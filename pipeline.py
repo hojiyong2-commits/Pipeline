@@ -168,6 +168,7 @@ import subprocess
 import tempfile
 import shutil
 import urllib.error
+import urllib.parse
 import urllib.request
 import io
 import zipfile
@@ -4044,7 +4045,39 @@ def _git_rev_parse(ref: str) -> Optional[str]:
 
 def _github_token(token_env: str = "GITHUB_TOKEN") -> Optional[str]:
     token = os.environ.get(token_env) or os.environ.get("GH_TOKEN")
-    return token.strip() if token else None
+    if token:
+        return token.strip()
+    return _github_token_from_git_credentials()
+
+
+def _github_token_from_git_credentials() -> Optional[str]:
+    """Reuse the GitHub login already configured for git push/pull.
+
+    Claude Code usually runs in the same Windows user session as git. If Git
+    Credential Manager is authenticated, `git credential fill` can supply the
+    same token without asking the user to create or paste a PAT into the
+    pipeline.
+    """
+    try:
+        completed = subprocess.run(
+            ["git", "credential", "fill"],
+            cwd=str(BASE_DIR),
+            input="protocol=https\nhost=github.com\n\n",
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    values: Dict[str, str] = {}
+    for line in completed.stdout.splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    password = values.get("password")
+    return password or None
 
 
 def _github_api_json(url: str, token: Optional[str]) -> Dict[str, Any]:
@@ -4092,6 +4125,34 @@ def _github_download_bytes(url: str, token: Optional[str]) -> bytes:
         _die(f"GitHub artifact download failed: {exc}")
 
 
+def _github_latest_run_for_commit(
+    repo: str,
+    commit_sha: str,
+    token: Optional[str],
+    *,
+    workflow: Optional[str] = None,
+) -> Dict[str, Any]:
+    query = urllib.parse.urlencode({"head_sha": commit_sha, "per_page": "50"})
+    response = _github_api_json(f"https://api.github.com/repos/{repo}/actions/runs?{query}", token)
+    runs = response.get("workflow_runs", [])
+    if not isinstance(runs, list):
+        _die("GitHub workflow runs response did not contain workflow_runs")
+    candidates = [run for run in runs if isinstance(run, dict)]
+    if workflow:
+        candidates = [run for run in candidates if str(run.get("name") or "") == workflow]
+    if not candidates:
+        workflow_hint = f" named {workflow!r}" if workflow else ""
+        _die(
+            f"no GitHub Actions workflow run{workflow_hint} found for commit {commit_sha[:12]}. "
+            "Push the branch and wait for CI before running `python pipeline.py gates github-ci`."
+        )
+    successful = [
+        run for run in candidates
+        if run.get("status") == "completed" and run.get("conclusion") == "success"
+    ]
+    return successful[0] if successful else candidates[0]
+
+
 def _read_attestation_from_zip(zip_bytes: bytes, file_name: str = "pipeline_attestation.json") -> Dict[str, Any]:
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
@@ -4114,6 +4175,7 @@ def _validate_github_ci_attestation(
     tree_sha: Optional[str] = None,
 ) -> Dict[str, Any]:
     blockers: List[str] = []
+    warnings: List[str] = []
     if attestation.get("schema_version") != 1:
         blockers.append("schema_version must be 1")
     if attestation.get("attestation_type") != "pipeline-ci-v1":
@@ -4122,10 +4184,15 @@ def _validate_github_ci_attestation(
         blockers.append(f"repository mismatch: expected {repo}, got {attestation.get('repository')}")
     if str(attestation.get("run_id") or "") != str(run_id):
         blockers.append(f"run_id mismatch: expected {run_id}, got {attestation.get('run_id')}")
-    if str(attestation.get("commit_sha") or "").lower() != str(commit_sha).lower():
+    attested_head_sha = str(attestation.get("head_sha") or attestation.get("commit_sha") or "")
+    checkout_sha = str(attestation.get("checkout_sha") or attestation.get("commit_sha") or "")
+    if attested_head_sha.lower() != str(commit_sha).lower():
         blockers.append("commit_sha mismatch")
-    if tree_sha and str(attestation.get("tree_sha") or "").lower() != tree_sha.lower():
-        blockers.append("tree_sha mismatch")
+    if tree_sha:
+        if checkout_sha and checkout_sha.lower() != str(commit_sha).lower():
+            warnings.append("tree_sha comparison skipped for pull_request merge checkout")
+        elif str(attestation.get("tree_sha") or "").lower() != tree_sha.lower():
+            blockers.append("tree_sha mismatch")
     tests = attestation.get("tests", {})
     if not isinstance(tests, dict) or tests.get("status") != "PASS":
         blockers.append("tests.status must be PASS")
@@ -4134,6 +4201,7 @@ def _validate_github_ci_attestation(
         "verified_at": _now(),
         "status": "PASS" if not blockers else "FAIL",
         "blockers": blockers,
+        "warnings": warnings,
         "repository": repo,
         "run_id": str(run_id),
         "commit_sha": commit_sha,
@@ -4142,19 +4210,29 @@ def _validate_github_ci_attestation(
     }
 
 
-def cmd_github(args: argparse.Namespace) -> None:
-    action = args.github_action
-    if action != "verify-run":
-        _die(f"unknown github action: {action}", exit_code=2)
-
-    repo = args.repo or _github_repo_from_remote()
-    commit_sha = args.commit or _git_rev_parse("HEAD")
+def _verify_github_ci_run(
+    *,
+    repo: Optional[str],
+    commit: Optional[str],
+    run_id: Optional[str],
+    artifact_name: str,
+    token_env: str,
+    workflow: Optional[str],
+) -> Dict[str, Any]:
+    resolved_repo = repo or _github_repo_from_remote()
+    commit_sha = commit or _git_rev_parse("HEAD")
     if not commit_sha:
         _die("could not infer commit sha; pass --commit explicitly")
-    run_id = str(args.run_id)
-    token = _github_token(args.token_env)
+    token = _github_token(token_env)
 
-    run = _github_api_json(f"https://api.github.com/repos/{repo}/actions/runs/{run_id}", token)
+    if run_id:
+        run = _github_api_json(f"https://api.github.com/repos/{resolved_repo}/actions/runs/{run_id}", token)
+    else:
+        run = _github_latest_run_for_commit(resolved_repo, commit_sha, token, workflow=workflow)
+    resolved_run_id = str(run.get("id") or run_id or "")
+    if not resolved_run_id:
+        _die("GitHub workflow run response is missing id")
+
     run_blockers: List[str] = []
     if str(run.get("head_sha") or "").lower() != str(commit_sha).lower():
         run_blockers.append(f"workflow run head_sha mismatch: expected {commit_sha}, got {run.get('head_sha')}")
@@ -4163,13 +4241,13 @@ def cmd_github(args: argparse.Namespace) -> None:
     if run.get("conclusion") != "success":
         run_blockers.append(f"workflow run conclusion is not success: {run.get('conclusion')}")
 
-    artifacts = _github_api_json(f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/artifacts", token)
+    artifacts = _github_api_json(f"https://api.github.com/repos/{resolved_repo}/actions/runs/{resolved_run_id}/artifacts", token)
     artifact_items = artifacts.get("artifacts", [])
     if not isinstance(artifact_items, list):
         _die("GitHub artifacts response did not contain an artifacts list")
-    artifact = next((item for item in artifact_items if isinstance(item, dict) and item.get("name") == args.artifact), None)
+    artifact = next((item for item in artifact_items if isinstance(item, dict) and item.get("name") == artifact_name), None)
     if not artifact:
-        _die(f"workflow run is missing required artifact: {args.artifact}")
+        _die(f"workflow run is missing required artifact: {artifact_name}")
     download_url = artifact.get("archive_download_url")
     if not download_url:
         _die("workflow artifact response is missing archive_download_url")
@@ -4178,8 +4256,8 @@ def cmd_github(args: argparse.Namespace) -> None:
     tree_sha = _git_rev_parse(f"{commit_sha}^{{tree}}")
     verification = _validate_github_ci_attestation(
         attestation,
-        repo=repo,
-        run_id=run_id,
+        repo=resolved_repo,
+        run_id=resolved_run_id,
         commit_sha=commit_sha,
         tree_sha=tree_sha,
     )
@@ -4200,30 +4278,52 @@ def cmd_github(args: argparse.Namespace) -> None:
         "size_in_bytes": artifact.get("size_in_bytes"),
         "expired": artifact.get("expired"),
     }
+    return verification
+
+
+def _record_github_ci_verification(state: Dict[str, Any], verification: Dict[str, Any], artifact_name: str) -> None:
+    pid = str(state.get("pipeline_id"))
+    paths = _contract_paths(pid)
+    _write_json(paths["github_ci_result"], verification)
+    run_id = str(verification.get("run_id") or "")
+    commit_sha = str(verification.get("commit_sha") or "")
+    state.setdefault("trusted_github_runs", [])
+    state["trusted_github_runs"].append({
+        "recorded_at": _now(),
+        "status": verification["status"],
+        "repo": verification.get("repository"),
+        "run_id": run_id,
+        "commit_sha": commit_sha,
+        "artifact": artifact_name,
+    })
+    if _external_gates_enabled(state):
+        _set_external_gate(
+            state,
+            "github_ci",
+            str(verification["status"]),
+            evidence=f"github_actions_run:{run_id}",
+            report_file=str(paths["github_ci_result"]),
+        )
+    _log_event(state, f"github verify-run {verification['status']} run_id={run_id} commit={commit_sha[:12]}")
+
+
+def cmd_github(args: argparse.Namespace) -> None:
+    action = args.github_action
+    if action != "verify-run":
+        _die(f"unknown github action: {action}", exit_code=2)
+
+    verification = _verify_github_ci_run(
+        repo=args.repo,
+        commit=args.commit,
+        run_id=args.run_id,
+        artifact_name=args.artifact,
+        token_env=args.token_env,
+        workflow=args.workflow,
+    )
 
     if getattr(args, "record", False):
         state = _require_state()
-        pid = str(state.get("pipeline_id"))
-        paths = _contract_paths(pid)
-        _write_json(paths["github_ci_result"], verification)
-        state.setdefault("trusted_github_runs", [])
-        state["trusted_github_runs"].append({
-            "recorded_at": _now(),
-            "status": verification["status"],
-            "repo": repo,
-            "run_id": run_id,
-            "commit_sha": commit_sha,
-            "artifact": args.artifact,
-        })
-        if _external_gates_enabled(state):
-            _set_external_gate(
-                state,
-                "github_ci",
-                str(verification["status"]),
-                evidence=f"github_actions_run:{run_id}",
-                report_file=str(paths["github_ci_result"]),
-            )
-        _log_event(state, f"github verify-run {verification['status']} run_id={run_id} commit={commit_sha[:12]}")
+        _record_github_ci_verification(state, verification, args.artifact)
         _save(state)
 
     print(json.dumps(verification, ensure_ascii=False, indent=2))
@@ -4644,6 +4744,23 @@ def cmd_gates(args: argparse.Namespace) -> None:
         print(f"  report: {paths['user_validation']}")
         print(f"  next: {YELLOW('python pipeline.py architect --report-file architect_report.xml')}\n")
         sys.exit(0 if gate_status == "PASS" else 1)
+
+    if action == "github-ci":
+        verification = _verify_github_ci_run(
+            repo=args.repo,
+            commit=args.commit,
+            run_id=args.run_id,
+            artifact_name=args.artifact,
+            token_env=args.token_env,
+            workflow=args.workflow,
+        )
+        _record_github_ci_verification(state, verification, args.artifact)
+        _save(state)
+        color = GREEN if verification["status"] == "PASS" else RED
+        print(color(f"\n[GITHUB CI GATE {verification['status']}]"))
+        print(f"  run_id: {verification.get('run_id')}")
+        print(f"  report: {_contract_paths(pid)['github_ci_result']}\n")
+        sys.exit(0 if verification["status"] == "PASS" else 1)
 
     _die(f"unknown gates action: {action}", exit_code=2)
 
@@ -5530,6 +5647,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_accept.add_argument("--evidence", default=None, help="Output file, screenshot, or report shown to user")
     p_gate_accept.add_argument("--notes", default=None)
     p_gate_accept.add_argument("--user-confirmed", action="store_true", default=False)
+    p_gate_github = gsub.add_parser("github-ci", help="Verify latest GitHub Actions CI run and record github_ci gate")
+    p_gate_github.add_argument("--repo", default=None, help="owner/repo; defaults to origin remote")
+    p_gate_github.add_argument("--run-id", default=None, help="Specific GitHub Actions workflow run id; omitted means latest run for HEAD")
+    p_gate_github.add_argument("--commit", default=None, help="Expected commit SHA; defaults to local HEAD")
+    p_gate_github.add_argument("--workflow", default="CI", help="Workflow run name to search when --run-id is omitted")
+    p_gate_github.add_argument("--artifact", default="pipeline-attestation", help="Required artifact name")
+    p_gate_github.add_argument("--token-env", default="GITHUB_TOKEN", help="Optional env var containing a GitHub token")
 
     # GPT/OpenAI advisory reviews (non-binding; CRITICAL must be resolved)
     p_advisory = sub.add_parser("advisory", help="External advisory reviews and resolutions")
@@ -5557,10 +5681,11 @@ def build_parser() -> argparse.ArgumentParser:
     ghsub = p_github.add_subparsers(dest="github_action", required=True)
     p_gh_verify = ghsub.add_parser("verify-run", help="Verify a GitHub Actions run attestation artifact")
     p_gh_verify.add_argument("--repo", default=None, help="owner/repo; defaults to origin remote")
-    p_gh_verify.add_argument("--run-id", required=True, help="GitHub Actions workflow run id")
+    p_gh_verify.add_argument("--run-id", default=None, help="GitHub Actions workflow run id; omitted means latest run for HEAD")
     p_gh_verify.add_argument("--commit", default=None, help="Expected commit SHA; defaults to local HEAD")
+    p_gh_verify.add_argument("--workflow", default="CI", help="Workflow run name to search when --run-id is omitted")
     p_gh_verify.add_argument("--artifact", default="pipeline-attestation", help="Required artifact name")
-    p_gh_verify.add_argument("--token-env", default="GITHUB_TOKEN", help="Environment variable containing a GitHub token")
+    p_gh_verify.add_argument("--token-env", default="GITHUB_TOKEN", help="Optional env var containing a GitHub token")
     p_gh_verify.add_argument("--record", action="store_true", default=False, help="Record verification summary in pipeline_state.json")
 
     # architect

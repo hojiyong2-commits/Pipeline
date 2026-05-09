@@ -39,7 +39,9 @@ jobs:
             workflow = $env:GITHUB_WORKFLOW
             run_id = $env:GITHUB_RUN_ID
             run_attempt = $env:GITHUB_RUN_ATTEMPT
-            commit_sha = $env:GITHUB_SHA
+            commit_sha = "${{ github.event.pull_request.head.sha || github.sha }}"
+            head_sha = "${{ github.event.pull_request.head.sha || github.sha }}"
+            checkout_sha = $env:GITHUB_SHA
             ref = $env:GITHUB_REF
             event_name = $env:GITHUB_EVENT_NAME
             runner_os = $env:RUNNER_OS
