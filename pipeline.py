@@ -2532,7 +2532,7 @@ def _agent_run_start(state: Dict[str, Any], phase: str, agent_id: Optional[str])
         _die(f"[GATE BLOCKED] {reason}")
     pid = str(state.get("pipeline_id") or "")
     run_id = _new_agent_run_id(phase)
-    token = secrets.token_urlsafe(32)
+    token = f"tok_{secrets.token_urlsafe(32)}"
     run = {
         "schema_version": 1,
         "run_id": run_id,

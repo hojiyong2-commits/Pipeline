@@ -686,6 +686,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
             with mock.patch.object(pipeline, "AGENT_RECEIPT_DIR", root / "receipts"), \
                  mock.patch.object(pipeline, "_git_rev_parse", return_value="a" * 40):
                 run, token = pipeline._agent_run_start(state, "pm", "pm-agent")
+                self.assertTrue(token.startswith("tok_"))
                 completed = pipeline._agent_run_finish(
                     state,
                     run_id=run["run_id"],
