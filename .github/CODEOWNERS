@@ -1,6 +1,7 @@
 # Pipeline trust root files.
 # Changes here alter the rules, validators, agents, or external CI gate.
 .github/CODEOWNERS @hojiyong2-commits
+.github/pull_request_template.md @hojiyong2-commits
 .github/workflows/** @hojiyong2-commits
 pipeline.py @hojiyong2-commits
 CLAUDE.md @hojiyong2-commits

@@ -128,6 +128,29 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("Enforcer — Phase", parser.description or "")
         self.assertNotIn("Enforcer -Phase", parser.description or "")
 
+    def test_github_review_surfaces_are_codeowned_and_templated(self) -> None:
+        root = Path(__file__).resolve().parent
+        codeowners = (root / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
+        template = root / ".github" / "pull_request_template.md"
+        workflow = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+        for pattern in (
+            ".github/CODEOWNERS",
+            ".github/pull_request_template.md",
+            "tests/oracles/**",
+            "tests/**",
+            "test_*.py",
+            "*_test.py",
+        ):
+            self.assertIn(pattern, codeowners)
+        self.assertTrue(template.exists())
+        template_text = template.read_text(encoding="utf-8")
+        self.assertIn("Human Acceptance Packet", template_text)
+        self.assertIn("ACCEPT", template_text)
+        self.assertIn("REJECT", template_text)
+        self.assertIn("human-acceptance-packet", workflow)
+        self.assertIn("pipeline-human-acceptance-packet", workflow)
+
     def test_contract_actions_before_init_are_user_friendly(self) -> None:
         pid = f"TMP-NO-CONTRACT-{uuid.uuid4().hex[:10]}"
         cases = [
