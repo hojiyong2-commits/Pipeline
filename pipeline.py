@@ -4106,6 +4106,11 @@ def _github_api_json(url: str, token: Optional[str]) -> Dict[str, Any]:
         _die(f"GitHub API request failed: {exc}")
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+        return None
+
+
 def _github_download_bytes(url: str, token: Optional[str]) -> bytes:
     headers = {
         "Accept": "application/vnd.github+json",
@@ -4115,10 +4120,28 @@ def _github_download_bytes(url: str, token: Optional[str]) -> bytes:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(url, headers=headers, method="GET")
+    opener = urllib.request.build_opener(_NoRedirectHandler)
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with opener.open(request, timeout=120) as response:
             return response.read()
     except urllib.error.HTTPError as exc:
+        if exc.code in {301, 302, 303, 307, 308}:
+            redirect_url = exc.headers.get("Location")
+            if not redirect_url:
+                _die(f"GitHub artifact download redirect missing Location header HTTP {exc.code}")
+            redirect_request = urllib.request.Request(
+                redirect_url,
+                headers={"User-Agent": "pipeline-trust-verifier"},
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(redirect_request, timeout=120) as response:
+                    return response.read()
+            except urllib.error.HTTPError as redirected_exc:
+                raw = redirected_exc.read().decode("utf-8", errors="replace")
+                _die(f"GitHub artifact redirected download failed HTTP {redirected_exc.code}: {raw[:1000]}")
+            except OSError as redirected_exc:
+                _die(f"GitHub artifact redirected download failed: {redirected_exc}")
         raw = exc.read().decode("utf-8", errors="replace")
         _die(f"GitHub artifact download failed HTTP {exc.code}: {raw[:1000]}")
     except OSError as exc:
