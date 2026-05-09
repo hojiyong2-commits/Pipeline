@@ -130,7 +130,7 @@ jobs:
           $fileLines = @()
           foreach ($file in ($files | Select-Object -First 30)) {
             $statusKo = Convert-FileStatusToKorean -Status ([string]$file.status)
-            $fileLines += "- $statusKo: ``$($file.filename)`` (추가 $($file.additions)줄, 삭제 $($file.deletions)줄)"
+            $fileLines += "- ${statusKo}: ``$($file.filename)`` (추가 $($file.additions)줄, 삭제 $($file.deletions)줄)"
           }
           if ($files.Count -gt 30) {
             $fileLines += "- ... 외 $($files.Count - 30)개 파일"

@@ -251,6 +251,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("코드를 읽지 말고", workflow)
         self.assertIn("마지막 작업 담당자", workflow)
         self.assertIn("Convert-FileStatusToKorean", workflow)
+        self.assertIn("- ${statusKo}:", workflow)
         self.assertIn('"modified" { return "수정됨" }', workflow)
         self.assertIn('"added" { return "새 파일" }', workflow)
         self.assertIn("자동 검사: 통과", workflow)
