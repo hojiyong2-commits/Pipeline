@@ -985,6 +985,7 @@ def build_full_payload() -> Dict[str, Any]:
             "current_phase_index": state.get("current_phase_index"),
             "events": state.get("events"),
             "external_gates": (state.get("raw") or {}).get("external_gates"),
+            "phase_attestations": (state.get("raw") or {}).get("phase_attestations"),
             "deployment": (state.get("raw") or {}).get("deployment"),
         },
         "agents": agents,

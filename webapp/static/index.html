@@ -1868,12 +1868,21 @@ function renderApproval(payload) {
   if (!approvalSummary) return;
   const pipeline = payload?.pipeline || {};
   const deployment = pipeline.deployment || {};
+  const phaseAtt = pipeline.phase_attestations || {};
+  const phaseRows = [];
+  if (phaseAtt.enabled && phaseAtt.phases) {
+    for (const name of ["pm", "dev", "qa", "build"]) {
+      const status = String(phaseAtt.phases?.[name]?.status || "PENDING").toUpperCase();
+      phaseRows.push(`<div><strong>${name.toUpperCase()} CI</strong>: ${escapeHtml(status)}</div>`);
+    }
+  }
   const required = ["technical", "oracle", "github_ci"];
   const rows = required.map(name => {
     const status = externalGateStatus(payload, name);
     const label = name.replace("_", " ").toUpperCase();
     return `<div><strong>${label}</strong>: ${escapeHtml(status)}</div>`;
   });
+  rows.unshift(...phaseRows);
   const acceptance = externalGateStatus(payload, "acceptance");
   rows.push(`<div><strong>ACCEPTANCE</strong>: ${escapeHtml(acceptance)}</div>`);
   if (deployment.deploy_dir) {
@@ -1883,12 +1892,15 @@ function renderApproval(payload) {
   }
   approvalSummary.innerHTML = rows.join("");
 
-  const gatesReady = required.every(name => externalGateStatus(payload, name) === "PASS");
+  const phaseReady = !phaseAtt.enabled || ["pm", "dev", "qa", "build"].every(name =>
+    String(phaseAtt.phases?.[name]?.status || "PENDING").toUpperCase() === "PASS"
+  );
+  const gatesReady = phaseReady && required.every(name => externalGateStatus(payload, name) === "PASS");
   const alreadyAccepted = acceptance === "PASS";
   approvalAccept.disabled = !gatesReady || alreadyAccepted;
   approvalReject.disabled = alreadyAccepted;
   if (!gatesReady) {
-    approvalStatus.textContent = "Technical, Oracle, and GitHub CI gates must PASS before ACCEPT.";
+    approvalStatus.textContent = "PM/Dev/QA/Build phase CI plus Technical, Oracle, and GitHub CI must PASS before ACCEPT.";
   } else if (alreadyAccepted && deployment.deploy_dir) {
     approvalStatus.textContent = `Accepted and deployed to ${deployment.deploy_dir}`;
   } else if (alreadyAccepted) {

@@ -128,7 +128,9 @@ BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런�
     python pipeline.py build --exe "dist/SmartNotepad.exe" [--report-file dist/build_report.xml]
     python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed
     python pipeline.py harness --score 95 --verdict PASS --test-output-file harness_output.xml --user-confirmed
-    python pipeline.py contract init --three-gate
+    python pipeline.py contract init --three-gate --phase-attestations
+    python pipeline.py gates prepare-phase --phase pm
+    python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
     python pipeline.py gates technical
     python pipeline.py gates oracle --user-confirmed
     python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
@@ -1511,6 +1513,17 @@ STATE_FILE = BASE_DIR / "pipeline_state.json"
 HISTORY_DIR = BASE_DIR / "pipeline_history"
 TEST_RESULTS_FILE = BASE_DIR / "test_results.jsonl"
 CONTRACTS_DIR = BASE_DIR / "pipeline_contracts"
+PIPELINE_CI_DIR = BASE_DIR / ".pipeline"
+PHASE_ATTESTATION_REQUEST = PIPELINE_CI_DIR / "phase_attestation_request.json"
+PHASE_ATTESTATION_EVIDENCE_DIR = PIPELINE_CI_DIR / "phase_evidence"
+AGENT_RECEIPT_DIR = PIPELINE_CI_DIR / "agent_receipts"
+PHASE_ATTESTATION_PHASES = ("pm", "dev", "qa", "build")
+PHASE_AGENT_IDS = {
+    "pm": "pm-agent",
+    "dev": "dev-agent",
+    "qa": "qa-agent",
+    "build": "build-agent",
+}
 DEFAULT_DEPLOY_ROOT_CANDIDATES = (
     Path(r"G:\내 드라이브\터미널"),
     Path(r"G:\내드라이브\터미널"),
@@ -1711,6 +1724,51 @@ def _new_external_gates(enabled: bool = False) -> Dict[str, Any]:
     }
 
 
+def _empty_phase_attestation() -> Dict[str, Any]:
+    return {
+        "status": "PENDING",
+        "completed_at": None,
+        "phase": None,
+        "run_id": None,
+        "commit_sha": None,
+        "evidence": None,
+        "report_file": None,
+        "notes": [],
+    }
+
+
+def _new_phase_attestations(enabled: bool = False) -> Dict[str, Any]:
+    return {
+        "enabled": enabled,
+        "mode": "github_actions_per_phase",
+        "required_phases": list(PHASE_ATTESTATION_PHASES),
+        "phases": {phase: _empty_phase_attestation() for phase in PHASE_ATTESTATION_PHASES},
+    }
+
+
+def _ensure_phase_attestations(state: Dict[str, Any]) -> Dict[str, Any]:
+    existing = state.get("phase_attestations")
+    if not isinstance(existing, dict):
+        return _new_phase_attestations(enabled=False)
+    normalized = _new_phase_attestations(enabled=bool(existing.get("enabled")))
+    normalized["mode"] = str(existing.get("mode") or "github_actions_per_phase")
+    required = existing.get("required_phases")
+    if isinstance(required, list) and required:
+        normalized["required_phases"] = [
+            str(item) for item in required if str(item) in PHASE_ATTESTATION_PHASES
+        ] or list(PHASE_ATTESTATION_PHASES)
+    phases = existing.get("phases")
+    if isinstance(phases, dict):
+        for phase in PHASE_ATTESTATION_PHASES:
+            item = phases.get(phase)
+            if isinstance(item, dict):
+                merged = _empty_phase_attestation()
+                merged.update(item)
+                merged["phase"] = phase
+                normalized["phases"][phase] = merged
+    return normalized
+
+
 def _save_phase_snapshot(state: Dict[str, Any], phase: str) -> Optional[str]:
     """현재 state를 pipeline_history/{pid}_phase_{phase}.json에 스냅샷.
 
@@ -1754,7 +1812,9 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
         # "TERMINATED" = 사용자 명시적 중단
         "terminal_state": None,
         "harness_fail_count": 0,
+        "agent_runs": {},
         "external_gates": _new_external_gates(enabled=False),
+        "phase_attestations": _new_phase_attestations(enabled=False),
         "protocol_evolution_decision": None,
     }
 
@@ -1781,9 +1841,12 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         state["terminal_state"] = None
     if "harness_fail_count" not in state:
         state["harness_fail_count"] = 0
+    if not isinstance(state.get("agent_runs"), dict):
+        state["agent_runs"] = {}
     if "protocol_evolution_decision" not in state:
         state["protocol_evolution_decision"] = None
     state["external_gates"] = _ensure_external_gates(state)
+    state["phase_attestations"] = _ensure_phase_attestations(state)
     return state
 
 
@@ -1902,6 +1965,7 @@ def _contract_paths(pipeline_id: str) -> Dict[str, Path]:
         "oracle_result": root / "gates" / "oracle_result.json",
         "user_validation": root / "gates" / "user_validation.json",
         "github_ci_result": root / "gates" / "github_ci_result.json",
+        "phase_ci_root": root / "gates" / "phase_ci",
         "advisory_root": root / "advisory",
         "advisory_resolutions": root / "advisory" / "resolutions.json",
     }
@@ -2109,6 +2173,340 @@ def _deploy_accepted_outputs(state: Dict[str, Any], evidence: Optional[str], not
     return manifest
 
 
+def _enable_phase_attestations(state: Dict[str, Any]) -> None:
+    state["phase_attestations"] = _ensure_phase_attestations(state)
+    state["phase_attestations"]["enabled"] = True
+
+
+def _expected_agent_id(phase: str) -> str:
+    if phase not in PHASE_AGENT_IDS:
+        _die(f"agent receipts are not supported for phase: {phase}", exit_code=2)
+    return PHASE_AGENT_IDS[phase]
+
+
+def _agent_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _new_agent_run_id(phase: str) -> str:
+    return f"{phase}-{secrets.token_hex(8)}"
+
+
+def _receipt_path_for_run(pid: str, phase: str, run_id: str) -> Path:
+    safe_run = re.sub(r"[^A-Za-z0-9_.-]+", "_", run_id)
+    return AGENT_RECEIPT_DIR / pid / phase / f"{safe_run}.json"
+
+
+def _path_sha_payload(path: Path) -> Dict[str, Any]:
+    return {
+        "path": _display_path(path),
+        "sha256": _sha256_file(path),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+def _agent_run_start(state: Dict[str, Any], phase: str, agent_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+    if phase not in PHASE_ATTESTATION_PHASES:
+        _die(f"agent start supports phases: {', '.join(PHASE_ATTESTATION_PHASES)}", exit_code=2)
+    expected = _expected_agent_id(phase)
+    actual_agent = agent_id or expected
+    if actual_agent != expected:
+        _die(f"[AGENT RECEIPT GATE] {phase} must be executed by {expected}, got {actual_agent!r}")
+    ok, reason = check_gate(state, phase)
+    if not ok:
+        _die(f"[GATE BLOCKED] {reason}")
+    pid = str(state.get("pipeline_id") or "")
+    run_id = _new_agent_run_id(phase)
+    token = secrets.token_urlsafe(32)
+    run = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "pipeline_id": pid,
+        "phase": phase,
+        "agent_id": actual_agent,
+        "status": "RUNNING",
+        "started_at": _now(),
+        "completed_at": None,
+        "token_hash": _agent_token_hash(token),
+        "output_file": None,
+        "output_sha256": None,
+        "evidence_files": [],
+        "receipt_path": None,
+        "receipt_sha256": None,
+        "used_by_phase": None,
+        "used_at": None,
+        "commit_sha": _git_rev_parse("HEAD"),
+    }
+    state.setdefault("agent_runs", {})[run_id] = run
+    _log_event(state, f"agent run started phase={phase} agent={actual_agent} run_id={run_id}")
+    return run, token
+
+
+def _agent_run_finish(
+    state: Dict[str, Any],
+    *,
+    run_id: str,
+    token: str,
+    output_file: str,
+    evidence: Optional[str],
+    notes: Optional[str],
+) -> Dict[str, Any]:
+    runs = state.setdefault("agent_runs", {})
+    run = runs.get(run_id)
+    if not isinstance(run, dict):
+        _die(f"[AGENT RECEIPT GATE] unknown run_id: {run_id}")
+    if run.get("status") != "RUNNING":
+        _die(f"[AGENT RECEIPT GATE] run {run_id} is not RUNNING")
+    if not token or _agent_token_hash(token) != run.get("token_hash"):
+        _die("[AGENT RECEIPT GATE] invalid agent run token")
+
+    output_path = Path(output_file)
+    if not output_path.is_absolute():
+        output_path = BASE_DIR / output_path
+    if not output_path.exists() or not output_path.is_file():
+        _die(f"[AGENT RECEIPT GATE] output file not found: {output_file}")
+
+    evidence_files: List[Dict[str, Any]] = []
+    for raw in _split_evidence_paths(evidence):
+        path = _resolve_artifact_path(raw)
+        if path and path.is_file():
+            evidence_files.append(_path_sha_payload(path))
+
+    run["status"] = "COMPLETED"
+    run["completed_at"] = _now()
+    run["output_file"] = _display_path(output_path)
+    run["output_sha256"] = _sha256_file(output_path)
+    run["evidence_files"] = evidence_files
+    run["notes"] = notes or ""
+    receipt = {
+        "schema_version": 1,
+        "receipt_type": "agent-run-receipt-v1",
+        "pipeline_id": run.get("pipeline_id"),
+        "phase": run.get("phase"),
+        "agent_id": run.get("agent_id"),
+        "run_id": run_id,
+        "status": run.get("status"),
+        "started_at": run.get("started_at"),
+        "completed_at": run.get("completed_at"),
+        "output_file": run.get("output_file"),
+        "output_sha256": run.get("output_sha256"),
+        "evidence_files": evidence_files,
+        "commit_sha": run.get("commit_sha"),
+    }
+    receipt_path = _receipt_path_for_run(str(run.get("pipeline_id")), str(run.get("phase")), run_id)
+    _write_json(receipt_path, receipt)
+    run["receipt_path"] = _display_path(receipt_path)
+    run["receipt_sha256"] = _sha256_file(receipt_path)
+    _log_event(state, f"agent run completed phase={run.get('phase')} agent={run.get('agent_id')} run_id={run_id}")
+    return run
+
+
+def _validate_agent_run_for_phase(
+    state: Dict[str, Any],
+    phase: str,
+    run_id: Optional[str],
+    report_file: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    if not _phase_attestations_enabled(state):
+        return None
+    if not run_id:
+        _die(
+            f"[AGENT RECEIPT GATE] {phase} requires --agent-run-id. "
+            f"Start with `python pipeline.py agent start --phase {phase}`, pass the token to {_expected_agent_id(phase)}, "
+            "then finish the run before recording the phase."
+        )
+    run = state.setdefault("agent_runs", {}).get(run_id)
+    if not isinstance(run, dict):
+        _die(f"[AGENT RECEIPT GATE] unknown run_id: {run_id}")
+    if run.get("pipeline_id") != state.get("pipeline_id"):
+        _die("[AGENT RECEIPT GATE] run pipeline_id mismatch")
+    if run.get("phase") != phase:
+        _die(f"[AGENT RECEIPT GATE] run phase mismatch: expected {phase}, got {run.get('phase')}")
+    expected_agent = _expected_agent_id(phase)
+    if run.get("agent_id") != expected_agent:
+        _die(f"[AGENT RECEIPT GATE] {phase} requires {expected_agent}, got {run.get('agent_id')}")
+    if run.get("status") != "COMPLETED":
+        _die(f"[AGENT RECEIPT GATE] run {run_id} must be COMPLETED")
+    used = run.get("used_by_phase")
+    if used and used != phase:
+        _die(f"[AGENT RECEIPT GATE] run {run_id} was already used by {used}")
+    if not run.get("receipt_path") or not run.get("receipt_sha256"):
+        _die(f"[AGENT RECEIPT GATE] run {run_id} is missing receipt file")
+    receipt_path = _resolve_artifact_path(str(run.get("receipt_path")))
+    if not receipt_path or not receipt_path.is_file():
+        _die(f"[AGENT RECEIPT GATE] receipt file missing for run {run_id}")
+    if _sha256_file(receipt_path) != run.get("receipt_sha256"):
+        _die(f"[AGENT RECEIPT GATE] receipt hash mismatch for run {run_id}")
+    if report_file:
+        report_path = Path(report_file)
+        if not report_path.is_absolute():
+            report_path = BASE_DIR / report_path
+        output_path = _resolve_artifact_path(str(run.get("output_file") or ""))
+        if not output_path or report_path.resolve() != output_path.resolve():
+            _die("[AGENT RECEIPT GATE] --report-file must match the completed agent run output_file")
+        if _sha256_file(report_path.resolve()) != run.get("output_sha256"):
+            _die("[AGENT RECEIPT GATE] report hash mismatch against agent run output")
+    run["used_by_phase"] = phase
+    run["used_at"] = _now()
+    return run
+
+
+def _safe_phase_artifact_name(path: Path) -> str:
+    name = path.name or "evidence"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
+
+
+def _git_check_ignored(path: Path) -> bool:
+    try:
+        rel = path.resolve().relative_to(BASE_DIR)
+    except ValueError:
+        return True
+    try:
+        proc = subprocess.run(
+            ["git", "check-ignore", "-q", str(rel)],
+            cwd=str(BASE_DIR),
+            check=False,
+        )
+        return proc.returncode == 0
+    except OSError:
+        return False
+
+
+def _workspace_check_for_file(path: Path) -> Dict[str, Any]:
+    return {
+        "path": _normalize_rel_path(path),
+        "sha256": _sha256_file(path),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not raw_path:
+        return None
+    path = Path(str(raw_path))
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    if not path.exists() or not path.is_file():
+        return None
+    dest_dir = PHASE_ATTESTATION_EVIDENCE_DIR / pid / phase
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_name = f"{label}_{_safe_phase_artifact_name(path)}"
+    dest = dest_dir / dest_name
+    shutil.copy2(path, dest)
+    return {
+        "label": label,
+        "source": _display_path(path),
+        "path": _normalize_rel_path(dest),
+        "sha256": _sha256_file(dest),
+        "size_bytes": dest.stat().st_size,
+    }
+
+
+def _phase_status_is_closed(phase: str, status: str) -> bool:
+    if phase in ("pm", "dev", "build"):
+        return status == "DONE"
+    if phase == "qa":
+        return status == "PASS"
+    return False
+
+
+def _prepare_phase_attestation_request(state: Dict[str, Any], phase: str) -> Dict[str, Any]:
+    if phase not in PHASE_ATTESTATION_PHASES:
+        _die(f"phase attestation only supports: {', '.join(PHASE_ATTESTATION_PHASES)}", exit_code=2)
+    if not _phase_attestations_enabled(state):
+        _die(
+            "phase attestations are not enabled. Use "
+            "`python pipeline.py contract init --three-gate --phase-attestations` "
+            "or `python pipeline.py gates init --phase-attestations`."
+        )
+    pid = str(state.get("pipeline_id") or "")
+    phase_info = state.get("phases", {}).get(phase, {})
+    if not isinstance(phase_info, dict):
+        _die(f"missing phase state for {phase}")
+    phase_status = str(phase_info.get("status") or "PENDING")
+    if not _phase_status_is_closed(phase, phase_status):
+        _die(f"{phase} phase must be completed before preparing phase CI attestation; current status={phase_status}")
+
+    copied: List[Dict[str, Any]] = []
+    workspace_checks: List[Dict[str, Any]] = []
+    local_only: List[Dict[str, Any]] = []
+    agent_run: Optional[Dict[str, Any]] = None
+
+    run_id = phase_info.get("agent_run_id")
+    if not run_id:
+        _die(f"[AGENT RECEIPT GATE] {phase} phase cannot prepare CI attestation without agent_run_id")
+    run = state.setdefault("agent_runs", {}).get(str(run_id))
+    if not isinstance(run, dict):
+        _die(f"[AGENT RECEIPT GATE] agent run not found for {phase}: {run_id}")
+    _validate_agent_run_for_phase(state, phase, str(run_id), phase_info.get("report_file"))
+    receipt_path = _resolve_artifact_path(str(run.get("receipt_path") or ""))
+    if not receipt_path:
+        _die(f"[AGENT RECEIPT GATE] receipt file missing for {phase}: {run_id}")
+    agent_run = {
+        "run_id": run.get("run_id"),
+        "phase": run.get("phase"),
+        "agent_id": run.get("agent_id"),
+        "status": run.get("status"),
+        "output_file": run.get("output_file"),
+        "output_sha256": run.get("output_sha256"),
+        "receipt_path": run.get("receipt_path"),
+        "receipt_sha256": run.get("receipt_sha256"),
+        "used_by_phase": run.get("used_by_phase"),
+    }
+    receipt_copy = _copy_phase_evidence_file(pid, phase, "agent_receipt", str(receipt_path))
+    if not receipt_copy:
+        _die(f"[AGENT RECEIPT GATE] could not copy receipt evidence for {phase}: {run_id}")
+    agent_run["receipt_source_path"] = agent_run["receipt_path"]
+    agent_run["receipt_path"] = receipt_copy["path"]
+    agent_run["receipt_sha256"] = receipt_copy["sha256"]
+    copied.append(receipt_copy)
+
+    report = _copy_phase_evidence_file(pid, phase, "report", phase_info.get("report_file"))
+    if report:
+        copied.append(report)
+    if phase == "dev":
+        atomic_scope = state.get("atomic_scope", {})
+        if isinstance(atomic_scope, dict):
+            scope = _copy_phase_evidence_file(pid, phase, "scope_manifest", atomic_scope.get("manifest_file"))
+            if scope:
+                copied.append(scope)
+
+    for raw in _split_evidence_paths(phase_info.get("evidence")):
+        path = _resolve_artifact_path(raw)
+        if not path or not path.is_file():
+            continue
+        if _git_check_ignored(path):
+            local_only.append({
+                "path": _display_path(path),
+                "sha256": _sha256_file(path),
+                "reason": "ignored_or_outside_git_checkout",
+            })
+            continue
+        workspace_checks.append(_workspace_check_for_file(path))
+
+    request = {
+        "schema_version": 1,
+        "request_type": "pipeline-phase-attestation-request-v1",
+        "generated_at": _now(),
+        "pipeline_id": pid,
+        "phase": phase,
+        "phase_status": phase_status,
+        "commit_hint": _git_rev_parse("HEAD"),
+        "state": {
+            "current_phase": state.get("current_phase"),
+            "phase_completed_at": phase_info.get("completed_at"),
+            "report_file": phase_info.get("report_file"),
+            "evidence": phase_info.get("evidence"),
+        },
+        "agent_run": agent_run,
+        "copied_evidence": copied,
+        "workspace_file_checks": workspace_checks,
+        "local_only_files": local_only,
+    }
+    _write_json(PHASE_ATTESTATION_REQUEST, request)
+    return request
+
+
 def _state_contract_enabled(state: Dict[str, Any]) -> bool:
     info = state.get("contract_v2")
     return isinstance(info, dict) and bool(info.get("enabled"))
@@ -2185,6 +2583,10 @@ def check_gate(state: Dict[str, Any], phase: str) -> Tuple[bool, str]:
             "contract_v2 is enabled but not frozen. Run `python pipeline.py contract ready` "
             "and `python pipeline.py contract freeze` before Dev.",
         )
+
+    phase_attestation_blocker = _phase_attestation_blocker_for_phase(state, phase)
+    if phase_attestation_blocker:
+        return False, phase_attestation_blocker
 
     for required_phase, required_status in GATE_RULES[phase]:
         actual = state["phases"][required_phase]["status"]
@@ -2558,10 +2960,20 @@ def cmd_done(args: argparse.Namespace) -> None:
             print(RED("dev-agent가 실제로 파일을 작성한 후 다시 실행하세요.\n"))
             sys.exit(1)
 
+    agent_run = _validate_agent_run_for_phase(
+        state,
+        phase,
+        getattr(args, "agent_run_id", None),
+        report_file,
+    )
+
     state["phases"][phase]["status"]       = "DONE"
     state["phases"][phase]["completed_at"] = _now()
     state["phases"][phase]["evidence"]     = evidence
     state["phases"][phase]["report_file"]  = report_file
+    if agent_run:
+        state["phases"][phase]["agent_run_id"] = agent_run["run_id"]
+        state["phases"][phase]["agent_id"] = agent_run["agent_id"]
     state["current_phase"] = PHASE_ORDER[PHASE_ORDER.index(phase) + 1]
     _log_event(state, f"{phase} DONE | evidence: {evidence}")
     if phase == "dev":
@@ -2692,11 +3104,21 @@ def cmd_qa(args: argparse.Namespace) -> None:
             hard_fail=True,
         )
 
+    agent_run = _validate_agent_run_for_phase(
+        state,
+        "qa",
+        getattr(args, "agent_run_id", None),
+        report_file,
+    )
+
     state["phases"]["qa"]["status"]       = result
     state["phases"]["qa"]["completed_at"] = _now()
     state["phases"]["qa"]["evidence"]     = getattr(args, "agent_id", None)
     state["phases"]["qa"]["agent_id"]     = getattr(args, "agent_id", None)
     state["phases"]["qa"]["report_file"]  = report_file
+    if agent_run:
+        state["phases"]["qa"]["agent_run_id"] = agent_run["run_id"]
+        state["phases"]["qa"]["agent_id"] = agent_run["agent_id"]
     # MT-2: numeric_score를 phase 메타데이터에 저장
     if numeric_score is not None:
         state["phases"]["qa"]["numeric_score"] = numeric_score
@@ -2858,11 +3280,21 @@ def cmd_build(args: argparse.Namespace) -> None:
         skip_reason = reason
         print(YELLOW("  [BUILD REPORT GATE] N/A 빌드 — build_report.xml 검증 생략"))
 
+    agent_run = _validate_agent_run_for_phase(
+        state,
+        "build",
+        getattr(args, "agent_run_id", None),
+        build_report_file,
+    )
+
     state["phases"]["build"]["status"]       = "DONE"
     state["phases"]["build"]["completed_at"] = _now()
     state["phases"]["build"]["evidence"]     = exe
     state["phases"]["build"]["report_file"]  = build_report_file if not is_na_build else None
     state["phases"]["build"]["skip_reason"]  = skip_reason if is_na_build else None
+    if agent_run:
+        state["phases"]["build"]["agent_run_id"] = agent_run["run_id"]
+        state["phases"]["build"]["agent_id"] = agent_run["agent_id"]
     state["current_phase"] = "harness"
     _log_event(state, f"build DONE exe={exe}" + (f" skip_reason={skip_reason}" if is_na_build else ""))
     _record_snapshot(state, "build", branch)
@@ -3770,6 +4202,12 @@ def cmd_contract(args: argparse.Namespace) -> None:
             if getattr(args, "three_gate", False):
                 state["external_gates"] = _new_external_gates(enabled=True)
                 _log_event(state, "three_gate mode enabled")
+            if getattr(args, "phase_attestations", False):
+                if not getattr(args, "three_gate", False):
+                    state["external_gates"] = _new_external_gates(enabled=True)
+                    _log_event(state, "three_gate mode enabled for phase attestations")
+                _enable_phase_attestations(state)
+                _log_event(state, "GitHub phase attestations enabled")
             _log_event(state, f"contract_v2 initialized: {paths['root']}")
             _save(state)
         print(GREEN(f"\n[CONTRACT INIT] {pid}"))
@@ -4082,6 +4520,59 @@ def _external_gates_enabled(state: Dict[str, Any]) -> bool:
     return isinstance(gates, dict) and bool(gates.get("enabled"))
 
 
+def _phase_attestations_enabled(state: Dict[str, Any]) -> bool:
+    state = _ensure_v210_fields(state)
+    info = state.get("phase_attestations", {})
+    return isinstance(info, dict) and bool(info.get("enabled"))
+
+
+def _phase_attestation_info(state: Dict[str, Any], phase: str) -> Dict[str, Any]:
+    state = _ensure_v210_fields(state)
+    info = state.get("phase_attestations", {})
+    phases = info.get("phases", {}) if isinstance(info, dict) else {}
+    item = phases.get(phase, {}) if isinstance(phases, dict) else {}
+    return item if isinstance(item, dict) else {}
+
+
+def _phase_attestation_required_before(phase: str) -> Optional[str]:
+    return {
+        "dev": "pm",
+        "qa": "dev",
+        "sec": "qa",
+        "build": "qa",
+        "harness": "build",
+        "architect": "build",
+    }.get(phase)
+
+
+def _phase_attestation_blocker_for_phase(state: Dict[str, Any], phase: str) -> Optional[str]:
+    if not _phase_attestations_enabled(state):
+        return None
+    required = _phase_attestation_required_before(phase)
+    if not required:
+        return None
+    info = _phase_attestation_info(state, required)
+    if info.get("status") != "PASS":
+        return (
+            f"{required} GitHub phase attestation must be PASS before {phase}. "
+            f"Run `python pipeline.py gates prepare-phase --phase {required}`, push the branch, "
+            f"wait for CI, then run `python pipeline.py gates phase-ci --phase {required}`."
+        )
+    return None
+
+
+def _phase_attestation_blockers(state: Dict[str, Any]) -> List[str]:
+    if not _phase_attestations_enabled(state):
+        return []
+    blockers: List[str] = []
+    phases = state.get("phase_attestations", {}).get("phases", {})
+    for phase in PHASE_ATTESTATION_PHASES:
+        info = phases.get(phase, {}) if isinstance(phases, dict) else {}
+        if not isinstance(info, dict) or info.get("status") != "PASS":
+            blockers.append(f"{phase} GitHub phase attestation must be PASS")
+    return blockers
+
+
 def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
     if not _external_gates_enabled(state):
         return []
@@ -4091,6 +4582,7 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
         info = gates.get(gate_name, {}) if isinstance(gates, dict) else {}
         if not isinstance(info, dict) or info.get("status") != "PASS":
             blockers.append(f"{gate_name} gate must be PASS")
+    blockers.extend(_phase_attestation_blockers(state))
     pid = str(state.get("pipeline_id", ""))
     unresolved = _unresolved_critical_advisories(pid)
     if unresolved:
@@ -4355,6 +4847,71 @@ def _validate_github_ci_attestation(
     }
 
 
+def _validate_github_phase_attestation(
+    attestation: Dict[str, Any],
+    *,
+    repo: str,
+    run_id: str,
+    commit_sha: str,
+    pipeline_id: str,
+    phase: str,
+) -> Dict[str, Any]:
+    blockers: List[str] = []
+    warnings: List[str] = []
+    if attestation.get("schema_version") != 1:
+        blockers.append("schema_version must be 1")
+    if attestation.get("attestation_type") != "pipeline-phase-v1":
+        blockers.append("attestation_type must be pipeline-phase-v1")
+    if str(attestation.get("repository") or "") != repo:
+        blockers.append(f"repository mismatch: expected {repo}, got {attestation.get('repository')}")
+    if str(attestation.get("run_id") or "") != str(run_id):
+        blockers.append(f"run_id mismatch: expected {run_id}, got {attestation.get('run_id')}")
+    if str(attestation.get("pipeline_id") or "") != pipeline_id:
+        blockers.append(f"pipeline_id mismatch: expected {pipeline_id}, got {attestation.get('pipeline_id')}")
+    if str(attestation.get("phase") or "") != phase:
+        blockers.append(f"phase mismatch: expected {phase}, got {attestation.get('phase')}")
+    head_sha = str(attestation.get("head_sha") or attestation.get("commit_sha") or "")
+    if head_sha.lower() != str(commit_sha).lower():
+        blockers.append("commit_sha mismatch")
+    validation = attestation.get("validation", {})
+    if not isinstance(validation, dict):
+        blockers.append("validation must be an object")
+    elif validation.get("status") != "PASS":
+        blockers.extend(str(item) for item in validation.get("blockers", ["phase validation did not PASS"]))
+    request = attestation.get("request", {})
+    if not isinstance(request, dict):
+        blockers.append("request must be an object")
+        request = {}
+    agent_run = request.get("agent_run")
+    if not isinstance(agent_run, dict):
+        blockers.append("request.agent_run receipt is required")
+    else:
+        expected_agent = _expected_agent_id(phase)
+        if agent_run.get("phase") != phase:
+            blockers.append("request.agent_run phase mismatch")
+        if agent_run.get("agent_id") != expected_agent:
+            blockers.append(f"request.agent_run agent_id must be {expected_agent}")
+        if agent_run.get("status") != "COMPLETED":
+            blockers.append("request.agent_run status must be COMPLETED")
+        if agent_run.get("used_by_phase") != phase:
+            blockers.append("request.agent_run must be consumed by the attested phase")
+    if isinstance(request, dict) and request.get("local_only_files"):
+        warnings.append("phase request included local-only files that GitHub Actions could not re-read")
+    return {
+        "schema_version": 1,
+        "verified_at": _now(),
+        "status": "PASS" if not blockers else "FAIL",
+        "blockers": blockers,
+        "warnings": warnings,
+        "repository": repo,
+        "run_id": str(run_id),
+        "commit_sha": commit_sha,
+        "pipeline_id": pipeline_id,
+        "phase": phase,
+        "attestation": attestation,
+    }
+
+
 def _verify_github_ci_run(
     *,
     repo: Optional[str],
@@ -4429,6 +4986,82 @@ def _verify_github_ci_run(
     return verification
 
 
+def _verify_github_phase_attestation_run(
+    *,
+    repo: Optional[str],
+    commit: Optional[str],
+    run_id: Optional[str],
+    artifact_name: str,
+    token_env: str,
+    workflow: Optional[str],
+    pipeline_id: str,
+    phase: str,
+) -> Dict[str, Any]:
+    resolved_repo = repo or _github_repo_from_remote()
+    if commit and re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+        commit_sha = commit
+    else:
+        commit_sha = _git_rev_parse(commit or "HEAD")
+    if not commit_sha:
+        _die("could not infer commit sha; pass --commit explicitly")
+    token = _github_token(token_env)
+
+    if run_id:
+        run = _github_api_json(f"https://api.github.com/repos/{resolved_repo}/actions/runs/{run_id}", token)
+    else:
+        run = _github_latest_run_for_commit(resolved_repo, commit_sha, token, workflow=workflow)
+    resolved_run_id = str(run.get("id") or run_id or "")
+    if not resolved_run_id:
+        _die("GitHub workflow run response is missing id")
+
+    run_blockers: List[str] = []
+    if str(run.get("head_sha") or "").lower() != str(commit_sha).lower():
+        run_blockers.append(f"workflow run head_sha mismatch: expected {commit_sha}, got {run.get('head_sha')}")
+    if run.get("status") != "completed":
+        run_blockers.append(f"workflow run status is not completed: {run.get('status')}")
+    if run.get("conclusion") != "success":
+        run_blockers.append(f"workflow run conclusion is not success: {run.get('conclusion')}")
+
+    artifacts = _github_api_json(f"https://api.github.com/repos/{resolved_repo}/actions/runs/{resolved_run_id}/artifacts", token)
+    artifact_items = artifacts.get("artifacts", [])
+    if not isinstance(artifact_items, list):
+        _die("GitHub artifacts response did not contain an artifacts list")
+    artifact = next((item for item in artifact_items if isinstance(item, dict) and item.get("name") == artifact_name), None)
+    if not artifact:
+        _die(f"workflow run is missing required artifact: {artifact_name}")
+    download_url = artifact.get("archive_download_url")
+    if not download_url:
+        _die("workflow artifact response is missing archive_download_url")
+    zip_bytes = _github_download_bytes(str(download_url), token)
+    attestation = _read_attestation_from_zip(zip_bytes, file_name="phase_attestation.json")
+    verification = _validate_github_phase_attestation(
+        attestation,
+        repo=resolved_repo,
+        run_id=resolved_run_id,
+        commit_sha=commit_sha,
+        pipeline_id=pipeline_id,
+        phase=phase,
+    )
+    if run_blockers:
+        verification["status"] = "FAIL"
+        verification["blockers"] = run_blockers + list(verification.get("blockers", []))
+    verification["workflow_run"] = {
+        "id": run.get("id"),
+        "name": run.get("name"),
+        "html_url": run.get("html_url"),
+        "status": run.get("status"),
+        "conclusion": run.get("conclusion"),
+        "head_sha": run.get("head_sha"),
+    }
+    verification["artifact"] = {
+        "id": artifact.get("id"),
+        "name": artifact.get("name"),
+        "size_in_bytes": artifact.get("size_in_bytes"),
+        "expired": artifact.get("expired"),
+    }
+    return verification
+
+
 def _record_github_ci_verification(state: Dict[str, Any], verification: Dict[str, Any], artifact_name: str) -> None:
     pid = str(state.get("pipeline_id"))
     paths = _contract_paths(pid)
@@ -4455,6 +5088,43 @@ def _record_github_ci_verification(state: Dict[str, Any], verification: Dict[str
     _log_event(state, f"github verify-run {verification['status']} run_id={run_id} commit={commit_sha[:12]}")
 
 
+def _record_phase_ci_verification(
+    state: Dict[str, Any],
+    phase: str,
+    verification: Dict[str, Any],
+    artifact_name: str,
+) -> None:
+    pid = str(state.get("pipeline_id"))
+    paths = _contract_paths(pid)
+    result_path = paths["phase_ci_root"] / f"{phase}_result.json"
+    _write_json(result_path, verification)
+    state["phase_attestations"] = _ensure_phase_attestations(state)
+    phase_state = state["phase_attestations"]["phases"][phase]
+    run_id = str(verification.get("run_id") or "")
+    commit_sha = str(verification.get("commit_sha") or "")
+    phase_state.update({
+        "status": verification["status"],
+        "completed_at": _now(),
+        "phase": phase,
+        "run_id": run_id,
+        "commit_sha": commit_sha,
+        "evidence": f"github_actions_phase_run:{run_id}",
+        "report_file": str(result_path),
+        "artifact": artifact_name,
+    })
+    state.setdefault("trusted_phase_runs", [])
+    state["trusted_phase_runs"].append({
+        "recorded_at": _now(),
+        "status": verification["status"],
+        "repo": verification.get("repository"),
+        "phase": phase,
+        "run_id": run_id,
+        "commit_sha": commit_sha,
+        "artifact": artifact_name,
+    })
+    _log_event(state, f"github phase-ci {phase} {verification['status']} run_id={run_id} commit={commit_sha[:12]}")
+
+
 def cmd_github(args: argparse.Namespace) -> None:
     action = args.github_action
     if action != "verify-run":
@@ -4476,6 +5146,56 @@ def cmd_github(args: argparse.Namespace) -> None:
 
     print(json.dumps(verification, ensure_ascii=False, indent=2))
     sys.exit(0 if verification["status"] == "PASS" else 1)
+
+
+def cmd_agent(args: argparse.Namespace) -> None:
+    action = args.agent_action
+    state = _require_state()
+    state = _ensure_v210_fields(state)
+    if action == "start":
+        run, token = _agent_run_start(state, args.phase, args.agent_id)
+        _save(state)
+        safe_run = {k: v for k, v in run.items() if k != "token_hash"}
+        print(GREEN(f"\n[AGENT RUN STARTED] {run['phase']} {run['agent_id']}"))
+        print(f"  run_id: {run['run_id']}")
+        print(f"  token: {token}")
+        print("  Pass this token only to the assigned agent; it is shown once.\n")
+        print(json.dumps({"run": safe_run, "token": token}, ensure_ascii=False, indent=2))
+        return
+
+    if action == "finish":
+        run = _agent_run_finish(
+            state,
+            run_id=args.run_id,
+            token=args.token,
+            output_file=args.output_file,
+            evidence=args.evidence,
+            notes=args.notes,
+        )
+        _save(state)
+        safe_run = {k: v for k, v in run.items() if k != "token_hash"}
+        print(GREEN(f"\n[AGENT RUN COMPLETED] {run['phase']} {run['agent_id']}"))
+        print(f"  run_id: {run['run_id']}")
+        print(f"  receipt: {run['receipt_path']}\n")
+        print(json.dumps(safe_run, ensure_ascii=False, indent=2))
+        return
+
+    if action == "status":
+        runs = state.get("agent_runs", {})
+        if not isinstance(runs, dict):
+            runs = {}
+        safe_runs = {
+            rid: {k: v for k, v in run.items() if k != "token_hash"}
+            for rid, run in runs.items()
+            if isinstance(run, dict)
+        }
+        print(json.dumps({
+            "pipeline_id": state.get("pipeline_id"),
+            "agent_runs": safe_runs,
+        }, ensure_ascii=False, indent=2))
+        return
+
+    _die(f"unknown agent action: {action}", exit_code=2)
 
 
 def _set_external_gate(
@@ -4731,6 +5451,9 @@ def cmd_gates(args: argparse.Namespace) -> None:
 
     if action == "init":
         state["external_gates"] = _new_external_gates(enabled=True)
+        if bool(getattr(args, "phase_attestations", False)):
+            _enable_phase_attestations(state)
+            _log_event(state, "GitHub phase attestations enabled")
         _log_event(state, "three_gate mode enabled")
         _save(state)
         print(GREEN(f"\n[THREE GATE ENABLED] {pid}\n"))
@@ -4740,6 +5463,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
         result = {
             "pipeline_id": pid,
             "external_gates": state.get("external_gates"),
+            "phase_attestations": state.get("phase_attestations"),
             "blockers": _external_gate_blockers(state),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -4748,7 +5472,42 @@ def cmd_gates(args: argparse.Namespace) -> None:
     if not _external_gates_enabled(state):
         _die("three_gate mode is not enabled. Run `python pipeline.py gates init` first.")
 
+    if action == "prepare-phase":
+        request = _prepare_phase_attestation_request(state, args.phase)
+        _log_event(state, f"phase attestation request prepared: {args.phase}")
+        _save(state)
+        print(GREEN(f"\n[PHASE ATTESTATION REQUEST READY] {args.phase}"))
+        print(f"  request: {PHASE_ATTESTATION_REQUEST}")
+        print("  next: commit/push the request plus .pipeline/phase_evidence, wait for GitHub Actions, then run:")
+        print(f"        {YELLOW(f'python pipeline.py gates phase-ci --phase {args.phase} --repo hojiyong2-commits/Pipeline')}\n")
+        print(json.dumps(request, ensure_ascii=False, indent=2))
+        return
+
+    if action == "phase-ci":
+        if not _phase_attestations_enabled(state):
+            _die("phase attestations are not enabled for this pipeline")
+        verification = _verify_github_phase_attestation_run(
+            repo=args.repo,
+            commit=args.commit,
+            run_id=args.run_id,
+            artifact_name=args.artifact,
+            token_env=args.token_env,
+            workflow=args.workflow,
+            pipeline_id=pid,
+            phase=args.phase,
+        )
+        _record_phase_ci_verification(state, args.phase, verification, args.artifact)
+        _save(state)
+        color = GREEN if verification["status"] == "PASS" else RED
+        print(color(f"\n[PHASE CI GATE {verification['status']}] {args.phase}"))
+        print(f"  run_id: {verification.get('run_id')}")
+        print(f"  report: {_contract_paths(pid)['phase_ci_root'] / (args.phase + '_result.json')}\n")
+        sys.exit(0 if verification["status"] == "PASS" else 1)
+
     if action == "technical":
+        build_blocker = _phase_attestation_blocker_for_phase(state, "harness")
+        if build_blocker:
+            _die(build_blocker)
         strict_tools = not bool(getattr(args, "relaxed_tools", False))
         if bool(getattr(args, "strict_tools", False)):
             strict_tools = True
@@ -5639,6 +6398,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_done.add_argument("--scope-manifest", default=None,
                         help="[dev 전용] 모든 파이프라인에서 필수인 scope_manifest.json 경로")
 
+    p_done.add_argument("--agent-run-id", default=None,
+                        help="Option A: completed agent run receipt id for pm/dev phase submission")
+
     # qa
     p_qa = sub.add_parser("qa", help="QA 결과 기록")
     p_qa.add_argument("--result", required=True, choices=["PASS", "FAIL", "pass", "fail"])
@@ -5654,6 +6416,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_qa.add_argument("--failure-sig", default=None, metavar="SIG",
                       help="QA FAIL 시 <failure_signature>[category]:[hash]</failure_signature> 값. "
                            "동일 시그니처 연속 2회 감지 시 RECURRING 경고 출력.")
+
+    p_qa.add_argument("--agent-run-id", default=None,
+                      help="Option A: completed qa-agent run receipt id")
 
     # sec
     p_sec = sub.add_parser("sec", help="Security 결과 기록")
@@ -5685,6 +6450,23 @@ def build_parser() -> argparse.ArgumentParser:
         help='N/A 빌드(--exe "N/A") 시 필수. Phase 7 진행 전 사용자 "진행" 응답 확인 완료 플래그. 없으면 빌드 기록 거부.',
     )
 
+    p_build.add_argument("--agent-run-id", default=None,
+                         help="Option A: completed build-agent run receipt id")
+
+    # agent run receipts
+    p_agent = sub.add_parser("agent", help="Start/finish trusted per-phase agent run receipts")
+    agsub = p_agent.add_subparsers(dest="agent_action", required=True)
+    p_agent_start = agsub.add_parser("start", help="Start an agent run and print one-time token")
+    p_agent_start.add_argument("--phase", required=True, choices=list(PHASE_ATTESTATION_PHASES))
+    p_agent_start.add_argument("--agent-id", default=None, help="Defaults to the required agent for the phase")
+    p_agent_finish = agsub.add_parser("finish", help="Finish an agent run and write receipt")
+    p_agent_finish.add_argument("--run-id", required=True)
+    p_agent_finish.add_argument("--token", required=True)
+    p_agent_finish.add_argument("--output-file", required=True)
+    p_agent_finish.add_argument("--evidence", default=None, help="Comma-separated files created or verified by the agent")
+    p_agent_finish.add_argument("--notes", default=None)
+    agsub.add_parser("status", help="Show agent run receipts without token hashes")
+
     # harness
     p_harness = sub.add_parser("harness", help="Harness 채점 결과 기록")
     p_harness.add_argument("--score", required=True, type=int, help="0~100 점수")
@@ -5713,6 +6495,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_contract_init.add_argument("--force", action="store_true", default=False)
     p_contract_init.add_argument("--three-gate", action="store_true", default=False,
                                  help="Enable external Technical/Oracle/User Acceptance gates for this pipeline")
+    p_contract_init.add_argument("--phase-attestations", action="store_true", default=False,
+                                 help="Option A: require GitHub Actions attestation after PM/Dev/QA/Build")
 
     p_contract_module = csub.add_parser("add-module", help="Add a module/component to the contract")
     p_contract_module.add_argument("--pipeline-id", default=None)
@@ -5787,8 +6571,20 @@ def build_parser() -> argparse.ArgumentParser:
     # three_gate external gates
     p_gates = sub.add_parser("gates", help="External three-gate status and runners")
     gsub = p_gates.add_subparsers(dest="gates_action", required=True)
-    gsub.add_parser("init", help="Enable three_gate mode on the active pipeline")
+    p_gates_init = gsub.add_parser("init", help="Enable three_gate mode on the active pipeline")
+    p_gates_init.add_argument("--phase-attestations", action="store_true", default=False,
+                              help="Require GitHub Actions attestation after PM/Dev/QA/Build")
     gsub.add_parser("status", help="Show external gate state")
+    p_gate_prepare = gsub.add_parser("prepare-phase", help="Write .pipeline phase attestation request for CI")
+    p_gate_prepare.add_argument("--phase", required=True, choices=list(PHASE_ATTESTATION_PHASES))
+    p_gate_phase_ci = gsub.add_parser("phase-ci", help="Verify GitHub Actions phase attestation artifact")
+    p_gate_phase_ci.add_argument("--phase", required=True, choices=list(PHASE_ATTESTATION_PHASES))
+    p_gate_phase_ci.add_argument("--repo", default=None, help="owner/repo; defaults to origin remote")
+    p_gate_phase_ci.add_argument("--run-id", default=None, help="Specific GitHub Actions workflow run id; omitted means latest run for HEAD")
+    p_gate_phase_ci.add_argument("--commit", default=None, help="Expected commit SHA/ref; defaults to local HEAD")
+    p_gate_phase_ci.add_argument("--workflow", default="CI", help="Workflow run name to search when --run-id is omitted")
+    p_gate_phase_ci.add_argument("--artifact", default="pipeline-phase-attestation", help="Required phase artifact name")
+    p_gate_phase_ci.add_argument("--token-env", default="GITHUB_TOKEN", help="Optional env var containing a GitHub token")
     p_gate_tech = gsub.add_parser("technical", help="Run deterministic technical tool gate")
     p_gate_tech.add_argument("--strict-tools", action="store_true", default=False,
                              help="Deprecated no-op; strict tool checks are the default")
@@ -5921,6 +6717,7 @@ COMMAND_MAP = {
     "gates":                cmd_gates,
     "advisory":             cmd_advisory,
     "github":               cmd_github,
+    "agent":                cmd_agent,
     "architect":            cmd_architect,
     "status":               cmd_status,
     "interface":            cmd_interface,

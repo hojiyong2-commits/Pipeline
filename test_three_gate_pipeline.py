@@ -69,6 +69,52 @@ def _write_qa_report(directory: str, *, verdict: str = "PASS", score: int = 120)
     return report
 
 
+def _install_completed_agent_run(state: dict, phase: str, output_file: Path, root: Path) -> str:
+    run_id = f"{phase}-test-run"
+    receipt_dir = root / "agent-receipts"
+    receipt_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_file.resolve()
+    started = pipeline._now()
+    completed = pipeline._now()
+    receipt = {
+        "schema_version": 1,
+        "receipt_type": "agent-run-receipt-v1",
+        "pipeline_id": state["pipeline_id"],
+        "phase": phase,
+        "agent_id": pipeline.PHASE_AGENT_IDS[phase],
+        "run_id": run_id,
+        "status": "COMPLETED",
+        "started_at": started,
+        "completed_at": completed,
+        "output_file": str(output_file),
+        "output_sha256": pipeline._sha256_file(output_file),
+        "evidence_files": [],
+        "commit_sha": "a" * 40,
+    }
+    receipt_path = receipt_dir / f"{run_id}.json"
+    pipeline._write_json(receipt_path, receipt)
+    state.setdefault("agent_runs", {})[run_id] = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "pipeline_id": state["pipeline_id"],
+        "phase": phase,
+        "agent_id": pipeline.PHASE_AGENT_IDS[phase],
+        "status": "COMPLETED",
+        "started_at": started,
+        "completed_at": completed,
+        "token_hash": "redacted",
+        "output_file": str(output_file),
+        "output_sha256": pipeline._sha256_file(output_file),
+        "evidence_files": [],
+        "receipt_path": str(receipt_path.resolve()),
+        "receipt_sha256": pipeline._sha256_file(receipt_path),
+        "used_by_phase": None,
+        "used_at": None,
+        "commit_sha": "a" * 40,
+    }
+    return run_id
+
+
 class ThreeGatePipelineTests(unittest.TestCase):
     def test_help_description_uses_dash_not_option_like_phase(self) -> None:
         parser = pipeline.build_parser()
@@ -434,6 +480,256 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 pipeline.cmd_gates(args)
 
         self.assertEqual(ctx.exception.code, 1)
+
+    def test_phase_attestation_blocks_next_phase_until_github_pass(self) -> None:
+        state = pipeline._new_state("TMP-PHASE-BLOCK", "IMP", "sample")
+        state["current_phase"] = "dev"
+        state["phases"]["pm"]["status"] = "DONE"
+        state["phase_attestations"] = pipeline._new_phase_attestations(enabled=True)
+
+        ok, reason = pipeline.check_gate(state, "dev")
+        self.assertFalse(ok)
+        self.assertIn("pm GitHub phase attestation must be PASS", reason)
+
+        state["phase_attestations"]["phases"]["pm"]["status"] = "PASS"
+        ok, reason = pipeline.check_gate(state, "dev")
+        self.assertTrue(ok, reason)
+
+    def test_prepare_phase_attestation_request_copies_report_evidence(self) -> None:
+        state = pipeline._new_state("TMP-PHASE-PREP", "IMP", "sample")
+        state["phase_attestations"] = pipeline._new_phase_attestations(enabled=True)
+        state["phases"]["pm"]["status"] = "DONE"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "step_plan.xml"
+            report.write_text("<step_plan></step_plan>", encoding="utf-8")
+            request_path = root / ".pipeline" / "phase_attestation_request.json"
+            evidence_dir = root / ".pipeline" / "phase_evidence"
+            state["phases"]["pm"]["report_file"] = str(report)
+            run_id = _install_completed_agent_run(state, "pm", report, root)
+            state["phases"]["pm"]["agent_run_id"] = run_id
+            with mock.patch.object(pipeline, "PHASE_ATTESTATION_REQUEST", request_path), \
+                 mock.patch.object(pipeline, "PHASE_ATTESTATION_EVIDENCE_DIR", evidence_dir), \
+                 mock.patch.object(pipeline, "_git_rev_parse", return_value="a" * 40):
+                request = pipeline._prepare_phase_attestation_request(state, "pm")
+
+            self.assertEqual(request["phase"], "pm")
+            self.assertEqual(request["pipeline_id"], "TMP-PHASE-PREP")
+            self.assertEqual(request["agent_run"]["agent_id"], "pm-agent")
+            self.assertEqual(request["agent_run"]["used_by_phase"], "pm")
+            self.assertTrue(request_path.exists())
+            labels = {item["label"] for item in request["copied_evidence"]}
+            self.assertIn("agent_receipt", labels)
+            self.assertIn("report", labels)
+            receipt_copy = next(item for item in request["copied_evidence"] if item["label"] == "agent_receipt")
+            self.assertEqual(request["agent_run"]["receipt_path"], receipt_copy["path"])
+            self.assertEqual(request["agent_run"]["receipt_sha256"], receipt_copy["sha256"])
+            for copied in request["copied_evidence"]:
+                copied_path = Path(copied["path"])
+                if not copied_path.is_absolute():
+                    copied_path = pipeline.BASE_DIR / copied_path
+                self.assertTrue(copied_path.exists())
+
+    def test_agent_run_receipt_roundtrip_validates_token_and_output(self) -> None:
+        state = pipeline._new_state("TMP-AGENT-RUN", "IMP", "sample")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "step_plan.xml"
+            output.write_text("<step_plan></step_plan>", encoding="utf-8")
+            with mock.patch.object(pipeline, "AGENT_RECEIPT_DIR", root / "receipts"), \
+                 mock.patch.object(pipeline, "_git_rev_parse", return_value="a" * 40):
+                run, token = pipeline._agent_run_start(state, "pm", "pm-agent")
+                completed = pipeline._agent_run_finish(
+                    state,
+                    run_id=run["run_id"],
+                    token=token,
+                    output_file=str(output),
+                    evidence=None,
+                    notes="done",
+                )
+                expected_output_hash = pipeline._sha256_file(output)
+                receipt_exists = Path(completed["receipt_path"]).exists()
+
+        self.assertEqual(completed["status"], "COMPLETED")
+        self.assertEqual(completed["agent_id"], "pm-agent")
+        self.assertEqual(completed["output_sha256"], expected_output_hash)
+        self.assertTrue(receipt_exists)
+
+    def test_phase_submission_requires_agent_run_when_phase_attestations_enabled(self) -> None:
+        state = pipeline._new_state("TMP-PM-AGENT-REQ", "IMP", "sample")
+        state["phase_attestations"] = pipeline._new_phase_attestations(enabled=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single function</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-PM-AGENT-REQ</pipeline_id>
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>main.run</affected_function>
+      <target_files><file>main.py</file></target_files>
+      <grep_evidence>
+        <pattern>def run</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Update run behavior</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(
+                branch=None,
+                phase="pm",
+                decomp=True,
+                clarification=True,
+                roadmap=True,
+                judgment_confirmed=False,
+                report_file=str(report),
+                files=None,
+                agent_run_id=None,
+            )
+            with mock.patch.object(pipeline, "_load_branch_state", return_value=state):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_done(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(state["phases"]["pm"]["status"], "PENDING")
+
+    def test_phase_submission_accepts_matching_agent_run_receipt(self) -> None:
+        state = pipeline._new_state("TMP-PM-AGENT-OK", "IMP", "sample")
+        state["phase_attestations"] = pipeline._new_phase_attestations(enabled=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single function</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-PM-AGENT-OK</pipeline_id>
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>main.run</affected_function>
+      <target_files><file>main.py</file></target_files>
+      <grep_evidence>
+        <pattern>def run</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Update run behavior</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            run_id = _install_completed_agent_run(state, "pm", report, root)
+            args = argparse.Namespace(
+                branch=None,
+                phase="pm",
+                decomp=True,
+                clarification=True,
+                roadmap=True,
+                judgment_confirmed=False,
+                report_file=str(report),
+                files=None,
+                agent_run_id=run_id,
+            )
+            with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                 mock.patch.object(pipeline, "_save_state_for"), \
+                 mock.patch.object(pipeline, "_record_snapshot"):
+                pipeline.cmd_done(args)
+
+        self.assertEqual(state["phases"]["pm"]["status"], "DONE")
+        self.assertEqual(state["phases"]["pm"]["agent_run_id"], run_id)
+        self.assertEqual(state["agent_runs"][run_id]["used_by_phase"], "pm")
+
+    def test_gates_phase_ci_records_phase_attestation(self) -> None:
+        state = pipeline._new_state("TMP-PHASE-CI", "IMP", "sample")
+        state["external_gates"] = pipeline._new_external_gates(enabled=True)
+        state["phase_attestations"] = pipeline._new_phase_attestations(enabled=True)
+        verification = {
+            "schema_version": 1,
+            "status": "PASS",
+            "repository": "hojiyong2-commits/Pipeline",
+            "run_id": "321",
+            "commit_sha": "a" * 40,
+            "pipeline_id": "TMP-PHASE-CI",
+            "phase": "pm",
+            "attestation": {},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = {"phase_ci_root": root / "gates" / "phase_ci"}
+            args = argparse.Namespace(
+                gates_action="phase-ci",
+                phase="pm",
+                repo="hojiyong2-commits/Pipeline",
+                run_id="321",
+                commit="a" * 40,
+                workflow="CI",
+                artifact="pipeline-phase-attestation",
+                token_env="GITHUB_TOKEN",
+            )
+            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+                 mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
+                 mock.patch.object(pipeline, "_verify_github_phase_attestation_run", return_value=verification), \
+                 mock.patch.object(pipeline, "_save"):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_gates(args)
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertEqual(state["phase_attestations"]["phases"]["pm"]["status"], "PASS")
+        self.assertEqual(state["phase_attestations"]["phases"]["pm"]["run_id"], "321")
+
+    def test_phase_ci_validation_rejects_wrong_agent_receipt(self) -> None:
+        attestation = {
+            "schema_version": 1,
+            "attestation_type": "pipeline-phase-v1",
+            "repository": "hojiyong2-commits/Pipeline",
+            "run_id": "321",
+            "pipeline_id": "TMP-PHASE-CI",
+            "phase": "dev",
+            "head_sha": "a" * 40,
+            "validation": {"status": "PASS", "blockers": []},
+            "request": {
+                "agent_run": {
+                    "run_id": "pm-test-run",
+                    "phase": "dev",
+                    "agent_id": "pm-agent",
+                    "status": "COMPLETED",
+                    "used_by_phase": "dev",
+                }
+            },
+        }
+
+        result = pipeline._validate_github_phase_attestation(
+            attestation,
+            repo="hojiyong2-commits/Pipeline",
+            run_id="321",
+            commit_sha="a" * 40,
+            pipeline_id="TMP-PHASE-CI",
+            phase="dev",
+        )
+
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn("request.agent_run agent_id must be dev-agent", result["blockers"])
 
     def test_accept_gate_requires_github_ci_pass_before_deploy(self) -> None:
         state = pipeline._new_state("TMP-ACCEPT-BLOCK", "FEAT", "sample")

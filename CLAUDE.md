@@ -83,20 +83,60 @@ When Contract v2 is enabled, `pipeline.py check --phase dev` blocks until the co
 
 For quality-sensitive work, prefer Three-Gate mode on top of Contract v2:
 
-1. `python pipeline.py contract init --three-gate`
+1. `python pipeline.py contract init --three-gate --phase-attestations`
 2. Register user-supplied oracle files with `python pipeline.py contract add-oracle --input ... --expected ... --case-kind normal`, plus at least one additional `--case-kind edge|exception|error` oracle.
 3. Run `python pipeline.py contract audit`; freeze is blocked until the rule-based audit PASSes.
 4. PM completion is also hard-gated: `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification ...` must include a real `<decomposition_audit>` and `<step_plan><micro_tasks>...</micro_tasks></step_plan>`.
 5. Dev completion is hard-gated against the PM atomic plan: `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json` must prove every declared and actual changed file maps to a PM micro-task.
-6. After Build, Phase 7 is no longer a numeric score. It is:
+6. Option A phase attestation is mandatory before moving across major role boundaries:
+   - after PM: `python pipeline.py gates prepare-phase --phase pm`, commit/push, wait for GitHub Actions, then `python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline`
+   - after Dev: repeat with `--phase dev`
+   - after QA PASS: repeat with `--phase qa`
+   - after Build: repeat with `--phase build`
+7. After Build phase attestation, Phase 7 is no longer a numeric score. It is:
    - `python pipeline.py gates technical`
    - `python pipeline.py gates oracle --user-confirmed`
    - `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
    - `python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed`
 
-Claude Code must provide the user-facing result link/path before acceptance: PR link, artifact path, screenshot path, EXE path, output workbook, or dashboard URL as applicable. The user may approve by typing ACCEPT/REJECT or by pressing the dashboard ACCEPT/REJECT buttons. ACCEPT is valid only after Technical, Oracle, and GitHub CI gates are PASS. On ACCEPT, `pipeline.py` copies the accepted artifact(s) into `G:\내 드라이브\터미널\<pipeline_id>` and writes `deployment_manifest.json`; `PIPELINE_DEPLOY_ROOT` may override this only for tests or explicit local configuration.
+### Option A Agent Receipt Gate
 
-In Three-Gate mode, `COMPLETE` is impossible until Technical, Oracle, GitHub CI, and User Acceptance gates are all PASS. The technical gate is strict by default: missing ruff/mypy/bandit/pytest or missing Python evidence files fail unless `--relaxed-tools` is explicitly used. Oracle audit requires user-source hashes, at least one normal oracle, at least one edge/exception/error oracle, and non-empty/non-placeholder expected outputs. `--allow-no-oracle` is only for explicitly non-runnable docs/analysis/config work and cannot waive malformed, hashless, agent-sourced, or weak oracle entries. Legacy `pipeline.py harness --score ...` is blocked in this mode. GPT/OpenAI advisory reviews are optional, non-binding red-team reviews fixed to `gpt-5.5`; API calls happen only when `OPENAI_API_KEY` is present and `ENABLE_GPT_ADVISORY=1`. Unresolved CRITICAL advisory findings block COMPLETE, but GPT never awards PASS/FAIL, never compares oracles, and never replaces user acceptance. If `pipeline.py advisory status` shows `review_count=0` or `api_call_count=0`, advisory was not actually run; agents must not report "GPT advisory CRITICAL findings zero" as if an OpenAI review occurred.
+When `phase_attestations.enabled=true`, PM/Dev/QA/Build phase records must be
+bound to a completed agent receipt. The orchestrator starts the receipt, passes
+the one-time token only to the assigned agent, and records the phase only with
+the returned `run_id`:
+
+```powershell
+python pipeline.py agent start --phase pm
+# give the printed token only to pm-agent
+python pipeline.py agent finish --run-id <run_id> --token <token> --output-file step_plan.xml
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>
+```
+
+Use the same pattern for `dev`, `qa`, and `build`. Expected ids are fixed:
+`pm-agent`, `dev-agent`, `qa-agent`, `build-agent`. `pipeline.py` rejects a
+phase submission without a matching completed receipt, and `gates prepare-phase`
+copies that receipt into `.pipeline/phase_evidence` so GitHub Actions can verify
+it. Agents must not claim another agent's phase, reuse a run id, or submit a
+phase without the receipt gate.
+
+In Option A mode this overrides the older PM Pipeline Manager spawn chain. PM may
+plan and hand off, but PM must not own downstream tokens, must not finish Dev/QA/
+Build receipts, and must not submit phase CI requests for another role. The main
+orchestrator acts only as the receipt clerk: it may run `agent start`, pass the
+one-time token only inside the assigned agent's prompt, collect that agent's
+output file, run `agent finish`, and then record the matching phase with
+`--agent-run-id`. The orchestrator still must not edit product files or author
+the agent reports.
+
+This is stronger than file-only phase evidence, but it is not absolute
+cryptographic isolation while every process runs as the same local OS user. Full
+proof requires a separate external runner or signer that local agents cannot
+modify or impersonate.
+
+Claude Code must provide the user-facing result link/path before acceptance: PR link, artifact path, screenshot path, EXE path, output workbook, or dashboard URL as applicable. The user may approve by typing ACCEPT/REJECT or by pressing the dashboard ACCEPT/REJECT buttons. ACCEPT is valid only after PM/Dev/QA/Build phase attestations, Technical, Oracle, and GitHub CI gates are PASS. On ACCEPT, `pipeline.py` copies the accepted artifact(s) into `G:\내 드라이브\터미널\<pipeline_id>` and writes `deployment_manifest.json`; `PIPELINE_DEPLOY_ROOT` may override this only for tests or explicit local configuration.
+
+In Three-Gate mode, `COMPLETE` is impossible until required phase attestations, Technical, Oracle, GitHub CI, and User Acceptance gates are all PASS. The technical gate is strict by default: missing ruff/mypy/bandit/pytest or missing Python evidence files fail unless `--relaxed-tools` is explicitly used. Oracle audit requires user-source hashes, at least one normal oracle, at least one edge/exception/error oracle, and non-empty/non-placeholder expected outputs. `--allow-no-oracle` is only for explicitly non-runnable docs/analysis/config work and cannot waive malformed, hashless, agent-sourced, or weak oracle entries. Legacy `pipeline.py harness --score ...` is blocked in this mode. GPT/OpenAI advisory reviews are optional, non-binding red-team reviews fixed to `gpt-5.5`; API calls happen only when `OPENAI_API_KEY` is present and `ENABLE_GPT_ADVISORY=1`. Unresolved CRITICAL advisory findings block COMPLETE, but GPT never awards PASS/FAIL, never compares oracles, and never replaces user acceptance. If `pipeline.py advisory status` shows `review_count=0` or `api_call_count=0`, advisory was not actually run; agents must not report "GPT advisory CRITICAL findings zero" as if an OpenAI review occurred.
 
 Expected CLI errors must print `[PIPELINE ERROR]` without raw traceback. Use `python pipeline.py --debug ...` only when debugging pipeline implementation bugs.
 
@@ -202,12 +242,13 @@ python -c "import pyautogui; print(pyautogui.size())"  # RPA 태스크만, 실�
 
 If `external_gates.enabled=true`, Phase 7 uses external binary gates instead of numeric scoring:
 
+0. If `phase_attestations.enabled=true`, PM/Dev/QA/Build each require `agent start -> agent finish -> phase record with --agent-run-id -> prepare-phase -> push -> GitHub Actions -> phase-ci` before the next role boundary may proceed.
 1. Technical gate: `python pipeline.py gates technical`
 2. Oracle gate: `python pipeline.py gates oracle --user-confirmed`
 3. GitHub CI gate: `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
 4. User Acceptance gate: `python pipeline.py gates accept --result ACCEPT --evidence [file-or-screenshot] --user-confirmed`
 
-Any gate FAIL means iterate the failing gate path. The test-harness-agent may diagnose, but must not invent a numeric score. `pipeline.py architect` blocks COMPLETE until all four external gates are PASS and actual unresolved GPT advisory CRITICAL findings are zero. No advisory review file means "advisory not run", not "advisory passed". The user acceptance command must receive a real output artifact path through `--evidence`; after ACCEPT, the pipeline deploys accepted outputs to `G:\내 드라이브\터미널\<pipeline_id>`.
+Any gate FAIL means iterate the failing gate path. The test-harness-agent may diagnose, but must not invent a numeric score. `pipeline.py architect` blocks COMPLETE until all required phase attestations, all four external gates, and actual unresolved GPT advisory CRITICAL findings are clear. No advisory review file means "advisory not run", not "advisory passed". The user acceptance command must receive a real output artifact path through `--evidence`; after ACCEPT, the pipeline deploys accepted outputs to `G:\내 드라이브\터미널\<pipeline_id>`.
 
 After `gates accept --result ACCEPT` passes, the next required record command is `python pipeline.py architect --report-file architect_report.xml`. Three-Gate does not auto-complete at Phase 7; Phase 8 must record the final COMPLETE transition after confirming the external gate blockers are empty. `pipeline.py architect` never enters Phase 9 automatically. The architect report must include `<protocol_evolution_decision>`; if protocol or agent-rule evolution is needed, record `required=true` and start a separate IMP pipeline after this pipeline is complete.
 

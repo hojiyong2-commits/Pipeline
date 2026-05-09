@@ -54,9 +54,140 @@ jobs:
           }
           $attestation | ConvertTo-Json -Depth 8 | Set-Content -Path pipeline_attestation.json -Encoding UTF8
 
+      - name: Create phase CI attestation
+        if: success() && hashFiles('.pipeline/phase_attestation_request.json') != ''
+        shell: pwsh
+        run: |
+          $requestPath = ".pipeline/phase_attestation_request.json"
+          $request = Get-Content -Path $requestPath -Raw | ConvertFrom-Json
+          $blockers = New-Object System.Collections.Generic.List[string]
+          if ($request.schema_version -ne 1) {
+            $blockers.Add("request schema_version must be 1")
+          }
+          if ($request.request_type -ne "pipeline-phase-attestation-request-v1") {
+            $blockers.Add("request_type must be pipeline-phase-attestation-request-v1")
+          }
+          if ([string]::IsNullOrWhiteSpace($request.pipeline_id)) {
+            $blockers.Add("pipeline_id is required")
+          }
+          if (@("pm", "dev", "qa", "build") -notcontains $request.phase) {
+            $blockers.Add("phase must be one of pm/dev/qa/build")
+          }
+          $expectedAgents = @{
+            pm = "pm-agent"
+            dev = "dev-agent"
+            qa = "qa-agent"
+            build = "build-agent"
+          }
+          if ($null -eq $request.agent_run) {
+            $blockers.Add("agent_run receipt is required")
+          } else {
+            if ($request.agent_run.phase -ne $request.phase) {
+              $blockers.Add("agent_run phase mismatch")
+            }
+            if ($request.agent_run.agent_id -ne $expectedAgents[[string]$request.phase]) {
+              $blockers.Add("agent_run agent_id mismatch")
+            }
+            if ($request.agent_run.status -ne "COMPLETED") {
+              $blockers.Add("agent_run status must be COMPLETED")
+            }
+            if ($request.agent_run.used_by_phase -ne $request.phase) {
+              $blockers.Add("agent_run must be consumed by the same phase")
+            }
+            $receiptPath = [string]$request.agent_run.receipt_path
+            if ([string]::IsNullOrWhiteSpace($receiptPath) -or -not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {
+              $blockers.Add("agent receipt file missing: $receiptPath")
+            } else {
+              $receiptHash = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($receiptHash -ne ([string]$request.agent_run.receipt_sha256).ToLowerInvariant()) {
+                $blockers.Add("agent receipt hash mismatch: $receiptPath")
+              }
+              $receipt = Get-Content -Path $receiptPath -Raw | ConvertFrom-Json
+              if ($receipt.receipt_type -ne "agent-run-receipt-v1") {
+                $blockers.Add("agent receipt_type must be agent-run-receipt-v1")
+              }
+              if ($receipt.run_id -ne $request.agent_run.run_id) {
+                $blockers.Add("agent receipt run_id mismatch")
+              }
+              if ($receipt.agent_id -ne $request.agent_run.agent_id) {
+                $blockers.Add("agent receipt agent_id mismatch")
+              }
+              if ($receipt.phase -ne $request.phase) {
+                $blockers.Add("agent receipt phase mismatch")
+              }
+            }
+          }
+
+          if ($null -ne $request.copied_evidence) {
+            foreach ($item in @($request.copied_evidence)) {
+              if ($null -eq $item) { continue }
+              $path = [string]$item.path
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                $blockers.Add("copied evidence missing: $path")
+                continue
+              }
+              $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -ne ([string]$item.sha256).ToLowerInvariant()) {
+                $blockers.Add("copied evidence hash mismatch: $path")
+              }
+            }
+          }
+
+          if ($null -ne $request.workspace_file_checks) {
+            foreach ($item in @($request.workspace_file_checks)) {
+              if ($null -eq $item) { continue }
+              $path = [string]$item.path
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                $blockers.Add("workspace file missing: $path")
+                continue
+              }
+              $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -ne ([string]$item.sha256).ToLowerInvariant()) {
+                $blockers.Add("workspace file hash mismatch: $path")
+              }
+            }
+          }
+
+          $validation = @{
+            status = $(if ($blockers.Count -eq 0) { "PASS" } else { "FAIL" })
+            blockers = @($blockers)
+          }
+          $attestation = @{
+            schema_version = 1
+            attestation_type = "pipeline-phase-v1"
+            repository = $env:GITHUB_REPOSITORY
+            workflow = $env:GITHUB_WORKFLOW
+            run_id = $env:GITHUB_RUN_ID
+            run_attempt = $env:GITHUB_RUN_ATTEMPT
+            commit_sha = "${{ github.event.pull_request.head.sha || github.sha }}"
+            head_sha = "${{ github.event.pull_request.head.sha || github.sha }}"
+            checkout_sha = $env:GITHUB_SHA
+            ref = $env:GITHUB_REF
+            event_name = $env:GITHUB_EVENT_NAME
+            runner_os = $env:RUNNER_OS
+            pipeline_id = $request.pipeline_id
+            phase = $request.phase
+            request_sha256 = (Get-FileHash -LiteralPath $requestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            request = $request
+            validation = $validation
+            generated_at = (Get-Date).ToUniversalTime().ToString("o")
+          }
+          $attestation | ConvertTo-Json -Depth 12 | Set-Content -Path phase_attestation.json -Encoding UTF8
+          if ($blockers.Count -gt 0) {
+            Write-Error ("Phase attestation failed: " + ($blockers -join "; "))
+            exit 1
+          }
+
       - name: Upload CI attestation
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-attestation
           path: pipeline_attestation.json
+
+      - name: Upload phase CI attestation
+        if: success() && hashFiles('phase_attestation.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-phase-attestation
+          path: phase_attestation.json
