@@ -332,7 +332,8 @@ jobs:
           $existing = $comments | Where-Object { $_.body -like "*<!-- pipeline-human-acceptance-packet -->*" } | Select-Object -First 1
           $payload = @{ body = $body } | ConvertTo-Json -Depth 4
           if ($null -ne $existing) {
-            Invoke-RestMethod -Method Patch -Uri "$commentsUri/$($existing.id)" -Headers $headers -Body $payload -ContentType "application/json" | Out-Null
+            $commentUri = "$env:GITHUB_API_URL/repos/$repo/issues/comments/$($existing.id)"
+            Invoke-RestMethod -Method Patch -Uri $commentUri -Headers $headers -Body $payload -ContentType "application/json" | Out-Null
           } else {
             Invoke-RestMethod -Method Post -Uri $commentsUri -Headers $headers -Body $payload -ContentType "application/json" | Out-Null
           }

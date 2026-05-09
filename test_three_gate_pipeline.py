@@ -153,6 +153,8 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("pipeline-human-acceptance-packet", workflow)
         self.assertIn("최종 확인 안내", workflow)
         self.assertIn("코드를 읽지 말고", workflow)
+        self.assertIn("issues/comments/$($existing.id)", workflow)
+        self.assertNotIn('"$commentsUri/$($existing.id)"', workflow)
 
     def test_contract_actions_before_init_are_user_friendly(self) -> None:
         pid = f"TMP-NO-CONTRACT-{uuid.uuid4().hex[:10]}"
