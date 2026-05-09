@@ -160,7 +160,7 @@ jobs:
           - 필수 검사 이름: ``tests``
           - 실제로 실행한 검사: ``python -m pytest -q``
           - 이번 변경 번호: ``$headSha``
-          - 작업 흐름: ``$headRef``에서 ``$baseRef``로 합치기
+          - 작업 흐름: ``$headRef`` 브랜치를 ``$baseRef`` 브랜치로 합치기
           - 자동 검사 결과와 첨부파일 보기: $runUrl
 
           ### 변경된 파일

@@ -256,6 +256,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn('"added" { return "새 파일" }', workflow)
         self.assertIn("자동 검사: 통과", workflow)
         self.assertIn("첨부파일", workflow)
+        self.assertIn("브랜치로 합치기", workflow)
         self.assertNotIn("- CI: PASS", workflow)
         self.assertNotIn("Actions 실행/첨부파일", workflow)
         self.assertNotIn("마지막 agent", workflow)
