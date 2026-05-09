@@ -115,6 +115,13 @@ def _install_completed_agent_run(state: dict, phase: str, output_file: Path, roo
     return run_id
 
 
+def _write_oracle_file(root: Path, name: str, payload: str = '{"value": 1}\n') -> Path:
+    path = root / "tests" / "oracles" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+    return path
+
+
 class ThreeGatePipelineTests(unittest.TestCase):
     def test_help_description_uses_dash_not_option_like_phase(self) -> None:
         parser = pipeline.build_parser()
@@ -1285,9 +1292,9 @@ class ThreeGatePipelineTests(unittest.TestCase):
             root = Path(tmp)
             actual = root / "actual.json"
             expected = root / "expected.json"
-            oracle_input = root / "oracle_input.json"
-            oracle_expected = root / "oracle_expected.json"
-            for path in (actual, expected, oracle_input, oracle_expected):
+            oracle_input = _write_oracle_file(root, "kind/normal_input.json")
+            oracle_expected = _write_oracle_file(root, "kind/normal_expected.json")
+            for path in (actual, expected):
                 path.write_text('{"value": 1}\n', encoding="utf-8")
 
             contract = build_initial_contract("TMP-ORACLE-KIND", "sample task")
@@ -1328,7 +1335,8 @@ class ThreeGatePipelineTests(unittest.TestCase):
             paths = {"oracle_manifest": root / "oracle_manifest.json"}
             pipeline._write_json(paths["oracle_manifest"], oracle_manifest)
 
-            audit = pipeline._audit_contract_bundle(contract, test_set, paths)
+            with mock.patch.object(pipeline, "BASE_DIR", root):
+                audit = pipeline._audit_contract_bundle(contract, test_set, paths)
 
         self.assertEqual(audit["status"], "FAIL")
         self.assertTrue(any("edge/exception/error oracle" in item for item in audit["blockers"]))
@@ -1338,11 +1346,11 @@ class ThreeGatePipelineTests(unittest.TestCase):
             root = Path(tmp)
             actual = root / "actual.json"
             expected = root / "expected.json"
-            normal_input = root / "normal_input.json"
-            normal_expected = root / "normal_expected.json"
-            edge_input = root / "edge_input.json"
-            edge_expected = root / "edge_expected.json"
-            for path in (actual, expected, normal_input, normal_expected, edge_input):
+            normal_input = _write_oracle_file(root, "empty/normal_input.json")
+            normal_expected = _write_oracle_file(root, "empty/normal_expected.json")
+            edge_input = _write_oracle_file(root, "empty/edge_input.json")
+            edge_expected = root / "tests" / "oracles" / "empty" / "edge_expected.json"
+            for path in (actual, expected):
                 path.write_text('{"value": 1}\n', encoding="utf-8")
             edge_expected.write_text("{}\n", encoding="utf-8")
 
@@ -1395,7 +1403,8 @@ class ThreeGatePipelineTests(unittest.TestCase):
             paths = {"oracle_manifest": root / "oracle_manifest.json"}
             pipeline._write_json(paths["oracle_manifest"], oracle_manifest)
 
-            audit = pipeline._audit_contract_bundle(contract, test_set, paths)
+            with mock.patch.object(pipeline, "BASE_DIR", root):
+                audit = pipeline._audit_contract_bundle(contract, test_set, paths)
 
         self.assertEqual(audit["status"], "FAIL")
         self.assertTrue(any("expected JSON is empty" in item for item in audit["blockers"]))
@@ -1405,9 +1414,9 @@ class ThreeGatePipelineTests(unittest.TestCase):
             root = Path(tmp)
             actual = root / "actual.json"
             expected = root / "expected.json"
-            oracle_input = root / "oracle_input.json"
-            oracle_expected = root / "oracle_expected.json"
-            for path in (actual, expected, oracle_input, oracle_expected):
+            oracle_input = _write_oracle_file(root, "source/oracle_input.json")
+            oracle_expected = _write_oracle_file(root, "source/oracle_expected.json")
+            for path in (actual, expected):
                 path.write_text('{"value": 1}\n', encoding="utf-8")
 
             contract = build_initial_contract("TMP-ORACLE-SOURCE", "sample task")
@@ -1446,21 +1455,87 @@ class ThreeGatePipelineTests(unittest.TestCase):
             paths = {"oracle_manifest": root / "oracle_manifest.json"}
             pipeline._write_json(paths["oracle_manifest"], oracle_manifest)
 
-            audit = pipeline._audit_contract_bundle(contract, test_set, paths)
+            with mock.patch.object(pipeline, "BASE_DIR", root):
+                audit = pipeline._audit_contract_bundle(contract, test_set, paths)
 
         self.assertEqual(audit["status"], "FAIL")
         self.assertTrue(any("source must be user" in item for item in audit["blockers"]))
         self.assertTrue(any("input_sha256 is required" in item for item in audit["blockers"]))
         self.assertTrue(any("expected_sha256 is required" in item for item in audit["blockers"]))
 
+    def test_contract_audit_requires_oracle_files_under_codeowned_oracle_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            actual = root / "actual.json"
+            expected = root / "expected.json"
+            oracle_input = root / "loose_oracle_input.json"
+            oracle_expected = root / "loose_oracle_expected.json"
+            for path in (actual, expected, oracle_input, oracle_expected):
+                path.write_text('{"value": 1}\n', encoding="utf-8")
+
+            contract = build_initial_contract("TMP-ORACLE-ROOT", "sample task")
+            contract["definition_of_ready"]["min_edge_cases_total"] = 0
+            contract["modules"].append({
+                "id": "M1",
+                "name": "Parser",
+                "inputs": [],
+                "outputs": [],
+                "acceptance_rules": [],
+                "exceptions": [],
+            })
+            test_set = build_initial_test_set("TMP-ORACLE-ROOT")
+            test_set["tests"].append({
+                "id": "T1",
+                "module": "M1",
+                "type": "json_exact_match",
+                "priority": "P0",
+                "case_kind": "normal",
+                "points": 1,
+                "given": {"actual_file": str(actual)},
+                "when": {},
+                "then": {"expected_file": str(expected)},
+            })
+            oracle_manifest = {
+                "schema_version": 1,
+                "pipeline_id": "TMP-ORACLE-ROOT",
+                "oracles": [
+                    {
+                        "name": "O1",
+                        "source": "user",
+                        "case_kind": "normal",
+                        "input_path": str(oracle_input),
+                        "expected_path": str(oracle_expected),
+                        "input_sha256": pipeline._sha256_file(oracle_input),
+                        "expected_sha256": pipeline._sha256_file(oracle_expected),
+                    },
+                    {
+                        "name": "O2",
+                        "source": "user",
+                        "case_kind": "edge",
+                        "input_path": str(oracle_input),
+                        "expected_path": str(oracle_expected),
+                        "input_sha256": pipeline._sha256_file(oracle_input),
+                        "expected_sha256": pipeline._sha256_file(oracle_expected),
+                    },
+                ],
+            }
+            paths = {"oracle_manifest": root / "oracle_manifest.json"}
+            pipeline._write_json(paths["oracle_manifest"], oracle_manifest)
+
+            with mock.patch.object(pipeline, "BASE_DIR", root):
+                audit = pipeline._audit_contract_bundle(contract, test_set, paths)
+
+        self.assertEqual(audit["status"], "FAIL")
+        self.assertTrue(any("tests/oracles" in item for item in audit["blockers"]))
+
     def test_oracle_waiver_does_not_cover_weak_oracle_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             actual = root / "actual.json"
             expected = root / "expected.json"
-            oracle_input = root / "oracle_input.json"
-            oracle_expected = root / "oracle_expected.json"
-            for path in (actual, expected, oracle_input):
+            oracle_input = _write_oracle_file(root, "waiver/oracle_input.json")
+            oracle_expected = root / "tests" / "oracles" / "waiver" / "oracle_expected.json"
+            for path in (actual, expected):
                 path.write_text('{"value": 1}\n', encoding="utf-8")
             oracle_expected.write_text('{"result": "TODO"}\n', encoding="utf-8")
 
@@ -1503,13 +1578,14 @@ class ThreeGatePipelineTests(unittest.TestCase):
             paths = {"oracle_manifest": root / "oracle_manifest.json"}
             pipeline._write_json(paths["oracle_manifest"], oracle_manifest)
 
-            audit = pipeline._audit_contract_bundle(
-                contract,
-                test_set,
-                paths,
-                allow_no_oracle=True,
-                waiver_reason="docs-only task",
-            )
+            with mock.patch.object(pipeline, "BASE_DIR", root):
+                audit = pipeline._audit_contract_bundle(
+                    contract,
+                    test_set,
+                    paths,
+                    allow_no_oracle=True,
+                    waiver_reason="docs-only task",
+                )
 
         self.assertEqual(audit["status"], "FAIL")
         self.assertTrue(any("waiver cannot cover" in item for item in audit["blockers"]))

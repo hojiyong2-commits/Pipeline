@@ -57,10 +57,12 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
     _ok(work, "new", "--type", "FEAT", "--desc", "three gate cli smoke", "--no-dashboard")
     pid = _state(work)["pipeline_id"]
 
-    oracle_input = work / "oracle_input.json"
-    oracle_expected = work / "oracle_expected.json"
-    oracle_edge_input = work / "oracle_edge_input.json"
-    oracle_edge_expected = work / "oracle_edge_expected.json"
+    oracle_root = work / "tests" / "oracles" / pid
+    oracle_root.mkdir(parents=True, exist_ok=True)
+    oracle_input = oracle_root / "normal_input.json"
+    oracle_expected = oracle_root / "normal_expected.json"
+    oracle_edge_input = oracle_root / "edge_input.json"
+    oracle_edge_expected = oracle_root / "edge_expected.json"
     oracle_input.write_text(json.dumps({"name": "Ada"}, ensure_ascii=False), encoding="utf-8")
     oracle_expected.write_text(json.dumps({"greeting": "Hello, Ada"}, ensure_ascii=False), encoding="utf-8")
     oracle_edge_input.write_text(json.dumps({"name": ""}, ensure_ascii=False), encoding="utf-8")

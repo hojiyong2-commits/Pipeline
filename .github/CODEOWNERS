@@ -1,6 +1,14 @@
 # Pipeline trust root files.
 # Changes here alter the rules, validators, agents, or external CI gate.
+.github/CODEOWNERS @hojiyong2-commits
 .github/workflows/** @hojiyong2-commits
 pipeline.py @hojiyong2-commits
 CLAUDE.md @hojiyong2-commits
 .claude/agents/** @hojiyong2-commits
+
+# User-owned oracle and test surfaces.
+# Agents may implement against these files, but changes to the answer key must be visible in PR review.
+tests/oracles/** @hojiyong2-commits
+tests/** @hojiyong2-commits
+test_*.py @hojiyong2-commits
+*_test.py @hojiyong2-commits

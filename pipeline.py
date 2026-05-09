@@ -3910,6 +3910,7 @@ SHALLOW_TEST_TYPES = {"file_exists_check", "exe_launch_check"}
 ORACLE_CASE_KINDS = {"normal", "edge", "exception", "error"}
 ORACLE_EDGE_CASE_KINDS = {"edge", "exception", "error"}
 ORACLE_PLACEHOLDER_STRINGS = {"", "todo", "tbd", "placeholder", "sample", "example", "n/a", "na", "none", "null"}
+ORACLE_STORAGE_ROOT_REL = Path("tests") / "oracles"
 NON_ORACLE_DELIVERABLE_KINDS = {"doc", "docs", "markdown", "prompt", "analysis", "research", "policy", "config", "configuration"}
 
 
@@ -4016,6 +4017,20 @@ def _oracle_expected_quality_blockers(name: str, expected_path: Path) -> List[st
     return blockers
 
 
+def _oracle_storage_blockers(name: str, input_path: Path, expected_path: Path) -> List[str]:
+    blockers: List[str] = []
+    root = (BASE_DIR / ORACLE_STORAGE_ROOT_REL).resolve()
+    for label, path in (("input", input_path), ("expected", expected_path)):
+        try:
+            path.resolve().relative_to(root)
+        except ValueError:
+            blockers.append(
+                f"{name}: oracle {label}_path must be under "
+                f"{ORACLE_STORAGE_ROOT_REL.as_posix()}/** so GitHub CODEOWNERS can protect the answer key"
+            )
+    return blockers
+
+
 def _oracle_blockers_are_waivable(blockers: List[str]) -> bool:
     waivable = {
         "oracle_manifest.json is required for three_gate mode",
@@ -4062,6 +4077,7 @@ def _oracle_manifest_status(paths: Dict[str, Path]) -> Tuple[List[Dict[str, Any]
             input_path = BASE_DIR / input_path
         if not expected_path.is_absolute():
             expected_path = BASE_DIR / expected_path
+        blockers.extend(_oracle_storage_blockers(name, input_path, expected_path))
         if not input_path.exists():
             blockers.append(f"{name}: input_path missing: {input_path}")
             continue
@@ -4339,6 +4355,12 @@ def cmd_contract(args: argparse.Namespace) -> None:
         name = args.name or f"O{len(entries) + 1:03d}"
         if any(isinstance(item, dict) and item.get("name") == name for item in entries):
             _die(f"oracle name already exists: {name}")
+        storage_blockers = _oracle_storage_blockers(name, input_path, expected_path)
+        if storage_blockers:
+            _die(
+                "; ".join(storage_blockers)
+                + f". Move user-provided oracle files to {ORACLE_STORAGE_ROOT_REL.as_posix()}/{pid}/{name}/ and retry."
+            )
         entries.append({
             "name": name,
             "description": args.description or "",

@@ -61,6 +61,27 @@ This is a strong local operating guard, not perfect cryptographic isolation.
 Absolute proof that a different OS-level actor performed each role requires an
 external runner or separate signer that local agents cannot modify.
 
+### User-owned oracle files
+
+Phase 1 PM must ask the user for concrete input and expected output examples
+before Dev starts. Store those answer-key files under:
+
+```text
+tests/oracles/<pipeline_id>/<case_id>/
+```
+
+Then register them:
+
+```powershell
+python pipeline.py contract add-oracle --input tests/oracles/<pipeline_id>/<case_id>/input.json --expected tests/oracles/<pipeline_id>/<case_id>/expected.json --case-kind normal
+```
+
+`pipeline.py contract audit` rejects oracle files outside `tests/oracles/**`.
+CODEOWNERS also marks `tests/oracles/**`, `tests/**`, root `test_*.py`, and
+`*_test.py` as user-owned review surfaces. This keeps the answer key and tests
+visible in PR review instead of letting the implementing agent silently rewrite
+the judge.
+
 ### CI Workflow
 
 The `.github/workflows/ci.yml` workflow runs on every PR and push to `main`:
@@ -82,8 +103,9 @@ The repository `main` branch is protected outside the local agent loop:
 - direct pushes to `main` are blocked
 - PRs must pass the GitHub Actions `tests` check before merge
 - admins are also subject to the protection rule
-- `.github/workflows/**`, `pipeline.py`, `CLAUDE.md`, and `.claude/agents/**`
-  are listed in `.github/CODEOWNERS`
+- `.github/CODEOWNERS`, `.github/workflows/**`, `pipeline.py`, `CLAUDE.md`,
+  `.claude/agents/**`, `tests/oracles/**`, `tests/**`, `test_*.py`, and
+  `*_test.py` are listed in `.github/CODEOWNERS`
 
 This keeps the final merge decision and CI check outside local Claude/Codex
 claims. In a single-owner repo, mandatory one-person review can block self-authored
