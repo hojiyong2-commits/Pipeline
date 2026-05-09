@@ -1,0 +1,74 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# PyInstaller intermediates
+build/
+**/build/
+dist/
+**/dist/
+*.spec~
+
+# Temporary scratch files
+_tmp*
+temp_*.txt
+tmp_*.txt
+
+# Local cleanup quarantine
+_cleanup_archive/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node / extension build outputs
+node_modules/
+**/node_modules/
+agent-office-ext/out/
+agent-office-ext/*.vsix
+vscode-agent-office/*.vsix
+
+# Runtime pipeline state and generated artifacts
+.claude/settings.local.json
+pipeline_state.json
+pipeline_history/
+pipeline_contracts/
+agent_office_control.json
+stop_signal.json
+test_hello.txt
+test_results.jsonl
+test_results_v3.jsonl
+logs/
+**/*.log
+
+# Generated harness / run reports
+_build_harness*.py
+harness_output*.xml
+harness_test_*.py
+harness_skip_prior100.xml
+architect_report.xml
+dev_handover.xml
+qa_report.xml
+scope_manifest.json
+
+# Local archives and packaged binaries
+_cleanup_archive/
+*.exe
+*.dll
+*.pkg
+*.pyz
+*.toc
+*.zip
+
+# Editor / OS noise
+.vscode/
+.DS_Store
+Thumbs.db

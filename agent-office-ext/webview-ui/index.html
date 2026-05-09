@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  webview-ui/index.html
+  Standalone HTML reference for the Agent Office WebView.
+  In production the HTML is generated inline by AgentOfficePanel._getWebviewContent()
+  with a dynamic nonce and cspSource.  This file documents the structure.
+-->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Office — WebView UI Reference</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a1a;
+      color: #ccc;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px;
+    }
+    #canvas-wrapper { border: 1px solid #333; }
+    canvas { display: block; }
+    #controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+      width: 100%;
+      max-width: 600px;
+      align-items: center;
+    }
+    #btn-stop {
+      background: #cc0000;
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      font-family: monospace;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    #btn-clear {
+      background: #333;
+      color: #ccc;
+      border: 1px solid #555;
+      padding: 6px 10px;
+      font-family: monospace;
+      font-size: 11px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    #pm-input-wrapper {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex: 1;
+    }
+    #pm-input {
+      flex: 1;
+      background: #2a2a2a;
+      color: #eee;
+      border: 1px solid #555;
+      padding: 5px 8px;
+      font-family: monospace;
+      font-size: 11px;
+      border-radius: 3px;
+    }
+    #btn-send-pm {
+      background: #FF8C00;
+      color: #fff;
+      border: none;
+      padding: 5px 10px;
+      font-family: monospace;
+      font-size: 11px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    #status-label {
+      font-size: 10px;
+      color: #666;
+      margin-top: 4px;
+      min-height: 14px;
+      width: 100%;
+      max-width: 600px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Canvas: 600×500 = 600×460 office + 40px token bar -->
+  <div id="canvas-wrapper">
+    <canvas id="office-canvas" width="600" height="500"></canvas>
+  </div>
+
+  <!-- Controls: Emergency Stop + Clear + PM command input -->
+  <div id="controls">
+    <button id="btn-stop" title="Ctrl+Shift+S">STOP (Ctrl+Shift+S)</button>
+    <button id="btn-clear">Clear Stop</button>
+    <!-- PM directive input — shown after emergency stop is sent -->
+    <div id="pm-input-wrapper">
+      <input
+        id="pm-input"
+        type="text"
+        placeholder="PM directive for next run..."
+        maxlength="500"
+      />
+      <button id="btn-send-pm">Send</button>
+    </div>
+  </div>
+
+  <div id="status-label">Waiting for agent data...</div>
+
+  <!--
+    Runtime script is injected inline by AgentOfficePanel._getWebviewContent()
+    with a content-security-policy nonce.
+    See: src/webview/panel.ts → _getWebviewContent()
+  -->
+</body>
+</html>

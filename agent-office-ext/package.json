@@ -1,0 +1,68 @@
+{
+  "name": "agent-office-dashboard",
+  "displayName": "Agent Office",
+  "publisher": "local",
+  "description": "VS Code Activity Bar hamster office: real-time agent status + token bar + emergency stop",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentOffice",
+          "title": "Agent Office",
+          "icon": "$(hubot)"
+        }
+      ]
+    },
+    "views": {
+      "agentOffice": [
+        {
+          "id": "agentOffice.dashboard",
+          "name": "Agent Office",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "agentOffice.emergencyStop",
+        "title": "Agent Office: Emergency Stop",
+        "category": "AgentOffice"
+      },
+      {
+        "command": "agentOffice.clearStop",
+        "title": "Agent Office: Clear Stop Signal",
+        "category": "AgentOffice"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "agentOffice.emergencyStop",
+        "key": "ctrl+shift+s",
+        "when": "true"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "node esbuild.js --production",
+    "build": "node esbuild.js",
+    "build:watch": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.19.12",
+    "typescript": "^5.9.3"
+  }
+}

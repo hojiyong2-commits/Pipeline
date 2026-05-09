@@ -1,0 +1,8 @@
+# PO Automation — Python 3.9 호환 의존성
+# tkinter는 Python 표준 라이브러리에 포함 (별도 설치 불필요)
+
+# Excel 파일 읽기/쓰기
+openpyxl>=3.0.10,<4.0.0
+
+# Outlook/Excel COM 자동화 (Windows 전용)
+pywin32>=306

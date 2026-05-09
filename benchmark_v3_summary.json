@@ -1,0 +1,37 @@
+{
+  "total_tasks": 100,
+  "pass_count": 100,
+  "fail_count": 0,
+  "pass_rate_percent": 100.0,
+  "average_score_percent": 98.7,
+  "by_category": {
+    "WA": {
+      "avg": 100.0,
+      "tasks": 20
+    },
+    "FS": {
+      "avg": 100.0,
+      "tasks": 20
+    },
+    "AL": {
+      "avg": 94.8,
+      "tasks": 21
+    },
+    "SEC": {
+      "avg": 98.1,
+      "tasks": 21
+    },
+    "PD": {
+      "avg": 99.2,
+      "tasks": 13
+    },
+    "UI": {
+      "avg": 98.6,
+      "tasks": 14
+    },
+    "BUILD": {
+      "avg": 100.0,
+      "tasks": 6
+    }
+  }
+}

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>power-automate-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>FEAT-20260428-43DD</pipeline_id>
+  <evidence>pa_flows/flow_definition.json</evidence>
+  <change_summary>
+    기존 플로우(IMP-20260418-F271 기반)에 AT Project ID 수집 및 이메일 Body 확장 로직 추가.
+    신규 액션 4개 삽입, 기존 액션 2개 수정:
+    - 추가: Initialize_Variable_AT_ProjectIDs, Filter_AT, Apply_to_each_AT_ProjectIDs, Error_Handler_Filter_AT
+    - 수정: Filter_SoCal_RSM runAfter (Initialize_Variable_ProjectIDs → Initialize_Variable_AT_ProjectIDs)
+    - 수정: Create_HTML_table runAfter (Apply_to_each_ProjectIDs 단독 → Apply_to_each_ProjectIDs + Apply_to_each_AT_ProjectIDs 모두)
+    - 수정: Send_an_email_V2 Body (HTML 테이블 아래 조건부 p 태그 2개 추가)
+  </change_summary>
+  <flow_stats>
+    <trigger_count>1</trigger_count>
+    <action_count>18</action_count>
+    <connector_list>shared_excelonlinebusiness, shared_approvals, shared_office365</connector_list>
+  </flow_stats>
+  <new_actions>
+    <action name="Initialize_Variable_AT_ProjectIDs" type="InitializeVariable" runAfter="Initialize_Variable_ProjectIDs[Succeeded]" />
+    <action name="Filter_AT" type="Query" runAfter="Initialize_Variable_AT_ProjectIDs[Succeeded]" note="at == AT AND PO startsWith 31, 병렬: Filter_SoCal_RSM" />
+    <action name="Apply_to_each_AT_ProjectIDs" type="Foreach" runAfter="Filter_AT[Succeeded]" />
+    <action name="Error_Handler_Filter_AT" type="Compose" runAfter="Filter_AT[Failed,TimedOut]" />
+  </new_actions>
+  <modified_actions>
+    <action name="Filter_SoCal_RSM" change="runAfter 변경: Initialize_Variable_ProjectIDs → Initialize_Variable_AT_ProjectIDs" />
+    <action name="Create_HTML_table" change="runAfter에 Apply_to_each_AT_ProjectIDs[Succeeded] 추가" />
+    <action name="Send_an_email_V2" change="Body에 SoCal/RSM ProjectIDs 및 AT ProjectIDs 조건부 p 태그 추가" />
+  </modified_actions>
+  <email_body_logic>
+    SoCal/RSM 라인: if(not(equals(variables('ProjectIDs'), '')), concat('&lt;p&gt;SoCal/RSM Project IDs: ', variables('ProjectIDs'), '&lt;/p&gt;'), '')
+    AT 라인: if(not(equals(variables('AT_ProjectIDs'), '')), concat('&lt;p&gt;AT Project IDs: ', variables('AT_ProjectIDs'), '&lt;/p&gt;'), '')
+    둘 다 비어있으면 해당 p 태그 미출력.
+  </email_body_logic>
+  <sec_required>false — 외부 HTTP 커넥터 미포함. 내부 Microsoft 커넥터(Excel Online Business, Approvals, Outlook)만 사용.</sec_required>
+  <build_applicable>false — pipeline.py build --exe "N/A" 처리 대상</build_applicable>
+  <known_warnings>없음</known_warnings>
+  <status>READY_FOR_QA</status>
+</handover>

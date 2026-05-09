@@ -1,0 +1,40 @@
+{
+  "output_excel_path": "C:\\path\\to\\ExcelA.xlsx",
+  "packing_detail_path": "\\\\ccikrnf\\wrkgroup\\Operation\\PACKING DETAIL\\2022년 패킹 디테일.xlsx",
+  "packing_detail_sheet": "2021년",
+  "order_lines_path": "C:\\path\\to\\ExcelB.xlsx",
+  "pm_name_map": {
+    "Ji Yong Ho": "호지용",
+    "Hye Ran Ko": "고혜란",
+    "In Kyoung Nam": "남인경",
+    "Yong Kyu Sung": "성용규"
+  },
+  "pm_location_overrides": {
+    "Sang Yong Cho": {
+      "AT": "호지용",
+      "_default": "성용규"
+    }
+  },
+  "excel_a_columns": {
+    "month": "A",
+    "day": "B",
+    "division": "C",
+    "pm": "D",
+    "sn": "E",
+    "location": "F",
+    "po": "G",
+    "project_id": "H",
+    "contract": "I",
+    "incoterm": "J",
+    "note": "K"
+  },
+  "excel_b_sheet": "Customer Order Lines",
+  "excel_b_search_column": "A",
+  "excel_b_columns": {
+    "fp": "J",
+    "f_col": "F",
+    "jm": "KJ",
+    "if_col": "C",
+    "jy_col": "E"
+  }
+}

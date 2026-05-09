@@ -1,0 +1,44 @@
+{
+  "name": "agent-office-dashboard",
+  "displayName": "Agent Office_t",
+  "description": "Activity Bar entry for the local Agent Office Live Dashboard.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:agentOffice.dashboard",
+    "onCommand:agentOffice.refresh"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentOffice.refresh",
+        "title": "Agent Office: Refresh"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentOffice",
+          "title": "Agent Office_t",
+          "icon": "media/hamster.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentOffice": [
+        {
+          "type": "webview",
+          "id": "agentOffice.dashboard",
+          "name": "Agent Office_t"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,347 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2016-06-01/Microsoft.Logic.json",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "Recurrence": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Day",
+        "interval": 1,
+        "startTime": "2024-01-01T00:00:00Z",
+        "timeZone": "Korea Standard Time",
+        "schedule": {
+          "hours": ["9"],
+          "minutes": ["0"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "List_rows_present_in_a_table": {
+      "type": "ApiConnection",
+      "inputs": {
+        "host": {
+          "connection": {
+            "name": "@parameters('$connections')['shared_excelonlinebusiness']['connectionId']"
+          }
+        },
+        "method": "GET",
+        "path": "/drives/@{encodeURIComponent('me')}/files/@{encodeURIComponent('YOUR_FILE_ID')}/tables/@{encodeURIComponent('YOUR_TABLE_NAME')}/rows",
+        "queries": {
+          "$top": 1000
+        }
+      },
+      "runAfter": {},
+      "metadata": {
+        "note": "배포 후 설정 필요: path 내 YOUR_FILE_ID와 YOUR_TABLE_NAME을 실제 값으로 교체. PA UI에서 액션을 열어 OneDrive for Business 파일과 테이블을 드롭다운으로 선택하는 방법을 권장."
+      }
+    },
+    "Filter_array": {
+      "type": "Query",
+      "inputs": {
+        "from": "@body('List_rows_present_in_a_table')?['value']",
+        "where": "@and(equals(item()?['Month'], string(month(utcNow()))), equals(item()?['Date'], string(dayOfMonth(utcNow()))))"
+      },
+      "runAfter": {
+        "List_rows_present_in_a_table": ["Succeeded"]
+      }
+    },
+    "Condition_Check_Empty": {
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@empty(body('Filter_array'))",
+              true
+            ]
+          }
+        ]
+      },
+      "actions": {
+        "true": {
+          "actions": {
+            "Terminate_No_Data": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Cancelled",
+                "runError": {
+                  "code": "NO_DATA",
+                  "message": "오늘 날짜에 해당하는 데이터가 없어 플로우를 종료합니다."
+                }
+              },
+              "runAfter": {}
+            }
+          }
+        },
+        "false": {
+          "actions": {}
+        }
+      },
+      "runAfter": {
+        "Filter_array": ["Succeeded"]
+      }
+    },
+    "Initialize_Variable_ProjectIDs": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "ProjectIDs",
+            "type": "string",
+            "value": ""
+          }
+        ]
+      },
+      "runAfter": {
+        "Condition_Check_Empty": ["Succeeded"]
+      }
+    },
+    "Initialize_Variable_AT_ProjectIDs": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "AT_ProjectIDs",
+            "type": "string",
+            "value": ""
+          }
+        ]
+      },
+      "runAfter": {
+        "Initialize_Variable_ProjectIDs": ["Succeeded"]
+      }
+    },
+    "Filter_SoCal_RSM": {
+      "type": "Query",
+      "inputs": {
+        "from": "@body('Filter_array')",
+        "where": "@and(or(equals(item()?['at'], 'SoCal'), equals(item()?['at'], 'RSM')), startsWith(string(item()?['PO']), '31'))"
+      },
+      "runAfter": {
+        "Initialize_Variable_AT_ProjectIDs": ["Succeeded"]
+      }
+    },
+    "Filter_AT": {
+      "type": "Query",
+      "inputs": {
+        "from": "@body('Filter_array')",
+        "where": "@and(equals(item()?['at'], 'AT'), startsWith(string(item()?['PO']), '31'))"
+      },
+      "runAfter": {
+        "Initialize_Variable_AT_ProjectIDs": ["Succeeded"]
+      }
+    },
+    "Apply_to_each_ProjectIDs": {
+      "type": "Foreach",
+      "foreach": "@body('Filter_SoCal_RSM')",
+      "actions": {
+        "Set_variable_ProjectIDs": {
+          "type": "SetVariable",
+          "inputs": {
+            "name": "ProjectIDs",
+            "value": "@{if(equals(variables('ProjectIDs'), ''), item()?['Project ID'], concat(variables('ProjectIDs'), ', ', item()?['Project ID']))}"
+          },
+          "runAfter": {}
+        }
+      },
+      "runAfter": {
+        "Filter_SoCal_RSM": ["Succeeded"]
+      }
+    },
+    "Apply_to_each_AT_ProjectIDs": {
+      "type": "Foreach",
+      "foreach": "@body('Filter_AT')",
+      "actions": {
+        "Set_variable_AT_ProjectIDs": {
+          "type": "SetVariable",
+          "inputs": {
+            "name": "AT_ProjectIDs",
+            "value": "@{if(equals(variables('AT_ProjectIDs'), ''), item()?['Project ID'], concat(variables('AT_ProjectIDs'), ', ', item()?['Project ID']))}"
+          },
+          "runAfter": {}
+        }
+      },
+      "runAfter": {
+        "Filter_AT": ["Succeeded"]
+      }
+    },
+    "Error_Handler_Filter_SoCal": {
+      "type": "Compose",
+      "inputs": "오류: SoCal/RSM 필터 실패. 날짜: @{formatDateTime(utcNow(), 'yyyy-MM-dd')}",
+      "runAfter": {
+        "Filter_SoCal_RSM": ["Failed", "TimedOut"]
+      }
+    },
+    "Error_Handler_Filter_AT": {
+      "type": "Compose",
+      "inputs": "오류: AT 필터 실패. 날짜: @{formatDateTime(utcNow(), 'yyyy-MM-dd')}",
+      "runAfter": {
+        "Filter_AT": ["Failed", "TimedOut"]
+      }
+    },
+    "Create_HTML_table": {
+      "type": "Table",
+      "inputs": {
+        "from": "@body('Filter_array')",
+        "format": "HTML",
+        "columns": [
+          {
+            "header": "PM",
+            "value": "@item()?['PM']"
+          },
+          {
+            "header": "SN",
+            "value": "@item()?['SN']"
+          },
+          {
+            "header": "at",
+            "value": "@item()?['at']"
+          },
+          {
+            "header": "PO",
+            "value": "@item()?['PO']"
+          },
+          {
+            "header": "Project ID",
+            "value": "@item()?['Project ID']"
+          },
+          {
+            "header": "Contract",
+            "value": "@item()?['Contract']"
+          },
+          {
+            "header": "FCA",
+            "value": "@item()?['FCA']"
+          },
+          {
+            "header": "Note",
+            "value": "@item()?['Note']"
+          }
+        ]
+      },
+      "runAfter": {
+        "Apply_to_each_ProjectIDs": ["Succeeded"],
+        "Apply_to_each_AT_ProjectIDs": ["Succeeded"]
+      }
+    },
+    "Create_an_approval": {
+      "type": "ApiConnectionWebhook",
+      "inputs": {
+        "host": {
+          "connection": {
+            "name": "@parameters('$connections')['shared_approvals']['connectionId']"
+          }
+        },
+        "path": "/approvalProcesses",
+        "method": "POST",
+        "body": {
+          "title": "@concat('[일일보고] ', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+          "assignedTo": "APPROVER_EMAIL@yourdomain.com",
+          "details": "@body('Create_HTML_table')",
+          "itemLink": null,
+          "itemLinkDescription": null,
+          "enableNotifications": true
+        },
+        "subscribe": {
+          "method": "POST",
+          "pathTemplate": {
+            "template": "/approvalProcesses"
+          },
+          "body": {
+            "NotificationUrl": "@{listCallbackUrl()}"
+          }
+        }
+      },
+      "runAfter": {
+        "Create_HTML_table": ["Succeeded"]
+      },
+      "metadata": {
+        "note": "배포 후 설정 필요: assignedTo 필드의 APPROVER_EMAIL@yourdomain.com을 실제 승인자 이메일로 교체."
+      }
+    },
+    "Condition_Approval_Result": {
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@body('Create_an_approval')?['outcome']",
+              "Approve"
+            ]
+          }
+        ]
+      },
+      "actions": {
+        "true": {
+          "actions": {
+            "Send_an_email_V2": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['shared_office365']['connectionId']"
+                  }
+                },
+                "method": "POST",
+                "path": "/v2/Mail",
+                "body": {
+                  "To": "RECIPIENT_EMAIL@yourdomain.com",
+                  "CC": "CC_EMAIL@yourdomain.com",
+                  "Subject": "@concat('[일일보고] ', formatDateTime(utcNow(), 'yyyy-MM-dd'))",
+                  "Body": "@concat('<p>안녕하세요,</p><p>아래는 ', formatDateTime(utcNow(), 'yyyy년 MM월 dd일'), ' 일일 보고 내용입니다.</p>', body('Create_HTML_table'), if(not(equals(variables('ProjectIDs'), '')), concat('<p>SoCal/RSM Project IDs: ', variables('ProjectIDs'), '</p>'), ''), if(not(equals(variables('AT_ProjectIDs'), '')), concat('<p>AT Project IDs: ', variables('AT_ProjectIDs'), '</p>'), ''), '<p>감사합니다.</p>')",
+                  "Importance": "Normal",
+                  "IsHtml": true
+                }
+              },
+              "runAfter": {},
+              "metadata": {
+                "note": "배포 후 설정 필요: To 필드와 CC 필드를 실제 수신자 이메일로 교체."
+              }
+            }
+          }
+        },
+        "false": {
+          "actions": {
+            "Compose_Rejected": {
+              "type": "Compose",
+              "inputs": "승인이 거절되었습니다. 일일보고 이메일 발송이 취소되었습니다. 날짜: @{formatDateTime(utcNow(), 'yyyy-MM-dd')}",
+              "runAfter": {}
+            }
+          }
+        }
+      },
+      "runAfter": {
+        "Create_an_approval": ["Succeeded"]
+      }
+    },
+    "Error_Handler_List_Rows": {
+      "type": "Compose",
+      "inputs": "오류 발생: Excel 행 목록 조회 실패. 오류 코드: @{outputs('List_rows_present_in_a_table')?['statusCode']}",
+      "runAfter": {
+        "List_rows_present_in_a_table": ["Failed", "TimedOut"]
+      }
+    },
+    "Error_Handler_Approval": {
+      "type": "Compose",
+      "inputs": "오류 발생: 승인 요청 실패 또는 타임아웃. 날짜: @{formatDateTime(utcNow(), 'yyyy-MM-dd')}",
+      "runAfter": {
+        "Create_an_approval": ["Failed", "TimedOut"]
+      }
+    },
+    "Error_Handler_Send_Email": {
+      "type": "Compose",
+      "inputs": "오류 발생: 이메일 발송 실패. 날짜: @{formatDateTime(utcNow(), 'yyyy-MM-dd')}",
+      "runAfter": {
+        "Condition_Approval_Result": ["Failed", "TimedOut"]
+      }
+    }
+  },
+  "outputs": {}
+}

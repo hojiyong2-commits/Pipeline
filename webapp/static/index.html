@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent Office Live Dashboard</title>
+<style>
+  :root {
+    --bg-floor: #f3ecdf;
+    --bg-floor-2: #ead9bb;
+    --wall: #e6dccb;
+    --wall-trim: #c6b591;
+    --dept-dev: #dbeafe;
+    --dept-qa: #dcfce7;
+    --dept-build: #ffedd5;
+    --dept-meta: #ede9fe;
+    --ink: #1f2937;
+    --ink-soft: #4b5563;
+    --line: #94a3b8;
+    --shadow: rgba(0, 0, 0, 0.18);
+    --panel-bg: rgba(255, 255, 255, 0.96);
+    --accent: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: linear-gradient(180deg, #fff7e6 0%, #ffe9c8 100%);
+    color: var(--ink);
+    font-family: "Segoe UI", "Malgun Gothic", system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; gap: 16px;
+    background: linear-gradient(90deg, #fde68a, #fcd34d);
+    border-bottom: 3px solid #b45309;
+    box-shadow: 0 2px 12px rgba(180, 83, 9, 0.18);
+    position: sticky; top: 0; z-index: 30;
+  }
+  header h1 {
+    margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.3px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  header h1 .emoji { font-size: 22px; }
+  header .meta {
+    display: flex; align-items: center; gap: 14px; font-size: 13px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .pill {
+    padding: 4px 10px; border-radius: 999px; font-weight: 600;
+    background: rgba(255,255,255,0.6); border: 1px solid rgba(0,0,0,0.08);
+  }
+  .pill.live { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .pill.live.disconnected { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+  .pill.dot::before {
+    content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 6px; background: currentColor; vertical-align: middle;
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  .pill.live.dot::before { animation: pulse 1.6s infinite; }
+  .top-token {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 3px 10px;
+    align-items: center;
+    min-width: 260px;
+    padding: 7px 10px;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(120, 53, 15, 0.18);
+    box-shadow: inset 0 -2px 0 rgba(180, 83, 9, 0.12);
+  }
+  .top-token .token-title {
+    font-size: 10px;
+    font-weight: 900;
+    color: #78350f;
+    letter-spacing: 0;
+  }
+  .top-token .token-readout {
+    font-size: 11px;
+    font-weight: 800;
+    color: #1f2937;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .token-track {
+    grid-column: 1 / -1;
+    height: 12px;
+    background: #111827;
+    border: 2px solid #1f2937;
+    box-shadow: inset 0 0 0 2px #fef3c7;
+    overflow: hidden;
+  }
+  .token-fill {
+    height: 100%;
+    width: 100%;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.18) 0 6px, transparent 6px 12px),
+      linear-gradient(90deg, #22c55e, #facc15 70%, #ef4444);
+    transform-origin: left center;
+    transition: width 0.35s steps(12);
+  }
+  .token-fill.warn { background: linear-gradient(90deg, #facc15, #f97316); }
+  .token-fill.danger { background: linear-gradient(90deg, #ef4444, #991b1b); }
+  .stop-button {
+    border: 0;
+    background: #991b1b;
+    color: white;
+    font-weight: 900;
+    font-size: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 #450a0a;
+    letter-spacing: 0;
+  }
+  .stop-button:hover { background: #b91c1c; }
+  .stop-button:active { transform: translateY(2px); box-shadow: 0 1px 0 #450a0a; }
+  .stop-button.paused {
+    background: #facc15;
+    color: #451a03;
+    box-shadow: 0 3px 0 #92400e;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+    70%  { box-shadow: 0 0 0 10px rgba(34,197,94,0); }
+    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 2.2fr 1fr;
+    gap: 16px;
+    padding: 16px 20px 80px;
+    max-width: 2100px; margin: 0 auto;
+  }
+
+  /* --------- Office Map --------- */
+  .office-card {
+    position: relative;
+    background: var(--panel-bg);
+    border-radius: 18px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.10);
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+  }
+  .office-card h2 {
+    font-size: 15px; padding: 12px 16px; margin: 0;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex; justify-content: space-between; align-items: center;
+    background: linear-gradient(90deg, #fef3c7, transparent);
+  }
+  .office-card h2 small { font-weight: 500; color: var(--ink-soft); }
+
+  .office-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 12 / 8;
+    background: #e6e8ee;
+    overflow: hidden;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+  .office-stage::before {
+    /* 16px square pixel tile floor — GBA/SNES top-down style */
+    content: ""; position: absolute; inset: 0;
+    background-color: #e6e8ee;
+    background-image:
+      linear-gradient(to right, #d6d8de 1px, transparent 1px),
+      linear-gradient(to bottom, #d6d8de 1px, transparent 1px);
+    background-size: 16px 16px;
+    pointer-events: none;
+    image-rendering: pixelated;
+  }
+  /* small pixel plant decorations scattered in zone corners */
+  .plant {
+    position: absolute;
+    width: 14px; height: 16px;
+    pointer-events: none;
+    image-rendering: pixelated;
+    z-index: 1;
+  }
+
+  /* department zones — solid pixel-style borders, pastel fill */
+  .zone {
+    position: absolute;
+    border-radius: 0;
+    border: 2px solid #8a98ad;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35);
+    opacity: 0.92;
+    image-rendering: pixelated;
+  }
+  .zone .zone-label {
+    position: absolute; top: 4px; left: 8px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+    color: #4b5563; text-transform: uppercase;
+    font-family: "Press Start 2P", "Courier New", ui-monospace, monospace;
+  }
+  .zone.dev   { background: #d4e4f5; }
+  .zone.qa    { background: #d8e8d4; }
+  .zone.build { background: #f5e8d0; }
+  .zone.meta  { background: #e0d8ee; }
+
+  /* desks — pixel-art tile sized (~30% smaller h, 20% smaller w than v1) */
+  .desk {
+    position: absolute;
+    width: 67px; height: 38px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    image-rendering: pixelated;
+  }
+  .desk .top {
+    width: 100%; height: 60%;
+    background: #b8855a;
+    border-radius: 0;
+    box-shadow: 0 2px 0 #7c5736, inset 0 -3px 0 #8d6240;
+    position: relative;
+    border: 1px solid #5b3d24;
+  }
+  .desk .legL, .desk .legR {
+    position: absolute; bottom: -4px; width: 5px; height: 8px;
+    background: #5b3d24;
+    border-radius: 0;
+  }
+  .desk .legL { left: 5px; } .desk .legR { right: 5px; }
+  .desk .monitor {
+    position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+    width: 26px; height: 17px; background: #1f2937;
+    border-radius: 0; border: 2px solid #111827;
+    box-shadow: inset 0 0 0 1px #2dd4bf;
+  }
+  .desk .monitor::after {
+    content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    width: 7px; height: 4px; background: #111827;
+  }
+
+  /* per-agent desk item (job-specific emoji prop) */
+  .desk .desk-item {
+    position: absolute;
+    top: -2px; right: 4px;
+    font-size: 16px;
+    pointer-events: none;
+    line-height: 1;
+    z-index: 2;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .desk[data-agent="pm-agent"]               .desk-item::before { content: "📋"; }
+  .desk[data-agent="dev-agent"]              .desk-item::before { content: "💻"; }
+  .desk[data-agent="ui-app-agent"]           .desk-item::before { content: "🎨"; }
+  .desk[data-agent="qa-agent"]               .desk-item::before { content: "🔍"; }
+  .desk[data-agent="security-agent"]         .desk-item::before { content: "🛡️"; }
+  .desk[data-agent="build-agent"]            .desk-item::before { content: "🔨"; }
+  .desk[data-agent="test-harness-agent"]     .desk-item::before { content: "⏱️"; }
+  .desk[data-agent="prompt-architect-agent"] .desk-item::before { content: "📐"; }
+  .desk[data-agent="agent-factory-agent"]    .desk-item::before { content: "🧪"; }
+  .desk[data-agent="protocol-evolution-agent"] .desk-item::before { content: "📡"; }
+  .desk[data-agent="power-automate-agent"]   .desk-item::before { content: "⚡"; }
+  .desk:not([data-agent]) .desk-item::before { content: ""; }
+
+  /* command desk for Mindasol — pixel-art L-shape command station */
+  .desk.command {
+    width: 94px; height: 44px;
+  }
+  .desk.command .top {
+    background: #d4a574;
+    box-shadow: 0 2px 0 #8b5e3c, inset 0 -3px 0 #b88862;
+    border: 1px solid #6b4423;
+  }
+  .desk.command::after {
+    content: "지휘대";
+    position: absolute;
+    bottom: -16px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px; font-weight: 700;
+    color: #92400e;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    font-family: "Press Start 2P", "Courier New", ui-monospace, monospace;
+  }
+
+  /* pixel-art character — 32x32 viewBox rendered at ~40px square */
+  .agent {
+    position: absolute;
+    width: 40px; height: 40px;
+    transform: translate(-50%, -50%);
+    transition: top 0.9s cubic-bezier(.6,.0,.3,1), left 0.9s cubic-bezier(.6,.0,.3,1);
+    cursor: pointer;
+    z-index: 5;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.30));
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+  .agent svg { image-rendering: pixelated; }
+  /* Mindasol — same character size as other agents (pixel uniformity) */
+  .agent.mindasol {
+    width: 40px; height: 40px;
+  }
+  .agent.mindasol .name {
+    font-size: 9px;
+    padding: 1px 4px;
+    bottom: -10px;
+  }
+  .agent:hover { z-index: 20; transform: translate(-50%, -55%) scale(1.08); }
+  .agent.working { z-index: 12; }
+  .agent.coordinating {
+    z-index: 14;
+    animation: messenger-step 0.7s steps(2) infinite;
+  }
+  .agent.coordinating::after {
+    content: "전달";
+    position: absolute; top: -9px; right: -12px;
+    background: #f59e0b; color: #451a03;
+    padding: 1px 6px; font-size: 9px; font-weight: 900;
+    border: 2px solid white;
+  }
+  .agent.alert { animation: shake 0.5s infinite; }
+  .agent.alert::after {
+    content: "!"; position: absolute; top: -8px; right: -4px;
+    background: #ef4444; color: white; width: 18px; height: 18px;
+    border-radius: 50%; font-size: 12px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid white;
+  }
+  .agent.working svg .body { animation: bobble 0.8s ease-in-out infinite; transform-origin: 50% 50%; }
+  .agent.working svg .held-tool { animation: bobble 0.8s ease-in-out infinite reverse; }
+  .agent.standby { opacity: 0.85; }
+  .agent.paused {
+    opacity: 0.58;
+    filter: grayscale(0.75) drop-shadow(0 2px 2px rgba(0,0,0,0.22));
+  }
+  .agent.paused::after {
+    content: "정지";
+    position: absolute; top: -8px; right: -10px;
+    background: #111827; color: #facc15;
+    padding: 1px 7px; font-size: 9px; font-weight: 900;
+    border: 2px solid white;
+  }
+  /* Skipped: stronger visual differentiation + "스킵" badge */
+  .agent.skipped {
+    opacity: 0.55;
+    filter: grayscale(0.85) drop-shadow(0 2px 3px rgba(0,0,0,0.15));
+  }
+  /* Halo ring above the skipped agent's head (angelic yellow ring) */
+  .agent.skipped::before {
+    content: "";
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 10px;
+    border: 2.5px solid #facc15;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: 0 0 8px rgba(250, 204, 21, 0.65), inset 0 0 4px rgba(253, 224, 71, 0.5);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .agent.skipped::after {
+    content: "스킵";
+    position: absolute; top: -8px; right: -10px;
+    background: #94a3b8; color: white;
+    padding: 1px 7px; border-radius: 8px;
+    font-size: 9px; font-weight: 800;
+    letter-spacing: 0.5px;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  /* explicitly disable working bobble for skipped agents (override safety) */
+  .agent.skipped svg .body,
+  .agent.skipped svg .held-tool {
+    animation: none !important;
+  }
+  .agent .name {
+    position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; font-weight: 700;
+    background: rgba(255,255,255,0.92);
+    padding: 1px 6px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.1);
+    white-space: nowrap;
+  }
+  .agent .progress-ring {
+    position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; font-weight: 700;
+    background: var(--ink); color: white;
+    padding: 1px 6px; border-radius: 8px;
+    display: none;
+  }
+  .agent.working .progress-ring { display: block; }
+
+  @keyframes bobble {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+  }
+  @keyframes messenger-step {
+    0%, 100% { transform: translate(-50%, -50%); }
+    50%      { transform: translate(-50%, -57%); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translate(-50%, -50%) rotate(0); }
+    25%      { transform: translate(-52%, -50%) rotate(-3deg); }
+    75%      { transform: translate(-48%, -50%) rotate(3deg); }
+  }
+
+  /* tooltip — Pixel-art speech bubble (NES/SNES style) */
+  .tooltip {
+    position: fixed;
+    background: #fafafa;
+    color: #1f2937;
+    padding: 10px 12px;
+    font-family: "Press Start 2P", "Courier New", ui-monospace, monospace;
+    font-size: 10px;
+    line-height: 1.5;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -100%);
+    transition: opacity 0.12s;
+    z-index: 100;
+    min-width: 180px;
+    max-width: 260px;
+    /* Crisp pixel border via layered box-shadows (no border-radius) */
+    border: 0;
+    box-shadow:
+      0 -4px 0 0 #1f2937,                    /* top */
+      0 4px 0 0 #1f2937,                     /* bottom */
+      -4px 0 0 0 #1f2937,                    /* left */
+      4px 0 0 0 #1f2937,                     /* right */
+      -4px -4px 0 0 #1f2937,                 /* tl corner */
+      4px -4px 0 0 #1f2937,                  /* tr corner */
+      -4px 4px 0 0 #1f2937,                  /* bl corner */
+      4px 4px 0 0 #1f2937,                   /* br corner */
+      0 8px 0 0 rgba(0,0,0,0.25);            /* drop shadow */
+    image-rendering: pixelated;
+  }
+  .tooltip.visible { opacity: 1; }
+  /* Pixel speech-bubble tail (chunky 4px squares pointing down) */
+  .tooltip::before,
+  .tooltip::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    width: 8px; height: 4px;
+    background: #fafafa;
+    transform: translateX(-50%);
+  }
+  .tooltip::before {
+    bottom: -8px;
+    box-shadow:
+      0 0 0 0 #1f2937,
+      -4px 0 0 0 #1f2937,
+      4px 0 0 0 #1f2937;
+  }
+  .tooltip::after {
+    bottom: -12px;
+    width: 4px; height: 4px;
+    box-shadow:
+      0 0 0 0 #1f2937,
+      0 4px 0 0 #1f2937,
+      -4px 4px 0 0 #1f2937,
+      4px 4px 0 0 #1f2937;
+  }
+  .tooltip h4 {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 6px;
+    padding-bottom: 4px;
+    /* pixel-style underline */
+    border-bottom: 2px solid #1f2937;
+  }
+  .tooltip h4 .dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    /* square pixel dot, not circle */
+    box-shadow: 0 0 0 1px #1f2937;
+  }
+  .tooltip dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3px 8px;
+  }
+  .tooltip dt {
+    color: #6b7280;
+    font-weight: 700;
+  }
+  .tooltip dd {
+    margin: 0;
+    color: #1f2937;
+  }
+  .tooltip .progress-bar {
+    height: 8px;
+    background: #d1d5db;
+    margin-top: 6px;
+    /* pixel-bordered bar */
+    box-shadow:
+      0 -2px 0 0 #1f2937, 0 2px 0 0 #1f2937,
+      -2px 0 0 0 #1f2937, 2px 0 0 0 #1f2937;
+    overflow: hidden;
+  }
+  .tooltip .progress-bar > div {
+    height: 100%;
+    background: #22c55e;
+    /* steppy fill — no smooth transition for pixel feel */
+    transition: width 0.2s steps(8);
+    /* pixel scanlines */
+    background-image: linear-gradient(
+      90deg,
+      #22c55e 0%, #16a34a 50%, #22c55e 100%
+    );
+  }
+  .tooltip .issue {
+    color: #dc2626;
+    margin-top: 6px;
+    font-weight: 700;
+  }
+  .tooltip .skip-tag {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 6px;
+    background: #94a3b8;
+    color: white;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 0 2px #475569;
+  }
+
+  /* ---------- Sidebar (right column) ---------- */
+  aside {
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .panel {
+    background: var(--panel-bg);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+  }
+  .panel h3 {
+    margin: 0 0 10px; font-size: 14px; font-weight: 700;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .panel h3 small { font-weight: 500; color: var(--ink-soft); font-size: 11px; }
+
+  .phase-list { list-style: none; padding: 0; margin: 0; }
+  .phase-list li {
+    display: grid; grid-template-columns: 24px 1fr auto; gap: 8px;
+    align-items: center; padding: 6px 4px;
+    border-bottom: 1px dashed #f1f5f9; font-size: 13px;
+  }
+  .phase-list li:last-child { border-bottom: none; }
+  .phase-list .icon {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; color: white;
+  }
+  .phase-list .icon.done    { background: #22c55e; }
+  .phase-list .icon.working { background: #3b82f6; animation: pulse-blue 1.4s infinite; }
+  .phase-list .icon.fail    { background: #ef4444; }
+  .phase-list .icon.skip    { background: #94a3b8; }
+  .phase-list .icon.pending { background: #d1d5db; color: #6b7280; }
+  .phase-list .status-pill {
+    padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 700;
+  }
+  @keyframes pulse-blue {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
+    70%      { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  }
+
+  .events {
+    max-height: 200px; overflow-y: auto;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11px; color: var(--ink-soft);
+  }
+  .events div { padding: 2px 0; border-bottom: 1px dotted #f3f4f6; }
+
+  /* Token usage panel */
+  .token-panel {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; padding: 6px 0 2px;
+    flex-wrap: wrap;
+  }
+  .token-chip {
+    display: flex; align-items: center; gap: 5px;
+    background: #f3f4f6; border-radius: 8px;
+    padding: 3px 10px; font-size: 11px; font-weight: 600;
+    border: 1px solid #e5e7eb;
+  }
+  .token-chip .label { color: #6b7280; font-weight: 500; }
+  .token-chip .val { color: #1f2937; }
+  .token-remaining-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    color: #4b5563;
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .agent-token-list {
+    display: grid;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 11px;
+  }
+  .agent-token-row {
+    display: grid;
+    grid-template-columns: 82px 1fr auto;
+    gap: 6px;
+    align-items: center;
+  }
+  .agent-token-mini {
+    height: 6px;
+    background: #e5e7eb;
+    border: 1px solid #cbd5e1;
+    overflow: hidden;
+  }
+  .agent-token-mini > span {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: #38bdf8;
+  }
+  .control-panel {
+    display: none;
+    border: 2px solid #991b1b;
+    background: #fff7ed;
+  }
+  .control-panel.open { display: block; }
+  .control-panel textarea {
+    width: 100%;
+    min-height: 86px;
+    resize: vertical;
+    border: 1px solid #f97316;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    background: #fffbeb;
+  }
+  .control-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .control-actions button {
+    border: 0;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .control-actions .send { background: #1f2937; color: white; }
+  .control-actions .resume { background: #22c55e; color: #052e16; }
+
+  .results-chart {
+    display: flex; align-items: flex-end; gap: 4px;
+    height: 80px; padding: 4px 2px;
+    border-bottom: 2px solid #e5e7eb;
+  }
+  .results-chart .bar {
+    flex: 1; background: linear-gradient(180deg, #34d399 0%, #10b981 100%);
+    border-radius: 4px 4px 0 0;
+    min-height: 4px; position: relative;
+    transition: height 0.4s;
+  }
+  .results-chart .bar.fail {
+    background: linear-gradient(180deg, #f87171 0%, #ef4444 100%);
+  }
+  .results-chart .bar:hover::after {
+    content: attr(data-label);
+    position: absolute; bottom: 100%; left: 50%;
+    transform: translateX(-50%) translateY(-4px);
+    background: var(--ink); color: white; padding: 2px 6px;
+    border-radius: 4px; font-size: 10px; white-space: nowrap;
+  }
+
+  /* detail panel — slides in from right */
+  .detail-panel {
+    position: fixed;
+    top: 70px; right: 16px; width: 360px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    background: var(--panel-bg);
+    border-radius: 16px;
+    padding: 16px 20px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+    border: 1px solid #e5e7eb;
+    transform: translateX(380px);
+    transition: transform 0.3s cubic-bezier(.6,.0,.3,1);
+    z-index: 50;
+  }
+  .detail-panel.open { transform: translateX(0); }
+  .detail-panel header {
+    background: none; border: none; padding: 0; box-shadow: none;
+    display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+    position: static;
+  }
+  .detail-panel .avatar {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: var(--dept-meta); display: flex;
+    align-items: center; justify-content: center;
+  }
+  .detail-panel h3 { margin: 0; font-size: 16px; }
+  .detail-panel h3 small { display:block; color: var(--ink-soft); font-size: 11px; font-weight: 500; }
+  .detail-panel .close {
+    margin-left: auto; background: #f3f4f6; border: none;
+    width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
+    font-size: 16px;
+  }
+  .detail-panel dl { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; font-size: 12px; }
+  .detail-panel dt { color: var(--ink-soft); font-weight: 600; }
+  .detail-panel dd { margin: 0; word-break: break-all; }
+
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .detail-panel {
+      position: static; width: auto; transform: none;
+      max-height: none;
+    }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="emoji">🐹</span> Agent Office Live Dashboard <small style="font-weight:500; opacity:0.7; font-size:13px;">— 민다솔 오피스</small></h1>
+  <div class="meta">
+    <div class="top-token" title="logs/token_log.jsonl 기반 추정치입니다. 예산은 AGENT_OFFICE_TOKEN_BUDGET 환경변수로 바꿀 수 있습니다.">
+      <span class="token-title">RESET TOKEN</span>
+      <span class="token-readout"><span id="tok-remaining-top">—</span> / <span id="tok-budget-top">—</span></span>
+      <div class="token-track"><div class="token-fill" id="tok-fill-top"></div></div>
+    </div>
+    <button class="stop-button" id="emergency-stop" title="모든 에이전트를 멈추고 PM에게 추가 지시를 보냅니다.">STOP</button>
+    <span id="pipeline-id" class="pill">파이프라인: -</span>
+    <span id="ws-status" class="pill live dot disconnected">연결 대기중</span>
+  </div>
+</header>
+
+<main>
+  <section class="office-card">
+    <h2>오피스 맵 <small id="phase-current">현재 단계: -</small></h2>
+    <div class="office-stage" id="stage">
+      <!-- Department zones -->
+      <div class="zone dev"   style="left:5%;  top:48%; width:38%; height:42%;"><span class="zone-label">개발실</span></div>
+      <div class="zone qa"    style="left:55%; top:48%; width:40%; height:30%;"><span class="zone-label">QA실</span></div>
+      <div class="zone build" style="left:5%;  top:90%; width:30%; height:5%;"></div>
+      <div class="zone build" style="left:5%;  top:78%; width:38%; height:18%; "><span class="zone-label">빌드실</span></div>
+      <div class="zone meta"  style="left:55%; top:5%;  width:40%; height:36%;"><span class="zone-label">메타실 (PM/Architect/Factory)</span></div>
+      <div class="zone meta"  style="left:55%; top:80%; width:40%; height:18%;"><span class="zone-label">진단실</span></div>
+
+      <!-- Pixel-art plant decorations (4 corners across zones) -->
+      <svg class="plant" viewBox="0 0 14 16" style="left:42%; top:46%;" shape-rendering="crispEdges">
+        <rect x="4" y="11" width="6" height="4" fill="#a16207"/>
+        <rect x="3" y="10" width="8" height="1" fill="#a16207"/>
+        <rect x="6" y="2"  width="2" height="9" fill="#16a34a"/>
+        <rect x="3" y="4"  width="3" height="3" fill="#16a34a"/>
+        <rect x="8" y="4"  width="3" height="3" fill="#16a34a"/>
+        <rect x="5" y="7"  width="4" height="2" fill="#22c55e"/>
+        <rect x="6" y="0"  width="2" height="2" fill="#22c55e"/>
+      </svg>
+      <svg class="plant" viewBox="0 0 14 16" style="left:50%; top:46%;" shape-rendering="crispEdges">
+        <rect x="4" y="11" width="6" height="4" fill="#7c2d12"/>
+        <rect x="6" y="3"  width="2" height="8" fill="#15803d"/>
+        <rect x="3" y="5"  width="3" height="3" fill="#22c55e"/>
+        <rect x="8" y="5"  width="3" height="3" fill="#22c55e"/>
+        <rect x="5" y="2"  width="4" height="2" fill="#16a34a"/>
+      </svg>
+      <svg class="plant" viewBox="0 0 14 16" style="left:6%; top:90%;" shape-rendering="crispEdges">
+        <rect x="4" y="11" width="6" height="4" fill="#a16207"/>
+        <rect x="3" y="10" width="8" height="1" fill="#a16207"/>
+        <rect x="6" y="3"  width="2" height="8" fill="#16a34a"/>
+        <rect x="4" y="5"  width="2" height="3" fill="#22c55e"/>
+        <rect x="8" y="5"  width="2" height="3" fill="#22c55e"/>
+        <rect x="6" y="1"  width="2" height="2" fill="#fbbf24"/>
+      </svg>
+      <svg class="plant" viewBox="0 0 14 16" style="left:90%; top:90%;" shape-rendering="crispEdges">
+        <rect x="4" y="11" width="6" height="4" fill="#7c2d12"/>
+        <rect x="6" y="2"  width="2" height="9" fill="#15803d"/>
+        <rect x="3" y="6"  width="3" height="3" fill="#16a34a"/>
+        <rect x="8" y="6"  width="3" height="3" fill="#16a34a"/>
+        <rect x="5" y="3"  width="4" height="2" fill="#fbbf24"/>
+      </svg>
+      <svg class="plant" viewBox="0 0 14 16" style="left:91%; top:6%;" shape-rendering="crispEdges">
+        <rect x="4" y="11" width="6" height="4" fill="#a16207"/>
+        <rect x="6" y="3"  width="2" height="8" fill="#16a34a"/>
+        <rect x="3" y="5"  width="3" height="3" fill="#22c55e"/>
+        <rect x="8" y="5"  width="3" height="3" fill="#22c55e"/>
+      </svg>
+
+      <!-- Desks rendered dynamically -->
+      <!-- Mindasol command desk + character -->
+      <!-- Agent characters rendered dynamically by JS -->
+    </div>
+  </section>
+
+  <aside>
+    <div class="panel">
+      <h3>토큰 사용량 <small id="token-last-ts"></small></h3>
+      <div class="token-panel" id="token-panel">
+        <div class="token-chip"><span class="label">총</span><span class="val" id="tok-total">—</span></div>
+        <div class="token-chip"><span class="label">입력</span><span class="val" id="tok-input">—</span></div>
+        <div class="token-chip"><span class="label">출력</span><span class="val" id="tok-output">—</span></div>
+        <div class="token-chip"><span class="label">세션</span><span class="val" id="tok-entries">—</span></div>
+        <div class="token-remaining-line">
+          <span>남은 추정치</span>
+          <strong id="tok-remaining-side">—</strong>
+        </div>
+      </div>
+      <div class="agent-token-list" id="agent-token-list"></div>
+    </div>
+
+    <div class="panel control-panel" id="control-panel">
+      <h3>긴급 정지 <small>PM 추가 지시 대기</small></h3>
+      <textarea id="pm-command" placeholder="PM에게 전달할 추가 지시를 적어주세요. PM은 이 내용을 원자 단위로 쪼개고, 충돌 없는 담당자에게 다시 배정합니다."></textarea>
+      <div class="control-actions">
+        <button class="send" id="pm-command-send">PM에게 전달</button>
+        <button class="resume" id="resume-agents">재개</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>파이프라인 단계 <small id="pipeline-desc"></small></h3>
+      <ul class="phase-list" id="phase-list"></ul>
+    </div>
+
+    <div class="panel">
+      <h3>최근 채점 <small>최근 10건 / 100점 환산</small></h3>
+      <div class="results-chart" id="results-chart"></div>
+      <div id="results-summary" style="font-size:11px; color: var(--ink-soft); margin-top: 6px;"></div>
+    </div>
+
+    <div class="panel">
+      <h3>이벤트 로그 <small>최신 20건</small></h3>
+      <div class="events" id="events"></div>
+    </div>
+  </aside>
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+
+<aside class="detail-panel" id="detail-panel">
+  <header>
+    <div class="avatar" id="detail-avatar"></div>
+    <h3 id="detail-name">에이전트<small id="detail-role"></small></h3>
+    <button class="close" id="detail-close">×</button>
+  </header>
+  <dl id="detail-data"></dl>
+  <h4 style="font-size:12px; margin: 14px 0 6px;">관련 파일</h4>
+  <ul id="detail-files" style="font-size:11px; padding-left: 16px; color: var(--ink-soft);"></ul>
+</aside>
+
+<script>
+// ============================================================
+// Hamster SVG — 32x32 PIXEL-ART (rect-only, GBA/SNES top-down style)
+// Head dominates (rows 4..18), body short (rows 18..26), feet rows 26..30
+// All shapes are <rect> only — no ellipse/circle/path curves
+// ============================================================
+//
+// Coordinate system: 32x32 viewBox, every unit = 1 pixel
+//   rows 0..3   : ear top headroom
+//   rows 4..18  : HEAD (~14px tall, 14px wide) with ears at sides
+//   rows 18..26 : BODY (~8px tall, 12-14px wide) with arms
+//   rows 26..30 : FEET / shadow
+//
+function hamsterSVG(color, agentId) {
+  const accent = lighten(color, 25);
+  const inner  = "#fde2e4";
+  const dark   = lighten(color, -18);
+  const belly  = lighten(color, 22);
+  const outline = lighten(color, -32);
+
+  const id = (agentId || "").toLowerCase();
+  const face = faceAccessoryFor(id);   // pixel hat / glasses / headset / ...
+  const tool = toolFor(id, color);      // pixel tool held in front of body
+
+  return `
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="xMidYMax meet" shape-rendering="crispEdges">
+  <!-- ground shadow (single rect) -->
+  <rect x="9" y="30" width="14" height="2" fill="rgba(0,0,0,0.25)"/>
+
+  <!-- ============== SHORT BODY (rows 18..26) ============== -->
+  <g class="body-lower">
+    <!-- belly fur (back layer, full width) -->
+    <rect x="9"  y="18" width="14" height="8" fill="${color}"/>
+    <!-- body outline pixels at edges -->
+    <rect x="8"  y="19" width="1" height="6" fill="${outline}"/>
+    <rect x="23" y="19" width="1" height="6" fill="${outline}"/>
+    <!-- belly patch (lighter cream center) -->
+    <rect x="12" y="20" width="8" height="5" fill="${belly}"/>
+    <!-- arm pixels (sides) -->
+    <rect x="7"  y="20" width="2" height="4" fill="${color}"/>
+    <rect x="23" y="20" width="2" height="4" fill="${color}"/>
+    <!-- paws (tiny dark squares at arm tips) -->
+    <rect x="7"  y="23" width="2" height="2" fill="${dark}"/>
+    <rect x="23" y="23" width="2" height="2" fill="${dark}"/>
+    <!-- feet (rows 26..28) -->
+    <rect x="11" y="26" width="3" height="3" fill="${dark}"/>
+    <rect x="18" y="26" width="3" height="3" fill="${dark}"/>
+  </g>
+
+  <!-- held tool in front of body (rows 19..25) -->
+  <g class="held-tool">${tool}</g>
+
+  <!-- ============== HEAD (rows 4..18, 14x14 dominant block) ============== -->
+  <g class="body">
+    <!-- ears (back layer) -->
+    <rect x="6"  y="4" width="3" height="3" fill="${color}"/>
+    <rect x="23" y="4" width="3" height="3" fill="${color}"/>
+    <rect x="7"  y="5" width="1" height="2" fill="${inner}"/>
+    <rect x="24" y="5" width="1" height="2" fill="${inner}"/>
+    <!-- head fill 14x14 (rows 4..18) -->
+    <rect x="9"  y="4"  width="14" height="14" fill="${color}"/>
+    <!-- head outline pixels (top/bottom corners chipped for round-ish look) -->
+    <rect x="8"  y="6"  width="1" height="10" fill="${outline}"/>
+    <rect x="23" y="6"  width="1" height="10" fill="${outline}"/>
+    <rect x="10" y="3"  width="12" height="1" fill="${outline}"/>
+    <rect x="10" y="18" width="12" height="1" fill="${outline}"/>
+    <!-- muzzle (lighter cream patch lower-center of head) -->
+    <rect x="12" y="12" width="8" height="5" fill="${belly}"/>
+    <!-- cheek blush squares (left + right) -->
+    <rect x="9"  y="12" width="2" height="2" fill="${accent}"/>
+    <rect x="21" y="12" width="2" height="2" fill="${accent}"/>
+    <!-- eyes — 2x2 black squares (rows 9..11) wide-set -->
+    <rect x="12" y="9" width="2" height="2" fill="#1f2937"/>
+    <rect x="18" y="9" width="2" height="2" fill="#1f2937"/>
+    <!-- eye highlight pixels (1x1 white) -->
+    <rect x="12" y="9" width="1" height="1" fill="#ffffff"/>
+    <rect x="18" y="9" width="1" height="1" fill="#ffffff"/>
+    <!-- nose 1x1 -->
+    <rect x="15" y="13" width="2" height="1" fill="#1f2937"/>
+    <!-- mouth 1x3 -->
+    <rect x="14" y="15" width="4" height="1" fill="#1f2937"/>
+    <!-- front teeth 1x2 white (hamster trademark) -->
+    <rect x="15" y="16" width="1" height="2" fill="#ffffff"/>
+    <rect x="16" y="16" width="1" height="2" fill="#ffffff"/>
+  </g>
+
+  <!-- per-agent face accessory layered on top of head -->
+  <g class="face-accessory">${face}</g>
+</svg>`;
+}
+
+// ------------------------------------------------------------
+// Per-agent face accessory — 32x32 grid, rect-only pixel art
+// Eyes are at rows 9..11, head fills rows 4..18, top headroom rows 0..3
+// ------------------------------------------------------------
+function faceAccessoryFor(id) {
+  switch (id) {
+    case "pm-agent":
+      // golden pixel crown on top of head (rows 1..4)
+      return `
+        <rect x="9"  y="2" width="14" height="2" fill="#fbbf24"/>
+        <rect x="9"  y="0" width="2"  height="2" fill="#fbbf24"/>
+        <rect x="13" y="0" width="2"  height="2" fill="#fbbf24"/>
+        <rect x="17" y="0" width="2"  height="2" fill="#fbbf24"/>
+        <rect x="21" y="0" width="2"  height="2" fill="#fbbf24"/>
+        <rect x="9"  y="4" width="14" height="1" fill="#92400e"/>
+        <rect x="15" y="2" width="2"  height="1" fill="#ef4444"/>`;
+    case "dev-agent":
+      // square coder glasses over eyes (rows 8..12)
+      return `
+        <rect x="11" y="8"  width="4" height="4" fill="none" stroke="#1f2937" stroke-width="1"/>
+        <rect x="17" y="8"  width="4" height="4" fill="none" stroke="#1f2937" stroke-width="1"/>
+        <rect x="15" y="9"  width="2" height="1" fill="#1f2937"/>
+        <rect x="11" y="8"  width="4" height="1" fill="#1f2937"/>
+        <rect x="17" y="8"  width="4" height="1" fill="#1f2937"/>`;
+    case "ui-app-agent":
+      // pixel beret (magenta) on top of head + small paint dot
+      return `
+        <rect x="9"  y="3" width="11" height="2" fill="#be185d"/>
+        <rect x="10" y="2" width="9"  height="1" fill="#be185d"/>
+        <rect x="8"  y="4" width="2"  height="1" fill="#be185d"/>
+        <rect x="19" y="4" width="2"  height="1" fill="#9d174d"/>
+        <rect x="20" y="3" width="2"  height="1" fill="#10b981"/>`;
+    case "qa-agent":
+      // pixel magnifying glass over right eye
+      return `
+        <rect x="17" y="8"  width="4" height="1" fill="#0369a1"/>
+        <rect x="17" y="11" width="4" height="1" fill="#0369a1"/>
+        <rect x="17" y="9"  width="1" height="2" fill="#0369a1"/>
+        <rect x="20" y="9"  width="1" height="2" fill="#0369a1"/>
+        <rect x="18" y="9"  width="2" height="2" fill="#bae6fd" opacity="0.7"/>
+        <rect x="21" y="12" width="2" height="2" fill="#0369a1"/>`;
+    case "security-agent":
+      // black tactical visor across eyes (rows 8..11)
+      return `
+        <rect x="9"  y="8"  width="14" height="1" fill="#111827"/>
+        <rect x="9"  y="9"  width="14" height="2" fill="#111827"/>
+        <rect x="11" y="9"  width="3"  height="2" fill="#374151"/>
+        <rect x="17" y="9"  width="3"  height="2" fill="#374151"/>`;
+    case "build-agent":
+      // yellow hard hat (rows 1..5)
+      return `
+        <rect x="10" y="3" width="12" height="2" fill="#f59e0b"/>
+        <rect x="11" y="2" width="10" height="1" fill="#f59e0b"/>
+        <rect x="13" y="1" width="6"  height="1" fill="#f59e0b"/>
+        <rect x="9"  y="5" width="14" height="1" fill="#92400e"/>
+        <rect x="15" y="2" width="2"  height="2" fill="#fbbf24"/>`;
+    case "test-harness-agent":
+      // purple sweatband (rows 5..7) with gold racing stripe
+      return `
+        <rect x="9"  y="5" width="14" height="2" fill="#7c3aed"/>
+        <rect x="9"  y="6" width="14" height="1" fill="#fbbf24"/>`;
+    case "prompt-architect-agent":
+      // pixel mortarboard (rows 0..4)
+      return `
+        <rect x="7"  y="3" width="18" height="1" fill="#1f2937"/>
+        <rect x="9"  y="2" width="14" height="1" fill="#1f2937"/>
+        <rect x="12" y="1" width="8"  height="1" fill="#1f2937"/>
+        <rect x="15" y="0" width="2"  height="1" fill="#1f2937"/>
+        <rect x="22" y="0" width="2"  height="1" fill="#fbbf24"/>
+        <rect x="20" y="3" width="2"  height="2" fill="#fbbf24"/>`;
+    case "agent-factory-agent":
+      // white lab cap + safety goggles
+      return `
+        <rect x="8"  y="3" width="16" height="2" fill="#fafafa"/>
+        <rect x="10" y="2" width="12" height="1" fill="#fafafa"/>
+        <rect x="11" y="9" width="3"  height="2" fill="#bae6fd" stroke="#0284c7"/>
+        <rect x="18" y="9" width="3"  height="2" fill="#bae6fd" stroke="#0284c7"/>
+        <rect x="14" y="10" width="4" height="1" fill="#0284c7"/>`;
+    case "protocol-evolution-agent":
+      // antenna + headset earpieces
+      return `
+        <rect x="13" y="0" width="1" height="3" fill="#84cc16"/>
+        <rect x="12" y="0" width="3" height="1" fill="#84cc16"/>
+        <rect x="18" y="0" width="1" height="3" fill="#84cc16"/>
+        <rect x="17" y="0" width="3" height="1" fill="#84cc16"/>
+        <rect x="9"  y="6" width="14" height="1" fill="#1f2937"/>
+        <rect x="6"  y="9" width="2" height="3" fill="#1f2937"/>
+        <rect x="24" y="9" width="2" height="3" fill="#1f2937"/>`;
+    case "power-automate-agent":
+      // tech visor (translucent purple) across eyes
+      return `
+        <rect x="9"  y="8" width="14" height="3" fill="#c084fc" opacity="0.65"/>
+        <rect x="9"  y="8" width="14" height="1" fill="#7c3aed"/>
+        <rect x="9"  y="11" width="14" height="1" fill="#7c3aed"/>
+        <rect x="22" y="6" width="2" height="2" fill="#fbbf24"/>`;
+    default:
+      return "";
+  }
+}
+
+// ------------------------------------------------------------
+// Per-agent held tool — 32x32 grid, rect-only
+// Tool occupies rows 19..25, x=10..22 (in front of body)
+// ------------------------------------------------------------
+function toolFor(id, color) {
+  switch (id) {
+    case "pm-agent":
+      // pixel clipboard
+      return `
+        <rect x="11" y="19" width="10" height="7" fill="#fafafa"/>
+        <rect x="11" y="19" width="10" height="1" fill="#92400e"/>
+        <rect x="14" y="18" width="4"  height="1" fill="#92400e"/>
+        <rect x="13" y="21" width="6"  height="1" fill="#22c55e"/>
+        <rect x="13" y="23" width="6"  height="1" fill="#9ca3af"/>`;
+    case "dev-agent":
+      // pixel laptop (cyan screen)
+      return `
+        <rect x="10" y="19" width="12" height="6" fill="#1f2937"/>
+        <rect x="11" y="20" width="10" height="4" fill="#22d3ee"/>
+        <rect x="12" y="21" width="3"  height="1" fill="#1f2937"/>
+        <rect x="12" y="22" width="6"  height="1" fill="#1f2937"/>
+        <rect x="9"  y="25" width="14" height="1" fill="#374151"/>`;
+    case "ui-app-agent":
+      // palette (red/blue/green dots) + brush
+      return `
+        <rect x="11" y="20" width="9" height="5" fill="#fef3c7"/>
+        <rect x="12" y="21" width="2" height="2" fill="#ef4444"/>
+        <rect x="15" y="21" width="2" height="2" fill="#3b82f6"/>
+        <rect x="13" y="23" width="2" height="1" fill="#22c55e"/>
+        <rect x="17" y="23" width="2" height="1" fill="#fbbf24"/>
+        <rect x="20" y="19" width="1" height="3" fill="#7c2d12"/>
+        <rect x="20" y="18" width="2" height="1" fill="#1f2937"/>`;
+    case "qa-agent":
+      // checklist with checks
+      return `
+        <rect x="11" y="19" width="10" height="7" fill="#fafafa"/>
+        <rect x="13" y="20" width="1" height="1" fill="#22c55e"/>
+        <rect x="15" y="20" width="4" height="1" fill="#9ca3af"/>
+        <rect x="13" y="22" width="1" height="1" fill="#22c55e"/>
+        <rect x="15" y="22" width="4" height="1" fill="#9ca3af"/>
+        <rect x="13" y="24" width="1" height="1" fill="#22c55e"/>
+        <rect x="15" y="24" width="4" height="1" fill="#9ca3af"/>`;
+    case "security-agent":
+      // pixel shield (red w/ cream lock)
+      return `
+        <rect x="12" y="19" width="8"  height="1" fill="#dc2626"/>
+        <rect x="11" y="20" width="10" height="3" fill="#dc2626"/>
+        <rect x="12" y="23" width="8"  height="2" fill="#dc2626"/>
+        <rect x="14" y="24" width="4"  height="1" fill="#dc2626"/>
+        <rect x="15" y="22" width="2"  height="2" fill="#fef3c7"/>`;
+    case "build-agent":
+      // hammer + wrench crossed (pixel)
+      return `
+        <rect x="10" y="24" width="2" height="2" fill="#9ca3af"/>
+        <rect x="12" y="22" width="2" height="2" fill="#9ca3af"/>
+        <rect x="14" y="20" width="2" height="2" fill="#9ca3af"/>
+        <rect x="16" y="18" width="3" height="2" fill="#9ca3af"/>
+        <rect x="20" y="24" width="3" height="2" fill="#92400e"/>
+        <rect x="18" y="22" width="2" height="2" fill="#92400e"/>
+        <rect x="16" y="20" width="2" height="2" fill="#92400e"/>`;
+    case "test-harness-agent":
+      // stopwatch (cream face, purple rim)
+      return `
+        <rect x="12" y="19" width="8" height="6" fill="#fafafa"/>
+        <rect x="12" y="19" width="8" height="1" fill="#5b21b6"/>
+        <rect x="12" y="24" width="8" height="1" fill="#5b21b6"/>
+        <rect x="12" y="20" width="1" height="4" fill="#5b21b6"/>
+        <rect x="19" y="20" width="1" height="4" fill="#5b21b6"/>
+        <rect x="14" y="18" width="4" height="1" fill="#5b21b6"/>
+        <rect x="15" y="21" width="1" height="2" fill="#1f2937"/>
+        <rect x="16" y="22" width="2" height="1" fill="#dc2626"/>`;
+    case "prompt-architect-agent":
+      // blueprint (blue with grid)
+      return `
+        <rect x="11" y="19" width="10" height="7" fill="#1e3a8a"/>
+        <rect x="13" y="21" width="6"  height="1" fill="#dbeafe"/>
+        <rect x="13" y="23" width="4"  height="1" fill="#dbeafe"/>
+        <rect x="14" y="22" width="2"  height="2" fill="none" stroke="#fbbf24" stroke-width="0.5"/>
+        <rect x="11" y="20" width="1"  height="2" fill="#1e40af"/>
+        <rect x="20" y="20" width="1"  height="2" fill="#1e40af"/>`;
+    case "agent-factory-agent":
+      // pixel beaker (teal liquid + bubbles)
+      return `
+        <rect x="13" y="18" width="6" height="1" fill="#0f766e"/>
+        <rect x="13" y="19" width="6" height="2" fill="#fafafa"/>
+        <rect x="12" y="21" width="8" height="4" fill="#5eead4"/>
+        <rect x="13" y="25" width="6" height="1" fill="#0f766e"/>
+        <rect x="14" y="22" width="1" height="1" fill="#fafafa"/>
+        <rect x="17" y="23" width="1" height="1" fill="#fafafa"/>
+        <rect x="15" y="17" width="1" height="1" fill="#5eead4"/>`;
+    case "protocol-evolution-agent":
+      // tablet broadcasting wifi
+      return `
+        <rect x="11" y="19" width="10" height="7" fill="#1f2937"/>
+        <rect x="12" y="20" width="8"  height="5" fill="#a3e635"/>
+        <rect x="14" y="21" width="4"  height="1" fill="#1f2937"/>
+        <rect x="15" y="23" width="2"  height="1" fill="#1f2937"/>
+        <rect x="15" y="24" width="2"  height="1" fill="#1f2937"/>`;
+    case "power-automate-agent":
+      // flow diagram + lightning bolt
+      return `
+        <rect x="10" y="19" width="12" height="7" fill="#fafafa"/>
+        <rect x="11" y="20" width="3"  height="2" fill="#c084fc"/>
+        <rect x="18" y="20" width="3"  height="2" fill="#c084fc"/>
+        <rect x="14" y="23" width="4"  height="2" fill="#c084fc"/>
+        <rect x="14" y="21" width="4"  height="1" fill="#7c3aed"/>
+        <rect x="15" y="22" width="2"  height="1" fill="#fbbf24"/>`;
+    default:
+      return "";
+  }
+}
+
+// ============================================================
+// Mindasol — 32x32 PIXEL-ART human female (orchestrator)
+// Bob hair (5+ rows of hair rect at y=4..16), pink blouse, gold crown
+// All shapes are <rect> only — no ellipse/circle/path curves
+// ============================================================
+function mindasolSVG() {
+  const skin     = "#fde2c4";   // peach skin tone
+  const skinDark = "#e8c19a";
+  const hair     = "#3a2418";   // dark brown short bob
+  const blouse   = "#f9a8d4";   // pink blouse
+  const blouseHi = "#fbcfe8";
+  const skirt    = "#be185d";   // darker pink skirt
+  const lipstick = "#be185d";
+
+  return `
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="xMidYMax meet" shape-rendering="crispEdges">
+  <!-- ground shadow -->
+  <rect x="9" y="30" width="14" height="2" fill="rgba(0,0,0,0.25)"/>
+
+  <!-- ============== LEGS + SHOES (rows 26..30) ============== -->
+  <g class="body-lower-legs">
+    <rect x="13" y="26" width="2" height="3" fill="${skin}"/>
+    <rect x="17" y="26" width="2" height="3" fill="${skin}"/>
+    <rect x="12" y="29" width="3" height="1" fill="#1f2937"/>
+    <rect x="17" y="29" width="3" height="1" fill="#1f2937"/>
+  </g>
+
+  <!-- ============== SKIRT (rows 23..26) ============== -->
+  <g class="body-skirt">
+    <rect x="11" y="23" width="10" height="3" fill="${skirt}"/>
+    <rect x="10" y="24" width="1"  height="2" fill="${skirt}"/>
+    <rect x="21" y="24" width="1"  height="2" fill="${skirt}"/>
+  </g>
+
+  <!-- ============== TORSO / BLOUSE (rows 18..23) ============== -->
+  <g class="body">
+    <rect x="11" y="18" width="10" height="5" fill="${blouse}"/>
+    <rect x="10" y="19" width="1"  height="3" fill="${blouse}"/>
+    <rect x="21" y="19" width="1"  height="3" fill="${blouse}"/>
+    <!-- collar V (skin) -->
+    <rect x="15" y="18" width="2" height="2" fill="${skin}"/>
+    <!-- subtle blouse highlight stripe -->
+    <rect x="11" y="20" width="10" height="1" fill="${blouseHi}" opacity="0.6"/>
+    <!-- gold orchestrator sash (diagonal pixel pattern) -->
+    <rect x="11" y="20" width="2" height="1" fill="#fbbf24"/>
+    <rect x="13" y="21" width="2" height="1" fill="#fbbf24"/>
+    <rect x="15" y="22" width="2" height="1" fill="#fbbf24"/>
+    <!-- arms (skin sleeves at sides) -->
+    <rect x="9"  y="19" width="2" height="3" fill="${blouse}"/>
+    <rect x="21" y="19" width="2" height="3" fill="${blouse}"/>
+    <!-- hands (skin) -->
+    <rect x="9"  y="22" width="2" height="2" fill="${skin}"/>
+    <rect x="21" y="22" width="2" height="2" fill="${skin}"/>
+
+    <!-- ============== NECK (row 17) ============== -->
+    <rect x="14" y="17" width="4" height="1" fill="${skin}"/>
+    <rect x="14" y="17" width="4" height="1" fill="${skinDark}" opacity="0.4"/>
+
+    <!-- ============== HEAD (rows 4..17) ============== -->
+    <!-- back hair layer (rows 4..16) — 5+ hair rect rows for bob -->
+    <rect x="9"  y="4"  width="14" height="1" fill="${hair}"/>
+    <rect x="8"  y="5"  width="16" height="1" fill="${hair}"/>
+    <rect x="8"  y="6"  width="16" height="1" fill="${hair}"/>
+    <rect x="8"  y="7"  width="2"  height="9" fill="${hair}"/>
+    <rect x="22" y="7"  width="2"  height="9" fill="${hair}"/>
+    <rect x="9"  y="14" width="2"  height="2" fill="${hair}"/>
+    <rect x="21" y="14" width="2"  height="2" fill="${hair}"/>
+    <!-- face (skin oval) rows 7..16 -->
+    <rect x="10" y="7"  width="12" height="9" fill="${skin}"/>
+    <rect x="11" y="16" width="10" height="1" fill="${skin}"/>
+    <!-- bangs (forehead hair) row 7..8 -->
+    <rect x="10" y="7"  width="12" height="1" fill="${hair}"/>
+    <rect x="10" y="8"  width="3"  height="1" fill="${hair}"/>
+    <rect x="19" y="8"  width="3"  height="1" fill="${hair}"/>
+    <!-- eyes — 2x2 black squares (rows 10..12) -->
+    <rect x="12" y="10" width="2" height="2" fill="#1f2937"/>
+    <rect x="18" y="10" width="2" height="2" fill="#1f2937"/>
+    <!-- eye highlights -->
+    <rect x="12" y="10" width="1" height="1" fill="#ffffff"/>
+    <rect x="18" y="10" width="1" height="1" fill="#ffffff"/>
+    <!-- subtle cheek blush -->
+    <rect x="11" y="13" width="1" height="1" fill="#fca5a5"/>
+    <rect x="20" y="13" width="1" height="1" fill="#fca5a5"/>
+    <!-- nose 1x1 -->
+    <rect x="15" y="13" width="2" height="1" fill="${skinDark}"/>
+    <!-- mouth (1x3 lipstick pink) -->
+    <rect x="14" y="15" width="4" height="1" fill="${lipstick}"/>
+  </g>
+
+  <!-- ============== CONDUCTOR BATON (held tool) ============== -->
+  <g class="held-tool">
+    <!-- white wand with gold tip, diagonal pixel staircase -->
+    <rect x="9"  y="22" width="1" height="1" fill="#fafafa"/>
+    <rect x="11" y="21" width="1" height="1" fill="#fafafa"/>
+    <rect x="13" y="20" width="1" height="1" fill="#fafafa"/>
+    <rect x="15" y="19" width="1" height="1" fill="#fafafa"/>
+    <rect x="17" y="18" width="2" height="2" fill="#fbbf24"/>
+  </g>
+
+  <!-- ============== ORCHESTRATOR CROWN (rows 0..4) ============== -->
+  <g class="face-accessory">
+    <rect x="9"  y="2" width="14" height="2" fill="#fbbf24"/>
+    <rect x="9"  y="0" width="2"  height="2" fill="#fbbf24"/>
+    <rect x="13" y="0" width="2"  height="2" fill="#fbbf24"/>
+    <rect x="17" y="0" width="2"  height="2" fill="#fbbf24"/>
+    <rect x="21" y="0" width="2"  height="2" fill="#fbbf24"/>
+    <rect x="9"  y="4" width="14" height="1" fill="#92400e"/>
+    <!-- jewels -->
+    <rect x="10" y="0" width="1" height="1" fill="#dc2626"/>
+    <rect x="14" y="0" width="1" height="1" fill="#3b82f6"/>
+    <rect x="16" y="2" width="1" height="1" fill="#dc2626"/>
+    <rect x="18" y="0" width="1" height="1" fill="#10b981"/>
+    <rect x="22" y="0" width="1" height="1" fill="#a855f7"/>
+  </g>
+</svg>`;
+}
+
+// ============================================================
+// Dasol — 32x32 PIXEL-ART human female (rect-only)
+// Used for detail panel avatars and as the human-form variant.
+// Sub-agents render as hamsters via hamsterSVG; this function
+// produces the human silhouette with bobbed hair and per-agent
+// blouse color + face accessory + held tool.
+// ============================================================
+function dasolHumanSVG(color, agentId) {
+  const id       = (agentId || "").toLowerCase();
+  const skin     = "#fde2c4";   // peach skin tone
+  const skinDark = "#e8c19a";
+  const hair     = "#3a2418";   // bobbed hair dark brown
+  const blouse   = color || "#f9a8d4";
+  const blouseHi = lighten(blouse, 18);
+  const skirt    = lighten(blouse, -22);
+  const lipstick = "#be185d";
+
+  const face = faceAccessoryFor(id);
+  const tool = toolFor(id, blouse);
+
+  return `
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="xMidYMax meet" shape-rendering="crispEdges">
+  <!-- ground shadow -->
+  <rect x="9" y="30" width="14" height="2" fill="rgba(0,0,0,0.25)"/>
+
+  <!-- ============== LEGS + SHOES (rows 26..30) ============== -->
+  <g class="body-lower-legs">
+    <rect x="13" y="26" width="2" height="3" fill="${skin}"/>
+    <rect x="17" y="26" width="2" height="3" fill="${skin}"/>
+    <rect x="12" y="29" width="3" height="1" fill="#1f2937"/>
+    <rect x="17" y="29" width="3" height="1" fill="#1f2937"/>
+  </g>
+
+  <!-- ============== SKIRT (rows 23..26) ============== -->
+  <g class="body-skirt">
+    <rect x="11" y="23" width="10" height="3" fill="${skirt}"/>
+    <rect x="10" y="24" width="1"  height="2" fill="${skirt}"/>
+    <rect x="21" y="24" width="1"  height="2" fill="${skirt}"/>
+  </g>
+
+  <!-- ============== TORSO / BLOUSE (rows 18..23) ============== -->
+  <g class="body">
+    <rect x="11" y="18" width="10" height="5" fill="${blouse}"/>
+    <rect x="10" y="19" width="1"  height="3" fill="${blouse}"/>
+    <rect x="21" y="19" width="1"  height="3" fill="${blouse}"/>
+    <rect x="15" y="18" width="2" height="2" fill="${skin}"/>
+    <rect x="11" y="20" width="10" height="1" fill="${blouseHi}" opacity="0.5"/>
+    <!-- arms -->
+    <rect x="9"  y="19" width="2" height="3" fill="${blouse}"/>
+    <rect x="21" y="19" width="2" height="3" fill="${blouse}"/>
+    <!-- hands -->
+    <rect x="9"  y="22" width="2" height="2" fill="${skin}"/>
+    <rect x="21" y="22" width="2" height="2" fill="${skin}"/>
+
+    <!-- ============== NECK (row 17) ============== -->
+    <rect x="14" y="17" width="4" height="1" fill="${skin}"/>
+
+    <!-- ============== HEAD (rows 4..17) ============== -->
+    <!-- back hair (5+ rows of hair rect to satisfy bob criteria) -->
+    <rect x="9"  y="4"  width="14" height="1" fill="${hair}"/>
+    <rect x="8"  y="5"  width="16" height="1" fill="${hair}"/>
+    <rect x="8"  y="6"  width="16" height="1" fill="${hair}"/>
+    <rect x="8"  y="7"  width="2"  height="9" fill="${hair}"/>
+    <rect x="22" y="7"  width="2"  height="9" fill="${hair}"/>
+    <rect x="9"  y="14" width="2"  height="2" fill="${hair}"/>
+    <rect x="21" y="14" width="2"  height="2" fill="${hair}"/>
+    <!-- face skin -->
+    <rect x="10" y="7"  width="12" height="9" fill="${skin}"/>
+    <rect x="11" y="16" width="10" height="1" fill="${skin}"/>
+    <!-- bangs -->
+    <rect x="10" y="7"  width="12" height="1" fill="${hair}"/>
+    <rect x="10" y="8"  width="3"  height="1" fill="${hair}"/>
+    <rect x="19" y="8"  width="3"  height="1" fill="${hair}"/>
+    <!-- eyes 2x2 black -->
+    <rect x="12" y="10" width="2" height="2" fill="#1f2937"/>
+    <rect x="18" y="10" width="2" height="2" fill="#1f2937"/>
+    <rect x="12" y="10" width="1" height="1" fill="#ffffff"/>
+    <rect x="18" y="10" width="1" height="1" fill="#ffffff"/>
+    <!-- cheek blush -->
+    <rect x="11" y="13" width="1" height="1" fill="#fca5a5"/>
+    <rect x="20" y="13" width="1" height="1" fill="#fca5a5"/>
+    <!-- nose 1x1 -->
+    <rect x="15" y="13" width="2" height="1" fill="${skinDark}"/>
+    <!-- mouth 1x3 -->
+    <rect x="14" y="15" width="4" height="1" fill="${lipstick}"/>
+  </g>
+
+  <!-- per-agent held tool -->
+  <g class="held-tool">${tool}</g>
+
+  <!-- per-agent head accessory -->
+  <g class="face-accessory">${face}</g>
+</svg>`;
+}
+
+// ============================================================
+// Color helpers
+// ============================================================
+function lighten(hex, amt) {
+  const c = hex.replace("#",""); const num = parseInt(c, 16);
+  let r = (num >> 16) + amt, g = ((num >> 8) & 0xff) + amt, b = (num & 0xff) + amt;
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+  return "#" + ((1<<24) + (r<<16) + (g<<8) + b).toString(16).slice(1);
+}
+
+// ============================================================
+// Office layout — convert agent grid (x:0-12, y:0-12) to %
+// ============================================================
+const STAGE_W = 12, STAGE_H = 12;
+function gridToPct(g) {
+  return { left: (g.x / STAGE_W) * 100, top: (g.y / STAGE_H) * 100 };
+}
+
+// ============================================================
+// Elapsed-time progress smoothing
+// Working agents animate 50% → 99% based on seconds elapsed
+// since the phase started. Phase completion snaps to 100%.
+// ============================================================
+const PROGRESS_MIN = 50;   // start of working range
+const PROGRESS_MAX = 99;   // asymptotic ceiling while working
+const SMOOTHING_TAU = 120; // seconds to reach ~63% of (MAX-MIN)
+
+// Map of agentId -> { startedAt: Date, animFrame: id }
+const _progressState = {};
+
+function _smoothProgress(elapsedSec) {
+  // Exponential approach: 50 + 49 * (1 - e^(-t/tau))
+  const ratio = 1 - Math.exp(-elapsedSec / SMOOTHING_TAU);
+  return Math.round(PROGRESS_MIN + (PROGRESS_MAX - PROGRESS_MIN) * ratio);
+}
+
+function startProgressAnimation(agentId, startedAtIso) {
+  if (_progressState[agentId]) {
+    // Already animating — update start time if different
+    const existing = _progressState[agentId];
+    const newStart = startedAtIso ? new Date(startedAtIso) : existing.startedAt;
+    if (newStart.getTime() !== existing.startedAt.getTime()) {
+      existing.startedAt = newStart;
+    }
+    return; // animation loop already running
+  }
+  const startedAt = startedAtIso ? new Date(startedAtIso) : new Date();
+  const state = { startedAt, animFrame: null };
+  _progressState[agentId] = state;
+
+  function tick() {
+    const node = agentNodes[agentId];
+    if (!node || !node.classList.contains("working")) {
+      // Agent is no longer working — stop loop
+      delete _progressState[agentId];
+      return;
+    }
+    const elapsedSec = (Date.now() - state.startedAt.getTime()) / 1000;
+    const pct = _smoothProgress(Math.max(0, elapsedSec));
+    const ring = node.querySelector(".progress-ring");
+    if (ring) ring.textContent = pct + "%";
+    state.animFrame = requestAnimationFrame(tick);
+  }
+  state.animFrame = requestAnimationFrame(tick);
+}
+
+function stopProgressAnimation(agentId) {
+  const s = _progressState[agentId];
+  if (s) {
+    if (s.animFrame != null) cancelAnimationFrame(s.animFrame);
+    delete _progressState[agentId];
+  }
+}
+
+// ============================================================
+// State + rendering
+// ============================================================
+const stage = document.getElementById("stage");
+const tooltip = document.getElementById("tooltip");
+const phaseList = document.getElementById("phase-list");
+const eventsBox = document.getElementById("events");
+const chartBox = document.getElementById("results-chart");
+const wsStatus = document.getElementById("ws-status");
+const pipelineIdPill = document.getElementById("pipeline-id");
+const pipelineDesc = document.getElementById("pipeline-desc");
+const phaseCurrentLbl = document.getElementById("phase-current");
+const detailPanel = document.getElementById("detail-panel");
+const detailName = document.getElementById("detail-name");
+const detailRole = document.getElementById("detail-role");
+const detailAvatar = document.getElementById("detail-avatar");
+const detailData = document.getElementById("detail-data");
+const detailFiles = document.getElementById("detail-files");
+const emergencyStopBtn = document.getElementById("emergency-stop");
+const controlPanel = document.getElementById("control-panel");
+const pmCommand = document.getElementById("pm-command");
+const pmCommandSend = document.getElementById("pm-command-send");
+const resumeAgents = document.getElementById("resume-agents");
+document.getElementById("detail-close").addEventListener("click", () => {
+  detailPanel.classList.remove("open");
+  selectedAgentId = null;
+});
+
+let agentNodes = {};        // id -> dom element
+let mindasolNode = null;
+let selectedAgentId = null;
+let lastPayload = null;
+
+function ensureCharacterNodes(payload) {
+  // Mindasol once
+  if (!mindasolNode) {
+    const desk = document.createElement("div");
+    desk.className = "desk command";
+    const ms = payload.orchestrator || { desk: { x: 9, y: 1.6 } };
+    const dpos = gridToPct(ms.desk);
+    desk.style.left = dpos.left + "%";
+    desk.style.top  = dpos.top + "%";
+    desk.innerHTML = `<div class="top"></div><div class="legL"></div><div class="legR"></div>`;
+    stage.appendChild(desk);
+
+    mindasolNode = document.createElement("div");
+    mindasolNode.className = "agent mindasol";
+    mindasolNode.style.left = dpos.left + "%";
+    mindasolNode.style.top  = (dpos.top - 4) + "%";
+    mindasolNode.innerHTML = `${dasolHumanSVG("#f9a8d4","mindasol")}<span class="name">다솔</span>`;
+    mindasolNode.addEventListener("mousemove", e => showTooltip(e, {
+      name: "민다솔 (Orchestrator)",
+      color: "#1f2937",
+      role: "총괄 지휘",
+      status: "command",
+      goal: "전체 파이프라인 지휘",
+      progress: null,
+      issue: ""
+    }));
+    mindasolNode.addEventListener("mouseleave", hideTooltip);
+    stage.appendChild(mindasolNode);
+  }
+
+  // Agents — 32x32 pixel hamsters with per-role tools/accessories.
+  for (const ag of payload.agents) {
+    let node = agentNodes[ag.id];
+    if (!node) {
+      // desk — tagged with agent id for job-specific desk-item emoji
+      const desk = document.createElement("div");
+      desk.className = "desk";
+      desk.dataset.agent = ag.id;
+      desk.setAttribute("data-agent", ag.id);
+      const dp = gridToPct(ag.desk);
+      desk.style.left = dp.left + "%";
+      desk.style.top = dp.top + "%";
+      desk.innerHTML = `<div class="monitor"></div><div class="top"></div><div class="legL"></div><div class="legR"></div><span class="desk-item"></span>`;
+      stage.appendChild(desk);
+
+      node = document.createElement("div");
+      node.className = "agent";
+      node.dataset.id = ag.id;
+      node.innerHTML = `
+        ${hamsterSVG(ag.color, ag.id)}
+        <span class="name">${ag.name}</span>
+        <span class="progress-ring">0%</span>
+      `;
+      node.addEventListener("mousemove", e => {
+        const data = (lastPayload?.agents || []).find(a => a.id === ag.id) || ag;
+        showTooltip(e, data);
+      });
+      node.addEventListener("mouseleave", () => {
+        hideTooltip();
+        // Auto-close detail panel when the cursor leaves the currently selected agent
+        if (selectedAgentId === ag.id && detailPanel.classList.contains("open")) {
+          detailPanel.classList.remove("open");
+          selectedAgentId = null;
+        }
+      });
+      node.addEventListener("click", () => openDetail(ag.id));
+      stage.appendChild(node);
+      agentNodes[ag.id] = node;
+    }
+  }
+}
+
+function updateAgents(payload) {
+  for (const ag of payload.agents) {
+    const node = agentNodes[ag.id];
+    if (!node) continue;
+    const pos = gridToPct(ag.position);
+    node.style.left = pos.left + "%";
+    node.style.top = pos.top + "%";
+    node.className = "agent " + (ag.status || "standby");
+
+    if (ag.status === "working") {
+      // Start or continue elapsed-time progress animation
+      // started_at comes from the phase data; fallback to now
+      const startedAt = ag.started_at || null;
+      startProgressAnimation(ag.id, startedAt);
+      // Ring text is managed by the animation loop — don't overwrite here
+    } else {
+      // Not working: stop animation, show static progress value
+      stopProgressAnimation(ag.id);
+      const ring = node.querySelector(".progress-ring");
+      if (ring) ring.textContent = (ag.progress ?? 0) + "%";
+    }
+  }
+  // Update detail panel if open
+  if (selectedAgentId) {
+    const ag = payload.agents.find(a => a.id === selectedAgentId);
+    if (ag) populateDetail(ag);
+  }
+}
+
+function showTooltip(e, ag) {
+  const statusText = {
+    working: "작업중", idle: "대기", alert: "문제발생",
+    coordinating: "전달중", paused: "긴급정지",
+    pending: "예정", standby: "대기", skipped: "스킵", command: "지휘"
+  }[ag.status] || ag.status || "—";
+  const issueLine = ag.issue ? `<div class="issue">! ${escapeHtml(ag.issue)}</div>` : "";
+  const concernLine = ag.concern
+    ? `<div style="margin-top:6px;color:#92400e;font-weight:700;">난감 포인트: ${escapeHtml(ag.concern)}</div>`
+    : "";
+  const skipBadge = ag.status === "skipped"
+    ? `<div class="skip-tag">SKIPPED — 이번 파이프라인 미실행</div>`
+    : "";
+  // No progress bar for skipped/command/standby
+  const showProgress = (
+    ag.progress != null
+    && ag.status !== "command"
+    && ag.status !== "skipped"
+    && ag.status !== "standby"
+  );
+  const progressLine = showProgress
+    ? `<div class="progress-bar"><div style="width:${ag.progress}%"></div></div>`
+    : "";
+  tooltip.innerHTML = `
+    <h4><span class="dot" style="background:${ag.color || '#999'}"></span>${escapeHtml(ag.name)}</h4>
+    <dl>
+      <dt>ROLE</dt><dd>${escapeHtml(ag.role || '-')}</dd>
+      <dt>STATUS</dt><dd>${statusText}</dd>
+      <dt>업무</dt><dd>${escapeHtml(ag.summary || ag.goal || '-')}</dd>
+      <dt>GOAL</dt><dd>${escapeHtml(ag.goal || '-')}</dd>
+      <dt>TOKEN</dt><dd>${(ag.tokens_used || 0).toLocaleString()} 사용</dd>
+      ${showProgress ? `<dt>PROG</dt><dd>${ag.progress}%</dd>` : ""}
+    </dl>
+    ${progressLine}
+    ${skipBadge}
+    ${concernLine}
+    ${issueLine}
+  `;
+  tooltip.classList.add("visible");
+  const x = e.clientX;
+  const y = e.clientY - 18;
+  tooltip.style.left = x + "px";
+  tooltip.style.top  = y + "px";
+}
+function hideTooltip() { tooltip.classList.remove("visible"); }
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function openDetail(agentId) {
+  selectedAgentId = agentId;
+  const ag = (lastPayload?.agents || []).find(a => a.id === agentId);
+  if (ag) populateDetail(ag);
+  detailPanel.classList.add("open");
+}
+
+function populateDetail(ag) {
+  detailName.firstChild.textContent = ag.name;
+  detailRole.textContent = ag.role || "—";
+  detailAvatar.style.background = ag.color;
+  detailAvatar.innerHTML = `<div style="width:80%;height:80%">${hamsterSVG(ag.color, ag.id)}</div>`;
+  detailData.innerHTML = `
+    <dt>ID</dt><dd>${escapeHtml(ag.id)}</dd>
+    <dt>부서</dt><dd>${escapeHtml(ag.department || '-')}</dd>
+    <dt>상태</dt><dd>${escapeHtml(ag.status || '-')}</dd>
+    <dt>Phase</dt><dd>${escapeHtml(ag.phase_status || '-')}</dd>
+    <dt>쉬운 설명</dt><dd>${escapeHtml(ag.summary || '-')}</dd>
+    <dt>현재 작업</dt><dd>${escapeHtml(ag.current_task || '-')}</dd>
+    <dt>진행률</dt><dd>${ag.progress ?? 0}%</dd>
+    <dt>토큰</dt><dd>${(ag.tokens_used || 0).toLocaleString()} 사용</dd>
+    <dt>난감함</dt><dd>${escapeHtml(ag.concern || '없음')}</dd>
+    <dt>문제</dt><dd>${escapeHtml(ag.issue || '없음')}</dd>
+  `;
+  detailFiles.innerHTML = (ag.files && ag.files.length)
+    ? ag.files.map(f => `<li>${escapeHtml(f)}</li>`).join("")
+    : `<li style="opacity:0.6">없음</li>`;
+}
+
+function renderPipelineHeader(p) {
+  pipelineIdPill.textContent = "파이프라인: " + (p.id || "-");
+  pipelineDesc.textContent = p.description ? `— ${p.description}` : "";
+  if (Array.isArray(p.phases) && p.current_phase_index >= 0) {
+    const cur = p.phases[p.current_phase_index];
+    phaseCurrentLbl.textContent = "현재 단계: " + (cur?.name || "-");
+  } else {
+    phaseCurrentLbl.textContent = "현재 단계: 모든 단계 완료";
+  }
+}
+
+function renderPhaseList(phases, currentIdx) {
+  phaseList.innerHTML = "";
+  (phases || []).forEach((p, idx) => {
+    const status = (p.status || "PENDING").toUpperCase();
+    let icon = "pending", text = "○";
+    if (status === "DONE" || status === "PASS" || status === "SAFE" || status === "COMPLETE") {
+      icon = "done"; text = "✓";
+    } else if (status === "FAIL" || status === "BLOCK" || status === "ERROR") {
+      icon = "fail"; text = "✗";
+    } else if (status === "SKIPPED") {
+      icon = "skip"; text = "—";
+    } else if (idx === currentIdx) {
+      icon = "working"; text = "▶";
+    }
+    const pillBg = {
+      done: "#dcfce7;color:#166534",
+      working: "#dbeafe;color:#1e40af",
+      fail: "#fee2e2;color:#991b1b",
+      skip: "#f1f5f9;color:#475569",
+      pending: "#f9fafb;color:#6b7280"
+    }[icon];
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <span class="icon ${icon}">${text}</span>
+      <span>${escapeHtml(p.name || '-')}</span>
+      <span class="status-pill" style="background:${pillBg}">${escapeHtml(status)}</span>
+    `;
+    phaseList.appendChild(li);
+  });
+}
+
+function renderEvents(events) {
+  eventsBox.innerHTML = "";
+  (events || []).slice().reverse().forEach(ev => {
+    const div = document.createElement("div");
+    const ts = ev.timestamp || ev.ts || "";
+    const msg = ev.message || ev.msg || JSON.stringify(ev);
+    div.textContent = `${ts.slice(11,16)}  ${msg}`;
+    eventsBox.appendChild(div);
+  });
+}
+
+function renderResults(results) {
+  chartBox.innerHTML = "";
+  if (!results || !results.length) {
+    chartBox.innerHTML = `<div style="color:#9ca3af;font-size:11px;align-self:center;text-align:center;flex:1">아직 채점 기록이 없습니다.</div>`;
+    document.getElementById("results-summary").textContent = "";
+    return;
+  }
+  let pass = 0;
+  results.forEach(r => {
+    let score = r.score;
+    // score may be number, percentage, or "N/A"
+    if (typeof score === "string") score = parseFloat(score);
+    if (isNaN(score)) score = 0;
+    // Normalize to 0-100 if total_score present
+    if (r.total_score && r.total_score > 100) {
+      score = (score / r.total_score) * 100;
+    }
+    score = Math.max(0, Math.min(100, score));
+    const verdict = (r.verdict || "").toUpperCase();
+    const isPass = verdict === "PASS" || score >= 80;
+    if (isPass) pass++;
+    const bar = document.createElement("div");
+    bar.className = "bar" + (isPass ? "" : " fail");
+    bar.style.height = (score * 0.8 + 4) + "%";
+    bar.dataset.label = `${r.id || ""}: ${score.toFixed(0)}점 ${verdict}`;
+    chartBox.appendChild(bar);
+  });
+  document.getElementById("results-summary").textContent =
+    `${results.length}건 중 PASS ${pass}건 (${Math.round(pass*100/results.length)}%)`;
+}
+
+function renderTokens(tokens) {
+  if (!tokens) return;
+  const fmt = n => (typeof n === "number" && n >= 0) ? n.toLocaleString() : "—";
+  const el = id => document.getElementById(id);
+  el("tok-total").textContent   = fmt(tokens.total_tokens);
+  el("tok-input").textContent   = fmt(tokens.total_input);
+  el("tok-output").textContent  = fmt(tokens.total_output);
+  el("tok-entries").textContent = (tokens.entries > 0) ? tokens.entries + "건" : "—";
+  el("tok-remaining-top").textContent = fmt(tokens.remaining_tokens);
+  el("tok-budget-top").textContent = fmt(tokens.budget_tokens);
+  el("tok-remaining-side").textContent =
+    `${fmt(tokens.remaining_tokens)} 남음 (${tokens.remaining_percent ?? 100}%)`;
+  const fill = document.getElementById("tok-fill-top");
+  const remainingPercent = Math.max(0, Math.min(100, Number(tokens.remaining_percent ?? 100)));
+  fill.style.width = remainingPercent + "%";
+  fill.classList.toggle("warn", remainingPercent <= 35 && remainingPercent > 15);
+  fill.classList.toggle("danger", remainingPercent <= 15);
+  const agentList = document.getElementById("agent-token-list");
+  const byAgent = tokens.by_agent || {};
+  const maxAgentTokens = Math.max(1, ...Object.values(byAgent).map(v => Number(v?.total || 0)));
+  const agents = (lastPayload?.agents || []).slice(0, 11);
+  agentList.innerHTML = agents.map(ag => {
+    const used = Number(byAgent[ag.id]?.total || ag.tokens_used || 0);
+    const pct = Math.max(0, Math.min(100, Math.round((used / maxAgentTokens) * 100)));
+    return `<div class="agent-token-row">
+      <span>${escapeHtml(ag.name)}</span>
+      <div class="agent-token-mini"><span style="width:${pct}%"></span></div>
+      <strong>${used ? used.toLocaleString() : "0"}</strong>
+    </div>`;
+  }).join("");
+  const tsEl = document.getElementById("token-last-ts");
+  if (tsEl && tokens.last_ts) {
+    const ts = tokens.last_ts.slice(11, 16);
+    tsEl.textContent = `마지막 업데이트: ${ts}`;
+  } else if (tsEl) {
+    tsEl.textContent = "로그 대기";
+  }
+}
+
+function renderControl(control) {
+  const stopped = Boolean(control && control.emergency_stop);
+  controlPanel.classList.toggle("open", stopped);
+  emergencyStopBtn.classList.toggle("paused", stopped);
+  emergencyStopBtn.textContent = stopped ? "RESUME" : "PAUSE";
+  if (stopped && control.pm_instruction && !pmCommand.value.trim()) {
+    pmCommand.value = control.pm_instruction;
+  }
+}
+
+async function postJson(url, body = {}) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`${url} failed: ${res.status}`);
+  const payload = await res.json();
+  applyPayload(payload);
+}
+
+function applyPayload(payload) {
+  lastPayload = payload;
+  ensureCharacterNodes(payload);
+  updateAgents(payload);
+  renderPipelineHeader(payload.pipeline || {});
+  renderPhaseList((payload.pipeline || {}).phases, (payload.pipeline || {}).current_phase_index ?? -1);
+  renderEvents((payload.pipeline || {}).events);
+  renderResults(payload.recent_results || []);
+  renderTokens(payload.tokens || null);
+  renderControl(payload.control || null);
+}
+
+emergencyStopBtn.addEventListener("click", () => {
+  postJson("/api/toggle-pause").catch(err => console.error(err));
+});
+pmCommandSend.addEventListener("click", () => {
+  postJson("/api/submit-task", { message: pmCommand.value }).catch(err => console.error(err));
+});
+resumeAgents.addEventListener("click", () => {
+  postJson("/api/resume").catch(err => console.error(err));
+});
+
+// ============================================================
+// WebSocket
+// ============================================================
+let ws = null, wsRetry = 0;
+function connectWS() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const url = `${proto}//${location.host}/ws`;
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    scheduleReconnect();
+    return;
+  }
+  ws.onopen = () => {
+    wsRetry = 0;
+    wsStatus.classList.remove("disconnected");
+    wsStatus.textContent = "LIVE";
+  };
+  ws.onmessage = e => {
+    try {
+      const p = JSON.parse(e.data);
+      if (p && p.type === "pong") return;
+      applyPayload(p);
+    } catch (err) {
+      console.error("payload parse error", err);
+    }
+  };
+  ws.onclose = scheduleReconnect;
+  ws.onerror = () => { try { ws.close(); } catch (_) {} };
+}
+function scheduleReconnect() {
+  wsStatus.classList.add("disconnected");
+  wsStatus.textContent = "연결 재시도중...";
+  wsRetry = Math.min(wsRetry + 1, 8);
+  const delay = Math.min(1000 * 2 ** wsRetry, 15000);
+  setTimeout(connectWS, delay);
+}
+
+// initial fetch (in case WS is slow)
+fetch("/api/state").then(r => r.json()).then(applyPayload).catch(() => {});
+connectWS();
+
+// keepalive ping
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try { ws.send("ping"); } catch (_) {}
+  }
+}, 25000);
+</script>
+</body>
+</html>

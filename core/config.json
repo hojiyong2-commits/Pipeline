@@ -1,0 +1,18 @@
+{
+  "excel_path": "",
+  "cell_range": {
+    "sheet_name": "Sheet1",
+    "start_row": 1,
+    "start_col": 1,
+    "end_row": 10,
+    "end_col": 5
+  },
+  "mark_color": "FFD700",
+  "email_subject_template": "[일일보고] {date}",
+  "email_body_template": "일자: {date}\n\n내용:\n{data}",
+  "to_recipients": [],
+  "cc_recipients": [],
+  "schedule_time": "10:00",
+  "check_modified": true,
+  "highlight_ranges": []
+}

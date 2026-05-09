@@ -1,0 +1,162 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2016-06-01/Microsoft.Logic.json",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "이메일_수신": {
+      "type": "ApiConnectionNotification",
+      "inputs": {
+        "host": {
+          "connection": {
+            "name": "@parameters('$connections')['shared_office365']['connectionId']"
+          }
+        },
+        "fetch": {
+          "method": "GET",
+          "path": "/Mail/OnNewEmail",
+          "queries": {
+            "folderPath": "Inbox",
+            "importance": "Any",
+            "fetchOnlyWithAttachment": false,
+            "includeAttachments": false,
+            "subjectFilter": "AFM-Kitting Notice dated on"
+          }
+        },
+        "subscribe": {
+          "method": "POST",
+          "path": "/MailSubscription/$subscriptions",
+          "body": {
+            "NotificationUrl": "@{listCallbackUrl()}"
+          }
+        }
+      }
+    }
+  },
+  "actions": {
+    "표에_있는_행_나열": {
+      "type": "ApiConnection",
+      "inputs": {
+        "host": {
+          "connection": {
+            "name": "@parameters('$connections')['shared_excelonlinebusiness']['connectionId']"
+          }
+        },
+        "method": "GET",
+        "path": "/drives/@{encodeURIComponent('me')}/files/@{encodeURIComponent('KITTING_FILE_ID')}/tables/@{encodeURIComponent('KITTING_TABLE_NAME')}/rows",
+        "queries": {
+          "$top": 1000
+        }
+      },
+      "runAfter": {},
+      "metadata": {
+        "note": "【설정 필요】KITTING_FILE_ID: Kitting Notice Excel 파일 ID / KITTING_TABLE_NAME: 표 이름"
+      }
+    },
+    "배열_필터링": {
+      "type": "Query",
+      "inputs": {
+        "from": "@body('표에_있는_행_나열')?['value']",
+        "where": "@equals(item()?['DATE_COLUMN_NAME'], formatDateTime(convertTimeZone(utcNow(), 'UTC', 'Korea Standard Time'), 'yyyy-MM-dd'))"
+      },
+      "runAfter": {
+        "표에_있는_행_나열": ["Succeeded"]
+      },
+      "metadata": {
+        "note": "【설정 필요】DATE_COLUMN_NAME: 날짜 열 이름으로 교체. 날짜 필터 불필요 시 이 액션 삭제 후 다음 액션의 입력을 표에_있는_행_나열 결과로 변경"
+      }
+    },
+    "조건_빈값_체크": {
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@empty(body('배열_필터링'))",
+              true
+            ]
+          }
+        ]
+      },
+      "actions": {
+        "true": {
+          "actions": {
+            "종료_데이터없음": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Cancelled",
+                "runError": {
+                  "code": "NO_DATA",
+                  "message": "오늘 날짜 Kitting Notice 데이터가 없습니다."
+                }
+              },
+              "runAfter": {}
+            }
+          }
+        },
+        "false": {
+          "actions": {}
+        }
+      },
+      "runAfter": {
+        "배열_필터링": ["Succeeded"]
+      }
+    },
+    "각각에_적용": {
+      "type": "Foreach",
+      "foreach": "@body('배열_필터링')",
+      "actions": {
+        "행_추가": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "name": "@parameters('$connections')['shared_excelonlinebusiness']['connectionId']"
+              }
+            },
+            "method": "POST",
+            "path": "/drives/@{encodeURIComponent('me')}/files/@{encodeURIComponent('SOURCE_FILE_ID')}/tables/@{encodeURIComponent('SOURCE_TABLE_NAME')}/rows",
+            "body": {
+              "Month":       "@{item()?['KITTING_MONTH_COL']}",
+              "Date":        "@{item()?['KITTING_DATE_COL']}",
+              "PM":          "@{item()?['KITTING_PM_COL']}",
+              "SN":          "@{item()?['KITTING_SN_COL']}",
+              "at":          "@{item()?['KITTING_AT_COL']}",
+              "PO":          "@{item()?['KITTING_PO_COL']}",
+              "Project ID":  "@{item()?['KITTING_PROJECTID_COL']}",
+              "Contract":    "@{item()?['KITTING_CONTRACT_COL']}",
+              "FCA":         "@{item()?['KITTING_FCA_COL']}",
+              "Note":        "@{item()?['KITTING_NOTE_COL']}"
+            }
+          },
+          "runAfter": {},
+          "metadata": {
+            "note": "【설정 필요】SOURCE_FILE_ID: 출고요청 Excel 파일 ID / SOURCE_TABLE_NAME: 표 이름 / KITTING_*_COL: Kitting Notice 실제 열 이름으로 교체"
+          }
+        }
+      },
+      "runAfter": {
+        "조건_빈값_체크": ["Succeeded"]
+      }
+    },
+    "오류_행나열_실패": {
+      "type": "Compose",
+      "inputs": "오류: Kitting Notice Excel 행 조회 실패. 날짜: @{formatDateTime(convertTimeZone(utcNow(), 'UTC', 'Korea Standard Time'), 'yyyy-MM-dd')}",
+      "runAfter": {
+        "표에_있는_행_나열": ["Failed", "TimedOut"]
+      }
+    },
+    "오류_행추가_실패": {
+      "type": "Compose",
+      "inputs": "오류: 출고요청 Excel 행 추가 실패. 날짜: @{formatDateTime(convertTimeZone(utcNow(), 'UTC', 'Korea Standard Time'), 'yyyy-MM-dd')}",
+      "runAfter": {
+        "각각에_적용": ["Failed", "TimedOut"]
+      }
+    }
+  },
+  "outputs": {}
+}

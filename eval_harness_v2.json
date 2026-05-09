@@ -1,0 +1,1088 @@
+{
+  "version": "2.0",
+  "generated": "2026-04-05",
+  "total_tasks": 31,
+  "category_distribution": {
+    "WA": 3,
+    "UI": 3,
+    "FS": 3,
+    "PD": 3,
+    "SEC": 3,
+    "AL": 3,
+    "BUILD": 3
+  },
+  "tasks": [
+    {
+      "id": "WA-V2-01",
+      "category_tags": [
+        "WA",
+        "AL"
+      ],
+      "difficulty": "medium",
+      "title": "REST API 클라이언트 — 재시도 및 에러 분류",
+      "description": "공개 REST API(JSONPlaceholder 또는 유사)를 호출하는 클라이언트를 구현하십시오. 네트워크 장애, HTTP 오류, 파싱 실패 시나리오를 모두 처리해야 합니다.",
+      "requirements": [
+        "create_session() — HTTPAdapter + Retry(total=3, backoff_factor=0.5, status_forcelist=[429,500,502,503,504])",
+        "safe_api_call() — timeout=(5, 30) 튜플, 4개 별도 except 블록",
+        "Timeout / ConnectionError / HTTPError / RequestException 각각 별도 처리",
+        "JSON 파싱 실패 시 {'success': False, 'error': 'PARSE_ERROR'} 반환",
+        "모든 함수 Python 3.9 타입 힌팅 (typing.Dict, typing.Optional)"
+      ],
+      "edge_cases": [
+        "timeout=0 설정 시 즉시 Timeout 예외",
+        "잘못된 URL 형식 입력",
+        "응답 Body가 JSON이 아닌 HTML",
+        "HTTP 429 Too Many Requests 반복",
+        "빈 payload dict 전달"
+      ],
+      "scoring_focus": [
+        "WA.retry",
+        "WA.timeout",
+        "WA.error_classify",
+        "WA.session",
+        "AL.empty_data"
+      ],
+      "acceptance_criteria": "3회 재시도 후에도 실패 시 에러 딕셔너리 반환. 모든 호출에 timeout 튜플 명시."
+    },
+    {
+      "id": "WA-V2-02",
+      "category_tags": [
+        "WA",
+        "SEC"
+      ],
+      "difficulty": "hard",
+      "title": "인증 API 클라이언트 — 토큰 기반 인증 + 보안",
+      "description": "Bearer Token 인증이 필요한 API 엔드포인트를 호출하는 클라이언트를 구현하십시오. 토큰은 환경 변수에서 로드해야 합니다.",
+      "requirements": [
+        "API 토큰을 os.environ.get()으로만 로드. 하드코딩 절대 금지.",
+        "Authorization: Bearer 헤더 자동 삽입",
+        "401 Unauthorized 수신 시 토큰 재발급 로직 (mock 허용)",
+        "timeout=(3, 15) 튜플 필수",
+        "retry with status_forcelist=[429, 500, 502, 503, 504]"
+      ],
+      "edge_cases": [
+        "환경 변수 미설정 시 명확한 EnvironmentError",
+        "토큰 만료(401) 처리",
+        "Rate Limit(429) 재시도",
+        "응답 헤더 없는 빈 응답",
+        "네트워크 완전 단절"
+      ],
+      "scoring_focus": [
+        "WA.retry",
+        "WA.timeout",
+        "WA.error_classify",
+        "SEC.credential",
+        "SEC.sanitize"
+      ],
+      "acceptance_criteria": "API 키 코드 내 노출 0건. 환경 변수 미설정 시 EnvironmentError 발생."
+    },
+    {
+      "id": "WA-V2-03",
+      "category_tags": [
+        "WA",
+        "AL",
+        "FS"
+      ],
+      "difficulty": "hard",
+      "title": "대용량 API 페이지네이션 — 결과 파일 저장",
+      "description": "페이지네이션이 있는 API에서 전체 데이터를 수집하여 JSONL 파일로 저장하는 시스템을 구현하십시오.",
+      "requirements": [
+        "페이지 기반 반복 호출 (page=1부터 마지막까지)",
+        "각 페이지 실패 시 최대 3회 재시도 후 건너뜀 (전체 중단 금지)",
+        "수집된 데이터를 pathlib.Path로 JSONL 파일에 원자적 쓰기",
+        "진행 상황 logging (INFO 레벨, 10페이지마다)",
+        "총 수집 건수와 실패 페이지 수를 요약 딕셔너리로 반환"
+      ],
+      "edge_cases": [
+        "첫 페이지부터 실패",
+        "중간 페이지 연속 실패",
+        "마지막 페이지가 빈 배열",
+        "디스크 쓰기 권한 없음",
+        "총 데이터 0건"
+      ],
+      "scoring_focus": [
+        "WA.retry",
+        "WA.timeout",
+        "FS.pathlib",
+        "FS.safe_write",
+        "AL.empty_data"
+      ],
+      "acceptance_criteria": "단일 페이지 실패가 전체 수집을 중단시키지 않음. JSONL 파일 원자적 쓰기."
+    },
+    {
+      "id": "UI-V2-01",
+      "category_tags": [
+        "UI",
+        "FS"
+      ],
+      "difficulty": "medium",
+      "title": "파일 배치 변환기 GUI — Tkinter",
+      "description": "사용자가 폴더를 선택하면 그 안의 .txt 파일을 모두 읽어 UTF-8로 재저장하는 Tkinter GUI 앱을 구현하십시오.",
+      "requirements": [
+        "tkinter.filedialog.askdirectory()로 폴더 선택",
+        "변환 작업을 threading.Thread에서 실행 (UI 블로킹 금지)",
+        "ttk.Progressbar로 진행률 표시",
+        "모든 위젯 변수명 self.btn_[동작] / self.lbl_[설명] / self.entry_[필드] 형식",
+        "모든 메서드 Python 3.9 타입 힌팅",
+        "빈 폴더 선택 시 '변환할 파일 없음' 경고 메시지"
+      ],
+      "edge_cases": [
+        "폴더 선택 취소 (None 반환)",
+        "읽기 권한 없는 파일 포함",
+        "이미 UTF-8인 파일 중복 처리",
+        "폴더 내 파일 0개",
+        "처리 중 앱 종료 시도"
+      ],
+      "scoring_focus": [
+        "UI.type_hint",
+        "UI.naming",
+        "UI.threading",
+        "UI.loading",
+        "UI.validation",
+        "FS.pathlib",
+        "FS.encoding"
+      ],
+      "acceptance_criteria": "UI가 변환 중 응답 없음(freezing) 없이 프로그레스바 업데이트. 위젯 네이밍 컨벤션 100% 준수."
+    },
+    {
+      "id": "UI-V2-02",
+      "category_tags": [
+        "UI",
+        "WA"
+      ],
+      "difficulty": "medium",
+      "title": "API 데이터 조회 대시보드 — Streamlit",
+      "description": "사용자가 검색어를 입력하면 공개 API에서 데이터를 조회하여 테이블로 표시하는 Streamlit 앱을 구현하십시오.",
+      "requirements": [
+        "st.text_input()으로 검색어 입력",
+        "st.spinner('조회 중...')으로 로딩 표시",
+        "API 호출은 WA 패턴 (timeout, retry, 에러 분류) 사용",
+        "결과를 st.dataframe()으로 표시",
+        "에러 발생 시 st.error()로 사용자 친화적 메시지",
+        "빈 검색어 입력 시 st.warning() 표시"
+      ],
+      "edge_cases": [
+        "빈 문자열 검색",
+        "API 연결 실패",
+        "결과 0건",
+        "특수문자 포함 검색어",
+        "매우 긴 검색어 (1000자+)"
+      ],
+      "scoring_focus": [
+        "UI.loading",
+        "UI.validation",
+        "WA.retry",
+        "WA.timeout",
+        "WA.error_classify"
+      ],
+      "acceptance_criteria": "검색 중 스피너 표시. API 실패 시 st.error() 메시지 표시. 빈 입력 방어."
+    },
+    {
+      "id": "UI-V2-03",
+      "category_tags": [
+        "UI",
+        "AL",
+        "SEC"
+      ],
+      "difficulty": "hard",
+      "title": "암호 생성기 + 강도 분석 GUI — PyQt5",
+      "description": "사용자가 길이와 옵션(대/소/숫자/특수문자)을 선택하면 안전한 암호를 생성하고 강도를 분석하는 PyQt5 앱을 구현하십시오.",
+      "requirements": [
+        "QSlider로 길이 선택 (8~64)",
+        "QCheckBox 4개 (대문자/소문자/숫자/특수문자)",
+        "암호 생성 버튼 클릭 시 secrets 모듈 사용",
+        "강도 분석: 엔트로피 계산 → 약/보통/강/매우강 4단계",
+        "클립보드 복사 기능",
+        "모든 위젯 변수명 컨벤션 준수, 모든 메서드 타입 힌팅"
+      ],
+      "edge_cases": [
+        "모든 체크박스 해제 시 '최소 1개 선택' 경고",
+        "길이 0 또는 음수 (슬라이더 범위 초과 방어)",
+        "클립보드 접근 실패",
+        "엔트로피 0 (문자셋 1개)",
+        "매우 긴 암호 (64자)"
+      ],
+      "scoring_focus": [
+        "UI.type_hint",
+        "UI.naming",
+        "UI.validation",
+        "AL.zero_div",
+        "AL.range_check",
+        "SEC.sanitize"
+      ],
+      "acceptance_criteria": "secrets 모듈 사용 (random 금지). 모든 체크박스 해제 시 생성 버튼 비활성화."
+    },
+    {
+      "id": "FS-V2-01",
+      "category_tags": [
+        "FS",
+        "AL"
+      ],
+      "difficulty": "easy",
+      "title": "멀티 인코딩 파일 읽기 — 자동 감지",
+      "description": "다양한 인코딩(UTF-8, CP949, EUC-KR, Latin-1)으로 저장된 파일을 자동 감지하여 읽는 함수를 구현하십시오.",
+      "requirements": [
+        "UTF-8 → CP949 → EUC-KR → Latin-1 순서로 폴백 시도",
+        "pathlib.Path로 경로 처리",
+        "경로 탐색 방지 (.. 필터링 + resolve())",
+        "파일 미존재 / 권한 없음 / OS 에러 각각 처리",
+        "성공한 인코딩 이름과 내용을 함께 반환 (Tuple[str, str] 또는 None)"
+      ],
+      "edge_cases": [
+        "파일 경로에 .. 포함",
+        "빈 파일 (0바이트)",
+        "권한 없는 파일",
+        "존재하지 않는 경로",
+        "모든 인코딩에서 실패하는 바이너리 파일"
+      ],
+      "scoring_focus": [
+        "FS.pathlib",
+        "FS.encoding",
+        "FS.traversal",
+        "AL.empty_data"
+      ],
+      "acceptance_criteria": "4단계 인코딩 폴백. 경로 탐색 차단. 모든 예외 상황 None 반환."
+    },
+    {
+      "id": "FS-V2-02",
+      "category_tags": [
+        "FS",
+        "PD"
+      ],
+      "difficulty": "medium",
+      "title": "설정 파일 관리자 — JSON 원자적 읽기/쓰기",
+      "description": "앱 설정을 JSON 파일로 관리하는 ConfigManager 클래스를 구현하십시오. PyInstaller EXE 환경에서도 동작해야 합니다.",
+      "requirements": [
+        "get_base_path() — sys._MEIPASS 호환 경로 반환",
+        "load() — UTF-8 읽기 + JSON 파싱 실패 시 기본값 반환",
+        "save() — 원자적 쓰기 (tmp→rename), 디렉토리 자동 생성",
+        "get(key, default) / set(key, value) 인터페이스",
+        "dataclass로 ConfigManager 상태 관리 (전역 변수 금지)"
+      ],
+      "edge_cases": [
+        "설정 파일 미존재 (최초 실행)",
+        "손상된 JSON 파일",
+        "디스크 가득 참 (쓰기 실패)",
+        "설정 키 없음 (KeyError 방어)",
+        "None 값 저장 시도"
+      ],
+      "scoring_focus": [
+        "FS.pathlib",
+        "FS.encoding",
+        "FS.safe_write",
+        "PD.interface",
+        "PD.edge_case"
+      ],
+      "acceptance_criteria": "원자적 쓰기로 설정 파일 손상 없음. sys._MEIPASS 경로 처리 포함."
+    },
+    {
+      "id": "FS-V2-03",
+      "category_tags": [
+        "FS",
+        "AL",
+        "SEC"
+      ],
+      "difficulty": "hard",
+      "title": "디렉토리 스캐너 — 파일 분류 및 보고서 생성",
+      "description": "지정된 디렉토리를 재귀적으로 스캔하여 파일을 확장자별로 분류하고, 결과를 CSV 보고서로 저장하는 시스템을 구현하십시오.",
+      "requirements": [
+        "pathlib.Path.rglob() 사용",
+        "경로 탐색 방지 (입력 경로가 허용 범위 밖이면 거부)",
+        "확장자별 파일 수, 총 용량 집계",
+        "CSV 파일을 원자적 쓰기로 저장",
+        "파일명 새니타이징 (sanitize_filename 적용)"
+      ],
+      "edge_cases": [
+        "빈 디렉토리",
+        "읽기 권한 없는 하위 폴더",
+        "심볼릭 링크 루프",
+        "파일명에 특수문자 포함",
+        "100만 파일 이상 (메모리 효율 고려)"
+      ],
+      "scoring_focus": [
+        "FS.pathlib",
+        "FS.traversal",
+        "FS.safe_write",
+        "AL.empty_data",
+        "SEC.path_verify"
+      ],
+      "acceptance_criteria": "경로 탐색 공격 차단. 읽기 실패 파일 건너뜀 (전체 중단 금지). CSV 원자적 쓰기."
+    },
+    {
+      "id": "PD-V2-01",
+      "category_tags": [
+        "PD",
+        "AL"
+      ],
+      "difficulty": "medium",
+      "title": "작업 큐 시스템 — 우선순위 기반 처리",
+      "description": "우선순위 큐(heapq)를 사용하는 작업 스케줄러를 설계하고 구현하십시오. 작업 타입별 처리기를 등록할 수 있어야 합니다.",
+      "requirements": [
+        "Task dataclass: id, priority(int), type(str), payload(Dict)",
+        "TaskQueue: heapq 기반, enqueue/dequeue/peek/size",
+        "HandlerRegistry: 타입별 처리기 함수 등록 (register/dispatch)",
+        "core/ 모듈로 분리 (UI 의존성 0%)",
+        "TypedDict로 Task 입출력 인터페이스 정의"
+      ],
+      "edge_cases": [
+        "빈 큐에서 dequeue",
+        "동일 우선순위 작업 순서 보장",
+        "미등록 타입 dispatch",
+        "처리기 함수 예외 발생",
+        "우선순위 음수 값"
+      ],
+      "scoring_focus": [
+        "PD.module_sep",
+        "PD.interface",
+        "PD.edge_case",
+        "AL.range_check",
+        "AL.empty_data"
+      ],
+      "acceptance_criteria": "heapq 사용. TypedDict 인터페이스 정의. 미등록 타입 dispatch 시 명확한 오류."
+    },
+    {
+      "id": "PD-V2-02",
+      "category_tags": [
+        "PD",
+        "WA",
+        "AL"
+      ],
+      "difficulty": "hard",
+      "title": "이벤트 기반 파이프라인 — 플러그인 아키텍처",
+      "description": "단계별 처리기(플러그인)를 등록하고 순차 실행하는 데이터 처리 파이프라인을 설계하십시오.",
+      "requirements": [
+        "Pipeline 클래스: add_stage(name, handler) / run(input_data)",
+        "각 Stage는 이전 Stage의 출력을 입력으로 받음",
+        "Stage 실패 시 에러 정보 포함 PipelineResult 반환 (전체 중단 선택적)",
+        "PipelineResult TypedDict: success, output, failed_stage, error",
+        "모든 인터페이스 Python 3.9 타입 힌팅"
+      ],
+      "edge_cases": [
+        "Stage 0개인 파이프라인 실행",
+        "Stage 처리기가 None 반환",
+        "Stage에서 예외 발생",
+        "입력 데이터가 None",
+        "Stage 이름 중복 등록"
+      ],
+      "scoring_focus": [
+        "PD.module_sep",
+        "PD.interface",
+        "PD.error_prop",
+        "PD.edge_case",
+        "AL.type_valid"
+      ],
+      "acceptance_criteria": "PipelineResult TypedDict 정의. Stage 실패가 전체 파이프라인 중단 여부를 설정 가능."
+    },
+    {
+      "id": "PD-V2-03",
+      "category_tags": [
+        "PD",
+        "FS",
+        "AL"
+      ],
+      "difficulty": "medium",
+      "title": "상태 기계 (State Machine) — 워크플로우 엔진",
+      "description": "정의된 상태와 전환 규칙에 따라 동작하는 유한 상태 기계(FSM)를 구현하십시오.",
+      "requirements": [
+        "StateMachine 클래스: add_state / add_transition / trigger / current_state",
+        "State dataclass: name, on_enter(callback), on_exit(callback)",
+        "Transition dataclass: from_state, to_state, event, condition(callable)",
+        "상태 기계 정의를 JSON으로 직렬화/역직렬화 (pathlib + 원자적 쓰기)",
+        "잘못된 전환 시도 시 InvalidTransitionError 커스텀 예외"
+      ],
+      "edge_cases": [
+        "초기 상태 없이 trigger 호출",
+        "정의되지 않은 이벤트",
+        "condition 함수가 예외 발생",
+        "순환 전환 (A→B→A)",
+        "동일 이벤트에 다중 전환 규칙"
+      ],
+      "scoring_focus": [
+        "PD.module_sep",
+        "PD.interface",
+        "PD.error_prop",
+        "PD.edge_case",
+        "FS.safe_write"
+      ],
+      "acceptance_criteria": "커스텀 InvalidTransitionError 예외. JSON 직렬화 원자적 쓰기. 모든 상태 전환 로깅."
+    },
+    {
+      "id": "SEC-V2-01",
+      "category_tags": [
+        "SEC",
+        "AL"
+      ],
+      "difficulty": "easy",
+      "title": "사용자 입력 새니타이저 — 다중 공격 벡터 방어",
+      "description": "웹/앱에서 사용자 입력을 안전하게 처리하는 새니타이저 라이브러리를 구현하십시오.",
+      "requirements": [
+        "sanitize_text(input, max_length=1000) — html.escape + strip + 길이 제한",
+        "sanitize_filename(filename) — basename + 특수문자 제거 + 빈 파일명 처리",
+        "sanitize_path(path, allowed_root) — 경로 탐색 방지 + allowed_root 내부 검증",
+        "validate_email(email) — 정규식 검증",
+        "모든 함수 타입 힌팅 + docstring"
+      ],
+      "edge_cases": [
+        "None 입력",
+        "빈 문자열",
+        "1만 자 이상 초대형 입력",
+        "경로 탐색 시도 (../../etc/passwd)",
+        "이메일에 injection 시도 (<script>@evil.com)"
+      ],
+      "scoring_focus": [
+        "SEC.sanitize",
+        "SEC.path_verify",
+        "SEC.injection",
+        "AL.empty_data",
+        "AL.type_valid"
+      ],
+      "acceptance_criteria": "None 입력 시 빈 문자열 반환 (예외 없음). 경로 탐색 시도 시 ValueError 또는 None 반환."
+    },
+    {
+      "id": "SEC-V2-02",
+      "category_tags": [
+        "SEC",
+        "FS"
+      ],
+      "difficulty": "medium",
+      "title": "환경 변수 기반 설정 관리자 — 보안 강화",
+      "description": "API 키, DB 비밀번호 등 민감한 설정을 환경 변수에서만 로드하는 보안 설정 관리자를 구현하십시오.",
+      "requirements": [
+        "SecretManager 클래스: get(key) — os.environ.get() 사용",
+        "필수 키 누락 시 MissingSecretError 커스텀 예외",
+        "로그에 시크릿 값 절대 출력 금지 (마스킹 처리)",
+        "설정값 캐시 (재로드 방지) + 캐시 무효화 메서드",
+        ".env 파일 지원 (python-dotenv 선택적 의존성)"
+      ],
+      "edge_cases": [
+        "필수 환경 변수 미설정",
+        "빈 문자열 환경 변수",
+        "None 값 환경 변수",
+        "로그 출력 시 시크릿 마스킹 확인",
+        "캐시 후 환경 변수 변경"
+      ],
+      "scoring_focus": [
+        "SEC.credential",
+        "SEC.sanitize",
+        "FS.pathlib",
+        "AL.empty_data"
+      ],
+      "acceptance_criteria": "하드코딩 크리덴셜 0건. 로그에 시크릿 값 노출 0건. 누락 키 시 MissingSecretError."
+    },
+    {
+      "id": "SEC-V2-03",
+      "category_tags": [
+        "SEC",
+        "WA",
+        "AL"
+      ],
+      "difficulty": "hard",
+      "title": "Rate Limiter + IP 차단 시스템",
+      "description": "API 엔드포인트를 보호하는 Rate Limiter를 구현하십시오. IP별 요청 횟수를 추적하고 임계값 초과 시 차단합니다.",
+      "requirements": [
+        "RateLimiter 클래스: check(ip) → bool, reset(ip), get_stats(ip)",
+        "슬라이딩 윈도우 알고리즘 (초당/분당 요청 제한)",
+        "IP 주소 검증 (ipaddress 모듈 사용)",
+        "차단된 IP 로깅 (WARNING 레벨, 실제 IP 마스킹)",
+        "스레드 안전 (threading.Lock)"
+      ],
+      "edge_cases": [
+        "잘못된 IP 형식 입력",
+        "IPv6 주소",
+        "동시 다발 요청 (race condition)",
+        "제한값 0 설정",
+        "매우 긴 IP 문자열"
+      ],
+      "scoring_focus": [
+        "SEC.sanitize",
+        "SEC.injection",
+        "AL.range_check",
+        "AL.type_valid",
+        "WA.session"
+      ],
+      "acceptance_criteria": "threading.Lock으로 스레드 안전. 잘못된 IP 형식 시 ValueError. 로그에 IP 마스킹."
+    },
+    {
+      "id": "AL-V2-01",
+      "category_tags": [
+        "AL",
+        "PD"
+      ],
+      "difficulty": "easy",
+      "title": "통계 계산기 — 방어적 구현",
+      "description": "평균, 중앙값, 표준편차, 백분위수를 계산하는 통계 라이브러리를 방어적으로 구현하십시오.",
+      "requirements": [
+        "mean(data) / median(data) / std_dev(data) / percentile(data, p)",
+        "빈 리스트 입력 시 None 반환 (예외 미발생)",
+        "0으로 나누기 방어 (std_dev 계산 시)",
+        "비숫자 타입 포함 시 ValueError 명확히",
+        "모든 함수 Optional[float] 반환 타입 힌팅"
+      ],
+      "edge_cases": [
+        "빈 리스트 []",
+        "단일 원소 리스트",
+        "모든 값이 동일한 리스트 (std_dev=0)",
+        "음수 값 포함",
+        "문자열 포함 리스트"
+      ],
+      "scoring_focus": [
+        "AL.zero_div",
+        "AL.range_check",
+        "AL.type_valid",
+        "AL.empty_data",
+        "PD.interface"
+      ],
+      "acceptance_criteria": "빈 입력 시 예외 없이 None 반환. ZeroDivisionError 발생 없음. 비숫자 입력 시 ValueError."
+    },
+    {
+      "id": "AL-V2-02",
+      "category_tags": [
+        "AL",
+        "FS"
+      ],
+      "difficulty": "medium",
+      "title": "텍스트 분석기 — 단어 빈도 + TF-IDF",
+      "description": "문서 컬렉션에서 단어 빈도와 TF-IDF 점수를 계산하는 텍스트 분석기를 구현하십시오.",
+      "requirements": [
+        "tokenize(text) — 소문자 변환 + 특수문자 제거 + 불용어 제거",
+        "word_freq(tokens) → Dict[str, int]",
+        "tf(term, doc_tokens) / idf(term, all_docs) / tfidf(term, doc, corpus)",
+        "0 나눗셈 방어 (idf 계산에서 문서 수 0)",
+        "pathlib.Path로 문서 파일 읽기 (인코딩 폴백 포함)"
+      ],
+      "edge_cases": [
+        "빈 문서",
+        "모든 문서가 동일한 단어만 포함",
+        "한 단어로만 이루어진 문서",
+        "특수문자만 있는 입력",
+        "코퍼스에 1개 문서만 존재 (IDF = log(1/1) = 0)"
+      ],
+      "scoring_focus": [
+        "AL.zero_div",
+        "AL.empty_data",
+        "AL.type_valid",
+        "FS.pathlib",
+        "FS.encoding"
+      ],
+      "acceptance_criteria": "IDF 계산 시 ZeroDivisionError 없음. 빈 문서 처리. 인코딩 폴백."
+    },
+    {
+      "id": "AL-V2-03",
+      "category_tags": [
+        "AL",
+        "PD",
+        "WA"
+      ],
+      "difficulty": "hard",
+      "title": "비동기 작업 스케줄러 — 의존성 그래프 기반",
+      "description": "작업 간 의존성을 DAG(방향성 비순환 그래프)로 표현하고, 위상 정렬 후 병렬 실행 계획을 생성하는 스케줄러를 구현하십시오.",
+      "requirements": [
+        "Task dataclass: id, dependencies(List[str]), func(Callable)",
+        "DAGScheduler: add_task / resolve_order (위상 정렬) / schedule",
+        "순환 의존성 감지 시 CyclicDependencyError 커스텀 예외",
+        "실행 계획을 레이어별로 반환 (List[List[str]] — 동시 실행 가능 그룹)",
+        "Python 3.9 asyncio.gather 사용 (asyncio.TaskGroup 금지)"
+      ],
+      "edge_cases": [
+        "의존성 없는 단독 작업",
+        "순환 의존성 (A→B→C→A)",
+        "존재하지 않는 의존성 참조",
+        "빈 작업 목록",
+        "단일 직선 의존성 체인 (A→B→C→D)"
+      ],
+      "scoring_focus": [
+        "AL.range_check",
+        "AL.empty_data",
+        "AL.type_valid",
+        "PD.error_prop",
+        "PD.edge_case"
+      ],
+      "acceptance_criteria": "순환 의존성 감지 CyclicDependencyError. asyncio.TaskGroup 사용 금지 (3.11+). 위상 정렬 정확성."
+    },
+    {
+      "id": "BUILD-V2-01",
+      "category_tags": [
+        "BUILD",
+        "FS"
+      ],
+      "difficulty": "easy",
+      "title": "단순 Tkinter 앱 빌드 — 리소스 없음",
+      "description": "외부 리소스 파일 없이 순수 Tkinter만 사용하는 간단한 계산기 앱을 --onefile --windowed로 빌드하십시오.",
+      "requirements": [
+        "PyInstaller --onefile --windowed --clean 명령어",
+        "6-Section BUILD REPORT 완성",
+        "sys._MEIPASS 경로 처리 함수 포함 (리소스 없어도 패턴 적용)",
+        "excludes에 matplotlib/numpy/scipy 제외",
+        "dist/ 폴더에 단일 EXE 생성 확인"
+      ],
+      "edge_cases": [
+        "--windowed 옵션 누락 시",
+        "console=True 설정 시",
+        "hiddenimports 누락으로 ImportError",
+        "EXE 크기 50MB 초과",
+        "DLL 의존성 오류"
+      ],
+      "scoring_focus": [
+        "BUILD.exe_gen",
+        "BUILD.console",
+        "BUILD.report",
+        "FS.pathlib"
+      ],
+      "acceptance_criteria": "6-Section REPORT 완성. --onefile --windowed 명시. console=False 확인."
+    },
+    {
+      "id": "BUILD-V2-02",
+      "category_tags": [
+        "BUILD",
+        "FS",
+        "SEC"
+      ],
+      "difficulty": "medium",
+      "title": "리소스 포함 앱 빌드 — 아이콘 + 설정 파일",
+      "description": "아이콘 파일(.ico)과 설정 파일(config.json)을 포함한 PyQt5 앱을 단일 EXE로 빌드하십시오.",
+      "requirements": [
+        "--add-data 'config.json;.' --add-data 'assets/icon.ico;assets'",
+        "sys._MEIPASS 기반 get_resource_path() 함수 구현",
+        "spec 파일에 datas, hiddenimports, excludes 완전 명시",
+        "6-Section BUILD REPORT 완성",
+        "UPX 압축 적용 여부 명시"
+      ],
+      "edge_cases": [
+        "아이콘 파일 누락 시 빌드 실패 방지",
+        "config.json 파싱 실패 시 기본값 사용",
+        "sys._MEIPASS 없는 개발 환경에서 실행",
+        "리소스 경로 하드코딩 시",
+        "EXE 실행 시 FileNotFoundError"
+      ],
+      "scoring_focus": [
+        "BUILD.exe_gen",
+        "BUILD.resource",
+        "BUILD.console",
+        "BUILD.report",
+        "FS.pathlib"
+      ],
+      "acceptance_criteria": "sys._MEIPASS 분기 처리. --add-data 경로 세미콜론 형식(Windows). 6-Section 완성."
+    },
+    {
+      "id": "BUILD-V2-03",
+      "category_tags": [
+        "BUILD",
+        "WA",
+        "SEC"
+      ],
+      "difficulty": "hard",
+      "title": "네트워크 통신 앱 빌드 — hiddenimports 완전 명시",
+      "description": "requests 라이브러리를 사용하는 API 클라이언트 앱을 빌드하십시오. PyInstaller의 동적 import 감지 문제를 해결해야 합니다.",
+      "requirements": [
+        "hiddenimports에 requests, urllib3, charset_normalizer, certifi 명시",
+        "SSL 인증서 번들 datas에 포함",
+        "환경 변수 로드 코드가 EXE 환경에서도 동작 확인",
+        "6-Section BUILD REPORT 완성",
+        "DLL 오류 방지 체크리스트: certifi, openssl, libssl 포함"
+      ],
+      "edge_cases": [
+        "certifi 누락으로 SSL 오류",
+        "charset_normalizer 누락으로 requests 실패",
+        "환경 변수가 EXE에서 읽히지 않는 경우",
+        "안티바이러스 소프트웨어가 EXE 차단",
+        "EXE 실행 경로에 한글 포함"
+      ],
+      "scoring_focus": [
+        "BUILD.exe_gen",
+        "BUILD.resource",
+        "BUILD.console",
+        "BUILD.report",
+        "WA.session",
+        "SEC.credential"
+      ],
+      "acceptance_criteria": "hiddenimports 완전 명시. certifi SSL 번들 포함. 6-Section REPORT 완성."
+    },
+    {
+      "id": "HARD-01",
+      "category_tags": [
+        "WA",
+        "SEC",
+        "AL"
+      ],
+      "difficulty": "hard",
+      "title": "OAuth 2.0 클라이언트 — 서킷 브레이커 + 토큰 자동 갱신",
+      "description": "Authorization Code Grant + PKCE 플로우 구현. 서킷 브레이커로 API 장애 자동 차단/복구.",
+      "requirements": [
+        "PKCE: code_verifier(32바이트 random) + code_challenge(SHA-256 base64url)",
+        "CircuitBreaker: CLOSED/OPEN/HALF_OPEN 3상태, failure_threshold=5, reset_timeout=60s",
+        "Access Token 만료 시 Refresh Token 자동 갱신 (401 수신)",
+        "Token 암호화 파일 저장 (Fernet), 키는 환경 변수",
+        "create_session() + timeout=(3,15) + Retry(3회) + 4개 except",
+        "threading.Lock 토큰 갱신 레이스 컨디션 방지"
+      ],
+      "edge_cases": [
+        "Refresh Token도 만료 (TokenExpiredError)",
+        "서킷 브레이커 OPEN 상태 호출 시 CircuitOpenError",
+        "PKCE verifier 범위 외 길이",
+        "동시 다중 스레드 토큰 갱신",
+        "암호화 키 환경 변수 미설정",
+        "HALF_OPEN 상태에서 테스트 실패 시 재OPEN"
+      ],
+      "scoring_focus": [
+        "WA.retry",
+        "WA.timeout",
+        "WA.error_classify",
+        "WA.session",
+        "SEC.credential",
+        "SEC.sanitize",
+        "AL.range_check",
+        "AL.type_valid"
+      ],
+      "acceptance_criteria": "CircuitBreaker 3상태 전환. 토큰 Fernet 암호화. threading.Lock. PKCE SHA-256."
+    },
+    {
+      "id": "HARD-02",
+      "category_tags": [
+        "FS",
+        "AL",
+        "PD"
+      ],
+      "difficulty": "hard",
+      "title": "트랜잭션 파일 DB — WAL(Write-Ahead Logging) 구현",
+      "description": "JSON 레코드 파일 DB. WAL로 충돌 복구. 원자적 쓰기 + threading.RLock.",
+      "requirements": [
+        "FileDB: insert/update/delete/query 메서드",
+        "WAL: 변경 전 wal.log 기록, 커밋 후 체크포인트",
+        "시작 시 WAL 재생으로 미완료 트랜잭션 복구",
+        "원자적 쓰기 (tmp→rename) 전수 적용",
+        "threading.RLock 동시 접근 보호",
+        "TypedDict: Record(id, data, created_at, updated_at, deleted)"
+      ],
+      "edge_cases": [
+        "쓰기 중 프로세스 강제 종료 시뮬레이션",
+        "WAL 파일 손상 시 안전 상태 복구",
+        "동시 insert 100건",
+        "존재하지 않는 ID update/delete",
+        "디스크 가득 참",
+        "빈 DB query"
+      ],
+      "scoring_focus": [
+        "FS.pathlib",
+        "FS.safe_write",
+        "FS.encoding",
+        "FS.traversal",
+        "AL.empty_data",
+        "AL.range_check",
+        "PD.module_sep",
+        "PD.interface",
+        "PD.error_prop",
+        "PD.edge_case"
+      ],
+      "acceptance_criteria": "WAL 재생 복구. threading.RLock. 원자적 쓰기 전수."
+    },
+    {
+      "id": "HARD-03",
+      "category_tags": [
+        "AL",
+        "PD"
+      ],
+      "difficulty": "hard",
+      "title": "멀티프로세싱 MapReduce 프레임워크",
+      "description": "청크 병렬 처리 MapReduce. 워커 실패 시 재시도. TypedDict 결과 반환.",
+      "requirements": [
+        "MapReduceEngine: map_func, reduce_func, chunk_size, num_workers",
+        "multiprocessing.Pool 사용 (CPU bound)",
+        "청크 map 병렬, reduce로 집계",
+        "워커 실패 시 해당 청크 최대 3회 재시도",
+        "TypedDict: MapReduceResult(output, failed_chunks, total_time, worker_count)",
+        "Python 3.9 호환"
+      ],
+      "edge_cases": [
+        "빈 입력 데이터",
+        "chunk_size > 데이터 크기",
+        "num_workers=0 또는 음수",
+        "map_func이 None 반환",
+        "reduce_func 예외 발생",
+        "모든 청크 실패 fallback"
+      ],
+      "scoring_focus": [
+        "AL.zero_div",
+        "AL.range_check",
+        "AL.type_valid",
+        "AL.empty_data",
+        "PD.module_sep",
+        "PD.interface",
+        "PD.error_prop",
+        "PD.edge_case"
+      ],
+      "acceptance_criteria": "multiprocessing.Pool. 청크 실패 시 전체 중단 없음. TypedDict."
+    },
+    {
+      "id": "HARD-04",
+      "category_tags": [
+        "SEC",
+        "FS",
+        "AL"
+      ],
+      "difficulty": "hard",
+      "title": "암호화 설정 관리자 — Fernet 키 로테이션",
+      "description": "Fernet 암호화 설정 파일 관리. 키 로테이션 시 전체 재암호화. MultiFernet 지원.",
+      "requirements": [
+        "SecureConfigManager: Fernet 암호화 파일 저장",
+        "마스터 키 환경 변수 MASTER_KEY에서만 로드",
+        "rotate_key(new_key): 전체 재암호화",
+        "MultiFernet: 구키/신키 동시 복호화 지원",
+        "원자적 암호화 파일 쓰기",
+        "InvalidKeyError 커스텀 예외"
+      ],
+      "edge_cases": [
+        "손상된 암호화 파일",
+        "잘못된 키로 복호화",
+        "키 로테이션 중 프로세스 중단",
+        "설정 파일 미존재",
+        "빈 딕셔너리 암호화",
+        "None 값 포함 설정"
+      ],
+      "scoring_focus": [
+        "SEC.credential",
+        "SEC.sanitize",
+        "SEC.injection",
+        "SEC.path_verify",
+        "FS.pathlib",
+        "FS.safe_write",
+        "AL.empty_data",
+        "AL.type_valid"
+      ],
+      "acceptance_criteria": "Fernet 암호화. 환경 변수 키. 원자적 쓰기. MultiFernet 키 로테이션."
+    },
+    {
+      "id": "HARD-05",
+      "category_tags": [
+        "PD",
+        "AL",
+        "WA"
+      ],
+      "difficulty": "hard",
+      "title": "분산 작업 조율기 — Worker Pool + CircuitBreaker",
+      "description": "원격 워커에 우선순위 기반 작업 분배. 워커별 CircuitBreaker. 페일오버.",
+      "requirements": [
+        "WorkerPool: add_worker / remove_worker / dispatch(task) / collect_results()",
+        "각 워커 URL 엔드포인트 (WA 패턴 전수)",
+        "워커별 CircuitBreaker 독립 적용",
+        "TypedDict: TaskResult(worker_id, task_id, output, error, duration)",
+        "heapq 우선순위 기반 작업 분배",
+        "threading.Lock 워커 풀 동시 접근 보호"
+      ],
+      "edge_cases": [
+        "모든 워커 OPEN 상태",
+        "워커 추가/삭제 중 작업 진행",
+        "빈 작업 큐",
+        "작업 timeout 초과",
+        "동일 작업 중복 dispatch",
+        "워커 0개 dispatch"
+      ],
+      "scoring_focus": [
+        "PD.module_sep",
+        "PD.interface",
+        "PD.error_prop",
+        "PD.edge_case",
+        "AL.range_check",
+        "AL.empty_data",
+        "WA.retry",
+        "WA.error_classify"
+      ],
+      "acceptance_criteria": "TaskResult TypedDict. CircuitBreaker 워커별 독립. heapq. threading.Lock."
+    },
+    {
+      "id": "HARD-06",
+      "category_tags": [
+        "UI",
+        "WA",
+        "AL"
+      ],
+      "difficulty": "hard",
+      "title": "실시간 모니터 GUI — Tkinter Canvas + API 폴링",
+      "description": "API에서 5초마다 데이터 폴링, Canvas에 선 그래프 직접 그리기. matplotlib 미사용.",
+      "requirements": [
+        "Tkinter Canvas 직접 그리기 (matplotlib 금지)",
+        "root.after()로 5초 주기 폴링 (UI 블로킹 없음)",
+        "WA 패턴: create_session() + timeout=(3,10) + retry + 4 except",
+        "위젯 네이밍: self.btn_/self.lbl_/self.canvas_ 컨벤션",
+        "갱신 에러 시 self.lbl_status 빨간 메시지, 앱 종료 없음",
+        "모든 메서드 타입 힌팅"
+      ],
+      "edge_cases": [
+        "API 완전 다운",
+        "데이터 포인트 0개",
+        "None 또는 비숫자 데이터",
+        "50개 초과 슬라이딩 윈도우",
+        "앱 종료 시 폴링 정리",
+        "캔버스 리사이즈 재그리기"
+      ],
+      "scoring_focus": [
+        "UI.type_hint",
+        "UI.naming",
+        "UI.threading",
+        "UI.loading",
+        "UI.validation",
+        "WA.retry",
+        "WA.timeout",
+        "WA.error_classify",
+        "AL.empty_data",
+        "AL.type_valid"
+      ],
+      "acceptance_criteria": "Canvas 직접 그리기. root.after() 폴링. API 실패 시 UI 유지. 위젯 네이밍 100%."
+    },
+    {
+      "id": "HARD-07",
+      "category_tags": [
+        "BUILD",
+        "FS",
+        "SEC"
+      ],
+      "difficulty": "hard",
+      "title": "자동 업데이터 내장 EXE — SHA-256 검증 + 원자적 패치",
+      "description": "실행 시 서버에서 버전 확인, 업데이트 다운로드, SHA-256 검증 후 원자적 적용.",
+      "requirements": [
+        "AutoUpdater: check_update(current_version) / download_patch(url, target_path)",
+        "다운로드 파일 SHA-256 해시 검증",
+        "get_resource_path() sys._MEIPASS 분기",
+        "6-Section BUILD REPORT: hiddenimports requests/hashlib/certifi 완전 명시",
+        "다운로드 경로 보안 검증 (경로 탐색 방지)",
+        "tmp 다운로드 후 해시 검증 성공 시에만 rename"
+      ],
+      "edge_cases": [
+        "네트워크 없는 환경 (건너뜀)",
+        "해시 불일치 시 파일 삭제",
+        "다운로드 중 디스크 가득 참",
+        "업데이터 URL 조작 시도",
+        "EXE 실행 중 자기 자신 덮어쓰기 방지",
+        "버전 문자열 파싱 실패"
+      ],
+      "scoring_focus": [
+        "BUILD.exe_gen",
+        "BUILD.resource",
+        "BUILD.console",
+        "BUILD.report",
+        "FS.pathlib",
+        "FS.safe_write",
+        "FS.traversal",
+        "SEC.path_verify",
+        "SEC.sanitize"
+      ],
+      "acceptance_criteria": "SHA-256 검증. 경로 탐색 방지. 6-Section BUILD REPORT. 원자적 업데이트."
+    },
+    {
+      "id": "HARD-08",
+      "category_tags": [
+        "AL",
+        "PD",
+        "SEC"
+      ],
+      "difficulty": "hard",
+      "title": "이상 탐지 엔진 — Z-score + 슬라이딩 윈도우 + 블랙리스트",
+      "description": "API 호출 패턴 이상치 감지. Z-score + 슬라이딩 윈도우. 블랙리스트. threading.Lock.",
+      "requirements": [
+        "AnomalyDetector: observe(entity_id, value) / is_anomaly() / get_stats()",
+        "슬라이딩 윈도우: deque(maxlen=N)",
+        "Z-score = (value - mean) / std_dev, std_dev=0 방어",
+        "cold_start 모드: N개 미만 데이터 시 임계값 완화",
+        "연속 K회 이상치 시 blacklist_entity()",
+        "threading.Lock 엔터티별 독립"
+      ],
+      "edge_cases": [
+        "데이터 0개에서 is_anomaly",
+        "모든 값 동일 (std_dev=0)",
+        "None / 비숫자 입력",
+        "음수 / 매우 큰 값",
+        "동시 다중 스레드 observe",
+        "entity_id None 또는 빈 문자열"
+      ],
+      "scoring_focus": [
+        "AL.zero_div",
+        "AL.range_check",
+        "AL.type_valid",
+        "AL.empty_data",
+        "PD.module_sep",
+        "PD.interface",
+        "PD.error_prop",
+        "SEC.sanitize"
+      ],
+      "acceptance_criteria": "std_dev=0 ZeroDivisionError 없음. cold_start. threading.Lock. 블랙리스트."
+    },
+    {
+      "id": "HARD-09",
+      "category_tags": [
+        "WA",
+        "AL",
+        "FS"
+      ],
+      "difficulty": "hard",
+      "title": "ETL 파이프라인 — 멀티소스 수집 + 변환 + JSONL 스트리밍",
+      "description": "여러 API 병렬 수집, 변환, dead_letter_queue, JSONL 원자적 스트리밍 저장.",
+      "requirements": [
+        "ETLPipeline: add_source(url, extractor) / add_transform(fn) / run(output_path)",
+        "concurrent.futures.ThreadPoolExecutor 병렬 소스 호출",
+        "WA 패턴 전수 (timeout tuple, retry, 4 except)",
+        "변환 실패 레코드 dead_letter_queue 적재",
+        "JSONL 원자적 스트리밍 쓰기 (청크 단위 flush)",
+        "TypedDict: ETLResult(total, success, failed, dead_letter_count, duration)"
+      ],
+      "edge_cases": [
+        "소스 0개",
+        "모든 소스 API 실패",
+        "변환 함수 None 반환",
+        "출력 경로 쓰기 권한 없음",
+        "단일 레코드 10MB 초과",
+        "변환 중 무한 루프 방지"
+      ],
+      "scoring_focus": [
+        "WA.retry",
+        "WA.timeout",
+        "WA.error_classify",
+        "WA.session",
+        "AL.empty_data",
+        "AL.type_valid",
+        "FS.pathlib",
+        "FS.safe_write",
+        "FS.encoding"
+      ],
+      "acceptance_criteria": "ThreadPoolExecutor 병렬. dead_letter_queue. JSONL 원자적. ETLResult TypedDict."
+    },
+    {
+      "id": "HARD-10",
+      "category_tags": [
+        "UI",
+        "AL",
+        "BUILD"
+      ],
+      "difficulty": "hard",
+      "title": "CSV 데이터 시각화 EXE — matplotlib 임베드 + 단일 빌드",
+      "description": "CSV 로드 후 Tkinter에 matplotlib 차트 임베드. 단일 EXE 빌드. hiddenimports 완전 명시.",
+      "requirements": [
+        "FigureCanvasTkAgg로 matplotlib 차트 Tkinter 임베드",
+        "차트 타입 ComboBox (선/막대/산점도)",
+        "CSV: pathlib + 인코딩 폴백 + 비숫자 컬럼 자동 제외",
+        "위젯 네이밍: self.btn_/self.lbl_/self.cmb_",
+        "6-Section BUILD REPORT: hiddenimports matplotlib/numpy/pandas 완전 명시",
+        "빈 CSV / NaN / 헤더만 있는 파일 전처리"
+      ],
+      "edge_cases": [
+        "빈 CSV",
+        "헤더만 있고 데이터 없음",
+        "모든 컬럼 비숫자",
+        "NaN 포함 행",
+        "matplotlib 렌더링 실패",
+        "EXE 폰트 경로 오류"
+      ],
+      "scoring_focus": [
+        "UI.type_hint",
+        "UI.naming",
+        "UI.threading",
+        "UI.loading",
+        "UI.validation",
+        "AL.empty_data",
+        "AL.type_valid",
+        "BUILD.exe_gen",
+        "BUILD.resource",
+        "BUILD.report"
+      ],
+      "acceptance_criteria": "FigureCanvasTkAgg. hiddenimports matplotlib/numpy. 6-Section REPORT. 빈 CSV 방어."
+    }
+  ]
+}
