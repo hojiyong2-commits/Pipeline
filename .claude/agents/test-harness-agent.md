@@ -22,7 +22,7 @@ Pipeline completion is controlled only by:
 4. `python pipeline.py gates technical`.
 5. `python pipeline.py gates oracle --user-confirmed`.
 6. `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`.
-7. `python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed`.
+7. `python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed`.
 8. `python pipeline.py architect --report-file architect_report.xml`.
 
 If any item is PENDING or FAIL, Harness reports the blocker and returns control to the relevant phase. It must not invent a score-based bypass.
@@ -53,8 +53,8 @@ Do not ask the user to review code. Provide:
 - PR link
 - GitHub Actions run link
 - 한국어 "최종 확인 안내" PR 댓글 링크
-- real result path or attachment link
-- short Korean summary of what changed and what the user should visually confirm
+- 실제 결과물 경로 또는 첨부파일 링크
+- 무엇이 바뀌었고 무엇을 눈으로 확인하면 되는지 쉬운 한국어 요약
 
 최종 사용자가 GitHub에서 보는 글은 모두 쉬운 한국어로 작성한다. `modified`, `added`, `CI: PASS`, `artifact` 같은 영어 상태값만 그대로 쓰지 말고 `수정됨`, `새 파일`, `자동 검사: 통과`, `첨부파일`처럼 풀어서 쓴다. `ACCEPT`, `REJECT`, 명령어, commit SHA, check 이름처럼 영어 식별자가 꼭 필요하면 바로 옆에 한국어 뜻을 붙인다.
 
@@ -71,7 +71,7 @@ Do not ask the user to review code. Provide:
   <oracle_gate>PASS|FAIL|PENDING</oracle_gate>
   <github_ci_gate>PASS|FAIL|PENDING</github_ci_gate>
   <acceptance_ready>true|false</acceptance_ready>
-  <user_visible_result>[path or URL]</user_visible_result>
+  <user_visible_result>[실제 결과물 경로 또는 URL]</user_visible_result>
   <blockers>
     <blocker>[specific blocker or none]</blocker>
   </blockers>

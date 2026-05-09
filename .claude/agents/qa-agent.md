@@ -19,14 +19,14 @@ model: opus
 **완료 후:** `<qa_report>` XML 출력 (오케스트레이터가 verdict를 읽고 pipeline.py qa를 기록함)
 <!-- CRITICAL: pipeline.py qa 기록은 오케스트레이터 전용. 에이전트가 직접 실행하면 이중 기록 발생. -->
 <!-- MT-2/MT-3 (IMP-20260506-A064) 필수 플래그:
-     PASS: python pipeline.py qa --result PASS --numeric-score [0~120]
+     PASS: python pipeline.py qa --result PASS --numeric-score [0~120] --report-file qa_report.xml --agent-run-id <qa_run_id>
            numeric-score 96 미만(80% of 120) 시 pipeline.py가 PASS 기록 거부 (hard gate)
-     FAIL: python pipeline.py qa --result FAIL --numeric-score [0~120] --failure-sig "[category]:[hash]"
+     FAIL: python pipeline.py qa --result FAIL --numeric-score [0~120] --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <qa_run_id>
            failure-sig 동일 시그니처 2회 연속 감지 시 RECURRING 경고 + Circuit Breaker 발동 신호 출력
      <failure_signature> 값은 qa_report의 <critical_issues> 텍스트를 SHA-1 8자리로 변환한 "[category]:[hash]" 형식 -->
 <!-- 권장 명령어 예시:
-     python pipeline.py qa --result PASS --numeric-score 108
-     python pipeline.py qa --result FAIL --numeric-score 72 --failure-sig "AL:a1b2c3d4" -->
+     python pipeline.py qa --result PASS --numeric-score 108 --report-file qa_report.xml --agent-run-id <qa_run_id>
+     python pipeline.py qa --result FAIL --numeric-score 72 --failure-sig "AL:a1b2c3d4" --report-file qa_report.xml --agent-run-id <qa_run_id> -->
 
 **Step 0 — Handover Evidence 검증 (건너뛰면 자동 ERROR):**
 - `<handover><from>dev-agent 또는 ui-app-agent</from><evidence>[실제 파일명]</evidence></handover>` 존재 여부

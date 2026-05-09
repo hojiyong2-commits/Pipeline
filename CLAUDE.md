@@ -94,8 +94,8 @@ Three-Gate mode and Option A phase attestation are mandatory for every pipeline.
 1. `python pipeline.py contract init` creates Contract v2 with Three-Gate and phase attestations enabled. `--three-gate` and `--phase-attestations` are accepted only for backward-compatible scripts.
 2. Register user-supplied oracle files only from `tests/oracles/**` with `python pipeline.py contract add-oracle --input tests/oracles/... --expected tests/oracles/... --case-kind normal`, plus at least one additional `--case-kind edge|exception|error` oracle. PM must ask the user for the answer key during Phase 1 and save the input/expected files under `tests/oracles/<pipeline_id>/<case_id>/`; Dev must implement against those files, not rewrite them.
 3. Run `python pipeline.py contract audit`; freeze is blocked until the rule-based audit PASSes.
-4. PM completion is also hard-gated: `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification ...` must include a real `<decomposition_audit>` and `<step_plan><micro_tasks>...</micro_tasks></step_plan>`.
-5. Dev completion is hard-gated against the PM atomic plan: `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json` must prove every declared and actual changed file maps to a PM micro-task.
+4. PM completion is also hard-gated: `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>` must include a real `<decomposition_audit>` and `<step_plan><micro_tasks>...</micro_tasks></step_plan>`.
+5. Dev completion is hard-gated against the PM atomic plan: `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>` must prove every declared and actual changed file maps to a PM micro-task.
 6. Option A phase attestation is mandatory before moving across major role boundaries:
    - after PM: `python pipeline.py gates prepare-phase --phase pm`, commit/push, wait for GitHub Actions, then `python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline`
    - after Dev: repeat with `--phase dev`
@@ -105,7 +105,7 @@ Three-Gate mode and Option A phase attestation are mandatory for every pipeline.
    - `python pipeline.py gates technical`
    - `python pipeline.py gates oracle --user-confirmed`
    - `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
-   - `python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed`
+   - `python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed`
 
 ### Incremental Module Gate
 
@@ -258,7 +258,7 @@ python -c "import pyautogui; print(pyautogui.size())"  # RPA 태스크만, 실�
 
 ---
 
-## Phase 7: Benchmarking Phase (Performance Testing)
+## Phase 7: External Gate Phase
 
 ### Mandatory External Gate Phase
 
@@ -412,13 +412,13 @@ Producer-consumer sync, strict-mode evidence, and meta-task validation still app
 
 | Phase | 진입 전 (check) | 완료 후 (record) |
 |---|---|---|
-| Phase 1 — PM | `python pipeline.py new --type FEAT --desc "..."` | `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap` |
-| Phase 2 — Dev | `python pipeline.py check --phase dev` (exit 0 확인) | `python pipeline.py done --phase dev --files "파일목록" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json` |
+| Phase 1 — PM | `python pipeline.py new --type FEAT --desc "..."` | `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>` + phase attestation |
+| Phase 2 — Dev | `python pipeline.py check --phase dev` (exit 0 확인) | `module design/dev/qa` per `MT-N` + `module integrate` 후 `python pipeline.py done --phase dev --files "파일목록" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>` + phase attestation |
 | Phase 3 — UI/dev subphase | pipeline.py phase 없음 (ui-app-agent 자체 gate) | ui-app-agent의 app.py를 Phase 2 done --files에 포함하거나 QA 증거로 처리 |
-| Phase 4 — QA | `python pipeline.py check --phase qa` (exit 0 확인) | `python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml` 또는 `--result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml` |
+| Phase 4 — QA | `python pipeline.py check --phase qa` (exit 0 확인) | `python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml --agent-run-id <qa_run_id>` 또는 `--result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <qa_run_id>` + phase attestation |
 | Phase 5 — SEC | `python pipeline.py check --phase sec` (exit 0 확인) | SAFE: `python pipeline.py sec --result PASS --risk LOW` / BLOCK: `--result BLOCK --risk HIGH` / FAIL: `python pipeline.py sec --result FAIL --risk MEDIUM` (dev PENDING 리셋, 스냅샷 미기록 — 의도적 설계) / 미해당: `python pipeline.py sec --skip` |
-| Phase 6 — Build | `python pipeline.py check --phase build` (exit 0 확인) | `python pipeline.py build --exe "dist/앱이름.exe" --report-file dist/build_report.xml` 또는 `--exe "N/A" --skip-reason "meta-task" --user-confirmed` |
-| Phase 7 — External Gates | `python pipeline.py gates status` | `python pipeline.py gates technical`; `python pipeline.py gates oracle --user-confirmed`; `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`; `python pipeline.py gates accept --result ACCEPT --evidence [real-result] --user-confirmed` |
+| Phase 6 — Build | `python pipeline.py check --phase build` (exit 0 확인) | `python pipeline.py build --exe "dist/앱이름.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>` 또는 `--exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <build_run_id>` + phase attestation |
+| Phase 7 — External Gates | `python pipeline.py gates status` | `python pipeline.py gates technical`; `python pipeline.py gates oracle --user-confirmed`; `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`; `python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed` |
 | Phase 8 — Architect | `python pipeline.py check --phase architect` (exit 0 확인) | `python pipeline.py architect --report-file architect_report.xml` |
 
 **exit code 1 = BLOCKED** → 해당 에이전트를 spawn하지 않고 `python pipeline.py status`로 원인 확인 후 선행 단계를 먼저 완료합니다.

@@ -119,14 +119,16 @@ BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런�
     python pipeline.py new --type BUG --desc "버튼 작동 안 함"
     python pipeline.py status
     python pipeline.py check --phase dev
-    python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap
-    python pipeline.py done --phase dev --files "core/ai_engine.py,ui/app.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json
-    python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.xml
-    python pipeline.py qa --result FAIL --numeric-score 70 --failure-sig "AL:a1b2c3d4"
+    python pipeline.py agent start --phase pm
+    python pipeline.py agent finish --run-id <run_id> --token <token> --output-file step_plan.xml
+    python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>
+    python pipeline.py done --phase dev --files "core/ai_engine.py,ui/app.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>
+    python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.xml --agent-run-id <run_id>
+    python pipeline.py qa --result FAIL --numeric-score 70 --failure-sig "AL:a1b2c3d4" --report-file qa_report.xml --agent-run-id <run_id>
     python pipeline.py sec --result PASS --risk LOW
     python pipeline.py sec --skip
-    python pipeline.py build --exe "dist/SmartNotepad.exe" [--report-file dist/build_report.xml]
-    python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed
+    python pipeline.py build --exe "dist/SmartNotepad.exe" --report-file dist/build_report.xml --agent-run-id <run_id>
+    python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <run_id>
     python pipeline.py contract init
     python pipeline.py module design --mt-id MT-1 --report-file module_design_MT-1.xml
     python pipeline.py module dev --mt-id MT-1 --files "core/ai_engine.py" --report-file module_handover_MT-1.xml --scope-manifest scope_manifest_MT-1.json
@@ -2467,8 +2469,9 @@ def _deploy_accepted_outputs(state: Dict[str, Any], evidence: Optional[str], not
     artifacts = _deployment_artifacts(state, evidence)
     if not artifacts:
         _die(
-            "acceptance deployment found no file or directory artifacts. "
-            "Pass --evidence with a real result path, or make the Dev/Build phase evidence point to the result."
+            "[ACCEPTANCE DEPLOY BLOCKED] 복사할 실제 결과물 파일/폴더를 찾지 못했습니다. "
+            "`--evidence`에 실제 결과물 경로 또는 첨부파일 경로를 넣거나, "
+            "Dev/Build phase evidence가 결과물을 가리키게 한 뒤 다시 실행하세요."
         )
     deploy_dir.mkdir(parents=True, exist_ok=True)
     copied = [_copy_deployment_artifact(path, deploy_dir) for path in artifacts]

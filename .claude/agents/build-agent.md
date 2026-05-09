@@ -26,12 +26,12 @@ model: haiku
 
 **빌드 성공 후:**
 1. `dist/build_report.xml` 파일 저장 (미저장 시 BUILD SUCCESS 선언 금지)
-2. `<build_report><status>BUILD SUCCESS</status>` XML 출력 → 오케스트레이터가 `<status>` 읽고 `python pipeline.py build --exe "dist/앱이름.exe" --report-file dist/build_report.xml` 기록
+2. `<build_report><status>BUILD SUCCESS</status>` XML 출력 → 오케스트레이터가 `<status>` 읽고 `python pipeline.py build --exe "dist/앱이름.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>` 기록
 <!-- CRITICAL: pipeline.py build 기록은 오케스트레이터 전용. 에이전트가 직접 실행하면 이중 기록 발생. -->
 <!-- MT-4 (IMP-20260506-A064): EXE 빌드 시 dist/build_report.xml 파일이 존재해야 하며 6-Section XML 블록 전부 포함 의무.
-     pipeline.py build --exe "dist/앱.exe" --report-file dist/build_report.xml
+     pipeline.py build --exe "dist/앱.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>
      파일 없거나 6-Section 블록 누락 시 pipeline.py가 BUILD DONE 기록 거부 (hard gate).
-     N/A 빌드(--exe N/A): report-file 검증 생략. 단, python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed 필수 (예시; 실제 유형 선택: Streamlit→"streamlit", MD-only→"md-only", Power Automate→"power-automate", 에이전트/CLAUDE 수정→"meta-task", 비코드→"no-code", 문서→"docs-only").
+     N/A 빌드(--exe N/A): report-file 검증 생략. 단, python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <build_run_id> 필수 (예시; 실제 유형 선택: Streamlit→"streamlit", MD-only→"md-only", Power Automate→"power-automate", 에이전트/CLAUDE 수정→"meta-task", 비코드→"no-code", 문서→"docs-only").
      --skip-reason whitelist (대소문자 무관, 길이 ≥5): "md-only", "meta-task", "streamlit", "power-automate", "no-code", "docs-only"
      whitelist 외 값 또는 길이 < 5인 값은 pipeline.py가 거부(exit 1). -->
 
@@ -80,7 +80,7 @@ PyInstaller 명령어 실행 전 반드시 수행:
 
 이 self_check은 build_report.xml 파일 저장 직전에 수행합니다. 6섹션 모두 YES 확인 후에만 파일 저장 및 `<status>BUILD SUCCESS</status>` 선언.
 
-**N/A 빌드 예외:** Streamlit/MD-only/메타-태스크 등 EXE 빌드 대상이 아닌 경우 build_report 자체가 N/A이므로 `<all_6_sections>N/A</all_6_sections>` 처리하고 별도 보고. 이 경우 `python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed`로 기록 (예시; 실제 유형: Streamlit→"streamlit", MD-only→"md-only", 에이전트·CLAUDE 수정→"meta-task", 비코드→"no-code", 문서→"docs-only", Power Automate→"power-automate").
+**N/A 빌드 예외:** Streamlit/MD-only/메타-태스크 등 EXE 빌드 대상이 아닌 경우 build_report 자체가 N/A이므로 `<all_6_sections>N/A</all_6_sections>` 처리하고 별도 보고. 이 경우 `python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <build_run_id>`로 기록 (예시; 실제 유형: Streamlit→"streamlit", MD-only→"md-only", 에이전트·CLAUDE 수정→"meta-task", 비코드→"no-code", 문서→"docs-only", Power Automate→"power-automate").
 
 ```xml
 <build_report>
@@ -127,7 +127,7 @@ PyInstaller 명령어 실행 전 반드시 수행:
   <!-- 실패 시: <status>BUILD FAILED</status>로 변경. pipeline.py build 기록 명령 실행 금지. -->
 
   <next_required_phase>
-    Phase 7: test-harness-agent 채점 필수. BUILD SUCCESS만으로 파이프라인 완료가 아닙니다.
+    Phase 7: test-harness-agent는 진단만 수행합니다. Technical, Oracle, GitHub CI, User Acceptance gate가 모두 PASS해야 하며 BUILD SUCCESS만으로 파이프라인 완료가 아닙니다.
   </next_required_phase>
 </build_report>
 ```

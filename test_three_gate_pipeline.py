@@ -960,7 +960,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertEqual(state["phases"]["pm"]["status"], "PENDING")
 
-    def test_pm_done_records_atomic_step_plan_without_three_gate(self) -> None:
+    def test_pm_done_records_atomic_step_plan_with_mandatory_gates(self) -> None:
         state = pipeline._new_state("TMP-PM-OK", "FEAT", "sample")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1299,7 +1299,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertEqual(state["phases"]["dev"]["status"], "PENDING")
 
-    def test_dev_done_requires_scope_manifest_without_three_gate(self) -> None:
+    def test_dev_done_requires_scope_manifest_with_mandatory_gates(self) -> None:
         state = pipeline._new_state("TMP-DEV-SCOPE-ALL", "FEAT", "sample")
         state["current_phase"] = "dev"
         state["phases"]["pm"]["status"] = "DONE"
@@ -2016,8 +2016,37 @@ class ThreeGatePipelineTests(unittest.TestCase):
     def test_global_wiki_pipeline_loop_has_no_numeric_harness_completion(self) -> None:
         wiki = Path(".claude/agents/shared/Global_Wiki.md").read_text(encoding="utf-8")
         self.assertIn("External Gates", wiki)
+        self.assertIn(
+            "done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id",
+            wiki,
+        )
+        self.assertIn("--evidence <실제-결과물-경로-또는-첨부파일>", wiki)
         self.assertNotIn("QA numeric_score + BUILD 합산 채점", wiki)
         self.assertNotIn("Phase 7 재채점 의무", wiki)
+
+    def test_agent_docs_match_mandatory_receipt_and_external_gate_flow(self) -> None:
+        pm = Path(".claude/agents/pm-agent.md").read_text(encoding="utf-8")
+        qa = Path(".claude/agents/qa-agent.md").read_text(encoding="utf-8")
+        build = Path(".claude/agents/build-agent.md").read_text(encoding="utf-8")
+        harness = Path(".claude/agents/test-harness-agent.md").read_text(encoding="utf-8")
+        agents_command = Path(".claude/commands/agents.md").read_text(encoding="utf-8")
+        claude = Path("CLAUDE.md").read_text(encoding="utf-8")
+        pipeline_text = Path("pipeline.py").read_text(encoding="utf-8")
+
+        self.assertIn("contract audit", pm)
+        self.assertIn("--agent-run-id <pm_run_id>", pm)
+        self.assertIn("gates phase-ci --phase pm", pm)
+        self.assertIn("--agent-run-id <dev_run_id>", pm)
+        self.assertIn("--agent-run-id <qa_run_id>", qa)
+        self.assertIn("--agent-run-id <build_run_id>", build)
+        self.assertIn("test-harness-agent는 진단만 수행", build)
+        self.assertNotIn("test-harness-agent 채점 필수", build)
+        self.assertIn("실제 결과물 경로 또는 첨부파일 링크", harness)
+        self.assertIn("--evidence <실제-결과물-경로-또는-첨부파일>", agents_command)
+        self.assertNotIn("<real-result-path>", agents_command)
+        self.assertIn("Phase 7: External Gate Phase", claude)
+        self.assertIn("agent start --phase pm", pipeline_text)
+        self.assertIn("done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id", pipeline_text)
 
     def test_github_repo_from_remote_parses_https_and_ssh_urls(self) -> None:
         self.assertEqual(
