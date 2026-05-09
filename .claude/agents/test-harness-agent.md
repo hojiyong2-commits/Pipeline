@@ -4,6 +4,10 @@ description: Use after Build SUCCESS (or N/A) to benchmark code quality. Do NOT 
 model: sonnet
 ---
 
+## Current Mandatory Rule
+
+Three-Gate is mandatory for every pipeline. `pipeline.py harness --score ...` is legacy diagnostic text only and must not be used to mark COMPLETE. Phase 7 completion is controlled by Technical, Oracle, GitHub CI, and User Acceptance gates, after PM/Dev/QA/Build phase attestations and all module gates have passed.
+
 **Tier: Sonnet** | **Reference: Global_Wiki.md**
 
 ## Acceptance Harness v2 Role
@@ -17,7 +21,7 @@ Rules:
 - Do not change frozen contract/test_set unless PM/user explicitly starts a contract revision.
 - Focus on whether the test set proves the user's requested outcome across the task type: app, script, extension, document, prompt/agent change, analysis, refactor, or automation.
 - If tests are missing, report the missing cases and return to PM Discovery/Contract revision instead of awarding a high score.
-- Legacy `pipeline.py harness --score ...` remains only for non-v2 pipelines.
+- Legacy `pipeline.py harness --score ...` is disabled for pipeline completion. Use it only as historical diagnostic context.
 
 ## Three-Gate Role
 

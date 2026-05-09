@@ -1,6 +1,14 @@
 # Final Work Protocol: Autonomous App Factory
 # Self-Evolving Multi-Agent Protocol (8-Phase + Separate Protocol Evolution IMP)
 
+## Read First: Mandatory Pipeline
+
+`/Task [work]` always uses Three-Gate + Option A phase attestation + Incremental Module Gate. Classic mode is no longer a valid path. Older passages that mention numeric Harness completion, BUILD+QA 140pt final scoring, or `pipeline.py harness --score ...` are legacy diagnostics only. They cannot mark COMPLETE.
+
+Trust chain: `local pipeline.py -> agent receipts -> GitHub Actions -> CODEOWNERS -> human ACCEPT`.
+
+Completion requires PM/Dev/QA/Build phase attestations PASS, every PM `MT-N` module gate PASS, `module integrate` PASS, Technical PASS, Oracle PASS, GitHub CI PASS, and User Acceptance ACCEPT with real result evidence. The user reviews visible results and artifacts, not code.
+
 이 프로젝트에서는 아래 자기 진화형 다중 에이전트 프로토콜을 엄격히 준수합니다.
 각 단계가 완료(PASS)되기 전에는 다음 단계로 진입하지 않습니다.
 
@@ -271,7 +279,7 @@ If `contract_v2.enabled=true`, Phase 7 uses:
 
 `python pipeline.py acceptance run --record --user-confirmed`
 
-In this mode, agents do not submit final score/verdict. `pipeline.py` reads the frozen `test_set.json`, runs code-based scorers, computes the score, records PASS/FAIL, and writes `acceptance_result.json`. Legacy `pipeline.py harness --score ...` is only for non-v2 pipelines.
+Agents do not submit final score/verdict for completion. `pipeline.py` reads the frozen `test_set.json`, runs code-based scorers, computes diagnostic PASS/FAIL, and writes `acceptance_result.json`. Mandatory Three-Gate still controls COMPLETE; legacy `pipeline.py harness --score ...` is not a valid completion path.
 
 ---
 
@@ -415,7 +423,7 @@ Producer-consumer sync, strict-mode evidence, and meta-task validation still app
 | Phase 4 — QA | `python pipeline.py check --phase qa` (exit 0 확인) | `python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml` 또는 `--result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml` |
 | Phase 5 — SEC | `python pipeline.py check --phase sec` (exit 0 확인) | SAFE: `python pipeline.py sec --result PASS --risk LOW` / BLOCK: `--result BLOCK --risk HIGH` / FAIL: `python pipeline.py sec --result FAIL --risk MEDIUM` (dev PENDING 리셋, 스냅샷 미기록 — 의도적 설계) / 미해당: `python pipeline.py sec --skip` |
 | Phase 6 — Build | `python pipeline.py check --phase build` (exit 0 확인) | `python pipeline.py build --exe "dist/앱이름.exe" --report-file dist/build_report.xml` 또는 `--exe "N/A" --skip-reason "meta-task" --user-confirmed` |
-| Phase 7 — Harness | `python pipeline.py check --phase harness --user-confirmed` (exit 0 확인) | `python pipeline.py harness --score [percentage 0~100] --verdict PASS\|FAIL --test-output-file [harness_output.xml] --user-confirmed` (PASS/FAIL 공통 필수) |
+| Phase 7 — External Gates | `python pipeline.py gates status` | `python pipeline.py gates technical`; `python pipeline.py gates oracle --user-confirmed`; `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`; `python pipeline.py gates accept --result ACCEPT --evidence [real-result] --user-confirmed` |
 | Phase 8 — Architect | `python pipeline.py check --phase architect` (exit 0 확인) | `python pipeline.py architect --report-file architect_report.xml` |
 
 **exit code 1 = BLOCKED** → 해당 에이전트를 spawn하지 않고 `python pipeline.py status`로 원인 확인 후 선행 단계를 먼저 완료합니다.
@@ -709,3 +717,12 @@ PM은 아래 케이스에서 step_plan을 micro_task 단위로 분할합니다:
 ### 기존 규칙과의 호환성
 
 본 Micro-task Decomposition 섹션은 기존 규칙(Frozen Codebase, Mandatory Clarification, Compliance Checklist, Robustness Sub-Rubric, Pre-Output Self-Check, Producer-Consumer Bundle Patch Verification 등)을 무손상으로 보존합니다. 신규 규칙은 모두 별도 헤더로 추가되며, 기존 섹션 텍스트는 변경하지 않습니다.
+## Current Mandatory Pipeline
+
+`/Task [work]` always uses Three-Gate + Option A phase attestation + Incremental Module Gate. Classic mode is no longer a valid path. Older passages that mention numeric Harness completion, BUILD+QA 140pt final scoring, or `pipeline.py harness --score ...` are legacy diagnostics only. They cannot mark COMPLETE.
+
+The active trust chain is:
+
+`local pipeline.py -> agent receipts -> GitHub Actions -> CODEOWNERS -> human ACCEPT`
+
+Completion requires PM/Dev/QA/Build phase attestations PASS, every PM `MT-N` module gate PASS, `module integrate` PASS, Technical PASS, Oracle PASS, GitHub CI PASS, and User Acceptance ACCEPT with real result evidence. The user reviews visible results and artifacts, not code.

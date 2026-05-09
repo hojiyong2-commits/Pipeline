@@ -1,5 +1,11 @@
 # Global_Wiki.md — Shared Reference for All Agents
 
+## Read First: Mandatory Pipeline
+
+`/Task` always uses Three-Gate + Option A phase attestation + Incremental Module Gate. Classic mode is no longer a valid completion path. Older references to numeric Harness completion, BUILD+QA 140pt final scoring, or `pipeline.py harness --score ...` are legacy diagnostics only and must not be used to mark COMPLETE.
+
+Completion requires phase attestations PASS, all `MT-N` module gates PASS, `module integrate` PASS, Technical PASS, Oracle PASS, GitHub CI PASS, and User Acceptance ACCEPT with real result evidence.
+
 ## Python Version (PM-Specified)
 
 PM Agent가 분석하여 프로젝트에 최적인 Python 버전(3.9 또는 3.10)을 지정합니다.
@@ -77,7 +83,7 @@ QA rejects any handover missing `<evidence>` with real file paths.
 | qa | `python pipeline.py check --phase qa` | `python pipeline.py qa --result PASS --numeric-score N` or `--result FAIL --numeric-score N --failure-sig "[category]:[hash]"` |
 | sec | `python pipeline.py check --phase sec` | `python pipeline.py sec --result PASS --risk LOW` or `--skip` |
 | build | `python pipeline.py check --phase build` | `python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml` or `--exe "N/A" --skip-reason "meta-task" --user-confirmed` |
-| harness | `python pipeline.py check --phase harness --user-confirmed` | `python pipeline.py harness --score N --verdict PASS\|FAIL --test-output-file harness_output.xml --user-confirmed` (PASS/FAIL 공통 필수) |
+| external gates | `python pipeline.py gates status` | `gates technical`, `gates oracle --user-confirmed`, `gates github-ci --repo hojiyong2-commits/Pipeline`, `gates accept --result ACCEPT --evidence <real-result> --user-confirmed` |
 
 **`<test_code>` CDATA 권장 (BUG-20260508-F7A8 / BUG-20260509-05AD MT-3 / BUG-20260509-4D25 MT-3 / BUG-20260509-FA5E MT-3 / BUG-20260509-6A4F MT-3 / BUG-20260509-ED9C MT-1 / BUG-20260509-894D MT-2):** harness 제출 시 XML 특수문자는 CDATA 또는 entity escape를 사용한다. `validate_test_evidence()`는 strict unittest evidence gate를 사용한다: 직접 `self.assert*`/`cls.assert*` AST 계수, runner/result-channel 접근 금지 패턴 hard-reject(`__main__`, `atexit`, `inspect`, `os`, `sys.argv`, `sys.modules`, `getattr`, `setattr`, monkeypatch 등), stdin nonce runner의 nonce JSON line 검증. 통과 기준: `astAsserts >= 1` AND 금지 패턴 없음 AND runner nonce 일치 AND `executed_assertions >= 1` AND `testsRun >= 1` AND `failures/errors/skipped/expectedFailures/unexpectedSuccesses == 0`.
 | architect | `python pipeline.py check --phase architect` | `python pipeline.py architect` |
@@ -382,3 +388,8 @@ def find_and_click_text(
 | Phase B (이번) | PM Tier 분류 + OAR Loop + qasync/Playwright/EasyOCR 고신뢰 패턴 | 85% → 90% |
 | Phase C (다음) | QA에 Tier 2 전용 체크리스트 + async_bridge/playwright_wait 검증 강화 | 90% → 93% |
 | Phase D (3번째) | Harness Framework D: 런타임 실행 점수 반영 + OAR 사이클 횟수 채점 | 93% → **95%** |
+## Current Pipeline Rule Override
+
+`/Task` always uses Three-Gate + Option A phase attestation + Incremental Module Gate. Classic mode is no longer a valid completion path. Any older references in this file to numeric Harness completion, BUILD+QA 140pt final scoring, or `pipeline.py harness --score ...` are legacy diagnostics only and must not be used to mark a pipeline COMPLETE.
+
+Final completion requires PM/Dev/QA/Build phase attestations PASS, every `MT-N` module gate PASS, `module integrate` PASS, Technical PASS, Oracle PASS, GitHub CI PASS, and User Acceptance ACCEPT with real result evidence. The user reviews visible results, not code.

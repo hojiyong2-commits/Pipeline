@@ -127,7 +127,6 @@ BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런�
     python pipeline.py sec --skip
     python pipeline.py build --exe "dist/SmartNotepad.exe" [--report-file dist/build_report.xml]
     python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed
-    python pipeline.py harness --score 95 --verdict PASS --test-output-file harness_output.xml --user-confirmed
     python pipeline.py contract init
     python pipeline.py module design --mt-id MT-1 --report-file module_design_MT-1.xml
     python pipeline.py module dev --mt-id MT-1 --files "core/ai_engine.py" --report-file module_handover_MT-1.xml --scope-manifest scope_manifest_MT-1.json
@@ -3633,9 +3632,12 @@ def cmd_build(args: argparse.Namespace) -> None:
     print(f"  다음 절차:")
     print(f"    1. AskUserQuestion으로 사용자에게 Phase 7 진행 확인 요청")
     print(f"    2. 사용자 '진행' 응답 수신 후:")
-    print(f"       {YELLOW('python pipeline.py check --phase harness --user-confirmed')}")
+    print(f"       {YELLOW('python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline')}")
     print(f"    3. test-harness-agent 를 spawn하여 채점 후 아래 명령 실행:")
-    print(f"       {YELLOW('python pipeline.py harness --score [점수] --verdict [PASS/FAIL] --test-output-file [harness_output.xml] --user-confirmed')}")
+    print(f"       {YELLOW('python pipeline.py gates technical')}")
+    print(f"       {YELLOW('python pipeline.py gates oracle --user-confirmed')}")
+    print(f"       {YELLOW('python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline')}")
+    print(f"       {YELLOW('python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed')}")
     print()
 
 

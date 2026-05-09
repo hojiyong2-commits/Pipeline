@@ -208,6 +208,16 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertTrue(state["phase_attestations"]["enabled"])
         self.assertTrue(state["module_gates"]["enabled"])
 
+    def test_task_command_forbids_classic_and_requires_external_gates(self) -> None:
+        root = Path(__file__).resolve().parent
+        task_md = (root / ".claude" / "commands" / "task.md").read_text(encoding="utf-8")
+        self.assertIn("Classic 모드는 없다", task_md)
+        self.assertIn("Three-Gate + Option A phase attestation + Incremental Module Gate", task_md)
+        self.assertIn("pipeline.py gates technical", task_md)
+        self.assertIn("pipeline.py module design", task_md)
+        self.assertNotIn("pipeline.py harness --score [점수]", task_md)
+        self.assertNotIn("PASS (≥ 80", task_md)
+
     def test_help_description_uses_dash_not_option_like_phase(self) -> None:
         parser = pipeline.build_parser()
         self.assertIn("Enforcer — Phase", parser.description or "")

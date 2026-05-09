@@ -19,6 +19,12 @@
 
 ---
 
+## Read First: Mandatory Pipeline
+
+`/Task` and all pipeline work must use Three-Gate + Option A phase attestation + Incremental Module Gate. Classic completion is forbidden. Older role text below may mention Harness numeric scoring or BUILD+QA 140pt; treat those passages as legacy diagnostics only. They cannot mark COMPLETE and cannot replace Technical, Oracle, GitHub CI, User Acceptance, phase attestations, or module gates.
+
+The orchestrator may directly spawn only `pm-agent`. PM plans and delegates; each PM `MT-N` must pass `module design -> module dev -> module qa`; all modules must pass `module integrate`; PM/Dev/QA/Build must pass GitHub Actions phase attestation; the final user sees result links/artifacts and answers ACCEPT or REJECT.
+
 ## [PM] — pm-agent
 
 # Role: Strategic Technical Project Manager (TPM)
@@ -1275,3 +1281,8 @@ VOID 항목이 발견된 경우, 분석 시작 전 다음을 출력합니다:
 - `<patches>` 내 `<content>` CDATA는 반드시 즉시 복사-붙여넣기 가능한 완전한 마크다운 텍스트여야 합니다. "이 부분을 수정하세요" 같은 서술 지시는 금지합니다.
 - 99% 이상의 시스템 성능을 목표로 합니다.
 - Data Integrity Check 없이 곧바로 패턴 분석으로 넘어가는 것은 시스템 신뢰성 위반입니다.
+## Current Pipeline Rule Override
+
+`/Task` and all pipeline work must use Three-Gate + Option A phase attestation + Incremental Module Gate. Classic completion is forbidden. Older role text below may mention Harness numeric scoring or BUILD+QA 140pt; treat those passages as legacy diagnostics only. They cannot mark COMPLETE and cannot replace Technical, Oracle, GitHub CI, User Acceptance, phase attestations, or module gates.
+
+The orchestrator may directly spawn only `pm-agent`. PM plans and delegates; each PM `MT-N` must pass `module design -> module dev -> module qa`; all modules must pass `module integrate`; PM/Dev/QA/Build must pass GitHub Actions phase attestation; the final user sees result links/artifacts and answers ACCEPT or REJECT.
