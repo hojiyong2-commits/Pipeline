@@ -55,9 +55,9 @@ If `contract_v2` is enabled and the contract is not frozen, `pipeline.py check -
 
 ## Three-Gate External Authority Mode
 
-For non-trivial runnable or business-output work, PM should enable Three-Gate mode:
+Three-Gate and Option A phase attestation are mandatory for every pipeline. PM must not treat them as optional quality modes. `pipeline.py contract init` enables them by default; legacy flags such as `--three-gate` and `--phase-attestations` are accepted only for old scripts.
 
-1. `python pipeline.py contract init --three-gate`
+1. `python pipeline.py contract init`
 2. Register user-provided oracle samples with `python pipeline.py contract add-oracle --input ... --expected ... --case-kind normal` and at least one additional `--case-kind edge|exception|error` oracle.
 3. Add behavior tests that consume generated output files; P0 tests must not be only `file_exists_check` or `exe_launch_check`.
 4. Run `python pipeline.py contract audit` and fix every BLOCKER before freeze.
@@ -75,6 +75,32 @@ PM completion is hard-gated by the atomic step plan in every pipeline:
 - `<step_plan>` must contain `<micro_tasks>`; each `<micro_task>` needs `id`, `<affected_function>`, `<target_files><file>...</file></target_files>`, `<grep_evidence><executed>true</executed>`, `<pattern>`, `<match_count>`, and `<change_summary>`.
 - The recorded command is `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap [--judgment-confirmed]`.
 - If `audit_result` is `AMBIGUOUS`, `<judgment_calls_resolved>` is mandatory before PM done.
+
+## Incremental Module Gate
+
+Every PM `<micro_task id="MT-N">` becomes a gated implementation module. PM must write each micro-task so Dev and QA can work one module at a time instead of implementing the whole plan in one pass.
+
+For each micro-task, PM must provide:
+- the exact target files and affected functions
+- a short interface contract: input, output, side effects, and dependencies
+- a verification plan that can be checked by module QA
+- integration notes explaining how this module connects to earlier/later modules
+
+Required downstream order:
+
+```bash
+python pipeline.py module design --mt-id MT-N --report-file module_design_MT-N.xml
+python pipeline.py module dev --mt-id MT-N --files "..." --report-file module_handover_MT-N.xml --scope-manifest scope_manifest_MT-N.json
+python pipeline.py module qa --mt-id MT-N --result PASS --report-file module_qa_MT-N.xml
+```
+
+Only after every `MT-N` has module QA PASS may Dev run:
+
+```bash
+python pipeline.py module integrate --result PASS --report-file integration_report.xml
+```
+
+`pipeline.py done --phase dev` is blocked until all module QA gates and the integration gate are PASS. Passed modules are checkpointed by file hash; if a later module silently changes an earlier passed file, final Dev completion is blocked.
 
 ## Role
 요구사항을 에이전트별 실행 가능한 티켓으로 변환하는 총괄 설계자이자 파이프라인 관리자. 

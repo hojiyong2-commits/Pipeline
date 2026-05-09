@@ -128,7 +128,11 @@ BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런�
     python pipeline.py build --exe "dist/SmartNotepad.exe" [--report-file dist/build_report.xml]
     python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed
     python pipeline.py harness --score 95 --verdict PASS --test-output-file harness_output.xml --user-confirmed
-    python pipeline.py contract init --three-gate --phase-attestations
+    python pipeline.py contract init
+    python pipeline.py module design --mt-id MT-1 --report-file module_design_MT-1.xml
+    python pipeline.py module dev --mt-id MT-1 --files "core/ai_engine.py" --report-file module_handover_MT-1.xml --scope-manifest scope_manifest_MT-1.json
+    python pipeline.py module qa --mt-id MT-1 --result PASS --report-file module_qa_MT-1.xml
+    python pipeline.py module integrate --result PASS --report-file integration_report.xml
     python pipeline.py gates prepare-phase --phase pm
     python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
     python pipeline.py gates technical
@@ -1018,6 +1022,7 @@ ATOMIC_SNAPSHOT_EXCLUDED_DIRS = {
     "logs",
     "pipeline_contracts",
     "pipeline_history",
+    ".pipeline",
     ".mypy_cache",
     ".ruff_cache",
     ".venv",
@@ -1035,6 +1040,7 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     "qa_report.xml",
     "architect_report.xml",
     "build_report.xml",
+    "integration_report.xml",
     "stop_signal.json",
     "test_results.jsonl",
     "test_results_v3.jsonl",
@@ -1053,6 +1059,10 @@ def _atomic_snapshot_include_path(path: Path) -> bool:
     if name in ATOMIC_SNAPSHOT_EXCLUDED_FILES:
         return False
     if name.startswith("pipeline_state") and name.endswith(".json"):
+        return False
+    if name.startswith("module_") and name.endswith(".xml"):
+        return False
+    if "scope_manifest" in name and name.endswith(".json"):
         return False
     if name.startswith("harness_output") and name.endswith(".xml"):
         return False
@@ -1438,6 +1448,247 @@ def _validate_dev_scope_manifest(
     }
 
 
+def _module_target_files_from_plan(state: Dict[str, Any], mt_id: str) -> List[str]:
+    atomic_plan = state.get("atomic_plan")
+    if not isinstance(atomic_plan, dict):
+        _die("[MODULE GATE] PM atomic_plan missing; complete PM first")
+    for item in atomic_plan.get("micro_tasks", []):
+        if isinstance(item, dict) and str(item.get("id")) == mt_id:
+            return [str(path) for path in item.get("target_files", []) if str(path).strip()]
+    _die(f"[MODULE GATE] unknown micro_task id: {mt_id}")
+
+
+def _module_task_from_plan(state: Dict[str, Any], mt_id: str) -> Dict[str, Any]:
+    atomic_plan = state.get("atomic_plan")
+    if not isinstance(atomic_plan, dict):
+        _die("[MODULE GATE] PM atomic_plan missing; complete PM first")
+    for item in atomic_plan.get("micro_tasks", []):
+        if isinstance(item, dict) and str(item.get("id")) == mt_id:
+            return item
+    _die(f"[MODULE GATE] unknown micro_task id: {mt_id}")
+
+
+def _init_module_gates_from_atomic_plan(state: Dict[str, Any]) -> Dict[str, Any]:
+    state["module_gates"] = _ensure_module_gates(state)
+    atomic_plan = state.get("atomic_plan")
+    if not isinstance(atomic_plan, dict):
+        return state["module_gates"]
+    micro_tasks = [
+        item for item in atomic_plan.get("micro_tasks", [])
+        if isinstance(item, dict) and item.get("id")
+    ]
+    sequence = [str(item["id"]) for item in micro_tasks]
+    existing_modules = state["module_gates"].setdefault("modules", {})
+    modules: Dict[str, Any] = {}
+    for index, item in enumerate(micro_tasks, start=1):
+        mt_id = str(item["id"])
+        previous = existing_modules.get(mt_id, {}) if isinstance(existing_modules, dict) else {}
+        module = {
+            "id": mt_id,
+            "status": "PENDING",
+            "order": index,
+            "target_files": [str(path) for path in item.get("target_files", [])],
+            "affected_function": item.get("affected_function"),
+            "design": _empty_module_step(),
+            "dev": _empty_module_step(),
+            "qa": _empty_module_step(),
+            "checkpoint": None,
+        }
+        if isinstance(previous, dict):
+            module.update(previous)
+            module["order"] = index
+            module["target_files"] = [str(path) for path in item.get("target_files", [])]
+            module["affected_function"] = item.get("affected_function")
+            for step_name in ("design", "dev", "qa"):
+                step = _empty_module_step()
+                if isinstance(previous.get(step_name), dict):
+                    step.update(previous[step_name])
+                module[step_name] = step
+        modules[mt_id] = module
+    state["module_gates"]["enabled"] = True
+    state["module_gates"]["sequence"] = sequence
+    state["module_gates"]["modules"] = modules
+    state["module_gates"]["integration"] = state["module_gates"].get("integration") or _empty_module_step()
+    return state["module_gates"]
+
+
+def _module_gate_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state["module_gates"] = _ensure_module_gates(state)
+    if not state["module_gates"].get("sequence") and isinstance(state.get("atomic_plan"), dict):
+        _init_module_gates_from_atomic_plan(state)
+    return state["module_gates"]
+
+
+def _module_gate_blockers(state: Dict[str, Any]) -> List[str]:
+    gates = _module_gate_state(state)
+    blockers: List[str] = []
+    sequence = gates.get("sequence", [])
+    modules = gates.get("modules", {})
+    if not sequence:
+        blockers.append("PM micro_tasks must initialize module gates")
+        return blockers
+    for mt_id in sequence:
+        module = modules.get(mt_id, {}) if isinstance(modules, dict) else {}
+        if not isinstance(module, dict) or module.get("status") != "PASS":
+            blockers.append(f"{mt_id} module QA must be PASS")
+    integration = gates.get("integration", {})
+    if not isinstance(integration, dict) or integration.get("status") != "PASS":
+        blockers.append("integration module gate must be PASS")
+    return blockers
+
+
+def _require_module_current(state: Dict[str, Any], mt_id: str) -> Dict[str, Any]:
+    gates = _module_gate_state(state)
+    sequence = gates.get("sequence", [])
+    modules = gates.get("modules", {})
+    if mt_id not in sequence:
+        _die(f"[MODULE GATE] unknown micro_task id: {mt_id}")
+    index = sequence.index(mt_id)
+    for prior_id in sequence[:index]:
+        prior = modules.get(prior_id, {}) if isinstance(modules, dict) else {}
+        if not isinstance(prior, dict) or prior.get("status") != "PASS":
+            _die(f"[MODULE GATE] {prior_id} must PASS module QA before {mt_id} can start")
+    for later_id in sequence[index + 1:]:
+        later = modules.get(later_id, {}) if isinstance(modules, dict) else {}
+        if isinstance(later, dict) and later.get("status") in {"DESIGN_DONE", "DEV_DONE", "PASS"}:
+            _die(f"[MODULE GATE] later module {later_id} already advanced before {mt_id}")
+    module = modules.get(mt_id)
+    if not isinstance(module, dict):
+        _die(f"[MODULE GATE] module state missing for {mt_id}")
+    return module
+
+
+def _resolve_workspace_file(raw: str) -> Path:
+    path = Path(str(raw))
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path
+
+
+def _module_checkpoint_for_files(files: List[str]) -> Dict[str, Any]:
+    checked: List[Dict[str, Any]] = []
+    missing: List[str] = []
+    for raw in files:
+        path = _resolve_workspace_file(raw)
+        if not path.exists() or not path.is_file():
+            missing.append(str(raw))
+            continue
+        checked.append(_workspace_check_for_file(path))
+    if missing:
+        _die(f"[MODULE CHECKPOINT] target files missing for checkpoint: {missing}")
+    if not checked:
+        _die("[MODULE CHECKPOINT] no files available for checkpoint")
+    return {
+        "created_at": _now(),
+        "files": checked,
+    }
+
+
+def _validate_module_checkpoints(state: Dict[str, Any]) -> None:
+    gates = _module_gate_state(state)
+    modules = gates.get("modules", {})
+    if not isinstance(modules, dict):
+        return
+    for mt_id, module in modules.items():
+        if not isinstance(module, dict) or module.get("status") != "PASS":
+            continue
+        checkpoint = module.get("checkpoint")
+        if not isinstance(checkpoint, dict):
+            _die(f"[MODULE CHECKPOINT] {mt_id} PASS module has no checkpoint")
+        for item in checkpoint.get("files", []):
+            if not isinstance(item, dict):
+                continue
+            path = _resolve_workspace_file(str(item.get("path") or ""))
+            if not path.exists() or not path.is_file():
+                _die(f"[MODULE CHECKPOINT] {mt_id} checkpoint file missing: {item.get('path')}")
+            actual = _sha256_file(path)
+            expected = str(item.get("sha256") or "")
+            if actual.lower() != expected.lower():
+                _die(f"[MODULE CHECKPOINT] {mt_id} checkpoint changed after PASS: {item.get('path')}")
+
+
+def _validate_module_report_file(
+    report_file: Optional[str],
+    *,
+    label: str,
+    required_tags: List[str],
+    mt_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    path, text = _read_phase_report_or_die(report_file, label)
+    _verify_required_xml_tags(
+        str(path),
+        required_tags=[f"<{tag}>" for tag in required_tags],
+        context_label=label,
+        hard_fail=True,
+    )
+    if mt_id is not None:
+        found = None
+        element = _extract_xml_element(text, "mt_id")
+        if element is not None and element.text:
+            found = element.text.strip()
+        if found != mt_id:
+            _die(f"[{label}] <mt_id> must be {mt_id}, got {found!r}")
+    return {
+        "report_file": str(path),
+        "validated_at": _now(),
+    }
+
+
+def _validate_module_scope_manifest(
+    manifest_file: str,
+    state: Dict[str, Any],
+    mt_id: str,
+    evidence: Optional[str],
+) -> Dict[str, Any]:
+    if not manifest_file:
+        _die("[MODULE SCOPE GATE] --scope-manifest is required")
+    path = Path(manifest_file)
+    if not path.exists():
+        _die(f"[MODULE SCOPE GATE] --scope-manifest not found: {manifest_file}")
+    manifest = _load_json_file(path)
+    pid = str(state.get("pipeline_id", ""))
+    if manifest.get("pipeline_id") and manifest.get("pipeline_id") != pid:
+        _die(f"[MODULE SCOPE GATE] scope_manifest pipeline_id mismatch: expected {pid}, got {manifest.get('pipeline_id')}")
+    task = _module_task_from_plan(state, mt_id)
+    allowed_files = {_normalize_rel_path(item) for item in task.get("target_files", [])}
+    allowed_functions = {str(task.get("affected_function"))}
+    manifest_tasks = manifest.get("micro_tasks")
+    if not isinstance(manifest_tasks, list) or len(manifest_tasks) != 1:
+        _die("[MODULE SCOPE GATE] module scope_manifest must contain exactly one micro_task")
+    item = manifest_tasks[0]
+    if not isinstance(item, dict) or str(item.get("id") or "") != mt_id:
+        _die(f"[MODULE SCOPE GATE] module scope_manifest must contain only {mt_id}")
+    files = item.get("files", [])
+    funcs = item.get("affected_functions", [])
+    if not isinstance(files, list) or not files:
+        _die(f"[MODULE SCOPE GATE] {mt_id} requires non-empty files list")
+    if not isinstance(funcs, list) or not funcs:
+        _die(f"[MODULE SCOPE GATE] {mt_id} requires non-empty affected_functions list")
+    manifest_files = {_normalize_rel_path(file) for file in files}
+    manifest_functions = {str(func).strip() for func in funcs if str(func).strip()}
+    evidence_files = {
+        _normalize_rel_path(item)
+        for item in (evidence or "").split(",")
+        if item.strip()
+    }
+    extra_files = sorted((manifest_files | evidence_files) - allowed_files)
+    if extra_files:
+        _die(f"[MODULE SCOPE GATE] files outside {mt_id} target_files: {extra_files}")
+    missing_evidence = sorted(manifest_files - evidence_files)
+    if missing_evidence:
+        _die(f"[MODULE SCOPE GATE] manifest files missing from --files evidence: {missing_evidence}")
+    extra_functions = sorted(manifest_functions - allowed_functions)
+    if extra_functions:
+        _die(f"[MODULE SCOPE GATE] affected_functions outside {mt_id} plan: {extra_functions}")
+    return {
+        "manifest_file": str(path),
+        "validated_at": _now(),
+        "micro_task_id": mt_id,
+        "files": sorted(manifest_files),
+        "affected_functions": sorted(manifest_functions),
+    }
+
+
 def _verify_build_report_xml(report: str) -> tuple:
     """Build report XML 검증. XML comment 우회 차단, regex fallback 없음.
 
@@ -1746,11 +1997,72 @@ def _new_phase_attestations(enabled: bool = False) -> Dict[str, Any]:
     }
 
 
+def _empty_module_step() -> Dict[str, Any]:
+    return {
+        "status": "PENDING",
+        "completed_at": None,
+        "report_file": None,
+        "evidence": None,
+        "notes": [],
+    }
+
+
+def _new_module_gates(enabled: bool = True) -> Dict[str, Any]:
+    return {
+        "enabled": enabled,
+        "mode": "incremental_module_gate",
+        "sequence": [],
+        "modules": {},
+        "integration": _empty_module_step(),
+    }
+
+
+def _ensure_module_gates(state: Dict[str, Any]) -> Dict[str, Any]:
+    existing = state.get("module_gates")
+    normalized = _new_module_gates(enabled=True)
+    if isinstance(existing, dict):
+        normalized["mode"] = str(existing.get("mode") or "incremental_module_gate")
+        sequence = existing.get("sequence")
+        if isinstance(sequence, list):
+            normalized["sequence"] = [str(item) for item in sequence if str(item)]
+        modules = existing.get("modules")
+        if isinstance(modules, dict):
+            for mt_id, item in modules.items():
+                if not isinstance(item, dict):
+                    continue
+                merged = {
+                    "id": str(mt_id),
+                    "status": "PENDING",
+                    "order": 0,
+                    "target_files": [],
+                    "affected_function": None,
+                    "design": _empty_module_step(),
+                    "dev": _empty_module_step(),
+                    "qa": _empty_module_step(),
+                    "checkpoint": None,
+                }
+                merged.update(item)
+                for step_name in ("design", "dev", "qa"):
+                    step = merged.get(step_name)
+                    base = _empty_module_step()
+                    if isinstance(step, dict):
+                        base.update(step)
+                    merged[step_name] = base
+                normalized["modules"][str(mt_id)] = merged
+        integration = existing.get("integration")
+        if isinstance(integration, dict):
+            merged_integration = _empty_module_step()
+            merged_integration.update(integration)
+            normalized["integration"] = merged_integration
+    normalized["enabled"] = True
+    return normalized
+
+
 def _ensure_phase_attestations(state: Dict[str, Any]) -> Dict[str, Any]:
     existing = state.get("phase_attestations")
     if not isinstance(existing, dict):
-        return _new_phase_attestations(enabled=False)
-    normalized = _new_phase_attestations(enabled=bool(existing.get("enabled")))
+        return _new_phase_attestations(enabled=True)
+    normalized = _new_phase_attestations(enabled=True)
     normalized["mode"] = str(existing.get("mode") or "github_actions_per_phase")
     required = existing.get("required_phases")
     if isinstance(required, list) and required:
@@ -1813,8 +2125,9 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
         "terminal_state": None,
         "harness_fail_count": 0,
         "agent_runs": {},
-        "external_gates": _new_external_gates(enabled=False),
-        "phase_attestations": _new_phase_attestations(enabled=False),
+        "external_gates": _new_external_gates(enabled=True),
+        "phase_attestations": _new_phase_attestations(enabled=True),
+        "module_gates": _new_module_gates(enabled=True),
         "protocol_evolution_decision": None,
     }
 
@@ -1822,9 +2135,9 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
 def _ensure_external_gates(state: Dict[str, Any]) -> Dict[str, Any]:
     gates = state.get("external_gates")
     if not isinstance(gates, dict):
-        return _new_external_gates(enabled=False)
+        return _new_external_gates(enabled=True)
 
-    normalized = _new_external_gates(enabled=bool(gates.get("enabled")))
+    normalized = _new_external_gates(enabled=True)
     normalized["mode"] = str(gates.get("mode") or "three_gate")
     for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
         existing = gates.get(gate_name)
@@ -1846,7 +2159,10 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     if "protocol_evolution_decision" not in state:
         state["protocol_evolution_decision"] = None
     state["external_gates"] = _ensure_external_gates(state)
+    state["external_gates"]["enabled"] = True
     state["phase_attestations"] = _ensure_phase_attestations(state)
+    state["phase_attestations"]["enabled"] = True
+    state["module_gates"] = _ensure_module_gates(state)
     return state
 
 
@@ -2415,9 +2731,9 @@ def _prepare_phase_attestation_request(state: Dict[str, Any], phase: str) -> Dic
         _die(f"phase attestation only supports: {', '.join(PHASE_ATTESTATION_PHASES)}", exit_code=2)
     if not _phase_attestations_enabled(state):
         _die(
-            "phase attestations are not enabled. Use "
-            "`python pipeline.py contract init --three-gate --phase-attestations` "
-            "or `python pipeline.py gates init --phase-attestations`."
+            "phase attestations must be enabled for every pipeline. Use "
+            "`python pipeline.py contract init` or `python pipeline.py gates init` "
+            "to migrate this state."
         )
     pid = str(state.get("pipeline_id") or "")
     phase_info = state.get("phases", {}).get(phase, {})
@@ -2896,6 +3212,10 @@ def cmd_done(args: argparse.Namespace) -> None:
             f"  [ATOMIC PLAN GATE] micro_tasks={state['atomic_plan']['micro_task_count']} "
             f"audit={state['atomic_plan']['audit_result']}"
         ))
+        module_gates = _init_module_gates_from_atomic_plan(state)
+        print(GREEN(
+            f"  [MODULE GATE] initialized {len(module_gates.get('sequence', []))} incremental modules"
+        ))
 
     evidence = args.files if hasattr(args, "files") and args.files else None
 
@@ -2906,6 +3226,13 @@ def cmd_done(args: argparse.Namespace) -> None:
                 "[SCOPE GATE] Dev DONE requires --scope-declared. "
                 "dev-agent must provide <scope_declaration> before Phase 2 can close."
             )
+        module_blockers = _module_gate_blockers(state)
+        if module_blockers:
+            _die(
+                "[MODULE GATE] Dev DONE requires every micro_task to pass module QA "
+                "and integration first: " + "; ".join(module_blockers)
+            )
+        _validate_module_checkpoints(state)
         print(GREEN("  [SCOPE GATE] scope_declaration confirmed"))
         state["dev_handover"] = _validate_dev_handover_file(report_file, state)
         state.setdefault("dev_gate_flags", {})
@@ -2925,7 +3252,7 @@ def cmd_done(args: argparse.Namespace) -> None:
     # ── MT-5: Frozen Codebase scope_declaration 선언 여부 기록 ────────────────
     # dev --scope-declared 플래그: dev-agent가 <scope_declaration>을 출력했음을 명시.
     # 선언 누락 시 경고 출력 (hard fail 아님 — 하위 호환성 유지).
-    if False and phase == "dev":
+    if False and phase == "dev":  # legacy disabled; mandatory dev scope gate runs above
         scope_declared: bool = bool(getattr(args, "scope_declared", False))
         if not scope_declared:
             print(YELLOW(
@@ -2940,7 +3267,7 @@ def cmd_done(args: argparse.Namespace) -> None:
         if _external_gates_enabled(state):
             if not scope_manifest:
                 _die(
-                    "[ATOMIC SCOPE GATE] Three-Gate mode requires "
+                    "[ATOMIC SCOPE GATE] Dev DONE requires "
                     "`--scope-manifest scope_manifest.json` for dev DONE."
                 )
             state["atomic_scope"] = _validate_dev_scope_manifest(scope_manifest, state, args.files)
@@ -2949,7 +3276,7 @@ def cmd_done(args: argparse.Namespace) -> None:
                 f"files={len(state['atomic_scope']['files'])}"
             ))
         elif scope_manifest:
-            print(YELLOW("  [SCOPE WARN] --scope-manifest supplied but atomic hard gate is active only in Three-Gate mode."))
+            print(YELLOW("  [SCOPE WARN] legacy unreachable scope branch."))
 
     # dev phase: --files에 나열된 경로가 실제로 존재하는지 검증
     if phase == "dev" and evidence:
@@ -3315,6 +3642,17 @@ def cmd_build(args: argparse.Namespace) -> None:
 def cmd_harness(args: argparse.Namespace) -> None:
     """Harness 채점 결과 기록."""
     branch: Optional[str] = getattr(args, "branch", None)
+    state = _load_branch_state(args)
+
+    if _external_gates_enabled(state):
+        _die(
+            "\n[THREE GATE BLOCKED] legacy `pipeline.py harness --score` is disabled when "
+            "external_gates.enabled=true.\n"
+            "  Use: python pipeline.py gates technical\n"
+            "       python pipeline.py gates oracle --user-confirmed\n"
+            "       python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline\n"
+            "       python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed"
+        )
 
     # ── Hard gates: 상태를 기록하는 명령 안에서 가장 먼저 검사 (check_gate 전) ──
     # 원칙: hard gate는 상태를 실제로 바꾸는 명령(기록 명령) 안에 있어야 함.
@@ -3342,16 +3680,6 @@ def cmd_harness(args: argparse.Namespace) -> None:
             "  PASS: <harness_report> + 실행 가능한 <test_code> 포함 파일 필요\n"
             "  FAIL: <harness_report> + <test_code> 포함 파일 필요 (PHASE_INTERFACE 계약 통일)\n"
             "  (meta-task 포함 예외 없음)"
-        )
-
-    state = _load_branch_state(args)
-    if _external_gates_enabled(state):
-        _die(
-            "\n[THREE GATE BLOCKED] legacy `pipeline.py harness --score` is disabled when "
-            "external_gates.enabled=true.\n"
-            "  Use: python pipeline.py gates technical\n"
-            "       python pipeline.py gates oracle --user-confirmed\n"
-            "       python pipeline.py gates accept --result ACCEPT --user-confirmed"
         )
 
     ok, reason = check_gate(state, "harness")
@@ -4215,15 +4543,11 @@ def cmd_contract(args: argparse.Namespace) -> None:
                 "contract_path": str(paths["contract"]),
                 "test_set_path": str(paths["test_set"]),
             }
-            if getattr(args, "three_gate", False):
-                state["external_gates"] = _new_external_gates(enabled=True)
-                _log_event(state, "three_gate mode enabled")
-            if getattr(args, "phase_attestations", False):
-                if not getattr(args, "three_gate", False):
-                    state["external_gates"] = _new_external_gates(enabled=True)
-                    _log_event(state, "three_gate mode enabled for phase attestations")
-                _enable_phase_attestations(state)
-                _log_event(state, "GitHub phase attestations enabled")
+            state["external_gates"] = _new_external_gates(enabled=True)
+            _enable_phase_attestations(state)
+            state["module_gates"] = _ensure_module_gates(state)
+            _log_event(state, "three_gate mode enabled (mandatory)")
+            _log_event(state, "GitHub phase attestations enabled (mandatory)")
             _log_event(state, f"contract_v2 initialized: {paths['root']}")
             _save(state)
         print(GREEN(f"\n[CONTRACT INIT] {pid}"))
@@ -4610,6 +4934,162 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
     if unresolved:
         blockers.append(f"unresolved GPT advisory CRITICAL findings: {len(unresolved)}")
     return blockers
+
+
+def cmd_module(args: argparse.Namespace) -> None:
+    """Incremental module gate for PM micro_tasks."""
+    action = args.module_action
+    state = _require_state()
+    state = _ensure_v210_fields(state)
+    if action == "status":
+        print(json.dumps({
+            "pipeline_id": state.get("pipeline_id"),
+            "module_gates": _module_gate_state(state),
+            "blockers": _module_gate_blockers(state),
+        }, ensure_ascii=False, indent=2))
+        return
+
+    current = state.get("current_phase")
+    if current != "dev":
+        _die(f"[MODULE GATE] module commands are allowed only during Dev phase; current_phase={current!r}")
+    if not isinstance(state.get("atomic_plan"), dict):
+        _die("[MODULE GATE] PM atomic_plan missing; complete PM first")
+
+    gates = _module_gate_state(state)
+    mt_id = str(getattr(args, "mt_id", "") or "")
+
+    if action in {"design", "dev", "qa"}:
+        if not mt_id:
+            _die("[MODULE GATE] --mt-id is required", exit_code=2)
+        module = _require_module_current(state, mt_id)
+        _validate_module_checkpoints(state)
+
+    if action == "design":
+        report = _validate_module_report_file(
+            getattr(args, "report_file", None),
+            label="MODULE DESIGN GATE",
+            required_tags=["module_design", "mt_id", "interface_contract", "implementation_plan", "verification_plan"],
+            mt_id=mt_id,
+        )
+        module["design"] = {
+            **_empty_module_step(),
+            "status": "PASS",
+            "completed_at": _now(),
+            "report_file": report["report_file"],
+        }
+        module["status"] = "DESIGN_DONE"
+        state["module_gates"]["modules"][mt_id] = module
+        _log_event(state, f"module design PASS {mt_id}")
+        _save(state)
+        print(GREEN(f"\n[MODULE DESIGN PASS] {mt_id}"))
+        print(f"  next: {YELLOW(f'python pipeline.py module dev --mt-id {mt_id} --files ... --report-file module_handover_{mt_id}.xml --scope-manifest scope_manifest_{mt_id}.json')}\n")
+        return
+
+    if action == "dev":
+        if module.get("design", {}).get("status") != "PASS":
+            _die(f"[MODULE GATE] {mt_id} requires module design PASS before module dev")
+        report = _validate_module_report_file(
+            getattr(args, "report_file", None),
+            label="MODULE DEV GATE",
+            required_tags=["module_handover", "mt_id", "implemented_files", "self_check"],
+            mt_id=mt_id,
+        )
+        scope = _validate_module_scope_manifest(
+            getattr(args, "scope_manifest", None),
+            state,
+            mt_id,
+            getattr(args, "files", None),
+        )
+        module["dev"] = {
+            **_empty_module_step(),
+            "status": "DONE",
+            "completed_at": _now(),
+            "report_file": report["report_file"],
+            "evidence": getattr(args, "files", None),
+            "scope": scope,
+        }
+        module["status"] = "DEV_DONE"
+        state["module_gates"]["modules"][mt_id] = module
+        _log_event(state, f"module dev DONE {mt_id}")
+        _save(state)
+        print(GREEN(f"\n[MODULE DEV DONE] {mt_id}"))
+        print(f"  next: {YELLOW(f'python pipeline.py module qa --mt-id {mt_id} --result PASS --report-file module_qa_{mt_id}.xml')}\n")
+        return
+
+    if action == "qa":
+        if module.get("dev", {}).get("status") != "DONE":
+            _die(f"[MODULE GATE] {mt_id} requires module dev DONE before module QA")
+        result = str(getattr(args, "result", "")).upper()
+        report = _validate_module_report_file(
+            getattr(args, "report_file", None),
+            label="MODULE QA GATE",
+            required_tags=["module_qa_report", "mt_id", "verdict", "verification_evidence"],
+            mt_id=mt_id,
+        )
+        path, text = _read_phase_report_or_die(getattr(args, "report_file", None), "MODULE QA GATE")
+        verdict_el = _extract_xml_element(text, "verdict")
+        verdict = (verdict_el.text or "").strip().upper() if verdict_el is not None and verdict_el.text else ""
+        if verdict != result:
+            _die(f"[MODULE QA GATE] CLI --result {result} does not match report <verdict> {verdict}")
+        module["qa"] = {
+            **_empty_module_step(),
+            "status": result,
+            "completed_at": _now(),
+            "report_file": report["report_file"],
+        }
+        if result == "PASS":
+            module["status"] = "PASS"
+            module["checkpoint"] = _module_checkpoint_for_files(module.get("target_files", []))
+            _log_event(state, f"module QA PASS {mt_id}")
+            print(GREEN(f"\n[MODULE QA PASS] {mt_id} checkpoint saved"))
+        else:
+            module["status"] = "QA_FAIL"
+            _log_event(state, f"module QA FAIL {mt_id}")
+            print(RED(f"\n[MODULE QA FAIL] {mt_id}"))
+        state["module_gates"]["modules"][mt_id] = module
+        _save(state)
+        blockers = _module_gate_blockers(state)
+        if blockers:
+            print(f"  remaining: {', '.join(blockers)}\n")
+        else:
+            print(f"  next: {YELLOW('python pipeline.py module integrate --result PASS --report-file integration_report.xml')}\n")
+        sys.exit(0 if result == "PASS" else 1)
+
+    if action == "integrate":
+        blockers = [
+            blocker for blocker in _module_gate_blockers(state)
+            if blocker != "integration module gate must be PASS"
+        ]
+        if blockers:
+            _die("[MODULE INTEGRATION GATE] all modules must pass before integration: " + "; ".join(blockers))
+        _validate_module_checkpoints(state)
+        result = str(getattr(args, "result", "")).upper()
+        report = _validate_module_report_file(
+            getattr(args, "report_file", None),
+            label="MODULE INTEGRATION GATE",
+            required_tags=["integration_report", "modules_integrated", "integration_verdict"],
+        )
+        path, text = _read_phase_report_or_die(getattr(args, "report_file", None), "MODULE INTEGRATION GATE")
+        verdict_el = _extract_xml_element(text, "integration_verdict")
+        verdict = (verdict_el.text or "").strip().upper() if verdict_el is not None and verdict_el.text else ""
+        if verdict != result:
+            _die(f"[MODULE INTEGRATION GATE] CLI --result {result} does not match report <integration_verdict> {verdict}")
+        gates["integration"] = {
+            **_empty_module_step(),
+            "status": "PASS" if result == "PASS" else "FAIL",
+            "completed_at": _now(),
+            "report_file": report["report_file"],
+        }
+        state["module_gates"]["integration"] = gates["integration"]
+        _log_event(state, f"module integration {result}")
+        _save(state)
+        color = GREEN if result == "PASS" else RED
+        print(color(f"\n[MODULE INTEGRATION {result}]"))
+        if result == "PASS":
+            print(f"  next: {YELLOW('python pipeline.py done --phase dev --files ... --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id ...')}\n")
+        sys.exit(0 if result == "PASS" else 1)
+
+    _die(f"unknown module action: {action}", exit_code=2)
 
 
 def _advisory_status_summary(pid: str) -> Dict[str, Any]:
@@ -5473,12 +5953,12 @@ def cmd_gates(args: argparse.Namespace) -> None:
 
     if action == "init":
         state["external_gates"] = _new_external_gates(enabled=True)
-        if bool(getattr(args, "phase_attestations", False)):
-            _enable_phase_attestations(state)
-            _log_event(state, "GitHub phase attestations enabled")
-        _log_event(state, "three_gate mode enabled")
+        _enable_phase_attestations(state)
+        state["module_gates"] = _ensure_module_gates(state)
+        _log_event(state, "three_gate mode enabled (mandatory)")
+        _log_event(state, "GitHub phase attestations enabled (mandatory)")
         _save(state)
-        print(GREEN(f"\n[THREE GATE ENABLED] {pid}\n"))
+        print(GREEN(f"\n[THREE GATE + PHASE ATTESTATION ENABLED] {pid}\n"))
         return
 
     if action == "status":
@@ -5492,7 +5972,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         return
 
     if not _external_gates_enabled(state):
-        _die("three_gate mode is not enabled. Run `python pipeline.py gates init` first.")
+        state["external_gates"] = _new_external_gates(enabled=True)
+        _enable_phase_attestations(state)
 
     if action == "prepare-phase":
         request = _prepare_phase_attestation_request(state, args.phase)
@@ -5507,7 +5988,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
 
     if action == "phase-ci":
         if not _phase_attestations_enabled(state):
-            _die("phase attestations are not enabled for this pipeline")
+            _die("phase attestations are mandatory. Run `python pipeline.py gates init` to migrate this state.")
         verification = _verify_github_phase_attestation_run(
             repo=args.repo,
             commit=args.commit,
@@ -6516,9 +6997,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_contract_init.add_argument("--type", default=None, choices=["FEAT", "BUG", "IMP", "feat", "bug", "imp"])
     p_contract_init.add_argument("--force", action="store_true", default=False)
     p_contract_init.add_argument("--three-gate", action="store_true", default=False,
-                                 help="Enable external Technical/Oracle/User Acceptance gates for this pipeline")
+                                 help="Backward-compatible no-op; external gates are mandatory")
     p_contract_init.add_argument("--phase-attestations", action="store_true", default=False,
-                                 help="Option A: require GitHub Actions attestation after PM/Dev/QA/Build")
+                                 help="Backward-compatible no-op; phase attestations are mandatory")
 
     p_contract_module = csub.add_parser("add-module", help="Add a module/component to the contract")
     p_contract_module.add_argument("--pipeline-id", default=None)
@@ -6590,12 +7071,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_acceptance_run.add_argument("--record", action="store_true", default=False)
     p_acceptance_run.add_argument("--user-confirmed", action="store_true", default=False)
 
+    # incremental module gates
+    p_module = sub.add_parser("module", help="Incremental Dev/QA gates for each PM micro_task")
+    msub = p_module.add_subparsers(dest="module_action", required=True)
+    p_module_design = msub.add_parser("design", help="Record detailed design for one micro_task")
+    p_module_design.add_argument("--mt-id", required=True)
+    p_module_design.add_argument("--report-file", required=True)
+    p_module_dev = msub.add_parser("dev", help="Record implementation for one micro_task")
+    p_module_dev.add_argument("--mt-id", required=True)
+    p_module_dev.add_argument("--files", required=True)
+    p_module_dev.add_argument("--report-file", required=True)
+    p_module_dev.add_argument("--scope-manifest", required=True)
+    p_module_qa = msub.add_parser("qa", help="Record QA result for one micro_task")
+    p_module_qa.add_argument("--mt-id", required=True)
+    p_module_qa.add_argument("--result", required=True, choices=["PASS", "FAIL", "pass", "fail"])
+    p_module_qa.add_argument("--report-file", required=True)
+    p_module_integrate = msub.add_parser("integrate", help="Record final integration after all module QA gates pass")
+    p_module_integrate.add_argument("--result", required=True, choices=["PASS", "FAIL", "pass", "fail"])
+    p_module_integrate.add_argument("--report-file", required=True)
+    msub.add_parser("status", help="Show incremental module gate state")
+
     # three_gate external gates
     p_gates = sub.add_parser("gates", help="External three-gate status and runners")
     gsub = p_gates.add_subparsers(dest="gates_action", required=True)
-    p_gates_init = gsub.add_parser("init", help="Enable three_gate mode on the active pipeline")
+    p_gates_init = gsub.add_parser("init", help="Migrate or show mandatory external gate state")
     p_gates_init.add_argument("--phase-attestations", action="store_true", default=False,
-                              help="Require GitHub Actions attestation after PM/Dev/QA/Build")
+                              help="Backward-compatible no-op; phase attestations are mandatory")
     gsub.add_parser("status", help="Show external gate state")
     p_gate_prepare = gsub.add_parser("prepare-phase", help="Write .pipeline phase attestation request for CI")
     p_gate_prepare.add_argument("--phase", required=True, choices=list(PHASE_ATTESTATION_PHASES))
@@ -6736,6 +7237,7 @@ COMMAND_MAP = {
     "harness":              cmd_harness,
     "contract":             cmd_contract,
     "acceptance":           cmd_acceptance,
+    "module":               cmd_module,
     "gates":                cmd_gates,
     "advisory":             cmd_advisory,
     "github":               cmd_github,

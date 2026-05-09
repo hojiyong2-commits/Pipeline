@@ -51,6 +51,37 @@ def _state(work: Path) -> dict:
     return json.loads((work / "pipeline_state.json").read_text(encoding="utf-8"))
 
 
+def _write_state(work: Path, state: dict) -> None:
+    (work / "pipeline_state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _json_from_stdout(stdout: str) -> dict:
+    start = stdout.find("{")
+    assert start >= 0, stdout
+    return json.loads(stdout[start:])
+
+
+def _agent_run(work: Path, phase: str, output_file: Path, evidence: str | None = None) -> str:
+    started = _ok(work, "agent", "start", "--phase", phase)
+    payload = _json_from_stdout(started.stdout)
+    run_id = payload["run"]["run_id"]
+    token = payload["token"]
+    args = ["agent", "finish", "--run-id", run_id, "--token", token, "--output-file", str(output_file)]
+    if evidence:
+        args.extend(["--evidence", evidence])
+    _ok(work, *args)
+    return run_id
+
+
+def _mark_phase_ci_passed(work: Path, phase: str) -> None:
+    state = _state(work)
+    phase_state = state.setdefault("phase_attestations", {}).setdefault("phases", {}).setdefault(phase, {})
+    phase_state["status"] = "PASS"
+    phase_state["phase"] = phase
+    phase_state["completed_at"] = "2026-01-01T00:00:00Z"
+    _write_state(work, state)
+
+
 def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) -> None:
     work = _copy_cli_workspace(tmp_path)
 
@@ -187,7 +218,22 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
 """,
         encoding="utf-8",
     )
-    _ok(work, "done", "--phase", "pm", "--report-file", str(step_plan), "--decomp", "--clarification", "--roadmap")
+    pm_run_id = _agent_run(work, "pm", step_plan)
+    _ok(
+        work,
+        "done",
+        "--phase",
+        "pm",
+        "--report-file",
+        str(step_plan),
+        "--decomp",
+        "--clarification",
+        "--roadmap",
+        "--agent-run-id",
+        pm_run_id,
+    )
+    _ok(work, "gates", "prepare-phase", "--phase", "pm")
+    _mark_phase_ci_passed(work, "pm")
 
     main_py = work / "main.py"
     main_py.write_text(
@@ -195,6 +241,18 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
         "    return {'greeting': f'Hello, {name}'}\n",
         encoding="utf-8",
     )
+    module_design = work / "module_design_MT-1.xml"
+    module_design.write_text(
+        """<module_design>
+  <mt_id>MT-1</mt_id>
+  <interface_contract>greet(name) returns a greeting dict</interface_contract>
+  <implementation_plan>create the greeting function</implementation_plan>
+  <verification_plan>verify module output shape</verification_plan>
+</module_design>
+""",
+        encoding="utf-8",
+    )
+    _ok(work, "module", "design", "--mt-id", "MT-1", "--report-file", str(module_design))
     scope_manifest = work / "scope_manifest.json"
     scope_manifest.write_text(
         json.dumps(
@@ -213,6 +271,50 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
         ),
         encoding="utf-8",
     )
+    module_handover = work / "module_handover_MT-1.xml"
+    module_handover.write_text(
+        """<module_handover>
+  <mt_id>MT-1</mt_id>
+  <implemented_files><file>main.py</file></implemented_files>
+  <self_check>PASS</self_check>
+</module_handover>
+""",
+        encoding="utf-8",
+    )
+    _ok(
+        work,
+        "module",
+        "dev",
+        "--mt-id",
+        "MT-1",
+        "--files",
+        "main.py",
+        "--report-file",
+        str(module_handover),
+        "--scope-manifest",
+        str(scope_manifest),
+    )
+    module_qa = work / "module_qa_MT-1.xml"
+    module_qa.write_text(
+        """<module_qa_report>
+  <mt_id>MT-1</mt_id>
+  <verdict>PASS</verdict>
+  <verification_evidence>module output verified</verification_evidence>
+</module_qa_report>
+""",
+        encoding="utf-8",
+    )
+    _ok(work, "module", "qa", "--mt-id", "MT-1", "--result", "PASS", "--report-file", str(module_qa))
+    integration_report = work / "integration_report.xml"
+    integration_report.write_text(
+        """<integration_report>
+  <modules_integrated>MT-1</modules_integrated>
+  <integration_verdict>PASS</integration_verdict>
+</integration_report>
+""",
+        encoding="utf-8",
+    )
+    _ok(work, "module", "integrate", "--result", "PASS", "--report-file", str(integration_report))
     dev_handover = work / "dev_handover.xml"
     dev_handover.write_text(
         """<handover>
@@ -227,6 +329,7 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
 """,
         encoding="utf-8",
     )
+    dev_run_id = _agent_run(work, "dev", dev_handover, "main.py")
     _ok(
         work,
         "done",
@@ -239,7 +342,11 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
         "--scope-declared",
         "--scope-manifest",
         str(scope_manifest),
+        "--agent-run-id",
+        dev_run_id,
     )
+    _ok(work, "gates", "prepare-phase", "--phase", "dev")
+    _mark_phase_ci_passed(work, "dev")
     qa_report = work / "qa_report.xml"
     qa_report.write_text(
         """<qa_report>
@@ -250,9 +357,38 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
 """,
         encoding="utf-8",
     )
-    _ok(work, "qa", "--result", "PASS", "--numeric-score", "120", "--report-file", str(qa_report))
+    qa_run_id = _agent_run(work, "qa", qa_report)
+    _ok(
+        work,
+        "qa",
+        "--result",
+        "PASS",
+        "--numeric-score",
+        "120",
+        "--report-file",
+        str(qa_report),
+        "--agent-run-id",
+        qa_run_id,
+    )
+    _ok(work, "gates", "prepare-phase", "--phase", "qa")
+    _mark_phase_ci_passed(work, "qa")
     _ok(work, "sec", "--skip")
-    _ok(work, "build", "--exe", "N/A", "--skip-reason", "no-code", "--user-confirmed")
+    build_output = work / "build_agent_output.xml"
+    build_output.write_text("<build_report><status>N/A</status></build_report>\n", encoding="utf-8")
+    build_run_id = _agent_run(work, "build", build_output)
+    _ok(
+        work,
+        "build",
+        "--exe",
+        "N/A",
+        "--skip-reason",
+        "no-code",
+        "--user-confirmed",
+        "--agent-run-id",
+        build_run_id,
+    )
+    _ok(work, "gates", "prepare-phase", "--phase", "build")
+    _mark_phase_ci_passed(work, "build")
 
     _ok(work, "gates", "technical")
     technical_result = json.loads(

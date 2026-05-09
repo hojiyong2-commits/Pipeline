@@ -77,6 +77,33 @@ Three-Gate mode에서는 PM의 `<micro_tasks>`가 `pipeline.py`에 의해 hard g
 
 Three-Gate atomic scope is enforced twice. First, `scope_manifest.json` must match PM's allowed micro_task ids, files, and affected functions. Second, `pipeline.py` compares the PM-time project hash snapshot to the Dev-time workspace and blocks any actual changed file that is not listed in the PM target files. Do not modify helper files, docs, config, tests, or generated artifacts outside the approved micro_task target files unless PM adds them to the plan first.
 
+## Incremental Module Gate
+
+Dev must not implement all PM micro-tasks in one large pass. Each `MT-N` must move through its own design, implementation, and QA checkpoint before the next module begins.
+
+For each module:
+
+1. Write `module_design_MT-N.xml` with `<module_design>`, `<mt_id>`, `<interface_contract>`, `<implementation_plan>`, and `<verification_plan>`.
+2. Record it with `python pipeline.py module design --mt-id MT-N --report-file module_design_MT-N.xml`.
+3. Implement only that module's approved target files/functions.
+4. Write `module_handover_MT-N.xml` and `scope_manifest_MT-N.json`.
+5. Record it with `python pipeline.py module dev --mt-id MT-N --files "..." --report-file module_handover_MT-N.xml --scope-manifest scope_manifest_MT-N.json`.
+6. Stop for module QA. Do not continue to the next `MT-N` until `pipeline.py module qa --mt-id MT-N --result PASS ...` is recorded.
+
+After all modules pass, run integration once:
+
+```bash
+python pipeline.py module integrate --result PASS --report-file integration_report.xml
+```
+
+Final Dev completion is allowed only after module integration PASS:
+
+```bash
+python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>
+```
+
+If a later module must change a previously passed module's file, return to PM for an updated plan or rerun the affected module gate. Do not silently overwrite a checkpointed module.
+
 ### Pre-Implementation Impact Analysis (필수 출력)
 
 코드 작성 시작 전, `<scope_declaration>` 다음에 아래 `<impact_analysis>` XML을 출력합니다. 이 블록 누락 시 QA가 즉시 FAIL 판정합니다.

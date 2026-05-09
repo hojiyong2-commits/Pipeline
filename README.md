@@ -2,6 +2,54 @@
 
 A 9-phase autonomous app factory pipeline enforcer.
 
+## 현재 기본 구조
+
+모든 파이프라인은 이제 예외 없이 Three-Gate + Option A + Incremental Module Gate로 실행합니다. 이 셋은 선택 모드가 아닙니다.
+
+쉽게 말하면:
+
+1. PM이 요구사항을 작은 `MT-N` 단위로 쪼갭니다.
+2. 각 `MT-N`은 `module design -> module dev -> module qa`를 통과해야 다음 모듈로 넘어갑니다.
+3. 모든 모듈이 PASS되면 `module integrate`로 합칩니다.
+4. PM/Dev/QA/Build phase는 각각 GitHub Actions phase attestation을 통과해야 다음 역할 경계로 넘어갑니다.
+5. 최종 완료는 Technical, Oracle, GitHub CI, User Acceptance가 모두 PASS된 뒤에만 가능합니다.
+
+사용자가 마지막에 해야 할 일은 코드 리뷰가 아니라 결과물 확인입니다. 마지막 agent가 PR 링크와 GitHub Actions의 한국어 최종 확인 안내, 실제 결과물 경로나 artifact 링크를 줍니다. 사용자는 그 결과물이 요청과 맞는지만 보고 ACCEPT 또는 REJECT를 선택합니다.
+
+## 필수 명령 흐름
+
+```powershell
+python pipeline.py contract init
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>
+python pipeline.py gates prepare-phase --phase pm
+python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
+
+python pipeline.py module design --mt-id MT-1 --report-file module_design_MT-1.xml
+python pipeline.py module dev --mt-id MT-1 --files "path/to/file.py" --report-file module_handover_MT-1.xml --scope-manifest scope_manifest_MT-1.json
+python pipeline.py module qa --mt-id MT-1 --result PASS --report-file module_qa_MT-1.xml
+
+# Repeat module design/dev/qa for every MT-N, then:
+python pipeline.py module integrate --result PASS --report-file integration_report.xml
+
+python pipeline.py done --phase dev --files "path/to/file.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>
+python pipeline.py gates prepare-phase --phase dev
+python pipeline.py gates phase-ci --phase dev --repo hojiyong2-commits/Pipeline
+
+python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.xml --agent-run-id <qa_run_id>
+python pipeline.py gates prepare-phase --phase qa
+python pipeline.py gates phase-ci --phase qa --repo hojiyong2-commits/Pipeline
+
+python pipeline.py build --exe "dist/app.exe" --report-file build_report.xml --agent-run-id <build_run_id>
+python pipeline.py gates prepare-phase --phase build
+python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline
+
+python pipeline.py gates technical
+python pipeline.py gates oracle --user-confirmed
+python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
+python pipeline.py gates accept --result ACCEPT --evidence <real-result-path-or-artifact> --user-confirmed
+python pipeline.py architect --report-file architect_report.xml
+```
+
 ## Pipeline smoke test
 
 **Pipeline ID:** IMP-20260509-A4DB
@@ -26,8 +74,8 @@ This section documents the end-to-end pipeline smoke test that verifies the full
 
 - No direct push to `main` — all changes via PR from `smoke-test/IMP-20260509-A4DB`
 - GitHub Actions CI (pytest + `pipeline_attestation.json` upload) must PASS before gate acceptance
-- Option A mode: PM/Dev/QA/Build phase requests produce `phase_attestation.json` in GitHub Actions
-- Three-Gate mode: Technical + Oracle (waived: docs-only) + GitHub CI + User Acceptance
+- Option A is mandatory: PM/Dev/QA/Build phase requests produce `phase_attestation.json` in GitHub Actions
+- Three-Gate is mandatory: Technical + Oracle (waived only by audited docs-only rules) + GitHub CI + User Acceptance
 - User acceptance deploys accepted artifacts to `G:\내 드라이브\터미널\<pipeline_id>` and writes `deployment_manifest.json`
 
 ### Option A: per-agent receipt + phase CI

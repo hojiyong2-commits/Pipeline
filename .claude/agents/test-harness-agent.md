@@ -28,6 +28,16 @@ If `external_gates.enabled=true`, Phase 7 has no 0-100 score. Harness may diagno
 3. `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
 4. `python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed`
 
+Three-Gate is mandatory for every pipeline. Harness must assume `external_gates.enabled=true`; if old state is missing it, ask the orchestrator to run `python pipeline.py gates init`, which enables the required gates.
+
+Harness must also confirm that incremental module gates are complete before Phase 7 diagnosis:
+
+```bash
+python pipeline.py module status
+```
+
+Every `MT-N` must be PASS and `integration` must be PASS. Harness may summarize module-gate failures, but must not replace module QA or integration with a numeric score.
+
 Before asking for ACCEPT, provide the PR link, the GitHub Actions **최종 확인 안내** PR comment, and the real result path/artifact to the user. Do not ask the user to review code. User acceptance is valid only after the visible result has been shown and the user answers ACCEPT or REJECT.
 
 The technical gate always records deterministic commands, versions, exit codes, and outputs. It is strict by default: missing ruff/mypy/bandit/pytest or missing Python evidence files are recorded as gate failures. `--relaxed-tools` is only for explicit local debugging and must not be used to claim COMPLETE.

@@ -69,6 +69,62 @@ def _write_qa_report(directory: str, *, verdict: str = "PASS", score: int = 120)
     return report
 
 
+def _write_module_design(directory: str, mt_id: str = "MT-1") -> Path:
+    report = Path(directory) / f"module_design_{mt_id}.xml"
+    report.write_text(
+        f"""<module_design>
+  <mt_id>{mt_id}</mt_id>
+  <interface_contract>input and output contract</interface_contract>
+  <implementation_plan>small implementation plan</implementation_plan>
+  <verification_plan>module-level QA plan</verification_plan>
+</module_design>
+""",
+        encoding="utf-8",
+    )
+    return report
+
+
+def _write_module_handover(directory: str, mt_id: str = "MT-1") -> Path:
+    report = Path(directory) / f"module_handover_{mt_id}.xml"
+    report.write_text(
+        f"""<module_handover>
+  <mt_id>{mt_id}</mt_id>
+  <implemented_files><file>main.py</file></implemented_files>
+  <self_check>PASS</self_check>
+</module_handover>
+""",
+        encoding="utf-8",
+    )
+    return report
+
+
+def _write_module_qa(directory: str, mt_id: str = "MT-1", verdict: str = "PASS") -> Path:
+    report = Path(directory) / f"module_qa_{mt_id}.xml"
+    report.write_text(
+        f"""<module_qa_report>
+  <mt_id>{mt_id}</mt_id>
+  <verdict>{verdict}</verdict>
+  <verification_evidence>module behavior verified</verification_evidence>
+</module_qa_report>
+""",
+        encoding="utf-8",
+    )
+    return report
+
+
+def _write_integration_report(directory: str, verdict: str = "PASS") -> Path:
+    report = Path(directory) / "integration_report.xml"
+    report.write_text(
+        f"""<integration_report>
+  <modules_integrated>MT-1</modules_integrated>
+  <integration_verdict>{verdict}</integration_verdict>
+</integration_report>
+""",
+        encoding="utf-8",
+    )
+    return report
+
+
 def _install_completed_agent_run(state: dict, phase: str, output_file: Path, root: Path) -> str:
     run_id = f"{phase}-test-run"
     receipt_dir = root / "agent-receipts"
@@ -115,6 +171,29 @@ def _install_completed_agent_run(state: dict, phase: str, output_file: Path, roo
     return run_id
 
 
+def _mark_phase_attestation_passed(state: dict, *phases: str) -> None:
+    state["phase_attestations"] = pipeline._ensure_phase_attestations(state)
+    state["phase_attestations"]["enabled"] = True
+    for phase in phases:
+        state["phase_attestations"]["phases"][phase]["status"] = "PASS"
+        state["phase_attestations"]["phases"][phase]["phase"] = phase
+        state["phase_attestations"]["phases"][phase]["completed_at"] = pipeline._now()
+
+
+def _mark_module_gates_passed(state: dict) -> None:
+    pipeline._init_module_gates_from_atomic_plan(state)
+    gates = state["module_gates"]
+    for mt_id in gates["sequence"]:
+        module = gates["modules"][mt_id]
+        module["design"]["status"] = "PASS"
+        module["dev"]["status"] = "DONE"
+        module["qa"]["status"] = "PASS"
+        module["status"] = "PASS"
+        module["checkpoint"] = pipeline._module_checkpoint_for_files(module.get("target_files", []))
+    gates["integration"]["status"] = "PASS"
+    gates["integration"]["completed_at"] = pipeline._now()
+
+
 def _write_oracle_file(root: Path, name: str, payload: str = '{"value": 1}\n') -> Path:
     path = root / "tests" / "oracles" / name
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +202,12 @@ def _write_oracle_file(root: Path, name: str, payload: str = '{"value": 1}\n') -
 
 
 class ThreeGatePipelineTests(unittest.TestCase):
+    def test_new_state_enables_external_phase_and_module_gates_by_default(self) -> None:
+        state = pipeline._new_state("TMP-DEFAULT-GATES", "FEAT", "sample")
+        self.assertTrue(state["external_gates"]["enabled"])
+        self.assertTrue(state["phase_attestations"]["enabled"])
+        self.assertTrue(state["module_gates"]["enabled"])
+
     def test_help_description_uses_dash_not_option_like_phase(self) -> None:
         parser = pipeline.build_parser()
         self.assertIn("Enforcer — Phase", parser.description or "")
@@ -254,6 +339,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         state = pipeline._new_state("TMP-TECH-RELAXED", "FEAT", "sample")
         state["external_gates"] = pipeline._new_external_gates(enabled=True)
         state["pipeline_id"] = "TMP-TECH-RELAXED"
+        _mark_phase_attestation_passed(state, "build")
         with tempfile.TemporaryDirectory() as tmp:
             paths = {"technical_result": Path(tmp) / "technical_result.json"}
             args = argparse.Namespace(gates_action="technical", strict_tools=False, relaxed_tools=True, timeout=5)
@@ -850,6 +936,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
     def test_pm_done_records_atomic_step_plan_without_three_gate(self) -> None:
         state = pipeline._new_state("TMP-PM-OK", "FEAT", "sample")
         with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
             report = Path(tmp) / "step_plan.xml"
             report.write_text(
                 """
@@ -888,6 +975,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 judgment_confirmed=False,
                 report_file=str(report),
                 files=None,
+                agent_run_id=_install_completed_agent_run(state, "pm", report, root),
             )
             with mock.patch.object(pipeline, "_load_branch_state", return_value=state):
                 with mock.patch.object(pipeline, "_save_state_for"):
@@ -1001,6 +1089,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         state["current_phase"] = "dev"
         state["phases"]["pm"]["status"] = "DONE"
         state["external_gates"] = pipeline._new_external_gates(enabled=True)
+        _mark_phase_attestation_passed(state, "pm")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             target = root / "main.py"
@@ -1013,6 +1102,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                     "target_files": [str(target)],
                 }]
             }
+            _mark_module_gates_passed(state)
             manifest = root / "scope_manifest.json"
             target_json = str(target).replace("\\", "\\\\")
             manifest.write_text(
@@ -1036,7 +1126,9 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 report_file=str(_write_dev_handover_report(tmp)),
                 scope_declared=True,
                 scope_manifest=str(manifest),
+                agent_run_id=None,
             )
+            args.agent_run_id = _install_completed_agent_run(state, "dev", Path(args.report_file), root)
             with mock.patch.object(pipeline, "_load_branch_state", return_value=state):
                 with mock.patch.object(pipeline, "_save_state_for"):
                     with mock.patch.object(pipeline, "_record_snapshot"):
@@ -1208,6 +1300,117 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertEqual(state["phases"]["dev"]["status"], "PENDING")
 
+    def test_dev_done_blocks_until_incremental_module_gates_pass(self) -> None:
+        state = pipeline._new_state("TMP-MODULE-BLOCK", "FEAT", "sample")
+        state["current_phase"] = "dev"
+        state["phases"]["pm"]["status"] = "DONE"
+        _mark_phase_attestation_passed(state, "pm")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "main.py"
+            target.write_text("print('ok')\n", encoding="utf-8")
+            state["atomic_plan"] = {
+                "project_snapshot": {},
+                "micro_tasks": [{
+                    "id": "MT-1",
+                    "affected_function": "main.run",
+                    "target_files": [str(target)],
+                }],
+            }
+            pipeline._init_module_gates_from_atomic_plan(state)
+            manifest = root / "scope_manifest.json"
+            target_json = str(target).replace("\\", "\\\\")
+            manifest.write_text(
+                f"""{{
+  "pipeline_id": "TMP-MODULE-BLOCK",
+  "micro_tasks": [
+    {{"id": "MT-1", "files": ["{target_json}"], "affected_functions": ["main.run"]}}
+  ]
+}}
+""",
+                encoding="utf-8",
+            )
+            handover = _write_dev_handover_report(tmp)
+            run_id = _install_completed_agent_run(state, "dev", handover, root)
+            args = argparse.Namespace(
+                branch=None,
+                phase="dev",
+                files=str(target),
+                report_file=str(handover),
+                scope_declared=True,
+                scope_manifest=str(manifest),
+                agent_run_id=run_id,
+            )
+            with mock.patch.object(pipeline, "_load_branch_state", return_value=state):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_done(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(state["phases"]["dev"]["status"], "PENDING")
+
+    def test_incremental_module_flow_records_checkpoint_and_integration(self) -> None:
+        state = pipeline._new_state("TMP-MODULE-FLOW", "FEAT", "sample")
+        state["current_phase"] = "dev"
+        state["phases"]["pm"]["status"] = "DONE"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "main.py"
+            target.write_text("print('module ok')\n", encoding="utf-8")
+            state["atomic_plan"] = {
+                "project_snapshot": {},
+                "micro_tasks": [{
+                    "id": "MT-1",
+                    "affected_function": "main.run",
+                    "target_files": [str(target)],
+                }],
+            }
+            pipeline._init_module_gates_from_atomic_plan(state)
+            manifest = root / "module_scope_manifest.json"
+            target_json = str(target).replace("\\", "\\\\")
+            manifest.write_text(
+                f"""{{
+  "pipeline_id": "TMP-MODULE-FLOW",
+  "micro_tasks": [
+    {{"id": "MT-1", "files": ["{target_json}"], "affected_functions": ["main.run"]}}
+  ]
+}}
+""",
+                encoding="utf-8",
+            )
+            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+                 mock.patch.object(pipeline, "_save"):
+                pipeline.cmd_module(argparse.Namespace(
+                    module_action="design",
+                    mt_id="MT-1",
+                    report_file=str(_write_module_design(tmp)),
+                ))
+                pipeline.cmd_module(argparse.Namespace(
+                    module_action="dev",
+                    mt_id="MT-1",
+                    files=str(target),
+                    report_file=str(_write_module_handover(tmp)),
+                    scope_manifest=str(manifest),
+                ))
+                with self.assertRaises(SystemExit) as qa_exit:
+                    pipeline.cmd_module(argparse.Namespace(
+                        module_action="qa",
+                        mt_id="MT-1",
+                        result="PASS",
+                        report_file=str(_write_module_qa(tmp)),
+                    ))
+                with self.assertRaises(SystemExit) as integration_exit:
+                    pipeline.cmd_module(argparse.Namespace(
+                        module_action="integrate",
+                        result="PASS",
+                        report_file=str(_write_integration_report(tmp)),
+                    ))
+
+        self.assertEqual(qa_exit.exception.code, 0)
+        self.assertEqual(integration_exit.exception.code, 0)
+        self.assertEqual(state["module_gates"]["modules"]["MT-1"]["status"], "PASS")
+        self.assertIsInstance(state["module_gates"]["modules"]["MT-1"]["checkpoint"], dict)
+        self.assertEqual(state["module_gates"]["integration"]["status"], "PASS")
+
     def test_qa_requires_report_file_with_micro_task_boundary(self) -> None:
         state = pipeline._new_state("TMP-QA-REPORT", "FEAT", "sample")
         state["current_phase"] = "qa"
@@ -1234,7 +1437,9 @@ class ThreeGatePipelineTests(unittest.TestCase):
         state["current_phase"] = "qa"
         state["phases"]["pm"]["status"] = "DONE"
         state["phases"]["dev"]["status"] = "DONE"
+        _mark_phase_attestation_passed(state, "pm", "dev")
         with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
             report = _write_qa_report(tmp, verdict="PASS", score=120)
             args = argparse.Namespace(
                 result="PASS",
@@ -1243,6 +1448,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 agent_id="qa-agent",
                 report_file=str(report),
                 branch=None,
+                agent_run_id=_install_completed_agent_run(state, "qa", report, root),
             )
             with mock.patch.object(pipeline, "_load_branch_state", return_value=state):
                 with mock.patch.object(pipeline, "_save_state_for"):
@@ -1688,6 +1894,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         state["external_gates"] = pipeline._new_external_gates(enabled=True)
         for gate in ("technical", "oracle", "acceptance", "github_ci"):
             state["external_gates"][gate]["status"] = "PASS"
+        _mark_phase_attestation_passed(state, "pm", "dev", "qa", "build")
 
         saved = {}
         with tempfile.TemporaryDirectory() as tmp:

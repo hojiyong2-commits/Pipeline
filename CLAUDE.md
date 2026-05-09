@@ -81,9 +81,9 @@ When Contract v2 is enabled, `pipeline.py check --phase dev` blocks until the co
 
 ### Three-Gate External Authority Mode
 
-For quality-sensitive work, prefer Three-Gate mode on top of Contract v2:
+Three-Gate mode and Option A phase attestation are mandatory for every pipeline. They are not optional modes.
 
-1. `python pipeline.py contract init --three-gate --phase-attestations`
+1. `python pipeline.py contract init` creates Contract v2 with Three-Gate and phase attestations enabled. `--three-gate` and `--phase-attestations` are accepted only for backward-compatible scripts.
 2. Register user-supplied oracle files only from `tests/oracles/**` with `python pipeline.py contract add-oracle --input tests/oracles/... --expected tests/oracles/... --case-kind normal`, plus at least one additional `--case-kind edge|exception|error` oracle. PM must ask the user for the answer key during Phase 1 and save the input/expected files under `tests/oracles/<pipeline_id>/<case_id>/`; Dev must implement against those files, not rewrite them.
 3. Run `python pipeline.py contract audit`; freeze is blocked until the rule-based audit PASSes.
 4. PM completion is also hard-gated: `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification ...` must include a real `<decomposition_audit>` and `<step_plan><micro_tasks>...</micro_tasks></step_plan>`.
@@ -98,6 +98,19 @@ For quality-sensitive work, prefer Three-Gate mode on top of Contract v2:
    - `python pipeline.py gates oracle --user-confirmed`
    - `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
    - `python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed`
+
+### Incremental Module Gate
+
+Every PM `<micro_task>` is a gated module. Dev cannot implement all modules in one undifferentiated pass. The required order is:
+
+1. `python pipeline.py module design --mt-id MT-N --report-file module_design_MT-N.xml`
+2. `python pipeline.py module dev --mt-id MT-N --files "..." --report-file module_handover_MT-N.xml --scope-manifest scope_manifest_MT-N.json`
+3. `python pipeline.py module qa --mt-id MT-N --result PASS --report-file module_qa_MT-N.xml`
+4. Repeat for the next MT only after the previous MT has PASS.
+5. After all MTs pass: `python pipeline.py module integrate --result PASS --report-file integration_report.xml`
+6. Only then record final Dev: `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>`
+
+`pipeline.py done --phase dev` blocks until every module QA is PASS and the integration gate is PASS. When a module passes QA, `pipeline.py` stores a checkpoint hash for that module's target files. Later module work is blocked if a previously passed module changes silently.
 
 ### Option A Agent Receipt Gate
 
