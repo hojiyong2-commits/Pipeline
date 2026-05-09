@@ -74,3 +74,18 @@ The `pipeline.py gates github-ci` command verifies the latest CI run against HEA
 and records the GitHub CI gate as PASS when the attestation is valid.
 The `pipeline.py gates phase-ci --phase <pm|dev|qa|build>` command verifies the
 per-phase GitHub attestation before the next role boundary may proceed.
+
+### GitHub trust root
+
+The repository `main` branch is protected outside the local agent loop:
+
+- direct pushes to `main` are blocked
+- PRs must pass the GitHub Actions `tests` check before merge
+- admins are also subject to the protection rule
+- `.github/workflows/**`, `pipeline.py`, `CLAUDE.md`, and `.claude/agents/**`
+  are listed in `.github/CODEOWNERS`
+
+This keeps the final merge decision and CI check outside local Claude/Codex
+claims. In a single-owner repo, mandatory one-person review can block self-authored
+PRs; add a second trusted GitHub account before raising the required approval
+count to `1`.

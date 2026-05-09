@@ -1,0 +1,6 @@
+# Pipeline trust root files.
+# Changes here alter the rules, validators, agents, or external CI gate.
+.github/workflows/** @hojiyong2-commits
+pipeline.py @hojiyong2-commits
+CLAUDE.md @hojiyong2-commits
+.claude/agents/** @hojiyong2-commits
