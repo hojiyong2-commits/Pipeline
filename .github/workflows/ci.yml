@@ -27,3 +27,34 @@ jobs:
         env:
           PIPELINE_NO_DASHBOARD: "1"
         run: python -m pytest -q
+
+      - name: Create CI attestation
+        if: success()
+        shell: pwsh
+        run: |
+          $attestation = @{
+            schema_version = 1
+            attestation_type = "pipeline-ci-v1"
+            repository = $env:GITHUB_REPOSITORY
+            workflow = $env:GITHUB_WORKFLOW
+            run_id = $env:GITHUB_RUN_ID
+            run_attempt = $env:GITHUB_RUN_ATTEMPT
+            commit_sha = $env:GITHUB_SHA
+            ref = $env:GITHUB_REF
+            event_name = $env:GITHUB_EVENT_NAME
+            runner_os = $env:RUNNER_OS
+            tree_sha = (git rev-parse 'HEAD^{tree}')
+            tests = @{
+              command = "python -m pytest -q"
+              status = "PASS"
+            }
+            generated_at = (Get-Date).ToUniversalTime().ToString("o")
+          }
+          $attestation | ConvertTo-Json -Depth 8 | Set-Content -Path pipeline_attestation.json -Encoding UTF8
+
+      - name: Upload CI attestation
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-attestation
+          path: pipeline_attestation.json

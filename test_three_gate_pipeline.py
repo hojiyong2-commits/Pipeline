@@ -1,10 +1,12 @@
 import argparse
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 import uuid
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -1304,6 +1306,91 @@ class ThreeGatePipelineTests(unittest.TestCase):
 
         self.assertEqual(state["external_gates"]["oracle"]["status"], "PASS")
         self.assertEqual(state["external_gates"]["oracle"]["evidence"], "oracle_waived_by_user")
+
+    def test_github_repo_from_remote_parses_https_and_ssh_urls(self) -> None:
+        self.assertEqual(
+            pipeline._github_repo_from_remote("https://github.com/hojiyong2-commits/Pipeline.git"),
+            "hojiyong2-commits/Pipeline",
+        )
+        self.assertEqual(
+            pipeline._github_repo_from_remote("git@github.com:hojiyong2-commits/Pipeline.git"),
+            "hojiyong2-commits/Pipeline",
+        )
+
+    def test_github_attestation_zip_reader_loads_json(self) -> None:
+        payload = {
+            "schema_version": 1,
+            "attestation_type": "pipeline-ci-v1",
+            "repository": "hojiyong2-commits/Pipeline",
+        }
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("pipeline_attestation.json", json.dumps(payload))
+
+        self.assertEqual(pipeline._read_attestation_from_zip(buffer.getvalue()), payload)
+
+    def test_github_attestation_validation_passes_for_matching_ci_result(self) -> None:
+        commit_sha = "a" * 40
+        tree_sha = "b" * 40
+        attestation = {
+            "schema_version": 1,
+            "attestation_type": "pipeline-ci-v1",
+            "repository": "hojiyong2-commits/Pipeline",
+            "run_id": "123456",
+            "commit_sha": commit_sha,
+            "tree_sha": tree_sha,
+            "tests": {
+                "command": "python -m pytest -q",
+                "status": "PASS",
+            },
+        }
+
+        result = pipeline._validate_github_ci_attestation(
+            attestation,
+            repo="hojiyong2-commits/Pipeline",
+            run_id="123456",
+            commit_sha=commit_sha,
+            tree_sha=tree_sha,
+        )
+
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["blockers"], [])
+
+    def test_github_attestation_validation_blocks_mismatch(self) -> None:
+        attestation = {
+            "schema_version": 1,
+            "attestation_type": "pipeline-ci-v1",
+            "repository": "hojiyong2-commits/Pipeline",
+            "run_id": "123456",
+            "commit_sha": "a" * 40,
+            "tree_sha": "b" * 40,
+            "tests": {
+                "command": "python -m pytest -q",
+                "status": "FAIL",
+            },
+        }
+
+        result = pipeline._validate_github_ci_attestation(
+            attestation,
+            repo="hojiyong2-commits/Pipeline",
+            run_id="654321",
+            commit_sha="c" * 40,
+            tree_sha="d" * 40,
+        )
+
+        self.assertEqual(result["status"], "FAIL")
+        self.assertTrue(any("run_id mismatch" in item for item in result["blockers"]))
+        self.assertIn("commit_sha mismatch", result["blockers"])
+        self.assertIn("tree_sha mismatch", result["blockers"])
+        self.assertIn("tests.status must be PASS", result["blockers"])
+
+    def test_github_command_is_registered(self) -> None:
+        parser = pipeline.build_parser()
+        args = parser.parse_args(["github", "verify-run", "--run-id", "123"])
+
+        self.assertEqual(args.command, "github")
+        self.assertEqual(args.github_action, "verify-run")
+        self.assertIs(pipeline.COMMAND_MAP["github"], pipeline.cmd_github)
 
 
 if __name__ == "__main__":
