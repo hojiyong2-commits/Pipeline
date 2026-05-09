@@ -80,7 +80,7 @@ def test_legacy_harness_phase7_user_confirmation_and_docs(tmp_path: Path) -> Non
 
     r3 = _run_pipeline(work, "harness", "--score", "100", "--verdict", "PASS", "--user-confirmed")
     assert r3.returncode != 0, r3.stdout + r3.stderr
-    assert "external_gates.enabled=true" in (r3.stdout + r3.stderr)
+    assert "not a completion path" in (r3.stdout + r3.stderr)
 
     agents_md = (work / ".claude" / "commands" / "agents.md").read_text(encoding="utf-8")
     assert "<status>BUILD SUCCESS</status>" in agents_md

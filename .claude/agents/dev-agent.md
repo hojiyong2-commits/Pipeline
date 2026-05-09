@@ -289,7 +289,7 @@ Required condition before code edits:
 If the contract is missing, draft, or not frozen, output:
 `[DEV GATE] contract_v2 not frozen — implementation refused.`
 
-If `external_gates.enabled=true`, Dev must implement against the frozen oracle contract, not against a numeric score target. P0 behavior must produce concrete output files that `pipeline.py gates oracle` can compare to user-provided expected outputs. Do not satisfy the contract with only file creation, launch smoke checks, or inline values that were written by an agent.
+External gates are mandatory. Dev must implement against the frozen oracle contract, not against a numeric score target. P0 behavior must produce concrete output files that `pipeline.py gates oracle` can compare to user-provided expected outputs. Do not satisfy the contract with only file creation, launch smoke checks, or inline values that were written by an agent.
 
 **코드 작성 전 필수:**
 1. PM 발행 `<step_plan>` + `<pipeline_id>` 존재 여부

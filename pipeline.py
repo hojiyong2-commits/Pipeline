@@ -248,11 +248,11 @@ def _validate_harness_evidence_gate(
     """PASS/FAIL 공통 3-gate 검증: Gate A(harness_report ET 파싱) → Gate B(test_code 비어있지 않음) → Gate C(validate_test_evidence 실행).
     실패 시 _die() 호출. 성공 시 반환.
 
-    BUG-20260509-FDBC MT-1: PASS/FAIL 검증 비대칭 해소.
-    - 기존에는 PASS 경로만 Gate C(validate_test_evidence)를 실행하고 FAIL 경로는 Gate B(존재 확인)에서 멈췄다.
-    - 수정 후 FAIL 경로도 동일한 3-gate를 통과해야 한다.
-    - FAIL verdict는 harness_score < 80을 뜻하며, test_code 자체가 실패 코드가 아님.
-      따라서 FAIL 기록 시에도 test_code는 unittest.TestCase + test_* 메서드 + testsRun>=1 필수.
+    Legacy harness diagnostic compatibility:
+    - PASS/FAIL diagnostic records must use the same evidence checks.
+    - FAIL means the diagnostic path found a problem; it is not a completion signal.
+    - New `/Task` completion is controlled by phase/module attestations and external gates,
+      not by harness_score.
 
     Args:
         clean_text: _strip_xml_comments() 처리된 텍스트 (Gate A 입력).
@@ -1787,7 +1787,7 @@ PHASE_LABELS = {
     "qa":        "Phase 4 - QA (Verification)",
     "sec":       "Phase 5 - Security (Audit)",
     "build":     "Phase 6 - Build (Packaging)",
-    "harness":   "Phase 7 - Harness (Benchmark)",
+    "harness":   "Phase 7 - External Gates (Acceptance)",
     "architect": "Phase 8 - Architect (RCA)",
 }
 
@@ -1852,7 +1852,7 @@ DIM    = lambda t: _c(t, "2")
 # ── Branch / Tournament state helpers ───────────────────────────────────────
 
 def _state_path(branch: Optional[str] = None) -> Path:
-    """Return state file path. branch=None → legacy single-file mode."""
+    """Return state file path. branch=None means the main pipeline state."""
     if branch is None:
         return STATE_FILE
     state = _load_state_for(None)
@@ -2119,7 +2119,7 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
         "phases": {p: _empty_phase(p) for p in PHASE_ORDER},
         "event_log":     [],
         # v2.10 Auto-Compact 지원: 파이프라인 종료 상태 표시
-        # null = in progress, "COMPLETE" = Phase 8 architect completion, "FAILED" = repeated harness FAIL,
+        # null = in progress, "COMPLETE" = Phase 8 architect completion, "FAILED" = repeated external gate FAIL,
         # "TERMINATED" = 사용자 명시적 중단
         "terminal_state": None,
         "harness_fail_count": 0,
@@ -2872,7 +2872,7 @@ def check_gate(state: Dict[str, Any], phase: str) -> Tuple[bool, str]:
         "qa": "Phase 4 - QA (Verification)",
         "sec": "Phase 5 - Security (Audit)",
         "build": "Phase 6 - Build (Packaging)",
-        "harness": "Phase 7 - Harness (Benchmark)",
+        "harness": "Phase 7 - External Gates (Acceptance)",
         "architect": "Phase 8 - Architect (RCA)",
     }
     current_phase_raw = state.get("current_phase")
@@ -3248,35 +3248,6 @@ def cmd_done(args: argparse.Namespace) -> None:
             f"files={len(state['atomic_scope']['files'])}"
         ))
 
-    # ── MT-5: Frozen Codebase scope_declaration 선언 여부 기록 ────────────────
-    # dev --scope-declared 플래그: dev-agent가 <scope_declaration>을 출력했음을 명시.
-    # 선언 누락 시 경고 출력 (hard fail 아님 — 하위 호환성 유지).
-    if False and phase == "dev":  # legacy disabled; mandatory dev scope gate runs above
-        scope_declared: bool = bool(getattr(args, "scope_declared", False))
-        if not scope_declared:
-            print(YELLOW(
-                "[SCOPE WARN] --scope-declared 플래그 없음 — dev-agent가 <scope_declaration>을 출력했는지 확인 필요. "
-                "(QA가 scope_declaration 누락 시 FAIL 처리할 수 있음)"
-            ))
-        else:
-            print(GREEN("  [SCOPE GATE] scope_declaration 선언 확인됨"))
-        state.setdefault("dev_gate_flags", {})
-        state["dev_gate_flags"]["scope_declared"] = scope_declared
-        scope_manifest: Optional[str] = getattr(args, "scope_manifest", None)
-        if _external_gates_enabled(state):
-            if not scope_manifest:
-                _die(
-                    "[ATOMIC SCOPE GATE] Dev DONE requires "
-                    "`--scope-manifest scope_manifest.json` for dev DONE."
-                )
-            state["atomic_scope"] = _validate_dev_scope_manifest(scope_manifest, state, args.files)
-            print(GREEN(
-                f"  [ATOMIC SCOPE GATE] micro_tasks={len(state['atomic_scope']['micro_task_ids'])} "
-                f"files={len(state['atomic_scope']['files'])}"
-            ))
-        elif scope_manifest:
-            print(YELLOW("  [SCOPE WARN] legacy unreachable scope branch."))
-
     # dev phase: --files에 나열된 경로가 실제로 존재하는지 검증
     if phase == "dev" and evidence:
         missing = [t.strip() for t in evidence.split(",") if t.strip() and not Path(t.strip()).exists()]
@@ -3340,7 +3311,9 @@ def cmd_qa(args: argparse.Namespace) -> None:
     # ── MT-2: QA numeric_score 기록 강제 (IMP-20260506-A064) ────────────────
     # --numeric-score: QA가 산출한 수치 점수(0~120 정수).
     # PASS/FAIL 공통 hard gate: --numeric-score 필수
-    # PASS 시: 96점(80%) 이상 추가 요건. FAIL 시: 점수 하한 없음 (회로 차단기 추적 및 harness 합산용).
+    # PASS 시: 96점(120점 만점의 80%) 이상 추가 요건.
+    # FAIL 시: 점수 하한 없음. 이 값은 QA 하한선과 Circuit Breaker 추적용이며
+    # Phase 7 COMPLETE 판정이나 external gate를 대체하지 않는다.
     numeric_score_raw: Optional[str] = getattr(args, "numeric_score", None)
     numeric_score: Optional[int] = None
     if numeric_score_raw is None:
@@ -3360,7 +3333,7 @@ def cmd_qa(args: argparse.Namespace) -> None:
             print(RED(
                 f"\n[QA NUMERIC GATE] PASS 기록 거부 — numeric_score={numeric_score} < 96 (80% of 120)"
             ))
-            print(RED("  QA numeric_verdict가 FAIL(점수 < 80%)이면 --result FAIL로 기록하세요.\n"))
+            print(RED("  QA numeric_verdict가 FAIL이면 --result FAIL로 기록하세요. 최종 COMPLETE는 external gates가 결정합니다.\n"))
             sys.exit(1)
 
     # ── MT-3: Circuit Breaker failure_signature 추적 (IMP-20260506-A064) ─────
@@ -3628,12 +3601,11 @@ def cmd_build(args: argparse.Namespace) -> None:
 
     print(GREEN(f"\n[BUILD DONE] EXE: {exe or '경로 미지정'}"))
     print()
-    print(BOLD(YELLOW("  ★ Phase 7 (Harness) 실행 의무 -생략 불가")))
+    print(BOLD(YELLOW("  ★ Phase 7 External Gates 실행 의무 -생략 불가")))
     print(f"  다음 절차:")
-    print(f"    1. AskUserQuestion으로 사용자에게 Phase 7 진행 확인 요청")
-    print(f"    2. 사용자 '진행' 응답 수신 후:")
+    print(f"    1. Build evidence commit/push 후 GitHub Actions phase attestation 확인:")
     print(f"       {YELLOW('python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline')}")
-    print(f"    3. test-harness-agent 를 spawn하여 채점 후 아래 명령 실행:")
+    print(f"    2. test-harness-agent는 진단만 수행하고, 아래 external gates를 기록:")
     print(f"       {YELLOW('python pipeline.py gates technical')}")
     print(f"       {YELLOW('python pipeline.py gates oracle --user-confirmed')}")
     print(f"       {YELLOW('python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline')}")
@@ -3642,14 +3614,17 @@ def cmd_build(args: argparse.Namespace) -> None:
 
 
 def cmd_harness(args: argparse.Namespace) -> None:
-    """Harness 채점 결과 기록."""
+    """Legacy harness diagnostic result recording.
+
+    Current `/Task` pipelines use external gates and this command is blocked.
+    """
     branch: Optional[str] = getattr(args, "branch", None)
     state = _load_branch_state(args)
 
     if _external_gates_enabled(state):
         _die(
-            "\n[THREE GATE BLOCKED] legacy `pipeline.py harness --score` is disabled when "
-            "external_gates.enabled=true.\n"
+            "\n[THREE GATE BLOCKED] `pipeline.py harness --score` is not a completion path "
+            "for current mandatory pipelines.\n"
             "  Use: python pipeline.py gates technical\n"
             "       python pipeline.py gates oracle --user-confirmed\n"
             "       python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline\n"
@@ -3665,10 +3640,12 @@ def cmd_harness(args: argparse.Namespace) -> None:
     user_confirmed: bool = getattr(args, "user_confirmed", False)
     if not user_confirmed:
         print()
-        print(RED("[HARNESS GATE] Phase 7 기록 거부 — 사용자 Phase 7 진행 확인 필요."))
-        print(RED("  AskUserQuestion으로 사용자에게 Phase 7 진행 여부를 확인한 후,"))
-        print(RED("  사용자 '진행' 응답을 받은 후에만 아래 명령 실행 가능:"))
-        print(RED("  python pipeline.py harness --score N --verdict PASS|FAIL --test-output-file PATH --user-confirmed"))
+        print(RED("[HARNESS GATE] legacy diagnostic 기록 거부 — 사용자 확인 필요."))
+        print(RED("  신규 `/Task` 완료는 external gates를 사용하세요:"))
+        print(RED("  python pipeline.py gates technical"))
+        print(RED("  python pipeline.py gates oracle --user-confirmed"))
+        print(RED("  python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline"))
+        print(RED("  python pipeline.py gates accept --result ACCEPT --evidence PATH --user-confirmed"))
         print()
         sys.exit(1)
 
@@ -3745,9 +3722,8 @@ def cmd_harness(args: argparse.Namespace) -> None:
         _validate_harness_evidence_gate(agent_output_clean, agent_output, pid, "PASS")
 
     # ── FAIL: PASS와 동일한 3-gate (_validate_harness_evidence_gate) 경유 ────────────
-    # BUG-20260509-FDBC MT-1: FAIL도 Gate C(validate_test_evidence)를 경유.
-    #   FAIL verdict는 harness_score < 80을 의미하며, test_code 자체가 실패 코드라는 뜻이 아님.
-    #   따라서 FAIL 기록 시에도 test_code는 unittest.TestCase + testsRun>=1 필수.
+    # Legacy diagnostic FAIL also uses Gate C(validate_test_evidence). New completion
+    # does not use harness_score.
     if verdict == "FAIL":
         # Gate A + B + C: 공통 helper 경유 (FAIL 경로)
         _validate_harness_evidence_gate(agent_output_clean, agent_output, pid, "FAIL")
@@ -3797,7 +3773,7 @@ def cmd_harness(args: argparse.Namespace) -> None:
     print(f"        {YELLOW('python pipeline.py architect --report-file architect_report.xml')}")
     if verdict == "FAIL":
         print()
-        print(RED("  [FAIL] score < 80 -Phase 2 재작업 필요"))
+        print(RED("  [FAIL] legacy diagnostic failed -Phase 2 재작업 필요"))
         print(f"  Architect RCA 완료 후: {YELLOW('python pipeline.py done --phase dev --files \"..\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json')}")
     print()
 
@@ -3815,8 +3791,8 @@ def cmd_architect(args: argparse.Namespace) -> None:
     rca_mode = str(protocol_decision.get("rca_mode") or "").upper()
     if harness_verdict == "PASS" and "FAIL" in rca_mode:
         _die(
-            "[ARCHITECT REPORT GATE] harness is PASS but architect report rca_mode is fail-oriented. "
-            "Use a completion/retrospective mode for PASS, or record a real harness FAIL first."
+            "[ARCHITECT REPORT GATE] external gates are PASS but architect report rca_mode is fail-oriented. "
+            "Use a completion/retrospective mode for PASS, or record a real external gate FAIL first."
         )
 
     state["phases"]["architect"]["status"]       = "DONE"
@@ -3826,11 +3802,11 @@ def cmd_architect(args: argparse.Namespace) -> None:
     _record_snapshot(state, "architect", branch)
 
     if harness_verdict == "FAIL":
-        # Harness FAIL path: Architect RCA 완료 후 Phase 2 재작업으로 루프백
+        # External gate FAIL path: Architect RCA 완료 후 Phase 2 재작업으로 루프백
         state["current_phase"] = "dev"
         state["phases"]["dev"]["status"] = "PENDING"
         state["terminal_state"] = None
-        _log_event(state, "architect DONE — harness FAIL path: dev PENDING reset for rework")
+        _log_event(state, "architect DONE — external gate FAIL path: dev PENDING reset for rework")
         _save_state_for(state, branch)
     else:
         external_blockers = _external_gate_blockers(state)
@@ -3839,7 +3815,7 @@ def cmd_architect(args: argparse.Namespace) -> None:
                 "[THREE GATE BLOCKED] COMPLETE requires external gates and advisory resolution: "
                 + "; ".join(external_blockers)
             )
-        # Harness PASS path: 파이프라인 정상 완료
+        # External gate PASS path: 파이프라인 정상 완료
         state["current_phase"] = "COMPLETE"
         # COMPLETE is a Phase 8 transition; protocol evolution is a separate IMP follow-up.
         state["terminal_state"] = "COMPLETE"
@@ -3858,7 +3834,7 @@ def cmd_architect(args: argparse.Namespace) -> None:
     pid_display = state.get("pipeline_id", "UNKNOWN")
     if harness_verdict == "FAIL":
         print(YELLOW(f"\n[ARCHITECT DONE — REWORK]{branch_tag} {pid_display}"))
-        print(YELLOW("  Harness FAIL 경로: Phase 2 (Dev) 재작업 필요"))
+        print(YELLOW("  External gate FAIL 경로: Phase 2 (Dev) 재작업 필요"))
         print(f"\n  다음 단계: {YELLOW('python pipeline.py done --phase dev --files \"..\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json')}")
     else:
         print(GREEN(f"\n[PIPELINE COMPLETE]{branch_tag} {pid_display}"))
@@ -3939,7 +3915,7 @@ def cmd_status(args: argparse.Namespace) -> None:
             if gate.get("evidence"):
                 print(DIM(f"        증거: {gate.get('evidence')}"))
         blockers = _external_gate_blockers(state)
-        if blockers:
+        if blockers and terminal != "COMPLETE":
             print(RED("    blockers: " + "; ".join(blockers)))
 
     advisory = _advisory_status_summary(str(pid))
@@ -3968,8 +3944,11 @@ def cmd_status(args: argparse.Namespace) -> None:
         gate_ok, reason = check_gate(state, current) if current in GATE_RULES else (True, "")
         if gate_ok:
             print(f"  현재 단계: {YELLOW(PHASE_LABELS.get(current, current))}")
-            hint_suffix = " --user-confirmed" if current == "harness" else ""
-            print(f"  확인 명령: {YELLOW(f'python pipeline.py check --phase {current}{hint_suffix}')}")
+            if current == "harness":
+                print(f"  확인 명령: {YELLOW('python pipeline.py gates status')}")
+                print(f"  다음 게이트: {YELLOW('technical -> oracle -> github-ci -> accept')}")
+            else:
+                print(f"  확인 명령: {YELLOW(f'python pipeline.py check --phase {current}')}")
         else:
             print(RED(f"  [차단] {reason}"))
         print()
@@ -4119,14 +4098,13 @@ def cmd_interface(args: argparse.Namespace) -> None:
         },
         "harness": {
             "agent": "test-harness-agent",
-            # BUG-20260508-D541 MT-5: PASS/FAIL 공통으로 <harness_report> + <test_code> 필수.
-            # XML comment 내 태그는 유효하지 않음 (_strip_xml_comments 후 검증).
             "next_cmd": (
-                'python pipeline.py harness --score 0..100 --verdict PASS|FAIL '
-                '--test-output-file PATH --user-confirmed  '
-                '(PASS/FAIL 공통: <harness_report> + <test_code> 필수, XML comment 내 태그 무효)'
+                'External gates only: python pipeline.py gates technical; '
+                'python pipeline.py gates oracle --user-confirmed; '
+                'python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline; '
+                'python pipeline.py gates accept --result ACCEPT --evidence PATH --user-confirmed'
             ),
-            "required_xml": ["<harness_report>", "<test_code>"],
+            "required_xml": ["<harness_diagnostic>"],
         },
         "architect": {
             "agent": "prompt-architect-agent",
@@ -6721,7 +6699,7 @@ def cmd_tournament_status(args: argparse.Namespace) -> None:
 
 
 def cmd_tournament_rank(args: argparse.Namespace) -> None:
-    """브랜치 Harness 점수 비교 출력."""
+    """브랜치 external gate/artifact 상태 비교 출력."""
     if args.pipeline_id is None:
         print("[ERROR] --pipeline-id 파라미터가 필요합니다.")
         raise SystemExit(2)
@@ -6738,10 +6716,10 @@ def cmd_tournament_rank(args: argparse.Namespace) -> None:
 
     print(f"\n  토너먼트 순위: {t['pipeline_id']}")
     print()
-    print(f"  {'브랜치':<8} {'Harness 점수':<15} {'Build':<10} {'결과'}")
-    print(f"  {'-'*8} {'-'*15} {'-'*10} {'-'*12}")
+    print(f"  {'브랜치':<8} {'External Gates':<28} {'Build':<10} {'결과'}")
+    print(f"  {'-'*8} {'-'*28} {'-'*10} {'-'*18}")
 
-    scores: List[tuple] = []
+    candidates: List[str] = []
     for b in t.get("branches", []):
         if not isinstance(b, str):
             continue  # allowed: 비정상 항목 방어 (skip non-str entries)
@@ -6749,41 +6727,38 @@ def cmd_tournament_rank(args: argparse.Namespace) -> None:
         phases = bs.get("phases", {})
         harness_info = phases.get("harness", {})
         build_info = phases.get("build", {})
+        external_gates = bs.get("external_gates", {})
 
         build_ok = isinstance(build_info, dict) and build_info.get("status") not in (None, "FAILED", "PENDING")
-        evidence = harness_info.get("evidence") if isinstance(harness_info, dict) else None
-        verdict = harness_info.get("verdict") if isinstance(harness_info, dict) else None
-
-        # evidence 형식: "score=N"
-        score: Optional[int] = None
-        if isinstance(evidence, str) and evidence.startswith("score="):
-            try:
-                score = int(evidence.split("=", 1)[1])
-            except (ValueError, IndexError):
-                score = None
-
-        # harness status 필드에서 PASS/FAIL 판정
         harness_status = harness_info.get("status") if isinstance(harness_info, dict) else None
+        gate_bits: List[str] = []
+        all_pass = True
+        if isinstance(external_gates, dict):
+            for gate_name in ("technical", "oracle", "github_ci", "acceptance"):
+                gate = external_gates.get(gate_name, {})
+                status = gate.get("status", "PENDING") if isinstance(gate, dict) else "PENDING"
+                gate_bits.append(f"{gate_name}:{status}")
+                if status != "PASS":
+                    all_pass = False
+        else:
+            all_pass = False
+        gate_summary = ", ".join(gate_bits) if gate_bits else "no gate state"
 
         if not build_ok:
             result = "ELIMINATED (Build FAIL)"
-            display_score = "-"
-        elif score is None:
-            result = "진행중"
-            display_score = "-"
+        elif all_pass:
+            result = "후보"
+            candidates.append(b)
         else:
             result = harness_status if harness_status in ("PASS", "FAIL") else "진행중"
-            display_score = f"{score}%"
-            scores.append((b, score))
 
         build_label = "OK" if build_ok else "FAIL"
-        print(f"  {b:<8} {display_score:<15} {build_label:<10} {result}")
+        print(f"  {b:<8} {gate_summary:<28} {build_label:<10} {result}")
 
-    if len(scores) > 0:
-        scores.sort(key=lambda x: x[1], reverse=True)
-        winner_branch, winner_score = scores[0]
-        print(f"\n  현재 선두: Branch {winner_branch} ({winner_score}%)")
-        print(f"  확정하려면: python pipeline.py tournament-finalize --pipeline-id {args.pipeline_id} --winner {winner_branch}")
+    if candidates:
+        print(f"\n  후보 브랜치: {', '.join(candidates)}")
+        print("  사용자에게 결과물 비교표를 보여준 뒤 승자를 확정하세요:")
+        print(f"  python pipeline.py tournament-finalize --pipeline-id {args.pipeline_id} --winner <BRANCH>")
     print()
 
 
@@ -6916,7 +6891,7 @@ def build_parser() -> argparse.ArgumentParser:
                       help="브랜치 ID (A-Z 대문자 1글자). 지정 시 브랜치 state 파일 사용.")
     # MT-2: QA numeric_score 기록 강제 (IMP-20260506-A064)
     p_qa.add_argument("--numeric-score", default=None, metavar="SCORE",
-                      help="QA 수치 점수 0~120. PASS 시 96점 이상 필수 (80%% of 120).")
+                      help="QA 중간 hard-gate 값 0~120. PASS 시 96점 이상 필수; 최종 COMPLETE 점수가 아님.")
     # MT-3: Circuit Breaker failure_signature 추적 (IMP-20260506-A064)
     p_qa.add_argument("--failure-sig", default=None, metavar="SIG",
                       help="QA FAIL 시 <failure_signature>[category]:[hash]</failure_signature> 값. "
@@ -6973,8 +6948,8 @@ def build_parser() -> argparse.ArgumentParser:
     agsub.add_parser("status", help="Show agent run receipts without token hashes")
 
     # harness
-    p_harness = sub.add_parser("harness", help="Harness 채점 결과 기록")
-    p_harness.add_argument("--score", required=True, type=int, help="0~100 점수")
+    p_harness = sub.add_parser("harness", help="Legacy harness diagnostic 기록. 현재 /Task 완료 경로에서는 차단됨")
+    p_harness.add_argument("--score", required=True, type=int, help="Legacy diagnostic percentage only; not a completion score")
     p_harness.add_argument("--verdict", required=True, choices=["PASS", "FAIL", "pass", "fail"])
     p_harness.add_argument("--branch", metavar="BRANCH", default=None,
                            help="브랜치 ID (A-Z 대문자 1글자). 지정 시 브랜치 state 파일 사용.")
@@ -6986,7 +6961,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--user-confirmed",
         action="store_true",
         default=False,
-        help="Phase 7 진행 전 사용자 '진행' 응답 확인 완료 플래그. 없으면 harness 기록 거부.",
+        help="Legacy diagnostic 기록 전 사용자 확인 플래그. 신규 /Task 완료는 gates accept를 사용.",
     )
 
     # contract v2
@@ -7065,9 +7040,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_contract_show.add_argument("--pipeline-id", default=None)
 
     # acceptance v2
-    p_acceptance = sub.add_parser("acceptance", help="Run contract-based acceptance harness v2")
+    p_acceptance = sub.add_parser("acceptance", help="Run contract-based acceptance diagnostics")
     asub = p_acceptance.add_subparsers(dest="acceptance_action", required=True)
-    p_acceptance_run = asub.add_parser("run", help="Run frozen test_set.json and compute score")
+    p_acceptance_run = asub.add_parser("run", help="Run frozen test_set.json and write diagnostic result")
     p_acceptance_run.add_argument("--pipeline-id", default=None)
     p_acceptance_run.add_argument("--output", default=None)
     p_acceptance_run.add_argument("--record", action="store_true", default=False)
@@ -7218,7 +7193,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_tstatus.add_argument("--pipeline-id", required=True, help="토너먼트 파이프라인 ID")
 
     # tournament-rank
-    p_tr = sub.add_parser("tournament-rank", help="브랜치 Harness 점수 비교")
+    p_tr = sub.add_parser("tournament-rank", help="브랜치 external gate/artifact 비교")
     p_tr.add_argument("--pipeline-id", required=True, help="토너먼트 파이프라인 ID")
 
     # tournament-finalize

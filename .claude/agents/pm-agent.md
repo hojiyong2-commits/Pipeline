@@ -55,7 +55,7 @@ If `contract_v2` is enabled and the contract is not frozen, `pipeline.py check -
 
 ## Three-Gate External Authority Mode
 
-Three-Gate and Option A phase attestation are mandatory for every pipeline. PM must not treat them as optional quality modes. `pipeline.py contract init` enables them by default; legacy flags such as `--three-gate` and `--phase-attestations` are accepted only for old scripts.
+Three-Gate and Option A phase attestation are mandatory for every pipeline. PM must not treat them as optional quality modes. `pipeline.py contract init` enables them by default; `--three-gate` and `--phase-attestations` are backward-compatible aliases, not optional switches.
 
 1. `python pipeline.py contract init`
 2. Register user-provided oracle samples with `python pipeline.py contract add-oracle --input ... --expected ... --case-kind normal` and at least one additional `--case-kind edge|exception|error` oracle.
@@ -260,7 +260,7 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
 
 ### 종료 처리
 
-**파이프라인 정상 완료:** 최종 `<pipeline_complete>` XML 보고 (pipeline_id, 모든 Phase 결과 요약, EXE 경로/N/A, harness score).
+**파이프라인 정상 완료:** 최종 `<pipeline_complete>` XML 보고 (pipeline_id, phase attestation 요약, module gate 요약, external gate 요약, EXE/N/A 또는 결과물 경로, PR/Actions 링크, 사용자 ACCEPT evidence).
 
 **파이프라인 실패 확정:** Circuit Breaker 또는 사용자 중단 시 `<pipeline_terminated>` XML 보고 (사유, 마지막 완료 Phase, 다음 단계 권고).
 
@@ -496,7 +496,7 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
 | GUI 앱 래핑 (Tkinter/PyQt5) | UI | `ui-app-agent` | UI/dev subphase |
 | 보안 감사 (DB / 외부 네트워크 포함) | SEC | `security-agent` | Phase 5, 해당 없으면 --skip |
 | EXE 빌드 (PyInstaller) | BUILD | `build-agent` | Phase 6 |
-| 정량 벤치마크 채점 | — | `test-harness-agent` | Phase 7 |
+| Phase 7 외부 게이트 진단 | — | `test-harness-agent` | Technical/Oracle/GitHub CI/User Acceptance readiness |
 | 로그 분석 / 프롬프트 패치 | — | `prompt-architect-agent` | Phase 8/9 |
 | 신규 전문 에이전트 설계 | — | `agent-factory-agent` | 도메인 공백 식별 시 |
 | **Power Automate 플로우 태스크** | **PA** | **`power-automate-agent`** | **Phase 2 병렬 또는 직후 spawn. EXE 빌드 불필요 → build 기록 시 `--exe "N/A" --skip-reason "power-automate" --user-confirmed`. 외부 HTTP 커넥터 포함 시 SEC 필수, 없으면 --skip.** |
@@ -531,8 +531,8 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
 
 ### 승자 결정 규칙
 - Build FAIL 브랜치는 자동 탈락 (ELIMINATED)
-- 남은 브랜치 중 Harness 점수 최고 브랜치가 승자
-- 동점 시 PM이 AskUserQuestion으로 사용자에게 최종 선택 위임
+- 남은 브랜치 중 모든 external gate가 PASS이고 사용자 요구에 가장 가까운 결과물이 승자 후보
+- 복수 후보가 있으면 PM이 결과물 비교표를 제시하고 사용자에게 최종 선택 위임
 
 ### branch_id 태그 (각 브랜치 step_plan 의무 포함)
 ```xml
@@ -557,4 +557,4 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
 2. step_plan 내 `<dynamic_enhancement>` 블록 출력 (부록 3 schema 참조)
 3. `agent-factory-agent`를 통해 `.claude/agents/[기능명]_specialist_temp_[pipeline_id].md` 생성
 4. 삽입 위치: Phase 2~5 사이 (insert_after_phase=1~5 정수). Phase 1 직후(0) 또는 Phase 6 이후 삽입 금지
-5. Cleanup: harness PASS 기록 완료 직후(pipeline.py harness 명령이 완료된 시점) 또는 파이프라인 FAIL 직후 임시 MD 파일 삭제
+5. Cleanup: `pipeline.py architect`가 terminal COMPLETE를 기록한 직후 또는 파이프라인 FAIL 직후 임시 MD 파일 삭제

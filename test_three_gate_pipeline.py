@@ -1985,6 +1985,23 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(state["external_gates"]["oracle"]["status"], "PASS")
         self.assertEqual(state["external_gates"]["oracle"]["evidence"], "oracle_waived_by_user")
 
+    def test_active_architect_docs_are_external_gate_based(self) -> None:
+        architect = Path(".claude/agents/prompt-architect-agent.md").read_text(encoding="utf-8")
+        agents = Path(".claude/commands/agents.md").read_text(encoding="utf-8")
+        arch_section = agents.split("## [ARCHITECT] — prompt-architect-agent", 1)[1]
+
+        for text in (architect, arch_section):
+            self.assertIn("External Gate RCA", text)
+            self.assertIn("protocol_evolution_decision", text)
+            self.assertNotIn("Harness-Driven Optimization Loop", text)
+            self.assertNotIn("유효한 `test_results.jsonl` 로그", text)
+
+    def test_global_wiki_pipeline_loop_has_no_numeric_harness_completion(self) -> None:
+        wiki = Path(".claude/agents/shared/Global_Wiki.md").read_text(encoding="utf-8")
+        self.assertIn("External Gates", wiki)
+        self.assertNotIn("QA numeric_score + BUILD 합산 채점", wiki)
+        self.assertNotIn("Phase 7 재채점 의무", wiki)
+
     def test_github_repo_from_remote_parses_https_and_ssh_urls(self) -> None:
         self.assertEqual(
             pipeline._github_repo_from_remote("https://github.com/hojiyong2-commits/Pipeline.git"),

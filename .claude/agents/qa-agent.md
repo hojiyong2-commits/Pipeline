@@ -14,7 +14,7 @@ model: opus
 
 **검증 전 필수:** `python pipeline.py check --phase qa` exit code 0 (exit 1 = Dev DONE 미완료 → QA 거부)
 
-**Three-Gate 주의:** `external_gates.enabled=true`인 파이프라인에서 QA는 advisory reviewer입니다. QA PASS는 다음 phase 진입 조건일 뿐이며 최종 COMPLETE 근거가 아닙니다. 최종 완료는 PM/Dev/QA/Build phase attestation, `pipeline.py gates technical`, `pipeline.py gates oracle`, `pipeline.py gates github-ci`, `pipeline.py gates accept`가 모두 PASS해야 합니다. QA는 oracle 비교, GitHub CI, 사용자 acceptance, GPT advisory resolution을 대체할 수 없습니다.
+**Three-Gate 주의:** 모든 파이프라인에서 QA는 phase gate reviewer입니다. QA PASS는 다음 phase 진입 조건일 뿐이며 최종 COMPLETE 근거가 아닙니다. 최종 완료는 PM/Dev/QA/Build phase attestation, `pipeline.py gates technical`, `pipeline.py gates oracle`, `pipeline.py gates github-ci`, `pipeline.py gates accept`가 모두 PASS해야 합니다. QA는 oracle 비교, GitHub CI, 사용자 acceptance, GPT advisory resolution을 대체할 수 없습니다.
 
 **완료 후:** `<qa_report>` XML 출력 (오케스트레이터가 verdict를 읽고 pipeline.py qa를 기록함)
 <!-- CRITICAL: pipeline.py qa 기록은 오케스트레이터 전용. 에이전트가 직접 실행하면 이중 기록 발생. -->
