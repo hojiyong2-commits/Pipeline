@@ -655,6 +655,56 @@
   .control-actions .send { background: #1f2937; color: white; }
   .control-actions .resume { background: #22c55e; color: #052e16; }
 
+  .approval-panel {
+    border: 2px solid #166534;
+    background: #f0fdf4;
+  }
+  .approval-summary {
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+    color: #14532d;
+    margin-bottom: 8px;
+  }
+  .approval-panel input,
+  .approval-panel textarea {
+    width: 100%;
+    border: 1px solid #86efac;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    background: #ffffff;
+    margin-top: 6px;
+  }
+  .approval-panel textarea {
+    min-height: 58px;
+    resize: vertical;
+  }
+  .approval-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .approval-actions button {
+    border: 0;
+    padding: 9px 12px;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .approval-actions .accept { background: #16a34a; color: white; }
+  .approval-actions .reject { background: #dc2626; color: white; }
+  .approval-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  .approval-status {
+    margin-top: 7px;
+    font-size: 11px;
+    color: #365314;
+    word-break: break-word;
+  }
+
   .results-chart {
     display: flex; align-items: flex-end; gap: 4px;
     height: 80px; padding: 4px 2px;
@@ -818,6 +868,18 @@
         <button class="send" id="pm-command-send">PM에게 전달</button>
         <button class="resume" id="resume-agents">재개</button>
       </div>
+    </div>
+
+    <div class="panel approval-panel" id="approval-panel">
+      <h3>Result Approval <small>ACCEPT deploys to G:\내 드라이브\터미널</small></h3>
+      <div class="approval-summary" id="approval-summary"></div>
+      <input id="approval-evidence" placeholder="Result path or link shown to the user" />
+      <textarea id="approval-notes" placeholder="Optional approval/rejection note"></textarea>
+      <div class="approval-actions">
+        <button class="accept" id="approval-accept">ACCEPT</button>
+        <button class="reject" id="approval-reject">REJECT</button>
+      </div>
+      <div class="approval-status" id="approval-status"></div>
     </div>
 
     <div class="panel">
@@ -1465,6 +1527,12 @@ const controlPanel = document.getElementById("control-panel");
 const pmCommand = document.getElementById("pm-command");
 const pmCommandSend = document.getElementById("pm-command-send");
 const resumeAgents = document.getElementById("resume-agents");
+const approvalSummary = document.getElementById("approval-summary");
+const approvalEvidence = document.getElementById("approval-evidence");
+const approvalNotes = document.getElementById("approval-notes");
+const approvalAccept = document.getElementById("approval-accept");
+const approvalReject = document.getElementById("approval-reject");
+const approvalStatus = document.getElementById("approval-status");
 document.getElementById("detail-close").addEventListener("click", () => {
   detailPanel.classList.remove("open");
   selectedAgentId = null;
@@ -1790,15 +1858,61 @@ function renderControl(control) {
   }
 }
 
+function externalGateStatus(payload, name) {
+  const gates = payload?.pipeline?.external_gates || {};
+  const gate = gates[name] || {};
+  return String(gate.status || "PENDING").toUpperCase();
+}
+
+function renderApproval(payload) {
+  if (!approvalSummary) return;
+  const pipeline = payload?.pipeline || {};
+  const deployment = pipeline.deployment || {};
+  const required = ["technical", "oracle", "github_ci"];
+  const rows = required.map(name => {
+    const status = externalGateStatus(payload, name);
+    const label = name.replace("_", " ").toUpperCase();
+    return `<div><strong>${label}</strong>: ${escapeHtml(status)}</div>`;
+  });
+  const acceptance = externalGateStatus(payload, "acceptance");
+  rows.push(`<div><strong>ACCEPTANCE</strong>: ${escapeHtml(acceptance)}</div>`);
+  if (deployment.deploy_dir) {
+    rows.push(`<div><strong>DEPLOYED</strong>: ${escapeHtml(deployment.deploy_dir)}</div>`);
+  } else {
+    rows.push(`<div><strong>DEPLOY TARGET</strong>: G:\\내 드라이브\\터미널\\${escapeHtml(pipeline.id || "[pipeline_id]")}</div>`);
+  }
+  approvalSummary.innerHTML = rows.join("");
+
+  const gatesReady = required.every(name => externalGateStatus(payload, name) === "PASS");
+  const alreadyAccepted = acceptance === "PASS";
+  approvalAccept.disabled = !gatesReady || alreadyAccepted;
+  approvalReject.disabled = alreadyAccepted;
+  if (!gatesReady) {
+    approvalStatus.textContent = "Technical, Oracle, and GitHub CI gates must PASS before ACCEPT.";
+  } else if (alreadyAccepted && deployment.deploy_dir) {
+    approvalStatus.textContent = `Accepted and deployed to ${deployment.deploy_dir}`;
+  } else if (alreadyAccepted) {
+    approvalStatus.textContent = "Accepted.";
+  } else if (!approvalStatus.textContent) {
+    approvalStatus.textContent = "Review the result link/path, then choose ACCEPT or REJECT.";
+  }
+}
+
 async function postJson(url, body = {}) {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error(`${url} failed: ${res.status}`);
-  const payload = await res.json();
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (payload && Object.keys(payload).length) applyPayload(payload);
+    const command = payload?.decision_result || {};
+    const detail = (command.stderr || command.stdout || payload.error || "").trim();
+    throw new Error(detail || `${url} failed: ${res.status}`);
+  }
   applyPayload(payload);
+  return payload;
 }
 
 function applyPayload(payload) {
@@ -1811,6 +1925,7 @@ function applyPayload(payload) {
   renderResults(payload.recent_results || []);
   renderTokens(payload.tokens || null);
   renderControl(payload.control || null);
+  renderApproval(payload);
 }
 
 emergencyStopBtn.addEventListener("click", () => {
@@ -1822,6 +1937,26 @@ pmCommandSend.addEventListener("click", () => {
 resumeAgents.addEventListener("click", () => {
   postJson("/api/resume").catch(err => console.error(err));
 });
+async function submitPipelineDecision(result) {
+  approvalStatus.textContent = `${result} recording...`;
+  try {
+    const payload = await postJson("/api/pipeline-decision", {
+      result,
+      evidence: approvalEvidence.value,
+      notes: approvalNotes.value
+    });
+    const command = payload.decision_result || {};
+    if (command.returncode === 0) {
+      approvalStatus.textContent = `${result} recorded.`;
+    } else {
+      approvalStatus.textContent = (command.stderr || command.stdout || "Decision failed.").trim();
+    }
+  } catch (err) {
+    approvalStatus.textContent = String(err.message || err);
+  }
+}
+approvalAccept.addEventListener("click", () => submitPipelineDecision("ACCEPT"));
+approvalReject.addEventListener("click", () => submitPipelineDecision("REJECT"));
 
 // ============================================================
 // WebSocket

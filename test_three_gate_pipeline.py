@@ -435,6 +435,67 @@ class ThreeGatePipelineTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 1)
 
+    def test_accept_gate_requires_github_ci_pass_before_deploy(self) -> None:
+        state = pipeline._new_state("TMP-ACCEPT-BLOCK", "FEAT", "sample")
+        state["external_gates"] = pipeline._new_external_gates(enabled=True)
+        state["external_gates"]["technical"]["status"] = "PASS"
+        state["external_gates"]["oracle"]["status"] = "PASS"
+
+        args = argparse.Namespace(
+            gates_action="accept",
+            result="ACCEPT",
+            evidence="result.txt",
+            notes="looks good",
+            user_confirmed=True,
+        )
+        with mock.patch.object(pipeline, "_require_state", return_value=state), \
+             mock.patch.object(pipeline, "_deploy_accepted_outputs") as deploy:
+            with self.assertRaises(SystemExit) as ctx:
+                pipeline.cmd_gates(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+        deploy.assert_not_called()
+        self.assertEqual(state["external_gates"]["acceptance"]["status"], "PENDING")
+
+    def test_accept_gate_deploys_real_artifact_after_ci_pass(self) -> None:
+        state = pipeline._new_state("TMP-ACCEPT-DEPLOY", "FEAT", "sample")
+        state["external_gates"] = pipeline._new_external_gates(enabled=True)
+        for gate_name in ("technical", "oracle", "github_ci"):
+            state["external_gates"][gate_name]["status"] = "PASS"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "result.txt"
+            artifact.write_text("accepted output", encoding="utf-8")
+            deploy_root = root / "deploy-root"
+            paths = {"user_validation": root / "user_validation.json"}
+            args = argparse.Namespace(
+                gates_action="accept",
+                result="ACCEPT",
+                evidence=str(artifact),
+                notes="approved by user",
+                user_confirmed=True,
+            )
+
+            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+                 mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
+                 mock.patch.object(pipeline, "_record_snapshot"), \
+                 mock.patch.object(pipeline, "_save"), \
+                 mock.patch.dict(pipeline.os.environ, {"PIPELINE_DEPLOY_ROOT": str(deploy_root)}):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_gates(args)
+
+            deployment = state.get("deployment")
+            deployed_file = deploy_root / "TMP-ACCEPT-DEPLOY" / artifact.name
+            manifest = deploy_root / "TMP-ACCEPT-DEPLOY" / "deployment_manifest.json"
+
+            self.assertEqual(ctx.exception.code, 0)
+            self.assertIsInstance(deployment, dict)
+            self.assertEqual(state["external_gates"]["acceptance"]["status"], "PASS")
+            self.assertTrue(deployed_file.exists())
+            self.assertTrue(manifest.exists())
+            self.assertEqual(deployed_file.read_text(encoding="utf-8"), "accepted output")
+
     def test_pm_done_requires_atomic_step_plan_for_all_pipelines(self) -> None:
         state = pipeline._new_state("TMP-PM", "FEAT", "sample")
         args = argparse.Namespace(

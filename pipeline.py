@@ -131,6 +131,7 @@ BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런�
     python pipeline.py contract init --three-gate
     python pipeline.py gates technical
     python pipeline.py gates oracle --user-confirmed
+    python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
     python pipeline.py gates accept --result ACCEPT --evidence output.png --user-confirmed
     python pipeline.py advisory status
     python pipeline.py architect --report-file architect_report.xml
@@ -1510,6 +1511,10 @@ STATE_FILE = BASE_DIR / "pipeline_state.json"
 HISTORY_DIR = BASE_DIR / "pipeline_history"
 TEST_RESULTS_FILE = BASE_DIR / "test_results.jsonl"
 CONTRACTS_DIR = BASE_DIR / "pipeline_contracts"
+DEFAULT_DEPLOY_ROOT_CANDIDATES = (
+    Path(r"G:\내 드라이브\터미널"),
+    Path(r"G:\내드라이브\터미널"),
+)
 
 PHASE_ORDER = ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
 
@@ -1985,6 +1990,123 @@ def _display_path(path: Path) -> str:
         return str(path.resolve().relative_to(BASE_DIR))
     except ValueError:
         return str(path.resolve())
+
+
+def _deployment_root() -> Path:
+    configured = os.environ.get("PIPELINE_DEPLOY_ROOT", "").strip()
+    if configured:
+        return Path(configured)
+    for candidate in DEFAULT_DEPLOY_ROOT_CANDIDATES:
+        if candidate.parent.exists():
+            return candidate
+    return DEFAULT_DEPLOY_ROOT_CANDIDATES[0]
+
+
+def _split_evidence_paths(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        items: List[str] = []
+        for item in raw:
+            items.extend(_split_evidence_paths(item))
+        return items
+    text = str(raw).strip()
+    if not text:
+        return []
+    if text.upper() in {"N/A", "NA", "NONE", "SKIP", "SKIPPED", "USER_CONFIRMED", "MANUAL-SMOKE"}:
+        return []
+    parts = re.split(r"[,;\n]+", text)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _resolve_artifact_path(raw: str) -> Optional[Path]:
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", raw):
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return None
+    if not resolved.exists():
+        return None
+    return resolved
+
+
+def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> List[Path]:
+    candidates: List[str] = []
+    candidates.extend(_split_evidence_paths(evidence))
+    phases = state.get("phases", {})
+    if isinstance(phases, dict):
+        for phase_name in ("build", "dev"):
+            phase = phases.get(phase_name, {})
+            if isinstance(phase, dict):
+                candidates.extend(_split_evidence_paths(phase.get("evidence")))
+
+    result: List[Path] = []
+    seen: set[str] = set()
+    for raw in candidates:
+        path = _resolve_artifact_path(raw)
+        if not path:
+            continue
+        key = str(path).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(path)
+    return result
+
+
+def _copy_deployment_artifact(src: Path, deploy_dir: Path) -> Dict[str, Any]:
+    try:
+        rel = src.resolve().relative_to(BASE_DIR)
+    except ValueError:
+        rel = Path(src.name)
+    dest = deploy_dir / rel
+    if src.is_dir():
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+        kind = "directory"
+        sha256 = None
+    else:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        kind = "file"
+        sha256 = _sha256_file(dest)
+    return {
+        "kind": kind,
+        "source": _display_path(src),
+        "destination": str(dest),
+        "sha256": sha256,
+    }
+
+
+def _deploy_accepted_outputs(state: Dict[str, Any], evidence: Optional[str], notes: Optional[str]) -> Dict[str, Any]:
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+    deploy_root = _deployment_root()
+    deploy_dir = deploy_root / pid
+    artifacts = _deployment_artifacts(state, evidence)
+    if not artifacts:
+        _die(
+            "acceptance deployment found no file or directory artifacts. "
+            "Pass --evidence with a real result path, or make the Dev/Build phase evidence point to the result."
+        )
+    deploy_dir.mkdir(parents=True, exist_ok=True)
+    copied = [_copy_deployment_artifact(path, deploy_dir) for path in artifacts]
+    manifest = {
+        "schema_version": 1,
+        "pipeline_id": pid,
+        "deployed_at": _now(),
+        "deploy_root": str(deploy_root),
+        "deploy_dir": str(deploy_dir),
+        "evidence": evidence,
+        "notes": notes or "",
+        "artifacts": copied,
+    }
+    manifest_path = deploy_dir / "deployment_manifest.json"
+    _write_json(manifest_path, manifest)
+    manifest["manifest_path"] = str(manifest_path)
+    return manifest
 
 
 def _state_contract_enabled(state: Dict[str, Any]) -> bool:
@@ -4243,7 +4365,10 @@ def _verify_github_ci_run(
     workflow: Optional[str],
 ) -> Dict[str, Any]:
     resolved_repo = repo or _github_repo_from_remote()
-    commit_sha = commit or _git_rev_parse("HEAD")
+    if commit and re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+        commit_sha = commit
+    else:
+        commit_sha = _git_rev_parse(commit or "HEAD")
     if not commit_sha:
         _die("could not infer commit sha; pass --commit explicitly")
     token = _github_token(token_env)
@@ -4728,14 +4853,16 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not getattr(args, "user_confirmed", False):
             _die("user acceptance gate requires --user-confirmed")
         result = str(args.result).upper()
+        deployment: Optional[Dict[str, Any]] = None
         if result == "ACCEPT":
             prereq = []
-            for gate_name in ("technical", "oracle"):
+            for gate_name in ("technical", "oracle", "github_ci"):
                 gate = state["external_gates"].get(gate_name, {})
                 if not isinstance(gate, dict) or gate.get("status") != "PASS":
                     prereq.append(f"{gate_name} gate must be PASS before user ACCEPT")
             if prereq:
                 _die("; ".join(prereq))
+            deployment = _deploy_accepted_outputs(state, args.evidence, args.notes)
         report = {
             "schema_version": 1,
             "generated_at": _now(),
@@ -4743,6 +4870,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
             "result": result,
             "evidence": args.evidence,
             "notes": args.notes or "",
+            "deployment": deployment,
         }
         _write_json(paths["user_validation"], report)
         gate_status = "PASS" if result == "ACCEPT" else "FAIL"
@@ -4758,6 +4886,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         state["phases"]["harness"]["completed_at"] = _now()
         state["phases"]["harness"]["evidence"] = "three_gate_user_acceptance"
         state["phases"]["harness"]["report_file"] = str(paths["user_validation"])
+        if deployment:
+            state["deployment"] = deployment
         state["current_phase"] = "architect"
         _log_event(state, f"user acceptance gate {gate_status}")
         _record_snapshot(state, "harness", None)
@@ -4765,6 +4895,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         color = GREEN if gate_status == "PASS" else RED
         print(color(f"\n[USER ACCEPTANCE GATE {gate_status}]"))
         print(f"  report: {paths['user_validation']}")
+        if deployment:
+            print(f"  deployed: {deployment['deploy_dir']}")
         print(f"  next: {YELLOW('python pipeline.py architect --report-file architect_report.xml')}\n")
         sys.exit(0 if gate_status == "PASS" else 1)
 

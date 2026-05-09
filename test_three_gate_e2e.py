@@ -25,6 +25,7 @@ def _run(work: Path, *args: str) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
     env["PIPELINE_NO_DASHBOARD"] = "1"
+    env["PIPELINE_DEPLOY_ROOT"] = str(work / "deploy")
     return subprocess.run(
         [sys.executable, "pipeline.py", *args],
         cwd=work,
@@ -260,7 +261,9 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
     assert technical_result["complete_eligible"] is True
     assert {item["name"] for item in technical_result["checks"]} >= {"py_compile", "ruff", "mypy", "bandit", "pytest"}
     _ok(work, "gates", "oracle", "--user-confirmed")
-    _ok(work, "gates", "accept", "--result", "ACCEPT", "--evidence", "manual-smoke", "--user-confirmed")
+    blocked_accept = _run(work, "gates", "accept", "--result", "ACCEPT", "--evidence", "manual-smoke", "--user-confirmed")
+    assert blocked_accept.returncode == 1
+    assert "github_ci gate must be PASS" in (blocked_accept.stdout + blocked_accept.stderr)
     architect_report = work / "architect_report.xml"
     architect_report.write_text(
         """<optimization_report>
@@ -276,12 +279,12 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
     )
     blocked = _run(work, "architect", "--report-file", str(architect_report))
     assert blocked.returncode == 1
-    assert "github_ci gate must be PASS" in (blocked.stdout + blocked.stderr)
+    assert "current_phase" in (blocked.stdout + blocked.stderr)
 
     final_state = _state(work)
     assert final_state["terminal_state"] is None
-    assert final_state["current_phase"] == "architect"
+    assert final_state["current_phase"] == "harness"
     assert final_state["external_gates"]["technical"]["status"] == "PASS"
     assert final_state["external_gates"]["oracle"]["status"] == "PASS"
-    assert final_state["external_gates"]["acceptance"]["status"] == "PASS"
+    assert final_state["external_gates"]["acceptance"]["status"] == "PENDING"
     assert final_state["external_gates"]["github_ci"]["status"] == "PENDING"
