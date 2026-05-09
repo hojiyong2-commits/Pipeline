@@ -50,7 +50,7 @@ def _state(work: Path) -> dict:
     return json.loads((work / "pipeline_state.json").read_text(encoding="utf-8"))
 
 
-def test_three_gate_cli_e2e_reaches_complete(tmp_path: Path) -> None:
+def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) -> None:
     work = _copy_cli_workspace(tmp_path)
 
     _ok(work, "new", "--type", "FEAT", "--desc", "three gate cli smoke", "--no-dashboard")
@@ -274,11 +274,14 @@ def test_three_gate_cli_e2e_reaches_complete(tmp_path: Path) -> None:
 """,
         encoding="utf-8",
     )
-    _ok(work, "architect", "--report-file", str(architect_report))
+    blocked = _run(work, "architect", "--report-file", str(architect_report))
+    assert blocked.returncode == 1
+    assert "github_ci gate must be PASS" in (blocked.stdout + blocked.stderr)
 
     final_state = _state(work)
-    assert final_state["terminal_state"] == "COMPLETE"
-    assert final_state["protocol_evolution_decision"]["required"] is False
+    assert final_state["terminal_state"] is None
+    assert final_state["current_phase"] == "architect"
     assert final_state["external_gates"]["technical"]["status"] == "PASS"
     assert final_state["external_gates"]["oracle"]["status"] == "PASS"
     assert final_state["external_gates"]["acceptance"]["status"] == "PASS"
+    assert final_state["external_gates"]["github_ci"]["status"] == "PENDING"
