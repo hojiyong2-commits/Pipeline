@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if [ "${PIPELINE_ALLOW_MAIN_PUSH:-}" = "1" ]; then
+  exit 0
+fi
+
+while read local_ref local_sha remote_ref remote_sha
+do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "[PIPELINE BLOCKED] Direct pushes to main are disabled in this workspace." >&2
+    echo "Use a feature branch and pull request so GitHub Actions can create pipeline-attestation." >&2
+    echo "Temporary override for maintainers: PIPELINE_ALLOW_MAIN_PUSH=1 git push ..." >&2
+    exit 1
+  fi
+done
+
+exit 0
