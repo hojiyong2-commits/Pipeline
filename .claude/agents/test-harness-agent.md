@@ -44,7 +44,7 @@ Harness must confirm:
 - PM/Dev/QA/Build phase attestations are PASS
 - Technical, Oracle, and GitHub CI gates are PASS
 - unresolved GPT advisory CRITICAL findings are absent or explicitly resolved
-- the user has a real visible result path, screenshot, EXE, output file, or GitHub Actions artifact to inspect
+- the user has a real visible result path, screenshot, EXE, output file, or GitHub Actions attachment to inspect
 
 ## User Acceptance Rule
 
@@ -52,11 +52,13 @@ Do not ask the user to review code. Provide:
 
 - PR link
 - GitHub Actions run link
-- Korean "최종 확인 안내" PR comment link
-- real result path or artifact link
+- 한국어 "최종 확인 안내" PR 댓글 링크
+- real result path or attachment link
 - short Korean summary of what changed and what the user should visually confirm
 
-Then ask only for ACCEPT or REJECT.
+최종 사용자가 GitHub에서 보는 글은 모두 쉬운 한국어로 작성한다. `modified`, `added`, `CI: PASS`, `artifact` 같은 영어 상태값만 그대로 쓰지 말고 `수정됨`, `새 파일`, `자동 검사: 통과`, `첨부파일`처럼 풀어서 쓴다. `ACCEPT`, `REJECT`, 명령어, commit SHA, check 이름처럼 영어 식별자가 꼭 필요하면 바로 옆에 한국어 뜻을 붙인다.
+
+마지막 질문은 승인(ACCEPT) 또는 거절(REJECT)만 묻는다.
 
 ## Output Format
 

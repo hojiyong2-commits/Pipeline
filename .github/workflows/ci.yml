@@ -15,26 +15,26 @@ jobs:
   tests:
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: 코드 가져오기
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: 파이썬 준비
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: 필요한 도구 설치
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
-      - name: Run tests
+      - name: 자동 검사 실행
         env:
           PIPELINE_NO_DASHBOARD: "1"
         run: python -m pytest -q
 
-      - name: Create CI attestation
+      - name: 자동 검사 증명 파일 만들기
         if: success()
         shell: pwsh
         run: |
@@ -60,7 +60,7 @@ jobs:
           }
           $attestation | ConvertTo-Json -Depth 8 | Set-Content -Path pipeline_attestation.json -Encoding UTF8
 
-      - name: Create human acceptance packet
+      - name: 최종 확인 안내 만들기
         if: success() && github.event_name == 'pull_request'
         shell: pwsh
         env:
@@ -110,9 +110,27 @@ jobs:
             }
           }
 
+          function Convert-FileStatusToKorean {
+            param([string]$Status)
+            switch ($Status) {
+              "added" { return "새 파일" }
+              "modified" { return "수정됨" }
+              "removed" { return "삭제됨" }
+              "deleted" { return "삭제됨" }
+              "renamed" { return "이름 변경" }
+              "copied" { return "복사됨" }
+              "changed" { return "변경됨" }
+              default {
+                if ([string]::IsNullOrWhiteSpace($Status)) { return "변경됨" }
+                return "변경됨"
+              }
+            }
+          }
+
           $fileLines = @()
           foreach ($file in ($files | Select-Object -First 30)) {
-            $fileLines += "- ``$($file.status)`` ``$($file.filename)`` (+$($file.additions)/-$($file.deletions))"
+            $statusKo = Convert-FileStatusToKorean -Status ([string]$file.status)
+            $fileLines += "- $statusKo: ``$($file.filename)`` (추가 $($file.additions)줄, 삭제 $($file.deletions)줄)"
           }
           if ($files.Count -gt 30) {
             $fileLines += "- ... 외 $($files.Count - 30)개 파일"
@@ -134,16 +152,16 @@ jobs:
           <!-- pipeline-human-acceptance-packet -->
           ## 최종 확인 안내
 
-          이 댓글은 마지막 ACCEPT/REJECT 판단용입니다. 코드를 읽지 말고, 결과물이 요청과 맞는지만 확인하세요.
+          이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, 결과물이 요청과 맞는지만 확인하세요.
 
           ### GitHub가 자동으로 확인한 것
 
-          - CI: PASS
-          - 필수 검사: ``tests``
-          - 실행 명령: ``python -m pytest -q``
-          - 커밋: ``$headSha``
-          - 브랜치: ``$headRef`` -> ``$baseRef``
-          - Actions 실행/첨부파일: $runUrl
+          - 자동 검사: 통과
+          - 필수 검사 이름: ``tests``
+          - 실제로 실행한 검사: ``python -m pytest -q``
+          - 이번 변경 번호: ``$headSha``
+          - 작업 흐름: ``$headRef``에서 ``$baseRef``로 합치기
+          - 자동 검사 결과와 첨부파일 보기: $runUrl
 
           ### 변경된 파일
 
@@ -153,21 +171,21 @@ jobs:
 
           $($sensitiveLines -join "`n")
 
-          ### ACCEPT 전에 볼 것
+          ### 승인 전에 볼 것
 
-          - 마지막 agent가 준 결과 링크/경로를 여세요.
-          - 첨부파일이 있으면 위 Actions 링크에서 artifact를 여세요.
+          - 마지막 작업 담당자가 준 결과 링크/경로를 여세요.
+          - 첨부파일이 있으면 위 자동 검사 링크에서 여세요.
           - 화면, 엑셀, EXE, 생성 파일이 처음 요청과 맞는지 확인하세요.
-          - 결과가 틀리거나 빠졌으면 REJECT를 고르고 짧게 이유를 적으세요.
+          - 결과가 틀리거나 빠졌으면 거절(REJECT)을 고르고 짧게 이유를 적으세요.
 
           ### 결정 기준
 
-          - 요청한 결과와 맞으면 ACCEPT.
-          - 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 REJECT.
+          - 요청한 결과와 맞으면 승인(ACCEPT).
+          - 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 거절(REJECT).
           "@
           Set-Content -Path human_acceptance_packet.md -Value $packet -Encoding UTF8
 
-      - name: Create phase CI attestation
+      - name: 단계 증명 파일 만들기
         if: success() && hashFiles('.pipeline/phase_attestation_request.json') != ''
         shell: pwsh
         run: |
@@ -291,28 +309,28 @@ jobs:
             exit 1
           }
 
-      - name: Upload CI attestation
+      - name: 자동 검사 증명 파일 올리기
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-attestation
           path: pipeline_attestation.json
 
-      - name: Upload human acceptance packet
+      - name: 최종 확인 안내 올리기
         if: success() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: human-acceptance-packet
+          name: 최종-확인-안내
           path: human_acceptance_packet.md
 
-      - name: Upload phase CI attestation
+      - name: 단계 증명 파일 올리기
         if: success() && hashFiles('phase_attestation.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-phase-attestation
           path: phase_attestation.json
 
-      - name: Comment human acceptance packet
+      - name: PR에 최종 확인 안내 남기기
         if: success() && github.event_name == 'pull_request'
         shell: pwsh
         env:

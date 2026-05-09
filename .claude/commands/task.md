@@ -9,7 +9,7 @@
 3. PM은 계획과 위임만 한다. PM이 Dev/QA/Build/Harness/Architect 산출물을 흉내 내면 프로토콜 위반이다.
 4. `pipeline.py harness --score ...`는 완료 경로가 아니다. Three-Gate에서는 차단된다.
 5. 최종 COMPLETE는 PM/Dev/QA/Build phase attestation, Technical, Oracle, GitHub CI, User Acceptance가 모두 PASS되어야 가능하다.
-6. 사용자는 마지막에 코드가 아니라 결과물을 보고 ACCEPT 또는 REJECT만 판단한다.
+6. 사용자는 마지막에 코드가 아니라 결과물을 보고 승인(ACCEPT) 또는 거절(REJECT)만 판단한다.
 
 ## 시작 절차
 
@@ -148,14 +148,16 @@ Build phase CI가 PASS되기 전에는 Phase 7로 넘어가지 않는다.
 python pipeline.py gates technical
 python pipeline.py gates oracle --user-confirmed
 python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
-python pipeline.py gates accept --result ACCEPT --evidence <real-result-path-or-artifact> --user-confirmed
+python pipeline.py gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed
 ```
 
-ACCEPT 전에 사용자가 봐야 하는 것은 코드가 아니라 결과물이다. 마지막 agent는 반드시 다음을 제공한다:
+승인(ACCEPT) 전에 사용자가 봐야 하는 것은 코드가 아니라 결과물이다. 마지막 작업 담당자는 반드시 다음을 제공한다:
 
 - PR 링크
 - GitHub Actions가 작성한 한국어 "최종 확인 안내" 댓글 링크
-- 실제 결과물 경로, 스크린샷, EXE, 엑셀, 출력 파일, artifact 링크 중 해당되는 것
+- 실제 결과물 경로, 스크린샷, EXE, 엑셀, 출력 파일, 첨부파일 링크 중 해당되는 것
+
+GitHub에서 사용자가 보게 되는 PR 제목/본문, 최종 확인 댓글, 첨부 안내, PR 템플릿은 모두 쉬운 한국어로 작성한다. `modified`, `added`, `CI: PASS`, `artifact` 같은 영어 상태값은 그대로 노출하지 말고 `수정됨`, `새 파일`, `자동 검사: 통과`, `첨부파일`처럼 풀어서 쓴다. 꼭 필요한 `ACCEPT/REJECT`, 명령어, commit SHA는 `승인/거절`, `명령어`, `변경 번호`처럼 한국어 설명과 함께만 쓴다.
 
 사용자가 REJECT하면 이유를 기록하고 해당 gate 경로로 되돌린다.
 

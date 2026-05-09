@@ -51,7 +51,8 @@ PM, QA, Harness, Architect는 파이프라인 시작 시 이 파일을 읽고 st
 
 8. **User acceptance without visible result**
    - 사용자에게 코드를 읽으라고 요구하지 않는다.
-   - ACCEPT 요청 전 PR 링크, GitHub Actions/artifact 링크, 실제 결과물 경로/스크린샷/출력 파일, 한국어 최종 확인 안내를 제공한다.
+   - 승인(ACCEPT) 요청 전 PR 링크, GitHub Actions 첨부파일 링크, 실제 결과물 경로/스크린샷/출력 파일, 한국어 최종 확인 안내를 제공한다.
+   - GitHub에서 최종 사용자가 보는 문서는 쉬운 한국어여야 한다. `modified`, `added`, `CI: PASS`, `artifact` 같은 영어 상태값만 노출하면 위반이다. `수정됨`, `새 파일`, `자동 검사: 통과`, `첨부파일`처럼 풀어서 쓴다.
 
 ## PM Step Plan Requirements
 
@@ -63,7 +64,7 @@ PM, QA, Harness, Architect는 파이프라인 시작 시 이 파일을 읽고 st
 - 실제 Grep 근거 (`<grep_evidence><executed>true</executed>`)
 - oracle/test ownership plan
 - phase attestation plan
-- user acceptance artifact plan
+- user acceptance result/attachment plan
 
 ## QA Requirements
 

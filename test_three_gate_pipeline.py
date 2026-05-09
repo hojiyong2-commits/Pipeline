@@ -228,6 +228,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         codeowners = (root / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
         template = root / ".github" / "pull_request_template.md"
         workflow = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        readme_text = (root / "README.md").read_text(encoding="utf-8")
 
         for pattern in (
             ".github/CODEOWNERS",
@@ -242,14 +243,27 @@ class ThreeGatePipelineTests(unittest.TestCase):
         template_text = template.read_text(encoding="utf-8")
         self.assertIn("최종 확인 안내", template_text)
         self.assertIn("결과물이 내가 요청한 내용과 맞다", template_text)
-        self.assertIn("ACCEPT", template_text)
-        self.assertIn("REJECT", template_text)
-        self.assertIn("human-acceptance-packet", workflow)
+        self.assertIn("승인(ACCEPT)", template_text)
+        self.assertIn("거절(REJECT)", template_text)
+        self.assertIn("최종-확인-안내", workflow)
         self.assertIn("pipeline-human-acceptance-packet", workflow)
         self.assertIn("최종 확인 안내", workflow)
         self.assertIn("코드를 읽지 말고", workflow)
+        self.assertIn("마지막 작업 담당자", workflow)
+        self.assertIn("Convert-FileStatusToKorean", workflow)
+        self.assertIn('"modified" { return "수정됨" }', workflow)
+        self.assertIn('"added" { return "새 파일" }', workflow)
+        self.assertIn("자동 검사: 통과", workflow)
+        self.assertIn("첨부파일", workflow)
+        self.assertNotIn("- CI: PASS", workflow)
+        self.assertNotIn("Actions 실행/첨부파일", workflow)
+        self.assertNotIn("마지막 agent", workflow)
+        self.assertNotIn("``$($file.status)``", workflow)
         self.assertIn("issues/comments/$($existing.id)", workflow)
         self.assertNotIn('"$commentsUri/$($existing.id)"', workflow)
+        self.assertIn("마지막 작업 담당자", readme_text)
+        self.assertIn("첨부파일 링크", readme_text)
+        self.assertNotIn("마지막 agent", readme_text)
 
     def test_contract_actions_before_init_are_user_friendly(self) -> None:
         pid = f"TMP-NO-CONTRACT-{uuid.uuid4().hex[:10]}"
