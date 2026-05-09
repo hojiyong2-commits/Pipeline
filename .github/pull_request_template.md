@@ -1,29 +1,29 @@
-## Human Acceptance Packet
+## 최종 확인 안내
 
-Final reviewer should judge the result, not the implementation details.
+코드가 아니라 **결과물**을 보고 판단하면 됩니다.
 
-### What changed
+### 무엇이 바뀌었나요?
 
-- 
+-
 
-### User-visible result
+### 확인할 결과물
 
-- Result link/path:
-- Screenshot/artifact/workbook/EXE:
+- 결과 링크/경로:
+- 스크린샷/첨부파일/엑셀/EXE:
 
-### Expected vs actual
+### 기대 결과와 실제 결과
 
-- Expected:
-- Actual:
+- 기대한 결과:
+- 실제 결과:
 
-### Acceptance checklist
+### 확인 체크리스트
 
-- [ ] The visible result matches the user request.
-- [ ] The output artifact opens or runs successfully.
-- [ ] No unexpected file/result is included.
-- [ ] Any changes under `tests/oracles/**`, `tests/**`, `test_*.py`, or `*_test.py` are intentional.
+- [ ] 결과물이 내가 요청한 내용과 맞다.
+- [ ] 결과 파일/화면/EXE가 정상적으로 열린다.
+- [ ] 이상한 파일이나 원하지 않은 결과물이 섞이지 않았다.
+- [ ] `tests/oracles/**`, `tests/**`, `test_*.py`, `*_test.py` 변경이 있다면 의도한 변경이다.
 
-### Final decision
+### 최종 결정
 
 - [ ] ACCEPT
-- [ ] REJECT, reason:
+- [ ] REJECT, 이유:

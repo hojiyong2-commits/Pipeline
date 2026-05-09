@@ -145,11 +145,14 @@ class ThreeGatePipelineTests(unittest.TestCase):
             self.assertIn(pattern, codeowners)
         self.assertTrue(template.exists())
         template_text = template.read_text(encoding="utf-8")
-        self.assertIn("Human Acceptance Packet", template_text)
+        self.assertIn("최종 확인 안내", template_text)
+        self.assertIn("결과물이 내가 요청한 내용과 맞다", template_text)
         self.assertIn("ACCEPT", template_text)
         self.assertIn("REJECT", template_text)
         self.assertIn("human-acceptance-packet", workflow)
         self.assertIn("pipeline-human-acceptance-packet", workflow)
+        self.assertIn("최종 확인 안내", workflow)
+        self.assertIn("코드를 읽지 말고", workflow)
 
     def test_contract_actions_before_init_are_user_friendly(self) -> None:
         pid = f"TMP-NO-CONTRACT-{uuid.uuid4().hex[:10]}"

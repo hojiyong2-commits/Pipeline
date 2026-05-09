@@ -25,7 +25,10 @@ If `external_gates.enabled=true`, Phase 7 has no 0-100 score. Harness may diagno
 
 1. `python pipeline.py gates technical`
 2. `python pipeline.py gates oracle --user-confirmed`
-3. `python pipeline.py gates accept --result ACCEPT --user-confirmed`
+3. `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
+4. `python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed`
+
+Before asking for ACCEPT, provide the PR link, the GitHub Actions **최종 확인 안내** PR comment, and the real result path/artifact to the user. Do not ask the user to review code. User acceptance is valid only after the visible result has been shown and the user answers ACCEPT or REJECT.
 
 The technical gate always records deterministic commands, versions, exit codes, and outputs. It is strict by default: missing ruff/mypy/bandit/pytest or missing Python evidence files are recorded as gate failures. `--relaxed-tools` is only for explicit local debugging and must not be used to claim COMPLETE.
 

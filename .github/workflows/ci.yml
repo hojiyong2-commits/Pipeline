@@ -115,15 +115,15 @@ jobs:
             $fileLines += "- ``$($file.status)`` ``$($file.filename)`` (+$($file.additions)/-$($file.deletions))"
           }
           if ($files.Count -gt 30) {
-            $fileLines += "- ... and $($files.Count - 30) more files"
+            $fileLines += "- ... 외 $($files.Count - 30)개 파일"
           }
           if ($fileLines.Count -eq 0) {
-            $fileLines = @("- No changed files reported by GitHub.")
+            $fileLines = @("- GitHub가 변경 파일을 찾지 못했습니다.")
           }
 
           $sensitiveLines = @()
           if ($sensitive.Count -eq 0) {
-            $sensitiveLines = @("- None")
+            $sensitiveLines = @("- 없음")
           } else {
             foreach ($name in $sensitive) {
               $sensitiveLines += "- ``$name``"
@@ -132,38 +132,38 @@ jobs:
 
           $packet = @"
           <!-- pipeline-human-acceptance-packet -->
-          ## Human Acceptance Packet
+          ## 최종 확인 안내
 
-          This packet is for final ACCEPT/REJECT. You should judge the visible result and requested behavior, not read the code.
+          이 댓글은 마지막 ACCEPT/REJECT 판단용입니다. 코드를 읽지 말고, 결과물이 요청과 맞는지만 확인하세요.
 
-          ### What GitHub verified
+          ### GitHub가 자동으로 확인한 것
 
           - CI: PASS
-          - Required check: ``tests``
-          - Command: ``python -m pytest -q``
-          - Commit: ``$headSha``
-          - Branch: ``$headRef`` -> ``$baseRef``
-          - Actions run / artifacts: $runUrl
+          - 필수 검사: ``tests``
+          - 실행 명령: ``python -m pytest -q``
+          - 커밋: ``$headSha``
+          - 브랜치: ``$headRef`` -> ``$baseRef``
+          - Actions 실행/첨부파일: $runUrl
 
-          ### Changed files
+          ### 변경된 파일
 
           $($fileLines -join "`n")
 
-          ### User-owned / trust-root files touched
+          ### 사용자가 확인해야 할 중요 파일 변경
 
           $($sensitiveLines -join "`n")
 
-          ### What to inspect before ACCEPT
+          ### ACCEPT 전에 볼 것
 
-          - Open the result link/path provided by the final agent.
-          - If an artifact was uploaded, open it from the Actions run above.
-          - Check the output, screenshot, workbook, EXE, or generated file against the original request.
-          - If the visible result is wrong, choose REJECT and give the shortest reason.
+          - 마지막 agent가 준 결과 링크/경로를 여세요.
+          - 첨부파일이 있으면 위 Actions 링크에서 artifact를 여세요.
+          - 화면, 엑셀, EXE, 생성 파일이 처음 요청과 맞는지 확인하세요.
+          - 결과가 틀리거나 빠졌으면 REJECT를 고르고 짧게 이유를 적으세요.
 
-          ### Decision
+          ### 결정 기준
 
-          - ACCEPT only when the result matches the request.
-          - REJECT when the result is missing, visually wrong, has wrong data, or includes unexpected artifacts.
+          - 요청한 결과와 맞으면 ACCEPT.
+          - 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 REJECT.
           "@
           Set-Content -Path human_acceptance_packet.md -Value $packet -Encoding UTF8
 
