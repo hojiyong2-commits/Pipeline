@@ -1701,6 +1701,7 @@ def _new_external_gates(enabled: bool = False) -> Dict[str, Any]:
         "technical": _empty_external_gate(),
         "oracle": _empty_external_gate(),
         "acceptance": _empty_external_gate(),
+        "github_ci": _empty_external_gate(),
     }
 
 
@@ -1759,7 +1760,7 @@ def _ensure_external_gates(state: Dict[str, Any]) -> Dict[str, Any]:
 
     normalized = _new_external_gates(enabled=bool(gates.get("enabled")))
     normalized["mode"] = str(gates.get("mode") or "three_gate")
-    for gate_name in ("technical", "oracle", "acceptance"):
+    for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
         existing = gates.get(gate_name)
         if isinstance(existing, dict):
             merged = _empty_external_gate()
@@ -1894,6 +1895,7 @@ def _contract_paths(pipeline_id: str) -> Dict[str, Path]:
         "technical_result": root / "gates" / "technical_result.json",
         "oracle_result": root / "gates" / "oracle_result.json",
         "user_validation": root / "gates" / "user_validation.json",
+        "github_ci_result": root / "gates" / "github_ci_result.json",
         "advisory_root": root / "advisory",
         "advisory_resolutions": root / "advisory" / "resolutions.json",
     }
@@ -3042,7 +3044,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     if isinstance(gates, dict) and gates.get("enabled"):
         print()
         print(BOLD("  External Gate 현황:"))
-        for gate_name in ("technical", "oracle", "acceptance"):
+        for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
             gate = gates.get(gate_name, {})
             if not isinstance(gate, dict):
                 continue
@@ -3962,7 +3964,7 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
         return []
     gates = state.get("external_gates", {})
     blockers: List[str] = []
-    for gate_name in ("technical", "oracle", "acceptance"):
+    for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
         info = gates.get(gate_name, {}) if isinstance(gates, dict) else {}
         if not isinstance(info, dict) or info.get("status") != "PASS":
             blockers.append(f"{gate_name} gate must be PASS")
@@ -4201,6 +4203,9 @@ def cmd_github(args: argparse.Namespace) -> None:
 
     if getattr(args, "record", False):
         state = _require_state()
+        pid = str(state.get("pipeline_id"))
+        paths = _contract_paths(pid)
+        _write_json(paths["github_ci_result"], verification)
         state.setdefault("trusted_github_runs", [])
         state["trusted_github_runs"].append({
             "recorded_at": _now(),
@@ -4210,6 +4215,14 @@ def cmd_github(args: argparse.Namespace) -> None:
             "commit_sha": commit_sha,
             "artifact": args.artifact,
         })
+        if _external_gates_enabled(state):
+            _set_external_gate(
+                state,
+                "github_ci",
+                str(verification["status"]),
+                evidence=f"github_actions_run:{run_id}",
+                report_file=str(paths["github_ci_result"]),
+            )
         _log_event(state, f"github verify-run {verification['status']} run_id={run_id} commit={commit_sha[:12]}")
         _save(state)
 

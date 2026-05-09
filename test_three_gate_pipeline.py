@@ -1225,7 +1225,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         state["phases"]["build"]["status"] = "DONE"
         state["phases"]["harness"]["status"] = "PASS"
         state["external_gates"] = pipeline._new_external_gates(enabled=True)
-        for gate in ("technical", "oracle", "acceptance"):
+        for gate in ("technical", "oracle", "acceptance", "github_ci"):
             state["external_gates"][gate]["status"] = "PASS"
 
         saved = {}
@@ -1391,6 +1391,78 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(args.command, "github")
         self.assertEqual(args.github_action, "verify-run")
         self.assertIs(pipeline.COMMAND_MAP["github"], pipeline.cmd_github)
+
+    def test_github_verify_record_satisfies_external_ci_gate(self) -> None:
+        state = pipeline._new_state("TMP-GH-CI", "IMP", "external runner")
+        state["external_gates"] = pipeline._new_external_gates(enabled=True)
+        commit_sha = "a" * 40
+        tree_sha = "b" * 40
+        attestation = {
+            "schema_version": 1,
+            "attestation_type": "pipeline-ci-v1",
+            "repository": "hojiyong2-commits/Pipeline",
+            "run_id": "123456",
+            "commit_sha": commit_sha,
+            "tree_sha": tree_sha,
+            "tests": {
+                "command": "python -m pytest -q",
+                "status": "PASS",
+            },
+        }
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("pipeline_attestation.json", json.dumps(attestation))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = {
+                "github_ci_result": root / "gates" / "github_ci_result.json",
+            }
+            args = argparse.Namespace(
+                github_action="verify-run",
+                repo="hojiyong2-commits/Pipeline",
+                run_id="123456",
+                commit=commit_sha,
+                artifact="pipeline-attestation",
+                token_env="GITHUB_TOKEN",
+                record=True,
+            )
+            run_payload = {
+                "id": 123456,
+                "name": "CI",
+                "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/123456",
+                "status": "completed",
+                "conclusion": "success",
+                "head_sha": commit_sha,
+            }
+            artifact_payload = {
+                "artifacts": [{
+                    "id": 99,
+                    "name": "pipeline-attestation",
+                    "archive_download_url": "https://api.github.com/artifact.zip",
+                    "size_in_bytes": 512,
+                    "expired": False,
+                }]
+            }
+            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+                 mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
+                 mock.patch.object(pipeline, "_github_token", return_value="token"), \
+                 mock.patch.object(pipeline, "_github_api_json", side_effect=[run_payload, artifact_payload]), \
+                 mock.patch.object(pipeline, "_github_download_bytes", return_value=buffer.getvalue()), \
+                 mock.patch.object(pipeline, "_git_rev_parse", return_value=tree_sha), \
+                 mock.patch.object(pipeline, "_save"):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_github(args)
+
+            result = pipeline._load_json_file(paths["github_ci_result"])
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(state["external_gates"]["github_ci"]["status"], "PASS")
+        self.assertEqual(
+            state["external_gates"]["github_ci"]["evidence"],
+            "github_actions_run:123456",
+        )
 
 
 if __name__ == "__main__":
