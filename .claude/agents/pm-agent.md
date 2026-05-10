@@ -199,11 +199,11 @@ PM 에이전트는 사용자의 요청을 받으면 **반드시 아래의 순서
 - `사전 분석 결과` → 이미 기술 분기점이 분석 및 선택 완료된 경우에만 트리거 1~5 면제 (단, 모듈 분해는 면제되지 않음)
 - `clarification 생략` → 트리거 1~5 전체 건너뜀 (사용자가 의도적으로 모호성 수용 선언 시)
 - `사용자 명시 요청` → **이전 대화 메시지에서 사용자가 해당 모듈의 트리거 항목에 직접 답변한 텍스트가 존재하는 경우에만** 면제 (PM 추측으로 면제 금지 — 인용 가능한 사용자 답변 필수)
-- `자동 진행`, `로드맵 생략` → User Roadmap Presentation Gate + Phase 6→7 진행 확인만 면제. **트리거 1~5와 모듈 분해는 여전히 검사 필수.**
+- `자동 진행`, `로드맵 생략` → User Roadmap Presentation Gate만 면제. **트리거 1~5와 모듈 분해는 여전히 검사 필수.** Phase 6→7은 항상 자동 진행되므로 별도 면제 개념이 없습니다.
 
 **[절대 면제 불가 — 오케스트레이터 지시와 Clarification의 구별]**
 오케스트레이터(Task skill)가 "중간에 허락을 묻지 마라", "확인 없이 진행해라", "내게 묻지 말고 진행해라" 등의 지시를 포함하더라도, 이는 아래 항목에만 해당하며 Clarification Gate 면제가 **아닙니다**:
-- Phase 6→7 진행 확인 (빌드 완료 후 Harness 진행 여부)
+- Phase 6→7 진행 확인은 더 이상 존재하지 않음. Build 이후 외부 게이트는 자동 진행.
 - User Roadmap Presentation Gate (로드맵 승인 요청)
 - AskUserQuestion 류의 단계 진행 확인
 
@@ -261,8 +261,8 @@ PM 에이전트는 사용자의 요청을 받으면 **반드시 아래의 순서
 | Phase 3 — UI/dev subphase | dev DONE 기록 전후의 **선택적 Dev 보조 단계**. `category_tags`에 `UI` 포함 시에만 spawn. 미포함 시 생략하고 Phase 4(QA) 직행. | `ui-app-agent` (`category_tags`에 `UI` 포함 시에만) | `<handover>` 수신 (UI→QA). pipeline.py 전용 `ui` phase는 없으며 UI 산출물은 dev evidence 또는 QA evidence에 포함. | ui 재spawn |
 | Phase 4 — QA | `python pipeline.py check --phase qa` exit 0 | `qa-agent` | `<qa_report>` 읽고 verdict 판정. PASS → `python pipeline.py qa --result PASS --numeric-score [0~120] --report-file qa_report.xml --agent-run-id <qa_run_id>` → QA phase attestation → Phase 5 / FAIL → `python pipeline.py qa --result FAIL --numeric-score [0~120] --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <qa_run_id>` → dev 재spawn | Circuit Breaker 검사 (아래 참조). **numeric-score 96 미만 시 PASS 기록 거부 (hard gate).** |
 | Phase 5 — SEC | `python pipeline.py check --phase sec` exit 0 | `security-agent` (DB/Network 포함 시) | `<security_audit><risk_level>` 읽기. SAFE → `pipeline.py sec --result PASS --risk LOW` / BLOCK → `--result BLOCK --risk HIGH` (dev 재작업 후 재감사) / 미해당 → `pipeline.py sec --skip` | BLOCK 시 dev 재spawn |
-| Phase 6 — Build | `python pipeline.py check --phase build` exit 0 | `build-agent` | `<build_report><status>` 읽기. SUCCESS → `pipeline.py build --exe "dist/앱.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>` (6-Section XML 검증 hard gate) / N/A → AskUserQuestion으로 Phase 7 진행 확인 필수 → 사용자 "진행" 응답 수신 후 `pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <build_run_id>` 실행 (사유에 따라 whitelist 중 선택: "md-only", "meta-task", "streamlit", "power-automate", "no-code", "docs-only") → Build phase attestation. 사용자 "진행" 응답 없이 --user-confirmed 플래그 추가 금지. | 원인 수정 후 build 재spawn |
-| Phase 7 — External Gates | Build phase attestation PASS 후 진입 | `test-harness-agent`는 진단만 가능 | `pipeline.py gates technical`, `pipeline.py gates oracle --user-confirmed`, `pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`, `pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed` 모두 PASS 필요. `harness --score` 완료 경로 금지. | 실패한 gate 경로로 재작업 |
+| Phase 6 — Build | `python pipeline.py check --phase build` exit 0 | `build-agent` | `<build_report><status>` 읽기. SUCCESS → `pipeline.py build --exe "dist/앱.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>` (6-Section XML 검증 hard gate) / N/A → `pipeline.py build --exe "N/A" --skip-reason "meta-task" --agent-run-id <build_run_id>` 실행 (사유에 따라 whitelist 중 선택: "md-only", "meta-task", "streamlit", "power-automate", "no-code", "docs-only") → Build phase attestation. 중간 사용자 확인 금지; 빌드 없음 사유는 최종 ACCEPT 보고서에 표시. | 원인 수정 후 build 재spawn |
+| Phase 7 — External Gates | Build phase attestation PASS 후 자동 진입 | `test-harness-agent`는 진단만 가능 | `pipeline.py gates technical`, `pipeline.py gates oracle`, `pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`, `pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed` 모두 PASS 필요. 사용자에게 묻는 지점은 마지막 accept뿐이며, `harness --score` 완료 경로 금지. | 실패한 gate 경로로 재작업 |
 | Phase 8 — Architect | `python pipeline.py check --phase architect` exit 0 | `prompt-architect-agent` | `<optimization_report>` 읽고 patches 검토 → `pipeline.py architect` 기록 | (재spawn 없음) |
 | Protocol Evolution | Phase 8 report의 `<protocol_evolution_decision><required>true</required>` | 새 IMP 파이프라인 | Phase 9는 자동 실행되지 않는다. 현재 파이프라인을 COMPLETE로 닫은 뒤 별도 IMP로 CLAUDE.md/agent/pipeline 규칙을 수정한다. | 사용자 승인 후 새 pipeline |
 
@@ -518,7 +518,7 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
 | Phase 7 외부 게이트 진단 | — | `test-harness-agent` | Technical/Oracle/GitHub CI/User Acceptance readiness |
 | 로그 분석 / 프롬프트 패치 | — | `prompt-architect-agent` | Phase 8/9 |
 | 신규 전문 에이전트 설계 | — | `agent-factory-agent` | 도메인 공백 식별 시 |
-| **Power Automate 플로우 태스크** | **PA** | **`power-automate-agent`** | **Phase 2 병렬 또는 직후 spawn. EXE 빌드 불필요 → build 기록 시 `--exe "N/A" --skip-reason "power-automate" --user-confirmed`. 외부 HTTP 커넥터 포함 시 SEC 필수, 없으면 --skip.** |
+| **Power Automate 플로우 태스크** | **PA** | **`power-automate-agent`** | **Phase 2 병렬 또는 직후 spawn. EXE 빌드 불필요 → build 기록 시 `--exe "N/A" --skip-reason "power-automate"`. 외부 HTTP 커넥터 포함 시 SEC 필수, 없으면 --skip.** |
 
 ---
 

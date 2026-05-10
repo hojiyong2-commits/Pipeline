@@ -69,11 +69,11 @@ def _run_pipeline(work: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
-def test_legacy_harness_phase7_user_confirmation_and_docs(tmp_path: Path) -> None:
+def test_legacy_harness_phase7_is_automatic_and_docs_present(tmp_path: Path) -> None:
     work = _copy_harness_fixture(tmp_path)
 
     r1 = _run_pipeline(work, "check", "--phase", "harness")
-    assert r1.returncode != 0, r1.stdout + r1.stderr
+    assert r1.returncode == 0, r1.stdout + r1.stderr
 
     r2 = _run_pipeline(work, "check", "--phase", "harness", "--user-confirmed")
     assert r2.returncode == 0, r2.stdout + r2.stderr

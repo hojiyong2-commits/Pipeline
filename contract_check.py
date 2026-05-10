@@ -24,16 +24,11 @@ BASE = Path(__file__).parent
 # match_means_violation=False: 패턴이 매칭되지 않는 경우는 별도 로직으로 처리 (미사용)
 #
 # 전략: 각 규칙은 "잘못된 형태"를 직접 매칭한다.
-#   - Rule 1: `check --phase harness` 뒤에 `--user-confirmed`가 없는 형태
-#   - Rule 2: `done --phase pm` 뒤에 `--decomp` 또는 `[--decomp`가 없는 형태
-#   - Rule 3: `done --phase dev --files ...` 에 `--scope-declared`가 없는 형태
+#   - Rule 1: `done --phase pm` 뒤에 `--decomp` 또는 `[--decomp`가 없는 형태
+#   - Rule 2: `done --phase dev --files ...` 에 `--scope-declared`가 없는 형태
 #             → 행 전체에 --scope-declared가 없을 때만 위반
-#   - Rule 4: `qa --result FAIL` 뒤에 `--failure-sig`가 없는 형태
+#   - Rule 3: `qa --result FAIL` 뒤에 `--failure-sig`가 없는 형태
 RULES = [
-    (
-        r"check\s+--phase\s+harness(?!\s+--user-confirmed)",
-        "check --phase harness 에는 --user-confirmed 필수 (pipeline.py line ~773)",
-    ),
     (
         r"done\s+--phase\s+pm(?!\s+--decomp|\s+\[--decomp)",
         "done --phase pm 에는 --decomp --clarification 필수 (pipeline.py line ~839)",
