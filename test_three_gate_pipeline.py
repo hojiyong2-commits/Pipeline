@@ -251,6 +251,31 @@ def _install_completed_agent_run(state: dict, phase: str, output_file: Path, roo
     return run_id
 
 
+def _write_manager_handoff(directory: Path, state: dict, step_plan: Path, planner_run_id: str) -> Path:
+    report = directory / "manager_handoff.xml"
+    report.write_text(
+        f"""<manager_handoff>
+  <pipeline_id>{state["pipeline_id"]}</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>{pipeline._sha256_file(step_plan)}</step_plan_sha256>
+  <planner_run_id>{planner_run_id}</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+</manager_handoff>
+""",
+        encoding="utf-8",
+    )
+    return report
+
+
+def _install_pm_split_runs(state: dict, step_plan: Path, root: Path) -> tuple[str, str, Path]:
+    planner_run_id = _install_completed_agent_run(state, "pm_planner", step_plan, root)
+    manager_report = _write_manager_handoff(root, state, step_plan, planner_run_id)
+    manager_run_id = _install_completed_agent_run(state, "pipeline_manager", manager_report, root)
+    return planner_run_id, manager_run_id, manager_report
+
+
 def _mark_phase_attestation_passed(state: dict, *phases: str) -> None:
     state["phase_attestations"] = pipeline._ensure_phase_attestations(state)
     state["phase_attestations"]["enabled"] = True
@@ -792,8 +817,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
             request_path = root / ".pipeline" / "phase_attestation_request.json"
             evidence_dir = root / ".pipeline" / "phase_evidence"
             state["phases"]["pm"]["report_file"] = str(report)
-            run_id = _install_completed_agent_run(state, "pm", report, root)
-            state["phases"]["pm"]["agent_run_id"] = run_id
+            planner_run_id, manager_run_id, manager_report = _install_pm_split_runs(state, report, root)
+            state["phases"]["pm"]["agent_run_id"] = planner_run_id
+            state["phases"]["pm"]["manager_run_id"] = manager_run_id
+            state["phases"]["pm"]["manager_report_file"] = str(manager_report)
             with mock.patch.object(pipeline, "PHASE_ATTESTATION_REQUEST", request_path), \
                  mock.patch.object(pipeline, "PHASE_ATTESTATION_EVIDENCE_DIR", evidence_dir), \
                  mock.patch.object(pipeline, "_git_check_ignored", return_value=False), \
@@ -802,11 +829,16 @@ class ThreeGatePipelineTests(unittest.TestCase):
 
             self.assertEqual(request["phase"], "pm")
             self.assertEqual(request["pipeline_id"], "TMP-PHASE-PREP")
-            self.assertEqual(request["agent_run"]["agent_id"], "pm-agent")
+            self.assertEqual(request["agent_run"]["agent_id"], "pm-planner-agent")
+            self.assertEqual(request["agent_run"]["phase"], "pm_planner")
             self.assertEqual(request["agent_run"]["used_by_phase"], "pm")
+            self.assertEqual(request["manager_run"]["agent_id"], "pipeline-manager-agent")
+            self.assertEqual(request["manager_run"]["used_by_phase"], "pm_manager")
             self.assertTrue(request_path.exists())
             labels = {item["label"] for item in request["copied_evidence"]}
             self.assertIn("agent_receipt", labels)
+            self.assertIn("manager_receipt", labels)
+            self.assertIn("manager_report", labels)
             self.assertIn("report", labels)
             receipt_copy = next(item for item in request["copied_evidence"] if item["label"] == "agent_receipt")
             self.assertEqual(request["agent_run"]["receipt_path"], receipt_copy["path"])
@@ -876,7 +908,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
             output.write_text("<step_plan></step_plan>", encoding="utf-8")
             with mock.patch.object(pipeline, "AGENT_RECEIPT_DIR", root / "receipts"), \
                  mock.patch.object(pipeline, "_git_rev_parse", return_value="a" * 40):
-                run, token = pipeline._agent_run_start(state, "pm", "pm-agent")
+                run, token = pipeline._agent_run_start(state, "pm_planner", "pm-planner-agent")
                 self.assertTrue(token.startswith("tok_"))
                 completed = pipeline._agent_run_finish(
                     state,
@@ -890,7 +922,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 receipt_exists = Path(completed["receipt_path"]).exists()
 
         self.assertEqual(completed["status"], "COMPLETED")
-        self.assertEqual(completed["agent_id"], "pm-agent")
+        self.assertEqual(completed["agent_id"], "pm-planner-agent")
         self.assertEqual(completed["output_sha256"], expected_output_hash)
         self.assertTrue(receipt_exists)
 
@@ -979,7 +1011,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 """,
                 encoding="utf-8",
             )
-            run_id = _install_completed_agent_run(state, "pm", report, root)
+            planner_run_id, manager_run_id, manager_report = _install_pm_split_runs(state, report, root)
             args = argparse.Namespace(
                 branch=None,
                 phase="pm",
@@ -989,7 +1021,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 judgment_confirmed=False,
                 report_file=str(report),
                 files=None,
-                agent_run_id=run_id,
+                agent_run_id=None,
+                planner_run_id=planner_run_id,
+                manager_run_id=manager_run_id,
+                manager_report=str(manager_report),
             )
             with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
                  mock.patch.object(pipeline, "_save_state_for"), \
@@ -997,8 +1032,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 pipeline.cmd_done(args)
 
         self.assertEqual(state["phases"]["pm"]["status"], "DONE")
-        self.assertEqual(state["phases"]["pm"]["agent_run_id"], run_id)
-        self.assertEqual(state["agent_runs"][run_id]["used_by_phase"], "pm")
+        self.assertEqual(state["phases"]["pm"]["agent_run_id"], planner_run_id)
+        self.assertEqual(state["phases"]["pm"]["manager_run_id"], manager_run_id)
+        self.assertEqual(state["agent_runs"][planner_run_id]["used_by_phase"], "pm")
+        self.assertEqual(state["agent_runs"][manager_run_id]["used_by_phase"], "pm_manager")
 
     def test_gates_phase_ci_records_phase_attestation(self) -> None:
         state = pipeline._new_state("TMP-PHASE-CI", "IMP", "sample")
@@ -1469,6 +1506,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 """,
                 encoding="utf-8",
             )
+            planner_run_id, manager_run_id, manager_report = _install_pm_split_runs(state, report, root)
             args = argparse.Namespace(
                 branch=None,
                 phase="pm",
@@ -1478,7 +1516,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 judgment_confirmed=False,
                 report_file=str(report),
                 files=None,
-                agent_run_id=_install_completed_agent_run(state, "pm", report, root),
+                agent_run_id=None,
+                planner_run_id=planner_run_id,
+                manager_run_id=manager_run_id,
+                manager_report=str(manager_report),
             )
             with mock.patch.object(pipeline, "_load_branch_state", return_value=state):
                 with mock.patch.object(pipeline, "_save_state_for"):
@@ -1490,6 +1531,77 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(state["atomic_plan"]["micro_tasks"][0]["id"], "MT-1")
         self.assertIn("project_snapshot", state["atomic_plan"])
         self.assertEqual(state["execution_profile"]["mode"], "STANDARD")
+
+    def test_pm_done_rejects_manager_handoff_with_wrong_step_plan_hash(self) -> None:
+        state = pipeline._new_state("TMP-PM-MANAGER-HASH", "FEAT", "sample")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single function</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-PM-MANAGER-HASH</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+""" + _design_confirmation_xml() + _task_complexity_xml("STANDARD", functions=1) + """
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>main.run</affected_function>
+      <target_files><file>main.py</file></target_files>
+      <grep_evidence>
+        <pattern>def run</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Update run behavior</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            planner_run_id = _install_completed_agent_run(state, "pm_planner", report, root)
+            manager_report = root / "manager_handoff.xml"
+            manager_report.write_text(
+                f"""<manager_handoff>
+  <pipeline_id>{state["pipeline_id"]}</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>{"0" * 64}</step_plan_sha256>
+  <planner_run_id>{planner_run_id}</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+</manager_handoff>
+""",
+                encoding="utf-8",
+            )
+            manager_run_id = _install_completed_agent_run(state, "pipeline_manager", manager_report, root)
+            args = argparse.Namespace(
+                branch=None,
+                phase="pm",
+                decomp=True,
+                clarification=True,
+                roadmap=True,
+                judgment_confirmed=False,
+                report_file=str(report),
+                files=None,
+                agent_run_id=None,
+                planner_run_id=planner_run_id,
+                manager_run_id=manager_run_id,
+                manager_report=str(manager_report),
+            )
+            with mock.patch.object(pipeline, "_load_branch_state", return_value=state):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_done(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(state["phases"]["pm"]["status"], "PENDING")
 
     def test_pm_done_records_fast_analysis_execution_profile(self) -> None:
         state = pipeline._new_state("TMP-FAST-ANALYSIS", "IMP", "analyze logs")
@@ -1525,6 +1637,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 """,
                 encoding="utf-8",
             )
+            planner_run_id, manager_run_id, manager_report = _install_pm_split_runs(state, report, root)
             args = argparse.Namespace(
                 branch=None,
                 phase="pm",
@@ -1534,7 +1647,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 judgment_confirmed=False,
                 report_file=str(report),
                 files=None,
-                agent_run_id=_install_completed_agent_run(state, "pm", report, root),
+                agent_run_id=None,
+                planner_run_id=planner_run_id,
+                manager_run_id=manager_run_id,
+                manager_report=str(manager_report),
             )
             with mock.patch.object(pipeline, "BASE_DIR", root), \
                  mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
@@ -1656,6 +1772,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 """,
                 encoding="utf-8",
             )
+            planner_run_id, manager_run_id, manager_report = _install_pm_split_runs(state, report, root)
             args = argparse.Namespace(
                 branch=None,
                 phase="pm",
@@ -1665,7 +1782,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 judgment_confirmed=False,
                 report_file=str(report),
                 files=None,
-                agent_run_id=_install_completed_agent_run(state, "pm", report, root),
+                agent_run_id=None,
+                planner_run_id=planner_run_id,
+                manager_run_id=manager_run_id,
+                manager_report=str(manager_report),
             )
             with mock.patch.object(pipeline, "BASE_DIR", root), \
                  mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
@@ -2716,7 +2836,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         wiki = Path(".claude/agents/shared/Global_Wiki.md").read_text(encoding="utf-8")
         self.assertIn("External Gates", wiki)
         self.assertIn(
-            "done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id",
+            "done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id",
             wiki,
         )
         self.assertIn("--evidence <실제-결과물-경로-또는-첨부파일>", wiki)
@@ -2735,7 +2855,9 @@ class ThreeGatePipelineTests(unittest.TestCase):
         pipeline_text = Path("pipeline.py").read_text(encoding="utf-8")
 
         self.assertIn("contract audit", pm)
-        self.assertIn("--agent-run-id <pm_run_id>", pm)
+        self.assertIn("--planner-run-id <planner_run_id>", pm)
+        self.assertIn("--manager-run-id <manager_run_id>", pm)
+        self.assertIn("--manager-report manager_handoff.xml", pm)
         self.assertIn("gates phase-ci --phase pm", pm)
         self.assertIn("--agent-run-id <dev_run_id>", pm)
         self.assertIn("--agent-run-id <qa_run_id>", qa)
@@ -2761,10 +2883,11 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("low_value_questions_filtered", pm)
         self.assertIn("maintainability_first", pm)
         self.assertIn("P2/internal implementation preferences must be filtered", pipeline_text)
-        self.assertIn("agent start --phase pm", pipeline_text)
+        self.assertIn("agent start --phase pm_planner", pipeline_text)
+        self.assertIn("agent start --phase pipeline_manager", pipeline_text)
         self.assertIn("세션 언어 규칙", pipeline_text)
         self.assertIn("최신 상태 확인", pipeline_text)
-        self.assertIn("done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id", pipeline_text)
+        self.assertIn("done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id", pipeline_text)
         active_docs = "\n".join([pm, qa, build, harness, power_automate, tech_tree, agents_command, claude, pipeline_text])
         self.assertIn("Phase 6→7 자동 진행", claude)
         self.assertIn("사용자에게 묻는 지점은 마지막", pm)
