@@ -630,7 +630,7 @@ class POAutomationApp:
 def main() -> None:
     """애플리케이션 진입점."""
     root = tk.Tk()
-    app = POAutomationApp(root)
+    POAutomationApp(root)
     root.mainloop()
 
 
