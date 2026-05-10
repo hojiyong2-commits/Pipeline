@@ -157,6 +157,54 @@ def _design_confirmation_xml(mt_id: str = "MT-1") -> str:
 """
 
 
+def _task_complexity_xml(
+    profile: str = "STANDARD",
+    *,
+    p0: int = 0,
+    p1: int = 0,
+    output_format_clear: bool = True,
+    files: int = 1,
+    functions: int = 0,
+    lines: int = 40,
+    risk_overrides: dict | None = None,
+) -> str:
+    risks = {
+        "data_deletion": False,
+        "file_move": False,
+        "external_api": False,
+        "auth_or_secret": False,
+        "pipeline_protocol": False,
+        "build_or_deploy": False,
+        "core_parser_logic": False,
+        "database_or_migration": False,
+        "new_dependency": False,
+    }
+    if risk_overrides:
+        risks.update(risk_overrides)
+    risk_xml = "\n".join(
+        f"    <{name}>{str(value).lower()}</{name}>"
+        for name, value in risks.items()
+    )
+    return f"""  <task_complexity>
+    <execution_profile>{profile}</execution_profile>
+    <reason>테스트용 실행 프로필 선언</reason>
+    <uncertainty>
+      <p0_questions>{p0}</p0_questions>
+      <p1_questions>{p1}</p1_questions>
+      <output_format_clear>{str(output_format_clear).lower()}</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>{files}</expected_changed_files>
+      <expected_changed_functions>{functions}</expected_changed_functions>
+      <expected_changed_lines>{lines}</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+{risk_xml}
+    </risk_flags>
+  </task_complexity>
+"""
+
+
 def _install_completed_agent_run(state: dict, phase: str, output_file: Path, root: Path) -> str:
     run_id = f"{phase}-test-run"
     receipt_dir = root / "agent-receipts"
@@ -862,7 +910,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 </decomposition_audit>
 <step_plan>
   <pipeline_id>TMP-PM-AGENT-REQ</pipeline_id>
-""" + _design_confirmation_xml() + """
+""" + _design_confirmation_xml() + _task_complexity_xml("STANDARD", functions=1) + """
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.run</affected_function>
@@ -914,7 +962,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 </decomposition_audit>
 <step_plan>
   <pipeline_id>TMP-PM-AGENT-OK</pipeline_id>
-""" + _design_confirmation_xml() + """
+""" + _design_confirmation_xml() + _task_complexity_xml("STANDARD", functions=1) + """
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.run</affected_function>
@@ -1136,6 +1184,38 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertEqual(state["external_gates"]["acceptance"]["status"], "PENDING")
 
+    def test_accept_gate_reject_records_failure_packet(self) -> None:
+        state = pipeline._new_state("TMP-ACCEPT-REJECT", "FEAT", "sample")
+        state["external_gates"] = pipeline._new_external_gates(enabled=True)
+        for gate_name in ("technical", "oracle", "github_ci"):
+            state["external_gates"][gate_name]["status"] = "PASS"
+
+        args = argparse.Namespace(
+            gates_action="accept",
+            result="REJECT",
+            evidence="https://github.com/hojiyong2-commits/Pipeline/pull/1",
+            notes="결과물이 요청과 다름",
+            user_confirmed=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = {
+                "user_validation": root / "user_validation.json",
+                "failures_root": root / "failures",
+            }
+            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+                 mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
+                 mock.patch.object(pipeline, "_record_snapshot"), \
+                 mock.patch.object(pipeline, "_save"):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_gates(args)
+                packet = paths["failures_root"] / "acceptance_attempt_1.json"
+                self.assertTrue(packet.exists())
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(state["external_gates"]["acceptance"]["status"], "FAIL")
+        self.assertEqual(state["failure_packets"][0]["gate"], "acceptance")
+
     def test_acceptance_record_is_blocked_in_mandatory_three_gate(self) -> None:
         state = pipeline._new_state("TMP-ACCEPTANCE-RECORD", "IMP", "sample")
         state["current_phase"] = "harness"
@@ -1317,6 +1397,44 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertIn("P2/internal implementation preferences must be filtered", stderr.getvalue())
 
+    def test_pm_done_requires_task_complexity_profile(self) -> None:
+        state = pipeline._new_state("TMP-PM-PROFILE-REQ", "FEAT", "sample")
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single function</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-PM-PROFILE-REQ</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+""" + _design_confirmation_xml() + """
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>main.run</affected_function>
+      <target_files><file>main.py</file></target_files>
+      <grep_evidence>
+        <pattern>def run</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Update run behavior</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            with self.assertRaises(SystemExit) as ctx:
+                pipeline._validate_pm_step_plan_file(str(report), state)
+
+        self.assertEqual(ctx.exception.code, 1)
+
     def test_pm_done_records_atomic_step_plan_with_mandatory_gates(self) -> None:
         state = pipeline._new_state("TMP-PM-OK", "FEAT", "sample")
         with tempfile.TemporaryDirectory() as tmp:
@@ -1334,7 +1452,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 <step_plan>
   <pipeline_id>TMP-PM-OK</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
-""" + _design_confirmation_xml() + """
+""" + _design_confirmation_xml() + _task_complexity_xml("STANDARD", functions=1) + """
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.run</affected_function>
@@ -1371,6 +1489,138 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(state["atomic_plan"]["micro_task_count"], 1)
         self.assertEqual(state["atomic_plan"]["micro_tasks"][0]["id"], "MT-1")
         self.assertIn("project_snapshot", state["atomic_plan"])
+        self.assertEqual(state["execution_profile"]["mode"], "STANDARD")
+
+    def test_pm_done_records_fast_analysis_execution_profile(self) -> None:
+        state = pipeline._new_state("TMP-FAST-ANALYSIS", "IMP", "analyze logs")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single report output</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-FAST-ANALYSIS</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+""" + _design_confirmation_xml() + _task_complexity_xml("FAST_ANALYSIS", functions=0, lines=30) + """
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>none.report</affected_function>
+      <target_files><file>pipeline_outputs/TMP-FAST-ANALYSIS/report.md</file></target_files>
+      <grep_evidence>
+        <pattern>pipeline status</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Write analysis report only</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(
+                branch=None,
+                phase="pm",
+                decomp=True,
+                clarification=True,
+                roadmap=True,
+                judgment_confirmed=False,
+                report_file=str(report),
+                files=None,
+                agent_run_id=_install_completed_agent_run(state, "pm", report, root),
+            )
+            with mock.patch.object(pipeline, "BASE_DIR", root), \
+                 mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                 mock.patch.object(pipeline, "_save_state_for"), \
+                 mock.patch.object(pipeline, "_record_snapshot"):
+                pipeline.cmd_done(args)
+
+        profile = state["execution_profile"]
+        self.assertEqual(profile["mode"], "FAST_ANALYSIS")
+        self.assertFalse(profile["product_code_write_allowed"])
+        self.assertEqual(profile["max_micro_tasks"], 1)
+        self.assertEqual(profile["phase_ci_mode"], "batched")
+
+    def test_pm_done_rejects_fast_analysis_with_multiple_micro_tasks(self) -> None:
+        state = pipeline._new_state("TMP-FAST-MULTI", "IMP", "bad fast profile")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>2</total_functions_identified>
+  <micro_task_count>2</micro_task_count>
+  <grep_executions>2</grep_executions>
+  <split_decision>two outputs</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-FAST-MULTI</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+""" + _design_confirmation_xml() + _task_complexity_xml("FAST_ANALYSIS", files=2, functions=0) + """
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>none.report_one</affected_function>
+      <target_files><file>pipeline_outputs/TMP-FAST-MULTI/report1.md</file></target_files>
+      <grep_evidence><pattern>one</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>Write first report</change_summary>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>none.report_two</affected_function>
+      <target_files><file>pipeline_outputs/TMP-FAST-MULTI/report2.md</file></target_files>
+      <grep_evidence><pattern>two</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>Write second report</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            with mock.patch.object(pipeline, "BASE_DIR", root):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline._validate_pm_step_plan_file(str(report), state)
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_fast_analysis_blocks_product_code_scope_manifest(self) -> None:
+        state = pipeline._new_state("TMP-FAST-SCOPE", "IMP", "analysis only")
+        state["execution_profile"] = pipeline._new_execution_profile("FAST_ANALYSIS")
+        state["execution_profile"]["product_code_write_allowed"] = False
+        state["atomic_plan"] = {
+            "micro_tasks": [
+                {
+                    "id": "MT-1",
+                    "affected_function": "main.run",
+                    "target_files": ["main.py"],
+                }
+            ],
+            "project_snapshot": {"files": {}, "skipped": []},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "scope_manifest.json"
+            manifest.write_text(
+                json.dumps({
+                    "pipeline_id": "TMP-FAST-SCOPE",
+                    "micro_tasks": [
+                        {
+                            "id": "MT-1",
+                            "files": ["main.py"],
+                            "affected_functions": ["main.run"],
+                        }
+                    ],
+                }),
+                encoding="utf-8",
+            )
+            with self.assertRaises(SystemExit) as ctx:
+                pipeline._validate_dev_scope_manifest(str(manifest), state, "main.py")
+        self.assertEqual(ctx.exception.code, 1)
 
     def test_pm_done_rejects_dev_output_or_handover_in_pm_report(self) -> None:
         state = pipeline._new_state("TMP-PM-POLLUTED", "FEAT", "sample")
@@ -2706,6 +2956,59 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(result["status"], "PASS")
         self.assertEqual(result["run_id"], "777")
         self.assertEqual(state["external_gates"]["github_ci"]["status"], "PASS")
+
+    def test_output_registry_copies_file_and_writes_manifest(self) -> None:
+        state = pipeline._new_state("TMP-OUTPUTS", "IMP", "visible result")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "report.md"
+            source.write_text("# 최종 보고서\n", encoding="utf-8")
+            outputs_root = root / "pipeline_outputs"
+            with mock.patch.object(pipeline, "BASE_DIR", root), \
+                 mock.patch.object(pipeline, "OUTPUTS_ROOT", outputs_root):
+                item = pipeline._register_output_item(
+                    state,
+                    kind="report",
+                    path=str(source),
+                    label="최종-보고서",
+                    notes="사용자 확인용",
+                )
+                manifest = outputs_root / "TMP-OUTPUTS" / "outputs_manifest.json"
+                copied = root / item["public_path"]
+                self.assertTrue(copied.exists())
+                self.assertTrue(manifest.exists())
+                self.assertEqual(copied.read_text(encoding="utf-8"), "# 최종 보고서\n")
+                self.assertEqual(state["outputs"]["items"][0]["label"], "최종-보고서")
+
+    def test_failure_packet_records_attempts_and_owner(self) -> None:
+        state = pipeline._new_state("TMP-FAIL-PACKET", "IMP", "gate failure")
+        report = {
+            "status": "FAIL",
+            "checks": [
+                {"name": "ruff", "status": "FAIL", "message": "unused import"},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with mock.patch.object(pipeline, "CONTRACTS_DIR", root / "pipeline_contracts"):
+                first = pipeline._record_failure_packet(state, "technical", report, command="python pipeline.py gates technical")
+                second = pipeline._record_failure_packet(state, "technical", report, command="python pipeline.py gates technical")
+                first_path = Path(first["packet_path"])
+                second_path = Path(second["packet_path"])
+                self.assertTrue(first_path.exists())
+                self.assertTrue(second_path.exists())
+                self.assertTrue(first_path.name.endswith("attempt_1.json"))
+                self.assertTrue(second_path.name.endswith("attempt_2.json"))
+                self.assertEqual(first["repair_owner"], "Dev tooling repair")
+                self.assertEqual(len(state["failure_packets"]), 2)
+
+    def test_outputs_command_is_registered(self) -> None:
+        parser = pipeline.build_parser()
+        args = parser.parse_args(["outputs", "add", "--kind", "report", "--path", "report.md", "--label", "최종 보고서"])
+
+        self.assertEqual(args.command, "outputs")
+        self.assertEqual(args.outputs_action, "add")
+        self.assertIs(pipeline.COMMAND_MAP["outputs"], pipeline.cmd_outputs)
 
 
 if __name__ == "__main__":
