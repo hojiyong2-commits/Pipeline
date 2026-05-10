@@ -44,7 +44,7 @@ python pipeline.py gates prepare-phase --phase build
 python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline
 
 python pipeline.py gates technical
-python pipeline.py gates oracle --user-confirmed
+python pipeline.py gates oracle
 python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
 python pipeline.py gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed
 python pipeline.py architect --report-file architect_report.xml
@@ -64,9 +64,9 @@ python pipeline.py architect --report-file architect_report.xml
 | Phase 2 — Dev | 브랜치에서 README 수정, PR 흐름 확인 | `pipeline.py done --phase dev --files "README.md" --scope-declared` |
 | Phase 4 — QA | 내용 검증, 브랜치/PR 검증 | `pipeline.py qa --result PASS --numeric-score N` |
 | Phase 5 — SEC | 문서 작업이라 보안 검사는 생략 | `pipeline.py sec --skip` |
-| Phase 6 — Build | 문서 작업이라 EXE 빌드는 해당 없음 | `pipeline.py build --exe "N/A" --skip-reason "docs-only" --user-confirmed` |
+| Phase 6 — Build | 문서 작업이라 EXE 빌드는 해당 없음 | `pipeline.py build --exe "N/A" --skip-reason "docs-only"` |
 | Phase A — 단계별 CI | PM/Dev/QA/Build마다 GitHub 자동 검증 통과 | `pipeline.py gates prepare-phase --phase dev` 후 `pipeline.py gates phase-ci --phase dev` |
-| Phase 7 — Three-Gate | 기술 검사, Oracle 검사, GitHub 자동 검사, 사용자 승인 | `pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed` |
+| Phase 7 — Three-Gate | 기술 검사, Oracle 검사, GitHub 자동 검사, 사용자 승인 | `pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed` |
 | Phase 8 — Architect | 원인 분석과 후속 개선 여부 판단 | `pipeline.py architect --report-file architect_report.xml` |
 
 ### 확인된 제약

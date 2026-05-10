@@ -20,7 +20,7 @@ Pipeline completion is controlled only by:
 2. Every PM `MT-N` module gate PASS.
 3. `python pipeline.py module integrate --result PASS --report-file integration_report.xml`.
 4. `python pipeline.py gates technical`.
-5. `python pipeline.py gates oracle --user-confirmed`.
+5. `python pipeline.py gates oracle`.
 6. `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`.
 7. `python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed`.
 8. `python pipeline.py architect --report-file architect_report.xml`.

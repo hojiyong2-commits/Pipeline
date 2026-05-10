@@ -14,8 +14,8 @@ BUG-20260509-894D MT-2
   Test 2: current_phase='Phase 8 - Architect (RCA)'일 때 check_gate("dev")는 BLOCKED
   Test 3: qa --result FAIL --numeric-score 60 without --failure-sig → exit 1
   Test 4: harness FAIL 후 check_gate("dev")는 BLOCKED (architect 먼저 필요)
-  Test 5: harness without --user-confirmed → exit 1 + [HARNESS GATE] 메시지
-  Test 6: harness FAIL without --test-output-file (--user-confirmed 있음) → exit 1 + HARNESS GATE BLOCKED 메시지
+  Test 5: harness without --user-confirmed → user-confirmed 때문에 차단되지 않음; evidence gate가 판단
+  Test 6: harness FAIL without --test-output-file → exit 1 + HARNESS GATE BLOCKED 메시지
 
   BUG-20260508-D541 추가 (XML comment bypass 차단):
   Test 7: comment-only <harness_report> → harness FAIL 기록 거부 (exit 1)
@@ -270,10 +270,10 @@ def test_harness_fail_requires_architect() -> None:
     )
 
 
-# ── Test 5: harness without --user-confirmed → exit 1 ────────────────────────
+# ── Test 5: harness without --user-confirmed → no user-confirmed gate ────────
 
 def test_harness_without_user_confirmed() -> None:
-    """pipeline.py harness --score 80 --verdict PASS --test-output-file X without --user-confirmed → exit 1."""
+    """user-confirmed 누락만으로는 더 이상 차단하지 않는다. 이후 evidence gate가 판단한다."""
     import tempfile
     import os
     # 절대경로 기반 cwd 사용 (anti-gaming 패턴 16: subprocess 상대경로 실패 방지)
@@ -292,13 +292,13 @@ def test_harness_without_user_confirmed() -> None:
         has_exit1 = result.returncode == 1
         combined = result.stdout + result.stderr
         has_msg = (
-            "user-confirmed" in combined.lower()
-            or "HARNESS GATE" in combined
+            "user-confirmed" not in combined.lower()
+            and ("HARNESS GATE" in combined or "not a completion path" in combined or "PIPELINE ERROR" in combined)
         )
         assert_result(
             has_exit1 and has_msg,
             "test_harness_without_user_confirmed",
-            f"expected exit 1 WITH HARNESS GATE message, got exit={result.returncode}, "
+            f"expected exit 1 for non-user gate reason, got exit={result.returncode}, "
             f"stdout={result.stdout[:300]}"
         )
     finally:
@@ -311,11 +311,11 @@ def test_harness_without_user_confirmed() -> None:
 # ── Test 6: harness FAIL without --test-output-file → exit 1 ─────────────────
 
 def test_harness_fail_without_test_output_file() -> None:
-    """pipeline.py harness --score 40 --verdict FAIL --user-confirmed without --test-output-file → exit 1."""
+    """pipeline.py harness --score 40 --verdict FAIL without --test-output-file → exit 1."""
     PROJECT_DIR = str(__import__("pathlib").Path(__file__).resolve().parent)
     result = subprocess.run(
         [sys.executable, "pipeline.py", "harness", "--score", "40",
-         "--verdict", "FAIL", "--user-confirmed"],
+         "--verdict", "FAIL"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         env=dict(__import__("os").environ, PYTHONIOENCODING="utf-8"),
         cwd=PROJECT_DIR,
