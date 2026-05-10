@@ -1,6 +1,6 @@
 ---
 name: build-agent
-description: Use to package completed Python apps into a single EXE via PyInstaller. Do NOT use for Streamlit apps, MD-only tasks, or non-code tasks — N/A builds require a whitelisted --skip-reason and --user-confirmed (see Role section).
+description: Use to package completed Python apps into a single EXE via PyInstaller. Do NOT use for Streamlit apps, MD-only tasks, or non-code tasks — N/A builds require a whitelisted --skip-reason and final acceptance report coverage (see Role section).
 model: haiku
 ---
 
@@ -31,7 +31,7 @@ model: haiku
 <!-- MT-4 (IMP-20260506-A064): EXE 빌드 시 dist/build_report.xml 파일이 존재해야 하며 6-Section XML 블록 전부 포함 의무.
      pipeline.py build --exe "dist/앱.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>
      파일 없거나 6-Section 블록 누락 시 pipeline.py가 BUILD DONE 기록 거부 (hard gate).
-     N/A 빌드(--exe N/A): report-file 검증 생략. 단, python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <build_run_id> 필수 (예시; 실제 유형 선택: Streamlit→"streamlit", MD-only→"md-only", Power Automate→"power-automate", 에이전트/CLAUDE 수정→"meta-task", 비코드→"no-code", 문서→"docs-only").
+     N/A 빌드(--exe N/A): report-file 검증 생략. 단, python pipeline.py build --exe "N/A" --skip-reason "meta-task" --agent-run-id <build_run_id> 필수 (예시; 실제 유형 선택: Streamlit→"streamlit", MD-only→"md-only", Power Automate→"power-automate", 에이전트/CLAUDE 수정→"meta-task", 비코드→"no-code", 문서→"docs-only"). 중간 사용자 확인은 묻지 않고 최종 ACCEPT 보고서에 빌드 없음 사유를 표시.
      --skip-reason whitelist (대소문자 무관, 길이 ≥5): "md-only", "meta-task", "streamlit", "power-automate", "no-code", "docs-only"
      whitelist 외 값 또는 길이 < 5인 값은 pipeline.py가 거부(exit 1). -->
 
@@ -80,7 +80,7 @@ PyInstaller 명령어 실행 전 반드시 수행:
 
 이 self_check은 build_report.xml 파일 저장 직전에 수행합니다. 6섹션 모두 YES 확인 후에만 파일 저장 및 `<status>BUILD SUCCESS</status>` 선언.
 
-**N/A 빌드 예외:** Streamlit/MD-only/메타-태스크 등 EXE 빌드 대상이 아닌 경우 build_report 자체가 N/A이므로 `<all_6_sections>N/A</all_6_sections>` 처리하고 별도 보고. 이 경우 `python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <build_run_id>`로 기록 (예시; 실제 유형: Streamlit→"streamlit", MD-only→"md-only", 에이전트·CLAUDE 수정→"meta-task", 비코드→"no-code", 문서→"docs-only", Power Automate→"power-automate").
+**N/A 빌드 예외:** Streamlit/MD-only/메타-태스크 등 EXE 빌드 대상이 아닌 경우 build_report 자체가 N/A이므로 `<all_6_sections>N/A</all_6_sections>` 처리하고 별도 보고. 이 경우 `python pipeline.py build --exe "N/A" --skip-reason "meta-task" --agent-run-id <build_run_id>`로 기록 (예시; 실제 유형: Streamlit→"streamlit", MD-only→"md-only", 에이전트·CLAUDE 수정→"meta-task", 비코드→"no-code", 문서→"docs-only", Power Automate→"power-automate"). 사용자에게 중간 진행 확인을 묻지 않습니다.
 
 ```xml
 <build_report>

@@ -625,12 +625,58 @@ class ThreeGatePipelineTests(unittest.TestCase):
         state = pipeline._new_state("TMP-ORACLE-ORDER", "FEAT", "sample")
         state["external_gates"] = pipeline._new_external_gates(enabled=True)
         state["pipeline_id"] = "TMP-ORACLE-ORDER"
-        args = argparse.Namespace(gates_action="oracle", user_confirmed=True)
-        with mock.patch.object(pipeline, "_require_state", return_value=state):
+        args = argparse.Namespace(gates_action="oracle", user_confirmed=False)
+        stderr = io.StringIO()
+        with mock.patch.object(pipeline, "_require_state", return_value=state), \
+             mock.patch("sys.stderr", stderr):
             with self.assertRaises(SystemExit) as ctx:
                 pipeline.cmd_gates(args)
 
         self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("technical gate PASS first", stderr.getvalue())
+
+    def test_phase7_check_no_longer_requires_user_confirmed(self) -> None:
+        state = pipeline._new_state("TMP-HARNESS-AUTO", "IMP", "sample")
+        state["current_phase"] = "harness"
+        state["phases"]["build"]["status"] = "DONE"
+        _mark_phase_attestation_passed(state, "build")
+
+        args = argparse.Namespace(phase="harness", branch=None, user_confirmed=False)
+        with mock.patch.object(pipeline, "_load_branch_state", return_value=state):
+            with self.assertRaises(SystemExit) as ctx:
+                pipeline.cmd_check(args)
+
+        self.assertEqual(ctx.exception.code, 0)
+
+    def test_na_build_no_longer_requires_user_confirmed(self) -> None:
+        state = pipeline._new_state("TMP-NA-BUILD-AUTO", "IMP", "docs")
+        state["current_phase"] = "build"
+        state["phases"]["pm"]["status"] = "DONE"
+        state["phases"]["dev"]["status"] = "DONE"
+        state["phases"]["qa"]["status"] = "PASS"
+        state["phases"]["sec"]["status"] = "SKIP"
+        _mark_phase_attestation_passed(state, "qa")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "build_report.xml"
+            output.write_text("<build_report><status>N/A</status></build_report>", encoding="utf-8")
+            run_id = _install_completed_agent_run(state, "build", output, root)
+            args = argparse.Namespace(
+                branch=None,
+                exe="N/A",
+                skip_reason="docs-only",
+                report_file=None,
+                user_confirmed=False,
+                agent_run_id=run_id,
+            )
+            with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                 mock.patch.object(pipeline, "_record_snapshot"), \
+                 mock.patch.object(pipeline, "_save_state_for"):
+                pipeline.cmd_build(args)
+
+        self.assertEqual(state["phases"]["build"]["status"], "DONE")
+        self.assertEqual(state["phases"]["build"]["skip_reason"], "docs-only")
 
     def test_phase_attestation_blocks_next_phase_until_github_pass(self) -> None:
         state = pipeline._new_state("TMP-PHASE-BLOCK", "IMP", "sample")
@@ -2050,7 +2096,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 "waiver_reason": "docs-only task",
             }
             pipeline._write_json(paths["contract_audit"], audit)
-            args = argparse.Namespace(gates_action="oracle", user_confirmed=True)
+            args = argparse.Namespace(gates_action="oracle", user_confirmed=False)
             with mock.patch.object(pipeline, "_require_state", return_value=state):
                 with mock.patch.object(pipeline, "_contract_paths", return_value=paths):
                     with mock.patch.object(pipeline, "_save"):
@@ -2109,6 +2155,12 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("세션 언어 규칙", pipeline_text)
         self.assertIn("최신 상태 확인", pipeline_text)
         self.assertIn("done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id", pipeline_text)
+        active_docs = "\n".join([pm, qa, build, harness, agents_command, claude, pipeline_text])
+        self.assertIn("Phase 6→7 자동 진행", claude)
+        self.assertIn("사용자에게 묻는 지점은 마지막", pm)
+        self.assertNotIn("gates oracle --user-confirmed", active_docs)
+        self.assertNotIn('skip-reason "meta-task" --user-confirmed', active_docs)
+        self.assertNotIn('skip-reason "docs-only" --user-confirmed', active_docs)
 
     def test_github_repo_from_remote_parses_https_and_ssh_urls(self) -> None:
         self.assertEqual(

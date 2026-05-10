@@ -131,7 +131,7 @@ python pipeline.py agent start --phase build
 python pipeline.py agent finish --run-id <build_run_id> --token <token> --output-file build_report.xml
 python pipeline.py build --exe "dist/app.exe" --report-file build_report.xml --agent-run-id <build_run_id>
 # docs-only 등 비실행 산출물:
-python pipeline.py build --exe "N/A" --skip-reason "docs-only" --user-confirmed --agent-run-id <build_run_id>
+python pipeline.py build --exe "N/A" --skip-reason "docs-only" --agent-run-id <build_run_id>
 python pipeline.py gates prepare-phase --phase build
 git add .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add build phase attestation request"
@@ -147,7 +147,7 @@ Build phase CI가 PASS되기 전에는 Phase 7로 넘어가지 않는다.
 
 ```powershell
 python pipeline.py gates technical
-python pipeline.py gates oracle --user-confirmed
+python pipeline.py gates oracle
 python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
 python pipeline.py gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed
 ```

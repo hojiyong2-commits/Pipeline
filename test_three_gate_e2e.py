@@ -383,7 +383,6 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
         "N/A",
         "--skip-reason",
         "no-code",
-        "--user-confirmed",
         "--agent-run-id",
         build_run_id,
     )
@@ -398,7 +397,7 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
     assert technical_result["strict_tools"] is True
     assert technical_result["complete_eligible"] is True
     assert {item["name"] for item in technical_result["checks"]} >= {"py_compile", "ruff", "mypy", "bandit", "pytest"}
-    _ok(work, "gates", "oracle", "--user-confirmed")
+    _ok(work, "gates", "oracle")
     blocked_accept = _run(work, "gates", "accept", "--result", "ACCEPT", "--evidence", "manual-smoke", "--user-confirmed")
     assert blocked_accept.returncode == 1
     assert "github_ci gate must be PASS" in (blocked_accept.stdout + blocked_accept.stderr)
