@@ -120,6 +120,73 @@ python pipeline.py module integrate --result PASS --report-file integration_repo
 
 `pipeline.py done --phase dev` is blocked until all module QA gates and the integration gate are PASS. Passed modules are checkpointed by file hash; if a later module silently changes an earlier passed file, final Dev completion is blocked.
 
+## Execution Profile / Fast Path Gate
+
+PM must classify every task with `<task_complexity>` inside `<step_plan>`. This is not optional text; `pipeline.py done --phase pm` parses it and blocks invalid Fast Path declarations.
+
+Fast Path means "same external verification, fewer unnecessary loops." It never disables Three-Gate, Option A receipts, GitHub Actions, CODEOWNERS, module QA, or final user ACCEPT.
+
+Choose the profile conservatively:
+
+- `FAST_DOC`: documentation, prompt, or MD-only work. Product code edits are forbidden.
+- `FAST_ANALYSIS`: log/result inspection or report writing. Product code edits are forbidden.
+- `FAST_SINGLE_CODE`: very small code change, at most 2 files, at most 2 functions, expected 80 changed lines or fewer.
+- `STANDARD`: default when the task is not clearly simple.
+- `HIGH_RISK`: deletion, file move, auth/secret, external API, protocol, build/deploy, core parser, DB/migration, or new dependency risk.
+
+Fast Path hard limits:
+
+- exactly one `<micro_task>`
+- `p0_questions=0`
+- `p1_questions<=2`
+- `output_format_clear=true`
+- all risk flags false
+- `FAST_DOC` and `FAST_ANALYSIS` must not target product code files
+
+Required XML shape:
+
+```xml
+<task_complexity>
+  <execution_profile>FAST_DOC|FAST_ANALYSIS|FAST_SINGLE_CODE|STANDARD|HIGH_RISK</execution_profile>
+  <reason>쉬운 한국어로 왜 이 프로필인지 설명</reason>
+  <uncertainty>
+    <p0_questions>0</p0_questions>
+    <p1_questions>0</p1_questions>
+    <output_format_clear>true</output_format_clear>
+  </uncertainty>
+  <blast_radius>
+    <expected_changed_files>1</expected_changed_files>
+    <expected_changed_functions>0</expected_changed_functions>
+    <expected_changed_lines>40</expected_changed_lines>
+  </blast_radius>
+  <risk_flags>
+    <data_deletion>false</data_deletion>
+    <file_move>false</file_move>
+    <external_api>false</external_api>
+    <auth_or_secret>false</auth_or_secret>
+    <pipeline_protocol>false</pipeline_protocol>
+    <build_or_deploy>false</build_or_deploy>
+    <core_parser_logic>false</core_parser_logic>
+    <database_or_migration>false</database_or_migration>
+    <new_dependency>false</new_dependency>
+  </risk_flags>
+</task_complexity>
+```
+
+If unsure, choose `STANDARD`. Do not choose Fast Path just to reduce time.
+
+## User-Visible Output Registry
+
+PM must plan at least one user-visible result for final ACCEPT. For docs or analysis tasks, the result is usually a report file. For runnable work, it may be an EXE, screenshot, output Excel, log, or generated file.
+
+Downstream agents must register the final result with:
+
+```bash
+python pipeline.py outputs add --kind report --path report.md --label "최종 보고서" --notes "사용자는 결론과 확인 항목만 보면 됩니다."
+```
+
+Registered outputs are copied under `pipeline_outputs/<pipeline_id>/` and shown as links in the GitHub PR "최종 확인 안내" comment. PM must not ask the user to ACCEPT until the PR link and registered output link/path are available.
+
 ## Role
 요구사항을 에이전트별 실행 가능한 티켓으로 변환하는 총괄 설계자이자 파이프라인 관리자. 
 ---

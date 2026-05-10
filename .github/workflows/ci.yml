@@ -247,6 +247,19 @@ jobs:
             $fileLines = @("- GitHub가 변경 파일을 찾지 못했습니다.")
           }
 
+          $outputLines = @()
+          foreach ($file in $files) {
+            $name = [string]$file.filename
+            if ($name -notmatch '^pipeline_outputs/') { continue }
+            if ($name -match '/outputs_manifest\.json$') { continue }
+            $encodedName = [System.Uri]::EscapeDataString($name).Replace('%2F','/')
+            $blobUrl = "$env:GITHUB_SERVER_URL/$repo/blob/$headSha/$encodedName"
+            $outputLines += "- [$name]($blobUrl)"
+          }
+          if ($outputLines.Count -eq 0) {
+            $outputLines = @("- 등록된 결과물 파일이 없습니다. 위 **사용자가 실제로 확인할 것**이나 PR 본문의 결과 링크/경로를 확인하세요.")
+          }
+
           $sensitiveLines = @()
           if ($sensitive.Count -eq 0) {
             $sensitiveLines = @("- 없음")
@@ -276,6 +289,10 @@ jobs:
           ### 사용자가 실제로 확인할 것
 
           $resultToCheckBlock
+
+          ### 등록된 결과물 바로 열기
+
+          $($outputLines -join "`n")
 
           ### 기대 결과와 실제 결과 비교
 

@@ -93,6 +93,35 @@ def _design_confirmation_xml(mt_id: str = "MT-1") -> str:
 """
 
 
+def _task_complexity_xml(profile: str = "STANDARD") -> str:
+    return f"""  <task_complexity>
+    <execution_profile>{profile}</execution_profile>
+    <reason>CLI E2E smoke test profile</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>40</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+"""
+
+
 def _agent_run(work: Path, phase: str, output_file: Path, evidence: str | None = None) -> str:
     started = _ok(work, "agent", "start", "--phase", phase)
     payload = _json_from_stdout(started.stdout)
@@ -235,6 +264,7 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
   <pipeline_id>{pid}</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
 {_design_confirmation_xml()}
+{_task_complexity_xml()}
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.greet</affected_function>

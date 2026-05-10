@@ -124,6 +124,72 @@ Every PM `<micro_task>` is a gated module. Dev cannot implement all modules in o
 
 `pipeline.py done --phase dev` blocks until every module QA is PASS and the integration gate is PASS. When a module passes QA, `pipeline.py` stores a checkpoint hash for that module's target files. Later module work is blocked if a previously passed module changes silently.
 
+### Execution Profile / Fast Path
+
+Fast Path는 검증을 약하게 하는 모드가 아니다. Three-Gate, Option A, GitHub Actions, CODEOWNERS, 최종 User ACCEPT는 그대로 유지하고, 단순 업무에서 불필요한 micro-task 반복과 로컬 pytest 반복만 줄인다.
+
+PM은 모든 `step_plan.xml`에 `<task_complexity>`를 넣어야 한다. `pipeline.py done --phase pm`이 이 블록을 파싱하며, 조건에 맞지 않는 Fast Path 선언은 차단한다.
+
+허용 프로필:
+
+| 프로필 | 사용 기준 | 중요한 제한 |
+|---|---|---|
+| `FAST_DOC` | 문서/MD/프롬프트 설명만 바꾸는 작업 | 제품 코드 수정 금지, micro-task 1개 |
+| `FAST_ANALYSIS` | 로그 분석, 결과 검토, 보고서 작성처럼 제품 코드를 바꾸지 않는 작업 | 제품 코드 수정 금지, micro-task 1개 |
+| `FAST_SINGLE_CODE` | 단일 파일/작은 함수 중심의 매우 작은 코드 수정 | 최대 2파일, 최대 2함수, 예상 80줄 이하 |
+| `STANDARD` | 기본값 | 일반 Incremental Module Gate |
+| `HIGH_RISK` | 인증/삭제/배포/핵심 파서/DB 등 위험 작업 | Fast Path 불가, 더 보수적으로 진행 |
+
+Fast Path 필수 조건:
+
+- `<micro_tasks>`는 정확히 1개여야 한다.
+- P0 질문은 0개여야 하고, P1 질문은 2개 이하여야 한다.
+- 출력 형식은 사용자 관점에서 명확해야 한다.
+- 삭제, 파일 이동, 외부 API, 인증/시크릿, 파이프라인 프로토콜, 빌드/배포, 핵심 파서, DB 마이그레이션, 신규 의존성이 있으면 Fast Path 금지.
+- `FAST_DOC`와 `FAST_ANALYSIS`는 제품 코드 파일(`.py`, `.js`, `.ts`, `.ps1` 등)을 수정할 수 없다.
+
+Fast Path XML 예시:
+
+```xml
+<task_complexity>
+  <execution_profile>FAST_ANALYSIS</execution_profile>
+  <reason>사용자에게 기존 로그 분석 보고서만 제공하며 제품 코드를 수정하지 않습니다.</reason>
+  <uncertainty>
+    <p0_questions>0</p0_questions>
+    <p1_questions>1</p1_questions>
+    <output_format_clear>true</output_format_clear>
+  </uncertainty>
+  <blast_radius>
+    <expected_changed_files>1</expected_changed_files>
+    <expected_changed_functions>0</expected_changed_functions>
+    <expected_changed_lines>40</expected_changed_lines>
+  </blast_radius>
+  <risk_flags>
+    <data_deletion>false</data_deletion>
+    <file_move>false</file_move>
+    <external_api>false</external_api>
+    <auth_or_secret>false</auth_or_secret>
+    <pipeline_protocol>false</pipeline_protocol>
+    <build_or_deploy>false</build_or_deploy>
+    <core_parser_logic>false</core_parser_logic>
+    <database_or_migration>false</database_or_migration>
+    <new_dependency>false</new_dependency>
+  </risk_flags>
+</task_complexity>
+```
+
+Fast Path에서 gate가 실패하면 `pipeline.py`는 실패 패킷을 남긴다. 실패 패킷에는 어느 gate가 실패했는지, 다음 수리 담당자가 PM/Dev/QA/Build 중 누구인지, 어떤 보고서 파일을 봐야 하는지가 기록된다. 같은 문제를 추측으로 반복 수정하지 말고 해당 실패 패킷을 기준으로 한 번에 고친다.
+
+### Output Registry
+
+사용자가 최종 ACCEPT/REJECT를 쉽게 판단하려면 결과물이 PR에서 바로 보여야 한다. Dev/Build/Harness는 사용자가 실제로 열어볼 보고서, 스크린샷, 엑셀, EXE, 로그를 아래 명령으로 등록해야 한다.
+
+```powershell
+python pipeline.py outputs add --kind report --path report.md --label "최종 분석 보고서" --notes "사용자는 이 파일의 결론과 권고만 확인하면 됩니다."
+```
+
+기본적으로 파일은 `pipeline_outputs/<pipeline_id>/` 아래로 복사되고, GitHub Actions의 한국어 **최종 확인 안내** 댓글에 “등록된 결과물 바로 열기” 링크로 표시된다. 마지막 작업 담당자는 ACCEPT를 묻기 전에 PR 링크와 이 결과물 링크를 함께 제공해야 한다.
+
 ### Option A Agent Receipt Gate
 
 When `phase_attestations.enabled=true`, PM/Dev/QA/Build phase records must be

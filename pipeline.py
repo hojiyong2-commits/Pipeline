@@ -1,121 +1,21 @@
 #!/usr/bin/env python3
-"""Work Protocol Pipeline Enforcer v1.3
+"""Work Protocol Pipeline Enforcer.
 
-IMP-20260506-A064 — 5개 강제 게이트 추가:
-  MT-1: PM 분석 게이트 (done --phase pm --decomp --clarification --roadmap)
-  MT-2: QA numeric_score 기록 강제 (qa --result --numeric-score)
-  MT-3: Circuit Breaker failure_signature 추적 (qa --result FAIL --failure-sig FAILURE_SIG)
-  MT-4: BUILD 6-Section Report 파일 존재 검증 (build --report-file)
-  MT-5: Frozen Codebase scope 선언 (done --phase dev --scope-declared)
+현재 `/Task` 파이프라인의 완료 조건은 숫자 점수가 아니라 아래 trust chain입니다.
 
-BUG-20260507-C2E2 — 4개 추가 게이트:
-  MT-1: BUILD XML comment bypass 차단 (_verify_build_report_xml, ET only, regex fallback 없음)
-  MT-2: check_gate current_phase 불변식 추가 (phase != current_phase → BLOCKED)
-  MT-3: TERMINATED terminal state 추가 + cmd_terminate()
-  MT-4: docstring 플래그 표기 수정 (required 항목은 대괄호 없이)
+    local pipeline.py -> agent receipts -> GitHub Actions -> CODEOWNERS -> human ACCEPT
 
-BUG-20260508-D541 — XML evidence gate 강화:
-  MT-1: _strip_xml_comments() 공통 유틸 추출 (comment bypass 차단)
-  MT-2: _extract_test_code() comment 제거 후 추출
-  MT-3: cmd_harness() PASS 경로 harness_report 검증 추가
-  MT-4: cmd_harness() FAIL 경로 comment-safe 검증 + 속성 있는 태그 허용 + test_code 검증 추가
-  MT-5: PHASE_INTERFACE["harness"] required_xml 계약 FAIL 경로 일치
+핵심 기능:
+  - PM/Dev/QA/Build phase receipt와 GitHub phase attestation 검증
+  - PM micro-task 분해, module design/dev/qa, integration gate 강제
+  - Technical/Oracle/GitHub CI/User Acceptance external gate 강제
+  - Execution Profile(Fast Path)로 단순 업무의 불필요한 반복 축소
+  - Output Registry로 최종 사용자가 열어볼 결과물 링크 관리
+  - Failure Packet으로 실패 gate의 수리 담당자와 증거 파일 기록
 
-BUG-20260508-A53A — harness XML evidence gate ElementTree 업그레이드:
-  MT-1: _parse_harness_report_et() 신규 함수 + _extract_test_code() 재구현
-        (harness_report 내부 test_code만 인정 — 파일 전체 regex 검색 폐기)
-  MT-2: cmd_harness() PASS 경로 Gate A — regex → _parse_harness_report_et() 교체
-  MT-3: cmd_harness() FAIL 경로 — regex 2개 → hr_element ET 검사 교체
-  MT-4: argparse help + Gate 2 _die() 메시지 — FAIL 경로 계약(harness_report+test_code) 동기화
-  MT-5: test_pipeline_gates.py — cmd_harness() 직접 호출 negative test 2건 추가
+현재 `pipeline.py harness --score ...`는 완료 경로가 아니며 CLI에서 차단됩니다.
 
-BUG-20260509-7D6E — exec() 격리 위반 수정 + 문서 동기화:
-  MT-1: _AssertCounter + _count_executed_asserts(exec() 기반) 완전 제거
-        → _instrument_assert_code() 신설 (AST에서 assert 직전 print("__ASSERT_COUNTER__") 삽입,
-           ast.unparse() 소스 반환, 실행 금지)
-        validate_test_evidence() Gate 0: SyntaxError + assert 0개 fast fail
-        → instrumented code를 subprocess에 전달, stdout "__ASSERT_COUNTER__" AND "ASSERTION PASSED" 모두 확인
-        exec() 완전 제거 — sys.exit() 격리 위반 및 이중 실행 방지
-  MT-2: 4개 MD 파일 문서 동기화 (test-harness-agent.md, CLAUDE.md, Global_Wiki.md, agents.md)
-        "AST 파싱으로 assert 존재 확인" → "instrumented subprocess + __ASSERT_COUNTER__ + ASSERTION PASSED"
-  MT-3: test_pipeline_gates.py — Test 24(sys.exit 격리), Test 25(double execution 방지) 추가
-        stale CDATA 주석 2개 수정 (BUG-20260509-7D6E)
-
-BUG-20260509-4D25 — validate_test_evidence() 루트 픽스 (unittest runner 모델):
-  MT-1: _instrument_assert_code() 완전 삭제
-        validate_test_evidence() 재작성 — python -m unittest subprocess 실행
-        pass criteria: returncode==0 + testsRun>=1 + FAILED 미포함 (폐기됨; 최신 모델은 BUG-20260509-894D 참조)
-        nonce/AST instrumentation/ASSERTION PASSED 방식 완전 폐기
-  MT-2: test_pipeline_gates.py Tests 17-29 교체 — unittest 계약 기반
-  MT-3: 6 MD 파일 문서 동기화 (test-harness-agent.md, CLAUDE.md, agents.md,
-        Global_Wiki.md, anti_gaming_rules.md, task.md)
-
-BUG-20260509-FA5E / BUG-20260509-B208 — JSON runner 모델 (assertionCount 검사):
-  MT-1: _RUNNER_TEMPLATE 상수 추가 (validate_test_evidence 위)
-        validate_test_evidence() 재작성 — _RUNNER_TEMPLATE 기반 tmp_runner.py 실행
-        pass criteria: testsRun>=1 + failures==0 + errors==0 + skipped==0 +
-                       expectedFailures==0 + unexpectedSuccesses==0 + assertionCount>=1
-        구 python -m unittest / Ran N test regex / "FAILED" in output 방식 폐기
-  MT-2: test_pipeline_gates.py Tests 30-33 추가 (noop/skip/expectedFailure/regression)
-  MT-3: 6 MD 파일 문서 동기화 (test-harness-agent.md, CLAUDE.md, agents.md,
-        Global_Wiki.md, anti_gaming_rules.md, task.md)
-
-BUG-20260509-6A4F — 사이드카 JSON 파일 모델 (stdout 채널 분리):
-  MT-1: _RUNNER_TEMPLATE 재작성 — sys.argv[2] sidecar 파일에 JSON 기록
-        test_code stdout을 io.StringIO()로 리디렉션 → print() 기반 스푸핑 원천 차단
-        __PIPELINE_RESULT__: 출력 완전 제거
-        validate_test_evidence() 재작성 — subprocess 완료 후 sidecar 파일 읽기
-        stdout __PIPELINE_RESULT__: 파싱 로직 완전 제거
-  MT-2: test_pipeline_gates.py Tests 34-36 추가 (스푸핑 차단 검증)
-  MT-3: 6 MD 파일 문서 동기화 (test-harness-agent.md, CLAUDE.md, agents.md,
-        Global_Wiki.md, anti_gaming_rules.md, task.md)
-
-BUG-20260509-ED9C — 완전 프로세스 격리 모델 (AST + isolated subprocess):
-  MT-1: _RUNNER_TEMPLATE 상수 완전 삭제
-        sidecar 파일 로직 완전 삭제 (report_path, uuid, os.path.exists, json.load, io.StringIO)
-        _ast_assert_count() 신설 — AST 기반 test_* 메서드 내 assert* 정적 계수
-        validate_test_evidence() 재작성 — AST check FIRST + python tmp_test.py isolated subprocess
-        test_code 서브프로세스는 자체 __main__, argv, atexit 보유 — 공유 상태 없음
-        차단 패턴: import __main__ 조작 (AST gate), atexit sidecar overwrite (경로 없음)
-        통과 기준: returncode==0 + testsRun>=1 + skipped==0 + expectedFailures==0 + unexpectedSuccesses==0 (폐기됨)
-  MT-2: test_pipeline_gates.py Tests 37-39 추가
-  MT-3: 6 MD 파일 문서 동기화 (test-harness-agent.md, CLAUDE.md, agents.md,
-        Global_Wiki.md, anti_gaming_rules.md, task.md)
-
-BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런타임 카운터):
-  MT-1: _ast_forbidden_check() 신규 추가 — AST로 금지 패턴 hard-reject
-          (monkeypatch: TestCase 클래스/인스턴스 assert* 재할당,
-           unittest.main() in test_* method body,
-           unreachable assert: return 후 assert* 호출)
-        validate_test_evidence() 재작성 — stdin nonce + runner_{nonce}.py 기반 executed_assertions 런타임 카운터
-          Step 1: _ast_assert_count() → 0이면 즉시 False (AST 정적 검사)
-          Step 2: _ast_forbidden_check() → 금지 패턴 발견 시 즉시 False
-          Step 3: runner_{nonce}.py 생성, nonce/test_code는 stdin으로 전달
-          Step 4: subprocess.run([python, runner_nonce.py], cwd=work_dir)
-          Step 5: stdout JSON line nonce 확인 + executed_assertions >= 1 + 기타 조건 AND 체크
-          stderr 텍스트 파싱/sidecar result file 완전 폐기 — runner-owned nonce JSON line만 신뢰
-        차단 추가 케이스:
-          dead code assert (if False: self.assertEqual): executed_assertions=0 → False
-          monkeypatch (TestCase.assertEqual = lambda): AST hard-reject → False
-          unreachable assert (return 후 assert): executed_assertions=0 → False
-        통과 기준: executed_assertions>=1 AND testsRun>=1 AND failures==0 AND errors==0
-                   AND skipped==0 AND expectedFailures==0 AND unexpectedSuccesses==0
-  MT-2: test_pipeline_gates.py Tests 40-44 추가
-          Test 40: dead code assert → False (executed_assertions=0)
-          Test 41: monkeypatch → False (AST hard-reject)
-          Test 42: unittest.main in test_* → False (AST hard-reject)
-          Test 43: fake stderr → False (stderr 파싱 없음 + executed_assertions=0)
-          Test 44: unreachable assert after return → False (executed_assertions=0)
-          Test 45: __main__ runner counter spoof → False (AST hard-reject)
-          Test 46: atexit result overwrite → False (AST hard-reject)
-          Test 47: inspect frame probe → False (AST hard-reject)
-  MT-3: 6 MD 파일 동기화 (test-harness-agent.md, CLAUDE.md, agents.md,
-        Global_Wiki.md, anti_gaming_rules.md, task.md)
-
-파이프라인 상태를 파일로 관리하여 Phase 순서를 기술적으로 강제합니다.
-텍스트 규칙이 아닌 실제 gate 검증으로 우회를 차단합니다.
-
-사용법:
+대표 사용법:
     python pipeline.py new --type BUG --desc "버튼 작동 안 함"
     python pipeline.py status
     python pipeline.py check --phase dev
@@ -140,6 +40,7 @@ BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런�
     python pipeline.py gates technical
     python pipeline.py gates oracle
     python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
+    python pipeline.py outputs add --kind report --path report.md --label "최종 보고서"
     python pipeline.py gates accept --result ACCEPT --evidence output.png --user-confirmed
     python pipeline.py advisory status
     python pipeline.py architect --report-file architect_report.xml
@@ -152,6 +53,7 @@ import argparse
 import json
 import sys
 import os
+import xml.etree.ElementTree as ET
 
 def _force_utf8_stdio() -> None:
     """Force UTF-8 CLI output on Windows cp949/cmd.exe/redirected streams."""
@@ -1408,6 +1310,7 @@ def _validate_pm_step_plan_file(report_file: str, state: Dict[str, Any]) -> Dict
         })
 
     design_confirmation = _validate_pm_design_confirmation(step_plan, micro_tasks)
+    execution_profile = _parse_task_complexity(step_plan, micro_tasks)
 
     return {
         "report_file": str(path),
@@ -1416,6 +1319,7 @@ def _validate_pm_step_plan_file(report_file: str, state: Dict[str, Any]) -> Dict
         "micro_task_count": len(micro_tasks),
         "micro_tasks": micro_tasks,
         "design_confirmation": design_confirmation,
+        "execution_profile": execution_profile,
         "project_snapshot": _atomic_project_snapshot(),
     }
 
@@ -1589,9 +1493,27 @@ def _validate_dev_scope_manifest(
     extra_functions = sorted(manifest_functions - allowed_functions)
     if extra_functions:
         _die(f"[ATOMIC SCOPE GATE] affected_functions outside PM plan: {extra_functions}")
+    if not _product_code_write_allowed(state):
+        declared_product_code = sorted(path for path in (manifest_files | evidence_files) if _is_product_code_path(path))
+        if declared_product_code:
+            profile = _execution_profile(state)
+            _die(
+                "[FAST PATH SCOPE GATE] "
+                f"{profile.get('mode')} does not allow product code files in scope/evidence: {declared_product_code}. "
+                "제품 코드 수정이 필요하면 PM이 STANDARD 프로필로 다시 계획해야 합니다."
+            )
 
     actual_diff = _atomic_changed_files(project_snapshot)
     actual_changed = set(actual_diff.get("changed", []))
+    if not _product_code_write_allowed(state):
+        product_code_changes = sorted(path for path in actual_changed if _is_product_code_path(path))
+        if product_code_changes:
+            profile = _execution_profile(state)
+            _die(
+                "[FAST PATH SCOPE GATE] "
+                f"{profile.get('mode')} does not allow product code changes: {product_code_changes}. "
+                "제품 코드 수정이 필요하면 PM이 STANDARD 프로필로 다시 계획해야 합니다."
+            )
     actual_outside_scope = sorted(actual_changed - allowed_files)
     if actual_outside_scope:
         _die(f"[ATOMIC SCOPE GATE] actual file changes outside PM micro_task target_files: {actual_outside_scope}")
@@ -1843,6 +1765,15 @@ def _validate_module_scope_manifest(
     extra_files = sorted((manifest_files | evidence_files) - allowed_files)
     if extra_files:
         _die(f"[MODULE SCOPE GATE] files outside {mt_id} target_files: {extra_files}")
+    if not _product_code_write_allowed(state):
+        product_code_changes = sorted(path for path in (manifest_files | evidence_files) if _is_product_code_path(path))
+        if product_code_changes:
+            profile = _execution_profile(state)
+            _die(
+                "[FAST PATH MODULE GATE] "
+                f"{profile.get('mode')} does not allow product code changes: {product_code_changes}. "
+                "제품 코드 수정이 필요하면 PM이 STANDARD 프로필로 다시 계획해야 합니다."
+            )
     missing_evidence = sorted(manifest_files - evidence_files)
     if missing_evidence:
         _die(f"[MODULE SCOPE GATE] manifest files missing from --files evidence: {missing_evidence}")
@@ -2166,6 +2097,21 @@ def _new_phase_attestations(enabled: bool = False) -> Dict[str, Any]:
     }
 
 
+def _new_execution_profile(mode: str = "STANDARD") -> Dict[str, Any]:
+    return {
+        "mode": mode,
+        "status": "ACTIVE",
+        "reason": "",
+        "max_micro_tasks": None,
+        "product_code_write_allowed": True,
+        "phase_ci_mode": "per_phase",
+        "repair_mode": "standard",
+        "declared_at": None,
+        "escalated_at": None,
+        "escalation_reason": None,
+    }
+
+
 def _empty_module_step() -> Dict[str, Any]:
     return {
         "status": "PENDING",
@@ -2297,6 +2243,9 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
         "external_gates": _new_external_gates(enabled=True),
         "phase_attestations": _new_phase_attestations(enabled=True),
         "module_gates": _new_module_gates(enabled=True),
+        "execution_profile": _new_execution_profile("STANDARD"),
+        "outputs": {"items": []},
+        "failure_packets": [],
         "protocol_evolution_decision": None,
     }
 
@@ -2327,6 +2276,18 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         state["agent_runs"] = {}
     if "protocol_evolution_decision" not in state:
         state["protocol_evolution_decision"] = None
+    if not isinstance(state.get("execution_profile"), dict):
+        state["execution_profile"] = _new_execution_profile("STANDARD")
+    else:
+        merged_profile = _new_execution_profile(str(state["execution_profile"].get("mode") or "STANDARD"))
+        merged_profile.update(state["execution_profile"])
+        state["execution_profile"] = merged_profile
+    if not isinstance(state.get("outputs"), dict):
+        state["outputs"] = {"items": []}
+    elif not isinstance(state["outputs"].get("items"), list):
+        state["outputs"]["items"] = []
+    if not isinstance(state.get("failure_packets"), list):
+        state["failure_packets"] = []
     state["external_gates"] = _ensure_external_gates(state)
     state["external_gates"]["enabled"] = True
     state["phase_attestations"] = _ensure_phase_attestations(state)
@@ -2451,6 +2412,8 @@ def _contract_paths(pipeline_id: str) -> Dict[str, Path]:
         "user_validation": root / "gates" / "user_validation.json",
         "github_ci_result": root / "gates" / "github_ci_result.json",
         "phase_ci_root": root / "gates" / "phase_ci",
+        "failures_root": root / "failures",
+        "outputs_manifest": OUTPUTS_ROOT / pipeline_id / "outputs_manifest.json",
         "advisory_root": root / "advisory",
         "advisory_resolutions": root / "advisory" / "resolutions.json",
     }
@@ -2650,9 +2613,84 @@ def _resolve_artifact_path(raw: str) -> Optional[Path]:
     return resolved
 
 
+def _ensure_output_registry(state: Dict[str, Any]) -> Dict[str, Any]:
+    outputs = state.get("outputs")
+    if not isinstance(outputs, dict):
+        outputs = {"items": []}
+    if not isinstance(outputs.get("items"), list):
+        outputs["items"] = []
+    state["outputs"] = outputs
+    return outputs
+
+
+def _pipeline_output_dir(pid: str) -> Path:
+    return OUTPUTS_ROOT / pid
+
+
+def _copy_to_pipeline_outputs(pid: str, source: Path, label: str = "") -> Path:
+    out_dir = _pipeline_output_dir(pid)
+    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "-", label.strip()).strip("-")
+    dest_name = source.name if not safe_label else f"{safe_label}-{source.name}"
+    dest = out_dir / dest_name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if source.resolve() != dest.resolve():
+        shutil.copy2(source, dest)
+    return dest
+
+
+def _register_output_item(
+    state: Dict[str, Any],
+    *,
+    kind: str,
+    path: str,
+    label: str,
+    copy_to_outputs: bool = True,
+    notes: str = "",
+) -> Dict[str, Any]:
+    pid = str(state.get("pipeline_id") or "")
+    if not pid:
+        _die("[OUTPUT REGISTRY] active pipeline_id is required")
+    resolved = _resolve_artifact_path(path)
+    if not resolved or not resolved.is_file():
+        _die(f"[OUTPUT REGISTRY] output file not found: {path}")
+    public_path = resolved
+    if copy_to_outputs:
+        public_path = _copy_to_pipeline_outputs(pid, resolved, label)
+    item = {
+        "kind": kind,
+        "label": label or kind,
+        "source_path": _display_path(resolved),
+        "public_path": _display_path(public_path),
+        "sha256": _sha256_file(public_path),
+        "size_bytes": public_path.stat().st_size,
+        "notes": notes,
+        "registered_at": _now(),
+    }
+    outputs = _ensure_output_registry(state)
+    existing = [
+        old for old in outputs["items"]
+        if not (isinstance(old, dict) and old.get("public_path") == item["public_path"])
+    ]
+    existing.append(item)
+    outputs["items"] = existing
+    manifest_path = _contract_paths(pid)["outputs_manifest"]
+    manifest = {
+        "schema_version": 1,
+        "pipeline_id": pid,
+        "generated_at": _now(),
+        "items": outputs["items"],
+    }
+    _write_json(manifest_path, manifest)
+    return item
+
+
 def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> List[Path]:
     candidates: List[str] = []
     candidates.extend(_split_evidence_paths(evidence))
+    outputs = _ensure_output_registry(state)
+    for item in outputs.get("items", []):
+        if isinstance(item, dict):
+            candidates.extend(_split_evidence_paths(item.get("public_path")))
     phases = state.get("phases", {})
     if isinstance(phases, dict):
         for phase_name in ("build", "dev"):
@@ -3458,6 +3496,7 @@ def cmd_done(args: argparse.Namespace) -> None:
                 "`python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification ...`"
             )
         state["atomic_plan"] = _validate_pm_step_plan_file(report_file, state)
+        state["execution_profile"] = state["atomic_plan"].get("execution_profile") or _new_execution_profile("STANDARD")
         if state["atomic_plan"]["audit_result"] == "AMBIGUOUS" and not judgment_confirmed:
             _die(
                 "[ATOMIC PLAN GATE] AMBIGUOUS decomposition requires --judgment-confirmed "
@@ -3470,6 +3509,11 @@ def cmd_done(args: argparse.Namespace) -> None:
         module_gates = _init_module_gates_from_atomic_plan(state)
         print(GREEN(
             f"  [MODULE GATE] initialized {len(module_gates.get('sequence', []))} incremental modules"
+        ))
+        profile = _execution_profile(state)
+        print(GREEN(
+            f"  [EXECUTION PROFILE] {profile.get('mode')} "
+            f"product_code_write_allowed={profile.get('product_code_write_allowed')}"
         ))
 
     evidence = args.files if hasattr(args, "files") and args.files else None
@@ -3968,6 +4012,10 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(BOLD(f"  파이프라인: {CYAN(pid)}"))
     print(f"  설명: {description}")
     print(f"  생성: {state['created_at']}  갱신: {state['updated_at']}")
+    profile = _execution_profile(state)
+    profile_mode = str(profile.get("mode") or "STANDARD")
+    fast_label = "빠른 경로" if profile_mode in FAST_EXECUTION_PROFILES else "표준 경로"
+    print(f"  실행 프로필: {profile_mode} ({fast_label})")
     if blocked:
         print(RED(f"  [차단] {state.get('blocked_reason', '')}"))
     # v2.10 Auto-Compact: 종료 상태 표시 (Stop hook이 이 필드를 읽음)
@@ -4017,6 +4065,26 @@ def cmd_status(args: argparse.Namespace) -> None:
         blockers = _external_gate_blockers(state)
         if blockers and terminal != "COMPLETE":
             print(RED("    blockers: " + "; ".join(blockers)))
+
+    outputs = _ensure_output_registry(state)
+    if outputs.get("items"):
+        print()
+        print(BOLD("  사용자가 확인할 결과물:"))
+        for item in outputs.get("items", [])[:10]:
+            if not isinstance(item, dict):
+                continue
+            label = item.get("label") or item.get("kind") or "output"
+            public_path = item.get("public_path") or item.get("source_path")
+            print(f"    - {label}: {public_path}")
+
+    failures = state.get("failure_packets")
+    if isinstance(failures, list) and failures:
+        print()
+        print(BOLD("  최근 실패 패킷:"))
+        for item in failures[-3:]:
+            if not isinstance(item, dict):
+                continue
+            print(f"    - {item.get('gate')} -> {item.get('repair_owner')} ({item.get('packet_path')})")
 
     advisory = _advisory_status_summary(str(pid))
     print()
@@ -4320,6 +4388,135 @@ ORACLE_EDGE_CASE_KINDS = {"edge", "exception", "error"}
 ORACLE_PLACEHOLDER_STRINGS = {"", "todo", "tbd", "placeholder", "sample", "example", "n/a", "na", "none", "null"}
 ORACLE_STORAGE_ROOT_REL = Path("tests") / "oracles"
 NON_ORACLE_DELIVERABLE_KINDS = {"doc", "docs", "markdown", "prompt", "analysis", "research", "policy", "config", "configuration"}
+
+EXECUTION_PROFILES = {"FAST_DOC", "FAST_ANALYSIS", "FAST_SINGLE_CODE", "STANDARD", "HIGH_RISK"}
+FAST_EXECUTION_PROFILES = {"FAST_DOC", "FAST_ANALYSIS", "FAST_SINGLE_CODE"}
+FAST_PROFILE_MAX_FILES = 2
+FAST_PROFILE_MAX_FUNCTIONS = 2
+FAST_PROFILE_MAX_LINES = 80
+PRODUCT_CODE_EXTENSIONS = {
+    ".py", ".pyw", ".js", ".jsx", ".ts", ".tsx", ".java", ".cs", ".go", ".rs",
+    ".cpp", ".cc", ".c", ".h", ".hpp", ".php", ".rb", ".swift", ".kt", ".kts",
+    ".ps1", ".sh", ".bat", ".cmd",
+}
+OUTPUTS_ROOT = BASE_DIR / "pipeline_outputs"
+
+
+def _bool_xml_text(parent: ET.Element, name: str, default: bool = False) -> bool:
+    raw = _child_text(parent, name, "true" if default else "false").strip().lower()
+    if raw in {"true", "1", "yes", "y"}:
+        return True
+    if raw in {"false", "0", "no", "n", ""}:
+        return False
+    _die(f"[EXECUTION PROFILE GATE] <{name}> must be true or false")
+
+
+def _int_xml_text(parent: ET.Element, name: str, default: int = 0) -> int:
+    raw = _child_text(parent, name, str(default)).strip()
+    try:
+        return int(raw)
+    except ValueError:
+        _die(f"[EXECUTION PROFILE GATE] <{name}> must be an integer")
+
+
+def _is_product_code_path(raw: str) -> bool:
+    rel = _normalize_rel_path(raw)
+    path = Path(rel)
+    if not path.suffix.lower() in PRODUCT_CODE_EXTENSIONS:
+        return False
+    parts = set(path.parts)
+    if "tests" in parts or path.name.startswith("test_") or path.name.endswith("_test.py"):
+        return False
+    return True
+
+
+def _parse_task_complexity(step_plan: ET.Element, micro_tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    complexity = step_plan.find("task_complexity")
+    if complexity is None:
+        _die("[EXECUTION PROFILE GATE] <task_complexity> is required inside <step_plan>")
+
+    mode = _child_text(complexity, "execution_profile", "STANDARD").strip().upper()
+    if mode not in EXECUTION_PROFILES:
+        _die(f"[EXECUTION PROFILE GATE] execution_profile must be one of {sorted(EXECUTION_PROFILES)}")
+
+    profile = _new_execution_profile(mode)
+    profile["declared_at"] = _now()
+    profile["reason"] = _child_text(complexity, "reason").strip()
+    uncertainty = complexity.find("uncertainty")
+    if uncertainty is None:
+        uncertainty = ET.Element("uncertainty")
+    blast_radius = complexity.find("blast_radius")
+    if blast_radius is None:
+        blast_radius = ET.Element("blast_radius")
+    risk_flags = complexity.find("risk_flags")
+    if risk_flags is None:
+        risk_flags = ET.Element("risk_flags")
+    profile["uncertainty"] = {
+        "p0_questions": _int_xml_text(uncertainty, "p0_questions", 0),
+        "p1_questions": _int_xml_text(uncertainty, "p1_questions", 0),
+        "output_format_clear": _bool_xml_text(uncertainty, "output_format_clear", mode not in FAST_EXECUTION_PROFILES),
+    }
+    profile["blast_radius"] = {
+        "expected_changed_files": _int_xml_text(blast_radius, "expected_changed_files", len({p for task in micro_tasks for p in task.get("target_files", [])})),
+        "expected_changed_functions": _int_xml_text(blast_radius, "expected_changed_functions", len({str(task.get("affected_function")) for task in micro_tasks})),
+        "expected_changed_lines": _int_xml_text(blast_radius, "expected_changed_lines", 0),
+    }
+    risk_names = [
+        "data_deletion", "file_move", "external_api", "auth_or_secret", "pipeline_protocol",
+        "build_or_deploy", "core_parser_logic", "database_or_migration", "new_dependency",
+    ]
+    profile["risk_flags"] = {name: _bool_xml_text(risk_flags, name, False) for name in risk_names}
+
+    if mode in FAST_EXECUTION_PROFILES:
+        blockers: List[str] = []
+        profile["max_micro_tasks"] = 1
+        profile["phase_ci_mode"] = "batched"
+        profile["repair_mode"] = "targeted"
+        if mode in {"FAST_DOC", "FAST_ANALYSIS"}:
+            profile["product_code_write_allowed"] = False
+        if not profile["reason"]:
+            blockers.append("fast profile requires <reason>")
+        if len(micro_tasks) != 1:
+            blockers.append("fast profile requires exactly one <micro_task>")
+        if profile["uncertainty"]["p0_questions"] != 0:
+            blockers.append("fast profile requires p0_questions=0")
+        if profile["uncertainty"]["p1_questions"] > 2:
+            blockers.append("fast profile allows at most 2 P1 questions")
+        if not profile["uncertainty"]["output_format_clear"]:
+            blockers.append("fast profile requires output_format_clear=true")
+        if profile["blast_radius"]["expected_changed_files"] > FAST_PROFILE_MAX_FILES:
+            blockers.append(f"fast profile allows expected_changed_files <= {FAST_PROFILE_MAX_FILES}")
+        if profile["blast_radius"]["expected_changed_functions"] > FAST_PROFILE_MAX_FUNCTIONS:
+            blockers.append(f"fast profile allows expected_changed_functions <= {FAST_PROFILE_MAX_FUNCTIONS}")
+        if profile["blast_radius"]["expected_changed_lines"] > FAST_PROFILE_MAX_LINES:
+            blockers.append(f"fast profile allows expected_changed_lines <= {FAST_PROFILE_MAX_LINES}")
+        risky = [name for name, enabled in profile["risk_flags"].items() if enabled]
+        if risky:
+            blockers.append("fast profile cannot set risk flags: " + ", ".join(sorted(risky)))
+        if mode in {"FAST_DOC", "FAST_ANALYSIS"}:
+            product_targets = sorted({
+                path for task in micro_tasks for path in task.get("target_files", [])
+                if _is_product_code_path(str(path))
+            })
+            if product_targets:
+                blockers.append(f"{mode} cannot target product code files: {product_targets}")
+        if blockers:
+            _die("[EXECUTION PROFILE GATE] " + "; ".join(blockers))
+    return profile
+
+
+def _execution_profile(state: Dict[str, Any]) -> Dict[str, Any]:
+    profile = state.get("execution_profile")
+    return profile if isinstance(profile, dict) else _new_execution_profile("STANDARD")
+
+
+def _fast_profile_active(state: Dict[str, Any]) -> bool:
+    profile = _execution_profile(state)
+    return profile.get("mode") in FAST_EXECUTION_PROFILES and profile.get("status") == "ACTIVE"
+
+
+def _product_code_write_allowed(state: Dict[str, Any]) -> bool:
+    return bool(_execution_profile(state).get("product_code_write_allowed", True))
 
 
 def _get_nested(mapping: Dict[str, Any], path: str) -> Any:
@@ -5785,6 +5982,36 @@ def cmd_agent(args: argparse.Namespace) -> None:
     _die(f"unknown agent action: {action}", exit_code=2)
 
 
+def cmd_outputs(args: argparse.Namespace) -> None:
+    """Register or list user-visible output artifacts for final ACCEPT."""
+    state = _require_state()
+    state = _ensure_v210_fields(state)
+    action = args.outputs_action
+    if action == "add":
+        item = _register_output_item(
+            state,
+            kind=str(args.kind),
+            path=str(args.path),
+            label=str(args.label or args.kind),
+            copy_to_outputs=not bool(getattr(args, "no_copy", False)),
+            notes=str(args.notes or ""),
+        )
+        _log_event(state, f"output registered {item['kind']} {item['public_path']}")
+        _save(state)
+        print(GREEN("\n[OUTPUT REGISTERED]"))
+        print(f"  label: {item['label']}")
+        print(f"  path:  {item['public_path']}")
+        print("  이 파일은 GitHub PR 최종 확인 안내에서 결과물 링크 후보로 표시됩니다.\n")
+        return
+    if action == "status":
+        print(json.dumps({
+            "pipeline_id": state.get("pipeline_id"),
+            "outputs": _ensure_output_registry(state),
+        }, ensure_ascii=False, indent=2))
+        return
+    _die(f"unknown outputs action: {action}", exit_code=2)
+
+
 def _set_external_gate(
     state: Dict[str, Any],
     gate_name: str,
@@ -5804,6 +6031,103 @@ def _set_external_gate(
         notes = gate.setdefault("notes", [])
         if isinstance(notes, list):
             notes.append(note)
+
+
+def _repair_owner_for_gate(gate_name: str, report: Dict[str, Any]) -> str:
+    if gate_name == "technical":
+        failed = [
+            str(item.get("name"))
+            for item in report.get("checks", [])
+            if isinstance(item, dict) and item.get("status") in {"FAIL", "ERROR"}
+        ]
+        if any(name in {"ruff", "mypy", "bandit", "py_compile", "pytest"} for name in failed):
+            return "Dev tooling repair"
+        return "Dev repair"
+    if gate_name == "oracle":
+        return "PM/oracle path repair or Dev behavior repair"
+    if gate_name == "github_ci":
+        return "CI/environment repair"
+    if gate_name == "acceptance":
+        return "PM clarification or Dev result repair"
+    return "Pipeline Manager repair"
+
+
+def _failure_root_from_paths(paths: Dict[str, Path]) -> Path:
+    root = paths.get("failures_root")
+    if isinstance(root, Path):
+        return root
+    for key in ("technical_result", "oracle_result", "github_ci_result", "acceptance_result"):
+        candidate = paths.get(key)
+        if isinstance(candidate, Path):
+            return candidate.parent / "failures"
+    return CONTRACTS_DIR / "UNKNOWN" / "failures"
+
+
+def _next_failure_attempt(paths: Dict[str, Path], gate_name: str) -> int:
+    root = _failure_root_from_paths(paths)
+    if not root.exists():
+        return 1
+    prefix = f"{gate_name}_attempt_"
+    attempts: List[int] = []
+    for path in root.glob(f"{prefix}*.json"):
+        match = re.search(r"_attempt_(\d+)\.json$", path.name)
+        if match:
+            attempts.append(int(match.group(1)))
+    return (max(attempts) + 1) if attempts else 1
+
+
+def _record_failure_packet(
+    state: Dict[str, Any],
+    gate_name: str,
+    report: Dict[str, Any],
+    *,
+    command: Optional[List[str]] = None,
+    note: str = "",
+) -> Dict[str, Any]:
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+    paths = _contract_paths(pid)
+    attempt = _next_failure_attempt(paths, gate_name)
+    packet_path = _failure_root_from_paths(paths) / f"{gate_name}_attempt_{attempt}.json"
+    failed_checks = [
+        item for item in report.get("checks", [])
+        if isinstance(item, dict) and item.get("status") in {"FAIL", "ERROR"}
+    ]
+    if command is None:
+        minimal_rerun: List[str] = []
+    elif isinstance(command, str):
+        minimal_rerun = [command]
+    else:
+        minimal_rerun = [str(item) for item in command]
+    packet = {
+        "schema_version": 1,
+        "pipeline_id": pid,
+        "gate": gate_name,
+        "attempt": attempt,
+        "packet_path": str(packet_path),
+        "recorded_at": _now(),
+        "status": report.get("status") or report.get("summary", {}).get("verdict") or "FAIL",
+        "repair_owner": _repair_owner_for_gate(gate_name, report),
+        "minimal_rerun": minimal_rerun,
+        "note": note,
+        "failed_checks": failed_checks,
+        "report_excerpt": {
+            "blockers": report.get("blockers", []),
+            "summary": report.get("summary", {}),
+            "results": report.get("results", [])[:10] if isinstance(report.get("results"), list) else [],
+        },
+    }
+    _write_json(packet_path, packet)
+    state.setdefault("failure_packets", [])
+    if isinstance(state["failure_packets"], list):
+        state["failure_packets"].append({
+            "gate": gate_name,
+            "attempt": attempt,
+            "path": str(packet_path),
+            "packet_path": str(packet_path),
+            "recorded_at": packet["recorded_at"],
+            "repair_owner": packet["repair_owner"],
+        })
+    return packet
 
 
 def _dev_evidence_files(state: Dict[str, Any]) -> List[Path]:
@@ -5953,8 +6277,18 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
             "stderr": proc.stderr[-4000:],
         })
 
+    profile = _execution_profile(state)
+    fast_non_code_profile = profile.get("mode") in {"FAST_DOC", "FAST_ANALYSIS"} and not target_files
     test_files = list(BASE_DIR.glob("test_*.py")) + list((BASE_DIR / "tests").glob("test_*.py")) if (BASE_DIR / "tests").exists() else list(BASE_DIR.glob("test_*.py"))
-    if not test_files:
+    if fast_non_code_profile:
+        checks.append({
+            "name": "pytest",
+            "status": "SKIP",
+            "command": [sys.executable, "-m", "pytest", "-q"],
+            "version": _technical_gate_tool_version("pytest", timeout) if importlib.util.find_spec("pytest") is not None else None,
+            "message": f"{profile.get('mode')} has no Python evidence; full pytest is deferred to GitHub CI",
+        })
+    elif not test_files:
         checks.append({
             "name": "pytest",
             "status": "SKIP",
@@ -6002,6 +6336,7 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
                 "evidence_files": [_display_path(path) for path in evidence_files],
                 "target_files": [_display_path(path) for path in target_files],
                 "strict_tools": strict_tools,
+                "execution_profile": profile.get("mode"),
                 "checks": checks,
             }
         status = "PASS" if proc.returncode == 0 else "FAIL"
@@ -6025,6 +6360,7 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
         "evidence_files": [_display_path(path) for path in evidence_files],
         "target_files": [_display_path(path) for path in target_files],
         "strict_tools": strict_tools,
+        "execution_profile": profile.get("mode"),
         "checks": checks,
     }
 
@@ -6121,6 +6457,15 @@ def cmd_gates(args: argparse.Namespace) -> None:
             evidence="deterministic_tool_gate",
             report_file=str(paths["technical_result"]),
         )
+        if result["status"] != "PASS":
+            packet = _record_failure_packet(
+                state,
+                "technical",
+                result,
+                command=[sys.executable, "pipeline.py", "gates", "technical"],
+                note="Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+            )
+            print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
         _log_event(state, f"technical gate {result['status']}")
         _save(state)
         color = GREEN if result["status"] == "PASS" else RED
@@ -6163,6 +6508,31 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 print(YELLOW("\n[ORACLE GATE PASS] user waiver recorded"))
                 print(f"  report: {paths['oracle_result']}\n")
                 return
+            report = {
+                "schema_version": 1,
+                "generated_at": _now(),
+                "pipeline_id": pid,
+                "status": "FAIL",
+                "blockers": oracle_blockers,
+            }
+            _write_json(paths["oracle_result"], report)
+            _set_external_gate(
+                state,
+                "oracle",
+                "FAIL",
+                evidence="oracle_manifest_blocked",
+                report_file=str(paths["oracle_result"]),
+            )
+            packet = _record_failure_packet(
+                state,
+                "oracle",
+                report,
+                command=[sys.executable, "pipeline.py", "contract", "audit"],
+                note="Oracle manifest is missing or malformed; repair user-owned oracle files before rerunning oracle gate.",
+            )
+            _log_event(state, "oracle gate FAIL (manifest blockers)")
+            _save(state)
+            print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
             _die("; ".join(oracle_blockers))
         from core.acceptance import run_acceptance
 
@@ -6183,6 +6553,14 @@ def cmd_gates(args: argparse.Namespace) -> None:
             report_file=str(paths["oracle_result"]),
         )
         if verdict != "PASS":
+            packet = _record_failure_packet(
+                state,
+                "oracle",
+                report,
+                command=[sys.executable, "pipeline.py", "gates", "oracle"],
+                note="Oracle gate failed; inspect failing results and output path resolution before broad rework.",
+            )
+            print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
             state["phases"]["harness"]["status"] = "FAIL"
             state["phases"]["harness"]["completed_at"] = _now()
             state["phases"]["harness"]["evidence"] = "oracle_gate_failed"
@@ -6213,10 +6591,12 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 _die("; ".join(prereq))
             evidence_validation = _validate_user_acceptance_evidence(args.evidence)
             deployment = _deploy_accepted_outputs(state, args.evidence, args.notes, evidence_validation)
+        gate_status = "PASS" if result == "ACCEPT" else "FAIL"
         report = {
             "schema_version": 1,
             "generated_at": _now(),
             "pipeline_id": pid,
+            "status": gate_status,
             "result": result,
             "evidence": args.evidence,
             "validated_evidence": evidence_validation or {},
@@ -6224,7 +6604,6 @@ def cmd_gates(args: argparse.Namespace) -> None:
             "deployment": deployment,
         }
         _write_json(paths["user_validation"], report)
-        gate_status = "PASS" if result == "ACCEPT" else "FAIL"
         _set_external_gate(
             state,
             "acceptance",
@@ -6239,6 +6618,14 @@ def cmd_gates(args: argparse.Namespace) -> None:
         state["phases"]["harness"]["report_file"] = str(paths["user_validation"])
         if deployment:
             state["deployment"] = deployment
+        if gate_status != "PASS":
+            _record_failure_packet(
+                state,
+                "acceptance",
+                report,
+                command=[sys.executable, "pipeline.py", "gates", "accept", "--result", "ACCEPT", "--evidence", "<repaired-result>", "--user-confirmed"],
+                note="User rejected the visible result; PM/Dev should repair the requested behavior or clarify requirements.",
+            )
         state["current_phase"] = "architect"
         _log_event(state, f"user acceptance gate {gate_status}")
         _record_snapshot(state, "harness", None)
@@ -6261,6 +6648,14 @@ def cmd_gates(args: argparse.Namespace) -> None:
             workflow=args.workflow,
         )
         _record_github_ci_verification(state, verification, args.artifact)
+        if verification["status"] != "PASS":
+            _record_failure_packet(
+                state,
+                "github_ci",
+                verification,
+                command=[sys.executable, "pipeline.py", "gates", "github-ci", "--repo", args.repo or _github_repo_from_remote()],
+                note="GitHub CI gate failed; inspect Actions logs before local code changes.",
+            )
         _save(state)
         color = GREEN if verification["status"] == "PASS" else RED
         print(color(f"\n[GITHUB CI GATE {verification['status']}]"))
@@ -7056,6 +7451,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_agent_finish.add_argument("--notes", default=None)
     agsub.add_parser("status", help="Show agent run receipts without token hashes")
 
+    # user-visible outputs for final ACCEPT
+    p_outputs = sub.add_parser("outputs", help="Register or list final user-visible result files")
+    osub = p_outputs.add_subparsers(dest="outputs_action", required=True)
+    p_outputs_add = osub.add_parser("add", help="Register a result file and copy it under pipeline_outputs/<pipeline_id>/")
+    p_outputs_add.add_argument("--kind", required=True,
+                               choices=["report", "screenshot", "excel", "exe", "log", "other"],
+                               help="Result file kind shown in the final PR acceptance packet")
+    p_outputs_add.add_argument("--path", required=True, help="File path to register")
+    p_outputs_add.add_argument("--label", default="", help="Short Korean label for the user-visible result")
+    p_outputs_add.add_argument("--notes", default="", help="Short Korean notes explaining what the user should inspect")
+    p_outputs_add.add_argument("--no-copy", action="store_true", default=False,
+                               help="Keep the original file path instead of copying to pipeline_outputs/<pipeline_id>/")
+    osub.add_parser("status", help="Show registered user-visible outputs")
+
     # harness
     p_harness = sub.add_parser("harness", help="Legacy harness diagnostic 기록. 현재 /Task 완료 경로에서는 차단됨")
     p_harness.add_argument("--score", required=True, type=int, help="Legacy diagnostic percentage only; not a completion score")
@@ -7326,6 +7735,7 @@ COMMAND_MAP = {
     "advisory":             cmd_advisory,
     "github":               cmd_github,
     "agent":                cmd_agent,
+    "outputs":              cmd_outputs,
     "architect":            cmd_architect,
     "status":               cmd_status,
     "interface":            cmd_interface,
