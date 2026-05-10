@@ -769,7 +769,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                     copied_path = pipeline.BASE_DIR / copied_path
                 self.assertTrue(copied_path.exists())
 
-    def test_phase_evidence_git_hygiene_is_documented_and_unignored(self) -> None:
+    def test_phase_evidence_git_hygiene_is_documented_as_force_added_transient_evidence(self) -> None:
         root = Path(__file__).resolve().parent
         gitignore = (root / ".gitignore").read_text(encoding="utf-8")
         gitattributes = (root / ".gitattributes").read_text(encoding="utf-8")
@@ -777,19 +777,18 @@ class ThreeGatePipelineTests(unittest.TestCase):
         pm = (root / ".claude" / "agents" / "pm-agent.md").read_text(encoding="utf-8")
         architect = (root / ".claude" / "agents" / "prompt-architect-agent.md").read_text(encoding="utf-8")
 
-        self.assertIn("!.pipeline/phase_attestation_request.json", gitignore)
-        self.assertIn("!.pipeline/phase_evidence/**", gitignore)
-        self.assertIn("!.pipeline/phase_evidence/**/build/**", gitignore)
-        self.assertIn("!.pipeline/phase_evidence/**/dist/**", gitignore)
+        self.assertIn(".pipeline/", gitignore)
+        self.assertIn("git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence", gitignore)
         self.assertIn("*.xml text eol=lf", gitattributes)
+        self.assertIn("*.json text eol=lf", gitattributes)
         self.assertIn("*.md text eol=lf", gitattributes)
         self.assertIn("Phase Evidence Git Hygiene", claude)
-        self.assertIn("`.pipeline/phase_evidence/**`", claude)
+        self.assertIn("git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence", claude)
         self.assertIn("`.gitattributes` must", claude)
-        self.assertIn(".pipeline/phase_evidence/.../build/...", pm)
+        self.assertIn("git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence", pm)
         self.assertIn("Phase attestation hash mismatch or missing evidence", architect)
 
-    def test_copy_phase_evidence_rejects_gitignored_destination(self) -> None:
+    def test_copy_phase_evidence_marks_force_add_when_destination_is_gitignored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = root / "step_plan.xml"
@@ -799,10 +798,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
             with mock.patch.object(pipeline, "BASE_DIR", root), \
                  mock.patch.object(pipeline, "PHASE_ATTESTATION_EVIDENCE_DIR", evidence_dir), \
                  mock.patch.object(pipeline, "_git_check_ignored", return_value=True):
-                with self.assertRaises(SystemExit) as ctx:
-                    pipeline._copy_phase_evidence_file("TMP-IGNORED", "build", "report", str(source))
+                copied = pipeline._copy_phase_evidence_file("TMP-IGNORED", "build", "report", str(source))
 
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertIsNotNone(copied)
+        self.assertTrue(copied["requires_force_add"])
 
     def test_relaxed_tools_and_qa_numeric_score_are_documented_as_hard_gates(self) -> None:
         root = Path(__file__).resolve().parent
@@ -1084,6 +1083,113 @@ class ThreeGatePipelineTests(unittest.TestCase):
             self.assertTrue(deployed_file.exists())
             self.assertTrue(manifest.exists())
             self.assertEqual(deployed_file.read_text(encoding="utf-8"), "accepted output")
+
+    def test_accept_gate_rejects_placeholder_evidence(self) -> None:
+        state = pipeline._new_state("TMP-ACCEPT-PLACEHOLDER", "FEAT", "sample")
+        state["external_gates"] = pipeline._new_external_gates(enabled=True)
+        for gate_name in ("technical", "oracle", "github_ci"):
+            state["external_gates"][gate_name]["status"] = "PASS"
+
+        args = argparse.Namespace(
+            gates_action="accept",
+            result="ACCEPT",
+            evidence="USER_CONFIRMED",
+            notes="approved by user",
+            user_confirmed=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = {"user_validation": root / "user_validation.json"}
+            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+                 mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
+                 mock.patch.object(pipeline, "_record_snapshot"), \
+                 mock.patch.object(pipeline, "_save"):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_gates(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(state["external_gates"]["acceptance"]["status"], "PENDING")
+
+    def test_accept_gate_rejects_unknown_result_value(self) -> None:
+        state = pipeline._new_state("TMP-ACCEPT-UNKNOWN", "FEAT", "sample")
+        state["external_gates"] = pipeline._new_external_gates(enabled=True)
+        for gate_name in ("technical", "oracle", "github_ci"):
+            state["external_gates"][gate_name]["status"] = "PASS"
+
+        args = argparse.Namespace(
+            gates_action="accept",
+            result="MAYBE",
+            evidence="https://github.com/hojiyong2-commits/Pipeline/pull/1",
+            notes="invalid decision",
+            user_confirmed=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = {"user_validation": root / "user_validation.json"}
+            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+                 mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
+                 mock.patch.object(pipeline, "_record_snapshot"), \
+                 mock.patch.object(pipeline, "_save"):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_gates(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(state["external_gates"]["acceptance"]["status"], "PENDING")
+
+    def test_acceptance_record_is_blocked_in_mandatory_three_gate(self) -> None:
+        state = pipeline._new_state("TMP-ACCEPTANCE-RECORD", "IMP", "sample")
+        state["current_phase"] = "harness"
+        state["phases"]["build"]["status"] = "DONE"
+        args = argparse.Namespace(
+            acceptance_action="run",
+            pipeline_id=None,
+            output=None,
+            record=True,
+        )
+        with mock.patch.object(
+            pipeline,
+            "_resolve_pipeline_context",
+            return_value=("TMP-ACCEPTANCE-RECORD", None, None, state),
+        ):
+            with self.assertRaises(SystemExit) as ctx:
+                pipeline.cmd_acceptance(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(state["phases"]["harness"]["status"], "PENDING")
+
+    def test_ast_forbidden_allows_safe_os_usage_but_blocks_os_exec(self) -> None:
+        safe_code = """import os\n\n\ndef test_env_path():\n    assert os.path.join('a', 'b') == os.path.join('a', 'b')\n    assert os.environ.get('MISSING_KEY') is None\n"""
+        unsafe_code = """import os\n\n\ndef test_shell():\n    os.system('echo forged')\n    assert True\n"""
+
+        self.assertIsNone(pipeline._ast_forbidden_check(safe_code))
+        self.assertIn("os.system", pipeline._ast_forbidden_check(unsafe_code) or "")
+
+    def test_qa_failure_signature_requires_hash8(self) -> None:
+        state = pipeline._new_state("TMP-QA-SIG", "IMP", "sample")
+        args = argparse.Namespace(
+            branch=None,
+            result="FAIL",
+            numeric_score="72",
+            failure_sig="FS:enc_fallback_missing",
+            report_file=None,
+            agent_id=None,
+            agent_run_id=None,
+        )
+        with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+             mock.patch.object(pipeline, "check_gate", return_value=(True, "")):
+            with self.assertRaises(SystemExit) as ctx:
+                pipeline.cmd_qa(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_deployment_root_reports_missing_drive_clearly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing-parent" / "deploy"
+            with mock.patch.dict(pipeline.os.environ, {"PIPELINE_DEPLOY_ROOT": str(missing)}):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline._deployment_root()
+
+        self.assertEqual(ctx.exception.code, 1)
 
     def test_pm_done_requires_atomic_step_plan_for_all_pipelines(self) -> None:
         state = pipeline._new_state("TMP-PM", "FEAT", "sample")
@@ -2281,6 +2387,8 @@ class ThreeGatePipelineTests(unittest.TestCase):
         qa = Path(".claude/agents/qa-agent.md").read_text(encoding="utf-8")
         build = Path(".claude/agents/build-agent.md").read_text(encoding="utf-8")
         harness = Path(".claude/agents/test-harness-agent.md").read_text(encoding="utf-8")
+        power_automate = Path(".claude/agents/power-automate-agent.md").read_text(encoding="utf-8")
+        tech_tree = Path(".claude/agents/shared/tech_tree_examples.md").read_text(encoding="utf-8")
         agents_command = Path(".claude/commands/agents.md").read_text(encoding="utf-8")
         claude = Path("CLAUDE.md").read_text(encoding="utf-8")
         pipeline_text = Path("pipeline.py").read_text(encoding="utf-8")
@@ -2290,12 +2398,19 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("gates phase-ci --phase pm", pm)
         self.assertIn("--agent-run-id <dev_run_id>", pm)
         self.assertIn("--agent-run-id <qa_run_id>", qa)
+        self.assertIn("PASS(≥96/120)", qa)
+        self.assertIn("FAIL(&lt;96/120)", qa)
         self.assertIn("--agent-run-id <build_run_id>", build)
         self.assertIn("test-harness-agent는 진단만 수행", build)
         self.assertNotIn("test-harness-agent 채점 필수", build)
         self.assertIn("실제 결과물 경로 또는 첨부파일 링크", harness)
         self.assertIn("사용자가 실제로 확인할 항목", harness)
+        self.assertIn("PA micro-task 순서", power_automate)
+        self.assertIn("병렬 실행하지 않습니다", power_automate)
+        self.assertIn("병렬 실행하지 않고 PM이 정한 `MT-N` 순서", tech_tree)
         self.assertIn("세션 언어 규칙", claude)
+        self.assertIn("호출 주체", claude)
+        self.assertIn("Pipeline Manager 기록 단계", claude)
         self.assertIn("Check latest status", claude)
         self.assertIn("--evidence <실제-결과물-경로-또는-첨부파일>", agents_command)
         self.assertNotIn("<real-result-path>", agents_command)
@@ -2309,12 +2424,14 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("세션 언어 규칙", pipeline_text)
         self.assertIn("최신 상태 확인", pipeline_text)
         self.assertIn("done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id", pipeline_text)
-        active_docs = "\n".join([pm, qa, build, harness, agents_command, claude, pipeline_text])
+        active_docs = "\n".join([pm, qa, build, harness, power_automate, tech_tree, agents_command, claude, pipeline_text])
         self.assertIn("Phase 6→7 자동 진행", claude)
         self.assertIn("사용자에게 묻는 지점은 마지막", pm)
         self.assertNotIn("gates oracle --user-confirmed", active_docs)
         self.assertNotIn('skip-reason "meta-task" --user-confirmed', active_docs)
         self.assertNotIn('skip-reason "docs-only" --user-confirmed', active_docs)
+        self.assertNotIn("병렬 또는 직후", active_docs)
+        self.assertNotIn("Dev DONE 기록 이후 QA로 직행", active_docs)
 
     def test_github_repo_from_remote_parses_https_and_ssh_urls(self) -> None:
         self.assertEqual(

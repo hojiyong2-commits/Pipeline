@@ -1,6 +1,9 @@
 # Self-Evolving System Log
 
-파이프라인 개선 이력. PM이 각 사이클 완료 후 업데이트한다.
+파이프라인 개선 이력. 이 파일은 역사 기록이며 현재 규칙의 권위 있는 출처가 아닙니다.
+현재 실행 규칙은 `CLAUDE.md`, `pipeline.py`, `.claude/commands/task.md`, 각 agent MD의 최신 섹션을 우선합니다.
+과거 항목의 `100점`, `Harness score`, `BUILD+QA`, `--user-confirmed` 중간 게이트 표현은 당시 기록일 뿐이며
+새 파이프라인에서 완료 기준으로 사용하면 안 됩니다. PM이 각 사이클 완료 후 업데이트한다.
 
 ## [IMP-20260505-A4C0] 2026-05-05
 

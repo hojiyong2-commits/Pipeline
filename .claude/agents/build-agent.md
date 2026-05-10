@@ -26,8 +26,8 @@ model: haiku
 
 **빌드 성공 후:**
 1. `dist/build_report.xml` 파일 저장 (미저장 시 BUILD SUCCESS 선언 금지)
-2. `<build_report><status>BUILD SUCCESS</status>` XML 출력 → 오케스트레이터가 `<status>` 읽고 `python pipeline.py build --exe "dist/앱이름.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>` 기록
-<!-- CRITICAL: pipeline.py build 기록은 오케스트레이터 전용. 에이전트가 직접 실행하면 이중 기록 발생. -->
+2. `<build_report><status>BUILD SUCCESS</status>` XML 출력 → Pipeline Manager가 `<status>` 읽고 `python pipeline.py build --exe "dist/앱이름.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>` 기록
+<!-- CRITICAL: build-agent는 pipeline.py build를 직접 실행하지 않습니다. -->
 <!-- MT-4 (IMP-20260506-A064): EXE 빌드 시 dist/build_report.xml 파일이 존재해야 하며 6-Section XML 블록 전부 포함 의무.
      pipeline.py build --exe "dist/앱.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>
      파일 없거나 6-Section 블록 누락 시 pipeline.py가 BUILD DONE 기록 거부 (hard gate).
@@ -41,11 +41,11 @@ model: haiku
 
 PyInstaller 명령어 실행 전 반드시 수행:
 
-1. 오케스트레이터가 지정한 엔트리 포인트 파일이 실제 파일시스템에 존재하는지 확인한다.
+1. PM step_plan 또는 Pipeline Manager가 지정한 엔트리 포인트 파일이 실제 파일시스템에 존재하는지 확인한다.
 2. 해당 파일에 `if __name__ == "__main__":` 블록 또는 GUI 진입점(tk.Tk(), QApplication 등)이 포함되어 있는지 내용을 확인한다.
 3. 둘 중 하나라도 불충족 시:
    - PyInstaller 실행을 즉시 중단한다.
-   - `[ENTRY POINT ERROR] 지정된 파일 '[파일명]'이 유효하지 않습니다. 오케스트레이터에게 올바른 엔트리 포인트를 재확인 요청합니다.` 출력.
+   - `[ENTRY POINT ERROR] 지정된 파일 '[파일명]'이 유효하지 않습니다. Pipeline Manager에게 올바른 엔트리 포인트를 재확인 요청합니다.` 출력.
    - 임의로 다른 파일로 대체하여 빌드하는 것은 금지한다.
 
 ## Output Format
