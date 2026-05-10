@@ -38,7 +38,7 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/BUG-20260510-9F70/dev/report_dev_handover.xml",
-      "sha256": "aa323ce82e23b51448904df24d49c293499d39806fc46b68d23e41e6c516855e",
+      "sha256": "62db3d2d7d10c5fe56de8b66c4d507ad324ea254797e4f85214acdc5bf858f46",
       "size_bytes": 1453,
       "requires_force_add": true
     },
@@ -46,7 +46,7 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/BUG-20260510-9F70/dev/scope_manifest_scope_manifest.json",
-      "sha256": "fbaa8b26dc22cd774ab63279555934becc84077031a0f8a89018a986c2b95a5e",
+      "sha256": "f98d6d982495e3dd07d9f93fd5e27e7772af840f9f2c0ca9c72a2ea630db467e",
       "size_bytes": 937,
       "requires_force_add": true
     }
@@ -54,7 +54,7 @@
   "workspace_file_checks": [
     {
       "path": "po_automation/email_monitor.py",
-      "sha256": "fba07debb433916a0c19f0e231358608520dca8cb11ac8a4ed386aca80dc5d34",
+      "sha256": "1a03115293936c2c4ea1dacc1486a0f669727068dc201b351a9fe714f803b919",
       "size_bytes": 71401
     },
     {
