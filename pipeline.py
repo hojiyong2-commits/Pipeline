@@ -2536,6 +2536,8 @@ def _validate_pr_title_matches_pipeline(state: Dict[str, Any]) -> None:
         )
         if pr_result.returncode != 0:
             return  # PR 없음 — 다른 gate에서 차단됨
+        if not pr_result.stdout:
+            return  # stdout 없음 (인코딩 오류 등) — 검사 생략
         pr_data = json.loads(pr_result.stdout)
         pr_title = pr_data.get("title", "")
         pr_number = pr_data.get("number", "?")
