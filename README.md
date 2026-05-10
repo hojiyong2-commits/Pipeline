@@ -115,6 +115,12 @@ python pipeline.py contract add-oracle --input tests/oracles/<pipeline_id>/<case
 
 `pipeline.py contract audit`는 `tests/oracles/**` 밖의 oracle 파일을 거부합니다. CODEOWNERS도 `tests/oracles/**`, `tests/**`, 루트의 `test_*.py`, `*_test.py`를 사용자 확인 대상으로 표시합니다. 이렇게 해야 agent가 정답지나 테스트를 몰래 바꾸기 어렵습니다.
 
+### PM 설계 확인
+
+Dev로 넘어가기 전, PM은 모듈 분해안을 사용자에게 쉬운 한국어로 보여주고 확인받아야 합니다. 모듈이 1개뿐이어도 확인합니다.
+
+`pipeline.py done --phase pm`은 `step_plan.xml`의 `<design_confirmation>`을 검사합니다. 각 중요한 질문은 근거, 왜 중요한지, 추천안, 최소 2개 옵션, 장점, 단점, 사용자 답변을 포함해야 합니다. 변수명이나 코드 취향처럼 중요하지 않은 질문은 묻지 않고, 유지보수성 우선 원칙으로 PM이 정리합니다.
+
 ### GitHub 자동 검사 흐름
 
 `.github/workflows/ci.yml`은 모든 PR과 `main` push에서 실행됩니다.

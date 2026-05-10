@@ -90,8 +90,9 @@ GPT advisory is optional, fixed to `gpt-5.5`, and is not a scorer. API calls hap
 
 PM completion is hard-gated by the atomic step plan in every pipeline:
 - PM must save its final output to `step_plan.xml`.
-- The file must contain both `<decomposition_audit>` and `<step_plan>`.
+- The file must contain `<decomposition_audit>`, `<step_plan>`, and `<step_plan><design_confirmation>`.
 - `<step_plan>` must contain `<micro_tasks>`; each `<micro_task>` needs `id`, `<affected_function>`, `<target_files><file>...</file></target_files>`, `<grep_evidence><executed>true</executed>`, `<pattern>`, `<match_count>`, and `<change_summary>`.
+- `<design_confirmation>` must record the user-facing PM design confirmation before Dev: module split shown, module split confirmed, maintainability-first priority, low-value question filtering, and at least one P0/P1 `module_split` question with easy wording, evidence, recommendation, two options, benefit/cost tradeoffs, and the user answer. P2/internal preference questions must be filtered instead of asked.
 - The recorded command is `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id> [--judgment-confirmed]`.
 - If `audit_result` is `AMBIGUOUS`, `<judgment_calls_resolved>` is mandatory before PM done.
 
@@ -221,6 +222,8 @@ PM 에이전트는 사용자의 요청을 받으면 **반드시 아래의 순서
 
 ### Step 3: User Roadmap Presentation Gate
 설계가 끝났다면 dev-agent를 spawn하기 전에 사용자에게 로드맵을 보고하고 승인을 받습니다. (면제 키워드: `로드맵 생략`, `자동 진행`)
+
+**설계 확인 질문 품질 hard gate:** PM은 로드맵 안에서 모듈 분해안이 1개뿐이어도 반드시 사용자에게 확인합니다. 질문은 쉬운 한국어로 쓰고, 질문마다 "왜 중요한지", "추천안", "장점", "단점", "사용자 답변"을 포함해야 합니다. 내부 변수명·코드 취향·사소한 구현 방식 같은 P2 질문은 묻지 말고 `low_value_questions_filtered=true`와 `filter_summary`에 걸러낸 이유를 적습니다. `pipeline.py done --phase pm`은 이 내용을 `<design_confirmation>`에서 파싱하며 누락 시 실패합니다.
 
 **형식 (Mandatory):** 핵심 결정 단계마다 옵션 A/B/C를 표 형식으로 제시. **각 옵션은 아래 5개 필드를 모두 포함해야 합니다 (필드 누락 시 로드맵 재출력 의무):**
 
@@ -412,6 +415,36 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
   <target_agent>Dev | UI | Build | Security | PowerAutomate</target_agent>
   <model_tier>Haiku | Sonnet | Opus</model_tier>
   <category_tags>[WA, FS, UI, PD, SEC, AL, BUILD, PA]</category_tags>
+
+  <!-- PM 설계 확인 게이트: pipeline.py hard gate. Dev 진입 전 사용자에게 쉬운 질문으로 확인한 내용. -->
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 변수명, 코드 스타일, 사소한 구현 취향 질문은 묻지 않고 기존 패턴과 유지보수성 기준으로 PM이 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업은 MT-1 단위로 작게 나눠 진행해도 될까요?</user_facing_question>
+        <evidence>사용자 요청과 Grep 결과 변경 범위가 MT-1 대상 파일과 함수에 모였습니다.</evidence>
+        <why_it_matters>모듈 단위가 맞아야 수정 범위가 작고, 이후 유지보수와 테스트가 쉬워집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1 단위로 진행</label>
+            <benefit>수정 범위가 작고 검증 위치가 명확합니다.</benefit>
+            <cost>요구사항이 커지면 다음 작업에서 추가 분리가 필요할 수 있습니다.</cost>
+          </option>
+          <option id="B">
+            <label>더 작게 다시 분해</label>
+            <benefit>각 변경을 더 세밀하게 확인할 수 있습니다.</benefit>
+            <cost>질문과 작업 시간이 늘고 불필요한 확인이 생길 수 있습니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 답변 요약 또는 "추천안 A로 진행"</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
   
   <interface_spec>
     - Input: [파일명 + 타입]

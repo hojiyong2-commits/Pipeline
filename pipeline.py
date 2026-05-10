@@ -955,6 +955,164 @@ def _collect_texts(element: Any, path: str) -> List[str]:
     return values
 
 
+_DESIGN_CONFIRMATION_BANNED_TERMS = (
+    "todo",
+    "tbd",
+    "n/a",
+    "placeholder",
+    "sample",
+    "알아서",
+    "적당히",
+    "아무거나",
+    "추후",
+    "모름",
+    "확정 안됨",
+)
+
+
+def _require_design_text(element: Any, path: str, label: str, min_len: int = 10) -> str:
+    value = _child_text(element, path)
+    if len(value) < min_len:
+        _die(f"[PM DESIGN GATE] {label} must be clear and specific: <{path}>")
+    lowered = value.lower()
+    for term in _DESIGN_CONFIRMATION_BANNED_TERMS:
+        if term in lowered:
+            _die(f"[PM DESIGN GATE] {label} contains vague placeholder text: {term}")
+    return value
+
+
+def _require_design_true(element: Any, path: str, label: str) -> None:
+    value = _child_text(element, path).strip().lower()
+    if value not in {"true", "yes", "y", "1", "confirmed", "확인", "완료"}:
+        _die(f"[PM DESIGN GATE] {label} must be true/confirmed: <{path}>")
+
+
+def _validate_pm_design_confirmation(step_plan: Any, micro_tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    confirmation = step_plan.find("design_confirmation")
+    if confirmation is None:
+        _die(
+            "[PM DESIGN GATE] <design_confirmation> is required inside <step_plan>. "
+            "PM must show the module split, explain tradeoffs in easy Korean, and record the user's answer before Dev."
+        )
+
+    _require_design_true(confirmation, "module_split_presented", "module split presentation")
+    _require_design_true(confirmation, "module_split_user_confirmed", "module split user confirmation")
+    _require_design_true(confirmation, "low_value_questions_filtered", "low-value question filter")
+    filter_summary = _require_design_text(
+        confirmation,
+        "filter_summary",
+        "low-value question filter summary",
+        min_len=20,
+    )
+
+    maintenance_priority = _child_text(confirmation, "maintenance_priority")
+    if "maintain" not in maintenance_priority.lower() and "유지보수" not in maintenance_priority:
+        _die(
+            "[PM DESIGN GATE] <maintenance_priority> must explicitly say maintainability comes first "
+            "(for example: maintainability_first or 유지보수성 우선)."
+        )
+
+    questions_root = confirmation.find("decision_questions")
+    if questions_root is None:
+        _die("[PM DESIGN GATE] <decision_questions> is required inside <design_confirmation>")
+    questions = questions_root.findall("question")
+    if not questions:
+        _die("[PM DESIGN GATE] at least one user-visible decision question is required")
+
+    allowed_priorities = {"P0", "P1"}
+    summaries: List[Dict[str, Any]] = []
+    has_module_split_question = False
+    known_mt_ids = {str(item.get("id")) for item in micro_tasks if item.get("id")}
+
+    for question in questions:
+        qid = str(question.get("id") or _child_text(question, "id")).strip()
+        if not qid:
+            _die("[PM DESIGN GATE] every decision question requires id")
+        priority = str(question.get("priority") or _child_text(question, "priority")).strip().upper()
+        if priority not in allowed_priorities:
+            _die(
+                f"[PM DESIGN GATE] {qid} priority must be P0 or P1. "
+                "P2/internal implementation preferences must be filtered, not asked to the user."
+            )
+        category = str(question.get("category") or _child_text(question, "category")).strip()
+        if not category:
+            _die(f"[PM DESIGN GATE] {qid} requires category")
+        if category == "module_split":
+            has_module_split_question = True
+
+        mt_id = str(question.get("mt_id") or _child_text(question, "mt_id")).strip()
+        if mt_id and known_mt_ids and mt_id not in known_mt_ids:
+            _die(f"[PM DESIGN GATE] {qid} references unknown mt_id: {mt_id}")
+
+        question_text = _require_design_text(
+            question,
+            "user_facing_question",
+            f"{qid} user-facing question",
+            min_len=16,
+        )
+        if not any(marker in question_text for marker in ("?", "까요", "선택", "확인")):
+            _die(f"[PM DESIGN GATE] {qid} must be phrased as a clear user decision question")
+
+        evidence = _require_design_text(question, "evidence", f"{qid} evidence", min_len=12)
+        why = _require_design_text(question, "why_it_matters", f"{qid} why_it_matters", min_len=20)
+        recommended = _require_design_text(
+            question,
+            "recommended_option",
+            f"{qid} recommended_option",
+            min_len=1,
+        )
+        user_answer = _require_design_text(question, "user_answer", f"{qid} user_answer", min_len=2)
+
+        options_root = question.find("options")
+        if options_root is None:
+            _die(f"[PM DESIGN GATE] {qid} requires <options>")
+        options = options_root.findall("option")
+        if len(options) < 2:
+            _die(f"[PM DESIGN GATE] {qid} requires at least two options with clear tradeoffs")
+
+        option_ids: List[str] = []
+        for option in options:
+            option_id = str(option.get("id") or _child_text(option, "id")).strip()
+            if not option_id:
+                _die(f"[PM DESIGN GATE] {qid} every option requires id")
+            if option_id in option_ids:
+                _die(f"[PM DESIGN GATE] {qid} duplicate option id: {option_id}")
+            option_ids.append(option_id)
+            _require_design_text(option, "label", f"{qid} option {option_id} label", min_len=4)
+            _require_design_text(option, "benefit", f"{qid} option {option_id} benefit", min_len=12)
+            _require_design_text(option, "cost", f"{qid} option {option_id} cost", min_len=12)
+
+        if recommended not in option_ids:
+            _die(
+                f"[PM DESIGN GATE] {qid} recommended_option must match one option id "
+                f"({', '.join(option_ids)})"
+            )
+
+        summaries.append({
+            "id": qid,
+            "priority": priority,
+            "category": category,
+            "mt_id": mt_id or None,
+            "recommended_option": recommended,
+            "option_count": len(options),
+            "user_answer": user_answer,
+        })
+
+    if not has_module_split_question:
+        _die(
+            "[PM DESIGN GATE] a module_split decision question is always required, "
+            "even when the PM recommends a single MT."
+        )
+
+    return {
+        "validated_at": _now(),
+        "maintenance_priority": maintenance_priority,
+        "filter_summary": filter_summary,
+        "question_count": len(summaries),
+        "questions": summaries,
+    }
+
+
 def _parse_protocol_evolution_decision(report_file: Optional[str]) -> Dict[str, Any]:
     """Parse the Phase 8 decision that keeps protocol evolution out of the main pipeline.
 
@@ -1242,12 +1400,15 @@ def _validate_pm_step_plan_file(report_file: str, state: Dict[str, Any]) -> Dict
             "change_summary": change_summary,
         })
 
+    design_confirmation = _validate_pm_design_confirmation(step_plan, micro_tasks)
+
     return {
         "report_file": str(path),
         "validated_at": _now(),
         "audit_result": audit_result,
         "micro_task_count": len(micro_tasks),
         "micro_tasks": micro_tasks,
+        "design_confirmation": design_confirmation,
         "project_snapshot": _atomic_project_snapshot(),
     }
 
@@ -4057,7 +4218,7 @@ def cmd_interface(args: argparse.Namespace) -> None:
         "pm": {
             "agent": "pm-agent",
             "next_cmd": 'python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap [--judgment-confirmed]',
-            "required_xml": ["<decomposition_audit>", "<step_plan>", "<micro_tasks>"],
+            "required_xml": ["<decomposition_audit>", "<step_plan>", "<design_confirmation>", "<micro_tasks>"],
         },
         "dev": {
             "agent": "dev-agent",
@@ -6849,7 +7010,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_done.add_argument("--files", default=None,
                         help="변경 파일 목록 (쉼표 구분, dev 전용)")
     p_done.add_argument("--report-file", default=None,
-                        help="PM 출력 파일 경로 (<decomposition_audit>/<step_plan>/<micro_tasks> hard 검증 필수)")
+                        help="PM 출력 파일 경로 (<decomposition_audit>/<step_plan>/<design_confirmation>/<micro_tasks> hard 검증 필수)")
     p_done.add_argument("--branch", metavar="BRANCH", default=None,
                         help="브랜치 ID (A-Z 대문자 1글자). 지정 시 브랜치 state 파일 사용.")
     # MT-1: PM Analysis Gate 플래그 (IMP-20260506-A064)

@@ -125,6 +125,38 @@ def _write_integration_report(directory: str, verdict: str = "PASS") -> Path:
     return report
 
 
+def _design_confirmation_xml(mt_id: str = "MT-1") -> str:
+    return f"""  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 변수명과 코드 취향 질문은 묻지 않고 기존 패턴과 유지보수성을 우선했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="{mt_id}">
+        <user_facing_question>이번 작업은 {mt_id} 단위로 작게 나눠 진행해도 될까요?</user_facing_question>
+        <evidence>사용자 요청과 Grep 결과 변경 범위가 이 모듈에 모였습니다.</evidence>
+        <why_it_matters>모듈 단위가 맞아야 수정 범위가 작고 나중에 유지보수가 쉬워집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>{mt_id} 단위로 진행</label>
+            <benefit>변경 범위가 작고 검증 위치가 명확합니다.</benefit>
+            <cost>기능이 커지면 다음 작업에서 추가 분리가 필요할 수 있습니다.</cost>
+          </option>
+          <option id="B">
+            <label>더 작게 다시 분해</label>
+            <benefit>각 변경을 더 세밀하게 검토할 수 있습니다.</benefit>
+            <cost>작업 시간이 늘고 불필요한 질문이 늘 수 있습니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+"""
+
+
 def _install_completed_agent_run(state: dict, phase: str, output_file: Path, root: Path) -> str:
     run_id = f"{phase}-test-run"
     receipt_dir = root / "agent-receipts"
@@ -823,6 +855,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 </decomposition_audit>
 <step_plan>
   <pipeline_id>TMP-PM-AGENT-REQ</pipeline_id>
+""" + _design_confirmation_xml() + """
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.run</affected_function>
@@ -874,6 +907,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 </decomposition_audit>
 <step_plan>
   <pipeline_id>TMP-PM-AGENT-OK</pipeline_id>
+""" + _design_confirmation_xml() + """
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.run</affected_function>
@@ -1063,6 +1097,112 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertEqual(state["phases"]["pm"]["status"], "PENDING")
 
+    def test_pm_done_requires_user_design_confirmation(self) -> None:
+        state = pipeline._new_state("TMP-PM-DESIGN-REQ", "FEAT", "sample")
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single function</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-PM-DESIGN-REQ</pipeline_id>
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>main.run</affected_function>
+      <target_files><file>main.py</file></target_files>
+      <grep_evidence>
+        <pattern>def run</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Update run behavior</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with mock.patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline._validate_pm_step_plan_file(str(report), state)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("PM DESIGN GATE", stderr.getvalue())
+
+    def test_pm_design_confirmation_filters_p2_questions(self) -> None:
+        state = pipeline._new_state("TMP-PM-DESIGN-P2", "FEAT", "sample")
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single function</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-PM-DESIGN-P2</pipeline_id>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>중요하지 않은 내부 구현 취향 질문은 묻지 않고 유지보수성 기준으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P2" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업은 MT-1 단위로 진행해도 될까요?</user_facing_question>
+        <evidence>사용자 요청과 Grep 결과 변경 범위가 한 곳에 모였습니다.</evidence>
+        <why_it_matters>분해 단위가 맞아야 수정 범위가 작고 유지보수가 쉬워집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1 단위로 진행</label>
+            <benefit>변경 범위와 검증 지점이 명확합니다.</benefit>
+            <cost>추가 요구가 생기면 새 모듈이 필요합니다.</cost>
+          </option>
+          <option id="B">
+            <label>더 작게 다시 분해</label>
+            <benefit>더 세밀한 검토가 가능합니다.</benefit>
+            <cost>질문과 작업 시간이 늘어납니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>main.run</affected_function>
+      <target_files><file>main.py</file></target_files>
+      <grep_evidence>
+        <pattern>def run</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Update run behavior</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with mock.patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline._validate_pm_step_plan_file(str(report), state)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("P2/internal implementation preferences must be filtered", stderr.getvalue())
+
     def test_pm_done_records_atomic_step_plan_with_mandatory_gates(self) -> None:
         state = pipeline._new_state("TMP-PM-OK", "FEAT", "sample")
         with tempfile.TemporaryDirectory() as tmp:
@@ -1080,6 +1220,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 <step_plan>
   <pipeline_id>TMP-PM-OK</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
+""" + _design_confirmation_xml() + """
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.run</affected_function>
@@ -2151,6 +2292,11 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("--evidence <실제-결과물-경로-또는-첨부파일>", agents_command)
         self.assertNotIn("<real-result-path>", agents_command)
         self.assertIn("Phase 7: External Gate Phase", claude)
+        self.assertIn("<design_confirmation>", pm)
+        self.assertIn("PM DESIGN GATE", pipeline_text)
+        self.assertIn("low_value_questions_filtered", pm)
+        self.assertIn("maintainability_first", pm)
+        self.assertIn("P2/internal implementation preferences must be filtered", pipeline_text)
         self.assertIn("agent start --phase pm", pipeline_text)
         self.assertIn("세션 언어 규칙", pipeline_text)
         self.assertIn("최신 상태 확인", pipeline_text)
