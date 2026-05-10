@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <mt_id>MT-2</mt_id>
+  <agent>dev-agent</agent>
+  <status>READY_FOR_QA</status>
+  <implemented_files>
+    <file>po_automation/email_monitor.py (읽기 전용 보안 분석)</file>
+  </implemented_files>
+  <self_check>
+    <impact_analysis_check>PASS</impact_analysis_check>
+    <scope_boundary>PASS — 코드 무변경</scope_boundary>
+    <evidence_trace>PASS — 5개 보안 발견 항목 모두 라인 인용</evidence_trace>
+  </self_check>
+  <analysis_notes>
+    <category>SECURITY</category>
+
+    <sec_finding id="S1" severity="MEDIUM" file="po_automation/email_monitor.py" lines="L39-L70">
+      <pattern>_safe_resolve: Path.resolve() + relative_to() 검증</pattern>
+      <evidence>
+        L63: `resolved = (allowed_root / user_path).resolve()`
+        L64-L65: `try: resolved.relative_to(allowed_root.resolve())`
+      </evidence>
+      <strength>None 방어 + str/Path 타입 가드 + symlink 평탄화 후 비교 — 표준 패턴</strength>
+      <weakness>
+        - Windows reparse point(예: junction, OneDrive cloud sync 폴더) 처리는 OS 동작에 의존 — Path.resolve()가 일관되지 않을 수 있음
+        - allowed_root 자체가 상대 경로면 cwd 변경 시 resolve() 결과 흔들림 (현재 호출자 main.py에서 절대 경로 전달하므로 실 위험 낮음)
+      </weakness>
+      <recommendation>allowed_root을 호출자가 항상 .resolve() 처리하도록 docstring 명시. Windows junction 발견 시 raise하는 방어 로직 옵션 추가 가능</recommendation>
+    </sec_finding>
+
+    <sec_finding id="S2" severity="HIGH" file="po_automation/email_monitor.py" lines="L795-L799, L906-L913">
+      <pattern>발신자 필터: GetExchangeUser() 실패 + '@' 미포함 시 빈 문자열 반환</pattern>
+      <evidence>
+        L795-L797: `if "@" in addr: return addr.lower()` (fallback)
+        L799: `return ""` (DN인데 GetExchangeUser 실패한 경우)
+        L910-L913: `if sender_addr not in allowed_senders: ... return False`
+      </evidence>
+      <impact>
+        DN 주소 + GetExchangeUser 실패 케이스에서 sender_addr=""이 되어 allowed_senders 에 ""이 없으므로 fail-safe 처리(필터 미통과 → 메일 처리 안됨)로 동작.
+        그러나 logger 경고만 남고 사용자에게 명시적 알림 없음 — 정상 메일이 silent drop될 수 있음.
+        반대로 allowed_senders에 ""이 우연히 포함되면 모든 DN 미해석 메일이 통과하는 우회 위험.
+      </impact>
+      <recommendation>
+        - allowed_senders 정규화 시 빈 문자열 자동 제거
+        - sender_addr=="" 케이스를 별도 로그 카테고리(WARN: SENDER_RESOLVE_FAILED)로 출력하여 사용자가 인지 가능하게
+      </recommendation>
+    </sec_finding>
+
+    <sec_finding id="S3" severity="HIGH" file="po_automation/email_monitor.py" lines="L916-L953">
+      <pattern>수신자 필터: rec.Address가 Exchange DN인 경우 SMTP 주소 변환 누락</pattern>
+      <evidence>
+        L929-L931: `addr = (getattr(rec, "Address", "") or "").lower().strip()`
+        — 발신자(_get_smtp_address)와 달리 GetExchangeUser() 호출 없음
+      </evidence>
+      <impact>
+        조직 내부 메일(Exchange 내 송수신)에서 rec.Address가 '/o=ExchangeLabs/...' DN 형식일 때
+        allowed_recipients (소문자 SMTP 주소) 와 비교 실패 → 정당한 수신자임에도 필터 미통과 → 메일 처리 안됨.
+        본 처리 누락으로 발신자/수신자 처리가 비대칭 (S2 vs S3).
+      </impact>
+      <recommendation>
+        _get_smtp_address_from_recipient(rec) 헬퍼 신설:
+        - rec.AddressEntry.GetExchangeUser().PrimarySmtpAddress 우선
+        - 실패 시 rec.Address fallback
+        발신자와 동일한 normalize 패턴 적용으로 비대칭 해소
+      </recommendation>
+    </sec_finding>
+
+    <sec_finding id="S4" severity="MEDIUM" file="po_automation/email_monitor.py" lines="L588, L646, L733">
+      <pattern>고정 .tmp 접미사 — 동시성 보호 없음</pattern>
+      <evidence>
+        L588: `tmp = msg_path.with_suffix(".msg.tmp")`
+        L646: `tmp_path = dest_path.with_suffix(dest_path.suffix + ".tmp")`
+        L733: `tmp = json_path.with_suffix(json_path.suffix + ".tmp")`
+      </evidence>
+      <impact>
+        - 동일 EntryID의 OnNewMailEx 이벤트가 중복 fire되는 케이스에서 동시 SaveAs → 같은 .tmp 파일 경합
+        - 다중 모니터링 인스턴스 실행 시 동일 processed.json.tmp 충돌
+        - tmp 파일 부분 쓰기 → os.replace 동시 실행 → 데이터 손상 가능
+      </impact>
+      <recommendation>
+        tempfile.mkstemp(dir=parent, suffix=".tmp") 사용:
+        - OS 레벨 atomic temp 생성
+        - tempfile은 mkstemp 후 fd를 반환 → fd 닫고 SaveAs 또는 fdopen → write
+        - 충돌 시 자동 고유 이름 부여
+        save_processed_set은 이미 tempfile.mkstemp 사용(main.py L564), email_monitor에도 동일 패턴 적용 권고
+      </recommendation>
+    </sec_finding>
+
+    <sec_finding id="S5" severity="LOW" file="po_automation/email_monitor.py" lines="L77-L94">
+      <pattern>_safe_filename: [:200] 절단 + "untitled" fallback</pattern>
+      <evidence>
+        L92: `sanitized = re.sub(r'[\\/:*?"<>|]', "_", name)`
+        L94: `return sanitized[:200] if sanitized else "untitled"`
+      </evidence>
+      <impact>
+        - 200자 초과 동일 prefix 다수 메일 시: 절단 결과가 동일 → _get_unique_path가 (1), (2), (3) ... 부여
+        - 무한 증가하는 카운터로 폴더 내 파일 수 폭발 가능 (수천 개)
+        - "untitled" 다수 메일 또한 동일 충돌 → 동일 폴더에 untitled (1) ~ untitled (N)
+      </impact>
+      <recommendation>
+        - 절단 시 짧은 hash(예: hashlib.sha1(original).hexdigest()[:8]) 접미사 부여
+        - 예: f"{trimmed[:190]}_{hash8}.msg" — 동일 prefix라도 원문 다르면 hash 다름
+        - "untitled" fallback도 timestamp 또는 EntryID prefix 활용으로 해소
+      </recommendation>
+    </sec_finding>
+  </analysis_notes>
+  <evidence>
+    <item>module_design_MT-2.xml</item>
+    <item>scope_manifest_MT-2.json</item>
+  </evidence>
+  <summary>보안 5개 영역 검증 완료: S1(_safe_resolve Win 한계) / S2(발신자 fallback) / S3(수신자 비대칭) / S4(.tmp 경쟁) / S5(파일명 절단).</summary>
+</module_handover>

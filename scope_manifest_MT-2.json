@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "IMP-20260510-D44F",
+  "micro_tasks": [
+    {
+      "id": "MT-2",
+      "files": ["po_automation/email_monitor.py"],
+      "affected_functions": ["email_monitor._safe_resolve, email_monitor._get_smtp_address, email_monitor._process_mail_item(수신자 필터), email_monitor._save_email_msg, email_monitor._save_attachments, email_monitor.save_processed_set"]
+    }
+  ]
+}
