@@ -1,0 +1,5 @@
+# Force LF for XML report files that pipeline.py generates via shutil/Python (which writes LF).
+# Without this, Windows git autocrlf converts LF->CRLF on checkout, breaking SHA-256 checks
+# in the phase attestation CI step. JSON files are written by _write_json (text mode = CRLF
+# on Windows), so autocrlf delivers CRLF to CI and the stored CRLF hash still matches.
+*.xml text eol=lf
