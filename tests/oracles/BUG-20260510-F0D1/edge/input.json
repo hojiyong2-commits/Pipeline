@@ -1,0 +1,6 @@
+{
+  "case": "single_order_multiple_dates",
+  "order_no": "X100050542",
+  "delivery_dates": ["2026-06-02", "2026-06-25"],
+  "line_number_groups": [[1, 2, 3], [4, 5]]
+}

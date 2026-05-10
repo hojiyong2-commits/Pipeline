@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260510-F0D1",
+  "created_at": "2026-05-10T14:06:12Z",
+  "oracles": [
+    {
+      "name": "normal",
+      "description": "주문번호 1개와 날짜 1개이면 Line No는 비워둔다",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\BUG-20260510-F0D1\\normal\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260510-F0D1\\normal\\expected.json",
+      "input_sha256": "f5da9861bb8f049151aaba6592c1ed981d51f46dc2ff58c7b0de7c75e08b5904",
+      "expected_sha256": "50633ae93d301ec8776ab0f2591ec9377a7499d390a49ab442d1e5b168bf6701",
+      "added_at": "2026-05-10T14:06:12Z"
+    },
+    {
+      "name": "edge",
+      "description": "주문번호 1개와 날짜 2개 이상이면 Line No를 출력한다",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\BUG-20260510-F0D1\\edge\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260510-F0D1\\edge\\expected.json",
+      "input_sha256": "eab0a938def8f28d93e677a9794c09b26dfd692617334add6a371fd56af2ab6f",
+      "expected_sha256": "ac8c5c47b00f2097d92d2e017638315d42f3821cf81a87e738b39e784418e9ad",
+      "added_at": "2026-05-10T14:06:12Z"
+    }
+  ],
+  "updated_at": "2026-05-10T14:06:12Z"
+}

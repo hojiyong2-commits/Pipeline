@@ -1,0 +1,9 @@
+{
+  "command": [
+    "{python}",
+    "-m",
+    "pytest",
+    "tests/test_order_mapper.py::TestApplySubOrderSuffixes::test_line_no_decision_uses_base_order_after_suffix",
+    "-q"
+  ]
+}

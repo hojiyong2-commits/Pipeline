@@ -1,26 +1,26 @@
 {
   "version": "1.2.0",
-  "pipeline_id": "IMP-20260510-9242",
-  "type": "IMP",
-  "description": "PR 브랜치 오염 방지: gates prepare-phase에 pipeline_id 브랜치 강제 격리 추가",
-  "created_at": "2026-05-10T13:27:05Z",
-  "updated_at": "2026-05-10T13:49:45Z",
+  "pipeline_id": "BUG-20260510-F0D1",
+  "type": "BUG",
+  "description": "ICPartAutomation.exe 오류 및 데드코드 최종 점검 후 수정",
+  "created_at": "2026-05-10T14:04:43Z",
+  "updated_at": "2026-05-10T14:10:10Z",
   "current_phase": "dev",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
     "pm": {
       "status": "DONE",
-      "completed_at": "2026-05-10T13:42:14Z",
+      "completed_at": "2026-05-10T14:10:05Z",
       "evidence": null,
       "notes": [],
       "report_file": "step_plan.xml",
       "agent_id": "pm-planner-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260510-9242_phase_pm.json",
-      "manager_run_id": "pipeline_manager-c7f612fb957de2b5",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_history\\BUG-20260510-F0D1_phase_pm.json",
+      "manager_run_id": "pipeline_manager-1d0b2f164e8a887f",
       "manager_agent_id": "pipeline-manager-agent",
       "manager_report_file": "manager_handoff.xml",
-      "agent_run_id": "pm_planner-515453fb7e867681"
+      "agent_run_id": "pm_planner-d76ad4c2b7497053"
     },
     "dev": {
       "status": "PENDING",
@@ -79,280 +79,292 @@
   },
   "event_log": [
     {
-      "ts": "2026-05-10T13:27:05Z",
-      "msg": "파이프라인 생성: IMP-20260510-9242"
+      "ts": "2026-05-10T14:04:43Z",
+      "msg": "파이프라인 생성: BUG-20260510-F0D1"
     },
     {
-      "ts": "2026-05-10T13:27:08Z",
-      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-2de5804942e699f7"
-    },
-    {
-      "ts": "2026-05-10T13:30:47Z",
-      "msg": "github phase-ci pm FAIL run_id=25629976926 commit=2a28ef845f9b"
-    },
-    {
-      "ts": "2026-05-10T13:32:01Z",
+      "ts": "2026-05-10T14:04:55Z",
       "msg": "three_gate mode enabled (mandatory)"
     },
     {
-      "ts": "2026-05-10T13:32:01Z",
+      "ts": "2026-05-10T14:04:55Z",
       "msg": "GitHub phase attestations enabled (mandatory)"
     },
     {
-      "ts": "2026-05-10T13:32:01Z",
-      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242"
+      "ts": "2026-05-10T14:04:55Z",
+      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_contracts\\BUG-20260510-F0D1"
     },
     {
-      "ts": "2026-05-10T13:34:41Z",
-      "msg": "contract_v2 frozen: 14c92dd2b5ed"
+      "ts": "2026-05-10T14:06:46Z",
+      "msg": "contract_v2 frozen: f0eb7c8339eb"
     },
     {
-      "ts": "2026-05-10T13:34:41Z",
+      "ts": "2026-05-10T14:06:46Z",
       "msg": "advisory gpt-contract SKIPPED api_called=False"
     },
     {
-      "ts": "2026-05-10T13:37:01Z",
-      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-2de5804942e699f7"
+      "ts": "2026-05-10T14:07:23Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-350d480763c62317"
     },
     {
-      "ts": "2026-05-10T13:37:22Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-6eb35e4f56cb897f"
+      "ts": "2026-05-10T14:07:28Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-350d480763c62317"
     },
     {
-      "ts": "2026-05-10T13:39:09Z",
-      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-6eb35e4f56cb897f"
+      "ts": "2026-05-10T14:07:39Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-5a647e31e7ba91f5"
     },
     {
-      "ts": "2026-05-10T13:39:54Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-320e1ce754247a02"
+      "ts": "2026-05-10T14:07:43Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-5a647e31e7ba91f5"
     },
     {
-      "ts": "2026-05-10T13:39:57Z",
-      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-320e1ce754247a02"
+      "ts": "2026-05-10T14:08:04Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-0d911dab438c88b8"
     },
     {
-      "ts": "2026-05-10T13:40:10Z",
-      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-559866bf68b0ebb2"
+      "ts": "2026-05-10T14:08:08Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-0d911dab438c88b8"
     },
     {
-      "ts": "2026-05-10T13:40:13Z",
-      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-559866bf68b0ebb2"
+      "ts": "2026-05-10T14:08:20Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-fd77fce10e89f622"
     },
     {
-      "ts": "2026-05-10T13:40:25Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-8a45fa8dffc43542"
+      "ts": "2026-05-10T14:08:24Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-fd77fce10e89f622"
     },
     {
-      "ts": "2026-05-10T13:40:28Z",
-      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-8a45fa8dffc43542"
+      "ts": "2026-05-10T14:08:42Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-d76ad4c2b7497053"
     },
     {
-      "ts": "2026-05-10T13:41:24Z",
-      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-515453fb7e867681"
+      "ts": "2026-05-10T14:08:46Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-d76ad4c2b7497053"
     },
     {
-      "ts": "2026-05-10T13:41:31Z",
-      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-515453fb7e867681"
+      "ts": "2026-05-10T14:08:55Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-fffa2652bc835cdd"
     },
     {
-      "ts": "2026-05-10T13:41:41Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-2fae267c5165f379"
+      "ts": "2026-05-10T14:09:00Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-fffa2652bc835cdd"
     },
     {
-      "ts": "2026-05-10T13:41:44Z",
-      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-2fae267c5165f379"
+      "ts": "2026-05-10T14:09:16Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-356e933403abe31c"
     },
     {
-      "ts": "2026-05-10T13:42:02Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-c7f612fb957de2b5"
+      "ts": "2026-05-10T14:09:22Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-356e933403abe31c"
     },
     {
-      "ts": "2026-05-10T13:42:05Z",
-      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-c7f612fb957de2b5"
+      "ts": "2026-05-10T14:09:32Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-4d11840fa4fee125"
     },
     {
-      "ts": "2026-05-10T13:42:14Z",
+      "ts": "2026-05-10T14:09:39Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-4d11840fa4fee125"
+    },
+    {
+      "ts": "2026-05-10T14:09:57Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-1d0b2f164e8a887f"
+    },
+    {
+      "ts": "2026-05-10T14:10:05Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-1d0b2f164e8a887f"
+    },
+    {
+      "ts": "2026-05-10T14:10:05Z",
       "msg": "pm DONE | evidence: None"
     },
     {
-      "ts": "2026-05-10T13:42:21Z",
-      "msg": "phase attestation request prepared: pm"
-    },
-    {
-      "ts": "2026-05-10T13:46:42Z",
-      "msg": "phase attestation request prepared: pm"
-    },
-    {
-      "ts": "2026-05-10T13:49:14Z",
-      "msg": "phase attestation request prepared: pm"
-    },
-    {
-      "ts": "2026-05-10T13:49:45Z",
+      "ts": "2026-05-10T14:10:10Z",
       "msg": "phase attestation request prepared: pm"
     }
   ],
   "terminal_state": null,
   "harness_fail_count": 0,
   "agent_runs": {
-    "pm_planner-2de5804942e699f7": {
+    "pm_planner-350d480763c62317": {
       "schema_version": 1,
-      "run_id": "pm_planner-2de5804942e699f7",
-      "pipeline_id": "IMP-20260510-9242",
+      "run_id": "pm_planner-350d480763c62317",
+      "pipeline_id": "BUG-20260510-F0D1",
       "phase": "pm_planner",
       "agent_id": "pm-planner-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:27:08Z",
-      "completed_at": "2026-05-10T13:37:01Z",
-      "token_hash": "6f2e1d32ae9c93783004ee56f8cc7a57ece23c3fa4e87e9fd8a838397b76066d",
+      "started_at": "2026-05-10T14:07:23Z",
+      "completed_at": "2026-05-10T14:07:28Z",
+      "token_hash": "edde5dcea191365f665903bdd2c90c03a223ff7311237c18a84e2769267e40cb",
       "output_file": "step_plan.xml",
-      "output_sha256": "461c5981be46a3aef5bc8a7c155f78dbe0a75e6dbce5a0848d7934a474a0a2c4",
+      "output_sha256": "fb02fa028808dae55b5732671babaad91a27a620f3bb6d2d597cd75f7140f49c",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-2de5804942e699f7.json",
-      "receipt_sha256": "84ad89080239410bc3c3d74a38daf4471d5194874e80a1c3d839a4f1ff54421d",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pm_planner\\pm_planner-350d480763c62317.json",
+      "receipt_sha256": "7b4914c0c032780ee07c039bf65a8e1422a9d57140769a8c0cbaa5fda30e234c",
       "used_by_phase": null,
       "used_at": null,
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "notes": ""
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "PM planner가 단일 모듈 계획과 사용자 업무 규칙 oracle을 확정했습니다."
     },
-    "pipeline_manager-6eb35e4f56cb897f": {
+    "pipeline_manager-5a647e31e7ba91f5": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-6eb35e4f56cb897f",
-      "pipeline_id": "IMP-20260510-9242",
+      "run_id": "pipeline_manager-5a647e31e7ba91f5",
+      "pipeline_id": "BUG-20260510-F0D1",
       "phase": "pipeline_manager",
       "agent_id": "pipeline-manager-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:37:21Z",
-      "completed_at": "2026-05-10T13:39:09Z",
-      "token_hash": "b34eaa81bc85ff119a148c6ab210bbb2f261027179ac1043fea538c1dabdc3aa",
+      "started_at": "2026-05-10T14:07:39Z",
+      "completed_at": "2026-05-10T14:07:43Z",
+      "token_hash": "faa11589b5d8d3912fd30d19b9c46ffd05fd14b3ff6300e22a07bb0356f6a7de",
       "output_file": "manager_handoff.xml",
-      "output_sha256": "b25190e80317f9126da1e2674cf38f29613bd04cd353c343c1f7b0296fcd92d2",
+      "output_sha256": "5cb60bf5452dc50c1bf7ba425c7690e747b423685b762ac17835c0a98ea1e5f7",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-6eb35e4f56cb897f.json",
-      "receipt_sha256": "cbe8d89d8bd0a0fc64cab1684492660bc13da64a4702316ffc655591b057e779",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pipeline_manager\\pipeline_manager-5a647e31e7ba91f5.json",
+      "receipt_sha256": "413c804df221aa6ada7cdff65e74c611c08f1ff75d30f899109c24a67903c87c",
       "used_by_phase": null,
       "used_at": null,
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "notes": ""
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "Pipeline manager가 PM 계획 해시와 다음 phase를 확인했습니다."
     },
-    "pipeline_manager-320e1ce754247a02": {
+    "pm_planner-0d911dab438c88b8": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-320e1ce754247a02",
-      "pipeline_id": "IMP-20260510-9242",
-      "phase": "pipeline_manager",
-      "agent_id": "pipeline-manager-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-05-10T13:39:54Z",
-      "completed_at": "2026-05-10T13:39:57Z",
-      "token_hash": "caafdd651c6edb39a10df5e96ecbd9a4024da5d46a202c4d75a48fafbb7e5ad3",
-      "output_file": "manager_handoff.xml",
-      "output_sha256": "b25190e80317f9126da1e2674cf38f29613bd04cd353c343c1f7b0296fcd92d2",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-320e1ce754247a02.json",
-      "receipt_sha256": "b5eda84cb5423c78959fc6f0a73280241cc9fb78be85fa82288d960c617d6f8e",
-      "used_by_phase": null,
-      "used_at": null,
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "notes": ""
-    },
-    "pm_planner-559866bf68b0ebb2": {
-      "schema_version": 1,
-      "run_id": "pm_planner-559866bf68b0ebb2",
-      "pipeline_id": "IMP-20260510-9242",
+      "run_id": "pm_planner-0d911dab438c88b8",
+      "pipeline_id": "BUG-20260510-F0D1",
       "phase": "pm_planner",
       "agent_id": "pm-planner-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:40:10Z",
-      "completed_at": "2026-05-10T13:40:13Z",
-      "token_hash": "4c9636ded9b47578da8f4cfe2f3c2b5695e1419bfedc4b0b5065af442fe38dad",
+      "started_at": "2026-05-10T14:08:03Z",
+      "completed_at": "2026-05-10T14:08:08Z",
+      "token_hash": "650e3699dbed4854f6cfa6d38ee1741207ace69e6e9a00f6566e4a281b3e030d",
       "output_file": "step_plan.xml",
-      "output_sha256": "a85b6fcdc25a03caefffa0a65a3ad3f882d29064ff653f195a76ef29f9a670f5",
+      "output_sha256": "f797c2ac304e9fcccb854e8d5dd11d46367a25ab1f7034f18581a7abf06c9958",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-559866bf68b0ebb2.json",
-      "receipt_sha256": "6915a3cb74bdb133f95fc7f114ae3e7078e8fd4c725ef62642226fa80bc55c52",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pm_planner\\pm_planner-0d911dab438c88b8.json",
+      "receipt_sha256": "c8f2fbcbfe93d092f44b6093002c99954dc089d06ca095f6ea79b987f0abec45",
       "used_by_phase": null,
       "used_at": null,
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "notes": ""
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "PM planner가 질문 형식을 보정한 최종 계획을 제출했습니다."
     },
-    "pipeline_manager-8a45fa8dffc43542": {
+    "pipeline_manager-fd77fce10e89f622": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-8a45fa8dffc43542",
-      "pipeline_id": "IMP-20260510-9242",
+      "run_id": "pipeline_manager-fd77fce10e89f622",
+      "pipeline_id": "BUG-20260510-F0D1",
       "phase": "pipeline_manager",
       "agent_id": "pipeline-manager-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:40:25Z",
-      "completed_at": "2026-05-10T13:40:28Z",
-      "token_hash": "5aa5e5c1ac5d967ece89010fcb1d53e960914559dd9049e507091f4c2ed4a404",
+      "started_at": "2026-05-10T14:08:20Z",
+      "completed_at": "2026-05-10T14:08:24Z",
+      "token_hash": "f1cb336555cb271c256fb4bf2b14d73ea7a70bb8c3b57e043b534d30623160d1",
       "output_file": "manager_handoff.xml",
-      "output_sha256": "ac7b6e7eb7a0e1141fc82459abeba32a1d04f9f09363aeab5cf7af69583feb67",
+      "output_sha256": "e94672957b50060ae0f02df48af2980b661ff8f645f9e7e2f930c0ece9df1d4f",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-8a45fa8dffc43542.json",
-      "receipt_sha256": "2aeeeb444c47935a851c8b18c1417cc8795e46172f9019eb950945d78f80b967",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pipeline_manager\\pipeline_manager-fd77fce10e89f622.json",
+      "receipt_sha256": "f879a0758f84f6065ef5aaba58bbe85f2dadb47eda176dcda9fba1160c12084b",
       "used_by_phase": null,
       "used_at": null,
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "notes": ""
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "Pipeline manager가 보정된 PM 계획을 확인했습니다."
     },
-    "pm_planner-515453fb7e867681": {
+    "pm_planner-d76ad4c2b7497053": {
       "schema_version": 1,
-      "run_id": "pm_planner-515453fb7e867681",
-      "pipeline_id": "IMP-20260510-9242",
+      "run_id": "pm_planner-d76ad4c2b7497053",
+      "pipeline_id": "BUG-20260510-F0D1",
       "phase": "pm_planner",
       "agent_id": "pm-planner-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:41:24Z",
-      "completed_at": "2026-05-10T13:41:31Z",
-      "token_hash": "5554b65a1f1093950731896a6d563b35093767b95828ce4ced835257c7c3db6f",
+      "started_at": "2026-05-10T14:08:42Z",
+      "completed_at": "2026-05-10T14:08:46Z",
+      "token_hash": "7c06fb805b31d93d4f10e00814520d82f9ffb8bbe47db4b092cbef0d2f1bcc59",
       "output_file": "step_plan.xml",
-      "output_sha256": "b58a80c1f04d42e7b67ec4f761ca978ffda25d6fa529b0db0e9de975c5687b34",
+      "output_sha256": "a143b381adf6eec92c1506fd678714668e4484254cf0e46e67798e77fb083798",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-515453fb7e867681.json",
-      "receipt_sha256": "50df965fae229d53ce7924832c0093bfdebad82cb2f8992007614ba7375e75b2",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pm_planner\\pm_planner-d76ad4c2b7497053.json",
+      "receipt_sha256": "697632644f6617690aba53c74b3229f67341eb66cbab7edac501adb471fabb5b",
       "used_by_phase": "pm",
-      "used_at": "2026-05-10T13:49:45Z",
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "notes": ""
+      "used_at": "2026-05-10T14:10:10Z",
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "PM planner가 표준 검증 경로로 보정한 계획을 제출했습니다."
     },
-    "pipeline_manager-2fae267c5165f379": {
+    "pipeline_manager-fffa2652bc835cdd": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-2fae267c5165f379",
-      "pipeline_id": "IMP-20260510-9242",
+      "run_id": "pipeline_manager-fffa2652bc835cdd",
+      "pipeline_id": "BUG-20260510-F0D1",
       "phase": "pipeline_manager",
       "agent_id": "pipeline-manager-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:41:41Z",
-      "completed_at": "2026-05-10T13:41:44Z",
-      "token_hash": "e2b3d95656f69578489a1a0d1a70f1456a527c875b4f0071c5da68fe55e34b01",
+      "started_at": "2026-05-10T14:08:55Z",
+      "completed_at": "2026-05-10T14:08:59Z",
+      "token_hash": "8021186081ecdd80cd7f459abaa901de6297cd172e4d2e64a3995d0784e92f45",
       "output_file": "manager_handoff.xml",
-      "output_sha256": "2e7a31fb2d302a9ddc473d73fc86e767731abb6fdea9bfee2295d2485e14c4d3",
+      "output_sha256": "babd0c3ab611f92b36abf487e93bbc3fccc2cb7f0108c9ffc49369ad14afe41f",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-2fae267c5165f379.json",
-      "receipt_sha256": "5730cd7ebdc171f300a4fb5e3a60822271165e25171edb24514cd520094ac0ae",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pipeline_manager\\pipeline_manager-fffa2652bc835cdd.json",
+      "receipt_sha256": "aee3c5173cf9e7a84580df77fe6f79674f6758f138a0c33f073f871ea09c9e64",
       "used_by_phase": null,
       "used_at": null,
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "notes": ""
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "Pipeline manager가 표준 경로 PM 계획을 확인했습니다."
     },
-    "pipeline_manager-c7f612fb957de2b5": {
+    "pipeline_manager-356e933403abe31c": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-c7f612fb957de2b5",
-      "pipeline_id": "IMP-20260510-9242",
+      "run_id": "pipeline_manager-356e933403abe31c",
+      "pipeline_id": "BUG-20260510-F0D1",
       "phase": "pipeline_manager",
       "agent_id": "pipeline-manager-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:42:02Z",
-      "completed_at": "2026-05-10T13:42:05Z",
-      "token_hash": "9c060853f46d2ebe7bf1db2bed01b70cf800047189f19f4a91e86c8076a191cc",
+      "started_at": "2026-05-10T14:09:16Z",
+      "completed_at": "2026-05-10T14:09:22Z",
+      "token_hash": "a39efda6158a3e6c408cc3bc5944315c5ae76642ed181a15683a89a0ec945007",
       "output_file": "manager_handoff.xml",
-      "output_sha256": "7b6dc77263ab173b2d374705c3859e77822e34dc44188f0d837ae52978a74c57",
+      "output_sha256": "a1d553325b4ec9ff06add605facc082bbc06afbd6957c48c65446cff3c71966e",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-c7f612fb957de2b5.json",
-      "receipt_sha256": "691443e87809ac4f043da08eff4f8508a101f27a028129399fce289720aa6064",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pipeline_manager\\pipeline_manager-356e933403abe31c.json",
+      "receipt_sha256": "9ba765f3b27c696fa22e8243f567eb9e9e3810d000fa50c67d199da4cf0f6b94",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "Pipeline manager가 manager_handoff 블록으로 PM 계획을 확인했습니다."
+    },
+    "pipeline_manager-4d11840fa4fee125": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-4d11840fa4fee125",
+      "pipeline_id": "BUG-20260510-F0D1",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T14:09:32Z",
+      "completed_at": "2026-05-10T14:09:39Z",
+      "token_hash": "9dc00495da28bcd6faaefa6a9d94bf7a247f0bb30b79641761412fe66d2b252a",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "2db54f1b0fa4b80f8e52be4637d2b0dfc87bd5fe71968088b4bb05695ba65948",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pipeline_manager\\pipeline_manager-4d11840fa4fee125.json",
+      "receipt_sha256": "0bad8340f60224c1e735e3e3993f04fd55d80c5697b93f89cdb03a14a66c7e28",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "Pipeline manager가 pipeline_id 포함 handoff를 제출했습니다."
+    },
+    "pipeline_manager-1d0b2f164e8a887f": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-1d0b2f164e8a887f",
+      "pipeline_id": "BUG-20260510-F0D1",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T14:09:57Z",
+      "completed_at": "2026-05-10T14:10:05Z",
+      "token_hash": "ba83de469e1407963456bfd079cef75e3590d45138f9b70b4d8c286c4e112f55",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "1ca9928fec0cd83d60f6f939ee9daa21dc99e63df335c2c7567ba51617ebd348",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\pipeline_manager\\pipeline_manager-1d0b2f164e8a887f.json",
+      "receipt_sha256": "e57d6132d37416900a042859b7f4de9a09d4bc4ce8d42a2726190f5c67d838e3",
       "used_by_phase": "pm_manager",
-      "used_at": "2026-05-10T13:49:45Z",
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "notes": ""
+      "used_at": "2026-05-10T14:10:10Z",
+      "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
+      "notes": "Pipeline manager가 필수 manager_handoff 필드를 모두 포함했습니다."
     }
   },
   "external_gates": {
@@ -398,15 +410,14 @@
     ],
     "phases": {
       "pm": {
-        "status": "FAIL",
-        "completed_at": "2026-05-10T13:30:47Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "pm",
-        "run_id": "25629976926",
-        "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-        "evidence": "github_actions_phase_run:25629976926",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\gates\\phase_ci\\pm_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "dev": {
         "status": "PENDING",
@@ -444,8 +455,7 @@
     "enabled": true,
     "mode": "incremental_module_gate",
     "sequence": [
-      "MT-1",
-      "MT-2"
+      "MT-1"
     ],
     "modules": {
       "MT-1": {
@@ -453,41 +463,9 @@
         "status": "PENDING",
         "order": 1,
         "target_files": [
-          "pipeline.py"
+          "ic_part_src/order_mapper.py"
         ],
-        "affected_function": "pipeline._validate_pipeline_branch_isolation",
-        "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
-        },
-        "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
-        },
-        "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
-        },
-        "checkpoint": null
-      },
-      "MT-2": {
-        "id": "MT-2",
-        "status": "PENDING",
-        "order": 2,
-        "target_files": [
-          "CLAUDE.md",
-          ".claude/agents/pipeline-manager-agent.md"
-        ],
-        "affected_function": "none",
+        "affected_function": "order_mapper.cleanup_and_gate_repairs",
         "design": {
           "status": "PENDING",
           "completed_at": null,
@@ -523,34 +501,34 @@
   "execution_profile": {
     "mode": "STANDARD",
     "status": "ACTIVE",
-    "reason": "pipeline.py 코드 수정(MT-1)과 프로토콜 문서 업데이트(MT-2)가 포함된 2-모듈 작업입니다. pipeline.py는 핵심 파이프라인 로직을 포함하므로 STANDARD 프로파일을 적용합니다.",
+    "reason": "단일 Python 파일 변경이지만 EXE 재빌드와 Technical gate 수리가 포함되어 표준 경로로 검증합니다.",
     "max_micro_tasks": null,
     "product_code_write_allowed": true,
     "phase_ci_mode": "per_phase",
     "repair_mode": "standard",
     "risk_review_required": false,
     "risk_categories": [],
-    "declared_at": "2026-05-10T13:42:09Z",
+    "declared_at": "2026-05-10T14:10:05Z",
     "escalated_at": null,
     "escalation_reason": null,
     "uncertainty": {
       "p0_questions": 0,
-      "p1_questions": 0,
+      "p1_questions": 1,
       "output_format_clear": true
     },
     "blast_radius": {
-      "expected_changed_files": 3,
+      "expected_changed_files": 1,
       "expected_changed_functions": 4,
-      "expected_changed_lines": 120
+      "expected_changed_lines": 320
     },
     "risk_flags": {
       "data_deletion": false,
       "file_move": false,
       "external_api": false,
       "auth_or_secret": false,
-      "pipeline_protocol": true,
-      "build_or_deploy": false,
-      "core_parser_logic": true,
+      "pipeline_protocol": false,
+      "build_or_deploy": true,
+      "core_parser_logic": false,
       "database_or_migration": false,
       "new_dependency": false
     }
@@ -560,26 +538,15 @@
   },
   "failure_packets": [],
   "protocol_evolution_decision": null,
-  "trusted_phase_runs": [
-    {
-      "recorded_at": "2026-05-10T13:30:47Z",
-      "status": "FAIL",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "pm",
-      "run_id": "25629976926",
-      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
-      "artifact": "pipeline-phase-attestation"
-    }
-  ],
   "contract_v2": {
     "enabled": true,
     "frozen": true,
     "status": "frozen",
-    "contract_hash": "14c92dd2b5ed2fa0e460253d5c8c56b00ae49935d1df5cd07348e053a862a895",
-    "test_set_hash": "3637e5b6db9481861a286ee521e246c6633ea3cca6303be500e7618486e2030c",
-    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\task_contract.json",
-    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\test_set.json",
-    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\acceptance_summary.md"
+    "contract_hash": "f0eb7c8339eb88762158ff2fc3cb3344cb6276b2eae334cc3c077639926b7858",
+    "test_set_hash": "2c976b3795db065517e8113e63ab4c00a0481297c7737c24c6d5972a427c9a8a",
+    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_contracts\\BUG-20260510-F0D1\\task_contract.json",
+    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_contracts\\BUG-20260510-F0D1\\test_set.json",
+    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_contracts\\BUG-20260510-F0D1\\acceptance_summary.md"
   },
   "pm_analysis_gate": {
     "decomp": true,
@@ -589,135 +556,113 @@
   },
   "atomic_plan": {
     "report_file": "step_plan.xml",
-    "validated_at": "2026-05-10T13:42:09Z",
-    "audit_result": "SPLIT_REQUIRED",
-    "micro_task_count": 2,
+    "validated_at": "2026-05-10T14:10:05Z",
+    "audit_result": "SINGLE_TASK_OK",
+    "micro_task_count": 1,
     "micro_tasks": [
       {
         "id": "MT-1",
-        "affected_function": "pipeline._validate_pipeline_branch_isolation",
+        "affected_function": "order_mapper.cleanup_and_gate_repairs",
         "target_files": [
-          "pipeline.py"
+          "ic_part_src/order_mapper.py"
         ],
-        "change_summary": "gates prepare-phase --phase pm 호출 시 현재 git 브랜치가 pipeline_id 패턴과 일치하는지 검증하고, gates accept --result ACCEPT 호출 시 PR 제목이 pipeline_id를 포함하는지 검증하는 두 함수를 추가합니다."
-      },
-      {
-        "id": "MT-2",
-        "affected_function": "none",
-        "target_files": [
-          "CLAUDE.md",
-          ".claude/agents/pipeline-manager-agent.md"
-        ],
-        "change_summary": "CLAUDE.md의 Phase 1 PM 절차 아래에 브랜치 격리 강제 규칙 섹션을 추가하고, pipeline-manager-agent.md의 PM Handoff 섹션에 브랜치 생성 단계를 명시합니다."
+        "change_summary": "order_mapper.py 안의 미사용 helper, 중복 self-verify 블록, Technical gate 실패 원인인 타입/보안/스타일 문제를 정리합니다."
       }
     ],
     "design_confirmation": {
-      "validated_at": "2026-05-10T13:42:09Z",
-      "maintenance_priority": "유지보수성 우선 — 빠른 수정보다 명확한 검사 로직과 오류 메시지 가독성을 우선합니다.",
-      "filter_summary": "P2 수준의 함수명 스타일 질문은 유지보수성 우선 원칙으로 자동 처리했습니다. 내부 변수명이나 주석 형식은 사용자 질문 대상에서 제외합니다.",
-      "question_count": 2,
+      "validated_at": "2026-05-10T14:10:05Z",
+      "maintenance_priority": "maintainability_first",
+      "filter_summary": "사용자가 이미 Line No 업무 규칙을 확정했고, 이번 작업은 기능 추가가 아니라 오류/데드코드 정리입니다. 따라서 선택 질문은 범위 확인 1개로 줄이고, 코드 취향이나 불필요한 구현 방식 질문은 제외합니다.",
+      "question_count": 1,
       "questions": [
         {
-          "id": "Q1",
-          "priority": "P0",
+          "id": "DQ-1",
+          "priority": "P1",
           "category": "module_split",
-          "mt_id": null,
+          "mt_id": "MT-1",
           "recommended_option": "A",
           "option_count": 2,
-          "user_answer": "옵션 A 선택 — MT-1(pipeline.py)과 MT-2(문서)를 별도 모듈로 분리합니다."
-        },
-        {
-          "id": "Q2",
-          "priority": "P0",
-          "category": "branch_validation_scope",
-          "mt_id": null,
-          "recommended_option": "A",
-          "option_count": 2,
-          "user_answer": "옵션 A 선택 — gates prepare-phase --phase pm 단계에서만 브랜치 격리 검사를 실행합니다."
+          "user_answer": "유지보수성을 우선하되 코드 생성과 수정은 최소화한다는 사용자 원칙에 따라 A로 진행합니다."
         }
       ]
     },
     "execution_profile": {
       "mode": "STANDARD",
       "status": "ACTIVE",
-      "reason": "pipeline.py 코드 수정(MT-1)과 프로토콜 문서 업데이트(MT-2)가 포함된 2-모듈 작업입니다. pipeline.py는 핵심 파이프라인 로직을 포함하므로 STANDARD 프로파일을 적용합니다.",
+      "reason": "단일 Python 파일 변경이지만 EXE 재빌드와 Technical gate 수리가 포함되어 표준 경로로 검증합니다.",
       "max_micro_tasks": null,
       "product_code_write_allowed": true,
       "phase_ci_mode": "per_phase",
       "repair_mode": "standard",
       "risk_review_required": false,
       "risk_categories": [],
-      "declared_at": "2026-05-10T13:42:09Z",
+      "declared_at": "2026-05-10T14:10:05Z",
       "escalated_at": null,
       "escalation_reason": null,
       "uncertainty": {
         "p0_questions": 0,
-        "p1_questions": 0,
+        "p1_questions": 1,
         "output_format_clear": true
       },
       "blast_radius": {
-        "expected_changed_files": 3,
+        "expected_changed_files": 1,
         "expected_changed_functions": 4,
-        "expected_changed_lines": 120
+        "expected_changed_lines": 320
       },
       "risk_flags": {
         "data_deletion": false,
         "file_move": false,
         "external_api": false,
         "auth_or_secret": false,
-        "pipeline_protocol": true,
-        "build_or_deploy": false,
-        "core_parser_logic": true,
+        "pipeline_protocol": false,
+        "build_or_deploy": true,
+        "core_parser_logic": false,
         "database_or_migration": false,
         "new_dependency": false
       }
     },
     "project_snapshot": {
-      "created_at": "2026-05-10T13:42:14Z",
+      "created_at": "2026-05-10T14:10:05Z",
       "files": {
-        ".bandit": {
-          "sha256": "08baae051ad0d4c2c23da772edee0a48fb6cb28244b04c824bc549ebacea83db",
-          "size": 27
-        },
         ".gitattributes": {
           "sha256": "dd63c0a4677bad87380c98a7dfff344c3d1e807ca19f8f40c47acd334c0f8a4c",
           "size": 375
         },
         ".gitignore": {
-          "sha256": "fc7e602141ab401156d10430f9895dffe464c2c9659893d713099fd246d36107",
-          "size": 1589
+          "sha256": "dfaf001974e85c9147a7b40b032ae2505089c98651afe860706b361ae1d32274",
+          "size": 1535
         },
         "analyze_fails.py": {
           "sha256": "6f619fe7abd83db6974d661fbdca23405af78b105c12875f83a453fceb9c134b",
           "size": 1466
         },
         "benchmarker.py": {
-          "sha256": "1928b29415e11ffdb65eb95e1642f3f6ffbfd5a31c6c3569dddf4a2ab2e58439",
-          "size": 1214
+          "sha256": "c1a9cbe154b0cc0fb0f172d19ed92d6740ec623db4f6c65ce405456519d5c639",
+          "size": 1180
         },
         "benchmark_v3_summary.json": {
-          "sha256": "44e6762a3ff6faea25636795211ac5b54487471ed6ac85cacc6253d104c13581",
-          "size": 584
+          "sha256": "7ae7c5b2b2e516cd8f3d734e5ef4a1bffc89603adbf823951dedadc01b79262e",
+          "size": 548
         },
         "CLAUDE.md": {
-          "sha256": "0542620c0db456ea853142799949f16c9cd3ab90aadcd330209efa37a23a364b",
-          "size": 69088
+          "sha256": "0a0e3bcf165a25372380edd6103b55f9177cfdc20d3d74067f6c5950d02659a1",
+          "size": 68416
         },
         "contract_check.py": {
-          "sha256": "1a1d3b945b3665245b32af1bd1ba7a9fef801403995002022502102cc9d56c5d",
-          "size": 5682
+          "sha256": "f1cd81284f5b3a60ff005d25172f6f445c3642db5fcbd8d568648a597956713d",
+          "size": 5544
         },
         "EmailMonitor.spec": {
-          "sha256": "a74b43b7cc17f3a4f7ccac0cf8b2b815add374f3dfa80e63ba698c8f209c8618",
-          "size": 718
+          "sha256": "73da6172ed5be16764b7ee834424b0848fa525690b62940af8338fccc6c69c48",
+          "size": 798
         },
         "eval_harness.json": {
           "sha256": "16f7550d697bf00f1b556ce8cd0f55374e7b6096fcd3f7393b6eaa6fee0f263e",
           "size": 57977
         },
         "eval_harness_v2.json": {
-          "sha256": "1d240d5a77d3a30e009e9d0de25f48f181219a343e9c2f26f6078facfb42c6f2",
-          "size": 42401
+          "sha256": "faa120bfa996e5008fe65a6e9fcda5161464f239ebf8c8094e599517dd2a8e50",
+          "size": 41314
         },
         "eval_harness_v3.json": {
           "sha256": "94e5ec20afb30691baf5f71064f43b753bd79da9d659af705707f8ef2235113f",
@@ -726,22 +671,6 @@
         "ExcelReportApp.spec": {
           "sha256": "559a8c1f00060ee29b12bc870980b849caafa11431ef1b54e1cf7db1e5e0f811",
           "size": 841
-        },
-        "harness_skip_prior100.xml": {
-          "sha256": "4b599c55c3acbb22d2838abb7fdb5cf3af0c920d4f81955c72028885f33820c0",
-          "size": 1473
-        },
-        "harness_test_4D27.py": {
-          "sha256": "e6414798e13bd9bfa2afd50a2c278cce181a35fd3ac224479880db20ccf93abb",
-          "size": 2045
-        },
-        "harness_test_BUG_20260507_C2E2.py": {
-          "sha256": "530441ee78808ff61af3c6e6b8df92e806690e467ab4ad14cf104bf403d86ae8",
-          "size": 2738
-        },
-        "harness_test_E886.py": {
-          "sha256": "9f76f83ac272f17f5142cf5f45f87665d90b329d43073ad8bff1ddbefc2ded5b",
-          "size": 3336
         },
         "inspection_report_IMP-20260510-D44F.md": {
           "sha256": "dac9779c58512bee91a1979a4a67973004d48a23078fd6e9d8c9ee3cf9fc85df",
@@ -756,20 +685,12 @@
           "size": 1260
         },
         "manager_handoff.xml": {
-          "sha256": "fb1667b1a04a52e2063db6b178c155476dcce755b5feec3b81455ad3ab9d7108",
-          "size": 2500
-        },
-        "mypy.ini": {
-          "sha256": "12838d5c680585049ba2e2029b3d0f08591d8e15eea9bb082a8fd3ec5049f93b",
-          "size": 212
+          "sha256": "1ca9928fec0cd83d60f6f939ee9daa21dc99e63df335c2c7567ba51617ebd348",
+          "size": 750
         },
         "pipeline.py": {
-          "sha256": "fbdbfa34deb06f812aa788038218a3f72e34b6fe70d8c2ac1d02b710b2d45a5b",
-          "size": 353035
-        },
-        "pyproject.toml": {
-          "sha256": "ba09344fd59f0d29b3968e996d40b32ea5c9741867d3064924f959271176414f",
-          "size": 39
+          "sha256": "5aafd24139dc44c5aea6c8036bad525d6cc1f944875c2289c55b26fe038c7aae",
+          "size": 346534
         },
         "README.md": {
           "sha256": "0429536e04312db3226423c652f4d789a0869ac5524b62cc8cbc371528dc0390",
@@ -780,8 +701,8 @@
           "size": 835
         },
         "requirements-dev.txt": {
-          "sha256": "4259b2d9ee902d98660f522e25ea950fadc41b7973bd5b759313ac181a081e74",
-          "size": 24
+          "sha256": "65b5ed497cee9c7a1f00331e02e12f181f9a5eec630211b4713a49b09e77048b",
+          "size": 28
         },
         "requirements.txt": {
           "sha256": "c36d8c9cb765ca5fa45f9b8c9d9940294e71e3dd6ba509cde11e1d0adf45a822",
@@ -790,10 +711,6 @@
         "score_v3.py": {
           "sha256": "4778b588cf3f55562292c064273bda591af67e9b95821288fa63bd536d06f89f",
           "size": 16059
-        },
-        "setup.cfg": {
-          "sha256": "08baae051ad0d4c2c23da772edee0a48fb6cb28244b04c824bc549ebacea83db",
-          "size": 27
         },
         "test_codex_task_hook.py": {
           "sha256": "9db753953be48f2eaa2566385eb2a6078478469615a83ac148fbe1592c6fac59",
@@ -804,48 +721,28 @@
           "size": 7328
         },
         "test_harness_6198.py": {
-          "sha256": "d13af0a1303cc6875a05c3c06e159cac3d355efe64db54ba3bb3b6570133254b",
-          "size": 3372
-        },
-        "test_hello.txt": {
-          "sha256": "1b2020502c0a005bc3385660133b66ff54238fee1eff95088f98d2ea5bb560d5",
-          "size": 17
+          "sha256": "8226ed958f1fa1cacbb83d735f67c66a06f58d7a3f0d772647b2a70e7ef9093a",
+          "size": 3280
         },
         "test_pipeline_gates.py": {
-          "sha256": "9ebb907c3ce4ed7e65c0d7518a3279b82e6c5b88afb23f98b974b80006d0d1f9",
-          "size": 72527
+          "sha256": "3313bf568e083a761f97830ba7b42dc911ed6a130ba304e90593845ef12a305b",
+          "size": 70764
         },
         "test_three_gate_e2e.py": {
-          "sha256": "d39ce41f92c9b9ce4212e7737d2b5161efc6e0f9383df4336dd0406420eda90b",
-          "size": 17844
+          "sha256": "de425b1759470c55c366505d4c8fd94ec1cf3cfe42dbe238c174323194501e6f",
+          "size": 17410
         },
         "test_three_gate_pipeline.py": {
-          "sha256": "67c7a4609f0e0da1ec929b5e9a0f5ac906a78b48d076f5e0fb9f97cc33ccc7b0",
-          "size": 147388
-        },
-        "_build_harness.py": {
-          "sha256": "183ee9951b5ae19b5ab8b8d52fa466c57b01648b821d6191e3d0c74f7b040e7e",
-          "size": 3107
-        },
-        "_build_harness2.py": {
-          "sha256": "69f15a485e97167784d6181f149ab7e243ee8bf90a290e61973aa219ec9b676c",
-          "size": 2799
-        },
-        ".claude/scheduled_tasks.lock": {
-          "sha256": "a22e9224d2e51ca1192fa0df95c25db8d1182b2b817071793e443702e5b06f81",
-          "size": 91
+          "sha256": "68e57a952ac99ea42b17378cf7c3dc252489a8f27f462d7f37dc9562f68bd5cf",
+          "size": 144946
         },
         ".claude/settings.json": {
           "sha256": "00a5bfaed9310e482b53e6c25fd683003fce1c5790f62b79b7bf7aceac799143",
           "size": 367
         },
-        ".claude/settings.local.json": {
-          "sha256": "a1cca2d06a9a8d9e1d706d9b1e5da97c17770fb8cce9f3b2905e0f46c63b9dba",
-          "size": 646
-        },
         ".githooks/pre-push": {
-          "sha256": "17a9f21be5b068bdee4a2ac5c996d31522a23931706fc65a72cd7a7b1ab4a6f2",
-          "size": 492
+          "sha256": "54fb997429d7f7851bc8ea84f7b361244070e0769aef501d7b1ea364d2f4032c",
+          "size": 509
         },
         ".github/CODEOWNERS": {
           "sha256": "540dfe2bdf9b950050da940dfcc04ae5031306c08872f89a78a0f174262ba541",
@@ -855,21 +752,9 @@
           "sha256": "897ef87c4d623e8aeffe90b49c723820cf7b45d5e83c089ac1fe62027b2d7ffe",
           "size": 1332
         },
-        ".vscode/tasks.json": {
-          "sha256": "443cb041331ffa4b1725cb999be99d7f03e8ccc716366a25cfa95ebec40ff34f",
-          "size": 1408
-        },
-        "agent-office-ext/agent-office-dashboard-0.1.0.vsix": {
-          "sha256": "eb60579af92b83e77204984ca9a1328c368f44a131862f4465157eee312a7aef",
-          "size": 60119
-        },
-        "agent-office-ext/agent-office-ext-0.1.0.vsix": {
-          "sha256": "299eff8922b32fe598a883e25f62813e00779c8ec542b8fff3fe63baf053840f",
-          "size": 58702
-        },
         "agent-office-ext/esbuild.js": {
-          "sha256": "6a2fef3354323dccd92ba0f49b2d60539f9c69be2b835e6b7fe2294c2da11d18",
-          "size": 2077
+          "sha256": "cbb8170ef54a1c26f73f6ff8f13112aa7fea87420135e7b991aa053b427845df",
+          "size": 2142
         },
         "agent-office-ext/package-lock.json": {
           "sha256": "387c6af45d96242fb3d8466681bfdf754d401d6a0f2eee45821742b81fd33afe",
@@ -888,8 +773,8 @@
           "size": 11458
         },
         "core/config.json": {
-          "sha256": "c27b1dd9b4033ecb8f28009cd2ee0cf4969bab7d2a825c838f110fd41de1124b",
-          "size": 433
+          "sha256": "d9ce6f06bcc7ed6934a6de305d67dfbc804db2d1ce471554ae9e3c5c19609d14",
+          "size": 416
         },
         "core/config_manager.py": {
           "sha256": "88f3f8a4c68e006527568f847fb3c22c745512bf97a1fcf99186e34c9a165e9d",
@@ -923,13 +808,9 @@
           "sha256": "b651807eed530fb19791e35e448235ae40afe2999886e83ab42c8c22b7f296a3",
           "size": 56
         },
-        "FEAT-20260426-332E/app.log": {
-          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "size": 0
-        },
         "FEAT-20260426-332E/config.json": {
-          "sha256": "1256cb85bf9c6a9de6c2611d6ade2d4a227c424da2cb754e79728f7b5f883b74",
-          "size": 979
+          "sha256": "6227b1b1ebe9fbad0bb66e130357fd07cb45390d2740f43d479631aa29932994",
+          "size": 940
         },
         "FEAT-20260426-332E/KittingMapper.spec": {
           "sha256": "388de81ff9fd0ef4ff6050c0b6f45b268762b6903a7c95301e791b63c80f3baa",
@@ -948,8 +829,8 @@
           "size": 22870
         },
         "ic_part_src/ICPartAutomation.spec": {
-          "sha256": "e0cf2011b5c3ddc5aa252f608667d027511a304b7aeb546db9b20972cfe6fe3f",
-          "size": 914
+          "sha256": "a9486be7aeccc6c299a10127a4c540b1bddda0de38fac7c1e08f3b616bdf0f90",
+          "size": 924
         },
         "ic_part_src/main.py": {
           "sha256": "1d66998ad2d74384cff0b4c060ecbf566851669e48c6a6818b8856c022038924",
@@ -979,10 +860,6 @@
           "sha256": "792b6ff6c860014731172f1679e542636f33095af50fcc4fe74a38af800e5f7d",
           "size": 5401
         },
-        "po_automation/build.log": {
-          "sha256": "7a44b2b167bdcf5405b694d81b00e04f81d78ac14348a700f4a4e4378976ba3b",
-          "size": 19072
-        },
         "po_automation/config.json": {
           "sha256": "0749bb635191759128dd2151128ddf0f9d93724d61116735e040429d6ac1472b",
           "size": 189
@@ -992,8 +869,8 @@
           "size": 839
         },
         "po_automation/email_monitor.py": {
-          "sha256": "fba07debb433916a0c19f0e231358608520dca8cb11ac8a4ed386aca80dc5d34",
-          "size": 71401
+          "sha256": "1a03115293936c2c4ea1dacc1486a0f669727068dc201b351a9fe714f803b919",
+          "size": 69763
         },
         "po_automation/excel_handler.py": {
           "sha256": "c5ef7cb94812ecb17563a1c70ea2b475b3823591f9f4d978459f9dd83a118806",
@@ -1016,8 +893,8 @@
           "size": 1098
         },
         "po_automation/requirements.txt": {
-          "sha256": "825384489101587a15886d9966e274a36653720f056f01b449ca7906327d06b3",
-          "size": 242
+          "sha256": "5fae9b84c424dcb73c8b07bc6130c67649099b50c2a9afb04f1318075cd6953a",
+          "size": 250
         },
         "tests/conftest.py": {
           "sha256": "ee622e0f0b8af5115bcd5ace704ade1df4dfe130e2be3cec2d2d7716bd2cb629",
@@ -1039,13 +916,9 @@
           "sha256": "9c3e2c5292cbcafaf8bb96b1851db42fe4e6692fe87ff99b34e7997fd2e79d31",
           "size": 13
         },
-        "vscode-agent-office/agent-office-dashboard-0.0.1.vsix": {
-          "sha256": "7ce88fe5974a0f1d28e95e1adb50c22f0e2584b379e225c627a5c6067e6c4792",
-          "size": 1422807
-        },
         "vscode-agent-office/extension.js": {
-          "sha256": "532df2c07b1599c88533f9a23f5aa34fdfce2d5c176e34bb2b662a3e8a5366c1",
-          "size": 37556
+          "sha256": "4e4f0679519e74cb09ab8d0527f2c1e9623cbd81a7b9351868a027284c97899a",
+          "size": 38199
         },
         "vscode-agent-office/package.json": {
           "sha256": "f9a9c5405b8ff8ce2078ccd566ff7d42f0c04f473386ac370e065c17434ffead",
@@ -1056,12 +929,12 @@
           "size": 527
         },
         "webapp/requirements.txt": {
-          "sha256": "108196949698c5ec0b0fe18492b011e8b836e644d19f64b56770aec749ae57c2",
-          "size": 52
+          "sha256": "077b78b288cd4229eb9ce05b781d4a27da0e3c97d0bfaefa7f79368d206c4dc6",
+          "size": 55
         },
         "webapp/server.py": {
-          "sha256": "2e6e56d2482b9894edd7370ee65f6152043fb3600cf50c19e879b271282c4e1f",
-          "size": 49457
+          "sha256": "83a16d4c7c2b4db97e99b0c633c7daee8abf8ed9145428e363d007f963cf671c",
+          "size": 48145
         },
         ".claude/agents/agent-factory-agent.md": {
           "sha256": "26f11a1e8a5514f43cfbf080396949a66aff4079827aa2d9ad4797111d2d446e",
@@ -1080,8 +953,8 @@
           "size": 2226
         },
         ".claude/agents/pm-agent.md": {
-          "sha256": "703fcbf1bb320b72daf46cb357100a468fd8766c74d62834f944ca56d6f639fb",
-          "size": 49778
+          "sha256": "d62d3810bac33e5e320095b1bb56edc62277ac17d4bf211b697570e946b27b8e",
+          "size": 49176
         },
         ".claude/agents/pm-planner-agent.md": {
           "sha256": "cf58bf9a8772a722614f0ee5e88595ab64fc3cf848fd8a7fa8ed218a1133dbf5",
@@ -1120,8 +993,8 @@
           "size": 56345
         },
         ".claude/commands/task.md": {
-          "sha256": "63fef73e3a2542d7ea26c4dfad1449d77f9efe7c4f6089c77976e758a9886339",
-          "size": 12752
+          "sha256": "5ce0c2a5c16e869fe17d9afff5fc4b200670da879dd9129b7bf5776ba4f0c6fe",
+          "size": 12571
         },
         ".claude/agents/shared/anti_gaming_rules.md": {
           "sha256": "3417b17c3d2936207a8484c9760adbea8e28bf3737c9276706f5dc24f7953897",
@@ -1148,68 +1021,52 @@
           "size": 341
         },
         ".github/workflows/ci.yml": {
-          "sha256": "8ea7d291d330c1fc95e5ec077a45fae3cb4e2ed4aef25c27dcd91674c5168b8e",
-          "size": 26631
-        },
-        "agent-office-ext/out/extension.js": {
-          "sha256": "cd797eb15a5488a2a3c7ea11e0eec28c431997c4f0968847a58d5c9da2d86887",
-          "size": 12867
-        },
-        "agent-office-ext/out/extension.js.map": {
-          "sha256": "cdbbc9dc1a897bffeb2b2aa83f5d94f0876ec844bd44b87088b67c33739eeb11",
-          "size": 50354
-        },
-        "agent-office-ext/out/webview.js": {
-          "sha256": "1446196b4eda510e0c89a1a64872ec110d4446c68f09091bd8b6028c112c25d7",
-          "size": 13916
-        },
-        "agent-office-ext/out/webview.js.map": {
-          "sha256": "6f7f3bf7d4521fe65c8670bcb99873ba467c746ea3ab94819508802b0492caf4",
-          "size": 73334
+          "sha256": "81b77d91a6c785aaa89ee85d384be7d737084e5ffba945192961c663e808b039",
+          "size": 26162
         },
         "agent-office-ext/src/agentState.ts": {
-          "sha256": "3e1ed069223574c04d454f157c34ed406f26376d5bd3b75c6e998d2d98fce09e",
-          "size": 3591
+          "sha256": "c4234fcac365fe0179060bf20e1d01e87aad5af8f73a0cf02e5413f697933b24",
+          "size": 3755
         },
         "agent-office-ext/src/dataWatcher.ts": {
-          "sha256": "c19767c7c22e2b7e3894ec021f73928418af0606aa683fec693a201d36e47274",
-          "size": 9796
+          "sha256": "d1d599cbe9cdb461858ba6e3f748505687539c9719026f06e818c7853d547b4d",
+          "size": 10088
         },
         "agent-office-ext/src/extension.ts": {
-          "sha256": "fa916fd6a1a024480065d8cd84d2f2dd6c02c3f45b4e9aafe376ded9a926e065",
-          "size": 5206
+          "sha256": "5445f6222277f14b06711e7fecfb69b8d7399db0e9af3eae8240fa08043f4ed0",
+          "size": 5348
         },
         "agent-office-ext/src/stopSignalHandler.ts": {
-          "sha256": "3c4167743d9e33cb06438858b94b12bbfd158175d9e634fde2b58e78dbfe1f78",
-          "size": 4052
+          "sha256": "0e0c2ac160237308d14c11ee3ce2984c2fcd61a03bc23f95ab2ed23f7e544e5a",
+          "size": 4184
         },
         "agent-office-ext/src/tokenBar.ts": {
-          "sha256": "e49424fb8c77363c3ca0b8706174507f0b8a7d9e452494423c3c3f7f65d89b0f",
-          "size": 2748
+          "sha256": "3f907343df13bf48247d8ae5eb97bbca0858750faaf3cb6a80555b28ec2adbc3",
+          "size": 2853
         },
         "agent-office-ext/webview-ui/index.html": {
-          "sha256": "5b5ec5b4e390091023365db17f8edefd387a73e086b526734511a0760cc9dc5b",
-          "size": 3048
+          "sha256": "a5fefa0e5becf6df0027024c76589fe6d85c868561577efada07860380bb431c",
+          "size": 3168
         },
         "agent-office-ext/src/webview/animationLoop.ts": {
-          "sha256": "cf2b404788feb36b3edf3bb584e57b2ae57424471a0ee419c48cf989410d4ee8",
-          "size": 4693
+          "sha256": "c6bb76e8ae499c4f3cf948b9e6afe2733f1a730fa0fdf4af4173682b6ce6a872",
+          "size": 4858
         },
         "agent-office-ext/src/webview/canvasRenderer.ts": {
-          "sha256": "9c8110692ae35980a8daf155178f3b01f696a86b284af30135b0938d002c5752",
-          "size": 9733
+          "sha256": "cc0d1edfb30e1ee236873e7f26ccd637c110fd9a81b8cf9369c284669177bb8f",
+          "size": 10084
         },
         "agent-office-ext/src/webview/hamsterSprites.ts": {
-          "sha256": "40542a5532d2675e0e95d5afc6365f4aeed9e1e41b90103b254cd62340923a53",
-          "size": 15162
+          "sha256": "175529dd81f405053d3bdf580802f99dd52a139aa692aee051516ea9e34cc427",
+          "size": 15643
         },
         "agent-office-ext/src/webview/panel.ts": {
-          "sha256": "043b446d66f05b7c142a5d817001238249f8a9faeb9e37e9a562a116ddd1f96e",
-          "size": 10046
+          "sha256": "598f2284aa2786dce5ec288a48f90c3b385eb3701fb32369bb1a43435208d881",
+          "size": 10373
         },
         "agent-office-ext/src/webview/webview-entry.ts": {
-          "sha256": "d89fdd33dd5f87224de4cf1e84db0701bfe923eeaee89f4c9ac918fd77ec817f",
-          "size": 4713
+          "sha256": "5e86975e614721ac1e34e3f1af152cade3344386a47b4cb7f5c11b746b7e8e3f",
+          "size": 4849
         },
         "core/acceptance/runner.py": {
           "sha256": "02ce7db7281865f5e115952d299e62009574973028ba5d2b76c794f70e2a25e0",
@@ -1287,14 +1144,6 @@
           "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
           "size": 0
         },
-        "pipeline_outputs/BUG-20260510-9F70/emailmonitor.exe-emailmonitor.exe": {
-          "sha256": "56394737b60787c6f7c3aeea7ecb4d18eed83d962c6b28a4e71dc74b43cae1b9",
-          "size": 118711712
-        },
-        "pipeline_outputs/BUG-20260510-9F70/outputs_manifest.json": {
-          "sha256": "11ab49203ec85ccd69b9ac4821df465358acd95b879d61fba0f97fe2fcd222ad",
-          "size": 652
-        },
         "tests/oracles/BUG-20260510-98D6/edge/expected.json": {
           "sha256": "b672abe28b96f2b212580b3f561814fde913dcf02cb1c7b4965b732fe36895aa",
           "size": 297
@@ -1311,99 +1160,59 @@
           "sha256": "66c59ee556a773bf7eeb6ebe753bf3252d50bfaf29bd8cf87d2f2c58832ed3f4",
           "size": 227
         },
-        "tests/oracles/BUG-20260510-9F70/edge_01/expected.txt": {
-          "sha256": "998ccf616845fbd499cb9af01f47e877a7b5e6c6982e4098016424acaf9182d1",
-          "size": 10
+        "tests/oracles/BUG-20260510-F0D1/edge/expected.json": {
+          "sha256": "ac8c5c47b00f2097d92d2e017638315d42f3821cf81a87e738b39e784418e9ad",
+          "size": 105
         },
-        "tests/oracles/BUG-20260510-9F70/edge_01/input.txt": {
-          "sha256": "c833b2282d1aad1691d75e31c00b5e56bbf58cd548d668b6158edeaa4381cca3",
-          "size": 317
+        "tests/oracles/BUG-20260510-F0D1/edge/input.json": {
+          "sha256": "eab0a938def8f28d93e677a9794c09b26dfd692617334add6a371fd56af2ab6f",
+          "size": 167
         },
-        "tests/oracles/BUG-20260510-9F70/normal_01/expected.txt": {
-          "sha256": "f0107ddb08c8dd0b51f91e6db8de9b3abe138e73638a44bba1d89fc6528efe53",
-          "size": 18
+        "tests/oracles/BUG-20260510-F0D1/normal/expected.json": {
+          "sha256": "50633ae93d301ec8776ab0f2591ec9377a7499d390a49ab442d1e5b168bf6701",
+          "size": 77
         },
-        "tests/oracles/BUG-20260510-9F70/normal_01/input.txt": {
-          "sha256": "990488ae7989fb2161bd71297d096a3990a580154bc569b63546a75cb802ef51",
-          "size": 614
-        },
-        "tests/oracles/IMP-20260510-9242/edge_01/expected.txt": {
-          "sha256": "ffedb6d091ab70e16db1e95e8545b8b6363f68e6fec762ffb80e85b9830c7944",
-          "size": 20
-        },
-        "tests/oracles/IMP-20260510-9242/edge_01/input.txt": {
-          "sha256": "7308dca6cc055fee71d4f708dcc28a0d2f94b738e5189572150457817a1bfff3",
-          "size": 183
-        },
-        "tests/oracles/IMP-20260510-9242/normal_01/expected.txt": {
-          "sha256": "c9989f59b5fbcdbbc75faa8ad1bf6d2147fe2137982c96a3971f5b87547ab11c",
-          "size": 28
-        },
-        "tests/oracles/IMP-20260510-9242/normal_01/input.txt": {
-          "sha256": "34dd8c381d1f99200c79704ac629e8ff4087e5a20d843050998f695adecf22ea",
-          "size": 210
+        "tests/oracles/BUG-20260510-F0D1/normal/input.json": {
+          "sha256": "f5da9861bb8f049151aaba6592c1ed981d51f46dc2ff58c7b0de7c75e08b5904",
+          "size": 128
         },
         "tests/oracles/IMP-20260510-D44F/case-edge/expected.txt": {
-          "sha256": "728104a7afdcd45711d81c067e0b7d490ed2ede9467b10e82d09a5c398f6463f",
-          "size": 947
+          "sha256": "b96d282692c3926101200899fafc0d5a93d4f9524f564092181bd24c32670d08",
+          "size": 962
         },
         "tests/oracles/IMP-20260510-D44F/case-edge/input.txt": {
-          "sha256": "ead3e02afe1013cba57d9366f73e113c460aecca68eca70f12ab243bf209fa0e",
-          "size": 368
+          "sha256": "88bb160fe733eb09a15f3c444616a9fc3508b091d225e8baa473f19bff841fba",
+          "size": 373
         },
         "tests/oracles/IMP-20260510-D44F/case-normal/expected.txt": {
-          "sha256": "8da58f4af62f54c0c748c8adbc17750c2867fbae30f2655926d436439b170a72",
-          "size": 948
+          "sha256": "b72f0c13e58badb7bafde3853f30c0da3832cbe26118631360f119e9ef9e597f",
+          "size": 963
         },
         "tests/oracles/IMP-20260510-D44F/case-normal/input.txt": {
-          "sha256": "bb69443408fa3e1420b192ea91239b25cf5243ab5793b1ddf777fdd22b4c7c4e",
-          "size": 452
+          "sha256": "d10bd39834bcd299559743a013f39e2d32245f8235f6043cf22f76b29aaeb543",
+          "size": 461
         },
         "vscode-agent-office/media/agent-office-map.png": {
           "sha256": "df2815202fa9a686e216e4ece15fcbbee8867f53d64c8dd4babbbbbc11ea7ade",
           "size": 1419378
         },
         "vscode-agent-office/media/hamster.svg": {
-          "sha256": "1f0b44d31d1b27e570a1366fc421ee72694d7b7351ceb2d9410f31fd4974dc77",
-          "size": 1389
+          "sha256": "4af9552a3625742c1d13eb296735a29b151be14c6d8402f3c1f4b7b467559fe4",
+          "size": 1413
         },
         "webapp/static/index.html": {
           "sha256": "9637c6ac971e63b735abe08b80afc37444757eb7901a23e902698fb480052ea0",
           "size": 82554
-        },
-        "_cleanup_archive/cleanup_20260505_171659/temp_analysis.txt": {
-          "sha256": "b8951c0137446c2e14dd7a4af3bb53dbb92b66a2010d56a18565aa625af195da",
-          "size": 893
-        },
-        "_cleanup_archive/cleanup_20260505_171659/temp_combos.txt": {
-          "sha256": "09909abee4fae51468bb7349b0fd7c887a2b684a20fa87aef810bbbb982fd0ef",
-          "size": 421
-        },
-        "_cleanup_archive/cleanup_20260505_171659/temp_prio.txt": {
-          "sha256": "f3b9735270600e2a2e7cc255dbafd5ec8bcee5c9f6181bfae9794653f5878cb6",
-          "size": 1060
-        },
-        "_cleanup_archive/cleanup_20260505_171659/tmp_status.txt": {
-          "sha256": "03d357099445f355be17d87d4e332fdf124fedd4d075c039cf7d37d27658a2a7",
-          "size": 817
-        },
-        "_cleanup_archive/cleanup_20260505_171659/_tmp_applog.txt": {
-          "sha256": "7ff6569bf9db7cb61d23cf1e1ad316da28dd9a89e70022bc5642a1669a249283",
-          "size": 702
-        },
-        "_cleanup_archive/cleanup_20260505_171659/_tmp_tail.txt": {
-          "sha256": "baa16c2e5d38658c87ef84addc8221ac07725e4c36a9bbe9ba27604336b67643",
-          "size": 9822
         }
       },
       "skipped": []
     }
   },
   "pm_manager_handoff": {
-    "validated_at": "2026-05-10T13:42:14Z",
+    "validated_at": "2026-05-10T14:10:05Z",
     "report_file": "manager_handoff.xml",
-    "step_plan_sha256": "1bdc7a20c69426babe4e8da8d1bd4cadd1da27abc13ffce8a24ff1b9b1325e46",
-    "planner_run_id": "pm_planner-515453fb7e867681",
+    "step_plan_sha256": "a143b381adf6eec92c1506fd678714668e4484254cf0e46e67798e77fb083798",
+    "planner_run_id": "pm_planner-d76ad4c2b7497053",
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"

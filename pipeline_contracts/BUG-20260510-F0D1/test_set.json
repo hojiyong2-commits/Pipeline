@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260510-F0D1",
+  "created_at": "2026-05-10T14:04:55Z",
+  "updated_at": "2026-05-10T14:06:46Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "P0-line-no-rule",
+      "module": "M1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 60,
+      "given": {},
+      "when": {
+        "command": [
+          "{python}",
+          "-m",
+          "pytest",
+          "tests/test_order_mapper.py::TestApplySubOrderSuffixes::test_line_no_decision_uses_base_order_after_suffix",
+          "-q"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "P1-order-mapper-regression",
+      "module": "M1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 40,
+      "given": {},
+      "when": {
+        "command": [
+          "{python}",
+          "-m",
+          "pytest",
+          "tests/test_order_mapper.py",
+          "tests/test_automation.py",
+          "-q"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    }
+  ],
+  "frozen_at": "2026-05-10T14:06:46Z",
+  "test_set_hash": "2c976b3795db065517e8113e63ab4c00a0481297c7737c24c6d5972a427c9a8a",
+  "contract_hash": "f0eb7c8339eb88762158ff2fc3cb3344cb6276b2eae334cc3c077639926b7858"
+}
