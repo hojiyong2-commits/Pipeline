@@ -305,6 +305,20 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
     manager_run_id = _agent_run(work, "pipeline_manager", manager_report)
     _ok(
         work,
+        "confirm-design",
+        "--question-id",
+        "DQ-1",
+        "--selected-option",
+        "A",
+        "--answer",
+        "추천안 A로 진행",
+        "--mt-id",
+        "MT-1",
+        "--module-split",
+        "--user-confirmed",
+    )
+    _ok(
+        work,
         "done",
         "--phase",
         "pm",

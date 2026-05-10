@@ -269,7 +269,21 @@ def _write_manager_handoff(directory: Path, state: dict, step_plan: Path, planne
     return report
 
 
+def _confirm_design_for_test(state: dict, question_id: str = "DQ-1", mt_id: str = "MT-1") -> None:
+    state.setdefault("pm_design_confirmations", {})[question_id] = {
+        "question_id": question_id,
+        "selected_option": "A",
+        "answer": "추천안 A로 진행",
+        "mt_id": mt_id,
+        "category": "module_split",
+        "confirmed_by": "user",
+        "user_confirmed": True,
+        "recorded_at": pipeline._now(),
+    }
+
+
 def _install_pm_split_runs(state: dict, step_plan: Path, root: Path) -> tuple[str, str, Path]:
+    _confirm_design_for_test(state)
     planner_run_id = _install_completed_agent_run(state, "pm_planner", step_plan, root)
     manager_report = _write_manager_handoff(root, state, step_plan, planner_run_id)
     manager_run_id = _install_completed_agent_run(state, "pipeline_manager", manager_report, root)
@@ -1366,6 +1380,67 @@ class ThreeGatePipelineTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 1)
         self.assertIn("PM DESIGN GATE", stderr.getvalue())
+
+    def test_pm_done_requires_recorded_user_design_confirmation(self) -> None:
+        state = pipeline._new_state("TMP-PM-USER-CONFIRM-REQ", "FEAT", "sample")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single function</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-PM-USER-CONFIRM-REQ</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+""" + _design_confirmation_xml() + _task_complexity_xml("STANDARD", functions=1) + """
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>main.run</affected_function>
+      <target_files><file>main.py</file></target_files>
+      <grep_evidence>
+        <pattern>def run</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Update run behavior</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            planner_run_id = _install_completed_agent_run(state, "pm_planner", report, root)
+            manager_report = _write_manager_handoff(root, state, report, planner_run_id)
+            manager_run_id = _install_completed_agent_run(state, "pipeline_manager", manager_report, root)
+            args = argparse.Namespace(
+                branch=None,
+                phase="pm",
+                decomp=True,
+                clarification=True,
+                roadmap=True,
+                judgment_confirmed=False,
+                report_file=str(report),
+                files=None,
+                agent_run_id=None,
+                planner_run_id=planner_run_id,
+                manager_run_id=manager_run_id,
+                manager_report=str(manager_report),
+            )
+            stderr = io.StringIO()
+            with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                 mock.patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline.cmd_done(args)
+
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("PM USER CONFIRMATION GATE", stderr.getvalue())
+        self.assertEqual(state["phases"]["pm"]["status"], "PENDING")
 
     def test_pm_design_confirmation_filters_p2_questions(self) -> None:
         state = pipeline._new_state("TMP-PM-DESIGN-P2", "FEAT", "sample")

@@ -44,6 +44,7 @@ python pipeline.py agent finish --run-id <manager_run_id> --token <token> --outp
 PM completion requires both receipts:
 
 ```powershell
+python pipeline.py confirm-design --question-id DQ-1 --selected-option A --answer "<verbatim user answer>" --mt-id MT-1 --module-split --user-confirmed
 python pipeline.py done --phase pm `
   --report-file step_plan.xml `
   --decomp --clarification --roadmap `
@@ -51,6 +52,8 @@ python pipeline.py done --phase pm `
   --manager-run-id <manager_run_id> `
   --manager-report manager_handoff.xml
 ```
+
+`confirm-design` is mandatory before PM `done` for every pipeline. It must be run only after the user explicitly approves the micro-task split, even when the split contains one MT. Do not use PM inference, previous preference, or "사용자 원칙에 따라" as the answer.
 
 After PM is recorded, this agent starts and records Dev, QA, Security, Build, External Gates, and Architect according to `CLAUDE.md`.
 
