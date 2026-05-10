@@ -98,7 +98,7 @@ Three-Gate mode and Option A phase attestation are mandatory for every pipeline.
 1. `python pipeline.py contract init` creates Contract v2 with Three-Gate and phase attestations enabled. `--three-gate` and `--phase-attestations` are accepted only for backward-compatible scripts.
 2. Register user-supplied oracle files only from `tests/oracles/**` with `python pipeline.py contract add-oracle --input tests/oracles/... --expected tests/oracles/... --case-kind normal`, plus at least one additional `--case-kind edge|exception|error` oracle. PM must ask the user for the answer key during Phase 1 and save the input/expected files under `tests/oracles/<pipeline_id>/<case_id>/`; Dev must implement against those files, not rewrite them.
 3. Run `python pipeline.py contract audit`; freeze is blocked until the rule-based audit PASSes.
-4. PM completion is also hard-gated: `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>` must include a real `<decomposition_audit>` and `<step_plan><micro_tasks>...</micro_tasks></step_plan>`.
+4. PM completion is also hard-gated: `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>` must include a real `<decomposition_audit>`, `<step_plan><design_confirmation>...</design_confirmation></step_plan>`, and `<step_plan><micro_tasks>...</micro_tasks></step_plan>`. `<design_confirmation>` must prove the module split was shown to the user, maintainability is the default priority, low-value/P2 questions were filtered, and every asked P0/P1 question has easy wording, evidence, recommendation, two options, benefit/cost tradeoffs, and the user answer.
 5. Dev completion is hard-gated against the PM atomic plan: `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>` must prove every declared and actual changed file maps to a PM micro-task.
 6. Option A phase attestation is mandatory before moving across major role boundaries:
    - after PM: `python pipeline.py gates prepare-phase --phase pm`, commit/push, wait for GitHub Actions, then `python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline`
@@ -660,7 +660,20 @@ Circuit Breaker로 진입한 Phase 8은 일반 RCA가 아닌 Strategic Restructu
 
 PM step_plan은 변경 범위를 단일 함수 또는 단일 UI 위젯 단위로 쪼개야 하며, dev-agent와 ui-app-agent는 코드 작성 전 `<impact_analysis>` XML을 필수 출력합니다. QA는 실제 diff와 `<impact_analysis>` 의 일치 여부를 검증합니다.
 
-이 규칙은 문서 지침이 아니라 `pipeline.py` hard gate입니다. PM `done`은 모든 파이프라인에서 `step_plan.xml` 안의 `<decomposition_audit>`/`<micro_tasks>`를 파싱해 원자 단위 계획을 `pipeline_state.json`에 기록합니다. Dev `done`도 모든 파이프라인에서 `dev_handover.xml`과 `scope_manifest.json`이 그 계획의 id, 파일, 함수 범위를 정확히 따를 때만 통과합니다.
+이 규칙은 문서 지침이 아니라 `pipeline.py` hard gate입니다. PM `done`은 모든 파이프라인에서 `step_plan.xml` 안의 `<decomposition_audit>`/`<design_confirmation>`/`<micro_tasks>`를 파싱해 원자 단위 계획과 사용자 설계 확인 기록을 `pipeline_state.json`에 기록합니다. Dev `done`도 모든 파이프라인에서 `dev_handover.xml`과 `scope_manifest.json`이 그 계획의 id, 파일, 함수 범위를 정확히 따를 때만 통과합니다.
+
+### PM 설계 확인 질문 품질
+
+PM은 모듈 분해 방식이 1개뿐이어도 Dev 진입 전에 사용자에게 보여주고 확인받습니다. 질문은 코드 용어가 아니라 사용자가 이해할 수 있는 쉬운 한국어로 작성하며, 각 질문은 아래를 포함해야 합니다:
+
+- 무엇을 선택하는지
+- 왜 중요한지
+- PM 추천안
+- 최소 2개 옵션
+- 각 옵션의 장점과 단점
+- 사용자 답변
+
+P2 수준의 내부 구현 취향 질문(변수명, 코드 스타일, 사소한 함수명 등)은 사용자에게 묻지 않습니다. PM은 이를 `low_value_questions_filtered=true`와 `filter_summary`로 기록하고, 유지보수성 우선 원칙으로 처리합니다. 유지보수성은 항상 빠른 수정이나 최소 수정보다 우선합니다.
 
 ### 계층 구조 (Frozen Codebase와 상호 보완)
 

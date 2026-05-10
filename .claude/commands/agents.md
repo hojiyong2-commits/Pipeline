@@ -59,6 +59,27 @@ The orchestrator may directly spawn only `pm-agent`. PM plans and delegates; eac
   <current_step>Step [번호]: [이름]</current_step>
   <target_agent>지시를 수행할 에이전트 (Dev / UI / Build 등)</target_agent>
   <category_tags>[WA, FS, AL 등 해당 카테고리 태그]</category_tags>
+  <design_confirmation>
+    <!-- pipeline.py hard gate: PM은 Dev 진입 전 쉬운 한국어 질문으로 설계 선택을 확인한다. -->
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명·코드 취향 같은 P2 질문은 묻지 않고 유지보수성 기준으로 정리</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이 모듈 단위로 진행해도 될까요?</user_facing_question>
+        <evidence>사용자 요청과 코드 탐색 결과 변경 범위가 MT-1에 모였습니다.</evidence>
+        <why_it_matters>분해 단위가 맞아야 수정 범위가 작고 이후 유지보수가 쉬워집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A"><label>추천 분해안</label><benefit>수정 범위가 작고 유지보수가 쉽습니다.</benefit><cost>요구사항이 커지면 추가 분리가 필요할 수 있습니다.</cost></option>
+          <option id="B"><label>더 작게 분해</label><benefit>각 변경을 더 세밀하게 검토할 수 있습니다.</benefit><cost>작업 시간과 사용자 질문 수가 늘어납니다.</cost></option>
+        </options>
+        <user_answer>[사용자 답변]</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
   <requirements>
     - 구현해야 할 핵심 기능 (구체적 함수/클래스 단위)
     - 반드시 적용해야 할 Dev_Agent 코드 패턴 명시

@@ -61,6 +61,38 @@ def _json_from_stdout(stdout: str) -> dict:
     return json.loads(stdout[start:])
 
 
+def _design_confirmation_xml(mt_id: str = "MT-1") -> str:
+    return f"""  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 구현 취향 질문은 묻지 않고 유지보수성 기준으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="{mt_id}">
+        <user_facing_question>이번 작업은 {mt_id} 단위로 작게 나눠 진행해도 될까요?</user_facing_question>
+        <evidence>사용자 요청과 Grep 결과 변경 범위가 이 모듈에 모였습니다.</evidence>
+        <why_it_matters>모듈 단위가 맞아야 수정 범위가 작고 나중에 유지보수가 쉬워집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>{mt_id} 단위로 진행</label>
+            <benefit>변경 범위가 작고 검증 위치가 명확합니다.</benefit>
+            <cost>기능이 커지면 다음 작업에서 추가 분리가 필요할 수 있습니다.</cost>
+          </option>
+          <option id="B">
+            <label>더 작게 다시 분해</label>
+            <benefit>각 변경을 더 세밀하게 검토할 수 있습니다.</benefit>
+            <cost>작업 시간이 늘고 불필요한 질문이 늘 수 있습니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+"""
+
+
 def _agent_run(work: Path, phase: str, output_file: Path, evidence: str | None = None) -> str:
     started = _ok(work, "agent", "start", "--phase", phase)
     payload = _json_from_stdout(started.stdout)
@@ -202,6 +234,7 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
 <step_plan>
   <pipeline_id>{pid}</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
+{_design_confirmation_xml()}
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.greet</affected_function>
