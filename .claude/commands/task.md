@@ -54,7 +54,7 @@ python pipeline.py agent start --phase pm
 python pipeline.py agent finish --run-id <pm_run_id> --token <token> --output-file step_plan.xml
 python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>
 python pipeline.py gates prepare-phase --phase pm
-git add .pipeline/phase_attestation_request.json .pipeline/phase_evidence
+git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add pm phase attestation request"
 git push
 python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
@@ -90,7 +90,7 @@ python pipeline.py agent start --phase dev
 python pipeline.py agent finish --run-id <dev_run_id> --token <token> --output-file dev_handover.xml
 python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>
 python pipeline.py gates prepare-phase --phase dev
-git add .pipeline/phase_attestation_request.json .pipeline/phase_evidence
+git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add dev phase attestation request"
 git push
 python pipeline.py gates phase-ci --phase dev --repo hojiyong2-commits/Pipeline
@@ -108,7 +108,7 @@ python pipeline.py agent start --phase qa
 python pipeline.py agent finish --run-id <qa_run_id> --token <token> --output-file qa_report.xml
 python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.xml --agent-run-id <qa_run_id>
 python pipeline.py gates prepare-phase --phase qa
-git add .pipeline/phase_attestation_request.json .pipeline/phase_evidence
+git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add qa phase attestation request"
 git push
 python pipeline.py gates phase-ci --phase qa --repo hojiyong2-commits/Pipeline
@@ -136,7 +136,7 @@ python pipeline.py build --exe "dist/app.exe" --report-file build_report.xml --a
 # docs-only 등 비실행 산출물:
 python pipeline.py build --exe "N/A" --skip-reason "docs-only" --agent-run-id <build_run_id>
 python pipeline.py gates prepare-phase --phase build
-git add .pipeline/phase_attestation_request.json .pipeline/phase_evidence
+git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add build phase attestation request"
 git push
 python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline

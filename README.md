@@ -87,7 +87,7 @@ python pipeline.py agent start --phase pm
 python pipeline.py agent finish --run-id <run_id> --token <token> --output-file step_plan.xml
 python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>
 python pipeline.py gates prepare-phase --phase pm
-git add .pipeline/phase_attestation_request.json .pipeline/phase_evidence
+git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add pm phase attestation request"
 git push
 python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline

@@ -16,8 +16,8 @@ model: opus
 
 **Three-Gate 주의:** 모든 파이프라인에서 QA는 phase gate reviewer입니다. QA PASS는 다음 phase 진입 조건일 뿐이며 최종 COMPLETE 근거가 아닙니다. 최종 완료는 PM/Dev/QA/Build phase attestation, `pipeline.py gates technical`, `pipeline.py gates oracle`, `pipeline.py gates github-ci`, `pipeline.py gates accept`가 모두 PASS해야 합니다. QA는 oracle 비교, GitHub CI, 사용자 acceptance, GPT advisory resolution을 대체할 수 없습니다.
 
-**완료 후:** `<qa_report>` XML 출력 (오케스트레이터가 verdict를 읽고 pipeline.py qa를 기록함)
-<!-- CRITICAL: pipeline.py qa 기록은 오케스트레이터 전용. 에이전트가 직접 실행하면 이중 기록 발생. -->
+**완료 후:** `<qa_report>` XML 출력 (Pipeline Manager가 verdict를 읽고 pipeline.py qa를 기록함)
+<!-- CRITICAL: qa-agent는 pipeline.py qa를 직접 실행하지 않습니다. Pipeline Manager가 agent receipt와 <qa_report> XML을 확인한 뒤 기록합니다. -->
 <!-- MT-2/MT-3 (IMP-20260506-A064) 필수 플래그:
      PASS: python pipeline.py qa --result PASS --numeric-score [0~120] --report-file qa_report.xml --agent-run-id <qa_run_id>
            numeric-score 96 미만(80% of 120) 시 pipeline.py가 PASS 기록 거부 (hard gate)
@@ -109,7 +109,7 @@ After all modules pass, QA must verify `integration_report.xml` before final QA.
     <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
     <total score="0" max="120"/>
     <percentage>0.0</percentage>
-    <numeric_verdict>PASS(≥80%) | FAIL(&lt;80%)</numeric_verdict>
+    <numeric_verdict>PASS(≥96/120) | FAIL(&lt;96/120)</numeric_verdict>
   </numeric_score>
   <result>[PASS] 모두 PASS이고 numeric_verdict=PASS일 때만 / [FAIL] 하나라도 FAIL이거나 numeric_verdict=FAIL이면</result>
   <critical_issues>
@@ -175,11 +175,11 @@ QA는 이진 게이트(PASS/FAIL)와 **동시에** 수치 채점을 수행합니
 
 ### 수치 채점 FAIL 트리거
 
-**numeric_verdict = FAIL 조건:** `(실제 획득 점수 / 관련 카테고리 최대 점수) × 100 < 80%`
+**numeric_verdict = FAIL 조건:** 총점이 96/120 미만이면 FAIL. 카테고리별 비율은 문제 설명용 보조 정보이며 pipeline.py hard gate 기준은 항상 총점 96/120이다.
 
 - numeric_verdict = FAIL이면 이진 게이트 PASS 여부와 무관하게 최상위 `<result>[FAIL]</result>` 강제 적용
 - 즉, 이진 게이트 PASS + numeric_verdict FAIL = 최종 `[FAIL]`
-- percentage 계산: N/A 카테고리는 분모에서 제외
+- percentage 계산: N/A 카테고리는 설명용으로만 사용하고, CLI `--numeric-score`에는 항상 0~120 정수 총점을 넣는다.
 
 ### 수치 채점 세부 기준
 
@@ -409,11 +409,11 @@ QA가 FAIL 판정을 내릴 때, PM Agent가 동일 오류 2회 연속 발생을
 - **CATEGORY**: 자동 FAIL을 유발한 1차 카테고리 (WA / UI / FS / PD / SEC / AL / BUILD 중 하나). 복수 FAIL 시 알파벳 순 첫 번째 값.
 - **HASH8**: `<critical_issues>` 본문 텍스트를 정규화 후 SHA-1 8자리 16진수.
   - 정규화 절차: ① 라인번호(`:N`) 제거, ② 공백 압축, ③ 소문자 변환, ④ 파일명 basename만 유지(디렉터리 경로 제거)
-  - SHA-1 직접 계산이 어려우면 본문의 핵심 키워드 3개를 `_`로 연결한 8자 슬러그 사용 (예: `tuple_missing_4xx`)
+  - 슬러그/단어 조합은 금지. 동일 오류가 다른 문자열로 기록되면 Circuit Breaker가 작동하지 않으므로, 반드시 8자리 16진수 해시를 사용한다.
 
 **예시:**
 - `<failure_signature>WA:a3f7c2b1</failure_signature>` — WA 카테고리, hash a3f7c2b1
-- `<failure_signature>FS:enc_fallback_missing</failure_signature>` — FS 카테고리, 슬러그 형태
+- 잘못된 예: `<failure_signature>FS:enc_fallback_missing</failure_signature>` — 슬러그이므로 pipeline.py가 거부한다.
 
 ### repeat_indicator 보조 필드
 

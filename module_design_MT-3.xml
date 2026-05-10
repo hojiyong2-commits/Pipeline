@@ -1,7 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<module_design>
-  <mt_id>MT-3</mt_id>
-  <interface_contract>.claude/agents/agent-factory-agent.md — documentation-only; no code callers</interface_contract>
-  <implementation_plan>Append CODEOWNERS Protection Notice section</implementation_plan>
-  <verification_plan>Grep confirms new section exists; no prior content deleted; utf-8 encoding</verification_plan>
-</module_design>

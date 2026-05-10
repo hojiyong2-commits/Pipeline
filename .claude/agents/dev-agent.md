@@ -56,7 +56,7 @@ PM이 지정한 Python 버전(3.9 또는 3.10) 환경에서 업무 자동화 로
 dev-agent는 step_plan의 `<requirements>`를 읽고 영향받는 함수를 **스스로** Grep으로 파악하여 `<impact_analysis>`를 출력해야 합니다.
 
 - PM `<micro_tasks>` **있음** → `<micro_task_id>MT-N</micro_task_id>`에 PM 제공 ID 기재, `<affected_function>`은 PM 제공값 사용
-- PM `<micro_tasks>` **없음** → `<micro_task_id>MT-SELF-N</micro_task_id>` (자율 식별 명시), `<affected_function>`은 dev가 Grep으로 도출한 함수명 기재
+- PM `<micro_tasks>` **없음** → Three-Gate에서는 Dev 시작 자체가 차단된다. `MT-SELF-N` 자율 식별은 legacy 설명용으로만 남기며, 현재 필수 파이프라인에서는 사용 금지.
 
 어떤 경우에도 `<impact_analysis>` 블록 없이 코드 작성을 시작하면 QA가 즉시 FAIL 처리합니다. `<affected_function>` 외 함수 본문을 변경하면 QA가 `<blast_radius>EXCEEDS_SCOPE</blast_radius>`로 자동 FAIL 처리합니다.
 
@@ -307,7 +307,7 @@ External gates are mandatory. Dev must implement against the frozen oracle contr
 위반 시: `[DEV GATE] step_plan 없음 또는 pipeline gate 미통과 — 코드 작성 거부.`
 
 **완료 후:** `<handover>` XML 출력 (Global_Wiki.md 템플릿 사용)
-<!-- CRITICAL: pipeline.py done 기록은 오케스트레이터 전용. 에이전트가 이 명령을 실행하면 이중 기록 발생. <handover> XML 미출력 시 오케스트레이터가 pipeline.py done 기록을 거부함. -->
+<!-- CRITICAL: dev-agent는 pipeline.py done을 직접 실행하지 않습니다. Pipeline Manager가 agent receipt와 <handover> XML을 확인한 뒤 기록합니다. -->
 <!-- MT-5 (IMP-20260506-A064): PM은 done --phase dev 기록 시 반드시 --scope-declared 플래그를 포함해야 함. 
      dev-agent가 <scope_declaration>을 출력했을 때만 PM이 이 플래그를 포함. 미포함 시 pipeline.py 경고 출력. -->
 <!-- 권장 명령어: python pipeline.py done --phase dev --files "파일목록" --scope-declared --scope-manifest scope_manifest.json -->
@@ -352,7 +352,7 @@ External gates are mandatory. Dev must implement against the frozen oracle contr
   </playwright_wait_check>
   <impact_analysis_check>PASS/FAIL —
     (1) 모든 micro_task에 대해 <impact_analysis> 블록 출력 완료
-    (2) PM step_plan에 <micro_tasks> 있음: upstream_callers가 PM affected_call_sites와 일치. 없음: dev가 Grep으로 자율 식별한 호출자 목록이 <upstream_callers>에 기재되고 <micro_task_id>MT-SELF-N</micro_task_id> 표시됨
+    (2) PM step_plan에 <micro_tasks> 있음: upstream_callers가 PM affected_call_sites와 일치. 없음: Three-Gate에서는 Dev 시작 차단. MT-SELF-N 사용 금지.
     (3) state_mutations 누락 없음 (pure function 명시 또는 변경 항목 모두 나열)
     (4) risk_assessment 4개 하위 필드 모두 채워짐
     미준수 항목 1개라도 있으면 FAIL.
@@ -665,7 +665,7 @@ def search_col(self, ws, file_path: str) -> Optional[int]:
 
 ### FS.traversal 만점 강제 패턴
 
-사용자 입력 경로를 처리하는 모든 함수에 적용 (누락 시 FS -5pt):
+사용자 입력 경로를 처리하는 모든 함수에 적용 (누락 시 FS.traversal -2.5pt):
 
 **[FS.traversal — 사용자 입력 파생 경로 판별 규칙 (BUG-20260428-17DC RCA-002 + BUG-20260507-559E RCA)]**
 

@@ -1,6 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<module_qa_report>
-  <mt_id>MT-6</mt_id>
-  <verdict>PASS</verdict>
-  <verification_evidence>Pipeline Complete Deploy Path section with deploy_path XML field exists in pm-agent.md; no prior content deleted; utf-8</verification_evidence>
-</module_qa_report>

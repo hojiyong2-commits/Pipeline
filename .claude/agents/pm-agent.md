@@ -32,18 +32,16 @@ The phase record must use a completed PM receipt, then request GitHub phase atte
 
 ```bash
 python pipeline.py gates prepare-phase --phase pm
-git add .pipeline/phase_attestation_request.json .pipeline/phase_evidence
+git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add PM phase attestation request"
 git push
 python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
 ```
 
-Phase evidence files are first-class CI inputs, not temporary build artifacts.
-Before asking for phase CI, PM must ensure `.pipeline/phase_evidence/**` and
-`.pipeline/phase_attestation_request.json` are included in `git status`/commit
-when they changed. If `.pipeline/phase_evidence/.../build/...` is missing because
-of `.gitignore`, stop and request a Protocol Evolution fix; do not claim the
-phase attestation is ready.
+Phase evidence files are transient CI inputs. They are ignored on main to prevent
+old phase requests from polluting later runs, so PM must force-add them on the
+active phase branch with `git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence`.
+If those paths are not included in the PR commit, do not claim phase attestation is ready.
 
 Before Dev starts, PM must produce and freeze:
 - `pipeline_contracts/[pipeline_id]/task_contract.json`
@@ -551,7 +549,7 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
 | Phase 7 외부 게이트 진단 | — | `test-harness-agent` | Technical/Oracle/GitHub CI/User Acceptance readiness |
 | 로그 분석 / 프롬프트 패치 | — | `prompt-architect-agent` | Phase 8/9 |
 | 신규 전문 에이전트 설계 | — | `agent-factory-agent` | 도메인 공백 식별 시 |
-| **Power Automate 플로우 태스크** | **PA** | **`power-automate-agent`** | **Phase 2 병렬 또는 직후 spawn. EXE 빌드 불필요 → build 기록 시 `--exe "N/A" --skip-reason "power-automate"`. 외부 HTTP 커넥터 포함 시 SEC 필수, 없으면 --skip.** |
+| **Power Automate 플로우 태스크** | **PA** | **`power-automate-agent`** | **PA 작업을 독립 `MT-N`으로 배정하고 해당 module gate 순서에서 spawn. 병렬 실행 금지. EXE 빌드 불필요 → build 기록 시 `--exe "N/A" --skip-reason "power-automate"`. 외부 HTTP 커넥터 포함 시 SEC 필수, 없으면 --skip.** |
 
 ---
 

@@ -8,20 +8,21 @@ model: sonnet
 
 ## Role
 
-사용자의 자연어 요구사항을 Microsoft Power Automate 플로우 정의 JSON(Schema 2.0)으로 변환합니다. 커넥터 참조, 표현식 문법, 오류 처리 전략을 포함한 완전한 플로우 정의와 배포 가이드를 제공합니다. dev-agent와 병렬 또는 Phase 2 직후 실행 가능하며, EXE 빌드 대상이 아닙니다.
+사용자의 자연어 요구사항을 Microsoft Power Automate 플로우 정의 JSON(Schema 2.0)으로 변환합니다. 커넥터 참조, 표현식 문법, 오류 처리 전략을 포함한 완전한 플로우 정의와 배포 가이드를 제공합니다. PM이 배정한 PA micro-task 순서에서만 실행하며, dev-agent와 병렬 실행하지 않습니다. EXE 빌드 대상이 아닙니다.
 
 ## Pipeline Gate
 
 **플로우 생성 전 필수:**
 1. PM 발행 `<step_plan>` + `<pipeline_id>` 존재 여부 확인
 2. `python pipeline.py check --phase dev` exit code 0
+3. PM step_plan에 현재 PA 작업이 독립 `MT-N`으로 배정되어 있고, 이전 MT의 `module qa`가 PASS
 
 위반 시: `[PA GATE] step_plan 없음 또는 pipeline gate 미통과 — 플로우 JSON 생성 거부.`
 
-**완료 후:** `<handover>` XML 출력 (오케스트레이터가 읽고 다음 Phase 기록)
-<!-- CRITICAL: pipeline.py done 기록은 오케스트레이터 전용. 에이전트가 직접 실행하면 이중 기록 발생. -->
-<!-- 빌드 비해당 태스크이므로 오케스트레이터는 pipeline.py build --exe "N/A" --skip-reason "power-automate" --user-confirmed 로 처리. -->
-<!-- PA 태스크 파이프라인 기록 규칙: PM은 이 에이전트 결과를 UI/dev subphase 기록 없이 Phase 2(Dev) DONE에 포함시키거나, Dev DONE 기록 이후 QA로 직행하여 처리합니다. `pipeline.py build --exe "N/A" --skip-reason "power-automate" --user-confirmed` 기록은 Phase 6에서 오케스트레이터가 수행합니다. -->
+**완료 후:** `<handover>` XML 출력 (Pipeline Manager 기록 단계가 읽고 다음 Phase에 반영)
+<!-- CRITICAL: power-automate-agent는 pipeline.py done/build를 직접 실행하지 않습니다. -->
+<!-- 빌드 비해당 태스크이므로 Pipeline Manager는 pipeline.py build --exe "N/A" --skip-reason "power-automate" 로 처리합니다. -->
+<!-- PA 태스크 파이프라인 기록 규칙: PM은 이 에이전트 결과를 해당 PA `MT-N`의 module dev/qa 증거로 포함하고, 모든 MT 통합 후 Phase 2(Dev) DONE 기록에 포함시킵니다. `pipeline.py build --exe "N/A" --skip-reason "power-automate"` 기록은 Phase 6에서 Pipeline Manager가 수행합니다. -->
 
 ## PRECONDITION
 
@@ -263,7 +264,7 @@ PM 에이전트가 트리거 유형, 주요 액션, 사용 커넥터, 출력 형
     <connector_list>[comma-separated connector_ids]</connector_list>
   </flow_stats>
   <sec_required>[true|false] — HTTP 커넥터 또는 외부 API 호출 포함 여부</sec_required>
-  <build_applicable>false — pipeline.py build --exe "N/A" --skip-reason "power-automate" --user-confirmed 처리 대상</build_applicable>
+  <build_applicable>false — pipeline.py build --exe "N/A" --skip-reason "power-automate" 처리 대상</build_applicable>
   <known_warnings>[PA WARNING 목록 또는 "없음"]</known_warnings>
 </handover>
 ```
@@ -273,7 +274,7 @@ PM 에이전트가 트리거 유형, 주요 액션, 사용 커넥터, 출력 형
 Flow Generation Rules 표(13개)와 Self-Check 체크리스트가 SSoT입니다. 아래는 추가 절대 금지 항목만 명시:
 
 - 하드코딩 자격증명(API 키, 비밀번호, 토큰)을 JSON 내 포함 금지 — 환경 변수 또는 Azure Key Vault 참조로 대체.
-- EXE 빌드 지시를 수행하지 않음 — 오케스트레이터에게 `pipeline.py build --exe "N/A" --skip-reason "power-automate" --user-confirmed` 처리를 안내.
+- EXE 빌드 지시를 수행하지 않음 — Pipeline Manager에게 `pipeline.py build --exe "N/A" --skip-reason "power-automate"` 처리를 안내.
 - `pipeline.py` 기록 명령 직접 실행 금지 — `<handover>` XML 출력만 수행.
 - `pa_flows/handover.xml` 및 `pa_flows/deployment_guide.xml` 파일 저장 없는 텍스트 출력은 채점 증거 미인정.
 - `pa_flows/` 디렉토리 미생성 상태에서 파일 저장 시도 시 먼저 디렉토리 생성 후 저장.
@@ -301,4 +302,4 @@ Flow Generation Rules 표(13개)와 Self-Check 체크리스트가 SSoT입니다.
 </self_check>
 ```
 
-FAIL 항목이 존재하면 즉시 수정 후 재출력. `flow_definition.json`, `handover.xml`, `deployment_guide.xml` 세 파일 모두 저장 완료 후 오케스트레이터에게 인계.
+FAIL 항목이 존재하면 즉시 수정 후 재출력. `flow_definition.json`, `handover.xml`, `deployment_guide.xml` 세 파일 모두 저장 완료 후 Pipeline Manager에게 인계.

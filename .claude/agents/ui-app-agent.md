@@ -58,7 +58,7 @@ model: sonnet
 **완료 후:** `<handover>` XML 출력 (from: ui-app-agent → to: qa-agent)
 <!-- 파이프라인 기록: ui-app-agent 전용 pipeline.py phase 없음.
      UI 작업은 dev subphase로 취급합니다.
-     오케스트레이터가 pipeline.py done --phase dev --files "core/...,ui/app.py" --scope-declared 에 app.py를 포함하여 기록하거나,
+     Pipeline Manager가 pipeline.py done --phase dev --files "core/...,ui/app.py" --scope-declared --agent-run-id <dev_run_id> 에 app.py를 포함하여 기록하거나,
      이미 dev DONE 기록이 완료된 경우 QA evidence에 UI handover를 포함합니다. -->
 
 **Code Quality 만점 체크리스트 (qa-agent.md UI 20pt 채점 기준):**
