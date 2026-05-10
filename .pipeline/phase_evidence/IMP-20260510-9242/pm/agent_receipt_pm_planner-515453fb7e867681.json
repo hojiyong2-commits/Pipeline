@@ -9,7 +9,7 @@
   "started_at": "2026-05-10T13:41:24Z",
   "completed_at": "2026-05-10T13:41:31Z",
   "output_file": "step_plan.xml",
-  "output_sha256": "1bdc7a20c69426babe4e8da8d1bd4cadd1da27abc13ffce8a24ff1b9b1325e46",
+  "output_sha256": "b58a80c1f04d42e7b67ec4f761ca978ffda25d6fa529b0db0e9de975c5687b34",
   "evidence_files": [],
   "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9"
 }

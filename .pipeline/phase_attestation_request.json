@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-10T13:42:21Z",
+  "generated_at": "2026-05-10T13:49:45Z",
   "pipeline_id": "IMP-20260510-9242",
   "phase": "pm",
   "phase_status": "DONE",
-  "commit_hint": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+  "commit_hint": "23d06cdec305909255808332433a8298cc56280a",
   "state": {
     "current_phase": "dev",
     "phase_completed_at": "2026-05-10T13:42:14Z",
@@ -18,9 +18,9 @@
     "agent_id": "pm-planner-agent",
     "status": "COMPLETED",
     "output_file": "step_plan.xml",
-    "output_sha256": "1bdc7a20c69426babe4e8da8d1bd4cadd1da27abc13ffce8a24ff1b9b1325e46",
+    "output_sha256": "b58a80c1f04d42e7b67ec4f761ca978ffda25d6fa529b0db0e9de975c5687b34",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260510-9242/pm/agent_receipt_pm_planner-515453fb7e867681.json",
-    "receipt_sha256": "affc7193309d502cc510779e4c18746f9d8ba6c02a6edf326f281dadbc2f9e87",
+    "receipt_sha256": "50df965fae229d53ce7924832c0093bfdebad82cb2f8992007614ba7375e75b2",
     "used_by_phase": "pm",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-515453fb7e867681.json"
   },
@@ -30,9 +30,9 @@
     "agent_id": "pipeline-manager-agent",
     "status": "COMPLETED",
     "output_file": "manager_handoff.xml",
-    "output_sha256": "fb1667b1a04a52e2063db6b178c155476dcce755b5feec3b81455ad3ab9d7108",
+    "output_sha256": "7b6dc77263ab173b2d374705c3859e77822e34dc44188f0d837ae52978a74c57",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260510-9242/pm/manager_receipt_pipeline_manager-c7f612fb957de2b5.json",
-    "receipt_sha256": "9b3817c0c6be8a74a2ef5c20bc54cc39db4bed3dbc7c830792c33c13477bcf0b",
+    "receipt_sha256": "691443e87809ac4f043da08eff4f8508a101f27a028129399fce289720aa6064",
     "used_by_phase": "pm_manager",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-c7f612fb957de2b5.json"
   },
@@ -41,33 +41,33 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-515453fb7e867681.json",
       "path": ".pipeline/phase_evidence/IMP-20260510-9242/pm/agent_receipt_pm_planner-515453fb7e867681.json",
-      "sha256": "affc7193309d502cc510779e4c18746f9d8ba6c02a6edf326f281dadbc2f9e87",
+      "sha256": "50df965fae229d53ce7924832c0093bfdebad82cb2f8992007614ba7375e75b2",
       "size_bytes": 520,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "manager_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-c7f612fb957de2b5.json",
       "path": ".pipeline/phase_evidence/IMP-20260510-9242/pm/manager_receipt_pipeline_manager-c7f612fb957de2b5.json",
-      "sha256": "9b3817c0c6be8a74a2ef5c20bc54cc39db4bed3dbc7c830792c33c13477bcf0b",
-      "size_bytes": 544,
-      "requires_force_add": true
+      "sha256": "691443e87809ac4f043da08eff4f8508a101f27a028129399fce289720aa6064",
+      "size_bytes": 543,
+      "requires_force_add": false
     },
     {
       "label": "report",
       "source": "step_plan.xml",
       "path": ".pipeline/phase_evidence/IMP-20260510-9242/pm/report_step_plan.xml",
-      "sha256": "1bdc7a20c69426babe4e8da8d1bd4cadd1da27abc13ffce8a24ff1b9b1325e46",
-      "size_bytes": 9361,
-      "requires_force_add": true
+      "sha256": "b58a80c1f04d42e7b67ec4f761ca978ffda25d6fa529b0db0e9de975c5687b34",
+      "size_bytes": 9206,
+      "requires_force_add": false
     },
     {
       "label": "manager_report",
       "source": "manager_handoff.xml",
       "path": ".pipeline/phase_evidence/IMP-20260510-9242/pm/manager_report_manager_handoff.xml",
-      "sha256": "fb1667b1a04a52e2063db6b178c155476dcce755b5feec3b81455ad3ab9d7108",
+      "sha256": "7b6dc77263ab173b2d374705c3859e77822e34dc44188f0d837ae52978a74c57",
       "size_bytes": 2500,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
