@@ -1,10 +1,14 @@
 {
-  "pipeline_id": "IMP-20260510-D44F",
+  "pipeline_id": "BUG-20260510-65DD",
   "micro_tasks": [
     {
       "id": "MT-1",
-      "files": ["po_automation/email_monitor.py", "po_automation/main.py"],
-      "affected_functions": ["email_monitor.OnNewMailEx, email_monitor.scan_past_emails, email_monitor._parse_pdf_info, main.POAutomationApp._poll_log_queue, email_monitor._process_mail_item, email_monitor.OutlookEventHandler"]
+      "files": [
+        "ic_part_src/order_mapper.py"
+      ],
+      "affected_functions": [
+        "order_mapper.dead_legacy_helpers"
+      ]
     }
   ]
 }

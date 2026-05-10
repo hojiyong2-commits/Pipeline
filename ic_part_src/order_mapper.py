@@ -79,53 +79,6 @@ _IC_MAP_CONTAINS_NORMALIZED: List[Tuple[str, str]] = [
 
 
 # ---------------------------------------------------------------------------
-# Helper: path safety
-# ---------------------------------------------------------------------------
-
-def _safe_resolve(user_path: str, allowed_root: Path) -> Path:
-    """Resolve user_path relative to allowed_root and verify no traversal."""
-    if user_path is None:
-        raise TypeError("user_path must not be None")
-    if not isinstance(user_path, str):
-        raise TypeError(f"user_path must be str, got {type(user_path).__name__}")
-    if allowed_root is None:
-        raise TypeError("allowed_root must not be None")
-    if not isinstance(allowed_root, Path):
-        raise TypeError(f"allowed_root must be Path, got {type(allowed_root).__name__}")
-
-    resolved = (allowed_root / user_path).resolve()
-    try:
-        resolved.relative_to(allowed_root.resolve())
-    except ValueError:
-        raise ValueError(
-            f"Path traversal detected: '{user_path}' escapes allowed root '{allowed_root}'"
-        )
-    return resolved
-
-
-# ---------------------------------------------------------------------------
-# Helper: encoding-safe text read
-# ---------------------------------------------------------------------------
-
-def read_text_with_fallback(path: Path) -> str:
-    """Read path trying utf-8 -> cp949 -> latin-1 in order."""
-    if path is None:
-        raise TypeError("path must not be None")
-    if not isinstance(path, Path):
-        raise TypeError(f"path must be Path, got {type(path).__name__}")
-
-    for enc in ("utf-8", "cp949", "latin-1"):
-        try:
-            return path.read_text(encoding=enc)
-        except (UnicodeDecodeError, LookupError):
-            continue
-    raise UnicodeDecodeError(
-        "utf-8", b"", 0, 1,
-        f"Cannot decode {path} with any supported encoding"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Helper: column index to Excel letter
 # ---------------------------------------------------------------------------
 
@@ -1398,68 +1351,6 @@ def write_ic_part_zip(
                 pass
 
     return written, skipped
-
-
-def _apply_label_via_excel(file_path: str) -> None:
-    """Open file with a hidden Excel instance to apply sensitivity label, then save and close."""
-    try:
-        import win32com.client as _win32
-        xl = _win32.DispatchEx("Excel.Application")
-        xl.Visible = False
-        xl.DisplayAlerts = False
-        try:
-            wb = xl.Workbooks.Open(file_path)
-            wb.Save()
-            wb.Close(False)
-        finally:
-            xl.Quit()
-    except Exception as exc:
-        import logging as _logging
-        _logging.getLogger(__name__).warning("레이블 적용 실패 (무시하고 계속): %s", exc)
-
-
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
-
-def run(
-    source_path: Path,
-    template_path: Path,
-    output_path: Path,
-    folder_date: Optional[date] = None,
-    contract_amount: Optional[str] = None,
-    incoterm: Optional[str] = None,
-    corb_path: Optional[str] = None,
-) -> None:
-    """Orchestrate the full CustomerOrderLines -> IC-Part mapping."""
-    if source_path is None:
-        raise TypeError("source_path must not be None")
-    if template_path is None:
-        raise TypeError("template_path must not be None")
-    if output_path is None:
-        raise TypeError("output_path must not be None")
-
-    logger.info("=== order_mapper START ===")
-    groups = read_customer_order_lines(source_path)
-    if len(groups) == 0:
-        logger.warning("No groups found in source file — nothing to write.")
-        return
-
-    apply_sub_order_suffixes(groups)
-
-    for _g in groups:
-        if folder_date is not None:
-            _g.folder_date = folder_date
-        if contract_amount is not None:
-            _g.contract_amount = contract_amount
-        if incoterm is not None:
-            _g.incoterm = incoterm
-        if corb_path is not None:
-            _g.corb_path = corb_path
-
-    written, skipped = write_ic_part_zip(groups, template_path, output_path)
-    print(f"[order_mapper] DONE — written={written} skipped={skipped} output={output_path}")
-    logger.info("=== order_mapper DONE === written=%d skipped=%d", written, skipped)
 
 
 # ---------------------------------------------------------------------------

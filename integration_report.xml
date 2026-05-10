@@ -1,27 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
 <integration_report>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
-  <modules_integrated>MT-1 MT-2 MT-3 MT-4 MT-5</modules_integrated>
+  <modules_integrated>MT-1</modules_integrated>
   <integration_verdict>PASS</integration_verdict>
-  <integration_summary>
-    EmailMonitor.exe 코드 점검 파이프라인 완료.
-    MT-1 (코드품질/성능 분석 7건), MT-2 (보안 분석 5건), MT-3 (버그 분석 5건),
-    MT-4 (inspection_report_IMP-20260510-D44F.md 통합 작성),
-    MT-5 (자기 검증 6개 항목 PASS) — 모두 module QA PASS.
-
-    최종 산출물: inspection_report_IMP-20260510-D44F.md (14966자, 17개 발견 항목,
-    4종 심각도, 124개 라인 참조). 코드 변경 0건 — 분석 전용 태스크.
-  </integration_summary>
-  <consistency_check>
-    <mt1_findings_in_report>PASS — P1, P2, P3, P4, M1, M2, M3 모두 inspection_report에 포함</mt1_findings_in_report>
-    <mt2_findings_in_report>PASS — S1, S2, S3, S4, S5 모두 inspection_report에 포함</mt2_findings_in_report>
-    <mt3_findings_in_report>PASS — B1, B2, B3, B4, B5 모두 inspection_report에 포함</mt3_findings_in_report>
-    <mt4_structure>PASS — 개요 + 요약테이블 + 4섹션 + 권고사항</mt4_structure>
-    <mt5_self_verification>PASS — 6개 자기 검증 항목 모두 통과</mt5_self_verification>
-  </consistency_check>
-  <files_summary>
-    <file>inspection_report_IMP-20260510-D44F.md (신규 — 17개 발견 항목)</file>
-  </files_summary>
-  <code_changes>0</code_changes>
-  <regression_risk>NONE — 코드 무변경, 신규 MD 파일만 추가</regression_risk>
+  <evidence>Single-module change integrated after compileall, targeted pytest, and dead-code pattern verification.</evidence>
 </integration_report>

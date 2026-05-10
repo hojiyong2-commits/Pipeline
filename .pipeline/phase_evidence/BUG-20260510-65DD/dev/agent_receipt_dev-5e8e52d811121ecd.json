@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260510-65DD",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-5e8e52d811121ecd",
+  "status": "COMPLETED",
+  "started_at": "2026-05-10T13:43:57Z",
+  "completed_at": "2026-05-10T13:44:05Z",
+  "output_file": "dev_handover.xml",
+  "output_sha256": "d510289c771b15be3fa5ef336539b0b279d436a0b4e58d1a1ccefe5f750919dd",
+  "evidence_files": [
+    {
+      "path": "ic_part_src\\order_mapper.py",
+      "sha256": "15d7f8d8c9ef7295c532fb8839ff6eccc9d5ed9811e789564d7f897084bd72e3",
+      "size_bytes": 65787
+    },
+    {
+      "path": "module_handover_MT-1.xml",
+      "sha256": "33709bd125b38fa64b75cdedd4c6f2fc1bcaf855724dafef078be67e3b3e3b03",
+      "size_bytes": 480
+    },
+    {
+      "path": "module_qa_MT-1.xml",
+      "sha256": "a9da1fdb7c714488bd2a2b37fb4e34a5d8b08ca4f13e834b56f6a3f7de7617ba",
+      "size_bytes": 512
+    },
+    {
+      "path": "integration_report.xml",
+      "sha256": "c22c2920259764fcda30aba30cd73f308ec9a929b98c2c52e79bf7a1a55d3f52",
+      "size_bytes": 267
+    },
+    {
+      "path": "scope_manifest.json",
+      "sha256": "f3f0033aae1d76a20243649ade3ddb88ee52ffc209da4d0850af0acbb229fe88",
+      "size_bytes": 242
+    }
+  ],
+  "commit_sha": "64be13f2fc1d5cf90e13216845d1e061eea8f736"
+}
