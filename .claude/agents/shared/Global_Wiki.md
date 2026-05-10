@@ -90,6 +90,8 @@ QA rejects any handover missing `<evidence>` with real file paths.
 **Legacy harness diagnostic:** `<test_code>` CDATA/strict unittest evidence rules are retained only for old harness diagnostic regression tests. New `/Task` completion uses external gates and phase/module attestations.
 | architect | `python pipeline.py check --phase architect` | `python pipeline.py architect --report-file architect_report.xml` |
 
+PM `step_plan.xml` must include `<design_confirmation>` before Dev. `pipeline.py` rejects PM completion unless the module split was shown and confirmed, maintainability is marked as the priority, low-value/P2 questions were filtered, and every asked P0/P1 question includes easy wording, evidence, recommendation, at least two options, benefit/cost tradeoffs, and the user answer.
+
 ## `/task` Command — Discovery Gate (코딩 전 필수)
 
 PM Agent는 `/task` 수신 즉시 파이프라인(Phase 1 step_plan 포함)을 시작하지 않는다.

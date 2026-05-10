@@ -26,6 +26,7 @@ python pipeline.py status
 - 사용자 원문 요청
 - `Three-Gate, Option A, Incremental Module Gate are mandatory. Classic mode is forbidden.`
 - PM은 `<decomposition_audit>`, `<step_plan>`, `<pipeline_manager_handoff>ready</pipeline_manager_handoff>`만 출력해야 한다는 역할 경계
+- PM은 `<step_plan><design_confirmation>` 안에 쉬운 한국어 설계 확인 질문을 기록해야 한다. 모듈이 1개여도 분해안을 사용자에게 보여주고 확인받는다. 각 P0/P1 질문은 근거, 왜 중요한지, 추천안, 2개 이상 옵션, 장점, 단점, 사용자 답변을 포함한다. P2/내부 구현 취향 질문은 묻지 않고 유지보수성 우선으로 필터링한다.
 
 ## Phase 1 — PM
 
@@ -60,6 +61,8 @@ python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
 ```
 
 PM phase CI가 PASS되기 전에는 Dev로 넘어가지 않는다.
+
+PM `done`은 `pipeline.py` hard gate다. `step_plan.xml`에 `<design_confirmation>`이 없거나, 질문이 추상적이거나, 장점/단점/추천안/사용자 답변이 빠지면 Dev로 넘어갈 수 없다.
 
 ## Phase 2 — Dev With Module Gates
 
