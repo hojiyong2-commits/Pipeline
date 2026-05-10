@@ -54,8 +54,15 @@ class TestMapIc:
     def test_cci_valve_lowercase_h(self) -> None:
         assert map_ic("CCI Valve Technology Gmbh") == "AT", "소문자 h 변형 미매핑"
 
+    def test_cci_valve_case_insensitive(self) -> None:
+        assert map_ic("cci valve technology gmbh") == "AT"
+        assert map_ic("Cci Valve Technology GmbH") == "AT"
+
     def test_apac_contains(self) -> None:
         assert map_ic("Some APAC Company") == "SG"
+
+    def test_apac_case_insensitive(self) -> None:
+        assert map_ic("some apac company") == "SG"
 
     def test_unknown_passthrough(self) -> None:
         assert map_ic("Unknown Corp") == "Unknown Corp"
@@ -185,6 +192,37 @@ class TestApplySubOrderSuffixes:
         assert og_a.order_no == "X100050542"
         assert og_b.order_no == "X100050542-2"
         assert og_c.order_no == "X100050542-3"
+        assert og_a.base_order_no == "X100050542"
+        assert og_b.base_order_no == "X100050542"
+        assert og_c.base_order_no == "X100050542"
+
+    def test_line_no_decision_uses_base_order_after_suffix(self) -> None:
+        og_a = OrderGroup()
+        og_a.order_no = "X100050542"
+        og_a.delivery_date = date(2026, 6, 2)
+        og_a.line_nos = [1, 2, 3]
+
+        og_b = OrderGroup()
+        og_b.order_no = "X100050542"
+        og_b.delivery_date = date(2026, 6, 25)
+        og_b.line_nos = [4, 5]
+
+        groups = [og_a, og_b]
+        apply_sub_order_suffixes(groups)
+        counts = {}
+        for group in groups:
+            key = group.base_order_no if group.base_order_no is not None else group.order_no
+            counts[key] = counts.get(key, 0) + 1
+
+        line_values = [
+            group.format_line_nos()
+            if counts[group.base_order_no if group.base_order_no is not None else group.order_no] > 1
+            else ""
+            for group in groups
+        ]
+
+        assert [og_a.order_no, og_b.order_no] == ["X100050542", "X100050542-2"]
+        assert line_values == ["#1~3", "#4,5"]
 
     def test_unique_orders_unchanged(self) -> None:
         og_x = OrderGroup()
@@ -346,6 +384,11 @@ class TestColumnConstants:
 
     def test_corb_path_col(self) -> None:
         assert ICPART_COL_CORB_PATH == 18  # IMP-20260509-F8BF: R column
+
+    def test_ic_distribution_formula_reference_updated_to_project_id_col(self) -> None:
+        src_path = Path(__file__).resolve().parent.parent / "ic_part_src" / "order_mapper.py"
+        src_text = src_path.read_text(encoding="utf-8")
+        assert 'replace("Sheet1!J:J", "Sheet1!I:I")' in src_text
 
 
 # ---------------------------------------------------------------------------
