@@ -1,107 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_handover>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <pipeline_id>IMP-20260510-184A</pipeline_id>
   <mt_id>MT-1</mt_id>
-  <agent>dev-agent</agent>
-  <status>READY_FOR_QA</status>
-  <files_modified>
-    <file>inspection_report_IMP-20260510-D44F.md (예약 — MT-4 작성)</file>
-  </files_modified>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+    <forbidden_files>모든 다른 파일</forbidden_files>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_deployment_artifacts</target_function>
+    <target_file>pipeline.py</target_file>
+    <change_line>2700</change_line>
+    <change_before>for phase_name in ("build", "dev"):</change_before>
+    <change_after>for phase_name in ("build",):</change_after>
+    <blast_radius>1 파일, 1 함수, 1 라인</blast_radius>
+  </impact_analysis>
   <implemented_files>
-    <file>inspection_report_IMP-20260510-D44F.md (예약 — MT-4에서 작성, MT-1은 분석 전용)</file>
+    <file>pipeline.py</file>
   </implemented_files>
   <self_check>
-    <impact_analysis_check>PASS — 7개 점검 항목 라인 범위 직접 검증 완료</impact_analysis_check>
-    <scope_boundary>PASS — 코드 수정 0건, 분석 전용</scope_boundary>
-    <evidence_trace>PASS — 각 발견 항목에 정확한 라인 번호 + 코드 인용 포함</evidence_trace>
+    <oracle_T001>DEPLOY_SCOPE_OK — pass</oracle_T001>
+    <oracle_T002>SYNTAX_OK — pass</oracle_T002>
+    <scope_compliance>MT-1 범위 내 (pipeline.py L2700 단 1줄 수정)</scope_compliance>
+    <forbidden_patterns_check>none found</forbidden_patterns_check>
   </self_check>
-  <scope_manifest>scope_manifest_MT-1.json</scope_manifest>
-  <analysis_notes>
-    <category>CODE_QUALITY_AND_PERFORMANCE</category>
-
-    <perf_finding id="P1" severity="HIGH" file="po_automation/email_monitor.py" lines="L1330-L1333">
-      <pattern>매 EntryID마다 win32com.client.Dispatch("Outlook.Application") 신규 호출</pattern>
-      <evidence>
-        L1330: `for entry_id in entry_ids:`
-        L1332: `namespace = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")`
-      </evidence>
-      <impact>1통 메일에 다수 EntryID가 포함될 때마다 COM 객체 신규 생성 — 수십~수백ms 비용</impact>
-      <recommendation>OutlookEventHandler.__init__ 시점에 namespace를 1회 획득하여 인스턴스 변수로 캐시. GetObject("Outlook.Application") 또는 win32com.client.GetActiveObject() 활용</recommendation>
-    </perf_finding>
-
-    <perf_finding id="P2" severity="MEDIUM" file="po_automation/email_monitor.py" lines="L1188, L1217-L1219">
-      <pattern>ReceivedTime DESC 정렬 후 since_dt 미만 발견 시 continue만 사용</pattern>
-      <evidence>
-        L1188: `items.Sort("[ReceivedTime]", True)` (DESC 정렬)
-        L1217-L1219: `if received_dt is not None and received_dt < since_dt: item = items.GetNext(); continue`
-      </evidence>
-      <impact>DESC 정렬 상태에서 since_dt 미만 발견 = 이후 모든 메일 더 오래됨 — break 가능. 1만+ 메일 inbox 시 명백한 비효율</impact>
-      <recommendation>continue 대신 break로 조기 종료. 단, ReceivedTime 파싱 실패 케이스(L1214 except)는 continue 유지</recommendation>
-    </perf_finding>
-
-    <perf_finding id="P3" severity="MEDIUM" file="po_automation/email_monitor.py" lines="L351-L378">
-      <pattern>전페이지 텍스트를 full_text 단일 문자열에 누적</pattern>
-      <evidence>
-        L351: `full_text: str = ""`
-        L356-L358: `for page in doc: full_text += page.get_text() + "\n"`
-        L370-L372: pdfplumber fallback도 동일 누적 패턴
-      </evidence>
-      <impact>100MB+ PDF / 1000페이지+ 시 RAM 폭발 가능 + 문자열 concat O(n²)</impact>
-      <recommendation>list.append() 후 "".join() 또는 파일별 streaming 처리. Total Amount 검색은 페이지 단위 early-exit 가능</recommendation>
-    </perf_finding>
-
-    <perf_finding id="P4" severity="LOW" file="po_automation/main.py" lines="L480-L493">
-      <pattern>100ms 주기 root.after() 폴링</pattern>
-      <evidence>L493: `self._root.after(100, self._poll_log_queue)`</evidence>
-      <impact>idle 시 초당 10회 wakeup — 노트북 배터리 영향 미미</impact>
-      <recommendation>현재 트레이드오프 합리적. 개선 시 200ms로 완화하거나 queue.get(timeout=0.1) + 별도 스레드 패턴</recommendation>
-    </perf_finding>
-
-    <maint_finding id="M1" severity="HIGH" file="po_automation/email_monitor.py" lines="L806-L1098">
-      <pattern>_process_mail_item 293줄 단일 함수 — 6개 이상 책임</pattern>
-      <evidence>
-        L869-L905: 제목/본문 파싱 + PO 번호 추출
-        L906-L953: 발신자/수신자 필터
-        L955-L958: 중복 차단
-        L960-L1032: PDF 첨부 파싱
-        L1034-L1074: 폴더명 조합 + 생성
-        L1076-L1090: .msg/첨부 저장
-      </evidence>
-      <impact>SRP 위반. 단위 테스트 불가, 변경 시 회귀 위험 높음</impact>
-      <recommendation>
-        - _filter_by_sender(mail_item, allowed_senders) → bool
-        - _filter_by_recipient(mail_item, allowed_recipients) → bool
-        - _extract_po_metadata_from_pdfs(attachments, po_number, tmp_folder) → (prefix, amount, date, incoterm, ic)
-        - _build_dest_folder_name(po_number, prefix, amount, date, incoterm, ic) → str
-        - _save_email_artifacts(mail_item, dest_folder, subject) → list
-        로 분리하면 본 함수는 ~80줄로 축소
-      </recommendation>
-    </maint_finding>
-
-    <maint_finding id="M2" severity="LOW" file="po_automation/email_monitor.py" lines="L1264-L1344">
-      <pattern>OutlookEventHandler __init__에서 핵심 변수 None 초기화 후 외부 주입</pattern>
-      <evidence>
-        L1273-L1278: `self._root_folder: Optional[Path] = None` 등 5개 변수 None
-        L1424-L1428 (_monitor_loop): `handler._root_folder = root_folder` 외부 주입
-        L1314: `if self._root_folder is None or ...: logger.error("...미초기화"); return` 가드
-      </evidence>
-      <impact>win32com DispatchWithEvents 제약상 __init__에 인자를 못 받음 — 부분 정당화 가능. 그러나 가드 누락 시 silent fail 위험</impact>
-      <recommendation>set_context(root_folder, processed_set, ...) 메서드를 명시적으로 노출하여 외부에서 호출. assert 또는 raise로 미초기화 시 즉시 실패</recommendation>
-    </maint_finding>
-
-    <maint_finding id="M3" severity="LOW" file="po_automation/email_monitor.py" lines="L991-L1001">
-      <pattern>_pdf_sort_key 내부 함수 — 클로저 의존(po_number)</pattern>
-      <evidence>
-        L991-L1001: `def _pdf_sort_key(item: tuple) -> int:` 가 _process_mail_item 내부 정의
-        L1001: `return 0 if po_number.lower() in name.lower() else 1` — po_number는 외부 클로저 변수
-      </evidence>
-      <impact>단위 테스트 불가, 로직 검증을 self-verify 블록에 작성하기 어려움</impact>
-      <recommendation>모듈 레벨 함수 `_pdf_sort_key(item: tuple, po_number: str) -> int`로 추출 + functools.partial로 sorted key 전달</recommendation>
-    </maint_finding>
-  </analysis_notes>
-  <evidence>
-    <item>module_design_MT-1.xml</item>
-    <item>scope_manifest_MT-1.json</item>
-  </evidence>
-  <summary>코드 품질 및 성능 분석 7개 항목 모두 검증 완료. P1-P4(perf) + M1-M3(maint). MT-4에서 리포트 통합.</summary>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260510-184A</pipeline_id>
+    <mt_id>MT-1</mt_id>
+    <evidence>
+      <file>pipeline.py</file>
+    </evidence>
+    <oracle_results>
+      <oracle id="T001" expected="DEPLOY_SCOPE_OK" actual="DEPLOY_SCOPE_OK" pass="true"/>
+      <oracle id="T002" expected="SYNTAX_OK" actual="SYNTAX_OK" pass="true"/>
+    </oracle_results>
+    <status>READY_FOR_QA</status>
+  </handover>
 </module_handover>
