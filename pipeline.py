@@ -2498,6 +2498,60 @@ def _is_evidence_url(raw: str) -> bool:
     return bool(re.match(r"^https?://[^\s]+$", raw.strip(), flags=re.IGNORECASE))
 
 
+def _validate_pipeline_branch_isolation(state: Dict[str, Any]) -> None:
+    """gates prepare-phase --phase pm 실행 시 브랜치가 pipeline_id를 포함하는지 강제 검증."""
+    pipeline_id = state["pipeline_id"]
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, check=True
+        )
+        current_branch = result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return  # git 미사용 환경 — 검사 생략
+    protected = ("main", "master", "HEAD")
+    if current_branch in protected:
+        _die(
+            f"[BRANCH ISOLATION] '{current_branch}' 브랜치에서 gates prepare-phase --phase pm을 실행할 수 없습니다.\n"
+            f"  파이프라인: {pipeline_id}\n"
+            f"  필요 브랜치: phase-attestation/{pipeline_id}\n"
+            f"  실행: git checkout -b phase-attestation/{pipeline_id}"
+        )
+    if pipeline_id not in current_branch:
+        _die(
+            f"[BRANCH ISOLATION] 현재 브랜치 '{current_branch}'가 파이프라인 ID '{pipeline_id}'를 포함하지 않습니다.\n"
+            f"  다른 파이프라인 브랜치에서 push하면 PR이 오염됩니다.\n"
+            f"  필요 브랜치: phase-attestation/{pipeline_id}\n"
+            f"  실행: git checkout -b phase-attestation/{pipeline_id}"
+        )
+
+
+def _validate_pr_title_matches_pipeline(state: Dict[str, Any]) -> None:
+    """gates accept --result ACCEPT 실행 시 열려 있는 PR 제목에 pipeline_id가 포함되는지 검증."""
+    pipeline_id = state["pipeline_id"]
+    try:
+        pr_result = subprocess.run(
+            ["gh", "pr", "view", "--json", "title,number,url"],
+            capture_output=True, text=True, check=False
+        )
+        if pr_result.returncode != 0:
+            return  # PR 없음 — 다른 gate에서 차단됨
+        pr_data = json.loads(pr_result.stdout)
+        pr_title = pr_data.get("title", "")
+        pr_number = pr_data.get("number", "?")
+        pr_url = pr_data.get("url", "")
+        if pipeline_id not in pr_title:
+            _die(
+                f"[PR TITLE MISMATCH] PR #{pr_number} 제목에 파이프라인 ID가 없습니다.\n"
+                f"  현재 PR 제목: '{pr_title}'\n"
+                f"  필요한 파이프라인 ID: [{pipeline_id}]\n"
+                f"  PR URL: {pr_url}\n"
+                f"  수정 후 다시 실행하세요: gh pr edit {pr_number} --title '[{pipeline_id}] ...'"
+            )
+    except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError, ValueError):
+        return  # gh CLI 미설치 환경 — 검사 생략
+
+
 def _validate_user_acceptance_evidence(raw: Any) -> Dict[str, Any]:
     items = _split_evidence_items(raw)
     if not items:
@@ -6505,6 +6559,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         _enable_phase_attestations(state)
 
     if action == "prepare-phase":
+        if args.phase == "pm":
+            _validate_pipeline_branch_isolation(state)
         request = _prepare_phase_attestation_request(state, args.phase)
         _log_event(state, f"phase attestation request prepared: {args.phase}")
         _save(state)
@@ -6697,6 +6753,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     prereq.append(f"{gate_name} gate must be PASS before user ACCEPT")
             if prereq:
                 _die("; ".join(prereq))
+            _validate_pr_title_matches_pipeline(state)
             evidence_validation = _validate_user_acceptance_evidence(args.evidence)
             deployment = _deploy_accepted_outputs(state, args.evidence, args.notes, evidence_validation)
         gate_status = "PASS" if result == "ACCEPT" else "FAIL"
