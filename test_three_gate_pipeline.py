@@ -232,6 +232,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
 
         for pattern in (
             ".github/CODEOWNERS",
+            ".gitattributes",
             ".github/pull_request_template.md",
             "tests/oracles/**",
             "tests/**",
@@ -249,7 +250,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("pipeline-human-acceptance-packet", workflow)
         self.assertIn("최종 확인 안내", workflow)
         self.assertIn("코드를 읽지 말고", workflow)
+        self.assertIn("같은 댓글을 갱신합니다", workflow)
+        self.assertIn("마지막 갱신", workflow)
         self.assertIn("마지막 작업 담당자", workflow)
+        self.assertIn("업무 결과물이 따로 없는 규칙/문서 작업이면", workflow)
         self.assertIn("Convert-FileStatusToKorean", workflow)
         self.assertIn("- ${statusKo}:", workflow)
         self.assertIn('"modified" { return "수정됨" }', workflow)
@@ -2042,10 +2046,15 @@ class ThreeGatePipelineTests(unittest.TestCase):
         self.assertIn("test-harness-agent는 진단만 수행", build)
         self.assertNotIn("test-harness-agent 채점 필수", build)
         self.assertIn("실제 결과물 경로 또는 첨부파일 링크", harness)
+        self.assertIn("사용자가 실제로 확인할 항목", harness)
+        self.assertIn("세션 언어 규칙", claude)
+        self.assertIn("Check latest status", claude)
         self.assertIn("--evidence <실제-결과물-경로-또는-첨부파일>", agents_command)
         self.assertNotIn("<real-result-path>", agents_command)
         self.assertIn("Phase 7: External Gate Phase", claude)
         self.assertIn("agent start --phase pm", pipeline_text)
+        self.assertIn("세션 언어 규칙", pipeline_text)
+        self.assertIn("최신 상태 확인", pipeline_text)
         self.assertIn("done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id", pipeline_text)
 
     def test_github_repo_from_remote_parses_https_and_ssh_urls(self) -> None:

@@ -69,6 +69,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $repo = $env:GITHUB_REPOSITORY
           $runUrl = "$env:GITHUB_SERVER_URL/$repo/actions/runs/$env:GITHUB_RUN_ID"
+          $generatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
           $prNumber = "${{ github.event.pull_request.number }}"
           $headSha = "${{ github.event.pull_request.head.sha }}"
           $baseRef = "${{ github.event.pull_request.base.ref }}"
@@ -153,10 +154,12 @@ jobs:
           ## 최종 확인 안내
 
           이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, 결과물이 요청과 맞는지만 확인하세요.
+          이 안내는 CI가 끝날 때마다 새 댓글을 만들지 않고 같은 댓글을 갱신합니다. GitHub가 댓글 생성 시각을 오래전으로 보여도 아래 갱신 시각이 최신 기준입니다.
 
           ### GitHub가 자동으로 확인한 것
 
           - 자동 검사: 통과
+          - 마지막 갱신: $generatedAt
           - 필수 검사 이름: ``tests``
           - 실제로 실행한 검사: ``python -m pytest -q``
           - 이번 변경 번호: ``$headSha``
@@ -176,6 +179,8 @@ jobs:
           - 마지막 작업 담당자가 준 결과 링크/경로를 여세요.
           - 첨부파일이 있으면 위 자동 검사 링크에서 여세요.
           - 화면, 엑셀, EXE, 생성 파일이 처음 요청과 맞는지 확인하세요.
+          - 업무 결과물이 따로 없는 규칙/문서 작업이면, 마지막 작업 담당자의 한국어 요약과 위 자동 검사 통과 여부, 중요 파일 변경 목록만 확인하세요.
+          - 코드 내용을 직접 이해하려고 애쓰지 않아도 됩니다. 요청한 결과가 나왔는지, 원하지 않은 결과물이 섞이지 않았는지만 보면 됩니다.
           - 결과가 틀리거나 빠졌으면 거절(REJECT)을 고르고 짧게 이유를 적으세요.
 
           ### 결정 기준

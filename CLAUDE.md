@@ -9,6 +9,10 @@ Trust chain: `local pipeline.py -> agent receipts -> GitHub Actions -> CODEOWNER
 
 Completion requires PM/Dev/QA/Build phase attestations PASS, every PM `MT-N` module gate PASS, `module integrate` PASS, Technical PASS, Oracle PASS, GitHub CI PASS, and User Acceptance ACCEPT with real result evidence. The user reviews visible results and attachments, not code.
 
+## 세션 언어 규칙 (Korean Session Language Rule)
+
+The user-facing language for every pipeline session is Korean. Claude Code, the orchestrator, and all agents must write progress updates, tool descriptions, Bash/PowerShell command descriptions, final summaries, PR titles/bodies, PR comments, and acceptance questions in easy Korean. UI/tool names such as `Bash`, `Read`, `GitHub Actions`, command names, commit SHA, and `ACCEPT/REJECT` may remain as identifiers, but must be surrounded by Korean explanation. Do not use English tool descriptions such as "Check latest status" or "Recent file changes stats"; write "최신 상태 확인", "최근 변경 파일 통계 확인" instead.
+
 이 프로젝트에서는 아래 자기 진화형 다중 에이전트 프로토콜을 엄격히 준수합니다.
 각 단계가 완료(PASS)되기 전에는 다음 단계로 진입하지 않습니다.
 

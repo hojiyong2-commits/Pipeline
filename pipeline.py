@@ -3076,6 +3076,10 @@ def cmd_new(args: argparse.Namespace) -> None:
     print(f"  유형: {pipeline_type}")
     print(f"  설명: {args.desc}")
     print()
+    print(BOLD(YELLOW("  세션 언어 규칙")))
+    print("  사용자에게 보이는 진행 설명, 도구 설명, PR 안내, 승인/거절 질문은 모두 쉬운 한국어로 작성하세요.")
+    print("  예: 'Check latest status' 대신 '최신 상태 확인'. 코드 식별자와 명령어는 그대로 두되 한국어 설명을 붙이세요.")
+    print()
 
     # Auto-start the Agent Office Dashboard so the user can see live activity.
     skip_dashboard = bool(getattr(args, "no_dashboard", False)) or os.environ.get(
@@ -3087,7 +3091,8 @@ def cmd_new(args: argparse.Namespace) -> None:
         except Exception as exc:  # pragma: no cover - defensive, never block pipeline
             print(DIM(f"  대시보드 부트 예외 무시: {exc}"))
 
-    print(f"  다음 단계: {YELLOW('python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap')}")
+    print(f"  다음 단계: {YELLOW('python pipeline.py agent start --phase pm')}")
+    print(f"  PM 완료 기록: {YELLOW('python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>')}")
     print()
 
 
@@ -3612,7 +3617,7 @@ def cmd_build(args: argparse.Namespace) -> None:
     print(f"       {YELLOW('python pipeline.py gates technical')}")
     print(f"       {YELLOW('python pipeline.py gates oracle --user-confirmed')}")
     print(f"       {YELLOW('python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline')}")
-    print(f"       {YELLOW('python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed')}")
+    print(f"       {YELLOW('python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed')}")
     print()
 
 
@@ -3631,7 +3636,7 @@ def cmd_harness(args: argparse.Namespace) -> None:
             "  Use: python pipeline.py gates technical\n"
             "       python pipeline.py gates oracle --user-confirmed\n"
             "       python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline\n"
-            "       python pipeline.py gates accept --result ACCEPT --evidence [real-result-path] --user-confirmed"
+            "       python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed"
         )
 
     # ── Hard gates: 상태를 기록하는 명령 안에서 가장 먼저 검사 (check_gate 전) ──
