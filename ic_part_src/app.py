@@ -308,15 +308,33 @@ class App(tk.Tk):
         if not corb_socal:
             messagebox.showerror("입력 오류", "CORB SoCal 경로를 입력해 주세요.")
             return False
+        if not Path(corb_socal).is_dir():
+            messagebox.showerror(
+                "입력 오류",
+                f"CORB SoCal 폴더를 찾을 수 없습니다:\n{corb_socal}",
+            )
+            return False
 
         corb_sg: str = self.entry_corb_sg.get().strip()
         if not corb_sg:
             messagebox.showerror("입력 오류", "CORB SG 경로를 입력해 주세요.")
             return False
+        if not Path(corb_sg).is_dir():
+            messagebox.showerror(
+                "입력 오류",
+                f"CORB SG 폴더를 찾을 수 없습니다:\n{corb_sg}",
+            )
+            return False
 
         corb_at: str = self.entry_corb_at.get().strip()
         if not corb_at:
             messagebox.showerror("입력 오류", "CORB AT 경로를 입력해 주세요.")
+            return False
+        if not Path(corb_at).is_dir():
+            messagebox.showerror(
+                "입력 오류",
+                f"CORB AT 폴더를 찾을 수 없습니다:\n{corb_at}",
+            )
             return False
 
         return True
