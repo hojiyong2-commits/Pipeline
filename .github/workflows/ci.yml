@@ -369,15 +369,21 @@ jobs:
             $blockers.Add("phase must be one of pm/dev/qa/build")
           }
           $expectedAgents = @{
-            pm = "pm-agent"
+            pm = "pm-planner-agent"
             dev = "dev-agent"
             qa = "qa-agent"
             build = "build-agent"
           }
+          $expectedRunPhases = @{
+            pm = "pm_planner"
+            dev = "dev"
+            qa = "qa"
+            build = "build"
+          }
           if ($null -eq $request.agent_run) {
             $blockers.Add("agent_run receipt is required")
           } else {
-            if ($request.agent_run.phase -ne $request.phase) {
+            if ($request.agent_run.phase -ne $expectedRunPhases[[string]$request.phase]) {
               $blockers.Add("agent_run phase mismatch")
             }
             if ($request.agent_run.agent_id -ne $expectedAgents[[string]$request.phase]) {
@@ -407,8 +413,49 @@ jobs:
               if ($receipt.agent_id -ne $request.agent_run.agent_id) {
                 $blockers.Add("agent receipt agent_id mismatch")
               }
-              if ($receipt.phase -ne $request.phase) {
+              if ($receipt.phase -ne $expectedRunPhases[[string]$request.phase]) {
                 $blockers.Add("agent receipt phase mismatch")
+              }
+            }
+          }
+
+          if ($request.phase -eq "pm") {
+            if ($null -eq $request.manager_run) {
+              $blockers.Add("manager_run receipt is required for pm")
+            } else {
+              if ($request.manager_run.phase -ne "pipeline_manager") {
+                $blockers.Add("manager_run phase must be pipeline_manager")
+              }
+              if ($request.manager_run.agent_id -ne "pipeline-manager-agent") {
+                $blockers.Add("manager_run agent_id mismatch")
+              }
+              if ($request.manager_run.status -ne "COMPLETED") {
+                $blockers.Add("manager_run status must be COMPLETED")
+              }
+              if ($request.manager_run.used_by_phase -ne "pm_manager") {
+                $blockers.Add("manager_run must be consumed by pm_manager")
+              }
+              $managerReceiptPath = [string]$request.manager_run.receipt_path
+              if ([string]::IsNullOrWhiteSpace($managerReceiptPath) -or -not (Test-Path -LiteralPath $managerReceiptPath -PathType Leaf)) {
+                $blockers.Add("manager receipt file missing: $managerReceiptPath")
+              } else {
+                $managerReceiptHash = (Get-FileHash -LiteralPath $managerReceiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($managerReceiptHash -ne ([string]$request.manager_run.receipt_sha256).ToLowerInvariant()) {
+                  $blockers.Add("manager receipt hash mismatch: $managerReceiptPath")
+                }
+                $managerReceipt = Get-Content -Path $managerReceiptPath -Raw | ConvertFrom-Json
+                if ($managerReceipt.receipt_type -ne "agent-run-receipt-v1") {
+                  $blockers.Add("manager receipt_type must be agent-run-receipt-v1")
+                }
+                if ($managerReceipt.run_id -ne $request.manager_run.run_id) {
+                  $blockers.Add("manager receipt run_id mismatch")
+                }
+                if ($managerReceipt.agent_id -ne $request.manager_run.agent_id) {
+                  $blockers.Add("manager receipt agent_id mismatch")
+                }
+                if ($managerReceipt.phase -ne "pipeline_manager") {
+                  $blockers.Add("manager receipt phase mismatch")
+                }
               }
             }
           }

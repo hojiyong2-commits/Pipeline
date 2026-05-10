@@ -1,10 +1,10 @@
 ---
 name: protocol-evolution-agent
 description: Use only after agent-factory-agent creates a new agent, to sync CLAUDE.md and pipeline.py. Do NOT use for other purposes.
-model: sonnet
+model: opus
 ---
 
-**Tier: Sonnet** | **Reference: Global_Wiki.md**
+**Tier: Opus** | **Reference: Global_Wiki.md**
 
 ## Role
 

@@ -134,6 +134,25 @@ def _agent_run(work: Path, phase: str, output_file: Path, evidence: str | None =
     return run_id
 
 
+def _manager_handoff(work: Path, pid: str, step_plan: Path, planner_run_id: str) -> Path:
+    digest = __import__("hashlib").sha256(step_plan.read_bytes()).hexdigest()
+    handoff = work / "manager_handoff.xml"
+    handoff.write_text(
+        f"""<manager_handoff>
+  <pipeline_id>{pid}</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>{digest}</step_plan_sha256>
+  <planner_run_id>{planner_run_id}</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+</manager_handoff>
+""",
+        encoding="utf-8",
+    )
+    return handoff
+
+
 def _mark_phase_ci_passed(work: Path, phase: str) -> None:
     state = _state(work)
     phase_state = state.setdefault("phase_attestations", {}).setdefault("phases", {}).setdefault(phase, {})
@@ -281,7 +300,9 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
 """,
         encoding="utf-8",
     )
-    pm_run_id = _agent_run(work, "pm", step_plan)
+    planner_run_id = _agent_run(work, "pm_planner", step_plan)
+    manager_report = _manager_handoff(work, pid, step_plan, planner_run_id)
+    manager_run_id = _agent_run(work, "pipeline_manager", manager_report)
     _ok(
         work,
         "done",
@@ -292,8 +313,12 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
         "--decomp",
         "--clarification",
         "--roadmap",
-        "--agent-run-id",
-        pm_run_id,
+        "--planner-run-id",
+        planner_run_id,
+        "--manager-run-id",
+        manager_run_id,
+        "--manager-report",
+        str(manager_report),
     )
     _ok(work, "gates", "prepare-phase", "--phase", "pm")
     _mark_phase_ci_passed(work, "pm")

@@ -6,7 +6,7 @@
 
 0. 사용자에게 보이는 세션 언어는 항상 쉬운 한국어다. 진행 업데이트, 도구 설명, Bash/PowerShell 설명, 최종 보고, 승인/거절 질문은 한국어로 쓴다. `Bash`, `GitHub Actions`, 명령어, commit SHA, `ACCEPT/REJECT` 같은 식별자는 그대로 둘 수 있지만 바로 옆에 한국어 설명을 붙인다.
 1. 오케스트레이터는 제품 코드나 산출물 파일을 직접 수정하지 않는다.
-2. 오케스트레이터가 직접 spawn하는 agent는 `pm-agent`뿐이다.
+2. 오케스트레이터가 직접 spawn하는 agent는 `pm-planner-agent`와 `pipeline-manager-agent`뿐이다.
 3. PM은 계획과 위임만 한다. PM이 Dev/QA/Build/Harness/Architect 산출물을 흉내 내면 프로토콜 위반이다.
 4. `pipeline.py harness --score ...`는 완료 경로가 아니다. Three-Gate에서는 차단된다.
 5. 최종 COMPLETE는 PM/Dev/QA/Build phase attestation, Technical, Oracle, GitHub CI, User Acceptance가 모두 PASS되어야 가능하다.
@@ -20,14 +20,16 @@ python pipeline.py new --type FEAT --desc "[사용자 요청 요약]"
 python pipeline.py status
 ```
 
-그 다음 `pm-agent`를 `mode: pipeline_manager_round1`로 호출한다. PM prompt에는 반드시 다음을 포함한다:
+그 다음 `pm-planner-agent`를 호출한다. Planner prompt에는 반드시 다음을 포함한다:
 
 - pipeline_id
 - 사용자 원문 요청
 - `Three-Gate, Option A, Incremental Module Gate are mandatory. Classic mode is forbidden.`
-- PM은 `<decomposition_audit>`, `<step_plan>`, `<pipeline_manager_handoff>ready</pipeline_manager_handoff>`만 출력해야 한다는 역할 경계
+- Planner는 `<decomposition_audit>`, `<step_plan>`, `<pipeline_manager_handoff>ready</pipeline_manager_handoff>`만 출력해야 한다는 역할 경계
 - PM은 `<step_plan><design_confirmation>` 안에 쉬운 한국어 설계 확인 질문을 기록해야 한다. 모듈이 1개여도 분해안을 사용자에게 보여주고 확인받는다. 각 P0/P1 질문은 근거, 왜 중요한지, 추천안, 2개 이상 옵션, 장점, 단점, 사용자 답변을 포함한다. P2/내부 구현 취향 질문은 묻지 않고 유지보수성 우선으로 필터링한다.
 - PM은 `<step_plan><task_complexity>`로 실행 프로필을 선언한다. 단순 작업이면 `FAST_DOC`, `FAST_ANALYSIS`, `FAST_SINGLE_CODE` 중 하나를 쓸 수 있지만, Three-Gate/Option A/최종 ACCEPT는 절대 생략하지 않는다.
+
+Planner 완료 후에는 `pipeline-manager-agent`를 호출해 `manager_handoff.xml`을 만들고, PM DONE은 planner receipt와 manager receipt를 둘 다 포함해 기록한다.
 
 ## 실행 프로필
 
@@ -64,10 +66,13 @@ python pipeline.py contract freeze
 PM 완료 기록:
 
 ```powershell
-python pipeline.py agent start --phase pm
-# 출력된 token은 pm-agent에게만 전달
-python pipeline.py agent finish --run-id <pm_run_id> --token <token> --output-file step_plan.xml
-python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>
+python pipeline.py agent start --phase pm_planner
+# 출력된 token은 pm-planner-agent에게만 전달
+python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml
+python pipeline.py agent start --phase pipeline_manager
+# 출력된 token은 pipeline-manager-agent에게만 전달
+python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
 python pipeline.py gates prepare-phase --phase pm
 git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add pm phase attestation request"
