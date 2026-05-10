@@ -38,7 +38,7 @@
       "label": "report",
       "source": "qa_report.xml",
       "path": ".pipeline/phase_evidence/BUG-20260510-9F70/qa/report_qa_report.xml",
-      "sha256": "e6c43553de85ac4817c89d1db3c7cd4adbf31719450f25f6755d267813c363f6",
+      "sha256": "cb14ebad8738956989d38b6c2bfdf91992fa333439bbc95879023af13dbdb165",
       "size_bytes": 1954,
       "requires_force_add": true
     }
