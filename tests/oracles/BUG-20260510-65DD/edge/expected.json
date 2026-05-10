@@ -1,0 +1,6 @@
+{
+  "case": "edge_multiple_delivery_dates",
+  "expected_order_no_values": ["X100050777", "X100050777-2"],
+  "expected_line_no_values": ["#1~3", "#4,5"],
+  "reason": "사용자가 확정한 업무 규칙에 따라 날짜가 2개 이상인 주문은 각 날짜 그룹의 Line No를 출력한다."
+}

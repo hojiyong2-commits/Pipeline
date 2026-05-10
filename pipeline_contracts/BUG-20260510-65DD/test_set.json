@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260510-65DD",
+  "created_at": "2026-05-10T13:39:27Z",
+  "updated_at": "2026-05-10T13:39:47Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "P0-LINE-NO-RULE",
+      "module": "IC-MAPPER",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 100,
+      "given": {
+        "actual_file": "tests/test_order_mapper.py"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_order_mapper.py::TestApplySubOrderSuffixes::test_line_no_decision_uses_base_order_after_suffix",
+          "-q"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "passed"
+      }
+    },
+    {
+      "id": "P1-ICPART-REGRESSION",
+      "module": "IC-MAPPER",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 100,
+      "given": {
+        "actual_file": "tests/test_order_mapper.py"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_order_mapper.py",
+          "tests/test_automation.py",
+          "-q"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "passed"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-10T13:39:47Z",
+  "test_set_hash": "6d1888487c645da45386c07ed3769df91441a0a8cb488e553bf66887b70ed176",
+  "contract_hash": "9d64167910d285d257503b97fb8cf981238ce63f56c213ff23708361c91f5ece"
+}
