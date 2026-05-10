@@ -33,6 +33,24 @@ def _copy_harness_fixture(tmp_path: Path) -> Path:
             "harness": {"status": "PENDING"},
             "architect": {"status": "PENDING"},
         },
+        "external_gates": {"enabled": True},
+        "phase_attestations": {
+            "enabled": True,
+            "phases": {
+                "build": {
+                    "phase": "build",
+                    "status": "PASS",
+                    "run_id": "test-build-run",
+                    "completed_at": "2026-05-10T00:00:00Z",
+                }
+            },
+        },
+        "module_gates": {
+            "enabled": True,
+            "sequence": [],
+            "modules": {},
+            "integration": {"status": "PASS"},
+        },
         "event_log": [],
     }
     (work / "pipeline_state.json").write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
@@ -62,7 +80,7 @@ def test_legacy_harness_phase7_user_confirmation_and_docs(tmp_path: Path) -> Non
 
     r3 = _run_pipeline(work, "harness", "--score", "100", "--verdict", "PASS", "--user-confirmed")
     assert r3.returncode != 0, r3.stdout + r3.stderr
-    assert "test-output-file" in (r3.stdout + r3.stderr).lower()
+    assert "not a completion path" in (r3.stdout + r3.stderr)
 
     agents_md = (work / ".claude" / "commands" / "agents.md").read_text(encoding="utf-8")
     assert "<status>BUILD SUCCESS</status>" in agents_md

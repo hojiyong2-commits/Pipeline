@@ -5,30 +5,36 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
 jobs:
   tests:
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: 코드 가져오기
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: 파이썬 준비
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: 필요한 도구 설치
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
-      - name: Run tests
+      - name: 자동 검사 실행
         env:
           PIPELINE_NO_DASHBOARD: "1"
         run: python -m pytest -q
 
-      - name: Create CI attestation
+      - name: 자동 검사 증명 파일 만들기
         if: success()
         shell: pwsh
         run: |
@@ -54,9 +60,303 @@ jobs:
           }
           $attestation | ConvertTo-Json -Depth 8 | Set-Content -Path pipeline_attestation.json -Encoding UTF8
 
-      - name: Upload CI attestation
+      - name: 최종 확인 안내 만들기
+        if: success() && github.event_name == 'pull_request'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $repo = $env:GITHUB_REPOSITORY
+          $runUrl = "$env:GITHUB_SERVER_URL/$repo/actions/runs/$env:GITHUB_RUN_ID"
+          $generatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+          $prNumber = "${{ github.event.pull_request.number }}"
+          $headSha = "${{ github.event.pull_request.head.sha }}"
+          $baseRef = "${{ github.event.pull_request.base.ref }}"
+          $headRef = "${{ github.event.pull_request.head.ref }}"
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $files = @()
+          $page = 1
+          do {
+            $uri = "$env:GITHUB_API_URL/repos/$repo/pulls/$prNumber/files?per_page=100&page=$page"
+            $batch = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers
+            if ($null -ne $batch) { $files += @($batch) }
+            $page += 1
+          } while ($batch.Count -eq 100)
+
+          $sensitivePatterns = @(
+            '^tests/oracles/',
+            '^tests/',
+            '^test_.*\.py$',
+            '^.*_test\.py$',
+            '^pipeline\.py$',
+            '^CLAUDE\.md$',
+            '^\.claude/agents/',
+            '^\.github/CODEOWNERS$',
+            '^\.github/pull_request_template\.md$',
+            '^\.github/workflows/'
+          )
+          $sensitive = New-Object System.Collections.Generic.List[string]
+          foreach ($file in $files) {
+            $name = [string]$file.filename
+            foreach ($pattern in $sensitivePatterns) {
+              if ($name -match $pattern) {
+                $sensitive.Add($name)
+                break
+              }
+            }
+          }
+
+          function Convert-FileStatusToKorean {
+            param([string]$Status)
+            switch ($Status) {
+              "added" { return "새 파일" }
+              "modified" { return "수정됨" }
+              "removed" { return "삭제됨" }
+              "deleted" { return "삭제됨" }
+              "renamed" { return "이름 변경" }
+              "copied" { return "복사됨" }
+              "changed" { return "변경됨" }
+              default {
+                if ([string]::IsNullOrWhiteSpace($Status)) { return "변경됨" }
+                return "변경됨"
+              }
+            }
+          }
+
+          $fileLines = @()
+          foreach ($file in ($files | Select-Object -First 30)) {
+            $statusKo = Convert-FileStatusToKorean -Status ([string]$file.status)
+            $fileLines += "- ${statusKo}: ``$($file.filename)`` (추가 $($file.additions)줄, 삭제 $($file.deletions)줄)"
+          }
+          if ($files.Count -gt 30) {
+            $fileLines += "- ... 외 $($files.Count - 30)개 파일"
+          }
+          if ($fileLines.Count -eq 0) {
+            $fileLines = @("- GitHub가 변경 파일을 찾지 못했습니다.")
+          }
+
+          $sensitiveLines = @()
+          if ($sensitive.Count -eq 0) {
+            $sensitiveLines = @("- 없음")
+          } else {
+            foreach ($name in $sensitive) {
+              $sensitiveLines += "- ``$name``"
+            }
+          }
+
+          $packet = @"
+          <!-- pipeline-human-acceptance-packet -->
+          ## 최종 확인 안내
+
+          이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, 결과물이 요청과 맞는지만 확인하세요.
+          이 안내는 CI가 끝날 때마다 새 댓글을 만들지 않고 같은 댓글을 갱신합니다. GitHub가 댓글 생성 시각을 오래전으로 보여도 아래 갱신 시각이 최신 기준입니다.
+
+          ### GitHub가 자동으로 확인한 것
+
+          - 자동 검사: 통과
+          - 마지막 갱신: $generatedAt
+          - 필수 검사 이름: ``tests``
+          - 실제로 실행한 검사: ``python -m pytest -q``
+          - 이번 변경 번호: ``$headSha``
+          - 작업 흐름: ``$headRef`` 브랜치를 ``$baseRef`` 브랜치로 합치기
+          - 자동 검사 결과와 첨부파일 보기: $runUrl
+
+          ### 변경된 파일
+
+          $($fileLines -join "`n")
+
+          ### 사용자가 확인해야 할 중요 파일 변경
+
+          $($sensitiveLines -join "`n")
+
+          ### 승인 전에 볼 것
+
+          - 마지막 작업 담당자가 준 결과 링크/경로를 여세요.
+          - 첨부파일이 있으면 위 자동 검사 링크에서 여세요.
+          - 화면, 엑셀, EXE, 생성 파일이 처음 요청과 맞는지 확인하세요.
+          - 업무 결과물이 따로 없는 규칙/문서 작업이면, 마지막 작업 담당자의 한국어 요약과 위 자동 검사 통과 여부, 중요 파일 변경 목록만 확인하세요.
+          - 코드 내용을 직접 이해하려고 애쓰지 않아도 됩니다. 요청한 결과가 나왔는지, 원하지 않은 결과물이 섞이지 않았는지만 보면 됩니다.
+          - 결과가 틀리거나 빠졌으면 거절(REJECT)을 고르고 짧게 이유를 적으세요.
+
+          ### 결정 기준
+
+          - 요청한 결과와 맞으면 승인(ACCEPT).
+          - 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 거절(REJECT).
+          "@
+          Set-Content -Path human_acceptance_packet.md -Value $packet -Encoding UTF8
+
+      - name: 단계 증명 파일 만들기
+        if: success() && hashFiles('.pipeline/phase_attestation_request.json') != ''
+        shell: pwsh
+        run: |
+          $requestPath = ".pipeline/phase_attestation_request.json"
+          $request = Get-Content -Path $requestPath -Raw | ConvertFrom-Json
+          $blockers = New-Object System.Collections.Generic.List[string]
+          if ($request.schema_version -ne 1) {
+            $blockers.Add("request schema_version must be 1")
+          }
+          if ($request.request_type -ne "pipeline-phase-attestation-request-v1") {
+            $blockers.Add("request_type must be pipeline-phase-attestation-request-v1")
+          }
+          if ([string]::IsNullOrWhiteSpace($request.pipeline_id)) {
+            $blockers.Add("pipeline_id is required")
+          }
+          if (@("pm", "dev", "qa", "build") -notcontains $request.phase) {
+            $blockers.Add("phase must be one of pm/dev/qa/build")
+          }
+          $expectedAgents = @{
+            pm = "pm-agent"
+            dev = "dev-agent"
+            qa = "qa-agent"
+            build = "build-agent"
+          }
+          if ($null -eq $request.agent_run) {
+            $blockers.Add("agent_run receipt is required")
+          } else {
+            if ($request.agent_run.phase -ne $request.phase) {
+              $blockers.Add("agent_run phase mismatch")
+            }
+            if ($request.agent_run.agent_id -ne $expectedAgents[[string]$request.phase]) {
+              $blockers.Add("agent_run agent_id mismatch")
+            }
+            if ($request.agent_run.status -ne "COMPLETED") {
+              $blockers.Add("agent_run status must be COMPLETED")
+            }
+            if ($request.agent_run.used_by_phase -ne $request.phase) {
+              $blockers.Add("agent_run must be consumed by the same phase")
+            }
+            $receiptPath = [string]$request.agent_run.receipt_path
+            if ([string]::IsNullOrWhiteSpace($receiptPath) -or -not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {
+              $blockers.Add("agent receipt file missing: $receiptPath")
+            } else {
+              $receiptHash = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($receiptHash -ne ([string]$request.agent_run.receipt_sha256).ToLowerInvariant()) {
+                $blockers.Add("agent receipt hash mismatch: $receiptPath")
+              }
+              $receipt = Get-Content -Path $receiptPath -Raw | ConvertFrom-Json
+              if ($receipt.receipt_type -ne "agent-run-receipt-v1") {
+                $blockers.Add("agent receipt_type must be agent-run-receipt-v1")
+              }
+              if ($receipt.run_id -ne $request.agent_run.run_id) {
+                $blockers.Add("agent receipt run_id mismatch")
+              }
+              if ($receipt.agent_id -ne $request.agent_run.agent_id) {
+                $blockers.Add("agent receipt agent_id mismatch")
+              }
+              if ($receipt.phase -ne $request.phase) {
+                $blockers.Add("agent receipt phase mismatch")
+              }
+            }
+          }
+
+          if ($null -ne $request.copied_evidence) {
+            foreach ($item in @($request.copied_evidence)) {
+              if ($null -eq $item) { continue }
+              $path = [string]$item.path
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                $blockers.Add("copied evidence missing: $path")
+                continue
+              }
+              $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -ne ([string]$item.sha256).ToLowerInvariant()) {
+                $blockers.Add("copied evidence hash mismatch: $path")
+              }
+            }
+          }
+
+          if ($null -ne $request.workspace_file_checks) {
+            foreach ($item in @($request.workspace_file_checks)) {
+              if ($null -eq $item) { continue }
+              $path = [string]$item.path
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                $blockers.Add("workspace file missing: $path")
+                continue
+              }
+              $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -ne ([string]$item.sha256).ToLowerInvariant()) {
+                $blockers.Add("workspace file hash mismatch: $path")
+              }
+            }
+          }
+
+          $validation = @{
+            status = $(if ($blockers.Count -eq 0) { "PASS" } else { "FAIL" })
+            blockers = @($blockers)
+          }
+          $attestation = @{
+            schema_version = 1
+            attestation_type = "pipeline-phase-v1"
+            repository = $env:GITHUB_REPOSITORY
+            workflow = $env:GITHUB_WORKFLOW
+            run_id = $env:GITHUB_RUN_ID
+            run_attempt = $env:GITHUB_RUN_ATTEMPT
+            commit_sha = "${{ github.event.pull_request.head.sha || github.sha }}"
+            head_sha = "${{ github.event.pull_request.head.sha || github.sha }}"
+            checkout_sha = $env:GITHUB_SHA
+            ref = $env:GITHUB_REF
+            event_name = $env:GITHUB_EVENT_NAME
+            runner_os = $env:RUNNER_OS
+            pipeline_id = $request.pipeline_id
+            phase = $request.phase
+            request_sha256 = (Get-FileHash -LiteralPath $requestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            request = $request
+            validation = $validation
+            generated_at = (Get-Date).ToUniversalTime().ToString("o")
+          }
+          $attestation | ConvertTo-Json -Depth 12 | Set-Content -Path phase_attestation.json -Encoding UTF8
+          if ($blockers.Count -gt 0) {
+            Write-Error ("Phase attestation failed: " + ($blockers -join "; "))
+            exit 1
+          }
+
+      - name: 자동 검사 증명 파일 올리기
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-attestation
           path: pipeline_attestation.json
+
+      - name: 최종 확인 안내 올리기
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 최종-확인-안내
+          path: human_acceptance_packet.md
+
+      - name: 단계 증명 파일 올리기
+        if: success() && hashFiles('phase_attestation.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-phase-attestation
+          path: phase_attestation.json
+
+      - name: PR에 최종 확인 안내 남기기
+        if: success() && github.event_name == 'pull_request'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $repo = $env:GITHUB_REPOSITORY
+          $prNumber = "${{ github.event.pull_request.number }}"
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $body = Get-Content -Path human_acceptance_packet.md -Raw
+          $commentsUri = "$env:GITHUB_API_URL/repos/$repo/issues/$prNumber/comments"
+          $comments = Invoke-RestMethod -Method Get -Uri $commentsUri -Headers $headers
+          $existing = $comments | Where-Object { $_.body -like "*<!-- pipeline-human-acceptance-packet -->*" } | Select-Object -First 1
+          $payload = @{ body = $body } | ConvertTo-Json -Depth 4
+          if ($null -ne $existing) {
+            $commentUri = "$env:GITHUB_API_URL/repos/$repo/issues/comments/$($existing.id)"
+            Invoke-RestMethod -Method Patch -Uri $commentUri -Headers $headers -Body $payload -ContentType "application/json" | Out-Null
+          } else {
+            Invoke-RestMethod -Method Post -Uri $commentsUri -Headers $headers -Body $payload -ContentType "application/json" | Out-Null
+          }

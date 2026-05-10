@@ -1,0 +1,14 @@
+﻿{
+    "pipeline_id":  "IMP-20260510-9BDC",
+    "micro_tasks":  [
+                        {
+                            "id":  "MT-2",
+                            "files":  [
+                                          ".claude/agents/build-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "build-agent.md :: next_required_phase (수정) + deploy path (신규)"
+                                                   ]
+                        }
+                    ]
+}

@@ -984,6 +984,9 @@ def build_full_payload() -> Dict[str, Any]:
             "phases": state.get("phases"),
             "current_phase_index": state.get("current_phase_index"),
             "events": state.get("events"),
+            "external_gates": (state.get("raw") or {}).get("external_gates"),
+            "phase_attestations": (state.get("raw") or {}).get("phase_attestations"),
+            "deployment": (state.get("raw") or {}).get("deployment"),
         },
         "agents": agents,
         "orchestrator": ORCHESTRATOR,
@@ -991,6 +994,40 @@ def build_full_payload() -> Dict[str, Any]:
         "tokens": tokens,
         "control": control,
         "server_ts": server_ts,
+    }
+
+
+def _run_pipeline_cli(args: List[str]) -> Dict[str, Any]:
+    command = [sys.executable, "pipeline.py", *args]
+    try:
+        proc = subprocess.run(
+            command,
+            cwd=str(BASE_DIR),
+            text=True,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "command": ["python", "pipeline.py", *args],
+            "returncode": 124,
+            "stdout": (exc.stdout or "")[-8000:],
+            "stderr": f"pipeline command timed out: {exc}",
+        }
+    except OSError as exc:
+        return {
+            "command": ["python", "pipeline.py", *args],
+            "returncode": 1,
+            "stdout": "",
+            "stderr": str(exc),
+        }
+    return {
+        "command": ["python", "pipeline.py", *args],
+        "returncode": proc.returncode,
+        "stdout": proc.stdout[-8000:],
+        "stderr": proc.stderr[-8000:],
     }
 
 
@@ -1178,6 +1215,34 @@ async def api_pm_instruction(request: Request) -> JSONResponse:
 @app.post("/api/submit-task")
 async def api_submit_task(request: Request) -> JSONResponse:
     return await _handle_submit_task(request)
+
+
+@app.post("/api/pipeline-decision")
+async def api_pipeline_decision(request: Request) -> JSONResponse:
+    body = await request.json()
+    if not isinstance(body, dict):
+        body = {}
+    result = str(body.get("result") or "").strip().upper()
+    evidence = str(body.get("evidence") or "").strip()
+    notes = str(body.get("notes") or "").strip()
+    if result not in {"ACCEPT", "REJECT"}:
+        return JSONResponse({"error": "result must be ACCEPT or REJECT"}, status_code=400)
+
+    args = ["gates", "accept", "--result", result, "--user-confirmed"]
+    if evidence:
+        args.extend(["--evidence", evidence])
+    if notes:
+        args.extend(["--notes", notes])
+    command_result = _run_pipeline_cli(args)
+    if command_result["returncode"] == 0:
+        append_pipeline_event(f"Dashboard decision recorded: {result}")
+    else:
+        append_pipeline_event(f"Dashboard decision failed: {result}")
+    payload = build_full_payload()
+    payload["decision_result"] = command_result
+    await manager.broadcast(payload)
+    status_code = 200 if command_result["returncode"] == 0 else 409
+    return JSONResponse(payload, status_code=status_code)
 
 
 @app.post("/api/resume")

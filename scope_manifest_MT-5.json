@@ -1,0 +1,14 @@
+﻿{
+    "pipeline_id":  "IMP-20260510-9BDC",
+    "micro_tasks":  [
+                        {
+                            "id":  "MT-5",
+                            "files":  [
+                                          ".claude/agents/test-harness-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "test-harness-agent.md :: ## Deploy Path After ACCEPT (신규 섹션)"
+                                                   ]
+                        }
+                    ]
+}

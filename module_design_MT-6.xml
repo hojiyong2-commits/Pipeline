@@ -1,0 +1,7 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<module_design>
+  <mt_id>MT-6</mt_id>
+  <interface_contract>pm-agent.md — documentation only; no code callers</interface_contract>
+  <implementation_plan>Append Pipeline Complete Deploy Path section with pipeline_complete XML template including deploy_path and deploy_note fields</implementation_plan>
+  <verification_plan>Grep for PIPELINE_DEPLOY or deploy.*path in pm-agent.md; no prior content deleted; utf-8</verification_plan>
+</module_design>
