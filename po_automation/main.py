@@ -300,9 +300,7 @@ class POAutomationApp:
             return
 
         # ① root_folder 검증
-        folder_str: str = self.entry_since_date.master.tk.eval(
-            f"set dummy [{self.entry_root_folder._w} get]"
-        ) if False else self.entry_root_folder.get().strip()
+        folder_str: str = self.entry_root_folder.get().strip()
 
         if not folder_str:
             messagebox.showwarning("경고", "저장 루트 폴더를 선택해 주세요.")
@@ -633,7 +631,6 @@ def main() -> None:
     """애플리케이션 진입점."""
     root = tk.Tk()
     app = POAutomationApp(root)
-    _ = app  # GC 방지
     root.mainloop()
 
 
