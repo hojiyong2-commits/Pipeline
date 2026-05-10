@@ -4,7 +4,7 @@
   "type": "BUG",
   "description": "ICPartAutomation.exe 오류 및 데드코드 최종 점검 후 수정",
   "created_at": "2026-05-10T14:04:43Z",
-  "updated_at": "2026-05-10T14:26:44Z",
+  "updated_at": "2026-05-10T14:29:12Z",
   "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
@@ -306,6 +306,10 @@
     {
       "ts": "2026-05-10T14:26:44Z",
       "msg": "output registered exe pipeline_outputs\\BUG-20260510-F0D1\\ICPartAutomation.exe-ICPartAutomation.exe"
+    },
+    {
+      "ts": "2026-05-10T14:29:12Z",
+      "msg": "github verify-run PASS run_id=25631224552 commit=199d09efa413"
     }
   ],
   "terminal_state": null,
@@ -610,8 +614,8 @@
     },
     "github_ci": {
       "status": "PASS",
-      "completed_at": "2026-05-10T14:26:03Z",
-      "evidence": "github_actions_run:25631143304",
+      "completed_at": "2026-05-10T14:29:12Z",
+      "evidence": "github_actions_run:25631224552",
       "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_contracts\\BUG-20260510-F0D1\\gates\\github_ci_result.json",
       "notes": []
     }
@@ -1561,6 +1565,14 @@
       "repo": "hojiyong2-commits/Pipeline",
       "run_id": "25631143304",
       "commit_sha": "a3d7118f37b1e318e38a0c5ba2d9531096eae9e5",
+      "artifact": "pipeline-attestation"
+    },
+    {
+      "recorded_at": "2026-05-10T14:29:12Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "run_id": "25631224552",
+      "commit_sha": "199d09efa413aa568235f96dc4c809485fae227f",
       "artifact": "pipeline-attestation"
     }
   ]
