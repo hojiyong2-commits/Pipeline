@@ -2697,7 +2697,7 @@ def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> Lis
             candidates.extend(_split_evidence_paths(item.get("public_path")))
     phases = state.get("phases", {})
     if isinstance(phases, dict):
-        for phase_name in ("build", "dev"):
+        for phase_name in ("build",):
             phase = phases.get(phase_name, {})
             if isinstance(phase, dict):
                 candidates.extend(_split_evidence_paths(phase.get("evidence")))
