@@ -79,6 +79,113 @@ jobs:
             Accept = "application/vnd.github+json"
             "X-GitHub-Api-Version" = "2022-11-28"
           }
+          $prUri = "$env:GITHUB_API_URL/repos/$repo/pulls/$prNumber"
+          $pr = Invoke-RestMethod -Method Get -Uri $prUri -Headers $headers
+          $prTitle = [string]$pr.title
+          $prBody = [string]$pr.body
+
+          function Get-MarkdownSection {
+            param(
+              [string]$Markdown,
+              [string[]]$Headers
+            )
+            if ([string]::IsNullOrWhiteSpace($Markdown)) { return "" }
+            $lines = $Markdown -split "`r?`n"
+            $start = -1
+            $startLevel = 0
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match '^(#{2,6})\s+(.+?)\s*$') {
+                $title = $Matches[2].Trim()
+                if ($Headers -contains $title) {
+                  $start = $i + 1
+                  $startLevel = $Matches[1].Length
+                  break
+                }
+              }
+            }
+            if ($start -lt 0) { return "" }
+            $end = $lines.Count
+            for ($i = $start; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match '^(#{2,6})\s+(.+?)\s*$') {
+                $level = $Matches[1].Length
+                if ($level -le $startLevel) {
+                  $end = $i
+                  break
+                }
+              }
+            }
+            if ($end -le $start) { return "" }
+            return (($lines[$start..($end - 1)] -join "`n").Trim())
+          }
+
+          function Format-DecisionBlock {
+            param(
+              [string]$Text,
+              [string]$Fallback
+            )
+            $cleaned = Normalize-DecisionText -Text $Text
+            if ([string]::IsNullOrWhiteSpace($cleaned)) {
+              return "- $Fallback"
+            }
+            return $cleaned
+          }
+
+          function Normalize-DecisionText {
+            param([string]$Text)
+            if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
+            $placeholderPatterns = @(
+              '^\s*#{2,6}\s+.*$',
+              '^\s*-\s*$',
+              '^\s*-\s*(요청한 일|실제 완료된 일|결과 링크/경로|스크린샷/첨부파일/엑셀/EXE|결과물이 없는 규칙/문서 작업이면 확인할 요약|기대 결과|실제 결과|선택|장점|단점|추가 개선 포인트)\s*:?\s*$',
+              '^\s*-\s*\[\s*\]\s*.*$'
+            )
+            $kept = New-Object System.Collections.Generic.List[string]
+            foreach ($line in ($Text -split "`r?`n")) {
+              $trimmed = $line.Trim()
+              if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+              $isPlaceholder = $false
+              foreach ($pattern in $placeholderPatterns) {
+                if ($trimmed -match $pattern) {
+                  $isPlaceholder = $true
+                  break
+                }
+              }
+              if (-not $isPlaceholder) {
+                $kept.Add($line)
+              }
+            }
+            return (($kept -join "`n").Trim())
+          }
+
+          $workSummary = Get-MarkdownSection -Markdown $prBody -Headers @("최종 판단 요약", "작업 요약", "변경 내용", "이번 요청과 완료 결과")
+          $resultToCheck = Get-MarkdownSection -Markdown $prBody -Headers @("사용자가 확인할 결과물", "확인할 결과물", "사용자가 보게 되는 흐름")
+          $expectedActual = Get-MarkdownSection -Markdown $prBody -Headers @("기대 결과와 실제 결과", "기대/실제 결과")
+          $tradeoffNotes = Get-MarkdownSection -Markdown $prBody -Headers @("중요한 선택과 트레이드오프", "트레이드오프", "선택과 이유")
+          $riskNotes = Get-MarkdownSection -Markdown $prBody -Headers @("남은 위험과 주의점", "남은 위험", "주의할 점")
+          $improvementNotes = Get-MarkdownSection -Markdown $prBody -Headers @("추가 개선 포인트", "앞으로 개선할 점", "후속 개선")
+          $validationNotes = Get-MarkdownSection -Markdown $prBody -Headers @("검증", "자동 검증", "테스트")
+
+          $missingDecisionInfo = New-Object System.Collections.Generic.List[string]
+          if ([string]::IsNullOrWhiteSpace((Normalize-DecisionText -Text $workSummary))) { $missingDecisionInfo.Add("작업 요약") }
+          if ([string]::IsNullOrWhiteSpace((Normalize-DecisionText -Text $resultToCheck))) { $missingDecisionInfo.Add("사용자가 확인할 결과물") }
+          if ([string]::IsNullOrWhiteSpace((Normalize-DecisionText -Text $expectedActual))) { $missingDecisionInfo.Add("기대 결과와 실제 결과") }
+          if ([string]::IsNullOrWhiteSpace((Normalize-DecisionText -Text $tradeoffNotes))) { $missingDecisionInfo.Add("중요한 선택과 트레이드오프") }
+          if ($missingDecisionInfo.Count -eq 0) {
+            $decisionReadiness = "판단 가능"
+            $decisionAdvice = "아래 요약과 결과물이 요청과 맞으면 승인(ACCEPT)하면 됩니다."
+          } else {
+            $decisionReadiness = "정보 부족"
+            $decisionAdvice = "아래 항목이 비어 있습니다: $($missingDecisionInfo -join ', '). ACCEPT 전에 마지막 작업 담당자에게 보완을 요청하세요."
+          }
+
+          $workSummaryBlock = Format-DecisionBlock -Text $workSummary -Fallback "PR 본문에 작업 요약이 없습니다. ACCEPT 전에 담당자에게 쉬운 한국어 요약을 요청하세요."
+          $resultToCheckBlock = Format-DecisionBlock -Text $resultToCheck -Fallback "PR 본문에 사용자가 열어볼 결과물 링크/경로가 없습니다. ACCEPT 전에 결과물 경로를 요청하세요."
+          $expectedActualBlock = Format-DecisionBlock -Text $expectedActual -Fallback "PR 본문에 기대 결과와 실제 결과 비교가 없습니다. ACCEPT 전에 비교 내용을 요청하세요."
+          $tradeoffNotesBlock = Format-DecisionBlock -Text $tradeoffNotes -Fallback "PR 본문에 중요한 선택과 트레이드오프가 없습니다. ACCEPT 전에 장점/단점 설명을 요청하세요."
+          $riskNotesBlock = Format-DecisionBlock -Text $riskNotes -Fallback "별도 주의점이 적혀 있지 않습니다."
+          $improvementNotesBlock = Format-DecisionBlock -Text $improvementNotes -Fallback "별도 후속 개선 포인트가 적혀 있지 않습니다."
+          $validationNotesBlock = Format-DecisionBlock -Text $validationNotes -Fallback "PR 본문 검증 요약이 없습니다. 아래 GitHub 자동 검사 통과 여부만 확인하세요."
+
           $files = @()
           $page = 1
           do {
@@ -153,8 +260,38 @@ jobs:
           <!-- pipeline-human-acceptance-packet -->
           ## 최종 확인 안내
 
-          이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, 결과물이 요청과 맞는지만 확인하세요.
+          이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, **아래 결과 요약과 실제 결과물**이 요청과 맞는지만 확인하세요.
           이 안내는 CI가 끝날 때마다 새 댓글을 만들지 않고 같은 댓글을 갱신합니다. GitHub가 댓글 생성 시각을 오래전으로 보여도 아래 갱신 시각이 최신 기준입니다.
+
+          ### 먼저 볼 결론
+
+          - 판단 정보 상태: **$decisionReadiness**
+          - 안내: $decisionAdvice
+          - PR 제목: $prTitle
+
+          ### 이번 요청과 완료 결과
+
+          $workSummaryBlock
+
+          ### 사용자가 실제로 확인할 것
+
+          $resultToCheckBlock
+
+          ### 기대 결과와 실제 결과 비교
+
+          $expectedActualBlock
+
+          ### 중요한 선택과 트레이드오프
+
+          $tradeoffNotesBlock
+
+          ### 남은 위험과 주의점
+
+          $riskNotesBlock
+
+          ### 추가 개선 포인트
+
+          $improvementNotesBlock
 
           ### GitHub가 자동으로 확인한 것
 
@@ -166,6 +303,10 @@ jobs:
           - 작업 흐름: ``$headRef`` 브랜치를 ``$baseRef`` 브랜치로 합치기
           - 자동 검사 결과와 첨부파일 보기: $runUrl
 
+          ### 작업 담당자가 보고한 검증
+
+          $validationNotesBlock
+
           ### 변경된 파일
 
           $($fileLines -join "`n")
@@ -176,16 +317,17 @@ jobs:
 
           ### 승인 전에 볼 것
 
-          - 마지막 작업 담당자가 준 결과 링크/경로를 여세요.
+          - 위 **사용자가 실제로 확인할 것**에 적힌 결과 링크/경로를 여세요.
           - 첨부파일이 있으면 위 자동 검사 링크에서 여세요.
-          - 화면, 엑셀, EXE, 생성 파일이 처음 요청과 맞는지 확인하세요.
-          - 업무 결과물이 따로 없는 규칙/문서 작업이면, 마지막 작업 담당자의 한국어 요약과 위 자동 검사 통과 여부, 중요 파일 변경 목록만 확인하세요.
+          - 화면, 엑셀, EXE, 생성 파일이 **기대 결과와 실제 결과 비교**와 맞는지 확인하세요.
+          - 업무 결과물이 따로 없는 규칙/문서 작업이면, **이번 요청과 완료 결과**, 자동 검사 통과 여부, 중요 파일 변경 목록을 확인하세요.
           - 코드 내용을 직접 이해하려고 애쓰지 않아도 됩니다. 요청한 결과가 나왔는지, 원하지 않은 결과물이 섞이지 않았는지만 보면 됩니다.
           - 결과가 틀리거나 빠졌으면 거절(REJECT)을 고르고 짧게 이유를 적으세요.
 
           ### 결정 기준
 
-          - 요청한 결과와 맞으면 승인(ACCEPT).
+          - 판단 정보 상태가 **판단 가능**이고, 결과물이 요청과 맞으면 승인(ACCEPT).
+          - 판단 정보 상태가 **정보 부족**이면 ACCEPT하지 말고 보완 요청 또는 거절(REJECT).
           - 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 거절(REJECT).
           "@
           Set-Content -Path human_acceptance_packet.md -Value $packet -Encoding UTF8
@@ -356,7 +498,7 @@ jobs:
           $payload = @{ body = $body } | ConvertTo-Json -Depth 4
           if ($null -ne $existing) {
             $commentUri = "$env:GITHUB_API_URL/repos/$repo/issues/comments/$($existing.id)"
-            Invoke-RestMethod -Method Patch -Uri $commentUri -Headers $headers -Body $payload -ContentType "application/json" | Out-Null
+            Invoke-RestMethod -Method Patch -Uri $commentUri -Headers $headers -Body $payload -ContentType "application/json; charset=utf-8" | Out-Null
           } else {
-            Invoke-RestMethod -Method Post -Uri $commentsUri -Headers $headers -Body $payload -ContentType "application/json" | Out-Null
+            Invoke-RestMethod -Method Post -Uri $commentsUri -Headers $headers -Body $payload -ContentType "application/json; charset=utf-8" | Out-Null
           }
