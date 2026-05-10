@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_design>
+  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <mt_id>MT-5</mt_id>
+  <title>자기 검증 (Self-Verification)</title>
+  <files>
+    <file>inspection_report_IMP-20260510-D44F.md (검증 대상)</file>
+  </files>
+  <interface_contract>
+    MT-4 산출물(inspection_report_IMP-20260510-D44F.md)의 PM 정의 5가지 검증 기준 통과 여부 확인.
+    파일 변경 없음 — 읽기 + assertion 전용.
+  </interface_contract>
+  <implementation_plan>
+    Bash + python으로 다음 6개 항목 검증:
+    1. 파일 존재 — Path.exists()
+    2. 문자수 ≥1500 — len(read_text())
+    3. 4개 섹션(버그/보안/성능/유지보수성) 모두 포함
+    4. 라인 번호 참조 ≥3 — 'L\d+' 매칭 카운트
+    5. 심각도 라벨 ≥2종 — CRITICAL|HIGH|MEDIUM|LOW 매칭
+    6. 요약 테이블 + 권고사항 섹션 존재
+  </implementation_plan>
+  <verification_plan>
+    위 6항목 자동 검증 결과를 module_handover_MT-5.xml에 기록. 한 항목이라도 실패하면 MT-4로 회귀.
+  </verification_plan>
+  <self_check>
+    <category>SELF_VERIFICATION</category>
+    <verdict>READY</verdict>
+    <impact_analysis_check>PASS — 검증 전용</impact_analysis_check>
+  </self_check>
+</module_design>
