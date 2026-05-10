@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-10T14:24:46Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [
+    "phase request included local-only files that GitHub Actions could not re-read"
+  ],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25631143304",
+  "commit_sha": "a3d7118f37b1e318e38a0c5ba2d9531096eae9e5",
+  "pipeline_id": "BUG-20260510-F0D1",
+  "phase": "build",
+  "attestation": {
+    "generated_at": "2026-05-10T14:24:25.8737928Z",
+    "run_id": "25631143304",
+    "commit_sha": "a3d7118f37b1e318e38a0c5ba2d9531096eae9e5",
+    "run_attempt": "1",
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-10T14:23:19Z",
+      "pipeline_id": "BUG-20260510-F0D1",
+      "phase": "build",
+      "phase_status": "DONE",
+      "commit_hint": "0459305617340352db8e7dd624e88c1aed9b2c59",
+      "state": {
+        "current_phase": "harness",
+        "phase_completed_at": "2026-05-10T14:23:12Z",
+        "report_file": "build_report.xml",
+        "evidence": "ic_part_src/dist/ICPartAutomation.exe"
+      },
+      "agent_run": {
+        "run_id": "build-a5ef89f17ee5aa58",
+        "phase": "build",
+        "agent_id": "build-agent",
+        "status": "COMPLETED",
+        "output_file": "build_report.xml",
+        "output_sha256": "86e95f61720e29f345bb671d27c3d2eb5570dc97841077c3bbbc324a56e786f3",
+        "receipt_path": ".pipeline/phase_evidence/BUG-20260510-F0D1/build/agent_receipt_build-a5ef89f17ee5aa58.json",
+        "receipt_sha256": "de4ba1344a117b5ac801f3c032af191a3124cbc4de21af9b39fc644daebb25c2",
+        "used_by_phase": "build",
+        "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\build\\build-a5ef89f17ee5aa58.json"
+      },
+      "manager_run": null,
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\build\\build-a5ef89f17ee5aa58.json",
+          "path": ".pipeline/phase_evidence/BUG-20260510-F0D1/build/agent_receipt_build-a5ef89f17ee5aa58.json",
+          "sha256": "de4ba1344a117b5ac801f3c032af191a3124cbc4de21af9b39fc644daebb25c2",
+          "size_bytes": 693,
+          "requires_force_add": true
+        },
+        {
+          "label": "report",
+          "source": "build_report.xml",
+          "path": ".pipeline/phase_evidence/BUG-20260510-F0D1/build/report_build_report.xml",
+          "sha256": "86e95f61720e29f345bb671d27c3d2eb5570dc97841077c3bbbc324a56e786f3",
+          "size_bytes": 1429,
+          "requires_force_add": true
+        }
+      ],
+      "workspace_file_checks": [],
+      "local_only_files": [
+        {
+          "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+          "sha256": "3564cf92850ae85062fc7c235e3846aa18c65bbb779c259de51a9ecb6857d3a7",
+          "reason": "ignored_or_outside_git_checkout"
+        }
+      ]
+    },
+    "workflow": "CI",
+    "head_sha": "a3d7118f37b1e318e38a0c5ba2d9531096eae9e5",
+    "request_sha256": "eac6db153a10ade8666647dec85847792dcebaafae434bdc0b2790f31d01f0f9",
+    "attestation_type": "pipeline-phase-v1",
+    "event_name": "pull_request",
+    "repository": "hojiyong2-commits/Pipeline",
+    "schema_version": 1,
+    "phase": "build",
+    "pipeline_id": "BUG-20260510-F0D1",
+    "ref": "refs/pull/13/merge",
+    "validation": {
+      "blockers": [],
+      "status": "PASS"
+    },
+    "checkout_sha": "fa0b425c01849cb4bb0d1797b50c6be7c13ec6d1",
+    "runner_os": "Windows"
+  },
+  "workflow_run": {
+    "id": 25631143304,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25631143304",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "a3d7118f37b1e318e38a0c5ba2d9531096eae9e5"
+  },
+  "artifact": {
+    "id": 6904405225,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1224,
+    "expired": false
+  }
+}

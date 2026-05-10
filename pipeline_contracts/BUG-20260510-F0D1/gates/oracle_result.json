@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T14:25:55Z",
+  "pipeline_id": "BUG-20260510-F0D1",
+  "contract_hash": "f0eb7c8339eb88762158ff2fc3cb3344cb6276b2eae334cc3c077639926b7858",
+  "test_set_hash": "2c976b3795db065517e8113e63ab4c00a0481297c7737c24c6d5972a427c9a8a",
+  "observed_contract_hash": "f0eb7c8339eb88762158ff2fc3cb3344cb6276b2eae334cc3c077639926b7858",
+  "observed_test_set_hash": "2c976b3795db065517e8113e63ab4c00a0481297c7737c24c6d5972a427c9a8a",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "M1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 1
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 100,
+    "total_points": 100,
+    "hard_fail": false,
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "P0-line-no-rule",
+      "module": "M1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 60,
+      "earned": 60,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "tests/test_order_mapper.py::TestApplySubOrderSuffixes::test_line_no_decision_uses_base_order_after_suffix",
+          "-q"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete",
+        "returncode": 0,
+        "stdout": ".                                                                        [100%]\n1 passed in 0.47s\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "P1-order-mapper-regression",
+      "module": "M1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 40,
+      "earned": 40,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "tests/test_order_mapper.py",
+          "tests/test_automation.py",
+          "-q"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete",
+        "returncode": 0,
+        "stdout": "........................................................................ [100%]\n72 passed in 0.49s\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "normal",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260510-F0D1\\normal\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260510-F0D1\\normal\\expected.json",
+      "input_sha256": "f5da9861bb8f049151aaba6592c1ed981d51f46dc2ff58c7b0de7c75e08b5904",
+      "expected_sha256": "50633ae93d301ec8776ab0f2591ec9377a7499d390a49ab442d1e5b168bf6701"
+    },
+    {
+      "name": "edge",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260510-F0D1\\edge\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260510-F0D1\\edge\\expected.json",
+      "input_sha256": "eab0a938def8f28d93e677a9794c09b26dfd692617334add6a371fd56af2ab6f",
+      "expected_sha256": "ac8c5c47b00f2097d92d2e017638315d42f3821cf81a87e738b39e784418e9ad"
+    }
+  ]
+}
