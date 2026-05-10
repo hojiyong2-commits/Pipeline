@@ -16,6 +16,30 @@
 
 사용자가 마지막에 해야 할 일은 코드 리뷰가 아니라 결과물 확인입니다. 마지막 작업 담당자가 PR 링크와 GitHub Actions의 한국어 **최종 확인 안내**, 실제 결과물 경로나 첨부파일 링크를 줍니다. 사용자는 그 결과물이 요청과 맞는지만 보고 승인(ACCEPT) 또는 거절(REJECT)을 선택합니다.
 
+### 단순 업무 빠른 경로
+
+단순 업무도 Three-Gate와 Option A는 그대로 씁니다. 다만 PM이 `step_plan.xml`의 `<task_complexity>`로 아래 프로필을 선언하면, 불필요하게 MT를 여러 개로 쪼개지 않고 MT-1 하나로 진행할 수 있습니다.
+
+| 프로필 | 의미 |
+|---|---|
+| `FAST_DOC` | 문서/MD/프롬프트 변경. 제품 코드 수정 금지 |
+| `FAST_ANALYSIS` | 로그 분석, 결과 검토, 보고서 작성. 제품 코드 수정 금지 |
+| `FAST_SINGLE_CODE` | 최대 2파일/2함수/예상 80줄 이하의 작은 코드 수정 |
+| `STANDARD` | 일반 작업 |
+| `HIGH_RISK` | 삭제, 인증, 배포, 핵심 파서, DB, 신규 의존성 등 위험 작업 |
+
+Fast Path는 검증 생략이 아닙니다. GitHub Actions, phase attestation, Technical/Oracle/GitHub/User Acceptance gate는 그대로 필요합니다.
+
+### 결과물 등록
+
+사용자가 PR에서 바로 열어볼 파일은 아래처럼 등록합니다.
+
+```powershell
+python pipeline.py outputs add --kind report --path report.md --label "최종 보고서" --notes "사용자는 결론과 확인 항목만 보면 됩니다."
+```
+
+등록된 파일은 `pipeline_outputs/<pipeline_id>/`로 복사되고, GitHub Actions가 만드는 **최종 확인 안내** 댓글의 “등록된 결과물 바로 열기”에 링크로 표시됩니다.
+
 ## 필수 명령 흐름
 
 ```powershell
