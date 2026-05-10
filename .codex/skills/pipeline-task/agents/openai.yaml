@@ -1,0 +1,7 @@
+interface:
+  display_name: "Pipeline Task"
+  short_description: "Run this repo's mandatory task pipeline"
+  default_prompt: "Use $pipeline-task to run this repository task through Three-Gate, phase attestations, and final ACCEPT/REJECT."
+
+policy:
+  allow_implicit_invocation: true
