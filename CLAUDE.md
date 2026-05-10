@@ -234,6 +234,23 @@ force-add the generated request/evidence on the active phase branch:
 git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 ```
 
+### 브랜치 격리 강제 규칙 (Branch Isolation Enforcement)
+
+`gates prepare-phase --phase pm`은 반드시 해당 파이프라인 전용 브랜치에서 실행해야 합니다. `pipeline.py`는 실행 시점의 git 브랜치를 검사하여 아래 두 경우를 자동 차단합니다:
+
+1. **보호 브랜치 차단**: `main`, `master`, `HEAD` 브랜치에서 실행 시 즉시 오류로 중단
+2. **다른 파이프라인 브랜치 차단**: 현재 브랜치 이름에 활성 `pipeline_id`가 포함되지 않으면 오류로 중단
+
+Pipeline Manager는 `gates prepare-phase --phase pm` 실행 전 반드시 아래 명령으로 전용 브랜치를 생성/전환해야 합니다:
+
+```powershell
+git checkout -b phase-attestation/{pipeline_id}
+# 이미 존재하면:
+git checkout phase-attestation/{pipeline_id}
+```
+
+이 규칙은 다른 파이프라인의 phase-attestation 브랜치에서 실수로 `prepare-phase`를 실행하여 PR이 오염되는 사고(BUG-20260510-9F70 실사례)를 방지합니다. `gates accept --result ACCEPT` 실행 시에도 열려 있는 PR 제목에 활성 `pipeline_id`가 포함되는지 자동 검증합니다.
+
 GitHub Actions verifies only the force-added request/evidence for that PR commit. `.gitattributes` must
 continue to force LF for XML/JSON/MD evidence (`*.xml text eol=lf`, `*.json text eol=lf`, `*.md text eol=lf`)
 because Windows CRLF conversion changes SHA-256 values. Any change to
