@@ -805,6 +805,40 @@ def _require_design_true(element: Any, path: str, label: str) -> None:
         _die(f"[PM DESIGN GATE] {label} must be true/confirmed: <{path}>")
 
 
+_USER_CONFIRMATION_INFERENCE_TERMS = (
+    "pm decided",
+    "pm assumed",
+    "agent decided",
+    "assumed from",
+    "inferred from",
+    "based on prior preference",
+    "사용자 원칙에 따라",
+    "사용자 선호에 따라",
+    "pm이 판단",
+    "에이전트가 판단",
+    "추론",
+    "추정",
+)
+
+
+def _normalize_user_confirmation_text(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip()).lower()
+
+
+def _validate_user_supplied_design_answer(value: str, label: str) -> str:
+    answer = str(value or "").strip()
+    if len(answer) < 1:
+        _die(f"[PM USER CONFIRMATION GATE] {label} is required")
+    lowered = answer.lower()
+    for term in _USER_CONFIRMATION_INFERENCE_TERMS:
+        if term.lower() in lowered:
+            _die(
+                f"[PM USER CONFIRMATION GATE] {label} looks inferred by PM/agent, "
+                f"not explicitly supplied by the user: {term}"
+            )
+    return answer
+
+
 def _validate_pm_design_confirmation(step_plan: Any, micro_tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     confirmation = step_plan.find("design_confirmation")
     if confirmation is None:
@@ -880,6 +914,7 @@ def _validate_pm_design_confirmation(step_plan: Any, micro_tasks: List[Dict[str,
             min_len=1,
         )
         user_answer = _require_design_text(question, "user_answer", f"{qid} user_answer", min_len=2)
+        _validate_user_supplied_design_answer(user_answer, f"{qid} user_answer")
 
         options_root = question.find("options")
         if options_root is None:
@@ -914,6 +949,7 @@ def _validate_pm_design_confirmation(step_plan: Any, micro_tasks: List[Dict[str,
             "recommended_option": recommended,
             "option_count": len(options),
             "user_answer": user_answer,
+            "question_text": question_text,
         })
 
     if not has_module_split_question:
@@ -929,6 +965,101 @@ def _validate_pm_design_confirmation(step_plan: Any, micro_tasks: List[Dict[str,
         "question_count": len(summaries),
         "questions": summaries,
     }
+
+
+def _ensure_pm_design_confirmations(state: Dict[str, Any]) -> Dict[str, Any]:
+    confirmations = state.get("pm_design_confirmations")
+    if not isinstance(confirmations, dict):
+        confirmations = {}
+        state["pm_design_confirmations"] = confirmations
+    return confirmations
+
+
+def _record_pm_design_confirmation(
+    state: Dict[str, Any],
+    *,
+    question_id: str,
+    selected_option: str,
+    answer: str,
+    mt_id: Optional[str],
+    module_split: bool,
+) -> Dict[str, Any]:
+    qid = str(question_id or "").strip()
+    if not qid:
+        _die("[PM USER CONFIRMATION GATE] --question-id is required", exit_code=2)
+    option = str(selected_option or "").strip()
+    if not option:
+        _die("[PM USER CONFIRMATION GATE] --selected-option is required", exit_code=2)
+    user_answer = _validate_user_supplied_design_answer(answer, "--answer")
+    record = {
+        "question_id": qid,
+        "selected_option": option,
+        "answer": user_answer,
+        "mt_id": str(mt_id or "").strip() or None,
+        "category": "module_split" if module_split else "design",
+        "confirmed_by": "user",
+        "user_confirmed": True,
+        "recorded_at": _now(),
+    }
+    confirmations = _ensure_pm_design_confirmations(state)
+    confirmations[qid] = record
+    _log_event(state, f"pm design confirmation recorded qid={qid} option={option}")
+    return record
+
+
+def _validate_pm_user_confirmation_records(state: Dict[str, Any], atomic_plan: Dict[str, Any]) -> None:
+    design = atomic_plan.get("design_confirmation")
+    if not isinstance(design, dict):
+        _die("[PM USER CONFIRMATION GATE] atomic plan has no design_confirmation")
+    confirmations = _ensure_pm_design_confirmations(state)
+    questions = design.get("questions")
+    if not isinstance(questions, list):
+        _die("[PM USER CONFIRMATION GATE] design questions are missing")
+
+    module_questions = [
+        item for item in questions
+        if isinstance(item, dict) and str(item.get("category") or "") == "module_split"
+    ]
+    if not module_questions:
+        _die("[PM USER CONFIRMATION GATE] module_split question is required before Dev")
+
+    for question in module_questions:
+        qid = str(question.get("id") or "").strip()
+        if not qid:
+            _die("[PM USER CONFIRMATION GATE] module_split question id is missing")
+        record = confirmations.get(qid)
+        if not isinstance(record, dict):
+            _die(
+                "[PM USER CONFIRMATION GATE] recorded user confirmation is required before PM completion. "
+                f"Run `python pipeline.py confirm-design --question-id {qid} --selected-option <A|B> "
+                "--answer \"<user answer>\" --module-split --user-confirmed` after showing the micro-task split."
+            )
+        if record.get("confirmed_by") != "user" or record.get("user_confirmed") is not True:
+            _die(f"[PM USER CONFIRMATION GATE] {qid} confirmation must be explicitly user-confirmed")
+        if str(record.get("category") or "") != "module_split":
+            _die(f"[PM USER CONFIRMATION GATE] {qid} confirmation must be category=module_split")
+
+        selected = str(record.get("selected_option") or "").strip()
+        if not selected:
+            _die(f"[PM USER CONFIRMATION GATE] {qid} selected_option is missing")
+        user_answer = _validate_user_supplied_design_answer(
+            str(record.get("answer") or ""),
+            f"{qid} recorded answer",
+        )
+        plan_answer = str(question.get("user_answer") or "").strip()
+        if plan_answer:
+            normalized_plan = _normalize_user_confirmation_text(plan_answer)
+            normalized_record = _normalize_user_confirmation_text(user_answer)
+            if normalized_record not in normalized_plan and selected.lower() not in normalized_plan:
+                _die(
+                    f"[PM USER CONFIRMATION GATE] {qid} plan user_answer does not match "
+                    "the recorded user confirmation"
+                )
+
+        mt_id = str(question.get("mt_id") or "").strip()
+        record_mt = str(record.get("mt_id") or "").strip()
+        if mt_id and record_mt and mt_id != record_mt:
+            _die(f"[PM USER CONFIRMATION GATE] {qid} mt_id mismatch: plan={mt_id}, record={record_mt}")
 
 
 def _parse_protocol_evolution_decision(report_file: Optional[str]) -> Dict[str, Any]:
@@ -2188,6 +2319,7 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
         "terminal_state": None,
         "harness_fail_count": 0,
         "agent_runs": {},
+        "pm_design_confirmations": {},
         "external_gates": _new_external_gates(enabled=True),
         "phase_attestations": _new_phase_attestations(enabled=True),
         "module_gates": _new_module_gates(enabled=True),
@@ -2222,6 +2354,8 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         state["harness_fail_count"] = 0
     if not isinstance(state.get("agent_runs"), dict):
         state["agent_runs"] = {}
+    if not isinstance(state.get("pm_design_confirmations"), dict):
+        state["pm_design_confirmations"] = {}
     if "protocol_evolution_decision" not in state:
         state["protocol_evolution_decision"] = None
     if not isinstance(state.get("execution_profile"), dict):
@@ -3459,6 +3593,32 @@ def cmd_new(args: argparse.Namespace) -> None:
     print()
 
 
+def cmd_confirm_design(args: argparse.Namespace) -> None:
+    """Record explicit user confirmation for the PM micro-task split."""
+    state = _require_state()
+    if not getattr(args, "user_confirmed", False):
+        _die(
+            "[PM USER CONFIRMATION GATE] --user-confirmed is required. "
+            "Only run this after the user explicitly approved the shown micro-task split.",
+            exit_code=2,
+        )
+    record = _record_pm_design_confirmation(
+        state,
+        question_id=args.question_id,
+        selected_option=args.selected_option,
+        answer=args.answer,
+        mt_id=args.mt_id,
+        module_split=bool(getattr(args, "module_split", False)),
+    )
+    _save(state)
+    print(GREEN("\n[PM USER CONFIRMATION RECORDED]"))
+    print(f"  question_id: {record['question_id']}")
+    print(f"  selected_option: {record['selected_option']}")
+    print(f"  mt_id: {record.get('mt_id') or 'N/A'}")
+    print("  next: python pipeline.py done --phase pm ...")
+    print()
+
+
 def cmd_check(args: argparse.Namespace) -> None:
     """gate 검증 -exit 0: 통과, exit 1: 차단."""
     state = _load_branch_state(args)
@@ -3586,6 +3746,7 @@ def cmd_done(args: argparse.Namespace) -> None:
             consume_phase="pm_manager",
         )
         state["atomic_plan"] = _validate_pm_step_plan_file(report_file, state)
+        _validate_pm_user_confirmation_records(state, state["atomic_plan"])
         state["execution_profile"] = state["atomic_plan"].get("execution_profile") or _new_execution_profile("STANDARD")
         state["pm_manager_handoff"] = _validate_manager_handoff_file(
             manager_report,
@@ -6137,6 +6298,7 @@ def cmd_codex(args: argparse.Namespace) -> None:
             "pm_planner",
             "pipeline_manager",
             "manager_handoff.xml",
+            "confirm-design",
             "anti_gaming_read",
             "Architect complete",
         ):
@@ -6158,6 +6320,7 @@ def cmd_codex(args: argparse.Namespace) -> None:
             "python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml",
             "python pipeline.py agent start --phase pipeline_manager",
             "python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml",
+            "python pipeline.py confirm-design --question-id DQ-1 --selected-option A --answer \"<verbatim user answer>\" --mt-id MT-1 --module-split --user-confirmed",
             "python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml",
         ],
     }
@@ -7518,6 +7681,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_new.add_argument("--no-dashboard", action="store_true",
                        help="에이전트 오피스 대시보드 자동 시작 비활성화")
 
+    # PM design confirmation
+    p_confirm_design = sub.add_parser(
+        "confirm-design",
+        help="Record explicit user approval for the PM micro-task split before PM done",
+    )
+    p_confirm_design.add_argument("--question-id", required=True)
+    p_confirm_design.add_argument("--selected-option", required=True)
+    p_confirm_design.add_argument("--answer", required=True)
+    p_confirm_design.add_argument("--mt-id", default=None)
+    p_confirm_design.add_argument("--module-split", action="store_true", default=False)
+    p_confirm_design.add_argument("--user-confirmed", action="store_true", default=False)
+
     # check
     p_check = sub.add_parser("check", help="phase gate 검증 (exit 1 = 차단)")
     p_check.add_argument("--phase", required=True,
@@ -7901,6 +8076,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 COMMAND_MAP = {
     "new":                  cmd_new,
+    "confirm-design":       cmd_confirm_design,
     "check":                cmd_check,
     "done":                 cmd_done,
     "qa":                   cmd_qa,

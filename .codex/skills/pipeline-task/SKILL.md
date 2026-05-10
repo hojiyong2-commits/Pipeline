@@ -7,102 +7,114 @@ description: Use when Codex is asked to run this repository's mandatory task pip
 
 ## 목적
 
-이 저장소에서 Codex가 작업을 맡으면 Claude Code의 `/task`와 같은 파이프라인을 사용한다. Classic mode는 사용하지 않는다.
+Codex에서 이 저장소의 작업을 맡으면 Claude Code의 `/task`와 같은 파이프라인을 따른다. Classic mode는 사용하지 않는다.
 
-사용자가 Codex에서 아래처럼 말하면 이 skill을 사용한다.
+트리거:
 
-- `/task [작업 내용]`
-- `./task [작업 내용]`
-- `task 스킬로 [작업 내용]`
-- `파이프라인 돌려서 [작업 내용]`
-- `[$pipeline-task](...) [작업 내용]`
+- `/task [작업]`
+- `./task [작업]`
+- `task [작업]`
+- `파이프라인 돌려 [작업]`
+- `[$pipeline-task](...) [작업]`
 
-`./task`는 실제 쉘 스크립트 이름이 아니라 Codex에게 이 skill을 쓰라는 호출 문구로 해석한다.
-
-필수 구조:
+## No Shortcut Rule
 
 1. Three-Gate는 항상 사용한다.
 2. Option A phase attestation은 항상 사용한다.
 3. Incremental Module Gate는 항상 사용한다.
-4. PM은 `pm-planner-agent`와 `pipeline-manager-agent`로 분리한다.
-5. 최종 사용자는 결과물 보고서와 링크만 보고 `ACCEPT` 또는 `REJECT`를 결정한다.
+4. PM은 `pm-planner-agent`와 `pipeline-manager-agent` 역할로 분리한다.
+5. 사용자는 마지막에 결과물 보고서/링크만 보고 `ACCEPT` 또는 `REJECT`를 결정한다.
+6. 명시적으로 이 skill이 호출되면 간단한 업무라도 파이프라인을 생략하지 않는다.
 
-## No Shortcut Rule
+## 모델 고정
 
-사용자가 이 skill을 명시적으로 호출하면 간단한 업무라도 전체 파이프라인을 생략하지 않는다.
-
-- 직접 코드 수정, 직접 빌드, 직접 배포를 먼저 하지 않는다.
-- 기존 파이프라인을 이어서 쓰려면 사용자가 같은 작업의 계속 진행이라고 명시해야 한다. 아니면 새 pipeline id로 시작한다.
-- `PM planner receipt -> pipeline manager receipt -> Incremental Module Gate -> Dev/QA/Build phase attestation -> Technical/Oracle/GitHub CI -> final ACCEPT/REJECT -> Architect complete` 순서를 끝까지 따른다.
-- 사용자가 "빨리", "그냥 수정", "간단히"라고 말해도 shortcut으로 처리하지 않는다. 대신 예상 시간과 줄인 범위를 한국어로 보고한다.
-- `G:\내 드라이브\터미널` 배포는 final `ACCEPT` 이후에만 pipeline 완료 배포로 기록한다. 사용자가 별도 임시 배포를 명시하면 그 결과는 pipeline COMPLETE가 아니다.
-
-## LLM Model Lock
-
-이 skill로 실행되는 모든 LLM 역할은 `gpt-5.5`를 사용한다.
-
-- Codex에서 모델 선택이 가능한 PM planner, pipeline manager, Dev, QA, Security, Build, Harness/diagnostic, Architect 역할은 모두 `gpt-5.5`로 고정한다.
-- `gpt-5.5`를 사용할 수 없으면 조용히 다른 모델로 낮추지 말고 중단한 뒤 사용자에게 보고한다.
-- 이 skill이 명시 호출된 작업에서는 Claude나 다른 LLM으로 최종 검증을 대체하지 않는다.
-- `pipeline.py`, GitHub Actions, pytest, ruff, mypy, bandit, oracle 비교 같은 결정론적 도구는 LLM이 아니므로 그대로 사용한다.
+이 skill로 수행하는 모든 LLM 역할은 `gpt-5.5`를 사용한다. 사용할 수 없으면 조용히 다른 모델로 대체하지 말고 사용자에게 보고한다.
 
 ## 시작 전 확인
 
-먼저 아래 명령으로 Codex 훅 상태를 확인한다.
-
-```bash
+```powershell
 python pipeline.py codex doctor
 ```
 
-`PASS`가 아니면 작업을 시작하지 말고 실패 항목을 먼저 고친다.
+PASS가 아니면 작업을 시작하지 말고 실패 항목을 먼저 고친다.
 
-사용자에게는 첫 응답에서 짧게 말한다: "Codex용 `/task` 파이프라인으로 진행하겠습니다." 이후 진행 설명, 도구 설명, 최종 보고는 쉬운 한국어로 쓴다.
+## PM 설계 확인 게이트
 
-## 필수 PM 분리 흐름
+PM은 micro-task가 1개뿐이어도 반드시 사용자에게 분해안을 보여주고 명시 답변을 받아야 한다.
 
-Codex가 직접 구현을 시작하기 전에 PM 설계와 관리 인계를 분리해야 한다.
+사용자에게 보여줄 질문은 쉬운 한국어여야 한다.
 
-```bash
+- 무엇을 어떻게 쪼갰는지
+- 왜 이 쪼개기가 중요한지
+- 추천안
+- 선택지 2개 이상
+- 각 선택지의 장점과 단점
+
+사용자가 답한 뒤에만 Pipeline Manager가 아래 명령을 실행한다.
+
+```powershell
+python pipeline.py confirm-design --question-id DQ-1 --selected-option A --answer "사용자가 실제로 답한 문장" --mt-id MT-1 --module-split --user-confirmed
+```
+
+금지:
+
+- `사용자 원칙에 따라 A로 진행`
+- `PM이 판단`
+- `에이전트가 추론`
+- 이전 대화의 취향을 근거로 사용자 답변을 대신 작성
+
+`confirm-design` 기록이 없으면 `done --phase pm`은 실패해야 한다.
+
+## PM 흐름
+
+```powershell
 python pipeline.py agent start --phase pm_planner
 python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml
 
 python pipeline.py agent start --phase pipeline_manager
 python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
 
+python pipeline.py confirm-design --question-id DQ-1 --selected-option A --answer "<verbatim user answer>" --mt-id MT-1 --module-split --user-confirmed
+
 python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
 ```
 
-`manager_handoff.xml`은 다음 사실을 증명해야 한다.
+`manager_handoff.xml`은 planner receipt, step plan hash, 다음 phase가 `dev`임을 증명해야 한다.
 
-- `pipeline-manager-agent`가 실행 관리를 맡았다.
-- `step_plan.xml`의 SHA-256을 확인했다.
-- planner run id를 확인했다.
-- step plan을 수정하지 않겠다고 선언했다.
-- 다음 단계가 `dev`임을 선언했다.
+`step_plan.xml`에는 반드시 `<anti_gaming_read>true</anti_gaming_read>`가 있어야 한다.
 
-## Codex 작업 원칙
+## Phase Attestation
 
-- 사용자에게 보이는 설명은 쉬운 한국어로 쓴다.
-- 코드가 아니라 결과물을 기준으로 최종 판단할 수 있게 만든다.
-- 중간 단계에서 임의로 PASS를 주장하지 않는다.
-- receipt token은 해당 역할의 output을 기록할 때만 사용한다.
-- PM 산출물 안에 Dev/QA/Build 산출물을 섞지 않는다.
-- PM 설계 전 `.claude/agents/shared/anti_gaming_rules.md`를 읽고 `<anti_gaming_read>true</anti_gaming_read>`를 `step_plan.xml`에 남긴다.
-- Dev는 `scope_manifest.json` 밖의 파일을 건드리지 않는다.
-- QA는 자신이 만든 테스트만 믿지 않고 실제 산출물, oracle, GitHub Actions 결과를 확인한다.
+각 주요 phase 뒤에는 다음을 실행한다.
 
-## 최종 사용자 보고
+```powershell
+python pipeline.py gates prepare-phase --phase <pm|dev|qa|build>
+git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
+git commit -m "Add <phase> phase attestation request"
+git push
+python pipeline.py gates phase-ci --phase <phase> --repo hojiyong2-commits/Pipeline
+```
 
-마지막 보고는 아래 정보를 포함한다.
+속도를 위해 phase CI는 receipt/hash/schema/evidence만 검증한다. 전체 `pytest`는 최종 GitHub CI gate에서 한 번 강하게 실행한다.
+
+## Dev/QA/Build
+
+Dev는 PM micro-task 범위 밖 파일을 수정하지 않는다. 각 MT는 `module design → module dev → module qa PASS` 순서로 처리한다.
+
+QA는 실제 증거를 확인하고 자기 채점만으로 PASS를 주장하지 않는다.
+
+Build는 결과물을 만들고, 최종 배포는 사용자의 `ACCEPT` 뒤에만 기록한다.
+
+## 최종 보고
+
+마지막 보고에는 다음을 포함한다.
 
 - 결과물 링크 또는 로컬 경로
 - GitHub PR 링크
-- GitHub Actions 실행 링크
+- GitHub Actions 링크
 - 사용자가 확인해야 할 항목
-- `ACCEPT` 또는 `REJECT` 기준
+- `ACCEPT` / `REJECT` 기준
 
 사용자에게 코드를 읽으라고 요구하지 않는다.
 
-## 실패 시 행동
-
-게이트가 실패하면 실패한 게이트 이름, 원인, 사용자가 볼 결과물, 다음 재시도 범위를 짧게 보고한다. 임의로 PASS를 만들거나 점수로 완료를 주장하지 않는다.
+최종 User Acceptance 뒤에는 Architect complete 단계까지 기록한다.

@@ -31,6 +31,8 @@ Save the final Round 1 output as `step_plan.xml`. The file must include:
 
 The design confirmation must use easy Korean questions. Every P0/P1 question needs evidence, why it matters, a recommendation, at least two options, benefit, cost, and the user answer. P2 or internal implementation preference questions must be filtered out.
 
+Hard rule: even if the plan has exactly one micro-task, show that split to the user and wait for an explicit answer before Dev. Do not fill `<user_answer>` from inference, previous preference, or PM judgment. Invalid examples include "사용자 원칙에 따라 A로 진행", "PM이 판단", and "추론". Pipeline Manager must later record the real answer with `python pipeline.py confirm-design ... --user-confirmed`; otherwise `done --phase pm` is blocked.
+
 ## Receipt Flow
 
 ```powershell

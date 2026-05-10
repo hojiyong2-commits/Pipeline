@@ -84,6 +84,16 @@ PM phase CI가 PASS되기 전에는 Dev로 넘어가지 않는다.
 
 PM `done`은 `pipeline.py` hard gate다. `step_plan.xml`에 `<design_confirmation>`이 없거나, 질문이 추상적이거나, 장점/단점/추천안/사용자 답변이 빠지면 Dev로 넘어갈 수 없다.
 
+### PM 설계 확인 hard gate
+
+모듈이 1개여도 PM은 micro-task 분해안을 사용자에게 보여주고 명시 답변을 받아야 한다. XML 안에 `<module_split_user_confirmed>true</module_split_user_confirmed>`를 적는 것만으로는 부족하다. PM `done` 전에 Pipeline Manager가 아래 명령으로 실제 사용자 답변을 기록해야 한다.
+
+```powershell
+python pipeline.py confirm-design --question-id DQ-1 --selected-option A --answer "사용자가 실제로 답한 문장" --mt-id MT-1 --module-split --user-confirmed
+```
+
+`사용자 원칙에 따라 A로 진행`, `PM이 판단`, `추론` 같은 문구는 사용자 답변으로 인정되지 않는다.
+
 ## Phase 2 — Dev With Module Gates
 
 PM의 `<micro_task id="MT-N">`는 각각 독립 모듈 게이트가 된다. Dev는 모든 MT를 한 번에 구현하지 않는다.
