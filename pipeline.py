@@ -84,6 +84,10 @@ import urllib.request
 import io
 import zipfile
 
+QA_MAX_SCORE = 120
+QA_PASS_RATIO = 0.8
+QA_PASS_THRESHOLD = int(QA_MAX_SCORE * QA_PASS_RATIO)
+
 
 # ── Execution Evidence Validator ─────────────────────────────────────────────
 
@@ -142,57 +146,6 @@ def _extract_test_code(agent_output: str) -> Optional[str]:
         return None
     text = root.findtext("test_code")
     return text.strip() if text else None
-
-
-def _validate_harness_evidence_gate(
-    clean_text: str,
-    agent_output: str,
-    pipeline_id: str,
-    verdict_label: str,
-) -> None:
-    """PASS/FAIL 공통 3-gate 검증: Gate A(harness_report ET 파싱) → Gate B(test_code 비어있지 않음) → Gate C(validate_test_evidence 실행).
-    실패 시 _die() 호출. 성공 시 반환.
-
-    Legacy harness diagnostic compatibility:
-    - PASS/FAIL diagnostic records must use the same evidence checks.
-    - FAIL means the diagnostic path found a problem; it is not a completion signal.
-    - New `/Task` completion is controlled by phase/module attestations and external gates,
-      not by harness_score.
-
-    Args:
-        clean_text: _strip_xml_comments() 처리된 텍스트 (Gate A 입력).
-        agent_output: 원본 에이전트 출력 (Gate C 입력 — validate_test_evidence 내부에서 _extract_test_code 재호출).
-        pipeline_id: 로깅용 파이프라인 ID.
-        verdict_label: 오류 메시지에 포함할 경로 레이블 ("PASS" 또는 "FAIL").
-    """
-    # Gate A: <harness_report> ElementTree 파싱 검증
-    hr_element = _parse_harness_report_et(clean_text)
-    if hr_element is None:
-        _die(
-            f"\n[HARNESS GATE BLOCKED] {verdict_label} 기록 거부 — --test-output-file에 유효한 <harness_report>가 없습니다.\n"
-            "  harness 분석 보고서(<harness_report>...</harness_report>)와 실행 가능한 <test_code>가 모두 필요합니다.\n"
-            "  malformed/unclosed <harness_report> 또는 XML comment 내 태그는 유효하지 않습니다.\n"
-        )
-
-    # Gate B: <test_code> 존재 + 비어있지 않음 확인
-    # hr_element는 None이 아님이 Gate A에서 보장되었으므로 안전하게 접근 가능
-    test_code_text: Optional[str] = hr_element.findtext("test_code")  # type: ignore[union-attr]
-    if not test_code_text or not test_code_text.strip():
-        _die(
-            f"\n[HARNESS GATE BLOCKED] {verdict_label} 기록 거부 — <test_code>가 없거나 비어 있습니다.\n"
-            "  <test_code>는 반드시 <harness_report>...</harness_report> 내부에 위치해야 하며 내용이 있어야 합니다.\n"
-            "  XML 특수문자(<, >, &) 포함 시 CDATA 또는 XML escape 필수: <test_code><![CDATA[...]]></test_code>\n"
-        )
-
-    # Gate C: <test_code> unittest 실행 검증
-    # validate_test_evidence()가 strict AST policy + runner-owned JSON 결과를 검증한다.
-    if not validate_test_evidence(agent_output, pipeline_id=pipeline_id):
-        _die(
-            f"\n[HARNESS GATE BLOCKED] {verdict_label} 기록 거부 — <test_code> unittest 실행 검증 실패.\n"
-            "  test_code는 unittest.TestCase 서브클래스 + 최소 1개 test_* 메서드 필수.\n"
-            "  빈 test_code, 실행 불가 Python, unittest.TestCase 없는 코드, testsRun=0은 모두 거부됩니다.\n"
-        )
-
 
 # ── Strict Test Evidence Policy ──────────────────────────────────────────────
 # Static pre-execution check: count direct self.assert*/cls.assert* calls in
@@ -676,52 +629,6 @@ def validate_test_evidence(agent_output: str, pipeline_id: str = "") -> bool:  #
                 _shutil.rmtree(tmp_root, ignore_errors=True)
             except Exception:
                 pass
-
-
-def validate_harness_evidence(submitted_files: List[str]) -> bool:
-    """제출된 .py 파일에 py_compile + (tests/ 존재 시) pytest 실행. 모두 통과해야 True."""
-    py_files = [
-        f for f in submitted_files
-        if f.strip().endswith(".py") and Path(f.strip()).exists()
-    ]
-
-    if not py_files:
-        return True
-
-    for f in py_files:
-        result = subprocess.run(
-            [sys.executable, "-m", "py_compile", f.strip()],
-            capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            print(RED(f"[HARNESS GATE] Syntax error: {f}"))
-            print(DIM(result.stderr[:300]))
-            return False
-
-    print(GREEN(f"[HARNESS GATE] py_compile 통과: {len(py_files)}개 파일"))
-
-    # pytest 실행 — py_files가 있으면 tests/ 디렉토리 필수
-    tests_dir = BASE_DIR / "tests"
-    if not tests_dir.exists():
-        print(DIM("[HARNESS GATE] tests/ 디렉토리 없음 — py_compile 통과만으로 검증 완료"))
-        return True
-
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", str(tests_dir), "-q", "--tb=short"],
-            capture_output=True, text=True, cwd=str(BASE_DIR), timeout=120
-        )
-        if result.returncode != 0:
-            print(RED("[HARNESS GATE] pytest 실패"))
-            print(DIM(result.stdout[-500:]))
-            return False
-        print(GREEN("[HARNESS GATE] pytest 통과"))
-    except subprocess.TimeoutExpired:
-        print(RED("[HARNESS GATE] pytest timeout (120초)"))
-        return False
-
-    return True
-
 
 def _strip_xml_brackets(tag: str) -> str:
     """'<qa_report>' → 'qa_report'. 시작/종료 마크 모두 제거."""
@@ -1538,17 +1445,6 @@ def _validate_dev_scope_manifest(
         },
     }
 
-
-def _module_target_files_from_plan(state: Dict[str, Any], mt_id: str) -> List[str]:
-    atomic_plan = state.get("atomic_plan")
-    if not isinstance(atomic_plan, dict):
-        _die("[MODULE GATE] PM atomic_plan missing; complete PM first")
-    for item in atomic_plan.get("micro_tasks", []):
-        if isinstance(item, dict) and str(item.get("id")) == mt_id:
-            return [str(path) for path in item.get("target_files", []) if str(path).strip()]
-    _die(f"[MODULE GATE] unknown micro_task id: {mt_id}")
-
-
 def _module_task_from_plan(state: Dict[str, Any], mt_id: str) -> Dict[str, Any]:
     atomic_plan = state.get("atomic_plan")
     if not isinstance(atomic_plan, dict):
@@ -1862,7 +1758,6 @@ OPENAI_ADVISORY_MODEL = "gpt-5.5"
 BASE_DIR   = Path(__file__).resolve().parent
 STATE_FILE = BASE_DIR / "pipeline_state.json"
 HISTORY_DIR = BASE_DIR / "pipeline_history"
-TEST_RESULTS_FILE = BASE_DIR / "test_results.jsonl"
 CONTRACTS_DIR = BASE_DIR / "pipeline_contracts"
 PIPELINE_CI_DIR = BASE_DIR / ".pipeline"
 PHASE_ATTESTATION_REQUEST = PIPELINE_CI_DIR / "phase_attestation_request.json"
@@ -1891,36 +1786,6 @@ PHASE_LABELS = {
     "harness":   "Phase 7 - External Gates (Acceptance)",
     "architect": "Phase 8 - Architect (RCA)",
 }
-
-
-def _dedupe_test_results_jsonl() -> Optional[str]:
-    """Keep the latest JSONL result per id after Harness writes its record."""
-    if not TEST_RESULTS_FILE.exists():
-        return None
-    try:
-        raw_lines = [
-            line for line in TEST_RESULTS_FILE.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-        seen: Dict[str, Dict[str, Any]] = {}
-        for line in raw_lines:
-            item = json.loads(line)
-            if not isinstance(item, dict):
-                return "skipped: non-object JSONL record found"
-            seen[str(item.get("id", ""))] = item
-        cleaned = list(seen.values())
-        if len(cleaned) == len(raw_lines):
-            return f"{len(raw_lines)} rows, no duplicates"
-        tmp = TEST_RESULTS_FILE.with_suffix(".jsonl.tmp")
-        tmp.write_text(
-            "\n".join(json.dumps(item, ensure_ascii=False) for item in cleaned) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(tmp, TEST_RESULTS_FILE)
-        return f"{len(raw_lines)} -> {len(cleaned)} rows, removed {len(raw_lines) - len(cleaned)} duplicates"
-    except Exception as exc:
-        return f"skipped: {exc}"
-
 
 # gate_rules[phase] = list of (required_phase, required_status_or_list)
 GATE_RULES: Dict[str, List[Tuple[str, Any]]] = {
@@ -2106,6 +1971,8 @@ def _new_execution_profile(mode: str = "STANDARD") -> Dict[str, Any]:
         "product_code_write_allowed": True,
         "phase_ci_mode": "per_phase",
         "repair_mode": "standard",
+        "risk_review_required": False,
+        "risk_categories": [],
         "declared_at": None,
         "escalated_at": None,
         "escalation_reason": None,
@@ -3609,9 +3476,9 @@ def cmd_qa(args: argparse.Namespace) -> None:
         _die("--result 는 PASS 또는 FAIL 이어야 합니다.")
 
     # ── MT-2: QA numeric_score 기록 강제 (IMP-20260506-A064) ────────────────
-    # --numeric-score: QA가 산출한 수치 점수(0~120 정수).
+    # --numeric-score: QA가 산출한 수치 점수(0~QA_MAX_SCORE 정수).
     # PASS/FAIL 공통 hard gate: --numeric-score 필수
-    # PASS 시: 96점(120점 만점의 80%) 이상 추가 요건.
+    # PASS 시: QA_PASS_THRESHOLD점(QA_MAX_SCORE의 80%) 이상 추가 요건.
     # FAIL 시: 점수 하한 없음. 이 값은 QA 하한선과 Circuit Breaker 추적용이며
     # Phase 7 COMPLETE 판정이나 external gate를 대체하지 않는다.
     numeric_score_raw: Optional[str] = getattr(args, "numeric_score", None)
@@ -3619,19 +3486,19 @@ def cmd_qa(args: argparse.Namespace) -> None:
     if numeric_score_raw is None:
         _die(
             "\n[QA NUMERIC GATE] --numeric-score 필수 (PASS/FAIL 공통).\n"
-            "  qa-agent는 <numeric_score> 블록을 출력하고 0~120 점수를 반드시 제출해야 합니다.\n"
+            f"  qa-agent는 <numeric_score> 블록을 출력하고 0~{QA_MAX_SCORE} 점수를 반드시 제출해야 합니다.\n"
             "  예: python pipeline.py qa --result FAIL --numeric-score 60 --failure-sig \"PD:abc123\"\n"
         )
     if numeric_score_raw is not None:
         try:
             numeric_score = int(numeric_score_raw)
         except (ValueError, TypeError):
-            _die("--numeric-score 는 0~120 정수여야 합니다.")
-        if not (0 <= numeric_score <= 120):
-            _die("--numeric-score 범위 오류: 0~120 이어야 합니다.")
-        if result == "PASS" and numeric_score < 96:  # 80% of 120 = 96
+            _die(f"--numeric-score 는 0~{QA_MAX_SCORE} 정수여야 합니다.")
+        if not (0 <= numeric_score <= QA_MAX_SCORE):
+            _die(f"--numeric-score 범위 오류: 0~{QA_MAX_SCORE} 이어야 합니다.")
+        if result == "PASS" and numeric_score < QA_PASS_THRESHOLD:
             print(RED(
-                f"\n[QA NUMERIC GATE] PASS 기록 거부 — numeric_score={numeric_score} < 96 (80% of 120)"
+                f"\n[QA NUMERIC GATE] PASS 기록 거부 — numeric_score={numeric_score} < {QA_PASS_THRESHOLD} ({int(QA_PASS_RATIO * 100)}% of {QA_MAX_SCORE})"
             ))
             print(RED("  QA numeric_verdict가 FAIL이면 --result FAIL로 기록하세요. 최종 COMPLETE는 external gates가 결정합니다.\n"))
             sys.exit(1)
@@ -3740,7 +3607,7 @@ def cmd_qa(args: argparse.Namespace) -> None:
     print(f"\n{msg}{branch_tag}")
     if numeric_score is not None:
         score_color = GREEN if (result == "PASS") else RED
-        print(score_color(f"  numeric_score={numeric_score}/120"))
+        print(score_color(f"  numeric_score={numeric_score}/{QA_MAX_SCORE}"))
     print(f"\n  다음: {YELLOW(next_cmd)}\n")
 
 
@@ -4347,16 +4214,6 @@ def _write_acceptance_summary(path: Path, contract: Dict[str, Any], test_set: Di
         lines.extend(f"- {item}" for item in ready["warnings"])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-
-def _load_contract_pair(pid: str) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Path]]:
-    from core.contracts import load_json
-
-    paths = _contract_paths(pid)
-    contract = load_json(paths["contract"])
-    test_set = load_json(paths["test_set"])
-    return contract, test_set, paths
-
-
 def _parse_contract_json_arg(raw: str, base_dir: Path) -> Any:
     if raw.startswith("@"):
         path = Path(raw[1:])
@@ -4502,18 +4359,25 @@ def _parse_task_complexity(step_plan: ET.Element, micro_tasks: List[Dict[str, An
                 blockers.append(f"{mode} cannot target product code files: {product_targets}")
         if blockers:
             _die("[EXECUTION PROFILE GATE] " + "; ".join(blockers))
+    elif mode == "HIGH_RISK":
+        blockers = []
+        profile["phase_ci_mode"] = "per_phase"
+        profile["repair_mode"] = "conservative"
+        profile["risk_review_required"] = True
+        if not profile["reason"]:
+            blockers.append("HIGH_RISK requires <reason>")
+        risky = [name for name, enabled in profile["risk_flags"].items() if enabled]
+        if not risky:
+            blockers.append("HIGH_RISK requires at least one risk flag")
+        profile["risk_categories"] = sorted(risky)
+        if blockers:
+            _die("[EXECUTION PROFILE GATE] " + "; ".join(blockers))
     return profile
 
 
 def _execution_profile(state: Dict[str, Any]) -> Dict[str, Any]:
     profile = state.get("execution_profile")
     return profile if isinstance(profile, dict) else _new_execution_profile("STANDARD")
-
-
-def _fast_profile_active(state: Dict[str, Any]) -> bool:
-    profile = _execution_profile(state)
-    return profile.get("mode") in FAST_EXECUTION_PROFILES and profile.get("status") == "ACTIVE"
-
 
 def _product_code_write_allowed(state: Dict[str, Any]) -> bool:
     return bool(_execution_profile(state).get("product_code_write_allowed", True))
@@ -5082,14 +4946,11 @@ def cmd_acceptance(args: argparse.Namespace) -> None:
 
     pid, _, _, state = _resolve_pipeline_context(args)
     if args.record:
-        if state is None or state.get("pipeline_id") != pid:
-            _die("acceptance --record requires the active pipeline state")
-        if _external_gates_enabled(state):
-            _die(
-                "[ACCEPTANCE RECORD BLOCKED] 필수 Three-Gate 파이프라인에서는 legacy "
-                "acceptance/harness 점수를 기록할 수 없습니다. Oracle 검증은 "
-                "`pipeline.py gates oracle`, 사용자 최종 결정은 `pipeline.py gates accept`를 사용하세요."
-            )
+        _die(
+            "[ACCEPTANCE RECORD BLOCKED] `acceptance run --record`는 legacy 점수 경로라 더 이상 "
+            "pipeline_state.json을 바꾸지 않습니다. 진짜 Oracle 검증은 `pipeline.py gates oracle`, "
+            "사용자 최종 결정은 `pipeline.py gates accept`를 사용하세요."
+        )
     paths = _contract_paths(pid)
     output_path = Path(args.output) if args.output else paths["result"]
     report = run_acceptance(
@@ -5104,40 +4965,8 @@ def cmd_acceptance(args: argparse.Namespace) -> None:
     print(f"  points: {summary['earned_points']} / {summary['total_points']}")
     print(f"  result: {output_path}")
 
-    if args.record:
-        ok, reason = check_gate(state, "harness")
-        if not ok:
-            _die(f"[GATE BLOCKED] {reason}")
-        verdict = str(summary["verdict"])
-        state["phases"]["harness"]["status"] = verdict
-        state["phases"]["harness"]["completed_at"] = _now()
-        state["phases"]["harness"]["evidence"] = f"acceptance_score={summary['score']}"
-        state["phases"]["harness"]["report_file"] = str(output_path)
-        state["current_phase"] = "architect"
-        if verdict == "FAIL":
-            state["harness_fail_count"] = int(state.get("harness_fail_count", 0)) + 1
-            if state["harness_fail_count"] >= 3:
-                state["terminal_state"] = "FAILED"
-        else:
-            state["harness_fail_count"] = 0
-        _log_event(state, f"acceptance {verdict} score={summary['score']}")
-        _record_snapshot(state, "harness", None)
-        _save(state)
-        with TEST_RESULTS_FILE.open("a", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "id": pid,
-                "framework": "ACCEPTANCE_V2",
-                "percentage": summary["score"],
-                "verdict": verdict,
-                "score": summary["earned_points"],
-                "max_score": summary["total_points"],
-                "result_file": str(output_path),
-            }, ensure_ascii=False) + "\n")
-        print(GREEN("  recorded to pipeline_state.json"))
-        print(f"  next: {YELLOW('python pipeline.py check --phase architect')}\n")
-    else:
-        print("  not recorded; add --record to update Phase 7 diagnostic evidence")
-        print()
+    print("  diagnostic only; pipeline completion is recorded by external gates")
+    print()
 
     sys.exit(0 if summary["verdict"] == "PASS" else 1)
 
@@ -7395,7 +7224,7 @@ def build_parser() -> argparse.ArgumentParser:
                       help="브랜치 ID (A-Z 대문자 1글자). 지정 시 브랜치 state 파일 사용.")
     # MT-2: QA numeric_score 기록 강제 (IMP-20260506-A064)
     p_qa.add_argument("--numeric-score", default=None, metavar="SCORE",
-                      help="QA 중간 hard-gate 값 0~120. PASS 시 96점 이상 필수; 최종 COMPLETE 점수가 아님.")
+                      help=f"QA 중간 hard-gate 값 0~{QA_MAX_SCORE}. PASS 시 {QA_PASS_THRESHOLD}점 이상 필수; 최종 COMPLETE 점수가 아님.")
     # MT-3: Circuit Breaker failure_signature 추적 (IMP-20260506-A064)
     p_qa.add_argument("--failure-sig", default=None, metavar="SIG",
                       help="QA FAIL 시 <failure_signature>[category]:[hash]</failure_signature> 값. "

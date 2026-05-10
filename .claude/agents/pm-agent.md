@@ -43,6 +43,11 @@ old phase requests from polluting later runs, so PM must force-add them on the
 active phase branch with `git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence`.
 If those paths are not included in the PR commit, do not claim phase attestation is ready.
 
+Round 2 is mandatory after every Round 1. If Round 1 did not ask the user a
+question, the Round 2 prompt must include `user_response: NO_ASKUSER_REQUIRED`.
+Round 2 manages downstream agents and Pipeline Manager recording, but it must
+not author Dev/QA/SEC/Build reports or create receipt tokens on their behalf.
+
 Before Dev starts, PM must produce and freeze:
 - `pipeline_contracts/[pipeline_id]/task_contract.json`
 - `pipeline_contracts/[pipeline_id]/test_set.json`
@@ -132,7 +137,7 @@ Choose the profile conservatively:
 - `FAST_ANALYSIS`: log/result inspection or report writing. Product code edits are forbidden.
 - `FAST_SINGLE_CODE`: very small code change, at most 2 files, at most 2 functions, expected 80 changed lines or fewer.
 - `STANDARD`: default when the task is not clearly simple.
-- `HIGH_RISK`: deletion, file move, auth/secret, external API, protocol, build/deploy, core parser, DB/migration, or new dependency risk.
+- `HIGH_RISK`: deletion, file move, auth/secret, external API, protocol, build/deploy, core parser, DB/migration, or new dependency risk. It must include a plain reason and at least one true `<risk_flags>` entry; pipeline.py then forces conservative repair and per-phase CI.
 
 Fast Path hard limits:
 
@@ -327,12 +332,14 @@ PM 에이전트는 사용자의 요청을 받으면 **반드시 아래의 순서
 | Phase 1 — PM | (없음 — PM 자신이 실행) | — | step_plan 발행 완료 후 `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id> [--judgment-confirmed]`, `gates prepare-phase --phase pm`, push, `gates phase-ci --phase pm`. 모든 파이프라인에서 `<decomposition_audit>`/`<micro_tasks>` hard gate. | clarification 재발행 |
 | Phase 2 — Dev | `python pipeline.py check --phase dev` exit 0 | `dev-agent` (Tier per category_tags) | 모든 `MT-N`에 대해 `module design -> module dev -> module qa PASS`, 이후 `module integrate PASS`, `<handover>` 수신 → `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>`, Dev phase attestation. 모든 파이프라인에서 PM micro_task 범위 hard gate. | dev 재spawn (최대 2회) |
 | Phase 3 — UI/dev subphase | dev DONE 기록 전후의 **선택적 Dev 보조 단계**. `category_tags`에 `UI` 포함 시에만 spawn. 미포함 시 생략하고 Phase 4(QA) 직행. | `ui-app-agent` (`category_tags`에 `UI` 포함 시에만) | `<handover>` 수신 (UI→QA). pipeline.py 전용 `ui` phase는 없으며 UI 산출물은 dev evidence 또는 QA evidence에 포함. | ui 재spawn |
-| Phase 4 — QA | `python pipeline.py check --phase qa` exit 0 | `qa-agent` | `<qa_report>` 읽고 verdict 판정. PASS → `python pipeline.py qa --result PASS --numeric-score [0~120] --report-file qa_report.xml --agent-run-id <qa_run_id>` → QA phase attestation → Phase 5 / FAIL → `python pipeline.py qa --result FAIL --numeric-score [0~120] --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <qa_run_id>` → dev 재spawn | Circuit Breaker 검사 (아래 참조). **numeric-score 96 미만 시 PASS 기록 거부 (hard gate).** |
+| Phase 4 — QA | `python pipeline.py check --phase qa` exit 0 | `qa-agent` | `<qa_report>` 읽고 verdict 판정. PASS → `python pipeline.py qa --result PASS --numeric-score [0~120] --report-file qa_report.xml --agent-run-id <qa_run_id>` → QA phase attestation → Phase 5 / FAIL → `python pipeline.py qa --result FAIL --numeric-score [0~120] --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <qa_run_id>` → dev 재spawn | Circuit Breaker 검사 (아래 참조). **numeric-score 96/120 미만 시 PASS 기록 거부 (hard gate).** |
 | Phase 5 — SEC | `python pipeline.py check --phase sec` exit 0 | `security-agent` (DB/Network 포함 시) | `<security_audit><risk_level>` 읽기. SAFE → `pipeline.py sec --result PASS --risk LOW` / BLOCK → `--result BLOCK --risk HIGH` (dev 재작업 후 재감사) / 미해당 → `pipeline.py sec --skip` | BLOCK 시 dev 재spawn |
 | Phase 6 — Build | `python pipeline.py check --phase build` exit 0 | `build-agent` | `<build_report><status>` 읽기. SUCCESS → `pipeline.py build --exe "dist/앱.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>` (6-Section XML 검증 hard gate) / N/A → `pipeline.py build --exe "N/A" --skip-reason "meta-task" --agent-run-id <build_run_id>` 실행 (사유에 따라 whitelist 중 선택: "md-only", "meta-task", "streamlit", "power-automate", "no-code", "docs-only") → Build phase attestation. 중간 사용자 확인 금지; 빌드 없음 사유는 최종 ACCEPT 보고서에 표시. | 원인 수정 후 build 재spawn |
 | Phase 7 — External Gates | Build phase attestation PASS 후 자동 진입 | `test-harness-agent`는 진단만 가능 | `pipeline.py gates technical`, `pipeline.py gates oracle`, `pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`, `pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed` 모두 PASS 필요. 사용자에게 묻는 지점은 마지막 accept뿐이며, `harness --score` 완료 경로 금지. | 실패한 gate 경로로 재작업 |
 | Phase 8 — Architect | `python pipeline.py check --phase architect` exit 0 | `prompt-architect-agent` | `<optimization_report>` 읽고 patches 검토 → `pipeline.py architect` 기록 | (재spawn 없음) |
 | Protocol Evolution | Phase 8 report의 `<protocol_evolution_decision><required>true</required>` | 새 IMP 파이프라인 | Phase 9는 자동 실행되지 않는다. 현재 파이프라인을 COMPLETE로 닫은 뒤 별도 IMP로 CLAUDE.md/agent/pipeline 규칙을 수정한다. | 사용자 승인 후 새 pipeline |
+
+Phase 5가 보안 범위가 아니면 Pipeline Manager 기록 단계가 `pipeline.py check --phase sec` exit 0을 확인하고 `pipeline.py sec --skip`을 기록한다. security-agent는 외부 네트워크/DB/인증/비밀값 관련 범위가 있을 때만 spawn한다.
 
 ### Circuit Breaker — Same-Error 2x FAIL Escalation
 
