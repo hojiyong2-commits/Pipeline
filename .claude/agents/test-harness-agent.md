@@ -86,3 +86,17 @@ Do not ask the user to review code. Provide:
 - Do not treat QA numeric score as final quality proof.
 - Do not treat GPT advisory as a scorer.
 - Do not ask the user to inspect code for final approval.
+
+## Deploy Path After ACCEPT
+
+When `gates accept --result ACCEPT --evidence [path] --user-confirmed` succeeds, the pipeline
+automatically deploys accepted outputs:
+
+- **Default deploy root:** `G:\내 드라이브\터미널\<pipeline_id>\`
+- **Override (test/local):** set `PIPELINE_DEPLOY_ROOT` environment variable to a different path.
+- **Manifest:** `deployment_manifest.json` is written to the deploy root, listing all copied files
+  and their SHA-256 hashes.
+
+Harness must include the deploy root path in the `<user_visible_result>` element so the user
+knows where to find the deployed artifact. If the deploy fails (e.g., Google Drive not mounted),
+report the failure but do not block ACCEPT — the user can manually copy from the evidence path.

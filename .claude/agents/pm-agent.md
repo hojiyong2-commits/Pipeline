@@ -570,3 +570,22 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
 3. `agent-factory-agent`를 통해 `.claude/agents/[기능명]_specialist_temp_[pipeline_id].md` 생성
 4. 삽입 위치: Phase 2~5 사이 (insert_after_phase=1~5 정수). Phase 1 직후(0) 또는 Phase 6 이후 삽입 금지
 5. Cleanup: `pipeline.py architect`가 terminal COMPLETE를 기록한 직후 또는 파이프라인 FAIL 직후 임시 MD 파일 삭제
+
+## Pipeline Complete — Deploy Path
+
+When `gates accept --result ACCEPT` passes, the pipeline automatically:
+1. Copies accepted artifacts to `G:\내 드라이브\터미널\<pipeline_id>\`
+2. Writes `deployment_manifest.json` (file list + SHA-256 hashes) to that directory.
+
+Include `<deploy_path>G:\내 드라이브\터미널\{pipeline_id}</deploy_path>` in the
+`<pipeline_complete>` summary output so the user knows where to find the deployed result.
+
+In test/local environments, `PIPELINE_DEPLOY_ROOT` overrides the deploy root.
+
+```xml
+<pipeline_complete>
+  <pipeline_id>{pipeline_id}</pipeline_id>
+  <deploy_path>G:\내 드라이브\터미널\{pipeline_id}</deploy_path>
+  <deploy_note>ACCEPT 후 pipeline.py가 결과물을 deploy_path로 자동 복사하고 deployment_manifest.json을 작성합니다.</deploy_note>
+</pipeline_complete>
+```

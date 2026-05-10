@@ -128,6 +128,20 @@ PyInstaller 명령어 실행 전 반드시 수행:
 
   <next_required_phase>
     Phase 7: test-harness-agent는 진단만 수행합니다. Technical, Oracle, GitHub CI, User Acceptance gate가 모두 PASS해야 하며 BUILD SUCCESS만으로 파이프라인 완료가 아닙니다.
+
+    Build 직후 phase attestation 시퀀스:
+    1. `python pipeline.py gates prepare-phase --phase build`
+    2. commit/push 수행
+    3. GitHub Actions 자동 검사 대기
+    4. `python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline`
+
+    이 phase attestation이 PASS되어야 Phase 7 외부 게이트(Technical, Oracle, GitHub CI, User Acceptance)로 진행할 수 있습니다.
+
+    Phase 7 사용자 ACCEPT 후 자동 배포:
+    `python pipeline.py gates accept --result ACCEPT --evidence [path] --user-confirmed` 가 PASS되면,
+    pipeline.py가 승인된 결과물을 `G:\내 드라이브\터미널\<pipeline_id>` 경로로 자동 복사하고
+    `deployment_manifest.json`(파일 목록 + SHA-256 해시)을 함께 작성합니다.
+    테스트/로컬 환경에서는 `PIPELINE_DEPLOY_ROOT` 환경 변수로 배포 루트를 재정의할 수 있습니다.
   </next_required_phase>
 </build_report>
 ```

@@ -1,0 +1,7 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<module_design>
+  <mt_id>MT-1</mt_id>
+  <interface_contract>security-agent.md :: ## Integration Context section — read-only by other agents (documentation)</interface_contract>
+  <implementation_plan>Append ## Integration Context section at end of file explaining Option A receipt gate ownership and Incremental Module Gate sequence</implementation_plan>
+  <verification_plan>Grep for agent-run-id or Incremental Module Gate in security-agent.md; confirm existing content unchanged</verification_plan>
+</module_design>

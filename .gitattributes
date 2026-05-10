@@ -3,3 +3,4 @@
 # in the phase attestation CI step. JSON files are written by _write_json (text mode = CRLF
 # on Windows), so autocrlf delivers CRLF to CI and the stored CRLF hash still matches.
 *.xml text eol=lf
+*.md text eol=lf
