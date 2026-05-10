@@ -16,12 +16,15 @@ class CodexTaskHookTests(unittest.TestCase):
         text = skill.read_text(encoding="utf-8")
 
         self.assertIn("Three-Gate", text)
+        self.assertIn("No Shortcut Rule", text)
         self.assertIn("Option A phase attestation", text)
         self.assertIn("Incremental Module Gate", text)
+        self.assertIn("gpt-5.5", text)
         self.assertIn("pm_planner", text)
         self.assertIn("pipeline_manager", text)
         self.assertIn("manager_handoff.xml", text)
         self.assertIn("anti_gaming_read", text)
+        self.assertIn("Architect complete", text)
         self.assertIn("ACCEPT", text)
         self.assertIn("REJECT", text)
 
@@ -39,6 +42,10 @@ class CodexTaskHookTests(unittest.TestCase):
         self.assertEqual(payload["status"], "PASS")
         self.assertIn("pm_planner", "\n".join(payload["quick_start"]))
         self.assertIn("pipeline_manager", "\n".join(payload["quick_start"]))
+        self.assertIn("gpt-5.5", "\n".join(payload["quick_start"]))
+        check_names = {item["name"] for item in payload["checks"]}
+        self.assertIn("skill-token:No Shortcut Rule", check_names)
+        self.assertIn("skill-token:gpt-5.5", check_names)
 
     def test_codex_command_is_registered(self) -> None:
         parser = pipeline.build_parser()

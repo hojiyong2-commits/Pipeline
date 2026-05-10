@@ -1,7 +1,8 @@
 interface:
   display_name: "Pipeline Task"
   short_description: "Run this repo's mandatory task pipeline"
-  default_prompt: "Use $pipeline-task to run this repository task through Three-Gate, phase attestations, and final ACCEPT/REJECT."
+  default_prompt: "Use $pipeline-task with the No Shortcut Rule: run the full Three-Gate pipeline, phase attestations, gpt-5.5 LLM roles, and final ACCEPT/REJECT."
+  required_model: "gpt-5.5"
 
 policy:
   allow_implicit_invocation: true

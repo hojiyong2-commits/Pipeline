@@ -1,6 +1,6 @@
 ---
 name: pipeline-task
-description: Use when Codex is asked to run this repository's mandatory task pipeline, especially prompts starting with /task, ./task, "task", "Task", "파이프라인 돌려", or "task 스킬". Mirrors Claude Code's /task command with Three-Gate, Option A phase attestation, PM role split, Incremental Module Gate, Korean user-facing reports, GitHub Actions, and final ACCEPT/REJECT.
+description: Use when Codex is asked to run this repository's mandatory task pipeline, especially prompts starting with /task, ./task, "task", "Task", "파이프라인 돌려", "task 스킬", or an explicit [$pipeline-task] skill mention. Mirrors Claude Code's /task command with Three-Gate, Option A phase attestation, PM role split, Incremental Module Gate, Korean user-facing reports, GitHub Actions, and final ACCEPT/REJECT. No shortcuts are allowed after an explicit skill call.
 ---
 
 # Pipeline Task Skill
@@ -15,6 +15,7 @@ description: Use when Codex is asked to run this repository's mandatory task pip
 - `./task [작업 내용]`
 - `task 스킬로 [작업 내용]`
 - `파이프라인 돌려서 [작업 내용]`
+- `[$pipeline-task](...) [작업 내용]`
 
 `./task`는 실제 쉘 스크립트 이름이 아니라 Codex에게 이 skill을 쓰라는 호출 문구로 해석한다.
 
@@ -25,6 +26,25 @@ description: Use when Codex is asked to run this repository's mandatory task pip
 3. Incremental Module Gate는 항상 사용한다.
 4. PM은 `pm-planner-agent`와 `pipeline-manager-agent`로 분리한다.
 5. 최종 사용자는 결과물 보고서와 링크만 보고 `ACCEPT` 또는 `REJECT`를 결정한다.
+
+## No Shortcut Rule
+
+사용자가 이 skill을 명시적으로 호출하면 간단한 업무라도 전체 파이프라인을 생략하지 않는다.
+
+- 직접 코드 수정, 직접 빌드, 직접 배포를 먼저 하지 않는다.
+- 기존 파이프라인을 이어서 쓰려면 사용자가 같은 작업의 계속 진행이라고 명시해야 한다. 아니면 새 pipeline id로 시작한다.
+- `PM planner receipt -> pipeline manager receipt -> Incremental Module Gate -> Dev/QA/Build phase attestation -> Technical/Oracle/GitHub CI -> final ACCEPT/REJECT -> Architect complete` 순서를 끝까지 따른다.
+- 사용자가 "빨리", "그냥 수정", "간단히"라고 말해도 shortcut으로 처리하지 않는다. 대신 예상 시간과 줄인 범위를 한국어로 보고한다.
+- `G:\내 드라이브\터미널` 배포는 final `ACCEPT` 이후에만 pipeline 완료 배포로 기록한다. 사용자가 별도 임시 배포를 명시하면 그 결과는 pipeline COMPLETE가 아니다.
+
+## LLM Model Lock
+
+이 skill로 실행되는 모든 LLM 역할은 `gpt-5.5`를 사용한다.
+
+- Codex에서 모델 선택이 가능한 PM planner, pipeline manager, Dev, QA, Security, Build, Harness/diagnostic, Architect 역할은 모두 `gpt-5.5`로 고정한다.
+- `gpt-5.5`를 사용할 수 없으면 조용히 다른 모델로 낮추지 말고 중단한 뒤 사용자에게 보고한다.
+- 이 skill이 명시 호출된 작업에서는 Claude나 다른 LLM으로 최종 검증을 대체하지 않는다.
+- `pipeline.py`, GitHub Actions, pytest, ruff, mypy, bandit, oracle 비교 같은 결정론적 도구는 LLM이 아니므로 그대로 사용한다.
 
 ## 시작 전 확인
 

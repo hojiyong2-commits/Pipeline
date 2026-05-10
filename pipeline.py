@@ -6074,7 +6074,16 @@ def cmd_codex(args: argparse.Namespace) -> None:
     skill_path = BASE_DIR / ".codex/skills/pipeline-task/SKILL.md"
     if skill_path.exists():
         skill_text = skill_path.read_text(encoding="utf-8", errors="replace")
-        for token in ("Three-Gate", "pm_planner", "pipeline_manager", "manager_handoff.xml", "anti_gaming_read"):
+        for token in (
+            "Three-Gate",
+            "No Shortcut Rule",
+            "gpt-5.5",
+            "pm_planner",
+            "pipeline_manager",
+            "manager_handoff.xml",
+            "anti_gaming_read",
+            "Architect complete",
+        ):
             ok = token in skill_text
             checks.append({
                 "name": f"skill-token:{token}",
@@ -6087,6 +6096,7 @@ def cmd_codex(args: argparse.Namespace) -> None:
         "status": status,
         "checks": checks,
         "quick_start": [
+            "Use gpt-5.5 for every LLM role; stop instead of silently downgrading.",
             "python pipeline.py new --type IMP --desc \"...\"",
             "python pipeline.py agent start --phase pm_planner",
             "python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml",
