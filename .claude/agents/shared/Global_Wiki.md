@@ -79,7 +79,7 @@ QA rejects any handover missing `<evidence>` with real file paths.
 ## Pipeline Gate Commands (Quick Reference)
 | Phase | Check | Record |
 |---|---|---|
-| pm | `python pipeline.py check --phase pm` | `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>` + `gates prepare-phase --phase pm` + `gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline` |
+| pm | `python pipeline.py check --phase pm` | `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml` + `gates prepare-phase --phase pm` + `gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline` |
 | module | `python pipeline.py module status` | `module design -> module dev -> module qa` for each `MT-N`, then `module integrate --result PASS --report-file integration_report.xml` |
 | dev | `python pipeline.py check --phase dev` | `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>` + phase attestation |
 | qa | `python pipeline.py check --phase qa` | `python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml --agent-run-id <run_id>` or `--result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <run_id>` |

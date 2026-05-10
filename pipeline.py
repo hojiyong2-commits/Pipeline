@@ -19,9 +19,11 @@
     python pipeline.py new --type BUG --desc "버튼 작동 안 함"
     python pipeline.py status
     python pipeline.py check --phase dev
-    python pipeline.py agent start --phase pm
-    python pipeline.py agent finish --run-id <run_id> --token <token> --output-file step_plan.xml
-    python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>
+    python pipeline.py agent start --phase pm_planner
+    python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml
+    python pipeline.py agent start --phase pipeline_manager
+    python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
+    python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
     python pipeline.py done --phase dev --files "core/ai_engine.py,ui/app.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>
     python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.xml --agent-run-id <run_id>
     python pipeline.py qa --result FAIL --numeric-score 70 --failure-sig "AL:a1b2c3d4" --report-file qa_report.xml --agent-run-id <run_id>
@@ -1245,6 +1247,76 @@ def _read_phase_report_or_die(report_file: Optional[str], label: str) -> Tuple[P
         _die(f"[{label}] --report-file read failed: {exc}")
 
 
+def _validate_manager_handoff_file(
+    report_file: Optional[str],
+    state: Dict[str, Any],
+    *,
+    step_plan_file: str,
+    planner_run_id: str,
+) -> Dict[str, Any]:
+    path, text = _read_phase_report_or_die(report_file, "PM MANAGER GATE")
+
+    forbidden_tags = [
+        "step_plan",
+        "decomposition_audit",
+        "dev_output",
+        "handover",
+        "impact_analysis",
+        "scope_declaration",
+        "qa_report",
+        "security_audit",
+        "build_report",
+        "harness_report",
+        "optimization_report",
+    ]
+    found_forbidden = [tag for tag in forbidden_tags if _extract_xml_element(text, tag) is not None]
+    if found_forbidden:
+        _die(
+            "[PM MANAGER GATE] manager_handoff contains forbidden planning/downstream blocks: "
+            + ", ".join(f"<{tag}>" for tag in found_forbidden)
+        )
+
+    handoff = _extract_xml_element(text, "manager_handoff")
+    if handoff is None:
+        _die("[PM MANAGER GATE] <manager_handoff> XML block is required")
+
+    pid = str(state.get("pipeline_id") or "")
+    actual_pid = _child_text(handoff, "pipeline_id")
+    if actual_pid != pid:
+        _die(f"[PM MANAGER GATE] pipeline_id mismatch: expected {pid}, got {actual_pid or '<missing>'}")
+    sender = _child_text(handoff, "from")
+    if sender != "pipeline-manager-agent":
+        _die("[PM MANAGER GATE] <from> must be pipeline-manager-agent")
+
+    step_path = Path(step_plan_file)
+    if not step_path.is_absolute():
+        step_path = BASE_DIR / step_path
+    expected_sha = _sha256_file(step_path.resolve())
+    actual_sha = _child_text(handoff, "step_plan_sha256")
+    if actual_sha.lower() != expected_sha.lower():
+        _die("[PM MANAGER GATE] step_plan_sha256 does not match the PM planner output")
+    actual_planner = _child_text(handoff, "planner_run_id")
+    if actual_planner != planner_run_id:
+        _die(f"[PM MANAGER GATE] planner_run_id mismatch: expected {planner_run_id}, got {actual_planner or '<missing>'}")
+    if _child_text(handoff, "accepted_for_execution").strip().lower() != "true":
+        _die("[PM MANAGER GATE] <accepted_for_execution>true</accepted_for_execution> is required")
+    if _child_text(handoff, "will_not_modify_step_plan").strip().lower() != "true":
+        _die("[PM MANAGER GATE] <will_not_modify_step_plan>true</will_not_modify_step_plan> is required")
+    next_phase = _child_text(handoff, "next_phase", "dev").strip().lower()
+    if next_phase != "dev":
+        _die("[PM MANAGER GATE] <next_phase> must be dev")
+
+    return {
+        "validated_at": _now(),
+        "report_file": _display_path(path.resolve()),
+        "step_plan_sha256": expected_sha,
+        "planner_run_id": planner_run_id,
+        "accepted_for_execution": True,
+        "will_not_modify_step_plan": True,
+        "next_phase": next_phase,
+    }
+
+
 def _validate_dev_handover_file(report_file: Optional[str], state: Dict[str, Any]) -> Dict[str, Any]:
     path, text = _read_phase_report_or_die(report_file, "DEV HANDOVER GATE")
     handover = _extract_xml_element(text, "handover")
@@ -1764,8 +1836,17 @@ PHASE_ATTESTATION_REQUEST = PIPELINE_CI_DIR / "phase_attestation_request.json"
 PHASE_ATTESTATION_EVIDENCE_DIR = PIPELINE_CI_DIR / "phase_evidence"
 AGENT_RECEIPT_DIR = PIPELINE_CI_DIR / "agent_receipts"
 PHASE_ATTESTATION_PHASES = ("pm", "dev", "qa", "build")
+AGENT_RUN_PHASES = ("pm_planner", "pipeline_manager", "dev", "qa", "build")
+PHASE_RECEIPT_RUN_PHASES = {
+    "pm": "pm_planner",
+    "dev": "dev",
+    "qa": "qa",
+    "build": "build",
+}
 PHASE_AGENT_IDS = {
-    "pm": "pm-agent",
+    "pm": "pm-planner-agent",
+    "pm_planner": "pm-planner-agent",
+    "pipeline_manager": "pipeline-manager-agent",
     "dev": "dev-agent",
     "qa": "qa-agent",
     "build": "build-agent",
@@ -2671,13 +2752,14 @@ def _path_sha_payload(path: Path) -> Dict[str, Any]:
 
 
 def _agent_run_start(state: Dict[str, Any], phase: str, agent_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
-    if phase not in PHASE_ATTESTATION_PHASES:
-        _die(f"agent start supports phases: {', '.join(PHASE_ATTESTATION_PHASES)}", exit_code=2)
+    if phase not in AGENT_RUN_PHASES:
+        _die(f"agent start supports phases: {', '.join(AGENT_RUN_PHASES)}", exit_code=2)
     expected = _expected_agent_id(phase)
     actual_agent = agent_id or expected
     if actual_agent != expected:
         _die(f"[AGENT RECEIPT GATE] {phase} must be executed by {expected}, got {actual_agent!r}")
-    ok, reason = check_gate(state, phase)
+    gate_phase = "pm" if phase in {"pm_planner", "pipeline_manager"} else phase
+    ok, reason = check_gate(state, gate_phase)
     if not ok:
         _die(f"[GATE BLOCKED] {reason}")
     pid = str(state.get("pipeline_id") or "")
@@ -2766,18 +2848,20 @@ def _agent_run_finish(
     return run
 
 
-def _validate_agent_run_for_phase(
+def _validate_agent_run_receipt(
     state: Dict[str, Any],
-    phase: str,
+    run_phase: str,
     run_id: Optional[str],
     report_file: Optional[str],
+    *,
+    consume_phase: str,
 ) -> Optional[Dict[str, Any]]:
     if not _phase_attestations_enabled(state):
         return None
     if not run_id:
         _die(
-            f"[AGENT RECEIPT GATE] {phase} requires --agent-run-id. "
-            f"Start with `python pipeline.py agent start --phase {phase}`, pass the token to {_expected_agent_id(phase)}, "
+            f"[AGENT RECEIPT GATE] {consume_phase} requires a completed {run_phase} receipt. "
+            f"Start with `python pipeline.py agent start --phase {run_phase}`, pass the token to {_expected_agent_id(run_phase)}, "
             "then finish the run before recording the phase."
         )
     run = state.setdefault("agent_runs", {}).get(run_id)
@@ -2785,15 +2869,15 @@ def _validate_agent_run_for_phase(
         _die(f"[AGENT RECEIPT GATE] unknown run_id: {run_id}")
     if run.get("pipeline_id") != state.get("pipeline_id"):
         _die("[AGENT RECEIPT GATE] run pipeline_id mismatch")
-    if run.get("phase") != phase:
-        _die(f"[AGENT RECEIPT GATE] run phase mismatch: expected {phase}, got {run.get('phase')}")
-    expected_agent = _expected_agent_id(phase)
+    if run.get("phase") != run_phase:
+        _die(f"[AGENT RECEIPT GATE] run phase mismatch: expected {run_phase}, got {run.get('phase')}")
+    expected_agent = _expected_agent_id(run_phase)
     if run.get("agent_id") != expected_agent:
-        _die(f"[AGENT RECEIPT GATE] {phase} requires {expected_agent}, got {run.get('agent_id')}")
+        _die(f"[AGENT RECEIPT GATE] {run_phase} requires {expected_agent}, got {run.get('agent_id')}")
     if run.get("status") != "COMPLETED":
         _die(f"[AGENT RECEIPT GATE] run {run_id} must be COMPLETED")
     used = run.get("used_by_phase")
-    if used and used != phase:
+    if used and used != consume_phase:
         _die(f"[AGENT RECEIPT GATE] run {run_id} was already used by {used}")
     if not run.get("receipt_path") or not run.get("receipt_sha256"):
         _die(f"[AGENT RECEIPT GATE] run {run_id} is missing receipt file")
@@ -2811,9 +2895,25 @@ def _validate_agent_run_for_phase(
             _die("[AGENT RECEIPT GATE] --report-file must match the completed agent run output_file")
         if _sha256_file(report_path.resolve()) != run.get("output_sha256"):
             _die("[AGENT RECEIPT GATE] report hash mismatch against agent run output")
-    run["used_by_phase"] = phase
+    run["used_by_phase"] = consume_phase
     run["used_at"] = _now()
     return run
+
+
+def _validate_agent_run_for_phase(
+    state: Dict[str, Any],
+    phase: str,
+    run_id: Optional[str],
+    report_file: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    run_phase = PHASE_RECEIPT_RUN_PHASES.get(phase, phase)
+    return _validate_agent_run_receipt(
+        state,
+        run_phase,
+        run_id,
+        report_file,
+        consume_phase=phase,
+    )
 
 
 def _safe_phase_artifact_name(path: Path) -> str:
@@ -2943,9 +3043,50 @@ def _prepare_phase_attestation_request(state: Dict[str, Any], phase: str) -> Dic
     agent_run["receipt_sha256"] = receipt_copy["sha256"]
     copied.append(receipt_copy)
 
+    manager_run: Optional[Dict[str, Any]] = None
+    if phase == "pm":
+        manager_run_id = phase_info.get("manager_run_id")
+        if not manager_run_id:
+            _die("[PM MANAGER GATE] pm phase cannot prepare CI attestation without manager_run_id")
+        manager = state.setdefault("agent_runs", {}).get(str(manager_run_id))
+        if not isinstance(manager, dict):
+            _die(f"[PM MANAGER GATE] manager run not found for pm: {manager_run_id}")
+        _validate_agent_run_receipt(
+            state,
+            "pipeline_manager",
+            str(manager_run_id),
+            phase_info.get("manager_report_file"),
+            consume_phase="pm_manager",
+        )
+        manager_receipt_path = _resolve_artifact_path(str(manager.get("receipt_path") or ""))
+        if not manager_receipt_path:
+            _die(f"[PM MANAGER GATE] manager receipt file missing for pm: {manager_run_id}")
+        manager_run = {
+            "run_id": manager.get("run_id"),
+            "phase": manager.get("phase"),
+            "agent_id": manager.get("agent_id"),
+            "status": manager.get("status"),
+            "output_file": manager.get("output_file"),
+            "output_sha256": manager.get("output_sha256"),
+            "receipt_path": manager.get("receipt_path"),
+            "receipt_sha256": manager.get("receipt_sha256"),
+            "used_by_phase": manager.get("used_by_phase"),
+        }
+        manager_receipt_copy = _copy_phase_evidence_file(pid, phase, "manager_receipt", str(manager_receipt_path))
+        if not manager_receipt_copy:
+            _die(f"[PM MANAGER GATE] could not copy manager receipt evidence for pm: {manager_run_id}")
+        manager_run["receipt_source_path"] = manager_run["receipt_path"]
+        manager_run["receipt_path"] = manager_receipt_copy["path"]
+        manager_run["receipt_sha256"] = manager_receipt_copy["sha256"]
+        copied.append(manager_receipt_copy)
+
     report = _copy_phase_evidence_file(pid, phase, "report", phase_info.get("report_file"))
     if report:
         copied.append(report)
+    if phase == "pm":
+        manager_report = _copy_phase_evidence_file(pid, phase, "manager_report", phase_info.get("manager_report_file"))
+        if manager_report:
+            copied.append(manager_report)
     if phase == "dev":
         atomic_scope = state.get("atomic_scope", {})
         if isinstance(atomic_scope, dict):
@@ -2981,6 +3122,7 @@ def _prepare_phase_attestation_request(state: Dict[str, Any], phase: str) -> Dic
             "evidence": phase_info.get("evidence"),
         },
         "agent_run": agent_run,
+        "manager_run": manager_run,
         "copied_evidence": copied,
         "workspace_file_checks": workspace_checks,
         "local_only_files": local_only,
@@ -3255,8 +3397,9 @@ def cmd_new(args: argparse.Namespace) -> None:
         except Exception as exc:  # pragma: no cover - defensive, never block pipeline
             print(DIM(f"  대시보드 부트 예외 무시: {exc}"))
 
-    print(f"  다음 단계: {YELLOW('python pipeline.py agent start --phase pm')}")
-    print(f"  PM 완료 기록: {YELLOW('python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>')}")
+    print(f"  다음 단계: {YELLOW('python pipeline.py agent start --phase pm_planner')}")
+    print(f"  PM 인수 기록: {YELLOW('python pipeline.py agent start --phase pipeline_manager')}")
+    print(f"  PM 완료 기록: {YELLOW('python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml')}")
     print()
 
 
@@ -3356,14 +3499,44 @@ def cmd_done(args: argparse.Namespace) -> None:
     # Every PM completion must provide parseable planning XML so Round 1 cannot
     # silently skip decomposition or impersonate Dev/QA output.
     report_file: Optional[str] = getattr(args, "report_file", None)
+    agent_run: Optional[Dict[str, Any]] = None
     if phase == "pm":
         if not report_file:
             _die(
                 "[ATOMIC PLAN GATE] PM done requires "
-                "`python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification ...`"
+                "`python pipeline.py done --phase pm --report-file step_plan.xml --planner-run-id <planner_run_id> "
+                "--manager-run-id <manager_run_id> --manager-report manager_handoff.xml --decomp --clarification ...`"
             )
+        if getattr(args, "agent_run_id", None):
+            _die(
+                "[PM SPLIT GATE] --agent-run-id is no longer accepted for PM. "
+                "Use --planner-run-id and --manager-run-id."
+            )
+        planner_run_id = getattr(args, "planner_run_id", None)
+        manager_run_id = getattr(args, "manager_run_id", None)
+        manager_report = getattr(args, "manager_report", None)
+        planner_run = _validate_agent_run_receipt(
+            state,
+            "pm_planner",
+            planner_run_id,
+            report_file,
+            consume_phase="pm",
+        )
+        manager_run = _validate_agent_run_receipt(
+            state,
+            "pipeline_manager",
+            manager_run_id,
+            manager_report,
+            consume_phase="pm_manager",
+        )
         state["atomic_plan"] = _validate_pm_step_plan_file(report_file, state)
         state["execution_profile"] = state["atomic_plan"].get("execution_profile") or _new_execution_profile("STANDARD")
+        state["pm_manager_handoff"] = _validate_manager_handoff_file(
+            manager_report,
+            state,
+            step_plan_file=report_file,
+            planner_run_id=str(planner_run_id),
+        )
         if state["atomic_plan"]["audit_result"] == "AMBIGUOUS" and not judgment_confirmed:
             _die(
                 "[ATOMIC PLAN GATE] AMBIGUOUS decomposition requires --judgment-confirmed "
@@ -3382,6 +3555,10 @@ def cmd_done(args: argparse.Namespace) -> None:
             f"  [EXECUTION PROFILE] {profile.get('mode')} "
             f"product_code_write_allowed={profile.get('product_code_write_allowed')}"
         ))
+        agent_run = planner_run
+        state["phases"]["pm"]["manager_run_id"] = manager_run["run_id"]
+        state["phases"]["pm"]["manager_agent_id"] = manager_run["agent_id"]
+        state["phases"]["pm"]["manager_report_file"] = manager_report
 
     evidence = args.files if hasattr(args, "files") and args.files else None
 
@@ -3424,12 +3601,13 @@ def cmd_done(args: argparse.Namespace) -> None:
             print(RED("dev-agent가 실제로 파일을 작성한 후 다시 실행하세요.\n"))
             sys.exit(1)
 
-    agent_run = _validate_agent_run_for_phase(
-        state,
-        phase,
-        getattr(args, "agent_run_id", None),
-        report_file,
-    )
+    if phase != "pm":
+        agent_run = _validate_agent_run_for_phase(
+            state,
+            phase,
+            getattr(args, "agent_run_id", None),
+            report_file,
+        )
 
     state["phases"][phase]["status"]       = "DONE"
     state["phases"][phase]["completed_at"] = _now()
@@ -4095,9 +4273,9 @@ def cmd_interface(args: argparse.Namespace) -> None:
     # phase 별 최소 인터페이스 사양 (에이전트가 즉시 호출 가능한 명령어)
     PHASE_INTERFACE: Dict[str, Dict[str, Any]] = {
         "pm": {
-            "agent": "pm-agent",
-            "next_cmd": 'python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap [--judgment-confirmed]',
-            "required_xml": ["<decomposition_audit>", "<step_plan>", "<design_confirmation>", "<micro_tasks>"],
+            "agent": "pm-planner-agent + pipeline-manager-agent",
+            "next_cmd": 'python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml [--judgment-confirmed]',
+            "required_xml": ["<decomposition_audit>", "<step_plan>", "<design_confirmation>", "<micro_tasks>", "<manager_handoff>"],
         },
         "dev": {
             "agent": "dev-agent",
@@ -5499,8 +5677,9 @@ def _validate_github_phase_attestation(
     if not isinstance(agent_run, dict):
         blockers.append("request.agent_run receipt is required")
     else:
-        expected_agent = _expected_agent_id(phase)
-        if agent_run.get("phase") != phase:
+        expected_run_phase = PHASE_RECEIPT_RUN_PHASES.get(phase, phase)
+        expected_agent = _expected_agent_id(expected_run_phase)
+        if agent_run.get("phase") != expected_run_phase:
             blockers.append("request.agent_run phase mismatch")
         if agent_run.get("agent_id") != expected_agent:
             blockers.append(f"request.agent_run agent_id must be {expected_agent}")
@@ -5508,6 +5687,19 @@ def _validate_github_phase_attestation(
             blockers.append("request.agent_run status must be COMPLETED")
         if agent_run.get("used_by_phase") != phase:
             blockers.append("request.agent_run must be consumed by the attested phase")
+    if phase == "pm":
+        manager_run = request.get("manager_run")
+        if not isinstance(manager_run, dict):
+            blockers.append("request.manager_run receipt is required for pm")
+        else:
+            if manager_run.get("phase") != "pipeline_manager":
+                blockers.append("request.manager_run phase must be pipeline_manager")
+            if manager_run.get("agent_id") != _expected_agent_id("pipeline_manager"):
+                blockers.append("request.manager_run agent_id must be pipeline-manager-agent")
+            if manager_run.get("status") != "COMPLETED":
+                blockers.append("request.manager_run status must be COMPLETED")
+            if manager_run.get("used_by_phase") != "pm_manager":
+                blockers.append("request.manager_run must be consumed by pm_manager")
     if isinstance(request, dict) and request.get("local_only_files"):
         warnings.append("phase request included local-only files that GitHub Actions could not re-read")
     return {
@@ -5839,6 +6031,83 @@ def cmd_outputs(args: argparse.Namespace) -> None:
         }, ensure_ascii=False, indent=2))
         return
     _die(f"unknown outputs action: {action}", exit_code=2)
+
+
+def cmd_codex(args: argparse.Namespace) -> None:
+    """Codex compatibility hooks for running the same mandatory pipeline."""
+    action = args.codex_action
+    if action != "doctor":
+        _die(f"unknown codex action: {action}", exit_code=2)
+
+    required_files = [
+        "pipeline.py",
+        "CLAUDE.md",
+        ".claude/commands/task.md",
+        ".claude/agents/pm-planner-agent.md",
+        ".claude/agents/pipeline-manager-agent.md",
+        ".codex/skills/pipeline-task/SKILL.md",
+    ]
+    checks: List[Dict[str, Any]] = []
+
+    for rel in required_files:
+        path = BASE_DIR / rel
+        checks.append({
+            "name": f"file:{rel}",
+            "status": "PASS" if path.exists() else "FAIL",
+            "message": "exists" if path.exists() else "missing",
+        })
+
+    phase_checks = [
+        ("pm_planner phase", "pm_planner" in AGENT_RUN_PHASES),
+        ("pipeline_manager phase", "pipeline_manager" in AGENT_RUN_PHASES),
+        ("pm planner agent id", PHASE_AGENT_IDS.get("pm_planner") == "pm-planner-agent"),
+        ("pipeline manager agent id", PHASE_AGENT_IDS.get("pipeline_manager") == "pipeline-manager-agent"),
+        ("pm receipt run phase", PHASE_RECEIPT_RUN_PHASES.get("pm") == "pm_planner"),
+    ]
+    for name, ok in phase_checks:
+        checks.append({
+            "name": name,
+            "status": "PASS" if ok else "FAIL",
+            "message": "ok" if ok else "not configured",
+        })
+
+    skill_path = BASE_DIR / ".codex/skills/pipeline-task/SKILL.md"
+    if skill_path.exists():
+        skill_text = skill_path.read_text(encoding="utf-8", errors="replace")
+        for token in ("Three-Gate", "pm_planner", "pipeline_manager", "manager_handoff.xml"):
+            ok = token in skill_text
+            checks.append({
+                "name": f"skill-token:{token}",
+                "status": "PASS" if ok else "FAIL",
+                "message": "present" if ok else "missing",
+            })
+
+    status = "PASS" if all(item["status"] == "PASS" for item in checks) else "FAIL"
+    payload = {
+        "status": status,
+        "checks": checks,
+        "quick_start": [
+            "python pipeline.py new --type IMP --desc \"...\"",
+            "python pipeline.py agent start --phase pm_planner",
+            "python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml",
+            "python pipeline.py agent start --phase pipeline_manager",
+            "python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml",
+            "python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml",
+        ],
+    }
+
+    if getattr(args, "json", False):
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        label = GREEN("[CODEX DOCTOR PASS]") if status == "PASS" else RED("[CODEX DOCTOR FAIL]")
+        print(label)
+        for item in checks:
+            mark = "OK" if item["status"] == "PASS" else "FAIL"
+            print(f"  {mark} {item['name']}: {item['message']}")
+        print("\nCodex에서 시작할 때는 `/task` 문자열 대신 `.codex/skills/pipeline-task/SKILL.md` 지침을 먼저 읽고, 위 quick_start 순서를 따르세요.")
+
+    if status != "PASS":
+        sys.exit(1)
 
 
 def _set_external_gate(
@@ -7212,7 +7481,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="[dev 전용] 모든 파이프라인에서 필수인 scope_manifest.json 경로")
 
     p_done.add_argument("--agent-run-id", default=None,
-                        help="Option A: completed agent run receipt id for pm/dev phase submission")
+                        help="[dev 전용] Option A completed dev-agent run receipt id")
+    p_done.add_argument("--planner-run-id", default=None,
+                        help="[pm 전용] completed pm-planner-agent run receipt id")
+    p_done.add_argument("--manager-run-id", default=None,
+                        help="[pm 전용] completed pipeline-manager-agent run receipt id")
+    p_done.add_argument("--manager-report", default=None,
+                        help="[pm 전용] manager_handoff.xml path from pipeline-manager-agent")
 
     # qa
     p_qa = sub.add_parser("qa", help="QA 결과 기록")
@@ -7270,7 +7545,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_agent = sub.add_parser("agent", help="Start/finish trusted per-phase agent run receipts")
     agsub = p_agent.add_subparsers(dest="agent_action", required=True)
     p_agent_start = agsub.add_parser("start", help="Start an agent run and print one-time token")
-    p_agent_start.add_argument("--phase", required=True, choices=list(PHASE_ATTESTATION_PHASES))
+    p_agent_start.add_argument("--phase", required=True, choices=list(AGENT_RUN_PHASES))
     p_agent_start.add_argument("--agent-id", default=None, help="Defaults to the required agent for the phase")
     p_agent_finish = agsub.add_parser("finish", help="Finish an agent run and write receipt")
     p_agent_finish.add_argument("--run-id", required=True)
@@ -7293,6 +7568,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_outputs_add.add_argument("--no-copy", action="store_true", default=False,
                                help="Keep the original file path instead of copying to pipeline_outputs/<pipeline_id>/")
     osub.add_parser("status", help="Show registered user-visible outputs")
+
+    # Codex compatibility hooks
+    p_codex = sub.add_parser("codex", help="Codex compatibility checks for the mandatory pipeline")
+    codex_sub = p_codex.add_subparsers(dest="codex_action", required=True)
+    p_codex_doctor = codex_sub.add_parser("doctor", help="Check whether Codex can use the pipeline task hook")
+    p_codex_doctor.add_argument("--json", action="store_true", default=False)
 
     # harness
     p_harness = sub.add_parser("harness", help="Legacy harness diagnostic 기록. 현재 /Task 완료 경로에서는 차단됨")
@@ -7565,6 +7846,7 @@ COMMAND_MAP = {
     "github":               cmd_github,
     "agent":                cmd_agent,
     "outputs":              cmd_outputs,
+    "codex":                cmd_codex,
     "architect":            cmd_architect,
     "status":               cmd_status,
     "interface":            cmd_interface,
