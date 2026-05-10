@@ -1,6 +1,6 @@
 ---
 name: pipeline-task
-description: Use when Codex is asked to run or continue this repository's mandatory /Task-style pipeline. Mirrors the Claude Code task command with Three-Gate, Option A phase attestation, PM role split, and Incremental Module Gate.
+description: Use when Codex is asked to run this repository's mandatory task pipeline, especially prompts starting with /task, ./task, "task", "Task", "파이프라인 돌려", or "task 스킬". Mirrors Claude Code's /task command with Three-Gate, Option A phase attestation, PM role split, Incremental Module Gate, Korean user-facing reports, GitHub Actions, and final ACCEPT/REJECT.
 ---
 
 # Pipeline Task Skill
@@ -8,6 +8,15 @@ description: Use when Codex is asked to run or continue this repository's mandat
 ## 목적
 
 이 저장소에서 Codex가 작업을 맡으면 Claude Code의 `/task`와 같은 파이프라인을 사용한다. Classic mode는 사용하지 않는다.
+
+사용자가 Codex에서 아래처럼 말하면 이 skill을 사용한다.
+
+- `/task [작업 내용]`
+- `./task [작업 내용]`
+- `task 스킬로 [작업 내용]`
+- `파이프라인 돌려서 [작업 내용]`
+
+`./task`는 실제 쉘 스크립트 이름이 아니라 Codex에게 이 skill을 쓰라는 호출 문구로 해석한다.
 
 필수 구조:
 
@@ -26,6 +35,8 @@ python pipeline.py codex doctor
 ```
 
 `PASS`가 아니면 작업을 시작하지 말고 실패 항목을 먼저 고친다.
+
+사용자에게는 첫 응답에서 짧게 말한다: "Codex용 `/task` 파이프라인으로 진행하겠습니다." 이후 진행 설명, 도구 설명, 최종 보고는 쉬운 한국어로 쓴다.
 
 ## 필수 PM 분리 흐름
 
@@ -71,3 +82,7 @@ python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarif
 - `ACCEPT` 또는 `REJECT` 기준
 
 사용자에게 코드를 읽으라고 요구하지 않는다.
+
+## 실패 시 행동
+
+게이트가 실패하면 실패한 게이트 이름, 원인, 사용자가 볼 결과물, 다음 재시도 범위를 짧게 보고한다. 임의로 PASS를 만들거나 점수로 완료를 주장하지 않는다.
