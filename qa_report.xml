@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260510-9F70</pipeline_id>
+  <phase>qa</phase>
+  <agent_run_id>qa-5d629e16d5559dfa</agent_run_id>
+
+  <numeric_score>116</numeric_score>
+  <verdict>PASS</verdict>
+
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+      <blast_radius>WITHIN_SCOPE</blast_radius>
+    </mt>
+    <mt id="MT-2">
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+      <blast_radius>WITHIN_SCOPE</blast_radius>
+    </mt>
+    <mt id="MT-3">
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+      <blast_radius>WITHIN_SCOPE</blast_radius>
+    </mt>
+    <mt id="MT-4">
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+      <blast_radius>WITHIN_SCOPE</blast_radius>
+    </mt>
+  </micro_task_boundary>
+
+  <checks>
+    <check name="syntax">
+      <status>PASS</status>
+      <detail>py_compile OK: email_monitor.py, main.py</detail>
+    </check>
+    <check name="dead_code_removal_MT1">
+      <status>PASS</status>
+      <detail>import re as _re 제거 확인, _re. 참조 없음</detail>
+    </check>
+    <check name="dead_code_removal_MT2">
+      <status>PASS</status>
+      <detail>import threading as _threading 제거, assert callable(start_monitoring) 추가 확인</detail>
+    </check>
+    <check name="dead_code_removal_MT3">
+      <status>PASS</status>
+      <detail>from datetime import datetime as _dt 제거, shutil import 및 shutil.move 사용 확인</detail>
+    </check>
+    <check name="dead_code_removal_MT4">
+      <status>PASS</status>
+      <detail>if False else 제거, _ = app 제거 확인</detail>
+    </check>
+    <check name="scope_boundary">
+      <status>PASS</status>
+      <detail>변경 범위 email_monitor.py, main.py — PM step_plan MT-1~MT-4 범위 내</detail>
+    </check>
+  </checks>
+
+  <failure_signature>none</failure_signature>
+</qa_report>

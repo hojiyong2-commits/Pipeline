@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "IMP-20260510-D44F",
+  "micro_tasks": [
+    {
+      "id": "MT-3",
+      "files": ["po_automation/email_monitor.py", "po_automation/main.py"],
+      "affected_functions": ["email_monitor.scan_past_emails, email_monitor._process_mail_item, email_monitor.OnNewMailEx, main.POAutomationApp._on_start, main.POAutomationApp._save_settings"]
+    }
+  ]
+}

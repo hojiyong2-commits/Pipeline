@@ -1,0 +1,100 @@
+<pm_planner_output>
+<decomposition_audit>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <rationale>ICPartAutomation EXE의 핵심 동작 테스트는 통과했고, 실제 수정 후보는 order_mapper.py 안의 EXE 흐름에서 호출되지 않는 오래된 helper와 entry point 정리에 집중됩니다.</rationale>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>BUG-20260510-98D6</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <task_goal>ICPartAutomation.exe 관련 코드에서 오류와 데드코드를 재점검하고, 실제로 불필요한 구버전 잔재가 있으면 유지보수성을 해치지 않는 범위에서 제거합니다.</task_goal>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 함수명 취향이나 포맷 취향 질문은 묻지 않고, EXE 실행 경로와 테스트 근거가 있는 데드코드 정리만 대상으로 제한했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업은 order_mapper.py의 구버전 잔재 정리 1개 모듈로 작게 진행해도 될까요?</user_facing_question>
+        <evidence>compileall과 pytest 72개가 통과했고, rg 결과 실제 미사용 후보가 order_mapper.py의 _safe_resolve, read_text_with_fallback, _apply_label_via_excel, run으로 모였습니다.</evidence>
+        <why_it_matters>수정 범위를 한 파일로 제한하면 EXE 동작 회귀 위험을 줄이고, 나중에 같은 매핑 로직을 유지보수할 때 읽어야 할 불필요한 코드를 줄일 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>한 파일 데드코드 정리</label>
+            <benefit>실제 EXE 흐름과 테스트에 영향이 작은 구버전 잔재만 제거합니다.</benefit>
+            <cost>더 큰 구조 개선은 다음 작업으로 미뤄져서 이번 변경은 좁게 끝납니다.</cost>
+          </option>
+          <option id="B">
+            <label>전체 구조 재설계</label>
+            <benefit>GUI, 감시기, 매퍼까지 한 번에 더 크게 정리할 수 있습니다.</benefit>
+            <cost>간단 점검 요청에 비해 시간이 길어지고 EXE 회귀 위험이 커집니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 pipeline-task로 명시적으로 재점검과 필요 시 수정을 요청했으므로, 유지보수성 우선 원칙에 따라 추천안 A로 진행합니다.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+  <task_complexity>
+    <execution_profile>FAST_SINGLE_CODE</execution_profile>
+    <reason>단일 Python 파일에서 호출되지 않는 구버전 helper를 제거하는 좁은 변경입니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>70</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+  <oracle_plan>
+    <owner>user</owner>
+    <normal_case>기존 사용자 업무 규칙인 단일 날짜 주문은 Line No를 비워야 한다는 동작을 유지합니다.</normal_case>
+    <edge_case>기존 사용자 업무 규칙인 날짜 2개 이상 주문은 Line No를 반드시 출력해야 한다는 동작을 유지합니다.</edge_case>
+  </oracle_plan>
+  <phase_attestation_plan>
+    <pm>true</pm>
+    <dev>true</dev>
+    <qa>true</qa>
+    <build>true</build>
+  </phase_attestation_plan>
+  <user_acceptance_plan>
+    <result_report>pipeline_outputs/BUG-20260510-98D6/final_report.md</result_report>
+    <deploy_path>G:\내 드라이브\터미널\BUG-20260510-98D6</deploy_path>
+  </user_acceptance_plan>
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>order_mapper.dead_legacy_helpers</affected_function>
+      <target_files>
+        <file>ic_part_src/order_mapper.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>ic_part_src/automation.py::process_event uses read_customer_order_lines, apply_sub_order_suffixes, write_ic_part_zip directly</site>
+        <site>ic_part_src/main.py::main launches App and does not call order_mapper.run</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_safe_resolve|read_text_with_fallback|_apply_label_via_excel|order_mapper.run</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>EXE 실행 경로에서 호출되지 않는 order_mapper.py 구버전 helper와 독립 run entry point를 제거합니다.</change_summary>
+      <line_estimate>70</line_estimate>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+</pm_planner_output>

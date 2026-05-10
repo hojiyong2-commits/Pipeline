@@ -18,6 +18,7 @@ import automation
 from automation import (
     parse_folder_name,
     _sanitize_name_component,
+    _CustomerOrderHandler,
     build_corb_path,
     copy_files_to_corb,
     FolderWatcher,
@@ -135,6 +136,21 @@ class TestFolderWatcherValidation:
     def test_empty_corb_base_map_raises_value_error(self) -> None:
         with pytest.raises(ValueError):
             FolderWatcher("C:/watch", "t.xlsx", {})
+
+    def test_customer_order_handler_identifies_corb_output(self, tmp_path: Path) -> None:
+        corb_root = tmp_path / "CORB"
+        watched_root = tmp_path / "watch"
+        corb_root.mkdir()
+        watched_root.mkdir()
+
+        handler = _CustomerOrderHandler(
+            ic_part_template="template.xlsx",
+            corb_base_map={"SoCal": str(corb_root), "SG": str(tmp_path / "SG"), "AT": str(tmp_path / "AT")},
+            log_callback=None,
+        )
+
+        assert handler._is_corb_output(corb_root / "B123 PO999 X100" / "CustomerOrderLines.xlsx")
+        assert not handler._is_corb_output(watched_root / "CustomerOrderLines.xlsx")
 
 
 # ---------------------------------------------------------------------------
