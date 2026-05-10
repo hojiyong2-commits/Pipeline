@@ -64,11 +64,11 @@ The user-facing language for every pipeline session is Korean. Claude Code, the 
 
 1. `python pipeline.py new --type FEAT|BUG|IMP --desc "..."` → pipeline_id 획득
 2. **Planner:** `python pipeline.py agent start --phase pm_planner` 후 `pm-planner-agent` 호출
-3. pm-planner-agent의 `<step_plan>` + `<pipeline_manager_handoff>ready</pipeline_manager_handoff>` 수신 후 `agent finish --phase pm_planner`
+3. pm-planner-agent의 `<step_plan>` + `<pipeline_manager_handoff>ready</pipeline_manager_handoff>` 수신 후 `agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml`
 4. step_plan에 `<askuser>` 블록 있으면 사용자에게 전달 후 응답 대기
    - `<askuser>` 블록이 없으면 사용자 질문 없이 `user_response: NO_ASKUSER_REQUIRED`로 표시
 5. **Manager:** `python pipeline.py agent start --phase pipeline_manager` 후 `pipeline-manager-agent` 호출
-6. pipeline-manager-agent가 `manager_handoff.xml` 생성 후 `agent finish --phase pipeline_manager`
+6. pipeline-manager-agent가 `manager_handoff.xml` 생성 후 `agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml`
 7. PM 기록은 `done --phase pm --planner-run-id ... --manager-run-id ... --manager-report manager_handoff.xml` 형식으로만 허용
 8. 이후 오케스트레이터는 도구 호출 없이 Pipeline Manager의 최종 출력만 사용자에게 중계
 9. Pipeline Manager가 `<pipeline_complete>` 출력 시 결과 요약 보고

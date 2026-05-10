@@ -36,7 +36,7 @@ Round 1 must not output or simulate downstream agent artifacts:
 python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml [--judgment-confirmed]
 ```
 
-The phase record must use a completed PM receipt, then request GitHub phase attestation:
+The phase record must use both completed planner and manager receipts, then request GitHub phase attestation:
 
 ```bash
 python pipeline.py gates prepare-phase --phase pm
