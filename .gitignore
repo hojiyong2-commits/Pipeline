@@ -80,6 +80,10 @@ _cleanup_archive/
 *.toc
 *.zip
 
+# User-visible pipeline outputs must be available to GitHub acceptance packets.
+!pipeline_outputs/
+!pipeline_outputs/**
+
 # Editor / OS noise
 .vscode/
 .DS_Store

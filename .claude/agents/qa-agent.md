@@ -20,7 +20,7 @@ model: opus
 <!-- CRITICAL: qa-agent는 pipeline.py qa를 직접 실행하지 않습니다. Pipeline Manager가 agent receipt와 <qa_report> XML을 확인한 뒤 기록합니다. -->
 <!-- MT-2/MT-3 (IMP-20260506-A064) 필수 플래그:
      PASS: python pipeline.py qa --result PASS --numeric-score [0~120] --report-file qa_report.xml --agent-run-id <qa_run_id>
-           numeric-score 96 미만(80% of 120) 시 pipeline.py가 PASS 기록 거부 (hard gate)
+           numeric-score 96/120 미만(80%) 시 pipeline.py가 PASS 기록 거부 (hard gate)
      FAIL: python pipeline.py qa --result FAIL --numeric-score [0~120] --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <qa_run_id>
            failure-sig 동일 시그니처 2회 연속 감지 시 RECURRING 경고 + Circuit Breaker 발동 신호 출력
      --numeric-score 값은 PASS/FAIL 모두 0~120 정수만 허용. "N/A", "NA", "PASS", "FAIL", "100%" 같은 문자열 금지.
@@ -156,7 +156,7 @@ After all modules pass, QA must verify `integration_report.xml` before final QA.
 
 ## QA Numeric Scoring (120점 만점)
 
-> **[HARD GATE]** `--numeric-score`는 advisory가 아닙니다. pipeline.py가 96 미만(80% of 120) 시 PASS 기록을 물리적으로 거부합니다. QA agent는 numeric_score를 반드시 `<qa_report>` 내 `<numeric_score>` 블록에 포함하고 pm-agent에게 전달해야 합니다. 누락 시 pipeline.py가 PASS/FAIL 기록 모두 차단합니다. (PASS/FAIL 공통 hard gate) CLI `--numeric-score`는 항상 0~120 정수입니다. 카테고리별 `N/A`는 `<category_check>` 또는 항목별 설명에만 쓰고, 총점 CLI 값으로 `N/A`를 쓰면 안 됩니다.
+> **[HARD GATE]** `--numeric-score`는 advisory가 아닙니다. pipeline.py가 96/120 미만(80%) 시 PASS 기록을 물리적으로 거부합니다. QA agent는 numeric_score를 반드시 `<qa_report>` 내 `<numeric_score>` 블록에 포함하고 pm-agent에게 전달해야 합니다. 누락 시 pipeline.py가 PASS/FAIL 기록 모두 차단합니다. (PASS/FAIL 공통 hard gate) CLI `--numeric-score`는 항상 0~120 정수입니다. 카테고리별 `N/A`는 `<category_check>` 또는 항목별 설명에만 쓰고, 총점 CLI 값으로 `N/A`를 쓰면 안 됩니다.
 
 QA는 이진 게이트(PASS/FAIL)와 **동시에** 수치 채점을 수행합니다. 수치 채점 결과는 `<numeric_score>` 블록으로 `<qa_report>` 내에 포함됩니다.
 
