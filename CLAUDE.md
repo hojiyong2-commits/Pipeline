@@ -145,6 +145,19 @@ copies that receipt into `.pipeline/phase_evidence` so GitHub Actions can verify
 it. Agents must not claim another agent's phase, reuse a run id, or submit a
 phase without the receipt gate.
 
+### Phase Evidence Git Hygiene
+
+Phase attestation evidence is not disposable build output. `.pipeline/phase_evidence/**`
+and `.pipeline/phase_attestation_request.json` must remain visible to git so
+GitHub Actions can verify the exact files that `pipeline.py` hashed locally.
+Do not add `.gitignore` rules that hide `.pipeline/phase_evidence/**`, including
+phase names such as `build` or copied files under `dist`. `.gitattributes` must
+continue to force LF for XML/MD evidence (`*.xml text eol=lf`, `*.md text eol=lf`)
+because Windows CRLF conversion changes SHA-256 values. Any change to
+`.gitignore`, `.gitattributes`, `.github/workflows/**`, `pipeline.py`, or agent
+MD files is a protocol change and must go through the protected PR/CODEOWNERS
+path.
+
 In Option A mode this overrides the older PM Pipeline Manager spawn chain. PM may
 plan and hand off, but PM must not own downstream tokens, must not finish Dev/QA/
 Build receipts, and must not submit phase CI requests for another role. The main
@@ -164,6 +177,11 @@ Claude Code는 사용자에게 승인(ACCEPT)을 묻기 전에 반드시 실제 
 GitHub에서 최종 사용자가 보게 되는 문서는 모두 쉬운 한국어로 작성한다. 대상은 PR 제목/본문, `.github/pull_request_template.md`, GitHub Actions의 **최종 확인 안내** 댓글, `human_acceptance_packet.md`, 사용자에게 전달하는 첨부파일 설명이다. `modified`, `added`, `CI: PASS`, `artifact`, `Actions`처럼 영어 상태값만 던지지 말고 `수정됨`, `새 파일`, `자동 검사: 통과`, `첨부파일`, `자동 검사 결과`처럼 한국어 설명으로 바꾼다. 꼭 필요한 식별자(`tests`, commit SHA, 명령어, ACCEPT/REJECT)는 backtick 안에 두고 바로 옆에 한국어 뜻을 붙인다.
 
 In the mandatory Three-Gate flow, `COMPLETE` is impossible until required phase attestations, Technical, Oracle, GitHub CI, and User Acceptance gates are all PASS. The technical gate is strict by default: missing ruff/mypy/bandit/pytest or missing Python evidence files fail unless `--relaxed-tools` is explicitly used. Oracle audit requires user-source hashes, at least one normal oracle, at least one edge/exception/error oracle, non-empty/non-placeholder expected outputs, and oracle files stored under `tests/oracles/**` so CODEOWNERS can protect the answer key. `--allow-no-oracle` is only for explicitly non-runnable docs/analysis/config work and cannot waive malformed, hashless, agent-sourced, weak, or non-codeowned oracle entries. GPT/OpenAI advisory reviews are optional, non-binding red-team reviews fixed to `gpt-5.5`; API calls happen only when `OPENAI_API_KEY` is present and `ENABLE_GPT_ADVISORY=1`. Unresolved CRITICAL advisory findings block COMPLETE, but GPT never awards PASS/FAIL, never compares oracles, and never replaces user acceptance. If `pipeline.py advisory status` shows `review_count=0` or `api_call_count=0`, advisory was not actually run; agents must not report "GPT advisory CRITICAL findings zero" as if an OpenAI review occurred.
+
+`python pipeline.py gates technical --relaxed-tools` is diagnostic only. It may
+help inspect a machine missing ruff/mypy/bandit/pytest, but it always records a
+non-complete-eligible FAIL and must never be used as the Technical gate for
+COMPLETE.
 
 Expected CLI errors must print `[PIPELINE ERROR]` without raw traceback. Use `python pipeline.py --debug ...` only when debugging pipeline implementation bugs.
 

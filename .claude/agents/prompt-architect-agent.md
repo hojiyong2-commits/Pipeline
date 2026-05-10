@@ -62,6 +62,7 @@ Do not use `test_results.jsonl` or harness scores as a COMPLETE criterion. Old l
 | Dev phase attestation FAIL/PENDING | dev_handover, scope_manifest, changed-file diff | rerun the failing module or Dev phase |
 | QA phase attestation FAIL/PENDING | qa_report, execution evidence | QA rework or Dev fix |
 | Build phase attestation FAIL/PENDING | build_report, artifact path | Build fix and phase-ci rerun |
+| Phase attestation hash mismatch or missing evidence | `.gitattributes` LF rules, `.gitignore` visibility for `.pipeline/phase_evidence/**`, copied evidence SHA-256 | Protocol Evolution IMP for git hygiene, then rerun phase-ci |
 | Module gate FAIL/PENDING | specific `MT-N` design/dev/qa report | rerun only that module |
 | Technical gate FAIL | tool output, versions, exit codes | Dev/build/tooling fix |
 | Oracle gate FAIL | failing oracle case, input/expected hashes, actual output | Dev behavior fix or user-approved oracle correction |

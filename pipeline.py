@@ -2681,11 +2681,26 @@ def _git_check_ignored(path: Path) -> bool:
         return True
     try:
         proc = subprocess.run(
-            ["git", "check-ignore", "-q", str(rel)],
+            ["git", "check-ignore", "-v", str(rel)],
             cwd=str(BASE_DIR),
             check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
-        return proc.returncode == 0
+        if proc.returncode != 0:
+            return False
+        last_match = ""
+        for line in proc.stdout.splitlines():
+            if line.strip():
+                last_match = line
+        if not last_match:
+            return False
+        pattern_part = last_match.split("\t", 1)[0]
+        parts = pattern_part.split(":", 2)
+        pattern = parts[2] if len(parts) == 3 else pattern_part
+        return not pattern.startswith("!")
     except OSError:
         return False
 
@@ -2711,6 +2726,13 @@ def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Option
     dest_name = f"{label}_{_safe_phase_artifact_name(path)}"
     dest = dest_dir / dest_name
     shutil.copy2(path, dest)
+    if _git_check_ignored(dest):
+        _die(
+            "[PHASE EVIDENCE GIT GATE] copied phase evidence is hidden by .gitignore: "
+            f"{_normalize_rel_path(dest)}\n"
+            "  Fix .gitignore so `.pipeline/phase_evidence/**` is explicitly re-included before "
+            "running `pipeline.py gates prepare-phase` again."
+        )
     return {
         "label": label,
         "source": _display_path(path),

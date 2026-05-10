@@ -662,6 +662,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
             state["phases"]["pm"]["agent_run_id"] = run_id
             with mock.patch.object(pipeline, "PHASE_ATTESTATION_REQUEST", request_path), \
                  mock.patch.object(pipeline, "PHASE_ATTESTATION_EVIDENCE_DIR", evidence_dir), \
+                 mock.patch.object(pipeline, "_git_check_ignored", return_value=False), \
                  mock.patch.object(pipeline, "_git_rev_parse", return_value="a" * 40):
                 request = pipeline._prepare_phase_attestation_request(state, "pm")
 
@@ -681,6 +682,58 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 if not copied_path.is_absolute():
                     copied_path = pipeline.BASE_DIR / copied_path
                 self.assertTrue(copied_path.exists())
+
+    def test_phase_evidence_git_hygiene_is_documented_and_unignored(self) -> None:
+        root = Path(__file__).resolve().parent
+        gitignore = (root / ".gitignore").read_text(encoding="utf-8")
+        gitattributes = (root / ".gitattributes").read_text(encoding="utf-8")
+        claude = (root / "CLAUDE.md").read_text(encoding="utf-8")
+        pm = (root / ".claude" / "agents" / "pm-agent.md").read_text(encoding="utf-8")
+        architect = (root / ".claude" / "agents" / "prompt-architect-agent.md").read_text(encoding="utf-8")
+
+        self.assertIn("!.pipeline/phase_attestation_request.json", gitignore)
+        self.assertIn("!.pipeline/phase_evidence/**", gitignore)
+        self.assertIn("!.pipeline/phase_evidence/**/build/**", gitignore)
+        self.assertIn("!.pipeline/phase_evidence/**/dist/**", gitignore)
+        self.assertIn("*.xml text eol=lf", gitattributes)
+        self.assertIn("*.md text eol=lf", gitattributes)
+        self.assertIn("Phase Evidence Git Hygiene", claude)
+        self.assertIn("`.pipeline/phase_evidence/**`", claude)
+        self.assertIn("`.gitattributes` must", claude)
+        self.assertIn(".pipeline/phase_evidence/.../build/...", pm)
+        self.assertIn("Phase attestation hash mismatch or missing evidence", architect)
+
+    def test_copy_phase_evidence_rejects_gitignored_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "step_plan.xml"
+            source.write_text("<step_plan></step_plan>", encoding="utf-8")
+            evidence_dir = root / ".pipeline" / "phase_evidence"
+
+            with mock.patch.object(pipeline, "BASE_DIR", root), \
+                 mock.patch.object(pipeline, "PHASE_ATTESTATION_EVIDENCE_DIR", evidence_dir), \
+                 mock.patch.object(pipeline, "_git_check_ignored", return_value=True):
+                with self.assertRaises(SystemExit) as ctx:
+                    pipeline._copy_phase_evidence_file("TMP-IGNORED", "build", "report", str(source))
+
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_relaxed_tools_and_qa_numeric_score_are_documented_as_hard_gates(self) -> None:
+        root = Path(__file__).resolve().parent
+        claude = (root / "CLAUDE.md").read_text(encoding="utf-8")
+        dev = (root / ".claude" / "agents" / "dev-agent.md").read_text(encoding="utf-8")
+        build = (root / ".claude" / "agents" / "build-agent.md").read_text(encoding="utf-8")
+        qa = (root / ".claude" / "agents" / "qa-agent.md").read_text(encoding="utf-8")
+
+        for text in (claude, dev):
+            self.assertIn("--relaxed-tools", text)
+            self.assertIn("diagnostic only", text)
+            self.assertIn("non-complete-eligible FAIL", text)
+        self.assertIn("진단용", build)
+        self.assertIn("COMPLETE 불가 FAIL", build)
+        self.assertIn('--numeric-score 값은 PASS/FAIL 모두 0~120 정수만 허용', qa)
+        self.assertIn('"N/A", "NA", "PASS", "FAIL", "100%"', qa)
+        self.assertIn("CLI `--numeric-score`는 항상 0~120 정수", qa)
 
     def test_agent_run_receipt_roundtrip_validates_token_and_output(self) -> None:
         state = pipeline._new_state("TMP-AGENT-RUN", "IMP", "sample")

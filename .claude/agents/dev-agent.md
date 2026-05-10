@@ -104,6 +104,15 @@ python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml
 
 If a later module must change a previously passed module's file, return to PM for an updated plan or rerun the affected module gate. Do not silently overwrite a checkpointed module.
 
+## Technical Gate Strictness
+
+Dev must implement code so the strict Technical gate can pass. Do not ask PM,
+Build, Harness, or the user to use `python pipeline.py gates technical --relaxed-tools`
+as a completion path. `--relaxed-tools` is diagnostic only and records a
+non-complete-eligible FAIL; it is useful only to inspect a local machine that is
+missing tools. Real completion requires the default strict run with required
+Python evidence, py_compile, tests when present, and installed tool checks.
+
 ### Pre-Implementation Impact Analysis (필수 출력)
 
 코드 작성 시작 전, `<scope_declaration>` 다음에 아래 `<impact_analysis>` XML을 출력합니다. 이 블록 누락 시 QA가 즉시 FAIL 판정합니다.

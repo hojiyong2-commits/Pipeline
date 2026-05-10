@@ -38,6 +38,13 @@ git push
 python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
 ```
 
+Phase evidence files are first-class CI inputs, not temporary build artifacts.
+Before asking for phase CI, PM must ensure `.pipeline/phase_evidence/**` and
+`.pipeline/phase_attestation_request.json` are included in `git status`/commit
+when they changed. If `.pipeline/phase_evidence/.../build/...` is missing because
+of `.gitignore`, stop and request a Protocol Evolution fix; do not claim the
+phase attestation is ready.
+
 Before Dev starts, PM must produce and freeze:
 - `pipeline_contracts/[pipeline_id]/task_contract.json`
 - `pipeline_contracts/[pipeline_id]/test_set.json`

@@ -137,6 +137,10 @@ PyInstaller 명령어 실행 전 반드시 수행:
 
     이 phase attestation이 PASS되어야 Phase 7 외부 게이트(Technical, Oracle, GitHub CI, User Acceptance)로 진행할 수 있습니다.
 
+    Technical gate는 기본 strict 모드만 COMPLETE 근거가 됩니다.
+    `python pipeline.py gates technical --relaxed-tools`는 진단용이며 항상 COMPLETE 불가 FAIL로 기록됩니다.
+    Build agent는 도구 누락을 우회하기 위해 `--relaxed-tools`를 권고하지 말고, 필요한 도구/증거를 보강하도록 보고해야 합니다.
+
     Phase 7 사용자 ACCEPT 후 자동 배포:
     `python pipeline.py gates accept --result ACCEPT --evidence [path] --user-confirmed` 가 PASS되면,
     pipeline.py가 승인된 결과물을 `G:\내 드라이브\터미널\<pipeline_id>` 경로로 자동 복사하고
