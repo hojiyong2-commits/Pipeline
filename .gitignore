@@ -49,6 +49,18 @@ test_results_v3.jsonl
 logs/
 **/*.log
 
+# GitHub phase attestation evidence must stay visible to git.
+# The broad build/dist ignores above would otherwise hide paths such as:
+# .pipeline/phase_evidence/<pipeline_id>/build/report_build_report.xml
+!.pipeline/
+!.pipeline/phase_attestation_request.json
+!.pipeline/phase_evidence/
+!.pipeline/phase_evidence/**
+!.pipeline/phase_evidence/**/build/
+!.pipeline/phase_evidence/**/build/**
+!.pipeline/phase_evidence/**/dist/
+!.pipeline/phase_evidence/**/dist/**
+
 # Generated harness / run reports
 _build_harness*.py
 harness_output*.xml

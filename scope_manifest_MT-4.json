@@ -1,0 +1,14 @@
+﻿{
+    "pipeline_id":  "IMP-20260510-9BDC",
+    "micro_tasks":  [
+                        {
+                            "id":  "MT-4",
+                            "files":  [
+                                          ".claude/agents/protocol-evolution-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "protocol-evolution-agent.md :: ## CODEOWNERS and PR Review Gate (신규 섹션)"
+                                                   ]
+                        }
+                    ]
+}

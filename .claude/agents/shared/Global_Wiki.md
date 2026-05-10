@@ -1,5 +1,11 @@
 # Global_Wiki.md — Shared Reference for All Agents
 
+## Read First: Mandatory Pipeline
+
+`/Task` always uses Three-Gate + Option A phase attestation + Incremental Module Gate. Classic mode, numeric Harness completion, BUILD+QA final scoring, and `pipeline.py harness --score ...` are not valid completion paths.
+
+Completion requires phase attestations PASS, all `MT-N` module gates PASS, `module integrate` PASS, Technical PASS, Oracle PASS, GitHub CI PASS, and User Acceptance ACCEPT with real result evidence.
+
 ## Python Version (PM-Specified)
 
 PM Agent가 분석하여 프로젝트에 최적인 Python 버전(3.9 또는 3.10)을 지정합니다.
@@ -73,14 +79,16 @@ QA rejects any handover missing `<evidence>` with real file paths.
 ## Pipeline Gate Commands (Quick Reference)
 | Phase | Check | Record |
 |---|---|---|
-| dev | `python pipeline.py check --phase dev` | `python pipeline.py done --phase dev --files "..." --scope-declared` |
-| qa | `python pipeline.py check --phase qa` | `python pipeline.py qa --result PASS --numeric-score N` or `--result FAIL --numeric-score N --failure-sig "[category]:[hash]"` |
+| pm | `python pipeline.py check --phase pm` | `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>` + `gates prepare-phase --phase pm` + `gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline` |
+| module | `python pipeline.py module status` | `module design -> module dev -> module qa` for each `MT-N`, then `module integrate --result PASS --report-file integration_report.xml` |
+| dev | `python pipeline.py check --phase dev` | `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>` + phase attestation |
+| qa | `python pipeline.py check --phase qa` | `python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml --agent-run-id <run_id>` or `--result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <run_id>` |
 | sec | `python pipeline.py check --phase sec` | `python pipeline.py sec --result PASS --risk LOW` or `--skip` |
-| build | `python pipeline.py check --phase build` | `python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml` or `--exe "N/A" --skip-reason "meta-task" --user-confirmed` |
-| harness | `python pipeline.py check --phase harness --user-confirmed` | `python pipeline.py harness --score N --verdict PASS\|FAIL --test-output-file harness_output.xml --user-confirmed` (PASS/FAIL 공통 필수) |
+| build | `python pipeline.py check --phase build` | `python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml --agent-run-id <run_id>` or `--exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <run_id>` + phase attestation |
+| external gates | `python pipeline.py gates status` | `gates technical`, `gates oracle --user-confirmed`, `gates github-ci --repo hojiyong2-commits/Pipeline`, `gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed` |
 
-**`<test_code>` CDATA 권장 (BUG-20260508-F7A8 / BUG-20260509-05AD MT-3 / BUG-20260509-4D25 MT-3 / BUG-20260509-FA5E MT-3 / BUG-20260509-6A4F MT-3 / BUG-20260509-ED9C MT-1 / BUG-20260509-894D MT-2):** harness 제출 시 XML 특수문자는 CDATA 또는 entity escape를 사용한다. `validate_test_evidence()`는 strict unittest evidence gate를 사용한다: 직접 `self.assert*`/`cls.assert*` AST 계수, runner/result-channel 접근 금지 패턴 hard-reject(`__main__`, `atexit`, `inspect`, `os`, `sys.argv`, `sys.modules`, `getattr`, `setattr`, monkeypatch 등), stdin nonce runner의 nonce JSON line 검증. 통과 기준: `astAsserts >= 1` AND 금지 패턴 없음 AND runner nonce 일치 AND `executed_assertions >= 1` AND `testsRun >= 1` AND `failures/errors/skipped/expectedFailures/unexpectedSuccesses == 0`.
-| architect | `python pipeline.py check --phase architect` | `python pipeline.py architect` |
+**Legacy harness diagnostic:** `<test_code>` CDATA/strict unittest evidence rules are retained only for old harness diagnostic regression tests. New `/Task` completion uses external gates and phase/module attestations.
+| architect | `python pipeline.py check --phase architect` | `python pipeline.py architect --report-file architect_report.xml` |
 
 ## `/task` Command — Discovery Gate (코딩 전 필수)
 
@@ -127,16 +135,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 ```
 
-## The 9-Phase Pipeline Loop (실제 실행 순서)
-1. **[PM]** `<step_plan>` 발행 (7대 카테고리 설계, Clarification + Roadmap Gate)
-2. **[Dev]** 코어 로직 구현 및 로그 핸들러 배치 (`<handover>` XML로 QA 인계)
-3. **[UI/App dev subphase]** (해당 시) GUI/CLI 래핑, 비동기 루프 브릿지 적용 → QA 인계. pipeline.py 전용 UI phase 없음.
-4. **[QA]** 7대 카테고리 논리 검증, numeric_score 산출 → PASS/FAIL
+## Mandatory Pipeline Loop (실제 실행 순서)
+1. **[PM]** `<step_plan>` 발행, oracle/test ownership 확정, phase receipt 기록
+2. **[Module Gate]** 각 `MT-N`에 대해 design → dev → qa 순차 PASS
+3. **[Dev]** 최종 handover + `scope_manifest.json` 기록, Dev phase attestation PASS
+4. **[QA]** 논리/범위/실행 증거 검증, QA phase attestation PASS
 5. **[Security]** (DB/네트워크 포함 시) 보안 감사 및 remediation_code 제공
-6. **[Build]** PyInstaller 단일 EXE 빌드 (또는 N/A 기록) → 사용자 Phase 7 진행 확인
-7. **[Harness]** `test_results.jsonl` 기록, QA numeric_score + BUILD 합산 채점
-8. **[Architect]** 로그 기반 RCA, 에이전트 MD 패치 제안
-9. **[Architect Phase 9]** MD 파일 직접 수정 → Phase 7 재채점 의무
+6. **[Build]** PyInstaller 단일 EXE 빌드 또는 N/A 기록, Build phase attestation PASS
+7. **[External Gates]** Technical → Oracle → GitHub CI → User Acceptance
+8. **[Architect]** 외부 게이트/RCA/프로토콜 결함 여부 진단 후 COMPLETE 또는 별도 IMP 권고
 
 ## Tier 2 Pattern Library
 

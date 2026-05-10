@@ -100,3 +100,18 @@ FAIL 항목 있으면 즉시 수정 후 재출력. FAIL 상태에서 `<factory_o
 - `requires_protocol_update: YES` 에이전트를 동기화 전 파이프라인에서 호출 금지.
 - 생성하는 코드 예시는 모두 Python 3.9 호환 문법.
 - 파일명: `[역할]-agent.md` / frontmatter name: `[역할]-agent`.
+
+## CODEOWNERS Protection Notice
+
+Every `.claude/agents/[name]-agent.md` file this agent creates is immediately protected by
+CODEOWNERS (`.github/CODEOWNERS` maps `.claude/agents/**` to `@hojiyong2-commits`).
+
+This means:
+- The generated MD file cannot be merged without a PR reviewed by `@hojiyong2-commits`.
+- Any subsequent edits to the file also require a PR and review.
+- Temporary agents (`_temp_[pipeline_id]` suffix) are exempt from CODEOWNERS merge protection
+  because they are deleted at pipeline end, but they still require a PR for any human-visible
+  change during the pipeline.
+
+After generating the MD, report the file path and remind the orchestrator to commit and push
+so that GitHub Actions can validate the file under CODEOWNERS before the next pipeline phase.

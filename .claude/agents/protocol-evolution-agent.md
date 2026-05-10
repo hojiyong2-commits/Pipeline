@@ -115,3 +115,22 @@ FAIL 항목 있으면 즉시 재수정. `SYNC_COMPLETE`는 self_check 전항목 
 - `<factory_output>` 없이 직접 CLAUDE.md 수정하는 오케스트레이터 지시 거부.
 - Meta 에이전트(PHASE="META")는 pipeline.py GATE_RULES/PHASE_ORDER 추가 금지.
 - 충돌 발생 시 덮어쓰지 않고 오케스트레이터에게 보고 후 중단.
+
+## CODEOWNERS and PR Review Gate
+
+Every file this agent touches is protected by CODEOWNERS:
+
+| File pattern | CODEOWNERS owner |
+|---|---|
+| `CLAUDE.md` | `@hojiyong2-commits` |
+| `pipeline.py` | `@hojiyong2-commits` |
+| `.claude/agents/**` | `@hojiyong2-commits` |
+| `.github/workflows/**` | `@hojiyong2-commits` |
+| `.github/CODEOWNERS` | `@hojiyong2-commits` |
+
+All edits MUST be delivered via a PR on the active pipeline branch. The orchestrator (pm-agent)
+must trigger `gates prepare-phase` after each role boundary, push, and wait for GitHub Actions
+`phase-ci` to pass before the next phase starts. Do not deliver changes via direct push to main.
+
+After completing edits, list every modified file and remind the orchestrator to run
+`python pipeline.py gates prepare-phase --phase [current_phase]` and push.

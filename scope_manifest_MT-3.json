@@ -1,0 +1,14 @@
+﻿{
+    "pipeline_id":  "IMP-20260510-9BDC",
+    "micro_tasks":  [
+                        {
+                            "id":  "MT-3",
+                            "files":  [
+                                          ".claude/agents/agent-factory-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "agent-factory-agent.md :: ## CODEOWNERS Protection Notice (신규 섹션)"
+                                                   ]
+                        }
+                    ]
+}

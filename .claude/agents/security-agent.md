@@ -119,3 +119,15 @@ if not api_key:
 | PA-3 | 민감 데이터 평문 전송 | `body` 필드에 비밀번호/토큰 평문 포함 | Critical |
 
 **sec_required: false 또는 미포함 PA 태스크 처리:** 외부 HTTP 커넥터 없음을 플로우 JSON에서 확인 후 오케스트레이터에게 `pipeline.py sec --skip` 처리 허용 신호를 전달합니다.
+
+## Integration Context
+
+Security phase is entered only after the Incremental Module Gate sequence completes:
+`module design → module dev → module qa PASS → integrate` for each PM micro-task (MT-N).
+Dev's `done --phase dev` must include `--agent-run-id <run_id>` from the Option A agent
+receipt gate. The orchestrator issues `python pipeline.py agent start --phase sec` and passes
+the one-time token only to security-agent. Security-agent returns results; orchestrator calls
+`agent finish` and records `python pipeline.py sec --result ... --agent-run-id <run_id>`.
+
+This agent does not issue agent receipts or call `agent start/finish` itself — the orchestrator
+(via pm-agent) manages the receipt gate. Security-agent's only responsibility is the audit.

@@ -119,18 +119,26 @@ BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런�
     python pipeline.py new --type BUG --desc "버튼 작동 안 함"
     python pipeline.py status
     python pipeline.py check --phase dev
-    python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap
-    python pipeline.py done --phase dev --files "core/ai_engine.py,ui/app.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json
-    python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.xml
-    python pipeline.py qa --result FAIL --numeric-score 70 --failure-sig "AL:a1b2c3d4"
+    python pipeline.py agent start --phase pm
+    python pipeline.py agent finish --run-id <run_id> --token <token> --output-file step_plan.xml
+    python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>
+    python pipeline.py done --phase dev --files "core/ai_engine.py,ui/app.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>
+    python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.xml --agent-run-id <run_id>
+    python pipeline.py qa --result FAIL --numeric-score 70 --failure-sig "AL:a1b2c3d4" --report-file qa_report.xml --agent-run-id <run_id>
     python pipeline.py sec --result PASS --risk LOW
     python pipeline.py sec --skip
-    python pipeline.py build --exe "dist/SmartNotepad.exe" [--report-file dist/build_report.xml]
-    python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed
-    python pipeline.py harness --score 95 --verdict PASS --test-output-file harness_output.xml --user-confirmed
-    python pipeline.py contract init --three-gate
+    python pipeline.py build --exe "dist/SmartNotepad.exe" --report-file dist/build_report.xml --agent-run-id <run_id>
+    python pipeline.py build --exe "N/A" --skip-reason "meta-task" --user-confirmed --agent-run-id <run_id>
+    python pipeline.py contract init
+    python pipeline.py module design --mt-id MT-1 --report-file module_design_MT-1.xml
+    python pipeline.py module dev --mt-id MT-1 --files "core/ai_engine.py" --report-file module_handover_MT-1.xml --scope-manifest scope_manifest_MT-1.json
+    python pipeline.py module qa --mt-id MT-1 --result PASS --report-file module_qa_MT-1.xml
+    python pipeline.py module integrate --result PASS --report-file integration_report.xml
+    python pipeline.py gates prepare-phase --phase pm
+    python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
     python pipeline.py gates technical
     python pipeline.py gates oracle --user-confirmed
+    python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
     python pipeline.py gates accept --result ACCEPT --evidence output.png --user-confirmed
     python pipeline.py advisory status
     python pipeline.py architect --report-file architect_report.xml
@@ -242,11 +250,11 @@ def _validate_harness_evidence_gate(
     """PASS/FAIL 공통 3-gate 검증: Gate A(harness_report ET 파싱) → Gate B(test_code 비어있지 않음) → Gate C(validate_test_evidence 실행).
     실패 시 _die() 호출. 성공 시 반환.
 
-    BUG-20260509-FDBC MT-1: PASS/FAIL 검증 비대칭 해소.
-    - 기존에는 PASS 경로만 Gate C(validate_test_evidence)를 실행하고 FAIL 경로는 Gate B(존재 확인)에서 멈췄다.
-    - 수정 후 FAIL 경로도 동일한 3-gate를 통과해야 한다.
-    - FAIL verdict는 harness_score < 80을 뜻하며, test_code 자체가 실패 코드가 아님.
-      따라서 FAIL 기록 시에도 test_code는 unittest.TestCase + test_* 메서드 + testsRun>=1 필수.
+    Legacy harness diagnostic compatibility:
+    - PASS/FAIL diagnostic records must use the same evidence checks.
+    - FAIL means the diagnostic path found a problem; it is not a completion signal.
+    - New `/Task` completion is controlled by phase/module attestations and external gates,
+      not by harness_score.
 
     Args:
         clean_text: _strip_xml_comments() 처리된 텍스트 (Gate A 입력).
@@ -1015,6 +1023,7 @@ ATOMIC_SNAPSHOT_EXCLUDED_DIRS = {
     "logs",
     "pipeline_contracts",
     "pipeline_history",
+    ".pipeline",
     ".mypy_cache",
     ".ruff_cache",
     ".venv",
@@ -1032,6 +1041,7 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     "qa_report.xml",
     "architect_report.xml",
     "build_report.xml",
+    "integration_report.xml",
     "stop_signal.json",
     "test_results.jsonl",
     "test_results_v3.jsonl",
@@ -1050,6 +1060,10 @@ def _atomic_snapshot_include_path(path: Path) -> bool:
     if name in ATOMIC_SNAPSHOT_EXCLUDED_FILES:
         return False
     if name.startswith("pipeline_state") and name.endswith(".json"):
+        return False
+    if name.startswith("module_") and name.endswith(".xml"):
+        return False
+    if "scope_manifest" in name and name.endswith(".json"):
         return False
     if name.startswith("harness_output") and name.endswith(".xml"):
         return False
@@ -1435,6 +1449,247 @@ def _validate_dev_scope_manifest(
     }
 
 
+def _module_target_files_from_plan(state: Dict[str, Any], mt_id: str) -> List[str]:
+    atomic_plan = state.get("atomic_plan")
+    if not isinstance(atomic_plan, dict):
+        _die("[MODULE GATE] PM atomic_plan missing; complete PM first")
+    for item in atomic_plan.get("micro_tasks", []):
+        if isinstance(item, dict) and str(item.get("id")) == mt_id:
+            return [str(path) for path in item.get("target_files", []) if str(path).strip()]
+    _die(f"[MODULE GATE] unknown micro_task id: {mt_id}")
+
+
+def _module_task_from_plan(state: Dict[str, Any], mt_id: str) -> Dict[str, Any]:
+    atomic_plan = state.get("atomic_plan")
+    if not isinstance(atomic_plan, dict):
+        _die("[MODULE GATE] PM atomic_plan missing; complete PM first")
+    for item in atomic_plan.get("micro_tasks", []):
+        if isinstance(item, dict) and str(item.get("id")) == mt_id:
+            return item
+    _die(f"[MODULE GATE] unknown micro_task id: {mt_id}")
+
+
+def _init_module_gates_from_atomic_plan(state: Dict[str, Any]) -> Dict[str, Any]:
+    state["module_gates"] = _ensure_module_gates(state)
+    atomic_plan = state.get("atomic_plan")
+    if not isinstance(atomic_plan, dict):
+        return state["module_gates"]
+    micro_tasks = [
+        item for item in atomic_plan.get("micro_tasks", [])
+        if isinstance(item, dict) and item.get("id")
+    ]
+    sequence = [str(item["id"]) for item in micro_tasks]
+    existing_modules = state["module_gates"].setdefault("modules", {})
+    modules: Dict[str, Any] = {}
+    for index, item in enumerate(micro_tasks, start=1):
+        mt_id = str(item["id"])
+        previous = existing_modules.get(mt_id, {}) if isinstance(existing_modules, dict) else {}
+        module = {
+            "id": mt_id,
+            "status": "PENDING",
+            "order": index,
+            "target_files": [str(path) for path in item.get("target_files", [])],
+            "affected_function": item.get("affected_function"),
+            "design": _empty_module_step(),
+            "dev": _empty_module_step(),
+            "qa": _empty_module_step(),
+            "checkpoint": None,
+        }
+        if isinstance(previous, dict):
+            module.update(previous)
+            module["order"] = index
+            module["target_files"] = [str(path) for path in item.get("target_files", [])]
+            module["affected_function"] = item.get("affected_function")
+            for step_name in ("design", "dev", "qa"):
+                step = _empty_module_step()
+                if isinstance(previous.get(step_name), dict):
+                    step.update(previous[step_name])
+                module[step_name] = step
+        modules[mt_id] = module
+    state["module_gates"]["enabled"] = True
+    state["module_gates"]["sequence"] = sequence
+    state["module_gates"]["modules"] = modules
+    state["module_gates"]["integration"] = state["module_gates"].get("integration") or _empty_module_step()
+    return state["module_gates"]
+
+
+def _module_gate_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state["module_gates"] = _ensure_module_gates(state)
+    if not state["module_gates"].get("sequence") and isinstance(state.get("atomic_plan"), dict):
+        _init_module_gates_from_atomic_plan(state)
+    return state["module_gates"]
+
+
+def _module_gate_blockers(state: Dict[str, Any]) -> List[str]:
+    gates = _module_gate_state(state)
+    blockers: List[str] = []
+    sequence = gates.get("sequence", [])
+    modules = gates.get("modules", {})
+    if not sequence:
+        blockers.append("PM micro_tasks must initialize module gates")
+        return blockers
+    for mt_id in sequence:
+        module = modules.get(mt_id, {}) if isinstance(modules, dict) else {}
+        if not isinstance(module, dict) or module.get("status") != "PASS":
+            blockers.append(f"{mt_id} module QA must be PASS")
+    integration = gates.get("integration", {})
+    if not isinstance(integration, dict) or integration.get("status") != "PASS":
+        blockers.append("integration module gate must be PASS")
+    return blockers
+
+
+def _require_module_current(state: Dict[str, Any], mt_id: str) -> Dict[str, Any]:
+    gates = _module_gate_state(state)
+    sequence = gates.get("sequence", [])
+    modules = gates.get("modules", {})
+    if mt_id not in sequence:
+        _die(f"[MODULE GATE] unknown micro_task id: {mt_id}")
+    index = sequence.index(mt_id)
+    for prior_id in sequence[:index]:
+        prior = modules.get(prior_id, {}) if isinstance(modules, dict) else {}
+        if not isinstance(prior, dict) or prior.get("status") != "PASS":
+            _die(f"[MODULE GATE] {prior_id} must PASS module QA before {mt_id} can start")
+    for later_id in sequence[index + 1:]:
+        later = modules.get(later_id, {}) if isinstance(modules, dict) else {}
+        if isinstance(later, dict) and later.get("status") in {"DESIGN_DONE", "DEV_DONE", "PASS"}:
+            _die(f"[MODULE GATE] later module {later_id} already advanced before {mt_id}")
+    module = modules.get(mt_id)
+    if not isinstance(module, dict):
+        _die(f"[MODULE GATE] module state missing for {mt_id}")
+    return module
+
+
+def _resolve_workspace_file(raw: str) -> Path:
+    path = Path(str(raw))
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path
+
+
+def _module_checkpoint_for_files(files: List[str]) -> Dict[str, Any]:
+    checked: List[Dict[str, Any]] = []
+    missing: List[str] = []
+    for raw in files:
+        path = _resolve_workspace_file(raw)
+        if not path.exists() or not path.is_file():
+            missing.append(str(raw))
+            continue
+        checked.append(_workspace_check_for_file(path))
+    if missing:
+        _die(f"[MODULE CHECKPOINT] target files missing for checkpoint: {missing}")
+    if not checked:
+        _die("[MODULE CHECKPOINT] no files available for checkpoint")
+    return {
+        "created_at": _now(),
+        "files": checked,
+    }
+
+
+def _validate_module_checkpoints(state: Dict[str, Any]) -> None:
+    gates = _module_gate_state(state)
+    modules = gates.get("modules", {})
+    if not isinstance(modules, dict):
+        return
+    for mt_id, module in modules.items():
+        if not isinstance(module, dict) or module.get("status") != "PASS":
+            continue
+        checkpoint = module.get("checkpoint")
+        if not isinstance(checkpoint, dict):
+            _die(f"[MODULE CHECKPOINT] {mt_id} PASS module has no checkpoint")
+        for item in checkpoint.get("files", []):
+            if not isinstance(item, dict):
+                continue
+            path = _resolve_workspace_file(str(item.get("path") or ""))
+            if not path.exists() or not path.is_file():
+                _die(f"[MODULE CHECKPOINT] {mt_id} checkpoint file missing: {item.get('path')}")
+            actual = _sha256_file(path)
+            expected = str(item.get("sha256") or "")
+            if actual.lower() != expected.lower():
+                _die(f"[MODULE CHECKPOINT] {mt_id} checkpoint changed after PASS: {item.get('path')}")
+
+
+def _validate_module_report_file(
+    report_file: Optional[str],
+    *,
+    label: str,
+    required_tags: List[str],
+    mt_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    path, text = _read_phase_report_or_die(report_file, label)
+    _verify_required_xml_tags(
+        str(path),
+        required_tags=[f"<{tag}>" for tag in required_tags],
+        context_label=label,
+        hard_fail=True,
+    )
+    if mt_id is not None:
+        found = None
+        element = _extract_xml_element(text, "mt_id")
+        if element is not None and element.text:
+            found = element.text.strip()
+        if found != mt_id:
+            _die(f"[{label}] <mt_id> must be {mt_id}, got {found!r}")
+    return {
+        "report_file": str(path),
+        "validated_at": _now(),
+    }
+
+
+def _validate_module_scope_manifest(
+    manifest_file: str,
+    state: Dict[str, Any],
+    mt_id: str,
+    evidence: Optional[str],
+) -> Dict[str, Any]:
+    if not manifest_file:
+        _die("[MODULE SCOPE GATE] --scope-manifest is required")
+    path = Path(manifest_file)
+    if not path.exists():
+        _die(f"[MODULE SCOPE GATE] --scope-manifest not found: {manifest_file}")
+    manifest = _load_json_file(path)
+    pid = str(state.get("pipeline_id", ""))
+    if manifest.get("pipeline_id") and manifest.get("pipeline_id") != pid:
+        _die(f"[MODULE SCOPE GATE] scope_manifest pipeline_id mismatch: expected {pid}, got {manifest.get('pipeline_id')}")
+    task = _module_task_from_plan(state, mt_id)
+    allowed_files = {_normalize_rel_path(item) for item in task.get("target_files", [])}
+    allowed_functions = {str(task.get("affected_function"))}
+    manifest_tasks = manifest.get("micro_tasks")
+    if not isinstance(manifest_tasks, list) or len(manifest_tasks) != 1:
+        _die("[MODULE SCOPE GATE] module scope_manifest must contain exactly one micro_task")
+    item = manifest_tasks[0]
+    if not isinstance(item, dict) or str(item.get("id") or "") != mt_id:
+        _die(f"[MODULE SCOPE GATE] module scope_manifest must contain only {mt_id}")
+    files = item.get("files", [])
+    funcs = item.get("affected_functions", [])
+    if not isinstance(files, list) or not files:
+        _die(f"[MODULE SCOPE GATE] {mt_id} requires non-empty files list")
+    if not isinstance(funcs, list) or not funcs:
+        _die(f"[MODULE SCOPE GATE] {mt_id} requires non-empty affected_functions list")
+    manifest_files = {_normalize_rel_path(file) for file in files}
+    manifest_functions = {str(func).strip() for func in funcs if str(func).strip()}
+    evidence_files = {
+        _normalize_rel_path(item)
+        for item in (evidence or "").split(",")
+        if item.strip()
+    }
+    extra_files = sorted((manifest_files | evidence_files) - allowed_files)
+    if extra_files:
+        _die(f"[MODULE SCOPE GATE] files outside {mt_id} target_files: {extra_files}")
+    missing_evidence = sorted(manifest_files - evidence_files)
+    if missing_evidence:
+        _die(f"[MODULE SCOPE GATE] manifest files missing from --files evidence: {missing_evidence}")
+    extra_functions = sorted(manifest_functions - allowed_functions)
+    if extra_functions:
+        _die(f"[MODULE SCOPE GATE] affected_functions outside {mt_id} plan: {extra_functions}")
+    return {
+        "manifest_file": str(path),
+        "validated_at": _now(),
+        "micro_task_id": mt_id,
+        "files": sorted(manifest_files),
+        "affected_functions": sorted(manifest_functions),
+    }
+
+
 def _verify_build_report_xml(report: str) -> tuple:
     """Build report XML 검증. XML comment 우회 차단, regex fallback 없음.
 
@@ -1510,6 +1765,21 @@ STATE_FILE = BASE_DIR / "pipeline_state.json"
 HISTORY_DIR = BASE_DIR / "pipeline_history"
 TEST_RESULTS_FILE = BASE_DIR / "test_results.jsonl"
 CONTRACTS_DIR = BASE_DIR / "pipeline_contracts"
+PIPELINE_CI_DIR = BASE_DIR / ".pipeline"
+PHASE_ATTESTATION_REQUEST = PIPELINE_CI_DIR / "phase_attestation_request.json"
+PHASE_ATTESTATION_EVIDENCE_DIR = PIPELINE_CI_DIR / "phase_evidence"
+AGENT_RECEIPT_DIR = PIPELINE_CI_DIR / "agent_receipts"
+PHASE_ATTESTATION_PHASES = ("pm", "dev", "qa", "build")
+PHASE_AGENT_IDS = {
+    "pm": "pm-agent",
+    "dev": "dev-agent",
+    "qa": "qa-agent",
+    "build": "build-agent",
+}
+DEFAULT_DEPLOY_ROOT_CANDIDATES = (
+    Path(r"G:\내 드라이브\터미널"),
+    Path(r"G:\내드라이브\터미널"),
+)
 
 PHASE_ORDER = ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
 
@@ -1519,7 +1789,7 @@ PHASE_LABELS = {
     "qa":        "Phase 4 - QA (Verification)",
     "sec":       "Phase 5 - Security (Audit)",
     "build":     "Phase 6 - Build (Packaging)",
-    "harness":   "Phase 7 - Harness (Benchmark)",
+    "harness":   "Phase 7 - External Gates (Acceptance)",
     "architect": "Phase 8 - Architect (RCA)",
 }
 
@@ -1584,7 +1854,7 @@ DIM    = lambda t: _c(t, "2")
 # ── Branch / Tournament state helpers ───────────────────────────────────────
 
 def _state_path(branch: Optional[str] = None) -> Path:
-    """Return state file path. branch=None → legacy single-file mode."""
+    """Return state file path. branch=None means the main pipeline state."""
     if branch is None:
         return STATE_FILE
     state = _load_state_for(None)
@@ -1706,6 +1976,112 @@ def _new_external_gates(enabled: bool = False) -> Dict[str, Any]:
     }
 
 
+def _empty_phase_attestation() -> Dict[str, Any]:
+    return {
+        "status": "PENDING",
+        "completed_at": None,
+        "phase": None,
+        "run_id": None,
+        "commit_sha": None,
+        "evidence": None,
+        "report_file": None,
+        "notes": [],
+    }
+
+
+def _new_phase_attestations(enabled: bool = False) -> Dict[str, Any]:
+    return {
+        "enabled": enabled,
+        "mode": "github_actions_per_phase",
+        "required_phases": list(PHASE_ATTESTATION_PHASES),
+        "phases": {phase: _empty_phase_attestation() for phase in PHASE_ATTESTATION_PHASES},
+    }
+
+
+def _empty_module_step() -> Dict[str, Any]:
+    return {
+        "status": "PENDING",
+        "completed_at": None,
+        "report_file": None,
+        "evidence": None,
+        "notes": [],
+    }
+
+
+def _new_module_gates(enabled: bool = True) -> Dict[str, Any]:
+    return {
+        "enabled": enabled,
+        "mode": "incremental_module_gate",
+        "sequence": [],
+        "modules": {},
+        "integration": _empty_module_step(),
+    }
+
+
+def _ensure_module_gates(state: Dict[str, Any]) -> Dict[str, Any]:
+    existing = state.get("module_gates")
+    normalized = _new_module_gates(enabled=True)
+    if isinstance(existing, dict):
+        normalized["mode"] = str(existing.get("mode") or "incremental_module_gate")
+        sequence = existing.get("sequence")
+        if isinstance(sequence, list):
+            normalized["sequence"] = [str(item) for item in sequence if str(item)]
+        modules = existing.get("modules")
+        if isinstance(modules, dict):
+            for mt_id, item in modules.items():
+                if not isinstance(item, dict):
+                    continue
+                merged = {
+                    "id": str(mt_id),
+                    "status": "PENDING",
+                    "order": 0,
+                    "target_files": [],
+                    "affected_function": None,
+                    "design": _empty_module_step(),
+                    "dev": _empty_module_step(),
+                    "qa": _empty_module_step(),
+                    "checkpoint": None,
+                }
+                merged.update(item)
+                for step_name in ("design", "dev", "qa"):
+                    step = merged.get(step_name)
+                    base = _empty_module_step()
+                    if isinstance(step, dict):
+                        base.update(step)
+                    merged[step_name] = base
+                normalized["modules"][str(mt_id)] = merged
+        integration = existing.get("integration")
+        if isinstance(integration, dict):
+            merged_integration = _empty_module_step()
+            merged_integration.update(integration)
+            normalized["integration"] = merged_integration
+    normalized["enabled"] = True
+    return normalized
+
+
+def _ensure_phase_attestations(state: Dict[str, Any]) -> Dict[str, Any]:
+    existing = state.get("phase_attestations")
+    if not isinstance(existing, dict):
+        return _new_phase_attestations(enabled=True)
+    normalized = _new_phase_attestations(enabled=True)
+    normalized["mode"] = str(existing.get("mode") or "github_actions_per_phase")
+    required = existing.get("required_phases")
+    if isinstance(required, list) and required:
+        normalized["required_phases"] = [
+            str(item) for item in required if str(item) in PHASE_ATTESTATION_PHASES
+        ] or list(PHASE_ATTESTATION_PHASES)
+    phases = existing.get("phases")
+    if isinstance(phases, dict):
+        for phase in PHASE_ATTESTATION_PHASES:
+            item = phases.get(phase)
+            if isinstance(item, dict):
+                merged = _empty_phase_attestation()
+                merged.update(item)
+                merged["phase"] = phase
+                normalized["phases"][phase] = merged
+    return normalized
+
+
 def _save_phase_snapshot(state: Dict[str, Any], phase: str) -> Optional[str]:
     """현재 state를 pipeline_history/{pid}_phase_{phase}.json에 스냅샷.
 
@@ -1745,11 +2121,14 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
         "phases": {p: _empty_phase(p) for p in PHASE_ORDER},
         "event_log":     [],
         # v2.10 Auto-Compact 지원: 파이프라인 종료 상태 표시
-        # null = in progress, "COMPLETE" = Phase 8 architect completion, "FAILED" = repeated harness FAIL,
+        # null = in progress, "COMPLETE" = Phase 8 architect completion, "FAILED" = repeated external gate FAIL,
         # "TERMINATED" = 사용자 명시적 중단
         "terminal_state": None,
         "harness_fail_count": 0,
-        "external_gates": _new_external_gates(enabled=False),
+        "agent_runs": {},
+        "external_gates": _new_external_gates(enabled=True),
+        "phase_attestations": _new_phase_attestations(enabled=True),
+        "module_gates": _new_module_gates(enabled=True),
         "protocol_evolution_decision": None,
     }
 
@@ -1757,9 +2136,9 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
 def _ensure_external_gates(state: Dict[str, Any]) -> Dict[str, Any]:
     gates = state.get("external_gates")
     if not isinstance(gates, dict):
-        return _new_external_gates(enabled=False)
+        return _new_external_gates(enabled=True)
 
-    normalized = _new_external_gates(enabled=bool(gates.get("enabled")))
+    normalized = _new_external_gates(enabled=True)
     normalized["mode"] = str(gates.get("mode") or "three_gate")
     for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
         existing = gates.get(gate_name)
@@ -1776,9 +2155,15 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         state["terminal_state"] = None
     if "harness_fail_count" not in state:
         state["harness_fail_count"] = 0
+    if not isinstance(state.get("agent_runs"), dict):
+        state["agent_runs"] = {}
     if "protocol_evolution_decision" not in state:
         state["protocol_evolution_decision"] = None
     state["external_gates"] = _ensure_external_gates(state)
+    state["external_gates"]["enabled"] = True
+    state["phase_attestations"] = _ensure_phase_attestations(state)
+    state["phase_attestations"]["enabled"] = True
+    state["module_gates"] = _ensure_module_gates(state)
     return state
 
 
@@ -1897,6 +2282,7 @@ def _contract_paths(pipeline_id: str) -> Dict[str, Path]:
         "oracle_result": root / "gates" / "oracle_result.json",
         "user_validation": root / "gates" / "user_validation.json",
         "github_ci_result": root / "gates" / "github_ci_result.json",
+        "phase_ci_root": root / "gates" / "phase_ci",
         "advisory_root": root / "advisory",
         "advisory_resolutions": root / "advisory" / "resolutions.json",
     }
@@ -1987,6 +2373,480 @@ def _display_path(path: Path) -> str:
         return str(path.resolve())
 
 
+def _deployment_root() -> Path:
+    configured = os.environ.get("PIPELINE_DEPLOY_ROOT", "").strip()
+    if configured:
+        return Path(configured)
+    for candidate in DEFAULT_DEPLOY_ROOT_CANDIDATES:
+        if candidate.parent.exists():
+            return candidate
+    return DEFAULT_DEPLOY_ROOT_CANDIDATES[0]
+
+
+def _split_evidence_paths(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        items: List[str] = []
+        for item in raw:
+            items.extend(_split_evidence_paths(item))
+        return items
+    text = str(raw).strip()
+    if not text:
+        return []
+    if text.upper() in {"N/A", "NA", "NONE", "SKIP", "SKIPPED", "USER_CONFIRMED", "MANUAL-SMOKE"}:
+        return []
+    parts = re.split(r"[,;\n]+", text)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _resolve_artifact_path(raw: str) -> Optional[Path]:
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", raw):
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return None
+    if not resolved.exists():
+        return None
+    return resolved
+
+
+def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> List[Path]:
+    candidates: List[str] = []
+    candidates.extend(_split_evidence_paths(evidence))
+    phases = state.get("phases", {})
+    if isinstance(phases, dict):
+        for phase_name in ("build", "dev"):
+            phase = phases.get(phase_name, {})
+            if isinstance(phase, dict):
+                candidates.extend(_split_evidence_paths(phase.get("evidence")))
+
+    result: List[Path] = []
+    seen: set[str] = set()
+    for raw in candidates:
+        path = _resolve_artifact_path(raw)
+        if not path:
+            continue
+        key = str(path).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(path)
+    return result
+
+
+def _copy_deployment_artifact(src: Path, deploy_dir: Path) -> Dict[str, Any]:
+    try:
+        rel = src.resolve().relative_to(BASE_DIR)
+    except ValueError:
+        rel = Path(src.name)
+    dest = deploy_dir / rel
+    if src.is_dir():
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+        kind = "directory"
+        sha256 = None
+    else:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        kind = "file"
+        sha256 = _sha256_file(dest)
+    return {
+        "kind": kind,
+        "source": _display_path(src),
+        "destination": str(dest),
+        "sha256": sha256,
+    }
+
+
+def _deploy_accepted_outputs(state: Dict[str, Any], evidence: Optional[str], notes: Optional[str]) -> Dict[str, Any]:
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+    deploy_root = _deployment_root()
+    deploy_dir = deploy_root / pid
+    artifacts = _deployment_artifacts(state, evidence)
+    if not artifacts:
+        _die(
+            "[ACCEPTANCE DEPLOY BLOCKED] 복사할 실제 결과물 파일/폴더를 찾지 못했습니다. "
+            "`--evidence`에 실제 결과물 경로 또는 첨부파일 경로를 넣거나, "
+            "Dev/Build phase evidence가 결과물을 가리키게 한 뒤 다시 실행하세요."
+        )
+    deploy_dir.mkdir(parents=True, exist_ok=True)
+    copied = [_copy_deployment_artifact(path, deploy_dir) for path in artifacts]
+    manifest = {
+        "schema_version": 1,
+        "pipeline_id": pid,
+        "deployed_at": _now(),
+        "deploy_root": str(deploy_root),
+        "deploy_dir": str(deploy_dir),
+        "evidence": evidence,
+        "notes": notes or "",
+        "artifacts": copied,
+    }
+    manifest_path = deploy_dir / "deployment_manifest.json"
+    _write_json(manifest_path, manifest)
+    manifest["manifest_path"] = str(manifest_path)
+    return manifest
+
+
+def _enable_phase_attestations(state: Dict[str, Any]) -> None:
+    state["phase_attestations"] = _ensure_phase_attestations(state)
+    state["phase_attestations"]["enabled"] = True
+
+
+def _expected_agent_id(phase: str) -> str:
+    if phase not in PHASE_AGENT_IDS:
+        _die(f"agent receipts are not supported for phase: {phase}", exit_code=2)
+    return PHASE_AGENT_IDS[phase]
+
+
+def _agent_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _new_agent_run_id(phase: str) -> str:
+    return f"{phase}-{secrets.token_hex(8)}"
+
+
+def _receipt_path_for_run(pid: str, phase: str, run_id: str) -> Path:
+    safe_run = re.sub(r"[^A-Za-z0-9_.-]+", "_", run_id)
+    return AGENT_RECEIPT_DIR / pid / phase / f"{safe_run}.json"
+
+
+def _path_sha_payload(path: Path) -> Dict[str, Any]:
+    return {
+        "path": _display_path(path),
+        "sha256": _sha256_file(path),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+def _agent_run_start(state: Dict[str, Any], phase: str, agent_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+    if phase not in PHASE_ATTESTATION_PHASES:
+        _die(f"agent start supports phases: {', '.join(PHASE_ATTESTATION_PHASES)}", exit_code=2)
+    expected = _expected_agent_id(phase)
+    actual_agent = agent_id or expected
+    if actual_agent != expected:
+        _die(f"[AGENT RECEIPT GATE] {phase} must be executed by {expected}, got {actual_agent!r}")
+    ok, reason = check_gate(state, phase)
+    if not ok:
+        _die(f"[GATE BLOCKED] {reason}")
+    pid = str(state.get("pipeline_id") or "")
+    run_id = _new_agent_run_id(phase)
+    token = f"tok_{secrets.token_urlsafe(32)}"
+    run = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "pipeline_id": pid,
+        "phase": phase,
+        "agent_id": actual_agent,
+        "status": "RUNNING",
+        "started_at": _now(),
+        "completed_at": None,
+        "token_hash": _agent_token_hash(token),
+        "output_file": None,
+        "output_sha256": None,
+        "evidence_files": [],
+        "receipt_path": None,
+        "receipt_sha256": None,
+        "used_by_phase": None,
+        "used_at": None,
+        "commit_sha": _git_rev_parse("HEAD"),
+    }
+    state.setdefault("agent_runs", {})[run_id] = run
+    _log_event(state, f"agent run started phase={phase} agent={actual_agent} run_id={run_id}")
+    return run, token
+
+
+def _agent_run_finish(
+    state: Dict[str, Any],
+    *,
+    run_id: str,
+    token: str,
+    output_file: str,
+    evidence: Optional[str],
+    notes: Optional[str],
+) -> Dict[str, Any]:
+    runs = state.setdefault("agent_runs", {})
+    run = runs.get(run_id)
+    if not isinstance(run, dict):
+        _die(f"[AGENT RECEIPT GATE] unknown run_id: {run_id}")
+    if run.get("status") != "RUNNING":
+        _die(f"[AGENT RECEIPT GATE] run {run_id} is not RUNNING")
+    if not token or _agent_token_hash(token) != run.get("token_hash"):
+        _die("[AGENT RECEIPT GATE] invalid agent run token")
+
+    output_path = Path(output_file)
+    if not output_path.is_absolute():
+        output_path = BASE_DIR / output_path
+    if not output_path.exists() or not output_path.is_file():
+        _die(f"[AGENT RECEIPT GATE] output file not found: {output_file}")
+
+    evidence_files: List[Dict[str, Any]] = []
+    for raw in _split_evidence_paths(evidence):
+        path = _resolve_artifact_path(raw)
+        if path and path.is_file():
+            evidence_files.append(_path_sha_payload(path))
+
+    run["status"] = "COMPLETED"
+    run["completed_at"] = _now()
+    run["output_file"] = _display_path(output_path)
+    run["output_sha256"] = _sha256_file(output_path)
+    run["evidence_files"] = evidence_files
+    run["notes"] = notes or ""
+    receipt = {
+        "schema_version": 1,
+        "receipt_type": "agent-run-receipt-v1",
+        "pipeline_id": run.get("pipeline_id"),
+        "phase": run.get("phase"),
+        "agent_id": run.get("agent_id"),
+        "run_id": run_id,
+        "status": run.get("status"),
+        "started_at": run.get("started_at"),
+        "completed_at": run.get("completed_at"),
+        "output_file": run.get("output_file"),
+        "output_sha256": run.get("output_sha256"),
+        "evidence_files": evidence_files,
+        "commit_sha": run.get("commit_sha"),
+    }
+    receipt_path = _receipt_path_for_run(str(run.get("pipeline_id")), str(run.get("phase")), run_id)
+    _write_json(receipt_path, receipt)
+    run["receipt_path"] = _display_path(receipt_path)
+    run["receipt_sha256"] = _sha256_file(receipt_path)
+    _log_event(state, f"agent run completed phase={run.get('phase')} agent={run.get('agent_id')} run_id={run_id}")
+    return run
+
+
+def _validate_agent_run_for_phase(
+    state: Dict[str, Any],
+    phase: str,
+    run_id: Optional[str],
+    report_file: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    if not _phase_attestations_enabled(state):
+        return None
+    if not run_id:
+        _die(
+            f"[AGENT RECEIPT GATE] {phase} requires --agent-run-id. "
+            f"Start with `python pipeline.py agent start --phase {phase}`, pass the token to {_expected_agent_id(phase)}, "
+            "then finish the run before recording the phase."
+        )
+    run = state.setdefault("agent_runs", {}).get(run_id)
+    if not isinstance(run, dict):
+        _die(f"[AGENT RECEIPT GATE] unknown run_id: {run_id}")
+    if run.get("pipeline_id") != state.get("pipeline_id"):
+        _die("[AGENT RECEIPT GATE] run pipeline_id mismatch")
+    if run.get("phase") != phase:
+        _die(f"[AGENT RECEIPT GATE] run phase mismatch: expected {phase}, got {run.get('phase')}")
+    expected_agent = _expected_agent_id(phase)
+    if run.get("agent_id") != expected_agent:
+        _die(f"[AGENT RECEIPT GATE] {phase} requires {expected_agent}, got {run.get('agent_id')}")
+    if run.get("status") != "COMPLETED":
+        _die(f"[AGENT RECEIPT GATE] run {run_id} must be COMPLETED")
+    used = run.get("used_by_phase")
+    if used and used != phase:
+        _die(f"[AGENT RECEIPT GATE] run {run_id} was already used by {used}")
+    if not run.get("receipt_path") or not run.get("receipt_sha256"):
+        _die(f"[AGENT RECEIPT GATE] run {run_id} is missing receipt file")
+    receipt_path = _resolve_artifact_path(str(run.get("receipt_path")))
+    if not receipt_path or not receipt_path.is_file():
+        _die(f"[AGENT RECEIPT GATE] receipt file missing for run {run_id}")
+    if _sha256_file(receipt_path) != run.get("receipt_sha256"):
+        _die(f"[AGENT RECEIPT GATE] receipt hash mismatch for run {run_id}")
+    if report_file:
+        report_path = Path(report_file)
+        if not report_path.is_absolute():
+            report_path = BASE_DIR / report_path
+        output_path = _resolve_artifact_path(str(run.get("output_file") or ""))
+        if not output_path or report_path.resolve() != output_path.resolve():
+            _die("[AGENT RECEIPT GATE] --report-file must match the completed agent run output_file")
+        if _sha256_file(report_path.resolve()) != run.get("output_sha256"):
+            _die("[AGENT RECEIPT GATE] report hash mismatch against agent run output")
+    run["used_by_phase"] = phase
+    run["used_at"] = _now()
+    return run
+
+
+def _safe_phase_artifact_name(path: Path) -> str:
+    name = path.name or "evidence"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
+
+
+def _git_check_ignored(path: Path) -> bool:
+    try:
+        rel = path.resolve().relative_to(BASE_DIR)
+    except ValueError:
+        return True
+    try:
+        proc = subprocess.run(
+            ["git", "check-ignore", "-v", str(rel)],
+            cwd=str(BASE_DIR),
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if proc.returncode != 0:
+            return False
+        last_match = ""
+        for line in proc.stdout.splitlines():
+            if line.strip():
+                last_match = line
+        if not last_match:
+            return False
+        pattern_part = last_match.split("\t", 1)[0]
+        parts = pattern_part.split(":", 2)
+        pattern = parts[2] if len(parts) == 3 else pattern_part
+        return not pattern.startswith("!")
+    except OSError:
+        return False
+
+
+def _workspace_check_for_file(path: Path) -> Dict[str, Any]:
+    return {
+        "path": _normalize_rel_path(path),
+        "sha256": _sha256_file(path),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not raw_path:
+        return None
+    path = Path(str(raw_path))
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    if not path.exists() or not path.is_file():
+        return None
+    dest_dir = PHASE_ATTESTATION_EVIDENCE_DIR / pid / phase
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_name = f"{label}_{_safe_phase_artifact_name(path)}"
+    dest = dest_dir / dest_name
+    shutil.copy2(path, dest)
+    if _git_check_ignored(dest):
+        _die(
+            "[PHASE EVIDENCE GIT GATE] copied phase evidence is hidden by .gitignore: "
+            f"{_normalize_rel_path(dest)}\n"
+            "  Fix .gitignore so `.pipeline/phase_evidence/**` is explicitly re-included before "
+            "running `pipeline.py gates prepare-phase` again."
+        )
+    return {
+        "label": label,
+        "source": _display_path(path),
+        "path": _normalize_rel_path(dest),
+        "sha256": _sha256_file(dest),
+        "size_bytes": dest.stat().st_size,
+    }
+
+
+def _phase_status_is_closed(phase: str, status: str) -> bool:
+    if phase in ("pm", "dev", "build"):
+        return status == "DONE"
+    if phase == "qa":
+        return status == "PASS"
+    return False
+
+
+def _prepare_phase_attestation_request(state: Dict[str, Any], phase: str) -> Dict[str, Any]:
+    if phase not in PHASE_ATTESTATION_PHASES:
+        _die(f"phase attestation only supports: {', '.join(PHASE_ATTESTATION_PHASES)}", exit_code=2)
+    if not _phase_attestations_enabled(state):
+        _die(
+            "phase attestations must be enabled for every pipeline. Use "
+            "`python pipeline.py contract init` or `python pipeline.py gates init` "
+            "to migrate this state."
+        )
+    pid = str(state.get("pipeline_id") or "")
+    phase_info = state.get("phases", {}).get(phase, {})
+    if not isinstance(phase_info, dict):
+        _die(f"missing phase state for {phase}")
+    phase_status = str(phase_info.get("status") or "PENDING")
+    if not _phase_status_is_closed(phase, phase_status):
+        _die(f"{phase} phase must be completed before preparing phase CI attestation; current status={phase_status}")
+
+    copied: List[Dict[str, Any]] = []
+    workspace_checks: List[Dict[str, Any]] = []
+    local_only: List[Dict[str, Any]] = []
+    agent_run: Optional[Dict[str, Any]] = None
+
+    run_id = phase_info.get("agent_run_id")
+    if not run_id:
+        _die(f"[AGENT RECEIPT GATE] {phase} phase cannot prepare CI attestation without agent_run_id")
+    run = state.setdefault("agent_runs", {}).get(str(run_id))
+    if not isinstance(run, dict):
+        _die(f"[AGENT RECEIPT GATE] agent run not found for {phase}: {run_id}")
+    _validate_agent_run_for_phase(state, phase, str(run_id), phase_info.get("report_file"))
+    receipt_path = _resolve_artifact_path(str(run.get("receipt_path") or ""))
+    if not receipt_path:
+        _die(f"[AGENT RECEIPT GATE] receipt file missing for {phase}: {run_id}")
+    agent_run = {
+        "run_id": run.get("run_id"),
+        "phase": run.get("phase"),
+        "agent_id": run.get("agent_id"),
+        "status": run.get("status"),
+        "output_file": run.get("output_file"),
+        "output_sha256": run.get("output_sha256"),
+        "receipt_path": run.get("receipt_path"),
+        "receipt_sha256": run.get("receipt_sha256"),
+        "used_by_phase": run.get("used_by_phase"),
+    }
+    receipt_copy = _copy_phase_evidence_file(pid, phase, "agent_receipt", str(receipt_path))
+    if not receipt_copy:
+        _die(f"[AGENT RECEIPT GATE] could not copy receipt evidence for {phase}: {run_id}")
+    agent_run["receipt_source_path"] = agent_run["receipt_path"]
+    agent_run["receipt_path"] = receipt_copy["path"]
+    agent_run["receipt_sha256"] = receipt_copy["sha256"]
+    copied.append(receipt_copy)
+
+    report = _copy_phase_evidence_file(pid, phase, "report", phase_info.get("report_file"))
+    if report:
+        copied.append(report)
+    if phase == "dev":
+        atomic_scope = state.get("atomic_scope", {})
+        if isinstance(atomic_scope, dict):
+            scope = _copy_phase_evidence_file(pid, phase, "scope_manifest", atomic_scope.get("manifest_file"))
+            if scope:
+                copied.append(scope)
+
+    for raw in _split_evidence_paths(phase_info.get("evidence")):
+        path = _resolve_artifact_path(raw)
+        if not path or not path.is_file():
+            continue
+        if _git_check_ignored(path):
+            local_only.append({
+                "path": _display_path(path),
+                "sha256": _sha256_file(path),
+                "reason": "ignored_or_outside_git_checkout",
+            })
+            continue
+        workspace_checks.append(_workspace_check_for_file(path))
+
+    request = {
+        "schema_version": 1,
+        "request_type": "pipeline-phase-attestation-request-v1",
+        "generated_at": _now(),
+        "pipeline_id": pid,
+        "phase": phase,
+        "phase_status": phase_status,
+        "commit_hint": _git_rev_parse("HEAD"),
+        "state": {
+            "current_phase": state.get("current_phase"),
+            "phase_completed_at": phase_info.get("completed_at"),
+            "report_file": phase_info.get("report_file"),
+            "evidence": phase_info.get("evidence"),
+        },
+        "agent_run": agent_run,
+        "copied_evidence": copied,
+        "workspace_file_checks": workspace_checks,
+        "local_only_files": local_only,
+    }
+    _write_json(PHASE_ATTESTATION_REQUEST, request)
+    return request
+
+
 def _state_contract_enabled(state: Dict[str, Any]) -> bool:
     info = state.get("contract_v2")
     return isinstance(info, dict) and bool(info.get("enabled"))
@@ -2037,7 +2897,7 @@ def check_gate(state: Dict[str, Any], phase: str) -> Tuple[bool, str]:
         "qa": "Phase 4 - QA (Verification)",
         "sec": "Phase 5 - Security (Audit)",
         "build": "Phase 6 - Build (Packaging)",
-        "harness": "Phase 7 - Harness (Benchmark)",
+        "harness": "Phase 7 - External Gates (Acceptance)",
         "architect": "Phase 8 - Architect (RCA)",
     }
     current_phase_raw = state.get("current_phase")
@@ -2063,6 +2923,10 @@ def check_gate(state: Dict[str, Any], phase: str) -> Tuple[bool, str]:
             "contract_v2 is enabled but not frozen. Run `python pipeline.py contract ready` "
             "and `python pipeline.py contract freeze` before Dev.",
         )
+
+    phase_attestation_blocker = _phase_attestation_blocker_for_phase(state, phase)
+    if phase_attestation_blocker:
+        return False, phase_attestation_blocker
 
     for required_phase, required_status in GATE_RULES[phase]:
         actual = state["phases"][required_phase]["status"]
@@ -2234,6 +3098,10 @@ def cmd_new(args: argparse.Namespace) -> None:
     print(f"  유형: {pipeline_type}")
     print(f"  설명: {args.desc}")
     print()
+    print(BOLD(YELLOW("  세션 언어 규칙")))
+    print("  사용자에게 보이는 진행 설명, 도구 설명, PR 안내, 승인/거절 질문은 모두 쉬운 한국어로 작성하세요.")
+    print("  예: 'Check latest status' 대신 '최신 상태 확인'. 코드 식별자와 명령어는 그대로 두되 한국어 설명을 붙이세요.")
+    print()
 
     # Auto-start the Agent Office Dashboard so the user can see live activity.
     skip_dashboard = bool(getattr(args, "no_dashboard", False)) or os.environ.get(
@@ -2245,7 +3113,8 @@ def cmd_new(args: argparse.Namespace) -> None:
         except Exception as exc:  # pragma: no cover - defensive, never block pipeline
             print(DIM(f"  대시보드 부트 예외 무시: {exc}"))
 
-    print(f"  다음 단계: {YELLOW('python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap')}")
+    print(f"  다음 단계: {YELLOW('python pipeline.py agent start --phase pm')}")
+    print(f"  PM 완료 기록: {YELLOW('python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>')}")
     print()
 
 
@@ -2372,6 +3241,10 @@ def cmd_done(args: argparse.Namespace) -> None:
             f"  [ATOMIC PLAN GATE] micro_tasks={state['atomic_plan']['micro_task_count']} "
             f"audit={state['atomic_plan']['audit_result']}"
         ))
+        module_gates = _init_module_gates_from_atomic_plan(state)
+        print(GREEN(
+            f"  [MODULE GATE] initialized {len(module_gates.get('sequence', []))} incremental modules"
+        ))
 
     evidence = args.files if hasattr(args, "files") and args.files else None
 
@@ -2382,6 +3255,13 @@ def cmd_done(args: argparse.Namespace) -> None:
                 "[SCOPE GATE] Dev DONE requires --scope-declared. "
                 "dev-agent must provide <scope_declaration> before Phase 2 can close."
             )
+        module_blockers = _module_gate_blockers(state)
+        if module_blockers:
+            _die(
+                "[MODULE GATE] Dev DONE requires every micro_task to pass module QA "
+                "and integration first: " + "; ".join(module_blockers)
+            )
+        _validate_module_checkpoints(state)
         print(GREEN("  [SCOPE GATE] scope_declaration confirmed"))
         state["dev_handover"] = _validate_dev_handover_file(report_file, state)
         state.setdefault("dev_gate_flags", {})
@@ -2398,35 +3278,6 @@ def cmd_done(args: argparse.Namespace) -> None:
             f"files={len(state['atomic_scope']['files'])}"
         ))
 
-    # ── MT-5: Frozen Codebase scope_declaration 선언 여부 기록 ────────────────
-    # dev --scope-declared 플래그: dev-agent가 <scope_declaration>을 출력했음을 명시.
-    # 선언 누락 시 경고 출력 (hard fail 아님 — 하위 호환성 유지).
-    if False and phase == "dev":
-        scope_declared: bool = bool(getattr(args, "scope_declared", False))
-        if not scope_declared:
-            print(YELLOW(
-                "[SCOPE WARN] --scope-declared 플래그 없음 — dev-agent가 <scope_declaration>을 출력했는지 확인 필요. "
-                "(QA가 scope_declaration 누락 시 FAIL 처리할 수 있음)"
-            ))
-        else:
-            print(GREEN("  [SCOPE GATE] scope_declaration 선언 확인됨"))
-        state.setdefault("dev_gate_flags", {})
-        state["dev_gate_flags"]["scope_declared"] = scope_declared
-        scope_manifest: Optional[str] = getattr(args, "scope_manifest", None)
-        if _external_gates_enabled(state):
-            if not scope_manifest:
-                _die(
-                    "[ATOMIC SCOPE GATE] Three-Gate mode requires "
-                    "`--scope-manifest scope_manifest.json` for dev DONE."
-                )
-            state["atomic_scope"] = _validate_dev_scope_manifest(scope_manifest, state, args.files)
-            print(GREEN(
-                f"  [ATOMIC SCOPE GATE] micro_tasks={len(state['atomic_scope']['micro_task_ids'])} "
-                f"files={len(state['atomic_scope']['files'])}"
-            ))
-        elif scope_manifest:
-            print(YELLOW("  [SCOPE WARN] --scope-manifest supplied but atomic hard gate is active only in Three-Gate mode."))
-
     # dev phase: --files에 나열된 경로가 실제로 존재하는지 검증
     if phase == "dev" and evidence:
         missing = [t.strip() for t in evidence.split(",") if t.strip() and not Path(t.strip()).exists()]
@@ -2436,10 +3287,20 @@ def cmd_done(args: argparse.Namespace) -> None:
             print(RED("dev-agent가 실제로 파일을 작성한 후 다시 실행하세요.\n"))
             sys.exit(1)
 
+    agent_run = _validate_agent_run_for_phase(
+        state,
+        phase,
+        getattr(args, "agent_run_id", None),
+        report_file,
+    )
+
     state["phases"][phase]["status"]       = "DONE"
     state["phases"][phase]["completed_at"] = _now()
     state["phases"][phase]["evidence"]     = evidence
     state["phases"][phase]["report_file"]  = report_file
+    if agent_run:
+        state["phases"][phase]["agent_run_id"] = agent_run["run_id"]
+        state["phases"][phase]["agent_id"] = agent_run["agent_id"]
     state["current_phase"] = PHASE_ORDER[PHASE_ORDER.index(phase) + 1]
     _log_event(state, f"{phase} DONE | evidence: {evidence}")
     if phase == "dev":
@@ -2480,7 +3341,9 @@ def cmd_qa(args: argparse.Namespace) -> None:
     # ── MT-2: QA numeric_score 기록 강제 (IMP-20260506-A064) ────────────────
     # --numeric-score: QA가 산출한 수치 점수(0~120 정수).
     # PASS/FAIL 공통 hard gate: --numeric-score 필수
-    # PASS 시: 96점(80%) 이상 추가 요건. FAIL 시: 점수 하한 없음 (회로 차단기 추적 및 harness 합산용).
+    # PASS 시: 96점(120점 만점의 80%) 이상 추가 요건.
+    # FAIL 시: 점수 하한 없음. 이 값은 QA 하한선과 Circuit Breaker 추적용이며
+    # Phase 7 COMPLETE 판정이나 external gate를 대체하지 않는다.
     numeric_score_raw: Optional[str] = getattr(args, "numeric_score", None)
     numeric_score: Optional[int] = None
     if numeric_score_raw is None:
@@ -2500,7 +3363,7 @@ def cmd_qa(args: argparse.Namespace) -> None:
             print(RED(
                 f"\n[QA NUMERIC GATE] PASS 기록 거부 — numeric_score={numeric_score} < 96 (80% of 120)"
             ))
-            print(RED("  QA numeric_verdict가 FAIL(점수 < 80%)이면 --result FAIL로 기록하세요.\n"))
+            print(RED("  QA numeric_verdict가 FAIL이면 --result FAIL로 기록하세요. 최종 COMPLETE는 external gates가 결정합니다.\n"))
             sys.exit(1)
 
     # ── MT-3: Circuit Breaker failure_signature 추적 (IMP-20260506-A064) ─────
@@ -2570,11 +3433,21 @@ def cmd_qa(args: argparse.Namespace) -> None:
             hard_fail=True,
         )
 
+    agent_run = _validate_agent_run_for_phase(
+        state,
+        "qa",
+        getattr(args, "agent_run_id", None),
+        report_file,
+    )
+
     state["phases"]["qa"]["status"]       = result
     state["phases"]["qa"]["completed_at"] = _now()
     state["phases"]["qa"]["evidence"]     = getattr(args, "agent_id", None)
     state["phases"]["qa"]["agent_id"]     = getattr(args, "agent_id", None)
     state["phases"]["qa"]["report_file"]  = report_file
+    if agent_run:
+        state["phases"]["qa"]["agent_run_id"] = agent_run["run_id"]
+        state["phases"]["qa"]["agent_id"] = agent_run["agent_id"]
     # MT-2: numeric_score를 phase 메타데이터에 저장
     if numeric_score is not None:
         state["phases"]["qa"]["numeric_score"] = numeric_score
@@ -2736,11 +3609,21 @@ def cmd_build(args: argparse.Namespace) -> None:
         skip_reason = reason
         print(YELLOW("  [BUILD REPORT GATE] N/A 빌드 — build_report.xml 검증 생략"))
 
+    agent_run = _validate_agent_run_for_phase(
+        state,
+        "build",
+        getattr(args, "agent_run_id", None),
+        build_report_file,
+    )
+
     state["phases"]["build"]["status"]       = "DONE"
     state["phases"]["build"]["completed_at"] = _now()
     state["phases"]["build"]["evidence"]     = exe
     state["phases"]["build"]["report_file"]  = build_report_file if not is_na_build else None
     state["phases"]["build"]["skip_reason"]  = skip_reason if is_na_build else None
+    if agent_run:
+        state["phases"]["build"]["agent_run_id"] = agent_run["run_id"]
+        state["phases"]["build"]["agent_id"] = agent_run["agent_id"]
     state["current_phase"] = "harness"
     _log_event(state, f"build DONE exe={exe}" + (f" skip_reason={skip_reason}" if is_na_build else ""))
     _record_snapshot(state, "build", branch)
@@ -2748,19 +3631,35 @@ def cmd_build(args: argparse.Namespace) -> None:
 
     print(GREEN(f"\n[BUILD DONE] EXE: {exe or '경로 미지정'}"))
     print()
-    print(BOLD(YELLOW("  ★ Phase 7 (Harness) 실행 의무 -생략 불가")))
+    print(BOLD(YELLOW("  ★ Phase 7 External Gates 실행 의무 -생략 불가")))
     print(f"  다음 절차:")
-    print(f"    1. AskUserQuestion으로 사용자에게 Phase 7 진행 확인 요청")
-    print(f"    2. 사용자 '진행' 응답 수신 후:")
-    print(f"       {YELLOW('python pipeline.py check --phase harness --user-confirmed')}")
-    print(f"    3. test-harness-agent 를 spawn하여 채점 후 아래 명령 실행:")
-    print(f"       {YELLOW('python pipeline.py harness --score [점수] --verdict [PASS/FAIL] --test-output-file [harness_output.xml] --user-confirmed')}")
+    print(f"    1. Build evidence commit/push 후 GitHub Actions phase attestation 확인:")
+    print(f"       {YELLOW('python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline')}")
+    print(f"    2. test-harness-agent는 진단만 수행하고, 아래 external gates를 기록:")
+    print(f"       {YELLOW('python pipeline.py gates technical')}")
+    print(f"       {YELLOW('python pipeline.py gates oracle --user-confirmed')}")
+    print(f"       {YELLOW('python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline')}")
+    print(f"       {YELLOW('python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed')}")
     print()
 
 
 def cmd_harness(args: argparse.Namespace) -> None:
-    """Harness 채점 결과 기록."""
+    """Legacy harness diagnostic result recording.
+
+    Current `/Task` pipelines use external gates and this command is blocked.
+    """
     branch: Optional[str] = getattr(args, "branch", None)
+    state = _load_branch_state(args)
+
+    if _external_gates_enabled(state):
+        _die(
+            "\n[THREE GATE BLOCKED] `pipeline.py harness --score` is not a completion path "
+            "for current mandatory pipelines.\n"
+            "  Use: python pipeline.py gates technical\n"
+            "       python pipeline.py gates oracle --user-confirmed\n"
+            "       python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline\n"
+            "       python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed"
+        )
 
     # ── Hard gates: 상태를 기록하는 명령 안에서 가장 먼저 검사 (check_gate 전) ──
     # 원칙: hard gate는 상태를 실제로 바꾸는 명령(기록 명령) 안에 있어야 함.
@@ -2771,10 +3670,12 @@ def cmd_harness(args: argparse.Namespace) -> None:
     user_confirmed: bool = getattr(args, "user_confirmed", False)
     if not user_confirmed:
         print()
-        print(RED("[HARNESS GATE] Phase 7 기록 거부 — 사용자 Phase 7 진행 확인 필요."))
-        print(RED("  AskUserQuestion으로 사용자에게 Phase 7 진행 여부를 확인한 후,"))
-        print(RED("  사용자 '진행' 응답을 받은 후에만 아래 명령 실행 가능:"))
-        print(RED("  python pipeline.py harness --score N --verdict PASS|FAIL --test-output-file PATH --user-confirmed"))
+        print(RED("[HARNESS GATE] legacy diagnostic 기록 거부 — 사용자 확인 필요."))
+        print(RED("  신규 `/Task` 완료는 external gates를 사용하세요:"))
+        print(RED("  python pipeline.py gates technical"))
+        print(RED("  python pipeline.py gates oracle --user-confirmed"))
+        print(RED("  python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline"))
+        print(RED("  python pipeline.py gates accept --result ACCEPT --evidence PATH --user-confirmed"))
         print()
         sys.exit(1)
 
@@ -2788,16 +3689,6 @@ def cmd_harness(args: argparse.Namespace) -> None:
             "  PASS: <harness_report> + 실행 가능한 <test_code> 포함 파일 필요\n"
             "  FAIL: <harness_report> + <test_code> 포함 파일 필요 (PHASE_INTERFACE 계약 통일)\n"
             "  (meta-task 포함 예외 없음)"
-        )
-
-    state = _load_branch_state(args)
-    if _external_gates_enabled(state):
-        _die(
-            "\n[THREE GATE BLOCKED] legacy `pipeline.py harness --score` is disabled when "
-            "external_gates.enabled=true.\n"
-            "  Use: python pipeline.py gates technical\n"
-            "       python pipeline.py gates oracle --user-confirmed\n"
-            "       python pipeline.py gates accept --result ACCEPT --user-confirmed"
         )
 
     ok, reason = check_gate(state, "harness")
@@ -2861,9 +3752,8 @@ def cmd_harness(args: argparse.Namespace) -> None:
         _validate_harness_evidence_gate(agent_output_clean, agent_output, pid, "PASS")
 
     # ── FAIL: PASS와 동일한 3-gate (_validate_harness_evidence_gate) 경유 ────────────
-    # BUG-20260509-FDBC MT-1: FAIL도 Gate C(validate_test_evidence)를 경유.
-    #   FAIL verdict는 harness_score < 80을 의미하며, test_code 자체가 실패 코드라는 뜻이 아님.
-    #   따라서 FAIL 기록 시에도 test_code는 unittest.TestCase + testsRun>=1 필수.
+    # Legacy diagnostic FAIL also uses Gate C(validate_test_evidence). New completion
+    # does not use harness_score.
     if verdict == "FAIL":
         # Gate A + B + C: 공통 helper 경유 (FAIL 경로)
         _validate_harness_evidence_gate(agent_output_clean, agent_output, pid, "FAIL")
@@ -2913,7 +3803,7 @@ def cmd_harness(args: argparse.Namespace) -> None:
     print(f"        {YELLOW('python pipeline.py architect --report-file architect_report.xml')}")
     if verdict == "FAIL":
         print()
-        print(RED("  [FAIL] score < 80 -Phase 2 재작업 필요"))
+        print(RED("  [FAIL] legacy diagnostic failed -Phase 2 재작업 필요"))
         print(f"  Architect RCA 완료 후: {YELLOW('python pipeline.py done --phase dev --files \"..\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json')}")
     print()
 
@@ -2931,8 +3821,8 @@ def cmd_architect(args: argparse.Namespace) -> None:
     rca_mode = str(protocol_decision.get("rca_mode") or "").upper()
     if harness_verdict == "PASS" and "FAIL" in rca_mode:
         _die(
-            "[ARCHITECT REPORT GATE] harness is PASS but architect report rca_mode is fail-oriented. "
-            "Use a completion/retrospective mode for PASS, or record a real harness FAIL first."
+            "[ARCHITECT REPORT GATE] external gates are PASS but architect report rca_mode is fail-oriented. "
+            "Use a completion/retrospective mode for PASS, or record a real external gate FAIL first."
         )
 
     state["phases"]["architect"]["status"]       = "DONE"
@@ -2942,11 +3832,11 @@ def cmd_architect(args: argparse.Namespace) -> None:
     _record_snapshot(state, "architect", branch)
 
     if harness_verdict == "FAIL":
-        # Harness FAIL path: Architect RCA 완료 후 Phase 2 재작업으로 루프백
+        # External gate FAIL path: Architect RCA 완료 후 Phase 2 재작업으로 루프백
         state["current_phase"] = "dev"
         state["phases"]["dev"]["status"] = "PENDING"
         state["terminal_state"] = None
-        _log_event(state, "architect DONE — harness FAIL path: dev PENDING reset for rework")
+        _log_event(state, "architect DONE — external gate FAIL path: dev PENDING reset for rework")
         _save_state_for(state, branch)
     else:
         external_blockers = _external_gate_blockers(state)
@@ -2955,7 +3845,7 @@ def cmd_architect(args: argparse.Namespace) -> None:
                 "[THREE GATE BLOCKED] COMPLETE requires external gates and advisory resolution: "
                 + "; ".join(external_blockers)
             )
-        # Harness PASS path: 파이프라인 정상 완료
+        # External gate PASS path: 파이프라인 정상 완료
         state["current_phase"] = "COMPLETE"
         # COMPLETE is a Phase 8 transition; protocol evolution is a separate IMP follow-up.
         state["terminal_state"] = "COMPLETE"
@@ -2974,7 +3864,7 @@ def cmd_architect(args: argparse.Namespace) -> None:
     pid_display = state.get("pipeline_id", "UNKNOWN")
     if harness_verdict == "FAIL":
         print(YELLOW(f"\n[ARCHITECT DONE — REWORK]{branch_tag} {pid_display}"))
-        print(YELLOW("  Harness FAIL 경로: Phase 2 (Dev) 재작업 필요"))
+        print(YELLOW("  External gate FAIL 경로: Phase 2 (Dev) 재작업 필요"))
         print(f"\n  다음 단계: {YELLOW('python pipeline.py done --phase dev --files \"..\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json')}")
     else:
         print(GREEN(f"\n[PIPELINE COMPLETE]{branch_tag} {pid_display}"))
@@ -3055,7 +3945,7 @@ def cmd_status(args: argparse.Namespace) -> None:
             if gate.get("evidence"):
                 print(DIM(f"        증거: {gate.get('evidence')}"))
         blockers = _external_gate_blockers(state)
-        if blockers:
+        if blockers and terminal != "COMPLETE":
             print(RED("    blockers: " + "; ".join(blockers)))
 
     advisory = _advisory_status_summary(str(pid))
@@ -3084,8 +3974,11 @@ def cmd_status(args: argparse.Namespace) -> None:
         gate_ok, reason = check_gate(state, current) if current in GATE_RULES else (True, "")
         if gate_ok:
             print(f"  현재 단계: {YELLOW(PHASE_LABELS.get(current, current))}")
-            hint_suffix = " --user-confirmed" if current == "harness" else ""
-            print(f"  확인 명령: {YELLOW(f'python pipeline.py check --phase {current}{hint_suffix}')}")
+            if current == "harness":
+                print(f"  확인 명령: {YELLOW('python pipeline.py gates status')}")
+                print(f"  다음 게이트: {YELLOW('technical -> oracle -> github-ci -> accept')}")
+            else:
+                print(f"  확인 명령: {YELLOW(f'python pipeline.py check --phase {current}')}")
         else:
             print(RED(f"  [차단] {reason}"))
         print()
@@ -3235,14 +4128,13 @@ def cmd_interface(args: argparse.Namespace) -> None:
         },
         "harness": {
             "agent": "test-harness-agent",
-            # BUG-20260508-D541 MT-5: PASS/FAIL 공통으로 <harness_report> + <test_code> 필수.
-            # XML comment 내 태그는 유효하지 않음 (_strip_xml_comments 후 검증).
             "next_cmd": (
-                'python pipeline.py harness --score 0..100 --verdict PASS|FAIL '
-                '--test-output-file PATH --user-confirmed  '
-                '(PASS/FAIL 공통: <harness_report> + <test_code> 필수, XML comment 내 태그 무효)'
+                'External gates only: python pipeline.py gates technical; '
+                'python pipeline.py gates oracle --user-confirmed; '
+                'python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline; '
+                'python pipeline.py gates accept --result ACCEPT --evidence PATH --user-confirmed'
             ),
-            "required_xml": ["<harness_report>", "<test_code>"],
+            "required_xml": ["<harness_diagnostic>"],
         },
         "architect": {
             "agent": "prompt-architect-agent",
@@ -3356,6 +4248,7 @@ SHALLOW_TEST_TYPES = {"file_exists_check", "exe_launch_check"}
 ORACLE_CASE_KINDS = {"normal", "edge", "exception", "error"}
 ORACLE_EDGE_CASE_KINDS = {"edge", "exception", "error"}
 ORACLE_PLACEHOLDER_STRINGS = {"", "todo", "tbd", "placeholder", "sample", "example", "n/a", "na", "none", "null"}
+ORACLE_STORAGE_ROOT_REL = Path("tests") / "oracles"
 NON_ORACLE_DELIVERABLE_KINDS = {"doc", "docs", "markdown", "prompt", "analysis", "research", "policy", "config", "configuration"}
 
 
@@ -3462,6 +4355,20 @@ def _oracle_expected_quality_blockers(name: str, expected_path: Path) -> List[st
     return blockers
 
 
+def _oracle_storage_blockers(name: str, input_path: Path, expected_path: Path) -> List[str]:
+    blockers: List[str] = []
+    root = (BASE_DIR / ORACLE_STORAGE_ROOT_REL).resolve()
+    for label, path in (("input", input_path), ("expected", expected_path)):
+        try:
+            path.resolve().relative_to(root)
+        except ValueError:
+            blockers.append(
+                f"{name}: oracle {label}_path must be under "
+                f"{ORACLE_STORAGE_ROOT_REL.as_posix()}/** so GitHub CODEOWNERS can protect the answer key"
+            )
+    return blockers
+
+
 def _oracle_blockers_are_waivable(blockers: List[str]) -> bool:
     waivable = {
         "oracle_manifest.json is required for three_gate mode",
@@ -3508,6 +4415,7 @@ def _oracle_manifest_status(paths: Dict[str, Path]) -> Tuple[List[Dict[str, Any]
             input_path = BASE_DIR / input_path
         if not expected_path.is_absolute():
             expected_path = BASE_DIR / expected_path
+        blockers.extend(_oracle_storage_blockers(name, input_path, expected_path))
         if not input_path.exists():
             blockers.append(f"{name}: input_path missing: {input_path}")
             continue
@@ -3645,9 +4553,11 @@ def cmd_contract(args: argparse.Namespace) -> None:
                 "contract_path": str(paths["contract"]),
                 "test_set_path": str(paths["test_set"]),
             }
-            if getattr(args, "three_gate", False):
-                state["external_gates"] = _new_external_gates(enabled=True)
-                _log_event(state, "three_gate mode enabled")
+            state["external_gates"] = _new_external_gates(enabled=True)
+            _enable_phase_attestations(state)
+            state["module_gates"] = _ensure_module_gates(state)
+            _log_event(state, "three_gate mode enabled (mandatory)")
+            _log_event(state, "GitHub phase attestations enabled (mandatory)")
             _log_event(state, f"contract_v2 initialized: {paths['root']}")
             _save(state)
         print(GREEN(f"\n[CONTRACT INIT] {pid}"))
@@ -3779,6 +4689,12 @@ def cmd_contract(args: argparse.Namespace) -> None:
         name = args.name or f"O{len(entries) + 1:03d}"
         if any(isinstance(item, dict) and item.get("name") == name for item in entries):
             _die(f"oracle name already exists: {name}")
+        storage_blockers = _oracle_storage_blockers(name, input_path, expected_path)
+        if storage_blockers:
+            _die(
+                "; ".join(storage_blockers)
+                + f". Move user-provided oracle files to {ORACLE_STORAGE_ROOT_REL.as_posix()}/{pid}/{name}/ and retry."
+            )
         entries.append({
             "name": name,
             "description": args.description or "",
@@ -3960,6 +4876,59 @@ def _external_gates_enabled(state: Dict[str, Any]) -> bool:
     return isinstance(gates, dict) and bool(gates.get("enabled"))
 
 
+def _phase_attestations_enabled(state: Dict[str, Any]) -> bool:
+    state = _ensure_v210_fields(state)
+    info = state.get("phase_attestations", {})
+    return isinstance(info, dict) and bool(info.get("enabled"))
+
+
+def _phase_attestation_info(state: Dict[str, Any], phase: str) -> Dict[str, Any]:
+    state = _ensure_v210_fields(state)
+    info = state.get("phase_attestations", {})
+    phases = info.get("phases", {}) if isinstance(info, dict) else {}
+    item = phases.get(phase, {}) if isinstance(phases, dict) else {}
+    return item if isinstance(item, dict) else {}
+
+
+def _phase_attestation_required_before(phase: str) -> Optional[str]:
+    return {
+        "dev": "pm",
+        "qa": "dev",
+        "sec": "qa",
+        "build": "qa",
+        "harness": "build",
+        "architect": "build",
+    }.get(phase)
+
+
+def _phase_attestation_blocker_for_phase(state: Dict[str, Any], phase: str) -> Optional[str]:
+    if not _phase_attestations_enabled(state):
+        return None
+    required = _phase_attestation_required_before(phase)
+    if not required:
+        return None
+    info = _phase_attestation_info(state, required)
+    if info.get("status") != "PASS":
+        return (
+            f"{required} GitHub phase attestation must be PASS before {phase}. "
+            f"Run `python pipeline.py gates prepare-phase --phase {required}`, push the branch, "
+            f"wait for CI, then run `python pipeline.py gates phase-ci --phase {required}`."
+        )
+    return None
+
+
+def _phase_attestation_blockers(state: Dict[str, Any]) -> List[str]:
+    if not _phase_attestations_enabled(state):
+        return []
+    blockers: List[str] = []
+    phases = state.get("phase_attestations", {}).get("phases", {})
+    for phase in PHASE_ATTESTATION_PHASES:
+        info = phases.get(phase, {}) if isinstance(phases, dict) else {}
+        if not isinstance(info, dict) or info.get("status") != "PASS":
+            blockers.append(f"{phase} GitHub phase attestation must be PASS")
+    return blockers
+
+
 def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
     if not _external_gates_enabled(state):
         return []
@@ -3969,11 +4938,168 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
         info = gates.get(gate_name, {}) if isinstance(gates, dict) else {}
         if not isinstance(info, dict) or info.get("status") != "PASS":
             blockers.append(f"{gate_name} gate must be PASS")
+    blockers.extend(_phase_attestation_blockers(state))
     pid = str(state.get("pipeline_id", ""))
     unresolved = _unresolved_critical_advisories(pid)
     if unresolved:
         blockers.append(f"unresolved GPT advisory CRITICAL findings: {len(unresolved)}")
     return blockers
+
+
+def cmd_module(args: argparse.Namespace) -> None:
+    """Incremental module gate for PM micro_tasks."""
+    action = args.module_action
+    state = _require_state()
+    state = _ensure_v210_fields(state)
+    if action == "status":
+        print(json.dumps({
+            "pipeline_id": state.get("pipeline_id"),
+            "module_gates": _module_gate_state(state),
+            "blockers": _module_gate_blockers(state),
+        }, ensure_ascii=False, indent=2))
+        return
+
+    current = state.get("current_phase")
+    if current != "dev":
+        _die(f"[MODULE GATE] module commands are allowed only during Dev phase; current_phase={current!r}")
+    if not isinstance(state.get("atomic_plan"), dict):
+        _die("[MODULE GATE] PM atomic_plan missing; complete PM first")
+
+    gates = _module_gate_state(state)
+    mt_id = str(getattr(args, "mt_id", "") or "")
+
+    if action in {"design", "dev", "qa"}:
+        if not mt_id:
+            _die("[MODULE GATE] --mt-id is required", exit_code=2)
+        module = _require_module_current(state, mt_id)
+        _validate_module_checkpoints(state)
+
+    if action == "design":
+        report = _validate_module_report_file(
+            getattr(args, "report_file", None),
+            label="MODULE DESIGN GATE",
+            required_tags=["module_design", "mt_id", "interface_contract", "implementation_plan", "verification_plan"],
+            mt_id=mt_id,
+        )
+        module["design"] = {
+            **_empty_module_step(),
+            "status": "PASS",
+            "completed_at": _now(),
+            "report_file": report["report_file"],
+        }
+        module["status"] = "DESIGN_DONE"
+        state["module_gates"]["modules"][mt_id] = module
+        _log_event(state, f"module design PASS {mt_id}")
+        _save(state)
+        print(GREEN(f"\n[MODULE DESIGN PASS] {mt_id}"))
+        print(f"  next: {YELLOW(f'python pipeline.py module dev --mt-id {mt_id} --files ... --report-file module_handover_{mt_id}.xml --scope-manifest scope_manifest_{mt_id}.json')}\n")
+        return
+
+    if action == "dev":
+        if module.get("design", {}).get("status") != "PASS":
+            _die(f"[MODULE GATE] {mt_id} requires module design PASS before module dev")
+        report = _validate_module_report_file(
+            getattr(args, "report_file", None),
+            label="MODULE DEV GATE",
+            required_tags=["module_handover", "mt_id", "implemented_files", "self_check"],
+            mt_id=mt_id,
+        )
+        scope = _validate_module_scope_manifest(
+            getattr(args, "scope_manifest", None),
+            state,
+            mt_id,
+            getattr(args, "files", None),
+        )
+        module["dev"] = {
+            **_empty_module_step(),
+            "status": "DONE",
+            "completed_at": _now(),
+            "report_file": report["report_file"],
+            "evidence": getattr(args, "files", None),
+            "scope": scope,
+        }
+        module["status"] = "DEV_DONE"
+        state["module_gates"]["modules"][mt_id] = module
+        _log_event(state, f"module dev DONE {mt_id}")
+        _save(state)
+        print(GREEN(f"\n[MODULE DEV DONE] {mt_id}"))
+        print(f"  next: {YELLOW(f'python pipeline.py module qa --mt-id {mt_id} --result PASS --report-file module_qa_{mt_id}.xml')}\n")
+        return
+
+    if action == "qa":
+        if module.get("dev", {}).get("status") != "DONE":
+            _die(f"[MODULE GATE] {mt_id} requires module dev DONE before module QA")
+        result = str(getattr(args, "result", "")).upper()
+        report = _validate_module_report_file(
+            getattr(args, "report_file", None),
+            label="MODULE QA GATE",
+            required_tags=["module_qa_report", "mt_id", "verdict", "verification_evidence"],
+            mt_id=mt_id,
+        )
+        path, text = _read_phase_report_or_die(getattr(args, "report_file", None), "MODULE QA GATE")
+        verdict_el = _extract_xml_element(text, "verdict")
+        verdict = (verdict_el.text or "").strip().upper() if verdict_el is not None and verdict_el.text else ""
+        if verdict != result:
+            _die(f"[MODULE QA GATE] CLI --result {result} does not match report <verdict> {verdict}")
+        module["qa"] = {
+            **_empty_module_step(),
+            "status": result,
+            "completed_at": _now(),
+            "report_file": report["report_file"],
+        }
+        if result == "PASS":
+            module["status"] = "PASS"
+            module["checkpoint"] = _module_checkpoint_for_files(module.get("target_files", []))
+            _log_event(state, f"module QA PASS {mt_id}")
+            print(GREEN(f"\n[MODULE QA PASS] {mt_id} checkpoint saved"))
+        else:
+            module["status"] = "QA_FAIL"
+            _log_event(state, f"module QA FAIL {mt_id}")
+            print(RED(f"\n[MODULE QA FAIL] {mt_id}"))
+        state["module_gates"]["modules"][mt_id] = module
+        _save(state)
+        blockers = _module_gate_blockers(state)
+        if blockers:
+            print(f"  remaining: {', '.join(blockers)}\n")
+        else:
+            print(f"  next: {YELLOW('python pipeline.py module integrate --result PASS --report-file integration_report.xml')}\n")
+        sys.exit(0 if result == "PASS" else 1)
+
+    if action == "integrate":
+        blockers = [
+            blocker for blocker in _module_gate_blockers(state)
+            if blocker != "integration module gate must be PASS"
+        ]
+        if blockers:
+            _die("[MODULE INTEGRATION GATE] all modules must pass before integration: " + "; ".join(blockers))
+        _validate_module_checkpoints(state)
+        result = str(getattr(args, "result", "")).upper()
+        report = _validate_module_report_file(
+            getattr(args, "report_file", None),
+            label="MODULE INTEGRATION GATE",
+            required_tags=["integration_report", "modules_integrated", "integration_verdict"],
+        )
+        path, text = _read_phase_report_or_die(getattr(args, "report_file", None), "MODULE INTEGRATION GATE")
+        verdict_el = _extract_xml_element(text, "integration_verdict")
+        verdict = (verdict_el.text or "").strip().upper() if verdict_el is not None and verdict_el.text else ""
+        if verdict != result:
+            _die(f"[MODULE INTEGRATION GATE] CLI --result {result} does not match report <integration_verdict> {verdict}")
+        gates["integration"] = {
+            **_empty_module_step(),
+            "status": "PASS" if result == "PASS" else "FAIL",
+            "completed_at": _now(),
+            "report_file": report["report_file"],
+        }
+        state["module_gates"]["integration"] = gates["integration"]
+        _log_event(state, f"module integration {result}")
+        _save(state)
+        color = GREEN if result == "PASS" else RED
+        print(color(f"\n[MODULE INTEGRATION {result}]"))
+        if result == "PASS":
+            print(f"  next: {YELLOW('python pipeline.py done --phase dev --files ... --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id ...')}\n")
+        sys.exit(0 if result == "PASS" else 1)
+
+    _die(f"unknown module action: {action}", exit_code=2)
 
 
 def _advisory_status_summary(pid: str) -> Dict[str, Any]:
@@ -4233,6 +5359,71 @@ def _validate_github_ci_attestation(
     }
 
 
+def _validate_github_phase_attestation(
+    attestation: Dict[str, Any],
+    *,
+    repo: str,
+    run_id: str,
+    commit_sha: str,
+    pipeline_id: str,
+    phase: str,
+) -> Dict[str, Any]:
+    blockers: List[str] = []
+    warnings: List[str] = []
+    if attestation.get("schema_version") != 1:
+        blockers.append("schema_version must be 1")
+    if attestation.get("attestation_type") != "pipeline-phase-v1":
+        blockers.append("attestation_type must be pipeline-phase-v1")
+    if str(attestation.get("repository") or "") != repo:
+        blockers.append(f"repository mismatch: expected {repo}, got {attestation.get('repository')}")
+    if str(attestation.get("run_id") or "") != str(run_id):
+        blockers.append(f"run_id mismatch: expected {run_id}, got {attestation.get('run_id')}")
+    if str(attestation.get("pipeline_id") or "") != pipeline_id:
+        blockers.append(f"pipeline_id mismatch: expected {pipeline_id}, got {attestation.get('pipeline_id')}")
+    if str(attestation.get("phase") or "") != phase:
+        blockers.append(f"phase mismatch: expected {phase}, got {attestation.get('phase')}")
+    head_sha = str(attestation.get("head_sha") or attestation.get("commit_sha") or "")
+    if head_sha.lower() != str(commit_sha).lower():
+        blockers.append("commit_sha mismatch")
+    validation = attestation.get("validation", {})
+    if not isinstance(validation, dict):
+        blockers.append("validation must be an object")
+    elif validation.get("status") != "PASS":
+        blockers.extend(str(item) for item in validation.get("blockers", ["phase validation did not PASS"]))
+    request = attestation.get("request", {})
+    if not isinstance(request, dict):
+        blockers.append("request must be an object")
+        request = {}
+    agent_run = request.get("agent_run")
+    if not isinstance(agent_run, dict):
+        blockers.append("request.agent_run receipt is required")
+    else:
+        expected_agent = _expected_agent_id(phase)
+        if agent_run.get("phase") != phase:
+            blockers.append("request.agent_run phase mismatch")
+        if agent_run.get("agent_id") != expected_agent:
+            blockers.append(f"request.agent_run agent_id must be {expected_agent}")
+        if agent_run.get("status") != "COMPLETED":
+            blockers.append("request.agent_run status must be COMPLETED")
+        if agent_run.get("used_by_phase") != phase:
+            blockers.append("request.agent_run must be consumed by the attested phase")
+    if isinstance(request, dict) and request.get("local_only_files"):
+        warnings.append("phase request included local-only files that GitHub Actions could not re-read")
+    return {
+        "schema_version": 1,
+        "verified_at": _now(),
+        "status": "PASS" if not blockers else "FAIL",
+        "blockers": blockers,
+        "warnings": warnings,
+        "repository": repo,
+        "run_id": str(run_id),
+        "commit_sha": commit_sha,
+        "pipeline_id": pipeline_id,
+        "phase": phase,
+        "attestation": attestation,
+    }
+
+
 def _verify_github_ci_run(
     *,
     repo: Optional[str],
@@ -4243,7 +5434,10 @@ def _verify_github_ci_run(
     workflow: Optional[str],
 ) -> Dict[str, Any]:
     resolved_repo = repo or _github_repo_from_remote()
-    commit_sha = commit or _git_rev_parse("HEAD")
+    if commit and re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+        commit_sha = commit
+    else:
+        commit_sha = _git_rev_parse(commit or "HEAD")
     if not commit_sha:
         _die("could not infer commit sha; pass --commit explicitly")
     token = _github_token(token_env)
@@ -4304,6 +5498,82 @@ def _verify_github_ci_run(
     return verification
 
 
+def _verify_github_phase_attestation_run(
+    *,
+    repo: Optional[str],
+    commit: Optional[str],
+    run_id: Optional[str],
+    artifact_name: str,
+    token_env: str,
+    workflow: Optional[str],
+    pipeline_id: str,
+    phase: str,
+) -> Dict[str, Any]:
+    resolved_repo = repo or _github_repo_from_remote()
+    if commit and re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+        commit_sha = commit
+    else:
+        commit_sha = _git_rev_parse(commit or "HEAD")
+    if not commit_sha:
+        _die("could not infer commit sha; pass --commit explicitly")
+    token = _github_token(token_env)
+
+    if run_id:
+        run = _github_api_json(f"https://api.github.com/repos/{resolved_repo}/actions/runs/{run_id}", token)
+    else:
+        run = _github_latest_run_for_commit(resolved_repo, commit_sha, token, workflow=workflow)
+    resolved_run_id = str(run.get("id") or run_id or "")
+    if not resolved_run_id:
+        _die("GitHub workflow run response is missing id")
+
+    run_blockers: List[str] = []
+    if str(run.get("head_sha") or "").lower() != str(commit_sha).lower():
+        run_blockers.append(f"workflow run head_sha mismatch: expected {commit_sha}, got {run.get('head_sha')}")
+    if run.get("status") != "completed":
+        run_blockers.append(f"workflow run status is not completed: {run.get('status')}")
+    if run.get("conclusion") != "success":
+        run_blockers.append(f"workflow run conclusion is not success: {run.get('conclusion')}")
+
+    artifacts = _github_api_json(f"https://api.github.com/repos/{resolved_repo}/actions/runs/{resolved_run_id}/artifacts", token)
+    artifact_items = artifacts.get("artifacts", [])
+    if not isinstance(artifact_items, list):
+        _die("GitHub artifacts response did not contain an artifacts list")
+    artifact = next((item for item in artifact_items if isinstance(item, dict) and item.get("name") == artifact_name), None)
+    if not artifact:
+        _die(f"workflow run is missing required artifact: {artifact_name}")
+    download_url = artifact.get("archive_download_url")
+    if not download_url:
+        _die("workflow artifact response is missing archive_download_url")
+    zip_bytes = _github_download_bytes(str(download_url), token)
+    attestation = _read_attestation_from_zip(zip_bytes, file_name="phase_attestation.json")
+    verification = _validate_github_phase_attestation(
+        attestation,
+        repo=resolved_repo,
+        run_id=resolved_run_id,
+        commit_sha=commit_sha,
+        pipeline_id=pipeline_id,
+        phase=phase,
+    )
+    if run_blockers:
+        verification["status"] = "FAIL"
+        verification["blockers"] = run_blockers + list(verification.get("blockers", []))
+    verification["workflow_run"] = {
+        "id": run.get("id"),
+        "name": run.get("name"),
+        "html_url": run.get("html_url"),
+        "status": run.get("status"),
+        "conclusion": run.get("conclusion"),
+        "head_sha": run.get("head_sha"),
+    }
+    verification["artifact"] = {
+        "id": artifact.get("id"),
+        "name": artifact.get("name"),
+        "size_in_bytes": artifact.get("size_in_bytes"),
+        "expired": artifact.get("expired"),
+    }
+    return verification
+
+
 def _record_github_ci_verification(state: Dict[str, Any], verification: Dict[str, Any], artifact_name: str) -> None:
     pid = str(state.get("pipeline_id"))
     paths = _contract_paths(pid)
@@ -4330,6 +5600,43 @@ def _record_github_ci_verification(state: Dict[str, Any], verification: Dict[str
     _log_event(state, f"github verify-run {verification['status']} run_id={run_id} commit={commit_sha[:12]}")
 
 
+def _record_phase_ci_verification(
+    state: Dict[str, Any],
+    phase: str,
+    verification: Dict[str, Any],
+    artifact_name: str,
+) -> None:
+    pid = str(state.get("pipeline_id"))
+    paths = _contract_paths(pid)
+    result_path = paths["phase_ci_root"] / f"{phase}_result.json"
+    _write_json(result_path, verification)
+    state["phase_attestations"] = _ensure_phase_attestations(state)
+    phase_state = state["phase_attestations"]["phases"][phase]
+    run_id = str(verification.get("run_id") or "")
+    commit_sha = str(verification.get("commit_sha") or "")
+    phase_state.update({
+        "status": verification["status"],
+        "completed_at": _now(),
+        "phase": phase,
+        "run_id": run_id,
+        "commit_sha": commit_sha,
+        "evidence": f"github_actions_phase_run:{run_id}",
+        "report_file": str(result_path),
+        "artifact": artifact_name,
+    })
+    state.setdefault("trusted_phase_runs", [])
+    state["trusted_phase_runs"].append({
+        "recorded_at": _now(),
+        "status": verification["status"],
+        "repo": verification.get("repository"),
+        "phase": phase,
+        "run_id": run_id,
+        "commit_sha": commit_sha,
+        "artifact": artifact_name,
+    })
+    _log_event(state, f"github phase-ci {phase} {verification['status']} run_id={run_id} commit={commit_sha[:12]}")
+
+
 def cmd_github(args: argparse.Namespace) -> None:
     action = args.github_action
     if action != "verify-run":
@@ -4351,6 +5658,56 @@ def cmd_github(args: argparse.Namespace) -> None:
 
     print(json.dumps(verification, ensure_ascii=False, indent=2))
     sys.exit(0 if verification["status"] == "PASS" else 1)
+
+
+def cmd_agent(args: argparse.Namespace) -> None:
+    action = args.agent_action
+    state = _require_state()
+    state = _ensure_v210_fields(state)
+    if action == "start":
+        run, token = _agent_run_start(state, args.phase, args.agent_id)
+        _save(state)
+        safe_run = {k: v for k, v in run.items() if k != "token_hash"}
+        print(GREEN(f"\n[AGENT RUN STARTED] {run['phase']} {run['agent_id']}"))
+        print(f"  run_id: {run['run_id']}")
+        print(f"  token: {token}")
+        print("  Pass this token only to the assigned agent; it is shown once.\n")
+        print(json.dumps({"run": safe_run, "token": token}, ensure_ascii=False, indent=2))
+        return
+
+    if action == "finish":
+        run = _agent_run_finish(
+            state,
+            run_id=args.run_id,
+            token=args.token,
+            output_file=args.output_file,
+            evidence=args.evidence,
+            notes=args.notes,
+        )
+        _save(state)
+        safe_run = {k: v for k, v in run.items() if k != "token_hash"}
+        print(GREEN(f"\n[AGENT RUN COMPLETED] {run['phase']} {run['agent_id']}"))
+        print(f"  run_id: {run['run_id']}")
+        print(f"  receipt: {run['receipt_path']}\n")
+        print(json.dumps(safe_run, ensure_ascii=False, indent=2))
+        return
+
+    if action == "status":
+        runs = state.get("agent_runs", {})
+        if not isinstance(runs, dict):
+            runs = {}
+        safe_runs = {
+            rid: {k: v for k, v in run.items() if k != "token_hash"}
+            for rid, run in runs.items()
+            if isinstance(run, dict)
+        }
+        print(json.dumps({
+            "pipeline_id": state.get("pipeline_id"),
+            "agent_runs": safe_runs,
+        }, ensure_ascii=False, indent=2))
+        return
+
+    _die(f"unknown agent action: {action}", exit_code=2)
 
 
 def _set_external_gate(
@@ -4606,24 +5963,64 @@ def cmd_gates(args: argparse.Namespace) -> None:
 
     if action == "init":
         state["external_gates"] = _new_external_gates(enabled=True)
-        _log_event(state, "three_gate mode enabled")
+        _enable_phase_attestations(state)
+        state["module_gates"] = _ensure_module_gates(state)
+        _log_event(state, "three_gate mode enabled (mandatory)")
+        _log_event(state, "GitHub phase attestations enabled (mandatory)")
         _save(state)
-        print(GREEN(f"\n[THREE GATE ENABLED] {pid}\n"))
+        print(GREEN(f"\n[THREE GATE + PHASE ATTESTATION ENABLED] {pid}\n"))
         return
 
     if action == "status":
         result = {
             "pipeline_id": pid,
             "external_gates": state.get("external_gates"),
+            "phase_attestations": state.get("phase_attestations"),
             "blockers": _external_gate_blockers(state),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
     if not _external_gates_enabled(state):
-        _die("three_gate mode is not enabled. Run `python pipeline.py gates init` first.")
+        state["external_gates"] = _new_external_gates(enabled=True)
+        _enable_phase_attestations(state)
+
+    if action == "prepare-phase":
+        request = _prepare_phase_attestation_request(state, args.phase)
+        _log_event(state, f"phase attestation request prepared: {args.phase}")
+        _save(state)
+        print(GREEN(f"\n[PHASE ATTESTATION REQUEST READY] {args.phase}"))
+        print(f"  request: {PHASE_ATTESTATION_REQUEST}")
+        print("  next: commit/push the request plus .pipeline/phase_evidence, wait for GitHub Actions, then run:")
+        print(f"        {YELLOW(f'python pipeline.py gates phase-ci --phase {args.phase} --repo hojiyong2-commits/Pipeline')}\n")
+        print(json.dumps(request, ensure_ascii=False, indent=2))
+        return
+
+    if action == "phase-ci":
+        if not _phase_attestations_enabled(state):
+            _die("phase attestations are mandatory. Run `python pipeline.py gates init` to migrate this state.")
+        verification = _verify_github_phase_attestation_run(
+            repo=args.repo,
+            commit=args.commit,
+            run_id=args.run_id,
+            artifact_name=args.artifact,
+            token_env=args.token_env,
+            workflow=args.workflow,
+            pipeline_id=pid,
+            phase=args.phase,
+        )
+        _record_phase_ci_verification(state, args.phase, verification, args.artifact)
+        _save(state)
+        color = GREEN if verification["status"] == "PASS" else RED
+        print(color(f"\n[PHASE CI GATE {verification['status']}] {args.phase}"))
+        print(f"  run_id: {verification.get('run_id')}")
+        print(f"  report: {_contract_paths(pid)['phase_ci_root'] / (args.phase + '_result.json')}\n")
+        sys.exit(0 if verification["status"] == "PASS" else 1)
 
     if action == "technical":
+        build_blocker = _phase_attestation_blocker_for_phase(state, "harness")
+        if build_blocker:
+            _die(build_blocker)
         strict_tools = not bool(getattr(args, "relaxed_tools", False))
         if bool(getattr(args, "strict_tools", False)):
             strict_tools = True
@@ -4728,14 +6125,16 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not getattr(args, "user_confirmed", False):
             _die("user acceptance gate requires --user-confirmed")
         result = str(args.result).upper()
+        deployment: Optional[Dict[str, Any]] = None
         if result == "ACCEPT":
             prereq = []
-            for gate_name in ("technical", "oracle"):
+            for gate_name in ("technical", "oracle", "github_ci"):
                 gate = state["external_gates"].get(gate_name, {})
                 if not isinstance(gate, dict) or gate.get("status") != "PASS":
                     prereq.append(f"{gate_name} gate must be PASS before user ACCEPT")
             if prereq:
                 _die("; ".join(prereq))
+            deployment = _deploy_accepted_outputs(state, args.evidence, args.notes)
         report = {
             "schema_version": 1,
             "generated_at": _now(),
@@ -4743,6 +6142,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
             "result": result,
             "evidence": args.evidence,
             "notes": args.notes or "",
+            "deployment": deployment,
         }
         _write_json(paths["user_validation"], report)
         gate_status = "PASS" if result == "ACCEPT" else "FAIL"
@@ -4758,6 +6158,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         state["phases"]["harness"]["completed_at"] = _now()
         state["phases"]["harness"]["evidence"] = "three_gate_user_acceptance"
         state["phases"]["harness"]["report_file"] = str(paths["user_validation"])
+        if deployment:
+            state["deployment"] = deployment
         state["current_phase"] = "architect"
         _log_event(state, f"user acceptance gate {gate_status}")
         _record_snapshot(state, "harness", None)
@@ -4765,6 +6167,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         color = GREEN if gate_status == "PASS" else RED
         print(color(f"\n[USER ACCEPTANCE GATE {gate_status}]"))
         print(f"  report: {paths['user_validation']}")
+        if deployment:
+            print(f"  deployed: {deployment['deploy_dir']}")
         print(f"  next: {YELLOW('python pipeline.py architect --report-file architect_report.xml')}\n")
         sys.exit(0 if gate_status == "PASS" else 1)
 
@@ -5325,7 +6729,7 @@ def cmd_tournament_status(args: argparse.Namespace) -> None:
 
 
 def cmd_tournament_rank(args: argparse.Namespace) -> None:
-    """브랜치 Harness 점수 비교 출력."""
+    """브랜치 external gate/artifact 상태 비교 출력."""
     if args.pipeline_id is None:
         print("[ERROR] --pipeline-id 파라미터가 필요합니다.")
         raise SystemExit(2)
@@ -5342,10 +6746,10 @@ def cmd_tournament_rank(args: argparse.Namespace) -> None:
 
     print(f"\n  토너먼트 순위: {t['pipeline_id']}")
     print()
-    print(f"  {'브랜치':<8} {'Harness 점수':<15} {'Build':<10} {'결과'}")
-    print(f"  {'-'*8} {'-'*15} {'-'*10} {'-'*12}")
+    print(f"  {'브랜치':<8} {'External Gates':<28} {'Build':<10} {'결과'}")
+    print(f"  {'-'*8} {'-'*28} {'-'*10} {'-'*18}")
 
-    scores: List[tuple] = []
+    candidates: List[str] = []
     for b in t.get("branches", []):
         if not isinstance(b, str):
             continue  # allowed: 비정상 항목 방어 (skip non-str entries)
@@ -5353,41 +6757,38 @@ def cmd_tournament_rank(args: argparse.Namespace) -> None:
         phases = bs.get("phases", {})
         harness_info = phases.get("harness", {})
         build_info = phases.get("build", {})
+        external_gates = bs.get("external_gates", {})
 
         build_ok = isinstance(build_info, dict) and build_info.get("status") not in (None, "FAILED", "PENDING")
-        evidence = harness_info.get("evidence") if isinstance(harness_info, dict) else None
-        verdict = harness_info.get("verdict") if isinstance(harness_info, dict) else None
-
-        # evidence 형식: "score=N"
-        score: Optional[int] = None
-        if isinstance(evidence, str) and evidence.startswith("score="):
-            try:
-                score = int(evidence.split("=", 1)[1])
-            except (ValueError, IndexError):
-                score = None
-
-        # harness status 필드에서 PASS/FAIL 판정
         harness_status = harness_info.get("status") if isinstance(harness_info, dict) else None
+        gate_bits: List[str] = []
+        all_pass = True
+        if isinstance(external_gates, dict):
+            for gate_name in ("technical", "oracle", "github_ci", "acceptance"):
+                gate = external_gates.get(gate_name, {})
+                status = gate.get("status", "PENDING") if isinstance(gate, dict) else "PENDING"
+                gate_bits.append(f"{gate_name}:{status}")
+                if status != "PASS":
+                    all_pass = False
+        else:
+            all_pass = False
+        gate_summary = ", ".join(gate_bits) if gate_bits else "no gate state"
 
         if not build_ok:
             result = "ELIMINATED (Build FAIL)"
-            display_score = "-"
-        elif score is None:
-            result = "진행중"
-            display_score = "-"
+        elif all_pass:
+            result = "후보"
+            candidates.append(b)
         else:
             result = harness_status if harness_status in ("PASS", "FAIL") else "진행중"
-            display_score = f"{score}%"
-            scores.append((b, score))
 
         build_label = "OK" if build_ok else "FAIL"
-        print(f"  {b:<8} {display_score:<15} {build_label:<10} {result}")
+        print(f"  {b:<8} {gate_summary:<28} {build_label:<10} {result}")
 
-    if len(scores) > 0:
-        scores.sort(key=lambda x: x[1], reverse=True)
-        winner_branch, winner_score = scores[0]
-        print(f"\n  현재 선두: Branch {winner_branch} ({winner_score}%)")
-        print(f"  확정하려면: python pipeline.py tournament-finalize --pipeline-id {args.pipeline_id} --winner {winner_branch}")
+    if candidates:
+        print(f"\n  후보 브랜치: {', '.join(candidates)}")
+        print("  사용자에게 결과물 비교표를 보여준 뒤 승자를 확정하세요:")
+        print(f"  python pipeline.py tournament-finalize --pipeline-id {args.pipeline_id} --winner <BRANCH>")
     print()
 
 
@@ -5507,6 +6908,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_done.add_argument("--scope-manifest", default=None,
                         help="[dev 전용] 모든 파이프라인에서 필수인 scope_manifest.json 경로")
 
+    p_done.add_argument("--agent-run-id", default=None,
+                        help="Option A: completed agent run receipt id for pm/dev phase submission")
+
     # qa
     p_qa = sub.add_parser("qa", help="QA 결과 기록")
     p_qa.add_argument("--result", required=True, choices=["PASS", "FAIL", "pass", "fail"])
@@ -5517,11 +6921,14 @@ def build_parser() -> argparse.ArgumentParser:
                       help="브랜치 ID (A-Z 대문자 1글자). 지정 시 브랜치 state 파일 사용.")
     # MT-2: QA numeric_score 기록 강제 (IMP-20260506-A064)
     p_qa.add_argument("--numeric-score", default=None, metavar="SCORE",
-                      help="QA 수치 점수 0~120. PASS 시 96점 이상 필수 (80%% of 120).")
+                      help="QA 중간 hard-gate 값 0~120. PASS 시 96점 이상 필수; 최종 COMPLETE 점수가 아님.")
     # MT-3: Circuit Breaker failure_signature 추적 (IMP-20260506-A064)
     p_qa.add_argument("--failure-sig", default=None, metavar="SIG",
                       help="QA FAIL 시 <failure_signature>[category]:[hash]</failure_signature> 값. "
                            "동일 시그니처 연속 2회 감지 시 RECURRING 경고 출력.")
+
+    p_qa.add_argument("--agent-run-id", default=None,
+                      help="Option A: completed qa-agent run receipt id")
 
     # sec
     p_sec = sub.add_parser("sec", help="Security 결과 기록")
@@ -5553,9 +6960,26 @@ def build_parser() -> argparse.ArgumentParser:
         help='N/A 빌드(--exe "N/A") 시 필수. Phase 7 진행 전 사용자 "진행" 응답 확인 완료 플래그. 없으면 빌드 기록 거부.',
     )
 
+    p_build.add_argument("--agent-run-id", default=None,
+                         help="Option A: completed build-agent run receipt id")
+
+    # agent run receipts
+    p_agent = sub.add_parser("agent", help="Start/finish trusted per-phase agent run receipts")
+    agsub = p_agent.add_subparsers(dest="agent_action", required=True)
+    p_agent_start = agsub.add_parser("start", help="Start an agent run and print one-time token")
+    p_agent_start.add_argument("--phase", required=True, choices=list(PHASE_ATTESTATION_PHASES))
+    p_agent_start.add_argument("--agent-id", default=None, help="Defaults to the required agent for the phase")
+    p_agent_finish = agsub.add_parser("finish", help="Finish an agent run and write receipt")
+    p_agent_finish.add_argument("--run-id", required=True)
+    p_agent_finish.add_argument("--token", required=True)
+    p_agent_finish.add_argument("--output-file", required=True)
+    p_agent_finish.add_argument("--evidence", default=None, help="Comma-separated files created or verified by the agent")
+    p_agent_finish.add_argument("--notes", default=None)
+    agsub.add_parser("status", help="Show agent run receipts without token hashes")
+
     # harness
-    p_harness = sub.add_parser("harness", help="Harness 채점 결과 기록")
-    p_harness.add_argument("--score", required=True, type=int, help="0~100 점수")
+    p_harness = sub.add_parser("harness", help="Legacy harness diagnostic 기록. 현재 /Task 완료 경로에서는 차단됨")
+    p_harness.add_argument("--score", required=True, type=int, help="Legacy diagnostic percentage only; not a completion score")
     p_harness.add_argument("--verdict", required=True, choices=["PASS", "FAIL", "pass", "fail"])
     p_harness.add_argument("--branch", metavar="BRANCH", default=None,
                            help="브랜치 ID (A-Z 대문자 1글자). 지정 시 브랜치 state 파일 사용.")
@@ -5567,7 +6991,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--user-confirmed",
         action="store_true",
         default=False,
-        help="Phase 7 진행 전 사용자 '진행' 응답 확인 완료 플래그. 없으면 harness 기록 거부.",
+        help="Legacy diagnostic 기록 전 사용자 확인 플래그. 신규 /Task 완료는 gates accept를 사용.",
     )
 
     # contract v2
@@ -5580,7 +7004,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_contract_init.add_argument("--type", default=None, choices=["FEAT", "BUG", "IMP", "feat", "bug", "imp"])
     p_contract_init.add_argument("--force", action="store_true", default=False)
     p_contract_init.add_argument("--three-gate", action="store_true", default=False,
-                                 help="Enable external Technical/Oracle/User Acceptance gates for this pipeline")
+                                 help="Backward-compatible no-op; external gates are mandatory")
+    p_contract_init.add_argument("--phase-attestations", action="store_true", default=False,
+                                 help="Backward-compatible no-op; phase attestations are mandatory")
 
     p_contract_module = csub.add_parser("add-module", help="Add a module/component to the contract")
     p_contract_module.add_argument("--pipeline-id", default=None)
@@ -5644,19 +7070,51 @@ def build_parser() -> argparse.ArgumentParser:
     p_contract_show.add_argument("--pipeline-id", default=None)
 
     # acceptance v2
-    p_acceptance = sub.add_parser("acceptance", help="Run contract-based acceptance harness v2")
+    p_acceptance = sub.add_parser("acceptance", help="Run contract-based acceptance diagnostics")
     asub = p_acceptance.add_subparsers(dest="acceptance_action", required=True)
-    p_acceptance_run = asub.add_parser("run", help="Run frozen test_set.json and compute score")
+    p_acceptance_run = asub.add_parser("run", help="Run frozen test_set.json and write diagnostic result")
     p_acceptance_run.add_argument("--pipeline-id", default=None)
     p_acceptance_run.add_argument("--output", default=None)
     p_acceptance_run.add_argument("--record", action="store_true", default=False)
     p_acceptance_run.add_argument("--user-confirmed", action="store_true", default=False)
 
+    # incremental module gates
+    p_module = sub.add_parser("module", help="Incremental Dev/QA gates for each PM micro_task")
+    msub = p_module.add_subparsers(dest="module_action", required=True)
+    p_module_design = msub.add_parser("design", help="Record detailed design for one micro_task")
+    p_module_design.add_argument("--mt-id", required=True)
+    p_module_design.add_argument("--report-file", required=True)
+    p_module_dev = msub.add_parser("dev", help="Record implementation for one micro_task")
+    p_module_dev.add_argument("--mt-id", required=True)
+    p_module_dev.add_argument("--files", required=True)
+    p_module_dev.add_argument("--report-file", required=True)
+    p_module_dev.add_argument("--scope-manifest", required=True)
+    p_module_qa = msub.add_parser("qa", help="Record QA result for one micro_task")
+    p_module_qa.add_argument("--mt-id", required=True)
+    p_module_qa.add_argument("--result", required=True, choices=["PASS", "FAIL", "pass", "fail"])
+    p_module_qa.add_argument("--report-file", required=True)
+    p_module_integrate = msub.add_parser("integrate", help="Record final integration after all module QA gates pass")
+    p_module_integrate.add_argument("--result", required=True, choices=["PASS", "FAIL", "pass", "fail"])
+    p_module_integrate.add_argument("--report-file", required=True)
+    msub.add_parser("status", help="Show incremental module gate state")
+
     # three_gate external gates
     p_gates = sub.add_parser("gates", help="External three-gate status and runners")
     gsub = p_gates.add_subparsers(dest="gates_action", required=True)
-    gsub.add_parser("init", help="Enable three_gate mode on the active pipeline")
+    p_gates_init = gsub.add_parser("init", help="Migrate or show mandatory external gate state")
+    p_gates_init.add_argument("--phase-attestations", action="store_true", default=False,
+                              help="Backward-compatible no-op; phase attestations are mandatory")
     gsub.add_parser("status", help="Show external gate state")
+    p_gate_prepare = gsub.add_parser("prepare-phase", help="Write .pipeline phase attestation request for CI")
+    p_gate_prepare.add_argument("--phase", required=True, choices=list(PHASE_ATTESTATION_PHASES))
+    p_gate_phase_ci = gsub.add_parser("phase-ci", help="Verify GitHub Actions phase attestation artifact")
+    p_gate_phase_ci.add_argument("--phase", required=True, choices=list(PHASE_ATTESTATION_PHASES))
+    p_gate_phase_ci.add_argument("--repo", default=None, help="owner/repo; defaults to origin remote")
+    p_gate_phase_ci.add_argument("--run-id", default=None, help="Specific GitHub Actions workflow run id; omitted means latest run for HEAD")
+    p_gate_phase_ci.add_argument("--commit", default=None, help="Expected commit SHA/ref; defaults to local HEAD")
+    p_gate_phase_ci.add_argument("--workflow", default="CI", help="Workflow run name to search when --run-id is omitted")
+    p_gate_phase_ci.add_argument("--artifact", default="pipeline-phase-attestation", help="Required phase artifact name")
+    p_gate_phase_ci.add_argument("--token-env", default="GITHUB_TOKEN", help="Optional env var containing a GitHub token")
     p_gate_tech = gsub.add_parser("technical", help="Run deterministic technical tool gate")
     p_gate_tech.add_argument("--strict-tools", action="store_true", default=False,
                              help="Deprecated no-op; strict tool checks are the default")
@@ -5765,7 +7223,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_tstatus.add_argument("--pipeline-id", required=True, help="토너먼트 파이프라인 ID")
 
     # tournament-rank
-    p_tr = sub.add_parser("tournament-rank", help="브랜치 Harness 점수 비교")
+    p_tr = sub.add_parser("tournament-rank", help="브랜치 external gate/artifact 비교")
     p_tr.add_argument("--pipeline-id", required=True, help="토너먼트 파이프라인 ID")
 
     # tournament-finalize
@@ -5786,9 +7244,11 @@ COMMAND_MAP = {
     "harness":              cmd_harness,
     "contract":             cmd_contract,
     "acceptance":           cmd_acceptance,
+    "module":               cmd_module,
     "gates":                cmd_gates,
     "advisory":             cmd_advisory,
     "github":               cmd_github,
+    "agent":                cmd_agent,
     "architect":            cmd_architect,
     "status":               cmd_status,
     "interface":            cmd_interface,

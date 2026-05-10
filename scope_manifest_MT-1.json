@@ -1,0 +1,14 @@
+﻿{
+    "pipeline_id":  "IMP-20260510-9BDC",
+    "micro_tasks":  [
+                        {
+                            "id":  "MT-1",
+                            "files":  [
+                                          ".claude/agents/security-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "security-agent.md :: ## Integration Context (신규 섹션)"
+                                                   ]
+                        }
+                    ]
+}
