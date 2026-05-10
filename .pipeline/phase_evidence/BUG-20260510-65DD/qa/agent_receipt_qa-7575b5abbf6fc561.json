@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260510-65DD",
+  "phase": "qa",
+  "agent_id": "qa-agent",
+  "run_id": "qa-7575b5abbf6fc561",
+  "status": "COMPLETED",
+  "started_at": "2026-05-10T13:48:51Z",
+  "completed_at": "2026-05-10T13:49:02Z",
+  "output_file": "qa_report.xml",
+  "output_sha256": "138da3baf84ac421a1954ec9fe8323e6be88b6baaf2a262814b10165018146dc",
+  "evidence_files": [
+    {
+      "path": "ic_part_src\\order_mapper.py",
+      "sha256": "15d7f8d8c9ef7295c532fb8839ff6eccc9d5ed9811e789564d7f897084bd72e3",
+      "size_bytes": 65787
+    },
+    {
+      "path": "tests\\test_order_mapper.py",
+      "sha256": "2f0affcdaa3f15031e997bbe365a764236209474b158dd677242576437ccf382",
+      "size_bytes": 18190
+    },
+    {
+      "path": "tests\\test_automation.py",
+      "sha256": "17ab68b4b258812668f92f9337fc88bd07b4b7c702bc65c302913eeaba6e05bf",
+      "size_bytes": 7231
+    }
+  ],
+  "commit_sha": "3dac14920ce9fc3c89ab347d79cc203188b58279"
+}
