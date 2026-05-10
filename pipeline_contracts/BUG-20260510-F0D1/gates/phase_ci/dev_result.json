@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-10T14:19:36Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25631022536",
+  "commit_sha": "dbd058a175d6963228f8f759496bc0ad537da509",
+  "pipeline_id": "BUG-20260510-F0D1",
+  "phase": "dev",
+  "attestation": {
+    "generated_at": "2026-05-10T14:19:18.9381679Z",
+    "workflow": "CI",
+    "runner_os": "Windows",
+    "head_sha": "dbd058a175d6963228f8f759496bc0ad537da509",
+    "pipeline_id": "BUG-20260510-F0D1",
+    "attestation_type": "pipeline-phase-v1",
+    "repository": "hojiyong2-commits/Pipeline",
+    "event_name": "pull_request",
+    "schema_version": 1,
+    "run_id": "25631022536",
+    "checkout_sha": "25c12ec0cc1eba5fee8f8776886719627143e665",
+    "phase": "dev",
+    "validation": {
+      "blockers": [],
+      "status": "PASS"
+    },
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-10T14:17:41Z",
+      "pipeline_id": "BUG-20260510-F0D1",
+      "phase": "dev",
+      "phase_status": "DONE",
+      "commit_hint": "5ba359359665ed1390a5cc4a0e293514aabd6f96",
+      "state": {
+        "current_phase": "qa",
+        "phase_completed_at": "2026-05-10T14:15:25Z",
+        "report_file": "dev_handover.xml",
+        "evidence": "ic_part_src/order_mapper.py"
+      },
+      "agent_run": {
+        "run_id": "dev-573962d2436bc585",
+        "phase": "dev",
+        "agent_id": "dev-agent",
+        "status": "COMPLETED",
+        "output_file": "dev_handover.xml",
+        "output_sha256": "a99f9dcd816f9e3a4ca764cb4ce5ce4e572395313fa911c7a533c95e04132f2e",
+        "receipt_path": ".pipeline/phase_evidence/BUG-20260510-F0D1/dev/agent_receipt_dev-573962d2436bc585.json",
+        "receipt_sha256": "065a3b5ad1640d57a3f4775cd71b09e02196d4b26bf1100f7e8bbeb4c2f6b2d0",
+        "used_by_phase": "dev",
+        "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\dev\\dev-573962d2436bc585.json"
+      },
+      "manager_run": null,
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\dev\\dev-573962d2436bc585.json",
+          "path": ".pipeline/phase_evidence/BUG-20260510-F0D1/dev/agent_receipt_dev-573962d2436bc585.json",
+          "sha256": "065a3b5ad1640d57a3f4775cd71b09e02196d4b26bf1100f7e8bbeb4c2f6b2d0",
+          "size_bytes": 673,
+          "requires_force_add": false
+        },
+        {
+          "label": "report",
+          "source": "dev_handover.xml",
+          "path": ".pipeline/phase_evidence/BUG-20260510-F0D1/dev/report_dev_handover.xml",
+          "sha256": "a99f9dcd816f9e3a4ca764cb4ce5ce4e572395313fa911c7a533c95e04132f2e",
+          "size_bytes": 1054,
+          "requires_force_add": false
+        },
+        {
+          "label": "scope_manifest",
+          "source": "scope_manifest.json",
+          "path": ".pipeline/phase_evidence/BUG-20260510-F0D1/dev/scope_manifest_scope_manifest.json",
+          "sha256": "23754010002e134e00d129526628b469fe037359428bd603295872add64b2a0c",
+          "size_bytes": 247,
+          "requires_force_add": false
+        }
+      ],
+      "workspace_file_checks": [
+        {
+          "path": "ic_part_src/order_mapper.py",
+          "sha256": "77c89d1c15fe0a2bb32cd135c937fb2389d3aecf91443c0c64a8a1f2c226da7d",
+          "size_bytes": 55708
+        }
+      ],
+      "local_only_files": []
+    },
+    "ref": "refs/pull/13/merge",
+    "run_attempt": "1",
+    "request_sha256": "1d2e01196f188aacdb2b36e3d467da6bef99559386c8c01f1e747df7d13a7c30",
+    "commit_sha": "dbd058a175d6963228f8f759496bc0ad537da509"
+  },
+  "workflow_run": {
+    "id": 25631022536,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25631022536",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "dbd058a175d6963228f8f759496bc0ad537da509"
+  },
+  "artifact": {
+    "id": 6904373135,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1265,
+    "expired": false
+  }
+}

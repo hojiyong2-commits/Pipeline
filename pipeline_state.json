@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "ICPartAutomation.exe 오류 및 데드코드 최종 점검 후 수정",
   "created_at": "2026-05-10T14:04:43Z",
-  "updated_at": "2026-05-10T14:17:41Z",
-  "current_phase": "qa",
+  "updated_at": "2026-05-10T14:20:13Z",
+  "current_phase": "sec",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -33,13 +33,15 @@
       "agent_run_id": "dev-573962d2436bc585"
     },
     "qa": {
-      "status": "PENDING",
-      "completed_at": null,
+      "status": "PASS",
+      "completed_at": "2026-05-10T14:20:08Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "qa_report.xml",
+      "agent_id": "qa-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_history\\BUG-20260510-F0D1_phase_qa.json",
+      "agent_run_id": "qa-184b04764e65cad5",
+      "numeric_score": 110
     },
     "sec": {
       "status": "PENDING",
@@ -226,6 +228,34 @@
     {
       "ts": "2026-05-10T14:17:41Z",
       "msg": "phase attestation request prepared: dev"
+    },
+    {
+      "ts": "2026-05-10T14:19:36Z",
+      "msg": "github phase-ci dev PASS run_id=25631022536 commit=dbd058a175d6"
+    },
+    {
+      "ts": "2026-05-10T14:19:49Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-60037d385c7bb361"
+    },
+    {
+      "ts": "2026-05-10T14:19:54Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-60037d385c7bb361"
+    },
+    {
+      "ts": "2026-05-10T14:20:02Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-184b04764e65cad5"
+    },
+    {
+      "ts": "2026-05-10T14:20:08Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-184b04764e65cad5"
+    },
+    {
+      "ts": "2026-05-10T14:20:08Z",
+      "msg": "qa PASS numeric=110"
+    },
+    {
+      "ts": "2026-05-10T14:20:13Z",
+      "msg": "phase attestation request prepared: qa"
     }
   ],
   "terminal_state": null,
@@ -436,6 +466,46 @@
       "used_at": "2026-05-10T14:17:40Z",
       "commit_sha": "f86768ac5baa5b85e1197df81340347b731811a7",
       "notes": "Dev가 order_mapper.py 정리를 완료했습니다."
+    },
+    "qa-60037d385c7bb361": {
+      "schema_version": 1,
+      "run_id": "qa-60037d385c7bb361",
+      "pipeline_id": "BUG-20260510-F0D1",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T14:19:49Z",
+      "completed_at": "2026-05-10T14:19:54Z",
+      "token_hash": "996db2e69052dda20e9c3f0ddbd9a47fa85934041bdbd0b839d76fb6410a5d6d",
+      "output_file": "qa_report.xml",
+      "output_sha256": "15c54be56448337ddc59ac65e78394661d33d7a75c39924cd7749e7cfd6f9ca6",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\qa\\qa-60037d385c7bb361.json",
+      "receipt_sha256": "37a1a2e4cd4af3052ad1ac371796121c52a3f9573224d7144406459d97c5ac28",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "dbd058a175d6963228f8f759496bc0ad537da509",
+      "notes": "QA가 전체 기술 검사와 회귀 테스트 통과를 확인했습니다."
+    },
+    "qa-184b04764e65cad5": {
+      "schema_version": 1,
+      "run_id": "qa-184b04764e65cad5",
+      "pipeline_id": "BUG-20260510-F0D1",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T14:20:02Z",
+      "completed_at": "2026-05-10T14:20:08Z",
+      "token_hash": "018e8aabfa5ec451cb99b2132a6960b8fe2840d90eb5ca0dd56e8c48fd29e31b",
+      "output_file": "qa_report.xml",
+      "output_sha256": "63fe3d479fbfef74a75b32e3eae8144aaf4625d653179c59a48434f26c8bb73e",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\qa\\qa-184b04764e65cad5.json",
+      "receipt_sha256": "94ea7d242bdacc132712255473ff2f49a1f6c2c3fc39295cd045081a7ede95e8",
+      "used_by_phase": "qa",
+      "used_at": "2026-05-10T14:20:12Z",
+      "commit_sha": "dbd058a175d6963228f8f759496bc0ad537da509",
+      "notes": "QA가 보정된 보고서로 검증을 제출했습니다."
     }
   },
   "external_gates": {
@@ -492,14 +562,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-10T14:19:36Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25631022536",
+        "commit_sha": "dbd058a175d6963228f8f759496bc0ad537da509",
+        "evidence": "github_actions_phase_run:25631022536",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_contracts\\BUG-20260510-F0D1\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "qa": {
         "status": "PENDING",
@@ -1318,6 +1389,15 @@
       "run_id": "25630888098",
       "commit_sha": "f86768ac5baa5b85e1197df81340347b731811a7",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-10T14:19:36Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "dev",
+      "run_id": "25631022536",
+      "commit_sha": "dbd058a175d6963228f8f759496bc0ad537da509",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "dev_handover": {
@@ -1350,5 +1430,11 @@
         "ic_part_src/order_mapper.py"
       ]
     }
+  },
+  "qa_report_validation": {
+    "report_file": "qa_report.xml",
+    "validated_at": "2026-05-10T14:20:08Z",
+    "numeric_score": 110,
+    "verdict": "PASS"
   }
 }
