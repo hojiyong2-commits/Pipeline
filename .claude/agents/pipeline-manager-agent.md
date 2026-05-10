@@ -54,6 +54,26 @@ python pipeline.py done --phase pm `
 
 After PM is recorded, this agent starts and records Dev, QA, Security, Build, External Gates, and Architect according to `CLAUDE.md`.
 
+## Phase Attestation — Branch Isolation Requirement
+
+Before running `gates prepare-phase --phase pm`, the Pipeline Manager **must** create and switch to the pipeline-specific branch. `pipeline.py` enforces this and blocks execution on `main`, `master`, `HEAD`, or any branch that does not contain the active `pipeline_id`.
+
+```powershell
+# PM phase-ci 브랜치 생성 (없으면 새로 만들기)
+git checkout -b phase-attestation/{pipeline_id}
+# 이미 존재하면
+git checkout phase-attestation/{pipeline_id}
+
+# 그 다음 phase attestation 요청 준비
+python pipeline.py gates prepare-phase --phase pm
+git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
+git commit -m "Add pm phase attestation request for {pipeline_id}"
+git push -u origin phase-attestation/{pipeline_id}
+python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
+```
+
+동일한 브랜치 생성 절차를 Dev/QA/Build phase attestation에도 적용합니다 (이미 해당 브랜치에 있으면 생략). `gates accept --result ACCEPT` 실행 전에 열린 PR 제목에 `pipeline_id`가 포함되어 있는지 확인합니다 — `pipeline.py`가 자동으로 검증합니다.
+
 ## Failure Handling
 
 When QA records `FAIL`, read the `pipeline.py qa` output and `pipeline_state.json`
