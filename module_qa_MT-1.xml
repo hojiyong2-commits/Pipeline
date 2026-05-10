@@ -1,33 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?>
 <module_qa_report>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
   <mt_id>MT-1</mt_id>
   <verdict>PASS</verdict>
-  <reviewed_files>
-    <file>po_automation/email_monitor.py (읽기 전용 검증)</file>
-    <file>po_automation/main.py (읽기 전용 검증)</file>
-  </reviewed_files>
   <verification_evidence>
-    PM이 명시한 7개 점검 항목 모두 dev-agent가 정확한 라인 번호 + 코드 인용으로 입증.
-    P1(OnNewMailEx Dispatch 재생성 L1330-L1333) / P2(scan_past_emails continue L1188+L1217-L1219) /
-    P3(_parse_pdf_info full_text 누적 L356-L378) / P4(_poll_log_queue 100ms L493) /
-    M1(_process_mail_item 293줄 L806-L1098) / M2(OutlookEventHandler 외부 주입 L1271-L1278+L1314) /
-    M3(_pdf_sort_key 내부 함수 L991-L1001) — 모두 라인 범위 직접 검증 완료.
-    코드 변경 0건. 분석 결과는 MT-4 inspection_report 통합 시 활용.
+    <compileall>python -m compileall -q ic_part_src tests: PASS</compileall>
+    <ruff>python -m ruff check ic_part_src/order_mapper.py: PASS</ruff>
+    <mypy>python -m mypy ic_part_src/order_mapper.py: PASS</mypy>
+    <bandit>PYTHONIOENCODING=utf-8 python -m bandit -q ic_part_src/order_mapper.py: PASS</bandit>
+    <pytest>python -m pytest -q: 219 passed</pytest>
+    <dead_code_search>rg removed helper names/self-verify/ElementTree in order_mapper.py: no matches</dead_code_search>
+    <scope_check>Product code change is limited to ic_part_src/order_mapper.py.</scope_check>
   </verification_evidence>
-  <findings_validation>
-    <perf id="P1" status="VERIFIED" severity="HIGH">OnNewMailEx Dispatch 재생성 — L1330-L1333</perf>
-    <perf id="P2" status="VERIFIED" severity="MEDIUM">scan_past_emails 조기 종료 미사용 — L1217-L1219</perf>
-    <perf id="P3" status="VERIFIED" severity="MEDIUM">_parse_pdf_info 메모리 누적 — L356-L378</perf>
-    <perf id="P4" status="VERIFIED" severity="LOW">_poll_log_queue 100ms 폴링 — L493</perf>
-    <maint id="M1" status="VERIFIED" severity="HIGH">_process_mail_item 293줄 SRP 위반 — L806-L1098</maint>
-    <maint id="M2" status="VERIFIED" severity="LOW">OutlookEventHandler 외부 주입 패턴 — L1264-L1344</maint>
-    <maint id="M3" status="VERIFIED" severity="LOW">_pdf_sort_key 내부 클로저 — L991-L1001</maint>
-  </findings_validation>
-  <scope_check>
-    <out_of_scope_writes>0</out_of_scope_writes>
-    <impact_analysis_present>true</impact_analysis_present>
-    <code_changes>0</code_changes>
-  </scope_check>
-  <numeric_score>120</numeric_score>
 </module_qa_report>

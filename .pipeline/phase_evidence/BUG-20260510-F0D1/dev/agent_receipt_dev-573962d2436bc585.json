@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260510-F0D1",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-573962d2436bc585",
+  "status": "COMPLETED",
+  "started_at": "2026-05-10T14:15:19Z",
+  "completed_at": "2026-05-10T14:15:24Z",
+  "output_file": "dev_handover.xml",
+  "output_sha256": "a99f9dcd816f9e3a4ca764cb4ce5ce4e572395313fa911c7a533c95e04132f2e",
+  "evidence_files": [
+    {
+      "path": "ic_part_src\\order_mapper.py",
+      "sha256": "2db8427fd1032c97c64d67cb4e22fa8ee9c54178e43120fb0b1efd4597bda384",
+      "size_bytes": 55709
+    }
+  ],
+  "commit_sha": "f86768ac5baa5b85e1197df81340347b731811a7"
+}

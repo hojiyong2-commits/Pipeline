@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "ICPartAutomation.exe 오류 및 데드코드 최종 점검 후 수정",
   "created_at": "2026-05-10T14:04:43Z",
-  "updated_at": "2026-05-10T14:10:10Z",
-  "current_phase": "dev",
+  "updated_at": "2026-05-10T14:15:31Z",
+  "current_phase": "qa",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -23,13 +23,14 @@
       "agent_run_id": "pm_planner-d76ad4c2b7497053"
     },
     "dev": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-10T14:15:25Z",
+      "evidence": "ic_part_src/order_mapper.py",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "dev_handover.xml",
+      "agent_id": "dev-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_history\\BUG-20260510-F0D1_phase_dev.json",
+      "agent_run_id": "dev-573962d2436bc585"
     },
     "qa": {
       "status": "PENDING",
@@ -181,6 +182,46 @@
     {
       "ts": "2026-05-10T14:10:10Z",
       "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-10T14:13:19Z",
+      "msg": "github phase-ci pm PASS run_id=25630888098 commit=f86768ac5baa"
+    },
+    {
+      "ts": "2026-05-10T14:14:01Z",
+      "msg": "module design PASS MT-1"
+    },
+    {
+      "ts": "2026-05-10T14:15:12Z",
+      "msg": "module dev DONE MT-1"
+    },
+    {
+      "ts": "2026-05-10T14:15:12Z",
+      "msg": "module QA PASS MT-1"
+    },
+    {
+      "ts": "2026-05-10T14:15:13Z",
+      "msg": "module integration PASS"
+    },
+    {
+      "ts": "2026-05-10T14:15:19Z",
+      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-573962d2436bc585"
+    },
+    {
+      "ts": "2026-05-10T14:15:24Z",
+      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-573962d2436bc585"
+    },
+    {
+      "ts": "2026-05-10T14:15:25Z",
+      "msg": "dev DONE | evidence: ic_part_src/order_mapper.py"
+    },
+    {
+      "ts": "2026-05-10T14:15:25Z",
+      "msg": "advisory gpt-code SKIPPED api_called=False"
+    },
+    {
+      "ts": "2026-05-10T14:15:31Z",
+      "msg": "phase attestation request prepared: dev"
     }
   ],
   "terminal_state": null,
@@ -365,6 +406,32 @@
       "used_at": "2026-05-10T14:10:10Z",
       "commit_sha": "72991e53c68ba7aeae3ee0080a453548cedf079e",
       "notes": "Pipeline manager가 필수 manager_handoff 필드를 모두 포함했습니다."
+    },
+    "dev-573962d2436bc585": {
+      "schema_version": 1,
+      "run_id": "dev-573962d2436bc585",
+      "pipeline_id": "BUG-20260510-F0D1",
+      "phase": "dev",
+      "agent_id": "dev-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T14:15:19Z",
+      "completed_at": "2026-05-10T14:15:24Z",
+      "token_hash": "85944afea8f74bcf6ba29cc2f95445758eb055ba466a39c1243c2fb72bbddbc4",
+      "output_file": "dev_handover.xml",
+      "output_sha256": "a99f9dcd816f9e3a4ca764cb4ce5ce4e572395313fa911c7a533c95e04132f2e",
+      "evidence_files": [
+        {
+          "path": "ic_part_src\\order_mapper.py",
+          "sha256": "2db8427fd1032c97c64d67cb4e22fa8ee9c54178e43120fb0b1efd4597bda384",
+          "size_bytes": 55709
+        }
+      ],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\dev\\dev-573962d2436bc585.json",
+      "receipt_sha256": "065a3b5ad1640d57a3f4775cd71b09e02196d4b26bf1100f7e8bbeb4c2f6b2d0",
+      "used_by_phase": "dev",
+      "used_at": "2026-05-10T14:15:30Z",
+      "commit_sha": "f86768ac5baa5b85e1197df81340347b731811a7",
+      "notes": "Dev가 order_mapper.py 정리를 완료했습니다."
     }
   },
   "external_gates": {
@@ -410,14 +477,15 @@
     ],
     "phases": {
       "pm": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-10T14:13:19Z",
         "phase": "pm",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25630888098",
+        "commit_sha": "f86768ac5baa5b85e1197df81340347b731811a7",
+        "evidence": "github_actions_phase_run:25630888098",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_contracts\\BUG-20260510-F0D1\\gates\\phase_ci\\pm_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "dev": {
         "status": "PENDING",
@@ -460,40 +528,60 @@
     "modules": {
       "MT-1": {
         "id": "MT-1",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 1,
         "target_files": [
           "ic_part_src/order_mapper.py"
         ],
         "affected_function": "order_mapper.cleanup_and_gate_repairs",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-10T14:14:01Z",
+          "report_file": "module_design_MT-1.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-10T14:15:12Z",
+          "report_file": "module_handover_MT-1.xml",
+          "evidence": "ic_part_src/order_mapper.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-1.json",
+            "validated_at": "2026-05-10T14:15:12Z",
+            "micro_task_id": "MT-1",
+            "files": [
+              "ic_part_src/order_mapper.py"
+            ],
+            "affected_functions": [
+              "order_mapper.cleanup_and_gate_repairs"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-10T14:15:12Z",
+          "report_file": "module_qa_MT-1.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-10T14:15:12Z",
+          "files": [
+            {
+              "path": "ic_part_src/order_mapper.py",
+              "sha256": "2db8427fd1032c97c64d67cb4e22fa8ee9c54178e43120fb0b1efd4597bda384",
+              "size_bytes": 55709
+            }
+          ]
+        }
       }
     },
     "integration": {
-      "status": "PENDING",
-      "completed_at": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-10T14:15:13Z",
+      "report_file": "integration_report.xml",
       "evidence": null,
       "notes": []
     }
@@ -1216,5 +1304,47 @@
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
+  },
+  "trusted_phase_runs": [
+    {
+      "recorded_at": "2026-05-10T14:13:19Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "pm",
+      "run_id": "25630888098",
+      "commit_sha": "f86768ac5baa5b85e1197df81340347b731811a7",
+      "artifact": "pipeline-phase-attestation"
+    }
+  ],
+  "dev_handover": {
+    "report_file": "dev_handover.xml",
+    "validated_at": "2026-05-10T14:15:24Z",
+    "producer": "dev-agent"
+  },
+  "dev_gate_flags": {
+    "scope_declared": true
+  },
+  "atomic_scope": {
+    "manifest_file": "scope_manifest.json",
+    "validated_at": "2026-05-10T14:15:25Z",
+    "micro_task_ids": [
+      "MT-1"
+    ],
+    "files": [
+      "ic_part_src/order_mapper.py"
+    ],
+    "affected_functions": [
+      "order_mapper.cleanup_and_gate_repairs"
+    ],
+    "actual_diff": {
+      "added": [],
+      "modified": [
+        "ic_part_src/order_mapper.py"
+      ],
+      "deleted": [],
+      "changed": [
+        "ic_part_src/order_mapper.py"
+      ]
+    }
   }
 }

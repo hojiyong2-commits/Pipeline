@@ -18,10 +18,11 @@ import zipfile
 from collections import Counter, defaultdict
 from datetime import date, datetime
 from datetime import date as _date
+from html import unescape as _xml_unescape
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 
-import openpyxl
+import openpyxl  # type: ignore[import-untyped]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,53 +80,6 @@ _IC_MAP_CONTAINS_NORMALIZED: List[Tuple[str, str]] = [
 
 
 # ---------------------------------------------------------------------------
-# Helper: path safety
-# ---------------------------------------------------------------------------
-
-def _safe_resolve(user_path: str, allowed_root: Path) -> Path:
-    """Resolve user_path relative to allowed_root and verify no traversal."""
-    if user_path is None:
-        raise TypeError("user_path must not be None")
-    if not isinstance(user_path, str):
-        raise TypeError(f"user_path must be str, got {type(user_path).__name__}")
-    if allowed_root is None:
-        raise TypeError("allowed_root must not be None")
-    if not isinstance(allowed_root, Path):
-        raise TypeError(f"allowed_root must be Path, got {type(allowed_root).__name__}")
-
-    resolved = (allowed_root / user_path).resolve()
-    try:
-        resolved.relative_to(allowed_root.resolve())
-    except ValueError:
-        raise ValueError(
-            f"Path traversal detected: '{user_path}' escapes allowed root '{allowed_root}'"
-        )
-    return resolved
-
-
-# ---------------------------------------------------------------------------
-# Helper: encoding-safe text read
-# ---------------------------------------------------------------------------
-
-def read_text_with_fallback(path: Path) -> str:
-    """Read path trying utf-8 -> cp949 -> latin-1 in order."""
-    if path is None:
-        raise TypeError("path must not be None")
-    if not isinstance(path, Path):
-        raise TypeError(f"path must be Path, got {type(path).__name__}")
-
-    for enc in ("utf-8", "cp949", "latin-1"):
-        try:
-            return path.read_text(encoding=enc)
-        except (UnicodeDecodeError, LookupError):
-            continue
-    raise UnicodeDecodeError(
-        "utf-8", b"", 0, 1,
-        f"Cannot decode {path} with any supported encoding"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Helper: column index to Excel letter
 # ---------------------------------------------------------------------------
 
@@ -173,6 +127,15 @@ def _xml_escape(text: str) -> str:
             .replace('>', '&gt;')
             .replace('"', '&quot;')
             .replace("'", '&apos;'))
+
+
+def _extract_shared_strings(shared_strings_xml: str) -> List[str]:
+    """Extract OOXML shared-string text without a general-purpose XML parser."""
+    values: List[str] = []
+    for si_body in re.findall(r"<si\b[^>]*>(.*?)</si>", shared_strings_xml, re.DOTALL):
+        text_parts = re.findall(r"<t(?:\s[^>]*)?>(.*?)</t>", si_body, re.DOTALL)
+        values.append("".join(_xml_unescape(part) for part in text_parts))
+    return values
 
 
 def _col_index(col: str) -> int:
@@ -605,6 +568,8 @@ def _inject_text_cell(xml_str: str, cell_ref: str, value: str) -> str:
     if n == 0:
         logger.warning("Cell %s not found in sheet1.xml — creating", cell_ref)
         col_m = re.match(r'([A-Za-z]+)(\d+)$', cell_ref)
+        if not col_m:
+            raise ValueError(f"invalid cell reference: {cell_ref!r}")
         col_letter = col_m.group(1)
         row_num_val = int(col_m.group(2))
         s_val = _find_col_style(result, col_letter, row_num_val)
@@ -644,6 +609,8 @@ def _inject_date_cell(xml_str: str, cell_ref: str, serial: int) -> str:
     if n == 0:
         logger.warning("Date cell %s not found in sheet1.xml — creating", cell_ref)
         col_m = re.match(r'([A-Za-z]+)(\d+)$', cell_ref)
+        if not col_m:
+            raise ValueError(f"invalid cell reference: {cell_ref!r}")
         col_letter = col_m.group(1)
         row_num_val = int(col_m.group(2))
         s_val = _find_col_style(result, col_letter, row_num_val)
@@ -1152,15 +1119,9 @@ def write_ic_part_zip(
         logger.info("Accumulation mode: last written row=%d, starting at row=%d", _last_written_row, _actual_start_row)
 
     # Parse shared strings table (may not exist in minimal templates)
-    import xml.etree.ElementTree as ET
     _shared_strings: List[str] = []
     if "xl/sharedStrings.xml" in all_zip_data:
-        _ss_root = ET.fromstring(all_zip_data["xl/sharedStrings.xml"].decode("utf-8"))
-        _ss_ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-        _shared_strings = [
-            (si.findtext(".//x:t", namespaces=_ss_ns) or "")
-            for si in _ss_root.findall("x:si", _ss_ns)
-        ]
+        _shared_strings = _extract_shared_strings(all_zip_data["xl/sharedStrings.xml"].decode("utf-8"))
 
     # Extract existing Project IDs from I column — both inlineStr and shared-string
     # IMP-20260509-F8BF: Project ID column shifted from J (10) to I (9) — regex updated.
@@ -1337,7 +1298,9 @@ def write_ic_part_zip(
 
     sheet1_bytes_new: bytes = sheet1_str.encode("utf-8")
 
-    import tempfile as _tempfile, shutil as _shutil, os as _os
+    import os as _os
+    import shutil as _shutil
+    import tempfile as _tempfile
     _tmp_path: Optional[str] = None
     try:
         _fd, _tmp_path = _tempfile.mkstemp(suffix=".xlsx", dir=_tempfile.gettempdir())
@@ -1398,299 +1361,3 @@ def write_ic_part_zip(
                 pass
 
     return written, skipped
-
-
-def _apply_label_via_excel(file_path: str) -> None:
-    """Open file with a hidden Excel instance to apply sensitivity label, then save and close."""
-    try:
-        import win32com.client as _win32
-        xl = _win32.DispatchEx("Excel.Application")
-        xl.Visible = False
-        xl.DisplayAlerts = False
-        try:
-            wb = xl.Workbooks.Open(file_path)
-            wb.Save()
-            wb.Close(False)
-        finally:
-            xl.Quit()
-    except Exception as exc:
-        import logging as _logging
-        _logging.getLogger(__name__).warning("레이블 적용 실패 (무시하고 계속): %s", exc)
-
-
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
-
-def run(
-    source_path: Path,
-    template_path: Path,
-    output_path: Path,
-    folder_date: Optional[date] = None,
-    contract_amount: Optional[str] = None,
-    incoterm: Optional[str] = None,
-    corb_path: Optional[str] = None,
-) -> None:
-    """Orchestrate the full CustomerOrderLines -> IC-Part mapping."""
-    if source_path is None:
-        raise TypeError("source_path must not be None")
-    if template_path is None:
-        raise TypeError("template_path must not be None")
-    if output_path is None:
-        raise TypeError("output_path must not be None")
-
-    logger.info("=== order_mapper START ===")
-    groups = read_customer_order_lines(source_path)
-    if len(groups) == 0:
-        logger.warning("No groups found in source file — nothing to write.")
-        return
-
-    apply_sub_order_suffixes(groups)
-
-    for _g in groups:
-        if folder_date is not None:
-            _g.folder_date = folder_date
-        if contract_amount is not None:
-            _g.contract_amount = contract_amount
-        if incoterm is not None:
-            _g.incoterm = incoterm
-        if corb_path is not None:
-            _g.corb_path = corb_path
-
-    written, skipped = write_ic_part_zip(groups, template_path, output_path)
-    print(f"[order_mapper] DONE — written={written} skipped={skipped} output={output_path}")
-    logger.info("=== order_mapper DONE === written=%d skipped=%d", written, skipped)
-
-
-# ---------------------------------------------------------------------------
-# Self-verification block
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    import sys
-
-    if "--self-verify" in sys.argv:
-        print("=== SELF-VERIFY START ===")
-
-        # map_ic
-        assert map_ic("CCI Valve Technology GmbH") == "AT"
-        assert map_ic("CC Valve Technology Gmbh") == "AT", "CC Valve variant 미매핑"
-        assert map_ic("IMI Critical Engineering LLC") == "SoCal"
-        assert map_ic("Some APAC Company") == "SG"
-        assert map_ic("CCI Valve Technology Gmbh") == "AT", "소문자 h 변형 미매핑"
-        assert map_ic("cci valve technology gmbh") == "AT", "대소문자 변형 미매핑"
-        assert map_ic("some apac company") == "SG", "APAC 대소문자 변형 미매핑"
-        assert map_ic("Unknown Corp") == "Unknown Corp"
-        assert map_ic(None) == ""
-        try:
-            map_ic(12345)  # type: ignore
-            assert False
-        except TypeError:
-            pass
-
-        # _col_letter
-        assert _col_letter(10) == "J"
-        assert _col_letter(11) == "K"
-        assert _col_letter(17) == "Q"
-        assert _col_letter(1) == "A"
-        assert _col_letter(26) == "Z"
-        assert _col_letter(27) == "AA"
-        try:
-            _col_letter(0)
-            assert False
-        except ValueError:
-            pass
-
-        # date_to_serial
-        assert date_to_serial(_date(2026, 6, 2)) == 46175
-        try:
-            date_to_serial(None)  # type: ignore
-            assert False
-        except TypeError:
-            pass
-
-        # normalise_date
-        from datetime import datetime as _dt
-        assert normalise_date(None) is None
-        assert normalise_date(_dt(2026, 6, 2, 0, 0)) == _date(2026, 6, 2)
-        assert normalise_date(_date(2026, 6, 25)) == _date(2026, 6, 25)
-        assert normalise_date("2026-07-01") == _date(2026, 7, 1)
-
-        # format_line_nos
-        og = OrderGroup()
-        assert og.format_line_nos() == ""
-        og.line_nos = [10, 7, 8, 9]
-        assert og.format_line_nos() == "#7~10"
-        og.line_nos = [3, 5, 6, 8]
-        assert og.format_line_nos() == "#3,5,6,8"
-        og.line_nos = [1, 2, 4]
-        assert og.format_line_nos() == "#1,2,4"
-
-        # apply_sub_order_suffixes
-        og_a = OrderGroup(); og_a.order_no = "X100050542"; og_a.delivery_date = _date(2026, 6, 2)
-        og_b = OrderGroup(); og_b.order_no = "X100050542"; og_b.delivery_date = _date(2026, 6, 25)
-        og_c = OrderGroup(); og_c.order_no = "X100050542"; og_c.delivery_date = _date(2026, 7, 1)
-        apply_sub_order_suffixes([og_a, og_b, og_c])
-        assert og_a.order_no == "X100050542"
-        assert og_b.order_no == "X100050542-2"
-        assert og_c.order_no == "X100050542-3"
-        assert og_b.base_order_no == "X100050542"
-
-        _ln_a = OrderGroup(); _ln_a.order_no = "X100050777"; _ln_a.line_nos = [1, 2, 3]
-        _ln_b = OrderGroup(); _ln_b.order_no = "X100050777"; _ln_b.line_nos = [4, 5]
-        _ln_groups = [_ln_a, _ln_b]
-        apply_sub_order_suffixes(_ln_groups)
-        _ln_counts: Dict[Optional[str], int] = Counter(g.base_order_no for g in _ln_groups)
-        _ln_values = [
-            g.format_line_nos() if _ln_counts[g.base_order_no] > 1 else ""
-            for g in _ln_groups
-        ]
-        assert _ln_values == ["#1~3", "#4,5"], f"Line No should use base order count, got {_ln_values!r}"
-
-        # _inject_text_cell: self-closing empty cell
-        _test_xml = (
-            '<worksheet><sheetData>'
-            '<row r="6"><c r="J6" s="38"/><c r="K6" s="38"/></row>'
-            '</sheetData></worksheet>'
-        )
-        _result = _inject_text_cell(_test_xml, "J6", "TestValue")
-        assert 't="inlineStr"' in _result
-        assert '<is><t>TestValue</t></is>' in _result
-        assert '<c r="K6" s="38"/>' in _result
-
-        # _inject_text_cell: overwrite existing non-empty cell (second-run scenario)
-        _filled_xml = (
-            '<worksheet><sheetData>'
-            '<row r="6"><c r="J6" s="14" t="inlineStr"><is><t>OldValue</t></is></c></row>'
-            '</sheetData></worksheet>'
-        )
-        _result_ow = _inject_text_cell(_filled_xml, "J6", "NewValue")
-        assert 'NewValue' in _result_ow
-        assert 'OldValue' not in _result_ow
-        assert 's="14"' in _result_ow
-
-        # _inject_date_cell
-        _test_xml2 = (
-            '<worksheet><sheetData>'
-            '<row r="6"><c r="Q6" s="44"/></row>'
-            '</sheetData></worksheet>'
-        )
-        _result3 = _inject_date_cell(_test_xml2, "Q6", 46175)
-        assert '<v>46175</v>' in _result3
-        try:
-            _inject_date_cell(_test_xml2, "Q6", 0)
-            assert False
-        except ValueError:
-            pass
-
-        # _detect_columns_from_header: new format
-        _new_hdr = ('Order No', 'Line No', 'Del No', 'Rental', 'Project Id',
-                    'Wanted Delivery Date', 'Status', 'Order Type', 'Customer No', 'Customer Name')
-        _det = _detect_columns_from_header(_new_hdr)
-        assert _det.get('project_id') == 4, f"project_id col should be 4, got {_det.get('project_id')}"
-        assert _det.get('customer_name') == 9, f"customer_name col should be 9, got {_det.get('customer_name')}"
-
-        # _detect_columns_from_header: old format
-        _old_hdr = ('Wanted Delivery Date', 'Order No', 'Line No', 'Del No', 'Rental',
-                    'Status', 'Order Type', 'Customer No', 'Customer Name')
-        _det_old = _detect_columns_from_header(_old_hdr)
-        assert _det_old.get('customer_name') == 8, f"old format customer_name should be 8, got {_det_old.get('customer_name')}"
-
-        # _auto_detect_key_columns
-        _detect_rows_a: List[Any] = [
-            ("X100050542", datetime(2026, 6, 2)),
-        ]
-        _det_order, _det_date = _auto_detect_key_columns(_detect_rows_a)
-        assert _det_order == 0
-        assert _det_date == 1
-
-        _detect_rows_b: List[Any] = [
-            (datetime(2026, 6, 2), "X100050542"),
-        ]
-        _det_order_b, _det_date_b = _auto_detect_key_columns(_detect_rows_b)
-        assert _det_order_b == 1
-        assert _det_date_b == 0
-
-        # add_line with col overrides
-        _row = [None] * 10
-        _row[1] = "X100050999"
-        _row[0] = datetime(2026, 6, 10)
-        _row[2] = 5
-        _row[9] = "Test Customer Name"
-        _row[4] = "B1234"
-        _og = OrderGroup()
-        _og.add_line(tuple(_row), col_order_no=1, col_delivery_date=0,
-                     col_customer_name=9, col_project_id=4)
-        assert _og.order_no == "X100050999"
-        assert _og.customer_name == "Test Customer Name", f"got {_og.customer_name!r}"
-        assert _og.project_id == "B1234", f"got {_og.project_id!r}"
-
-        # Column constants (IMP-20260509-F8BF — all indices shifted left by 1)
-        assert ICPART_COL_FOLDER_DATE == 8
-        assert ICPART_COL_CONTRACT_AMOUNT == 14
-        assert ICPART_COL_CORB_PATH == 18
-
-        # Bug 2 fix 검증: frozen _check_pids 스냅샷으로 체크해야
-        # 같은 Project Id를 가진 서브그룹(X100050786-2, -3)이 스킵되지 않아야 함.
-        _existing_pids_frozen: Set[str] = {"PJ-001", "PJ-002"}  # already-in-template IDs
-        _check_pids_test: Set[str] = set(_existing_pids_frozen)  # frozen snapshot — never mutated
-        _groups_b2 = [
-            # pid,      expect_skip
-            ("PJ-001", True),   # 이미 템플릿에 있음 → skip
-            ("PJ-003", False),  # 신규 → write
-            ("PJ-003", False),  # 같은 실행 내 서브그룹 → 이제 write 해야 함 (버그 수정 후)
-            (None,     False),  # None → write
-        ]
-        _test_written = 0
-        _test_skipped = 0
-        for _pid_raw, _expect_skip in _groups_b2:
-            _pid_t = _pid_raw.strip() if _pid_raw else None
-            if _pid_t and _pid_t in _check_pids_test:
-                # _check_pids_test is never extended → sub-groups not skipped
-                _test_skipped += 1
-                assert _expect_skip, f"Unexpected skip for pid={_pid_t}"
-            else:
-                _test_written += 1
-                assert not _expect_skip, f"Expected skip for pid={_pid_t} but wrote"
-        assert _test_skipped == 1, f"Bug2: expected 1 skipped (template dup), got {_test_skipped}"
-        assert _test_written == 3, f"Bug2: expected 3 written (sub-groups + None), got {_test_written}"
-        print("bug2_frozen_check_pids_test: PASS")
-
-        # Bug 1 fix 검증: IC-Distribution A2에 project_id가 들어가야 하고
-        # project_id가 None이면 order_no 폴백.
-        _og_b1a = OrderGroup()
-        _og_b1a.order_no = "X100050786"
-        _og_b1a.project_id = "B42728KR"
-        _a2_val_a: Optional[str] = (
-            _og_b1a.project_id.strip()
-            if _og_b1a.project_id and _og_b1a.project_id.strip()
-            else _og_b1a.order_no
-        )
-        assert _a2_val_a == "B42728KR", f"Bug1: A2 should be project_id, got {_a2_val_a!r}"
-
-        _og_b1b = OrderGroup()
-        _og_b1b.order_no = "X100050601"
-        _og_b1b.project_id = None  # no project_id → fallback
-        _a2_val_b: Optional[str] = (
-            _og_b1b.project_id.strip()
-            if _og_b1b.project_id and _og_b1b.project_id.strip()
-            else _og_b1b.order_no
-        )
-        assert _a2_val_b == "X100050601", f"Bug1: fallback should be order_no, got {_a2_val_b!r}"
-        print("bug1_a2_project_id_test: PASS")
-
-        # col_line_no 전달 검증 (신규 포맷 Line No 오독 방지)
-        _og_ln = OrderGroup()
-        # 신규 포맷 행: col0=OrderNo, col1=LineNo(7), col2=DelNo(1), col5=Date
-        _row_ln = ('X100', 7, 1, None, 'B001', '2026-06-02', None, None, None, 'IMI Critical Engineering LLC')
-        _og_ln.add_line(_row_ln, col_order_no=0, col_delivery_date=5, col_line_no=1,
-                        col_customer_name=9, col_project_id=4, col_po_no=None)
-        assert _og_ln.line_nos == [7], f"Expected [7], got {_og_ln.line_nos}"
-        # col_line_no=None 이면 fallback COL_LINE_NO=2 사용 (DelNo=1)
-        _og_ln2 = OrderGroup()
-        _og_ln2.add_line(_row_ln, col_order_no=0, col_delivery_date=5, col_line_no=None,
-                         col_customer_name=9, col_project_id=4, col_po_no=None)
-        assert _og_ln2.line_nos == [1], f"Expected [1] (fallback col2), got {_og_ln2.line_nos}"
-        print("col_line_no_passthrough_test: PASS")
-
-        print("=== SELF-VERIFY OK ===")
