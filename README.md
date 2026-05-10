@@ -67,7 +67,7 @@ python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.
 python pipeline.py gates prepare-phase --phase qa
 python pipeline.py gates phase-ci --phase qa --repo hojiyong2-commits/Pipeline
 
-python pipeline.py build --exe "dist/app.exe" --report-file build_report.xml --agent-run-id <build_run_id>
+python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>
 python pipeline.py gates prepare-phase --phase build
 python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline
 

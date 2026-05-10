@@ -56,6 +56,7 @@ python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarif
 - 중간 단계에서 임의로 PASS를 주장하지 않는다.
 - receipt token은 해당 역할의 output을 기록할 때만 사용한다.
 - PM 산출물 안에 Dev/QA/Build 산출물을 섞지 않는다.
+- PM 설계 전 `.claude/agents/shared/anti_gaming_rules.md`를 읽고 `<anti_gaming_read>true</anti_gaming_read>`를 `step_plan.xml`에 남긴다.
 - Dev는 `scope_manifest.json` 밖의 파일을 건드리지 않는다.
 - QA는 자신이 만든 테스트만 믿지 않고 실제 산출물, oracle, GitHub Actions 결과를 확인한다.
 

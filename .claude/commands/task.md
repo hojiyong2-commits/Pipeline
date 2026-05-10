@@ -151,8 +151,8 @@ python pipeline.py sec --skip
 ```powershell
 python pipeline.py agent start --phase build
 # token은 build-agent에게만 전달
-python pipeline.py agent finish --run-id <build_run_id> --token <token> --output-file build_report.xml
-python pipeline.py build --exe "dist/app.exe" --report-file build_report.xml --agent-run-id <build_run_id>
+python pipeline.py agent finish --run-id <build_run_id> --token <token> --output-file dist/build_report.xml
+python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>
 # docs-only 등 비실행 산출물:
 python pipeline.py build --exe "N/A" --skip-reason "docs-only" --agent-run-id <build_run_id>
 python pipeline.py gates prepare-phase --phase build

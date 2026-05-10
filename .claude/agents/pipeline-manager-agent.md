@@ -54,3 +54,13 @@ python pipeline.py done --phase pm `
 
 After PM is recorded, this agent starts and records Dev, QA, Security, Build, External Gates, and Architect according to `CLAUDE.md`.
 
+## Failure Handling
+
+When QA records `FAIL`, read the `pipeline.py qa` output and `pipeline_state.json`
+`qa_fail_history` before respawning Dev. If the latest failure is marked
+`RECURRING`, stop the normal retry loop and route to Architect/Circuit Breaker
+handling instead of asking Dev to guess again.
+
+Security is not phase-attested. Do not start a Security agent receipt and do not
+add `--agent-run-id` to `pipeline.py sec`; record only `sec --result ... --risk ...`
+or `sec --skip` after checking the security-agent report.
