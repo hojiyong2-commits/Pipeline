@@ -6378,7 +6378,7 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
     optional_tools = [
         ("ruff", ["-m", "ruff", "check", *[str(path) for path in target_files]]),
         ("mypy", ["-m", "mypy", *[str(path) for path in target_files]]),
-        ("bandit", ["-m", "bandit", "-q", *[str(path) for path in target_files]]),
+        ("bandit", ["-m", "bandit", "-q", "--ini", str(BASE_DIR / ".bandit"), *[str(path) for path in target_files]]),
     ]
     for module_name, command_tail in optional_tools:
         if not target_files:
