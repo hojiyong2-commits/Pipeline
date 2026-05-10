@@ -41,6 +41,7 @@ vscode-agent-office/*.vsix
 pipeline_state.json
 pipeline_history/
 pipeline_contracts/
+.pipeline/
 agent_office_control.json
 stop_signal.json
 test_hello.txt
@@ -49,17 +50,9 @@ test_results_v3.jsonl
 logs/
 **/*.log
 
-# GitHub phase attestation evidence must stay visible to git.
-# The broad build/dist ignores above would otherwise hide paths such as:
-# .pipeline/phase_evidence/<pipeline_id>/build/report_build_report.xml
-!.pipeline/
-!.pipeline/phase_attestation_request.json
-!.pipeline/phase_evidence/
-!.pipeline/phase_evidence/**
-!.pipeline/phase_evidence/**/build/
-!.pipeline/phase_evidence/**/build/**
-!.pipeline/phase_evidence/**/dist/
-!.pipeline/phase_evidence/**/dist/**
+# GitHub phase attestation request/evidence is transient per phase branch.
+# Keep it out of main by default. Phase PRs must add it explicitly with:
+#   git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 
 # Generated harness / run reports
 _build_harness*.py
@@ -67,9 +60,16 @@ harness_output*.xml
 harness_test_*.py
 harness_skip_prior100.xml
 architect_report.xml
+step_plan.xml
 dev_handover.xml
 qa_report.xml
 scope_manifest.json
+scope_manifest_*.json
+module_design_*.xml
+module_dev_*.xml
+module_qa_*.xml
+module_handover_*.xml
+integration_report.xml
 
 # Local archives and packaged binaries
 _cleanup_archive/

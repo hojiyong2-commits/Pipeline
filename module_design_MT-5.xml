@@ -1,7 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<module_design>
-  <mt_id>MT-5</mt_id>
-  <interface_contract>test-harness-agent.md — documentation only</interface_contract>
-  <implementation_plan>Append Deploy Path After ACCEPT section after Forbidden block</implementation_plan>
-  <verification_plan>Grep for deploy or PIPELINE_DEPLOY in test-harness-agent.md; no prior content deleted</verification_plan>
-</module_design>

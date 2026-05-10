@@ -13,8 +13,8 @@
 │   │
 │   └─ YES → [Microsoft 서비스 연동 또는 PA 시그널도 존재?]
 │               │
-│               ├─ YES → [HYBRID] dev-agent + power-automate-agent 모두 spawn
-│               │         (복잡 로직은 Python, 연동/알림/저장은 PA 담당)
+│               ├─ YES → [HYBRID] dev-agent + power-automate-agent 모두 사용
+│               │         (복잡 로직은 Python, 연동/알림/저장은 PA 담당. 각 작업은 PM micro-task 순서대로 실행)
 │               │
 │               └─ NO  → [PYTHON 단독] dev-agent만 spawn
 │
@@ -29,7 +29,7 @@
         - 실시간 이벤트 기반 자동화 (HTTP 트리거 등)
         │
         ├─ YES → [PA 단독] power-automate-agent만 spawn
-        │         EXE 빌드 불필요 → `--exe "N/A" --skip-reason "power-automate" --user-confirmed`
+        │         EXE 빌드 불필요 → `--exe "N/A" --skip-reason "power-automate"`
         │         외부 HTTP 커넥터 포함 시 SEC 필수
         │
         └─ NO  → 시그널 불명확 → Clarification 요청
@@ -41,14 +41,14 @@
 | 판정 결과 | spawn 에이전트 | category_tags | EXE 빌드 |
 |---|---|---|---|
 | Python 단독 | `dev-agent` | WA / FS / AL / PD (해당 태그) | 해당 시 Phase 6 진행 |
-| PA 단독 | `power-automate-agent` | PA | `--exe "N/A" --skip-reason "power-automate" --user-confirmed` |
+| PA 단독 | `power-automate-agent` | PA | `--exe "N/A" --skip-reason "power-automate"` |
 | 하이브리드 | `dev-agent` + `power-automate-agent` | PA + (WA/FS/AL 등 복합) | Python 산출물만 Phase 6 대상 |
 
 ### 하이브리드 판정 우선 규칙
 
 - Python 단독 시그널과 PA 단독 시그널이 **동시에 존재**하면 하이브리드로 확정. 추가 Clarification 금지.
 - Microsoft 서비스가 포함되더라도 복잡한 로직(집계/변환/ML 등)이 **하나라도** 포함되면 하이브리드 우선.
-- 하이브리드 시 dev-agent는 Python 로직 산출물을 `<handover>`로 QA에 인계하고, power-automate-agent는 플로우 JSON을 별도 산출물로 제출.
+- 하이브리드 시 dev-agent는 Python 로직 산출물을 `<handover>`로 QA에 인계하고, power-automate-agent는 플로우 JSON을 별도 산출물로 제출한다. 둘은 병렬 실행하지 않고 PM이 정한 `MT-N` 순서를 따른다.
 
 ### 시그널 불명확(Ambiguous) 처리
 

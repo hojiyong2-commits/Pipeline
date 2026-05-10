@@ -46,8 +46,8 @@ Then inspect available artifacts:
 - `scope_manifest.json`
 - `qa_report.xml`
 - `dist/build_report.xml` or the declared N/A build report
-- `.pipeline/phase_evidence/**`
-- `.pipeline/phase_attestation_request.json`
+- force-added `.pipeline/phase_evidence/**`
+- force-added `.pipeline/phase_attestation_request.json`
 - `pipeline_contracts/<pipeline_id>/**`
 - GitHub Actions attestation artifacts when linked in the pipeline state
 - user acceptance evidence copied to `G:\내 드라이브\터미널\<pipeline_id>`
@@ -62,7 +62,7 @@ Do not use `test_results.jsonl` or harness scores as a COMPLETE criterion. Old l
 | Dev phase attestation FAIL/PENDING | dev_handover, scope_manifest, changed-file diff | rerun the failing module or Dev phase |
 | QA phase attestation FAIL/PENDING | qa_report, execution evidence | QA rework or Dev fix |
 | Build phase attestation FAIL/PENDING | build_report, artifact path | Build fix and phase-ci rerun |
-| Phase attestation hash mismatch or missing evidence | `.gitattributes` LF rules, `.gitignore` visibility for `.pipeline/phase_evidence/**`, copied evidence SHA-256 | Protocol Evolution IMP for git hygiene, then rerun phase-ci |
+| Phase attestation hash mismatch or missing evidence | `.gitattributes` LF rules, `git add -f` 여부, copied evidence SHA-256 | Protocol Evolution IMP for git hygiene, then rerun phase-ci |
 | Module gate FAIL/PENDING | specific `MT-N` design/dev/qa report | rerun only that module |
 | Technical gate FAIL | tool output, versions, exit codes | Dev/build/tooling fix |
 | Oracle gate FAIL | failing oracle case, input/expected hashes, actual output | Dev behavior fix or user-approved oracle correction |
@@ -121,6 +121,18 @@ Normal Phase 8:
   <root_cause>[specific blocker or none]</root_cause>
   <repair_path>[exact next command or phase to rerun]</repair_path>
   <user_visible_result>[path/link or missing]</user_visible_result>
+  <contract_audit>
+    <section_completeness>PASS|FAIL</section_completeness>
+    <producer_consumer_sync>PASS|FAIL</producer_consumer_sync>
+    <backward_compatibility>PASS|FAIL</backward_compatibility>
+    <role_transition_clarity>PASS|FAIL</role_transition_clarity>
+    <evidence_lines>
+      <section_completeness>[file:line evidence]</section_completeness>
+      <producer_consumer_sync>[file:line evidence]</producer_consumer_sync>
+      <backward_compatibility>[file:line evidence]</backward_compatibility>
+      <role_transition_clarity>[file:line evidence]</role_transition_clarity>
+    </evidence_lines>
+  </contract_audit>
   <protocol_evolution_decision>
     <required>true|false</required>
     <reason>none or concrete protocol defect</reason>

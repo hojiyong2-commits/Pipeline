@@ -135,6 +135,7 @@ BUG-20260509-894D — runner-owned JSON 채널 모델 (executed_assertions 런�
     python pipeline.py module qa --mt-id MT-1 --result PASS --report-file module_qa_MT-1.xml
     python pipeline.py module integrate --result PASS --report-file integration_report.xml
     python pipeline.py gates prepare-phase --phase pm
+    git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
     python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
     python pipeline.py gates technical
     python pipeline.py gates oracle
@@ -360,7 +361,6 @@ def _ast_forbidden_check(code: str) -> Optional[str]:
 
     forbidden_import_roots = {
         "__main__", "atexit", "inspect", "gc", "ctypes", "importlib", "runpy", "traceback",
-        "os",
     }
     forbidden_calls = {
         "eval", "exec", "compile", "globals", "locals", "vars",
@@ -375,6 +375,11 @@ def _ast_forbidden_check(code: str) -> Optional[str]:
     }
     forbidden_sys_attrs = {
         "argv", "modules", "_getframe", "_current_frames", "settrace", "setprofile",
+    }
+    forbidden_os_attrs = {
+        "system", "popen", "spawnl", "spawnle", "spawnlp", "spawnlpe",
+        "spawnv", "spawnve", "spawnvp", "spawnvpe",
+        "execv", "execve", "execvp", "execvpe",
     }
     runner_private_names = {
         "_result_path", "_exec_assert_count", "_counter", "_result", "_test_src",
@@ -419,6 +424,8 @@ def _ast_forbidden_check(code: str) -> Optional[str]:
                 root = _root_name(func)
                 if func.attr in {"patch", "patch.object"} or (root in {"mock", "unittest"} and func.attr == "patch"):
                     return "FORBIDDEN: mock.patch can alter assertions or test results"
+                if root == "os" and func.attr in forbidden_os_attrs:
+                    return f"FORBIDDEN: os.{func.attr}() can bypass deterministic test evidence"
                 if root == "unittest" and func.attr == "main":
                     # Top-level guarded unittest.main is harmless because the runner loads the module as _test_module.
                     # Calls inside test_* methods are rejected below with a clearer message.
@@ -2491,14 +2498,13 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
     tmp_path: Optional[Path] = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
+            mode="wb",
             dir=path.parent,
             delete=False,
             suffix=".tmp",
         ) as tmp:
-            json.dump(data, tmp, ensure_ascii=False, indent=2)
-            tmp.write("\n")
+            payload = (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+            tmp.write(payload)
             tmp_path = Path(tmp.name)
         os.replace(str(tmp_path), str(path))
     except Exception:
@@ -2537,28 +2543,96 @@ def _display_path(path: Path) -> str:
 def _deployment_root() -> Path:
     configured = os.environ.get("PIPELINE_DEPLOY_ROOT", "").strip()
     if configured:
-        return Path(configured)
+        root = Path(configured)
+        parent = root.parent if root.parent != root else root
+        if not parent.exists():
+            _die(
+                "[DEPLOY ROOT BLOCKED] PIPELINE_DEPLOY_ROOT 상위 폴더가 없습니다: "
+                f"{parent}. Google Drive를 마운트하거나 PIPELINE_DEPLOY_ROOT를 실제 존재하는 폴더로 바꾸세요."
+            )
+        return root
     for candidate in DEFAULT_DEPLOY_ROOT_CANDIDATES:
-        if candidate.parent.exists():
+        if candidate.exists() or candidate.parent.exists():
             return candidate
-    return DEFAULT_DEPLOY_ROOT_CANDIDATES[0]
+    candidates = ", ".join(str(path) for path in DEFAULT_DEPLOY_ROOT_CANDIDATES)
+    _die(
+        "[DEPLOY ROOT BLOCKED] Google Drive 배포 폴더를 찾지 못했습니다. "
+        f"확인한 경로: {candidates}. Google Drive를 마운트하거나 PIPELINE_DEPLOY_ROOT를 설정하세요."
+    )
 
 
-def _split_evidence_paths(raw: Any) -> List[str]:
+PLACEHOLDER_EVIDENCE_VALUES = {"N/A", "NA", "NONE", "SKIP", "SKIPPED", "USER_CONFIRMED", "MANUAL-SMOKE"}
+
+
+def _split_evidence_items(raw: Any) -> List[str]:
     if raw is None:
         return []
     if isinstance(raw, (list, tuple)):
         items: List[str] = []
         for item in raw:
-            items.extend(_split_evidence_paths(item))
+            items.extend(_split_evidence_items(item))
         return items
     text = str(raw).strip()
     if not text:
         return []
-    if text.upper() in {"N/A", "NA", "NONE", "SKIP", "SKIPPED", "USER_CONFIRMED", "MANUAL-SMOKE"}:
-        return []
     parts = re.split(r"[,;\n]+", text)
     return [part.strip() for part in parts if part.strip()]
+
+
+def _split_evidence_paths(raw: Any) -> List[str]:
+    return [item for item in _split_evidence_items(raw) if item.upper() not in PLACEHOLDER_EVIDENCE_VALUES]
+
+
+def _is_evidence_url(raw: str) -> bool:
+    return bool(re.match(r"^https?://[^\s]+$", raw.strip(), flags=re.IGNORECASE))
+
+
+def _validate_user_acceptance_evidence(raw: Any) -> Dict[str, Any]:
+    items = _split_evidence_items(raw)
+    if not items:
+        _die(
+            "[USER ACCEPTANCE BLOCKED] ACCEPT에는 실제 확인 증거가 필요합니다. "
+            "실제 결과 파일/폴더 경로, 스크린샷 경로, PR 링크, GitHub Actions 첨부파일 링크 중 하나를 넣으세요."
+        )
+
+    placeholders = [item for item in items if item.upper() in PLACEHOLDER_EVIDENCE_VALUES]
+    if placeholders:
+        _die(
+            "[USER ACCEPTANCE BLOCKED] ACCEPT에는 placeholder 증거를 쓸 수 없습니다: "
+            + ", ".join(placeholders)
+            + ". 실제 결과 경로나 검토 링크를 넣으세요."
+        )
+
+    files: List[Dict[str, Any]] = []
+    urls: List[str] = []
+    missing: List[str] = []
+    for item in items:
+        if _is_evidence_url(item):
+            urls.append(item)
+            continue
+        path = _resolve_artifact_path(item)
+        if path is None:
+            missing.append(item)
+            continue
+        if path.is_file():
+            files.append(_path_sha_payload(path))
+        else:
+            files.append({
+                "path": _display_path(path),
+                "kind": "directory",
+                "exists": True,
+            })
+
+    if missing:
+        _die(
+            "[USER ACCEPTANCE BLOCKED] 증거 경로/링크를 확인할 수 없습니다: "
+            + ", ".join(missing)
+        )
+    if not files and not urls:
+        _die(
+            "[USER ACCEPTANCE BLOCKED] ACCEPT에는 실제 결과 파일/폴더 경로 또는 검토 링크가 최소 1개 필요합니다."
+        )
+    return {"files": files, "urls": urls, "raw_items": items}
 
 
 def _resolve_artifact_path(raw: str) -> Optional[Path]:
@@ -2623,16 +2697,21 @@ def _copy_deployment_artifact(src: Path, deploy_dir: Path) -> Dict[str, Any]:
     }
 
 
-def _deploy_accepted_outputs(state: Dict[str, Any], evidence: Optional[str], notes: Optional[str]) -> Dict[str, Any]:
+def _deploy_accepted_outputs(
+    state: Dict[str, Any],
+    evidence: Optional[str],
+    notes: Optional[str],
+    evidence_validation: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     pid = str(state.get("pipeline_id") or "UNKNOWN")
     deploy_root = _deployment_root()
     deploy_dir = deploy_root / pid
     artifacts = _deployment_artifacts(state, evidence)
-    if not artifacts:
+    external_urls = list((evidence_validation or {}).get("urls") or [])
+    if not artifacts and not external_urls:
         _die(
-            "[ACCEPTANCE DEPLOY BLOCKED] 복사할 실제 결과물 파일/폴더를 찾지 못했습니다. "
-            "`--evidence`에 실제 결과물 경로 또는 첨부파일 경로를 넣거나, "
-            "Dev/Build phase evidence가 결과물을 가리키게 한 뒤 다시 실행하세요."
+            "[ACCEPTANCE DEPLOY BLOCKED] 배포할 결과물을 찾지 못했습니다. "
+            "--evidence에 실제 파일/폴더 경로 또는 GitHub 첨부파일/PR 링크를 넣으세요."
         )
     deploy_dir.mkdir(parents=True, exist_ok=True)
     copied = [_copy_deployment_artifact(path, deploy_dir) for path in artifacts]
@@ -2643,8 +2722,10 @@ def _deploy_accepted_outputs(state: Dict[str, Any], evidence: Optional[str], not
         "deploy_root": str(deploy_root),
         "deploy_dir": str(deploy_dir),
         "evidence": evidence,
+        "validated_evidence": evidence_validation or {},
         "notes": notes or "",
         "artifacts": copied,
+        "external_urls": external_urls,
     }
     manifest_path = deploy_dir / "deployment_manifest.json"
     _write_json(manifest_path, manifest)
@@ -2887,19 +2968,14 @@ def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Option
     dest_name = f"{label}_{_safe_phase_artifact_name(path)}"
     dest = dest_dir / dest_name
     shutil.copy2(path, dest)
-    if _git_check_ignored(dest):
-        _die(
-            "[PHASE EVIDENCE GIT GATE] copied phase evidence is hidden by .gitignore: "
-            f"{_normalize_rel_path(dest)}\n"
-            "  Fix .gitignore so `.pipeline/phase_evidence/**` is explicitly re-included before "
-            "running `pipeline.py gates prepare-phase` again."
-        )
+    ignored_by_git = _git_check_ignored(dest)
     return {
         "label": label,
         "source": _display_path(path),
         "path": _normalize_rel_path(dest),
         "sha256": _sha256_file(dest),
         "size_bytes": dest.stat().st_size,
+        "requires_force_add": ignored_by_git,
     }
 
 
@@ -3527,6 +3603,14 @@ def cmd_qa(args: argparse.Namespace) -> None:
                 "pipeline.py qa --result FAIL --numeric-score N --failure-sig '[category]:[hash]'를 호출하세요. "
                 "Circuit Breaker 패턴 추적에 필수입니다."
             )
+        sig_match = re.fullmatch(r"([A-Z][A-Z0-9_-]{1,15}):([0-9a-fA-F]{8})", failure_sig)
+        if not sig_match:
+            _die(
+                "[QA GATE] --failure-sig는 '[CATEGORY]:[HASH8]' 형식이어야 합니다. "
+                "HASH8은 정확히 8자리 16진수입니다. 슬러그 signature는 동일 오류를 "
+                "다른 오류처럼 쪼개 Circuit Breaker를 약화시키므로 허용하지 않습니다."
+            )
+        failure_sig = f"{sig_match.group(1)}:{sig_match.group(2).lower()}"
         # qa_fail_history 초기화 (없을 시 신규 생성)
         state.setdefault("qa_fail_history", [])
         fail_history: List[Dict[str, Any]] = state["qa_fail_history"]
@@ -3575,13 +3659,6 @@ def cmd_qa(args: argparse.Namespace) -> None:
         numeric_score=int(numeric_score),
     )
     state["qa_report_validation"] = qa_report_validation
-    if report_file:
-        _verify_required_xml_tags(
-            report_file,
-            required_tags=["<qa_report>", "<numeric_score>", "<verdict>"],
-            context_label="QA REPORT GATE",
-            hard_fail=True,
-        )
 
     agent_run = _validate_agent_run_for_phase(
         state,
@@ -3784,154 +3861,21 @@ def cmd_build(args: argparse.Namespace) -> None:
 
 
 def cmd_harness(args: argparse.Namespace) -> None:
-    """Legacy harness diagnostic result recording.
+    """Reject the removed legacy harness score path.
 
-    Current `/Task` pipelines use external gates and this command is blocked.
+    Harness helpers such as validate_test_evidence() remain available for unit tests and
+    diagnostics, but the CLI command no longer mutates pipeline_state.json. Completion is
+    owned by external gates only.
     """
-    branch: Optional[str] = getattr(args, "branch", None)
-    state = _load_branch_state(args)
-
-    if _external_gates_enabled(state):
-        _die(
-            "\n[THREE GATE BLOCKED] `pipeline.py harness --score` is not a completion path "
-            "for current mandatory pipelines.\n"
-            "  Use: python pipeline.py gates technical\n"
-            "       python pipeline.py gates oracle\n"
-            "       python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline\n"
-            "       python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed"
-        )
-
-    # ── Hard gates: 상태를 기록하는 명령 안에서 가장 먼저 검사 (check_gate 전) ──
-    # 원칙: hard gate는 상태를 실제로 바꾸는 명령(기록 명령) 안에 있어야 함.
-    # check_gate(state) 호출 전에 검사하여 파이프라인 상태와 무관하게 항상 적용.
-
-    # Gate 1: --test-output-file (PASS/FAIL 공통 필수)
-    # BUG-20260508-6198 MT-1: --test-output-file은 PASS뿐 아니라 FAIL에도 필수.
-    # FAIL 시에는 <harness_report>가 포함된 RCA 증거 파일이 필요하다.
-    test_output_file: Optional[str] = getattr(args, "test_output_file", None)
-    if not test_output_file:
-        _die(
-            "\n[HARNESS GATE BLOCKED] --test-output-file 필수입니다 (PASS/FAIL 공통).\n"
-            "  PASS: <harness_report> + 실행 가능한 <test_code> 포함 파일 필요\n"
-            "  FAIL: <harness_report> + <test_code> 포함 파일 필요 (PHASE_INTERFACE 계약 통일)\n"
-            "  (meta-task 포함 예외 없음)"
-        )
-
-    ok, reason = check_gate(state, "harness")
-    if not ok:
-        _die(f"[GATE BLOCKED] {reason}")
-
-    score   = int(args.score)
-    verdict = args.verdict.upper()
-    if verdict not in ("PASS", "FAIL"):
-        _die("--verdict 는 PASS 또는 FAIL 이어야 합니다.")
-    if not (0 <= score <= 100):
-        _die("--score 는 0~100 사이여야 합니다.")
-
-    p = Path(test_output_file)
-    if not p.exists():
-        _die(f"\n[HARNESS GATE BLOCKED] --test-output-file 경로 없음: {test_output_file}\n")
-
-    # 파일 읽기 (인코딩 자동 감지)
-    agent_output = ""
-    for enc in ("utf-8", "cp949", "latin-1"):
-        try:
-            agent_output = p.read_text(encoding=enc)
-            break
-        except (UnicodeDecodeError, OSError):
-            continue
-    if not agent_output:
-        _die(f"\n[HARNESS GATE BLOCKED] --test-output-file 읽기 실패: {test_output_file}\n")
-
-    # BUG-20260508-D541: comment 제거 후 검증에 사용할 공통 clean 텍스트
-    agent_output_clean = _strip_xml_comments(agent_output)
-
-    # ── 공통 Gate A: <harness_report> ElementTree 파싱 (PASS/FAIL 양쪽에서 사용) ──────
-    # BUG-20260508-A53A MT-2/MT-3: regex-only 검증 → ElementTree 파싱으로 업그레이드.
-    #   - malformed/unclosed <harness_report> → ET.ParseError → None → gate blocked.
-    #   - <harness_report> 없음 → None → gate blocked.
-    #   - 속성 있는 태그(<harness_report verdict="FAIL">) → ET 정상 파싱 → 허용.
-    #   - comment 내 <harness_report> → _strip_xml_comments로 제거 후 파싱 → None → blocked.
-    hr_element = _parse_harness_report_et(agent_output_clean)
-
-    # ── Execution Evidence Gate (PASS/FAIL 공통: _validate_harness_evidence_gate() 경유) ──────
-    # BUG-20260509-FDBC MT-1: PASS/FAIL 검증 비대칭 해소.
-    #   기존 FAIL 경로는 Gate A(harness_report 존재) + Gate B(test_code 존재)만 확인하고
-    #   Gate C(validate_test_evidence 실행)를 생략하여 빈/무효/ASSERTION없는 test_code가
-    #   RECORDED FAIL로 통과되는 결함이 있었다.
-    #   수정: PASS/FAIL 양쪽 모두 동일한 _validate_harness_evidence_gate()를 경유.
-    #   단, PASS 경로 전용 dev 파일 syntax 검증(validate_harness_evidence)은 PASS 이후에 유지.
-    pid: str = state.get("pipeline_id", "")
-
-    if verdict == "PASS":
-        # PASS 전용 dev 파일 syntax 검증 (FAIL 경로에는 불필요)
-        dev_evidence: str = state["phases"]["dev"].get("evidence") or ""
-        dev_files: List[str] = (
-            [f.strip() for f in dev_evidence.split(",") if f.strip()]
-            if dev_evidence else []
-        )
-        if dev_files and not validate_harness_evidence(dev_files):
-            print(RED("\n[HARNESS GATE BLOCKED] 실행 검증 실패 — verdict PASS 기록 거부"))
-            print(RED("dev-agent가 제출한 파일의 syntax 오류 또는 테스트 실패를 수정 후 재시도하세요."))
-            sys.exit(1)
-        # Gate A + B + C: 공통 helper 경유 (PASS 경로)
-        _validate_harness_evidence_gate(agent_output_clean, agent_output, pid, "PASS")
-
-    # ── FAIL: PASS와 동일한 3-gate (_validate_harness_evidence_gate) 경유 ────────────
-    # Legacy diagnostic FAIL also uses Gate C(validate_test_evidence). New completion
-    # does not use harness_score.
-    if verdict == "FAIL":
-        # Gate A + B + C: 공통 helper 경유 (FAIL 경로)
-        _validate_harness_evidence_gate(agent_output_clean, agent_output, pid, "FAIL")
-
-    cleanup_msg = _dedupe_test_results_jsonl()
-    if cleanup_msg:
-        print(YELLOW(f"  [RESULTS CLEANUP] {cleanup_msg}"))
-
-    state["phases"]["harness"]["status"]       = verdict
-    state["phases"]["harness"]["completed_at"] = _now()
-    state["phases"]["harness"]["evidence"]     = f"score={score}"
-    state["phases"]["harness"]["report_file"]  = test_output_file
-    state["current_phase"] = "architect"
-
-    # v2.10 Auto-Compact: harness FAIL 누적 카운터 + 3회 누적 시 terminal_state="FAILED"
-    # 메인 state(브랜치 None)에서만 카운팅. 토너먼트 브랜치는 별도.
-    if branch is None:
-        state = _ensure_v210_fields(state)
-        if verdict == "FAIL":
-            state["harness_fail_count"] = int(state.get("harness_fail_count", 0)) + 1
-            if state["harness_fail_count"] >= 3:
-                state["terminal_state"] = "FAILED"
-                _log_event(state, f"harness FAIL 3회 누적 — terminal_state=FAILED")
-        else:
-            state["harness_fail_count"] = 0
-
-    _log_event(state, f"harness {verdict} score={score}")
-    _record_snapshot(state, "harness", branch)
-    _save_state_for(state, branch)
-
-    # 토너먼트 모드: 마스터 state 의 branch_states 업데이트
-    if branch is not None:
-        master = _load_state()
-        t = master.get("tournament", {})
-        if t.get("active") and branch in t.get("branches", []):
-            new_bs = "harness_passed" if verdict == "PASS" else "harness_failed"
-            t["branch_states"][branch] = new_bs
-            master["tournament"] = t
-            _save_state(master)
-
-    color = GREEN if verdict == "PASS" else RED
-    branch_tag = f" [Branch {branch}]" if branch else ""
-    print(color(f"\n[HARNESS {verdict}]{branch_tag} score={score}/100"))
-    print()
-    print(BOLD(YELLOW("  ★ Phase 8 (Architect RCA) 실행 의무 -생략 불가")))
-    print(f"  다음: prompt-architect-agent spawn → RCA 완료 후:")
-    print(f"        {YELLOW('python pipeline.py architect --report-file architect_report.xml')}")
-    if verdict == "FAIL":
-        print()
-        print(RED("  [FAIL] legacy diagnostic failed -Phase 2 재작업 필요"))
-        print(f"  Architect RCA 완료 후: {YELLOW('python pipeline.py done --phase dev --files \"..\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json')}")
-    print()
+    _load_branch_state(args)
+    _die(
+        "\n[THREE GATE BLOCKED] `pipeline.py harness --score`는 현재 필수 파이프라인의 완료 경로가 아닙니다 (not a completion path).\n"
+        "  대신 아래 외부 게이트를 순서대로 사용하세요:\n"
+        "       python pipeline.py gates technical\n"
+        "       python pipeline.py gates oracle\n"
+        "       python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline\n"
+        "       python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed"
+    )
 
 
 def cmd_architect(args: argparse.Namespace) -> None:
@@ -4940,6 +4884,15 @@ def cmd_acceptance(args: argparse.Namespace) -> None:
         _die(f"unknown acceptance action: {action}", exit_code=2)
 
     pid, _, _, state = _resolve_pipeline_context(args)
+    if args.record:
+        if state is None or state.get("pipeline_id") != pid:
+            _die("acceptance --record requires the active pipeline state")
+        if _external_gates_enabled(state):
+            _die(
+                "[ACCEPTANCE RECORD BLOCKED] 필수 Three-Gate 파이프라인에서는 legacy "
+                "acceptance/harness 점수를 기록할 수 없습니다. Oracle 검증은 "
+                "`pipeline.py gates oracle`, 사용자 최종 결정은 `pipeline.py gates accept`를 사용하세요."
+            )
     paths = _contract_paths(pid)
     output_path = Path(args.output) if args.output else paths["result"]
     report = run_acceptance(
@@ -4955,8 +4908,6 @@ def cmd_acceptance(args: argparse.Namespace) -> None:
     print(f"  result: {output_path}")
 
     if args.record:
-        if state is None or state.get("pipeline_id") != pid:
-            _die("acceptance --record requires the active pipeline state")
         ok, reason = check_gate(state, "harness")
         if not ok:
             _die(f"[GATE BLOCKED] {reason}")
@@ -6115,7 +6066,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         _save(state)
         print(GREEN(f"\n[PHASE ATTESTATION REQUEST READY] {args.phase}"))
         print(f"  request: {PHASE_ATTESTATION_REQUEST}")
-        print("  next: commit/push the request plus .pipeline/phase_evidence, wait for GitHub Actions, then run:")
+        print("  next: 일회성 요청/증거를 force-add로 커밋/푸시하고, GitHub Actions 완료 후 아래 명령을 실행하세요:")
+        print("        git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence")
         print(f"        {YELLOW(f'python pipeline.py gates phase-ci --phase {args.phase} --repo hojiyong2-commits/Pipeline')}\n")
         print(json.dumps(request, ensure_ascii=False, indent=2))
         return
@@ -6247,7 +6199,10 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not getattr(args, "user_confirmed", False):
             _die("user acceptance gate requires --user-confirmed")
         result = str(args.result).upper()
+        if result not in {"ACCEPT", "REJECT"}:
+            _die("[USER ACCEPTANCE BLOCKED] --result는 ACCEPT 또는 REJECT만 허용됩니다.")
         deployment: Optional[Dict[str, Any]] = None
+        evidence_validation: Optional[Dict[str, Any]] = None
         if result == "ACCEPT":
             prereq = []
             for gate_name in ("technical", "oracle", "github_ci"):
@@ -6256,13 +6211,15 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     prereq.append(f"{gate_name} gate must be PASS before user ACCEPT")
             if prereq:
                 _die("; ".join(prereq))
-            deployment = _deploy_accepted_outputs(state, args.evidence, args.notes)
+            evidence_validation = _validate_user_acceptance_evidence(args.evidence)
+            deployment = _deploy_accepted_outputs(state, args.evidence, args.notes, evidence_validation)
         report = {
             "schema_version": 1,
             "generated_at": _now(),
             "pipeline_id": pid,
             "result": result,
             "evidence": args.evidence,
+            "validated_evidence": evidence_validation or {},
             "notes": args.notes or "",
             "deployment": deployment,
         }

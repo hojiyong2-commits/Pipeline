@@ -1,6 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<module_qa_report>
-  <mt_id>MT-1</mt_id>
-  <verdict>PASS</verdict>
-  <verification_evidence>Grep confirmed new section exists in .claude/agents/security-agent.md; line count grew; no prior content deleted; file encoding utf-8</verification_evidence>
-</module_qa_report>

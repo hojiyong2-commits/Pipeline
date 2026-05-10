@@ -1,7 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<module_design>
-  <mt_id>MT-2</mt_id>
-  <interface_contract>.claude/agents/build-agent.md — documentation-only; no code callers</interface_contract>
-  <implementation_plan>Expand next_required_phase with Build phase attestation sequence and ACCEPT deploy path</implementation_plan>
-  <verification_plan>Grep confirms new section exists; no prior content deleted; utf-8 encoding</verification_plan>
-</module_design>
