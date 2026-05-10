@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260510-9242</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <pipeline_manager_run_id>pipeline_manager-6eb35e4f56cb897f</pipeline_manager_run_id>
+  <planner_run_id>pm_planner-515453fb7e867681</planner_run_id>
+  <step_plan_sha256>b58a80c1f04d42e7b67ec4f761ca978ffda25d6fa529b0db0e9de975c5687b34</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+
+  <execution_plan>
+    <phase id="1" name="PM">완료 — step_plan.xml 작성, contract frozen (14c92dd2b5ed)</phase>
+    <phase id="2" name="Dev">MT-1 (pipeline.py 2개 함수 추가) → MT-2 (CLAUDE.md + pipeline-manager-agent.md 업데이트) 순서</phase>
+    <phase id="4" name="QA">각 MT별 module qa 후 integration 검증</phase>
+    <phase id="5" name="SEC">skip — 외부 네트워크/DB 없음</phase>
+    <phase id="6" name="Build">N/A — meta-task (pipeline.py + MD 수정)</phase>
+    <phase id="7" name="External Gates">technical / oracle / github-ci / acceptance 게이트</phase>
+    <phase id="8" name="Architect">RCA 후 COMPLETE 전이</phase>
+  </execution_plan>
+
+  <micro_tasks_confirmed>
+    <micro_task id="MT-1">
+      <target_files>pipeline.py</target_files>
+      <change_summary>_validate_pipeline_branch_isolation 및 _validate_pr_title_matches_pipeline 함수 추가, cmd_gates 내 호출 삽입</change_summary>
+    </micro_task>
+    <micro_task id="MT-2">
+      <target_files>CLAUDE.md, .claude/agents/pipeline-manager-agent.md</target_files>
+      <change_summary>브랜치 격리 강제 규칙 섹션 추가 (CLAUDE.md) + PM Handoff 브랜치 생성 단계 명시 (pipeline-manager-agent.md)</change_summary>
+    </micro_task>
+  </micro_tasks_confirmed>
+
+  <build_decision>
+    <exe>N/A</exe>
+    <skip_reason>meta-task</skip_reason>
+    <rationale>pipeline.py 및 MD 파일 수정만 포함하는 메타 태스크로 EXE 빌드 불필요</rationale>
+  </build_decision>
+
+  <sec_decision>
+    <action>skip</action>
+    <rationale>외부 네트워크 통신 또는 DB 접근 없음. subprocess는 git/gh CLI 로컬 호출만 수행</rationale>
+  </sec_decision>
+
+  <manager_notes>IMP-20260510-9242 파이프라인 관리를 시작합니다. step_plan.xml을 수정하지 않고 Dev 단계부터 실행 관리를 시작합니다.</manager_notes>
+  <handover_status>READY_FOR_DEV</handover_status>
+</manager_handoff>

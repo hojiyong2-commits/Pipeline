@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260510-184A</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>116</numeric_score>
+  <failure_signature></failure_signature>
+
+  <scope_verification>
+    <files_checked>pipeline.py</files_checked>
+    <mt_boundary_check>WITHIN_SCOPE</mt_boundary_check>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <extra_files_found>none</extra_files_found>
+  </scope_verification>
+
+  <oracle_verification>
+    <oracle id="T001" case_kind="normal" expected="DEPLOY_SCOPE_OK" actual="DEPLOY_SCOPE_OK" pass="true"/>
+    <oracle id="T002" case_kind="edge" expected="SYNTAX_OK" actual="SYNTAX_OK" pass="true"/>
+  </oracle_verification>
+
+  <code_quality>
+    <syntax_valid>true</syntax_valid>
+    <change_minimal>true</change_minimal>
+    <change_description>L2700: ("build", "dev") → ("build",) — 1줄 수정</change_description>
+    <regression_risk>none — _deployment_artifacts 함수 내 build 단계 경로는 그대로 유지, 명시적 evidence/outputs도 유지</regression_risk>
+  </code_quality>
+
+  <category_checks>
+    <check name="deploy_scope_correct" category="FS" result="PASS">_deployment_artifacts에 dev 단계 없음</check>
+    <check name="build_phase_preserved" category="FS" result="PASS">build 단계 경로 유지</check>
+    <check name="no_scope_widening" category="PD" result="PASS">MT-1 범위 외 변경 없음</check>
+    <check name="impact_analysis_match" category="PD" result="PASS">impact_analysis와 실제 diff 일치</check>
+  </category_checks>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+</qa_report>

@@ -1,0 +1,1411 @@
+{
+  "version": "1.2.0",
+  "pipeline_id": "IMP-20260510-9242",
+  "type": "IMP",
+  "description": "PR 브랜치 오염 방지: gates prepare-phase에 pipeline_id 브랜치 강제 격리 추가",
+  "created_at": "2026-05-10T13:27:05Z",
+  "updated_at": "2026-05-10T13:49:45Z",
+  "current_phase": "dev",
+  "blocked": false,
+  "blocked_reason": null,
+  "phases": {
+    "pm": {
+      "status": "DONE",
+      "completed_at": "2026-05-10T13:42:14Z",
+      "evidence": null,
+      "notes": [],
+      "report_file": "step_plan.xml",
+      "agent_id": "pm-planner-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260510-9242_phase_pm.json",
+      "manager_run_id": "pipeline_manager-c7f612fb957de2b5",
+      "manager_agent_id": "pipeline-manager-agent",
+      "manager_report_file": "manager_handoff.xml",
+      "agent_run_id": "pm_planner-515453fb7e867681"
+    },
+    "dev": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "qa": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "sec": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "build": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "harness": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "architect": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    }
+  },
+  "event_log": [
+    {
+      "ts": "2026-05-10T13:27:05Z",
+      "msg": "파이프라인 생성: IMP-20260510-9242"
+    },
+    {
+      "ts": "2026-05-10T13:27:08Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-2de5804942e699f7"
+    },
+    {
+      "ts": "2026-05-10T13:30:47Z",
+      "msg": "github phase-ci pm FAIL run_id=25629976926 commit=2a28ef845f9b"
+    },
+    {
+      "ts": "2026-05-10T13:32:01Z",
+      "msg": "three_gate mode enabled (mandatory)"
+    },
+    {
+      "ts": "2026-05-10T13:32:01Z",
+      "msg": "GitHub phase attestations enabled (mandatory)"
+    },
+    {
+      "ts": "2026-05-10T13:32:01Z",
+      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242"
+    },
+    {
+      "ts": "2026-05-10T13:34:41Z",
+      "msg": "contract_v2 frozen: 14c92dd2b5ed"
+    },
+    {
+      "ts": "2026-05-10T13:34:41Z",
+      "msg": "advisory gpt-contract SKIPPED api_called=False"
+    },
+    {
+      "ts": "2026-05-10T13:37:01Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-2de5804942e699f7"
+    },
+    {
+      "ts": "2026-05-10T13:37:22Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-6eb35e4f56cb897f"
+    },
+    {
+      "ts": "2026-05-10T13:39:09Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-6eb35e4f56cb897f"
+    },
+    {
+      "ts": "2026-05-10T13:39:54Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-320e1ce754247a02"
+    },
+    {
+      "ts": "2026-05-10T13:39:57Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-320e1ce754247a02"
+    },
+    {
+      "ts": "2026-05-10T13:40:10Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-559866bf68b0ebb2"
+    },
+    {
+      "ts": "2026-05-10T13:40:13Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-559866bf68b0ebb2"
+    },
+    {
+      "ts": "2026-05-10T13:40:25Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-8a45fa8dffc43542"
+    },
+    {
+      "ts": "2026-05-10T13:40:28Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-8a45fa8dffc43542"
+    },
+    {
+      "ts": "2026-05-10T13:41:24Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-515453fb7e867681"
+    },
+    {
+      "ts": "2026-05-10T13:41:31Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-515453fb7e867681"
+    },
+    {
+      "ts": "2026-05-10T13:41:41Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-2fae267c5165f379"
+    },
+    {
+      "ts": "2026-05-10T13:41:44Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-2fae267c5165f379"
+    },
+    {
+      "ts": "2026-05-10T13:42:02Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-c7f612fb957de2b5"
+    },
+    {
+      "ts": "2026-05-10T13:42:05Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-c7f612fb957de2b5"
+    },
+    {
+      "ts": "2026-05-10T13:42:14Z",
+      "msg": "pm DONE | evidence: None"
+    },
+    {
+      "ts": "2026-05-10T13:42:21Z",
+      "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-10T13:46:42Z",
+      "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-10T13:49:14Z",
+      "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-10T13:49:45Z",
+      "msg": "phase attestation request prepared: pm"
+    }
+  ],
+  "terminal_state": null,
+  "harness_fail_count": 0,
+  "agent_runs": {
+    "pm_planner-2de5804942e699f7": {
+      "schema_version": 1,
+      "run_id": "pm_planner-2de5804942e699f7",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:27:08Z",
+      "completed_at": "2026-05-10T13:37:01Z",
+      "token_hash": "6f2e1d32ae9c93783004ee56f8cc7a57ece23c3fa4e87e9fd8a838397b76066d",
+      "output_file": "step_plan.xml",
+      "output_sha256": "461c5981be46a3aef5bc8a7c155f78dbe0a75e6dbce5a0848d7934a474a0a2c4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-2de5804942e699f7.json",
+      "receipt_sha256": "84ad89080239410bc3c3d74a38daf4471d5194874e80a1c3d839a4f1ff54421d",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-6eb35e4f56cb897f": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-6eb35e4f56cb897f",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:37:21Z",
+      "completed_at": "2026-05-10T13:39:09Z",
+      "token_hash": "b34eaa81bc85ff119a148c6ab210bbb2f261027179ac1043fea538c1dabdc3aa",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "b25190e80317f9126da1e2674cf38f29613bd04cd353c343c1f7b0296fcd92d2",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-6eb35e4f56cb897f.json",
+      "receipt_sha256": "cbe8d89d8bd0a0fc64cab1684492660bc13da64a4702316ffc655591b057e779",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-320e1ce754247a02": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-320e1ce754247a02",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:39:54Z",
+      "completed_at": "2026-05-10T13:39:57Z",
+      "token_hash": "caafdd651c6edb39a10df5e96ecbd9a4024da5d46a202c4d75a48fafbb7e5ad3",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "b25190e80317f9126da1e2674cf38f29613bd04cd353c343c1f7b0296fcd92d2",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-320e1ce754247a02.json",
+      "receipt_sha256": "b5eda84cb5423c78959fc6f0a73280241cc9fb78be85fa82288d960c617d6f8e",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pm_planner-559866bf68b0ebb2": {
+      "schema_version": 1,
+      "run_id": "pm_planner-559866bf68b0ebb2",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:40:10Z",
+      "completed_at": "2026-05-10T13:40:13Z",
+      "token_hash": "4c9636ded9b47578da8f4cfe2f3c2b5695e1419bfedc4b0b5065af442fe38dad",
+      "output_file": "step_plan.xml",
+      "output_sha256": "a85b6fcdc25a03caefffa0a65a3ad3f882d29064ff653f195a76ef29f9a670f5",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-559866bf68b0ebb2.json",
+      "receipt_sha256": "6915a3cb74bdb133f95fc7f114ae3e7078e8fd4c725ef62642226fa80bc55c52",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-8a45fa8dffc43542": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-8a45fa8dffc43542",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:40:25Z",
+      "completed_at": "2026-05-10T13:40:28Z",
+      "token_hash": "5aa5e5c1ac5d967ece89010fcb1d53e960914559dd9049e507091f4c2ed4a404",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "ac7b6e7eb7a0e1141fc82459abeba32a1d04f9f09363aeab5cf7af69583feb67",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-8a45fa8dffc43542.json",
+      "receipt_sha256": "2aeeeb444c47935a851c8b18c1417cc8795e46172f9019eb950945d78f80b967",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pm_planner-515453fb7e867681": {
+      "schema_version": 1,
+      "run_id": "pm_planner-515453fb7e867681",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:41:24Z",
+      "completed_at": "2026-05-10T13:41:31Z",
+      "token_hash": "5554b65a1f1093950731896a6d563b35093767b95828ce4ced835257c7c3db6f",
+      "output_file": "step_plan.xml",
+      "output_sha256": "b58a80c1f04d42e7b67ec4f761ca978ffda25d6fa529b0db0e9de975c5687b34",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-515453fb7e867681.json",
+      "receipt_sha256": "50df965fae229d53ce7924832c0093bfdebad82cb2f8992007614ba7375e75b2",
+      "used_by_phase": "pm",
+      "used_at": "2026-05-10T13:49:45Z",
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-2fae267c5165f379": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-2fae267c5165f379",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:41:41Z",
+      "completed_at": "2026-05-10T13:41:44Z",
+      "token_hash": "e2b3d95656f69578489a1a0d1a70f1456a527c875b4f0071c5da68fe55e34b01",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "2e7a31fb2d302a9ddc473d73fc86e767731abb6fdea9bfee2295d2485e14c4d3",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-2fae267c5165f379.json",
+      "receipt_sha256": "5730cd7ebdc171f300a4fb5e3a60822271165e25171edb24514cd520094ac0ae",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-c7f612fb957de2b5": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-c7f612fb957de2b5",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:42:02Z",
+      "completed_at": "2026-05-10T13:42:05Z",
+      "token_hash": "9c060853f46d2ebe7bf1db2bed01b70cf800047189f19f4a91e86c8076a191cc",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "7b6dc77263ab173b2d374705c3859e77822e34dc44188f0d837ae52978a74c57",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-c7f612fb957de2b5.json",
+      "receipt_sha256": "691443e87809ac4f043da08eff4f8508a101f27a028129399fce289720aa6064",
+      "used_by_phase": "pm_manager",
+      "used_at": "2026-05-10T13:49:45Z",
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    }
+  },
+  "external_gates": {
+    "enabled": true,
+    "mode": "three_gate",
+    "technical": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "oracle": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "acceptance": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "github_ci": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    }
+  },
+  "phase_attestations": {
+    "enabled": true,
+    "mode": "github_actions_per_phase",
+    "required_phases": [
+      "pm",
+      "dev",
+      "qa",
+      "build"
+    ],
+    "phases": {
+      "pm": {
+        "status": "FAIL",
+        "completed_at": "2026-05-10T13:30:47Z",
+        "phase": "pm",
+        "run_id": "25629976926",
+        "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+        "evidence": "github_actions_phase_run:25629976926",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\gates\\phase_ci\\pm_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
+      },
+      "dev": {
+        "status": "PENDING",
+        "completed_at": null,
+        "phase": "dev",
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
+      },
+      "qa": {
+        "status": "PENDING",
+        "completed_at": null,
+        "phase": "qa",
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
+      },
+      "build": {
+        "status": "PENDING",
+        "completed_at": null,
+        "phase": "build",
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
+      }
+    }
+  },
+  "module_gates": {
+    "enabled": true,
+    "mode": "incremental_module_gate",
+    "sequence": [
+      "MT-1",
+      "MT-2"
+    ],
+    "modules": {
+      "MT-1": {
+        "id": "MT-1",
+        "status": "PENDING",
+        "order": 1,
+        "target_files": [
+          "pipeline.py"
+        ],
+        "affected_function": "pipeline._validate_pipeline_branch_isolation",
+        "design": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "dev": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
+      },
+      "MT-2": {
+        "id": "MT-2",
+        "status": "PENDING",
+        "order": 2,
+        "target_files": [
+          "CLAUDE.md",
+          ".claude/agents/pipeline-manager-agent.md"
+        ],
+        "affected_function": "none",
+        "design": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "dev": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
+      }
+    },
+    "integration": {
+      "status": "PENDING",
+      "completed_at": null,
+      "report_file": null,
+      "evidence": null,
+      "notes": []
+    }
+  },
+  "execution_profile": {
+    "mode": "STANDARD",
+    "status": "ACTIVE",
+    "reason": "pipeline.py 코드 수정(MT-1)과 프로토콜 문서 업데이트(MT-2)가 포함된 2-모듈 작업입니다. pipeline.py는 핵심 파이프라인 로직을 포함하므로 STANDARD 프로파일을 적용합니다.",
+    "max_micro_tasks": null,
+    "product_code_write_allowed": true,
+    "phase_ci_mode": "per_phase",
+    "repair_mode": "standard",
+    "risk_review_required": false,
+    "risk_categories": [],
+    "declared_at": "2026-05-10T13:42:09Z",
+    "escalated_at": null,
+    "escalation_reason": null,
+    "uncertainty": {
+      "p0_questions": 0,
+      "p1_questions": 0,
+      "output_format_clear": true
+    },
+    "blast_radius": {
+      "expected_changed_files": 3,
+      "expected_changed_functions": 4,
+      "expected_changed_lines": 120
+    },
+    "risk_flags": {
+      "data_deletion": false,
+      "file_move": false,
+      "external_api": false,
+      "auth_or_secret": false,
+      "pipeline_protocol": true,
+      "build_or_deploy": false,
+      "core_parser_logic": true,
+      "database_or_migration": false,
+      "new_dependency": false
+    }
+  },
+  "outputs": {
+    "items": []
+  },
+  "failure_packets": [],
+  "protocol_evolution_decision": null,
+  "trusted_phase_runs": [
+    {
+      "recorded_at": "2026-05-10T13:30:47Z",
+      "status": "FAIL",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "pm",
+      "run_id": "25629976926",
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "artifact": "pipeline-phase-attestation"
+    }
+  ],
+  "contract_v2": {
+    "enabled": true,
+    "frozen": true,
+    "status": "frozen",
+    "contract_hash": "14c92dd2b5ed2fa0e460253d5c8c56b00ae49935d1df5cd07348e053a862a895",
+    "test_set_hash": "3637e5b6db9481861a286ee521e246c6633ea3cca6303be500e7618486e2030c",
+    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\task_contract.json",
+    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\test_set.json",
+    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\acceptance_summary.md"
+  },
+  "pm_analysis_gate": {
+    "decomp": true,
+    "clarification": true,
+    "roadmap": true,
+    "judgment_confirmed": false
+  },
+  "atomic_plan": {
+    "report_file": "step_plan.xml",
+    "validated_at": "2026-05-10T13:42:09Z",
+    "audit_result": "SPLIT_REQUIRED",
+    "micro_task_count": 2,
+    "micro_tasks": [
+      {
+        "id": "MT-1",
+        "affected_function": "pipeline._validate_pipeline_branch_isolation",
+        "target_files": [
+          "pipeline.py"
+        ],
+        "change_summary": "gates prepare-phase --phase pm 호출 시 현재 git 브랜치가 pipeline_id 패턴과 일치하는지 검증하고, gates accept --result ACCEPT 호출 시 PR 제목이 pipeline_id를 포함하는지 검증하는 두 함수를 추가합니다."
+      },
+      {
+        "id": "MT-2",
+        "affected_function": "none",
+        "target_files": [
+          "CLAUDE.md",
+          ".claude/agents/pipeline-manager-agent.md"
+        ],
+        "change_summary": "CLAUDE.md의 Phase 1 PM 절차 아래에 브랜치 격리 강제 규칙 섹션을 추가하고, pipeline-manager-agent.md의 PM Handoff 섹션에 브랜치 생성 단계를 명시합니다."
+      }
+    ],
+    "design_confirmation": {
+      "validated_at": "2026-05-10T13:42:09Z",
+      "maintenance_priority": "유지보수성 우선 — 빠른 수정보다 명확한 검사 로직과 오류 메시지 가독성을 우선합니다.",
+      "filter_summary": "P2 수준의 함수명 스타일 질문은 유지보수성 우선 원칙으로 자동 처리했습니다. 내부 변수명이나 주석 형식은 사용자 질문 대상에서 제외합니다.",
+      "question_count": 2,
+      "questions": [
+        {
+          "id": "Q1",
+          "priority": "P0",
+          "category": "module_split",
+          "mt_id": null,
+          "recommended_option": "A",
+          "option_count": 2,
+          "user_answer": "옵션 A 선택 — MT-1(pipeline.py)과 MT-2(문서)를 별도 모듈로 분리합니다."
+        },
+        {
+          "id": "Q2",
+          "priority": "P0",
+          "category": "branch_validation_scope",
+          "mt_id": null,
+          "recommended_option": "A",
+          "option_count": 2,
+          "user_answer": "옵션 A 선택 — gates prepare-phase --phase pm 단계에서만 브랜치 격리 검사를 실행합니다."
+        }
+      ]
+    },
+    "execution_profile": {
+      "mode": "STANDARD",
+      "status": "ACTIVE",
+      "reason": "pipeline.py 코드 수정(MT-1)과 프로토콜 문서 업데이트(MT-2)가 포함된 2-모듈 작업입니다. pipeline.py는 핵심 파이프라인 로직을 포함하므로 STANDARD 프로파일을 적용합니다.",
+      "max_micro_tasks": null,
+      "product_code_write_allowed": true,
+      "phase_ci_mode": "per_phase",
+      "repair_mode": "standard",
+      "risk_review_required": false,
+      "risk_categories": [],
+      "declared_at": "2026-05-10T13:42:09Z",
+      "escalated_at": null,
+      "escalation_reason": null,
+      "uncertainty": {
+        "p0_questions": 0,
+        "p1_questions": 0,
+        "output_format_clear": true
+      },
+      "blast_radius": {
+        "expected_changed_files": 3,
+        "expected_changed_functions": 4,
+        "expected_changed_lines": 120
+      },
+      "risk_flags": {
+        "data_deletion": false,
+        "file_move": false,
+        "external_api": false,
+        "auth_or_secret": false,
+        "pipeline_protocol": true,
+        "build_or_deploy": false,
+        "core_parser_logic": true,
+        "database_or_migration": false,
+        "new_dependency": false
+      }
+    },
+    "project_snapshot": {
+      "created_at": "2026-05-10T13:42:14Z",
+      "files": {
+        ".bandit": {
+          "sha256": "08baae051ad0d4c2c23da772edee0a48fb6cb28244b04c824bc549ebacea83db",
+          "size": 27
+        },
+        ".gitattributes": {
+          "sha256": "dd63c0a4677bad87380c98a7dfff344c3d1e807ca19f8f40c47acd334c0f8a4c",
+          "size": 375
+        },
+        ".gitignore": {
+          "sha256": "fc7e602141ab401156d10430f9895dffe464c2c9659893d713099fd246d36107",
+          "size": 1589
+        },
+        "analyze_fails.py": {
+          "sha256": "6f619fe7abd83db6974d661fbdca23405af78b105c12875f83a453fceb9c134b",
+          "size": 1466
+        },
+        "benchmarker.py": {
+          "sha256": "1928b29415e11ffdb65eb95e1642f3f6ffbfd5a31c6c3569dddf4a2ab2e58439",
+          "size": 1214
+        },
+        "benchmark_v3_summary.json": {
+          "sha256": "44e6762a3ff6faea25636795211ac5b54487471ed6ac85cacc6253d104c13581",
+          "size": 584
+        },
+        "CLAUDE.md": {
+          "sha256": "0542620c0db456ea853142799949f16c9cd3ab90aadcd330209efa37a23a364b",
+          "size": 69088
+        },
+        "contract_check.py": {
+          "sha256": "1a1d3b945b3665245b32af1bd1ba7a9fef801403995002022502102cc9d56c5d",
+          "size": 5682
+        },
+        "EmailMonitor.spec": {
+          "sha256": "a74b43b7cc17f3a4f7ccac0cf8b2b815add374f3dfa80e63ba698c8f209c8618",
+          "size": 718
+        },
+        "eval_harness.json": {
+          "sha256": "16f7550d697bf00f1b556ce8cd0f55374e7b6096fcd3f7393b6eaa6fee0f263e",
+          "size": 57977
+        },
+        "eval_harness_v2.json": {
+          "sha256": "1d240d5a77d3a30e009e9d0de25f48f181219a343e9c2f26f6078facfb42c6f2",
+          "size": 42401
+        },
+        "eval_harness_v3.json": {
+          "sha256": "94e5ec20afb30691baf5f71064f43b753bd79da9d659af705707f8ef2235113f",
+          "size": 22579
+        },
+        "ExcelReportApp.spec": {
+          "sha256": "559a8c1f00060ee29b12bc870980b849caafa11431ef1b54e1cf7db1e5e0f811",
+          "size": 841
+        },
+        "harness_skip_prior100.xml": {
+          "sha256": "4b599c55c3acbb22d2838abb7fdb5cf3af0c920d4f81955c72028885f33820c0",
+          "size": 1473
+        },
+        "harness_test_4D27.py": {
+          "sha256": "e6414798e13bd9bfa2afd50a2c278cce181a35fd3ac224479880db20ccf93abb",
+          "size": 2045
+        },
+        "harness_test_BUG_20260507_C2E2.py": {
+          "sha256": "530441ee78808ff61af3c6e6b8df92e806690e467ab4ad14cf104bf403d86ae8",
+          "size": 2738
+        },
+        "harness_test_E886.py": {
+          "sha256": "9f76f83ac272f17f5142cf5f45f87665d90b329d43073ad8bff1ddbefc2ded5b",
+          "size": 3336
+        },
+        "inspection_report_IMP-20260510-D44F.md": {
+          "sha256": "dac9779c58512bee91a1979a4a67973004d48a23078fd6e9d8c9ee3cf9fc85df",
+          "size": 21305
+        },
+        "KittingMapper.spec": {
+          "sha256": "fa4792dd0fe1214d4b95a3e6528bc337e16c084951f42b2d222878c9eab544e9",
+          "size": 938
+        },
+        "main.py": {
+          "sha256": "fc90f556fd071a6985120cec5c144e1f3ef6e2b4ab405952f8cd0fff179519c8",
+          "size": 1260
+        },
+        "manager_handoff.xml": {
+          "sha256": "fb1667b1a04a52e2063db6b178c155476dcce755b5feec3b81455ad3ab9d7108",
+          "size": 2500
+        },
+        "mypy.ini": {
+          "sha256": "12838d5c680585049ba2e2029b3d0f08591d8e15eea9bb082a8fd3ec5049f93b",
+          "size": 212
+        },
+        "pipeline.py": {
+          "sha256": "fbdbfa34deb06f812aa788038218a3f72e34b6fe70d8c2ac1d02b710b2d45a5b",
+          "size": 353035
+        },
+        "pyproject.toml": {
+          "sha256": "ba09344fd59f0d29b3968e996d40b32ea5c9741867d3064924f959271176414f",
+          "size": 39
+        },
+        "README.md": {
+          "sha256": "0429536e04312db3226423c652f4d789a0869ac5524b62cc8cbc371528dc0390",
+          "size": 12558
+        },
+        "record_harness.py": {
+          "sha256": "6355e5e05194d79b52c5e313bf34731f93960833adbf114af9af4dda22d35918",
+          "size": 835
+        },
+        "requirements-dev.txt": {
+          "sha256": "4259b2d9ee902d98660f522e25ea950fadc41b7973bd5b759313ac181a081e74",
+          "size": 24
+        },
+        "requirements.txt": {
+          "sha256": "c36d8c9cb765ca5fa45f9b8c9d9940294e71e3dd6ba509cde11e1d0adf45a822",
+          "size": 65
+        },
+        "score_v3.py": {
+          "sha256": "4778b588cf3f55562292c064273bda591af67e9b95821288fa63bd536d06f89f",
+          "size": 16059
+        },
+        "setup.cfg": {
+          "sha256": "08baae051ad0d4c2c23da772edee0a48fb6cb28244b04c824bc549ebacea83db",
+          "size": 27
+        },
+        "test_codex_task_hook.py": {
+          "sha256": "9db753953be48f2eaa2566385eb2a6078478469615a83ac148fbe1592c6fac59",
+          "size": 2218
+        },
+        "test_contract_acceptance_v2.py": {
+          "sha256": "9bdae7b6681e965cc04f9dd2efb5b08d0b37f554f3073315943a0f91a7bf86bc",
+          "size": 7328
+        },
+        "test_harness_6198.py": {
+          "sha256": "d13af0a1303cc6875a05c3c06e159cac3d355efe64db54ba3bb3b6570133254b",
+          "size": 3372
+        },
+        "test_hello.txt": {
+          "sha256": "1b2020502c0a005bc3385660133b66ff54238fee1eff95088f98d2ea5bb560d5",
+          "size": 17
+        },
+        "test_pipeline_gates.py": {
+          "sha256": "9ebb907c3ce4ed7e65c0d7518a3279b82e6c5b88afb23f98b974b80006d0d1f9",
+          "size": 72527
+        },
+        "test_three_gate_e2e.py": {
+          "sha256": "d39ce41f92c9b9ce4212e7737d2b5161efc6e0f9383df4336dd0406420eda90b",
+          "size": 17844
+        },
+        "test_three_gate_pipeline.py": {
+          "sha256": "67c7a4609f0e0da1ec929b5e9a0f5ac906a78b48d076f5e0fb9f97cc33ccc7b0",
+          "size": 147388
+        },
+        "_build_harness.py": {
+          "sha256": "183ee9951b5ae19b5ab8b8d52fa466c57b01648b821d6191e3d0c74f7b040e7e",
+          "size": 3107
+        },
+        "_build_harness2.py": {
+          "sha256": "69f15a485e97167784d6181f149ab7e243ee8bf90a290e61973aa219ec9b676c",
+          "size": 2799
+        },
+        ".claude/scheduled_tasks.lock": {
+          "sha256": "a22e9224d2e51ca1192fa0df95c25db8d1182b2b817071793e443702e5b06f81",
+          "size": 91
+        },
+        ".claude/settings.json": {
+          "sha256": "00a5bfaed9310e482b53e6c25fd683003fce1c5790f62b79b7bf7aceac799143",
+          "size": 367
+        },
+        ".claude/settings.local.json": {
+          "sha256": "a1cca2d06a9a8d9e1d706d9b1e5da97c17770fb8cce9f3b2905e0f46c63b9dba",
+          "size": 646
+        },
+        ".githooks/pre-push": {
+          "sha256": "17a9f21be5b068bdee4a2ac5c996d31522a23931706fc65a72cd7a7b1ab4a6f2",
+          "size": 492
+        },
+        ".github/CODEOWNERS": {
+          "sha256": "540dfe2bdf9b950050da940dfcc04ae5031306c08872f89a78a0f174262ba541",
+          "size": 645
+        },
+        ".github/pull_request_template.md": {
+          "sha256": "897ef87c4d623e8aeffe90b49c723820cf7b45d5e83c089ac1fe62027b2d7ffe",
+          "size": 1332
+        },
+        ".vscode/tasks.json": {
+          "sha256": "443cb041331ffa4b1725cb999be99d7f03e8ccc716366a25cfa95ebec40ff34f",
+          "size": 1408
+        },
+        "agent-office-ext/agent-office-dashboard-0.1.0.vsix": {
+          "sha256": "eb60579af92b83e77204984ca9a1328c368f44a131862f4465157eee312a7aef",
+          "size": 60119
+        },
+        "agent-office-ext/agent-office-ext-0.1.0.vsix": {
+          "sha256": "299eff8922b32fe598a883e25f62813e00779c8ec542b8fff3fe63baf053840f",
+          "size": 58702
+        },
+        "agent-office-ext/esbuild.js": {
+          "sha256": "6a2fef3354323dccd92ba0f49b2d60539f9c69be2b835e6b7fe2294c2da11d18",
+          "size": 2077
+        },
+        "agent-office-ext/package-lock.json": {
+          "sha256": "387c6af45d96242fb3d8466681bfdf754d401d6a0f2eee45821742b81fd33afe",
+          "size": 99892
+        },
+        "agent-office-ext/package.json": {
+          "sha256": "a11f5c2c3e7a393857665ef70b43bf184c55786e816c5d171dbd097b3f69ae12",
+          "size": 1601
+        },
+        "agent-office-ext/tsconfig.json": {
+          "sha256": "458eab7c0364df575051d533f51620f34d9cb096600ca63ad9cba5efa2e91d70",
+          "size": 406
+        },
+        "core/automation_runner.py": {
+          "sha256": "b69118966812974c24df2b7ee86ac2ec04dfd8f4688230c8c688d221834a9116",
+          "size": 11458
+        },
+        "core/config.json": {
+          "sha256": "c27b1dd9b4033ecb8f28009cd2ee0cf4969bab7d2a825c838f110fd41de1124b",
+          "size": 433
+        },
+        "core/config_manager.py": {
+          "sha256": "88f3f8a4c68e006527568f847fb3c22c745512bf97a1fcf99186e34c9a165e9d",
+          "size": 12447
+        },
+        "core/email_composer.py": {
+          "sha256": "16d8becdb575d116f11588dd266a37c2768f554026af01a17ebb0ec3c43be013",
+          "size": 13760
+        },
+        "core/encoding_utils.py": {
+          "sha256": "8976d360b775fd1ece75ecec6d71ca0145d2ddd3b2f06563014a2c8e268160a0",
+          "size": 3213
+        },
+        "core/excel_handler.py": {
+          "sha256": "f0c5c29693a753bc1be654f3fb080f41010059353b1854347a88e18a5f8965df",
+          "size": 29409
+        },
+        "core/outlook_sender.py": {
+          "sha256": "b516046c83574cfdcd1ade5f4d3ebbcb831905d772ed85c8425c68934709a8bf",
+          "size": 4076
+        },
+        "core/scheduler.py": {
+          "sha256": "9fda80c6a3faa846a8b17a705ba5b553e9b41eb248360f4afd5e1795fc9f4c33",
+          "size": 9502
+        },
+        "core/state_manager.py": {
+          "sha256": "a48933d6a25dd64cc5d011385b2df4965c987c5be31be8de07d219f6147137f5",
+          "size": 9867
+        },
+        "core/__init__.py": {
+          "sha256": "b651807eed530fb19791e35e448235ae40afe2999886e83ab42c8c22b7f296a3",
+          "size": 56
+        },
+        "FEAT-20260426-332E/app.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size": 0
+        },
+        "FEAT-20260426-332E/config.json": {
+          "sha256": "1256cb85bf9c6a9de6c2611d6ade2d4a227c424da2cb754e79728f7b5f883b74",
+          "size": 979
+        },
+        "FEAT-20260426-332E/KittingMapper.spec": {
+          "sha256": "388de81ff9fd0ef4ff6050c0b6f45b268762b6903a7c95301e791b63c80f3baa",
+          "size": 704
+        },
+        "FEAT-20260426-332E/main.py": {
+          "sha256": "b37c351d0ed835760d677bfecf0a0ffd008dde77fc11a9fe1ab9de55b3e1c45f",
+          "size": 10408
+        },
+        "ic_part_src/app.py": {
+          "sha256": "d0ef0aba3f4c7fb9a211ad55b290e4fc19cf234192d4cc92e9fc2f7a09fa4e87",
+          "size": 20911
+        },
+        "ic_part_src/automation.py": {
+          "sha256": "4db521b59051e38fa99c73ffe838babb25e5012aabcc2076293ce195d7244bae",
+          "size": 22870
+        },
+        "ic_part_src/ICPartAutomation.spec": {
+          "sha256": "e0cf2011b5c3ddc5aa252f608667d027511a304b7aeb546db9b20972cfe6fe3f",
+          "size": 914
+        },
+        "ic_part_src/main.py": {
+          "sha256": "1d66998ad2d74384cff0b4c060ecbf566851669e48c6a6818b8856c022038924",
+          "size": 2220
+        },
+        "ic_part_src/order_mapper.py": {
+          "sha256": "0e304090b49c17e097aee8fb3731b0e6d262cba4542e247e436f5c490ac299ca",
+          "size": 69821
+        },
+        "mail_sorter/__init__.py": {
+          "sha256": "9b8ccc6164ba1a719ae4793b4772982634072f9e995783f800588b04aa7b70f6",
+          "size": 22
+        },
+        "pa_flows/deployment_guide.xml": {
+          "sha256": "09a992c3b06efce2a875e27502d7353c8e8b4bfa1db3f453378fe20524d1b0f1",
+          "size": 4253
+        },
+        "pa_flows/flow_definition.json": {
+          "sha256": "be4ad919e0e983a6da11f334d8c746ff9c06a790e011d969ad78f1ce6f0ceb29",
+          "size": 10606
+        },
+        "pa_flows/handover.xml": {
+          "sha256": "2b2c8f720c5e8a71fa59313b0484cd4e729d486fd4a5184e48723f1160c201cd",
+          "size": 2741
+        },
+        "pa_flows/kitting_notice_flow.json": {
+          "sha256": "792b6ff6c860014731172f1679e542636f33095af50fcc4fe74a38af800e5f7d",
+          "size": 5401
+        },
+        "po_automation/build.log": {
+          "sha256": "7a44b2b167bdcf5405b694d81b00e04f81d78ac14348a700f4a4e4378976ba3b",
+          "size": 19072
+        },
+        "po_automation/config.json": {
+          "sha256": "0749bb635191759128dd2151128ddf0f9d93724d61116735e040429d6ac1472b",
+          "size": 189
+        },
+        "po_automation/EmailMonitor.spec": {
+          "sha256": "7233ebc0a1a65d997be40e87eeeb0f25f78fabc3fdd35c53be9039df4324e0bf",
+          "size": 839
+        },
+        "po_automation/email_monitor.py": {
+          "sha256": "fba07debb433916a0c19f0e231358608520dca8cb11ac8a4ed386aca80dc5d34",
+          "size": 71401
+        },
+        "po_automation/excel_handler.py": {
+          "sha256": "c5ef7cb94812ecb17563a1c70ea2b475b3823591f9f4d978459f9dd83a118806",
+          "size": 19456
+        },
+        "po_automation/folder_handler.py": {
+          "sha256": "06cfa3cc14d7fbddc55f970ed8847cce1aa126ec615411f79aefd37b9f567070",
+          "size": 10463
+        },
+        "po_automation/follow_up_tracker.py": {
+          "sha256": "6f248f8acd0ec02279be3be5fd6b5d32d53d4a1fe2107948a94fef1894deedb1",
+          "size": 35638
+        },
+        "po_automation/main.py": {
+          "sha256": "d4384d8070f9996c87ddcf235474daffe7c1473b1a04eda54a035264faf5f138",
+          "size": 24816
+        },
+        "po_automation/POAutomation.spec": {
+          "sha256": "3f61843d41dc07252b48348ae5002a1782c91de450e80002eacf9c3ddcea6901",
+          "size": 1098
+        },
+        "po_automation/requirements.txt": {
+          "sha256": "825384489101587a15886d9966e274a36653720f056f01b449ca7906327d06b3",
+          "size": 242
+        },
+        "tests/conftest.py": {
+          "sha256": "ee622e0f0b8af5115bcd5ace704ade1df4dfe130e2be3cec2d2d7716bd2cb629",
+          "size": 401
+        },
+        "tests/test_automation.py": {
+          "sha256": "17ab68b4b258812668f92f9337fc88bd07b4b7c702bc65c302913eeaba6e05bf",
+          "size": 7231
+        },
+        "tests/test_order_mapper.py": {
+          "sha256": "2f0affcdaa3f15031e997bbe365a764236209474b158dd677242576437ccf382",
+          "size": 18190
+        },
+        "ui/app.py": {
+          "sha256": "fd9ed900214c83cc94bf55d95cffb34c2d5ae4b9473a02ce044cdee1280408df",
+          "size": 43551
+        },
+        "ui/__init__.py": {
+          "sha256": "9c3e2c5292cbcafaf8bb96b1851db42fe4e6692fe87ff99b34e7997fd2e79d31",
+          "size": 13
+        },
+        "vscode-agent-office/agent-office-dashboard-0.0.1.vsix": {
+          "sha256": "7ce88fe5974a0f1d28e95e1adb50c22f0e2584b379e225c627a5c6067e6c4792",
+          "size": 1422807
+        },
+        "vscode-agent-office/extension.js": {
+          "sha256": "532df2c07b1599c88533f9a23f5aa34fdfce2d5c176e34bb2b662a3e8a5366c1",
+          "size": 37556
+        },
+        "vscode-agent-office/package.json": {
+          "sha256": "f9a9c5405b8ff8ce2078ccd566ff7d42f0c04f473386ac370e065c17434ffead",
+          "size": 924
+        },
+        "vscode-agent-office/README.md": {
+          "sha256": "78dac1224bade67b4aaa997d85407fc7cb496afa8e454f327c9c78602b0ddfb8",
+          "size": 527
+        },
+        "webapp/requirements.txt": {
+          "sha256": "108196949698c5ec0b0fe18492b011e8b836e644d19f64b56770aec749ae57c2",
+          "size": 52
+        },
+        "webapp/server.py": {
+          "sha256": "2e6e56d2482b9894edd7370ee65f6152043fb3600cf50c19e879b271282c4e1f",
+          "size": 49457
+        },
+        ".claude/agents/agent-factory-agent.md": {
+          "sha256": "26f11a1e8a5514f43cfbf080396949a66aff4079827aa2d9ad4797111d2d446e",
+          "size": 5519
+        },
+        ".claude/agents/build-agent.md": {
+          "sha256": "94fbba2bc8c1850bad4ccf1e6cfa75354b31c6f13477075d3cd8db8b63256795",
+          "size": 9591
+        },
+        ".claude/agents/dev-agent.md": {
+          "sha256": "523bdb21773dcf72ae8991e41471a8b90b7d808faabc9d3a50e17b2010dbfaee",
+          "size": 62227
+        },
+        ".claude/agents/pipeline-manager-agent.md": {
+          "sha256": "6f4f643195fbd7f1c33914f891ec26f8e7f414c0547790db57abedd56283aab8",
+          "size": 2226
+        },
+        ".claude/agents/pm-agent.md": {
+          "sha256": "703fcbf1bb320b72daf46cb357100a468fd8766c74d62834f944ca56d6f639fb",
+          "size": 49778
+        },
+        ".claude/agents/pm-planner-agent.md": {
+          "sha256": "cf58bf9a8772a722614f0ee5e88595ab64fc3cf848fd8a7fa8ed218a1133dbf5",
+          "size": 1786
+        },
+        ".claude/agents/power-automate-agent.md": {
+          "sha256": "6f8abdb6ba4f69a31134d1d86964a62b128767796461487d286cec1c47f0b0eb",
+          "size": 15215
+        },
+        ".claude/agents/prompt-architect-agent.md": {
+          "sha256": "5f046e63a36fc0b23dc41fca11e7ebe18eebd6923e3444a0bc14b15718d1818c",
+          "size": 8023
+        },
+        ".claude/agents/protocol-evolution-agent.md": {
+          "sha256": "0163ec828d873a5495c4bd007e9e4a16195063420adcba47351d82e899ec1a2b",
+          "size": 6612
+        },
+        ".claude/agents/qa-agent.md": {
+          "sha256": "ffff520de6b65cb48efbfebb02a29b7ef9768f8ad0d6846dd297ac91c87992c9",
+          "size": 30993
+        },
+        ".claude/agents/security-agent.md": {
+          "sha256": "cd562baf453eca11e95048062501d2700a58be62e38f9db78643654b9e9f69c1",
+          "size": 7602
+        },
+        ".claude/agents/test-harness-agent.md": {
+          "sha256": "c34cf8b2399669945906f8d1dfd089bd8ecfe50b4afcc8ca1d534debd72835cf",
+          "size": 5560
+        },
+        ".claude/agents/ui-app-agent.md": {
+          "sha256": "bc9d213471d7a2ea2b3d2f059b4fe8722146466350002b28b8f9c9b31552d697",
+          "size": 10933
+        },
+        ".claude/commands/agents.md": {
+          "sha256": "8178a4951772d724424e3ef4ea7a72ecc8a9d9d2506038ec357612c4a09a4c55",
+          "size": 56345
+        },
+        ".claude/commands/task.md": {
+          "sha256": "63fef73e3a2542d7ea26c4dfad1449d77f9efe7c4f6089c77976e758a9886339",
+          "size": 12752
+        },
+        ".claude/agents/shared/anti_gaming_rules.md": {
+          "sha256": "3417b17c3d2936207a8484c9760adbea8e28bf3737c9276706f5dc24f7953897",
+          "size": 4601
+        },
+        ".claude/agents/shared/Global_Wiki.md": {
+          "sha256": "6a2c22acc5bca7a0039c8da8912f29a495e71809c7ae4864471acbddb6f0de3f",
+          "size": 17054
+        },
+        ".claude/agents/shared/self_evolving_log.md": {
+          "sha256": "41c72098106889c8935602e0bc82de0f53376e389aaad43ff74053d201198831",
+          "size": 35026
+        },
+        ".claude/agents/shared/tech_tree_examples.md": {
+          "sha256": "c6f3f179ffa92ce89cf605caec4f312c53ee1c06228f907cec176414a1bd8800",
+          "size": 3115
+        },
+        ".codex/skills/pipeline-task/SKILL.md": {
+          "sha256": "77709a3000c94c657cef90b04bc6eb26d877124e5db0bf3b4735ad748cff0c06",
+          "size": 5719
+        },
+        ".codex/skills/pipeline-task/agents/openai.yaml": {
+          "sha256": "febd1744bcb0c1e7c34c77c58a51aa64e6cfc21a6de89e82b7d8dc14a780b4ac",
+          "size": 341
+        },
+        ".github/workflows/ci.yml": {
+          "sha256": "8ea7d291d330c1fc95e5ec077a45fae3cb4e2ed4aef25c27dcd91674c5168b8e",
+          "size": 26631
+        },
+        "agent-office-ext/out/extension.js": {
+          "sha256": "cd797eb15a5488a2a3c7ea11e0eec28c431997c4f0968847a58d5c9da2d86887",
+          "size": 12867
+        },
+        "agent-office-ext/out/extension.js.map": {
+          "sha256": "cdbbc9dc1a897bffeb2b2aa83f5d94f0876ec844bd44b87088b67c33739eeb11",
+          "size": 50354
+        },
+        "agent-office-ext/out/webview.js": {
+          "sha256": "1446196b4eda510e0c89a1a64872ec110d4446c68f09091bd8b6028c112c25d7",
+          "size": 13916
+        },
+        "agent-office-ext/out/webview.js.map": {
+          "sha256": "6f7f3bf7d4521fe65c8670bcb99873ba467c746ea3ab94819508802b0492caf4",
+          "size": 73334
+        },
+        "agent-office-ext/src/agentState.ts": {
+          "sha256": "3e1ed069223574c04d454f157c34ed406f26376d5bd3b75c6e998d2d98fce09e",
+          "size": 3591
+        },
+        "agent-office-ext/src/dataWatcher.ts": {
+          "sha256": "c19767c7c22e2b7e3894ec021f73928418af0606aa683fec693a201d36e47274",
+          "size": 9796
+        },
+        "agent-office-ext/src/extension.ts": {
+          "sha256": "fa916fd6a1a024480065d8cd84d2f2dd6c02c3f45b4e9aafe376ded9a926e065",
+          "size": 5206
+        },
+        "agent-office-ext/src/stopSignalHandler.ts": {
+          "sha256": "3c4167743d9e33cb06438858b94b12bbfd158175d9e634fde2b58e78dbfe1f78",
+          "size": 4052
+        },
+        "agent-office-ext/src/tokenBar.ts": {
+          "sha256": "e49424fb8c77363c3ca0b8706174507f0b8a7d9e452494423c3c3f7f65d89b0f",
+          "size": 2748
+        },
+        "agent-office-ext/webview-ui/index.html": {
+          "sha256": "5b5ec5b4e390091023365db17f8edefd387a73e086b526734511a0760cc9dc5b",
+          "size": 3048
+        },
+        "agent-office-ext/src/webview/animationLoop.ts": {
+          "sha256": "cf2b404788feb36b3edf3bb584e57b2ae57424471a0ee419c48cf989410d4ee8",
+          "size": 4693
+        },
+        "agent-office-ext/src/webview/canvasRenderer.ts": {
+          "sha256": "9c8110692ae35980a8daf155178f3b01f696a86b284af30135b0938d002c5752",
+          "size": 9733
+        },
+        "agent-office-ext/src/webview/hamsterSprites.ts": {
+          "sha256": "40542a5532d2675e0e95d5afc6365f4aeed9e1e41b90103b254cd62340923a53",
+          "size": 15162
+        },
+        "agent-office-ext/src/webview/panel.ts": {
+          "sha256": "043b446d66f05b7c142a5d817001238249f8a9faeb9e37e9a562a116ddd1f96e",
+          "size": 10046
+        },
+        "agent-office-ext/src/webview/webview-entry.ts": {
+          "sha256": "d89fdd33dd5f87224de4cf1e84db0701bfe923eeaee89f4c9ac918fd77ec817f",
+          "size": 4713
+        },
+        "core/acceptance/runner.py": {
+          "sha256": "02ce7db7281865f5e115952d299e62009574973028ba5d2b76c794f70e2a25e0",
+          "size": 5756
+        },
+        "core/acceptance/scorers.py": {
+          "sha256": "bc05636ee8752e92e2213f3f32c8dfe431156549a4b9c7af5d6334d70299edb9",
+          "size": 11688
+        },
+        "core/acceptance/__init__.py": {
+          "sha256": "9f786439661debe2fe19543eefb011c318b707e5fece6f54f723d765ff03b800",
+          "size": 166
+        },
+        "core/contracts/freeze.py": {
+          "sha256": "162924a1385612ceac3f7ffd879b076f9b6fa3eda32e64c38fa399e08f6e98c1",
+          "size": 1330
+        },
+        "core/contracts/readiness.py": {
+          "sha256": "f5aaaaee34d1bea6afdefb978b1cf4de01b5f44673c34e11f9aae0ce0aed78f9",
+          "size": 5522
+        },
+        "core/contracts/schema.py": {
+          "sha256": "50b7fd49b4ae020ac2872d01c7b0ce30c0a4f2c7ea36b32c42ba29ee1e7240fb",
+          "size": 8658
+        },
+        "core/contracts/__init__.py": {
+          "sha256": "1c4fa91f2a727718063c37bdaed9d24cb0b504d42655f8da3107ab2f5616ffe5",
+          "size": 738
+        },
+        "FEAT-20260426-332E/core/business_day.py": {
+          "sha256": "73c4dd2e4591935926f36904e629ba805bb0a8fc371dd5479a9eebd08e234bb7",
+          "size": 5110
+        },
+        "FEAT-20260426-332E/core/config_loader.py": {
+          "sha256": "817baabbd6b659570e10d02b7cf5cdba39832c343f8a9c2a6b9977f5b69a8ce9",
+          "size": 4794
+        },
+        "FEAT-20260426-332E/core/excel_mapper.py": {
+          "sha256": "0c793e4babccf63882dff6c6dfe3b20c8ca9962ac87bc468b31e2cf936524244",
+          "size": 18980
+        },
+        "FEAT-20260426-332E/core/models.py": {
+          "sha256": "4df5e475313768ed1b00caae217969b0d0365efa652ac8ad35ed47827983a9dd",
+          "size": 957
+        },
+        "FEAT-20260426-332E/core/order_lines_reader.py": {
+          "sha256": "83d12907edbe40bb4cd4f00c136099d852001baba36a97f624c322a467a53d8f",
+          "size": 14424
+        },
+        "FEAT-20260426-332E/core/outlook_reader.py": {
+          "sha256": "cc497f149e040571ae146e6bed1d8a954acbca0cb3906401efcffc285d2834cc",
+          "size": 12991
+        },
+        "FEAT-20260426-332E/core/packing_detail_reader.py": {
+          "sha256": "1558593a5b9b62e40cfd3136dc478542e504602732921407eae1d7dd61e08164",
+          "size": 14253
+        },
+        "FEAT-20260426-332E/core/pending_store.py": {
+          "sha256": "945ba83c890c82b151dc4cb33931826f46203f24704b1e4770344887f254f8ef",
+          "size": 6003
+        },
+        "FEAT-20260426-332E/core/__init__.py": {
+          "sha256": "87cd03c751a9cb073e946437a27685b988e4f0f6bb08eb703e99a7c8f1c6110e",
+          "size": 43
+        },
+        "FEAT-20260426-332E/ui/app.py": {
+          "sha256": "e60f0c5b16526c0d779d4624b2d4643424fe891ae3afd74eb3b07f4d50b262f7",
+          "size": 31144
+        },
+        "FEAT-20260426-332E/ui/__init__.py": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size": 0
+        },
+        "mail_sorter/core/__init__.py": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size": 0
+        },
+        "pipeline_outputs/BUG-20260510-9F70/emailmonitor.exe-emailmonitor.exe": {
+          "sha256": "56394737b60787c6f7c3aeea7ecb4d18eed83d962c6b28a4e71dc74b43cae1b9",
+          "size": 118711712
+        },
+        "pipeline_outputs/BUG-20260510-9F70/outputs_manifest.json": {
+          "sha256": "11ab49203ec85ccd69b9ac4821df465358acd95b879d61fba0f97fe2fcd222ad",
+          "size": 652
+        },
+        "tests/oracles/BUG-20260510-98D6/edge/expected.json": {
+          "sha256": "b672abe28b96f2b212580b3f561814fde913dcf02cb1c7b4965b732fe36895aa",
+          "size": 297
+        },
+        "tests/oracles/BUG-20260510-98D6/edge/input.json": {
+          "sha256": "ca67642585b10405580bd04a7dd48dc581f2c1bf2aa9deb60456d920b55b25b0",
+          "size": 307
+        },
+        "tests/oracles/BUG-20260510-98D6/normal/expected.json": {
+          "sha256": "ce21e64ab84a4f60233dc27fd831e1c7b01526dc916d83117b6511846375869b",
+          "size": 249
+        },
+        "tests/oracles/BUG-20260510-98D6/normal/input.json": {
+          "sha256": "66c59ee556a773bf7eeb6ebe753bf3252d50bfaf29bd8cf87d2f2c58832ed3f4",
+          "size": 227
+        },
+        "tests/oracles/BUG-20260510-9F70/edge_01/expected.txt": {
+          "sha256": "998ccf616845fbd499cb9af01f47e877a7b5e6c6982e4098016424acaf9182d1",
+          "size": 10
+        },
+        "tests/oracles/BUG-20260510-9F70/edge_01/input.txt": {
+          "sha256": "c833b2282d1aad1691d75e31c00b5e56bbf58cd548d668b6158edeaa4381cca3",
+          "size": 317
+        },
+        "tests/oracles/BUG-20260510-9F70/normal_01/expected.txt": {
+          "sha256": "f0107ddb08c8dd0b51f91e6db8de9b3abe138e73638a44bba1d89fc6528efe53",
+          "size": 18
+        },
+        "tests/oracles/BUG-20260510-9F70/normal_01/input.txt": {
+          "sha256": "990488ae7989fb2161bd71297d096a3990a580154bc569b63546a75cb802ef51",
+          "size": 614
+        },
+        "tests/oracles/IMP-20260510-9242/edge_01/expected.txt": {
+          "sha256": "ffedb6d091ab70e16db1e95e8545b8b6363f68e6fec762ffb80e85b9830c7944",
+          "size": 20
+        },
+        "tests/oracles/IMP-20260510-9242/edge_01/input.txt": {
+          "sha256": "7308dca6cc055fee71d4f708dcc28a0d2f94b738e5189572150457817a1bfff3",
+          "size": 183
+        },
+        "tests/oracles/IMP-20260510-9242/normal_01/expected.txt": {
+          "sha256": "c9989f59b5fbcdbbc75faa8ad1bf6d2147fe2137982c96a3971f5b87547ab11c",
+          "size": 28
+        },
+        "tests/oracles/IMP-20260510-9242/normal_01/input.txt": {
+          "sha256": "34dd8c381d1f99200c79704ac629e8ff4087e5a20d843050998f695adecf22ea",
+          "size": 210
+        },
+        "tests/oracles/IMP-20260510-D44F/case-edge/expected.txt": {
+          "sha256": "728104a7afdcd45711d81c067e0b7d490ed2ede9467b10e82d09a5c398f6463f",
+          "size": 947
+        },
+        "tests/oracles/IMP-20260510-D44F/case-edge/input.txt": {
+          "sha256": "ead3e02afe1013cba57d9366f73e113c460aecca68eca70f12ab243bf209fa0e",
+          "size": 368
+        },
+        "tests/oracles/IMP-20260510-D44F/case-normal/expected.txt": {
+          "sha256": "8da58f4af62f54c0c748c8adbc17750c2867fbae30f2655926d436439b170a72",
+          "size": 948
+        },
+        "tests/oracles/IMP-20260510-D44F/case-normal/input.txt": {
+          "sha256": "bb69443408fa3e1420b192ea91239b25cf5243ab5793b1ddf777fdd22b4c7c4e",
+          "size": 452
+        },
+        "vscode-agent-office/media/agent-office-map.png": {
+          "sha256": "df2815202fa9a686e216e4ece15fcbbee8867f53d64c8dd4babbbbbc11ea7ade",
+          "size": 1419378
+        },
+        "vscode-agent-office/media/hamster.svg": {
+          "sha256": "1f0b44d31d1b27e570a1366fc421ee72694d7b7351ceb2d9410f31fd4974dc77",
+          "size": 1389
+        },
+        "webapp/static/index.html": {
+          "sha256": "9637c6ac971e63b735abe08b80afc37444757eb7901a23e902698fb480052ea0",
+          "size": 82554
+        },
+        "_cleanup_archive/cleanup_20260505_171659/temp_analysis.txt": {
+          "sha256": "b8951c0137446c2e14dd7a4af3bb53dbb92b66a2010d56a18565aa625af195da",
+          "size": 893
+        },
+        "_cleanup_archive/cleanup_20260505_171659/temp_combos.txt": {
+          "sha256": "09909abee4fae51468bb7349b0fd7c887a2b684a20fa87aef810bbbb982fd0ef",
+          "size": 421
+        },
+        "_cleanup_archive/cleanup_20260505_171659/temp_prio.txt": {
+          "sha256": "f3b9735270600e2a2e7cc255dbafd5ec8bcee5c9f6181bfae9794653f5878cb6",
+          "size": 1060
+        },
+        "_cleanup_archive/cleanup_20260505_171659/tmp_status.txt": {
+          "sha256": "03d357099445f355be17d87d4e332fdf124fedd4d075c039cf7d37d27658a2a7",
+          "size": 817
+        },
+        "_cleanup_archive/cleanup_20260505_171659/_tmp_applog.txt": {
+          "sha256": "7ff6569bf9db7cb61d23cf1e1ad316da28dd9a89e70022bc5642a1669a249283",
+          "size": 702
+        },
+        "_cleanup_archive/cleanup_20260505_171659/_tmp_tail.txt": {
+          "sha256": "baa16c2e5d38658c87ef84addc8221ac07725e4c36a9bbe9ba27604336b67643",
+          "size": 9822
+        }
+      },
+      "skipped": []
+    }
+  },
+  "pm_manager_handoff": {
+    "validated_at": "2026-05-10T13:42:14Z",
+    "report_file": "manager_handoff.xml",
+    "step_plan_sha256": "1bdc7a20c69426babe4e8da8d1bd4cadd1da27abc13ffce8a24ff1b9b1325e46",
+    "planner_run_id": "pm_planner-515453fb7e867681",
+    "accepted_for_execution": true,
+    "will_not_modify_step_plan": true,
+    "next_phase": "dev"
+  }
+}

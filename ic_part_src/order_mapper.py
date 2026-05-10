@@ -70,6 +70,12 @@ IC_MAP_CONTAINS: List[Tuple[str, str]] = [
     ("CCI Valve", "AT"),   # catches GmbH and Gmbh variants (case-insensitive fallback)
     ("APAC", "SG"),
 ]
+_IC_MAP_EXACT_NORMALIZED: Dict[str, str] = {
+    key.casefold(): value for key, value in IC_MAP_EXACT.items()
+}
+_IC_MAP_CONTAINS_NORMALIZED: List[Tuple[str, str]] = [
+    (needle.casefold(), value) for needle, value in IC_MAP_CONTAINS
+]
 
 
 # ---------------------------------------------------------------------------
@@ -657,11 +663,12 @@ def map_ic(customer_name: Optional[str]) -> str:
     if not isinstance(customer_name, str):
         raise TypeError(f"customer_name must be str, got {type(customer_name).__name__}")
 
-    if customer_name in IC_MAP_EXACT:
-        return IC_MAP_EXACT[customer_name]
+    normalized = customer_name.casefold()
+    if normalized in _IC_MAP_EXACT_NORMALIZED:
+        return _IC_MAP_EXACT_NORMALIZED[normalized]
 
-    for substring, code in IC_MAP_CONTAINS:
-        if substring in customer_name:
+    for substring, code in _IC_MAP_CONTAINS_NORMALIZED:
+        if substring in normalized:
             return code
 
     return customer_name
@@ -704,6 +711,7 @@ class OrderGroup:
 
     def __init__(self) -> None:
         """Initialise all fields to None/empty."""
+        self.base_order_no: Optional[str] = None
         self.order_no: Optional[str] = None
         self.delivery_date: Optional[date] = None
         self.po_no: Optional[str] = None
@@ -760,6 +768,7 @@ class OrderGroup:
         if self.order_no is None:
             raw_order = _get(eff_order_no)
             self.order_no = str(raw_order).strip() if raw_order is not None else None
+            self.base_order_no = self.order_no
 
             self.delivery_date = normalise_date(_get(eff_delivery_date))
 
@@ -1037,12 +1046,14 @@ def apply_sub_order_suffixes(groups: List[OrderGroup]) -> None:
 
     counts: Dict[str, int] = {}
     for group in groups:
-        base = group.order_no if group.order_no is not None else ""
+        if group.base_order_no is None:
+            group.base_order_no = group.order_no
+        base = group.base_order_no if group.base_order_no is not None else ""
         counts[base] = counts.get(base, 0) + 1
 
     occurrence: Dict[str, int] = {}
     for group in groups:
-        base = group.order_no if group.order_no is not None else ""
+        base = group.base_order_no if group.base_order_no is not None else ""
         if counts[base] > 1:
             occ = occurrence.get(base, 0)
             if occ > 0:
@@ -1192,9 +1203,13 @@ def write_ic_part_zip(
     # sub-groups to be incorrectly skipped as duplicates.
     _check_pids: Set[str] = set(existing_project_ids)  # frozen snapshot — never mutated
 
-    # Count how many groups (delivery-date buckets) share each order_no.
-    # Used below to decide whether to write Line No or leave it blank.
-    order_date_count: Counter = Counter(g.order_no for g in groups)
+    # Count how many delivery-date groups share the original order number.
+    # Suffixes (-2/-3) are display values; Line No must be decided from the
+    # original CustomerOrderLines order number.
+    order_date_count: Counter = Counter(
+        (g.base_order_no if g.base_order_no is not None else g.order_no)
+        for g in groups
+    )
 
     for i, group in enumerate(groups):
         # Duplicate Project ID check — only against IDs already in the template,
@@ -1252,9 +1267,10 @@ def write_ic_part_zip(
                 sheet1_str = _inject_or_replace_cell(sheet1_str, row_num, 'V', _vsrc)
                 logger.info("Backfilled V formula into %s", _vref)
 
-        # Write Line No only when this order_no has 2+ delivery-date groups;
-        # a single-group order leaves the O column empty.
-        line_no_val: str = group.format_line_nos() if order_date_count[group.order_no] > 1 else ""
+        # Write Line No only when this original order_no has 2+ delivery-date
+        # groups; a single-date order leaves the M column empty.
+        _line_count_key = group.base_order_no if group.base_order_no is not None else group.order_no
+        line_no_val: str = group.format_line_nos() if order_date_count[_line_count_key] > 1 else ""
 
         text_cols: List[Tuple[int, Optional[str]]] = [
             (ICPART_COL_PROJECT_ID,      group.project_id),
@@ -1290,7 +1306,7 @@ def write_ic_part_zip(
     logger.info("Groups injected: %d, rows skipped: %d", written, skipped)
 
     # Inject first group's Project Id into IC-Distribution sheet2 cell A2.
-    # Sheet2 B2 formula is MATCH($A$2, Sheet1!J:J, 0) where J = Project Id column.
+    # Sheet2 B2 formula should match Sheet1!I:I, where I = Project Id column.
     # Therefore A2 must hold Project Id, not Order No.
     # Fallback to order_no only when project_id is None (backward compatibility).
     _sheet2_key = "xl/worksheets/sheet2.xml"
@@ -1313,6 +1329,7 @@ def write_ic_part_zip(
             if _n2 == 0:
                 logger.warning("IC-Distribution A2 not found in sheet2.xml — skipped")
             else:
+                _s2_new = _s2_new.replace("Sheet1!J:J", "Sheet1!I:I")
                 all_zip_data[_sheet2_key] = _s2_new.encode("utf-8")
                 logger.info("IC-Distribution A2 set to %s (project_id)", _a2_value)
     elif _sheet2_key not in all_zip_data:
@@ -1461,6 +1478,8 @@ if __name__ == "__main__":
         assert map_ic("IMI Critical Engineering LLC") == "SoCal"
         assert map_ic("Some APAC Company") == "SG"
         assert map_ic("CCI Valve Technology Gmbh") == "AT", "소문자 h 변형 미매핑"
+        assert map_ic("cci valve technology gmbh") == "AT", "대소문자 변형 미매핑"
+        assert map_ic("some apac company") == "SG", "APAC 대소문자 변형 미매핑"
         assert map_ic("Unknown Corp") == "Unknown Corp"
         assert map_ic(None) == ""
         try:
@@ -1515,6 +1534,18 @@ if __name__ == "__main__":
         assert og_a.order_no == "X100050542"
         assert og_b.order_no == "X100050542-2"
         assert og_c.order_no == "X100050542-3"
+        assert og_b.base_order_no == "X100050542"
+
+        _ln_a = OrderGroup(); _ln_a.order_no = "X100050777"; _ln_a.line_nos = [1, 2, 3]
+        _ln_b = OrderGroup(); _ln_b.order_no = "X100050777"; _ln_b.line_nos = [4, 5]
+        _ln_groups = [_ln_a, _ln_b]
+        apply_sub_order_suffixes(_ln_groups)
+        _ln_counts: Dict[Optional[str], int] = Counter(g.base_order_no for g in _ln_groups)
+        _ln_values = [
+            g.format_line_nos() if _ln_counts[g.base_order_no] > 1 else ""
+            for g in _ln_groups
+        ]
+        assert _ln_values == ["#1~3", "#4,5"], f"Line No should use base order count, got {_ln_values!r}"
 
         # _inject_text_cell: self-closing empty cell
         _test_xml = (

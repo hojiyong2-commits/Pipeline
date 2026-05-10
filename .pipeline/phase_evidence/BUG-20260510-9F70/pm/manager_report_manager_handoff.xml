@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260510-9F70</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>8fd00f03329fe5f094d6c702cf51120e17b870524012f30498f2f0815c148a5b</step_plan_sha256>
+  <planner_run_id>pm_planner-116904a060fdf4a2</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+</manager_handoff>
