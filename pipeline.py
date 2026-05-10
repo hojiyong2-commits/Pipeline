@@ -3776,7 +3776,7 @@ def cmd_qa(args: argparse.Namespace) -> None:
         state["current_phase"] = "dev"
         state["phases"]["dev"]["status"] = "PENDING"
         msg = RED("[QA FAIL] Phase 2 -Dev 재작업 필요")
-        next_cmd = "python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json"
+        next_cmd = "python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>"
 
     _log_event(state, f"qa {result}" + (f" numeric={numeric_score}" if numeric_score is not None else ""))
     _record_snapshot(state, "qa", branch)
@@ -3821,7 +3821,7 @@ def cmd_sec(args: argparse.Namespace) -> None:
             _log_event(state, f"sec FAIL risk={risk}")
             _save_state_for(state, branch)
             print(YELLOW(f"\n[SEC FAIL] risk_level={risk} — Tier2 이상 발견"))
-            print(f"\n  다음: {YELLOW('python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json')}\n")
+            print(f"\n  다음: {YELLOW('python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>')}\n")
             return
         status = "PASS"
         msg    = GREEN(f"[SEC PASS] risk_level={risk}")
@@ -4024,7 +4024,7 @@ def cmd_architect(args: argparse.Namespace) -> None:
     if harness_verdict == "FAIL":
         print(YELLOW(f"\n[ARCHITECT DONE — REWORK]{branch_tag} {pid_display}"))
         print(YELLOW("  External gate FAIL 경로: Phase 2 (Dev) 재작업 필요"))
-        print(f"\n  다음 단계: {YELLOW('python pipeline.py done --phase dev --files \"..\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json')}")
+        print(f"\n  다음 단계: {YELLOW('python pipeline.py done --phase dev --files \"..\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>')}")
     else:
         print(GREEN(f"\n[PIPELINE COMPLETE]{branch_tag} {pid_display}"))
         archive_path = HISTORY_DIR / f"{pid_display}_COMPLETE.json"
@@ -4279,14 +4279,14 @@ def cmd_interface(args: argparse.Namespace) -> None:
         },
         "dev": {
             "agent": "dev-agent",
-            "next_cmd": 'python pipeline.py done --phase dev --files "core/x.py,ui/app.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json',
+            "next_cmd": 'python pipeline.py done --phase dev --files "core/x.py,ui/app.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>',
             "required_xml": ["<scope_declaration>", "<impact_analysis>", "<handover>"],
         },
         "qa": {
             "agent": "qa-agent",
             "next_cmd": (
-                'PASS: python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml\n'
-                '        FAIL: python pipeline.py qa --result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml'
+                'PASS: python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml --agent-run-id <qa_run_id>\n'
+                '        FAIL: python pipeline.py qa --result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <qa_run_id>'
             ),
             "required_xml": ["<qa_report>", "<numeric_score>", "<verdict>", "<micro_task_boundary>"],
         },
@@ -4297,7 +4297,7 @@ def cmd_interface(args: argparse.Namespace) -> None:
         },
         "build": {
             "agent": "build-agent",
-            "next_cmd": 'python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml  (N/A: --exe "N/A" --skip-reason "meta-task")',
+            "next_cmd": 'python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>  (N/A: --exe "N/A" --skip-reason "meta-task" --agent-run-id <build_run_id>)',
             "required_xml": [
                 "<build_report>",
                 "<section_1_command>",
@@ -6074,7 +6074,7 @@ def cmd_codex(args: argparse.Namespace) -> None:
     skill_path = BASE_DIR / ".codex/skills/pipeline-task/SKILL.md"
     if skill_path.exists():
         skill_text = skill_path.read_text(encoding="utf-8", errors="replace")
-        for token in ("Three-Gate", "pm_planner", "pipeline_manager", "manager_handoff.xml"):
+        for token in ("Three-Gate", "pm_planner", "pipeline_manager", "manager_handoff.xml", "anti_gaming_read"):
             ok = token in skill_text
             checks.append({
                 "name": f"skill-token:{token}",

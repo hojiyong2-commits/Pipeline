@@ -16,11 +16,15 @@ model: opus
 
 It must not write code, create Dev/QA/SEC/Build/Architect reports, call `pipeline.py done/qa/sec/build/gates/architect`, or claim downstream phases are complete.
 
+Before writing `step_plan.xml`, read `.claude/agents/shared/anti_gaming_rules.md`.
+Record this as `<anti_gaming_read>true</anti_gaming_read>` inside `<step_plan>`.
+
 ## Required Output
 
 Save the final Round 1 output as `step_plan.xml`. The file must include:
 
 - `<decomposition_audit>`
+- `<step_plan><anti_gaming_read>true</anti_gaming_read></step_plan>`
 - `<step_plan><design_confirmation>...</design_confirmation></step_plan>`
 - `<step_plan><task_complexity>...</task_complexity></step_plan>`
 - `<step_plan><micro_tasks>...</micro_tasks></step_plan>`
@@ -36,4 +40,3 @@ python pipeline.py agent finish --run-id <planner_run_id> --token <token> --outp
 ```
 
 The planner receipt can only be used as the PM planning receipt. It cannot be used as the Pipeline Manager receipt.
-

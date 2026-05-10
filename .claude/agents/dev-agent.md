@@ -326,7 +326,7 @@ External gates are mandatory. Dev must implement against the frozen oracle contr
 <!-- CRITICAL: dev-agent는 pipeline.py done을 직접 실행하지 않습니다. Pipeline Manager가 agent receipt와 <handover> XML을 확인한 뒤 기록합니다. -->
 <!-- MT-5 (IMP-20260506-A064): PM은 done --phase dev 기록 시 반드시 --scope-declared 플래그를 포함해야 함. 
      dev-agent가 <scope_declaration>을 출력했을 때만 PM이 이 플래그를 포함. 미포함 시 pipeline.py 경고 출력. -->
-<!-- 권장 명령어: python pipeline.py done --phase dev --files "파일목록" --scope-declared --scope-manifest scope_manifest.json -->
+<!-- 권장 명령어: python pipeline.py done --phase dev --files "파일목록" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id> -->
 
 ## Output Format
 
