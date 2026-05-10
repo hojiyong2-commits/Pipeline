@@ -1,54 +1,75 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-10T13:11:26Z",
-  "pipeline_id": "BUG-20260510-9F70",
-  "phase": "build",
+  "generated_at": "2026-05-10T13:35:04Z",
+  "pipeline_id": "BUG-20260510-EE42",
+  "phase": "pm",
   "phase_status": "DONE",
-  "commit_hint": "e28da4ed6f718a26c241695c46421bf2c85b4740",
+  "commit_hint": "ea13f1eb1077695d995f1ea5dfca047ed9ee36df",
   "state": {
-    "current_phase": "harness",
-    "phase_completed_at": "2026-05-10T13:04:31Z",
-    "report_file": "dist/build_report.xml",
-    "evidence": "dist/emailmonitor.exe"
+    "current_phase": "dev",
+    "phase_completed_at": "2026-05-10T13:34:30Z",
+    "report_file": "step_plan.xml",
+    "evidence": null
   },
   "agent_run": {
-    "run_id": "build-616821991407f275",
-    "phase": "build",
-    "agent_id": "build-agent",
+    "run_id": "pm_planner-3c013b906d0ce1eb",
+    "phase": "pm_planner",
+    "agent_id": "pm-planner-agent",
     "status": "COMPLETED",
-    "output_file": "dist\\build_report.xml",
-    "output_sha256": "8511eedb5fa27586e08f824965d9184788472a419f3f4cbe47b118f982e23ca8",
-    "receipt_path": ".pipeline/phase_evidence/BUG-20260510-9F70/build/agent_receipt_build-616821991407f275.json",
-    "receipt_sha256": "fc142af04454840c59bfab768c1df955fafbafac8bf2a523e8374472945c6bda",
-    "used_by_phase": "build",
-    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260510-9F70\\build\\build-616821991407f275.json"
+    "output_file": "step_plan.xml",
+    "output_sha256": "41bcbf3f38397cb3cd133616d99e9977ef8a9b56a861d5990ad779aeeabd1e44",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260510-EE42/pm/agent_receipt_pm_planner-3c013b906d0ce1eb.json",
+    "receipt_sha256": "d6e3b2449907be606b7109a686aaa272d0aacb8ff3b1506795840a625b76d39b",
+    "used_by_phase": "pm",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260510-EE42\\pm_planner\\pm_planner-3c013b906d0ce1eb.json"
   },
-  "manager_run": null,
+  "manager_run": {
+    "run_id": "pipeline_manager-68e1e30800e23ea9",
+    "phase": "pipeline_manager",
+    "agent_id": "pipeline-manager-agent",
+    "status": "COMPLETED",
+    "output_file": "manager_handoff.xml",
+    "output_sha256": "273828d1ba8594e978773ccbbf7b3d696978cf9ea657b3c2b36c1498c21c2c75",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260510-EE42/pm/manager_receipt_pipeline_manager-68e1e30800e23ea9.json",
+    "receipt_sha256": "a1d23e75777fbc991e2d7d3a915bc9c4df3cc0a8ebc7f881fc5e8cf85d1deaf4",
+    "used_by_phase": "pm_manager",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260510-EE42\\pipeline_manager\\pipeline_manager-68e1e30800e23ea9.json"
+  },
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\BUG-20260510-9F70\\build\\build-616821991407f275.json",
-      "path": ".pipeline/phase_evidence/BUG-20260510-9F70/build/agent_receipt_build-616821991407f275.json",
-      "sha256": "fc142af04454840c59bfab768c1df955fafbafac8bf2a523e8374472945c6bda",
-      "size_bytes": 514,
-      "requires_force_add": false
+      "source": ".pipeline\\agent_receipts\\BUG-20260510-EE42\\pm_planner\\pm_planner-3c013b906d0ce1eb.json",
+      "path": ".pipeline/phase_evidence/BUG-20260510-EE42/pm/agent_receipt_pm_planner-3c013b906d0ce1eb.json",
+      "sha256": "d6e3b2449907be606b7109a686aaa272d0aacb8ff3b1506795840a625b76d39b",
+      "size_bytes": 1191,
+      "requires_force_add": true
+    },
+    {
+      "label": "manager_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260510-EE42\\pipeline_manager\\pipeline_manager-68e1e30800e23ea9.json",
+      "path": ".pipeline/phase_evidence/BUG-20260510-EE42/pm/manager_receipt_pipeline_manager-68e1e30800e23ea9.json",
+      "sha256": "a1d23e75777fbc991e2d7d3a915bc9c4df3cc0a8ebc7f881fc5e8cf85d1deaf4",
+      "size_bytes": 699,
+      "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "dist\\build_report.xml",
-      "path": ".pipeline/phase_evidence/BUG-20260510-9F70/build/report_build_report.xml",
-      "sha256": "8511eedb5fa27586e08f824965d9184788472a419f3f4cbe47b118f982e23ca8",
-      "size_bytes": 1556,
-      "requires_force_add": false
+      "source": "step_plan.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260510-EE42/pm/report_step_plan.xml",
+      "sha256": "41bcbf3f38397cb3cd133616d99e9977ef8a9b56a861d5990ad779aeeabd1e44",
+      "size_bytes": 5789,
+      "requires_force_add": true
+    },
+    {
+      "label": "manager_report",
+      "source": "manager_handoff.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260510-EE42/pm/manager_report_manager_handoff.xml",
+      "sha256": "273828d1ba8594e978773ccbbf7b3d696978cf9ea657b3c2b36c1498c21c2c75",
+      "size_bytes": 622,
+      "requires_force_add": true
     }
   ],
   "workspace_file_checks": [],
-  "local_only_files": [
-    {
-      "path": "dist\\emailmonitor.exe",
-      "sha256": "56394737b60787c6f7c3aeea7ecb4d18eed83d962c6b28a4e71dc74b43cae1b9",
-      "reason": "ignored_or_outside_git_checkout"
-    }
-  ]
+  "local_only_files": []
 }

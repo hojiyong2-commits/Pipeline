@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260510-EE42",
+  "phase": "pm_planner",
+  "agent_id": "pm-planner-agent",
+  "run_id": "pm_planner-3c013b906d0ce1eb",
+  "status": "COMPLETED",
+  "started_at": "2026-05-10T13:34:11Z",
+  "completed_at": "2026-05-10T13:34:16Z",
+  "output_file": "step_plan.xml",
+  "output_sha256": "41bcbf3f38397cb3cd133616d99e9977ef8a9b56a861d5990ad779aeeabd1e44",
+  "evidence_files": [
+    {
+      "path": "ic_part_src\\order_mapper.py",
+      "sha256": "0e304090b49c17e097aee8fb3731b0e6d262cba4542e247e436f5c490ac299ca",
+      "size_bytes": 69821
+    },
+    {
+      "path": "ic_part_src\\automation.py",
+      "sha256": "4db521b59051e38fa99c73ffe838babb25e5012aabcc2076293ce195d7244bae",
+      "size_bytes": 22870
+    },
+    {
+      "path": "tests\\test_order_mapper.py",
+      "sha256": "2f0affcdaa3f15031e997bbe365a764236209474b158dd677242576437ccf382",
+      "size_bytes": 18190
+    },
+    {
+      "path": "tests\\test_automation.py",
+      "sha256": "17ab68b4b258812668f92f9337fc88bd07b4b7c702bc65c302913eeaba6e05bf",
+      "size_bytes": 7231
+    }
+  ],
+  "commit_sha": "ea13f1eb1077695d995f1ea5dfca047ed9ee36df"
+}

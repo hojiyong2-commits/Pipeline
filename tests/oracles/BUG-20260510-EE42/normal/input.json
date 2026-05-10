@@ -1,0 +1,7 @@
+{
+  "case": "normal_single_delivery_date",
+  "user_rule": "하나의 Order No에 날짜가 1개인 경우 Line No는 비워둔다.",
+  "order_no": "X100050777",
+  "delivery_dates": ["2026-06-02"],
+  "line_numbers": [1, 2, 3]
+}

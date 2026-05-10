@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260510-EE42",
+  "pipeline_type": "BUG",
+  "created_at": "2026-05-10T13:34:36Z",
+  "updated_at": "2026-05-10T13:34:58Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "ICPartAutomation.exe 오류 및 데드코드 재점검 후 필요한 수정",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "IC-MAPPER",
+      "name": "ICPartAutomation order mapper dead-code cleanup",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-10T13:34:58Z",
+  "contract_hash": "b74a14c7d3726985f376bf577f4b2e301b39a574777fceb65585b617286a7f6a",
+  "test_set_hash": "27c78d9bd7eaa338b4068b7b6de85dca6968d6ab646ad424486b6ac3bac5d171"
+}
