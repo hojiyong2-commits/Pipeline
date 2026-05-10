@@ -38,7 +38,7 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/IMP-20260510-9242/dev/report_dev_handover.xml",
-      "sha256": "e35ee768f9b615710fd42d207c4da1678f8fe8655d752ad37c0d548366de89b6",
+      "sha256": "e0471d569d8374ba72ab449dd3002644751c13d7a439cccaf0da7ff30491d1cd",
       "size_bytes": 2089,
       "requires_force_add": true
     },
@@ -46,7 +46,7 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260510-9242/dev/scope_manifest_scope_manifest.json",
-      "sha256": "c1c223f958a554714281768ef07f8c9caa879c0fcc7eaf66a79773294ee9edac",
+      "sha256": "29a28cffa5653ad1fbe0664d1ba6d6986c119c5243e8bc4a0f4442c8b275a8c9",
       "size_bytes": 444,
       "requires_force_add": true
     }
@@ -54,12 +54,12 @@
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "6b2a01e1a8370f7d403c898a1f62bcc118335365909f60bdcc0ead7c938cd18c",
+      "sha256": "02a81e2fd9581f92dea5f3aa79afbe5b5d51d3c6ce60b86ce31d820de6ecac9a",
       "size_bytes": 357345
     },
     {
       "path": "CLAUDE.md",
-      "sha256": "ceda5b32d986df1ca01903e962e12a972ab314094476e9393f24f20526d945bc",
+      "sha256": "42a6daee8abfcf004893b371cbd868760eca458b7e5dfb04a78f8c07d1d4143c",
       "size_bytes": 70421
     },
     {
