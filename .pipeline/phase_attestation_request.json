@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-10T13:04:44Z",
+  "generated_at": "2026-05-10T13:11:26Z",
   "pipeline_id": "BUG-20260510-9F70",
   "phase": "build",
   "phase_status": "DONE",
-  "commit_hint": "96b4e2ccaf45091f2e878c485f32e9a36286465a",
+  "commit_hint": "adc816dbf177f240d8851ba512c9d44f132444a7",
   "state": {
     "current_phase": "harness",
     "phase_completed_at": "2026-05-10T13:04:31Z",
@@ -18,9 +18,9 @@
     "agent_id": "build-agent",
     "status": "COMPLETED",
     "output_file": "dist\\build_report.xml",
-    "output_sha256": "e9be6099bf800e369b6439f59bc5f7f722d7319622a7ec37a3913b915b004cfa",
+    "output_sha256": "8511eedb5fa27586e08f824965d9184788472a419f3f4cbe47b118f982e23ca8",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260510-9F70/build/agent_receipt_build-616821991407f275.json",
-    "receipt_sha256": "d107ab19fa43225fbec517fb0f1aed06b1c17d8f6373d100e7345f71f6f737ea",
+    "receipt_sha256": "fc142af04454840c59bfab768c1df955fafbafac8bf2a523e8374472945c6bda",
     "used_by_phase": "build",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260510-9F70\\build\\build-616821991407f275.json"
   },
@@ -30,9 +30,9 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260510-9F70\\build\\build-616821991407f275.json",
       "path": ".pipeline/phase_evidence/BUG-20260510-9F70/build/agent_receipt_build-616821991407f275.json",
-      "sha256": "d107ab19fa43225fbec517fb0f1aed06b1c17d8f6373d100e7345f71f6f737ea",
+      "sha256": "fc142af04454840c59bfab768c1df955fafbafac8bf2a523e8374472945c6bda",
       "size_bytes": 514,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -40,7 +40,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260510-9F70/build/report_build_report.xml",
       "sha256": "8511eedb5fa27586e08f824965d9184788472a419f3f4cbe47b118f982e23ca8",
       "size_bytes": 1556,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],

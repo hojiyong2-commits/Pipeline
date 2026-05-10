@@ -9,7 +9,7 @@
   "started_at": "2026-05-10T13:00:02Z",
   "completed_at": "2026-05-10T13:03:32Z",
   "output_file": "dist\\build_report.xml",
-  "output_sha256": "e9be6099bf800e369b6439f59bc5f7f722d7319622a7ec37a3913b915b004cfa",
+  "output_sha256": "8511eedb5fa27586e08f824965d9184788472a419f3f4cbe47b118f982e23ca8",
   "evidence_files": [],
   "commit_sha": "8c7a94b8c13447124e7512d227fe96ee1b668ea5"
 }
