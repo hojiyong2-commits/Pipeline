@@ -9,7 +9,7 @@
   "started_at": "2026-05-10T13:42:02Z",
   "completed_at": "2026-05-10T13:42:05Z",
   "output_file": "manager_handoff.xml",
-  "output_sha256": "fb1667b1a04a52e2063db6b178c155476dcce755b5feec3b81455ad3ab9d7108",
+  "output_sha256": "7b6dc77263ab173b2d374705c3859e77822e34dc44188f0d837ae52978a74c57",
   "evidence_files": [],
   "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9"
 }

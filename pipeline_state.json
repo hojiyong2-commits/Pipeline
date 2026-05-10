@@ -1,26 +1,26 @@
 {
   "version": "1.2.0",
-  "pipeline_id": "BUG-20260510-98D6",
-  "type": "BUG",
-  "description": "ICPartAutomation.exe 오류 및 데드코드 재점검 후 필요한 수정",
-  "created_at": "2026-05-10T13:24:18Z",
-  "updated_at": "2026-05-10T13:26:03Z",
+  "pipeline_id": "IMP-20260510-9242",
+  "type": "IMP",
+  "description": "PR 브랜치 오염 방지: gates prepare-phase에 pipeline_id 브랜치 강제 격리 추가",
+  "created_at": "2026-05-10T13:27:05Z",
+  "updated_at": "2026-05-10T13:49:45Z",
   "current_phase": "dev",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
     "pm": {
       "status": "DONE",
-      "completed_at": "2026-05-10T13:24:51Z",
+      "completed_at": "2026-05-10T13:42:14Z",
       "evidence": null,
       "notes": [],
       "report_file": "step_plan.xml",
       "agent_id": "pm-planner-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260510-98D6_phase_pm.json",
-      "manager_run_id": "pipeline_manager-1d42d546358e7400",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260510-9242_phase_pm.json",
+      "manager_run_id": "pipeline_manager-c7f612fb957de2b5",
       "manager_agent_id": "pipeline-manager-agent",
       "manager_report_file": "manager_handoff.xml",
-      "agent_run_id": "pm_planner-2e223fc073b8cc54"
+      "agent_run_id": "pm_planner-515453fb7e867681"
     },
     "dev": {
       "status": "PENDING",
@@ -79,123 +79,280 @@
   },
   "event_log": [
     {
-      "ts": "2026-05-10T13:24:18Z",
-      "msg": "파이프라인 생성: BUG-20260510-98D6"
+      "ts": "2026-05-10T13:27:05Z",
+      "msg": "파이프라인 생성: IMP-20260510-9242"
     },
     {
-      "ts": "2026-05-10T13:24:29Z",
-      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-2e223fc073b8cc54"
+      "ts": "2026-05-10T13:27:08Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-2de5804942e699f7"
     },
     {
-      "ts": "2026-05-10T13:24:33Z",
-      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-2e223fc073b8cc54"
+      "ts": "2026-05-10T13:30:47Z",
+      "msg": "github phase-ci pm FAIL run_id=25629976926 commit=2a28ef845f9b"
     },
     {
-      "ts": "2026-05-10T13:24:38Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-1d42d546358e7400"
-    },
-    {
-      "ts": "2026-05-10T13:24:47Z",
-      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-1d42d546358e7400"
-    },
-    {
-      "ts": "2026-05-10T13:24:51Z",
-      "msg": "pm DONE | evidence: None"
-    },
-    {
-      "ts": "2026-05-10T13:25:07Z",
+      "ts": "2026-05-10T13:32:01Z",
       "msg": "three_gate mode enabled (mandatory)"
     },
     {
-      "ts": "2026-05-10T13:25:07Z",
+      "ts": "2026-05-10T13:32:01Z",
       "msg": "GitHub phase attestations enabled (mandatory)"
     },
     {
-      "ts": "2026-05-10T13:25:07Z",
-      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260510-98D6"
+      "ts": "2026-05-10T13:32:01Z",
+      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242"
     },
     {
-      "ts": "2026-05-10T13:25:55Z",
-      "msg": "contract_v2 frozen: ad3316d5d612"
+      "ts": "2026-05-10T13:34:41Z",
+      "msg": "contract_v2 frozen: 14c92dd2b5ed"
     },
     {
-      "ts": "2026-05-10T13:25:56Z",
+      "ts": "2026-05-10T13:34:41Z",
       "msg": "advisory gpt-contract SKIPPED api_called=False"
     },
     {
-      "ts": "2026-05-10T13:26:03Z",
+      "ts": "2026-05-10T13:37:01Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-2de5804942e699f7"
+    },
+    {
+      "ts": "2026-05-10T13:37:22Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-6eb35e4f56cb897f"
+    },
+    {
+      "ts": "2026-05-10T13:39:09Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-6eb35e4f56cb897f"
+    },
+    {
+      "ts": "2026-05-10T13:39:54Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-320e1ce754247a02"
+    },
+    {
+      "ts": "2026-05-10T13:39:57Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-320e1ce754247a02"
+    },
+    {
+      "ts": "2026-05-10T13:40:10Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-559866bf68b0ebb2"
+    },
+    {
+      "ts": "2026-05-10T13:40:13Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-559866bf68b0ebb2"
+    },
+    {
+      "ts": "2026-05-10T13:40:25Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-8a45fa8dffc43542"
+    },
+    {
+      "ts": "2026-05-10T13:40:28Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-8a45fa8dffc43542"
+    },
+    {
+      "ts": "2026-05-10T13:41:24Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-515453fb7e867681"
+    },
+    {
+      "ts": "2026-05-10T13:41:31Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-515453fb7e867681"
+    },
+    {
+      "ts": "2026-05-10T13:41:41Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-2fae267c5165f379"
+    },
+    {
+      "ts": "2026-05-10T13:41:44Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-2fae267c5165f379"
+    },
+    {
+      "ts": "2026-05-10T13:42:02Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-c7f612fb957de2b5"
+    },
+    {
+      "ts": "2026-05-10T13:42:05Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-c7f612fb957de2b5"
+    },
+    {
+      "ts": "2026-05-10T13:42:14Z",
+      "msg": "pm DONE | evidence: None"
+    },
+    {
+      "ts": "2026-05-10T13:42:21Z",
+      "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-10T13:46:42Z",
+      "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-10T13:49:14Z",
+      "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-10T13:49:45Z",
       "msg": "phase attestation request prepared: pm"
     }
   ],
   "terminal_state": null,
   "harness_fail_count": 0,
   "agent_runs": {
-    "pm_planner-2e223fc073b8cc54": {
+    "pm_planner-2de5804942e699f7": {
       "schema_version": 1,
-      "run_id": "pm_planner-2e223fc073b8cc54",
-      "pipeline_id": "BUG-20260510-98D6",
+      "run_id": "pm_planner-2de5804942e699f7",
+      "pipeline_id": "IMP-20260510-9242",
       "phase": "pm_planner",
       "agent_id": "pm-planner-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:24:29Z",
-      "completed_at": "2026-05-10T13:24:33Z",
-      "token_hash": "70b1cf90a3356fa17fc4842601220504f392bbd51f838969a30a3f8bf241dd72",
+      "started_at": "2026-05-10T13:27:08Z",
+      "completed_at": "2026-05-10T13:37:01Z",
+      "token_hash": "6f2e1d32ae9c93783004ee56f8cc7a57ece23c3fa4e87e9fd8a838397b76066d",
       "output_file": "step_plan.xml",
-      "output_sha256": "7ce7667da01c9e293aaab17e771cd364719a0062a3190195e7117b692da9bdb4",
-      "evidence_files": [
-        {
-          "path": "ic_part_src\\order_mapper.py",
-          "sha256": "0e304090b49c17e097aee8fb3731b0e6d262cba4542e247e436f5c490ac299ca",
-          "size_bytes": 69821
-        },
-        {
-          "path": "ic_part_src\\automation.py",
-          "sha256": "4db521b59051e38fa99c73ffe838babb25e5012aabcc2076293ce195d7244bae",
-          "size_bytes": 22870
-        },
-        {
-          "path": "tests\\test_order_mapper.py",
-          "sha256": "2f0affcdaa3f15031e997bbe365a764236209474b158dd677242576437ccf382",
-          "size_bytes": 18190
-        },
-        {
-          "path": "tests\\test_automation.py",
-          "sha256": "17ab68b4b258812668f92f9337fc88bd07b4b7c702bc65c302913eeaba6e05bf",
-          "size_bytes": 7231
-        }
-      ],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-98D6\\pm_planner\\pm_planner-2e223fc073b8cc54.json",
-      "receipt_sha256": "c315474b39da9af2c3e69875df91beee4179573efc2598ec3ca0a82033a3a18e",
-      "used_by_phase": "pm",
-      "used_at": "2026-05-10T13:26:02Z",
-      "commit_sha": "ea13f1eb1077695d995f1ea5dfca047ed9ee36df",
-      "notes": "PM planner: ICPartAutomation dead-code audit plan"
+      "output_sha256": "461c5981be46a3aef5bc8a7c155f78dbe0a75e6dbce5a0848d7934a474a0a2c4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-2de5804942e699f7.json",
+      "receipt_sha256": "84ad89080239410bc3c3d74a38daf4471d5194874e80a1c3d839a4f1ff54421d",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
     },
-    "pipeline_manager-1d42d546358e7400": {
+    "pipeline_manager-6eb35e4f56cb897f": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-1d42d546358e7400",
-      "pipeline_id": "BUG-20260510-98D6",
+      "run_id": "pipeline_manager-6eb35e4f56cb897f",
+      "pipeline_id": "IMP-20260510-9242",
       "phase": "pipeline_manager",
       "agent_id": "pipeline-manager-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-10T13:24:38Z",
-      "completed_at": "2026-05-10T13:24:47Z",
-      "token_hash": "751714eff784d91dc22ff9a1d336b3c39d9340572f664e837d02733dc1d443ef",
+      "started_at": "2026-05-10T13:37:21Z",
+      "completed_at": "2026-05-10T13:39:09Z",
+      "token_hash": "b34eaa81bc85ff119a148c6ab210bbb2f261027179ac1043fea538c1dabdc3aa",
       "output_file": "manager_handoff.xml",
-      "output_sha256": "658ef70af84b02f1ff6cc398b4bcef1bab178a4f3042db0fd5ba49d1aaffac14",
-      "evidence_files": [
-        {
-          "path": "step_plan.xml",
-          "sha256": "7ce7667da01c9e293aaab17e771cd364719a0062a3190195e7117b692da9bdb4",
-          "size_bytes": 5789
-        }
-      ],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-98D6\\pipeline_manager\\pipeline_manager-1d42d546358e7400.json",
-      "receipt_sha256": "ce782aa9e37d42a0cd8e5f76ce78abb1013159c5ddd6dd68d476914a2112be4e",
+      "output_sha256": "b25190e80317f9126da1e2674cf38f29613bd04cd353c343c1f7b0296fcd92d2",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-6eb35e4f56cb897f.json",
+      "receipt_sha256": "cbe8d89d8bd0a0fc64cab1684492660bc13da64a4702316ffc655591b057e779",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-320e1ce754247a02": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-320e1ce754247a02",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:39:54Z",
+      "completed_at": "2026-05-10T13:39:57Z",
+      "token_hash": "caafdd651c6edb39a10df5e96ecbd9a4024da5d46a202c4d75a48fafbb7e5ad3",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "b25190e80317f9126da1e2674cf38f29613bd04cd353c343c1f7b0296fcd92d2",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-320e1ce754247a02.json",
+      "receipt_sha256": "b5eda84cb5423c78959fc6f0a73280241cc9fb78be85fa82288d960c617d6f8e",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pm_planner-559866bf68b0ebb2": {
+      "schema_version": 1,
+      "run_id": "pm_planner-559866bf68b0ebb2",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:40:10Z",
+      "completed_at": "2026-05-10T13:40:13Z",
+      "token_hash": "4c9636ded9b47578da8f4cfe2f3c2b5695e1419bfedc4b0b5065af442fe38dad",
+      "output_file": "step_plan.xml",
+      "output_sha256": "a85b6fcdc25a03caefffa0a65a3ad3f882d29064ff653f195a76ef29f9a670f5",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-559866bf68b0ebb2.json",
+      "receipt_sha256": "6915a3cb74bdb133f95fc7f114ae3e7078e8fd4c725ef62642226fa80bc55c52",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-8a45fa8dffc43542": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-8a45fa8dffc43542",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:40:25Z",
+      "completed_at": "2026-05-10T13:40:28Z",
+      "token_hash": "5aa5e5c1ac5d967ece89010fcb1d53e960914559dd9049e507091f4c2ed4a404",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "ac7b6e7eb7a0e1141fc82459abeba32a1d04f9f09363aeab5cf7af69583feb67",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-8a45fa8dffc43542.json",
+      "receipt_sha256": "2aeeeb444c47935a851c8b18c1417cc8795e46172f9019eb950945d78f80b967",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pm_planner-515453fb7e867681": {
+      "schema_version": 1,
+      "run_id": "pm_planner-515453fb7e867681",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:41:24Z",
+      "completed_at": "2026-05-10T13:41:31Z",
+      "token_hash": "5554b65a1f1093950731896a6d563b35093767b95828ce4ced835257c7c3db6f",
+      "output_file": "step_plan.xml",
+      "output_sha256": "b58a80c1f04d42e7b67ec4f761ca978ffda25d6fa529b0db0e9de975c5687b34",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pm_planner\\pm_planner-515453fb7e867681.json",
+      "receipt_sha256": "50df965fae229d53ce7924832c0093bfdebad82cb2f8992007614ba7375e75b2",
+      "used_by_phase": "pm",
+      "used_at": "2026-05-10T13:49:45Z",
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-2fae267c5165f379": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-2fae267c5165f379",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:41:41Z",
+      "completed_at": "2026-05-10T13:41:44Z",
+      "token_hash": "e2b3d95656f69578489a1a0d1a70f1456a527c875b4f0071c5da68fe55e34b01",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "2e7a31fb2d302a9ddc473d73fc86e767731abb6fdea9bfee2295d2485e14c4d3",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-2fae267c5165f379.json",
+      "receipt_sha256": "5730cd7ebdc171f300a4fb5e3a60822271165e25171edb24514cd520094ac0ae",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
+    },
+    "pipeline_manager-c7f612fb957de2b5": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-c7f612fb957de2b5",
+      "pipeline_id": "IMP-20260510-9242",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T13:42:02Z",
+      "completed_at": "2026-05-10T13:42:05Z",
+      "token_hash": "9c060853f46d2ebe7bf1db2bed01b70cf800047189f19f4a91e86c8076a191cc",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "7b6dc77263ab173b2d374705c3859e77822e34dc44188f0d837ae52978a74c57",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260510-9242\\pipeline_manager\\pipeline_manager-c7f612fb957de2b5.json",
+      "receipt_sha256": "691443e87809ac4f043da08eff4f8508a101f27a028129399fce289720aa6064",
       "used_by_phase": "pm_manager",
-      "used_at": "2026-05-10T13:26:02Z",
-      "commit_sha": "ea13f1eb1077695d995f1ea5dfca047ed9ee36df",
-      "notes": "Pipeline manager accepted PM planner output"
+      "used_at": "2026-05-10T13:49:45Z",
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -241,14 +398,15 @@
     ],
     "phases": {
       "pm": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "FAIL",
+        "completed_at": "2026-05-10T13:30:47Z",
         "phase": "pm",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25629976926",
+        "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+        "evidence": "github_actions_phase_run:25629976926",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\gates\\phase_ci\\pm_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "dev": {
         "status": "PENDING",
@@ -286,7 +444,8 @@
     "enabled": true,
     "mode": "incremental_module_gate",
     "sequence": [
-      "MT-1"
+      "MT-1",
+      "MT-2"
     ],
     "modules": {
       "MT-1": {
@@ -294,9 +453,41 @@
         "status": "PENDING",
         "order": 1,
         "target_files": [
-          "ic_part_src/order_mapper.py"
+          "pipeline.py"
         ],
-        "affected_function": "order_mapper.dead_legacy_helpers",
+        "affected_function": "pipeline._validate_pipeline_branch_isolation",
+        "design": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "dev": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
+      },
+      "MT-2": {
+        "id": "MT-2",
+        "status": "PENDING",
+        "order": 2,
+        "target_files": [
+          "CLAUDE.md",
+          ".claude/agents/pipeline-manager-agent.md"
+        ],
+        "affected_function": "none",
         "design": {
           "status": "PENDING",
           "completed_at": null,
@@ -330,36 +521,36 @@
     }
   },
   "execution_profile": {
-    "mode": "FAST_SINGLE_CODE",
+    "mode": "STANDARD",
     "status": "ACTIVE",
-    "reason": "단일 Python 파일에서 호출되지 않는 구버전 helper를 제거하는 좁은 변경입니다.",
-    "max_micro_tasks": 1,
+    "reason": "pipeline.py 코드 수정(MT-1)과 프로토콜 문서 업데이트(MT-2)가 포함된 2-모듈 작업입니다. pipeline.py는 핵심 파이프라인 로직을 포함하므로 STANDARD 프로파일을 적용합니다.",
+    "max_micro_tasks": null,
     "product_code_write_allowed": true,
-    "phase_ci_mode": "batched",
-    "repair_mode": "targeted",
+    "phase_ci_mode": "per_phase",
+    "repair_mode": "standard",
     "risk_review_required": false,
     "risk_categories": [],
-    "declared_at": "2026-05-10T13:24:47Z",
+    "declared_at": "2026-05-10T13:42:09Z",
     "escalated_at": null,
     "escalation_reason": null,
     "uncertainty": {
       "p0_questions": 0,
-      "p1_questions": 1,
+      "p1_questions": 0,
       "output_format_clear": true
     },
     "blast_radius": {
-      "expected_changed_files": 1,
-      "expected_changed_functions": 1,
-      "expected_changed_lines": 70
+      "expected_changed_files": 3,
+      "expected_changed_functions": 4,
+      "expected_changed_lines": 120
     },
     "risk_flags": {
       "data_deletion": false,
       "file_move": false,
       "external_api": false,
       "auth_or_secret": false,
-      "pipeline_protocol": false,
+      "pipeline_protocol": true,
       "build_or_deploy": false,
-      "core_parser_logic": false,
+      "core_parser_logic": true,
       "database_or_migration": false,
       "new_dependency": false
     }
@@ -369,6 +560,27 @@
   },
   "failure_packets": [],
   "protocol_evolution_decision": null,
+  "trusted_phase_runs": [
+    {
+      "recorded_at": "2026-05-10T13:30:47Z",
+      "status": "FAIL",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "pm",
+      "run_id": "25629976926",
+      "commit_sha": "2a28ef845f9b8a9acf414827d443110a98d4e3e9",
+      "artifact": "pipeline-phase-attestation"
+    }
+  ],
+  "contract_v2": {
+    "enabled": true,
+    "frozen": true,
+    "status": "frozen",
+    "contract_hash": "14c92dd2b5ed2fa0e460253d5c8c56b00ae49935d1df5cd07348e053a862a895",
+    "test_set_hash": "3637e5b6db9481861a286ee521e246c6633ea3cca6303be500e7618486e2030c",
+    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\task_contract.json",
+    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\test_set.json",
+    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\acceptance_summary.md"
+  },
   "pm_analysis_gate": {
     "decomp": true,
     "clarification": true,
@@ -377,73 +589,91 @@
   },
   "atomic_plan": {
     "report_file": "step_plan.xml",
-    "validated_at": "2026-05-10T13:24:47Z",
-    "audit_result": "SINGLE_TASK_OK",
-    "micro_task_count": 1,
+    "validated_at": "2026-05-10T13:42:09Z",
+    "audit_result": "SPLIT_REQUIRED",
+    "micro_task_count": 2,
     "micro_tasks": [
       {
         "id": "MT-1",
-        "affected_function": "order_mapper.dead_legacy_helpers",
+        "affected_function": "pipeline._validate_pipeline_branch_isolation",
         "target_files": [
-          "ic_part_src/order_mapper.py"
+          "pipeline.py"
         ],
-        "change_summary": "EXE 실행 경로에서 호출되지 않는 order_mapper.py 구버전 helper와 독립 run entry point를 제거합니다."
+        "change_summary": "gates prepare-phase --phase pm 호출 시 현재 git 브랜치가 pipeline_id 패턴과 일치하는지 검증하고, gates accept --result ACCEPT 호출 시 PR 제목이 pipeline_id를 포함하는지 검증하는 두 함수를 추가합니다."
+      },
+      {
+        "id": "MT-2",
+        "affected_function": "none",
+        "target_files": [
+          "CLAUDE.md",
+          ".claude/agents/pipeline-manager-agent.md"
+        ],
+        "change_summary": "CLAUDE.md의 Phase 1 PM 절차 아래에 브랜치 격리 강제 규칙 섹션을 추가하고, pipeline-manager-agent.md의 PM Handoff 섹션에 브랜치 생성 단계를 명시합니다."
       }
     ],
     "design_confirmation": {
-      "validated_at": "2026-05-10T13:24:47Z",
-      "maintenance_priority": "maintainability_first",
-      "filter_summary": "내부 함수명 취향이나 포맷 취향 질문은 묻지 않고, EXE 실행 경로와 테스트 근거가 있는 데드코드 정리만 대상으로 제한했습니다.",
-      "question_count": 1,
+      "validated_at": "2026-05-10T13:42:09Z",
+      "maintenance_priority": "유지보수성 우선 — 빠른 수정보다 명확한 검사 로직과 오류 메시지 가독성을 우선합니다.",
+      "filter_summary": "P2 수준의 함수명 스타일 질문은 유지보수성 우선 원칙으로 자동 처리했습니다. 내부 변수명이나 주석 형식은 사용자 질문 대상에서 제외합니다.",
+      "question_count": 2,
       "questions": [
         {
-          "id": "DQ-1",
-          "priority": "P1",
+          "id": "Q1",
+          "priority": "P0",
           "category": "module_split",
-          "mt_id": "MT-1",
+          "mt_id": null,
           "recommended_option": "A",
           "option_count": 2,
-          "user_answer": "사용자가 pipeline-task로 명시적으로 재점검과 필요 시 수정을 요청했으므로, 유지보수성 우선 원칙에 따라 추천안 A로 진행합니다."
+          "user_answer": "옵션 A 선택 — MT-1(pipeline.py)과 MT-2(문서)를 별도 모듈로 분리합니다."
+        },
+        {
+          "id": "Q2",
+          "priority": "P0",
+          "category": "branch_validation_scope",
+          "mt_id": null,
+          "recommended_option": "A",
+          "option_count": 2,
+          "user_answer": "옵션 A 선택 — gates prepare-phase --phase pm 단계에서만 브랜치 격리 검사를 실행합니다."
         }
       ]
     },
     "execution_profile": {
-      "mode": "FAST_SINGLE_CODE",
+      "mode": "STANDARD",
       "status": "ACTIVE",
-      "reason": "단일 Python 파일에서 호출되지 않는 구버전 helper를 제거하는 좁은 변경입니다.",
-      "max_micro_tasks": 1,
+      "reason": "pipeline.py 코드 수정(MT-1)과 프로토콜 문서 업데이트(MT-2)가 포함된 2-모듈 작업입니다. pipeline.py는 핵심 파이프라인 로직을 포함하므로 STANDARD 프로파일을 적용합니다.",
+      "max_micro_tasks": null,
       "product_code_write_allowed": true,
-      "phase_ci_mode": "batched",
-      "repair_mode": "targeted",
+      "phase_ci_mode": "per_phase",
+      "repair_mode": "standard",
       "risk_review_required": false,
       "risk_categories": [],
-      "declared_at": "2026-05-10T13:24:47Z",
+      "declared_at": "2026-05-10T13:42:09Z",
       "escalated_at": null,
       "escalation_reason": null,
       "uncertainty": {
         "p0_questions": 0,
-        "p1_questions": 1,
+        "p1_questions": 0,
         "output_format_clear": true
       },
       "blast_radius": {
-        "expected_changed_files": 1,
-        "expected_changed_functions": 1,
-        "expected_changed_lines": 70
+        "expected_changed_files": 3,
+        "expected_changed_functions": 4,
+        "expected_changed_lines": 120
       },
       "risk_flags": {
         "data_deletion": false,
         "file_move": false,
         "external_api": false,
         "auth_or_secret": false,
-        "pipeline_protocol": false,
+        "pipeline_protocol": true,
         "build_or_deploy": false,
-        "core_parser_logic": false,
+        "core_parser_logic": true,
         "database_or_migration": false,
         "new_dependency": false
       }
     },
     "project_snapshot": {
-      "created_at": "2026-05-10T13:24:51Z",
+      "created_at": "2026-05-10T13:42:14Z",
       "files": {
         ".bandit": {
           "sha256": "08baae051ad0d4c2c23da772edee0a48fb6cb28244b04c824bc549ebacea83db",
@@ -526,8 +756,8 @@
           "size": 1260
         },
         "manager_handoff.xml": {
-          "sha256": "658ef70af84b02f1ff6cc398b4bcef1bab178a4f3042db0fd5ba49d1aaffac14",
-          "size": 622
+          "sha256": "fb1667b1a04a52e2063db6b178c155476dcce755b5feec3b81455ad3ab9d7108",
+          "size": 2500
         },
         "mypy.ini": {
           "sha256": "12838d5c680585049ba2e2029b3d0f08591d8e15eea9bb082a8fd3ec5049f93b",
@@ -1065,6 +1295,22 @@
           "sha256": "11ab49203ec85ccd69b9ac4821df465358acd95b879d61fba0f97fe2fcd222ad",
           "size": 652
         },
+        "tests/oracles/BUG-20260510-98D6/edge/expected.json": {
+          "sha256": "b672abe28b96f2b212580b3f561814fde913dcf02cb1c7b4965b732fe36895aa",
+          "size": 297
+        },
+        "tests/oracles/BUG-20260510-98D6/edge/input.json": {
+          "sha256": "ca67642585b10405580bd04a7dd48dc581f2c1bf2aa9deb60456d920b55b25b0",
+          "size": 307
+        },
+        "tests/oracles/BUG-20260510-98D6/normal/expected.json": {
+          "sha256": "ce21e64ab84a4f60233dc27fd831e1c7b01526dc916d83117b6511846375869b",
+          "size": 249
+        },
+        "tests/oracles/BUG-20260510-98D6/normal/input.json": {
+          "sha256": "66c59ee556a773bf7eeb6ebe753bf3252d50bfaf29bd8cf87d2f2c58832ed3f4",
+          "size": 227
+        },
         "tests/oracles/BUG-20260510-9F70/edge_01/expected.txt": {
           "sha256": "998ccf616845fbd499cb9af01f47e877a7b5e6c6982e4098016424acaf9182d1",
           "size": 10
@@ -1080,6 +1326,22 @@
         "tests/oracles/BUG-20260510-9F70/normal_01/input.txt": {
           "sha256": "990488ae7989fb2161bd71297d096a3990a580154bc569b63546a75cb802ef51",
           "size": 614
+        },
+        "tests/oracles/IMP-20260510-9242/edge_01/expected.txt": {
+          "sha256": "ffedb6d091ab70e16db1e95e8545b8b6363f68e6fec762ffb80e85b9830c7944",
+          "size": 20
+        },
+        "tests/oracles/IMP-20260510-9242/edge_01/input.txt": {
+          "sha256": "7308dca6cc055fee71d4f708dcc28a0d2f94b738e5189572150457817a1bfff3",
+          "size": 183
+        },
+        "tests/oracles/IMP-20260510-9242/normal_01/expected.txt": {
+          "sha256": "c9989f59b5fbcdbbc75faa8ad1bf6d2147fe2137982c96a3971f5b87547ab11c",
+          "size": 28
+        },
+        "tests/oracles/IMP-20260510-9242/normal_01/input.txt": {
+          "sha256": "34dd8c381d1f99200c79704ac629e8ff4087e5a20d843050998f695adecf22ea",
+          "size": 210
         },
         "tests/oracles/IMP-20260510-D44F/case-edge/expected.txt": {
           "sha256": "728104a7afdcd45711d81c067e0b7d490ed2ede9467b10e82d09a5c398f6463f",
@@ -1138,22 +1400,12 @@
     }
   },
   "pm_manager_handoff": {
-    "validated_at": "2026-05-10T13:24:51Z",
+    "validated_at": "2026-05-10T13:42:14Z",
     "report_file": "manager_handoff.xml",
-    "step_plan_sha256": "7ce7667da01c9e293aaab17e771cd364719a0062a3190195e7117b692da9bdb4",
-    "planner_run_id": "pm_planner-2e223fc073b8cc54",
+    "step_plan_sha256": "1bdc7a20c69426babe4e8da8d1bd4cadd1da27abc13ffce8a24ff1b9b1325e46",
+    "planner_run_id": "pm_planner-515453fb7e867681",
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
-  },
-  "contract_v2": {
-    "enabled": true,
-    "frozen": true,
-    "status": "frozen",
-    "contract_hash": "ad3316d5d61266bd416620d9d368f681abf64e52808fdaead5a2082d900ded59",
-    "test_set_hash": "c7ad4da25b093df825e551f558956772ed771d0923159d0279f95b1f470fd764",
-    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260510-98D6\\task_contract.json",
-    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260510-98D6\\test_set.json",
-    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260510-98D6\\acceptance_summary.md"
   }
 }
