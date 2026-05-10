@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260510-F0D1",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-a5ef89f17ee5aa58",
+  "status": "COMPLETED",
+  "started_at": "2026-05-10T14:23:04Z",
+  "completed_at": "2026-05-10T14:23:12Z",
+  "output_file": "build_report.xml",
+  "output_sha256": "86e95f61720e29f345bb671d27c3d2eb5570dc97841077c3bbbc324a56e786f3",
+  "evidence_files": [
+    {
+      "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+      "sha256": "3564cf92850ae85062fc7c235e3846aa18c65bbb779c259de51a9ecb6857d3a7",
+      "size_bytes": 37762998
+    }
+  ],
+  "commit_sha": "0459305617340352db8e7dd624e88c1aed9b2c59"
+}

@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "ICPartAutomation.exe 오류 및 데드코드 최종 점검 후 수정",
   "created_at": "2026-05-10T14:04:43Z",
-  "updated_at": "2026-05-10T14:20:13Z",
-  "current_phase": "sec",
+  "updated_at": "2026-05-10T14:23:19Z",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -44,22 +44,24 @@
       "numeric_score": 110
     },
     "sec": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "SKIP",
+      "completed_at": "2026-05-10T14:22:46Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_history\\BUG-20260510-F0D1_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-10T14:23:12Z",
+      "evidence": "ic_part_src/dist/ICPartAutomation.exe",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "build_report.xml",
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_history\\BUG-20260510-F0D1_phase_build.json",
+      "skip_reason": null,
+      "agent_run_id": "build-a5ef89f17ee5aa58"
     },
     "harness": {
       "status": "PENDING",
@@ -256,6 +258,30 @@
     {
       "ts": "2026-05-10T14:20:13Z",
       "msg": "phase attestation request prepared: qa"
+    },
+    {
+      "ts": "2026-05-10T14:21:52Z",
+      "msg": "github phase-ci qa PASS run_id=25631075143 commit=045930561734"
+    },
+    {
+      "ts": "2026-05-10T14:22:46Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-05-10T14:23:04Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-a5ef89f17ee5aa58"
+    },
+    {
+      "ts": "2026-05-10T14:23:12Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-a5ef89f17ee5aa58"
+    },
+    {
+      "ts": "2026-05-10T14:23:12Z",
+      "msg": "build DONE exe=ic_part_src/dist/ICPartAutomation.exe"
+    },
+    {
+      "ts": "2026-05-10T14:23:19Z",
+      "msg": "phase attestation request prepared: build"
     }
   ],
   "terminal_state": null,
@@ -506,6 +532,32 @@
       "used_at": "2026-05-10T14:20:12Z",
       "commit_sha": "dbd058a175d6963228f8f759496bc0ad537da509",
       "notes": "QA가 보정된 보고서로 검증을 제출했습니다."
+    },
+    "build-a5ef89f17ee5aa58": {
+      "schema_version": 1,
+      "run_id": "build-a5ef89f17ee5aa58",
+      "pipeline_id": "BUG-20260510-F0D1",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-10T14:23:04Z",
+      "completed_at": "2026-05-10T14:23:12Z",
+      "token_hash": "d7b1e29296246f0bb60679f409a850baa463ae614dd9561743f0fadf6785a1ae",
+      "output_file": "build_report.xml",
+      "output_sha256": "86e95f61720e29f345bb671d27c3d2eb5570dc97841077c3bbbc324a56e786f3",
+      "evidence_files": [
+        {
+          "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+          "sha256": "3564cf92850ae85062fc7c235e3846aa18c65bbb779c259de51a9ecb6857d3a7",
+          "size_bytes": 37762998
+        }
+      ],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260510-F0D1\\build\\build-a5ef89f17ee5aa58.json",
+      "receipt_sha256": "de4ba1344a117b5ac801f3c032af191a3124cbc4de21af9b39fc644daebb25c2",
+      "used_by_phase": "build",
+      "used_at": "2026-05-10T14:23:19Z",
+      "commit_sha": "0459305617340352db8e7dd624e88c1aed9b2c59",
+      "notes": "Build가 최신 코드 기준 EXE 생성을 완료했습니다."
     }
   },
   "external_gates": {
@@ -573,14 +625,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-10T14:21:52Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25631075143",
+        "commit_sha": "0459305617340352db8e7dd624e88c1aed9b2c59",
+        "evidence": "github_actions_phase_run:25631075143",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Pipeline-icpart-complete\\pipeline_contracts\\BUG-20260510-F0D1\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
         "status": "PENDING",
@@ -1397,6 +1450,15 @@
       "phase": "dev",
       "run_id": "25631022536",
       "commit_sha": "dbd058a175d6963228f8f759496bc0ad537da509",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-10T14:21:52Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "25631075143",
+      "commit_sha": "0459305617340352db8e7dd624e88c1aed9b2c59",
       "artifact": "pipeline-phase-attestation"
     }
   ],

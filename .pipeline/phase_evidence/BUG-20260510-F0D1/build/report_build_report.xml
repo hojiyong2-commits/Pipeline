@@ -1,0 +1,32 @@
+<build_report>
+  <section_1_command>
+    <command>python -m PyInstaller ICPartAutomation.spec --clean --noconfirm</command>
+    <working_directory>ic_part_src</working_directory>
+    <result>PASS</result>
+  </section_1_command>
+  <section_2_spec>
+    <spec_file>ic_part_src/ICPartAutomation.spec</spec_file>
+    <entry_point>main.py</entry_point>
+    <build_type>PyInstaller EXE</build_type>
+  </section_2_spec>
+  <section_3_output>
+    <exe_path>ic_part_src/dist/ICPartAutomation.exe</exe_path>
+    <file_size_bytes>37762998</file_size_bytes>
+    <result>EXE generated</result>
+  </section_3_output>
+  <section_4_verification>
+    <compile_check>python -m compileall -q ic_part_src tests: PASS</compile_check>
+    <tool_checks>ruff, mypy, bandit: PASS</tool_checks>
+    <full_tests>python -m pytest -q: 219 passed</full_tests>
+  </section_4_verification>
+  <section_5_optimization>
+    <change>Dead-code cleanup and technical gate repair only. No business behavior change intended.</change>
+    <removed_items>unused helpers and duplicate order_mapper.py self-verify block</removed_items>
+  </section_5_optimization>
+  <section_6_qa_mapping>
+    <qa_report>qa_report.xml</qa_report>
+    <qa_score>110/120</qa_score>
+    <business_rule>One Order No with one date keeps Line No blank; one Order No with two or more dates requires Line No.</business_rule>
+  </section_6_qa_mapping>
+  <status>BUILD SUCCESS</status>
+</build_report>
