@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <mt_id>MT-3</mt_id>
+  <verdict>PASS</verdict>
+  <verification_evidence>
+    PM이 명시한 5개 잠재 버그 영역 모두 dev-agent가 정확한 라인 인용 + 트리거 시나리오로 입증:
+    B1(ReceivedTime None L1200-L1219) HIGH, B2(rename 실패 빈 폴더 L1058-L1072) MEDIUM,
+    B3(log_queue 포화 main.py L112 + email_monitor L866-L867) MEDIUM,
+    B4(COM Dispatch 비일관성 L1332-L1333) MEDIUM, B5(fd 누수 main.py L564-L574) LOW.
+    각 항목에 권고 패치 코드 포함. 코드 변경 0건.
+  </verification_evidence>
+  <findings_validation>
+    <bug id="B1" status="VERIFIED" severity="HIGH">scan_past_emails ReceivedTime None bypass</bug>
+    <bug id="B2" status="VERIFIED" severity="MEDIUM">_process_mail_item rename 실패 시 tmp 폴더 잔존</bug>
+    <bug id="B3" status="VERIFIED" severity="MEDIUM">log_queue 포화 silent drop</bug>
+    <bug id="B4" status="VERIFIED" severity="MEDIUM">OnNewMailEx Dispatch COM apartment 비일관성</bug>
+    <bug id="B5" status="VERIFIED" severity="LOW">_save_settings tempfile fd 누수 가능성</bug>
+  </findings_validation>
+  <scope_check>
+    <code_changes>0</code_changes>
+    <out_of_scope_writes>0</out_of_scope_writes>
+  </scope_check>
+  <numeric_score>120</numeric_score>
+</module_qa_report>

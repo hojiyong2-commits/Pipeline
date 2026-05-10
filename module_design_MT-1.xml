@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_design>
+  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <title>코드 품질 및 성능 점검 (CodeQuality &amp; Performance)</title>
+  <files>
+    <file>inspection_report_IMP-20260510-D44F.md (신규 — MT-4에서 통합 작성)</file>
+  </files>
+  <source_read_only>
+    <file>po_automation/email_monitor.py</file>
+    <file>po_automation/main.py</file>
+  </source_read_only>
+  <interface_contract>읽기 전용 분석 — 코드 변경 없음. PM이 명시한 7개 점검 항목을 라인 범위 직접 검증으로 확인하고 발견 사항을 정리.</interface_contract>
+  <implementation_plan>
+    PM 명시 라인 범위(L1293-L1344, L1105-L1257, L310-L544, L480-L493, L806-L1098, L1264-L1344, L991-L1001)를 Read 도구로 모두 확인 완료.
+    각 항목의 코드 패턴을 검증하고 분석 노트를 module_handover에 기록.
+    실제 inspection_report MD 작성은 MT-4에서 수행 (MT-1~3은 분석 단계).
+  </implementation_plan>
+  <verification_plan>
+    각 라인 범위에서 PM이 지적한 패턴이 실제로 존재함을 코드 인용으로 입증.
+    심각도 레이블(CRITICAL/HIGH/MEDIUM/LOW)을 할당.
+  </verification_plan>
+  <expected_findings>
+    <finding severity="HIGH">OnNewMailEx: L1332에서 매 EntryID마다 win32com.client.Dispatch("Outlook.Application") 신규 호출 — namespace 캐싱 부재 (perf)</finding>
+    <finding severity="MEDIUM">scan_past_emails: L1188에서 ReceivedTime DESC 정렬 후 L1217~L1219에서 since_dt 미만 발견 시 continue만 실행 — break 미사용 (perf)</finding>
+    <finding severity="MEDIUM">_parse_pdf_info: L356-L377에서 전페이지 텍스트를 full_text 단일 문자열에 누적 — 100MB+ PDF 시 메모리 폭발 가능 (perf)</finding>
+    <finding severity="LOW">main.py _poll_log_queue: L493 root.after(100) 폴링 — 합리적 트레이드오프, 개선 여지 적음 (perf)</finding>
+    <finding severity="HIGH">_process_mail_item: L806-L1098 단일 함수 293줄, 6개 이상 책임(필터/PDF파싱/폴더/저장 등) — SRP 위반 (maint)</finding>
+    <finding severity="LOW">OutlookEventHandler.__init__: L1271-L1278 핵심 변수 None 초기화 + 외부 주입 — 미초기화 가드(L1314) 있으나 설계상 안티패턴 (maint)</finding>
+    <finding severity="LOW">_pdf_sort_key 내부 함수: L991-L1001 클로저로 정의 — 단위 테스트 불가 (maint)</finding>
+  </expected_findings>
+  <self_check>
+    <category>CODE_QUALITY_PERF</category>
+    <verdict>READY</verdict>
+    <impact_analysis_check>PASS — 분석 대상 함수 7개에 대해 impact_analysis 출력 완료</impact_analysis_check>
+  </self_check>
+</module_design>
