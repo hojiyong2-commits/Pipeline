@@ -1589,6 +1589,97 @@ class ThreeGatePipelineTests(unittest.TestCase):
                     pipeline._validate_pm_step_plan_file(str(report), state)
         self.assertEqual(ctx.exception.code, 1)
 
+    def test_high_risk_profile_requires_explicit_risk_flag(self) -> None:
+        state = pipeline._new_state("TMP-HIGH-RISK-NO-FLAG", "IMP", "bad high risk profile")
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single risky task</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-HIGH-RISK-NO-FLAG</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+""" + _design_confirmation_xml() + _task_complexity_xml("HIGH_RISK", functions=1) + """
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.update</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <grep_evidence><pattern>def update</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>Risky protocol update</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            with self.assertRaises(SystemExit) as ctx:
+                pipeline._validate_pm_step_plan_file(str(report), state)
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_high_risk_profile_records_conservative_mode(self) -> None:
+        state = pipeline._new_state("TMP-HIGH-RISK", "IMP", "protocol update")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "step_plan.xml"
+            report.write_text(
+                """
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <split_decision>single risky task</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>TMP-HIGH-RISK</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+""" + _design_confirmation_xml() + _task_complexity_xml(
+                    "HIGH_RISK",
+                    functions=1,
+                    risk_overrides={"pipeline_protocol": True},
+                ) + """
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.update</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <grep_evidence><pattern>def update</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>Risky protocol update</change_summary>
+    </micro_task>
+  </micro_tasks>
+</step_plan>
+""",
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(
+                branch=None,
+                phase="pm",
+                decomp=True,
+                clarification=True,
+                roadmap=True,
+                judgment_confirmed=False,
+                report_file=str(report),
+                files=None,
+                agent_run_id=_install_completed_agent_run(state, "pm", report, root),
+            )
+            with mock.patch.object(pipeline, "BASE_DIR", root), \
+                 mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                 mock.patch.object(pipeline, "_save_state_for"), \
+                 mock.patch.object(pipeline, "_record_snapshot"):
+                pipeline.cmd_done(args)
+
+        profile = state["execution_profile"]
+        self.assertEqual(profile["mode"], "HIGH_RISK")
+        self.assertEqual(profile["repair_mode"], "conservative")
+        self.assertEqual(profile["phase_ci_mode"], "per_phase")
+        self.assertTrue(profile["risk_review_required"])
+        self.assertEqual(profile["risk_categories"], ["pipeline_protocol"])
+
     def test_fast_analysis_blocks_product_code_scope_manifest(self) -> None:
         state = pipeline._new_state("TMP-FAST-SCOPE", "IMP", "analysis only")
         state["execution_profile"] = pipeline._new_execution_profile("FAST_ANALYSIS")
@@ -2979,6 +3070,12 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 self.assertTrue(manifest.exists())
                 self.assertEqual(copied.read_text(encoding="utf-8"), "# 최종 보고서\n")
                 self.assertEqual(state["outputs"]["items"][0]["label"], "최종-보고서")
+
+    def test_gitignore_keeps_registered_outputs_trackable(self) -> None:
+        text = (Path(__file__).resolve().parent / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("!pipeline_outputs/", text)
+        self.assertIn("!pipeline_outputs/**", text)
+        self.assertLess(text.index("*.zip"), text.index("!pipeline_outputs/**"))
 
     def test_failure_packet_records_attempts_and_owner(self) -> None:
         state = pipeline._new_state("TMP-FAIL-PACKET", "IMP", "gate failure")

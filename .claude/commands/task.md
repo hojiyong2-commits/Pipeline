@@ -133,7 +133,7 @@ QA FAIL이면 Dev로 되돌린다.
 
 ## Phase 5 — Security
 
-보안 관련 코드가 있으면 `security-agent`가 검토한다. 네트워크/DB/인증/외부 입력이 없으면 명시적으로 skip한다.
+보안 관련 코드가 있으면 `security-agent`가 검토한다. 네트워크/DB/인증/외부 입력이 없으면 Pipeline Manager 기록 단계가 `check --phase sec` 통과를 확인한 뒤 명시적으로 skip한다. 오케스트레이터와 security-agent는 `sec --skip`을 직접 기록하지 않는다.
 
 ```powershell
 python pipeline.py sec --result PASS --risk LOW

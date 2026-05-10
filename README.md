@@ -26,7 +26,7 @@
 | `FAST_ANALYSIS` | 로그 분석, 결과 검토, 보고서 작성. 제품 코드 수정 금지 |
 | `FAST_SINGLE_CODE` | 최대 2파일/2함수/예상 80줄 이하의 작은 코드 수정 |
 | `STANDARD` | 일반 작업 |
-| `HIGH_RISK` | 삭제, 인증, 배포, 핵심 파서, DB, 신규 의존성 등 위험 작업 |
+| `HIGH_RISK` | 삭제, 인증, 배포, 핵심 파서, DB, 신규 의존성 등 위험 작업. 이유와 risk flag가 필요하고 보수 모드로 진행 |
 
 Fast Path는 검증 생략이 아닙니다. GitHub Actions, phase attestation, Technical/Oracle/GitHub/User Acceptance gate는 그대로 필요합니다.
 
