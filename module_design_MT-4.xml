@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_design>
+  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <mt_id>MT-4</mt_id>
+  <title>리포트 작성 (Report Authoring)</title>
+  <files>
+    <file>inspection_report_IMP-20260510-D44F.md (신규 — 통합 점검 리포트)</file>
+  </files>
+  <interface_contract>
+    inspection_report_IMP-20260510-D44F.md 파일을 신규 작성.
+    구조: 개요 → 요약 테이블 → 버그 → 보안 → 성능 → 유지보수성 → 권고사항.
+    MT-1~3의 검증된 발견 항목(7+5+5=17개)을 한 파일에 통합.
+  </interface_contract>
+  <implementation_plan>
+    Write 도구로 inspection_report_IMP-20260510-D44F.md 1회 생성.
+    MD 구조:
+    1. # 헤더 + 개요 (대상 파일/총 라인/점검 일자)
+    2. ## 요약 테이블 (심각도별 발견 항목 수)
+    3. ## 버그 발견 사항 (B1~B5)
+    4. ## 보안 발견 사항 (S1~S5)
+    5. ## 성능 발견 사항 (P1~P4)
+    6. ## 유지보수성 발견 사항 (M1~M3)
+    7. ## 권고사항 (우선순위별 종합 액션)
+    각 발견 항목 형식: ### [심각도] 제목 → 파일/위치/설명/권고
+  </implementation_plan>
+  <verification_plan>
+    MT-5에서 (1) 파일 존재, (2) 1500자 이상, (3) 4개 섹션 모두 포함,
+    (4) 라인 번호 참조 ≥3, (5) 심각도 라벨 ≥2종, (6) 요약 테이블 + 권고사항 섹션 확인.
+  </verification_plan>
+  <self_check>
+    <category>REPORT_AUTHORING</category>
+    <verdict>READY</verdict>
+    <impact_analysis_check>PASS</impact_analysis_check>
+  </self_check>
+</module_design>

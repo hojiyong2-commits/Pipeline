@@ -1,4 +1,4 @@
-# 기술 선택 의사결정 트리 (pm-agent 참조 전용)
+# 기술 선택 의사결정 트리 (PM Planner / Pipeline Manager 참조)
 
 ```
 요구사항 수신
