@@ -368,7 +368,7 @@ python -c "import pyautogui; print(pyautogui.size())"  # RPA 태스크만, 실�
 
 Phase 7 always uses external binary gates instead of numeric scoring:
 
-0. If `phase_attestations.enabled=true`, PM/Dev/QA/Build each require `agent start -> agent finish -> phase record with --agent-run-id -> prepare-phase -> push -> GitHub Actions -> phase-ci` before the next role boundary may proceed.
+0. If `phase_attestations.enabled=true`, PM requires separate `pm_planner` and `pipeline_manager` receipts, while Dev/QA/Build require `agent start -> agent finish -> phase record with --agent-run-id -> prepare-phase -> push -> GitHub Actions -> phase-ci` before the next role boundary may proceed.
 1. Technical gate: `python pipeline.py gates technical`
 2. Oracle gate: `python pipeline.py gates oracle`
 3. GitHub CI gate: `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
@@ -732,7 +732,7 @@ QA가 같은 실패 시그니처로 2회 연속 FAIL을 반환하면, PM은 dev-
 | 책임자 | 역할 |
 |---|---|
 | qa-agent | FAIL 시 `<failure_signature>` + `<repeat_indicator>FIRST</repeat_indicator>` 출력 (qa-agent.md `## Circuit Breaker Signal Output`) |
-| pm-agent | qa_fail_history 추적 + RECURRING 판정 + Architect 이관 (pm-agent.md `## Circuit Breaker — Same-Error 2x FAIL Escalation`) |
+| pipeline.py + Pipeline Manager | `qa_fail_history` 추적 + RECURRING 판정 확인 + Architect 이관. `pm-agent.md`의 Circuit Breaker 섹션은 호환성 참고문서로만 사용 |
 | prompt-architect-agent | circuit_breaker_handoff 수신 시 Strategic Restructuring Report 출력 (prompt-architect-agent.md `## Circuit Breaker Intake Mode`) |
 | 사용자 | 3개 옵션 중 선택 또는 중단 |
 

@@ -21,6 +21,7 @@ class CodexTaskHookTests(unittest.TestCase):
         self.assertIn("pm_planner", text)
         self.assertIn("pipeline_manager", text)
         self.assertIn("manager_handoff.xml", text)
+        self.assertIn("anti_gaming_read", text)
         self.assertIn("ACCEPT", text)
         self.assertIn("REJECT", text)
 

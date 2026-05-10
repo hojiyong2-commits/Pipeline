@@ -52,7 +52,7 @@ def get_base_path() -> Path:
 
 ## WA Category — 4 Mandatory Items (SSoT)
 
-> **이 섹션이 WA 4항목의 Single Source of Truth(SSoT)입니다.** dev-agent.md / qa-agent.md / test-harness-agent.md / pm-agent.md는 모두 이 섹션을 참조합니다.
+> **이 섹션이 WA 4항목의 Single Source of Truth(SSoT)입니다.** dev-agent.md / qa-agent.md / test-harness-agent.md / pm-planner-agent.md / pipeline-manager-agent.md / pm-agent.md 호환 문서는 모두 이 섹션을 참조합니다.
 
 1. `timeout=(connect_timeout, read_timeout)` tuple on every `requests` call (e.g. `timeout=(5, 30)`)
 2. `urllib3.util.retry.Retry` with `total=3`, `backoff_factor`, `status_forcelist` OR manual 3-retry loop
