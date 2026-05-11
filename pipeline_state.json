@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "KittingMapper 버그 수정 및 코드 정리: UNC 경로 차단, jm 컬럼 기본값, 포장반 Note 통일, _compress_line_nos 중복 제거, 데드코드 제거",
   "created_at": "2026-05-11T22:24:35Z",
-  "updated_at": "2026-05-11T22:58:01Z",
-  "current_phase": "qa",
+  "updated_at": "2026-05-11T23:04:49Z",
+  "current_phase": "sec",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -33,13 +33,15 @@
       "agent_run_id": "dev-107f8758fbc053f5"
     },
     "qa": {
-      "status": "PENDING",
-      "completed_at": null,
+      "status": "PASS",
+      "completed_at": "2026-05-11T23:04:49Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "qa_report.xml",
+      "agent_id": "qa-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260511-073B_phase_qa.json",
+      "agent_run_id": "qa-a1746b4558615732",
+      "numeric_score": 108
     },
     "sec": {
       "status": "PENDING",
@@ -210,6 +212,26 @@
     {
       "ts": "2026-05-11T22:58:01Z",
       "msg": "advisory gpt-code SKIPPED api_called=False"
+    },
+    {
+      "ts": "2026-05-11T22:58:23Z",
+      "msg": "phase attestation request prepared: dev"
+    },
+    {
+      "ts": "2026-05-11T23:00:52Z",
+      "msg": "github phase-ci dev PASS run_id=25702306449 commit=b031e3fea829"
+    },
+    {
+      "ts": "2026-05-11T23:00:58Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-a1746b4558615732"
+    },
+    {
+      "ts": "2026-05-11T23:03:56Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-a1746b4558615732"
+    },
+    {
+      "ts": "2026-05-11T23:04:49Z",
+      "msg": "qa PASS numeric=108"
     }
   ],
   "terminal_state": null,
@@ -271,8 +293,28 @@
       "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\dev\\dev-107f8758fbc053f5.json",
       "receipt_sha256": "c88f80f4c9803a49c01e86837c726cb953468c7b946e2bbf651fbb840dbfc9dd",
       "used_by_phase": "dev",
-      "used_at": "2026-05-11T22:58:01Z",
+      "used_at": "2026-05-11T22:58:22Z",
       "commit_sha": "3ef1133cfd77046bf4fc81a019c4ae3941094bf3",
+      "notes": ""
+    },
+    "qa-a1746b4558615732": {
+      "schema_version": 1,
+      "run_id": "qa-a1746b4558615732",
+      "pipeline_id": "BUG-20260511-073B",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-11T23:00:58Z",
+      "completed_at": "2026-05-11T23:03:56Z",
+      "token_hash": "a2a92fd69f93b495812688a9ae943f3b0508b036bc95938ef6172abe909735fa",
+      "output_file": "qa_report.xml",
+      "output_sha256": "8c2618f7b19138428be639ccf6ae96ed8c197ef72c3b5454966582acf7ad52c8",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\qa\\qa-a1746b4558615732.json",
+      "receipt_sha256": "9bab168245f2c281997be8fc7f680615de6fb32ae0a801de24788579dfe27610",
+      "used_by_phase": "qa",
+      "used_at": "2026-05-11T23:04:49Z",
+      "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
       "notes": ""
     }
   },
@@ -330,14 +372,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-11T23:00:52Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25702306449",
+        "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
+        "evidence": "github_actions_phase_run:25702306449",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "qa": {
         "status": "PENDING",
@@ -1639,6 +1682,15 @@
       "run_id": "25701702722",
       "commit_sha": "3ef1133cfd77046bf4fc81a019c4ae3941094bf3",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-11T23:00:52Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "dev",
+      "run_id": "25702306449",
+      "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "dev_handover": {
@@ -1688,5 +1740,11 @@
         "FEAT-20260426-332E/ui/app.py"
       ]
     }
+  },
+  "qa_report_validation": {
+    "report_file": "qa_report.xml",
+    "validated_at": "2026-05-11T23:04:49Z",
+    "numeric_score": 108,
+    "verdict": "PASS"
   }
 }
