@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <status>BUILD SUCCESS</status>
+  <section_1_command>
+    <command>pyinstaller --noconfirm --onefile --windowed --name KittingMapper main.py</command>
+    <working_directory>FEAT-20260426-332E</working_directory>
+  </section_1_command>
+  <section_2_environment>
+    <python_version>3.12</python_version>
+    <pyinstaller_version>6.x</pyinstaller_version>
+    <platform>Windows 11 win32</platform>
+    <os_version>10.0.26200</os_version>
+  </section_2_environment>
+  <section_3_output>
+    <exe_path>FEAT-20260426-332E/dist/KittingMapper.exe</exe_path>
+    <exe_size_bytes>37778246</exe_size_bytes>
+    <exe_sha256>eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0</exe_sha256>
+  </section_3_output>
+  <section_4_verification>
+    <exe_exists>true</exe_exists>
+    <build_warnings>0 critical warnings</build_warnings>
+    <launch_check>windowed EXE; no console</launch_check>
+  </section_4_verification>
+  <section_5_artifacts>
+    <artifact>FEAT-20260426-332E/dist/KittingMapper.exe</artifact>
+    <spec_file>FEAT-20260426-332E/KittingMapper.spec</spec_file>
+    <build_dir>FEAT-20260426-332E/build/KittingMapper</build_dir>
+  </section_5_artifacts>
+  <section_6_qa_mapping>
+    <mt_coverage>MT-1 MT-2 MT-3 MT-4 MT-5 all included in build</mt_coverage>
+    <core_utils_included>true — _compress_line_nos from core.utils</core_utils_included>
+    <order_lines_reader_updated>true — _ALLOWED_ROOTS with UNC allowlist</order_lines_reader_updated>
+    <dead_code_removed>true — write_date removed; inline import re removed</dead_code_removed>
+  </section_6_qa_mapping>
+</build_report>
