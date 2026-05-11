@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+  </evidence>
+  <implemented_files>
+    <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+  </implemented_files>
+  <change_summary>
+    - _ALLOWED_ROOT (single Path) replaced with _ALLOWED_ROOTS (List[Path]) containing Path.home() and Path("//ccikrnf/wrkgroup")
+    - _safe_resolve() signature changed: removed allowed_root parameter; iterates _ALLOWED_ROOTS using UNC string-prefix check + resolve()/relative_to() fallback
+    - Call site updated: _safe_resolve(file_path) without second argument
+  </change_summary>
+  <impact_analysis>
+    <target_function>core.order_lines_reader._safe_resolve</target_function>
+    <changed_files>
+      <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+    </changed_files>
+    <affected_call_sites>
+      <site>core.order_lines_reader.lookup_order_lines (internal call at _safe_resolve line)</site>
+    </affected_call_sites>
+    <blast_radius>CONTAINED</blast_radius>
+  </impact_analysis>
+  <self_check>
+    <python39_syntax>PASS — no match/case, no X|Y union, no walrus abuse, no asyncio.TaskGroup</python39_syntax>
+    <type_hinting>PASS — _safe_resolve(user_path: str) -> Path with full type annotations</type_hinting>
+    <error_handling>PASS — ValueError raised on traversal detection with descriptive message</error_handling>
+    <path_safety>PASS — pathlib.Path used throughout; _ALLOWED_ROOTS list validated; UNC prefix check + resolve/relative_to fallback</path_safety>
+    <security>PASS — no hardcoded keys; UNC allowlist explicitly declared; input string checked against allowlist</security>
+    <al_edge_cases>PASS — UNC paths handled via string prefix; non-UNC paths via resolve()+relative_to(); ValueError on mismatch</al_edge_cases>
+    <pd_policy>PASS — path traversal raises ValueError (no silent correction)</pd_policy>
+    <docstring>PASS — updated docstring describes new multi-root behavior</docstring>
+  </self_check>
+</module_handover>

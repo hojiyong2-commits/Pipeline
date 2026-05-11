@@ -1,0 +1,41 @@
+{
+  "pipeline_id": "BUG-20260510-9F70",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "po_automation/email_monitor.py"
+      ],
+      "affected_functions": [
+        "__main__ block (if __name__ == \"__main__\", 라인 ~1602)"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "po_automation/email_monitor.py"
+      ],
+      "affected_functions": [
+        "__main__ block (if __name__ == \"__main__\", 라인 ~1633)"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "po_automation/email_monitor.py"
+      ],
+      "affected_functions": [
+        "parse_email_content 또는 내부 try 블록 (라인 ~415)"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "po_automation/main.py"
+      ],
+      "affected_functions": [
+        "POAutomationApp._start_monitoring (라인 ~303-305), main() (라인 ~636)"
+      ]
+    }
+  ]
+}

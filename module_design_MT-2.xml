@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_design>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-2</mt_id>
+  <design_summary>
+    Change the default value for jm column letter in _cli_main from "G" (col 7, numeric employee IDs)
+    to "KJ" (col 296, Project Manager English names). Single-line change in main.py L180.
+  </design_summary>
+  <target_files>
+    <file>FEAT-20260426-332E/main.py</file>
+  </target_files>
+  <affected_function>main._cli_main</affected_function>
+  <interface_contract>
+    Input: excel_b_columns dict from config (may or may not contain "jm" key)
+    Output: jm_col_letter passed to lookup_order_lines() — default "KJ" when key absent
+    Validation: "KJ" is validated by _col_to_idx() downstream; no additional validation needed here
+  </interface_contract>
+  <implementation_plan>
+    1. In main.py _cli_main, locate: excel_b_columns.get("jm", "G")
+    2. Replace default "G" with "KJ"
+    3. No other changes required
+  </implementation_plan>
+  <verification_plan>
+    T3 acceptance test: source of main.py must contain .get("jm", "KJ") string
+    Manual check: grep for .get("jm", confirms KJ not G
+  </verification_plan>
+  <risks>
+    <risk>None — single string literal change; "KJ" is a valid Excel column letter validated downstream by _col_to_idx()</risk>
+  </risks>
+</module_design>

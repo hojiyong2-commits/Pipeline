@@ -1,0 +1,15 @@
+{
+  "pipeline_id": "IMP-20260509-A4DB",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["README.md"],
+      "affected_functions": ["README.md (new file creation)"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["README.md"],
+      "affected_functions": ["git branch + commit + push + PR"]
+    }
+  ]
+}

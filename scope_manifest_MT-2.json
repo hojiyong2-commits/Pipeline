@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "BUG-20260511-073B",
+  "micro_tasks": [
+    {
+      "id": "MT-2",
+      "files": ["FEAT-20260426-332E/main.py"],
+      "affected_functions": ["main._cli_main"]
+    }
+  ]
+}

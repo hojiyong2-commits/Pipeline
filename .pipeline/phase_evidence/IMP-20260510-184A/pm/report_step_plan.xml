@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260510-184A</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>pipeline_protocol</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline_protocol 태그로 인해 Fast Path 불가. 1줄 수정이지만 파이프라인 핵심 파일(pipeline.py) 수정이므로 STANDARD 유지.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>1</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <interface_spec>
+    - Input: pipeline.py (단일 파일)
+    - Output: pipeline.py (L2700 수정본)
+    - Validation: _deployment_artifacts 함수 내 ("build", "dev") 튜플이 ("build",)로 변경되었는지 확인
+  </interface_spec>
+
+  <requirements>
+    - pipeline.py L2700의 for phase_name in ("build", "dev"): 를 for phase_name in ("build",): 로 변경
+    - 변경은 정확히 1줄, 1개 함수(_deployment_artifacts), 1개 파일(pipeline.py) 범위 내
+    - 다른 함수, 다른 라인, 다른 파일 수정 금지
+    - 변경 후 py_compile 문법 검사 통과 필수
+    - EXE 빌드 N/A (meta-task: pipeline.py 수정)
+  </requirements>
+
+  <decomposition_audit>
+    <total_functions_identified>1</total_functions_identified>
+    <micro_task_count>1</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <split_decision>단일 함수 내 1줄 변경으로 분할 불필요. SINGLE_TASK_OK.</split_decision>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_deployment_artifacts</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>for phase_name in \("build", "dev"\)</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>L2700: ("build", "dev") 튜플에서 "dev" 제거 하여 배포 시 dev 단계 증거 자동수집 차단</change_summary>
+      <line_estimate>1</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>유지보수성 우선 — 1줄 수정으로 배포 범위를 명확히 제한하여 향후 단계 추가 시 의도치 않은 자동수집을 방지</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P0/P1 질문 없음. 변경 범위가 명확(1줄 수정, 1개 함수)하여 내부 구현 취향 질문 없이 진행.</filter_summary>
+    <decision_questions>
+      <question id="Q1" priority="P1" category="module_split">
+        <user_facing_question>_deployment_artifacts 함수 수정을 MT-1 단일 마이크로태스크로 처리할까요, 아니면 더 작게 분리할까요?</user_facing_question>
+        <evidence>Grep 결과: _deployment_artifacts 함수 내 ("build", "dev") 튜플이 L2700 단 1곳에만 존재. 영향 함수 1개, 변경 라인 1줄.</evidence>
+        <why_it_matters>단일 MT vs 분리 여부에 따라 모듈 게이트 개수와 검증 복잡도가 달라집니다. 1줄 수정이므로 분리 실익이 없어 단일 MT가 유지보수성이 높습니다.</why_it_matters>
+        <options>
+          <option id="A">
+            <label>단일 MT-1 (권장)</label>
+            <benefit>1줄 수정이므로 단일 MT로 충분하며 검증 절차가 간결하고 오류 범위가 최소화됩니다.</benefit>
+            <cost>분리 구조가 없어 미래에 함수가 확장될 경우 재분리가 필요할 수 있습니다.</cost>
+          </option>
+          <option id="B">
+            <label>MT 추가 분리 (비권장)</label>
+            <benefit>구조적으로 더 세분화되어 각 단계가 명확히 분리됩니다.</benefit>
+            <cost>1줄 수정에 2개 MT를 쓰면 오버헤드가 크고 실익이 없어 유지보수성이 떨어집니다.</cost>
+          </option>
+        </options>
+        <recommended_option>A</recommended_option>
+        <user_answer>변경 범위 명확 — P0 질문 불필요. dev 단계 자동수집만 제거. build 단계와 명시적 evidence/outputs는 유지. MT-1 단일로 진행.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <python_version>3.10 — 기존 pipeline.py 환경과 일치</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>pylance, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - pipeline.py L2700이 for phase_name in ("build",): 로 변경되었는가
+    - ("build", "dev") 문자열이 _deployment_artifacts 함수 본문 600자 내에 존재하지 않는가
+    - py_compile.compile('pipeline.py') 가 오류 없이 통과하는가
+    - 변경 파일이 pipeline.py 단 1개인가
+    - oracle T001 (DEPLOY_SCOPE_OK), T002 (SYNTAX_OK) 모두 통과
+    - Edge: 명시적 outputs/evidence 경로로 추가된 항목은 계속 배포 대상에 포함 (build 단계 경로 유지)
+  </acceptance_criteria>
+
+  <oracle_plan>
+    <oracle id="O001" case_kind="normal">
+      <input>tests/oracles/IMP-20260510-184A/normal_01/input.txt</input>
+      <expected>tests/oracles/IMP-20260510-184A/normal_01/expected.txt</expected>
+      <expected_output>DEPLOY_SCOPE_OK</expected_output>
+    </oracle>
+    <oracle id="O002" case_kind="edge">
+      <input>tests/oracles/IMP-20260510-184A/edge_01/input.txt</input>
+      <expected>tests/oracles/IMP-20260510-184A/edge_01/expected.txt</expected>
+      <expected_output>SYNTAX_OK</expected_output>
+    </oracle>
+  </oracle_plan>
+
+  <phase_attestation_plan>
+    <phases>pm, dev, qa, build</phases>
+    <branch>phase-attestation/IMP-20260510-184A</branch>
+    <repo>hojiyong2-commits/Pipeline</repo>
+  </phase_attestation_plan>
+
+  <forbidden>
+    - pipeline.py 외 다른 파일 수정 절대 금지
+    - _deployment_artifacts 함수 외 다른 함수 수정 금지
+    - ("build",) 튜플 이외 로직 변경 금지
+    - oracle 파일(tests/oracles/**) 내용 변경 금지
+  </forbidden>
+
+  <next_phase_template>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260510-184A</pipeline_id>
+    <evidence_file>pipeline.py</evidence_file>
+    <status>READY_FOR_QA</status>
+  </next_phase_template>
+
+  <context_injection>
+    <target_files><file>pipeline.py</file></target_files>
+    <phase_rules_excerpt>MT-1: pipeline.py L2700 ("build", "dev") to ("build",) 1줄 변경. scope_manifest.json 제출 필수.</phase_rules_excerpt>
+    <prev_phase_summary>PM 완료. 계약 동결. oracle 2개(normal+edge) 등록 완료.</prev_phase_summary>
+  </context_injection>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>

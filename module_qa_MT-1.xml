@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <result>PASS</result>
+  <numeric_score>20</numeric_score>
+  <verification_evidence>
+    <check id="FS.traversal">PASS - _safe_resolve() iterates _ALLOWED_ROOTS; UNC prefix check covers //ccikrnf/wrkgroup; resolve()+relative_to() for non-UNC paths; ValueError on mismatch</check>
+    <check id="T1_acceptance">PASS - //ccikrnf/wrkgroup/orders.xlsx prefix matches _ALLOWED_ROOTS[1]; returns Path without raising</check>
+    <check id="T2_acceptance">PASS - //unknown/share/file.xlsx does not match any root; ValueError raised (returncode=1)</check>
+    <check id="scope_boundary">PASS - only order_lines_reader.py modified; no other files touched</check>
+    <check id="python39_syntax">PASS - no 3.10+ syntax used; List[Path] typing import already present</check>
+    <check id="call_site_updated">PASS - call site at lookup_order_lines uses _safe_resolve(file_path) without second arg</check>
+  </verification_evidence>
+  <verdict>PASS</verdict>
+</module_qa_report>

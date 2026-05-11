@@ -1,0 +1,53 @@
+{
+  "pipeline_id": "BUG-20260511-073B",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "FEAT-20260426-332E/core/order_lines_reader.py"
+      ],
+      "affected_functions": [
+        "order_lines_reader._safe_resolve, order_lines_reader._ALLOWED_ROOT"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "FEAT-20260426-332E/main.py"
+      ],
+      "affected_functions": [
+        "main._cli_main"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "FEAT-20260426-332E/main.py"
+      ],
+      "affected_functions": [
+        "main._cli_main"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "FEAT-20260426-332E/core/utils.py",
+        "FEAT-20260426-332E/main.py",
+        "FEAT-20260426-332E/ui/app.py"
+      ],
+      "affected_functions": [
+        "_compress_line_nos (main.py 로컬), _compress_line_nos (ui/app.py 로컬)"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "FEAT-20260426-332E/main.py",
+        "FEAT-20260426-332E/ui/app.py"
+      ],
+      "affected_functions": [
+        "main._cli_main, ui.app (thread worker block)"
+      ]
+    }
+  ]
+}

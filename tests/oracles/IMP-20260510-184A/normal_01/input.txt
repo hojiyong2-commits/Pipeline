@@ -1,0 +1,6 @@
+content = open('pipeline.py', encoding='utf-8').read()
+idx = content.find('def _deployment_artifacts')
+chunk = content[idx:idx+600]
+assert '("build", "dev")' not in chunk, 'dev still in deployment artifacts'
+assert '("build",)' in chunk or '"build"' in chunk, 'build phase missing'
+print('DEPLOY_SCOPE_OK')

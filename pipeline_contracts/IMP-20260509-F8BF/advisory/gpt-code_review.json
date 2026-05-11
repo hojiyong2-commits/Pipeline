@@ -1,0 +1,13 @@
+{
+  "status": "ERROR",
+  "reason": "HTTP Error 401: Unauthorized",
+  "api_called": true,
+  "findings": [],
+  "model": "gpt-5.5",
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260509-F8BF",
+  "kind": "gpt-code",
+  "files": [
+    "ic_part_src\\order_mapper.py"
+  ]
+}

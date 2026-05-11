@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-2</mt_id>
+  <result>PASS</result>
+  <numeric_score>15</numeric_score>
+  <verification_evidence>
+    <check id="T3_source_check">PASS - main.py now contains .get("jm", "KJ"); old "G" default removed</check>
+    <check id="scope_boundary">PASS - only main.py modified; single line change</check>
+    <check id="python39_syntax">PASS - no new code added; string literal only</check>
+    <check id="column_validity">PASS - "KJ" is valid Excel column letter (col 296); validated by _col_to_idx() at runtime</check>
+  </verification_evidence>
+  <verdict>PASS</verdict>
+</module_qa_report>

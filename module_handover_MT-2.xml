@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-2</mt_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>FEAT-20260426-332E/main.py</file>
+  </evidence>
+  <implemented_files>
+    <file>FEAT-20260426-332E/main.py</file>
+  </implemented_files>
+  <change_summary>
+    main.py L180: excel_b_columns.get("jm", "G") changed to excel_b_columns.get("jm", "KJ").
+    "G" was the numeric employee-ID column (col 7), "KJ" is the Project Manager English name column (col 296).
+  </change_summary>
+  <impact_analysis>
+    <target_function>main._cli_main</target_function>
+    <changed_files>
+      <file>FEAT-20260426-332E/main.py</file>
+    </changed_files>
+    <affected_call_sites>
+      <site>none</site>
+    </affected_call_sites>
+    <blast_radius>CONTAINED</blast_radius>
+  </impact_analysis>
+  <self_check>
+    <python39_syntax>PASS — no match/case, no X|Y union, no walrus abuse</python39_syntax>
+    <type_hinting>PASS — no new functions added; existing call unchanged except default value</type_hinting>
+    <error_handling>PASS — dict.get() with default is safe; no new error paths</error_handling>
+    <path_safety>PASS — no path changes in this MT</path_safety>
+    <security>PASS — no security-relevant changes; column letter default only</security>
+    <al_edge_cases>PASS — default "KJ" is valid Excel column letter; will be validated by _col_to_idx() downstream</al_edge_cases>
+    <pd_policy>PASS — no policy-relevant changes</pd_policy>
+    <docstring>PASS — no new functions; existing docstrings unchanged</docstring>
+  </self_check>
+</module_handover>

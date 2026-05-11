@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-11T23:09:45Z",
+  "pipeline_id": "BUG-20260511-073B",
+  "phase": "build",
+  "phase_status": "DONE",
+  "commit_hint": "65f0f0ba956d645468b66b7cb3ee729109667fb4",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-05-11T23:09:37Z",
+    "report_file": "dist/build_report.xml",
+    "evidence": "FEAT-20260426-332E/dist/KittingMapper.exe"
+  },
+  "agent_run": {
+    "run_id": "build-54186a43fc82864a",
+    "phase": "build",
+    "agent_id": "build-agent",
+    "status": "COMPLETED",
+    "output_file": "dist\\build_report.xml",
+    "output_sha256": "6b2dd925bffb660398036396d653dced7e5fc0cb6bb4d722d9708d9fac042fea",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260511-073B/build/agent_receipt_build-54186a43fc82864a.json",
+    "receipt_sha256": "50a3a6db97b727d46868c6f5a2599c34a7a8d8046c90bd28ff809f1a31fb1951",
+    "used_by_phase": "build",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\build\\build-54186a43fc82864a.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260511-073B\\build\\build-54186a43fc82864a.json",
+      "path": ".pipeline/phase_evidence/BUG-20260511-073B/build/agent_receipt_build-54186a43fc82864a.json",
+      "sha256": "50a3a6db97b727d46868c6f5a2599c34a7a8d8046c90bd28ff809f1a31fb1951",
+      "size_bytes": 513,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dist\\build_report.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260511-073B/build/report_build_report.xml",
+      "sha256": "6b2dd925bffb660398036396d653dced7e5fc0cb6bb4d722d9708d9fac042fea",
+      "size_bytes": 1704,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": [
+    {
+      "path": "FEAT-20260426-332E\\dist\\KittingMapper.exe",
+      "sha256": "eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0",
+      "reason": "ignored_or_outside_git_checkout"
+    }
+  ]
+}

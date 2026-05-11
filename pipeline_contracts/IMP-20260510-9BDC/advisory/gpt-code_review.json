@@ -1,0 +1,20 @@
+{
+  "status": "SKIPPED",
+  "reason": "ENABLE_GPT_ADVISORY is not 1",
+  "api_called": false,
+  "api_key_source": "process",
+  "findings": [],
+  "model": "gpt-5.5",
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-9BDC",
+  "kind": "gpt-code",
+  "auto_run": true,
+  "files": [
+    ".claude\\agents\\security-agent.md",
+    ".claude\\agents\\build-agent.md",
+    ".claude\\agents\\agent-factory-agent.md",
+    ".claude\\agents\\protocol-evolution-agent.md",
+    ".claude\\agents\\test-harness-agent.md",
+    ".claude\\agents\\pm-agent.md"
+  ]
+}
