@@ -1,43 +1,36 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <build_report>
-  <pipeline_id>BUG-20260510-9F70</pipeline_id>
-  <agent_run_id>build-616821991407f275</agent_run_id>
-
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <status>BUILD SUCCESS</status>
   <section_1_command>
-    <command>pyinstaller --noconfirm --onefile --windowed --name emailmonitor po_automation/main.py</command>
+    <command>pyinstaller --noconfirm --onefile --windowed --name KittingMapper main.py</command>
+    <working_directory>FEAT-20260426-332E</working_directory>
   </section_1_command>
-
-  <section_2_spec>
-    <entry_point>po_automation/main.py</entry_point>
+  <section_2_environment>
     <python_version>3.12</python_version>
-    <onefile>true</onefile>
-    <windowed>true</windowed>
-    <platform>windows-x64</platform>
-  </section_2_spec>
-
+    <pyinstaller_version>6.x</pyinstaller_version>
+    <platform>Windows 11 win32</platform>
+    <os_version>10.0.26200</os_version>
+  </section_2_environment>
   <section_3_output>
-    <exe_path>dist/emailmonitor.exe</exe_path>
-    <exe_size_bytes>118711712</exe_size_bytes>
-    <build_dir>build/emailmonitor</build_dir>
+    <exe_path>FEAT-20260426-332E/dist/KittingMapper.exe</exe_path>
+    <exe_size_bytes>37778246</exe_size_bytes>
+    <exe_sha256>eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0</exe_sha256>
   </section_3_output>
-
   <section_4_verification>
     <exe_exists>true</exe_exists>
-    <exe_size_nonzero>true</exe_size_nonzero>
-    <syntax_pre_build>PASS</syntax_pre_build>
+    <build_warnings>0 critical warnings</build_warnings>
+    <launch_check>windowed EXE; no console</launch_check>
   </section_4_verification>
-
   <section_5_artifacts>
-    <artifact path="dist/emailmonitor.exe" size_bytes="118711712">emailmonitor EXE</artifact>
-    <artifact path="dist/build_report.xml">build report</artifact>
+    <artifact>FEAT-20260426-332E/dist/KittingMapper.exe</artifact>
+    <spec_file>FEAT-20260426-332E/KittingMapper.spec</spec_file>
+    <build_dir>FEAT-20260426-332E/build/KittingMapper</build_dir>
   </section_5_artifacts>
-
   <section_6_qa_mapping>
-    <qa_pass>true</qa_pass>
-    <qa_numeric_score>116</qa_numeric_score>
-    <mt_covered>MT-1,MT-2,MT-3,MT-4</mt_covered>
-    <dead_code_removed>MT-1:import re as _re, MT-2:import threading as _threading, MT-3:from datetime import datetime as _dt, MT-4:if False else/_=app</dead_code_removed>
+    <mt_coverage>MT-1 MT-2 MT-3 MT-4 MT-5 all included in build</mt_coverage>
+    <core_utils_included>true — _compress_line_nos from core.utils</core_utils_included>
+    <order_lines_reader_updated>true — _ALLOWED_ROOTS with UNC allowlist</order_lines_reader_updated>
+    <dead_code_removed>true — write_date removed; inline import re removed</dead_code_removed>
   </section_6_qa_mapping>
-
-  <status>BUILD SUCCESS</status>
 </build_report>
