@@ -1,0 +1,17 @@
+{
+  "status": "SKIPPED",
+  "reason": "ENABLE_GPT_ADVISORY is not 1",
+  "api_called": false,
+  "api_key_source": "user",
+  "findings": [],
+  "model": "gpt-5.5",
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260509-A4DB",
+  "kind": "gpt-contract",
+  "auto_run": true,
+  "files": [
+    "pipeline_contracts\\IMP-20260509-A4DB\\task_contract.json",
+    "pipeline_contracts\\IMP-20260509-A4DB\\test_set.json",
+    "pipeline_contracts\\IMP-20260509-A4DB\\contract_audit.json"
+  ]
+}

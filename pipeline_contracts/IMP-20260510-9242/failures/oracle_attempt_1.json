@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-9242",
+  "gate": "oracle",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\failures\\oracle_attempt_1.json",
+  "recorded_at": "2026-05-10T14:33:51Z",
+  "status": "FAIL",
+  "repair_owner": "PM/oracle path repair or Dev behavior repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "oracle"
+  ],
+  "note": "Oracle gate failed; inspect failing results and output path resolution before broad rework.",
+  "failed_checks": [],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {
+      "verdict": "FAIL",
+      "score": 75.0,
+      "threshold": 80,
+      "earned_points": 15,
+      "total_points": 20,
+      "hard_fail": false,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0
+    },
+    "results": [
+      {
+        "id": "T1",
+        "module": "MT-1",
+        "type": "command_check",
+        "priority": "P0",
+        "case_kind": "normal",
+        "status": "PASS",
+        "points": 10,
+        "earned": 10,
+        "message": "command matched expectations",
+        "details": {
+          "command": [
+            "python",
+            "-c",
+            "content = open('pipeline.py', encoding='utf-8').read(); assert '_validate_pipeline_branch_isolation' in content; print('BRANCH_ISOLATION_CHECK_FOUND')"
+          ],
+          "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+          "returncode": 0,
+          "stdout": "BRANCH_ISOLATION_CHECK_FOUND\n",
+          "stderr": ""
+        }
+      },
+      {
+        "id": "T2",
+        "module": "MT-1",
+        "type": "command_check",
+        "priority": "P1",
+        "case_kind": "edge",
+        "status": "PASS",
+        "points": 5,
+        "earned": 5,
+        "message": "command matched expectations",
+        "details": {
+          "command": [
+            "python",
+            "-c",
+            "content = open('pipeline.py', encoding='utf-8').read(); assert '_validate_pr_title_matches_pipeline' in content; print('PR_TITLE_CHECK_FOUND')"
+          ],
+          "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+          "returncode": 0,
+          "stdout": "PR_TITLE_CHECK_FOUND\n",
+          "stderr": ""
+        }
+      },
+      {
+        "id": "T3",
+        "module": "MT-2",
+        "type": "file_exists_check",
+        "priority": "P1",
+        "case_kind": "normal",
+        "status": "FAIL",
+        "points": 5,
+        "earned": 0,
+        "message": "file missing: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\CLAUDE.md",
+        "details": {
+          "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\CLAUDE.md"
+        }
+      }
+    ]
+  }
+}
