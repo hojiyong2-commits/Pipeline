@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-9242",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-10T13:32:01Z",
+  "updated_at": "2026-05-10T13:34:41Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "PR 브랜치 오염 방지: gates prepare-phase에 pipeline_id 브랜치 강제 격리 추가",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "pipeline_branch_isolation",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-2",
+      "name": "protocol_doc_update",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": null,
+      "severity": "P0",
+      "question": "브랜치 격리 검사를 PM 단계만 적용할까요, 모든 단계에 적용할까요?",
+      "options": [
+        "옵션A: gates prepare-phase --phase pm 단계에서만",
+        "옵션B: 모든 단계"
+      ],
+      "answer": "옵션 A 선택 — gates prepare-phase --phase pm 단계에서만 브랜치 격리 검사.",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-10T13:34:41Z",
+  "contract_hash": "14c92dd2b5ed2fa0e460253d5c8c56b00ae49935d1df5cd07348e053a862a895",
+  "test_set_hash": "3637e5b6db9481861a286ee521e246c6633ea3cca6303be500e7618486e2030c"
+}
