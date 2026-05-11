@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "FEAT-20260509-5C4A",
+  "created_at": "2026-05-09T08:40:15Z",
+  "updated_at": "2026-05-09T08:40:15Z",
+  "status": "draft",
+  "frozen": false,
+  "tests": []
+}

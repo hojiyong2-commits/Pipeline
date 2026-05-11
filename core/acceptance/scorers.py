@@ -72,7 +72,20 @@ def score_email_parse_check(test: dict[str, Any], base_dir: Path, project_dir: P
 def score_file_exists_check(test: dict[str, Any], base_dir: Path, project_dir: Path) -> tuple[bool, str, dict[str, Any]]:
     then = test.get("then", {})
     path_value = then.get("path") if isinstance(then, dict) else None
-    path = _resolve(base_dir, str(path_value) if path_value else None)
+    raw = str(path_value) if path_value else None
+    if not raw:
+        raise ScoringError("path is required")
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        # Prefer project root resolution over contract-dir resolution so that
+        # relative paths like "CLAUDE.md" resolve to the actual project file.
+        project_candidate = project_dir / raw
+        if project_candidate.exists():
+            path = project_candidate
+        else:
+            path = base_dir / raw
+    else:
+        path = candidate
     ok = path.exists()
     return ok, f"file exists: {path}" if ok else f"file missing: {path}", {"path": str(path)}
 

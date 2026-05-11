@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-9BDC",
+  "created_at": "2026-05-10T02:32:52Z",
+  "updated_at": "2026-05-10T02:36:33Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T-1",
+      "module": "MOD-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "description": "security-agent.md must mention agent-run-id receipt or Incremental Module Gate after gap patch",
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/security-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'agent-run-id|Incremental Module Gate|module.*gate', content, re.I) else sys.exit(1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "T-2",
+      "module": "MOD-2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "description": "build-agent.md must mention build phase attestation requirement (prepare-phase or phase-ci)",
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/build-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'attestation|gates prepare-phase|phase-ci', content, re.I) else sys.exit(1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "T-3",
+      "module": "MOD-2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "description": "build-agent.md must mention ACCEPT and deploy after acceptance gate",
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/build-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'PIPELINE_DEPLOY|deploy|ACCEPT', content, re.I) else sys.exit(1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "T-4",
+      "module": "MOD-3",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "description": "agent-factory-agent.md must mention CODEOWNERS protection of .claude/agents/**",
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/agent-factory-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'CODEOWNERS|PR.*review|review.*required|protected', content, re.I) else sys.exit(1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "T-5",
+      "module": "MOD-4",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "description": "protocol-evolution-agent.md must mention CODEOWNERS and PR review requirement",
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/protocol-evolution-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'CODEOWNERS|PR.*review|review.*required|protected', content, re.I) else sys.exit(1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "T-6",
+      "module": "MOD-5",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "description": "test-harness-agent.md must mention ACCEPT triggers deploy or mention deployment path",
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/test-harness-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'deploy|PIPELINE_DEPLOY|ACCEPT.*deploy|deploy.*ACCEPT', content, re.I) else sys.exit(1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "T-7",
+      "module": "MOD-6",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "description": "pm-agent.md pipeline_complete summary must mention deploy path or auto-deploy on ACCEPT",
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/pm-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'PIPELINE_DEPLOY|deploy.*path|accept.*deploy|G:.*터미널', content, re.I) else sys.exit(1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "T-EDGE-1",
+      "module": "MOD-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 5,
+      "description": "Edge: security-agent.md gate section must still say pipeline.py sec is orchestrator-only (no accidental removal)",
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/security-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'orchestrator.*\\uc804\\ub2f4|orc.*only|CRITICAL.*pipeline.*sec|\\uc624\\ucf00\\uc2a4\\ud2b8\\ub808\\uc774\\ud130.*\\uc804\\uc6a9', content, re.I) else sys.exit(1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    }
+  ],
+  "frozen_at": "2026-05-10T02:36:33Z",
+  "test_set_hash": "cf1c36887c8274eb2cf789d2228c9eef0024fe41e87e22f0806393fe99360684",
+  "contract_hash": "5edd2f0e5706c153afd1c3ab1e96834a7290122b2f24c4e9caa3c164bf01fd1b"
+}

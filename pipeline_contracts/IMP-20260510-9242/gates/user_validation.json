@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T14:41:07Z",
+  "pipeline_id": "IMP-20260510-9242",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "pipeline.py",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "pipeline.py",
+        "sha256": "796d83324971b1a5b56ed433661212dcdc474b59a9b2b3338c031acc32882cc1",
+        "size_bytes": 349533
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "pipeline.py"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260510-9242",
+    "deployed_at": "2026-05-10T14:41:07Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\IMP-20260510-9242",
+    "evidence": "pipeline.py",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "pipeline.py",
+          "sha256": "796d83324971b1a5b56ed433661212dcdc474b59a9b2b3338c031acc32882cc1",
+          "size_bytes": 349533
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "pipeline.py"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "pipeline.py",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9242\\pipeline.py",
+        "sha256": "796d83324971b1a5b56ed433661212dcdc474b59a9b2b3338c031acc32882cc1"
+      },
+      {
+        "kind": "file",
+        "source": "CLAUDE.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9242\\CLAUDE.md",
+        "sha256": "42a6daee8abfcf004893b371cbd868760eca458b7e5dfb04a78f8c07d1d4143c"
+      },
+      {
+        "kind": "file",
+        "source": ".claude\\agents\\pipeline-manager-agent.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9242\\.claude\\agents\\pipeline-manager-agent.md",
+        "sha256": "c9dfc76c320af11521be3d3896a3ff9b61f4136f6fc171f299f2c15e04230cf6"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\IMP-20260510-9242\\deployment_manifest.json"
+  }
+}

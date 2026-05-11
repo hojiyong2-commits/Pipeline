@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<integration_report>
+  <pipeline_id>IMP-20260510-184A</pipeline_id>
+  <integration_verdict>PASS</integration_verdict>
+  <modules_integrated>
+    <module id="MT-1" status="PASS">_deployment_artifacts dev 자동수집 제거 완료</module>
+  </modules_integrated>
+  <integration_checks>
+    <check name="all_mt_pass" result="PASS">MT-1 유일 마이크로태스크 PASS</check>
+    <check name="no_regression" result="PASS">pipeline.py 전체 문법 유효</check>
+    <check name="oracle_all_pass" result="PASS">T001, T002 모두 PASS</check>
+  </integration_checks>
+  <summary>단일 MT-1 완료. 통합 충돌 없음.</summary>
+</integration_report>

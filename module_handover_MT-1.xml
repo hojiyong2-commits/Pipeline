@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <pipeline_id>IMP-20260510-184A</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+    <forbidden_files>모든 다른 파일</forbidden_files>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_deployment_artifacts</target_function>
+    <target_file>pipeline.py</target_file>
+    <change_line>2700</change_line>
+    <change_before>for phase_name in ("build", "dev"):</change_before>
+    <change_after>for phase_name in ("build",):</change_after>
+    <blast_radius>1 파일, 1 함수, 1 라인</blast_radius>
+  </impact_analysis>
+  <implemented_files>
+    <file>pipeline.py</file>
+  </implemented_files>
+  <self_check>
+    <oracle_T001>DEPLOY_SCOPE_OK — pass</oracle_T001>
+    <oracle_T002>SYNTAX_OK — pass</oracle_T002>
+    <scope_compliance>MT-1 범위 내 (pipeline.py L2700 단 1줄 수정)</scope_compliance>
+    <forbidden_patterns_check>none found</forbidden_patterns_check>
+  </self_check>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260510-184A</pipeline_id>
+    <mt_id>MT-1</mt_id>
+    <evidence>
+      <file>pipeline.py</file>
+    </evidence>
+    <oracle_results>
+      <oracle id="T001" expected="DEPLOY_SCOPE_OK" actual="DEPLOY_SCOPE_OK" pass="true"/>
+      <oracle id="T002" expected="SYNTAX_OK" actual="SYNTAX_OK" pass="true"/>
+    </oracle_results>
+    <status>READY_FOR_QA</status>
+  </handover>
+</module_handover>

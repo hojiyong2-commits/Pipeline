@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260510-9F70</pipeline_id>
+  <agent_run_id>dev-b17cd3af5b63d97d</agent_run_id>
+
+  <scope_declaration>
+    <files_modified>
+      <file>po_automation/email_monitor.py</file>
+      <file>po_automation/main.py</file>
+    </files_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <mt_coverage>MT-1,MT-2,MT-3,MT-4</mt_coverage>
+    <changes>
+      <change mt_id="MT-1" function="__main__ block">import re as _re 제거, _re. 참조 6개를 re.로 교체</change>
+      <change mt_id="MT-2" function="__main__ block">import threading as _threading 제거, _threading.Event() 교체, 도달불가 try/except를 assert callable(start_monitoring)으로 교체</change>
+      <change mt_id="MT-3" function="_parse_order_date, _move_emails_to_folder">from datetime import datetime as _dt 제거, _dt.strptime 교체. import shutil 추가, rename을 shutil.move로 교체</change>
+      <change mt_id="MT-4" function="_start_monitoring, main">if False 인라인 제거, _ = app 제거</change>
+    </changes>
+  </impact_analysis>
+
+  <verification>
+    <syntax_ok>true</syntax_ok>
+    <dead_code_removed>true</dead_code_removed>
+  </verification>
+
+  <evidence>
+    <file>po_automation/email_monitor.py</file>
+    <file>po_automation/main.py</file>
+  </evidence>
+
+  <status>READY_FOR_QA</status>
+</handover>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_design>
+  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <mt_id>MT-3</mt_id>
+  <title>버그 점검 (Bug)</title>
+  <files>
+    <file>inspection_report_IMP-20260510-D44F.md (MT-4 통합 작성용 분석)</file>
+  </files>
+  <source_read_only>
+    <file>po_automation/email_monitor.py</file>
+    <file>po_automation/main.py</file>
+  </source_read_only>
+  <interface_contract>읽기 전용 버그 분석 — ReceivedTime None, rename 실패 분기, log_queue 포화, COM 비일관성, fd 누수 5개 영역.</interface_contract>
+  <implementation_plan>
+    PM 명시 라인 범위 직접 검증:
+    - email_monitor.py L1200-L1217 (ReceivedTime None)
+    - email_monitor.py L1058-L1072 (rename 실패 분기)
+    - email_monitor.py L866-L867 + main.py L112 (log_queue 포화)
+    - email_monitor.py L1332-L1333 (COM Dispatch 일관성)
+    - main.py L564-L574 (tempfile fd 처리)
+  </implementation_plan>
+  <verification_plan>
+    각 잠재 버그 시나리오를 코드 인용 + 트리거 조건으로 입증.
+    의도 여부(설계 의사결정 vs 미식별 결함) 판정.
+  </verification_plan>
+  <expected_findings>
+    <finding severity="HIGH">scan_past_emails: ReceivedTime None인 메일이 since_dt 비교 없이 _process_mail_item에 진입 (L1217-L1219의 None 분기)</finding>
+    <finding severity="MEDIUM">_process_mail_item rename 실패 + dest_folder 존재 시 tmp_dest_folder 내 PDF 임시파일 정리 후 폴더 자체가 빈 채로 잔존 (L1058-L1072)</finding>
+    <finding severity="MEDIUM">log_queue 포화 시 put_nowait 실패 메시지 드롭 — 사용자에게 통지 없음 (main.py L112 maxsize=2000)</finding>
+    <finding severity="MEDIUM">OnNewMailEx에서 매번 새 Dispatch 호출 — _monitor_loop의 DispatchWithEvents와 다른 COM apartment 사용 가능 (L1332-L1333)</finding>
+    <finding severity="LOW">_save_settings: fdopen 컨텍스트에서 예외 시 외부 except가 처리하나 최초 fd가 fdopen 호출 직전에 예외 시 누수 가능 (L564-L574, 그러나 mkstemp 직후 fdopen이라 실 위험 매우 낮음)</finding>
+  </expected_findings>
+  <self_check>
+    <category>BUG</category>
+    <verdict>READY</verdict>
+    <impact_analysis_check>PASS</impact_analysis_check>
+  </self_check>
+</module_design>

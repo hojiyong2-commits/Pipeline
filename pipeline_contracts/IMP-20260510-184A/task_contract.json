@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-184A",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-10T22:22:12Z",
+  "updated_at": "2026-05-10T22:23:44Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "배포 범위 축소: _deployment_artifacts에서 dev 단계 자동수집 제거",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "deploy_scope_fix: _deployment_artifacts dev 자동수집 제거",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": null,
+      "severity": "P1",
+      "question": "dev 단계 증거 자동수집 제거 범위 확인",
+      "options": [],
+      "answer": "dev 단계 자동수집만 제거. build 단계와 명시적 evidence/outputs는 유지.",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-10T22:23:44Z",
+  "contract_hash": "abdbe7244f6264e70df6c6a75def1c4f9c67928bcf6fedcac00f7a8f55526d36",
+  "test_set_hash": "04025e424ea76500b670a1b5d843002cbd1def69a1d1c3d97bd1e8efbc731c1b"
+}
