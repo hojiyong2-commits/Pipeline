@@ -1,10 +1,14 @@
 {
-  "pipeline_id": "IMP-20260510-184A",
+  "pipeline_id": "IMP-20260511-92A6",
   "micro_tasks": [
     {
       "id": "MT-1",
-      "files": ["pipeline.py"],
-      "affected_functions": ["_deployment_artifacts"]
+      "files": [
+        "KittingMapper_inspection_report.md"
+      ],
+      "affected_functions": [
+        "none — 신규 보고서 파일 생성, 제품 코드 수정 없음"
+      ]
     }
   ]
 }
