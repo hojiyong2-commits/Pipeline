@@ -1,25 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <module_qa_report>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
   <mt_id>MT-3</mt_id>
-  <verdict>PASS</verdict>
+  <result>PASS</result>
+  <numeric_score>15</numeric_score>
   <verification_evidence>
-    PM이 명시한 5개 잠재 버그 영역 모두 dev-agent가 정확한 라인 인용 + 트리거 시나리오로 입증:
-    B1(ReceivedTime None L1200-L1219) HIGH, B2(rename 실패 빈 폴더 L1058-L1072) MEDIUM,
-    B3(log_queue 포화 main.py L112 + email_monitor L866-L867) MEDIUM,
-    B4(COM Dispatch 비일관성 L1332-L1333) MEDIUM, B5(fd 누수 main.py L564-L574) LOW.
-    각 항목에 권고 패치 코드 포함. 코드 변경 0건.
+    <check id="T4_source_check">PASS - _cli_main block contains "note = kit_place" and does NOT contain "note = &quot;포장반&quot;"</check>
+    <check id="dims_str_branch">PASS - f"포장반 ({dims_result})" branch unchanged (dims_result is str)</check>
+    <check id="scope_boundary">PASS - only main.py _cli_main None branch modified</check>
+    <check id="python39_syntax">PASS - no 3.10+ syntax; variable assignment only</check>
+    <check id="gui_alignment">PASS - CLI now consistent with GUI (ui/app.py) behavior for dims_result=None case</check>
   </verification_evidence>
-  <findings_validation>
-    <bug id="B1" status="VERIFIED" severity="HIGH">scan_past_emails ReceivedTime None bypass</bug>
-    <bug id="B2" status="VERIFIED" severity="MEDIUM">_process_mail_item rename 실패 시 tmp 폴더 잔존</bug>
-    <bug id="B3" status="VERIFIED" severity="MEDIUM">log_queue 포화 silent drop</bug>
-    <bug id="B4" status="VERIFIED" severity="MEDIUM">OnNewMailEx Dispatch COM apartment 비일관성</bug>
-    <bug id="B5" status="VERIFIED" severity="LOW">_save_settings tempfile fd 누수 가능성</bug>
-  </findings_validation>
-  <scope_check>
-    <code_changes>0</code_changes>
-    <out_of_scope_writes>0</out_of_scope_writes>
-  </scope_check>
-  <numeric_score>120</numeric_score>
+  <verdict>PASS</verdict>
 </module_qa_report>

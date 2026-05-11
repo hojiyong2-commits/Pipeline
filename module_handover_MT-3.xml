@@ -1,148 +1,38 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <module_handover>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
   <mt_id>MT-3</mt_id>
-  <agent>dev-agent</agent>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
   <status>READY_FOR_QA</status>
-  <implemented_files>
-    <file>po_automation/email_monitor.py (읽기 전용 버그 분석)</file>
-    <file>po_automation/main.py (읽기 전용 버그 분석)</file>
-  </implemented_files>
-  <self_check>
-    <impact_analysis_check>PASS</impact_analysis_check>
-    <scope_boundary>PASS — 코드 무변경</scope_boundary>
-    <evidence_trace>PASS — 5개 버그 후보 모두 라인 인용</evidence_trace>
-  </self_check>
-  <analysis_notes>
-    <category>BUG</category>
-
-    <bug_finding id="B1" severity="HIGH" file="po_automation/email_monitor.py" lines="L1200-L1219">
-      <pattern>ReceivedTime None인 메일이 since_dt 비교 우회</pattern>
-      <evidence>
-        L1200: `received = getattr(item, "ReceivedTime", None)`
-        L1201: `if received is not None:` — None이면 비교 블록 전체 우회
-        L1217-L1219: `if received_dt is not None and received_dt < since_dt: continue`
-        L1221: `processed = _process_mail_item(item, ...)` — 비교 우회 시 즉시 처리 진입
-      </evidence>
-      <impact>
-        Outlook의 초안(Draft), 시스템 메시지, MAPI 동기화 중인 메일은 ReceivedTime이 None일 수 있음.
-        since_dt 필터를 의도하는 사용자 기대와 어긋나게 since_dt 이전 메일도 처리될 수 있음.
-        실제로 _process_mail_item이 PO 번호/회신 필터를 별도로 적용하므로 데이터 손상 위험은 낮으나,
-        예상치 못한 오래된 메일이 결과에 포함되는 사용자 혼란 발생 가능.
-      </impact>
-      <recommendation>
-        L1201 분기 변경:
-        ```
-        if received is None:
-            logger.warning("ReceivedTime None 메일 스킵: subject=%s", getattr(item, "Subject", ""))
-            item = items.GetNext(); continue
-        ```
-        또는 명시적으로 "ReceivedTime None은 처리한다"는 의도라면 docstring에 명시.
-      </recommendation>
-    </bug_finding>
-
-    <bug_finding id="B2" severity="MEDIUM" file="po_automation/email_monitor.py" lines="L1058-L1072">
-      <pattern>rename 실패 분기 — tmp_dest_folder 잔존 처리 누락</pattern>
-      <evidence>
-        L1058: `if tmp_dest_folder != dest_folder:`
-        L1060-L1062: `if dest_folder.exists(): pass` (이미 존재하면 임시 폴더 안 옮김)
-        L1063-L1064: `else: tmp_dest_folder.rename(dest_folder)`
-        L1065-L1070: `except OSError: ... dest_folder.mkdir(...)`
-      </evidence>
-      <impact>
-        시나리오: 동일 PO에 PDF 첨부가 다른 메일에 또 도착 → 두 번째 메일에서:
-        1. tmp_dest_folder = root/po_number 생성
-        2. PDF 임시 파싱 후 unlink (L1030 missing_ok=True)
-        3. dest_folder(접두사 포함)가 이미 존재 → L1062 pass → tmp_dest_folder 그대로 빈 채 남음
-        4. 이후 L1078 _save_email_msg / L1081 _save_attachments는 dest_folder에 정상 저장
-        5. 결과: root/po_number/ 빈 폴더가 누적 → 사용자 폴더 어지러움.
-        rename OSError 분기에서도 tmp_dest_folder 정리 코드 없음 — 같은 누적 문제.
-      </impact>
-      <recommendation>
-        L1062 pass 자리에 다음 추가:
-        ```
-        try:
-            tmp_dest_folder.rmdir()  # 비어있을 때만 삭제
-        except OSError:
-            pass
-        ```
-        rename OSError 분기도 동일 정리 추가.
-      </recommendation>
-    </bug_finding>
-
-    <bug_finding id="B3" severity="MEDIUM" file="po_automation/email_monitor.py + po_automation/main.py" lines="email_monitor.py L866-L867, main.py L112">
-      <pattern>log_queue maxsize=2000 + put_nowait 실패 시 silent drop</pattern>
-      <evidence>
-        main.py L112: `self._log_queue: "queue.Queue[str]" = queue.Queue(maxsize=2000)`
-        email_monitor.py L865: `log_queue.put_nowait(msg)`
-        L866-L867: `except queue.Full: logger.warning("log_queue 가득 참, 메시지 드롭: %s", msg)`
-      </evidence>
-      <impact>
-        - 대량 PO 처리(예: 5000개+ 메일 일괄 스캔) 또는 GUI 멈춤(_poll_log_queue 100ms 대기) 시 큐 포화
-        - 드롭된 메시지는 logger.warning으로만 남음 → 사용자가 GUI에서 누락 인지 불가
-        - 숫자 카운트만 GUI에 통지하는 fail-safe 없음
-      </impact>
-      <recommendation>
-        - 드롭 카운터: self._dropped_log_count += 1, _poll_log_queue에서 드롭 발생 시 GUI에 "[경고] 로그 N건 드롭됨" 출력
-        - 또는 maxsize 상향 + 백프레셔: queue.put(msg, timeout=0.5) (단, 백엔드 스레드가 잠시 멈춤)
-      </recommendation>
-    </bug_finding>
-
-    <bug_finding id="B4" severity="MEDIUM" file="po_automation/email_monitor.py" lines="L1332-L1333">
-      <pattern>OnNewMailEx 내부에서 별도 Dispatch 신규 생성 — _monitor_loop의 DispatchWithEvents와 COM apartment 일관성 불명확</pattern>
-      <evidence>
-        L1418: `pythoncom.CoInitialize()` (monitor 스레드)
-        L1420-L1422: `handler = win32com.client.DispatchWithEvents("Outlook.Application", OutlookEventHandler)`
-        L1330-L1333: OnNewMailEx 내부에서 `namespace = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")` (이벤트 콜백)
-      </evidence>
-      <impact>
-        - DispatchWithEvents가 만든 COM 객체와 OnNewMailEx 내부의 Dispatch 객체가 같은 STA 안에 있는지 보장 안됨 (이벤트 콜백 타이밍에 따라)
-        - 일반적으로 같은 스레드 컨텍스트라 OK이나, win32com.client 캐시 동작에 따라 새 dispatch 인스턴스가 생성되면 불필요한 자원 낭비 + 잠재적 RPC 오류
-      </impact>
-      <recommendation>
-        - OnNewMailEx에서는 `self.Application.GetNamespace("MAPI")` 패턴 사용 (DispatchWithEvents가 self.Application을 주입함)
-        - 또는 _monitor_loop에서 namespace 미리 획득 → handler에 주입(set_context 패턴)
-      </recommendation>
-    </bug_finding>
-
-    <bug_finding id="B5" severity="LOW" file="po_automation/main.py" lines="L564-L574">
-      <pattern>_save_settings: tempfile.mkstemp + os.fdopen 흐름의 fd 누수 가능성</pattern>
-      <evidence>
-        L564: `fd, tmp = tempfile.mkstemp(dir=str(p.parent), suffix=".tmp")`
-        L565-L568: `try: with os.fdopen(fd, "w", encoding="utf-8") as f: f.write(content); os.replace(tmp, str(p))`
-        L569-L574: `except Exception: try: os.unlink(tmp) ...`
-      </evidence>
-      <impact>
-        - mkstemp 직후 ~ os.fdopen() 진입 직전에 예외 발생 시(예: 시스템 인터럽트) fd가 닫히지 않음
-        - 실제 발생 가능성 매우 낮음 — Python 인터프리터 레벨에서 두 줄 사이 예외는 KeyboardInterrupt/MemoryError 정도
-        - 단점: try 블록 진입 후 fdopen 실패 시 fd가 컨텍스트 매니저에 들어가지 못해 누수 → except의 unlink만 실행
-      </impact>
-      <recommendation>
-        try를 mkstemp 직후로 옮김:
-        ```
-        fd, tmp = tempfile.mkstemp(dir=str(p.parent), suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(content)
-            os.replace(tmp, str(p))
-        except Exception:
-            try:
-                os.close(fd)  # fdopen이 실패한 케이스 보강
-            except OSError:
-                pass
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
-        ```
-        실 위험은 낮으나 방어적 코드 권고.
-      </recommendation>
-    </bug_finding>
-  </analysis_notes>
   <evidence>
-    <item>module_design_MT-3.xml</item>
-    <item>scope_manifest_MT-3.json</item>
+    <file>FEAT-20260426-332E/main.py</file>
   </evidence>
-  <summary>버그 5개 영역 검증: B1(ReceivedTime None) HIGH, B2(rename 실패+빈 폴더) MEDIUM, B3(log_queue 포화) MEDIUM, B4(COM 비일관성) MEDIUM, B5(fd 누수) LOW.</summary>
+  <implemented_files>
+    <file>FEAT-20260426-332E/main.py</file>
+  </implemented_files>
+  <change_summary>
+    main.py _cli_main dims_result=None branch: note = "포장반" changed to note = kit_place.
+    Preserves variant kit_place values and aligns CLI with GUI (ui/app.py) behavior.
+  </change_summary>
+  <impact_analysis>
+    <target_function>main._cli_main</target_function>
+    <changed_files>
+      <file>FEAT-20260426-332E/main.py</file>
+    </changed_files>
+    <affected_call_sites>
+      <site>none</site>
+    </affected_call_sites>
+    <blast_radius>CONTAINED</blast_radius>
+  </impact_analysis>
+  <self_check>
+    <python39_syntax>PASS — no match/case, no X|Y union, no walrus abuse</python39_syntax>
+    <type_hinting>PASS — note: str annotation already present; no new functions</type_hinting>
+    <error_handling>PASS — no new error paths; kit_place is always str from prior validation</error_handling>
+    <path_safety>PASS — no path changes in this MT</path_safety>
+    <security>PASS — no security-relevant changes</security>
+    <al_edge_cases>PASS — kit_place is a non-None str at this point in the flow</al_edge_cases>
+    <pd_policy>PASS — no policy-relevant changes</pd_policy>
+    <docstring>PASS — inline comment updated to explain the change</docstring>
+  </self_check>
 </module_handover>

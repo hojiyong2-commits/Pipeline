@@ -1,44 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<dev_handover>
-  <pipeline_id>IMP-20260511-92A6</pipeline_id>
+<handover>
   <from>dev-agent</from>
   <to>qa-agent</to>
-  <micro_tasks>
-    <mt id="MT-1">
-      <status>DONE</status>
-      <description>KittingMapper 정적 분석 보고서 작성 완료 — 제품 코드 수정 없음</description>
-    </mt>
-  </micro_tasks>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <evidence>
+    <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+    <file>FEAT-20260426-332E/core/utils.py</file>
+    <file>FEAT-20260426-332E/main.py</file>
+    <file>FEAT-20260426-332E/ui/app.py</file>
+  </evidence>
   <scope_declaration>
     <files_to_modify>
-      <file>KittingMapper_inspection_report.md</file>
+      <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+      <file>FEAT-20260426-332E/core/utils.py</file>
+      <file>FEAT-20260426-332E/main.py</file>
+      <file>FEAT-20260426-332E/ui/app.py</file>
     </files_to_modify>
   </scope_declaration>
   <impact_analysis>
-    <target_function>none — 신규 보고서 파일 생성, 제품 코드 수정 없음</target_function>
-    <description>KittingMapper 소스 코드 정적 분석 보고서 신규 생성. 제품 코드(.py) 파일 수정 없음.</description>
-    <blast_radius>NONE</blast_radius>
+    <changed_files>
+      <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+      <file>FEAT-20260426-332E/core/utils.py</file>
+      <file>FEAT-20260426-332E/main.py</file>
+      <file>FEAT-20260426-332E/ui/app.py</file>
+    </changed_files>
+    <blast_radius>CONTAINED</blast_radius>
+    <mt_summary>
+      MT-1: _safe_resolve() UNC allowlist — order_lines_reader.py only
+      MT-2: jm default KJ — main.py only
+      MT-3: note = kit_place — main.py only
+      MT-4: _compress_line_nos centralized — core/utils.py new, main.py, ui/app.py
+      MT-5: dead code removed — main.py, ui/app.py
+    </mt_summary>
   </impact_analysis>
-  <evidence>
-    <file>KittingMapper_inspection_report.md</file>
-  </evidence>
-  <self_check>
-    <python39_syntax>N/A — 보고서 작성, 코드 변경 없음</python39_syntax>
-    <type_hinting>N/A</type_hinting>
-    <error_handling>N/A</error_handling>
-    <path_safety>N/A</path_safety>
-    <security>N/A</security>
-    <al_edge_cases>N/A</al_edge_cases>
-    <pd_policy>N/A</pd_policy>
-    <docstring>N/A</docstring>
-  </self_check>
-  <handover>
-    <from>dev-agent</from>
-    <to>qa-agent</to>
-    <pipeline_id>IMP-20260511-92A6</pipeline_id>
-    <evidence>
-      <file>KittingMapper_inspection_report.md</file>
-    </evidence>
-    <status>READY_FOR_QA</status>
-  </handover>
-</dev_handover>
+  <status>READY_FOR_QA</status>
+  <change_summary>
+    MT-1: _ALLOWED_ROOTS list with UNC //ccikrnf/wrkgroup; _safe_resolve() updated to iterate list
+    MT-2: jm column default "G" changed to "KJ" in main.py _cli_main
+    MT-3: note = kit_place instead of hardcoded "포장반" in _cli_main dims_result=None branch
+    MT-4: _compress_line_nos moved to core/utils.py; removed from main.py and ui/app.py; imports added
+    MT-5: write_date dead code removed; inline import re as _re removed; import re added at top of ui/app.py
+  </change_summary>
+</handover>

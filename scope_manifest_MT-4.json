@@ -1,10 +1,16 @@
 {
-  "pipeline_id": "IMP-20260510-D44F",
+  "pipeline_id": "BUG-20260511-073B",
   "micro_tasks": [
     {
       "id": "MT-4",
-      "files": ["inspection_report_IMP-20260510-D44F.md"],
-      "affected_functions": ["inspection_report_IMP-20260510-D44F.md (신규 생성)"]
+      "files": [
+        "FEAT-20260426-332E/core/utils.py",
+        "FEAT-20260426-332E/main.py",
+        "FEAT-20260426-332E/ui/app.py"
+      ],
+      "affected_functions": [
+        "_compress_line_nos (main.py 로컬), _compress_line_nos (ui/app.py 로컬)"
+      ]
     }
   ]
 }

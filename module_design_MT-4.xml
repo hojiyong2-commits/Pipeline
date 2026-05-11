@@ -1,35 +1,33 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <module_design>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
   <mt_id>MT-4</mt_id>
-  <title>리포트 작성 (Report Authoring)</title>
-  <files>
-    <file>inspection_report_IMP-20260510-D44F.md (신규 — 통합 점검 리포트)</file>
-  </files>
+  <design_summary>
+    Move _compress_line_nos from local definitions in main.py and ui/app.py into a new
+    core/utils.py module. Both source files will import from core.utils.
+  </design_summary>
+  <target_files>
+    <file>FEAT-20260426-332E/core/utils.py</file>
+    <file>FEAT-20260426-332E/main.py</file>
+    <file>FEAT-20260426-332E/ui/app.py</file>
+  </target_files>
+  <affected_function>_compress_line_nos (main.py local), _compress_line_nos (ui/app.py local)</affected_function>
   <interface_contract>
-    inspection_report_IMP-20260510-D44F.md 파일을 신규 작성.
-    구조: 개요 → 요약 테이블 → 버그 → 보안 → 성능 → 유지보수성 → 권고사항.
-    MT-1~3의 검증된 발견 항목(7+5+5=17개)을 한 파일에 통합.
+    Input: raw_nos: List[object] — line number values (str or numeric)
+    Output: str — compressed range notation (e.g., "1~3,5~6")
+    Contract: function signature identical to existing local definitions; no behavior change
+    Import: from core.utils import _compress_line_nos in both main.py and ui/app.py
   </interface_contract>
   <implementation_plan>
-    Write 도구로 inspection_report_IMP-20260510-D44F.md 1회 생성.
-    MD 구조:
-    1. # 헤더 + 개요 (대상 파일/총 라인/점검 일자)
-    2. ## 요약 테이블 (심각도별 발견 항목 수)
-    3. ## 버그 발견 사항 (B1~B5)
-    4. ## 보안 발견 사항 (S1~S5)
-    5. ## 성능 발견 사항 (P1~P4)
-    6. ## 유지보수성 발견 사항 (M1~M3)
-    7. ## 권고사항 (우선순위별 종합 액션)
-    각 발견 항목 형식: ### [심각도] 제목 → 파일/위치/설명/권고
+    1. Create FEAT-20260426-332E/core/utils.py with _compress_line_nos function
+    2. Remove local _compress_line_nos from main.py (lines 34-63)
+    3. Add from core.utils import _compress_line_nos inside _cli_main imports block in main.py
+    4. Remove local _compress_line_nos from ui/app.py (lines 30-59)
+    5. Add from core.utils import _compress_line_nos at module level in ui/app.py
   </implementation_plan>
   <verification_plan>
-    MT-5에서 (1) 파일 존재, (2) 1500자 이상, (3) 4개 섹션 모두 포함,
-    (4) 라인 번호 참조 ≥3, (5) 심각도 라벨 ≥2종, (6) 요약 테이블 + 권고사항 섹션 확인.
+    T5 test: python -c "from core.utils import _compress_line_nos; print(_compress_line_nos([1,2,3,5,6]))"
+    Must return "1~3,5~6" (returncode=0, stdout contains "1")
+    Additional: verify no local _compress_line_nos definition remains in main.py or ui/app.py
   </verification_plan>
-  <self_check>
-    <category>REPORT_AUTHORING</category>
-    <verdict>READY</verdict>
-    <impact_analysis_check>PASS</impact_analysis_check>
-  </self_check>
 </module_design>

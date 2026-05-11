@@ -1,27 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <module_qa_report>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
   <mt_id>MT-4</mt_id>
-  <verdict>PASS</verdict>
+  <result>PASS</result>
+  <numeric_score>15</numeric_score>
   <verification_evidence>
-    inspection_report_IMP-20260510-D44F.md 파일 신규 생성 완료.
-    구조 검증: # 헤더 + 개요 + 요약 테이블 + 4개 섹션(버그/보안/성능/유지보수성) + 권고사항.
-    내용 검증: MT-1(코드품질/성능 7건) + MT-2(보안 5건) + MT-3(버그 5건) 합산 17개 발견 항목 모두 포함.
-    심각도 라벨: HIGH(5), MEDIUM(7), LOW(5) — 3종 사용 (PM 요건 ≥2종 충족).
-    라인 번호 참조: 17개 발견 항목 각각 정확한 라인 범위 명시 (PM 요건 ≥3 충족).
-    각 발견 항목은 파일/위치/설명/권고 4요소를 포함하는 PM 명시 형식 준수.
-    코드 변경 없음 (분석 전용).
+    <check id="T5_import_test">PASS - from core.utils import _compress_line_nos succeeds; _compress_line_nos([1,2,3,5,6]) returns "1~3,5~6" (contains "1")</check>
+    <check id="no_local_def_main">PASS - main.py no longer contains local _compress_line_nos definition</check>
+    <check id="no_local_def_app">PASS - ui/app.py no longer contains local _compress_line_nos definition</check>
+    <check id="import_main">PASS - main.py contains from core.utils import _compress_line_nos inside _cli_main</check>
+    <check id="import_app">PASS - ui/app.py contains from core.utils import _compress_line_nos at module level</check>
+    <check id="scope_boundary">PASS - only core/utils.py (new), main.py, ui/app.py modified</check>
+    <check id="python39_syntax">PASS - List[object] from typing; no 3.10+ syntax</check>
   </verification_evidence>
-  <findings_in_report>
-    <bug>B1(HIGH), B2(MEDIUM), B3(MEDIUM), B4(MEDIUM), B5(LOW)</bug>
-    <security>S1(MEDIUM), S2(HIGH), S3(HIGH), S4(MEDIUM), S5(LOW)</security>
-    <performance>P1(HIGH), P2(MEDIUM), P3(MEDIUM), P4(LOW)</performance>
-    <maintainability>M1(HIGH), M2(LOW), M3(LOW)</maintainability>
-  </findings_in_report>
-  <scope_check>
-    <code_changes>0</code_changes>
-    <files_created>1 (inspection_report_IMP-20260510-D44F.md)</files_created>
-    <out_of_scope_writes>0</out_of_scope_writes>
-  </scope_check>
-  <numeric_score>120</numeric_score>
+  <verdict>PASS</verdict>
 </module_qa_report>

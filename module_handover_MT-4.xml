@@ -1,34 +1,47 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <module_handover>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
   <mt_id>MT-4</mt_id>
-  <agent>dev-agent</agent>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
   <status>READY_FOR_QA</status>
-  <implemented_files>
-    <file>inspection_report_IMP-20260510-D44F.md (신규 작성 완료)</file>
-  </implemented_files>
-  <self_check>
-    <impact_analysis_check>PASS — 단일 파일 신규 생성, 다른 코드 무영향</impact_analysis_check>
-    <scope_boundary>PASS — 코드 변경 0건, MD 파일만 작성</scope_boundary>
-    <evidence_trace>PASS — MT-1/2/3에서 검증된 17개 발견 항목 모두 통합</evidence_trace>
-    <structure_check>PASS — 개요/요약테이블/4개섹션/권고사항 모두 포함</structure_check>
-  </self_check>
-  <report_metadata>
-    <total_findings>17</total_findings>
-    <bug_findings>5 (HIGH 1, MEDIUM 3, LOW 1)</bug_findings>
-    <security_findings>5 (HIGH 2, MEDIUM 2, LOW 1)</security_findings>
-    <performance_findings>4 (HIGH 1, MEDIUM 2, LOW 1)</performance_findings>
-    <maintainability_findings>3 (HIGH 1, LOW 2)</maintainability_findings>
-    <severity_labels_used>HIGH, MEDIUM, LOW (3종)</severity_labels_used>
-    <line_number_references>17+ (각 발견 항목당 정확한 라인 범위)</line_number_references>
-  </report_metadata>
   <evidence>
-    <item>inspection_report_IMP-20260510-D44F.md</item>
-    <item>module_design_MT-4.xml</item>
-    <item>scope_manifest_MT-4.json</item>
+    <file>FEAT-20260426-332E/core/utils.py</file>
+    <file>FEAT-20260426-332E/main.py</file>
+    <file>FEAT-20260426-332E/ui/app.py</file>
   </evidence>
-  <summary>
-    inspection_report_IMP-20260510-D44F.md 작성 완료. 4개 영역 17개 발견 항목, 3종 심각도 라벨, 17개 라인 번호 참조,
-    요약 테이블 + 권고사항 섹션 + 영역별 종합 평가 포함. 코드 변경 없음.
-  </summary>
+  <implemented_files>
+    <file>FEAT-20260426-332E/core/utils.py</file>
+    <file>FEAT-20260426-332E/main.py</file>
+    <file>FEAT-20260426-332E/ui/app.py</file>
+  </implemented_files>
+  <change_summary>
+    1. Created core/utils.py with _compress_line_nos function (List[object] -> str)
+    2. Removed local _compress_line_nos from main.py; added from core.utils import _compress_line_nos inside _cli_main
+    3. Removed local _compress_line_nos from ui/app.py; added from core.utils import _compress_line_nos at module level
+    Function signature and behavior identical to removed local definitions.
+  </change_summary>
+  <impact_analysis>
+    <target_function>_compress_line_nos (main.py local), _compress_line_nos (ui/app.py local)</target_function>
+    <changed_files>
+      <file>FEAT-20260426-332E/core/utils.py</file>
+      <file>FEAT-20260426-332E/main.py</file>
+      <file>FEAT-20260426-332E/ui/app.py</file>
+    </changed_files>
+    <affected_call_sites>
+      <site>main._cli_main (calls _compress_line_nos)</site>
+      <site>ui.app.KittingMapperApp (calls _compress_line_nos)</site>
+    </affected_call_sites>
+    <blast_radius>CONTAINED</blast_radius>
+  </impact_analysis>
+  <self_check>
+    <python39_syntax>PASS — List[object] typing from typing module; no 3.10+ syntax</python39_syntax>
+    <type_hinting>PASS — _compress_line_nos(raw_nos: List[object]) -> str with full type annotations</type_hinting>
+    <error_handling>PASS — ValueError/TypeError handled with fallback join; empty list returns ""</error_handling>
+    <path_safety>PASS — no path changes in this MT</path_safety>
+    <security>PASS — no security-relevant changes</security>
+    <al_edge_cases>PASS — empty list returns ""; ValueError/TypeError fallback; non-numeric items handled</al_edge_cases>
+    <pd_policy>PASS — no policy-relevant changes</pd_policy>
+    <docstring>PASS — docstring preserved from original with examples</docstring>
+  </self_check>
 </module_handover>
