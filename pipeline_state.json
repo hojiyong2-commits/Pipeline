@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "KittingMapper 버그 수정 및 코드 정리: UNC 경로 차단, jm 컬럼 기본값, 포장반 Note 통일, _compress_line_nos 중복 제거, 데드코드 제거",
   "created_at": "2026-05-11T22:24:35Z",
-  "updated_at": "2026-05-11T23:04:49Z",
-  "current_phase": "sec",
+  "updated_at": "2026-05-11T23:09:37Z",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -44,22 +44,24 @@
       "numeric_score": 108
     },
     "sec": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "SKIP",
+      "completed_at": "2026-05-11T23:07:08Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260511-073B_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-11T23:09:37Z",
+      "evidence": "FEAT-20260426-332E/dist/KittingMapper.exe",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "dist/build_report.xml",
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260511-073B_phase_build.json",
+      "skip_reason": null,
+      "agent_run_id": "build-54186a43fc82864a"
     },
     "harness": {
       "status": "PENDING",
@@ -232,6 +234,30 @@
     {
       "ts": "2026-05-11T23:04:49Z",
       "msg": "qa PASS numeric=108"
+    },
+    {
+      "ts": "2026-05-11T23:05:16Z",
+      "msg": "phase attestation request prepared: qa"
+    },
+    {
+      "ts": "2026-05-11T23:07:01Z",
+      "msg": "github phase-ci qa PASS run_id=25702560285 commit=09e57a9a2d14"
+    },
+    {
+      "ts": "2026-05-11T23:07:08Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-05-11T23:07:15Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-54186a43fc82864a"
+    },
+    {
+      "ts": "2026-05-11T23:09:03Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-54186a43fc82864a"
+    },
+    {
+      "ts": "2026-05-11T23:09:37Z",
+      "msg": "build DONE exe=FEAT-20260426-332E/dist/KittingMapper.exe"
     }
   ],
   "terminal_state": null,
@@ -313,8 +339,28 @@
       "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\qa\\qa-a1746b4558615732.json",
       "receipt_sha256": "9bab168245f2c281997be8fc7f680615de6fb32ae0a801de24788579dfe27610",
       "used_by_phase": "qa",
-      "used_at": "2026-05-11T23:04:49Z",
+      "used_at": "2026-05-11T23:05:16Z",
       "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
+      "notes": ""
+    },
+    "build-54186a43fc82864a": {
+      "schema_version": 1,
+      "run_id": "build-54186a43fc82864a",
+      "pipeline_id": "BUG-20260511-073B",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-11T23:07:15Z",
+      "completed_at": "2026-05-11T23:09:03Z",
+      "token_hash": "6cfd81fab4ba4f903561dae1b07e2b32e944bab7a0db6b05ed54cbf6ca426e5d",
+      "output_file": "dist\\build_report.xml",
+      "output_sha256": "6b2dd925bffb660398036396d653dced7e5fc0cb6bb4d722d9708d9fac042fea",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\build\\build-54186a43fc82864a.json",
+      "receipt_sha256": "50a3a6db97b727d46868c6f5a2599c34a7a8d8046c90bd28ff809f1a31fb1951",
+      "used_by_phase": "build",
+      "used_at": "2026-05-11T23:09:37Z",
+      "commit_sha": "09e57a9a2d14708d544c5c6a1548576fa9c6ca6a",
       "notes": ""
     }
   },
@@ -383,14 +429,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-11T23:07:01Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25702560285",
+        "commit_sha": "09e57a9a2d14708d544c5c6a1548576fa9c6ca6a",
+        "evidence": "github_actions_phase_run:25702560285",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
         "status": "PENDING",
@@ -1690,6 +1737,15 @@
       "phase": "dev",
       "run_id": "25702306449",
       "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-11T23:07:01Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "25702560285",
+      "commit_sha": "09e57a9a2d14708d544c5c6a1548576fa9c6ca6a",
       "artifact": "pipeline-phase-attestation"
     }
   ],
