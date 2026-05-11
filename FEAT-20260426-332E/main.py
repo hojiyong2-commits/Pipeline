@@ -31,38 +31,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _compress_line_nos(raw_nos: list) -> str:
-    """Deduplicate, sort, and compress consecutive line numbers using '~' range notation.
-
-    Examples:
-        [1, 1, 2, 3] -> "1~3"
-        [1, 2, 3, 5, 6, 7, 8, 11] -> "1~3,5~8,11"
-        [] -> ""
-
-    Args:
-        raw_nos: Raw list of line number values (str or numeric).
-
-    Returns:
-        Compressed string representation, or empty string for empty input.
-    """
-    try:
-        nums = sorted(set(int(float(str(n).strip())) for n in raw_nos if str(n).strip()))
-    except (ValueError, TypeError):
-        return ",".join(str(n) for n in raw_nos)
-    if not nums:
-        return ""
-    ranges = []
-    start = end = nums[0]
-    for n in nums[1:]:
-        if n == end + 1:
-            end = n
-        else:
-            ranges.append(str(start) if start == end else f"{start}~{end}")
-            start = end = n
-    ranges.append(str(start) if start == end else f"{start}~{end}")
-    return ",".join(ranges)
-
-
 def _cli_main() -> None:
     """Orchestrate the full AFM-Kitting email-to-Excel pipeline.
 
@@ -79,12 +47,13 @@ def _cli_main() -> None:
         SystemExit: On any unrecoverable error (exit code 1).
     """
     from core.config_loader import load_config
-    from core.business_day import get_previous_business_day, get_next_business_day
+    from core.business_day import get_previous_business_day
     from core.outlook_reader import find_kitting_email, parse_kitting_table
     from core.packing_detail_reader import lookup_packing_dimensions
     from core.order_lines_reader import lookup_order_lines
     from core.excel_mapper import write_to_excel_a
     from core.models import KitRow, MappedRow
+    from core.utils import _compress_line_nos
 
     try:
         # Step 1: Load configuration
@@ -101,14 +70,10 @@ def _cli_main() -> None:
         excel_b_search_col: str = config.get("excel_b_search_column", "A")
         excel_b_columns: dict = config.get("excel_b_columns", {"fp": "J", "f_col": "F", "jm": "KJ", "if_col": "C", "jy_col": "E"})
 
-        # Step 2: Determine target date (previous business day) and write date (next business day)
+        # Step 2: Determine target date (previous business day)
         today = date.today()
         target_date = get_previous_business_day(today)
-        write_date = get_next_business_day(today)
-        logger.info(
-            "Today: %s | Target email date: %s | Excel write date: %s",
-            today, target_date, write_date,
-        )
+        logger.info("Today: %s | Target email date: %s", today, target_date)
 
         # Step 3: Find kitting email in Outlook
         logger.info("Searching Outlook for kitting email on %s...", target_date)
@@ -162,8 +127,8 @@ def _cli_main() -> None:
 
                 if isinstance(dims_result, str):
                     note = f"포장반 ({dims_result})"
-                else:  # None — no valid K-date rows found
-                    note = "포장반"
+                else:  # None — no valid K-date rows found; use kit_place to preserve variant value
+                    note = kit_place
             else:
                 # kit_place is neither 창고 nor 포장반 — use raw value
                 note = kit_place
@@ -177,7 +142,7 @@ def _cli_main() -> None:
                     search_col_letter=excel_b_search_col,
                     fp_col_letter=excel_b_columns.get("fp", "J"),
                     f_col_letter=excel_b_columns.get("f_col", "F"),
-                    jm_col_letter=excel_b_columns.get("jm", "G"),
+                    jm_col_letter=excel_b_columns.get("jm", "KJ"),
                     if_col_letter=excel_b_columns.get("if_col", "C"),
                     jy_col_letter=excel_b_columns.get("jy_col", "E"),
                     planned_date=kit_row.get("planned_date"),

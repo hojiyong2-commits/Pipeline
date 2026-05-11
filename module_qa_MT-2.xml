@@ -1,25 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <module_qa_report>
-  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
   <mt_id>MT-2</mt_id>
-  <verdict>PASS</verdict>
+  <result>PASS</result>
+  <numeric_score>15</numeric_score>
   <verification_evidence>
-    PM이 명시한 5개 보안 영역 모두 dev-agent가 정확한 라인 인용으로 입증:
-    S1(_safe_resolve L39-L70), S2(발신자 fallback L795-L799 + L906-L913),
-    S3(수신자 비대칭 L916-L953), S4(.tmp 경쟁 L588 / L646 / L733), S5(파일명 절단 L77-L94).
-    심각도: HIGH 2건(S2, S3), MEDIUM 2건(S1, S4), LOW 1건(S5).
-    코드 변경 0건. 권고사항은 MT-4 통합 리포트에 통합.
+    <check id="T3_source_check">PASS - main.py now contains .get("jm", "KJ"); old "G" default removed</check>
+    <check id="scope_boundary">PASS - only main.py modified; single line change</check>
+    <check id="python39_syntax">PASS - no new code added; string literal only</check>
+    <check id="column_validity">PASS - "KJ" is valid Excel column letter (col 296); validated by _col_to_idx() at runtime</check>
   </verification_evidence>
-  <findings_validation>
-    <sec id="S1" status="VERIFIED" severity="MEDIUM">_safe_resolve Windows reparse point 한계</sec>
-    <sec id="S2" status="VERIFIED" severity="HIGH">발신자 GetExchangeUser fallback 빈문자열</sec>
-    <sec id="S3" status="VERIFIED" severity="HIGH">수신자 DN 변환 누락 (발신자와 비대칭)</sec>
-    <sec id="S4" status="VERIFIED" severity="MEDIUM">고정 .tmp 접미사 동시성 위험</sec>
-    <sec id="S5" status="VERIFIED" severity="LOW">_safe_filename 200자 절단 충돌</sec>
-  </findings_validation>
-  <scope_check>
-    <code_changes>0</code_changes>
-    <out_of_scope_writes>0</out_of_scope_writes>
-  </scope_check>
-  <numeric_score>120</numeric_score>
+  <verdict>PASS</verdict>
 </module_qa_report>

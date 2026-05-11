@@ -1,28 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <module_qa_report>
-  <pipeline_id>IMP-20260510-184A</pipeline_id>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
   <mt_id>MT-1</mt_id>
-  <verdict>PASS</verdict>
-  <numeric_score>115</numeric_score>
-  <scope_verification>
-    <expected_files>pipeline.py</expected_files>
-    <actual_files>pipeline.py</actual_files>
-    <scope_match>true</scope_match>
-    <micro_task_boundary>WITHIN_SCOPE</micro_task_boundary>
-    <blast_radius>WITHIN_SCOPE</blast_radius>
-  </scope_verification>
+  <result>PASS</result>
+  <numeric_score>20</numeric_score>
   <verification_evidence>
-    <oracle id="T001" case_kind="normal" expected="DEPLOY_SCOPE_OK" actual="DEPLOY_SCOPE_OK" pass="true"/>
-    <oracle id="T002" case_kind="edge" expected="SYNTAX_OK" actual="SYNTAX_OK" pass="true"/>
-    <diff_verified>true</diff_verified>
-    <changed_line>2700</changed_line>
-    <changed_function>_deployment_artifacts</changed_function>
-    <diff>-        for phase_name in ("build", "dev"):\n+        for phase_name in ("build",):</diff>
+    <check id="FS.traversal">PASS - _safe_resolve() iterates _ALLOWED_ROOTS; UNC prefix check covers //ccikrnf/wrkgroup; resolve()+relative_to() for non-UNC paths; ValueError on mismatch</check>
+    <check id="T1_acceptance">PASS - //ccikrnf/wrkgroup/orders.xlsx prefix matches _ALLOWED_ROOTS[1]; returns Path without raising</check>
+    <check id="T2_acceptance">PASS - //unknown/share/file.xlsx does not match any root; ValueError raised (returncode=1)</check>
+    <check id="scope_boundary">PASS - only order_lines_reader.py modified; no other files touched</check>
+    <check id="python39_syntax">PASS - no 3.10+ syntax used; List[Path] typing import already present</check>
+    <check id="call_site_updated">PASS - call site at lookup_order_lines uses _safe_resolve(file_path) without second arg</check>
   </verification_evidence>
-  <qa_checks>
-    <check name="deploy_scope_correct" result="PASS">_deployment_artifacts에 dev 단계 없음 확인</check>
-    <check name="build_phase_preserved" result="PASS">build 단계는 그대로 유지</check>
-    <check name="syntax_valid" result="PASS">py_compile 통과</check>
-    <check name="no_extra_changes" result="PASS">MT-1 범위 외 변경 없음</check>
-  </qa_checks>
+  <verdict>PASS</verdict>
 </module_qa_report>
