@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T03:47:28Z",
+  "pipeline_id": "IMP-20260510-9BDC",
+  "verdict": "PASS",
+  "waived": true,
+  "reason": "user-approved non-oracle task",
+  "oracle_blockers": [
+    "oracle_manifest.json is required for three_gate mode"
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T03:49:25Z",
+  "pipeline_id": "IMP-20260510-9BDC",
+  "result": "ACCEPT",
+  "evidence": ".claude/agents/security-agent.md,.claude/agents/build-agent.md,.claude/agents/agent-factory-agent.md,.claude/agents/protocol-evolution-agent.md,.claude/agents/test-harness-agent.md,.claude/agents/pm-agent.md",
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260510-9BDC",
+    "deployed_at": "2026-05-10T03:49:25Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\IMP-20260510-9BDC",
+    "evidence": ".claude/agents/security-agent.md,.claude/agents/build-agent.md,.claude/agents/agent-factory-agent.md,.claude/agents/protocol-evolution-agent.md,.claude/agents/test-harness-agent.md,.claude/agents/pm-agent.md",
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": ".claude\\agents\\security-agent.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9BDC\\.claude\\agents\\security-agent.md",
+        "sha256": "5d5ba4f2d28ddea5fb3c08de8f31a60e46bc5218a3ac8713f0c1ff7cb83890cf"
+      },
+      {
+        "kind": "file",
+        "source": ".claude\\agents\\build-agent.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9BDC\\.claude\\agents\\build-agent.md",
+        "sha256": "20d6243e7aa1bc4554d6ffd11e377f401bdf5e2b56281f19fff685e4c5bbceb0"
+      },
+      {
+        "kind": "file",
+        "source": ".claude\\agents\\agent-factory-agent.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9BDC\\.claude\\agents\\agent-factory-agent.md",
+        "sha256": "42c6929f61f42deea43ba01363d90ed47e7f071bb8c1a18410fc5c223c6deef9"
+      },
+      {
+        "kind": "file",
+        "source": ".claude\\agents\\protocol-evolution-agent.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9BDC\\.claude\\agents\\protocol-evolution-agent.md",
+        "sha256": "d65ea965a91ff709ab94d343ff6c1232e6610d150ea12a7e1460708e968182e8"
+      },
+      {
+        "kind": "file",
+        "source": ".claude\\agents\\test-harness-agent.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9BDC\\.claude\\agents\\test-harness-agent.md",
+        "sha256": "593ed34ed0dba042f62b0a738f89a3adae297990e5948b7dabbd30126f51230f"
+      },
+      {
+        "kind": "file",
+        "source": ".claude\\agents\\pm-agent.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-9BDC\\.claude\\agents\\pm-agent.md",
+        "sha256": "c53024e91d44f275f9bbb2819b8b4be918ae2617457c1db3638456fba1402d1e"
+      }
+    ],
+    "manifest_path": "G:\\내 드라이브\\터미널\\IMP-20260510-9BDC\\deployment_manifest.json"
+  }
+}

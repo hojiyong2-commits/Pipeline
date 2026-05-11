@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T08:53:52Z",
+  "pipeline_id": "IMP-20260510-D44F",
+  "status": "PASS",
+  "evidence_files": [
+    "inspection_report_IMP-20260510-D44F.md",
+    "po_automation\\email_monitor.py",
+    "po_automation\\main.py"
+  ],
+  "target_files": [
+    "po_automation\\email_monitor.py",
+    "po_automation\\main.py"
+  ],
+  "strict_tools": true,
+  "checks": [
+    {
+      "name": "py_compile",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "py_compile",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\main.py"
+      ],
+      "details": [
+        {
+          "file": "po_automation\\email_monitor.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py"
+          ]
+        },
+        {
+          "file": "po_automation\\main.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\main.py"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ruff",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\main.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "ruff",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "ruff 0.15.12",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "name": "mypy",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "mypy",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\main.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "mypy",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "mypy 2.0.0 (compiled: yes)",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "Success: no issues found in 2 source files\n",
+      "stderr": "mypy.ini: [mypy]: python_version: Python 3.9 is not supported (must be 3.10 or higher)\n"
+    },
+    {
+      "name": "bandit",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\main.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "bandit",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "__main__.py 1.9.4\n  python version = 3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025, 15:27:58) [MSC v.1942 64 bit (AMD64)]",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "lly good agents for QA and Orchestra\\po_automation\\email_monitor.py:1164\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1170\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1175\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1249\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1254\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1432\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1439\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1443\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1452\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1478\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1484\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1506\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1512\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1524\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1530\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1553\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1559\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1565\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1571\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1578\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1584\n[tester]\tWARNING\tnosec encountered (B110), but no failed test on file C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py:1639\n"
+    },
+    {
+      "name": "pytest",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "........................................................................ [ 35%]\n........................................................................ [ 71%]\n.........................................................                [100%]\n201 passed in 32.95s\n",
+      "stderr": ""
+    }
+  ],
+  "complete_eligible": true
+}

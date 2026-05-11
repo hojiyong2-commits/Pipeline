@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T14:35:51Z",
+  "pipeline_id": "IMP-20260510-9242",
+  "contract_hash": "14c92dd2b5ed2fa0e460253d5c8c56b00ae49935d1df5cd07348e053a862a895",
+  "test_set_hash": "3637e5b6db9481861a286ee521e246c6633ea3cca6303be500e7618486e2030c",
+  "observed_contract_hash": "14c92dd2b5ed2fa0e460253d5c8c56b00ae49935d1df5cd07348e053a862a895",
+  "observed_test_set_hash": "3637e5b6db9481861a286ee521e246c6633ea3cca6303be500e7618486e2030c",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 2,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 1,
+        "MT-2": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 1
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 20,
+    "total_points": 20,
+    "hard_fail": false,
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T1",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "content = open('pipeline.py', encoding='utf-8').read(); assert '_validate_pipeline_branch_isolation' in content; print('BRANCH_ISOLATION_CHECK_FOUND')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "BRANCH_ISOLATION_CHECK_FOUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T2",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 5,
+      "earned": 5,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "content = open('pipeline.py', encoding='utf-8').read(); assert '_validate_pr_title_matches_pipeline' in content; print('PR_TITLE_CHECK_FOUND')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "PR_TITLE_CHECK_FOUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T3",
+      "module": "MT-2",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 5,
+      "earned": 5,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\CLAUDE.md",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\CLAUDE.md"
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260510-9242\\normal_01\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-9242\\normal_01\\expected.txt",
+      "input_sha256": "34dd8c381d1f99200c79704ac629e8ff4087e5a20d843050998f695adecf22ea",
+      "expected_sha256": "c9989f59b5fbcdbbc75faa8ad1bf6d2147fe2137982c96a3971f5b87547ab11c"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260510-9242\\edge_01\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-9242\\edge_01\\expected.txt",
+      "input_sha256": "7308dca6cc055fee71d4f708dcc28a0d2f94b738e5189572150457817a1bfff3",
+      "expected_sha256": "ffedb6d091ab70e16db1e95e8545b8b6363f68e6fec762ffb80e85b9830c7944"
+    }
+  ]
+}

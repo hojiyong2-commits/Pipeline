@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-09T08:40:27Z",
+  "pipeline_id": "FEAT-20260509-5C4A",
+  "status": "FAIL",
+  "blockers": [
+    "at least one module/component is required",
+    "at least 1 edge/exception tests are required",
+    "at least one P0 acceptance test is required",
+    "oracle_manifest.json is required for three_gate mode"
+  ],
+  "warnings": [],
+  "metrics": {
+    "test_count": 0,
+    "p0_tests": 0,
+    "p0_behavior_tests": 0,
+    "shallow_tests": 0,
+    "oracle_count": 0
+  },
+  "oracle_entries": [],
+  "readiness": {
+    "ready": false,
+    "blockers": [
+      "at least one module/component is required",
+      "at least 1 edge/exception tests are required",
+      "at least one P0 acceptance test is required"
+    ],
+    "warnings": [],
+    "metrics": {
+      "module_count": 0,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {},
+      "edge_case_tests": 0,
+      "p0_tests": 0
+    }
+  },
+  "allow_no_oracle": false,
+  "waiver_reason": ""
+}
