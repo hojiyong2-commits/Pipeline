@@ -1,77 +1,48 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-11T22:58:23Z",
+  "generated_at": "2026-05-11T23:05:16Z",
   "pipeline_id": "BUG-20260511-073B",
-  "phase": "dev",
-  "phase_status": "DONE",
-  "commit_hint": "03e9ba81d42a545d601da5fdafbbe2ccbb54a4c1",
+  "phase": "qa",
+  "phase_status": "PASS",
+  "commit_hint": "f7e340158156a9646a2f684e7772d09af08fb005",
   "state": {
-    "current_phase": "qa",
-    "phase_completed_at": "2026-05-11T22:58:01Z",
-    "report_file": "dev_handover.xml",
-    "evidence": "FEAT-20260426-332E/core/order_lines_reader.py,FEAT-20260426-332E/core/utils.py,FEAT-20260426-332E/main.py,FEAT-20260426-332E/ui/app.py"
+    "current_phase": "sec",
+    "phase_completed_at": "2026-05-11T23:04:49Z",
+    "report_file": "qa_report.xml",
+    "evidence": null
   },
   "agent_run": {
-    "run_id": "dev-107f8758fbc053f5",
-    "phase": "dev",
-    "agent_id": "dev-agent",
+    "run_id": "qa-a1746b4558615732",
+    "phase": "qa",
+    "agent_id": "qa-agent",
     "status": "COMPLETED",
-    "output_file": "dev_handover.xml",
-    "output_sha256": "3c76b2bd612734c36e648e6c8d0e9e1d6e42bf73322ac2976b962b33be478012",
-    "receipt_path": ".pipeline/phase_evidence/BUG-20260511-073B/dev/agent_receipt_dev-107f8758fbc053f5.json",
-    "receipt_sha256": "c88f80f4c9803a49c01e86837c726cb953468c7b946e2bbf651fbb840dbfc9dd",
-    "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\dev\\dev-107f8758fbc053f5.json"
+    "output_file": "qa_report.xml",
+    "output_sha256": "8c2618f7b19138428be639ccf6ae96ed8c197ef72c3b5454966582acf7ad52c8",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260511-073B/qa/agent_receipt_qa-a1746b4558615732.json",
+    "receipt_sha256": "9bab168245f2c281997be8fc7f680615de6fb32ae0a801de24788579dfe27610",
+    "used_by_phase": "qa",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\qa\\qa-a1746b4558615732.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\BUG-20260511-073B\\dev\\dev-107f8758fbc053f5.json",
-      "path": ".pipeline/phase_evidence/BUG-20260511-073B/dev/agent_receipt_dev-107f8758fbc053f5.json",
-      "sha256": "c88f80f4c9803a49c01e86837c726cb953468c7b946e2bbf651fbb840dbfc9dd",
-      "size_bytes": 502,
+      "source": ".pipeline\\agent_receipts\\BUG-20260511-073B\\qa\\qa-a1746b4558615732.json",
+      "path": ".pipeline/phase_evidence/BUG-20260511-073B/qa/agent_receipt_qa-a1746b4558615732.json",
+      "sha256": "9bab168245f2c281997be8fc7f680615de6fb32ae0a801de24788579dfe27610",
+      "size_bytes": 495,
       "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "dev_handover.xml",
-      "path": ".pipeline/phase_evidence/BUG-20260511-073B/dev/report_dev_handover.xml",
-      "sha256": "3c76b2bd612734c36e648e6c8d0e9e1d6e42bf73322ac2976b962b33be478012",
-      "size_bytes": 1904,
-      "requires_force_add": true
-    },
-    {
-      "label": "scope_manifest",
-      "source": "scope_manifest.json",
-      "path": ".pipeline/phase_evidence/BUG-20260511-073B/dev/scope_manifest_scope_manifest.json",
-      "sha256": "0d596d6a28ced3cc4d016e154724de7e4e459a429b1294250282f67ff2b45524",
-      "size_bytes": 1195,
+      "source": "qa_report.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260511-073B/qa/report_qa_report.xml",
+      "sha256": "8c2618f7b19138428be639ccf6ae96ed8c197ef72c3b5454966582acf7ad52c8",
+      "size_bytes": 1811,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "FEAT-20260426-332E/core/order_lines_reader.py",
-      "sha256": "9d770ca9eedddcea0c4084465527d1dca65ae0de993700fbffe674e49df01431",
-      "size_bytes": 15039
-    },
-    {
-      "path": "FEAT-20260426-332E/core/utils.py",
-      "sha256": "2df7196b381ddd9d07d834f411f74f0a4263381c2965658d43edda1cec06c7f4",
-      "size_bytes": 1063
-    },
-    {
-      "path": "FEAT-20260426-332E/main.py",
-      "sha256": "ace85d490e88727d5446ac2d00abf67a3063276cdec6b72ad2430cdf4d03aed5",
-      "size_bytes": 9349
-    },
-    {
-      "path": "FEAT-20260426-332E/ui/app.py",
-      "sha256": "a87a4ed0c88bd5732e6df38bdf5a1d5ed3fbaa5f3b4eedc587af8b745509d13c",
-      "size_bytes": 30008
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
