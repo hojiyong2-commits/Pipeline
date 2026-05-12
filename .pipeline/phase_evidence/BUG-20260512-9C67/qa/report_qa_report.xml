@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <run_id>qa-4e4c1fdbcd7c502f</run_id>
+  <mt_id>MT-1</mt_id>
+  <agent>qa-agent</agent>
+
+  <handover_evidence_check>
+    <handover_present>true</handover_present>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <evidence_files>
+      <file>ic_part_src/order_mapper.py</file>
+      <file>scope_manifest.json</file>
+      <file>scope_manifest_MT-1.json</file>
+      <file>module_handover_MT-1.xml</file>
+    </evidence_files>
+    <precondition>PASS</precondition>
+  </handover_evidence_check>
+
+  <scope_boundary_check>
+    <mt1_files_declared>ic_part_src/order_mapper.py</mt1_files_declared>
+    <actual_changed_files>ic_part_src/order_mapper.py</actual_changed_files>
+    <oracle_files_changed>false</oracle_files_changed>
+    <scope_verdict>WITHIN_SCOPE</scope_verdict>
+  </scope_boundary_check>
+
+  <acceptance_criteria_results>
+    <criterion id="MUST-1" desc="for _col_letter in _COL_LETTERS: 패턴 존재하지 않음">PASS</criterion>
+    <criterion id="MUST-2" desc="for _scan_letter in _COL_LETTERS: 패턴 정확히 1회 존재">PASS</criterion>
+    <criterion id="MUST-3" desc="def _col_letter(n: int) -&gt; str: 함수 정의(L132) 보존">PASS</criterion>
+    <criterion id="MUST-4" desc="_col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE) 3곳 호출부 보존">PASS</criterion>
+    <criterion id="MUST-5" desc="자가 테스트 assert _col_letter(10) 등 5개 보존">PASS</criterion>
+    <criterion id="EDGE-1" desc="_scan_letter가 루프 블록 내(L1141-L1145)에만 존재, 외부 참조 없음">PASS</criterion>
+    <criterion id="EDGE-2" desc="루프 블록 내 참조 정확히 3곳 (L1141, L1143, L1145)">PASS</criterion>
+    <criterion id="SCOPE-1" desc="ic_part_src/order_mapper.py 외 제품 코드 파일 변경 없음">PASS</criterion>
+    <criterion id="ANTI-GAMING" desc="tests/oracles/** 변경 없음">PASS</criterion>
+  </acceptance_criteria_results>
+
+  <oracle_verification>
+    <normal_case id="normal_rename">
+      <shadowing_loop_var_removed>PASS</shadowing_loop_var_removed>
+      <scan_letter_loop_present>PASS</scan_letter_loop_present>
+      <func_def_intact>PASS</func_def_intact>
+      <func_call_sites_intact>PASS</func_call_sites_intact>
+      <loop_body_uses_scan_letter>PASS</loop_body_uses_scan_letter>
+      <no_other_files_changed>PASS</no_other_files_changed>
+    </normal_case>
+    <edge_case id="edge_func_intact">
+      <func_def_line_132_unchanged>PASS</func_def_line_132_unchanged>
+      <call_l1308_unchanged>PASS</call_l1308_unchanged>
+      <call_l1312_unchanged>PASS</call_l1312_unchanged>
+      <call_l1317_unchanged>PASS</call_l1317_unchanged>
+      <self_test_assertions_unchanged>PASS</self_test_assertions_unchanged>
+      <loop_var_l1141_renamed>PASS</loop_var_l1141_renamed>
+      <loop_body_l1143_renamed>PASS</loop_body_l1143_renamed>
+      <loop_body_l1145_renamed>PASS</loop_body_l1145_renamed>
+      <no_TypeError_on_call>PASS</no_TypeError_on_call>
+    </edge_case>
+    <oracle_verdict>PASS</oracle_verdict>
+  </oracle_verification>
+
+  <category_check>
+    <wa>N-A</wa>
+    <ui>N-A</ui>
+    <fs>PASS</fs>
+    <pd>PASS</pd>
+    <sec>N-A</sec>
+    <al>PASS</al>
+    <build>N-A</build>
+  </category_check>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <declared_files>ic_part_src/order_mapper.py</declared_files>
+    <actual_changed_files>ic_part_src/order_mapper.py</actual_changed_files>
+    <declared_functions>order_mapper.write_ic_part_zip</declared_functions>
+    <actual_changed_functions>order_mapper.write_ic_part_zip 루프 변수 내부만</actual_changed_functions>
+    <scope_verdict>WITHIN_SCOPE</scope_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <numeric_score>110</numeric_score>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <critical_issues>none</critical_issues>
+  <improvement_suggestions>없음. 변경 범위 최소화, acceptance criteria 전항목 충족.</improvement_suggestions>
+  <failure_signature>none</failure_signature>
+</qa_report>
