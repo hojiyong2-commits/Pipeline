@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>FEAT-20260512-627D</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-60ca33ef19340e36</manager_run_id>
+  <planner_run_id>pm_planner-dbc1e6ef1dcb8797</planner_run_id>
+  <step_plan_sha256>c1513d7a5b42bcdb6c2bf648931849a1ec76b45862a5ca35d552a5f0d2d91664</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <phase_plan>
+    <phase id="2" name="Dev">PENDING — MT-1(_clone_row U/W 분기 제거) + MT-2(backfill U/W/V 블록 삭제), order_mapper.py 수정</phase>
+    <phase id="4" name="QA">PENDING</phase>
+    <phase id="5" name="SEC">SKIP — 파일 시스템만, 외부 네트워크 없음</phase>
+    <phase id="6" name="Build">PENDING — ICPartAutomation.exe PyInstaller 재빌드</phase>
+    <phase id="7" name="External Gates">PENDING</phase>
+    <phase id="8" name="Architect">PENDING</phase>
+  </phase_plan>
+  <contract_hash>c81b6643da53a21686341dc4d0b3fcbaf06544b778ca40d0c471b3bc9265c121</contract_hash>
+  <test_set_hash>2e4adb8a113da2262f8aff02b5ced4d95651b8f0503ba76b7eafce3652fdda87</test_set_hash>
+  <clarification_summary>P0/P1 모호성 없음. oracle 2개(normal/edge) 등록 완료. 사용자 확인 불필요.</clarification_summary>
+  <roadmap_summary>MT-1(U/W 분기 제거) + MT-2(backfill 블록 삭제) → Dev attestation → QA → SEC skip → Build → External Gates → ACCEPT → 배포</roadmap_summary>
+</manager_handoff>
