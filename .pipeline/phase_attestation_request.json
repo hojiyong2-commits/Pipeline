@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-12T14:12:57Z",
+  "generated_at": "2026-05-12T14:18:10Z",
   "pipeline_id": "FEAT-20260512-627D",
   "phase": "build",
   "phase_status": "DONE",
-  "commit_hint": "6d7b91386b2cf5a06f01c132c7ecbce58c5c8f16",
+  "commit_hint": "b799cacc30d4a38f3d0fb39679e4c7d90fef3daf",
   "state": {
     "current_phase": "harness",
     "phase_completed_at": "2026-05-12T14:12:48Z",
@@ -18,9 +18,9 @@
     "agent_id": "build-agent",
     "status": "COMPLETED",
     "output_file": "dist\\build_report.xml",
-    "output_sha256": "04e12961a0f834b2a1852fc3c0aff6a386abdafd9a6edcd8a53be81052ccb960",
+    "output_sha256": "b00c625aa936c4747cf2e9f0ddbf3f75cc23042f1fa4847b3f0b2a74f183591c",
     "receipt_path": ".pipeline/phase_evidence/FEAT-20260512-627D/build/agent_receipt_build-7b2d5aaa2da19d9e.json",
-    "receipt_sha256": "8052a869786b5d34d9333ad570e1f3a2782022ab4e8a19050fd3b346349a5c05",
+    "receipt_sha256": "eedc5101d0bbfcf34a7a4dd06faa554b341a7140515f8c7b4e0a16a472d750c6",
     "used_by_phase": "build",
     "receipt_source_path": ".pipeline\\agent_receipts\\FEAT-20260512-627D\\build\\build-7b2d5aaa2da19d9e.json"
   },
@@ -30,17 +30,17 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\FEAT-20260512-627D\\build\\build-7b2d5aaa2da19d9e.json",
       "path": ".pipeline/phase_evidence/FEAT-20260512-627D/build/agent_receipt_build-7b2d5aaa2da19d9e.json",
-      "sha256": "8052a869786b5d34d9333ad570e1f3a2782022ab4e8a19050fd3b346349a5c05",
-      "size_bytes": 515,
-      "requires_force_add": true
+      "sha256": "eedc5101d0bbfcf34a7a4dd06faa554b341a7140515f8c7b4e0a16a472d750c6",
+      "size_bytes": 514,
+      "requires_force_add": false
     },
     {
       "label": "report",
       "source": "dist\\build_report.xml",
       "path": ".pipeline/phase_evidence/FEAT-20260512-627D/build/report_build_report.xml",
-      "sha256": "04e12961a0f834b2a1852fc3c0aff6a386abdafd9a6edcd8a53be81052ccb960",
-      "size_bytes": 2073,
-      "requires_force_add": true
+      "sha256": "b00c625aa936c4747cf2e9f0ddbf3f75cc23042f1fa4847b3f0b2a74f183591c",
+      "size_bytes": 2015,
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
