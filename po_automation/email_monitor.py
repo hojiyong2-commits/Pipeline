@@ -925,9 +925,22 @@ def _process_mail_item(
                     for ri in range(1, rec_count + 1):
                         try:
                             rec = recipients_col.Item(ri)
-                            addr = (
-                                getattr(rec, "Address", "") or ""
-                            ).lower().strip()
+                            # BUG-20260512-E68A: Exchange 계정의 rec.Address는
+                            # '/o=ExchangeLabs/.../cn=...' 형식의 DN을 반환할 수 있음.
+                            # '@' 없는 주소는 Exchange DN으로 감지하고 SMTP 주소로 변환.
+                            raw_addr = (getattr(rec, "Address", "") or "").strip()
+                            if raw_addr and "@" not in raw_addr:
+                                try:
+                                    ae = getattr(rec, "AddressEntry", None)
+                                    if ae is not None:
+                                        eu = ae.GetExchangeUser()
+                                        if eu is not None:
+                                            smtp = getattr(eu, "PrimarySmtpAddress", "") or ""
+                                            if smtp:
+                                                raw_addr = smtp
+                                except Exception:
+                                    pass  # nosec B110  Exchange DN 변환 실패 시 원본 주소 폴백
+                            addr = raw_addr.lower().strip()
                             if addr:
                                 recipient_set.add(addr)
                         except Exception:

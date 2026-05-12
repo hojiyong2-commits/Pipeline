@@ -1126,30 +1126,49 @@ def write_ic_part_zip(
     sheet1_bytes: bytes = all_zip_data["xl/worksheets/sheet1.xml"]
     sheet1_str: str = sheet1_bytes.decode("utf-8")
 
-    # Find last occupied row in K column (PO No.) — only cells with actual <v> value.
-    # BUG-20260429-6B72: previous regex matched format-only cells (no <v> tag),
-    # causing false "last written row" when template had formatting-only cells.
-    # Fix: two-branch alternation — branch 1 captures self-closing cells (no value, skipped);
-    # branch 2 captures open/close cells and filters for <v> presence.
+    # BUG-20260512-E68A: 빈행 탐지 기준을 K 컬럼 단독에서 I·J·K 세 컬럼 합집합으로 변경.
+    # 기존 코드는 K 컬럼만 스캔했기 때문에, I 또는 J에만 데이터가 있고 K가 비어있는 행을
+    # "빈 행"으로 잘못 인식하여 기존 데이터를 덮어쓰는 버그가 있었음.
+    # 수정: ICPART_COL_PROJECT_ID(I=9), ICPART_COL_ORDER_NO(J=10), ICPART_COL_PO_NO(K=11) 세
+    # 컬럼 모두 스캔하여 값이 있는 행 번호를 _ijk_occupied set에 합산.
     # Inner content boundary (?:(?!</?c[\s>]).)*? prevents spanning into adjacent <c> elements.
-    # IMP-20260509-F8BF: PO No. column shifted from L (12) to K (11) — regex updated accordingly.
-    _l_cell_pattern = re.compile(
-        r'<c\s[^>]*\br="K(\d+)"[^>]*/>'               # branch 1: self-closing — no value
-        r'|'
-        r'<c\s[^>]*\br="K(\d+)"[^>]*>((?:(?!</?c[\s>]).)*?)</c>',  # branch 2: open/close
-        re.DOTALL,
-    )
-    _l_filled = [
-        int(m.group(2))
-        for m in _l_cell_pattern.finditer(sheet1_str)
-        if m.group(2) is not None                      # open/close branch only (branch 2)
-        and int(m.group(2)) >= ICPART_DATA_START_ROW
-        and re.search(r'<v[\s>]', m.group(3) or '')
-    ]
-    _last_written_row = max(_l_filled, default=ICPART_DATA_START_ROW - 1)
-    _actual_start_row = max(_last_written_row + 1, ICPART_DATA_START_ROW)
+    _COL_LETTERS: dict = {
+        "I": ICPART_COL_PROJECT_ID,
+        "J": ICPART_COL_ORDER_NO,
+        "K": ICPART_COL_PO_NO,
+    }
+    _ijk_occupied: set = set()
+    for _col_letter in _COL_LETTERS:
+        _col_pattern = re.compile(
+            rf'<c\s[^>]*\br="{_col_letter}(\d+)"[^>]*/>'  # branch 1: self-closing (no value)
+            r'|'
+            rf'<c\s[^>]*\br="{_col_letter}(\d+)"[^>]*>((?:(?!</?c[\s>]).)*?)</c>',  # branch 2: open/close
+            re.DOTALL,
+        )
+        for _m in _col_pattern.finditer(sheet1_str):
+            # branch 1 (self-closing): group(1)이 있으면 값 없음 → 건너뜀
+            if _m.group(1) is not None:
+                continue
+            # branch 2 (open/close): group(2)이 행 번호, group(3)이 셀 내용
+            _row_g = _m.group(2)
+            if _row_g is None:
+                continue
+            _row_n = int(_row_g)
+            if _row_n < ICPART_DATA_START_ROW:
+                continue
+            # <v> 태그가 있는 셀만 "값 있음"으로 집계
+            if not re.search(r'<v[\s>]', _m.group(3) or ''):
+                continue
+            _ijk_occupied.add(_row_n)
+
+    _last_occupied_row = max(_ijk_occupied, default=ICPART_DATA_START_ROW - 1)
+    _actual_start_row = max(_last_occupied_row + 1, ICPART_DATA_START_ROW)
     if _actual_start_row > ICPART_DATA_START_ROW:
-        logger.info("Accumulation mode: last written row=%d, starting at row=%d", _last_written_row, _actual_start_row)
+        logger.info(
+            "Accumulation mode: last occupied row=%d (I·J·K 합집합), starting at row=%d",
+            _last_occupied_row,
+            _actual_start_row,
+        )
 
     # Parse shared strings table (may not exist in minimal templates)
     import xml.etree.ElementTree as ET

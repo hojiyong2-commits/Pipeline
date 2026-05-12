@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "ICPartAutomation 빈행 탐지 기준 변경(I,J,K 모두 비어있는 첫 행) + emailmonitor 발신자/수신자 필터링 동작 불량 수정",
   "created_at": "2026-05-12T00:05:14Z",
-  "updated_at": "2026-05-12T00:23:01Z",
-  "current_phase": "dev",
+  "updated_at": "2026-05-12T00:31:23Z",
+  "current_phase": "qa",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -23,13 +23,14 @@
       "agent_run_id": "pm_planner-ad27123881739b37"
     },
     "dev": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-12T00:31:19Z",
+      "evidence": "ic_part_src/order_mapper.py,po_automation/email_monitor.py",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "dev_handover.xml",
+      "agent_id": "dev-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-E68A_phase_dev.json",
+      "agent_run_id": "dev-0facc601d848c49a"
     },
     "qa": {
       "status": "PENDING",
@@ -245,6 +246,58 @@
     {
       "ts": "2026-05-12T00:23:01Z",
       "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-12T00:26:50Z",
+      "msg": "github phase-ci pm PASS run_id=25705389172 commit=7c4cdbc9a225"
+    },
+    {
+      "ts": "2026-05-12T00:26:58Z",
+      "msg": "module design PASS MT-1"
+    },
+    {
+      "ts": "2026-05-12T00:27:52Z",
+      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-0facc601d848c49a"
+    },
+    {
+      "ts": "2026-05-12T00:28:09Z",
+      "msg": "module dev DONE MT-1"
+    },
+    {
+      "ts": "2026-05-12T00:28:49Z",
+      "msg": "module QA PASS MT-1"
+    },
+    {
+      "ts": "2026-05-12T00:29:09Z",
+      "msg": "module design PASS MT-2"
+    },
+    {
+      "ts": "2026-05-12T00:29:51Z",
+      "msg": "module dev DONE MT-2"
+    },
+    {
+      "ts": "2026-05-12T00:30:13Z",
+      "msg": "module QA PASS MT-2"
+    },
+    {
+      "ts": "2026-05-12T00:30:41Z",
+      "msg": "module integration PASS"
+    },
+    {
+      "ts": "2026-05-12T00:31:13Z",
+      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-0facc601d848c49a"
+    },
+    {
+      "ts": "2026-05-12T00:31:19Z",
+      "msg": "dev DONE | evidence: ic_part_src/order_mapper.py,po_automation/email_monitor.py"
+    },
+    {
+      "ts": "2026-05-12T00:31:19Z",
+      "msg": "advisory gpt-code SKIPPED api_called=False"
+    },
+    {
+      "ts": "2026-05-12T00:31:23Z",
+      "msg": "phase attestation request prepared: dev"
     }
   ],
   "terminal_state": null,
@@ -589,6 +642,26 @@
       "used_at": "2026-05-12T00:23:01Z",
       "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
       "notes": ""
+    },
+    "dev-0facc601d848c49a": {
+      "schema_version": 1,
+      "run_id": "dev-0facc601d848c49a",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "dev",
+      "agent_id": "dev-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:27:52Z",
+      "completed_at": "2026-05-12T00:31:12Z",
+      "token_hash": "4bfcfc5ab301eda597f27aea6d67fa32093755d15749b5333da1bf16c6da4996",
+      "output_file": "dev_handover.xml",
+      "output_sha256": "782dc64274655dd43d654aa587a93f6680cd56101da326f01c83a10442c1d40c",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\dev\\dev-0facc601d848c49a.json",
+      "receipt_sha256": "1c5409af2d520335c974e46f112c37a8c2168b991c18709c6b8e05d9e56b8270",
+      "used_by_phase": "dev",
+      "used_at": "2026-05-12T00:31:23Z",
+      "commit_sha": "7c4cdbc9a225cca4f7648dca3ae95cd31afac21f",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -634,14 +707,15 @@
     ],
     "phases": {
       "pm": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-12T00:26:50Z",
         "phase": "pm",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25705389172",
+        "commit_sha": "7c4cdbc9a225cca4f7648dca3ae95cd31afac21f",
+        "evidence": "github_actions_phase_run:25705389172",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\gates\\phase_ci\\pm_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "dev": {
         "status": "PENDING",
@@ -685,71 +759,111 @@
     "modules": {
       "MT-1": {
         "id": "MT-1",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 1,
         "target_files": [
           "ic_part_src/order_mapper.py"
         ],
         "affected_function": "ic_part_src.order_mapper.write_ic_part_zip",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T00:26:58Z",
+          "report_file": "module_design_MT-1.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-12T00:28:09Z",
+          "report_file": "module_handover_MT-1.xml",
+          "evidence": "ic_part_src/order_mapper.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-1.json",
+            "validated_at": "2026-05-12T00:28:09Z",
+            "micro_task_id": "MT-1",
+            "files": [
+              "ic_part_src/order_mapper.py"
+            ],
+            "affected_functions": [
+              "ic_part_src.order_mapper.write_ic_part_zip"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T00:28:49Z",
+          "report_file": "module_qa_MT-1.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-12T00:28:49Z",
+          "files": [
+            {
+              "path": "ic_part_src/order_mapper.py",
+              "sha256": "250444319e7487e398e1b4923241aaebe1751e53a44afb60bc212c47a95b4b60",
+              "size_bytes": 70509
+            }
+          ]
+        }
       },
       "MT-2": {
         "id": "MT-2",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 2,
         "target_files": [
           "po_automation/email_monitor.py"
         ],
         "affected_function": "po_automation.email_monitor._process_mail_item",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T00:29:09Z",
+          "report_file": "module_design_MT-2.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-12T00:29:51Z",
+          "report_file": "module_handover_MT-2.xml",
+          "evidence": "po_automation/email_monitor.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-2.json",
+            "validated_at": "2026-05-12T00:29:51Z",
+            "micro_task_id": "MT-2",
+            "files": [
+              "po_automation/email_monitor.py"
+            ],
+            "affected_functions": [
+              "po_automation.email_monitor._process_mail_item"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T00:30:13Z",
+          "report_file": "module_qa_MT-2.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-12T00:30:13Z",
+          "files": [
+            {
+              "path": "po_automation/email_monitor.py",
+              "sha256": "bb83c2661a676206aa8312a5edb54e6a4be7efb412289d998cc9725697af4e11",
+              "size_bytes": 72420
+            }
+          ]
+        }
       }
     },
     "integration": {
-      "status": "PENDING",
-      "completed_at": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-12T00:30:41Z",
+      "report_file": "integration_report.xml",
       "evidence": null,
       "notes": []
     }
@@ -1774,5 +1888,52 @@
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
+  },
+  "trusted_phase_runs": [
+    {
+      "recorded_at": "2026-05-12T00:26:50Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "pm",
+      "run_id": "25705389172",
+      "commit_sha": "7c4cdbc9a225cca4f7648dca3ae95cd31afac21f",
+      "artifact": "pipeline-phase-attestation"
+    }
+  ],
+  "dev_handover": {
+    "report_file": "dev_handover.xml",
+    "validated_at": "2026-05-12T00:31:16Z",
+    "producer": "dev-agent"
+  },
+  "dev_gate_flags": {
+    "scope_declared": true
+  },
+  "atomic_scope": {
+    "manifest_file": "scope_manifest.json",
+    "validated_at": "2026-05-12T00:31:19Z",
+    "micro_task_ids": [
+      "MT-1",
+      "MT-2"
+    ],
+    "files": [
+      "ic_part_src/order_mapper.py",
+      "po_automation/email_monitor.py"
+    ],
+    "affected_functions": [
+      "ic_part_src.order_mapper.write_ic_part_zip",
+      "po_automation.email_monitor._process_mail_item"
+    ],
+    "actual_diff": {
+      "added": [],
+      "modified": [
+        "ic_part_src/order_mapper.py",
+        "po_automation/email_monitor.py"
+      ],
+      "deleted": [],
+      "changed": [
+        "ic_part_src/order_mapper.py",
+        "po_automation/email_monitor.py"
+      ]
+    }
   }
 }

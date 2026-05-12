@@ -1,30 +1,26 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <module_design>
-  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
   <mt_id>MT-2</mt_id>
-  <design_summary>
-    Change the default value for jm column letter in _cli_main from "G" (col 7, numeric employee IDs)
-    to "KJ" (col 296, Project Manager English names). Single-line change in main.py L180.
-  </design_summary>
-  <target_files>
-    <file>FEAT-20260426-332E/main.py</file>
-  </target_files>
-  <affected_function>main._cli_main</affected_function>
+
   <interface_contract>
-    Input: excel_b_columns dict from config (may or may not contain "jm" key)
-    Output: jm_col_letter passed to lookup_order_lines() — default "KJ" when key absent
-    Validation: "KJ" is validated by _col_to_idx() downstream; no additional validation needed here
+    <input>po_automation/email_monitor.py — _process_mail_item 내 수신자 for 루프의 rec.Address</input>
+    <output>recipient_set에 올바른 SMTP 주소 또는 DN 폴백 주소가 추가됨</output>
+    <precondition>rec.Address가 '@' 없는 Exchange DN 형식일 수 있음</precondition>
+    <postcondition>SMTP 주소로 정상 변환되거나, 예외 발생 시 원본 주소로 폴백. 크래시 없음.</postcondition>
   </interface_contract>
+
   <implementation_plan>
-    1. In main.py _cli_main, locate: excel_b_columns.get("jm", "G")
-    2. Replace default "G" with "KJ"
-    3. No other changes required
+    <step id="1">rec.Address에서 raw_addr 추출</step>
+    <step id="2">raw_addr에 '@' 없으면 Exchange DN으로 감지</step>
+    <step id="3">rec.AddressEntry.GetExchangeUser().PrimarySmtpAddress 조회</step>
+    <step id="4">예외 발생 시 try/except로 잡고 원본 주소 유지 (nosec B110)</step>
+    <step id="5">addr = raw_addr.lower()로 정규화 후 recipient_set에 추가</step>
   </implementation_plan>
+
   <verification_plan>
-    T3 acceptance test: source of main.py must contain .get("jm", "KJ") string
-    Manual check: grep for .get("jm", confirms KJ not G
+    <test id="T1">SMTP 주소 입력 시 변환 없이 그대로 통과 확인</test>
+    <test id="T2">Exchange DN 입력 시 SMTP 변환 성공 확인</test>
+    <test id="T3">Exchange DN + GetExchangeUser 예외 시 크래시 없이 DN 폴백 확인</test>
   </verification_plan>
-  <risks>
-    <risk>None — single string literal change; "KJ" is a valid Excel column letter validated downstream by _col_to_idx()</risk>
-  </risks>
 </module_design>
