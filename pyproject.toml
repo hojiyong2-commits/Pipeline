@@ -11,6 +11,8 @@ line-length = 120
 # E713: not in membership test — pre-existing one-off case at line 4514
 # E701: multiple statements on one line — pre-existing style
 # F541: f-string without placeholders — pre-existing throughout pipeline.py
+# PLW2901: redefined-loop-name — detect loop variable shadowing outer scope names (BUG-20260512-9C67 recurrence prevention)
+extend-select = ["PLW2901"]
 ignore = ["E402", "E731", "E713", "E701", "F541", "F841"]
 
 [tool.mypy]
