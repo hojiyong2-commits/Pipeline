@@ -1,67 +1,62 @@
 {
   "version": "1.2.0",
-  "pipeline_id": "BUG-20260512-CF73",
+  "pipeline_id": "BUG-20260512-9C67",
   "type": "BUG",
-  "description": "emailmonitor 폴더 생성 불량 수정: 고아 폴더 정리 + PDF 파싱 라이브러리 EXE 번들링",
-  "created_at": "2026-05-12T01:19:23Z",
-  "updated_at": "2026-05-12T02:01:59Z",
-  "current_phase": "harness",
+  "description": "write_ic_part_zip _col_letter 루프 변수가 동명 함수 shadowing — str is not callable 수정",
+  "created_at": "2026-05-12T10:40:11Z",
+  "updated_at": "2026-05-12T10:55:40Z",
+  "current_phase": "dev",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
     "pm": {
       "status": "DONE",
-      "completed_at": "2026-05-12T01:34:38Z",
+      "completed_at": "2026-05-12T10:52:02Z",
       "evidence": null,
       "notes": [],
       "report_file": "step_plan.xml",
       "agent_id": "pm-planner-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-CF73_phase_pm.json",
-      "manager_run_id": "pipeline_manager-5ac170996aa694a6",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-9C67_phase_pm.json",
+      "manager_run_id": "pipeline_manager-3205ec990d6e8467",
       "manager_agent_id": "pipeline-manager-agent",
       "manager_report_file": "manager_handoff.xml",
-      "agent_run_id": "pm_planner-73388ef05949036a"
+      "agent_run_id": "pm_planner-10b1bda1e4fef07f"
     },
     "dev": {
-      "status": "DONE",
-      "completed_at": "2026-05-12T01:51:35Z",
-      "evidence": "po_automation/email_monitor.py,EmailMonitor.spec",
-      "notes": [],
-      "report_file": "dev_handover.xml",
-      "agent_id": "dev-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-CF73_phase_dev.json",
-      "agent_run_id": "dev-fe1dfc91b21de6db"
-    },
-    "qa": {
-      "status": "PASS",
-      "completed_at": "2026-05-12T01:56:06Z",
+      "status": "PENDING",
+      "completed_at": null,
       "evidence": null,
-      "notes": [],
-      "report_file": "qa_report.xml",
-      "agent_id": "qa-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-CF73_phase_qa.json",
-      "agent_run_id": "qa-dceb608819d846b0",
-      "numeric_score": 100
-    },
-    "sec": {
-      "status": "SKIP",
-      "completed_at": "2026-05-12T01:59:17Z",
-      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-CF73_phase_sec.json"
+      "snapshot_path": null
+    },
+    "qa": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "sec": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
     },
     "build": {
-      "status": "DONE",
-      "completed_at": "2026-05-12T02:01:47Z",
-      "evidence": "dist/emailmonitor.exe",
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
       "notes": [],
-      "report_file": "dist/build_report.xml",
-      "agent_id": "build-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-CF73_phase_build.json",
-      "skip_reason": null,
-      "agent_run_id": "build-e9aba340b9872437"
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
     },
     "harness": {
       "status": "PENDING",
@@ -84,251 +79,99 @@
   },
   "event_log": [
     {
-      "ts": "2026-05-12T01:19:23Z",
-      "msg": "파이프라인 생성: BUG-20260512-CF73"
+      "ts": "2026-05-12T10:40:11Z",
+      "msg": "파이프라인 생성: BUG-20260512-9C67"
     },
     {
-      "ts": "2026-05-12T01:19:26Z",
-      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-73388ef05949036a"
+      "ts": "2026-05-12T10:40:15Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-10b1bda1e4fef07f"
     },
     {
-      "ts": "2026-05-12T01:21:58Z",
+      "ts": "2026-05-12T10:41:03Z",
       "msg": "three_gate mode enabled (mandatory)"
     },
     {
-      "ts": "2026-05-12T01:21:58Z",
+      "ts": "2026-05-12T10:41:03Z",
       "msg": "GitHub phase attestations enabled (mandatory)"
     },
     {
-      "ts": "2026-05-12T01:21:58Z",
-      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-CF73"
+      "ts": "2026-05-12T10:41:03Z",
+      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-9C67"
     },
     {
-      "ts": "2026-05-12T01:25:31Z",
-      "msg": "contract_v2 frozen: a705414d07e1"
+      "ts": "2026-05-12T10:43:45Z",
+      "msg": "contract_v2 frozen: a16e3e33dbab"
     },
     {
-      "ts": "2026-05-12T01:25:31Z",
+      "ts": "2026-05-12T10:43:45Z",
       "msg": "advisory gpt-contract SKIPPED api_called=False"
     },
     {
-      "ts": "2026-05-12T01:28:58Z",
-      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-73388ef05949036a"
+      "ts": "2026-05-12T10:45:39Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-10b1bda1e4fef07f"
     },
     {
-      "ts": "2026-05-12T01:29:16Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-5ac170996aa694a6"
+      "ts": "2026-05-12T10:45:55Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-3205ec990d6e8467"
     },
     {
-      "ts": "2026-05-12T01:30:24Z",
-      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-5ac170996aa694a6"
+      "ts": "2026-05-12T10:46:56Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-3205ec990d6e8467"
     },
     {
-      "ts": "2026-05-12T01:34:38Z",
+      "ts": "2026-05-12T10:52:02Z",
       "msg": "pm DONE | evidence: None"
     },
     {
-      "ts": "2026-05-12T01:34:48Z",
+      "ts": "2026-05-12T10:52:12Z",
       "msg": "phase attestation request prepared: pm"
     },
     {
-      "ts": "2026-05-12T01:43:34Z",
-      "msg": "github phase-ci pm PASS run_id=25708044583 commit=42263745d62a"
-    },
-    {
-      "ts": "2026-05-12T01:43:41Z",
-      "msg": "module design PASS MT-1"
-    },
-    {
-      "ts": "2026-05-12T01:44:34Z",
-      "msg": "module dev DONE MT-1"
-    },
-    {
-      "ts": "2026-05-12T01:45:19Z",
-      "msg": "module QA PASS MT-1"
-    },
-    {
-      "ts": "2026-05-12T01:45:22Z",
-      "msg": "module design PASS MT-2"
-    },
-    {
-      "ts": "2026-05-12T01:48:10Z",
-      "msg": "module dev DONE MT-2"
-    },
-    {
-      "ts": "2026-05-12T01:48:47Z",
-      "msg": "module QA PASS MT-2"
-    },
-    {
-      "ts": "2026-05-12T01:49:07Z",
-      "msg": "module integration PASS"
-    },
-    {
-      "ts": "2026-05-12T01:49:10Z",
-      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-fe1dfc91b21de6db"
-    },
-    {
-      "ts": "2026-05-12T01:49:41Z",
-      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-fe1dfc91b21de6db"
-    },
-    {
-      "ts": "2026-05-12T01:51:35Z",
-      "msg": "dev DONE | evidence: po_automation/email_monitor.py,EmailMonitor.spec"
-    },
-    {
-      "ts": "2026-05-12T01:51:35Z",
-      "msg": "advisory gpt-code SKIPPED api_called=False"
-    },
-    {
-      "ts": "2026-05-12T01:51:51Z",
-      "msg": "phase attestation request prepared: dev"
-    },
-    {
-      "ts": "2026-05-12T01:54:31Z",
-      "msg": "github phase-ci dev PASS run_id=25708413484 commit=5c8812aa09b9"
-    },
-    {
-      "ts": "2026-05-12T01:54:37Z",
-      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-dceb608819d846b0"
-    },
-    {
-      "ts": "2026-05-12T01:55:15Z",
-      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-dceb608819d846b0"
-    },
-    {
-      "ts": "2026-05-12T01:56:06Z",
-      "msg": "qa PASS numeric=100"
-    },
-    {
-      "ts": "2026-05-12T01:56:12Z",
-      "msg": "phase attestation request prepared: qa"
-    },
-    {
-      "ts": "2026-05-12T01:59:14Z",
-      "msg": "github phase-ci qa PASS run_id=25708550738 commit=1e8b08959a28"
-    },
-    {
-      "ts": "2026-05-12T01:59:17Z",
-      "msg": "sec SKIP risk=N/A"
-    },
-    {
-      "ts": "2026-05-12T01:59:22Z",
-      "msg": "agent run started phase=build agent=build-agent run_id=build-e9aba340b9872437"
-    },
-    {
-      "ts": "2026-05-12T02:01:01Z",
-      "msg": "agent run completed phase=build agent=build-agent run_id=build-e9aba340b9872437"
-    },
-    {
-      "ts": "2026-05-12T02:01:47Z",
-      "msg": "build DONE exe=dist/emailmonitor.exe"
-    },
-    {
-      "ts": "2026-05-12T02:01:59Z",
-      "msg": "phase attestation request prepared: build"
+      "ts": "2026-05-12T10:55:40Z",
+      "msg": "phase attestation request prepared: pm"
     }
   ],
   "terminal_state": null,
   "harness_fail_count": 0,
   "agent_runs": {
-    "pm_planner-73388ef05949036a": {
+    "pm_planner-10b1bda1e4fef07f": {
       "schema_version": 1,
-      "run_id": "pm_planner-73388ef05949036a",
-      "pipeline_id": "BUG-20260512-CF73",
+      "run_id": "pm_planner-10b1bda1e4fef07f",
+      "pipeline_id": "BUG-20260512-9C67",
       "phase": "pm_planner",
       "agent_id": "pm-planner-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-12T01:19:26Z",
-      "completed_at": "2026-05-12T01:28:58Z",
-      "token_hash": "d11af3481be6b4a096c1f3ef0b11f534e937fafe1cc51830c314f29406fb3c35",
+      "started_at": "2026-05-12T10:40:15Z",
+      "completed_at": "2026-05-12T10:45:39Z",
+      "token_hash": "0b7efeb75bcc5394cd98f0af2365735bd7f1ac32861976f7d401dd9679a5c23d",
       "output_file": "step_plan.xml",
-      "output_sha256": "30f972fbba937d5867d79f16dcdcca994487d4dc748e7fdf2748db21d75fc80f",
+      "output_sha256": "3646d516b950aca07b39900fe392f44280e31612d00f0e016519f32142c5750a",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-CF73\\pm_planner\\pm_planner-73388ef05949036a.json",
-      "receipt_sha256": "21c5593baac39ce75f2b1dbf0bbb5a19bcb626e6dfb8d050c8a5dd7ec9217f3e",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-9C67\\pm_planner\\pm_planner-10b1bda1e4fef07f.json",
+      "receipt_sha256": "eab6a1630efe4024fbb5e150b666e05a17e50aadeb872d57021da20d20d4502d",
       "used_by_phase": "pm",
-      "used_at": "2026-05-12T01:34:48Z",
-      "commit_sha": "30b7ddfdf253d0980c8d8dc07e8f30f625e1d26c",
+      "used_at": "2026-05-12T10:55:40Z",
+      "commit_sha": "491d9cdbf90d2bd6652dbfde8879f78aa2bae27e",
       "notes": ""
     },
-    "pipeline_manager-5ac170996aa694a6": {
+    "pipeline_manager-3205ec990d6e8467": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-5ac170996aa694a6",
-      "pipeline_id": "BUG-20260512-CF73",
+      "run_id": "pipeline_manager-3205ec990d6e8467",
+      "pipeline_id": "BUG-20260512-9C67",
       "phase": "pipeline_manager",
       "agent_id": "pipeline-manager-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-12T01:29:16Z",
-      "completed_at": "2026-05-12T01:30:24Z",
-      "token_hash": "8e917c4946d01617283dc8e09e624b017f33b0d5259c4afc0dbcddddac1c87eb",
+      "started_at": "2026-05-12T10:45:55Z",
+      "completed_at": "2026-05-12T10:46:56Z",
+      "token_hash": "c520b51b0bb752cf49aab81ba714de550266f853c52359a3d010c16a939ef584",
       "output_file": "manager_handoff.xml",
-      "output_sha256": "4c68e2930314a9de0215fad29e10a34c31ba3e166d0ba13cbc71b390dbd9bcaf",
+      "output_sha256": "98571a924edcacff928bb652f49d1690fb8d62390c7c336875a7f5efd85dbd51",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-CF73\\pipeline_manager\\pipeline_manager-5ac170996aa694a6.json",
-      "receipt_sha256": "7e2a7f05d578c4d4e2a4bd481b8de6f7961c2a48b0e8dba1337a73eaa508410c",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-9C67\\pipeline_manager\\pipeline_manager-3205ec990d6e8467.json",
+      "receipt_sha256": "d1b29735288190a29194a7a1661fe0a3a25c537e120ad19b646f3b6d2e3c0ba1",
       "used_by_phase": "pm_manager",
-      "used_at": "2026-05-12T01:34:48Z",
-      "commit_sha": "30b7ddfdf253d0980c8d8dc07e8f30f625e1d26c",
-      "notes": ""
-    },
-    "dev-fe1dfc91b21de6db": {
-      "schema_version": 1,
-      "run_id": "dev-fe1dfc91b21de6db",
-      "pipeline_id": "BUG-20260512-CF73",
-      "phase": "dev",
-      "agent_id": "dev-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-05-12T01:49:10Z",
-      "completed_at": "2026-05-12T01:49:41Z",
-      "token_hash": "4a72db43831c037aa74f8d91d944aba6aec0825403288464129e79276259c0a5",
-      "output_file": "dev_handover.xml",
-      "output_sha256": "e72735bdc66c883269e63042eca36af1b2a9cf80a91eb31ec004cdebac95e968",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-CF73\\dev\\dev-fe1dfc91b21de6db.json",
-      "receipt_sha256": "7d8576abc561488d953ce615e9913f3660b9db845e352649c3bfc93b34cae6f0",
-      "used_by_phase": "dev",
-      "used_at": "2026-05-12T01:51:51Z",
-      "commit_sha": "42263745d62ac123a446eb76dde582796976067a",
-      "notes": ""
-    },
-    "qa-dceb608819d846b0": {
-      "schema_version": 1,
-      "run_id": "qa-dceb608819d846b0",
-      "pipeline_id": "BUG-20260512-CF73",
-      "phase": "qa",
-      "agent_id": "qa-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-05-12T01:54:37Z",
-      "completed_at": "2026-05-12T01:55:15Z",
-      "token_hash": "be5dc2a408da24728cd566735608d806705378bfbd0c6409160959c47e175817",
-      "output_file": "qa_report.xml",
-      "output_sha256": "6d4b5ecbbae142972e13b80cc72e91e6346a51a8c5581f89c8835464e700d352",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-CF73\\qa\\qa-dceb608819d846b0.json",
-      "receipt_sha256": "9237614d28d918109671c88bac7beb3131f855091626583443b1b46eac2d0128",
-      "used_by_phase": "qa",
-      "used_at": "2026-05-12T01:56:12Z",
-      "commit_sha": "5c8812aa09b90fcbd735a0f5c423c32134c9ac01",
-      "notes": ""
-    },
-    "build-e9aba340b9872437": {
-      "schema_version": 1,
-      "run_id": "build-e9aba340b9872437",
-      "pipeline_id": "BUG-20260512-CF73",
-      "phase": "build",
-      "agent_id": "build-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-05-12T01:59:22Z",
-      "completed_at": "2026-05-12T02:01:01Z",
-      "token_hash": "0c600ced426ed11dd3cc8d1cf9beeb1405d398bdb4b49d37ae2a06328a7e363a",
-      "output_file": "dist\\build_report.xml",
-      "output_sha256": "6a96e94d16a81bc3b884f7bff576770d241e3cd945d4ad1a92f0587b90abc55f",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-CF73\\build\\build-e9aba340b9872437.json",
-      "receipt_sha256": "c5931a4d72bd4790c57056e37164557c4f02a6ab023b0a9f9d9f87cd31a0b9d4",
-      "used_by_phase": "build",
-      "used_at": "2026-05-12T02:01:50Z",
-      "commit_sha": "1e8b08959a28f1977fe20146c8366545c4d12c13",
+      "used_at": "2026-05-12T10:55:40Z",
+      "commit_sha": "491d9cdbf90d2bd6652dbfde8879f78aa2bae27e",
       "notes": ""
     }
   },
@@ -375,37 +218,34 @@
     ],
     "phases": {
       "pm": {
-        "status": "PASS",
-        "completed_at": "2026-05-12T01:43:34Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "pm",
-        "run_id": "25708044583",
-        "commit_sha": "42263745d62ac123a446eb76dde582796976067a",
-        "evidence": "github_actions_phase_run:25708044583",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-CF73\\gates\\phase_ci\\pm_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "dev": {
-        "status": "PASS",
-        "completed_at": "2026-05-12T01:54:31Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "dev",
-        "run_id": "25708413484",
-        "commit_sha": "5c8812aa09b90fcbd735a0f5c423c32134c9ac01",
-        "evidence": "github_actions_phase_run:25708413484",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-CF73\\gates\\phase_ci\\dev_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "qa": {
-        "status": "PASS",
-        "completed_at": "2026-05-12T01:59:14Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "qa",
-        "run_id": "25708550738",
-        "commit_sha": "1e8b08959a28f1977fe20146c8366545c4d12c13",
-        "evidence": "github_actions_phase_run:25708550738",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-CF73\\gates\\phase_ci\\qa_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "build": {
         "status": "PENDING",
@@ -423,117 +263,45 @@
     "enabled": true,
     "mode": "incremental_module_gate",
     "sequence": [
-      "MT-1",
-      "MT-2"
+      "MT-1"
     ],
     "modules": {
       "MT-1": {
         "id": "MT-1",
-        "status": "PASS",
+        "status": "PENDING",
         "order": 1,
         "target_files": [
-          "po_automation/email_monitor.py"
+          "ic_part_src/order_mapper.py"
         ],
-        "affected_function": "po_automation.email_monitor._process_mail_item",
+        "affected_function": "order_mapper.write_ic_part_zip",
         "design": {
-          "status": "PASS",
-          "completed_at": "2026-05-12T01:43:41Z",
-          "report_file": "module_design_MT-1.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "DONE",
-          "completed_at": "2026-05-12T01:44:34Z",
-          "report_file": "module_handover_MT-1.xml",
-          "evidence": "po_automation/email_monitor.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-1.json",
-            "validated_at": "2026-05-12T01:44:34Z",
-            "micro_task_id": "MT-1",
-            "files": [
-              "po_automation/email_monitor.py"
-            ],
-            "affected_functions": [
-              "po_automation.email_monitor._process_mail_item"
-            ]
-          }
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
         },
         "qa": {
-          "status": "PASS",
-          "completed_at": "2026-05-12T01:45:19Z",
-          "report_file": "module_qa_MT-1.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
-        "checkpoint": {
-          "created_at": "2026-05-12T01:45:19Z",
-          "files": [
-            {
-              "path": "po_automation/email_monitor.py",
-              "sha256": "b043eea414fc81a018109c74e652322d069bf6cf6efcd781df2fff8d0523361d",
-              "size_bytes": 70958
-            }
-          ]
-        }
-      },
-      "MT-2": {
-        "id": "MT-2",
-        "status": "PASS",
-        "order": 2,
-        "target_files": [
-          "EmailMonitor.spec"
-        ],
-        "affected_function": "EmailMonitor.spec — PyInstaller Analysis configuration",
-        "design": {
-          "status": "PASS",
-          "completed_at": "2026-05-12T01:45:22Z",
-          "report_file": "module_design_MT-2.xml",
-          "evidence": null,
-          "notes": []
-        },
-        "dev": {
-          "status": "DONE",
-          "completed_at": "2026-05-12T01:48:10Z",
-          "report_file": "module_handover_MT-2.xml",
-          "evidence": "EmailMonitor.spec",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-2.json",
-            "validated_at": "2026-05-12T01:48:10Z",
-            "micro_task_id": "MT-2",
-            "files": [
-              "EmailMonitor.spec"
-            ],
-            "affected_functions": [
-              "EmailMonitor.spec — PyInstaller Analysis configuration"
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-05-12T01:48:47Z",
-          "report_file": "module_qa_MT-2.xml",
-          "evidence": null,
-          "notes": []
-        },
-        "checkpoint": {
-          "created_at": "2026-05-12T01:48:47Z",
-          "files": [
-            {
-              "path": "EmailMonitor.spec",
-              "sha256": "c43cabb86c1c9deececb7b1b46e9a6c3b07ac4a926f5afcc27ac8ed59cddcb53",
-              "size_bytes": 1177
-            }
-          ]
-        }
+        "checkpoint": null
       }
     },
     "integration": {
-      "status": "PASS",
-      "completed_at": "2026-05-12T01:49:07Z",
-      "report_file": "integration_report.xml",
+      "status": "PENDING",
+      "completed_at": null,
+      "report_file": null,
       "evidence": null,
       "notes": []
     }
@@ -541,25 +309,25 @@
   "execution_profile": {
     "mode": "STANDARD",
     "status": "ACTIVE",
-    "reason": "build_or_deploy=true (EmailMonitor.spec 수정으로 EXE 빌드 영향)이고 fitz/pdfplumber C 확장 번들링 포함. Fast Path 금지 조건 해당.",
+    "reason": "core_parser_logic(True)이고 build_or_deploy(True)이므로 Fast Path 금지. 단일 함수 내 변경이지만 핵심 ZIP 생성 로직의 루프 변수 shadowing 버그 수정.",
     "max_micro_tasks": null,
     "product_code_write_allowed": true,
     "phase_ci_mode": "per_phase",
     "repair_mode": "standard",
     "risk_review_required": false,
     "risk_categories": [],
-    "declared_at": "2026-05-12T01:34:35Z",
+    "declared_at": "2026-05-12T10:51:33Z",
     "escalated_at": null,
     "escalation_reason": null,
     "uncertainty": {
       "p0_questions": 0,
-      "p1_questions": 2,
+      "p1_questions": 1,
       "output_format_clear": true
     },
     "blast_radius": {
-      "expected_changed_files": 2,
+      "expected_changed_files": 1,
       "expected_changed_functions": 1,
-      "expected_changed_lines": 25
+      "expected_changed_lines": 4
     },
     "risk_flags": {
       "data_deletion": false,
@@ -568,7 +336,7 @@
       "auth_or_secret": false,
       "pipeline_protocol": false,
       "build_or_deploy": true,
-      "core_parser_logic": false,
+      "core_parser_logic": true,
       "database_or_migration": false,
       "new_dependency": false
     }
@@ -582,11 +350,11 @@
     "enabled": true,
     "frozen": true,
     "status": "frozen",
-    "contract_hash": "a705414d07e1fae9ab6e24ba20d20741352c3a7487ba262873a6594b0b97ae1a",
-    "test_set_hash": "322dff58e001b85608d567b4f2b782a8fa3a70cc4ca15933ead3d068aa8bc98d",
-    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-CF73\\task_contract.json",
-    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-CF73\\test_set.json",
-    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-CF73\\acceptance_summary.md"
+    "contract_hash": "a16e3e33dbabfda86150ae396398c845a62f8961af85004dc36a7fe1634a2f0a",
+    "test_set_hash": "19cb4433bb6aefbd86a4b6c14e0175c464fcfdf8a852d60b60293b9831c0a64a",
+    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-9C67\\task_contract.json",
+    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-9C67\\test_set.json",
+    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-9C67\\acceptance_summary.md"
   },
   "pm_analysis_gate": {
     "decomp": true,
@@ -596,84 +364,58 @@
   },
   "atomic_plan": {
     "report_file": "step_plan.xml",
-    "validated_at": "2026-05-12T01:34:35Z",
-    "audit_result": "SPLIT_REQUIRED",
-    "micro_task_count": 2,
+    "validated_at": "2026-05-12T10:51:33Z",
+    "audit_result": "SINGLE_TASK_OK",
+    "micro_task_count": 1,
     "micro_tasks": [
       {
         "id": "MT-1",
-        "affected_function": "po_automation.email_monitor._process_mail_item",
+        "affected_function": "order_mapper.write_ic_part_zip",
         "target_files": [
-          "po_automation/email_monitor.py"
+          "ic_part_src/order_mapper.py"
         ],
-        "change_summary": "dest_folder.exists() 분기에서 비어있는 tmp_dest_folder를 rmdir()로 정리 (OSError는 pass)"
-      },
-      {
-        "id": "MT-2",
-        "affected_function": "EmailMonitor.spec — PyInstaller Analysis configuration",
-        "target_files": [
-          "EmailMonitor.spec"
-        ],
-        "change_summary": "collect_all('fitz') + collect_all('pdfplumber')로 C 확장 DLL과 데이터 파일을 EXE에 번들링. 기존 hiddenimports 목록(win32com, openpyxl) 보존."
+        "change_summary": "L1141 루프 변수 _col_letter → _scan_letter rename, 루프 블록 내 L1143·L1145 참조 2곳도 _scan_letter로 변경 (총 3곳). 함수 def와 호출부는 보존."
       }
     ],
     "design_confirmation": {
-      "validated_at": "2026-05-12T01:34:35Z",
-      "maintenance_priority": "maintainability_first — 빠른 수정보다 코드 안전성과 유지보수성을 우선합니다.",
-      "filter_summary": "rmdir 호출 위치(try 블록 내부 vs 외부)는 안전성상 try/except 안이 명확하므로 P2로 분류 후 필터링.\n      collect_all 변수명(fitz_datas vs fitz_data 등)은 PyInstaller 관례를 따르므로 P2 필터링.\n      유지보수성 우선 원칙 적용.",
-      "question_count": 3,
+      "validated_at": "2026-05-12T10:51:33Z",
+      "maintenance_priority": "유지보수성 우선 — 루프 변수와 함수명 충돌을 제거하여 장기 유지보수성을 높임",
+      "filter_summary": "루프 변수 rename은 단일 방향(_scan_letter)으로 명확하므로 P2 세부 사항(변수명 대안 등)은 사용자에게 묻지 않음. 오케스트레이터 지시에서 rename 방향이 이미 명시됨.",
+      "question_count": 1,
       "questions": [
         {
-          "id": "DQ0",
+          "id": "Q-1",
           "priority": "P1",
           "category": "module_split",
-          "mt_id": null,
-          "recommended_option": "A",
-          "option_count": 2,
-          "user_answer": "A — 사용자 분석 결과에서 MT-1/MT-2 분리 방식 명시"
-        },
-        {
-          "id": "DQ1",
-          "priority": "P1",
-          "category": "implementation",
           "mt_id": "MT-1",
           "recommended_option": "A",
           "option_count": 2,
-          "user_answer": "A — 사용자 분석 결과에서 rmdir + OSError pass 명시"
-        },
-        {
-          "id": "DQ2",
-          "priority": "P1",
-          "category": "implementation",
-          "mt_id": "MT-2",
-          "recommended_option": "A",
-          "option_count": 2,
-          "user_answer": "A — 사용자 분석 결과에서 기존 hiddenimports 유지 명시"
+          "user_answer": "A (오케스트레이터 지시에서 MT-1 단일 태스크로 명시됨)"
         }
       ]
     },
     "execution_profile": {
       "mode": "STANDARD",
       "status": "ACTIVE",
-      "reason": "build_or_deploy=true (EmailMonitor.spec 수정으로 EXE 빌드 영향)이고 fitz/pdfplumber C 확장 번들링 포함. Fast Path 금지 조건 해당.",
+      "reason": "core_parser_logic(True)이고 build_or_deploy(True)이므로 Fast Path 금지. 단일 함수 내 변경이지만 핵심 ZIP 생성 로직의 루프 변수 shadowing 버그 수정.",
       "max_micro_tasks": null,
       "product_code_write_allowed": true,
       "phase_ci_mode": "per_phase",
       "repair_mode": "standard",
       "risk_review_required": false,
       "risk_categories": [],
-      "declared_at": "2026-05-12T01:34:35Z",
+      "declared_at": "2026-05-12T10:51:33Z",
       "escalated_at": null,
       "escalation_reason": null,
       "uncertainty": {
         "p0_questions": 0,
-        "p1_questions": 2,
+        "p1_questions": 1,
         "output_format_clear": true
       },
       "blast_radius": {
-        "expected_changed_files": 2,
+        "expected_changed_files": 1,
         "expected_changed_functions": 1,
-        "expected_changed_lines": 25
+        "expected_changed_lines": 4
       },
       "risk_flags": {
         "data_deletion": false,
@@ -682,13 +424,13 @@
         "auth_or_secret": false,
         "pipeline_protocol": false,
         "build_or_deploy": true,
-        "core_parser_logic": false,
+        "core_parser_logic": true,
         "database_or_migration": false,
         "new_dependency": false
       }
     },
     "project_snapshot": {
-      "created_at": "2026-05-12T01:34:38Z",
+      "created_at": "2026-05-12T10:52:02Z",
       "files": {
         ".bandit": {
           "sha256": "924bf23b843ef513d64e26f7e4352cb4b8f4dee2eea5af90f2239099c80a2868",
@@ -723,8 +465,8 @@
           "size": 5682
         },
         "EmailMonitor.spec": {
-          "sha256": "a74b43b7cc17f3a4f7ccac0cf8b2b815add374f3dfa80e63ba698c8f209c8618",
-          "size": 718
+          "sha256": "c43cabb86c1c9deececb7b1b46e9a6c3b07ac4a926f5afcc27ac8ed59cddcb53",
+          "size": 1177
         },
         "eval_harness.json": {
           "sha256": "16f7550d697bf00f1b556ce8cd0f55374e7b6096fcd3f7393b6eaa6fee0f263e",
@@ -775,8 +517,8 @@
           "size": 1260
         },
         "manager_handoff.xml": {
-          "sha256": "4c68e2930314a9de0215fad29e10a34c31ba3e166d0ba13cbc71b390dbd9bcaf",
-          "size": 1636
+          "sha256": "98571a924edcacff928bb652f49d1690fb8d62390c7c336875a7f5efd85dbd51",
+          "size": 1424
         },
         "mypy.ini": {
           "sha256": "2bc73366ba36dcefe8dfd374d6843b80b7a4ab274786fe942e0cc81d73060d76",
@@ -1011,8 +753,8 @@
           "size": 839
         },
         "po_automation/email_monitor.py": {
-          "sha256": "8daf76dba193b99858bbb5d8670e1c463c24296fcd565a562fd22ace0f7734bf",
-          "size": 70769
+          "sha256": "b043eea414fc81a018109c74e652322d069bf6cf6efcd781df2fff8d0523361d",
+          "size": 70958
         },
         "po_automation/excel_handler.py": {
           "sha256": "c5ef7cb94812ecb17563a1c70ea2b475b3823591f9f4d978459f9dd83a118806",
@@ -1310,6 +1052,14 @@
           "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
           "size": 0
         },
+        "pipeline_outputs/BUG-20260512-CF73/emailmonitor-EXE-fitz-pdfplumber-emailmonitor.exe": {
+          "sha256": "07a43fb3a3b1c88fed646909fe44ba45d0f273ea2587adb6bccb3db033660a06",
+          "size": 118804286
+        },
+        "pipeline_outputs/BUG-20260512-CF73/outputs_manifest.json": {
+          "sha256": "e4985a0ae39fbc1f1ba9b45919fb9f275cbdba4be8d0257b328110ed7947c923",
+          "size": 661
+        },
         "pipeline_outputs/BUG-20260512-E68A/emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe": {
           "sha256": "11ec9b562d7649f98a3f40acae00995d6cf38ec42df83a9e5d49b983fdd77871",
           "size": 118713794
@@ -1397,6 +1147,22 @@
         "tests/oracles/BUG-20260511-073B/MT-5-deadcode-edge/input.json": {
           "sha256": "9fbcfd0b90d7457d24f544372237592437505eaff80fe6e7ce587e6efa73b316",
           "size": 656
+        },
+        "tests/oracles/BUG-20260512-9C67/edge_func_intact/expected.py": {
+          "sha256": "73eefc277947d788dbdc9ea4aa4e4dcd3bdad6c540f97fa13e55cd5a1bd2475c",
+          "size": 1017
+        },
+        "tests/oracles/BUG-20260512-9C67/edge_func_intact/input.py": {
+          "sha256": "8a5bf783f33f124a72b79cbb4a4029b27fd01a0f62dcc97c9bc65462d5a81a6c",
+          "size": 400
+        },
+        "tests/oracles/BUG-20260512-9C67/normal_rename/expected.py": {
+          "sha256": "20461c98d06fa2078f16cbd27c8e51e276520afacd7be4ee0f4ced89e8ef3cd3",
+          "size": 785
+        },
+        "tests/oracles/BUG-20260512-9C67/normal_rename/input.py": {
+          "sha256": "3ce4a9f1333a1e92202ee0ad74c738096c3648b6e9f7d71a3647f53927bc565a",
+          "size": 389
         },
         "tests/oracles/BUG-20260512-CF73/case_edge_nonempty/expected/result.json": {
           "sha256": "b69844ba2010de85e2e65a9c0d6e569600ac84a8fcb828c30e69de1f9a9d1645",
@@ -1575,83 +1341,12 @@
     }
   },
   "pm_manager_handoff": {
-    "validated_at": "2026-05-12T01:34:38Z",
+    "validated_at": "2026-05-12T10:52:02Z",
     "report_file": "manager_handoff.xml",
-    "step_plan_sha256": "30f972fbba937d5867d79f16dcdcca994487d4dc748e7fdf2748db21d75fc80f",
-    "planner_run_id": "pm_planner-73388ef05949036a",
+    "step_plan_sha256": "3646d516b950aca07b39900fe392f44280e31612d00f0e016519f32142c5750a",
+    "planner_run_id": "pm_planner-10b1bda1e4fef07f",
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
-  },
-  "trusted_phase_runs": [
-    {
-      "recorded_at": "2026-05-12T01:43:34Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "pm",
-      "run_id": "25708044583",
-      "commit_sha": "42263745d62ac123a446eb76dde582796976067a",
-      "artifact": "pipeline-phase-attestation"
-    },
-    {
-      "recorded_at": "2026-05-12T01:54:31Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "dev",
-      "run_id": "25708413484",
-      "commit_sha": "5c8812aa09b90fcbd735a0f5c423c32134c9ac01",
-      "artifact": "pipeline-phase-attestation"
-    },
-    {
-      "recorded_at": "2026-05-12T01:59:14Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "qa",
-      "run_id": "25708550738",
-      "commit_sha": "1e8b08959a28f1977fe20146c8366545c4d12c13",
-      "artifact": "pipeline-phase-attestation"
-    }
-  ],
-  "dev_handover": {
-    "report_file": "dev_handover.xml",
-    "validated_at": "2026-05-12T01:51:32Z",
-    "producer": "dev-agent"
-  },
-  "dev_gate_flags": {
-    "scope_declared": true
-  },
-  "atomic_scope": {
-    "manifest_file": "scope_manifest.json",
-    "validated_at": "2026-05-12T01:51:35Z",
-    "micro_task_ids": [
-      "MT-1",
-      "MT-2"
-    ],
-    "files": [
-      "EmailMonitor.spec",
-      "po_automation/email_monitor.py"
-    ],
-    "affected_functions": [
-      "EmailMonitor.spec — PyInstaller Analysis configuration",
-      "po_automation.email_monitor._process_mail_item"
-    ],
-    "actual_diff": {
-      "added": [],
-      "modified": [
-        "EmailMonitor.spec",
-        "po_automation/email_monitor.py"
-      ],
-      "deleted": [],
-      "changed": [
-        "EmailMonitor.spec",
-        "po_automation/email_monitor.py"
-      ]
-    }
-  },
-  "qa_report_validation": {
-    "report_file": "qa_report.xml",
-    "validated_at": "2026-05-12T01:56:06Z",
-    "numeric_score": 100,
-    "verdict": "PASS"
   }
 }
