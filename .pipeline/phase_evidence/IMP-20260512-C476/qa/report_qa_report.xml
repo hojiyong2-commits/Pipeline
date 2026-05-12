@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <run_id>qa-a2ae41d77718360d</run_id>
+  <agent>qa-agent</agent>
+
+  <handover_evidence_check>
+    <handover_present>true</handover_present>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <evidence_files>
+      <file>pyproject.toml</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>scope_manifest.json</file>
+      <file>scope_manifest_MT-1.json</file>
+      <file>scope_manifest_MT-2.json</file>
+      <file>module_handover_MT-1.xml</file>
+      <file>module_handover_MT-2.xml</file>
+      <file>integration_report.xml</file>
+    </evidence_files>
+    <precondition>PASS</precondition>
+  </handover_evidence_check>
+
+  <scope_boundary_check>
+    <declared_files>pyproject.toml, .claude/agents/qa-agent.md</declared_files>
+    <actual_changed_files>pyproject.toml, .claude/agents/qa-agent.md</actual_changed_files>
+    <oracle_files_changed>false</oracle_files_changed>
+    <scope_verdict>WITHIN_SCOPE</scope_verdict>
+  </scope_boundary_check>
+
+  <acceptance_criteria_results>
+    <criterion id="T1-P0" desc="pyproject.toml [tool.ruff.lint] extend-select = [PLW2901] 존재">PASS</criterion>
+    <criterion id="T2-P0" desc="qa-agent.md에 PLW2901 문자열 존재 + 검사 절차 명시">PASS</criterion>
+    <criterion id="T3-P1" desc="기존 ignore 목록 6개 항목 모두 보존 (E402, E731, E713, E701, F541, F841)">PASS</criterion>
+    <criterion id="EDGE-WA-UI-FS" desc="qa-agent.md WA/UI/FS Compliance Checklist 항목 삭제 없음">PASS</criterion>
+    <criterion id="SCOPE" desc="pyproject.toml, qa-agent.md 이외 파일 미변경">PASS</criterion>
+    <criterion id="ANTI-GAMING" desc="tests/oracles/** 변경 없음">PASS</criterion>
+    <criterion id="PLW2901-FAIL-SIG" desc="PLW2901 위반 시 FS:PLW2901_shadow failure_signature 명시">PASS</criterion>
+    <criterion id="GREP-CROSS" desc="루프 변수명-함수명 grep 교차검증 의무 명시">PASS</criterion>
+  </acceptance_criteria_results>
+
+  <oracle_verification>
+    <normal_case id="OR-1_ruff_rule">
+      <extend_select_plw2901_present>PASS</extend_select_plw2901_present>
+      <ignore_list_unchanged>PASS</ignore_list_unchanged>
+      <ruff_check_exit0>PASS</ruff_check_exit0>
+    </normal_case>
+    <edge_case id="OR-2_qa_agent_item">
+      <plw2901_string_present>PASS</plw2901_string_present>
+      <grep_cross_check_present>PASS</grep_cross_check_present>
+      <failure_sig_present>PASS</failure_sig_present>
+      <existing_items_preserved>PASS</existing_items_preserved>
+    </edge_case>
+    <oracle_verdict>PASS</oracle_verdict>
+  </oracle_verification>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <declared_files>pyproject.toml</declared_files>
+    <actual_changed_files>pyproject.toml</actual_changed_files>
+    <declared_functions>pyproject.toml [tool.ruff.lint] section — extend-select 추가</declared_functions>
+    <scope_verdict>WITHIN_SCOPE</scope_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <declared_files>.claude/agents/qa-agent.md</declared_files>
+    <actual_changed_files>.claude/agents/qa-agent.md</actual_changed_files>
+    <declared_functions>.claude/agents/qa-agent.md Compliance Checklist section — PLW2901 항목 추가</declared_functions>
+    <scope_verdict>WITHIN_SCOPE</scope_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <numeric_score>120</numeric_score>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <critical_issues>none</critical_issues>
+  <improvement_suggestions>없음. 변경 범위 최소화, acceptance criteria 전항목 충족.</improvement_suggestions>
+  <failure_signature>none</failure_signature>
+</qa_report>
