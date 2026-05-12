@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "ICPartAutomation 빈행 탐지 기준 변경(I,J,K 모두 비어있는 첫 행) + emailmonitor 발신자/수신자 필터링 동작 불량 수정",
   "created_at": "2026-05-12T00:05:14Z",
-  "updated_at": "2026-05-12T00:33:40Z",
-  "current_phase": "qa",
+  "updated_at": "2026-05-12T00:36:30Z",
+  "current_phase": "sec",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -33,13 +33,15 @@
       "agent_run_id": "dev-0facc601d848c49a"
     },
     "qa": {
-      "status": "PENDING",
-      "completed_at": null,
+      "status": "PASS",
+      "completed_at": "2026-05-12T00:36:26Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "qa_report.xml",
+      "agent_id": "qa-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-E68A_phase_qa.json",
+      "agent_run_id": "qa-58e0e211033885c1",
+      "numeric_score": 116
     },
     "sec": {
       "status": "PENDING",
@@ -302,6 +304,26 @@
     {
       "ts": "2026-05-12T00:33:40Z",
       "msg": "phase attestation request prepared: dev"
+    },
+    {
+      "ts": "2026-05-12T00:35:40Z",
+      "msg": "github phase-ci dev PASS run_id=25705761242 commit=ee0b34c71e5c"
+    },
+    {
+      "ts": "2026-05-12T00:36:21Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-58e0e211033885c1"
+    },
+    {
+      "ts": "2026-05-12T00:36:26Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-58e0e211033885c1"
+    },
+    {
+      "ts": "2026-05-12T00:36:26Z",
+      "msg": "qa PASS numeric=116"
+    },
+    {
+      "ts": "2026-05-12T00:36:30Z",
+      "msg": "phase attestation request prepared: qa"
     }
   ],
   "terminal_state": null,
@@ -666,6 +688,26 @@
       "used_at": "2026-05-12T00:33:40Z",
       "commit_sha": "7c4cdbc9a225cca4f7648dca3ae95cd31afac21f",
       "notes": ""
+    },
+    "qa-58e0e211033885c1": {
+      "schema_version": 1,
+      "run_id": "qa-58e0e211033885c1",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:36:21Z",
+      "completed_at": "2026-05-12T00:36:26Z",
+      "token_hash": "e0476af715c5baface3985e88ad2a1fbb23411c341543a85c56208cd92a7349e",
+      "output_file": "qa_report.xml",
+      "output_sha256": "339568c264bb1589804f4e1d0902fff2b7ff1d622eca464382f5443c2b7687a5",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\qa\\qa-58e0e211033885c1.json",
+      "receipt_sha256": "ea689895f8be1dc81667f94b9f0051dc05371ef2fbabd6b150a0e82cd47a507a",
+      "used_by_phase": "qa",
+      "used_at": "2026-05-12T00:36:30Z",
+      "commit_sha": "ee0b34c71e5c98b9f6a4370e484d22f1cfef40fa",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -722,14 +764,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-12T00:35:40Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25705761242",
+        "commit_sha": "ee0b34c71e5c98b9f6a4370e484d22f1cfef40fa",
+        "evidence": "github_actions_phase_run:25705761242",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "qa": {
         "status": "PENDING",
@@ -1902,6 +1945,15 @@
       "run_id": "25705389172",
       "commit_sha": "7c4cdbc9a225cca4f7648dca3ae95cd31afac21f",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-12T00:35:40Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "dev",
+      "run_id": "25705761242",
+      "commit_sha": "ee0b34c71e5c98b9f6a4370e484d22f1cfef40fa",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "dev_handover": {
@@ -1939,5 +1991,11 @@
         "po_automation/email_monitor.py"
       ]
     }
+  },
+  "qa_report_validation": {
+    "report_file": "qa_report.xml",
+    "validated_at": "2026-05-12T00:36:26Z",
+    "numeric_score": 116,
+    "verdict": "PASS"
   }
 }
