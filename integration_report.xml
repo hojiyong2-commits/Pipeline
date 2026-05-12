@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <integration_report>
-  <pipeline_id>IMP-20260512-C476</pipeline_id>
-  <integration_verdict>PASS</integration_verdict>
+  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <result>PASS</result>
   <modules_integrated>
-    <module id="MT-1" status="PASS">pyproject.toml [tool.ruff.lint] extend-select PLW2901 추가</module>
-    <module id="MT-2" status="PASS">.claude/agents/qa-agent.md PLW2901 shadowing 검사 항목 추가</module>
+    <module id="MT-1" status="PASS">
+      ic_part_src/order_mapper.py — inlineStr 스캐너 OR 조건 추가
+    </module>
   </modules_integrated>
   <integration_check>
-    <cross_module_conflicts>none — MT-1(pyproject.toml)과 MT-2(qa-agent.md)는 독립적 파일, 충돌 없음</cross_module_conflicts>
-    <interface_compatibility>PASS — 두 파일은 서로 참조하지 않음</interface_compatibility>
-    <no_regression>PASS — 기존 ruff ignore 목록, WA/UI/FS Compliance 항목 모두 보존 확인</no_regression>
-    <plw2901_consistency>PASS — pyproject.toml의 PLW2901 규칙과 qa-agent.md의 PLW2901 검사 지침 일치</plw2901_consistency>
+    <api_compatibility>PASS — write_ic_part_zip 시그니처 변경 없음</api_compatibility>
+    <regression_check>PASS — 기존 v 태그 감지 동작 유지</regression_check>
+    <scope_boundary>PASS — 변경 파일 1개, MT-1 범위 내</scope_boundary>
   </integration_check>
+  <integration_verdict>PASS</integration_verdict>
 </integration_report>

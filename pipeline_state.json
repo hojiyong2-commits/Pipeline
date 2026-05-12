@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "I·J·K 스캐너가 inlineStr 셀(<is> 태그)을 미감지 — 새로 쓴 행 overwrite 버그",
   "created_at": "2026-05-12T12:27:00Z",
-  "updated_at": "2026-05-12T12:39:46Z",
-  "current_phase": "dev",
+  "updated_at": "2026-05-12T12:47:53Z",
+  "current_phase": "qa",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -23,13 +23,14 @@
       "agent_run_id": "pm_planner-df1023db1db11291"
     },
     "dev": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-12T12:47:46Z",
+      "evidence": "ic_part_src/order_mapper.py",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "dev_handover.xml",
+      "agent_id": "dev-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-F307_phase_dev.json",
+      "agent_run_id": "dev-22b767df98c86840"
     },
     "qa": {
       "status": "PENDING",
@@ -125,6 +126,50 @@
     {
       "ts": "2026-05-12T12:39:46Z",
       "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-12T12:44:16Z",
+      "msg": "github phase-ci pm PASS run_id=25735045191 commit=5f7bc5023b97"
+    },
+    {
+      "ts": "2026-05-12T12:44:23Z",
+      "msg": "module design PASS MT-1"
+    },
+    {
+      "ts": "2026-05-12T12:44:43Z",
+      "msg": "module design PASS MT-1"
+    },
+    {
+      "ts": "2026-05-12T12:44:47Z",
+      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-22b767df98c86840"
+    },
+    {
+      "ts": "2026-05-12T12:45:55Z",
+      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-22b767df98c86840"
+    },
+    {
+      "ts": "2026-05-12T12:46:17Z",
+      "msg": "module dev DONE MT-1"
+    },
+    {
+      "ts": "2026-05-12T12:46:59Z",
+      "msg": "module QA PASS MT-1"
+    },
+    {
+      "ts": "2026-05-12T12:47:15Z",
+      "msg": "module integration PASS"
+    },
+    {
+      "ts": "2026-05-12T12:47:46Z",
+      "msg": "dev DONE | evidence: ic_part_src/order_mapper.py"
+    },
+    {
+      "ts": "2026-05-12T12:47:46Z",
+      "msg": "advisory gpt-code SKIPPED api_called=False"
+    },
+    {
+      "ts": "2026-05-12T12:47:53Z",
+      "msg": "phase attestation request prepared: dev"
     }
   ],
   "terminal_state": null,
@@ -168,6 +213,26 @@
       "used_by_phase": "pm_manager",
       "used_at": "2026-05-12T12:39:46Z",
       "commit_sha": "8727065282b5d918eaf9adeaa3a92c25acb4ed5a",
+      "notes": ""
+    },
+    "dev-22b767df98c86840": {
+      "schema_version": 1,
+      "run_id": "dev-22b767df98c86840",
+      "pipeline_id": "BUG-20260512-F307",
+      "phase": "dev",
+      "agent_id": "dev-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T12:44:47Z",
+      "completed_at": "2026-05-12T12:45:55Z",
+      "token_hash": "656f80489ea981290d59a9db014fa990f0e23600084f845664792897d21c1374",
+      "output_file": "dev_handover.xml",
+      "output_sha256": "6499374b40cef3f959e5547a5319916a3b8fce9376eb8a28b96f7bac58abd58e",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-F307\\dev\\dev-22b767df98c86840.json",
+      "receipt_sha256": "678d2dcd0c4c8fc83dcd6baa18b4e1f08fec39815ce5e905dd3bfb93dd10df7d",
+      "used_by_phase": "dev",
+      "used_at": "2026-05-12T12:47:53Z",
+      "commit_sha": "5f7bc5023b9734197a3a1327b02b03a00c493b4a",
       "notes": ""
     }
   },
@@ -214,14 +279,15 @@
     ],
     "phases": {
       "pm": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-12T12:44:16Z",
         "phase": "pm",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25735045191",
+        "commit_sha": "5f7bc5023b9734197a3a1327b02b03a00c493b4a",
+        "evidence": "github_actions_phase_run:25735045191",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-F307\\gates\\phase_ci\\pm_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "dev": {
         "status": "PENDING",
@@ -264,40 +330,60 @@
     "modules": {
       "MT-1": {
         "id": "MT-1",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 1,
         "target_files": [
           "ic_part_src/order_mapper.py"
         ],
         "affected_function": "order_mapper.write_ic_part_zip._ijk_scanner_block",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T12:44:43Z",
+          "report_file": "module_design_MT-1.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-12T12:46:17Z",
+          "report_file": "module_handover_MT-1.xml",
+          "evidence": "ic_part_src/order_mapper.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-1.json",
+            "validated_at": "2026-05-12T12:46:17Z",
+            "micro_task_id": "MT-1",
+            "files": [
+              "ic_part_src/order_mapper.py"
+            ],
+            "affected_functions": [
+              "order_mapper.write_ic_part_zip._ijk_scanner_block"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T12:46:59Z",
+          "report_file": "module_qa_MT-1.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-12T12:46:59Z",
+          "files": [
+            {
+              "path": "ic_part_src/order_mapper.py",
+              "sha256": "48eefc91302cc668b7569066831f40623581cee26e32002b25edc893b6300454",
+              "size_bytes": 70679
+            }
+          ]
+        }
       }
     },
     "integration": {
-      "status": "PENDING",
-      "completed_at": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-12T12:47:15Z",
+      "report_file": "integration_report.xml",
       "evidence": null,
       "notes": []
     }
@@ -1408,5 +1494,47 @@
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
+  },
+  "trusted_phase_runs": [
+    {
+      "recorded_at": "2026-05-12T12:44:16Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "pm",
+      "run_id": "25735045191",
+      "commit_sha": "5f7bc5023b9734197a3a1327b02b03a00c493b4a",
+      "artifact": "pipeline-phase-attestation"
+    }
+  ],
+  "dev_handover": {
+    "report_file": "dev_handover.xml",
+    "validated_at": "2026-05-12T12:47:43Z",
+    "producer": "dev-agent"
+  },
+  "dev_gate_flags": {
+    "scope_declared": true
+  },
+  "atomic_scope": {
+    "manifest_file": "scope_manifest.json",
+    "validated_at": "2026-05-12T12:47:46Z",
+    "micro_task_ids": [
+      "MT-1"
+    ],
+    "files": [
+      "ic_part_src/order_mapper.py"
+    ],
+    "affected_functions": [
+      "order_mapper.write_ic_part_zip._ijk_scanner_block"
+    ],
+    "actual_diff": {
+      "added": [],
+      "modified": [
+        "ic_part_src/order_mapper.py"
+      ],
+      "deleted": [],
+      "changed": [
+        "ic_part_src/order_mapper.py"
+      ]
+    }
   }
 }
