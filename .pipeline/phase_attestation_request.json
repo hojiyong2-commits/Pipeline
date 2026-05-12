@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-12T11:17:37Z",
+  "pipeline_id": "BUG-20260512-9C67",
+  "phase": "build",
+  "phase_status": "DONE",
+  "commit_hint": "99bb0accea1de6beb96acb45c49119eb73dcace7",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-05-12T11:17:30Z",
+    "report_file": "ic_part_src/dist/build_report.xml",
+    "evidence": "ic_part_src/dist/ICPartAutomation.exe"
+  },
+  "agent_run": {
+    "run_id": "build-2b5330682083d3bf",
+    "phase": "build",
+    "agent_id": "build-agent",
+    "status": "COMPLETED",
+    "output_file": "ic_part_src\\dist\\build_report.xml",
+    "output_sha256": "1aa47b13ad1c7aee5a8881da3e602e097a8b7ef3b1402ca18fb3af91041b763d",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260512-9C67/build/agent_receipt_build-2b5330682083d3bf.json",
+    "receipt_sha256": "06988d14bf887bf6786161388d1c86a958da89957f4c33c3de095d9023d92d44",
+    "used_by_phase": "build",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260512-9C67\\build\\build-2b5330682083d3bf.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260512-9C67\\build\\build-2b5330682083d3bf.json",
+      "path": ".pipeline/phase_evidence/BUG-20260512-9C67/build/agent_receipt_build-2b5330682083d3bf.json",
+      "sha256": "06988d14bf887bf6786161388d1c86a958da89957f4c33c3de095d9023d92d44",
+      "size_bytes": 527,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "ic_part_src\\dist\\build_report.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260512-9C67/build/report_build_report.xml",
+      "sha256": "1aa47b13ad1c7aee5a8881da3e602e097a8b7ef3b1402ca18fb3af91041b763d",
+      "size_bytes": 1766,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": [
+    {
+      "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+      "sha256": "d9d33a89ec1c472831ca7d3684919ad8c81a2e7f0ce9bcd9222ed3251559c9b0",
+      "reason": "ignored_or_outside_git_checkout"
+    }
+  ]
+}

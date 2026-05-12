@@ -1,0 +1,6 @@
+{
+  "description": "Exchange DN 형식 + GetExchangeUser() 호출 시 예외 발생 — 원본 DN 그대로 폴백",
+  "rec_address": "/o=ExchangeLabs/ou=Exchange Administrative Group/cn=Recipients/cn=xyz999",
+  "has_at_sign": false,
+  "GetExchangeUser_raises": "AttributeError: 'NoneType' object has no attribute 'PrimarySmtpAddress'"
+}

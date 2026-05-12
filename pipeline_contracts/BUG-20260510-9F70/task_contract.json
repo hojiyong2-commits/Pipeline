@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260510-9F70",
+  "pipeline_type": "BUG",
+  "created_at": "2026-05-10T12:35:43Z",
+  "updated_at": "2026-05-10T12:37:29Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "emailmonitor.exe 개선 - 버그리포트 기반 수정(dead code, 성능, 안전성) 및 GDrive 터미널 배포",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "email_monitor_fixes",
+      "name": "email_monitor_fixes",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "main_fixes",
+      "name": "main_fixes",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": null,
+      "severity": "P0",
+      "question": "수정 범위를 데드코드/안전성(MT-1~MT-4)만으로 제한할까요?",
+      "options": [],
+      "answer": "옵션 A 선택 — MT-1~MT-4만. AT 패턴/pdfplumber는 별도 파이프라인.",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-10T12:37:29Z",
+  "contract_hash": "e15f9fe4b141568b6d1205498adb317b34f7be10af4c0be7997832a8a504e177",
+  "test_set_hash": "db27114f17096cedbeab3edcd5806ec7bb5604f8c3deac715fe73e780e483a34"
+}

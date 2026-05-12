@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-9BDC",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-10T02:32:52Z",
+  "updated_at": "2026-05-10T02:36:33Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "agent MD files 전체 재검토: 최신 Three-Gate/Option A/trust chain 구조를 agent MD에 반영",
+  "task_profile": {
+    "domain": "agent-protocol",
+    "task_kind": "meta-task",
+    "deliverable_kind": "docs",
+    "success_signal": [
+      "agent MD files updated with trust chain + deploy path awareness"
+    ]
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": false,
+    "type": "N/A",
+    "notes": "meta-task: agent MD files modification only; no EXE build required"
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MOD-1",
+      "name": "security-agent.md gap: agent receipt + module gate awareness",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-2",
+      "name": "build-agent.md gap: phase attestation + deploy path after ACCEPT",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-3",
+      "name": "agent-factory-agent.md gap: CODEOWNERS protection notice",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-4",
+      "name": "protocol-evolution-agent.md gap: CODEOWNERS protection + PR review notice",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-5",
+      "name": "test-harness-agent.md gap: deploy path after ACCEPT",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-6",
+      "name": "pm-agent.md gap: deploy path in pipeline_complete summary",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-10T02:36:33Z",
+  "contract_hash": "5edd2f0e5706c153afd1c3ab1e96834a7290122b2f24c4e9caa3c164bf01fd1b",
+  "test_set_hash": "cf1c36887c8274eb2cf789d2228c9eef0024fe41e87e22f0806393fe99360684"
+}

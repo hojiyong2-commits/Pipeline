@@ -22,7 +22,7 @@ import logging
 import os
 import queue
 import re
-import tempfile
+import shutil
 import threading
 import time
 from datetime import datetime
@@ -413,8 +413,7 @@ def _parse_pdf_info(pdf_path: Path) -> Tuple[str, str, str, str, str]:
         if date_m:
             raw_date = date_m.group(1).replace(",", "").strip()
             try:
-                from datetime import datetime as _dt
-                order_date = _dt.strptime(raw_date, "%b %d %Y").strftime("%Y-%m-%d")
+                order_date = datetime.strptime(raw_date, "%b %d %Y").strftime("%Y-%m-%d")
             except ValueError:
                 logger.warning("Our Order Date 파싱 실패: %r", raw_date)
 
@@ -481,7 +480,7 @@ def _parse_pdf_info(pdf_path: Path) -> Tuple[str, str, str, str, str]:
                 try:
                     amount_str = f"{round(float(raw)):,}"
                 except ValueError:
-                    pass
+                    pass  # nosec B110
 
         # Strategy 2: next-line — amount on the line after label
         if not amount_str:
@@ -495,7 +494,7 @@ def _parse_pdf_info(pdf_path: Path) -> Tuple[str, str, str, str, str]:
                     try:
                         amount_str = f"{round(float(raw)):,}"
                     except ValueError:
-                        pass
+                        pass  # nosec B110
 
         # Strategy 3: loose — find any large number after "Total Amount" within 300 chars
         if not amount_str and ta_idx >= 0:
@@ -509,7 +508,7 @@ def _parse_pdf_info(pdf_path: Path) -> Tuple[str, str, str, str, str]:
                         amount_str = f"{round(val):,}"
                         break
                 except ValueError:
-                    pass
+                    pass  # nosec B110
 
         # --- Prefix extraction (ACT / Valve) ---
         # 컨텍스트 윈도우(±150자): ACT/Valve 매치 주변에 SPARE 키워드 없으면 본품으로 판단
@@ -595,7 +594,7 @@ def _save_email_msg(mail_item: object, dest_folder: Path, safe_subject: str) -> 
             try:
                 tmp.unlink()
             except OSError:
-                pass
+                pass  # nosec B110
         raise RuntimeError(f"이메일 .msg 저장 실패: {msg_path}") from exc
 
 
@@ -741,7 +740,7 @@ def save_processed_set(base_dir: Path, processed_set: Set[str]) -> None:
             try:
                 tmp.unlink()
             except OSError:
-                pass
+                pass  # nosec B110
         raise RuntimeError(f"processed.json 저장 실패: {json_path}") from exc
 
 
@@ -926,15 +925,28 @@ def _process_mail_item(
                     for ri in range(1, rec_count + 1):
                         try:
                             rec = recipients_col.Item(ri)
-                            addr = (
-                                getattr(rec, "Address", "") or ""
-                            ).lower().strip()
+                            # BUG-20260512-E68A: Exchange 계정의 rec.Address는
+                            # '/o=ExchangeLabs/.../cn=...' 형식의 DN을 반환할 수 있음.
+                            # '@' 없는 주소는 Exchange DN으로 감지하고 SMTP 주소로 변환.
+                            raw_addr = (getattr(rec, "Address", "") or "").strip()
+                            if raw_addr and "@" not in raw_addr:
+                                try:
+                                    ae = getattr(rec, "AddressEntry", None)
+                                    if ae is not None:
+                                        eu = ae.GetExchangeUser()
+                                        if eu is not None:
+                                            smtp = getattr(eu, "PrimarySmtpAddress", "") or ""
+                                            if smtp:
+                                                raw_addr = smtp
+                                except Exception:
+                                    pass  # nosec B110  Exchange DN 변환 실패 시 원본 주소 폴백
+                            addr = raw_addr.lower().strip()
                             if addr:
                                 recipient_set.add(addr)
                         except Exception:
-                            pass
+                            pass  # nosec B110
             except Exception:
-                pass
+                pass  # nosec B110
 
             # Recipients 컬렉션 추출 실패 시 To 필드 파싱 fallback
             if not recipient_set and recipients_str:
@@ -1058,10 +1070,13 @@ def _process_mail_item(
         if tmp_dest_folder != dest_folder:
             try:
                 if dest_folder.exists():
-                    # 이미 존재하면 임시 폴더 내 파일을 이동하지 않고 그냥 사용
-                    pass
+                    # 이미 존재하면 임시 폴더를 정리하고 최종 폴더 그대로 사용
+                    try:
+                        tmp_dest_folder.rmdir()  # 비어있을 때만 삭제 (안전)
+                    except OSError:
+                        pass  # nosec B110 — 비어있지 않으면 그냥 둠
                 else:
-                    tmp_dest_folder.rename(dest_folder)
+                    shutil.move(str(tmp_dest_folder), str(dest_folder))
             except OSError as rename_exc:
                 logger.warning(
                     "폴더 rename 실패(%s→%s): %s, 새로 생성",
@@ -1094,7 +1109,7 @@ def _process_mail_item(
         try:
             log_queue.put_nowait(f"[오류] MailItem 처리 실패: {exc}")
         except queue.Full:
-            pass
+            pass  # nosec B110
         return False
 
 
@@ -1163,7 +1178,7 @@ def scan_past_emails(
         try:
             log_queue.put_nowait(msg)
         except queue.Full:
-            pass
+            pass  # nosec B110
 
     try:
         import pythoncom  # type: ignore[import]
@@ -1174,7 +1189,7 @@ def scan_past_emails(
         try:
             log_queue.put_nowait(f"[오류] {errmsg}")
         except queue.Full:
-            pass
+            pass  # nosec B110
         return 0
 
     try:
@@ -1253,7 +1268,7 @@ def scan_past_emails(
         try:
             log_queue.put_nowait(f"[오류] {errmsg}")
         except queue.Full:
-            pass
+            pass  # nosec B110
         return 0
 
 
@@ -1316,7 +1331,7 @@ class OutlookEventHandler:
             return
 
         try:
-            import pythoncom  # type: ignore[import]
+            import pythoncom  # type: ignore[import]  # noqa: F401
             import win32com.client  # type: ignore[import]
         except ImportError as exc:
             logger.error("win32com/pythoncom import 실패: %s", exc)
@@ -1431,7 +1446,7 @@ def start_monitoring(
             try:
                 log_queue.put_nowait("[모니터] Outlook 감시 시작")
             except queue.Full:
-                pass
+                pass  # nosec B110
 
             while not _stop_event.is_set():
                 pythoncom.PumpWaitingMessages()
@@ -1442,7 +1457,7 @@ def start_monitoring(
             try:
                 log_queue.put_nowait(f"[오류] 모니터링 중단: {exc}")
             except queue.Full:
-                pass
+                pass  # nosec B110
         finally:
             pythoncom.CoUninitialize()
             logger.info("Outlook COM 해제 완료")
@@ -1451,7 +1466,7 @@ def start_monitoring(
         try:
             log_queue.put_nowait("[모니터] 감시 중지됨")
         except queue.Full:
-            pass
+            pass  # nosec B110
 
     thread = threading.Thread(target=_monitor_loop, daemon=True, name="OutlookMonitor")
     thread.start()
@@ -1464,72 +1479,72 @@ def start_monitoring(
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     # --- _has_new_po_keyword ---
-    assert _has_new_po_keyword("Please find new PO attached") is True, "new PO 감지 실패"
-    assert _has_new_po_keyword("new ICPO 3100035140 issued") is True, "new ICPO 감지 실패"
-    assert _has_new_po_keyword("newPO from customer") is True, "newPO 감지 실패"
-    assert _has_new_po_keyword("newICPO document") is True, "newICPO 감지 실패"
-    assert _has_new_po_keyword("NEW PO ARRIVED") is True, "대문자 NEW PO 감지 실패"
-    assert _has_new_po_keyword("NEW ICPO ISSUED") is True, "대문자 NEW ICPO 감지 실패"
-    assert _has_new_po_keyword("regular invoice email") is False, "키워드 없음 → False 실패"
-    assert _has_new_po_keyword("") is False, "빈 문자열 → False 실패"
+    assert _has_new_po_keyword("Please find new PO attached") is True, "new PO 감지 실패"  # nosec B101
+    assert _has_new_po_keyword("new ICPO 3100035140 issued") is True, "new ICPO 감지 실패"  # nosec B101
+    assert _has_new_po_keyword("newPO from customer") is True, "newPO 감지 실패"  # nosec B101
+    assert _has_new_po_keyword("newICPO document") is True, "newICPO 감지 실패"  # nosec B101
+    assert _has_new_po_keyword("NEW PO ARRIVED") is True, "대문자 NEW PO 감지 실패"  # nosec B101
+    assert _has_new_po_keyword("NEW ICPO ISSUED") is True, "대문자 NEW ICPO 감지 실패"  # nosec B101
+    assert _has_new_po_keyword("regular invoice email") is False, "키워드 없음 → False 실패"  # nosec B101
+    assert _has_new_po_keyword("") is False, "빈 문자열 → False 실패"  # nosec B101
 
     try:
         _has_new_po_keyword(None)  # type: ignore[arg-type]
-        assert False, "_has_new_po_keyword None TypeError 미발생"
+        assert False, "_has_new_po_keyword None TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     try:
         _has_new_po_keyword(42)  # type: ignore[arg-type]
-        assert False, "_has_new_po_keyword int TypeError 미발생"
+        assert False, "_has_new_po_keyword int TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     print("[SELF-VERIFY] _has_new_po_keyword OK")
 
     # --- _extract_po_number 정상 케이스 ---
-    assert _extract_po_number("PO3213131") == "3213131", "PO3213131 실패"
-    assert _extract_po_number("PO 512345") == "512345", "PO 512345 실패"
-    assert _extract_po_number("ICPO3001") == "3001", "ICPO3001 실패"
-    assert _extract_po_number("ICPO 50001") == "50001", "ICPO 50001 실패"
-    assert _extract_po_number("New ICPO 3100035140") == "3100035140", "1차 패턴 ICPO 앞 케이스 실패"
-    assert _extract_po_number("CCI ICPO 3100035131 / some details") == "3100035131", "CCI ICPO 케이스 실패"
-    assert _extract_po_number("3100035130 B43234AT new ICPO") == "3100035130", "AT format 미감지"
-    assert _extract_po_number("Invoice Only") is None, "Invoice Only → None 실패"
-    assert _extract_po_number("") is None, "빈 문자열 → None 실패"
+    assert _extract_po_number("PO3213131") == "3213131", "PO3213131 실패"  # nosec B101
+    assert _extract_po_number("PO 512345") == "512345", "PO 512345 실패"  # nosec B101
+    assert _extract_po_number("ICPO3001") == "3001", "ICPO3001 실패"  # nosec B101
+    assert _extract_po_number("ICPO 50001") == "50001", "ICPO 50001 실패"  # nosec B101
+    assert _extract_po_number("New ICPO 3100035140") == "3100035140", "1차 패턴 ICPO 앞 케이스 실패"  # nosec B101
+    assert _extract_po_number("CCI ICPO 3100035131 / some details") == "3100035131", "CCI ICPO 케이스 실패"  # nosec B101
+    assert _extract_po_number("3100035130 B43234AT new ICPO") == "3100035130", "AT format 미감지"  # nosec B101
+    assert _extract_po_number("Invoice Only") is None, "Invoice Only → None 실패"  # nosec B101
+    assert _extract_po_number("") is None, "빈 문자열 → None 실패"  # nosec B101
     # AT 폴백은 "new ICPO" 없으면 발동하지 않음 (오탐 방지 검증)
-    assert _extract_po_number("3100035130 B43234AT some other text") is None, "AT 폴백 오탐 방지 실패"
+    assert _extract_po_number("3100035130 B43234AT some other text") is None, "AT 폴백 오탐 방지 실패"  # nosec B101
 
     # --- _extract_po_number 예외 케이스 ---
     try:
         _extract_po_number(None)  # type: ignore[arg-type]
-        assert False, "None 입력 TypeError 미발생"
+        assert False, "None 입력 TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     try:
         _extract_po_number(123)  # type: ignore[arg-type]
-        assert False, "int 입력 TypeError 미발생"
+        assert False, "int 입력 TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     # --- _is_reply_or_forward ---
-    assert _is_reply_or_forward("Re: test") is True, "Re: 감지 실패"
-    assert _is_reply_or_forward("FWD: test") is True, "FWD: 감지 실패"
-    assert _is_reply_or_forward("fw: hello") is True, "fw: 감지 실패"
-    assert _is_reply_or_forward("PO3213131 신규") is False, "일반 메일 오탐 실패"
+    assert _is_reply_or_forward("Re: test") is True, "Re: 감지 실패"  # nosec B101
+    assert _is_reply_or_forward("FWD: test") is True, "FWD: 감지 실패"  # nosec B101
+    assert _is_reply_or_forward("fw: hello") is True, "fw: 감지 실패"  # nosec B101
+    assert _is_reply_or_forward("PO3213131 신규") is False, "일반 메일 오탐 실패"  # nosec B101
 
     try:
         _is_reply_or_forward(None)  # type: ignore[arg-type]
-        assert False, "_is_reply_or_forward None TypeError 미발생"
+        assert False, "_is_reply_or_forward None TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     try:
         _is_reply_or_forward(42)  # type: ignore[arg-type]
-        assert False, "_is_reply_or_forward int TypeError 미발생"
+        assert False, "_is_reply_or_forward int TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     # --- load_processed_set / save_processed_set (임시 디렉토리 사용) ---
     import tempfile as _tempfile
@@ -1539,106 +1554,101 @@ if __name__ == "__main__":
 
         # 파일 없을 때 빈 set
         ps = load_processed_set(tmp_path)
-        assert ps == set(), "처음 로드 시 빈 set 아님"
+        assert ps == set(), "처음 로드 시 빈 set 아님"  # nosec B101
 
         # 저장 후 재로드
         sample: Set[str] = {"3001", "50001", "3213131"}
         save_processed_set(tmp_path, sample)
         ps2 = load_processed_set(tmp_path)
-        assert ps2 == sample, f"재로드 불일치: {ps2} != {sample}"
+        assert ps2 == sample, f"재로드 불일치: {ps2} != {sample}"  # nosec B101
 
     # --- None 입력 방어 ---
     try:
         load_processed_set(None)  # type: ignore[arg-type]
-        assert False, "load_processed_set None TypeError 미발생"
+        assert False, "load_processed_set None TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     try:
         save_processed_set(None, set())  # type: ignore[arg-type]
-        assert False, "save_processed_set None TypeError 미발생"
+        assert False, "save_processed_set None TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     try:
         start_monitoring(None, __import__("queue").Queue(), set())  # type: ignore[arg-type]
-        assert False, "start_monitoring root_folder None TypeError 미발생"
+        assert False, "start_monitoring root_folder None TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     try:
         start_monitoring(Path("."), None, set())  # type: ignore[arg-type]
-        assert False, "start_monitoring log_queue None TypeError 미발생"
+        assert False, "start_monitoring log_queue None TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     # --- _parse_pdf_info 타입 방어 ---
     try:
         _parse_pdf_info(None)  # type: ignore[arg-type]
-        assert False, "_parse_pdf_info None TypeError 미발생"
+        assert False, "_parse_pdf_info None TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     try:
         _parse_pdf_info("not_a_path")  # type: ignore[arg-type]
-        assert False, "_parse_pdf_info str TypeError 미발생"
+        assert False, "_parse_pdf_info str TypeError 미발생"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
 
     # pdfplumber/pymupdf 없을 때 ("", "", "", "", "") 반환 확인 (존재하지 않는 PDF 경로)
     result = _parse_pdf_info(Path("nonexistent_test.pdf"))
-    assert isinstance(result, tuple) and len(result) == 5, "_parse_pdf_info 반환 형식 오류 (5-tuple 필요)"
-    assert result[2] == "", "_parse_pdf_info 실패 시 order_date 빈 문자열 필요"
-    assert result[3] == "", "_parse_pdf_info 실패 시 incoterm 빈 문자열 필요"
-    assert result[4] == "", "_parse_pdf_info 실패 시 ic_code 빈 문자열 필요"
+    assert isinstance(result, tuple) and len(result) == 5, "_parse_pdf_info 반환 형식 오류 (5-tuple 필요)"  # nosec B101
+    assert result[2] == "", "_parse_pdf_info 실패 시 order_date 빈 문자열 필요"  # nosec B101
+    assert result[3] == "", "_parse_pdf_info 실패 시 incoterm 빈 문자열 필요"  # nosec B101
+    assert result[4] == "", "_parse_pdf_info 실패 시 ic_code 빈 문자열 필요"  # nosec B101
 
     # _COMPANY_IC_MAP 매핑 검증
-    assert _COMPANY_IC_MAP.get("imi critical engineering llc") == "SoCal", "SoCal 매핑 실패"
-    assert _COMPANY_IC_MAP.get("cci valve technology gmbh") == "AT", "AT 매핑 실패"
-    assert _COMPANY_IC_MAP.get("imi critical engineering (apac) pte. ltd.") == "SG", "SG 매핑 실패"
-    assert _COMPANY_IC_MAP.get("unknown company") is None, "미매핑 회사 None 필요"
-    assert _COMPANY_IC_MAP.get("unknown company", "") == "", "미매핑 회사 빈 문자열 필요"
+    assert _COMPANY_IC_MAP.get("imi critical engineering llc") == "SoCal", "SoCal 매핑 실패"  # nosec B101
+    assert _COMPANY_IC_MAP.get("cci valve technology gmbh") == "AT", "AT 매핑 실패"  # nosec B101
+    assert _COMPANY_IC_MAP.get("imi critical engineering (apac) pte. ltd.") == "SG", "SG 매핑 실패"  # nosec B101
+    assert _COMPANY_IC_MAP.get("unknown company") is None, "미매핑 회사 None 필요"  # nosec B101
+    assert _COMPANY_IC_MAP.get("unknown company", "") == "", "미매핑 회사 빈 문자열 필요"  # nosec B101
 
     # Bug 1: Incoterm Strategy 2 (next-line) 검증
-    import re as _re
     _full_inline = "Terms Of Delivery: FOB BUSAN\nother"
     _full_nextline = "Terms Of Delivery\nEX WORKS(NAMED PLACE), PAJU FACTORY\nother"
-    _m1 = _re.search(r"Terms\s+[Oo]f\s+Delivery[\s:]+([^\n]{2,80})", _full_inline, _re.IGNORECASE)
-    assert _m1 and "FOB" in _m1.group(1).upper(), "Bug1 Strategy1 실패"
-    _m2 = _re.search(r"Terms\s+[Oo]f\s+Delivery[^\n]*\n\s*([^\n]{2,80})", _full_nextline, _re.IGNORECASE)
-    assert _m2 and "EX WORKS" in _m2.group(1).upper(), "Bug1 Strategy2 실패"
+    _m1 = re.search(r"Terms\s+[Oo]f\s+Delivery[\s:]+([^\n]{2,80})", _full_inline, re.IGNORECASE)
+    assert _m1 and "FOB" in _m1.group(1).upper(), "Bug1 Strategy1 실패"  # nosec B101
+    _m2 = re.search(r"Terms\s+[Oo]f\s+Delivery[^\n]*\n\s*([^\n]{2,80})", _full_nextline, re.IGNORECASE)
+    assert _m2 and "EX WORKS" in _m2.group(1).upper(), "Bug1 Strategy2 실패"  # nosec B101
 
     # Bug 2: 스페어 오탐 방지 검증
-    _spare_pat = _re.compile(r"\b(SOFTGOODS|SOFT\s+GOODS|SPARE|REPAIR\s+KIT|SEAL\s+KIT|SERVICE\s+KIT|O[\-\s]RING\s+KIT)\b", _re.IGNORECASE)
-    _act_pat = _re.compile(r"\bACT[,\s]", _re.IGNORECASE)
+    _spare_pat = re.compile(r"\b(SOFTGOODS|SOFT\s+GOODS|SPARE|REPAIR\s+KIT|SEAL\s+KIT|SERVICE\s+KIT|O[\-\s]RING\s+KIT)\b", re.IGNORECASE)
+    _act_pat = re.compile(r"\bACT[,\s]", re.IGNORECASE)
     _spare_only = ["ACT SOFTGOODS REPLACEMENT", "SPARE PART"]
     _actual_act = ["ACT, VALVE ITEM #1234", "description"]
-    assert not any(_act_pat.search(ln) and not _spare_pat.search(ln) for ln in _spare_only), "Bug2 스페어 오탐"
-    assert any(_act_pat.search(ln) and not _spare_pat.search(ln) for ln in _actual_act), "Bug2 본품 미탐"
+    assert not any(_act_pat.search(ln) and not _spare_pat.search(ln) for ln in _spare_only), "Bug2 스페어 오탐"  # nosec B101
+    assert any(_act_pat.search(ln) and not _spare_pat.search(ln) for ln in _actual_act), "Bug2 본품 미탐"  # nosec B101
     _soft_goods_line = ["ACT, Soft Goods replacement item"]
-    assert not any(_act_pat.search(ln) and not _spare_pat.search(ln) for ln in _soft_goods_line), "Bug2 SOFT GOODS 오탐"
+    assert not any(_act_pat.search(ln) and not _spare_pat.search(ln) for ln in _soft_goods_line), "Bug2 SOFT GOODS 오탐"  # nosec B101
 
     # Bug 3: MAX_PATH 트리밍 검증
     _folder_len = 80
     _avail = 259 - _folder_len - 1 - len(".msg.tmp")
     _avail = max(20, min(_avail, 200))
-    assert _avail == 170, f"Bug3 avail 계산 오류: expected 170, got {_avail}"
+    assert _avail == 170, f"Bug3 avail 계산 오류: expected 170, got {_avail}"  # nosec B101
     _trimmed = ("A" * 250)[:_avail]
-    assert len(_trimmed) == 170, "Bug3 트리밍 길이 오류"
+    assert len(_trimmed) == 170, "Bug3 트리밍 길이 오류"  # nosec B101
 
     # stop_event type check
-    try:
-        start_monitoring.__code__  # just verify it's callable
-    except Exception:
-        pass
-    import threading as _threading
-    _ev = _threading.Event()
+    assert callable(start_monitoring)  # nosec B101
+    _ev = threading.Event()
     # Verify TypeError on bad type (no Outlook needed — TypeError raised before COM call)
     try:
         start_monitoring(Path("."), queue.Queue(), set(), stop_event=42)  # type: ignore[arg-type]
-        assert False, "Expected TypeError for stop_event=42"
+        assert False, "Expected TypeError for stop_event=42"  # nosec B101
     except TypeError:
-        pass
+        pass  # nosec B110
     print("[SELF-VERIFY] stop_event type guard OK")
 
     print("[SELF-VERIFY] email_monitor.py OK")

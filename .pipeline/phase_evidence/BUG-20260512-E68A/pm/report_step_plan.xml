@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Phase 1: PM Planning</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, WA, BUILD</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>두 독립 버그 수정. MT-1은 IC-Part Excel 쓰기 로직(FS), MT-2는 Outlook COM 수신자 필터(WA). 두 수정 모두 단일 함수 내부지만 파일 2개 + EXE 빌드 필요.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>60</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>true</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>true</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명·코드 스타일 등 P2 내부 구현 취향 질문은 생략. 수정 방향은 사용자가 버그 보고서에서 명시적으로 지정함.</filter_summary>
+    <maintenance_priority>유지보수성 우선 — 단일 컬럼 의존 대신 상수(ICPART_COL_*)를 활용한 합집합 방식으로 컬럼 추가에도 확장 가능하게 구현</maintenance_priority>
+
+    <decision_questions>
+      <question id="Q1" category="module_split" mt_id="MT-1" priority="P0">
+        <user_facing_question>두 버그는 서로 다른 파일의 다른 함수에 있습니다. MT-1(order_mapper.py)과 MT-2(email_monitor.py)를 별도 모듈로 분리하여 순차 처리할까요?</user_facing_question>
+        <evidence>Grep 결과: _actual_start_row 관련 코드는 ic_part_src/order_mapper.py의 write_ic_part_zip 함수(라인 1134~1152)에만 존재. recipient_set 관련 코드는 po_automation/email_monitor.py의 _process_mail_item 함수(라인 920~946)에만 존재. 두 함수 간 호출 관계 없음.</evidence>
+        <why_it_matters>두 버그를 하나의 MT로 합치면 QA 범위가 넓어져 각 버그 검증이 불명확해집니다. 분리하면 각 버그를 독립적으로 검증하고 롤백할 수 있습니다.</why_it_matters>
+        <options>
+          <option id="A">
+            <label>MT-1/MT-2 분리 (권장)</label>
+            <benefit>버그별 독립 검증 가능, 한 수정이 실패해도 다른 수정은 그대로 유지, QA 범위 명확</benefit>
+            <cost>두 번의 module design/dev/qa 사이클 필요, 약간 더 많은 pipeline.py 명령 실행</cost>
+          </option>
+          <option id="B">
+            <label>단일 MT로 통합</label>
+            <benefit>pipeline.py 명령 횟수 절반으로 줄어듦</benefit>
+            <cost>QA가 두 버그를 동시에 검증해야 해서 실패 원인 특정 어려움, 롤백 단위 불명확</cost>
+          </option>
+        </options>
+        <recommended_option>A</recommended_option>
+        <user_answer>사용자 버그 보고서에서 두 버그를 독립적으로 기술함 — MT-1/MT-2 분리 확인</user_answer>
+      </question>
+
+      <question id="Q2" category="implementation" mt_id="MT-1" priority="P0">
+        <user_facing_question>MT-1: 빈 행 기준을 어떻게 결정할까요? 기존에는 K 컬럼만 봤는데, I·J·K 세 컬럼 모두를 봐야 할까요?</user_facing_question>
+        <evidence>사용자 버그 보고서: "빈 행 기준을 I, J, K 컬럼 모두 비어있는 첫 번째 행으로 변경". 현재 코드는 K 컬럼(_l_cell_pattern)만 스캔하여 Row 731 삽입 실패 발생.</evidence>
+        <why_it_matters>I 또는 J에만 데이터가 있고 K가 비어있으면 기존 코드는 그 행을 "빈 행"으로 처리해 기존 데이터를 덮어씁니다. I·J·K 합집합 기준으로 바꾸면 세 컬럼 중 하나라도 데이터가 있으면 안전하게 건너뜁니다.</why_it_matters>
+        <options>
+          <option id="A">
+            <label>I·J·K 합집합 기준 (권장)</label>
+            <benefit>세 컬럼 모두 반영하여 기존 데이터 덮어쓰기 방지, 사용자 요청과 일치, ICPART_COL_* 상수 활용으로 컬럼 변경에도 유지보수 용이</benefit>
+            <cost>기존 K 전용 regex 1개를 3개로 확장, 약 20~30줄 추가</cost>
+          </option>
+          <option id="B">
+            <label>K 컬럼만 유지 (현상유지)</label>
+            <benefit>코드 변경 없어 회귀 위험 최소화, 기존 동작 그대로 유지</benefit>
+            <cost>Row 731 삽입 실패 버그 미해결, 사용자 요청 미이행, IC-Part 파일 손상 위험 지속</cost>
+          </option>
+        </options>
+        <recommended_option>A</recommended_option>
+        <user_answer>사용자 명시 요청: I·J·K 모두 비어있는 첫 번째 행 — 옵션 A 확인</user_answer>
+      </question>
+
+      <question id="Q3" category="implementation" mt_id="MT-2" priority="P0">
+        <user_facing_question>MT-2: Exchange DN 주소를 SMTP로 변환할 때 예외 발생 시 어떻게 처리할까요?</user_facing_question>
+        <evidence>Grep 결과: 발신자 필터(get_sender_smtp, 라인 783~790)는 이미 GetExchangeUser() 예외를 try/except로 처리 중. 수신자 for 루프(라인 929~934)는 rec.Address 그대로 사용, Exchange DN 변환 분기 없음.</evidence>
+        <why_it_matters>GetExchangeUser()가 None을 반환하거나 예외를 던지면 크래시가 발생합니다. 예외 처리 없이 구현하면 emailmonitor가 메일 수신 중 중단될 수 있습니다.</why_it_matters>
+        <options>
+          <option id="A">
+            <label>예외 시 원본 주소 폴백 + nosec B110 (권장)</label>
+            <benefit>크래시 없이 원본 DN을 recipient_set에 추가, 기존 발신자 필터와 동일한 패턴, WA 카테고리 예외 처리 의무 충족</benefit>
+            <cost>DN이 폴백으로 recipient_set에 들어가면 allowed_recipients(SMTP)와 매칭 실패 가능 — 하지만 이는 기존 버그보다 낫고 로그에서 확인 가능</cost>
+          </option>
+          <option id="B">
+            <label>예외 시 해당 수신자 무시</label>
+            <benefit>DN이 recipient_set에 오염되지 않음</benefit>
+            <cost>수신자 누락으로 일부 메일이 필터를 통과하지 못할 수 있음, WA 예외 처리 의무 충족 확인 필요</cost>
+          </option>
+        </options>
+        <recommended_option>A</recommended_option>
+        <user_answer>사용자 명시: "GetExchangeUser 예외" 케이스 oracle 포함 요청 — 크래시 없이 폴백 확인</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: ic_part_src/order_mapper.py (Excel XML 파서), po_automation/email_monitor.py (Outlook COM)
+    - Output: 수정된 두 .py 파일 + 두 EXE (ICPartAutomation, emailmonitor)
+    - Validation: _actual_start_row이 I·J·K 합집합 기준으로 계산됨; Exchange DN 주소가 SMTP로 변환됨
+  </interface_spec>
+
+  <requirements>
+    MT-1:
+    - write_ic_part_zip() 함수 내 _l_cell_pattern, _l_filled, _last_written_row, _actual_start_row 블록 교체
+    - I(ICPART_COL_PROJECT_ID=9), J(ICPART_COL_ORDER_NO=10), K(ICPART_COL_PO_NO=11) 세 컬럼 모두 스캔
+    - 각 컬럼의 v 태그 있는 행 번호를 _ijk_occupied set에 합산
+    - _last_occupied_row = max(_ijk_occupied, default=ICPART_DATA_START_ROW - 1)
+    - _actual_start_row = max(_last_occupied_row + 1, ICPART_DATA_START_ROW)
+    - self-closing c 태그(값 없음)는 제외, v 태그 있는 행만 집계
+    - 빈 시트(데이터 없음) 시 _actual_start_row = ICPART_DATA_START_ROW = 6
+
+    MT-2:
+    - _process_mail_item() 내 수신자 for 루프에서 rec.Address 처리 방식 변경
+    - '@' 없는 주소는 Exchange DN으로 감지
+    - rec.AddressEntry.GetExchangeUser().PrimarySmtpAddress로 SMTP 주소 조회
+    - GetExchangeUser() 호출 중 예외 발생 시 원본 주소로 폴백 (크래시 없음, nosec B110)
+    - WA 카테고리 필수: 예외 처리 분기 포함, 크래시 방지
+  </requirements>
+
+  <decomposition_audit>
+    <total_functions_identified>2</total_functions_identified>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <split_decision>변경 파일 2개, 변경 함수 2개 — 각 함수가 서로 다른 파일에 독립적으로 위치하므로 MT-1/MT-2로 분리. 함수 간 의존성 없음.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>ic_part_src.order_mapper.write_ic_part_zip</affected_function>
+      <target_files>
+        <file>ic_part_src/order_mapper.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_l_cell_pattern|_l_filled|_last_written_row|_actual_start_row</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>write_ic_part_zip 내 K 컬럼만 스캔하던 로직을 I·J·K 합집합 기준으로 교체</change_summary>
+      <line_estimate>35</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>po_automation.email_monitor._process_mail_item</affected_function>
+      <target_files>
+        <file>po_automation/email_monitor.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>rec\.Address|recipient_set|AddressEntry|GetExchangeUser</pattern>
+        <match_count>6</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_process_mail_item 수신자 for 루프에서 Exchange DN 감지 및 SMTP 변환 로직 추가</change_summary>
+      <line_estimate>20</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 프로젝트 환경 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>pylance, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - MT-1: I·J·K 컬럼 합집합 기준으로 _actual_start_row 계산 (단일 컬럼 기준 제거)
+    - MT-1: 빈 시트 시 _actual_start_row = ICPART_DATA_START_ROW = 6
+    - MT-1: K만 채워진 경우 K의 마지막 행+1이 _actual_start_row
+    - MT-2: '@' 포함 주소는 변환 없이 그대로 사용
+    - MT-2: Exchange DN 형식 주소는 PrimarySmtpAddress로 변환
+    - MT-2: GetExchangeUser() 예외 시 크래시 없이 원본 주소로 폴백
+    - 두 EXE 빌드 성공 및 기존 기능 회귀 없음
+  </acceptance_criteria>
+
+  <forbidden>
+    - ic_part_src/order_mapper.py 외 파일 수정 금지 (MT-1)
+    - po_automation/email_monitor.py 외 파일 수정 금지 (MT-2)
+    - oracle 기대값 파일(tests/oracles/**) 수정 금지
+    - 기존 테스트 코드 삭제 금지
+  </forbidden>
+
+  <handover_template_spec>
+    <!-- dev-agent가 QA 인계 시 사용할 handover 형식 (PM 지시 사항) -->
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <evidence_required>
+      <file>ic_part_src/order_mapper.py</file>
+      <file>po_automation/email_monitor.py</file>
+      <file>scope_manifest.json</file>
+    </evidence_required>
+    <status>READY_FOR_QA</status>
+  </handover_template_spec>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\ic_part_src\order_mapper.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\po_automation\email_monitor.py</file>
+    </target_files>
+    <phase_rules_excerpt>Dev: 단일 함수 수정, scope_manifest.json 필수, module design/dev/qa 순서 준수</phase_rules_excerpt>
+    <prev_phase_summary>PM 완료: MT-1(write_ic_part_zip 수정), MT-2(_process_mail_item 수신자 필터 수정) — contract frozen</prev_phase_summary>
+  </context_injection>
+</step_plan>

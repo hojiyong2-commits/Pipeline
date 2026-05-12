@@ -1,0 +1,5 @@
+{
+  "description": "SMTP 형식 rec.Address — '@' 포함, 변환 불필요",
+  "rec_address": "user@contoso.com",
+  "has_at_sign": true
+}

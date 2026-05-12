@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BUG-20260512-CF73: emailmonitor 폴더 생성 불량 수정 -->
+<step_plan>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>build_or_deploy=true (EmailMonitor.spec 수정으로 EXE 빌드 영향)이고 fitz/pdfplumber C 확장 번들링 포함. Fast Path 금지 조건 해당.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>25</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>true</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first — 빠른 수정보다 코드 안전성과 유지보수성을 우선합니다.</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      rmdir 호출 위치(try 블록 내부 vs 외부)는 안전성상 try/except 안이 명확하므로 P2로 분류 후 필터링.
+      collect_all 변수명(fitz_datas vs fitz_data 등)은 PyInstaller 관례를 따르므로 P2 필터링.
+      유지보수성 우선 원칙 적용.
+    </filter_summary>
+
+    <decision_questions>
+      <question id="DQ0" priority="P1" category="module_split">
+        <user_facing_question>이번 버그 수정을 MT-1(폴더 정리 로직)과 MT-2(spec 번들링) 두 개로 나누는 것이 좋을까요, 아니면 하나로 합치는 것이 나을까요?</user_facing_question>
+        <evidence>MT-1은 email_monitor.py 런타임 로직, MT-2는 EmailMonitor.spec 빌드 설정으로 서로 다른 파일·레이어이며 독립적으로 검증 가능합니다.</evidence>
+        <why_it_matters>분리하면 각 수정을 독립적으로 검증할 수 있어 나중에 디버깅이 쉬워집니다.</why_it_matters>
+        <options>
+          <option id="A">
+            <label>MT-1 + MT-2 분리 (권장)</label>
+            <benefit>각 변경 독립 검증 가능, 빌드 실패 시 원인 파악 용이</benefit>
+            <cost>두 번 모듈 게이트를 통과해야 하므로 처리 시간 약간 증가</cost>
+          </option>
+          <option id="B">
+            <label>단일 MT로 합치기</label>
+            <benefit>모듈 게이트 통과 횟수가 1회로 줄어 처리 단계 수가 감소합니다</benefit>
+            <cost>런타임 버그와 빌드 설정 변경이 묶여 실패 원인 파악이 어려움</cost>
+          </option>
+        </options>
+        <recommended_option>A</recommended_option>
+        <user_answer>A — 사용자 분석 결과에서 MT-1/MT-2 분리 방식 명시</user_answer>
+      </question>
+
+      <question id="DQ1" priority="P1" category="implementation" mt_id="MT-1">
+        <user_facing_question>최종 폴더(dest_folder)가 이미 존재할 때 비어있는 임시 폴더(tmp_dest_folder) 처리 방식: 비어있으면 rmdir 삭제, 비어있지 않으면 OSError pass로 처리할까요?</user_facing_question>
+        <evidence>email_monitor.py L1072에 dest_folder.exists(): pass 코드가 있어 임시 폴더가 정리되지 않아 고아 폴더가 누적됩니다.</evidence>
+        <why_it_matters>비어있지 않은 경우 shutil.rmtree를 쓰면 첨부파일이 남아있을 때 데이터 손실 위험이 있습니다.</why_it_matters>
+        <options>
+          <option id="A">
+            <label>rmdir + OSError pass (권장)</label>
+            <benefit>안전: 비어있지 않으면 파일 손실 없음, 기존 pass 패턴과 일관성 유지</benefit>
+            <cost>비어있지 않은 고아 폴더는 여전히 남을 수 있음 (드문 케이스)</cost>
+          </option>
+          <option id="B">
+            <label>shutil.rmtree 강제 삭제</label>
+            <benefit>완전 정리로 고아 폴더 완전 제거</benefit>
+            <cost>첨부파일이 아직 tmp에 있을 경우 데이터 손실 위험으로 사용 금지</cost>
+          </option>
+        </options>
+        <recommended_option>A</recommended_option>
+        <user_answer>A — 사용자 분석 결과에서 rmdir + OSError pass 명시</user_answer>
+      </question>
+
+      <question id="DQ2" priority="P1" category="implementation" mt_id="MT-2">
+        <user_facing_question>EmailMonitor.spec에 collect_all 추가 시 기존 hiddenimports 목록(win32com, openpyxl 등) 유지할까요?</user_facing_question>
+        <evidence>EmailMonitor.spec 현재 hiddenimports=[]로 비어있어 win32com, openpyxl 등이 런타임에 누락될 수 있습니다. collect_all이 이를 전부 커버하는지 불확실합니다.</evidence>
+        <why_it_matters>기존 항목을 삭제하면 win32com, openpyxl 의존 기능이 EXE에서 누락됩니다.</why_it_matters>
+        <options>
+          <option id="A">
+            <label>기존 항목 보존 + collect_all 추가 확장 (권장)</label>
+            <benefit>하위 호환성 완전 보장, win32com과 openpyxl 누락 위험 없음</benefit>
+            <cost>spec이 약간 길어지지만 가독성에 영향 없음</cost>
+          </option>
+          <option id="B">
+            <label>collect_all로 전체 대체</label>
+            <benefit>spec 단순화로 중복 항목 없음</benefit>
+            <cost>collect_all이 win32com 같은 COM 라이브러리를 포함하지 않을 수 있어 EXE 실패 위험</cost>
+          </option>
+        </options>
+        <recommended_option>A</recommended_option>
+        <user_answer>A — 사용자 분석 결과에서 기존 hiddenimports 유지 명시</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <decomposition_audit>
+    <total_functions_identified>2</total_functions_identified>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <split_decision>
+      버그 1(email_monitor.py _process_mail_item 내 orphan folder 로직)과
+      버그 2(EmailMonitor.spec collect_all 번들링)는 서로 다른 파일, 서로 다른 레이어(런타임 vs 빌드),
+      독립적으로 구현·검증 가능하므로 MT-1/MT-2로 분할.
+    </split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <current_step>Step 1: PM Planning — BUG-20260512-CF73</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, BUILD</category_tags>
+
+  <interface_spec>
+    - Input: po_automation/email_monitor.py (기존 코드), EmailMonitor.spec (기존 spec)
+    - Output: 수정된 email_monitor.py (MT-1 orphan 정리), 수정된 EmailMonitor.spec (MT-2 collect_all)
+    - Validation: T001~T004 command_check (contract test_set.json 참조)
+  </interface_spec>
+
+  <requirements>
+    ### MT-1: orphan_folder_fix (po_automation/email_monitor.py)
+
+    대상 함수: _process_mail_item (L970~L1084)
+    수정 위치: L1072~L1074 (if dest_folder.exists(): pass 블록)
+
+    현재 코드:
+      if dest_folder.exists():
+          pass  # nosec B110
+
+    수정 후:
+      if dest_folder.exists():
+          try:
+              tmp_dest_folder.rmdir()  # 비어있을 때만 삭제 (안전)
+          except OSError:
+              pass  # nosec B110 — 비어있지 않으면 그냥 둠
+
+    규칙:
+    - rmdir()는 try/except OSError 블록 안에서만 호출
+    - except OSError: pass (nosec B110) 주석 필수
+    - shutil.rmtree 사용 금지 (데이터 손실 위험)
+    - 함수 시그니처, 반환값, 기타 로직 변경 금지
+
+    ### MT-2: pdf_library_bundle (EmailMonitor.spec)
+
+    대상: 프로젝트 루트의 EmailMonitor.spec (name='emailmonitor' EXE 빌드용)
+    수정 금지: po_automation/EmailMonitor.spec (사용되지 않는 spec)
+
+    현재 코드:
+      a = Analysis(
+          ['po_automation\\main.py'],
+          pathex=[],
+          binaries=[],
+          datas=[],
+          hiddenimports=[],
+          ...
+      )
+
+    수정 후:
+      # 파일 상단에 추가 (# -*- mode: python -*- 아래):
+      from PyInstaller.utils.hooks import collect_all
+
+      fitz_datas, fitz_binaries, fitz_hiddenimports = collect_all('fitz')
+      pdfplumber_datas, pdfplumber_binaries, pdfplumber_hiddenimports = collect_all('pdfplumber')
+
+      a = Analysis(
+          ['po_automation\\main.py'],
+          pathex=[],
+          binaries=fitz_binaries + pdfplumber_binaries,
+          datas=fitz_datas + pdfplumber_datas,
+          hiddenimports=fitz_hiddenimports + pdfplumber_hiddenimports + [
+              'win32com', 'win32com.client', 'win32com.server', 'win32timezone',
+              'openpyxl', 'openpyxl.styles', 'openpyxl.utils',
+          ],
+          ...
+      )
+
+    규칙:
+    - collect_all은 파일 맨 상단에 import (# -*- mode: python -*- 이후)
+    - 기존 Analysis 파라미터 구조(hookspath, hooksconfig, runtime_hooks, excludes 등) 유지
+    - name='emailmonitor', console=False, upx=True 등 EXE 설정 변경 금지
+    - po_automation/EmailMonitor.spec 절대 수정 금지
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>po_automation.email_monitor._process_mail_item</affected_function>
+      <target_files>
+        <file>po_automation/email_monitor.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+        <!-- _process_mail_item 내부 로직 변경이며 함수 시그니처 불변. 외부 호출부 영향 없음. -->
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>tmp_dest_folder</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>dest_folder.exists() 분기에서 비어있는 tmp_dest_folder를 rmdir()로 정리 (OSError는 pass)</change_summary>
+      <line_estimate>5</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>EmailMonitor.spec — PyInstaller Analysis configuration</affected_function>
+      <target_files>
+        <file>EmailMonitor.spec</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+        <!-- spec 파일은 빌드 설정 파일이며 Python 코드에서 import되지 않음 -->
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>collect_all|hiddenimports|fitz|pdfplumber</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+        <!-- 현재 match_count=1 (hiddenimports=[] 1개만 존재). 수정 후 collect_all 패턴이 추가되어야 함. -->
+      </grep_evidence>
+      <change_summary>collect_all('fitz') + collect_all('pdfplumber')로 C 확장 DLL과 데이터 파일을 EXE에 번들링. 기존 hiddenimports 목록(win32com, openpyxl) 보존.</change_summary>
+      <line_estimate>12</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 프로젝트 기존 Python 버전(PyInstaller + pymupdf 3.10 호환성 확인됨)</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.analysis.typeCheckingMode=basic, pylance 권장</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    1. [MT-1 정상] tmp_dest_folder가 비어있고 dest_folder가 이미 존재할 때: tmp_dest_folder가 rmdir로 삭제됨.
+       Grep 검증: tmp_dest_folder.rmdir() 패턴이 email_monitor.py에서 1회 이상 매칭.
+    2. [MT-1 엣지] tmp_dest_folder가 비어있지 않고 dest_folder가 이미 존재할 때: OSError가 발생하고 pass로 처리됨, 예외 전파 없음.
+       Grep 검증: except OSError: + nosec B110 패턴이 rmdir 바로 아래에 존재.
+    3. [MT-1 미변경] _process_mail_item 함수의 기타 로직(PDF 파싱, 폴더명 조합, shutil.move 등) 변경 없음.
+    4. [MT-2 fitz] EmailMonitor.spec에 collect_all('fitz') 존재, fitz_binaries/fitz_datas가 Analysis()에 전달됨.
+    5. [MT-2 pdfplumber] EmailMonitor.spec에 collect_all('pdfplumber') 존재, pdfplumber_binaries/pdfplumber_datas가 Analysis()에 전달됨.
+    6. [MT-2 기존 항목 보존] win32com, openpyxl이 hiddenimports에 여전히 존재.
+    7. [금지] po_automation/EmailMonitor.spec 수정 없음.
+    8. [금지] 수정 대상 2파일 외 변경 없음.
+  </acceptance_criteria>
+
+  <forbidden>
+    - po_automation/EmailMonitor.spec 수정 금지 (사용되지 않는 spec)
+    - email_monitor.py에서 _process_mail_item 외의 함수 수정 금지
+    - shutil.rmtree 사용 금지 (데이터 손실 위험)
+    - oracle/test 파일 수정 금지
+    - 기존 테스트 코드 삭제 금지
+    - Anti-gaming: scope_manifest.json 없이 dev done 제출 금지
+    - Anti-gaming: 숫자 점수(harness score)로 COMPLETE 선언 금지 — Technical/Oracle/GitHub CI/User Acceptance gate 필수
+  </forbidden>
+
+  <handover_template>
+    <template_from>dev-agent</template_from>
+    <template_to>qa-agent</template_to>
+    <template_pipeline_id>BUG-20260512-CF73</template_pipeline_id>
+    <template_evidence>
+      <file>po_automation/email_monitor.py</file>
+      <file>EmailMonitor.spec</file>
+      <file>scope_manifest.json</file>
+      <file>dev_handover.xml</file>
+    </template_evidence>
+    <template_status>READY_FOR_QA</template_status>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\po_automation\email_monitor.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\EmailMonitor.spec</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Dev Phase 필수:
+      - Incremental Module Gate: MT-1 module design -> module dev -> module qa PASS 후 MT-2 시작
+      - 각 MT마다 scope_manifest_MT-N.json 생성 필수
+      - impact_analysis 블록 출력 필수
+      - FS 카테고리: safe_write 패턴 적용, 인코딩(utf-8) 명시
+      - 수정 대상 2파일 외 변경 절대 금지
+      - po_automation/EmailMonitor.spec 수정 금지
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Planning DONE — contract frozen (audit PASS), oracle 2개 등록 (normal+edge), P0 test 4개 등록</prev_phase_summary>
+  </context_injection>
+
+  <askuser>NONE</askuser>
+</step_plan>

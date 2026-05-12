@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <anti_gaming_read>true</anti_gaming_read>
+  <pipeline_id>IMP-20260511-92A6</pipeline_id>
+
+  <!-- ================================================================
+       실행 프로필
+       ================================================================ -->
+  <task_complexity>
+    <execution_profile>FAST_ANALYSIS</execution_profile>
+    <reason>제품 코드를 수정하지 않고 KittingMapper.exe 소스 정적 분석 보고서 1개만 작성합니다. 코드 수정은 별도 파이프라인에서 진행합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>0</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <!-- ================================================================
+       설계 확인 (사용자에게 P0 질문)
+       ================================================================ -->
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      FAST_ANALYSIS 프로필이므로 코드 구조 선택, 변수명 등 P2 질문은 모두 필터링했습니다.
+      P0는 매핑 테이블 정확성 1개 + 모듈 분해 확인 1개만 포함합니다.
+    </filter_summary>
+    <maintenance_priority>유지보수성 우선 — 분석 보고서는 향후 개선 작업에서 참조됩니다.</maintenance_priority>
+
+    <decision_questions>
+
+      <question id="Q-MS-1" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>분석 보고서를 단일 파일(MT-1)로 작성하는 방식이 맞는지 확인해 주시겠습니까?</user_facing_question>
+        <evidence>FAST_ANALYSIS 프로필: 코드 수정 없이 정적 분석 보고서 1개만 산출합니다. 현재 MT-1 하나로 분해했습니다.</evidence>
+        <why_it_matters>보고서를 여러 섹션으로 나눠 복수의 MT로 작성할 수도 있지만, 단일 마크다운 파일이 사용자 관점에서 가장 간결합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <user_answer>A — 단일 파일(MT-1) 방식으로 진행 확인 (사용자 승인 완료)</user_answer>
+        <options>
+          <option id="A">
+            <label>단일 보고서 파일(KittingMapper_inspection_report.md) 1개 생성</label>
+            <benefit>단일 파일로 모든 발견 항목을 통합하여 가독성이 높고 관리가 쉽습니다.</benefit>
+            <cost>섹션이 많아지면 파일이 길어질 수 있습니다(예상 150줄, 허용 범위 내).</cost>
+          </option>
+          <option id="B">
+            <label>섹션별 복수 파일 생성 (예: report_summary.md, report_findings.md)</label>
+            <benefit>섹션별로 분리하여 개별 관리 가능합니다.</benefit>
+            <cost>MT를 여러 개로 나눠야 하고, 사용자가 여러 파일을 열어야 합니다.</cost>
+          </option>
+        </options>
+      </question>
+
+      <question id="Q-P0-1" priority="P1" category="business_rule" mt_id="MT-1">
+        <user_facing_question>config.json의 pm_name_map 및 pm_location_overrides 매핑 테이블이 현재 정확한지 선택해 주시겠습니까?</user_facing_question>
+        <evidence>
+          pm_name_map: Ji Yong Ho=호지용, Hye Ran Ko=고혜란, In Kyoung Nam=남인경, Yong Kyu Sung=성용규.
+          pm_location_overrides: Sang Yong Cho — AT 기종=호지용, 기본값=성용규.
+        </evidence>
+        <why_it_matters>이 매핑이 틀리면 엑셀 결과물에 잘못된 PM 이름이 기재되므로, 보고서의 권고 사항 섹션에 정확한 현황이 반영되어야 합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <user_answer>A — 정확함 (수정 불필요, 사용자 확인 완료)</user_answer>
+        <options>
+          <option id="A">
+            <label>매핑 테이블이 현재 정확하다 (수정 불필요)</label>
+            <benefit>보고서에 "매핑 테이블 사용자 확인 완료 — 현행 유지"로 기재할 수 있습니다.</benefit>
+            <cost>PM 변경 시 별도 개선 파이프라인(IMP)을 열어 config.json을 수정해야 합니다.</cost>
+          </option>
+          <option id="B">
+            <label>수정이 필요한 항목이 있다</label>
+            <benefit>보고서에 정확한 수정 내용을 기재하여 다음 파이프라인에서 즉시 반영 가능합니다.</benefit>
+            <cost>추가 정보(수정할 영문 이름, 한국어 이름)를 제공해야 합니다.</cost>
+          </option>
+        </options>
+      </question>
+
+    </decision_questions>
+  </design_confirmation>
+
+  <!-- ================================================================
+       분해 감사
+       ================================================================ -->
+  <decomposition_audit>
+    <total_functions_identified>0</total_functions_identified>
+    <micro_task_count>1</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <split_decision>
+      FAST_ANALYSIS 프로필: 제품 코드 수정 없음. 분석 결과를 단일 마크다운 보고서로
+      정리하는 작업이므로 micro_task 1개로 충분합니다.
+      변경 함수 0개, 변경 파일 1개(보고서 신규 생성), 예상 라인 약 150줄.
+    </split_decision>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+  </decomposition_audit>
+
+  <!-- ================================================================
+       Micro-task
+       ================================================================ -->
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <name>KittingMapper_inspection_report.md 분석 보고서 작성</name>
+      <affected_function>none — 신규 보고서 파일 생성, 제품 코드 수정 없음</affected_function>
+      <target_files>
+        <file>KittingMapper_inspection_report.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_compress_line_nos</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+        <note>main.py L34-63 과 ui/app.py L30-59 에 동일 함수 중복 정의 확인</note>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>import re as _re</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+        <note>ui/app.py L591 try 블록 내 인라인 import 안티패턴 확인</note>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>write_date = get_next_business_day</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+        <note>main.py L107, ui/app.py L425 — write_date 계산 후 미사용 데드코드 확인</note>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>_safe_resolve</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+        <note>order_lines_reader.py — ALLOWED_ROOT=Path.home() 이므로 UNC 경로 차단 가능성 확인</note>
+      </grep_evidence>
+      <change_summary>
+        소스 정적 분석 결과(데드코드 4건, 코드 중복 1건, CLI-GUI 기능 차이 2건,
+        잠재적 오류 2건, 성능 2건, 보안 1건)를 구조화된 마크다운 보고서로 작성합니다.
+        매핑 테이블 사용자 확인 결과와 배포 규칙도 포함합니다.
+      </change_summary>
+      <line_estimate>150</line_estimate>
+
+      <!-- 보고서 필수 섹션 목록 -->
+      <report_sections>
+        <section id="S1">요약 (Executive Summary)</section>
+        <section id="S2">소스 파일 구조 개요</section>
+        <section id="S3">
+          발견 항목 분류별 상세
+          — 데드코드 (Dead Code): 4건
+          — 코드 중복 (Duplication): 1건
+          — CLI-GUI 기능 차이 (Feature Gap): 2건
+          — 잠재적 오류 (Potential Bug): 2건
+          — 성능 (Performance): 2건
+          — 보안 (Security): 1건
+        </section>
+        <section id="S4">
+          매핑 테이블 점검 결과
+          (pm_name_map 4개 항목 + pm_location_overrides 1개 고객사 규칙 — 사용자 확인 결과 반영)
+        </section>
+        <section id="S5">
+          배포 규칙 명시
+          "모든 파이프라인의 산출물은 승인 후 G:\내 드라이브\터미널\[pipeline_id] 에 자동 배포됩니다.
+          이 규칙은 CLAUDE.md에 이미 존재하며 gates accept --result ACCEPT 실행 시 자동 적용됩니다."
+        </section>
+        <section id="S6">
+          개선 우선순위 권고표
+          (우선순위 High/Medium/Low, 예상 공수, 별도 파이프라인 번호 예정)
+        </section>
+        <section id="S7">이후 개선 파이프라인 진행 시 참고사항</section>
+      </report_sections>
+    </micro_task>
+  </micro_tasks>
+
+  <!-- ================================================================
+       파이프라인 설정
+       ================================================================ -->
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Sonnet</model_tier>
+  <category_tags>FAST_ANALYSIS</category_tags>
+
+  <interface_spec>
+    Input: FEAT-20260426-332E/ 소스 파일 (이미 분석 완료, Read-only)
+    Output: KittingMapper_inspection_report.md (신규 생성, 프로젝트 루트)
+    Validation: 보고서 7개 섹션 모두 포함 여부, 12개 발견 항목 모두 기재 여부
+  </interface_spec>
+
+  <requirements>
+    - 제품 코드(*.py, config.json 등)를 절대 수정하지 않는다.
+    - 보고서 파일은 KittingMapper_inspection_report.md 단일 파일만 생성한다.
+    - 발견된 12개 항목을 S3 섹션에 모두 포함한다.
+    - S4 섹션에 사용자 매핑 테이블 확인 결과(Q-P0-1 답변)를 반영한다.
+    - S5 섹션에 배포 경로(G:\내 드라이브\터미널\) 규칙을 명시한다.
+    - S6 섹션에 개선 항목별 우선순위(High/Medium/Low)와 예상 공수를 기재한다.
+    - 각 발견 항목은 파일명, 라인 번호, 문제 설명, 권고 조치를 포함한다.
+    - 보고서는 한국어로 작성한다 (코드 식별자, 파일명은 원문 유지).
+    - oracle: --allow-no-oracle 적용 대상 (docs/analysis 전용 태스크).
+  </requirements>
+
+  <python_version>3.10 — 분석 전용으로 소스와 동일 환경 기준</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.analysis.typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - 보고서 파일 KittingMapper_inspection_report.md 생성 확인
+    - 7개 섹션(S1~S7) 모두 포함
+    - 12개 발견 항목 모두 기재 (데드코드 4건, 중복 1건, 기능차이 2건, 버그 2건, 성능 2건, 보안 1건)
+    - 매핑 테이블 점검 결과 섹션에 Q-P0-1 사용자 답변 반영
+    - 배포 경로 G:\내 드라이브\터미널\ 명시
+    - 제품 코드 파일 미수정 확인 (scope_manifest에 .py 파일 없어야 함)
+    - 엣지케이스 1: pm_location_overrides 항목이 pm_name_map에 없는 경우 보고서에 명시
+    - 엣지케이스 2: UNC 경로(_safe_resolve) 보안 이슈 — 실제 config.json의 packing_detail_path가 UNC 임을 명시
+    - 엣지케이스 3: CLI 기본값 jm="G" 오류 — config에 "jm":"KJ"가 있으면 무관하나, config 누락 시 발생 가능성 보고
+  </acceptance_criteria>
+
+  <!-- ================================================================
+       oracle 면제 선언
+       ================================================================ -->
+  <oracle_waiver>
+    <allow_no_oracle>true</allow_no_oracle>
+    <reason>FAST_ANALYSIS 프로필: 제품 코드 수정 없는 분석 보고서 작성 전용 태스크. docs/analysis 면제 조건 충족.</reason>
+  </oracle_waiver>
+
+  <!-- ================================================================
+       배포 규칙 (step_plan 수준에서 명시)
+       ================================================================ -->
+  <deployment_rule>
+    <deploy_root>G:\내 드라이브\터미널\</deploy_root>
+    <deploy_path>G:\내 드라이브\터미널\IMP-20260511-92A6\</deploy_path>
+    <trigger>gates accept --result ACCEPT --user-confirmed 실행 후 자동 복사</trigger>
+    <source>CLAUDE.md — "승인되면 pipeline.py가 승인된 결과물을 G:\내 드라이브\터미널\[pipeline_id]로 복사하고 deployment_manifest.json을 작성한다." 조항에 의거. 모든 파이프라인에 자동 적용됨.</source>
+    <output_registry_item>
+      <kind>report</kind>
+      <path>KittingMapper_inspection_report.md</path>
+      <label>KittingMapper 정적 분석 보고서</label>
+      <notes>사용자는 이 파일의 S1(요약)과 S6(개선 우선순위)만 확인하시면 됩니다. 상세 내용은 S2~S7에 있습니다.</notes>
+    </output_registry_item>
+  </deployment_rule>
+
+  <!-- ================================================================
+       인계 템플릿
+       ================================================================ -->
+  <handover_template>
+    <handover_example>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260511-92A6</pipeline_id>
+      <evidence>
+        <file>KittingMapper_inspection_report.md</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_example>
+  </handover_template>
+
+  <!-- ================================================================
+       컨텍스트 주입 (다음 Phase용)
+       ================================================================ -->
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\main.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\ui\app.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\core\order_lines_reader.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\core\packing_detail_reader.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\core\excel_mapper.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\config.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      FAST_ANALYSIS 프로필: 제품 코드 수정 금지, micro_task 1개.
+      산출물: KittingMapper_inspection_report.md 단일 파일.
+      oracle: --allow-no-oracle (docs/analysis 면제).
+      배포: G:\내 드라이브\터미널\IMP-20260511-92A6\ (ACCEPT 후 자동).
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Planner (IMP-20260511-92A6) 계획 완료 — 소스 분석 결과 12개 항목 발견, 보고서 작성 단일 태스크.</prev_phase_summary>
+  </context_injection>
+
+  <!-- ================================================================
+       forbidden
+       ================================================================ -->
+  <forbidden>
+    - 제품 코드 파일(.py, config.json, requirements.txt 등) 수정 절대 금지
+    - CLAUDE.md, pipeline.py, agent MD 수정 금지 (별도 IMP 대상)
+    - 보고서 외 파일 생성 금지
+    - pipeline.py done/qa/sec/build/harness/architect 호출 금지 (Pipeline Manager 전용)
+    - oracle 생성 금지 (--allow-no-oracle 적용 태스크)
+  </forbidden>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>

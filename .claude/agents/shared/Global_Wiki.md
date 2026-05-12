@@ -52,7 +52,7 @@ def get_base_path() -> Path:
 
 ## WA Category — 4 Mandatory Items (SSoT)
 
-> **이 섹션이 WA 4항목의 Single Source of Truth(SSoT)입니다.** dev-agent.md / qa-agent.md / test-harness-agent.md / pm-agent.md는 모두 이 섹션을 참조합니다.
+> **이 섹션이 WA 4항목의 Single Source of Truth(SSoT)입니다.** dev-agent.md / qa-agent.md / test-harness-agent.md / pm-planner-agent.md / pipeline-manager-agent.md / pm-agent.md 호환 문서는 모두 이 섹션을 참조합니다.
 
 1. `timeout=(connect_timeout, read_timeout)` tuple on every `requests` call (e.g. `timeout=(5, 30)`)
 2. `urllib3.util.retry.Retry` with `total=3`, `backoff_factor`, `status_forcelist` OR manual 3-retry loop
@@ -79,7 +79,7 @@ QA rejects any handover missing `<evidence>` with real file paths.
 ## Pipeline Gate Commands (Quick Reference)
 | Phase | Check | Record |
 |---|---|---|
-| pm | `python pipeline.py check --phase pm` | `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>` + `gates prepare-phase --phase pm` + `gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline` |
+| pm | `python pipeline.py check --phase pm` | `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml` + `gates prepare-phase --phase pm` + `gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline` |
 | module | `python pipeline.py module status` | `module design -> module dev -> module qa` for each `MT-N`, then `module integrate --result PASS --report-file integration_report.xml` |
 | dev | `python pipeline.py check --phase dev` | `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>` + phase attestation |
 | qa | `python pipeline.py check --phase qa` | `python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml --agent-run-id <run_id>` or `--result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <run_id>` |

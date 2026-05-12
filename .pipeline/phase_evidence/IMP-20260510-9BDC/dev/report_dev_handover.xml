@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260510-9BDC</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <evidence_files>
+    <file>.claude/agents/security-agent.md</file>
+    <file>.claude/agents/build-agent.md</file>
+    <file>.claude/agents/agent-factory-agent.md</file>
+    <file>.claude/agents/protocol-evolution-agent.md</file>
+    <file>.claude/agents/test-harness-agent.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+  </evidence_files>
+  <scope_declaration>
+    <files_to_modify>
+      <file>.claude/agents/security-agent.md</file>
+      <file>.claude/agents/build-agent.md</file>
+      <file>.claude/agents/agent-factory-agent.md</file>
+      <file>.claude/agents/protocol-evolution-agent.md</file>
+      <file>.claude/agents/test-harness-agent.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>MT-1: security-agent.md :: ## Integration Context (new section)</target_function>
+    <target_function>MT-2: build-agent.md :: next_required_phase (expanded) + deploy path</target_function>
+    <target_function>MT-3: agent-factory-agent.md :: ## CODEOWNERS Protection Notice (new section)</target_function>
+    <target_function>MT-4: protocol-evolution-agent.md :: ## CODEOWNERS and PR Review Gate (new section)</target_function>
+    <target_function>MT-5: test-harness-agent.md :: ## Deploy Path After ACCEPT (new section)</target_function>
+    <target_function>MT-6: pm-agent.md :: pipeline_complete deploy_path (new fields)</target_function>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </impact_analysis>
+</handover>

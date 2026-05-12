@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <mt_id>MT-1</mt_id>
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <from>dev-agent</from>
+  <status>READY_FOR_MODULE_QA</status>
+  <implemented_files>
+    <file>ic_part_src/order_mapper.py</file>
+  </implemented_files>
+  <change_summary>
+    L1141 루프 변수 _col_letter to _scan_letter rename.
+    L1143 L1145 regex f-string 참조 2곳도 _scan_letter로 변경 (총 3곳).
+    def _col_letter(L132) 함수 정의 및 L1308 L1312 L1317 호출부 3곳 보존.
+    assert 5곳(L1511-1518) 보존.
+  </change_summary>
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <scope_within_mt>PASS - 3곳만 변경, 함수 정의/호출부/assert 보존</scope_within_mt>
+    <forbidden_preserved>PASS - def _col_letter 및 호출부 미변경</forbidden_preserved>
+  </self_check>
+</module_handover>

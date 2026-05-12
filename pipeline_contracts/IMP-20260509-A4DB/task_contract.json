@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260509-A4DB",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-09T15:50:28Z",
+  "updated_at": "2026-05-09T15:52:30Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "README.md Pipeline smoke test 섹션 추가 + GitHub CI gate 검증",
+  "task_profile": {
+    "domain": "docs",
+    "task_kind": "docs-only",
+    "deliverable_kind": "markdown",
+    "success_signal": [
+      "README.md created",
+      "Pipeline smoke test section present",
+      "GitHub CI PASS",
+      "PR merged"
+    ]
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [
+      "no direct push to main",
+      "new branch required",
+      "PR required"
+    ],
+    "external_connectors_allowed": false
+  },
+  "deliverables": [
+    {
+      "id": "DEL-01",
+      "name": "README.md",
+      "kind": "markdown",
+      "path": "README.md",
+      "description": "Repository README with Pipeline smoke test section"
+    }
+  ],
+  "build_target": {
+    "required": false,
+    "type": "N/A",
+    "notes": "docs-only task — no runnable code, no EXE build required"
+  },
+  "execution": {
+    "mode": "N/A",
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MOD-IN-1",
+      "name": "README.md 신규 생성",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-OUT-1",
+      "name": "Git 브랜치 + PR + GitHub CI 통과",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-09T15:52:30Z",
+  "contract_hash": "ee08e6487ea3079e831aff5c4411226f47345dccac074af01f07f403fdfaa1e5",
+  "test_set_hash": "d4ce7e0999388704a298724dc06dabd8d14bb3e57d9203cc36172e2ada89ae85"
+}

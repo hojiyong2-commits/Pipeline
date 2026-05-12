@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260509-A4DB",
+  "created_at": "2026-05-09T15:50:28Z",
+  "updated_at": "2026-05-09T15:52:30Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "TC-01",
+      "module": "MOD-IN-1",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 50,
+      "given": {
+        "file": "README.md"
+      },
+      "when": {
+        "action": "read_file"
+      },
+      "then": {
+        "path": "README.md",
+        "contains": "Pipeline smoke test"
+      }
+    },
+    {
+      "id": "TC-02",
+      "module": "MOD-OUT-1",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 30,
+      "given": {
+        "pr_branch": "smoke-test/IMP-20260509-A4DB"
+      },
+      "when": {
+        "action": "verify_ci_attestation"
+      },
+      "then": {
+        "path": "README.md",
+        "result": "all_checks_pass",
+        "artifact": "pipeline-attestation"
+      }
+    },
+    {
+      "id": "TC-03",
+      "module": "MOD-OUT-1",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 20,
+      "given": {
+        "branch": "main"
+      },
+      "when": {
+        "action": "verify_no_direct_push"
+      },
+      "then": {
+        "path": "README.md",
+        "result": "push_via_pr_only"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-09T15:52:30Z",
+  "test_set_hash": "d4ce7e0999388704a298724dc06dabd8d14bb3e57d9203cc36172e2ada89ae85",
+  "contract_hash": "ee08e6487ea3079e831aff5c4411226f47345dccac074af01f07f403fdfaa1e5"
+}

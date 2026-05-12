@@ -1,0 +1,14 @@
+{
+  "pipeline_id": "BUG-20260512-CF73",
+  "micro_tasks": [
+    {
+      "id": "MT-2",
+      "files": [
+        "EmailMonitor.spec"
+      ],
+      "affected_functions": [
+        "EmailMonitor.spec — PyInstaller Analysis configuration"
+      ]
+    }
+  ]
+}

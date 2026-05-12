@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T03:47:50Z",
+  "pipeline_id": "IMP-20260510-9BDC",
+  "contract_hash": "5edd2f0e5706c153afd1c3ab1e96834a7290122b2f24c4e9caa3c164bf01fd1b",
+  "test_set_hash": "cf1c36887c8274eb2cf789d2228c9eef0024fe41e87e22f0806393fe99360684",
+  "observed_contract_hash": "5edd2f0e5706c153afd1c3ab1e96834a7290122b2f24c4e9caa3c164bf01fd1b",
+  "observed_test_set_hash": "cf1c36887c8274eb2cf789d2228c9eef0024fe41e87e22f0806393fe99360684",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 6,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MOD-4": 1,
+        "MOD-2": 2,
+        "MOD-6": 1,
+        "MOD-3": 1,
+        "MOD-5": 1,
+        "MOD-1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 7
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 75,
+    "total_points": 75,
+    "hard_fail": false,
+    "passed": 8,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T-1",
+      "module": "MOD-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/security-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'agent-run-id|Incremental Module Gate|module.*gate', content, re.I) else sys.exit(1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-2",
+      "module": "MOD-2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/build-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'attestation|gates prepare-phase|phase-ci', content, re.I) else sys.exit(1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-3",
+      "module": "MOD-2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/build-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'PIPELINE_DEPLOY|deploy|ACCEPT', content, re.I) else sys.exit(1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-4",
+      "module": "MOD-3",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/agent-factory-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'CODEOWNERS|PR.*review|review.*required|protected', content, re.I) else sys.exit(1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-5",
+      "module": "MOD-4",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/protocol-evolution-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'CODEOWNERS|PR.*review|review.*required|protected', content, re.I) else sys.exit(1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-6",
+      "module": "MOD-5",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/test-harness-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'deploy|PIPELINE_DEPLOY|ACCEPT.*deploy|deploy.*ACCEPT', content, re.I) else sys.exit(1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-7",
+      "module": "MOD-6",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/pm-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'PIPELINE_DEPLOY|deploy.*path|accept.*deploy|G:.*터미널', content, re.I) else sys.exit(1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-EDGE-1",
+      "module": "MOD-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 5,
+      "earned": 5,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re,sys; content=open('.claude/agents/security-agent.md',encoding='utf-8').read(); sys.exit(0) if re.search(r'orchestrator.*\\uc804\\ub2f4|orc.*only|CRITICAL.*pipeline.*sec|\\uc624\\ucf00\\uc2a4\\ud2b8\\ub808\\uc774\\ud130.*\\uc804\\uc6a9', content, re.I) else sys.exit(1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    }
+  ]
+}

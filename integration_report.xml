@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<integration_report>
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <integration_verdict>PASS</integration_verdict>
+  <modules_integrated>
+    <module id="MT-1" status="PASS">ic_part_src/order_mapper.py write_ic_part_zip 루프 변수 rename</module>
+  </modules_integrated>
+  <integration_check>
+    <cross_module_conflicts>none</cross_module_conflicts>
+    <interface_compatibility>PASS</interface_compatibility>
+    <no_regression>PASS - 함수 정의 및 호출부 보존 확인</no_regression>
+  </integration_check>
+</integration_report>

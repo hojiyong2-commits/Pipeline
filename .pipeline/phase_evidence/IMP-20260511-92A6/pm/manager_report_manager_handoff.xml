@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260511-92A6</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>9866aa848332271e65ef77383180f0c74c4bb7a4cbffccd670ca2d92aa8e5511</step_plan_sha256>
+  <planner_run_id>pm_planner-2304bfb29a778d90</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <user_design_confirmation>
+    <question id="Q1">매핑 테이블 정확성 확인</question>
+    <answer>A — 정확함 (수정 불필요)</answer>
+    <mapping_table_confirmed>true</mapping_table_confirmed>
+  </user_design_confirmation>
+</manager_handoff>

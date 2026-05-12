@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <mt_id>MT-1</mt_id>
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <verdict>PASS</verdict>
+  <verification_evidence>
+    <check id="1">for _scan_letter in _COL_LETTERS at L1141 confirmed</check>
+    <check id="2">for _col_letter pattern absent (only _scan_letter in loop)</check>
+    <check id="3">def _col_letter(n: int) at L132 preserved</check>
+    <check id="4">_col_letter() call sites at L1308 L1312 L1317 preserved</check>
+    <check id="5">assert statements at L1511-1518 preserved</check>
+    <check id="6">_scan_letter only used inside loop block (L1141-L1146)</check>
+  </verification_evidence>
+  <category_check>
+    <wa>N/A</wa>
+    <ui>N/A</ui>
+    <fs>PASS</fs>
+    <pd>PASS</pd>
+    <sec>PASS</sec>
+    <al>PASS</al>
+    <build>N/A</build>
+  </category_check>
+  <result>[PASS]</result>
+  <numeric_score>120</numeric_score>
+  <critical_issues>none</critical_issues>
+</module_qa_report>
