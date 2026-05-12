@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "emailmonitor 폴더 생성 불량 수정: 고아 폴더 정리 + PDF 파싱 라이브러리 EXE 번들링",
   "created_at": "2026-05-12T01:19:23Z",
-  "updated_at": "2026-05-12T01:56:12Z",
-  "current_phase": "sec",
+  "updated_at": "2026-05-12T02:01:59Z",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -44,22 +44,24 @@
       "numeric_score": 100
     },
     "sec": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "SKIP",
+      "completed_at": "2026-05-12T01:59:17Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-CF73_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-12T02:01:47Z",
+      "evidence": "dist/emailmonitor.exe",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "dist/build_report.xml",
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-CF73_phase_build.json",
+      "skip_reason": null,
+      "agent_run_id": "build-e9aba340b9872437"
     },
     "harness": {
       "status": "PENDING",
@@ -200,6 +202,30 @@
     {
       "ts": "2026-05-12T01:56:12Z",
       "msg": "phase attestation request prepared: qa"
+    },
+    {
+      "ts": "2026-05-12T01:59:14Z",
+      "msg": "github phase-ci qa PASS run_id=25708550738 commit=1e8b08959a28"
+    },
+    {
+      "ts": "2026-05-12T01:59:17Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-05-12T01:59:22Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-e9aba340b9872437"
+    },
+    {
+      "ts": "2026-05-12T02:01:01Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-e9aba340b9872437"
+    },
+    {
+      "ts": "2026-05-12T02:01:47Z",
+      "msg": "build DONE exe=dist/emailmonitor.exe"
+    },
+    {
+      "ts": "2026-05-12T02:01:59Z",
+      "msg": "phase attestation request prepared: build"
     }
   ],
   "terminal_state": null,
@@ -284,6 +310,26 @@
       "used_at": "2026-05-12T01:56:12Z",
       "commit_sha": "5c8812aa09b90fcbd735a0f5c423c32134c9ac01",
       "notes": ""
+    },
+    "build-e9aba340b9872437": {
+      "schema_version": 1,
+      "run_id": "build-e9aba340b9872437",
+      "pipeline_id": "BUG-20260512-CF73",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T01:59:22Z",
+      "completed_at": "2026-05-12T02:01:01Z",
+      "token_hash": "0c600ced426ed11dd3cc8d1cf9beeb1405d398bdb4b49d37ae2a06328a7e363a",
+      "output_file": "dist\\build_report.xml",
+      "output_sha256": "6a96e94d16a81bc3b884f7bff576770d241e3cd945d4ad1a92f0587b90abc55f",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-CF73\\build\\build-e9aba340b9872437.json",
+      "receipt_sha256": "c5931a4d72bd4790c57056e37164557c4f02a6ab023b0a9f9d9f87cd31a0b9d4",
+      "used_by_phase": "build",
+      "used_at": "2026-05-12T02:01:50Z",
+      "commit_sha": "1e8b08959a28f1977fe20146c8366545c4d12c13",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -351,14 +397,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-12T01:59:14Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25708550738",
+        "commit_sha": "1e8b08959a28f1977fe20146c8366545c4d12c13",
+        "evidence": "github_actions_phase_run:25708550738",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-CF73\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
         "status": "PENDING",
@@ -1553,6 +1600,15 @@
       "phase": "dev",
       "run_id": "25708413484",
       "commit_sha": "5c8812aa09b90fcbd735a0f5c423c32134c9ac01",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-12T01:59:14Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "25708550738",
+      "commit_sha": "1e8b08959a28f1977fe20146c8366545c4d12c13",
       "artifact": "pipeline-phase-attestation"
     }
   ],
