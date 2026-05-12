@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "ICPartAutomation 빈행 탐지 기준 변경(I,J,K 모두 비어있는 첫 행) + emailmonitor 발신자/수신자 필터링 동작 불량 수정",
   "created_at": "2026-05-12T00:05:14Z",
-  "updated_at": "2026-05-12T00:36:30Z",
-  "current_phase": "sec",
+  "updated_at": "2026-05-12T00:43:07Z",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -44,22 +44,24 @@
       "numeric_score": 116
     },
     "sec": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "SKIP",
+      "completed_at": "2026-05-12T00:38:47Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-E68A_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-12T00:42:54Z",
+      "evidence": "dist/emailmonitor.exe",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "dist/build_report.xml",
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-E68A_phase_build.json",
+      "skip_reason": null,
+      "agent_run_id": "build-18893b01debf2e4d"
     },
     "harness": {
       "status": "PENDING",
@@ -324,6 +326,46 @@
     {
       "ts": "2026-05-12T00:36:30Z",
       "msg": "phase attestation request prepared: qa"
+    },
+    {
+      "ts": "2026-05-12T00:38:38Z",
+      "msg": "github phase-ci qa PASS run_id=25705860023 commit=dc2ae76980d1"
+    },
+    {
+      "ts": "2026-05-12T00:38:47Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-05-12T00:41:59Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-6024a03d19d9b347"
+    },
+    {
+      "ts": "2026-05-12T00:42:04Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-6024a03d19d9b347"
+    },
+    {
+      "ts": "2026-05-12T00:42:25Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-b997c624ed368b36"
+    },
+    {
+      "ts": "2026-05-12T00:42:29Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-b997c624ed368b36"
+    },
+    {
+      "ts": "2026-05-12T00:42:49Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-18893b01debf2e4d"
+    },
+    {
+      "ts": "2026-05-12T00:42:54Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-18893b01debf2e4d"
+    },
+    {
+      "ts": "2026-05-12T00:42:54Z",
+      "msg": "build DONE exe=dist/emailmonitor.exe"
+    },
+    {
+      "ts": "2026-05-12T00:43:07Z",
+      "msg": "phase attestation request prepared: build"
     }
   ],
   "terminal_state": null,
@@ -708,6 +750,66 @@
       "used_at": "2026-05-12T00:36:30Z",
       "commit_sha": "ee0b34c71e5c98b9f6a4370e484d22f1cfef40fa",
       "notes": ""
+    },
+    "build-6024a03d19d9b347": {
+      "schema_version": 1,
+      "run_id": "build-6024a03d19d9b347",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:41:59Z",
+      "completed_at": "2026-05-12T00:42:04Z",
+      "token_hash": "22af463a1fca5afdee1f44a1160e0cabb1ba1852521b64966547dbe8f0ae3793",
+      "output_file": "dist\\build_report.xml",
+      "output_sha256": "ec79f23452a41385dd5a4eb508689b2af1bd93dbe3e8fab21aa3aef73eeb09f6",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\build\\build-6024a03d19d9b347.json",
+      "receipt_sha256": "754ff8756b03d2b5501e5530259f38e2f638f519659035d1c3d27b2d3db1d954",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "dc2ae76980d1ce297a9e202104d4b3b27dfd87e0",
+      "notes": ""
+    },
+    "build-b997c624ed368b36": {
+      "schema_version": 1,
+      "run_id": "build-b997c624ed368b36",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:42:25Z",
+      "completed_at": "2026-05-12T00:42:29Z",
+      "token_hash": "c615b7de8b91d82fc53ec46d5df042eed53baa0af8ec70279abc18f8018dfcba",
+      "output_file": "dist\\build_report.xml",
+      "output_sha256": "d3fb101b6fb2fafc639acc37663e55b7b61a54029b5cffe35ea9ab69d0889c86",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\build\\build-b997c624ed368b36.json",
+      "receipt_sha256": "da0a3b9556e84b4700df4a371cc831312f31dc46f97829717e697edb4102b3d5",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "dc2ae76980d1ce297a9e202104d4b3b27dfd87e0",
+      "notes": ""
+    },
+    "build-18893b01debf2e4d": {
+      "schema_version": 1,
+      "run_id": "build-18893b01debf2e4d",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:42:49Z",
+      "completed_at": "2026-05-12T00:42:54Z",
+      "token_hash": "f7243188d6f6196d05455d38575e9a5e23759122d9ce26093efc24ef4fa519dd",
+      "output_file": "dist\\build_report.xml",
+      "output_sha256": "3eabd0594e98e3a097862ff3d803793e193d6572d30037ff3cf6b25174571963",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\build\\build-18893b01debf2e4d.json",
+      "receipt_sha256": "24733e2bc6936c1aaed8d2a9362bc75bb89a90d379f3f19a51522aac8ad5c6e9",
+      "used_by_phase": "build",
+      "used_at": "2026-05-12T00:42:58Z",
+      "commit_sha": "dc2ae76980d1ce297a9e202104d4b3b27dfd87e0",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -775,14 +877,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-12T00:38:38Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25705860023",
+        "commit_sha": "dc2ae76980d1ce297a9e202104d4b3b27dfd87e0",
+        "evidence": "github_actions_phase_run:25705860023",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
         "status": "PENDING",
@@ -1953,6 +2056,15 @@
       "phase": "dev",
       "run_id": "25705761242",
       "commit_sha": "ee0b34c71e5c98b9f6a4370e484d22f1cfef40fa",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-12T00:38:38Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "25705860023",
+      "commit_sha": "dc2ae76980d1ce297a9e202104d4b3b27dfd87e0",
       "artifact": "pipeline-phase-attestation"
     }
   ],
