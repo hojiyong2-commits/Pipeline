@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "I·J·K 스캐너가 inlineStr 셀(<is> 태그)을 미감지 — 새로 쓴 행 overwrite 버그",
   "created_at": "2026-05-12T12:27:00Z",
-  "updated_at": "2026-05-12T12:52:39Z",
-  "current_phase": "sec",
+  "updated_at": "2026-05-12T12:57:15Z",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -44,22 +44,24 @@
       "numeric_score": 115
     },
     "sec": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "SKIP",
+      "completed_at": "2026-05-12T12:55:48Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-F307_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-12T12:57:07Z",
+      "evidence": "ic_part_src/dist/ICPartAutomation.exe",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "ic_part_src/dist/build_report.xml",
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-F307_phase_build.json",
+      "skip_reason": null,
+      "agent_run_id": "build-6bd761a539b15c4f"
     },
     "harness": {
       "status": "PENDING",
@@ -192,6 +194,30 @@
     {
       "ts": "2026-05-12T12:52:39Z",
       "msg": "phase attestation request prepared: qa"
+    },
+    {
+      "ts": "2026-05-12T12:55:44Z",
+      "msg": "github phase-ci qa PASS run_id=25735660219 commit=b08bf383d83c"
+    },
+    {
+      "ts": "2026-05-12T12:55:48Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-05-12T12:55:55Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-6bd761a539b15c4f"
+    },
+    {
+      "ts": "2026-05-12T12:56:42Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-6bd761a539b15c4f"
+    },
+    {
+      "ts": "2026-05-12T12:57:07Z",
+      "msg": "build DONE exe=ic_part_src/dist/ICPartAutomation.exe"
+    },
+    {
+      "ts": "2026-05-12T12:57:15Z",
+      "msg": "phase attestation request prepared: build"
     }
   ],
   "terminal_state": null,
@@ -276,6 +302,26 @@
       "used_at": "2026-05-12T12:52:39Z",
       "commit_sha": "3853cb51fed555f9fe956867e495dd79ab3a7b70",
       "notes": ""
+    },
+    "build-6bd761a539b15c4f": {
+      "schema_version": 1,
+      "run_id": "build-6bd761a539b15c4f",
+      "pipeline_id": "BUG-20260512-F307",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T12:55:55Z",
+      "completed_at": "2026-05-12T12:56:42Z",
+      "token_hash": "04455b2e33028d60c60157d04169bff01934eefc2e5e19445062f16b800d2e27",
+      "output_file": "ic_part_src\\dist\\build_report.xml",
+      "output_sha256": "1916f740a98bd64439e1cb75362cde5a22a17b77192c8f023ab03785d1ea858f",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-F307\\build\\build-6bd761a539b15c4f.json",
+      "receipt_sha256": "c033beb6f8204ac49d1bcaaf0a69d2900ddd2b3aa0f84d4c882c55c7cbc5ffa0",
+      "used_by_phase": "build",
+      "used_at": "2026-05-12T12:57:11Z",
+      "commit_sha": "b08bf383d83cdb3ae2d36c661896a31fef4b1879",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -343,14 +389,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-12T12:55:44Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25735660219",
+        "commit_sha": "b08bf383d83cdb3ae2d36c661896a31fef4b1879",
+        "evidence": "github_actions_phase_run:25735660219",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-F307\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
         "status": "PENDING",
@@ -1555,6 +1602,15 @@
       "phase": "dev",
       "run_id": "25735413956",
       "commit_sha": "3853cb51fed555f9fe956867e495dd79ab3a7b70",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-12T12:55:44Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "25735660219",
+      "commit_sha": "b08bf383d83cdb3ae2d36c661896a31fef4b1879",
       "artifact": "pipeline-phase-attestation"
     }
   ],
