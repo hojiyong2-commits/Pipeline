@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <phase>pm</phase>
+  <status>READY_FOR_DEV</status>
+  <step_plan_file>step_plan.xml</step_plan_file>
+  <step_plan_sha256>30f972fbba937d5867d79f16dcdcca994487d4dc748e7fdf2748db21d75fc80f</step_plan_sha256>
+  <planner_run_id>pm_planner-73388ef05949036a</planner_run_id>
+  <manager_run_id>pipeline_manager-5ac170996aa694a6</manager_run_id>
+  <contract_frozen>true</contract_frozen>
+  <contract_hash>cd03b14ba0825def5dbcec6c27870504a2046d969b4561fb119238b4faf5faa8</contract_hash>
+  <test_set_hash>c0e60cfa0952c2af11857bb902daf368b0b4c1618a6a8eb846529c2e74296ded</test_set_hash>
+
+  <micro_tasks>
+    <task id="MT-1" file="po_automation/email_monitor.py" function="_process_mail_item" status="PENDING"/>
+    <task id="MT-2" file="EmailMonitor.spec" function="Analysis spec config" status="PENDING"/>
+  </micro_tasks>
+
+  <oracle_summary>
+    <count>2</count>
+    <normal>1</normal>
+    <edge>1</edge>
+    <exception>0</exception>
+  </oracle_summary>
+
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <build_required>true</build_required>
+  <build_targets>
+    <target>emailmonitor (EmailMonitor.spec)</target>
+  </build_targets>
+
+  <sec_decision>
+    <action>SKIP</action>
+    <reason>MT-1은 COM API 직접 호출 로직이 아닌 임시 폴더 정리 코드만 수정. MT-2는 PyInstaller spec 파일 수정으로 외부 네트워크 통신 없음.</reason>
+  </sec_decision>
+</manager_handoff>
