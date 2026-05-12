@@ -1,38 +1,43 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <module_handover>
-  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
   <mt_id>MT-2</mt_id>
   <from>dev-agent</from>
   <to>qa-agent</to>
-  <status>READY_FOR_QA</status>
-  <evidence>
-    <file>FEAT-20260426-332E/main.py</file>
-  </evidence>
-  <implemented_files>
-    <file>FEAT-20260426-332E/main.py</file>
-  </implemented_files>
-  <change_summary>
-    main.py L180: excel_b_columns.get("jm", "G") changed to excel_b_columns.get("jm", "KJ").
-    "G" was the numeric employee-ID column (col 7), "KJ" is the Project Manager English name column (col 296).
-  </change_summary>
+  <status>READY_FOR_MODULE_QA</status>
+
+  <scope_declaration>
+    <files_modified>
+      <file>po_automation/email_monitor.py</file>
+    </files_modified>
+    <functions_modified>
+      <function>_process_mail_item</function>
+    </functions_modified>
+  </scope_declaration>
+
   <impact_analysis>
-    <target_function>main._cli_main</target_function>
-    <changed_files>
-      <file>FEAT-20260426-332E/main.py</file>
-    </changed_files>
-    <affected_call_sites>
-      <site>none</site>
-    </affected_call_sites>
-    <blast_radius>CONTAINED</blast_radius>
+    <target_function>po_automation.email_monitor._process_mail_item</target_function>
+    <change_type>logic_addition</change_type>
+    <description>수신자 for 루프 내 rec.Address 처리 부분에 Exchange DN 감지 + SMTP 변환 로직 추가. '@' 없는 주소를 Exchange DN으로 감지하여 GetExchangeUser().PrimarySmtpAddress로 변환. 예외 시 원본 주소로 폴백.</description>
+    <side_effects>없음 — recipient_set에 추가되는 주소가 SMTP 형식으로 개선될 뿐, 기존 allowed_recipients 인터셋 로직 변경 없음</side_effects>
+    <regression_risk>낮음 — '@' 있는 일반 SMTP 주소는 기존과 동일하게 처리됨</regression_risk>
   </impact_analysis>
+
+  <implemented_files>
+    <file>po_automation/email_monitor.py</file>
+  </implemented_files>
+
   <self_check>
-    <python39_syntax>PASS — no match/case, no X|Y union, no walrus abuse</python39_syntax>
-    <type_hinting>PASS — no new functions added; existing call unchanged except default value</type_hinting>
-    <error_handling>PASS — dict.get() with default is safe; no new error paths</error_handling>
-    <path_safety>PASS — no path changes in this MT</path_safety>
-    <security>PASS — no security-relevant changes; column letter default only</security>
-    <al_edge_cases>PASS — default "KJ" is valid Excel column letter; will be validated by _col_to_idx() downstream</al_edge_cases>
-    <pd_policy>PASS — no policy-relevant changes</pd_policy>
-    <docstring>PASS — no new functions; existing docstrings unchanged</docstring>
+    <item id="SC-1" result="PASS">raw_addr에 '@' 없을 때만 Exchange DN 분기 진입</item>
+    <item id="SC-2" result="PASS">AddressEntry → GetExchangeUser → PrimarySmtpAddress 순서 확인</item>
+    <item id="SC-3" result="PASS">예외 발생 시 pass (nosec B110) → raw_addr 원본 유지</item>
+    <item id="SC-4" result="PASS">addr = raw_addr.lower().strip() 정규화 후 recipient_set 추가</item>
+    <item id="SC-5" result="PASS">SMTP 주소('@' 포함)는 Exchange DN 분기 건너뛰고 그대로 사용</item>
+    <item id="SC-6" result="PASS">외부 try/except 구조(기존 nosec B110) 유지</item>
   </self_check>
+
+  <evidence>
+    <file>po_automation/email_monitor.py</file>
+    <file>scope_manifest_MT-2.json</file>
+  </evidence>
 </module_handover>

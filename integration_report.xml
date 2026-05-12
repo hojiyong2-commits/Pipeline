@@ -1,28 +1,23 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <integration_report>
-  <pipeline_id>BUG-20260511-073B</pipeline_id>
-  <modules_integrated>MT-1, MT-2, MT-3, MT-4, MT-5</modules_integrated>
-  <integration_summary>
-    All 5 micro-tasks integrated successfully:
-    - MT-1: _safe_resolve() now uses _ALLOWED_ROOTS list with UNC allowlist
-    - MT-2: jm default changed from "G" to "KJ" in _cli_main
-    - MT-3: note = kit_place instead of hardcoded "포장반" in _cli_main None branch
-    - MT-4: _compress_line_nos moved to core/utils.py; imported in both main.py and ui/app.py
-    - MT-5: write_date dead code removed from main.py and ui/app.py; inline import re as _re removed; import re added at top of ui/app.py
-    No import conflicts. All module imports resolve correctly. core/utils.py created successfully.
-  </integration_summary>
-  <integration_checks>
-    <check id="import_resolution">PASS - all from core.utils import _compress_line_nos calls resolve</check>
-    <check id="no_duplicate_functions">PASS - _compress_line_nos exists only in core/utils.py</check>
-    <check id="no_unused_imports">PASS - get_next_business_day removed from all import lines</check>
-    <check id="no_inline_imports">PASS - import re as _re removed from ui/app.py</check>
-    <check id="T1_passes">PASS - UNC //ccikrnf/wrkgroup resolves correctly</check>
-    <check id="T2_passes">PASS - unknown UNC blocked with ValueError</check>
-    <check id="T3_passes">PASS - .get("jm", "KJ") in main.py source</check>
-    <check id="T4_passes">PASS - note = kit_place in _cli_main; no note = "포장반"</check>
-    <check id="T5_passes">PASS - from core.utils import _compress_line_nos works</check>
-    <check id="T6_passes">PASS - write_date = get_next_business_day not in main.py</check>
-    <check id="T7_passes">PASS - import re as _re not in ui/app.py</check>
-  </integration_checks>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <result>PASS</result>
+
+  <modules_integrated>
+    <module id="MT-1" status="PASS">ic_part_src/order_mapper.py — write_ic_part_zip I·J·K 합집합 수정</module>
+    <module id="MT-2" status="PASS">po_automation/email_monitor.py — _process_mail_item Exchange DN 변환 추가</module>
+  </modules_integrated>
+
   <integration_verdict>PASS</integration_verdict>
+
+  <interaction_check>
+    <cross_module_dependency>없음 — MT-1과 MT-2는 서로 다른 파일의 독립적인 함수</cross_module_dependency>
+    <regression_check>두 수정 모두 기존 코드 흐름을 유지하며 버그 부분만 교체/추가</regression_check>
+    <interface_consistency>PASS — 두 함수의 외부 인터페이스(파라미터, 반환값) 변경 없음</interface_consistency>
+  </interaction_check>
+
+  <combined_files>
+    <file>ic_part_src/order_mapper.py</file>
+    <file>po_automation/email_monitor.py</file>
+  </combined_files>
 </integration_report>

@@ -1,10 +1,10 @@
 {
-  "pipeline_id": "BUG-20260511-073B",
+  "pipeline_id": "BUG-20260512-E68A",
   "micro_tasks": [
     {
       "id": "MT-1",
-      "files": ["FEAT-20260426-332E/core/order_lines_reader.py"],
-      "affected_functions": ["order_lines_reader._safe_resolve, order_lines_reader._ALLOWED_ROOT"]
+      "files": ["ic_part_src/order_mapper.py"],
+      "affected_functions": ["ic_part_src.order_mapper.write_ic_part_zip"]
     }
   ]
 }
