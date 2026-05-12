@@ -1,0 +1,14 @@
+{
+  "pipeline_id": "IMP-20260512-00BC",
+  "micro_tasks": [
+    {
+      "id": "MT-4",
+      "files": [
+        ".claude/agents/pm-planner-agent.md",
+        ".claude/agents/qa-agent.md",
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": ["doc.pm_planner_agent.preflight_dependency, doc.qa_agent.round_trip_gate, doc.pipeline_manager_agent.codex_review_gate"]
+    }
+  ]
+}

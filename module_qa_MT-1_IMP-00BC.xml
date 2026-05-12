@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <mt_id>MT-1</mt_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <result>PASS</result>
+  <numeric_score>112</numeric_score>
+  <checks>
+    <check id="T002">
+      <description>PLW0621이 ruff_rules_not_found에 기록됨</description>
+      <result>PASS</result>
+      <evidence>preflight_report.json: tool_facts.ruff_rules_not_found = ["PLW0621"]</evidence>
+    </check>
+    <check id="T008">
+      <description>preflight_report.json 스키마 검증 — 모든 필수 키 존재</description>
+      <result>PASS</result>
+      <evidence>schema_version=1, pipeline_id, generated_at, related_files, recent_pipelines_same_file, tool_facts, build_required, build_reason, writer_reader_pairs 모두 존재</evidence>
+    </check>
+    <check id="C-FS">
+      <description>파일 utf-8 + ensure_ascii=False 저장</description>
+      <result>PASS</result>
+      <evidence>out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")</evidence>
+    </check>
+    <check id="C-AL">
+      <description>빈 입력 / 예외 처리 방어 코드</description>
+      <result>PASS</result>
+      <evidence>FileNotFoundError(ruff 미설치), subprocess timeout=15, OSError except, 빈 목록 처리</evidence>
+    </check>
+    <check id="C-SCOPE">
+      <description>MT-1 scope 범위 내 수정 (pipeline.py 단일 파일)</description>
+      <result>PASS</result>
+      <evidence>scope_manifest_MT-1_IMP-00BC.json: files=["pipeline.py"]</evidence>
+    </check>
+  </checks>
+  <micro_task_boundary>
+    <expected_files>pipeline.py</expected_files>
+    <actual_files>pipeline.py</actual_files>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <verification_evidence>
+    <run>python pipeline.py preflight --pipeline-id IMP-20260512-00BC --ruff-codes PLW0621,E501,B006</run>
+    <output>[PREFLIGHT OK] 보고서 저장: preflight_report.json; ruff 규칙 미발견: ['PLW0621']</output>
+    <schema_check>모든 필수 키(schema_version, pipeline_id, generated_at, related_files, recent_pipelines_same_file, tool_facts, build_required, build_reason, writer_reader_pairs) 확인됨</schema_check>
+  </verification_evidence>
+</module_qa_report>

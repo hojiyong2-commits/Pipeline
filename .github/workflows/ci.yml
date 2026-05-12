@@ -541,6 +541,25 @@ jobs:
           name: pipeline-phase-attestation
           path: phase_attestation.json
 
+      - name: 신뢰 루트 파일 변경 여부 감지
+        if: success() && github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          $changedFiles = git diff --name-only origin/${{ github.base_ref }}...HEAD 2>$null
+          if ($null -eq $changedFiles) { $changedFiles = @() }
+          $changedCsv = ($changedFiles -join ",")
+          if ([string]::IsNullOrWhiteSpace($changedCsv)) { $changedCsv = "" }
+          $result = python pipeline.py gates batch-ci --probe --changed-files "$changedCsv" 2>$null | ConvertFrom-Json
+          $ciMode = if ($null -ne $result) { [string]$result.ci_mode } else { "per_phase" }
+          $isTrustRoot = if ($null -ne $result) { [bool]$result.is_trust_root } else { $true }
+          Write-Host "신뢰 루트 파일 변경 여부: $isTrustRoot"
+          Write-Host "CI 모드: $ciMode"
+          if ($isTrustRoot) {
+            Write-Host "신뢰 루트 파일이 변경되었습니다. per_phase CI가 적용됩니다."
+          } else {
+            Write-Host "비신뢰 루트 파일만 변경되었습니다. batched CI가 가능합니다."
+          }
+
       - name: PR에 최종 확인 안내 남기기
         if: success() && github.event_name == 'pull_request'
         shell: pwsh

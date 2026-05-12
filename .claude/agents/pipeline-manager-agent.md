@@ -84,3 +84,43 @@ handling instead of asking Dev to guess again.
 Security is not phase-attested. Do not start a Security agent receipt and do not
 add `--agent-run-id` to `pipeline.py sec`; record only `sec --result ... --risk ...`
 or `sec --skip` after checking the security-agent report.
+
+## Codex Review Gate 절차
+
+Dev phase 완료 후 QA phase (`check --phase qa`) 실행 전에 Codex Review Gate를 수행합니다:
+
+```powershell
+# 1. Codex Review 메타데이터 수집
+python pipeline.py review codex --base main
+
+# 2. 외부 Codex/AI 도구로 리뷰 수행 후 findings를 codex_review_result.json에 추가
+#    (실제 LLM 호출은 pipeline.py 범위 밖)
+
+# 3. HIGH/CRITICAL findings 해소
+python pipeline.py review resolve --id CR-001 --resolution-file review_resolution.json
+
+# 4. 상태 확인 — unresolved_high_critical == 0 이어야 QA 진입 허용
+python pipeline.py review status
+
+# 5. QA phase 진입 (codex gate 자동 검증)
+python pipeline.py check --phase qa
+```
+
+`codex_review_result.json`이 없으면 gate를 건너뜁니다 (선택적).
+미해결 HIGH/CRITICAL findings가 있으면 `check --phase qa`가 `[CODEX REVIEW REQUIRED]`로 차단됩니다.
+
+## Phase CI Batching
+
+변경 파일이 신뢰 루트(`TRUST_ROOT_PATTERNS`)에 해당하면 per_phase CI를 적용합니다.
+비신뢰 루트 파일만 변경된 경우 batched CI(마지막 build phase에서 1회)를 사용할 수 있습니다.
+
+```powershell
+# 변경 파일 목록으로 CI 모드 결정
+python pipeline.py gates batch-ci --probe --changed-files "pipeline.py,README.md"
+# → ci_mode="per_phase" (pipeline.py가 신뢰 루트이므로)
+
+python pipeline.py gates batch-ci --probe --changed-files "README.md,docs/guide.md"
+# → ci_mode="batched" (신뢰 루트 파일 없음)
+```
+
+신뢰 루트 파일: `pipeline.py`, `CLAUDE.md`, `.claude/agents/`, `.github/workflows/`, `.github/CODEOWNERS`, `.codex/skills/`

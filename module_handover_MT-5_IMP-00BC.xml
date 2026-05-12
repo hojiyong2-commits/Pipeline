@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <mt_id>MT-5</mt_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>CLAUDE.md</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>scope_manifest_MT-5_IMP-00BC.json</file>
+  </evidence>
+  <implementation_summary>
+    1. CLAUDE.md: "## Read First: Mandatory Pipeline" 섹션에 "### Clustered Verification Pipeline (IMP-20260512-00BC)" 추가.
+       preflight, Codex Review Gate, Phase CI Batching, Deferred Build 설명 및 신뢰 루트 패턴 목록 포함.
+       PM Planner 재시도 한도 설명 포함.
+    2. ci.yml: "신뢰 루트 파일 변경 여부 감지" step 추가.
+       git diff + pipeline.py gates batch-ci --probe 를 통해 is_trust_root / ci_mode 출력.
+  </implementation_summary>
+  <implemented_files>
+    <file>CLAUDE.md</file>
+    <file>.github/workflows/ci.yml</file>
+  </implemented_files>
+  <self_check>
+    <python39_syntax>N/A (MD/YAML 파일)</python39_syntax>
+    <type_hinting>N/A</type_hinting>
+    <error_handling>PASS — ci.yml에 null 방어 코드 포함</error_handling>
+    <path_safety>N/A</path_safety>
+    <security>PASS — 하드코딩 시크릿 없음</security>
+    <al_edge_cases>N/A</al_edge_cases>
+    <pd_policy>N/A</pd_policy>
+    <docstring>PASS — 각 섹션에 목적 설명 포함</docstring>
+  </self_check>
+</module_handover>

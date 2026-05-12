@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <mt_id>MT-3</mt_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>scope_manifest_MT-3_IMP-00BC.json</file>
+  </evidence>
+  <implementation_summary>
+    1. TRUST_ROOT_PATTERNS 상수 추가 (pipeline.py, CLAUDE.md, .claude/agents/, .github/workflows/, .github/CODEOWNERS, .codex/skills/).
+    2. PM_PLANNER_MAX_RETRIES=2 상수 추가.
+    3. cmd_gates()에 "batch-ci" subaction 추가 — --probe --changed-files 플래그 지원.
+       신뢰 루트 파일 포함 시 ci_mode="per_phase", 아니면 "batched" 반환.
+    4. cmd_build()에 --build-deferred 플래그 추가 — build_deferred=true를 pipeline_state.json에 기록.
+    5. _agent_run_start()에 PM Planner retry limit 체크 추가 — retry_count >= 2 시 failure_packet.json 생성 + exit 1.
+    6. argparse에 gates batch-ci 서브파서 등록.
+    7. build argparse에 --build-deferred 등록.
+  </implementation_summary>
+  <implemented_files>
+    <file>pipeline.py</file>
+  </implemented_files>
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+</module_handover>

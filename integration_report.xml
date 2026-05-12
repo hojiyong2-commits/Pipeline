@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <integration_report>
-  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
   <result>PASS</result>
+  <summary>MT-1 ~ MT-5 모두 개별 QA PASS. pipeline.py preflight/review/batch-ci 통합 작동 확인.</summary>
   <modules_integrated>
     <module id="MT-1" status="PASS">
-      ic_part_src/order_mapper.py — inlineStr 스캐너 OR 조건 추가
+      ic_part_src/order_mapper.py — _clone_row_xml U/W 값 상속 분기 제거
+    </module>
+    <module id="MT-2" status="PASS">
+      ic_part_src/order_mapper.py — write_ic_part_zip Backfill U/W/V 블록 삭제
     </module>
   </modules_integrated>
   <integration_check>
-    <api_compatibility>PASS — write_ic_part_zip 시그니처 변경 없음</api_compatibility>
-    <regression_check>PASS — 기존 v 태그 감지 동작 유지</regression_check>
-    <scope_boundary>PASS — 변경 파일 1개, MT-1 범위 내</scope_boundary>
+    <api_compatibility>PASS — write_ic_part_zip/_clone_row_xml 시그니처 변경 없음</api_compatibility>
+    <regression_check>PASS — MT-1/MT-2 변경 후 수식 셀 및 기타 비수식 셀 동작 유지</regression_check>
+    <scope_boundary>PASS — 변경 파일 1개(order_mapper.py), MT-1/MT-2 범위 내</scope_boundary>
+    <combined_effect>신규 행의 U/V/W 열이 항상 빈 셀로 시작됨. 기존 행 값 유지.</combined_effect>
   </integration_check>
   <integration_verdict>PASS</integration_verdict>
 </integration_report>

@@ -53,6 +53,7 @@
 
 import argparse
 import json
+import logging
 import sys
 import os
 import xml.etree.ElementTree as ET
@@ -1837,6 +1838,20 @@ PHASE_ATTESTATION_EVIDENCE_DIR = PIPELINE_CI_DIR / "phase_evidence"
 AGENT_RECEIPT_DIR = PIPELINE_CI_DIR / "agent_receipts"
 PHASE_ATTESTATION_PHASES = ("pm", "dev", "qa", "build")
 AGENT_RUN_PHASES = ("pm_planner", "pipeline_manager", "dev", "qa", "build")
+
+# 신뢰 루트 파일 패턴 — 이 패턴에 해당하는 파일이 변경된 경우 per_phase CI 필수
+# (batched CI 불허). "gates batch-ci --probe"에서 ci_mode 결정에 사용.
+TRUST_ROOT_PATTERNS: List[str] = [
+    "pipeline.py",
+    "CLAUDE.md",
+    ".claude/agents/",
+    ".github/workflows/",
+    ".github/CODEOWNERS",
+    ".codex/skills/",
+]
+
+# PM Planner 재시도 허용 최대 횟수 (초과 시 [PM PLANNER RETRY LIMIT] + exit 1)
+PM_PLANNER_MAX_RETRIES: int = 2
 PHASE_RECEIPT_RUN_PHASES = {
     "pm": "pm_planner",
     "dev": "dev",
@@ -2814,6 +2829,37 @@ def _agent_run_start(state: Dict[str, Any], phase: str, agent_id: Optional[str])
     actual_agent = agent_id or expected
     if actual_agent != expected:
         _die(f"[AGENT RECEIPT GATE] {phase} must be executed by {expected}, got {actual_agent!r}")
+
+    # PM Planner 재시도 제한: 동일 파이프라인에서 pm_planner phase가 PM_PLANNER_MAX_RETRIES회
+    # 이상 시작되면 failure_packet을 기록하고 종료.
+    if phase == "pm_planner":
+        existing_runs = state.get("agent_runs", {})
+        planner_run_count = sum(
+            1 for r in existing_runs.values()
+            if isinstance(r, dict) and r.get("phase") == "pm_planner"
+        )
+        if planner_run_count >= PM_PLANNER_MAX_RETRIES:
+            pid = str(state.get("pipeline_id") or "UNKNOWN")
+            failure_data = {
+                "schema_version": 1,
+                "pipeline_id": pid,
+                "gate": "PM_PLANNER_RETRY_LIMIT",
+                "recorded_at": _now(),
+                "retry_count": planner_run_count,
+                "max_retries": PM_PLANNER_MAX_RETRIES,
+                "message": (
+                    f"[PM PLANNER RETRY LIMIT] pm-planner-agent가 {planner_run_count}회 이상 실행되었습니다. "
+                    f"최대 허용 횟수({PM_PLANNER_MAX_RETRIES})를 초과했습니다. "
+                    "근본 원인을 분석하고 새 파이프라인을 시작하거나 관리자에게 문의하세요."
+                ),
+            }
+            failure_path = BASE_DIR / "failure_packet.json"
+            try:
+                failure_path.write_text(json.dumps(failure_data, ensure_ascii=False, indent=2), encoding="utf-8")
+            except OSError:
+                pass
+            _die(failure_data["message"])
+
     gate_phase = "pm" if phase in {"pm_planner", "pipeline_manager"} else phase
     ok, reason = check_gate(state, gate_phase)
     if not ok:
@@ -3459,6 +3505,62 @@ def cmd_new(args: argparse.Namespace) -> None:
     print()
 
 
+def _check_codex_review_gate(state: Dict[str, Any]) -> Tuple[bool, str]:
+    """QA 진입 전 Codex Review Gate 검증.
+
+    codex_review_result.json이 존재할 경우 4가지 조건을 확인합니다:
+    1. reviewed_files >= dev_changed_files (커버리지)
+    2. diff_sha256 == 현재 HEAD diff SHA (최신성)
+    3. unresolved HIGH/CRITICAL == 0 (blocking findings 없음)
+    codex_review_result.json이 없으면 gate를 건너뜁니다 (선택적).
+    """
+    review_path = BASE_DIR / "codex_review_result.json"
+    if not review_path.exists():
+        # Codex review is optional; absence is not a blocker
+        return True, "codex review file absent — skipped"
+
+    try:
+        review_data = json.loads(review_path.read_text(encoding="utf-8", errors="replace"))
+    except Exception as exc:
+        return False, f"codex_review_result.json 파싱 실패: {exc}"
+
+    findings: List[Dict[str, Any]] = review_data.get("findings", [])
+    unresolved_hc: List[Dict[str, Any]] = [
+        f for f in findings
+        if not f.get("resolved", False) and str(f.get("severity", "")).upper() in {"HIGH", "CRITICAL"}
+    ]
+    if unresolved_hc:
+        ids = [str(f.get("id", "?")) for f in unresolved_hc]
+        return False, (
+            f"[CODEX REVIEW REQUIRED] 미해결 HIGH/CRITICAL findings {len(unresolved_hc)}개: "
+            f"{', '.join(ids)}. "
+            f"'python pipeline.py review resolve --id <ID>' 로 해소 후 재시도."
+        )
+
+    # verify diff_sha256 freshness
+    stored_sha = review_data.get("diff_sha256", "")
+    base_ref = review_data.get("base_ref", "main")
+    if stored_sha:
+        try:
+            diff_proc = subprocess.run(
+                ["git", "diff", f"{base_ref}...HEAD"],
+                capture_output=True,
+                cwd=str(BASE_DIR),
+                timeout=30,
+            )
+            if diff_proc.returncode == 0 and diff_proc.stdout is not None:
+                current_sha = hashlib.sha256(diff_proc.stdout).hexdigest()
+                if current_sha != stored_sha:
+                    return False, (
+                        "[CODEX REVIEW REQUIRED] diff SHA256 불일치 — 코드가 Codex 리뷰 이후에 변경되었습니다. "
+                        "'python pipeline.py review codex' 로 리뷰를 갱신하세요."
+                    )
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Codex review diff SHA check failed: %s", exc)
+
+    return True, "codex review gate passed"
+
+
 def cmd_check(args: argparse.Namespace) -> None:
     """gate 검증 -exit 0: 통과, exit 1: 차단."""
     state = _load_branch_state(args)
@@ -3466,6 +3568,16 @@ def cmd_check(args: argparse.Namespace) -> None:
 
     # Phase 6 -> 7 does not ask the user anymore. Phase 7 is deterministic
     # automation; the only user decision is the final gates accept ACCEPT/REJECT.
+
+    # Codex Review Gate — QA 진입 시에만 적용
+    if phase == "qa":
+        cr_ok, cr_reason = _check_codex_review_gate(state)
+        if not cr_ok:
+            print()
+            print(RED("[CODEX REVIEW REQUIRED] QA 진입 차단"))
+            print(RED(f"  사유: {cr_reason}"))
+            print()
+            sys.exit(1)
 
     ok, reason = check_gate(state, phase)
 
@@ -3898,6 +4010,18 @@ def cmd_build(args: argparse.Namespace) -> None:
     """Build 결과 기록."""
     branch: Optional[str] = getattr(args, "branch", None)
     state = _load_branch_state(args)
+
+    # --build-deferred: 패키징 파일 변경이 감지되었으나 최종 ACCEPT 직전까지 빌드를 유보.
+    # build_deferred=true를 pipeline_state.json에 기록하고 즉시 종료.
+    # 실제 EXE 빌드 기록은 ACCEPT 직전 별도 명령으로 수행한다.
+    build_deferred_flag: bool = bool(getattr(args, "build_deferred", False))
+    if build_deferred_flag:
+        state["build_deferred"] = True
+        _log_event(state, "build_deferred=true recorded (EXE build deferred to pre-ACCEPT step)")
+        _save(state)
+        print(GREEN("[BUILD DEFERRED] build_deferred=true 기록됨. 최종 ACCEPT 전에 EXE 빌드를 완료하세요."))
+        return
+
     ok, reason = check_gate(state, "build")
     if not ok:
         _die(f"[GATE BLOCKED] {reason}")
@@ -6176,6 +6300,341 @@ def cmd_codex(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_preflight(args: argparse.Namespace) -> None:
+    """파이프라인 사전 점검 — preflight_report.json 생성.
+
+    수집 항목:
+    - related_files: git diff HEAD~1 --name-only 결과
+    - recent_pipelines_same_file: pipeline_state / pipeline_history 에서 동일 파일 포함 최근 7개 파이프라인
+    - tool_facts.ruff_rules_verified / ruff_rules_not_found: ruff rule [code] 반환 코드로 판별
+    - build_required / build_reason: 패키징 파일(.spec, requirements.txt, pyproject.toml, entrypoint) 변경 여부
+    - writer_reader_pairs: _inject / scanner 패턴이 같은 파일에 공존하는 쌍 목록
+    """
+    pipeline_id: Optional[str] = getattr(args, "pipeline_id", None)
+    ruff_codes_raw: str = getattr(args, "ruff_codes", "") or ""
+    output_path_arg: Optional[str] = getattr(args, "output", None)
+
+    # 1. active pipeline_id 결정
+    if not pipeline_id:
+        try:
+            state_path = BASE_DIR / "pipeline_state.json"
+            if state_path.exists():
+                state_data = json.loads(state_path.read_text(encoding="utf-8", errors="replace"))
+                pipeline_id = state_data.get("pipeline_id") or "UNKNOWN"
+            else:
+                pipeline_id = "UNKNOWN"
+        except Exception:
+            pipeline_id = "UNKNOWN"
+
+    # 2. related_files — git diff HEAD~1 --name-only
+    related_files: List[str] = []
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "HEAD~1", "--name-only"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+            timeout=15,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            related_files = [f.strip() for f in proc.stdout.decode("utf-8", errors="replace").strip().splitlines() if f.strip()]
+    except Exception as exc:
+        logging.getLogger(__name__).warning("git diff failed: %s", exc)
+
+    # 3. recent_pipelines_same_file — pipeline_history 및 현재 state 검색
+    recent_pipelines_same_file: List[Dict[str, Any]] = []
+    try:
+        history_dir = BASE_DIR / "pipeline_history"
+        candidate_state_files: List[Path] = []
+        state_path = BASE_DIR / "pipeline_state.json"
+        if state_path.exists():
+            candidate_state_files.append(state_path)
+        if history_dir.exists():
+            candidate_state_files.extend(sorted(history_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:20])
+
+        seen_pids: set = set()
+        for sf in candidate_state_files:
+            if len(recent_pipelines_same_file) >= 7:
+                break
+            try:
+                sdata = json.loads(sf.read_text(encoding="utf-8", errors="replace"))
+                pid = sdata.get("pipeline_id", "")
+                if not pid or pid in seen_pids:
+                    continue
+                # extract all file references from micro_tasks and scope manifests
+                mt_files: List[str] = []
+                for mt in sdata.get("micro_tasks", []):
+                    mt_files.extend(mt.get("files", []))
+                if related_files and mt_files:
+                    overlap = set(related_files) & set(mt_files)
+                    if overlap:
+                        seen_pids.add(pid)
+                        recent_pipelines_same_file.append({
+                            "pipeline_id": pid,
+                            "description": sdata.get("description", ""),
+                            "overlapping_files": sorted(overlap),
+                        })
+            except Exception:
+                continue
+    except Exception as exc:
+        logging.getLogger(__name__).warning("pipeline history scan failed: %s", exc)
+
+    # 4. tool_facts — ruff rule [code] 검증
+    ruff_rules_verified: List[str] = []
+    ruff_rules_not_found: List[str] = []
+    ruff_codes: List[str] = [c.strip() for c in ruff_codes_raw.split(",") if c.strip()]
+    if not ruff_codes:
+        # default set of commonly misunderstood rules
+        ruff_codes = ["PLW0621", "E501", "B006", "SIM117"]
+    for code in ruff_codes:
+        try:
+            ruff_proc = subprocess.run(
+                ["ruff", "rule", code],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if ruff_proc.returncode == 0:
+                ruff_rules_verified.append(code)
+            else:
+                ruff_rules_not_found.append(code)
+        except FileNotFoundError:
+            ruff_rules_not_found.append(code)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("ruff rule check failed for %s: %s", code, exc)
+            ruff_rules_not_found.append(code)
+
+    # 5. build_required — 패키징 파일 변경 감지
+    PACKAGING_PATTERNS = (".spec", "requirements.txt", "pyproject.toml", "setup.py", "setup.cfg", "MANIFEST.in")
+    ENTRYPOINT_PATTERNS = ("main.py", "app.py", "entrypoint.py", "__main__.py")
+    build_required: bool = False
+    build_reason: str = "no packaging file changes detected"
+    packaging_changed: List[str] = []
+    for f in related_files:
+        fname = Path(f).name
+        if any(fname == pat or fname.endswith(pat) for pat in PACKAGING_PATTERNS):
+            packaging_changed.append(f)
+        elif fname in ENTRYPOINT_PATTERNS:
+            packaging_changed.append(f)
+    if packaging_changed:
+        build_required = True
+        build_reason = f"packaging/entrypoint files changed: {', '.join(packaging_changed)}"
+
+    # 6. writer_reader_pairs — _inject + scanner 패턴이 같은 파일에 공존하는 쌍
+    writer_reader_pairs: List[Dict[str, str]] = []
+    try:
+        inject_proc = subprocess.run(
+            ["git", "grep", "-l", "_inject"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+            timeout=15,
+        )
+        inject_files: List[str] = []
+        if inject_proc.returncode == 0 and inject_proc.stdout:
+            inject_files = [f.strip() for f in inject_proc.stdout.decode("utf-8", errors="replace").strip().splitlines() if f.strip()]
+
+        scanner_proc = subprocess.run(
+            ["git", "grep", "-l", "scanner"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+            timeout=15,
+        )
+        scanner_files: List[str] = []
+        if scanner_proc.returncode == 0 and scanner_proc.stdout:
+            scanner_files = [f.strip() for f in scanner_proc.stdout.decode("utf-8", errors="replace").strip().splitlines() if f.strip()]
+
+        # files where both writer (_inject) and reader (scanner) are present
+        both = set(inject_files) & set(scanner_files)
+        for f in sorted(both):
+            writer_reader_pairs.append({"file": f, "writer_pattern": "_inject", "reader_pattern": "scanner"})
+    except Exception as exc:
+        logging.getLogger(__name__).warning("writer-reader grep failed: %s", exc)
+
+    # 7. Assemble report
+    report: Dict[str, Any] = {
+        "schema_version": 1,
+        "pipeline_id": pipeline_id,
+        "generated_at": _now(),
+        "related_files": related_files,
+        "recent_pipelines_same_file": recent_pipelines_same_file,
+        "tool_facts": {
+            "ruff_rules_verified": ruff_rules_verified,
+            "ruff_rules_not_found": ruff_rules_not_found,
+        },
+        "build_required": build_required,
+        "build_reason": build_reason,
+        "writer_reader_pairs": writer_reader_pairs,
+    }
+
+    out_path = Path(output_path_arg) if output_path_arg else BASE_DIR / "preflight_report.json"
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"[PREFLIGHT OK] 보고서 저장: {out_path}")
+        print(f"  관련 파일: {len(related_files)}개")
+        print(f"  동일 파일 포함 이전 파이프라인: {len(recent_pipelines_same_file)}개")
+        print(f"  ruff 규칙 확인됨: {ruff_rules_verified}")
+        print(f"  ruff 규칙 미발견: {ruff_rules_not_found}")
+        print(f"  빌드 필요: {build_required} ({build_reason})")
+        print(f"  writer-reader 쌍: {len(writer_reader_pairs)}개")
+    except OSError as exc:
+        _die(f"preflight_report.json 저장 실패: {exc}", exit_code=2)
+
+
+def cmd_review(args: argparse.Namespace) -> None:
+    """Codex Review Gate — 코드 리뷰 결과 관리.
+
+    subaction:
+      codex    git diff 메타데이터를 수집하여 codex_review_result.json 생성.
+               실제 LLM Codex 호출은 pipeline.py 범위 밖이므로 findings는 빈 배열로 초기화.
+               사용자가 외부 Codex 도구 실행 후 findings를 채운 뒤 review resolve로 해소.
+      status   codex_review_result.json에서 미해결 HIGH/CRITICAL findings 수 출력.
+      resolve  특정 finding을 resolved=true로 표시.
+    """
+    review_action: str = getattr(args, "review_action", "") or ""
+    base_ref: str = getattr(args, "base", "main") or "main"
+    output_path_arg: Optional[str] = getattr(args, "output", None)
+    finding_id: Optional[str] = getattr(args, "finding_id", None)
+    resolution_file: Optional[str] = getattr(args, "resolution_file", None)
+
+    review_result_path = Path(output_path_arg) if output_path_arg else BASE_DIR / "codex_review_result.json"
+
+    if review_action == "codex":
+        # collect git diff metadata
+        reviewed_files: List[str] = []
+        diff_sha256: str = ""
+
+        try:
+            diff_names_proc = subprocess.run(
+                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+                capture_output=True,
+                cwd=str(BASE_DIR),
+                timeout=15,
+            )
+            if diff_names_proc.returncode == 0 and diff_names_proc.stdout:
+                names_text = diff_names_proc.stdout.decode("utf-8", errors="replace")
+                reviewed_files = [f.strip() for f in names_text.strip().splitlines() if f.strip()]
+        except Exception as exc:
+            logging.getLogger(__name__).warning("git diff --name-only failed: %s", exc)
+
+        try:
+            diff_full_proc = subprocess.run(
+                ["git", "diff", f"{base_ref}...HEAD"],
+                capture_output=True,
+                cwd=str(BASE_DIR),
+                timeout=30,
+            )
+            if diff_full_proc.returncode == 0 and diff_full_proc.stdout is not None:
+                diff_sha256 = hashlib.sha256(diff_full_proc.stdout).hexdigest()
+        except Exception as exc:
+            logging.getLogger(__name__).warning("git diff (full) failed: %s", exc)
+
+        # preserve existing findings if file already exists
+        existing_findings: List[Dict[str, Any]] = []
+        if review_result_path.exists():
+            try:
+                existing_data = json.loads(review_result_path.read_text(encoding="utf-8", errors="replace"))
+                existing_findings = existing_data.get("findings", [])
+            except Exception:
+                pass
+
+        result: Dict[str, Any] = {
+            "schema_version": 1,
+            "generated_at": _now(),
+            "base_ref": base_ref,
+            "reviewed_files": reviewed_files,
+            "diff_sha256": diff_sha256,
+            "findings": existing_findings,
+        }
+
+        try:
+            review_result_path.parent.mkdir(parents=True, exist_ok=True)
+            review_result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"[REVIEW CODEX] codex_review_result.json 저장: {review_result_path}")
+            print(f"  검토 파일: {len(reviewed_files)}개")
+            print(f"  diff SHA256: {diff_sha256[:16]}...")
+            print(f"  기존 findings: {len(existing_findings)}개 유지")
+            print("  ※ 실제 Codex LLM 리뷰 결과는 findings 배열에 직접 추가하거나")
+            print("     review resolve --id <CR-XXX> 로 개별 해소하세요.")
+        except OSError as exc:
+            _die(f"codex_review_result.json 저장 실패: {exc}", exit_code=2)
+
+    elif review_action == "status":
+        if not review_result_path.exists():
+            print(json.dumps({
+                "status": "NO_REVIEW_FILE",
+                "unresolved_high_critical": 0,
+                "findings": [],
+            }, ensure_ascii=False, indent=2))
+            return
+
+        try:
+            data = json.loads(review_result_path.read_text(encoding="utf-8", errors="replace"))
+        except Exception as exc:
+            _die(f"codex_review_result.json 읽기 실패: {exc}", exit_code=2)
+            return
+
+        findings: List[Dict[str, Any]] = data.get("findings", [])
+        unresolved: List[Dict[str, Any]] = [
+            f for f in findings
+            if not f.get("resolved", False) and str(f.get("severity", "")).upper() in {"HIGH", "CRITICAL"}
+        ]
+        print(json.dumps({
+            "status": "OK",
+            "reviewed_files": data.get("reviewed_files", []),
+            "diff_sha256": data.get("diff_sha256", ""),
+            "total_findings": len(findings),
+            "unresolved_high_critical": len(unresolved),
+            "unresolved_findings": unresolved,
+        }, ensure_ascii=False, indent=2))
+
+    elif review_action == "resolve":
+        if not finding_id:
+            _die("--id 파라미터가 필요합니다 (예: --id CR-001)", exit_code=2)
+            return
+        if not review_result_path.exists():
+            _die(f"codex_review_result.json 파일 없음: {review_result_path}", exit_code=2)
+            return
+
+        try:
+            data = json.loads(review_result_path.read_text(encoding="utf-8", errors="replace"))
+        except Exception as exc:
+            _die(f"codex_review_result.json 읽기 실패: {exc}", exit_code=2)
+            return
+
+        # optionally load resolution notes
+        resolution_notes: str = ""
+        if resolution_file:
+            try:
+                res_data = json.loads(Path(resolution_file).read_text(encoding="utf-8", errors="replace"))
+                resolution_notes = str(res_data.get("resolution", ""))
+            except Exception as exc:
+                logging.getLogger(__name__).warning("resolution_file 읽기 실패: %s", exc)
+
+        findings = data.get("findings", [])
+        matched = False
+        for f in findings:
+            if str(f.get("id", "")) == finding_id:
+                f["resolved"] = True
+                f["resolved_at"] = _now()
+                if resolution_notes:
+                    f["resolution_notes"] = resolution_notes
+                matched = True
+                break
+
+        if not matched:
+            _die(f"finding id '{finding_id}' 없음", exit_code=2)
+            return
+
+        try:
+            review_result_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"[REVIEW RESOLVE] {finding_id} 해소 처리 완료")
+        except OSError as exc:
+            _die(f"codex_review_result.json 저장 실패: {exc}", exit_code=2)
+
+    else:
+        _die(f"알 수 없는 review 하위 명령: {review_action}", exit_code=2)
+
+
 def _set_external_gate(
     state: Dict[str, Any],
     gate_name: str,
@@ -6829,6 +7288,50 @@ def cmd_gates(args: argparse.Namespace) -> None:
         print(f"  run_id: {verification.get('run_id')}")
         print(f"  report: {_contract_paths(pid)['github_ci_result']}\n")
         sys.exit(0 if verification["status"] == "PASS" else 1)
+
+    if action == "batch-ci":
+        # batch-ci --probe --changed-files a,b,c
+        # 신뢰 루트 파일 포함 여부에 따라 ci_mode 결정.
+        probe: bool = getattr(args, "probe", False)
+        changed_files_raw: str = getattr(args, "changed_files", "") or ""
+        changed_files: List[str] = [f.strip() for f in changed_files_raw.split(",") if f.strip()]
+
+        if not changed_files:
+            # 변경 파일이 없으면 batched
+            result_payload: Dict[str, Any] = {
+                "is_trust_root": False,
+                "ci_mode": "batched",
+                "changed_files": [],
+                "matched_patterns": [],
+            }
+        else:
+            matched: List[str] = []
+            for f in changed_files:
+                for pat in TRUST_ROOT_PATTERNS:
+                    if pat.endswith("/"):
+                        # directory prefix match
+                        if f.startswith(pat) or ("/" + pat in f):
+                            matched.append(pat)
+                            break
+                    else:
+                        # exact filename or basename match
+                        if f == pat or Path(f).name == pat:
+                            matched.append(pat)
+                            break
+
+            is_trust_root = len(matched) > 0
+            result_payload = {
+                "is_trust_root": is_trust_root,
+                "ci_mode": "per_phase" if is_trust_root else "batched",
+                "changed_files": changed_files,
+                "matched_patterns": matched,
+            }
+
+        print(json.dumps(result_payload, ensure_ascii=False, indent=2))
+        if not probe:
+            # 비probe 모드: 상태 기록 없음, 단순 stdout 출력 후 종료
+            pass
+        return
 
     _die(f"unknown gates action: {action}", exit_code=2)
 
@@ -7609,6 +8112,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_build.add_argument("--agent-run-id", default=None,
                          help="Option A: completed build-agent run receipt id")
+    p_build.add_argument(
+        "--build-deferred",
+        action="store_true",
+        default=False,
+        help="패키징 파일 변경이 감지되었으나 빌드를 최종 ACCEPT 직전으로 유보. "
+             "build_deferred=true를 pipeline_state.json에 기록하고 gate 검증 없이 종료.",
+    )
 
     # agent run receipts
     p_agent = sub.add_parser("agent", help="Start/finish trusted per-phase agent run receipts")
@@ -7643,6 +8153,39 @@ def build_parser() -> argparse.ArgumentParser:
     codex_sub = p_codex.add_subparsers(dest="codex_action", required=True)
     p_codex_doctor = codex_sub.add_parser("doctor", help="Check whether Codex can use the pipeline task hook")
     p_codex_doctor.add_argument("--json", action="store_true", default=False)
+
+    # review — Codex Review Gate namespace
+    p_review = sub.add_parser("review", help="Codex Review Gate — 코드 리뷰 결과 관리")
+    review_sub = p_review.add_subparsers(dest="review_action", required=True)
+
+    p_review_codex = review_sub.add_parser("codex", help="git diff 메타데이터 수집 및 codex_review_result.json 초기화")
+    p_review_codex.add_argument("--base", default="main", metavar="REF",
+                                help="비교 기준 브랜치/커밋 (기본값: main)")
+    p_review_codex.add_argument("--output", default=None, metavar="PATH",
+                                help="출력 파일 경로 (기본값: codex_review_result.json)")
+
+    p_review_status = review_sub.add_parser("status", help="미해결 HIGH/CRITICAL findings 수 출력")
+    p_review_status.add_argument("--output", default=None, metavar="PATH",
+                                 help="codex_review_result.json 경로 (기본값: codex_review_result.json)")
+
+    p_review_resolve = review_sub.add_parser("resolve", help="특정 finding을 resolved=true로 표시")
+    p_review_resolve.add_argument("--id", dest="finding_id", required=True, metavar="ID",
+                                  help="해소할 finding ID (예: CR-001)")
+    p_review_resolve.add_argument("--resolution-file", dest="resolution_file", default=None,
+                                  metavar="PATH", help="해소 내용 JSON 파일 (선택)")
+    p_review_resolve.add_argument("--output", default=None, metavar="PATH",
+                                  help="codex_review_result.json 경로 (기본값: codex_review_result.json)")
+
+    p_review.set_defaults(func=cmd_review)
+
+    # preflight — pre-PM fact collection
+    p_preflight = sub.add_parser("preflight", help="파이프라인 사전 점검 — preflight_report.json 생성")
+    p_preflight.add_argument("--pipeline-id", default=None, help="파이프라인 ID (생략 시 active pipeline_state에서 자동 추출)")
+    p_preflight.add_argument("--ruff-codes", default="", metavar="CODES",
+                             help="검증할 ruff rule 코드 콤마 구분 목록 (예: PLW0621,E501). 생략 시 기본 4개 코드 사용.")
+    p_preflight.add_argument("--output", default=None, metavar="PATH",
+                             help="출력 파일 경로 (생략 시 preflight_report.json)")
+    p_preflight.set_defaults(func=cmd_preflight)
 
     # harness
     p_harness = sub.add_parser("harness", help="Legacy harness diagnostic 기록. 현재 /Task 완료 경로에서는 차단됨")
@@ -7795,6 +8338,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_accept.add_argument("--evidence", default=None, help="Output file, screenshot, or report shown to user")
     p_gate_accept.add_argument("--notes", default=None)
     p_gate_accept.add_argument("--user-confirmed", action="store_true", default=False)
+    p_gate_batch_ci = gsub.add_parser("batch-ci", help="변경 파일 목록을 기반으로 CI 모드(per_phase/batched) 결정")
+    p_gate_batch_ci.add_argument("--probe", action="store_true", default=False,
+                                 help="프로브 모드: 상태 기록 없이 ci_mode만 출력")
+    p_gate_batch_ci.add_argument("--changed-files", default="", metavar="FILES",
+                                 help="콤마 구분 변경 파일 목록 (예: pipeline.py,README.md)")
+
     p_gate_github = gsub.add_parser("github-ci", help="Verify latest GitHub Actions CI run and record github_ci gate")
     p_gate_github.add_argument("--repo", default=None, help="owner/repo; defaults to origin remote")
     p_gate_github.add_argument("--run-id", default=None, help="Specific GitHub Actions workflow run id; omitted means latest run for HEAD")
@@ -7916,6 +8465,8 @@ COMMAND_MAP = {
     "agent":                cmd_agent,
     "outputs":              cmd_outputs,
     "codex":                cmd_codex,
+    "preflight":            cmd_preflight,
+    "review":               cmd_review,
     "architect":            cmd_architect,
     "status":               cmd_status,
     "interface":            cmd_interface,

@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "IMP-20260512-00BC",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_preflight"]
+    }
+  ]
+}

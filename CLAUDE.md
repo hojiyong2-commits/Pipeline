@@ -9,6 +9,22 @@ Trust chain: `local pipeline.py -> agent receipts -> GitHub Actions -> CODEOWNER
 
 Completion requires PM/Dev/QA/Build phase attestations PASS, every PM `MT-N` module gate PASS, `module integrate` PASS, Technical PASS, Oracle PASS, GitHub CI PASS, and User Acceptance ACCEPT with real result evidence. The user reviews visible results and attachments, not code.
 
+### Clustered Verification Pipeline (IMP-20260512-00BC)
+
+파이프라인 절차에 다음 4가지 기능이 추가되었습니다:
+
+1. **Preflight** (`python pipeline.py preflight`): PM Planner가 step_plan 발행 전에 관련 파일, ruff 규칙 가용성, 빌드 필요 여부, writer-reader 쌍을 사전 수집합니다. `preflight_report.json` 생성.
+
+2. **Codex Review Gate** (`python pipeline.py review codex/status/resolve`): Dev 완료 후 QA 진입 전에 Codex/AI 리뷰 결과를 검증합니다. 미해결 HIGH/CRITICAL findings가 있으면 `check --phase qa`가 차단됩니다.
+
+3. **Phase CI Batching** (`python pipeline.py gates batch-ci --probe`): 변경 파일이 신뢰 루트(`TRUST_ROOT_PATTERNS`)에 해당하면 per_phase CI, 비신뢰 루트만 변경 시 batched CI를 허용합니다.
+
+4. **Deferred Build** (`python pipeline.py build --build-deferred`): 패키징 파일 변경이 있어도 빌드를 최종 ACCEPT 직전으로 유보할 수 있습니다. `build_deferred=true`가 `pipeline_state.json`에 기록됩니다.
+
+신뢰 루트 패턴: `pipeline.py`, `CLAUDE.md`, `.claude/agents/`, `.github/workflows/`, `.github/CODEOWNERS`, `.codex/skills/`
+
+PM Planner 재시도 한도: 동일 파이프라인에서 2회 초과 시 `[PM PLANNER RETRY LIMIT]`으로 차단됩니다.
+
 ## 세션 언어 규칙 (Korean Session Language Rule)
 
 The user-facing language for every pipeline session is Korean. Claude Code, the orchestrator, and all agents must write progress updates, tool descriptions, Bash/PowerShell command descriptions, final summaries, PR titles/bodies, PR comments, and acceptance questions in easy Korean. UI/tool names such as `Bash`, `Read`, `GitHub Actions`, command names, commit SHA, and `ACCEPT/REJECT` may remain as identifiers, but must be surrounded by Korean explanation. Do not use English tool descriptions such as "Check latest status" or "Recent file changes stats"; write "최신 상태 확인", "최근 변경 파일 통계 확인" instead.

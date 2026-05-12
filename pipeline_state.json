@@ -4,8 +4,8 @@
   "type": "IMP",
   "description": "Protocol Evolution: Clustered Verification Pipeline + Codex Review Gate — preflight/incident_cluster/Codex Review Gate/batched CI/deferred build/PM retry limit/agent MD sync",
   "created_at": "2026-05-12T21:52:02Z",
-  "updated_at": "2026-05-12T22:11:18Z",
-  "current_phase": "dev",
+  "updated_at": "2026-05-12T22:37:17Z",
+  "current_phase": "qa",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -23,13 +23,14 @@
       "agent_run_id": "pm_planner-720e9912b1a0854b"
     },
     "dev": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-12T22:37:11Z",
+      "evidence": "pipeline.py,.claude/agents/pm-planner-agent.md,.claude/agents/qa-agent.md,.claude/agents/pipeline-manager-agent.md,CLAUDE.md,.github/workflows/ci.yml",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "dev_handover.xml",
+      "agent_id": "dev-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260512-00BC_phase_dev.json",
+      "agent_run_id": "dev-d138991930a2070a"
     },
     "qa": {
       "status": "PENDING",
@@ -125,6 +126,94 @@
     {
       "ts": "2026-05-12T22:11:18Z",
       "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-05-12T22:15:56Z",
+      "msg": "github phase-ci pm PASS run_id=25765370031 commit=6fd50a2f0b0e"
+    },
+    {
+      "ts": "2026-05-12T22:16:02Z",
+      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-d138991930a2070a"
+    },
+    {
+      "ts": "2026-05-12T22:16:51Z",
+      "msg": "module design PASS MT-1"
+    },
+    {
+      "ts": "2026-05-12T22:20:57Z",
+      "msg": "module dev DONE MT-1"
+    },
+    {
+      "ts": "2026-05-12T22:21:30Z",
+      "msg": "module QA PASS MT-1"
+    },
+    {
+      "ts": "2026-05-12T22:21:46Z",
+      "msg": "module design PASS MT-2"
+    },
+    {
+      "ts": "2026-05-12T22:25:05Z",
+      "msg": "module dev DONE MT-2"
+    },
+    {
+      "ts": "2026-05-12T22:25:21Z",
+      "msg": "module QA PASS MT-2"
+    },
+    {
+      "ts": "2026-05-12T22:25:36Z",
+      "msg": "module design PASS MT-3"
+    },
+    {
+      "ts": "2026-05-12T22:28:34Z",
+      "msg": "module dev DONE MT-3"
+    },
+    {
+      "ts": "2026-05-12T22:28:52Z",
+      "msg": "module QA PASS MT-3"
+    },
+    {
+      "ts": "2026-05-12T22:29:08Z",
+      "msg": "module design PASS MT-4"
+    },
+    {
+      "ts": "2026-05-12T22:30:29Z",
+      "msg": "module dev DONE MT-4"
+    },
+    {
+      "ts": "2026-05-12T22:30:47Z",
+      "msg": "module QA PASS MT-4"
+    },
+    {
+      "ts": "2026-05-12T22:31:05Z",
+      "msg": "module design PASS MT-5"
+    },
+    {
+      "ts": "2026-05-12T22:31:58Z",
+      "msg": "module dev DONE MT-5"
+    },
+    {
+      "ts": "2026-05-12T22:32:13Z",
+      "msg": "module QA PASS MT-5"
+    },
+    {
+      "ts": "2026-05-12T22:32:38Z",
+      "msg": "module integration PASS"
+    },
+    {
+      "ts": "2026-05-12T22:35:19Z",
+      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-d138991930a2070a"
+    },
+    {
+      "ts": "2026-05-12T22:37:11Z",
+      "msg": "dev DONE | evidence: pipeline.py,.claude/agents/pm-planner-agent.md,.claude/agents/qa-agent.md,.claude/agents/pipeline-manager-agent.md,CLAUDE.md,.github/workflows/ci.yml"
+    },
+    {
+      "ts": "2026-05-12T22:37:11Z",
+      "msg": "advisory gpt-code SKIPPED api_called=False"
+    },
+    {
+      "ts": "2026-05-12T22:37:17Z",
+      "msg": "phase attestation request prepared: dev"
     }
   ],
   "terminal_state": null,
@@ -168,6 +257,26 @@
       "used_by_phase": "pm_manager",
       "used_at": "2026-05-12T22:11:17Z",
       "commit_sha": "fe0ac7d89d4e5907bc4a009265369bdcee89add8",
+      "notes": ""
+    },
+    "dev-d138991930a2070a": {
+      "schema_version": 1,
+      "run_id": "dev-d138991930a2070a",
+      "pipeline_id": "IMP-20260512-00BC",
+      "phase": "dev",
+      "agent_id": "dev-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T22:16:02Z",
+      "completed_at": "2026-05-12T22:35:19Z",
+      "token_hash": "2fd1d6a82b9394acdc556b9e165445871452a7ab3023c7ff75ef03c14c7ad0e0",
+      "output_file": "dev_handover.xml",
+      "output_sha256": "2b3e1b4a83b8406b01932cba4954f8270b74954a2af7a3b619b1de0fbd393642",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260512-00BC\\dev\\dev-d138991930a2070a.json",
+      "receipt_sha256": "b1678acee5ec8cdf315b67ef051e3e2710143368334f9e9daa5b7a3ffa1a041b",
+      "used_by_phase": "dev",
+      "used_at": "2026-05-12T22:37:17Z",
+      "commit_sha": "6fd50a2f0b0e610887cd531acd20ac6419303691",
       "notes": ""
     }
   },
@@ -214,14 +323,15 @@
     ],
     "phases": {
       "pm": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-12T22:15:56Z",
         "phase": "pm",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25765370031",
+        "commit_sha": "6fd50a2f0b0e610887cd531acd20ac6419303691",
+        "evidence": "github_actions_phase_run:25765370031",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260512-00BC\\gates\\phase_ci\\pm_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "dev": {
         "status": "PENDING",
@@ -268,100 +378,160 @@
     "modules": {
       "MT-1": {
         "id": "MT-1",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 1,
         "target_files": [
           "pipeline.py"
         ],
         "affected_function": "pipeline.cmd_preflight",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:16:51Z",
+          "report_file": "module_design_MT-1_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-12T22:20:57Z",
+          "report_file": "module_handover_MT-1_IMP-00BC.xml",
+          "evidence": "pipeline.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-1_IMP-00BC.json",
+            "validated_at": "2026-05-12T22:20:57Z",
+            "micro_task_id": "MT-1",
+            "files": [
+              "pipeline.py"
+            ],
+            "affected_functions": [
+              "pipeline.cmd_preflight"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:21:30Z",
+          "report_file": "module_qa_MT-1_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-12T22:21:30Z",
+          "files": [
+            {
+              "path": "pipeline.py",
+              "sha256": "e1da86b3f8875ed86789434ed13373b956e1d13783bd1dd400c2d1486fc3b53b",
+              "size_bytes": 375226
+            }
+          ]
+        }
       },
       "MT-2": {
         "id": "MT-2",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 2,
         "target_files": [
           "pipeline.py"
         ],
         "affected_function": "pipeline.cmd_review",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:21:46Z",
+          "report_file": "module_design_MT-2_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-12T22:25:05Z",
+          "report_file": "module_handover_MT-2_IMP-00BC.xml",
+          "evidence": "pipeline.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-2_IMP-00BC.json",
+            "validated_at": "2026-05-12T22:25:05Z",
+            "micro_task_id": "MT-2",
+            "files": [
+              "pipeline.py"
+            ],
+            "affected_functions": [
+              "pipeline.cmd_review"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:25:21Z",
+          "report_file": "module_qa_MT-2_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-12T22:25:21Z",
+          "files": [
+            {
+              "path": "pipeline.py",
+              "sha256": "e1da86b3f8875ed86789434ed13373b956e1d13783bd1dd400c2d1486fc3b53b",
+              "size_bytes": 375226
+            }
+          ]
+        }
       },
       "MT-3": {
         "id": "MT-3",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 3,
         "target_files": [
           "pipeline.py"
         ],
         "affected_function": "pipeline.cmd_build, pipeline.cmd_gates(batch-ci), pipeline._agent_run_start",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:25:36Z",
+          "report_file": "module_design_MT-3_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-12T22:28:34Z",
+          "report_file": "module_handover_MT-3_IMP-00BC.xml",
+          "evidence": "pipeline.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-3_IMP-00BC.json",
+            "validated_at": "2026-05-12T22:28:34Z",
+            "micro_task_id": "MT-3",
+            "files": [
+              "pipeline.py"
+            ],
+            "affected_functions": [
+              "pipeline.cmd_build, pipeline.cmd_gates(batch-ci), pipeline._agent_run_start"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:28:52Z",
+          "report_file": "module_qa_MT-3_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-12T22:28:52Z",
+          "files": [
+            {
+              "path": "pipeline.py",
+              "sha256": "e1da86b3f8875ed86789434ed13373b956e1d13783bd1dd400c2d1486fc3b53b",
+              "size_bytes": 375226
+            }
+          ]
+        }
       },
       "MT-4": {
         "id": "MT-4",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 4,
         "target_files": [
           ".claude/agents/pm-planner-agent.md",
@@ -370,31 +540,63 @@
         ],
         "affected_function": "doc.pm_planner_agent.preflight_dependency, doc.qa_agent.round_trip_gate, doc.pipeline_manager_agent.codex_review_gate",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:29:08Z",
+          "report_file": "module_design_MT-4_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-12T22:30:29Z",
+          "report_file": "module_handover_MT-4_IMP-00BC.xml",
+          "evidence": ".claude/agents/pm-planner-agent.md,.claude/agents/qa-agent.md,.claude/agents/pipeline-manager-agent.md",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-4_IMP-00BC.json",
+            "validated_at": "2026-05-12T22:30:29Z",
+            "micro_task_id": "MT-4",
+            "files": [
+              ".claude/agents/pipeline-manager-agent.md",
+              ".claude/agents/pm-planner-agent.md",
+              ".claude/agents/qa-agent.md"
+            ],
+            "affected_functions": [
+              "doc.pm_planner_agent.preflight_dependency, doc.qa_agent.round_trip_gate, doc.pipeline_manager_agent.codex_review_gate"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:30:47Z",
+          "report_file": "module_qa_MT-4_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-12T22:30:47Z",
+          "files": [
+            {
+              "path": ".claude/agents/pm-planner-agent.md",
+              "sha256": "9a217351cc20e9a1a0b527bb8679a1f978db1dc6b8341ff4d7369dcad42f0d69",
+              "size_bytes": 2901
+            },
+            {
+              "path": ".claude/agents/qa-agent.md",
+              "sha256": "29954ed56b6510e5de285fb13df252e3eabec8532aed07cab1e4360862a6b970",
+              "size_bytes": 32534
+            },
+            {
+              "path": ".claude/agents/pipeline-manager-agent.md",
+              "sha256": "5931e3451e12af51f35bccaa6af4004ca4a0178b7b93fe3475b9dc7ba5d2033c",
+              "size_bytes": 5054
+            }
+          ]
+        }
       },
       "MT-5": {
         "id": "MT-5",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 5,
         "target_files": [
           "CLAUDE.md",
@@ -402,33 +604,59 @@
         ],
         "affected_function": "doc.CLAUDE_md.clustered_verification_pipeline, workflow.ci_yml.batch_ci_branch",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:31:05Z",
+          "report_file": "module_design_MT-5_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-05-12T22:31:58Z",
+          "report_file": "module_handover_MT-5_IMP-00BC.xml",
+          "evidence": "CLAUDE.md,.github/workflows/ci.yml",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-5_IMP-00BC.json",
+            "validated_at": "2026-05-12T22:31:58Z",
+            "micro_task_id": "MT-5",
+            "files": [
+              ".github/workflows/ci.yml",
+              "CLAUDE.md"
+            ],
+            "affected_functions": [
+              "doc.CLAUDE_md.clustered_verification_pipeline, workflow.ci_yml.batch_ci_branch"
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-05-12T22:32:13Z",
+          "report_file": "module_qa_MT-5_IMP-00BC.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-05-12T22:32:13Z",
+          "files": [
+            {
+              "path": "CLAUDE.md",
+              "sha256": "88a0c114506af169251d7a94f7d14fbaaad4478154e457851f6abcfb421334ac",
+              "size_bytes": 70880
+            },
+            {
+              "path": ".github/workflows/ci.yml",
+              "sha256": "1d14efbfc0e6bab59f7eed948fe06c7a08a7b268f7787f0e512ce616c7d82540",
+              "size_bytes": 27290
+            }
+          ]
+        }
       }
     },
     "integration": {
-      "status": "PENDING",
-      "completed_at": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-12T22:32:38Z",
+      "report_file": "integration_report.xml",
       "evidence": null,
       "notes": []
     }
@@ -706,10 +934,6 @@
         "pipeline.py": {
           "sha256": "0a98d01718fa984519ed6fb648931de57e9c16b87933b2f29a7a9c4c77f426bf",
           "size": 349527
-        },
-        "preflight_report.json": {
-          "sha256": "5cfbc2fe51ab3dc6813f65376e7e35801b92dfae951bfdae1a0d68e658907b82",
-          "size": 2472
         },
         "pyproject.toml": {
           "sha256": "5dedf0cd012919a00bfcf49c6736603a712bc9ef1131985944e7f24d0373755a",
@@ -1667,5 +1891,70 @@
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
+  },
+  "trusted_phase_runs": [
+    {
+      "recorded_at": "2026-05-12T22:15:56Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "pm",
+      "run_id": "25765370031",
+      "commit_sha": "6fd50a2f0b0e610887cd531acd20ac6419303691",
+      "artifact": "pipeline-phase-attestation"
+    }
+  ],
+  "dev_handover": {
+    "report_file": "dev_handover.xml",
+    "validated_at": "2026-05-12T22:37:07Z",
+    "producer": "dev-agent"
+  },
+  "dev_gate_flags": {
+    "scope_declared": true
+  },
+  "atomic_scope": {
+    "manifest_file": "scope_manifest.json",
+    "validated_at": "2026-05-12T22:37:11Z",
+    "micro_task_ids": [
+      "MT-1",
+      "MT-2",
+      "MT-3",
+      "MT-4",
+      "MT-5"
+    ],
+    "files": [
+      ".claude/agents/pipeline-manager-agent.md",
+      ".claude/agents/pm-planner-agent.md",
+      ".claude/agents/qa-agent.md",
+      ".github/workflows/ci.yml",
+      "CLAUDE.md",
+      "pipeline.py"
+    ],
+    "affected_functions": [
+      "doc.CLAUDE_md.clustered_verification_pipeline, workflow.ci_yml.batch_ci_branch",
+      "doc.pm_planner_agent.preflight_dependency, doc.qa_agent.round_trip_gate, doc.pipeline_manager_agent.codex_review_gate",
+      "pipeline.cmd_build, pipeline.cmd_gates(batch-ci), pipeline._agent_run_start",
+      "pipeline.cmd_preflight",
+      "pipeline.cmd_review"
+    ],
+    "actual_diff": {
+      "added": [],
+      "modified": [
+        ".claude/agents/pipeline-manager-agent.md",
+        ".claude/agents/pm-planner-agent.md",
+        ".claude/agents/qa-agent.md",
+        ".github/workflows/ci.yml",
+        "CLAUDE.md",
+        "pipeline.py"
+      ],
+      "deleted": [],
+      "changed": [
+        ".claude/agents/pipeline-manager-agent.md",
+        ".claude/agents/pm-planner-agent.md",
+        ".claude/agents/qa-agent.md",
+        ".github/workflows/ci.yml",
+        "CLAUDE.md",
+        "pipeline.py"
+      ]
+    }
   }
 }

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <mt_id>MT-2</mt_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <result>PASS</result>
+  <numeric_score>110</numeric_score>
+  <checks>
+    <check id="C-REVIEW-CODEX">
+      <description>review codex — codex_review_result.json 생성</description>
+      <result>PASS</result>
+      <evidence>python pipeline.py review codex --base main → 416개 파일, diff_sha256 생성됨</evidence>
+    </check>
+    <check id="C-REVIEW-STATUS">
+      <description>review status — unresolved HIGH/CRITICAL 0개 확인</description>
+      <result>PASS</result>
+      <evidence>unresolved_high_critical: 0, total_findings: 0</evidence>
+    </check>
+    <check id="C-CODEX-GATE-QA">
+      <description>cmd_check --phase qa에 Codex Review Gate 적용</description>
+      <result>PASS</result>
+      <evidence>_check_codex_review_gate 호출됨; 파일 없으면 건너뜀, unresolved HIGH/CRITICAL 있으면 차단</evidence>
+    </check>
+    <check id="C-SCOPE">
+      <description>MT-2 scope 범위 내 수정</description>
+      <result>PASS</result>
+      <evidence>scope_manifest_MT-2_IMP-00BC.json: affected_functions=["pipeline.cmd_review"]</evidence>
+    </check>
+    <check id="C-ENCODING">
+      <description>subprocess bytes 모드 + utf-8 decode</description>
+      <result>PASS</result>
+      <evidence>capture_output=True (text=True 제거), decode("utf-8", errors="replace") 적용</evidence>
+    </check>
+  </checks>
+  <micro_task_boundary>
+    <expected_files>pipeline.py</expected_files>
+    <actual_files>pipeline.py</actual_files>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <verification_evidence>
+    <run>python pipeline.py review codex --base main</run>
+    <output>[REVIEW CODEX] codex_review_result.json 저장; 416개 파일 검토됨</output>
+    <run>python pipeline.py review status</run>
+    <output>unresolved_high_critical: 0</output>
+  </verification_evidence>
+</module_qa_report>
