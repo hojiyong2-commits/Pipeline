@@ -348,22 +348,16 @@ def _clone_row_xml(
         )
 
         if '<f' not in cell_xml:
-            # Non-formula cell: U and W inherit style+value (fixed text cells).
-            # B, C, E, H and all other non-formula columns get style only — the
-            # injection code writes fresh mapped data; unmapped columns stay empty
-            # but retain borders/date-format/alignment from the style index.
+            # Non-formula cell: all columns get style only — the injection code
+            # writes fresh mapped data; unmapped columns stay empty but retain
+            # borders/date-format/alignment from the style index.
             s_m = re.search(r'\bs="(\d+)"', cell_xml)
             if not s_m:
                 continue  # no style to preserve — skip entirely
             ref_m = re.search(r'r="([A-Za-z]+' + str(to_row) + r')"', cell_xml)
             if not ref_m:
                 continue
-            col_letter_m = re.match(r'[A-Za-z]+', ref_m.group(1))
-            col_letter = col_letter_m.group() if col_letter_m else ''
-            if col_letter in {'U', 'W'}:
-                cloned_cells.append(cell_xml)  # inherit style + value
-            else:
-                cloned_cells.append(f'<c r="{ref_m.group(1)}" s="{s_m.group(1)}"/>')
+            cloned_cells.append(f'<c r="{ref_m.group(1)}" s="{s_m.group(1)}"/>')
             continue
 
         # Formula cell: expand shared formula refs -> inline formula
@@ -1250,41 +1244,6 @@ def write_ic_part_zip(
             row_num,
         )
         sheet1_str = _ensure_row_exists(sheet1_str, row_num)
-
-        # Backfill U and W: inherit fixed text (e.g. "김유숙 선임", "KOREA") from
-        # the nearest non-empty row above, regardless of how many empty rows lie
-        # between.  This handles the case where prior runs wrote empty U/W cells.
-        for _bfcol in ('U', 'W'):
-            _bfref = _bfcol + str(row_num)
-            _bftag = re.search(r'<c\s+r="' + re.escape(_bfref) + r'"[^>]*>', sheet1_str)
-            _needs_fill = True
-            if _bftag and not _bftag.group(0).rstrip().endswith('/>'):
-                _bfclose = sheet1_str.find('</c>', _bftag.end())
-                if _bfclose != -1:
-                    _bfcontent = sheet1_str[_bftag.end():_bfclose]
-                    if '<v>' in _bfcontent or '<is>' in _bfcontent:
-                        _needs_fill = False
-            if _needs_fill:
-                _bfsrc = _find_cell_with_value(sheet1_str, _bfcol, row_num)
-                if _bfsrc:
-                    sheet1_str = _inject_or_replace_cell(sheet1_str, row_num, _bfcol, _bfsrc)
-                    logger.info("Backfilled %s from nearest row above", _bfref)
-
-        # Backfill V: inherit formula from nearest formula-containing V row above
-        # and expand shared formula reference to inline formula.
-        _vref = 'V' + str(row_num)
-        _vtag = re.search(r'<c\s+r="' + re.escape(_vref) + r'"[^>]*>', sheet1_str)
-        _vneeds_fill = True
-        if _vtag and not _vtag.group(0).rstrip().endswith('/>'):
-            _vclose = sheet1_str.find('</c>', _vtag.end())
-            if _vclose != -1:
-                if '<f' in sheet1_str[_vtag.end():_vclose]:
-                    _vneeds_fill = False
-        if _vneeds_fill:
-            _vsrc = _find_cell_with_formula(sheet1_str, 'V', row_num, _shared_fmla_cache)
-            if _vsrc:
-                sheet1_str = _inject_or_replace_cell(sheet1_str, row_num, 'V', _vsrc)
-                logger.info("Backfilled V formula into %s", _vref)
 
         # Write Line No only when this original order_no has 2+ delivery-date
         # groups; a single-date order leaves the M column empty.
