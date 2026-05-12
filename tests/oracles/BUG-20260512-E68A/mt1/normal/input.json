@@ -1,0 +1,8 @@
+{
+  "description": "I, J, K 컬럼 모두 row 6~10에 값이 채워진 정상 케이스 (5개 데이터 행)",
+  "sheet_xml_snippet": "<row r=\"6\"><c r=\"I6\" t=\"s\"><v>0</v></c><c r=\"J6\" t=\"s\"><v>1</v></c><c r=\"K6\" t=\"s\"><v>2</v></c></row><row r=\"7\"><c r=\"I7\" t=\"s\"><v>3</v></c><c r=\"J7\" t=\"s\"><v>4</v></c><c r=\"K7\" t=\"s\"><v>5</v></c></row><row r=\"8\"><c r=\"I8\" t=\"s\"><v>6</v></c><c r=\"J8\" t=\"s\"><v>7</v></c><c r=\"K8\" t=\"s\"><v>8</v></c></row><row r=\"9\"><c r=\"I9\" t=\"s\"><v>9</v></c><c r=\"J9\" t=\"s\"><v>10</v></c><c r=\"K9\" t=\"s\"><v>11</v></c></row><row r=\"10\"><c r=\"I10\" t=\"s\"><v>12</v></c><c r=\"J10\" t=\"s\"><v>13</v></c><c r=\"K10\" t=\"s\"><v>14</v></c></row>",
+  "ICPART_DATA_START_ROW": 6,
+  "ICPART_COL_PROJECT_ID": 9,
+  "ICPART_COL_ORDER_NO": 10,
+  "ICPART_COL_PO_NO": 11
+}
