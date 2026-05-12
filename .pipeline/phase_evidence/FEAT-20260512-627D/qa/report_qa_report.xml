@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>FEAT-20260512-627D</pipeline_id>
+
+  <category_check>
+    <wa>N-A — 네트워크 통신 없음</wa>
+    <ui>N-A — UI 변경 없음</ui>
+    <fs>PASS — ZIP in-place 쓰기 패턴 기존 유지. s_m/ref_m 없으면 continue 방어 유지</fs>
+    <pd>PASS — _clone_row_xml/write_ic_part_zip API 시그니처 변경 없음, 범위 초과 없음</pd>
+    <sec>PASS — 사용자 입력 경로 없음, 보안 표면 변화 없음</sec>
+    <al>PASS — 코드 삭제만. 기존 알고리즘 로직 변경 없음. 회귀 없음</al>
+    <build>N-A — 빌드는 Phase 6에서 수행</build>
+  </category_check>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <declared_functions>_clone_row_xml</declared_functions>
+    <actual_diff_functions>_clone_row_xml</actual_diff_functions>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <declared_functions>write_ic_part_zip (backfill 블록)</declared_functions>
+    <actual_diff_functions>write_ic_part_zip (backfill 블록)</actual_diff_functions>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <scope_boundary>
+    <verdict>PASS</verdict>
+    <declared_files>ic_part_src/order_mapper.py</declared_files>
+    <actual_changed_files>ic_part_src/order_mapper.py</actual_changed_files>
+    <lines_changed>40</lines_changed>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </scope_boundary>
+
+  <verification_evidence>
+    <check>col_letter in U/W 분기 없음 (grep 0건)</check>
+    <check>Backfill U/V 블록 없음 (grep 0건)</check>
+    <check>Python 문법 파싱 통과 (ast.parse PASS)</check>
+    <check>scope_manifest 파일 목록 일치 (order_mapper.py 1개)</check>
+    <check>API 시그니처 변경 없음 확인</check>
+  </verification_evidence>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <numeric_score>112</numeric_score>
+  <failure_signature/>
+
+  <critical_issues/>
+  <improvement_suggestions>
+    - 삭제된 backfill 로직에 의존하던 다른 코드 경로가 있다면 별도 점검 권고
+  </improvement_suggestions>
+</qa_report>
