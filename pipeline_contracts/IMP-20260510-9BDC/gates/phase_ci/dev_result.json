@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-10T03:36:01Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25618857127",
+  "commit_sha": "f44b9d0b8bd4f11c3e25ae0682238e3931a96d57",
+  "pipeline_id": "IMP-20260510-9BDC",
+  "phase": "dev",
+  "attestation": {
+    "generated_at": "2026-05-10T03:35:43.6720553Z",
+    "request_sha256": "28547d7f9982e5a75b212039b026b65f7768df4b370f476267524420d0eca1da",
+    "commit_sha": "f44b9d0b8bd4f11c3e25ae0682238e3931a96d57",
+    "phase": "dev",
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-10T03:30:47Z",
+      "pipeline_id": "IMP-20260510-9BDC",
+      "phase": "dev",
+      "phase_status": "DONE",
+      "commit_hint": "5910ed32fea9c036a35cd010d7c6000b5a766bbd",
+      "state": {
+        "current_phase": "qa",
+        "phase_completed_at": "2026-05-10T03:29:45Z",
+        "report_file": "dev_handover.xml",
+        "evidence": ".claude/agents/security-agent.md,.claude/agents/build-agent.md,.claude/agents/agent-factory-agent.md,.claude/agents/protocol-evolution-agent.md,.claude/agents/test-harness-agent.md,.claude/agents/pm-agent.md"
+      },
+      "agent_run": {
+        "run_id": "dev-288b0f29f0bee333",
+        "phase": "dev",
+        "agent_id": "dev-agent",
+        "status": "COMPLETED",
+        "output_file": "dev_handover.xml",
+        "output_sha256": "703b250bb0fa0498760d7636f9fc67a8df38b671ff9ce49f9ea359110ef59a53",
+        "receipt_path": ".pipeline/phase_evidence/IMP-20260510-9BDC/dev/agent_receipt_dev-288b0f29f0bee333.json",
+        "receipt_sha256": "3142f2ebbdd0d3b07cb233846a951d3f28644962d20575723a6cba0a2d57feca",
+        "used_by_phase": "dev",
+        "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260510-9BDC\\dev\\dev-288b0f29f0bee333.json"
+      },
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\IMP-20260510-9BDC\\dev\\dev-288b0f29f0bee333.json",
+          "path": ".pipeline/phase_evidence/IMP-20260510-9BDC/dev/agent_receipt_dev-288b0f29f0bee333.json",
+          "sha256": "3142f2ebbdd0d3b07cb233846a951d3f28644962d20575723a6cba0a2d57feca",
+          "size_bytes": 517
+        },
+        {
+          "label": "report",
+          "source": "dev_handover.xml",
+          "path": ".pipeline/phase_evidence/IMP-20260510-9BDC/dev/report_dev_handover.xml",
+          "sha256": "703b250bb0fa0498760d7636f9fc67a8df38b671ff9ce49f9ea359110ef59a53",
+          "size_bytes": 1700
+        },
+        {
+          "label": "scope_manifest",
+          "source": "scope_manifest.json",
+          "path": ".pipeline/phase_evidence/IMP-20260510-9BDC/dev/scope_manifest_scope_manifest.json",
+          "sha256": "d49e150e57ec6bcc06394cb7daa5dac027cd755bb8b03e219fc6a1d4e4d0d571",
+          "size_bytes": 3086
+        }
+      ],
+      "workspace_file_checks": [
+        {
+          "path": ".claude/agents/security-agent.md",
+          "sha256": "5d5ba4f2d28ddea5fb3c08de8f31a60e46bc5218a3ac8713f0c1ff7cb83890cf",
+          "size_bytes": 7646
+        },
+        {
+          "path": ".claude/agents/build-agent.md",
+          "sha256": "20d6243e7aa1bc4554d6ffd11e377f401bdf5e2b56281f19fff685e4c5bbceb0",
+          "size_bytes": 9123
+        },
+        {
+          "path": ".claude/agents/agent-factory-agent.md",
+          "sha256": "42c6929f61f42deea43ba01363d90ed47e7f071bb8c1a18410fc5c223c6deef9",
+          "size_bytes": 5450
+        },
+        {
+          "path": ".claude/agents/protocol-evolution-agent.md",
+          "sha256": "d65ea965a91ff709ab94d343ff6c1232e6610d150ea12a7e1460708e968182e8",
+          "size_bytes": 5513
+        },
+        {
+          "path": ".claude/agents/test-harness-agent.md",
+          "sha256": "593ed34ed0dba042f62b0a738f89a3adae297990e5948b7dabbd30126f51230f",
+          "size_bytes": 4461
+        },
+        {
+          "path": ".claude/agents/pm-agent.md",
+          "sha256": "c53024e91d44f275f9bbb2819b8b4be918ae2617457c1db3638456fba1402d1e",
+          "size_bytes": 41326
+        }
+      ],
+      "local_only_files": []
+    },
+    "ref": "refs/pull/3/merge",
+    "run_id": "25618857127",
+    "runner_os": "Windows",
+    "schema_version": 1,
+    "repository": "hojiyong2-commits/Pipeline",
+    "event_name": "pull_request",
+    "validation": {
+      "blockers": [],
+      "status": "PASS"
+    },
+    "run_attempt": "1",
+    "pipeline_id": "IMP-20260510-9BDC",
+    "checkout_sha": "514de45e56e7f3a7b23ef3e449bfafe2527e7206",
+    "workflow": "CI",
+    "attestation_type": "pipeline-phase-v1",
+    "head_sha": "f44b9d0b8bd4f11c3e25ae0682238e3931a96d57"
+  },
+  "workflow_run": {
+    "id": 25618857127,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25618857127",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "f44b9d0b8bd4f11c3e25ae0682238e3931a96d57"
+  },
+  "artifact": {
+    "id": 6900667379,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1547,
+    "expired": false
+  }
+}

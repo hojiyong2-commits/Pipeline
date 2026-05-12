@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T02:36:30Z",
+  "pipeline_id": "IMP-20260510-9BDC",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [
+    "oracle gate waived by user: no reason provided"
+  ],
+  "metrics": {
+    "test_count": 8,
+    "p0_tests": 7,
+    "p0_behavior_tests": 7,
+    "shallow_tests": 0,
+    "oracle_count": 0
+  },
+  "oracle_entries": [],
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 6,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MOD-2": 2,
+        "MOD-5": 1,
+        "MOD-3": 1,
+        "MOD-6": 1,
+        "MOD-4": 1,
+        "MOD-1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 7
+    }
+  },
+  "allow_no_oracle": true,
+  "waiver_reason": ""
+}

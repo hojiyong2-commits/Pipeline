@@ -21,7 +21,9 @@ PM, QA, Harness, Architect는 파이프라인 시작 시 이 파일을 읽고 st
 
 1. **Role absorption**
    - PM이 `<dev_output>`, `<qa_report>`, `<build_report>`, `<harness_report>`, `<optimization_report>`를 직접 출력하면 실패.
-   - 각 phase는 `pipeline.py agent start/finish` receipt와 `--agent-run-id`가 있어야 한다.
+   - PM은 `pm_planner` receipt와 `pipeline_manager` receipt가 둘 다 있어야 한다.
+   - Dev/QA/Build는 `pipeline.py agent start/finish` receipt와 `--agent-run-id`가 있어야 한다.
+   - Security phase는 phase attestation 대상이 아니므로 `--agent-run-id`를 요구하지 않는다.
 
 2. **Score completion**
    - `pipeline.py harness --score ...`, BUILD+QA 합산, 100점, 80점 이상 PASS 같은 표현으로 COMPLETE 선언 금지.
@@ -75,7 +77,7 @@ QA는 아래를 FAIL로 처리한다.
 - 실제 diff가 PM micro_task 밖으로 나감
 - oracle expected output을 Dev가 수정함
 - 실행 증거 없이 PASS 선언
-- PM/Dev/QA/Build phase receipt 누락
+- PM planner/manager receipt 또는 Dev/QA/Build phase receipt 누락
 
 ## Architect Requirements
 

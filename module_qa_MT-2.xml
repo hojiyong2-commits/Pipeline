@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <mt_id>MT-2</mt_id>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
+  <result>PASS</result>
+  <numeric_score>100</numeric_score>
+
+  <category_check>
+    <fs>PASS -- EmailMonitor.spec 수정만. po_automation/EmailMonitor.spec 수정 없음</fs>
+    <al>N-A -- 알고리즘 로직 없음 (빌드 설정 파일)</al>
+    <wa>N-A -- 네트워크 통신 없음</wa>
+    <ui>N-A -- UI 없음</ui>
+    <pd>PASS -- 기존 hiddenimports 보존, collect_all 패턴 정상 적용</pd>
+    <sec>PASS -- 하드코딩 없음, 외부 입력 없음</sec>
+    <build>PASS -- collect_all(fitz) + collect_all(pdfplumber) 번들링, name/console/upx 설정 유지</build>
+  </category_check>
+
+  <verification_results>
+    <check id="1" result="PASS">collect_all(fitz) 호출 존재 (count=1)</check>
+    <check id="2" result="PASS">collect_all(pdfplumber) 호출 존재 (count=1)</check>
+    <check id="3" result="PASS">fitz_binaries + pdfplumber_binaries가 binaries= 인자에 전달됨</check>
+    <check id="4" result="PASS">fitz_datas + pdfplumber_datas가 datas= 인자에 전달됨</check>
+    <check id="5" result="PASS">win32com, win32com.client, win32com.server, win32timezone hiddenimports 보존됨</check>
+    <check id="6" result="PASS">openpyxl, openpyxl.styles, openpyxl.utils hiddenimports 보존됨</check>
+    <check id="7" result="PASS">name=emailmonitor, console=False, upx=True 설정 변경 없음</check>
+    <check id="8" result="PASS">po_automation/EmailMonitor.spec 수정 없음</check>
+  </verification_results>
+
+  <verdict>PASS</verdict>
+
+  <verification_evidence>
+    <file>EmailMonitor.spec</file>
+    <evidence_type>grep_check</evidence_type>
+    <collect_all_fitz>true</collect_all_fitz>
+    <collect_all_pdfplumber>true</collect_all_pdfplumber>
+    <binaries_includes_fitz>true</binaries_includes_fitz>
+    <datas_includes_fitz>true</datas_includes_fitz>
+    <win32com_preserved>true</win32com_preserved>
+    <openpyxl_preserved>true</openpyxl_preserved>
+    <po_automation_spec_unchanged>true</po_automation_spec_unchanged>
+  </verification_evidence>
+
+  <critical_issues>none</critical_issues>
+</module_qa_report>

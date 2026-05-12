@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260510-9242</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <description>PR 브랜치 오염 방지: gates prepare-phase에 pipeline_id 브랜치 강제 격리 추가</description>
+  <created_at>2026-05-10T13:34:00Z</created_at>
+  <execution_profile>STANDARD</execution_profile>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 코드 수정(MT-1)과 프로토콜 문서 업데이트(MT-2)가 포함된 2-모듈 작업입니다. pipeline.py는 핵심 파이프라인 로직을 포함하므로 STANDARD 프로파일을 적용합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>4</expected_changed_functions>
+      <expected_changed_lines>120</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>유지보수성 우선 — 빠른 수정보다 명확한 검사 로직과 오류 메시지 가독성을 우선합니다.</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 수준의 함수명 스타일 질문은 유지보수성 우선 원칙으로 자동 처리했습니다. 내부 변수명이나 주석 형식은 사용자 질문 대상에서 제외합니다.</filter_summary>
+    <decision_questions>
+      <question id="Q1" priority="P0" category="module_split">
+        <user_facing_question>pipeline.py 코드 변경과 문서 업데이트를 별도 모듈로 분리할까요, 하나로 합칠까요?</user_facing_question>
+        <evidence>pipeline.py는 핵심 파이프라인 로직이고 CLAUDE.md/agent MD는 프로토콜 문서입니다. 두 파일 그룹은 성격이 달라서 분리 검토합니다.</evidence>
+        <why_it_matters>모듈을 분리하면 코드 변경이 실패해도 문서 변경은 독립적으로 검증할 수 있어 유지보수성이 높아집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <user_answer>옵션 A 선택 — MT-1(pipeline.py)과 MT-2(문서)를 별도 모듈로 분리합니다.</user_answer>
+        <options>
+          <option id="A">
+            <label>MT-1(pipeline.py 코드)과 MT-2(문서)를 별도 모듈로 분리</label>
+            <benefit>코드 변경 실패 시 문서 변경은 독립 검증 가능, 변경 범위가 명확히 분리됨</benefit>
+            <cost>두 번의 module qa 실행 필요, 약간의 절차 증가</cost>
+          </option>
+          <option id="B">
+            <label>pipeline.py와 문서를 하나의 모듈로 합쳐서 처리</label>
+            <benefit>단일 모듈 qa로 완료 가능, 절차 단순화</benefit>
+            <cost>코드와 문서 변경이 섞여 실패 시 원인 파악이 어려워짐, 유지보수성 저하</cost>
+          </option>
+        </options>
+      </question>
+      <question id="Q2" priority="P0" category="branch_validation_scope">
+        <user_facing_question>브랜치 격리 검사를 PM 단계에서만 실행할까요, 모든 단계에서 실행할까요?</user_facing_question>
+        <evidence>BUG-20260510-9F70 실사례에서 이전 파이프라인 브랜치에서 gates prepare-phase --phase pm을 실행해 PR이 오염됐습니다. PM 단계가 브랜치 오염의 최초 진입점입니다.</evidence>
+        <why_it_matters>검사 범위가 넓을수록 안전하지만 코드 복잡도가 증가합니다. PM 단계만 검사해도 초기 오염 방지 효과는 충분합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <user_answer>옵션 A 선택 — gates prepare-phase --phase pm 단계에서만 브랜치 격리 검사를 실행합니다.</user_answer>
+        <options>
+          <option id="A">
+            <label>gates prepare-phase --phase pm에서만 브랜치 격리 검사 실행</label>
+            <benefit>코드 단순성 유지, 단일 진입점에서 명확한 검사, BUG 실사례 진입점 차단</benefit>
+            <cost>Dev/QA/Build 단계에서 브랜치가 변경되더라도 감지하지 못함</cost>
+          </option>
+          <option id="B">
+            <label>모든 단계(pm/dev/qa/build)의 gates prepare-phase에서 브랜치 격리 검사 실행</label>
+            <benefit>모든 단계에서 브랜치 오염 조기 감지, 더 강력한 보호</benefit>
+            <cost>코드 복잡도 증가, 불필요한 반복 검사, 구현 범위 확대</cost>
+          </option>
+        </options>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <decomposition_audit>
+    <total_functions_identified>4</total_functions_identified>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <split_decision>변경 파일이 pipeline.py(코드), CLAUDE.md + pipeline-manager-agent.md(문서) 두 그룹으로 명확히 분리됩니다.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <name>pipeline.py 브랜치 격리 검증 함수 추가</name>
+      <affected_function>pipeline._validate_pipeline_branch_isolation</affected_function>
+      <affected_function>pipeline._validate_pr_title_matches_pipeline</affected_function>
+      <affected_function>pipeline.cmd_gates_prepare_phase</affected_function>
+      <affected_function>pipeline.cmd_gates_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates_prepare_phase (gates prepare-phase --phase pm 경로)</site>
+        <site>pipeline.cmd_gates_accept (gates accept --result ACCEPT 경로)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_gates_prepare_phase|def.*prepare.phase|prepare_phase</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>gates prepare-phase --phase pm 호출 시 현재 git 브랜치가 pipeline_id 패턴과 일치하는지 검증하고, gates accept --result ACCEPT 호출 시 PR 제목이 pipeline_id를 포함하는지 검증하는 두 함수를 추가합니다.</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <name>프로토콜 문서 업데이트 (CLAUDE.md + pipeline-manager-agent.md)</name>
+      <affected_function>none</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>prepare-phase|branch.*isolation|브랜치.*격리</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>CLAUDE.md의 Phase 1 PM 절차 아래에 브랜치 격리 강제 규칙 섹션을 추가하고, pipeline-manager-agent.md의 PM Handoff 섹션에 브랜치 생성 단계를 명시합니다.</change_summary>
+      <line_estimate>30</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <contract_summary>
+    <contract_hash>14c92dd2b5ed2fa0e460253d5c8c56b00ae49935d1df5cd07348e053a862a895</contract_hash>
+    <test_set_hash>3637e5b6db9481861a286ee521e246c6633ea3cca6303be500e7618486e2030c</test_set_hash>
+    <modules>2</modules>
+    <oracles>2</oracles>
+    <oracle_normal>1</oracle_normal>
+    <oracle_edge>1</oracle_edge>
+    <frozen>true</frozen>
+    <audit_status>PASS</audit_status>
+  </contract_summary>
+
+  <roadmap>
+    <phase id="1" name="PM">step_plan.xml 작성 및 contract freeze 완료</phase>
+    <phase id="2" name="Dev">MT-1 (pipeline.py 함수 추가) - MT-2 (문서 업데이트) 순서로 진행</phase>
+    <phase id="4" name="QA">각 MT별 module qa 실행 후 integration 검증</phase>
+    <phase id="5" name="SEC">해당 없음 (외부 API/네트워크 없음) - skip 처리</phase>
+    <phase id="6" name="Build">meta-task - N/A, skip-reason: meta-task</phase>
+    <phase id="7" name="External Gates">technical / oracle / github-ci / acceptance 게이트 순서대로 실행</phase>
+    <phase id="8" name="Architect">RCA 보고서 작성 후 COMPLETE 전이</phase>
+  </roadmap>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>

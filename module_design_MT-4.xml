@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_design>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-4</mt_id>
+  <design_summary>
+    Move _compress_line_nos from local definitions in main.py and ui/app.py into a new
+    core/utils.py module. Both source files will import from core.utils.
+  </design_summary>
+  <target_files>
+    <file>FEAT-20260426-332E/core/utils.py</file>
+    <file>FEAT-20260426-332E/main.py</file>
+    <file>FEAT-20260426-332E/ui/app.py</file>
+  </target_files>
+  <affected_function>_compress_line_nos (main.py local), _compress_line_nos (ui/app.py local)</affected_function>
+  <interface_contract>
+    Input: raw_nos: List[object] — line number values (str or numeric)
+    Output: str — compressed range notation (e.g., "1~3,5~6")
+    Contract: function signature identical to existing local definitions; no behavior change
+    Import: from core.utils import _compress_line_nos in both main.py and ui/app.py
+  </interface_contract>
+  <implementation_plan>
+    1. Create FEAT-20260426-332E/core/utils.py with _compress_line_nos function
+    2. Remove local _compress_line_nos from main.py (lines 34-63)
+    3. Add from core.utils import _compress_line_nos inside _cli_main imports block in main.py
+    4. Remove local _compress_line_nos from ui/app.py (lines 30-59)
+    5. Add from core.utils import _compress_line_nos at module level in ui/app.py
+  </implementation_plan>
+  <verification_plan>
+    T5 test: python -c "from core.utils import _compress_line_nos; print(_compress_line_nos([1,2,3,5,6]))"
+    Must return "1~3,5~6" (returncode=0, stdout contains "1")
+    Additional: verify no local _compress_line_nos definition remains in main.py or ui/app.py
+  </verification_plan>
+</module_design>

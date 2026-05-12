@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260510-9242</pipeline_id>
+  <phase>qa</phase>
+  <agent_run_id>qa-69cc2caf34fb6eb8</agent_run_id>
+
+  <numeric_score>108</numeric_score>
+  <verdict>PASS</verdict>
+
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+      <blast_radius>WITHIN_SCOPE</blast_radius>
+    </mt>
+    <mt id="MT-2">
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+      <blast_radius>WITHIN_SCOPE</blast_radius>
+    </mt>
+  </micro_task_boundary>
+
+  <category_check>
+    <wa>N/A — 네트워크 통신 없음</wa>
+    <ui>N/A</ui>
+    <fs>N/A</fs>
+    <pd>PASS — MT-1 두 함수 단일 책임, MT-2 문서 기존 내용 보존</pd>
+    <sec>PASS — shell=False 기본값, 리스트 인자 사용</sec>
+    <al>PASS — returncode 체크, get() 방어, 예외 tuple 완비</al>
+    <build>N/A</build>
+  </category_check>
+
+  <checks>
+    <check name="syntax">
+      <status>PASS</status>
+      <detail>py_compile OK: pipeline.py. Functions importable: _validate_pipeline_branch_isolation=True, _validate_pr_title_matches_pipeline=True</detail>
+    </check>
+    <check name="mt1_functions">
+      <status>PASS</status>
+      <detail>_validate_pipeline_branch_isolation (라인 2501): protected 브랜치 차단 + pipeline_id 미포함 차단</detail>
+    </check>
+    <check name="mt1_call_sites">
+      <status>PASS</status>
+      <detail>라인 6563 prepare-phase pm 경로, 라인 6756 accept ACCEPT 경로 — 두 호출 지점 연결 확인</detail>
+    </check>
+    <check name="mt2_claude_md">
+      <status>PASS</status>
+      <detail>라인 237: 브랜치 격리 강제 규칙 섹션 추가, 기존 내용 무손상</detail>
+    </check>
+    <check name="mt2_agent_md">
+      <status>PASS</status>
+      <detail>라인 57: Phase Attestation Branch Isolation Requirement 섹션 추가</detail>
+    </check>
+    <check name="scope_boundary">
+      <status>PASS</status>
+      <detail>변경 범위: pipeline.py(MT-1), CLAUDE.md+pipeline-manager-agent.md(MT-2) — PM step_plan 범위 내</detail>
+    </check>
+    <check name="integration">
+      <status>PASS</status>
+      <detail>pipeline.py 함수 동작과 CLAUDE.md 규칙, pipeline-manager-agent.md 절차가 일관성 있게 정렬됨</detail>
+    </check>
+  </checks>
+
+  <failure_signature>none</failure_signature>
+</qa_report>

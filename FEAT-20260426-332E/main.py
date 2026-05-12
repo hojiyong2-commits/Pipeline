@@ -31,66 +31,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _compress_line_nos(raw_nos: list) -> str:
-    """Deduplicate, sort, and compress consecutive line numbers using '~' range notation.
-
-    Examples:
-        [1, 1, 2, 3] -> "1~3"
-        [1, 2, 3, 5, 6, 7, 8, 11] -> "1~3,5~8,11"
-        [] -> ""
-
-    Args:
-        raw_nos: Raw list of line number values (str or numeric).
-
-    Returns:
-        Compressed string representation, or empty string for empty input.
-    """
-    try:
-        nums = sorted(set(int(float(str(n).strip())) for n in raw_nos if str(n).strip()))
-    except (ValueError, TypeError):
-        return ",".join(str(n) for n in raw_nos)
-    if not nums:
-        return ""
-    ranges = []
-    start = end = nums[0]
-    for n in nums[1:]:
-        if n == end + 1:
-            end = n
-        else:
-            ranges.append(str(start) if start == end else f"{start}~{end}")
-            start = end = n
-    ranges.append(str(start) if start == end else f"{start}~{end}")
-    return ",".join(ranges)
-
-
 def _cli_main() -> None:
-    """Orchestrate the full AFM-Kitting email-to-Excel pipeline.
-
-    Steps:
-    1. Load configuration.
-    2. Determine the previous business day (target email date).
-    3. Find and read the kitting email from Outlook.
-    4. Parse the HTML table into KitRow list.
-    5. Map each KitRow to MappedRow (note construction, order line lookup).
-    6. Write all MappedRows to Excel A.
-    7. Print a summary.
-
-    Raises:
-        SystemExit: On any unrecoverable error (exit code 1).
-    """
+    """CLI pipeline: load config, find email, parse rows, map to MappedRow, write Excel A."""
     from core.config_loader import load_config
-    from core.business_day import get_previous_business_day, get_next_business_day
+    from core.business_day import get_previous_business_day
     from core.outlook_reader import find_kitting_email, parse_kitting_table
     from core.packing_detail_reader import lookup_packing_dimensions
     from core.order_lines_reader import lookup_order_lines
     from core.excel_mapper import write_to_excel_a
     from core.models import KitRow, MappedRow
+    from core.utils import _compress_line_nos
 
     try:
-        # Step 1: Load configuration
-        logger.info("Loading configuration...")
         config = load_config()
-
         packing_detail_path: str = config.get("packing_detail_path", "")
         packing_detail_sheet: str = config.get("packing_detail_sheet", "2021년")
         order_lines_path: str = config.get("order_lines_path", "")
@@ -100,33 +53,18 @@ def _cli_main() -> None:
         excel_b_sheet: str = config.get("excel_b_sheet", "Customer Order Lines")
         excel_b_search_col: str = config.get("excel_b_search_column", "A")
         excel_b_columns: dict = config.get("excel_b_columns", {"fp": "J", "f_col": "F", "jm": "KJ", "if_col": "C", "jy_col": "E"})
-
-        # Step 2: Determine target date (previous business day) and write date (next business day)
         today = date.today()
         target_date = get_previous_business_day(today)
-        write_date = get_next_business_day(today)
-        logger.info(
-            "Today: %s | Target email date: %s | Excel write date: %s",
-            today, target_date, write_date,
-        )
-
-        # Step 3: Find kitting email in Outlook
-        logger.info("Searching Outlook for kitting email on %s...", target_date)
+        logger.info("Today: %s | Target: %s", today, target_date)
         html_body = find_kitting_email(target_date)
         if html_body is None:
             print("이메일을 찾을 수 없습니다.")
-            logger.warning("No kitting email found for %s", target_date)
             sys.exit(0)
-
-        # Step 4: Parse HTML table
-        logger.info("Parsing kitting table from email HTML...")
         kit_rows = parse_kitting_table(html_body)
         if len(kit_rows) == 0:
             print("처리할 행이 없습니다.")
-            logger.warning("No qualifying rows found in kitting email")
             sys.exit(0)
-
-        logger.info("Found %d qualifying kit rows", len(kit_rows))
+        logger.info("Found %d kit rows", len(kit_rows))
 
         # Step 5: Map each KitRow to MappedRow
         mapped_rows: list = []
@@ -148,24 +86,14 @@ def _cli_main() -> None:
                         packing_detail_path, project_id,
                         sheet_name=packing_detail_sheet,
                     )
-                except FileNotFoundError:
-                    logger.warning(
-                        "Packing detail file not found; skipping dimensions for project_id '%s'",
-                        project_id,
-                    )
+                except (FileNotFoundError, Exception) as exc:
+                    logger.warning("치수 조회 실패 '%s': %s", project_id, exc)
                     dims_result = None
-                except Exception as exc:
-                    logger.warning(
-                        "Error looking up dimensions for project_id '%s': %s", project_id, exc
-                    )
-                    dims_result = None
-
                 if isinstance(dims_result, str):
                     note = f"포장반 ({dims_result})"
-                else:  # None — no valid K-date rows found
-                    note = "포장반"
+                else:
+                    note = kit_place
             else:
-                # kit_place is neither 창고 nor 포장반 — use raw value
                 note = kit_place
 
             # Step 5b: Lookup order lines from Excel B
@@ -177,7 +105,7 @@ def _cli_main() -> None:
                     search_col_letter=excel_b_search_col,
                     fp_col_letter=excel_b_columns.get("fp", "J"),
                     f_col_letter=excel_b_columns.get("f_col", "F"),
-                    jm_col_letter=excel_b_columns.get("jm", "G"),
+                    jm_col_letter=excel_b_columns.get("jm", "KJ"),
                     if_col_letter=excel_b_columns.get("if_col", "C"),
                     jy_col_letter=excel_b_columns.get("jy_col", "E"),
                     planned_date=kit_row.get("planned_date"),

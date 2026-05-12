@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <mt_id>MT-2</mt_id>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_MODULE_QA</status>
+
+  <implementation_summary>
+    프로젝트 루트의 EmailMonitor.spec 파일에 collect_all 번들링을 추가하였습니다.
+    파일 상단에 from PyInstaller.utils.hooks import collect_all을 추가하고,
+    collect_all('fitz')와 collect_all('pdfplumber')를 호출하여 C 확장 DLL과
+    데이터 파일을 EXE에 번들링합니다. 기존 hiddenimports에는
+    win32com, openpyxl 등 기존 항목을 보존하면서 collect_all 결과를 추가합니다.
+    po_automation/EmailMonitor.spec은 수정하지 않았습니다.
+  </implementation_summary>
+
+  <implemented_files>
+    <file>EmailMonitor.spec</file>
+  </implemented_files>
+
+  <changed_files>
+    <file>EmailMonitor.spec</file>
+  </changed_files>
+
+  <scope_manifest>scope_manifest_MT-2.json</scope_manifest>
+
+  <verification_criteria>
+    1. EmailMonitor.spec에 collect_all('fitz') 호출 존재
+    2. EmailMonitor.spec에 collect_all('pdfplumber') 호출 존재
+    3. fitz_binaries, fitz_datas가 Analysis() binaries/datas에 전달됨
+    4. pdfplumber_binaries, pdfplumber_datas가 Analysis() binaries/datas에 전달됨
+    5. win32com, openpyxl이 hiddenimports에 여전히 존재
+    6. name='emailmonitor', console=False, upx=True 설정 변경 없음
+    7. po_automation/EmailMonitor.spec 수정 없음
+  </verification_criteria>
+
+  <self_check>
+    <python39_syntax>PASS — PyInstaller spec 파일은 Python 문법 사용, collect_all은 PyInstaller 공식 API</python39_syntax>
+    <error_handling>N-A — spec 파일은 빌드 설정이므로 런타임 예외 처리 불필요</error_handling>
+    <build>PASS — collect_all로 fitz/pdfplumber 번들링, 기존 hiddenimports 보존</build>
+    <security>PASS — 하드코딩 없음, 외부 입력 없음</security>
+  </self_check>
+</module_handover>

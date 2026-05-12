@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T13:11:11Z",
+  "pipeline_id": "BUG-20260510-9F70",
+  "contract_hash": "e15f9fe4b141568b6d1205498adb317b34f7be10af4c0be7997832a8a504e177",
+  "test_set_hash": "db27114f17096cedbeab3edcd5806ec7bb5604f8c3deac715fe73e780e483a34",
+  "observed_contract_hash": "e15f9fe4b141568b6d1205498adb317b34f7be10af4c0be7997832a8a504e177",
+  "observed_test_set_hash": "db27114f17096cedbeab3edcd5806ec7bb5604f8c3deac715fe73e780e483a34",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 2,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "main_fixes": 1,
+        "email_monitor_fixes": 1
+      },
+      "edge_case_tests": 2,
+      "p0_tests": 2
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 120,
+    "total_points": 120,
+    "hard_fail": false,
+    "passed": 4,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T001",
+      "module": "email_monitor_fixes",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 40,
+      "earned": 40,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import ast, sys; src=open('po_automation/email_monitor.py',encoding='utf-8').read(); found=[p for p in ['import re as _re','import threading as _threading','from datetime import datetime as _dt'] if p in src]; sys.exit(1) if found else print('ALL_CHECKS_PASSED')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "ALL_CHECKS_PASSED\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T002",
+      "module": "email_monitor_fixes",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 30,
+      "earned": 30,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; src=open('po_automation/email_monitor.py',encoding='utf-8').read(); found='Path(' in src and '.rename(' in src; sys.exit(1) if found else print('SAFETY_OK')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "SAFETY_OK\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T003",
+      "module": "main_fixes",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 30,
+      "earned": 30,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; src=open('po_automation/main.py',encoding='utf-8').read(); found=[p for p in ['if False:','_ = app'] if p in src]; sys.exit(1) if found else print('ALL_CHECKS_PASSED')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "ALL_CHECKS_PASSED\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T004",
+      "module": "email_monitor_fixes",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "exception",
+      "status": "PASS",
+      "points": 20,
+      "earned": 20,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-m",
+          "py_compile",
+          "po_automation/email_monitor.py"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260510-9F70\\normal_01\\input.txt",
+      "expected_path": "tests\\oracles\\BUG-20260510-9F70\\normal_01\\expected.txt",
+      "input_sha256": "990488ae7989fb2161bd71297d096a3990a580154bc569b63546a75cb802ef51",
+      "expected_sha256": "f0107ddb08c8dd0b51f91e6db8de9b3abe138e73638a44bba1d89fc6528efe53"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260510-9F70\\edge_01\\input.txt",
+      "expected_path": "tests\\oracles\\BUG-20260510-9F70\\edge_01\\expected.txt",
+      "input_sha256": "c833b2282d1aad1691d75e31c00b5e56bbf58cd548d668b6158edeaa4381cca3",
+      "expected_sha256": "998ccf616845fbd499cb9af01f47e877a7b5e6c6982e4098016424acaf9182d1"
+    }
+  ]
+}

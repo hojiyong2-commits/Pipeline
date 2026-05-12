@@ -125,9 +125,10 @@ if not api_key:
 Security phase is entered only after the Incremental Module Gate sequence completes:
 `module design → module dev → module qa PASS → integrate` for each PM micro-task (MT-N).
 Dev's `done --phase dev` must include `--agent-run-id <run_id>` from the Option A agent
-receipt gate. The Pipeline Manager recording step issues `python pipeline.py agent start --phase sec`
-and passes the one-time token only to security-agent. Security-agent returns results; the Pipeline
-Manager calls `agent finish` and records `python pipeline.py sec --result ... --agent-run-id <run_id>`.
+receipt gate. Security is not one of the phase-attested roles; there is no
+Security agent receipt start command and `pipeline.py sec` has no
+`--agent-run-id` argument. Security-agent returns `<security_audit>`, and the Pipeline
+Manager records `python pipeline.py sec --result ... --risk ...` or `python pipeline.py sec --skip`.
 
-This agent does not issue agent receipts or call `agent start/finish` itself — the Pipeline Manager
-manages the receipt gate. Security-agent's only responsibility is the audit.
+This agent does not issue agent receipts or call `agent start/finish` itself.
+Security-agent's only responsibility is the audit.

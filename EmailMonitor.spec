@@ -1,12 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
 
+fitz_datas, fitz_binaries, fitz_hiddenimports = collect_all('fitz')
+pdfplumber_datas, pdfplumber_binaries, pdfplumber_hiddenimports = collect_all('pdfplumber')
 
 a = Analysis(
     ['po_automation\\main.py'],
     pathex=[],
-    binaries=[],
-    datas=[],
-    hiddenimports=['win32com', 'win32com.client', 'win32timezone', 'pdfplumber', 'fitz', 'openpyxl'],
+    binaries=fitz_binaries + pdfplumber_binaries,
+    datas=fitz_datas + pdfplumber_datas,
+    hiddenimports=fitz_hiddenimports + pdfplumber_hiddenimports + [
+        'win32com', 'win32com.client', 'win32com.server', 'win32timezone',
+        'openpyxl', 'openpyxl.styles', 'openpyxl.utils',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -22,7 +28,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='EmailMonitor',
+    name='emailmonitor',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260512-CF73</pipeline_id>
+    <evidence>
+      <file>po_automation/email_monitor.py</file>
+      <file>EmailMonitor.spec</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>po_automation/email_monitor.py</file>
+      <file>EmailMonitor.spec</file>
+    </files_to_modify>
+    <files_modified>
+      <file>po_automation/email_monitor.py</file>
+      <file>EmailMonitor.spec</file>
+    </files_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>po_automation.email_monitor._process_mail_item</target_function>
+    <change_type>bugfix</change_type>
+    <change_description>dest_folder.exists() 분기에서 bare pass를 tmp_dest_folder.rmdir() + OSError pass 패턴으로 교체. 비어있는 임시 폴더 고아 방지.</change_description>
+    <mt_id>MT-2</mt_id>
+    <target_function>EmailMonitor.spec -- PyInstaller Analysis configuration</target_function>
+    <change_type>build_config</change_type>
+    <change_description>collect_all(fitz) + collect_all(pdfplumber)로 PDF 파싱 C 확장 DLL 번들링. 기존 win32com, openpyxl hiddenimports 보존.</change_description>
+    <affected_call_sites>none</affected_call_sites>
+  </impact_analysis>
+
+  <implementation_summary>
+    MT-1: po_automation/email_monitor.py _process_mail_item() 함수 내
+    dest_folder.exists() 분기에서 bare pass를 tmp_dest_folder.rmdir() + OSError pass 패턴으로
+    교체하여 비어있는 임시 폴더가 고아 폴더로 남지 않도록 정리합니다.
+
+    MT-2: 프로젝트 루트 EmailMonitor.spec에 collect_all(fitz) + collect_all(pdfplumber)를
+    추가하여 PDF 파싱 C 확장 DLL과 데이터 파일을 EXE에 번들링합니다.
+    기존 win32com, openpyxl hiddenimports는 보존됩니다.
+  </implementation_summary>
+
+  <implemented_files>
+    <file>po_automation/email_monitor.py</file>
+    <file>EmailMonitor.spec</file>
+  </implemented_files>
+
+  <changed_files>
+    <file>po_automation/email_monitor.py</file>
+    <file>EmailMonitor.spec</file>
+  </changed_files>
+
+  <scope_manifest>scope_manifest.json</scope_manifest>
+
+  <module_gate_results>
+    <module id="MT-1" result="PASS">module_qa_MT-1.xml</module>
+    <module id="MT-2" result="PASS">module_qa_MT-2.xml</module>
+    <integration result="PASS">integration_report.xml</integration>
+  </module_gate_results>
+
+  <self_check>
+    <python39_syntax>PASS -- match/case, X|Y 유니온, 소문자 제네릭 미사용</python39_syntax>
+    <error_handling>PASS -- try/except OSError 구조 유지, nosec B110 적용</error_handling>
+    <path_safety>PASS -- pathlib.Path 기존 사용 유지</path_safety>
+    <security>PASS -- 하드코딩 없음, rmdir은 OS 내장 안전 연산</security>
+    <build>PASS -- EmailMonitor.spec collect_all 번들링 검증 완료</build>
+  </self_check>
+</dev_handover>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <evidence>
+    <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+    <file>FEAT-20260426-332E/core/utils.py</file>
+    <file>FEAT-20260426-332E/main.py</file>
+    <file>FEAT-20260426-332E/ui/app.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+      <file>FEAT-20260426-332E/core/utils.py</file>
+      <file>FEAT-20260426-332E/main.py</file>
+      <file>FEAT-20260426-332E/ui/app.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <changed_files>
+      <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+      <file>FEAT-20260426-332E/core/utils.py</file>
+      <file>FEAT-20260426-332E/main.py</file>
+      <file>FEAT-20260426-332E/ui/app.py</file>
+    </changed_files>
+    <blast_radius>CONTAINED</blast_radius>
+    <mt_summary>
+      MT-1: _safe_resolve() UNC allowlist — order_lines_reader.py only
+      MT-2: jm default KJ — main.py only
+      MT-3: note = kit_place — main.py only
+      MT-4: _compress_line_nos centralized — core/utils.py new, main.py, ui/app.py
+      MT-5: dead code removed — main.py, ui/app.py
+    </mt_summary>
+  </impact_analysis>
+  <status>READY_FOR_QA</status>
+  <change_summary>
+    MT-1: _ALLOWED_ROOTS list with UNC //ccikrnf/wrkgroup; _safe_resolve() updated to iterate list
+    MT-2: jm column default "G" changed to "KJ" in main.py _cli_main
+    MT-3: note = kit_place instead of hardcoded "포장반" in _cli_main dims_result=None branch
+    MT-4: _compress_line_nos moved to core/utils.py; removed from main.py and ui/app.py; imports added
+    MT-5: write_date dead code removed; inline import re as _re removed; import re added at top of ui/app.py
+  </change_summary>
+</handover>

@@ -5,7 +5,7 @@ Pipeline: FEAT-20260425-6FFC
 
 Watches an EmailMonitor parent folder for new CustomerOrderLines*.xlsx files.
 On detection, parses the parent folder name, runs order_mapper, creates CORB
-folder, copies source files, and updates the IC-Part T column with the CORB path.
+folder, copies source files, and updates the IC-Part R column with the CORB path.
 
 Python 3.9 compatible.
 
@@ -36,6 +36,15 @@ except ImportError as _e:
 import order_mapper
 
 logger = logging.getLogger("automation")
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    """Return True when path is inside root, compatible with Python 3.9."""
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
 
 # ---------------------------------------------------------------------------
 # Folder name parser
@@ -370,17 +379,29 @@ class _CustomerOrderHandler(FileSystemEventHandler):
         super().__init__()
         self._ic_part_template = Path(ic_part_template)
         self._corb_base_map = corb_base_map
+        self._corb_roots: List[Path] = [
+            Path(str(path_value))
+            for path_value in corb_base_map.values()
+            if str(path_value).strip()
+        ]
         self._log_callback = log_callback
         self._debounce_seconds = debounce_seconds
         self._timers: Dict[str, threading.Timer] = {}
         self._lock = threading.Lock()
         self._ic_part_lock = threading.Lock()
 
+    def _is_corb_output(self, path: Path) -> bool:
+        """Return True when path is under one of the configured CORB roots."""
+        return any(_is_relative_to(path, root) for root in self._corb_roots)
+
     def on_created(self, event: FileCreatedEvent) -> None:
         if event.is_directory:
             return
         src_path = Path(event.src_path)
         if not (src_path.name.startswith("CustomerOrderLines") and src_path.suffix.lower() == ".xlsx") or src_path.name.startswith("~$"):
+            return
+        if self._is_corb_output(src_path):
+            logger.info("CORB 경로 안의 CustomerOrderLines 파일은 재처리하지 않음: %s", src_path)
             return
         key = str(src_path)
         with self._lock:
@@ -405,6 +426,7 @@ class _CustomerOrderHandler(FileSystemEventHandler):
             candidates: List[Path] = [
                 p for p in src_path.parent.glob("CustomerOrderLines*.xlsx")
                 if not p.name.startswith("~$")
+                and not self._is_corb_output(p)
             ]
             if candidates:
                 resolved_path = max(candidates, key=lambda p: p.stat().st_mtime)

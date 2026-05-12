@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<build_report>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
+  <status>BUILD SUCCESS</status>
+
+  <section_1_command>
+    <tool>pyinstaller</tool>
+    <spec_file>EmailMonitor.spec</spec_file>
+    <command>pyinstaller --noconfirm EmailMonitor.spec</command>
+    <mode>onefile windowed (console=False)</mode>
+  </section_1_command>
+
+  <section_2_spec>
+    <spec_name>EmailMonitor.spec</spec_name>
+    <entry_point>po_automation/main.py</entry_point>
+    <collect_all>fitz (PyMuPDF), pdfplumber</collect_all>
+    <hiddenimports>win32com, win32com.client, win32com.server, win32timezone, openpyxl, openpyxl.styles, openpyxl.utils</hiddenimports>
+    <upx>true</upx>
+    <noarchive>false</noarchive>
+  </section_2_spec>
+
+  <section_3_output>
+    <exe_path>dist/emailmonitor.exe</exe_path>
+    <exe_size_bytes>118804286</exe_size_bytes>
+    <exe_size_mb>113.3</exe_size_mb>
+    <build_dir>build/EmailMonitor</build_dir>
+    <dist_dir>dist</dist_dir>
+  </section_3_output>
+
+  <section_4_verification>
+    <exe_exists>true</exe_exists>
+    <exe_non_zero>true</exe_non_zero>
+    <build_log_errors>none detected</build_log_errors>
+    <upx_applied>true</upx_applied>
+    <console_mode>false (windowed)</console_mode>
+    <fitz_bundled>true</fitz_bundled>
+    <pdfplumber_bundled>true</pdfplumber_bundled>
+  </section_4_verification>
+
+  <section_5_artifacts>
+    <artifact>
+      <name>emailmonitor.exe</name>
+      <path>dist/emailmonitor.exe</path>
+      <size_bytes>118804286</size_bytes>
+      <type>Windows EXE (windowed, single-file)</type>
+    </artifact>
+    <artifact>
+      <name>build_report.xml</name>
+      <path>dist/build_report.xml</path>
+      <type>Build report</type>
+    </artifact>
+  </section_5_artifacts>
+
+  <section_6_qa_mapping>
+    <mt id="MT-1" qa_result="PASS">email_monitor.py orphan folder fix -- rmdir 추가</mt>
+    <mt id="MT-2" qa_result="PASS">EmailMonitor.spec collect_all(fitz)+collect_all(pdfplumber) 번들링</mt>
+    <overall_qa_score>100/120</overall_qa_score>
+    <overall_qa_verdict>PASS</overall_qa_verdict>
+  </section_6_qa_mapping>
+</build_report>

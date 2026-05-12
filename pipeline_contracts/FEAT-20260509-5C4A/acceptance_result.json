@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-09T08:40:36Z",
+  "pipeline_id": "FEAT-20260509-5C4A",
+  "contract_hash": null,
+  "test_set_hash": null,
+  "observed_contract_hash": "1f4601ce48c7e346290899b0a8bc873a27300159127889f3f4631b61ac6f4cef",
+  "observed_test_set_hash": "fdb1def802fe2ed6f1fb42f58a62df1e88f917c2d3434742d7fadadb99abaf47",
+  "readiness": {
+    "ready": false,
+    "blockers": [
+      "at least one module/component is required",
+      "at least 1 edge/exception tests are required",
+      "at least one P0 acceptance test is required"
+    ],
+    "warnings": [],
+    "metrics": {
+      "module_count": 0,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {},
+      "edge_case_tests": 0,
+      "p0_tests": 0
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "FAIL",
+    "score": 0.0,
+    "threshold": 80,
+    "earned_points": 0,
+    "total_points": 0,
+    "hard_fail": false,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": []
+}

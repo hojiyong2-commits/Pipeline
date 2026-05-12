@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-09T07:33:06Z",
+  "pipeline_id": "FEAT-20260509-7CB3",
+  "contract_hash": "aaf6a10c30e30d305bf85801a3ace1077c1ef71a251af887719ae69db73148bd",
+  "test_set_hash": "5f474719e00e6060f30de0fe6185bb81ac95e9b51277a920419a3297af406e07",
+  "observed_contract_hash": "aaf6a10c30e30d305bf85801a3ace1077c1ef71a251af887719ae69db73148bd",
+  "observed_test_set_hash": "5f474719e00e6060f30de0fe6185bb81ac95e9b51277a920419a3297af406e07",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "M1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 1
+    }
+  },
+  "shape_errors": [],
+  "summary": {
+    "verdict": "FAIL",
+    "score": 0.0,
+    "threshold": 80,
+    "earned_points": 0,
+    "total_points": 20,
+    "hard_fail": true,
+    "passed": 0,
+    "failed": 2,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T1",
+      "module": "M1",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "status": "FAIL",
+      "points": 10,
+      "earned": 0,
+      "message": "path is required",
+      "details": {
+        "error": "ScoringError"
+      }
+    },
+    {
+      "id": "T2",
+      "module": "M1",
+      "type": "file_exists_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "FAIL",
+      "points": 10,
+      "earned": 0,
+      "message": "path is required",
+      "details": {
+        "error": "ScoringError"
+      }
+    }
+  ]
+}

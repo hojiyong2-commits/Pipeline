@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
+  <result>PASS</result>
+  <numeric_score>100</numeric_score>
+
+  <category_scores>
+    <fs score="10" max="10">PASS -- pathlib.Path 기존 사용 유지, rmdir() 안전 연산, po_automation/EmailMonitor.spec 미수정</fs>
+    <al score="10" max="10">PASS -- 분기 로직 정확, dest_folder.exists() 조건 유지</al>
+    <wa score="10" max="10">N-A -- 네트워크 통신 없음</wa>
+    <ui score="10" max="10">N-A -- UI 없음</ui>
+    <pd score="20" max="20">PASS -- 함수 시그니처 불변, 기타 로직 변경 없음, collect_all 설정 정확</pd>
+    <sec score="20" max="20">PASS -- 하드코딩 없음, rmdir은 OS 내장 안전 연산, nosec B110 적용</sec>
+    <build score="20" max="20">PASS -- collect_all(fitz)+collect_all(pdfplumber) 번들링, 기존 hiddenimports 보존</build>
+  </category_scores>
+
+  <mt_verifications>
+    <mt id="MT-1">
+      <check id="1" result="PASS">L1075에 tmp_dest_folder.rmdir() 호출 존재 (count=1)</check>
+      <check id="2" result="PASS">except OSError: pass + nosec B110이 rmdir 바로 아래에 존재</check>
+      <check id="3" result="PASS">shutil.rmtree 사용 없음 (count=0)</check>
+      <check id="4" result="PASS">함수 시그니처 및 기타 로직 변경 없음</check>
+      <check id="5" result="PASS">po_automation/EmailMonitor.spec 수정 없음</check>
+    </mt>
+    <mt id="MT-2">
+      <check id="1" result="PASS">collect_all(fitz) 호출 존재</check>
+      <check id="2" result="PASS">collect_all(pdfplumber) 호출 존재</check>
+      <check id="3" result="PASS">fitz_binaries + pdfplumber_binaries가 binaries= 인자에 전달됨</check>
+      <check id="4" result="PASS">fitz_datas + pdfplumber_datas가 datas= 인자에 전달됨</check>
+      <check id="5" result="PASS">win32com, openpyxl hiddenimports 보존됨</check>
+      <check id="6" result="PASS">name=emailmonitor, console=False, upx=True 설정 변경 없음</check>
+    </mt>
+  </mt_verifications>
+
+  <scope_verification>
+    <declared_files_match_actual>true</declared_files_match_actual>
+    <unauthorized_files_changed>none</unauthorized_files_changed>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    <mt_id>MT-2</mt_id>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+  </micro_task_boundary>
+
+  <verdict>PASS</verdict>
+  <critical_issues>none</critical_issues>
+  <failure_signature>none</failure_signature>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>build-agent</to>
+    <pipeline_id>BUG-20260512-CF73</pipeline_id>
+    <evidence>
+      <file>po_automation/email_monitor.py</file>
+      <file>EmailMonitor.spec</file>
+    </evidence>
+    <status>READY_FOR_BUILD</status>
+  </handover>
+</qa_report>
