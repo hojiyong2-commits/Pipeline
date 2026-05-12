@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: inlineStr 스캐너 정규식 패치</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, BUILD</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>core_parser_logic=true (ZIP XML 스캐너 정규식 수정), build_or_deploy=true (EXE 재빌드 필요) — Fast Path 금지 조건 충족.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>1</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>true</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <askuser>NONE</askuser>
+
+  <decomposition_audit>
+    <total_functions_identified>1</total_functions_identified>
+    <micro_task_count>1</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <split_decision>
+      변경 대상 파일 1개(order_mapper.py), 변경 함수 1개(write_ic_part_zip 내 스캐너 블록),
+      변경 라인 1줄 — 분할 불필요. SINGLE_TASK_OK.
+      write_ic_part_zip 호출부는 automation.py에 1개 추가 존재하나
+      API 시그니처 변경 없으므로 별도 micro_task 불필요.
+    </split_decision>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <module_split_shown_to_user>true</module_split_shown_to_user>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <maintainability_priority>true</maintainability_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      수정 방향이 명확하고(정규식 OR 조건 1개 추가), P0/P1 모호성 없음.
+      변수명/코드 스타일 등 P2 수준 질문은 모두 필터링. 사용자가 수정 내용(1줄 패치)을 직접 지정했으므로 설계 분기 없음.
+    </filter_summary>
+    <decision_questions>
+      <question id="Q1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>write_ic_part_zip 함수의 I·J·K 스캐너 블록 수정을 단일 micro_task(MT-1)로 처리할까요?</user_facing_question>
+        <evidence>변경 대상: order_mapper.py 1개 파일, write_ic_part_zip 함수 내 정규식 1줄. grep 결과 호출부 2개 존재하나 API 시그니처 변경 없음.</evidence>
+        <why_it_matters>MT를 분리하면 검증 비용이 늘고 이점이 없습니다. 단일 MT로 처리하는 것이 유지보수성에 유리합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <user_answer>A — 단일 MT-1로 처리 (사용자가 1줄 수정으로 명시)</user_answer>
+        <options>
+          <option id="A">
+            <label>단일 MT-1 — order_mapper.py 1줄만 수정</label>
+            <benefit>변경 범위 최소화, 검증 단순, 기존 API 시그니처 유지</benefit>
+            <cost>inlineStr 외 추가 포맷이 발견되면 별도 패치 필요</cost>
+          </option>
+          <option id="B">
+            <label>MT 분리 — 스캐너 유닛 테스트 추가 별도 MT</label>
+            <benefit>스캐너 로직에 대한 테스트 커버리지가 증가하여 향후 회귀 방지에 유리</benefit>
+            <cost>단순 1줄 수정에 비해 과도한 분리로 개발 비용과 일정이 증가함</cost>
+          </option>
+        </options>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    Input: ic_part_src/order_mapper.py (Python 소스, 1482라인)
+    Output: ic_part_src/order_mapper.py (동일 파일, L1160 정규식 1줄 변경)
+    Validation: re.search(r'&lt;v[\s>]|&lt;is[\s>]', ...) 가 inlineStr 셀에서 truthy 반환
+  </interface_spec>
+
+  <requirements>
+    1. ic_part_src/order_mapper.py L1160 (write_ic_part_zip 함수 내 I·J·K 스캐너):
+       현재:  if not re.search(r'&lt;v[\s>]', _m.group(3) or ''):
+       수정:  if not re.search(r'&lt;v[\s>]|&lt;is[\s>]', _m.group(3) or ''):
+       — OR 조건 추가로 inlineStr 포맷 셀(&lt;is> 태그)도 "값 있음"으로 집계
+
+    2. 변경 범위는 정확히 L1160 1줄만. 다른 함수/파일 수정 금지.
+
+    3. 기존 &lt;v> 태그 감지 동작 유지 필수 (회귀 방지).
+
+    4. 수정 후 oracle 기반 테스트 검증 의무:
+       - T001 (mapping_rule_check, P0): inlineStr 셀 3개 포함 시 last_occupied=229, next_write=230
+       - T002 (excel_row_match, P0): 빈 시트 시 last_occupied=5, next_write=6
+       - T003 (command_check, P1): L1160에 inlineStr 패턴 존재 확인
+
+    5. FS.safe_write 패턴: 기존 ZIP in-place write 방식 유지 (변경 없음).
+
+    6. 빌드 대상: ICPartAutomation.exe (PyInstaller --onefile --windowed).
+       수정 후 EXE 재빌드 필수.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>order_mapper.write_ic_part_zip._ijk_scanner_block</affected_function>
+      <target_files>
+        <file>ic_part_src/order_mapper.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>ic_part_src/automation.py:347 — order_mapper.write_ic_part_zip(...) [API 시그니처 변경 없음, 수정 불필요]</site>
+        <site>ic_part_src/order_mapper.py:1479 — write_ic_part_zip(...) 내부 호출 [수정 불필요]</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>write_ic_part_zip</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+        <note>order_mapper.py:1068(정의), order_mapper.py:1479(내부 호출), automation.py:347(외부 호출), tests/test_order_mapper.py:462(테스트 참조)</note>
+      </grep_evidence>
+      <change_summary>
+        write_ic_part_zip 내 I·J·K 스캐너 정규식에 OR 조건 추가:
+        r'&lt;v[\s>]' → r'&lt;v[\s>]|&lt;is[\s>]'
+        inlineStr 포맷 셀도 occupied로 집계하여 덮어쓰기 버그 해결
+      </change_summary>
+      <line_estimate>1</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 ICPartAutomation 빌드 환경과 동일</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>
+      python.defaultInterpreterPath: 기존 venv 유지
+      typeCheckingMode: basic
+    </vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    1. [기능] 16개 CustomerOrderLines 실행 시 IC-Part.xlsx에 16개 행 모두 기록 (이전: 3개만 기록)
+    2. [단위-P0] T001: inlineStr 셀 3행 스캔 → occupied=[227,228,229], next_write=230
+    3. [엣지-P0] T002: 빈 시트 → occupied=[], next_write=6 (ICPART_DATA_START_ROW)
+    4. [코드-P1] T003: L1160 라인에 &lt;is[\s>] 패턴 존재
+    5. [회귀] 기존 &lt;v> 태그 방식 셀(shared_string 포맷)도 여전히 occupied로 집계
+    6. [빌드] PyInstaller EXE 빌드 성공, dist/ICPartAutomation.exe 생성
+    7. [스코프] 변경 파일 1개, 변경 라인 1줄만 (scope_manifest.json으로 검증)
+    8. [로그] 실행 시 "Accumulation mode: last occupied row=N" 로그에서 row가 매 호출마다 증가 (overwrite 재발 없음)
+  </acceptance_criteria>
+
+  <forbidden>
+    - order_mapper.py 외 다른 파일 수정 금지 (automation.py, main.py, ui/app.py 등)
+    - write_ic_part_zip 함수 시그니처 변경 금지
+    - ICPART_DATA_START_ROW 상수값 변경 금지
+    - oracle 파일(tests/oracles/**) 수정 금지
+    - L1160 이외 라인 수정 금지
+    - &lt;v> 태그 감지 조건 삭제 또는 변경 금지 (OR 조건 추가만 허용)
+    - anti_gaming_rules 우회 패턴 사용 금지
+  </forbidden>
+
+  <handover_template>
+    <!-- dev-agent가 QA에 인계할 때 사용하는 템플릿 (PM 계획 문서 — 실제 handover 아님) -->
+    <template_from>dev-agent</template_from>
+    <template_to>qa-agent</template_to>
+    <template_pipeline_id>BUG-20260512-F307</template_pipeline_id>
+    <template_evidence>
+      <file>ic_part_src/order_mapper.py</file>
+      <file>scope_manifest.json</file>
+      <file>scope_manifest_MT-1.json</file>
+      <file>dev_handover.xml</file>
+    </template_evidence>
+    <template_status>READY_FOR_QA</template_status>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\ic_part_src\order_mapper.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\BUG-20260512-F307\task_contract.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\BUG-20260512-F307\test_set.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Phase 2 Dev 규칙:
+      - PM 지정 micro_task(MT-1) 범위 내에서만 변경
+      - 변경 완료 후 scope_manifest_MT-1.json + scope_manifest.json 생성 필수
+      - module design → module dev → module qa → module integrate 순서 필수
+      - dev_handover.xml에 실제 변경 파일과 line number 포함
+      - FS.safe_write: ZIP in-place write 기존 패턴 유지
+    </phase_rules_excerpt>
+    <prev_phase_summary>
+      PM Phase 완료. Contract frozen (hash: 0cce08cb). MT-1 단일 micro_task:
+      order_mapper.py L1160 정규식 1줄 변경. 호출부 API 변경 없음.
+    </prev_phase_summary>
+  </context_injection>
+
+  <oracle_ownership_plan>
+    <oracle_root>tests/oracles/BUG-20260512-F307/</oracle_root>
+    <oracle_case id="O001" kind="normal">
+      <input>normal_inlinestr_detect/input.json</input>
+      <expected>normal_inlinestr_detect/expected.json</expected>
+      <source>user</source>
+    </oracle_case>
+    <oracle_case id="O002" kind="edge">
+      <input>edge_empty_sheet/input.json</input>
+      <expected>edge_empty_sheet/expected.json</expected>
+      <source>user</source>
+    </oracle_case>
+    <note>Dev는 oracle 파일을 읽기만 하고 절대 수정하지 않는다.</note>
+  </oracle_ownership_plan>
+
+  <phase_attestation_plan>
+    <branch>phase-attestation/BUG-20260512-F307</branch>
+    <sequence>
+      1. PM: gates prepare-phase --phase pm → commit/push → GitHub Actions → gates phase-ci --phase pm
+      2. Dev: gates prepare-phase --phase dev → commit/push → GitHub Actions → gates phase-ci --phase dev
+      3. QA: gates prepare-phase --phase qa → commit/push → GitHub Actions → gates phase-ci --phase qa
+      4. Build: gates prepare-phase --phase build → commit/push → GitHub Actions → gates phase-ci --phase build
+      5. External Gates: technical → oracle → github-ci → accept (ACCEPT/REJECT 사용자 결정)
+    </sequence>
+  </phase_attestation_plan>
+
+  <user_acceptance_plan>
+    <evidence_type>EXE 실행 결과 스크린샷 또는 IC-Part.xlsx 출력 파일</evidence_type>
+    <required_proof>
+      16개 CustomerOrderLines가 모두 IC-Part.xlsx에 기록된 스크린샷 또는 xlsx 파일
+    </required_proof>
+    <deploy_path>G:\내 드라이브\터미널\BUG-20260512-F307</deploy_path>
+  </user_acceptance_plan>
+
+</step_plan>

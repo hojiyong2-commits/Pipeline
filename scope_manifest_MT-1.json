@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "BUG-20260512-F307",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["ic_part_src/order_mapper.py"],
+      "affected_functions": ["order_mapper.write_ic_part_zip._ijk_scanner_block"]
+    }
+  ]
+}

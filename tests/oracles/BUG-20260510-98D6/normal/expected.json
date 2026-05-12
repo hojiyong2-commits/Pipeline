@@ -1,0 +1,6 @@
+{
+  "case": "normal_single_delivery_date",
+  "expected_order_no_values": ["X100050777"],
+  "expected_line_no_values": [""],
+  "reason": "사용자가 확정한 업무 규칙에 따라 날짜가 1개인 주문은 IC-Part Line No 칸을 비운다."
+}

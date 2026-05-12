@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>ic_part_src/order_mapper.py</file>
+    </files_to_modify>
+    <functions_to_modify>
+      <function>write_ic_part_zip._ijk_scanner_block</function>
+    </functions_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>order_mapper.write_ic_part_zip._ijk_scanner_block</target_function>
+    <change_type>regex_pattern_extension</change_type>
+    <lines_changed>1</lines_changed>
+    <line_number>1160</line_number>
+    <before>if not re.search(r'&lt;v[\s&gt;]', _m.group(3) or ''):</before>
+    <after>if not re.search(r'&lt;v[\s&gt;]|&lt;is[\s&gt;]', _m.group(3) or ''):</after>
+    <api_signature_changed>false</api_signature_changed>
+    <call_sites_affected>none</call_sites_affected>
+    <regression_risk>LOW</regression_risk>
+  </impact_analysis>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260512-F307</pipeline_id>
+    <evidence>
+      <file>ic_part_src/order_mapper.py</file>
+      <file>scope_manifest.json</file>
+      <file>scope_manifest_MT-1.json</file>
+      <file>module_handover_MT-1.xml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+</dev_handover>

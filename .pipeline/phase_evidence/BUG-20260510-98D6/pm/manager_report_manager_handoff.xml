@@ -1,0 +1,10 @@
+<manager_handoff>
+  <pipeline_id>BUG-20260510-98D6</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-2e223fc073b8cc54</planner_run_id>
+  <step_plan_sha256>7ce7667da01c9e293aaab17e771cd364719a0062a3190195e7117b692da9bdb4</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <manager_notes>PM planner 산출물의 해시와 pipeline id를 확인했습니다. 실행 관리는 step_plan.xml을 수정하지 않고 Dev 단계로 넘깁니다.</manager_notes>
+</manager_handoff>

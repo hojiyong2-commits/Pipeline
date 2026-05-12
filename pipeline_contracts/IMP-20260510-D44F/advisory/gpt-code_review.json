@@ -1,0 +1,17 @@
+{
+  "status": "SKIPPED",
+  "reason": "ENABLE_GPT_ADVISORY is not 1",
+  "api_called": false,
+  "api_key_source": "process",
+  "findings": [],
+  "model": "gpt-5.5",
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-D44F",
+  "kind": "gpt-code",
+  "auto_run": true,
+  "files": [
+    "inspection_report_IMP-20260510-D44F.md",
+    "po_automation\\email_monitor.py",
+    "po_automation\\main.py"
+  ]
+}

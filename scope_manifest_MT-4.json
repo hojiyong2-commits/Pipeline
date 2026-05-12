@@ -1,0 +1,16 @@
+{
+  "pipeline_id": "BUG-20260511-073B",
+  "micro_tasks": [
+    {
+      "id": "MT-4",
+      "files": [
+        "FEAT-20260426-332E/core/utils.py",
+        "FEAT-20260426-332E/main.py",
+        "FEAT-20260426-332E/ui/app.py"
+      ],
+      "affected_functions": [
+        "_compress_line_nos (main.py 로컬), _compress_line_nos (ui/app.py 로컬)"
+      ]
+    }
+  ]
+}

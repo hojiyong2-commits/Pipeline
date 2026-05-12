@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <phase>pm</phase>
+  <status>READY_FOR_DEV</status>
+  <step_plan_file>step_plan.xml</step_plan_file>
+  <step_plan_sha256>35003c896700a17fc4dceb4868251193b8951335c859445ddeeac02df16436bf</step_plan_sha256>
+  <planner_run_id>pm_planner-3c039d6f222e04e6</planner_run_id>
+  <manager_run_id>pipeline_manager-85c5bf7d38488249</manager_run_id>
+  <contract_frozen>true</contract_frozen>
+  <contract_hash>0e2aaed09b04009e380ef842b4b56977c00eddd10cbf081a7263fc2bfca2156b</contract_hash>
+  <test_set_hash>e184c0a6af1c19b1696b1b0e5664021c2d0e46d21643f2763f68e8f627718a34</test_set_hash>
+  <micro_tasks>
+    <task id="MT-1" file="pyproject.toml" function="[tool.ruff.lint] extend-select 추가" status="PENDING"/>
+    <task id="MT-2" file=".claude/agents/qa-agent.md" function="PLW2901 shadowing 체크리스트 추가" status="PENDING"/>
+  </micro_tasks>
+  <oracle_summary>
+    <count>2</count>
+    <normal>1</normal>
+    <edge>1</edge>
+    <exception>0</exception>
+  </oracle_summary>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <build_required>false</build_required>
+  <build_decision>
+    <exe>N/A</exe>
+    <skip_reason>meta-task</skip_reason>
+  </build_decision>
+  <sec_skip>true</sec_skip>
+  <sec_skip_reason>외부 네트워크/DB 접근 없는 설정 파일 + MD 수정</sec_skip_reason>
+  <summary>ruff PLW2901 활성화 + qa-agent.md shadowing 체크리스트 추가. MT-1: pyproject.toml extend-select 1줄. MT-2: qa-agent.md PLW2901 검사 항목 7줄. Contract frozen, oracle 2개 등록 완료.</summary>
+</manager_handoff>

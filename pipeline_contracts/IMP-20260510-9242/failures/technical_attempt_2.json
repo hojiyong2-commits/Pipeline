@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-9242",
+  "gate": "technical",
+  "attempt": 2,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\failures\\technical_attempt_2.json",
+  "recorded_at": "2026-05-10T14:31:33Z",
+  "status": "FAIL",
+  "repair_owner": "Dev tooling repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "technical"
+  ],
+  "note": "Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+  "failed_checks": [
+    {
+      "name": "pytest",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "l).\n    \n        ``parse_int``, if specified, will be called with the string\n        of every JSON int to be decoded. By default this is equivalent to\n        int(num_str). This can be used to use another datatype or parser\n        for JSON integers (e.g. float).\n    \n        ``parse_constant``, if specified, will be called with one of the\n        following strings: -Infinity, Infinity, NaN.\n        This can be used to raise an exception if invalid JSON numbers\n        are encountered.\n    \n        To use a custom ``JSONDecoder`` subclass, specify it with the ``cls``\n        kwarg; otherwise ``JSONDecoder`` is used.\n        \"\"\"\n        if isinstance(s, str):\n            if s.startswith('\\ufeff'):\n                raise JSONDecodeError(\"Unexpected UTF-8 BOM (decode using utf-8-sig)\",\n                                      s, 0)\n        else:\n            if not isinstance(s, (bytes, bytearray)):\n>               raise TypeError(f'the JSON object must be str, bytes or bytearray, '\n                                f'not {s.__class__.__name__}')\nE               TypeError: the JSON object must be str, bytes or bytearray, not NoneType\n\n..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\json\\__init__.py:339: TypeError\n============================== warnings summary ===============================\ntest_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_deploys_real_artifact_after_ci_pass\n  C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-107 (_readerthread)\n  \n  Traceback (most recent call last):\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1075, in _bootstrap_inner\n      self.run()\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1012, in run\n      self._target(*self._args, **self._kwargs)\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\subprocess.py\", line 1601, in _readerthread\n      buffer.append(fh.read())\n                    ^^^^^^^^^\n  UnicodeDecodeError: 'cp949' codec can't decode byte 0x98 in position 53: illegal multibyte sequence\n  \n  Enable tracemalloc to get traceback where the object was allocated.\n  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.\n    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))\n\ntest_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_rejects_placeholder_evidence\n  C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-109 (_readerthread)\n  \n  Traceback (most recent call last):\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1075, in _bootstrap_inner\n      self.run()\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1012, in run\n      self._target(*self._args, **self._kwargs)\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\subprocess.py\", line 1601, in _readerthread\n      buffer.append(fh.read())\n                    ^^^^^^^^^\n  UnicodeDecodeError: 'cp949' codec can't decode byte 0x98 in position 53: illegal multibyte sequence\n  \n  Enable tracemalloc to get traceback where the object was allocated.\n  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.\n    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ===========================\nFAILED test_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_deploys_real_artifact_after_ci_pass\nFAILED test_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_rejects_placeholder_evidence\n2 failed, 217 passed, 2 warnings in 41.66s\n",
+      "stderr": ""
+    }
+  ],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {},
+    "results": []
+  }
+}

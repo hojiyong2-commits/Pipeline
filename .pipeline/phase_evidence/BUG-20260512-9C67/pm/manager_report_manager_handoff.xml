@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <phase>pm</phase>
+  <status>READY_FOR_DEV</status>
+  <step_plan_file>step_plan.xml</step_plan_file>
+  <step_plan_sha256>3646d516b950aca07b39900fe392f44280e31612d00f0e016519f32142c5750a</step_plan_sha256>
+  <planner_run_id>pm_planner-10b1bda1e4fef07f</planner_run_id>
+  <manager_run_id>pipeline_manager-3205ec990d6e8467</manager_run_id>
+  <contract_frozen>true</contract_frozen>
+  <contract_hash>a16e3e33dbabfda86150ae396398c845a62f8961af85004dc36a7fe1634a2f0a</contract_hash>
+  <test_set_hash>19cb4433bb6aefbd86a4b6c14e0175c464fcfdf8a852d60b60293b9831c0a64a</test_set_hash>
+  <micro_tasks>
+    <task id="MT-1" file="ic_part_src/order_mapper.py" function="write_ic_part_zip" status="PENDING"/>
+  </micro_tasks>
+  <oracle_summary>
+    <count>2</count>
+    <normal>1</normal>
+    <edge>1</edge>
+    <exception>0</exception>
+  </oracle_summary>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <build_required>true</build_required>
+  <build_targets>
+    <exe>ICPartAutomation</exe>
+    <spec>ic_part_src/ICPartAutomation.spec</spec>
+  </build_targets>
+  <sec_skip>true</sec_skip>
+  <sec_skip_reason>파일 시스템 조작만, 외부 API 없음</sec_skip_reason>
+</manager_handoff>
