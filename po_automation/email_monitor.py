@@ -1070,8 +1070,11 @@ def _process_mail_item(
         if tmp_dest_folder != dest_folder:
             try:
                 if dest_folder.exists():
-                    # 이미 존재하면 임시 폴더 내 파일을 이동하지 않고 그냥 사용
-                    pass  # nosec B110
+                    # 이미 존재하면 임시 폴더를 정리하고 최종 폴더 그대로 사용
+                    try:
+                        tmp_dest_folder.rmdir()  # 비어있을 때만 삭제 (안전)
+                    except OSError:
+                        pass  # nosec B110 — 비어있지 않으면 그냥 둠
                 else:
                     shutil.move(str(tmp_dest_folder), str(dest_folder))
             except OSError as rename_exc:

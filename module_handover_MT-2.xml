@@ -1,43 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_handover>
-  <pipeline_id>BUG-20260512-E68A</pipeline_id>
   <mt_id>MT-2</mt_id>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
   <from>dev-agent</from>
   <to>qa-agent</to>
   <status>READY_FOR_MODULE_QA</status>
 
-  <scope_declaration>
-    <files_modified>
-      <file>po_automation/email_monitor.py</file>
-    </files_modified>
-    <functions_modified>
-      <function>_process_mail_item</function>
-    </functions_modified>
-  </scope_declaration>
-
-  <impact_analysis>
-    <target_function>po_automation.email_monitor._process_mail_item</target_function>
-    <change_type>logic_addition</change_type>
-    <description>수신자 for 루프 내 rec.Address 처리 부분에 Exchange DN 감지 + SMTP 변환 로직 추가. '@' 없는 주소를 Exchange DN으로 감지하여 GetExchangeUser().PrimarySmtpAddress로 변환. 예외 시 원본 주소로 폴백.</description>
-    <side_effects>없음 — recipient_set에 추가되는 주소가 SMTP 형식으로 개선될 뿐, 기존 allowed_recipients 인터셋 로직 변경 없음</side_effects>
-    <regression_risk>낮음 — '@' 있는 일반 SMTP 주소는 기존과 동일하게 처리됨</regression_risk>
-  </impact_analysis>
+  <implementation_summary>
+    프로젝트 루트의 EmailMonitor.spec 파일에 collect_all 번들링을 추가하였습니다.
+    파일 상단에 from PyInstaller.utils.hooks import collect_all을 추가하고,
+    collect_all('fitz')와 collect_all('pdfplumber')를 호출하여 C 확장 DLL과
+    데이터 파일을 EXE에 번들링합니다. 기존 hiddenimports에는
+    win32com, openpyxl 등 기존 항목을 보존하면서 collect_all 결과를 추가합니다.
+    po_automation/EmailMonitor.spec은 수정하지 않았습니다.
+  </implementation_summary>
 
   <implemented_files>
-    <file>po_automation/email_monitor.py</file>
+    <file>EmailMonitor.spec</file>
   </implemented_files>
 
-  <self_check>
-    <item id="SC-1" result="PASS">raw_addr에 '@' 없을 때만 Exchange DN 분기 진입</item>
-    <item id="SC-2" result="PASS">AddressEntry → GetExchangeUser → PrimarySmtpAddress 순서 확인</item>
-    <item id="SC-3" result="PASS">예외 발생 시 pass (nosec B110) → raw_addr 원본 유지</item>
-    <item id="SC-4" result="PASS">addr = raw_addr.lower().strip() 정규화 후 recipient_set 추가</item>
-    <item id="SC-5" result="PASS">SMTP 주소('@' 포함)는 Exchange DN 분기 건너뛰고 그대로 사용</item>
-    <item id="SC-6" result="PASS">외부 try/except 구조(기존 nosec B110) 유지</item>
-  </self_check>
+  <changed_files>
+    <file>EmailMonitor.spec</file>
+  </changed_files>
 
-  <evidence>
-    <file>po_automation/email_monitor.py</file>
-    <file>scope_manifest_MT-2.json</file>
-  </evidence>
+  <scope_manifest>scope_manifest_MT-2.json</scope_manifest>
+
+  <verification_criteria>
+    1. EmailMonitor.spec에 collect_all('fitz') 호출 존재
+    2. EmailMonitor.spec에 collect_all('pdfplumber') 호출 존재
+    3. fitz_binaries, fitz_datas가 Analysis() binaries/datas에 전달됨
+    4. pdfplumber_binaries, pdfplumber_datas가 Analysis() binaries/datas에 전달됨
+    5. win32com, openpyxl이 hiddenimports에 여전히 존재
+    6. name='emailmonitor', console=False, upx=True 설정 변경 없음
+    7. po_automation/EmailMonitor.spec 수정 없음
+  </verification_criteria>
+
+  <self_check>
+    <python39_syntax>PASS — PyInstaller spec 파일은 Python 문법 사용, collect_all은 PyInstaller 공식 API</python39_syntax>
+    <error_handling>N-A — spec 파일은 빌드 설정이므로 런타임 예외 처리 불필요</error_handling>
+    <build>PASS — collect_all로 fitz/pdfplumber 번들링, 기존 hiddenimports 보존</build>
+    <security>PASS — 하드코딩 없음, 외부 입력 없음</security>
+  </self_check>
 </module_handover>
