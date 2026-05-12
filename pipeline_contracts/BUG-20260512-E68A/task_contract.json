@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-E68A",
+  "pipeline_type": "BUG",
+  "created_at": "2026-05-12T00:13:05Z",
+  "updated_at": "2026-05-12T00:15:42Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "ICPartAutomation 빈행 탐지 기준 변경(I,J,K 모두 비어있는 첫 행) + emailmonitor 발신자/수신자 필터링 동작 불량 수정",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MOD-1",
+      "name": "ICPartAutomation_빈행탐지",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-2",
+      "name": "emailmonitor_Exchange_DN_해소",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-12T00:15:42Z",
+  "contract_hash": "574ffccfd170df395656c373630aa92db373376c00c4c1d3b7ec4d5c56fc745f",
+  "test_set_hash": "af3616eef3859dc652ea962a65ebf2bb5ceb3d3dd1be9eb99211742f7ebf6834"
+}
