@@ -1356,7 +1356,7 @@ def write_ic_part_zip(
 
     sheet1_bytes_new: bytes = sheet1_str.encode("utf-8")
 
-    import tempfile as _tempfile, shutil as _shutil, os as _os
+    import tempfile as _tempfile, shutil as _shutil, os as _os  # noqa: E401
     _tmp_path: Optional[str] = None
     try:
         _fd, _tmp_path = _tempfile.mkstemp(suffix=".xlsx", dir=_tempfile.gettempdir())
@@ -1546,17 +1546,17 @@ if __name__ == "__main__":
         assert og.format_line_nos() == "#1,2,4"
 
         # apply_sub_order_suffixes
-        og_a = OrderGroup(); og_a.order_no = "X100050542"; og_a.delivery_date = _date(2026, 6, 2)
-        og_b = OrderGroup(); og_b.order_no = "X100050542"; og_b.delivery_date = _date(2026, 6, 25)
-        og_c = OrderGroup(); og_c.order_no = "X100050542"; og_c.delivery_date = _date(2026, 7, 1)
+        og_a = OrderGroup(); og_a.order_no = "X100050542"; og_a.delivery_date = _date(2026, 6, 2)  # noqa: E702
+        og_b = OrderGroup(); og_b.order_no = "X100050542"; og_b.delivery_date = _date(2026, 6, 25)  # noqa: E702
+        og_c = OrderGroup(); og_c.order_no = "X100050542"; og_c.delivery_date = _date(2026, 7, 1)  # noqa: E702
         apply_sub_order_suffixes([og_a, og_b, og_c])
         assert og_a.order_no == "X100050542"
         assert og_b.order_no == "X100050542-2"
         assert og_c.order_no == "X100050542-3"
         assert og_b.base_order_no == "X100050542"
 
-        _ln_a = OrderGroup(); _ln_a.order_no = "X100050777"; _ln_a.line_nos = [1, 2, 3]
-        _ln_b = OrderGroup(); _ln_b.order_no = "X100050777"; _ln_b.line_nos = [4, 5]
+        _ln_a = OrderGroup(); _ln_a.order_no = "X100050777"; _ln_a.line_nos = [1, 2, 3]  # noqa: E702
+        _ln_b = OrderGroup(); _ln_b.order_no = "X100050777"; _ln_b.line_nos = [4, 5]  # noqa: E702
         _ln_groups = [_ln_a, _ln_b]
         apply_sub_order_suffixes(_ln_groups)
         _ln_counts: Dict[Optional[str], int] = Counter(g.base_order_no for g in _ln_groups)
@@ -1631,7 +1631,7 @@ if __name__ == "__main__":
         assert _det_date_b == 0
 
         # add_line with col overrides
-        _row = [None] * 10
+        _row: list = [None] * 10  # type: ignore[var-annotated]
         _row[1] = "X100050999"
         _row[0] = datetime(2026, 6, 10)
         _row[2] = 5
