@@ -1,44 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_handover>
   <mt_id>MT-2</mt_id>
-  <pipeline_id>BUG-20260512-CF73</pipeline_id>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
   <from>dev-agent</from>
   <to>qa-agent</to>
   <status>READY_FOR_MODULE_QA</status>
 
-  <implementation_summary>
-    프로젝트 루트의 EmailMonitor.spec 파일에 collect_all 번들링을 추가하였습니다.
-    파일 상단에 from PyInstaller.utils.hooks import collect_all을 추가하고,
-    collect_all('fitz')와 collect_all('pdfplumber')를 호출하여 C 확장 DLL과
-    데이터 파일을 EXE에 번들링합니다. 기존 hiddenimports에는
-    win32com, openpyxl 등 기존 항목을 보존하면서 collect_all 결과를 추가합니다.
-    po_automation/EmailMonitor.spec은 수정하지 않았습니다.
-  </implementation_summary>
+  <scope_declaration>
+    <files_to_modify>
+      <file>.claude/agents/qa-agent.md</file>
+    </files_to_modify>
+    <files_modified>
+      <file>.claude/agents/qa-agent.md</file>
+    </files_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>.claude/agents/qa-agent.md Compliance Checklist section — PLW2901 항목 추가</target_function>
+    <change_type>documentation_addition</change_type>
+    <lines_changed>10</lines_changed>
+    <side_effects>none — QA 에이전트가 PLW2901 검사를 추가로 수행하게 됨</side_effects>
+  </impact_analysis>
 
   <implemented_files>
-    <file>EmailMonitor.spec</file>
+    <file>.claude/agents/qa-agent.md</file>
   </implemented_files>
 
-  <changed_files>
-    <file>EmailMonitor.spec</file>
-  </changed_files>
-
-  <scope_manifest>scope_manifest_MT-2.json</scope_manifest>
-
-  <verification_criteria>
-    1. EmailMonitor.spec에 collect_all('fitz') 호출 존재
-    2. EmailMonitor.spec에 collect_all('pdfplumber') 호출 존재
-    3. fitz_binaries, fitz_datas가 Analysis() binaries/datas에 전달됨
-    4. pdfplumber_binaries, pdfplumber_datas가 Analysis() binaries/datas에 전달됨
-    5. win32com, openpyxl이 hiddenimports에 여전히 존재
-    6. name='emailmonitor', console=False, upx=True 설정 변경 없음
-    7. po_automation/EmailMonitor.spec 수정 없음
-  </verification_criteria>
+  <change_summary>
+    Compliance Checklist 섹션의 FS 체크리스트 뒤에 "변수 Shadowing 검사 — PLW2901" 서브섹션 추가.
+    ruff check --select PLW2901 실행 의무, 루프 변수명과 함수/상수명 grep 교차검증 의무,
+    PLW2901 위반 시 FS:PLW2901_shadow failure_signature로 FAIL 처리 절차 명시.
+    기존 WA/UI/FS Compliance Checklist 항목 삭제 없음.
+  </change_summary>
 
   <self_check>
-    <python39_syntax>PASS — PyInstaller spec 파일은 Python 문법 사용, collect_all은 PyInstaller 공식 API</python39_syntax>
-    <error_handling>N-A — spec 파일은 빌드 설정이므로 런타임 예외 처리 불필요</error_handling>
-    <build>PASS — collect_all로 fitz/pdfplumber 번들링, 기존 hiddenimports 보존</build>
-    <security>PASS — 하드코딩 없음, 외부 입력 없음</security>
+    <plw2901_present>PASS — .claude/agents/qa-agent.md에 "PLW2901" 문자열 존재 확인</plw2901_present>
+    <existing_items_preserved>PASS — WA/UI/FS Compliance Checklist 항목 삭제 없음 확인</existing_items_preserved>
+    <scope_within_mt>PASS — .claude/agents/qa-agent.md만 수정</scope_within_mt>
+    <forbidden_preserved>PASS — oracle 파일, pipeline.py, CLAUDE.md 미변경</forbidden_preserved>
+    <execution_check>SKIP — MD 파일 변경으로 실행 불필요</execution_check>
   </self_check>
 </module_handover>

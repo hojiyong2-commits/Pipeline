@@ -1,161 +1,284 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <step_plan>
-  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
-  <current_step>Step 1: write_ic_part_zip 루프 변수 shadowing 수정</current_step>
+  <current_step>Step 1: PM Planning — ruff PLW2901 활성화 + qa-agent.md shadowing 체크리스트 추가</current_step>
   <tier>1</tier>
   <target_agent>Dev</target_agent>
   <model_tier>Opus</model_tier>
-  <category_tags>FS</category_tags>
+  <category_tags>IMP, META</category_tags>
 
+  <!-- ===== TASK COMPLEXITY ===== -->
   <task_complexity>
     <execution_profile>STANDARD</execution_profile>
-    <reason>core_parser_logic(True)이고 build_or_deploy(True)이므로 Fast Path 금지. 단일 함수 내 변경이지만 핵심 ZIP 생성 로직의 루프 변수 shadowing 버그 수정.</reason>
+    <reason>qa-agent.md는 pipeline_protocol=true 파일이므로 Fast Path 금지. 두 파일(pyproject.toml, qa-agent.md) 수정이며 각각 독립적인 MT로 분리됨.</reason>
     <uncertainty>
       <p0_questions>0</p0_questions>
       <p1_questions>1</p1_questions>
       <output_format_clear>true</output_format_clear>
     </uncertainty>
     <blast_radius>
-      <expected_changed_files>1</expected_changed_files>
-      <expected_changed_functions>1</expected_changed_functions>
-      <expected_changed_lines>4</expected_changed_lines>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>0</expected_changed_functions>
+      <expected_changed_lines>8</expected_changed_lines>
     </blast_radius>
     <risk_flags>
       <data_deletion>false</data_deletion>
       <file_move>false</file_move>
       <external_api>false</external_api>
       <auth_or_secret>false</auth_or_secret>
-      <pipeline_protocol>false</pipeline_protocol>
-      <build_or_deploy>true</build_or_deploy>
-      <core_parser_logic>true</core_parser_logic>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
       <database_or_migration>false</database_or_migration>
       <new_dependency>false</new_dependency>
     </risk_flags>
   </task_complexity>
 
-  <interface_spec>
-    - Input: ic_part_src/order_mapper.py (Python 소스 파일)
-    - Output: ic_part_src/order_mapper.py (루프 변수 rename 완료된 수정 파일)
-    - Validation: L1141 for 루프 변수가 _scan_letter이고, 함수 def _col_letter(n: int)와 호출부 3곳(_col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE))이 보존되어야 함
-  </interface_spec>
-
-  <requirements>
-    - write_ic_part_zip 함수 내부(L1141) for 루프 변수를 _col_letter에서 _scan_letter로 rename
-    - 루프 블록 내 _col_letter 참조 2곳(L1143, L1145 regex f-string)도 _scan_letter로 변경 (총 3곳)
-    - 함수 정의(L132 def _col_letter)는 절대 변경하지 않음
-    - 루프 블록 외부 호출부 _col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE), 자가 테스트 assert 문 등은 절대 변경하지 않음
-    - 변경 범위: ic_part_src/order_mapper.py 단 1개 파일
-    - Python 버전: 3.10 (기존 프로젝트 환경 유지)
-    - FS 카테고리 공통: 파일 encoding utf-8 유지, 다른 함수/클래스 범위 수정 금지
-  </requirements>
-
+  <!-- ===== DECOMPOSITION AUDIT ===== -->
   <decomposition_audit>
-    <total_functions_identified>1</total_functions_identified>
-    <micro_task_count>1</micro_task_count>
-    <grep_executions>2</grep_executions>
-    <split_decision>변경 함수 1개(write_ic_part_zip), 변경 파일 1개(order_mapper.py), 예상 변경 라인 4줄 — 분할 불필요, SINGLE_TASK_OK</split_decision>
-    <audit_result>SINGLE_TASK_OK</audit_result>
+    <total_functions_identified>0</total_functions_identified>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <split_decision>
+      두 파일(pyproject.toml, qa-agent.md)이 서로 다른 관심사를 가지므로 MT-1/MT-2로 분리.
+      MT-1: pyproject.toml ruff 린트 설정 파일 수정 — 설정 파일, 코드 아님.
+      MT-2: qa-agent.md QA agent 프로토콜 파일 수정 — pipeline_protocol=true.
+      두 수정은 독립적이며 순서 의존성 없음.
+
+      핵심 기술 발견: 파이프라인 지시에서 PLW0621로 명시했으나
+      ruff 0.15.12에서 해당 규칙 미지원 확인됨 (ruff rule PLW0621 실행 오류).
+      ruff 0.15.12에서 실제 지원되는 loop 재정의 탐지 규칙:
+      - PLW2901 (redefined-loop-name): for 루프/with 변수가 루프 바디 내에서 재정의될 때 검출.
+        이 규칙이 BUG-20260512-E68A 버그(루프 변수로 함수명 shadowing) 방지에 가장 적합.
+      PLW2901로 대체 결정 (P1 질문 Q1 해소됨).
+    </split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
   </decomposition_audit>
 
+  <!-- ===== DESIGN CONFIRMATION ===== -->
   <design_confirmation>
     <module_split_presented>true</module_split_presented>
     <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>유지보수성 우선 — 재발 방지를 위해 lint 규칙과 QA 체크리스트를 함께 강화하는 접근 선택</maintenance_priority>
     <low_value_questions_filtered>true</low_value_questions_filtered>
-    <filter_summary>루프 변수 rename은 단일 방향(_scan_letter)으로 명확하므로 P2 세부 사항(변수명 대안 등)은 사용자에게 묻지 않음. 오케스트레이터 지시에서 rename 방향이 이미 명시됨.</filter_summary>
-    <maintenance_priority>유지보수성 우선 — 루프 변수와 함수명 충돌을 제거하여 장기 유지보수성을 높임</maintenance_priority>
+    <filter_summary>
+      변수명 대안, 주석 스타일 등 P2 질문 필터링 완료.
+      실제 P1 질문 1개: PLW0621 vs PLW2901 규칙 선택.
+      Q1 답변: PLW2901 사용 (ruff 0.15.12 실제 지원 규칙으로 대체).
+    </filter_summary>
     <decision_questions>
-      <question id="Q-1" priority="P1" category="module_split" mt_id="MT-1">
-        <user_facing_question>MT-1 단일 태스크로 write_ic_part_zip 내 루프 변수만 변경하는 방식으로 진행할까요?</user_facing_question>
-        <evidence>변경 함수 1개, 변경 파일 1개, 예상 변경 라인 4줄 — 분할 불필요</evidence>
-        <why_it_matters>단일 MT로 처리하면 범위가 명확하고 롤백이 쉬워 유지보수성이 높아집니다</why_it_matters>
+      <question id="Q0" priority="P1" category="module_split" mt_id="">
+        <user_facing_question>이번 작업을 두 파일(pyproject.toml, qa-agent.md) 각각 별도 모듈로 분리할까요, 아니면 하나로 묶을까요?</user_facing_question>
+        <evidence>pyproject.toml은 ruff 설정 파일이고 qa-agent.md는 QA 에이전트 프로토콜 파일로 관심사가 다릅니다. 두 파일 수정은 독립적이며 순서 의존성이 없습니다.</evidence>
+        <why_it_matters>두 파일을 하나의 MT로 묶으면 한 쪽 수정이 실패해도 다른 쪽을 롤백해야 하므로 유지보수성이 낮아집니다. 분리하면 각 수정의 성공/실패를 독립적으로 추적할 수 있습니다.</why_it_matters>
         <recommended_option>A</recommended_option>
-        <user_answer>A (오케스트레이터 지시에서 MT-1 단일 태스크로 명시됨)</user_answer>
         <options>
           <option id="A">
-            <label>MT-1 단일 태스크 — write_ic_part_zip 루프 변수만 변경</label>
-            <benefit>범위가 최소화되어 다른 함수에 영향 없음, 롤백 용이</benefit>
-            <cost>함수 내부의 작은 변경이지만 별도 모듈 게이트를 통과해야 함</cost>
+            <label>MT-1/MT-2로 분리 — 파일별 독립 모듈</label>
+            <benefit>각 파일의 수정 결과를 독립적으로 검증 가능하며 롤백 범위가 최소화됩니다.</benefit>
+            <cost>module design/dev/qa 단계가 2회 실행되어 파이프라인 단계가 늘어납니다.</cost>
           </option>
           <option id="B">
-            <label>추가 리팩터링 포함 — 관련 함수명 패턴 전체 정리</label>
-            <benefit>한 번에 네이밍 일관성 개선 가능</benefit>
-            <cost>범위 확장으로 QA 검증 복잡도 증가, 다른 함수 변경 위험 증가</cost>
+            <label>단일 MT로 통합 — 두 파일 동시 수정</label>
+            <benefit>파이프라인 단계가 줄어들어 실행 속도가 빠릅니다.</benefit>
+            <cost>한 파일 수정 오류 시 두 파일 모두 롤백 필요, 관심사 혼재로 리뷰 어려움.</cost>
           </option>
         </options>
+        <user_answer>A: MT-1/MT-2 분리 확인 (오케스트레이터 PM 지시에 따라 SPLIT_REQUIRED 결정)</user_answer>
+      </question>
+      <question id="Q1" priority="P1" category="implementation" mt_id="MT-1">
+        <user_facing_question>ruff에서 PLW0621 대신 PLW2901을 사용해도 될까요?</user_facing_question>
+        <evidence>ruff 0.15.12에서 PLW0621 규칙이 존재하지 않음을 직접 확인했습니다. PLW2901 (redefined-loop-name)이 루프 변수 재정의 탐지에 가장 근접한 지원 규칙입니다.</evidence>
+        <why_it_matters>PLW0621을 그대로 추가하면 ruff가 알 수 없는 규칙 오류를 내어 CI가 깨집니다. PLW2901은 BUG-20260512-E68A 재발 방지에 충분히 근접하며 실제로 지원됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>PLW2901 사용 — ruff 0.15.12 지원 규칙으로 대체</label>
+            <benefit>CI가 깨지지 않으며 루프 변수 재정의 패턴을 탐지할 수 있습니다.</benefit>
+            <cost>원래 요청한 PLW0621과 완전히 동일한 동작은 아닙니다.</cost>
+          </option>
+          <option id="B">
+            <label>pylint 별도 설치 후 PLW0621 직접 사용</label>
+            <benefit>원래 요청한 규칙 번호를 정확히 사용합니다.</benefit>
+            <cost>pylint 신규 의존성 추가 필요, 기존 ruff 전용 설정과 혼재.</cost>
+          </option>
+        </options>
+        <user_answer>A: PLW2901 사용 (ruff 버전 제약으로 인한 기술적 결정, 오케스트레이터 PM 지시에서 PLW2901로 명시됨)</user_answer>
       </question>
     </decision_questions>
+    <askuser>NONE</askuser>
   </design_confirmation>
 
+  <!-- ===== INTERFACE SPEC ===== -->
+  <interface_spec>
+    - Input: pyproject.toml (현재 [tool.ruff.lint] 섹션에 extend-select 없음)
+    - Input: .claude/agents/qa-agent.md (현재 PLW 관련 shadowing 검사 항목 없음)
+    - Output: pyproject.toml (extend-select = ["PLW2901"] 추가됨)
+    - Output: .claude/agents/qa-agent.md (PLW2901 + loop variable shadowing grep 교차검증 의무 항목 추가됨)
+    - Validation: T1 command_check (PLW2901 in pyproject.toml), T2 command_check (PLW2901 in qa-agent.md), T3 edge (ignore 목록 보존)
+  </interface_spec>
+
+  <!-- ===== REQUIREMENTS ===== -->
+  <requirements>
+    1. [MT-1] pyproject.toml [tool.ruff.lint] 섹션에 extend-select = ["PLW2901"] 한 줄 추가.
+       - 추가 위치: 기존 ignore 라인 바로 위.
+       - 기존 ignore 목록(E402, E731, E713, E701, F541, F841) 변경/삭제 금지.
+       - 기존 주석(E402 설명 등) 변경 금지.
+
+    2. [MT-2] .claude/agents/qa-agent.md Compliance Checklist 섹션에 아래 항목 추가:
+       - ruff PLW2901 (redefined-loop-name) 위반 여부 명시적 확인 의무.
+       - 루프 변수명이 같은 파일 내 함수/클래스명과 동일한지 grep 교차검증 의무.
+       - 추가 위치: Compliance Checklist 섹션의 FS 체크리스트 이후, 또는 별도 서브섹션.
+       - QA agent가 Dev 코드 리뷰 시 실행해야 하는 검증 절차로 명확히 기술.
+       - 기존 WA/UI/FS 항목 삭제 금지.
+
+    3. 위 두 파일 외 어떠한 파일도 수정 금지.
+
+    4. 수정 후 acceptance 테스트 T1(P0), T2(P0), T3(P1 edge) 모두 통과.
+  </requirements>
+
+  <!-- ===== MICRO TASKS ===== -->
   <micro_tasks>
     <micro_task id="MT-1">
-      <affected_function>order_mapper.write_ic_part_zip</affected_function>
+      <affected_function>pyproject.toml [tool.ruff.lint] section — extend-select 추가</affected_function>
       <target_files>
-        <file>ic_part_src/order_mapper.py</file>
+        <file>pyproject.toml</file>
       </target_files>
       <affected_call_sites>
         <site>none</site>
       </affected_call_sites>
       <grep_evidence>
-        <pattern>_col_letter</pattern>
-        <match_count>11</match_count>
+        <pattern>extend-select</pattern>
+        <match_count>0</match_count>
         <executed>true</executed>
+        <note>현재 pyproject.toml에 extend-select 없음 — 신규 추가 대상</note>
       </grep_evidence>
-      <change_summary>L1141 루프 변수 _col_letter → _scan_letter rename, 루프 블록 내 L1143·L1145 참조 2곳도 _scan_letter로 변경 (총 3곳). 함수 def와 호출부는 보존.</change_summary>
-      <line_estimate>4</line_estimate>
+      <change_summary>pyproject.toml [tool.ruff.lint] 섹션 ignore 라인 위에 extend-select = ["PLW2901"] 한 줄 추가.</change_summary>
+      <line_estimate>1</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>.claude/agents/qa-agent.md Compliance Checklist section — PLW2901 항목 추가</affected_function>
+      <target_files>
+        <file>.claude/agents/qa-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PLW2901|PLW0621|loop.*shadow|shadow.*loop|redefined-loop</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+        <note>현재 qa-agent.md에 PLW 관련 shadowing 검사 항목 없음 — 신규 추가 대상</note>
+      </grep_evidence>
+      <change_summary>.claude/agents/qa-agent.md Compliance Checklist에 PLW2901 루프 변수 shadowing grep 교차검증 의무 항목 추가 (약 7줄).</change_summary>
+      <line_estimate>7</line_estimate>
     </micro_task>
   </micro_tasks>
 
-  <python_version>3.10 — 기존 프로젝트 환경 유지</python_version>
+  <!-- ===== PYTHON VERSION ===== -->
+  <python_version>3.9 — pyproject.toml/MD 수정이므로 Python 버전 무관. 기존 프로젝트 설정 준수.</python_version>
   <env_specs>
-    <python>3.10</python>
-    <vscode>python.analysis.typeCheckingMode: basic, python.defaultInterpreterPath: 프로젝트 환경</vscode>
+    <python>3.9</python>
+    <vscode>python.defaultInterpreterPath 기존 설정 유지</vscode>
   </env_specs>
 
+  <!-- ===== ACCEPTANCE CRITERIA ===== -->
   <acceptance_criteria>
-    - [MUST] ic_part_src/order_mapper.py에 'for _col_letter in _COL_LETTERS:' 패턴이 존재하지 않음
-    - [MUST] ic_part_src/order_mapper.py에 'for _scan_letter in _COL_LETTERS:' 패턴이 정확히 1회 존재
-    - [MUST] 'def _col_letter(n: int) -> str:' 함수 정의(L132)가 변경 없이 보존됨
-    - [MUST] _col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE) 3곳의 호출부가 모두 보존됨
-    - [MUST] 자가 테스트 _col_letter(10) 등 assert 문이 모두 보존됨
-    - [EDGE] 루프 블록 내에만 _scan_letter가 사용되고 블록 외부에는 _scan_letter 참조가 없음
-    - [EDGE] 수정 후 order_mapper.py 임포트 및 함수 호출 시 TypeError 없음
-    - [SCOPE] ic_part_src/order_mapper.py 외 다른 파일 변경 없음
-    - [ANTI-GAMING] oracle 파일(tests/oracles/**) 변경 금지. Dev가 oracle을 수정하면 QA FAIL.
+    - [T1/P0/normal] pyproject.toml [tool.ruff.lint] 섹션에 extend-select = ["PLW2901"] 존재
+    - [T2/P0/normal] qa-agent.md에 "PLW2901" 문자열 존재 + loop/shadowing 관련 검사 절차 명시
+    - [T3/P1/edge] 기존 ignore 목록 6개 항목(E402, E731, E713, E701, F541, F841) 모두 그대로 유지
+    - [edge] qa-agent.md 수정 후 기존 WA/UI/FS Compliance Checklist 항목 삭제 없음
+    - [edge] PLW2901 추가로 인해 ic_part_src 코드에 새 ruff 위반 없음 (BUG 수정 완료 확인됨)
+    - [exception] Dev가 oracle 파일(tests/oracles/**) 수정하면 QA FAIL
   </acceptance_criteria>
 
+  <!-- ===== ORACLE PLAN ===== -->
+  <oracle_plan>
+    <oracle id="OR-1" case_kind="normal">
+      tests/oracles/IMP-20260512-C476/normal_ruff_rule/input.toml — MT-1 입력 (extend-select 없는 상태)
+      tests/oracles/IMP-20260512-C476/normal_ruff_rule/expected.toml — MT-1 기대값 (extend-select PLW2901 추가됨)
+      input_sha256: 7508c9123b6b52688385ae89651bbdcd707245efbb287fb849c6f6ca615b08e4
+      expected_sha256: 1d06555623c6eb43685d4e13b5eb874cfd3a02d8a4ea803ec28da453f98e0499
+    </oracle>
+    <oracle id="OR-2" case_kind="edge">
+      tests/oracles/IMP-20260512-C476/edge_qa_agent_item/input.txt — MT-2 입력 (shadowing 항목 없는 상태)
+      tests/oracles/IMP-20260512-C476/edge_qa_agent_item/expected.txt — MT-2 기대값 (PLW2901 + grep 교차검증 의무 포함 조건)
+      input_sha256: 3207c22d0076882b4440d94bf52a022a5998971d69e7e609f2b5cfdb63f13f26
+      expected_sha256: 618c10f4c9505aa7ac9f6e28bd6baae42621521daf61c81a8186c04d37dd5e99
+    </oracle>
+  </oracle_plan>
+
+  <!-- ===== PHASE ATTESTATION PLAN ===== -->
+  <phase_attestation_plan>
+    <phase name="pm">gates prepare-phase --phase pm 후 commit/push → GitHub Actions → gates phase-ci --phase pm</phase>
+    <phase name="dev">MT-1 (module design/dev/qa) → MT-2 (module design/dev/qa) → module integrate → done --phase dev → phase attestation</phase>
+    <phase name="qa">qa --result PASS --numeric-score N → phase attestation</phase>
+    <phase name="build">build --exe "N/A" --skip-reason "meta-task" → phase attestation (코드 파일 아니므로 EXE 불필요)</phase>
+  </phase_attestation_plan>
+
+  <!-- ===== USER ACCEPTANCE PLAN ===== -->
+  <user_acceptance_plan>
+    <evidence_type>파일 diff 출력 또는 스크린샷</evidence_type>
+    <deliverables>
+      <item>pyproject.toml diff (extend-select PLW2901 추가 1줄 확인)</item>
+      <item>qa-agent.md diff (PLW2901 + grep 교차검증 항목 추가 확인)</item>
+      <item>acceptance run T1/T2/T3 PASS 결과</item>
+    </deliverables>
+  </user_acceptance_plan>
+
+  <!-- ===== CONTRACT INFO ===== -->
+  <contract_info>
+    <contract_hash>0e2aaed09b04009e380ef842b4b56977c00eddd10cbf081a7263fc2bfca2156b</contract_hash>
+    <test_set_hash>e184c0a6af1c19b1696b1b0e5664021c2d0e46d21643f2763f68e8f627718a34</test_set_hash>
+    <frozen_at>2026-05-12T11:51:17Z</frozen_at>
+  </contract_info>
+
+  <!-- ===== FORBIDDEN ===== -->
   <forbidden>
-    - def _col_letter 함수 정의 변경 금지
-    - _col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE) 호출부 rename 금지
-    - 자가 테스트 assert 내 _col_letter 참조 변경 금지
-    - ic_part_src/order_mapper.py 외 파일 변경 금지
-    - 루프 블록 외부에서 _scan_letter 참조 추가 금지
-    - oracle 파일(tests/oracles/**) 변경 금지
-    - 역할 흡수(dev_output/qa_report 직접 출력) 금지
+    - pyproject.toml과 .claude/agents/qa-agent.md 외 어떤 파일도 수정 금지
+    - 기존 ignore 목록 항목 변경/삭제 금지
+    - qa-agent.md 기존 WA/UI/FS Compliance Checklist 항목 삭제 금지
+    - PLW0621을 extend-select에 추가 금지 (ruff 0.15.12 미지원)
+    - ic_part_src 코드 파일 수정 금지 (BUG 수정 완료됨)
+    - pipeline.py, CLAUDE.md, 기타 agent MD 파일 수정 금지 (이 IMP 범위 외)
+    - oracle 파일(tests/oracles/**) 수정 금지
+    - dev_output/qa_report/build_report 직접 출력 금지 (역할 흡수 금지)
     - 숫자 점수로 COMPLETE 선언 금지
   </forbidden>
 
-  <handover_template_ref>
-    <!-- dev-agent가 작성할 handover 형식: from=dev-agent, to=qa-agent, evidence에 ic_part_src/order_mapper.py + scope_manifest.json + dev_handover.xml 포함, status=READY_FOR_QA -->
-  </handover_template_ref>
+  <!-- ===== HANDOVER TEMPLATE (참고용 — dev-agent가 실제 handover.xml 생성) ===== -->
+  <dev_to_qa_handover_spec>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260512-C476</pipeline_id>
+    <evidence>
+      <file>pyproject.toml</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>scope_manifest.json</file>
+      <file>dev_handover.xml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </dev_to_qa_handover_spec>
 
+  <!-- ===== CONTEXT INJECTION ===== -->
   <context_injection>
     <target_files>
-      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\ic_part_src\order_mapper.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pyproject.toml</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\qa-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260512-C476\task_contract.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260512-C476\test_set.json</file>
     </target_files>
     <phase_rules_excerpt>
-      Dev: MT-1 단일 태스크. 변경 대상은 write_ic_part_zip 함수 내부 L1141 루프 변수와 루프 블록 내 2개 참조만.
-      scope_manifest_MT-1.json 및 scope_manifest.json 생성 필수.
-      module design → module dev → module qa → module integrate → done --phase dev 순서 필수.
-      impact_analysis XML 출력 필수. def _col_letter 및 호출부 변경 절대 금지.
+      Dev: Incremental Module Gate 필수. MT-1 먼저 완료 후 MT-2.
+      각 MT: module design → module dev → module qa 순서.
+      scope_manifest_MT-1.json, scope_manifest_MT-2.json, scope_manifest.json 생성 필수.
+      수정 파일: pyproject.toml (MT-1), .claude/agents/qa-agent.md (MT-2) 단 2개.
+      IMP 태스크이므로 build --exe "N/A" --skip-reason "meta-task".
+      impact_analysis XML 출력 필수.
     </phase_rules_excerpt>
-    <prev_phase_summary>PM planner 완료 — 계약 동결, oracle 2개(normal+edge) 등록, T-1/T-2 P0 테스트 frozen.</prev_phase_summary>
+    <prev_phase_summary>PM Planning 완료. Contract frozen (hash: 0e2aaed0). Oracle 2개 등록 (normal+edge). PLW0621 ruff 미지원 확인, PLW2901로 대체 결정.</prev_phase_summary>
   </context_injection>
 
-  <contract_info>
-    <contract_hash>a16e3e33dbabfda86150ae396398c845a62f8961af85004dc36a7fe1634a2f0a</contract_hash>
-    <test_set_hash>19cb4433bb6aefbd86a4b6c14e0175c464fcfdf8a852d60b60293b9831c0a64a</test_set_hash>
-    <oracle_normal>tests/oracles/BUG-20260512-9C67/normal_rename/</oracle_normal>
-    <oracle_edge>tests/oracles/BUG-20260512-9C67/edge_func_intact/</oracle_edge>
-  </contract_info>
 </step_plan>
