@@ -1,0 +1,7 @@
+{
+  "description": "예외 발생 시 원본 DN 주소로 폴백 — 크래시 없이 recipient_set에 원본 주소(소문자) 추가",
+  "resolved_addr": "/o=exchangelabs/ou=exchange administrative group/cn=recipients/cn=xyz999",
+  "exchange_lookup_called": true,
+  "exception_raised": true,
+  "crash": false
+}
