@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T22:48:26Z",
+  "pipeline_id": "IMP-20260510-184A",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "pipeline.py",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "pipeline.py",
+        "sha256": "0a98d01718fa984519ed6fb648931de57e9c16b87933b2f29a7a9c4c77f426bf",
+        "size_bytes": 349527
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "pipeline.py"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260510-184A",
+    "deployed_at": "2026-05-10T22:48:26Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\IMP-20260510-184A",
+    "evidence": "pipeline.py",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "pipeline.py",
+          "sha256": "0a98d01718fa984519ed6fb648931de57e9c16b87933b2f29a7a9c4c77f426bf",
+          "size_bytes": 349527
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "pipeline.py"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "pipeline.py",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260510-184A\\pipeline.py",
+        "sha256": "0a98d01718fa984519ed6fb648931de57e9c16b87933b2f29a7a9c4c77f426bf"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\IMP-20260510-184A\\deployment_manifest.json"
+  }
+}

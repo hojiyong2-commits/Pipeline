@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-ad3045b436574f7d</manager_run_id>
+  <planner_run_id>pm_planner-df1023db1db11291</planner_run_id>
+  <step_plan_sha256>ec7a0185ae345a34dfcbb73ca6256dbd72e57cced2d15b02d06f71e5ad377754</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <phase_plan>
+    <phase id="2" name="Dev">PENDING — MT-1 단일 micro_task, order_mapper.py L1160 1줄 변경</phase>
+    <phase id="4" name="QA">PENDING</phase>
+    <phase id="5" name="SEC">SKIP — 파일 시스템만, 외부 네트워크 없음</phase>
+    <phase id="6" name="Build">PENDING — ICPartAutomation.exe PyInstaller 재빌드</phase>
+    <phase id="7" name="External Gates">PENDING</phase>
+    <phase id="8" name="Architect">PENDING</phase>
+  </phase_plan>
+  <clarification_summary>P0/P1 모호성 없음. 사용자 확인 불필요.</clarification_summary>
+  <roadmap_summary>MT-1(1줄 수정) → Dev attestation → QA → SEC skip → Build → External Gates → ACCEPT → 배포</roadmap_summary>
+</manager_handoff>

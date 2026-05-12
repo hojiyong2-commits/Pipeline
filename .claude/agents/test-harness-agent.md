@@ -45,6 +45,8 @@ Harness must confirm:
 - Technical, Oracle, and GitHub CI gates are PASS
 - unresolved GPT advisory CRITICAL findings are absent or explicitly resolved
 - the user has a real visible result path, screenshot, EXE, output file, or GitHub Actions attachment to inspect
+- `python pipeline.py outputs status` lists the user-visible files when the task produced a report, screenshot, Excel, EXE, log, or other artifact
+- if any external gate failed, the latest `pipeline_contracts/<pipeline_id>/failures/<gate>_attempt_N.json` packet is referenced so the repair path is clear
 
 ## User Acceptance Rule
 
@@ -56,6 +58,14 @@ Do not ask the user to review code. Provide:
 - 실제 결과물 경로 또는 첨부파일 링크
 - 무엇이 바뀌었고 무엇을 눈으로 확인하면 되는지 쉬운 한국어 요약
 - 사용자가 실제로 확인할 항목 2~5개. 예: 화면/엑셀/EXE/출력 파일이 요청과 맞는지, 규칙/문서 작업이면 요약과 자동 검사 통과 여부만 보면 되는지.
+
+결과 파일이 로컬에만 있으면 아래 명령으로 등록되어야 한다:
+
+```bash
+python pipeline.py outputs add --kind report --path report.md --label "최종 보고서" --notes "사용자는 결론과 확인 항목만 보면 됩니다."
+```
+
+등록된 파일은 `pipeline_outputs/<pipeline_id>/` 아래로 복사되고 GitHub PR의 "최종 확인 안내" 댓글에 링크로 표시된다.
 
 최종 사용자가 GitHub에서 보는 글은 모두 쉬운 한국어로 작성한다. `modified`, `added`, `CI: PASS`, `artifact` 같은 영어 상태값만 그대로 쓰지 말고 `수정됨`, `새 파일`, `자동 검사: 통과`, `첨부파일`처럼 풀어서 쓴다. `ACCEPT`, `REJECT`, 명령어, commit SHA, check 이름처럼 영어 식별자가 꼭 필요하면 바로 옆에 한국어 뜻을 붙인다.
 

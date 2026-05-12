@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<integration_report>
+  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <result>PASS</result>
+  <modules_integrated>
+    <module id="MT-1" status="PASS">
+      ic_part_src/order_mapper.py — inlineStr 스캐너 OR 조건 추가
+    </module>
+  </modules_integrated>
+  <integration_check>
+    <api_compatibility>PASS — write_ic_part_zip 시그니처 변경 없음</api_compatibility>
+    <regression_check>PASS — 기존 v 태그 감지 동작 유지</regression_check>
+    <scope_boundary>PASS — 변경 파일 1개, MT-1 범위 내</scope_boundary>
+  </integration_check>
+  <integration_verdict>PASS</integration_verdict>
+</integration_report>

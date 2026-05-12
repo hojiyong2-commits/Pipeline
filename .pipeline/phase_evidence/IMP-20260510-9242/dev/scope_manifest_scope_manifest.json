@@ -1,0 +1,24 @@
+{
+  "pipeline_id": "IMP-20260510-9242",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._validate_pipeline_branch_isolation"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "CLAUDE.md",
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": [
+        "none"
+      ]
+    }
+  ]
+}

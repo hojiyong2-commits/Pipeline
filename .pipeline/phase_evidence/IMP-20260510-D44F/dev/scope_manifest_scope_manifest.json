@@ -1,0 +1,30 @@
+{
+  "pipeline_id": "IMP-20260510-D44F",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["po_automation/email_monitor.py", "po_automation/main.py"],
+      "affected_functions": ["email_monitor.OnNewMailEx, email_monitor.scan_past_emails, email_monitor._parse_pdf_info, main.POAutomationApp._poll_log_queue, email_monitor._process_mail_item, email_monitor.OutlookEventHandler"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["po_automation/email_monitor.py"],
+      "affected_functions": ["email_monitor._safe_resolve, email_monitor._get_smtp_address, email_monitor._process_mail_item(수신자 필터), email_monitor._save_email_msg, email_monitor._save_attachments, email_monitor.save_processed_set"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["po_automation/email_monitor.py", "po_automation/main.py"],
+      "affected_functions": ["email_monitor.scan_past_emails, email_monitor._process_mail_item, email_monitor.OnNewMailEx, main.POAutomationApp._on_start, main.POAutomationApp._save_settings"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["inspection_report_IMP-20260510-D44F.md"],
+      "affected_functions": ["inspection_report_IMP-20260510-D44F.md (신규 생성)"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["inspection_report_IMP-20260510-D44F.md"],
+      "affected_functions": ["inspection_report_IMP-20260510-D44F.md (자기 검증)"]
+    }
+  ]
+}

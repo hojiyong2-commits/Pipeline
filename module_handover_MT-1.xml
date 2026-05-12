@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <status>READY_FOR_MODULE_QA</status>
+
+  <implemented_files>
+    <file path="ic_part_src/order_mapper.py" lines_changed="1" line_number="1160">
+      정규식 OR 조건 추가: r'&lt;v[\s&gt;]' → r'&lt;v[\s&gt;]|&lt;is[\s&gt;]'
+    </file>
+  </implemented_files>
+
+  <scope_manifest>scope_manifest_MT-1.json</scope_manifest>
+
+  <change_description>
+    write_ic_part_zip 함수 내 I·J·K 스캐너 블록(L1160)에서
+    inlineStr 포맷 셀(&lt;is&gt; 태그)도 occupied로 집계되도록 OR 조건 추가.
+    기존 &lt;v&gt; 태그 감지 동작 100% 유지.
+  </change_description>
+
+  <self_check>
+    <python39_syntax>PASS — 정규식 문자열 변경만. 3.10+ 문법 없음</python39_syntax>
+    <type_hinting>PASS — 함수 시그니처 변경 없음</type_hinting>
+    <error_handling>PASS — 기존 예외 처리 유지</error_handling>
+    <path_safety>PASS — 경로 처리 변경 없음</path_safety>
+    <security>PASS — 정규식 OR 조건 추가만. 보안 표면 변화 없음</security>
+    <al_edge_cases>PASS — _m.group(3) or '' 로 빈 문자열 방어 기존에 존재</al_edge_cases>
+    <pd_policy>PASS — API 시그니처 변경 없음</pd_policy>
+    <docstring>PASS — 함수 docstring 변경 없음</docstring>
+  </self_check>
+
+  <verification>
+    L1160: if not re.search(r'&lt;v[\s&gt;]|&lt;is[\s&gt;]', _m.group(3) or ''):
+    - &lt;v&gt; 태그 포함 셀: occupied 집계 (회귀 없음)
+    - &lt;is&gt; 태그 포함 셀: occupied 집계 (신규 수정)
+    - 빈 셀: continue (기존 동작 유지)
+  </verification>
+</module_handover>

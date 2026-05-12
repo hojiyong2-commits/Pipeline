@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260509-A4DB</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Phase — README.md smoke test + GitHub CI gate</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, BUILD</category_tags>
+
+  <strict_mode_status>
+    <triggered>true</triggered>
+    <basis>Last 3 META-FS-PD records: 100, 100, 100 (BUG-20260509-6A4F, BUG-20260509-ED9C, BUG-20260509-894D) — all three 100%, threshold met</basis>
+    <additional_checks>
+      <dead_code_penalty>-1pt per instance, max -5pt</dead_code_penalty>
+      <duplication_penalty>-1pt per instance, max -5pt</duplication_penalty>
+      <producer_consumer_completeness_penalty>-2pt per missing consumer</producer_consumer_completeness_penalty>
+    </additional_checks>
+  </strict_mode_status>
+
+  <contract_v2>
+    <enabled>true</enabled>
+    <frozen>true</frozen>
+    <three_gate>true</three_gate>
+    <contract_hash>ee08e6487ea3079e831aff5c4411226f47345dccac074af01f07f403fdfaa1e5</contract_hash>
+    <deliverable_kind>markdown</deliverable_kind>
+    <oracle_waiver>docs-only: README.md markdown creation, no runnable code</oracle_waiver>
+  </contract_v2>
+
+  <interface_spec>
+    - Input: None (README.md does not exist yet — new file)
+    - Output: README.md (new file, markdown, contains "Pipeline smoke test" section)
+    - Validation: file exists at repo root; section heading "Pipeline smoke test" present
+  </interface_spec>
+
+  <requirements>
+    1. Create README.md at repository root (C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\README.md)
+    2. Include a "## Pipeline smoke test" section (H2 markdown heading exactly)
+    3. Section must describe: this pipeline verifies end-to-end workflow (PM → Dev → QA → SEC skip → Build N/A → Three-Gate → Architect)
+    4. Include pipeline_id IMP-20260509-A4DB in the section
+    5. Git: create new branch named "smoke-test/IMP-20260509-A4DB" from main
+    6. Commit README.md to that branch
+    7. Push branch to origin (remote: https://github.com/hojiyong2-commits/Pipeline.git)
+    8. Create PR titled "[IMP-20260509-A4DB] Add Pipeline smoke test section to README"
+    9. Do NOT push directly to main
+    10. docs-only task — no Python code changes
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>README.md (new file creation)</affected_function>
+      <target_files>
+        <file>README.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>README</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Create README.md with Pipeline smoke test section (H2 + description)</change_summary>
+      <line_estimate>25</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>git branch + commit + push + PR</affected_function>
+      <target_files>
+        <file>README.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>smoke-test</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Create branch smoke-test/IMP-20260509-A4DB, commit README.md, push, open PR via gh CLI</change_summary>
+      <line_estimate>0</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <decomposition_audit>
+    <total_functions_identified>2</total_functions_identified>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <split_decision>docs-only task: 1 new file + 1 git operation. No function changes. Split into MT-1 (content) and MT-2 (git/PR) for clarity. Under 100 lines, under 3 files — SINGLE_TASK_OK but split for auditability.</split_decision>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+  </decomposition_audit>
+
+  <python_version>N/A — docs-only task, no Python code</python_version>
+  <env_specs>
+    <python>N/A</python>
+    <vscode>N/A</vscode>
+  </env_specs>
+
+  <phase_flow>
+    <phase id="2">Dev: create README.md + git branch + commit + push + PR</phase>
+    <phase id="4">QA: verify README.md content, PR exists, branch name correct</phase>
+    <phase id="5">SEC: skip (no network code, no DB)</phase>
+    <phase id="6">Build: N/A — docs-only, skip-reason="docs-only", user-confirmed required</phase>
+    <phase id="7">Three-Gate:
+      1. python pipeline.py gates technical (relaxed-tools for docs-only)
+      2. python pipeline.py gates github-ci --user-confirmed (after CI PASS)
+      3. python pipeline.py gates accept --result ACCEPT --user-confirmed
+    </phase>
+    <phase id="8">Architect: python pipeline.py architect --report-file architect_report.xml</phase>
+  </phase_flow>
+
+  <acceptance_criteria>
+    1. README.md exists at repository root
+    2. Contains H2 section "## Pipeline smoke test" (exact heading)
+    3. Section references pipeline_id IMP-20260509-A4DB
+    4. Branch smoke-test/IMP-20260509-A4DB exists on origin remote
+    5. PR titled "[IMP-20260509-A4DB] Add Pipeline smoke test section to README" is open
+    6. No direct push to main branch
+    7. GitHub CI (pytest + attestation) passes on the PR
+    8. pipeline_attestation.json artifact uploaded by CI
+    9. Edge: section heading must be exact H2 markdown (## not # or ###)
+    10. Edge: README.md must not be empty (min 10 lines)
+    11. strict_mode checks: no dead code, no duplication, all consumers synced
+    12. [Anti-gaming: no MD modification without actual file edit verified by QA via Grep]
+    13. [Anti-gaming: harness score/percentage must be int type, not float or null]
+    14. [Anti-gaming: validate_test_evidence must use runner-owned JSON channel, not stdout marker]
+  </acceptance_criteria>
+
+  <forbidden>
+    1. Direct push to main branch — must use PR workflow
+    2. Any Python code changes — docs-only task
+    3. Modification of pipeline.py, CLAUDE.md, or agent MD files
+    4. Using float or null for harness score/percentage fields
+    5. stdout marker-based test evidence (must use runner-owned JSON channel)
+    6. Single-location whitelist modification without checking all locations (patterns 8, 9)
+    7. Faking CI attestation or PR existence
+    8. Harness scoring without actual code/file submission (evidence gate)
+  </forbidden>
+
+  <handover_template>
+    <description>Dev agent must output this handover XML after completing work</description>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260509-A4DB</pipeline_id>
+    <required_evidence>
+      <file>README.md</file>
+    </required_evidence>
+    <required_git_evidence>
+      <branch>smoke-test/IMP-20260509-A4DB</branch>
+      <pr_url>[gh pr create output URL]</pr_url>
+    </required_git_evidence>
+    <required_status>READY_FOR_QA</required_status>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\README.md</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Phase 2 Dev: docs-only task, create README.md with Pipeline smoke test section.
+      Phase 4 QA: verify README content and git/PR state.
+      Phase 5 SEC: skip (no network/DB code).
+      Phase 6 Build: N/A docs-only, user confirmation required before Phase 7.
+      Phase 7 Three-Gate: gates technical + gates github-ci --user-confirmed + gates accept --user-confirmed.
+      Phase 8 Architect: architect --report-file architect_report.xml.
+      Anti-gaming: score/percentage must be int. No stdout marker evidence. No direct main push.
+    </phase_rules_excerpt>
+    <prev_phase_summary>Phase 1 PM complete. Contract v2 Three-Gate frozen. step_plan.xml written.</prev_phase_summary>
+    <strict_mode_for_harness>
+      <triggered>true</triggered>
+      <framework>META-FS-PD</framework>
+      <additional_penalties>dead_code: -1pt/instance max -5pt; duplication: -1pt/instance max -5pt; producer_consumer_completeness: -2pt/missing consumer</additional_penalties>
+    </strict_mode_for_harness>
+  </context_injection>
+</step_plan>

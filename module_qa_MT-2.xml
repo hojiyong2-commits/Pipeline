@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <mt_id>MT-2</mt_id>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <result>PASS</result>
+  <verdict>PASS</verdict>
+  <numeric_score>120</numeric_score>
+
+  <category_check>
+    <wa>N-A</wa>
+    <ui>N-A</ui>
+    <fs>N-A</fs>
+    <pd>PASS</pd>
+    <sec>N-A</sec>
+    <al>N-A</al>
+    <build>N-A</build>
+  </category_check>
+
+  <verification_evidence>
+    <check id="T2" priority="P0">qa-agent.md에 "PLW2901" 문자열 존재 확인 — PASS (line 289, 291, 292, 295)</check>
+    <check id="T2b" priority="P0">loop/shadowing 관련 검사 절차 명시 확인 — PASS (grep 교차검증 의무 포함)</check>
+    <check id="existing_items">WA/UI/FS Compliance Checklist 항목 삭제 없음 — PASS</check>
+    <check id="scope">qa-agent.md 이외 파일 미변경 — PASS</check>
+    <check id="plw2901_fail_sig">PLW2901 위반 시 FS:PLW2901_shadow failure_signature 명시 — PASS (line 295)</check>
+  </verification_evidence>
+
+  <critical_issues>none</critical_issues>
+</module_qa_report>

@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-9242",
+  "gate": "technical",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-9242\\failures\\technical_attempt_1.json",
+  "recorded_at": "2026-05-10T14:25:08Z",
+  "status": "FAIL",
+  "repair_owner": "Dev tooling repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "technical"
+  ],
+  "note": "Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+  "failed_checks": [
+    {
+      "name": "ruff",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "ruff",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "ruff 0.15.12",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "EEN(f\"  파이프라인 생성 완료\")))\n     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^\n3435 |     print(f\"  ID:   {CYAN(pipeline_id)}\")\n3436 |     print(f\"  유형: {pipeline_type}\")\n     |\nhelp: Remove extraneous `f` prefix\n\nF541 [*] f-string without any placeholders\n    --> pipeline.py:3499:14\n     |\n3498 |     if phase not in (\"pm\", \"dev\"):\n3499 |         _die(f\"'done' 명령은 pm/dev 전용입니다. qa/sec/build/harness는 전용 명령 사용.\")\n     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n3500 |\n3501 |     ok, reason = check_gate(state, phase)\n     |\nhelp: Remove extraneous `f` prefix\n\nE701 Multiple statements on one line (colon)\n    --> pipeline.py:3654:29\n     |\n3652 |         if missing:\n3653 |             print(RED(\"\\n[FILE NOT FOUND] DONE 기록 거부 — 존재하지 않는 파일:\"))\n3654 |             for p in missing: print(RED(f\"  - {p}\"))\n     |                             ^\n3655 |             print(RED(\"dev-agent가 실제로 파일을 작성한 후 다시 실행하세요.\\n\"))\n3656 |             sys.exit(1)\n     |\n\nF541 [*] f-string without any placeholders\n    --> pipeline.py:3995:11\n     |\n3993 |     print()\n3994 |     print(BOLD(YELLOW(\"  ★ Phase 7 External Gates 실행 의무 -생략 불가\")))\n3995 |     print(f\"  다음 절차:\")\n     |           ^^^^^^^^^^^^^^^\n3996 |     print(f\"    1. Build evidence commit/push 후 GitHub Actions phase attestation 확인:\")\n3997 |     print(f\"       {YELLOW('python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline')}\")\n     |\nhelp: Remove extraneous `f` prefix\n\nF541 [*] f-string without any placeholders\n    --> pipeline.py:3996:11\n     |\n3994 |     print(BOLD(YELLOW(\"  ★ Phase 7 External Gates 실행 의무 -생략 불가\")))\n3995 |     print(f\"  다음 절차:\")\n3996 |     print(f\"    1. Build evidence commit/push 후 GitHub Actions phase attestation 확인:\")\n     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n3997 |     print(f\"       {YELLOW('python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline')}\")\n3998 |     print(f\"    2. test-harness-agent는 진단만 수행하고, 아래 external gates를 기록:\")\n     |\nhelp: Remove extraneous `f` prefix\n\nF541 [*] f-string without any placeholders\n    --> pipeline.py:3998:11\n     |\n3996 |     print(f\"    1. Build evidence commit/push 후 GitHub Actions phase attestation 확인:\")\n3997 |     print(f\"       {YELLOW('python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline')}\")\n3998 |     print(f\"    2. test-harness-agent는 진단만 수행하고, 아래 external gates를 기록:\")\n     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n3999 |     print(f\"       {YELLOW('python pipeline.py gates technical')}\")\n4000 |     print(f\"       {YELLOW('python pipeline.py gates oracle')}\")\n     |\nhelp: Remove extraneous `f` prefix\n\nF541 [*] f-string without any placeholders\n    --> pipeline.py:4266:23\n     |\n4264 |     state[\"terminal_state\"] = \"TERMINATED\"\n4265 |     state[\"current_phase\"] = \"TERMINATED\"\n4266 |     _log_event(state, f\"파이프라인 명시적 종료 (사용자 terminate 명령)\")\n     |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n4267 |\n4268 |     # 보관\n     |\nhelp: Remove extraneous `f` prefix\n\nE713 [*] Test for membership should be `not in`\n    --> pipeline.py:4514:12\n     |\n4512 |     rel = _normalize_rel_path(raw)\n4513 |     path = Path(rel)\n4514 |     if not path.suffix.lower() in PRODUCT_CODE_EXTENSIONS:\n     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n4515 |         return False\n4516 |     parts = set(path.parts)\n     |\nhelp: Convert to `not in`\n\nF541 [*] f-string without any placeholders\n    --> pipeline.py:7495:11\n     |\n7493 |     print(f\"\\n  토너먼트 완료: {pid}\")\n7494 |     print(f\"  승자: Branch {args.winner}\")\n7495 |     print(f\"  결과는 pipeline_history/ 에 보관됩니다.\")\n     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n7496 |     print()\n     |\nhelp: Remove extraneous `f` prefix\n\nFound 34 errors.\n[*] 9 fixable with the `--fix` option (8 hidden fixes can be enabled with the `--unsafe-fixes` option).\n",
+      "stderr": ""
+    },
+    {
+      "name": "mypy",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "mypy",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "mypy",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "mypy 2.0.0 (compiled: yes)",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "pipeline.py:1236: error: Missing return statement  [return]\npipeline.py:1520: error: Missing return statement  [return]\npipeline.py:2247: error: Missing return statement  [return]\npipeline.py:2454: error: Missing return statement  [return]\npipeline.py:4494: error: Missing return statement  [return]\npipeline.py:4503: error: Missing return statement  [return]\npipeline.py:5542: error: Missing return statement  [return]\npipeline.py:5573: error: Missing return statement  [return]\npipeline.py:5638: error: Missing return statement  [return]\nFound 9 errors in 1 file (checked 1 source file)\n",
+      "stderr": "mypy.ini: [mypy]: python_version: Python 3.9 is not supported (must be 3.10 or higher)\n"
+    },
+    {
+      "name": "bandit",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "bandit",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "__main__.py 1.9.4\n  python version = 3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025, 15:27:58) [MSC v.1942 64 bit (AMD64)]",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "or QA and Orchestra\\pipeline.py:5597:21\n5596\t            try:\n5597\t                with urllib.request.urlopen(redirect_request, timeout=120) as response:\n5598\t                    return response.read()\n\n--------------------------------------------------\n>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.\n   Severity: Low   Confidence: High\n   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)\n   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html\n   Location: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py:6313:15\n6312\t    try:\n6313\t        proc = subprocess.run(\n6314\t            command,\n6315\t            cwd=str(BASE_DIR),\n6316\t            capture_output=True,\n6317\t            text=True,\n6318\t            encoding=\"utf-8\",\n6319\t            errors=\"replace\",\n6320\t            timeout=timeout,\n6321\t            check=False,\n6322\t        )\n6323\t    except (OSError, subprocess.TimeoutExpired) as exc:\n\n--------------------------------------------------\n>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.\n   Severity: Low   Confidence: High\n   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)\n   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html\n   Location: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py:6409:19\n6408\t        try:\n6409\t            proc = subprocess.run(\n6410\t                command,\n6411\t                cwd=str(BASE_DIR),\n6412\t                capture_output=True,\n6413\t                text=True,\n6414\t                encoding=\"utf-8\",\n6415\t                errors=\"replace\",\n6416\t                timeout=timeout,\n6417\t                check=False,\n6418\t            )\n6419\t        except (OSError, subprocess.TimeoutExpired) as exc:\n\n--------------------------------------------------\n>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.\n   Severity: Low   Confidence: High\n   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)\n   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html\n   Location: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py:6474:19\n6473\t        try:\n6474\t            proc = subprocess.run(\n6475\t                command,\n6476\t                cwd=str(BASE_DIR),\n6477\t                capture_output=True,\n6478\t                text=True,\n6479\t                encoding=\"utf-8\",\n6480\t                errors=\"replace\",\n6481\t                timeout=timeout,\n6482\t                check=False,\n6483\t            )\n6484\t        except (OSError, subprocess.TimeoutExpired) as exc:\n\n--------------------------------------------------\n>> Issue: [B310:blacklist] Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.\n   Severity: Medium   Confidence: High\n   CWE: CWE-22 (https://cwe.mitre.org/data/definitions/22.html)\n   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b310-urllib-urlopen\n   Location: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py:6945:13\n6944\t    try:\n6945\t        with urllib.request.urlopen(request, timeout=timeout) as response:\n6946\t            response_payload = json.loads(response.read().decode(\"utf-8\"))\n\n--------------------------------------------------\n\nCode scanned:\n\tTotal lines of code: 6964\n\tTotal lines skipped (#nosec): 0\n\tTotal potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0\n\nRun metrics:\n\tTotal issues (by severity):\n\t\tUndefined: 0\n\t\tLow: 26\n\t\tMedium: 8\n\t\tHigh: 0\n\tTotal issues (by confidence):\n\t\tUndefined: 0\n\t\tLow: 0\n\t\tMedium: 1\n\t\tHigh: 33\nFiles skipped (0):\n",
+      "stderr": ""
+    },
+    {
+      "name": "pytest",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "l).\n    \n        ``parse_int``, if specified, will be called with the string\n        of every JSON int to be decoded. By default this is equivalent to\n        int(num_str). This can be used to use another datatype or parser\n        for JSON integers (e.g. float).\n    \n        ``parse_constant``, if specified, will be called with one of the\n        following strings: -Infinity, Infinity, NaN.\n        This can be used to raise an exception if invalid JSON numbers\n        are encountered.\n    \n        To use a custom ``JSONDecoder`` subclass, specify it with the ``cls``\n        kwarg; otherwise ``JSONDecoder`` is used.\n        \"\"\"\n        if isinstance(s, str):\n            if s.startswith('\\ufeff'):\n                raise JSONDecodeError(\"Unexpected UTF-8 BOM (decode using utf-8-sig)\",\n                                      s, 0)\n        else:\n            if not isinstance(s, (bytes, bytearray)):\n>               raise TypeError(f'the JSON object must be str, bytes or bytearray, '\n                                f'not {s.__class__.__name__}')\nE               TypeError: the JSON object must be str, bytes or bytearray, not NoneType\n\n..\\..\\..\\..\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\json\\__init__.py:339: TypeError\n============================== warnings summary ===============================\ntest_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_deploys_real_artifact_after_ci_pass\n  C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-107 (_readerthread)\n  \n  Traceback (most recent call last):\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1075, in _bootstrap_inner\n      self.run()\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1012, in run\n      self._target(*self._args, **self._kwargs)\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\subprocess.py\", line 1601, in _readerthread\n      buffer.append(fh.read())\n                    ^^^^^^^^^\n  UnicodeDecodeError: 'cp949' codec can't decode byte 0x98 in position 53: illegal multibyte sequence\n  \n  Enable tracemalloc to get traceback where the object was allocated.\n  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.\n    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))\n\ntest_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_rejects_placeholder_evidence\n  C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-109 (_readerthread)\n  \n  Traceback (most recent call last):\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1075, in _bootstrap_inner\n      self.run()\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1012, in run\n      self._target(*self._args, **self._kwargs)\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\subprocess.py\", line 1601, in _readerthread\n      buffer.append(fh.read())\n                    ^^^^^^^^^\n  UnicodeDecodeError: 'cp949' codec can't decode byte 0x98 in position 53: illegal multibyte sequence\n  \n  Enable tracemalloc to get traceback where the object was allocated.\n  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.\n    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ===========================\nFAILED test_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_deploys_real_artifact_after_ci_pass\nFAILED test_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_rejects_placeholder_evidence\n2 failed, 217 passed, 2 warnings in 43.17s\n",
+      "stderr": ""
+    }
+  ],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {},
+    "results": []
+  }
+}

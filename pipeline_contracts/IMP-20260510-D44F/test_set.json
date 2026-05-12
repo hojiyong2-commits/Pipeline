@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-D44F",
+  "created_at": "2026-05-10T07:48:49Z",
+  "updated_at": "2026-05-10T07:56:03Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "TST-1",
+      "module": "MOD-1",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 25,
+      "given": {},
+      "when": {
+        "action": "dev-agent가 email_monitor.py, main.py 전체를 읽고 inspection_report_IMP-20260510-D44F.md를 작성한다"
+      },
+      "then": {
+        "path": "inspection_report_IMP-20260510-D44F.md",
+        "description": "버그 섹션, 보안 섹션, 성능 섹션, 유지보수성 섹션이 모두 존재하고 각 섹션에 코드 라인 번호와 함께 발견 항목이 기술되어 있어야 한다. 파일 크기 1500자 이상."
+      }
+    },
+    {
+      "id": "TST-2",
+      "module": "MOD-2",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 20,
+      "given": {},
+      "when": {
+        "action": "보안 섹션 내용 확인"
+      },
+      "then": {
+        "path": "inspection_report_IMP-20260510-D44F.md",
+        "description": "_safe_resolve 경로 순회 방어 평가, 발신자 필터 우회 가능성 분석, 수신자 Recipients Exchange DN 처리 분석, 임시파일 원자 저장 패턴 평가가 리포트 보안 섹션에 포함되어야 한다"
+      }
+    },
+    {
+      "id": "TST-3",
+      "module": "MOD-3",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 20,
+      "given": {},
+      "when": {
+        "action": "버그 섹션 내용 확인"
+      },
+      "then": {
+        "path": "inspection_report_IMP-20260510-D44F.md",
+        "description": "scan_past_emails ReceivedTime None 처리 흐름, _process_mail_item rename 실패 분기, log_queue 포화 시 드롭 동작, OnNewMailEx 내 Dispatch 재생성 문제가 버그 섹션에 분석되어야 한다"
+      }
+    },
+    {
+      "id": "TST-4",
+      "module": "MOD-4",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 20,
+      "given": {},
+      "when": {
+        "action": "리포트 산출물 전체 구조 확인"
+      },
+      "then": {
+        "path": "inspection_report_IMP-20260510-D44F.md",
+        "description": "inspection_report_IMP-20260510-D44F.md가 존재하고, 요약 테이블, 심각도별(CRITICAL/HIGH/MEDIUM/LOW) 발견 항목, 권고사항 섹션을 포함하며 최소 1500자 이상이어야 한다"
+      }
+    },
+    {
+      "id": "TST-5",
+      "module": "MOD-3",
+      "type": "file_output_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 10,
+      "given": {},
+      "when": {
+        "action": "엣지케이스: allowed_senders/recipients 빈 set vs None 동작 분석 포함 여부"
+      },
+      "then": {
+        "path": "inspection_report_IMP-20260510-D44F.md",
+        "description": "allowed_senders/recipients가 None 또는 빈 set일 때 전체 허용으로 동작하는 코드 패턴(if allowed_senders: 조건)이 분석되어 있고 오탐 가능성이 없음을 확인한 내용이 포함되어야 한다"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-10T07:56:03Z",
+  "test_set_hash": "b49c507c39f64fcf833de56fb6052c869ff114440b7a07c97d2fc671ca068e30",
+  "contract_hash": "4d1770152fc375455c7c1c37ecdc07b3a5e33d45f8158cf9ae98751d7084d4cd"
+}

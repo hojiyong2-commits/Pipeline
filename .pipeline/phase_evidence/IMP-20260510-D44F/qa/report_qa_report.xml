@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <agent_run_id>qa-e8b22fe0c1a9a3ad</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>120</numeric_score>
+  <numeric_verdict>PASS(&gt;=80%)</numeric_verdict>
+
+  <handover_evidence_check>
+    <handover_xml_present>PASS — dev_handover.xml 존재</handover_xml_present>
+    <from_agent>dev-agent</from_agent>
+    <evidence_files_listed>inspection_report_IMP-20260510-D44F.md, scope_manifest.json, integration_report.xml, module_design/handover/qa x 5</evidence_files_listed>
+    <ui_handover_required>NO — category_tags=META-DOCS,FS, UI 미포함</ui_handover_required>
+    <verdict>PASS</verdict>
+  </handover_evidence_check>
+
+  <pm_step_plan_check>
+    <anti_gaming_read>PASS — anti_gaming_read=true 명시</anti_gaming_read>
+    <decomposition_audit>PASS — total_functions=25, micro_task_count=5, audit_result=SINGLE_TASK_OK</decomposition_audit>
+    <grep_evidence_per_mt>PASS — MT-1~5 모두 executed=true</grep_evidence_per_mt>
+    <design_confirmation>PASS — DQ-1, DQ-2 사용자 응답 확보</design_confirmation>
+    <judgment_calls_resolved>N-A — judgment_calls 블록 없음</judgment_calls_resolved>
+  </pm_step_plan_check>
+
+  <category_check>
+    <wa>N-A — 네트워크/HTTP 호출 없음 (분석 전용 META-DOCS 태스크)</wa>
+    <ui>N-A — UI 카테고리 미포함, 코드 변경 없음</ui>
+    <fs>PASS — 산출물은 단일 MD 파일이며 utf-8 단일 인코딩. 분석 대상 .py 안의 FS 패턴(tempfile/encoding/safe_resolve) 평가가 정확한 라인 번호로 리포트에 반영됨</fs>
+    <pd>PASS — 모듈 분리 분석(_process_mail_item 6개 헬퍼 분리 권고) 및 인터페이스 계약(set_context 메서드) 권고 포함</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점</sec>
+    <al>N-A — 코드 변경 없음. 리포트 내 엣지케이스 분석(B1 None, B5 fd 누수, S5 200자 절단 fallback)이 AL 정신을 반영함</al>
+    <build>N-A — meta-task, EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 카테고리 태그 없음</vsce>
+  </category_check>
+
+  <numeric_score_breakdown>
+    <wa score="N/A" max="N/A">네트워크 호출 없음</wa>
+    <ui score="N/A" max="N/A">UI 카테고리 없음</ui>
+    <fs score="20" max="20">FS 패턴 5개(mkstemp, _safe_resolve, .tmp 동시성, _safe_filename, 인코딩) 모두 정확한 라인 번호와 권고 코드 포함</fs>
+    <pd score="10" max="10">모듈분리(SRP 위반 분리 권고 + 6개 헬퍼 명시) 5pt + 인터페이스계약 5pt</pd>
+    <al score="20" max="20">엣지케이스 4개 분야 모두 분석: 0/None 방어(B1 ReceivedTime), 인덱스/범위(P3 PDF 메모리), 타입 검증(M3 _pdf_sort_key None/str/len), 빈 데이터(S2 빈 문자열 fallback). 각 5pt</al>
+    <build score="N/A" max="N/A">meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="50" max="50"/>
+    <percentage>100.0</percentage>
+    <note>category_tags=META-DOCS,FS, 코드 변경 없는 분석 전용 태스크. 적용 카테고리 FS+PD+AL = 50/50(100%). 파이프라인 hard gate(96/120) 대응 환산 점수 120.</note>
+  </numeric_score_breakdown>
+
+  <acceptance_criteria_check>
+    <criterion id="1" verdict="PASS">inspection_report_IMP-20260510-D44F.md 프로젝트 루트 존재</criterion>
+    <criterion id="2" verdict="PASS">파일 문자 수 14966 &gt;= 1500</criterion>
+    <criterion id="3" verdict="PASS">## 버그, ## 보안, ## 성능, ## 유지보수성 4개 섹션 모두 존재 (grep 검증)</criterion>
+    <criterion id="4" verdict="PASS">라인 번호 참조 124곳 (L숫자/line N/라인 N 정규식) &gt;= 3</criterion>
+    <criterion id="5" verdict="PASS">CRITICAL/HIGH/MEDIUM/LOW 4개 레이블 모두 사용 &gt;= 2</criterion>
+    <criterion id="6" verdict="PASS">## 권고사항 섹션 + 우선순위 그룹화 + 항목별 구체적 개선 코드 포함</criterion>
+    <criterion id="7" verdict="PASS">요약 테이블 (심각도x영역 17개 항목) 존재</criterion>
+    <criterion id="8" verdict="PASS">엣지케이스 — allowed_senders/recipients 빈 set vs None 분석. S2 (L795-L913)에서 빈 문자열 정규화 + silent drop 위험 명시</criterion>
+    <criterion id="9" verdict="PASS">엣지케이스 — OnNewMailEx COM 매번 재생성. P1 (L1330-L1333)에서 매 EntryID마다 신규 Dispatch 비용 분석 + namespace 캐싱 권고</criterion>
+    <criterion id="10" verdict="PASS">코드 변경 없음 — po_automation/*.py 변경 0건. dev_handover에 files_modified=inspection_report만 명시</criterion>
+  </acceptance_criteria_check>
+
+  <line_number_sample_audit>
+    <sample id="B1" report_lines="L1200~L1219" actual_verified="L1200 received=getattr, L1201 if received is not None, L1217-1219 continue">PASS</sample>
+    <sample id="P1" report_lines="L1330~L1333" actual_verified="L1330 for entry_id, L1332 namespace=win32com.client.Dispatch, L1333 GetItemFromID">PASS</sample>
+    <sample id="S1" report_lines="L39~L70" actual_verified="L39 def _safe_resolve, L63 resolve(), L65 relative_to, L70 return">PASS</sample>
+    <sample id="B5" report_lines="L564~L574 (main.py)" actual_verified="L564 fd,tmp=tempfile.mkstemp, L566 os.fdopen, L568 os.replace, L569-573 except 블록">PASS</sample>
+  </line_number_sample_audit>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <fs>
+      <atomic_write>PASS — 분석 대상 코드의 .tmp 동시성 문제(S4)와 main.py mkstemp 패턴(B5) 정확히 평가</atomic_write>
+      <encoding_fallback>N-A — 신규 산출물은 utf-8 단일</encoding_fallback>
+      <traversal_wired>PASS — 분석 대상 _safe_resolve 호출체인(S1) 평가 완료</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover에 execution_check=PASS (V1~V6 6개 자기 검증 항목 실행)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <functional_binding_verified>PASS — QA가 라인 번호 4개 샘플(B1/P1/S1/B5)을 실제 소스와 직접 대조하여 정확성 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>1 (inspection_report_IMP-20260510-D44F.md)</scope_files_declared>
+    <evidence_files_submitted>1 (inspection_report_IMP-20260510-D44F.md)</evidence_files_submitted>
+    <files_in_evidence_not_in_scope><file>없음</file></files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence><file>없음</file></files_in_scope_not_in_evidence>
+    <grep_verified>YES — git status로 po_automation/*.py 변경 0건 확인</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~5 모두 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>5 MT, 25개 함수 분석 대상 명시</declared_functions>
+    <actual_modified_functions>0 (read-only 분석)</actual_modified_functions>
+    <out_of_scope_modifications><modification>없음</modification></out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>CONTAINED</blast_radius>
+    <mt_id>MT-1~5</mt_id>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <result>[PASS]</result>
+  <failure_signature>none</failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+
+  <critical_issues>없음 — acceptance_criteria 10개 PASS, 라인 번호 4개 샘플 모두 실제 소스와 일치.</critical_issues>
+
+  <improvement_suggestions>향후 리포트에 발견 항목 ID(B1, S2 등)와 우선순위 그룹 간 cross-reference 표를 추가하면 추적성 향상. 17개 권고를 별도 BUG/IMP 파이프라인으로 분리 적용 시 우선순위 1(HIGH 5건)을 단일 IMP로 묶고 우선순위 2(MEDIUM 7건)는 영역별 BUG로 분리 권장.</improvement_suggestions>
+</qa_report>

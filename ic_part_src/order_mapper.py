@@ -70,6 +70,12 @@ IC_MAP_CONTAINS: List[Tuple[str, str]] = [
     ("CCI Valve", "AT"),   # catches GmbH and Gmbh variants (case-insensitive fallback)
     ("APAC", "SG"),
 ]
+_IC_MAP_EXACT_NORMALIZED: Dict[str, str] = {
+    key.casefold(): value for key, value in IC_MAP_EXACT.items()
+}
+_IC_MAP_CONTAINS_NORMALIZED: List[Tuple[str, str]] = [
+    (needle.casefold(), value) for needle, value in IC_MAP_CONTAINS
+]
 
 
 # ---------------------------------------------------------------------------
@@ -657,11 +663,12 @@ def map_ic(customer_name: Optional[str]) -> str:
     if not isinstance(customer_name, str):
         raise TypeError(f"customer_name must be str, got {type(customer_name).__name__}")
 
-    if customer_name in IC_MAP_EXACT:
-        return IC_MAP_EXACT[customer_name]
+    normalized = customer_name.casefold()
+    if normalized in _IC_MAP_EXACT_NORMALIZED:
+        return _IC_MAP_EXACT_NORMALIZED[normalized]
 
-    for substring, code in IC_MAP_CONTAINS:
-        if substring in customer_name:
+    for substring, code in _IC_MAP_CONTAINS_NORMALIZED:
+        if substring in normalized:
             return code
 
     return customer_name
@@ -704,6 +711,7 @@ class OrderGroup:
 
     def __init__(self) -> None:
         """Initialise all fields to None/empty."""
+        self.base_order_no: Optional[str] = None
         self.order_no: Optional[str] = None
         self.delivery_date: Optional[date] = None
         self.po_no: Optional[str] = None
@@ -760,6 +768,7 @@ class OrderGroup:
         if self.order_no is None:
             raw_order = _get(eff_order_no)
             self.order_no = str(raw_order).strip() if raw_order is not None else None
+            self.base_order_no = self.order_no
 
             self.delivery_date = normalise_date(_get(eff_delivery_date))
 
@@ -1037,12 +1046,14 @@ def apply_sub_order_suffixes(groups: List[OrderGroup]) -> None:
 
     counts: Dict[str, int] = {}
     for group in groups:
-        base = group.order_no if group.order_no is not None else ""
+        if group.base_order_no is None:
+            group.base_order_no = group.order_no
+        base = group.base_order_no if group.base_order_no is not None else ""
         counts[base] = counts.get(base, 0) + 1
 
     occurrence: Dict[str, int] = {}
     for group in groups:
-        base = group.order_no if group.order_no is not None else ""
+        base = group.base_order_no if group.base_order_no is not None else ""
         if counts[base] > 1:
             occ = occurrence.get(base, 0)
             if occ > 0:
@@ -1115,30 +1126,49 @@ def write_ic_part_zip(
     sheet1_bytes: bytes = all_zip_data["xl/worksheets/sheet1.xml"]
     sheet1_str: str = sheet1_bytes.decode("utf-8")
 
-    # Find last occupied row in K column (PO No.) — only cells with actual <v> value.
-    # BUG-20260429-6B72: previous regex matched format-only cells (no <v> tag),
-    # causing false "last written row" when template had formatting-only cells.
-    # Fix: two-branch alternation — branch 1 captures self-closing cells (no value, skipped);
-    # branch 2 captures open/close cells and filters for <v> presence.
+    # BUG-20260512-E68A: 빈행 탐지 기준을 K 컬럼 단독에서 I·J·K 세 컬럼 합집합으로 변경.
+    # 기존 코드는 K 컬럼만 스캔했기 때문에, I 또는 J에만 데이터가 있고 K가 비어있는 행을
+    # "빈 행"으로 잘못 인식하여 기존 데이터를 덮어쓰는 버그가 있었음.
+    # 수정: ICPART_COL_PROJECT_ID(I=9), ICPART_COL_ORDER_NO(J=10), ICPART_COL_PO_NO(K=11) 세
+    # 컬럼 모두 스캔하여 값이 있는 행 번호를 _ijk_occupied set에 합산.
     # Inner content boundary (?:(?!</?c[\s>]).)*? prevents spanning into adjacent <c> elements.
-    # IMP-20260509-F8BF: PO No. column shifted from L (12) to K (11) — regex updated accordingly.
-    _l_cell_pattern = re.compile(
-        r'<c\s[^>]*\br="K(\d+)"[^>]*/>'               # branch 1: self-closing — no value
-        r'|'
-        r'<c\s[^>]*\br="K(\d+)"[^>]*>((?:(?!</?c[\s>]).)*?)</c>',  # branch 2: open/close
-        re.DOTALL,
-    )
-    _l_filled = [
-        int(m.group(2))
-        for m in _l_cell_pattern.finditer(sheet1_str)
-        if m.group(2) is not None                      # open/close branch only (branch 2)
-        and int(m.group(2)) >= ICPART_DATA_START_ROW
-        and re.search(r'<v[\s>]', m.group(3) or '')
-    ]
-    _last_written_row = max(_l_filled, default=ICPART_DATA_START_ROW - 1)
-    _actual_start_row = max(_last_written_row + 1, ICPART_DATA_START_ROW)
+    _COL_LETTERS: dict = {
+        "I": ICPART_COL_PROJECT_ID,
+        "J": ICPART_COL_ORDER_NO,
+        "K": ICPART_COL_PO_NO,
+    }
+    _ijk_occupied: set = set()
+    for _scan_letter in _COL_LETTERS:
+        _col_pattern = re.compile(
+            rf'<c\s[^>]*\br="{_scan_letter}(\d+)"[^>]*/>'  # branch 1: self-closing (no value)
+            r'|'
+            rf'<c\s[^>]*\br="{_scan_letter}(\d+)"[^>]*>((?:(?!</?c[\s>]).)*?)</c>',  # branch 2: open/close
+            re.DOTALL,
+        )
+        for _m in _col_pattern.finditer(sheet1_str):
+            # branch 1 (self-closing): group(1)이 있으면 값 없음 → 건너뜀
+            if _m.group(1) is not None:
+                continue
+            # branch 2 (open/close): group(2)이 행 번호, group(3)이 셀 내용
+            _row_g = _m.group(2)
+            if _row_g is None:
+                continue
+            _row_n = int(_row_g)
+            if _row_n < ICPART_DATA_START_ROW:
+                continue
+            # <v> 태그 또는 <is> 태그(inlineStr 포맷)가 있는 셀만 "값 있음"으로 집계
+            if not re.search(r'<v[\s>]|<is[\s>]', _m.group(3) or ''):
+                continue
+            _ijk_occupied.add(_row_n)
+
+    _last_occupied_row = max(_ijk_occupied, default=ICPART_DATA_START_ROW - 1)
+    _actual_start_row = max(_last_occupied_row + 1, ICPART_DATA_START_ROW)
     if _actual_start_row > ICPART_DATA_START_ROW:
-        logger.info("Accumulation mode: last written row=%d, starting at row=%d", _last_written_row, _actual_start_row)
+        logger.info(
+            "Accumulation mode: last occupied row=%d (I·J·K 합집합), starting at row=%d",
+            _last_occupied_row,
+            _actual_start_row,
+        )
 
     # Parse shared strings table (may not exist in minimal templates)
     import xml.etree.ElementTree as ET
@@ -1192,9 +1222,13 @@ def write_ic_part_zip(
     # sub-groups to be incorrectly skipped as duplicates.
     _check_pids: Set[str] = set(existing_project_ids)  # frozen snapshot — never mutated
 
-    # Count how many groups (delivery-date buckets) share each order_no.
-    # Used below to decide whether to write Line No or leave it blank.
-    order_date_count: Counter = Counter(g.order_no for g in groups)
+    # Count how many delivery-date groups share the original order number.
+    # Suffixes (-2/-3) are display values; Line No must be decided from the
+    # original CustomerOrderLines order number.
+    order_date_count: Counter = Counter(
+        (g.base_order_no if g.base_order_no is not None else g.order_no)
+        for g in groups
+    )
 
     for i, group in enumerate(groups):
         # Duplicate Project ID check — only against IDs already in the template,
@@ -1252,9 +1286,10 @@ def write_ic_part_zip(
                 sheet1_str = _inject_or_replace_cell(sheet1_str, row_num, 'V', _vsrc)
                 logger.info("Backfilled V formula into %s", _vref)
 
-        # Write Line No only when this order_no has 2+ delivery-date groups;
-        # a single-group order leaves the O column empty.
-        line_no_val: str = group.format_line_nos() if order_date_count[group.order_no] > 1 else ""
+        # Write Line No only when this original order_no has 2+ delivery-date
+        # groups; a single-date order leaves the M column empty.
+        _line_count_key = group.base_order_no if group.base_order_no is not None else group.order_no
+        line_no_val: str = group.format_line_nos() if order_date_count[_line_count_key] > 1 else ""
 
         text_cols: List[Tuple[int, Optional[str]]] = [
             (ICPART_COL_PROJECT_ID,      group.project_id),
@@ -1290,7 +1325,7 @@ def write_ic_part_zip(
     logger.info("Groups injected: %d, rows skipped: %d", written, skipped)
 
     # Inject first group's Project Id into IC-Distribution sheet2 cell A2.
-    # Sheet2 B2 formula is MATCH($A$2, Sheet1!J:J, 0) where J = Project Id column.
+    # Sheet2 B2 formula should match Sheet1!I:I, where I = Project Id column.
     # Therefore A2 must hold Project Id, not Order No.
     # Fallback to order_no only when project_id is None (backward compatibility).
     _sheet2_key = "xl/worksheets/sheet2.xml"
@@ -1313,6 +1348,7 @@ def write_ic_part_zip(
             if _n2 == 0:
                 logger.warning("IC-Distribution A2 not found in sheet2.xml — skipped")
             else:
+                _s2_new = _s2_new.replace("Sheet1!J:J", "Sheet1!I:I")
                 all_zip_data[_sheet2_key] = _s2_new.encode("utf-8")
                 logger.info("IC-Distribution A2 set to %s (project_id)", _a2_value)
     elif _sheet2_key not in all_zip_data:
@@ -1320,7 +1356,7 @@ def write_ic_part_zip(
 
     sheet1_bytes_new: bytes = sheet1_str.encode("utf-8")
 
-    import tempfile as _tempfile, shutil as _shutil, os as _os
+    import tempfile as _tempfile, shutil as _shutil, os as _os  # noqa: E401
     _tmp_path: Optional[str] = None
     try:
         _fd, _tmp_path = _tempfile.mkstemp(suffix=".xlsx", dir=_tempfile.gettempdir())
@@ -1461,6 +1497,8 @@ if __name__ == "__main__":
         assert map_ic("IMI Critical Engineering LLC") == "SoCal"
         assert map_ic("Some APAC Company") == "SG"
         assert map_ic("CCI Valve Technology Gmbh") == "AT", "소문자 h 변형 미매핑"
+        assert map_ic("cci valve technology gmbh") == "AT", "대소문자 변형 미매핑"
+        assert map_ic("some apac company") == "SG", "APAC 대소문자 변형 미매핑"
         assert map_ic("Unknown Corp") == "Unknown Corp"
         assert map_ic(None) == ""
         try:
@@ -1508,13 +1546,25 @@ if __name__ == "__main__":
         assert og.format_line_nos() == "#1,2,4"
 
         # apply_sub_order_suffixes
-        og_a = OrderGroup(); og_a.order_no = "X100050542"; og_a.delivery_date = _date(2026, 6, 2)
-        og_b = OrderGroup(); og_b.order_no = "X100050542"; og_b.delivery_date = _date(2026, 6, 25)
-        og_c = OrderGroup(); og_c.order_no = "X100050542"; og_c.delivery_date = _date(2026, 7, 1)
+        og_a = OrderGroup(); og_a.order_no = "X100050542"; og_a.delivery_date = _date(2026, 6, 2)  # noqa: E702
+        og_b = OrderGroup(); og_b.order_no = "X100050542"; og_b.delivery_date = _date(2026, 6, 25)  # noqa: E702
+        og_c = OrderGroup(); og_c.order_no = "X100050542"; og_c.delivery_date = _date(2026, 7, 1)  # noqa: E702
         apply_sub_order_suffixes([og_a, og_b, og_c])
         assert og_a.order_no == "X100050542"
         assert og_b.order_no == "X100050542-2"
         assert og_c.order_no == "X100050542-3"
+        assert og_b.base_order_no == "X100050542"
+
+        _ln_a = OrderGroup(); _ln_a.order_no = "X100050777"; _ln_a.line_nos = [1, 2, 3]  # noqa: E702
+        _ln_b = OrderGroup(); _ln_b.order_no = "X100050777"; _ln_b.line_nos = [4, 5]  # noqa: E702
+        _ln_groups = [_ln_a, _ln_b]
+        apply_sub_order_suffixes(_ln_groups)
+        _ln_counts: Dict[Optional[str], int] = Counter(g.base_order_no for g in _ln_groups)
+        _ln_values = [
+            g.format_line_nos() if _ln_counts[g.base_order_no] > 1 else ""
+            for g in _ln_groups
+        ]
+        assert _ln_values == ["#1~3", "#4,5"], f"Line No should use base order count, got {_ln_values!r}"
 
         # _inject_text_cell: self-closing empty cell
         _test_xml = (
@@ -1581,7 +1631,7 @@ if __name__ == "__main__":
         assert _det_date_b == 0
 
         # add_line with col overrides
-        _row = [None] * 10
+        _row: list = [None] * 10  # type: ignore[var-annotated]
         _row[1] = "X100050999"
         _row[0] = datetime(2026, 6, 10)
         _row[2] = 5

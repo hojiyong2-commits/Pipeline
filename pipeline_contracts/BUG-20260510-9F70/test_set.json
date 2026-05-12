@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260510-9F70",
+  "created_at": "2026-05-10T12:35:43Z",
+  "updated_at": "2026-05-10T12:37:29Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T001",
+      "module": "email_monitor_fixes",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 40,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import ast, sys; src=open('po_automation/email_monitor.py',encoding='utf-8').read(); found=[p for p in ['import re as _re','import threading as _threading','from datetime import datetime as _dt'] if p in src]; sys.exit(1) if found else print('ALL_CHECKS_PASSED')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "ALL_CHECKS_PASSED"
+      }
+    },
+    {
+      "id": "T002",
+      "module": "email_monitor_fixes",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 30,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; src=open('po_automation/email_monitor.py',encoding='utf-8').read(); found='Path(' in src and '.rename(' in src; sys.exit(1) if found else print('SAFETY_OK')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "SAFETY_OK"
+      }
+    },
+    {
+      "id": "T003",
+      "module": "main_fixes",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 30,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; src=open('po_automation/main.py',encoding='utf-8').read(); found=[p for p in ['if False:','_ = app'] if p in src]; sys.exit(1) if found else print('ALL_CHECKS_PASSED')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "ALL_CHECKS_PASSED"
+      }
+    },
+    {
+      "id": "T004",
+      "module": "email_monitor_fixes",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "exception",
+      "points": 20,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "py_compile",
+          "po_automation/email_monitor.py"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    }
+  ],
+  "frozen_at": "2026-05-10T12:37:29Z",
+  "test_set_hash": "db27114f17096cedbeab3edcd5806ec7bb5604f8c3deac715fe73e780e483a34",
+  "contract_hash": "e15f9fe4b141568b6d1205498adb317b34f7be10af4c0be7997832a8a504e177"
+}

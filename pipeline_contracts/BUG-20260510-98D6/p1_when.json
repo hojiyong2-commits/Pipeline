@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_order_mapper.py",
+    "tests/test_automation.py",
+    "-q"
+  ]
+}

@@ -1,0 +1,5 @@
+엣지케이스 점검 입력 (사용자 제공):
+- scan_past_emails: ReceivedTime 속성이 None인 메일 아이템 처리 흐름
+- _process_mail_item: tmp_dest_folder rename 실패 후 dest_folder 생성 분기 누락 여부
+- OnNewMailEx: entryIDsCollection이 빈 문자열일 때 동작
+- allowed_senders/allowed_recipients: 빈 set vs None 필터 동작 차이

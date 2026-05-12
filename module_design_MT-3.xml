@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_design>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-3</mt_id>
+  <design_summary>
+    In _cli_main, when dims_result is None (no valid K-date rows), change note from hardcoded "포장반"
+    to note = kit_place to preserve variant values like "당일 포장반" and match GUI behavior.
+  </design_summary>
+  <target_files>
+    <file>FEAT-20260426-332E/main.py</file>
+  </target_files>
+  <affected_function>main._cli_main</affected_function>
+  <interface_contract>
+    Input: kit_place (str) from kit_row; dims_result from lookup_packing_dimensions (str or None)
+    Output: note (str) — when dims_result is None, note = kit_place (dynamic value, not hardcoded "포장반")
+    Validation: note used downstream for output reporting; must preserve exact kit_place string
+  </interface_contract>
+  <implementation_plan>
+    1. Locate: else: note = "포장반" in _cli_main (dims_result None branch)
+    2. Replace with: note = kit_place
+    3. Keep dims_result-is-str branch unchanged: note = f"포장반 ({dims_result})"
+  </implementation_plan>
+  <verification_plan>
+    T4 test: _cli_main block contains "note = kit_place" AND does NOT contain "note = \"포장반\""
+  </verification_plan>
+</module_design>

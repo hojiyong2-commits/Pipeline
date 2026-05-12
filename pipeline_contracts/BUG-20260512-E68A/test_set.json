@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-E68A",
+  "created_at": "2026-05-12T00:13:05Z",
+  "updated_at": "2026-05-12T00:15:42Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T01",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "description": "I·J·K row 6~10 채워짐 — _actual_start_row 계산",
+        "actual_file": "tests/oracles/BUG-20260512-E68A/mt1/normal/actual.json"
+      },
+      "when": {
+        "action": "_actual_start_row 계산 로직 실행"
+      },
+      "then": {
+        "expected_file": "tests/oracles/BUG-20260512-E68A/mt1/normal/expected.json"
+      }
+    },
+    {
+      "id": "T02",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 10,
+      "given": {
+        "description": "K만 row 12까지, I·J는 row 10까지 — 합집합 max=12",
+        "actual_file": "tests/oracles/BUG-20260512-E68A/mt1/edge/actual.json"
+      },
+      "when": {
+        "action": "_actual_start_row 계산 로직 실행"
+      },
+      "then": {
+        "expected_file": "tests/oracles/BUG-20260512-E68A/mt1/edge/expected.json"
+      }
+    },
+    {
+      "id": "T03",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "exception",
+      "points": 10,
+      "given": {
+        "description": "빈 시트 (I·J·K 데이터 없음) — default=5 → start=6",
+        "actual_file": "tests/oracles/BUG-20260512-E68A/mt1/exception/actual.json"
+      },
+      "when": {
+        "action": "_actual_start_row 계산 로직 실행"
+      },
+      "then": {
+        "expected_file": "tests/oracles/BUG-20260512-E68A/mt1/exception/expected.json"
+      }
+    },
+    {
+      "id": "T04",
+      "module": "MOD-2",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "description": "SMTP 형식 rec.Address — 변환 불필요",
+        "actual_file": "tests/oracles/BUG-20260512-E68A/mt2/normal/actual.json"
+      },
+      "when": {
+        "action": "recipient_set 필터링 (Exchange DN 분기)"
+      },
+      "then": {
+        "expected_file": "tests/oracles/BUG-20260512-E68A/mt2/normal/expected.json"
+      }
+    },
+    {
+      "id": "T05",
+      "module": "MOD-2",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 10,
+      "given": {
+        "description": "Exchange DN → SMTP 변환 성공",
+        "actual_file": "tests/oracles/BUG-20260512-E68A/mt2/edge/actual.json"
+      },
+      "when": {
+        "action": "Exchange DN SMTP 변환 실행"
+      },
+      "then": {
+        "expected_file": "tests/oracles/BUG-20260512-E68A/mt2/edge/expected.json"
+      }
+    },
+    {
+      "id": "T06",
+      "module": "MOD-2",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "exception",
+      "points": 10,
+      "given": {
+        "description": "Exchange DN 변환 시 예외 발생 — 폴백, 크래시 없음",
+        "actual_file": "tests/oracles/BUG-20260512-E68A/mt2/exception/actual.json"
+      },
+      "when": {
+        "action": "Exchange DN 변환 예외 처리"
+      },
+      "then": {
+        "expected_file": "tests/oracles/BUG-20260512-E68A/mt2/exception/expected.json"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-12T00:15:42Z",
+  "test_set_hash": "9e1f0791dcb32f8b80ab7cf45731fac9165c5ba5781037f7aaa3d7ba87b944f6",
+  "contract_hash": "574ffccfd170df395656c373630aa92db373376c00c4c1d3b7ec4d5c56fc745f"
+}
