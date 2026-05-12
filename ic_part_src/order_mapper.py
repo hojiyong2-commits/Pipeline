@@ -1156,8 +1156,8 @@ def write_ic_part_zip(
             _row_n = int(_row_g)
             if _row_n < ICPART_DATA_START_ROW:
                 continue
-            # <v> 태그가 있는 셀만 "값 있음"으로 집계
-            if not re.search(r'<v[\s>]', _m.group(3) or ''):
+            # <v> 태그 또는 <is> 태그(inlineStr 포맷)가 있는 셀만 "값 있음"으로 집계
+            if not re.search(r'<v[\s>]|<is[\s>]', _m.group(3) or ''):
                 continue
             _ijk_occupied.add(_row_n)
 
