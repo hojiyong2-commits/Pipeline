@@ -1,42 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_qa_report>
-  <pipeline_id>BUG-20260512-E68A</pipeline_id>
   <mt_id>MT-2</mt_id>
+  <pipeline_id>BUG-20260512-CF73</pipeline_id>
   <result>PASS</result>
+  <numeric_score>100</numeric_score>
 
-  <scope_verification>
-    <declared_files>
-      <file>po_automation/email_monitor.py</file>
-    </declared_files>
-    <actual_changed_files>
-      <file>po_automation/email_monitor.py</file>
-    </actual_changed_files>
-    <scope_match>PASS</scope_match>
-    <other_files_modified>false</other_files_modified>
-  </scope_verification>
+  <category_check>
+    <fs>PASS -- EmailMonitor.spec 수정만. po_automation/EmailMonitor.spec 수정 없음</fs>
+    <al>N-A -- 알고리즘 로직 없음 (빌드 설정 파일)</al>
+    <wa>N-A -- 네트워크 통신 없음</wa>
+    <ui>N-A -- UI 없음</ui>
+    <pd>PASS -- 기존 hiddenimports 보존, collect_all 패턴 정상 적용</pd>
+    <sec>PASS -- 하드코딩 없음, 외부 입력 없음</sec>
+    <build>PASS -- collect_all(fitz) + collect_all(pdfplumber) 번들링, name/console/upx 설정 유지</build>
+  </category_check>
 
-  <micro_task_boundary>
-    <verdict>PASS</verdict>
-    <blast_radius>WITHIN_SCOPE</blast_radius>
-    <target_function>_process_mail_item</target_function>
-    <change_description>수신자 for 루프 내 Exchange DN 감지/변환 로직이 추가됨. 기존 SMTP 처리 경로는 변경 없음.</change_description>
-  </micro_task_boundary>
+  <verification_results>
+    <check id="1" result="PASS">collect_all(fitz) 호출 존재 (count=1)</check>
+    <check id="2" result="PASS">collect_all(pdfplumber) 호출 존재 (count=1)</check>
+    <check id="3" result="PASS">fitz_binaries + pdfplumber_binaries가 binaries= 인자에 전달됨</check>
+    <check id="4" result="PASS">fitz_datas + pdfplumber_datas가 datas= 인자에 전달됨</check>
+    <check id="5" result="PASS">win32com, win32com.client, win32com.server, win32timezone hiddenimports 보존됨</check>
+    <check id="6" result="PASS">openpyxl, openpyxl.styles, openpyxl.utils hiddenimports 보존됨</check>
+    <check id="7" result="PASS">name=emailmonitor, console=False, upx=True 설정 변경 없음</check>
+    <check id="8" result="PASS">po_automation/EmailMonitor.spec 수정 없음</check>
+  </verification_results>
 
-  <checks>
-    <check id="C1" name="'@' 없는 주소 Exchange DN 감지" result="PASS">if raw_addr and '@' not in raw_addr 분기 확인</check>
-    <check id="C2" name="AddressEntry.GetExchangeUser().PrimarySmtpAddress 호출" result="PASS">순서 확인</check>
-    <check id="C3" name="예외 처리 (nosec B110)" result="PASS">inner try/except + pass 확인</check>
-    <check id="C4" name="SMTP 주소 변환 없이 통과" result="PASS">oracle T04 일치: '@' 있으면 분기 건너뜀</check>
-    <check id="C5" name="Exchange DN → SMTP 변환 성공" result="PASS">oracle T05 일치</check>
-    <check id="C6" name="예외 시 원본 DN 폴백, 크래시 없음" result="PASS">oracle T06 일치</check>
-    <check id="C7" name="WA 카테고리 예외 처리 분기" result="PASS">nosec B110 주석 포함, 이중 try/except 구조</check>
-  </checks>
-
-  <numeric_score>118</numeric_score>
+  <verdict>PASS</verdict>
 
   <verification_evidence>
-    <code_review>po_automation/email_monitor.py 수정 블록 직접 검토 — _process_mail_item 수신자 for 루프 내 Exchange DN 변환 패턴 확인</code_review>
-    <oracle_alignment>T04(SMTP 그대로), T05(DN→SMTP 성공), T06(DN+예외→폴백) 기대값과 구현 로직 일치</oracle_alignment>
-    <scope_check>po_automation/email_monitor.py만 수정됨. oracle 파일, pipeline.py, 기타 파일 미변경 확인</scope_check>
+    <file>EmailMonitor.spec</file>
+    <evidence_type>grep_check</evidence_type>
+    <collect_all_fitz>true</collect_all_fitz>
+    <collect_all_pdfplumber>true</collect_all_pdfplumber>
+    <binaries_includes_fitz>true</binaries_includes_fitz>
+    <datas_includes_fitz>true</datas_includes_fitz>
+    <win32com_preserved>true</win32com_preserved>
+    <openpyxl_preserved>true</openpyxl_preserved>
+    <po_automation_spec_unchanged>true</po_automation_spec_unchanged>
   </verification_evidence>
+
+  <critical_issues>none</critical_issues>
 </module_qa_report>
