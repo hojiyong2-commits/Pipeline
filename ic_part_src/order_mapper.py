@@ -1138,11 +1138,11 @@ def write_ic_part_zip(
         "K": ICPART_COL_PO_NO,
     }
     _ijk_occupied: set = set()
-    for _col_letter in _COL_LETTERS:
+    for _scan_letter in _COL_LETTERS:
         _col_pattern = re.compile(
-            rf'<c\s[^>]*\br="{_col_letter}(\d+)"[^>]*/>'  # branch 1: self-closing (no value)
+            rf'<c\s[^>]*\br="{_scan_letter}(\d+)"[^>]*/>'  # branch 1: self-closing (no value)
             r'|'
-            rf'<c\s[^>]*\br="{_col_letter}(\d+)"[^>]*>((?:(?!</?c[\s>]).)*?)</c>',  # branch 2: open/close
+            rf'<c\s[^>]*\br="{_scan_letter}(\d+)"[^>]*>((?:(?!</?c[\s>]).)*?)</c>',  # branch 2: open/close
             re.DOTALL,
         )
         for _m in _col_pattern.finditer(sheet1_str):
