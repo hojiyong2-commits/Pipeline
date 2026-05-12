@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>FEAT-20260512-627D</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: U/V/W 열 상속 제거</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <!-- =====================================================
+       Execution Profile
+  ====================================================== -->
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>단일 파일(order_mapper.py) 내 2개 함수 변경(MT-1, MT-2), 핵심 파서 로직 수정 포함. STANDARD 경로 필요.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>30</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <!-- =====================================================
+       Decomposition Audit
+  ====================================================== -->
+  <decomposition_audit>
+    <total_functions_identified>2</total_functions_identified>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <split_decision>
+      변경 대상 함수가 2개(_clone_row_xml 내 비수식 셀 처리 분기, write_ic_part_zip 내 backfill 블록)이고
+      각 함수의 변경 범위가 독립적이므로 2개 MT로 분할.
+      MT-1: _clone_row_xml 의 {'U','W'} 예외 분기 제거 (약 2줄).
+      MT-2: write_ic_part_zip 내 backfill U/W/V 블록 삭제 (약 34줄).
+      변경 파일은 1개이며 두 MT 모두 동일 파일을 대상으로 함.
+    </split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <!-- =====================================================
+       Design Confirmation (사용자 확인 질문)
+  ====================================================== -->
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 변수명, 주석 스타일, 코드 포맷 등 P2 질문은 제외하고 동작 변경에 직결되는 P0/P1만 질문 대상으로 검토했습니다. P0 질문은 0개 — 모두 사전 분석에서 확인됨. 유지보수성 우선 원칙 적용.</filter_summary>
+    <maintenance_priority>maintainability_first — 빠른 수정보다 유지보수성 우선. 두 backfill 블록을 완전히 삭제하는 방식이 부분 수정보다 유지보수성이 높습니다.</maintenance_priority>
+    <decision_questions>
+      <question id="Q1" priority="P1" category="module_split">
+        <user_facing_question>이번 변경을 MT-1(_clone_row 수정)과 MT-2(backfill 블록 삭제) 두 개의 단위로 나눠서 진행하는 방향으로 확인해 주실 수 있을까요?</user_facing_question>
+        <evidence>order_mapper.py 내 두 변경 위치(_clone_row 함수와 write_ic_part_zip 함수)가 서로 독립적이므로 별도 micro-task로 분리하여 각각 검증합니다.</evidence>
+        <why_it_matters>두 수정 위치가 다른 함수에 있으며 각각 독립적으로 검증 가능합니다. MT-1 실패 시 MT-2에 영향 없이 격리 수정이 가능하여 유지보수성이 높아집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1/MT-2 분리 진행 (권장)</label>
+            <benefit>각 변경 위치를 독립적으로 검증 가능, 실패 시 영향 범위 최소화</benefit>
+            <cost>두 단계로 나뉘어 처리 시간이 약간 증가할 수 있음</cost>
+          </option>
+          <option id="B">
+            <label>단일 MT로 통합 진행</label>
+            <benefit>단일 커밋으로 처리 가능, 진행 단계 수 감소</benefit>
+            <cost>두 수정 위치가 섞여 실패 시 원인 파악이 어려워질 수 있음</cost>
+          </option>
+        </options>
+        <user_answer>사전 분석 결과로 A 확인됨 — ASKUSER_NONE</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <!-- =====================================================
+       Interface Spec
+  ====================================================== -->
+  <interface_spec>
+    - Input: ic_part_src/order_mapper.py (기존 파일 수정)
+    - Output: ic_part_src/order_mapper.py (수정된 파일)
+    - Validation: _clone_row_xml 내 {'U','W'} 분기 없음, write_ic_part_zip 내 backfill 블록 없음
+  </interface_spec>
+
+  <!-- =====================================================
+       Requirements
+  ====================================================== -->
+  <requirements>
+    1. [MT-1] _clone_row_xml 함수 L363-364: col_letter in {'U','W'} 조건부 cell_xml 추가 로직 제거.
+       U/W 비수식 셀도 else 브랜치(스타일만 복사)로 통합.
+       변경 전: if col_letter in {'U','W'}: cloned_cells.append(cell_xml) else: cloned_cells.append(style_only)
+       변경 후: cloned_cells.append(style_only)  # 분기 없이 단일 경로
+
+    2. [MT-2] write_ic_part_zip 함수 L1254-1287:
+       - Backfill U/W 루프(L1257-1271) 전체 삭제 — 주석 포함
+       - Backfill V 블록(L1273-1287) 전체 삭제 — 주석 포함
+       삭제 후 L1252(_ensure_row_exists) 바로 다음 줄은 L1289(# Write Line No) 블록이어야 함.
+
+    3. row_exists=True 경로(기존 행 처리)에는 변경 없음 — _inject_or_replace_cell 호출부 보존.
+
+    4. FS 카테고리 필수: safe_write, encoding, traversal 패턴 영향 없음 (삭제만이므로 해당 없음).
+
+    5. 변경 파일: ic_part_src/order_mapper.py 단 1개.
+  </requirements>
+
+  <!-- =====================================================
+       Micro Tasks
+  ====================================================== -->
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_clone_row_xml</affected_function>
+      <target_files>
+        <file>ic_part_src/order_mapper.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>col_letter in \{'U', 'W'\}</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_clone_row_xml 내 U/W 비수식 셀 특별 처리 분기(cell_xml 상속) 제거 — 스타일만 복사하는 경로로 통합</change_summary>
+      <line_estimate>4</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>write_ic_part_zip (backfill 블록)</affected_function>
+      <target_files>
+        <file>ic_part_src/order_mapper.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>for _bfcol in \('U', 'W'\):</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>write_ic_part_zip 내 Backfill U/W 루프(L1254-1271)와 Backfill V 블록(L1273-1287) 전체 삭제</change_summary>
+      <line_estimate>34</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <!-- =====================================================
+       Oracle Manifest
+  ====================================================== -->
+  <oracle_manifest>
+    <source>user</source>
+    <cases>
+      <case id="T001" kind="normal">
+        <input_path>tests/oracles/FEAT-20260512-627D/normal_no_inherit/input.json</input_path>
+        <expected_path>tests/oracles/FEAT-20260512-627D/normal_no_inherit/expected.json</expected_path>
+        <input_sha256>ad5340eff8c08786ffd1bd03b524de348b482dd71e73ea8b36f960b1a0a361ee</input_sha256>
+        <expected_sha256>eefb94e139b85fe9b902e14c89a04df0ab833db2e6b971e8d892286031dc7737</expected_sha256>
+        <description>새 행 추가 시 U/V/W 열이 이전 행 값을 상속하지 않음</description>
+      </case>
+      <case id="T002" kind="edge">
+        <input_path>tests/oracles/FEAT-20260512-627D/edge_already_empty/input.json</input_path>
+        <expected_path>tests/oracles/FEAT-20260512-627D/edge_already_empty/expected.json</expected_path>
+        <input_sha256>b848f56d6f49e1936d80c41a7815a47ed12c3a06b08c5564aab4828c39bb5f3d</input_sha256>
+        <expected_sha256>d8973b2f5272ada134df8e72fec564ce57170b16a23b360bb9c60b7493fc4588</expected_sha256>
+        <description>U/V/W가 원래 비어있는 경우 backfill 시도 없음</description>
+      </case>
+    </cases>
+  </oracle_manifest>
+
+  <!-- =====================================================
+       Python Version / Env
+  ====================================================== -->
+  <python_version>3.10 — 기존 프로젝트 환경 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.analysis.typeCheckingMode: basic, pylance provider</vscode>
+  </env_specs>
+
+  <!-- =====================================================
+       Acceptance Criteria
+  ====================================================== -->
+  <acceptance_criteria>
+    1. [MT-1 검증] order_mapper.py 내 col_letter in {'U','W'} 조건문이 존재하지 않아야 함 (grep 0건).
+    2. [MT-2 검증] for _bfcol in ('U','W') 루프가 존재하지 않아야 함 (grep 0건).
+    3. [MT-2 검증] # Backfill V: 주석 블록이 존재하지 않아야 함 (grep 0건).
+    4. [T001 oracle] _clone_row_xml 호출 시 반환 XML의 U/V/W 셀이 style-only 형태(c r="UN" s="X"/)임.
+    5. [T002 edge] 위 행에 U/W/V 값이 없어도 예외 없이 빈 셀 반환.
+    6. [회귀] _ensure_row_exists 후 text_cols 주입 흐름이 정상 동작 (기존 테스트 통과).
+    7. [scope] 변경 파일이 ic_part_src/order_mapper.py 1개뿐임 (scope_manifest 검증).
+  </acceptance_criteria>
+
+  <!-- =====================================================
+       Phase Attestation Plan
+  ====================================================== -->
+  <phase_attestation_plan>
+    <pm_attestation>
+      gates prepare-phase --phase pm 후 phase-attestation/FEAT-20260512-627D 브랜치에서 commit/push,
+      GitHub Actions 완료 후 gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
+    </pm_attestation>
+    <dev_attestation>
+      module design/dev/qa per MT-1, MT-2 → module integrate → done --phase dev → gates prepare-phase --phase dev
+    </dev_attestation>
+    <qa_attestation>
+      qa --result PASS --numeric-score N → gates prepare-phase --phase qa
+    </qa_attestation>
+    <build_attestation>
+      build --exe "N/A" --skip-reason "meta-task" — 소스 파일 수정만, EXE 빌드 대상 아님
+    </build_attestation>
+  </phase_attestation_plan>
+
+  <!-- =====================================================
+       Forbidden
+  ====================================================== -->
+  <forbidden>
+    - ic_part_src/order_mapper.py 외 파일 수정 금지
+    - _inject_or_replace_cell, _find_cell_with_value, _find_cell_with_formula 함수 본문 수정 금지
+    - row_exists=True 경로 수정 금지
+    - oracle 파일(tests/oracles/**) 내용 수정 금지 (Dev가 expected.json 변경 시 QA FAIL)
+    - Backfill 로직을 다른 위치로 이동(리팩터링) 금지 — 완전 삭제만 허용
+    - 테스트 파일 신규 생성 시 tests/oracles/ 밖에 oracle 데이터 저장 금지
+    - anti-gaming 우회 패턴(scope widening, role absorption, fake advisory claim) 금지
+  </forbidden>
+
+  <!-- =====================================================
+       Handover Template
+  ====================================================== -->
+  <handover_template>
+    <!-- dev-agent가 사용할 인계 XML 예시 (PM 계획 참고용) -->
+    <dev_to_qa_handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>FEAT-20260512-627D</pipeline_id>
+      <evidence>
+        <file>ic_part_src/order_mapper.py</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </dev_to_qa_handover_spec>
+  </handover_template>
+
+  <!-- =====================================================
+       Context Injection (for downstream agents)
+  ====================================================== -->
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\ic_part_src\order_mapper.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Dev: FS 카테고리 필수 3항목(safe_write/encoding/traversal) 준수. scope_manifest.json 필수.
+      QA: 실제 diff와 scope_manifest 불일치 시 EXCEEDS_SCOPE FAIL. oracle expected 변경 시 자동 FAIL.
+      Incremental Module Gate: MT-1 완료(qa PASS) 후 MT-2 진행.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Planner 계획 완료 — order_mapper.py 1파일, 2함수 변경(MT-1: _clone_row_xml 분기 제거, MT-2: backfill 블록 삭제)</prev_phase_summary>
+  </context_injection>
+
+  <!-- =====================================================
+       AskUser
+  ====================================================== -->
+  <askuser>NONE</askuser>
+
+  <!-- =====================================================
+       Pipeline Manager Handoff
+  ====================================================== -->
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</step_plan>
