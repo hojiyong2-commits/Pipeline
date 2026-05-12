@@ -1,67 +1,62 @@
 {
   "version": "1.2.0",
-  "pipeline_id": "BUG-20260511-073B",
+  "pipeline_id": "BUG-20260512-E68A",
   "type": "BUG",
-  "description": "KittingMapper 버그 수정 및 코드 정리: UNC 경로 차단, jm 컬럼 기본값, 포장반 Note 통일, _compress_line_nos 중복 제거, 데드코드 제거",
-  "created_at": "2026-05-11T22:24:35Z",
-  "updated_at": "2026-05-11T23:09:37Z",
-  "current_phase": "harness",
+  "description": "ICPartAutomation 빈행 탐지 기준 변경(I,J,K 모두 비어있는 첫 행) + emailmonitor 발신자/수신자 필터링 동작 불량 수정",
+  "created_at": "2026-05-12T00:05:14Z",
+  "updated_at": "2026-05-12T00:23:01Z",
+  "current_phase": "dev",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
     "pm": {
       "status": "DONE",
-      "completed_at": "2026-05-11T22:37:47Z",
+      "completed_at": "2026-05-12T00:22:40Z",
       "evidence": null,
       "notes": [],
       "report_file": "step_plan.xml",
       "agent_id": "pm-planner-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260511-073B_phase_pm.json",
-      "manager_run_id": "pipeline_manager-386972057e62bd84",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260512-E68A_phase_pm.json",
+      "manager_run_id": "pipeline_manager-b2b94c3c9e1e88c7",
       "manager_agent_id": "pipeline-manager-agent",
       "manager_report_file": "manager_handoff.xml",
-      "agent_run_id": "pm_planner-5732a0074fea2e67"
+      "agent_run_id": "pm_planner-ad27123881739b37"
     },
     "dev": {
-      "status": "DONE",
-      "completed_at": "2026-05-11T22:58:01Z",
-      "evidence": "FEAT-20260426-332E/core/order_lines_reader.py,FEAT-20260426-332E/core/utils.py,FEAT-20260426-332E/main.py,FEAT-20260426-332E/ui/app.py",
-      "notes": [],
-      "report_file": "dev_handover.xml",
-      "agent_id": "dev-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260511-073B_phase_dev.json",
-      "agent_run_id": "dev-107f8758fbc053f5"
-    },
-    "qa": {
-      "status": "PASS",
-      "completed_at": "2026-05-11T23:04:49Z",
+      "status": "PENDING",
+      "completed_at": null,
       "evidence": null,
-      "notes": [],
-      "report_file": "qa_report.xml",
-      "agent_id": "qa-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260511-073B_phase_qa.json",
-      "agent_run_id": "qa-a1746b4558615732",
-      "numeric_score": 108
-    },
-    "sec": {
-      "status": "SKIP",
-      "completed_at": "2026-05-11T23:07:08Z",
-      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260511-073B_phase_sec.json"
+      "snapshot_path": null
+    },
+    "qa": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "sec": {
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
     },
     "build": {
-      "status": "DONE",
-      "completed_at": "2026-05-11T23:09:37Z",
-      "evidence": "FEAT-20260426-332E/dist/KittingMapper.exe",
+      "status": "PENDING",
+      "completed_at": null,
+      "evidence": null,
       "notes": [],
-      "report_file": "dist/build_report.xml",
-      "agent_id": "build-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260511-073B_phase_build.json",
-      "skip_reason": null,
-      "agent_run_id": "build-54186a43fc82864a"
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
     },
     "harness": {
       "status": "PENDING",
@@ -84,283 +79,515 @@
   },
   "event_log": [
     {
-      "ts": "2026-05-11T22:24:35Z",
-      "msg": "파이프라인 생성: BUG-20260511-073B"
+      "ts": "2026-05-12T00:05:14Z",
+      "msg": "파이프라인 생성: BUG-20260512-E68A"
     },
     {
-      "ts": "2026-05-11T22:24:38Z",
-      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-5732a0074fea2e67"
+      "ts": "2026-05-12T00:05:16Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-308fe7580e3592fc"
     },
     {
-      "ts": "2026-05-11T22:31:54Z",
-      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-5732a0074fea2e67"
+      "ts": "2026-05-12T00:12:00Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-308fe7580e3592fc"
     },
     {
-      "ts": "2026-05-11T22:32:16Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-386972057e62bd84"
+      "ts": "2026-05-12T00:12:03Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-2272d7decd45072f"
     },
     {
-      "ts": "2026-05-11T22:33:30Z",
-      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-386972057e62bd84"
-    },
-    {
-      "ts": "2026-05-11T22:37:47Z",
-      "msg": "pm DONE | evidence: None"
-    },
-    {
-      "ts": "2026-05-11T22:37:50Z",
+      "ts": "2026-05-12T00:13:05Z",
       "msg": "three_gate mode enabled (mandatory)"
     },
     {
-      "ts": "2026-05-11T22:37:50Z",
+      "ts": "2026-05-12T00:13:05Z",
       "msg": "GitHub phase attestations enabled (mandatory)"
     },
     {
-      "ts": "2026-05-11T22:37:50Z",
-      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B"
+      "ts": "2026-05-12T00:13:05Z",
+      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A"
     },
     {
-      "ts": "2026-05-11T22:39:35Z",
-      "msg": "contract_v2 frozen: 9bd75631a7c0"
+      "ts": "2026-05-12T00:15:42Z",
+      "msg": "contract_v2 frozen: 574ffccfd170"
     },
     {
-      "ts": "2026-05-11T22:39:35Z",
+      "ts": "2026-05-12T00:15:42Z",
       "msg": "advisory gpt-contract SKIPPED api_called=False"
     },
     {
-      "ts": "2026-05-11T22:39:46Z",
+      "ts": "2026-05-12T00:17:38Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-2272d7decd45072f"
+    },
+    {
+      "ts": "2026-05-12T00:17:59Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-3ab335fc1ec6eadc"
+    },
+    {
+      "ts": "2026-05-12T00:18:07Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-3ab335fc1ec6eadc"
+    },
+    {
+      "ts": "2026-05-12T00:18:27Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-0ea5c40988950433"
+    },
+    {
+      "ts": "2026-05-12T00:18:32Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-0ea5c40988950433"
+    },
+    {
+      "ts": "2026-05-12T00:18:34Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-76676f6c6afa11c7"
+    },
+    {
+      "ts": "2026-05-12T00:18:37Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-76676f6c6afa11c7"
+    },
+    {
+      "ts": "2026-05-12T00:18:50Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-4eb94249f31269df"
+    },
+    {
+      "ts": "2026-05-12T00:18:57Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-4eb94249f31269df"
+    },
+    {
+      "ts": "2026-05-12T00:18:59Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-4114873ee2bd095f"
+    },
+    {
+      "ts": "2026-05-12T00:19:02Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-4114873ee2bd095f"
+    },
+    {
+      "ts": "2026-05-12T00:20:29Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-589d9076929ed24c"
+    },
+    {
+      "ts": "2026-05-12T00:20:32Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-589d9076929ed24c"
+    },
+    {
+      "ts": "2026-05-12T00:20:35Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-41bb0405cfa32102"
+    },
+    {
+      "ts": "2026-05-12T00:20:38Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-41bb0405cfa32102"
+    },
+    {
+      "ts": "2026-05-12T00:20:59Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-a8de95b404b4db14"
+    },
+    {
+      "ts": "2026-05-12T00:21:03Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-a8de95b404b4db14"
+    },
+    {
+      "ts": "2026-05-12T00:21:03Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-1c67d727253d8dca"
+    },
+    {
+      "ts": "2026-05-12T00:21:10Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-1c67d727253d8dca"
+    },
+    {
+      "ts": "2026-05-12T00:21:20Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-ad27123881739b37"
+    },
+    {
+      "ts": "2026-05-12T00:21:24Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-ad27123881739b37"
+    },
+    {
+      "ts": "2026-05-12T00:21:24Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-6afa08d1ae862d38"
+    },
+    {
+      "ts": "2026-05-12T00:21:27Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-6afa08d1ae862d38"
+    },
+    {
+      "ts": "2026-05-12T00:21:41Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-115ecf3730798d72"
+    },
+    {
+      "ts": "2026-05-12T00:21:46Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-115ecf3730798d72"
+    },
+    {
+      "ts": "2026-05-12T00:22:01Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-673703ea0db3a6c2"
+    },
+    {
+      "ts": "2026-05-12T00:22:05Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-673703ea0db3a6c2"
+    },
+    {
+      "ts": "2026-05-12T00:22:14Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-bfddf29548388946"
+    },
+    {
+      "ts": "2026-05-12T00:22:18Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-bfddf29548388946"
+    },
+    {
+      "ts": "2026-05-12T00:22:33Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-b2b94c3c9e1e88c7"
+    },
+    {
+      "ts": "2026-05-12T00:22:37Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-b2b94c3c9e1e88c7"
+    },
+    {
+      "ts": "2026-05-12T00:22:40Z",
+      "msg": "pm DONE | evidence: None"
+    },
+    {
+      "ts": "2026-05-12T00:23:01Z",
       "msg": "phase attestation request prepared: pm"
-    },
-    {
-      "ts": "2026-05-11T22:45:18Z",
-      "msg": "github phase-ci pm PASS run_id=25701702722 commit=3ef1133cfd77"
-    },
-    {
-      "ts": "2026-05-11T22:45:28Z",
-      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-107f8758fbc053f5"
-    },
-    {
-      "ts": "2026-05-11T22:45:49Z",
-      "msg": "module design PASS MT-1"
-    },
-    {
-      "ts": "2026-05-11T22:49:48Z",
-      "msg": "module dev DONE MT-1"
-    },
-    {
-      "ts": "2026-05-11T22:50:10Z",
-      "msg": "module QA PASS MT-1"
-    },
-    {
-      "ts": "2026-05-11T22:51:00Z",
-      "msg": "module design PASS MT-2"
-    },
-    {
-      "ts": "2026-05-11T22:51:00Z",
-      "msg": "module dev DONE MT-2"
-    },
-    {
-      "ts": "2026-05-11T22:51:08Z",
-      "msg": "module QA PASS MT-2"
-    },
-    {
-      "ts": "2026-05-11T22:52:35Z",
-      "msg": "module design PASS MT-3"
-    },
-    {
-      "ts": "2026-05-11T22:52:38Z",
-      "msg": "module dev DONE MT-3"
-    },
-    {
-      "ts": "2026-05-11T22:52:49Z",
-      "msg": "module QA PASS MT-3"
-    },
-    {
-      "ts": "2026-05-11T22:54:07Z",
-      "msg": "module design PASS MT-4"
-    },
-    {
-      "ts": "2026-05-11T22:54:40Z",
-      "msg": "module dev DONE MT-4"
-    },
-    {
-      "ts": "2026-05-11T22:54:50Z",
-      "msg": "module QA PASS MT-4"
-    },
-    {
-      "ts": "2026-05-11T22:56:36Z",
-      "msg": "module design PASS MT-5"
-    },
-    {
-      "ts": "2026-05-11T22:56:37Z",
-      "msg": "module dev DONE MT-5"
-    },
-    {
-      "ts": "2026-05-11T22:56:46Z",
-      "msg": "module QA PASS MT-5"
-    },
-    {
-      "ts": "2026-05-11T22:57:01Z",
-      "msg": "module integration PASS"
-    },
-    {
-      "ts": "2026-05-11T22:57:55Z",
-      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-107f8758fbc053f5"
-    },
-    {
-      "ts": "2026-05-11T22:58:01Z",
-      "msg": "dev DONE | evidence: FEAT-20260426-332E/core/order_lines_reader.py,FEAT-20260426-332E/core/utils.py,FEAT-20260426-332E/main.py,FEAT-20260426-332E/ui/app.py"
-    },
-    {
-      "ts": "2026-05-11T22:58:01Z",
-      "msg": "advisory gpt-code SKIPPED api_called=False"
-    },
-    {
-      "ts": "2026-05-11T22:58:23Z",
-      "msg": "phase attestation request prepared: dev"
-    },
-    {
-      "ts": "2026-05-11T23:00:52Z",
-      "msg": "github phase-ci dev PASS run_id=25702306449 commit=b031e3fea829"
-    },
-    {
-      "ts": "2026-05-11T23:00:58Z",
-      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-a1746b4558615732"
-    },
-    {
-      "ts": "2026-05-11T23:03:56Z",
-      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-a1746b4558615732"
-    },
-    {
-      "ts": "2026-05-11T23:04:49Z",
-      "msg": "qa PASS numeric=108"
-    },
-    {
-      "ts": "2026-05-11T23:05:16Z",
-      "msg": "phase attestation request prepared: qa"
-    },
-    {
-      "ts": "2026-05-11T23:07:01Z",
-      "msg": "github phase-ci qa PASS run_id=25702560285 commit=09e57a9a2d14"
-    },
-    {
-      "ts": "2026-05-11T23:07:08Z",
-      "msg": "sec SKIP risk=N/A"
-    },
-    {
-      "ts": "2026-05-11T23:07:15Z",
-      "msg": "agent run started phase=build agent=build-agent run_id=build-54186a43fc82864a"
-    },
-    {
-      "ts": "2026-05-11T23:09:03Z",
-      "msg": "agent run completed phase=build agent=build-agent run_id=build-54186a43fc82864a"
-    },
-    {
-      "ts": "2026-05-11T23:09:37Z",
-      "msg": "build DONE exe=FEAT-20260426-332E/dist/KittingMapper.exe"
     }
   ],
   "terminal_state": null,
   "harness_fail_count": 0,
   "agent_runs": {
-    "pm_planner-5732a0074fea2e67": {
+    "pm_planner-308fe7580e3592fc": {
       "schema_version": 1,
-      "run_id": "pm_planner-5732a0074fea2e67",
-      "pipeline_id": "BUG-20260511-073B",
+      "run_id": "pm_planner-308fe7580e3592fc",
+      "pipeline_id": "BUG-20260512-E68A",
       "phase": "pm_planner",
       "agent_id": "pm-planner-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-11T22:24:38Z",
-      "completed_at": "2026-05-11T22:31:54Z",
-      "token_hash": "67788eb9f3cc0d9f209c4d41d3ec16fca6c38865500d12247416a612a1a24ce5",
+      "started_at": "2026-05-12T00:05:16Z",
+      "completed_at": "2026-05-12T00:12:00Z",
+      "token_hash": "6b0f339594c82025317090c38b6c1975505d9358b04876b60d050925284dc692",
       "output_file": "step_plan.xml",
-      "output_sha256": "04aced2662bbf15f82816a4cdacf76fdd84a1177e89ff165966bb50d5465ab3f",
+      "output_sha256": "fa3b099495af0f97350af0dc6aa0cf649979b5fcc4edddb213c39bbf529ea4f3",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\pm_planner\\pm_planner-5732a0074fea2e67.json",
-      "receipt_sha256": "b51342ac22b799da6a5b1e81379d347fd189a2b1144c75c04989e1f7fdab396e",
-      "used_by_phase": "pm",
-      "used_at": "2026-05-11T22:39:46Z",
-      "commit_sha": "f7a1ece1292c30d3dfee3881d884163a475422c0",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pm_planner\\pm_planner-308fe7580e3592fc.json",
+      "receipt_sha256": "bfe65eee0ddd244723e540f3c73451ef8c4591cfa19e320ef2fcef45afa1b0f8",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
       "notes": ""
     },
-    "pipeline_manager-386972057e62bd84": {
+    "pipeline_manager-2272d7decd45072f": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-386972057e62bd84",
-      "pipeline_id": "BUG-20260511-073B",
+      "run_id": "pipeline_manager-2272d7decd45072f",
+      "pipeline_id": "BUG-20260512-E68A",
       "phase": "pipeline_manager",
       "agent_id": "pipeline-manager-agent",
       "status": "COMPLETED",
-      "started_at": "2026-05-11T22:32:16Z",
-      "completed_at": "2026-05-11T22:33:30Z",
-      "token_hash": "982cb9d0bb3a18e3ff6d6235091aa5e6bc92113c82e206ee2d6a8764d8a96ca1",
+      "started_at": "2026-05-12T00:12:03Z",
+      "completed_at": "2026-05-12T00:17:38Z",
+      "token_hash": "dc414f16b1525907b00dab54ea35737b846bf4fefd4a6b2b3bb2fa145ecf1804",
       "output_file": "manager_handoff.xml",
-      "output_sha256": "ace02862e480ff7d7854bc146189fbd2607ba7df664f9d4690ec56d4687c9ae4",
+      "output_sha256": "c3951f4b8b507ee918627898a3626de2fda20f284f23229c6b3147897158bef4",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\pipeline_manager\\pipeline_manager-386972057e62bd84.json",
-      "receipt_sha256": "901e9867559246086a71376b0c2b683b46657f9466ca6a5213b9a6c7109f48cf",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-2272d7decd45072f.json",
+      "receipt_sha256": "34f4d7563387614627cf3b961f007afc751df7b5eafb1053190252d085e32e42",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pm_planner-3ab335fc1ec6eadc": {
+      "schema_version": 1,
+      "run_id": "pm_planner-3ab335fc1ec6eadc",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:17:59Z",
+      "completed_at": "2026-05-12T00:18:07Z",
+      "token_hash": "aa557d4a82aa84241242bac2cbe5301dc03553c8ec186dc699c9f19806cd0848",
+      "output_file": "step_plan.xml",
+      "output_sha256": "d2ccdf7f25790a43804f97e6dd6a435b2670b237e2dd83f11f5545b7f9f93b9d",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pm_planner\\pm_planner-3ab335fc1ec6eadc.json",
+      "receipt_sha256": "150764b521abb5e529050d576fef6a614fb97dbae59daefb6248e3ad26f093a3",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pm_planner-0ea5c40988950433": {
+      "schema_version": 1,
+      "run_id": "pm_planner-0ea5c40988950433",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:18:27Z",
+      "completed_at": "2026-05-12T00:18:32Z",
+      "token_hash": "09511c345edc257056ff029cb2d37c256039649340ba9d4089fdb0da0eb335d9",
+      "output_file": "step_plan.xml",
+      "output_sha256": "3955dd5ad24ef5cd6b6e083d0ba5858b84b29ad49aefddcb23e43f397efcd589",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pm_planner\\pm_planner-0ea5c40988950433.json",
+      "receipt_sha256": "4f3527e873a204055af01f8d531dd90322c64d589313fdb6f60ac6ac5b8b3f5b",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-76676f6c6afa11c7": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-76676f6c6afa11c7",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:18:34Z",
+      "completed_at": "2026-05-12T00:18:37Z",
+      "token_hash": "fa88da3cc7c925ded7be44ba2aefd7ec1d48731fa8f65ff4b5960efe641a5bbd",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "c3951f4b8b507ee918627898a3626de2fda20f284f23229c6b3147897158bef4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-76676f6c6afa11c7.json",
+      "receipt_sha256": "8194aec05f284524abde76cfb681c49d0a7847870ff4e5663c4f8711e2ce940c",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pm_planner-4eb94249f31269df": {
+      "schema_version": 1,
+      "run_id": "pm_planner-4eb94249f31269df",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:18:50Z",
+      "completed_at": "2026-05-12T00:18:57Z",
+      "token_hash": "8e8a81b770b421f0295fd416dc6f36ae744cb4e964edda1205eaecb928d6c1d3",
+      "output_file": "step_plan.xml",
+      "output_sha256": "f15911961b29bc60fd6c4de17f51cfdd493387c5efa593ece7a6149867c699e4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pm_planner\\pm_planner-4eb94249f31269df.json",
+      "receipt_sha256": "654f187ccaef22d39561eb72605aa6bfb9f4b9a6d977714276ea1bbb6426006a",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-4114873ee2bd095f": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-4114873ee2bd095f",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:18:59Z",
+      "completed_at": "2026-05-12T00:19:02Z",
+      "token_hash": "5601174268575a123b01c4c841c4debd7141fdbe475c8e91f8b9d900a35c11b5",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "c3951f4b8b507ee918627898a3626de2fda20f284f23229c6b3147897158bef4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-4114873ee2bd095f.json",
+      "receipt_sha256": "12dc13cdf4e28a4d030de8d9d97f2ed2a64525311126a034489be633aacfc858",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pm_planner-589d9076929ed24c": {
+      "schema_version": 1,
+      "run_id": "pm_planner-589d9076929ed24c",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:20:29Z",
+      "completed_at": "2026-05-12T00:20:32Z",
+      "token_hash": "8dd5e2548b2865c6c6d2feca67297cf7e0342db5f64ad3926ffa8bd78e851bf9",
+      "output_file": "step_plan.xml",
+      "output_sha256": "074c20826db6a7e5840e412a7599735020aba0ea1f0815a512d8b1ca00674e93",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pm_planner\\pm_planner-589d9076929ed24c.json",
+      "receipt_sha256": "0a931ff71664281b53f5e4671f7ec7e35b05a76c949d66b84c0182f92dadacb1",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-41bb0405cfa32102": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-41bb0405cfa32102",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:20:35Z",
+      "completed_at": "2026-05-12T00:20:38Z",
+      "token_hash": "7876418c84d090d79105a946e4f563814d50ef125ea8f151013464fcba799666",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "c3951f4b8b507ee918627898a3626de2fda20f284f23229c6b3147897158bef4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-41bb0405cfa32102.json",
+      "receipt_sha256": "93f607c2f846a8e798e7f5687e920de3587aad62bd82a696b62ef035627d4c74",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pm_planner-a8de95b404b4db14": {
+      "schema_version": 1,
+      "run_id": "pm_planner-a8de95b404b4db14",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:20:59Z",
+      "completed_at": "2026-05-12T00:21:03Z",
+      "token_hash": "baed1cb468f5615f8ba3553a1de44f67803c60f98846d8435f2296fbebe0fce6",
+      "output_file": "step_plan.xml",
+      "output_sha256": "dde03e29974edc73270bf5751bace13f91e321746e2a9d9e4a0757cb0924626d",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pm_planner\\pm_planner-a8de95b404b4db14.json",
+      "receipt_sha256": "aaef4191b1982a9a812919343f1835a0f53093d5a87d404f79f719087660591f",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-1c67d727253d8dca": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-1c67d727253d8dca",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:21:03Z",
+      "completed_at": "2026-05-12T00:21:10Z",
+      "token_hash": "40ef871d85aceae87d85b5d869d0d1e67945944d51b0cc6574ebd94efd60fd1a",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "c3951f4b8b507ee918627898a3626de2fda20f284f23229c6b3147897158bef4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-1c67d727253d8dca.json",
+      "receipt_sha256": "a027831f75e3b4a8c735a38d481dde9c8e91d1e2f8e68b85e794f8c766b93e87",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pm_planner-ad27123881739b37": {
+      "schema_version": 1,
+      "run_id": "pm_planner-ad27123881739b37",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pm_planner",
+      "agent_id": "pm-planner-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:21:20Z",
+      "completed_at": "2026-05-12T00:21:24Z",
+      "token_hash": "d3b75446060ac814d097f149fa7a11ec25292f4f12bd41dd9245ec04166b798e",
+      "output_file": "step_plan.xml",
+      "output_sha256": "2ebbd40d90e6ffebb77401b16d3a4247166f39b325b366b613994bda1eb2003f",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pm_planner\\pm_planner-ad27123881739b37.json",
+      "receipt_sha256": "a521816012d239b58007ac0b2cfde1b0277b2ed3a186b9126e391545094c3ea5",
+      "used_by_phase": "pm",
+      "used_at": "2026-05-12T00:23:01Z",
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-6afa08d1ae862d38": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-6afa08d1ae862d38",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:21:24Z",
+      "completed_at": "2026-05-12T00:21:27Z",
+      "token_hash": "601bb343d7c05d67d63e28ad48ab22988154ea8e9fc54272102cb4501affdf6e",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "c3951f4b8b507ee918627898a3626de2fda20f284f23229c6b3147897158bef4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-6afa08d1ae862d38.json",
+      "receipt_sha256": "d53353b8fe5e18b7551fac5332ffa961f30e18c7b57396764e51eb92205d35b3",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-115ecf3730798d72": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-115ecf3730798d72",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:21:41Z",
+      "completed_at": "2026-05-12T00:21:46Z",
+      "token_hash": "c24850ce904b37e24888123911868438954ef7b592cb04c23a08adc53d014433",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "5394e6b5e932e6b4f75314d0d2cd6f2fb4f30d5ada33dc71e2832f6d8449a1aa",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-115ecf3730798d72.json",
+      "receipt_sha256": "6b3fee6f65442b7b214160ee16b00ef91a1eccdb413b36534e809111eeae5cb2",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-673703ea0db3a6c2": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-673703ea0db3a6c2",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:22:01Z",
+      "completed_at": "2026-05-12T00:22:05Z",
+      "token_hash": "ca160d35dd23f35420ebfec1716bcb64f7a253e092f06a9192fe9c5bdb348158",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "e1f7c309fb5ee7e20a3854cf27e7bcfb32b21247448627911e3c20b32f5e1911",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-673703ea0db3a6c2.json",
+      "receipt_sha256": "14f5b4b967dcc5b734079b324546e2fa9040ef15c38f4a827e6fc8874dfb0981",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-bfddf29548388946": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-bfddf29548388946",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:22:14Z",
+      "completed_at": "2026-05-12T00:22:18Z",
+      "token_hash": "0c786c55cf66092bfc0598f7380850896619d570b4bf583c6b5f8f1dc7e873b8",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "fb6e8096045bcc578f1dd4404f2cdb7aecc1caa588b8ea52896b4de57ae1a27f",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-bfddf29548388946.json",
+      "receipt_sha256": "fa15661d6008ee0945f5d50525ed6c3f6b1fcbdd88e3295d70b5ef0d88dcdeb4",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+      "notes": ""
+    },
+    "pipeline_manager-b2b94c3c9e1e88c7": {
+      "schema_version": 1,
+      "run_id": "pipeline_manager-b2b94c3c9e1e88c7",
+      "pipeline_id": "BUG-20260512-E68A",
+      "phase": "pipeline_manager",
+      "agent_id": "pipeline-manager-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-12T00:22:33Z",
+      "completed_at": "2026-05-12T00:22:37Z",
+      "token_hash": "eff6bdf8eb94dac2b7d01a9d698be5aa252b84d958072a548dce223079cd2798",
+      "output_file": "manager_handoff.xml",
+      "output_sha256": "ff3d222250a2eee6fa36c5c37e301b12547c4b9c2b940b6bdf0eb07c1dc371de",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260512-E68A\\pipeline_manager\\pipeline_manager-b2b94c3c9e1e88c7.json",
+      "receipt_sha256": "ad8512914719fa5472a7834332183957c639e0736fbbfe8120017c0eaa9740b8",
       "used_by_phase": "pm_manager",
-      "used_at": "2026-05-11T22:39:46Z",
-      "commit_sha": "f7a1ece1292c30d3dfee3881d884163a475422c0",
-      "notes": ""
-    },
-    "dev-107f8758fbc053f5": {
-      "schema_version": 1,
-      "run_id": "dev-107f8758fbc053f5",
-      "pipeline_id": "BUG-20260511-073B",
-      "phase": "dev",
-      "agent_id": "dev-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-05-11T22:45:28Z",
-      "completed_at": "2026-05-11T22:57:55Z",
-      "token_hash": "687fed2c2abd0b29b9e81ec1840832e65e7128012364c2e099af1427d31fdb74",
-      "output_file": "dev_handover.xml",
-      "output_sha256": "3c76b2bd612734c36e648e6c8d0e9e1d6e42bf73322ac2976b962b33be478012",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\dev\\dev-107f8758fbc053f5.json",
-      "receipt_sha256": "c88f80f4c9803a49c01e86837c726cb953468c7b946e2bbf651fbb840dbfc9dd",
-      "used_by_phase": "dev",
-      "used_at": "2026-05-11T22:58:22Z",
-      "commit_sha": "3ef1133cfd77046bf4fc81a019c4ae3941094bf3",
-      "notes": ""
-    },
-    "qa-a1746b4558615732": {
-      "schema_version": 1,
-      "run_id": "qa-a1746b4558615732",
-      "pipeline_id": "BUG-20260511-073B",
-      "phase": "qa",
-      "agent_id": "qa-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-05-11T23:00:58Z",
-      "completed_at": "2026-05-11T23:03:56Z",
-      "token_hash": "a2a92fd69f93b495812688a9ae943f3b0508b036bc95938ef6172abe909735fa",
-      "output_file": "qa_report.xml",
-      "output_sha256": "8c2618f7b19138428be639ccf6ae96ed8c197ef72c3b5454966582acf7ad52c8",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\qa\\qa-a1746b4558615732.json",
-      "receipt_sha256": "9bab168245f2c281997be8fc7f680615de6fb32ae0a801de24788579dfe27610",
-      "used_by_phase": "qa",
-      "used_at": "2026-05-11T23:05:16Z",
-      "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
-      "notes": ""
-    },
-    "build-54186a43fc82864a": {
-      "schema_version": 1,
-      "run_id": "build-54186a43fc82864a",
-      "pipeline_id": "BUG-20260511-073B",
-      "phase": "build",
-      "agent_id": "build-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-05-11T23:07:15Z",
-      "completed_at": "2026-05-11T23:09:03Z",
-      "token_hash": "6cfd81fab4ba4f903561dae1b07e2b32e944bab7a0db6b05ed54cbf6ca426e5d",
-      "output_file": "dist\\build_report.xml",
-      "output_sha256": "6b2dd925bffb660398036396d653dced7e5fc0cb6bb4d722d9708d9fac042fea",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\build\\build-54186a43fc82864a.json",
-      "receipt_sha256": "50a3a6db97b727d46868c6f5a2599c34a7a8d8046c90bd28ff809f1a31fb1951",
-      "used_by_phase": "build",
-      "used_at": "2026-05-11T23:09:37Z",
-      "commit_sha": "09e57a9a2d14708d544c5c6a1548576fa9c6ca6a",
+      "used_at": "2026-05-12T00:23:01Z",
+      "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
       "notes": ""
     }
   },
@@ -407,37 +634,34 @@
     ],
     "phases": {
       "pm": {
-        "status": "PASS",
-        "completed_at": "2026-05-11T22:45:18Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "pm",
-        "run_id": "25701702722",
-        "commit_sha": "3ef1133cfd77046bf4fc81a019c4ae3941094bf3",
-        "evidence": "github_actions_phase_run:25701702722",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\gates\\phase_ci\\pm_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "dev": {
-        "status": "PASS",
-        "completed_at": "2026-05-11T23:00:52Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "dev",
-        "run_id": "25702306449",
-        "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
-        "evidence": "github_actions_phase_run:25702306449",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\gates\\phase_ci\\dev_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "qa": {
-        "status": "PASS",
-        "completed_at": "2026-05-11T23:07:01Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "qa",
-        "run_id": "25702560285",
-        "commit_sha": "09e57a9a2d14708d544c5c6a1548576fa9c6ca6a",
-        "evidence": "github_actions_phase_run:25702560285",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\gates\\phase_ci\\qa_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "build": {
         "status": "PENDING",
@@ -456,296 +680,76 @@
     "mode": "incremental_module_gate",
     "sequence": [
       "MT-1",
-      "MT-2",
-      "MT-3",
-      "MT-4",
-      "MT-5"
+      "MT-2"
     ],
     "modules": {
       "MT-1": {
         "id": "MT-1",
-        "status": "PASS",
+        "status": "PENDING",
         "order": 1,
         "target_files": [
-          "FEAT-20260426-332E/core/order_lines_reader.py"
+          "ic_part_src/order_mapper.py"
         ],
-        "affected_function": "order_lines_reader._safe_resolve, order_lines_reader._ALLOWED_ROOT",
+        "affected_function": "ic_part_src.order_mapper.write_ic_part_zip",
         "design": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:45:49Z",
-          "report_file": "module_design_MT-1.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "DONE",
-          "completed_at": "2026-05-11T22:49:48Z",
-          "report_file": "module_handover_MT-1.xml",
-          "evidence": "FEAT-20260426-332E/core/order_lines_reader.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-1.json",
-            "validated_at": "2026-05-11T22:49:48Z",
-            "micro_task_id": "MT-1",
-            "files": [
-              "FEAT-20260426-332E/core/order_lines_reader.py"
-            ],
-            "affected_functions": [
-              "order_lines_reader._safe_resolve, order_lines_reader._ALLOWED_ROOT"
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:50:10Z",
-          "report_file": "module_qa_MT-1.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
-        "checkpoint": {
-          "created_at": "2026-05-11T22:50:10Z",
-          "files": [
-            {
-              "path": "FEAT-20260426-332E/core/order_lines_reader.py",
-              "sha256": "9d770ca9eedddcea0c4084465527d1dca65ae0de993700fbffe674e49df01431",
-              "size_bytes": 15039
-            }
-          ]
-        }
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
       },
       "MT-2": {
         "id": "MT-2",
-        "status": "PASS",
+        "status": "PENDING",
         "order": 2,
         "target_files": [
-          "FEAT-20260426-332E/main.py"
+          "po_automation/email_monitor.py"
         ],
-        "affected_function": "main._cli_main",
+        "affected_function": "po_automation.email_monitor._process_mail_item",
         "design": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:51:00Z",
-          "report_file": "module_design_MT-2.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "DONE",
-          "completed_at": "2026-05-11T22:51:00Z",
-          "report_file": "module_handover_MT-2.xml",
-          "evidence": "FEAT-20260426-332E/main.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-2.json",
-            "validated_at": "2026-05-11T22:51:00Z",
-            "micro_task_id": "MT-2",
-            "files": [
-              "FEAT-20260426-332E/main.py"
-            ],
-            "affected_functions": [
-              "main._cli_main"
-            ]
-          }
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
         },
         "qa": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:51:08Z",
-          "report_file": "module_qa_MT-2.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
-        "checkpoint": {
-          "created_at": "2026-05-11T22:51:08Z",
-          "files": [
-            {
-              "path": "FEAT-20260426-332E/main.py",
-              "sha256": "ace85d490e88727d5446ac2d00abf67a3063276cdec6b72ad2430cdf4d03aed5",
-              "size_bytes": 9349
-            }
-          ],
-          "updated_by_mt": "MT-5"
-        }
-      },
-      "MT-3": {
-        "id": "MT-3",
-        "status": "PASS",
-        "order": 3,
-        "target_files": [
-          "FEAT-20260426-332E/main.py"
-        ],
-        "affected_function": "main._cli_main",
-        "design": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:52:35Z",
-          "report_file": "module_design_MT-3.xml",
-          "evidence": null,
-          "notes": []
-        },
-        "dev": {
-          "status": "DONE",
-          "completed_at": "2026-05-11T22:52:38Z",
-          "report_file": "module_handover_MT-3.xml",
-          "evidence": "FEAT-20260426-332E/main.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-3.json",
-            "validated_at": "2026-05-11T22:52:38Z",
-            "micro_task_id": "MT-3",
-            "files": [
-              "FEAT-20260426-332E/main.py"
-            ],
-            "affected_functions": [
-              "main._cli_main"
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:52:49Z",
-          "report_file": "module_qa_MT-3.xml",
-          "evidence": null,
-          "notes": []
-        },
-        "checkpoint": {
-          "created_at": "2026-05-11T22:52:49Z",
-          "files": [
-            {
-              "path": "FEAT-20260426-332E/main.py",
-              "sha256": "ace85d490e88727d5446ac2d00abf67a3063276cdec6b72ad2430cdf4d03aed5",
-              "size_bytes": 9349
-            }
-          ],
-          "updated_by_mt": "MT-5"
-        }
-      },
-      "MT-4": {
-        "id": "MT-4",
-        "status": "PASS",
-        "order": 4,
-        "target_files": [
-          "FEAT-20260426-332E/core/utils.py",
-          "FEAT-20260426-332E/main.py",
-          "FEAT-20260426-332E/ui/app.py"
-        ],
-        "affected_function": "_compress_line_nos (main.py 로컬), _compress_line_nos (ui/app.py 로컬)",
-        "design": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:54:07Z",
-          "report_file": "module_design_MT-4.xml",
-          "evidence": null,
-          "notes": []
-        },
-        "dev": {
-          "status": "DONE",
-          "completed_at": "2026-05-11T22:54:40Z",
-          "report_file": "module_handover_MT-4.xml",
-          "evidence": "FEAT-20260426-332E/core/utils.py,FEAT-20260426-332E/main.py,FEAT-20260426-332E/ui/app.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-4.json",
-            "validated_at": "2026-05-11T22:54:40Z",
-            "micro_task_id": "MT-4",
-            "files": [
-              "FEAT-20260426-332E/core/utils.py",
-              "FEAT-20260426-332E/main.py",
-              "FEAT-20260426-332E/ui/app.py"
-            ],
-            "affected_functions": [
-              "_compress_line_nos (main.py 로컬), _compress_line_nos (ui/app.py 로컬)"
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:54:50Z",
-          "report_file": "module_qa_MT-4.xml",
-          "evidence": null,
-          "notes": []
-        },
-        "checkpoint": {
-          "created_at": "2026-05-11T22:54:50Z",
-          "files": [
-            {
-              "path": "FEAT-20260426-332E/core/utils.py",
-              "sha256": "2df7196b381ddd9d07d834f411f74f0a4263381c2965658d43edda1cec06c7f4",
-              "size_bytes": 1063
-            },
-            {
-              "path": "FEAT-20260426-332E/main.py",
-              "sha256": "ace85d490e88727d5446ac2d00abf67a3063276cdec6b72ad2430cdf4d03aed5",
-              "size_bytes": 9349
-            },
-            {
-              "path": "FEAT-20260426-332E/ui/app.py",
-              "sha256": "a87a4ed0c88bd5732e6df38bdf5a1d5ed3fbaa5f3b4eedc587af8b745509d13c",
-              "size_bytes": 30008
-            }
-          ],
-          "updated_by_mt": "MT-5"
-        }
-      },
-      "MT-5": {
-        "id": "MT-5",
-        "status": "PASS",
-        "order": 5,
-        "target_files": [
-          "FEAT-20260426-332E/main.py",
-          "FEAT-20260426-332E/ui/app.py"
-        ],
-        "affected_function": "main._cli_main, ui.app (thread worker block)",
-        "design": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:56:36Z",
-          "report_file": "module_design_MT-5.xml",
-          "evidence": null,
-          "notes": []
-        },
-        "dev": {
-          "status": "DONE",
-          "completed_at": "2026-05-11T22:56:37Z",
-          "report_file": "module_handover_MT-5.xml",
-          "evidence": "FEAT-20260426-332E/main.py,FEAT-20260426-332E/ui/app.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-5.json",
-            "validated_at": "2026-05-11T22:56:37Z",
-            "micro_task_id": "MT-5",
-            "files": [
-              "FEAT-20260426-332E/main.py",
-              "FEAT-20260426-332E/ui/app.py"
-            ],
-            "affected_functions": [
-              "main._cli_main, ui.app (thread worker block)"
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-05-11T22:56:46Z",
-          "report_file": "module_qa_MT-5.xml",
-          "evidence": null,
-          "notes": []
-        },
-        "checkpoint": {
-          "created_at": "2026-05-11T22:56:46Z",
-          "files": [
-            {
-              "path": "FEAT-20260426-332E/main.py",
-              "sha256": "ace85d490e88727d5446ac2d00abf67a3063276cdec6b72ad2430cdf4d03aed5",
-              "size_bytes": 9349
-            },
-            {
-              "path": "FEAT-20260426-332E/ui/app.py",
-              "sha256": "a87a4ed0c88bd5732e6df38bdf5a1d5ed3fbaa5f3b4eedc587af8b745509d13c",
-              "size_bytes": 30008
-            }
-          ]
-        }
+        "checkpoint": null
       }
     },
     "integration": {
-      "status": "PASS",
-      "completed_at": "2026-05-11T22:57:01Z",
-      "report_file": "integration_report.xml",
+      "status": "PENDING",
+      "completed_at": null,
+      "report_file": null,
       "evidence": null,
       "notes": []
     }
@@ -753,14 +757,14 @@
   "execution_profile": {
     "mode": "STANDARD",
     "status": "ACTIVE",
-    "reason": "5개 micro-task, 5개 파일 수정(신규 1개 포함), 핵심 파서 로직(order_lines_reader) 변경 포함",
+    "reason": "두 독립 버그 수정. MT-1은 IC-Part Excel 쓰기 로직(FS), MT-2는 Outlook COM 수신자 필터(WA). 두 수정 모두 단일 함수 내부지만 파일 2개 + EXE 빌드 필요.",
     "max_micro_tasks": null,
     "product_code_write_allowed": true,
     "phase_ci_mode": "per_phase",
     "repair_mode": "standard",
     "risk_review_required": false,
     "risk_categories": [],
-    "declared_at": "2026-05-11T22:37:44Z",
+    "declared_at": "2026-05-12T00:22:37Z",
     "escalated_at": null,
     "escalation_reason": null,
     "uncertainty": {
@@ -769,17 +773,17 @@
       "output_format_clear": true
     },
     "blast_radius": {
-      "expected_changed_files": 5,
-      "expected_changed_functions": 7,
-      "expected_changed_lines": 45
+      "expected_changed_files": 2,
+      "expected_changed_functions": 2,
+      "expected_changed_lines": 60
     },
     "risk_flags": {
       "data_deletion": false,
       "file_move": false,
-      "external_api": false,
+      "external_api": true,
       "auth_or_secret": false,
       "pipeline_protocol": false,
-      "build_or_deploy": false,
+      "build_or_deploy": true,
       "core_parser_logic": true,
       "database_or_migration": false,
       "new_dependency": false
@@ -790,6 +794,16 @@
   },
   "failure_packets": [],
   "protocol_evolution_decision": null,
+  "contract_v2": {
+    "enabled": true,
+    "frozen": true,
+    "status": "frozen",
+    "contract_hash": "574ffccfd170df395656c373630aa92db373376c00c4c1d3b7ec4d5c56fc745f",
+    "test_set_hash": "af3616eef3859dc652ea962a65ebf2bb5ceb3d3dd1be9eb99211742f7ebf6834",
+    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\task_contract.json",
+    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\test_set.json",
+    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\acceptance_summary.md"
+  },
   "pm_analysis_gate": {
     "decomp": true,
     "clarification": true,
@@ -798,82 +812,73 @@
   },
   "atomic_plan": {
     "report_file": "step_plan.xml",
-    "validated_at": "2026-05-11T22:37:44Z",
+    "validated_at": "2026-05-12T00:22:37Z",
     "audit_result": "SPLIT_REQUIRED",
-    "micro_task_count": 5,
+    "micro_task_count": 2,
     "micro_tasks": [
       {
         "id": "MT-1",
-        "affected_function": "order_lines_reader._safe_resolve, order_lines_reader._ALLOWED_ROOT",
+        "affected_function": "ic_part_src.order_mapper.write_ic_part_zip",
         "target_files": [
-          "FEAT-20260426-332E/core/order_lines_reader.py"
+          "ic_part_src/order_mapper.py"
         ],
-        "change_summary": "_ALLOWED_ROOT: Path = Path.home() 단일값을 _ALLOWED_ROOTS: List[Path]로 확장.\n        config.json의 packing_detail_path/order_lines_path에서 UNC 루트(\\\\ccikrnf\\wrkgroup)를 자동 추출하여\n        _ALLOWED_ROOTS에 포함. _safe_resolve는 List 순회로 any() 검사로 변경.\n        traversal guard 보안 속성은 유지 (목록에 없는 UNC는 여전히 ValueError 발생)."
+        "change_summary": "write_ic_part_zip 내 K 컬럼만 스캔하던 로직을 I·J·K 합집합 기준으로 교체"
       },
       {
         "id": "MT-2",
-        "affected_function": "main._cli_main",
+        "affected_function": "po_automation.email_monitor._process_mail_item",
         "target_files": [
-          "FEAT-20260426-332E/main.py"
+          "po_automation/email_monitor.py"
         ],
-        "change_summary": "main.py L180: excel_b_columns.get(\"jm\", \"G\") to excel_b_columns.get(\"jm\", \"KJ\").\n        \"G\"는 숫자 사번 컬럼(7번째)이고 \"KJ\"가 PM 이름(296번째 컬럼)이므로 기본값 수정."
-      },
-      {
-        "id": "MT-3",
-        "affected_function": "main._cli_main",
-        "target_files": [
-          "FEAT-20260426-332E/main.py"
-        ],
-        "change_summary": "main.py L166: dims_result가 None일 때 note = \"포장반\" to note = kit_place.\n        GUI(ui/app.py L469)와 동일 동작으로 통일. kit_place가 \"당일 포장반\" 등 변형값일 때 정보 손실 방지."
-      },
-      {
-        "id": "MT-4",
-        "affected_function": "_compress_line_nos (main.py 로컬), _compress_line_nos (ui/app.py 로컬)",
-        "target_files": [
-          "FEAT-20260426-332E/core/utils.py",
-          "FEAT-20260426-332E/main.py",
-          "FEAT-20260426-332E/ui/app.py"
-        ],
-        "change_summary": "1. core/utils.py 신규 생성: _compress_line_nos 함수 정의 포함.\n        2. main.py: L34~63 로컬 _compress_line_nos 정의 제거, 파일 상단에 from core.utils import _compress_line_nos 추가.\n        3. ui/app.py: L30~59 로컬 _compress_line_nos 정의 제거, 파일 상단에 from core.utils import _compress_line_nos 추가.\n        함수 시그니처/동작 동일 유지."
-      },
-      {
-        "id": "MT-5",
-        "affected_function": "main._cli_main, ui.app (thread worker block)",
-        "target_files": [
-          "FEAT-20260426-332E/main.py",
-          "FEAT-20260426-332E/ui/app.py"
-        ],
-        "change_summary": "[main.py] L107 write_date 할당 및 L108-111 logger.info 3줄 제거. L82 get_next_business_day import 제거.\n        [ui/app.py] L425 write_date 할당 및 L426 logger.info 제거.\n        [ui/app.py] L591 인라인 import re as _re 제거. 파일 상단 import 섹션에 import re 추가. L592 _re.sub to re.sub.\n        get_next_business_day 함수 자체는 core/business_day.py에 유지 (다른 참조 가능성 있음)."
+        "change_summary": "_process_mail_item 수신자 for 루프에서 Exchange DN 감지 및 SMTP 변환 로직 추가"
       }
     ],
     "design_confirmation": {
-      "validated_at": "2026-05-11T22:37:44Z",
-      "maintenance_priority": "유지보수성 우선 — 중복 코드 제거(_compress_line_nos), 명확한 경로 제한(_ALLOWED_ROOTS), 단일 진실 소스 확보가 빠른 수정보다 우선.",
-      "filter_summary": "변수명, 코드 스타일 등 P2 내부 구현 취향 질문은 유지보수성 우선 원칙으로 처리. 사용자에게 묻지 않음. 사전 분석 보고서에서 모든 기술 분기점이 확정되어 P0 질문 0개.",
-      "question_count": 1,
+      "validated_at": "2026-05-12T00:22:37Z",
+      "maintenance_priority": "유지보수성 우선 — 단일 컬럼 의존 대신 상수(ICPART_COL_*)를 활용한 합집합 방식으로 컬럼 추가에도 확장 가능하게 구현",
+      "filter_summary": "변수명·코드 스타일 등 P2 내부 구현 취향 질문은 생략. 수정 방향은 사용자가 버그 보고서에서 명시적으로 지정함.",
+      "question_count": 3,
       "questions": [
         {
-          "id": "DQ-1",
-          "priority": "P1",
+          "id": "Q1",
+          "priority": "P0",
           "category": "module_split",
-          "mt_id": "MT-4",
+          "mt_id": "MT-1",
           "recommended_option": "A",
           "option_count": 2,
-          "user_answer": "A — 사전 분석 결과로 core/utils.py 신규 생성 및 통합 확정"
+          "user_answer": "사용자 버그 보고서에서 두 버그를 독립적으로 기술함 — MT-1/MT-2 분리 확인"
+        },
+        {
+          "id": "Q2",
+          "priority": "P0",
+          "category": "implementation",
+          "mt_id": "MT-1",
+          "recommended_option": "A",
+          "option_count": 2,
+          "user_answer": "사용자 명시 요청: I·J·K 모두 비어있는 첫 번째 행 — 옵션 A 확인"
+        },
+        {
+          "id": "Q3",
+          "priority": "P0",
+          "category": "implementation",
+          "mt_id": "MT-2",
+          "recommended_option": "A",
+          "option_count": 2,
+          "user_answer": "사용자 명시: \"GetExchangeUser 예외\" 케이스 oracle 포함 요청 — 크래시 없이 폴백 확인"
         }
       ]
     },
     "execution_profile": {
       "mode": "STANDARD",
       "status": "ACTIVE",
-      "reason": "5개 micro-task, 5개 파일 수정(신규 1개 포함), 핵심 파서 로직(order_lines_reader) 변경 포함",
+      "reason": "두 독립 버그 수정. MT-1은 IC-Part Excel 쓰기 로직(FS), MT-2는 Outlook COM 수신자 필터(WA). 두 수정 모두 단일 함수 내부지만 파일 2개 + EXE 빌드 필요.",
       "max_micro_tasks": null,
       "product_code_write_allowed": true,
       "phase_ci_mode": "per_phase",
       "repair_mode": "standard",
       "risk_review_required": false,
       "risk_categories": [],
-      "declared_at": "2026-05-11T22:37:44Z",
+      "declared_at": "2026-05-12T00:22:37Z",
       "escalated_at": null,
       "escalation_reason": null,
       "uncertainty": {
@@ -882,24 +887,24 @@
         "output_format_clear": true
       },
       "blast_radius": {
-        "expected_changed_files": 5,
-        "expected_changed_functions": 7,
-        "expected_changed_lines": 45
+        "expected_changed_files": 2,
+        "expected_changed_functions": 2,
+        "expected_changed_lines": 60
       },
       "risk_flags": {
         "data_deletion": false,
         "file_move": false,
-        "external_api": false,
+        "external_api": true,
         "auth_or_secret": false,
         "pipeline_protocol": false,
-        "build_or_deploy": false,
+        "build_or_deploy": true,
         "core_parser_logic": true,
         "database_or_migration": false,
         "new_dependency": false
       }
     },
     "project_snapshot": {
-      "created_at": "2026-05-11T22:37:47Z",
+      "created_at": "2026-05-12T00:22:40Z",
       "files": {
         ".bandit": {
           "sha256": "d52de30afccbf9af2a11bf4d36bc20a159742b3d8a128449c9d6624cbf7e7626",
@@ -986,8 +991,8 @@
           "size": 1260
         },
         "manager_handoff.xml": {
-          "sha256": "ace02862e480ff7d7854bc146189fbd2607ba7df664f9d4690ec56d4687c9ae4",
-          "size": 477
+          "sha256": "ff3d222250a2eee6fa36c5c37e301b12547c4b9c2b940b6bdf0eb07c1dc371de",
+          "size": 1375
         },
         "mypy.ini": {
           "sha256": "d249843ab52959cff150634a48e676b7d54384d9dd3dedff57b858ebbc12729d",
@@ -1166,8 +1171,8 @@
           "size": 704
         },
         "FEAT-20260426-332E/main.py": {
-          "sha256": "b37c351d0ed835760d677bfecf0a0ffd008dde77fc11a9fe1ab9de55b3e1c45f",
-          "size": 10408
+          "sha256": "6ebe152884e6927a41e2c93be64257bae09b2b790d29e3cce4147737aab43311",
+          "size": 7917
         },
         "ic_part_src/app.py": {
           "sha256": "d0ef0aba3f4c7fb9a211ad55b290e4fc19cf234192d4cc92e9fc2f7a09fa4e87",
@@ -1486,8 +1491,8 @@
           "size": 957
         },
         "FEAT-20260426-332E/core/order_lines_reader.py": {
-          "sha256": "83d12907edbe40bb4cd4f00c136099d852001baba36a97f624c322a467a53d8f",
-          "size": 14424
+          "sha256": "9d770ca9eedddcea0c4084465527d1dca65ae0de993700fbffe674e49df01431",
+          "size": 15039
         },
         "FEAT-20260426-332E/core/outlook_reader.py": {
           "sha256": "cc497f149e040571ae146e6bed1d8a954acbca0cb3906401efcffc285d2834cc",
@@ -1501,13 +1506,17 @@
           "sha256": "945ba83c890c82b151dc4cb33931826f46203f24704b1e4770344887f254f8ef",
           "size": 6003
         },
+        "FEAT-20260426-332E/core/utils.py": {
+          "sha256": "2df7196b381ddd9d07d834f411f74f0a4263381c2965658d43edda1cec06c7f4",
+          "size": 1063
+        },
         "FEAT-20260426-332E/core/__init__.py": {
           "sha256": "87cd03c751a9cb073e946437a27685b988e4f0f6bb08eb703e99a7c8f1c6110e",
           "size": 43
         },
         "FEAT-20260426-332E/ui/app.py": {
-          "sha256": "e60f0c5b16526c0d779d4624b2d4643424fe891ae3afd74eb3b07f4d50b262f7",
-          "size": 31144
+          "sha256": "c5f81e59e1b9abefda1a1ca7c2e9b333901cc81d33b1a00a2a10a73843114f51",
+          "size": 29994
         },
         "FEAT-20260426-332E/ui/__init__.py": {
           "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -1524,6 +1533,14 @@
         "pipeline_outputs/BUG-20260510-9F70/outputs_manifest.json": {
           "sha256": "11ab49203ec85ccd69b9ac4821df465358acd95b879d61fba0f97fe2fcd222ad",
           "size": 652
+        },
+        "pipeline_outputs/BUG-20260511-073B/KittingMapper-EXE-KittingMapper.exe": {
+          "sha256": "eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0",
+          "size": 37778246
+        },
+        "pipeline_outputs/BUG-20260511-073B/outputs_manifest.json": {
+          "sha256": "794a6c450d23bbe34c66efa2c820f77ba01048647a1aecfff38c655bf8310d98",
+          "size": 700
         },
         "pipeline_outputs/IMP-20260511-92A6/KittingMapper-KittingMapper_inspection_report.md": {
           "sha256": "c0a2d5fe04827947e3d2c4cd10da222aeaecb8b939cbee5f5bbb5057b3d40b5c",
@@ -1612,6 +1629,54 @@
         "tests/oracles/BUG-20260511-073B/MT-5-deadcode-edge/input.json": {
           "sha256": "9fbcfd0b90d7457d24f544372237592437505eaff80fe6e7ce587e6efa73b316",
           "size": 656
+        },
+        "tests/oracles/BUG-20260512-E68A/mt1/edge/expected.json": {
+          "sha256": "6b54c9a24d378c47c0fa5b416506877c0610c40acabb55d63e3276813bfac096",
+          "size": 163
+        },
+        "tests/oracles/BUG-20260512-E68A/mt1/edge/input.json": {
+          "sha256": "8a9eac1cc98331424111f63e97767045319952da63ee7e29be0372f43b38e4a2",
+          "size": 611
+        },
+        "tests/oracles/BUG-20260512-E68A/mt1/exception/expected.json": {
+          "sha256": "83c5556f9620cdcbe2b400555c79660ccec611390380d0b54c071569eb76b8f6",
+          "size": 178
+        },
+        "tests/oracles/BUG-20260512-E68A/mt1/exception/input.json": {
+          "sha256": "bce47db7edf1925760aefe77ca30147edcd8964877f99a1faab62653cb2b1af5",
+          "size": 269
+        },
+        "tests/oracles/BUG-20260512-E68A/mt1/normal/expected.json": {
+          "sha256": "7c53ac39f1d9f4cf10ce1e5f759b60deea599c1c22500e22f7d1321f0197d283",
+          "size": 143
+        },
+        "tests/oracles/BUG-20260512-E68A/mt1/normal/input.json": {
+          "sha256": "31523c0f85d4c798870cf2009c1afefea1c02746d484e93cb3952230d747f4a9",
+          "size": 838
+        },
+        "tests/oracles/BUG-20260512-E68A/mt2/edge/expected.json": {
+          "sha256": "724b667229120db6dac40e86506cdf03fa0992f2d77f8635fa187bcf2b9a5a24",
+          "size": 207
+        },
+        "tests/oracles/BUG-20260512-E68A/mt2/edge/input.json": {
+          "sha256": "b7027a0a7c578b94b9df48ee61e15a0146bfc00575eaafd8e78df5e2f23f3353",
+          "size": 298
+        },
+        "tests/oracles/BUG-20260512-E68A/mt2/exception/expected.json": {
+          "sha256": "b78b1dcb589785a8b8082365cae913aae82329e2ba9a99376ee019da35d10703",
+          "size": 313
+        },
+        "tests/oracles/BUG-20260512-E68A/mt2/exception/input.json": {
+          "sha256": "88e4e5939b477ce1bcc2d8e3ac4fc1c631a9c8ee5836e34a5b62b91cc3133041",
+          "size": 338
+        },
+        "tests/oracles/BUG-20260512-E68A/mt2/normal/expected.json": {
+          "sha256": "b885f904b9c1a84d370d902ae507eec87f7c22f278089c77a5dec2b06c05ab09",
+          "size": 173
+        },
+        "tests/oracles/BUG-20260512-E68A/mt2/normal/input.json": {
+          "sha256": "a35e9dde2516a99479e494771decc329de4cfbf4b7bb6506d17939eb602de471",
+          "size": 140
         },
         "tests/oracles/IMP-20260510-184A/edge_01/expected.txt": {
           "sha256": "998ccf616845fbd499cb9af01f47e877a7b5e6c6982e4098016424acaf9182d1",
@@ -1702,105 +1767,12 @@
     }
   },
   "pm_manager_handoff": {
-    "validated_at": "2026-05-11T22:37:47Z",
+    "validated_at": "2026-05-12T00:22:40Z",
     "report_file": "manager_handoff.xml",
-    "step_plan_sha256": "04aced2662bbf15f82816a4cdacf76fdd84a1177e89ff165966bb50d5465ab3f",
-    "planner_run_id": "pm_planner-5732a0074fea2e67",
+    "step_plan_sha256": "2ebbd40d90e6ffebb77401b16d3a4247166f39b325b366b613994bda1eb2003f",
+    "planner_run_id": "pm_planner-ad27123881739b37",
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
-  },
-  "contract_v2": {
-    "enabled": true,
-    "frozen": true,
-    "status": "frozen",
-    "contract_hash": "9bd75631a7c04d893c78098a8bc5d9ddecb5e6549b88daeb2e7e2816640d4afe",
-    "test_set_hash": "6f401ee0841d71f4e27a03607654309700e9d8b5c08dd2a4293d7462e7fea516",
-    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\task_contract.json",
-    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\test_set.json",
-    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\acceptance_summary.md"
-  },
-  "trusted_phase_runs": [
-    {
-      "recorded_at": "2026-05-11T22:45:18Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "pm",
-      "run_id": "25701702722",
-      "commit_sha": "3ef1133cfd77046bf4fc81a019c4ae3941094bf3",
-      "artifact": "pipeline-phase-attestation"
-    },
-    {
-      "recorded_at": "2026-05-11T23:00:52Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "dev",
-      "run_id": "25702306449",
-      "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
-      "artifact": "pipeline-phase-attestation"
-    },
-    {
-      "recorded_at": "2026-05-11T23:07:01Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "qa",
-      "run_id": "25702560285",
-      "commit_sha": "09e57a9a2d14708d544c5c6a1548576fa9c6ca6a",
-      "artifact": "pipeline-phase-attestation"
-    }
-  ],
-  "dev_handover": {
-    "report_file": "dev_handover.xml",
-    "validated_at": "2026-05-11T22:57:58Z",
-    "producer": "dev-agent"
-  },
-  "dev_gate_flags": {
-    "scope_declared": true
-  },
-  "atomic_scope": {
-    "manifest_file": "scope_manifest.json",
-    "validated_at": "2026-05-11T22:58:01Z",
-    "micro_task_ids": [
-      "MT-1",
-      "MT-2",
-      "MT-3",
-      "MT-4",
-      "MT-5"
-    ],
-    "files": [
-      "FEAT-20260426-332E/core/order_lines_reader.py",
-      "FEAT-20260426-332E/core/utils.py",
-      "FEAT-20260426-332E/main.py",
-      "FEAT-20260426-332E/ui/app.py"
-    ],
-    "affected_functions": [
-      "_compress_line_nos (main.py 로컬), _compress_line_nos (ui/app.py 로컬)",
-      "main._cli_main",
-      "main._cli_main, ui.app (thread worker block)",
-      "order_lines_reader._safe_resolve, order_lines_reader._ALLOWED_ROOT"
-    ],
-    "actual_diff": {
-      "added": [
-        "FEAT-20260426-332E/core/utils.py"
-      ],
-      "modified": [
-        "FEAT-20260426-332E/core/order_lines_reader.py",
-        "FEAT-20260426-332E/main.py",
-        "FEAT-20260426-332E/ui/app.py"
-      ],
-      "deleted": [],
-      "changed": [
-        "FEAT-20260426-332E/core/order_lines_reader.py",
-        "FEAT-20260426-332E/core/utils.py",
-        "FEAT-20260426-332E/main.py",
-        "FEAT-20260426-332E/ui/app.py"
-      ]
-    }
-  },
-  "qa_report_validation": {
-    "report_file": "qa_report.xml",
-    "validated_at": "2026-05-11T23:04:49Z",
-    "numeric_score": 108,
-    "verdict": "PASS"
   }
 }
