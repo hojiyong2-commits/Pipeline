@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <mt_id>MT-4</mt_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <file>scope_manifest_MT-4_IMP-00BC.json</file>
+  </evidence>
+  <implementation_summary>
+    1. pm-planner-agent.md: "## Preflight Dependency Rule" + "## PM Planner Retry Limit" 섹션 추가.
+    2. qa-agent.md: "## Round-trip Gate" (failure_signature=RT:round_trip_missing) + "## Codex Review Gate 차단 조건" (failure_signature=CR:unresolved_finding) 섹션 추가.
+    3. pipeline-manager-agent.md: "## Codex Review Gate 절차" + "## Phase CI Batching" 섹션 추가.
+    기존 frontmatter 및 기존 콘텐츠 보존 (IMP-C0FC 원칙).
+  </implementation_summary>
+  <implemented_files>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+  </implemented_files>
+  <self_check>
+    <python39_syntax>N/A (MD 파일)</python39_syntax>
+    <type_hinting>N/A</type_hinting>
+    <error_handling>N/A</error_handling>
+    <path_safety>N/A</path_safety>
+    <security>PASS — 하드코딩 시크릿 없음</security>
+    <al_edge_cases>N/A</al_edge_cases>
+    <pd_policy>N/A</pd_policy>
+    <docstring>PASS — 각 섹션에 목적 설명 포함</docstring>
+  </self_check>
+</module_handover>

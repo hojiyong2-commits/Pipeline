@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>FEAT-20260512-627D</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>ic_part_src/order_mapper.py</file>
+    </files_to_modify>
+    <functions_to_modify>
+      <function>_clone_row_xml</function>
+      <function>write_ic_part_zip (backfill 블록)</function>
+    </functions_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>_clone_row_xml + write_ic_part_zip (backfill 블록)</target_function>
+    <change_type>code_deletion</change_type>
+    <lines_changed>40</lines_changed>
+    <api_signature_changed>false</api_signature_changed>
+    <call_sites_affected>none</call_sites_affected>
+    <regression_risk>LOW — 코드 삭제만, 추가 로직 없음</regression_risk>
+  </impact_analysis>
+
+  <evidence>
+    <file>ic_part_src/order_mapper.py</file>
+    <file>scope_manifest.json</file>
+    <file>scope_manifest_MT-1.json</file>
+    <file>scope_manifest_MT-2.json</file>
+    <file>module_handover_MT-1.xml</file>
+    <file>module_handover_MT-2.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>FEAT-20260512-627D</pipeline_id>
+    <evidence>
+      <file>ic_part_src/order_mapper.py</file>
+      <file>scope_manifest.json</file>
+      <file>module_handover_MT-1.xml</file>
+      <file>module_handover_MT-2.xml</file>
+      <file>integration_report.xml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+</dev_handover>

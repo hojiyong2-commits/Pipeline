@@ -58,7 +58,7 @@ Do not use `test_results.jsonl` or harness scores as a COMPLETE criterion. Old l
 
 | Blocker | RCA target | Normal repair path |
 |---|---|---|
-| PM phase attestation FAIL/PENDING | step_plan, decomposition audit, receipt, CI artifact | rerun PM receipt/phase-ci |
+| PM phase attestation FAIL/PENDING | step_plan, decomposition audit, planner receipt, manager receipt, CI artifact | rerun PM planner/manager receipts and phase-ci |
 | Dev phase attestation FAIL/PENDING | dev_handover, scope_manifest, changed-file diff | rerun the failing module or Dev phase |
 | QA phase attestation FAIL/PENDING | qa_report, execution evidence | QA rework or Dev fix |
 | Build phase attestation FAIL/PENDING | build_report, artifact path | Build fix and phase-ci rerun |
@@ -94,9 +94,9 @@ When recommending a protocol IMP, list every producer/consumer file that must ch
 | Producer change | Consumer files to check |
 |---|---|
 | `pipeline.py` gate or CLI change | `CLAUDE.md`, `.claude/commands/task.md`, affected agent MD, tests |
-| PM planning rule change | `pm-agent.md`, `CLAUDE.md`, QA boundary checks, tests |
+| PM planning rule change | `pm-planner-agent.md`, `pipeline-manager-agent.md`, `pm-agent.md` compatibility notes, `CLAUDE.md`, QA boundary checks, tests |
 | Dev scope rule change | `dev-agent.md`, `qa-agent.md`, `pipeline.py`, tests |
-| QA verdict rule change | `qa-agent.md`, `pm-agent.md`, `pipeline.py`, tests |
+| QA verdict rule change | `qa-agent.md`, `pipeline-manager-agent.md`, `pm-agent.md` compatibility notes, `pipeline.py`, tests |
 | Build/report rule change | `build-agent.md`, `CLAUDE.md`, `pipeline.py`, tests |
 | Phase 7/user acceptance change | `test-harness-agent.md`, `.github/workflows/**`, PR template/comment scripts, tests |
 

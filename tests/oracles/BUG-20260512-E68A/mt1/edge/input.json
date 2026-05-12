@@ -1,0 +1,8 @@
+{
+  "description": "K 컬럼만 row 12까지 값 있고, I·J는 row 10까지만 — I·J·K 합집합으로 row 12가 최대",
+  "sheet_xml_snippet": "<row r=\"6\"><c r=\"I6\" t=\"s\"><v>0</v></c><c r=\"J6\" t=\"s\"><v>1</v></c><c r=\"K6\" t=\"s\"><v>2</v></c></row><row r=\"10\"><c r=\"I10\" t=\"s\"><v>3</v></c><c r=\"J10\" t=\"s\"><v>4</v></c><c r=\"K10\" t=\"s\"><v>5</v></c></row><row r=\"11\"><c r=\"K11\" t=\"s\"><v>6</v></c></row><row r=\"12\"><c r=\"K12\" t=\"s\"><v>7</v></c></row>",
+  "ICPART_DATA_START_ROW": 6,
+  "ICPART_COL_PROJECT_ID": 9,
+  "ICPART_COL_ORDER_NO": 10,
+  "ICPART_COL_PO_NO": 11
+}

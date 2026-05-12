@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<build_report>
+  <pipeline_id>FEAT-20260512-627D</pipeline_id>
+  <status>BUILD SUCCESS</status>
+
+  <section_1_command>
+    <tool>pyinstaller</tool>
+    <spec_file>ic_part_src/ICPartAutomation.spec</spec_file>
+    <command>pyinstaller --noconfirm ICPartAutomation.spec</command>
+    <mode>onefile windowed (console=False)</mode>
+  </section_1_command>
+
+  <section_2_spec>
+    <spec_name>ICPartAutomation.spec</spec_name>
+    <entry_point>ic_part_src/main.py</entry_point>
+    <collect_all>openpyxl</collect_all>
+    <hiddenimports>openpyxl, openpyxl.styles, openpyxl.utils</hiddenimports>
+    <upx>false</upx>
+    <noarchive>false</noarchive>
+  </section_2_spec>
+
+  <section_3_output>
+    <exe_path>ic_part_src/dist/ICPartAutomation.exe</exe_path>
+    <exe_size_bytes>37768096</exe_size_bytes>
+    <exe_size_mb>36.0</exe_size_mb>
+    <build_dir>ic_part_src/build/ICPartAutomation</build_dir>
+    <dist_dir>ic_part_src/dist</dist_dir>
+  </section_3_output>
+
+  <section_4_verification>
+    <exe_exists>true</exe_exists>
+    <exe_non_zero>true</exe_non_zero>
+    <build_log_errors>none detected</build_log_errors>
+    <upx_applied>false</upx_applied>
+    <console_mode>false (windowed)</console_mode>
+  </section_4_verification>
+
+  <section_5_artifacts>
+    <artifact>
+      <name>ICPartAutomation.exe</name>
+      <path>ic_part_src/dist/ICPartAutomation.exe</path>
+      <size_bytes>37768096</size_bytes>
+      <type>Windows EXE (windowed, single-file)</type>
+    </artifact>
+    <artifact>
+      <name>build_report.xml</name>
+      <path>dist/build_report.xml</path>
+      <type>Build report</type>
+    </artifact>
+  </section_5_artifacts>
+
+  <section_6_qa_mapping>
+    <mt id="MT-1" qa_result="PASS">_clone_row_xml U/W 값 상속 분기 제거</mt>
+    <mt id="MT-2" qa_result="PASS">write_ic_part_zip Backfill U/W/V 블록 삭제</mt>
+    <overall_qa_score>112/120</overall_qa_score>
+    <overall_qa_verdict>PASS</overall_qa_verdict>
+  </section_6_qa_mapping>
+</build_report>

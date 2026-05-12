@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <mt_id>MT-2</mt_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>codex_review_result.json</file>
+    <file>scope_manifest_MT-2_IMP-00BC.json</file>
+  </evidence>
+  <implementation_summary>
+    1. cmd_review(args) 함수 추가 (cmd_preflight 직후). subaction: codex/status/resolve.
+       - codex: git diff --name-only + full diff SHA256 수집, codex_review_result.json 생성
+       - status: unresolved HIGH/CRITICAL findings 수 출력
+       - resolve: --id 지정 finding을 resolved=true로 표시
+    2. _check_codex_review_gate(state) 헬퍼 함수 추가 (cmd_check 직전).
+       - codex_review_result.json 없으면 건너뜀 (선택적)
+       - unresolved HIGH/CRITICAL 존재 시 FAIL
+       - diff_sha256 불일치 시 FAIL
+    3. cmd_check() 에 QA phase 진입 시 _check_codex_review_gate 호출 추가.
+    4. argparse에 "review" 서브파서 (codex/status/resolve) 등록.
+    5. COMMAND_MAP에 "review": cmd_review 추가.
+    6. logging import 추가 (import logging).
+    7. 모든 subprocess 호출에서 bytes 모드 + decode("utf-8", errors="replace") 적용.
+  </implementation_summary>
+  <implemented_files>
+    <file>pipeline.py</file>
+  </implemented_files>
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+</module_handover>

@@ -1,0 +1,317 @@
+<pm_planner_output>
+<step_plan>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning - Clustered Verification Pipeline + Codex Review Gate</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>META, PD, AL</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>이 IMP는 신뢰 루트(pipeline.py, CLAUDE.md, .claude/agents/**, .github/workflows/**)를 모두 수정합니다. pipeline_protocol/build_or_deploy/core_parser_logic 위험이 동시에 발생하므로 Fast Path 금지, conservative repair + per-phase CI 유지, Incremental Module Gate 전체 적용이 의무입니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>11</expected_changed_files>
+      <expected_changed_functions>9</expected_changed_functions>
+      <expected_changed_lines>900</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>true</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <env_snapshot>
+    <python_version>3.10.x</python_version>
+    <installed_packages>standard library only; pipeline.py uses argparse/json/pathlib. Dev 진입 시 ruff/mypy/bandit/pytest 존재 재확인.</installed_packages>
+    <encoding>cp949 (Windows 기본). 모든 신규 JSON 파일은 utf-8 + ensure_ascii=False 강제.</encoding>
+    <screen_size>N/A (non-GUI task)</screen_size>
+  </env_snapshot>
+
+  <interface_spec>
+    - Input: 사용자 11단계 명세, preflight_report.json 스키마, codex_review_result.json 스키마.
+    - Output: pipeline.py 신규 명령 (preflight, review codex|status|resolve, gates batch-ci), 수정된 cmd_check/cmd_build, agent MD 3종 + CLAUDE.md + ci.yml 업데이트.
+    - Validation: contract_audit PASS (완료), P0 oracle round-trip (T001~T004, T008), MT-4/MT-5 file_output_check, 신뢰 루트 per-phase CI 4회 유지.
+  </interface_spec>
+
+  <design_confirmation>
+    <module_split_shown_to_user>true</module_split_shown_to_user>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintainability_priority>true</maintainability_priority>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명, 헬퍼 함수명, 로그 텍스트, JSON 키 카멜/스네이크 등 P2 수준 내부 취향 질문은 묻지 않고 유지보수성 우선 원칙으로 처리.</filter_summary>
+    <decision_questions>
+      <question id="Q1" priority="P1" category="module_split">
+        <user_facing_question>pipeline.py 변경을 몇 개 MT로 나눌까요? 어느 방식으로 진행할지 선택해 주세요.</user_facing_question>
+        <why_it_matters>MT 수가 많으면 module gate 사이클이 늘어나 검증은 촘촘해지지만 작업 시간이 커집니다. 적으면 빠르지만 한 MT가 깨지면 영향 범위가 큽니다.</why_it_matters>
+        <evidence>preflight_report.json — 관련 함수 9개, 변경 예상 라인 900. pipeline.py 7960줄 중 cmd_check / cmd_build / cmd_agent / subparser / GATE_RULES 5개 영역에 동시 변경 필요.</evidence>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>3 MT 묶음 방식</label>
+            <approach>MT-1 preflight, MT-2 review 명령, MT-3 (check/build_deferred/batch-ci/pm_planner_retry 묶음). 3 MT.</approach>
+            <benefit>scope가 명확하고 module qa 횟수가 적어 신뢰 루트 수정 시간을 줄입니다.</benefit>
+            <cost>MT-3가 다소 큼(약 320줄) — 함수별 grep 증거로 boundary 명확화 필요.</cost>
+          </option>
+          <option id="B">
+            <label>6 MT 세분화 방식</label>
+            <approach>preflight / review_codex / review_status_resolve / check_qa_gate / build_deferred / pm_planner_retry로 6 MT 분리.</approach>
+            <benefit>module qa 단위가 작아 회귀 차단력이 높아짐.</benefit>
+            <cost>per-phase CI 4회 사이클을 6회 module qa와 결합 시 작업 시간 1.5~2배.</cost>
+          </option>
+        </options>
+        <user_answer>B — 6 MT 세분화 선택</user_answer>
+      </question>
+      <question id="Q2" priority="P1" category="architecture">
+        <user_facing_question>새 11단계 흐름을 CLAUDE.md에 어떻게 반영할까요? 어느 방식으로 진행할지 선택해 주세요.</user_facing_question>
+        <why_it_matters>기존 CLAUDE.md는 Phase 1~9 + 부속 게이트로 구성되어 있습니다. 11단계 흐름은 같은 phase를 재명명하므로 중복 노출이 일어날 수 있습니다.</why_it_matters>
+        <evidence>CLAUDE.md 852줄. "Phase 1~9", "Mandatory Pipeline", "External Gate Phase" 등 기존 섹션이 11단계와 1:1 매핑됩니다.</evidence>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>기존 섹션 업데이트</label>
+            <approach>기존 섹션을 업데이트하여 Preflight, Incident Cluster, Codex Review Gate, Batched CI, Deferred Build 5개 신규 개념을 자연스럽게 끼워 넣습니다.</approach>
+            <benefit>중복 제거, 단일 진실 출처(SSoT) 유지. agent MD 참조와 일관성.</benefit>
+            <cost>편집 범위가 6~8개 섹션에 걸침.</cost>
+          </option>
+          <option id="B">
+            <label>새 섹션 추가 방식</label>
+            <approach>"Clustered Verification Pipeline" 새 섹션을 추가하고 기존 Phase 1~9를 그대로 유지합니다.</approach>
+            <benefit>편집 범위가 좁고 기존 섹션 훼손 위험이 낮습니다.</benefit>
+            <cost>같은 단계가 두 곳에서 다른 이름으로 설명되어 모순 위험. IMP-20260507-0EDC drift 규칙 위반.</cost>
+          </option>
+        </options>
+        <user_answer>A — 기존 섹션 업데이트 선택</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    - MT-1 (preflight): pipeline.py에 cmd_preflight(args) 함수 추가. argparse subparser "preflight" 등록 (line 7511 근방). 산출물 preflight_report.json (schema_version=1, pipeline_id, generated_at UTC ISO8601, related_files, recent_pipelines_same_file, tool_facts.ruff_rules_verified/ruff_rules_not_found, build_required, build_reason, writer_reader_pairs). ruff 규칙 검증은 `ruff rule [code]` 서브프로세스 호출 결과(returncode=0=verified, returncode!=0=not_found)로 판정. recent_pipelines_same_file은 pipeline_state 또는 pipeline_history/* 디렉터리에서 최근 7일치 기록 스캔. utf-8 + ensure_ascii=False.
+    - MT-2 (review gate): pipeline.py에 cmd_review(args) 함수와 "review" 최상위 subparser 추가 (subaction: codex/status/resolve). `review codex --base main --output codex_review_result.json`은 `git diff --name-only main...HEAD` + `git diff main...HEAD | sha256sum`을 계산하여 reviewed_files / diff_sha256 / findings(현재는 빈 배열로 시작, 실제 Codex 호출은 별도 IMP에서 통합)을 codex_review_result.json에 기록. `review status`는 unresolved HIGH/CRITICAL 개수 출력. `review resolve --id CR-001 --resolution review_resolution.json`은 resolution.json을 읽어 finding을 resolved=true로 마킹하고 resolved_at 타임스탬프를 review 타임스탬프보다 늦게 검증. cmd_check QA gate에 추가 조건 4가지: codex_review_result.json 존재 + reviewed_files >= dev_changed_files + diff_sha256 == 현재 diff SHA + unresolved HIGH/CRITICAL == 0. 미충족 시 "[CODEX REVIEW REQUIRED]" 출력 후 exit 1. 기존 cmd_codex(L6092, doctor)는 절대 변경 금지 - `review` 명령은 별도 namespace.
+    - MT-3 (batch-ci + build_deferred + pm_planner retry): pipeline.py 모듈 상수 TRUST_ROOT_PATTERNS = ["pipeline.py", "CLAUDE.md", ".claude/agents/", ".github/workflows/", ".github/CODEOWNERS", ".codex/skills/"] 정의. `gates batch-ci --probe --changed-files a,b` 서브명령 추가 → {is_trust_root, ci_mode} JSON 출력. trust-root 포함 시 ci_mode="per_phase", 미포함 시 "batched". cmd_build에 --build-deferred 플래그 추가: packaging 파일(.spec, requirements.txt, pyproject.toml, entrypoint) 미변경 + 사용자 즉시 EXE 미요구 시 build_deferred=true를 pipeline_state.json에 기록하고 final ACCEPT 전 build 강제 실행 hook 추가. pm_planner_retry_count를 pipeline_state.json["pm_planner_retry_count"]로 추적 - _agent_run_start 내 phase=="pm_planner" 분기에서 retry_count >= 2 검사, 초과 시 failure_packet.json 작성 후 "[PM PLANNER RETRY LIMIT]" 출력 + exit 1.
+    - MT-4 (agent MD sync): pm-planner-agent.md에 "## Preflight Dependency Rule" + "## PM Planner Retry Limit" 섹션 추가. qa-agent.md에 "## Round-trip Gate" (writer_reader_pairs 검증 의무, failure_signature=RT:round_trip_missing) + "## Codex Review Gate 대응 검증" (failure_signature=CR:unresolved_finding) 섹션 추가. pipeline-manager-agent.md에 "## Codex Review Gate 절차" (Dev 후 QA 전 review codex → status → resolve → check --phase qa 순) + "## Phase CI Batching" (TRUST_ROOT 포함 시 per_phase 유지, 미포함 시 batch-ci) 섹션 추가. 신규 섹션은 frontmatter 외 본문 끝에 헤더로 추가 - 기존 섹션 텍스트 보존(IMP-C0FC 무손상 원칙). 모든 producer-consumer 묶음 패치를 단일 MT에서 수행.
+    - MT-5 (CLAUDE.md + ci.yml): CLAUDE.md 기존 섹션을 업데이트 - "## Read First: Mandatory Pipeline"에 11단계 흐름 명시(Preflight/Incident Cluster/PM/Design/Dev Module Loop/Codex Review/QA + Round-trip/Final Batched CI/Final Build 1회 deferred 가능/User ACCEPT/Architect), "### Three-Gate External Authority Mode" 섹션에 Codex Review Gate 항목 추가, 새 항목 "### Phase CI Batching"에 TRUST_ROOT 규칙 명시, "### Deferred Build" 새 항목 추가. .github/workflows/ci.yml에 trust-root 패턴 감지 분기 추가 (변경 파일 grep 후 trust-root 포함이면 기존 per-phase 검증, 미포함이면 마지막 1회 batch 검증). ci.yml 변경은 신뢰 루트 변경이므로 이 IMP의 CI는 per-phase 유지 (자기 자신을 batching 처리하지 않음). Drift 방지: pipeline.py의 TRUST_ROOT_PATTERNS 상수 변경이 발생할 때마다 CLAUDE.md "### Phase CI Batching" 목록과 동일 MT에서 함께 업데이트 (IMP-20260507-0EDC 의무).
+    - 모든 신규 JSON 출력은 utf-8 + ensure_ascii=False. 모든 신규 hard gate 오류는 단순 한국어 메시지 + exit 1. 각 신규 명령은 --debug 미지정 시 traceback 노출 금지.
+    - WA category 미해당 (외부 네트워크/RPA 없음). FS category 부분 해당 - preflight_report.json/codex_review_result.json/review_resolution.json/failure_packet.json은 dev-agent.md "FS.safe_write/encoding/traversal" 패턴 의무 적용 (path 검증, atomic write, encoding 명시).
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.cmd_preflight</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.main subparser registration (line ~7511)</site>
+        <site>pipeline.cmd_preflight (신규)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>sub = parser.add_subparsers</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_preflight 추가 - preflight_report.json 생성 (관련 파일/최근 파이프라인/ruff 사실/build 필요성/writer-reader 후보).</change_summary>
+      <line_estimate>180</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>pipeline.cmd_review</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.main subparser registration (line ~7511)</site>
+        <site>pipeline.cmd_check (line 3462) - QA gate 보강</site>
+        <site>pipeline.cmd_review (신규)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_check\(</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>def cmd_codex\(</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_review (codex/status/resolve) 추가 + cmd_check QA gate에 codex_review_result.json 검증 4조건 추가. 기존 cmd_codex(doctor)는 변경 금지.</change_summary>
+      <line_estimate>280</line_estimate>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>pipeline.cmd_build, pipeline.cmd_gates(batch-ci), pipeline._agent_run_start</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_build (line 3897)</site>
+        <site>pipeline.cmd_gates (line 6532) - batch-ci subaction 추가</site>
+        <site>pipeline._agent_run_start (line 2810) - pm_planner retry 검사</site>
+        <site>pipeline.main gates subparser (line 7769) - batch-ci 등록</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_build\(</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>def _agent_run_start\(</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>gsub = p_gates.add_subparsers</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TRUST_ROOT_PATTERNS 모듈 상수 + gates batch-ci 서브명령 + cmd_build --build-deferred 플래그 + _agent_run_start pm_planner retry limit (2회) + failure_packet.json 작성.</change_summary>
+      <line_estimate>320</line_estimate>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>doc.pm_planner_agent.preflight_dependency, doc.qa_agent.round_trip_gate, doc.pipeline_manager_agent.codex_review_gate</affected_function>
+      <target_files>
+        <file>.claude/agents/pm-planner-agent.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Preflight Dependency Rule</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>agent MD 3종에 Preflight/Round-trip/Codex Review/Retry 규칙 섹션 추가 (producer-consumer 묶음 패치). 기존 섹션 보존.</change_summary>
+      <line_estimate>120</line_estimate>
+    </micro_task>
+    <micro_task id="MT-5">
+      <affected_function>doc.CLAUDE_md.clustered_verification_pipeline, workflow.ci_yml.batch_ci_branch</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Mandatory Pipeline</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>phase-ci|prepare-phase</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>CLAUDE.md 기존 섹션 업데이트로 11단계 흐름 + Preflight + Codex Review Gate + Phase CI Batching + Deferred Build 반영. ci.yml에 trust-root 감지 분기 추가.</change_summary>
+      <line_estimate>200</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 - pipeline.py 기존 호환성 유지. argparse subparser typing 일관.</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>pythonPath=.venv/python; typeCheckingMode=basic; ruff enabled</vscode>
+  </env_specs>
+
+  <decomposition_audit>
+    <total_functions_identified>9</total_functions_identified>
+    <micro_task_count>5</micro_task_count>
+    <grep_executions>7</grep_executions>
+    <split_decision>pipeline.py 단일 파일 변경이 7960줄 중 5개 영역(subparser, cmd_check, cmd_build, cmd_gates, _agent_run_start)에 분산되므로 함수 책임 단위로 MT-1(preflight)/MT-2(review)/MT-3(batch+build+retry)로 분할. agent MD 3종은 producer-consumer 묶음 의무로 단일 MT-4. CLAUDE.md + ci.yml은 문서/워크플로우 동시 업데이트 묶음(IMP-20260507-0EDC drift 방지)으로 MT-5. 100라인 초과 + 파일 3개 초과 분할 의무 충족.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <acceptance_criteria>
+    - T001 (P0 normal): codex_review_result.json에 unresolved HIGH finding이 있을 때 `pipeline.py check --phase qa` exit=1 + 메시지에 "CR:unresolved_finding" 포함.
+    - T002 (P0 edge): `pipeline.py preflight` 가 ruff_rule_requested=PLW0621를 ruff_rules_not_found에 기록.
+    - T003 (P0 normal): `pipeline.py gates batch-ci --probe --changed-files ic_part_src/order_mapper.py` → {"is_trust_root":false,"ci_mode":"batched"}.
+    - T004 (P0 edge): `pipeline.py gates batch-ci --probe --changed-files pipeline.py,CLAUDE.md` → {"is_trust_root":true,"ci_mode":"per_phase"}.
+    - T005 (P0 normal): `.claude/agents/qa-agent.md` 가 "Round-trip Gate" + "Codex Review Gate" 헤더 포함.
+    - T006 (P0 normal): `CLAUDE.md` 가 "Preflight", "Codex Review Gate", "batched CI", "deferred build" 4개 키워드 모두 포함.
+    - T007 (P1 exception): pm_planner_retry_count >= 2 상태에서 `pipeline.py agent start --phase pm_planner` returncode != 0 + stderr "pm_planner retry limit" 포함.
+    - T008 (P0 normal): `pipeline.py preflight` 출력 preflight_report.json이 schema_version=1, related_files/tool_facts/writer_reader_pairs/build_required 모두 포함.
+    - 신뢰 루트 변경이므로 PM/Dev/QA/Build 4회 per-phase CI 모두 PASS.
+    - oracle 전수 round-trip 통과 (Round-trip Gate 신규 규정 직접 검증 대상).
+    - 기존 cmd_codex(L6092)는 1바이트도 변경되지 않음 (qa-agent grep으로 SHA-256 검증).
+  </acceptance_criteria>
+
+  <forbidden>
+    - 기존 cmd_codex(line 6092) 함수 본문 수정 - Codex Review Gate는 별도 `review` namespace에서만 구현.
+    - GATE_RULES dict (line 1872) 수정 - 새 게이트 조건은 check_gate 내부 보강 호출로 처리하고 GATE_RULES 표는 변경 금지 (회귀 위험).
+    - .github/CODEOWNERS, .codex/skills/** 수정 - 본 IMP 범위 아님.
+    - Frozen Codebase 경계 외 파일 수정 (FEAT-20260426-332E/**, webapp/**, ic_part_src/**, KittingMapper/** 등).
+    - 신뢰 루트를 batched CI로 처리하는 어떤 형태의 코드 분기도 금지 - 자기 자신을 우회하는 회로 차단.
+    - pm_planner retry 횟수를 reset하는 우회 명령 추가 금지 (failure_packet 작성 후 architect 이관만 허용).
+  </forbidden>
+
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260512-00BC</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>.claude/agents/pm-planner-agent.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+        <file>CLAUDE.md</file>
+        <file>.github/workflows/ci.yml</file>
+        <file>test_artifacts/IMP-20260512-00BC/T001_review_gate_actual.json</file>
+        <file>test_artifacts/IMP-20260512-00BC/T002_preflight_actual.json</file>
+        <file>test_artifacts/IMP-20260512-00BC/T003_batch_ci_actual.json</file>
+        <file>test_artifacts/IMP-20260512-00BC/T004_trust_root_actual.json</file>
+        <file>test_artifacts/IMP-20260512-00BC/T008_preflight_schema_actual.json</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\CLAUDE.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\pm-planner-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\qa-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\pipeline-manager-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.github\workflows\ci.yml</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\preflight_report.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260512-00BC\task_contract.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260512-00BC\test_set.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Three-Gate + Option A + Incremental Module Gate 의무. PM done은 step_plan.xml의 decomposition_audit/design_confirmation/micro_tasks를 hard gate로 파싱. Dev done은 scope_manifest.json이 PM micro_tasks의 id/files/affected_function 범위와 일치해야 통과. 신뢰 루트 변경이므로 PM/Dev/QA/Build 4회 per-phase CI 의무, batched CI 예외 없음. cmd_codex(L6092)는 doctor 체크 전용으로 변경 금지 - Codex Review Gate는 별도 `review` namespace에서 구현.
+    </phase_rules_excerpt>
+    <prev_phase_summary>Pipeline IMP-20260512-00BC NEW 직후, PM Planner Round 1 단계 - preflight_report.json 작성 완료, contract init/add-module(x5)/add-question(x2)/add-oracle(x5)/add-test(x8)/ready PASS/audit PASS 완료. 사용자 askuser 응답 대기 → manager가 freeze 수행 후 dev module loop 진입 예정.</prev_phase_summary>
+  </context_injection>
+
+  <askuser>
+    <question id="Q1" severity="P1">
+      <text_korean>pipeline.py 변경을 몇 개 MT로 나눌까요? PM Planner 추천은 A안(3 MT)입니다 - preflight/review/check+build+retry 묶음. B안(6 MT)은 module qa 횟수가 늘어 "작은 수정에 30분 쓰지 않기" 목표와 충돌합니다. 어느 쪽으로 진행할까요?</text_korean>
+      <recommended>A</recommended>
+      <options>A=3 MT(추천)|B=6 MT(세분화)</options>
+    </question>
+    <question id="Q2" severity="P1">
+      <text_korean>새 11단계 흐름을 CLAUDE.md에 어떻게 반영할까요? PM Planner 추천은 A안(기존 섹션 업데이트, 일관성 유지)입니다. B안(새 섹션 추가, 기존 유지)은 같은 단계가 두 곳에서 다른 이름으로 설명되어 drift 위험이 있습니다. 어느 쪽으로 진행할까요?</text_korean>
+      <recommended>A</recommended>
+      <options>A=기존 섹션 업데이트(추천)|B=새 섹션 추가</options>
+    </question>
+  </askuser>
+</step_plan>
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</pm_planner_output>

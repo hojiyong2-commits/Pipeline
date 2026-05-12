@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_design>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-5</mt_id>
+  <design_summary>
+    Remove dead code from main.py and ui/app.py:
+    main.py: remove write_date assignment + logger.info referencing it; remove get_next_business_day import.
+    ui/app.py: remove write_date assignment + logger.info; remove get_next_business_day import;
+    remove inline import re as _re; add import re at file top; change _re.sub to re.sub.
+  </design_summary>
+  <target_files>
+    <file>FEAT-20260426-332E/main.py</file>
+    <file>FEAT-20260426-332E/ui/app.py</file>
+  </target_files>
+  <affected_function>main._cli_main, ui.app (thread worker block)</affected_function>
+  <interface_contract>
+    No interface changes — dead code removal only.
+    write_date was computed but never used downstream (not passed to any function).
+    re is used only for _re.sub call; top-level import is equivalent.
+  </interface_contract>
+  <implementation_plan>
+    1. main.py: Remove write_date = get_next_business_day(today) and logger.info with write_date
+    2. main.py: Remove get_next_business_day from business_day import
+    3. ui/app.py: Remove write_date line and logger.info referencing it
+    4. ui/app.py: Remove get_next_business_day from business_day import
+    5. ui/app.py: Add import re at file top (with other stdlib imports)
+    6. ui/app.py: Remove inline import re as _re; change _re.sub to re.sub
+  </implementation_plan>
+  <verification_plan>
+    T6: "write_date = get_next_business_day" NOT in main.py source
+    T7: "import re as _re" NOT in ui/app.py source
+  </verification_plan>
+</module_design>

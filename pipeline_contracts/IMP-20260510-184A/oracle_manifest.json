@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-184A",
+  "created_at": "2026-05-10T22:22:55Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260510-184A\\normal_01\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-184A\\normal_01\\expected.txt",
+      "input_sha256": "b330c5118a765a94d98bf33b7e772b69ddd2e5d18205d2dc0430b978db4f9345",
+      "expected_sha256": "851c1aee20ba297074dd9d628de79a50673adfa0ec814bca3fd321fce83261c2",
+      "added_at": "2026-05-10T22:22:55Z"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260510-184A\\edge_01\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-184A\\edge_01\\expected.txt",
+      "input_sha256": "967300444fedf8b0dc798bcca6a657c12eb5befd56c42deb3e8da019d121ef83",
+      "expected_sha256": "998ccf616845fbd499cb9af01f47e877a7b5e6c6982e4098016424acaf9182d1",
+      "added_at": "2026-05-10T22:22:58Z"
+    }
+  ],
+  "updated_at": "2026-05-10T22:22:58Z"
+}

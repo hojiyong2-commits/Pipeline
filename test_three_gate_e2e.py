@@ -93,6 +93,35 @@ def _design_confirmation_xml(mt_id: str = "MT-1") -> str:
 """
 
 
+def _task_complexity_xml(profile: str = "STANDARD") -> str:
+    return f"""  <task_complexity>
+    <execution_profile>{profile}</execution_profile>
+    <reason>CLI E2E smoke test profile</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>40</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+"""
+
+
 def _agent_run(work: Path, phase: str, output_file: Path, evidence: str | None = None) -> str:
     started = _ok(work, "agent", "start", "--phase", phase)
     payload = _json_from_stdout(started.stdout)
@@ -103,6 +132,25 @@ def _agent_run(work: Path, phase: str, output_file: Path, evidence: str | None =
         args.extend(["--evidence", evidence])
     _ok(work, *args)
     return run_id
+
+
+def _manager_handoff(work: Path, pid: str, step_plan: Path, planner_run_id: str) -> Path:
+    digest = __import__("hashlib").sha256(step_plan.read_bytes()).hexdigest()
+    handoff = work / "manager_handoff.xml"
+    handoff.write_text(
+        f"""<manager_handoff>
+  <pipeline_id>{pid}</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>{digest}</step_plan_sha256>
+  <planner_run_id>{planner_run_id}</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+</manager_handoff>
+""",
+        encoding="utf-8",
+    )
+    return handoff
 
 
 def _mark_phase_ci_passed(work: Path, phase: str) -> None:
@@ -235,6 +283,7 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
   <pipeline_id>{pid}</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
 {_design_confirmation_xml()}
+{_task_complexity_xml()}
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.greet</affected_function>
@@ -251,7 +300,9 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
 """,
         encoding="utf-8",
     )
-    pm_run_id = _agent_run(work, "pm", step_plan)
+    planner_run_id = _agent_run(work, "pm_planner", step_plan)
+    manager_report = _manager_handoff(work, pid, step_plan, planner_run_id)
+    manager_run_id = _agent_run(work, "pipeline_manager", manager_report)
     _ok(
         work,
         "done",
@@ -262,8 +313,12 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
         "--decomp",
         "--clarification",
         "--roadmap",
-        "--agent-run-id",
-        pm_run_id,
+        "--planner-run-id",
+        planner_run_id,
+        "--manager-run-id",
+        manager_run_id,
+        "--manager-report",
+        str(manager_report),
     )
     _ok(work, "gates", "prepare-phase", "--phase", "pm")
     _mark_phase_ci_passed(work, "pm")

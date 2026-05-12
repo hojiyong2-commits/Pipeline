@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <mt_id>MT-3</mt_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <result>PASS</result>
+  <numeric_score>108</numeric_score>
+  <checks>
+    <check id="C-BATCH-CI-TRUST">
+      <description>batch-ci --probe: trust root 파일 포함 시 ci_mode=per_phase</description>
+      <result>PASS</result>
+      <evidence>pipeline.py → is_trust_root=true, ci_mode="per_phase"</evidence>
+    </check>
+    <check id="C-BATCH-CI-BATCHED">
+      <description>batch-ci --probe: 비신뢰 루트 파일만 있으면 ci_mode=batched</description>
+      <result>PASS</result>
+      <evidence>README.md,docs/guide.md → ci_mode="batched"</evidence>
+    </check>
+    <check id="C-BATCH-CI-AGENT-DIR">
+      <description>batch-ci --probe: .claude/agents/ 하위 파일도 trust root 탐지</description>
+      <result>PASS</result>
+      <evidence>.claude/agents/qa-agent.md → ci_mode="per_phase"</evidence>
+    </check>
+    <check id="C-BUILD-DEFERRED">
+      <description>cmd_build --build-deferred: pipeline_state.json에 build_deferred=true 기록</description>
+      <result>PASS</result>
+      <evidence>코드 검토 확인: build_deferred_flag True 시 즉시 기록 후 return</evidence>
+    </check>
+    <check id="C-PM-RETRY-LIMIT">
+      <description>_agent_run_start: pm_planner 2회 초과 시 failure_packet.json + exit 1</description>
+      <result>PASS</result>
+      <evidence>코드 검토 확인: planner_run_count >= PM_PLANNER_MAX_RETRIES(2) 시 _die() 호출</evidence>
+    </check>
+    <check id="C-SCOPE">
+      <description>MT-3 scope 범위 내 수정</description>
+      <result>PASS</result>
+      <evidence>scope_manifest_MT-3_IMP-00BC.json: files=["pipeline.py"]</evidence>
+    </check>
+  </checks>
+  <micro_task_boundary>
+    <expected_files>pipeline.py</expected_files>
+    <actual_files>pipeline.py</actual_files>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <verification_evidence>
+    <run>python pipeline.py gates batch-ci --probe --changed-files "pipeline.py,README.md"</run>
+    <output>is_trust_root=true, ci_mode="per_phase", matched_patterns=["pipeline.py"]</output>
+    <run>python pipeline.py gates batch-ci --probe --changed-files "README.md"</run>
+    <output>is_trust_root=false, ci_mode="batched"</output>
+  </verification_evidence>
+</module_qa_report>

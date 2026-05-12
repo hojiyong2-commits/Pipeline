@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>CLAUDE.md</file>
+      <file>.github/workflows/ci.yml</file>
+    </files_to_modify>
+    <functions_to_modify>
+      <function>pipeline.cmd_preflight</function>
+      <function>pipeline.TRUST_ROOT_PATTERNS</function>
+      <function>pipeline.PM_PLANNER_MAX_RETRIES</function>
+      <function>pipeline.cmd_review</function>
+      <function>pipeline.cmd_build</function>
+      <function>pipeline.cmd_gates(batch-ci)</function>
+      <function>pipeline._agent_run_start</function>
+      <function>doc.pm_planner_agent_md.preflight_dependency_rule</function>
+      <function>doc.qa_agent_md.round_trip_gate</function>
+      <function>doc.pipeline_manager_agent_md.codex_review_gate_procedure</function>
+      <function>doc.CLAUDE_md.clustered_verification_pipeline</function>
+      <function>workflow.ci_yml.batch_ci_branch</function>
+    </functions_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>pipeline.cmd_preflight, pipeline.cmd_review, pipeline.cmd_build, pipeline.cmd_gates(batch-ci), pipeline._agent_run_start, agent MD sections, CLAUDE.md section, ci.yml step</target_function>
+    <change_type>feature_addition + doc_update</change_type>
+    <lines_changed>~350</lines_changed>
+    <api_signature_changed>false</api_signature_changed>
+    <call_sites_affected>none — new commands added, existing signatures unchanged</call_sites_affected>
+    <regression_risk>LOW — existing commands unmodified; new subparsers/subactions only</regression_risk>
+  </impact_analysis>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <file>CLAUDE.md</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>scope_manifest.json</file>
+    <file>scope_manifest_MT-1_IMP-00BC.json</file>
+    <file>scope_manifest_MT-2_IMP-00BC.json</file>
+    <file>scope_manifest_MT-3_IMP-00BC.json</file>
+    <file>scope_manifest_MT-4_IMP-00BC.json</file>
+    <file>scope_manifest_MT-5_IMP-00BC.json</file>
+    <file>module_handover_MT-1_IMP-00BC.xml</file>
+    <file>module_handover_MT-2_IMP-00BC.xml</file>
+    <file>module_handover_MT-3_IMP-00BC.xml</file>
+    <file>module_handover_MT-4_IMP-00BC.xml</file>
+    <file>module_handover_MT-5_IMP-00BC.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <file>CLAUDE.md</file>
+    <file>.github/workflows/ci.yml</file>
+  </implemented_files>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260512-00BC</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>CLAUDE.md</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>scope_manifest.json</file>
+      <file>integration_report.xml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+
+  <self_check>
+    <python39_syntax>PASS — match/case, X|Y union, list[int] 소문자 제네릭 미사용</python39_syntax>
+    <type_hinting>PASS — 신규 함수 모두 파라미터/리턴 타입 명시</type_hinting>
+    <error_handling>PASS — subprocess, JSON, git 호출 모두 try-except + bytes decode 방어</error_handling>
+    <path_safety>PASS — pathlib.Path 사용, 하드코딩 경로 없음</path_safety>
+    <security>PASS — 하드코딩 시크릿 없음, 외부 네트워크 미호출</security>
+    <al_edge_cases>N/A — 알고리즘 카테고리 해당 없음</al_edge_cases>
+    <pd_policy>PASS — 신규 서브커맨드 명시적 실패 처리, 빈 결과 방어</pd_policy>
+    <docstring>PASS — 신규 함수 모두 docstring 포함</docstring>
+  </self_check>
+</dev_handover>

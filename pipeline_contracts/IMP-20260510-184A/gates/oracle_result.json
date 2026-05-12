@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T22:42:33Z",
+  "pipeline_id": "IMP-20260510-184A",
+  "contract_hash": "abdbe7244f6264e70df6c6a75def1c4f9c67928bcf6fedcac00f7a8f55526d36",
+  "test_set_hash": "04025e424ea76500b670a1b5d843002cbd1def69a1d1c3d97bd1e8efbc731c1b",
+  "observed_contract_hash": "abdbe7244f6264e70df6c6a75def1c4f9c67928bcf6fedcac00f7a8f55526d36",
+  "observed_test_set_hash": "04025e424ea76500b670a1b5d843002cbd1def69a1d1c3d97bd1e8efbc731c1b",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 1
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 70,
+    "total_points": 70,
+    "hard_fail": false,
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T001",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 40,
+      "earned": 40,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "tests/oracles/IMP-20260510-184A/normal_01/input.txt"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "DEPLOY_SCOPE_OK\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 30,
+      "earned": 30,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "tests/oracles/IMP-20260510-184A/edge_01/input.txt"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "SYNTAX_OK\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260510-184A\\normal_01\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-184A\\normal_01\\expected.txt",
+      "input_sha256": "b330c5118a765a94d98bf33b7e772b69ddd2e5d18205d2dc0430b978db4f9345",
+      "expected_sha256": "851c1aee20ba297074dd9d628de79a50673adfa0ec814bca3fd321fce83261c2"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260510-184A\\edge_01\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-184A\\edge_01\\expected.txt",
+      "input_sha256": "967300444fedf8b0dc798bcca6a657c12eb5befd56c42deb3e8da019d121ef83",
+      "expected_sha256": "998ccf616845fbd499cb9af01f47e877a7b5e6c6982e4098016424acaf9182d1"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <mt_id>MT-4</mt_id>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+  <result>PASS</result>
+  <numeric_score>112</numeric_score>
+  <checks>
+    <check id="C-PM-PREFLIGHT">
+      <description>pm-planner-agent.md: Preflight Dependency Rule 섹션 존재</description>
+      <result>PASS</result>
+      <evidence>"Preflight Dependency Rule" 텍스트 확인됨</evidence>
+    </check>
+    <check id="C-PM-RETRY">
+      <description>pm-planner-agent.md: PM Planner Retry Limit 섹션 존재</description>
+      <result>PASS</result>
+      <evidence>"PM Planner Retry Limit" + "PM_PLANNER_MAX_RETRIES=2" 텍스트 확인됨</evidence>
+    </check>
+    <check id="C-QA-ROUND-TRIP">
+      <description>qa-agent.md: Round-trip Gate + failure_signature=RT:round_trip_missing 존재</description>
+      <result>PASS</result>
+      <evidence>"Round-trip Gate" + "RT:round_trip_missing" 텍스트 확인됨</evidence>
+    </check>
+    <check id="C-QA-CODEX-GATE">
+      <description>qa-agent.md: Codex Review Gate 차단 조건 + failure_signature=CR:unresolved_finding 존재</description>
+      <result>PASS</result>
+      <evidence>"CR:unresolved_finding" 텍스트 확인됨</evidence>
+    </check>
+    <check id="C-MGR-CODEX">
+      <description>pipeline-manager-agent.md: Codex Review Gate 절차 섹션 존재</description>
+      <result>PASS</result>
+      <evidence>"Codex Review Gate 절차" + "review codex" 명령어 확인됨</evidence>
+    </check>
+    <check id="C-MGR-BATCH-CI">
+      <description>pipeline-manager-agent.md: Phase CI Batching 섹션 존재</description>
+      <result>PASS</result>
+      <evidence>"Phase CI Batching" + "batch-ci --probe" 텍스트 확인됨</evidence>
+    </check>
+    <check id="C-FROZEN-CODEBASE">
+      <description>기존 frontmatter 및 콘텐츠 보존 (IMP-C0FC)</description>
+      <result>PASS</result>
+      <evidence>각 MD 파일 기존 섹션 말미에 추가, 기존 내용 무수정</evidence>
+    </check>
+  </checks>
+  <micro_task_boundary>
+    <expected_files>.claude/agents/pm-planner-agent.md,.claude/agents/qa-agent.md,.claude/agents/pipeline-manager-agent.md</expected_files>
+    <actual_files>.claude/agents/pm-planner-agent.md,.claude/agents/qa-agent.md,.claude/agents/pipeline-manager-agent.md</actual_files>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <verification_evidence>
+    <check>grep -n "Preflight Dependency Rule" .claude/agents/pm-planner-agent.md → FOUND</check>
+    <check>grep -n "Round-trip Gate" .claude/agents/qa-agent.md → FOUND</check>
+    <check>grep -n "batch-ci" .claude/agents/pipeline-manager-agent.md → FOUND</check>
+  </verification_evidence>
+</module_qa_report>

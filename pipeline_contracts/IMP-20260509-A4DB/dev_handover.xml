@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260509-A4DB</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>README.md</file>
+    </files_to_modify>
+    <frozen_files>
+      <file>pipeline.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/*.md</file>
+    </frozen_files>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>README.md (new file creation)</target_function>
+    <change_type>new_file</change_type>
+    <blast_radius>CONTAINED</blast_radius>
+    <affected_call_sites>none</affected_call_sites>
+  </impact_analysis>
+
+  <evidence>
+    <file>README.md</file>
+  </evidence>
+
+  <git_evidence>
+    <branch>smoke-test/IMP-20260509-A4DB</branch>
+    <commit_sha>ee17edd558093a862b4d4caa3ebf705dd47a1b23</commit_sha>
+    <pr_url>https://github.com/hojiyong2-commits/Pipeline/pull/2</pr_url>
+    <pr_number>2</pr_number>
+    <remote>origin (https://github.com/hojiyong2-commits/Pipeline.git)</remote>
+    <direct_main_push>false</direct_main_push>
+  </git_evidence>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <files_declared>README.md</files_declared>
+    <files_actual>README.md</files_actual>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>CONTAINED</blast_radius>
+  </micro_task_boundary>
+
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <files_declared>README.md</files_declared>
+    <files_actual>README.md (committed to branch)</files_actual>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>CONTAINED</blast_radius>
+  </micro_task_boundary>
+
+  <self_check>
+    <item>README.md created at repository root: YES</item>
+    <item>Section heading "## Pipeline smoke test" present: YES</item>
+    <item>Pipeline ID IMP-20260509-A4DB referenced: YES</item>
+    <item>Branch smoke-test/IMP-20260509-A4DB created and pushed: YES</item>
+    <item>PR opened (not direct push to main): YES — PR #2</item>
+    <item>No Python code changes: YES (docs-only)</item>
+    <item>evidence file list matches actual edits: YES (README.md only)</item>
+  </self_check>
+</handover>

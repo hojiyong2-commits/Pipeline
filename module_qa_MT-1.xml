@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <result>PASS</result>
+
+  <category_check>
+    <wa>N-A — 네트워크 통신 없음</wa>
+    <ui>N-A — UI 변경 없음</ui>
+    <fs>PASS — ZIP in-place 쓰기 패턴 기존 유지, 변경 없음</fs>
+    <pd>PASS — API 시그니처 변경 없음, 범위 초과 없음</pd>
+    <sec>PASS — 사용자 입력 경로 없음, 보안 표면 변화 없음</sec>
+    <al>PASS — _m.group(3) or '' 방어 기존 유지, OR 조건 추가만</al>
+    <build>N-A — 빌드는 별도 Phase 6에서 수행</build>
+  </category_check>
+
+  <verification_evidence>
+    <evidence_item>
+      <file>ic_part_src/order_mapper.py</file>
+      <line>1160</line>
+      <before>if not re.search(r'&lt;v[\s&gt;]', _m.group(3) or ''):</before>
+      <after>if not re.search(r'&lt;v[\s&gt;]|&lt;is[\s&gt;]', _m.group(3) or ''):</after>
+      <check>inlineStr 셀 감지 조건 추가 확인</check>
+      <status>PASS</status>
+    </evidence_item>
+    <evidence_item>
+      <check>v 태그 기존 감지 조건 유지 확인</check>
+      <status>PASS</status>
+    </evidence_item>
+    <evidence_item>
+      <check>scope_manifest MT-1 파일 목록 일치 확인</check>
+      <status>PASS — 변경 파일 1개, 선언과 일치</status>
+    </evidence_item>
+  </verification_evidence>
+
+  <scope_boundary_check>
+    <declared_files>ic_part_src/order_mapper.py</declared_files>
+    <actual_changed_files>ic_part_src/order_mapper.py</actual_changed_files>
+    <scope_match>true</scope_match>
+    <lines_changed>1</lines_changed>
+  </scope_boundary_check>
+
+  <verdict>PASS</verdict>
+</module_qa_report>

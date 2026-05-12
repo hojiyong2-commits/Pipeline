@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_output>
+  <files>
+    <file role="수정된 소스">ic_part_src/order_mapper.py</file>
+    <file role="모듈 범위 선언">scope_manifest_MT-1.json</file>
+    <file role="전체 범위 선언">scope_manifest.json</file>
+    <file role="모듈 인계">module_handover_MT-1.xml</file>
+  </files>
+  <dependencies>없음 - 기존 의존성 변경 없음</dependencies>
+  <entry_point>ic_part_src/order_mapper.py write_ic_part_zip 함수</entry_point>
+  <env_vars>없음</env_vars>
+  <known_constraints>변경은 L1141 L1143 L1145 3곳만. def _col_letter 및 호출부 3곳 보존. assert 5곳 보존.</known_constraints>
+</dev_output>
+
+<scope_declaration>
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <files_to_modify>
+    <file>ic_part_src/order_mapper.py</file>
+  </files_to_modify>
+  <functions_to_modify>
+    <function>order_mapper.write_ic_part_zip</function>
+  </functions_to_modify>
+</scope_declaration>
+
+<impact_analysis>
+  <mt_id>MT-1</mt_id>
+  <target_function>order_mapper.write_ic_part_zip</target_function>
+  <change_description>루프 변수 _col_letter to _scan_letter rename (L1141 L1143 L1145 총 3곳). def _col_letter 함수 정의 및 호출부 보존.</change_description>
+  <lines_affected>L1141, L1143, L1145</lines_affected>
+  <risk>MINIMAL</risk>
+  <blast_radius>
+    <files>1</files>
+    <functions>1</functions>
+    <lines>3</lines>
+  </blast_radius>
+</impact_analysis>
+
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <evidence>
+    <file>ic_part_src/order_mapper.py</file>
+    <file>scope_manifest.json</file>
+    <file>scope_manifest_MT-1.json</file>
+    <file>module_handover_MT-1.xml</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+  <change_summary>write_ic_part_zip 내 루프 변수 _col_letter to _scan_letter rename (3곳). def _col_letter 함수 정의 및 3곳 호출부 보존. assert 5곳 보존.</change_summary>
+</handover>

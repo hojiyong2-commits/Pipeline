@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-5</mt_id>
+  <result>PASS</result>
+  <numeric_score>15</numeric_score>
+  <verification_evidence>
+    <check id="T6_write_date_removed">PASS - "write_date = get_next_business_day" not found in main.py source</check>
+    <check id="T7_import_re_removed">PASS - "import re as _re" not found in ui/app.py source</check>
+    <check id="re_sub_works">PASS - re.sub() at module level replaces inline _re.sub(); identical behavior</check>
+    <check id="get_next_business_day_import_removed_main">PASS - main.py imports only get_previous_business_day from core.business_day</check>
+    <check id="get_next_business_day_import_removed_app">PASS - ui/app.py imports only get_previous_business_day from core.business_day</check>
+    <check id="scope_boundary">PASS - only main.py and ui/app.py modified</check>
+    <check id="python39_syntax">PASS - import re is stdlib; no 3.10+ syntax</check>
+  </verification_evidence>
+  <verdict>PASS</verdict>
+</module_qa_report>

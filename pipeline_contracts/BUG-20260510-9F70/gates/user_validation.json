@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T13:22:31Z",
+  "pipeline_id": "BUG-20260510-9F70",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "dist/emailmonitor.exe",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "dist\\emailmonitor.exe",
+        "sha256": "56394737b60787c6f7c3aeea7ecb4d18eed83d962c6b28a4e71dc74b43cae1b9",
+        "size_bytes": 118711712
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "dist/emailmonitor.exe"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "BUG-20260510-9F70",
+    "deployed_at": "2026-05-10T13:22:31Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\BUG-20260510-9F70",
+    "evidence": "dist/emailmonitor.exe",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "dist\\emailmonitor.exe",
+          "sha256": "56394737b60787c6f7c3aeea7ecb4d18eed83d962c6b28a4e71dc74b43cae1b9",
+          "size_bytes": 118711712
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "dist/emailmonitor.exe"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "dist\\emailmonitor.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260510-9F70\\dist\\emailmonitor.exe",
+        "sha256": "56394737b60787c6f7c3aeea7ecb4d18eed83d962c6b28a4e71dc74b43cae1b9"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\BUG-20260510-9F70\\emailmonitor.exe-emailmonitor.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260510-9F70\\pipeline_outputs\\BUG-20260510-9F70\\emailmonitor.exe-emailmonitor.exe",
+        "sha256": "56394737b60787c6f7c3aeea7ecb4d18eed83d962c6b28a4e71dc74b43cae1b9"
+      },
+      {
+        "kind": "file",
+        "source": "po_automation\\email_monitor.py",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260510-9F70\\po_automation\\email_monitor.py",
+        "sha256": "fba07debb433916a0c19f0e231358608520dca8cb11ac8a4ed386aca80dc5d34"
+      },
+      {
+        "kind": "file",
+        "source": "po_automation\\main.py",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260510-9F70\\po_automation\\main.py",
+        "sha256": "d4384d8070f9996c87ddcf235474daffe7c1473b1a04eda54a035264faf5f138"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\BUG-20260510-9F70\\deployment_manifest.json"
+  }
+}

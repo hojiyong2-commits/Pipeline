@@ -1,0 +1,30 @@
+{
+  "pipeline_id": "IMP-20260512-00BC",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_preflight"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_review"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_build, pipeline.cmd_gates(batch-ci), pipeline._agent_run_start"]
+    },
+    {
+      "id": "MT-4",
+      "files": [".claude/agents/pm-planner-agent.md", ".claude/agents/qa-agent.md", ".claude/agents/pipeline-manager-agent.md"],
+      "affected_functions": ["doc.pm_planner_agent.preflight_dependency, doc.qa_agent.round_trip_gate, doc.pipeline_manager_agent.codex_review_gate"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["CLAUDE.md", ".github/workflows/ci.yml"],
+      "affected_functions": ["doc.CLAUDE_md.clustered_verification_pipeline, workflow.ci_yml.batch_ci_branch"]
+    }
+  ]
+}

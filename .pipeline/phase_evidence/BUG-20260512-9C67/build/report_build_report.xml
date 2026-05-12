@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<build_report>
+  <section_1_command>
+    pyinstaller --noconfirm ICPartAutomation.spec
+    (ic_part_src/ 디렉토리에서 실행)
+  </section_1_command>
+
+  <section_2_spec>
+    <onefile>YES</onefile>
+    <windowed>YES - console=False</windowed>
+    <hiddenimports>
+      <item>win32com</item>
+      <item>win32com.client</item>
+      <item>pywintypes</item>
+      <item>win32api</item>
+      <item>win32con</item>
+      <item>watchdog.observers</item>
+      <item>watchdog.observers.winapi</item>
+      <item>watchdog.events</item>
+    </hiddenimports>
+    <datas></datas>
+    <excludes></excludes>
+  </section_2_spec>
+
+  <section_3_output>
+    <exe_path>ic_part_src/dist/ICPartAutomation.exe</exe_path>
+    <size_mb>36.0</size_mb>
+    <meipass_helper>YES - sys._MEIPASS 경로 처리 코드 존재</meipass_helper>
+  </section_3_output>
+
+  <section_4_verification>
+    <dll_included>YES - win32com, pywintypes DLL 포함</dll_included>
+    <upx_risk>LOW - UPX 압축 활성화되어 있으나 win32 DLL 손상 위험 낮음</upx_risk>
+    <zero_dependency>YES - 단독 실행 가능 onefile 빌드</zero_dependency>
+    <console_hidden>YES - console=False 설정</console_hidden>
+  </section_4_verification>
+
+  <section_5_optimization>
+    BUG-20260512-9C67 변경사항은 루프 변수 rename 3줄로 EXE 크기/성능에 영향 없음.
+    빌드 산출물 동일 spec 재사용으로 안정적.
+  </section_5_optimization>
+
+  <section_6_qa_mapping>
+    <qa_result>[PASS] - numeric_score 110/120</qa_result>
+    <critical_issues_resolved>
+      <item issue="루프 변수 _col_letter shadowing" resolved="YES" />
+    </critical_issues_resolved>
+  </section_6_qa_mapping>
+
+  <status>BUILD SUCCESS</status>
+</build_report>

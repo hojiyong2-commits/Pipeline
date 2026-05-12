@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: write_ic_part_zip 루프 변수 shadowing 수정</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>core_parser_logic(True)이고 build_or_deploy(True)이므로 Fast Path 금지. 단일 함수 내 변경이지만 핵심 ZIP 생성 로직의 루프 변수 shadowing 버그 수정.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>4</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>true</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <interface_spec>
+    - Input: ic_part_src/order_mapper.py (Python 소스 파일)
+    - Output: ic_part_src/order_mapper.py (루프 변수 rename 완료된 수정 파일)
+    - Validation: L1141 for 루프 변수가 _scan_letter이고, 함수 def _col_letter(n: int)와 호출부 3곳(_col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE))이 보존되어야 함
+  </interface_spec>
+
+  <requirements>
+    - write_ic_part_zip 함수 내부(L1141) for 루프 변수를 _col_letter에서 _scan_letter로 rename
+    - 루프 블록 내 _col_letter 참조 2곳(L1143, L1145 regex f-string)도 _scan_letter로 변경 (총 3곳)
+    - 함수 정의(L132 def _col_letter)는 절대 변경하지 않음
+    - 루프 블록 외부 호출부 _col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE), 자가 테스트 assert 문 등은 절대 변경하지 않음
+    - 변경 범위: ic_part_src/order_mapper.py 단 1개 파일
+    - Python 버전: 3.10 (기존 프로젝트 환경 유지)
+    - FS 카테고리 공통: 파일 encoding utf-8 유지, 다른 함수/클래스 범위 수정 금지
+  </requirements>
+
+  <decomposition_audit>
+    <total_functions_identified>1</total_functions_identified>
+    <micro_task_count>1</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <split_decision>변경 함수 1개(write_ic_part_zip), 변경 파일 1개(order_mapper.py), 예상 변경 라인 4줄 — 분할 불필요, SINGLE_TASK_OK</split_decision>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>루프 변수 rename은 단일 방향(_scan_letter)으로 명확하므로 P2 세부 사항(변수명 대안 등)은 사용자에게 묻지 않음. 오케스트레이터 지시에서 rename 방향이 이미 명시됨.</filter_summary>
+    <maintenance_priority>유지보수성 우선 — 루프 변수와 함수명 충돌을 제거하여 장기 유지보수성을 높임</maintenance_priority>
+    <decision_questions>
+      <question id="Q-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>MT-1 단일 태스크로 write_ic_part_zip 내 루프 변수만 변경하는 방식으로 진행할까요?</user_facing_question>
+        <evidence>변경 함수 1개, 변경 파일 1개, 예상 변경 라인 4줄 — 분할 불필요</evidence>
+        <why_it_matters>단일 MT로 처리하면 범위가 명확하고 롤백이 쉬워 유지보수성이 높아집니다</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <user_answer>A (오케스트레이터 지시에서 MT-1 단일 태스크로 명시됨)</user_answer>
+        <options>
+          <option id="A">
+            <label>MT-1 단일 태스크 — write_ic_part_zip 루프 변수만 변경</label>
+            <benefit>범위가 최소화되어 다른 함수에 영향 없음, 롤백 용이</benefit>
+            <cost>함수 내부의 작은 변경이지만 별도 모듈 게이트를 통과해야 함</cost>
+          </option>
+          <option id="B">
+            <label>추가 리팩터링 포함 — 관련 함수명 패턴 전체 정리</label>
+            <benefit>한 번에 네이밍 일관성 개선 가능</benefit>
+            <cost>범위 확장으로 QA 검증 복잡도 증가, 다른 함수 변경 위험 증가</cost>
+          </option>
+        </options>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>order_mapper.write_ic_part_zip</affected_function>
+      <target_files>
+        <file>ic_part_src/order_mapper.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_col_letter</pattern>
+        <match_count>11</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>L1141 루프 변수 _col_letter → _scan_letter rename, 루프 블록 내 L1143·L1145 참조 2곳도 _scan_letter로 변경 (총 3곳). 함수 def와 호출부는 보존.</change_summary>
+      <line_estimate>4</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 프로젝트 환경 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.analysis.typeCheckingMode: basic, python.defaultInterpreterPath: 프로젝트 환경</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - [MUST] ic_part_src/order_mapper.py에 'for _col_letter in _COL_LETTERS:' 패턴이 존재하지 않음
+    - [MUST] ic_part_src/order_mapper.py에 'for _scan_letter in _COL_LETTERS:' 패턴이 정확히 1회 존재
+    - [MUST] 'def _col_letter(n: int) -> str:' 함수 정의(L132)가 변경 없이 보존됨
+    - [MUST] _col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE) 3곳의 호출부가 모두 보존됨
+    - [MUST] 자가 테스트 _col_letter(10) 등 assert 문이 모두 보존됨
+    - [EDGE] 루프 블록 내에만 _scan_letter가 사용되고 블록 외부에는 _scan_letter 참조가 없음
+    - [EDGE] 수정 후 order_mapper.py 임포트 및 함수 호출 시 TypeError 없음
+    - [SCOPE] ic_part_src/order_mapper.py 외 다른 파일 변경 없음
+    - [ANTI-GAMING] oracle 파일(tests/oracles/**) 변경 금지. Dev가 oracle을 수정하면 QA FAIL.
+  </acceptance_criteria>
+
+  <forbidden>
+    - def _col_letter 함수 정의 변경 금지
+    - _col_letter(col_idx), _col_letter(ICPART_COL_DELIVERY_DATE), _col_letter(ICPART_COL_FOLDER_DATE) 호출부 rename 금지
+    - 자가 테스트 assert 내 _col_letter 참조 변경 금지
+    - ic_part_src/order_mapper.py 외 파일 변경 금지
+    - 루프 블록 외부에서 _scan_letter 참조 추가 금지
+    - oracle 파일(tests/oracles/**) 변경 금지
+    - 역할 흡수(dev_output/qa_report 직접 출력) 금지
+    - 숫자 점수로 COMPLETE 선언 금지
+  </forbidden>
+
+  <handover_template_ref>
+    <!-- dev-agent가 작성할 handover 형식: from=dev-agent, to=qa-agent, evidence에 ic_part_src/order_mapper.py + scope_manifest.json + dev_handover.xml 포함, status=READY_FOR_QA -->
+  </handover_template_ref>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\ic_part_src\order_mapper.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Dev: MT-1 단일 태스크. 변경 대상은 write_ic_part_zip 함수 내부 L1141 루프 변수와 루프 블록 내 2개 참조만.
+      scope_manifest_MT-1.json 및 scope_manifest.json 생성 필수.
+      module design → module dev → module qa → module integrate → done --phase dev 순서 필수.
+      impact_analysis XML 출력 필수. def _col_letter 및 호출부 변경 절대 금지.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM planner 완료 — 계약 동결, oracle 2개(normal+edge) 등록, T-1/T-2 P0 테스트 frozen.</prev_phase_summary>
+  </context_injection>
+
+  <contract_info>
+    <contract_hash>a16e3e33dbabfda86150ae396398c845a62f8961af85004dc36a7fe1634a2f0a</contract_hash>
+    <test_set_hash>19cb4433bb6aefbd86a4b6c14e0175c464fcfdf8a852d60b60293b9831c0a64a</test_set_hash>
+    <oracle_normal>tests/oracles/BUG-20260512-9C67/normal_rename/</oracle_normal>
+    <oracle_edge>tests/oracles/BUG-20260512-9C67/edge_func_intact/</oracle_edge>
+  </contract_info>
+</step_plan>

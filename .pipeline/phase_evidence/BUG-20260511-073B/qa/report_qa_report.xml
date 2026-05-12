@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <result>PASS</result>
+  <numeric_score>108</numeric_score>
+  <acceptance_score>100</acceptance_score>
+  <micro_task_boundary>
+    <boundary_check mt="MT-1" status="CONTAINED"/>
+    <boundary_check mt="MT-2" status="CONTAINED"/>
+    <boundary_check mt="MT-3" status="CONTAINED"/>
+    <boundary_check mt="MT-4" status="CONTAINED"/>
+    <boundary_check mt="MT-5" status="CONTAINED"/>
+    <blast_radius>CONTAINED</blast_radius>
+  </micro_task_boundary>
+  <categories>
+    <category name="FS" score="10" max="10">FS.traversal: _safe_resolve() iterates _ALLOWED_ROOTS; UNC prefix + resolve/relative_to; ValueError on mismatch</category>
+    <category name="AL" score="20" max="20">AL: _compress_line_nos handles None, non-numeric, empty list; all 7 acceptance tests PASS</category>
+    <category name="PD" score="20" max="20">PD: decomposition_audit, scope_declaration, impact_analysis all present and verified</category>
+  </categories>
+  <test_results>
+    <test id="T1" status="PASS" points="20">UNC //ccikrnf/wrkgroup resolves successfully</test>
+    <test id="T2" status="PASS" points="10">Unknown UNC blocked (returncode=1)</test>
+    <test id="T3" status="PASS" points="15">Source contains .get("jm", "KJ")</test>
+    <test id="T4" status="PASS" points="15">_cli_main has note = kit_place; no hardcoded note = "포장반"</test>
+    <test id="T5" status="PASS" points="15">from core.utils import _compress_line_nos works</test>
+    <test id="T6" status="PASS" points="10">write_date dead code removed from main.py</test>
+    <test id="T7" status="PASS" points="5">import re as _re removed from ui/app.py</test>
+  </test_results>
+  <failure_signature></failure_signature>
+  <verdict>PASS</verdict>
+</qa_report>

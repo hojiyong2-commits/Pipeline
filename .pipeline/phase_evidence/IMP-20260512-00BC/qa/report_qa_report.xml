@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260512-00BC</pipeline_id>
+
+  <!-- ========= MT-1: pipeline.py — cmd_preflight + TRUST_ROOT_PATTERNS + PM_PLANNER_MAX_RETRIES ========= -->
+  <module_check id="MT-1">
+    <function>pipeline.cmd_preflight</function>
+    <checks>
+      <check id="C-MT1-1">
+        <description>cmd_preflight 함수 존재 및 preflight_report.json 출력</description>
+        <result>PASS</result>
+        <evidence>python pipeline.py preflight → [PREFLIGHT OK] 보고서 저장 확인</evidence>
+      </check>
+      <check id="C-MT1-2">
+        <description>TRUST_ROOT_PATTERNS 상수 정의 및 값 일치</description>
+        <result>PASS</result>
+        <evidence>pipeline.py L1844 TRUST_ROOT_PATTERNS = ["pipeline.py", "CLAUDE.md", ".claude/agents/", ".github/workflows/", ".github/CODEOWNERS", ".codex/skills/"] 확인</evidence>
+      </check>
+      <check id="C-MT1-3">
+        <description>PM_PLANNER_MAX_RETRIES=2 상수 정의</description>
+        <result>PASS</result>
+        <evidence>pipeline.py L1854 PM_PLANNER_MAX_RETRIES: int = 2 확인</evidence>
+      </check>
+      <check id="C-MT1-4">
+        <description>argparse "preflight" 서브파서 등록</description>
+        <result>PASS</result>
+        <evidence>L8188 p_preflight.set_defaults(func=cmd_preflight) 확인</evidence>
+      </check>
+      <check id="C-MT1-5">
+        <description>COMMAND_MAP에 "preflight" 등록</description>
+        <result>PASS</result>
+        <evidence>L8468 "preflight": cmd_preflight 확인</evidence>
+      </check>
+    </checks>
+    <boundary_verdict>PASS</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </module_check>
+
+  <!-- ========= MT-2: pipeline.py — cmd_review ========= -->
+  <module_check id="MT-2">
+    <function>pipeline.cmd_review</function>
+    <checks>
+      <check id="C-MT2-1">
+        <description>cmd_review 함수 존재 (codex/status/resolve 서브액션)</description>
+        <result>PASS</result>
+        <evidence>python pipeline.py review codex → [REVIEW CODEX] 출력 확인; review status → JSON 출력 확인</evidence>
+      </check>
+      <check id="C-MT2-2">
+        <description>_check_codex_review_gate 헬퍼 함수 존재 및 QA check gate에서 호출</description>
+        <result>PASS</result>
+        <evidence>L3508 _check_codex_review_gate 정의, cmd_check qa phase에서 호출 확인; codex_review_result.json 부재 시 (True, "skipped") 반환 — 불필요한 차단 없음</evidence>
+      </check>
+      <check id="C-MT2-3">
+        <description>check --phase qa 에서 Codex Review Gate 적용</description>
+        <result>PASS</result>
+        <evidence>python pipeline.py check --phase qa → [GATE OK] (codex_review_result.json 없으므로 gate skipped)</evidence>
+      </check>
+      <check id="C-MT2-4">
+        <description>argparse "review" 서브파서 + codex/status/resolve 서브서브파서 등록</description>
+        <result>PASS</result>
+        <evidence>COMMAND_MAP "review": cmd_review 확인</evidence>
+      </check>
+    </checks>
+    <boundary_verdict>PASS</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </module_check>
+
+  <!-- ========= MT-3: pipeline.py — cmd_build(deferred) + cmd_gates(batch-ci) + _agent_run_start(retry limit) ========= -->
+  <module_check id="MT-3">
+    <function>pipeline.cmd_build, pipeline.cmd_gates(batch-ci), pipeline._agent_run_start</function>
+    <checks>
+      <check id="C-MT3-1">
+        <description>cmd_build --build-deferred 플래그 동작</description>
+        <result>PASS</result>
+        <evidence>python pipeline.py build --build-deferred --exe "N/A" --skip-reason "meta-task" → [BUILD DEFERRED] 출력, build_deferred=True 기록 확인</evidence>
+      </check>
+      <check id="C-MT3-2">
+        <description>gates batch-ci --probe: 신뢰 루트 파일 포함 시 per_phase 반환</description>
+        <result>PASS</result>
+        <evidence>--changed-files "pipeline.py,README.md" → is_trust_root=true, ci_mode="per_phase", matched_patterns=["pipeline.py"]</evidence>
+      </check>
+      <check id="C-MT3-3">
+        <description>gates batch-ci --probe: 비신뢰 루트 파일만 시 batched 반환</description>
+        <result>PASS</result>
+        <evidence>--changed-files "README.md,docs/guide.md" → is_trust_root=false, ci_mode="batched"</evidence>
+      </check>
+      <check id="C-MT3-4">
+        <description>_agent_run_start PM_PLANNER_MAX_RETRIES 초과 시 차단</description>
+        <result>PASS</result>
+        <evidence>L2841 planner_run_count >= PM_PLANNER_MAX_RETRIES 조건 + _die 호출 확인</evidence>
+      </check>
+    </checks>
+    <boundary_verdict>PASS</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </module_check>
+
+  <!-- ========= MT-4: agent MD 3개 업데이트 ========= -->
+  <module_check id="MT-4">
+    <function>doc.pm_planner_agent.preflight_dependency, doc.qa_agent.round_trip_gate, doc.pipeline_manager_agent.codex_review_gate</function>
+    <checks>
+      <check id="C-MT4-1">
+        <description>pm-planner-agent.md — Preflight Dependency Rule 섹션 존재</description>
+        <result>PASS</result>
+        <evidence>## Preflight Dependency Rule 섹션 + preflight_skipped 태그 설명 확인</evidence>
+      </check>
+      <check id="C-MT4-2">
+        <description>pm-planner-agent.md — PM Planner Retry Limit 섹션 존재</description>
+        <result>PASS</result>
+        <evidence>## PM Planner Retry Limit 섹션 + PM_PLANNER_MAX_RETRIES=2 명시 확인</evidence>
+      </check>
+      <check id="C-MT4-3">
+        <description>qa-agent.md — Round-trip Gate 섹션 존재</description>
+        <result>PASS</result>
+        <evidence>## Round-trip Gate 섹션 + failure_signature=RT:round_trip_missing 확인</evidence>
+      </check>
+      <check id="C-MT4-4">
+        <description>qa-agent.md — Codex Review Gate 차단 조건 섹션 존재</description>
+        <result>PASS</result>
+        <evidence>## Codex Review Gate 차단 조건 섹션 + failure_signature=CR:unresolved_finding 확인</evidence>
+      </check>
+      <check id="C-MT4-5">
+        <description>pipeline-manager-agent.md — Codex Review Gate 절차 섹션 존재</description>
+        <result>PASS</result>
+        <evidence>## Codex Review Gate 절차 섹션 + PowerShell 명령어 시퀀스 확인</evidence>
+      </check>
+      <check id="C-MT4-6">
+        <description>pipeline-manager-agent.md — Phase CI Batching 섹션 존재</description>
+        <result>PASS</result>
+        <evidence>## Phase CI Batching 섹션 + TRUST_ROOT_PATTERNS 목록 확인</evidence>
+      </check>
+      <check id="C-MT4-7">
+        <description>기존 내용 보존 (IMP-C0FC 원칙)</description>
+        <result>PASS</result>
+        <evidence>3개 agent MD 모두 기존 섹션 말미에 추가, 기존 내용 무수정 확인</evidence>
+      </check>
+    </checks>
+    <boundary_verdict>PASS</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </module_check>
+
+  <!-- ========= MT-5: CLAUDE.md + ci.yml ========= -->
+  <module_check id="MT-5">
+    <function>doc.CLAUDE_md.clustered_verification_pipeline, workflow.ci_yml.batch_ci_branch</function>
+    <checks>
+      <check id="C-MT5-1">
+        <description>CLAUDE.md — Clustered Verification Pipeline 서브섹션 존재</description>
+        <result>PASS</result>
+        <evidence>grep "Clustered Verification Pipeline" CLAUDE.md → FOUND</evidence>
+      </check>
+      <check id="C-MT5-2">
+        <description>CLAUDE.md — preflight/Codex Review Gate/batch-ci/build_deferred 텍스트 존재</description>
+        <result>PASS</result>
+        <evidence>grep "preflight" CLAUDE.md → FOUND; grep "batch-ci" CLAUDE.md → FOUND; grep "build_deferred" CLAUDE.md → FOUND</evidence>
+      </check>
+      <check id="C-MT5-3">
+        <description>ci.yml — 신뢰 루트 파일 변경 여부 감지 step 존재</description>
+        <result>PASS</result>
+        <evidence>grep "신뢰 루트 파일 변경 여부 감지" ci.yml → FOUND; grep "batch-ci --probe" ci.yml → FOUND</evidence>
+      </check>
+      <check id="C-MT5-4">
+        <description>기존 내용 보존 (IMP-C0FC 원칙)</description>
+        <result>PASS</result>
+        <evidence>CLAUDE.md 기존 섹션 말미에 추가, ci.yml 기존 step 보존 확인</evidence>
+      </check>
+    </checks>
+    <boundary_verdict>PASS</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </module_check>
+
+  <!-- ========= 카테고리 체크 ========= -->
+  <category_check>
+    <wa>N/A — 외부 네트워크 통신 없음</wa>
+    <ui>N/A — UI 변경 없음</ui>
+    <fs>PASS — subprocess bytes 모드 + decode("utf-8", errors="replace") 적용, 하드코딩 경로 없음</fs>
+    <pd>PASS — 모든 함수 시그니처 변경 없음, 새 서브커맨드만 추가, 빈 결과/예외 방어 포함</pd>
+    <sec>PASS — 하드코딩 시크릿 없음, 외부 네트워크 미호출, 입력 검증 포함</sec>
+    <al>PASS — 신규 로직(TRUST_ROOT_PATTERNS 매칭, planner retry count) 모두 경계값 방어</al>
+    <build>N/A — 빌드 단계 별도 수행</build>
+  </category_check>
+
+  <!-- ========= 전체 Scope Boundary ========= -->
+  <scope_boundary>
+    <verdict>PASS</verdict>
+    <declared_files>pipeline.py, .claude/agents/pm-planner-agent.md, .claude/agents/qa-agent.md, .claude/agents/pipeline-manager-agent.md, CLAUDE.md, .github/workflows/ci.yml</declared_files>
+    <actual_changed_files>pipeline.py, .claude/agents/pm-planner-agent.md, .claude/agents/qa-agent.md, .claude/agents/pipeline-manager-agent.md, CLAUDE.md, .github/workflows/ci.yml</actual_changed_files>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </scope_boundary>
+
+  <!-- ========= Codex Review Gate ========= -->
+  <codex_review_gate>
+    <file_present>false</file_present>
+    <unresolved_high_critical>0</unresolved_high_critical>
+    <gate_result>SKIPPED (파일 없음 — 선택적 게이트)</gate_result>
+  </codex_review_gate>
+
+  <!-- ========= Round-trip Gate ========= -->
+  <round_trip_gate>
+    <writer_reader_pairs_checked>true</writer_reader_pairs_checked>
+    <pairs_count>3</pairs_count>
+    <result>PASS — writer/reader 쌍은 pipeline.py 내부 함수이며 cmd_preflight 신규 구현으로 양방향 커버됨</result>
+  </round_trip_gate>
+
+  <!-- ========= Micro-task Boundary ========= -->
+  <micro_task_boundary>
+    <expected_files>pipeline.py,.claude/agents/pm-planner-agent.md,.claude/agents/qa-agent.md,.claude/agents/pipeline-manager-agent.md,CLAUDE.md,.github/workflows/ci.yml</expected_files>
+    <actual_files>pipeline.py,.claude/agents/pm-planner-agent.md,.claude/agents/qa-agent.md,.claude/agents/pipeline-manager-agent.md,CLAUDE.md,.github/workflows/ci.yml</actual_files>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <verification_evidence>
+    <check>python pipeline.py preflight → [PREFLIGHT OK]</check>
+    <check>python pipeline.py review codex → [REVIEW CODEX] 출력</check>
+    <check>python pipeline.py review status → JSON 출력</check>
+    <check>python pipeline.py gates batch-ci --probe --changed-files "pipeline.py,README.md" → ci_mode=per_phase</check>
+    <check>python pipeline.py gates batch-ci --probe --changed-files "README.md" → ci_mode=batched</check>
+    <check>python pipeline.py build --build-deferred --exe "N/A" --skip-reason "meta-task" → [BUILD DEFERRED]</check>
+    <check>python pipeline.py check --phase qa → [GATE OK] (Codex gate skipped 정상)</check>
+    <check>TRUST_ROOT_PATTERNS 6개 항목 확인</check>
+    <check>PM_PLANNER_MAX_RETRIES=2 상수 확인</check>
+    <check>3개 agent MD 섹션 추가 + 기존 내용 보존 확인</check>
+    <check>CLAUDE.md Clustered Verification Pipeline 섹션 확인</check>
+    <check>ci.yml 신뢰 루트 step 확인</check>
+  </verification_evidence>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <numeric_score>112</numeric_score>
+  <failure_signature/>
+  <repeat_indicator>FIRST</repeat_indicator>
+
+  <critical_issues/>
+  <improvement_suggestions>
+    - cmd_review resolve 서브액션의 실제 LLM 연동은 향후 구현 대상
+    - preflight_report.json이 git 추적 대상에서 제외되도록 .gitignore 추가 권고
+  </improvement_suggestions>
+</qa_report>

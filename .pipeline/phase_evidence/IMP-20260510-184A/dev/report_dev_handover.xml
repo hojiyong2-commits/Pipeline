@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_output>
+  <pipeline_id>IMP-20260510-184A</pipeline_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_deployment_artifacts</target_function>
+    <target_file>pipeline.py</target_file>
+    <change_line>2700</change_line>
+    <change_before>for phase_name in ("build", "dev"):</change_before>
+    <change_after>for phase_name in ("build",):</change_after>
+    <blast_radius>1 파일, 1 함수, 1 라인</blast_radius>
+  </impact_analysis>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260510-184A</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+    </evidence>
+    <oracle_results>
+      <oracle id="T001" expected="DEPLOY_SCOPE_OK" actual="DEPLOY_SCOPE_OK" pass="true"/>
+      <oracle id="T002" expected="SYNTAX_OK" actual="SYNTAX_OK" pass="true"/>
+    </oracle_results>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_output>

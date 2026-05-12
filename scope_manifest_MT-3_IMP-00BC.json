@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "IMP-20260512-00BC",
+  "micro_tasks": [
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_build, pipeline.cmd_gates(batch-ci), pipeline._agent_run_start"]
+    }
+  ]
+}

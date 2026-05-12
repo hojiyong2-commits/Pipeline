@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260510-184A</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-cb09d787f98e5997</manager_run_id>
+  <planner_run_id>pm_planner-6e685cfdb87aeac1</planner_run_id>
+  <step_plan_sha256>4da1b8270290e92da3663e7decf691016b7a9cb4a0559263a3d85289097c5b1b</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <phase_sequence>pm → dev → qa → sec(skip) → build(N/A) → external_gates → architect</phase_sequence>
+  <contract_frozen>true</contract_frozen>
+  <contract_hash>abdbe7244f6264e70df6c6a75def1c4f9c67928bcf6fedcac00f7a8f55526d36</contract_hash>
+  <test_set_hash>04025e424ea76500b670a1b5d843002cbd1def69a1d1c3d97bd1e8efbc731c1b</test_set_hash>
+  <micro_tasks>
+    <mt id="MT-1">
+      <file>pipeline.py</file>
+      <function>_deployment_artifacts</function>
+      <change>L2700: ("build", "dev") to ("build",) — 1줄 제거</change>
+    </mt>
+  </micro_tasks>
+  <oracle_manifest>
+    <oracle id="O001" case_kind="normal" input="tests/oracles/IMP-20260510-184A/normal_01/input.txt" expected="tests/oracles/IMP-20260510-184A/normal_01/expected.txt"/>
+    <oracle id="O002" case_kind="edge" input="tests/oracles/IMP-20260510-184A/edge_01/input.txt" expected="tests/oracles/IMP-20260510-184A/edge_01/expected.txt"/>
+  </oracle_manifest>
+  <build_target>N/A — meta-task (pipeline.py 수정)</build_target>
+  <sec_scope>skip — 외부 네트워크/DB 없음</sec_scope>
+  <deploy_root>G:\내 드라이브\터미널\IMP-20260510-184A</deploy_root>
+  <repo>hojiyong2-commits/Pipeline</repo>
+  <attestation_branch>phase-attestation/IMP-20260510-184A</attestation_branch>
+</manager_handoff>
