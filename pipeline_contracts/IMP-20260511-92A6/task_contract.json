@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260511-92A6",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-11T13:01:13Z",
+  "updated_at": "2026-05-11T13:03:47Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "KittingMapper 정적 분석 보고서 작성 및 개선 계획 수립",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": "analysis",
+    "deliverable_kind": "analysis",
+    "success_signal": [
+      "KittingMapper_inspection_report.md 생성 완료"
+    ]
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "M1",
+      "name": "KittingMapper 점검 보고서",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": null,
+      "severity": "P1",
+      "question": "PM 매핑 테이블이 현재 정확한가?",
+      "options": [],
+      "answer": "A — 정확함",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-11T13:03:47Z",
+  "contract_hash": "544b68a042d78a5b3bcadd958a94a69dcd2873b02904276feb8326e94c1b3bc7",
+  "test_set_hash": "c21d2d81756b94195748dde0fba89a26687c74f64e4471f1cfedc864f6845abd"
+}

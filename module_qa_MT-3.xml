@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <mt_id>MT-3</mt_id>
+  <result>PASS</result>
+  <numeric_score>15</numeric_score>
+  <verification_evidence>
+    <check id="T4_source_check">PASS - _cli_main block contains "note = kit_place" and does NOT contain "note = &quot;포장반&quot;"</check>
+    <check id="dims_str_branch">PASS - f"포장반 ({dims_result})" branch unchanged (dims_result is str)</check>
+    <check id="scope_boundary">PASS - only main.py _cli_main None branch modified</check>
+    <check id="python39_syntax">PASS - no 3.10+ syntax; variable assignment only</check>
+    <check id="gui_alignment">PASS - CLI now consistent with GUI (ui/app.py) behavior for dims_result=None case</check>
+  </verification_evidence>
+  <verdict>PASS</verdict>
+</module_qa_report>

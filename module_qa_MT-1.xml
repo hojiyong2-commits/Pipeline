@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <result>PASS</result>
+
+  <scope_verification>
+    <declared_files>
+      <file>ic_part_src/order_mapper.py</file>
+    </declared_files>
+    <actual_changed_files>
+      <file>ic_part_src/order_mapper.py</file>
+    </actual_changed_files>
+    <scope_match>PASS</scope_match>
+    <other_files_modified>false</other_files_modified>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <target_function>write_ic_part_zip</target_function>
+    <change_description>K 컬럼 전용 regex 블록이 I·J·K 합집합 스캔 로직으로 교체됨</change_description>
+  </micro_task_boundary>
+
+  <checks>
+    <check id="C1" name="I·J·K 합집합 로직 구현 여부" result="PASS">_COL_LETTERS dict + _ijk_occupied set 패턴 확인</check>
+    <check id="C2" name="self-closing 셀 건너뜀" result="PASS">group(1) is not None 분기로 branch 1 건너뜀</check>
+    <check id="C3" name="v 태그 없는 셀 건너뜀" result="PASS">re.search(r'v[\s>]', group(3)) 조건 확인</check>
+    <check id="C4" name="ICPART_DATA_START_ROW 미만 행 건너뜀" result="PASS">_row_n &lt; ICPART_DATA_START_ROW 조건 확인</check>
+    <check id="C5" name="빈 시트 처리 (default=5)" result="PASS">max(_ijk_occupied, default=ICPART_DATA_START_ROW - 1) 확인</check>
+    <check id="C6" name="oracle T01 (정상 5행)" result="PASS">_actual_start_row=11 계산 로직 일치</check>
+    <check id="C7" name="oracle T02 (K만 row 12)" result="PASS">_actual_start_row=13 계산 로직 일치</check>
+    <check id="C8" name="oracle T03 (빈 시트)" result="PASS">_actual_start_row=6 계산 로직 일치</check>
+  </checks>
+
+  <numeric_score>118</numeric_score>
+
+  <verification_evidence>
+    <code_review>ic_part_src/order_mapper.py 수정 블록 직접 검토 — write_ic_part_zip 함수 내 _COL_LETTERS, _ijk_occupied 패턴 확인</code_review>
+    <oracle_alignment>T01(정상 5행→start=11), T02(K만 row12→start=13), T03(빈시트→start=6) 기대값과 구현 로직 일치 확인</oracle_alignment>
+    <scope_check>ic_part_src/order_mapper.py만 수정됨. oracle 파일, pipeline.py, 기타 파일 미변경 확인</scope_check>
+  </verification_evidence>
+</module_qa_report>

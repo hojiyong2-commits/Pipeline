@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>116</numeric_score>
+
+  <scope_verification>
+    <files_declared>
+      <file>ic_part_src/order_mapper.py</file>
+      <file>po_automation/email_monitor.py</file>
+    </files_declared>
+    <files_actually_changed>
+      <file>ic_part_src/order_mapper.py</file>
+      <file>po_automation/email_monitor.py</file>
+    </files_actually_changed>
+    <scope_match>PASS</scope_match>
+    <unexpected_changes>none</unexpected_changes>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <confirmed>write_ic_part_zip 함수 내 단일 블록만 변경됨</confirmed>
+  </micro_task_boundary>
+
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <confirmed>_process_mail_item 내 수신자 for 루프만 변경됨</confirmed>
+  </micro_task_boundary>
+
+  <checks>
+    <!-- MT-1 검사 -->
+    <check id="MT1-C1" category="FS" result="PASS">I·J·K 세 컬럼 모두 순회하는 _COL_LETTERS dict 구현 확인</check>
+    <check id="MT1-C2" category="FS" result="PASS">self-closing 셀(branch 1) 건너뜀 로직 확인</check>
+    <check id="MT1-C3" category="FS" result="PASS">v 태그 없는 셀 건너뜀 확인</check>
+    <check id="MT1-C4" category="FS" result="PASS">ICPART_DATA_START_ROW 미만 행 필터 확인</check>
+    <check id="MT1-C5" category="FS" result="PASS">빈 시트 default=ICPART_DATA_START_ROW-1 처리 확인</check>
+    <check id="MT1-C6" category="PD" result="PASS">oracle T01(정상 5행→start=11) 로직 일치 검증</check>
+    <check id="MT1-C7" category="PD" result="PASS">oracle T02(K만 row12→start=13) 로직 일치 검증</check>
+    <check id="MT1-C8" category="PD" result="PASS">oracle T03(빈 시트→start=6) 로직 일치 검증</check>
+    <!-- MT-2 검사 -->
+    <check id="MT2-C1" category="WA" result="PASS">'@' 없는 주소 Exchange DN 감지 분기 확인</check>
+    <check id="MT2-C2" category="WA" result="PASS">AddressEntry.GetExchangeUser().PrimarySmtpAddress 순서 확인</check>
+    <check id="MT2-C3" category="WA" result="PASS">inner try/except + nosec B110 예외 처리 확인</check>
+    <check id="MT2-C4" category="WA" result="PASS">SMTP 주소('@' 있음) 변환 없이 통과 확인 (oracle T04)</check>
+    <check id="MT2-C5" category="WA" result="PASS">Exchange DN → SMTP 변환 성공 확인 (oracle T05)</check>
+    <check id="MT2-C6" category="WA" result="PASS">예외 시 원본 DN 폴백, 크래시 없음 확인 (oracle T06)</check>
+    <check id="MT2-C7" category="AL" result="PASS">WA 카테고리 4 필수 항목: 예외 처리 분기 포함 확인</check>
+  </checks>
+
+  <oracle_check>
+    <status>PASS</status>
+    <notes>oracle 파일(tests/oracles/BUG-20260512-E68A/**) 미변경 확인. 6개 oracle 모두 기대값과 구현 로직 일치.</notes>
+  </oracle_check>
+</qa_report>

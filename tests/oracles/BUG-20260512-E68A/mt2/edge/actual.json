@@ -1,0 +1,6 @@
+{
+  "description": "Exchange DN → SMTP 변환 성공 — recipient_set에 'user@contoso.com' 추가",
+  "resolved_addr": "user@contoso.com",
+  "exchange_lookup_called": true,
+  "exception_raised": false
+}

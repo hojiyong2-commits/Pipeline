@@ -1,0 +1,15 @@
+{
+  "pipeline_id": "BUG-20260512-E68A",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["ic_part_src/order_mapper.py"],
+      "affected_functions": ["ic_part_src.order_mapper.write_ic_part_zip"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["po_automation/email_monitor.py"],
+      "affected_functions": ["po_automation.email_monitor._process_mail_item"]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import logging
 import logging.handlers
 import os
 import queue
+import re
 import sys
 import tempfile
 import threading
@@ -27,36 +28,7 @@ _FIXED_EXCEL_A_COLUMNS = {
 _FIXED_EXCEL_B_COLUMNS = {"fp": "J", "f_col": "F", "jm": "KJ", "if_col": "C", "jy_col": "E"}
 
 
-def _compress_line_nos(raw_nos: list) -> str:
-    """Deduplicate, sort, and compress consecutive line numbers using '~' range notation.
-
-    Examples:
-        [1, 1, 2, 3] -> "1~3"
-        [1, 2, 3, 5, 6, 7, 8, 11] -> "1~3,5~8,11"
-        [] -> ""
-
-    Args:
-        raw_nos: Raw list of line number values (str or numeric).
-
-    Returns:
-        Compressed string representation, or empty string for empty input.
-    """
-    try:
-        nums = sorted(set(int(float(str(n).strip())) for n in raw_nos if str(n).strip()))
-    except (ValueError, TypeError):
-        return ",".join(str(n) for n in raw_nos)
-    if not nums:
-        return ""
-    ranges = []
-    start = end = nums[0]
-    for n in nums[1:]:
-        if n == end + 1:
-            end = n
-        else:
-            ranges.append(str(start) if start == end else f"{start}~{end}")
-            start = end = n
-    ranges.append(str(start) if start == end else f"{start}~{end}")
-    return ",".join(ranges)
+from core.utils import _compress_line_nos
 
 
 class KittingMapperApp(tk.Tk):
@@ -383,7 +355,7 @@ class KittingMapperApp(tk.Tk):
 
             try:
                 from core.config_loader import load_config
-                from core.business_day import get_previous_business_day, get_next_business_day
+                from core.business_day import get_previous_business_day
                 from core.outlook_reader import find_kitting_email, parse_kitting_table
                 from core.packing_detail_reader import lookup_packing_dimensions
                 from core.order_lines_reader import lookup_order_lines
@@ -422,9 +394,6 @@ class KittingMapperApp(tk.Tk):
                 else:
                     target_date = get_previous_business_day(today)
                 logger.info("오늘: %s | 검색 날짜: %s", today, target_date)
-                write_date: date = get_next_business_day(today)
-                logger.info("Excel 기재 날짜(다음 영업일): %s", write_date)
-
                 logger.info("%s 이메일 검색 중...", target_date)
                 html_body: Optional[str] = find_kitting_email(target_date)
                 if html_body is None:
@@ -588,8 +557,7 @@ class KittingMapperApp(tk.Tk):
                             )
                             if _current_note is not None and _current_note.strip():
                                 # Strip existing parenthesis suffix: "당일 포장반 (이전치수)" → "당일 포장반"
-                                import re as _re
-                                _base_note = _re.sub(r'\s*\(.*', '', _current_note).strip()
+                                _base_note = re.sub(r'\s*\(.*', '', _current_note).strip()
                             else:
                                 _base_note = _pe["kit_place"]
                             _new_note = f"{_base_note} ({_dims})"

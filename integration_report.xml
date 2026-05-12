@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<integration_report>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <result>PASS</result>
+
+  <modules_integrated>
+    <module id="MT-1" status="PASS">ic_part_src/order_mapper.py — write_ic_part_zip I·J·K 합집합 수정</module>
+    <module id="MT-2" status="PASS">po_automation/email_monitor.py — _process_mail_item Exchange DN 변환 추가</module>
+  </modules_integrated>
+
+  <integration_verdict>PASS</integration_verdict>
+
+  <interaction_check>
+    <cross_module_dependency>없음 — MT-1과 MT-2는 서로 다른 파일의 독립적인 함수</cross_module_dependency>
+    <regression_check>두 수정 모두 기존 코드 흐름을 유지하며 버그 부분만 교체/추가</regression_check>
+    <interface_consistency>PASS — 두 함수의 외부 인터페이스(파라미터, 반환값) 변경 없음</interface_consistency>
+  </interaction_check>
+
+  <combined_files>
+    <file>ic_part_src/order_mapper.py</file>
+    <file>po_automation/email_monitor.py</file>
+  </combined_files>
+</integration_report>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_MODULE_QA</status>
+
+  <scope_declaration>
+    <files_modified>
+      <file>ic_part_src/order_mapper.py</file>
+    </files_modified>
+    <functions_modified>
+      <function>write_ic_part_zip</function>
+    </functions_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>ic_part_src.order_mapper.write_ic_part_zip</target_function>
+    <change_type>logic_replacement</change_type>
+    <description>K 컬럼만 스캔하던 _l_cell_pattern/_l_filled/_last_written_row/_actual_start_row 블록을 I·J·K 합집합 기준(_ijk_occupied set)으로 교체. 기존 5줄을 35줄로 확장.</description>
+    <side_effects>없음 — _actual_start_row 변수는 기존과 동일하게 write_offset 계산에 사용됨</side_effects>
+    <regression_risk>낮음 — 변경 범위는 write_ic_part_zip 함수 내 단일 블록</regression_risk>
+  </impact_analysis>
+
+  <implemented_files>
+    <file>ic_part_src/order_mapper.py</file>
+  </implemented_files>
+
+  <self_check>
+    <item id="SC-1" result="PASS">_COL_LETTERS dict로 I·J·K 세 컬럼 모두 순회</item>
+    <item id="SC-2" result="PASS">self-closing 태그(branch 1, group(1) not None) 건너뜀</item>
+    <item id="SC-3" result="PASS">v 태그 없는 open/close 셀 건너뜀</item>
+    <item id="SC-4" result="PASS">ICPART_DATA_START_ROW 미만 행 건너뜀</item>
+    <item id="SC-5" result="PASS">빈 시트 시 max(_ijk_occupied, default=5)=5, _actual_start_row=6</item>
+    <item id="SC-6" result="PASS">logger.info 메시지 업데이트 (I·J·K 합집합 명시)</item>
+  </self_check>
+
+  <evidence>
+    <file>ic_part_src/order_mapper.py</file>
+    <file>scope_manifest_MT-1.json</file>
+  </evidence>
+</module_handover>

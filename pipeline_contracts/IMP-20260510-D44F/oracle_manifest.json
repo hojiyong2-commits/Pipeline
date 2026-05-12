@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-D44F",
+  "created_at": "2026-05-10T07:54:32Z",
+  "oracles": [
+    {
+      "name": "normal-inspection-input",
+      "description": "정상 케이스: 전체 점검 리포트가 필수 섹션을 모두 포함하는지 확인",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260510-D44F\\case-normal\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-D44F\\case-normal\\expected.txt",
+      "input_sha256": "bb69443408fa3e1420b192ea91239b25cf5243ab5793b1ddf777fdd22b4c7c4e",
+      "expected_sha256": "8da58f4af62f54c0c748c8adbc17750c2867fbae30f2655926d436439b170a72",
+      "added_at": "2026-05-10T07:54:32Z"
+    },
+    {
+      "name": "edge-scan-behaviors",
+      "description": "엣지케이스: ReceivedTime None, rename 실패 분기, 빈 필터 동작 분석 포함 여부",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260510-D44F\\case-edge\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-D44F\\case-edge\\expected.txt",
+      "input_sha256": "ead3e02afe1013cba57d9366f73e113c460aecca68eca70f12ab243bf209fa0e",
+      "expected_sha256": "728104a7afdcd45711d81c067e0b7d490ed2ede9467b10e82d09a5c398f6463f",
+      "added_at": "2026-05-10T07:54:36Z"
+    }
+  ],
+  "updated_at": "2026-05-10T07:54:36Z"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "FEAT-20260509-EB28",
+  "pipeline_type": "FEAT",
+  "created_at": "2026-05-09T07:24:59Z",
+  "updated_at": "2026-05-09T07:32:04Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "smoke test v2",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "M1",
+      "name": "파싱모듈",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-09T07:32:04Z",
+  "contract_hash": "6ef9a9936062f7e1d1cfd9f384d993882a45d88b141fe0e5409253005e12a19f",
+  "test_set_hash": "68abe32a07c2943827201bbb6a693637fad178b49e6393ea4f098c1229d9c02d"
+}

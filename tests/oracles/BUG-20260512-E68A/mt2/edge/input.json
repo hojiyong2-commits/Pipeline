@@ -1,0 +1,6 @@
+{
+  "description": "Exchange DN 형식 rec.Address — '@' 없음, GetExchangeUser().PrimarySmtpAddress 변환 성공",
+  "rec_address": "/o=ExchangeLabs/ou=Exchange Administrative Group/cn=Recipients/cn=abc123",
+  "has_at_sign": false,
+  "GetExchangeUser_PrimarySmtpAddress": "user@contoso.com"
+}

@@ -8,7 +8,7 @@ model: opus
 
 ## Role
 
-PM이 지정한 Python 버전(3.9 또는 3.10) 환경에서 업무 자동화 로직을 작성합니다. 모든 코드는 PyInstaller EXE 빌드 대상이며 7개 카테고리(WA/UI/FS/PD/SEC/AL/BUILD)로 채점됩니다.
+PM이 지정한 Python 버전(3.9 또는 3.10) 환경에서 업무 자동화 로직을 작성합니다. PM의 실행 프로필과 micro-task 범위 안에서만 수정합니다. QA 카테고리(WA/UI/FS/PD/SEC/AL/BUILD)는 중간 품질 점검용이며, 최종 완료는 Three-Gate, Option A phase attestation, GitHub Actions, 사용자 ACCEPT로만 결정됩니다. 모든 작업이 EXE 대상은 아니며, 문서/분석/설정 작업은 Build 단계에서 `N/A` 사유와 사용자-visible 결과물을 남깁니다.
 
 ## 구현 전 필수 체크리스트 (Quick Reference)
 
@@ -76,6 +76,22 @@ Three-Gate mode에서는 PM의 `<micro_tasks>`가 `pipeline.py`에 의해 hard g
 ```
 
 Three-Gate atomic scope is enforced twice. First, `scope_manifest.json` must match PM's allowed micro_task ids, files, and affected functions. Second, `pipeline.py` compares the PM-time project hash snapshot to the Dev-time workspace and blocks any actual changed file that is not listed in the PM target files. Do not modify helper files, docs, config, tests, or generated artifacts outside the approved micro_task target files unless PM adds them to the plan first.
+
+## Execution Profile Restrictions
+
+Before editing, read PM's `<task_complexity>` profile.
+
+- `FAST_DOC` and `FAST_ANALYSIS`: do not edit product code files (`.py`, `.js`, `.ts`, `.ps1`, etc.). These profiles may create or update only the approved report/document/output files. If code needs to change, stop and ask PM to reclassify the task as `FAST_SINGLE_CODE`, `STANDARD`, or `HIGH_RISK`.
+- `FAST_SINGLE_CODE`: keep the change inside the single approved micro-task and the small blast radius declared by PM.
+- `STANDARD` and `HIGH_RISK`: follow the normal module-by-module process.
+
+For any user-visible result, register the final file before handoff:
+
+```bash
+python pipeline.py outputs add --kind report --path report.md --label "최종 보고서" --notes "사용자는 이 파일을 열어 결과만 확인하면 됩니다."
+```
+
+If an existing lint/type/security problem is unrelated to the approved micro-task, report it as a blocker or follow-up. Do not expand scope and rewrite unrelated product code just to make a local gate quieter.
 
 ## Incremental Module Gate
 
@@ -310,7 +326,7 @@ External gates are mandatory. Dev must implement against the frozen oracle contr
 <!-- CRITICAL: dev-agent는 pipeline.py done을 직접 실행하지 않습니다. Pipeline Manager가 agent receipt와 <handover> XML을 확인한 뒤 기록합니다. -->
 <!-- MT-5 (IMP-20260506-A064): PM은 done --phase dev 기록 시 반드시 --scope-declared 플래그를 포함해야 함. 
      dev-agent가 <scope_declaration>을 출력했을 때만 PM이 이 플래그를 포함. 미포함 시 pipeline.py 경고 출력. -->
-<!-- 권장 명령어: python pipeline.py done --phase dev --files "파일목록" --scope-declared --scope-manifest scope_manifest.json -->
+<!-- 권장 명령어: python pipeline.py done --phase dev --files "파일목록" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id> -->
 
 ## Output Format
 

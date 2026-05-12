@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T08:55:24Z",
+  "pipeline_id": "IMP-20260510-D44F",
+  "contract_hash": "4d1770152fc375455c7c1c37ecdc07b3a5e33d45f8158cf9ae98751d7084d4cd",
+  "test_set_hash": "b49c507c39f64fcf833de56fb6052c869ff114440b7a07c97d2fc671ca068e30",
+  "observed_contract_hash": "4d1770152fc375455c7c1c37ecdc07b3a5e33d45f8158cf9ae98751d7084d4cd",
+  "observed_test_set_hash": "b49c507c39f64fcf833de56fb6052c869ff114440b7a07c97d2fc671ca068e30",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 4,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MOD-3": 1,
+        "MOD-4": 1,
+        "MOD-1": 1,
+        "MOD-2": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 4
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 95,
+    "total_points": 95,
+    "hard_fail": false,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "TST-1",
+      "module": "MOD-1",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 25,
+      "earned": 25,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md"
+      }
+    },
+    {
+      "id": "TST-2",
+      "module": "MOD-2",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 20,
+      "earned": 20,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md"
+      }
+    },
+    {
+      "id": "TST-3",
+      "module": "MOD-3",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 20,
+      "earned": 20,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md"
+      }
+    },
+    {
+      "id": "TST-4",
+      "module": "MOD-4",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 20,
+      "earned": 20,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md"
+      }
+    },
+    {
+      "id": "TST-5",
+      "module": "MOD-3",
+      "type": "file_output_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260510-D44F\\inspection_report_IMP-20260510-D44F.md"
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "normal-inspection-input",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260510-D44F\\case-normal\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-D44F\\case-normal\\expected.txt",
+      "input_sha256": "bb69443408fa3e1420b192ea91239b25cf5243ab5793b1ddf777fdd22b4c7c4e",
+      "expected_sha256": "8da58f4af62f54c0c748c8adbc17750c2867fbae30f2655926d436439b170a72"
+    },
+    {
+      "name": "edge-scan-behaviors",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260510-D44F\\case-edge\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260510-D44F\\case-edge\\expected.txt",
+      "input_sha256": "ead3e02afe1013cba57d9366f73e113c460aecca68eca70f12ab243bf209fa0e",
+      "expected_sha256": "728104a7afdcd45711d81c067e0b7d490ed2ede9467b10e82d09a5c398f6463f"
+    }
+  ]
+}

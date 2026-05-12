@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <mt_id>MT-2</mt_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_MODULE_QA</status>
+
+  <scope_declaration>
+    <files_modified>
+      <file>po_automation/email_monitor.py</file>
+    </files_modified>
+    <functions_modified>
+      <function>_process_mail_item</function>
+    </functions_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>po_automation.email_monitor._process_mail_item</target_function>
+    <change_type>logic_addition</change_type>
+    <description>수신자 for 루프 내 rec.Address 처리 부분에 Exchange DN 감지 + SMTP 변환 로직 추가. '@' 없는 주소를 Exchange DN으로 감지하여 GetExchangeUser().PrimarySmtpAddress로 변환. 예외 시 원본 주소로 폴백.</description>
+    <side_effects>없음 — recipient_set에 추가되는 주소가 SMTP 형식으로 개선될 뿐, 기존 allowed_recipients 인터셋 로직 변경 없음</side_effects>
+    <regression_risk>낮음 — '@' 있는 일반 SMTP 주소는 기존과 동일하게 처리됨</regression_risk>
+  </impact_analysis>
+
+  <implemented_files>
+    <file>po_automation/email_monitor.py</file>
+  </implemented_files>
+
+  <self_check>
+    <item id="SC-1" result="PASS">raw_addr에 '@' 없을 때만 Exchange DN 분기 진입</item>
+    <item id="SC-2" result="PASS">AddressEntry → GetExchangeUser → PrimarySmtpAddress 순서 확인</item>
+    <item id="SC-3" result="PASS">예외 발생 시 pass (nosec B110) → raw_addr 원본 유지</item>
+    <item id="SC-4" result="PASS">addr = raw_addr.lower().strip() 정규화 후 recipient_set 추가</item>
+    <item id="SC-5" result="PASS">SMTP 주소('@' 포함)는 Exchange DN 분기 건너뛰고 그대로 사용</item>
+    <item id="SC-6" result="PASS">외부 try/except 구조(기존 nosec B110) 유지</item>
+  </self_check>
+
+  <evidence>
+    <file>po_automation/email_monitor.py</file>
+    <file>scope_manifest_MT-2.json</file>
+  </evidence>
+</module_handover>

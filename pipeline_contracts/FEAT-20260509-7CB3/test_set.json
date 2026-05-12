@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "FEAT-20260509-7CB3",
+  "created_at": "2026-05-09T07:32:50Z",
+  "updated_at": "2026-05-09T07:32:51Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T1",
+      "module": "M1",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {},
+      "when": {},
+      "then": {}
+    },
+    {
+      "id": "T2",
+      "module": "M1",
+      "type": "file_exists_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 10,
+      "given": {},
+      "when": {},
+      "then": {}
+    }
+  ],
+  "frozen_at": "2026-05-09T07:32:51Z",
+  "test_set_hash": "5f474719e00e6060f30de0fe6185bb81ac95e9b51277a920419a3297af406e07",
+  "contract_hash": "aaf6a10c30e30d305bf85801a3ace1077c1ef71a251af887719ae69db73148bd"
+}

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>ic_part_src/order_mapper.py</file>
+      <file>po_automation/email_monitor.py</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>ic_part_src.order_mapper.write_ic_part_zip</target_function>
+    <change>K 컬럼 전용 빈행 탐지를 I·J·K 합집합 기준으로 교체</change>
+    <mt_id>MT-2</mt_id>
+    <target_function>po_automation.email_monitor._process_mail_item</target_function>
+    <change>수신자 for 루프에 Exchange DN SMTP 변환 로직 추가</change>
+  </impact_analysis>
+
+  <evidence>
+    <file>ic_part_src/order_mapper.py</file>
+    <file>po_automation/email_monitor.py</file>
+    <file>scope_manifest.json</file>
+    <file>module_qa_MT-1.xml</file>
+    <file>module_qa_MT-2.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+</handover>
