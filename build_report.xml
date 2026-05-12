@@ -1,13 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <build_report>
-  <pipeline_id>IMP-20260510-184A</pipeline_id>
-  <section_1_command>N/A — meta-task (pipeline.py 수정)</section_1_command>
-  <section_2_output>N/A</section_2_output>
-  <section_3_verification>N/A — EXE 빌드 대상 아님</section_3_verification>
-  <section_4_artifacts>N/A</section_4_artifacts>
-  <section_5_status>N/A — meta-task skip</section_5_status>
-  <section_6_qa_mapping>oracle T001, T002 PASS 확인. 배포 범위 축소 변경 포함.</section_6_qa_mapping>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <agent>build-agent</agent>
+  <run_id>build-9014a192222fe593</run_id>
+
+  <section_1_command>
+    <exe_target>N/A</exe_target>
+    <skip_reason>meta-task</skip_reason>
+    <justification>pyproject.toml과 .claude/agents/qa-agent.md만 수정하는 메타 태스크. Python EXE 빌드 대상 없음.</justification>
+  </section_1_command>
+
+  <section_2_dependencies>
+    <note>EXE 빌드 없음. 의존성 패키징 불필요.</note>
+  </section_2_dependencies>
+
+  <section_3_output>
+    <exe_path>N/A</exe_path>
+    <artifact_description>수정 파일: pyproject.toml (PLW2901 extend-select 추가), .claude/agents/qa-agent.md (PLW2901 shadowing 체크리스트 추가)</artifact_description>
+  </section_3_output>
+
+  <section_4_verification>
+    <ruff_check>ruff check --select PLW2901 pyproject.toml -- All checks passed (0 violations)</ruff_check>
+    <plw2901_rule_active>PASS -- extend-select = [PLW2901] in [tool.ruff.lint]</plw2901_rule_active>
+    <qa_agent_checklist>PASS -- PLW2901 shadowing 검사 서브섹션 추가 확인</qa_agent_checklist>
+  </section_4_verification>
+
+  <section_5_status>
+    <status>N/A</status>
+    <verdict>BUILD_SKIPPED_META_TASK</verdict>
+    <notes>meta-task: EXE 빌드 대상 아님. QA PASS (120/120), 모든 acceptance criteria 충족.</notes>
+  </section_5_status>
+
+  <section_6_qa_mapping>
+    <qa_run_id>qa-a2ae41d77718360d</qa_run_id>
+    <qa_verdict>PASS</qa_verdict>
+    <qa_numeric_score>120</qa_numeric_score>
+    <mt1_pyproject_toml>PASS -- extend-select PLW2901 추가 확인</mt1_pyproject_toml>
+    <mt2_qa_agent_md>PASS -- PLW2901 shadowing 체크리스트 추가 확인</mt2_qa_agent_md>
+  </section_6_qa_mapping>
+
   <status>N/A</status>
-  <skip_reason>meta-task</skip_reason>
-  <exe_path>N/A</exe_path>
 </build_report>
