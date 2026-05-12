@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<build_report>
+  <pipeline_id>BUG-20260512-F307</pipeline_id>
+
+  <section_1_command>
+    pyinstaller --noconfirm ICPartAutomation.spec
+    (ic_part_src 디렉터리에서 실행)
+  </section_1_command>
+
+  <section_2_spec>
+    <onefile>YES</onefile>
+    <windowed>YES</windowed>
+    <hiddenimports>
+      <item>openpyxl</item>
+      <item>zipfile</item>
+      <item>re</item>
+    </hiddenimports>
+    <datas>
+      <item src="IC-Part.xlsx 템플릿" dest="." />
+    </datas>
+    <excludes/>
+  </section_2_spec>
+
+  <section_3_output>
+    <exe_path>ic_part_src/dist/ICPartAutomation.exe</exe_path>
+    <size_mb>36.0</size_mb>
+    <meipass_helper>YES</meipass_helper>
+  </section_3_output>
+
+  <section_4_verification>
+    <dll_included>YES — PYZ 아카이브 포함 성공</dll_included>
+    <upx_risk>NO — UPX 미사용</upx_risk>
+    <zero_dependency>YES — 단독 실행 가능</zero_dependency>
+    <console_hidden>YES — windowed 모드, 콘솔 창 없음</console_hidden>
+  </section_4_verification>
+
+  <section_5_optimization>
+    order_mapper.py 변경 감지 후 PYZ 재빌드 완료.
+    EXE 크기 36MB — 정상 범위 (openpyxl + tkinter 포함).
+    불필요한 패키지 없음.
+  </section_5_optimization>
+
+  <section_6_qa_mapping>
+    <qa_result>[PASS]</qa_result>
+    <critical_issues_resolved>
+      <item issue="inlineStr 감지 누락 (MT-1)" resolved="YES" />
+    </critical_issues_resolved>
+  </section_6_qa_mapping>
+
+  <status>BUILD SUCCESS</status>
+</build_report>
