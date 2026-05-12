@@ -1,23 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_qa_report>
   <mt_id>MT-1</mt_id>
-  <pipeline_id>BUG-20260512-9C67</pipeline_id>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
   <verdict>PASS</verdict>
   <verification_evidence>
-    <check id="1">for _scan_letter in _COL_LETTERS at L1141 confirmed</check>
-    <check id="2">for _col_letter pattern absent (only _scan_letter in loop)</check>
-    <check id="3">def _col_letter(n: int) at L132 preserved</check>
-    <check id="4">_col_letter() call sites at L1308 L1312 L1317 preserved</check>
-    <check id="5">assert statements at L1511-1518 preserved</check>
-    <check id="6">_scan_letter only used inside loop block (L1141-L1146)</check>
+    <check id="T1" priority="P0">pyproject.toml [tool.ruff.lint] 섹션에 extend-select = ["PLW2901"] 확인 — PASS</check>
+    <check id="T3" priority="P1">기존 ignore 목록 E402,E731,E713,E701,F541,F841 모두 보존 — PASS</check>
+    <check id="ruff_run">ruff check --select PLW2901 pyproject.toml → All checks passed (exit 0)</check>
+    <check id="scope">pyproject.toml 이외 파일 미변경 — PASS</check>
   </verification_evidence>
   <category_check>
     <wa>N/A</wa>
     <ui>N/A</ui>
-    <fs>PASS</fs>
+    <fs>N/A</fs>
     <pd>PASS</pd>
-    <sec>PASS</sec>
-    <al>PASS</al>
+    <sec>N/A</sec>
+    <al>N/A</al>
     <build>N/A</build>
   </category_check>
   <result>[PASS]</result>
