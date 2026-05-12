@@ -4,8 +4,8 @@
   "type": "BUG",
   "description": "ICPartAutomation 빈행 탐지 기준 변경(I,J,K 모두 비어있는 첫 행) + emailmonitor 발신자/수신자 필터링 동작 불량 수정",
   "created_at": "2026-05-12T00:05:14Z",
-  "updated_at": "2026-05-12T00:43:07Z",
-  "current_phase": "harness",
+  "updated_at": "2026-05-12T01:01:46Z",
+  "current_phase": "architect",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -64,11 +64,11 @@
       "agent_run_id": "build-18893b01debf2e4d"
     },
     "harness": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "FAIL",
+      "completed_at": "2026-05-12T01:00:54Z",
+      "evidence": "oracle_gate_failed",
       "notes": [],
-      "report_file": null,
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\gates\\oracle_result.json",
       "agent_id": null,
       "snapshot_path": null
     },
@@ -366,6 +366,50 @@
     {
       "ts": "2026-05-12T00:43:07Z",
       "msg": "phase attestation request prepared: build"
+    },
+    {
+      "ts": "2026-05-12T00:47:25Z",
+      "msg": "github phase-ci build PASS run_id=25706161389 commit=251a8b6ab511"
+    },
+    {
+      "ts": "2026-05-12T00:48:00Z",
+      "msg": "technical gate FAIL"
+    },
+    {
+      "ts": "2026-05-12T00:48:28Z",
+      "msg": "technical gate FAIL"
+    },
+    {
+      "ts": "2026-05-12T00:54:25Z",
+      "msg": "technical gate PASS"
+    },
+    {
+      "ts": "2026-05-12T00:54:28Z",
+      "msg": "oracle gate FAIL"
+    },
+    {
+      "ts": "2026-05-12T00:56:07Z",
+      "msg": "oracle gate FAIL"
+    },
+    {
+      "ts": "2026-05-12T01:00:54Z",
+      "msg": "oracle gate FAIL"
+    },
+    {
+      "ts": "2026-05-12T01:01:23Z",
+      "msg": "oracle gate PASS"
+    },
+    {
+      "ts": "2026-05-12T01:01:31Z",
+      "msg": "github verify-run PASS run_id=25706443788 commit=0dd03c27cfa0"
+    },
+    {
+      "ts": "2026-05-12T01:01:41Z",
+      "msg": "output registered exe pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe"
+    },
+    {
+      "ts": "2026-05-12T01:01:46Z",
+      "msg": "output registered exe pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe"
     }
   ],
   "terminal_state": null,
@@ -816,17 +860,17 @@
     "enabled": true,
     "mode": "three_gate",
     "technical": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-12T00:54:25Z",
+      "evidence": "deterministic_tool_gate",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\gates\\technical_result.json",
       "notes": []
     },
     "oracle": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-12T01:01:23Z",
+      "evidence": "oracle_acceptance",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\gates\\oracle_result.json",
       "notes": []
     },
     "acceptance": {
@@ -837,10 +881,10 @@
       "notes": []
     },
     "github_ci": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-12T01:01:31Z",
+      "evidence": "github_actions_run:25706443788",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\gates\\github_ci_result.json",
       "notes": []
     }
   },
@@ -888,14 +932,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "build": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-12T00:47:25Z",
         "phase": "build",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25706161389",
+        "commit_sha": "251a8b6ab51145b1402e72d83e7841f4b972aaf5",
+        "evidence": "github_actions_phase_run:25706161389",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\gates\\phase_ci\\build_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       }
     }
   },
@@ -1054,16 +1099,78 @@
     }
   },
   "outputs": {
-    "items": []
+    "items": [
+      {
+        "kind": "exe",
+        "label": "ICPartAutomation EXE (MT-1: I·J·K 합집합 빈행 탐지 수정)",
+        "source_path": "ic_part_src\\dist\\ICPartAutomation.exe",
+        "public_path": "pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe",
+        "sha256": "b5bc8675482875c5890041e21dfc43aba452515d748d950738789fb41b37d62e",
+        "size_bytes": 37767908,
+        "notes": "IC Part 자동화 앱. order_mapper.py write_ic_part_zip() 함수 수정 — K 컬럼 단독 스캔에서 I·J·K 합집합 스캔으로 변경하여 누적 모드 시작 행 계산 오류 수정.",
+        "registered_at": "2026-05-12T01:01:41Z"
+      },
+      {
+        "kind": "exe",
+        "label": "emailmonitor EXE (MT-2: Exchange DN SMTP 변환 수정)",
+        "source_path": "dist\\emailmonitor.exe",
+        "public_path": "pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe",
+        "sha256": "11ec9b562d7649f98a3f40acae00995d6cf38ec42df83a9e5d49b983fdd77871",
+        "size_bytes": 118713794,
+        "notes": "이메일 모니터 앱. email_monitor.py _process_mail_item() 수정 — Exchange DN 형식 수신자 주소를 SMTP로 변환하여 recipient_set 필터링 오류 수정.",
+        "registered_at": "2026-05-12T01:01:46Z"
+      }
+    ]
   },
-  "failure_packets": [],
+  "failure_packets": [
+    {
+      "gate": "technical",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\technical_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\technical_attempt_1.json",
+      "recorded_at": "2026-05-12T00:48:00Z",
+      "repair_owner": "Dev tooling repair"
+    },
+    {
+      "gate": "technical",
+      "attempt": 2,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\technical_attempt_2.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\technical_attempt_2.json",
+      "recorded_at": "2026-05-12T00:48:28Z",
+      "repair_owner": "Dev tooling repair"
+    },
+    {
+      "gate": "oracle",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\oracle_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\oracle_attempt_1.json",
+      "recorded_at": "2026-05-12T00:54:28Z",
+      "repair_owner": "PM/oracle path repair or Dev behavior repair"
+    },
+    {
+      "gate": "oracle",
+      "attempt": 2,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\oracle_attempt_2.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\oracle_attempt_2.json",
+      "recorded_at": "2026-05-12T00:56:07Z",
+      "repair_owner": "PM/oracle path repair or Dev behavior repair"
+    },
+    {
+      "gate": "oracle",
+      "attempt": 3,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\oracle_attempt_3.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\oracle_attempt_3.json",
+      "recorded_at": "2026-05-12T01:00:54Z",
+      "repair_owner": "PM/oracle path repair or Dev behavior repair"
+    }
+  ],
   "protocol_evolution_decision": null,
   "contract_v2": {
     "enabled": true,
     "frozen": true,
     "status": "frozen",
     "contract_hash": "574ffccfd170df395656c373630aa92db373376c00c4c1d3b7ec4d5c56fc745f",
-    "test_set_hash": "af3616eef3859dc652ea962a65ebf2bb5ceb3d3dd1be9eb99211742f7ebf6834",
+    "test_set_hash": "9e1f0791dcb32f8b80ab7cf45731fac9165c5ba5781037f7aaa3d7ba87b944f6",
     "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\task_contract.json",
     "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\test_set.json",
     "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\acceptance_summary.md"
@@ -2066,6 +2173,15 @@
       "run_id": "25705860023",
       "commit_sha": "dc2ae76980d1ce297a9e202104d4b3b27dfd87e0",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-12T00:47:25Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "build",
+      "run_id": "25706161389",
+      "commit_sha": "251a8b6ab51145b1402e72d83e7841f4b972aaf5",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "dev_handover": {
@@ -2109,5 +2225,15 @@
     "validated_at": "2026-05-12T00:36:26Z",
     "numeric_score": 116,
     "verdict": "PASS"
-  }
+  },
+  "trusted_github_runs": [
+    {
+      "recorded_at": "2026-05-12T01:01:31Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "run_id": "25706443788",
+      "commit_sha": "0dd03c27cfa03ba4c579d84a8578cc237ed133a6",
+      "artifact": "pipeline-attestation"
+    }
+  ]
 }

@@ -1,0 +1,5 @@
+{
+  "description": "K 컬럼이 row 12까지 채워짐 (I·J는 row 10까지) — _actual_start_row = 13",
+  "_last_occupied_row": 12,
+  "_actual_start_row": 13
+}
