@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-E68A",
+  "created_at": "2026-05-12T00:14:32Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\normal\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\normal\\expected.json",
+      "input_sha256": "31523c0f85d4c798870cf2009c1afefea1c02746d484e93cb3952230d747f4a9",
+      "expected_sha256": "7c53ac39f1d9f4cf10ce1e5f759b60deea599c1c22500e22f7d1321f0197d283",
+      "added_at": "2026-05-12T00:14:32Z"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\edge\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\edge\\expected.json",
+      "input_sha256": "8a9eac1cc98331424111f63e97767045319952da63ee7e29be0372f43b38e4a2",
+      "expected_sha256": "6b54c9a24d378c47c0fa5b416506877c0610c40acabb55d63e3276813bfac096",
+      "added_at": "2026-05-12T00:14:35Z"
+    },
+    {
+      "name": "O003",
+      "description": "",
+      "source": "user",
+      "case_kind": "exception",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\exception\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\exception\\expected.json",
+      "input_sha256": "bce47db7edf1925760aefe77ca30147edcd8964877f99a1faab62653cb2b1af5",
+      "expected_sha256": "83c5556f9620cdcbe2b400555c79660ccec611390380d0b54c071569eb76b8f6",
+      "added_at": "2026-05-12T00:14:36Z"
+    },
+    {
+      "name": "O004",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\normal\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\normal\\expected.json",
+      "input_sha256": "a35e9dde2516a99479e494771decc329de4cfbf4b7bb6506d17939eb602de471",
+      "expected_sha256": "b885f904b9c1a84d370d902ae507eec87f7c22f278089c77a5dec2b06c05ab09",
+      "added_at": "2026-05-12T00:14:39Z"
+    },
+    {
+      "name": "O005",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\edge\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\edge\\expected.json",
+      "input_sha256": "b7027a0a7c578b94b9df48ee61e15a0146bfc00575eaafd8e78df5e2f23f3353",
+      "expected_sha256": "724b667229120db6dac40e86506cdf03fa0992f2d77f8635fa187bcf2b9a5a24",
+      "added_at": "2026-05-12T00:14:40Z"
+    },
+    {
+      "name": "O006",
+      "description": "",
+      "source": "user",
+      "case_kind": "exception",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\exception\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\exception\\expected.json",
+      "input_sha256": "88e4e5939b477ce1bcc2d8e3ac4fc1c631a9c8ee5836e34a5b62b91cc3133041",
+      "expected_sha256": "b78b1dcb589785a8b8082365cae913aae82329e2ba9a99376ee019da35d10703",
+      "added_at": "2026-05-12T00:14:40Z"
+    }
+  ],
+  "updated_at": "2026-05-12T00:14:40Z"
+}

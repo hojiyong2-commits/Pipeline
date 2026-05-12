@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-09T15:52:28Z",
+  "pipeline_id": "IMP-20260509-A4DB",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [
+    "oracle gate waived by user: docs-only: README.md markdown creation, deliverable_kind=markdown, no runnable code"
+  ],
+  "metrics": {
+    "test_count": 3,
+    "p0_tests": 2,
+    "p0_behavior_tests": 2,
+    "shallow_tests": 1,
+    "oracle_count": 0
+  },
+  "oracle_entries": [],
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 2,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MOD-IN-1": 1,
+        "MOD-OUT-1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 2
+    }
+  },
+  "allow_no_oracle": true,
+  "waiver_reason": "docs-only: README.md markdown creation, deliverable_kind=markdown, no runnable code"
+}

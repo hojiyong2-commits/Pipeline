@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_handover>
+  <mt_id>MT-1</mt_id>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <from>dev-agent</from>
+  <status>READY_FOR_MODULE_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pyproject.toml</file>
+    </files_to_modify>
+    <files_modified>
+      <file>pyproject.toml</file>
+    </files_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>pyproject.toml [tool.ruff.lint] extend-select 추가</target_function>
+    <change_type>config_addition</change_type>
+    <lines_changed>2</lines_changed>
+    <side_effects>none — ruff PLW2901 규칙 활성화로 루프 변수 shadowing 탐지 가능해짐</side_effects>
+  </impact_analysis>
+
+  <changes_made>
+    <change>
+      <file>pyproject.toml</file>
+      <description>[tool.ruff.lint] 섹션에 PLW2901 주석과 extend-select = ["PLW2901"] 추가 (ignore 라인 위). 기존 ignore 목록 6개 항목 그대로 유지.</description>
+    </change>
+  </changes_made>
+
+  <implemented_files>
+    <file>pyproject.toml</file>
+  </implemented_files>
+
+  <self_check>
+    <ruff_check>ruff check --select PLW2901 pyproject.toml → All checks passed</ruff_check>
+    <existing_ignore_preserved>E402, E731, E713, E701, F541, F841 모두 그대로 유지</existing_ignore_preserved>
+    <scope_within_mt>PASS — pyproject.toml만 수정, 다른 파일 미변경</scope_within_mt>
+    <forbidden_preserved>PASS — oracle 파일, pipeline.py, CLAUDE.md, 기타 agent MD 미변경</forbidden_preserved>
+  </self_check>
+</module_handover>

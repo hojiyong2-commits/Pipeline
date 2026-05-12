@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260510-D44F",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-10T07:48:49Z",
+  "updated_at": "2026-05-10T07:56:03Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "EmailMonitor.exe 코드 점검 — po_automation 폴더 소스 검토 후 버그/보안/성능/유지보수성 전체 점검 리포트 생성",
+  "task_profile": {
+    "domain": "analysis",
+    "task_kind": "inspection",
+    "deliverable_kind": "analysis",
+    "success_signal": [
+      "inspection_report_IMP-20260510-D44F.md 파일 생성 완료",
+      "버그/보안/성능/유지보수성 4개 섹션 모두 포함",
+      "각 발견 항목에 코드 라인 번호 참조 3곳 이상"
+    ]
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": "3.9",
+    "constraints": [
+      "코드 변경 없음 — 읽기 전용 분석만 수행",
+      "EXE 빌드 없음",
+      "산출물: inspection_report_IMP-20260510-D44F.md"
+    ],
+    "external_connectors_allowed": false
+  },
+  "deliverables": [
+    {
+      "id": "DEL-1",
+      "name": "inspection_report_IMP-20260510-D44F.md",
+      "kind": "analysis_report",
+      "path": "inspection_report_IMP-20260510-D44F.md",
+      "description": "EmailMonitor 소스 전체 점검 Markdown 리포트"
+    }
+  ],
+  "build_target": {
+    "required": false,
+    "type": "N/A",
+    "notes": "분석 태스크 — EXE 빌드 불필요. pipeline.py build --exe N/A --skip-reason meta-task"
+  },
+  "execution": {
+    "mode": "analysis-only",
+    "entrypoint": null,
+    "user_trigger": "dev-agent가 소스 Read 후 MD 리포트 작성"
+  },
+  "modules": [
+    {
+      "id": "MOD-1",
+      "name": "코드품질_정적분석",
+      "inputs": [
+        "po_automation/email_monitor.py",
+        "po_automation/main.py"
+      ],
+      "outputs": [
+        "inspection_report_IMP-20260510-D44F.md (섹션: 유지보수성, 성능)"
+      ],
+      "acceptance_rules": [
+        "함수 복잡도 분석 결과 포함",
+        "책임 분리 위반 항목 기술",
+        "성능 취약 패턴(scan 루프, COM 객체 재생성) 분석"
+      ],
+      "exceptions": [
+        "COM/Outlook 런타임 호출 없음 — 정적 코드 분석만"
+      ]
+    },
+    {
+      "id": "MOD-2",
+      "name": "보안_경로순회_입력검증",
+      "inputs": [
+        "po_automation/email_monitor.py"
+      ],
+      "outputs": [
+        "inspection_report_IMP-20260510-D44F.md (섹션: 보안)"
+      ],
+      "acceptance_rules": [
+        "_safe_resolve 경로 순회 방어 분석",
+        "발신자/수신자 필터 우회 가능성 분석",
+        "임시파일 원자 저장 패턴 평가"
+      ],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-3",
+      "name": "버그_논리오류_경쟁조건",
+      "inputs": [
+        "po_automation/email_monitor.py",
+        "po_automation/main.py"
+      ],
+      "outputs": [
+        "inspection_report_IMP-20260510-D44F.md (섹션: 버그)"
+      ],
+      "acceptance_rules": [
+        "ReceivedTime None 처리 흐름 분석",
+        "rename 실패 후 폴더 생성 분기 검증",
+        "log_queue maxsize 포화 시 드롭 동작 평가",
+        "OnNewMailEx 내 Dispatch 객체 매 EntryID 재생성 문제 지적"
+      ],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-4",
+      "name": "리포트_산출물",
+      "inputs": [
+        "MOD-1 분석 결과",
+        "MOD-2 분석 결과",
+        "MOD-3 분석 결과"
+      ],
+      "outputs": [
+        "inspection_report_IMP-20260510-D44F.md"
+      ],
+      "acceptance_rules": [
+        "요약 테이블 포함",
+        "심각도 레이블(CRITICAL/HIGH/MEDIUM/LOW) 사용",
+        "각 발견 항목별 권고사항 포함",
+        "최소 1500자 이상"
+      ],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": null,
+      "severity": "P0",
+      "question": "점검 결과물 형태 및 점검 집중 영역을 선택해주세요",
+      "options": [
+        "A: 코드버그+보안+유지보수성 전체 점검 리포트",
+        "B: 버그/보안 집중",
+        "C: 코드 품질(유지보수성) 집중"
+      ],
+      "answer": "A: 코드버그+보안+성능+유지보수성 전체 점검 리포트(Markdown)만 생성. 코드 변경 없음, EXE 빌드 없음.",
+      "resolved": true,
+      "answered_at": "2026-05-10T07:52:55Z"
+    }
+  ],
+  "assumptions": [
+    "분석 대상: po_automation/email_monitor.py (1645줄), po_automation/main.py (642줄)",
+    "코드 변경 없음 — Read 전용",
+    "EXE 빌드 없음 — build --exe N/A --skip-reason meta-task",
+    "oracle: --allow-no-oracle (deliverable_kind=analysis)"
+  ],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-10T07:56:03Z",
+  "contract_hash": "4d1770152fc375455c7c1c37ecdc07b3a5e33d45f8158cf9ae98751d7084d4cd",
+  "test_set_hash": "b49c507c39f64fcf833de56fb6052c869ff114440b7a07c97d2fc671ca068e30"
+}

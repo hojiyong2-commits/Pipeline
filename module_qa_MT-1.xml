@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <mt_id>MT-1</mt_id>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <verdict>PASS</verdict>
+  <verification_evidence>
+    <check id="T1" priority="P0">pyproject.toml [tool.ruff.lint] 섹션에 extend-select = ["PLW2901"] 확인 — PASS</check>
+    <check id="T3" priority="P1">기존 ignore 목록 E402,E731,E713,E701,F541,F841 모두 보존 — PASS</check>
+    <check id="ruff_run">ruff check --select PLW2901 pyproject.toml → All checks passed (exit 0)</check>
+    <check id="scope">pyproject.toml 이외 파일 미변경 — PASS</check>
+  </verification_evidence>
+  <category_check>
+    <wa>N/A</wa>
+    <ui>N/A</ui>
+    <fs>N/A</fs>
+    <pd>PASS</pd>
+    <sec>N/A</sec>
+    <al>N/A</al>
+    <build>N/A</build>
+  </category_check>
+  <result>[PASS]</result>
+  <numeric_score>120</numeric_score>
+  <critical_issues>none</critical_issues>
+</module_qa_report>

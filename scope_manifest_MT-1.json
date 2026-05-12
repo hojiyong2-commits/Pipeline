@@ -1,0 +1,14 @@
+{
+  "pipeline_id": "IMP-20260512-C476",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pyproject.toml"
+      ],
+      "affected_functions": [
+        "pyproject.toml [tool.ruff.lint] section — extend-select 추가"
+      ]
+    }
+  ]
+}

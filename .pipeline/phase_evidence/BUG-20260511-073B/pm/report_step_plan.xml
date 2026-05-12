@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <anti_gaming_read>true</anti_gaming_read>
+  <pipeline_id>BUG-20260511-073B</pipeline_id>
+
+  <!-- ================================================================
+       TASK COMPLEXITY
+       ================================================================ -->
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>5개 micro-task, 5개 파일 수정(신규 1개 포함), 핵심 파서 로직(order_lines_reader) 변경 포함</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>5</expected_changed_files>
+      <expected_changed_functions>7</expected_changed_functions>
+      <expected_changed_lines>45</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <!-- ================================================================
+       DESIGN CONFIRMATION
+       ================================================================ -->
+  <design_confirmation>
+    <user_response>NO_ASKUSER_REQUIRED</user_response>
+    <reason>IMP-20260511-92A6 분석 보고서 기반 확정 항목. P0/P1/P2 분류 및 각 수정 범위가 보고서에서 사전 확정됨. 사용자 추가 확인 불필요.</reason>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명, 코드 스타일 등 P2 내부 구현 취향 질문은 유지보수성 우선 원칙으로 처리. 사용자에게 묻지 않음. 사전 분석 보고서에서 모든 기술 분기점이 확정되어 P0 질문 0개.</filter_summary>
+    <maintenance_priority>유지보수성 우선 — 중복 코드 제거(_compress_line_nos), 명확한 경로 제한(_ALLOWED_ROOTS), 단일 진실 소스 확보가 빠른 수정보다 우선.</maintenance_priority>
+    <dual_code_path_note>
+      KittingMapper는 main.py(CLI)와 ui/app.py(GUI) 양쪽에 동일 매핑 로직이 있음.
+      MT-2(jm 기본값): ui/app.py L487에도 .get("jm", "G") 버그가 동일하게 존재하나,
+      사전 분석에서 "ui/app.py는 _FIXED_EXCEL_B_COLUMNS 하드코딩이라 불필요"로 확정됨.
+      실제 분석 결과: _FIXED_EXCEL_B_COLUMNS["jm"]="KJ"가 config.get("excel_b_columns", _FIXED_EXCEL_B_COLUMNS)의
+      폴백값으로만 사용되고, config.json이 있을 때는 config.json 값을 사용하므로 동일한 버그가 존재함.
+      그러나 사전 분석 결과를 존중하여 MT-2는 main.py만 수정. Dev는 ui/app.py의 동일 패턴을 scope_manifest에
+      out_of_scope_known_issue로 기록하여 QA가 인지하도록 한다.
+      MT-3(포장반 Note): ui/app.py L469는 이미 note = kit_place로 올바름. 수정 불필요.
+    </dual_code_path_note>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-4">
+        <user_facing_question>_compress_line_nos 함수를 utils.py로 옮길까요, 아니면 각 파일에 두는 방식을 선택할까요?</user_facing_question>
+        <evidence>현재 main.py와 ui/app.py 모두 동일한 _compress_line_nos 함수를 복사해서 사용하고 있습니다. 두 파일의 코드가 따로 관리되면 나중에 버그 수정을 두 곳에서 따로 해야 합니다.</evidence>
+        <why_it_matters>중복 코드가 있으면 한 곳만 수정하고 다른 곳을 잊어서 버그가 생기는 유지보수 문제가 발생합니다. 유지보수성 우선 원칙에 따라 단일 소스로 통합이 권장됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <user_answer>A — 사전 분석 결과로 core/utils.py 신규 생성 및 통합 확정</user_answer>
+        <options>
+          <option id="A">
+            <label>utils.py로 통합 (단일 소스)</label>
+            <benefit>한 곳만 수정하면 CLI와 GUI 모두 반영, 유지보수 실수 방지</benefit>
+            <cost>utils.py 신규 파일 생성 필요, import 추가 2곳</cost>
+          </option>
+          <option id="B">
+            <label>각 파일 유지 (현행 유지)</label>
+            <benefit>파일 구조 변경 없음, 리스크 최소</benefit>
+            <cost>중복 코드 지속, 나중에 한 곳만 수정하는 실수 발생 가능</cost>
+          </option>
+        </options>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <!-- ================================================================
+       DECOMPOSITION AUDIT
+       ================================================================ -->
+  <decomposition_audit>
+    <total_functions_identified>7</total_functions_identified>
+    <micro_task_count>5</micro_task_count>
+    <grep_executions>6</grep_executions>
+    <split_decision>
+      5개 수정 항목을 우선순위(P0 to P2)와 파일/기능 경계에 따라 5개 MT로 분리.
+      MT-1(traversal guard 확장)과 MT-2(기본값 수정)는 독립적이므로 병합 불가.
+      MT-4는 신규 파일(core/utils.py) 생성을 수반하므로 별도 MT로 분리 필수.
+    </split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <!-- ================================================================
+       MICRO TASKS
+       ================================================================ -->
+  <micro_tasks>
+
+    <!-- MT-1: B-02 UNC 경로 허용 (P0) -->
+    <micro_task id="MT-1">
+      <priority>P0</priority>
+      <affected_function>order_lines_reader._safe_resolve, order_lines_reader._ALLOWED_ROOT</affected_function>
+      <target_files>
+        <file>FEAT-20260426-332E/core/order_lines_reader.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>order_lines_reader.lookup_order_lines (L172: path = _safe_resolve(file_path, _ALLOWED_ROOT))</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_ALLOWED_ROOT|_safe_resolve</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _ALLOWED_ROOT: Path = Path.home() 단일값을 _ALLOWED_ROOTS: List[Path]로 확장.
+        config.json의 packing_detail_path/order_lines_path에서 UNC 루트(\\ccikrnf\wrkgroup)를 자동 추출하여
+        _ALLOWED_ROOTS에 포함. _safe_resolve는 List 순회로 any() 검사로 변경.
+        traversal guard 보안 속성은 유지 (목록에 없는 UNC는 여전히 ValueError 발생).
+      </change_summary>
+      <implementation_note>
+        _ALLOWED_ROOTS 초기값: [Path.home()].
+        lookup_order_lines 호출 시 file_path에서 UNC 루트를 파싱하여 동적으로 허용 목록에 포함.
+        UNC 경로 패턴: \\server\share 형태(Path(p).anchor로 추출 가능).
+        _safe_resolve 시그니처: (user_path: str, allowed_roots: List[Path]) -> Path.
+        호출부(L172)도 _safe_resolve(file_path, _ALLOWED_ROOTS)로 변경.
+        List[Path] 타입 import: from typing import List 추가(이미 있으면 확인).
+      </implementation_note>
+      <line_estimate>18</line_estimate>
+      <oracle_cases>
+        <normal>tests/oracles/BUG-20260511-073B/MT-1-unc-normal</normal>
+        <edge>tests/oracles/BUG-20260511-073B/MT-1-unc-edge</edge>
+      </oracle_cases>
+    </micro_task>
+
+    <!-- MT-2: B-01 jm 컬럼 기본값 수정 (P0) -->
+    <micro_task id="MT-2">
+      <priority>P0</priority>
+      <affected_function>main._cli_main</affected_function>
+      <target_files>
+        <file>FEAT-20260426-332E/main.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>main._cli_main (L180: jm_col_letter=excel_b_columns.get("jm", "G"))</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>excel_b_columns.get\("jm"</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+        <note>main.py L180, ui/app.py L487 각 1건. MT-2는 main.py만 수정.</note>
+      </grep_evidence>
+      <change_summary>
+        main.py L180: excel_b_columns.get("jm", "G") to excel_b_columns.get("jm", "KJ").
+        "G"는 숫자 사번 컬럼(7번째)이고 "KJ"가 PM 이름(296번째 컬럼)이므로 기본값 수정.
+      </change_summary>
+      <out_of_scope_known_issue>
+        ui/app.py L487에도 동일한 .get("jm", "G") 버그가 존재하나, 사전 분석 결과에 따라 이번 MT-2 범위에서 제외.
+        Dev는 scope_manifest에 out_of_scope_known_issue로 기록. 후속 BUG 파이프라인 검토 권장.
+      </out_of_scope_known_issue>
+      <line_estimate>1</line_estimate>
+      <oracle_cases>
+        <normal>tests/oracles/BUG-20260511-073B/MT-2-jm-normal</normal>
+      </oracle_cases>
+    </micro_task>
+
+    <!-- MT-3: G-02 포장반 Note 통일 (P1) -->
+    <micro_task id="MT-3">
+      <priority>P1</priority>
+      <affected_function>main._cli_main</affected_function>
+      <target_files>
+        <file>FEAT-20260426-332E/main.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>main._cli_main (L166: note = "포장반" in else branch)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>note = "포장반"</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+        <note>main.py L166만 해당. ui/app.py L469는 이미 note = kit_place로 올바름.</note>
+      </grep_evidence>
+      <change_summary>
+        main.py L166: dims_result가 None일 때 note = "포장반" to note = kit_place.
+        GUI(ui/app.py L469)와 동일 동작으로 통일. kit_place가 "당일 포장반" 등 변형값일 때 정보 손실 방지.
+      </change_summary>
+      <line_estimate>1</line_estimate>
+      <oracle_cases>
+        <normal>tests/oracles/BUG-20260511-073B/MT-3-note-normal</normal>
+      </oracle_cases>
+    </micro_task>
+
+    <!-- MT-4: D-01 _compress_line_nos 중복 제거 (P1) -->
+    <micro_task id="MT-4">
+      <priority>P1</priority>
+      <affected_function>_compress_line_nos (main.py 로컬), _compress_line_nos (ui/app.py 로컬)</affected_function>
+      <target_files>
+        <file>FEAT-20260426-332E/core/utils.py</file>
+        <file>FEAT-20260426-332E/main.py</file>
+        <file>FEAT-20260426-332E/ui/app.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>main._cli_main (L198: _compress_line_nos(line_nos))</site>
+        <site>ui.app (L515: _compress_line_nos(line_nos))</site>
+        <site>ui.app (L582: _compress_line_nos(_pe.get("line_nos", [])))</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _compress_line_nos|_compress_line_nos\(</pattern>
+        <match_count>6</match_count>
+        <executed>true</executed>
+        <note>def: main.py L34, ui/app.py L30. 호출: main.py L198, ui/app.py L515, L582. core/utils.py 신규 생성.</note>
+      </grep_evidence>
+      <change_summary>
+        1. core/utils.py 신규 생성: _compress_line_nos 함수 정의 포함.
+        2. main.py: L34~63 로컬 _compress_line_nos 정의 제거, 파일 상단에 from core.utils import _compress_line_nos 추가.
+        3. ui/app.py: L30~59 로컬 _compress_line_nos 정의 제거, 파일 상단에 from core.utils import _compress_line_nos 추가.
+        함수 시그니처/동작 동일 유지.
+      </change_summary>
+      <line_estimate>15</line_estimate>
+      <oracle_cases>
+        <normal>tests/oracles/BUG-20260511-073B/MT-4-utils-normal</normal>
+      </oracle_cases>
+    </micro_task>
+
+    <!-- MT-5: F-01+F-02 데드코드/인라인 import 제거 (P2) -->
+    <micro_task id="MT-5">
+      <priority>P2</priority>
+      <affected_function>main._cli_main, ui.app (thread worker block)</affected_function>
+      <target_files>
+        <file>FEAT-20260426-332E/main.py</file>
+        <file>FEAT-20260426-332E/ui/app.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>write_date|get_next_business_day|import re as _re|_re\.sub</pattern>
+        <match_count>7</match_count>
+        <executed>true</executed>
+        <note>
+          main.py: write_date(L107), get_next_business_day import(L82), logger.info L108-111 - 3건.
+          ui/app.py: write_date(L425), logger.info(L426) - 2건.
+          ui/app.py: import re as _re(L591), _re.sub(L592) - 2건.
+        </note>
+      </grep_evidence>
+      <change_summary>
+        [main.py] L107 write_date 할당 및 L108-111 logger.info 3줄 제거. L82 get_next_business_day import 제거.
+        [ui/app.py] L425 write_date 할당 및 L426 logger.info 제거.
+        [ui/app.py] L591 인라인 import re as _re 제거. 파일 상단 import 섹션에 import re 추가. L592 _re.sub to re.sub.
+        get_next_business_day 함수 자체는 core/business_day.py에 유지 (다른 참조 가능성 있음).
+      </change_summary>
+      <line_estimate>10</line_estimate>
+      <oracle_cases>
+        <edge>tests/oracles/BUG-20260511-073B/MT-5-deadcode-edge</edge>
+      </oracle_cases>
+    </micro_task>
+
+  </micro_tasks>
+
+  <!-- ================================================================
+       ORACLE MANIFEST
+       ================================================================ -->
+  <oracle_manifest>
+    <source>user</source>
+    <pipeline_id>BUG-20260511-073B</pipeline_id>
+    <cases>
+      <case id="MT-1-unc-normal" kind="normal">
+        <input_path>tests/oracles/BUG-20260511-073B/MT-1-unc-normal/input.json</input_path>
+        <expected_path>tests/oracles/BUG-20260511-073B/MT-1-unc-normal/expected.json</expected_path>
+        <input_sha256>74305b160142b82f44a708d4d567ab97468920e49573fc9bb236cf0dad4b4402</input_sha256>
+        <expected_sha256>92e03c06cfac511cd417ec1312c137a72b6a835b80b5e60b7de82feaeca4afe5</expected_sha256>
+      </case>
+      <case id="MT-1-unc-edge" kind="edge">
+        <input_path>tests/oracles/BUG-20260511-073B/MT-1-unc-edge/input.json</input_path>
+        <expected_path>tests/oracles/BUG-20260511-073B/MT-1-unc-edge/expected.json</expected_path>
+        <input_sha256>2fe6f500ab753df74cefbd50edf08fa44b8ca23c51f94186a382bad0faad51dd</input_sha256>
+        <expected_sha256>bd522b75eb15834945c17825bbe369dbefa59de12275c26ce828dd1b16dcd460</expected_sha256>
+      </case>
+      <case id="MT-2-jm-normal" kind="normal">
+        <input_path>tests/oracles/BUG-20260511-073B/MT-2-jm-normal/input.json</input_path>
+        <expected_path>tests/oracles/BUG-20260511-073B/MT-2-jm-normal/expected.json</expected_path>
+        <input_sha256>b255444cedacc8fab3dcb10bab8351c4237c3b133b76204c73f7610a622a6c2a</input_sha256>
+        <expected_sha256>6428c6b1888f7ae4cb3a6ae8c1b8300e59d27afd14c7fd82a4ebb3b586aa4e08</expected_sha256>
+      </case>
+      <case id="MT-3-note-normal" kind="normal">
+        <input_path>tests/oracles/BUG-20260511-073B/MT-3-note-normal/input.json</input_path>
+        <expected_path>tests/oracles/BUG-20260511-073B/MT-3-note-normal/expected.json</expected_path>
+        <input_sha256>7fa9ce328367f1c99a21f80501931927328c45de8af93e295c5918acd3044db2</input_sha256>
+        <expected_sha256>0949f854de4782bc77dcfd2df5a3fd9fa4d33faa6fbd3c52493b896902127311</expected_sha256>
+      </case>
+      <case id="MT-4-utils-normal" kind="normal">
+        <input_path>tests/oracles/BUG-20260511-073B/MT-4-utils-normal/input.json</input_path>
+        <expected_path>tests/oracles/BUG-20260511-073B/MT-4-utils-normal/expected.json</expected_path>
+        <input_sha256>7a6291e98b0c5b1137a107e8952cdf7727eeb6e1521fae0c82303471039ba6f2</input_sha256>
+        <expected_sha256>ca38c3da1980bdf4491f1f7731f7e748423b2b76f57d6c9b076690c5fa4c4209</expected_sha256>
+      </case>
+      <case id="MT-5-deadcode-edge" kind="edge">
+        <input_path>tests/oracles/BUG-20260511-073B/MT-5-deadcode-edge/input.json</input_path>
+        <expected_path>tests/oracles/BUG-20260511-073B/MT-5-deadcode-edge/expected.json</expected_path>
+        <input_sha256>9fbcfd0b90d7457d24f544372237592437505eaff80fe6e7ce587e6efa73b316</input_sha256>
+        <expected_sha256>3a01bba65821d4bb41ba5661472507f51c4aefb843e42e671f1141a11b5456b0</expected_sha256>
+      </case>
+    </cases>
+  </oracle_manifest>
+
+  <!-- ================================================================
+       INTERFACE SPEC
+       ================================================================ -->
+  <interface_spec>
+    <input>
+      FEAT-20260426-332E/core/order_lines_reader.py (현재: _ALLOWED_ROOT 단일 Path)
+      FEAT-20260426-332E/main.py (현재: jm 기본값 "G", note="포장반" 하드코딩, write_date 데드코드, _compress_line_nos 중복)
+      FEAT-20260426-332E/ui/app.py (현재: _compress_line_nos 중복, write_date 데드코드, import re as _re 인라인)
+    </input>
+    <output>
+      FEAT-20260426-332E/core/order_lines_reader.py (수정: _ALLOWED_ROOTS List[Path], _safe_resolve 다중 루트 지원)
+      FEAT-20260426-332E/core/utils.py (신규: _compress_line_nos 공유 유틸리티)
+      FEAT-20260426-332E/main.py (수정: 3개 버그 픽스 + 데드코드 제거 + import 정리)
+      FEAT-20260426-332E/ui/app.py (수정: 중복 함수 제거 + 데드코드 제거 + import 정리)
+    </output>
+    <validation>
+      1. order_lines_reader: UNC 경로를 _safe_resolve가 허용하는지 단위 테스트
+      2. main.py: .get("jm", "KJ") 패턴 존재, .get("jm", "G") 패턴 없음
+      3. main.py: note = kit_place 패턴이 포장반 else 절에 존재
+      4. core/utils.py: _compress_line_nos 정의 존재 및 동일 출력 (1~3,5~8,11)
+      5. main.py, ui/app.py: write_date, import re as _re 패턴 없음
+    </validation>
+  </interface_spec>
+
+  <!-- ================================================================
+       REQUIREMENTS
+       ================================================================ -->
+  <requirements>
+    - [MT-1] _ALLOWED_ROOT 단일 Path를 _ALLOWED_ROOTS List[Path]로 확장. file_path에서 UNC 루트 동적 파싱 후 허용 목록 등록.
+    - [MT-1] _safe_resolve 시그니처를 (str, List[Path]) -> Path로 변경. any() 순회 검사.
+    - [MT-1] 기존 traversal guard 보안 속성 유지: 목록에 없는 경로는 ValueError 발생.
+    - [MT-2] main.py: excel_b_columns.get("jm", "G") to excel_b_columns.get("jm", "KJ").
+    - [MT-3] main.py: else 절 note = "포장반" to note = kit_place.
+    - [MT-4] core/utils.py 신규 생성 후 _compress_line_nos 이동. main.py와 ui/app.py에서 import로 교체.
+    - [MT-5] write_date, get_next_business_day import(main.py), write_date(ui/app.py) 데드코드 제거.
+    - [MT-5] ui/app.py 인라인 import re as _re 제거, 상단에 import re 추가, _re.sub to re.sub.
+    - [공통] FS.traversal 보안 패턴 변경 시 테스트가 순방향(허용)과 역방향(차단) 둘 다 커버해야 함.
+    - [공통] 듀얼 코드 패스 원칙: MT-4는 main.py와 ui/app.py 양쪽을 동시에 수정.
+    - [공통] MT-2의 ui/app.py L487 동일 버그는 out_of_scope_known_issue로 scope_manifest에 기록.
+    - [공통] target_date 관련 코드(get_previous_business_day)는 제거 금지. write_date만 제거.
+  </requirements>
+
+  <!-- ================================================================
+       PYTHON VERSION AND ENV SPECS
+       ================================================================ -->
+  <python_version>3.10 - 기존 FEAT-20260426-332E 프로젝트와 동일 버전 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>
+      pylance provider, typeCheckingMode: basic.
+      typing.List 사용 (Python 3.10이므로 list[Path]도 허용되나 기존 코드 스타일 유지).
+    </vscode>
+  </env_specs>
+
+  <!-- ================================================================
+       ACCEPTANCE CRITERIA
+       ================================================================ -->
+  <acceptance_criteria>
+    - [MT-1 normal] UNC 경로 \\ccikrnf\wrkgroup\file.xlsx가 _safe_resolve에서 ValueError 없이 통과
+    - [MT-1 edge] 허용 목록에 없는 UNC 경로 \\evil-server\share\file.xlsx는 ValueError 발생
+    - [MT-1 edge] Path.home() 하위 로컬 경로는 기존과 동일하게 허용
+    - [MT-2] excel_b_columns.get("jm", "KJ") 패턴이 main.py에 존재. "G" 폴백 없음
+    - [MT-3] 포장반 else 절에서 note = kit_place 패턴 확인. "포장반" 하드코딩 없음
+    - [MT-4] core/utils.py 파일 존재. _compress_line_nos([1,1,2,3,5,6,7,8,11]) == "1~3,5~8,11"
+    - [MT-4] main.py, ui/app.py에서 로컬 def _compress_line_nos 없음. from core.utils import 존재
+    - [MT-5] main.py에 write_date 변수 할당 없음, get_next_business_day import 없음
+    - [MT-5] ui/app.py에 import re as _re 없음, _re.sub 없음. 상단에 import re 존재
+    - [공통] QA numeric score 96/120 이상
+    - [공통] Grep으로 확인한 변경 외 PM micro_task 범위 초과 수정 없음
+  </acceptance_criteria>
+
+  <!-- ================================================================
+       FORBIDDEN
+       ================================================================ -->
+  <forbidden>
+    - lookup_order_lines, lookup_packing_dimensions 함수 시그니처 변경 금지 (호출부 영향)
+    - _compress_line_nos 함수 동작 변경 금지 (단순 이동만)
+    - oracle 파일(tests/oracles/BUG-20260511-073B/**/expected.json) 수정 금지
+    - MT-2 범위를 ui/app.py L487까지 확대하는 것 금지 (사전 분석 결과 존중)
+    - target_date 관련 코드(get_previous_business_day) 제거 금지 - write_date만 제거 대상
+    - CLAUDE.md, pipeline.py, .github/workflows/** 수정 금지 (별도 IMP 필요)
+    - core/utils.py에 _compress_line_nos 외 추가 함수 신설 금지 (이번 MT 범위 외)
+    - anti_gaming: numeric score만으로 COMPLETE 선언 금지. Technical+Oracle+GitHub CI+User Acceptance 필수
+  </forbidden>
+
+  <!-- ================================================================
+       PHASE ATTESTATION PLAN
+       ================================================================ -->
+  <phase_attestation_plan>
+    <pm_branch>phase-attestation/BUG-20260511-073B</pm_branch>
+    <sequence>
+      1. PM done 기록 후 git checkout -b phase-attestation/BUG-20260511-073B
+      2. gates prepare-phase --phase pm → git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence → commit → push
+      3. GitHub Actions 검증 대기 → gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
+      4. Dev module gate per MT (MT-1 to MT-2 to MT-3 to MT-4 to MT-5 순서)
+      5. Dev done 후 gates prepare-phase --phase dev → push → phase-ci --phase dev
+      6. QA done 후 gates prepare-phase --phase qa → push → phase-ci --phase qa
+      7. Build(N/A skip) 후 gates prepare-phase --phase build → push → phase-ci --phase build
+      8. Technical gate → Oracle gate → GitHub CI gate → User Acceptance gate
+    </sequence>
+  </phase_attestation_plan>
+
+  <!-- ================================================================
+       HANDOVER TEMPLATE (dev-agent가 이 양식대로 dev_handover.xml 작성)
+       from: dev-agent / to: qa-agent
+       evidence: order_lines_reader.py, utils.py, main.py, app.py, scope_manifest.json, dev_handover.xml
+       status: READY_FOR_QA
+       ================================================================ -->
+
+  <!-- ================================================================
+       CONTEXT INJECTION (for dev-agent)
+       ================================================================ -->
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\core\order_lines_reader.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\main.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\ui\app.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\core\utils.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Dev는 Incremental Module Gate 순서로 진행: MT-1 to MT-2 to MT-3 to MT-4 to MT-5.
+      각 MT마다 module design to module dev to module qa PASS 후 다음 MT 진입.
+      완료 후 module integrate to done --phase dev.
+      FS.traversal 패턴 변경 시 보안 속성(차단) 유지 필수.
+      scope_manifest.json에 out_of_scope_known_issue 필드로 ui/app.py L487 동일 버그 기록.
+      KittingMapper 듀얼 코드 패스: MT-4는 main.py와 ui/app.py 양쪽 동시 수정 필수.
+    </phase_rules_excerpt>
+    <prev_phase_summary>신규 BUG 파이프라인. IMP-20260511-92A6 분석 보고서 기반. 이전 phase 없음.</prev_phase_summary>
+  </context_injection>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</step_plan>

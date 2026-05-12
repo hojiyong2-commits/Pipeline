@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<integration_report>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <integration_verdict>PASS</integration_verdict>
+  <modules_integrated>
+    <module id="MT-1" status="PASS">pyproject.toml [tool.ruff.lint] extend-select PLW2901 추가</module>
+    <module id="MT-2" status="PASS">.claude/agents/qa-agent.md PLW2901 shadowing 검사 항목 추가</module>
+  </modules_integrated>
+  <integration_check>
+    <cross_module_conflicts>none — MT-1(pyproject.toml)과 MT-2(qa-agent.md)는 독립적 파일, 충돌 없음</cross_module_conflicts>
+    <interface_compatibility>PASS — 두 파일은 서로 참조하지 않음</interface_compatibility>
+    <no_regression>PASS — 기존 ruff ignore 목록, WA/UI/FS Compliance 항목 모두 보존 확인</no_regression>
+    <plw2901_consistency>PASS — pyproject.toml의 PLW2901 규칙과 qa-agent.md의 PLW2901 검사 지침 일치</plw2901_consistency>
+  </integration_check>
+</integration_report>
