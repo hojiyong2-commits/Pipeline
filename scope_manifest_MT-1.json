@@ -1,13 +1,14 @@
 {
-  "pipeline_id": "BUG-20260512-CF73",
+  "pipeline_id": "BUG-20260512-9C67",
+  "mt_id": "MT-1",
   "micro_tasks": [
     {
       "id": "MT-1",
       "files": [
-        "po_automation/email_monitor.py"
+        "ic_part_src/order_mapper.py"
       ],
       "affected_functions": [
-        "po_automation.email_monitor._process_mail_item"
+        "order_mapper.write_ic_part_zip"
       ]
     }
   ]

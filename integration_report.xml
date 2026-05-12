@@ -1,27 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <integration_report>
-  <pipeline_id>BUG-20260512-CF73</pipeline_id>
-  <result>PASS</result>
-
-  <modules_integrated>
-    <module id="MT-1">
-      <file>po_automation/email_monitor.py</file>
-      <function>po_automation.email_monitor._process_mail_item</function>
-      <status>PASS</status>
-    </module>
-    <module id="MT-2">
-      <file>EmailMonitor.spec</file>
-      <function>EmailMonitor.spec -- PyInstaller Analysis configuration</function>
-      <status>PASS</status>
-    </module>
-  </modules_integrated>
-
-  <integration_checks>
-    <check id="1" result="PASS">MT-1과 MT-2는 독립적 파일 수정 -- 충돌 없음</check>
-    <check id="2" result="PASS">email_monitor.py 변경이 EmailMonitor.spec에 영향 없음</check>
-    <check id="3" result="PASS">EmailMonitor.spec 변경이 email_monitor.py 런타임 로직에 영향 없음</check>
-    <check id="4" result="PASS">두 변경 모두 함수 시그니처 변경 없음 -- 호출부 수정 불필요</check>
-  </integration_checks>
-
+  <pipeline_id>BUG-20260512-9C67</pipeline_id>
   <integration_verdict>PASS</integration_verdict>
+  <modules_integrated>
+    <module id="MT-1" status="PASS">ic_part_src/order_mapper.py write_ic_part_zip 루프 변수 rename</module>
+  </modules_integrated>
+  <integration_check>
+    <cross_module_conflicts>none</cross_module_conflicts>
+    <interface_compatibility>PASS</interface_compatibility>
+    <no_regression>PASS - 함수 정의 및 호출부 보존 확인</no_regression>
+  </integration_check>
 </integration_report>
