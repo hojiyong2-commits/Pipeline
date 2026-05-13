@@ -13,8 +13,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-import pytest
-
 _ROOT = Path(__file__).resolve().parent.parent
 _PIPELINE = str(_ROOT / "pipeline.py")
 
