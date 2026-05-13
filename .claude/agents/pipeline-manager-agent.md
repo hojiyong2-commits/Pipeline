@@ -84,3 +84,30 @@ handling instead of asking Dev to guess again.
 Security is not phase-attested. Do not start a Security agent receipt and do not
 add `--agent-run-id` to `pipeline.py sec`; record only `sec --result ... --risk ...`
 or `sec --skip` after checking the security-agent report.
+
+## Patch Lane 관리 (IMP-20260513-4C0B)
+
+PM Planner의 `step_plan.xml`에 `<patch_lane_eligible>true</patch_lane_eligible>`가 있으면 아래 순서로 Patch Lane을 관리합니다.
+
+| 단계 | 명령어 | 결과 처리 |
+|---|---|---|
+| 진입 조건 검사 | `python pipeline.py patch plan --plan patch_plan.json` | exit 0 → 계속, exit 1 (lane=full) → Full Lane 전환 |
+| 패치 감사 | `python pipeline.py patch audit --plan patch_plan.json` | PASS → 계속, ESCALATE → Full Lane 전환 |
+| 패치 결과 검증 | `python pipeline.py patch verify --plan patch_plan.json --result PASS\|FAIL` | FAIL → cluster.patch_failures 증가 확인 |
+| 완료 증거 기록 | `python pipeline.py patch attest --plan patch_plan.json` | attested_at 타임스탬프 확인 |
+
+### Incident Cluster 관리 명령어
+
+| 명령어 | 용도 |
+|---|---|
+| `python pipeline.py cluster detect --desc "키워드"` | 유사 클러스터 탐색 |
+| `python pipeline.py cluster init --desc "설명"` | 새 클러스터 생성 |
+| `python pipeline.py cluster attach --cluster-id CL-XXXX` | 현재 파이프라인 연결 |
+| `python pipeline.py cluster status [--cluster-id CL-XXXX]` | 상태 조회 |
+| `python pipeline.py cluster close --cluster-id CL-XXXX` | 클러스터 종료 |
+
+### Patch Lane 실패 처리
+
+- `patch plan` exit code 1 (`lane=full`) → PM에게 Full Lane step_plan 요청
+- `patch verify --result FAIL` 이후 해당 클러스터의 `patch_failures >= 2` → `patch_lane_forbidden=true` 자동 설정, 이후 모든 Patch Lane 차단
+- Full Lane 전환 후에는 일반 STANDARD 파이프라인 절차 적용

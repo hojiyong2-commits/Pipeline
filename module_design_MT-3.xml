@@ -1,26 +1,24 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <module_design>
-  <pipeline_id>BUG-20260511-073B</pipeline_id>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
   <mt_id>MT-3</mt_id>
-  <design_summary>
-    In _cli_main, when dims_result is None (no valid K-date rows), change note from hardcoded "포장반"
-    to note = kit_place to preserve variant values like "당일 포장반" and match GUI behavior.
-  </design_summary>
-  <target_files>
-    <file>FEAT-20260426-332E/main.py</file>
-  </target_files>
-  <affected_function>main._cli_main</affected_function>
+  <status>PASS</status>
+  <design_summary>tests/test_patch_lane.py 작성 — cluster 4개, patch audit 4개, patch verify 2개 이상, auto-escalation 15줄 임계값 테스트, patch_lane_forbidden 테스트 포함, 총 10개+ 단위 테스트</design_summary>
   <interface_contract>
-    Input: kit_place (str) from kit_row; dims_result from lookup_packing_dimensions (str or None)
-    Output: note (str) — when dims_result is None, note = kit_place (dynamic value, not hardcoded "포장반")
-    Validation: note used downstream for output reporting; must preserve exact kit_place string
+    <input>MT-1에서 구현된 pipeline.py의 cluster/patch 명령어</input>
+    <output>tests/test_patch_lane.py — pytest 실행 가능한 단위 테스트 파일</output>
+    <validation>pytest tests/test_patch_lane.py 전체 PASS</validation>
   </interface_contract>
   <implementation_plan>
-    1. Locate: else: note = "포장반" in _cli_main (dims_result None branch)
-    2. Replace with: note = kit_place
-    3. Keep dims_result-is-str branch unchanged: note = f"포장반 ({dims_result})"
+    <step>1. cluster 테스트: init, detect, status, attach, close</step>
+    <step>2. patch plan 테스트: PASS(정상), FAIL(초과), FAIL(복수파일), FAIL(trust_root)</step>
+    <step>3. patch verify 테스트: PASS 기록, FAIL + patch_failures 증가</step>
+    <step>4. auto-escalation 경계값: 15줄 PASS, 16줄 FAIL</step>
+    <step>5. patch_lane_forbidden 테스트: patch_failures=2 후 forbidden=true</step>
   </implementation_plan>
   <verification_plan>
-    T4 test: _cli_main block contains "note = kit_place" AND does NOT contain "note = \"포장반\""
+    <check>pytest tests/test_patch_lane.py 전체 통과 확인</check>
+    <check>10개 이상 테스트 케이스 존재 확인</check>
+    <check>auto-escalation 15줄 경계값 테스트 존재 확인</check>
   </verification_plan>
 </module_design>

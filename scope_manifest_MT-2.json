@@ -1,13 +1,17 @@
 {
-  "pipeline_id": "IMP-20260512-C476",
+  "pipeline_id": "IMP-20260513-4C0B",
   "micro_tasks": [
     {
       "id": "MT-2",
       "files": [
-        ".claude/agents/qa-agent.md"
+        "CLAUDE.md",
+        ".claude/agents/pm-planner-agent.md",
+        ".claude/agents/pipeline-manager-agent.md",
+        ".claude/agents/qa-agent.md",
+        ".github/workflows/ci.yml"
       ],
       "affected_functions": [
-        ".claude/agents/qa-agent.md Compliance Checklist section — PLW2901 항목 추가"
+        "CLAUDE.md 섹션 추가, pm-planner-agent.md 섹션 추가, pipeline-manager-agent.md 섹션 추가, qa-agent.md 섹션 추가, ci.yml step 추가"
       ]
     }
   ]

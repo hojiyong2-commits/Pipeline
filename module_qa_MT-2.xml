@@ -1,28 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_qa_report>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
   <mt_id>MT-2</mt_id>
-  <pipeline_id>IMP-20260512-C476</pipeline_id>
-  <result>PASS</result>
   <verdict>PASS</verdict>
-  <numeric_score>120</numeric_score>
-
-  <category_check>
-    <wa>N-A</wa>
-    <ui>N-A</ui>
-    <fs>N-A</fs>
-    <pd>PASS</pd>
-    <sec>N-A</sec>
-    <al>N-A</al>
-    <build>N-A</build>
-  </category_check>
-
+  <result>PASS</result>
+  <summary>MT-2 문서 동기화 검증 완료. 5개 파일 모두 Patch Lane 섹션 추가됨, auto-escalation 임계값 15줄 일치.</summary>
   <verification_evidence>
-    <check id="T2" priority="P0">qa-agent.md에 "PLW2901" 문자열 존재 확인 — PASS (line 289, 291, 292, 295)</check>
-    <check id="T2b" priority="P0">loop/shadowing 관련 검사 절차 명시 확인 — PASS (grep 교차검증 의무 포함)</check>
-    <check id="existing_items">WA/UI/FS Compliance Checklist 항목 삭제 없음 — PASS</check>
-    <check id="scope">qa-agent.md 이외 파일 미변경 — PASS</check>
-    <check id="plw2901_fail_sig">PLW2901 위반 시 FS:PLW2901_shadow failure_signature 명시 — PASS (line 295)</check>
+    <test name="CLAUDE.md Patch Lane 섹션">Patch Lane + Incident Cluster 섹션 존재, 15줄 임계값 명시</test>
+    <test name="pm-planner-agent.md 체크리스트">5개 판별 조건 표, patch_plan_template XML 존재</test>
+    <test name="pipeline-manager-agent.md 명령어 표">cluster/patch 명령어 Phase 표 존재</test>
+    <test name="qa-agent.md QA 체크리스트">5개 항목 체크리스트, PL:violation failure_signature 존재</test>
+    <test name="ci.yml patch lane 스텝">Patch Lane 증거 파일 검증 스텝 추가, YAML 구문 정상</test>
+    <test name="임계값 일치">모든 문서에서 15줄 임계값 일치</test>
   </verification_evidence>
-
-  <critical_issues>none</critical_issues>
+  <boundary_check>
+    <scope_files_match>PASS</scope_files_match>
+    <no_extra_files>PASS</no_extra_files>
+    <micro_task_boundary>WITHIN_SCOPE</micro_task_boundary>
+  </boundary_check>
 </module_qa_report>
