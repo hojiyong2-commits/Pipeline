@@ -1,44 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_qa_report>
-  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
   <mt_id>MT-1</mt_id>
-  <result>PASS</result>
-
-  <category_check>
-    <wa>N-A — 네트워크 통신 없음</wa>
-    <ui>N-A — UI 변경 없음</ui>
-    <fs>PASS — ZIP in-place 쓰기 패턴 기존 유지, 변경 없음</fs>
-    <pd>PASS — API 시그니처 변경 없음, 범위 초과 없음</pd>
-    <sec>PASS — 사용자 입력 경로 없음, 보안 표면 변화 없음</sec>
-    <al>PASS — _m.group(3) or '' 방어 기존 유지, OR 조건 추가만</al>
-    <build>N-A — 빌드는 별도 Phase 6에서 수행</build>
-  </category_check>
-
-  <verification_evidence>
-    <evidence_item>
-      <file>ic_part_src/order_mapper.py</file>
-      <line>1160</line>
-      <before>if not re.search(r'&lt;v[\s&gt;]', _m.group(3) or ''):</before>
-      <after>if not re.search(r'&lt;v[\s&gt;]|&lt;is[\s&gt;]', _m.group(3) or ''):</after>
-      <check>inlineStr 셀 감지 조건 추가 확인</check>
-      <status>PASS</status>
-    </evidence_item>
-    <evidence_item>
-      <check>v 태그 기존 감지 조건 유지 확인</check>
-      <status>PASS</status>
-    </evidence_item>
-    <evidence_item>
-      <check>scope_manifest MT-1 파일 목록 일치 확인</check>
-      <status>PASS — 변경 파일 1개, 선언과 일치</status>
-    </evidence_item>
-  </verification_evidence>
-
-  <scope_boundary_check>
-    <declared_files>ic_part_src/order_mapper.py</declared_files>
-    <actual_changed_files>ic_part_src/order_mapper.py</actual_changed_files>
-    <scope_match>true</scope_match>
-    <lines_changed>1</lines_changed>
-  </scope_boundary_check>
-
   <verdict>PASS</verdict>
+  <result>PASS</result>
+  <qa_verdict>PASS</qa_verdict>
+  <summary>MT-1 Patch Lane + Incident Cluster 서브커맨드 구현 검증 완료. 모든 CLI 명령 정상 동작, auto-escalation 임계값(15줄) 정확히 적용됨.</summary>
+  <verification_evidence>
+    <test name="cluster detect">JSON 응답 형식 정상, exit code 0</test>
+    <test name="cluster init">CL-XXXX 형식 ID 생성, 클러스터 JSON 파일 저장 확인</test>
+    <test name="cluster status">전체/특정 클러스터 조회 정상</test>
+    <test name="cluster attach">현재 파이프라인 ID 연결 확인</test>
+    <test name="cluster close">closed_at 타임스탬프 기록 확인</test>
+    <test name="patch plan PASS">1파일/1함수/10줄 조건 통과, exit code 0</test>
+    <test name="patch plan FAIL">20줄 조건 위반 시 lane=full FAIL, exit code 1</test>
+    <test name="patch audit">자동 에스컬레이션 정상 동작</test>
+    <test name="patch verify PASS">검증 결과 기록 정상</test>
+    <test name="patch attest">증거 JSON 기록 정상</test>
+    <test name="auto-escalation threshold">15줄 이하 PASS, 16줄+ FAIL 확인</test>
+    <test name="argparse registration">cluster/patch 서브커맨드 --help 정상</test>
+    <test name="COMMAND_MAP">cluster, patch 엔트리 존재 확인</test>
+  </verification_evidence>
+  <boundary_check>
+    <scope_files_match>PASS</scope_files_match>
+    <no_extra_files>PASS</no_extra_files>
+    <micro_task_boundary>WITHIN_SCOPE</micro_task_boundary>
+  </boundary_check>
 </module_qa_report>

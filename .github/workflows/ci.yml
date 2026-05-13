@@ -34,6 +34,48 @@ jobs:
           PIPELINE_NO_DASHBOARD: "1"
         run: python -m pytest -q
 
+      - name: Patch Lane 증거 파일 검증 (IMP-20260513-4C0B)
+        if: success() && hashFiles('patch_plan.json') != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $planPath = "patch_plan.json"
+          $plan = Get-Content -Path $planPath -Raw | ConvertFrom-Json
+          $blockers = New-Object System.Collections.Generic.List[string]
+          if ($plan.schema_version -ne 1) {
+            $blockers.Add("patch_plan.json schema_version must be 1")
+          }
+          $scope = $plan.patch_scope
+          if ($null -eq $scope -or [string]::IsNullOrWhiteSpace([string]$scope.file)) {
+            $blockers.Add("patch_plan.json: patch_scope.file 미지정")
+          }
+          if ($null -eq $scope -or [string]::IsNullOrWhiteSpace([string]$scope.function)) {
+            $blockers.Add("patch_plan.json: patch_scope.function 미지정")
+          }
+          if ($null -ne $scope -and $null -ne $scope.expected_lines_changed_max) {
+            $maxLines = [int]$scope.expected_lines_changed_max
+            if ($maxLines -gt 15) {
+              $blockers.Add("patch_plan.json: expected_lines_changed_max=$maxLines 초과 (최대 15줄) — Full Lane 필요")
+            }
+          }
+          $forbidden = $plan.forbidden
+          if ($null -ne $forbidden) {
+            if ($forbidden.trust_root_changes -eq $true) {
+              $blockers.Add("patch_plan.json: trust_root_changes=true — Patch Lane 금지")
+            }
+            if ($forbidden.new_dependencies -eq $true) {
+              $blockers.Add("patch_plan.json: new_dependencies=true — Patch Lane 금지")
+            }
+            if ($forbidden.file_move_or_delete -eq $true) {
+              $blockers.Add("patch_plan.json: file_move_or_delete=true — Patch Lane 금지")
+            }
+          }
+          if ($blockers.Count -gt 0) {
+            Write-Error ("Patch Lane 검증 실패: " + ($blockers -join "; "))
+            exit 1
+          }
+          Write-Host "[PATCH LANE CI] patch_plan.json 검증 통과"
+
       - name: 자동 검사 증명 파일 만들기
         if: success()
         shell: pwsh
