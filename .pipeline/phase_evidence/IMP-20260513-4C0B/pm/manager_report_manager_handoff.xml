@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-00fc30348dcb7a41</manager_run_id>
+  <planner_run_id>pm_planner-1b2d415ebc538159</planner_run_id>
+  <step_plan_sha256>ab697c2ffe8393ea884be9e53eec04c44eee53d21cc24b1d0ebc0e72f3a154bf</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <pipeline_summary>
+    <title>Patch Lane + Incident Cluster 경량 패치 레인 구현</title>
+    <description>배포된 IMP-00BC pipeline.py(8512줄)를 저장소로 교체 후 cluster/patch 서브커맨드 신규 구현. CLAUDE.md + 4개 agent MD + ci.yml 동기화. 단위 테스트 10개 이상 작성.</description>
+    <execution_profile>STANDARD</execution_profile>
+    <trust_root_change>true</trust_root_change>
+    <per_phase_ci_required>true</per_phase_ci_required>
+  </pipeline_summary>
+  <step_plan_verification>
+    <step_plan_file>step_plan.xml</step_plan_file>
+    <decomposition_audit_present>true</decomposition_audit_present>
+    <design_confirmation_present>true</design_confirmation_present>
+    <micro_tasks_present>true</micro_tasks_present>
+    <micro_task_count>3</micro_task_count>
+    <user_answer_recorded>Q-PL-01: auto-escalation 임계값 = 15줄 (사용자 선택)</user_answer_recorded>
+  </step_plan_verification>
+  <phase_plan>
+    <phase id="1" name="PM">RECORDING — step_plan.xml 기반 PM done 기록 후 phase-ci</phase>
+    <phase id="2" name="Dev">PENDING — MT-1(pipeline.py ~550줄) → MT-2(문서 5파일 ~200줄) → MT-3(테스트 ~200줄) Incremental Module Gate</phase>
+    <phase id="4" name="QA">PENDING — pytest tests/test_patch_lane.py 전체 PASS, 96/120 이상</phase>
+    <phase id="5" name="SEC">SKIP — 외부 네트워크/DB 없음, 로컬 JSON I/O만</phase>
+    <phase id="6" name="Build">PENDING — EXE N/A, skip-reason meta-task</phase>
+    <phase id="7" name="External Gates">PENDING — technical + oracle + github-ci + accept</phase>
+    <phase id="8" name="Architect">PENDING</phase>
+  </phase_plan>
+  <key_constraints>
+    <constraint>auto_escalation_threshold_lines>15</constraint>
+    <constraint>oracle_files_immutable: tests/oracles/IMP-20260513-4C0B/**</constraint>
+    <constraint>deploy_target: G:\내 드라이브\터미널\IMP-20260513-4C0B\</constraint>
+    <constraint>branch: phase-attestation/IMP-20260513-4C0B</constraint>
+  </key_constraints>
+  <clarification_summary>P0 질문 0개. Q-PL-01(auto-escalation 임계값) 사용자 답변 15줄로 확정.</clarification_summary>
+  <roadmap_summary>MT-1(pipeline.py 교체+cluster/patch 구현) → MT-2(문서 동기화) → MT-3(테스트) → Dev attestation → QA → SEC skip → Build(N/A) → External Gates → ACCEPT → 배포</roadmap_summary>
+</manager_handoff>

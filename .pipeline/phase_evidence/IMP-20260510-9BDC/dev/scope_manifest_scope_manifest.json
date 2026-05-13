@@ -1,0 +1,59 @@
+﻿{
+    "pipeline_id":  "IMP-20260510-9BDC",
+    "micro_tasks":  [
+                        {
+                            "id":  "MT-1",
+                            "files":  [
+                                          ".claude/agents/security-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "security-agent.md :: ## Integration Context (신규 섹션)"
+                                                   ]
+                        },
+                        {
+                            "id":  "MT-2",
+                            "files":  [
+                                          ".claude/agents/build-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "build-agent.md :: next_required_phase (수정) + deploy path (신규)"
+                                                   ]
+                        },
+                        {
+                            "id":  "MT-3",
+                            "files":  [
+                                          ".claude/agents/agent-factory-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "agent-factory-agent.md :: ## CODEOWNERS Protection Notice (신규 섹션)"
+                                                   ]
+                        },
+                        {
+                            "id":  "MT-4",
+                            "files":  [
+                                          ".claude/agents/protocol-evolution-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "protocol-evolution-agent.md :: ## CODEOWNERS and PR Review Gate (신규 섹션)"
+                                                   ]
+                        },
+                        {
+                            "id":  "MT-5",
+                            "files":  [
+                                          ".claude/agents/test-harness-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "test-harness-agent.md :: ## Deploy Path After ACCEPT (신규 섹션)"
+                                                   ]
+                        },
+                        {
+                            "id":  "MT-6",
+                            "files":  [
+                                          ".claude/agents/pm-agent.md"
+                                      ],
+                            "affected_functions":  [
+                                                       "pm-agent.md :: pipeline_complete summary (수정 — deploy path 추가)"
+                                                   ]
+                        }
+                    ]
+}

@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="utf-8"?>
+<pm_round1_output>
+
+<decomposition_audit>
+  <total_functions_identified>25</total_functions_identified>
+  <!-- email_monitor.py: _safe_resolve, _safe_filename, _get_unique_path,
+       _has_new_po_keyword, _extract_po_number, _is_reply_or_forward,
+       _parse_pdf_info, _save_email_msg, _save_attachments,
+       load_processed_set, save_processed_set, _get_smtp_address,
+       _process_mail_item, scan_past_emails, OutlookEventHandler.__init__,
+       OutlookEventHandler.OnNewMailEx, OutlookEventHandler._log, start_monitoring
+       main.py: POAutomationApp.__init__, _build_widgets, _on_browse, _on_start,
+       _on_scan_complete, _on_stop, _on_scan_error, _poll_log_queue,
+       _load_settings, _save_settings, _on_close, _set_status, _append_log -->
+  <micro_task_count>5</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>
+    분석 전용 태스크(코드 변경 없음)이므로 함수별 분할이 아닌 점검 영역별 분할.
+    MT-1(코드 품질/성능), MT-2(보안), MT-3(버그), MT-4(리포트 작성),
+    MT-5(자기 검증) 5개 micro_task로 구성.
+    모두 동일 산출물(inspection_report_IMP-20260510-D44F.md)에 섹션 단위 기여.
+    변경 함수 없음 — Frozen Codebase 원칙 적용(읽기 전용).
+    SPLIT_REQUIRED 조건(변경 함수 ≥3, 변경 파일 ≥3) 모두 미해당 — 점검 영역 분리만.
+  </split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260510-D44F</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <!-- anti_gaming_rules.md 확인 완료: 숫자 점수 완료 금지, oracle 조건,
+       phase attestation 필수, fake advisory 금지, real evidence 필수 -->
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      리포트 파일명 대안, 섹션 순서, 심각도 레이블 언어(한/영) 등 P2 내부 구현
+      취향 질문은 사용자에게 묻지 않고 유지보수성 우선 원칙으로 처리함.
+      영어 심각도 레이블(CRITICAL/HIGH/MEDIUM/LOW) 사용으로 결정.
+    </filter_summary>
+    <maintenance_priority>maintainability_first — 분석 리포트는 추후 유지보수 판단을 돕는 것이 목적이므로 유지보수성 우선.</maintenance_priority>
+
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="">
+        <user_facing_question>점검 결과물을 단일 MD 파일로 통합할까요, 아니면 영역별로 파일을 나눌까요?</user_facing_question>
+        <evidence>email_monitor.py 1645줄, main.py 642줄 — 4개 점검 영역(버그/보안/성능/유지보수성)이 모두 동일 소스에서 기인하므로 단일 파일이 상호 참조에 유리함.</evidence>
+        <why_it_matters>파일을 나누면 참조 이동이 번거롭고, 단일 파일이면 검색과 공유가 더 쉽습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>단일 MD 파일 (inspection_report_IMP-20260510-D44F.md)</label>
+            <benefit>단일 파일로 모든 영역을 한눈에 볼 수 있고, 공유와 버전 관리가 간단합니다.</benefit>
+            <cost>파일이 길어질 수 있으나 섹션 헤더로 탐색 가능하므로 실용적 단점 없음.</cost>
+          </option>
+          <option id="B">
+            <label>영역별 4개 파일 분리 (bug.md, security.md, performance.md, maintainability.md)</label>
+            <benefit>각 영역 담당자가 독립적으로 검토할 수 있습니다.</benefit>
+            <cost>상호 참조가 어렵고 공유 시 4개 파일을 모두 전달해야 합니다.</cost>
+          </option>
+        </options>
+        <user_answer>A — 단일 MD 파일로 통합. 코드 변경 없음, EXE 빌드 없음.</user_answer>
+      </question>
+
+      <question id="DQ-2" priority="P0" category="scope" mt_id="">
+        <user_facing_question>점검 범위를 전체 4개 영역(버그+보안+성능+유지보수성)으로 할까요, 아니면 특정 영역만 집중할까요?</user_facing_question>
+        <evidence>사용자 원문 "점검해봐"는 전체 점검을 시사. Round 1 Q2 답변에서 A(전체 점검) 선택 확인.</evidence>
+        <why_it_matters>범위를 좁히면 발견 항목이 적어지고, 넓히면 리포트가 더 완전해집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>전체 점검 (버그+보안+성능+유지보수성 4개 영역)</label>
+            <benefit>코드 전체 건강 상태를 종합적으로 파악할 수 있습니다.</benefit>
+            <cost>리포트 작성 시간이 길어지지만 분석 전용 태스크이므로 런타임 비용 없음.</cost>
+          </option>
+          <option id="B">
+            <label>버그/보안 집중 (성능/유지보수성 생략)</label>
+            <benefit>리포트가 간결해집니다.</benefit>
+            <cost>성능/유지보수성 문제를 놓칠 수 있습니다.</cost>
+          </option>
+        </options>
+        <user_answer>A — 전체 점검. 버그+보안+성능+유지보수성 4개 영역 모두 포함.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <current_step>Step 1: PM Planning — IMP-20260510-D44F</current_step>
+  <tier>1</tier>
+  <!-- 단일 분석 태스크, 동기 처리, 외부 네트워크 없음 -->
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>META-DOCS, FS</category_tags>
+
+  <interface_spec>
+    Input:
+      - po_automation/email_monitor.py (1645줄, Outlook COM 모니터링 코어)
+      - po_automation/main.py (642줄, Tkinter GUI)
+    Output:
+      - inspection_report_IMP-20260510-D44F.md (Markdown 점검 리포트)
+        위치: 프로젝트 루트
+    Validation:
+      - 파일 크기 1500자(문자 수) 이상
+      - ## 버그, ## 보안, ## 성능, ## 유지보수성 (또는 동등 한국어 헤더) 4개 섹션 존재
+      - 코드 라인 번호 참조(L숫자, line 숫자, 라인 숫자) 3곳 이상
+      - 심각도 레이블(CRITICAL/HIGH/MEDIUM/LOW) 최소 2개 사용
+      - 요약 테이블 포함
+      - ## 권고사항 섹션 + 각 주요 발견 항목별 개선안 기술
+  </interface_spec>
+
+  <requirements>
+    ## 전체 방침
+    - 코드 변경 금지 — Read 전용 분석
+    - 산출물: inspection_report_IMP-20260510-D44F.md (단일 파일)
+    - EXE 빌드 없음 → pipeline.py build --exe "N/A" --skip-reason "meta-task"
+    - QA 후 build N/A 기록 → External Gates (Technical/Oracle/GitHub CI/Acceptance) 진행
+
+    ## MT-1: 코드 품질 및 성능 점검
+    대상: email_monitor.py, main.py
+
+    성능 분석 필수 항목:
+    1. OnNewMailEx (email_monitor.py L1293~L1344):
+       매 EntryID 처리마다 win32com.client.Dispatch("Outlook.Application") 신규 생성.
+       COM 객체 재생성 비용 및 GetObject() 캐시 대안 분석.
+    2. scan_past_emails (L1105~L1257):
+       ReceivedTime 정렬 후 since_dt 이전 아이템 발견 시 continue만 사용.
+       break 조기 종료 최적화 여지 분석.
+    3. _parse_pdf_info (L310~L544):
+       pymupdf → pdfplumber 이중 fallback, 전페이지 텍스트 누적.
+       대형 PDF 메모리 사용 및 파싱 비용 평가.
+    4. main.py _poll_log_queue (L480~L493):
+       100ms after() 폴링 — UI 응답성 vs CPU 트레이드오프.
+
+    유지보수성 분석 필수 항목:
+    1. _process_mail_item (L806~L1098, 293줄):
+       단일 함수에 PDF 파싱, 폴더 생성, .msg 저장, 첨부파일 저장 등 6개 이상 책임.
+       단일 책임 원칙 위반 지적, 분리 권고.
+    2. OutlookEventHandler (L1264~L1344):
+       __init__에서 핵심 변수 None 초기화 후 외부 주입 패턴.
+       타입 힌트 부재, 미초기화 가드(L1314) 평가.
+    3. _pdf_sort_key 내부 함수 (L991~L1001):
+       내부 함수로 단위 테스트 불가 — 복잡도 지적.
+
+    ## MT-2: 보안 점검
+    대상: email_monitor.py
+
+    필수 분석 항목:
+    1. _safe_resolve (L39~L70):
+       resolve() + relative_to() 패턴 평가.
+       Windows 심볼릭 링크 한계, allowed_root 상대 경로 시 일관성 분석.
+    2. 발신자 필터 우회 가능성 (L906~L913):
+       GetExchangeUser() 실패 시 "@" 미포함 DN 주소 → "" 반환 → 필터 미통과.
+       잠재적 발신자 필터 누락 시나리오.
+    3. 수신자 Recipients Exchange DN (L916~L953):
+       rec.Address가 DN인 경우 소문자 SMTP 비교 실패 가능성.
+       발신자와 달리 _get_smtp_address 없는 비대칭 처리 지적.
+    4. 임시파일 경쟁 조건 (L588~L599, L645~L649, L732~L744):
+       고정 .tmp 접미사 — 동일 EntryID 중복 이벤트 시 덮어씀.
+       tempfile.mkstemp 미사용 패턴 평가.
+    5. _safe_filename (L77~L94):
+       [:200] 절단 후 "untitled" fallback — 다수 파일 충돌 위험 분석.
+
+    ## MT-3: 버그 점검
+    대상: email_monitor.py, main.py
+
+    필수 분석 항목:
+    1. scan_past_emails ReceivedTime None 처리 (L1200~L1217):
+       received is None → since_dt 비교 건너뜀 → _process_mail_item 호출.
+       초안/시스템 메시지가 처리될 수 있음 — 의도 여부 판정.
+    2. _process_mail_item rename 실패 분기 (L1058~L1072):
+       dest_folder.exists() == True이면 pass (tmp 폴더 내 파일 이동 없음).
+       tmp_dest_folder 내 파일 방치 가능성 논리 버그 후보.
+    3. log_queue 포화 드롭 (main.py L112, email_monitor.py L866~L867):
+       maxsize=2000, put_nowait 실패 시 메시지 드롭.
+       대량 메일 처리 중 UI 업데이트 손실 가능.
+    4. OnNewMailEx COM 초기화 비일관성 (L1332~L1333):
+       _monitor_loop에서 CoInitialize 후 DispatchWithEvents 설정,
+       OnNewMailEx 내 별도 Dispatch 생성 시 COM apartment 보장 불명확.
+    5. main.py _save_settings tempfile fd 누수 (L564~L574):
+       os.fdopen(fd, "w") 중 예외 발생 시 finally 없어 fd 누수 가능.
+
+    ## MT-4: 리포트 작성
+    inspection_report_IMP-20260510-D44F.md 구조:
+      1. 개요 및 요약 테이블 (심각도별 항목 수)
+      2. ## 버그 발견 사항 (MT-3 결과, 코드 라인 번호 포함)
+      3. ## 보안 발견 사항 (MT-2 결과, 코드 라인 번호 포함)
+      4. ## 성능 발견 사항 (MT-1 성능 파트)
+      5. ## 유지보수성 발견 사항 (MT-1 유지보수성 파트)
+      6. ## 권고사항 (각 항목별 구체적 개선안)
+    각 발견 항목: 심각도(CRITICAL/HIGH/MEDIUM/LOW), 파일명, 라인 번호, 설명, 권고.
+
+    ## MT-5: 자기 검증
+    - MD 파일 섹션 완전성 확인
+    - 코드 라인 번호 참조 ≥3 확인
+    - 심각도 레이블 존재 확인
+    - 1500자 이상 확인
+    - 검증 통과 후 handover 발행
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>email_monitor.OnNewMailEx, email_monitor.scan_past_emails, email_monitor._parse_pdf_info, main.POAutomationApp._poll_log_queue, email_monitor._process_mail_item, email_monitor.OutlookEventHandler</affected_function>
+      <target_files>
+        <file>po_automation/email_monitor.py</file>
+        <file>po_automation/main.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (읽기 전용 분석)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def OnNewMailEx|def scan_past_emails|def _parse_pdf_info|def _poll_log_queue|def _process_mail_item|class OutlookEventHandler</pattern>
+        <match_count>6</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>코드 품질(성능+유지보수성) 점검 — COM 재생성 비용, scan 루프 최적화, _process_mail_item 과대 책임 분석</change_summary>
+      <line_estimate>0 (읽기 전용)</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>email_monitor._safe_resolve, email_monitor._get_smtp_address, email_monitor._process_mail_item(수신자 필터), email_monitor._save_email_msg, email_monitor._save_attachments, email_monitor.save_processed_set</affected_function>
+      <target_files>
+        <file>po_automation/email_monitor.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (읽기 전용 분석)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _safe_resolve|def _get_smtp_address|def _save_email_msg|def _save_attachments|allowed_recipients|\.tmp</pattern>
+        <match_count>10</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>보안 점검 — 경로 순회 방어 평가, 발신자/수신자 필터 우회, 임시파일 경쟁 조건 분석</change_summary>
+      <line_estimate>0 (읽기 전용)</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>email_monitor.scan_past_emails, email_monitor._process_mail_item, email_monitor.OnNewMailEx, main.POAutomationApp._on_start, main.POAutomationApp._save_settings</affected_function>
+      <target_files>
+        <file>po_automation/email_monitor.py</file>
+        <file>po_automation/main.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (읽기 전용 분석)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>ReceivedTime|rename|log_queue.put_nowait|Dispatch\("Outlook|self\._running|tempfile\.mkstemp</pattern>
+        <match_count>14</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>버그 점검 — ReceivedTime None 처리, rename 실패 분기 논리, log_queue 포화, COM 초기화 비일관성, tempfile fd 누수</change_summary>
+      <line_estimate>0 (읽기 전용)</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>inspection_report_IMP-20260510-D44F.md (신규 생성)</affected_function>
+      <target_files>
+        <file>inspection_report_IMP-20260510-D44F.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>inspection_report_IMP-20260510-D44F</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>MT-1~3 결과를 통합하여 inspection_report_IMP-20260510-D44F.md 작성 (버그/보안/성능/유지보수성/권고사항)</change_summary>
+      <line_estimate>80 이상</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>inspection_report_IMP-20260510-D44F.md (자기 검증)</affected_function>
+      <target_files>
+        <file>inspection_report_IMP-20260510-D44F.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>inspection_report_IMP-20260510-D44F\.md</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>MD 파일 섹션 완전성, 라인 번호 참조 수(≥3), 심각도 레이블, 1500자 이상 자기 검증 후 handover 발행</change_summary>
+      <line_estimate>0 (검증 전용)</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.9 — 소스 파일이 Python 3.9 호환, 분석 전용 태스크이므로 실행 환경 불필요</python_version>
+  <env_specs>
+    <python>3.9</python>
+    <vscode>불필요 (분석 전용)</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    1. inspection_report_IMP-20260510-D44F.md 파일이 프로젝트 루트에 존재
+    2. 파일 문자 수 1500자 이상
+    3. ## 버그, ## 보안, ## 성능, ## 유지보수성 (또는 동등 한국어 헤더) 4개 섹션 모두 포함
+    4. 코드 라인 번호 참조(L숫자 / line 숫자 / 라인 숫자) 3곳 이상
+    5. 심각도 레이블 CRITICAL/HIGH/MEDIUM/LOW 최소 2개 이상
+    6. ## 권고사항 섹션 + 각 주요 항목별 구체적 개선안
+    7. 요약 테이블(심각도별 발견 항목 수) 포함
+    8. [엣지케이스] allowed_senders/recipients 빈 set vs None 동작 분석 포함
+    9. [엣지케이스] OnNewMailEx 내 COM 객체 매번 재생성 문제 지적 포함
+    10. [코드 변경 없음] 소스 파일(.py) 수정 diff 없어야 함
+  </acceptance_criteria>
+
+  <dynamic_enhancement_required>false</dynamic_enhancement_required>
+  <!-- 분석 전용 태스크. 도메인 공백 없음, 최신 라이브러리 불필요. -->
+
+  <forbidden>
+    - po_automation/email_monitor.py 코드 수정 금지 (읽기 전용)
+    - po_automation/main.py 코드 수정 금지 (읽기 전용)
+    - EXE 빌드 금지
+    - inspection_report_IMP-20260510-D44F.md 이외 신규 파일 생성 금지
+    - pipeline.py, CLAUDE.md, agent MD 수정 금지
+    - tests/oracles/** 파일 수정 금지
+    - anti_gaming_rules.md 수정 금지
+  </forbidden>
+
+  <handover_template>
+    <handover_spec>
+      <agent_from>dev-agent</agent_from>
+      <agent_to>qa-agent</agent_to>
+      <pipeline_ref>IMP-20260510-D44F</pipeline_ref>
+      <evidence_files>
+        <file>inspection_report_IMP-20260510-D44F.md</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence_files>
+      <expected_status>READY_FOR_QA</expected_status>
+    </handover_spec>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\po_automation\email_monitor.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\po_automation\main.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260510-D44F\task_contract.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260510-D44F\test_set.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      [Dev Phase 핵심 규칙]
+      - 코드 변경 없음 — inspection_report_IMP-20260510-D44F.md 신규 생성만 허용
+      - scope_manifest.json 필수 생성
+      - module design → module dev → module qa 순서로 각 MT 기록
+      - module integrate PASS 후 done --phase dev 기록
+      - phase attestation: agent finish → done --phase dev --agent-run-id 필수
+      - handover XML로 qa-agent에 인계
+      - EXE 빌드 없음: pipeline.py build --exe "N/A" --skip-reason "meta-task"
+    </phase_rules_excerpt>
+    <prev_phase_summary>
+      PM Phase Round 2 실행 중. Contract FROZEN (contract_hash: 4d1770152fc3).
+      분석 대상: email_monitor.py(1645줄), main.py(642줄).
+      산출물: inspection_report_IMP-20260510-D44F.md.
+      빌드: N/A. oracle: --allow-no-oracle (deliverable_kind=analysis).
+    </prev_phase_summary>
+  </context_injection>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</pm_round1_output>

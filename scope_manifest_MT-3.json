@@ -1,0 +1,14 @@
+{
+  "pipeline_id": "IMP-20260513-4C0B",
+  "micro_tasks": [
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/test_patch_lane.py"
+      ],
+      "affected_functions": [
+        "test_cluster_init, test_cluster_detect_no_match, test_cluster_attach, test_cluster_close, test_patch_audit_escalate_files, test_patch_audit_escalate_lines, test_patch_audit_escalate_trust_root, test_patch_lane_forbidden, test_patch_verify_pass, test_patch_verify_fail"
+      ]
+    }
+  ]
+}

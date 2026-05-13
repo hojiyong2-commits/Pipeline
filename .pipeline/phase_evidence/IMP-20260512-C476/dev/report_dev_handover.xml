@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<scope_declaration>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <files_to_modify>
+    <file>pyproject.toml</file>
+    <file>.claude/agents/qa-agent.md</file>
+  </files_to_modify>
+  <functions_to_modify>
+    <function>pyproject.toml [tool.ruff.lint] section — extend-select 추가</function>
+    <function>.claude/agents/qa-agent.md Compliance Checklist section — PLW2901 항목 추가</function>
+  </functions_to_modify>
+</scope_declaration>
+
+<impact_analysis>
+  <mt_id>MT-1</mt_id>
+  <target_function>pyproject.toml [tool.ruff.lint] section — extend-select 추가</target_function>
+  <change_description>extend-select = ["PLW2901"] 추가 (ignore 라인 위). PLW2901 주석 추가. 기존 ignore 목록 보존.</change_description>
+  <lines_affected>L14-L15</lines_affected>
+  <risk>MINIMAL</risk>
+  <blast_radius>
+    <files>1</files>
+    <functions>0</functions>
+    <lines>2</lines>
+  </blast_radius>
+</impact_analysis>
+
+<impact_analysis>
+  <mt_id>MT-2</mt_id>
+  <target_function>.claude/agents/qa-agent.md Compliance Checklist section — PLW2901 항목 추가</target_function>
+  <change_description>FS Compliance Checklist 뒤에 PLW2901 shadowing 검사 서브섹션 추가 (10줄). 기존 WA/UI/FS 항목 보존.</change_description>
+  <lines_affected>L288-L297 (신규)</lines_affected>
+  <risk>MINIMAL</risk>
+  <blast_radius>
+    <files>1</files>
+    <functions>0</functions>
+    <lines>10</lines>
+  </blast_radius>
+</impact_analysis>
+
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <evidence>
+    <file>pyproject.toml</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>scope_manifest.json</file>
+    <file>scope_manifest_MT-1.json</file>
+    <file>scope_manifest_MT-2.json</file>
+    <file>module_handover_MT-1.xml</file>
+    <file>module_handover_MT-2.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+  <change_summary>
+    MT-1: pyproject.toml extend-select PLW2901 추가 (2줄).
+    MT-2: qa-agent.md PLW2901 shadowing 검사 항목 추가 (10줄).
+    모든 module QA PASS, integration PASS.
+  </change_summary>
+</handover>

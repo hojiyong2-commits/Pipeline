@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260510-9242</pipeline_id>
+  <agent_run_id>dev-de5706c9029dc619</agent_run_id>
+
+  <scope_declaration>
+    <files_modified>
+      <file>pipeline.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+    </files_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <mt_coverage>MT-1,MT-2</mt_coverage>
+    <changes>
+      <change mt_id="MT-1" function="_validate_pipeline_branch_isolation">신규 추가: gates prepare-phase --phase pm 실행 시 현재 git 브랜치가 pipeline_id를 포함하는지 강제 검증</change>
+      <change mt_id="MT-1" function="_validate_pr_title_matches_pipeline">신규 추가: gates accept --result ACCEPT 실행 시 열린 PR 제목에 pipeline_id가 포함되는지 검증</change>
+      <change mt_id="MT-1" function="cmd_gates">prepare-phase --phase pm 경로에 _validate_pipeline_branch_isolation 호출 추가 (라인 6563)</change>
+      <change mt_id="MT-1" function="cmd_gates">accept --result ACCEPT 경로에 _validate_pr_title_matches_pipeline 호출 추가 (라인 6756)</change>
+      <change mt_id="MT-2" function="none">CLAUDE.md Phase Evidence Git Hygiene 섹션 직후 "브랜치 격리 강제 규칙" 새 섹션 추가</change>
+      <change mt_id="MT-2" function="none">pipeline-manager-agent.md PM Handoff 섹션 이후 "Phase Attestation -- Branch Isolation Requirement" 새 섹션 추가</change>
+    </changes>
+  </impact_analysis>
+
+  <verification>
+    <syntax_ok>true</syntax_ok>
+    <functions_added>2 (_validate_pipeline_branch_isolation, _validate_pr_title_matches_pipeline)</functions_added>
+    <call_sites_wired>2 (라인 6563, 6756)</call_sites_wired>
+    <documentation_updated>true</documentation_updated>
+  </verification>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+  </evidence>
+
+  <status>READY_FOR_QA</status>
+</handover>

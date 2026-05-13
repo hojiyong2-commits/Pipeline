@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-09T16:00:14Z",
+  "pipeline_id": "IMP-20260509-A4DB",
+  "verdict": "PASS",
+  "waived": true,
+  "reason": "docs-only: README.md markdown creation, deliverable_kind=markdown, no runnable code",
+  "oracle_blockers": [
+    "oracle_manifest.json is required for three_gate mode"
+  ]
+}

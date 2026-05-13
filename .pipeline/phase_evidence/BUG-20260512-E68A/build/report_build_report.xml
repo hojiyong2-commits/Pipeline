@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<build_report>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <status>BUILD SUCCESS</status>
+
+  <section_1_command>
+    <build_1>cd ic_part_src &amp;&amp; python -m PyInstaller --noconfirm ICPartAutomation.spec</build_1>
+    <build_2>python -m PyInstaller --noconfirm EmailMonitor.spec</build_2>
+    <result_1>SUCCESS</result_1>
+    <result_2>SUCCESS</result_2>
+  </section_1_command>
+
+  <section_2_environment>
+    <python>3.12</python>
+    <pyinstaller>installed</pyinstaller>
+    <platform>Windows-64bit-intel</platform>
+    <spec_1>ic_part_src/ICPartAutomation.spec</spec_1>
+    <spec_2>EmailMonitor.spec</spec_2>
+  </section_2_environment>
+
+  <section_3_output>
+    <exe_1>ic_part_src/dist/ICPartAutomation.exe</exe_1>
+    <exe_2>dist/emailmonitor.exe</exe_2>
+    <exe_1_notes>ICPartAutomation.exe — order_mapper.py 변경으로 인한 PYZ 재빌드 확인됨</exe_1_notes>
+    <exe_2_notes>emailmonitor.exe — email_monitor.py 변경 포함, emailmonitor.pkg 빌드 완료</exe_2_notes>
+  </section_3_output>
+
+  <section_4_verification>
+    <exe_1_exists>true</exe_1_exists>
+    <exe_2_exists>true</exe_2_exists>
+    <smoke_test>EXE 파일 존재 확인 완료</smoke_test>
+  </section_4_verification>
+
+  <section_5_artifacts>
+    <artifact id="1">ic_part_src/dist/ICPartAutomation.exe</artifact>
+    <artifact id="2">dist/emailmonitor.exe</artifact>
+    <warnings>없음</warnings>
+  </section_5_artifacts>
+
+  <section_6_qa_mapping>
+    <mt_covered>
+      <mt id="MT-1" exe="ic_part_src/dist/ICPartAutomation.exe" source="ic_part_src/order_mapper.py" status="INCLUDED"/>
+      <mt id="MT-2" exe="dist/emailmonitor.exe" source="po_automation/email_monitor.py" status="INCLUDED"/>
+    </mt_covered>
+  </section_6_qa_mapping>
+</build_report>

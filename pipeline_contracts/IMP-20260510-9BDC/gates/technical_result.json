@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-10T03:47:17Z",
+  "pipeline_id": "IMP-20260510-9BDC",
+  "status": "PASS",
+  "evidence_files": [
+    ".claude\\agents\\security-agent.md",
+    ".claude\\agents\\build-agent.md",
+    ".claude\\agents\\agent-factory-agent.md",
+    ".claude\\agents\\protocol-evolution-agent.md",
+    ".claude\\agents\\test-harness-agent.md",
+    ".claude\\agents\\pm-agent.md"
+  ],
+  "target_files": [],
+  "strict_tools": true,
+  "checks": [
+    {
+      "name": "py_compile",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "py_compile"
+      ],
+      "message": "non-Python evidence files; py_compile not applicable",
+      "details": []
+    },
+    {
+      "name": "ruff",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "mypy",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "mypy"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "bandit",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "pytest",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "........................................................................ [ 38%]\n........................................................................ [ 76%]\n............................................                             [100%]\n188 passed in 18.68s\n",
+      "stderr": ""
+    }
+  ],
+  "complete_eligible": true
+}

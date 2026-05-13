@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module_qa_report>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <mt_id>MT-3</mt_id>
+  <verdict>PASS</verdict>
+  <result>PASS</result>
+  <summary>MT-3 단위 테스트 검증 완료. 14개 테스트 전체 PASS, 전체 pytest 스위트 233개 통과.</summary>
+  <verification_evidence>
+    <test name="pytest tests/test_patch_lane.py">14 passed in 3.37s</test>
+    <test name="pytest -q 전체">233 passed in 29.80s</test>
+    <test name="cluster 테스트 4개">detect/init/status/close 전체 PASS</test>
+    <test name="patch audit 테스트 4개">plan PASS/FAIL(16줄)/FAIL(trust_root)/audit PASS</test>
+    <test name="patch verify 테스트 2개">PASS/FAIL exit code 확인</test>
+    <test name="auto-escalation 경계값 2개">15줄 PASS, 16줄 FAIL 확인</test>
+    <test name="patch_lane_forbidden 1개">초기값 false, patch_failures=0 확인</test>
+    <test name="스키마 검증 1개">scope.file 누락 시 FAIL 확인</test>
+  </verification_evidence>
+  <boundary_check>
+    <scope_files_match>PASS</scope_files_match>
+    <no_extra_files>PASS</no_extra_files>
+    <micro_task_boundary>WITHIN_SCOPE</micro_task_boundary>
+  </boundary_check>
+</module_qa_report>

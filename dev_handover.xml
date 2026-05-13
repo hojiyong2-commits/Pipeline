@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <agent_run_id>dev-829c09a8823a84bc</agent_run_id>
+  <summary>IMP-20260513-4C0B 전체 구현 완료. MT-1(pipeline.py 579줄 추가) + MT-2(5개 문서 동기화) + MT-3(14개 단위 테스트). pytest 233개 전체 통과.</summary>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_patch_lane.py</file>
+    </files_to_modify>
+    <files_not_to_modify>모든 다른 파일</files_not_to_modify>
+  </scope_declaration>
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>tests/test_patch_lane.py</file>
+  </implemented_files>
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+  <impact_analysis>
+    <micro_task id="MT-1">
+      <target_function>cmd_cluster, cmd_patch, _check_patch_lane_conditions, _run_patch_audit, _load_patch_plan, build_parser</target_function>
+      <target_file>pipeline.py</target_file>
+      <change_type>addition</change_type>
+      <lines_changed>579</lines_changed>
+      <call_sites_affected>COMMAND_MAP, build_parser</call_sites_affected>
+    </micro_task>
+    <micro_task id="MT-2">
+      <target_function>문서 섹션 추가</target_function>
+      <target_file>CLAUDE.md, agent MDs, ci.yml</target_file>
+      <change_type>addition</change_type>
+      <lines_changed>200</lines_changed>
+      <call_sites_affected>none</call_sites_affected>
+    </micro_task>
+    <micro_task id="MT-3">
+      <target_function>단위 테스트 14개</target_function>
+      <target_file>tests/test_patch_lane.py</target_file>
+      <change_type>new_file</change_type>
+      <lines_changed>280</lines_changed>
+      <call_sites_affected>none</call_sites_affected>
+    </micro_task>
+  </impact_analysis>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_patch_lane.py</file>
+      <file>scope_manifest.json</file>
+      <file>integration_report.xml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+  <test_results>
+    <suite>pytest -q: 233 passed</suite>
+    <suite>tests/test_patch_lane.py: 14 passed</suite>
+  </test_results>
+</dev_handover>

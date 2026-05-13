@@ -1,0 +1,8 @@
+{
+  "description": "I·J·K 컬럼에 데이터가 전혀 없는 빈 시트 (ICPART_DATA_START_ROW 이후 데이터 없음)",
+  "sheet_xml_snippet": "",
+  "ICPART_DATA_START_ROW": 6,
+  "ICPART_COL_PROJECT_ID": 9,
+  "ICPART_COL_ORDER_NO": 10,
+  "ICPART_COL_PO_NO": 11
+}

@@ -1,0 +1,15 @@
+엣지케이스 분석 결과가 리포트에 포함되어야 할 내용:
+
+1. ReceivedTime None 처리: scan_past_emails L1200-1220 부근에서 received is None이면
+   since_dt 비교를 건너뛰고 _process_mail_item을 호출하는 흐름이 분석되어야 함.
+   (수신 시각 미상 메일도 처리됨 — 의도적 설계인지 확인 필요)
+
+2. rename 실패 분기: _process_mail_item L1060-1073 부근 rename 실패 후
+   dest_folder.mkdir 호출 분기 존재 여부가 분석되어야 함.
+   (현재 코드: OSError 발생 시 mkdir 호출 — 올바름 또는 개선 여지 판정 필요)
+
+3. 빈 entryIDsCollection: OnNewMailEx L1310-1312에서 strip 후 빈 문자열 감지 후
+   early return 동작이 확인되어야 함.
+
+4. 빈 set vs None 필터: allowed_senders/recipients가 None일 때와 빈 set일 때
+   동일하게 전체 허용으로 동작하는지 (if allowed_senders: 패턴 분석) 확인되어야 함.

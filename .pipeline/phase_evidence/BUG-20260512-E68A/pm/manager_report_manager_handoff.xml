@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <phase>pm</phase>
+  <status>READY_FOR_DEV</status>
+  <step_plan_file>step_plan.xml</step_plan_file>
+  <step_plan_sha256>2ebbd40d90e6ffebb77401b16d3a4247166f39b325b366b613994bda1eb2003f</step_plan_sha256>
+  <planner_run_id>pm_planner-ad27123881739b37</planner_run_id>
+  <contract_frozen>true</contract_frozen>
+  <contract_hash>574ffccfd170df395656c373630aa92db373376c00c4c1d3b7ec4d5c56fc745f</contract_hash>
+  <test_set_hash>af3616eef3859dc652ea962a65ebf2bb5ceb3d3dd1be9eb99211742f7ebf6834</test_set_hash>
+
+  <micro_tasks>
+    <task id="MT-1" file="ic_part_src/order_mapper.py" function="write_ic_part_zip" status="PENDING"/>
+    <task id="MT-2" file="po_automation/email_monitor.py" function="_process_mail_item" status="PENDING"/>
+  </micro_tasks>
+
+  <oracle_summary>
+    <count>6</count>
+    <normal>2</normal>
+    <edge>2</edge>
+    <exception>2</exception>
+  </oracle_summary>
+
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <build_required>true</build_required>
+  <build_targets>
+    <target>ICPartAutomation (ic_part_src/)</target>
+    <target>emailmonitor (po_automation/)</target>
+  </build_targets>
+</manager_handoff>

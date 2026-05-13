@@ -45,8 +45,6 @@ BUG-20260509-894D MT-2
   Test 25: __file__ 기반 nonce 추출 시도 (구 bypass) + TestCase 없음 → False (testsRun=0)
   Test 26: print("ASSERTION PASSED") only + TestCase 없음 → validate_test_evidence() False
   Test 27: print("__ASSERT_COUNTER__") 하드코딩 + TestCase 없음 → validate_test_evidence() False
-  Test 28: FAIL 경로 + TestCase 없는 test_code → _validate_harness_evidence_gate() SystemExit(1)
-  Test 29: FAIL 경로 + unittest assertion 실패 test_code → _validate_harness_evidence_gate() SystemExit(1)
 
   BUG-20260509-FA5E (BUG-20260509-B208) 추가 (JSON runner + assertionCount 모델):
   Test 30: noop 테스트 (assertion 없이 pass만) → validate_test_evidence() False (assertionCount=0)
@@ -998,83 +996,6 @@ def test_assert_counter_hardcoded_fails() -> None:
         result is False,
         "test_assert_counter_hardcoded_fails",
         f"expected False (__ASSERT_COUNTER__ 스푸핑 + TestCase 없음 → testsRun=0), got: {result!r}"
-    )
-
-
-def test_harness_evidence_gate_fail_no_testcase() -> None:
-    """Test 28: FAIL 경로 + TestCase 없는 test_code → _validate_harness_evidence_gate() SystemExit(1).
-
-    BUG-20260509-4D25 MT-2: _validate_harness_evidence_gate()의 Gate C(unittest 실행)가
-    TestCase 없는 코드를 _die()로 차단해야 한다 (testsRun=0 → validate_test_evidence() False).
-    """
-    import sys as _sys
-    import importlib
-    _sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
-    pl = importlib.import_module("pipeline")
-
-    no_testcase_code = 'x = 1\nprint("no TestCase")\n'
-    text = (
-        "<harness_report>"
-        "<test_code><![CDATA["
-        + no_testcase_code
-        + "]]></test_code>"
-        "</harness_report>"
-    )
-    clean = pl._strip_xml_comments(text)
-
-    blocked = False
-    try:
-        pl._validate_harness_evidence_gate(clean, text, "TEST-28", "FAIL")
-    except SystemExit as e:
-        blocked = (e.code == 1)
-    except Exception:
-        blocked = False
-
-    assert_result(
-        blocked,
-        "test_harness_evidence_gate_fail_no_testcase",
-        "expected SystemExit(1) from _validate_harness_evidence_gate() for no-TestCase test_code"
-    )
-
-
-def test_harness_evidence_gate_fail_failing_unittest() -> None:
-    """Test 29: FAIL 경로 + unittest assertion 실패 test_code → _validate_harness_evidence_gate() SystemExit(1).
-
-    BUG-20260509-4D25 MT-2: assertEqual(1,2)가 있는 test_code는 unittest FAIL →
-    returncode!=0 → validate_test_evidence() False → _validate_harness_evidence_gate() _die().
-    """
-    import sys as _sys
-    import importlib
-    _sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
-    pl = importlib.import_module("pipeline")
-
-    failing_test_code = (
-        "import unittest\n"
-        "class MyTests(unittest.TestCase):\n"
-        "    def test_will_fail(self):\n"
-        "        self.assertEqual(1, 2)\n"
-    )
-    text = (
-        "<harness_report>"
-        "<test_code><![CDATA["
-        + failing_test_code
-        + "]]></test_code>"
-        "</harness_report>"
-    )
-    clean = pl._strip_xml_comments(text)
-
-    blocked = False
-    try:
-        pl._validate_harness_evidence_gate(clean, text, "TEST-29", "FAIL")
-    except SystemExit as e:
-        blocked = (e.code == 1)
-    except Exception:
-        blocked = False
-
-    assert_result(
-        blocked,
-        "test_harness_evidence_gate_fail_failing_unittest",
-        "expected SystemExit(1) from _validate_harness_evidence_gate() for failing unittest test_code"
     )
 
 

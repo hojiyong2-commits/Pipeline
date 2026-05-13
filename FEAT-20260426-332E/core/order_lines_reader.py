@@ -8,33 +8,48 @@ import openpyxl
 from openpyxl.utils import column_index_from_string
 from datetime import datetime as _dt, date as _date
 
-_ALLOWED_ROOT: Path = Path.home()  # traversal guard root; user files must reside under HOME
+_ALLOWED_ROOTS: List[Path] = [
+    Path.home(),                   # traversal guard: user home directory
+    Path("//ccikrnf/wrkgroup"),    # MT-1: approved UNC share for order files
+]
 
 
-def _safe_resolve(user_path: str, allowed_root: Path) -> Path:
-    """Resolve and validate a user-supplied path against allowed_root.
+def _safe_resolve(user_path: str) -> Path:
+    """Resolve and validate a user-supplied path against _ALLOWED_ROOTS.
 
     Prevents directory traversal by ensuring the resolved path remains
-    inside allowed_root (symlink-safe via .resolve()).
+    inside at least one of the allowed roots (symlink-safe via .resolve()).
+    UNC paths (//server/share/...) are compared by string prefix because
+    Path.resolve() on Windows UNC shares does not always produce a
+    canonical form that relative_to() can match.
 
     Args:
         user_path: Raw path string from user input or config.
-        allowed_root: Top-level directory that the resolved path must be under.
 
     Returns:
-        Resolved Path object guaranteed to be inside allowed_root.
+        Resolved Path object guaranteed to be inside one of _ALLOWED_ROOTS.
 
     Raises:
-        ValueError: If the resolved path escapes allowed_root.
+        ValueError: If the resolved path escapes all allowed roots.
     """
-    resolved = Path(user_path).resolve()
-    try:
-        resolved.relative_to(allowed_root.resolve())
-    except ValueError:
-        raise ValueError(
-            f"Path traversal detected: '{user_path}' escapes allowed root '{allowed_root}'"
-        )
-    return resolved
+    p = Path(user_path)
+    # UNC paths: compare as normalised string prefix (case-insensitive on Windows)
+    p_str = str(p).replace("\\", "/").lower()
+    for root in _ALLOWED_ROOTS:
+        root_str = str(root).replace("\\", "/").lower().rstrip("/")
+        if p_str.startswith(root_str):
+            return p
+    # Non-UNC paths: use resolve() + relative_to() for symlink safety
+    resolved = p.resolve()
+    for root in _ALLOWED_ROOTS:
+        try:
+            resolved.relative_to(root.resolve())
+            return resolved
+        except ValueError:
+            continue
+    raise ValueError(
+        f"Path traversal detected: '{user_path}' escapes all allowed roots"
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +183,8 @@ def lookup_order_lines(
     # MT-2: I column index for service-part filter (computed once)
     sales_part_idx = _col_to_idx(_DEFAULT_SALES_PART_COL)
 
-    # FS.traversal: resolve and validate against allowed_root before any I/O
-    path = _safe_resolve(file_path, _ALLOWED_ROOT)
+    # FS.traversal: resolve and validate against _ALLOWED_ROOTS before any I/O
+    path = _safe_resolve(file_path)
     if not path.exists():
         raise FileNotFoundError(f"Excel B file not found: '{path}'")
 

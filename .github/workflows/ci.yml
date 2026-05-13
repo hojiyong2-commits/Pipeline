@@ -34,6 +34,48 @@ jobs:
           PIPELINE_NO_DASHBOARD: "1"
         run: python -m pytest -q
 
+      - name: Patch Lane 증거 파일 검증 (IMP-20260513-4C0B)
+        if: success() && hashFiles('patch_plan.json') != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $planPath = "patch_plan.json"
+          $plan = Get-Content -Path $planPath -Raw | ConvertFrom-Json
+          $blockers = New-Object System.Collections.Generic.List[string]
+          if ($plan.schema_version -ne 1) {
+            $blockers.Add("patch_plan.json schema_version must be 1")
+          }
+          $scope = $plan.patch_scope
+          if ($null -eq $scope -or [string]::IsNullOrWhiteSpace([string]$scope.file)) {
+            $blockers.Add("patch_plan.json: patch_scope.file 미지정")
+          }
+          if ($null -eq $scope -or [string]::IsNullOrWhiteSpace([string]$scope.function)) {
+            $blockers.Add("patch_plan.json: patch_scope.function 미지정")
+          }
+          if ($null -ne $scope -and $null -ne $scope.expected_lines_changed_max) {
+            $maxLines = [int]$scope.expected_lines_changed_max
+            if ($maxLines -gt 15) {
+              $blockers.Add("patch_plan.json: expected_lines_changed_max=$maxLines 초과 (최대 15줄) — Full Lane 필요")
+            }
+          }
+          $forbidden = $plan.forbidden
+          if ($null -ne $forbidden) {
+            if ($forbidden.trust_root_changes -eq $true) {
+              $blockers.Add("patch_plan.json: trust_root_changes=true — Patch Lane 금지")
+            }
+            if ($forbidden.new_dependencies -eq $true) {
+              $blockers.Add("patch_plan.json: new_dependencies=true — Patch Lane 금지")
+            }
+            if ($forbidden.file_move_or_delete -eq $true) {
+              $blockers.Add("patch_plan.json: file_move_or_delete=true — Patch Lane 금지")
+            }
+          }
+          if ($blockers.Count -gt 0) {
+            Write-Error ("Patch Lane 검증 실패: " + ($blockers -join "; "))
+            exit 1
+          }
+          Write-Host "[PATCH LANE CI] patch_plan.json 검증 통과"
+
       - name: 자동 검사 증명 파일 만들기
         if: success()
         shell: pwsh
@@ -247,6 +289,19 @@ jobs:
             $fileLines = @("- GitHub가 변경 파일을 찾지 못했습니다.")
           }
 
+          $outputLines = @()
+          foreach ($file in $files) {
+            $name = [string]$file.filename
+            if ($name -notmatch '^pipeline_outputs/') { continue }
+            if ($name -match '/outputs_manifest\.json$') { continue }
+            $encodedName = [System.Uri]::EscapeDataString($name).Replace('%2F','/')
+            $blobUrl = "$env:GITHUB_SERVER_URL/$repo/blob/$headSha/$encodedName"
+            $outputLines += "- [$name]($blobUrl)"
+          }
+          if ($outputLines.Count -eq 0) {
+            $outputLines = @("- 등록된 결과물 파일이 없습니다. 위 **사용자가 실제로 확인할 것**이나 PR 본문의 결과 링크/경로를 확인하세요.")
+          }
+
           $sensitiveLines = @()
           if ($sensitive.Count -eq 0) {
             $sensitiveLines = @("- 없음")
@@ -276,6 +331,10 @@ jobs:
           ### 사용자가 실제로 확인할 것
 
           $resultToCheckBlock
+
+          ### 등록된 결과물 바로 열기
+
+          $($outputLines -join "`n")
 
           ### 기대 결과와 실제 결과 비교
 
@@ -352,15 +411,21 @@ jobs:
             $blockers.Add("phase must be one of pm/dev/qa/build")
           }
           $expectedAgents = @{
-            pm = "pm-agent"
+            pm = "pm-planner-agent"
             dev = "dev-agent"
             qa = "qa-agent"
             build = "build-agent"
           }
+          $expectedRunPhases = @{
+            pm = "pm_planner"
+            dev = "dev"
+            qa = "qa"
+            build = "build"
+          }
           if ($null -eq $request.agent_run) {
             $blockers.Add("agent_run receipt is required")
           } else {
-            if ($request.agent_run.phase -ne $request.phase) {
+            if ($request.agent_run.phase -ne $expectedRunPhases[[string]$request.phase]) {
               $blockers.Add("agent_run phase mismatch")
             }
             if ($request.agent_run.agent_id -ne $expectedAgents[[string]$request.phase]) {
@@ -390,8 +455,49 @@ jobs:
               if ($receipt.agent_id -ne $request.agent_run.agent_id) {
                 $blockers.Add("agent receipt agent_id mismatch")
               }
-              if ($receipt.phase -ne $request.phase) {
+              if ($receipt.phase -ne $expectedRunPhases[[string]$request.phase]) {
                 $blockers.Add("agent receipt phase mismatch")
+              }
+            }
+          }
+
+          if ($request.phase -eq "pm") {
+            if ($null -eq $request.manager_run) {
+              $blockers.Add("manager_run receipt is required for pm")
+            } else {
+              if ($request.manager_run.phase -ne "pipeline_manager") {
+                $blockers.Add("manager_run phase must be pipeline_manager")
+              }
+              if ($request.manager_run.agent_id -ne "pipeline-manager-agent") {
+                $blockers.Add("manager_run agent_id mismatch")
+              }
+              if ($request.manager_run.status -ne "COMPLETED") {
+                $blockers.Add("manager_run status must be COMPLETED")
+              }
+              if ($request.manager_run.used_by_phase -ne "pm_manager") {
+                $blockers.Add("manager_run must be consumed by pm_manager")
+              }
+              $managerReceiptPath = [string]$request.manager_run.receipt_path
+              if ([string]::IsNullOrWhiteSpace($managerReceiptPath) -or -not (Test-Path -LiteralPath $managerReceiptPath -PathType Leaf)) {
+                $blockers.Add("manager receipt file missing: $managerReceiptPath")
+              } else {
+                $managerReceiptHash = (Get-FileHash -LiteralPath $managerReceiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($managerReceiptHash -ne ([string]$request.manager_run.receipt_sha256).ToLowerInvariant()) {
+                  $blockers.Add("manager receipt hash mismatch: $managerReceiptPath")
+                }
+                $managerReceipt = Get-Content -Path $managerReceiptPath -Raw | ConvertFrom-Json
+                if ($managerReceipt.receipt_type -ne "agent-run-receipt-v1") {
+                  $blockers.Add("manager receipt_type must be agent-run-receipt-v1")
+                }
+                if ($managerReceipt.run_id -ne $request.manager_run.run_id) {
+                  $blockers.Add("manager receipt run_id mismatch")
+                }
+                if ($managerReceipt.agent_id -ne $request.manager_run.agent_id) {
+                  $blockers.Add("manager receipt agent_id mismatch")
+                }
+                if ($managerReceipt.phase -ne "pipeline_manager") {
+                  $blockers.Add("manager receipt phase mismatch")
+                }
               }
             }
           }

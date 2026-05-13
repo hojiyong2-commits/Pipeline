@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260511-92A6",
+  "created_at": "2026-05-11T13:01:13Z",
+  "updated_at": "2026-05-11T13:03:47Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T1",
+      "module": "M1",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {},
+      "when": {},
+      "then": {
+        "path": "KittingMapper_inspection_report.md"
+      }
+    },
+    {
+      "id": "T2",
+      "module": "M1",
+      "type": "file_output_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 5,
+      "given": {},
+      "when": {},
+      "then": {
+        "path": "KittingMapper_inspection_report.md"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-11T13:03:47Z",
+  "test_set_hash": "c21d2d81756b94195748dde0fba89a26687c74f64e4471f1cfedc864f6845abd",
+  "contract_hash": "544b68a042d78a5b3bcadd958a94a69dcd2873b02904276feb8326e94c1b3bc7"
+}
