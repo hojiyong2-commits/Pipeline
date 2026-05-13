@@ -1,38 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_handover>
-  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
   <mt_id>MT-1</mt_id>
+  <from>dev-agent</from>
+  <to>module-qa</to>
   <status>READY_FOR_MODULE_QA</status>
-
+  <summary>pipeline.py에 Patch Lane + Incident Cluster 서브커맨드 구현 완료. 579줄 추가. cluster(detect/init/status/attach/close) 및 patch(plan/audit/verify/attest) 모든 서브커맨드 동작 확인.</summary>
   <implemented_files>
-    <file path="ic_part_src/order_mapper.py" lines_changed="1" line_number="1160">
-      정규식 OR 조건 추가: r'&lt;v[\s&gt;]' → r'&lt;v[\s&gt;]|&lt;is[\s&gt;]'
-    </file>
+    <file>pipeline.py</file>
   </implemented_files>
-
-  <scope_manifest>scope_manifest_MT-1.json</scope_manifest>
-
-  <change_description>
-    write_ic_part_zip 함수 내 I·J·K 스캐너 블록(L1160)에서
-    inlineStr 포맷 셀(&lt;is&gt; 태그)도 occupied로 집계되도록 OR 조건 추가.
-    기존 &lt;v&gt; 태그 감지 동작 100% 유지.
-  </change_description>
-
   <self_check>
-    <python39_syntax>PASS — 정규식 문자열 변경만. 3.10+ 문법 없음</python39_syntax>
-    <type_hinting>PASS — 함수 시그니처 변경 없음</type_hinting>
-    <error_handling>PASS — 기존 예외 처리 유지</error_handling>
-    <path_safety>PASS — 경로 처리 변경 없음</path_safety>
-    <security>PASS — 정규식 OR 조건 추가만. 보안 표면 변화 없음</security>
-    <al_edge_cases>PASS — _m.group(3) or '' 로 빈 문자열 방어 기존에 존재</al_edge_cases>
-    <pd_policy>PASS — API 시그니처 변경 없음</pd_policy>
-    <docstring>PASS — 함수 docstring 변경 없음</docstring>
+    <python39_syntax>PASS — match/case 미사용, Union[] 표기 사용, asyncio.TaskGroup/ExceptionGroup 미사용</python39_syntax>
+    <type_hinting>PASS — 모든 신규 함수에 파라미터 타입 + 리턴 타입 명시</type_hinting>
+    <error_handling>PASS — JSON I/O, 파일 접근에 try-except + 구체적 예외 타입 포함</error_handling>
+    <path_safety>PASS — pathlib.Path 사용, 하드코딩 경로 없음, _CLUSTER_DIR 상수 사용</path_safety>
+    <security>PASS — 하드코딩 키 없음, 입력 검증 포함, cluster_id 형식 검증</security>
+    <al_edge_cases>PASS — 빈 클러스터 목록 처리, None 체크, 잘못된 JSON 방어</al_edge_cases>
+    <pd_policy>PASS — 잘못된 cluster_id ValueError, 빈 결과 반환, 필드 검증</pd_policy>
+    <docstring>PASS — 모든 신규 함수에 docstring 포함</docstring>
   </self_check>
-
-  <verification>
-    L1160: if not re.search(r'&lt;v[\s&gt;]|&lt;is[\s&gt;]', _m.group(3) or ''):
-    - &lt;v&gt; 태그 포함 셀: occupied 집계 (회귀 없음)
-    - &lt;is&gt; 태그 포함 셀: occupied 집계 (신규 수정)
-    - 빈 셀: continue (기존 동작 유지)
-  </verification>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>scope_manifest_MT-1.json</file>
+  </evidence>
+  <implementation_details>
+    <constants>
+      _CLUSTER_DIR = clusters/
+      _PATCH_LANE_AUTO_ESCALATION_LINES = 15
+      _CLUSTER_MAX_PATCH_FAILURES = 2
+      _CLUSTER_AUTO_CLOSE_DAYS = 7
+    </constants>
+    <new_commands>
+      <command>cluster detect [--desc]</command>
+      <command>cluster init [--desc]</command>
+      <command>cluster status [--cluster-id]</command>
+      <command>cluster attach --cluster-id</command>
+      <command>cluster close --cluster-id</command>
+      <command>patch plan [--plan]</command>
+      <command>patch audit [--plan]</command>
+      <command>patch verify --result PASS|FAIL [--plan]</command>
+      <command>patch attest [--plan]</command>
+    </new_commands>
+    <auto_escalation_threshold_lines>15</auto_escalation_threshold_lines>
+    <cluster_max_patch_failures>2</cluster_max_patch_failures>
+    <cluster_auto_close_days>7</cluster_auto_close_days>
+  </implementation_details>
+  <test_verification>
+    <test>cluster detect: 활성 클러스터 없음 JSON 반환 확인</test>
+    <test>cluster init: CL-XXXX 형식 ID로 클러스터 생성 확인</test>
+    <test>cluster status: 전체 클러스터 목록 JSON 반환 확인</test>
+    <test>cluster attach: 현재 파이프라인 연결 확인</test>
+    <test>cluster close: closed_at 타임스탬프 기록 확인</test>
+    <test>patch plan (PASS): 1파일/1함수/10줄 조건 통과 확인</test>
+    <test>patch audit (PASS): audit 통과 확인</test>
+    <test>patch verify --result PASS: 검증 PASS 확인</test>
+    <test>patch attest: 증거 기록 확인</test>
+    <test>auto-escalation: 20줄 계획 시 FAIL + lane=full 확인</test>
+  </test_verification>
 </module_handover>

@@ -1,43 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_handover>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
   <mt_id>MT-2</mt_id>
-  <pipeline_id>IMP-20260512-C476</pipeline_id>
   <from>dev-agent</from>
-  <to>qa-agent</to>
+  <to>module-qa</to>
   <status>READY_FOR_MODULE_QA</status>
-
-  <scope_declaration>
-    <files_to_modify>
-      <file>.claude/agents/qa-agent.md</file>
-    </files_to_modify>
-    <files_modified>
-      <file>.claude/agents/qa-agent.md</file>
-    </files_modified>
-  </scope_declaration>
-
-  <impact_analysis>
-    <target_function>.claude/agents/qa-agent.md Compliance Checklist section — PLW2901 항목 추가</target_function>
-    <change_type>documentation_addition</change_type>
-    <lines_changed>10</lines_changed>
-    <side_effects>none — QA 에이전트가 PLW2901 검사를 추가로 수행하게 됨</side_effects>
-  </impact_analysis>
-
+  <summary>5개 문서 파일 Patch Lane 동기화 완료: CLAUDE.md(Patch Lane 운영 섹션), pm-planner-agent.md(판별 체크리스트), pipeline-manager-agent.md(명령어 표), qa-agent.md(QA 체크리스트), ci.yml(patch lane 검증 스텝)</summary>
   <implemented_files>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
     <file>.claude/agents/qa-agent.md</file>
+    <file>.github/workflows/ci.yml</file>
   </implemented_files>
-
-  <change_summary>
-    Compliance Checklist 섹션의 FS 체크리스트 뒤에 "변수 Shadowing 검사 — PLW2901" 서브섹션 추가.
-    ruff check --select PLW2901 실행 의무, 루프 변수명과 함수/상수명 grep 교차검증 의무,
-    PLW2901 위반 시 FS:PLW2901_shadow failure_signature로 FAIL 처리 절차 명시.
-    기존 WA/UI/FS Compliance Checklist 항목 삭제 없음.
-  </change_summary>
-
   <self_check>
-    <plw2901_present>PASS — .claude/agents/qa-agent.md에 "PLW2901" 문자열 존재 확인</plw2901_present>
-    <existing_items_preserved>PASS — WA/UI/FS Compliance Checklist 항목 삭제 없음 확인</existing_items_preserved>
-    <scope_within_mt>PASS — .claude/agents/qa-agent.md만 수정</scope_within_mt>
-    <forbidden_preserved>PASS — oracle 파일, pipeline.py, CLAUDE.md 미변경</forbidden_preserved>
-    <execution_check>SKIP — MD 파일 변경으로 실행 불필요</execution_check>
+    <python39_syntax>N/A — 문서 파일</python39_syntax>
+    <type_hinting>N/A — 문서 파일</type_hinting>
+    <error_handling>N/A — 문서 파일</error_handling>
+    <path_safety>PASS — 절대 경로 없음, 상대 경로만 사용</path_safety>
+    <security>PASS — 민감 정보 없음</security>
+    <al_edge_cases>N/A — 문서 파일</al_edge_cases>
+    <pd_policy>PASS — auto-escalation 임계값 15줄 모든 문서에서 일치</pd_policy>
+    <docstring>N/A — 문서 파일</docstring>
   </self_check>
+  <evidence>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>scope_manifest_MT-2.json</file>
+  </evidence>
+  <changes_made>
+    <change file="CLAUDE.md">Patch Lane + Incident Cluster 운영 섹션 추가 (진입 조건 5-AND, 절차, 스키마, cluster 자동 규칙)</change>
+    <change file=".claude/agents/pm-planner-agent.md">Patch Lane 판별 체크리스트 + patch_plan_template XML 추가</change>
+    <change file=".claude/agents/pipeline-manager-agent.md">Patch Lane 관리 명령어 표 + 실패 처리 규칙 추가</change>
+    <change file=".claude/agents/qa-agent.md">Patch Lane QA 체크리스트 5항목 + 실패 시 failure_signature 추가</change>
+    <change file=".github/workflows/ci.yml">Patch Lane 증거 파일 검증 스텝 추가 (schema_version, scope, lines <= 15, forbidden 검증)</change>
+  </changes_made>
 </module_handover>

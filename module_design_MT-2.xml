@@ -1,26 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_design>
-  <pipeline_id>BUG-20260512-E68A</pipeline_id>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
   <mt_id>MT-2</mt_id>
-
+  <status>PASS</status>
+  <design_summary>5개 문서 파일 동기화: CLAUDE.md(Patch Lane 운영 섹션), pm-planner-agent.md, pipeline-manager-agent.md, qa-agent.md, ci.yml</design_summary>
   <interface_contract>
-    <input>po_automation/email_monitor.py — _process_mail_item 내 수신자 for 루프의 rec.Address</input>
-    <output>recipient_set에 올바른 SMTP 주소 또는 DN 폴백 주소가 추가됨</output>
-    <precondition>rec.Address가 '@' 없는 Exchange DN 형식일 수 있음</precondition>
-    <postcondition>SMTP 주소로 정상 변환되거나, 예외 발생 시 원본 주소로 폴백. 크래시 없음.</postcondition>
+    <input>MT-1 완료된 pipeline.py — cluster/patch 서브커맨드 기능 명세</input>
+    <output>5개 문서 파일에 Patch Lane 규칙 섹션 추가됨</output>
+    <validation>각 문서에 auto-escalation 15줄 임계값, cluster/patch 명령어, 운영 규칙이 일치하는지 확인</validation>
   </interface_contract>
-
   <implementation_plan>
-    <step id="1">rec.Address에서 raw_addr 추출</step>
-    <step id="2">raw_addr에 '@' 없으면 Exchange DN으로 감지</step>
-    <step id="3">rec.AddressEntry.GetExchangeUser().PrimarySmtpAddress 조회</step>
-    <step id="4">예외 발생 시 try/except로 잡고 원본 주소 유지 (nosec B110)</step>
-    <step id="5">addr = raw_addr.lower()로 정규화 후 recipient_set에 추가</step>
+    <step>1. CLAUDE.md에 Patch Lane + Incident Cluster 운영 섹션 추가</step>
+    <step>2. pm-planner-agent.md에 Patch Lane 판별 체크리스트 추가</step>
+    <step>3. pipeline-manager-agent.md에 cluster/patch Phase 표 항목 추가</step>
+    <step>4. qa-agent.md에 Patch Lane QA 체크리스트 추가</step>
+    <step>5. .github/workflows/ci.yml에 patch lane evidence 검증 스텝 추가</step>
   </implementation_plan>
-
   <verification_plan>
-    <test id="T1">SMTP 주소 입력 시 변환 없이 그대로 통과 확인</test>
-    <test id="T2">Exchange DN 입력 시 SMTP 변환 성공 확인</test>
-    <test id="T3">Exchange DN + GetExchangeUser 예외 시 크래시 없이 DN 폴백 확인</test>
+    <check>각 문서에 Patch Lane 섹션이 존재하는지 Grep 확인</check>
+    <check>15줄 임계값이 모든 문서에서 일치하는지 확인</check>
+    <check>ci.yml 스텝이 YAML 문법 오류 없이 파싱되는지 확인</check>
   </verification_plan>
 </module_design>

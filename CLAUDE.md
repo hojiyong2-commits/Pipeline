@@ -850,3 +850,102 @@ PM은 아래 케이스에서 step_plan을 micro_task 단위로 분할합니다:
 ### 기존 규칙과의 호환성
 
 본 Micro-task Decomposition 섹션은 기존 규칙(Frozen Codebase, Mandatory Clarification, Compliance Checklist, Robustness Sub-Rubric, Pre-Output Self-Check, Producer-Consumer Bundle Patch Verification 등)을 무손상으로 보존합니다. 신규 규칙은 모두 별도 헤더로 추가되며, 기존 섹션 텍스트는 변경하지 않습니다.
+
+---
+
+## Patch Lane + Incident Cluster (IMP-20260513-4C0B)
+
+파이프라인 규모가 작고 위험 요소가 없는 경우 Full Lane 대신 경량 Patch Lane을 사용합니다.
+Incident Cluster는 관련 파이프라인들을 그룹화하여 반복 실패 패턴을 추적합니다.
+
+### Patch Lane 진입 조건 (5-AND)
+
+아래 **모두** 충족 시에만 Patch Lane 사용 가능합니다:
+
+1. 변경 파일 수 = 1개
+2. 변경 함수 수 = 1개
+3. 예상 변경 줄 수 ≤ **15줄** (auto-escalation 임계값)
+4. 신뢰 루트 파일(CLAUDE.md/pipeline.py/agent MD/ci.yml) 수정 없음 (`trust_root_changes=false`)
+5. 새 의존성 추가 없음, 파일 이동/삭제 없음
+
+하나라도 위반 시 → 자동으로 Full Lane으로 에스컬레이션됩니다 (`exit code 1`, `lane=full`).
+
+### Patch Lane 운영 절차
+
+```powershell
+# 1. patch_plan.json 작성 후 진입 조건 검사
+python pipeline.py patch plan --plan patch_plan.json
+
+# 2. 패치 감사 (auto-escalation 검사)
+python pipeline.py patch audit --plan patch_plan.json
+
+# 3. 패치 적용 후 검증
+python pipeline.py patch verify --plan patch_plan.json --result PASS
+
+# 4. 완료 증거 기록
+python pipeline.py patch attest --plan patch_plan.json
+```
+
+### patch_plan.json 스키마
+
+```json
+{
+  "schema_version": 1,
+  "pipeline_id": "FEAT|BUG|IMP-YYYYMMDD-XXXX",
+  "patch_scope": {
+    "file": "단일파일.py",
+    "function": "단일함수명",
+    "expected_lines_changed_max": 10
+  },
+  "forbidden": {
+    "trust_root_changes": false,
+    "new_dependencies": false,
+    "file_move_or_delete": false,
+    "packaging_changes": false
+  }
+}
+```
+
+### Incident Cluster 운영 절차
+
+```powershell
+# 유사 클러스터 탐색
+python pipeline.py cluster detect --desc "키워드"
+
+# 새 클러스터 생성
+python pipeline.py cluster init --desc "클러스터 설명"
+
+# 현재 파이프라인 연결
+python pipeline.py cluster attach --cluster-id CL-XXXX
+
+# 클러스터 상태 조회
+python pipeline.py cluster status [--cluster-id CL-XXXX]
+
+# 클러스터 종료
+python pipeline.py cluster close --cluster-id CL-XXXX
+```
+
+### Cluster 자동 규칙
+
+- `patch_failures >= 2` → `patch_lane_forbidden=true` 자동 설정 — 이후 Patch Lane 사용 불가
+- `created_at` 으로부터 7일 경과 → `cluster status` / `cluster detect` 실행 시 자동 close
+- `closed_at != null` 인 클러스터는 `detect` 결과에서 제외
+
+### Pipeline Manager 책임
+
+Pipeline Manager는 Patch Lane 작업에도 아래를 수행합니다:
+
+- `patch plan` FAIL(exit code 1) 시 → Full Lane으로 전환하고 PM에게 새 step_plan 요청
+- `patch audit` ESCALATE 시 → `python pipeline.py patch audit` exit code 1 → Full Lane 전환
+- `patch verify --result FAIL` 시 → `cluster patch_failures` 증가, 임계값(2) 초과 시 `patch_lane_forbidden=true`
+- Patch Lane 완료 증거는 `patch attest` 로 기록하고 GitHub CI에 포함
+
+### QA — Patch Lane 검증 의무
+
+QA는 Patch Lane 태스크에서 아래를 추가로 검증합니다:
+
+1. `patch_plan.json`의 `schema_version=1` 확인
+2. `patch_scope.file`이 실제 변경된 파일과 일치하는지 확인
+3. `patch_scope.expected_lines_changed_max <= 15` 확인
+4. `forbidden.*` 필드가 모두 `false`인지 확인
+5. `patch attest` 출력 JSON에 `attested_at` 타임스탬프 존재 확인

@@ -1,10 +1,14 @@
 {
-  "pipeline_id": "BUG-20260512-F307",
+  "pipeline_id": "IMP-20260513-4C0B",
   "micro_tasks": [
     {
       "id": "MT-1",
-      "files": ["ic_part_src/order_mapper.py"],
-      "affected_functions": ["order_mapper.write_ic_part_zip._ijk_scanner_block"]
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "cmd_cluster (신규), cmd_patch (신규), _load_cluster_json (신규), _save_cluster_json (신규), _check_patch_lane_conditions (신규), _run_patch_audit (신규), main argparse dispatcher (cluster/patch 서브커맨드 등록)"
+      ]
     }
   ]
 }

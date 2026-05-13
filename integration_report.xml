@@ -1,16 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <integration_report>
-  <pipeline_id>BUG-20260512-F307</pipeline_id>
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
   <result>PASS</result>
-  <modules_integrated>
-    <module id="MT-1" status="PASS">
-      ic_part_src/order_mapper.py — inlineStr 스캐너 OR 조건 추가
-    </module>
-  </modules_integrated>
-  <integration_check>
-    <api_compatibility>PASS — write_ic_part_zip 시그니처 변경 없음</api_compatibility>
-    <regression_check>PASS — 기존 v 태그 감지 동작 유지</regression_check>
-    <scope_boundary>PASS — 변경 파일 1개, MT-1 범위 내</scope_boundary>
-  </integration_check>
   <integration_verdict>PASS</integration_verdict>
+  <verdict>PASS</verdict>
+  <summary>MT-1/MT-2/MT-3 통합 완료. pipeline.py cluster/patch 서브커맨드, 5개 문서 동기화, 14개 단위 테스트 — 전체 pytest 233개 통과.</summary>
+  <modules_integrated>
+    <module id="MT-1" status="PASS">pipeline.py cluster/patch 구현 완료</module>
+    <module id="MT-2" status="PASS">문서 5파일 동기화 완료</module>
+    <module id="MT-3" status="PASS">단위 테스트 14개 완료</module>
+  </modules_integrated>
+  <integration_tests>
+    <test>pytest -q: 233 passed</test>
+    <test>pipeline.py cluster init/detect/status/attach/close: 정상</test>
+    <test>pipeline.py patch plan/audit/verify/attest: 정상</test>
+    <test>auto-escalation 15줄 임계값: 정상</test>
+    <test>CLAUDE.md Patch Lane 섹션 존재: 확인</test>
+    <test>agent MD 동기화: 확인</test>
+    <test>ci.yml patch lane 스텝: 확인</test>
+  </integration_tests>
 </integration_report>
