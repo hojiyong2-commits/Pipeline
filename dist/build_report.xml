@@ -1,58 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <build_report>
-  <pipeline_id>FEAT-20260512-627D</pipeline_id>
-  <status>BUILD SUCCESS</status>
-
+  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <build_agent>build-agent</build_agent>
+  <build_timestamp>2026-05-13T13:41:00Z</build_timestamp>
   <section_1_command>
-    <tool>pyinstaller</tool>
-    <spec_file>ic_part_src/ICPartAutomation.spec</spec_file>
-    <command>pyinstaller --noconfirm ICPartAutomation.spec</command>
-    <mode>onefile windowed (console=False)</mode>
+    <command>N/A - meta-task: Patch Lane + Incident Cluster 문서/파이프라인 개선</command>
+    <skip_reason>meta-task</skip_reason>
+    <note>pipeline.py 기능 추가 및 agent MD 동기화 태스크로 EXE 빌드 대상 아님</note>
   </section_1_command>
-
-  <section_2_spec>
-    <spec_name>ICPartAutomation.spec</spec_name>
-    <entry_point>ic_part_src/main.py</entry_point>
-    <collect_all>openpyxl</collect_all>
-    <hiddenimports>openpyxl, openpyxl.styles, openpyxl.utils</hiddenimports>
-    <upx>false</upx>
-    <noarchive>false</noarchive>
-  </section_2_spec>
-
-  <section_3_output>
-    <exe_path>ic_part_src/dist/ICPartAutomation.exe</exe_path>
-    <exe_size_bytes>37768096</exe_size_bytes>
-    <exe_size_mb>36.0</exe_size_mb>
-    <build_dir>ic_part_src/build/ICPartAutomation</build_dir>
-    <dist_dir>ic_part_src/dist</dist_dir>
-  </section_3_output>
-
-  <section_4_verification>
-    <exe_exists>true</exe_exists>
-    <exe_non_zero>true</exe_non_zero>
-    <build_log_errors>none detected</build_log_errors>
-    <upx_applied>false</upx_applied>
-    <console_mode>false (windowed)</console_mode>
-  </section_4_verification>
-
+  <section_2_output>
+    <exe_path>N/A</exe_path>
+    <build_status>SKIPPED</build_status>
+    <deliverables>
+      <file>pipeline.py (cluster/patch 서브커맨드 추가)</file>
+      <file>CLAUDE.md (Patch Lane + Incident Cluster 섹션 추가)</file>
+      <file>.claude/agents/pm-planner-agent.md (Patch Lane 판별 체크리스트 추가)</file>
+      <file>.claude/agents/pipeline-manager-agent.md (Patch Lane 관리 섹션 추가)</file>
+      <file>.claude/agents/qa-agent.md (Patch Lane QA 체크리스트 추가)</file>
+      <file>.github/workflows/ci.yml (Patch Lane 증거 파일 검증 단계 추가)</file>
+      <file>tests/test_patch_lane.py (14개 단위 테스트)</file>
+    </deliverables>
+  </section_2_output>
+  <section_3_verification>
+    <test_run>pytest tests/test_patch_lane.py - 14/14 PASS</test_run>
+    <overall_tests>233/233 PASS</overall_tests>
+    <patch_commands_verified>
+      <cmd>cluster detect</cmd>
+      <cmd>cluster init</cmd>
+      <cmd>cluster status</cmd>
+      <cmd>cluster close</cmd>
+      <cmd>patch plan (PASS 15줄 이하, FAIL 16줄 이상)</cmd>
+      <cmd>patch audit</cmd>
+      <cmd>patch verify PASS/FAIL</cmd>
+    </patch_commands_verified>
+  </section_3_verification>
+  <section_4_dependencies>
+    <new_dependencies>none</new_dependencies>
+    <changed_dependencies>none</changed_dependencies>
+  </section_4_dependencies>
   <section_5_artifacts>
-    <artifact>
-      <name>ICPartAutomation.exe</name>
-      <path>ic_part_src/dist/ICPartAutomation.exe</path>
-      <size_bytes>37768096</size_bytes>
-      <type>Windows EXE (windowed, single-file)</type>
-    </artifact>
-    <artifact>
-      <name>build_report.xml</name>
-      <path>dist/build_report.xml</path>
-      <type>Build report</type>
-    </artifact>
+    <artifact kind="pipeline_module" path="pipeline.py" label="Patch Lane + Incident Cluster 서브커맨드 구현"/>
+    <artifact kind="doc" path="CLAUDE.md" label="프로토콜 동기화 완료"/>
+    <artifact kind="test" path="tests/test_patch_lane.py" label="14개 단위 테스트 전체 PASS"/>
   </section_5_artifacts>
-
   <section_6_qa_mapping>
-    <mt id="MT-1" qa_result="PASS">_clone_row_xml U/W 값 상속 분기 제거</mt>
-    <mt id="MT-2" qa_result="PASS">write_ic_part_zip Backfill U/W/V 블록 삭제</mt>
-    <overall_qa_score>112/120</overall_qa_score>
+    <mt id="MT-1" qa_result="PASS">Incident Cluster 서브커맨드 구현</mt>
+    <mt id="MT-2" qa_result="PASS">Patch Lane 서브커맨드 구현</mt>
+    <mt id="MT-3" qa_result="PASS">CLAUDE.md + 4개 agent MD + ci.yml 동기화</mt>
+    <integration_verdict>PASS</integration_verdict>
+    <overall_qa_score>108/120</overall_qa_score>
     <overall_qa_verdict>PASS</overall_qa_verdict>
   </section_6_qa_mapping>
 </build_report>
