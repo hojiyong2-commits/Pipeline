@@ -3108,6 +3108,11 @@ def _workspace_check_for_file(path: Path) -> Dict[str, Any]:
 
 
 def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Optional[str]) -> Optional[Dict[str, Any]]:
+    """phase 증거 파일을 evidence 디렉토리로 복사.
+
+    JSON/XML/MD 파일은 LF로 정규화하여 저장합니다.
+    GitHub checkout 시 Windows CRLF -> LF 변환으로 SHA256이 달라지는 문제를 방지합니다.
+    """
     if not raw_path:
         return None
     path = Path(str(raw_path))
@@ -3119,7 +3124,17 @@ def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Option
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_name = f"{label}_{_safe_phase_artifact_name(path)}"
     dest = dest_dir / dest_name
-    shutil.copy2(path, dest)
+    # JSON, XML, MD 파일은 LF 정규화 후 저장 (GitHub checkout LF 변환과 일치시키기 위해)
+    _lf_normalizable_exts = {".json", ".xml", ".md", ".yml", ".yaml", ".py", ".txt"}
+    if path.suffix.lower() in _lf_normalizable_exts:
+        try:
+            raw_bytes = path.read_bytes()
+            lf_bytes = raw_bytes.replace(b"\r\n", b"\n")
+            dest.write_bytes(lf_bytes)
+        except OSError:
+            shutil.copy2(path, dest)
+    else:
+        shutil.copy2(path, dest)
     ignored_by_git = _git_check_ignored(dest)
     return {
         "label": label,
