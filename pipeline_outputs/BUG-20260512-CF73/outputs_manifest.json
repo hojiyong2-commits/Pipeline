@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-CF73",
+  "generated_at": "2026-05-12T02:05:02Z",
+  "items": [
+    {
+      "kind": "exe",
+      "label": "emailmonitor EXE (fitz+pdfplumber 번들링 포함)",
+      "source_path": "dist\\emailmonitor.exe",
+      "public_path": "pipeline_outputs\\BUG-20260512-CF73\\emailmonitor-EXE-fitz-pdfplumber-emailmonitor.exe",
+      "sha256": "07a43fb3a3b1c88fed646909fe44ba45d0f273ea2587adb6bccb3db033660a06",
+      "size_bytes": 118804286,
+      "notes": "MT-1 고아 폴더 정리 + MT-2 PDF 파싱 라이브러리 번들링이 적용된 최신 빌드",
+      "registered_at": "2026-05-12T02:05:02Z"
+    }
+  ]
+}

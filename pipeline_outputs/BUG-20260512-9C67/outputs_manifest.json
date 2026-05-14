@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-9C67",
+  "generated_at": "2026-05-12T11:21:03Z",
+  "items": [
+    {
+      "kind": "exe",
+      "label": "ICPartAutomation.exe (버그 수정 완료)",
+      "source_path": "ic_part_src\\dist\\ICPartAutomation.exe",
+      "public_path": "pipeline_outputs\\BUG-20260512-9C67\\ICPartAutomation.exe-ICPartAutomation.exe",
+      "sha256": "d9d33a89ec1c472831ca7d3684919ad8c81a2e7f0ce9bcd9222ed3251559c9b0",
+      "size_bytes": 37767942,
+      "notes": "write_ic_part_zip 루프 변수 shadowing 버그 수정. 수정 전: str is not callable TypeError 발생. 수정 후: 정상 동작.",
+      "registered_at": "2026-05-12T11:21:03Z"
+    }
+  ]
+}
