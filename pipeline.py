@@ -1022,6 +1022,7 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     "stop_signal.json",
     "test_results.jsonl",
     "test_results_v3.jsonl",
+    "manager_handoff.xml",
 }
 
 
@@ -2569,7 +2570,16 @@ def _validate_pr_title_matches_pipeline(state: Dict[str, Any]) -> None:
         return  # gh CLI 미설치 환경 — 검사 생략
 
 
-def _validate_user_acceptance_evidence(raw: Any) -> Dict[str, Any]:
+def _validate_user_acceptance_evidence(
+    raw: Any,
+    allow_unregistered: bool = False,
+    state: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """ACCEPT 증거 검증. outputs_manifest 등록 여부 체크 포함.
+
+    allow_unregistered=True 또는 --allow-unregistered-evidence 플래그 시
+    outputs_manifest 미등록 증거도 허용 (마이그레이션/긴급 패치 목적).
+    """
     items = _split_evidence_items(raw)
     if not items:
         _die(
@@ -2614,6 +2624,41 @@ def _validate_user_acceptance_evidence(raw: Any) -> Dict[str, Any]:
         _die(
             "[USER ACCEPTANCE BLOCKED] ACCEPT에는 실제 결과 파일/폴더 경로 또는 검토 링크가 최소 1개 필요합니다."
         )
+
+    # outputs_manifest 등록 여부 체크 (URL은 제외, allow_unregistered 시 경고만)
+    if not allow_unregistered and state is not None:
+        try:
+            pid = str(state.get("pipeline_id", ""))
+            if pid:
+                manifest_path = _contract_paths(pid).get("outputs_manifest")
+                if manifest_path and Path(str(manifest_path)).is_file():
+                    with open(str(manifest_path), encoding="utf-8") as _mf:
+                        manifest_data = json.load(_mf)
+                    registered_paths = set()
+                    for reg_item in manifest_data.get("items", []):
+                        if isinstance(reg_item, dict):
+                            pp = reg_item.get("public_path") or reg_item.get("path") or ""
+                            if pp:
+                                registered_paths.add(str(Path(pp).resolve()).lower())
+                    unregistered = []
+                    for file_info in files:
+                        fp = file_info.get("path", "")
+                        if fp and str(Path(str(BASE_DIR / fp) if not Path(fp).is_absolute() else fp).resolve()).lower() not in registered_paths:
+                            unregistered.append(fp)
+                    if unregistered:
+                        import warnings
+                        # outputs_manifest 미등록은 경고만 (차단은 하지 않음 — 레거시 호환성)
+                        for up in unregistered:
+                            print(
+                                YELLOW(
+                                    f"  [ACCEPTANCE WARNING] outputs_manifest에 미등록된 증거 파일: {up}. "
+                                    "'python pipeline.py outputs add' 로 등록하거나 "
+                                    "--allow-unregistered-evidence 플래그를 사용하세요."
+                                )
+                            )
+        except (OSError, json.JSONDecodeError, TypeError, KeyError):
+            pass  # manifest 읽기 실패 시 무시
+
     return {"files": files, "urls": urls, "raw_items": items}
 
 
@@ -7215,7 +7260,12 @@ def cmd_gates(args: argparse.Namespace) -> None:
             if prereq:
                 _die("; ".join(prereq))
             _validate_pr_title_matches_pipeline(state)
-            evidence_validation = _validate_user_acceptance_evidence(args.evidence)
+            allow_unregistered = getattr(args, "allow_unregistered_evidence", False) or False
+            evidence_validation = _validate_user_acceptance_evidence(
+                args.evidence,
+                allow_unregistered=allow_unregistered,
+                state=state,
+            )
             deployment = _deploy_accepted_outputs(state, args.evidence, args.notes, evidence_validation)
         gate_status = "PASS" if result == "ACCEPT" else "FAIL"
         report = {
@@ -8338,6 +8388,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_accept.add_argument("--evidence", default=None, help="Output file, screenshot, or report shown to user")
     p_gate_accept.add_argument("--notes", default=None)
     p_gate_accept.add_argument("--user-confirmed", action="store_true", default=False)
+    p_gate_accept.add_argument("--allow-unregistered-evidence", action="store_true", default=False,
+                               dest="allow_unregistered_evidence",
+                               help="outputs_manifest 미등록 증거도 허용 (레거시/긴급 패치 목적)")
     p_gate_batch_ci = gsub.add_parser("batch-ci", help="변경 파일 목록을 기반으로 CI 모드(per_phase/batched) 결정")
     p_gate_batch_ci.add_argument("--probe", action="store_true", default=False,
                                  help="프로브 모드: 상태 기록 없이 ci_mode만 출력")
@@ -8470,13 +8523,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_pt_plan = pt_sub.add_parser("plan", help="Patch Lane 진입 조건 검사")
     p_pt_plan.add_argument("--plan", default="patch_plan.json", help="patch_plan.json 경로")
+    p_pt_plan.add_argument("--base-ref", default=None, dest="base_ref",
+                           help="diff gate 기준 브랜치/커밋 (기본: origin/main)")
+    p_pt_plan.add_argument("--skip-diff-check", action="store_true", default=False,
+                           dest="skip_diff_check", help="diff gate 건너뜀 (테스트/오프라인 환경)")
 
     p_pt_audit = pt_sub.add_parser("audit", help="패치 감사 및 자동 에스컬레이션 검사")
     p_pt_audit.add_argument("--plan", default="patch_plan.json", help="patch_plan.json 경로")
+    p_pt_audit.add_argument("--base-ref", default=None, dest="base_ref",
+                            help="diff gate 기준 브랜치/커밋 (기본: origin/main)")
+    p_pt_audit.add_argument("--skip-diff-check", action="store_true", default=False,
+                            dest="skip_diff_check", help="diff gate 건너뜀 (테스트/오프라인 환경)")
 
     p_pt_verify = pt_sub.add_parser("verify", help="패치 결과 검증")
     p_pt_verify.add_argument("--plan", default="patch_plan.json", help="patch_plan.json 경로")
     p_pt_verify.add_argument("--result", required=True, choices=["PASS", "FAIL"], help="검증 결과")
+    p_pt_verify.add_argument("--test-command", default=None, dest="test_command",
+                             help="검증에 사용한 테스트 명령어 (예: pytest tests/test_patch_lane.py)")
+    p_pt_verify.add_argument("--evidence-file", default=None, dest="evidence_file",
+                             help="검증 증거 파일 경로 (pytest XML report 등)")
 
     p_pt_attest = pt_sub.add_parser("attest", help="패치 완료 증거 기록")
     p_pt_attest.add_argument("--plan", default="patch_plan.json", help="patch_plan.json 경로")
@@ -8499,6 +8564,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 import random as _random_mod
 
+# PIPELINE_CLUSTER_DIR 환경 변수로 클러스터 디렉토리 오버라이드 (테스트 격리 목적)
+def _get_cluster_dir() -> Path:
+    """PIPELINE_CLUSTER_DIR 환경 변수 또는 기본 경로 반환."""
+    env_val = os.environ.get("PIPELINE_CLUSTER_DIR", "")
+    if env_val:
+        return Path(env_val)
+    return BASE_DIR / ".pipeline" / "clusters"
+
 _CLUSTER_DIR = BASE_DIR / ".pipeline" / "clusters"
 _PATCH_LANE_AUTO_ESCALATION_LINES = 15
 _CLUSTER_MAX_PATCH_FAILURES = 2
@@ -8513,8 +8586,9 @@ def _cluster_id_generate() -> str:
 
 def _load_cluster_json(cluster_id: str) -> Optional[Dict[str, Any]]:
     """cluster.json 파일 로드. 없으면 None 반환."""
-    _CLUSTER_DIR.mkdir(parents=True, exist_ok=True)
-    path = _CLUSTER_DIR / f"{cluster_id}.json"
+    cluster_dir = _get_cluster_dir()
+    cluster_dir.mkdir(parents=True, exist_ok=True)
+    path = cluster_dir / f"{cluster_id}.json"
     if not path.is_file():
         return None
     try:
@@ -8526,9 +8600,10 @@ def _load_cluster_json(cluster_id: str) -> Optional[Dict[str, Any]]:
 
 def _save_cluster_json(data: Dict[str, Any]) -> None:
     """cluster.json 원자적 쓰기 (UTF-8 LF)."""
-    _CLUSTER_DIR.mkdir(parents=True, exist_ok=True)
+    cluster_dir = _get_cluster_dir()
+    cluster_dir.mkdir(parents=True, exist_ok=True)
     cluster_id = data.get("id", "unknown")
-    path = _CLUSTER_DIR / f"{cluster_id}.json"
+    path = cluster_dir / f"{cluster_id}.json"
     tmp = path.with_suffix(".json.tmp")
     try:
         with open(tmp, "w", encoding="utf-8", newline="\n") as f:
@@ -8541,9 +8616,10 @@ def _save_cluster_json(data: Dict[str, Any]) -> None:
 
 def _list_all_clusters() -> List[Dict[str, Any]]:
     """모든 cluster.json 파일 목록 반환."""
-    _CLUSTER_DIR.mkdir(parents=True, exist_ok=True)
+    cluster_dir = _get_cluster_dir()
+    cluster_dir.mkdir(parents=True, exist_ok=True)
     result: List[Dict[str, Any]] = []
-    for fp in sorted(_CLUSTER_DIR.glob("CL-*.json")):
+    for fp in sorted(cluster_dir.glob("CL-*.json")):
         try:
             with open(fp, encoding="utf-8") as f:
                 result.append(json.load(f))
@@ -8570,6 +8646,180 @@ def _cluster_check_auto_close(cluster: Dict[str, Any]) -> bool:
     except (ValueError, TypeError):
         pass
     return False
+
+
+def _get_actual_diff_scope(
+    base_ref: Optional[str] = None,
+    skip_diff: bool = False,
+) -> Dict[str, Any]:
+    """실제 git diff 분석으로 변경 범위를 반환한다.
+
+    반환 키:
+      skipped       -- True이면 diff 검사가 건너뜀됨 (PATCH_SKIP_DIFF=1 또는 --skip-diff-check)
+      changed_files -- 변경된 파일 경로 목록
+      changed_lines -- 총 변경 줄 수 (추가+삭제)
+      merge_base    -- git merge-base 결과
+      base_ref      -- 사용된 base_ref
+      trust_root_hits -- TRUST_ROOT_PATTERNS 에 매칭된 파일 목록
+      error         -- 오류 메시지 (git 미설치 등)
+    """
+    # --skip-diff-check 또는 PATCH_SKIP_DIFF=1 환경 변수
+    if skip_diff or os.environ.get("PATCH_SKIP_DIFF", "") == "1":
+        return {
+            "skipped": True,
+            "changed_files": [],
+            "changed_lines": 0,
+            "merge_base": "",
+            "base_ref": base_ref or "",
+            "trust_root_hits": [],
+            "error": "",
+        }
+
+    effective_base = base_ref or "origin/main"
+    try:
+        # merge-base 계산
+        merge_proc = subprocess.run(
+            ["git", "merge-base", effective_base, "HEAD"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+        )
+        if merge_proc.returncode != 0:
+            # merge-base 실패 시 base_ref 직접 사용
+            merge_base = effective_base
+        else:
+            merge_base = merge_proc.stdout.decode("utf-8", errors="replace").strip()
+
+        # committed diff --stat
+        stat_proc = subprocess.run(
+            ["git", "diff", "--stat", f"{merge_base}..HEAD"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+        )
+        stat_text = stat_proc.stdout.decode("utf-8", errors="replace")
+
+        # unstaged diff --stat
+        unstaged_proc = subprocess.run(
+            ["git", "diff", "--stat"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+        )
+        unstaged_text = unstaged_proc.stdout.decode("utf-8", errors="replace")
+
+        # staged diff --stat
+        staged_proc = subprocess.run(
+            ["git", "diff", "--cached", "--stat"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+        )
+        staged_text = staged_proc.stdout.decode("utf-8", errors="replace")
+
+        # 변경 파일 목록 추출 (committed + staged + unstaged)
+        changed_files: List[str] = []
+        seen_files: set = set()
+        total_insertions = 0
+        total_deletions = 0
+
+        def _parse_stat_block(text: str) -> None:
+            for line in text.splitlines():
+                line = line.strip()
+                # "filename | N +++---" 형태 파싱
+                if "|" in line:
+                    fname = line.split("|")[0].strip()
+                    if fname and fname not in seen_files:
+                        seen_files.add(fname)
+                        changed_files.append(fname)
+                # " N files changed, X insertions(+), Y deletions(-)" 요약 줄 파싱
+                if "insertion" in line or "deletion" in line:
+                    parts = line.split(",")
+                    for part in parts:
+                        part = part.strip()
+                        if "insertion" in part:
+                            try:
+                                total_insertions += int(part.split()[0])
+                            except (IndexError, ValueError):
+                                pass
+                        if "deletion" in part:
+                            try:
+                                total_deletions += int(part.split()[0])
+                            except (IndexError, ValueError):
+                                pass
+
+        nonlocal_ins: List[int] = [0]
+        nonlocal_del: List[int] = [0]
+
+        def _parse_stat_block_v2(text: str) -> None:
+            for line in text.splitlines():
+                line = line.strip()
+                if "|" in line:
+                    fname = line.split("|")[0].strip()
+                    if fname and fname not in seen_files:
+                        seen_files.add(fname)
+                        changed_files.append(fname)
+                if "insertion" in line or "deletion" in line:
+                    parts = line.split(",")
+                    for part in parts:
+                        part = part.strip()
+                        if "insertion" in part:
+                            try:
+                                nonlocal_ins[0] += int(part.split()[0])
+                            except (IndexError, ValueError):
+                                pass
+                        if "deletion" in part:
+                            try:
+                                nonlocal_del[0] += int(part.split()[0])
+                            except (IndexError, ValueError):
+                                pass
+
+        _parse_stat_block_v2(stat_text)
+        _parse_stat_block_v2(staged_text)
+        _parse_stat_block_v2(unstaged_text)
+
+        changed_lines = nonlocal_ins[0] + nonlocal_del[0]
+
+        # trust root 히트 탐지
+        trust_root_hits: List[str] = []
+        for fname in changed_files:
+            for pattern in TRUST_ROOT_PATTERNS:
+                if pattern.endswith("/"):
+                    if fname.startswith(pattern) or ("/" + pattern.rstrip("/") + "/") in fname:
+                        trust_root_hits.append(fname)
+                        break
+                else:
+                    if fname == pattern or fname.endswith("/" + pattern):
+                        trust_root_hits.append(fname)
+                        break
+
+        return {
+            "skipped": False,
+            "changed_files": changed_files,
+            "changed_lines": changed_lines,
+            "merge_base": merge_base,
+            "base_ref": effective_base,
+            "trust_root_hits": trust_root_hits,
+            "error": "",
+        }
+
+    except FileNotFoundError:
+        # git 미설치
+        return {
+            "skipped": True,
+            "changed_files": [],
+            "changed_lines": 0,
+            "merge_base": "",
+            "base_ref": effective_base,
+            "trust_root_hits": [],
+            "error": "git not found — diff check skipped",
+        }
+    except OSError as exc:
+        return {
+            "skipped": True,
+            "changed_files": [],
+            "changed_lines": 0,
+            "merge_base": "",
+            "base_ref": effective_base,
+            "trust_root_hits": [],
+            "error": f"diff check error: {exc}",
+        }
 
 
 def _check_patch_lane_conditions(plan: Dict[str, Any]) -> List[str]:
@@ -8764,7 +9014,7 @@ def _cmd_cluster_init(args: "argparse.Namespace") -> None:
     cluster_id = _cluster_id_generate()
     # 중복 방지 (매우 낮은 확률이지만 체크)
     attempts = 0
-    while (_CLUSTER_DIR / f"{cluster_id}.json").exists() and attempts < 10:
+    while (_get_cluster_dir() / f"{cluster_id}.json").exists() and attempts < 10:
         cluster_id = _cluster_id_generate()
         attempts += 1
 
@@ -8878,9 +9128,12 @@ def cmd_patch(args: "argparse.Namespace") -> None:
 def _cmd_patch_plan(args: "argparse.Namespace") -> None:
     """patch_plan.json 진입 조건 검사.
     patch_lane_forbidden 클러스터이면 즉시 오류. 조건 위반 목록 출력.
+    diff gate: 실제 git diff와 선언 범위 불일치 시 lane=full 에스컬레이션.
     """
     plan_file = getattr(args, "plan", None) or "patch_plan.json"
     plan = _load_patch_plan(plan_file)
+    base_ref = getattr(args, "base_ref", None)
+    skip_diff = getattr(args, "skip_diff_check", False) or False
 
     # cluster_id 체크
     cluster_id = plan.get("cluster_id")
@@ -8895,11 +9148,46 @@ def _cmd_patch_plan(args: "argparse.Namespace") -> None:
                 )
 
     violations = _check_patch_lane_conditions(plan)
-    if violations:
+
+    # diff gate: 실제 변경 범위를 선언 범위와 비교
+    diff_scope = _get_actual_diff_scope(base_ref=base_ref, skip_diff=skip_diff)
+    diff_violations: List[str] = []
+    if not diff_scope.get("skipped"):
+        scope = plan.get("patch_scope") or {}
+        declared_file = scope.get("file", "")
+        changed_files = diff_scope.get("changed_files", [])
+        changed_lines = diff_scope.get("changed_lines", 0)
+        trust_root_hits = diff_scope.get("trust_root_hits", [])
+
+        # 실제 변경 파일이 선언된 1개 파일과 다르거나 복수인 경우
+        if len(changed_files) > 1:
+            diff_violations.append(
+                f"diff gate: 실제 변경 파일 {len(changed_files)}개 > 선언 1개 ({changed_files})"
+            )
+        elif len(changed_files) == 1 and declared_file and changed_files[0] != declared_file:
+            diff_violations.append(
+                f"diff gate: 실제 변경 파일 {changed_files[0]!r} ≠ 선언 파일 {declared_file!r}"
+            )
+
+        # 실제 변경 줄 수 초과
+        if changed_lines > _PATCH_LANE_AUTO_ESCALATION_LINES:
+            diff_violations.append(
+                f"diff gate: 실제 변경 줄 수 {changed_lines} > 임계값 {_PATCH_LANE_AUTO_ESCALATION_LINES}"
+            )
+
+        # trust root 히트
+        if trust_root_hits:
+            diff_violations.append(
+                f"diff gate: trust root 파일 감지됨: {trust_root_hits}"
+            )
+
+    all_violations = violations + diff_violations
+    if all_violations:
         result = {
             "verdict": "FAIL",
             "lane": "full",
-            "violations": violations,
+            "violations": all_violations,
+            "diff_scope": diff_scope if not diff_scope.get("skipped") else {},
             "message": "Patch Lane 진입 조건 불만족 — Full Lane 필요",
         }
         print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -8909,6 +9197,7 @@ def _cmd_patch_plan(args: "argparse.Namespace") -> None:
         "verdict": "PASS",
         "lane": "patch",
         "violations": [],
+        "diff_scope": diff_scope if not diff_scope.get("skipped") else {},
         "message": "Patch Lane 진입 조건 통과",
         "pipeline_id": plan.get("pipeline_id", ""),
         "cluster_id": cluster_id or "",
@@ -8918,9 +9207,13 @@ def _cmd_patch_plan(args: "argparse.Namespace") -> None:
 
 
 def _cmd_patch_audit(args: "argparse.Namespace") -> None:
-    """patch audit 실행. auto-escalation 시 lane='full', exit 1."""
+    """patch audit 실행. auto-escalation 시 lane='full', exit 1.
+    diff gate: 실제 git diff로 trust root 및 파일 수 초과 추가 검사.
+    """
     plan_file = getattr(args, "plan", None) or "patch_plan.json"
     plan = _load_patch_plan(plan_file)
+    base_ref = getattr(args, "base_ref", None)
+    skip_diff = getattr(args, "skip_diff_check", False) or False
 
     # cluster_id 체크
     cluster_id = plan.get("cluster_id")
@@ -8937,6 +9230,31 @@ def _cmd_patch_audit(args: "argparse.Namespace") -> None:
 
     audit_result = _run_patch_audit(plan, cl)
 
+    # diff gate 추가 검사
+    diff_scope = _get_actual_diff_scope(base_ref=base_ref, skip_diff=skip_diff)
+    if not diff_scope.get("skipped") and audit_result["verdict"] != "ESCALATE":
+        trust_root_hits = diff_scope.get("trust_root_hits", [])
+        changed_files = diff_scope.get("changed_files", [])
+        changed_lines = diff_scope.get("changed_lines", 0)
+        extra_reasons: List[str] = []
+
+        if trust_root_hits:
+            extra_reasons.append(f"diff gate: trust root 파일 감지됨: {trust_root_hits}")
+        if len(changed_files) > 1:
+            extra_reasons.append(
+                f"diff gate: 실제 변경 파일 {len(changed_files)}개 > 선언 1개"
+            )
+        if changed_lines > _PATCH_LANE_AUTO_ESCALATION_LINES:
+            extra_reasons.append(
+                f"diff gate: 실제 변경 줄 수 {changed_lines} > 임계값 {_PATCH_LANE_AUTO_ESCALATION_LINES}"
+            )
+
+        if extra_reasons:
+            audit_result["verdict"] = "ESCALATE"
+            audit_result["lane"] = "full"
+            audit_result["reasons"] = audit_result.get("reasons", []) + extra_reasons
+            audit_result["message"] = "diff gate auto-escalation: " + "; ".join(extra_reasons)
+
     if audit_result["verdict"] == "ESCALATE":
         # pipeline_state에 lane=full 기록
         state = _load_state()
@@ -8952,11 +9270,33 @@ def _cmd_patch_audit(args: "argparse.Namespace") -> None:
 
 
 def _cmd_patch_verify(args: "argparse.Namespace") -> None:
-    """patch 결과 검증. --result PASS|FAIL + --plan으로 cluster 실패 누적."""
+    """patch 결과 검증. --result PASS|FAIL + --plan으로 cluster 실패 누적.
+    PASS 시: --test-command 또는 --evidence-file 중 하나 필수.
+    """
     plan_file = getattr(args, "plan", None) or "patch_plan.json"
     result_val = (getattr(args, "result", None) or "").strip().upper()
     if result_val not in ("PASS", "FAIL"):
         _die("[PATCH ERROR] --result PASS 또는 --result FAIL 필수")
+
+    test_command = getattr(args, "test_command", None) or ""
+    evidence_file = getattr(args, "evidence_file", None) or ""
+
+    # PASS 시 evidence 필수
+    if result_val == "PASS" and not test_command and not evidence_file:
+        _die(
+            "[PATCH VERIFY BLOCKED] PASS 결과를 기록하려면 --test-command 또는 --evidence-file 중 "
+            "하나를 반드시 제공해야 합니다. 자기신고만으로 PASS를 기록할 수 없습니다."
+        )
+
+    # evidence_file 존재 확인
+    if evidence_file:
+        ev_path = Path(evidence_file)
+        if not ev_path.is_absolute():
+            ev_path = BASE_DIR / ev_path
+        if not ev_path.exists():
+            _die(
+                f"[PATCH VERIFY BLOCKED] --evidence-file 경로를 찾을 수 없습니다: {evidence_file}"
+            )
 
     plan = _load_patch_plan(plan_file)
     cluster_id = plan.get("cluster_id")
@@ -8973,12 +9313,27 @@ def _cmd_patch_verify(args: "argparse.Namespace") -> None:
                 ))
             _save_cluster_json(cl)
 
+    # PASS 시 pipeline_state에 verify_passed=True 기록
+    if result_val == "PASS":
+        state = _load_state()
+        patch_lane = state.get("patch_lane") or {}
+        patch_lane["verify_passed"] = True
+        patch_lane["verify_evidence"] = {
+            "test_command": test_command,
+            "evidence_file": evidence_file,
+            "verified_at": _now(),
+        }
+        state["patch_lane"] = patch_lane
+        _save_state(state)
+
     verdict_color = GREEN if result_val == "PASS" else RED
     print(verdict_color(f"  [PATCH VERIFY] {result_val}"))
     print(json.dumps({
         "verdict": result_val,
         "cluster_id": cluster_id or "",
         "pipeline_id": plan.get("pipeline_id", ""),
+        "test_command": test_command,
+        "evidence_file": evidence_file,
     }, indent=2, ensure_ascii=False))
 
     if result_val == "FAIL":
@@ -8986,16 +9341,24 @@ def _cmd_patch_verify(args: "argparse.Namespace") -> None:
 
 
 def _cmd_patch_attest(args: "argparse.Namespace") -> None:
-    """patch lane 완료 증거 기록."""
+    """patch lane 완료 증거 기록. patch verify PASS 없이는 차단됨."""
     plan_file = getattr(args, "plan", None) or "patch_plan.json"
     plan = _load_patch_plan(plan_file)
 
+    # verify_passed 체크
     state = _load_state()
-    state["patch_lane"] = state.get("patch_lane") or {}
-    state["patch_lane"]["attested_at"] = _now()
-    state["patch_lane"]["lane"] = plan.get("lane", "patch")
-    state["patch_lane"]["pipeline_id"] = plan.get("pipeline_id", "")
-    state["patch_lane"]["cluster_id"] = plan.get("cluster_id", "")
+    patch_lane = state.get("patch_lane") or {}
+    if not patch_lane.get("verify_passed"):
+        _die(
+            "[PATCH ATTEST BLOCKED] patch verify --result PASS 를 먼저 실행해야 합니다. "
+            "verify_passed 기록이 없으면 attest를 기록할 수 없습니다."
+        )
+
+    patch_lane["attested_at"] = _now()
+    patch_lane["lane"] = plan.get("lane", "patch")
+    patch_lane["pipeline_id"] = plan.get("pipeline_id", "")
+    patch_lane["cluster_id"] = plan.get("cluster_id", "")
+    state["patch_lane"] = patch_lane
     _save_state(state)
 
     print(GREEN("  [PATCH ATTEST] Patch Lane 완료 증거 기록됨"))

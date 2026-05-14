@@ -1,22 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <integration_report>
-  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <pipeline_id>IMP-20260514-28A2</pipeline_id>
   <result>PASS</result>
   <integration_verdict>PASS</integration_verdict>
   <verdict>PASS</verdict>
-  <summary>MT-1/MT-2/MT-3 통합 완료. pipeline.py cluster/patch 서브커맨드, 5개 문서 동기화, 14개 단위 테스트 — 전체 pytest 233개 통과.</summary>
+  <summary>MT-1/MT-2/MT-3 통합 완료. pipeline.py diff gate/verify evidence/attest blocking/PIPELINE_CLUSTER_DIR, tests/test_patch_lane.py 23개 테스트 격리, .github/workflows/ci.yml UTF-8+pipeline.py patch plan 연동 — 전체 pytest 통과.</summary>
   <modules_integrated>
-    <module id="MT-1" status="PASS">pipeline.py cluster/patch 구현 완료</module>
-    <module id="MT-2" status="PASS">문서 5파일 동기화 완료</module>
-    <module id="MT-3" status="PASS">단위 테스트 14개 완료</module>
+    <module id="MT-1" status="PASS">pipeline.py: _get_cluster_dir, _get_actual_diff_scope, diff gate, verify evidence 필수화, attest blocking, outputs_manifest check 구현 완료</module>
+    <module id="MT-2" status="PASS">tests/test_patch_lane.py: PIPELINE_CLUSTER_DIR 격리 autouse fixture + 8개 신규 테스트, pytest 23/23 PASS</module>
+    <module id="MT-3" status="PASS">.github/workflows/ci.yml: UTF-8 인코딩 설정 + pipeline.py patch plan --base-ref origin/main 연동 완료</module>
   </modules_integrated>
   <integration_tests>
-    <test>pytest -q: 233 passed</test>
-    <test>pipeline.py cluster init/detect/status/attach/close: 정상</test>
-    <test>pipeline.py patch plan/audit/verify/attest: 정상</test>
-    <test>auto-escalation 15줄 임계값: 정상</test>
-    <test>CLAUDE.md Patch Lane 섹션 존재: 확인</test>
-    <test>agent MD 동기화: 확인</test>
-    <test>ci.yml patch lane 스텝: 확인</test>
+    <test>pytest tests/test_patch_lane.py: 23 passed</test>
+    <test>PIPELINE_CLUSTER_DIR 격리: .pipeline/clusters 오염 없음</test>
+    <test>PATCH_SKIP_DIFF=1 autouse fixture: diff gate 건너뜀 확인</test>
+    <test>diff gate (PATCH_SKIP_DIFF=0): 실제 변경 파일/라인 계산</test>
+    <test>verify PASS: --test-command 또는 --evidence-file 없으면 exit 1</test>
+    <test>attest: verify_passed=False이면 exit 1 + BLOCKED</test>
+    <test>ci.yml YAML syntax: OK</test>
+    <test>ci.yml UTF-8 인코딩 설정 존재 확인</test>
+    <test>ci.yml pipeline.py patch plan --base-ref origin/main 호출 확인</test>
   </integration_tests>
 </integration_report>

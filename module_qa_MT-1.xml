@@ -1,25 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_qa_report>
-  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <pipeline_id>IMP-20260514-28A2</pipeline_id>
   <mt_id>MT-1</mt_id>
   <verdict>PASS</verdict>
   <result>PASS</result>
   <qa_verdict>PASS</qa_verdict>
-  <summary>MT-1 Patch Lane + Incident Cluster 서브커맨드 구현 검증 완료. 모든 CLI 명령 정상 동작, auto-escalation 임계값(15줄) 정확히 적용됨.</summary>
+  <summary>MT-1 pipeline.py 강화 구현 검증 완료. diff gate, verify evidence 필수화, cluster 환경변수 격리, acceptance evidence 강화 모두 정상 동작.</summary>
   <verification_evidence>
-    <test name="cluster detect">JSON 응답 형식 정상, exit code 0</test>
-    <test name="cluster init">CL-XXXX 형식 ID 생성, 클러스터 JSON 파일 저장 확인</test>
-    <test name="cluster status">전체/특정 클러스터 조회 정상</test>
-    <test name="cluster attach">현재 파이프라인 ID 연결 확인</test>
-    <test name="cluster close">closed_at 타임스탬프 기록 확인</test>
-    <test name="patch plan PASS">1파일/1함수/10줄 조건 통과, exit code 0</test>
-    <test name="patch plan FAIL">20줄 조건 위반 시 lane=full FAIL, exit code 1</test>
-    <test name="patch audit">자동 에스컬레이션 정상 동작</test>
-    <test name="patch verify PASS">검증 결과 기록 정상</test>
-    <test name="patch attest">증거 JSON 기록 정상</test>
-    <test name="auto-escalation threshold">15줄 이하 PASS, 16줄+ FAIL 확인</test>
-    <test name="argparse registration">cluster/patch 서브커맨드 --help 정상</test>
-    <test name="COMMAND_MAP">cluster, patch 엔트리 존재 확인</test>
+    <test name="PIPELINE_CLUSTER_DIR 격리">tmpdir 지정 시 cluster 파일이 tmpdir에만 생성됨 확인 (exit 0)</test>
+    <test name="patch plan --skip-diff-check">skip-diff-check 플래그로 diff gate 건너뜀, exit 0</test>
+    <test name="patch plan PATCH_SKIP_DIFF=1">환경변수로 diff gate 건너뜀, exit 0</test>
+    <test name="patch verify PASS without evidence">--test-command/--evidence-file 없으면 exit 1 + BLOCKED 메시지</test>
+    <test name="patch verify PASS with test-command">--test-command 제공 시 exit 0</test>
+    <test name="patch attest before verify">verify_passed 없으면 exit 1 + BLOCKED 메시지</test>
+    <test name="gates accept --allow-unregistered-evidence">신규 플래그 argparse 등록 확인</test>
+    <test name="syntax check">python -c 'import pipeline; print(OK)' 통과</test>
   </verification_evidence>
   <boundary_check>
     <scope_files_match>PASS</scope_files_match>

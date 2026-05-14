@@ -1,17 +1,11 @@
 {
-  "pipeline_id": "IMP-20260513-4C0B",
+  "pipeline_id": "IMP-20260514-28A2",
   "micro_tasks": [
     {
       "id": "MT-2",
-      "files": [
-        "CLAUDE.md",
-        ".claude/agents/pm-planner-agent.md",
-        ".claude/agents/pipeline-manager-agent.md",
-        ".claude/agents/qa-agent.md",
-        ".github/workflows/ci.yml"
-      ],
+      "files": ["tests/test_patch_lane.py"],
       "affected_functions": [
-        "CLAUDE.md 섹션 추가, pm-planner-agent.md 섹션 추가, pipeline-manager-agent.md 섹션 추가, qa-agent.md 섹션 추가, ci.yml step 추가"
+        "tests.test_patch_lane._run"
       ]
     }
   ]

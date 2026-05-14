@@ -1,24 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_design>
-  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <pipeline_id>IMP-20260514-28A2</pipeline_id>
   <mt_id>MT-3</mt_id>
   <status>PASS</status>
-  <design_summary>tests/test_patch_lane.py 작성 — cluster 4개, patch audit 4개, patch verify 2개 이상, auto-escalation 15줄 임계값 테스트, patch_lane_forbidden 테스트 포함, 총 10개+ 단위 테스트</design_summary>
+  <design_summary>.github/workflows/ci.yml Patch Lane 검증 스텝 강화: PowerShell UTF-8 인코딩 설정 추가, pipeline.py patch plan --base-ref origin/main 호출로 실제 diff gate CI 연동</design_summary>
   <interface_contract>
-    <input>MT-1에서 구현된 pipeline.py의 cluster/patch 명령어</input>
-    <output>tests/test_patch_lane.py — pytest 실행 가능한 단위 테스트 파일</output>
-    <validation>pytest tests/test_patch_lane.py 전체 PASS</validation>
+    <input>기존 Patch Lane 증거 파일 검증 step (inline PowerShell schema 검사만 수행)</input>
+    <output>.github/workflows/ci.yml — UTF-8 설정 + pipeline.py patch plan 호출이 추가된 강화된 검증 step</output>
+    <validation>GitHub Actions에서 patch_plan.json 존재 시 schema 검사 + diff gate 양쪽 모두 통과해야 CI PASS</validation>
   </interface_contract>
   <implementation_plan>
-    <step>1. cluster 테스트: init, detect, status, attach, close</step>
-    <step>2. patch plan 테스트: PASS(정상), FAIL(초과), FAIL(복수파일), FAIL(trust_root)</step>
-    <step>3. patch verify 테스트: PASS 기록, FAIL + patch_failures 증가</step>
-    <step>4. auto-escalation 경계값: 15줄 PASS, 16줄 FAIL</step>
-    <step>5. patch_lane_forbidden 테스트: patch_failures=2 후 forbidden=true</step>
+    <step>1. 기존 "Patch Lane 증거 파일 검증 (IMP-20260513-4C0B)" step 이름을 pipeline ID 미포함 형태로 변경</step>
+    <step>2. pwsh 블록 상단에 PowerShell UTF-8 출력 인코딩 설정 추가 ($OutputEncoding, [Console]::OutputEncoding)</step>
+    <step>3. 기존 inline PowerShell schema 검사 로직 유지 (삭제하지 않음)</step>
+    <step>4. schema 검사 통과 후 python pipeline.py patch plan --plan patch_plan.json --base-ref origin/main 호출 추가</step>
+    <step>5. PATCH_SKIP_DIFF 환경 변수를 CI에서 설정하지 않으므로 실제 diff gate가 동작함</step>
   </implementation_plan>
   <verification_plan>
-    <check>pytest tests/test_patch_lane.py 전체 통과 확인</check>
-    <check>10개 이상 테스트 케이스 존재 확인</check>
-    <check>auto-escalation 15줄 경계값 테스트 존재 확인</check>
+    <check>ci.yml 문법 오류 없음 (yaml 들여쓰기)</check>
+    <check>UTF-8 인코딩 설정이 pwsh 블록 상단에 위치</check>
+    <check>pipeline.py patch plan 호출이 기존 schema 검사 이후에 위치</check>
+    <check>if: success() &amp;&amp; hashFiles('patch_plan.json') != '' 조건 유지</check>
   </verification_plan>
 </module_design>

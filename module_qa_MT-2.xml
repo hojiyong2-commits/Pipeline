@@ -1,17 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_qa_report>
-  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <pipeline_id>IMP-20260514-28A2</pipeline_id>
   <mt_id>MT-2</mt_id>
   <verdict>PASS</verdict>
   <result>PASS</result>
-  <summary>MT-2 문서 동기화 검증 완료. 5개 파일 모두 Patch Lane 섹션 추가됨, auto-escalation 임계값 15줄 일치.</summary>
+  <summary>MT-2 tests/test_patch_lane.py 강화 검증 완료. pytest 23/23 PASS. PIPELINE_CLUSTER_DIR 격리, PATCH_SKIP_DIFF=1, 8개 신규 테스트 모두 정상 동작.</summary>
   <verification_evidence>
-    <test name="CLAUDE.md Patch Lane 섹션">Patch Lane + Incident Cluster 섹션 존재, 15줄 임계값 명시</test>
-    <test name="pm-planner-agent.md 체크리스트">5개 판별 조건 표, patch_plan_template XML 존재</test>
-    <test name="pipeline-manager-agent.md 명령어 표">cluster/patch 명령어 Phase 표 존재</test>
-    <test name="qa-agent.md QA 체크리스트">5개 항목 체크리스트, PL:violation failure_signature 존재</test>
-    <test name="ci.yml patch lane 스텝">Patch Lane 증거 파일 검증 스텝 추가, YAML 구문 정상</test>
-    <test name="임계값 일치">모든 문서에서 15줄 임계값 일치</test>
+    <test name="pytest 23/23 PASS">python -m pytest tests/test_patch_lane.py -v — 23 passed in 4.99s</test>
+    <test name="PIPELINE_CLUSTER_DIR 격리">클러스터 파일이 tmpdir에만 생성, .pipeline/clusters 오염 없음</test>
+    <test name="PATCH_SKIP_DIFF=1 autouse fixture">모든 테스트에서 diff gate 건너뜀 확인</test>
+    <test name="test_diff_gate_skip_via_flag">--skip-diff-check 플래그 PASS</test>
+    <test name="test_diff_gate_skip_via_env_var">PATCH_SKIP_DIFF=1 환경변수 PASS</test>
+    <test name="test_verify_pass_without_evidence_blocked">evidence 없이 PASS 시 exit 1 + BLOCKED</test>
+    <test name="test_verify_pass_with_test_command_succeeds">--test-command 제공 시 exit 0</test>
+    <test name="test_verify_pass_with_evidence_file_succeeds">--evidence-file 제공 시 exit 0</test>
+    <test name="test_attest_blocks_when_no_prior_verify_pass">verify_passed 없이 attest 시 exit 1 + BLOCKED</test>
+    <test name="test_cluster_dir_isolation_via_env">custom dir 격리 확인</test>
+    <test name="test_acceptance_unregistered_evidence_flag_in_help">--allow-unregistered-evidence 플래그 등록 확인</test>
   </verification_evidence>
   <boundary_check>
     <scope_files_match>PASS</scope_files_match>

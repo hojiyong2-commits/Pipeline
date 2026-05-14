@@ -34,10 +34,12 @@ jobs:
           PIPELINE_NO_DASHBOARD: "1"
         run: python -m pytest -q
 
-      - name: Patch Lane 증거 파일 검증 (IMP-20260513-4C0B)
+      - name: Patch Lane 증거 파일 검증
         if: success() && hashFiles('patch_plan.json') != ''
         shell: pwsh
         run: |
+          $OutputEncoding = [System.Text.Encoding]::UTF8
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           $ErrorActionPreference = "Stop"
           $planPath = "patch_plan.json"
           $plan = Get-Content -Path $planPath -Raw | ConvertFrom-Json
@@ -74,7 +76,9 @@ jobs:
             Write-Error ("Patch Lane 검증 실패: " + ($blockers -join "; "))
             exit 1
           }
-          Write-Host "[PATCH LANE CI] patch_plan.json 검증 통과"
+          Write-Host "[PATCH LANE CI] patch_plan.json schema 검증 통과"
+          python pipeline.py patch plan --plan patch_plan.json --base-ref origin/main
+          Write-Host "[PATCH LANE CI] diff gate 검증 통과"
 
       - name: 자동 검사 증명 파일 만들기
         if: success()
