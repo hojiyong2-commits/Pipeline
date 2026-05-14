@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-14T13:58:25Z",
+  "generated_at": "2026-05-14T14:03:46Z",
   "pipeline_id": "IMP-20260514-28A2",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "26f4fffb1bde154791cb6e226b39b20ae192e6ad",
+  "commit_hint": "efa27513718e3d7db609256613d64500b9c16db1",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-14T13:55:18Z",
@@ -46,16 +46,16 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260514-28A2/dev/scope_manifest_scope_manifest.json",
-      "sha256": "5e294d98cedccb4092d7c2c4571a606b52bc1fc37ab033b88fcd400ebb89dc9c",
-      "size_bytes": 619,
+      "sha256": "8b9951e6226cb495cf019cd64b15b1da1d085140667e62b11f543d11c57c2b63",
+      "size_bytes": 588,
       "requires_force_add": false
     }
   ],
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "df3f3c2e4a65d898f6d0913ded8cb0740ad14fdaa2a111e2bff338417827f1b5",
-      "size_bytes": 413709
+      "sha256": "cca81bc2d0019d8cb020f0e588a2c3b46ca09efdbdcf802880eb11d142ce3335",
+      "size_bytes": 414424
     },
     {
       "path": "tests/test_patch_lane.py",
