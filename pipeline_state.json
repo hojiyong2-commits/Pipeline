@@ -4,8 +4,8 @@
   "type": "IMP",
   "description": "Patch Lane 증거 강화: 자기신고 기반 → 실제 diff/hash 기반 검증 (diff gate, verify evidence 필수화, cluster 테스트 격리, acceptance evidence 강화)",
   "created_at": "2026-05-14T13:07:59Z",
-  "updated_at": "2026-05-14T14:08:42Z",
-  "current_phase": "sec",
+  "updated_at": "2026-05-14T14:11:49Z",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -44,22 +44,24 @@
       "numeric_score": 120
     },
     "sec": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "SKIP",
+      "completed_at": "2026-05-14T14:11:01Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260514-28A2_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "completed_at": "2026-05-14T14:11:46Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260514-28A2_phase_build.json",
+      "skip_reason": "meta-task",
+      "agent_run_id": "build-406a7226f94bd127"
     },
     "harness": {
       "status": "PENDING",
@@ -220,6 +222,30 @@
     {
       "ts": "2026-05-14T14:08:42Z",
       "msg": "phase attestation request prepared: qa"
+    },
+    {
+      "ts": "2026-05-14T14:10:57Z",
+      "msg": "github phase-ci qa PASS run_id=25864746091 commit=ec9fe527835f"
+    },
+    {
+      "ts": "2026-05-14T14:11:01Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-05-14T14:11:08Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-406a7226f94bd127"
+    },
+    {
+      "ts": "2026-05-14T14:11:42Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-406a7226f94bd127"
+    },
+    {
+      "ts": "2026-05-14T14:11:46Z",
+      "msg": "build DONE exe=N/A skip_reason=meta-task"
+    },
+    {
+      "ts": "2026-05-14T14:11:49Z",
+      "msg": "phase attestation request prepared: build"
     }
   ],
   "terminal_state": null,
@@ -304,6 +330,26 @@
       "used_at": "2026-05-14T14:08:42Z",
       "commit_sha": "d5e867a6f47bba8b57a4aff554f782b4a85209e2",
       "notes": ""
+    },
+    "build-406a7226f94bd127": {
+      "schema_version": 1,
+      "run_id": "build-406a7226f94bd127",
+      "pipeline_id": "IMP-20260514-28A2",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-14T14:11:08Z",
+      "completed_at": "2026-05-14T14:11:42Z",
+      "token_hash": "baebe8164fb172a0fffa37c4392c0124dcb190a2ecd0c338b7a918d8000389d2",
+      "output_file": "build_report.xml",
+      "output_sha256": "cab20746a32dcb32206b9c2d464d2b62523f72b829f6b5de3598629791e203a0",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260514-28A2\\build\\build-406a7226f94bd127.json",
+      "receipt_sha256": "f91288aa603ffe8a627c0e3e102ec30d76e7bf64f4a1a63c38e5d864446b925d",
+      "used_by_phase": "build",
+      "used_at": "2026-05-14T14:11:49Z",
+      "commit_sha": "ec9fe527835f37a4e8fad5578dd226ed1ba5cf7f",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -371,14 +417,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-14T14:10:57Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25864746091",
+        "commit_sha": "ec9fe527835f37a4e8fad5578dd226ed1ba5cf7f",
+        "evidence": "github_actions_phase_run:25864746091",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260514-28A2\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
         "status": "PENDING",
@@ -1860,6 +1907,15 @@
       "phase": "dev",
       "run_id": "25864508729",
       "commit_sha": "d5e867a6f47bba8b57a4aff554f782b4a85209e2",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-14T14:10:57Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "25864746091",
+      "commit_sha": "ec9fe527835f37a4e8fad5578dd226ed1ba5cf7f",
       "artifact": "pipeline-phase-attestation"
     }
   ],

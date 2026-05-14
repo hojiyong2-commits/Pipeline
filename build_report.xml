@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <build_report>
-  <pipeline_id>IMP-20260512-C476</pipeline_id>
+  <pipeline_id>IMP-20260514-28A2</pipeline_id>
   <agent>build-agent</agent>
-  <run_id>build-9014a192222fe593</run_id>
+  <run_id>build-406a7226f94bd127</run_id>
 
   <section_1_command>
     <exe_target>N/A</exe_target>
     <skip_reason>meta-task</skip_reason>
-    <justification>pyproject.toml과 .claude/agents/qa-agent.md만 수정하는 메타 태스크. Python EXE 빌드 대상 없음.</justification>
+    <justification>pipeline.py, tests/test_patch_lane.py, .github/workflows/ci.yml만 수정하는 메타 태스크. Python EXE 빌드 대상 없음.</justification>
   </section_1_command>
 
   <section_2_dependencies>
@@ -16,13 +16,13 @@
 
   <section_3_output>
     <exe_path>N/A</exe_path>
-    <artifact_description>수정 파일: pyproject.toml (PLW2901 extend-select 추가), .claude/agents/qa-agent.md (PLW2901 shadowing 체크리스트 추가)</artifact_description>
+    <artifact_description>수정 파일: pipeline.py (diff gate, verify evidence, attest blocking, LF 정규화), tests/test_patch_lane.py (23개 테스트, PIPELINE_CLUSTER_DIR 격리), .github/workflows/ci.yml (UTF-8+pipeline.py patch plan 연동)</artifact_description>
   </section_3_output>
 
   <section_4_verification>
-    <ruff_check>ruff check --select PLW2901 pyproject.toml -- All checks passed (0 violations)</ruff_check>
-    <plw2901_rule_active>PASS -- extend-select = [PLW2901] in [tool.ruff.lint]</plw2901_rule_active>
-    <qa_agent_checklist>PASS -- PLW2901 shadowing 검사 서브섹션 추가 확인</qa_agent_checklist>
+    <pytest_check>pytest tests/test_patch_lane.py: 23 passed</pytest_check>
+    <yaml_syntax>python yaml.safe_load(.github/workflows/ci.yml): OK</yaml_syntax>
+    <pipeline_py_import>python -c import pipeline: OK</pipeline_py_import>
   </section_4_verification>
 
   <section_5_status>
@@ -32,11 +32,12 @@
   </section_5_status>
 
   <section_6_qa_mapping>
-    <qa_run_id>qa-a2ae41d77718360d</qa_run_id>
+    <qa_run_id>qa-55f74c445eefcb6c</qa_run_id>
     <qa_verdict>PASS</qa_verdict>
     <qa_numeric_score>120</qa_numeric_score>
-    <mt1_pyproject_toml>PASS -- extend-select PLW2901 추가 확인</mt1_pyproject_toml>
-    <mt2_qa_agent_md>PASS -- PLW2901 shadowing 체크리스트 추가 확인</mt2_qa_agent_md>
+    <mt1_pipeline_py>PASS — diff gate, verify evidence, attest blocking, LF 정규화 확인</mt1_pipeline_py>
+    <mt2_test_patch_lane>PASS — 23/23 PASS, PIPELINE_CLUSTER_DIR 격리 확인</mt2_test_patch_lane>
+    <mt3_ci_yml>PASS — UTF-8 인코딩, pipeline.py patch plan --base-ref 연동 확인</mt3_ci_yml>
   </section_6_qa_mapping>
 
   <status>N/A</status>
