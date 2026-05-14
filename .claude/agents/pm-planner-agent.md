@@ -72,3 +72,9 @@ Patch Lane 태스크의 `step_plan.xml` 필수 포함 항목:
   </forbidden>
 </patch_plan_template>
 ```
+
+## 외부 플러그인 운영 설계 참조
+
+> 핵심 원칙: 외부 플러그인은 완료 판정자가 아니라 정보 탐색/실행/증거 생성 도구이며, 완료 판정은 Three-Gate + Option A + Incremental Module Gate + User Acceptance가 담당한다.
+
+PM Planner는 step_plan 작성 시 외부 플러그인(Web search/Notion/GitHub Issues 등)을 요구사항 수집 보조 도구로 사용할 수 있다. 플러그인 사용은 Level 0~2(읽기+로컬+외부조회) 권한 내에서만 허용된다. 플러그인이 oracle 파일이나 step_plan을 직접 작성하거나, 설계 결정을 대신 내리는 것은 금지된다. 상세 규칙은 `CLAUDE.md`의 "외부 플러그인 운영 설계" 섹션을 참조한다.

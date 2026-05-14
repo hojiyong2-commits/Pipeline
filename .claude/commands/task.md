@@ -206,6 +206,25 @@ python pipeline.py architect --report-file architect_report.xml
 
 Architect는 Phase 9를 자동으로 시작하지 않는다. 프로토콜 자체 수정이 필요하면 별도 IMP 파이프라인을 새로 시작한다.
 
+## 외부 플러그인 사용 가이드 (IMP-20260514-40B8)
+
+> **핵심 원칙:** 외부 플러그인은 완료 판정자가 아니라 정보 탐색/실행/증거 생성 도구이며, 완료 판정은 Three-Gate + Option A + Incremental Module Gate + User Acceptance가 담당한다.
+
+외부 플러그인은 각 phase에서 다음과 같이 보조 도구로만 사용합니다:
+
+| Phase | 허용되는 플러그인 활용 |
+|---|---|
+| PM | Web search로 최신 라이브러리 정보 조회 |
+| Dev | Local shell로 빌드·테스트 실행, GitHub Issues 참조 |
+| QA | Playwright로 UI 스크린샷 수집, CI 로그 열람 |
+| Advisory | OpenAI API red-team 리뷰 (비구속적) |
+| Build | Local shell로 빌드 명령 실행 |
+| Acceptance | PR 링크, CI 결과, 첨부파일 경로 제공 |
+
+**권한:** Level 0~2(읽기+로컬+외부조회)만 기본 활성. Level 4(결제·배포·삭제)는 기본 비활성.
+
+상세 규칙은 `CLAUDE.md`의 "외부 플러그인 운영 설계 (IMP-20260514-40B8)" 섹션을 참조합니다.
+
 ## 금지 행동
 
 | 금지 | 이유 |
@@ -217,6 +236,7 @@ Architect는 Phase 9를 자동으로 시작하지 않는다. 프로토콜 자체
 | GitHub Actions phase-ci 없이 다음 역할로 이동 | 외부 검증 누락 |
 | `tests/oracles/**` 밖의 oracle 사용 | CODEOWNERS 보호 우회 |
 | 사용자를 코드 리뷰하게 만들기 | 최종 판단은 결과물 기준 |
+| 외부 플러그인이 PASS/FAIL 결정 | 플러그인은 증거 생성만 허용 |
 
 사용자 요청:
 

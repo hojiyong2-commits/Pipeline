@@ -192,3 +192,40 @@ Dev로 넘어가기 전, PM은 모듈 분해안을 사용자에게 쉬운 한국
 - `.github/CODEOWNERS`, `.github/workflows/**`, `pipeline.py`, `CLAUDE.md`, `.claude/agents/**`, `tests/oracles/**`, `tests/**`, `test_*.py`, `*_test.py`는 CODEOWNERS에 들어 있습니다.
 
 이렇게 하면 최종 merge 결정과 자동 검사가 로컬 Claude/Codex 주장 밖에서 이루어집니다. 단일 소유자 repo에서 “승인 1명 필수”를 켜면 본인이 만든 PR이 막힐 수 있으므로, 그 설정은 신뢰할 두 번째 GitHub 계정을 추가한 뒤 켜는 것이 좋습니다.
+
+## 외부 플러그인 운영 설계 (개인 PC 한정)
+
+> **핵심 원칙:** 외부 플러그인은 완료 판정자가 아니라 정보 탐색/실행/증거 생성 도구이며, 완료 판정은 Three-Gate + Option A + Incremental Module Gate + User Acceptance가 담당한다.
+
+이 섹션은 개인 PC에서 개인 프로젝트를 관리할 때 외부 플러그인(GitHub, Local shell, Web/Browser, Playwright/Screenshot, Notion/Drive, Calendar, OpenAI advisory)을 파이프라인에 연결하는 운영 설계를 요약합니다.
+
+### 플러그인 역할 분리
+
+| 플러그인 | 허용 | 금지 |
+|---|---|---|
+| GitHub | 조회·열람·CI 결과 확인 | 직접 머지, 승인 결정 |
+| Local shell | 빌드·테스트 실행, 로그 수집 | `pipeline.py done/qa/build` 직접 기록 |
+| Web·Browser | 문서 열람, 검색 | 증거 날조, oracle 변조 |
+| Playwright·Screenshot | UI 화면 캡처, 동작 증거 수집 | QA PASS 선언 |
+| Notion·Drive | 컨텍스트·결정사항 기록 | step_plan 대체 |
+| Calendar | 리마인더, 마감 추적 | 자동 완료 선언 |
+| OpenAI advisory | 코드 리뷰 조언, red-team 리뷰 | PASS/FAIL 결정 |
+
+### 도입 순서 (4단계 추천)
+
+1. **1단계:** GitHub + Local shell + Web search (기본 작업 도구)
+2. **2단계:** Playwright·Screenshot + outputs_manifest (UI 검증·결과물 제공)
+3. **3단계:** Notion·Drive + Calendar (장기 컨텍스트 관리)
+4. **4단계:** OpenAI API advisory + red-team review (선택적 품질 향상)
+
+### 성능 기대치
+
+| 업무 | 기대 효과 |
+|---|---|
+| 최신 문서 기반 구현 | 오래된 API 사용 실수 감소 |
+| 코드 수정 + 테스트 | 빌드·테스트 즉시 확인, 반복 감소 |
+| UI 동작 검증 | 스크린샷으로 시각적 증거 자동 수집 |
+| GitHub PR·CI | PR/CI 상태 실시간 반영 |
+| 장기 프로젝트 | 결정사항 보존, 컨텍스트 복원 비용 감소 |
+
+상세 규칙은 `CLAUDE.md`의 “외부 플러그인 운영 설계” 섹션을 참조합니다.

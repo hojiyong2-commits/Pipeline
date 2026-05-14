@@ -111,3 +111,9 @@ PM Planner의 `step_plan.xml`에 `<patch_lane_eligible>true</patch_lane_eligible
 - `patch plan` exit code 1 (`lane=full`) → PM에게 Full Lane step_plan 요청
 - `patch verify --result FAIL` 이후 해당 클러스터의 `patch_failures >= 2` → `patch_lane_forbidden=true` 자동 설정, 이후 모든 Patch Lane 차단
 - Full Lane 전환 후에는 일반 STANDARD 파이프라인 절차 적용
+
+## 외부 플러그인 운영 설계 참조
+
+> 핵심 원칙: 외부 플러그인은 완료 판정자가 아니라 정보 탐색/실행/증거 생성 도구이며, 완료 판정은 Three-Gate + Option A + Incremental Module Gate + User Acceptance가 담당한다.
+
+Pipeline Manager는 각 phase에서 외부 플러그인(GitHub/Local shell/Playwright 등)이 생성한 결과(CI 로그, 스크린샷, 아티팩트)를 `pipeline.py outputs add`로 등록하여 사용자에게 제공한다. 플러그인이 직접 `pipeline.py done/qa/build` 등을 기록하거나 완료를 선언하는 것은 금지된다. 상세 규칙은 `CLAUDE.md`의 "외부 플러그인 운영 설계" 섹션을 참조한다.

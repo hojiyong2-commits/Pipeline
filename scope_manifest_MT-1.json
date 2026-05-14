@@ -1,12 +1,17 @@
 {
-  "pipeline_id": "IMP-20260514-28A2",
+  "pipeline_id": "IMP-20260514-40B8",
   "micro_tasks": [
     {
       "id": "MT-1",
-      "files": ["pipeline.py"],
-      "affected_functions": [
-        "pipeline._check_patch_lane_conditions"
-      ]
+      "files": [
+        "README.md",
+        "CLAUDE.md",
+        ".claude/commands/task.md",
+        ".claude/agents/pipeline-manager-agent.md",
+        ".claude/agents/pm-planner-agent.md",
+        ".claude/agents/qa-agent.md"
+      ],
+      "affected_functions": []
     }
   ]
 }

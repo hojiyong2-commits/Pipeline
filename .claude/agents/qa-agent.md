@@ -542,3 +542,9 @@ Patch Lane 태스크에서 위 5개 항목 중 하나라도 실패 시:
 <repeat_indicator>FIRST</repeat_indicator>
 <blast_radius>PATCH_LANE_ESCALATE</blast_radius>
 ```
+
+## 외부 플러그인 운영 설계 참조
+
+> 핵심 원칙: 외부 플러그인은 완료 판정자가 아니라 정보 탐색/실행/증거 생성 도구이며, 완료 판정은 Three-Gate + Option A + Incremental Module Gate + User Acceptance가 담당한다.
+
+QA는 외부 플러그인(Playwright/Screenshot/GitHub Actions 로그)이 생성한 스크린샷, CI 결과, 아티팩트를 증거로 인정할 수 있다. 단, 이 증거들은 QA 검증의 보조 자료일 뿐이며 QA PASS 결정 자체는 QA agent가 수행한다. 플러그인이 직접 QA PASS/FAIL을 선언하거나 oracle을 비교하는 것은 금지된다. 상세 규칙은 `CLAUDE.md`의 "외부 플러그인 운영 설계" 섹션을 참조한다.
