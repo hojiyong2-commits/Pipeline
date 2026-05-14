@@ -1,60 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_handover>
-  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <pipeline_id>IMP-20260514-28A2</pipeline_id>
   <mt_id>MT-1</mt_id>
   <from>dev-agent</from>
   <to>module-qa</to>
   <status>READY_FOR_MODULE_QA</status>
-  <summary>pipeline.py에 Patch Lane + Incident Cluster 서브커맨드 구현 완료. 579줄 추가. cluster(detect/init/status/attach/close) 및 patch(plan/audit/verify/attest) 모든 서브커맨드 동작 확인.</summary>
+  <summary>pipeline.py MT-1 구현 완료. _get_actual_diff_scope() 신규 추가, _cmd_patch_plan/_cmd_patch_audit diff gate 통합, _cmd_patch_verify evidence 필수화, _cmd_patch_attest verify_passed 블로킹, _load/_save/_list cluster 함수에 PIPELINE_CLUSTER_DIR 환경변수 지원, _validate_user_acceptance_evidence outputs_manifest 체크 추가, gates accept --allow-unregistered-evidence 플래그 추가.</summary>
   <implemented_files>
     <file>pipeline.py</file>
   </implemented_files>
   <self_check>
     <python39_syntax>PASS — match/case 미사용, Union[] 표기 사용, asyncio.TaskGroup/ExceptionGroup 미사용</python39_syntax>
-    <type_hinting>PASS — 모든 신규 함수에 파라미터 타입 + 리턴 타입 명시</type_hinting>
-    <error_handling>PASS — JSON I/O, 파일 접근에 try-except + 구체적 예외 타입 포함</error_handling>
-    <path_safety>PASS — pathlib.Path 사용, 하드코딩 경로 없음, _CLUSTER_DIR 상수 사용</path_safety>
-    <security>PASS — 하드코딩 키 없음, 입력 검증 포함, cluster_id 형식 검증</security>
-    <al_edge_cases>PASS — 빈 클러스터 목록 처리, None 체크, 잘못된 JSON 방어</al_edge_cases>
-    <pd_policy>PASS — 잘못된 cluster_id ValueError, 빈 결과 반환, 필드 검증</pd_policy>
-    <docstring>PASS — 모든 신규 함수에 docstring 포함</docstring>
+    <type_hinting>PASS — _get_actual_diff_scope Optional[str], bool, Dict[str, Any] 타입 명시</type_hinting>
+    <error_handling>PASS — subprocess FileNotFoundError/OSError 방어, JSON decode 방어, 경로 None 체크</error_handling>
+    <path_safety>PASS — pathlib.Path 사용, _get_cluster_dir() 환경변수 오버라이드 지원</path_safety>
+    <security>PASS — 하드코딩 키 없음, PATCH_SKIP_DIFF 환경변수만 허용, trust root 패턴 검증</security>
+    <al_edge_cases>PASS — nonlocal list 패턴으로 클로저 변수 누적, 빈 파일 목록 처리, git 미설치 방어</al_edge_cases>
+    <pd_policy>PASS — verify_passed 없는 attest 차단, evidence 없는 PASS 차단</pd_policy>
+    <docstring>PASS — _get_actual_diff_scope, _get_cluster_dir 신규 함수 docstring 포함</docstring>
   </self_check>
   <evidence>
     <file>pipeline.py</file>
     <file>scope_manifest_MT-1.json</file>
   </evidence>
-  <implementation_details>
-    <constants>
-      _CLUSTER_DIR = clusters/
-      _PATCH_LANE_AUTO_ESCALATION_LINES = 15
-      _CLUSTER_MAX_PATCH_FAILURES = 2
-      _CLUSTER_AUTO_CLOSE_DAYS = 7
-    </constants>
-    <new_commands>
-      <command>cluster detect [--desc]</command>
-      <command>cluster init [--desc]</command>
-      <command>cluster status [--cluster-id]</command>
-      <command>cluster attach --cluster-id</command>
-      <command>cluster close --cluster-id</command>
-      <command>patch plan [--plan]</command>
-      <command>patch audit [--plan]</command>
-      <command>patch verify --result PASS|FAIL [--plan]</command>
-      <command>patch attest [--plan]</command>
-    </new_commands>
-    <auto_escalation_threshold_lines>15</auto_escalation_threshold_lines>
-    <cluster_max_patch_failures>2</cluster_max_patch_failures>
-    <cluster_auto_close_days>7</cluster_auto_close_days>
-  </implementation_details>
-  <test_verification>
-    <test>cluster detect: 활성 클러스터 없음 JSON 반환 확인</test>
-    <test>cluster init: CL-XXXX 형식 ID로 클러스터 생성 확인</test>
-    <test>cluster status: 전체 클러스터 목록 JSON 반환 확인</test>
-    <test>cluster attach: 현재 파이프라인 연결 확인</test>
-    <test>cluster close: closed_at 타임스탬프 기록 확인</test>
-    <test>patch plan (PASS): 1파일/1함수/10줄 조건 통과 확인</test>
-    <test>patch audit (PASS): audit 통과 확인</test>
-    <test>patch verify --result PASS: 검증 PASS 확인</test>
-    <test>patch attest: 증거 기록 확인</test>
-    <test>auto-escalation: 20줄 계획 시 FAIL + lane=full 확인</test>
-  </test_verification>
+  <key_changes>
+    <change>_get_cluster_dir(): PIPELINE_CLUSTER_DIR 환경변수 오버라이드 지원 (테스트 격리)</change>
+    <change>_get_actual_diff_scope(): git diff --stat 기반 실제 변경 범위 분석, PATCH_SKIP_DIFF/--skip-diff-check 지원</change>
+    <change>_cmd_patch_plan(): diff gate 통합 + --base-ref/--skip-diff-check 파라미터 추가</change>
+    <change>_cmd_patch_audit(): diff gate trust root/파일수/줄수 추가 검사</change>
+    <change>_cmd_patch_verify(): PASS 시 --test-command 또는 --evidence-file 필수, verify_passed 기록</change>
+    <change>_cmd_patch_attest(): verify_passed 없으면 BLOCKED</change>
+    <change>_validate_user_acceptance_evidence(): outputs_manifest 등록 여부 경고 + allow_unregistered 파라미터</change>
+    <change>gates accept argparse: --allow-unregistered-evidence 플래그 추가</change>
+  </key_changes>
 </module_handover>

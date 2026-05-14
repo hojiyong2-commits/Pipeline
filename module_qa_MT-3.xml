@@ -1,19 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_qa_report>
-  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <pipeline_id>IMP-20260514-28A2</pipeline_id>
   <mt_id>MT-3</mt_id>
   <verdict>PASS</verdict>
   <result>PASS</result>
-  <summary>MT-3 단위 테스트 검증 완료. 14개 테스트 전체 PASS, 전체 pytest 스위트 233개 통과.</summary>
+  <summary>MT-3 .github/workflows/ci.yml 강화 검증 완료. YAML 문법 OK, UTF-8 인코딩 설정 확인, pipeline.py patch plan --base-ref origin/main 호출 추가 확인, 기존 schema 검사 로직 유지 확인, step 이름에서 파이프라인 ID 제거 확인.</summary>
   <verification_evidence>
-    <test name="pytest tests/test_patch_lane.py">14 passed in 3.37s</test>
-    <test name="pytest -q 전체">233 passed in 29.80s</test>
-    <test name="cluster 테스트 4개">detect/init/status/close 전체 PASS</test>
-    <test name="patch audit 테스트 4개">plan PASS/FAIL(16줄)/FAIL(trust_root)/audit PASS</test>
-    <test name="patch verify 테스트 2개">PASS/FAIL exit code 확인</test>
-    <test name="auto-escalation 경계값 2개">15줄 PASS, 16줄 FAIL 확인</test>
-    <test name="patch_lane_forbidden 1개">초기값 false, patch_failures=0 확인</test>
-    <test name="스키마 검증 1개">scope.file 누락 시 FAIL 확인</test>
+    <test name="YAML syntax">python -c yaml.safe_load() — OK</test>
+    <test name="UTF-8 인코딩 설정">$OutputEncoding = [System.Text.Encoding]::UTF8 존재 확인</test>
+    <test name="Console 인코딩 설정">[Console]::OutputEncoding = [System.Text.Encoding]::UTF8 존재 확인</test>
+    <test name="pipeline.py patch plan 호출">python pipeline.py patch plan --plan patch_plan.json --base-ref origin/main 존재 확인</test>
+    <test name="기존 schema 검사 유지">blockers 패턴, $ErrorActionPreference = Stop, schema_version 검사 모두 유지</test>
+    <test name="step 이름 정리">IMP-20260513-4C0B 제거, "Patch Lane 증거 파일 검증"으로 변경 확인</test>
+    <test name="조건 유지">if: success() &amp;&amp; hashFiles('patch_plan.json') != '' 유지 확인</test>
   </verification_evidence>
   <boundary_check>
     <scope_files_match>PASS</scope_files_match>

@@ -1,24 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_design>
-  <pipeline_id>IMP-20260513-4C0B</pipeline_id>
+  <pipeline_id>IMP-20260514-28A2</pipeline_id>
   <mt_id>MT-2</mt_id>
   <status>PASS</status>
-  <design_summary>5개 문서 파일 동기화: CLAUDE.md(Patch Lane 운영 섹션), pm-planner-agent.md, pipeline-manager-agent.md, qa-agent.md, ci.yml</design_summary>
+  <design_summary>tests/test_patch_lane.py 강화: PIPELINE_CLUSTER_DIR 격리 fixture, 8개 신규 테스트 추가 (diff gate, verify evidence, attest blocking)</design_summary>
   <interface_contract>
-    <input>MT-1 완료된 pipeline.py — cluster/patch 서브커맨드 기능 명세</input>
-    <output>5개 문서 파일에 Patch Lane 규칙 섹션 추가됨</output>
-    <validation>각 문서에 auto-escalation 15줄 임계값, cluster/patch 명령어, 운영 규칙이 일치하는지 확인</validation>
+    <input>MT-1 완료된 pipeline.py — 신규 --skip-diff-check, --test-command, --evidence-file, verify_passed blocking 기능</input>
+    <output>tests/test_patch_lane.py — 기존 14개 테스트 격리 + 8개 신규 테스트, 총 22개</output>
+    <validation>pytest tests/test_patch_lane.py -v 전체 22개 PASS</validation>
   </interface_contract>
   <implementation_plan>
-    <step>1. CLAUDE.md에 Patch Lane + Incident Cluster 운영 섹션 추가</step>
-    <step>2. pm-planner-agent.md에 Patch Lane 판별 체크리스트 추가</step>
-    <step>3. pipeline-manager-agent.md에 cluster/patch Phase 표 항목 추가</step>
-    <step>4. qa-agent.md에 Patch Lane QA 체크리스트 추가</step>
-    <step>5. .github/workflows/ci.yml에 patch lane evidence 검증 스텝 추가</step>
+    <step>1. conftest.py 또는 fixture에 PIPELINE_CLUSTER_DIR=tmpdir 환경변수 격리 추가 (monkeypatch 방식)</step>
+    <step>2. 기존 14개 테스트에 격리 환경 적용 (autouse fixture 또는 개별 fixture 인자)</step>
+    <step>3. test_diff_gate_escalate_when_actual_files_exceed_declared — PATCH_SKIP_DIFF=0으로 실제 diff gate 에스컬레이션 확인</step>
+    <step>4. test_diff_gate_pass_when_skip_diff_check — --skip-diff-check 플래그로 PASS 확인</step>
+    <step>5. test_verify_pass_without_evidence_blocks — --test-command 없이 PASS 호출 시 exit 1</step>
+    <step>6. test_verify_pass_with_test_command_succeeds — --test-command 제공 시 exit 0</step>
+    <step>7. test_verify_pass_with_evidence_file_succeeds — --evidence-file 제공 시 exit 0</step>
+    <step>8. test_attest_blocks_when_no_prior_verify_pass — verify PASS 없이 attest 시 exit 1</step>
+    <step>9. test_cluster_dir_isolation_via_env — PIPELINE_CLUSTER_DIR 격리 확인</step>
+    <step>10. test_acceptance_unregistered_evidence_flag — --allow-unregistered-evidence 플래그 argparse 등록 확인</step>
   </implementation_plan>
   <verification_plan>
-    <check>각 문서에 Patch Lane 섹션이 존재하는지 Grep 확인</check>
-    <check>15줄 임계값이 모든 문서에서 일치하는지 확인</check>
-    <check>ci.yml 스텝이 YAML 문법 오류 없이 파싱되는지 확인</check>
+    <check>pytest tests/test_patch_lane.py -v 전체 22개 PASS</check>
+    <check>PIPELINE_CLUSTER_DIR 격리로 .pipeline/clusters에 오염 파일 없음 확인</check>
+    <check>신규 테스트 모두 --skip-diff-check 또는 PIPELINE_CLUSTER_DIR 격리 사용 여부 확인</check>
   </verification_plan>
 </module_design>

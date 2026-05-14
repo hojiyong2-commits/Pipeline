@@ -1,23 +1,22 @@
-<?xml version="1.0" encoding="utf-8"?>
 <module_design>
-  <pipeline_id>IMP-20260510-184A</pipeline_id>
   <mt_id>MT-1</mt_id>
-  <title>_deployment_artifacts에서 dev 단계 자동수집 제거</title>
-  <files>
-    <file>pipeline.py</file>
-  </files>
+  <title>pipeline.py diff gate 신규 함수 + patch plan/audit/verify/attest 강화 + PIPELINE_CLUSTER_DIR + acceptance evidence 강화</title>
   <interface_contract>
-    _deployment_artifacts(state, evidence): state에서 build 단계 evidence만 자동수집. dev 단계는 수집하지 않음. 명시적 evidence 경로와 output registry 경로는 그대로 유지.
+    <input>pipeline_state.json, patch_plan.json, git repository</input>
+    <output>pipeline_state.json (갱신), exit codes (0=pass, 1=fail)</output>
   </interface_contract>
   <implementation_plan>
-    pipeline.py L2700:
-    변경 전: for phase_name in ("build", "dev"):
-    변경 후: for phase_name in ("build",):
-    단 1줄 수정. 다른 부분 변경 없음.
+    <step>1. _get_actual_diff_scope() 신규 함수 추가</step>
+    <step>2. _cmd_patch_plan --base-ref 파라미터 추가, diff gate 호출</step>
+    <step>3. _cmd_patch_audit diff gate 호출</step>
+    <step>4. _cmd_patch_verify --test-command, --evidence-file 추가</step>
+    <step>5. _cmd_patch_attest verify_passed 선행 확인</step>
+    <step>6. _load_cluster_json/_save_cluster_json PIPELINE_CLUSTER_DIR 지원</step>
+    <step>7. gates accept outputs_manifest 검증</step>
   </implementation_plan>
   <verification_plan>
-    1. oracle T001 (normal): python tests/oracles/IMP-20260510-184A/normal_01/input.txt → DEPLOY_SCOPE_OK
-    2. oracle T002 (edge): python tests/oracles/IMP-20260510-184A/edge_01/input.txt → SYNTAX_OK
-    3. grep 확인: _deployment_artifacts 함수에 ("build", "dev") 문자열 없어야 함
+    <test>python pipeline.py patch plan --skip-diff-check → exit 0</test>
+    <test>python pipeline.py patch verify --result PASS (no evidence) → exit 1</test>
+    <test>pytest tests/test_patch_lane.py 전체 PASS</test>
   </verification_plan>
 </module_design>
