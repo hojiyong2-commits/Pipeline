@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260514-40B8",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-14T14:54:39Z",
+  "updated_at": "2026-05-14T14:56:36Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "외부 플러그인 기반 파이프라인 운영 설계 문서화: GitHub/Shell/Web/Playwright/Notion/Calendar/OpenAI 플러그인 역할 분리, 단계별 사용법, 권한 설계, 증거 규칙, 도입 순서를 README.md/CLAUDE.md/agent MD에 반영",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "외부_플러그인_운영_설계_문서화",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q001",
+      "module": null,
+      "severity": "P1",
+      "question": "외부 플러그인이 완료 판정자가 아님을 모든 문서에 명시하는가?",
+      "options": [],
+      "answer": "예, 핵심 원칙 문장을 6개 파일 모두에 일관되게 추가함",
+      "resolved": true
+    },
+    {
+      "id": "Q002",
+      "module": null,
+      "severity": "P1",
+      "question": "회사 데이터/회사 업무 우회로 읽힐 표현이 신규 추가되지 않는가?",
+      "options": [],
+      "answer": "예, 개인 PC/개인 프로젝트 한정 문구만 사용",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-14T14:56:36Z",
+  "contract_hash": "c7e7459fc324c1ebbbaab4c309996360b029eafd9e699055d99e7b163cdb9025",
+  "test_set_hash": "9c080a76da867801fc695e3623d7baf5ca36b132acd39fe8eae85d866d7c39cd"
+}

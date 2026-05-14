@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <pipeline_id>IMP-20260514-40B8</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <agent_run_id>dev-13e47664060ba8ab</agent_run_id>
+  <summary>IMP-20260514-40B8 MT-1 구현 완료. README.md, CLAUDE.md, .claude/commands/task.md, .claude/agents/pipeline-manager-agent.md, .claude/agents/pm-planner-agent.md, .claude/agents/qa-agent.md 6개 파일에 외부 플러그인 운영 설계 섹션 추가. 핵심 원칙 반영. 신뢰 루트 파일 미수정. 개인 PC 한정 운영 설계.</summary>
+  <scope_declaration>
+    <files_to_modify>
+      <file>README.md</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/commands/task.md</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>N/A (문서 작업, 코드 함수 변경 없음)</target_function>
+    <change_type>documentation_addition</change_type>
+    <blast_radius>LOW</blast_radius>
+    <affected_call_sites>none</affected_call_sites>
+  </impact_analysis>
+  <evidence>
+    <commit_sha>04d7d811577f7c2d146fc12cd71c5468267ba7b4</commit_sha>
+    <module_qa_mt1>PASS</module_qa_mt1>
+    <module_integration>PASS</module_integration>
+  </evidence>
+</handover>

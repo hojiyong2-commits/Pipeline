@@ -1,0 +1,13 @@
+{
+  "check_type": "heading_presence",
+  "file": "CLAUDE.md",
+  "required_headings": [
+    "외부 플러그인 사용 목적",
+    "플러그인 역할 분리",
+    "파이프라인 단계별 사용 방식",
+    "권한 설계",
+    "증거 규칙",
+    "도입 순서",
+    "성능 향상 기대치"
+  ]
+}
