@@ -83,6 +83,9 @@ _cleanup_archive/
 # User-visible pipeline outputs must be available to GitHub acceptance packets.
 !pipeline_outputs/
 !pipeline_outputs/**
+# But EXE/DLL binaries inside pipeline_outputs are too large for GitHub (>100MB)
+pipeline_outputs/**/*.exe
+pipeline_outputs/**/*.dll
 
 # Editor / OS noise
 .vscode/
