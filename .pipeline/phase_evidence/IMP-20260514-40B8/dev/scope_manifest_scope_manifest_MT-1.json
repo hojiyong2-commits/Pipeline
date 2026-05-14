@@ -1,0 +1,17 @@
+{
+  "pipeline_id": "IMP-20260514-40B8",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "README.md",
+        "CLAUDE.md",
+        ".claude/commands/task.md",
+        ".claude/agents/pipeline-manager-agent.md",
+        ".claude/agents/pm-planner-agent.md",
+        ".claude/agents/qa-agent.md"
+      ],
+      "affected_functions": ["N/A (문서 작업, 코드 함수 변경 없음)"]
+    }
+  ]
+}

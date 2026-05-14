@@ -16,11 +16,39 @@
 
 사용자가 마지막에 해야 할 일은 코드 리뷰가 아니라 결과물 확인입니다. 마지막 작업 담당자가 PR 링크와 GitHub Actions의 한국어 **최종 확인 안내**, 실제 결과물 경로나 첨부파일 링크를 줍니다. 사용자는 그 결과물이 요청과 맞는지만 보고 승인(ACCEPT) 또는 거절(REJECT)을 선택합니다.
 
+### 단순 업무 빠른 경로
+
+단순 업무도 Three-Gate와 Option A는 그대로 씁니다. 다만 PM이 `step_plan.xml`의 `<task_complexity>`로 아래 프로필을 선언하면, 불필요하게 MT를 여러 개로 쪼개지 않고 MT-1 하나로 진행할 수 있습니다.
+
+| 프로필 | 의미 |
+|---|---|
+| `FAST_DOC` | 문서/MD/프롬프트 변경. 제품 코드 수정 금지 |
+| `FAST_ANALYSIS` | 로그 분석, 결과 검토, 보고서 작성. 제품 코드 수정 금지 |
+| `FAST_SINGLE_CODE` | 최대 2파일/2함수/예상 80줄 이하의 작은 코드 수정 |
+| `STANDARD` | 일반 작업 |
+| `HIGH_RISK` | 삭제, 인증, 배포, 핵심 파서, DB, 신규 의존성 등 위험 작업. 이유와 risk flag가 필요하고 보수 모드로 진행 |
+
+Fast Path는 검증 생략이 아닙니다. GitHub Actions, phase attestation, Technical/Oracle/GitHub/User Acceptance gate는 그대로 필요합니다.
+
+### 결과물 등록
+
+사용자가 PR에서 바로 열어볼 파일은 아래처럼 등록합니다.
+
+```powershell
+python pipeline.py outputs add --kind report --path report.md --label "최종 보고서" --notes "사용자는 결론과 확인 항목만 보면 됩니다."
+```
+
+등록된 파일은 `pipeline_outputs/<pipeline_id>/`로 복사되고, GitHub Actions가 만드는 **최종 확인 안내** 댓글의 “등록된 결과물 바로 열기”에 링크로 표시됩니다.
+
 ## 필수 명령 흐름
 
 ```powershell
 python pipeline.py contract init
-python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>
+python pipeline.py agent start --phase pm_planner
+python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml
+python pipeline.py agent start --phase pipeline_manager
+python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
 python pipeline.py gates prepare-phase --phase pm
 python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline
 
@@ -39,7 +67,7 @@ python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.
 python pipeline.py gates prepare-phase --phase qa
 python pipeline.py gates phase-ci --phase qa --repo hojiyong2-commits/Pipeline
 
-python pipeline.py build --exe "dist/app.exe" --report-file build_report.xml --agent-run-id <build_run_id>
+python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>
 python pipeline.py gates prepare-phase --phase build
 python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline
 
@@ -82,10 +110,13 @@ python pipeline.py architect --report-file architect_report.xml
 각 주요 단계는 한 번만 쓰는 agent receipt와 연결되어야 기록할 수 있습니다.
 
 ```powershell
-python pipeline.py agent start --phase pm
-# 출력된 token은 pm-agent에게만 전달
-python pipeline.py agent finish --run-id <run_id> --token <token> --output-file step_plan.xml
-python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <run_id>
+python pipeline.py agent start --phase pm_planner
+# 출력된 token은 pm-planner-agent에게만 전달
+python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml
+python pipeline.py agent start --phase pipeline_manager
+# 출력된 token은 pipeline-manager-agent에게만 전달
+python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
 python pipeline.py gates prepare-phase --phase pm
 git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add pm phase attestation request"
@@ -161,3 +192,40 @@ Dev로 넘어가기 전, PM은 모듈 분해안을 사용자에게 쉬운 한국
 - `.github/CODEOWNERS`, `.github/workflows/**`, `pipeline.py`, `CLAUDE.md`, `.claude/agents/**`, `tests/oracles/**`, `tests/**`, `test_*.py`, `*_test.py`는 CODEOWNERS에 들어 있습니다.
 
 이렇게 하면 최종 merge 결정과 자동 검사가 로컬 Claude/Codex 주장 밖에서 이루어집니다. 단일 소유자 repo에서 “승인 1명 필수”를 켜면 본인이 만든 PR이 막힐 수 있으므로, 그 설정은 신뢰할 두 번째 GitHub 계정을 추가한 뒤 켜는 것이 좋습니다.
+
+## 외부 플러그인 운영 설계 (개인 PC 한정)
+
+> **핵심 원칙:** 외부 플러그인은 완료 판정자가 아니라 정보 탐색/실행/증거 생성 도구이며, 완료 판정은 Three-Gate + Option A + Incremental Module Gate + User Acceptance가 담당한다.
+
+이 섹션은 개인 PC에서 개인 프로젝트를 관리할 때 외부 플러그인(GitHub, Local shell, Web/Browser, Playwright/Screenshot, Notion/Drive, Calendar, OpenAI advisory)을 파이프라인에 연결하는 운영 설계를 요약합니다.
+
+### 플러그인 역할 분리
+
+| 플러그인 | 허용 | 금지 |
+|---|---|---|
+| GitHub | 조회·열람·CI 결과 확인 | 직접 머지, 승인 결정 |
+| Local shell | 빌드·테스트 실행, 로그 수집 | `pipeline.py done/qa/build` 직접 기록 |
+| Web·Browser | 문서 열람, 검색 | 증거 날조, oracle 변조 |
+| Playwright·Screenshot | UI 화면 캡처, 동작 증거 수집 | QA PASS 선언 |
+| Notion·Drive | 컨텍스트·결정사항 기록 | step_plan 대체 |
+| Calendar | 리마인더, 마감 추적 | 자동 완료 선언 |
+| OpenAI advisory | 코드 리뷰 조언, red-team 리뷰 | PASS/FAIL 결정 |
+
+### 도입 순서 (4단계 추천)
+
+1. **1단계:** GitHub + Local shell + Web search (기본 작업 도구)
+2. **2단계:** Playwright·Screenshot + outputs_manifest (UI 검증·결과물 제공)
+3. **3단계:** Notion·Drive + Calendar (장기 컨텍스트 관리)
+4. **4단계:** OpenAI API advisory + red-team review (선택적 품질 향상)
+
+### 성능 기대치
+
+| 업무 | 기대 효과 |
+|---|---|
+| 최신 문서 기반 구현 | 오래된 API 사용 실수 감소 |
+| 코드 수정 + 테스트 | 빌드·테스트 즉시 확인, 반복 감소 |
+| UI 동작 검증 | 스크린샷으로 시각적 증거 자동 수집 |
+| GitHub PR·CI | PR/CI 상태 실시간 반영 |
+| 장기 프로젝트 | 결정사항 보존, 컨텍스트 복원 비용 감소 |
+
+상세 규칙은 `CLAUDE.md`의 “외부 플러그인 운영 설계” 섹션을 참조합니다.

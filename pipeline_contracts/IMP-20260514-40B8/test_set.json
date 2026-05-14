@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260514-40B8",
+  "created_at": "2026-05-14T14:54:39Z",
+  "updated_at": "2026-05-14T14:56:36Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T001",
+      "module": "MT-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 50,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260514-40B8/case_normal/expected.json"
+      },
+      "when": {
+        "check": "heading_presence_in_CLAUDE_md"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260514-40B8/case_normal/expected.json"
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MT-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 50,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260514-40B8/case_edge/expected.json"
+      },
+      "when": {
+        "check": "principle_and_exclusion"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260514-40B8/case_edge/expected.json"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-14T14:56:36Z",
+  "test_set_hash": "9c080a76da867801fc695e3623d7baf5ca36b132acd39fe8eae85d866d7c39cd",
+  "contract_hash": "c7e7459fc324c1ebbbaab4c309996360b029eafd9e699055d99e7b163cdb9025"
+}

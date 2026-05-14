@@ -6,7 +6,7 @@
 
 0. 사용자에게 보이는 세션 언어는 항상 쉬운 한국어다. 진행 업데이트, 도구 설명, Bash/PowerShell 설명, 최종 보고, 승인/거절 질문은 한국어로 쓴다. `Bash`, `GitHub Actions`, 명령어, commit SHA, `ACCEPT/REJECT` 같은 식별자는 그대로 둘 수 있지만 바로 옆에 한국어 설명을 붙인다.
 1. 오케스트레이터는 제품 코드나 산출물 파일을 직접 수정하지 않는다.
-2. 오케스트레이터가 직접 spawn하는 agent는 `pm-agent`뿐이다.
+2. 오케스트레이터가 직접 spawn하는 agent는 `pm-planner-agent`와 `pipeline-manager-agent`뿐이다.
 3. PM은 계획과 위임만 한다. PM이 Dev/QA/Build/Harness/Architect 산출물을 흉내 내면 프로토콜 위반이다.
 4. `pipeline.py harness --score ...`는 완료 경로가 아니다. Three-Gate에서는 차단된다.
 5. 최종 COMPLETE는 PM/Dev/QA/Build phase attestation, Technical, Oracle, GitHub CI, User Acceptance가 모두 PASS되어야 가능하다.
@@ -20,13 +20,30 @@ python pipeline.py new --type FEAT --desc "[사용자 요청 요약]"
 python pipeline.py status
 ```
 
-그 다음 `pm-agent`를 `mode: pipeline_manager_round1`로 호출한다. PM prompt에는 반드시 다음을 포함한다:
+그 다음 `pm-planner-agent`를 호출한다. Planner prompt에는 반드시 다음을 포함한다:
 
 - pipeline_id
 - 사용자 원문 요청
 - `Three-Gate, Option A, Incremental Module Gate are mandatory. Classic mode is forbidden.`
-- PM은 `<decomposition_audit>`, `<step_plan>`, `<pipeline_manager_handoff>ready</pipeline_manager_handoff>`만 출력해야 한다는 역할 경계
+- Planner는 `<decomposition_audit>`, `<step_plan>`, `<pipeline_manager_handoff>ready</pipeline_manager_handoff>`만 출력해야 한다는 역할 경계
 - PM은 `<step_plan><design_confirmation>` 안에 쉬운 한국어 설계 확인 질문을 기록해야 한다. 모듈이 1개여도 분해안을 사용자에게 보여주고 확인받는다. 각 P0/P1 질문은 근거, 왜 중요한지, 추천안, 2개 이상 옵션, 장점, 단점, 사용자 답변을 포함한다. P2/내부 구현 취향 질문은 묻지 않고 유지보수성 우선으로 필터링한다.
+- PM은 `<step_plan><task_complexity>`로 실행 프로필을 선언한다. 단순 작업이면 `FAST_DOC`, `FAST_ANALYSIS`, `FAST_SINGLE_CODE` 중 하나를 쓸 수 있지만, Three-Gate/Option A/최종 ACCEPT는 절대 생략하지 않는다.
+
+Planner 완료 후에는 `pipeline-manager-agent`를 호출해 `manager_handoff.xml`을 만들고, PM DONE은 planner receipt와 manager receipt를 둘 다 포함해 기록한다.
+
+## 실행 프로필
+
+빠른 경로는 검증 생략이 아니다. 단순 업무에서 micro-task를 불필요하게 5개로 쪼개지 않고 MT-1 하나로 끝내도록 제한하는 장치다.
+
+| 프로필 | 언제 쓰나 | 제한 |
+|---|---|---|
+| `FAST_DOC` | 문서/MD/프롬프트 변경 | 제품 코드 수정 금지 |
+| `FAST_ANALYSIS` | 로그 분석, 결과 검토, 보고서 작성 | 제품 코드 수정 금지 |
+| `FAST_SINGLE_CODE` | 단일 파일/작은 함수 수정 | 최대 2파일, 최대 2함수, 예상 80줄 이하 |
+| `STANDARD` | 일반 작업 | 기본 경로 |
+| `HIGH_RISK` | 삭제/인증/배포/핵심 파서/DB/신규 의존성 | 더 보수적으로 진행 |
+
+Fast Path 조건이 하나라도 맞지 않으면 `pipeline.py done --phase pm`이 차단한다. 판단이 애매하면 `STANDARD`를 선택한다.
 
 ## Phase 1 — PM
 
@@ -49,10 +66,13 @@ python pipeline.py contract freeze
 PM 완료 기록:
 
 ```powershell
-python pipeline.py agent start --phase pm
-# 출력된 token은 pm-agent에게만 전달
-python pipeline.py agent finish --run-id <pm_run_id> --token <token> --output-file step_plan.xml
-python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>
+python pipeline.py agent start --phase pm_planner
+# 출력된 token은 pm-planner-agent에게만 전달
+python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml
+python pipeline.py agent start --phase pipeline_manager
+# 출력된 token은 pipeline-manager-agent에게만 전달
+python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
 python pipeline.py gates prepare-phase --phase pm
 git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add pm phase attestation request"
@@ -118,7 +138,7 @@ QA FAIL이면 Dev로 되돌린다.
 
 ## Phase 5 — Security
 
-보안 관련 코드가 있으면 `security-agent`가 검토한다. 네트워크/DB/인증/외부 입력이 없으면 명시적으로 skip한다.
+보안 관련 코드가 있으면 `security-agent`가 검토한다. 네트워크/DB/인증/외부 입력이 없으면 Pipeline Manager 기록 단계가 `check --phase sec` 통과를 확인한 뒤 명시적으로 skip한다. 오케스트레이터와 security-agent는 `sec --skip`을 직접 기록하지 않는다.
 
 ```powershell
 python pipeline.py sec --result PASS --risk LOW
@@ -131,8 +151,8 @@ python pipeline.py sec --skip
 ```powershell
 python pipeline.py agent start --phase build
 # token은 build-agent에게만 전달
-python pipeline.py agent finish --run-id <build_run_id> --token <token> --output-file build_report.xml
-python pipeline.py build --exe "dist/app.exe" --report-file build_report.xml --agent-run-id <build_run_id>
+python pipeline.py agent finish --run-id <build_run_id> --token <token> --output-file dist/build_report.xml
+python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml --agent-run-id <build_run_id>
 # docs-only 등 비실행 산출물:
 python pipeline.py build --exe "N/A" --skip-reason "docs-only" --agent-run-id <build_run_id>
 python pipeline.py gates prepare-phase --phase build
@@ -152,6 +172,7 @@ Build phase CI가 PASS되기 전에는 Phase 7로 넘어가지 않는다.
 python pipeline.py gates technical
 python pipeline.py gates oracle
 python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
+python pipeline.py outputs status
 python pipeline.py gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed
 ```
 
@@ -159,7 +180,7 @@ python pipeline.py gates accept --result ACCEPT --evidence <실제-결과물-경
 
 - PR 링크
 - GitHub Actions가 작성한 한국어 "최종 확인 안내" 댓글 링크
-- 실제 결과물 경로, 스크린샷, EXE, 엑셀, 출력 파일, 첨부파일 링크 중 해당되는 것
+- 실제 결과물 경로, 스크린샷, EXE, 엑셀, 출력 파일, 첨부파일 링크 중 해당되는 것. 로컬 파일은 먼저 `python pipeline.py outputs add --kind report --path ... --label "최종 보고서"`로 등록한다.
 - 사용자가 실제로 확인할 항목 2~5개. 코드 리뷰 항목이 아니라 "화면이 맞는지", "엑셀 열이 맞는지", "파일이 원하는 위치에 생겼는지", "규칙/문서 작업이면 요약과 자동 검사 통과 여부를 확인하면 되는지"처럼 결과물 기준으로 쓴다.
 
 GitHub에서 사용자가 보게 되는 PR 제목/본문, 최종 확인 댓글, 첨부 안내, PR 템플릿은 모두 쉬운 한국어로 작성한다. `modified`, `added`, `CI: PASS`, `artifact` 같은 영어 상태값은 그대로 노출하지 말고 `수정됨`, `새 파일`, `자동 검사: 통과`, `첨부파일`처럼 풀어서 쓴다. 꼭 필요한 `ACCEPT/REJECT`, 명령어, commit SHA는 `승인/거절`, `명령어`, `변경 번호`처럼 한국어 설명과 함께만 쓴다.
@@ -185,6 +206,25 @@ python pipeline.py architect --report-file architect_report.xml
 
 Architect는 Phase 9를 자동으로 시작하지 않는다. 프로토콜 자체 수정이 필요하면 별도 IMP 파이프라인을 새로 시작한다.
 
+## 외부 플러그인 사용 가이드 (IMP-20260514-40B8)
+
+> **핵심 원칙:** 외부 플러그인은 완료 판정자가 아니라 정보 탐색/실행/증거 생성 도구이며, 완료 판정은 Three-Gate + Option A + Incremental Module Gate + User Acceptance가 담당한다.
+
+외부 플러그인은 각 phase에서 다음과 같이 보조 도구로만 사용합니다:
+
+| Phase | 허용되는 플러그인 활용 |
+|---|---|
+| PM | Web search로 최신 라이브러리 정보 조회 |
+| Dev | Local shell로 빌드·테스트 실행, GitHub Issues 참조 |
+| QA | Playwright로 UI 스크린샷 수집, CI 로그 열람 |
+| Advisory | OpenAI API red-team 리뷰 (비구속적) |
+| Build | Local shell로 빌드 명령 실행 |
+| Acceptance | PR 링크, CI 결과, 첨부파일 경로 제공 |
+
+**권한:** Level 0~2(읽기+로컬+외부조회)만 기본 활성. Level 4(결제·배포·삭제)는 기본 비활성.
+
+상세 규칙은 `CLAUDE.md`의 "외부 플러그인 운영 설계 (IMP-20260514-40B8)" 섹션을 참조합니다.
+
 ## 금지 행동
 
 | 금지 | 이유 |
@@ -196,6 +236,7 @@ Architect는 Phase 9를 자동으로 시작하지 않는다. 프로토콜 자체
 | GitHub Actions phase-ci 없이 다음 역할로 이동 | 외부 검증 누락 |
 | `tests/oracles/**` 밖의 oracle 사용 | CODEOWNERS 보호 우회 |
 | 사용자를 코드 리뷰하게 만들기 | 최종 판단은 결과물 기준 |
+| 외부 플러그인이 PASS/FAIL 결정 | 플러그인은 증거 생성만 허용 |
 
 사용자 요청:
 
