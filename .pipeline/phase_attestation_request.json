@@ -1,72 +1,48 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-14T14:03:46Z",
+  "generated_at": "2026-05-14T14:08:42Z",
   "pipeline_id": "IMP-20260514-28A2",
-  "phase": "dev",
-  "phase_status": "DONE",
-  "commit_hint": "efa27513718e3d7db609256613d64500b9c16db1",
+  "phase": "qa",
+  "phase_status": "PASS",
+  "commit_hint": "d5e867a6f47bba8b57a4aff554f782b4a85209e2",
   "state": {
-    "current_phase": "qa",
-    "phase_completed_at": "2026-05-14T13:55:18Z",
-    "report_file": "dev_handover.xml",
-    "evidence": "pipeline.py,tests/test_patch_lane.py,.github/workflows/ci.yml"
+    "current_phase": "sec",
+    "phase_completed_at": "2026-05-14T14:08:34Z",
+    "report_file": "qa_report.xml",
+    "evidence": null
   },
   "agent_run": {
-    "run_id": "dev-4f149da0439c85c8",
-    "phase": "dev",
-    "agent_id": "dev-agent",
+    "run_id": "qa-55f74c445eefcb6c",
+    "phase": "qa",
+    "agent_id": "qa-agent",
     "status": "COMPLETED",
-    "output_file": "dev_handover.xml",
-    "output_sha256": "837422380a4b98fffc02f4791e624f8a8e0bb13f5e2e11273b2b229d77e1bca8",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260514-28A2/dev/agent_receipt_dev-4f149da0439c85c8.json",
-    "receipt_sha256": "939a1996b709dd9d418efab1c729a8fc473241735b22aa519ebe84ed81f1b7d8",
-    "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260514-28A2\\dev\\dev-4f149da0439c85c8.json"
+    "output_file": "qa_report.xml",
+    "output_sha256": "9fdf4a258d2173e17adc081ffdc014ead82c259a6eeb5bc759324d1a52de3c60",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260514-28A2/qa/agent_receipt_qa-55f74c445eefcb6c.json",
+    "receipt_sha256": "e568d6256dc8dcb920354c2700ac15a4dbca1d6365ff895f8b848158d6f57959",
+    "used_by_phase": "qa",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260514-28A2\\qa\\qa-55f74c445eefcb6c.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260514-28A2\\dev\\dev-4f149da0439c85c8.json",
-      "path": ".pipeline/phase_evidence/IMP-20260514-28A2/dev/agent_receipt_dev-4f149da0439c85c8.json",
-      "sha256": "939a1996b709dd9d418efab1c729a8fc473241735b22aa519ebe84ed81f1b7d8",
-      "size_bytes": 502,
-      "requires_force_add": false
+      "source": ".pipeline\\agent_receipts\\IMP-20260514-28A2\\qa\\qa-55f74c445eefcb6c.json",
+      "path": ".pipeline/phase_evidence/IMP-20260514-28A2/qa/agent_receipt_qa-55f74c445eefcb6c.json",
+      "sha256": "e568d6256dc8dcb920354c2700ac15a4dbca1d6365ff895f8b848158d6f57959",
+      "size_bytes": 496,
+      "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "dev_handover.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260514-28A2/dev/report_dev_handover.xml",
-      "sha256": "837422380a4b98fffc02f4791e624f8a8e0bb13f5e2e11273b2b229d77e1bca8",
-      "size_bytes": 3539,
-      "requires_force_add": false
-    },
-    {
-      "label": "scope_manifest",
-      "source": "scope_manifest.json",
-      "path": ".pipeline/phase_evidence/IMP-20260514-28A2/dev/scope_manifest_scope_manifest.json",
-      "sha256": "8b9951e6226cb495cf019cd64b15b1da1d085140667e62b11f543d11c57c2b63",
-      "size_bytes": 588,
-      "requires_force_add": false
+      "source": "qa_report.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260514-28A2/qa/report_qa_report.xml",
+      "sha256": "9fdf4a258d2173e17adc081ffdc014ead82c259a6eeb5bc759324d1a52de3c60",
+      "size_bytes": 3280,
+      "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "cca81bc2d0019d8cb020f0e588a2c3b46ca09efdbdcf802880eb11d142ce3335",
-      "size_bytes": 414424
-    },
-    {
-      "path": "tests/test_patch_lane.py",
-      "sha256": "5b91f0661a074839b0600527a9f94df8be1db687b60768df53b632174e7df84c",
-      "size_bytes": 26495
-    },
-    {
-      "path": ".github/workflows/ci.yml",
-      "sha256": "86c50bf0a393d20298bf7352f68b3921b0ad7208bed9f1b0381f349c8241b18f",
-      "size_bytes": 28469
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
