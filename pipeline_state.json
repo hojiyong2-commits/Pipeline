@@ -4,7 +4,7 @@
   "type": "IMP",
   "description": "Patch Lane 증거 강화: 자기신고 기반 → 실제 diff/hash 기반 검증 (diff gate, verify evidence 필수화, cluster 테스트 격리, acceptance evidence 강화)",
   "created_at": "2026-05-14T13:07:59Z",
-  "updated_at": "2026-05-14T14:11:49Z",
+  "updated_at": "2026-05-14T14:18:45Z",
   "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
@@ -246,6 +246,30 @@
     {
       "ts": "2026-05-14T14:11:49Z",
       "msg": "phase attestation request prepared: build"
+    },
+    {
+      "ts": "2026-05-14T14:14:05Z",
+      "msg": "github phase-ci build PASS run_id=25864902821 commit=be600a001f42"
+    },
+    {
+      "ts": "2026-05-14T14:14:47Z",
+      "msg": "technical gate FAIL"
+    },
+    {
+      "ts": "2026-05-14T14:16:47Z",
+      "msg": "technical gate PASS"
+    },
+    {
+      "ts": "2026-05-14T14:18:29Z",
+      "msg": "oracle gate PASS"
+    },
+    {
+      "ts": "2026-05-14T14:18:37Z",
+      "msg": "github verify-run PASS run_id=25864902821 commit=be600a001f42"
+    },
+    {
+      "ts": "2026-05-14T14:18:45Z",
+      "msg": "output registered report pipeline_outputs\\IMP-20260514-28A2\\Patch-Lane-23-test_patch_lane.py"
     }
   ],
   "terminal_state": null,
@@ -356,17 +380,17 @@
     "enabled": true,
     "mode": "three_gate",
     "technical": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-14T14:16:47Z",
+      "evidence": "deterministic_tool_gate",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260514-28A2\\gates\\technical_result.json",
       "notes": []
     },
     "oracle": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-14T14:18:29Z",
+      "evidence": "oracle_acceptance",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260514-28A2\\gates\\oracle_result.json",
       "notes": []
     },
     "acceptance": {
@@ -377,10 +401,10 @@
       "notes": []
     },
     "github_ci": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-14T14:18:37Z",
+      "evidence": "github_actions_run:25864902821",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260514-28A2\\gates\\github_ci_result.json",
       "notes": []
     }
   },
@@ -428,14 +452,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "build": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-14T14:14:05Z",
         "phase": "build",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25864902821",
+        "commit_sha": "be600a001f4221bcbc769f1c11abae4ed324657c",
+        "evidence": "github_actions_phase_run:25864902821",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260514-28A2\\gates\\phase_ci\\build_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       }
     }
   },
@@ -646,9 +671,29 @@
     }
   },
   "outputs": {
-    "items": []
+    "items": [
+      {
+        "kind": "report",
+        "label": "Patch Lane 강화 테스트 (23개)",
+        "source_path": "tests\\test_patch_lane.py",
+        "public_path": "pipeline_outputs\\IMP-20260514-28A2\\Patch-Lane-23-test_patch_lane.py",
+        "sha256": "5b91f0661a074839b0600527a9f94df8be1db687b60768df53b632174e7df84c",
+        "size_bytes": 26495,
+        "notes": "pytest 23/23 PASS. PIPELINE_CLUSTER_DIR 격리, diff gate, verify evidence, attest blocking 검증.",
+        "registered_at": "2026-05-14T14:18:45Z"
+      }
+    ]
   },
-  "failure_packets": [],
+  "failure_packets": [
+    {
+      "gate": "technical",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260514-28A2\\failures\\technical_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260514-28A2\\failures\\technical_attempt_1.json",
+      "recorded_at": "2026-05-14T14:14:47Z",
+      "repair_owner": "Dev tooling repair"
+    }
+  ],
   "protocol_evolution_decision": null,
   "contract_v2": {
     "enabled": true,
@@ -1917,6 +1962,15 @@
       "run_id": "25864746091",
       "commit_sha": "ec9fe527835f37a4e8fad5578dd226ed1ba5cf7f",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-14T14:14:05Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "build",
+      "run_id": "25864902821",
+      "commit_sha": "be600a001f4221bcbc769f1c11abae4ed324657c",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "patch_lane": {
@@ -1930,8 +1984,8 @@
     "verify_passed": true,
     "verify_evidence": {
       "test_command": "",
-      "evidence_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tmpg38r3y13.txt",
-      "verified_at": "2026-05-14T13:54:02Z"
+      "evidence_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tmpk0i1p66x.txt",
+      "verified_at": "2026-05-14T14:16:10Z"
     },
     "attested_at": "2026-05-14T13:44:39Z",
     "pipeline_id": "IMP-TEST-0000-0001",
@@ -1983,5 +2037,15 @@
     "validated_at": "2026-05-14T14:08:34Z",
     "numeric_score": 120,
     "verdict": "PASS"
-  }
+  },
+  "trusted_github_runs": [
+    {
+      "recorded_at": "2026-05-14T14:18:37Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "run_id": "25864902821",
+      "commit_sha": "be600a001f4221bcbc769f1c11abae4ed324657c",
+      "artifact": "pipeline-attestation"
+    }
+  ]
 }

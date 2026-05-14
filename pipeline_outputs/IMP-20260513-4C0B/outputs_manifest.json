@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260513-4C0B",
+  "generated_at": "2026-05-13T13:51:56Z",
+  "items": [
+    {
+      "kind": "report",
+      "label": "Patch Lane + Incident Cluster 서브커맨드 구현 (pipeline.py)",
+      "source_path": "pipeline.py",
+      "public_path": "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py",
+      "sha256": "81efba1a4b9070534d4cb10e7d9657b180739f53bd07dd7cef93e305fe952c5a",
+      "size_bytes": 397600,
+      "notes": "cluster detect/init/status/attach/close + patch plan/audit/verify/attest 서브커맨드 추가",
+      "registered_at": "2026-05-13T13:51:52Z"
+    },
+    {
+      "kind": "report",
+      "label": "Patch Lane 단위 테스트 (14/14 PASS)",
+      "source_path": "tests\\test_patch_lane.py",
+      "public_path": "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-14-14-PASS-test_patch_lane.py",
+      "sha256": "7469d5a4be09220dd644dbfe05884d4abcc373b1d4f1579f42950e362fd148bb",
+      "size_bytes": 12834,
+      "notes": "14개 테스트: cluster 4개 + patch audit 4개 + patch verify 2개 + auto-escalation 경계값 2개 + forbidden 1개 + schema 1개",
+      "registered_at": "2026-05-13T13:51:56Z"
+    }
+  ]
+}

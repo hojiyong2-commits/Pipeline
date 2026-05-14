@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260512-C476",
+  "generated_at": "2026-05-12T12:23:21Z",
+  "items": [
+    {
+      "kind": "report",
+      "label": "PLW2901 lint 규칙 활성화 (pyproject.toml)",
+      "source_path": "pyproject.toml",
+      "public_path": "pipeline_outputs\\IMP-20260512-C476\\PLW2901-lint-pyproject.toml-pyproject.toml",
+      "sha256": "5dedf0cd012919a00bfcf49c6736603a712bc9ef1131985944e7f24d0373755a",
+      "size_bytes": 1187,
+      "notes": "ruff [tool.ruff.lint] 섹션에 extend-select = PLW2901 추가. 루프 변수 shadowing 자동 감지.",
+      "registered_at": "2026-05-12T12:23:13Z"
+    },
+    {
+      "kind": "report",
+      "label": "QA 에이전트 PLW2901 shadowing 체크리스트 추가",
+      "source_path": ".claude\\agents\\qa-agent.md",
+      "public_path": "pipeline_outputs\\IMP-20260512-C476\\QA-PLW2901-shadowing-qa-agent.md",
+      "sha256": "1a04a14aab52ef997923bb3bcab2c95821408849d814f0d13699968f56684d3c",
+      "size_bytes": 31500,
+      "notes": "qa-agent.md FS Compliance Checklist 뒤에 PLW2901 변수 shadowing 검사 서브섹션 추가. FS:PLW2901_shadow failure_signature 정의 포함.",
+      "registered_at": "2026-05-12T12:23:21Z"
+    }
+  ]
+}

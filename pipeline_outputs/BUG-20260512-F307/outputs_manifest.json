@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-F307",
+  "generated_at": "2026-05-12T13:07:07Z",
+  "items": [
+    {
+      "kind": "report",
+      "label": "ICPartAutomation EXE (inlineStr 감지 수정 완료)",
+      "source_path": "ic_part_src\\dist\\ICPartAutomation.exe",
+      "public_path": "pipeline_outputs\\BUG-20260512-F307\\ICPartAutomation-EXE-inlineStr-ICPartAutomation.exe",
+      "sha256": "c4d123d781ff076058be7d294cc1aa2ec7b4e22e24de5ed7a6e11f8cf883f878",
+      "size_bytes": 37767508,
+      "notes": "inlineStr 포맷 셀도 occupied로 집계 — 16개 CustomerOrderLines 모두 기록됩니다",
+      "registered_at": "2026-05-12T13:07:07Z"
+    }
+  ]
+}

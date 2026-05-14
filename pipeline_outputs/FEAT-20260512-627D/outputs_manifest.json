@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "FEAT-20260512-627D",
+  "generated_at": "2026-05-12T14:25:24Z",
+  "items": [
+    {
+      "kind": "exe",
+      "label": "ICPartAutomation.exe (EXE 빌드)",
+      "source_path": "ic_part_src\\dist\\ICPartAutomation.exe",
+      "public_path": "pipeline_outputs\\FEAT-20260512-627D\\ICPartAutomation.exe-EXE-ICPartAutomation.exe",
+      "sha256": "fd43ccfddd9fa15d4568a6f38515b7d1772c5d9613fc37d91084cb2e6ed842b3",
+      "size_bytes": 37768096,
+      "notes": "신규 행의 U/V/W 열이 항상 빈 셀로 시작. backfill 로직 삭제 반영.",
+      "registered_at": "2026-05-12T14:25:24Z"
+    }
+  ]
+}
