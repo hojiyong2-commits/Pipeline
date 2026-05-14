@@ -4,7 +4,7 @@
   "type": "IMP",
   "description": "Patch Lane 증거 강화: 자기신고 기반 → 실제 diff/hash 기반 검증 (diff gate, verify evidence 필수화, cluster 테스트 격리, acceptance evidence 강화)",
   "created_at": "2026-05-14T13:07:59Z",
-  "updated_at": "2026-05-14T13:55:21Z",
+  "updated_at": "2026-05-14T13:58:25Z",
   "current_phase": "qa",
   "blocked": false,
   "blocked_reason": null,
@@ -190,6 +190,10 @@
     {
       "ts": "2026-05-14T13:55:21Z",
       "msg": "phase attestation request prepared: dev"
+    },
+    {
+      "ts": "2026-05-14T13:58:25Z",
+      "msg": "phase attestation request prepared: dev"
     }
   ],
   "terminal_state": null,
@@ -251,7 +255,7 @@
       "receipt_path": ".pipeline\\agent_receipts\\IMP-20260514-28A2\\dev\\dev-4f149da0439c85c8.json",
       "receipt_sha256": "939a1996b709dd9d418efab1c729a8fc473241735b22aa519ebe84ed81f1b7d8",
       "used_by_phase": "dev",
-      "used_at": "2026-05-14T13:55:21Z",
+      "used_at": "2026-05-14T13:58:25Z",
       "commit_sha": "c10a23d075d64c1dadaf5549d4caa148bf9f313b",
       "notes": ""
     }
