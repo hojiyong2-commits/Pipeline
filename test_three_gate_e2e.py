@@ -234,6 +234,13 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
 <step_plan>
   <pipeline_id>{pid}</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>e2e smoke test plan</reason>
+    <uncertainty><p0_questions>0</p0_questions><p1_questions>0</p1_questions><output_format_clear>true</output_format_clear></uncertainty>
+    <blast_radius><expected_changed_files>1</expected_changed_files><expected_changed_functions>1</expected_changed_functions><expected_changed_lines>10</expected_changed_lines></blast_radius>
+    <risk_flags><data_deletion>false</data_deletion><file_move>false</file_move><external_api>false</external_api><auth_or_secret>false</auth_or_secret><pipeline_protocol>false</pipeline_protocol><build_or_deploy>false</build_or_deploy><core_parser_logic>false</core_parser_logic><database_or_migration>false</database_or_migration><new_dependency>false</new_dependency></risk_flags>
+  </task_complexity>
 {_design_confirmation_xml()}
   <micro_tasks>
     <micro_task id="MT-1">

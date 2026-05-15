@@ -914,6 +914,13 @@ class ThreeGatePipelineTests(unittest.TestCase):
 </decomposition_audit>
 <step_plan>
   <pipeline_id>TMP-PM-AGENT-OK</pipeline_id>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>테스트용 단순 계획</reason>
+    <uncertainty><p0_questions>0</p0_questions><p1_questions>0</p1_questions><output_format_clear>true</output_format_clear></uncertainty>
+    <blast_radius><expected_changed_files>1</expected_changed_files><expected_changed_functions>1</expected_changed_functions><expected_changed_lines>10</expected_changed_lines></blast_radius>
+    <risk_flags><data_deletion>false</data_deletion><file_move>false</file_move><external_api>false</external_api><auth_or_secret>false</auth_or_secret><pipeline_protocol>false</pipeline_protocol><build_or_deploy>false</build_or_deploy><core_parser_logic>false</core_parser_logic><database_or_migration>false</database_or_migration><new_dependency>false</new_dependency></risk_flags>
+  </task_complexity>
 """ + _design_confirmation_xml() + """
   <micro_tasks>
     <micro_task id="MT-1">
@@ -1069,6 +1076,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
                  mock.patch.object(pipeline, "_record_snapshot"), \
                  mock.patch.object(pipeline, "_save"), \
+                 mock.patch.object(pipeline, "_validate_pr_title_matches_pipeline"), \
                  mock.patch.dict(pipeline.os.environ, {"PIPELINE_DEPLOY_ROOT": str(deploy_root)}):
                 with self.assertRaises(SystemExit) as ctx:
                     pipeline.cmd_gates(args)
@@ -1334,6 +1342,13 @@ class ThreeGatePipelineTests(unittest.TestCase):
 <step_plan>
   <pipeline_id>TMP-PM-OK</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>테스트용 단순 계획</reason>
+    <uncertainty><p0_questions>0</p0_questions><p1_questions>0</p1_questions><output_format_clear>true</output_format_clear></uncertainty>
+    <blast_radius><expected_changed_files>1</expected_changed_files><expected_changed_functions>1</expected_changed_functions><expected_changed_lines>10</expected_changed_lines></blast_radius>
+    <risk_flags><data_deletion>false</data_deletion><file_move>false</file_move><external_api>false</external_api><auth_or_secret>false</auth_or_secret><pipeline_protocol>false</pipeline_protocol><build_or_deploy>false</build_or_deploy><core_parser_logic>false</core_parser_logic><database_or_migration>false</database_or_migration><new_dependency>false</new_dependency></risk_flags>
+  </task_complexity>
 """ + _design_confirmation_xml() + """
   <micro_tasks>
     <micro_task id="MT-1">
