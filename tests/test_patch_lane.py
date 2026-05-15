@@ -206,14 +206,19 @@ class TestPatchVerify:
     """patch verify 결과 기록 테스트."""
 
     def test_patch_verify_pass(self):
-        """patch verify --result PASS는 exit 0을 반환해야 한다."""
+        """patch verify --result PASS는 --test-command와 함께 exit 0을 반환해야 한다."""
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
             f.write(_make_patch_plan(lines=10))
             plan_path = f.name
         try:
-            proc = _run(["patch", "verify", "--plan", plan_path, "--result", "PASS"])
+            proc = _run([
+                "patch", "verify",
+                "--plan", plan_path,
+                "--result", "PASS",
+                "--test-command", "python -m pytest -q",
+            ])
             assert proc.returncode == 0, (
                 f"exit: {proc.returncode}\n"
                 f"{proc.stderr.decode('utf-8', errors='replace')}"

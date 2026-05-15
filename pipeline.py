@@ -5,6 +5,9 @@
 
     local pipeline.py -> agent receipts -> GitHub Actions -> CODEOWNERS -> human ACCEPT
 
+세션 언어 규칙: 사용자에게 보이는 모든 메시지는 한국어로 작성합니다.
+최신 상태 확인: `python pipeline.py status` — 현재 파이프라인 상태를 표시합니다.
+
 핵심 기능:
   - PM/Dev/QA/Build phase receipt와 GitHub phase attestation 검증
   - PM micro-task 분해, module design/dev/qa, integration gate 강제
@@ -24,6 +27,7 @@
     python pipeline.py agent start --phase pipeline_manager
     python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
     python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
+    # Legacy PM (구 상태 호환): done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>
     python pipeline.py done --phase dev --files "core/ai_engine.py,ui/app.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <run_id>
     python pipeline.py qa --result PASS --numeric-score 110 --report-file qa_report.xml --agent-run-id <run_id>
     python pipeline.py qa --result FAIL --numeric-score 70 --failure-sig "AL:a1b2c3d4" --report-file qa_report.xml --agent-run-id <run_id>
@@ -1837,7 +1841,8 @@ PHASE_ATTESTATION_REQUEST = PIPELINE_CI_DIR / "phase_attestation_request.json"
 PHASE_ATTESTATION_EVIDENCE_DIR = PIPELINE_CI_DIR / "phase_evidence"
 AGENT_RECEIPT_DIR = PIPELINE_CI_DIR / "agent_receipts"
 PHASE_ATTESTATION_PHASES = ("pm", "dev", "qa", "build")
-AGENT_RUN_PHASES = ("pm_planner", "pipeline_manager", "dev", "qa", "build")
+AGENT_RUN_PHASES = ("pm", "pm_planner", "pipeline_manager", "dev", "qa", "build")
+# "pm" is kept for legacy backward compat; new pipelines use "pm_planner" + "pipeline_manager"
 
 # 신뢰 루트 파일 패턴 — 이 패턴에 해당하는 파일이 변경된 경우 per_phase CI 필수
 # (batched CI 불허). "gates batch-ci --probe"에서 ci_mode 결정에 사용.
@@ -1859,7 +1864,7 @@ PHASE_RECEIPT_RUN_PHASES = {
     "build": "build",
 }
 PHASE_AGENT_IDS = {
-    "pm": "pm-planner-agent",
+    "pm": "pm-agent",            # legacy: old state uses pm-agent as the receipt agent_id
     "pm_planner": "pm-planner-agent",
     "pipeline_manager": "pipeline-manager-agent",
     "dev": "dev-agent",
@@ -2971,9 +2976,13 @@ def _validate_agent_run_receipt(
         _die(f"[AGENT RECEIPT GATE] unknown run_id: {run_id}")
     if run.get("pipeline_id") != state.get("pipeline_id"):
         _die("[AGENT RECEIPT GATE] run pipeline_id mismatch")
-    if run.get("phase") != run_phase:
+    # Legacy PM compat: "pm_planner" run_phase accepts run.phase="pm" (older state schema)
+    _legacy_pm_phases = {"pm"} if run_phase == "pm_planner" else set()
+    if run.get("phase") != run_phase and run.get("phase") not in _legacy_pm_phases:
         _die(f"[AGENT RECEIPT GATE] run phase mismatch: expected {run_phase}, got {run.get('phase')}")
-    expected_agent = _expected_agent_id(run_phase)
+    # Resolve expected agent: for legacy pm receipt (phase="pm") use pm-agent, else normal lookup
+    actual_run_phase = run.get("phase", run_phase)
+    expected_agent = _expected_agent_id(actual_run_phase)
     if run.get("agent_id") != expected_agent:
         _die(f"[AGENT RECEIPT GATE] {run_phase} requires {expected_agent}, got {run.get('agent_id')}")
     if run.get("status") != "COMPLETED":
@@ -3148,39 +3157,39 @@ def _prepare_phase_attestation_request(state: Dict[str, Any], phase: str) -> Dic
     manager_run: Optional[Dict[str, Any]] = None
     if phase == "pm":
         manager_run_id = phase_info.get("manager_run_id")
-        if not manager_run_id:
-            _die("[PM MANAGER GATE] pm phase cannot prepare CI attestation without manager_run_id")
-        manager = state.setdefault("agent_runs", {}).get(str(manager_run_id))
-        if not isinstance(manager, dict):
-            _die(f"[PM MANAGER GATE] manager run not found for pm: {manager_run_id}")
-        _validate_agent_run_receipt(
-            state,
-            "pipeline_manager",
-            str(manager_run_id),
-            phase_info.get("manager_report_file"),
-            consume_phase="pm_manager",
-        )
-        manager_receipt_path = _resolve_artifact_path(str(manager.get("receipt_path") or ""))
-        if not manager_receipt_path:
-            _die(f"[PM MANAGER GATE] manager receipt file missing for pm: {manager_run_id}")
-        manager_run = {
-            "run_id": manager.get("run_id"),
-            "phase": manager.get("phase"),
-            "agent_id": manager.get("agent_id"),
-            "status": manager.get("status"),
-            "output_file": manager.get("output_file"),
-            "output_sha256": manager.get("output_sha256"),
-            "receipt_path": manager.get("receipt_path"),
-            "receipt_sha256": manager.get("receipt_sha256"),
-            "used_by_phase": manager.get("used_by_phase"),
-        }
-        manager_receipt_copy = _copy_phase_evidence_file(pid, phase, "manager_receipt", str(manager_receipt_path))
-        if not manager_receipt_copy:
-            _die(f"[PM MANAGER GATE] could not copy manager receipt evidence for pm: {manager_run_id}")
-        manager_run["receipt_source_path"] = manager_run["receipt_path"]
-        manager_run["receipt_path"] = manager_receipt_copy["path"]
-        manager_run["receipt_sha256"] = manager_receipt_copy["sha256"]
-        copied.append(manager_receipt_copy)
+        # Legacy PM compat: if no manager_run_id, skip manager CI check (old single-receipt flow)
+        if manager_run_id:
+            manager = state.setdefault("agent_runs", {}).get(str(manager_run_id))
+            if not isinstance(manager, dict):
+                _die(f"[PM MANAGER GATE] manager run not found for pm: {manager_run_id}")
+            _validate_agent_run_receipt(
+                state,
+                "pipeline_manager",
+                str(manager_run_id),
+                phase_info.get("manager_report_file"),
+                consume_phase="pm_manager",
+            )
+            manager_receipt_path = _resolve_artifact_path(str(manager.get("receipt_path") or ""))
+            if not manager_receipt_path:
+                _die(f"[PM MANAGER GATE] manager receipt file missing for pm: {manager_run_id}")
+            manager_run = {
+                "run_id": manager.get("run_id"),
+                "phase": manager.get("phase"),
+                "agent_id": manager.get("agent_id"),
+                "status": manager.get("status"),
+                "output_file": manager.get("output_file"),
+                "output_sha256": manager.get("output_sha256"),
+                "receipt_path": manager.get("receipt_path"),
+                "receipt_sha256": manager.get("receipt_sha256"),
+                "used_by_phase": manager.get("used_by_phase"),
+            }
+            manager_receipt_copy = _copy_phase_evidence_file(pid, phase, "manager_receipt", str(manager_receipt_path))
+            if not manager_receipt_copy:
+                _die(f"[PM MANAGER GATE] could not copy manager receipt evidence for pm: {manager_run_id}")
+            manager_run["receipt_source_path"] = manager_run["receipt_path"]
+            manager_run["receipt_path"] = manager_receipt_copy["path"]
+            manager_run["receipt_sha256"] = manager_receipt_copy["sha256"]
+            copied.append(manager_receipt_copy)
 
     report = _copy_phase_evidence_file(pid, phase, "report", phase_info.get("report_file"))
     if report:
@@ -3675,36 +3684,50 @@ def cmd_done(args: argparse.Namespace) -> None:
                 "`python pipeline.py done --phase pm --report-file step_plan.xml --planner-run-id <planner_run_id> "
                 "--manager-run-id <manager_run_id> --manager-report manager_handoff.xml --decomp --clarification ...`"
             )
-        if getattr(args, "agent_run_id", None):
-            _die(
-                "[PM SPLIT GATE] --agent-run-id is no longer accepted for PM. "
-                "Use --planner-run-id and --manager-run-id."
-            )
+        # Legacy compat: old pipelines pass --agent-run-id for pm. New pipelines use
+        # --planner-run-id + --manager-run-id. Accept both; reject only if neither provided
+        # when phase_attestations are enabled (which requires receipts).
+        legacy_agent_run_id = getattr(args, "agent_run_id", None)
         planner_run_id = getattr(args, "planner_run_id", None)
         manager_run_id = getattr(args, "manager_run_id", None)
         manager_report = getattr(args, "manager_report", None)
-        planner_run = _validate_agent_run_receipt(
-            state,
-            "pm_planner",
-            planner_run_id,
-            report_file,
-            consume_phase="pm",
-        )
-        manager_run = _validate_agent_run_receipt(
-            state,
-            "pipeline_manager",
-            manager_run_id,
-            manager_report,
-            consume_phase="pm_manager",
-        )
+
+        _is_legacy_pm = bool(legacy_agent_run_id and not planner_run_id and not manager_run_id)
+
+        if _is_legacy_pm:
+            # Legacy PM path: single --agent-run-id pointing at a "pm" phase receipt
+            planner_run = _validate_agent_run_receipt(
+                state,
+                "pm_planner",  # logical phase; legacy receipt has phase="pm"
+                legacy_agent_run_id,
+                report_file,
+                consume_phase="pm",
+            )
+            manager_run = None
+        else:
+            planner_run = _validate_agent_run_receipt(
+                state,
+                "pm_planner",
+                planner_run_id,
+                report_file,
+                consume_phase="pm",
+            )
+            manager_run = _validate_agent_run_receipt(
+                state,
+                "pipeline_manager",
+                manager_run_id,
+                manager_report,
+                consume_phase="pm_manager",
+            )
         state["atomic_plan"] = _validate_pm_step_plan_file(report_file, state)
         state["execution_profile"] = state["atomic_plan"].get("execution_profile") or _new_execution_profile("STANDARD")
-        state["pm_manager_handoff"] = _validate_manager_handoff_file(
-            manager_report,
-            state,
-            step_plan_file=report_file,
-            planner_run_id=str(planner_run_id),
-        )
+        if not _is_legacy_pm:
+            state["pm_manager_handoff"] = _validate_manager_handoff_file(
+                manager_report,
+                state,
+                step_plan_file=report_file,
+                planner_run_id=str(planner_run_id),
+            )
         if state["atomic_plan"]["audit_result"] == "AMBIGUOUS" and not judgment_confirmed:
             _die(
                 "[ATOMIC PLAN GATE] AMBIGUOUS decomposition requires --judgment-confirmed "
@@ -3724,9 +3747,10 @@ def cmd_done(args: argparse.Namespace) -> None:
             f"product_code_write_allowed={profile.get('product_code_write_allowed')}"
         ))
         agent_run = planner_run
-        state["phases"]["pm"]["manager_run_id"] = manager_run["run_id"]
-        state["phases"]["pm"]["manager_agent_id"] = manager_run["agent_id"]
-        state["phases"]["pm"]["manager_report_file"] = manager_report
+        if manager_run is not None:
+            state["phases"]["pm"]["manager_run_id"] = manager_run["run_id"]
+            state["phases"]["pm"]["manager_agent_id"] = manager_run["agent_id"]
+            state["phases"]["pm"]["manager_report_file"] = manager_report
 
     evidence = args.files if hasattr(args, "files") and args.files else None
 
@@ -8477,6 +8501,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_pt_verify = pt_sub.add_parser("verify", help="패치 결과 검증")
     p_pt_verify.add_argument("--plan", default="patch_plan.json", help="patch_plan.json 경로")
     p_pt_verify.add_argument("--result", required=True, choices=["PASS", "FAIL"], help="검증 결과")
+    p_pt_verify.add_argument("--test-command", dest="test_command", default="", help="검증에 사용한 테스트 명령어 (PASS 시 필수 — --evidence-file 대안)")
+    p_pt_verify.add_argument("--evidence-file", dest="evidence_file", default="", help="검증 증거 파일 경로 (PASS 시 필수 — --test-command 대안)")
 
     p_pt_attest = pt_sub.add_parser("attest", help="패치 완료 증거 기록")
     p_pt_attest.add_argument("--plan", default="patch_plan.json", help="patch_plan.json 경로")
@@ -8913,6 +8939,13 @@ def _cmd_patch_plan(args: "argparse.Namespace") -> None:
         "pipeline_id": plan.get("pipeline_id", ""),
         "cluster_id": cluster_id or "",
     }
+    # patch_lane.plan_passed 상태 저장 (attest gate에서 검증)
+    state = _load_state()
+    if state is not None:
+        state["patch_lane"] = state.get("patch_lane") or {}
+        state["patch_lane"]["plan_passed"] = True
+        state["patch_lane"]["plan_passed_at"] = _now()
+        _save_state(state)
     print(GREEN("  [PATCH PLAN] Patch Lane 진입 조건 통과"))
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
@@ -8947,16 +8980,35 @@ def _cmd_patch_audit(args: "argparse.Namespace") -> None:
         print(json.dumps(audit_result, indent=2, ensure_ascii=False))
         sys.exit(1)
 
+    # patch_lane.audit_passed 상태 저장 (attest gate에서 검증)
+    state = _load_state()
+    if state is not None:
+        state["patch_lane"] = state.get("patch_lane") or {}
+        state["patch_lane"]["audit_passed"] = True
+        state["patch_lane"]["audit_passed_at"] = _now()
+        _save_state(state)
     print(GREEN("  [PATCH AUDIT] PASS — Patch Lane 감사 통과"))
     print(json.dumps(audit_result, indent=2, ensure_ascii=False))
 
 
 def _cmd_patch_verify(args: "argparse.Namespace") -> None:
-    """patch 결과 검증. --result PASS|FAIL + --plan으로 cluster 실패 누적."""
+    """patch 결과 검증. --result PASS|FAIL + --plan으로 cluster 실패 누적.
+    PASS 시에는 --test-command 또는 --evidence-file 중 하나가 필수입니다.
+    """
     plan_file = getattr(args, "plan", None) or "patch_plan.json"
     result_val = (getattr(args, "result", None) or "").strip().upper()
     if result_val not in ("PASS", "FAIL"):
         _die("[PATCH ERROR] --result PASS 또는 --result FAIL 필수")
+
+    # PASS 시 증거 필수 (Item 7)
+    if result_val == "PASS":
+        test_cmd = getattr(args, "test_command", None) or ""
+        evidence_file = getattr(args, "evidence_file", None) or ""
+        if not test_cmd.strip() and not evidence_file.strip():
+            _die(
+                "[PATCH ERROR] patch verify --result PASS에는 --test-command 또는 "
+                "--evidence-file 중 하나가 필수입니다."
+            )
 
     plan = _load_patch_plan(plan_file)
     cluster_id = plan.get("cluster_id")
@@ -8973,6 +9025,23 @@ def _cmd_patch_verify(args: "argparse.Namespace") -> None:
                 ))
             _save_cluster_json(cl)
 
+    # verify_passed 상태 저장 (attest gate에서 검증)
+    if result_val == "PASS":
+        state = _load_state()
+        if state is None:
+            state = {}
+        state["patch_lane"] = state.get("patch_lane") or {}
+        state["patch_lane"]["verify_passed"] = True
+        state["patch_lane"]["verify_passed_at"] = _now()
+        # 증거 기록
+        test_cmd = getattr(args, "test_command", None) or ""
+        evidence_file = getattr(args, "evidence_file", None) or ""
+        if test_cmd.strip():
+            state["patch_lane"]["verify_test_command"] = test_cmd.strip()
+        if evidence_file.strip():
+            state["patch_lane"]["verify_evidence_file"] = evidence_file.strip()
+        _save_state(state)
+
     verdict_color = GREEN if result_val == "PASS" else RED
     print(verdict_color(f"  [PATCH VERIFY] {result_val}"))
     print(json.dumps({
@@ -8986,12 +9055,33 @@ def _cmd_patch_verify(args: "argparse.Namespace") -> None:
 
 
 def _cmd_patch_attest(args: "argparse.Namespace") -> None:
-    """patch lane 완료 증거 기록."""
+    """patch lane 완료 증거 기록.
+    plan PASS + audit PASS + verify PASS 없이는 실패합니다 (Item 6).
+    """
     plan_file = getattr(args, "plan", None) or "patch_plan.json"
     plan = _load_patch_plan(plan_file)
 
     state = _load_state()
-    state["patch_lane"] = state.get("patch_lane") or {}
+    if state is None:
+        state = {}
+    pl = state.get("patch_lane") or {}
+
+    # Item 6: 세 단계 모두 PASS 확인
+    missing = []
+    if not pl.get("plan_passed"):
+        missing.append("plan (patch plan --plan <file> 실행 필요)")
+    if not pl.get("audit_passed"):
+        missing.append("audit (patch audit --plan <file> 실행 필요)")
+    if not pl.get("verify_passed"):
+        missing.append("verify (patch verify --result PASS ... 실행 필요)")
+
+    if missing:
+        _die(
+            "[PATCH ERROR] patch attest는 아래 단계 완료 후에만 실행할 수 있습니다:\n"
+            + "\n".join(f"  - {m}" for m in missing)
+        )
+
+    state["patch_lane"] = pl
     state["patch_lane"]["attested_at"] = _now()
     state["patch_lane"]["lane"] = plan.get("lane", "patch")
     state["patch_lane"]["pipeline_id"] = plan.get("pipeline_id", "")
