@@ -1,44 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <build_report>
-  <pipeline_id>IMP-20260514-28A2</pipeline_id>
+  <pipeline_id>IMP-20260515-020F</pipeline_id>
   <agent>build-agent</agent>
-  <run_id>build-406a7226f94bd127</run_id>
+  <run_id>build-7fc011907c6eb62b</run_id>
 
   <section_1_command>
-    <exe_target>N/A</exe_target>
+    <exe>N/A</exe>
     <skip_reason>meta-task</skip_reason>
-    <justification>pipeline.py, tests/test_patch_lane.py, .github/workflows/ci.yml만 수정하는 메타 태스크. Python EXE 빌드 대상 없음.</justification>
+    <note>pipeline.py 이식 작업. Python 스크립트 파일 이식으로 PyInstaller EXE 빌드 대상 아님. pipeline.py는 CLI 도구로 직접 실행. meta-task 분류.</note>
   </section_1_command>
 
-  <section_2_dependencies>
-    <note>EXE 빌드 없음. 의존성 패키징 불필요.</note>
-  </section_2_dependencies>
+  <section_2_output>
+    <build_status>N/A — 빌드 없음</build_status>
+    <skip_reason>meta-task</skip_reason>
+  </section_2_output>
 
-  <section_3_output>
-    <exe_path>N/A</exe_path>
-    <artifact_description>수정 파일: pipeline.py (diff gate, verify evidence, attest blocking, LF 정규화), tests/test_patch_lane.py (23개 테스트, PIPELINE_CLUSTER_DIR 격리), .github/workflows/ci.yml (UTF-8+pipeline.py patch plan 연동)</artifact_description>
-  </section_3_output>
+  <section_3_verification>
+    <verification>smoke test PASS — pipeline.py --help, outputs/patch/cluster 서브커맨드, pytest 14/14</verification>
+    <note>EXE 빌드 없음. smoke test로 이식 검증.</note>
+  </section_3_verification>
 
-  <section_4_verification>
-    <pytest_check>pytest tests/test_patch_lane.py: 23 passed</pytest_check>
-    <yaml_syntax>python yaml.safe_load(.github/workflows/ci.yml): OK</yaml_syntax>
-    <pipeline_py_import>python -c import pipeline: OK</pipeline_py_import>
-  </section_4_verification>
+  <section_4_artifacts>
+    <artifact>
+      <type>python_script</type>
+      <files>pipeline.py, tests/test_patch_lane.py, setup.cfg</files>
+      <note>3개 파일 이식 완료. outputs/patch/cluster 서브커맨드 포함 pipeline.py.</note>
+    </artifact>
+  </section_4_artifacts>
 
-  <section_5_status>
-    <status>N/A</status>
-    <verdict>BUILD_SKIPPED_META_TASK</verdict>
-    <notes>meta-task: EXE 빌드 대상 아님. QA PASS (120/120), 모든 acceptance criteria 충족.</notes>
-  </section_5_status>
+  <section_5_qa_gate>
+    <qa_result>PASS 108/120</qa_result>
+    <security>SKIPPED (meta-task, 네트워크/DB 없음)</security>
+  </section_5_qa_gate>
 
   <section_6_qa_mapping>
-    <qa_run_id>qa-55f74c445eefcb6c</qa_run_id>
-    <qa_verdict>PASS</qa_verdict>
-    <qa_numeric_score>120</qa_numeric_score>
-    <mt1_pipeline_py>PASS — diff gate, verify evidence, attest blocking, LF 정규화 확인</mt1_pipeline_py>
-    <mt2_test_patch_lane>PASS — 23/23 PASS, PIPELINE_CLUSTER_DIR 격리 확인</mt2_test_patch_lane>
-    <mt3_ci_yml>PASS — UTF-8 인코딩, pipeline.py patch plan --base-ref 연동 확인</mt3_ci_yml>
+    <mapped_requirement>MT-1: pipeline.py 이식 (outputs/patch/cluster/pm_planner 서브커맨드)</mapped_requirement>
+    <mapped_requirement>MT-2: tests/test_patch_lane.py + setup.cfg 이식 (14개 pytest)</mapped_requirement>
+    <mapped_requirement>MT-3: oracle 파일 등록 + 회귀 검증 (14 passed)</mapped_requirement>
+    <status>COMPLETE</status>
   </section_6_qa_mapping>
-
-  <status>N/A</status>
 </build_report>
