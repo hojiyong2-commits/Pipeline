@@ -11,7 +11,6 @@ IMP-20260515-020F: PM split (pm_planner + pipeline_manager) 단위 테스트
   - done --phase pm 레거시 플로우(pm agent_run_id만 허용)
 """
 import argparse
-import json
 import tempfile
 from pathlib import Path
 from unittest import mock
