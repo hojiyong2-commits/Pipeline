@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-15T22:10:48Z",
+  "generated_at": "2026-05-15T22:19:56Z",
   "pipeline_id": "IMP-20260515-020F",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "f38565b3a6861d38ed0f0ba8acf2064e27499871",
+  "commit_hint": "32fdb0c38ed2af129e278b975d2cbc9529a52a63",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-15T22:10:44Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260515-020F/dev/agent_receipt_dev-757566f4ebd1a09a.json",
       "sha256": "058e376c4a8e522681783c892922a0308f954795278fceeb064e9170ed38bc22",
       "size_bytes": 502,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -74,8 +74,8 @@
     },
     {
       "path": "tests/test_pm_split.py",
-      "sha256": "686e3bd8a81fd31ef68db0b1f0d6ba45421960d6377b9b1399772257af78df55",
-      "size_bytes": 13065
+      "sha256": "c460bbbecd210f2ed038f8a47f4025d3eb8a7a6b338ec2e5a56ece546e321b5e",
+      "size_bytes": 13662
     },
     {
       "path": "tests/test_outputs.py",
@@ -84,8 +84,8 @@
     },
     {
       "path": "tests/test_doc_cli_contract.py",
-      "sha256": "a4f4f06bdd4231af1ec6ce918972738316d0bc648da659ce6e2bf53e300348d7",
-      "size_bytes": 15210
+      "sha256": "c52ab756eb69abbc687d273f03f8b2d8afc754fd26309ef4ca073e62485475f0",
+      "size_bytes": 16104
     },
     {
       "path": "tests/oracles/IMP-20260515-020F/case_normal/input.json",
