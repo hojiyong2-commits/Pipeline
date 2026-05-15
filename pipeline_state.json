@@ -4,7 +4,7 @@
   "type": "IMP",
   "description": "pipeline.py 구현 변경을 main에 반영: pm_planner/pipeline_manager phase, --planner-run-id/--manager-run-id, outputs add/status, patch plan/audit/verify/attest 명령어를 main 기준 브랜치에 추가하고 관련 테스트 포함",
   "created_at": "2026-05-15T20:35:21Z",
-  "updated_at": "2026-05-15T22:32:11Z",
+  "updated_at": "2026-05-15T22:35:31Z",
   "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
@@ -388,6 +388,22 @@
     {
       "ts": "2026-05-15T22:29:41Z",
       "msg": "technical gate FAIL"
+    },
+    {
+      "ts": "2026-05-15T22:33:07Z",
+      "msg": "technical gate PASS"
+    },
+    {
+      "ts": "2026-05-15T22:33:10Z",
+      "msg": "oracle gate PASS"
+    },
+    {
+      "ts": "2026-05-15T22:35:26Z",
+      "msg": "github verify-run PASS run_id=25944561709 commit=b63adb7782e9"
+    },
+    {
+      "ts": "2026-05-15T22:35:31Z",
+      "msg": "output registered report pipeline_outputs\\IMP-20260515-020F\\Dev-dev_handover.xml"
     }
   ],
   "terminal_state": null,
@@ -558,17 +574,17 @@
     "enabled": true,
     "mode": "three_gate",
     "technical": {
-      "status": "FAIL",
-      "completed_at": "2026-05-15T22:29:41Z",
+      "status": "PASS",
+      "completed_at": "2026-05-15T22:33:07Z",
       "evidence": "deterministic_tool_gate",
       "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260515-020F\\gates\\technical_result.json",
       "notes": []
     },
     "oracle": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-15T22:33:10Z",
+      "evidence": "oracle_acceptance",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260515-020F\\gates\\oracle_result.json",
       "notes": []
     },
     "acceptance": {
@@ -579,10 +595,10 @@
       "notes": []
     },
     "github_ci": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-05-15T22:35:26Z",
+      "evidence": "github_actions_run:25944561709",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260515-020F\\gates\\github_ci_result.json",
       "notes": []
     }
   },
@@ -924,6 +940,16 @@
         "size_bytes": 414179,
         "notes": "outputs/patch/cluster/pm_planner/pipeline_manager 서브커맨드 포함. 14개 pytest 통과 확인.",
         "registered_at": "2026-05-15T21:26:02Z"
+      },
+      {
+        "kind": "report",
+        "label": "Dev 인계 보고서",
+        "source_path": "dev_handover.xml",
+        "public_path": "pipeline_outputs\\IMP-20260515-020F\\Dev-dev_handover.xml",
+        "sha256": "bcc9dc01568f7c72eb132f1a137b89fe41dc9d78feeb368480fade6ac5714d6c",
+        "size_bytes": 1911,
+        "notes": "PM split 마이그레이션 + patch gate 강화 구현 완료. 271 테스트 PASS.",
+        "registered_at": "2026-05-15T22:35:31Z"
       }
     ]
   },
@@ -2373,6 +2399,14 @@
       "repo": "hojiyong2-commits/Pipeline",
       "run_id": "25942107474",
       "commit_sha": "f38565b3a6861d38ed0f0ba8acf2064e27499871",
+      "artifact": "pipeline-attestation"
+    },
+    {
+      "recorded_at": "2026-05-15T22:35:26Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "run_id": "25944561709",
+      "commit_sha": "b63adb7782e980beb9affcaabb62274911e270d2",
       "artifact": "pipeline-attestation"
     }
   ],
