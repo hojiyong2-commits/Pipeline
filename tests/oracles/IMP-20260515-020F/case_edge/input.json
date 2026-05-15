@@ -1,0 +1,6 @@
+{
+  "check_type": "argparse_gate",
+  "command": "done --phase pm",
+  "missing_arg": "--planner-run-id",
+  "expected_behavior": "error_or_required_arg"
+}

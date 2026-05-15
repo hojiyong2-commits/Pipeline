@@ -1,0 +1,5 @@
+{
+  "check_type": "command_presence",
+  "commands": ["outputs", "patch", "cluster", "pm_planner", "pipeline_manager"],
+  "source_file": "pipeline.py"
+}
