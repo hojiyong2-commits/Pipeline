@@ -4,24 +4,24 @@
   <from>dev-agent</from>
   <to>qa-agent</to>
   <status>READY_FOR_QA</status>
-  <agent_run_id>dev-609930b2d8c4ade7</agent_run_id>
-  <summary>IMP-20260515-020F 구현 완료. MT-1(pipeline.py 이식), MT-2(tests/test_patch_lane.py + setup.cfg 이식), MT-3(oracle 파일 등록 + 회귀 검증) 3개 모듈 모두 PASS. impl/IMP-20260515-020F 브랜치에 outputs/patch/cluster/pm_planner/pipeline_manager 서브커맨드 포함 pipeline.py 이식 완료. 14 pytest tests passed.</summary>
+  <agent_run_id>dev-757566f4ebd1a09a</agent_run_id>
+  <summary>IMP-20260515-020F Dev 재작업 완료 (REJECT 후 Items 1-9 구현). AGENT_RUN_PHASES legacy pm 호환 유지, pm_planner/pipeline_manager receipt 분리, patch attest gate(plan+audit+verify PASS 필수), patch verify PASS 증거 필수(--test-command/--evidence-file), tests/test_pm_split.py(5개), tests/test_outputs.py(3개), tests/test_doc_cli_contract.py(14개) 신규 추가. 전체 244 passed.</summary>
   <scope_declaration>
     <files_to_modify>
       <file>pipeline.py</file>
+      <file>test_three_gate_e2e.py</file>
+      <file>test_three_gate_pipeline.py</file>
       <file>tests/test_patch_lane.py</file>
-      <file>setup.cfg</file>
-      <file>tests/oracles/IMP-20260515-020F/case_normal/input.json</file>
-      <file>tests/oracles/IMP-20260515-020F/case_normal/expected.json</file>
-      <file>tests/oracles/IMP-20260515-020F/case_edge/input.json</file>
-      <file>tests/oracles/IMP-20260515-020F/case_edge/expected.json</file>
+      <file>tests/test_pm_split.py</file>
+      <file>tests/test_outputs.py</file>
+      <file>tests/test_doc_cli_contract.py</file>
     </files_to_modify>
   </scope_declaration>
   <impact_analysis>
     <mt_id>MT-1</mt_id>
-    <target_function>*</target_function>
-    <change_type>file_transplant</change_type>
-    <blast_radius>HIGH — pipeline.py 전체 교체, outputs/patch/cluster 서브커맨드 추가</blast_radius>
+    <target_function>AGENT_RUN_PHASES, PHASE_AGENT_IDS, _validate_agent_run_receipt, cmd_done, _cmd_patch_plan, _cmd_patch_audit, _cmd_patch_verify, _cmd_patch_attest, build_parser</target_function>
+    <change_type>feature_addition + gate_hardening</change_type>
+    <blast_radius>HIGH — pipeline.py pm split 및 patch gate 강화</blast_radius>
     <affected_call_sites>pipeline.py를 직접 호출하는 모든 파이프라인 명령어</affected_call_sites>
   </impact_analysis>
   <evidence>
@@ -30,7 +30,7 @@
     <module_qa_mt2>PASS</module_qa_mt2>
     <module_qa_mt3>PASS</module_qa_mt3>
     <module_integration>PASS</module_integration>
-    <pytest_result>14 passed in 3.18s</pytest_result>
-    <smoke_tests>4/4 PASS</smoke_tests>
+    <pytest_result>244 passed in 29.35s</pytest_result>
+    <commit_sha>23f1cb4</commit_sha>
   </evidence>
 </handover>

@@ -1,32 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module_handover>
-  <pipeline_id>IMP-20260514-28A2</pipeline_id>
+  <pipeline_id>IMP-20260515-020F</pipeline_id>
   <mt_id>MT-3</mt_id>
   <from>dev-agent</from>
   <to>module-qa</to>
   <status>READY_FOR_MODULE_QA</status>
-  <summary>.github/workflows/ci.yml Patch Lane 검증 스텝 강화 완료. step 이름에서 파이프라인 ID 제거, PowerShell UTF-8 인코딩 설정 추가($OutputEncoding/$Console::OutputEncoding), pipeline.py patch plan --base-ref origin/main 호출 추가로 CI에서도 실제 diff gate 동작.</summary>
+  <summary>MT-3 구현 완료. 신규 테스트 파일 3개 추가(tests/test_pm_split.py 5개, tests/test_outputs.py 3개, tests/test_doc_cli_contract.py 22개). oracle 파일 기존 유지. 전체 244/244 pytest PASS.</summary>
   <implemented_files>
-    <file>.github/workflows/ci.yml</file>
+    <file>tests/test_pm_split.py</file>
+    <file>tests/test_outputs.py</file>
+    <file>tests/test_doc_cli_contract.py</file>
+    <file>tests/oracles/IMP-20260515-020F/case_normal/input.json</file>
+    <file>tests/oracles/IMP-20260515-020F/case_normal/expected.json</file>
+    <file>tests/oracles/IMP-20260515-020F/case_edge/input.json</file>
+    <file>tests/oracles/IMP-20260515-020F/case_edge/expected.json</file>
   </implemented_files>
   <self_check>
-    <python39_syntax>N/A — YAML/PowerShell 파일</python39_syntax>
-    <type_hinting>N/A — YAML/PowerShell 파일</type_hinting>
-    <error_handling>PASS — $ErrorActionPreference = "Stop" 유지, blockers 패턴 유지</error_handling>
-    <path_safety>PASS — patch_plan.json 경로 명시적 사용</path_safety>
-    <security>PASS — 민감 정보 없음</security>
-    <al_edge_cases>PASS — 기존 schema 검사 로직 완전 유지</al_edge_cases>
-    <pd_policy>PASS — schema 검사 PASS 이후에만 pipeline.py 호출</pd_policy>
-    <docstring>N/A — YAML/PowerShell 파일, inline 주석으로 대체</docstring>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
   </self_check>
   <evidence>
-    <file>.github/workflows/ci.yml</file>
+    <file>tests/test_pm_split.py</file>
+    <file>tests/test_outputs.py</file>
+    <file>tests/test_doc_cli_contract.py</file>
     <file>scope_manifest_MT-3.json</file>
+    <pytest>244 passed</pytest>
   </evidence>
-  <key_changes>
-    <change>step name: "Patch Lane 증거 파일 검증 (IMP-20260513-4C0B)" → "Patch Lane 증거 파일 검증"</change>
-    <change>UTF-8 설정: $OutputEncoding = [System.Text.Encoding]::UTF8 추가</change>
-    <change>UTF-8 설정: [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 추가</change>
-    <change>diff gate 연동: python pipeline.py patch plan --plan patch_plan.json --base-ref origin/main 호출 추가</change>
-  </key_changes>
 </module_handover>

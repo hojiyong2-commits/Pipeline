@@ -1,71 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<dev_handover>
-  <pipeline_id>IMP-20260514-28A2</pipeline_id>
+<handover>
+  <pipeline_id>IMP-20260515-020F</pipeline_id>
   <from>dev-agent</from>
   <to>qa-agent</to>
   <status>READY_FOR_QA</status>
-  <agent_run_id>dev-4f149da0439c85c8</agent_run_id>
-  <summary>IMP-20260514-28A2 전체 구현 완료. MT-1(pipeline.py diff gate/verify evidence/attest blocking/PIPELINE_CLUSTER_DIR) + MT-2(tests/test_patch_lane.py 23개 테스트 격리) + MT-3(ci.yml UTF-8+pipeline.py patch plan 연동). pytest 23/23 PASS.</summary>
+  <agent_run_id>dev-757566f4ebd1a09a</agent_run_id>
+  <summary>IMP-20260515-020F Dev 재작업 완료 (REJECT 후 Items 1-9 구현). AGENT_RUN_PHASES legacy pm 호환 유지, pm_planner/pipeline_manager receipt 분리, patch attest gate(plan+audit+verify PASS 필수), patch verify PASS 증거 필수(--test-command/--evidence-file), tests/test_pm_split.py(5개), tests/test_outputs.py(3개), tests/test_doc_cli_contract.py(14개) 신규 추가. 전체 244 passed.</summary>
   <scope_declaration>
     <files_to_modify>
       <file>pipeline.py</file>
+      <file>test_three_gate_e2e.py</file>
+      <file>test_three_gate_pipeline.py</file>
       <file>tests/test_patch_lane.py</file>
-      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pm_split.py</file>
+      <file>tests/test_outputs.py</file>
+      <file>tests/test_doc_cli_contract.py</file>
     </files_to_modify>
-    <files_not_to_modify>모든 다른 파일</files_not_to_modify>
   </scope_declaration>
-  <implemented_files>
-    <file>pipeline.py</file>
-    <file>tests/test_patch_lane.py</file>
-    <file>.github/workflows/ci.yml</file>
-  </implemented_files>
-  <self_check>
-    <python39_syntax>PASS — match/case 미사용, Union[] 사용, 소문자 제네릭 없음</python39_syntax>
-    <type_hinting>PASS — 모든 새 함수에 파라미터 타입 + 리턴 타입 명시</type_hinting>
-    <error_handling>PASS — subprocess CalledProcessError, json decode 방어, 파일 존재 확인</error_handling>
-    <path_safety>PASS — _get_cluster_dir() PIPELINE_CLUSTER_DIR 환경변수 지원, Path 절대경로 사용</path_safety>
-    <security>PASS — 민감 정보 없음, git 명령어 subprocess 호출 방어</security>
-    <al_edge_cases>PASS — diff gate 결과 None 처리, verify_passed 없을 때 BLOCKED 처리</al_edge_cases>
-    <pd_policy>PASS — verify_passed=False 시 ValueError 아닌 BLOCKED 메시지로 명시적 실패</pd_policy>
-    <docstring>PASS — _get_cluster_dir, _get_actual_diff_scope 등 모든 신규 함수 docstring 포함</docstring>
-  </self_check>
   <impact_analysis>
-    <micro_task id="MT-1">
-      <target_function>pipeline._check_patch_lane_conditions</target_function>
-      <target_file>pipeline.py</target_file>
-      <change_type>enhancement</change_type>
-      <lines_changed>~220</lines_changed>
-      <call_sites_affected>_cmd_patch_plan, _cmd_patch_audit, _cmd_patch_verify, _cmd_patch_attest, _get_cluster_dir (신규), _get_actual_diff_scope (신규)</call_sites_affected>
-    </micro_task>
-    <micro_task id="MT-2">
-      <target_function>tests.test_patch_lane._run</target_function>
-      <target_file>tests/test_patch_lane.py</target_file>
-      <change_type>enhancement</change_type>
-      <lines_changed>~120</lines_changed>
-      <call_sites_affected>모든 기존 테스트 (autouse fixture 적용)</call_sites_affected>
-    </micro_task>
-    <micro_task id="MT-3">
-      <target_function>ci.tests.steps.Patch Lane 증거 파일 검증</target_function>
-      <target_file>.github/workflows/ci.yml</target_file>
-      <change_type>enhancement</change_type>
-      <lines_changed>~5</lines_changed>
-      <call_sites_affected>none</call_sites_affected>
-    </micro_task>
+    <mt_id>MT-1</mt_id>
+    <target_function>AGENT_RUN_PHASES, PHASE_AGENT_IDS, _validate_agent_run_receipt, cmd_done, _cmd_patch_plan, _cmd_patch_audit, _cmd_patch_verify, _cmd_patch_attest, build_parser</target_function>
+    <change_type>feature_addition + gate_hardening</change_type>
+    <blast_radius>HIGH — pipeline.py pm split 및 patch gate 강화</blast_radius>
+    <affected_call_sites>pipeline.py를 직접 호출하는 모든 파이프라인 명령어</affected_call_sites>
   </impact_analysis>
-  <handover>
-    <from>dev-agent</from>
-    <to>qa-agent</to>
-    <pipeline_id>IMP-20260514-28A2</pipeline_id>
-    <evidence>
-      <file>pipeline.py</file>
-      <file>tests/test_patch_lane.py</file>
-      <file>.github/workflows/ci.yml</file>
-      <file>scope_manifest.json</file>
-      <file>integration_report.xml</file>
-    </evidence>
-    <status>READY_FOR_QA</status>
-  </handover>
-  <test_results>
-    <suite>pytest tests/test_patch_lane.py: 23 passed</suite>
-  </test_results>
-</dev_handover>
+  <evidence>
+    <branch>impl/IMP-20260515-020F</branch>
+    <module_qa_mt1>PASS</module_qa_mt1>
+    <module_qa_mt2>PASS</module_qa_mt2>
+    <module_qa_mt3>PASS</module_qa_mt3>
+    <module_integration>PASS</module_integration>
+    <pytest_result>244 passed in 29.35s</pytest_result>
+    <commit_sha>23f1cb4</commit_sha>
+  </evidence>
+</handover>
