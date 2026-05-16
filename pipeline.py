@@ -7587,10 +7587,10 @@ def cmd_gates(args: argparse.Namespace) -> None:
         # batch-ci --probe --changed-files a,b,c
         # 신뢰 루트 파일 포함 여부에 따라 ci_mode 결정.
         probe: bool = getattr(args, "probe", False)
-        changed_files_raw: str = getattr(args, "changed_files", "") or ""
-        changed_files: List[str] = [f.strip() for f in changed_files_raw.split(",") if f.strip()]
+        batch_changed_files_raw: str = getattr(args, "changed_files", "") or ""
+        batch_changed_files: List[str] = [f.strip() for f in batch_changed_files_raw.split(",") if f.strip()]
 
-        if not changed_files:
+        if not batch_changed_files:
             # 변경 파일이 없으면 batched
             result_payload: Dict[str, Any] = {
                 "is_trust_root": False,
@@ -7600,7 +7600,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
             }
         else:
             matched: List[str] = []
-            for f in changed_files:
+            for f in batch_changed_files:
                 for pat in TRUST_ROOT_PATTERNS:
                     if pat.endswith("/"):
                         # directory prefix match
@@ -7617,7 +7617,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
             result_payload = {
                 "is_trust_root": is_trust_root,
                 "ci_mode": "per_phase" if is_trust_root else "batched",
-                "changed_files": changed_files,
+                "changed_files": batch_changed_files,
                 "matched_patterns": matched,
             }
 
