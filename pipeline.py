@@ -3101,6 +3101,9 @@ def _workspace_check_for_file(path: Path) -> Dict[str, Any]:
     }
 
 
+_TEXT_EXTENSIONS_FOR_LF_NORM = {".json", ".xml", ".md", ".txt", ".yml", ".yaml", ".py"}
+
+
 def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Optional[str]) -> Optional[Dict[str, Any]]:
     if not raw_path:
         return None
@@ -3113,7 +3116,16 @@ def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Option
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_name = f"{label}_{_safe_phase_artifact_name(path)}"
     dest = dest_dir / dest_name
-    shutil.copy2(path, dest)
+    # 텍스트 파일은 LF로 정규화하여 복사 — Windows CRLF와 Linux LF 환경 간 SHA 불일치 방지
+    if path.suffix.lower() in _TEXT_EXTENSIONS_FOR_LF_NORM:
+        try:
+            raw_bytes = path.read_bytes()
+            lf_bytes = raw_bytes.replace(b"\r\n", b"\n")
+            dest.write_bytes(lf_bytes)
+        except Exception:
+            shutil.copy2(path, dest)
+    else:
+        shutil.copy2(path, dest)
     ignored_by_git = _git_check_ignored(dest)
     return {
         "label": label,
