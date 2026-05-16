@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260516-E881</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>36c56d11b3aae1ef09f00a6dda55183cfc82c7fc3c6c9c4e38741abfbbabe19a</step_plan_sha256>
+  <planner_run_id>pm_planner-c6be6d74411e9235</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+</manager_handoff>

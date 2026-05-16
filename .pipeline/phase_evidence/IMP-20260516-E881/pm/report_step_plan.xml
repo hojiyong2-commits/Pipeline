@@ -1,0 +1,218 @@
+<step_plan>
+  <anti_gaming_read>true</anti_gaming_read>
+  <pipeline_id>IMP-20260516-E881</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <user_request_original>전반적으로 Pipeline이나 다른 파이썬 코드들을 살피면서 dead Code가 있는 지 확인하고 제거해봐.</user_request_original>
+
+  <decomposition_audit>
+    <executed>true</executed>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+    <micro_task_count>1</micro_task_count>
+    <grep_executions>1</grep_executions>
+    <method>오케스트레이터의 read-only 분석으로 git 추적 대상 dead code 식별 완료. benchmarker.py(수동 평가 스크립트, input() 기반 사람 y/n 입력)는 현재 자동화 파이프라인(Three-Gate + Option A + Incremental Module Gate)에 의해 완전히 대체됨. eval_harness.json은 benchmarker.py 전용 데이터 파일로, 다른 파일에서 참조 없음(score_v3.py는 별도 파일인 eval_harness_v3.json을 사용).</method>
+    <files_in_scope>
+      <file>benchmarker.py</file>
+      <file>eval_harness.json</file>
+    </files_in_scope>
+    <files_excluded>
+      <excluded reason="gitignore된 파일, repo에 없음">_build_harness.py</excluded>
+      <excluded reason="gitignore된 파일, repo에 없음">_build_harness2.py</excluded>
+      <excluded reason="pipeline.py cmd_check()에서 실제 호출 중인 정상 코드">_check_codex_review_gate()</excluded>
+      <excluded reason="score_v3.py가 사용 중인 별개 파일">eval_harness_v3.json</excluded>
+      <excluded reason="score_v3.py가 사용 중인 별개 파일">eval_harness_v2.json</excluded>
+      <excluded reason="과거 파이프라인 상태 백업, 코드 아님">pipeline_state_backup_40B8.json</excluded>
+    </files_excluded>
+    <grep_evidence>
+      <pattern>benchmarker|eval_harness</pattern>
+      <executed>true</executed>
+      <match_count>4</match_count>
+      <result_summary>score_v3.py는 eval_harness_v3.json만 참조하며 삭제 대상과 무관. self_evolving_log.md는 과거 로그(코드 의존성 아님). benchmarker.py는 본인 파일. pipeline_state_backup_40B8.json은 백업.</result_summary>
+    </grep_evidence>
+    <decomposition_method>파일 단위 단일 삭제 micro_task. 두 파일이 함께 폐기되는 단일 단위이므로 MT-1 하나로 통합.</decomposition_method>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 수준의 내부 구현 취향 질문(변수명, 코드 스타일 등)은 묻지 않습니다. 유지보수성 우선 원칙으로 처리.</filter_summary>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>유지보수성 우선 — dead code 제거로 코드베이스 청결도와 유지보수성을 높입니다.</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 수준의 내부 구현 취향 질문(git rm vs bash rm 선택, 커밋 메시지 문구, oracle 파일 이름)은 유지보수성 우선 원칙으로 PM이 자체 결정하며 사용자에게 묻지 않습니다.</filter_summary>
+
+    <decision_questions>
+      <question id="Q1" priority="P1" category="module_split">
+        <user_facing_question>benchmarker.py와 eval_harness.json을 하나의 작업 단위(MT-1)로 묶어서 한 번에 삭제할까요?</user_facing_question>
+        <evidence>두 파일은 항상 함께 사용됩니다. benchmarker.py가 eval_harness.json을 읽고, 다른 파일은 이 두 파일을 참조하지 않습니다(Grep 4건 모두 확인). 함께 삭제하면 의존성이 깨끗하게 사라집니다.</evidence>
+        <why_it_matters>두 파일을 별도 MT로 분리하면 중간 상태(benchmarker.py만 삭제, eval_harness.json 잔류)가 생겨 오히려 혼동이 커질 수 있습니다. 단일 MT로 묶으면 원자적으로 처리되어 유지보수성이 높아집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1 하나로 두 파일을 함께 삭제 (PM 추천)</label>
+            <benefit>원자적 삭제로 중간 상태 없이 깔끔하게 처리됩니다. 단계 수가 최소화됩니다.</benefit>
+            <cost>두 파일이 하나의 MT에 포함되지만 변경량이 0줄이므로 scope 위험이 없습니다.</cost>
+          </option>
+          <option id="B">
+            <label>MT-1과 MT-2로 분리하여 각각 삭제</label>
+            <benefit>각 파일의 삭제를 독립적으로 추적할 수 있습니다.</benefit>
+            <cost>불필요한 복잡성 추가. 두 파일 간 의존성이 있어 분리 삭제는 오히려 검증이 어렵습니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 원문 요청에서 "dead Code가 있는 지 확인하고 제거해봐"라고 요청함. MT-1 단일 단위(Option A)로 진행합니다.</user_answer>
+      </question>
+    </decision_questions>
+
+    <p2_filtered_questions>
+      <filtered>git rm vs Bash rm 중 어느 방식으로 삭제할지 (내부 구현 선택, 결과 동일하므로 묻지 않음)</filtered>
+      <filtered>삭제 후 커밋 메시지 문구 선택 (P2 스타일 질문, 묻지 않음)</filtered>
+      <filtered>oracle 파일 이름 (내부 구현 디테일, 묻지 않음)</filtered>
+    </p2_filtered_questions>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>파일 삭제 작업이 포함되어 있어 Fast Path 사용 불가(Fast Path 규칙: 파일 이동/삭제 금지). 그러나 위험은 낮고 micro_task는 1개로 충분합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>0</expected_changed_functions>
+      <expected_changed_lines>0</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>true</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+    <risk_note>file_move=true는 dead code 파일 2개의 삭제를 의미. 두 파일은 어디서도 참조되지 않음(Grep 확인). 신뢰 루트 파일(CLAUDE.md/pipeline.py/agent MD/ci.yml) 미수정.</risk_note>
+  </task_complexity>
+
+  <patch_lane_eligible>false</patch_lane_eligible>
+  <patch_lane_reason>파일 삭제 2개(파일 수 = 2, file_move_or_delete=true). Patch Lane 5-AND 조건 중 "단일 파일"과 "파일 이동/삭제 없음" 두 조건 위반. STANDARD Full Lane 사용.</patch_lane_reason>
+
+  <env_snapshot>
+    <applicable>false</applicable>
+    <reason>Tier 2 태스크(RPA, 스크래핑, 스케줄러, ETL)가 아닌 단순 파일 삭제 작업. 환경 스냅샷 불필요.</reason>
+  </env_snapshot>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <title>dead code 파일 2개 삭제 (benchmarker.py + eval_harness.json)</title>
+      <affected_function>none</affected_function>
+      <target_files>
+        <file>benchmarker.py</file>
+        <file>eval_harness.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>benchmarker|eval_harness</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+        <interpretation>매치된 4개 위치 중 score_v3.py는 별개 파일(eval_harness_v3.json) 사용, self_evolving_log.md는 과거 로그, pipeline_state_backup_40B8.json은 백업, benchmarker.py 자체. 외부 참조 없음.</interpretation>
+      </grep_evidence>
+      <change_summary>benchmarker.py와 eval_harness.json 두 파일을 git에서 삭제합니다 (git rm 사용).</change_summary>
+      <line_estimate>0</line_estimate>
+      <dev_implementation_notes>
+        <note>Dev는 `git rm benchmarker.py eval_harness.json` 으로 두 파일을 삭제합니다.</note>
+        <note>다른 파일은 수정하지 않습니다(scope_manifest_MT-1.json의 files 배열에 정확히 이 두 파일만 포함).</note>
+        <note>삭제 후 `git status`로 두 파일이 deleted 상태인지 확인합니다.</note>
+      </dev_implementation_notes>
+    </micro_task>
+  </micro_tasks>
+
+  <oracle_plan>
+    <oracle_root>tests/oracles/IMP-20260516-E881/</oracle_root>
+    <oracle_source>user</oracle_source>
+    <oracle_owner>user_via_pm_planner</oracle_owner>
+    <case_kind_normal>
+      <case_id>benchmarker_deleted</case_id>
+      <input_file>tests/oracles/IMP-20260516-E881/benchmarker_deleted/input.txt</input_file>
+      <expected_file>tests/oracles/IMP-20260516-E881/benchmarker_deleted/expected.txt</expected_file>
+      <description>benchmarker.py가 repo에서 삭제되어 존재하지 않아야 함. `Path("benchmarker.py").exists()` 결과가 False여야 함.</description>
+      <expected_content>file_absent: benchmarker.py</expected_content>
+    </case_kind_normal>
+    <case_kind_edge>
+      <case_id>eval_harness_deleted</case_id>
+      <input_file>tests/oracles/IMP-20260516-E881/eval_harness_deleted/input.txt</input_file>
+      <expected_file>tests/oracles/IMP-20260516-E881/eval_harness_deleted/expected.txt</expected_file>
+      <description>eval_harness.json이 repo에서 삭제되어 존재하지 않아야 함. eval_harness_v2.json, eval_harness_v3.json은 score_v3.py가 사용 중이므로 존재해야 함(edge: 비슷한 이름의 파일이 함께 삭제되지 않았는지 확인).</description>
+      <expected_content>file_absent: eval_harness.json; file_present: eval_harness_v3.json</expected_content>
+    </case_kind_edge>
+    <weak_oracle_check>
+      <description>oracle은 단순 file_exists만이 아니라, 비슷한 이름의 파일(eval_harness_v3.json)이 보존되는지를 함께 확인하는 의미 있는 비교를 포함합니다.</description>
+      <not_weak>true</not_weak>
+    </weak_oracle_check>
+  </oracle_plan>
+
+  <phase_attestation_plan>
+    <pm_phase>
+      <command>python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id pm_planner-c6be6d74411e9235 --manager-run-id [manager_run_id] --manager-report manager_handoff.xml</command>
+      <followed_by>gates prepare-phase --phase pm; git commit/push; GitHub Actions; gates phase-ci --phase pm</followed_by>
+    </pm_phase>
+    <dev_phase>
+      <module_gate_order>
+        <step>python pipeline.py module design --mt-id MT-1 --report-file module_design_MT-1.xml</step>
+        <step>python pipeline.py module dev --mt-id MT-1 --files "benchmarker.py,eval_harness.json" --report-file module_handover_MT-1.xml --scope-manifest scope_manifest_MT-1.json</step>
+        <step>python pipeline.py module qa --mt-id MT-1 --result PASS --report-file module_qa_MT-1.xml</step>
+        <step>python pipeline.py module integrate --result PASS --report-file integration_report.xml</step>
+        <step>python pipeline.py done --phase dev --files "benchmarker.py,eval_harness.json" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id [dev_run_id]</step>
+      </module_gate_order>
+      <followed_by>gates prepare-phase --phase dev; commit/push; GitHub Actions; gates phase-ci --phase dev</followed_by>
+    </dev_phase>
+    <qa_phase>
+      <followed_by>gates prepare-phase --phase qa; commit/push; GitHub Actions; gates phase-ci --phase qa</followed_by>
+    </qa_phase>
+    <sec_phase>
+      <applicable>false</applicable>
+      <reason>DB 접근/외부 네트워크 통신 코드 변경 없음. dead code 파일 삭제만 수행.</reason>
+      <command>python pipeline.py sec --skip</command>
+    </sec_phase>
+    <build_phase>
+      <build_target>N/A</build_target>
+      <skip_reason>no-code</skip_reason>
+      <command>python pipeline.py build --exe "N/A" --skip-reason "no-code" --report-file build_report.xml --agent-run-id [build_run_id]</command>
+      <rationale>EXE 빌드 대상이 아닌 dead code 파일 삭제 작업. 새 코드 추가 없음.</rationale>
+      <followed_by>gates prepare-phase --phase build; commit/push; GitHub Actions; gates phase-ci --phase build</followed_by>
+    </build_phase>
+  </phase_attestation_plan>
+
+  <external_gate_plan>
+    <technical>python pipeline.py gates technical</technical>
+    <oracle>python pipeline.py gates oracle</oracle>
+    <github_ci>python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline</github_ci>
+    <user_acceptance>
+      <command>python pipeline.py gates accept --result ACCEPT --evidence [PR-링크-또는-삭제-증거-경로] --user-confirmed</command>
+      <evidence_plan>
+        <attachment>GitHub PR diff에 benchmarker.py와 eval_harness.json 두 파일이 deleted로 표시되는 스크린샷 또는 PR 링크</attachment>
+        <attachment>pipeline_outputs/IMP-20260516-E881/ 아래에 등록된 삭제 결과 보고서</attachment>
+      </evidence_plan>
+    </user_acceptance>
+  </external_gate_plan>
+
+  <user_acceptance_result_plan>
+    <visible_artifacts>
+      <artifact>GitHub PR 링크 (benchmarker.py와 eval_harness.json이 `삭제됨`으로 표시)</artifact>
+      <artifact>GitHub Actions의 최종 확인 안내 PR 댓글 (자동 검사 결과: 통과)</artifact>
+      <artifact>pipeline_outputs/IMP-20260516-E881/dead_code_removal_report.md (한국어 요약)</artifact>
+    </visible_artifacts>
+    <korean_summary>사용자는 PR 링크와 자동 검사 결과만 확인하면 됩니다. 코드 검토는 요구하지 않습니다. 승인(ACCEPT) 또는 거절(REJECT)만 응답합니다.</korean_summary>
+  </user_acceptance_result_plan>
+
+  <askuser>
+    <none_required>true</none_required>
+    <reason>사용자가 원문 요청에서 "dead Code가 있는 지 확인하고 제거해봐"라고 명시적으로 삭제를 요청했고, 분석 결과 benchmarker.py와 eval_harness.json이 dead code임이 확정됨(외부 참조 0개, Grep으로 검증). P0 질문 0개, 추가 사용자 확인 불필요.</reason>
+  </askuser>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>
