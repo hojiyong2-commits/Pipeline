@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260516-1690</pipeline_id>
+  <agent_run_id>qa-a46d01616b37371d</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>116</numeric_score>
+  <summary>IMP-20260516-1690 _classify_pr_file 엄격한 allowlist 재구현 QA 검증 PASS (116/120). 총 11개 회귀 테스트 통과, strict allowlist 구현 및 preflight-pr cmd 재구조화 검증 완료. pipeline.py, .github/workflows/ci.yml, tests/test_pr_hygiene.py 3개 파일 변경. 범위 위반 없음.</summary>
+  <micro_task_boundary>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <scope_files_checked>3개 product code 파일 (pipeline.py, .github/workflows/ci.yml, tests/test_pr_hygiene.py)</scope_files_checked>
+    <extra_product_files>none</extra_product_files>
+  </micro_task_boundary>
+  <category_checks>
+    <category name="AL">
+      <check name="_classify_pr_file strict allowlist">PASS — phase_attestation_request.json 및 phase_evidence/{pid}/{phase}/** 만 허용</check>
+      <check name="allowlist 경계값">PASS — 다른 pipeline_id, 다른 phase, pipeline_contracts, product code 모두 rejected</check>
+      <check name="preflight-pr state 없이 동작">PASS — cmd_gates()에서 preflight-pr를 _require_state() 이전에 처리</check>
+    </category>
+    <category name="FS">
+      <check name="pathlib.Path 사용">PASS — 파일 경로 처리 pathlib 기반</check>
+      <check name="CRLF 정규화">PASS — .gitattributes eol=lf 설정 유지</check>
+    </category>
+    <category name="PD">
+      <check name="preflight-pr 재구조화">PASS — cmd_gates() 첫 번째 조건 분기로 이동</check>
+      <check name="GITHUB_BASE_SHA 환경변수">PASS — CI에서 diff base SHA 제공</check>
+      <check name="--diff-filter=ACMRT">PASS — 삭제된 파일 제외</check>
+    </category>
+    <category name="SEC">
+      <check name="PR 오염 방지">PASS — 내부 파이프라인 파일이 구현 PR에 포함되지 않도록 차단</check>
+    </category>
+  </category_checks>
+  <test_results>
+    <test name="test_preflight_pr_fails_on_stale_pipeline_files">PASS</test>
+    <test name="test_accept_rejects_phase_evidence_path">PASS</test>
+    <test name="test_architect_fails_on_run_id_mismatch">PASS</test>
+    <test name="test_doc_cli_patch_verify_contract">PASS</test>
+    <test name="test_classify_rejects_pipeline_contracts">PASS</test>
+    <test name="test_classify_rejects_product_code_in_attestation_pr">PASS</test>
+    <test name="test_classify_rejects_other_pipeline_id_evidence">PASS</test>
+    <test name="test_classify_rejects_agent_receipts">PASS</test>
+    <test name="test_classify_rejects_other_pipeline_subpath">PASS</test>
+    <test name="test_preflight_pr_fails_on_phase_mismatch">PASS</test>
+    <test name="test_preflight_pr_fails_on_pipeline_id_mismatch">PASS</test>
+  </test_results>
+  <deduction_log>
+    <deduction>ci.yml preflight-pr 조건부 실행: -2pt (FAST_DOC 프로필 단순성 vs 조건 복잡성)</deduction>
+    <deduction>workspace_file_checks 비움: -2pt (implementation 파일 attestation 브랜치 없음)</deduction>
+  </deduction_log>
+</qa_report>
