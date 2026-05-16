@@ -44,10 +44,12 @@ jobs:
             Write-Error "[PIPELINE ERROR] phase_attestation_request.json에 phase 필드가 없습니다."
             exit 1
           }
-          # origin/main을 fetch하여 git diff가 동작하도록 함
+          # origin/main을 fetch하여 git diff merge-base가 동작하도록 함 (shallow clone 호환)
           $baseRef = "${{ github.event.pull_request.base.ref }}"
           if ([string]::IsNullOrWhiteSpace($baseRef)) { $baseRef = "main" }
-          git fetch origin $baseRef --depth=1
+          git fetch origin $baseRef --depth=50
+          $baseSha = "${{ github.event.pull_request.base.sha }}"
+          $env:GITHUB_BASE_SHA = $baseSha
           python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pipelineId --request-file $reqPath
 
       - name: 자동 검사 실행
@@ -529,7 +531,13 @@ jobs:
             Accept = "application/vnd.github+json"
             "X-GitHub-Api-Version" = "2022-11-28"
           }
-          $body = Get-Content -Path human_acceptance_packet.md -Raw
+          # human_acceptance_packet.md가 없으면 CI 실패 안내 기본 메시지 사용
+          if (Test-Path -LiteralPath "human_acceptance_packet.md") {
+            $body = Get-Content -Path human_acceptance_packet.md -Raw
+          } else {
+            $runUrl = "$env:GITHUB_SERVER_URL/$repo/actions/runs/$env:GITHUB_RUN_ID"
+            $body = "<!-- pipeline-human-acceptance-packet -->`n## CI 검사 실패 안내`n`nCI 자동 검사가 실패하여 최종 확인 안내를 생성하지 못했습니다.`n자동 검사 결과: $runUrl"
+          }
           $commentsUri = "$env:GITHUB_API_URL/repos/$repo/issues/$prNumber/comments"
           $comments = Invoke-RestMethod -Method Get -Uri $commentsUri -Headers $headers
           $existing = $comments | Where-Object { $_.body -like "*<!-- pipeline-human-acceptance-packet -->*" } | Select-Object -First 1

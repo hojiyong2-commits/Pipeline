@@ -7242,16 +7242,47 @@ def _cmd_gates_preflight_pr(args: argparse.Namespace) -> None:
         if not pid:
             pid = req_pid
 
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "origin/main...HEAD"],
+    # git diff로 변경 파일 목록 수집 — shallow clone 환경 호환
+    # 1) merge-base를 찾아서 두점 표기 시도
+    # 2) 실패 시 환경변수 GITHUB_BASE_SHA 시도
+    # 3) 모두 실패 시 PIPELINE ERROR
+    changed_files: List[str] = []
+    diff_ok = False
+
+    # 시도 1: merge-base 이용
+    mb_result = subprocess.run(
+        ["git", "merge-base", "origin/main", "HEAD"],
         capture_output=True, text=True, check=False,
     )
-    if result.returncode != 0:
+    if mb_result.returncode == 0:
+        base_sha = mb_result.stdout.strip()
+        diff_result = subprocess.run(
+            ["git", "diff", "--name-only", f"{base_sha}...HEAD"],
+            capture_output=True, text=True, check=False,
+        )
+        if diff_result.returncode == 0:
+            changed_files = [f.strip() for f in diff_result.stdout.splitlines() if f.strip()]
+            diff_ok = True
+
+    # 시도 2: GITHUB_BASE_SHA 환경변수 이용
+    if not diff_ok:
+        base_sha_env = os.environ.get("GITHUB_BASE_SHA", "").strip()
+        if base_sha_env:
+            diff_result = subprocess.run(
+                ["git", "diff", "--name-only", f"{base_sha_env}...HEAD"],
+                capture_output=True, text=True, check=False,
+            )
+            if diff_result.returncode == 0:
+                changed_files = [f.strip() for f in diff_result.stdout.splitlines() if f.strip()]
+                diff_ok = True
+
+    if not diff_ok:
         _die(
-            f"[PIPELINE ERROR] preflight-pr: git diff failed: {result.stderr.strip()}",
+            "[PIPELINE ERROR] preflight-pr: git diff 실패 — origin/main을 fetch하지 않았거나 "
+            "shallow clone에서 공통 조상을 찾지 못했습니다. "
+            "ci.yml에서 'git fetch origin main --depth=50' 이상을 실행한 후 다시 시도하세요.",
             exit_code=1,
         )
-    changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
 
     forbidden: List[str] = []
     for f in changed_files:

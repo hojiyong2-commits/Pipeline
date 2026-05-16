@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T05:56:51Z",
+  "generated_at": "2026-05-16T06:08:33Z",
   "pipeline_id": "IMP-20260516-78B2",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "b5fdd0c9ed97db4cd9912c01d089f7275ff1e1df",
+  "commit_hint": "b6e652b6ed71566f49b3e33c13c1fc40cb4597a2",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-16T05:56:44Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260516-78B2/dev/agent_receipt_dev-09687b4f145da92d.json",
       "sha256": "9aeb5b847e83e78025235475d3c5fe02658f68d006b45226893c51ec6c36429a",
       "size_bytes": 515,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -40,7 +40,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260516-78B2/dev/report_dev_handover.xml",
       "sha256": "a04b987b05c7063185e28c7eac18191165efe7431fab6aaa8d08c8bcdf8d785b",
       "size_bytes": 3576,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "scope_manifest",
@@ -48,19 +48,19 @@
       "path": ".pipeline/phase_evidence/IMP-20260516-78B2/dev/scope_manifest_scope_manifest.json",
       "sha256": "fce27846f1f9f72b54ae7c8eaa6768081b431bc1cb76c6be9725312f506a6a4f",
       "size_bytes": 1077,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "8b371901b4791a98eca39ba630e173982093cc74f3358f670182f955058ccbee",
-      "size_bytes": 413280
+      "sha256": "09ea364082c6c93369b4f95ac231bd03ab4d80ec50e62817158e9970b8d53468",
+      "size_bytes": 414957
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "68ce45430fd63e9d79d2866ae8fce818d0444ca998db4ad23083aabfc4de30f3",
-      "size_bytes": 24652
+      "sha256": "d2e7e5075e8c76e0cbb1633b9f0b53d7fe8854a01b66f34c11f7a010aa0f2c1b",
+      "size_bytes": 25559
     },
     {
       "path": "tests/test_pr_hygiene.py",
