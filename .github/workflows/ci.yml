@@ -39,12 +39,12 @@ jobs:
           $reqPath = ".pipeline/phase_attestation_request.json"
           $req = ConvertFrom-Json (Get-Content -Path $reqPath -Raw -Encoding UTF8)
           $phase = [string]$req.phase
-          $pid = [string]$req.pipeline_id
+          $pipelineId = [string]$req.pipeline_id
           if ([string]::IsNullOrWhiteSpace($phase)) {
             Write-Error "[PIPELINE ERROR] phase_attestation_request.json에 phase 필드가 없습니다."
             exit 1
           }
-          python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pid --request-file $reqPath
+          python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pipelineId --request-file $reqPath
 
       - name: 자동 검사 실행
         env:
