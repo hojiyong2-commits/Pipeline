@@ -256,6 +256,7 @@ class TestCodexRecord(unittest.TestCase):
         review_model: str = "GPT-5.5",
         notes: Optional[str] = None,
         output: Optional[str] = None,
+        pipeline_id: str = "TEST-99999999-0000",
     ) -> "subprocess.CompletedProcess[str]":
         cmd = [
             sys.executable,
@@ -265,6 +266,7 @@ class TestCodexRecord(unittest.TestCase):
             "--result", result,
             "--review-model", review_model,
             "--reviewer", "test-agent",
+            "--pipeline-id", pipeline_id,
         ]
         if head_sha:
             cmd += ["--head-sha", head_sha]
