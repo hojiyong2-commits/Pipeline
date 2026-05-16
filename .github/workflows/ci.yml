@@ -30,7 +30,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: 단계 PR 위생 검사 (preflight-pr)
-        if: hashFiles('.pipeline/phase_attestation_request.json') != ''
+        if: contains(github.head_ref, 'phase-attestation') && hashFiles('.pipeline/phase_attestation_request.json') != ''
         shell: pwsh
         env:
           PIPELINE_NO_DASHBOARD: "1"
