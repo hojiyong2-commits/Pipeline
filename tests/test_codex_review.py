@@ -11,10 +11,7 @@ IMP-20260516-A627 MT-5: Codex Review Gate 검증 테스트 (28개)
 Oracle 파일: tests/oracles/IMP-20260516-A627/tc01~tc08/
 """
 
-from __future__ import annotations
-
 import json
-import os
 import sys
 import tempfile
 import subprocess
@@ -28,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import pipeline as pl
+import pipeline as pl  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -444,10 +441,7 @@ class TestGateCheck(unittest.TestCase):
             data = _make_valid_record(result="ACCEPT")
             review_file = self._write_review_file(tmpdir, data)
 
-            # git diff subprocess mock: 저장된 diff_sha256와 같은 바이트 반환
-            import hashlib
-            stored_sha = data["diff_sha256"]
-            # stored_sha에 해당하는 바이트를 만들어야 하므로 역산 불가 → diff_sha256을 ""로 설정하여 검증 skip
+            # diff_sha256을 빈 문자열로 설정하여 diff check skip (역산 불가)
             data_no_diff = _make_valid_record(result="ACCEPT", diff_sha256="")
             review_file.write_text(json.dumps(data_no_diff), encoding="utf-8")
 
@@ -461,8 +455,8 @@ class TestGateCheck(unittest.TestCase):
             PROJECT_ROOT
             / "tests/oracles/IMP-20260516-A627/tc04/codex_review_result.json"
         )
-        with oracle_path.open(encoding="utf-8") as f:
-            oracle_data = json.load(f)
+        with oracle_path.open(encoding="utf-8") as _f:
+            json.load(_f)  # oracle 파일 존재 확인 (내용은 gate 동작 검증으로 대체)
         # tc04는 diff_sha256='' → stored_sha가 빈 문자열 → diff check skip
         # 실제 gate 결과는 review_model + result에 따라 결정됨
         # tc04 oracle은 GPT-5.5 + ACCEPT지만 diff_sha256="" → stored_sha 없으므로 diff check skip → PASS
@@ -637,7 +631,8 @@ class TestSchemaEdgeCases(unittest.TestCase):
 
     def test_non_dict_input_raises(self) -> None:
         """dict가 아닌 입력 → ValueError."""
-        for bad_input in [None, [], "string", 42, True]:
+        bad_inputs: List[Any] = [None, [], "string", 42, True]
+        for bad_input in bad_inputs:
             with self.subTest(bad_input=bad_input):
                 with self.assertRaises(ValueError):
                     pl._validate_codex_review_schema(bad_input)  # type: ignore[arg-type]
