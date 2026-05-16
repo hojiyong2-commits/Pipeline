@@ -394,7 +394,7 @@ jobs:
           }
           $baseRef = "${{ github.event.pull_request.base.ref }}"
           if ([string]::IsNullOrWhiteSpace($baseRef)) { $baseRef = "main" }
-          git fetch origin $baseRef --depth=50
+          git fetch origin $baseRef --unshallow 2>$null; if ($LASTEXITCODE -ne 0) { git fetch origin $baseRef --depth=200 }
           python pipeline.py gates preflight-pr --phase $phase
           if ($LASTEXITCODE -ne 0) {
             Write-Error "[PIPELINE ERROR] preflight-pr 검사 실패"

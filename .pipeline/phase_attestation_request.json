@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T10:42:35Z",
+  "generated_at": "2026-05-16T10:44:52Z",
   "pipeline_id": "IMP-20260516-C13E",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "0a465dd2ef09fee19401c53f419da84ff2eccff0",
+  "commit_hint": "3d3d7d7574001e91c48a7c98e20ef4761f62461a",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-16T10:36:45Z",
@@ -54,8 +54,8 @@
   "workspace_file_checks": [
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "08f4e166a7d4afec32316ba91b108f15b3cbae34fdcb220b27512b8ba9e617f6",
-      "size_bytes": 26432
+      "sha256": "b0e6d497d51f3932c1fed7b9de80582504e9b809ec60b6cddbd304e974af75c5",
+      "size_bytes": 26509
     },
     {
       "path": "setup.cfg",
