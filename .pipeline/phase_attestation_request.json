@@ -1,72 +1,48 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T14:30:15Z",
+  "generated_at": "2026-05-16T14:36:17Z",
   "pipeline_id": "IMP-20260516-77AA",
-  "phase": "dev",
-  "phase_status": "DONE",
-  "commit_hint": "e130250223d2f500bfa59ee27aeb9a3fa368e51d",
+  "phase": "qa",
+  "phase_status": "PASS",
+  "commit_hint": "2ad556fdd8bad212250069644a02d6327b86a80b",
   "state": {
-    "current_phase": "qa",
-    "phase_completed_at": "2026-05-16T14:18:52Z",
-    "report_file": "dev_handover.xml",
-    "evidence": "CLAUDE.md,.claude/agents/dev-agent.md,.claude/agents/pm-agent.md"
+    "current_phase": "sec",
+    "phase_completed_at": "2026-05-16T14:36:11Z",
+    "report_file": "qa_report.xml",
+    "evidence": null
   },
   "agent_run": {
-    "run_id": "dev-0e18ca7b2df49039",
-    "phase": "dev",
-    "agent_id": "dev-agent",
+    "run_id": "qa-89c7fd97ca48c7cf",
+    "phase": "qa",
+    "agent_id": "qa-agent",
     "status": "COMPLETED",
-    "output_file": "dev_handover.xml",
-    "output_sha256": "9ef47b3ea1dfadf2a4f2f89b9c3ae7e6318f6642e72e2fb602f5f86e199b89a2",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-77AA/dev/agent_receipt_dev-0e18ca7b2df49039.json",
-    "receipt_sha256": "ef5e9eed45091af8bdbad28f5beaa1b590659d48d59dd3b40164792ee8dee424",
-    "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-77AA\\dev\\dev-0e18ca7b2df49039.json"
+    "output_file": "qa_report.xml",
+    "output_sha256": "69b346ef759b5e2af3e3bb861ef958b926c39c38e3d30e277730ed08b334c3e4",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-77AA/qa/agent_receipt_qa-89c7fd97ca48c7cf.json",
+    "receipt_sha256": "51544c9c9aebaef6d1ccff48282fc320cd5060dca0b46fecf95ddb382cd7428d",
+    "used_by_phase": "qa",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-77AA\\qa\\qa-89c7fd97ca48c7cf.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-77AA\\dev\\dev-0e18ca7b2df49039.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-77AA/dev/agent_receipt_dev-0e18ca7b2df49039.json",
-      "sha256": "ef5e9eed45091af8bdbad28f5beaa1b590659d48d59dd3b40164792ee8dee424",
-      "size_bytes": 502,
+      "source": ".pipeline\\agent_receipts\\IMP-20260516-77AA\\qa\\qa-89c7fd97ca48c7cf.json",
+      "path": ".pipeline/phase_evidence/IMP-20260516-77AA/qa/agent_receipt_qa-89c7fd97ca48c7cf.json",
+      "sha256": "51544c9c9aebaef6d1ccff48282fc320cd5060dca0b46fecf95ddb382cd7428d",
+      "size_bytes": 496,
       "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "dev_handover.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-77AA/dev/report_dev_handover.xml",
-      "sha256": "9ef47b3ea1dfadf2a4f2f89b9c3ae7e6318f6642e72e2fb602f5f86e199b89a2",
-      "size_bytes": 2805,
-      "requires_force_add": true
-    },
-    {
-      "label": "scope_manifest",
-      "source": "scope_manifest_MT-1.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-77AA/dev/scope_manifest_scope_manifest_MT-1.json",
-      "sha256": "2fa8a6dd07d394b7c61e539f87e7b05b066f0e5524cf52b90f621f0e5b953b6a",
-      "size_bytes": 339,
+      "source": "qa_report.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260516-77AA/qa/report_qa_report.xml",
+      "sha256": "69b346ef759b5e2af3e3bb861ef958b926c39c38e3d30e277730ed08b334c3e4",
+      "size_bytes": 6560,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "CLAUDE.md",
-      "sha256": "236e9a2a2f567d6c656c210418ed33d09fecd62a4bae53e733df23076e0757dc",
-      "size_bytes": 76425
-    },
-    {
-      "path": ".claude/agents/dev-agent.md",
-      "sha256": "5341d04f21ee34ef85831bda8445e80fd546c6c6830cfa5f8f8333c77a777b9a",
-      "size_bytes": 63302
-    },
-    {
-      "path": ".claude/agents/pm-agent.md",
-      "sha256": "f7f9f24358dcbe200d6f38e91b7fbb237c630e66dab3bf0689a80e339fba92dd",
-      "size_bytes": 46082
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }

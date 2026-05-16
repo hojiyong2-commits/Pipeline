@@ -1,0 +1,262 @@
+<decomposition_audit>
+  <pipeline_id>IMP-20260516-77AA</pipeline_id>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <type>IMP</type>
+  <summary>IMP-20260516-E881 post-accept REJECT 후속 조치 — Scope Lock 강제 규칙(CLAUDE.md), dev-agent / pm-agent(겸 Pipeline Manager 호환 문서)에 trust-root 파일 변경 금지 및 git diff vs scope_manifest 비교 의무를 추가하는 문서/지침 IMP. ci.yml fetch-depth 변경의 정식 사유도 함께 기록.</summary>
+  <change_categories>
+    <category>protocol_documentation</category>
+    <category>agent_instructions</category>
+  </change_categories>
+  <product_code_changes>false</product_code_changes>
+  <trust_root_files_changed>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/dev-agent.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+  </trust_root_files_changed>
+  <pipeline_py_changes>false</pipeline_py_changes>
+  <ci_yml_changes>false</ci_yml_changes>
+  <test_oracle_changes>false</test_oracle_changes>
+
+  <decomposition_method>single_atomic_documentation_patch</decomposition_method>
+  <decomposition_rationale>
+    이번 IMP는 (1) CLAUDE.md에 Scope Lock 강제 규칙 새 섹션 추가, (2) dev-agent.md에 scope_manifest에 없는 파일 추가 금지 + trust-root 파일 별도 IMP 원칙 추가, (3) pm-agent.md(현재 Pipeline Manager 호환 문서)에 module dev 단계 git diff vs scope_manifest 비교 의무 추가. 세 파일은 같은 규칙(Scope Lock)을 producer/consumer 양쪽에 정합되게 기술해야 하므로 분리 패치 시 Producer-Consumer Bundle 위반 위험이 있다. 따라서 단일 micro-task로 묶어 한 번에 패치한다. 코드 변경 라인 추정은 합산 약 80~120라인(문서 추가) 수준.
+  </decomposition_rationale>
+
+  <grep_evidence_summary>
+    <search>
+      <pattern>trust.?root|scope_lock|Scope Lock</pattern>
+      <path>CLAUDE.md</path>
+      <match_count>3</match_count>
+      <note>line 257 (.github/workflows 언급), 868 (Patch Lane trust_root_changes=false), 903 (patch_plan schema) — 명시적 Scope Lock 강제 섹션은 없음. 새 섹션 추가가 안전.</note>
+    </search>
+    <search>
+      <pattern>scope_manifest</pattern>
+      <path>.claude/agents/dev-agent.md</path>
+      <match_count>5</match_count>
+      <note>line 23, 63, 78, 89, 102 — 이미 scope_manifest 의무는 있으나 "git diff와 일치 검증" + "trust-root 파일은 별도 IMP" 문구는 없음. 보강 필요.</note>
+    </search>
+    <search>
+      <pattern>pipeline-manager-agent</pattern>
+      <path>.claude/agents</path>
+      <match_count>0</match_count>
+      <note>CLAUDE.md는 pipeline-manager-agent.md / pm-planner-agent.md를 참조하지만 실파일은 없음. 현재 호환 문서는 pm-agent.md 1개. 따라서 Pipeline Manager 책임 패치는 pm-agent.md에 추가하는 것이 정확하다.</note>
+    </search>
+    <search>
+      <pattern>module dev|scope_manifest</pattern>
+      <path>.claude/agents/pm-agent.md</path>
+      <match_count>2</match_count>
+      <note>line 111 (module dev 명령), 261 (긴 라인) — 현재 pm-agent.md에는 "Pipeline Manager는 module dev 기록 시 git diff vs scope_manifest 비교 후 초과 파일 발견 시 즉시 FAIL" 의무 없음. 추가 필요.</note>
+    </search>
+    <executed>true</executed>
+  </grep_evidence_summary>
+
+  <impact_radius_audit>
+    <files_in_scope>3</files_in_scope>
+    <files_out_of_scope_forbidden>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>tests/**</file>
+      <file>.github/CODEOWNERS</file>
+    </files_out_of_scope_forbidden>
+    <out_of_scope_rationale>
+      pipeline.py 코드 변경은 사용자가 명시적으로 금지함(별도 IMP). qa-agent.md / .github/workflows / tests는 이번 IMP의 명시 범위 밖. ci.yml fetch-depth는 사용자가 되돌리지 말라고 지시했고 별도 follow-up scope로 처리하라 했으므로 이번에도 손대지 않는다.
+    </out_of_scope_rationale>
+  </impact_radius_audit>
+
+  <oracle_plan>
+    <kind>non_runnable_docs</kind>
+    <rationale>
+      이번 IMP는 문서/에이전트 지침만 수정하며 실행 가능한 산출물이 없다. 따라서 user-source oracle은 면제 대상이며 contract audit은 `--allow-no-oracle`로 진행한다. 대신 acceptance evidence로 (a) 변경된 3개 파일의 git diff, (b) Scope Lock 섹션이 CLAUDE.md에 실제 포함된 grep 결과, (c) GitHub Actions PR 자동 검사 통과 첨부파일을 제공한다.
+    </rationale>
+  </oracle_plan>
+
+  <phase_attestation_plan>
+    <pm>required: gates prepare-phase --phase pm, push to phase-attestation/IMP-20260516-77AA branch, gates phase-ci --phase pm</pm>
+    <dev>required: module design MT-1 → module dev MT-1 → module qa MT-1 → module integrate → done --phase dev → gates phase-ci --phase dev</dev>
+    <qa>required: qa PASS report (문서/지침 정합성 검증) → gates phase-ci --phase qa</qa>
+    <build>N/A: meta-task (skip-reason "meta-task")</build>
+  </phase_attestation_plan>
+
+  <user_acceptance_evidence_plan>
+    <attachment_1>CLAUDE.md의 새 "Scope Lock 강제 규칙" 섹션 grep 결과</attachment_1>
+    <attachment_2>dev-agent.md / pm-agent.md의 신규 문구 grep 결과</attachment_2>
+    <attachment_3>PR 링크 + GitHub Actions 자동 검사 통과 첨부파일</attachment_3>
+    <korean_summary>사용자는 PR에서 (1) CLAUDE.md에 Scope Lock 섹션이 추가되었는지, (2) dev-agent.md와 pm-agent.md에 trust-root 파일 변경 금지 및 git diff 검증 의무가 추가되었는지, (3) ci.yml fetch-depth 변경의 정식 사유 기록이 있는지만 한국어로 확인하면 됩니다.</korean_summary>
+  </user_acceptance_evidence_plan>
+</decomposition_audit>
+
+<step_plan>
+  <anti_gaming_read>true</anti_gaming_read>
+  <pipeline_id>IMP-20260516-77AA</pipeline_id>
+  <patch_lane_eligible>false</patch_lane_eligible>
+  <patch_lane_decision_rationale>
+    Patch Lane 5-AND 조건 위반: (1) 단일 파일이 아닌 3개 파일 변경, (2) 신뢰 루트 파일(CLAUDE.md, agent MD 2개) 수정 — 조건 4 위반. 따라서 Full Lane(STANDARD가 아닌 HIGH_RISK 프로필)로 진행.
+  </patch_lane_decision_rationale>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <module_split_shown_to_user>true</module_split_shown_to_user>
+    <module_split_summary>
+      단일 micro-task MT-1으로 3개 파일을 한 번에 패치합니다. 분리하면 producer(CLAUDE.md 규칙) / consumer(dev-agent.md, pm-agent.md 의무) 정합성이 깨질 수 있어, Producer-Consumer Bundle 원칙에 따라 한 번에 묶습니다.
+    </module_split_summary>
+    <maintenance_priority>maintainability_first — 유지보수성 우선</maintenance_priority>
+    <maintainability_note>
+      유지보수성 우선 — 빠른 수정/최소 수정보다 정합성을 우선합니다. CLAUDE.md 규칙과 두 에이전트 지침이 동일 사이클에서 반영되어야 다음 파이프라인부터 Scope Lock이 일관되게 동작합니다.
+    </maintainability_note>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      P2 수준의 내부 표현 취향 질문(섹션 제목 워딩, 문단 순서, 강조 표시 등)은 묻지 않고 PM이 유지보수성 기준으로 결정합니다. 사용자에게는 P1 수준(범위 경계 / 적용 시점)만 묻습니다.
+    </filter_summary>
+
+    <decision_questions>
+      <question id="Q1" priority="P1" category="module_split">
+        <user_facing_question>Scope Lock 새 규칙을 모든 파일에 동일하게 강제할까요, 아니면 trust-root 파일에만 적용할까요?</user_facing_question>
+        <why_it_matters>
+          이번 사고는 trust-root 파일(ci.yml) 변경이었지만, scope_manifest 밖 파일이라면 일반 코드 파일이라도 동일하게 FAIL 처리할지 결정해야 합니다. 둘 중 하나를 골라야 dev-agent와 pm-agent에 들어갈 문구가 달라집니다.
+        </why_it_matters>
+        <evidence>
+          현재 CLAUDE.md의 Frozen Codebase / scope_manifest 규칙은 "PM 미승인 파일 변경 금지"라고 적혀 있지만, "Dev done 기록 직전에 git diff vs scope_manifest를 자동 비교한다"는 강제 절차는 명시되지 않았습니다. IMP-E881에서 scope_manifest에 ci.yml이 없었음에도 PR에 포함되어 통과한 이유가 이 강제 절차 부재였습니다.
+        </evidence>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>모든 파일에 동일하게 Scope Lock 강제 — scope_manifest 밖 파일이 git diff에 있으면 무조건 FAIL. Trust-root 파일은 추가로 별도 IMP 또는 Codex Deep Review 요구</label>
+            <benefit>일관성이 높고 일반 코드 파일의 우연한 scope creep도 차단. 다음 파이프라인부터 동일 규칙으로 자동 검증 가능.</benefit>
+            <cost>아주 작은 부수 변경(예: 줄바꿈 한 곳 수정)도 PM에게 scope 추가를 요청해야 함 → 사이클이 약간 길어짐. 단, 안전성 이득이 더 큼.</cost>
+          </option>
+          <option id="B">
+            <label>Trust-root 파일에만 Scope Lock 강제. 일반 코드 파일은 기존 Frozen Codebase 규칙으로 유지</label>
+            <benefit>변경 폭이 작음. 기존 워크플로우 영향 최소.</benefit>
+            <cost>일반 코드 파일의 scope creep은 여전히 사람이 잡아야 함 → 같은 종류의 사고 재발 가능.</cost>
+          </option>
+        </options>
+        <user_answer>A — 모든 파일에 Scope Lock 강제 (scope_manifest 밖 = FAIL, trust-root는 추가로 별도 IMP/Codex Deep Review 필요)</user_answer>
+      </question>
+
+      <question id="Q2" priority="P1" category="module_split">
+        <user_facing_question>Pipeline Manager Scope Lock 의무를 기존 pm-agent.md에 추가할까요, 아니면 새 파일을 만들까요?</user_facing_question>
+        <why_it_matters>
+          요청 본문은 `.claude/agents/pipeline-manager-agent.md` 수정을 지시하지만, 실제 저장소에는 그 파일이 없습니다(`pm-planner-agent.md`도 없음). CLAUDE.md는 두 파일을 참조하지만, 현재 호환 문서는 `pm-agent.md` 하나뿐입니다. 어디에 Pipeline Manager 의무를 적을지 결정해야 합니다.
+        </why_it_matters>
+        <evidence>
+          ls .claude/agents/ 결과: pm-agent.md만 존재. pipeline-manager-agent.md / pm-planner-agent.md 없음. pm-agent.md 헤더는 "PM Agent plans, delegates, and monitors mandatory gates"로 두 역할의 호환 문서임을 명시.
+        </evidence>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>현재 존재하는 pm-agent.md에 Pipeline Manager Scope Lock 의무 섹션을 추가. 새 파일 생성하지 않음</label>
+            <benefit>실제 사용 중인 호환 문서를 한 번에 패치. 별도 IMP가 필요한 신규 파일 생성을 피함.</benefit>
+            <cost>장기적으로 pipeline-manager-agent.md / pm-planner-agent.md 분리가 필요할 수 있음 — 별도 IMP에서 마이그레이션해야 함.</cost>
+          </option>
+          <option id="B">
+            <label>이번 IMP에서 pipeline-manager-agent.md를 신규 생성하고 거기에 의무 추가</label>
+            <benefit>CLAUDE.md 참조와 실파일이 일치.</benefit>
+            <cost>새 트러스트-루트 파일 생성 → 사용자 사고 대상 확대. 게다가 pm-planner-agent.md까지 만들어야 정합성이 맞아 단일 IMP 범위를 크게 벗어남.</cost>
+          </option>
+        </options>
+        <user_answer>A — 기존 pm-agent.md에 Pipeline Manager Scope Lock 의무 섹션 추가 (신규 파일 생성 없음)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>
+      변경 대상이 트러스트-루트 파일(CLAUDE.md + 에이전트 MD 2개)이며 파이프라인 프로토콜 규칙을 추가합니다. CLAUDE.md Fast Path 금지 목록의 "파이프라인 프로토콜" 조건에 해당하므로 FAST_DOC 사용 불가. 동시에 risk flag pipeline_protocol=true 가 켜진 HIGH_RISK 프로필이 정확합니다.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>0</expected_changed_functions>
+      <expected_changed_lines>110</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+    <risk_mitigation>
+      <conservative_repair>true</conservative_repair>
+      <per_phase_ci>true</per_phase_ci>
+      <note>HIGH_RISK 프로필이므로 보수적 수리 + 모든 phase에서 phase-ci 통과 필수. trust-root 파일이라 GitHub Actions의 PR 자동 검사를 반드시 통과해야 함.</note>
+    </risk_mitigation>
+  </task_complexity>
+
+  <env_snapshot>
+    <python_version>N/A — 제품 코드 미변경, 문서 IMP</python_version>
+    <installed_packages>N/A</installed_packages>
+    <encoding>N/A</encoding>
+    <screen_size>N/A</screen_size>
+    <note>이 IMP는 RPA/스크래핑/스케줄러/ETL 어디에도 해당하지 않아 환경 스냅샷 의무 대상이 아님(Tier 2 아님).</note>
+  </env_snapshot>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <title>Scope Lock 강제 규칙 추가 (CLAUDE.md) + dev/pm 에이전트 지침 동기화 + ci.yml fetch-depth 정식 사유 기록</title>
+      <affected_function>N/A — 문서/에이전트 지침 수정. 코드 함수 변경 없음.</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/dev-agent.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>trust.?root|scope_lock|Scope Lock</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+        <note>CLAUDE.md 기존 매칭은 partial(line 257 workflows 언급, 868/903 Patch Lane 내부). Scope Lock 정식 강제 섹션은 미존재 — 신규 섹션 추가가 안전.</note>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>scope_manifest</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+        <note>dev-agent.md line 23/63/78/89/102 — scope_manifest 자체는 있으나 "git diff와의 자동 비교 + trust-root 별도 IMP" 문구 미존재.</note>
+      </grep_evidence>
+      <change_summary>
+        (1) CLAUDE.md에 "## Scope Lock 강제 규칙 (IMP-20260516-77AA)" 섹션 신설: scope_manifest와 git diff 일치 의무, trust-root 파일 목록(`.github/workflows/**`, `pipeline.py`, `CLAUDE.md`, `.claude/agents/**`, `tests/**`) 명시, 사용자 explicit scope 승인 또는 Codex Code Deep Review 없으면 trust-root 변경 금지, Pipeline Manager가 module dev 단계에서 비교 후 초과 시 FAIL + dev-agent 재spawn 금지.
+        (2) CLAUDE.md에 "ci.yml fetch-depth 변경 정식 사유 기록 (IMP-20260516-E881 follow-up)" 한 문단: fetch-depth:0 변경은 base_sha 비교용 shallow clone 버그 수정으로 유효, 단 별도 scope 승인 없이 PR에 포함된 것은 위반이었으며 이번 IMP-77AA가 그 재발 방지 조치임을 기록. ci.yml 자체는 되돌리지 않음.
+        (3) .claude/agents/dev-agent.md: Pre-Implementation Scope Declaration 또는 Micro-task Surgical Edit 섹션 인접에 "scope_manifest에 없는 파일을 git diff에 추가하면 dev done이 FAIL이고, trust-root 파일(`.github/workflows/**`, `pipeline.py`, `CLAUDE.md`, `.claude/agents/**`, `tests/**`)은 별도 IMP로만 변경 가능. 같은 PR에 trust-root 변경을 끼워넣지 말 것" 강조 박스 추가.
+        (4) .claude/agents/pm-agent.md (현재 Pipeline Manager 호환 문서): module dev 기록 절차에 "module dev 기록 직전 git diff --name-only base_sha...HEAD 결과를 scope_manifest_MT-N.json의 files와 비교. 초과 파일 1개라도 발견되면 module dev FAIL로 기록하고 dev-agent 재spawn 금지. 사용자에게 scope 확장 또는 별도 IMP 분리 여부를 묻는다" 절차 추가.
+      </change_summary>
+      <line_estimate>110</line_estimate>
+      <forbidden_changes>
+        <forbidden>pipeline.py 코드 수정 — 사용자가 명시적으로 금지(별도 IMP 필요)</forbidden>
+        <forbidden>.github/workflows/ci.yml 수정 또는 fetch-depth 되돌리기 — 사용자가 명시적으로 금지</forbidden>
+        <forbidden>tests/** 수정 — 이번 IMP scope 외</forbidden>
+        <forbidden>.claude/agents/qa-agent.md 수정 — 이번 IMP scope 외(QA의 Scope Lock 검증 책임은 후속 IMP에서 추가 검토)</forbidden>
+      </forbidden_changes>
+      <module_gate_plan>
+        <design>module design MT-1 → module_design_MT-1.xml에 위 4개 변경 항목의 인터페이스 계약과 검증 계획 기록</design>
+        <implement>module dev MT-1 → 3개 파일 패치 후 module_handover_MT-1.xml + scope_manifest_MT-1.json 작성. Pipeline Manager는 기록 직전 git diff vs scope_manifest 비교(이번 IMP가 도입하는 그 규칙을 자기 자신에게도 적용).</implement>
+        <verify>module qa MT-1 → QA가 (a) CLAUDE.md에 Scope Lock 섹션이 실제 포함되었는지 grep, (b) dev-agent.md와 pm-agent.md에 신규 문구가 포함되었는지 grep, (c) ci.yml / pipeline.py / qa-agent.md / tests 미변경 확인, (d) Producer-Consumer Bundle 정합성 검증 후 PASS 또는 FAIL 기록.</verify>
+        <integrate>module integrate → 단일 모듈이므로 형식적 통합 PASS</integrate>
+      </module_gate_plan>
+    </micro_task>
+  </micro_tasks>
+
+  <build_decision>
+    <required>false</required>
+    <skip_reason>meta-task</skip_reason>
+    <rationale>문서 + 에이전트 지침만 수정하므로 EXE 빌드 대상이 아님. pipeline.py build --exe "N/A" --skip-reason "meta-task"로 기록.</rationale>
+  </build_decision>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
