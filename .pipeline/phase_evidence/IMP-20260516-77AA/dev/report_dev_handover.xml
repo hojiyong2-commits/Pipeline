@@ -1,0 +1,62 @@
+<dev_handover>
+  <pipeline_id>IMP-20260516-77AA</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <phase>dev</phase>
+  <status>READY_FOR_QA</status>
+  <implemented_files>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/dev-agent.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+  </implemented_files>
+  <module_gates>
+    <module id="MT-1">
+      <design>PASS</design>
+      <dev>PASS</dev>
+      <qa>PASS</qa>
+    </module>
+    <integration>PASS</integration>
+  </module_gates>
+  <scope_declaration>
+    <files_to_modify>CLAUDE.md, .claude/agents/dev-agent.md, .claude/agents/pm-agent.md</files_to_modify>
+    <files_to_create>없음</files_to_create>
+    <files_to_delete>없음</files_to_delete>
+    <out_of_scope>pipeline.py, .github/workflows/ci.yml, tests/**, qa-agent.md (step_plan에서 명시적 제외)</out_of_scope>
+  </scope_declaration>
+  <scope_lock_check>
+    <git_diff_files>CLAUDE.md, .claude/agents/dev-agent.md, .claude/agents/pm-agent.md</git_diff_files>
+    <manifest_files>CLAUDE.md, .claude/agents/dev-agent.md, .claude/agents/pm-agent.md</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <changes_summary>
+    <change file="CLAUDE.md">Scope Lock 강제 규칙 (IMP-20260516-77AA) 섹션 신설: Trust-Root 파일 목록, Pipeline Manager 검증 의무, Dev Agent scope_lock_check 블록 의무, ci.yml fetch-depth 정식 기록</change>
+    <change file=".claude/agents/dev-agent.md">Scope Lock 파일 범위 강제 규칙 섹션 신설: scope_manifest 외 파일 handover 금지, Trust-Root 특별 규칙, scope_lock_check XML 블록 의무 출력</change>
+    <change file=".claude/agents/pm-agent.md">Pipeline Manager Scope Lock 의무 섹션 신설: module dev 기록 직전 git diff vs scope_manifest 비교, 초과 시 FAIL + dev 재spawn 금지</change>
+  </changes_summary>
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <affected_function>N/A — 문서/에이전트 지침 수정. 코드 함수 변경 없음.</affected_function>
+    <target_files>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/dev-agent.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+    </target_files>
+    <affected_call_sites>
+      <site>none</site>
+    </affected_call_sites>
+    <change_description>문서 섹션 추가 — 기존 섹션 수정 없음, 신규 섹션 3개 추가</change_description>
+  </impact_analysis>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <step_id>MT-1</step_id>
+    <evidence>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/dev-agent.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_handover>
