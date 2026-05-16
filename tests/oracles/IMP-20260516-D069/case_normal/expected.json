@@ -1,0 +1,6 @@
+{
+  "exit_code": 0,
+  "status": "PASS",
+  "message_contains": "PREFLIGHT-PR",
+  "description": "pm phase 관련 파일만 있으면 preflight-pr PASS (exit code 0)"
+}

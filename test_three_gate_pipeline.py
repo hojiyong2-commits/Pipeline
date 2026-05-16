@@ -914,6 +914,9 @@ class ThreeGatePipelineTests(unittest.TestCase):
 </decomposition_audit>
 <step_plan>
   <pipeline_id>TMP-PM-AGENT-OK</pipeline_id>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+  </task_complexity>
 """ + _design_confirmation_xml() + """
   <micro_tasks>
     <micro_task id="MT-1">
@@ -1334,6 +1337,9 @@ class ThreeGatePipelineTests(unittest.TestCase):
 <step_plan>
   <pipeline_id>TMP-PM-OK</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+  </task_complexity>
 """ + _design_confirmation_xml() + """
   <micro_tasks>
     <micro_task id="MT-1">
