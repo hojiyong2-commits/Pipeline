@@ -267,6 +267,46 @@ grep -rn "함수명\(" --include="*.py" .
 
 **`PARTIAL` 상태로 handover 금지** — 모든 위치가 `COMPLETE`여야 합니다.
 
+## Scope Lock — 파일 범위 강제 규칙 (IMP-20260516-77AA)
+
+**[항상 적용 — Three-Gate 파이프라인 전체]**
+
+dev-agent는 코드 작성 완료 후 `<handover>` 출력 직전에 아래 scope lock 검증을 수행해야 합니다. 검증을 생략하거나 FAIL 상태로 handover를 제출하면 Pipeline Manager가 `module dev` 기록을 거부합니다.
+
+### 검증 절차
+
+1. `git diff --name-only HEAD` (또는 `git status --short`)로 실제 변경된 파일 목록을 확인합니다.
+2. 현재 MT-N의 `scope_manifest_MT-N.json`의 `files` 배열과 비교합니다.
+3. **scope_manifest에 없는 파일이 변경되어 있으면 즉시 되돌립니다.** 되돌리기가 불가능하거나 변경이 필요하다고 판단되면 Pipeline Manager에게 알리고 PM step_plan 갱신을 요청합니다.
+
+### Trust-Root 파일 특별 규칙
+
+아래 Trust-Root 파일은 **현재 파이프라인의 PM `<target_files>`에 명시되어 있어도 별도 IMP 파이프라인 없이 수정 불가**합니다. 단, 현재 파이프라인 자체가 Trust-Root를 대상으로 하는 HIGH_RISK IMP인 경우는 예외입니다:
+
+- `.github/workflows/**`
+- `pipeline.py`
+- `tests/**`
+
+> **CLAUDE.md**와 **`.claude/agents/*.md`**는 Trust-Root이지만, 프로토콜 개선을 목적으로 하는 IMP 파이프라인의 공식 target_files에 포함된 경우에는 수정 가능합니다.
+
+**Trust-Root 파일이 scope_manifest에 없는데 변경된 경우:** dev-agent는 즉시 변경을 되돌리고 `[SCOPE LOCK VIOLATION] Trust-root file modified outside scope_manifest: [파일명] — 별도 IMP 파이프라인이 필요합니다.` 메시지를 출력합니다.
+
+### handover 직전 필수 출력 블록
+
+```xml
+<scope_lock_check>
+  <git_diff_files>[git diff --name-only로 확인한 실제 변경 파일 목록]</git_diff_files>
+  <manifest_files>[scope_manifest의 files 배열]</manifest_files>
+  <extra_files>[manifest에 없는 파일 — 없으면 "없음"]</extra_files>
+  <trust_root_violation>[Trust-Root 파일이 범위 외 변경되었는지 여부 — true/false]</trust_root_violation>
+  <verdict>PASS | FAIL</verdict>
+</scope_lock_check>
+```
+
+- `<extra_files>`가 "없음"이고 `<trust_root_violation>`이 `false`일 때만 `<verdict>PASS</verdict>`.
+- FAIL이면 `<handover>` 출력 금지. 되돌린 후 재확인.
+- Pipeline Manager는 `<scope_lock_check><verdict>PASS</verdict>` 없는 handover를 받으면 `module dev` 기록 거부.
+
 ## 모듈 자기반성 헤더 (IMP-20260505-A4C0)
 
 각 Python 모듈/함수 상단에 아래 4개 주석을 필수 포함:

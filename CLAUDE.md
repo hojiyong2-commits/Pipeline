@@ -951,3 +951,52 @@ QA는 Patch Lane 태스크에서 아래를 추가로 검증합니다:
 3. `patch_scope.expected_lines_changed_max <= 15` 확인
 4. `forbidden.*` 필드가 모두 `false`인지 확인
 5. `patch attest` 출력 JSON에 `attested_at` 타임스탬프 존재 확인
+
+---
+
+## Scope Lock 강제 규칙 (IMP-20260516-77AA)
+
+PM `step_plan.xml`의 `<target_files>` 목록과 Dev가 실제로 변경한 파일(git diff --name-only) 사이에 불일치가 있을 경우, **Dev done/PR 생성을 차단**합니다. 이 규칙은 IMP-20260516-E881의 사후 REJECT(ci.yml이 PM scope 외 파일로 PR에 포함된 사건)를 방지하기 위해 도입되었습니다.
+
+### 보호 대상 파일 목록 (Trust-Root Files)
+
+아래 파일/경로는 별도 IMP 파이프라인 + CODEOWNERS 승인 없이 어떠한 PR에도 포함될 수 없습니다:
+
+- `.github/workflows/**` (GitHub Actions 워크플로우)
+- `pipeline.py` (파이프라인 엔진)
+- `CLAUDE.md` (최상위 프로토콜 문서)
+- `tests/**` (테스트 및 오라클 파일)
+- `.claude/agents/*.md` (에이전트 정의 파일)
+
+> **예외:** 현재 파이프라인의 PM `<target_files>`에 명시적으로 포함된 Trust-Root 파일은 해당 파이프라인 PR 내에서 수정 가능합니다. Trust-Root 파일을 대상으로 하는 파이프라인은 `HIGH_RISK` 실행 프로필을 사용해야 합니다.
+
+> **ci.yml fetch-depth 변경 정식 기록:** IMP-20260516-E881에서 `.github/workflows/ci.yml`의 `fetch-depth: 0` 변경은 phase attestation SHA 검증에 필요한 전체 git 이력을 확보하기 위한 것이었습니다. 이 변경은 별도 scope로 기록되지 않았으나, 기능적으로는 phase attestation 인프라의 일부입니다. 이후 ci.yml 변경은 반드시 별도 `IMP` 파이프라인을 통해 PM scope에 명시하고 진행해야 합니다.
+
+### Pipeline Manager Scope Lock 의무
+
+Pipeline Manager는 `module dev` 기록 직전에 반드시 아래를 수행합니다:
+
+1. `git diff --name-only HEAD` 또는 `git status --short` 로 실제 변경 파일 목록을 확인합니다.
+2. 변경 파일 목록을 현재 MT-N의 `scope_manifest_MT-N.json`의 `files` 배열과 비교합니다.
+3. **scope_manifest에 없는 파일이 변경되어 있으면:**
+   - `python pipeline.py module dev` 기록을 하지 않습니다.
+   - Dev agent에게 초과 파일을 되돌리도록 지시합니다.
+   - 초과 파일이 Trust-Root 파일인 경우, 별도 IMP를 시작하도록 사용자에게 안내합니다.
+   - **dev-agent 재spawn 금지** — 같은 dev-agent가 이미 scope를 초과했으므로, 재spawn이 아니라 현재 변경을 되돌린 후 scope 내 변경만 재확인합니다.
+4. 모든 변경 파일이 scope_manifest 안에 있으면 정상적으로 `module dev` 기록을 진행합니다.
+
+### Dev Agent Scope Lock 의무
+
+dev-agent는 코드 작성 완료 후 `<handover>` 출력 전에 반드시 스스로 scope 검증을 수행합니다:
+
+```xml
+<scope_lock_check>
+  <git_diff_files>[git diff --name-only로 확인한 실제 변경 파일 목록]</git_diff_files>
+  <manifest_files>[scope_manifest의 files 배열]</manifest_files>
+  <extra_files>[manifest에 없는 파일 — 없으면 "없음"]</extra_files>
+  <trust_root_violation>[Trust-Root 파일 포함 여부 — true/false]</trust_root_violation>
+  <verdict>PASS | FAIL</verdict>
+</scope_lock_check>
+```
+
+`<extra_files>`가 "없음"이고 `<trust_root_violation>`이 false일 때만 `<verdict>PASS</verdict>`이며, 이 때만 `<handover>` 출력과 Pipeline Manager의 `module dev` 기록이 허용됩니다.
