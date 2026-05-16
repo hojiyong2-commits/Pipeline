@@ -4,8 +4,8 @@
   "type": "IMP",
   "description": "PR 오염 재발 방지: preflight-pr gate 추가, acceptance evidence 범위 제한, architect run_id/commit_sha 자동 검증, CLAUDE.md patch verify 예시 수정, 관련 테스트 추가",
   "created_at": "2026-05-16T01:57:03Z",
-  "updated_at": "2026-05-16T02:36:40Z",
-  "current_phase": "qa",
+  "updated_at": "2026-05-16T02:44:36Z",
+  "current_phase": "sec",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -33,13 +33,15 @@
       "agent_run_id": "dev-71413361244bbd20"
     },
     "qa": {
-      "status": "PENDING",
-      "completed_at": null,
+      "status": "PASS",
+      "completed_at": "2026-05-16T02:44:22Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "qa_report.xml",
+      "agent_id": "qa-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260516-D069_phase_qa.json",
+      "agent_run_id": "qa-94e3c6888fc91a0b",
+      "numeric_score": 108
     },
     "sec": {
       "status": "PENDING",
@@ -214,6 +216,30 @@
     {
       "ts": "2026-05-16T02:36:40Z",
       "msg": "phase attestation request prepared: dev"
+    },
+    {
+      "ts": "2026-05-16T02:37:37Z",
+      "msg": "phase attestation request prepared: dev"
+    },
+    {
+      "ts": "2026-05-16T02:42:24Z",
+      "msg": "github phase-ci dev PASS run_id=25950702511 commit=5d111f92cf21"
+    },
+    {
+      "ts": "2026-05-16T02:42:38Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-94e3c6888fc91a0b"
+    },
+    {
+      "ts": "2026-05-16T02:43:55Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-94e3c6888fc91a0b"
+    },
+    {
+      "ts": "2026-05-16T02:44:22Z",
+      "msg": "qa PASS numeric=108"
+    },
+    {
+      "ts": "2026-05-16T02:44:36Z",
+      "msg": "phase attestation request prepared: qa"
     }
   ],
   "terminal_state": null,
@@ -275,8 +301,28 @@
       "receipt_path": ".pipeline\\agent_receipts\\IMP-20260516-D069\\dev\\dev-71413361244bbd20.json",
       "receipt_sha256": "4b8cdf9c19fbcc421978d972d14502930360947d8f3d1ced749afcbb875ec794",
       "used_by_phase": "dev",
-      "used_at": "2026-05-16T02:36:40Z",
+      "used_at": "2026-05-16T02:37:37Z",
       "commit_sha": "7e847e5070779a7e30e00256ec17960901fe7ca3",
+      "notes": ""
+    },
+    "qa-94e3c6888fc91a0b": {
+      "schema_version": 1,
+      "run_id": "qa-94e3c6888fc91a0b",
+      "pipeline_id": "IMP-20260516-D069",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-05-16T02:42:38Z",
+      "completed_at": "2026-05-16T02:43:55Z",
+      "token_hash": "fea07d752e75844950f8ea7013f58e99a25d5453be4eb47a7a3e5ce403d4dfb6",
+      "output_file": "qa_report.xml",
+      "output_sha256": "a71747a5f44799185f91cfbe15d1d7e56604793d37899362eb47ece2d6dd8976",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260516-D069\\qa\\qa-94e3c6888fc91a0b.json",
+      "receipt_sha256": "1c2a7d8fd6538f44ffcd72473f139fff5b8e4409857e7584c1b81a22661ab9e3",
+      "used_by_phase": "qa",
+      "used_at": "2026-05-16T02:44:36Z",
+      "commit_sha": "5d111f92cf215e72979345f5ec974f831d629e8f",
       "notes": ""
     }
   },
@@ -334,14 +380,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-16T02:42:24Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25950702511",
+        "commit_sha": "5d111f92cf215e72979345f5ec974f831d629e8f",
+        "evidence": "github_actions_phase_run:25950702511",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260516-D069\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "qa": {
         "status": "PENDING",
@@ -1832,15 +1879,24 @@
       "run_id": "25950227692",
       "commit_sha": "29326469b5ea9fdd9300329e26637b6106bf45ba",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-16T02:42:24Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "dev",
+      "run_id": "25950702511",
+      "commit_sha": "5d111f92cf215e72979345f5ec974f831d629e8f",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "patch_lane": {
     "plan_passed": true,
-    "plan_passed_at": "2026-05-16T02:24:42Z",
+    "plan_passed_at": "2026-05-16T02:42:52Z",
     "audit_passed": true,
-    "audit_passed_at": "2026-05-16T02:24:42Z",
+    "audit_passed_at": "2026-05-16T02:42:52Z",
     "verify_passed": true,
-    "verify_passed_at": "2026-05-16T02:24:42Z",
+    "verify_passed_at": "2026-05-16T02:42:52Z",
     "verify_test_command": "python -m pytest -q"
   },
   "dev_handover": {
@@ -1899,5 +1955,11 @@
         "tests/test_pr_hygiene.py"
       ]
     }
+  },
+  "qa_report_validation": {
+    "report_file": "qa_report.xml",
+    "validated_at": "2026-05-16T02:44:22Z",
+    "numeric_score": 108,
+    "verdict": "PASS"
   }
 }
