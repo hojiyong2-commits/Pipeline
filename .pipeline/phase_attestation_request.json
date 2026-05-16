@@ -1,75 +1,92 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T10:07:51Z",
+  "generated_at": "2026-05-16T10:36:54Z",
   "pipeline_id": "IMP-20260516-C13E",
-  "phase": "pm",
+  "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "2a18da85fab30fc76108707a4e8274b991dee18e",
+  "commit_hint": "a7aa7fa2f1f2175764be18a0f2f9c62844cb0524",
   "state": {
-    "current_phase": "dev",
-    "phase_completed_at": "2026-05-16T10:03:39Z",
-    "report_file": "step_plan.xml",
-    "evidence": null
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-16T10:36:45Z",
+    "report_file": "dev_handover.xml",
+    "evidence": ".github/workflows/ci.yml,setup.cfg,tests/test_pr_hygiene.py,tests/oracles/IMP-20260516-C13E/case_normal/input.json,tests/oracles/IMP-20260516-C13E/case_normal/expected.json,tests/oracles/IMP-20260516-C13E/case_edge/input.json,tests/oracles/IMP-20260516-C13E/case_edge/expected.json"
   },
   "agent_run": {
-    "run_id": "pm_planner-a0fd7a5036925b3f",
-    "phase": "pm_planner",
-    "agent_id": "pm-planner-agent",
+    "run_id": "dev-4f0cef85c83b323c",
+    "phase": "dev",
+    "agent_id": "dev-agent",
     "status": "COMPLETED",
-    "output_file": "step_plan.xml",
-    "output_sha256": "5c08d4c758439a54c896042399754a69bc6f0417ad8b3be6ebef5fd2c359213b",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-C13E/pm/agent_receipt_pm_planner-a0fd7a5036925b3f.json",
-    "receipt_sha256": "6e815351a3d94f60a4c7f09780d20cf1859761c23c4c51ae7a68b9aaca623931",
-    "used_by_phase": "pm",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\pm_planner\\pm_planner-a0fd7a5036925b3f.json"
+    "output_file": "dev_handover.xml",
+    "output_sha256": "fa5b9990d9008d036559c718c4a35e320c4faf370ee03886b8ea715a84991188",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-C13E/dev/agent_receipt_dev-4f0cef85c83b323c.json",
+    "receipt_sha256": "97129556aca550ddb32f74b928212b410f02d512680b3317489fbe0a2d61a8e6",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\dev\\dev-4f0cef85c83b323c.json"
   },
-  "manager_run": {
-    "run_id": "pipeline_manager-c030909995825146",
-    "phase": "pipeline_manager",
-    "agent_id": "pipeline-manager-agent",
-    "status": "COMPLETED",
-    "output_file": "manager_handoff.xml",
-    "output_sha256": "06bcdcadaf50115f9407edf13eb07af0e168e47524aeeaad29ca71d9d4cef072",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-C13E/pm/manager_receipt_pipeline_manager-c030909995825146.json",
-    "receipt_sha256": "90c3d0826ade6f3f9fdbfe6181272106bebfffbebb019196e8d2a7171bf7951f",
-    "used_by_phase": "pm_manager",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\pipeline_manager\\pipeline_manager-c030909995825146.json"
-  },
+  "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\pm_planner\\pm_planner-a0fd7a5036925b3f.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/pm/agent_receipt_pm_planner-a0fd7a5036925b3f.json",
-      "sha256": "6e815351a3d94f60a4c7f09780d20cf1859761c23c4c51ae7a68b9aaca623931",
-      "size_bytes": 520,
-      "requires_force_add": true
-    },
-    {
-      "label": "manager_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\pipeline_manager\\pipeline_manager-c030909995825146.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/pm/manager_receipt_pipeline_manager-c030909995825146.json",
-      "sha256": "90c3d0826ade6f3f9fdbfe6181272106bebfffbebb019196e8d2a7171bf7951f",
-      "size_bytes": 544,
+      "source": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\dev\\dev-4f0cef85c83b323c.json",
+      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/dev/agent_receipt_dev-4f0cef85c83b323c.json",
+      "sha256": "97129556aca550ddb32f74b928212b410f02d512680b3317489fbe0a2d61a8e6",
+      "size_bytes": 502,
       "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "step_plan.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/pm/report_step_plan.xml",
-      "sha256": "5c08d4c758439a54c896042399754a69bc6f0417ad8b3be6ebef5fd2c359213b",
-      "size_bytes": 24410,
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/dev/report_dev_handover.xml",
+      "sha256": "fa5b9990d9008d036559c718c4a35e320c4faf370ee03886b8ea715a84991188",
+      "size_bytes": 2209,
       "requires_force_add": true
     },
     {
-      "label": "manager_report",
-      "source": "manager_handoff.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/pm/manager_report_manager_handoff.xml",
-      "sha256": "06bcdcadaf50115f9407edf13eb07af0e168e47524aeeaad29ca71d9d4cef072",
-      "size_bytes": 477,
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/dev/scope_manifest_scope_manifest.json",
+      "sha256": "50ab2f4c8ec7250d03d496648c7eccc9bcf1ce5980ee29a8b554204926064c44",
+      "size_bytes": 904,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [],
+  "workspace_file_checks": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "6d3e35f5ec58b843765e9295e11bbb826ebe96a5c9b8cfe608f1ddb1f25adfe0",
+      "size_bytes": 26244
+    },
+    {
+      "path": "setup.cfg",
+      "sha256": "4744ce60f31a1fef722f8e949bc9da15159f16007db481c8d492a67602ba8f91",
+      "size_bytes": 29
+    },
+    {
+      "path": "tests/test_pr_hygiene.py",
+      "sha256": "94a5e60f126e38b6b73c8dc9023d7a9bd762cbef789b9f1f177d15e402522b89",
+      "size_bytes": 11058
+    },
+    {
+      "path": "tests/oracles/IMP-20260516-C13E/case_normal/input.json",
+      "sha256": "04d6eea77cc7fe88de5fded8123f7fa24f30c55b9bbdd99bc4ad23af320a6a8c",
+      "size_bytes": 100
+    },
+    {
+      "path": "tests/oracles/IMP-20260516-C13E/case_normal/expected.json",
+      "sha256": "62bbf76bd3f4146094bb4ec1cc079fff311fb2e1f4211927ad025103c27ea2dd",
+      "size_bytes": 27
+    },
+    {
+      "path": "tests/oracles/IMP-20260516-C13E/case_edge/input.json",
+      "sha256": "bd08fcbc62592618bff7cf658be1f2dca1888235f2896877c22deb1ff5fc7bb4",
+      "size_bytes": 70
+    },
+    {
+      "path": "tests/oracles/IMP-20260516-C13E/case_edge/expected.json",
+      "sha256": "62bbf76bd3f4146094bb4ec1cc079fff311fb2e1f4211927ad025103c27ea2dd",
+      "size_bytes": 27
+    }
+  ],
   "local_only_files": []
 }

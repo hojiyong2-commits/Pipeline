@@ -1,0 +1,30 @@
+{
+  "pipeline_id": "IMP-20260516-C13E",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [".github/workflows/ci.yml"],
+      "affected_functions": [".github/workflows/ci.yml::jobs.tests.steps"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["setup.cfg"],
+      "affected_functions": ["setup.cfg::[bandit/mypy/ruff], .bandit::[bandit]"]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/oracles/IMP-20260516-C13E/case_normal/input.json",
+        "tests/oracles/IMP-20260516-C13E/case_normal/expected.json",
+        "tests/oracles/IMP-20260516-C13E/case_edge/input.json",
+        "tests/oracles/IMP-20260516-C13E/case_edge/expected.json"
+      ],
+      "affected_functions": ["tests/oracles/IMP-20260516-C13E/**"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["tests/test_pr_hygiene.py"],
+      "affected_functions": ["tests.test_pr_hygiene.* (12개 테스트)"]
+    }
+  ]
+}
