@@ -267,6 +267,23 @@ PM 에이전트는 사용자의 요청을 받으면 **반드시 아래의 순서
 | Phase 8 — Architect | `python pipeline.py check --phase architect` exit 0 | `prompt-architect-agent` | `<optimization_report>` 읽고 patches 검토 → `pipeline.py architect` 기록 | (재spawn 없음) |
 | Protocol Evolution | Phase 8 report의 `<protocol_evolution_decision><required>true</required>` | 새 IMP 파이프라인 | Phase 9는 자동 실행되지 않는다. 현재 파이프라인을 COMPLETE로 닫은 뒤 별도 IMP로 CLAUDE.md/agent/pipeline 규칙을 수정한다. | 사용자 승인 후 새 pipeline |
 
+### Pipeline Manager Scope Lock 의무 (IMP-20260516-77AA)
+
+Pipeline Manager는 각 MT-N의 `module dev` 기록 직전에 반드시 실제 변경 파일과 scope_manifest를 비교합니다. 이 절차를 생략하면 PM scope 외 파일이 PR에 포함되어 사후 REJECT가 발생할 수 있습니다(IMP-20260516-E881 사례).
+
+**module dev 기록 직전 필수 절차:**
+
+1. `git diff --name-only HEAD` (또는 `git status --short`)로 실제 변경 파일 목록을 확인합니다.
+2. 목록을 `scope_manifest_MT-N.json`의 `files` 배열과 비교합니다.
+3. **초과 파일 발견 시:**
+   - `python pipeline.py module dev` 기록을 하지 않습니다.
+   - dev-agent에게 초과 파일을 되돌리도록 지시합니다.
+   - **dev-agent 재spawn 금지** — 동일 dev-agent에게 초과 파일 제거 후 재확인을 요청합니다.
+   - 초과 파일이 Trust-Root 파일(`.github/workflows/**`, `pipeline.py`, `tests/**`, `CLAUDE.md`, `.claude/agents/*.md`)이면 별도 IMP 파이프라인 시작을 사용자에게 안내합니다.
+4. 모든 변경 파일이 scope_manifest 안에 있으면 정상적으로 `module dev` 기록을 진행합니다.
+
+**dev-agent의 `<scope_lock_check><verdict>PASS</verdict>` 없는 handover는 `module dev` 기록 거부.**
+
 ### Circuit Breaker — Same-Error 2x FAIL Escalation
 
 QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 FAIL** 처리한 경우:
