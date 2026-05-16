@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260516-A627</pipeline_id>
+  <phase>QA</phase>
+  <agent_id>qa-agent</agent_id>
+  <run_id>qa-11f5fa9f06041ac4</run_id>
+  <generated_at>2026-05-17T00:00:00Z</generated_at>
+
+  <result>PASS</result>
+
+  <numeric_score>108</numeric_score>
+  <numeric_score_detail>
+    <score>108</score>
+    <max>120</max>
+    <threshold>96</threshold>
+  </numeric_score_detail>
+
+  <verified_deliverables>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+    <file>.claude/commands/task.md</file>
+  </verified_deliverables>
+
+  <d1_to_d6_verification>
+    <defect id="D1" status="FIXED">
+      <description>review codex --result ACCEPT/REJECT 직접 차단</description>
+      <evidence>pipeline.py에서 review codex 명령이 ACCEPT/REJECT 결과 입력을 거부하고 codex-record 사용을 안내</evidence>
+      <test>tc01 PASS — Claude self-ACCEPT 차단 확인</test>
+    </defect>
+    <defect id="D2" status="FIXED">
+      <description>codex-record가 plan/scope/code/hygiene stage 지원</description>
+      <evidence>codex-record 명령이 모든 6개 stage(plan/scope/code/hygiene/pr/rca) 처리</evidence>
+      <test>tc04(plan REJECT), tc05(scope REJECT), tc10(code ACCEPT) PASS</test>
+    </defect>
+    <defect id="D3" status="FIXED">
+      <description>Dev 진입 조건 plan AND scope (both required)</description>
+      <evidence>check --phase dev에서 plan stage OR scope stage 중 하나만 있으면 차단</evidence>
+      <test>tc06(plan 없이 scope만 있을 때 차단), tc07(scope 없이 plan만 있을 때 차단) PASS</test>
+    </defect>
+    <defect id="D4" status="FIXED">
+      <description>hygiene/pr gate to technical/user acceptance 연결</description>
+      <evidence>_check_codex_pr_gate_for_technical: codex_review_result.json 있을 때 pr stage ACCEPT 검증</evidence>
+      <test>tc11(pr ACCEPT 없이 technical 차단), tc12(pr ACCEPT 후 technical 통과) PASS</test>
+    </defect>
+    <defect id="D5" status="FIXED">
+      <description>diff_sha256 실제 diff와 비교</description>
+      <evidence>codex-record ACCEPT 기록 시 현재 git diff 해시와 --diff-sha256 인자 비교하여 불일치 시 차단</evidence>
+      <test>tc13(diff_sha256 불일치 시 차단) PASS — mock 기반 단위 테스트</test>
+    </defect>
+    <defect id="D6" status="FIXED">
+      <description>PR scope creep 차단 강화</description>
+      <evidence>preflight-pr gate에서 phase attestation PR에 구현 코드 파일 포함 시 차단</evidence>
+      <test>tc15(preflight-pr scope creep 차단) PASS</test>
+    </defect>
+  </d1_to_d6_verification>
+
+  <test_results>
+    <total_tests>297</total_tests>
+    <passed>297</passed>
+    <failed>0</failed>
+    <test_file>tests/test_codex_review.py</test_file>
+    <tc_coverage>
+      <tc id="tc01" result="PASS">D1: Claude self-ACCEPT 차단</tc>
+      <tc id="tc02" result="PASS">GPT-5.5 모델 강제</tc>
+      <tc id="tc03" result="PASS">schema validation</tc>
+      <tc id="tc04" result="PASS">D2: plan stage REJECT 기록</tc>
+      <tc id="tc05" result="PASS">D2: scope stage REJECT 기록</tc>
+      <tc id="tc06" result="PASS">D3: plan 없이 dev 진입 차단</tc>
+      <tc id="tc07" result="PASS">D3: scope 없이 dev 진입 차단</tc>
+      <tc id="tc08" result="PASS">D3: plan+scope 모두 있으면 dev 진입 허용</tc>
+      <tc id="tc09" result="PASS">REJECT 시 failure_packet 생성</tc>
+      <tc id="tc10" result="PASS">D2: code stage ACCEPT 기록</tc>
+      <tc id="tc11" result="PASS">D4: pr stage ACCEPT 없이 technical 차단</tc>
+      <tc id="tc12" result="PASS">D4: pr stage ACCEPT 후 technical 통과</tc>
+      <tc id="tc13" result="PASS">D5: diff_sha256 불일치 시 차단 (mock 단위 테스트)</tc>
+      <tc id="tc14" result="PASS">hygiene stage 기록</tc>
+      <tc id="tc15" result="PASS">D6: preflight-pr scope creep 차단</tc>
+    </tc_coverage>
+    <evidence_source>GitHub Actions CI run 25972677024 (PR #75, impl/IMP-20260516-A627-dev-clean merged to main)</evidence_source>
+  </test_results>
+
+  <scope_boundary_check>
+    <verdict>PASS</verdict>
+    <declared_files>pipeline.py, tests/test_codex_review.py, CLAUDE.md, .claude/agents/pm-agent.md, .claude/commands/task.md</declared_files>
+    <actual_changed_files>pipeline.py, tests/test_codex_review.py, CLAUDE.md, .claude/agents/pm-agent.md, .claude/commands/task.md</actual_changed_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+  </scope_boundary_check>
+
+  <module_gate_check>
+    <mt id="MT-1" status="PASS">
+      <description>D1-D6 Codex Review hard gate 수정 + 15개 테스트 (tc01~tc15)</description>
+      <files>pipeline.py, tests/test_codex_review.py</files>
+    </mt>
+  </module_gate_check>
+
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <declared_files>pipeline.py, tests/test_codex_review.py</declared_files>
+      <actual_diff_files>pipeline.py, tests/test_codex_review.py</actual_diff_files>
+      <verdict>PASS</verdict>
+      <blast_radius>WITHIN_SCOPE</blast_radius>
+    </mt>
+  </micro_task_boundary>
+
+  <failure_signature/>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <status>READY_FOR_BUILD</status>
+    <evidence>
+      <file>qa_report.xml</file>
+      <file>pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+    </evidence>
+  </handover>
+</qa_report>
