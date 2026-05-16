@@ -170,3 +170,145 @@ def test_doc_cli_patch_verify_contract():
         assert "--test-command" in line or "--evidence-file" in line, (
             f"CLAUDE.md patch verify 예시에 --test-command 또는 --evidence-file이 없습니다: {line}"
         )
+
+
+# ─────────────────────────────────────────────
+# 엄격한 allowlist 회귀 테스트 (IMP-20260516-1690 재작업)
+# ─────────────────────────────────────────────
+
+def _load_classify(base_dir=BASE_DIR):
+    """_classify_pr_file 로드 헬퍼."""
+    import importlib.util as _ilu
+    spec = _ilu.spec_from_file_location("pipeline", base_dir / "pipeline.py")
+    mod = _ilu.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod._classify_pr_file
+
+
+def test_classify_rejects_pipeline_contracts():
+    """pipeline_contracts/** 는 attestation PR에서 forbidden이어야 합니다."""
+    classify = _load_classify()
+    result = classify("pipeline_contracts/IMP-TEST-0000/contract.json", "pm", "IMP-TEST-0000")
+    assert result.startswith("forbidden"), (
+        f"pipeline_contracts/** 는 forbidden이어야 합니다: {result}"
+    )
+
+
+def test_classify_rejects_product_code_in_attestation_pr():
+    """구현 파일도 attestation PR에서는 forbidden이어야 합니다."""
+    classify = _load_classify()
+    for path in [
+        "pipeline.py",
+        ".github/workflows/ci.yml",
+        "tests/test_pr_hygiene.py",
+        "build_report.xml",
+        "scope_manifest_MT-1.json",
+        "pipeline_state.json",
+        "pipeline_outputs/IMP-TEST-0000/result.md",
+    ]:
+        result = classify(path, "pm", "IMP-TEST-0000")
+        assert result.startswith("forbidden"), (
+            f"'{path}' 는 attestation PR에서 forbidden이어야 합니다: {result}"
+        )
+
+
+def test_classify_rejects_other_pipeline_id_evidence():
+    """다른 pipeline_id의 phase_evidence는 forbidden이어야 합니다."""
+    classify = _load_classify()
+    result = classify(
+        ".pipeline/phase_evidence/OTHER-IMP-0000/pm/receipt.json", "pm", "IMP-TEST-0000"
+    )
+    assert result.startswith("forbidden"), (
+        f"다른 pipeline_id의 phase_evidence는 forbidden이어야 합니다: {result}"
+    )
+    # 같은 pipeline_id + 같은 phase → allowed
+    result_ok = classify(
+        ".pipeline/phase_evidence/IMP-TEST-0000/pm/receipt.json", "pm", "IMP-TEST-0000"
+    )
+    assert result_ok == "allowed", (
+        f"같은 pipeline_id의 phase_evidence는 allowed여야 합니다: {result_ok}"
+    )
+
+
+def test_classify_rejects_agent_receipts():
+    """.pipeline/agent_receipts/** 는 forbidden이어야 합니다."""
+    classify = _load_classify()
+    result = classify(
+        ".pipeline/agent_receipts/IMP-TEST-0000/pm_planner/run.json", "pm", "IMP-TEST-0000"
+    )
+    assert result.startswith("forbidden"), (
+        f".pipeline/agent_receipts/** 는 forbidden이어야 합니다: {result}"
+    )
+
+
+def test_classify_rejects_other_pipeline_subpath():
+    """기타 .pipeline/** 경로도 forbidden이어야 합니다."""
+    classify = _load_classify()
+    for path in [
+        ".pipeline/something_else/file.json",
+        ".pipeline/pipeline_state_backup.json",
+    ]:
+        result = classify(path, "pm", "IMP-TEST-0000")
+        assert result.startswith("forbidden"), (
+            f"기타 .pipeline/** 경로는 forbidden이어야 합니다: {result}"
+        )
+
+
+def test_preflight_pr_fails_on_phase_mismatch(tmp_path):
+    """request.phase=dev인데 --phase pm으로 호출하면 exit code != 0이어야 합니다."""
+    req = {
+        "schema_version": 1,
+        "request_type": "pipeline-phase-attestation-request-v1",
+        "pipeline_id": "IMP-TEST-0000",
+        "phase": "dev",
+        "phase_status": "DONE",
+        "agent_run": {
+            "run_id": "dev-agent-abc123",
+            "phase": "dev",
+            "agent_id": "dev-agent",
+            "status": "COMPLETED",
+            "used_by_phase": "dev",
+        },
+    }
+    req_file = tmp_path / "phase_attestation_request.json"
+    req_file.write_text(json.dumps(req), encoding="utf-8")
+    result = _run_pipeline(
+        "gates", "preflight-pr",
+        "--phase", "pm",
+        "--pipeline-id", "IMP-TEST-0000",
+        "--request-file", str(req_file),
+    )
+    assert result.returncode != 0, (
+        f"phase 불일치 시 exit code != 0이어야 합니다. "
+        f"실제: {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+
+
+def test_preflight_pr_fails_on_pipeline_id_mismatch(tmp_path):
+    """request.pipeline_id와 --pipeline-id가 다르면 exit code != 0이어야 합니다."""
+    req = {
+        "schema_version": 1,
+        "request_type": "pipeline-phase-attestation-request-v1",
+        "pipeline_id": "IMP-A-0000",
+        "phase": "pm",
+        "phase_status": "DONE",
+        "agent_run": {
+            "run_id": "pm_planner-abc123",
+            "phase": "pm_planner",
+            "agent_id": "pm-planner-agent",
+            "status": "COMPLETED",
+            "used_by_phase": "pm",
+        },
+    }
+    req_file = tmp_path / "phase_attestation_request.json"
+    req_file.write_text(json.dumps(req), encoding="utf-8")
+    result = _run_pipeline(
+        "gates", "preflight-pr",
+        "--phase", "pm",
+        "--pipeline-id", "IMP-B-9999",
+        "--request-file", str(req_file),
+    )
+    assert result.returncode != 0, (
+        f"pipeline_id 불일치 시 exit code != 0이어야 합니다. "
+        f"실제: {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )

@@ -7152,48 +7152,38 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
 
 
 def _classify_pr_file(path: str, phase: str, pid: str) -> str:
-    """PR에 포함된 파일이 해당 phase 범위에 속하는지 분류합니다.
+    """Phase attestation PR에서 허용되는 파일인지 분류합니다.
+
+    preflight-pr는 phase attestation PR에서만 실행됩니다 (ci.yml의 if: 조건).
+    attestation PR에는 오직 아래 파일만 포함되어야 합니다:
+    1. .pipeline/phase_attestation_request.json
+    2. .pipeline/phase_evidence/{pid}/{phase}/**
+
+    그 외 모든 파일(구현 파일, pipeline_contracts, reports 등)은 PR 오염으로 금지합니다.
 
     Returns:
         "allowed" — phase attestation 증거로 허용
-        "forbidden:<reason>" — phase 범위를 벗어남
+        "forbidden:<reason>" — phase 범위를 벗어남 (PR 오염)
     """
-    # 허용: .pipeline/phase_attestation_request.json
+    path = path.replace("\\", "/")
+
+    # 허용 1: request 파일 자체
     if path == ".pipeline/phase_attestation_request.json":
         return "allowed"
 
-    # 허용: 해당 phase의 phase_evidence 파일
-    phase_evidence_prefix = f".pipeline/phase_evidence/"
+    # 허용 2: 이번 pipeline_id + phase의 phase_evidence만 허용
+    phase_evidence_prefix = ".pipeline/phase_evidence/"
     if path.startswith(phase_evidence_prefix):
-        # 경로에서 phase 폴더 확인: .pipeline/phase_evidence/{pid}/{phase}/...
         rest = path[len(phase_evidence_prefix):]
         parts = rest.split("/")
-        if len(parts) >= 2 and parts[1] == phase:
+        if len(parts) >= 2 and parts[0] == pid and parts[1] == phase:
             return "allowed"
-        # 다른 phase의 evidence
-        return f"forbidden:다른 phase evidence 경로 ({path})"
+        # 다른 pipeline_id 또는 다른 phase의 evidence
+        return f"forbidden:다른 pipeline_id 또는 phase의 evidence 경로 ({path})"
 
-    # 금지 패턴
-    FORBIDDEN_PREFIXES = [
-        "pipeline_contracts/",
-        "pipeline_outputs/",
-        ".github/",
-        "tests/",
-    ]
-    FORBIDDEN_EXACT = {
-        "pipeline_state.json",
-        "pipeline.py",
-        "CLAUDE.md",
-    }
-
-    if path in FORBIDDEN_EXACT:
-        return f"forbidden:내부 파이프라인 파일 ({path})"
-
-    for prefix in FORBIDDEN_PREFIXES:
-        if path.startswith(prefix):
-            return f"forbidden:금지 경로 접두사 ({prefix})"
-
-    return "allowed"
+    # 그 외 모든 파일은 phase attestation PR에 포함 금지
+    # (구현 파일, pipeline_contracts, pipeline_outputs, 리포트 파일, .pipeline/** 등)
+    return f"forbidden:phase attestation PR에 포함할 수 없는 파일 ({path})"
 
 
 def cmd_gates(args: argparse.Namespace) -> None:
