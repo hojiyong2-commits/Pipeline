@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260516-78B2</pipeline_id>
+  <agent_id>qa-agent</agent_id>
+  <run_id>qa-5bcd11de86ab2893</run_id>
+  <title>QA Phase — preflight-pr 강화 7개 요구사항 검증</title>
+
+  <scope_verification>
+    <declared_files>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </declared_files>
+    <actual_changed_files>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </actual_changed_files>
+    <scope_match>true</scope_match>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <blast_radius>IN_SCOPE</blast_radius>
+    <mt_results>
+      <mt id="MT-1" verdict="PASS" file="pipeline.py" function="_classify_pr_file">
+        <note>pipeline_id 검증 + agent_receipts 차단 구현 확인. 함수가 다른 pipeline_id의 phase_evidence와 agent_receipts만 금지하고 일반 구현 파일은 허용하도록 올바르게 구현됨.</note>
+      </mt>
+      <mt id="MT-2" verdict="PASS" file="pipeline.py" function="cmd_gates (preflight-pr)">
+        <note>state-free 동작 확인. merge-base + GITHUB_BASE_SHA 폴백 방식으로 git diff 실행. request JSON의 phase 및 pipeline_id 검증 로직 정상 작동.</note>
+      </mt>
+      <mt id="MT-3" verdict="PASS" file=".github/workflows/ci.yml" function="preflight-pr step">
+        <note>pytest 전에 preflight-pr step이 실행됨. hashFiles 조건부 실행. fetch-depth:0으로 full history 확보.</note>
+      </mt>
+      <mt id="MT-4" verdict="PASS" file=".github/workflows/ci.yml" function="정보 부족 hard fail">
+        <note>isAttestationPr 여부에 따른 분기 처리. 일반 구현 PR에서 정보 부족 시 hard fail. always-run 조건 변경 ((success() || failure())).</note>
+      </mt>
+      <mt id="MT-5" verdict="PASS" file="tests/test_pr_hygiene.py" function="신규 5개 테스트">
+        <note>5개 회귀 테스트 + 기존 4개 = 총 9개 테스트 PASS. 요구사항 3번(phase mismatch), 4번(pipeline_id mismatch), 4번(other pipeline evidence), 5번(agent_receipts) 각각 검증.</note>
+      </mt>
+    </mt_results>
+  </micro_task_boundary>
+
+  <requirements_verification>
+    <req id="1" desc="GitHub Actions에서 pytest 전 preflight-pr 실행" status="PASS">
+      ci.yml의 '단계 PR 위생 검사 (preflight-pr)' step이 '자동 검사 실행'(pytest) 전에 위치함.
+      hashFiles('.pipeline/phase_attestation_request.json') != '' 조건으로 attestation PR에서만 실행.
+    </req>
+    <req id="2" desc="preflight-pr가 request JSON에서 phase 검증" status="PASS">
+      _cmd_gates_preflight_pr()이 request_file을 파싱하여 req_phase와 --phase를 비교함.
+      불일치 시 exit 1 출력 확인.
+    </req>
+    <req id="3" desc="phase 불일치 시 hard fail (exit 1)" status="PASS">
+      test_preflight_pr_fails_on_phase_mismatch: request.phase=dev, --phase pm → exit != 0 PASS.
+    </req>
+    <req id="4" desc="pipeline_id 검증 — 다른 pipeline_id evidence 차단" status="PASS">
+      test_classify_rejects_other_pipeline_id_evidence: OTHER-IMP-0000 → forbidden PASS.
+      test_preflight_pr_fails_on_pipeline_id_mismatch: IMP-A/IMP-B mismatch → exit != 0 PASS.
+    </req>
+    <req id="5" desc=".pipeline/agent_receipts/** 금지" status="PASS">
+      test_classify_rejects_agent_receipts: agent_receipts → forbidden PASS.
+      _classify_pr_file 첫 번째 조건이 agent_receipts 경로를 즉시 forbidden 처리.
+    </req>
+    <req id="6" desc="정보 부족 → 일반 구현 PR에서 CI hard fail" status="PASS">
+      ci.yml '최종 확인 안내 만들기' step에서 isAttestationPr=false이고 missingDecisionInfo.Count > 0이면 exit 1.
+    </req>
+    <req id="7" desc="5개 회귀 테스트 추가" status="PASS">
+      test_classify_rejects_other_pipeline_id_evidence, test_classify_rejects_agent_receipts,
+      test_classify_rejects_other_pipeline_subpath, test_preflight_pr_fails_on_phase_mismatch,
+      test_preflight_pr_fails_on_pipeline_id_mismatch — 5개 신규 테스트 모두 PASS.
+    </req>
+  </requirements_verification>
+
+  <test_results>
+    <suite name="tests/test_pr_hygiene.py">
+      <command>python -m pytest tests/test_pr_hygiene.py -v</command>
+      <result>9 passed, 2 warnings in 0.39s</result>
+      <verdict>PASS</verdict>
+    </suite>
+    <suite name="전체 테스트 스위트">
+      <command>python -m pytest tests/ -q</command>
+      <result>119 passed, 2 warnings in 10.44s</result>
+      <verdict>PASS</verdict>
+    </suite>
+    <suite name="GitHub Actions CI">
+      <run_id>25954863990</run_id>
+      <result>모든 step PASS (preflight-pr, pytest, phase attestation)</result>
+      <verdict>PASS</verdict>
+    </suite>
+  </test_results>
+
+  <integration_verification>
+    <item>CI pipeline 통합: preflight-pr step이 pytest 전에 실행되고 phase attestation 후에 단계 증명 파일 만들기 실행 — 순서 올바름</item>
+    <item>state-free 동작: CI 환경에 pipeline_state.json 없어도 preflight-pr 정상 실행</item>
+    <item>LF 정규화: phase_evidence 파일을 LF로 복사하여 Windows/Linux 환경 간 SHA 일치</item>
+    <item>fetch-depth:0: full git history 확보로 merge-base 항상 성공</item>
+  </integration_verification>
+
+  <numeric_score>116</numeric_score>
+
+  <verdict>PASS</verdict>
+  <failure_signature>NONE</failure_signature>
+
+  <handover>
+    <to>pipeline-manager-agent</to>
+    <summary>7개 요구사항 모두 구현 검증 완료. 9개 테스트 PASS, 119개 전체 테스트 PASS. GitHub Actions CI PASS. phase attestation PASS.</summary>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </evidence>
+    <test_results>python -m pytest tests/ -q → 119 passed</test_results>
+    <github_ci>run_id=25954863990 — PASS</github_ci>
+  </handover>
+</qa_report>
