@@ -1,42 +1,29 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <build_report>
-  <pipeline_id>IMP-20260515-020F</pipeline_id>
+  <pipeline_id>IMP-20260516-D069</pipeline_id>
   <agent>build-agent</agent>
-  <run_id>build-7fc011907c6eb62b</run_id>
-
-  <section_1_command>
-    <exe>N/A</exe>
-    <skip_reason>meta-task</skip_reason>
-    <note>pipeline.py 이식 작업. Python 스크립트 파일 이식으로 PyInstaller EXE 빌드 대상 아님. pipeline.py는 CLI 도구로 직접 실행. meta-task 분류.</note>
-  </section_1_command>
-
-  <section_2_output>
-    <build_status>N/A — 빌드 없음</build_status>
-    <skip_reason>meta-task</skip_reason>
-  </section_2_output>
-
-  <section_3_verification>
-    <verification>smoke test PASS — pipeline.py --help, outputs/patch/cluster 서브커맨드, pytest 14/14</verification>
-    <note>EXE 빌드 없음. smoke test로 이식 검증.</note>
-  </section_3_verification>
-
-  <section_4_artifacts>
-    <artifact>
-      <type>python_script</type>
-      <files>pipeline.py, tests/test_patch_lane.py, setup.cfg</files>
-      <note>3개 파일 이식 완료. outputs/patch/cluster 서브커맨드 포함 pipeline.py.</note>
-    </artifact>
-  </section_4_artifacts>
-
-  <section_5_qa_gate>
-    <qa_result>PASS 108/120</qa_result>
-    <security>SKIPPED (meta-task, 네트워크/DB 없음)</security>
-  </section_5_qa_gate>
-
+  <run_id>build-a0af85064bd78788</run_id>
+  <section_1_command>N/A — meta-task (pipeline.py + CLAUDE.md + tests 수정; EXE 빌드 대상 아님)</section_1_command>
+  <section_2_result>SKIP</section_2_result>
+  <section_3_artifacts>
+    <artifact>pipeline.py (수정됨)</artifact>
+    <artifact>CLAUDE.md (수정됨)</artifact>
+    <artifact>tests/test_pr_hygiene.py (신규)</artifact>
+    <artifact>tests/oracles/IMP-20260516-D069/case_normal/input.json (신규)</artifact>
+    <artifact>tests/oracles/IMP-20260516-D069/case_normal/expected.json (신규)</artifact>
+    <artifact>tests/oracles/IMP-20260516-D069/case_edge/input.json (신규)</artifact>
+    <artifact>tests/oracles/IMP-20260516-D069/case_edge/expected.json (신규)</artifact>
+  </section_3_artifacts>
+  <section_4_verification>
+    <item>EXE 빌드 불필요 — meta-task (docs-only 제외 코드+문서 혼합이나 EXE 미해당)</item>
+    <item>skip_reason: meta-task</item>
+    <item>pytest -q → 266 passed (로컬)</item>
+    <item>GitHub Actions CI → 266 passed (run: 25950875127)</item>
+  </section_4_verification>
+  <section_5_skip_reason>meta-task — pipeline.py/CLAUDE.md/tests 변경은 EXE 빌드 대상이 아님</section_5_skip_reason>
   <section_6_qa_mapping>
-    <mapped_requirement>MT-1: pipeline.py 이식 (outputs/patch/cluster/pm_planner 서브커맨드)</mapped_requirement>
-    <mapped_requirement>MT-2: tests/test_patch_lane.py + setup.cfg 이식 (14개 pytest)</mapped_requirement>
-    <mapped_requirement>MT-3: oracle 파일 등록 + 회귀 검증 (14 passed)</mapped_requirement>
-    <status>COMPLETE</status>
+    <qa_result>PASS 108/120</qa_result>
+    <test_evidence>pytest 266 passed</test_evidence>
+    <ci_run>25950875127</ci_run>
   </section_6_qa_mapping>
 </build_report>
