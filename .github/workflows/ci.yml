@@ -332,6 +332,73 @@ jobs:
           "@
           Set-Content -Path human_acceptance_packet.md -Value $packet -Encoding UTF8
 
+      - name: 구현 PR 위생 검사 (내부 산출물 오염 방지)
+        if: github.event_name == 'pull_request' && hashFiles('.pipeline/phase_attestation_request.json') == ''
+        shell: pwsh
+        env:
+          PIPELINE_NO_DASHBOARD: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $baseRef = "${{ github.event.pull_request.base.ref }}"
+          if ([string]::IsNullOrWhiteSpace($baseRef)) { $baseRef = "main" }
+          git fetch origin $baseRef --depth=50
+          $baseSha = "${{ github.event.pull_request.base.sha }}"
+          if ([string]::IsNullOrWhiteSpace($baseSha)) {
+            $baseSha = git merge-base "origin/$baseRef" HEAD
+          }
+          $changedFiles = git diff --name-only $baseSha HEAD
+          $forbiddenPatterns = @(
+            '^\.pipeline[/\\]',
+            '^pipeline_contracts[/\\]',
+            '^pipeline_outputs[/\\]',
+            '^pipeline_state.*\.json$',
+            '^build_report\.xml$',
+            '^qa_report\.xml$',
+            '^codex_review_result\.json$',
+            '^integration_report\.xml$',
+            '^dev_handover\.xml$',
+            '^step_plan\.xml$',
+            '^architect_report\.xml$',
+            'module_.*\.xml$',
+            '^scope_manifest.*\.json$',
+            '^preflight_report\.json$',
+            '^failure_packet\.json$'
+          )
+          $violations = @()
+          foreach ($file in $changedFiles) {
+            foreach ($pattern in $forbiddenPatterns) {
+              if ($file -match $pattern) {
+                $violations += $file
+                break
+              }
+            }
+          }
+          if ($violations.Count -gt 0) {
+            Write-Error "[PIPELINE ERROR] 구현 PR에 내부 파이프라인 산출물이 포함되어 있습니다:`n$($violations -join [System.Environment]::NewLine)"
+            exit 1
+          }
+          Write-Host "구현 PR 위생 검사 통과 — 내부 산출물 없음 ($($changedFiles.Count)개 파일 확인)"
+
+      - name: 단계 PR 위생 검사 (preflight-pr)
+        if: hashFiles('.pipeline/phase_attestation_request.json') != ''
+        shell: pwsh
+        env:
+          PIPELINE_NO_DASHBOARD: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $req = Get-Content -Raw -Path ".pipeline/phase_attestation_request.json" | ConvertFrom-Json
+          $phase = [string]$req.phase
+          if ([string]::IsNullOrWhiteSpace($phase)) {
+            Write-Error "[PIPELINE ERROR] phase_attestation_request.json에 phase 필드가 없습니다"
+            exit 1
+          }
+          python pipeline.py gates preflight-pr --phase $phase
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "[PIPELINE ERROR] preflight-pr 검사 실패"
+            exit 1
+          }
+          Write-Host "단계 PR 위생 검사 통과 (phase=$phase)"
+
       - name: 단계 증명 파일 만들기
         if: success() && hashFiles('.pipeline/phase_attestation_request.json') != ''
         shell: pwsh
