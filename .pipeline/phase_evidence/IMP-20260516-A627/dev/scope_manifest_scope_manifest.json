@@ -1,0 +1,61 @@
+{
+  "pipeline_id": "IMP-20260516-A627",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._validate_codex_review_schema"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.cmd_review (codex 분기)"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.cmd_review_codex_record"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_codex_review_gate"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "tests/test_codex_review.py"
+      ],
+      "affected_functions": [
+        "tests.test_codex_review (13개 신규 함수)"
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "CLAUDE.md",
+        ".claude/agents/pm-agent.md",
+        ".claude/commands/task.md"
+      ],
+      "affected_functions": [
+        "none (문서)"
+      ]
+    }
+  ]
+}
