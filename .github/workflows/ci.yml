@@ -392,6 +392,9 @@ jobs:
             Write-Error "[PIPELINE ERROR] phase_attestation_request.json에 phase 필드가 없습니다"
             exit 1
           }
+          $baseRef = "${{ github.event.pull_request.base.ref }}"
+          if ([string]::IsNullOrWhiteSpace($baseRef)) { $baseRef = "main" }
+          git fetch origin $baseRef --depth=50
           python pipeline.py gates preflight-pr --phase $phase
           if ($LASTEXITCODE -ne 0) {
             Write-Error "[PIPELINE ERROR] preflight-pr 검사 실패"
