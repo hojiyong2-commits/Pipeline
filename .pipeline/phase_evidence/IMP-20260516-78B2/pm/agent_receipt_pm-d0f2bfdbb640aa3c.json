@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260516-78B2",
+  "phase": "pm",
+  "agent_id": "pm-agent",
+  "run_id": "pm-d0f2bfdbb640aa3c",
+  "status": "COMPLETED",
+  "started_at": "2026-05-16T04:42:28Z",
+  "completed_at": "2026-05-16T04:58:59Z",
+  "output_file": "step_plan.xml",
+  "output_sha256": "e1654238a715c0217c519ff81e1ccd629ddd6be33ab5f46d47b2447ec4705d7a",
+  "evidence_files": [],
+  "commit_sha": "1ade70e7a90e1cf20305221bea24c8e49c56a054",
+  "notes": "pm_planner + pipeline_manager dual receipt - synthesized for phase attestation"
+}
