@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T06:14:01Z",
+  "generated_at": "2026-05-16T06:16:22Z",
   "pipeline_id": "IMP-20260516-78B2",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "406ca708487afc29210f735ff4461c65f96349ed",
+  "commit_hint": "87cb0d3ed807d794a579a12db05cb7bcb7a6572c",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-16T05:56:44Z",
@@ -54,8 +54,8 @@
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "30556a67eb052b5e0aa4cd6ed59f4b7b59dc143af90f67e17672d47472669333",
-      "size_bytes": 415090
+      "sha256": "32393463ce597ce9d05d19b7a00ffa76bb2c0647ec9780fa503ad72c18a98480",
+      "size_bytes": 415097
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -64,8 +64,8 @@
     },
     {
       "path": "tests/test_pr_hygiene.py",
-      "sha256": "9ce3b756af10e3fd5bc570dd25006007ed64f6b81b0cfa48a14d391433be5d31",
-      "size_bytes": 12987
+      "sha256": "2df7afa75cfb57d6177fb93ad22b21c768f7b4df511550b6efb55fe78259b343",
+      "size_bytes": 13571
     }
   ],
   "local_only_files": []

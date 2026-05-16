@@ -35,12 +35,15 @@ def _run_pipeline(*args: str, cwd: Path = BASE_DIR) -> subprocess.CompletedProce
 # ─────────────────────────────────────────────
 
 def test_preflight_pr_fails_on_stale_pipeline_files(tmp_path, monkeypatch):
-    """stale .pipeline/phase_evidence 파일이 있으면 preflight-pr FAIL (exit code != 0).
+    """preflight-pr 핵심 금지 규칙 검증.
 
     핵심 금지 규칙:
-    - pm phase에서 dev evidence (.pipeline/phase_evidence/{pid}/dev/...) 는 forbidden
-    - .pipeline/agent_receipts/** 는 forbidden
-    - 다른 pipeline_id의 phase_evidence 는 forbidden
+    - .pipeline/agent_receipts/** 는 forbidden (요구사항 5, 토큰/시크릿 노출 방지)
+    - 다른 pipeline_id의 phase_evidence 는 forbidden (요구사항 4)
+
+    허용 규칙:
+    - 같은 파이프라인의 모든 phase evidence는 허용 (impl 브랜치에서 PM→Dev evidence 공존)
+    - 일반 구현 파일(pipeline.py, ci.yml, tests/ 등)은 허용
     """
     import importlib
 
@@ -51,28 +54,35 @@ def test_preflight_pr_fails_on_stale_pipeline_files(tmp_path, monkeypatch):
 
     classify = pipeline_mod._classify_pr_file
 
-    # pm phase에서 dev evidence는 forbidden이어야 함 (요구사항 4)
-    result_dev = classify(".pipeline/phase_evidence/IMP-TEST-0000/dev/handover.json", "pm", "IMP-TEST-0000")
-    assert result_dev.startswith("forbidden"), (
-        f"dev evidence가 pm phase에서 forbidden이어야 합니다: {result_dev}"
+    # 다른 pipeline_id의 evidence는 forbidden이어야 함 (요구사항 4)
+    result_other_pid = classify(".pipeline/phase_evidence/OTHER-PID-0000/pm/receipt.json", "dev", "IMP-TEST-0000")
+    assert result_other_pid.startswith("forbidden"), (
+        f"다른 pipeline_id의 phase_evidence는 forbidden이어야 합니다: {result_other_pid}"
     )
 
     # agent_receipts는 forbidden이어야 함 (요구사항 5)
-    result_receipts = classify(".pipeline/agent_receipts/IMP-TEST-0000/dev/run.json", "pm", "IMP-TEST-0000")
+    result_receipts = classify(".pipeline/agent_receipts/IMP-TEST-0000/dev/run.json", "dev", "IMP-TEST-0000")
     assert result_receipts.startswith("forbidden"), (
         f".pipeline/agent_receipts/** 는 forbidden이어야 합니다: {result_receipts}"
     )
 
-    # pm phase의 own evidence는 allowed여야 함
-    own_evidence = ".pipeline/phase_evidence/IMP-TEST-0000/pm/receipt.json"
-    result_own = classify(own_evidence, "pm", "IMP-TEST-0000")
-    assert result_own == "allowed", (
-        f"pm phase evidence가 pm phase에서 allowed여야 합니다: {result_own}"
+    # 같은 파이프라인의 pm evidence는 dev phase에서도 allowed여야 함 (이전 phase 공존)
+    pm_evidence = ".pipeline/phase_evidence/IMP-TEST-0000/pm/receipt.json"
+    result_pm = classify(pm_evidence, "dev", "IMP-TEST-0000")
+    assert result_pm == "allowed", (
+        f"같은 파이프라인의 pm evidence는 dev phase에서 allowed여야 합니다: {result_pm}"
+    )
+
+    # dev evidence는 dev phase에서 allowed여야 함
+    dev_evidence = ".pipeline/phase_evidence/IMP-TEST-0000/dev/handover.json"
+    result_dev = classify(dev_evidence, "dev", "IMP-TEST-0000")
+    assert result_dev == "allowed", (
+        f"같은 파이프라인의 dev evidence는 dev phase에서 allowed여야 합니다: {result_dev}"
     )
 
     # 일반 구현 파일(pipeline.py, ci.yml 등)은 allowed여야 함
     for impl_file in ["pipeline.py", ".github/workflows/ci.yml", "tests/test_pr_hygiene.py"]:
-        result_impl = classify(impl_file, "pm", "IMP-TEST-0000")
+        result_impl = classify(impl_file, "dev", "IMP-TEST-0000")
         assert result_impl == "allowed", (
             f"구현 파일은 allowed여야 합니다: {impl_file} → {result_impl}"
         )
@@ -218,12 +228,11 @@ def test_classify_rejects_agent_receipts():
 def test_classify_rejects_other_pipeline_subpath():
     """.pipeline/agent_receipts/** 경로는 forbidden이어야 합니다 (요구사항 5번).
 
-    기타 .pipeline/** 경로(agent_receipts 제외)는 allowed입니다.
-    구현 파일도 phase attestation PR에 포함될 수 있으므로 허용합니다.
+    같은 파이프라인의 phase_evidence 및 기타 .pipeline/ 경로는 허용됩니다.
     """
     classify = _load_classify()
 
-    # agent_receipts는 항상 forbidden
+    # agent_receipts는 항상 forbidden (요구사항 5)
     for path in [
         ".pipeline/agent_receipts/IMP-TEST-0000/pm_planner/run.json",
         ".pipeline/agent_receipts/IMP-TEST-0000/dev/run.json",
@@ -233,10 +242,11 @@ def test_classify_rejects_other_pipeline_subpath():
             f".pipeline/agent_receipts/** 경로는 forbidden이어야 합니다: {result}"
         )
 
-    # 기타 .pipeline/** 경로는 제한 없음 (agent_receipts + phase_evidence 외)
-    # phase_attestation_request.json과 기타 .pipeline/ 내부 파일은 허용
+    # 같은 파이프라인의 phase_evidence와 기타 .pipeline/ 경로는 allowed
     for path in [
         ".pipeline/phase_attestation_request.json",
+        ".pipeline/phase_evidence/IMP-TEST-0000/pm/receipt.json",
+        ".pipeline/phase_evidence/IMP-TEST-0000/dev/handover.json",
         ".pipeline/something_else/file.json",
     ]:
         result = classify(path, "pm", "IMP-TEST-0000")

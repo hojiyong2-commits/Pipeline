@@ -7172,20 +7172,19 @@ def _classify_pr_file(path: str, phase: str, pid: str) -> str:
     if path.startswith(".pipeline/agent_receipts/"):
         return f"forbidden:.pipeline/agent_receipts/** 는 PR에 포함 금지 ({path})"
 
-    # phase_evidence 처리: pipeline_id + phase 모두 일치해야 허용
+    # phase_evidence 처리: pipeline_id가 다르면 금지, 같은 파이프라인의 모든 phase는 허용
+    # (같은 파이프라인의 이전/이후 phase evidence는 PR에 공존 가능)
     phase_evidence_prefix = ".pipeline/phase_evidence/"
     if path.startswith(phase_evidence_prefix):
-        # 경로에서 pid + phase 폴더 확인: .pipeline/phase_evidence/{pid}/{phase}/...
+        # 경로에서 pid 폴더 확인: .pipeline/phase_evidence/{pid}/{phase}/...
         rest = path[len(phase_evidence_prefix):]
         parts = rest.split("/")
-        # pid 또는 phase가 명시된 경우에만 검증
+        # 다른 pipeline_id의 evidence는 금지 (요구사항 4)
         if len(parts) >= 1 and pid and parts[0] != pid:
             return f"forbidden:다른 pipeline_id의 evidence 경로 ({path})"
-        if len(parts) >= 2 and phase and parts[1] != phase:
-            return f"forbidden:다른 phase의 evidence 경로 ({path})"
         return "allowed"
 
-    # 그 외 모든 파일은 허용 (구현 파일, docs, tests 등)
+    # 그 외 모든 파일은 허용 (구현 파일, docs, tests, 기타 .pipeline/ 등)
     return "allowed"
 
 
