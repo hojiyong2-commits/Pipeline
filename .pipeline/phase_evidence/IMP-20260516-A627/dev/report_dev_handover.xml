@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260516-A627</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <phase>dev</phase>
+  <status>READY_FOR_QA</status>
+
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+    <file>CLAUDE.md</file>
+    <file>.claude/commands/task.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+  </implemented_files>
+
+  <module_gates>
+    <module id="MT-1"><design>PASS</design><dev>PASS</dev><qa>PASS</qa></module>
+    <module id="MT-2"><design>PASS</design><dev>PASS</dev><qa>PASS</qa></module>
+    <module id="MT-3"><design>PASS</design><dev>PASS</dev><qa>PASS</qa></module>
+    <module id="MT-4"><design>PASS</design><dev>PASS</dev><qa>PASS</qa></module>
+    <module id="MT-5"><design>PASS</design><dev>PASS</dev><qa>PASS</qa></module>
+    <module id="MT-6"><design>PASS</design><dev>PASS</dev><qa>PASS</qa></module>
+    <integration>PASS</integration>
+  </module_gates>
+
+  <scope_declaration>
+    <files_to_modify>pipeline.py, CLAUDE.md, .claude/commands/task.md, .claude/agents/pm-agent.md</files_to_modify>
+    <files_to_create>tests/test_codex_review.py</files_to_create>
+    <files_to_delete>없음</files_to_delete>
+    <out_of_scope>.pipeline/**, pipeline_contracts/**, pipeline_outputs/**, pipeline_state*.json, build_report.xml, qa_report.xml (step_plan 금지 목록)</out_of_scope>
+  </scope_declaration>
+
+  <changes_summary>
+    <change file="pipeline.py">MT-1~MT-4: Codex Review Gate 구현 — _validate_codex_review_schema, cmd_review codex 분기 확장, cmd_review_codex_record, _check_codex_review_gate absent=FAIL 전환, --codex-review-waiver 지원</change>
+    <change file="tests/test_codex_review.py">MT-5: 28개 테스트 — TestSchemaValidator(6), TestReviewCodexStages(4), TestCodexRecord(5), TestGateCheck(5), TestRCARegressionPR60(4), TestSchemaEdgeCases(4). 28/28 PASS</change>
+    <change file="CLAUDE.md">MT-6: Trust chain에 Codex technical review(GPT-5.5) 삽입, Codex Review Gate 6-stage 섹션 신설</change>
+    <change file=".claude/commands/task.md">MT-6: Codex Review Gate 섹션 추가 (Dev/QA 진입 전 Codex ACCEPT 절차)</change>
+    <change file=".claude/agents/pm-agent.md">MT-6: Codex Review Gate 섹션 추가 (PM 책임, 6-stage 매핑, GPT-5.5 모델 고정, waiver 규칙)</change>
+  </changes_summary>
+
+  <impact_analysis>
+    <micro_task_id>MT-1 through MT-6</micro_task_id>
+    <affected_function>pipeline._validate_codex_review_schema, pipeline.cmd_review (codex 분기), pipeline.cmd_review_codex_record, pipeline._check_codex_review_gate, pipeline.cmd_check (waiver 추가)</affected_function>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/commands/task.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+    </target_files>
+    <affected_call_sites>
+      <site>pipeline.cmd_check (dev/qa phase 진입 차단)</site>
+      <site>pipeline._check_codex_review_gate (MT-4 재작성)</site>
+    </affected_call_sites>
+    <change_description>pipeline.py에 Codex Review hard gate 전체 구현. 문서 3개에 Trust chain + gate 규칙 동기화.</change_description>
+  </impact_analysis>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <step_id>MT-1~MT-6</step_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/commands/task.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_handover>
