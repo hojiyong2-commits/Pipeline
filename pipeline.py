@@ -7199,8 +7199,85 @@ def _classify_pr_file(path: str, phase: str, pid: str) -> str:
     return "allowed"
 
 
+def _cmd_gates_preflight_pr(args: argparse.Namespace) -> None:
+    """preflight-pr 명령 처리 — state 없이도 동작 (CI 환경 호환)."""
+    phase = str(getattr(args, "phase", "") or "").strip().lower()
+    if not phase:
+        _die("[PIPELINE ERROR] preflight-pr requires --phase {pm,dev,qa,build}", exit_code=2)
+
+    # --pipeline-id 우선, 없으면 state에서 시도, state도 없으면 빈 문자열
+    pid_arg = str(getattr(args, "pipeline_id", None) or "")
+    if not pid_arg:
+        state = _load()
+        pid_arg = str(state.get("pipeline_id", "") if state else "")
+
+    request_file = str(getattr(args, "request_file", None) or ".pipeline/phase_attestation_request.json")
+
+    pid = pid_arg
+
+    # request 파일이 있으면 파싱하여 phase와 pipeline_id 검증
+    req_path = Path(request_file)
+    if req_path.is_file():
+        try:
+            req_data = json.loads(req_path.read_bytes().decode("utf-8"))
+        except Exception as exc:
+            _die(f"[PIPELINE ERROR] preflight-pr: request 파일 파싱 실패: {exc}", exit_code=1)
+        req_phase = str(req_data.get("phase", "")).strip().lower()
+        req_pid = str(req_data.get("pipeline_id", "")).strip()
+        if req_phase and req_phase != phase:
+            print(
+                f"[PIPELINE ERROR] preflight-pr FAIL: request.phase={req_phase!r}가 "
+                f"--phase={phase!r}와 다릅니다. 잘못된 phase 브랜치에서 PR을 열었을 수 있습니다.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if pid and req_pid and req_pid != pid:
+            print(
+                f"[PIPELINE ERROR] preflight-pr FAIL: request.pipeline_id={req_pid!r}가 "
+                f"--pipeline-id={pid!r}와 다릅니다.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        # request에서 pid를 덮어쓰기 (--pipeline-id 미지정 시 request 값 사용)
+        if not pid:
+            pid = req_pid
+
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "origin/main...HEAD"],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        _die(
+            f"[PIPELINE ERROR] preflight-pr: git diff failed: {result.stderr.strip()}",
+            exit_code=1,
+        )
+    changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+
+    forbidden: List[str] = []
+    for f in changed_files:
+        verdict = _classify_pr_file(f, phase, pid)
+        if verdict.startswith("forbidden"):
+            forbidden.append(f)
+
+    if forbidden:
+        print(f"[PIPELINE ERROR] preflight-pr FAIL: 다음 파일이 phase={phase} PR 범위를 벗어납니다:")
+        for f in forbidden:
+            print(f"  - {f}")
+        sys.exit(1)
+
+    color = GREEN
+    print(color(f"[PREFLIGHT-PR PASS] phase={phase} changed={len(changed_files)}개 파일"))
+    sys.exit(0)
+
+
 def cmd_gates(args: argparse.Namespace) -> None:
     action = args.gates_action
+
+    # preflight-pr는 state 없이도 동작 (GitHub Actions CI 환경에서 pipeline_state.json이 없을 수 있음)
+    if action == "preflight-pr":
+        _cmd_gates_preflight_pr(args)
+        return
+
     state = _require_state()
     state = _ensure_v210_fields(state)
     pid = str(state.get("pipeline_id"))
@@ -7543,68 +7620,6 @@ def cmd_gates(args: argparse.Namespace) -> None:
             # 비probe 모드: 상태 기록 없음, 단순 stdout 출력 후 종료
             pass
         return
-
-    if action == "preflight-pr":
-        phase = str(getattr(args, "phase", "") or "").strip().lower()
-        if not phase:
-            _die("[PIPELINE ERROR] preflight-pr requires --phase {pm,dev,qa,build}", exit_code=2)
-
-        pid = str(getattr(args, "pipeline_id", None) or state.get("pipeline_id", ""))
-        request_file = str(getattr(args, "request_file", None) or ".pipeline/phase_attestation_request.json")
-
-        # request 파일이 있으면 파싱하여 phase와 pipeline_id 검증
-        req_path = Path(request_file)
-        if req_path.is_file():
-            try:
-                req_data = json.loads(req_path.read_bytes().decode("utf-8"))
-            except Exception as exc:
-                _die(f"[PIPELINE ERROR] preflight-pr: request 파일 파싱 실패: {exc}", exit_code=1)
-            req_phase = str(req_data.get("phase", "")).strip().lower()
-            req_pid = str(req_data.get("pipeline_id", "")).strip()
-            if req_phase and req_phase != phase:
-                print(
-                    f"[PIPELINE ERROR] preflight-pr FAIL: request.phase={req_phase!r}가 "
-                    f"--phase={phase!r}와 다릅니다. 잘못된 phase 브랜치에서 PR을 열었을 수 있습니다.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            if pid and req_pid and req_pid != pid:
-                print(
-                    f"[PIPELINE ERROR] preflight-pr FAIL: request.pipeline_id={req_pid!r}가 "
-                    f"--pipeline-id={pid!r}와 다릅니다.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            # request에서 pid를 덮어쓰기 (--pipeline-id 미지정 시 request 값 사용)
-            if not pid:
-                pid = req_pid
-
-        result = subprocess.run(
-            ["git", "diff", "--name-only", "origin/main...HEAD"],
-            capture_output=True, text=True, check=False,
-        )
-        if result.returncode != 0:
-            _die(
-                f"[PIPELINE ERROR] preflight-pr: git diff failed: {result.stderr.strip()}",
-                exit_code=1,
-            )
-        changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
-
-        forbidden: List[str] = []
-        for f in changed_files:
-            verdict = _classify_pr_file(f, phase, pid)
-            if verdict.startswith("forbidden"):
-                forbidden.append(f)
-
-        if forbidden:
-            print(f"[PIPELINE ERROR] preflight-pr FAIL: 다음 파일이 phase={phase} PR 범위를 벗어납니다:")
-            for f in forbidden:
-                print(f"  - {f}")
-            sys.exit(1)
-
-        color = GREEN
-        print(color(f"[PREFLIGHT-PR PASS] phase={phase} changed={len(changed_files)}개 파일"))
-        sys.exit(0)
 
     _die(f"unknown gates action: {action}", exit_code=2)
 
