@@ -74,22 +74,22 @@ def _force_utf8_stdio() -> None:
 
 _force_utf8_stdio()
 
-import hashlib
-import importlib.util
-import secrets
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
-import re
-import socket
-import subprocess
-import tempfile
-import shutil
-import urllib.error
-import urllib.parse
-import urllib.request
-import io
-import zipfile
+import hashlib  # noqa: E402
+import importlib.util  # noqa: E402
+import secrets  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any, Dict, List, Optional, Tuple, TypedDict  # noqa: E402
+import re  # noqa: E402
+import socket  # noqa: E402
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
+import shutil  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.parse  # noqa: E402
+import urllib.request  # noqa: E402
+import io  # noqa: E402
+import zipfile  # noqa: E402
 
 QA_MAX_SCORE = 120
 QA_PASS_RATIO = 0.8
@@ -876,8 +876,8 @@ def _validate_pm_design_confirmation(step_plan: Any, micro_tasks: List[Dict[str,
         if not any(marker in question_text for marker in ("?", "까요", "선택", "확인")):
             _die(f"[PM DESIGN GATE] {qid} must be phrased as a clear user decision question")
 
-        evidence = _require_design_text(question, "evidence", f"{qid} evidence", min_len=12)
-        why = _require_design_text(question, "why_it_matters", f"{qid} why_it_matters", min_len=20)
+        _require_design_text(question, "evidence", f"{qid} evidence", min_len=12)
+        _require_design_text(question, "why_it_matters", f"{qid} why_it_matters", min_len=20)
         recommended = _require_design_text(
             question,
             "recommended_option",
@@ -1908,12 +1908,12 @@ def _c(text: str, code: str) -> str:
         return f"\033[{code}m{text}\033[0m"
     return text
 
-RED    = lambda t: _c(t, "31")
-GREEN  = lambda t: _c(t, "32")
-YELLOW = lambda t: _c(t, "33")
-CYAN   = lambda t: _c(t, "36")
-BOLD   = lambda t: _c(t, "1")
-DIM    = lambda t: _c(t, "2")
+def RED(t: str) -> str: return _c(t, "31")
+def GREEN(t: str) -> str: return _c(t, "32")
+def YELLOW(t: str) -> str: return _c(t, "33")
+def CYAN(t: str) -> str: return _c(t, "36")
+def BOLD(t: str) -> str: return _c(t, "1")
+def DIM(t: str) -> str: return _c(t, "2")
 
 
 # ── Branch / Tournament state helpers ───────────────────────────────────────
@@ -3504,7 +3504,7 @@ def _ensure_dashboard_running(open_browser: bool = True) -> None:
             print(DIM(f"  에이전트 오피스 대시보드 이미 실행 중 → {DASHBOARD_URL}"))
         # 브라우저 자동 오픈 제거 (IMP-20260505-C0FC) — open_browser 파라미터는 시그니처 호환을 위해 유지하되 동작은 no-op.
     else:
-        print(DIM(f"  대시보드 자동 시작 보류 — 수동으로 'VS Code 태스크: 에이전트 대시보드 시작' 실행 가능"))
+        print(DIM("  대시보드 자동 시작 보류 — 수동으로 'VS Code 태스크: 에이전트 대시보드 시작' 실행 가능"))
 
 
 # ── Commands ─────────────────────────────────────────────────────────────────
@@ -3530,7 +3530,7 @@ def cmd_new(args: argparse.Namespace) -> None:
     _save(state)
 
     print()
-    print(BOLD(GREEN(f"  파이프라인 생성 완료")))
+    print(BOLD(GREEN("  파이프라인 생성 완료")))
     print(f"  ID:   {CYAN(pipeline_id)}")
     print(f"  유형: {pipeline_type}")
     print(f"  설명: {args.desc}")
@@ -3661,7 +3661,7 @@ def cmd_done(args: argparse.Namespace) -> None:
     phase = args.phase.lower()
 
     if phase not in ("pm", "dev"):
-        _die(f"'done' 명령은 pm/dev 전용입니다. qa/sec/build/harness는 전용 명령 사용.")
+        _die("'done' 명령은 pm/dev 전용입니다. qa/sec/build/harness는 전용 명령 사용.")
 
     ok, reason = check_gate(state, phase)
     if not ok:
@@ -3831,7 +3831,8 @@ def cmd_done(args: argparse.Namespace) -> None:
         missing = [t.strip() for t in evidence.split(",") if t.strip() and not Path(t.strip()).exists()]
         if missing:
             print(RED("\n[FILE NOT FOUND] DONE 기록 거부 — 존재하지 않는 파일:"))
-            for p in missing: print(RED(f"  - {p}"))
+            for p in missing:
+                print(RED(f"  - {p}"))
             print(RED("dev-agent가 실제로 파일을 작성한 후 다시 실행하세요.\n"))
             sys.exit(1)
 
@@ -4184,10 +4185,10 @@ def cmd_build(args: argparse.Namespace) -> None:
     print(GREEN(f"\n[BUILD DONE] EXE: {exe or '경로 미지정'}"))
     print()
     print(BOLD(YELLOW("  ★ Phase 7 External Gates 실행 의무 -생략 불가")))
-    print(f"  다음 절차:")
-    print(f"    1. Build evidence commit/push 후 GitHub Actions phase attestation 확인:")
+    print("  다음 절차:")
+    print("    1. Build evidence commit/push 후 GitHub Actions phase attestation 확인:")
     print(f"       {YELLOW('python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipeline')}")
-    print(f"    2. test-harness-agent는 진단만 수행하고, 아래 external gates를 기록:")
+    print("    2. test-harness-agent는 진단만 수행하고, 아래 external gates를 기록:")
     print(f"       {YELLOW('python pipeline.py gates technical')}")
     print(f"       {YELLOW('python pipeline.py gates oracle')}")
     print(f"       {YELLOW('python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline')}")
@@ -4282,7 +4283,7 @@ def _inject_phase_attestation_facts(report_path: str, state: Dict[str, Any]) -> 
             facts_lines.append(f"    <phase_ci_run_id>{run_id}</phase_ci_run_id>")
             facts_lines.append(f"    <phase_ci_commit_sha>{commit}</phase_ci_commit_sha>")
             facts_lines.append(f"    <phase_ci_pr_number>{pr_number}</phase_ci_pr_number>")
-            facts_lines.append(f"  </phase>")
+            facts_lines.append("  </phase>")
         facts_lines.append("</phase_attestation_facts>")
         facts_block = "\n".join(facts_lines)
 
@@ -4564,7 +4565,7 @@ def cmd_terminate(args: argparse.Namespace) -> None:
 
     state["terminal_state"] = "TERMINATED"
     state["current_phase"] = "TERMINATED"
-    _log_event(state, f"파이프라인 명시적 종료 (사용자 terminate 명령)")
+    _log_event(state, "파이프라인 명시적 종료 (사용자 terminate 명령)")
 
     # 보관
     HISTORY_DIR.mkdir(exist_ok=True)
@@ -4812,7 +4813,7 @@ def _int_xml_text(parent: ET.Element, name: str, default: int = 0) -> int:
 def _is_product_code_path(raw: str) -> bool:
     rel = _normalize_rel_path(raw)
     path = Path(rel)
-    if not path.suffix.lower() in PRODUCT_CODE_EXTENSIONS:
+    if path.suffix.lower() not in PRODUCT_CODE_EXTENSIONS:
         return False
     parts = set(path.parts)
     if "tests" in parts or path.name.startswith("test_") or path.name.endswith("_test.py"):
@@ -8317,7 +8318,7 @@ def cmd_tournament_finalize(args: argparse.Namespace) -> None:
 
     print(f"\n  토너먼트 완료: {pid}")
     print(f"  승자: Branch {args.winner}")
-    print(f"  결과는 pipeline_history/ 에 보관됩니다.")
+    print("  결과는 pipeline_history/ 에 보관됩니다.")
     print()
 
 
@@ -8828,7 +8829,7 @@ def build_parser() -> argparse.ArgumentParser:
 #    "forbidden": {...}, "user_confirmation": {...}}
 # ---------------------------------------------------------------------------
 
-import random as _random_mod
+import random as _random_mod  # noqa: E402
 
 _CLUSTER_DIR = BASE_DIR / ".pipeline" / "clusters"
 _PATCH_LANE_AUTO_ESCALATION_LINES = 15

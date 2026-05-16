@@ -12,9 +12,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import patch
-
-import pytest
 
 # 프로젝트 루트 경로
 BASE_DIR = Path(__file__).resolve().parent.parent
