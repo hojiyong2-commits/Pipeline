@@ -1,0 +1,6 @@
+﻿{
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "pipeline_id": "IMP-20260516-D069",
+  "phase": "pm",
+  "phase_status": "DONE"
+}
