@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260516-9A42</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </files_to_modify>
+    <out_of_scope>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/**/*.md</file>
+    </out_of_scope>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_classify_pr_file; cmd_gates (preflight-pr); p_gate_preflight_pr; ci.yml steps; test_pr_hygiene tests</target_function>
+    <change_description>
+      MT-1: _classify_pr_file를 엄격한 allowlist로 재구현. preflight-pr에 --pipeline-id/--request-file 추가.
+      MT-2: ci.yml에 preflight-pr step 추가, 구현 PR 하드 fail, if 조건 변경. test_pr_hygiene.py에 7개 신규 테스트.
+    </change_description>
+    <blast_radius>3개 파일, 외부 영향 없음</blast_radius>
+  </impact_analysis>
+  <evidence>
+    <modified_files>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </modified_files>
+    <test_results>pytest tests/test_pr_hygiene.py: 11 passed</test_results>
+    <module_gates>
+      <mt id="MT-1">PASS</mt>
+      <mt id="MT-2">PASS</mt>
+      <integration>PASS</integration>
+    </module_gates>
+  </evidence>
+</handover>
