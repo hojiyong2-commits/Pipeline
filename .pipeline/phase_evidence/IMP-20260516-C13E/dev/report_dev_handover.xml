@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260516-C13E</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <scope_declaration>
+    <files_to_modify>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+      <file>tests/oracles/IMP-20260516-C13E/case_normal/input.json</file>
+      <file>tests/oracles/IMP-20260516-C13E/case_normal/expected.json</file>
+      <file>tests/oracles/IMP-20260516-C13E/case_edge/input.json</file>
+      <file>tests/oracles/IMP-20260516-C13E/case_edge/expected.json</file>
+    </files_to_modify>
+    <out_of_scope>
+      <file>CLAUDE.md</file>
+      <file>pipeline.py</file>
+      <file>setup.cfg</file>
+    </out_of_scope>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>.github/workflows/ci.yml::jobs.tests.steps; tests.test_pr_hygiene.*</target_function>
+    <change_description>
+      MT-1: ci.yml에 구현 PR 위생 검사 스텝 추가 (hashFiles == '' 조건) 및 단계 PR 위생 검사 스텝 추가 (hashFiles != '' 조건, 브랜치명 제거).
+      MT-2: setup.cfg/.bandit이 origin/main 상태 확인 (변경 없음).
+      MT-3: tests/oracles/IMP-20260516-C13E/ 4개 oracle 파일 생성.
+      MT-4: tests/test_pr_hygiene.py에 신규 7개 테스트 추가 (총 11개).
+    </change_description>
+    <blast_radius>2개 파일 수정 + oracle 4개 신규. pipeline.py 미변경. 외부 영향 없음.</blast_radius>
+  </impact_analysis>
+  <evidence>
+    <modified_files>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+      <file>tests/oracles/IMP-20260516-C13E/case_normal/input.json</file>
+      <file>tests/oracles/IMP-20260516-C13E/case_normal/expected.json</file>
+      <file>tests/oracles/IMP-20260516-C13E/case_edge/input.json</file>
+      <file>tests/oracles/IMP-20260516-C13E/case_edge/expected.json</file>
+    </modified_files>
+    <test_results>pytest tests/test_pr_hygiene.py: 11 passed</test_results>
+    <module_gates>
+      <mt id="MT-1">PASS</mt>
+      <mt id="MT-2">PASS</mt>
+      <mt id="MT-3">PASS</mt>
+      <mt id="MT-4">PASS</mt>
+      <integration>PASS</integration>
+    </module_gates>
+  </evidence>
+</handover>
