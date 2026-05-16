@@ -30,7 +30,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: 구현 PR 위생 검사 (내부 산출물 오염 방지)
-        if: github.event_name == 'pull_request' && hashFiles('.pipeline/phase_attestation_request.json') == ''
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'phase-attestation/')
         shell: pwsh
         env:
           PIPELINE_NO_DASHBOARD: "1"
@@ -78,13 +78,17 @@ jobs:
           Write-Host "구현 PR 위생 검사 통과 — 내부 산출물 없음 ($($changedFiles.Count)개 파일 확인)"
 
       - name: 단계 PR 위생 검사 (preflight-pr)
-        if: hashFiles('.pipeline/phase_attestation_request.json') != ''
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'phase-attestation/')
         shell: pwsh
         env:
           PIPELINE_NO_DASHBOARD: "1"
         run: |
           $ErrorActionPreference = "Stop"
           $reqPath = ".pipeline/phase_attestation_request.json"
+          if (-not (Test-Path $reqPath)) {
+            Write-Error "[PIPELINE ERROR] phase-attestation 브랜치에 .pipeline/phase_attestation_request.json이 없습니다."
+            exit 1
+          }
           $req = ConvertFrom-Json (Get-Content -Path $reqPath -Raw -Encoding UTF8)
           $phase = [string]$req.phase
           $pipelineId = [string]$req.pipeline_id
