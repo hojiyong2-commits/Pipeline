@@ -7264,12 +7264,12 @@ def _cmd_gates_preflight_pr(args: argparse.Namespace) -> None:
             changed_files = [f.strip() for f in diff_result.stdout.splitlines() if f.strip()]
             diff_ok = True
 
-    # 시도 2: GITHUB_BASE_SHA 환경변수 이용
+    # 시도 2: GITHUB_BASE_SHA 환경변수 이용 (two-dot: merge-base 없이 직접 비교)
     if not diff_ok:
         base_sha_env = os.environ.get("GITHUB_BASE_SHA", "").strip()
         if base_sha_env:
             diff_result = subprocess.run(
-                ["git", "diff", "--name-only", f"{base_sha_env}...HEAD"],
+                ["git", "diff", "--name-only", base_sha_env, "HEAD"],
                 capture_output=True, text=True, check=False,
             )
             if diff_result.returncode == 0:
