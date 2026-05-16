@@ -42,21 +42,44 @@ def _normalize(value: Any) -> Any:
     return value
 
 
-def _expected_actual(test: dict[str, Any], base_dir: Path) -> tuple[Any, Any]:
+def _resolve_with_fallback(base_dir: Path, project_dir: Path, raw_path: str | None) -> Path:
+    """base_dir에서 resolve 시도, 파일이 없으면 project_dir로 fallback."""
+    if not raw_path:
+        raise ScoringError("path is required")
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    candidate = base_dir / path
+    if candidate.exists():
+        return candidate
+    fallback = project_dir / path
+    if fallback.exists():
+        return fallback
+    # 둘 다 없으면 원래 경로 반환 (기존 오류 메시지 유지)
+    return candidate
+
+
+def _expected_actual(test: dict[str, Any], base_dir: Path, project_dir: Path | None = None) -> tuple[Any, Any]:
     then = test.get("then", {})
     given = test.get("given", {})
     expected = then.get("expected") if isinstance(then, dict) else None
     actual = given.get("actual") if isinstance(given, dict) else None
 
     if isinstance(then, dict) and then.get("expected_file"):
-        expected = _load_json(_resolve(base_dir, str(then["expected_file"])))
+        if project_dir is not None:
+            expected = _load_json(_resolve_with_fallback(base_dir, project_dir, str(then["expected_file"])))
+        else:
+            expected = _load_json(_resolve(base_dir, str(then["expected_file"])))
     if isinstance(given, dict) and given.get("actual_file"):
-        actual = _load_json(_resolve(base_dir, str(given["actual_file"])))
+        if project_dir is not None:
+            actual = _load_json(_resolve_with_fallback(base_dir, project_dir, str(given["actual_file"])))
+        else:
+            actual = _load_json(_resolve(base_dir, str(given["actual_file"])))
     return expected, actual
 
 
 def score_json_exact_match(test: dict[str, Any], base_dir: Path, project_dir: Path) -> tuple[bool, str, dict[str, Any]]:
-    expected, actual = _expected_actual(test, base_dir)
+    expected, actual = _expected_actual(test, base_dir, project_dir)
     ok = _normalize(expected) == _normalize(actual)
     return ok, "JSON values match" if ok else "JSON values differ", {"expected": expected, "actual": actual}
 
@@ -239,6 +262,8 @@ def score_command_check(test: dict[str, Any], base_dir: Path, project_dir: Path)
         cwd=str(cwd),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
         check=False,
     )

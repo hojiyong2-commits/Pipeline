@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260516-78B2",
+  "created_at": "2026-05-16T04:51:09Z",
+  "updated_at": "2026-05-16T04:53:33Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "TC001",
+      "module": "preflight-pr-enhance",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260516-78B2/case_normal/actual.json"
+      },
+      "when": {
+        "action": "_classify_pr_file: path=.pipeline/phase_evidence/IMP-TEST-0000/pm/receipt.json phase=pm pid=IMP-TEST-0000"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260516-78B2/case_normal/expected.json"
+      }
+    },
+    {
+      "id": "TC002",
+      "module": "preflight-pr-enhance",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 10,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260516-78B2/case_edge/actual.json"
+      },
+      "when": {
+        "action": "_classify_pr_file: path=.pipeline/phase_evidence/OTHER-IMP-0000/pm/receipt.json phase=pm pid=IMP-TEST-0000"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260516-78B2/case_edge/expected.json"
+      }
+    },
+    {
+      "id": "TC003",
+      "module": "preflight-pr-enhance",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "exception",
+      "points": 10,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "pipeline.py",
+          "gates",
+          "preflight-pr",
+          "--phase",
+          "pm",
+          "--pipeline-id",
+          "IMP-TEST-0000"
+        ]
+      },
+      "then": {
+        "returncode": 1
+      }
+    }
+  ],
+  "frozen_at": "2026-05-16T04:53:33Z",
+  "test_set_hash": "8f09343569b12f3f447ae2cf6b3ed3b033eecb4ceaf32027c62eaee5bf6403dc",
+  "contract_hash": "4fe3ad92bc6358bc79dad31f6410d6e386751735fc4c8673685c2eae453895bd"
+}
