@@ -5,7 +5,7 @@
   "pipeline_id": "IMP-20260516-1690",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "3d796d9b5d0e1f2a3c4d5e6f7a8b9c0d1e2f3a4b",
+  "commit_hint": "ece188626ed20c75585c00a4781d228e87b34bbd",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-16T07:31:04Z",
