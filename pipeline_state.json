@@ -4,7 +4,7 @@
   "type": "IMP",
   "description": "PR 오염 재발 방지: preflight-pr gate 추가, acceptance evidence 범위 제한, architect run_id/commit_sha 자동 검증, CLAUDE.md patch verify 예시 수정, 관련 테스트 추가",
   "created_at": "2026-05-16T01:57:03Z",
-  "updated_at": "2026-05-16T02:52:42Z",
+  "updated_at": "2026-05-16T02:55:11Z",
   "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
@@ -278,6 +278,18 @@
     {
       "ts": "2026-05-16T02:52:42Z",
       "msg": "phase attestation request prepared: build"
+    },
+    {
+      "ts": "2026-05-16T02:54:24Z",
+      "msg": "github phase-ci build PASS run_id=25950928303 commit=c58ee4d91c21"
+    },
+    {
+      "ts": "2026-05-16T02:54:30Z",
+      "msg": "output registered report pipeline_outputs\\IMP-20260516-D069\\MT-5-4-test_pr_hygiene.py"
+    },
+    {
+      "ts": "2026-05-16T02:55:11Z",
+      "msg": "technical gate FAIL"
     }
   ],
   "terminal_state": null,
@@ -388,10 +400,10 @@
     "enabled": true,
     "mode": "three_gate",
     "technical": {
-      "status": "PENDING",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "FAIL",
+      "completed_at": "2026-05-16T02:55:11Z",
+      "evidence": "deterministic_tool_gate",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260516-D069\\gates\\technical_result.json",
       "notes": []
     },
     "oracle": {
@@ -460,14 +472,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "build": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-05-16T02:54:24Z",
         "phase": "build",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "25950928303",
+        "commit_sha": "c58ee4d91c2166d3be3fd803206eedc7c4e047d5",
+        "evidence": "github_actions_phase_run:25950928303",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260516-D069\\gates\\phase_ci\\build_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       }
     }
   },
@@ -810,9 +823,29 @@
     }
   },
   "outputs": {
-    "items": []
+    "items": [
+      {
+        "kind": "report",
+        "label": "MT-5 회귀 테스트 (4개 테스트 함수)",
+        "source_path": "tests\\test_pr_hygiene.py",
+        "public_path": "pipeline_outputs\\IMP-20260516-D069\\MT-5-4-test_pr_hygiene.py",
+        "sha256": "288c39d691170ab34d4e9e2e9328ba9ef23fce593ac76f54ce46da63a91cd464",
+        "size_bytes": 7255,
+        "notes": "preflight-pr, accept evidence, architect 검증, patch verify 계약 테스트",
+        "registered_at": "2026-05-16T02:54:30Z"
+      }
+    ]
   },
-  "failure_packets": [],
+  "failure_packets": [
+    {
+      "gate": "technical",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260516-D069\\failures\\technical_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260516-D069\\failures\\technical_attempt_1.json",
+      "recorded_at": "2026-05-16T02:55:11Z",
+      "repair_owner": "Dev tooling repair"
+    }
+  ],
   "protocol_evolution_decision": null,
   "contract_v2": {
     "enabled": true,
@@ -1955,6 +1988,15 @@
       "phase": "qa",
       "run_id": "25950875127",
       "commit_sha": "047765f53aec99dd1338b300746451f8e1a592c4",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-05-16T02:54:24Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "build",
+      "run_id": "25950928303",
+      "commit_sha": "c58ee4d91c2166d3be3fd803206eedc7c4e047d5",
       "artifact": "pipeline-phase-attestation"
     }
   ],
