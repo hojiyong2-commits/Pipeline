@@ -1,0 +1,8 @@
+{
+  "task_description": "hard gate 구현 완료",
+  "changed_files": [
+    "docs/README.md"
+  ],
+  "stage": "code",
+  "completion_attempted": true
+}

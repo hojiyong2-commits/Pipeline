@@ -1,0 +1,8 @@
+{
+  "task_description": "pipeline.py hard gate 강제 차단 구현",
+  "changed_files": [
+    "CLAUDE.md"
+  ],
+  "stage": "code",
+  "review_model": "GPT-5.5"
+}

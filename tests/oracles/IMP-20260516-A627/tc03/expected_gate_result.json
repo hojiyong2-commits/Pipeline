@@ -1,0 +1,5 @@
+{
+  "gate": "codex_code_review",
+  "result": "FAIL",
+  "reason": "codex review result absent; absent=FAIL enforced by default (no ENV flag)"
+}

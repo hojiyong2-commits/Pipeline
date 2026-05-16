@@ -1,0 +1,5 @@
+{
+  "gate": "codex_code_review",
+  "result": "PASS",
+  "reason": "Valid ACCEPT with GPT-5.5 model, head_sha match, diff_sha256 non-empty, evidence file exists"
+}

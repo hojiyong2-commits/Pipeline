@@ -1,0 +1,5 @@
+{
+  "gate": "codex_code_review",
+  "result": "FAIL",
+  "reason": "review_model must be GPT-5.5, got gpt-4o"
+}
