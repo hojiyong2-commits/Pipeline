@@ -822,6 +822,7 @@ class TestPR64Defects(unittest.TestCase):
                 "--reviewer", "test",
                 "--notes", "D2 테스트 plan stage REJECT",
                 "--evidence", str(ev_path),
+                "--pipeline-id", "IMP-TEST-0001",
                 "--output", out_path,
             )
         # plan stage REJECT는 notes 있으면 처리되어야 함 (exit 0)
@@ -851,6 +852,7 @@ class TestPR64Defects(unittest.TestCase):
                 "--reviewer", "test",
                 "--notes", "D2 테스트 scope stage REJECT",
                 "--evidence", str(ev_path),
+                "--pipeline-id", "IMP-TEST-0001",
                 "--output", out_path,
             )
         self.assertEqual(proc.returncode, 0,
@@ -948,6 +950,7 @@ class TestPR64Defects(unittest.TestCase):
                 "--reviewer", "test",
                 "--notes", "hygiene 검사 실패",
                 "--evidence", str(ev_path),
+                "--pipeline-id", "IMP-TEST-0001",
                 "--output", out_path,
             )
         self.assertEqual(proc.returncode, 0,
@@ -1017,6 +1020,7 @@ class TestPR64Defects(unittest.TestCase):
                 "--head-sha", current_head,
                 "--diff-sha256", "0000000000000000000000000000000000000000000000000000000000000000",
                 "--evidence", str(ev_path),
+                "--pipeline-id", "IMP-TEST-0001",
                 "--output", out_path,
             )
         # diff_sha256 불일치이면 FAIL (exit 1)
@@ -1069,6 +1073,7 @@ class TestPR64Defects(unittest.TestCase):
                 "--reviewer", "test",
                 "--notes", "RCA: 반복 실패 패턴 발견",
                 "--evidence", str(ev_path),
+                "--pipeline-id", "IMP-TEST-0001",
                 "--output", out_path,
             )
         self.assertEqual(proc.returncode, 0,

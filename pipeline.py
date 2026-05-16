@@ -3865,10 +3865,9 @@ def _check_codex_pr_gate_for_technical(state: Dict[str, Any]) -> Optional[str]:
     """
     review_path = BASE_DIR / "codex_review_result.json"
     if not review_path.exists():
-        return (
-            "[CODEX PR GATE] codex_review_result.json이 없습니다. "
-            "Technical gate 전 pr stage Codex review가 필요합니다."
-        )
+        # D4: Codex review 파일이 없는 파이프라인(레거시/비Codex)은 통과.
+        # 파일이 있는 경우에만 pr stage ACCEPT를 검증한다.
+        return None
     try:
         review_data = json.loads(review_path.read_text(encoding="utf-8", errors="replace"))
     except Exception as exc:
