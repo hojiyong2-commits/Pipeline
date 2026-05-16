@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_planner_output>
+  <pipeline_id>IMP-20260516-78B2</pipeline_id>
+  <planner_run_id>pm_planner-2410cee690fe6ab1</planner_run_id>
+  <pipeline_type>IMP</pipeline_type>
+  <reject_context>
+    <previous_pipeline>IMP-20260516-D069</previous_pipeline>
+    <reject_reason>preflight-pr 구현이 불완전하여 7개 요구 항목(1: CI에서 preflight-pr 실행, 2: request 파싱·검증, 3: phase 불일치 hard fail, 4: pipeline_id 검증, 5: agent_receipts 차단, 6: 정보부족 hard fail, 7: 회귀 테스트) 미충족.</reject_reason>
+  </reject_context>
+
+  <decomposition_audit>
+    <task_summary>preflight-pr gate를 7개 요구 사항에 맞춰 완성한다. (1) pipeline.py의 _classify_pr_file()이 pipeline_id까지 일치를 강제하고 .pipeline/agent_receipts/와 기타 .pipeline/** catch-all을 forbidden 처리한다. (2) preflight-pr 명령에 --pipeline-id, --request-file 인수를 추가하고 request JSON의 phase/pipeline_id 불일치 시 exit 1로 hard fail한다. (3) .github/workflows/ci.yml에서 pytest 전에 preflight-pr를 실행하고, attestation PR이 아닌 경우 "정보 부족"을 hard fail로 승격한다. (4) tests/test_pr_hygiene.py에 5개 회귀 테스트를 추가한다.</task_summary>
+
+    <user_request_evidence>
+      <quoted>1. GitHub Actions에서 pytest 실행 전에 `python pipeline.py gates preflight-pr`를 반드시 실행하세요. 2. preflight-pr가 `.pipeline/phase_attestation_request.json`을 파싱해서 `pipeline_id`와 `phase`를 검증하게 하세요. 3. PR 목적 phase와 request phase가 다르면 hard fail 하세요. 4. `.pipeline/phase_evidence/&lt;pipeline_id&gt;/&lt;phase&gt;/**`에서 pipeline_id까지 일치해야만 허용하세요. 5. `.pipeline/agent_receipts/**`와 기타 내부 `.pipeline/**` 파일은 phase attestation PR에서 hard fail 하세요. 6. human acceptance packet이 "정보 부족"이면 CI 또는 별도 gate에서 hard fail 하세요. 7. 위 케이스들을 실제 회귀 테스트로 추가하세요.</quoted>
+    </user_request_evidence>
+
+    <module_count>5</module_count>
+    <files_in_scope>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </files_in_scope>
+    <out_of_scope>
+      <item>CLAUDE.md (변경 불필요 - 신뢰 루트, Patch Lane 부적격 사유 중 하나)</item>
+      <item>.claude/agents/**/*.md (변경 불필요)</item>
+      <item>pipeline_state.json (런타임 상태 - 변경 대상 아님)</item>
+    </out_of_scope>
+    <decomposition_strategy>요구 7개 항목을 책임 단위로 분리. 함수 수준 micro-task: MT-1=_classify_pr_file 강화(요구 4·5), MT-2=preflight-pr 명령 확장+request 검증(요구 1·2·3), MT-3=ci.yml에 preflight-pr 단계 삽입(요구 1), MT-4=ci.yml "정보 부족" hard fail 승격(요구 6), MT-5=회귀 테스트 5개(요구 7). 한 MT는 정확히 한 파일·한 책임을 다룬다.</decomposition_strategy>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명, exit code 외 메시지 문구, 테스트 함수 이름 등 P2 수준 구현 취향은 사용자에게 묻지 않는다. 유지보수성 우선 원칙으로 처리한다. P0 두 질문(preflight-pr 항상 실행 여부, 정보부족 hard fail 적용 범위)만 사용자에게 묻는다.</filter_summary>
+    <micro_task_count>5</micro_task_count>
+    <grep_executions>5</grep_executions>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <step_plan>
+    <anti_gaming_read>true</anti_gaming_read>
+
+    <design_confirmation>
+      <maintenance_priority>유지보수성 우선 — 빠른 수정보다 코드 명확성과 장기 유지보수성을 항상 우선합니다.</maintenance_priority>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>변수명, exit code 메시지 문구, 테스트 함수 이름 prefix 등 P2 수준 구현 취향은 사용자에게 묻지 않는다. 유지보수성 우선 원칙으로 PM이 처리한다.</filter_summary>
+      <module_split_summary>
+        MT-1 pipeline.py _classify_pr_file 강화 (pipeline_id 검증 + agent_receipts 차단 + catch-all)
+        MT-2 pipeline.py preflight-pr 명령 확장 (--pipeline-id/--request-file + request JSON 검증)
+        MT-3 ci.yml에 pytest 전 preflight-pr 단계 삽입
+        MT-4 ci.yml "정보 부족" hard fail 승격
+        MT-5 tests/test_pr_hygiene.py 회귀 테스트 5개 추가
+      </module_split_summary>
+
+      <decision_questions>
+        <question id="Q0" priority="P0" category="module_split">
+          <user_facing_question>5개 모듈로 나누어 각각 순서대로 구현하는 방식을 확인해 주세요. MT-1부터 MT-5까지 순서대로 진행하면 될까요?</user_facing_question>
+          <why_it_matters>각 MT가 서로 다른 파일과 기능을 담당하므로 순서대로 구현해야 의존성 충돌을 피할 수 있습니다.</why_it_matters>
+          <evidence>step_plan.xml MT-1~MT-5: pipeline.py(MT-1,2), ci.yml(MT-3,4), test_pr_hygiene.py(MT-5) 3개 파일 분리</evidence>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>MT-1~MT-5 순서대로 각각 module gate를 통과하면서 구현</label>
+              <benefit>각 MT가 독립적으로 검증되어 오류 원인을 파악하기 쉽습니다.</benefit>
+              <cost>5번의 module gate 사이클이 필요해 총 시간이 늘어납니다.</cost>
+            </option>
+            <option id="B">
+              <label>모든 파일을 한 번에 구현</label>
+              <benefit>총 사이클 횟수가 줄어듭니다.</benefit>
+              <cost>오류 발생 시 어느 부분이 원인인지 파악하기 어렵습니다.</cost>
+            </option>
+          </options>
+          <user_answer>옵션 A — MT-1~MT-5 순서대로 진행 (사용자가 파이프라인 시작 승인)</user_answer>
+        </question>
+
+        <question id="Q1" priority="P0" category="behavior">
+          <user_facing_question>preflight-pr 검사를 모든 PR에서 실행해야 하나요, 아니면 phase attestation PR(.pipeline/phase_attestation_request.json이 있는 PR)에서만 실행해야 하나요?</user_facing_question>
+          <why_it_matters>preflight-pr는 PR이 단계 증명용인지 아니면 일반 구현용인지에 따라 의미가 다릅니다. 일반 구현 PR에서 강제로 돌리면 request 파일이 없어 항상 통과하거나 잘못 실패할 위험이 있습니다.</why_it_matters>
+          <evidence>ci.yml 라인 32-35: 현재는 pytest만 실행하고 preflight-pr 단계가 없음. 요구사항 1번이 이 단계를 추가하라는 것임.</evidence>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>attestation PR에서만 실행 — .pipeline/phase_attestation_request.json 파일이 있을 때만 preflight-pr 실행</label>
+              <benefit>본래 목적(단계 PR 오염 차단)에 정확히 일치. 일반 구현 PR이 불필요한 hard fail 위험에서 자유로움.</benefit>
+              <cost>일반 구현 PR이 실수로 .pipeline 파일을 섞어도 preflight-pr가 잡지 못함.</cost>
+            </option>
+            <option id="B">
+              <label>모든 PR에서 항상 실행 — phase 추정/스킵 로직 추가</label>
+              <benefit>일반 PR에도 일관된 검사를 제공.</benefit>
+              <cost>request 없는 PR에서는 phase가 없어 검사 기준이 모호. workflow 복잡도 상승.</cost>
+            </option>
+          </options>
+          <user_answer>옵션 A — .pipeline/phase_attestation_request.json이 있을 때만 실행</user_answer>
+        </question>
+
+        <question id="Q2" priority="P0" category="behavior">
+          <user_facing_question>human acceptance packet의 "정보 부족" 판정을 hard fail로 승격할 때, 모든 PR에 적용해야 하나요, 아니면 일반 구현 PR에서만 적용해야 하나요?</user_facing_question>
+          <why_it_matters>attestation PR은 단계 증명만 담아 본문이 비어 있을 수 있습니다. 모든 PR에 hard fail을 적용하면 attestation PR이 매번 실패합니다.</why_it_matters>
+          <evidence>ci.yml 라인 173-179: 현재는 정보부족 시 decisionReadiness를 표시만 하고 exit 0. 요구사항 6번이 hard fail로 승격하라는 것임.</evidence>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>일반 구현 PR에서만 hard fail — attestation PR은 면제</label>
+              <benefit>ACCEPT 판단에 필요한 정보 확보 의도와 정확히 일치. attestation PR은 단계 증명 흐름이라 정보 부족 판단 대상이 아님.</benefit>
+              <cost>attestation PR도 본문이 비어 있으면 컨텍스트가 부족할 수 있음.</cost>
+            </option>
+            <option id="B">
+              <label>모든 PR에서 hard fail — attestation PR도 본문 4항목을 모두 채워야 함</label>
+              <benefit>예외 없는 강한 규칙. attestation PR도 컨텍스트 풍부해짐.</benefit>
+              <cost>모든 attestation PR가 본문 작성 부담을 추가로 짊어짐. 기존 흐름과 호환성 손상.</cost>
+            </option>
+          </options>
+          <user_answer>옵션 A — 일반 구현 PR에서만 hard fail, attestation PR은 면제</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <task_complexity>
+      <execution_profile>STANDARD</execution_profile>
+      <reason>3개 파일(pipeline.py, .github/workflows/ci.yml, tests/test_pr_hygiene.py)을 수정하고 각각 다른 책임 단위 변경이 있어 STANDARD Incremental Module Gate 흐름이 필요합니다. Patch Lane은 단일 파일·단일 함수·15줄 이하만 가능하므로 부적격합니다.</reason>
+      <uncertainty>
+        <p0_questions>2</p0_questions>
+        <p1_questions>0</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>3</expected_changed_files>
+        <expected_changed_functions>3</expected_changed_functions>
+        <expected_changed_lines>180</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>false</external_api>
+        <auth_or_secret>false</auth_or_secret>
+        <pipeline_protocol>true</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>false</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+      <pipeline_protocol_note>pipeline.py와 .github/workflows/ci.yml은 신뢰 루트로 분류되지만, 이 작업 자체가 별도 IMP(IMP-20260516-78B2)로 protocol-level 수정을 진행하는 정당한 경로입니다. CLAUDE.md와 .claude/agents/**/*.md는 변경하지 않습니다.</pipeline_protocol_note>
+    </task_complexity>
+
+    <patch_lane_eligible>false</patch_lane_eligible>
+    <patch_lane_rationale>3개 파일·복수 함수·150줄 이상 예상으로 Patch Lane 5-AND 진입 조건(단일 파일·단일 함수·15줄 이하) 미달. 또한 pipeline.py와 ci.yml은 신뢰 루트라 trust_root_changes=true가 되어 Patch Lane 명시 금지.</patch_lane_rationale>
+
+    <env_snapshot>
+      <python_version>3.12 (CI windows-latest)</python_version>
+      <installed_packages>requirements.txt + requirements-dev.txt (pytest 포함)</installed_packages>
+      <encoding>cp949 (Windows 로컬), utf-8 (CI)</encoding>
+      <screen_size>N/A (서버/CLI 작업)</screen_size>
+    </env_snapshot>
+
+    <micro_tasks>
+
+      <micro_task id="MT-1">
+        <title>pipeline.py — _classify_pr_file()을 pipeline_id 검증 + agent_receipts 차단 + .pipeline/** catch-all로 강화</title>
+        <affected_function>pipeline._classify_pr_file</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pipeline.cmd_gates (action == "preflight-pr" 분기에서 호출)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>_classify_pr_file\(</pattern>
+          <match_count>3</match_count>
+          <executed>true</executed>
+          <details>pipeline.py 라인 7154(정의), 7563(cmd_gates에서 호출). tests/test_pr_hygiene.py 라인 56에서 import하여 단위 테스트.</details>
+        </grep_evidence>
+        <change_summary>
+          (1) phase_evidence 분기에서 `parts[0] == pid` (pipeline_id)도 함께 일치 강제. (2) FORBIDDEN_PREFIXES에 `.pipeline/agent_receipts/` 추가. (3) FORBIDDEN_PREFIXES 검사 후, 기타 `.pipeline/`로 시작하는 모든 경로를 forbidden으로 처리하는 catch-all 추가 (예외: 이미 위에서 allowed 처리된 phase_attestation_request.json과 본인 pipeline_id+phase의 phase_evidence).
+        </change_summary>
+        <line_estimate>15</line_estimate>
+        <acceptance_criteria>
+          <criterion>`.pipeline/phase_evidence/OTHER-PID/pm/x.json` 입력에 대해 pid="MY-PID", phase="pm" 호출 시 "forbidden:..."를 반환</criterion>
+          <criterion>`.pipeline/agent_receipts/MY-PID/pm_planner/run.json` 입력에 대해 "forbidden:..."를 반환</criterion>
+          <criterion>`.pipeline/some_other_dir/file.json` 입력에 대해 "forbidden:..."를 반환</criterion>
+          <criterion>`.pipeline/phase_attestation_request.json` 입력은 여전히 "allowed"</criterion>
+          <criterion>`.pipeline/phase_evidence/MY-PID/pm/receipt.json` 입력에 pid="MY-PID", phase="pm" 호출 시 "allowed"</criterion>
+        </acceptance_criteria>
+        <oracle_mapping>case_normal (pipeline_id mismatch), case_edge (agent_receipts)</oracle_mapping>
+      </micro_task>
+
+      <micro_task id="MT-2">
+        <title>pipeline.py — preflight-pr 명령에 --pipeline-id/--request-file 추가 + request JSON 파싱·검증</title>
+        <affected_function>pipeline.cmd_gates (preflight-pr 분기) + p_gate_preflight_pr 파서 정의</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>.github/workflows/ci.yml (MT-3에서 추가될 preflight-pr 호출 단계)</site>
+          <site>tests/test_pr_hygiene.py (MT-5에서 추가될 서브프로세스 호출)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>preflight-pr|p_gate_preflight_pr</pattern>
+          <match_count>4</match_count>
+          <executed>true</executed>
+          <details>pipeline.py 라인 7544 (action 분기), 8582-8584 (파서). pid는 라인 7549에서 state로부터 읽지만 PR target phase와의 cross-check 없음.</details>
+        </grep_evidence>
+        <change_summary>
+          (1) 파서 p_gate_preflight_pr에 `--pipeline-id` (선택, request 파일과 cross-check용), `--request-file` (선택, 기본값 `.pipeline/phase_attestation_request.json`) 추가. (2) cmd_gates preflight-pr 분기에서 request 파일이 존재하면 JSON 파싱하여 `pipeline_id`와 `phase` 필드 추출. (3) request.phase가 args.phase와 다르면 exit 1로 hard fail. (4) `--pipeline-id` 인수가 주어졌고 request.pipeline_id가 다르면 exit 1로 hard fail. (5) request 검증을 통과하면 기존 `_classify_pr_file` 흐름 진행. (6) request 파일이 없으면 종전과 같이 phase만으로 검사 (legacy 호환).
+        </change_summary>
+        <line_estimate>50</line_estimate>
+        <acceptance_criteria>
+          <criterion>`python pipeline.py gates preflight-pr --phase pm --pipeline-id IMP-X --request-file path.json` 형태로 호출 가능</criterion>
+          <criterion>request.phase != args.phase면 stderr에 한국어 오류 메시지와 exit 1</criterion>
+          <criterion>request.pipeline_id != args.pipeline-id면 stderr에 한국어 오류 메시지와 exit 1</criterion>
+          <criterion>request 파일 없을 때 기존 동작 유지 (legacy 호환)</criterion>
+        </acceptance_criteria>
+        <oracle_mapping>회귀 테스트로 검증 (MT-5의 phase mismatch, pipeline_id mismatch 케이스)</oracle_mapping>
+      </micro_task>
+
+      <micro_task id="MT-3">
+        <title>.github/workflows/ci.yml — pytest 실행 전에 preflight-pr 단계 추가 (attestation PR에서만)</title>
+        <affected_function>ci.yml `자동 검사 실행` 단계 직전</affected_function>
+        <target_files>
+          <file>.github/workflows/ci.yml</file>
+        </target_files>
+        <affected_call_sites>
+          <site>GitHub Actions에서 모든 PR 이벤트 (attestation PR에서만 실제 실행)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>자동 검사 실행|pytest -q</pattern>
+          <match_count>2</match_count>
+          <executed>true</executed>
+          <details>ci.yml 라인 32-35 (자동 검사 실행 단계). 이 단계 바로 앞에 preflight-pr 단계 삽입.</details>
+        </grep_evidence>
+        <change_summary>
+          ci.yml 라인 32 (자동 검사 실행) 바로 앞에 `단계 PR 위생 검사 (preflight-pr)` 단계 추가. 조건: `if: hashFiles('.pipeline/phase_attestation_request.json') != ''`. 동작: pwsh로 request JSON에서 phase와 pipeline_id 추출 후 `python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pid --request-file .pipeline/phase_attestation_request.json` 실행. 실패 시 step exit 1로 workflow 전체 실패.
+        </change_summary>
+        <line_estimate>25</line_estimate>
+        <acceptance_criteria>
+          <criterion>request 파일이 있는 PR에서 preflight-pr가 pytest보다 먼저 실행됨</criterion>
+          <criterion>request 파일이 없는 PR에서는 preflight-pr 단계가 자동 skip (`if:` 조건)</criterion>
+          <criterion>preflight-pr가 exit 1이면 후속 pytest와 attestation 단계가 실행되지 않음</criterion>
+        </acceptance_criteria>
+      </micro_task>
+
+      <micro_task id="MT-4">
+        <title>.github/workflows/ci.yml — "정보 부족" 판정을 hard fail로 승격 (attestation PR 아닐 때)</title>
+        <affected_function>ci.yml `최종 확인 안내 만들기` 단계의 missingDecisionInfo 처리부</affected_function>
+        <target_files>
+          <file>.github/workflows/ci.yml</file>
+        </target_files>
+        <affected_call_sites>
+          <site>GitHub Actions에서 pull_request 이벤트 발생 시 (모든 PR이 이 단계를 거침)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>missingDecisionInfo</pattern>
+          <match_count>6</match_count>
+          <executed>true</executed>
+          <details>ci.yml 라인 168, 169, 170, 171, 172, 173, 178에서 정의·집계·메시지 표시. 라인 173 if 분기 직후 exit 1 분기 추가 필요.</details>
+        </grep_evidence>
+        <change_summary>
+          ci.yml 라인 173-179 if/else 블록 직후, `if ($missingDecisionInfo.Count -gt 0 -and -not (Test-Path -LiteralPath '.pipeline/phase_attestation_request.json'))` 분기를 추가. 이 조건에서: (a) packet 생성/업로드/댓글까지 그대로 진행하여 사용자 컨텍스트는 보존, (b) 같은 단계 마지막 또는 별도 후행 단계에서 `Write-Error` + `exit 1`로 CI를 실패 처리. attestation PR(request 파일 존재)에서는 종전대로 exit 0.
+        </change_summary>
+        <line_estimate>20</line_estimate>
+        <acceptance_criteria>
+          <criterion>일반 구현 PR에서 본문 4항목(작업 요약, 사용자가 확인할 결과물, 기대/실제 비교, 트레이드오프) 중 한 개라도 비어 있으면 CI가 실패함</criterion>
+          <criterion>attestation PR(`.pipeline/phase_attestation_request.json` 존재)에서는 정보 부족이어도 종전대로 통과</criterion>
+          <criterion>본문 4항목이 모두 채워진 일반 PR에서는 종전대로 통과</criterion>
+          <criterion>"최종 확인 안내" 댓글은 hard fail이 발생해도 작성/갱신되어 사용자가 누락 항목을 확인할 수 있음</criterion>
+        </acceptance_criteria>
+      </micro_task>
+
+      <micro_task id="MT-5">
+        <title>tests/test_pr_hygiene.py — 5개 회귀 테스트 추가 (요구사항 7번)</title>
+        <affected_function>tests.test_pr_hygiene (신규 5개 테스트 함수)</affected_function>
+        <target_files>
+          <file>tests/test_pr_hygiene.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pytest 실행 시 자동 수집</site>
+          <site>CI workflow의 pytest 단계</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>def test_</pattern>
+          <match_count>4</match_count>
+          <executed>true</executed>
+          <details>현재 4개 테스트만 존재(test_preflight_pr_fails_on_stale_pipeline_files, test_accept_rejects_phase_evidence_path, test_architect_fails_on_run_id_mismatch, test_doc_cli_patch_verify_contract). 신규 5개 추가하여 총 9개.</details>
+        </grep_evidence>
+        <change_summary>
+          신규 테스트 5개를 파일 끝에 추가:
+          (1) test_classify_rejects_other_pipeline_id_evidence — `.pipeline/phase_evidence/OTHER-PID/pm/x.json`에서 pid="MY-PID" 호출 시 forbidden
+          (2) test_classify_rejects_agent_receipts — `.pipeline/agent_receipts/MY-PID/pm_planner/run.json`이 forbidden
+          (3) test_classify_rejects_other_pipeline_subpath — `.pipeline/something_else/x.json` 같은 기타 .pipeline/** 경로가 forbidden
+          (4) test_preflight_pr_fails_on_phase_mismatch — request.phase=dev 인데 --phase pm으로 호출 시 exit code != 0
+          (5) test_preflight_pr_fails_on_pipeline_id_mismatch — request.pipeline_id=IMP-A 인데 --pipeline-id IMP-B로 호출 시 exit code != 0
+          (4), (5)는 tmp_path에 임시 request.json을 만들고 subprocess로 pipeline.py를 호출하는 방식. (1)-(3)은 기존 importlib 패턴을 재사용하여 _classify_pr_file을 직접 호출.
+        </change_summary>
+        <line_estimate>75</line_estimate>
+        <acceptance_criteria>
+          <criterion>신규 5개 테스트가 모두 PASS (MT-1·MT-2 구현 완료 후)</criterion>
+          <criterion>기존 4개 테스트도 그대로 PASS (회귀 없음)</criterion>
+          <criterion>각 테스트는 한국어 docstring과 한국어 assert 메시지를 포함</criterion>
+        </acceptance_criteria>
+        <oracle_mapping>
+          tests/oracles/IMP-20260516-78B2/case_normal/* (pipeline_id mismatch → forbidden)
+          tests/oracles/IMP-20260516-78B2/case_edge/* (agent_receipts → forbidden)
+        </oracle_mapping>
+      </micro_task>
+
+    </micro_tasks>
+
+    <oracle_plan>
+      <oracle case_kind="normal" case_id="case_normal">
+        <input_path>tests/oracles/IMP-20260516-78B2/case_normal/input.json</input_path>
+        <expected_path>tests/oracles/IMP-20260516-78B2/case_normal/expected.json</expected_path>
+        <input_content>{"path": ".pipeline/phase_evidence/OTHER-IMP-0000/pm/receipt.json", "phase": "pm", "pid": "IMP-TEST-0000"}</input_content>
+        <expected_content>{"verdict": "forbidden"}</expected_content>
+        <semantics>다른 pipeline_id의 phase_evidence는 phase가 같아도 forbidden이어야 한다 (요구사항 4번).</semantics>
+        <source>user</source>
+      </oracle>
+      <oracle case_kind="edge" case_id="case_edge">
+        <input_path>tests/oracles/IMP-20260516-78B2/case_edge/input.json</input_path>
+        <expected_path>tests/oracles/IMP-20260516-78B2/case_edge/expected.json</expected_path>
+        <input_content>{"path": ".pipeline/agent_receipts/IMP-TEST-0000/pm_planner/run.json", "phase": "pm", "pid": "IMP-TEST-0000"}</input_content>
+        <expected_content>{"verdict": "forbidden"}</expected_content>
+        <semantics>본인 pipeline_id라도 `.pipeline/agent_receipts/**`는 PR에 포함되면 안 된다 (요구사항 5번).</semantics>
+        <source>user</source>
+      </oracle>
+    </oracle_plan>
+
+    <phase_attestation_plan>
+      <pm_phase>
+        <branch>phase-attestation/IMP-20260516-78B2</branch>
+        <prepare>python pipeline.py gates prepare-phase --phase pm</prepare>
+        <commit>step_plan.xml, tests/oracles/IMP-20260516-78B2/** 포함</commit>
+        <ci>GitHub Actions 통과 후 python pipeline.py gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline</ci>
+      </pm_phase>
+      <dev_phase>module design/dev/qa per MT-1..MT-5 + module integrate 후 done --phase dev + prepare-phase --phase dev + phase-ci --phase dev</dev_phase>
+      <qa_phase>qa --result PASS --numeric-score N + prepare-phase --phase qa + phase-ci --phase qa</qa_phase>
+      <build_phase>build --exe "N/A" --skip-reason "meta-task" (이 작업은 pipeline.py + ci.yml + test 변경이며 EXE 빌드 대상 아님) + prepare-phase --phase build + phase-ci --phase build</build_phase>
+    </phase_attestation_plan>
+
+    <user_acceptance_plan>
+      <result_artifacts>
+        <artifact>PR 링크 (phase-attestation/IMP-20260516-78B2 → main)</artifact>
+        <artifact>GitHub Actions 자동 검사 결과 (preflight-pr 단계 + pytest 단계 + 9개 테스트 PASS 증거)</artifact>
+        <artifact>최종 확인 안내 PR 댓글 (한국어, 자동 갱신)</artifact>
+        <artifact>tests/oracles/IMP-20260516-78B2/** (case_normal + case_edge oracle)</artifact>
+      </result_artifacts>
+      <user_evidence>사용자는 PR 링크와 GitHub Actions 결과 + 한국어 최종 확인 안내 댓글만 확인하면 됨. 7개 요구사항이 각각 어떤 변경으로 충족되었는지 PR 본문에 한국어 표 형식으로 기록.</user_evidence>
+    </user_acceptance_plan>
+
+    <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+  </step_plan>
+</pm_planner_output>
