@@ -7211,9 +7211,9 @@ def cmd_gates(args: argparse.Namespace) -> None:
 
         base_sha = os.environ.get("GITHUB_BASE_SHA", "")
         if base_sha:
-            diff_cmd = ["git", "diff", "--name-only", f"{base_sha}...HEAD"]
+            diff_cmd = ["git", "diff", "--name-only", "--diff-filter=ACMRT", f"{base_sha}...HEAD"]
         else:
-            diff_cmd = ["git", "diff", "--name-only", "origin/main...HEAD"]
+            diff_cmd = ["git", "diff", "--name-only", "--diff-filter=ACMRT", "origin/main...HEAD"]
         result = subprocess.run(diff_cmd, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             _die(
