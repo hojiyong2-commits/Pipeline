@@ -351,19 +351,28 @@ jobs:
           if (@("pm", "dev", "qa", "build") -notcontains $request.phase) {
             $blockers.Add("phase must be one of pm/dev/qa/build")
           }
+          # PM split: pm-planner-agent (new) or pm-agent (legacy) both accepted
           $expectedAgents = @{
-            pm = "pm-agent"
-            dev = "dev-agent"
-            qa = "qa-agent"
-            build = "build-agent"
+            pm = @("pm-agent", "pm-planner-agent")
+            dev = @("dev-agent")
+            qa = @("qa-agent")
+            build = @("build-agent")
+          }
+          # PM split: agent_run.phase may be "pm_planner" when request.phase is "pm"
+          $allowedAgentPhases = @{
+            pm = @("pm", "pm_planner")
+            dev = @("dev")
+            qa = @("qa")
+            build = @("build")
           }
           if ($null -eq $request.agent_run) {
             $blockers.Add("agent_run receipt is required")
           } else {
-            if ($request.agent_run.phase -ne $request.phase) {
+            $reqPhase = [string]$request.phase
+            if ($allowedAgentPhases[$reqPhase] -notcontains $request.agent_run.phase) {
               $blockers.Add("agent_run phase mismatch")
             }
-            if ($request.agent_run.agent_id -ne $expectedAgents[[string]$request.phase]) {
+            if ($expectedAgents[$reqPhase] -notcontains $request.agent_run.agent_id) {
               $blockers.Add("agent_run agent_id mismatch")
             }
             if ($request.agent_run.status -ne "COMPLETED") {
@@ -390,7 +399,8 @@ jobs:
               if ($receipt.agent_id -ne $request.agent_run.agent_id) {
                 $blockers.Add("agent receipt agent_id mismatch")
               }
-              if ($receipt.phase -ne $request.phase) {
+              # Compare receipt.phase to agent_run.phase (not request.phase) to support PM split
+              if ($receipt.phase -ne $request.agent_run.phase) {
                 $blockers.Add("agent receipt phase mismatch")
               }
             }
