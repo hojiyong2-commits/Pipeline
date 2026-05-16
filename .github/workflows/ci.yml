@@ -44,6 +44,10 @@ jobs:
             Write-Error "[PIPELINE ERROR] phase_attestation_request.json에 phase 필드가 없습니다."
             exit 1
           }
+          # origin/main을 fetch하여 git diff가 동작하도록 함
+          $baseRef = "${{ github.event.pull_request.base.ref }}"
+          if ([string]::IsNullOrWhiteSpace($baseRef)) { $baseRef = "main" }
+          git fetch origin $baseRef --depth=1
           python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pipelineId --request-file $reqPath
 
       - name: 자동 검사 실행
