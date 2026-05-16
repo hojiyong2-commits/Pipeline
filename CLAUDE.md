@@ -880,7 +880,9 @@ python pipeline.py patch plan --plan patch_plan.json
 python pipeline.py patch audit --plan patch_plan.json
 
 # 3. 패치 적용 후 검증
-python pipeline.py patch verify --plan patch_plan.json --result PASS
+python pipeline.py patch verify --plan patch_plan.json --result PASS --test-command "python -m pytest tests/test_patch_lane.py -q"
+# 또는
+python pipeline.py patch verify --plan patch_plan.json --result PASS --evidence-file verify_result.txt
 
 # 4. 완료 증거 기록
 python pipeline.py patch attest --plan patch_plan.json
@@ -949,89 +951,3 @@ QA는 Patch Lane 태스크에서 아래를 추가로 검증합니다:
 3. `patch_scope.expected_lines_changed_max <= 15` 확인
 4. `forbidden.*` 필드가 모두 `false`인지 확인
 5. `patch attest` 출력 JSON에 `attested_at` 타임스탬프 존재 확인
-
----
-
-## 외부 플러그인 운영 설계 (개인 PC 한정, IMP-20260514-40B8)
-
-> **핵심 원칙:** 외부 플러그인은 완료 판정자가 아니라 정보 탐색/실행/증거 생성 도구이며, 완료 판정은 Three-Gate + Option A + Incremental Module Gate + User Acceptance가 담당한다.
-
-이 섹션은 **개인 PC에서 개인 프로젝트를 관리할 때** 외부 플러그인을 파이프라인에 연결하는 운영 규칙을 정의합니다. 회사 데이터·사내 시스템과 무관합니다.
-
-### S1 외부 플러그인 사용 목적
-
-외부 플러그인은 다음 목적에 한정하여 사용합니다:
-
-1. **최신 정보 확인** — 라이브러리 변경 이력, 이슈 현황, 문서 최신 버전을 실시간으로 확인
-2. **실제 작업 실행** — 로컬 shell 명령, 파일 시스템 작업, 빌드/테스트 실행
-3. **테스트·CI·스크린샷·산출물 검증** — GitHub Actions 결과, Playwright 스크린샷, 아티팩트 경로 확인
-4. **장기 프로젝트 기억 관리** — Notion/Drive 등에 결정사항·컨텍스트 저장
-5. **반복 업무 자동화** — Calendar 리마인더, 스케줄 기반 실행
-
-### S2 플러그인 역할 분리
-
-| 플러그인 카테고리 | 허용 역할 | 금지 역할 |
-|---|---|---|
-| GitHub (Issues/PR/Actions) | 이슈 조회, PR 상태 확인, CI 결과 열람, 아티팩트 다운로드 | PASS/FAIL 판정, 직접 머지, 승인 결정 |
-| Local shell | 명령 실행, 로그 수집, 파일 조작, 빌드 실행 | 파이프라인 상태 기록(`pipeline.py done/qa/build` 등) 직접 호출 |
-| Web·Browser | 공식 문서 열람, 패키지 정보 조회, 검색 | 완료 증거 날조, oracle 파일 변조 |
-| Playwright·Screenshot | UI 화면 캡처, 동작 증거 수집 | QA PASS 선언, 사용자 승인 대행 |
-| Notion·Drive | 컨텍스트 저장, 결정사항 기록, 문서 공유 | step_plan 대체, oracle 기록 |
-| Calendar·Reminder | 리마인더 설정, 마감 추적 | 스케줄 기반 자동 완료 선언 |
-| OpenAI API advisory | 코드 리뷰 조언, red-team 리뷰, 취약점 힌트 | PASS/FAIL 결정, oracle 비교, 사용자 승인 대체 |
-
-### S3 파이프라인 단계별 사용 방식
-
-| 단계 | 허용되는 플러그인 활용 |
-|---|---|
-| PM (Planning) | Web search로 최신 라이브러리 정보 조회, Notion에 설계 결정사항 기록 |
-| Dev (Implementation) | Local shell로 빌드·테스트 실행, GitHub Issues로 관련 이슈 참조 |
-| QA (Verification) | Playwright로 UI 동작 스크린샷 수집, GitHub Actions 로그 열람 |
-| Advisory (optional) | OpenAI API로 red-team 코드 리뷰 (비구속적 참고용) |
-| Build (Packaging) | Local shell로 빌드 명령 실행, 아티팩트 경로 검증 |
-| Acceptance (User) | PR 링크, GitHub Actions 결과, 첨부파일 경로를 사용자에게 제공 |
-
-### S4 권한 설계
-
-| 레벨 | 설명 | 기본 활성 |
-|---|---|---|
-| Level 0 | 읽기 전용 (조회, 검색, 열람) | 예 |
-| Level 1 | 로컬 읽기·쓰기 (파일 생성/수정, shell 명령) | 예 |
-| Level 2 | 외부 서비스 읽기 (GitHub 조회, Web 검색, Notion 열람) | 예 |
-| Level 3 | 외부 서비스 쓰기 (GitHub Issue 생성, Notion 업데이트, Calendar 설정) | 선택 |
-| Level 4 | 결제·배포·삭제 API (프로덕션 배포, 유료 API 호출) | 기본 비활성 |
-
-**기본 권장:** Level 0~2만 활성화. Level 3 이상은 명시적 사용자 승인 후에만 활성화합니다.
-
-**시크릿 관리:** API 키·토큰은 환경 변수로만 전달하며 git commit에 포함하지 않습니다. `OPENAI_API_KEY`, `GITHUB_TOKEN` 등은 `.env` 파일 또는 시스템 환경 변수로 관리합니다.
-
-### S5 증거 규칙
-
-플러그인은 증거를 **생성**하고 **수집**할 수 있지만 **완료를 선언**할 수 없습니다.
-
-- 플러그인이 생성한 스크린샷, CI 로그, 아티팩트는 `pipeline.py outputs add`로 등록한 뒤 사용자에게 제공
-- 테스트 명령 결과(`pytest` 출력), CI run 링크, screenshot 경로, artifact path, sha256, PR link는 `outputs_manifest`에 연결
-- 사용자는 코드가 아니라 **등록된 결과물**을 보고 ACCEPT/REJECT를 결정
-- OpenAI advisory CRITICAL 미해결 항목은 파이프라인 완료를 차단하지만, advisory 자체가 PASS를 결정하지는 않음
-
-### S6 도입 순서 (4단계)
-
-| 단계 | 연결할 플러그인 | 이유 |
-|---|---|---|
-| 1단계 | GitHub + Local shell + Web search | 가장 많이 쓰이는 기본 작업 도구 |
-| 2단계 | Playwright·Screenshot + outputs_manifest | UI 검증 및 사용자 결과물 제공 |
-| 3단계 | Notion·Drive + Calendar | 장기 컨텍스트 관리 |
-| 4단계 | OpenAI API advisory + red-team review | 선택적 품질 향상 도구 |
-
-### S7 성능 향상 기대치
-
-| 업무 유형 | 기대 효과 |
-|---|---|
-| 최신 문서 기반 구현 | Web search로 오래된 API 사용 실수 감소 |
-| 코드 수정 + 테스트 | Local shell로 빌드·테스트 즉시 확인, 반복 횟수 감소 |
-| UI 동작 검증 | Playwright 스크린샷으로 시각적 증거 자동 수집 |
-| GitHub PR·CI 업무 | GitHub 플러그인으로 PR/CI 상태 실시간 반영 |
-| 장기 프로젝트 관리 | Notion/Drive로 결정사항 보존, 컨텍스트 복원 비용 감소 |
-| 단순 설명·아이디어 | 플러그인 없이도 주요 게이트는 그대로 유지 |
-
-> **참고:** `CLAUDE.md`의 외부 플러그인 섹션이 SSoT(Single Source of Truth)입니다. agent MD의 참조 링크는 이 섹션으로 연결됩니다. 중복 기재를 피하고, 변경 시 이 섹션만 수정합니다.
