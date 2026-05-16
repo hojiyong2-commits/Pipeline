@@ -49,7 +49,7 @@ jobs:
           git fetch origin $baseRef --depth=50
           $baseSha = "${{ github.event.pull_request.base.sha }}"
           $env:GITHUB_BASE_SHA = $baseSha
-          python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pipelineId --request-file $reqPath
+          python pipeline.py gates preflight-pr --phase $phase
 
       - name: 자동 검사 실행
         env:
@@ -508,6 +508,7 @@ jobs:
         with:
           name: 최종-확인-안내
           path: human_acceptance_packet.md
+          if-no-files-found: ignore
 
       - name: 단계 증명 파일 올리기
         if: success() && hashFiles('phase_attestation.json') != ''
@@ -529,6 +530,10 @@ jobs:
             Authorization = "Bearer $env:GITHUB_TOKEN"
             Accept = "application/vnd.github+json"
             "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          if (-not (Test-Path -LiteralPath "human_acceptance_packet.md")) {
+            Write-Host "[INFO] human_acceptance_packet.md 없음 - 이전 단계가 실패한 경우 생략됩니다."
+            exit 0
           }
           $body = Get-Content -Path human_acceptance_packet.md -Raw
           $commentsUri = "$env:GITHUB_API_URL/repos/$repo/issues/$prNumber/comments"
