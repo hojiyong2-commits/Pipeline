@@ -11,6 +11,7 @@ IMP-20260515-020F: PM split (pm_planner + pipeline_manager) 단위 테스트
   - done --phase pm 레거시 플로우(pm agent_run_id만 허용)
 """
 import argparse
+import json
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -196,25 +197,22 @@ def test_pipeline_manager_phase_starts() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Item 5-C: PM split 이후 agent start --phase pm 거부 검증
+# Item 5-C: legacy agent start --phase pm 호환 동작
 # ---------------------------------------------------------------------------
 
 def test_legacy_pm_phase_still_works() -> None:
-    """PM split 이후 agent start --phase pm은 거부돼야 한다.
-
-    pm_planner와 pipeline_manager를 별도로 사용해야 하며,
-    레거시 'pm' 페이즈 직접 사용은 AGENT_RUN_PHASES에서 제거됐다.
-    """
+    """레거시 agent start --phase pm이 pm-agent run을 생성해야 한다 (구 state 호환)."""
     state = pipeline._new_state("TMP-PM-LEGACY", "IMP", "테스트")
     state["phase_attestations"] = pipeline._new_phase_attestations(enabled=True)
 
-    # 'pm' 페이즈는 AGENT_RUN_PHASES에 없으므로 SystemExit이 발생해야 함
-    with pytest.raises(SystemExit) as exc_info:
-        pipeline._agent_run_start(state, "pm", None)
-    # exit code 2 = AGENT_RUN_PHASES 위반
-    assert exc_info.value.code == 2, (
-        f"pm 페이즈 거부 시 exit code 2여야 한다, got {exc_info.value.code}"
+    run, token = pipeline._agent_run_start(state, "pm", None)
+
+    assert run["phase"] == "pm", f"phase가 pm이어야 한다, got {run['phase']}"
+    assert run["agent_id"] == "pm-agent", (
+        f"legacy pm run의 agent_id는 pm-agent여야 한다, got {run['agent_id']}"
     )
+    assert run["status"] == "RUNNING"
+    assert token and len(token) > 10
 
 
 # ---------------------------------------------------------------------------
@@ -277,15 +275,11 @@ def test_done_pm_requires_planner_and_manager_run_id() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Item 5-E: done --phase pm 에서 --agent-run-id 거부 검증 (PM split 이후)
+# Item 5-E: done --phase pm 레거시 플로우 (pm agent_run_id만)
 # ---------------------------------------------------------------------------
 
 def test_done_pm_legacy_accepts_pm_run_id() -> None:
-    """PM split 이후 done --phase pm에 --agent-run-id만 전달하면 거부돼야 한다.
-
-    PM split 이후 done --phase pm은 반드시 --planner-run-id와 --manager-run-id를 요구한다.
-    --agent-run-id는 [PM SPLIT GATE]에 의해 거부된다.
-    """
+    """레거시 state에서 done --phase pm은 agent_run_id(pm 단일 receipt)만으로 성공해야 한다."""
     pipeline_id = "TMP-PM-LEGACY-DONE"
     state = pipeline._new_state(pipeline_id, "IMP", "테스트")
     state["phase_attestations"] = pipeline._new_phase_attestations(enabled=True)
@@ -295,8 +289,8 @@ def test_done_pm_legacy_accepts_pm_run_id() -> None:
         step_plan = root / "step_plan.xml"
         step_plan.write_text(_minimal_step_plan_xml(pipeline_id), encoding="utf-8")
 
-        # pm_planner로 receipt 생성 (PHASE_AGENT_IDS["pm_planner"] 사용)
-        run_id = _install_agent_run(state, "pm_planner", step_plan, root)
+        # 레거시: pm phase로 receipt 생성
+        run_id = _install_agent_run(state, "pm", step_plan, root)
 
         args = argparse.Namespace(
             branch=None,
@@ -310,14 +304,12 @@ def test_done_pm_legacy_accepts_pm_run_id() -> None:
             planner_run_id=None,
             manager_run_id=None,
             manager_report=None,
-            agent_run_id=run_id,  # --agent-run-id만 전달: PM SPLIT GATE가 거부해야 함
+            agent_run_id=run_id,
         )
         with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
              mock.patch.object(pipeline, "_save_state_for"), \
              mock.patch.object(pipeline, "_record_snapshot"):
-            # [PM SPLIT GATE]가 --agent-run-id를 거부 → SystemExit 1
-            with pytest.raises(SystemExit) as exc_info:
-                pipeline.cmd_done(args)
-            assert exc_info.value.code == 1, (
-                f"PM SPLIT GATE 거부 시 exit code 1이어야 한다, got {exc_info.value.code}"
-            )
+            pipeline.cmd_done(args)
+
+    assert state["phases"]["pm"]["status"] == "DONE"
+    assert state["phases"]["pm"]["agent_run_id"] == run_id

@@ -74,31 +74,18 @@ class TestPipelineManagerPhaseContract:
 # ---------------------------------------------------------------------------
 
 class TestLegacyPmPhaseCompat:
-    """PM split 마이그레이션 이후 pm phase 동작 검증.
+    """레거시 pm phase도 AGENT_RUN_PHASES에 있어야 하고, pm-agent로 매핑돼야 한다."""
 
-    PM split 이후:
-    - 'pm'은 AGENT_RUN_PHASES에서 제거됨 (pm_planner + pipeline_manager로 분리)
-    - PHASE_AGENT_IDS['pm']은 pm-planner-agent로 매핑됨 (PHASE_RECEIPT_RUN_PHASES 검증용)
-    - PHASE_RECEIPT_RUN_PHASES['pm'] == 'pm_planner' (done --phase pm 검증 경로)
-    """
-
-    def test_pm_not_in_agent_run_phases_after_split(self) -> None:
-        """PM split 이후 'pm'은 AGENT_RUN_PHASES에서 제거돼야 한다.
-        agent start --phase pm은 거부돼야 한다."""
-        assert "pm" not in pipeline.AGENT_RUN_PHASES, (
-            "PM split 이후 'pm' 페이즈가 AGENT_RUN_PHASES에 남아 있습니다. "
-            "pm_planner와 pipeline_manager를 별도로 사용해야 합니다."
+    def test_legacy_pm_in_agent_run_phases(self) -> None:
+        assert "pm" in pipeline.AGENT_RUN_PHASES, (
+            "레거시 'pm' 페이즈가 AGENT_RUN_PHASES에서 제거됐습니다. "
+            "구 state 호환을 위해 유지해야 합니다."
         )
-        # pm_planner와 pipeline_manager가 있어야 한다
-        assert "pm_planner" in pipeline.AGENT_RUN_PHASES
-        assert "pipeline_manager" in pipeline.AGENT_RUN_PHASES
 
-    def test_pm_agent_id_maps_to_pm_planner_agent(self) -> None:
-        """PHASE_AGENT_IDS['pm']은 pm-planner-agent를 반환해야 한다.
-        PHASE_RECEIPT_RUN_PHASES 검증 시 done --phase pm이 planner receipt를 찾을 때 사용됨."""
-        assert pipeline.PHASE_AGENT_IDS.get("pm") == "pm-planner-agent", (
-            f"PHASE_AGENT_IDS['pm']이 잘못됐습니다: "
-            f"expected 'pm-planner-agent', got '{pipeline.PHASE_AGENT_IDS.get('pm')}'"
+    def test_legacy_pm_agent_id_is_pm_agent(self) -> None:
+        assert pipeline.PHASE_AGENT_IDS.get("pm") == "pm-agent", (
+            f"레거시 pm 에이전트 ID가 잘못됐습니다: "
+            f"expected 'pm-agent', got '{pipeline.PHASE_AGENT_IDS.get('pm')}'"
         )
 
 
@@ -305,8 +292,7 @@ class TestPatchVerifyEvidenceContract:
                 pipeline._cmd_patch_verify(args)
 
         assert state.get("patch_lane", {}).get("verify_passed") is True
-        # verify_evidence 하위에 test_command 키로 저장됨
-        assert state["patch_lane"]["verify_evidence"]["test_command"] == "python -m pytest -q"
+        assert state["patch_lane"]["verify_test_command"] == "python -m pytest -q"
 
 
 # ---------------------------------------------------------------------------
