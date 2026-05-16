@@ -1,0 +1,12 @@
+# ruff.toml — IMP-20260516-A627: pipeline.py pre-existing lint 오류 억제 설정
+# E402: pipeline.py는 _force_utf8_stdio() 호출 후 import하므로 E402 필요
+# E731: 기존 lambda 색상 함수 (RED, GREEN 등)는 한 줄 lambda 패턴으로 작성됨
+# E701: 기존 for 한 줄 패턴
+# E711/E712: 기존 비교 패턴
+
+[lint]
+ignore = [
+    "E402",   # Module level import not at top of file (pipeline.py 구조적 필요)
+    "E731",   # Do not assign a lambda expression (색상 함수 패턴)
+    "E701",   # Multiple statements on one line (기존 패턴)
+]
