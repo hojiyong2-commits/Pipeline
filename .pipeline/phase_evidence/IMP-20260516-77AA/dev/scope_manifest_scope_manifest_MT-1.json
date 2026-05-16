@@ -1,0 +1,16 @@
+{
+  "pipeline_id": "IMP-20260516-77AA",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "CLAUDE.md",
+        ".claude/agents/dev-agent.md",
+        ".claude/agents/pm-agent.md"
+      ],
+      "affected_functions": [
+        "N/A — 문서/에이전트 지침 수정. 코드 함수 변경 없음."
+      ]
+    }
+  ]
+}
