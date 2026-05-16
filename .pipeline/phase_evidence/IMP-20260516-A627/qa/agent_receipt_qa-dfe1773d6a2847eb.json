@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260516-A627",
+  "phase": "qa",
+  "agent_id": "qa-agent",
+  "run_id": "qa-dfe1773d6a2847eb",
+  "status": "COMPLETED",
+  "started_at": "2026-05-16T23:26:11Z",
+  "completed_at": "2026-05-16T23:26:13Z",
+  "output_file": "qa_report.xml",
+  "output_sha256": "7f4bc316c3597a2c7a5ee188d696776b9574bda8cf46d3f3bf41cf2567b6be72",
+  "evidence_files": [],
+  "commit_sha": "97b6e1aa9d4f746b97b160fb05648951d2e81632"
+}
