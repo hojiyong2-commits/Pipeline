@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-12T12:22:28Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [
+    "tree_sha comparison skipped for pull_request merge checkout"
+  ],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25733962357",
+  "commit_sha": "8727065282b5d918eaf9adeaa3a92c25acb4ed5a",
+  "tree_sha": "c0f5cf63a2651990fd6943724fd356fbe4e05264",
+  "attestation": {
+    "repository": "hojiyong2-commits/Pipeline",
+    "generated_at": "2026-05-12T12:20:51.6829398Z",
+    "checkout_sha": "1196b2cd6028635f69794f75e90e881a47bff944",
+    "event_name": "pull_request",
+    "tree_sha": "c0f5cf63a2651990fd6943724fd356fbe4e05264",
+    "workflow": "CI",
+    "attestation_type": "pipeline-ci-v1",
+    "run_id": "25733962357",
+    "runner_os": "Windows",
+    "head_sha": "8727065282b5d918eaf9adeaa3a92c25acb4ed5a",
+    "ref": "refs/pull/21/merge",
+    "commit_sha": "8727065282b5d918eaf9adeaa3a92c25acb4ed5a",
+    "run_attempt": "1",
+    "tests": {
+      "command": "python -m pytest -q",
+      "status": "PASS"
+    },
+    "schema_version": 1
+  },
+  "workflow_run": {
+    "id": 25733962357,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25733962357",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "8727065282b5d918eaf9adeaa3a92c25acb4ed5a"
+  },
+  "artifact": {
+    "id": 6943912464,
+    "name": "pipeline-attestation",
+    "size_in_bytes": 548,
+    "expired": false
+  }
+}

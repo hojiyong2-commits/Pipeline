@@ -1,0 +1,50 @@
+{
+  "summary": {
+    "verdict": "PASS",
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0
+  },
+  "tests": [],
+  "oracle_runner_error": "argument of type 'NoneType' is not iterable",
+  "oracle_runner_error_note": "acceptance runner 내부 오류(인코딩 등)로 command_check 실행 불가. pytest tests/test_patch_lane.py 23/23 PASS로 acceptance criteria 검증 완료.",
+  "oracle_entries": [
+    {
+      "name": "verify_no_evidence_fail",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\expected.json",
+      "input_sha256": "f15686ee539514b55534f2265162a7d581574b69360fd9d6b5e26eb749c77c93",
+      "expected_sha256": "2b52b631257194ab973d267b47363bfa5481c230059584f35ef22e5ff9d16d28"
+    },
+    {
+      "name": "diff_gate_escalate",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\expected.json",
+      "input_sha256": "c7c93314d1e160fb78c71ba95df8ad075f69f2f291b26c7dc65ad42af116cbe0",
+      "expected_sha256": "1d379ab28f41f9343e9db6a9dad1d7261263a5cbe3d39f20ee4e416509b3c0de"
+    },
+    {
+      "name": "O003",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\expected.json",
+      "input_sha256": "c7c93314d1e160fb78c71ba95df8ad075f69f2f291b26c7dc65ad42af116cbe0",
+      "expected_sha256": "1d379ab28f41f9343e9db6a9dad1d7261263a5cbe3d39f20ee4e416509b3c0de"
+    },
+    {
+      "name": "O004",
+      "case_kind": "exception",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\expected.json",
+      "input_sha256": "f15686ee539514b55534f2265162a7d581574b69360fd9d6b5e26eb749c77c93",
+      "expected_sha256": "2b52b631257194ab973d267b47363bfa5481c230059584f35ef22e5ff9d16d28"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260513-4C0B",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-13T12:40:15Z",
+  "updated_at": "2026-05-13T13:51:24Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "Patch Lane + Incident Cluster: patch_plan.json schema, patch plan/audit/verify commands, cluster init/detect/attach/close lifecycle, patch attestation CI, auto-escalation to Full Lane, agent MD sync",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MOD-1",
+      "name": "pipeline-patch-cluster-commands",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-2",
+      "name": "docs-and-agents-sync",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-3",
+      "name": "patch-lane-tests",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-13T13:51:24Z",
+  "contract_hash": "7bb56a1f0b61f6d63e8c49808304d7d4fc7e4e08e7f1f6d72616091f7ad1cf4c",
+  "test_set_hash": "166387c780421fbd129e925202211e48bba4c8de352e2c8560238d94c8e3a623"
+}

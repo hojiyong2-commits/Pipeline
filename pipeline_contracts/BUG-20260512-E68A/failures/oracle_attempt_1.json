@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-E68A",
+  "gate": "oracle",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\oracle_attempt_1.json",
+  "recorded_at": "2026-05-12T00:54:28Z",
+  "status": "FAIL",
+  "repair_owner": "PM/oracle path repair or Dev behavior repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "oracle"
+  ],
+  "note": "Oracle gate failed; inspect failing results and output path resolution before broad rework.",
+  "failed_checks": [],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "threshold": 80,
+      "earned_points": 0,
+      "total_points": 60,
+      "hard_fail": true,
+      "passed": 0,
+      "failed": 6,
+      "skipped": 0
+    },
+    "results": [
+      {
+        "id": "T01",
+        "module": "MOD-1",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "normal",
+        "status": "FAIL",
+        "points": 10,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\tests\\oracles\\BUG-20260512-E68A\\mt1\\normal\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T02",
+        "module": "MOD-1",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "edge",
+        "status": "FAIL",
+        "points": 10,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\tests\\oracles\\BUG-20260512-E68A\\mt1\\edge\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T03",
+        "module": "MOD-1",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "exception",
+        "status": "FAIL",
+        "points": 10,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\tests\\oracles\\BUG-20260512-E68A\\mt1\\exception\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T04",
+        "module": "MOD-2",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "normal",
+        "status": "FAIL",
+        "points": 10,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\tests\\oracles\\BUG-20260512-E68A\\mt2\\normal\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T05",
+        "module": "MOD-2",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "edge",
+        "status": "FAIL",
+        "points": 10,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\tests\\oracles\\BUG-20260512-E68A\\mt2\\edge\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T06",
+        "module": "MOD-2",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "exception",
+        "status": "FAIL",
+        "points": 10,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\tests\\oracles\\BUG-20260512-E68A\\mt2\\exception\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      }
+    ]
+  }
+}

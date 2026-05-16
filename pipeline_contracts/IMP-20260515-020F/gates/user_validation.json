@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-16T01:45:38Z",
+  "pipeline_id": "IMP-20260515-020F",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": ".pipeline/phase_evidence/IMP-20260515-020F/pm/",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": ".pipeline\\phase_evidence\\IMP-20260515-020F\\pm",
+        "kind": "directory",
+        "exists": true
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      ".pipeline/phase_evidence/IMP-20260515-020F/pm/"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260515-020F",
+    "deployed_at": "2026-05-16T01:45:38Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\IMP-20260515-020F",
+    "evidence": ".pipeline/phase_evidence/IMP-20260515-020F/pm/",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": ".pipeline\\phase_evidence\\IMP-20260515-020F\\pm",
+          "kind": "directory",
+          "exists": true
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        ".pipeline/phase_evidence/IMP-20260515-020F/pm/"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "directory",
+        "source": ".pipeline\\phase_evidence\\IMP-20260515-020F\\pm",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260515-020F\\.pipeline\\phase_evidence\\IMP-20260515-020F\\pm",
+        "sha256": null
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\IMP-20260515-020F\\pipeline.py-pipeline.py",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260515-020F\\pipeline_outputs\\IMP-20260515-020F\\pipeline.py-pipeline.py",
+        "sha256": "aac6521f3a255bf7231a5cf978d4e66efba3824e3a2da4d0cc097a1abe395b5e"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\IMP-20260515-020F\\Dev-dev_handover.xml",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260515-020F\\pipeline_outputs\\IMP-20260515-020F\\Dev-dev_handover.xml",
+        "sha256": "bcc9dc01568f7c72eb132f1a137b89fe41dc9d78feeb368480fade6ac5714d6c"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\IMP-20260515-020F\\deployment_manifest.json"
+  }
+}

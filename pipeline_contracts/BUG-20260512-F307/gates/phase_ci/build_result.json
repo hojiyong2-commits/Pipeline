@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-12T12:59:28Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [
+    "phase request included local-only files that GitHub Actions could not re-read"
+  ],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25735921257",
+  "commit_sha": "8f78675837625ff7d0e06f57392dc5bf5c952021",
+  "pipeline_id": "BUG-20260512-F307",
+  "phase": "build",
+  "attestation": {
+    "event_name": "pull_request",
+    "workflow": "CI",
+    "request_sha256": "d9420f9de982353bbb6727315a15af3c7550fb5d196a663c20ad50d33c78df69",
+    "validation": {
+      "blockers": [],
+      "status": "PASS"
+    },
+    "repository": "hojiyong2-commits/Pipeline",
+    "attestation_type": "pipeline-phase-v1",
+    "ref": "refs/pull/22/merge",
+    "run_attempt": "1",
+    "phase": "build",
+    "run_id": "25735921257",
+    "pipeline_id": "BUG-20260512-F307",
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-12T12:57:15Z",
+      "pipeline_id": "BUG-20260512-F307",
+      "phase": "build",
+      "phase_status": "DONE",
+      "commit_hint": "b08bf383d83cdb3ae2d36c661896a31fef4b1879",
+      "state": {
+        "current_phase": "harness",
+        "phase_completed_at": "2026-05-12T12:57:07Z",
+        "report_file": "ic_part_src/dist/build_report.xml",
+        "evidence": "ic_part_src/dist/ICPartAutomation.exe"
+      },
+      "agent_run": {
+        "run_id": "build-6bd761a539b15c4f",
+        "phase": "build",
+        "agent_id": "build-agent",
+        "status": "COMPLETED",
+        "output_file": "ic_part_src\\dist\\build_report.xml",
+        "output_sha256": "1916f740a98bd64439e1cb75362cde5a22a17b77192c8f023ab03785d1ea858f",
+        "receipt_path": ".pipeline/phase_evidence/BUG-20260512-F307/build/agent_receipt_build-6bd761a539b15c4f.json",
+        "receipt_sha256": "c033beb6f8204ac49d1bcaaf0a69d2900ddd2b3aa0f84d4c882c55c7cbc5ffa0",
+        "used_by_phase": "build",
+        "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260512-F307\\build\\build-6bd761a539b15c4f.json"
+      },
+      "manager_run": null,
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\BUG-20260512-F307\\build\\build-6bd761a539b15c4f.json",
+          "path": ".pipeline/phase_evidence/BUG-20260512-F307/build/agent_receipt_build-6bd761a539b15c4f.json",
+          "sha256": "c033beb6f8204ac49d1bcaaf0a69d2900ddd2b3aa0f84d4c882c55c7cbc5ffa0",
+          "size_bytes": 526,
+          "requires_force_add": true
+        },
+        {
+          "label": "report",
+          "source": "ic_part_src\\dist\\build_report.xml",
+          "path": ".pipeline/phase_evidence/BUG-20260512-F307/build/report_build_report.xml",
+          "sha256": "1916f740a98bd64439e1cb75362cde5a22a17b77192c8f023ab03785d1ea858f",
+          "size_bytes": 1533,
+          "requires_force_add": true
+        }
+      ],
+      "workspace_file_checks": [],
+      "local_only_files": [
+        {
+          "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+          "sha256": "c4d123d781ff076058be7d294cc1aa2ec7b4e22e24de5ed7a6e11f8cf883f878",
+          "reason": "ignored_or_outside_git_checkout"
+        }
+      ]
+    },
+    "checkout_sha": "9531529120747d956c15ad5bb4b71f90fc2010a1",
+    "head_sha": "8f78675837625ff7d0e06f57392dc5bf5c952021",
+    "runner_os": "Windows",
+    "commit_sha": "8f78675837625ff7d0e06f57392dc5bf5c952021",
+    "schema_version": 1,
+    "generated_at": "2026-05-12T12:59:00.4918730Z"
+  },
+  "workflow_run": {
+    "id": 25735921257,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25735921257",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "8f78675837625ff7d0e06f57392dc5bf5c952021"
+  },
+  "artifact": {
+    "id": 6944738303,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1225,
+    "expired": false
+  }
+}

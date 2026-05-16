@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-F307",
+  "pipeline_type": "BUG",
+  "created_at": "2026-05-12T12:27:50Z",
+  "updated_at": "2026-05-12T13:06:36Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "I·J·K 스캐너가 inlineStr 셀(<is> 태그)을 미감지 — 새로 쓴 행 overwrite 버그",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "write_ic_part_zip inlineStr 감지 패치",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-12T13:06:36Z",
+  "contract_hash": "0cce08cbcb609ed5ae333a8aa40fb8542fe916ded4a93d459909fd214b05f5bd",
+  "test_set_hash": "36007bb7da742d70c714d8bd9ab2407ef022fa9c755e3af240ebdd2120b94ee6"
+}

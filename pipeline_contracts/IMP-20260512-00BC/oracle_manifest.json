@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260512-00BC",
+  "created_at": "2026-05-12T21:54:41Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_review_gate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_review_gate\\expected.json",
+      "input_sha256": "292b7e447051fa6cb4e4aef39dd6a3ff5811d26c4d45310be3c3e42f5a8a9db5",
+      "expected_sha256": "462a2fa060df9de198d891fb91276a490ca7bb320e46a06a1e33d9991d523627",
+      "added_at": "2026-05-12T21:54:41Z"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\edge_preflight_tool_fact\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\edge_preflight_tool_fact\\expected.json",
+      "input_sha256": "239a09d11e98a94b85b753688213339d19820b58c6afa6b7455ee4a7f4ae0ff1",
+      "expected_sha256": "591fdcfeb610bfe07b7bc1929b2d5fc763a109fcb7ae8c038211016b5a22fa4c",
+      "added_at": "2026-05-12T21:54:45Z"
+    },
+    {
+      "name": "O003",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_batch_ci\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_batch_ci\\expected.json",
+      "input_sha256": "befe5b638c80a4f1d02de84a6aa6af6ddcad9176382be8e51e7c9501e775ac84",
+      "expected_sha256": "bcfcfe99628669f4cd6ee3c7a7c3ee31dcee911d877c83190814399853ae9b7f",
+      "added_at": "2026-05-12T21:54:46Z"
+    },
+    {
+      "name": "O004",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\edge_trust_root_per_phase_ci\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\edge_trust_root_per_phase_ci\\expected.json",
+      "input_sha256": "55f08494a899884304dd4088fd639c9984687f5116b0d76184dc7b7c03d9fb37",
+      "expected_sha256": "a5021816a37d0c28a86beed30261508e516ae6791c77213535f5051be72985bc",
+      "added_at": "2026-05-12T21:54:46Z"
+    },
+    {
+      "name": "O005",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_preflight_basic\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_preflight_basic\\expected.json",
+      "input_sha256": "c657ac146362d9865b4f2febb7abd38ef1fb5935d7b1d247bb89f8a2e557a529",
+      "expected_sha256": "fa713f387a0b1abab00e547ed79e20988056ad847000ceb8a20d063fcf5941d1",
+      "added_at": "2026-05-12T21:56:34Z"
+    }
+  ],
+  "updated_at": "2026-05-12T21:56:34Z"
+}

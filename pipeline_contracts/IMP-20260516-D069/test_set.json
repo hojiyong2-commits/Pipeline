@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260516-D069",
+  "created_at": "2026-05-16T02:06:23Z",
+  "updated_at": "2026-05-16T02:09:40Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T005",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 30,
+      "given": {
+        "phase": "pm",
+        "changed_files": [
+          ".pipeline/phase_attestation_request.json",
+          ".pipeline/phase_evidence/IMP-20260516-D069/pm/receipt.json"
+        ],
+        "description": "pm phase 파일만 포함한 clean PR"
+      },
+      "when": {
+        "command": [
+          "python",
+          "pipeline.py",
+          "gates",
+          "preflight-pr",
+          "--phase",
+          "pm"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PREFLIGHT-PR"
+      }
+    },
+    {
+      "id": "T006",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 20,
+      "given": {
+        "phase": "pm",
+        "changed_files": [
+          ".pipeline/phase_evidence/IMP-20260516-D069/dev/handover.json",
+          "pipeline_state.json"
+        ],
+        "description": "금지 파일(다른 phase evidence, pipeline_state.json)이 포함된 PR"
+      },
+      "when": {
+        "command": [
+          "python",
+          "pipeline.py",
+          "gates",
+          "preflight-pr",
+          "--phase",
+          "pm"
+        ]
+      },
+      "then": {
+        "returncode": 1,
+        "stdout_contains": "PIPELINE ERROR"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-16T02:09:40Z",
+  "test_set_hash": "d7945cf252b2cd88ea4639dadc9c34f24d07d013c8e75d7f41357a5c2fca0343",
+  "contract_hash": "26bc8fd8c3854b76137d42ba7afba44b4c8169f64fe3a235cce677addd09fa70"
+}

@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-13T13:40:42Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25802637846",
+  "commit_sha": "885f86cc9dbc6a6f191fd7ca7a89c7e56c5fa836",
+  "pipeline_id": "IMP-20260513-4C0B",
+  "phase": "qa",
+  "attestation": {
+    "workflow": "CI",
+    "event_name": "pull_request",
+    "phase": "qa",
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-13T13:36:11Z",
+      "pipeline_id": "IMP-20260513-4C0B",
+      "phase": "qa",
+      "phase_status": "PASS",
+      "commit_hint": "8a04eefbf5743ea47aabd2c8ef63e890321fac59",
+      "state": {
+        "current_phase": "sec",
+        "phase_completed_at": "2026-05-13T13:36:02Z",
+        "report_file": "qa_report.xml",
+        "evidence": null
+      },
+      "agent_run": {
+        "run_id": "qa-0ce37b0b851aca5a",
+        "phase": "qa",
+        "agent_id": "qa-agent",
+        "status": "COMPLETED",
+        "output_file": "qa_report.xml",
+        "output_sha256": "ca05a401c086650617ff50192573d42cec3ea43ef6d1daed52c3e8447cda9604",
+        "receipt_path": ".pipeline/phase_evidence/IMP-20260513-4C0B/qa/agent_receipt_qa-0ce37b0b851aca5a.json",
+        "receipt_sha256": "4419c41c4ad53fd1cc913875ff3c41964cd72033b8e61a14a50f78f3b26a770a",
+        "used_by_phase": "qa",
+        "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260513-4C0B\\qa\\qa-0ce37b0b851aca5a.json"
+      },
+      "manager_run": null,
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\IMP-20260513-4C0B\\qa\\qa-0ce37b0b851aca5a.json",
+          "path": ".pipeline/phase_evidence/IMP-20260513-4C0B/qa/agent_receipt_qa-0ce37b0b851aca5a.json",
+          "sha256": "4419c41c4ad53fd1cc913875ff3c41964cd72033b8e61a14a50f78f3b26a770a",
+          "size_bytes": 496,
+          "requires_force_add": true
+        },
+        {
+          "label": "report",
+          "source": "qa_report.xml",
+          "path": ".pipeline/phase_evidence/IMP-20260513-4C0B/qa/report_qa_report.xml",
+          "sha256": "ca05a401c086650617ff50192573d42cec3ea43ef6d1daed52c3e8447cda9604",
+          "size_bytes": 2561,
+          "requires_force_add": true
+        }
+      ],
+      "workspace_file_checks": [],
+      "local_only_files": []
+    },
+    "head_sha": "885f86cc9dbc6a6f191fd7ca7a89c7e56c5fa836",
+    "checkout_sha": "ee2cceb3e99dadd2a7a8ed403f75267929beb646",
+    "runner_os": "Windows",
+    "validation": {
+      "status": "PASS",
+      "blockers": []
+    },
+    "request_sha256": "304e55b2f98fe21fb697d61cb5ea222dc4f97b9def3a9cd3f8d12e1c40cf6670",
+    "pipeline_id": "IMP-20260513-4C0B",
+    "attestation_type": "pipeline-phase-v1",
+    "ref": "refs/pull/25/merge",
+    "repository": "hojiyong2-commits/Pipeline",
+    "run_attempt": "1",
+    "schema_version": 1,
+    "run_id": "25802637846",
+    "commit_sha": "885f86cc9dbc6a6f191fd7ca7a89c7e56c5fa836",
+    "generated_at": "2026-05-13T13:40:19.2203050Z"
+  },
+  "workflow_run": {
+    "id": 25802637846,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25802637846",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "885f86cc9dbc6a6f191fd7ca7a89c7e56c5fa836"
+  },
+  "artifact": {
+    "id": 6971653071,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1103,
+    "expired": false
+  }
+}

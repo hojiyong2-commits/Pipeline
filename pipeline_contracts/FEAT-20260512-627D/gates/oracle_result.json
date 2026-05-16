@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-13T12:19:25Z",
+  "pipeline_id": "FEAT-20260512-627D",
+  "contract_hash": "c81b6643da53a21686341dc4d0b3fcbaf06544b778ca40d0c471b3bc9265c121",
+  "test_set_hash": "4dc6a030edadc8990fbd794be5bbbc4c1a2e6b3cbe603dbc985ebeda2dbf6f2f",
+  "observed_contract_hash": "c81b6643da53a21686341dc4d0b3fcbaf06544b778ca40d0c471b3bc9265c121",
+  "observed_test_set_hash": "4dc6a030edadc8990fbd794be5bbbc4c1a2e6b3cbe603dbc985ebeda2dbf6f2f",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "M1": 1
+      },
+      "edge_case_tests": 2,
+      "p0_tests": 1
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 100,
+    "total_points": 100,
+    "hard_fail": false,
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T001",
+      "module": "M1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 50,
+      "earned": 50,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "U_inherited": false,
+          "V_inherited": false,
+          "W_inherited": false,
+          "backfill_U": false,
+          "backfill_W": false,
+          "backfill_V": false
+        },
+        "actual": {
+          "U_inherited": false,
+          "V_inherited": false,
+          "W_inherited": false,
+          "backfill_U": false,
+          "backfill_W": false,
+          "backfill_V": false
+        }
+      }
+    },
+    {
+      "id": "T002",
+      "module": "M1",
+      "type": "json_exact_match",
+      "priority": "P1",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 30,
+      "earned": 30,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "backfill_attempted": false,
+          "cells_remain_empty": true
+        },
+        "actual": {
+          "backfill_attempted": false,
+          "cells_remain_empty": true
+        }
+      }
+    },
+    {
+      "id": "T003",
+      "module": "M1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "exception",
+      "status": "PASS",
+      "points": 20,
+      "earned": 20,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; src=open('ic_part_src/order_mapper.py', encoding='utf-8').read(); sys.exit(0 if 'Backfill U' not in src and 'Backfill V' not in src else 1)"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\FEAT-20260512-627D\\normal_no_inherit\\input.json",
+      "expected_path": "tests\\oracles\\FEAT-20260512-627D\\normal_no_inherit\\expected.json",
+      "input_sha256": "eefb94e139b85fe9b902e14c89a04df0ab833db2e6b971e8d892286031dc7737",
+      "expected_sha256": "eefb94e139b85fe9b902e14c89a04df0ab833db2e6b971e8d892286031dc7737"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\FEAT-20260512-627D\\edge_already_empty\\input.json",
+      "expected_path": "tests\\oracles\\FEAT-20260512-627D\\edge_already_empty\\expected.json",
+      "input_sha256": "d8973b2f5272ada134df8e72fec564ce57170b16a23b360bb9c60b7493fc4588",
+      "expected_sha256": "d8973b2f5272ada134df8e72fec564ce57170b16a23b360bb9c60b7493fc4588"
+    }
+  ]
+}

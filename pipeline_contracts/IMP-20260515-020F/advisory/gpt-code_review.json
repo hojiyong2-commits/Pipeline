@@ -1,0 +1,25 @@
+{
+  "status": "SKIPPED",
+  "reason": "ENABLE_GPT_ADVISORY is not 1",
+  "api_called": false,
+  "api_key_source": "process",
+  "findings": [],
+  "model": "gpt-5.5",
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260515-020F",
+  "kind": "gpt-code",
+  "auto_run": true,
+  "files": [
+    "pipeline.py",
+    "test_three_gate_e2e.py",
+    "test_three_gate_pipeline.py",
+    "tests\\test_patch_lane.py",
+    "tests\\test_pm_split.py",
+    "tests\\test_outputs.py",
+    "tests\\test_doc_cli_contract.py",
+    "tests\\oracles\\IMP-20260515-020F\\case_normal\\input.json",
+    "tests\\oracles\\IMP-20260515-020F\\case_normal\\expected.json",
+    "tests\\oracles\\IMP-20260515-020F\\case_edge\\input.json",
+    "tests\\oracles\\IMP-20260515-020F\\case_edge\\expected.json"
+  ]
+}

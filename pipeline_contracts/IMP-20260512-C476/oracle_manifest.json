@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260512-C476",
+  "created_at": "2026-05-12T11:50:15Z",
+  "oracles": [
+    {
+      "name": "MT-1 pyproject.toml extend-select PLW2901 추가",
+      "description": "pyproject.toml [tool.ruff.lint] 섹션에 extend-select = ['PLW2901']이 추가되어야 함",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260512-C476\\normal_ruff_rule\\input.toml",
+      "expected_path": "tests\\oracles\\IMP-20260512-C476\\normal_ruff_rule\\expected.toml",
+      "input_sha256": "7508c9123b6b52688385ae89651bbdcd707245efbb287fb849c6f6ca615b08e4",
+      "expected_sha256": "1d06555623c6eb43685d4e13b5eb874cfd3a02d8a4ea803ec28da453f98e0499",
+      "added_at": "2026-05-12T11:50:15Z"
+    },
+    {
+      "name": "MT-2 qa-agent.md PLW2901 shadowing 체크리스트 항목",
+      "description": "qa-agent.md에 PLW2901 + 루프 변수 shadowing grep 교차검증 의무 항목이 존재해야 함",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260512-C476\\edge_qa_agent_item\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260512-C476\\edge_qa_agent_item\\expected.txt",
+      "input_sha256": "3207c22d0076882b4440d94bf52a022a5998971d69e7e609f2b5cfdb63f13f26",
+      "expected_sha256": "618c10f4c9505aa7ac9f6e28bd6baae42621521daf61c81a8186c04d37dd5e99",
+      "added_at": "2026-05-12T11:50:19Z"
+    }
+  ],
+  "updated_at": "2026-05-12T11:50:19Z"
+}

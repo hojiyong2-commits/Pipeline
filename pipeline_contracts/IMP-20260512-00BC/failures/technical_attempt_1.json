@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260512-00BC",
+  "gate": "technical",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260512-00BC\\failures\\technical_attempt_1.json",
+  "recorded_at": "2026-05-12T22:46:42Z",
+  "status": "FAIL",
+  "repair_owner": "Dev tooling repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "technical"
+  ],
+  "note": "Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+  "failed_checks": [
+    {
+      "name": "bandit",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q",
+        "--ini",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.bandit",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "bandit",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "__main__.py 1.9.4\n  python version = 3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025, 15:27:58) [MSC v.1942 64 bit (AMD64)]",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "Run started:2026-05-12 22:46:07.118153+00:00\n\nTest results:\n>> Issue: [B112:try_except_continue] Try, Except, Continue detected.\n   Severity: Low   Confidence: High\n   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)\n   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html\n   Location: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py:6376:12\n6375\t                        })\n6376\t            except Exception:\n6377\t                continue\n6378\t    except Exception as exc:\n\n--------------------------------------------------\n\nCode scanned:\n\tTotal lines of code: 7426\n\tTotal lines skipped (#nosec): 0\n\tTotal potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0\n\nRun metrics:\n\tTotal issues (by severity):\n\t\tUndefined: 0\n\t\tLow: 1\n\t\tMedium: 0\n\t\tHigh: 0\n\tTotal issues (by confidence):\n\t\tUndefined: 0\n\t\tLow: 0\n\t\tMedium: 0\n\t\tHigh: 1\nFiles skipped (0):\n",
+      "stderr": "[main]\tINFO\tUsing ini file for skipped tests\n[main]\tINFO\tUsing command line arg for selected targets\n"
+    }
+  ],
+  "report_excerpt": {
+    "blockers": [
+      "--relaxed-tools runs are diagnostic only and cannot satisfy COMPLETE"
+    ],
+    "summary": {},
+    "results": []
+  }
+}

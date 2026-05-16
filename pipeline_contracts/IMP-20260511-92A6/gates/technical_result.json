@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-11T13:26:53Z",
+  "pipeline_id": "IMP-20260511-92A6",
+  "status": "PASS",
+  "evidence_files": [
+    "KittingMapper_inspection_report.md"
+  ],
+  "target_files": [],
+  "strict_tools": true,
+  "execution_profile": "FAST_ANALYSIS",
+  "checks": [
+    {
+      "name": "py_compile",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "py_compile"
+      ],
+      "message": "non-Python evidence files; py_compile not applicable",
+      "details": []
+    },
+    {
+      "name": "ruff",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "mypy",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "mypy"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "bandit",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q",
+        "--ini",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.bandit"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "pytest",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "message": "FAST_ANALYSIS has no Python evidence; full pytest is deferred to GitHub CI"
+    }
+  ],
+  "complete_eligible": true
+}

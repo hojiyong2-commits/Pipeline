@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260513-4C0B",
+  "gate": "oracle",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260513-4C0B\\failures\\oracle_attempt_1.json",
+  "recorded_at": "2026-05-13T13:50:08Z",
+  "status": "FAIL",
+  "repair_owner": "PM/oracle path repair or Dev behavior repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "oracle"
+  ],
+  "note": "Oracle gate failed; inspect failing results and output path resolution before broad rework.",
+  "failed_checks": [],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {
+      "verdict": "FAIL",
+      "score": 57.14,
+      "threshold": 80,
+      "earned_points": 40,
+      "total_points": 70,
+      "hard_fail": true,
+      "passed": 4,
+      "failed": 2,
+      "skipped": 0
+    },
+    "results": [
+      {
+        "id": "T001",
+        "module": "MOD-1",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "normal",
+        "status": "FAIL",
+        "points": 15,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260513-4C0B\\tests\\oracles\\IMP-20260513-4C0B\\cluster_detect_normal\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T002",
+        "module": "MOD-1",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "edge",
+        "status": "FAIL",
+        "points": 15,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260513-4C0B\\tests\\oracles\\IMP-20260513-4C0B\\patch_audit_escalate\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T003",
+        "module": "MOD-1",
+        "type": "file_exists_check",
+        "priority": "P1",
+        "case_kind": "normal",
+        "status": "PASS",
+        "points": 10,
+        "earned": 10,
+        "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+        "details": {
+          "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py"
+        }
+      },
+      {
+        "id": "T004",
+        "module": "MOD-1",
+        "type": "file_exists_check",
+        "priority": "P1",
+        "case_kind": "exception",
+        "status": "PASS",
+        "points": 10,
+        "earned": 10,
+        "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py",
+        "details": {
+          "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py"
+        }
+      },
+      {
+        "id": "T005",
+        "module": "MOD-2",
+        "type": "file_exists_check",
+        "priority": "P1",
+        "case_kind": "normal",
+        "status": "PASS",
+        "points": 5,
+        "earned": 5,
+        "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\CLAUDE.md",
+        "details": {
+          "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\CLAUDE.md"
+        }
+      },
+      {
+        "id": "T006",
+        "module": "MOD-3",
+        "type": "command_check",
+        "priority": "P0",
+        "case_kind": "normal",
+        "status": "PASS",
+        "points": 15,
+        "earned": 15,
+        "message": "command matched expectations",
+        "details": {
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "tests/test_patch_lane.py",
+            "-v",
+            "--tb=short"
+          ],
+          "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+          "returncode": 0,
+          "stdout": "============================= test session starts =============================\nplatform win32 -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0 -- C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\nconfigfile: pyproject.toml\nplugins: anyio-4.13.0\ncollecting ... collected 14 items\n\ntests/test_patch_lane.py::TestClusterCommands::test_cluster_detect_returns_json PASSED [  7%]\ntests/test_patch_lane.py::TestClusterCommands::test_cluster_init_creates_cluster PASSED [ 14%]\ntests/test_patch_lane.py::TestClusterCommands::test_cluster_status_shows_all PASSED [ 21%]\ntests/test_patch_lane.py::TestClusterCommands::test_cluster_close_sets_closed_at PASSED [ 28%]\ntests/test_patch_lane.py::TestPatchAudit::test_patch_plan_pass_within_limit PASSED [ 35%]\ntests/test_patch_lane.py::TestPatchAudit::test_patch_plan_fail_exceeds_15_lines PASSED [ 42%]\ntests/test_patch_lane.py::TestPatchAudit::test_patch_plan_fail_trust_root PASSED [ 50%]\ntests/test_patch_lane.py::TestPatchAudit::test_patch_audit_pass PASSED   [ 57%]\ntests/test_patch_lane.py::TestPatchVerify::test_patch_verify_pass PASSED [ 64%]\ntests/test_patch_lane.py::TestPatchVerify::test_patch_verify_fail PASSED [ 71%]\ntests/test_patch_lane.py::TestAutoEscalation::test_exactly_15_lines_passes PASSED [ 78%]\ntests/test_patch_lane.py::TestAutoEscalation::test_16_lines_fails PASSED [ 85%]\ntests/test_patch_lane.py::TestPatchLaneForbidden::test_cluster_init_has_forbidden_false PASSED [ 92%]\ntests/test_patch_lane.py::TestPatchPlanSchema::test_missing_scope_file_fails PASSED [100%]\n\n============================= 14 passed in 3.33s ==============================\n",
+          "stderr": ""
+        }
+      }
+    ]
+  }
+}

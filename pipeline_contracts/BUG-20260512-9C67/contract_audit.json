@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T10:43:38Z",
+  "pipeline_id": "BUG-20260512-9C67",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "metrics": {
+    "test_count": 3,
+    "p0_tests": 2,
+    "p0_behavior_tests": 2,
+    "shallow_tests": 0,
+    "oracle_count": 2
+  },
+  "oracle_entries": [
+    {
+      "name": "normal_rename",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-9C67\\normal_rename\\input.py",
+      "expected_path": "tests\\oracles\\BUG-20260512-9C67\\normal_rename\\expected.py",
+      "input_sha256": "3ce4a9f1333a1e92202ee0ad74c738096c3648b6e9f7d71a3647f53927bc565a",
+      "expected_sha256": "20461c98d06fa2078f16cbd27c8e51e276520afacd7be4ee0f4ced89e8ef3cd3"
+    },
+    {
+      "name": "edge_func_intact",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-9C67\\edge_func_intact\\input.py",
+      "expected_path": "tests\\oracles\\BUG-20260512-9C67\\edge_func_intact\\expected.py",
+      "input_sha256": "8a5bf783f33f124a72b79cbb4a4029b27fd01a0f62dcc97c9bc65462d5a81a6c",
+      "expected_sha256": "73eefc277947d788dbdc9ea4aa4e4dcd3bdad6c540f97fa13e55cd5a1bd2475c"
+    }
+  ],
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 2
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 2
+    }
+  },
+  "allow_no_oracle": false,
+  "waiver_reason": ""
+}

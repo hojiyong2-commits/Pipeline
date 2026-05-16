@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-12T22:39:26Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25766328899",
+  "commit_sha": "c44e754827de04c7b6feea112645763cb4dc88ff",
+  "pipeline_id": "IMP-20260512-00BC",
+  "phase": "dev",
+  "attestation": {
+    "runner_os": "Windows",
+    "ref": "refs/pull/24/merge",
+    "run_id": "25766328899",
+    "request_sha256": "2f7b0da6d54308379e43a35e732f7c39ef37858d3d69a01c67639439647cb841",
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-12T22:37:17Z",
+      "pipeline_id": "IMP-20260512-00BC",
+      "phase": "dev",
+      "phase_status": "DONE",
+      "commit_hint": "6fd50a2f0b0e610887cd531acd20ac6419303691",
+      "state": {
+        "current_phase": "qa",
+        "phase_completed_at": "2026-05-12T22:37:11Z",
+        "report_file": "dev_handover.xml",
+        "evidence": "pipeline.py,.claude/agents/pm-planner-agent.md,.claude/agents/qa-agent.md,.claude/agents/pipeline-manager-agent.md,CLAUDE.md,.github/workflows/ci.yml"
+      },
+      "agent_run": {
+        "run_id": "dev-d138991930a2070a",
+        "phase": "dev",
+        "agent_id": "dev-agent",
+        "status": "COMPLETED",
+        "output_file": "dev_handover.xml",
+        "output_sha256": "2b3e1b4a83b8406b01932cba4954f8270b74954a2af7a3b619b1de0fbd393642",
+        "receipt_path": ".pipeline/phase_evidence/IMP-20260512-00BC/dev/agent_receipt_dev-d138991930a2070a.json",
+        "receipt_sha256": "b1678acee5ec8cdf315b67ef051e3e2710143368334f9e9daa5b7a3ffa1a041b",
+        "used_by_phase": "dev",
+        "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260512-00BC\\dev\\dev-d138991930a2070a.json"
+      },
+      "manager_run": null,
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\IMP-20260512-00BC\\dev\\dev-d138991930a2070a.json",
+          "path": ".pipeline/phase_evidence/IMP-20260512-00BC/dev/agent_receipt_dev-d138991930a2070a.json",
+          "sha256": "b1678acee5ec8cdf315b67ef051e3e2710143368334f9e9daa5b7a3ffa1a041b",
+          "size_bytes": 502,
+          "requires_force_add": true
+        },
+        {
+          "label": "report",
+          "source": "dev_handover.xml",
+          "path": ".pipeline/phase_evidence/IMP-20260512-00BC/dev/report_dev_handover.xml",
+          "sha256": "2b3e1b4a83b8406b01932cba4954f8270b74954a2af7a3b619b1de0fbd393642",
+          "size_bytes": 4445,
+          "requires_force_add": true
+        },
+        {
+          "label": "scope_manifest",
+          "source": "scope_manifest.json",
+          "path": ".pipeline/phase_evidence/IMP-20260512-00BC/dev/scope_manifest_scope_manifest.json",
+          "sha256": "73b6742ce5ccdd128dce6bf942b62923d72892fa369389ba1c12cf257c5974cf",
+          "size_bytes": 988,
+          "requires_force_add": true
+        }
+      ],
+      "workspace_file_checks": [
+        {
+          "path": "pipeline.py",
+          "sha256": "e1da86b3f8875ed86789434ed13373b956e1d13783bd1dd400c2d1486fc3b53b",
+          "size_bytes": 375226
+        },
+        {
+          "path": ".claude/agents/pm-planner-agent.md",
+          "sha256": "9a217351cc20e9a1a0b527bb8679a1f978db1dc6b8341ff4d7369dcad42f0d69",
+          "size_bytes": 2901
+        },
+        {
+          "path": ".claude/agents/qa-agent.md",
+          "sha256": "29954ed56b6510e5de285fb13df252e3eabec8532aed07cab1e4360862a6b970",
+          "size_bytes": 32534
+        },
+        {
+          "path": ".claude/agents/pipeline-manager-agent.md",
+          "sha256": "5931e3451e12af51f35bccaa6af4004ca4a0178b7b93fe3475b9dc7ba5d2033c",
+          "size_bytes": 5054
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "88a0c114506af169251d7a94f7d14fbaaad4478154e457851f6abcfb421334ac",
+          "size_bytes": 70880
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "1d14efbfc0e6bab59f7eed948fe06c7a08a7b268f7787f0e512ce616c7d82540",
+          "size_bytes": 27290
+        }
+      ],
+      "local_only_files": []
+    },
+    "validation": {
+      "blockers": [],
+      "status": "PASS"
+    },
+    "commit_sha": "c44e754827de04c7b6feea112645763cb4dc88ff",
+    "checkout_sha": "910c4d84ee1cd9080f80c607c2cfd6e1d8fb0873",
+    "pipeline_id": "IMP-20260512-00BC",
+    "schema_version": 1,
+    "head_sha": "c44e754827de04c7b6feea112645763cb4dc88ff",
+    "phase": "dev",
+    "run_attempt": "1",
+    "workflow": "CI",
+    "attestation_type": "pipeline-phase-v1",
+    "repository": "hojiyong2-commits/Pipeline",
+    "generated_at": "2026-05-12T22:39:03.0877825Z",
+    "event_name": "pull_request"
+  },
+  "workflow_run": {
+    "id": 25766328899,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25766328899",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "c44e754827de04c7b6feea112645763cb4dc88ff"
+  },
+  "artifact": {
+    "id": 6957474153,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1568,
+    "expired": false
+  }
+}

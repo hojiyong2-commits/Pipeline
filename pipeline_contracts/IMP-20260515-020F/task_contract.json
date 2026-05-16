@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260515-020F",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-15T20:44:19Z",
+  "updated_at": "2026-05-15T20:45:55Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "pipeline.py 구현 변경을 main에 반영: pm_planner/pipeline_manager phase, --planner-run-id/--manager-run-id, outputs add/status, patch plan/audit/verify/attest 명령어를 main 기준 브랜치에 추가하고 관련 테스트 포함",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "M-1",
+      "name": "pipeline_py_sync",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q001",
+      "module": null,
+      "severity": "P1",
+      "question": "pm_planner/pipeline_manager phase가 pipeline.py에 구현되어 있는가?",
+      "options": [],
+      "answer": "예, agent_start 명령어에 pm_planner, pipeline_manager phase가 등록됨",
+      "resolved": true
+    },
+    {
+      "id": "Q002",
+      "module": null,
+      "severity": "P1",
+      "question": "outputs add/status 명령어가 pipeline.py에 구현되어 있는가?",
+      "options": [],
+      "answer": "예, cmd_outputs 핸들러와 outputs add/status subcommand가 구현됨",
+      "resolved": true
+    },
+    {
+      "id": "Q003",
+      "module": null,
+      "severity": "P0",
+      "question": "pipeline.py 이식 후 pytest 23개 테스트가 모두 통과하는가?",
+      "options": [],
+      "answer": "예, tests/test_patch_lane.py 23개 테스트가 main 기준 브랜치에서 모두 PASS",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-15T20:45:55Z",
+  "contract_hash": "f78ded49a02d74b17acad0446505daf93e038a6bcacebb2a6b72ee41920e1c5d",
+  "test_set_hash": "eeef95c9fe7d96fc16a3ce494784c0341246ac2215d037ea6ae0e64335581b38"
+}

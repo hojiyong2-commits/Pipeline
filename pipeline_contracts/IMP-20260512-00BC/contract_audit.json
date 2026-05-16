@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T21:56:52Z",
+  "pipeline_id": "IMP-20260512-00BC",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "metrics": {
+    "test_count": 8,
+    "p0_tests": 7,
+    "p0_behavior_tests": 7,
+    "shallow_tests": 0,
+    "oracle_count": 5
+  },
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_review_gate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_review_gate\\expected.json",
+      "input_sha256": "292b7e447051fa6cb4e4aef39dd6a3ff5811d26c4d45310be3c3e42f5a8a9db5",
+      "expected_sha256": "462a2fa060df9de198d891fb91276a490ca7bb320e46a06a1e33d9991d523627"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\edge_preflight_tool_fact\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\edge_preflight_tool_fact\\expected.json",
+      "input_sha256": "239a09d11e98a94b85b753688213339d19820b58c6afa6b7455ee4a7f4ae0ff1",
+      "expected_sha256": "591fdcfeb610bfe07b7bc1929b2d5fc763a109fcb7ae8c038211016b5a22fa4c"
+    },
+    {
+      "name": "O003",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_batch_ci\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_batch_ci\\expected.json",
+      "input_sha256": "befe5b638c80a4f1d02de84a6aa6af6ddcad9176382be8e51e7c9501e775ac84",
+      "expected_sha256": "bcfcfe99628669f4cd6ee3c7a7c3ee31dcee911d877c83190814399853ae9b7f"
+    },
+    {
+      "name": "O004",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\edge_trust_root_per_phase_ci\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\edge_trust_root_per_phase_ci\\expected.json",
+      "input_sha256": "55f08494a899884304dd4088fd639c9984687f5116b0d76184dc7b7c03d9fb37",
+      "expected_sha256": "a5021816a37d0c28a86beed30261508e516ae6791c77213535f5051be72985bc"
+    },
+    {
+      "name": "O005",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_preflight_basic\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_preflight_basic\\expected.json",
+      "input_sha256": "c657ac146362d9865b4f2febb7abd38ef1fb5935d7b1d247bb89f8a2e557a529",
+      "expected_sha256": "fa713f387a0b1abab00e547ed79e20988056ad847000ceb8a20d063fcf5941d1"
+    }
+  ],
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 5,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-5": 1,
+        "MT-4": 1,
+        "MT-2": 1,
+        "MT-1": 1,
+        "MT-3": 1
+      },
+      "edge_case_tests": 3,
+      "p0_tests": 7
+    }
+  },
+  "allow_no_oracle": false,
+  "waiver_reason": ""
+}

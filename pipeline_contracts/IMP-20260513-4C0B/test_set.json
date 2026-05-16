@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260513-4C0B",
+  "created_at": "2026-05-13T12:40:15Z",
+  "updated_at": "2026-05-13T13:51:24Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T001",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 15,
+      "given": {
+        "actual_file": "../../tests/oracles/IMP-20260513-4C0B/cluster_detect_normal/expected.json"
+      },
+      "when": {
+        "command": "cluster detect",
+        "args": [
+          "--desc",
+          "로그인 실패 시 500 에러 반환"
+        ],
+        "state_clusters": []
+      },
+      "then": {
+        "expected_file": "../../tests/oracles/IMP-20260513-4C0B/cluster_detect_normal/expected.json",
+        "description": "빈 클러스터 목록에서 cluster detect 실행 시 match_found=false, matched_cluster_id=null을 반환해야 한다"
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 15,
+      "given": {
+        "actual_file": "../../tests/oracles/IMP-20260513-4C0B/patch_audit_escalate/expected.json"
+      },
+      "when": {
+        "command": "patch audit",
+        "args": [
+          "--plan",
+          "patch_plan.json"
+        ],
+        "actual_diff_files": 2,
+        "actual_diff_lines": 24
+      },
+      "then": {
+        "expected_file": "../../tests/oracles/IMP-20260513-4C0B/patch_audit_escalate/expected.json",
+        "description": "변경 파일 2개, 변경 라인 24줄인 경우 patch audit이 ESCALATE를 반환하고 lane을 full로 전환해야 한다"
+      }
+    },
+    {
+      "id": "T003",
+      "module": "MOD-1",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {},
+      "when": {
+        "action": "check_exists"
+      },
+      "then": {
+        "path": "pipeline.py"
+      },
+      "description": "pipeline.py 파일 존재 확인"
+    },
+    {
+      "id": "T004",
+      "module": "MOD-1",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "exception",
+      "points": 10,
+      "given": {},
+      "when": {
+        "action": "check_exists"
+      },
+      "then": {
+        "path": "tests/test_patch_lane.py"
+      },
+      "description": "test_patch_lane.py 파일 존재 확인"
+    },
+    {
+      "id": "T005",
+      "module": "MOD-2",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 5,
+      "given": {},
+      "when": {
+        "action": "check_sync"
+      },
+      "then": {
+        "path": "CLAUDE.md"
+      }
+    },
+    {
+      "id": "T006",
+      "module": "MOD-3",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 15,
+      "given": {
+        "cwd": "."
+      },
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_patch_lane.py",
+          "-v",
+          "--tb=short"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "passed"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-13T13:51:24Z",
+  "test_set_hash": "166387c780421fbd129e925202211e48bba4c8de352e2c8560238d94c8e3a623",
+  "contract_hash": "7bb56a1f0b61f6d63e8c49808304d7d4fc7e4e08e7f1f6d72616091f7ad1cf4c"
+}

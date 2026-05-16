@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-F307",
+  "gate": "oracle",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-F307\\failures\\oracle_attempt_1.json",
+  "recorded_at": "2026-05-12T13:00:20Z",
+  "status": "FAIL",
+  "repair_owner": "PM/oracle path repair or Dev behavior repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "oracle"
+  ],
+  "note": "Oracle gate failed; inspect failing results and output path resolution before broad rework.",
+  "failed_checks": [],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "threshold": 80,
+      "earned_points": 0,
+      "total_points": 90,
+      "hard_fail": true,
+      "passed": 0,
+      "failed": 3,
+      "skipped": 0
+    },
+    "results": [
+      {
+        "id": "T001",
+        "module": "MT-1",
+        "type": "mapping_rule_check",
+        "priority": "P0",
+        "case_kind": "normal",
+        "status": "FAIL",
+        "points": 40,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-F307\\tests\\oracles\\BUG-20260512-F307\\normal_inlinestr_detect\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T002",
+        "module": "MT-1",
+        "type": "excel_row_match",
+        "priority": "P0",
+        "case_kind": "edge",
+        "status": "FAIL",
+        "points": 30,
+        "earned": 0,
+        "message": "failed to open workbook C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-F307\\tests\\oracles\\BUG-20260512-F307\\edge_empty_sheet\\input.json: openpyxl does not support .json file format, please check you can open it with Excel first. Supported formats are: .xlsx,.xlsm,.xltx,.xltm",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T003",
+        "module": "MT-1",
+        "type": "command_check",
+        "priority": "P1",
+        "case_kind": "normal",
+        "status": "FAIL",
+        "points": 20,
+        "earned": 0,
+        "message": "command did not match expectations",
+        "details": {
+          "command": [
+            "python",
+            "-c",
+            "import re; line = open('ic_part_src/order_mapper.py').readlines()[1159]; assert '<is[\\\\s>]' in line or '<is>' in line, f'inlineStr patch missing: {line}'"
+          ],
+          "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+          "returncode": 1,
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nUnicodeDecodeError: 'cp949' codec can't decode byte 0xe2 in position 699: illegal multibyte sequence\n"
+        }
+      }
+    ]
+  }
+}

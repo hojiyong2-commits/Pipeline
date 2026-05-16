@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260514-28A2",
+  "gate": "technical",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260514-28A2\\failures\\technical_attempt_1.json",
+  "recorded_at": "2026-05-14T14:14:47Z",
+  "status": "FAIL",
+  "repair_owner": "Dev tooling repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "technical"
+  ],
+  "note": "Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+  "failed_checks": [
+    {
+      "name": "ruff",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "ruff",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "ruff 0.15.12",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "F401 [*] `warnings` imported but unused\n    --> pipeline.py:2649:32\n     |\n2647 |                             unregistered.append(fp)\n2648 |                     if unregistered:\n2649 |                         import warnings\n     |                                ^^^^^^^^\n2650 |                         # outputs_manifest 미등록은 경고만 (차단은 하지 않음 — 레거시 호환성)\n2651 |                         for up in unregistered:\n     |\nhelp: Remove unused import: `warnings`\n\nPLW2901 `for` loop variable `line` overwritten by assignment target\n    --> pipeline.py:8739:17\n     |\n8737 |         def _parse_stat_block(text: str) -> None:\n8738 |             for line in text.splitlines():\n8739 |                 line = line.strip()\n     |                 ^^^^\n8740 |                 # \"filename | N +++---\" 형태 파싱\n8741 |                 if \"|\" in line:\n     |\n\nPLW2901 `for` loop variable `part` overwritten by assignment target\n    --> pipeline.py:8750:25\n     |\n8748 |                     parts = line.split(\",\")\n8749 |                     for part in parts:\n8750 |                         part = part.strip()\n     |                         ^^^^\n8751 |                         if \"insertion\" in part:\n8752 |                             try:\n     |\n\nF823 Local variable `total_insertions` referenced before assignment\n    --> pipeline.py:8753:33\n     |\n8751 |                         if \"insertion\" in part:\n8752 |                             try:\n8753 |                                 total_insertions += int(part.split()[0])\n     |                                 ^^^^^^^^^^^^^^^^\n8754 |                             except (IndexError, ValueError):\n8755 |                                 pass\n     |\n\nF823 Local variable `total_deletions` referenced before assignment\n    --> pipeline.py:8758:33\n     |\n8756 |                         if \"deletion\" in part:\n8757 |                             try:\n8758 |                                 total_deletions += int(part.split()[0])\n     |                                 ^^^^^^^^^^^^^^^\n8759 |                             except (IndexError, ValueError):\n8760 |                                 pass\n     |\n\nPLW2901 `for` loop variable `line` overwritten by assignment target\n    --> pipeline.py:8767:17\n     |\n8765 |         def _parse_stat_block_v2(text: str) -> None:\n8766 |             for line in text.splitlines():\n8767 |                 line = line.strip()\n     |                 ^^^^\n8768 |                 if \"|\" in line:\n8769 |                     fname = line.split(\"|\")[0].strip()\n     |\n\nPLW2901 `for` loop variable `part` overwritten by assignment target\n    --> pipeline.py:8776:25\n     |\n8774 |                     parts = line.split(\",\")\n8775 |                     for part in parts:\n8776 |                         part = part.strip()\n     |                         ^^^^\n8777 |                         if \"insertion\" in part:\n8778 |                             try:\n     |\n\nFound 7 errors.\n[*] 1 fixable with the `--fix` option.\n",
+      "stderr": ""
+    }
+  ],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {},
+    "results": []
+  }
+}

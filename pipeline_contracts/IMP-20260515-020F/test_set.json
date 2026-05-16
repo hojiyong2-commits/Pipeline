@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260515-020F",
+  "created_at": "2026-05-15T20:44:19Z",
+  "updated_at": "2026-05-15T20:45:55Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T-1",
+      "module": "M-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "pipeline.py",
+          "outputs",
+          "--help"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "T-2",
+      "module": "M-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 5,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "pipeline.py",
+          "patch",
+          "--help"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    }
+  ],
+  "frozen_at": "2026-05-15T20:45:55Z",
+  "test_set_hash": "eeef95c9fe7d96fc16a3ce494784c0341246ac2215d037ea6ae0e64335581b38",
+  "contract_hash": "f78ded49a02d74b17acad0446505daf93e038a6bcacebb2a6b72ee41920e1c5d"
+}

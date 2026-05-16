@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-E68A",
+  "gate": "technical",
+  "attempt": 2,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260512-E68A\\failures\\technical_attempt_2.json",
+  "recorded_at": "2026-05-12T00:48:28Z",
+  "status": "FAIL",
+  "repair_owner": "Dev tooling repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "technical"
+  ],
+  "note": "Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+  "failed_checks": [
+    {
+      "name": "ruff",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\ic_part_src\\order_mapper.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "ruff",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "ruff 0.15.12",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "og_a.order_no = \"X100050542\"; og_a.delivery_date = _date(2026, 6, 2)\n1550 |         og_b = OrderGroup(); og_b.order_no = \"X100050542\"; og_b.delivery_date = _date(2026, 6, 25)\n     |                            ^\n1551 |         og_c = OrderGroup(); og_c.order_no = \"X100050542\"; og_c.delivery_date = _date(2026, 7, 1)\n1552 |         apply_sub_order_suffixes([og_a, og_b, og_c])\n     |\n\nE702 Multiple statements on one line (semicolon)\n    --> ic_part_src\\order_mapper.py:1550:58\n     |\n1548 |         # apply_sub_order_suffixes\n1549 |         og_a = OrderGroup(); og_a.order_no = \"X100050542\"; og_a.delivery_date = _date(2026, 6, 2)\n1550 |         og_b = OrderGroup(); og_b.order_no = \"X100050542\"; og_b.delivery_date = _date(2026, 6, 25)\n     |                                                          ^\n1551 |         og_c = OrderGroup(); og_c.order_no = \"X100050542\"; og_c.delivery_date = _date(2026, 7, 1)\n1552 |         apply_sub_order_suffixes([og_a, og_b, og_c])\n     |\n\nE702 Multiple statements on one line (semicolon)\n    --> ic_part_src\\order_mapper.py:1551:28\n     |\n1549 |         og_a = OrderGroup(); og_a.order_no = \"X100050542\"; og_a.delivery_date = _date(2026, 6, 2)\n1550 |         og_b = OrderGroup(); og_b.order_no = \"X100050542\"; og_b.delivery_date = _date(2026, 6, 25)\n1551 |         og_c = OrderGroup(); og_c.order_no = \"X100050542\"; og_c.delivery_date = _date(2026, 7, 1)\n     |                            ^\n1552 |         apply_sub_order_suffixes([og_a, og_b, og_c])\n1553 |         assert og_a.order_no == \"X100050542\"\n     |\n\nE702 Multiple statements on one line (semicolon)\n    --> ic_part_src\\order_mapper.py:1551:58\n     |\n1549 |         og_a = OrderGroup(); og_a.order_no = \"X100050542\"; og_a.delivery_date = _date(2026, 6, 2)\n1550 |         og_b = OrderGroup(); og_b.order_no = \"X100050542\"; og_b.delivery_date = _date(2026, 6, 25)\n1551 |         og_c = OrderGroup(); og_c.order_no = \"X100050542\"; og_c.delivery_date = _date(2026, 7, 1)\n     |                                                          ^\n1552 |         apply_sub_order_suffixes([og_a, og_b, og_c])\n1553 |         assert og_a.order_no == \"X100050542\"\n     |\n\nE702 Multiple statements on one line (semicolon)\n    --> ic_part_src\\order_mapper.py:1558:29\n     |\n1556 |         assert og_b.base_order_no == \"X100050542\"\n1557 |\n1558 |         _ln_a = OrderGroup(); _ln_a.order_no = \"X100050777\"; _ln_a.line_nos = [1, 2, 3]\n     |                             ^\n1559 |         _ln_b = OrderGroup(); _ln_b.order_no = \"X100050777\"; _ln_b.line_nos = [4, 5]\n1560 |         _ln_groups = [_ln_a, _ln_b]\n     |\n\nE702 Multiple statements on one line (semicolon)\n    --> ic_part_src\\order_mapper.py:1558:60\n     |\n1556 |         assert og_b.base_order_no == \"X100050542\"\n1557 |\n1558 |         _ln_a = OrderGroup(); _ln_a.order_no = \"X100050777\"; _ln_a.line_nos = [1, 2, 3]\n     |                                                            ^\n1559 |         _ln_b = OrderGroup(); _ln_b.order_no = \"X100050777\"; _ln_b.line_nos = [4, 5]\n1560 |         _ln_groups = [_ln_a, _ln_b]\n     |\n\nE702 Multiple statements on one line (semicolon)\n    --> ic_part_src\\order_mapper.py:1559:29\n     |\n1558 |         _ln_a = OrderGroup(); _ln_a.order_no = \"X100050777\"; _ln_a.line_nos = [1, 2, 3]\n1559 |         _ln_b = OrderGroup(); _ln_b.order_no = \"X100050777\"; _ln_b.line_nos = [4, 5]\n     |                             ^\n1560 |         _ln_groups = [_ln_a, _ln_b]\n1561 |         apply_sub_order_suffixes(_ln_groups)\n     |\n\nE702 Multiple statements on one line (semicolon)\n    --> ic_part_src\\order_mapper.py:1559:60\n     |\n1558 |         _ln_a = OrderGroup(); _ln_a.order_no = \"X100050777\"; _ln_a.line_nos = [1, 2, 3]\n1559 |         _ln_b = OrderGroup(); _ln_b.order_no = \"X100050777\"; _ln_b.line_nos = [4, 5]\n     |                                                            ^\n1560 |         _ln_groups = [_ln_a, _ln_b]\n1561 |         apply_sub_order_suffixes(_ln_groups)\n     |\n\nFound 11 errors.\n[*] 1 fixable with the `--fix` option.\n",
+      "stderr": ""
+    },
+    {
+      "name": "mypy",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "mypy",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\ic_part_src\\order_mapper.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "mypy",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "mypy 2.0.0 (compiled: yes)",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "ic_part_src\\order_mapper.py:1635: error: No overload variant of \"__setitem__\" of \"list\" matches argument types \"int\", \"str\"  [call-overload]\nic_part_src\\order_mapper.py:1635: note: Possible overload variants:\nic_part_src\\order_mapper.py:1635: note:     def __setitem__(self, SupportsIndex, None, /) -> None\nic_part_src\\order_mapper.py:1635: note:     def __setitem__(self, slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None], Iterable[None], /) -> None\nic_part_src\\order_mapper.py:1636: error: No overload variant of \"__setitem__\" of \"list\" matches argument types \"int\", \"datetime\"  [call-overload]\nic_part_src\\order_mapper.py:1636: note: Possible overload variants:\nic_part_src\\order_mapper.py:1636: note:     def __setitem__(self, SupportsIndex, None, /) -> None\nic_part_src\\order_mapper.py:1636: note:     def __setitem__(self, slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None], Iterable[None], /) -> None\nic_part_src\\order_mapper.py:1637: error: No overload variant of \"__setitem__\" of \"list\" matches argument types \"int\", \"int\"  [call-overload]\nic_part_src\\order_mapper.py:1637: note: Possible overload variants:\nic_part_src\\order_mapper.py:1637: note:     def __setitem__(self, SupportsIndex, None, /) -> None\nic_part_src\\order_mapper.py:1637: note:     def __setitem__(self, slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None], Iterable[None], /) -> None\nic_part_src\\order_mapper.py:1638: error: No overload variant of \"__setitem__\" of \"list\" matches argument types \"int\", \"str\"  [call-overload]\nic_part_src\\order_mapper.py:1638: note: Possible overload variants:\nic_part_src\\order_mapper.py:1638: note:     def __setitem__(self, SupportsIndex, None, /) -> None\nic_part_src\\order_mapper.py:1638: note:     def __setitem__(self, slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None], Iterable[None], /) -> None\nic_part_src\\order_mapper.py:1639: error: No overload variant of \"__setitem__\" of \"list\" matches argument types \"int\", \"str\"  [call-overload]\nic_part_src\\order_mapper.py:1639: note: Possible overload variants:\nic_part_src\\order_mapper.py:1639: note:     def __setitem__(self, SupportsIndex, None, /) -> None\nic_part_src\\order_mapper.py:1639: note:     def __setitem__(self, slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None], Iterable[None], /) -> None\nFound 5 errors in 1 file (checked 2 source files)\n",
+      "stderr": "mypy.ini: [mypy]: python_version: Python 3.9 is not supported (must be 3.10 or higher)\n"
+    },
+    {
+      "name": "pytest",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": ".........................................................F.............. [ 32%]\n........................................................................ [ 65%]\n........................................................................ [ 98%]\n...                                                                      [100%]\n================================== FAILURES ===================================\n_ ThreeGatePipelineTests.test_accept_gate_deploys_real_artifact_after_ci_pass _\n\nself = <test_three_gate_pipeline.ThreeGatePipelineTests testMethod=test_accept_gate_deploys_real_artifact_after_ci_pass>\n\n    def test_accept_gate_deploys_real_artifact_after_ci_pass(self) -> None:\n        state = pipeline._new_state(\"TMP-ACCEPT-DEPLOY\", \"FEAT\", \"sample\")\n        state[\"external_gates\"] = pipeline._new_external_gates(enabled=True)\n        for gate_name in (\"technical\", \"oracle\", \"github_ci\"):\n            state[\"external_gates\"][gate_name][\"status\"] = \"PASS\"\n    \n        with tempfile.TemporaryDirectory() as tmp:\n            root = Path(tmp)\n            artifact = root / \"result.txt\"\n            artifact.write_text(\"accepted output\", encoding=\"utf-8\")\n            deploy_root = root / \"deploy-root\"\n            paths = {\"user_validation\": root / \"user_validation.json\"}\n            args = argparse.Namespace(\n                gates_action=\"accept\",\n                result=\"ACCEPT\",\n                evidence=str(artifact),\n                notes=\"approved by user\",\n                user_confirmed=True,\n            )\n    \n            with mock.patch.object(pipeline, \"_require_state\", return_value=state), \\\n                 mock.patch.object(pipeline, \"_contract_paths\", return_value=paths), \\\n                 mock.patch.object(pipeline, \"_record_snapshot\"), \\\n                 mock.patch.object(pipeline, \"_save\"), \\\n                 mock.patch.dict(pipeline.os.environ, {\"PIPELINE_DEPLOY_ROOT\": str(deploy_root)}):\n                with self.assertRaises(SystemExit) as ctx:\n                    pipeline.cmd_gates(args)\n    \n            deployment = state.get(\"deployment\")\n            deployed_file = deploy_root / \"TMP-ACCEPT-DEPLOY\" / artifact.name\n            manifest = deploy_root / \"TMP-ACCEPT-DEPLOY\" / \"deployment_manifest.json\"\n    \n>           self.assertEqual(ctx.exception.code, 0)\nE           AssertionError: 1 != 0\n\ntest_three_gate_pipeline.py:1165: AssertionError\n---------------------------- Captured stderr call -----------------------------\n\n[PIPELINE ERROR] [PR TITLE MISMATCH] PR #18 ���� ���������� ID�� �����ϴ�.\n  ���� PR ����: 'BUG-20260512-E68A PM phase attestation'\n  �ʿ��� ���������� ID: [TMP-ACCEPT-DEPLOY]\n  PR URL: https://github.com/hojiyong2-commits/Pipeline/pull/18\n  ���� �� �ٽ� �����ϼ���: gh pr edit 18 --title '[TMP-ACCEPT-DEPLOY] ...'\n=========================== short test summary info ===========================\nFAILED test_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_deploys_real_artifact_after_ci_pass\n1 failed, 218 passed in 24.03s\n",
+      "stderr": ""
+    }
+  ],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {},
+    "results": []
+  }
+}

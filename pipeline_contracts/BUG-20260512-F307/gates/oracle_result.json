@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T13:06:54Z",
+  "pipeline_id": "BUG-20260512-F307",
+  "contract_hash": "0cce08cbcb609ed5ae333a8aa40fb8542fe916ded4a93d459909fd214b05f5bd",
+  "test_set_hash": "36007bb7da742d70c714d8bd9ab2407ef022fa9c755e3af240ebdd2120b94ee6",
+  "observed_contract_hash": "0cce08cbcb609ed5ae333a8aa40fb8542fe916ded4a93d459909fd214b05f5bd",
+  "observed_test_set_hash": "36007bb7da742d70c714d8bd9ab2407ef022fa9c755e3af240ebdd2120b94ee6",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 2
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 2
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 90,
+    "total_points": 90,
+    "hard_fail": false,
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T001",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 40,
+      "earned": 40,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re; p=r'<v[\\s>]|<is[\\s>]'; assert re.search(p,'<v>42</v>'), 'v tag not matched'; assert re.search(p,'<is><t>X</t></is>'), 'is tag not matched'; assert not re.search(p,'<c r=\"X\"/>'), 'empty cell falsely matched'"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 30,
+      "earned": 30,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('ic_part_src/order_mapper.py',encoding='utf-8').read(); assert 'ICPART_DATA_START_ROW: int = 6' in src or 'ICPART_DATA_START_ROW = 6' in src, 'constant not found or wrong value'; start=6; assert start-1==5 and start==6"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T003",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 20,
+      "earned": 20,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import re; line = open('ic_part_src/order_mapper.py', encoding='utf-8').readlines()[1159]; assert '<is[\\s>]' in line or '<is>' in line, f'inlineStr patch missing: {line}'"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": "<string>:1: SyntaxWarning: invalid escape sequence '\\s'\n"
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-F307\\normal_inlinestr_detect\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-F307\\normal_inlinestr_detect\\expected.json",
+      "input_sha256": "efbd0910605e70392422268399b633066b8552da5256127c19d53f2d778c037c",
+      "expected_sha256": "0833cc2581446e55d21d3beba36d817dc034491e7470432b1cf9839db5529a8f"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-F307\\edge_empty_sheet\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-F307\\edge_empty_sheet\\expected.json",
+      "input_sha256": "99ba3a94bd13ff603f848e5edc1d98edd77a9ec9b442bafecd9f1de13e30cd58",
+      "expected_sha256": "7c437b0e70fa3197fe435e12a849061a4b3194814d3795cb206903d82f71121f"
+    }
+  ]
+}

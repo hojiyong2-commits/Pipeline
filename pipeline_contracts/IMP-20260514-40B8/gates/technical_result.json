@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-14T15:45:39Z",
+  "pipeline_id": "IMP-20260514-40B8",
+  "status": "PASS",
+  "evidence_files": [
+    "README.md",
+    "CLAUDE.md",
+    ".claude\\commands\\task.md",
+    ".claude\\agents\\pipeline-manager-agent.md",
+    ".claude\\agents\\pm-planner-agent.md",
+    ".claude\\agents\\qa-agent.md"
+  ],
+  "target_files": [],
+  "strict_tools": true,
+  "execution_profile": "STANDARD",
+  "checks": [
+    {
+      "name": "py_compile",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "py_compile"
+      ],
+      "message": "non-Python evidence files; py_compile not applicable",
+      "details": []
+    },
+    {
+      "name": "ruff",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "mypy",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "mypy"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "bandit",
+      "status": "SKIP",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q",
+        "--ini",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.bandit"
+      ],
+      "message": "non-Python evidence files; Python tool not applicable"
+    },
+    {
+      "name": "pytest",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "........................................................................ [ 29%]\n........................................................................ [ 59%]\n........................................................................ [ 89%]\n..........................                                               [100%]\n============================== warnings summary ===============================\ntest_three_gate_pipeline.py::ThreeGatePipelineTests::test_accept_gate_rejects_placeholder_evidence\n  C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-107 (_readerthread)\n  \n  Traceback (most recent call last):\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1075, in _bootstrap_inner\n      self.run()\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\threading.py\", line 1012, in run\n      self._target(*self._args, **self._kwargs)\n    File \"C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\subprocess.py\", line 1601, in _readerthread\n      buffer.append(fh.read())\n                    ^^^^^^^^^\n  UnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 64: illegal multibyte sequence\n  \n  Enable tracemalloc to get traceback where the object was allocated.\n  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.\n    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n242 passed, 1 warning in 29.49s\n",
+      "stderr": ""
+    }
+  ],
+  "complete_eligible": true
+}

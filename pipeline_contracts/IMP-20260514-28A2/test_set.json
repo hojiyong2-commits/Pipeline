@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260514-28A2",
+  "created_at": "2026-05-14T13:10:01Z",
+  "updated_at": "2026-05-14T13:13:37Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T-PIPELINE-VERIFY-EVIDENCE",
+      "module": "MOD-PIPELINE-DIFFGATE",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 20,
+      "given": {
+        "command_summary": "patch verify --result PASS without --test-command and without --evidence-file must exit 1 and emit [PIPELINE ERROR]",
+        "patch_plan_path": "patch_plan.json",
+        "evidence_provided": false
+      },
+      "when": {
+        "command": [
+          "python",
+          "pipeline.py",
+          "patch",
+          "verify",
+          "--plan",
+          "patch_plan.json",
+          "--result",
+          "PASS"
+        ]
+      },
+      "then": {
+        "returncode": 1,
+        "stderr_contains": "[PIPELINE ERROR]"
+      }
+    },
+    {
+      "id": "T-PIPELINE-DIFFGATE-ESCALATE",
+      "module": "MOD-PIPELINE-DIFFGATE",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 15,
+      "given": {
+        "declared_files": [
+          "core/utils.py"
+        ],
+        "actual_changed_files": [
+          "core/utils.py",
+          "core/extra.py"
+        ],
+        "base_ref": "origin/main",
+        "expectation": "real git diff reveals 2 changed files while patch_plan declared 1"
+      },
+      "when": {
+        "command": [
+          "python",
+          "pipeline.py",
+          "patch",
+          "audit",
+          "--plan",
+          "patch_plan.json",
+          "--base-ref",
+          "origin/main"
+        ]
+      },
+      "then": {
+        "returncode": 1,
+        "stdout_contains": "ESCALATE"
+      }
+    },
+    {
+      "id": "T-TEST-CLUSTER-ENV",
+      "module": "MOD-TEST-PATCHLANE",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 15,
+      "given": {
+        "env_var": "PIPELINE_CLUSTER_DIR",
+        "value": "tmp_path",
+        "expectation": "pytest run honors PIPELINE_CLUSTER_DIR; .pipeline/clusters/ stays unchanged"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "tests/test_patch_lane.py"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "passed"
+      }
+    },
+    {
+      "id": "T-CI-PATCH-BASEREF",
+      "module": "MOD-CI-WORKFLOW",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "workflow": ".github/workflows/ci.yml",
+        "step": "Patch Lane 증거 파일 검증",
+        "must_contain": [
+          "python pipeline.py patch plan",
+          "--plan patch_plan.json",
+          "--base-ref origin/main"
+        ]
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import pathlib,sys; t=pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8'); sys.exit(0 if ('patch plan --plan patch_plan.json --base-ref origin/main' in t or ('python pipeline.py patch plan' in t and '--base-ref origin/main' in t)) else 1)"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    }
+  ],
+  "frozen_at": "2026-05-14T13:13:37Z",
+  "test_set_hash": "cd628d6178ae2d7efb486220c6e648424a0c5c7af86d76f58c9d34ac41a56f9a",
+  "contract_hash": "de252f337b1f9ecc10b3dc6ad908a477343b0ba86e657b9d0925cb795f74ad8a"
+}

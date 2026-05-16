@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-16T02:09:36Z",
+  "pipeline_id": "IMP-20260516-D069",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "metrics": {
+    "test_count": 2,
+    "p0_tests": 1,
+    "p0_behavior_tests": 1,
+    "shallow_tests": 0,
+    "oracle_count": 2
+  },
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260516-D069\\case_normal\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260516-D069\\case_normal\\expected.json",
+      "input_sha256": "552064c865be4ebac96f1bcbf17571008a760e61e1b39599497c307f76226fa1",
+      "expected_sha256": "6bc871c3e21f2f92aa236e994848198952008f2ba6c7b15cde1c0a82107d7f77"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260516-D069\\case_edge\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260516-D069\\case_edge\\expected.json",
+      "input_sha256": "5f1a5c8183c8979176de7c5155c576279873fe3faae301c0716f3a8a22af04ac",
+      "expected_sha256": "9eb41dfc25bed9728eb977b92f7ee73c724cded6d8c425d98bb20b3609dd3793"
+    }
+  ],
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 1
+    }
+  },
+  "allow_no_oracle": false,
+  "waiver_reason": ""
+}

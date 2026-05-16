@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T01:06:23Z",
+  "pipeline_id": "BUG-20260512-E68A",
+  "contract_hash": "574ffccfd170df395656c373630aa92db373376c00c4c1d3b7ec4d5c56fc745f",
+  "test_set_hash": "9e1f0791dcb32f8b80ab7cf45731fac9165c5ba5781037f7aaa3d7ba87b944f6",
+  "observed_contract_hash": "574ffccfd170df395656c373630aa92db373376c00c4c1d3b7ec4d5c56fc745f",
+  "observed_test_set_hash": "9e1f0791dcb32f8b80ab7cf45731fac9165c5ba5781037f7aaa3d7ba87b944f6",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 2,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MOD-2": 1,
+        "MOD-1": 1
+      },
+      "edge_case_tests": 4,
+      "p0_tests": 6
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 60,
+    "total_points": 60,
+    "hard_fail": false,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T01",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "description": "I, J, K 모두 row 10까지 채워짐 — _actual_start_row = 11",
+          "_last_occupied_row": 10,
+          "_actual_start_row": 11
+        },
+        "actual": {
+          "description": "I, J, K 모두 row 10까지 채워짐 — _actual_start_row = 11",
+          "_last_occupied_row": 10,
+          "_actual_start_row": 11
+        }
+      }
+    },
+    {
+      "id": "T02",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "description": "K 컬럼이 row 12까지 채워짐 (I·J는 row 10까지) — _actual_start_row = 13",
+          "_last_occupied_row": 12,
+          "_actual_start_row": 13
+        },
+        "actual": {
+          "description": "K 컬럼이 row 12까지 채워짐 (I·J는 row 10까지) — _actual_start_row = 13",
+          "_last_occupied_row": 12,
+          "_actual_start_row": 13
+        }
+      }
+    },
+    {
+      "id": "T03",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "exception",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "description": "빈 시트 — max(_ijk_occupied, default=ICPART_DATA_START_ROW-1)=5 → _actual_start_row=max(6,6)=6",
+          "_last_occupied_row": 5,
+          "_actual_start_row": 6
+        },
+        "actual": {
+          "description": "빈 시트 — max(_ijk_occupied, default=ICPART_DATA_START_ROW-1)=5 → _actual_start_row=max(6,6)=6",
+          "_last_occupied_row": 5,
+          "_actual_start_row": 6
+        }
+      }
+    },
+    {
+      "id": "T04",
+      "module": "MOD-2",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "description": "SMTP 주소 그대로 사용 — recipient_set에 'user@contoso.com' 추가",
+          "resolved_addr": "user@contoso.com",
+          "exchange_lookup_called": false
+        },
+        "actual": {
+          "description": "SMTP 주소 그대로 사용 — recipient_set에 'user@contoso.com' 추가",
+          "resolved_addr": "user@contoso.com",
+          "exchange_lookup_called": false
+        }
+      }
+    },
+    {
+      "id": "T05",
+      "module": "MOD-2",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "description": "Exchange DN → SMTP 변환 성공 — recipient_set에 'user@contoso.com' 추가",
+          "resolved_addr": "user@contoso.com",
+          "exchange_lookup_called": true,
+          "exception_raised": false
+        },
+        "actual": {
+          "description": "Exchange DN → SMTP 변환 성공 — recipient_set에 'user@contoso.com' 추가",
+          "resolved_addr": "user@contoso.com",
+          "exchange_lookup_called": true,
+          "exception_raised": false
+        }
+      }
+    },
+    {
+      "id": "T06",
+      "module": "MOD-2",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "exception",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "description": "예외 발생 시 원본 DN 주소로 폴백 — 크래시 없이 recipient_set에 원본 주소(소문자) 추가",
+          "resolved_addr": "/o=exchangelabs/ou=exchange administrative group/cn=recipients/cn=xyz999",
+          "exchange_lookup_called": true,
+          "exception_raised": true,
+          "crash": false
+        },
+        "actual": {
+          "description": "예외 발생 시 원본 DN 주소로 폴백 — 크래시 없이 recipient_set에 원본 주소(소문자) 추가",
+          "resolved_addr": "/o=exchangelabs/ou=exchange administrative group/cn=recipients/cn=xyz999",
+          "exchange_lookup_called": true,
+          "exception_raised": true,
+          "crash": false
+        }
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\normal\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\normal\\expected.json",
+      "input_sha256": "31523c0f85d4c798870cf2009c1afefea1c02746d484e93cb3952230d747f4a9",
+      "expected_sha256": "7c53ac39f1d9f4cf10ce1e5f759b60deea599c1c22500e22f7d1321f0197d283"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\edge\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\edge\\expected.json",
+      "input_sha256": "8a9eac1cc98331424111f63e97767045319952da63ee7e29be0372f43b38e4a2",
+      "expected_sha256": "6b54c9a24d378c47c0fa5b416506877c0610c40acabb55d63e3276813bfac096"
+    },
+    {
+      "name": "O003",
+      "case_kind": "exception",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\exception\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt1\\exception\\expected.json",
+      "input_sha256": "bce47db7edf1925760aefe77ca30147edcd8964877f99a1faab62653cb2b1af5",
+      "expected_sha256": "83c5556f9620cdcbe2b400555c79660ccec611390380d0b54c071569eb76b8f6"
+    },
+    {
+      "name": "O004",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\normal\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\normal\\expected.json",
+      "input_sha256": "a35e9dde2516a99479e494771decc329de4cfbf4b7bb6506d17939eb602de471",
+      "expected_sha256": "b885f904b9c1a84d370d902ae507eec87f7c22f278089c77a5dec2b06c05ab09"
+    },
+    {
+      "name": "O005",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\edge\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\edge\\expected.json",
+      "input_sha256": "b7027a0a7c578b94b9df48ee61e15a0146bfc00575eaafd8e78df5e2f23f3353",
+      "expected_sha256": "724b667229120db6dac40e86506cdf03fa0992f2d77f8635fa187bcf2b9a5a24"
+    },
+    {
+      "name": "O006",
+      "case_kind": "exception",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\exception\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-E68A\\mt2\\exception\\expected.json",
+      "input_sha256": "88e4e5939b477ce1bcc2d8e3ac4fc1c631a9c8ee5836e34a5b62b91cc3133041",
+      "expected_sha256": "b78b1dcb589785a8b8082365cae913aae82329e2ba9a99376ee019da35d10703"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260512-C476",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-12T11:49:12Z",
+  "updated_at": "2026-05-12T11:51:17Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "변수 shadowing 예방: ruff PLW0621 활성화 + QA agent 체크리스트 추가",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "pyproject.toml ruff shadowing rule activation",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-2",
+      "name": "qa-agent.md shadowing checklist addition",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": "MT-1",
+      "severity": "P1",
+      "question": "ruff 0.15.12에서 PLW0621이 지원되지 않으므로, shadowing 탐지를 위해 어떤 규칙을 사용해야 하는가?",
+      "options": [
+        "A: PLW2901 (redefined-loop-name, loop 내부 재할당 검출)",
+        "B: A001/A002 (builtin shadowing 검출)",
+        "C: 두 규칙 모두 추가",
+        "D: pylint 직접 사용"
+      ],
+      "answer": "PLW2901 사용 (ruff 0.15.12 지원 규칙). PLW0621은 현재 ruff 버전에서 미지원이므로 PLW2901로 대체",
+      "resolved": true,
+      "answered_at": "2026-05-12T11:49:38Z"
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-12T11:51:17Z",
+  "contract_hash": "0e2aaed09b04009e380ef842b4b56977c00eddd10cbf081a7263fc2bfca2156b",
+  "test_set_hash": "e184c0a6af1c19b1696b1b0e5664021c2d0e46d21643f2763f68e8f627718a34"
+}

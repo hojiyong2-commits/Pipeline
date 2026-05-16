@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "FEAT-20260512-627D",
+  "created_at": "2026-05-12T13:51:00Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\FEAT-20260512-627D\\normal_no_inherit\\input.json",
+      "expected_path": "tests\\oracles\\FEAT-20260512-627D\\normal_no_inherit\\expected.json",
+      "input_sha256": "eefb94e139b85fe9b902e14c89a04df0ab833db2e6b971e8d892286031dc7737",
+      "expected_sha256": "eefb94e139b85fe9b902e14c89a04df0ab833db2e6b971e8d892286031dc7737",
+      "added_at": "2026-05-12T13:51:00Z"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\FEAT-20260512-627D\\edge_already_empty\\input.json",
+      "expected_path": "tests\\oracles\\FEAT-20260512-627D\\edge_already_empty\\expected.json",
+      "input_sha256": "d8973b2f5272ada134df8e72fec564ce57170b16a23b360bb9c60b7493fc4588",
+      "expected_sha256": "d8973b2f5272ada134df8e72fec564ce57170b16a23b360bb9c60b7493fc4588",
+      "added_at": "2026-05-12T13:51:04Z"
+    }
+  ],
+  "updated_at": "2026-05-12T13:51:04Z"
+}

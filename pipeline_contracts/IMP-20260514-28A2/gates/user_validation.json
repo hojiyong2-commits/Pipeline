@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-14T14:33:25Z",
+  "pipeline_id": "IMP-20260514-28A2",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "pipeline_outputs/IMP-20260514-28A2/Patch-Lane-23-test_patch_lane.py",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "pipeline_outputs\\IMP-20260514-28A2\\Patch-Lane-23-test_patch_lane.py",
+        "sha256": "5b91f0661a074839b0600527a9f94df8be1db687b60768df53b632174e7df84c",
+        "size_bytes": 26495
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "pipeline_outputs/IMP-20260514-28A2/Patch-Lane-23-test_patch_lane.py"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260514-28A2",
+    "deployed_at": "2026-05-14T14:33:25Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\IMP-20260514-28A2",
+    "evidence": "pipeline_outputs/IMP-20260514-28A2/Patch-Lane-23-test_patch_lane.py",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "pipeline_outputs\\IMP-20260514-28A2\\Patch-Lane-23-test_patch_lane.py",
+          "sha256": "5b91f0661a074839b0600527a9f94df8be1db687b60768df53b632174e7df84c",
+          "size_bytes": 26495
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "pipeline_outputs/IMP-20260514-28A2/Patch-Lane-23-test_patch_lane.py"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\IMP-20260514-28A2\\Patch-Lane-23-test_patch_lane.py",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260514-28A2\\pipeline_outputs\\IMP-20260514-28A2\\Patch-Lane-23-test_patch_lane.py",
+        "sha256": "5b91f0661a074839b0600527a9f94df8be1db687b60768df53b632174e7df84c"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\IMP-20260514-28A2\\deployment_manifest.json"
+  }
+}

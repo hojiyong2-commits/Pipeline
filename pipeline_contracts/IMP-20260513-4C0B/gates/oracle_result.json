@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-13T13:51:38Z",
+  "pipeline_id": "IMP-20260513-4C0B",
+  "contract_hash": "7bb56a1f0b61f6d63e8c49808304d7d4fc7e4e08e7f1f6d72616091f7ad1cf4c",
+  "test_set_hash": "166387c780421fbd129e925202211e48bba4c8de352e2c8560238d94c8e3a623",
+  "observed_contract_hash": "7bb56a1f0b61f6d63e8c49808304d7d4fc7e4e08e7f1f6d72616091f7ad1cf4c",
+  "observed_test_set_hash": "166387c780421fbd129e925202211e48bba4c8de352e2c8560238d94c8e3a623",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 3,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MOD-2": 1,
+        "MOD-1": 2,
+        "MOD-3": 1
+      },
+      "edge_case_tests": 2,
+      "p0_tests": 3
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 70,
+    "total_points": 70,
+    "hard_fail": false,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T001",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 15,
+      "earned": 15,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "match_found": false,
+          "matched_cluster_id": null,
+          "suggestion": "새 클러스터를 생성하려면 'pipeline.py cluster init --desc \"...\"' 를 사용하세요.",
+          "checked_clusters": 0
+        },
+        "actual": {
+          "match_found": false,
+          "matched_cluster_id": null,
+          "suggestion": "새 클러스터를 생성하려면 'pipeline.py cluster init --desc \"...\"' 를 사용하세요.",
+          "checked_clusters": 0
+        }
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MOD-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 15,
+      "earned": 15,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "audit_result": "ESCALATE",
+          "escalation_reasons": [
+            "files_changed(2) > patch_scope 허용 1개 파일",
+            "lines_changed(24) > expected_lines_changed_max(10)"
+          ],
+          "lane_transition": {
+            "from": "patch",
+            "to": "full"
+          },
+          "pipeline_state_update": {
+            "lane": "full"
+          },
+          "message": "[PATCH AUDIT] 범위 초과 감지 — Full Lane으로 자동 전환됩니다."
+        },
+        "actual": {
+          "audit_result": "ESCALATE",
+          "escalation_reasons": [
+            "files_changed(2) > patch_scope 허용 1개 파일",
+            "lines_changed(24) > expected_lines_changed_max(10)"
+          ],
+          "lane_transition": {
+            "from": "patch",
+            "to": "full"
+          },
+          "pipeline_state_update": {
+            "lane": "full"
+          },
+          "message": "[PATCH AUDIT] 범위 초과 감지 — Full Lane으로 자동 전환됩니다."
+        }
+      }
+    },
+    {
+      "id": "T003",
+      "module": "MOD-1",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py"
+      }
+    },
+    {
+      "id": "T004",
+      "module": "MOD-1",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "exception",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py"
+      }
+    },
+    {
+      "id": "T005",
+      "module": "MOD-2",
+      "type": "file_exists_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 5,
+      "earned": 5,
+      "message": "file exists: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\CLAUDE.md",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\CLAUDE.md"
+      }
+    },
+    {
+      "id": "T006",
+      "module": "MOD-3",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 15,
+      "earned": 15,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_patch_lane.py",
+          "-v",
+          "--tb=short"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "============================= test session starts =============================\nplatform win32 -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0 -- C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\nconfigfile: pyproject.toml\nplugins: anyio-4.13.0\ncollecting ... collected 14 items\n\ntests/test_patch_lane.py::TestClusterCommands::test_cluster_detect_returns_json PASSED [  7%]\ntests/test_patch_lane.py::TestClusterCommands::test_cluster_init_creates_cluster PASSED [ 14%]\ntests/test_patch_lane.py::TestClusterCommands::test_cluster_status_shows_all PASSED [ 21%]\ntests/test_patch_lane.py::TestClusterCommands::test_cluster_close_sets_closed_at PASSED [ 28%]\ntests/test_patch_lane.py::TestPatchAudit::test_patch_plan_pass_within_limit PASSED [ 35%]\ntests/test_patch_lane.py::TestPatchAudit::test_patch_plan_fail_exceeds_15_lines PASSED [ 42%]\ntests/test_patch_lane.py::TestPatchAudit::test_patch_plan_fail_trust_root PASSED [ 50%]\ntests/test_patch_lane.py::TestPatchAudit::test_patch_audit_pass PASSED   [ 57%]\ntests/test_patch_lane.py::TestPatchVerify::test_patch_verify_pass PASSED [ 64%]\ntests/test_patch_lane.py::TestPatchVerify::test_patch_verify_fail PASSED [ 71%]\ntests/test_patch_lane.py::TestAutoEscalation::test_exactly_15_lines_passes PASSED [ 78%]\ntests/test_patch_lane.py::TestAutoEscalation::test_16_lines_fails PASSED [ 85%]\ntests/test_patch_lane.py::TestPatchLaneForbidden::test_cluster_init_has_forbidden_false PASSED [ 92%]\ntests/test_patch_lane.py::TestPatchPlanSchema::test_missing_scope_file_fails PASSED [100%]\n\n============================= 14 passed in 3.30s ==============================\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260513-4C0B\\cluster_detect_normal\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260513-4C0B\\cluster_detect_normal\\expected.json",
+      "input_sha256": "13c2f35e692afdcb677a67c4a707f268e6ccf7b78489b6b1590c0087997e98b9",
+      "expected_sha256": "aba054cee075d7083a0b54df19a2a593bb8d43dfeaad453f4d23585a1ee71187"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260513-4C0B\\patch_audit_escalate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260513-4C0B\\patch_audit_escalate\\expected.json",
+      "input_sha256": "6d59797184cf2bd40b495949e352fb418e0a69d47b51a9484ec3bc27320a75ca",
+      "expected_sha256": "b9a52ec19bec09e515bdc21ce4ed9298b406236944eda14a6cf8b76d9d106c13"
+    }
+  ]
+}

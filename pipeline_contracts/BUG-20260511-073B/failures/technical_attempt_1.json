@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260511-073B",
+  "gate": "technical",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260511-073B\\failures\\technical_attempt_1.json",
+  "recorded_at": "2026-05-11T23:12:05Z",
+  "status": "FAIL",
+  "repair_owner": "Dev tooling repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "technical"
+  ],
+  "note": "Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+  "failed_checks": [
+    {
+      "name": "ruff",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\FEAT-20260426-332E\\core\\order_lines_reader.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\FEAT-20260426-332E\\core\\utils.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\FEAT-20260426-332E\\main.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\FEAT-20260426-332E\\ui\\app.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "ruff",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "ruff 0.15.12",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "F401 [*] `core.models.KitRow` imported but unused\n  --> FEAT-20260426-332E\\main.py:42:29\n   |\n40 |     from core.order_lines_reader import lookup_order_lines\n41 |     from core.excel_mapper import write_to_excel_a\n42 |     from core.models import KitRow, MappedRow\n   |                             ^^^^^^\n43 |     from core.utils import _compress_line_nos\n   |\nhelp: Remove unused import: `core.models.KitRow`\n\nF401 [*] `core.pending_store.PendingEntry` imported but unused\n   --> FEAT-20260426-332E\\ui\\app.py:363:76\n    |\n361 |                 from core.order_lines_reader import lookup_order_lines\n362 |                 from core.excel_mapper import write_to_excel_a, update_note_by_sn, read_note_by_sn\n363 |                 from core.pending_store import load_pending, save_pending, PendingEntry\n    |                                                                            ^^^^^^^^^^^^\n364 |                 from datetime import date\n    |\nhelp: Remove unused import: `core.pending_store.PendingEntry`\n\nFound 2 errors.\n[*] 2 fixable with the `--fix` option.\n",
+      "stderr": ""
+    }
+  ],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {},
+    "results": []
+  }
+}

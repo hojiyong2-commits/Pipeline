@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T11:20:45Z",
+  "pipeline_id": "BUG-20260512-9C67",
+  "contract_hash": "a16e3e33dbabfda86150ae396398c845a62f8961af85004dc36a7fe1634a2f0a",
+  "test_set_hash": "19cb4433bb6aefbd86a4b6c14e0175c464fcfdf8a852d60b60293b9831c0a64a",
+  "observed_contract_hash": "a16e3e33dbabfda86150ae396398c845a62f8961af85004dc36a7fe1634a2f0a",
+  "observed_test_set_hash": "19cb4433bb6aefbd86a4b6c14e0175c464fcfdf8a852d60b60293b9831c0a64a",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 2
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 2
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 90,
+    "total_points": 90,
+    "hard_fail": false,
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T-1",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 40,
+      "earned": 40,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('ic_part_src/order_mapper.py','r',encoding='utf-8').read(); ok=('for _scan_letter in _COL_LETTERS:' in src) and ('for _col_letter in _COL_LETTERS:' not in src) and ('def _col_letter(n: int) -> str:' in src); print('PASS' if ok else 'FAIL')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-2",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 30,
+      "earned": 30,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('ic_part_src/order_mapper.py','r',encoding='utf-8').read(); ok=all(c in src for c in ['_col_letter(col_idx)','_col_letter(ICPART_COL_DELIVERY_DATE)','_col_letter(ICPART_COL_FOLDER_DATE)']); print('PASS' if ok else 'FAIL')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T-3",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 20,
+      "earned": 20,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('ic_part_src/order_mapper.py','r',encoding='utf-8').read(); ok=src.count('for _scan_letter in _COL_LETTERS:') == 1; print('PASS' if ok else 'FAIL')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "normal_rename",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-9C67\\normal_rename\\input.py",
+      "expected_path": "tests\\oracles\\BUG-20260512-9C67\\normal_rename\\expected.py",
+      "input_sha256": "3ce4a9f1333a1e92202ee0ad74c738096c3648b6e9f7d71a3647f53927bc565a",
+      "expected_sha256": "20461c98d06fa2078f16cbd27c8e51e276520afacd7be4ee0f4ced89e8ef3cd3"
+    },
+    {
+      "name": "edge_func_intact",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\BUG-20260512-9C67\\edge_func_intact\\input.py",
+      "expected_path": "tests\\oracles\\BUG-20260512-9C67\\edge_func_intact\\expected.py",
+      "input_sha256": "8a5bf783f33f124a72b79cbb4a4029b27fd01a0f62dcc97c9bc65462d5a81a6c",
+      "expected_sha256": "73eefc277947d788dbdc9ea4aa4e4dcd3bdad6c540f97fa13e55cd5a1bd2475c"
+    }
+  ]
+}

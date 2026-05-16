@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-15T22:25:13Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25944240655",
+  "commit_sha": "e64f0b4688dbb7a69d0de85a68c1dfe12556ab08",
+  "pipeline_id": "IMP-20260515-020F",
+  "phase": "qa",
+  "attestation": {
+    "commit_sha": "e64f0b4688dbb7a69d0de85a68c1dfe12556ab08",
+    "request_sha256": "8915024a41f60bcc0a7d52c4b16f2291ab6832703c5202f3d5f161ceaaa95851",
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-15T22:22:50Z",
+      "pipeline_id": "IMP-20260515-020F",
+      "phase": "qa",
+      "phase_status": "PASS",
+      "commit_hint": "e98b7c17f205f4247c5557904054ae0e8c4c64f7",
+      "state": {
+        "current_phase": "sec",
+        "phase_completed_at": "2026-05-15T22:22:44Z",
+        "report_file": "qa_report.xml",
+        "evidence": null
+      },
+      "agent_run": {
+        "run_id": "qa-20b2956eb3b81ba3",
+        "phase": "qa",
+        "agent_id": "qa-agent",
+        "status": "COMPLETED",
+        "output_file": "qa_report.xml",
+        "output_sha256": "5114e113ee7d83bf728b942f21a47c096160db9f4113bd15995d7e37e369337a",
+        "receipt_path": ".pipeline/phase_evidence/IMP-20260515-020F/qa/agent_receipt_qa-20b2956eb3b81ba3.json",
+        "receipt_sha256": "5ccf5bf0ba9d76e9b4f0844ad299f71d581c2ef2241e260e7714f7a0ebfb59b1",
+        "used_by_phase": "qa",
+        "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260515-020F\\qa\\qa-20b2956eb3b81ba3.json"
+      },
+      "manager_run": null,
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\IMP-20260515-020F\\qa\\qa-20b2956eb3b81ba3.json",
+          "path": ".pipeline/phase_evidence/IMP-20260515-020F/qa/agent_receipt_qa-20b2956eb3b81ba3.json",
+          "sha256": "5ccf5bf0ba9d76e9b4f0844ad299f71d581c2ef2241e260e7714f7a0ebfb59b1",
+          "size_bytes": 496,
+          "requires_force_add": true
+        },
+        {
+          "label": "report",
+          "source": "qa_report.xml",
+          "path": ".pipeline/phase_evidence/IMP-20260515-020F/qa/report_qa_report.xml",
+          "sha256": "5114e113ee7d83bf728b942f21a47c096160db9f4113bd15995d7e37e369337a",
+          "size_bytes": 2596,
+          "requires_force_add": false
+        }
+      ],
+      "workspace_file_checks": [],
+      "local_only_files": []
+    },
+    "run_attempt": "1",
+    "pipeline_id": "IMP-20260515-020F",
+    "event_name": "pull_request",
+    "workflow": "CI",
+    "attestation_type": "pipeline-phase-v1",
+    "run_id": "25944240655",
+    "schema_version": 1,
+    "checkout_sha": "92b25760f2b35f0bdbd1730bbb352587aa64fbd2",
+    "runner_os": "Windows",
+    "generated_at": "2026-05-15T22:24:33.6962755Z",
+    "head_sha": "e64f0b4688dbb7a69d0de85a68c1dfe12556ab08",
+    "validation": {
+      "blockers": [],
+      "status": "PASS"
+    },
+    "phase": "qa",
+    "ref": "refs/pull/32/merge",
+    "repository": "hojiyong2-commits/Pipeline"
+  },
+  "workflow_run": {
+    "id": 25944240655,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25944240655",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "e64f0b4688dbb7a69d0de85a68c1dfe12556ab08"
+  },
+  "artifact": {
+    "id": 7027607969,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1111,
+    "expired": false
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T12:22:48Z",
+  "pipeline_id": "IMP-20260512-C476",
+  "contract_hash": "0e2aaed09b04009e380ef842b4b56977c00eddd10cbf081a7263fc2bfca2156b",
+  "test_set_hash": "e184c0a6af1c19b1696b1b0e5664021c2d0e46d21643f2763f68e8f627718a34",
+  "observed_contract_hash": "0e2aaed09b04009e380ef842b4b56977c00eddd10cbf081a7263fc2bfca2156b",
+  "observed_test_set_hash": "e184c0a6af1c19b1696b1b0e5664021c2d0e46d21643f2763f68e8f627718a34",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 2,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-2": 1,
+        "MT-1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 2
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 100,
+    "total_points": 100,
+    "hard_fail": false,
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T1",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 40,
+      "earned": 40,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import pathlib; content=pathlib.Path('pyproject.toml').read_text(encoding='utf-8'); assert 'PLW2901' in content, 'PLW2901 not found in pyproject.toml'; assert 'extend-select' in content, 'extend-select not found'; print('PASS')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T2",
+      "module": "MT-2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 40,
+      "earned": 40,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import pathlib; content=pathlib.Path('.claude/agents/qa-agent.md').read_text(encoding='utf-8'); assert 'PLW2901' in content, 'PLW2901 not found in qa-agent.md'; assert 'shadowing' in content.lower() or 'loop' in content.lower(), 'No shadowing/loop mention in qa-agent.md'; print('PASS')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "T3",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 20,
+      "earned": 20,
+      "message": "command matched expectations",
+      "details": {
+        "command": [
+          "python",
+          "-c",
+          "import pathlib; content=pathlib.Path('pyproject.toml').read_text(encoding='utf-8'); required=['E402','E731','E713','E701','F541','F841']; missing=[r for r in required if r not in content]; assert not missing, f'Missing from ignore list: {missing}'; print('PASS')"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 0,
+        "stdout": "PASS\n",
+        "stderr": ""
+      }
+    }
+  ]
+}

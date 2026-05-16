@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260512-C476",
+  "created_at": "2026-05-12T11:49:12Z",
+  "updated_at": "2026-05-12T11:51:17Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T1",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 40,
+      "given": {
+        "file": "pyproject.toml"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import pathlib; content=pathlib.Path('pyproject.toml').read_text(encoding='utf-8'); assert 'PLW2901' in content, 'PLW2901 not found in pyproject.toml'; assert 'extend-select' in content, 'extend-select not found'; print('PASS')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS"
+      }
+    },
+    {
+      "id": "T2",
+      "module": "MT-2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 40,
+      "given": {
+        "file": ".claude/agents/qa-agent.md"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import pathlib; content=pathlib.Path('.claude/agents/qa-agent.md').read_text(encoding='utf-8'); assert 'PLW2901' in content, 'PLW2901 not found in qa-agent.md'; assert 'shadowing' in content.lower() or 'loop' in content.lower(), 'No shadowing/loop mention in qa-agent.md'; print('PASS')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS"
+      }
+    },
+    {
+      "id": "T3",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 20,
+      "given": {
+        "file": "pyproject.toml",
+        "description": "기존 ignore 목록이 변경되지 않아야 함"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import pathlib; content=pathlib.Path('pyproject.toml').read_text(encoding='utf-8'); required=['E402','E731','E713','E701','F541','F841']; missing=[r for r in required if r not in content]; assert not missing, f'Missing from ignore list: {missing}'; print('PASS')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-12T11:51:17Z",
+  "test_set_hash": "e184c0a6af1c19b1696b1b0e5664021c2d0e46d21643f2763f68e8f627718a34",
+  "contract_hash": "0e2aaed09b04009e380ef842b4b56977c00eddd10cbf081a7263fc2bfca2156b"
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-9C67",
+  "created_at": "2026-05-12T10:42:14Z",
+  "oracles": [
+    {
+      "name": "normal_rename",
+      "description": "수정 후 루프 변수 rename 완료 및 함수 shadowing 해소 검증",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\BUG-20260512-9C67\\normal_rename\\input.py",
+      "expected_path": "tests\\oracles\\BUG-20260512-9C67\\normal_rename\\expected.py",
+      "input_sha256": "3ce4a9f1333a1e92202ee0ad74c738096c3648b6e9f7d71a3647f53927bc565a",
+      "expected_sha256": "20461c98d06fa2078f16cbd27c8e51e276520afacd7be4ee0f4ced89e8ef3cd3",
+      "added_at": "2026-05-12T10:42:14Z"
+    },
+    {
+      "name": "edge_func_intact",
+      "description": "_col_letter 함수 정의 및 기존 호출부 3곳 보존 검증 (과수정 방지)",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\BUG-20260512-9C67\\edge_func_intact\\input.py",
+      "expected_path": "tests\\oracles\\BUG-20260512-9C67\\edge_func_intact\\expected.py",
+      "input_sha256": "8a5bf783f33f124a72b79cbb4a4029b27fd01a0f62dcc97c9bc65462d5a81a6c",
+      "expected_sha256": "73eefc277947d788dbdc9ea4aa4e4dcd3bdad6c540f97fa13e55cd5a1bd2475c",
+      "added_at": "2026-05-12T10:42:19Z"
+    }
+  ],
+  "updated_at": "2026-05-12T10:42:19Z"
+}

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-9C67",
+  "pipeline_type": "BUG",
+  "created_at": "2026-05-12T10:41:03Z",
+  "updated_at": "2026-05-12T10:43:45Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "write_ic_part_zip _col_letter 루프 변수가 동명 함수 shadowing — str is not callable 수정",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "write_ic_part_zip 루프 변수 rename: _col_letter -> _scan_letter",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q-1",
+      "module": "MT-1",
+      "severity": "P1",
+      "question": "루프 변수를 _col_letter에서 _scan_letter로 rename하는 방향으로 진행합니다. 루프 블록 내 _col_letter 참조 3곳도 모두 _scan_letter로 변경합니다. 이 방향으로 수정해도 되겠습니까?",
+      "options": [
+        "A: 동의, _scan_letter로 rename 진행",
+        "B: 다른 변수명 사용"
+      ],
+      "answer": "A",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-12T10:43:45Z",
+  "contract_hash": "a16e3e33dbabfda86150ae396398c845a62f8961af85004dc36a7fe1634a2f0a",
+  "test_set_hash": "19cb4433bb6aefbd86a4b6c14e0175c464fcfdf8a852d60b60293b9831c0a64a"
+}

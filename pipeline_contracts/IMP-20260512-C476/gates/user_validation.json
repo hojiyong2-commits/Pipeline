@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T12:24:16Z",
+  "pipeline_id": "IMP-20260512-C476",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "pyproject.toml",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "pyproject.toml",
+        "sha256": "5dedf0cd012919a00bfcf49c6736603a712bc9ef1131985944e7f24d0373755a",
+        "size_bytes": 1187
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "pyproject.toml"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260512-C476",
+    "deployed_at": "2026-05-12T12:24:16Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\IMP-20260512-C476",
+    "evidence": "pyproject.toml",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "pyproject.toml",
+          "sha256": "5dedf0cd012919a00bfcf49c6736603a712bc9ef1131985944e7f24d0373755a",
+          "size_bytes": 1187
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "pyproject.toml"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "pyproject.toml",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260512-C476\\pyproject.toml",
+        "sha256": "5dedf0cd012919a00bfcf49c6736603a712bc9ef1131985944e7f24d0373755a"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\IMP-20260512-C476\\PLW2901-lint-pyproject.toml-pyproject.toml",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260512-C476\\pipeline_outputs\\IMP-20260512-C476\\PLW2901-lint-pyproject.toml-pyproject.toml",
+        "sha256": "5dedf0cd012919a00bfcf49c6736603a712bc9ef1131985944e7f24d0373755a"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\IMP-20260512-C476\\QA-PLW2901-shadowing-qa-agent.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260512-C476\\pipeline_outputs\\IMP-20260512-C476\\QA-PLW2901-shadowing-qa-agent.md",
+        "sha256": "1a04a14aab52ef997923bb3bcab2c95821408849d814f0d13699968f56684d3c"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\IMP-20260512-C476\\deployment_manifest.json"
+  }
+}

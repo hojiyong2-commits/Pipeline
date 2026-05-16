@@ -1,0 +1,18 @@
+{
+  "status": "SKIPPED",
+  "reason": "ENABLE_GPT_ADVISORY is not 1",
+  "api_called": false,
+  "api_key_source": "process",
+  "findings": [],
+  "model": "gpt-5.5",
+  "schema_version": 1,
+  "pipeline_id": "FEAT-20260512-627D",
+  "kind": "gpt-contract",
+  "auto_run": true,
+  "files": [
+    "pipeline_contracts\\FEAT-20260512-627D\\task_contract.json",
+    "pipeline_contracts\\FEAT-20260512-627D\\test_set.json",
+    "pipeline_contracts\\FEAT-20260512-627D\\oracle_manifest.json",
+    "pipeline_contracts\\FEAT-20260512-627D\\contract_audit.json"
+  ]
+}

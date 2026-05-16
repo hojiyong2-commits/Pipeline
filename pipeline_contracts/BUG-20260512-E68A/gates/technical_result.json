@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T01:06:18Z",
+  "pipeline_id": "BUG-20260512-E68A",
+  "status": "PASS",
+  "evidence_files": [
+    "ic_part_src\\order_mapper.py",
+    "po_automation\\email_monitor.py"
+  ],
+  "target_files": [
+    "ic_part_src\\order_mapper.py",
+    "po_automation\\email_monitor.py"
+  ],
+  "strict_tools": true,
+  "execution_profile": "STANDARD",
+  "checks": [
+    {
+      "name": "py_compile",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "py_compile",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\ic_part_src\\order_mapper.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py"
+      ],
+      "details": [
+        {
+          "file": "ic_part_src\\order_mapper.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\ic_part_src\\order_mapper.py"
+          ]
+        },
+        {
+          "file": "po_automation\\email_monitor.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ruff",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\ic_part_src\\order_mapper.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "ruff",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "ruff 0.15.12",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "name": "mypy",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "mypy",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\ic_part_src\\order_mapper.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "mypy",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "mypy 2.0.0 (compiled: yes)",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "Success: no issues found in 2 source files\n",
+      "stderr": "mypy.ini: [mypy]: python_version: Python 3.9 is not supported (must be 3.10 or higher)\n"
+    },
+    {
+      "name": "bandit",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q",
+        "--ini",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.bandit",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\ic_part_src\\order_mapper.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\po_automation\\email_monitor.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "bandit",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "__main__.py 1.9.4\n  python version = 3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025, 15:27:58) [MSC v.1942 64 bit (AMD64)]",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "[main]\tINFO\tUsing ini file for skipped tests\n[main]\tINFO\tUsing command line arg for selected targets\n[manager]\tWARNING\tTest in comment: Exchange is not a test name or id, ignoring\n[manager]\tWARNING\tTest in comment: DN is not a test name or id, ignoring\n"
+    },
+    {
+      "name": "pytest",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "........................................................................ [ 32%]\n........................................................................ [ 65%]\n........................................................................ [ 98%]\n...                                                                      [100%]\n219 passed in 22.84s\n",
+      "stderr": ""
+    }
+  ],
+  "complete_eligible": true
+}

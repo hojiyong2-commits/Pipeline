@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T22:58:19Z",
+  "pipeline_id": "IMP-20260512-00BC",
+  "contract_hash": "8255ffdf536dc033621b59b2f1836c4f576c8005f78490cdbcf763ba8e84c9cf",
+  "test_set_hash": "9d932ed0d3d51b4ff3bcaa2f9e7a13ba22a2c0604b7fe08bb27e03ec41e99da6",
+  "observed_contract_hash": "8255ffdf536dc033621b59b2f1836c4f576c8005f78490cdbcf763ba8e84c9cf",
+  "observed_test_set_hash": "9d932ed0d3d51b4ff3bcaa2f9e7a13ba22a2c0604b7fe08bb27e03ec41e99da6",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 5,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 1,
+        "MT-5": 1,
+        "MT-2": 1,
+        "MT-4": 1,
+        "MT-3": 1
+      },
+      "edge_case_tests": 3,
+      "p0_tests": 7
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 96.3,
+    "threshold": 80,
+    "earned_points": 130,
+    "total_points": 135,
+    "hard_fail": false,
+    "passed": 7,
+    "failed": 1,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T001",
+      "module": "MT-2",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 25,
+      "earned": 25,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "qa_blocked": true,
+          "block_reason": "CR:unresolved_finding"
+        },
+        "actual": {
+          "qa_blocked": true,
+          "block_reason": "CR:unresolved_finding"
+        }
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MT-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 25,
+      "earned": 25,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "ruff_rules_not_found": [
+            "PLW0621"
+          ],
+          "ruff_rules_verified": []
+        },
+        "actual": {
+          "ruff_rules_not_found": [
+            "PLW0621"
+          ],
+          "ruff_rules_verified": []
+        }
+      }
+    },
+    {
+      "id": "T003",
+      "module": "MT-3",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 25,
+      "earned": 25,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "is_trust_root": false,
+          "ci_mode": "batched"
+        },
+        "actual": {
+          "is_trust_root": false,
+          "ci_mode": "batched"
+        }
+      }
+    },
+    {
+      "id": "T004",
+      "module": "MT-3",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 25,
+      "earned": 25,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "is_trust_root": true,
+          "ci_mode": "per_phase"
+        },
+        "actual": {
+          "is_trust_root": true,
+          "ci_mode": "per_phase"
+        }
+      }
+    },
+    {
+      "id": "T005",
+      "module": "MT-4",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "file contains all required strings",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.claude\\agents\\qa-agent.md",
+        "must_contain": [
+          "Round-trip Gate",
+          "Codex Review Gate"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "T006",
+      "module": "MT-5",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "file contains all required strings",
+      "details": {
+        "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\CLAUDE.md",
+        "must_contain": [
+          "Preflight",
+          "Codex Review Gate",
+          "batched CI",
+          "deferred build"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "T007",
+      "module": "MT-3",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "exception",
+      "status": "FAIL",
+      "points": 5,
+      "earned": 0,
+      "message": "command did not match expectations",
+      "details": {
+        "command": [
+          "python",
+          "pipeline.py",
+          "agent",
+          "start",
+          "--phase",
+          "pm_planner"
+        ],
+        "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+        "returncode": 1,
+        "stdout": "",
+        "stderr": "\r\n[PIPELINE ERROR] [GATE BLOCKED] current_phase 불일치 — 현재='harness' (=harness), 요청=pm. 순서대로 진행하세요: python pipeline.py status\r\n"
+      }
+    },
+    {
+      "id": "T008",
+      "module": "MT-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 10,
+      "earned": 10,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "schema_version": 1,
+          "has_related_files": true,
+          "has_tool_facts": true,
+          "has_writer_reader_pairs": true,
+          "has_build_required": true
+        },
+        "actual": {
+          "schema_version": 1,
+          "has_related_files": true,
+          "has_tool_facts": true,
+          "has_writer_reader_pairs": true,
+          "has_build_required": true
+        }
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_review_gate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_review_gate\\expected.json",
+      "input_sha256": "292b7e447051fa6cb4e4aef39dd6a3ff5811d26c4d45310be3c3e42f5a8a9db5",
+      "expected_sha256": "462a2fa060df9de198d891fb91276a490ca7bb320e46a06a1e33d9991d523627"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\edge_preflight_tool_fact\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\edge_preflight_tool_fact\\expected.json",
+      "input_sha256": "239a09d11e98a94b85b753688213339d19820b58c6afa6b7455ee4a7f4ae0ff1",
+      "expected_sha256": "591fdcfeb610bfe07b7bc1929b2d5fc763a109fcb7ae8c038211016b5a22fa4c"
+    },
+    {
+      "name": "O003",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_batch_ci\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_batch_ci\\expected.json",
+      "input_sha256": "befe5b638c80a4f1d02de84a6aa6af6ddcad9176382be8e51e7c9501e775ac84",
+      "expected_sha256": "bcfcfe99628669f4cd6ee3c7a7c3ee31dcee911d877c83190814399853ae9b7f"
+    },
+    {
+      "name": "O004",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\edge_trust_root_per_phase_ci\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\edge_trust_root_per_phase_ci\\expected.json",
+      "input_sha256": "55f08494a899884304dd4088fd639c9984687f5116b0d76184dc7b7c03d9fb37",
+      "expected_sha256": "a5021816a37d0c28a86beed30261508e516ae6791c77213535f5051be72985bc"
+    },
+    {
+      "name": "O005",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-00BC\\normal_preflight_basic\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260512-00BC\\normal_preflight_basic\\expected.json",
+      "input_sha256": "c657ac146362d9865b4f2febb7abd38ef1fb5935d7b1d247bb89f8a2e557a529",
+      "expected_sha256": "fa713f387a0b1abab00e547ed79e20988056ad847000ceb8a20d063fcf5941d1"
+    }
+  ]
+}

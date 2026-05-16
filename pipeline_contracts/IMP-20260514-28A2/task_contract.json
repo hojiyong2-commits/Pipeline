@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260514-28A2",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-14T13:10:01Z",
+  "updated_at": "2026-05-14T13:13:37Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "Patch Lane 증거 강화: 자기신고 기반 → 실제 diff/hash 기반 검증 (diff gate, verify evidence 필수화, cluster 테스트 격리, acceptance evidence 강화)",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MOD-PIPELINE-DIFFGATE",
+      "name": "pipeline.py diff gate + verify evidence + cluster env",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-TEST-PATCHLANE",
+      "name": "tests/test_patch_lane.py PIPELINE_CLUSTER_DIR isolation + diff gate tests",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-CI-WORKFLOW",
+      "name": ".github/workflows/ci.yml patch plan diff base-ref + UTF-8",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-14T13:13:37Z",
+  "contract_hash": "de252f337b1f9ecc10b3dc6ad908a477343b0ba86e657b9d0925cb795f74ad8a",
+  "test_set_hash": "cd628d6178ae2d7efb486220c6e648424a0c5c7af86d76f58c9d34ac41a56f9a"
+}

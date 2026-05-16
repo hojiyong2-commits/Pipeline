@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-14T12:13:27Z",
+  "pipeline_id": "IMP-20260513-4C0B",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py",
+        "sha256": "81efba1a4b9070534d4cb10e7d9657b180739f53bd07dd7cef93e305fe952c5a",
+        "size_bytes": 397600
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260513-4C0B",
+    "deployed_at": "2026-05-14T12:13:27Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\IMP-20260513-4C0B",
+    "evidence": "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py",
+          "sha256": "81efba1a4b9070534d4cb10e7d9657b180739f53bd07dd7cef93e305fe952c5a",
+          "size_bytes": 397600
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260513-4C0B\\pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-Incident-Cluster-pipeline.py-pipeline.py",
+        "sha256": "81efba1a4b9070534d4cb10e7d9657b180739f53bd07dd7cef93e305fe952c5a"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-14-14-PASS-test_patch_lane.py",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260513-4C0B\\pipeline_outputs\\IMP-20260513-4C0B\\Patch-Lane-14-14-PASS-test_patch_lane.py",
+        "sha256": "7469d5a4be09220dd644dbfe05884d4abcc373b1d4f1579f42950e362fd148bb"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\IMP-20260513-4C0B\\deployment_manifest.json"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-11T22:21:52Z",
+  "pipeline_id": "IMP-20260511-92A6",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "KittingMapper_inspection_report.md",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "KittingMapper_inspection_report.md",
+        "sha256": "c0a2d5fe04827947e3d2c4cd10da222aeaecb8b939cbee5f5bbb5057b3d40b5c",
+        "size_bytes": 9752
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "KittingMapper_inspection_report.md"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260511-92A6",
+    "deployed_at": "2026-05-11T22:21:52Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\IMP-20260511-92A6",
+    "evidence": "KittingMapper_inspection_report.md",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "KittingMapper_inspection_report.md",
+          "sha256": "c0a2d5fe04827947e3d2c4cd10da222aeaecb8b939cbee5f5bbb5057b3d40b5c",
+          "size_bytes": 9752
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "KittingMapper_inspection_report.md"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "KittingMapper_inspection_report.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260511-92A6\\KittingMapper_inspection_report.md",
+        "sha256": "c0a2d5fe04827947e3d2c4cd10da222aeaecb8b939cbee5f5bbb5057b3d40b5c"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\IMP-20260511-92A6\\KittingMapper-KittingMapper_inspection_report.md",
+        "destination": "G:\\내 드라이브\\터미널\\IMP-20260511-92A6\\pipeline_outputs\\IMP-20260511-92A6\\KittingMapper-KittingMapper_inspection_report.md",
+        "sha256": "c0a2d5fe04827947e3d2c4cd10da222aeaecb8b939cbee5f5bbb5057b3d40b5c"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\IMP-20260511-92A6\\deployment_manifest.json"
+  }
+}

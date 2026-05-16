@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-11T23:11:30Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [
+    "phase request included local-only files that GitHub Actions could not re-read"
+  ],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25702729997",
+  "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+  "pipeline_id": "BUG-20260511-073B",
+  "phase": "build",
+  "attestation": {
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-11T23:09:45Z",
+      "pipeline_id": "BUG-20260511-073B",
+      "phase": "build",
+      "phase_status": "DONE",
+      "commit_hint": "65f0f0ba956d645468b66b7cb3ee729109667fb4",
+      "state": {
+        "current_phase": "harness",
+        "phase_completed_at": "2026-05-11T23:09:37Z",
+        "report_file": "dist/build_report.xml",
+        "evidence": "FEAT-20260426-332E/dist/KittingMapper.exe"
+      },
+      "agent_run": {
+        "run_id": "build-54186a43fc82864a",
+        "phase": "build",
+        "agent_id": "build-agent",
+        "status": "COMPLETED",
+        "output_file": "dist\\build_report.xml",
+        "output_sha256": "6b2dd925bffb660398036396d653dced7e5fc0cb6bb4d722d9708d9fac042fea",
+        "receipt_path": ".pipeline/phase_evidence/BUG-20260511-073B/build/agent_receipt_build-54186a43fc82864a.json",
+        "receipt_sha256": "50a3a6db97b727d46868c6f5a2599c34a7a8d8046c90bd28ff809f1a31fb1951",
+        "used_by_phase": "build",
+        "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\build\\build-54186a43fc82864a.json"
+      },
+      "manager_run": null,
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\BUG-20260511-073B\\build\\build-54186a43fc82864a.json",
+          "path": ".pipeline/phase_evidence/BUG-20260511-073B/build/agent_receipt_build-54186a43fc82864a.json",
+          "sha256": "50a3a6db97b727d46868c6f5a2599c34a7a8d8046c90bd28ff809f1a31fb1951",
+          "size_bytes": 513,
+          "requires_force_add": true
+        },
+        {
+          "label": "report",
+          "source": "dist\\build_report.xml",
+          "path": ".pipeline/phase_evidence/BUG-20260511-073B/build/report_build_report.xml",
+          "sha256": "6b2dd925bffb660398036396d653dced7e5fc0cb6bb4d722d9708d9fac042fea",
+          "size_bytes": 1704,
+          "requires_force_add": true
+        }
+      ],
+      "workspace_file_checks": [],
+      "local_only_files": [
+        {
+          "path": "FEAT-20260426-332E\\dist\\KittingMapper.exe",
+          "sha256": "eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0",
+          "reason": "ignored_or_outside_git_checkout"
+        }
+      ]
+    },
+    "schema_version": 1,
+    "run_id": "25702729997",
+    "attestation_type": "pipeline-phase-v1",
+    "head_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+    "workflow": "CI",
+    "checkout_sha": "44ee37da2a0c6966ce8eabc1856e07c2534d44ae",
+    "request_sha256": "2c473f3e79eddd5b87f6efa2d93148d2a01e59181a67b49c99ea0e08a5e43ae5",
+    "validation": {
+      "blockers": [],
+      "status": "PASS"
+    },
+    "ref": "refs/pull/17/merge",
+    "repository": "hojiyong2-commits/Pipeline",
+    "phase": "build",
+    "commit_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d",
+    "event_name": "pull_request",
+    "pipeline_id": "BUG-20260511-073B",
+    "run_attempt": "1",
+    "generated_at": "2026-05-11T23:11:00.0484713Z",
+    "runner_os": "Windows"
+  },
+  "workflow_run": {
+    "id": 25702729997,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25702729997",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "7b098e3030c56a51848b2b13e0e1d3e14ab4b13d"
+  },
+  "artifact": {
+    "id": 6931968460,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1235,
+    "expired": false
+  }
+}

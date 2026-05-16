@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-CF73",
+  "pipeline_type": "BUG",
+  "created_at": "2026-05-12T01:21:58Z",
+  "updated_at": "2026-05-12T01:25:31Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "emailmonitor 폴더 생성 불량 수정: 고아 폴더 정리 + PDF 파싱 라이브러리 EXE 번들링",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "orphan_folder_fix",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-2",
+      "name": "pdf_library_bundle",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": "MT-1",
+      "severity": "P1",
+      "question": "최종 폴더가 이미 존재할 때 임시 PO번호 폴더(tmp_dest_folder) 처리 방식: 비어있으면 즉시 삭제(rmdir), 파일 있으면 그냥 두기?",
+      "options": [],
+      "answer": "비어있으면 rmdir, 비어있지 않으면 OSError pass (nosec B110) — 기존 pass 코드 유지 방향으로 수정",
+      "resolved": true
+    },
+    {
+      "id": "Q2",
+      "module": "MT-2",
+      "severity": "P1",
+      "question": "EmailMonitor.spec에 collect_all('fitz') + collect_all('pdfplumber')를 추가하여 C 확장 DLL을 번들링합니다. 기존 hiddenimports 목록(win32com 등)은 그대로 유지됩니까?",
+      "options": [],
+      "answer": "예, 기존 hiddenimports 구조를 확장하는 형태로 추가. 기존 항목 삭제 금지.",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-12T01:25:31Z",
+  "contract_hash": "a705414d07e1fae9ab6e24ba20d20741352c3a7487ba262873a6594b0b97ae1a",
+  "test_set_hash": "322dff58e001b85608d567b4f2b782a8fa3a70cc4ca15933ead3d068aa8bc98d"
+}

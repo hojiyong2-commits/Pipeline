@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-CF73",
+  "created_at": "2026-05-12T01:21:58Z",
+  "updated_at": "2026-05-12T01:25:31Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T001",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 30,
+      "given": {
+        "setup": "po_automation/email_monitor.py has been patched with MT-1 fix"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re; src=open('po_automation/email_monitor.py',encoding='utf-8').read(); assert 'tmp_dest_folder.rmdir()' in src, 'rmdir call missing'; print('PASS: rmdir present')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS: rmdir present"
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 20,
+      "given": {
+        "setup": "po_automation/email_monitor.py has been patched with MT-1 fix"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re; src=open('po_automation/email_monitor.py',encoding='utf-8').read(); assert 'except OSError' in src, 'except OSError missing'; assert 'nosec B110' in src, 'nosec B110 missing'; print('PASS: OSError pass present')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS: OSError pass present"
+      }
+    },
+    {
+      "id": "T003",
+      "module": "MT-2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 25,
+      "given": {
+        "setup": "EmailMonitor.spec has been patched with MT-2 fix"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('EmailMonitor.spec',encoding='utf-8').read(); assert \"collect_all('fitz')\" in src, 'collect_all fitz missing'; assert 'fitz_binaries' in src, 'fitz_binaries missing'; assert 'fitz_datas' in src, 'fitz_datas missing'; print('PASS: fitz collect_all present')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS: fitz collect_all present"
+      }
+    },
+    {
+      "id": "T004",
+      "module": "MT-2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 25,
+      "given": {
+        "setup": "EmailMonitor.spec has been patched with MT-2 fix"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('EmailMonitor.spec',encoding='utf-8').read(); assert \"collect_all('pdfplumber')\" in src, 'collect_all pdfplumber missing'; assert 'win32com' in src, 'win32com missing'; assert 'openpyxl' in src, 'openpyxl missing'; print('PASS: pdfplumber + win32com + openpyxl present')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS: pdfplumber + win32com + openpyxl present"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-12T01:25:31Z",
+  "test_set_hash": "322dff58e001b85608d567b4f2b782a8fa3a70cc4ca15933ead3d068aa8bc98d",
+  "contract_hash": "a705414d07e1fae9ab6e24ba20d20741352c3a7487ba262873a6594b0b97ae1a"
+}

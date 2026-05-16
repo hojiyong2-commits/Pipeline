@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260511-073B",
+  "pipeline_type": "BUG",
+  "created_at": "2026-05-11T22:37:50Z",
+  "updated_at": "2026-05-11T22:39:35Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "KittingMapper 버그 수정 및 코드 정리: UNC 경로 차단, jm 컬럼 기본값, 포장반 Note 통일, _compress_line_nos 중복 제거, 데드코드 제거",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "M1",
+      "name": "UNC 경로 허용",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "M2",
+      "name": "jm 컬럼 기본값 수정",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "M3",
+      "name": "포장반 Note 통일",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "M4",
+      "name": "_compress_line_nos 중복 제거",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "M5",
+      "name": "데드코드 제거",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": null,
+      "severity": "P1",
+      "question": "UNC 경로 화이트리스트로 허용 범위를 제한할 것인가?",
+      "options": [],
+      "answer": "예 — ccikrnf 서버 경로만 허용",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-11T22:39:35Z",
+  "contract_hash": "9bd75631a7c04d893c78098a8bc5d9ddecb5e6549b88daeb2e7e2816640d4afe",
+  "test_set_hash": "6f401ee0841d71f4e27a03607654309700e9d8b5c08dd2a4293d7462e7fea516"
+}

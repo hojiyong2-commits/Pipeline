@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-F307",
+  "created_at": "2026-05-12T12:28:27Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\BUG-20260512-F307\\normal_inlinestr_detect\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-F307\\normal_inlinestr_detect\\expected.json",
+      "input_sha256": "efbd0910605e70392422268399b633066b8552da5256127c19d53f2d778c037c",
+      "expected_sha256": "0833cc2581446e55d21d3beba36d817dc034491e7470432b1cf9839db5529a8f",
+      "added_at": "2026-05-12T12:28:27Z"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\BUG-20260512-F307\\edge_empty_sheet\\input.json",
+      "expected_path": "tests\\oracles\\BUG-20260512-F307\\edge_empty_sheet\\expected.json",
+      "input_sha256": "99ba3a94bd13ff603f848e5edc1d98edd77a9ec9b442bafecd9f1de13e30cd58",
+      "expected_sha256": "7c437b0e70fa3197fe435e12a849061a4b3194814d3795cb206903d82f71121f",
+      "added_at": "2026-05-12T12:28:30Z"
+    }
+  ],
+  "updated_at": "2026-05-12T12:28:30Z"
+}

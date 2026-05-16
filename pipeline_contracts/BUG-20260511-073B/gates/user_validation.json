@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-11T23:36:54Z",
+  "pipeline_id": "BUG-20260511-073B",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "FEAT-20260426-332E/dist/KittingMapper.exe",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "FEAT-20260426-332E\\dist\\KittingMapper.exe",
+        "sha256": "eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0",
+        "size_bytes": 37778246
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "FEAT-20260426-332E/dist/KittingMapper.exe"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "BUG-20260511-073B",
+    "deployed_at": "2026-05-11T23:36:54Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\BUG-20260511-073B",
+    "evidence": "FEAT-20260426-332E/dist/KittingMapper.exe",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "FEAT-20260426-332E\\dist\\KittingMapper.exe",
+          "sha256": "eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0",
+          "size_bytes": 37778246
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "FEAT-20260426-332E/dist/KittingMapper.exe"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "FEAT-20260426-332E\\dist\\KittingMapper.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260511-073B\\FEAT-20260426-332E\\dist\\KittingMapper.exe",
+        "sha256": "eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\BUG-20260511-073B\\KittingMapper-EXE-KittingMapper.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260511-073B\\pipeline_outputs\\BUG-20260511-073B\\KittingMapper-EXE-KittingMapper.exe",
+        "sha256": "eb20c2d8f06bbcc04ca99796f814df9ad0b7eae17cbc0a17ebe99bda63e87db0"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\BUG-20260511-073B\\deployment_manifest.json"
+  }
+}

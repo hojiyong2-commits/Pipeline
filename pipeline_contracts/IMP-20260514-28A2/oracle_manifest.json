@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260514-28A2",
+  "created_at": "2026-05-14T13:12:19Z",
+  "oracles": [
+    {
+      "name": "verify_no_evidence_fail",
+      "description": "patch verify --result PASS without --test-command/--evidence-file must exit 1 with [PIPELINE ERROR]",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\expected.json",
+      "input_sha256": "f15686ee539514b55534f2265162a7d581574b69360fd9d6b5e26eb749c77c93",
+      "expected_sha256": "2b52b631257194ab973d267b47363bfa5481c230059584f35ef22e5ff9d16d28",
+      "added_at": "2026-05-14T13:12:19Z"
+    },
+    {
+      "name": "diff_gate_escalate",
+      "description": "patch audit --base-ref must read actual git diff; declared 1 file but actual 2 files triggers ESCALATE/lane=full",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\expected.json",
+      "input_sha256": "c7c93314d1e160fb78c71ba95df8ad075f69f2f291b26c7dc65ad42af116cbe0",
+      "expected_sha256": "1d379ab28f41f9343e9db6a9dad1d7261263a5cbe3d39f20ee4e416509b3c0de",
+      "added_at": "2026-05-14T13:12:24Z"
+    },
+    {
+      "name": "O003",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\expected.json",
+      "input_sha256": "c7c93314d1e160fb78c71ba95df8ad075f69f2f291b26c7dc65ad42af116cbe0",
+      "expected_sha256": "1d379ab28f41f9343e9db6a9dad1d7261263a5cbe3d39f20ee4e416509b3c0de",
+      "added_at": "2026-05-14T14:17:26Z"
+    },
+    {
+      "name": "O004",
+      "description": "",
+      "source": "user",
+      "case_kind": "exception",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\expected.json",
+      "input_sha256": "f15686ee539514b55534f2265162a7d581574b69360fd9d6b5e26eb749c77c93",
+      "expected_sha256": "2b52b631257194ab973d267b47363bfa5481c230059584f35ef22e5ff9d16d28",
+      "added_at": "2026-05-14T14:17:26Z"
+    }
+  ],
+  "updated_at": "2026-05-14T14:17:26Z"
+}

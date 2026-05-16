@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260513-4C0B",
+  "created_at": "2026-05-13T12:41:44Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260513-4C0B\\cluster_detect_normal\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260513-4C0B\\cluster_detect_normal\\expected.json",
+      "input_sha256": "13c2f35e692afdcb677a67c4a707f268e6ccf7b78489b6b1590c0087997e98b9",
+      "expected_sha256": "aba054cee075d7083a0b54df19a2a593bb8d43dfeaad453f4d23585a1ee71187",
+      "added_at": "2026-05-13T12:41:44Z"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260513-4C0B\\patch_audit_escalate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260513-4C0B\\patch_audit_escalate\\expected.json",
+      "input_sha256": "6d59797184cf2bd40b495949e352fb418e0a69d47b51a9484ec3bc27320a75ca",
+      "expected_sha256": "b9a52ec19bec09e515bdc21ce4ed9298b406236944eda14a6cf8b76d9d106c13",
+      "added_at": "2026-05-13T12:41:47Z"
+    }
+  ],
+  "updated_at": "2026-05-13T12:41:47Z"
+}

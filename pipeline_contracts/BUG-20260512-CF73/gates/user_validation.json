@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T02:30:27Z",
+  "pipeline_id": "BUG-20260512-CF73",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "dist/emailmonitor.exe",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "dist\\emailmonitor.exe",
+        "sha256": "07a43fb3a3b1c88fed646909fe44ba45d0f273ea2587adb6bccb3db033660a06",
+        "size_bytes": 118804286
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "dist/emailmonitor.exe"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "BUG-20260512-CF73",
+    "deployed_at": "2026-05-12T02:30:27Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\BUG-20260512-CF73",
+    "evidence": "dist/emailmonitor.exe",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "dist\\emailmonitor.exe",
+          "sha256": "07a43fb3a3b1c88fed646909fe44ba45d0f273ea2587adb6bccb3db033660a06",
+          "size_bytes": 118804286
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "dist/emailmonitor.exe"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "dist\\emailmonitor.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260512-CF73\\dist\\emailmonitor.exe",
+        "sha256": "07a43fb3a3b1c88fed646909fe44ba45d0f273ea2587adb6bccb3db033660a06"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\BUG-20260512-CF73\\emailmonitor-EXE-fitz-pdfplumber-emailmonitor.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260512-CF73\\pipeline_outputs\\BUG-20260512-CF73\\emailmonitor-EXE-fitz-pdfplumber-emailmonitor.exe",
+        "sha256": "07a43fb3a3b1c88fed646909fe44ba45d0f273ea2587adb6bccb3db033660a06"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\BUG-20260512-CF73\\deployment_manifest.json"
+  }
+}

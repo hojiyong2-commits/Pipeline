@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T13:12:58Z",
+  "pipeline_id": "BUG-20260512-F307",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "ic_part_src/dist/ICPartAutomation.exe",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+        "sha256": "c4d123d781ff076058be7d294cc1aa2ec7b4e22e24de5ed7a6e11f8cf883f878",
+        "size_bytes": 37767508
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "ic_part_src/dist/ICPartAutomation.exe"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "BUG-20260512-F307",
+    "deployed_at": "2026-05-12T13:12:58Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\BUG-20260512-F307",
+    "evidence": "ic_part_src/dist/ICPartAutomation.exe",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+          "sha256": "c4d123d781ff076058be7d294cc1aa2ec7b4e22e24de5ed7a6e11f8cf883f878",
+          "size_bytes": 37767508
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "ic_part_src/dist/ICPartAutomation.exe"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "ic_part_src\\dist\\ICPartAutomation.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260512-F307\\ic_part_src\\dist\\ICPartAutomation.exe",
+        "sha256": "c4d123d781ff076058be7d294cc1aa2ec7b4e22e24de5ed7a6e11f8cf883f878"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\BUG-20260512-F307\\ICPartAutomation-EXE-inlineStr-ICPartAutomation.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260512-F307\\pipeline_outputs\\BUG-20260512-F307\\ICPartAutomation-EXE-inlineStr-ICPartAutomation.exe",
+        "sha256": "c4d123d781ff076058be7d294cc1aa2ec7b4e22e24de5ed7a6e11f8cf883f878"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\BUG-20260512-F307\\deployment_manifest.json"
+  }
+}

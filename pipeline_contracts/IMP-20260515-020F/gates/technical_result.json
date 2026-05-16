@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-15T22:33:07Z",
+  "pipeline_id": "IMP-20260515-020F",
+  "status": "PASS",
+  "evidence_files": [
+    "pipeline.py",
+    "test_three_gate_e2e.py",
+    "test_three_gate_pipeline.py",
+    "tests\\test_patch_lane.py",
+    "tests\\test_pm_split.py",
+    "tests\\test_outputs.py",
+    "tests\\test_doc_cli_contract.py",
+    "tests\\oracles\\IMP-20260515-020F\\case_normal\\input.json",
+    "tests\\oracles\\IMP-20260515-020F\\case_normal\\expected.json",
+    "tests\\oracles\\IMP-20260515-020F\\case_edge\\input.json",
+    "tests\\oracles\\IMP-20260515-020F\\case_edge\\expected.json"
+  ],
+  "target_files": [
+    "pipeline.py",
+    "test_three_gate_e2e.py",
+    "test_three_gate_pipeline.py",
+    "tests\\test_patch_lane.py",
+    "tests\\test_pm_split.py",
+    "tests\\test_outputs.py",
+    "tests\\test_doc_cli_contract.py"
+  ],
+  "strict_tools": true,
+  "execution_profile": "HIGH_RISK",
+  "checks": [
+    {
+      "name": "py_compile",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "py_compile",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_e2e.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_pm_split.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_outputs.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_doc_cli_contract.py"
+      ],
+      "details": [
+        {
+          "file": "pipeline.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py"
+          ]
+        },
+        {
+          "file": "test_three_gate_e2e.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_e2e.py"
+          ]
+        },
+        {
+          "file": "test_three_gate_pipeline.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py"
+          ]
+        },
+        {
+          "file": "tests\\test_patch_lane.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py"
+          ]
+        },
+        {
+          "file": "tests\\test_pm_split.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_pm_split.py"
+          ]
+        },
+        {
+          "file": "tests\\test_outputs.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_outputs.py"
+          ]
+        },
+        {
+          "file": "tests\\test_doc_cli_contract.py",
+          "status": "PASS",
+          "command": [
+            "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-m",
+            "py_compile",
+            "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_doc_cli_contract.py"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ruff",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_e2e.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_pm_split.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_outputs.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_doc_cli_contract.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "ruff",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "ruff 0.15.12",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "name": "mypy",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "mypy",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_e2e.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_pm_split.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_outputs.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_doc_cli_contract.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "mypy",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "mypy 2.0.0 (compiled: yes)",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "Success: no issues found in 7 source files\n",
+      "stderr": "mypy.ini: [mypy]: python_version: Python 3.9 is not supported (must be 3.10 or higher)\n"
+    },
+    {
+      "name": "bandit",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q",
+        "--ini",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.bandit",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_e2e.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_pm_split.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_outputs.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_doc_cli_contract.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "bandit",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "__main__.py 1.9.4\n  python version = 3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025, 15:27:58) [MSC v.1942 64 bit (AMD64)]",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "[main]\tINFO\tUsing ini file for skipped tests\n[main]\tINFO\tUsing command line arg for selected targets\n"
+    },
+    {
+      "name": "pytest",
+      "status": "PASS",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "pytest",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "pytest 9.0.3",
+        "stderr": ""
+      },
+      "returncode": 0,
+      "stdout": "........................................................................ [ 26%]\n........................................................................ [ 53%]\n........................................................................ [ 79%]\n.......................................................                  [100%]\n271 passed in 31.72s\n",
+      "stderr": ""
+    }
+  ],
+  "complete_eligible": true
+}

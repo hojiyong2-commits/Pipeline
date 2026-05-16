@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-13T12:19:45Z",
+  "pipeline_id": "FEAT-20260512-627D",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "ic_part_src/dist/ICPartAutomation.exe",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+        "sha256": "fd43ccfddd9fa15d4568a6f38515b7d1772c5d9613fc37d91084cb2e6ed842b3",
+        "size_bytes": 37768096
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "ic_part_src/dist/ICPartAutomation.exe"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "FEAT-20260512-627D",
+    "deployed_at": "2026-05-13T12:19:44Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\FEAT-20260512-627D",
+    "evidence": "ic_part_src/dist/ICPartAutomation.exe",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+          "sha256": "fd43ccfddd9fa15d4568a6f38515b7d1772c5d9613fc37d91084cb2e6ed842b3",
+          "size_bytes": 37768096
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "ic_part_src/dist/ICPartAutomation.exe"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "ic_part_src\\dist\\ICPartAutomation.exe",
+        "destination": "G:\\내 드라이브\\터미널\\FEAT-20260512-627D\\ic_part_src\\dist\\ICPartAutomation.exe",
+        "sha256": "fd43ccfddd9fa15d4568a6f38515b7d1772c5d9613fc37d91084cb2e6ed842b3"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\FEAT-20260512-627D\\deployment_manifest.json"
+  }
+}

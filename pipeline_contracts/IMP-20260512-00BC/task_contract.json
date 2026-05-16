@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260512-00BC",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-12T21:53:32Z",
+  "updated_at": "2026-05-12T22:05:09Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "Protocol Evolution: Clustered Verification Pipeline + Codex Review Gate — preflight/incident_cluster/Codex Review Gate/batched CI/deferred build/PM retry limit/agent MD sync",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "pipeline_preflight",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-2",
+      "name": "pipeline_review_gate",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-3",
+      "name": "pipeline_batch_ci_build_retry",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-4",
+      "name": "agent_md_sync",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MT-5",
+      "name": "claudemd_workflow_update",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "module": "MT-1",
+      "severity": "P1",
+      "question": "pipeline.py 변경을 몇 개 MT로 나눌지",
+      "options": [
+        "A",
+        "3 MT (preflight + review + check/build/retry 묶음)",
+        "B",
+        "6 MT (세분화)"
+      ],
+      "answer": "A안: 3 MT (MT-1 preflight, MT-2 review, MT-3 check/build/retry 묶음). 검증 단순성과 scope 명확성 우선. 사용자 askuser 응답으로 최종 확정.",
+      "resolved": true,
+      "answered_at": "2026-05-12T21:55:23Z"
+    },
+    {
+      "id": "Q2",
+      "module": "MT-5",
+      "severity": "P1",
+      "question": "CLAUDE.md 새 11단계 흐름을 어떻게 반영할지",
+      "options": [
+        "A",
+        "기존 섹션 업데이트",
+        "B",
+        "새 섹션 추가 (기존 유지)"
+      ],
+      "answer": "A안: 기존 CLAUDE.md 섹션을 업데이트하여 11단계 흐름 반영. 일관성 유지 우선. 사용자 askuser 응답으로 최종 확정.",
+      "resolved": true,
+      "answered_at": "2026-05-12T21:55:23Z"
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-12T22:05:09Z",
+  "contract_hash": "8255ffdf536dc033621b59b2f1836c4f576c8005f78490cdbcf763ba8e84c9cf",
+  "test_set_hash": "9d932ed0d3d51b4ff3bcaa2f9e7a13ba22a2c0604b7fe08bb27e03ec41e99da6"
+}

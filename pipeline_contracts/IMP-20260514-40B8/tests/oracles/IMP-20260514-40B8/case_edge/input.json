@@ -1,0 +1,6 @@
+{
+  "check_type": "principle_and_exclusion",
+  "files": ["README.md", "CLAUDE.md", ".claude/commands/task.md"],
+  "required_phrase": "외부 플러그인은 완료 판정자가 아니",
+  "forbidden_phrases": ["회사 데이터", "사내", "기업 데이터", "회사 업무"]
+}

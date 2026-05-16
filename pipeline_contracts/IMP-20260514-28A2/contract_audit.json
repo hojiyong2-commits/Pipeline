@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-14T13:13:34Z",
+  "pipeline_id": "IMP-20260514-28A2",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "metrics": {
+    "test_count": 4,
+    "p0_tests": 3,
+    "p0_behavior_tests": 3,
+    "shallow_tests": 0,
+    "oracle_count": 2
+  },
+  "oracle_entries": [
+    {
+      "name": "verify_no_evidence_fail",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\verify_no_evidence_fail\\expected.json",
+      "input_sha256": "f15686ee539514b55534f2265162a7d581574b69360fd9d6b5e26eb749c77c93",
+      "expected_sha256": "2b52b631257194ab973d267b47363bfa5481c230059584f35ef22e5ff9d16d28"
+    },
+    {
+      "name": "diff_gate_escalate",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-28A2\\diff_gate_escalate\\expected.json",
+      "input_sha256": "c7c93314d1e160fb78c71ba95df8ad075f69f2f291b26c7dc65ad42af116cbe0",
+      "expected_sha256": "1d379ab28f41f9343e9db6a9dad1d7261263a5cbe3d39f20ee4e416509b3c0de"
+    }
+  ],
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 3,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MOD-CI-WORKFLOW": 1,
+        "MOD-TEST-PATCHLANE": 1,
+        "MOD-PIPELINE-DIFFGATE": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 3
+    }
+  },
+  "allow_no_oracle": false,
+  "waiver_reason": ""
+}

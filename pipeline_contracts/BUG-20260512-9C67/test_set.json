@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-9C67",
+  "created_at": "2026-05-12T10:41:03Z",
+  "updated_at": "2026-05-12T10:43:45Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T-1",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 40,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('ic_part_src/order_mapper.py','r',encoding='utf-8').read(); ok=('for _scan_letter in _COL_LETTERS:' in src) and ('for _col_letter in _COL_LETTERS:' not in src) and ('def _col_letter(n: int) -> str:' in src); print('PASS' if ok else 'FAIL')"
+        ]
+      },
+      "then": {
+        "stdout_contains": "PASS",
+        "description": "루프 변수 _col_letter가 _scan_letter로 rename되었고 함수 def는 보존됨"
+      }
+    },
+    {
+      "id": "T-2",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 30,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('ic_part_src/order_mapper.py','r',encoding='utf-8').read(); ok=all(c in src for c in ['_col_letter(col_idx)','_col_letter(ICPART_COL_DELIVERY_DATE)','_col_letter(ICPART_COL_FOLDER_DATE)']); print('PASS' if ok else 'FAIL')"
+        ]
+      },
+      "then": {
+        "stdout_contains": "PASS",
+        "description": "루프 블록 외부의 _col_letter(...) 호출부 3곳이 모두 보존됨 (과수정 없음)"
+      }
+    },
+    {
+      "id": "T-3",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 20,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('ic_part_src/order_mapper.py','r',encoding='utf-8').read(); ok=src.count('for _scan_letter in _COL_LETTERS:') == 1; print('PASS' if ok else 'FAIL')"
+        ]
+      },
+      "then": {
+        "stdout_contains": "PASS",
+        "description": "for _scan_letter in _COL_LETTERS: 가 정확히 1회 존재"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-12T10:43:45Z",
+  "test_set_hash": "19cb4433bb6aefbd86a4b6c14e0175c464fcfdf8a852d60b60293b9831c0a64a",
+  "contract_hash": "a16e3e33dbabfda86150ae396398c845a62f8961af85004dc36a7fe1634a2f0a"
+}

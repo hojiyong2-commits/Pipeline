@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T01:16:16Z",
+  "pipeline_id": "BUG-20260512-E68A",
+  "status": "PASS",
+  "result": "ACCEPT",
+  "evidence": "pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe,pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe",
+  "validated_evidence": {
+    "files": [
+      {
+        "path": "pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe",
+        "sha256": "b5bc8675482875c5890041e21dfc43aba452515d748d950738789fb41b37d62e",
+        "size_bytes": 37767908
+      },
+      {
+        "path": "pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe",
+        "sha256": "11ec9b562d7649f98a3f40acae00995d6cf38ec42df83a9e5d49b983fdd77871",
+        "size_bytes": 118713794
+      }
+    ],
+    "urls": [],
+    "raw_items": [
+      "pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe",
+      "pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe"
+    ]
+  },
+  "notes": "",
+  "deployment": {
+    "schema_version": 1,
+    "pipeline_id": "BUG-20260512-E68A",
+    "deployed_at": "2026-05-12T01:16:16Z",
+    "deploy_root": "G:\\내 드라이브\\터미널",
+    "deploy_dir": "G:\\내 드라이브\\터미널\\BUG-20260512-E68A",
+    "evidence": "pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe,pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe",
+    "validated_evidence": {
+      "files": [
+        {
+          "path": "pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe",
+          "sha256": "b5bc8675482875c5890041e21dfc43aba452515d748d950738789fb41b37d62e",
+          "size_bytes": 37767908
+        },
+        {
+          "path": "pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe",
+          "sha256": "11ec9b562d7649f98a3f40acae00995d6cf38ec42df83a9e5d49b983fdd77871",
+          "size_bytes": 118713794
+        }
+      ],
+      "urls": [],
+      "raw_items": [
+        "pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe",
+        "pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe"
+      ]
+    },
+    "notes": "",
+    "artifacts": [
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260512-E68A\\pipeline_outputs\\BUG-20260512-E68A\\ICPartAutomation-EXE-MT-1-I-J-K-ICPartAutomation.exe",
+        "sha256": "b5bc8675482875c5890041e21dfc43aba452515d748d950738789fb41b37d62e"
+      },
+      {
+        "kind": "file",
+        "source": "pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260512-E68A\\pipeline_outputs\\BUG-20260512-E68A\\emailmonitor-EXE-MT-2-Exchange-DN-SMTP-emailmonitor.exe",
+        "sha256": "11ec9b562d7649f98a3f40acae00995d6cf38ec42df83a9e5d49b983fdd77871"
+      },
+      {
+        "kind": "file",
+        "source": "dist\\emailmonitor.exe",
+        "destination": "G:\\내 드라이브\\터미널\\BUG-20260512-E68A\\dist\\emailmonitor.exe",
+        "sha256": "11ec9b562d7649f98a3f40acae00995d6cf38ec42df83a9e5d49b983fdd77871"
+      }
+    ],
+    "external_urls": [],
+    "manifest_path": "G:\\내 드라이브\\터미널\\BUG-20260512-E68A\\deployment_manifest.json"
+  }
+}

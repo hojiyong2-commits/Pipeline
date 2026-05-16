@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T11:51:12Z",
+  "pipeline_id": "IMP-20260512-C476",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "metrics": {
+    "test_count": 3,
+    "p0_tests": 2,
+    "p0_behavior_tests": 2,
+    "shallow_tests": 0,
+    "oracle_count": 2
+  },
+  "oracle_entries": [
+    {
+      "name": "MT-1 pyproject.toml extend-select PLW2901 추가",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-C476\\normal_ruff_rule\\input.toml",
+      "expected_path": "tests\\oracles\\IMP-20260512-C476\\normal_ruff_rule\\expected.toml",
+      "input_sha256": "7508c9123b6b52688385ae89651bbdcd707245efbb287fb849c6f6ca615b08e4",
+      "expected_sha256": "1d06555623c6eb43685d4e13b5eb874cfd3a02d8a4ea803ec28da453f98e0499"
+    },
+    {
+      "name": "MT-2 qa-agent.md PLW2901 shadowing 체크리스트 항목",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260512-C476\\edge_qa_agent_item\\input.txt",
+      "expected_path": "tests\\oracles\\IMP-20260512-C476\\edge_qa_agent_item\\expected.txt",
+      "input_sha256": "3207c22d0076882b4440d94bf52a022a5998971d69e7e609f2b5cfdb63f13f26",
+      "expected_sha256": "618c10f4c9505aa7ac9f6e28bd6baae42621521daf61c81a8186c04d37dd5e99"
+    }
+  ],
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 2,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 1,
+        "MT-2": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 2
+    }
+  },
+  "allow_no_oracle": false,
+  "waiver_reason": ""
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-13T12:43:58Z",
+  "pipeline_id": "IMP-20260513-4C0B",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "metrics": {
+    "test_count": 6,
+    "p0_tests": 3,
+    "p0_behavior_tests": 3,
+    "shallow_tests": 1,
+    "oracle_count": 2
+  },
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260513-4C0B\\cluster_detect_normal\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260513-4C0B\\cluster_detect_normal\\expected.json",
+      "input_sha256": "13c2f35e692afdcb677a67c4a707f268e6ccf7b78489b6b1590c0087997e98b9",
+      "expected_sha256": "aba054cee075d7083a0b54df19a2a593bb8d43dfeaad453f4d23585a1ee71187"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260513-4C0B\\patch_audit_escalate\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260513-4C0B\\patch_audit_escalate\\expected.json",
+      "input_sha256": "6d59797184cf2bd40b495949e352fb418e0a69d47b51a9484ec3bc27320a75ca",
+      "expected_sha256": "b9a52ec19bec09e515bdc21ce4ed9298b406236944eda14a6cf8b76d9d106c13"
+    }
+  ],
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 3,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MOD-3": 1,
+        "MOD-1": 2,
+        "MOD-2": 1
+      },
+      "edge_case_tests": 2,
+      "p0_tests": 3
+    }
+  },
+  "allow_no_oracle": false,
+  "waiver_reason": ""
+}

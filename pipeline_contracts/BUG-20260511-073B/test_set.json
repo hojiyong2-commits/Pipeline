@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260511-073B",
+  "created_at": "2026-05-11T22:37:50Z",
+  "updated_at": "2026-05-11T22:39:35Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T1",
+      "module": "M1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 20,
+      "given": {
+        "desc": "UNC 경로 //ccikrnf/wrkgroup는 허용된 루트"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; sys.path.insert(0,'FEAT-20260426-332E'); from core.order_lines_reader import _safe_resolve; from pathlib import Path; print(_safe_resolve(Path('//ccikrnf/wrkgroup/orders.xlsx')))"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "ccikrnf"
+      }
+    },
+    {
+      "id": "T2",
+      "module": "M1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 10,
+      "given": {
+        "desc": "미허용 UNC 경로 //unknown/share는 차단되어야 함"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; sys.path.insert(0,'FEAT-20260426-332E'); from core.order_lines_reader import _safe_resolve; from pathlib import Path; _safe_resolve(Path('//unknown/share/file.xlsx'))"
+        ]
+      },
+      "then": {
+        "returncode": 1
+      }
+    },
+    {
+      "id": "T3",
+      "module": "M2",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 15,
+      "given": {
+        "desc": "config 없을 때 jm 기본값이 KJ여야 함"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; sys.path.insert(0,'FEAT-20260426-332E'); import ast; src=open('FEAT-20260426-332E/main.py','r',encoding='utf-8').read(); print('KJ' if \".get(\\\"jm\\\", \\\"KJ\\\")\" in src else 'FAIL')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "KJ"
+      }
+    },
+    {
+      "id": "T4",
+      "module": "M3",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 15,
+      "given": {
+        "desc": "CLI _cli_main 함수에서 note = kit_place 사용 확인"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('FEAT-20260426-332E/main.py','r',encoding='utf-8').read(); idx=src.find('def _cli_main'); block=src[idx:idx+3000]; print('PASS' if 'note = kit_place' in block and 'note = \"포장반\"' not in block else 'FAIL')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS"
+      }
+    },
+    {
+      "id": "T5",
+      "module": "M4",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 15,
+      "given": {
+        "desc": "_compress_line_nos가 core/utils.py에 존재하고 main.py/app.py에서 import함"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import sys; sys.path.insert(0,'FEAT-20260426-332E'); from core.utils import _compress_line_nos; print(_compress_line_nos([1,2,3,5,6]))"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "1"
+      }
+    },
+    {
+      "id": "T6",
+      "module": "M5",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "desc": "write_date 데드코드가 main.py에서 제거되었는지 확인"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('FEAT-20260426-332E/main.py','r',encoding='utf-8').read(); print('PASS' if 'write_date = get_next_business_day' not in src else 'FAIL')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS"
+      }
+    },
+    {
+      "id": "T7",
+      "module": "M5",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 5,
+      "given": {
+        "desc": "ui/app.py에서 import re as _re 인라인 제거 확인"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('FEAT-20260426-332E/ui/app.py','r',encoding='utf-8').read(); print('PASS' if 'import re as _re' not in src else 'FAIL')"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": "PASS"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-11T22:39:35Z",
+  "test_set_hash": "6f401ee0841d71f4e27a03607654309700e9d8b5c08dd2a4293d7462e7fea516",
+  "contract_hash": "9bd75631a7c04d893c78098a8bc5d9ddecb5e6549b88daeb2e7e2816640d4afe"
+}

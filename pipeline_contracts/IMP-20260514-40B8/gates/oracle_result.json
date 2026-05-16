@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-14T15:47:53Z",
+  "pipeline_id": "IMP-20260514-40B8",
+  "contract_hash": "c7e7459fc324c1ebbbaab4c309996360b029eafd9e699055d99e7b163cdb9025",
+  "test_set_hash": "9c080a76da867801fc695e3623d7baf5ca36b132acd39fe8eae85d866d7c39cd",
+  "observed_contract_hash": "c7e7459fc324c1ebbbaab4c309996360b029eafd9e699055d99e7b163cdb9025",
+  "observed_test_set_hash": "9c080a76da867801fc695e3623d7baf5ca36b132acd39fe8eae85d866d7c39cd",
+  "readiness": {
+    "ready": true,
+    "blockers": [],
+    "warnings": [],
+    "metrics": {
+      "module_count": 1,
+      "unresolved_p0_questions": 0,
+      "unresolved_p1_questions": 0,
+      "normal_tests_by_module": {
+        "MT-1": 1
+      },
+      "edge_case_tests": 1,
+      "p0_tests": 2
+    }
+  },
+  "shape_errors": [],
+  "integrity_errors": [],
+  "summary": {
+    "verdict": "PASS",
+    "score": 100.0,
+    "threshold": 80,
+    "earned_points": 100,
+    "total_points": 100,
+    "hard_fail": false,
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "T001",
+      "module": "MT-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "status": "PASS",
+      "points": 50,
+      "earned": 50,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "all_headings_present": true,
+          "heading_count": 7,
+          "missing_headings": []
+        },
+        "actual": {
+          "all_headings_present": true,
+          "heading_count": 7,
+          "missing_headings": []
+        }
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MT-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "edge",
+      "status": "PASS",
+      "points": 50,
+      "earned": 50,
+      "message": "JSON values match",
+      "details": {
+        "expected": {
+          "required_phrase_found_in_all_files": true,
+          "forbidden_phrases_found": [],
+          "compliant": true
+        },
+        "actual": {
+          "required_phrase_found_in_all_files": true,
+          "forbidden_phrases_found": [],
+          "compliant": true
+        }
+      }
+    }
+  ],
+  "oracle_entries": [
+    {
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260514-40B8\\case_normal\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-40B8\\case_normal\\expected.json",
+      "input_sha256": "04a093363c1a840b96593fc38b5dfb13a81280ad5c13d9fdd05291c57fcac7f6",
+      "expected_sha256": "4851b560dae224d256ac6fd9f1a0e3027db4f3364d275cab34511a3dc8b2d538"
+    },
+    {
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "input_path": "tests\\oracles\\IMP-20260514-40B8\\case_edge\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260514-40B8\\case_edge\\expected.json",
+      "input_sha256": "61c0c1077a338da010421e897f1375e9c84a235fd9be52e0df6a89f6e05ecf31",
+      "expected_sha256": "85c8d45efd1093cc3af5e34d7296a4f16bbf881ec481f0ed682ae32f003d0d88"
+    }
+  ]
+}

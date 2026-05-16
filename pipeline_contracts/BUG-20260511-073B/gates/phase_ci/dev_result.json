@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-05-11T23:00:52Z",
+  "status": "PASS",
+  "blockers": [],
+  "warnings": [],
+  "repository": "hojiyong2-commits/Pipeline",
+  "run_id": "25702306449",
+  "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
+  "pipeline_id": "BUG-20260511-073B",
+  "phase": "dev",
+  "attestation": {
+    "phase": "dev",
+    "commit_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
+    "ref": "refs/pull/17/merge",
+    "request": {
+      "schema_version": 1,
+      "request_type": "pipeline-phase-attestation-request-v1",
+      "generated_at": "2026-05-11T22:58:23Z",
+      "pipeline_id": "BUG-20260511-073B",
+      "phase": "dev",
+      "phase_status": "DONE",
+      "commit_hint": "03e9ba81d42a545d601da5fdafbbe2ccbb54a4c1",
+      "state": {
+        "current_phase": "qa",
+        "phase_completed_at": "2026-05-11T22:58:01Z",
+        "report_file": "dev_handover.xml",
+        "evidence": "FEAT-20260426-332E/core/order_lines_reader.py,FEAT-20260426-332E/core/utils.py,FEAT-20260426-332E/main.py,FEAT-20260426-332E/ui/app.py"
+      },
+      "agent_run": {
+        "run_id": "dev-107f8758fbc053f5",
+        "phase": "dev",
+        "agent_id": "dev-agent",
+        "status": "COMPLETED",
+        "output_file": "dev_handover.xml",
+        "output_sha256": "3c76b2bd612734c36e648e6c8d0e9e1d6e42bf73322ac2976b962b33be478012",
+        "receipt_path": ".pipeline/phase_evidence/BUG-20260511-073B/dev/agent_receipt_dev-107f8758fbc053f5.json",
+        "receipt_sha256": "c88f80f4c9803a49c01e86837c726cb953468c7b946e2bbf651fbb840dbfc9dd",
+        "used_by_phase": "dev",
+        "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260511-073B\\dev\\dev-107f8758fbc053f5.json"
+      },
+      "manager_run": null,
+      "copied_evidence": [
+        {
+          "label": "agent_receipt",
+          "source": ".pipeline\\agent_receipts\\BUG-20260511-073B\\dev\\dev-107f8758fbc053f5.json",
+          "path": ".pipeline/phase_evidence/BUG-20260511-073B/dev/agent_receipt_dev-107f8758fbc053f5.json",
+          "sha256": "c88f80f4c9803a49c01e86837c726cb953468c7b946e2bbf651fbb840dbfc9dd",
+          "size_bytes": 502,
+          "requires_force_add": true
+        },
+        {
+          "label": "report",
+          "source": "dev_handover.xml",
+          "path": ".pipeline/phase_evidence/BUG-20260511-073B/dev/report_dev_handover.xml",
+          "sha256": "3c76b2bd612734c36e648e6c8d0e9e1d6e42bf73322ac2976b962b33be478012",
+          "size_bytes": 1904,
+          "requires_force_add": true
+        },
+        {
+          "label": "scope_manifest",
+          "source": "scope_manifest.json",
+          "path": ".pipeline/phase_evidence/BUG-20260511-073B/dev/scope_manifest_scope_manifest.json",
+          "sha256": "0d596d6a28ced3cc4d016e154724de7e4e459a429b1294250282f67ff2b45524",
+          "size_bytes": 1195,
+          "requires_force_add": true
+        }
+      ],
+      "workspace_file_checks": [
+        {
+          "path": "FEAT-20260426-332E/core/order_lines_reader.py",
+          "sha256": "9d770ca9eedddcea0c4084465527d1dca65ae0de993700fbffe674e49df01431",
+          "size_bytes": 15039
+        },
+        {
+          "path": "FEAT-20260426-332E/core/utils.py",
+          "sha256": "2df7196b381ddd9d07d834f411f74f0a4263381c2965658d43edda1cec06c7f4",
+          "size_bytes": 1063
+        },
+        {
+          "path": "FEAT-20260426-332E/main.py",
+          "sha256": "ace85d490e88727d5446ac2d00abf67a3063276cdec6b72ad2430cdf4d03aed5",
+          "size_bytes": 9349
+        },
+        {
+          "path": "FEAT-20260426-332E/ui/app.py",
+          "sha256": "a87a4ed0c88bd5732e6df38bdf5a1d5ed3fbaa5f3b4eedc587af8b745509d13c",
+          "size_bytes": 30008
+        }
+      ],
+      "local_only_files": []
+    },
+    "run_id": "25702306449",
+    "workflow": "CI",
+    "attestation_type": "pipeline-phase-v1",
+    "schema_version": 1,
+    "event_name": "pull_request",
+    "repository": "hojiyong2-commits/Pipeline",
+    "checkout_sha": "d8e7adf29bd19448a1b8c10d638af1048e8ced09",
+    "pipeline_id": "BUG-20260511-073B",
+    "head_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b",
+    "runner_os": "Windows",
+    "request_sha256": "7bc15ef6f92d9cfd9e454e04e6cd86b47294f1a6df482650606b7aac255bb836",
+    "validation": {
+      "blockers": [],
+      "status": "PASS"
+    },
+    "generated_at": "2026-05-11T23:00:23.6797412Z",
+    "run_attempt": "1"
+  },
+  "workflow_run": {
+    "id": 25702306449,
+    "name": "CI",
+    "html_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/25702306449",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "b031e3fea829d26d7adfb8b1d592ccca4fe9ae0b"
+  },
+  "artifact": {
+    "id": 6931818867,
+    "name": "pipeline-phase-attestation",
+    "size_in_bytes": 1461,
+    "expired": false
+  }
+}

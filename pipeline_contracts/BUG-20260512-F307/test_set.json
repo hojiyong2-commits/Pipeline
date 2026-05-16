@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260512-F307",
+  "created_at": "2026-05-12T12:27:50Z",
+  "updated_at": "2026-05-12T13:06:36Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T001",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 40,
+      "given": {
+        "file": "ic_part_src/order_mapper.py",
+        "description": "write_ic_part_zip I.J.K 스캐너 inlineStr 감지 검증"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re; p=r'<v[\\s>]|<is[\\s>]'; assert re.search(p,'<v>42</v>'), 'v tag not matched'; assert re.search(p,'<is><t>X</t></is>'), 'is tag not matched'; assert not re.search(p,'<c r=\"X\"/>'), 'empty cell falsely matched'"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": ""
+      }
+    },
+    {
+      "id": "T002",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 30,
+      "given": {
+        "file": "ic_part_src/order_mapper.py",
+        "condition": "empty_ijk_columns",
+        "description": "빈 시트: ICPART_DATA_START_ROW=6, last_occupied=5, next_write=6"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "src=open('ic_part_src/order_mapper.py',encoding='utf-8').read(); assert 'ICPART_DATA_START_ROW: int = 6' in src or 'ICPART_DATA_START_ROW = 6' in src, 'constant not found or wrong value'; start=6; assert start-1==5 and start==6"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": ""
+      }
+    },
+    {
+      "id": "T003",
+      "module": "MT-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 20,
+      "given": {
+        "file": "ic_part_src/order_mapper.py"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-c",
+          "import re; line = open('ic_part_src/order_mapper.py', encoding='utf-8').readlines()[1159]; assert '<is[\\s>]' in line or '<is>' in line, f'inlineStr patch missing: {line}'"
+        ]
+      },
+      "then": {
+        "returncode": 0,
+        "stdout_contains": ""
+      }
+    }
+  ],
+  "frozen_at": "2026-05-12T13:06:36Z",
+  "test_set_hash": "36007bb7da742d70c714d8bd9ab2407ef022fa9c755e3af240ebdd2120b94ee6",
+  "contract_hash": "0cce08cbcb609ed5ae333a8aa40fb8542fe916ded4a93d459909fd214b05f5bd"
+}

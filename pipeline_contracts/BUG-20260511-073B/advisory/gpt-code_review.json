@@ -1,0 +1,18 @@
+{
+  "status": "SKIPPED",
+  "reason": "ENABLE_GPT_ADVISORY is not 1",
+  "api_called": false,
+  "api_key_source": "process",
+  "findings": [],
+  "model": "gpt-5.5",
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260511-073B",
+  "kind": "gpt-code",
+  "auto_run": true,
+  "files": [
+    "FEAT-20260426-332E\\core\\order_lines_reader.py",
+    "FEAT-20260426-332E\\core\\utils.py",
+    "FEAT-20260426-332E\\main.py",
+    "FEAT-20260426-332E\\ui\\app.py"
+  ]
+}

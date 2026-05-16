@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "FEAT-20260512-627D",
+  "gate": "oracle",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\FEAT-20260512-627D\\failures\\oracle_attempt_1.json",
+  "recorded_at": "2026-05-12T14:21:15Z",
+  "status": "FAIL",
+  "repair_owner": "PM/oracle path repair or Dev behavior repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "oracle"
+  ],
+  "note": "Oracle gate failed; inspect failing results and output path resolution before broad rework.",
+  "failed_checks": [],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "threshold": 80,
+      "earned_points": 0,
+      "total_points": 100,
+      "hard_fail": true,
+      "passed": 0,
+      "failed": 3,
+      "skipped": 0
+    },
+    "results": [
+      {
+        "id": "T001",
+        "module": "M1",
+        "type": "json_exact_match",
+        "priority": "P0",
+        "case_kind": "normal",
+        "status": "FAIL",
+        "points": 50,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\FEAT-20260512-627D\\tests\\oracles\\FEAT-20260512-627D\\normal_no_inherit\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T002",
+        "module": "M1",
+        "type": "json_exact_match",
+        "priority": "P1",
+        "case_kind": "edge",
+        "status": "FAIL",
+        "points": 30,
+        "earned": 0,
+        "message": "missing JSON file: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\FEAT-20260512-627D\\tests\\oracles\\FEAT-20260512-627D\\edge_already_empty\\expected.json",
+        "details": {
+          "error": "ScoringError"
+        }
+      },
+      {
+        "id": "T003",
+        "module": "M1",
+        "type": "command_check",
+        "priority": "P1",
+        "case_kind": "exception",
+        "status": "FAIL",
+        "points": 20,
+        "earned": 0,
+        "message": "command did not match expectations",
+        "details": {
+          "command": [
+            "python",
+            "-c",
+            "import sys; src=open('ic_part_src/order_mapper.py').read(); sys.exit(0 if 'Backfill U' not in src and 'Backfill V' not in src else 1)"
+          ],
+          "cwd": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra",
+          "returncode": 1,
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nUnicodeDecodeError: 'cp949' codec can't decode byte 0xe2 in position 699: illegal multibyte sequence\n"
+        }
+      }
+    ]
+  }
+}

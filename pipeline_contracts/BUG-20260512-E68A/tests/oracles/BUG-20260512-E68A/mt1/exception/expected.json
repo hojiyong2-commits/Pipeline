@@ -1,0 +1,5 @@
+{
+  "description": "빈 시트 — max(_ijk_occupied, default=ICPART_DATA_START_ROW-1)=5 → _actual_start_row=max(6,6)=6",
+  "_last_occupied_row": 5,
+  "_actual_start_row": 6
+}

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260515-020F",
+  "gate": "technical",
+  "attempt": 1,
+  "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260515-020F\\failures\\technical_attempt_1.json",
+  "recorded_at": "2026-05-15T22:29:41Z",
+  "status": "FAIL",
+  "repair_owner": "Dev tooling repair",
+  "minimal_rerun": [
+    "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "pipeline.py",
+    "gates",
+    "technical"
+  ],
+  "note": "Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+  "failed_checks": [
+    {
+      "name": "ruff",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_e2e.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_pm_split.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_outputs.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_doc_cli_contract.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "ruff",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "ruff 0.15.12",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "F401 [*] `pytest` imported but unused\n  --> tests\\test_outputs.py:16:8\n   |\n14 | from unittest import mock\n15 |\n16 | import pytest\n   |        ^^^^^^\n17 |\n18 | import sys\n   |\nhelp: Remove unused import: `pytest`\n\nF401 [*] `json` imported but unused\n  --> tests\\test_pm_split.py:14:8\n   |\n12 | \"\"\"\n13 | import argparse\n14 | import json\n   |        ^^^^\n15 | import tempfile\n16 | from pathlib import Path\n   |\nhelp: Remove unused import: `json`\n\nFound 2 errors.\n[*] 2 fixable with the `--fix` option.\n",
+      "stderr": ""
+    },
+    {
+      "name": "bandit",
+      "status": "FAIL",
+      "command": [
+        "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-m",
+        "bandit",
+        "-q",
+        "--ini",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.bandit",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_e2e.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_patch_lane.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_pm_split.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_outputs.py",
+        "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_doc_cli_contract.py"
+      ],
+      "version": {
+        "command": [
+          "C:\\Users\\hojiy\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+          "-m",
+          "bandit",
+          "--version"
+        ],
+        "status": "PASS",
+        "returncode": 0,
+        "stdout": "__main__.py 1.9.4\n  python version = 3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025, 15:27:58) [MSC v.1942 64 bit (AMD64)]",
+        "stderr": ""
+      },
+      "returncode": 1,
+      "stdout": "s(SystemExit) as ctx:\n1072\t                    pipeline.cmd_gates(args)\n1073\t\n1074\t        self.assertEqual(ctx.exception.code, 0)\n1075\t        self.assertEqual(state[\"phase_attestations\"][\"phases\"][\"pm\"][\"status\"], \"PASS\")\n\n--------------------------------------------------\n>> Issue: [B106:hardcoded_password_funcarg] Possible hardcoded password: 'GITHUB_TOKEN'\n   Severity: Low   Confidence: Medium\n   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)\n   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html\n   Location: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py:3082:19\n3081\t                artifact=\"pipeline-attestation\",\n3082\t                token_env=\"GITHUB_TOKEN\",\n3083\t                record=True,\n3084\t            )\n3085\t            run_payload = {\n3086\t                \"id\": 123456,\n3087\t                \"name\": \"CI\",\n3088\t                \"html_url\": \"https://github.com/hojiyong2-commits/Pipeline/actions/runs/123456\",\n3089\t                \"status\": \"completed\",\n3090\t                \"conclusion\": \"success\",\n3091\t                \"head_sha\": commit_sha,\n3092\t            }\n\n--------------------------------------------------\n>> Issue: [B106:hardcoded_password_funcarg] Possible hardcoded password: 'GITHUB_TOKEN'\n   Severity: Low   Confidence: Medium\n   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)\n   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html\n   Location: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\test_three_gate_pipeline.py:3157:19\n3156\t                artifact=\"pipeline-attestation\",\n3157\t                token_env=\"GITHUB_TOKEN\",\n3158\t            )\n3159\t            runs_payload = {\n3160\t                \"workflow_runs\": [{\n3161\t                    \"id\": 777,\n3162\t                    \"name\": \"CI\",\n3163\t                    \"html_url\": \"https://github.com/hojiyong2-commits/Pipeline/actions/runs/777\",\n3164\t                    \"status\": \"completed\",\n3165\t                    \"conclusion\": \"success\",\n3166\t                    \"head_sha\": commit_sha,\n\n--------------------------------------------------\n>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'redacted'\n   Severity: Low   Confidence: Medium\n   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)\n   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html\n   Location: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\tests\\test_pm_split.py:144:8\n143\t        \"completed_at\": completed,\n144\t        \"token_hash\": \"redacted\",\n145\t        \"output_file\": str(output_file_resolved),\n146\t        \"output_sha256\": pipeline._sha256_file(output_file_resolved),\n147\t        \"evidence_files\": [],\n148\t        \"receipt_path\": str(receipt_path.resolve()),\n149\t        \"receipt_sha256\": pipeline._sha256_file(receipt_path),\n150\t        \"used_by_phase\": None,\n151\t        \"used_at\": None,\n152\t        \"commit_sha\": \"a\" * 40,\n153\t    }\n154\t    return run_id\n155\t\n156\t\n157\t# ---------------------------------------------------------------------------\n158\t# Item 5-A: agent start --phase pm_planner ����\n159\t# ---------------------------------------------------------------------------\n160\t\n161\tdef test_pm_planner_phase_starts() -> None:\n162\t    \"\"\"agent start --phase pm_planner�� ���������� run_id�� token�� �����ؾ� �Ѵ�.\"\"\"\n163\t    state = pipeline._new_state(\"TMP-PM-PLANNER-START\", \"IMP\", \"�׽�Ʈ\")\n\n--------------------------------------------------\n\nCode scanned:\n\tTotal lines of code: 12893\n\tTotal lines skipped (#nosec): 0\n\tTotal potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 1\n\nRun metrics:\n\tTotal issues (by severity):\n\t\tUndefined: 0\n\t\tLow: 6\n\t\tMedium: 0\n\t\tHigh: 0\n\tTotal issues (by confidence):\n\t\tUndefined: 0\n\t\tLow: 0\n\t\tMedium: 6\n\t\tHigh: 0\nFiles skipped (0):\n",
+      "stderr": "[main]\tINFO\tUsing ini file for skipped tests\n[main]\tINFO\tUsing command line arg for selected targets\n"
+    }
+  ],
+  "report_excerpt": {
+    "blockers": [],
+    "summary": {},
+    "results": []
+  }
+}
