@@ -7152,17 +7152,25 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
 
 
 def _classify_pr_file(path: str, phase: str, pid: str) -> str:
-    """PR에 포함된 파일이 해당 phase 범위에 속하는지 분류합니다.
+    """PR에 포함된 파일이 phase attestation 규칙을 위반하는지 분류합니다.
+
+    Phase attestation PR에서 절대 포함해서는 안 되는 파일을 탐지합니다:
+    - .pipeline/agent_receipts/**: 토큰/시크릿 노출 방지 (요구사항 #5)
+    - 다른 pipeline_id의 phase_evidence: 오염 방지 (요구사항 #4)
+    - 다른 phase의 phase_evidence: phase 혼합 방지 (요구사항 #4)
+
+    일반 구현 파일(pipeline.py, ci.yml, tests/ 등)은 impl 브랜치에서
+    phase attestation 파일과 함께 커밋될 수 있으므로 허용합니다.
 
     Returns:
-        "allowed" — phase attestation 증거로 허용
+        "allowed" — 허용된 파일
         "forbidden:<reason>" — phase 범위를 벗어남
     """
     path = path.replace("\\", "/")
 
-    # 허용: .pipeline/phase_attestation_request.json
-    if path == ".pipeline/phase_attestation_request.json":
-        return "allowed"
+    # 절대 금지: agent_receipts (토큰/run_id/시크릿 노출 방지)
+    if path.startswith(".pipeline/agent_receipts/"):
+        return f"forbidden:.pipeline/agent_receipts/** 는 PR에 포함 금지 ({path})"
 
     # phase_evidence 처리: pipeline_id + phase 모두 일치해야 허용
     phase_evidence_prefix = ".pipeline/phase_evidence/"
@@ -7170,32 +7178,14 @@ def _classify_pr_file(path: str, phase: str, pid: str) -> str:
         # 경로에서 pid + phase 폴더 확인: .pipeline/phase_evidence/{pid}/{phase}/...
         rest = path[len(phase_evidence_prefix):]
         parts = rest.split("/")
-        if len(parts) >= 2 and parts[0] == pid and parts[1] == phase:
-            return "allowed"
-        # 다른 pipeline_id 또는 다른 phase의 evidence
-        return f"forbidden:다른 pipeline_id 또는 phase의 evidence 경로 ({path})"
+        # pid 또는 phase가 명시된 경우에만 검증
+        if len(parts) >= 1 and pid and parts[0] != pid:
+            return f"forbidden:다른 pipeline_id의 evidence 경로 ({path})"
+        if len(parts) >= 2 and phase and parts[1] != phase:
+            return f"forbidden:다른 phase의 evidence 경로 ({path})"
+        return "allowed"
 
-    # 금지 패턴 (구체적인 것 먼저, 마지막에 .pipeline/ catch-all)
-    FORBIDDEN_PREFIXES = [
-        "pipeline_contracts/",
-        "pipeline_outputs/",
-        ".github/",
-        "tests/",
-        ".pipeline/",  # catch-all: agent_receipts, 기타 .pipeline/** 모두 금지
-    ]
-    FORBIDDEN_EXACT = {
-        "pipeline_state.json",
-        "pipeline.py",
-        "CLAUDE.md",
-    }
-
-    if path in FORBIDDEN_EXACT:
-        return f"forbidden:내부 파이프라인 파일 ({path})"
-
-    for prefix in FORBIDDEN_PREFIXES:
-        if path.startswith(prefix):
-            return f"forbidden:금지 경로 접두사 ({prefix})"
-
+    # 그 외 모든 파일은 허용 (구현 파일, docs, tests 등)
     return "allowed"
 
 

@@ -35,18 +35,14 @@ def _run_pipeline(*args: str, cwd: Path = BASE_DIR) -> subprocess.CompletedProce
 # ─────────────────────────────────────────────
 
 def test_preflight_pr_fails_on_stale_pipeline_files(tmp_path, monkeypatch):
-    """stale .pipeline tracked file이 있으면 preflight-pr FAIL (exit code != 0)."""
-    # 금지 파일 목록을 git diff 결과로 모킹
-    stale_files = [
-        ".pipeline/phase_evidence/IMP-TEST-0000/dev/handover.json",
-        "pipeline_state.json",
-    ]
-    fake_diff_output = "\n".join(stale_files) + "\n"
+    """stale .pipeline/phase_evidence 파일이 있으면 preflight-pr FAIL (exit code != 0).
 
-    # _classify_pr_file과 git diff를 모킹하여 단위 테스트 수행
-    # pipeline.py의 _classify_pr_file 함수를 직접 import하여 테스트
+    핵심 금지 규칙:
+    - pm phase에서 dev evidence (.pipeline/phase_evidence/{pid}/dev/...) 는 forbidden
+    - .pipeline/agent_receipts/** 는 forbidden
+    - 다른 pipeline_id의 phase_evidence 는 forbidden
+    """
     import importlib
-    import types
 
     # pipeline 모듈 직접 import
     spec = importlib.util.spec_from_file_location("pipeline", BASE_DIR / "pipeline.py")
@@ -55,16 +51,16 @@ def test_preflight_pr_fails_on_stale_pipeline_files(tmp_path, monkeypatch):
 
     classify = pipeline_mod._classify_pr_file
 
-    # pm phase에서 dev evidence는 forbidden이어야 함
-    result_dev = classify(stale_files[0], "pm", "IMP-TEST-0000")
+    # pm phase에서 dev evidence는 forbidden이어야 함 (요구사항 4)
+    result_dev = classify(".pipeline/phase_evidence/IMP-TEST-0000/dev/handover.json", "pm", "IMP-TEST-0000")
     assert result_dev.startswith("forbidden"), (
         f"dev evidence가 pm phase에서 forbidden이어야 합니다: {result_dev}"
     )
 
-    # pipeline_state.json은 forbidden이어야 함
-    result_state = classify(stale_files[1], "pm", "IMP-TEST-0000")
-    assert result_state.startswith("forbidden"), (
-        f"pipeline_state.json이 forbidden이어야 합니다: {result_state}"
+    # agent_receipts는 forbidden이어야 함 (요구사항 5)
+    result_receipts = classify(".pipeline/agent_receipts/IMP-TEST-0000/dev/run.json", "pm", "IMP-TEST-0000")
+    assert result_receipts.startswith("forbidden"), (
+        f".pipeline/agent_receipts/** 는 forbidden이어야 합니다: {result_receipts}"
     )
 
     # pm phase의 own evidence는 allowed여야 함
@@ -73,6 +69,13 @@ def test_preflight_pr_fails_on_stale_pipeline_files(tmp_path, monkeypatch):
     assert result_own == "allowed", (
         f"pm phase evidence가 pm phase에서 allowed여야 합니다: {result_own}"
     )
+
+    # 일반 구현 파일(pipeline.py, ci.yml 등)은 allowed여야 함
+    for impl_file in ["pipeline.py", ".github/workflows/ci.yml", "tests/test_pr_hygiene.py"]:
+        result_impl = classify(impl_file, "pm", "IMP-TEST-0000")
+        assert result_impl == "allowed", (
+            f"구현 파일은 allowed여야 합니다: {impl_file} → {result_impl}"
+        )
 
 
 # ─────────────────────────────────────────────
@@ -213,16 +216,32 @@ def test_classify_rejects_agent_receipts():
 
 
 def test_classify_rejects_other_pipeline_subpath():
-    """기타 .pipeline/** 경로도 forbidden이어야 합니다."""
+    """.pipeline/agent_receipts/** 경로는 forbidden이어야 합니다 (요구사항 5번).
+
+    기타 .pipeline/** 경로(agent_receipts 제외)는 allowed입니다.
+    구현 파일도 phase attestation PR에 포함될 수 있으므로 허용합니다.
+    """
     classify = _load_classify()
 
+    # agent_receipts는 항상 forbidden
     for path in [
-        ".pipeline/something_else/file.json",
-        ".pipeline/pipeline_state_backup.json",
+        ".pipeline/agent_receipts/IMP-TEST-0000/pm_planner/run.json",
+        ".pipeline/agent_receipts/IMP-TEST-0000/dev/run.json",
     ]:
         result = classify(path, "pm", "IMP-TEST-0000")
         assert result.startswith("forbidden"), (
-            f"기타 .pipeline/** 경로는 forbidden이어야 합니다: {result}"
+            f".pipeline/agent_receipts/** 경로는 forbidden이어야 합니다: {result}"
+        )
+
+    # 기타 .pipeline/** 경로는 제한 없음 (agent_receipts + phase_evidence 외)
+    # phase_attestation_request.json과 기타 .pipeline/ 내부 파일은 허용
+    for path in [
+        ".pipeline/phase_attestation_request.json",
+        ".pipeline/something_else/file.json",
+    ]:
+        result = classify(path, "pm", "IMP-TEST-0000")
+        assert result == "allowed", (
+            f"기타 .pipeline/** 경로는 allowed여야 합니다: {path} → {result}"
         )
 
 
