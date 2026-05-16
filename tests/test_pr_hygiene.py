@@ -9,12 +9,9 @@ MT-4: CLAUDE.md patch verify 예시에 --test-command 또는 --evidence-file 포
 from __future__ import annotations
 
 import json
-import subprocess
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
-from unittest.mock import patch
-
-import pytest
 
 # 프로젝트 루트 경로
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 def _run_pipeline(*args: str, cwd: Path = BASE_DIR) -> subprocess.CompletedProcess:
     """pipeline.py를 서브프로세스로 실행합니다."""
-    return subprocess.run(
+    return subprocess.run(  # nosec B603
         [sys.executable, str(BASE_DIR / "pipeline.py"), *args],
         capture_output=True,
         text=True,
@@ -41,12 +38,9 @@ def test_preflight_pr_fails_on_stale_pipeline_files(tmp_path, monkeypatch):
         ".pipeline/phase_evidence/IMP-TEST-0000/dev/handover.json",
         "pipeline_state.json",
     ]
-    fake_diff_output = "\n".join(stale_files) + "\n"
-
     # _classify_pr_file과 git diff를 모킹하여 단위 테스트 수행
     # pipeline.py의 _classify_pr_file 함수를 직접 import하여 테스트
     import importlib
-    import types
 
     # pipeline 모듈 직접 import
     spec = importlib.util.spec_from_file_location("pipeline", BASE_DIR / "pipeline.py")
