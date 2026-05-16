@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260516-1690</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>d12b21b7a9c6361737416c088ec902b2e0f2c16ab9b17ae37fc6db1d6f515d68</step_plan_sha256>
+  <planner_run_id>pm_planner-855de4f09ee6ce14</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <execution_notes>
+    PR #41 REJECT 후 clean branch 재작업. _classify_pr_file()을 엄격한 allowlist로 재구현.
+    변경 파일 3개: pipeline.py, .github/workflows/ci.yml, tests/test_pr_hygiene.py
+    origin/main 기반 clean branch fix/preflight-pr-strict 사용.
+  </execution_notes>
+</manager_handoff>
