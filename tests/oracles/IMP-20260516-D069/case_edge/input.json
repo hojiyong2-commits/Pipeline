@@ -1,0 +1,10 @@
+{
+  "phase": "pm",
+  "files": [
+    ".pipeline/phase_evidence/IMP-20260516-D069/dev/handover.json",
+    "pipeline_state.json",
+    "pipeline_contracts/TMP-DEV-OK/contract.json"
+  ],
+  "pipeline_id": "IMP-20260516-D069",
+  "description": "오염된 PR: 다른 phase evidence(dev), pipeline_state.json, pipeline_contracts/ 포함"
+}
