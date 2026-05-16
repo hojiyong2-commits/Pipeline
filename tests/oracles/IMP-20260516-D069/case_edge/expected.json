@@ -1,0 +1,10 @@
+{
+  "exit_code": 1,
+  "status": "FAIL",
+  "message_contains": "PIPELINE ERROR",
+  "violations_contains": [
+    ".pipeline/phase_evidence/IMP-20260516-D069/dev/handover.json",
+    "pipeline_state.json"
+  ],
+  "description": "금지 파일이 포함된 PR에서 preflight-pr FAIL (exit code 1), 위반 파일 목록 출력"
+}

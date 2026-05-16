@@ -1,0 +1,9 @@
+{
+  "phase": "pm",
+  "files": [
+    ".pipeline/phase_attestation_request.json",
+    ".pipeline/phase_evidence/IMP-20260516-D069/pm/receipt.json"
+  ],
+  "pipeline_id": "IMP-20260516-D069",
+  "description": "clean PR: pm phase evidence 파일만 포함, 금지 파일 없음"
+}
