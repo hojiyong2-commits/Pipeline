@@ -7184,6 +7184,106 @@ def _classify_pr_file(path: str, phase: str, pid: str) -> str:
 
 def cmd_gates(args: argparse.Namespace) -> None:
     action = args.gates_action
+
+    # preflight-pr는 pipeline_state.json 없이도 동작해야 합니다 (GitHub Actions 환경 지원)
+    if action == "preflight-pr":
+        phase = str(getattr(args, "phase", "") or "").strip().lower()
+        if not phase:
+            _die("[PIPELINE ERROR] preflight-pr requires --phase {pm,dev,qa,build}", exit_code=2)
+
+        # --pipeline-id 우선, 없으면 state에서 시도, state도 없으면 빈 문자열
+        pid_arg = str(getattr(args, "pipeline_id", None) or "")
+        if not pid_arg:
+            try:
+                state_inner = _load()
+                pid_arg = str(state_inner.get("pipeline_id", "") if state_inner else "")
+            except Exception:
+                pid_arg = ""
+
+        request_file = str(getattr(args, "request_file", None) or ".pipeline/phase_attestation_request.json")
+        pid = pid_arg
+
+        # request 파일이 있으면 파싱하여 phase와 pipeline_id 검증
+        req_path = Path(request_file)
+        if req_path.is_file():
+            try:
+                req_data = json.loads(req_path.read_bytes().decode("utf-8"))
+            except Exception as exc:
+                _die(f"[PIPELINE ERROR] preflight-pr: request 파일 파싱 실패: {exc}", exit_code=1)
+            req_phase = str(req_data.get("phase", "")).strip().lower()
+            req_pid = str(req_data.get("pipeline_id", "")).strip()
+            if req_phase and req_phase != phase:
+                print(
+                    f"[PIPELINE ERROR] preflight-pr FAIL: request.phase={req_phase!r}가 "
+                    f"--phase={phase!r}와 다릅니다. 잘못된 phase 브랜치에서 PR을 열었을 수 있습니다.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            if pid and req_pid and req_pid != pid:
+                print(
+                    f"[PIPELINE ERROR] preflight-pr FAIL: request.pipeline_id={req_pid!r}가 "
+                    f"--pipeline-id={pid!r}와 다릅니다.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            # request에서 pid를 덮어쓰기 (--pipeline-id 미지정 시 request 값 사용)
+            if not pid:
+                pid = req_pid
+
+        # git diff로 변경 파일 목록 수집 — merge-base 방식 (shallow clone 환경 호환)
+        changed_files: List[str] = []
+        diff_ok = False
+
+        # 시도 1: merge-base 이용
+        mb_result = subprocess.run(
+            ["git", "merge-base", "origin/main", "HEAD"],
+            capture_output=True, text=True, check=False,
+        )
+        if mb_result.returncode == 0:
+            base_sha = mb_result.stdout.strip()
+            diff_result = subprocess.run(
+                ["git", "diff", "--name-only", f"{base_sha}...HEAD"],
+                capture_output=True, text=True, check=False,
+            )
+            if diff_result.returncode == 0:
+                changed_files = [f.strip() for f in diff_result.stdout.splitlines() if f.strip()]
+                diff_ok = True
+
+        # 시도 2: GITHUB_BASE_SHA 환경변수
+        if not diff_ok:
+            base_sha_env = os.environ.get("GITHUB_BASE_SHA", "").strip()
+            if base_sha_env:
+                diff_result = subprocess.run(
+                    ["git", "diff", "--name-only", base_sha_env, "HEAD"],
+                    capture_output=True, text=True, check=False,
+                )
+                if diff_result.returncode == 0:
+                    changed_files = [f.strip() for f in diff_result.stdout.splitlines() if f.strip()]
+                    diff_ok = True
+
+        if not diff_ok:
+            _die(
+                "[PIPELINE ERROR] preflight-pr: git diff 실패 — origin/main을 fetch하지 않았거나 "
+                "shallow clone에서 공통 조상을 찾지 못했습니다. "
+                "ci.yml에서 'git fetch origin main --depth=50' 이상을 실행한 후 다시 시도하세요.",
+                exit_code=1,
+            )
+
+        forbidden: List[str] = []
+        for f in changed_files:
+            verdict = _classify_pr_file(f, phase, pid)
+            if verdict.startswith("forbidden"):
+                forbidden.append(f)
+
+        if forbidden:
+            print(f"[PIPELINE ERROR] preflight-pr FAIL: 다음 파일이 phase={phase} PR 범위를 벗어납니다:")
+            for f in forbidden:
+                print(f"  - {f}")
+            sys.exit(1)
+
+        print(GREEN(f"[PREFLIGHT-PR PASS] phase={phase} changed={len(changed_files)}개 파일"))
+        sys.exit(0)
+
     state = _require_state()
     state = _ensure_v210_fields(state)
     pid = str(state.get("pipeline_id"))
@@ -7526,104 +7626,6 @@ def cmd_gates(args: argparse.Namespace) -> None:
             # 비probe 모드: 상태 기록 없음, 단순 stdout 출력 후 종료
             pass
         return
-
-    if action == "preflight-pr":
-        phase = str(getattr(args, "phase", "") or "").strip().lower()
-        if not phase:
-            _die("[PIPELINE ERROR] preflight-pr requires --phase {pm,dev,qa,build}", exit_code=2)
-
-        # --pipeline-id 우선, 없으면 state에서 시도, state도 없으면 빈 문자열
-        pid_arg = str(getattr(args, "pipeline_id", None) or "")
-        if not pid_arg:
-            try:
-                state_inner = _load()
-                pid_arg = str(state_inner.get("pipeline_id", "") if state_inner else "")
-            except Exception:
-                pid_arg = ""
-
-        request_file = str(getattr(args, "request_file", None) or ".pipeline/phase_attestation_request.json")
-        pid = pid_arg
-
-        # request 파일이 있으면 파싱하여 phase와 pipeline_id 검증
-        req_path = Path(request_file)
-        if req_path.is_file():
-            try:
-                req_data = json.loads(req_path.read_bytes().decode("utf-8"))
-            except Exception as exc:
-                _die(f"[PIPELINE ERROR] preflight-pr: request 파일 파싱 실패: {exc}", exit_code=1)
-            req_phase = str(req_data.get("phase", "")).strip().lower()
-            req_pid = str(req_data.get("pipeline_id", "")).strip()
-            if req_phase and req_phase != phase:
-                print(
-                    f"[PIPELINE ERROR] preflight-pr FAIL: request.phase={req_phase!r}가 "
-                    f"--phase={phase!r}와 다릅니다. 잘못된 phase 브랜치에서 PR을 열었을 수 있습니다.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            if pid and req_pid and req_pid != pid:
-                print(
-                    f"[PIPELINE ERROR] preflight-pr FAIL: request.pipeline_id={req_pid!r}가 "
-                    f"--pipeline-id={pid!r}와 다릅니다.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            # request에서 pid를 덮어쓰기 (--pipeline-id 미지정 시 request 값 사용)
-            if not pid:
-                pid = req_pid
-
-        # git diff로 변경 파일 목록 수집 — merge-base 방식 (shallow clone 환경 호환)
-        changed_files: List[str] = []
-        diff_ok = False
-
-        # 시도 1: merge-base 이용
-        mb_result = subprocess.run(
-            ["git", "merge-base", "origin/main", "HEAD"],
-            capture_output=True, text=True, check=False,
-        )
-        if mb_result.returncode == 0:
-            base_sha = mb_result.stdout.strip()
-            diff_result = subprocess.run(
-                ["git", "diff", "--name-only", f"{base_sha}...HEAD"],
-                capture_output=True, text=True, check=False,
-            )
-            if diff_result.returncode == 0:
-                changed_files = [f.strip() for f in diff_result.stdout.splitlines() if f.strip()]
-                diff_ok = True
-
-        # 시도 2: GITHUB_BASE_SHA 환경변수
-        if not diff_ok:
-            base_sha_env = os.environ.get("GITHUB_BASE_SHA", "").strip()
-            if base_sha_env:
-                diff_result = subprocess.run(
-                    ["git", "diff", "--name-only", base_sha_env, "HEAD"],
-                    capture_output=True, text=True, check=False,
-                )
-                if diff_result.returncode == 0:
-                    changed_files = [f.strip() for f in diff_result.stdout.splitlines() if f.strip()]
-                    diff_ok = True
-
-        if not diff_ok:
-            _die(
-                "[PIPELINE ERROR] preflight-pr: git diff 실패 — origin/main을 fetch하지 않았거나 "
-                "shallow clone에서 공통 조상을 찾지 못했습니다. "
-                "ci.yml에서 'git fetch origin main --depth=50' 이상을 실행한 후 다시 시도하세요.",
-                exit_code=1,
-            )
-
-        forbidden: List[str] = []
-        for f in changed_files:
-            verdict = _classify_pr_file(f, phase, pid)
-            if verdict.startswith("forbidden"):
-                forbidden.append(f)
-
-        if forbidden:
-            print(f"[PIPELINE ERROR] preflight-pr FAIL: 다음 파일이 phase={phase} PR 범위를 벗어납니다:")
-            for f in forbidden:
-                print(f"  - {f}")
-            sys.exit(1)
-
-        print(GREEN(f"[PREFLIGHT-PR PASS] phase={phase} changed={len(changed_files)}개 파일"))
-        sys.exit(0)
 
     _die(f"unknown gates action: {action}", exit_code=2)
 
