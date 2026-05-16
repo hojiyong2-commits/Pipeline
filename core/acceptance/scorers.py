@@ -42,21 +42,37 @@ def _normalize(value: Any) -> Any:
     return value
 
 
-def _expected_actual(test: dict[str, Any], base_dir: Path) -> tuple[Any, Any]:
+def _expected_actual(test: dict[str, Any], base_dir: Path, project_dir: Path | None = None) -> tuple[Any, Any]:
     then = test.get("then", {})
     given = test.get("given", {})
     expected = then.get("expected") if isinstance(then, dict) else None
     actual = given.get("actual") if isinstance(given, dict) else None
 
+    # Resolve file paths: prefer project_dir for relative paths that start with
+    # known project-root subdirectories (tests/, src/, etc.) so that test_set.json
+    # entries that use project-root relative paths work correctly even when
+    # base_dir is the contract directory.
+    def _smart_resolve(raw: str) -> Path:
+        p = Path(raw)
+        if p.is_absolute():
+            return p
+        # Try project_dir first (project-root relative path)
+        if project_dir is not None:
+            candidate = project_dir / p
+            if candidate.exists():
+                return candidate
+        # Fall back to base_dir (contract-dir relative)
+        return base_dir / p
+
     if isinstance(then, dict) and then.get("expected_file"):
-        expected = _load_json(_resolve(base_dir, str(then["expected_file"])))
+        expected = _load_json(_smart_resolve(str(then["expected_file"])))
     if isinstance(given, dict) and given.get("actual_file"):
-        actual = _load_json(_resolve(base_dir, str(given["actual_file"])))
+        actual = _load_json(_smart_resolve(str(given["actual_file"])))
     return expected, actual
 
 
 def score_json_exact_match(test: dict[str, Any], base_dir: Path, project_dir: Path) -> tuple[bool, str, dict[str, Any]]:
-    expected, actual = _expected_actual(test, base_dir)
+    expected, actual = _expected_actual(test, base_dir, project_dir)
     ok = _normalize(expected) == _normalize(actual)
     return ok, "JSON values match" if ok else "JSON values differ", {"expected": expected, "actual": actual}
 
@@ -239,6 +255,8 @@ def score_command_check(test: dict[str, Any], base_dir: Path, project_dir: Path)
         cwd=str(cwd),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
         check=False,
     )
