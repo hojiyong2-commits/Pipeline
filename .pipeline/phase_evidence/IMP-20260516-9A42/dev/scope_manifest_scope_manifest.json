@@ -1,0 +1,15 @@
+{
+  "pipeline_id": "IMP-20260516-9A42",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._classify_pr_file; pipeline.cmd_gates (preflight-pr 분기); p_gate_preflight_pr 파서"]
+    },
+    {
+      "id": "MT-2",
+      "files": [".github/workflows/ci.yml", "tests/test_pr_hygiene.py"],
+      "affected_functions": ["ci.yml 자동검사 단계; ci.yml 최종확인안내 단계; tests.test_pr_hygiene"]
+    }
+  ]
+}
