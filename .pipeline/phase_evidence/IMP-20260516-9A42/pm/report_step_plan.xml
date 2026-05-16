@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_planner_output>
+  <pipeline_id>IMP-20260516-9A42</pipeline_id>
+  <planner_run_id>pm_planner-76156a4e311f5ff0</planner_run_id>
+  <pipeline_type>IMP</pipeline_type>
+
+  <decomposition_audit>
+    <task_summary>_classify_pr_file() 엄격한 allowlist 재구현 + preflight-pr request 검증 + CI 연결 + 회귀 테스트 7개 추가. 이전 D069/78B2 REJECT 재발 방지.</task_summary>
+    <module_count>2</module_count>
+    <files_in_scope>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </files_in_scope>
+    <out_of_scope>
+      <item>CLAUDE.md (변경 불필요)</item>
+      <item>.claude/agents/**/*.md (변경 불필요)</item>
+    </out_of_scope>
+    <decomposition_strategy>MT-1: pipeline.py의 _classify_pr_file + preflight-pr 강화. MT-2: ci.yml + tests/test_pr_hygiene.py 변경.</decomposition_strategy>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 이미 2회 REJECT로 모든 요구사항을 확정함. P0/P1 질문 없음.</filter_summary>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+  </decomposition_audit>
+
+  <step_plan>
+    <anti_gaming_read>true</anti_gaming_read>
+
+    <design_confirmation>
+      <maintenance_priority>유지보수성 우선</maintenance_priority>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>사용자가 2회 REJECT로 모든 요구사항을 직접 명시함. 추가 P0/P1 질문 없음.</filter_summary>
+      <module_split_summary>MT-1: pipeline.py 함수 수정. MT-2: ci.yml + tests 변경.</module_split_summary>
+      <decision_questions>
+        <question id="Q0" priority="P0" category="module_split">
+          <user_facing_question>2회 REJECT(D069, 78B2) 사유에서 요구사항이 모두 확정되었으므로, 명시된 구현 방향대로 진행할까요?</user_facing_question>
+          <why_it_matters>이번 작업은 이전 2회 REJECT(D069, 78B2)에서 사용자가 명확하게 요구사항을 지정했으므로 추가 질문 없이 해당 방향대로 구현합니다.</why_it_matters>
+          <evidence>IMP-20260516-D069 REJECT + IMP-20260516-78B2 REJECT 사유에 7개 항목 명시됨</evidence>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>명시된 요구사항대로 구현 (추천)</label>
+              <benefit>2회 REJECT에서 사용자가 확정한 요구사항을 모두 충족하여 ACCEPT 가능성 극대화</benefit>
+              <cost>없음 — 요구사항이 이미 확정되어 추가 설계 결정 불필요</cost>
+            </option>
+            <option id="B">
+              <label>추가 설계 질문 후 구현</label>
+              <benefit>혹시 놓친 엣지 케이스가 있다면 사전에 확인 가능</benefit>
+              <cost>이미 2회 REJECT로 요구사항이 명확하므로 불필요한 지연이 발생하고 사용자 불편 초래</cost>
+            </option>
+          </options>
+          <user_answer>2회 REJECT 사유에서 이미 확정됨 — 진행</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <task_complexity>
+      <execution_profile>STANDARD</execution_profile>
+      <reason>3개 파일 수정, 복수 함수, 예상 150줄 변경</reason>
+      <uncertainty>
+        <p0_questions>0</p0_questions>
+        <p1_questions>0</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>3</expected_changed_files>
+        <expected_changed_functions>3</expected_changed_functions>
+        <expected_changed_lines>150</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>false</external_api>
+        <auth_or_secret>false</auth_or_secret>
+        <pipeline_protocol>true</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>false</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+      <pipeline_protocol_note>pipeline.py와 ci.yml은 신뢰 루트이지만 이 IMP가 해당 수정의 정당 경로임.</pipeline_protocol_note>
+    </task_complexity>
+
+    <patch_lane_eligible>false</patch_lane_eligible>
+    <patch_lane_rationale>3개 파일, 복수 함수로 Patch Lane 조건 미달</patch_lane_rationale>
+
+    <micro_tasks>
+      <micro_task id="MT-1">
+        <title>pipeline.py — _classify_pr_file() 엄격한 allowlist + preflight-pr 강화</title>
+        <affected_function>pipeline._classify_pr_file; pipeline.cmd_gates (preflight-pr 분기); p_gate_preflight_pr 파서</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>cmd_gates preflight-pr 분기</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>def _classify_pr_file|action == .preflight-pr.|p_gate_preflight_pr</pattern>
+          <match_count>4</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>_classify_pr_file: 엄격한 allowlist (request.json + 본인 pid/phase evidence만 허용). preflight-pr: --pipeline-id/--request-file 추가, request 파싱·검증, merge-base diff 사용.</change_summary>
+        <line_estimate>80</line_estimate>
+        <acceptance_criteria>
+          <criterion>pipeline_contracts/xxx → forbidden</criterion>
+          <criterion>build_report.xml → forbidden</criterion>
+          <criterion>pipeline.py → forbidden (attestation PR에서)</criterion>
+          <criterion>.pipeline/phase_evidence/IMP-TEST-0000/pm/x.json with pid="IMP-TEST-0000", phase="pm" → allowed</criterion>
+          <criterion>--request-file 옵션으로 request JSON 전달 가능</criterion>
+          <criterion>request.phase != --phase → exit 1</criterion>
+        </acceptance_criteria>
+      </micro_task>
+
+      <micro_task id="MT-2">
+        <title>ci.yml + tests/test_pr_hygiene.py 변경</title>
+        <affected_function>ci.yml 자동검사 단계; ci.yml 최종확인안내 단계; tests.test_pr_hygiene</affected_function>
+        <target_files>
+          <file>.github/workflows/ci.yml</file>
+          <file>tests/test_pr_hygiene.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>GitHub Actions PR 이벤트</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>자동 검사 실행|missingDecisionInfo|최종 확인 안내 올리기</pattern>
+          <match_count>3</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>ci.yml: pytest 전 preflight-pr 단계 삽입, 정보부족 hard fail, upload/comment 단계 success()||failure()로 변경. tests: 7개 회귀 테스트 추가.</change_summary>
+        <line_estimate>70</line_estimate>
+        <acceptance_criteria>
+          <criterion>attestation PR에서 preflight-pr 단계가 pytest보다 먼저 실행됨</criterion>
+          <criterion>정보부족 시 일반 구현 PR에서 CI FAIL</criterion>
+          <criterion>신규 7개 테스트 포함 전체 pytest PASS</criterion>
+        </acceptance_criteria>
+      </micro_task>
+    </micro_tasks>
+
+    <oracle_plan>
+      <oracle case_kind="normal" case_id="case_normal">
+        <input_path>tests/oracles/IMP-20260516-9A42/case_normal/input.json</input_path>
+        <expected_path>tests/oracles/IMP-20260516-9A42/case_normal/expected.json</expected_path>
+        <input_content>{"path": "pipeline_contracts/IMP-TEST-0000/contract.json", "phase": "pm", "pid": "IMP-TEST-0000"}</input_content>
+        <expected_content>{"verdict": "forbidden"}</expected_content>
+        <semantics>pipeline_contracts/**는 attestation PR에서 forbidden이어야 함</semantics>
+        <source>user</source>
+      </oracle>
+      <oracle case_kind="edge" case_id="case_edge">
+        <input_path>tests/oracles/IMP-20260516-9A42/case_edge/input.json</input_path>
+        <expected_path>tests/oracles/IMP-20260516-9A42/case_edge/expected.json</expected_path>
+        <input_content>{"path": "build_report.xml", "phase": "pm", "pid": "IMP-TEST-0000"}</input_content>
+        <expected_content>{"verdict": "forbidden"}</expected_content>
+        <semantics>build_report.xml 같은 일반 파일도 attestation PR에서 forbidden이어야 함</semantics>
+        <source>user</source>
+      </oracle>
+    </oracle_plan>
+
+    <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+  </step_plan>
+</pm_planner_output>
