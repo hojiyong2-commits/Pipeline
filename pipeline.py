@@ -7197,6 +7197,7 @@ def cmd_review(args: argparse.Namespace) -> None:
     elif review_action == "status":
         if not review_result_path.exists():
             print(json.dumps({
+                "schema_version": 2,
                 "status": "NO_REVIEW_FILE",
                 "unresolved_high_critical": 0,
                 "findings": [],
@@ -9274,6 +9275,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_review_status = review_sub.add_parser("status", help="미해결 HIGH/CRITICAL findings 수 출력")
     p_review_status.add_argument("--output", default=None, metavar="PATH",
                                  help="codex_review_result.json 경로 (기본값: codex_review_result.json)")
+    p_review_status.add_argument("--json", dest="json_output", action="store_true",
+                                 help="JSON 형식으로 출력 (기본값과 동일)")
 
     p_review_resolve = review_sub.add_parser("resolve", help="특정 finding을 resolved=true로 표시")
     p_review_resolve.add_argument("--id", dest="finding_id", required=True, metavar="ID",
