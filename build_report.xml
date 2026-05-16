@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<build_report>
+  <pipeline_id>IMP-20260516-78B2</pipeline_id>
+  <agent_id>build-agent</agent_id>
+  <run_id>build-9891bf2d764c870d</run_id>
+
+  <section_1_command>
+    <exe>N/A</exe>
+    <skip_reason>meta-task</skip_reason>
+    <rationale>이 파이프라인은 pipeline.py, ci.yml, tests/ 수정 작업으로 EXE 빌드 대상이 아닙니다. 프로토콜/파이프라인 개선 작업이므로 빌드를 생략합니다.</rationale>
+  </section_1_command>
+
+  <section_2_output>
+    <status>N/A</status>
+    <artifacts>없음 — meta-task 파이프라인</artifacts>
+  </section_2_output>
+
+  <section_3_verification>
+    <exe_exists>N/A</exe_exists>
+    <deliverables>
+      <file>pipeline.py (preflight-pr 강화 구현)</file>
+      <file>.github/workflows/ci.yml (CI 통합)</file>
+      <file>tests/test_pr_hygiene.py (5개 회귀 테스트 추가)</file>
+    </deliverables>
+  </section_3_verification>
+
+  <section_4_qa_results>
+    <pytest_result>119 passed, 2 warnings</pytest_result>
+    <github_ci_result>run_id=25954937434 PASS</github_ci_result>
+  </section_4_qa_results>
+
+  <section_5_deployment>
+    <method>N/A — meta-task (코드/워크플로우 변경은 GitHub PR 병합으로 배포)</method>
+    <target>N/A</target>
+  </section_5_deployment>
+
+  <section_6_qa_mapping>
+    <requirement_coverage>7/7 요구사항 모두 구현 및 검증 완료</requirement_coverage>
+    <test_coverage>신규 5개 회귀 테스트 + 기존 114개 = 119개 PASS</test_coverage>
+  </section_6_qa_mapping>
+
+  <verdict>N/A</verdict>
+  <skip_reason>meta-task</skip_reason>
+</build_report>
