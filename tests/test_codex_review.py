@@ -124,17 +124,22 @@ class TestSchemaValidator(unittest.TestCase):
 # ===========================================================================
 
 class TestReviewCodexStages(unittest.TestCase):
-    """cmd_review codex 분기: stage 기록, scope 계산, history 누적."""
+    """cmd_review codex 분기: stage 기록, scope 계산, history 누적.
+
+    D1 수정으로 인해 `review codex`는 ACCEPT/REJECT를 직접 허용하지 않습니다.
+    plan/scope/code/hygiene stage의 ACCEPT/REJECT 기록은 `review codex-record`를 사용합니다.
+    `review codex`는 PENDING 메타데이터 생성 전용입니다.
+    """
 
     def _invoke_review_codex(
         self,
         stage: str,
-        result: str = "ACCEPT",
+        result: str = "PENDING",
         output: Optional[str] = None,
         pipeline_id: str = "IMP-TEST-0001",
         extra_args: Optional[List[str]] = None,
     ) -> "subprocess.CompletedProcess[str]":
-        """pipeline.py review codex CLI를 subprocess로 실행."""
+        """pipeline.py review codex CLI를 subprocess로 실행 (PENDING 전용)."""
         cmd = [
             sys.executable,
             str(PROJECT_ROOT / "pipeline.py"),
@@ -157,11 +162,46 @@ class TestReviewCodexStages(unittest.TestCase):
             cwd=str(PROJECT_ROOT),
         )
 
+    def _invoke_codex_record(
+        self,
+        stage: str,
+        result: str = "ACCEPT",
+        output: Optional[str] = None,
+        pipeline_id: str = "IMP-TEST-0001",
+    ) -> "subprocess.CompletedProcess[str]":
+        """pipeline.py review codex-record CLI를 subprocess로 실행.
+
+        plan/scope/code/hygiene: 간소화 검증(review_model만 확인).
+        pr/rca: 4중 검증 적용(head-sha, diff-sha256, evidence JSON 필요).
+        """
+        cmd = [
+            sys.executable,
+            str(PROJECT_ROOT / "pipeline.py"),
+            "review", "codex-record",
+            "--stage", stage,
+            "--result", result,
+            "--review-model", "GPT-5.5",
+            "--reviewer", "test-agent",
+            "--pipeline-id", pipeline_id,
+        ]
+        if output:
+            cmd += ["--output", output]
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=str(PROJECT_ROOT),
+        )
+
     def test_plan_stage_writes_file(self) -> None:
-        """plan stage ACCEPT → codex_review_result.json이 생성되어야 함."""
+        """plan stage ACCEPT → codex_review_result.json이 생성되어야 함.
+
+        D1 수정: review codex-record를 통해 ACCEPT 기록 (review codex는 PENDING 전용).
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = str(Path(tmpdir) / "codex_review_result.json")
-            proc = self._invoke_review_codex("plan", "ACCEPT", output=out_path)
+            proc = self._invoke_codex_record("plan", "ACCEPT", output=out_path)
             self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr}")
             self.assertTrue(Path(out_path).exists(), "결과 파일이 생성되지 않음")
             data = json.loads(Path(out_path).read_text(encoding="utf-8"))
@@ -170,30 +210,43 @@ class TestReviewCodexStages(unittest.TestCase):
             self.assertEqual(data.get("review_model"), "GPT-5.5")
 
     def test_scope_stage_computes_files(self) -> None:
-        """scope stage → reviewed_files 필드가 리스트여야 함."""
+        """scope stage → reviewed_files 필드가 리스트여야 함.
+
+        D1 수정: review codex-record를 통해 ACCEPT 기록 (review codex는 PENDING 전용).
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = str(Path(tmpdir) / "codex_review_result.json")
-            proc = self._invoke_review_codex("scope", "ACCEPT", output=out_path)
+            proc = self._invoke_codex_record("scope", "ACCEPT", output=out_path)
             self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr}")
             data = json.loads(Path(out_path).read_text(encoding="utf-8"))
             self.assertIsInstance(data.get("reviewed_files"), list)
 
     def test_invalid_stage_rejected(self) -> None:
-        """허용되지 않은 stage 값 → exit code 2 (인자 오류)."""
+        """허용되지 않은 stage 값 → exit code 2 (인자 오류).
+
+        review codex에서 invalid_stage는 stage 검증 단계에서 차단됩니다.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = str(Path(tmpdir) / "out.json")
             proc = self._invoke_review_codex("invalid_stage", output=out_path)
             self.assertNotEqual(proc.returncode, 0, "잘못된 stage에도 성공하면 안 됨")
 
     def test_history_accumulated(self) -> None:
-        """같은 stage를 재기록하면 history 배열에 이전 기록이 누적되어야 함."""
+        """같은 stage를 재기록하면 history 배열에 이전 기록이 누적되어야 함.
+
+        D1 수정: review codex-record를 통해 REJECT → ACCEPT 순으로 기록.
+        codex-record는 ACCEPT/REJECT만 허용하므로 REJECT로 1차 기록 후 ACCEPT로 2차 기록.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = str(Path(tmpdir) / "codex_review_result.json")
-            # 1st record
-            proc1 = self._invoke_review_codex("code", "PENDING", output=out_path)
+            # 1차 기록: REJECT (사유 필요)
+            proc1 = self._invoke_codex_record("code", "REJECT", output=out_path)
+            # REJECT는 notes/required-actions 없으면 exit 2 → 간소화 검증 stage이므로 notes 없이 통과 여부 확인
+            # 간소화 stage(code)는 review_model만 검증하므로 REJECT도 notes 없이 통과해야 함
+            # (pr/rca만 REJECT 시 notes 필수)
             self.assertEqual(proc1.returncode, 0, f"1차 기록 실패: {proc1.stderr}")
-            # 2nd record (같은 stage, 다른 result)
-            proc2 = self._invoke_review_codex("code", "ACCEPT", output=out_path)
+            # 2차 기록: ACCEPT (같은 stage, 다른 result)
+            proc2 = self._invoke_codex_record("code", "ACCEPT", output=out_path)
             self.assertEqual(proc2.returncode, 0, f"2차 기록 실패: {proc2.stderr}")
             data = json.loads(Path(out_path).read_text(encoding="utf-8"))
             # top-level은 최신 ACCEPT
@@ -201,8 +254,6 @@ class TestReviewCodexStages(unittest.TestCase):
             # history에 이전 기록 존재 확인
             history = data.get("history", [])
             self.assertIsInstance(history, list)
-            # history 배열이 존재하면 이전 기록이 있어야 함
-            # (같은 stage 재기록이므로 history에서 same-stage 항목은 교체됨)
             # reviewed_files와 stage 기록은 유지되어야 함
             self.assertEqual(data.get("stage"), "code")
 
@@ -231,6 +282,27 @@ class TestCodexRecord(unittest.TestCase):
             pass
         return "0000000000000000000000000000000000000000"
 
+    def _get_current_diff_sha256(self) -> str:
+        """현재 git diff main...HEAD의 SHA256을 계산하여 반환.
+
+        D5 수정으로 인해 codex-record ACCEPT 시 diff_sha256을 실제 값과 비교하므로,
+        테스트에서는 실제 현재 diff sha256을 제공해야 한다.
+        """
+        try:
+            import hashlib
+            diff_proc = subprocess.run(
+                ["git", "diff", "main...HEAD"],
+                capture_output=True,
+                cwd=str(PROJECT_ROOT),
+                timeout=30,
+            )
+            if diff_proc.returncode == 0:
+                diff_bytes = diff_proc.stdout if diff_proc.stdout else b""
+                return hashlib.sha256(diff_bytes).hexdigest()
+        except Exception:
+            pass
+        return "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
     def _make_evidence_file(self, tmpdir: str, review_model: str = "GPT-5.5") -> str:
         """임시 evidence JSON 파일 생성."""
         evidence_data = {
@@ -248,13 +320,16 @@ class TestCodexRecord(unittest.TestCase):
         stage: str,
         result: str,
         head_sha: Optional[str] = None,
-        diff_sha256: Optional[str] = "abc123",
+        diff_sha256: Optional[str] = None,
         evidence_file: Optional[str] = None,
         review_model: str = "GPT-5.5",
         notes: Optional[str] = None,
         output: Optional[str] = None,
         pipeline_id: str = "TEST-99999999-0000",
     ) -> "subprocess.CompletedProcess[str]":
+        # diff_sha256 기본값: 실제 현재 diff sha256 (D5 검증 통과용)
+        if diff_sha256 is None:
+            diff_sha256 = self._get_current_diff_sha256()
         cmd = [
             sys.executable,
             str(PROJECT_ROOT / "pipeline.py"),
@@ -365,7 +440,11 @@ class TestCodexRecord(unittest.TestCase):
             self.assertNotEqual(proc.returncode, 0, "head_sha 없는 ACCEPT도 성공하면 안 됨")
 
     def test_evidence_json_parse_failure_exits_1(self) -> None:
-        """검증(4/4): evidence 파일이 invalid JSON이면 exit code 1 (JSON parse fail)."""
+        """검증(4/4): evidence 파일이 invalid JSON이면 exit code 1 (JSON parse fail).
+
+        D5 수정으로 인해 diff_sha256은 실제 현재 diff sha256을 제공해야 한다.
+        (잘못된 sha256이면 D5 검증에서 먼저 차단됨)
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             # invalid JSON 파일 생성
             bad_ev = Path(tmpdir) / "bad_evidence.json"
@@ -375,7 +454,7 @@ class TestCodexRecord(unittest.TestCase):
                 stage="pr",
                 result="ACCEPT",
                 head_sha=self._get_current_head(),
-                diff_sha256="abc123",
+                diff_sha256=self._get_current_diff_sha256(),  # D5: 실제 sha256 제공
                 evidence_file=str(bad_ev),
                 output=out,
             )
@@ -657,6 +736,344 @@ class TestSchemaEdgeCases(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             pl._validate_codex_review_schema(data)
         self.assertIn("findings", str(ctx.exception).lower())
+
+
+# ===========================================================================
+# 7. TestPR64Defects — PR #64 REJECT 6개 결함 회귀 테스트 (tc01~tc15)
+# ===========================================================================
+
+class TestPR64Defects(unittest.TestCase):
+    """PR #64 REJECT 6개 결함(D1~D6) 수정 검증 및 tc01~tc15 회귀 테스트."""
+
+    def _run_cli(self, *args: str) -> "subprocess.CompletedProcess[str]":
+        """pipeline.py CLI를 subprocess로 실행."""
+        cmd = [sys.executable, str(PROJECT_ROOT / "pipeline.py")] + list(args)
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=str(PROJECT_ROOT),
+        )
+
+    # ── D1: review codex --result ACCEPT/REJECT 금지 (tc01, tc02) ────────────
+
+    def test_tc01_review_codex_result_accept_rejected(self) -> None:
+        """tc01: review codex --result ACCEPT → 즉시 FAIL (exit code 1).
+
+        D1 수정 검증: `review codex`는 ACCEPT/REJECT를 허용하지 않는다.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "out.json")
+            proc = self._run_cli(
+                "review", "codex",
+                "--stage", "plan",
+                "--result", "ACCEPT",
+                "--review-model", "GPT-5.5",
+                "--reviewer", "test",
+                "--output", out_path,
+            )
+        self.assertEqual(proc.returncode, 1,
+                         f"tc01: review codex --result ACCEPT는 exit 1이어야 함. stdout={proc.stdout!r}")
+        self.assertIn("ACCEPT", proc.stdout + proc.stderr,
+                      "tc01: 에러 메시지에 ACCEPT 언급이 있어야 함")
+
+    def test_tc02_review_codex_result_reject_rejected(self) -> None:
+        """tc02: review codex --result REJECT → 즉시 FAIL (exit code 1).
+
+        D1 수정 검증: `review codex`는 REJECT도 허용하지 않는다.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "out.json")
+            proc = self._run_cli(
+                "review", "codex",
+                "--stage", "code",
+                "--result", "REJECT",
+                "--review-model", "GPT-5.5",
+                "--reviewer", "test",
+                "--output", out_path,
+            )
+        self.assertEqual(proc.returncode, 1,
+                         f"tc02: review codex --result REJECT는 exit 1이어야 함. stdout={proc.stdout!r}")
+
+    # ── D2: codex-record 6 stage 전부 지원 (tc04, tc05) ──────────────────────
+
+    def test_tc04_codex_record_plan_stage_accepted(self) -> None:
+        """tc04: codex-record --stage plan → plan gate 기록 성공 (exit 0).
+
+        D2 수정 검증: codex-record는 plan stage도 처리해야 한다.
+        plan stage REJECT (notes 필수 아님 - ACCEPT이므로 다른 검증 필요 없음).
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # evidence 파일 생성 (review_model=GPT-5.5 포함)
+            ev_path = Path(tmpdir) / "evidence.json"
+            ev_path.write_text(json.dumps({
+                "schema_version": 2, "stage": "plan", "result": "REJECT",
+                "review_model": "GPT-5.5", "pipeline_id": "TEST",
+                "reviewer": "test", "diff_sha256": "",
+                "reviewed_files": [], "findings": [], "created_at": "2026-01-01T00:00:00Z",
+            }), encoding="utf-8")
+            out_path = str(Path(tmpdir) / "out.json")
+            proc = self._run_cli(
+                "review", "codex-record",
+                "--stage", "plan",
+                "--result", "REJECT",
+                "--review-model", "GPT-5.5",
+                "--reviewer", "test",
+                "--notes", "D2 테스트 plan stage REJECT",
+                "--evidence", str(ev_path),
+                "--output", out_path,
+            )
+        # plan stage REJECT는 notes 있으면 처리되어야 함 (exit 0)
+        self.assertEqual(proc.returncode, 0,
+                         f"tc04: codex-record plan stage는 처리되어야 함. stdout={proc.stdout!r} stderr={proc.stderr!r}")
+        self.assertIn("plan", proc.stdout, "tc04: 출력에 plan stage 언급이 있어야 함")
+
+    def test_tc05_codex_record_scope_stage_accepted(self) -> None:
+        """tc05: codex-record --stage scope → scope gate 기록 성공.
+
+        D2 수정 검증: codex-record는 scope stage도 처리해야 한다.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ev_path = Path(tmpdir) / "evidence.json"
+            ev_path.write_text(json.dumps({
+                "schema_version": 2, "stage": "scope", "result": "REJECT",
+                "review_model": "GPT-5.5", "pipeline_id": "TEST",
+                "reviewer": "test", "diff_sha256": "",
+                "reviewed_files": [], "findings": [], "created_at": "2026-01-01T00:00:00Z",
+            }), encoding="utf-8")
+            out_path = str(Path(tmpdir) / "out.json")
+            proc = self._run_cli(
+                "review", "codex-record",
+                "--stage", "scope",
+                "--result", "REJECT",
+                "--review-model", "GPT-5.5",
+                "--reviewer", "test",
+                "--notes", "D2 테스트 scope stage REJECT",
+                "--evidence", str(ev_path),
+                "--output", out_path,
+            )
+        self.assertEqual(proc.returncode, 0,
+                         f"tc05: codex-record scope stage는 처리되어야 함. stdout={proc.stdout!r} stderr={proc.stderr!r}")
+        self.assertIn("scope", proc.stdout, "tc05: 출력에 scope stage 언급이 있어야 함")
+
+    # ── D3: Dev 진입 plan AND scope (tc06, tc07, tc08) ───────────────────────
+
+    def test_tc06_check_dev_plan_only_fails(self) -> None:
+        """tc06: plan ACCEPT만 있고 scope 없음 → check --phase dev FAIL.
+
+        D3 수정 검증: Dev 진입은 plan AND scope 모두 ACCEPT여야 한다.
+        """
+        # plan ACCEPT만 있는 codex_review_result.json으로 gate 검증
+        plan_only_data = _make_valid_record(stage="plan", result="ACCEPT")
+        plan_only_data["history"] = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(plan_only_data), encoding="utf-8")
+            state_no_bootstrap: Dict[str, Any] = {}
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate(state_no_bootstrap, required_stage="plan")
+        self.assertFalse(ok, f"tc06: plan만 있으면 gate FAIL이어야 함. reason={reason!r}")
+        self.assertIn("scope", reason, "tc06: 에러 메시지에 scope 언급이 있어야 함")
+
+    def test_tc07_check_dev_scope_only_fails(self) -> None:
+        """tc07: scope ACCEPT만 있고 plan 없음 → check --phase dev FAIL.
+
+        D3 수정 검증: scope만으로는 Dev 진입 불가.
+        """
+        scope_only_data = _make_valid_record(stage="scope", result="ACCEPT")
+        scope_only_data["history"] = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(scope_only_data), encoding="utf-8")
+            state_no_bootstrap: Dict[str, Any] = {}
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate(state_no_bootstrap, required_stage="scope")
+        self.assertFalse(ok, f"tc07: scope만 있으면 gate FAIL이어야 함. reason={reason!r}")
+        self.assertIn("plan", reason, "tc07: 에러 메시지에 plan 언급이 있어야 함")
+
+    def test_tc08_check_dev_plan_and_scope_passes(self) -> None:
+        """tc08: plan AND scope 모두 ACCEPT → _check_codex_review_gate PASS.
+
+        D3 수정 검증: 두 stage 모두 있으면 통과.
+        """
+        # top-level: scope ACCEPT, history에 plan ACCEPT
+        both_data = _make_valid_record(stage="scope", result="ACCEPT")
+        both_data["history"] = [
+            {"stage": "plan", "result": "ACCEPT", "review_model": "GPT-5.5",
+             "reviewer": "test", "created_at": "2026-01-01T00:00:00Z", "diff_sha256": ""},
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(both_data), encoding="utf-8")
+            state_no_bootstrap: Dict[str, Any] = {}
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate(state_no_bootstrap, required_stage="plan")
+        self.assertTrue(ok, f"tc08: plan+scope 모두 있으면 gate PASS여야 함. reason={reason!r}")
+
+    # ── tc09: code stage REJECT → QA 진입 차단 확인 ───────────────────────────
+
+    def test_tc09_code_stage_reject_blocks_qa(self) -> None:
+        """tc09: code stage REJECT → _check_codex_review_gate(required_stage='code') FAIL."""
+        reject_data = _make_valid_record(stage="code", result="REJECT")
+        reject_data["history"] = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(reject_data), encoding="utf-8")
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate({}, required_stage="code")
+        self.assertFalse(ok, f"tc09: code REJECT이면 gate FAIL이어야 함. reason={reason!r}")
+
+    # ── tc10: hygiene REJECT → codex-record 처리 확인 ────────────────────────
+
+    def test_tc10_hygiene_reject_records_failure_packet(self) -> None:
+        """tc10: hygiene stage REJECT → codex-record 처리 + failure_packet 생성.
+
+        D4 부분 검증: hygiene REJECT 기록은 codex-record가 처리해야 한다.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ev_path = Path(tmpdir) / "evidence.json"
+            ev_path.write_text(json.dumps({
+                "schema_version": 2, "stage": "hygiene", "result": "REJECT",
+                "review_model": "GPT-5.5", "pipeline_id": "TEST",
+                "reviewer": "test", "diff_sha256": "",
+                "reviewed_files": [], "findings": [], "created_at": "2026-01-01T00:00:00Z",
+            }), encoding="utf-8")
+            out_path = str(Path(tmpdir) / "out.json")
+            proc = self._run_cli(
+                "review", "codex-record",
+                "--stage", "hygiene",
+                "--result", "REJECT",
+                "--review-model", "GPT-5.5",
+                "--reviewer", "test",
+                "--notes", "hygiene 검사 실패",
+                "--evidence", str(ev_path),
+                "--output", out_path,
+            )
+        self.assertEqual(proc.returncode, 0,
+                         f"tc10: hygiene REJECT 기록은 성공해야 함. stdout={proc.stdout!r} stderr={proc.stderr!r}")
+        self.assertIn("REJECT", proc.stdout, "tc10: 출력에 REJECT 언급이 있어야 함")
+
+    # ── tc11: pr ACCEPT → _check_codex_pr_gate_for_technical 통과 ────────────
+
+    def test_tc11_pr_accept_unblocks_technical(self) -> None:
+        """tc11: pr stage ACCEPT → _check_codex_pr_gate_for_technical returns None.
+
+        D4 수정 검증: pr gate ACCEPT이면 technical gate 진입 허용.
+        """
+        pr_accept_data = _make_valid_record(stage="pr", result="ACCEPT")
+        pr_accept_data["history"] = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(pr_accept_data), encoding="utf-8")
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                result = pl._check_codex_pr_gate_for_technical({})
+        self.assertIsNone(result, f"tc11: pr ACCEPT이면 technical gate 차단 없어야 함. got={result!r}")
+
+    # ── tc12: pr REJECT → _check_codex_pr_gate_for_technical 차단 ────────────
+
+    def test_tc12_pr_reject_blocks_technical(self) -> None:
+        """tc12: pr stage REJECT (또는 ACCEPT 없음) → _check_codex_pr_gate_for_technical returns error.
+
+        D4 수정 검증: pr gate ACCEPT 없으면 technical gate 차단.
+        """
+        # code ACCEPT만 있고 pr ACCEPT 없음
+        code_only_data = _make_valid_record(stage="code", result="ACCEPT")
+        code_only_data["history"] = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(code_only_data), encoding="utf-8")
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                result = pl._check_codex_pr_gate_for_technical({})
+        self.assertIsNotNone(result, "tc12: pr ACCEPT 없으면 technical gate 차단되어야 함")
+        self.assertIn("pr", str(result), "tc12: 에러 메시지에 pr 언급이 있어야 함")
+
+    # ── tc13: diff_sha256 mismatch → codex-record FAIL ───────────────────────
+
+    def test_tc13_diff_sha256_mismatch_fails(self) -> None:
+        """tc13: diff_sha256 불일치 → codex-record ACCEPT FAIL (exit 1).
+
+        D5 수정 검증: 실제 diff와 --diff-sha256가 다르면 FAIL.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ev_path = Path(tmpdir) / "evidence.json"
+            ev_path.write_text(json.dumps({
+                "schema_version": 2, "stage": "pr", "result": "ACCEPT",
+                "review_model": "GPT-5.5", "pipeline_id": "TEST",
+                "reviewer": "test", "diff_sha256": "fake_sha_abc",
+                "reviewed_files": [], "findings": [], "created_at": "2026-01-01T00:00:00Z",
+            }), encoding="utf-8")
+            out_path = str(Path(tmpdir) / "out.json")
+            current_head = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+            ).stdout.strip()
+            proc = self._run_cli(
+                "review", "codex-record",
+                "--stage", "pr",
+                "--result", "ACCEPT",
+                "--review-model", "GPT-5.5",
+                "--reviewer", "test",
+                "--head-sha", current_head,
+                "--diff-sha256", "0000000000000000000000000000000000000000000000000000000000000000",
+                "--evidence", str(ev_path),
+                "--output", out_path,
+            )
+        # diff_sha256 불일치이면 FAIL (exit 1)
+        self.assertNotEqual(proc.returncode, 0,
+                            f"tc13: diff_sha256 불일치 시 FAIL이어야 함. stdout={proc.stdout!r}")
+        combined = proc.stdout + proc.stderr
+        self.assertTrue(
+            "mismatch" in combined.lower() or "sha256" in combined.lower() or "diff" in combined.lower(),
+            f"tc13: 에러 메시지에 mismatch/sha256/diff 언급이 있어야 함. got={combined!r}"
+        )
+
+    # ── tc14: review_model != GPT-5.5 → gate FAIL ────────────────────────────
+
+    def test_tc14_wrong_review_model_fails_gate(self) -> None:
+        """tc14: review_model != GPT-5.5 → _check_codex_review_gate FAIL.
+
+        CLAUDE.md 규칙: review_model은 반드시 GPT-5.5여야 한다.
+        """
+        wrong_model_data = _make_valid_record(review_model="claude-opus-4-7", result="ACCEPT")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(wrong_model_data), encoding="utf-8")
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate({})
+        self.assertFalse(ok, f"tc14: GPT-5.5 외 모델은 gate FAIL이어야 함. reason={reason!r}")
+        self.assertIn("GPT-5.5", reason, "tc14: 에러 메시지에 GPT-5.5 언급이 있어야 함")
+
+    # ── tc15: rca record required after any REJECT ────────────────────────────
+
+    def test_tc15_rca_record_after_reject(self) -> None:
+        """tc15: REJECT 이후 rca stage codex-record 가능 (exit 0).
+
+        D2 수정 검증: codex-record는 rca stage를 처리해야 한다.
+        REJECT가 발생하면 rca stage 기록이 가능해야 한다.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ev_path = Path(tmpdir) / "evidence.json"
+            ev_path.write_text(json.dumps({
+                "schema_version": 2, "stage": "rca", "result": "REJECT",
+                "review_model": "GPT-5.5", "pipeline_id": "TEST",
+                "reviewer": "test", "diff_sha256": "",
+                "reviewed_files": [], "findings": [], "created_at": "2026-01-01T00:00:00Z",
+            }), encoding="utf-8")
+            out_path = str(Path(tmpdir) / "out.json")
+            proc = self._run_cli(
+                "review", "codex-record",
+                "--stage", "rca",
+                "--result", "REJECT",
+                "--review-model", "GPT-5.5",
+                "--reviewer", "test",
+                "--notes", "RCA: 반복 실패 패턴 발견",
+                "--evidence", str(ev_path),
+                "--output", out_path,
+            )
+        self.assertEqual(proc.returncode, 0,
+                         f"tc15: rca REJECT 기록은 성공해야 함. stdout={proc.stdout!r} stderr={proc.stderr!r}")
+        self.assertIn("rca", proc.stdout, "tc15: 출력에 rca stage 언급이 있어야 함")
 
 
 # ===========================================================================
