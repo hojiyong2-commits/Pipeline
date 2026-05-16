@@ -1,0 +1,5 @@
+{
+  "gate": "codex_code_review",
+  "result": "FAIL",
+  "reason": "diff_sha256 must be non-empty"
+}

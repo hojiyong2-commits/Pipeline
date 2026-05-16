@@ -5,9 +5,48 @@
 
 `/Task [work]` always uses Three-Gate + Option A phase attestation + Incremental Module Gate. Classic mode, numeric Harness completion, BUILD+QA final scoring, and `pipeline.py harness --score ...` are not valid completion paths.
 
-Trust chain: `local pipeline.py -> agent receipts -> GitHub Actions -> CODEOWNERS -> human ACCEPT`.
+Trust chain: `local pipeline.py -> agent receipts -> Codex technical review(GPT-5.5) -> GitHub Actions -> CODEOWNERS -> human ACCEPT`.
 
 Completion requires PM/Dev/QA/Build phase attestations PASS, every PM `MT-N` module gate PASS, `module integrate` PASS, Technical PASS, Oracle PASS, GitHub CI PASS, and User Acceptance ACCEPT with real result evidence. The user reviews visible results and attachments, not code.
+
+## Codex Review Gate (IMP-20260516-A627)
+
+Codex technical review(GPT-5.5)는 파이프라인의 공식 hard gate입니다. 코드 기여자나 PM이 선택하는 optional 항목이 아닙니다.
+
+### 6단계 Codex Review Stage
+
+| Stage | 트리거 지점 | gate 조건 |
+|---|---|---|
+| `plan` | Dev 진입 전 | `python pipeline.py check --phase dev` 차단 |
+| `scope` | Dev 진입 전 | `python pipeline.py check --phase dev` 차단 |
+| `code` | QA 진입 전 | `python pipeline.py check --phase qa` 차단 |
+| `hygiene` | PR 생성 전 | PR hygiene gate에서 확인 |
+| `pr` | PR 머지 전 | `python pipeline.py review codex-record --stage pr` 4중 검증 |
+| `rca` | Phase 8 Architect 전 | `python pipeline.py review codex-record --stage rca` 4중 검증 |
+
+### 핵심 규칙
+
+- `codex_review_result.json` 파일이 없으면 **absent=FAIL** (기본값, ENV flag 없음)
+- `review_model`은 반드시 `"GPT-5.5"`여야 함. 다른 모델(Claude, GPT-4 등)은 허용되지 않음
+- `Codex REJECT = 해당 phase FAIL + failure_packet.json 생성` (owner/return_phase 포함)
+- Codex review는 기술 승인(technical approval)이며, 최종 결과물 ACCEPT/REJECT는 사용자가 별도 판단
+- legacy 파이프라인 등 waiver가 필요하면 `--codex-review-waiver legacy-bootstrap` 인자 사용
+
+### Codex Review 명령어
+
+```powershell
+# stage별 기록 (plan/scope/code/hygiene)
+python pipeline.py review codex --stage plan --result ACCEPT --review-model GPT-5.5 --reviewer [ID]
+
+# pr/rca stage 공식 기록 (4중 검증 적용)
+python pipeline.py review codex-record --stage pr --result ACCEPT --review-model GPT-5.5 \
+  --head-sha [HEAD SHA] --diff-sha256 [diff SHA256] --evidence codex_review_result.json \
+  --reviewer [ID]
+
+# gate 상태 확인
+python pipeline.py check --phase dev
+python pipeline.py check --phase qa
+```
 
 ## 세션 언어 규칙 (Korean Session Language Rule)
 

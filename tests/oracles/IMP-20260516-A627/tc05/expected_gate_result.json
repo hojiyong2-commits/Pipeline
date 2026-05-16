@@ -1,0 +1,5 @@
+{
+  "gate": "codex_code_review",
+  "result": "REJECT",
+  "reason": "Task description contains hard gate / 강제 / 차단 keywords but no pipeline.py change detected"
+}

@@ -1,0 +1,7 @@
+{
+  "human_acceptance_packet": "정보 부족",
+  "stage": "pr",
+  "pr_number": 99,
+  "result": "ACCEPT",
+  "review_model": "GPT-5.5"
+}

@@ -64,6 +64,24 @@ PM phase CI가 PASS되기 전에는 Dev로 넘어가지 않는다.
 
 PM `done`은 `pipeline.py` hard gate다. `step_plan.xml`에 `<design_confirmation>`이 없거나, 질문이 추상적이거나, 장점/단점/추천안/사용자 답변이 빠지면 Dev로 넘어갈 수 없다.
 
+## Codex Review Gate (IMP-20260516-A627 이후 필수)
+
+Dev/QA 진입 전 `codex_review_result.json`이 있어야 한다. 파일 없으면 `python pipeline.py check --phase dev` 또는 `check --phase qa`가 자동으로 차단된다.
+
+- Codex ACCEPT는 기술 승인(technical approval). 사용자는 마지막에 결과물만 최종 확인(ACCEPT/REJECT)
+- 6개 stage: `plan` → `scope` → `code` → `hygiene` → `pr` → `rca`
+- Dev 진입 전: `plan` 또는 `scope` ACCEPT 필요 / QA 진입 전: `code` ACCEPT 필요
+- `review_model`은 반드시 `"GPT-5.5"` — 다른 모델은 허용되지 않음
+- Codex REJECT = 해당 phase FAIL + failure_packet.json 생성(owner/return_phase 포함)
+- legacy pipeline waiver: `python pipeline.py check --phase dev --codex-review-waiver legacy-bootstrap`
+
+```powershell
+# Dev 진입 전 Codex plan ACCEPT 기록
+python pipeline.py review codex --stage plan --result ACCEPT --review-model GPT-5.5 --reviewer [ID]
+# 확인
+python pipeline.py check --phase dev
+```
+
 ## Phase 2 — Dev With Module Gates
 
 PM의 `<micro_task id="MT-N">`는 각각 독립 모듈 게이트가 된다. Dev는 모든 MT를 한 번에 구현하지 않는다.

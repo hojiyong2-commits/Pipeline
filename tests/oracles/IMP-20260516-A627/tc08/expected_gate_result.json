@@ -1,0 +1,5 @@
+{
+  "gate": "acceptance",
+  "result": "FAIL",
+  "reason": "No codex PR review ACCEPT record; gates accept --user-confirmed blocked"
+}

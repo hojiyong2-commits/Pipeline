@@ -1,0 +1,5 @@
+{
+  "gate": "codex_pr_review",
+  "result": "REJECT",
+  "reason": "human_acceptance_packet indicates 정보 부족; PR review ACCEPT cannot be recorded"
+}

@@ -3544,25 +3544,242 @@ def cmd_new(args: argparse.Namespace) -> None:
     print()
 
 
-def _check_codex_review_gate(state: Dict[str, Any]) -> Tuple[bool, str]:
-    """QA 진입 전 Codex Review Gate 검증.
+# ── Codex Review Schema v2 Validator (MT-1: IMP-20260516-A627) ───────────────
 
-    codex_review_result.json이 존재할 경우 4가지 조건을 확인합니다:
-    1. reviewed_files >= dev_changed_files (커버리지)
-    2. diff_sha256 == 현재 HEAD diff SHA (최신성)
-    3. unresolved HIGH/CRITICAL == 0 (blocking findings 없음)
-    codex_review_result.json이 없으면 gate를 건너뜁니다 (선택적).
+CODEX_VALID_STAGES = {"plan", "scope", "code", "hygiene", "pr", "rca"}
+CODEX_VALID_RESULTS = {"ACCEPT", "REJECT", "PENDING"}
+CODEX_REQUIRED_MODEL = "GPT-5.5"
+CODEX_REQUIRED_FIELDS = [
+    "schema_version",
+    "pipeline_id",
+    "stage",
+    "result",
+    "reviewer",
+    "review_model",
+    "diff_sha256",
+    "reviewed_files",
+    "findings",
+    "created_at",
+]
+
+
+def _validate_codex_review_schema(data: Dict[str, Any]) -> None:
+    """codex_review_result.json schema v2 유효성 검증 순수 함수.
+
+    IMP-20260516-A627 MT-1: schema_version, stage, result, review_model 등
+    신규 필수 필드를 검증한다. 검증 실패 시 ValueError를 발생시킨다.
+
+    Args:
+        data: codex_review_result.json에서 읽은 dict 객체.
+
+    Raises:
+        ValueError: 필수 필드 누락, 허용 외 값(stage/result/review_model) 등
+                    스키마 위반 시 상세 메시지와 함께 발생.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("codex_review_result.json 최상위 값이 dict가 아닙니다.")
+
+    # 1. 필수 필드 존재 여부 검증
+    missing: List[str] = [f for f in CODEX_REQUIRED_FIELDS if f not in data]
+    if missing:
+        raise ValueError(
+            f"[CODEX SCHEMA] 필수 필드 누락: {', '.join(missing)}. "
+            f"codex_review_result.json에 해당 필드가 있어야 합니다."
+        )
+
+    # 2. schema_version 검증 (정수 1 이상)
+    schema_version = data.get("schema_version")
+    if not isinstance(schema_version, int) or schema_version < 1:
+        raise ValueError(
+            f"[CODEX SCHEMA] schema_version은 1 이상의 정수여야 합니다. 현재 값: {schema_version!r}"
+        )
+
+    # 3. pipeline_id 검증 (비어 있지 않은 문자열, 1~255자)
+    pipeline_id = data.get("pipeline_id", "")
+    if not isinstance(pipeline_id, str) or not pipeline_id.strip():
+        raise ValueError(
+            "[CODEX SCHEMA] pipeline_id는 비어 있지 않은 문자열이어야 합니다."
+        )
+    if len(pipeline_id.strip()) > 255:
+        raise ValueError(
+            f"[CODEX SCHEMA] pipeline_id 길이가 255자를 초과합니다: {len(pipeline_id.strip())}자"
+        )
+
+    # 4. stage 검증 (허용 값: plan/scope/code/hygiene/pr/rca)
+    stage = data.get("stage", "")
+    if not isinstance(stage, str) or stage.lower() not in CODEX_VALID_STAGES:
+        raise ValueError(
+            f"[CODEX SCHEMA] stage 값 '{stage}'는 허용되지 않습니다. "
+            f"허용 값: {', '.join(sorted(CODEX_VALID_STAGES))}"
+        )
+
+    # 5. result 검증 (허용 값: ACCEPT/REJECT/PENDING)
+    result = data.get("result", "")
+    if not isinstance(result, str) or result.upper() not in CODEX_VALID_RESULTS:
+        raise ValueError(
+            f"[CODEX SCHEMA] result 값 '{result}'는 허용되지 않습니다. "
+            f"허용 값: {', '.join(sorted(CODEX_VALID_RESULTS))}"
+        )
+
+    # 6. reviewer 검증 (비어 있지 않은 문자열)
+    reviewer = data.get("reviewer", "")
+    if not isinstance(reviewer, str) or not reviewer.strip():
+        raise ValueError(
+            "[CODEX SCHEMA] reviewer는 비어 있지 않은 문자열이어야 합니다."
+        )
+
+    # 7. review_model 검증 (반드시 GPT-5.5)
+    review_model = data.get("review_model", "")
+    if not isinstance(review_model, str) or review_model.strip() != CODEX_REQUIRED_MODEL:
+        raise ValueError(
+            f"[CODEX SCHEMA] review_model은 반드시 '{CODEX_REQUIRED_MODEL}'이어야 합니다. "
+            f"현재 값: '{review_model}'. "
+            f"GPT-5.5 외 모델(Claude, GPT-4 등)로 수행한 리뷰는 인정되지 않습니다."
+        )
+
+    # 8. diff_sha256 검증 (문자열, 비어 있어도 허용하되 빈 문자열 시 경고용으로 별도 처리)
+    diff_sha256 = data.get("diff_sha256", None)
+    if diff_sha256 is not None and not isinstance(diff_sha256, str):
+        raise ValueError(
+            f"[CODEX SCHEMA] diff_sha256는 문자열이어야 합니다. 현재 타입: {type(diff_sha256).__name__}"
+        )
+
+    # 9. reviewed_files 검증 (리스트여야 함)
+    reviewed_files = data.get("reviewed_files", None)
+    if not isinstance(reviewed_files, list):
+        raise ValueError(
+            f"[CODEX SCHEMA] reviewed_files는 리스트여야 합니다. 현재 타입: {type(reviewed_files).__name__}"
+        )
+
+    # 10. findings 검증 (리스트여야 함)
+    findings = data.get("findings", None)
+    if not isinstance(findings, list):
+        raise ValueError(
+            f"[CODEX SCHEMA] findings는 리스트여야 합니다. 현재 타입: {type(findings).__name__}"
+        )
+
+    # 11. findings 내 항목 검증 (있는 경우)
+    for idx, finding in enumerate(findings):
+        if not isinstance(finding, dict):
+            raise ValueError(
+                f"[CODEX SCHEMA] findings[{idx}]는 dict여야 합니다. "
+                f"현재 타입: {type(finding).__name__}"
+            )
+
+    # 12. created_at 검증 (비어 있지 않은 문자열)
+    created_at = data.get("created_at", "")
+    if not isinstance(created_at, str) or not created_at.strip():
+        raise ValueError(
+            "[CODEX SCHEMA] created_at은 비어 있지 않은 문자열(ISO-8601 타임스탬프)이어야 합니다."
+        )
+
+    # 13. optional 필드 타입 검증 (존재하는 경우에만)
+    optional_str_fields = ["review_type", "pr_number", "base_ref", "head_sha", "updated_at", "return_phase"]
+    for field_name in optional_str_fields:
+        field_val = data.get(field_name)
+        if field_val is not None and not isinstance(field_val, (str, int)):
+            raise ValueError(
+                f"[CODEX SCHEMA] {field_name}는 문자열 또는 정수여야 합니다. "
+                f"현재 타입: {type(field_val).__name__}"
+            )
+
+    optional_list_fields = ["allowed_files", "forbidden_files", "required_actions"]
+    for field_name in optional_list_fields:
+        field_val = data.get(field_name)
+        if field_val is not None and not isinstance(field_val, list):
+            raise ValueError(
+                f"[CODEX SCHEMA] {field_name}는 리스트여야 합니다. "
+                f"현재 타입: {type(field_val).__name__}"
+            )
+
+
+def _check_codex_review_gate(
+    state: Dict[str, Any],
+    required_stage: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Codex Review Gate 검증 (MT-4: IMP-20260516-A627 — absent=FAIL 강제 반전).
+
+    codex_review_result.json이 없으면 FAIL (선택적 skip 제거).
+    stage별 요구 stage 확인:
+      - Dev 진입 (phase=dev): required_stage="plan" 또는 "scope" ACCEPT 확인
+      - QA 진입 (phase=qa): required_stage="code" ACCEPT 확인
+      - PR 생성 진입 (phase=pr): required_stage="hygiene" ACCEPT 확인
+
+    Args:
+        state: 현재 파이프라인 state dict.
+        required_stage: 이 stage의 ACCEPT가 필요한지 확인 (None이면 stage 미검증).
+
+    Returns:
+        Tuple[bool, str]: (ok, reason_message).
     """
     review_path = BASE_DIR / "codex_review_result.json"
+
+    # MT-4 핵심 변경: absent=FAIL (더 이상 skip 없음)
     if not review_path.exists():
-        # Codex review is optional; absence is not a blocker
-        return True, "codex review file absent — skipped"
+        return False, (
+            "[CODEX REVIEW REQUIRED] codex_review_result.json이 없습니다. "
+            "'python pipeline.py review codex --stage plan --result ACCEPT --review-model GPT-5.5' "
+            "로 Codex review를 먼저 수행하세요. "
+            "legacy 파이프라인 등 waiver가 필요하면 "
+            "--codex-review-waiver legacy-bootstrap 인자를 사용하세요."
+        )
 
     try:
         review_data = json.loads(review_path.read_text(encoding="utf-8", errors="replace"))
     except Exception as exc:
-        return False, f"codex_review_result.json 파싱 실패: {exc}"
+        return False, f"[CODEX REVIEW REQUIRED] codex_review_result.json 파싱 실패: {exc}"
 
+    # review_model 검증 (반드시 GPT-5.5)
+    review_model = str(review_data.get("review_model", "")).strip()
+    if review_model != CODEX_REQUIRED_MODEL:
+        return False, (
+            f"[CODEX REVIEW REQUIRED] review_model='{review_model}'은 허용되지 않습니다. "
+            f"반드시 '{CODEX_REQUIRED_MODEL}'이어야 합니다. "
+            f"GPT-5.5 세션으로 수행한 리뷰 파일을 제공하세요."
+        )
+
+    # result 검증 (PENDING이면 FAIL)
+    result_val = str(review_data.get("result", "")).upper()
+    if result_val == "PENDING":
+        return False, (
+            "[CODEX REVIEW REQUIRED] Codex review 결과가 PENDING 상태입니다. "
+            "ACCEPT 또는 REJECT로 확정 후 재시도하세요."
+        )
+    if result_val == "REJECT":
+        return False, (
+            "[CODEX REVIEW REQUIRED] Codex review 결과가 REJECT입니다. "
+            "failure_packet.json을 참조하여 지적 사항을 수정 후 재시도하세요."
+        )
+
+    # stage 검증 (required_stage가 지정된 경우)
+    if required_stage is not None:
+        current_stage = str(review_data.get("stage", "")).lower()
+        # history 배열도 확인 (이전에 required_stage를 ACCEPT했는지)
+        all_stages_accepted: List[str] = []
+        if result_val == "ACCEPT" and current_stage:
+            all_stages_accepted.append(current_stage)
+        history = review_data.get("history", [])
+        for h in history:
+            if str(h.get("result", "")).upper() == "ACCEPT" and h.get("stage"):
+                all_stages_accepted.append(str(h.get("stage", "")).lower())
+
+        # Dev 진입은 plan 또는 scope ACCEPT이면 됨
+        if required_stage in {"plan", "scope"}:
+            has_plan_or_scope = any(s in {"plan", "scope"} for s in all_stages_accepted)
+            if not has_plan_or_scope:
+                return False, (
+                    "[CODEX REVIEW REQUIRED] Dev 진입 전 plan 또는 scope stage ACCEPT가 필요합니다. "
+                    f"현재 통과된 stages: {all_stages_accepted if all_stages_accepted else '없음'}. "
+                    "'python pipeline.py review codex --stage plan --result ACCEPT ...' 를 먼저 수행하세요."
+                )
+        elif required_stage not in all_stages_accepted:
+            return False, (
+                f"[CODEX REVIEW REQUIRED] {required_stage} stage ACCEPT가 필요합니다. "
+                f"현재 통과된 stages: {all_stages_accepted if all_stages_accepted else '없음'}. "
+                f"'python pipeline.py review codex --stage {required_stage} --result ACCEPT ...' 를 먼저 수행하세요."
+            )
+
+    # findings 검증 (미해결 HIGH/CRITICAL)
     findings: List[Dict[str, Any]] = review_data.get("findings", [])
     unresolved_hc: List[Dict[str, Any]] = [
         f for f in findings
@@ -3576,9 +3793,9 @@ def _check_codex_review_gate(state: Dict[str, Any]) -> Tuple[bool, str]:
             f"'python pipeline.py review resolve --id <ID>' 로 해소 후 재시도."
         )
 
-    # verify diff_sha256 freshness
-    stored_sha = review_data.get("diff_sha256", "")
-    base_ref = review_data.get("base_ref", "main")
+    # diff_sha256 최신성 검증
+    stored_sha = str(review_data.get("diff_sha256", ""))
+    base_ref = str(review_data.get("base_ref", "main") or "main")
     if stored_sha:
         try:
             diff_proc = subprocess.run(
@@ -3592,10 +3809,10 @@ def _check_codex_review_gate(state: Dict[str, Any]) -> Tuple[bool, str]:
                 if current_sha != stored_sha:
                     return False, (
                         "[CODEX REVIEW REQUIRED] diff SHA256 불일치 — 코드가 Codex 리뷰 이후에 변경되었습니다. "
-                        "'python pipeline.py review codex' 로 리뷰를 갱신하세요."
+                        "'python pipeline.py review codex --stage code --result ACCEPT ...' 로 리뷰를 갱신하세요."
                     )
         except Exception as exc:
-            logging.getLogger(__name__).warning("Codex review diff SHA check failed: %s", exc)
+            logging.getLogger(__name__).warning("Codex review diff SHA check 실패: %s", exc)
 
     return True, "codex review gate passed"
 
@@ -3608,15 +3825,30 @@ def cmd_check(args: argparse.Namespace) -> None:
     # Phase 6 -> 7 does not ask the user anymore. Phase 7 is deterministic
     # automation; the only user decision is the final gates accept ACCEPT/REJECT.
 
-    # Codex Review Gate — QA 진입 시에만 적용
-    if phase == "qa":
-        cr_ok, cr_reason = _check_codex_review_gate(state)
-        if not cr_ok:
-            print()
-            print(RED("[CODEX REVIEW REQUIRED] QA 진입 차단"))
-            print(RED(f"  사유: {cr_reason}"))
-            print()
-            sys.exit(1)
+    # Codex Review Gate — MT-4: stage별 분기 적용 (IMP-20260516-A627)
+    # --codex-review-waiver legacy-bootstrap 인자가 있으면 waiver 허용
+    codex_waiver: str = getattr(args, "codex_review_waiver", "") or ""
+    skip_codex_gate = (codex_waiver.strip().lower() == "legacy-bootstrap")
+
+    if not skip_codex_gate:
+        # Dev 진입: plan 또는 scope ACCEPT 필요
+        if phase == "dev":
+            cr_ok, cr_reason = _check_codex_review_gate(state, required_stage="plan")
+            if not cr_ok:
+                print()
+                print(RED("[CODEX REVIEW REQUIRED] Dev 진입 차단"))
+                print(RED(f"  사유: {cr_reason}"))
+                print()
+                sys.exit(1)
+        # QA 진입: code ACCEPT 필요
+        elif phase == "qa":
+            cr_ok, cr_reason = _check_codex_review_gate(state, required_stage="code")
+            if not cr_ok:
+                print()
+                print(RED("[CODEX REVIEW REQUIRED] QA 진입 차단"))
+                print(RED(f"  사유: {cr_reason}"))
+                print()
+                sys.exit(1)
 
     ok, reason = check_gate(state, phase)
 
@@ -6643,15 +6875,139 @@ def cmd_preflight(args: argparse.Namespace) -> None:
         _die(f"preflight_report.json 저장 실패: {exc}", exit_code=2)
 
 
+# ── Codex Review 내부 산출물 forbidden 기본값 (MT-2: IMP-20260516-A627) ───────
+
+CODEX_DEFAULT_FORBIDDEN_PATTERNS: List[str] = [
+    ".pipeline/",
+    "pipeline_contracts/",
+    "pipeline_outputs/",
+    "pipeline_state",
+    "build_report.xml",
+    "qa_report.xml",
+    "codex_review_result.json",
+    "failure_packet.json",
+    "module_handover_",
+    "module_qa_",
+    "module_design_",
+    "scope_manifest_",
+    "dev_handover.xml",
+    "integration_report.xml",
+    "manager_handoff.xml",
+]
+
+CODEX_DEEP_REVIEW_TRIGGERS: List[str] = [
+    "pipeline.py",
+    ".github/workflows/",
+    "tests/",
+    "CLAUDE.md",
+    ".claude/",
+]
+
+
+def _collect_git_diff_meta(base_ref: str) -> Tuple[List[str], str]:
+    """git diff --name-only 와 전체 diff SHA256을 수집한다.
+
+    Args:
+        base_ref: 비교 기준 브랜치/커밋 (예: 'main').
+
+    Returns:
+        Tuple[List[str], str]: (변경된 파일 목록, diff SHA256 16진수 문자열).
+    """
+    reviewed_files: List[str] = []
+    diff_sha256: str = ""
+
+    try:
+        diff_names_proc = subprocess.run(
+            ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+            timeout=15,
+        )
+        if diff_names_proc.returncode == 0 and diff_names_proc.stdout:
+            names_text = diff_names_proc.stdout.decode("utf-8", errors="replace")
+            reviewed_files = [f.strip() for f in names_text.strip().splitlines() if f.strip()]
+    except Exception as exc:
+        logging.getLogger(__name__).warning("git diff --name-only 실패: %s", exc)
+
+    try:
+        diff_full_proc = subprocess.run(
+            ["git", "diff", f"{base_ref}...HEAD"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+            timeout=30,
+        )
+        if diff_full_proc.returncode == 0 and diff_full_proc.stdout is not None:
+            diff_sha256 = hashlib.sha256(diff_full_proc.stdout).hexdigest()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("git diff (full) 실패: %s", exc)
+
+    return reviewed_files, diff_sha256
+
+
+def _compute_scope_files(
+    reviewed_files: List[str],
+    forbidden_patterns: Optional[List[str]] = None,
+) -> Tuple[List[str], List[str]]:
+    """scope stage용 allowed_files / forbidden_files 분류 함수.
+
+    reviewed_files에서 forbidden_patterns에 해당하는 파일을 분리한다.
+
+    Args:
+        reviewed_files: git diff --name-only 결과 파일 목록.
+        forbidden_patterns: 금지 패턴 목록. None이면 기본값 사용.
+
+    Returns:
+        Tuple[List[str], List[str]]: (allowed_files, forbidden_files).
+    """
+    if forbidden_patterns is None:
+        forbidden_patterns = CODEX_DEFAULT_FORBIDDEN_PATTERNS
+
+    allowed_files: List[str] = []
+    forbidden_files_out: List[str] = []
+
+    for filepath in (reviewed_files or []):
+        is_forbidden = any(pattern in filepath for pattern in forbidden_patterns)
+        if is_forbidden:
+            forbidden_files_out.append(filepath)
+        else:
+            allowed_files.append(filepath)
+
+    return allowed_files, forbidden_files_out
+
+
+def _check_deep_review_required(reviewed_files: List[str]) -> bool:
+    """code stage deep review 필요 여부 판단 함수.
+
+    pipeline.py, .github/workflows/**, tests/**, CLAUDE.md, .claude/** 변경 시 REQUIRED.
+
+    Args:
+        reviewed_files: git diff 변경 파일 목록.
+
+    Returns:
+        bool: True이면 deep review REQUIRED.
+    """
+    for filepath in (reviewed_files or []):
+        for trigger in CODEX_DEEP_REVIEW_TRIGGERS:
+            if filepath.startswith(trigger) or trigger in filepath:
+                return True
+    return False
+
+
 def cmd_review(args: argparse.Namespace) -> None:
     """Codex Review Gate — 코드 리뷰 결과 관리.
 
     subaction:
-      codex    git diff 메타데이터를 수집하여 codex_review_result.json 생성.
-               실제 LLM Codex 호출은 pipeline.py 범위 밖이므로 findings는 빈 배열로 초기화.
-               사용자가 외부 Codex 도구 실행 후 findings를 채운 뒤 review resolve로 해소.
-      status   codex_review_result.json에서 미해결 HIGH/CRITICAL findings 수 출력.
-      resolve  특정 finding을 resolved=true로 표시.
+      codex       git diff 메타데이터를 수집하여 codex_review_result.json에 stage 기록 추가.
+                  --stage: plan|scope|code|hygiene|pr|rca (필수)
+                  --result: ACCEPT|REJECT|PENDING (기본값 PENDING)
+                  --review-model: 리뷰 모델 (기본값 GPT-5.5, 다른 값 시 경고)
+                  --reviewer: 리뷰어 식별자
+                  --pipeline-id: 파이프라인 ID
+                  history 배열에 이전 기록이 누적되고, 최신 기록이 top-level에 반영된다.
+      codex-record 사용자의 실제 Codex review ACCEPT/REJECT 세션을 공식 기록으로 등록.
+                   pr/rca stage 전용. 4중 검증 적용.
+      status      codex_review_result.json에서 미해결 HIGH/CRITICAL findings 수 출력.
+      resolve     특정 finding을 resolved=true로 표시.
     """
     review_action: str = getattr(args, "review_action", "") or ""
     base_ref: str = getattr(args, "base", "main") or "main"
@@ -6662,62 +7018,179 @@ def cmd_review(args: argparse.Namespace) -> None:
     review_result_path = Path(output_path_arg) if output_path_arg else BASE_DIR / "codex_review_result.json"
 
     if review_action == "codex":
-        # collect git diff metadata
-        reviewed_files: List[str] = []
-        diff_sha256: str = ""
+        # MT-2: stage별 6-stage 확장 구현
+        stage_arg: str = getattr(args, "stage", "") or ""
+        result_arg: str = getattr(args, "result_value", "") or "PENDING"
+        review_model_arg: str = getattr(args, "review_model", CODEX_REQUIRED_MODEL) or CODEX_REQUIRED_MODEL
+        reviewer_arg: str = getattr(args, "reviewer", "unknown") or "unknown"
+        pipeline_id_arg: str = getattr(args, "pipeline_id_arg", "") or ""
+        pr_number_arg: Optional[str] = getattr(args, "pr_number", None)
+        head_sha_arg: Optional[str] = getattr(args, "head_sha", None)
+        notes_arg: Optional[str] = getattr(args, "notes", None)
+        findings_arg: Optional[str] = getattr(args, "findings_file", None)
 
-        try:
-            diff_names_proc = subprocess.run(
-                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
-                capture_output=True,
-                cwd=str(BASE_DIR),
-                timeout=15,
+        # stage 필수 검증
+        if not stage_arg or stage_arg.lower() not in CODEX_VALID_STAGES:
+            _die(
+                f"[REVIEW CODEX] --stage는 필수이며 허용 값: {', '.join(sorted(CODEX_VALID_STAGES))}. "
+                f"현재 값: '{stage_arg}'",
+                exit_code=2,
             )
-            if diff_names_proc.returncode == 0 and diff_names_proc.stdout:
-                names_text = diff_names_proc.stdout.decode("utf-8", errors="replace")
-                reviewed_files = [f.strip() for f in names_text.strip().splitlines() if f.strip()]
-        except Exception as exc:
-            logging.getLogger(__name__).warning("git diff --name-only failed: %s", exc)
+            return
+        stage: str = stage_arg.lower()
 
-        try:
-            diff_full_proc = subprocess.run(
-                ["git", "diff", f"{base_ref}...HEAD"],
-                capture_output=True,
-                cwd=str(BASE_DIR),
-                timeout=30,
+        # result 검증
+        result_upper: str = result_arg.upper() if result_arg else "PENDING"
+        if result_upper not in CODEX_VALID_RESULTS:
+            _die(
+                f"[REVIEW CODEX] --result 허용 값: {', '.join(sorted(CODEX_VALID_RESULTS))}. "
+                f"현재 값: '{result_arg}'",
+                exit_code=2,
             )
-            if diff_full_proc.returncode == 0 and diff_full_proc.stdout is not None:
-                diff_sha256 = hashlib.sha256(diff_full_proc.stdout).hexdigest()
-        except Exception as exc:
-            logging.getLogger(__name__).warning("git diff (full) failed: %s", exc)
+            return
 
-        # preserve existing findings if file already exists
-        existing_findings: List[Dict[str, Any]] = []
+        # review_model 경고 (GPT-5.5 아닌 경우)
+        if review_model_arg.strip() != CODEX_REQUIRED_MODEL:
+            print(
+                f"[REVIEW CODEX] 경고: review_model='{review_model_arg}'은 "
+                f"'{CODEX_REQUIRED_MODEL}'이 아닙니다. "
+                f"codex-record 시 검증이 실패할 수 있습니다."
+            )
+
+        # git diff 메타데이터 수집
+        reviewed_files, diff_sha256 = _collect_git_diff_meta(base_ref)
+
+        # pipeline_id 결정 (인자 > 활성 state에서 자동 추출)
+        active_pipeline_id: str = pipeline_id_arg
+        if not active_pipeline_id:
+            try:
+                st = _load_state()
+                active_pipeline_id = st.get("pipeline_id", "")
+            except Exception:
+                active_pipeline_id = ""
+
+        # scope stage: allowed_files / forbidden_files 자동 계산
+        allowed_files_out: List[str] = []
+        forbidden_files_out: List[str] = []
+        if stage == "scope":
+            allowed_files_out, forbidden_files_out = _compute_scope_files(reviewed_files)
+
+        # code stage: deep review 필요 여부 확인
+        deep_review_required: bool = False
+        if stage == "code":
+            deep_review_required = _check_deep_review_required(reviewed_files)
+            if deep_review_required:
+                print(
+                    "[REVIEW CODEX] [REQUIRED] 신뢰 루트 파일 변경 감지 — "
+                    "code stage deep review가 필수입니다: "
+                    "pipeline.py/.github/workflows/**/tests/**/CLAUDE.md/.claude/** 중 하나 이상 변경됨."
+                )
+
+        # findings 로드 (파일에서 제공된 경우)
+        extra_findings: List[Dict[str, Any]] = []
+        if findings_arg:
+            try:
+                findings_path = Path(findings_arg)
+                if findings_path.exists():
+                    findings_data = json.loads(findings_path.read_text(encoding="utf-8", errors="replace"))
+                    if isinstance(findings_data, list):
+                        extra_findings = findings_data
+                    elif isinstance(findings_data, dict) and "findings" in findings_data:
+                        extra_findings = findings_data.get("findings", [])
+            except Exception as exc:
+                logging.getLogger(__name__).warning("findings 파일 로드 실패: %s", exc)
+
+        # 기존 파일 로드 (history 누적을 위해)
+        existing_history: List[Dict[str, Any]] = []
+        existing_findings_preserved: List[Dict[str, Any]] = []
         if review_result_path.exists():
             try:
-                existing_data = json.loads(review_result_path.read_text(encoding="utf-8", errors="replace"))
-                existing_findings = existing_data.get("findings", [])
-            except Exception:
-                pass
+                existing_raw = json.loads(
+                    review_result_path.read_text(encoding="utf-8", errors="replace")
+                )
+                existing_history = existing_raw.get("history", [])
+                # 이전 top-level도 history로 보존
+                if existing_raw.get("stage"):
+                    existing_history.insert(0, {
+                        "stage": existing_raw.get("stage"),
+                        "result": existing_raw.get("result"),
+                        "review_model": existing_raw.get("review_model"),
+                        "reviewer": existing_raw.get("reviewer"),
+                        "created_at": existing_raw.get("created_at", existing_raw.get("generated_at", "")),
+                        "diff_sha256": existing_raw.get("diff_sha256", ""),
+                    })
+                existing_findings_preserved = existing_raw.get("findings", [])
+            except Exception as exc:
+                logging.getLogger(__name__).warning("기존 review 파일 로드 실패: %s", exc)
 
-        result: Dict[str, Any] = {
-            "schema_version": 1,
-            "generated_at": _now(),
+        # 신규 stage 기록 생성
+        now_ts = _now()
+        new_record: Dict[str, Any] = {
+            "schema_version": 2,
+            "pipeline_id": active_pipeline_id,
+            "stage": stage,
+            "review_type": "quick" if stage in {"plan", "scope", "hygiene"} else "deep",
+            "result": result_upper,
+            "reviewer": reviewer_arg,
+            "review_model": review_model_arg.strip(),
             "base_ref": base_ref,
             "reviewed_files": reviewed_files,
             "diff_sha256": diff_sha256,
-            "findings": existing_findings,
+            "findings": extra_findings if extra_findings else existing_findings_preserved,
+            "created_at": now_ts,
+            "updated_at": now_ts,
         }
+
+        # stage별 선택 필드 추가
+        if pr_number_arg:
+            new_record["pr_number"] = pr_number_arg
+        if head_sha_arg:
+            new_record["head_sha"] = head_sha_arg
+        if notes_arg:
+            new_record["notes"] = notes_arg
+        if stage == "scope":
+            new_record["allowed_files"] = allowed_files_out
+            new_record["forbidden_files"] = forbidden_files_out
+        if stage == "code" and deep_review_required:
+            new_record["deep_review_required"] = True
+
+        # history 배열 업데이트 (현재 stage의 이전 기록은 history로 이동)
+        history_snapshot = {
+            "stage": stage,
+            "result": result_upper,
+            "review_model": review_model_arg.strip(),
+            "reviewer": reviewer_arg,
+            "created_at": now_ts,
+            "diff_sha256": diff_sha256,
+        }
+        # history에서 같은 stage의 기존 기록을 보존하고 새 기록을 앞에 추가
+        updated_history: List[Dict[str, Any]] = [history_snapshot] + [
+            h for h in existing_history
+            if h.get("stage") != stage
+        ]
+        new_record["history"] = updated_history
+
+        # schema v2 검증 (MT-1 validator 활용)
+        try:
+            _validate_codex_review_schema(new_record)
+        except ValueError as ve:
+            _die(f"[REVIEW CODEX] schema 검증 실패: {ve}", exit_code=2)
+            return
 
         try:
             review_result_path.parent.mkdir(parents=True, exist_ok=True)
-            review_result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(f"[REVIEW CODEX] codex_review_result.json 저장: {review_result_path}")
+            review_result_path.write_text(
+                json.dumps(new_record, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            print(f"[REVIEW CODEX] stage={stage} result={result_upper} 기록 완료: {review_result_path}")
             print(f"  검토 파일: {len(reviewed_files)}개")
-            print(f"  diff SHA256: {diff_sha256[:16]}...")
-            print(f"  기존 findings: {len(existing_findings)}개 유지")
-            print("  ※ 실제 Codex LLM 리뷰 결과는 findings 배열에 직접 추가하거나")
-            print("     review resolve --id <CR-XXX> 로 개별 해소하세요.")
+            if diff_sha256:
+                print(f"  diff SHA256: {diff_sha256[:16]}...")
+            if stage == "scope":
+                print(f"  허용 파일: {len(allowed_files_out)}개, 금지 파일: {len(forbidden_files_out)}개")
+            if stage == "code" and deep_review_required:
+                print("  [REQUIRED] 신뢰 루트 변경 — deep review 필수")
+            print(f"  history 항목: {len(updated_history)}개")
         except OSError as exc:
             _die(f"codex_review_result.json 저장 실패: {exc}", exit_code=2)
 
@@ -6794,8 +7267,312 @@ def cmd_review(args: argparse.Namespace) -> None:
         except OSError as exc:
             _die(f"codex_review_result.json 저장 실패: {exc}", exit_code=2)
 
+    elif review_action == "codex-record":
+        # MT-3: codex-record는 별도 함수로 위임
+        cmd_review_codex_record(args)
+
     else:
         _die(f"알 수 없는 review 하위 명령: {review_action}", exit_code=2)
+
+
+def _get_current_head_sha() -> str:
+    """현재 git HEAD commit SHA를 반환한다.
+
+    Returns:
+        str: 40자 hex SHA 문자열. 실패 시 빈 문자열.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+            timeout=10,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            return proc.stdout.decode("utf-8", errors="replace").strip()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("git rev-parse HEAD 실패: %s", exc)
+    return ""
+
+
+def cmd_review_codex_record(args: argparse.Namespace) -> None:
+    """review codex-record — 실제 Codex review ACCEPT/REJECT 세션을 공식 기록으로 등록.
+
+    MT-3 (IMP-20260516-A627): pr/rca stage 전용 4중 검증 적용:
+      1. --review-model == "GPT-5.5" 검증
+      2. --head-sha == 현재 git HEAD SHA 검증 (ACCEPT인 경우)
+      3. --diff-sha256 비어 있지 않음 검증 (ACCEPT인 경우)
+      4. --evidence 파일 존재 + JSON 파싱으로 review_model 필드 확인
+
+    REJECT인 경우:
+      - --notes 또는 --required-actions 중 하나는 필수
+      - failure_packet.json 생성 (gate, owner, return_phase 포함)
+
+    Args:
+        args: argparse.Namespace — codex-record 전용 인자.
+
+    Raises:
+        SystemExit: 검증 실패 시 exit_code=1(내용 오류) 또는 exit_code=2(인자 오류).
+    """
+    stage_arg: str = getattr(args, "stage", "") or ""
+    result_arg: str = getattr(args, "result_value", "") or ""
+    review_model_arg: str = getattr(args, "review_model", "") or ""
+    head_sha_arg: Optional[str] = getattr(args, "head_sha", None)
+    diff_sha256_arg: Optional[str] = getattr(args, "diff_sha256_arg", None)
+    evidence_arg: Optional[str] = getattr(args, "evidence", None)
+    notes_arg: Optional[str] = getattr(args, "notes", None)
+    required_actions_arg: Optional[str] = getattr(args, "required_actions", None)
+    return_phase_arg: Optional[str] = getattr(args, "return_phase", None)
+    pr_number_arg: Optional[str] = getattr(args, "pr_number", None)
+    output_path_arg: Optional[str] = getattr(args, "output", None)
+    reviewer_arg: str = getattr(args, "reviewer", "unknown") or "unknown"
+    pipeline_id_arg: str = getattr(args, "pipeline_id_arg", "") or ""
+
+    review_result_path = Path(output_path_arg) if output_path_arg else BASE_DIR / "codex_review_result.json"
+
+    # stage 검증: pr/rca만 허용
+    if not stage_arg or stage_arg.lower() not in {"pr", "rca"}:
+        _die(
+            f"[CODEX RECORD] codex-record는 pr 또는 rca stage만 허용합니다. 현재: '{stage_arg}'",
+            exit_code=2,
+        )
+        return
+    stage: str = stage_arg.lower()
+
+    # result 검증
+    result_upper: str = result_arg.upper() if result_arg else ""
+    if result_upper not in {"ACCEPT", "REJECT"}:
+        _die(
+            f"[CODEX RECORD] --result는 ACCEPT 또는 REJECT만 허용합니다. 현재: '{result_arg}'",
+            exit_code=2,
+        )
+        return
+
+    # 검증 1: review_model == GPT-5.5 (강제)
+    if not review_model_arg or review_model_arg.strip() != CODEX_REQUIRED_MODEL:
+        _die(
+            f"[CODEX RECORD] 검증 실패(1/4): --review-model은 반드시 '{CODEX_REQUIRED_MODEL}'이어야 합니다. "
+            f"현재: '{review_model_arg}'. "
+            f"GPT-5.5 외 모델로 수행한 리뷰는 공식 기록으로 인정되지 않습니다.",
+            exit_code=2,
+        )
+        return
+
+    now_ts = _now()
+
+    # ACCEPT인 경우 추가 검증
+    if result_upper == "ACCEPT":
+        # 검증 2: head_sha == 현재 git HEAD
+        if head_sha_arg:
+            current_head = _get_current_head_sha()
+            # PR SHA일 수도 있으므로 완전 일치 실패 시 경고만 (엄격 모드)
+            # 사용자 Q2 답변: "head_sha == git HEAD or PR head SHA" → 불일치 시 FAIL
+            if current_head and head_sha_arg.strip() != current_head:
+                _die(
+                    f"[CODEX RECORD] 검증 실패(2/4): head_sha 불일치 — "
+                    f"제출한 SHA='{head_sha_arg.strip()[:16]}...'가 "
+                    f"현재 git HEAD='{current_head[:16]}...'와 다릅니다. "
+                    f"코드가 리뷰 이후 변경되었을 수 있습니다. "
+                    f"최신 HEAD에 대해 다시 리뷰를 수행하거나 PR head SHA를 확인하세요.",
+                    exit_code=1,
+                )
+                return
+        else:
+            _die(
+                "[CODEX RECORD] 검증 실패(2/4): ACCEPT 기록 시 --head-sha는 필수입니다.",
+                exit_code=2,
+            )
+            return
+
+        # 검증 3: diff_sha256 비어 있지 않음
+        if not diff_sha256_arg or not diff_sha256_arg.strip():
+            _die(
+                "[CODEX RECORD] 검증 실패(3/4): ACCEPT 기록 시 --diff-sha256는 비어 있으면 안 됩니다. "
+                "리뷰한 diff의 SHA256 값을 제공하세요.",
+                exit_code=2,
+            )
+            return
+
+    # REJECT인 경우: notes 또는 required_actions 필수 (evidence 검증 전에 확인)
+    if result_upper == "REJECT":
+        if not notes_arg and not required_actions_arg:
+            _die(
+                "[CODEX RECORD] REJECT 기록 시 --notes 또는 --required-actions 중 하나는 필수입니다. "
+                "거절 사유 또는 필요 조치를 명시하세요.",
+                exit_code=2,
+            )
+            return
+
+    # 검증 4: evidence 파일 존재 + JSON parse + review_model 확인
+    if not evidence_arg:
+        _die(
+            "[CODEX RECORD] 검증 실패(4/4): --evidence는 필수입니다. "
+            "Codex review 결과 JSON 파일 경로를 제공하세요.",
+            exit_code=2,
+        )
+        return
+
+    evidence_path = Path(evidence_arg)
+    if not evidence_path.exists() or not evidence_path.is_file():
+        _die(
+            f"[CODEX RECORD] 검증 실패(4/4): evidence 파일이 존재하지 않습니다: {evidence_arg}",
+            exit_code=1,
+        )
+        return
+
+    # evidence JSON 파싱 + review_model 필드 확인 (fallback grep 금지)
+    try:
+        evidence_data = json.loads(evidence_path.read_text(encoding="utf-8", errors="replace"))
+    except (json.JSONDecodeError, ValueError, OSError) as exc:
+        _die(
+            f"[CODEX RECORD] 검증 실패(4/4): evidence 파일 JSON 파싱 실패 — {exc}. "
+            f"유효한 JSON 파일이어야 합니다. fallback grep은 허용되지 않습니다.",
+            exit_code=1,
+        )
+        return
+
+    evidence_model = str(evidence_data.get("review_model", "")).strip()
+    if evidence_model != CODEX_REQUIRED_MODEL:
+        _die(
+            f"[CODEX RECORD] 검증 실패(4/4): evidence JSON의 review_model='{evidence_model}'이 "
+            f"'{CODEX_REQUIRED_MODEL}'과 다릅니다. "
+            f"실제 GPT-5.5 세션에서 생성된 리뷰 파일을 제공하세요.",
+            exit_code=1,
+        )
+        return
+
+    # pipeline_id 결정
+    active_pipeline_id: str = pipeline_id_arg
+    if not active_pipeline_id:
+        try:
+            st = _load_state()
+            active_pipeline_id = st.get("pipeline_id", "")
+        except Exception:
+            active_pipeline_id = ""
+
+    # 기존 파일 로드 (history 누적)
+    existing_history: List[Dict[str, Any]] = []
+    existing_findings: List[Dict[str, Any]] = []
+    if review_result_path.exists():
+        try:
+            existing_raw = json.loads(
+                review_result_path.read_text(encoding="utf-8", errors="replace")
+            )
+            existing_history = existing_raw.get("history", [])
+            if existing_raw.get("stage"):
+                existing_history.insert(0, {
+                    "stage": existing_raw.get("stage"),
+                    "result": existing_raw.get("result"),
+                    "review_model": existing_raw.get("review_model"),
+                    "reviewer": existing_raw.get("reviewer"),
+                    "created_at": existing_raw.get("created_at", ""),
+                    "diff_sha256": existing_raw.get("diff_sha256", ""),
+                })
+            existing_findings = existing_raw.get("findings", [])
+        except Exception as exc:
+            logging.getLogger(__name__).warning("기존 review 파일 로드 실패: %s", exc)
+
+    # diff_sha256 계산 (인자로 없으면 현재 diff에서 계산)
+    if not diff_sha256_arg or not diff_sha256_arg.strip():
+        _, computed_diff_sha = _collect_git_diff_meta("main")
+        diff_sha256_final = computed_diff_sha
+    else:
+        diff_sha256_final = diff_sha256_arg.strip()
+
+    # reviewed_files 수집
+    reviewed_files, _ = _collect_git_diff_meta("main")
+
+    # 신규 기록 생성
+    new_record: Dict[str, Any] = {
+        "schema_version": 2,
+        "pipeline_id": active_pipeline_id,
+        "stage": stage,
+        "review_type": "deep",
+        "result": result_upper,
+        "reviewer": reviewer_arg,
+        "review_model": CODEX_REQUIRED_MODEL,
+        "reviewed_files": reviewed_files,
+        "diff_sha256": diff_sha256_final,
+        "findings": existing_findings,
+        "created_at": now_ts,
+        "updated_at": now_ts,
+    }
+
+    if pr_number_arg:
+        new_record["pr_number"] = pr_number_arg
+    if head_sha_arg:
+        new_record["head_sha"] = head_sha_arg.strip() if head_sha_arg else ""
+    if notes_arg:
+        new_record["notes"] = notes_arg
+    if required_actions_arg:
+        new_record["required_actions"] = [a.strip() for a in required_actions_arg.split(",") if a.strip()]
+    if return_phase_arg:
+        new_record["return_phase"] = return_phase_arg
+
+    # history 누적
+    history_snapshot = {
+        "stage": stage,
+        "result": result_upper,
+        "review_model": CODEX_REQUIRED_MODEL,
+        "reviewer": reviewer_arg,
+        "created_at": now_ts,
+        "diff_sha256": diff_sha256_final,
+        "recorded_via": "codex-record",
+    }
+    updated_history: List[Dict[str, Any]] = [history_snapshot] + [
+        h for h in existing_history
+        if h.get("stage") != stage
+    ]
+    new_record["history"] = updated_history
+
+    # schema v2 검증
+    try:
+        _validate_codex_review_schema(new_record)
+    except ValueError as ve:
+        _die(f"[CODEX RECORD] schema 검증 실패: {ve}", exit_code=2)
+        return
+
+    # 파일 저장
+    try:
+        review_result_path.parent.mkdir(parents=True, exist_ok=True)
+        review_result_path.write_text(
+            json.dumps(new_record, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError as exc:
+        _die(f"[CODEX RECORD] codex_review_result.json 저장 실패: {exc}", exit_code=2)
+        return
+
+    # REJECT인 경우 failure_packet.json 생성
+    if result_upper == "REJECT":
+        gate_name = f"codex_{stage}_review"
+        owner = "PM" if stage == "rca" else "Dev"
+        packet: Dict[str, Any] = {
+            "gate": gate_name,
+            "stage": stage,
+            "result": "REJECT",
+            "owner": owner,
+            "return_phase": return_phase_arg or ("pm" if stage == "rca" else "dev"),
+            "notes": notes_arg or "",
+            "required_actions": new_record.get("required_actions", []),
+            "created_at": now_ts,
+            "evidence_file": str(evidence_arg),
+            "review_model": CODEX_REQUIRED_MODEL,
+        }
+        packet_path = BASE_DIR / "failure_packet.json"
+        try:
+            packet_path.write_text(json.dumps(packet, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"[CODEX RECORD] REJECT — failure_packet.json 생성: {packet_path}")
+            print(f"  gate: {gate_name}")
+            print(f"  owner: {owner}")
+            print(f"  return_phase: {packet['return_phase']}")
+        except OSError as exc:
+            logging.getLogger(__name__).warning("failure_packet.json 저장 실패: %s", exc)
+
+    print(f"[CODEX RECORD] stage={stage} result={result_upper} 공식 기록 완료: {review_result_path}")
+    if result_upper == "ACCEPT":
+        print("  4중 검증: review_model(1/4) + head_sha(2/4) + diff_sha256(3/4) + evidence JSON(4/4) 모두 통과")
+    else:
+        print(f"  REJECT 기록 완료. failure_packet.json을 참조하여 {owner}가 수정 후 재시도하세요.")
 
 
 def _set_external_gate(
@@ -8422,11 +9199,77 @@ def build_parser() -> argparse.ArgumentParser:
     p_review = sub.add_parser("review", help="Codex Review Gate — 코드 리뷰 결과 관리")
     review_sub = p_review.add_subparsers(dest="review_action", required=True)
 
-    p_review_codex = review_sub.add_parser("codex", help="git diff 메타데이터 수집 및 codex_review_result.json 초기화")
+    p_review_codex = review_sub.add_parser(
+        "codex",
+        help="git diff 메타데이터 수집 및 codex_review_result.json에 stage 기록 추가 (MT-2: IMP-20260516-A627)",
+    )
     p_review_codex.add_argument("--base", default="main", metavar="REF",
                                 help="비교 기준 브랜치/커밋 (기본값: main)")
     p_review_codex.add_argument("--output", default=None, metavar="PATH",
                                 help="출력 파일 경로 (기본값: codex_review_result.json)")
+    p_review_codex.add_argument(
+        "--stage",
+        dest="stage",
+        default="",
+        metavar="STAGE",
+        help="리뷰 단계: plan|scope|code|hygiene|pr|rca (필수)",
+    )
+    p_review_codex.add_argument(
+        "--result",
+        dest="result_value",
+        default="PENDING",
+        metavar="RESULT",
+        help="리뷰 결과: ACCEPT|REJECT|PENDING (기본값: PENDING)",
+    )
+    p_review_codex.add_argument(
+        "--review-model",
+        dest="review_model",
+        default=CODEX_REQUIRED_MODEL,
+        metavar="MODEL",
+        help=f"리뷰 모델 식별자 (기본값: {CODEX_REQUIRED_MODEL}, 다른 값 시 경고)",
+    )
+    p_review_codex.add_argument(
+        "--reviewer",
+        dest="reviewer",
+        default="unknown",
+        metavar="REVIEWER",
+        help="리뷰어 식별자 (기본값: unknown)",
+    )
+    p_review_codex.add_argument(
+        "--pipeline-id",
+        dest="pipeline_id_arg",
+        default="",
+        metavar="ID",
+        help="파이프라인 ID (생략 시 활성 state에서 자동 추출)",
+    )
+    p_review_codex.add_argument(
+        "--pr-number",
+        dest="pr_number",
+        default=None,
+        metavar="PR",
+        help="PR 번호 또는 URL (선택)",
+    )
+    p_review_codex.add_argument(
+        "--head-sha",
+        dest="head_sha",
+        default=None,
+        metavar="SHA",
+        help="리뷰 시점의 git HEAD SHA (선택; codex-record에서 4중 검증에 사용됨)",
+    )
+    p_review_codex.add_argument(
+        "--notes",
+        dest="notes",
+        default=None,
+        metavar="TEXT",
+        help="리뷰 노트 (선택)",
+    )
+    p_review_codex.add_argument(
+        "--findings-file",
+        dest="findings_file",
+        default=None,
+        metavar="PATH",
+        help="findings 배열 JSON 파일 경로 (선택; 없으면 빈 배열 또는 기존 findings 유지)",
+    )
 
     p_review_status = review_sub.add_parser("status", help="미해결 HIGH/CRITICAL findings 수 출력")
     p_review_status.add_argument("--output", default=None, metavar="PATH",
@@ -8439,6 +9282,64 @@ def build_parser() -> argparse.ArgumentParser:
                                   metavar="PATH", help="해소 내용 JSON 파일 (선택)")
     p_review_resolve.add_argument("--output", default=None, metavar="PATH",
                                   help="codex_review_result.json 경로 (기본값: codex_review_result.json)")
+
+    # codex-record — 실제 Codex review ACCEPT/REJECT 공식 기록 (MT-3: IMP-20260516-A627)
+    p_review_record = review_sub.add_parser(
+        "codex-record",
+        help="실제 Codex review(GPT-5.5) 세션 ACCEPT/REJECT를 공식 기록 (pr/rca stage 전용, 4중 검증)",
+    )
+    p_review_record.add_argument(
+        "--stage", dest="stage", required=True,
+        metavar="STAGE", help="리뷰 단계: pr|rca",
+    )
+    p_review_record.add_argument(
+        "--result", dest="result_value", required=True,
+        metavar="RESULT", help="리뷰 결과: ACCEPT|REJECT",
+    )
+    p_review_record.add_argument(
+        "--review-model", dest="review_model", default=CODEX_REQUIRED_MODEL,
+        metavar="MODEL", help=f"리뷰 모델 (반드시 {CODEX_REQUIRED_MODEL})",
+    )
+    p_review_record.add_argument(
+        "--head-sha", dest="head_sha", default=None,
+        metavar="SHA", help="리뷰 시점의 git HEAD SHA (ACCEPT 시 필수)",
+    )
+    p_review_record.add_argument(
+        "--diff-sha256", dest="diff_sha256_arg", default=None,
+        metavar="SHA256", help="리뷰한 diff의 SHA256 (ACCEPT 시 필수)",
+    )
+    p_review_record.add_argument(
+        "--evidence", dest="evidence", required=True,
+        metavar="PATH", help="Codex review 결과 JSON 파일 경로 (review_model 필드 포함)",
+    )
+    p_review_record.add_argument(
+        "--notes", dest="notes", default=None,
+        metavar="TEXT", help="리뷰 노트 (REJECT 시 --notes 또는 --required-actions 중 하나 필수)",
+    )
+    p_review_record.add_argument(
+        "--required-actions", dest="required_actions", default=None,
+        metavar="TEXT", help="필요 조치 콤마 구분 목록 (REJECT 시 --notes 또는 이 인자 중 하나 필수)",
+    )
+    p_review_record.add_argument(
+        "--return-phase", dest="return_phase", default=None,
+        metavar="PHASE", help="REJECT 시 되돌아갈 phase (예: dev, qa, pm)",
+    )
+    p_review_record.add_argument(
+        "--pr", dest="pr_number", default=None,
+        metavar="PR", help="PR 번호 또는 URL (선택)",
+    )
+    p_review_record.add_argument(
+        "--reviewer", dest="reviewer", default="unknown",
+        metavar="REVIEWER", help="리뷰어 식별자 (기본값: unknown)",
+    )
+    p_review_record.add_argument(
+        "--pipeline-id", dest="pipeline_id_arg", default="",
+        metavar="ID", help="파이프라인 ID (생략 시 활성 state에서 자동 추출)",
+    )
+    p_review_record.add_argument(
+        "--output", default=None,
+        metavar="PATH", help="codex_review_result.json 출력 경로 (기본값: codex_review_result.json)",
+    )
 
     p_review.set_defaults(func=cmd_review)
 
@@ -8674,6 +9575,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Backward-compatible no-op. Phase 6→7은 자동 진행되며 최종 gates accept에서만 사용자 확인.",
+    )
+    p_check.add_argument(
+        "--codex-review-waiver",
+        dest="codex_review_waiver",
+        default="",
+        metavar="REASON",
+        help=(
+            "Codex Review Gate waiver 이유. "
+            "허용 값: 'legacy-bootstrap' (IMP 머지 직전 기존 파이프라인 보호용). "
+            "이 플래그 사용 시 해당 check 결과는 waived로 기록됩니다. (MT-4: IMP-20260516-A627)"
+        ),
     )
 
     # status
