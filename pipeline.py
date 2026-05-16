@@ -7158,27 +7158,30 @@ def _classify_pr_file(path: str, phase: str, pid: str) -> str:
         "allowed" — phase attestation 증거로 허용
         "forbidden:<reason>" — phase 범위를 벗어남
     """
+    path = path.replace("\\", "/")
+
     # 허용: .pipeline/phase_attestation_request.json
     if path == ".pipeline/phase_attestation_request.json":
         return "allowed"
 
-    # 허용: 해당 phase의 phase_evidence 파일
-    phase_evidence_prefix = f".pipeline/phase_evidence/"
+    # phase_evidence 처리: pipeline_id + phase 모두 일치해야 허용
+    phase_evidence_prefix = ".pipeline/phase_evidence/"
     if path.startswith(phase_evidence_prefix):
-        # 경로에서 phase 폴더 확인: .pipeline/phase_evidence/{pid}/{phase}/...
+        # 경로에서 pid + phase 폴더 확인: .pipeline/phase_evidence/{pid}/{phase}/...
         rest = path[len(phase_evidence_prefix):]
         parts = rest.split("/")
-        if len(parts) >= 2 and parts[1] == phase:
+        if len(parts) >= 2 and parts[0] == pid and parts[1] == phase:
             return "allowed"
-        # 다른 phase의 evidence
-        return f"forbidden:다른 phase evidence 경로 ({path})"
+        # 다른 pipeline_id 또는 다른 phase의 evidence
+        return f"forbidden:다른 pipeline_id 또는 phase의 evidence 경로 ({path})"
 
-    # 금지 패턴
+    # 금지 패턴 (구체적인 것 먼저, 마지막에 .pipeline/ catch-all)
     FORBIDDEN_PREFIXES = [
         "pipeline_contracts/",
         "pipeline_outputs/",
         ".github/",
         "tests/",
+        ".pipeline/",  # catch-all: agent_receipts, 기타 .pipeline/** 모두 금지
     ]
     FORBIDDEN_EXACT = {
         "pipeline_state.json",
@@ -7546,7 +7549,36 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not phase:
             _die("[PIPELINE ERROR] preflight-pr requires --phase {pm,dev,qa,build}", exit_code=2)
 
-        pid = str(state.get("pipeline_id", ""))
+        pid = str(getattr(args, "pipeline_id", None) or state.get("pipeline_id", ""))
+        request_file = str(getattr(args, "request_file", None) or ".pipeline/phase_attestation_request.json")
+
+        # request 파일이 있으면 파싱하여 phase와 pipeline_id 검증
+        req_path = Path(request_file)
+        if req_path.is_file():
+            try:
+                req_data = json.loads(req_path.read_bytes().decode("utf-8"))
+            except Exception as exc:
+                _die(f"[PIPELINE ERROR] preflight-pr: request 파일 파싱 실패: {exc}", exit_code=1)
+            req_phase = str(req_data.get("phase", "")).strip().lower()
+            req_pid = str(req_data.get("pipeline_id", "")).strip()
+            if req_phase and req_phase != phase:
+                print(
+                    f"[PIPELINE ERROR] preflight-pr FAIL: request.phase={req_phase!r}가 "
+                    f"--phase={phase!r}와 다릅니다. 잘못된 phase 브랜치에서 PR을 열었을 수 있습니다.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            if pid and req_pid and req_pid != pid:
+                print(
+                    f"[PIPELINE ERROR] preflight-pr FAIL: request.pipeline_id={req_pid!r}가 "
+                    f"--pipeline-id={pid!r}와 다릅니다.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            # request에서 pid를 덮어쓰기 (--pipeline-id 미지정 시 request 값 사용)
+            if not pid:
+                pid = req_pid
+
         result = subprocess.run(
             ["git", "diff", "--name-only", "origin/main...HEAD"],
             capture_output=True, text=True, check=False,
@@ -8582,6 +8614,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_preflight_pr = gsub.add_parser("preflight-pr", help="PR에 섞인 무관한 파일을 검사하여 phase attestation 오염을 차단")
     p_gate_preflight_pr.add_argument("--phase", required=True, choices=["pm", "dev", "qa", "build"],
                                      help="검사할 phase (pm|dev|qa|build)")
+    p_gate_preflight_pr.add_argument("--pipeline-id", default=None, dest="pipeline_id",
+                                     help="검사할 pipeline_id (request 파일 pipeline_id와 cross-check)")
+    p_gate_preflight_pr.add_argument("--request-file",
+                                     default=".pipeline/phase_attestation_request.json",
+                                     help="검증할 request JSON 경로 (기본값: .pipeline/phase_attestation_request.json)")
 
     p_gate_batch_ci = gsub.add_parser("batch-ci", help="변경 파일 목록을 기반으로 CI 모드(per_phase/batched) 결정")
     p_gate_batch_ci.add_argument("--probe", action="store_true", default=False,

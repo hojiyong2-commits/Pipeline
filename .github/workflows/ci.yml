@@ -29,6 +29,23 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: 단계 PR 위생 검사 (preflight-pr)
+        if: hashFiles('.pipeline/phase_attestation_request.json') != ''
+        shell: pwsh
+        env:
+          PIPELINE_NO_DASHBOARD: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $reqPath = ".pipeline/phase_attestation_request.json"
+          $req = ConvertFrom-Json (Get-Content -Path $reqPath -Raw -Encoding UTF8)
+          $phase = [string]$req.phase
+          $pid = [string]$req.pipeline_id
+          if ([string]::IsNullOrWhiteSpace($phase)) {
+            Write-Error "[PIPELINE ERROR] phase_attestation_request.json에 phase 필드가 없습니다."
+            exit 1
+          }
+          python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pid --request-file $reqPath
+
       - name: 자동 검사 실행
         env:
           PIPELINE_NO_DASHBOARD: "1"
@@ -332,6 +349,13 @@ jobs:
           "@
           Set-Content -Path human_acceptance_packet.md -Value $packet -Encoding UTF8
 
+          # 일반 구현 PR에서 정보 부족이면 CI hard fail
+          $isAttestationPr = Test-Path -LiteralPath ".pipeline/phase_attestation_request.json"
+          if (-not $isAttestationPr -and $missingDecisionInfo.Count -gt 0) {
+            Write-Error "[PIPELINE ERROR] 판단 정보 부족 ($($missingDecisionInfo -join ', ')): 구현 PR 본문에 필수 항목을 추가한 후 다시 push하세요."
+            exit 1
+          }
+
       - name: 단계 증명 파일 만들기
         if: success() && hashFiles('.pipeline/phase_attestation_request.json') != ''
         shell: pwsh
@@ -474,7 +498,7 @@ jobs:
           path: pipeline_attestation.json
 
       - name: 최종 확인 안내 올리기
-        if: success() && github.event_name == 'pull_request'
+        if: (success() || failure()) && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: 최종-확인-안내
@@ -488,7 +512,7 @@ jobs:
           path: phase_attestation.json
 
       - name: PR에 최종 확인 안내 남기기
-        if: success() && github.event_name == 'pull_request'
+        if: (success() || failure()) && github.event_name == 'pull_request'
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}

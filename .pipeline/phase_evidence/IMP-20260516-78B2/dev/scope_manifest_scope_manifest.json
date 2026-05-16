@@ -1,0 +1,50 @@
+{
+  "pipeline_id": "IMP-20260516-78B2",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._classify_pr_file"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.cmd_gates (preflight-pr 분기) + p_gate_preflight_pr 파서 정의"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        ".github/workflows/ci.yml"
+      ],
+      "affected_functions": [
+        "ci.yml `자동 검사 실행` 단계 직전"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        ".github/workflows/ci.yml"
+      ],
+      "affected_functions": [
+        "ci.yml `최종 확인 안내 만들기` 단계의 missingDecisionInfo 처리부"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "tests/test_pr_hygiene.py"
+      ],
+      "affected_functions": [
+        "tests.test_pr_hygiene (신규 5개 테스트 함수)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260516-78B2</pipeline_id>
+  <agent_id>dev-agent</agent_id>
+  <run_id>dev-09687b4f145da92d</run_id>
+  <title>Dev Phase 완료 — preflight-pr 강화 7개 요구사항 구현</title>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_functions>
+      <function file="pipeline.py">_classify_pr_file — pipeline_id 검증 + agent_receipts 차단</function>
+      <function file="pipeline.py">cmd_gates (preflight-pr) — request JSON 검증 추가</function>
+      <function file=".github/workflows/ci.yml">preflight-pr step 삽입</function>
+      <function file=".github/workflows/ci.yml">정보 부족 hard fail + always-run 조건</function>
+      <function file="tests/test_pr_hygiene.py">5개 회귀 테스트 추가</function>
+    </target_functions>
+    <blast_radius>3개 파일, 2+3 함수 수정</blast_radius>
+  </impact_analysis>
+
+  <implemented_files>
+    <file path="pipeline.py" lines_changed="55" functions_changed="2">
+      <function>_classify_pr_file (MT-1)</function>
+      <function>cmd_gates preflight-pr action + parser (MT-2)</function>
+    </file>
+    <file path=".github/workflows/ci.yml" lines_changed="29" functions_changed="3">
+      <function>preflight-pr step 삽입 (MT-3)</function>
+      <function>isAttestationPr hard fail 로직 (MT-4)</function>
+      <function>최종 확인 안내 step if 조건 변경 (MT-4)</function>
+    </file>
+    <file path="tests/test_pr_hygiene.py" lines_changed="95" functions_changed="6">
+      <function>_load_classify 헬퍼 (MT-5)</function>
+      <function>5개 회귀 테스트 (MT-5)</function>
+    </file>
+  </implemented_files>
+
+  <self_check>
+    <item check="all_mts_pass">true — MT-1~MT-5 모두 QA PASS</item>
+    <item check="integration_pass">true — module integrate PASS</item>
+    <item check="tests_pass">true — 9 passed in 0.37s</item>
+    <item check="yaml_valid">true — ci.yml YAML valid</item>
+    <item check="scope_within_plan">true — 3개 파일 모두 PM step_plan 범위 내</item>
+  </self_check>
+
+  <qa_handover>
+    <summary>
+      7개 요구사항 모두 구현 완료:
+      1. GitHub Actions에서 pytest 전 preflight-pr 실행 (MT-3)
+      2. preflight-pr가 request JSON에서 phase 검증 (MT-2)
+      3. phase 불일치 시 hard fail exit 1 (MT-2)
+      4. pipeline_id까지 검증 — 다른 pipeline_id evidence 차단 (MT-1, MT-2)
+      5. .pipeline/agent_receipts/** 금지 (MT-1)
+      6. 정보 부족 → 일반 구현 PR에서 CI hard fail (MT-4)
+      7. 5개 회귀 테스트 추가 (MT-5)
+    </summary>
+    <test_evidence>python -m pytest tests/test_pr_hygiene.py -q → 9 passed</test_evidence>
+  </qa_handover>
+
+  <evidence>
+    <file path="pipeline.py">_classify_pr_file, cmd_gates</file>
+    <file path=".github/workflows/ci.yml">preflight-pr step, hard fail, always-run</file>
+    <file path="tests/test_pr_hygiene.py">9개 테스트</file>
+  </evidence>
+
+  <handover>
+    <to>qa-agent</to>
+    <summary>7개 요구사항 모두 구현. MT-1~MT-5 QA PASS. 통합 9개 테스트 PASS. YAML 유효.</summary>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/test_pr_hygiene.py</file>
+    </evidence>
+    <test_results>python -m pytest tests/test_pr_hygiene.py -q → 9 passed</test_results>
+  </handover>
+</dev_handover>
