@@ -7188,6 +7188,56 @@ def _classify_pr_file(path: str, phase: str, pid: str) -> str:
 
 def cmd_gates(args: argparse.Namespace) -> None:
     action = args.gates_action
+
+    # preflight-pr는 pipeline_state.json 없이도 동작해야 함 (CI에서 clean branch로 실행)
+    if action == "preflight-pr":
+        phase = str(getattr(args, "phase", "") or "").strip().lower()
+        if not phase:
+            _die("[PIPELINE ERROR] preflight-pr requires --phase {pm,dev,qa,build}", exit_code=2)
+
+        # pipeline_id를 phase_attestation_request.json에서 읽거나 state에서 읽음
+        pid = ""
+        req_path = Path(".pipeline/phase_attestation_request.json")
+        if req_path.exists():
+            try:
+                req = json.loads(req_path.read_text(encoding="utf-8"))
+                pid = str(req.get("pipeline_id", ""))
+            except Exception:
+                pass
+        if not pid:
+            state_raw = _load()
+            if state_raw:
+                pid = str(state_raw.get("pipeline_id", ""))
+
+        base_sha = os.environ.get("GITHUB_BASE_SHA", "")
+        if base_sha:
+            diff_cmd = ["git", "diff", "--name-only", f"{base_sha}...HEAD"]
+        else:
+            diff_cmd = ["git", "diff", "--name-only", "origin/main...HEAD"]
+        result = subprocess.run(diff_cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            _die(
+                f"[PIPELINE ERROR] preflight-pr: git diff failed: {result.stderr.strip()}",
+                exit_code=1,
+            )
+        changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+
+        forbidden: List[str] = []
+        for f in changed_files:
+            verdict = _classify_pr_file(f, phase, pid)
+            if verdict.startswith("forbidden"):
+                forbidden.append(f)
+
+        if forbidden:
+            print(f"[PIPELINE ERROR] preflight-pr FAIL: 다음 파일이 phase={phase} PR 범위를 벗어납니다:")
+            for f in forbidden:
+                print(f"  - {f}")
+            sys.exit(1)
+
+        color = GREEN
+        print(color(f"[PREFLIGHT-PR PASS] phase={phase} changed={len(changed_files)}개 파일"))
+        sys.exit(0)
+
     state = _require_state()
     state = _ensure_v210_fields(state)
     pid = str(state.get("pipeline_id"))
@@ -7530,39 +7580,6 @@ def cmd_gates(args: argparse.Namespace) -> None:
             # 비probe 모드: 상태 기록 없음, 단순 stdout 출력 후 종료
             pass
         return
-
-    if action == "preflight-pr":
-        phase = str(getattr(args, "phase", "") or "").strip().lower()
-        if not phase:
-            _die("[PIPELINE ERROR] preflight-pr requires --phase {pm,dev,qa,build}", exit_code=2)
-
-        pid = str(state.get("pipeline_id", ""))
-        result = subprocess.run(
-            ["git", "diff", "--name-only", "origin/main...HEAD"],
-            capture_output=True, text=True, check=False,
-        )
-        if result.returncode != 0:
-            _die(
-                f"[PIPELINE ERROR] preflight-pr: git diff failed: {result.stderr.strip()}",
-                exit_code=1,
-            )
-        changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
-
-        forbidden: List[str] = []
-        for f in changed_files:
-            verdict = _classify_pr_file(f, phase, pid)
-            if verdict.startswith("forbidden"):
-                forbidden.append(f)
-
-        if forbidden:
-            print(f"[PIPELINE ERROR] preflight-pr FAIL: 다음 파일이 phase={phase} PR 범위를 벗어납니다:")
-            for f in forbidden:
-                print(f"  - {f}")
-            sys.exit(1)
-
-        color = GREEN
-        print(color(f"[PREFLIGHT-PR PASS] phase={phase} changed={len(changed_files)}개 파일"))
-        sys.exit(0)
 
     _die(f"unknown gates action: {action}", exit_code=2)
 
