@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_planner_output>
+
+  <decomposition_audit>
+    <pipeline_id>IMP-20260516-A627</pipeline_id>
+    <user_request_summary>Codex review를 문서 규칙이 아닌 pipeline.py hard gate로 공식 편입한다. 6단계 stage(plan/scope/code/hygiene/pr/rca), GPT-5.5 모델 고정, schema validation, failure packet, 13개 regression test까지 구현하는 HIGH_RISK 작업.</user_request_summary>
+
+    <risk_assessment>
+      <profile>HIGH_RISK</profile>
+      <reasons>
+        <reason>신뢰 루트 파일 pipeline.py 대규모 수정 (약 +600~900 라인 신규 코드, 6단계 stage validator + codex-record + schema)</reason>
+        <reason>CLAUDE.md, .claude/commands/task.md, .claude/agents/pm-agent.md 등 신뢰 루트 문서 trust chain 정의 변경</reason>
+        <reason>QA 진입 gate 강화 (현재 "absent=skip" → "absent=FAIL"로 행동 반전, 회귀 영향 큼)</reason>
+        <reason>codex_review_result.json 데이터 스키마 v1 → v2 마이그레이션 필요 (schema_version, stage, result, review_model 필드 추가)</reason>
+        <reason>외부 GPT-5.5 모델 의존성 명시 (다른 모델 차단), advisory(GPT-5)와 분리</reason>
+      </reasons>
+      <fast_path_eligible>false</fast_path_eligible>
+      <patch_lane_eligible>false</patch_lane_eligible>
+      <patch_lane_block_reasons>
+        <reason>변경 파일 5개 이상 (pipeline.py + 신규 tests + CLAUDE.md + task.md + pm-agent.md)</reason>
+        <reason>변경 함수 다수 (_check_codex_review_gate, cmd_review, codex-record 신규, schema validator 신규, hygiene checker 신규)</reason>
+        <reason>예상 변경 라인 >> 15 (HIGH_RISK 본질)</reason>
+        <reason>trust root 파일 다수 수정 (pipeline.py, CLAUDE.md, .claude/agents/**)</reason>
+        <reason>새 hard gate 의미론 도입 (absent → FAIL)</reason>
+      </patch_lane_block_reasons>
+    </risk_assessment>
+
+    <evidence_collected>
+      <grep_evidence>
+        <pattern>_check_codex_review_gate|cmd_review|review_action</pattern>
+        <target>pipeline.py</target>
+        <match_count>11</match_count>
+        <executed>true</executed>
+        <interpretation>현재 pipeline.py에 codex review gate 코드와 cmd_review subcommand가 이미 존재. 6단계 stage 확장은 기존 cmd_review를 확장하는 형태로 진행.</interpretation>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>Trust chain</pattern>
+        <target>CLAUDE.md</target>
+        <match_count>1</match_count>
+        <executed>true</executed>
+        <interpretation>CLAUDE.md L8에 trust chain 정의 1곳 존재. Codex technical review(GPT-5.5) 항목 삽입 위치 확정.</interpretation>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>codex|Codex|GPT-5</pattern>
+        <target>.claude/commands/task.md</target>
+        <match_count>0</match_count>
+        <executed>true</executed>
+        <interpretation>task.md에 Codex/GPT-5 언급 없음. trust chain 정의 + 6단계 gate 설명 신규 섹션 추가 필요.</interpretation>
+      </grep_evidence>
+      <grep_evidence>
+        <pattern>codex|Codex|GPT-5</pattern>
+        <target>.claude/agents/pm-agent.md</target>
+        <match_count>0</match_count>
+        <executed>true</executed>
+        <interpretation>pm-agent.md에 Codex 언급 없음. plan stage(Dev 진입 전)와 scope stage 필수 통과 항목 신규 섹션 추가 필요.</interpretation>
+      </grep_evidence>
+      <file_check>
+        <path>tests/test_pr_hygiene.py</path>
+        <exists>true</exists>
+        <note>기존 PR 위생 회귀 테스트 — 신규 test_codex_review.py와 동일 패턴(_run_pipeline subprocess + importlib spec)을 따른다.</note>
+      </file_check>
+      <file_check>
+        <path>tests/test_codex_review.py</path>
+        <exists>false</exists>
+        <note>신규 작성 대상. 13개 테스트.</note>
+      </file_check>
+      <file_check>
+        <path>codex_review_result.json</path>
+        <exists>true_but_gitignored</exists>
+        <note>현재 schema_version=1, generated_at, base_ref, reviewed_files, diff_sha256, findings 필드만 존재. stage/result/review_model/pr_number/head_sha/allowed_files/forbidden_files/required_actions/return_phase 추가 필요.</note>
+      </file_check>
+    </evidence_collected>
+
+    <decomposition_strategy>
+      <principle>파일별 + 책임별 분해. pipeline.py 변경이 가장 크고 위험하므로 schema/CLI/gate/record/hygiene을 4개 MT로 쪼개어 incremental module gate로 격리한다. 테스트와 문서는 별도 MT.</principle>
+      <module_split>
+        <count>6</count>
+        <criteria>관심사 분리: (1) 데이터 스키마 + validator (2) review codex CLI 6-stage 확장 (3) codex-record 명령 신규 + failure packet (4) hard gate 행동 변경 (absent → FAIL) + hygiene + pr/rca gate hook (5) 회귀 테스트 13개 (6) 신뢰 루트 문서 동기화</criteria>
+      </module_split>
+    </decomposition_strategy>
+
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+
+    <oracle_plan>
+      <location>tests/oracles/IMP-20260516-A627/</location>
+      <cases>
+        <case kind="normal" id="tc01">
+          <description>plan stage ACCEPT + review_model=GPT-5.5 + diff_sha256 일치 → Dev 진입 PASS</description>
+          <input>tests/oracles/IMP-20260516-A627/tc01/codex_review_result.json (사용자 제공 sample, schema_version=1, stage=plan, result=ACCEPT, review_model=GPT-5.5)</input>
+          <expected>tests/oracles/IMP-20260516-A627/tc01/expected_gate_result.json (gate_status=PASS, exit_code=0)</expected>
+        </case>
+        <case kind="exception" id="tc02">
+          <description>review_model이 GPT-5.5가 아니면 (예: claude-opus-4-7) FAIL + 한국어 에러 메시지</description>
+          <input>tests/oracles/IMP-20260516-A627/tc02/codex_review_result.json (result=ACCEPT, review_model=claude-opus-4-7)</input>
+          <expected>tests/oracles/IMP-20260516-A627/tc02/expected_gate_result.json (gate_status=FAIL, error_contains="GPT-5.5")</expected>
+        </case>
+        <case kind="error" id="tc03">
+          <description>review 파일 자체가 없으면 plan stage에서 Dev 진입 FAIL (skip 금지)</description>
+          <input>tests/oracles/IMP-20260516-A627/tc03/empty_dir_marker.txt</input>
+          <expected>tests/oracles/IMP-20260516-A627/tc03/expected_gate_result.json (gate_status=FAIL, error_contains="codex review")</expected>
+        </case>
+        <case kind="edge" id="tc04">
+          <description>code stage ACCEPT인데 diff_sha256이 현재 HEAD와 불일치하면 FAIL (stale review)</description>
+          <input>tests/oracles/IMP-20260516-A627/tc04/codex_review_result.json (result=ACCEPT, diff_sha256=fake_sha)</input>
+          <expected>tests/oracles/IMP-20260516-A627/tc04/expected_gate_result.json (gate_status=FAIL, error_contains="diff SHA256")</expected>
+        </case>
+      </cases>
+      <ownership>PM이 oracle 파일을 tests/oracles/IMP-20260516-A627/ 아래에 저장하고, Dev는 oracle expected를 수정하지 않는다.</ownership>
+    </oracle_plan>
+
+    <phase_attestation_plan>
+      <pm>step_plan.xml + manager_handoff.xml + planner/manager run_id 받아 gates prepare-phase --phase pm → push → phase-ci</pm>
+      <dev>module design/dev/qa MT-1~MT-6 순차 통과 + module integrate → done --phase dev → prepare-phase --phase dev → push → phase-ci</dev>
+      <qa>각 MT QA PASS + integration QA PASS → done --phase qa → prepare-phase --phase qa → push → phase-ci</qa>
+      <build>비코드 빌드 대상 없음. pipeline.py와 테스트는 EXE가 아니므로 --exe "N/A" --skip-reason "meta-task" 기록. 단 phase attestation은 동일하게 수행.</build>
+    </phase_attestation_plan>
+
+    <user_acceptance_plan>
+      <evidence_files>
+        <file kind="report">codex_gate_demo_report.md (Dev가 작성: 6 stage 시연 로그 + 13개 테스트 출력 + before/after gate 동작 요약)</file>
+        <file kind="log">pytest_codex_review_log.txt (13개 테스트 통과 출력)</file>
+        <file kind="log">pipeline_review_help_log.txt (review --help, review codex --help, codex doctor --json 출력)</file>
+      </evidence_files>
+      <user_facing_question_korean>Codex review를 hard gate로 편입했고 13개 테스트 모두 통과했습니다. 첨부된 시연 보고서와 테스트 로그를 확인하고 승인(ACCEPT) 또는 거절(REJECT)을 선택해 주세요.</user_facing_question_korean>
+    </user_acceptance_plan>
+
+    <anti_gaming_compliance>
+      <role_absorption>PM은 step_plan만 출력. dev/qa/build report 출력하지 않음.</role_absorption>
+      <score_completion>QA numeric은 중간 hard gate. 최종 완료는 Three-Gate + Option A + module gate + User ACCEPT.</score_completion>
+      <weak_oracle>위 oracle_plan에 normal + edge + exception + error 4 case 모두 명시. tests/oracles/IMP-20260516-A627/&lt;case_id&gt;/ 경로, SHA-256/source=user 필수.</weak_oracle>
+      <answer_key_mutation>Dev는 tests/oracles/IMP-20260516-A627/ 하위 expected 파일을 수정 금지. 변경 발견 시 QA FAIL.</answer_key_mutation>
+      <scope_widening>각 MT마다 scope_manifest_MT-N.json 필수. files/affected_functions가 PM micro_task 범위 안에 있어야 함.</scope_widening>
+      <phase_attestation_bypass>각 role boundary마다 prepare-phase + push + GitHub Actions + phase-ci 의무. 로컬 report만으로 통과 주장 금지.</phase_attestation_bypass>
+      <fake_advisory_claim>advisory(GPT-5)와 Codex review(GPT-5.5)는 분리. advisory가 review_count=0이면 advisory 미실행. 단, 본 IMP의 완료 조건은 advisory가 아니라 Three-Gate.</fake_advisory_claim>
+      <user_acceptance_without_visible_result>위 user_acceptance_plan에 실제 첨부파일 경로 3개 명시.</user_acceptance_without_visible_result>
+    </anti_gaming_compliance>
+
+  </decomposition_audit>
+
+  <step_plan>
+
+    <anti_gaming_read>true</anti_gaming_read>
+
+    <task_complexity>
+      <execution_profile>HIGH_RISK</execution_profile>
+      <reason>pipeline.py(신뢰 루트)의 hard gate 의미론을 반전(absent → FAIL)시키고, CLAUDE.md / task.md / pm-agent.md trust chain 정의를 동시 변경하며, 신규 CLI(codex-record) + 신규 schema(v1 → 확장) + 신규 13개 회귀 테스트를 한 사이클에 묶는다. 단일 게이트 회귀 실패가 모든 후속 IMP의 QA 진입을 차단할 수 있다.</reason>
+      <uncertainty>
+        <p0_questions>2</p0_questions>
+        <p1_questions>2</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>6</expected_changed_files>
+        <expected_changed_functions>8</expected_changed_functions>
+        <expected_changed_lines>900</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>true</external_api>
+        <auth_or_secret>false</auth_or_secret>
+        <pipeline_protocol>true</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>true</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+    </task_complexity>
+
+    <design_confirmation>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <maintenance_priority>maintainability_first — 유지보수성 우선 원칙 적용</maintenance_priority>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>변수명/함수명 스타일, 한국어 에러 메시지 정확한 문구, finding ID 포맷(CR-XXX vs CR-NNN) 같은 P2 내부 구현 취향 질문은 묻지 않습니다. 유지보수성 우선 원칙으로 PM이 일관성 있게 결정합니다.</filter_summary>
+
+      <decision_questions>
+        <question id="Q1" priority="P0" category="module_split">
+          <user_facing_question>Codex review hard gate를 어떻게 도입할까요? 즉시 강제(absent=FAIL 기본값)할지, ENV 변수로 단계적으로 할지 결정이 필요합니다.</user_facing_question>
+          <evidence>현재 _check_codex_review_gate()는 codex_review_result.json이 없으면 "skipped"로 PASS합니다. absent=FAIL로 바꾸면 본 IMP 머지 직후 모든 진행 중 파이프라인이 즉시 차단될 수 있습니다.</evidence>
+          <why_it_matters>이 결정은 사용자 경험과 안전성을 직접 가릅니다. 강제 우선이면 안전성 최대이지만 진행 중 작업이 멈춥니다. 단계적이면 리스크가 분산되지만 한 번 더 IMP가 필요합니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>즉시 강제 (absent=FAIL 기본값, ENV 플래그 없음)</label>
+              <benefit>안전성 최대. 사용자 요청과 가장 가까움. Codex review 누락이 즉시 드러남.</benefit>
+              <cost>본 IMP 머지 직후 진행 중 파이프라인의 QA 진입이 멈출 수 있음. 명시적 --codex-review-waiver로 처리 가능.</cost>
+            </option>
+            <option id="B">
+              <label>단계적 (ENV 변수 CODEX_GATE_STRICT=1 일 때만 활성화)</label>
+              <benefit>본 IMP 머지 직후 회귀 없음. 사용자가 준비 끝났을 때 플래그로 활성.</benefit>
+              <cost>한 번 더 머지가 필요. 임시 ENV 플래그가 코드에 남음.</cost>
+            </option>
+          </options>
+          <user_answer>A — 즉시 강제. absent=FAIL 기본값. ENV 플래그 없음. 진행 중 파이프라인 보호는 --codex-review-waiver legacy-bootstrap으로 처리.</user_answer>
+        </question>
+
+        <question id="Q2" priority="P0" category="module_split">
+          <user_facing_question>codex-record 명령으로 PR review ACCEPT를 기록할 때 어떤 수준의 4중 검증을 적용할까요?</user_facing_question>
+          <evidence>사용자 요청: "실제 Codex review 세션의 ACCEPT/REJECT 판단은 별도 codex-record 명령으로 기록해야 합니다." 검증 없이 ACCEPT를 받아들이면 위조를 막을 수 없습니다.</evidence>
+          <why_it_matters>본 IMP 핵심 원칙 "Claude가 Codex review를 했다고 주장만으로 통과 금지"를 어떻게 보장할지의 문제입니다.</why_it_matters>
+          <recommended_option>B</recommended_option>
+          <options>
+            <option id="A">
+              <label>최소 검증 (--result, --review-model GPT-5.5, --evidence 파일 존재만 확인)</label>
+              <benefit>구현 단순. 사용자 부담 적음.</benefit>
+              <cost>빈 파일을 evidence로 주고 ACCEPT를 위조해도 막지 못함. 원칙 위배 위험.</cost>
+            </option>
+            <option id="B">
+              <label>강한 4중 검증 (GPT-5.5 모델 + head_sha 검증 + diff_sha256 비어있지 않음 + evidence JSON에서 review_model 파싱 확인)</label>
+              <benefit>위조 시도 4중 차단. Codex 세션을 실제로 진행하지 않으면 통과 불가.</benefit>
+              <cost>구현 코드 +50줄. JSON parse 실패 시 FAIL (fallback grep 금지).</cost>
+            </option>
+          </options>
+          <user_answer>B — 강한 4중 검증. JSON parse 실패 시 FAIL, fallback grep 사용 금지.</user_answer>
+        </question>
+
+        <question id="Q3" priority="P1" category="module_split">
+          <user_facing_question>6단계 Codex review 결과를 단일 파일 + history 배열로 저장할까요, stage별 별도 파일로 저장할까요?</user_facing_question>
+          <evidence>사용자 요청 스키마에 stage 필드가 명시되어 단일 파일이 가능합니다. 단 덮어쓰면 history가 손실됩니다. history 배열로 누적하면 해결됩니다.</evidence>
+          <why_it_matters>실패 packet 추적성과 GitHub Actions가 무엇을 검증할지가 갈립니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>단일 파일 + history 배열 (stage별 기록 누적)</label>
+              <benefit>현재 schema와 호환. 한 파일만 추적. GitHub Actions가 단일 경로 검증.</benefit>
+              <cost>JSON 파일이 커짐. 같은 stage 재기록 시 최신 기록을 top-level로 반영.</cost>
+            </option>
+            <option id="B">
+              <label>stage별 별도 파일 6개</label>
+              <benefit>stage별 독립. race 없음.</benefit>
+              <cost>파일 6개 관리. 기존 단일 파일 마이그레이션 필요.</cost>
+            </option>
+          </options>
+          <user_answer>A — 단일 파일 + history 배열. 같은 stage 재기록 시 최신 기록이 top-level로 반영됨.</user_answer>
+        </question>
+
+        <question id="Q4" priority="P1" category="module_split">
+          <user_facing_question>17개 이상의 회귀 테스트를 단일 파일 tests/test_codex_review.py에 둘까요, 기능별로 쪼갤까요?</user_facing_question>
+          <evidence>사용자 요청은 "python -m pytest tests/test_codex_review.py -q"로 단일 파일을 가정합니다.</evidence>
+          <why_it_matters>유지보수성 vs 명령 호환성의 균형.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>단일 파일 tests/test_codex_review.py (17개+ 테스트 + stage별 클래스 분리)</label>
+              <benefit>사용자 검증 명령과 정확히 일치. 단일 모듈 import.</benefit>
+              <cost>400~500 라인 파일. 클래스 분리로 가독성 보완 필요.</cost>
+            </option>
+            <option id="B">
+              <label>분리 파일 (test_codex_plan.py, test_codex_code.py 등)</label>
+              <benefit>각 파일이 짧고 명확하여 stage별 독립 테스트 실행 가능.</benefit>
+              <cost>사용자 검증 명령 "pytest tests/test_codex_review.py -q"가 다르게 동작. 공통 fixture 중복.</cost>
+            </option>
+          </options>
+          <user_answer>A — 단일 파일 tests/test_codex_review.py. tc05~tc08 PR #60 RCA 회귀 케이스 포함하여 17개 이상.</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <micro_tasks>
+
+      <micro_task id="MT-1">
+        <title>codex_review_result.json schema v2 + validator 함수</title>
+        <affected_function>pipeline._validate_codex_review_schema</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pipeline._check_codex_review_gate</site>
+          <site>pipeline.cmd_review (codex / codex-record / status)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>_check_codex_review_gate|cmd_review|review_action</pattern>
+          <match_count>11</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>schema_version, pipeline_id, stage, review_type, result, reviewer, review_model, pr_number, base_ref, head_sha, diff_sha256, reviewed_files, allowed_files, forbidden_files, findings, required_actions, return_phase, created_at, updated_at 필드를 검증하는 순수 함수 추가. 모든 stage 명령이 이 validator를 호출.</change_summary>
+        <line_estimate>120</line_estimate>
+        <qa_criteria>
+          <criterion>review_model="GPT-5.5"가 아니면 ValueError 발생</criterion>
+          <criterion>result가 ACCEPT/REJECT/PENDING 외값이면 ValueError</criterion>
+          <criterion>stage가 plan/scope/code/hygiene/pr/rca 외값이면 ValueError</criterion>
+          <criterion>필수 필드 누락 시 ValueError + 누락 필드명 포함</criterion>
+        </qa_criteria>
+      </micro_task>
+
+      <micro_task id="MT-2">
+        <title>review codex 6-stage 확장 (plan/scope/code/hygiene/pr/rca)</title>
+        <affected_function>pipeline.cmd_review (codex 분기)</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pipeline._main argparse setup (p_review_codex)</site>
+          <site>pipeline._check_codex_review_gate</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>p_review_codex|review_action == "codex"</pattern>
+          <match_count>2</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>review codex 명령에 --stage 인자 추가. plan(quick) / scope(quick) / code(deep) / hygiene(quick) 4개 stage 메타데이터 수집 분기 구현. 각 stage는 codex_review_result.json에 stage별 history 항목 append. allowed_files/forbidden_files 계산 로직(scope stage) 포함. 기본 forbidden: .pipeline/**, pipeline_contracts/**, pipeline_outputs/**, pipeline_state*.json, build_report.xml, qa_report.xml, codex_review_result.json, failure_packet.json.</change_summary>
+        <line_estimate>200</line_estimate>
+        <qa_criteria>
+          <criterion>각 stage 호출 시 codex_review_result.json에 stage 필드와 timestamp 기록</criterion>
+          <criterion>scope stage가 forbidden 파일을 자동으로 채움</criterion>
+          <criterion>code stage(deep)는 pipeline.py/.github/workflows/**/tests/**/CLAUDE.md/.claude/** 변경 감지 시 REQUIRED 플래그 출력</criterion>
+        </qa_criteria>
+      </micro_task>
+
+      <micro_task id="MT-3">
+        <title>review codex-record (pr/rca) + failure packet</title>
+        <affected_function>pipeline.cmd_review_codex_record</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pipeline._main argparse setup (p_review_codex_record 신규)</site>
+          <site>pipeline._validate_codex_review_schema (MT-1)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>review_sub.add_parser|p_review_</pattern>
+          <match_count>5</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>codex-record 신규 subcommand 추가. 인자: --stage(pr|rca), --pr, --head-sha, --result(ACCEPT|REJECT), --review-model(GPT-5.5 강제), --evidence, --notes, --required-actions, --return-phase. 검증: --result REJECT면 notes 또는 required_actions 필수. ACCEPT인데 head_sha != 현재 git HEAD면 FAIL. diff_sha256 있으면 현재 diff와 일치 필수. REJECT면 failure_packet.json 생성(gate=codex_pr_review/codex_rca, owner=PM 또는 Dev, return_phase 명시).</change_summary>
+        <line_estimate>180</line_estimate>
+        <qa_criteria>
+          <criterion>--review-model이 GPT-5.5 아니면 exit code 2</criterion>
+          <criterion>--result REJECT면 failure_packet.json이 실제 디스크에 생성됨</criterion>
+          <criterion>--result ACCEPT인데 head_sha 불일치면 exit code 1 + 한국어 에러</criterion>
+        </qa_criteria>
+      </micro_task>
+
+      <micro_task id="MT-4">
+        <title>_check_codex_review_gate 강화 (absent → FAIL, stage별 분기)</title>
+        <affected_function>pipeline._check_codex_review_gate</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pipeline.cmd_check (Phase 2 Dev / Phase 4 QA / hygiene PR 진입)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>_check_codex_review_gate</pattern>
+          <match_count>2</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>현재 absent=skip → absent=FAIL로 반전. stage 인자 추가하여 Dev 진입은 plan/scope ACCEPT 확인, QA 진입은 code ACCEPT 확인, PR 생성 진입은 hygiene ACCEPT 확인. review_model != GPT-5.5 시 FAIL. result=PENDING 시 FAIL. diff_sha256 mismatch 유지. Q1 사용자 답변에 따라 CODEX_GATE_STRICT ENV 게이트 적용.</change_summary>
+        <line_estimate>150</line_estimate>
+        <qa_criteria>
+          <criterion>review 파일 없을 때 exit code 1 + 한국어 에러 "[CODEX REVIEW REQUIRED]"</criterion>
+          <criterion>stage 미일치 시 (예: QA 진입 시 plan stage만 있으면) FAIL</criterion>
+          <criterion>모든 검증 실패 메시지가 사용자 한국어 규칙 준수</criterion>
+        </qa_criteria>
+      </micro_task>
+
+      <micro_task id="MT-5">
+        <title>tests/test_codex_review.py — 13개 회귀 테스트</title>
+        <affected_function>tests.test_codex_review (13개 신규 함수)</affected_function>
+        <target_files>
+          <file>tests/test_codex_review.py</file>
+          <file>tests/oracles/IMP-20260516-A627/tc01/codex_review_result.json</file>
+          <file>tests/oracles/IMP-20260516-A627/tc02/codex_review_result.json</file>
+          <file>tests/oracles/IMP-20260516-A627/tc03/empty_dir_marker.txt</file>
+          <file>tests/oracles/IMP-20260516-A627/tc04/codex_review_result.json</file>
+        </target_files>
+        <affected_call_sites>
+          <site>none (테스트 신규)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>test_codex_review|test_pr_hygiene</pattern>
+          <match_count>1</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>13개 테스트 작성 (tests/test_pr_hygiene.py와 동일 패턴: subprocess + importlib.util.spec_from_file_location). 매핑: 1) plan absent → Dev FAIL, 2) plan REJECT → Dev FAIL, 3) plan ACCEPT → Dev PASS, 4) review_model 없음 → FAIL, 5) review_model != GPT-5.5 → FAIL, 6) scope allowed_files 밖 diff → FAIL, 7) code REJECT → QA FAIL, 8) code ACCEPT인데 diff_sha256 변경 → FAIL, 9) hygiene 내부 산출물 포함 PR → FAIL, 10) PR REJECT → failure_packet.json 생성, 11) PR ACCEPT → technical acceptance 가능, 12) pipeline.py/workflow/tests 변경 시 deep review REQUIRED, 13) Claude/GPT advisory/QA PASS만 있고 Codex record 없으면 FAIL.</change_summary>
+        <line_estimate>450</line_estimate>
+        <qa_criteria>
+          <criterion>python -m pytest tests/test_codex_review.py -q 출력에 "13 passed"</criterion>
+          <criterion>각 테스트가 명확한 assert 메시지 한국어/영어 모두 명확</criterion>
+          <criterion>tmp_path 사용으로 실제 codex_review_result.json 오염 없음</criterion>
+        </qa_criteria>
+      </micro_task>
+
+      <micro_task id="MT-6">
+        <title>신뢰 루트 문서 동기화 (CLAUDE.md, task.md, pm-agent.md)</title>
+        <affected_function>none (문서)</affected_function>
+        <target_files>
+          <file>CLAUDE.md</file>
+          <file>.claude/commands/task.md</file>
+          <file>.claude/agents/pm-agent.md</file>
+        </target_files>
+        <affected_call_sites>
+          <site>none (문서)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>Trust chain</pattern>
+          <match_count>1</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>Trust chain을 "local pipeline.py -> agent receipts -> Codex technical review(GPT-5.5) -> GitHub Actions -> CODEOWNERS -> user product ACCEPT"로 갱신(CLAUDE.md L8). 6-stage Codex gate 표/설명 신규 섹션 추가(CLAUDE.md). task.md에 "Codex ACCEPT는 기술 승인, 사용자는 결과물만 최종 확인" 명시. pm-agent.md에 plan stage(Dev 진입 전)와 scope stage 사용자 확인 항목 추가. "Codex REJECT = 해당 phase FAIL + failure packet" 규칙 모든 문서 반영.</change_summary>
+        <line_estimate>80</line_estimate>
+        <qa_criteria>
+          <criterion>CLAUDE.md Trust chain 한 줄에 "Codex technical review(GPT-5.5)" 포함</criterion>
+          <criterion>task.md, pm-agent.md 양쪽에 codex 6-stage 언급 ≥1</criterion>
+          <criterion>한국어 표기 일관성 (Codex/GPT-5.5는 영어 식별자 허용)</criterion>
+        </qa_criteria>
+      </micro_task>
+
+    </micro_tasks>
+
+    <module_gate_order>
+      <step order="1">MT-1 (schema validator) — 순수 함수, 다른 MT의 토대</step>
+      <step order="2">MT-2 (review codex 6-stage) — MT-1 validator 호출</step>
+      <step order="3">MT-3 (codex-record + failure packet) — MT-1 validator 호출</step>
+      <step order="4">MT-4 (_check_codex_review_gate 강화) — MT-1~MT-3 완성 후 gate 행동 반전</step>
+      <step order="5">MT-5 (13개 회귀 테스트) — MT-1~MT-4 모두 구현 후 검증</step>
+      <step order="6">MT-6 (신뢰 루트 문서 동기화) — 코드 동작 확정 후 문서 정합화</step>
+    </module_gate_order>
+
+    <env_snapshot>
+      <python_version>(Pipeline Manager가 phase 시작 시 채움)</python_version>
+      <installed_packages>(필요 없음: 신규 의존성 없음)</installed_packages>
+      <encoding>cp949 (Windows 기본)</encoding>
+      <screen_size>N/A (CLI 작업)</screen_size>
+    </env_snapshot>
+
+    <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+  </step_plan>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</pm_planner_output>
