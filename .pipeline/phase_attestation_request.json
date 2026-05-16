@@ -1,62 +1,48 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T10:48:46Z",
+  "generated_at": "2026-05-16T11:13:10Z",
   "pipeline_id": "IMP-20260516-C13E",
-  "phase": "dev",
-  "phase_status": "DONE",
-  "commit_hint": "42c0373f83849fbdccce8d126871a6045ee59d45",
+  "phase": "qa",
+  "phase_status": "PASS",
+  "commit_hint": "5e4006b3927610506f4151972cc0eb9cca5dce91",
   "state": {
-    "current_phase": "qa",
-    "phase_completed_at": "2026-05-16T10:36:45Z",
-    "report_file": "dev_handover.xml",
-    "evidence": ".github/workflows/ci.yml,setup.cfg,tests/test_pr_hygiene.py,tests/oracles/IMP-20260516-C13E/case_normal/input.json,tests/oracles/IMP-20260516-C13E/case_normal/expected.json,tests/oracles/IMP-20260516-C13E/case_edge/input.json,tests/oracles/IMP-20260516-C13E/case_edge/expected.json"
+    "current_phase": "sec",
+    "phase_completed_at": "2026-05-16T11:12:54Z",
+    "report_file": "qa_report.xml",
+    "evidence": null
   },
   "agent_run": {
-    "run_id": "dev-4f0cef85c83b323c",
-    "phase": "dev",
-    "agent_id": "dev-agent",
+    "run_id": "qa-cc433b490e6503c5",
+    "phase": "qa",
+    "agent_id": "qa-agent",
     "status": "COMPLETED",
-    "output_file": "dev_handover.xml",
-    "output_sha256": "fa5b9990d9008d036559c718c4a35e320c4faf370ee03886b8ea715a84991188",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-C13E/dev/agent_receipt_dev-4f0cef85c83b323c.json",
-    "receipt_sha256": "97129556aca550ddb32f74b928212b410f02d512680b3317489fbe0a2d61a8e6",
-    "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\dev\\dev-4f0cef85c83b323c.json"
+    "output_file": "qa_report.xml",
+    "output_sha256": "c81b8cb1bc7d56031e54318b55329cd1acd4734d62a742c4cf65d7b7041a897f",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-C13E/qa/agent_receipt_qa-cc433b490e6503c5.json",
+    "receipt_sha256": "6831b855a8abd3995db95207f2d88c4df21a3aab929e5c54afe265e83acf6cbe",
+    "used_by_phase": "qa",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\qa\\qa-cc433b490e6503c5.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\dev\\dev-4f0cef85c83b323c.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/dev/agent_receipt_dev-4f0cef85c83b323c.json",
-      "sha256": "97129556aca550ddb32f74b928212b410f02d512680b3317489fbe0a2d61a8e6",
-      "size_bytes": 502,
-      "requires_force_add": false
+      "source": ".pipeline\\agent_receipts\\IMP-20260516-C13E\\qa\\qa-cc433b490e6503c5.json",
+      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/qa/agent_receipt_qa-cc433b490e6503c5.json",
+      "sha256": "6831b855a8abd3995db95207f2d88c4df21a3aab929e5c54afe265e83acf6cbe",
+      "size_bytes": 496,
+      "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "dev_handover.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/dev/report_dev_handover.xml",
-      "sha256": "fa5b9990d9008d036559c718c4a35e320c4faf370ee03886b8ea715a84991188",
-      "size_bytes": 2209,
-      "requires_force_add": false
-    },
-    {
-      "label": "scope_manifest",
-      "source": "scope_manifest.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/dev/scope_manifest_scope_manifest.json",
-      "sha256": "50ab2f4c8ec7250d03d496648c7eccc9bcf1ce5980ee29a8b554204926064c44",
-      "size_bytes": 904,
-      "requires_force_add": false
+      "source": "qa_report.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260516-C13E/qa/report_qa_report.xml",
+      "sha256": "c81b8cb1bc7d56031e54318b55329cd1acd4734d62a742c4cf65d7b7041a897f",
+      "size_bytes": 2881,
+      "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "setup.cfg",
-      "sha256": "4744ce60f31a1fef722f8e949bc9da15159f16007db481c8d492a67602ba8f91",
-      "size_bytes": 29
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
