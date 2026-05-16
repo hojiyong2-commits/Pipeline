@@ -234,6 +234,9 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
 <step_plan>
   <pipeline_id>{pid}</pipeline_id>
   <anti_gaming_read>true</anti_gaming_read>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+  </task_complexity>
 {_design_confirmation_xml()}
   <micro_tasks>
     <micro_task id="MT-1">
