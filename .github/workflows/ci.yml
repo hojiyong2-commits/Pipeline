@@ -29,6 +29,87 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: 구현 PR 위생 검사 (내부 산출물 오염 방지)
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'phase-attestation/')
+        shell: pwsh
+        env:
+          PIPELINE_NO_DASHBOARD: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $baseRef = "${{ github.event.pull_request.base.ref }}"
+          if ([string]::IsNullOrWhiteSpace($baseRef)) { $baseRef = "main" }
+          git fetch origin $baseRef --depth=50
+          $baseSha = "${{ github.event.pull_request.base.sha }}"
+          if ([string]::IsNullOrWhiteSpace($baseSha)) {
+            $baseSha = git merge-base "origin/$baseRef" HEAD
+          }
+          $changedFiles = git diff --name-only "$baseSha" HEAD
+          $forbiddenPatterns = @(
+            '^\.pipeline[/\\]',
+            '^pipeline_contracts[/\\]',
+            '^pipeline_outputs[/\\]',
+            '^pipeline_state.*\.json$',
+            '^build_report\.xml$',
+            '^qa_report\.xml$',
+            '^codex_review_result\.json$',
+            '^integration_report\.xml$',
+            '^dev_handover\.xml$',
+            '^step_plan\.xml$',
+            '^architect_report\.xml$',
+            'module_.*\.xml$',
+            '^scope_manifest.*\.json$',
+            '^preflight_report\.json$',
+            '^failure_packet\.json$',
+            '^manager_handoff\.xml$'
+          )
+          $violations = @()
+          foreach ($file in $changedFiles) {
+            foreach ($pattern in $forbiddenPatterns) {
+              if ($file -match $pattern) {
+                $violations += $file
+                break
+              }
+            }
+          }
+          if ($violations.Count -gt 0) {
+            Write-Error "[PIPELINE ERROR] 구현 PR에 내부 파이프라인 산출물이 포함되어 있습니다:`n$($violations -join [System.Environment]::NewLine)"
+            exit 1
+          }
+          Write-Host "구현 PR 위생 검사 통과 — 내부 산출물 없음 ($($changedFiles.Count)개 파일 확인)"
+
+      - name: 단계 PR 위생 검사 (preflight-pr)
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'phase-attestation/')
+        shell: pwsh
+        env:
+          PIPELINE_NO_DASHBOARD: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $reqPath = ".pipeline/phase_attestation_request.json"
+          if (-not (Test-Path $reqPath)) {
+            Write-Error "[PIPELINE ERROR] phase-attestation 브랜치에 .pipeline/phase_attestation_request.json이 없습니다."
+            exit 1
+          }
+          $req = ConvertFrom-Json (Get-Content -Path $reqPath -Raw -Encoding UTF8)
+          $phase = [string]$req.phase
+          $pipelineId = [string]$req.pipeline_id
+          if ([string]::IsNullOrWhiteSpace($phase)) {
+            Write-Error "[PIPELINE ERROR] phase_attestation_request.json에 phase 필드가 없습니다."
+            exit 1
+          }
+          $baseRef = "${{ github.event.pull_request.base.ref }}"
+          if ([string]::IsNullOrWhiteSpace($baseRef)) { $baseRef = "main" }
+          git fetch origin $baseRef --depth=50
+          $baseSha = "${{ github.event.pull_request.base.sha }}"
+          if ([string]::IsNullOrWhiteSpace($baseSha)) {
+            $baseSha = git merge-base "origin/$baseRef" HEAD
+            if ($LASTEXITCODE -ne 0) {
+              git fetch --unshallow 2>$null
+              $baseSha = git merge-base "origin/$baseRef" HEAD
+            }
+          }
+          $env:GITHUB_BASE_SHA = $baseSha
+          python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pipelineId --request-file $reqPath
+
       - name: 자동 검사 실행
         env:
           PIPELINE_NO_DASHBOARD: "1"
