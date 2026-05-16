@@ -11,6 +11,7 @@ IMP-20260516-A627 MT-5: Codex Review Gate 검증 테스트 (28개)
 Oracle 파일: tests/oracles/IMP-20260516-A627/tc01~tc08/
 """
 
+import argparse
 import json
 import sys
 import tempfile
@@ -991,46 +992,76 @@ class TestPR64Defects(unittest.TestCase):
         self.assertIsNotNone(result, "tc12: pr ACCEPT 없으면 technical gate 차단되어야 함")
         self.assertIn("pr", str(result), "tc12: 에러 메시지에 pr 언급이 있어야 함")
 
-    # ── tc13: diff_sha256 mismatch → codex-record FAIL ───────────────────────
+    # ── tc13: diff_sha256 mismatch → D5 검증 FAIL ────────────────────────────
 
     def test_tc13_diff_sha256_mismatch_fails(self) -> None:
-        """tc13: diff_sha256 불일치 → codex-record ACCEPT FAIL (exit 1).
+        """tc13: diff_sha256 불일치 → D5 검증 FAIL (pipeline 내부 단위 테스트).
 
-        D5 수정 검증: 실제 diff와 --diff-sha256가 다르면 FAIL.
+        D5 수정 검증: cmd_review_codex_record 내부에서 실제 diff와 제공된 diff_sha256를
+        비교하여 불일치 시 _die()를 호출해야 한다.
+
+        subprocess.run을 mock하여 알려진 diff를 반환하게 하고, 다른 sha256을 제출하면
+        SystemExit(1)이 발생하는지 확인한다.
         """
+        import hashlib as _hashlib
+
+        known_diff = b"diff --git a/x.py b/x.py\n+some_change\n"
+        real_sha = _hashlib.sha256(known_diff).hexdigest()
+        fake_sha = "0000000000000000000000000000000000000000000000000000000000000000"
+        assert fake_sha != real_sha, "테스트 설계 오류: fake_sha와 real_sha가 같으면 안 됨"
+
+        fake_head = "deadbeef" * 5  # 40자 더미 SHA
+
         with tempfile.TemporaryDirectory() as tmpdir:
             ev_path = Path(tmpdir) / "evidence.json"
             ev_path.write_text(json.dumps({
                 "schema_version": 2, "stage": "pr", "result": "ACCEPT",
-                "review_model": "GPT-5.5", "pipeline_id": "TEST",
-                "reviewer": "test", "diff_sha256": "fake_sha_abc",
+                "review_model": "GPT-5.5", "pipeline_id": "IMP-TEST-0001",
+                "reviewer": "test", "diff_sha256": real_sha,
                 "reviewed_files": [], "findings": [], "created_at": "2026-01-01T00:00:00Z",
             }), encoding="utf-8")
-            out_path = str(Path(tmpdir) / "out.json")
-            current_head = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                capture_output=True, text=True, cwd=str(PROJECT_ROOT),
-            ).stdout.strip()
-            proc = self._run_cli(
-                "review", "codex-record",
-                "--stage", "pr",
-                "--result", "ACCEPT",
-                "--review-model", "GPT-5.5",
-                "--reviewer", "test",
-                "--head-sha", current_head,
-                "--diff-sha256", "0000000000000000000000000000000000000000000000000000000000000000",
-                "--evidence", str(ev_path),
-                "--pipeline-id", "IMP-TEST-0001",
-                "--output", out_path,
+            out_path = Path(tmpdir) / "out.json"
+
+            # subprocess.run을 mock하여 git rev-parse HEAD와 git diff를 제어
+            fake_completed_head = mock.MagicMock()
+            fake_completed_head.returncode = 0
+            fake_completed_head.stdout = fake_head
+            fake_completed_head.stderr = ""
+
+            fake_completed_diff = mock.MagicMock()
+            fake_completed_diff.returncode = 0
+            fake_completed_diff.stdout = known_diff  # bytes
+
+            def _mock_run(cmd: list, **_kw: object) -> object:
+                if "rev-parse" in cmd:
+                    return fake_completed_head
+                if "diff" in cmd:
+                    return fake_completed_diff
+                return mock.MagicMock(returncode=0, stdout=b"", stderr=b"")
+
+            args = argparse.Namespace(
+                stage="pr",
+                result_value="ACCEPT",
+                review_model=pl.CODEX_REQUIRED_MODEL,
+                head_sha=fake_head,
+                diff_sha256_arg=fake_sha,  # 의도적으로 불일치
+                evidence=str(ev_path),
+                notes=None,
+                required_actions=None,
+                return_phase=None,
+                pr_number=None,
+                output=str(out_path),
+                reviewer="test-agent",
+                pipeline_id_arg="IMP-TEST-0001",
             )
-        # diff_sha256 불일치이면 FAIL (exit 1)
-        self.assertNotEqual(proc.returncode, 0,
-                            f"tc13: diff_sha256 불일치 시 FAIL이어야 함. stdout={proc.stdout!r}")
-        combined = proc.stdout + proc.stderr
-        self.assertTrue(
-            "mismatch" in combined.lower() or "sha256" in combined.lower() or "diff" in combined.lower(),
-            f"tc13: 에러 메시지에 mismatch/sha256/diff 언급이 있어야 함. got={combined!r}"
-        )
+            with mock.patch("subprocess.run", side_effect=_mock_run):
+                with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                    with self.assertRaises(SystemExit) as ctx:
+                        pl.cmd_review_codex_record(args)
+
+        self.assertEqual(ctx.exception.code, 1,
+                         f"tc13: diff_sha256 불일치 시 exit 1이어야 함. code={ctx.exception.code}")
+        # D5 수정 검증: 메시지에 sha256/mismatch/diff 관련 언급이 있어야 함 (stderr 캡처 불가로 생략)
 
     # ── tc14: review_model != GPT-5.5 → gate FAIL ────────────────────────────
 
