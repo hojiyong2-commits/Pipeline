@@ -5,7 +5,7 @@
   "pipeline_id": "IMP-20260516-1690",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "cd35e65c2dd68bcf4fa120ad0fb4a953e32804c6",
+  "commit_hint": "010f4a060147d2612b414251444ccae406fefeb3",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-16T07:31:04Z",
@@ -59,8 +59,8 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "8ad539b53c2847384a817f9fcc30f1621ee67bce6c94a897f472839109ef8218",
-      "size_bytes": 24961
+      "sha256": "e7eece92b8ebc75f6c9bbd1bdb8ab3b6bc8a86e1e93b9b246b9b16bc0f184bb0",
+      "size_bytes": 25173
     },
     {
       "path": "tests/test_pr_hygiene.py",
