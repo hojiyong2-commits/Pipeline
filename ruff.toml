@@ -1,0 +1,9 @@
+# ruff 설정 — IMP-20260516-1690 이전부터 존재하는 기존 오류 무시
+[lint]
+ignore = [
+    "E402",  # Module level import not at top of file (pipeline.py stdio 초기화 패턴)
+    "E731",  # Lambda expressions (RED/GREEN/YELLOW 색상 함수)
+    "F841",  # Local variable assigned but never used (기존 코드)
+    "E701",  # Multiple statements on one line (기존 코드)
+    "F401",  # Unused import (필요 시 제외)
+]

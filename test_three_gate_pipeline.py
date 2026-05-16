@@ -1072,6 +1072,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
                  mock.patch.object(pipeline, "_record_snapshot"), \
                  mock.patch.object(pipeline, "_save"), \
+                 mock.patch.object(pipeline, "_validate_pr_title_matches_pipeline"), \
                  mock.patch.dict(pipeline.os.environ, {"PIPELINE_DEPLOY_ROOT": str(deploy_root)}):
                 with self.assertRaises(SystemExit) as ctx:
                     pipeline.cmd_gates(args)
