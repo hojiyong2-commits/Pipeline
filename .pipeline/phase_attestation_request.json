@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T10:44:52Z",
+  "generated_at": "2026-05-16T10:48:46Z",
   "pipeline_id": "IMP-20260516-C13E",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "3d3d7d7574001e91c48a7c98e20ef4761f62461a",
+  "commit_hint": "42c0373f83849fbdccce8d126871a6045ee59d45",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-16T10:36:45Z",
@@ -53,39 +53,9 @@
   ],
   "workspace_file_checks": [
     {
-      "path": ".github/workflows/ci.yml",
-      "sha256": "b0e6d497d51f3932c1fed7b9de80582504e9b809ec60b6cddbd304e974af75c5",
-      "size_bytes": 26509
-    },
-    {
       "path": "setup.cfg",
       "sha256": "4744ce60f31a1fef722f8e949bc9da15159f16007db481c8d492a67602ba8f91",
       "size_bytes": 29
-    },
-    {
-      "path": "tests/test_pr_hygiene.py",
-      "sha256": "94a5e60f126e38b6b73c8dc9023d7a9bd762cbef789b9f1f177d15e402522b89",
-      "size_bytes": 11058
-    },
-    {
-      "path": "tests/oracles/IMP-20260516-C13E/case_normal/input.json",
-      "sha256": "04d6eea77cc7fe88de5fded8123f7fa24f30c55b9bbdd99bc4ad23af320a6a8c",
-      "size_bytes": 100
-    },
-    {
-      "path": "tests/oracles/IMP-20260516-C13E/case_normal/expected.json",
-      "sha256": "62bbf76bd3f4146094bb4ec1cc079fff311fb2e1f4211927ad025103c27ea2dd",
-      "size_bytes": 27
-    },
-    {
-      "path": "tests/oracles/IMP-20260516-C13E/case_edge/input.json",
-      "sha256": "bd08fcbc62592618bff7cf658be1f2dca1888235f2896877c22deb1ff5fc7bb4",
-      "size_bytes": 70
-    },
-    {
-      "path": "tests/oracles/IMP-20260516-C13E/case_edge/expected.json",
-      "sha256": "62bbf76bd3f4146094bb4ec1cc079fff311fb2e1f4211927ad025103c27ea2dd",
-      "size_bytes": 27
     }
   ],
   "local_only_files": []
