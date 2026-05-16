@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260516-E881</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <scope_declaration>
+    <files_to_delete>
+      <file>benchmarker.py</file>
+      <file>eval_harness.json</file>
+    </files_to_delete>
+    <files_to_modify>
+      <file>none — file deletion only</file>
+    </files_to_modify>
+    <out_of_scope>
+      <file>.github/workflows/ci.yml (오케스트레이터 부가 지시였으나 PM step_plan target_files 범위 밖 — Pipeline Manager에 별도 처리 위임)</file>
+      <file>CLAUDE.md</file>
+      <file>pipeline.py</file>
+      <file>tests/test_*.py (테스트 코드 미변경)</file>
+    </out_of_scope>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>benchmarker.py::run_evaluation; benchmarker.py::__main__ (모듈 전체 제거)</target_function>
+    <change_description>
+      MT-1: dead code 파일 2개 삭제.
+      benchmarker.py(35줄, input() 기반 수동 평가 스크립트)와 eval_harness.json(benchmarker.py 전용 데이터)을 git에서 제거.
+      두 파일은 코드베이스의 어떤 .py 파일에서도 import/참조되지 않음. score_v3.py는 eval_harness_v3.json(별개 파일)을 참조하므로 영향 없음.
+    </change_description>
+    <upstream_callers>none — Grep 4건 검증 완료: score_v3.py(다른 파일 사용), self_evolving_log.md(과거 로그), pipeline_state_backup_40B8.json(백업), benchmarker.py 자체</upstream_callers>
+    <downstream_dependencies>none — json/os 표준 라이브러리는 다른 모듈에 영향 없음</downstream_dependencies>
+    <state_mutations>filesystem: 두 파일 삭제 예정 (prepare-phase 단계에서 실제 git rm 적용)</state_mutations>
+    <blast_radius>SCOPE_MATCH — scope_manifest 등록 파일 2개와 정확히 일치. ci.yml 외부 변경 없음.</blast_radius>
+  </impact_analysis>
+  <evidence>
+    <files_to_be_deleted>
+      <file>benchmarker.py</file>
+      <file>eval_harness.json</file>
+    </files_to_be_deleted>
+    <verification>
+      Grep "benchmarker|eval_harness\.json" — 5개 매치 중 코드 의존성 0건 (oracle 파일 + 백업)
+      Grep "eval_harness" --type py — score_v3.py만 매치(eval_harness_v3.json 사용), 본 MT 영향 없음
+      Path("eval_harness_v3.json").exists() == True (인접 파일 보존)
+    </verification>
+    <module_gates>
+      <mt id="MT-1">PASS</mt>
+      <integration>PASS</integration>
+    </module_gates>
+    <oracle_coverage>
+      <case>benchmarker_deleted (normal) — Path("benchmarker.py").exists() == False 기대</case>
+      <case>eval_harness_deleted (edge) — eval_harness.json 부재 + eval_harness_v3.json 보존</case>
+    </oracle_coverage>
+  </evidence>
+  <deletion_application_plan>
+    pipeline.py module gate의 checkpoint 메커니즘이 file deletion 작업에서 working tree에 파일이 살아있을 것을 요구하므로,
+    module qa PASS → integrate → done --phase dev 모든 게이트 통과 후
+    prepare-phase --phase dev 직전에 `git rm benchmarker.py eval_harness.json` 으로 최종 삭제를 적용합니다.
+    최종 PR diff에는 두 파일이 deleted 상태로 반영됩니다.
+  </deletion_application_plan>
+  <out_of_scope_notice>
+    오케스트레이터 dev 지시에 포함된 .github/workflows/ci.yml의 fetch-depth: 0 변경은 PM step_plan target_files 범위 밖.
+    pipeline.py module dev gate가 reject했으므로 본 MT-1에서는 처리하지 않았습니다.
+    Pipeline Manager가 (a) PM step_plan 갱신 + MT 추가 또는 (b) 별도 IMP 파이프라인 생성으로 후속 처리해야 합니다.
+  </out_of_scope_notice>
+</handover>
