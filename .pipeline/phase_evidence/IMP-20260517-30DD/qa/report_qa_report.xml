@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260517-30DD</pipeline_id>
+  <agent>qa-agent</agent>
+  <run_id>qa-b94625825ebe2cf6</run_id>
+  <result>PASS</result>
+  <timestamp>2026-05-17T05:10:00Z</timestamp>
+
+  <numeric_score>114</numeric_score>
+  <!-- max=120, threshold=96, above_threshold=true -->
+
+  <!-- ====== Handover Verification ====== -->
+  <handover_verification>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <step_id>MT-1,MT-2</step_id>
+    <status>READY_FOR_QA</status>
+    <evidence_files>
+      <file present="true">pipeline.py</file>
+      <file present="true">tests/test_codex_review.py</file>
+    </evidence_files>
+    <verdict>PASS</verdict>
+  </handover_verification>
+
+  <!-- ====== Scope Lock Check ====== -->
+  <scope_lock_check>
+    <manifest_files>pipeline.py, tests/test_codex_review.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <!-- ====== Impact Analysis Verification ====== -->
+  <impact_analysis_verification>
+    <target_functions>
+      <function>pipeline._check_codex_review_gate</function>
+      <function>pipeline.cmd_review_codex_run</function>
+      <function>pipeline.cmd_codex (doctor 경로)</function>
+      <function>pipeline._codex_run_via_openai_api (신규)</function>
+      <function>pipeline._codex_run_via_codex_cli (신규)</function>
+      <function>pipeline._redact_secrets (신규)</function>
+      <function>pipeline._save_codex_attempt_log (신규)</function>
+    </target_functions>
+    <blast_radius>pipeline.py codex review 관련 함수 7개 + tests/test_codex_review.py 신규 5개 TestClass (31 tests)</blast_radius>
+    <verdict>PASS</verdict>
+  </impact_analysis_verification>
+
+  <!-- ====== MT-1: pipeline.py 핵심 구현 검증 ====== -->
+  <module id="MT-1" name="pipeline.py provider-level evidence hard gate">
+
+    <check id="C1" category="PD">
+      <description>CODEX_REQUIRED_MODEL_ID="gpt-5.5" (소문자), CODEX_REQUIRED_REVIEW_MODEL="GPT-5.5" (대문자) 분리. 12개 CODEX_FAILURE_CODES 완비.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C2" category="SEC">
+      <description>_redact_secrets: API key 패턴 redact. raw 응답 저장 전 redaction 호출.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C3" category="WA">
+      <description>openai-api: urllib.request + shell=False. actual_model_id = response_payload.get("model"). HTTP 상태코드별 except 분기(401/402/404/429/5xx). API key 미기록.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C4" category="PD">
+      <description>codex-cli: shell=False, list args. JSONL event stream에서 model 추출. MODEL_METADATA_UNAVAILABLE sentinel 반환.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C5" category="PD">
+      <description>provider dispatch: openai-api vs codex-cli. valid_providers 검증. --provider argparse 추가.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C6" category="SEC">
+      <description>actual_model_verified = (actual_model_id == CODEX_REQUIRED_MODEL_ID). False이면 sys.exit(1) + MODEL_UNAVAILABLE 메시지.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C7" category="SEC">
+      <description>review_model 필드(모델 응답 내부)는 actual evidence로 절대 인정 금지. actual_model_source는 openai_api_response_object 또는 codex_cli_jsonl_metadata로만 설정.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C8" category="PD">
+      <description>MODEL_METADATA_UNAVAILABLE 시 openai-api로 1회 fallback. 역방향 금지. fallback_attempts 체크로 budget 초과 방지.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C9" category="AL">
+      <description>CODEX_ATTEMPT_BUDGET_TOTAL=6, CODEX_ATTEMPT_BUDGET_PER_STAGE=2. 초과 시 MANUAL_SETUP_REQUIRED + exit(1).</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C10" category="FS">
+      <description>_save_codex_attempt_log: pipeline_state.json에 저장. 시크릿 미기록.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C11" category="SEC">
+      <description>_check_codex_review_gate: actual_model_verified=False FAIL. actual_model_id != "gpt-5.5" FAIL. actual_model_source="model_output_json" FAIL.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C12" category="PD">
+      <description>doctor --json 출력에 provider_diagnostics 14개 필드 완비.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C13" category="SEC">
+      <description>모든 subprocess.run 호출에 shell=False 및 list args 사용.</description>
+      <result>PASS</result>
+    </check>
+
+    <check id="C14" category="FS">
+      <description>result_data에 actual_model_id, actual_model_verified, actual_model_source, provider_response_id, review_provider, requested_model_id, attempt_count 포함.</description>
+      <result>PASS</result>
+    </check>
+
+    <module_verdict>PASS</module_verdict>
+  </module>
+
+  <!-- ====== MT-2: tests/test_codex_review.py 신규 테스트 검증 ====== -->
+  <module id="MT-2" name="tests/test_codex_review.py 31개 신규 테스트">
+
+    <check id="T1" category="AL">
+      <description>TestProviderOpenAIApi (15개): actual_model_id/source/verified, provider_response_id, secret redaction, schema_version, head_sha, attempt_count, invalid provider 검증.</description>
+      <result>PASS — 15 passed</result>
+    </check>
+
+    <check id="T2" category="AL">
+      <description>TestProviderCodexCli (6개): MODEL_METADATA_UNAVAILABLE fallback, actual_model_source=codex_cli_jsonl_metadata, model_output_json 비신뢰, fallback 왕복 금지.</description>
+      <result>PASS — 6 passed</result>
+    </check>
+
+    <check id="T3" category="AL">
+      <description>TestHardGateExtended (6개): actual_model_verified=False FAIL, actual_model_id 불일치 FAIL, model_output_json FAIL, 유효 record PASS, REJECT FAIL, 누락 필드 neutral.</description>
+      <result>PASS — 6 passed</result>
+    </check>
+
+    <check id="T4" category="AL">
+      <description>TestAttemptBudget (3개): 전체 6회 초과 exit 1, stage당 2회 초과 exit 1, 첫 번째 attempt는 SETUP_REQUIRED.</description>
+      <result>PASS — 3 passed</result>
+    </check>
+
+    <check id="T5" category="AL">
+      <description>TestCodexDoctorExtended (1개): doctor --json에 provider_diagnostics 14개 필드 완비.</description>
+      <result>PASS — 1 passed</result>
+    </check>
+
+    <check id="T6" category="AL">
+      <description>기존 테스트 회귀 (52개): TestSchemaValidator/TestReviewCodexStages/TestCodexRecord/TestGateCheck/TestRCARegressionPR60/TestSchemaEdgeCases/TestPR64Defects/TestCodexRunCommand 전원 PASS.</description>
+      <result>PASS — 52 passed (11 subtests 포함)</result>
+    </check>
+
+    <check id="T7" category="SEC">
+      <description>_run_with_mock helper: provider="openai-api" 기본값. mock payload에 id/model/output 래핑 (OpenAI Responses API 형식 준수).</description>
+      <result>PASS</result>
+    </check>
+
+    <module_verdict>PASS</module_verdict>
+  </module>
+
+  <!-- ====== Python 3.9 준수 ====== -->
+  <python39_compliance>
+    <match_case>없음 — PASS</match_case>
+    <pipe_union>없음 — Union[] 사용 — PASS</pipe_union>
+    <lowercase_generic>없음 — List[], Dict[], Tuple[], Optional[] 사용 — PASS</lowercase_generic>
+    <walrus_misuse>없음 — PASS</walrus_misuse>
+    <verdict>PASS</verdict>
+  </python39_compliance>
+
+  <!-- ====== Self-check 검증 ====== -->
+  <self_check_verification>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check_verification>
+
+  <!-- ====== 보안 검증 ====== -->
+  <security_verification>
+    <api_key_not_in_raw_output>PASS — _redact_secrets 적용</api_key_not_in_raw_output>
+    <api_key_not_in_result_file>PASS — result_data에 api_key 필드 없음</api_key_not_in_result_file>
+    <api_key_env_only>PASS — os.environ["OPENAI_API_KEY"]만 사용</api_key_env_only>
+    <shell_false_everywhere>PASS — 모든 subprocess.run에 shell=False, list args</shell_false_everywhere>
+  </security_verification>
+
+  <!-- ====== 테스트 실행 결과 ====== -->
+  <test_results>
+    <command>python -m pytest tests/test_codex_review.py -q</command>
+    <outcome>83 passed, 11 subtests passed in 6.99s</outcome>
+    <failures>0</failures>
+    <errors>0</errors>
+  </test_results>
+
+  <!-- ====== Micro-task Boundary Verification ====== -->
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <declared_files>pipeline.py</declared_files>
+      <actual_changed_files>pipeline.py</actual_changed_files>
+      <declared_functions>_check_codex_review_gate, cmd_review_codex_run, cmd_codex, _codex_run_via_openai_api, _codex_run_via_codex_cli, _redact_secrets, _save_codex_attempt_log</declared_functions>
+      <scope_exceeded>false</scope_exceeded>
+      <verdict>WITHIN_SCOPE</verdict>
+    </mt>
+    <mt id="MT-2">
+      <declared_files>tests/test_codex_review.py</declared_files>
+      <actual_changed_files>tests/test_codex_review.py</actual_changed_files>
+      <declared_functions>TestProviderOpenAIApi, TestProviderCodexCli, TestHardGateExtended, TestAttemptBudget, TestCodexDoctorExtended (신규 5개 TestClass), _run_with_mock helper 업데이트</declared_functions>
+      <scope_exceeded>false</scope_exceeded>
+      <verdict>WITHIN_SCOPE</verdict>
+    </mt>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <overall_verdict>WITHIN_SCOPE</overall_verdict>
+  </micro_task_boundary>
+
+  <!-- ====== QA 최종 판정 ====== -->
+  <verdict>PASS</verdict>
+  <verdict_reason>
+    MT-1(pipeline.py) 및 MT-2(tests/test_codex_review.py) 모두 PASS.
+    83개 테스트 전원 통과 (11 subtests 포함).
+    provider-level evidence 기반 actual_model_id 검증 게이트 정상 동작.
+    actual_model_verified=False 및 actual_model_source=model_output_json 차단 동작 확인.
+    API key가 어떠한 파일/로그에도 기록되지 않음 확인.
+    shell=False 전수 확인. attempt budget 관리 정상. Python 3.9 준수.
+  </verdict_reason>
+
+  <failure_signature>N/A</failure_signature>
+</qa_report>
