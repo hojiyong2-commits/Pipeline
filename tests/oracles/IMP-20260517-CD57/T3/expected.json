@@ -1,0 +1,8 @@
+{
+  "case_id": "T3",
+  "case_kind": "exception",
+  "expected_result": "FAIL",
+  "expected_ok": false,
+  "expected_message_contains": "actual_model_id",
+  "rationale": "actual_model_id가 'GPT-5.5'(대문자)이면 exact match 'gpt-5.5'와 다르므로 FAIL. .lower() 정규화 제거 후에는 케이스가 보존되어 비교 시 불일치로 거부된다."
+}

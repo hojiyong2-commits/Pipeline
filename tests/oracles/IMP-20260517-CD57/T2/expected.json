@@ -1,0 +1,8 @@
+{
+  "case_id": "T2",
+  "case_kind": "edge",
+  "expected_result": "FAIL",
+  "expected_ok": false,
+  "expected_message_contains": "actual_model_verified",
+  "rationale": "actual_model_verified 필드가 없으면(None) 반드시 FAIL이어야 한다. 수정 후 코드 `if actual_model_verified is not True:`로 False와 None을 모두 FAIL 처리. 추가로 CODEX_REQUIRED_FIELDS에 'actual_model_verified'가 포함되어 schema 단계에서도 누락 시 거부된다."
+}

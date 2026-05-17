@@ -1,0 +1,8 @@
+{
+  "case_id": "T4",
+  "case_kind": "error",
+  "expected_result": "BLOCKED",
+  "expected_exit_code": 2,
+  "expected_message_contains": "CODEX RECORD BLOCKED",
+  "rationale": "codex-record는 manual 경로이므로 actual_model_verified=true를 제공할 수 없다. result_upper=='ACCEPT'이면 새 record를 생성하지 않고 FAIL로 차단해야 하며, 'python pipeline.py review codex-run --provider openai-api'를 사용하라는 안내가 출력되어야 한다."
+}

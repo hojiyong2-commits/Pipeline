@@ -1,0 +1,15 @@
+{
+  "case_id": "T4",
+  "case_kind": "error",
+  "description": "에러 케이스 — codex-record는 수동 기록 경로이므로 result=ACCEPT를 만들 수 없어야 한다. actual_model_verified=true를 신뢰할 provider 증거 없이 만들 방법이 없기 때문이다. ACCEPT 시도 시 [CODEX RECORD BLOCKED] 메시지로 차단.",
+  "command": "review codex-record",
+  "args": {
+    "stage": "pr",
+    "result": "ACCEPT",
+    "review_model": "GPT-5.5",
+    "reviewer": "manual_user",
+    "head_sha": "abc123",
+    "diff_sha256": "abc123def4567890abc123def4567890abc123def4567890abc123def4567890"
+  },
+  "note": "현재 버그(Blocker 3)에서는 codex-record가 actual_model_verified 없이 ACCEPT를 기록한다. 수정 후 ACCEPT 결과는 차단되어야 하며, codex-run --provider openai-api 사용을 안내한다."
+}
