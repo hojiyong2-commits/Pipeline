@@ -7433,6 +7433,10 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
     except Exception as exc:
         diff_text = f"[git diff 예외: {exc}]"
 
+    # diff sha256 계산 (모델 응답과 비교용)
+    diff_bytes: bytes = diff_text.encode("utf-8")
+    current_diff_sha: str = hashlib.sha256(diff_bytes).hexdigest()
+
     # 4. 프롬프트 구성 (API key 제외)
     prompt = (
         f"Stage: {stage_arg}\n"
@@ -7447,6 +7451,9 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
         "type": "object",
         "additionalProperties": False,
         "properties": {
+            "result": {"type": "string", "enum": ["ACCEPT", "REJECT"]},
+            "review_model": {"type": "string"},
+            "diff_sha256": {"type": "string"},
             "summary": {"type": "string"},
             "findings": {
                 "type": "array",
@@ -7464,8 +7471,10 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
                     "required": ["id", "level", "file", "line", "message", "recommendation"],
                 },
             },
+            "required_actions": {"type": "array", "items": {"type": "string"}},
+            "return_phase": {"type": ["string", "null"]},
         },
-        "required": ["summary", "findings"],
+        "required": ["result", "review_model", "diff_sha256", "summary", "findings", "required_actions", "return_phase"],
     }
 
     body: Dict[str, Any] = {
@@ -7541,14 +7550,47 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
         print("[CODEX FAIL] 모델 응답이 스키마를 만족하지 않습니다.", file=sys.stderr)
         sys.exit(1)
 
-    # 8. 결과 파일 저장 (schema_version=2, review_model=GPT-5.5 고정)
+    # result 검증: ACCEPT 또는 REJECT만 허용
+    result_from_model: str = str(parsed.get("result", "")).upper().strip()
+    if result_from_model not in {"ACCEPT", "REJECT"}:
+        print(
+            f"[CODEX FAIL] 모델 응답 result가 ACCEPT 또는 REJECT가 아닙니다: '{result_from_model}'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # review_model 검증: GPT-5.5만 허용
+    model_from_response: str = str(parsed.get("review_model", "")).strip()
+    if model_from_response != CODEX_REQUIRED_MODEL:
+        print(
+            f"[CODEX FAIL] 모델 응답 review_model이 GPT-5.5가 아닙니다: '{model_from_response}'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # diff_sha256 비교: 모델 응답 hash와 현재 hash 비교
+    response_diff_sha: str = str(parsed.get("diff_sha256", "")).strip()
+    if not response_diff_sha:
+        print("[CODEX FAIL] 모델 응답에 diff_sha256 필드가 없습니다.", file=sys.stderr)
+        sys.exit(1)
+    if response_diff_sha != current_diff_sha:
+        print(
+            f"[CODEX FAIL] diff_sha256 불일치: 모델응답={response_diff_sha[:16]}... 현재={current_diff_sha[:16]}...",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # 8. 결과 파일 저장 (schema_version=2, 모델 응답의 result/review_model/diff_sha256 사용)
     findings: List[Dict[str, Any]] = parsed.get("findings", [])
     result_data: Dict[str, Any] = {
         "schema_version": 2,
         "pipeline_id": _load().get("pipeline_id", "") if _load() else "",
         "stage": stage_arg,
-        "review_model": CODEX_REQUIRED_MODEL,
-        "result": "PENDING",
+        "review_model": model_from_response,
+        "result": result_from_model,
+        "diff_sha256": current_diff_sha,
+        "required_actions": parsed.get("required_actions", []),
+        "return_phase": parsed.get("return_phase"),
         "reviewer": "codex-run",
         "reviewed_at": _now(),
         "summary": parsed.get("summary", ""),
