@@ -3617,6 +3617,12 @@ CODEX_REQUIRED_FIELDS = [
     "reviewed_files",
     "findings",
     "created_at",
+    "requested_model_id",
+    "actual_model_id",
+    "actual_model_verified",
+    "actual_model_source",
+    "review_provider",
+    "raw_output_path",
 ]
 
 
@@ -3800,10 +3806,11 @@ def _check_codex_review_gate(
     actual_model_id = str(review_data.get("actual_model_id", "")).strip()
     actual_model_source = str(review_data.get("actual_model_source", "")).strip()
 
-    # actual_model_verified가 명시적으로 false이면 FAIL
-    if actual_model_verified is False:
+    # actual_model_verified가 명시적으로 True가 아니면 FAIL (False뿐 아니라 None도 실패)
+    if actual_model_verified is not True:
         return False, (
-            "[CODEX REVIEW REQUIRED] actual_model_verified=false: "
+            "[CODEX REVIEW REQUIRED] actual_model_verified가 True가 아닙니다 "
+            f"(현재 값: {actual_model_verified!r}): "
             "provider-level evidence에서 실제 사용 모델이 gpt-5.5임을 검증하지 못했습니다. "
             "python pipeline.py review codex-run --stage <STAGE> --provider openai-api 를 실행하세요."
         )
@@ -3846,7 +3853,12 @@ def _check_codex_review_gate(
             all_stages_accepted.append(current_stage)
         history = review_data.get("history", [])
         for h in history:
-            if str(h.get("result", "")).upper() == "ACCEPT" and h.get("stage"):
+            if (
+                str(h.get("result", "")).upper() == "ACCEPT"
+                and h.get("stage")
+                and h.get("actual_model_verified") is True
+                and str(h.get("actual_model_id", "")).strip() == CODEX_REQUIRED_MODEL_ID
+            ):
                 all_stages_accepted.append(str(h.get("stage", "")).lower())
 
         # Dev 진입은 plan AND scope 모두 ACCEPT여야 함 (D3 수정: OR → AND)
@@ -7790,7 +7802,7 @@ def _codex_run_via_codex_cli(
                 or (event.get("response", {}) or {}).get("model")
             )
             if meta_model and isinstance(meta_model, str):
-                actual_model_id = meta_model.strip().lower()
+                actual_model_id = meta_model.strip()
         # auth_method 추출 시도
         if event.get("type") == "auth_info" or "auth_method" in event:
             auth_method = str(event.get("auth_method", ""))
@@ -7983,7 +7995,7 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
         )
         # actual_model_id는 response_payload.get("model") — provider-level evidence
         raw_actual = response_payload.get("model", "")
-        actual_model_id = str(raw_actual).strip().lower() if raw_actual else ""
+        actual_model_id = str(raw_actual).strip() if raw_actual else ""
         actual_model_source = "openai_api_response_object"
         actual_model_verified = (actual_model_id == CODEX_REQUIRED_MODEL_ID)
 
@@ -8035,7 +8047,7 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
                 schema=schema,
             )
             raw_actual = response_payload.get("model", "")
-            actual_model_id = str(raw_actual).strip().lower() if raw_actual else ""
+            actual_model_id = str(raw_actual).strip() if raw_actual else ""
             actual_model_source = "openai_api_response_object_fallback_from_codex_cli"
             actual_model_verified = (actual_model_id == CODEX_REQUIRED_MODEL_ID)
             effective_provider = "openai-api"  # fallback provider 기록
@@ -8403,6 +8415,33 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
     # reviewed_files 수집
     reviewed_files, _ = _collect_git_diff_meta("main")
 
+    # evidence_data에서 actual model 필드 추출 (Blocker 3: ACCEPT blocking + defaults)
+    _ev_actual_model_id = str(evidence_data.get("actual_model_id", "")).strip()
+    _ev_actual_model_verified = evidence_data.get("actual_model_verified", None)
+    _ev_actual_model_source = str(evidence_data.get("actual_model_source", "")).strip()
+    _ev_review_provider = str(evidence_data.get("review_provider", "")).strip()
+    _ev_raw_output_path = str(evidence_data.get("raw_output_path", "")).strip()
+
+    # pr/rca stage ACCEPT인 경우 actual_model_verified가 True이고 actual_model_id가 gpt-5.5여야 함
+    # (Blocker 3: pr/rca stage의 4중 검증 경로만 적용 — plan/scope/code/hygiene은 간소화 검증)
+    if result_upper == "ACCEPT" and is_full_validation_stage:
+        if _ev_actual_model_verified is not True:
+            _die(
+                f"[CODEX RECORD] ACCEPT 차단: evidence JSON의 actual_model_verified가 True가 아닙니다 "
+                f"(현재 값: {_ev_actual_model_verified!r}). "
+                "provider-level evidence에서 실제 모델 검증이 완료된 리뷰만 ACCEPT로 기록할 수 있습니다.",
+                exit_code=1,
+            )
+            return
+        if _ev_actual_model_id != CODEX_REQUIRED_MODEL_ID:
+            _die(
+                f"[CODEX RECORD] ACCEPT 차단: evidence JSON의 actual_model_id='{_ev_actual_model_id}'가 "
+                f"'{CODEX_REQUIRED_MODEL_ID}'와 다릅니다. "
+                "gpt-5.5로 수행된 리뷰만 ACCEPT로 기록할 수 있습니다.",
+                exit_code=1,
+            )
+            return
+
     # 신규 기록 생성
     new_record: Dict[str, Any] = {
         "schema_version": 2,
@@ -8417,6 +8456,12 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
         "findings": existing_findings,
         "created_at": now_ts,
         "updated_at": now_ts,
+        "requested_model_id": CODEX_REQUIRED_MODEL_ID,
+        "actual_model_id": _ev_actual_model_id or "",
+        "actual_model_verified": _ev_actual_model_verified if isinstance(_ev_actual_model_verified, bool) else False,
+        "actual_model_source": _ev_actual_model_source or "",
+        "review_provider": _ev_review_provider or "",
+        "raw_output_path": _ev_raw_output_path or "",
     }
 
     if pr_number_arg:
