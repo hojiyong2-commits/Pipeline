@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260517-30DD</pipeline_id>
+  <manager_run_id>pipeline_manager-41e4f75c6e3ed7ce</manager_run_id>
+  <planner_run_id>pm_planner-2d1e7112dd71b3a9</planner_run_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>c811ab17e4d755854986c58a4d7899fee1492e40adfc2cd42b5bb024115ff9c1</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <phase_sequence>pm → dev(MT-1→MT-2) → qa → sec(skip) → build(N/A) → external-gates → architect</phase_sequence>
+  <key_decisions>
+    <decision>provider 기본값: openai-api (사용자 명시)</decision>
+    <decision>Trust-Root scope: pipeline.py 명시적 포함</decision>
+    <decision>Build: N/A (코드+테스트만, EXE 없음)</decision>
+    <decision>Security: skip (실제 API 호출은 환경변수로만, 테스트는 mock)</decision>
+    <decision>Codex review waiver: legacy-bootstrap (pipeline.py 자체가 수정 대상)</decision>
+  </key_decisions>
+  <scope_files>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+  </scope_files>
+</manager_handoff>
