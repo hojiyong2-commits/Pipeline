@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_planner_output>
+  <pipeline_id>IMP-20260517-1F94</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <description>codex-run 응답 스키마 보강: result/review_model/diff_sha256 검증 + ACCEPT/REJECT verdict 기록 (IMP-20260516-00DE REJECT fix-forward)</description>
+
+  <decomposition_audit>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+    <reviewed_files>
+      <file>pipeline.py (lines 7386-7589, cmd_review_codex_run 전체)</file>
+      <file>tests/test_codex_review.py (lines 1117-1326, TestCodexRunCommand 클래스 전체)</file>
+      <file>tests/oracles/IMP-20260516-00DE/T1,T2 (이전 oracle 형식 참조)</file>
+      <file>pipeline_contracts/IMP-20260516-00DE/test_set.json (when/then 스키마 참조)</file>
+      <file>.claude/agents/shared/anti_gaming_rules.md (강제 규칙 확인)</file>
+    </reviewed_files>
+    <pr79_reject_blockers>
+      <blocker id="B1">응답 schema가 summary/findings만 요구 — result/review_model/diff_sha256를 모델 응답에서 받지 못함</blocker>
+      <blocker id="B2">codex-run에서 응답 diff_sha256과 현재 diff sha256을 비교하지 않음</blocker>
+      <blocker id="B3">결과 파일이 항상 result=PENDING으로 저장되어 외부 reviewer ACCEPT/REJECT verdict가 공식 기록되지 않음</blocker>
+    </pr79_reject_blockers>
+    <scope_decisions>
+      <decision>수정 대상은 pipeline.py(cmd_review_codex_run) 1개 함수, tests/test_codex_review.py(TestCodexRunCommand 클래스 내 신규 5개 테스트 + tc04 mock 응답 보강)로 한정. 다른 함수/파일 변경 금지.</decision>
+      <decision>codex_review_result.json schema는 schema_version=2 유지하되 result/review_model/diff_sha256 필드를 모델 응답에서 받아 검증·저장하도록 변경. PENDING 고정 코드 제거.</decision>
+      <decision>git diff base..HEAD의 SHA-256을 cmd_review_codex_run 내부에서 계산하고, 모델 응답의 diff_sha256과 비교. 불일치 시 exit 1.</decision>
+      <decision>review_model 검증은 응답값과 상수 CODEX_REQUIRED_MODEL("GPT-5.5") 동일성 검사로 처리.</decision>
+      <decision>required_actions, return_phase는 추가 필드로 저장하되 옵션 검증(타입 검사)만 적용.</decision>
+      <decision>JSON 스키마 보강은 추가 필드를 required로 강제 — strict json_schema가 응답 단계에서 1차 차단, 그 후 Python 단계에서 2차 검증.</decision>
+      <decision>테스트는 mock/monkeypatch만 사용. 실제 OpenAI API 호출 없음. urllib.request.urlopen mock + _openai_api_key mock 패턴 유지.</decision>
+      <decision>diff_sha256 계산은 subprocess(git diff)를 mock하기 어렵기 때문에, 테스트는 mock urlopen 응답의 diff_sha256을 "실제 현재 diff sha"로 맞추는 방식과, 일부러 다르게 맞춰 mismatch 분기를 검증하는 방식을 모두 사용.</decision>
+    </scope_decisions>
+    <call_site_research>
+      <grep>
+        <pattern>cmd_review_codex_run</pattern>
+        <executed>true</executed>
+        <match_count>14</match_count>
+        <relevant_call_sites>
+          <site>pipeline.py:7356 (argparse dispatch)</site>
+          <site>tests/test_codex_review.py:1178,1195,1247,1270,1310 (기존 5개 테스트의 pl.cmd_review_codex_run 호출)</site>
+        </relevant_call_sites>
+      </grep>
+      <grep>
+        <pattern>TestCodexRunCommand</pattern>
+        <executed>true</executed>
+        <match_count>2</match_count>
+        <class_location>tests/test_codex_review.py:1120</class_location>
+      </grep>
+    </call_site_research>
+    <backward_compatibility_analysis>
+      <impact>schema_version=2 유지. result 필드값(PENDING -> ACCEPT/REJECT)이 바뀌지만 codex-record는 이미 ACCEPT/REJECT를 처리하므로 호환됨.</impact>
+      <impact>기존 codex_review_result.json 파일이 history로 누적되는 로직은 변경 없음.</impact>
+      <impact>기존 5개 TestCodexRunCommand 테스트(tc03/tc04/tc05/tc06)는 변경하지 않음. 신규 5개는 별도 메서드로 추가.</impact>
+      <impact>기존 tc04(test_tc04_run_mock_creates_result_file)는 응답에 result/review_model/diff_sha256이 없는 mock을 사용 중. 신규 schema 강제로 인해 이 테스트가 깨질 가능성 있음 — MT-2에서 mock 응답 보강도 함께 수행(같은 파일 내 같은 클래스 수정).</impact>
+    </backward_compatibility_analysis>
+    <risk_analysis>
+      <risk level="low">git diff 실패 시(예: base_ref가 잘못된 경우) 기존 코드는 "[git diff 실패]" 문자열을 diff_text로 사용함. 새 diff_sha256 계산은 이 문자열의 SHA-256을 계산하게 되며, 정상 비교 로직과 호환됨(테스트에서는 subprocess mock 권장).</risk>
+      <risk level="low">tc04 기존 mock 응답이 신규 필수 필드를 누락하므로 schema 강제 시 실패할 위험 — 동일 사이클에서 mock 보강 처리.</risk>
+      <risk level="none">신규 의존성 추가 없음. 기존 hashlib, subprocess, json만 사용.</risk>
+      <risk level="none">Trust-root 파일(CLAUDE.md, agent MD, .github/workflows, ci.yml) 변경 없음.</risk>
+    </risk_analysis>
+    <anti_gaming_compliance>
+      <role_absorption>PM Planner는 step_plan만 출력. Dev/QA/Build report 생성 금지.</role_absorption>
+      <score_completion>QA numeric은 중간 hard gate. 외부 게이트와 user ACCEPT가 최종 판정.</score_completion>
+      <oracle_strength>oracle 3개 = normal 2개 + edge 1개, expected.txt에 구체적인 검증 항목 명시. file_exists/exe_launch 검증만 사용하지 않음.</oracle_strength>
+      <answer_key_protection>oracle 파일은 tests/oracles/IMP-20260517-1F94/ 아래 위치, CODEOWNERS 보호 대상.</answer_key_protection>
+      <scope_widening>micro_task target_files는 정확히 pipeline.py, tests/test_codex_review.py 2개로 고정.</scope_widening>
+      <phase_attestation>PM/Dev/QA/Build 모두 prepare-phase -> push -> GitHub Actions -> phase-ci 시퀀스 필수.</phase_attestation>
+      <user_acceptance>PR 링크 + GitHub Actions 한국어 최종 확인 안내 + codex_review_result.json 샘플(또는 pytest 로그) 첨부.</user_acceptance>
+    </anti_gaming_compliance>
+  </decomposition_audit>
+
+  <step_plan>
+    <anti_gaming_read>true</anti_gaming_read>
+
+    <env_snapshot>
+      <python_version>해당 없음 (RPA/스크래핑/스케줄러 카테고리 아님 — 일반 코드 수정 태스크)</python_version>
+      <installed_packages>해당 없음</installed_packages>
+      <encoding>해당 없음</encoding>
+      <screen_size>N/A</screen_size>
+    </env_snapshot>
+
+    <category_tags>
+      <tag>BACKEND</tag>
+      <tag>TEST</tag>
+    </category_tags>
+
+    <patch_lane_eligible>false</patch_lane_eligible>
+    <patch_lane_reason>변경 파일 2개(pipeline.py + tests/test_codex_review.py) — Patch Lane 단일 파일 조건 미충족. FAST_SINGLE_CODE Full Lane 사용.</patch_lane_reason>
+
+    <task_complexity>
+      <execution_profile>STANDARD</execution_profile>
+      <reason>이전 PR #79 REJECT의 3개 blocker를 한 함수(cmd_review_codex_run)와 한 테스트 클래스(TestCodexRunCommand)에 한정해 보강하는 코드 수정입니다. 파일이 2개(pipeline.py, tests/test_codex_review.py)이고 MT-1/MT-2 두 모듈로 분리되어 STANDARD 프로필을 적용합니다. 신규 의존성·파일 이동·신뢰루트 변경이 없습니다.</reason>
+      <uncertainty>
+        <p0_questions>0</p0_questions>
+        <p1_questions>0</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>2</expected_changed_files>
+        <expected_changed_functions>2</expected_changed_functions>
+        <expected_changed_lines>75</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>false</external_api>
+        <auth_or_secret>false</auth_or_secret>
+        <pipeline_protocol>false</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>false</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+    </task_complexity>
+
+    <design_confirmation>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <maintenance_priority>유지보수성 우선 — 검증 코드를 별도 함수로 분리하지 않고 cmd_review_codex_run 내부에 인라인으로 배치하여 추후 담당자가 한 곳에서 전체 흐름을 파악할 수 있도록 합니다.</maintenance_priority>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>변수명, 검증 메시지 한글 표현, 함수 내부 헬퍼 분리 여부, 응답 파싱 dict 키 접근 방식 등 P2 내부 구현 취향 질문은 모두 제외했습니다. 사용자 요청 메시지에 범위가 고정되어 있고 P0/P1 설계 결정 사항이 없습니다.</filter_summary>
+      <decision_questions>
+        <question id="Q1" priority="P1" category="module_split" mt_id="">
+          <user_facing_question>MT-1(pipeline.py 수정)과 MT-2(테스트 추가)를 별도 모듈로 분리할까요, 아니면 단일 모듈로 처리할까요?</user_facing_question>
+          <evidence>PR #79 REJECT 3개 blocker 모두 pipeline.py의 cmd_review_codex_run 함수 한 곳에 집중되어 있고, 테스트는 tests/test_codex_review.py의 TestCodexRunCommand 클래스에만 추가됩니다. 변경 범위가 명확하게 두 파일로 분리됩니다.</evidence>
+          <why_it_matters>모듈 분리 방식에 따라 Dev 구현 순서와 QA 검증 범위가 달라집니다. MT-1이 완료된 후 MT-2를 진행해야 테스트가 올바른 구현을 검증할 수 있습니다.</why_it_matters>
+          <recommended_option>two_modules</recommended_option>
+          <options>
+            <option id="two_modules">
+              <label>MT-1(pipeline.py), MT-2(테스트) 두 모듈로 분리</label>
+              <benefit>구현과 테스트를 순서대로 검증 가능. MT-1 완료 후 MT-2에서 실패 조건 테스트가 정확히 동작함을 확인할 수 있습니다.</benefit>
+              <cost>두 번의 module dev/qa 사이클이 필요합니다. 파이프라인 절차가 약간 더 길어집니다.</cost>
+            </option>
+            <option id="one_module">
+              <label>단일 모듈로 pipeline.py와 테스트를 한 번에 처리</label>
+              <benefit>절차가 간단해집니다. 파이프라인 사이클이 줄어듭니다.</benefit>
+              <cost>구현과 테스트를 동시에 변경하면 구현 오류와 테스트 오류를 구분하기 어렵습니다. QA 검증 범위가 넓어져 오류 격리가 어렵습니다.</cost>
+            </option>
+          </options>
+          <user_answer>NO_ASKUSER_REQUIRED — 사용자가 PR #79 REJECT 코멘트에서 이미 MT-1(pipeline.py), MT-2(테스트)로 분리된 수정 항목을 명시했습니다. two_modules 채택.</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <micro_tasks>
+      <micro_task id="MT-1">
+        <name>pipeline.py cmd_review_codex_run 응답 스키마 보강 + 검증 + PENDING 제거</name>
+        <affected_function>pipeline.cmd_review_codex_run</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pipeline.py:7356 (argparse dispatch — 호출 시그니처 변경 없음)</site>
+          <site>tests/test_codex_review.py:1178,1195,1247,1270,1310 (5개 기존 호출 — 호출 시그니처 변경 없음, mock 응답 보강은 MT-2에서 처리)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>cmd_review_codex_run</pattern>
+          <match_count>14</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>응답 schema에 result/review_model/diff_sha256/required_actions/return_phase 추가하고 strict=True 유지. urlopen 응답 파싱 후 result는 ACCEPT/REJECT만 허용, review_model은 GPT-5.5 일치 검사, diff_sha256은 현재 git diff base..HEAD 의 SHA-256과 일치 검사. 결과 파일 저장 시 result="PENDING" 고정 코드를 모델 응답의 result 값으로 교체.</change_summary>
+        <line_estimate>55</line_estimate>
+        <implementation_details>
+          <detail>schema dict의 properties에 result(enum: ACCEPT/REJECT), review_model(string), diff_sha256(string), required_actions(array of string), return_phase(string|null) 5개 필드 추가.</detail>
+          <detail>schema required에 위 5개 필드 모두 추가.</detail>
+          <detail>diff_text 계산 직후 current_diff_sha = hashlib.sha256(diff_text.encode("utf-8")).hexdigest() 추가.</detail>
+          <detail>parsed 검증 후 result/review_model/diff_sha256 검증 분기 3개 추가 (각각 _die 또는 print+sys.exit(1)).</detail>
+          <detail>result_data 구성에서 result="PENDING"을 parsed["result"]로 교체, diff_sha256=current_diff_sha 추가, required_actions/return_phase 필드 추가.</detail>
+          <detail>summary print 메시지에 result, diff_sha256(앞 12자) 표시 추가는 선택. 보안상 API key는 출력 금지 유지.</detail>
+        </implementation_details>
+        <forbidden_changes>
+          <item>cmd_review_codex_record, _openai_api_key, _extract_response_output_text 등 다른 함수 수정 금지.</item>
+          <item>schema_version, CODEX_REQUIRED_MODEL 상수, history 누적 로직 변경 금지.</item>
+          <item>API key 로깅 추가 금지.</item>
+        </forbidden_changes>
+      </micro_task>
+
+      <micro_task id="MT-2">
+        <name>tests/test_codex_review.py TestCodexRunCommand 5개 신규 테스트 추가 + tc04 mock 응답 보강</name>
+        <affected_function>tests.test_codex_review.TestCodexRunCommand</affected_function>
+        <target_files>
+          <file>tests/test_codex_review.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>tests/test_codex_review.py:1120 (TestCodexRunCommand 클래스 본문)</site>
+          <site>tests/test_codex_review.py:1203-1259 (기존 test_tc04_run_mock_creates_result_file mock 응답 보강 — MT-1 schema 강제로 인해 동일 사이클에서 보강 필수)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>TestCodexRunCommand</pattern>
+          <match_count>2</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>TestCodexRunCommand 클래스에 5개 메서드 신규 추가 (test_codex_run_pending_not_saved, test_codex_run_result_accept_stored, test_codex_run_result_reject_stored, test_codex_run_diff_sha256_mismatch, test_codex_run_wrong_review_model). 기존 tc04의 mock 응답에 result/review_model/diff_sha256/required_actions/return_phase 5개 필드 추가하여 신규 schema 강제 통과시킴.</change_summary>
+        <line_estimate>180</line_estimate>
+        <implementation_details>
+          <detail>helper: 현재 diff SHA-256 계산 함수 _expected_diff_sha(base_ref) 추가 — pipeline.py와 동일한 git diff base HEAD + hashlib.sha256 사용.</detail>
+          <detail>test_codex_run_result_accept_stored (normal): mock urlopen이 result=ACCEPT, review_model=GPT-5.5, diff_sha256=_expected_diff_sha 응답 반환 → 파일에 result="ACCEPT" 저장 확인.</detail>
+          <detail>test_codex_run_result_reject_stored (normal): result=REJECT 변형 → 파일에 result="REJECT" 저장 확인.</detail>
+          <detail>test_codex_run_pending_not_saved (regression): result=ACCEPT mock → 파일의 result 값이 절대 "PENDING"이 아니어야 한다(assertNotEqual).</detail>
+          <detail>test_codex_run_diff_sha256_mismatch (edge): mock 응답 diff_sha256="deadbeef..." 고정 → cmd_review_codex_run이 SystemExit(1) 발생시킴 + stderr에 "diff_sha256" 또는 "불일치" 포함.</detail>
+          <detail>test_codex_run_wrong_review_model (edge): mock 응답 review_model="gpt-4" → SystemExit(1) 발생 + stderr에 "review_model" 또는 "GPT-5.5" 포함.</detail>
+          <detail>기존 test_tc04_run_mock_creates_result_file의 mock_response_payload.output[0].content[0].text JSON에 5개 필수 필드 추가. diff_sha256은 _expected_diff_sha 사용.</detail>
+        </implementation_details>
+        <forbidden_changes>
+          <item>기존 tc03, tc05, tc06 테스트 메서드 본문 수정 금지(필수 schema와 무관).</item>
+          <item>실제 OpenAI API 호출 추가 금지 — mock/monkeypatch만 사용.</item>
+          <item>API key 평문 노출 코드 추가 금지.</item>
+          <item>TestCodexRunCommand 외 클래스(TestCodexReviewResultSchema 등) 수정 금지.</item>
+        </forbidden_changes>
+      </micro_task>
+    </micro_tasks>
+
+    <oracle_plan>
+      <oracle id="T1" case_kind="normal" location="tests/oracles/IMP-20260517-1F94/T1/" />
+      <oracle id="T2" case_kind="edge" location="tests/oracles/IMP-20260517-1F94/T2/" />
+      <oracle id="T3" case_kind="normal" location="tests/oracles/IMP-20260517-1F94/T3/" />
+      <total_oracles>3</total_oracles>
+      <normal_count>2</normal_count>
+      <edge_count>1</edge_count>
+      <ownership>oracle 파일은 PM Planner가 작성, CODEOWNERS가 tests/oracles/** 보호. Dev/QA는 oracle을 수정하지 않음.</ownership>
+    </oracle_plan>
+
+    <test_plan>
+      <test id="T1" module="MT-1" priority="P0" type="command_check">pytest test_codex_run_result_accept_stored 단일 PASS</test>
+      <test id="T2" module="MT-1" priority="P0" type="command_check">pytest test_codex_run_diff_sha256_mismatch 단일 PASS</test>
+      <test id="T3" module="MT-2" priority="P0" type="command_check">pytest tests/test_codex_review.py 전체 PASS (신규 5개 포함)</test>
+    </test_plan>
+
+    <phase_attestation_plan>
+      <branch>phase-attestation/IMP-20260517-1F94 (Pipeline Manager가 생성/체크아웃)</branch>
+      <pm_attestation>prepare-phase --phase pm -> commit/push -> phase-ci --phase pm 시퀀스</pm_attestation>
+      <dev_attestation>module design/dev/qa per MT, integrate -> prepare-phase --phase dev -> phase-ci</dev_attestation>
+      <qa_attestation>qa --result PASS -> prepare-phase --phase qa -> phase-ci</qa_attestation>
+      <build_attestation>build --exe "N/A" --skip-reason "no-code" -> prepare-phase --phase build -> phase-ci</build_attestation>
+    </phase_attestation_plan>
+
+    <external_gate_plan>
+      <technical>ruff/mypy/bandit/pytest 통과 — pytest는 tests/test_codex_review.py 신규 5개 포함 전체 PASS</technical>
+      <oracle>oracle audit PASS (T1/T2/T3 신규 3개 등록 + IMP-20260517-1F94 input/expected hash 일치)</oracle>
+      <github_ci>GitHub Actions workflow 통과 (.github/workflows/ci.yml 변경 없음)</github_ci>
+      <acceptance_evidence>
+        <item>PR 링크 (head: phase-attestation/IMP-20260517-1F94 -> main)</item>
+        <item>codex_review_result.json 샘플(mock 기반, result=ACCEPT, diff_sha256 표시)</item>
+        <item>pytest tests/test_codex_review.py -q 로그</item>
+        <item>GitHub Actions의 한국어 최종 확인 안내 댓글</item>
+      </acceptance_evidence>
+    </external_gate_plan>
+
+    <build_decision>
+      <runnable>false</runnable>
+      <skip_reason>no-code</skip_reason>
+      <rationale>pipeline.py CLI 함수 수정 + pytest 테스트 추가만 포함. EXE/앱 빌드 대상 아님. Build phase attestation은 정상 진행하되 --exe "N/A" --skip-reason "no-code"로 기록.</rationale>
+    </build_decision>
+
+    <user_acceptance_packet>
+      <result_artifact>codex_review_result.json (mock 실행 결과 예시)</result_artifact>
+      <test_log>pytest tests/test_codex_review.py -q (전체 PASS)</test_log>
+      <pr_link_pattern>https://github.com/hojiyong2-commits/Pipeline/pull/&lt;NEW&gt;</pr_link_pattern>
+      <visible_change_summary_ko>PR #79가 거절(REJECT)된 3가지 이유를 한 번에 고쳤습니다. (1) codex-run의 응답 형식에 승인/거절(ACCEPT/REJECT) 판정값과 모델명, diff 해시값을 모두 받도록 강화했습니다. (2) 모델이 응답한 diff 해시값과 지금 PR의 실제 diff 해시값이 다르면 즉시 실패로 끝냅니다. (3) 결과 파일에 항상 "PENDING"이 저장되던 버그를 고쳐서, 실제 외부 리뷰 결과(ACCEPT/REJECT)가 기록되도록 했습니다. 새 테스트 5개로 동작을 보장합니다.</visible_change_summary_ko>
+    </user_acceptance_packet>
+
+    <roadmap>
+      <step phase="1" actor="pipeline-manager-agent">PM Planner 산출물(step_plan.xml) 검증 후 manager_handoff.xml 작성 + done --phase pm</step>
+      <step phase="1.5" actor="pipeline-manager-agent">git checkout -b phase-attestation/IMP-20260517-1F94, gates prepare-phase --phase pm, force-add 증거, commit/push, phase-ci --phase pm</step>
+      <step phase="2" actor="dev-agent (Pipeline Manager spawn)">MT-1 module design -> module dev (pipeline.py 수정) -> module qa</step>
+      <step phase="2.5" actor="dev-agent (Pipeline Manager spawn)">MT-2 module design -> module dev (tests 추가) -> module qa</step>
+      <step phase="2.9" actor="pipeline-manager-agent">module integrate -> done --phase dev -> prepare-phase --phase dev -> phase-ci</step>
+      <step phase="4" actor="qa-agent (Pipeline Manager spawn)">qa_report.xml + qa --result PASS + prepare-phase --phase qa + phase-ci</step>
+      <step phase="5" actor="pipeline-manager-agent">sec --skip (외부 네트워크/DB 신규 코드 없음 — codex-run의 OpenAI 호출은 기존 코드, 신규 외부 API 추가 없음)</step>
+      <step phase="6" actor="build-agent (Pipeline Manager spawn)">build --exe "N/A" --skip-reason "no-code" + prepare-phase --phase build + phase-ci</step>
+      <step phase="7" actor="pipeline-manager-agent">gates technical -> gates oracle -> gates github-ci -> outputs add -> gates accept --result ACCEPT (사용자 확인 후)</step>
+      <step phase="8" actor="prompt-architect-agent (Pipeline Manager spawn)">architect --report-file architect_report.xml</step>
+    </roadmap>
+
+    <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+  </step_plan>
+</pm_planner_output>
