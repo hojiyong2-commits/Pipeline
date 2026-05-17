@@ -1,0 +1,34 @@
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260517-1F94</pipeline_id>
+  <agent_run_id>dev-b83020468e7f467f</agent_run_id>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+    </files_to_modify>
+    <scope_declared>true</scope_declared>
+  </scope_declaration>
+  <impact_analysis>
+    <target_module>MT-1: pipeline.py — cmd_review_codex_run 응답 schema 보강 + result/review_model/diff_sha256 검증 + PENDING 제거</target_module>
+    <target_function>pipeline.cmd_review_codex_run</target_function>
+    <mt2_target_function>tests.test_codex_review.TestCodexRunCommand</mt2_target_function>
+    <downstream_impact>review codex-run이 ACCEPT/REJECT만 허용, diff_sha256 불일치 시 exit 1, GPT-5.5 외 모델 exit 1</downstream_impact>
+    <no_breaking_change>기존 review codex/codex-record/check/status 동작 변경 없음</no_breaking_change>
+  </impact_analysis>
+  <changes_summary>
+    MT-1: pipeline.py — PR #79 REJECT 3개 blocker 해결
+    1) schema에 result/review_model/diff_sha256/required_actions/return_phase 5개 필드 추가 (required 강제)
+    2) diff_text 수집 후 current_diff_sha = hashlib.sha256(diff_text.encode()).hexdigest() 계산
+    3) 파싱 후 3단계 검증: result(ACCEPT/REJECT), review_model(GPT-5.5), diff_sha256(현재 hash와 비교)
+    4) result_data에서 result="PENDING" 고정 제거, 모델 응답의 실제 값으로 교체
+    MT-2: tests/test_codex_review.py — 5개 신규 테스트 + 헬퍼 3개 추가
+    pytest 52개 전체 PASS (기존 42개 회귀 포함)
+  </changes_summary>
+</handover>

@@ -1200,25 +1200,64 @@ class TestCodexRunCommand(unittest.TestCase):
             f"[CODEX SETUP_REQUIRED] 메시지가 stderr에 없음. 실제: {stderr_output!r}",
         )
 
-    def test_tc04_run_mock_creates_result_file(self) -> None:
-        """tc04: OpenAI API mock → codex_review_result.json 생성 + schema_version=2 검증."""
-        mock_response_payload = {
+    def _get_current_diff_sha(self, base_ref: str = "main") -> str:
+        """pipeline.py와 동일한 방식으로 현재 git diff sha256을 계산한다."""
+        import subprocess as _sp
+        try:
+            proc = _sp.run(
+                ["git", "diff", base_ref, "HEAD"],
+                capture_output=True,
+                cwd=str(PROJECT_ROOT),
+                timeout=30,
+            )
+            if proc.returncode == 0:
+                diff_bytes = proc.stdout
+            else:
+                diff_bytes = f"[git diff 실패: returncode={proc.returncode}]".encode("utf-8")
+        except Exception as exc:
+            diff_bytes = f"[git diff 예외: {exc}]".encode("utf-8")
+        import hashlib as _hl
+        return _hl.sha256(diff_bytes).hexdigest()
+
+    def _make_mock_response(
+        self,
+        result: str = "ACCEPT",
+        review_model: str = "GPT-5.5",
+        diff_sha256: Optional[str] = None,
+        findings: Optional[list] = None,
+        required_actions: Optional[list] = None,
+        return_phase: Optional[str] = None,
+        summary: str = "코드 리뷰 완료: 특이사항 없음",
+    ) -> Dict[str, Any]:
+        """tc04/신규 테스트용 mock API 응답 payload 생성 helper."""
+        if diff_sha256 is None:
+            diff_sha256 = self._get_current_diff_sha()
+        if findings is None:
+            findings = [
+                {
+                    "id": "CR-001",
+                    "level": "LOW",
+                    "file": "pipeline.py",
+                    "line": 1,
+                    "message": "테스트 finding",
+                    "recommendation": "확인 필요",
+                }
+            ]
+        if required_actions is None:
+            required_actions = []
+        return {
             "output": [
                 {
                     "content": [
                         {
                             "text": json.dumps({
-                                "summary": "코드 리뷰 완료: 특이사항 없음",
-                                "findings": [
-                                    {
-                                        "id": "CR-001",
-                                        "level": "LOW",
-                                        "file": "pipeline.py",
-                                        "line": 1,
-                                        "message": "테스트 finding",
-                                        "recommendation": "확인 필요",
-                                    }
-                                ],
+                                "result": result,
+                                "review_model": review_model,
+                                "diff_sha256": diff_sha256,
+                                "summary": summary,
+                                "findings": findings,
+                                "required_actions": required_actions,
+                                "return_phase": return_phase,
                             })
                         }
                     ]
@@ -1226,6 +1265,26 @@ class TestCodexRunCommand(unittest.TestCase):
             ]
         }
 
+    def _run_with_mock(
+        self,
+        args: "argparse.Namespace",
+        mock_payload: Dict[str, Any],
+        api_key: str = "sk-test-key",
+    ) -> None:
+        """urlopen을 mock하여 cmd_review_codex_run을 실행하는 helper."""
+        mock_resp = mock.MagicMock()
+        mock_resp.read.return_value = json.dumps(mock_payload).encode("utf-8")
+        mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = mock.MagicMock(return_value=False)
+        with mock.patch.object(pl, "_openai_api_key", return_value=(api_key, "process")):
+            with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                pl.cmd_review_codex_run(args)
+
+    def test_tc04_run_mock_creates_result_file(self) -> None:
+        """tc04: OpenAI API mock → codex_review_result.json 생성 + schema_version=2 검증.
+
+        신규 schema 강제: result/review_model/diff_sha256 필드 포함한 mock 응답 사용.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = str(Path(tmpdir) / "codex_review_result.json")
             raw_path = str(Path(tmpdir) / "codex_run_raw.json")
@@ -1236,15 +1295,8 @@ class TestCodexRunCommand(unittest.TestCase):
                 raw_output=raw_path,
             )
 
-            # urllib.request.urlopen mock
-            mock_resp = mock.MagicMock()
-            mock_resp.read.return_value = json.dumps(mock_response_payload).encode("utf-8")
-            mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
-            mock_resp.__exit__ = mock.MagicMock(return_value=False)
-
-            with mock.patch.object(pl, "_openai_api_key", return_value=("sk-test-key", "process")):
-                with mock.patch("urllib.request.urlopen", return_value=mock_resp):
-                    pl.cmd_review_codex_run(args)
+            mock_payload = self._make_mock_response(result="ACCEPT")
+            self._run_with_mock(args, mock_payload)
 
             # 결과 파일 검증
             self.assertTrue(Path(out_path).exists(), "codex_review_result.json이 생성되어야 함")
@@ -1271,25 +1323,10 @@ class TestCodexRunCommand(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1, "잘못된 stage 시 exit code 1이어야 함")
 
     def test_tc06_run_raw_output_no_api_key(self) -> None:
-        """tc06: raw 응답 파일에 API key 문자열이 포함되지 않아야 함 (보안 검증)."""
-        # "sk-"로 시작하는 API key 패턴이 raw 출력에 없어야 함
-        mock_response_payload: Dict[str, Any] = {
-            "id": "resp_test123",
-            "model": "GPT-5.5",
-            "output": [
-                {
-                    "content": [
-                        {
-                            "text": json.dumps({
-                                "summary": "no findings",
-                                "findings": [],
-                            })
-                        }
-                    ]
-                }
-            ],
-        }
+        """tc06: raw 응답 파일에 API key 문자열이 포함되지 않아야 함 (보안 검증).
 
+        신규 schema 강제: result/review_model/diff_sha256/required_actions/return_phase 포함.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = str(Path(tmpdir) / "codex_review_result.json")
             raw_path = str(Path(tmpdir) / "codex_run_raw.json")
@@ -1299,6 +1336,18 @@ class TestCodexRunCommand(unittest.TestCase):
                 output=out_path,
                 raw_output=raw_path,
             )
+
+            mock_payload = self._make_mock_response(
+                result="ACCEPT",
+                findings=[],
+                summary="no findings",
+            )
+            # raw 응답에 wrap
+            mock_response_payload: Dict[str, Any] = {
+                "id": "resp_test123",
+                "model": "GPT-5.5",
+                "output": mock_payload["output"],
+            }
 
             mock_resp = mock.MagicMock()
             mock_resp.read.return_value = json.dumps(mock_response_payload).encode("utf-8")
@@ -1323,6 +1372,177 @@ class TestCodexRunCommand(unittest.TestCase):
                 out_content,
                 "결과 파일에 API key가 포함되어서는 안 됨",
             )
+
+    # ─────────────────────────────────────────────
+    # 신규 테스트 5개 (IMP-20260517-1F94 MT-2)
+    # ─────────────────────────────────────────────
+
+    def test_codex_run_pending_not_saved(self) -> None:
+        """회귀 검증: mock 응답 result=ACCEPT → 파일 result 값이 절대 PENDING이 아니어야 함."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "codex_review_result.json")
+            raw_path = str(Path(tmpdir) / "codex_run_raw.json")
+            args = argparse.Namespace(
+                stage="code",
+                base_ref="main",
+                output=out_path,
+                raw_output=raw_path,
+            )
+
+            mock_payload = self._make_mock_response(result="ACCEPT", findings=[])
+            self._run_with_mock(args, mock_payload)
+
+            self.assertTrue(Path(out_path).exists(), "codex_review_result.json이 생성되어야 함")
+            result_data = json.loads(Path(out_path).read_text(encoding="utf-8"))
+            self.assertNotEqual(
+                result_data.get("result"),
+                "PENDING",
+                "result 필드가 PENDING으로 저장되면 버그: 모델 응답의 ACCEPT/REJECT를 저장해야 함",
+            )
+
+    def test_codex_run_result_accept_stored(self) -> None:
+        """정상 경로: mock 응답 result=ACCEPT → 파일 result 필드가 ACCEPT여야 함."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "codex_review_result.json")
+            raw_path = str(Path(tmpdir) / "codex_run_raw.json")
+            args = argparse.Namespace(
+                stage="code",
+                base_ref="main",
+                output=out_path,
+                raw_output=raw_path,
+            )
+
+            mock_payload = self._make_mock_response(result="ACCEPT", findings=[])
+            self._run_with_mock(args, mock_payload)
+
+            result_data = json.loads(Path(out_path).read_text(encoding="utf-8"))
+            self.assertEqual(
+                result_data.get("result"),
+                "ACCEPT",
+                f"파일 result 필드가 ACCEPT여야 함. 실제: {result_data.get('result')!r}",
+            )
+            self.assertEqual(
+                result_data.get("review_model"),
+                "GPT-5.5",
+                "파일 review_model이 GPT-5.5여야 함",
+            )
+            self.assertIsNotNone(result_data.get("diff_sha256"), "파일 diff_sha256이 있어야 함")
+
+    def test_codex_run_result_reject_stored(self) -> None:
+        """정상 경로: mock 응답 result=REJECT → 파일 result 필드가 REJECT여야 함."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "codex_review_result.json")
+            raw_path = str(Path(tmpdir) / "codex_run_raw.json")
+            args = argparse.Namespace(
+                stage="code",
+                base_ref="main",
+                output=out_path,
+                raw_output=raw_path,
+            )
+
+            mock_payload = self._make_mock_response(
+                result="REJECT",
+                findings=[
+                    {
+                        "id": "CR-001",
+                        "level": "CRITICAL",
+                        "file": "pipeline.py",
+                        "line": 42,
+                        "message": "심각한 버그",
+                        "recommendation": "즉시 수정 필요",
+                    }
+                ],
+                required_actions=["pipeline.py:42 수정"],
+                return_phase="dev",
+            )
+            self._run_with_mock(args, mock_payload)
+
+            result_data = json.loads(Path(out_path).read_text(encoding="utf-8"))
+            self.assertEqual(
+                result_data.get("result"),
+                "REJECT",
+                f"파일 result 필드가 REJECT여야 함. 실제: {result_data.get('result')!r}",
+            )
+            self.assertEqual(
+                result_data.get("return_phase"),
+                "dev",
+                "파일 return_phase가 dev여야 함",
+            )
+
+    def test_codex_run_diff_sha256_mismatch(self) -> None:
+        """엣지케이스: 모델 응답 diff_sha256 != 현재 diff sha256 → exit code 1 + stderr에 diff_sha256 또는 불일치 포함."""
+        import io
+
+        args = argparse.Namespace(
+            stage="code",
+            base_ref="main",
+            output=None,
+            raw_output=None,
+        )
+
+        # 고의로 잘못된 diff_sha256 사용
+        mock_payload = self._make_mock_response(
+            result="ACCEPT",
+            diff_sha256="deadbeef" * 8,  # 64자 고정 잘못된 hash
+            findings=[],
+        )
+
+        mock_resp = mock.MagicMock()
+        mock_resp.read.return_value = json.dumps(mock_payload).encode("utf-8")
+        mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = mock.MagicMock(return_value=False)
+
+        stderr_capture = io.StringIO()
+        with mock.patch.object(pl, "_openai_api_key", return_value=("sk-test-key", "process")):
+            with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                with mock.patch("sys.stderr", stderr_capture):
+                    with self.assertRaises(SystemExit) as ctx:
+                        pl.cmd_review_codex_run(args)
+
+        self.assertEqual(ctx.exception.code, 1, "diff_sha256 불일치 시 exit code 1이어야 함")
+        stderr_output = stderr_capture.getvalue()
+        has_keyword = any(k in stderr_output for k in ("diff_sha256", "불일치", "mismatch"))
+        self.assertTrue(
+            has_keyword,
+            f"stderr에 diff_sha256 관련 메시지가 없음. 실제: {stderr_output!r}",
+        )
+
+    def test_codex_run_wrong_review_model(self) -> None:
+        """엣지케이스: 모델 응답 review_model != GPT-5.5 → exit code 1 + stderr에 review_model 또는 GPT-5.5 포함."""
+        import io
+
+        args = argparse.Namespace(
+            stage="code",
+            base_ref="main",
+            output=None,
+            raw_output=None,
+        )
+
+        mock_payload = self._make_mock_response(
+            result="ACCEPT",
+            review_model="gpt-4",  # 잘못된 모델
+            findings=[],
+        )
+
+        mock_resp = mock.MagicMock()
+        mock_resp.read.return_value = json.dumps(mock_payload).encode("utf-8")
+        mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = mock.MagicMock(return_value=False)
+
+        stderr_capture = io.StringIO()
+        with mock.patch.object(pl, "_openai_api_key", return_value=("sk-test-key", "process")):
+            with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                with mock.patch("sys.stderr", stderr_capture):
+                    with self.assertRaises(SystemExit) as ctx:
+                        pl.cmd_review_codex_run(args)
+
+        self.assertEqual(ctx.exception.code, 1, "잘못된 review_model 시 exit code 1이어야 함")
+        stderr_output = stderr_capture.getvalue()
+        has_keyword = any(k in stderr_output for k in ("review_model", "GPT-5.5", "GPT-5.5가 아닙니다"))
+        self.assertTrue(
+            has_keyword,
+            f"stderr에 review_model 관련 메시지가 없음. 실제: {stderr_output!r}",
+        )
 
 
 # ===========================================================================
