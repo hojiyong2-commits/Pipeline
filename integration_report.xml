@@ -1,0 +1,15 @@
+<integration_report>
+  <pipeline_id>IMP-20260516-00DE</pipeline_id>
+  <modules_integrated>
+    <module id="MT-1">pipeline.py — cmd_review_codex_run 신규 함수, codex-run 서브파서, stage help 수정</module>
+    <module id="MT-2">tests/test_codex_review.py — TestCodexRunCommand 클래스 5개 테스트</module>
+  </modules_integrated>
+  <integration_verdict>PASS</integration_verdict>
+  <integrated_at>2026-05-17T01:38:00Z</integrated_at>
+  <integration_evidence>
+    <test_run>pytest tests/test_codex_review.py -v: 47 passed (MT-1 5개 + 기존 42개 회귀 PASS)</test_run>
+    <cli_smoke>python pipeline.py review codex-run --help: exit 0</cli_smoke>
+    <cli_smoke>python pipeline.py review codex-record --help: stage help includes plan|scope|code|hygiene|pr|rca</cli_smoke>
+    <no_regression>47개 전체 테스트 PASS, 기존 42개 회귀 없음</no_regression>
+  </integration_evidence>
+</integration_report>

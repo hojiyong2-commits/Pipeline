@@ -1,0 +1,14 @@
+{
+  "pipeline_id": "IMP-20260516-00DE",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.cmd_review, pipeline.cmd_review_codex_run (신규), pipeline.create_parser (review_sub 등록부)"
+      ]
+    }
+  ]
+}
