@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260517-CD57</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-4e834246d270187a</manager_run_id>
+  <planner_run_id>pm_planner-19eb30233059e180</planner_run_id>
+  <step_plan_sha256>25099ff3eda70daefde4c3698d88b53ac8d7a6441b77b06a88ead6a4ecccbd03</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <phase_sequence>pm → dev(MT-1→MT-2) → qa → sec(skip) → build(N/A) → external-gates → architect</phase_sequence>
+  <key_decisions>
+    <decision>Blocker 1: actual_model_verified is not True → FAIL (None도 포함)</decision>
+    <decision>Blocker 2: CODEX_REQUIRED_FIELDS에 6개 필드 추가 (requested_model_id, actual_model_id, actual_model_verified, actual_model_source, review_provider, raw_output_path)</decision>
+    <decision>Blocker 3: codex-record ACCEPT 차단 — manual 경로에서 ACCEPT 기록 불가</decision>
+    <decision>Blocker 4: history item actual_model_verified=true + actual_model_id exact match 필수</decision>
+    <decision>Blocker 5: .lower() 제거, exact match만 (GPT-5.5 대소문자 정확히)</decision>
+    <decision>Blocker 6: Pipeline Manager는 사용자 확인 없이 acceptance 자동 기록 금지</decision>
+    <decision>Build: N/A (코드+테스트만, 실행 가능 산출물 없음)</decision>
+    <decision>Security: skip (환경변수 제어, 테스트 mock — 외부 네트워크/DB 없음)</decision>
+    <decision>Codex review waiver: legacy-bootstrap (pipeline.py 자체가 수정 대상)</decision>
+  </key_decisions>
+  <scope_files>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+  </scope_files>
+  <module_plan>
+    <module id="MT-1">
+      <file>pipeline.py</file>
+      <description>Blocker 1~5 수정 (~60줄)</description>
+    </module>
+    <module id="MT-2">
+      <file>tests/test_codex_review.py</file>
+      <description>Blocker 1~4 대응 테스트 추가/수정 (~80줄), MT-1 PASS 후 진행</description>
+    </module>
+  </module_plan>
+</manager_handoff>
