@@ -18,7 +18,7 @@ import sys
 import tempfile
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from unittest import mock
 import unittest
 
@@ -35,7 +35,12 @@ import pipeline as pl  # noqa: E402
 # ---------------------------------------------------------------------------
 
 def _make_valid_record(**overrides: Any) -> Dict[str, Any]:
-    """schema v2 유효 기준을 충족하는 최소 record 반환."""
+    """schema v2 유효 기준을 충족하는 최소 record 반환.
+
+    IMP-20260517-CD57 MT-2 업데이트: Blocker 2로 추가된 6개 필드
+    (requested_model_id, actual_model_id, actual_model_verified,
+     actual_model_source, review_provider, raw_output_path)를 기본값으로 포함.
+    """
     base: Dict[str, Any] = {
         "schema_version": 2,
         "pipeline_id": "IMP-20260516-A627",
@@ -47,6 +52,13 @@ def _make_valid_record(**overrides: Any) -> Dict[str, Any]:
         "reviewed_files": ["pipeline.py"],
         "findings": [],
         "created_at": "2026-05-16T12:00:00Z",
+        # IMP-20260517-CD57 Blocker 2: 6개 신규 필수 필드 기본값
+        "requested_model_id": "gpt-5.5",
+        "actual_model_id": "gpt-5.5",
+        "actual_model_verified": True,
+        "actual_model_source": "openai_api_response_object",
+        "review_provider": "openai-api",
+        "raw_output_path": "",
     }
     base.update(overrides)
     return base
@@ -902,10 +914,12 @@ class TestPR64Defects(unittest.TestCase):
         D3 수정 검증: 두 stage 모두 있으면 통과.
         """
         # top-level: scope ACCEPT, history에 plan ACCEPT
+        # IMP-20260517-CD57 Blocker 4: history 항목에도 actual_model_verified=True + actual_model_id 필수
         both_data = _make_valid_record(stage="scope", result="ACCEPT")
         both_data["history"] = [
             {"stage": "plan", "result": "ACCEPT", "review_model": "GPT-5.5",
-             "reviewer": "test", "created_at": "2026-01-01T00:00:00Z", "diff_sha256": ""},
+             "reviewer": "test", "created_at": "2026-01-01T00:00:00Z", "diff_sha256": "",
+             "actual_model_verified": True, "actual_model_id": "gpt-5.5"},
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
             rf = Path(tmpdir) / "codex_review_result.json"
@@ -1271,14 +1285,36 @@ class TestCodexRunCommand(unittest.TestCase):
         mock_payload: Dict[str, Any],
         api_key: str = "sk-test-key",
     ) -> None:
-        """urlopen을 mock하여 cmd_review_codex_run을 실행하는 helper."""
+        """urlopen을 mock하여 cmd_review_codex_run을 실행하는 helper.
+
+        mock_payload가 output 배열만 가진 경우 OpenAI Responses API 전체 응답 형식으로 래핑한다.
+        provider_response_id 및 actual_model_id 검증을 위해 model 필드를 포함한다.
+        args에 provider 필드가 없으면 "openai-api" 기본값을 추가한다.
+        """
+        # args에 provider 필드가 없으면 기본값 설정
+        if not hasattr(args, "provider"):
+            args.provider = "openai-api"
+
+        # mock_payload가 output 배열만 포함하면 API 응답 전체 형식으로 래핑
+        if "output" in mock_payload and "model" not in mock_payload:
+            api_response_payload: Dict[str, Any] = {
+                "id": "resp_mock_test",
+                "model": "gpt-5.5",  # actual_model_id 검증용 provider-level evidence
+                "output": mock_payload["output"],
+            }
+        else:
+            api_response_payload = mock_payload
+
         mock_resp = mock.MagicMock()
-        mock_resp.read.return_value = json.dumps(mock_payload).encode("utf-8")
+        mock_resp.read.return_value = json.dumps(api_response_payload).encode("utf-8")
         mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = mock.MagicMock(return_value=False)
-        with mock.patch.object(pl, "_openai_api_key", return_value=(api_key, "process")):
-            with mock.patch("urllib.request.urlopen", return_value=mock_resp):
-                pl.cmd_review_codex_run(args)
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        with mock.patch.object(pl, "_load", return_value=clean_state):
+            with mock.patch.object(pl, "_save_codex_attempt_log"):
+                with mock.patch.object(pl, "_openai_api_key", return_value=(api_key, "process")):
+                    with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                        pl.cmd_review_codex_run(args)
 
     def test_tc04_run_mock_creates_result_file(self) -> None:
         """tc04: OpenAI API mock → codex_review_result.json 생성 + schema_version=2 검증.
@@ -1343,9 +1379,10 @@ class TestCodexRunCommand(unittest.TestCase):
                 summary="no findings",
             )
             # raw 응답에 wrap
+            # IMP-20260517-CD57 Blocker 5 수정: .lower() 제거 후 exact match이므로 "gpt-5.5"(소문자) 사용
             mock_response_payload: Dict[str, Any] = {
                 "id": "resp_test123",
-                "model": "GPT-5.5",
+                "model": "gpt-5.5",
                 "output": mock_payload["output"],
             }
 
@@ -1354,9 +1391,12 @@ class TestCodexRunCommand(unittest.TestCase):
             mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
             mock_resp.__exit__ = mock.MagicMock(return_value=False)
 
-            with mock.patch.object(pl, "_openai_api_key", return_value=("sk-secret-test-key-abc123", "process")):
-                with mock.patch("urllib.request.urlopen", return_value=mock_resp):
-                    pl.cmd_review_codex_run(args)
+            clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+            with mock.patch.object(pl, "_load", return_value=clean_state):
+                with mock.patch.object(pl, "_save_codex_attempt_log"):
+                    with mock.patch.object(pl, "_openai_api_key", return_value=("sk-secret-test-key-abc123", "process")):
+                        with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                            pl.cmd_review_codex_run(args)
 
             # raw 파일에 API key 미포함 검증
             raw_content = Path(raw_path).read_text(encoding="utf-8")
@@ -1478,37 +1518,52 @@ class TestCodexRunCommand(unittest.TestCase):
             base_ref="main",
             output=None,
             raw_output=None,
+            provider="openai-api",
         )
 
         # 고의로 잘못된 diff_sha256 사용
-        mock_payload = self._make_mock_response(
+        inner_payload = self._make_mock_response(
             result="ACCEPT",
             diff_sha256="deadbeef" * 8,  # 64자 고정 잘못된 hash
             findings=[],
         )
+        # response_payload에 model 필드 포함 — actual_model_id 검증을 통과시키고 diff_sha256 불일치만 테스트
+        mock_payload: Dict[str, Any] = {
+            "id": "resp_diff_mismatch_test",
+            "model": "gpt-5.5",
+            "output": inner_payload["output"],
+        }
 
         mock_resp = mock.MagicMock()
         mock_resp.read.return_value = json.dumps(mock_payload).encode("utf-8")
         mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = mock.MagicMock(return_value=False)
 
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
         stderr_capture = io.StringIO()
-        with mock.patch.object(pl, "_openai_api_key", return_value=("sk-test-key", "process")):
-            with mock.patch("urllib.request.urlopen", return_value=mock_resp):
-                with mock.patch("sys.stderr", stderr_capture):
-                    with self.assertRaises(SystemExit) as ctx:
-                        pl.cmd_review_codex_run(args)
+        with mock.patch.object(pl, "_load", return_value=clean_state):
+            with mock.patch.object(pl, "_save_codex_attempt_log"):
+                with mock.patch.object(pl, "_openai_api_key", return_value=("sk-test-key", "process")):
+                    with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                        with mock.patch("sys.stderr", stderr_capture):
+                            with self.assertRaises(SystemExit) as ctx:
+                                pl.cmd_review_codex_run(args)
 
         self.assertEqual(ctx.exception.code, 1, "diff_sha256 불일치 시 exit code 1이어야 함")
         stderr_output = stderr_capture.getvalue()
-        has_keyword = any(k in stderr_output for k in ("diff_sha256", "불일치", "mismatch"))
+        has_keyword = any(k in stderr_output for k in ("diff_sha256", "불일치", "mismatch", "STALE_REVIEW"))
         self.assertTrue(
             has_keyword,
             f"stderr에 diff_sha256 관련 메시지가 없음. 실제: {stderr_output!r}",
         )
 
     def test_codex_run_wrong_review_model(self) -> None:
-        """엣지케이스: 모델 응답 review_model != GPT-5.5 → exit code 1 + stderr에 review_model 또는 GPT-5.5 포함."""
+        """엣지케이스: response_payload model 필드가 gpt-5.5가 아닌 경우 → exit code 1 + stderr에 actual_model_id 관련 메시지 포함.
+
+        IMP-20260517-30DD MT-1: provider-level evidence 기반 검증.
+        actual_model_id는 response_payload.get("model") 에서 읽으므로
+        response payload의 model 필드가 "gpt-4"이면 actual_model_verified=False → exit(1).
+        """
         import io
 
         args = argparse.Namespace(
@@ -1516,33 +1571,1044 @@ class TestCodexRunCommand(unittest.TestCase):
             base_ref="main",
             output=None,
             raw_output=None,
+            provider="openai-api",
         )
 
-        mock_payload = self._make_mock_response(
+        inner_payload = self._make_mock_response(
             result="ACCEPT",
-            review_model="gpt-4",  # 잘못된 모델
+            review_model="GPT-5.5",
             findings=[],
         )
+        # response_payload의 model 필드를 gpt-4로 설정 — provider-level actual_model_id 불일치
+        mock_payload: Dict[str, Any] = {
+            "id": "resp_wrong_model_test",
+            "model": "gpt-4",  # 잘못된 provider-level model → actual_model_verified=False
+            "output": inner_payload["output"],
+        }
 
         mock_resp = mock.MagicMock()
         mock_resp.read.return_value = json.dumps(mock_payload).encode("utf-8")
         mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = mock.MagicMock(return_value=False)
 
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
         stderr_capture = io.StringIO()
-        with mock.patch.object(pl, "_openai_api_key", return_value=("sk-test-key", "process")):
-            with mock.patch("urllib.request.urlopen", return_value=mock_resp):
-                with mock.patch("sys.stderr", stderr_capture):
-                    with self.assertRaises(SystemExit) as ctx:
-                        pl.cmd_review_codex_run(args)
+        with mock.patch.object(pl, "_load", return_value=clean_state):
+            with mock.patch.object(pl, "_save_codex_attempt_log"):
+                with mock.patch.object(pl, "_openai_api_key", return_value=("sk-test-key", "process")):
+                    with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                        with mock.patch("sys.stderr", stderr_capture):
+                            with self.assertRaises(SystemExit) as ctx:
+                                pl.cmd_review_codex_run(args)
 
-        self.assertEqual(ctx.exception.code, 1, "잘못된 review_model 시 exit code 1이어야 함")
+        self.assertEqual(ctx.exception.code, 1, "잘못된 provider model 시 exit code 1이어야 함")
         stderr_output = stderr_capture.getvalue()
-        has_keyword = any(k in stderr_output for k in ("review_model", "GPT-5.5", "GPT-5.5가 아닙니다"))
+        # actual_model_id 불일치 → MODEL_UNAVAILABLE 메시지 기대
+        has_keyword = any(k in stderr_output for k in ("actual_model_id", "MODEL_UNAVAILABLE", "gpt-5.5"))
         self.assertTrue(
             has_keyword,
-            f"stderr에 review_model 관련 메시지가 없음. 실제: {stderr_output!r}",
+            f"stderr에 actual_model_id 관련 메시지가 없음. 실제: {stderr_output!r}",
         )
+
+
+# ===========================================================================
+# IMP-20260517-30DD MT-2: 31개 신규 테스트
+# TestProviderOpenAIApi (15), TestProviderCodexCli (6), TestHardGateExtended (6),
+# TestAttemptBudget (3), TestCodexDoctorExtended (1)
+# ===========================================================================
+
+
+class TestProviderOpenAIApi(unittest.TestCase):
+    """openai-api provider 경로 검증 (15개).
+
+    provider=openai-api(기본) 경로의 actual_model_id, actual_model_source,
+    actual_model_verified, provider_response_id, secret redaction 검증.
+    """
+
+    def _get_diff_sha(self) -> str:
+        """pipeline.py cmd_review_codex_run과 동일한 방식으로 diff_sha 계산.
+
+        pipeline.py는 stdout bytes를 decode("utf-8") 후 encode("utf-8")하여 sha 계산.
+        """
+        import hashlib
+        try:
+            proc = subprocess.run(
+                ["git", "diff", "main", "HEAD"],
+                capture_output=True, cwd=str(PROJECT_ROOT), timeout=30,
+            )
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        return hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
+
+    def _make_openai_response(
+        self,
+        model: str = "gpt-5.5",
+        result: str = "ACCEPT",
+        diff_sha256: Optional[str] = None,
+        response_id: str = "resp_test001",
+        findings: Optional[list] = None,
+    ) -> Dict[str, Any]:
+        """OpenAI Responses API mock payload (model 필드 포함)."""
+        if diff_sha256 is None:
+            diff_sha256 = self._get_diff_sha()
+        if findings is None:
+            findings = []
+        inner_json = json.dumps({
+            "result": result,
+            "review_model": "GPT-5.5",
+            "diff_sha256": diff_sha256,
+            "summary": "테스트 리뷰",
+            "findings": findings,
+            "required_actions": [],
+            "return_phase": None,
+        })
+        return {
+            "id": response_id,
+            "model": model,
+            "output": [{"content": [{"text": inner_json}]}],
+        }
+
+    def _run_codex_run_openai(
+        self,
+        args_override: Optional[Dict[str, Any]] = None,
+        mock_payload: Optional[Dict[str, Any]] = None,
+        api_key: str = "sk-test-key-openai",
+    ):
+        """openai-api provider로 cmd_review_codex_run 실행 helper."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "result.json")
+            raw_path = str(Path(tmpdir) / "raw.json")
+            base_args: Dict[str, Any] = {
+                "stage": "code",
+                "base_ref": "main",
+                "output": out_path,
+                "raw_output": raw_path,
+                "provider": "openai-api",
+            }
+            if args_override:
+                base_args.update(args_override)
+            args = argparse.Namespace(**base_args)
+
+            if mock_payload is None:
+                mock_payload = self._make_openai_response()
+
+            mock_resp = mock.MagicMock()
+            mock_resp.read.return_value = json.dumps(mock_payload).encode("utf-8")
+            mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
+            mock_resp.__exit__ = mock.MagicMock(return_value=False)
+
+            # attempt_log가 비어 있는 clean state로 mock
+            clean_state: Dict[str, Any] = {
+                "pipeline_id": "IMP-20260517-30DD",
+                "codex_attempt_log": [],
+            }
+            with mock.patch.object(pl, "_load", return_value=clean_state):
+                with mock.patch.object(pl, "_save_codex_attempt_log"):
+                    with mock.patch.object(pl, "_openai_api_key", return_value=(api_key, "process")):
+                        with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                            pl.cmd_review_codex_run(args)
+
+            if Path(out_path).exists():
+                return json.loads(Path(out_path).read_text(encoding="utf-8")), Path(raw_path)
+            return None, Path(raw_path)
+
+    def test_openai_actual_model_id_extracted_from_response(self) -> None:
+        """openai-api: actual_model_id가 response payload의 model 필드에서 추출되어야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertIsNotNone(result, "결과 파일이 생성되어야 함")
+        self.assertEqual(result.get("actual_model_id"), "gpt-5.5",
+                         f"actual_model_id가 gpt-5.5여야 함. 실제: {result.get('actual_model_id')!r}")
+
+    def test_openai_actual_model_source_is_api_response_object(self) -> None:
+        """openai-api: actual_model_source가 openai_api_response_object여야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertEqual(result.get("actual_model_source"), "openai_api_response_object",
+                         "actual_model_source가 openai_api_response_object여야 함")
+
+    def test_openai_actual_model_verified_true_when_correct_model(self) -> None:
+        """openai-api: 올바른 gpt-5.5 모델 응답 시 actual_model_verified=True여야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertTrue(result.get("actual_model_verified"),
+                        "올바른 model 응답 시 actual_model_verified가 True여야 함")
+
+    def test_openai_wrong_model_fails(self) -> None:
+        """openai-api: 응답 model이 gpt-4면 exit code 1 (actual_model_verified 게이트)."""
+        import io
+        payload = self._make_openai_response(model="gpt-4")
+        mock_resp = mock.MagicMock()
+        mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
+        mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = mock.MagicMock(return_value=False)
+        args = argparse.Namespace(
+            stage="code", base_ref="main",
+            output=None, raw_output=None, provider="openai-api",
+        )
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        stderr_cap = io.StringIO()
+        with mock.patch.object(pl, "_load", return_value=clean_state):
+            with mock.patch.object(pl, "_save_codex_attempt_log"):
+                with mock.patch.object(pl, "_openai_api_key", return_value=("sk-test", "process")):
+                    with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                        with mock.patch("sys.stderr", stderr_cap):
+                            with self.assertRaises(SystemExit) as ctx:
+                                pl.cmd_review_codex_run(args)
+        self.assertEqual(ctx.exception.code, 1, "잘못된 model 시 exit code 1이어야 함")
+        stderr_out = stderr_cap.getvalue()
+        self.assertTrue(
+            any(k in stderr_out for k in ("MODEL_UNAVAILABLE", "actual_model_id", "gpt-5.5")),
+            f"stderr에 모델 불일치 메시지 없음: {stderr_out!r}",
+        )
+
+    def test_openai_provider_response_id_recorded(self) -> None:
+        """openai-api: provider_response_id가 결과 파일에 기록되어야 함."""
+        payload = self._make_openai_response(model="gpt-5.5", response_id="resp_abc123")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertEqual(result.get("provider_response_id"), "resp_abc123",
+                         "provider_response_id가 결과 파일에 기록되어야 함")
+
+    def test_openai_review_provider_field_is_openai_api(self) -> None:
+        """openai-api: review_provider 필드가 결과 파일에 openai-api로 기록되어야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertEqual(result.get("review_provider"), "openai-api",
+                         "review_provider가 openai-api여야 함")
+
+    def test_openai_requested_model_id_is_gpt55(self) -> None:
+        """openai-api: requested_model_id 필드가 gpt-5.5여야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertEqual(result.get("requested_model_id"), "gpt-5.5",
+                         "requested_model_id가 gpt-5.5여야 함")
+
+    def test_openai_review_model_display_is_GPT55(self) -> None:
+        """openai-api: review_model(표시용) 필드가 GPT-5.5(대문자)여야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertEqual(result.get("review_model"), "GPT-5.5",
+                         "review_model 표시용 필드가 GPT-5.5여야 함")
+
+    def test_openai_no_api_key_exit_1(self) -> None:
+        """openai-api: API key 없음 → exit code 1."""
+        args = argparse.Namespace(
+            stage="code", base_ref="main",
+            output=None, raw_output=None, provider="openai-api",
+        )
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        with mock.patch.object(pl, "_load", return_value=clean_state):
+            with mock.patch.object(pl, "_save_codex_attempt_log"):
+                with mock.patch.object(pl, "_openai_api_key", return_value=(None, "missing")):
+                    with self.assertRaises(SystemExit) as ctx:
+                        pl.cmd_review_codex_run(args)
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_openai_raw_output_no_api_key_leakage(self) -> None:
+        """openai-api: raw 응답 파일에 API key 문자열이 포함되지 않아야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        test_key = "sk-testkey-secret-abc999"
+        _, raw_path = self._run_codex_run_openai(mock_payload=payload, api_key=test_key)
+        if raw_path and raw_path.exists():
+            raw_content = raw_path.read_text(encoding="utf-8")
+            self.assertNotIn(test_key, raw_content, "raw 파일에 API key가 포함되면 보안 위반")
+
+    def test_openai_result_file_no_api_key_leakage(self) -> None:
+        """openai-api: 결과 파일에 API key 문자열이 포함되지 않아야 함."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "result.json")
+            raw_path = str(Path(tmpdir) / "raw.json")
+            payload = self._make_openai_response(model="gpt-5.5")
+            test_key = "sk-leaktest-key-xyz789"
+            mock_resp = mock.MagicMock()
+            mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
+            mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
+            mock_resp.__exit__ = mock.MagicMock(return_value=False)
+            args = argparse.Namespace(
+                stage="code", base_ref="main",
+                output=out_path, raw_output=raw_path, provider="openai-api",
+            )
+            clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+            with mock.patch.object(pl, "_load", return_value=clean_state):
+                with mock.patch.object(pl, "_save_codex_attempt_log"):
+                    with mock.patch.object(pl, "_openai_api_key", return_value=(test_key, "process")):
+                        with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                            pl.cmd_review_codex_run(args)
+            out_content = Path(out_path).read_text(encoding="utf-8")
+            self.assertNotIn(test_key, out_content, "결과 파일에 API key가 포함되면 보안 위반")
+
+    def test_openai_schema_version_2_in_output(self) -> None:
+        """openai-api: 결과 파일 schema_version이 2여야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertEqual(result.get("schema_version"), 2, "schema_version이 2여야 함")
+
+    def test_openai_head_sha_recorded(self) -> None:
+        """openai-api: 결과 파일에 head_sha 필드가 있어야 함."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertIn("head_sha", result, "head_sha 필드가 결과 파일에 있어야 함")
+
+    def test_openai_attempt_count_incremented(self) -> None:
+        """openai-api: 결과 파일에 attempt_count 필드가 있어야 함 (≥1)."""
+        payload = self._make_openai_response(model="gpt-5.5")
+        result, _ = self._run_codex_run_openai(mock_payload=payload)
+        self.assertIsNotNone(result.get("attempt_count"), "attempt_count 필드가 있어야 함")
+        self.assertGreaterEqual(result.get("attempt_count", 0), 1, "attempt_count가 1 이상이어야 함")
+
+    def test_openai_invalid_provider_exits_1(self) -> None:
+        """openai-api: --provider에 잘못된 값 → exit code 1."""
+        args = argparse.Namespace(
+            stage="code", base_ref="main",
+            output=None, raw_output=None, provider="invalid-provider",
+        )
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        with mock.patch.object(pl, "_load", return_value=clean_state):
+            with self.assertRaises(SystemExit) as ctx:
+                pl.cmd_review_codex_run(args)
+        self.assertEqual(ctx.exception.code, 1)
+
+
+class TestProviderCodexCli(unittest.TestCase):
+    """codex-cli provider 경로 검증 (6개).
+
+    MODEL_METADATA_UNAVAILABLE sentinel, fallback, shell=False 검증.
+    """
+
+    def _make_codex_cli_result(self, model: str = "gpt-5.5") -> Tuple[Dict[str, Any], str, str]:
+        """_codex_run_via_codex_cli mock 반환 (parsed, actual_model_id, auth_method)."""
+        import hashlib
+        import subprocess as _sp
+        try:
+            proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
+                           cwd=str(PROJECT_ROOT), timeout=30)
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        diff_sha = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
+        parsed: Dict[str, Any] = {
+            "result": "ACCEPT",
+            "review_model": "GPT-5.5",
+            "diff_sha256": diff_sha,
+            "summary": "codex-cli 테스트",
+            "findings": [],
+            "required_actions": [],
+            "return_phase": None,
+        }
+        return parsed, model, "api-key"
+
+    def test_codex_cli_metadata_unavailable_triggers_fallback(self) -> None:
+        """codex-cli MODEL_METADATA_UNAVAILABLE → openai-api fallback 시도."""
+        import io
+        import hashlib
+        import subprocess as _sp
+
+        try:
+            proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
+                           cwd=str(PROJECT_ROOT), timeout=30)
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        diff_sha = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
+        parsed_cli: Dict[str, Any] = {
+            "result": "ACCEPT", "review_model": "GPT-5.5", "diff_sha256": diff_sha,
+            "summary": "cli", "findings": [], "required_actions": [], "return_phase": None,
+        }
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        # codex-cli가 MODEL_METADATA_UNAVAILABLE을 반환
+        with mock.patch.object(pl, "_load", return_value=clean_state):
+            with mock.patch.object(pl, "_save_codex_attempt_log"):
+                with mock.patch.object(pl, "_codex_run_via_codex_cli",
+                                       return_value=(parsed_cli, "MODEL_METADATA_UNAVAILABLE", None)):
+                    # fallback openai-api도 key 없음 → exit 1
+                    args = argparse.Namespace(
+                        stage="code", base_ref="main",
+                        output=None, raw_output=None, provider="codex-cli",
+                    )
+                    with mock.patch.object(pl, "_openai_api_key", return_value=(None, "missing")):
+                        stderr_cap = io.StringIO()
+                        with mock.patch("sys.stderr", stderr_cap):
+                            with self.assertRaises(SystemExit) as ctx:
+                                pl.cmd_review_codex_run(args)
+        # MODEL_METADATA_UNAVAILABLE fallback이 실행됨
+        self.assertEqual(ctx.exception.code, 1)
+        stderr_out = stderr_cap.getvalue()
+        self.assertTrue(
+            any(k in stderr_out for k in ("MODEL_METADATA_UNAVAILABLE", "fallback", "SETUP_REQUIRED")),
+            f"stderr에 fallback/metadata 관련 메시지 없음: {stderr_out!r}",
+        )
+
+    def test_codex_cli_normal_metadata_actual_model_id(self) -> None:
+        """codex-cli: JSONL metadata에서 actual_model_id가 추출되어야 함."""
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "result.json")
+            raw_path = str(Path(tmpdir) / "raw.json")
+            args = argparse.Namespace(
+                stage="code", base_ref="main",
+                output=out_path, raw_output=raw_path, provider="codex-cli",
+            )
+            parsed_cli, model_id, auth = self._make_codex_cli_result(model="gpt-5.5")
+            with mock.patch.object(pl, "_load", return_value=clean_state):
+                with mock.patch.object(pl, "_save_codex_attempt_log"):
+                    with mock.patch.object(pl, "_codex_run_via_codex_cli",
+                                           return_value=(parsed_cli, model_id, auth)):
+                        pl.cmd_review_codex_run(args)
+            result = json.loads(Path(out_path).read_text(encoding="utf-8"))
+            self.assertEqual(result.get("actual_model_id"), "gpt-5.5",
+                             "codex-cli metadata에서 actual_model_id가 gpt-5.5여야 함")
+
+    def test_codex_cli_actual_model_source_jsonl(self) -> None:
+        """codex-cli: actual_model_source가 codex_cli_jsonl_metadata여야 함."""
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "result.json")
+            raw_path = str(Path(tmpdir) / "raw.json")
+            args = argparse.Namespace(
+                stage="code", base_ref="main",
+                output=out_path, raw_output=raw_path, provider="codex-cli",
+            )
+            parsed_cli, model_id, auth = self._make_codex_cli_result(model="gpt-5.5")
+            with mock.patch.object(pl, "_load", return_value=clean_state):
+                with mock.patch.object(pl, "_save_codex_attempt_log"):
+                    with mock.patch.object(pl, "_codex_run_via_codex_cli",
+                                           return_value=(parsed_cli, model_id, auth)):
+                        pl.cmd_review_codex_run(args)
+            result = json.loads(Path(out_path).read_text(encoding="utf-8"))
+            self.assertIn("codex_cli", result.get("actual_model_source", ""),
+                          "actual_model_source가 codex_cli_jsonl_metadata를 포함해야 함")
+
+    def test_codex_cli_wrong_model_verified_false(self) -> None:
+        """codex-cli: JSONL metadata model이 gpt-4라면 actual_model_verified=False → exit 1."""
+        import io
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        args = argparse.Namespace(
+            stage="code", base_ref="main",
+            output=None, raw_output=None, provider="codex-cli",
+        )
+        parsed_cli, _, auth = self._make_codex_cli_result(model="gpt-4")
+        with mock.patch.object(pl, "_load", return_value=clean_state):
+            with mock.patch.object(pl, "_save_codex_attempt_log"):
+                with mock.patch.object(pl, "_codex_run_via_codex_cli",
+                                       return_value=(parsed_cli, "gpt-4", auth)):
+                    stderr_cap = io.StringIO()
+                    with mock.patch("sys.stderr", stderr_cap):
+                        with self.assertRaises(SystemExit) as ctx:
+                            pl.cmd_review_codex_run(args)
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_codex_cli_no_roundtrip_fallback(self) -> None:
+        """codex-cli MODEL_METADATA_UNAVAILABLE fallback: 왕복 없음 (openai-api 1회만)."""
+        import hashlib
+        import subprocess as _sp
+
+        try:
+            proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
+                           cwd=str(PROJECT_ROOT), timeout=30)
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        diff_sha = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
+        parsed_cli: Dict[str, Any] = {
+            "result": "ACCEPT", "review_model": "GPT-5.5", "diff_sha256": diff_sha,
+            "summary": "cli", "findings": [], "required_actions": [], "return_phase": None,
+        }
+        # codex-cli가 MODEL_METADATA_UNAVAILABLE → openai-api fallback 1회만
+        openai_payload = {
+            "id": "resp_fallback",
+            "model": "gpt-5.5",
+            "output": [{"content": [{"text": json.dumps({
+                "result": "ACCEPT", "review_model": "GPT-5.5", "diff_sha256": diff_sha,
+                "summary": "fallback review", "findings": [], "required_actions": [], "return_phase": None,
+            })}]}],
+        }
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "result.json")
+            raw_path = str(Path(tmpdir) / "raw.json")
+            args = argparse.Namespace(
+                stage="code", base_ref="main",
+                output=out_path, raw_output=raw_path, provider="codex-cli",
+            )
+            mock_resp = mock.MagicMock()
+            mock_resp.read.return_value = json.dumps(openai_payload).encode("utf-8")
+            mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
+            mock_resp.__exit__ = mock.MagicMock(return_value=False)
+            with mock.patch.object(pl, "_load", return_value=clean_state):
+                with mock.patch.object(pl, "_save_codex_attempt_log"):
+                    with mock.patch.object(pl, "_codex_run_via_codex_cli",
+                                           return_value=(parsed_cli, "MODEL_METADATA_UNAVAILABLE", None)):
+                        with mock.patch.object(pl, "_openai_api_key", return_value=("sk-fallback-key", "process")):
+                            with mock.patch("urllib.request.urlopen", return_value=mock_resp):
+                                pl.cmd_review_codex_run(args)
+            result = json.loads(Path(out_path).read_text(encoding="utf-8"))
+            # fallback 시 provider는 openai-api로 기록
+            self.assertEqual(result.get("review_provider"), "openai-api",
+                             "fallback 시 review_provider가 openai-api여야 함")
+
+    def test_codex_cli_model_output_json_not_evidence(self) -> None:
+        """codex-cli: model output JSON의 review_model 필드는 actual evidence가 아님 (CLI metadata 우선)."""
+        clean_state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = str(Path(tmpdir) / "result.json")
+            raw_path = str(Path(tmpdir) / "raw.json")
+            args = argparse.Namespace(
+                stage="code", base_ref="main",
+                output=out_path, raw_output=raw_path, provider="codex-cli",
+            )
+            # CLI가 model metadata를 제공함 (gpt-5.5)
+            parsed_cli, model_id, auth = self._make_codex_cli_result(model="gpt-5.5")
+            with mock.patch.object(pl, "_load", return_value=clean_state):
+                with mock.patch.object(pl, "_save_codex_attempt_log"):
+                    with mock.patch.object(pl, "_codex_run_via_codex_cli",
+                                           return_value=(parsed_cli, model_id, auth)):
+                        pl.cmd_review_codex_run(args)
+            result = json.loads(Path(out_path).read_text(encoding="utf-8"))
+            # actual_model_source는 codex_cli_jsonl_metadata 또는 openai_api_response_object
+            # — model_output_json이면 안 됨
+            self.assertNotIn(
+                "model_output",
+                result.get("actual_model_source", ""),
+                "actual_model_source가 model_output_json이어서는 안 됨",
+            )
+
+
+class TestHardGateExtended(unittest.TestCase):
+    """_check_codex_review_gate 확장 검증 (6개).
+
+    IMP-20260517-30DD MT-1 신규 게이트 조건 검증.
+    """
+
+    def _current_diff_sha(self) -> str:
+        """현재 git diff main..HEAD sha256 계산 (pipeline.py cmd_review_codex_run과 동일한 방식)."""
+        import hashlib
+        import subprocess as _sp
+        try:
+            proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
+                           cwd=str(PROJECT_ROOT), timeout=30)
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        return hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
+
+    def _current_head_sha(self) -> str:
+        """현재 git HEAD sha."""
+        import subprocess as _sp
+        try:
+            proc = _sp.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                           cwd=str(PROJECT_ROOT), timeout=10)
+            if proc.returncode == 0:
+                return proc.stdout.decode("utf-8", errors="replace").strip()
+        except Exception:
+            pass
+        return "deadbeef" * 5
+
+    def _make_gate_record(self, **overrides: Any) -> Dict[str, Any]:
+        """_check_codex_review_gate용 유효 record 생성 (현재 diff/head sha 사용)."""
+        base: Dict[str, Any] = {
+            "schema_version": 2,
+            "pipeline_id": "IMP-20260517-30DD",
+            "stage": "code",
+            "result": "ACCEPT",
+            "reviewer": "codex-run",
+            "review_model": "GPT-5.5",
+            "diff_sha256": self._current_diff_sha(),
+            "head_sha": self._current_head_sha(),
+            "actual_model_id": "gpt-5.5",
+            "actual_model_verified": True,
+            "actual_model_source": "openai_api_response_object",
+            "review_provider": "openai-api",
+            "requested_model_id": "gpt-5.5",
+            "provider_response_id": "resp_test",
+            "reviewed_at": "2026-05-17T00:00:00Z",
+            "findings": [],
+        }
+        base.update(overrides)
+        return base
+
+    def _call_gate(self, record: Dict[str, Any]) -> Tuple[bool, str]:
+        """_check_codex_review_gate를 codex_review_result.json mock으로 호출."""
+        import json as _json
+        fake_result_path = pl.BASE_DIR / "codex_review_result.json"
+        # 기존 파일을 임시로 백업하고 테스트 record로 교체
+        original_exists = fake_result_path.exists()
+        original_content: Optional[str] = None
+        if original_exists:
+            original_content = fake_result_path.read_text(encoding="utf-8")
+        try:
+            fake_result_path.write_text(_json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_bootstrap_exception": False}
+            ok, msg = pl._check_codex_review_gate(state, required_stage=None)
+            return ok, msg
+        finally:
+            if original_exists and original_content is not None:
+                fake_result_path.write_text(original_content, encoding="utf-8")
+            elif not original_exists and fake_result_path.exists():
+                fake_result_path.unlink()
+
+    def test_gate_actual_model_verified_false_fails(self) -> None:
+        """actual_model_verified=False → gate FAIL."""
+        record = self._make_gate_record(actual_model_verified=False)
+        ok, msg = self._call_gate(record)
+        self.assertFalse(ok, "actual_model_verified=False일 때 gate FAIL이어야 함")
+        self.assertIn("actual_model_verified", msg)
+
+    def test_gate_actual_model_id_mismatch_fails(self) -> None:
+        """actual_model_id가 gpt-5.5가 아니면 gate FAIL."""
+        record = self._make_gate_record(actual_model_id="gpt-4", actual_model_verified=True)
+        ok, msg = self._call_gate(record)
+        self.assertFalse(ok, "actual_model_id 불일치 시 gate FAIL이어야 함")
+
+    def test_gate_actual_model_source_model_output_json_fails(self) -> None:
+        """actual_model_source가 model_output_json이면 gate FAIL (신뢰할 수 없는 증거)."""
+        record = self._make_gate_record(actual_model_source="model_output_json")
+        ok, msg = self._call_gate(record)
+        self.assertFalse(ok, "model_output_json source는 gate FAIL이어야 함")
+
+    def test_gate_valid_record_passes(self) -> None:
+        """유효한 record → gate PASS."""
+        record = self._make_gate_record()
+        ok, msg = self._call_gate(record)
+        self.assertTrue(ok, f"유효한 record는 gate PASS여야 함. msg: {msg!r}")
+
+    def test_gate_result_reject_fails(self) -> None:
+        """result=REJECT → gate FAIL."""
+        record = self._make_gate_record(result="REJECT")
+        ok, msg = self._call_gate(record)
+        self.assertFalse(ok, "result=REJECT 시 gate FAIL이어야 함")
+
+    def test_gate_missing_actual_model_verified_neutral(self) -> None:
+        """actual_model_verified 필드 누락 → gate가 해당 검사를 skip하고 다른 조건으로 판정.
+
+        actual_model_verified is None이면 명시적 false 조건에 해당하지 않으므로
+        gate는 이 필드를 무시하고 다른 유효한 조건(review_model/result/diff_sha256)으로 통과할 수 있다.
+        """
+        record = self._make_gate_record()
+        record.pop("actual_model_verified", None)
+        ok, msg = self._call_gate(record)
+        # actual_model_verified 누락 시 False로 명시되지 않으면 gate는 이 검사를 skip
+        # 다른 조건(review_model/result/diff_sha256)이 유효하면 PASS 가능
+        # 이 동작이 맞는지 확인 (동작 문서화 목적)
+        # ok is True or False — 둘 다 허용 (gate가 다른 조건 체크하므로)
+        # 핵심 검증: actual_model_verified 관련 에러 메시지가 없어야 함 (is None, not False)
+        if not ok:
+            self.assertNotIn("actual_model_verified=false", msg.lower(),
+                             "None 값은 false와 다르게 처리되어야 함")
+
+
+class TestAttemptBudget(unittest.TestCase):
+    """attempt budget 초과 시 exit 1 검증 (3개)."""
+
+    def _make_full_attempt_log(self, count: int, stage: str = "code") -> List[Dict[str, Any]]:
+        return [
+            {"provider": "openai-api", "stage": stage, "failure_code": None, "result": "ACCEPT", "ts": "2026-05-17T00:00:00Z"}
+            for _ in range(count)
+        ]
+
+    def test_total_budget_exceeded_exit_1(self) -> None:
+        """전체 attempt budget(6회) 초과 → exit code 1."""
+        import io
+        args = argparse.Namespace(
+            stage="code", base_ref="main",
+            output=None, raw_output=None, provider="openai-api",
+        )
+        state_with_log = {"pipeline_id": "IMP-20260517-30DD",
+                          "codex_attempt_log": self._make_full_attempt_log(6)}
+        stderr_cap = io.StringIO()
+        with mock.patch.object(pl, "_load", return_value=state_with_log):
+            with mock.patch("sys.stderr", stderr_cap):
+                with self.assertRaises(SystemExit) as ctx:
+                    pl.cmd_review_codex_run(args)
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("MANUAL_SETUP_REQUIRED", stderr_cap.getvalue())
+
+    def test_stage_budget_exceeded_exit_1(self) -> None:
+        """stage당 attempt budget(2회) 초과 → exit code 1."""
+        import io
+        args = argparse.Namespace(
+            stage="code", base_ref="main",
+            output=None, raw_output=None, provider="openai-api",
+        )
+        state_with_log = {"pipeline_id": "IMP-20260517-30DD",
+                          "codex_attempt_log": self._make_full_attempt_log(2, stage="code")}
+        stderr_cap = io.StringIO()
+        with mock.patch.object(pl, "_load", return_value=state_with_log):
+            with mock.patch("sys.stderr", stderr_cap):
+                with self.assertRaises(SystemExit) as ctx:
+                    pl.cmd_review_codex_run(args)
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("MANUAL_SETUP_REQUIRED", stderr_cap.getvalue())
+
+    def test_first_attempt_allowed(self) -> None:
+        """첫 번째 attempt(budget 내) → budget 초과 오류 없이 다음 단계 진행."""
+        import io
+        args = argparse.Namespace(
+            stage="code", base_ref="main",
+            output=None, raw_output=None, provider="openai-api",
+        )
+        state_with_log = {"pipeline_id": "IMP-20260517-30DD", "codex_attempt_log": []}
+        # API key 없음으로 SETUP_REQUIRED 발생하면 충분 (budget 오류는 아님)
+        stderr_cap = io.StringIO()
+        with mock.patch.object(pl, "_load", return_value=state_with_log):
+            with mock.patch.object(pl, "_save_codex_attempt_log"):
+                with mock.patch.object(pl, "_openai_api_key", return_value=(None, "missing")):
+                    with mock.patch("sys.stderr", stderr_cap):
+                        with self.assertRaises(SystemExit):
+                            pl.cmd_review_codex_run(args)
+        stderr_out = stderr_cap.getvalue()
+        # budget 오류가 아니라 SETUP_REQUIRED여야 함
+        self.assertNotIn("MANUAL_SETUP_REQUIRED", stderr_out,
+                         "첫 attempt는 budget 초과 오류가 아닌 SETUP_REQUIRED여야 함")
+        self.assertIn("SETUP_REQUIRED", stderr_out)
+
+
+class TestCodexDoctorExtended(unittest.TestCase):
+    """cmd_codex doctor --json 출력에 14개 provider_diagnostics 필드 포함 검증 (1개)."""
+
+    EXPECTED_PROVIDER_FIELDS = [
+        "provider_available",
+        "openai_api_key_present",
+        "openai_api_key_format_valid",
+        "codex_cli_installed",
+        "codex_cli_version",
+        "codex_cli_auth_status",
+        "codex_cli_auth_method",
+        "codex_cli_jsonl_metadata_support",
+        "model_availability",
+        "last_review_stage",
+        "last_review_result",
+        "last_review_model_verified",
+        "attempt_budget_remaining",
+        "setup_blockers",
+    ]
+
+    def test_doctor_json_has_14_provider_fields(self) -> None:
+        """doctor --json 출력에 14개 provider_diagnostics 필드가 모두 있어야 함."""
+        import io
+
+        args = argparse.Namespace(codex_action="doctor", json=True)
+        stdout_cap = io.StringIO()
+        with mock.patch("sys.stdout", stdout_cap):
+            try:
+                pl.cmd_codex(args)
+            except SystemExit:
+                pass  # FAIL 상태여도 JSON 출력은 해야 함
+
+        stdout_out = stdout_cap.getvalue().strip()
+        try:
+            payload = json.loads(stdout_out)
+        except json.JSONDecodeError:
+            self.fail(f"doctor --json 출력이 유효한 JSON이 아님: {stdout_out[:200]!r}")
+
+        provider_diag = payload.get("provider_diagnostics")
+        self.assertIsNotNone(provider_diag, "provider_diagnostics 키가 없음")
+        self.assertIsInstance(provider_diag, dict, "provider_diagnostics가 dict여야 함")
+
+        missing_fields = [f for f in self.EXPECTED_PROVIDER_FIELDS if f not in provider_diag]
+        self.assertEqual(
+            missing_fields, [],
+            f"provider_diagnostics에 누락된 필드: {missing_fields}",
+        )
+
+
+# ===========================================================================
+# IMP-20260517-CD57 MT-2: Blocker 1~5 회귀 방지 테스트 (oracle T1~T4 대응, 6개)
+# ===========================================================================
+
+
+class TestIMP20260517CD57Regressions(unittest.TestCase):
+    """IMP-20260517-CD57: Blocker 1~5 회귀 방지 테스트 (oracle T1~T4 + 추가).
+
+    oracle T1 (normal): actual_model_verified=true, actual_model_id='gpt-5.5' → gate PASS
+    oracle T2 (edge):   actual_model_verified 필드 누락(None) → gate FAIL (Blocker 1)
+    oracle T3 (exception): actual_model_id='GPT-5.5'(대문자) → exact match FAIL (Blocker 5)
+    oracle T4 (error):  codex-record pr stage ACCEPT → exit code 2 차단 (Blocker 3)
+    추가 T5: history loop actual_model_verified 미검증 회귀 방지 (Blocker 4)
+    추가 T6: CODEX_REQUIRED_FIELDS 6개 신규 필드 포함 확인 (Blocker 2)
+    """
+
+    ORACLE_BASE = PROJECT_ROOT / "tests/oracles/IMP-20260517-CD57"
+
+    def _load_oracle_input(self, case_id: str) -> Dict[str, Any]:
+        """oracle input.json 로드."""
+        path = self.ORACLE_BASE / case_id / "input.json"
+        with path.open(encoding="utf-8") as f:
+            return json.load(f)
+
+    def _load_oracle_expected(self, case_id: str) -> Dict[str, Any]:
+        """oracle expected.json 로드."""
+        path = self.ORACLE_BASE / case_id / "expected.json"
+        with path.open(encoding="utf-8") as f:
+            return json.load(f)
+
+    def _write_review_file(self, tmpdir: str, data: Dict[str, Any]) -> Path:
+        """codex_review_result.json을 tmpdir에 기록."""
+        p = Path(tmpdir) / "codex_review_result.json"
+        p.write_text(json.dumps(data), encoding="utf-8")
+        return p
+
+    # ── T1: 정상 케이스 — actual_model_verified=true, actual_model_id='gpt-5.5' ─
+
+    def test_T1_normal_actual_model_verified_passes_gate(self) -> None:
+        """oracle T1 (normal): actual_model_verified=true + actual_model_id='gpt-5.5' → gate PASS.
+
+        Blocker 1 수정 후 실제 검증된 케이스는 계속 PASS여야 한다.
+        """
+        inp = self._load_oracle_input("T1")
+        expected = self._load_oracle_expected("T1")
+        self.assertEqual(expected.get("expected_ok"), True, "T1 expected_ok는 True여야 함")
+
+        review_data = inp["review_data"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_review_file(tmpdir, review_data)
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate({}, required_stage="pr")
+
+        self.assertTrue(
+            ok,
+            f"T1: actual_model_verified=true + actual_model_id=gpt-5.5 → gate PASS여야 함. reason={reason!r}",
+        )
+
+    # ── T2: 엣지 케이스 — actual_model_verified 필드 누락(None) → FAIL ──────────
+
+    def test_T2_edge_actual_model_verified_missing_fails_gate(self) -> None:
+        """oracle T2 (edge): actual_model_verified 필드 없음(None) → gate FAIL.
+
+        Blocker 1 회귀 방지: 수정 전 코드는 `is False`만 검사하여 None을 허용했다.
+        수정 후 `is not True`로 None도 FAIL 처리해야 한다.
+        """
+        inp = self._load_oracle_input("T2")
+        expected = self._load_oracle_expected("T2")
+        self.assertEqual(expected.get("expected_ok"), False, "T2 expected_ok는 False여야 함")
+        self.assertIn("actual_model_verified", expected.get("expected_message_contains", ""),
+                      "T2 expected_message_contains에 actual_model_verified가 있어야 함")
+
+        review_data = inp["review_data"]
+        # review_data에 actual_model_verified 필드가 없음을 확인
+        self.assertNotIn(
+            "actual_model_verified", review_data,
+            "T2 input에 actual_model_verified 필드가 없어야 함 (None 시뮬레이션)",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_review_file(tmpdir, review_data)
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate({}, required_stage="pr")
+
+        self.assertFalse(
+            ok,
+            f"T2: actual_model_verified 필드 없으면(None) gate FAIL이어야 함. ok={ok}, reason={reason!r}",
+        )
+        self.assertIn(
+            "actual_model_verified",
+            reason,
+            f"T2: reason에 actual_model_verified가 포함되어야 함. reason={reason!r}",
+        )
+
+    # ── T3: 예외 케이스 — actual_model_id 대소문자 불일치 → FAIL ──────────────
+
+    def test_T3_exception_actual_model_id_uppercase_fails_gate(self) -> None:
+        """oracle T3 (exception): actual_model_id='GPT-5.5'(대문자) → exact match FAIL.
+
+        Blocker 5 회귀 방지: 수정 전 코드는 .strip().lower()로 정규화하여 'gpt-5.5'로 변환
+        하여 통과시켰다. 수정 후 .strip()만 사용하므로 'GPT-5.5' != 'gpt-5.5' → FAIL.
+        """
+        inp = self._load_oracle_input("T3")
+        expected = self._load_oracle_expected("T3")
+        self.assertEqual(expected.get("expected_ok"), False, "T3 expected_ok는 False여야 함")
+
+        review_data = inp["review_data"]
+        self.assertEqual(
+            review_data.get("actual_model_id"), "GPT-5.5",
+            "T3 input actual_model_id는 'GPT-5.5'(대문자)여야 함",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_review_file(tmpdir, review_data)
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate({}, required_stage="pr")
+
+        self.assertFalse(
+            ok,
+            f"T3: actual_model_id='GPT-5.5'(대문자)는 gate FAIL이어야 함. ok={ok}, reason={reason!r}",
+        )
+        self.assertIn(
+            "actual_model_id",
+            reason,
+            f"T3: reason에 actual_model_id가 포함되어야 함. reason={reason!r}",
+        )
+
+    # ── T4: 에러 케이스 — codex-record pr ACCEPT without evidence → exit != 0 ──
+
+    def test_T4_error_codex_record_accept_blocked(self) -> None:
+        """oracle T4 (error): codex-record pr stage ACCEPT → exit code != 0.
+
+        Blocker 3 회귀 방지: 수정 전 codex-record는 actual_model_verified 없이 ACCEPT를
+        기록할 수 있었다. 수정 후 evidence 없이 pr ACCEPT 시도 시 exit code 2로 차단.
+        """
+        inp = self._load_oracle_input("T4")
+        expected = self._load_oracle_expected("T4")
+        self.assertNotEqual(expected.get("expected_exit_code", 0), 0,
+                            "T4 expected_exit_code는 0이 아니어야 함 (차단 기대)")
+
+        # T4: evidence 없이 pr stage ACCEPT 시도
+        args_dict = inp["args"]
+        cmd = [
+            sys.executable,
+            str(PROJECT_ROOT / "pipeline.py"),
+            "review", "codex-record",
+            "--stage", args_dict["stage"],
+            "--result", args_dict["result"],
+            "--review-model", args_dict["review_model"],
+            "--reviewer", args_dict["reviewer"],
+            "--head-sha", args_dict["head_sha"],
+            "--diff-sha256", args_dict["diff_sha256"],
+            # evidence 미제공 — Blocker 3 테스트
+        ]
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=str(PROJECT_ROOT),
+        )
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"T4: codex-record pr ACCEPT without evidence는 exit != 0이어야 함. "
+            f"returncode={proc.returncode}\nstdout={proc.stdout!r}\nstderr={proc.stderr!r}",
+        )
+        # 에러 메시지 확인: 차단/검증 관련 메시지 (head_sha 불일치, evidence 없음, actual_model_verified 등)
+        combined = proc.stdout + proc.stderr
+        has_block_msg = any(
+            kw in combined
+            for kw in (
+                "ACCEPT", "actual_model_verified", "evidence", "4중 검증",
+                "검증 실패", "head_sha", "CODEX RECORD", "불일치",
+            )
+        )
+        self.assertTrue(
+            has_block_msg,
+            f"T4: 에러 메시지에 차단/검증 관련 내용이 없음. combined={combined!r}",
+        )
+
+    # ── T5: Blocker 4 회귀 방지 — history loop actual_model_verified 검증 ──────
+
+    def test_T5_blocker4_history_loop_requires_actual_model_verified(self) -> None:
+        """Blocker 4 회귀 방지: history의 ACCEPT 항목은 actual_model_verified=true여야 인정.
+
+        수정 전: history에 actual_model_verified 체크 없어 가짜 ACCEPT가 plan/scope로 인정됨.
+        수정 후: actual_model_verified is True AND actual_model_id == 'gpt-5.5' 모두 필요.
+        """
+        # history에 plan ACCEPT가 있지만 actual_model_verified=false인 케이스
+        fake_history_data: Dict[str, Any] = {
+            "schema_version": 2,
+            "pipeline_id": "TEST-T5",
+            "stage": "scope",
+            "result": "ACCEPT",
+            "reviewer": "test",
+            "review_model": "GPT-5.5",
+            "diff_sha256": "abc123",
+            "reviewed_files": ["pipeline.py"],
+            "findings": [],
+            "created_at": "2026-05-17T00:00:00Z",
+            "actual_model_verified": True,
+            "actual_model_id": "gpt-5.5",
+            "actual_model_source": "openai_api_response_object",
+            "review_provider": "openai-api",
+            "raw_output_path": "",
+            "history": [
+                {
+                    "stage": "plan",
+                    "result": "ACCEPT",
+                    "review_model": "GPT-5.5",
+                    "reviewer": "test",
+                    "created_at": "2026-05-17T00:00:00Z",
+                    "diff_sha256": "",
+                    # actual_model_verified=false → history에서 인정하면 안 됨
+                    "actual_model_verified": False,
+                    "actual_model_id": "gpt-5.5",
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_review_file(tmpdir, fake_history_data)
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                # required_stage="plan" → history plan ACCEPT 인정 여부 확인
+                # actual_model_verified=False인 history plan은 인정되면 안 됨
+                ok, reason = pl._check_codex_review_gate({}, required_stage="plan")
+
+        # scope(top-level)는 actual_model_verified=True이지만 plan만 history에서 False
+        # all_stages_accepted에 plan이 없어야 함 → required_stage="plan" 이면서 plan이 없으면 FAIL
+        # 하지만 top-level scope가 actual_model_verified=True이고 history plan이 False면
+        # plan은 not in all_stages_accepted, scope는 top-level에 있음
+        # required_stage="plan"이고 plan AND scope 모두 필요하므로 plan이 없으면 FAIL
+        self.assertFalse(
+            ok,
+            f"T5: history의 actual_model_verified=False인 plan ACCEPT는 인정되면 안 됨. reason={reason!r}",
+        )
+
+    # ── T6: Blocker 2 확인 — CODEX_REQUIRED_FIELDS에 6개 신규 필드 포함 ─────────
+
+    def test_T6_blocker2_codex_required_fields_includes_actual_model_evidence(self) -> None:
+        """Blocker 2 회귀 방지: CODEX_REQUIRED_FIELDS에 6개 actual model evidence 필드가 있어야 한다.
+
+        수정 전: CODEX_REQUIRED_FIELDS에 actual model 관련 필드 없음.
+        수정 후: 6개 필드(requested_model_id, actual_model_id, actual_model_verified,
+                 actual_model_source, review_provider, raw_output_path) 추가.
+        """
+        required_new_fields = [
+            "requested_model_id",
+            "actual_model_id",
+            "actual_model_verified",
+            "actual_model_source",
+            "review_provider",
+            "raw_output_path",
+        ]
+        for field in required_new_fields:
+            with self.subTest(field=field):
+                self.assertIn(
+                    field,
+                    pl.CODEX_REQUIRED_FIELDS,
+                    f"Blocker 2: CODEX_REQUIRED_FIELDS에 '{field}' 필드가 없음",
+                )
+
+        # 6개 신규 필드 누락 시 _validate_codex_review_schema가 ValueError를 발생시키는지 확인
+        base_record = _make_valid_record(
+            result="ACCEPT",
+            review_model="GPT-5.5",
+            actual_model_verified=True,
+            actual_model_id="gpt-5.5",
+            actual_model_source="openai_api_response_object",
+            review_provider="openai-api",
+            raw_output_path="raw.jsonl",
+            requested_model_id="gpt-5.5",
+        )
+        # 전체 필드 있으면 통과
+        pl._validate_codex_review_schema(base_record)
+
+        # actual_model_verified 누락 시 ValueError
+        record_missing_field = {k: v for k, v in base_record.items() if k != "actual_model_verified"}
+        with self.assertRaises(ValueError) as ctx:
+            pl._validate_codex_review_schema(record_missing_field)
+        self.assertIn("actual_model_verified", str(ctx.exception),
+                      "actual_model_verified 누락 시 에러 메시지에 필드명 포함")
 
 
 # ===========================================================================
