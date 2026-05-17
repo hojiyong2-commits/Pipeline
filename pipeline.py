@@ -7299,7 +7299,6 @@ def cmd_review(args: argparse.Namespace) -> None:
             if not f.get("resolved", False) and str(f.get("severity", "")).upper() in {"HIGH", "CRITICAL"}
         ]
         print(json.dumps({
-            "schema_version": 2,
             "status": "OK",
             "reviewed_files": data.get("reviewed_files", []),
             "diff_sha256": data.get("diff_sha256", ""),
@@ -7352,9 +7351,6 @@ def cmd_review(args: argparse.Namespace) -> None:
         except OSError as exc:
             _die(f"codex_review_result.json 저장 실패: {exc}", exit_code=2)
 
-    elif review_action == "codex-run":
-        cmd_review_codex_run(args)
-
     elif review_action == "codex-record":
         # MT-3: codex-record는 별도 함수로 위임
         cmd_review_codex_record(args)
@@ -7381,211 +7377,6 @@ def _get_current_head_sha() -> str:
     except Exception as exc:
         logging.getLogger(__name__).warning("git rev-parse HEAD 실패: %s", exc)
     return ""
-
-
-def cmd_review_codex_run(args: argparse.Namespace) -> None:
-    """review codex-run — 실제 OpenAI Responses API(GPT-5.5)로 Codex review를 실행하고 결과를 저장.
-
-    MT-1 (IMP-20260516-00DE): OPENAI_API_KEY 환경변수에서 키를 읽어 Responses API를 호출.
-    API key는 출력/로그/JSON에 절대 기록하지 않는다.
-    모델은 GPT-5.5 고정이며 fallback 모델 없음.
-    키 없음 → [CODEX SETUP_REQUIRED] 출력 후 sys.exit(1).
-    API 오류 → [CODEX FAIL] 출력 후 sys.exit(1).
-    """
-    stage_arg: str = getattr(args, "stage", "") or ""
-    base_ref: str = getattr(args, "base_ref", "main") or "main"
-    output_path_arg: Optional[str] = getattr(args, "output", None)
-    raw_output_path_arg: Optional[str] = getattr(args, "raw_output", None)
-
-    # 1. stage 검증
-    if stage_arg not in CODEX_VALID_STAGES:
-        _die(
-            f"[CODEX FAIL] --stage 값이 유효하지 않습니다: '{stage_arg}'. "
-            f"허용값: {', '.join(sorted(CODEX_VALID_STAGES))}",
-            exit_code=1,
-        )
-        return
-
-    # 2. API key 확인 — 없으면 SETUP_REQUIRED + exit 1
-    api_key, _api_key_source = _openai_api_key()
-    if not api_key:
-        print(
-            "[CODEX SETUP_REQUIRED] OPENAI_API_KEY 환경변수가 설정되지 않았습니다.\n"
-            "  설정 방법: $env:OPENAI_API_KEY = 'sk-...' (PowerShell)\n"
-            "  또는: setx OPENAI_API_KEY sk-... (영구 설정, 터미널 재시작 필요)",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    # 3. git diff 수집
-    diff_text: str = ""
-    try:
-        diff_proc = subprocess.run(
-            ["git", "diff", base_ref, "HEAD"],
-            capture_output=True,
-            cwd=str(BASE_DIR),
-            timeout=30,
-        )
-        if diff_proc.returncode == 0:
-            diff_text = diff_proc.stdout.decode("utf-8", errors="replace")
-        else:
-            diff_text = f"[git diff 실패: returncode={diff_proc.returncode}]"
-    except Exception as exc:
-        diff_text = f"[git diff 예외: {exc}]"
-
-    # 4. 프롬프트 구성 (API key 제외)
-    prompt = (
-        f"Stage: {stage_arg}\n"
-        f"Base ref: {base_ref}\n"
-        f"Diff (truncated to 8000 chars):\n"
-        f"{diff_text[:8000]}\n\n"
-        "Review the diff above for bugs, security issues, edge cases, and incomplete "
-        "implementations. Output only JSON matching the required schema."
-    )
-
-    schema: Dict[str, Any] = {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "summary": {"type": "string"},
-            "findings": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "id": {"type": "string"},
-                        "level": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]},
-                        "file": {"type": "string"},
-                        "line": {"type": ["integer", "null"]},
-                        "message": {"type": "string"},
-                        "recommendation": {"type": "string"},
-                    },
-                    "required": ["id", "level", "file", "line", "message", "recommendation"],
-                },
-            },
-        },
-        "required": ["summary", "findings"],
-    }
-
-    body: Dict[str, Any] = {
-        "model": CODEX_REQUIRED_MODEL,
-        "instructions": (
-            "You are a Codex technical reviewer. Find bugs, security issues, edge cases, "
-            "and ways the pipeline could give an undeserved COMPLETE. Output only JSON."
-        ),
-        "input": prompt,
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "codex_review",
-                "strict": True,
-                "schema": schema,
-            }
-        },
-    }
-
-    # 5. OpenAI Responses API 호출 (API key는 Authorization 헤더에만 사용, 절대 출력 안 함)
-    import urllib.request  # noqa: PLC0415 — 로컬 임포트로 상단 임포트 의존 최소화
-    import urllib.error  # noqa: PLC0415
-
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
-    response_payload: Dict[str, Any] = {}
-    try:
-        with urllib.request.urlopen(request, timeout=120) as resp:
-            response_payload = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        raw_body = exc.read().decode("utf-8", errors="replace")
-        try:
-            error_body: Any = json.loads(raw_body)
-        except json.JSONDecodeError:
-            error_body = {"raw": raw_body[:2000]}
-        error_obj = error_body.get("error", {}) if isinstance(error_body, dict) else {}
-        code = error_obj.get("code") if isinstance(error_obj, dict) else None
-        message = error_obj.get("message") if isinstance(error_obj, dict) else raw_body[:500]
-        print(
-            f"[CODEX FAIL] OpenAI API HTTP 오류 {exc.code}: {code or message}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    except Exception as exc:
-        print(f"[CODEX FAIL] OpenAI API 호출 실패: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    # 6. raw 응답 저장 (API key 제외 — Authorization 헤더는 이미 request 객체에만 있음)
-    raw_output_path = Path(raw_output_path_arg) if raw_output_path_arg else BASE_DIR / "codex_run_raw.json"
-    try:
-        raw_output_path.write_text(json.dumps(response_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError as exc:
-        print(f"[CODEX FAIL] raw 응답 저장 실패: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    # 7. 응답 파싱
-    output_text = _extract_response_output_text(response_payload)
-    try:
-        parsed = json.loads(output_text)
-    except json.JSONDecodeError as exc:
-        print(f"[CODEX FAIL] 모델 응답이 유효한 JSON이 아닙니다: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("findings"), list):
-        print("[CODEX FAIL] 모델 응답이 스키마를 만족하지 않습니다.", file=sys.stderr)
-        sys.exit(1)
-
-    # 8. 결과 파일 저장 (schema_version=2, review_model=GPT-5.5 고정)
-    findings: List[Dict[str, Any]] = parsed.get("findings", [])
-    result_data: Dict[str, Any] = {
-        "schema_version": 2,
-        "pipeline_id": _load().get("pipeline_id", "") if _load() else "",
-        "stage": stage_arg,
-        "review_model": CODEX_REQUIRED_MODEL,
-        "result": "PENDING",
-        "reviewer": "codex-run",
-        "reviewed_at": _now(),
-        "summary": parsed.get("summary", ""),
-        "findings": findings,
-        "history": [],
-    }
-
-    output_path = Path(output_path_arg) if output_path_arg else BASE_DIR / "codex_review_result.json"
-    # 기존 파일이 있으면 history에 누적
-    if output_path.exists():
-        try:
-            existing_data = json.loads(output_path.read_text(encoding="utf-8"))
-            if isinstance(existing_data, dict):
-                prev_history: List[Any] = existing_data.get("history", [])
-                if not isinstance(prev_history, list):
-                    prev_history = []
-                # 현재 top-level(이전 기록)을 history에 추가
-                prev_entry: Dict[str, Any] = {k: v for k, v in existing_data.items() if k != "history"}
-                prev_history.append(prev_entry)
-                result_data["history"] = prev_history
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    try:
-        output_path.write_text(json.dumps(result_data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError as exc:
-        print(f"[CODEX FAIL] 결과 파일 저장 실패: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    critical_count = sum(1 for f in findings if isinstance(f, dict) and f.get("level") == "CRITICAL")
-    high_count = sum(1 for f in findings if isinstance(f, dict) and f.get("level") == "HIGH")
-    print(
-        f"[CODEX RUN] stage={stage_arg} model={CODEX_REQUIRED_MODEL} "
-        f"findings={len(findings)} CRITICAL={critical_count} HIGH={high_count}\n"
-        f"  결과 파일: {output_path}\n"
-        f"  raw 응답: {raw_output_path}"
-    )
 
 
 def cmd_review_codex_record(args: argparse.Namespace) -> None:
@@ -9645,28 +9436,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_review_resolve.add_argument("--output", default=None, metavar="PATH",
                                   help="codex_review_result.json 경로 (기본값: codex_review_result.json)")
 
-    # codex-run — 실제 OpenAI Responses API 호출 (MT-1: IMP-20260516-00DE)
-    p_review_codex_run = review_sub.add_parser(
-        "codex-run",
-        help="실제 OpenAI Responses API(GPT-5.5)로 Codex review 실행 및 결과 저장",
-    )
-    p_review_codex_run.add_argument(
-        "--stage", dest="stage", required=True,
-        metavar="STAGE", help="리뷰 단계: plan|scope|code|hygiene|pr|rca",
-    )
-    p_review_codex_run.add_argument(
-        "--base", dest="base_ref", default="main",
-        metavar="REF", help="비교 기준 브랜치 (기본값: main)",
-    )
-    p_review_codex_run.add_argument(
-        "--output", dest="output", default="codex_review_result.json",
-        metavar="PATH", help="결과 출력 경로 (기본값: codex_review_result.json)",
-    )
-    p_review_codex_run.add_argument(
-        "--raw-output", dest="raw_output", default="codex_run_raw.json",
-        metavar="PATH", help="raw provider 응답 저장 경로 (기본값: codex_run_raw.json)",
-    )
-
     # codex-record — 실제 Codex review ACCEPT/REJECT 공식 기록 (MT-3: IMP-20260516-A627)
     p_review_record = review_sub.add_parser(
         "codex-record",
@@ -9674,7 +9443,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_review_record.add_argument(
         "--stage", dest="stage", required=True,
-        metavar="STAGE", help="리뷰 단계: plan|scope|code|hygiene|pr|rca",
+        metavar="STAGE", help="리뷰 단계: pr|rca",
     )
     p_review_record.add_argument(
         "--result", dest="result_value", required=True,
