@@ -1,0 +1,30 @@
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260516-00DE</pipeline_id>
+  <agent_run_id>dev-29366e9fbb37e739</agent_run_id>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+    </files_to_modify>
+    <scope_declared>true</scope_declared>
+  </scope_declaration>
+  <impact_analysis>
+    <target_module>MT-1: pipeline.py</target_module>
+    <target_function>cmd_review_codex_run (신규), cmd_review (분기 추가), create_parser (review_sub 등록)</target_function>
+    <downstream_impact>review codex-run CLI 사용 가능, codex-record --stage help text 보정</downstream_impact>
+    <mt2_impact>MT-2: tests/test_codex_review.py — TestCodexRunCommand 5개 테스트 추가</mt2_impact>
+    <no_breaking_change>기존 review codex/codex-record/status/resolve 동작 변경 없음</no_breaking_change>
+  </impact_analysis>
+  <changes_summary>
+    MT-1: pipeline.py — cmd_review_codex_run 신규, codex-run 서브파서, stage help 수정
+    MT-2: tests/test_codex_review.py — TestCodexRunCommand 5개 테스트 (tc03~tc06)
+    pytest 47개 전체 PASS
+  </changes_summary>
+</handover>
