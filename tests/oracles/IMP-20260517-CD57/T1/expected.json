@@ -1,0 +1,8 @@
+{
+  "case_id": "T1",
+  "case_kind": "normal",
+  "expected_result": "PASS",
+  "expected_ok": true,
+  "expected_message_contains": "",
+  "rationale": "actual_model_verified=true이고 actual_model_id가 정확히 'gpt-5.5'이며 schema 모든 필수 필드가 있으므로 gate는 PASS해야 한다. CODEX_REQUIRED_FIELDS 신규 필드(requested_model_id/actual_model_id/actual_model_verified/actual_model_source/review_provider/raw_output_path)가 모두 채워져 있다."
+}
