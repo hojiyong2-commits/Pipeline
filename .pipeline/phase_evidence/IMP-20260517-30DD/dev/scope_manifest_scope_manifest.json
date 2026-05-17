@@ -1,0 +1,23 @@
+{
+  "pipeline_id": "IMP-20260517-30DD",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_codex_review_gate, pipeline.cmd_review_codex_run, pipeline.cmd_codex"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/test_codex_review.py"
+      ],
+      "affected_functions": [
+        "tests.test_codex_review (5개 신규 TestClass 추가)"
+      ]
+    }
+  ]
+}
