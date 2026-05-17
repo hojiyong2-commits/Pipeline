@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260516-00DE</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>e589395e7316e8ec638037844f0a50e9afae78d8166246c6313983b8d1589094</step_plan_sha256>
+  <planner_run_id>pm_planner-f35672e15ccbdc96</planner_run_id>
+  <manager_run_id>pipeline_manager-ef10e708b6cc0e15</manager_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <modules>
+    <module id="MT-1">pipeline.py — review codex-run 서브커맨드 추가 + OpenAI Responses API 실제 호출 경로 + SETUP_REQUIRED/FAIL + codex-record --stage help text 수정</module>
+    <module id="MT-2">tests/test_codex_review.py — tc03 (codex-run 인증 없음 → SETUP_REQUIRED/FAIL) + codex-run mock 테스트 추가</module>
+  </modules>
+</manager_handoff>
