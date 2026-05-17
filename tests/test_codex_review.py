@@ -1857,9 +1857,10 @@ class TestProviderCodexCli(unittest.TestCase):
     MODEL_METADATA_UNAVAILABLE sentinel, fallback, shell=False 검증.
     """
 
-    def _make_codex_cli_result(self, model: str = "gpt-5.5") -> Dict[str, Any]:
+    def _make_codex_cli_result(self, model: str = "gpt-5.5") -> Tuple[Dict[str, Any], str, str]:
         """_codex_run_via_codex_cli mock 반환 (parsed, actual_model_id, auth_method)."""
-        import hashlib, subprocess as _sp
+        import hashlib
+        import subprocess as _sp
         try:
             proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
@@ -1867,7 +1868,7 @@ class TestProviderCodexCli(unittest.TestCase):
         except Exception:
             diff = b"[fallback]"
         diff_sha = hashlib.sha256(diff).hexdigest()
-        parsed = {
+        parsed: Dict[str, Any] = {
             "result": "ACCEPT",
             "review_model": "GPT-5.5",
             "diff_sha256": diff_sha,
@@ -1880,7 +1881,9 @@ class TestProviderCodexCli(unittest.TestCase):
 
     def test_codex_cli_metadata_unavailable_triggers_fallback(self) -> None:
         """codex-cli MODEL_METADATA_UNAVAILABLE → openai-api fallback 시도."""
-        import io, hashlib, subprocess as _sp
+        import io
+        import hashlib
+        import subprocess as _sp
 
         try:
             proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
@@ -1889,7 +1892,7 @@ class TestProviderCodexCli(unittest.TestCase):
         except Exception:
             diff = b"[fallback]"
         diff_sha = hashlib.sha256(diff).hexdigest()
-        parsed_cli = {
+        parsed_cli: Dict[str, Any] = {
             "result": "ACCEPT", "review_model": "GPT-5.5", "diff_sha256": diff_sha,
             "summary": "cli", "findings": [], "required_actions": [], "return_phase": None,
         }
@@ -1978,7 +1981,8 @@ class TestProviderCodexCli(unittest.TestCase):
 
     def test_codex_cli_no_roundtrip_fallback(self) -> None:
         """codex-cli MODEL_METADATA_UNAVAILABLE fallback: 왕복 없음 (openai-api 1회만)."""
-        import hashlib, subprocess as _sp
+        import hashlib
+        import subprocess as _sp
 
         try:
             proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
@@ -1987,7 +1991,7 @@ class TestProviderCodexCli(unittest.TestCase):
         except Exception:
             diff = b"[fallback]"
         diff_sha = hashlib.sha256(diff).hexdigest()
-        parsed_cli = {
+        parsed_cli: Dict[str, Any] = {
             "result": "ACCEPT", "review_model": "GPT-5.5", "diff_sha256": diff_sha,
             "summary": "cli", "findings": [], "required_actions": [], "return_phase": None,
         }
@@ -2059,7 +2063,8 @@ class TestHardGateExtended(unittest.TestCase):
 
     def _current_diff_sha(self) -> str:
         """현재 git diff main..HEAD sha256 계산 (pipeline.py와 동일한 방식)."""
-        import hashlib, subprocess as _sp
+        import hashlib
+        import subprocess as _sp
         try:
             proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
@@ -2105,24 +2110,23 @@ class TestHardGateExtended(unittest.TestCase):
 
     def _call_gate(self, record: Dict[str, Any]) -> Tuple[bool, str]:
         """_check_codex_review_gate를 codex_review_result.json mock으로 호출."""
-        import tempfile as _tf, json as _json
-        with _tf.TemporaryDirectory() as tmpdir:
-            fake_result_path = pl.BASE_DIR / "codex_review_result.json"
-            # 기존 파일을 임시로 백업하고 테스트 record로 교체
-            original_exists = fake_result_path.exists()
-            original_content: Optional[str] = None
-            if original_exists:
-                original_content = fake_result_path.read_text(encoding="utf-8")
-            try:
-                fake_result_path.write_text(_json.dumps(record, ensure_ascii=False), encoding="utf-8")
-                state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_bootstrap_exception": False}
-                ok, msg = pl._check_codex_review_gate(state, required_stage=None)
-                return ok, msg
-            finally:
-                if original_exists and original_content is not None:
-                    fake_result_path.write_text(original_content, encoding="utf-8")
-                elif not original_exists and fake_result_path.exists():
-                    fake_result_path.unlink()
+        import json as _json
+        fake_result_path = pl.BASE_DIR / "codex_review_result.json"
+        # 기존 파일을 임시로 백업하고 테스트 record로 교체
+        original_exists = fake_result_path.exists()
+        original_content: Optional[str] = None
+        if original_exists:
+            original_content = fake_result_path.read_text(encoding="utf-8")
+        try:
+            fake_result_path.write_text(_json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            state: Dict[str, Any] = {"pipeline_id": "IMP-20260517-30DD", "codex_bootstrap_exception": False}
+            ok, msg = pl._check_codex_review_gate(state, required_stage=None)
+            return ok, msg
+        finally:
+            if original_exists and original_content is not None:
+                fake_result_path.write_text(original_content, encoding="utf-8")
+            elif not original_exists and fake_result_path.exists():
+                fake_result_path.unlink()
 
     def test_gate_actual_model_verified_false_fails(self) -> None:
         """actual_model_verified=False → gate FAIL."""
@@ -2231,7 +2235,7 @@ class TestAttemptBudget(unittest.TestCase):
             with mock.patch.object(pl, "_save_codex_attempt_log"):
                 with mock.patch.object(pl, "_openai_api_key", return_value=(None, "missing")):
                     with mock.patch("sys.stderr", stderr_cap):
-                        with self.assertRaises(SystemExit) as ctx:
+                        with self.assertRaises(SystemExit):
                             pl.cmd_review_codex_run(args)
         stderr_out = stderr_cap.getvalue()
         # budget 오류가 아니라 SETUP_REQUIRED여야 함
