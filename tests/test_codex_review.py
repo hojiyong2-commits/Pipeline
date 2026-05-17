@@ -1611,16 +1611,23 @@ class TestProviderOpenAIApi(unittest.TestCase):
     """
 
     def _get_diff_sha(self) -> str:
+        """pipeline.py cmd_review_codex_run과 동일한 방식으로 diff_sha 계산.
+
+        pipeline.py는 stdout bytes를 decode("utf-8") 후 encode("utf-8")하여 sha 계산.
+        """
+        import hashlib
         try:
             proc = subprocess.run(
                 ["git", "diff", "main", "HEAD"],
                 capture_output=True, cwd=str(PROJECT_ROOT), timeout=30,
             )
-            diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
-        except Exception:
-            diff = b"[fallback]"
-        import hashlib
-        return hashlib.sha256(diff).hexdigest()
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        return hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
 
     def _make_openai_response(
         self,
@@ -1864,10 +1871,13 @@ class TestProviderCodexCli(unittest.TestCase):
         try:
             proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
-            diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
-        except Exception:
-            diff = b"[fallback]"
-        diff_sha = hashlib.sha256(diff).hexdigest()
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        diff_sha = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
         parsed: Dict[str, Any] = {
             "result": "ACCEPT",
             "review_model": "GPT-5.5",
@@ -1888,10 +1898,13 @@ class TestProviderCodexCli(unittest.TestCase):
         try:
             proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
-            diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
-        except Exception:
-            diff = b"[fallback]"
-        diff_sha = hashlib.sha256(diff).hexdigest()
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        diff_sha = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
         parsed_cli: Dict[str, Any] = {
             "result": "ACCEPT", "review_model": "GPT-5.5", "diff_sha256": diff_sha,
             "summary": "cli", "findings": [], "required_actions": [], "return_phase": None,
@@ -1987,10 +2000,13 @@ class TestProviderCodexCli(unittest.TestCase):
         try:
             proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
-            diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
-        except Exception:
-            diff = b"[fallback]"
-        diff_sha = hashlib.sha256(diff).hexdigest()
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        diff_sha = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
         parsed_cli: Dict[str, Any] = {
             "result": "ACCEPT", "review_model": "GPT-5.5", "diff_sha256": diff_sha,
             "summary": "cli", "findings": [], "required_actions": [], "return_phase": None,
@@ -2062,16 +2078,19 @@ class TestHardGateExtended(unittest.TestCase):
     """
 
     def _current_diff_sha(self) -> str:
-        """현재 git diff main..HEAD sha256 계산 (pipeline.py와 동일한 방식)."""
+        """현재 git diff main..HEAD sha256 계산 (pipeline.py cmd_review_codex_run과 동일한 방식)."""
         import hashlib
         import subprocess as _sp
         try:
             proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
-            diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
-        except Exception:
-            diff = b"[fallback]"
-        return hashlib.sha256(diff).hexdigest()
+            if proc.returncode == 0:
+                diff_text = proc.stdout.decode("utf-8", errors="replace")
+            else:
+                diff_text = "[git diff 실패: returncode={}]".format(proc.returncode)
+        except Exception as exc:
+            diff_text = "[git diff 예외: {}]".format(exc)
+        return hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
 
     def _current_head_sha(self) -> str:
         """현재 git HEAD sha."""
