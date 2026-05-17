@@ -3562,7 +3562,50 @@ def cmd_new(args: argparse.Namespace) -> None:
 
 CODEX_VALID_STAGES = {"plan", "scope", "code", "hygiene", "pr", "rca"}
 CODEX_VALID_RESULTS = {"ACCEPT", "REJECT", "PENDING"}
-CODEX_REQUIRED_MODEL = "GPT-5.5"
+# IMP-20260517-30DD MT-1: 상수 분리
+# - CODEX_REQUIRED_REVIEW_MODEL: schema review_model 필드 표시용 (대문자, 사람이 읽는 값)
+# - CODEX_REQUIRED_MODEL_ID: API payload model 필드 + actual_model_id 비교용 (소문자 exact string)
+CODEX_REQUIRED_REVIEW_MODEL: str = "GPT-5.5"
+CODEX_REQUIRED_MODEL_ID: str = "gpt-5.5"
+# 하위호환: 기존 CODEX_REQUIRED_MODEL 참조는 CODEX_REQUIRED_REVIEW_MODEL로 유지
+CODEX_REQUIRED_MODEL: str = CODEX_REQUIRED_REVIEW_MODEL
+
+# IMP-20260517-30DD MT-1: failure code 12개
+CODEX_FAILURE_CODES = {
+    "SETUP_REQUIRED": "OPENAI_API_KEY 환경변수가 설정되지 않았습니다.",
+    "AUTH_REQUIRED": "API 키가 유효하지 않거나 만료되었습니다. (401 Unauthorized)",
+    "BILLING_REQUIRED": "청구 문제로 API 호출이 거부되었습니다. (402 Payment Required)",
+    "MODEL_UNAVAILABLE": "요청한 모델(gpt-5.5)을 사용할 수 없습니다. (404 Model Not Found)",
+    "MODEL_METADATA_UNAVAILABLE": "Provider가 actual model metadata를 노출하지 않습니다. actual_model_id 검증 불가.",
+    "PROVIDER_CAPABILITY_MISSING": "Provider가 필요한 기능(structured output 등)을 지원하지 않습니다.",
+    "RATE_LIMITED": "요청 한도를 초과했습니다. (429 Rate Limited) 잠시 후 재시도하세요.",
+    "PROVIDER_FAIL": "Provider 서버 오류가 발생했습니다. (5xx Server Error)",
+    "PROVIDER_OUTPUT_INVALID": "Provider 응답이 유효한 JSON이 아니거나 스키마를 위반합니다.",
+    "STALE_REVIEW": "diff_sha256 또는 head_sha가 현재 코드베이스와 다릅니다. 재실행이 필요합니다.",
+    "REVIEW_REJECTED": "Codex review 결과가 REJECT입니다. failure_packet을 확인하세요.",
+    "MANUAL_SETUP_REQUIRED": "동일 provider/stage/failure_code가 2회 반복되었습니다. 수동 설정이 필요합니다.",
+}
+
+# IMP-20260517-30DD MT-1: attempt budget 상수
+CODEX_ATTEMPT_BUDGET_TOTAL: int = 6
+CODEX_ATTEMPT_BUDGET_PER_STAGE: int = 2
+
+# IMP-20260517-30DD MT-1: secret redaction 패턴
+import re as _re
+_SECRET_PATTERNS = [
+    _re.compile(r"sk-[A-Za-z0-9\-_]{20,}", _re.IGNORECASE),
+    _re.compile(r"Bearer\s+[A-Za-z0-9\-_\.]{16,}", _re.IGNORECASE),
+    _re.compile(r"\"Authorization\"\s*:\s*\"[^\"]{8,}\"", _re.IGNORECASE),
+    _re.compile(r"access_token[\"']?\s*[:=]\s*[\"']?[A-Za-z0-9\-_\.]{16,}", _re.IGNORECASE),
+    _re.compile(r"refresh_token[\"']?\s*[:=]\s*[\"']?[A-Za-z0-9\-_\.]{16,}", _re.IGNORECASE),
+]
+
+
+def _redact_secrets(text: str) -> str:
+    """IMP-20260517-30DD MT-1: 민감 정보(API key, Bearer token 등)를 REDACTED로 치환."""
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub("[REDACTED]", text)
+    return text
 CODEX_REQUIRED_FIELDS = [
     "schema_version",
     "pipeline_id",
@@ -3642,11 +3685,11 @@ def _validate_codex_review_schema(data: Dict[str, Any]) -> None:
             "[CODEX SCHEMA] reviewer는 비어 있지 않은 문자열이어야 합니다."
         )
 
-    # 7. review_model 검증 (반드시 GPT-5.5)
+    # 7. review_model 검증 (반드시 GPT-5.5 — 표시용 대문자)
     review_model = data.get("review_model", "")
-    if not isinstance(review_model, str) or review_model.strip() != CODEX_REQUIRED_MODEL:
+    if not isinstance(review_model, str) or review_model.strip() != CODEX_REQUIRED_REVIEW_MODEL:
         raise ValueError(
-            f"[CODEX SCHEMA] review_model은 반드시 '{CODEX_REQUIRED_MODEL}'이어야 합니다. "
+            f"[CODEX SCHEMA] review_model은 반드시 '{CODEX_REQUIRED_REVIEW_MODEL}'이어야 합니다. "
             f"현재 값: '{review_model}'. "
             f"GPT-5.5 외 모델(Claude, GPT-4 등)로 수행한 리뷰는 인정되지 않습니다."
         )
@@ -3743,14 +3786,43 @@ def _check_codex_review_gate(
     except Exception as exc:
         return False, f"[CODEX REVIEW REQUIRED] codex_review_result.json 파싱 실패: {exc}"
 
-    # review_model 검증 (반드시 GPT-5.5)
+    # IMP-20260517-30DD MT-1: review_model 검증 (표시용 GPT-5.5)
     review_model = str(review_data.get("review_model", "")).strip()
-    if review_model != CODEX_REQUIRED_MODEL:
+    if review_model != CODEX_REQUIRED_REVIEW_MODEL:
         return False, (
             f"[CODEX REVIEW REQUIRED] review_model='{review_model}'은 허용되지 않습니다. "
-            f"반드시 '{CODEX_REQUIRED_MODEL}'이어야 합니다. "
+            f"반드시 '{CODEX_REQUIRED_REVIEW_MODEL}'이어야 합니다. "
             f"GPT-5.5 세션으로 수행한 리뷰 파일을 제공하세요."
         )
+
+    # IMP-20260517-30DD MT-1: actual_model_verified 검증 (provider-level evidence 필수)
+    actual_model_verified = review_data.get("actual_model_verified")
+    actual_model_id = str(review_data.get("actual_model_id", "")).strip()
+    actual_model_source = str(review_data.get("actual_model_source", "")).strip()
+
+    # actual_model_verified가 명시적으로 false이면 FAIL
+    if actual_model_verified is False:
+        return False, (
+            "[CODEX REVIEW REQUIRED] actual_model_verified=false: "
+            "provider-level evidence에서 실제 사용 모델이 gpt-5.5임을 검증하지 못했습니다. "
+            "python pipeline.py review codex-run --stage <STAGE> --provider openai-api 를 실행하세요."
+        )
+
+    # actual_model_verified가 True인 경우 actual_model_id가 gpt-5.5(소문자 exact)인지 확인
+    if actual_model_verified is True:
+        if actual_model_id != CODEX_REQUIRED_MODEL_ID:
+            return False, (
+                f"[CODEX REVIEW REQUIRED] actual_model_id='{actual_model_id}'가 "
+                f"'{CODEX_REQUIRED_MODEL_ID}'와 다릅니다. "
+                "provider-level evidence의 실제 model ID가 gpt-5.5이어야 합니다."
+            )
+        # actual_model_source가 model output JSON이면 FAIL (provider-level이 아님)
+        if actual_model_source and "model_output" in actual_model_source.lower():
+            return False, (
+                "[CODEX REVIEW REQUIRED] actual_model_source가 model output JSON입니다. "
+                "model output의 review_model 필드는 actual evidence로 인정되지 않습니다. "
+                "openai-api response.model 또는 codex-cli JSONL metadata를 사용하세요."
+            )
 
     # result 검증 (PENDING이면 FAIL)
     result_val = str(review_data.get("result", "")).upper()
@@ -6742,9 +6814,121 @@ def cmd_codex(args: argparse.Namespace) -> None:
             })
 
     status = "PASS" if all(item["status"] == "PASS" for item in checks) else "FAIL"
+
+    # IMP-20260517-30DD MT-1: 14개 provider/model 진단 필드 수집
+    import shutil as _shutil
+    import os as _os
+
+    _openai_api_key_raw: str = _os.environ.get("OPENAI_API_KEY", "")
+    _openai_api_key_present: bool = bool(_openai_api_key_raw)
+    _openai_api_key_format_valid: bool = (
+        _openai_api_key_present and _openai_api_key_raw.startswith("sk-")
+    )
+    _codex_cli_installed: bool = _shutil.which("codex") is not None
+    _codex_cli_version: Optional[str] = None
+    _codex_cli_auth_status: str = "UNKNOWN"
+    _codex_cli_auth_method: Optional[str] = None
+    _codex_cli_jsonl_metadata_support: bool = False
+
+    if _codex_cli_installed:
+        try:
+            _ver_proc = subprocess.run(
+                ["codex", "--version"],
+                capture_output=True,
+                timeout=10,
+            )
+            if _ver_proc.returncode == 0:
+                _codex_cli_version = _ver_proc.stdout.decode("utf-8", errors="replace").strip()
+        except Exception:
+            pass
+        try:
+            _auth_proc = subprocess.run(
+                ["codex", "whoami", "--json"],
+                capture_output=True,
+                timeout=10,
+            )
+            _auth_out = _auth_proc.stdout.decode("utf-8", errors="replace").strip()
+            if _auth_proc.returncode == 0:
+                _codex_cli_auth_status = "OK"
+                try:
+                    _auth_data = json.loads(_auth_out)
+                    _codex_cli_auth_method = _auth_data.get("auth_method")
+                except Exception:
+                    _codex_cli_auth_method = "unknown"
+            else:
+                _codex_cli_auth_status = "FAIL"
+        except Exception:
+            _codex_cli_auth_status = "UNKNOWN"
+
+        # JSONL metadata support: codex exec --json으로 model 필드 노출 여부 추정
+        # conservative: 버전 파싱 가능 시 True로 마킹 (실제 확인은 codex-run 시도에서)
+        _codex_cli_jsonl_metadata_support = _codex_cli_version is not None
+
+    # model_availability: openai-api 키 유효 또는 codex-cli 인증 OK 중 하나면 AVAILABLE
+    _model_availability: str
+    if _openai_api_key_format_valid:
+        _model_availability = "AVAILABLE_VIA_OPENAI_API"
+    elif _codex_cli_installed and _codex_cli_auth_status == "OK":
+        _model_availability = "AVAILABLE_VIA_CODEX_CLI"
+    elif _codex_cli_installed:
+        _model_availability = "CODEX_CLI_AUTH_REQUIRED"
+    else:
+        _model_availability = "UNAVAILABLE"
+
+    # pipeline_state에서 마지막 codex review 상태 읽기
+    _last_review_stage: Optional[str] = None
+    _last_review_result: Optional[str] = None
+    _last_review_model_verified: Optional[bool] = None
+    _attempt_budget_remaining: int = CODEX_ATTEMPT_BUDGET_TOTAL
+    _setup_blockers: List[str] = []
+
+    try:
+        _state_path = BASE_DIR / "pipeline_state.json"
+        if _state_path.exists():
+            _state_data = json.loads(_state_path.read_text(encoding="utf-8", errors="replace"))
+            _codex_log: List[Dict[str, Any]] = _state_data.get("codex_attempt_log") or []
+            if _codex_log:
+                _last_entry = _codex_log[-1]
+                _last_review_stage = _last_entry.get("stage")
+                _last_review_result = _last_entry.get("result")
+                _last_review_model_verified = _last_entry.get("actual_model_verified")
+                _attempt_budget_remaining = max(0, CODEX_ATTEMPT_BUDGET_TOTAL - len(_codex_log))
+    except Exception:
+        pass
+
+    if not _openai_api_key_present and not _codex_cli_installed:
+        _setup_blockers.append("OPENAI_API_KEY 미설정 + codex CLI 미설치")
+    elif not _openai_api_key_format_valid and not _codex_cli_installed:
+        _setup_blockers.append("OPENAI_API_KEY 형식 불일치 + codex CLI 미설치")
+    if _codex_cli_installed and _codex_cli_auth_status != "OK" and not _openai_api_key_format_valid:
+        _setup_blockers.append("codex CLI 인증 필요 (AUTH_REQUIRED)")
+    if _attempt_budget_remaining == 0:
+        _setup_blockers.append("attempt budget 소진 — MANUAL_SETUP_REQUIRED 상태")
+
+    _provider_available: bool = _model_availability.startswith("AVAILABLE")
+
+    # 14개 진단 필드 payload에 포함
+    _provider_fields: Dict[str, Any] = {
+        "provider_available": _provider_available,
+        "openai_api_key_present": _openai_api_key_present,
+        "openai_api_key_format_valid": _openai_api_key_format_valid,
+        "codex_cli_installed": _codex_cli_installed,
+        "codex_cli_version": _codex_cli_version,
+        "codex_cli_auth_status": _codex_cli_auth_status,
+        "codex_cli_auth_method": _codex_cli_auth_method,
+        "codex_cli_jsonl_metadata_support": _codex_cli_jsonl_metadata_support,
+        "model_availability": _model_availability,
+        "last_review_stage": _last_review_stage,
+        "last_review_result": _last_review_result,
+        "last_review_model_verified": _last_review_model_verified,
+        "attempt_budget_remaining": _attempt_budget_remaining,
+        "setup_blockers": _setup_blockers,
+    }
+
     payload = {
         "status": status,
         "checks": checks,
+        "provider_diagnostics": _provider_fields,
         "quick_start": [
             "Use gpt-5.5 for every LLM role; stop instead of silently downgrading.",
             "python pipeline.py new --type IMP --desc \"...\"",
@@ -6764,6 +6948,10 @@ def cmd_codex(args: argparse.Namespace) -> None:
         for item in checks:
             mark = "OK" if item["status"] == "PASS" else "FAIL"
             print(f"  {mark} {item['name']}: {item['message']}")
+        print()
+        print("[ Provider Diagnostics ]")
+        for k, v in _provider_fields.items():
+            print(f"  {k}: {v}")
         print("\nCodex에서 시작할 때는 `/task` 문자열 대신 `.codex/skills/pipeline-task/SKILL.md` 지침을 먼저 읽고, 위 quick_start 순서를 따르세요.")
 
     if status != "PASS":
@@ -7383,19 +7571,265 @@ def _get_current_head_sha() -> str:
     return ""
 
 
-def cmd_review_codex_run(args: argparse.Namespace) -> None:
-    """review codex-run — 실제 OpenAI Responses API(GPT-5.5)로 Codex review를 실행하고 결과를 저장.
+def _save_codex_attempt_log(state: Dict[str, Any], attempt_log: List[Dict[str, Any]]) -> None:
+    """IMP-20260517-30DD MT-1: codex_attempt_log를 pipeline_state.json에 저장한다.
 
-    MT-1 (IMP-20260516-00DE): OPENAI_API_KEY 환경변수에서 키를 읽어 Responses API를 호출.
-    API key는 출력/로그/JSON에 절대 기록하지 않는다.
-    모델은 GPT-5.5 고정이며 fallback 모델 없음.
-    키 없음 → [CODEX SETUP_REQUIRED] 출력 후 sys.exit(1).
-    API 오류 → [CODEX FAIL] 출력 후 sys.exit(1).
+    Args:
+        state: 현재 pipeline state 딕셔너리 (in-place 수정).
+        attempt_log: 저장할 시도 로그 리스트.
+    """
+    state["codex_attempt_log"] = attempt_log
+    state_path = BASE_DIR / "pipeline_state.json"
+    try:
+        state_path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        logging.getLogger(__name__).warning("codex_attempt_log 저장 실패: %s", exc)
+
+
+def _codex_run_via_openai_api(
+    api_key: str,
+    prompt: str,
+    schema: Dict[str, Any],
+) -> Tuple[Dict[str, Any], str]:
+    """IMP-20260517-30DD MT-1: openai-api provider로 Responses API를 호출한다.
+
+    Args:
+        api_key: OPENAI_API_KEY (절대 출력/로그에 포함 안 됨)
+        prompt: 리뷰 프롬프트 텍스트
+        schema: JSON schema dict
+
+    Returns:
+        Tuple[response_payload, provider_response_id]: API 응답 dict와 응답 ID
+
+    Raises:
+        SystemExit: API 오류 시 failure code 출력 후 exit(1)
+    """
+    import urllib.request  # noqa: PLC0415
+    import urllib.error  # noqa: PLC0415
+
+    body: Dict[str, Any] = {
+        "model": CODEX_REQUIRED_MODEL_ID,  # API payload에는 소문자 exact model ID
+        "instructions": (
+            "You are a Codex technical reviewer. Find bugs, security issues, edge cases, "
+            "and ways the pipeline could give an undeserved COMPLETE. Output only JSON."
+        ),
+        "input": prompt,
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "codex_review",
+                "strict": True,
+                "schema": schema,
+            }
+        },
+    }
+
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            response_payload: Dict[str, Any] = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raw_body = exc.read().decode("utf-8", errors="replace")
+        # secret redaction 적용
+        raw_body_safe = _redact_secrets(raw_body[:2000])
+        try:
+            error_body: Any = json.loads(raw_body)
+        except json.JSONDecodeError:
+            error_body = {"raw": raw_body_safe}
+        error_obj = error_body.get("error", {}) if isinstance(error_body, dict) else {}
+        err_code = error_obj.get("code") if isinstance(error_obj, dict) else None
+        err_msg = error_obj.get("message") if isinstance(error_obj, dict) else raw_body_safe[:500]
+        http_code = exc.code
+        if http_code == 401:
+            failure_code = "AUTH_REQUIRED"
+        elif http_code == 402:
+            failure_code = "BILLING_REQUIRED"
+        elif http_code == 404:
+            failure_code = "MODEL_UNAVAILABLE"
+        elif http_code == 429:
+            failure_code = "RATE_LIMITED"
+        elif http_code >= 500:
+            failure_code = "PROVIDER_FAIL"
+        else:
+            failure_code = "PROVIDER_FAIL"
+        print(
+            f"[CODEX {failure_code}] OpenAI API HTTP {http_code}: {err_code or err_msg}. "
+            f"{CODEX_FAILURE_CODES.get(failure_code, '')}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except Exception as exc:
+        print(
+            f"[CODEX PROVIDER_FAIL] OpenAI API 호출 실패: {exc}. "
+            f"{CODEX_FAILURE_CODES['PROVIDER_FAIL']}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    provider_response_id: str = str(response_payload.get("id", ""))
+    return response_payload, provider_response_id
+
+
+def _codex_run_via_codex_cli(
+    prompt: str,
+) -> Tuple[Dict[str, Any], str, Optional[str]]:
+    """IMP-20260517-30DD MT-1: codex-cli provider로 실행하고 JSONL event stream에서 actual_model_id를 추출한다.
+
+    Args:
+        prompt: 리뷰 프롬프트 텍스트
+
+    Returns:
+        Tuple[parsed_output_dict, actual_model_id_or_sentinel, auth_method]:
+            - parsed_output_dict: 모델 응답 JSON dict (또는 빈 dict)
+            - actual_model_id: 추출된 model ID, 또는 "MODEL_METADATA_UNAVAILABLE"
+            - auth_method: 인증 방식 (예: "browser_login", "api_key", None)
+
+    Raises:
+        SystemExit: codex-cli 호출 실패 시
+    """
+    # codex-cli 설치 여부 확인
+    try:
+        which_proc = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            shell=False,
+            timeout=10,
+        )
+        if which_proc.returncode != 0:
+            print(
+                f"[CODEX PROVIDER_CAPABILITY_MISSING] codex-cli를 찾을 수 없습니다. "
+                f"{CODEX_FAILURE_CODES['PROVIDER_CAPABILITY_MISSING']}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    except FileNotFoundError:
+        print(
+            f"[CODEX PROVIDER_CAPABILITY_MISSING] codex-cli가 설치되지 않았습니다. "
+            f"{CODEX_FAILURE_CODES['PROVIDER_CAPABILITY_MISSING']}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except Exception as exc:
+        print(
+            f"[CODEX PROVIDER_CAPABILITY_MISSING] codex-cli 버전 확인 실패: {exc}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # codex-cli 실행 (shell=False, list args — 절대 shell=True 사용 안 함)
+    cmd_args: List[str] = [
+        "codex", "exec",
+        "-m", CODEX_REQUIRED_MODEL_ID,  # 반드시 gpt-5.5
+        "--json",
+        prompt[:4000],  # 프롬프트 길이 제한
+    ]
+    try:
+        proc = subprocess.run(
+            cmd_args,
+            capture_output=True,
+            shell=False,
+            timeout=180,
+        )
+    except FileNotFoundError:
+        print(
+            f"[CODEX PROVIDER_CAPABILITY_MISSING] codex 명령을 실행할 수 없습니다.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except subprocess.TimeoutExpired:
+        print(
+            f"[CODEX PROVIDER_FAIL] codex-cli 실행 시간 초과(180초).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except Exception as exc:
+        print(f"[CODEX PROVIDER_FAIL] codex-cli 실행 실패: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if proc.returncode != 0:
+        stderr_safe = _redact_secrets(proc.stderr.decode("utf-8", errors="replace")[:500])
+        print(
+            f"[CODEX PROVIDER_FAIL] codex-cli exit code {proc.returncode}: {stderr_safe}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # JSONL event stream 파싱 — actual_model_id 추출
+    actual_model_id: str = "MODEL_METADATA_UNAVAILABLE"
+    auth_method: Optional[str] = None
+    parsed_output: Dict[str, Any] = {}
+
+    stdout_text = proc.stdout.decode("utf-8", errors="replace")
+    for line in stdout_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        # model metadata 추출 시도
+        if event.get("type") in ("message_start", "response.created", "metadata"):
+            meta_model = (
+                event.get("model")
+                or (event.get("message", {}) or {}).get("model")
+                or (event.get("response", {}) or {}).get("model")
+            )
+            if meta_model and isinstance(meta_model, str):
+                actual_model_id = meta_model.strip().lower()
+        # auth_method 추출 시도
+        if event.get("type") == "auth_info" or "auth_method" in event:
+            auth_method = str(event.get("auth_method", ""))
+        # 최종 output 파싱 시도
+        if event.get("type") in ("message_stop", "response.done", "output"):
+            output_text_raw = (
+                event.get("output_text")
+                or (event.get("message", {}) or {}).get("content", [{}])[0].get("text", "")
+                if isinstance((event.get("message", {}) or {}).get("content"), list)
+                else ""
+            )
+            if output_text_raw:
+                try:
+                    parsed_output = json.loads(output_text_raw)
+                except json.JSONDecodeError:
+                    pass
+
+    return parsed_output, actual_model_id, auth_method
+
+
+def cmd_review_codex_run(args: argparse.Namespace) -> None:
+    """review codex-run — 실제 OpenAI Responses API 또는 Codex CLI로 Codex review를 실행하고 결과를 저장.
+
+    IMP-20260517-30DD MT-1:
+    - --provider {openai-api,codex-cli} 인자 추가 (기본값: openai-api)
+    - openai-api: response_payload.get("model") → actual_model_id (actual_model_source="openai_api_response_object")
+    - codex-cli: JSONL event stream에서 model 필드 추출. metadata 없으면 MODEL_METADATA_UNAVAILABLE
+    - model output JSON의 review_model 필드는 actual evidence로 절대 인정 금지
+    - provider_response_id 기록 (openai-api: response id 필드)
+    - shell=False, list args만 사용
+    - API key는 출력/로그/JSON에 절대 기록하지 않는다 (secret redaction 적용)
+    - attempt budget: 전체 6회 / stage당 2회. 동일 provider/stage/failure_code 2회 → MANUAL_SETUP_REQUIRED
+    - codex-cli MODEL_METADATA_UNAVAILABLE 시 openai-api로 1회 fallback (왕복 금지)
     """
     stage_arg: str = getattr(args, "stage", "") or ""
     base_ref: str = getattr(args, "base_ref", "main") or "main"
     output_path_arg: Optional[str] = getattr(args, "output", None)
     raw_output_path_arg: Optional[str] = getattr(args, "raw_output", None)
+    provider_arg: str = str(getattr(args, "provider", "openai-api") or "openai-api").strip().lower()
 
     # 1. stage 검증
     if stage_arg not in CODEX_VALID_STAGES:
@@ -7406,23 +7840,58 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
         )
         return
 
-    # 2. API key 확인 — 없으면 SETUP_REQUIRED + exit 1
-    api_key, _api_key_source = _openai_api_key()
-    if not api_key:
+    # 2. provider 검증
+    valid_providers = {"openai-api", "codex-cli"}
+    if provider_arg not in valid_providers:
+        _die(
+            f"[CODEX FAIL] --provider 값이 유효하지 않습니다: '{provider_arg}'. "
+            f"허용값: {', '.join(sorted(valid_providers))}",
+            exit_code=1,
+        )
+        return
+
+    # 3. attempt budget 확인 및 갱신
+    state = _load() or {}
+    attempt_log: List[Dict[str, Any]] = state.get("codex_attempt_log", [])
+    if not isinstance(attempt_log, list):
+        attempt_log = []
+
+    total_attempts = len(attempt_log)
+    stage_attempts = [a for a in attempt_log if a.get("stage") == stage_arg]
+    stage_attempt_count = len(stage_attempts)
+
+    if total_attempts >= CODEX_ATTEMPT_BUDGET_TOTAL:
         print(
-            "[CODEX SETUP_REQUIRED] OPENAI_API_KEY 환경변수가 설정되지 않았습니다.\n"
-            "  설정 방법: $env:OPENAI_API_KEY = 'sk-...' (PowerShell)\n"
-            "  또는: setx OPENAI_API_KEY sk-... (영구 설정, 터미널 재시작 필요)",
+            f"[CODEX MANUAL_SETUP_REQUIRED] 전체 attempt budget({CODEX_ATTEMPT_BUDGET_TOTAL}회) 초과. "
+            f"현재 누적: {total_attempts}회. {CODEX_FAILURE_CODES['MANUAL_SETUP_REQUIRED']}",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # 3. git diff 수집
+    if stage_attempt_count >= CODEX_ATTEMPT_BUDGET_PER_STAGE:
+        # 동일 stage에서 같은 failure_code 2회 반복 확인
+        last_failure = None
+        for a in reversed(stage_attempts):
+            if a.get("failure_code"):
+                last_failure = a.get("failure_code")
+                break
+        print(
+            f"[CODEX MANUAL_SETUP_REQUIRED] stage={stage_arg} attempt budget({CODEX_ATTEMPT_BUDGET_PER_STAGE}회) 초과. "
+            f"마지막 실패 코드: {last_failure or 'N/A'}. {CODEX_FAILURE_CODES['MANUAL_SETUP_REQUIRED']}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # 4. 현재 HEAD SHA 수집
+    current_head_sha: str = _get_current_head_sha()
+
+    # 5. git diff 수집
     diff_text: str = ""
     try:
         diff_proc = subprocess.run(
             ["git", "diff", base_ref, "HEAD"],
             capture_output=True,
+            shell=False,
             cwd=str(BASE_DIR),
             timeout=30,
         )
@@ -7433,11 +7902,11 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
     except Exception as exc:
         diff_text = f"[git diff 예외: {exc}]"
 
-    # diff sha256 계산 (모델 응답과 비교용)
+    # diff sha256 계산
     diff_bytes: bytes = diff_text.encode("utf-8")
     current_diff_sha: str = hashlib.sha256(diff_bytes).hexdigest()
 
-    # 4. 프롬프트 구성 (API key 제외)
+    # 6. 프롬프트 구성 (API key 절대 미포함)
     prompt = (
         f"Stage: {stage_arg}\n"
         f"Base ref: {base_ref}\n"
@@ -7477,118 +7946,194 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
         "required": ["result", "review_model", "diff_sha256", "summary", "findings", "required_actions", "return_phase"],
     }
 
-    body: Dict[str, Any] = {
-        "model": CODEX_REQUIRED_MODEL,
-        "instructions": (
-            "You are a Codex technical reviewer. Find bugs, security issues, edge cases, "
-            "and ways the pipeline could give an undeserved COMPLETE. Output only JSON."
-        ),
-        "input": prompt,
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "codex_review",
-                "strict": True,
-                "schema": schema,
-            }
-        },
-    }
-
-    # 5. OpenAI Responses API 호출 (API key는 Authorization 헤더에만 사용, 절대 출력 안 함)
-    import urllib.request  # noqa: PLC0415 — 로컬 임포트로 상단 임포트 의존 최소화
-    import urllib.error  # noqa: PLC0415
-
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
+    # 7. provider별 실행 + actual_model_id 추출
+    actual_model_id: str = ""
+    actual_model_source: str = ""
+    actual_model_verified: bool = False
+    provider_response_id: str = ""
+    provider_exit_code: int = 0
+    auth_method: Optional[str] = None
     response_payload: Dict[str, Any] = {}
-    try:
-        with urllib.request.urlopen(request, timeout=120) as resp:
-            response_payload = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        raw_body = exc.read().decode("utf-8", errors="replace")
+    parsed: Dict[str, Any] = {}
+    effective_provider: str = provider_arg
+
+    if provider_arg == "openai-api":
+        # openai-api: API key 필수
+        api_key, _api_key_source = _openai_api_key()
+        if not api_key:
+            print(
+                f"[CODEX SETUP_REQUIRED] OPENAI_API_KEY 환경변수가 설정되지 않았습니다.\n"
+                f"  설정 방법: $env:OPENAI_API_KEY = 'sk-...' (PowerShell)\n"
+                f"  또는: setx OPENAI_API_KEY sk-... (영구 설정, 터미널 재시작 필요)\n"
+                f"  {CODEX_FAILURE_CODES['SETUP_REQUIRED']}",
+                file=sys.stderr,
+            )
+            # attempt 기록
+            attempt_log.append({
+                "provider": provider_arg, "stage": stage_arg,
+                "failure_code": "SETUP_REQUIRED", "ts": _now(),
+            })
+            _save_codex_attempt_log(state, attempt_log)
+            sys.exit(1)
+
+        response_payload, provider_response_id = _codex_run_via_openai_api(
+            api_key=api_key,
+            prompt=prompt,
+            schema=schema,
+        )
+        # actual_model_id는 response_payload.get("model") — provider-level evidence
+        raw_actual = response_payload.get("model", "")
+        actual_model_id = str(raw_actual).strip().lower() if raw_actual else ""
+        actual_model_source = "openai_api_response_object"
+        actual_model_verified = (actual_model_id == CODEX_REQUIRED_MODEL_ID)
+
+        # 모델 응답 JSON 파싱
+        output_text = _extract_response_output_text(response_payload)
         try:
-            error_body: Any = json.loads(raw_body)
-        except json.JSONDecodeError:
-            error_body = {"raw": raw_body[:2000]}
-        error_obj = error_body.get("error", {}) if isinstance(error_body, dict) else {}
-        code = error_obj.get("code") if isinstance(error_obj, dict) else None
-        message = error_obj.get("message") if isinstance(error_obj, dict) else raw_body[:500]
+            parsed = json.loads(output_text)
+        except json.JSONDecodeError as exc:
+            print(
+                f"[CODEX PROVIDER_OUTPUT_INVALID] 모델 응답이 유효한 JSON이 아닙니다: {exc}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    elif provider_arg == "codex-cli":
+        # codex-cli: JSONL event stream에서 model 추출
+        parsed, actual_model_id_raw, auth_method = _codex_run_via_codex_cli(prompt=prompt)
+        actual_model_id = actual_model_id_raw if actual_model_id_raw != "MODEL_METADATA_UNAVAILABLE" else ""
+        actual_model_source = "codex_cli_jsonl_metadata"
+        effective_provider = "codex-cli"
+
+        if actual_model_id_raw == "MODEL_METADATA_UNAVAILABLE":
+            # codex-cli가 metadata를 노출하지 않음 → openai-api로 1회 fallback (왕복 금지)
+            print(
+                f"[CODEX MODEL_METADATA_UNAVAILABLE] codex-cli가 actual model metadata를 제공하지 않습니다. "
+                f"openai-api로 1회 fallback을 시도합니다.",
+                file=sys.stderr,
+            )
+            # fallback 시도 전 openai-api 버짓 확인
+            fallback_attempts = [a for a in attempt_log if a.get("provider") == "openai-api" and a.get("stage") == stage_arg]
+            if len(fallback_attempts) >= CODEX_ATTEMPT_BUDGET_PER_STAGE:
+                print(
+                    f"[CODEX MANUAL_SETUP_REQUIRED] openai-api fallback도 budget 초과. "
+                    f"{CODEX_FAILURE_CODES['MANUAL_SETUP_REQUIRED']}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            api_key, _api_key_source = _openai_api_key()
+            if not api_key:
+                print(
+                    f"[CODEX SETUP_REQUIRED] fallback openai-api에도 OPENAI_API_KEY가 없습니다. "
+                    f"{CODEX_FAILURE_CODES['SETUP_REQUIRED']}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            response_payload, provider_response_id = _codex_run_via_openai_api(
+                api_key=api_key,
+                prompt=prompt,
+                schema=schema,
+            )
+            raw_actual = response_payload.get("model", "")
+            actual_model_id = str(raw_actual).strip().lower() if raw_actual else ""
+            actual_model_source = "openai_api_response_object_fallback_from_codex_cli"
+            actual_model_verified = (actual_model_id == CODEX_REQUIRED_MODEL_ID)
+            effective_provider = "openai-api"  # fallback provider 기록
+            output_text = _extract_response_output_text(response_payload)
+            try:
+                parsed = json.loads(output_text)
+            except json.JSONDecodeError as exc:
+                print(
+                    f"[CODEX PROVIDER_OUTPUT_INVALID] fallback 모델 응답이 유효한 JSON이 아닙니다: {exc}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        else:
+            # codex-cli metadata 정상 추출
+            actual_model_verified = (actual_model_id == CODEX_REQUIRED_MODEL_ID)
+
+    else:
+        _die(f"[CODEX FAIL] 알 수 없는 provider: {provider_arg}", exit_code=1)
+        return
+
+    # 8. 파싱된 응답 검증
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("findings"), list):
         print(
-            f"[CODEX FAIL] OpenAI API HTTP 오류 {exc.code}: {code or message}",
+            f"[CODEX PROVIDER_OUTPUT_INVALID] 모델 응답이 스키마를 만족하지 않습니다. "
+            f"{CODEX_FAILURE_CODES['PROVIDER_OUTPUT_INVALID']}",
             file=sys.stderr,
         )
-        sys.exit(1)
-    except Exception as exc:
-        print(f"[CODEX FAIL] OpenAI API 호출 실패: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    # 6. raw 응답 저장 (API key 제외 — Authorization 헤더는 이미 request 객체에만 있음)
-    raw_output_path = Path(raw_output_path_arg) if raw_output_path_arg else BASE_DIR / "codex_run_raw.json"
-    try:
-        raw_output_path.write_text(json.dumps(response_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError as exc:
-        print(f"[CODEX FAIL] raw 응답 저장 실패: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    # 7. 응답 파싱
-    output_text = _extract_response_output_text(response_payload)
-    try:
-        parsed = json.loads(output_text)
-    except json.JSONDecodeError as exc:
-        print(f"[CODEX FAIL] 모델 응답이 유효한 JSON이 아닙니다: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("findings"), list):
-        print("[CODEX FAIL] 모델 응답이 스키마를 만족하지 않습니다.", file=sys.stderr)
         sys.exit(1)
 
     # result 검증: ACCEPT 또는 REJECT만 허용
     result_from_model: str = str(parsed.get("result", "")).upper().strip()
     if result_from_model not in {"ACCEPT", "REJECT"}:
         print(
-            f"[CODEX FAIL] 모델 응답 result가 ACCEPT 또는 REJECT가 아닙니다: '{result_from_model}'",
+            f"[CODEX PROVIDER_OUTPUT_INVALID] 모델 응답 result가 ACCEPT 또는 REJECT가 아닙니다: '{result_from_model}'",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # review_model 검증: GPT-5.5만 허용
-    model_from_response: str = str(parsed.get("review_model", "")).strip()
-    if model_from_response != CODEX_REQUIRED_MODEL:
-        print(
-            f"[CODEX FAIL] 모델 응답 review_model이 GPT-5.5가 아닙니다: '{model_from_response}'",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    # review_model 필드는 model output JSON에서 가져오지만 actual evidence로 인정하지 않음
+    # actual_model_id는 이미 provider-level에서 추출했음 (위 단계)
+    # review_model 필드는 표시용으로만 사용 (CODEX_REQUIRED_REVIEW_MODEL 형식)
+    model_from_output_json: str = str(parsed.get("review_model", "")).strip()
 
     # diff_sha256 비교: 모델 응답 hash와 현재 hash 비교
     response_diff_sha: str = str(parsed.get("diff_sha256", "")).strip()
     if not response_diff_sha:
-        print("[CODEX FAIL] 모델 응답에 diff_sha256 필드가 없습니다.", file=sys.stderr)
+        print(
+            f"[CODEX PROVIDER_OUTPUT_INVALID] 모델 응답에 diff_sha256 필드가 없습니다. "
+            f"{CODEX_FAILURE_CODES['PROVIDER_OUTPUT_INVALID']}",
+            file=sys.stderr,
+        )
         sys.exit(1)
     if response_diff_sha != current_diff_sha:
         print(
-            f"[CODEX FAIL] diff_sha256 불일치: 모델응답={response_diff_sha[:16]}... 현재={current_diff_sha[:16]}...",
+            f"[CODEX STALE_REVIEW] diff_sha256 불일치: "
+            f"모델응답={response_diff_sha[:16]}... 현재={current_diff_sha[:16]}... "
+            f"{CODEX_FAILURE_CODES['STALE_REVIEW']}",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # 8. 결과 파일 저장 (schema_version=2, 모델 응답의 result/review_model/diff_sha256 사용)
+    # actual_model_verified 최종 확인
+    if not actual_model_verified:
+        print(
+            f"[CODEX MODEL_UNAVAILABLE] actual_model_id='{actual_model_id}'가 "
+            f"'{CODEX_REQUIRED_MODEL_ID}'와 다릅니다. "
+            f"{CODEX_FAILURE_CODES['MODEL_UNAVAILABLE']}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # 9. raw 응답 저장 (secret redaction 적용)
+    raw_output_path = Path(raw_output_path_arg) if raw_output_path_arg else BASE_DIR / "codex_run_raw.json"
+    try:
+        raw_safe = _redact_secrets(json.dumps(response_payload, ensure_ascii=False, indent=2))
+        raw_output_path.write_text(raw_safe, encoding="utf-8")
+    except OSError as exc:
+        print(f"[CODEX PROVIDER_FAIL] raw 응답 저장 실패: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    # 10. 결과 파일 저장
     findings: List[Dict[str, Any]] = parsed.get("findings", [])
     result_data: Dict[str, Any] = {
         "schema_version": 2,
         "pipeline_id": _load().get("pipeline_id", "") if _load() else "",
         "stage": stage_arg,
-        "review_model": model_from_response,
+        "review_model": CODEX_REQUIRED_REVIEW_MODEL,  # 표시용 대문자 GPT-5.5
         "result": result_from_model,
         "diff_sha256": current_diff_sha,
+        "head_sha": current_head_sha,
+        "review_provider": effective_provider,
+        "requested_model_id": CODEX_REQUIRED_MODEL_ID,  # API payload model 필드
+        "actual_model_id": actual_model_id,
+        "actual_model_verified": actual_model_verified,
+        "actual_model_source": actual_model_source,
+        "provider_response_id": provider_response_id,
+        "provider_exit_code": provider_exit_code,
+        "attempt_count": total_attempts + 1,
         "required_actions": parsed.get("required_actions", []),
         "return_phase": parsed.get("return_phase"),
         "reviewer": "codex-run",
@@ -7597,6 +8142,8 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
         "findings": findings,
         "history": [],
     }
+    if auth_method:
+        result_data["codex_cli_auth_method"] = auth_method
 
     output_path = Path(output_path_arg) if output_path_arg else BASE_DIR / "codex_review_result.json"
     # 기존 파일이 있으면 history에 누적
@@ -7607,7 +8154,6 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
                 prev_history: List[Any] = existing_data.get("history", [])
                 if not isinstance(prev_history, list):
                     prev_history = []
-                # 현재 top-level(이전 기록)을 history에 추가
                 prev_entry: Dict[str, Any] = {k: v for k, v in existing_data.items() if k != "history"}
                 prev_history.append(prev_entry)
                 result_data["history"] = prev_history
@@ -7617,13 +8163,25 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
     try:
         output_path.write_text(json.dumps(result_data, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError as exc:
-        print(f"[CODEX FAIL] 결과 파일 저장 실패: {exc}", file=sys.stderr)
+        print(f"[CODEX PROVIDER_FAIL] 결과 파일 저장 실패: {exc}", file=sys.stderr)
         sys.exit(1)
+
+    # 11. attempt log 갱신 (성공)
+    attempt_log.append({
+        "provider": effective_provider,
+        "stage": stage_arg,
+        "failure_code": None,
+        "result": result_from_model,
+        "ts": _now(),
+    })
+    _save_codex_attempt_log(state, attempt_log)
 
     critical_count = sum(1 for f in findings if isinstance(f, dict) and f.get("level") == "CRITICAL")
     high_count = sum(1 for f in findings if isinstance(f, dict) and f.get("level") == "HIGH")
     print(
-        f"[CODEX RUN] stage={stage_arg} model={CODEX_REQUIRED_MODEL} "
+        f"[CODEX RUN] stage={stage_arg} provider={effective_provider} "
+        f"model={CODEX_REQUIRED_REVIEW_MODEL} actual_model_id={actual_model_id} "
+        f"actual_model_verified={actual_model_verified} "
         f"findings={len(findings)} CRITICAL={critical_count} HIGH={high_count}\n"
         f"  결과 파일: {output_path}\n"
         f"  raw 응답: {raw_output_path}"
@@ -9707,6 +10265,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_review_codex_run.add_argument(
         "--raw-output", dest="raw_output", default="codex_run_raw.json",
         metavar="PATH", help="raw provider 응답 저장 경로 (기본값: codex_run_raw.json)",
+    )
+    # IMP-20260517-30DD MT-1: provider 선택 인수
+    p_review_codex_run.add_argument(
+        "--provider", dest="provider", default="openai-api",
+        choices=["openai-api", "codex-cli"],
+        help="Codex review provider (기본값: openai-api). openai-api: OPENAI_API_KEY 환경변수 필요. "
+             "codex-cli: codex CLI 설치 및 인증 필요.",
     )
 
     # codex-record — 실제 Codex review ACCEPT/REJECT 공식 기록 (MT-3: IMP-20260516-A627)
