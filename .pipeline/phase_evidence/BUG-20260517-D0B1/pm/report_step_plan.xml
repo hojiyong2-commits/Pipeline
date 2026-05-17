@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260517-D0B1</pipeline_id>
+  <planner_run_id>pm_planner-6a2fd25348f5f5b1</planner_run_id>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <summary>FD3F 수정으로 _check_codex_pr_gate_for_technical 함수가 파일 없을 때 None 대신 FAIL 문자열을 반환하도록 변경되어, 이를 검증하는 단위 테스트 1줄(타입 narrowing 누락)과 e2e 테스트 1지점(codex_review_result.json 미생성)이 깨졌다. 두 결함은 서로 다른 파일·다른 함수·다른 회귀 원인이므로 micro_task를 2개로 분해한다. 두 파일 모두 tests/ 영역이며 Trust-Root에 해당하지만, 본 파이프라인이 정식 BUG 절차로 진입했고 CODEOWNERS 검토 경로(GitHub CI)를 거치므로 정상 수정 대상이다.</summary>
+    <decomposition_rationale>
+      <rule>변경 함수 수 = 2 (test_T2_pr_gate_fails_when_no_review_file 함수 / e2e flow 함수). 2개 모두 단일 함수 내 매우 작은 변경이므로 함수 단위로 MT 분리한다.</rule>
+      <rule>변경 파일 수 = 2 (tests/test_codex_review.py / test_three_gate_e2e.py). 각 파일이 다른 회귀 시그니처(mypy union-attr vs runtime FAIL)를 갖기 때문에 파일별 MT 분리가 자연스럽다.</rule>
+      <rule>단일 함수 내 변경 라인 ≤ 5. 100줄 임계값 미만이므로 추가 분할은 불필요.</rule>
+      <rule>FAST_SINGLE_CODE 프로필 조건(파일 ≤ 2, 함수 ≤ 2, 줄 ≤ 80) 충족.</rule>
+    </decomposition_rationale>
+
+    <grep_audit_mt1>
+      <pattern>self.assertIsNotNone(result</pattern>
+      <target_file>tests/test_codex_review.py</target_file>
+      <match_count>1</match_count>
+      <match_lines>1608</match_lines>
+      <executed>true</executed>
+    </grep_audit_mt1>
+    <grep_audit_mt1_call_sites>
+      <pattern>test_T2_pr_gate_fails_when_no_review_file</pattern>
+      <scope>repository</scope>
+      <match_count>1</match_count>
+      <match_files>tests/test_codex_review.py:1599</match_files>
+      <executed>true</executed>
+      <note>테스트 함수이므로 외부 호출자는 pytest collector뿐이며 다른 코드 호출 사이트 없음.</note>
+    </grep_audit_mt1_call_sites>
+
+    <grep_audit_mt2>
+      <pattern>_ok(work, "gates", "technical")</pattern>
+      <target_file>test_three_gate_e2e.py</target_file>
+      <match_count>1</match_count>
+      <match_lines>428</match_lines>
+      <executed>true</executed>
+    </grep_audit_mt2>
+    <grep_audit_mt2_call_sites>
+      <pattern>codex_review_result.json</pattern>
+      <target_file>test_three_gate_e2e.py</target_file>
+      <match_count>0</match_count>
+      <executed>true</executed>
+      <note>파일 내 codex_review_result.json 작성 코드 부재 — FD3F 변경 이후 gates technical이 None 대신 FAIL을 반환하므로 e2e가 깨진 원인 확인됨.</note>
+    </grep_audit_mt2_call_sites>
+
+    <fast_path_eligibility_check>
+      <files>2</files>
+      <functions>2</functions>
+      <expected_lines>8</expected_lines>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+      <trust_root_change>true</trust_root_change>
+      <trust_root_note>tests/ 영역 수정이지만 FD3F가 만든 회귀이므로 정상 BUG 파이프라인으로 수정. PR + CODEOWNERS + GitHub CI 경로로 가시화됨.</trust_root_note>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+      <eligible_profile>FAST_SINGLE_CODE</eligible_profile>
+    </fast_path_eligibility_check>
+
+    <patch_lane_eligible>false</patch_lane_eligible>
+    <patch_lane_reason>변경 파일 수 = 2 (Patch Lane은 단일 파일만 허용). FAST_SINGLE_CODE Full Lane으로 진행.</patch_lane_reason>
+
+    <decomposition_history>
+      <round number="1">
+        <option>단일 MT로 두 파일을 동시 수정</option>
+        <decision>REJECTED — 두 회귀의 실패 시그니처가 서로 다르므로 module gate를 개별로 두는 편이 이후 RCA에 유리.</decision>
+      </round>
+      <round number="2">
+        <option>파일·함수별 MT 2개 분리 (현재 선택안)</option>
+        <decision>ACCEPTED — 각 회귀를 독립 module qa로 검증 가능, FAST_SINGLE_CODE 조건도 충족.</decision>
+      </round>
+    </decomposition_history>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <maintenance_priority>maintainability_first — 유지보수성 우선으로 변경 최소화, 스타일 혼합보다 mypy 통과가 중요</maintenance_priority>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2/내부 구현 취향 질문(변수명, 코드 스타일, 어떤 assert 형식이 예쁜가 등)은 묻지 않았다. 사용자에게 제공된 버그 명세에 수정 코드 예시가 이미 포함되어 있어 P0 설계 결정은 없다. P1 한 가지(에러 처리 표현 형식)는 사용자 답변과 함께 명시한다.</filter_summary>
+
+    <module_overview_for_user>
+      <module id="MT-1">
+        <user_friendly_name>단위 테스트 mypy 타입 오류 수정</user_friendly_name>
+        <plain_explanation>tests/test_codex_review.py 1608~1612줄에서 mypy가 result 변수의 타입을 좁히지 못해 발생한 union-attr 오류를 Python 표준 assert 문으로 교체하여 해결합니다.</plain_explanation>
+      </module>
+      <module id="MT-2">
+        <user_friendly_name>e2e 테스트 codex_review_result.json 누락 수정</user_friendly_name>
+        <plain_explanation>test_three_gate_e2e.py 428줄 _ok(work, "gates", "technical") 호출 직전에 유효한 codex_review_result.json 파일을 작성하여, FD3F 변경 후 새로 의무가 된 파일 부재 차단 로직을 통과시킵니다.</plain_explanation>
+      </module>
+    </module_overview_for_user>
+
+    <decision_questions>
+      <question id="Q1" priority="P1" category="module_split" mt_id="">
+        <user_facing_question>두 테스트 회귀(MT-1: mypy 오류, MT-2: e2e codex 파일 누락)를 각각 별도 모듈로 분리할까요, 아니면 하나로 묶을까요?</user_facing_question>
+        <evidence>두 파일의 회귀 원인이 서로 다름 (mypy union-attr vs runtime FAIL). 각각 독립적인 module QA 검증이 필요하며, 분리가 RCA 추적에 유리합니다.</evidence>
+        <why_it_matters>모듈 분리 여부는 이후 module gate 검증 단위를 결정합니다. 분리 시 각 회귀를 독립 검증 가능하고, 단일 MT 시 변경이 간단해집니다.</why_it_matters>
+        <recommended_option>option_a</recommended_option>
+        <user_answer>option_a — MT-2 개로 분리 (사용자 버그 명세에 MT-1/MT-2 구분이 명시됨)</user_answer>
+        <options>
+          <option id="option_a">
+            <label>MT-2개 분리 (현재 선택: MT-1 단위 테스트, MT-2 e2e 테스트)</label>
+            <benefit>각 회귀를 독립 module gate로 검증 가능, RCA 추적 명확, 회귀 격리 용이</benefit>
+            <cost>module 기록 2회 필요, 약간의 절차 증가</cost>
+          </option>
+          <option id="option_b">
+            <label>단일 MT로 두 파일 동시 수정</label>
+            <benefit>절차 단순화, module 기록 1회</benefit>
+            <cost>두 회귀 시그니처 혼합으로 RCA 추적이 어려워짐, module gate 격리 불가</cost>
+          </option>
+        </options>
+      </question>
+    </decision_questions>
+
+    <roadmap_for_user_display>
+      <step order="1">MT-1: tests/test_codex_review.py 1608~1609줄을 Python assert로 교체 (3줄 영향)</step>
+      <step order="2">MT-2: test_three_gate_e2e.py 428줄 직전에 codex_review_result.json 작성 추가 (약 12줄)</step>
+      <step order="3">module qa: pytest tests/test_codex_review.py 및 test_three_gate_e2e.py 회귀 PASS 확인</step>
+      <step order="4">module integrate → Dev DONE → QA → Build (N/A no-code) → External Gates → User ACCEPT</step>
+    </roadmap_for_user_display>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>변경 파일 2개(tests/test_codex_review.py, test_three_gate_e2e.py), 변경 함수 2개, micro_task 2개 — FAST_SINGLE_CODE는 micro_task 1개만 허용하므로 STANDARD로 진행. 변경 규모는 작지만 모듈 분리 2개를 위해 STANDARD 경로 사용.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>8</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <env_snapshot>
+    <python_version>tier-2 미해당 — 환경 스냅샷 생략 가능 (테스트 파일 수정만)</python_version>
+    <installed_packages>pytest, mypy (이미 dev 환경 설치됨)</installed_packages>
+    <encoding>cp949 (Windows 기본) — 테스트 파일은 ASCII 안전 범위에서 작업</encoding>
+    <screen_size>N/A</screen_size>
+  </env_snapshot>
+
+  <category_tags>
+    <tag>TESTS</tag>
+    <tag>REGRESSION_FIX</tag>
+  </category_tags>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <user_friendly_name>단위 테스트 mypy union-attr 오류 수정</user_friendly_name>
+      <affected_function>tests.test_codex_review.TestCodexPRGateForTechnical.test_T2_pr_gate_fails_when_no_review_file</affected_function>
+      <target_files>
+        <file>tests/test_codex_review.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_T2_pr_gate_fails_when_no_review_file</pattern>
+        <match_count>1</match_count>
+        <match_lines>1599</match_lines>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>1608~1609줄의 self.assertIsNotNone/self.assertIsInstance를 Python assert 문으로 교체하여 mypy의 타입 narrowing이 동작하도록 한다. 1611~1614줄 self.assertTrue 블록은 사용자 명세대로 유지.</change_summary>
+      <line_estimate>3</line_estimate>
+      <module_gate_plan>
+        <design>module_design_MT-1.xml</design>
+        <dev>module_handover_MT-1.xml, scope_manifest_MT-1.json</dev>
+        <qa>module_qa_MT-1.xml — pytest tests/test_codex_review.py::TestCodexPRGateForTechnical::test_T2_pr_gate_fails_when_no_review_file PASS 및 mypy --strict 통과 확인</qa>
+      </module_gate_plan>
+      <expected_diff_pattern>
+        <hunk>self.assertIsNotNone(result, ...) → assert result is not None, ...</hunk>
+        <hunk>self.assertIsInstance(result, str, ...) → assert isinstance(result, str), ...</hunk>
+      </expected_diff_pattern>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <user_friendly_name>e2e 테스트 codex_review_result.json 누락 수정</user_friendly_name>
+      <affected_function>test_three_gate_e2e.test_three_gate_e2e_full_meta_task_flow</affected_function>
+      <target_files>
+        <file>test_three_gate_e2e.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_ok(work, "gates", "technical")</pattern>
+        <match_count>1</match_count>
+        <match_lines>428</match_lines>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>428줄 _ok(work, "gates", "technical") 호출 직전에 codex_review_result.json을 작성하여 FD3F 수정으로 의무가 된 파일 존재 요건을 충족한다. ACCEPT/GPT-5.5/actual_model_verified=true 등 필수 필드 포함.</change_summary>
+      <line_estimate>12</line_estimate>
+      <module_gate_plan>
+        <design>module_design_MT-2.xml</design>
+        <dev>module_handover_MT-2.xml, scope_manifest_MT-2.json</dev>
+        <qa>module_qa_MT-2.xml — pytest test_three_gate_e2e.py PASS 확인</qa>
+      </module_gate_plan>
+      <expected_diff_pattern>
+        <hunk>line 428 직전에 codex_review_data dict + (work / "codex_review_result.json").write_text(...) 추가</hunk>
+      </expected_diff_pattern>
+    </micro_task>
+  </micro_tasks>
+
+  <oracle_plan>
+    <normal_case>
+      <id>O003 (T1)</id>
+      <input>tests/oracles/BUG-20260517-D0B1/T1/input.json</input>
+      <expected>tests/oracles/BUG-20260517-D0B1/T1/expected.json</expected>
+      <verification>MT-1 수정 후 mypy 오류 0개 + T2 테스트 PASS 확인</verification>
+    </normal_case>
+    <edge_case>
+      <id>O004 (T2)</id>
+      <input>tests/oracles/BUG-20260517-D0B1/T2/input.json</input>
+      <expected>tests/oracles/BUG-20260517-D0B1/T2/expected.json</expected>
+      <verification>MT-2 수정 후 test_three_gate_e2e.py 전체 PASS + gates technical PASS 확인</verification>
+    </edge_case>
+  </oracle_plan>
+
+  <acceptance_test_plan>
+    <test id="T-MT1-N1" module="MT-1" priority="P0" case_kind="normal" type="command_check">
+      <command>python -m pytest tests/test_codex_review.py::TestCodexPRGateForTechnical::test_T2_pr_gate_fails_when_no_review_file -q</command>
+      <expectation>returncode=0, stdout contains "passed"</expectation>
+    </test>
+    <test id="T-MT2-N1" module="MT-2" priority="P0" case_kind="normal" type="command_check">
+      <command>python -m pytest test_three_gate_e2e.py -q</command>
+      <expectation>returncode=0, stdout contains "passed"</expectation>
+    </test>
+    <test id="T-MT1-E1" module="MT-1" priority="P1" case_kind="edge" type="command_check">
+      <command>python -m mypy --strict tests/test_codex_review.py</command>
+      <expectation>stdout contains "Success"</expectation>
+    </test>
+  </acceptance_test_plan>
+
+  <phase_attestation_plan>
+    <pm>pm_planner + pipeline_manager receipt → done --phase pm → gates prepare-phase --phase pm → push → GitHub Actions → gates phase-ci --phase pm</pm>
+    <dev>module design/dev/qa per MT + module integrate → done --phase dev → gates prepare-phase --phase dev → GitHub Actions → gates phase-ci --phase dev</dev>
+    <qa>qa --result PASS → gates prepare-phase --phase qa → GitHub Actions → gates phase-ci --phase qa</qa>
+    <sec>SKIP (네트워크/DB/인증/시크릿 변경 없음 — sec --skip 처리)</sec>
+    <build>build --exe "N/A" --skip-reason "no-code" (테스트 파일만 수정, EXE 빌드 대상 아님)</build>
+    <external_gates>technical, oracle, github-ci, accept</external_gates>
+    <architect>architect --report-file architect_report.xml + protocol_evolution_decision 기록</architect>
+  </phase_attestation_plan>
+
+  <user_acceptance_plan>
+    <evidence_type>PR 링크 + GitHub Actions 자동 검사 결과 + 두 테스트 파일의 변경 diff 요약</evidence_type>
+    <attachment>pipeline_outputs/BUG-20260517-D0B1/ 아래 module_qa_MT-1.xml, module_qa_MT-2.xml, integration_report.xml 등록</attachment>
+    <user_visible_result>한국어 최종 확인 안내 PR 댓글에 "FD3F로 깨졌던 두 테스트 회귀가 모두 PASS로 복구됨" 명시</user_visible_result>
+  </user_acceptance_plan>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>
