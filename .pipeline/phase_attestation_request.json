@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-17T07:30:29Z",
+  "generated_at": "2026-05-17T07:31:10Z",
   "pipeline_id": "IMP-20260517-CD57",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "99a822e5f34471733196369484cc6db194af40ca",
+  "commit_hint": "bc15b369e9634c46c2df57af724d78f956c8c2b7",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-17T07:08:55Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260517-CD57/dev/agent_receipt_dev-baff0ea371c1910c.json",
       "sha256": "a27ed0f68ea0d0ba2c2bf12b2c51c5e6f63ac1e39aa91c23927e28c1d092b794",
       "size_bytes": 502,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -40,7 +40,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260517-CD57/dev/report_dev_handover.xml",
       "sha256": "00dddb252ad1778d65a3f272ce7580510f585a622f1b2af77383d4e551fc7fea",
       "size_bytes": 2045,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "scope_manifest",
@@ -48,7 +48,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260517-CD57/dev/scope_manifest_scope_manifest.json",
       "sha256": "01b7895ca1457ac4274481dd26958bb698d68d426ef8d9ddde4ad02e3c5bb5de",
       "size_bytes": 1438,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [
