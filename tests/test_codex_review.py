@@ -965,9 +965,15 @@ class TestPR64Defects(unittest.TestCase):
         """tc11: pr stage ACCEPT → _check_codex_pr_gate_for_technical returns None.
 
         D4 수정 검증: pr gate ACCEPT이면 technical gate 진입 허용.
+        IMP-20260517-FD3F: actual_model_verified=True, actual_model_id="gpt-5.5",
+        actual_model_source="openai_api_response_object" 필드 추가 (FD3F 검증 강화 대응).
         """
         pr_accept_data = _make_valid_record(stage="pr", result="ACCEPT")
         pr_accept_data["history"] = []
+        # IMP-20260517-FD3F: actual model evidence 필드 추가
+        pr_accept_data["actual_model_verified"] = True
+        pr_accept_data["actual_model_id"] = "gpt-5.5"
+        pr_accept_data["actual_model_source"] = "openai_api_response_object"
         with tempfile.TemporaryDirectory() as tmpdir:
             rf = Path(tmpdir) / "codex_review_result.json"
             rf.write_text(json.dumps(pr_accept_data), encoding="utf-8")
@@ -1542,6 +1548,142 @@ class TestCodexRunCommand(unittest.TestCase):
         self.assertTrue(
             has_keyword,
             f"stderr에 review_model 관련 메시지가 없음. 실제: {stderr_output!r}",
+        )
+
+
+# ===========================================================================
+# IMP-20260517-FD3F: TestPrGateActualModel
+# _check_codex_pr_gate_for_technical actual model evidence 검증 테스트 (4개)
+# ===========================================================================
+
+class TestPrGateActualModel(unittest.TestCase):
+    """IMP-20260517-FD3F: _check_codex_pr_gate_for_technical actual model evidence 검증 테스트.
+
+    T1(normal): valid actual model evidence → None (PASS)
+    T2(edge): codex_review_result.json 없음 → FAIL 문자열 반환 (None이 아님)
+    T3(exception): actual_model_verified=False → FAIL
+    T4(error): history의 pr ACCEPT에서 actual_model_id 대문자 → FAIL
+    """
+
+    def test_T1_pr_accept_with_verified_actual_model(self) -> None:
+        """T1(normal): actual_model_verified=True, actual_model_id="gpt-5.5", valid source → None (PASS).
+
+        IMP-20260517-FD3F Fix2 검증: 모든 actual model evidence 조건 충족 시 통과.
+        """
+        review_data = {
+            "schema_version": 2,
+            "pipeline_id": "IMP-20260517-FD3F",
+            "stage": "pr",
+            "result": "ACCEPT",
+            "reviewer": "test-reviewer",
+            "review_model": "GPT-5.5",
+            "diff_sha256": "abc123def456",
+            "reviewed_files": ["pipeline.py"],
+            "findings": [],
+            "created_at": "2026-05-17T12:00:00Z",
+            "actual_model_verified": True,
+            "actual_model_id": "gpt-5.5",
+            "actual_model_source": "openai_api_response_object",
+            "history": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(review_data), encoding="utf-8")
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                result = pl._check_codex_pr_gate_for_technical({})
+        self.assertIsNone(
+            result,
+            f"T1: 모든 actual model evidence 조건 충족 시 None이어야 함. got={result!r}",
+        )
+
+    def test_T2_pr_gate_fails_when_no_review_file(self) -> None:
+        """T2(edge): codex_review_result.json 없으면 None이 아니라 FAIL 문자열 반환.
+
+        IMP-20260517-FD3F Fix1 검증: 파일 없을 때 기존 None 반환이 FAIL 메시지로 변경됨.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # codex_review_result.json 파일을 생성하지 않음
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                result = pl._check_codex_pr_gate_for_technical({})
+        self.assertIsNotNone(result, "T2: 파일 없으면 None이 아닌 FAIL 문자열이어야 함")
+        self.assertIsInstance(result, str, "T2: 반환값은 문자열이어야 함")
+        # 에러 메시지에 파일명 또는 pr gate 언급 확인
+        self.assertTrue(
+            "codex_review_result.json" in result or "pr" in result.lower(),
+            f"T2: 에러 메시지에 codex_review_result.json 또는 pr 언급이 있어야 함. got={result!r}",
+        )
+
+    def test_T3_pr_gate_fails_when_actual_model_verified_false(self) -> None:
+        """T3(exception): actual_model_verified=False → FAIL (None이 아님).
+
+        IMP-20260517-FD3F Fix2 검증: actual_model_verified 미충족 시 차단.
+        """
+        review_data = {
+            "schema_version": 2,
+            "pipeline_id": "IMP-20260517-FD3F",
+            "stage": "pr",
+            "result": "ACCEPT",
+            "reviewer": "test-reviewer",
+            "review_model": "GPT-5.5",
+            "diff_sha256": "abc123def456",
+            "reviewed_files": ["pipeline.py"],
+            "findings": [],
+            "created_at": "2026-05-17T12:00:00Z",
+            "actual_model_verified": False,
+            "actual_model_id": "gpt-5.5",
+            "actual_model_source": "openai_api_response_object",
+            "history": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(review_data), encoding="utf-8")
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                result = pl._check_codex_pr_gate_for_technical({})
+        self.assertIsNotNone(
+            result,
+            "T3: actual_model_verified=False이면 None이 아닌 FAIL 문자열이어야 함",
+        )
+
+    def test_T4_pr_gate_fails_when_actual_model_id_uppercase_in_history(self) -> None:
+        """T4(error): history의 pr ACCEPT에서 actual_model_id가 'GPT-5.5'(대문자) → FAIL.
+
+        IMP-20260517-FD3F Fix3 검증: history 루프도 exact match 적용.
+        actual_model_id는 정확히 "gpt-5.5"여야 하고 "GPT-5.5" 대문자는 거부됨.
+        top-level은 pr가 아닌 rca ACCEPT이므로 history에서만 pr를 찾아야 하고,
+        history의 pr ACCEPT가 대문자 모델명이므로 전체 결과는 FAIL이어야 함.
+        """
+        review_data = {
+            "schema_version": 2,
+            "pipeline_id": "IMP-20260517-FD3F",
+            "stage": "rca",
+            "result": "ACCEPT",
+            "reviewer": "test-reviewer",
+            "review_model": "GPT-5.5",
+            "diff_sha256": "abc123def456",
+            "reviewed_files": ["pipeline.py"],
+            "findings": [],
+            "created_at": "2026-05-17T12:00:00Z",
+            "actual_model_verified": True,
+            "actual_model_id": "gpt-5.5",
+            "actual_model_source": "openai_api_response_object",
+            "history": [
+                {
+                    "stage": "pr",
+                    "result": "ACCEPT",
+                    "actual_model_verified": True,
+                    "actual_model_id": "GPT-5.5",
+                    "actual_model_source": "openai_api_response_object",
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "codex_review_result.json"
+            rf.write_text(json.dumps(review_data), encoding="utf-8")
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                result = pl._check_codex_pr_gate_for_technical({})
+        self.assertIsNotNone(
+            result,
+            "T4: history pr ACCEPT에서 actual_model_id='GPT-5.5'(대문자)이면 FAIL이어야 함",
         )
 
 

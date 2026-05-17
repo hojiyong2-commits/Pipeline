@@ -3851,11 +3851,46 @@ def _check_codex_review_gate(
     return True, "codex review gate passed"
 
 
+def _is_valid_pr_accept(entry: Dict[str, Any]) -> bool:
+    """IMP-20260517-FD3F: pr stage ACCEPT 항목이 actual model evidence 조건을 모두 충족하는지 검증.
+
+    조건:
+    1. result == "ACCEPT" AND stage == "pr"
+    2. actual_model_verified is True (None, False 모두 FAIL)
+    3. actual_model_id == "gpt-5.5" (exact, no .lower() conversion)
+    4. actual_model_source 가 "model_output_json"이 아니고 비어 있지 않음
+
+    Returns:
+        bool: 모든 조건 충족 시 True, 아니면 False.
+    """
+    if str(entry.get("result", "")).upper() != "ACCEPT":
+        return False
+    if str(entry.get("stage", "")).lower() != "pr":
+        return False
+    # actual_model_verified is True (None, False, 0, "" 모두 FAIL)
+    if entry.get("actual_model_verified") is not True:
+        return False
+    # actual_model_id 는 정확히 "gpt-5.5" (대소문자 구분, no strip 이후 비교)
+    actual_model_id = str(entry.get("actual_model_id", ""))
+    if actual_model_id != "gpt-5.5":
+        return False
+    # actual_model_source 는 "model_output_json"이 아니고 비어 있지 않음
+    source = str(entry.get("actual_model_source", ""))
+    if not source or source.lower() == "model_output_json":
+        return False
+    return True
+
+
 def _check_codex_pr_gate_for_technical(state: Dict[str, Any]) -> Optional[str]:
-    """D4: pr stage ACCEPT 여부를 확인하는 헬퍼. 문제 있으면 에러 메시지 반환, 없으면 None.
+    """IMP-20260517-FD3F: pr stage ACCEPT 여부를 확인하는 헬퍼. 문제 있으면 에러 메시지 반환, 없으면 None.
 
     gates technical 및 gates accept ACCEPT 시 codex pr stage ACCEPT를 요구한다.
     bootstrap_exception=true인 파이프라인은 이 함수를 호출하지 않는다.
+
+    변경 사항 (IMP-20260517-FD3F):
+    1. 파일 없으면 None 반환 → FAIL 메시지 반환 (Blocker 1)
+    2. pr ACCEPT 인정 조건에 actual_model_verified, actual_model_id, actual_model_source 검증 추가 (Blocker 2)
+    3. top-level + history 루프 모두 동일 조건 적용
 
     Args:
         state: 파이프라인 state dict.
@@ -3865,28 +3900,45 @@ def _check_codex_pr_gate_for_technical(state: Dict[str, Any]) -> Optional[str]:
     """
     review_path = BASE_DIR / "codex_review_result.json"
     if not review_path.exists():
-        # D4: Codex review 파일이 없는 파이프라인(레거시/비Codex)은 통과.
-        # 파일이 있는 경우에만 pr stage ACCEPT를 검증한다.
-        return None
+        # IMP-20260517-FD3F Blocker 1: 파일 없으면 FAIL (기존 None 반환 제거)
+        return (
+            "[CODEX PR GATE] codex_review_result.json 파일이 없습니다. "
+            "pr stage Codex review ACCEPT가 필요합니다. "
+            "'python pipeline.py review codex-record --stage pr --result ACCEPT --review-model GPT-5.5 ...' 를 먼저 수행하세요."
+        )
     try:
         review_data = json.loads(review_path.read_text(encoding="utf-8", errors="replace"))
     except Exception as exc:
         return f"[CODEX PR GATE] codex_review_result.json 파싱 실패: {exc}"
 
-    # pr stage ACCEPT 여부를 history + 현재 top-level에서 확인
-    all_accepted_stages: List[str] = []
-    current_stage = str(review_data.get("stage", "")).lower()
-    current_result = str(review_data.get("result", "")).upper()
-    if current_result == "ACCEPT" and current_stage:
-        all_accepted_stages.append(current_stage)
-    for h in review_data.get("history", []):
-        if str(h.get("result", "")).upper() == "ACCEPT" and h.get("stage"):
-            all_accepted_stages.append(str(h.get("stage", "")).lower())
+    # IMP-20260517-FD3F Blocker 2: pr stage ACCEPT를 _is_valid_pr_accept로 검증
+    # top-level 항목과 history 항목 모두 동일 조건 적용
+    found_valid_pr_accept = False
 
-    if "pr" not in all_accepted_stages:
+    # top-level 항목 확인
+    if _is_valid_pr_accept(review_data):
+        found_valid_pr_accept = True
+
+    # history 루프 확인 (top-level에서 찾지 못한 경우에도 계속 확인)
+    if not found_valid_pr_accept:
+        for h in review_data.get("history", []):
+            if _is_valid_pr_accept(h):
+                found_valid_pr_accept = True
+                break
+
+    if not found_valid_pr_accept:
+        # 진단 정보: 현재 ACCEPT된 stages (actual_model 검증 없는 것 포함)
+        weak_accepted: List[str] = []
+        if str(review_data.get("result", "")).upper() == "ACCEPT" and review_data.get("stage"):
+            weak_accepted.append(str(review_data.get("stage", "")).lower())
+        for h in review_data.get("history", []):
+            if str(h.get("result", "")).upper() == "ACCEPT" and h.get("stage"):
+                weak_accepted.append(str(h.get("stage", "")).lower())
         return (
             "[CODEX PR GATE] Technical gate 진입 전 pr stage Codex review ACCEPT가 필요합니다. "
-            f"현재 ACCEPT된 stages: {all_accepted_stages if all_accepted_stages else '없음'}. "
+            "actual_model_verified=true, actual_model_id='gpt-5.5' (exact), "
+            "actual_model_source!='model_output_json' 조건을 모두 충족해야 합니다. "
+            f"현재 ACCEPT된 stages(model 검증 포함): {weak_accepted if weak_accepted else '없음'}. "
             "'python pipeline.py review codex-record --stage pr --result ACCEPT --review-model GPT-5.5 ...' 를 먼저 수행하세요."
         )
     return None
