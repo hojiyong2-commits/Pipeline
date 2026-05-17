@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260517-D0B1</pipeline_id>
+  <from>qa-agent</from>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <failure_signature></failure_signature>
+  <checks>
+    <check name="MT-1_pytest_T2">
+      <command>python -m pytest tests/test_codex_review.py -k test_T2_pr_gate_fails -q</command>
+      <result>PASS — 1 passed</result>
+    </check>
+    <check name="MT-2_e2e">
+      <command>python -m pytest test_three_gate_e2e.py -q</command>
+      <result>PASS — 1 passed in 9.70s</result>
+    </check>
+    <check name="mypy">
+      <command>python -m mypy tests/test_codex_review.py</command>
+      <result>PASS — Success: no issues found in 1 source file</result>
+    </check>
+    <check name="scope_boundary">
+      <result>PASS — 변경 파일 2개 모두 PM scope 내</result>
+    </check>
+  </checks>
+  <repeat_indicator>FIRST</repeat_indicator>
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+</qa_report>
