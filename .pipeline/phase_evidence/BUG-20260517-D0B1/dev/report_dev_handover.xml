@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <pipeline_id>BUG-20260517-D0B1</pipeline_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>tests/test_codex_review.py</file>
+      <file>test_three_gate_e2e.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>tests.test_codex_review.TestCodexPRGateForTechnical.test_T2_pr_gate_fails_when_no_review_file</target_function>
+    <target_function>test_three_gate_e2e.test_three_gate_e2e_full_meta_task_flow</target_function>
+    <change_type>bug_fix</change_type>
+    <total_lines_changed>14</total_lines_changed>
+    <description>MT-1: mypy union-attr 수정. MT-2: codex_review_result.json e2e 테스트 추가</description>
+  </impact_analysis>
+  <implemented_files>
+    <file>tests/test_codex_review.py</file>
+    <file>test_three_gate_e2e.py</file>
+  </implemented_files>
+  <scope_lock_check>
+    <git_diff_files>tests/test_codex_review.py, test_three_gate_e2e.py</git_diff_files>
+    <manifest_files>tests/test_codex_review.py, test_three_gate_e2e.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <self_check>
+    <mypy_clean>true</mypy_clean>
+    <tests_pass>true</tests_pass>
+    <scope_match>true</scope_match>
+  </self_check>
+  <evidence>
+    <module_qa_mt1>PASS — pytest 1 passed, mypy 0 errors</module_qa_mt1>
+    <module_qa_mt2>PASS — e2e pytest 1 passed in 13.72s</module_qa_mt2>
+    <integration>PASS</integration>
+  </evidence>
+</handover>
