@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260517-CD57</pipeline_id>
+  <agent>qa-agent</agent>
+  <run_id>qa-a37bf937e2d31466</run_id>
+  <result>PASS</result>
+  <timestamp>2026-05-17T07:42:00Z</timestamp>
+  <numeric_score>112</numeric_score>
+  <handover_verification>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <step_id>MT-1</step_id>
+    <status>READY_FOR_QA</status>
+    <evidence_files>
+      <file present="true">pipeline.py</file>
+      <file present="true">tests/test_codex_review.py</file>
+    </evidence_files>
+    <verdict>PASS</verdict>
+  </handover_verification>
+  <blocker_verification>
+    <blocker id="1" desc="actual_model_verified is not True"><status>VERIFIED_PASS</status></blocker>
+    <blocker id="2" desc="CODEX_REQUIRED_FIELDS 6개 추가"><status>VERIFIED_PASS</status></blocker>
+    <blocker id="3" desc="codex-record ACCEPT 차단"><status>VERIFIED_PASS</status></blocker>
+    <blocker id="4" desc="history 검증 강화"><status>VERIFIED_PASS</status></blocker>
+    <blocker id="5" desc=".lower() 제거"><status>VERIFIED_PASS</status></blocker>
+  </blocker_verification>
+  <category_check>
+    <wa>N-A</wa>
+    <ui>N-A</ui>
+    <fs>N-A</fs>
+    <pd>PASS</pd>
+    <sec>PASS</sec>
+    <al>PASS</al>
+    <build>N-A</build>
+  </category_check>
+  <test_results>
+    <command>python -m pytest tests/test_codex_review.py -q</command>
+    <outcome>89 passed, 17 subtests passed</outcome>
+    <failures>0</failures>
+  </test_results>
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <declared_files>pipeline.py, tests/test_codex_review.py</declared_files>
+      <actual_changed_files>pipeline.py, tests/test_codex_review.py</actual_changed_files>
+      <scope_exceeded>false</scope_exceeded>
+      <verdict>WITHIN_SCOPE</verdict>
+    </mt>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <overall_verdict>WITHIN_SCOPE</overall_verdict>
+  </micro_task_boundary>
+  <verdict>PASS</verdict>
+  <failure_signature>NONE</failure_signature>
+</qa_report>
