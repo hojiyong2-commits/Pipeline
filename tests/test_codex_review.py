@@ -1605,8 +1605,8 @@ class TestPrGateActualModel(unittest.TestCase):
             # codex_review_result.json 파일을 생성하지 않음
             with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
                 result = pl._check_codex_pr_gate_for_technical({})
-        self.assertIsNotNone(result, "T2: 파일 없으면 None이 아닌 FAIL 문자열이어야 함")
-        self.assertIsInstance(result, str, "T2: 반환값은 문자열이어야 함")
+        assert result is not None, "T2: 파일 없으면 None이 아닌 FAIL 문자열이어야 함"
+        assert isinstance(result, str), "T2: 반환값은 문자열이어야 함"
         # 에러 메시지에 파일명 또는 pr gate 언급 확인
         self.assertTrue(
             "codex_review_result.json" in result or "pr" in result.lower(),

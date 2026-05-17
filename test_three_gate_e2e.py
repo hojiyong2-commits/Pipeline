@@ -425,6 +425,21 @@ def test_three_gate_cli_e2e_blocks_complete_without_github_ci(tmp_path: Path) ->
     _ok(work, "gates", "prepare-phase", "--phase", "build")
     _mark_phase_ci_passed(work, "build")
 
+    # gates technical 호출 전 codex_review_result.json 추가 (IMP-20260517-FD3F 수정으로 필요)
+    codex_review_data: dict = {
+        "result": "ACCEPT",
+        "stage": "pr",
+        "actual_model_verified": True,
+        "actual_model_id": "gpt-5.5",
+        "actual_model_source": "openai_api_response_object",
+        "review_provider": "openai-api",
+        "raw_output_path": "raw_output.json",
+        "history": [],
+    }
+    (work / "codex_review_result.json").write_text(
+        json.dumps(codex_review_data, ensure_ascii=False), encoding="utf-8"
+    )
+
     _ok(work, "gates", "technical")
     technical_result = json.loads(
         (work / "pipeline_contracts" / pid / "gates" / "technical_result.json").read_text(encoding="utf-8")
