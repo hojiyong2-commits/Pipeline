@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260517-FD3F</pipeline_id>
+  <status>READY_FOR_QA</status>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <step_id>MT-1,MT-2</step_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+
+  <impact_analysis>
+    <target_function>pipeline._check_codex_pr_gate_for_technical (수정), pipeline._is_valid_pr_accept (신규 헬퍼), tests.test_codex_review.TestPrGateActualModel (신규 클래스 4개 메서드)</target_function>
+    <affected_call_sites>
+      <site>pipeline.py: cmd_gates technical action</site>
+      <site>pipeline.py: cmd_gates accept action</site>
+    </affected_call_sites>
+    <blast_radius>pipeline.py 단일 함수 수정 + tests/test_codex_review.py TestPrGateActualModel 추가 + tc11 fixture 보강</blast_radius>
+  </impact_analysis>
+
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+  </implemented_files>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+    </files_to_modify>
+    <scope_lock_check>
+      <extra_files>없음</extra_files>
+      <trust_root_violation>false</trust_root_violation>
+      <verdict>PASS</verdict>
+    </scope_lock_check>
+  </scope_declaration>
+
+  <evidence>
+    <test_result>python -m pytest tests/test_codex_review.py -q → 56 passed, 11 subtests passed</test_result>
+    <syntax_check>python -m py_compile pipeline.py → PASS</syntax_check>
+  </evidence>
+
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+</dev_handover>
