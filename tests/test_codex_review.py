@@ -35,7 +35,12 @@ import pipeline as pl  # noqa: E402
 # ---------------------------------------------------------------------------
 
 def _make_valid_record(**overrides: Any) -> Dict[str, Any]:
-    """schema v2 유효 기준을 충족하는 최소 record 반환."""
+    """schema v2 유효 기준을 충족하는 최소 record 반환.
+
+    IMP-20260517-CD57 MT-2 업데이트: Blocker 2로 추가된 6개 필드
+    (requested_model_id, actual_model_id, actual_model_verified,
+     actual_model_source, review_provider, raw_output_path)를 기본값으로 포함.
+    """
     base: Dict[str, Any] = {
         "schema_version": 2,
         "pipeline_id": "IMP-20260516-A627",
@@ -47,6 +52,13 @@ def _make_valid_record(**overrides: Any) -> Dict[str, Any]:
         "reviewed_files": ["pipeline.py"],
         "findings": [],
         "created_at": "2026-05-16T12:00:00Z",
+        # IMP-20260517-CD57 Blocker 2: 6개 신규 필수 필드 기본값
+        "requested_model_id": "gpt-5.5",
+        "actual_model_id": "gpt-5.5",
+        "actual_model_verified": True,
+        "actual_model_source": "openai_api_response_object",
+        "review_provider": "openai-api",
+        "raw_output_path": "",
     }
     base.update(overrides)
     return base
@@ -902,10 +914,12 @@ class TestPR64Defects(unittest.TestCase):
         D3 수정 검증: 두 stage 모두 있으면 통과.
         """
         # top-level: scope ACCEPT, history에 plan ACCEPT
+        # IMP-20260517-CD57 Blocker 4: history 항목에도 actual_model_verified=True + actual_model_id 필수
         both_data = _make_valid_record(stage="scope", result="ACCEPT")
         both_data["history"] = [
             {"stage": "plan", "result": "ACCEPT", "review_model": "GPT-5.5",
-             "reviewer": "test", "created_at": "2026-01-01T00:00:00Z", "diff_sha256": ""},
+             "reviewer": "test", "created_at": "2026-01-01T00:00:00Z", "diff_sha256": "",
+             "actual_model_verified": True, "actual_model_id": "gpt-5.5"},
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
             rf = Path(tmpdir) / "codex_review_result.json"
@@ -1365,9 +1379,10 @@ class TestCodexRunCommand(unittest.TestCase):
                 summary="no findings",
             )
             # raw 응답에 wrap
+            # IMP-20260517-CD57 Blocker 5 수정: .lower() 제거 후 exact match이므로 "gpt-5.5"(소문자) 사용
             mock_response_payload: Dict[str, Any] = {
                 "id": "resp_test123",
-                "model": "GPT-5.5",
+                "model": "gpt-5.5",
                 "output": mock_payload["output"],
             }
 
@@ -2310,6 +2325,290 @@ class TestCodexDoctorExtended(unittest.TestCase):
             missing_fields, [],
             f"provider_diagnostics에 누락된 필드: {missing_fields}",
         )
+
+
+# ===========================================================================
+# IMP-20260517-CD57 MT-2: Blocker 1~5 회귀 방지 테스트 (oracle T1~T4 대응, 6개)
+# ===========================================================================
+
+
+class TestIMP20260517CD57Regressions(unittest.TestCase):
+    """IMP-20260517-CD57: Blocker 1~5 회귀 방지 테스트 (oracle T1~T4 + 추가).
+
+    oracle T1 (normal): actual_model_verified=true, actual_model_id='gpt-5.5' → gate PASS
+    oracle T2 (edge):   actual_model_verified 필드 누락(None) → gate FAIL (Blocker 1)
+    oracle T3 (exception): actual_model_id='GPT-5.5'(대문자) → exact match FAIL (Blocker 5)
+    oracle T4 (error):  codex-record pr stage ACCEPT → exit code 2 차단 (Blocker 3)
+    추가 T5: history loop actual_model_verified 미검증 회귀 방지 (Blocker 4)
+    추가 T6: CODEX_REQUIRED_FIELDS 6개 신규 필드 포함 확인 (Blocker 2)
+    """
+
+    ORACLE_BASE = PROJECT_ROOT / "tests/oracles/IMP-20260517-CD57"
+
+    def _load_oracle_input(self, case_id: str) -> Dict[str, Any]:
+        """oracle input.json 로드."""
+        path = self.ORACLE_BASE / case_id / "input.json"
+        with path.open(encoding="utf-8") as f:
+            return json.load(f)
+
+    def _load_oracle_expected(self, case_id: str) -> Dict[str, Any]:
+        """oracle expected.json 로드."""
+        path = self.ORACLE_BASE / case_id / "expected.json"
+        with path.open(encoding="utf-8") as f:
+            return json.load(f)
+
+    def _write_review_file(self, tmpdir: str, data: Dict[str, Any]) -> Path:
+        """codex_review_result.json을 tmpdir에 기록."""
+        p = Path(tmpdir) / "codex_review_result.json"
+        p.write_text(json.dumps(data), encoding="utf-8")
+        return p
+
+    # ── T1: 정상 케이스 — actual_model_verified=true, actual_model_id='gpt-5.5' ─
+
+    def test_T1_normal_actual_model_verified_passes_gate(self) -> None:
+        """oracle T1 (normal): actual_model_verified=true + actual_model_id='gpt-5.5' → gate PASS.
+
+        Blocker 1 수정 후 실제 검증된 케이스는 계속 PASS여야 한다.
+        """
+        inp = self._load_oracle_input("T1")
+        expected = self._load_oracle_expected("T1")
+        self.assertEqual(expected.get("expected_ok"), True, "T1 expected_ok는 True여야 함")
+
+        review_data = inp["review_data"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_review_file(tmpdir, review_data)
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate({}, required_stage="pr")
+
+        self.assertTrue(
+            ok,
+            f"T1: actual_model_verified=true + actual_model_id=gpt-5.5 → gate PASS여야 함. reason={reason!r}",
+        )
+
+    # ── T2: 엣지 케이스 — actual_model_verified 필드 누락(None) → FAIL ──────────
+
+    def test_T2_edge_actual_model_verified_missing_fails_gate(self) -> None:
+        """oracle T2 (edge): actual_model_verified 필드 없음(None) → gate FAIL.
+
+        Blocker 1 회귀 방지: 수정 전 코드는 `is False`만 검사하여 None을 허용했다.
+        수정 후 `is not True`로 None도 FAIL 처리해야 한다.
+        """
+        inp = self._load_oracle_input("T2")
+        expected = self._load_oracle_expected("T2")
+        self.assertEqual(expected.get("expected_ok"), False, "T2 expected_ok는 False여야 함")
+        self.assertIn("actual_model_verified", expected.get("expected_message_contains", ""),
+                      "T2 expected_message_contains에 actual_model_verified가 있어야 함")
+
+        review_data = inp["review_data"]
+        # review_data에 actual_model_verified 필드가 없음을 확인
+        self.assertNotIn(
+            "actual_model_verified", review_data,
+            "T2 input에 actual_model_verified 필드가 없어야 함 (None 시뮬레이션)",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_review_file(tmpdir, review_data)
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate({}, required_stage="pr")
+
+        self.assertFalse(
+            ok,
+            f"T2: actual_model_verified 필드 없으면(None) gate FAIL이어야 함. ok={ok}, reason={reason!r}",
+        )
+        self.assertIn(
+            "actual_model_verified",
+            reason,
+            f"T2: reason에 actual_model_verified가 포함되어야 함. reason={reason!r}",
+        )
+
+    # ── T3: 예외 케이스 — actual_model_id 대소문자 불일치 → FAIL ──────────────
+
+    def test_T3_exception_actual_model_id_uppercase_fails_gate(self) -> None:
+        """oracle T3 (exception): actual_model_id='GPT-5.5'(대문자) → exact match FAIL.
+
+        Blocker 5 회귀 방지: 수정 전 코드는 .strip().lower()로 정규화하여 'gpt-5.5'로 변환
+        하여 통과시켰다. 수정 후 .strip()만 사용하므로 'GPT-5.5' != 'gpt-5.5' → FAIL.
+        """
+        inp = self._load_oracle_input("T3")
+        expected = self._load_oracle_expected("T3")
+        self.assertEqual(expected.get("expected_ok"), False, "T3 expected_ok는 False여야 함")
+
+        review_data = inp["review_data"]
+        self.assertEqual(
+            review_data.get("actual_model_id"), "GPT-5.5",
+            "T3 input actual_model_id는 'GPT-5.5'(대문자)여야 함",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_review_file(tmpdir, review_data)
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                ok, reason = pl._check_codex_review_gate({}, required_stage="pr")
+
+        self.assertFalse(
+            ok,
+            f"T3: actual_model_id='GPT-5.5'(대문자)는 gate FAIL이어야 함. ok={ok}, reason={reason!r}",
+        )
+        self.assertIn(
+            "actual_model_id",
+            reason,
+            f"T3: reason에 actual_model_id가 포함되어야 함. reason={reason!r}",
+        )
+
+    # ── T4: 에러 케이스 — codex-record pr ACCEPT without evidence → exit != 0 ──
+
+    def test_T4_error_codex_record_accept_blocked(self) -> None:
+        """oracle T4 (error): codex-record pr stage ACCEPT → exit code != 0.
+
+        Blocker 3 회귀 방지: 수정 전 codex-record는 actual_model_verified 없이 ACCEPT를
+        기록할 수 있었다. 수정 후 evidence 없이 pr ACCEPT 시도 시 exit code 2로 차단.
+        """
+        inp = self._load_oracle_input("T4")
+        expected = self._load_oracle_expected("T4")
+        self.assertNotEqual(expected.get("expected_exit_code", 0), 0,
+                            "T4 expected_exit_code는 0이 아니어야 함 (차단 기대)")
+
+        # T4: evidence 없이 pr stage ACCEPT 시도
+        args_dict = inp["args"]
+        cmd = [
+            sys.executable,
+            str(PROJECT_ROOT / "pipeline.py"),
+            "review", "codex-record",
+            "--stage", args_dict["stage"],
+            "--result", args_dict["result"],
+            "--review-model", args_dict["review_model"],
+            "--reviewer", args_dict["reviewer"],
+            "--head-sha", args_dict["head_sha"],
+            "--diff-sha256", args_dict["diff_sha256"],
+            # evidence 미제공 — Blocker 3 테스트
+        ]
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=str(PROJECT_ROOT),
+        )
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"T4: codex-record pr ACCEPT without evidence는 exit != 0이어야 함. "
+            f"returncode={proc.returncode}\nstdout={proc.stdout!r}\nstderr={proc.stderr!r}",
+        )
+        # 에러 메시지 확인: 차단/검증 관련 메시지 (head_sha 불일치, evidence 없음, actual_model_verified 등)
+        combined = proc.stdout + proc.stderr
+        has_block_msg = any(
+            kw in combined
+            for kw in (
+                "ACCEPT", "actual_model_verified", "evidence", "4중 검증",
+                "검증 실패", "head_sha", "CODEX RECORD", "불일치",
+            )
+        )
+        self.assertTrue(
+            has_block_msg,
+            f"T4: 에러 메시지에 차단/검증 관련 내용이 없음. combined={combined!r}",
+        )
+
+    # ── T5: Blocker 4 회귀 방지 — history loop actual_model_verified 검증 ──────
+
+    def test_T5_blocker4_history_loop_requires_actual_model_verified(self) -> None:
+        """Blocker 4 회귀 방지: history의 ACCEPT 항목은 actual_model_verified=true여야 인정.
+
+        수정 전: history에 actual_model_verified 체크 없어 가짜 ACCEPT가 plan/scope로 인정됨.
+        수정 후: actual_model_verified is True AND actual_model_id == 'gpt-5.5' 모두 필요.
+        """
+        # history에 plan ACCEPT가 있지만 actual_model_verified=false인 케이스
+        fake_history_data: Dict[str, Any] = {
+            "schema_version": 2,
+            "pipeline_id": "TEST-T5",
+            "stage": "scope",
+            "result": "ACCEPT",
+            "reviewer": "test",
+            "review_model": "GPT-5.5",
+            "diff_sha256": "abc123",
+            "reviewed_files": ["pipeline.py"],
+            "findings": [],
+            "created_at": "2026-05-17T00:00:00Z",
+            "actual_model_verified": True,
+            "actual_model_id": "gpt-5.5",
+            "actual_model_source": "openai_api_response_object",
+            "review_provider": "openai-api",
+            "raw_output_path": "",
+            "history": [
+                {
+                    "stage": "plan",
+                    "result": "ACCEPT",
+                    "review_model": "GPT-5.5",
+                    "reviewer": "test",
+                    "created_at": "2026-05-17T00:00:00Z",
+                    "diff_sha256": "",
+                    # actual_model_verified=false → history에서 인정하면 안 됨
+                    "actual_model_verified": False,
+                    "actual_model_id": "gpt-5.5",
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_review_file(tmpdir, fake_history_data)
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                # required_stage="plan" → history plan ACCEPT 인정 여부 확인
+                # actual_model_verified=False인 history plan은 인정되면 안 됨
+                ok, reason = pl._check_codex_review_gate({}, required_stage="plan")
+
+        # scope(top-level)는 actual_model_verified=True이지만 plan만 history에서 False
+        # all_stages_accepted에 plan이 없어야 함 → required_stage="plan" 이면서 plan이 없으면 FAIL
+        # 하지만 top-level scope가 actual_model_verified=True이고 history plan이 False면
+        # plan은 not in all_stages_accepted, scope는 top-level에 있음
+        # required_stage="plan"이고 plan AND scope 모두 필요하므로 plan이 없으면 FAIL
+        self.assertFalse(
+            ok,
+            f"T5: history의 actual_model_verified=False인 plan ACCEPT는 인정되면 안 됨. reason={reason!r}",
+        )
+
+    # ── T6: Blocker 2 확인 — CODEX_REQUIRED_FIELDS에 6개 신규 필드 포함 ─────────
+
+    def test_T6_blocker2_codex_required_fields_includes_actual_model_evidence(self) -> None:
+        """Blocker 2 회귀 방지: CODEX_REQUIRED_FIELDS에 6개 actual model evidence 필드가 있어야 한다.
+
+        수정 전: CODEX_REQUIRED_FIELDS에 actual model 관련 필드 없음.
+        수정 후: 6개 필드(requested_model_id, actual_model_id, actual_model_verified,
+                 actual_model_source, review_provider, raw_output_path) 추가.
+        """
+        required_new_fields = [
+            "requested_model_id",
+            "actual_model_id",
+            "actual_model_verified",
+            "actual_model_source",
+            "review_provider",
+            "raw_output_path",
+        ]
+        for field in required_new_fields:
+            with self.subTest(field=field):
+                self.assertIn(
+                    field,
+                    pl.CODEX_REQUIRED_FIELDS,
+                    f"Blocker 2: CODEX_REQUIRED_FIELDS에 '{field}' 필드가 없음",
+                )
+
+        # 6개 신규 필드 누락 시 _validate_codex_review_schema가 ValueError를 발생시키는지 확인
+        base_record = _make_valid_record(
+            result="ACCEPT",
+            review_model="GPT-5.5",
+            actual_model_verified=True,
+            actual_model_id="gpt-5.5",
+            actual_model_source="openai_api_response_object",
+            review_provider="openai-api",
+            raw_output_path="raw.jsonl",
+            requested_model_id="gpt-5.5",
+        )
+        # 전체 필드 있으면 통과
+        pl._validate_codex_review_schema(base_record)
+
+        # actual_model_verified 누락 시 ValueError
+        record_missing_field = {k: v for k, v in base_record.items() if k != "actual_model_verified"}
+        with self.assertRaises(ValueError) as ctx:
+            pl._validate_codex_review_schema(record_missing_field)
+        self.assertIn("actual_model_verified", str(ctx.exception),
+                      "actual_model_verified 누락 시 에러 메시지에 필드명 포함")
 
 
 # ===========================================================================

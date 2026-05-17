@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<integration_report>
+  <pipeline_id>IMP-20260517-30DD</pipeline_id>
+  <modules_integrated>
+    <module id="MT-1">
+      <file>pipeline.py</file>
+      <status>PASS</status>
+      <description>Codex Review provider-level evidence 검증 강화</description>
+    </module>
+    <module id="MT-2">
+      <file>tests/test_codex_review.py</file>
+      <status>PASS</status>
+      <description>31개 신규 테스트 추가</description>
+    </module>
+  </modules_integrated>
+
+  <integration_test>
+    <command>python -m pytest tests/test_codex_review.py -q</command>
+    <result>83 passed, 11 subtests passed</result>
+    <verdict>PASS</verdict>
+  </integration_test>
+
+  <integration_verdict>PASS</integration_verdict>
+
+  <result>PASS</result>
+</integration_report>

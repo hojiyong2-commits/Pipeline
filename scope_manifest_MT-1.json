@@ -1,0 +1,14 @@
+{
+  "pipeline_id": "IMP-20260517-CD57",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.py:_check_codex_review_required(상수 CODEX_REQUIRED_FIELDS 포함);\n          pipeline.py:_codex_run_via_openai_api 호출부 (line 7986 .strip().lower());\n          pipeline.py:_codex_run_via_codex_cli (line 7793 .strip().lower());\n          pipeline.py:cmd_review_codex_run fallback (line 8038 .strip().lower());\n          pipeline.py:cmd_review_codex_record (line 8407 new_record 및 result=ACCEPT 차단)"
+      ]
+    }
+  ]
+}

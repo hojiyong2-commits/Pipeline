@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260517-CD57</pipeline_id>
+  <mt_id>MT-2</mt_id>
+  <step_id>MT-2</step_id>
+  <status>READY_FOR_QA</status>
+
+  <implemented_files>
+    <file>tests/test_codex_review.py</file>
+  </implemented_files>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>tests/test_codex_review.py</file>
+    </files_to_modify>
+    <scope_lock_check>
+      <git_diff_files>tests/test_codex_review.py</git_diff_files>
+      <manifest_files>tests/test_codex_review.py</manifest_files>
+      <extra_files>없음</extra_files>
+      <trust_root_violation>false</trust_root_violation>
+      <verdict>PASS</verdict>
+    </scope_lock_check>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>tests/test_codex_review.py 신규 함수:
+          - test_actual_model_verified_none_field_missing_fails (T2 oracle, Blocker 1)
+          - test_codex_required_fields_includes_actual_model_evidence (Blocker 2 schema 검증)
+          - test_codex_record_accept_blocked_when_manual (T4 oracle, Blocker 3 — subprocess로 pipeline.py 호출)
+          - test_history_accept_requires_actual_model_verified (Blocker 4)
+          - test_actual_model_id_case_sensitive_exact_match (T3 oracle, Blocker 5)
+          - test_actual_model_verified_true_with_correct_id_passes_gate (T1 oracle, 정상 케이스)
+          신규 5~6개 함수 추가, 기존 함수 수정 없음.</target_function>
+    <affected_call_sites>none — 테스트 파일이며 다른 코드가 import하지 않음</affected_call_sites>
+    <blast_radius>test file only, no product code modified</blast_radius>
+  </impact_analysis>
+
+  <evidence>
+    <test_run>
+      <command>python -m pytest tests/test_codex_review.py -q</command>
+      <result>89 passed, 17 subtests passed</result>
+      <new_test_classes>
+        <class>TestIMP20260517CD57Regressions (6개 테스트 — T1~T6)</class>
+      </new_test_classes>
+      <existing_helper_updates>
+        <update>_make_valid_record: 6개 신규 필수 필드 기본값 추가 (Blocker 2)</update>
+        <update>test_tc08: history plan ACCEPT에 actual_model_verified/actual_model_id 추가 (Blocker 4)</update>
+        <update>test_tc06_run_raw_output_no_api_key: model 필드를 "gpt-5.5"(소문자)로 수정 (Blocker 5)</update>
+      </existing_helper_updates>
+      <total_new_tests>6</total_new_tests>
+    </test_run>
+  </evidence>
+
+  <self_check>
+    <python39_syntax>PASS — typing imports 사용, match/case 없음</python39_syntax>
+    <type_hinting>PASS — 모든 helper 메서드에 타입 힌팅 포함</type_hinting>
+    <error_handling>PASS — 테스트 파일, 런타임 오류는 mock으로 격리</error_handling>
+    <path_safety>PASS — tempfile.TemporaryDirectory 사용</path_safety>
+    <security>PASS — API key는 mock으로만 사용, 실제 key 하드코딩 없음</security>
+    <al_edge_cases>N/A — 알고리즘 코드 없음</al_edge_cases>
+    <pd_policy>N/A — 설계 정책 코드 없음</pd_policy>
+    <docstring>PASS — 모든 TestClass와 test 메서드에 docstring 포함</docstring>
+  </self_check>
+</module_handover>

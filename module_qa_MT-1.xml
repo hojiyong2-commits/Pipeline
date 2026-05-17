@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+  <pipeline_id>IMP-20260517-CD57</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <qa_agent>qa-agent</qa_agent>
+  <result>PASS</result>
+  <numeric_score>108</numeric_score>
+  <verification_evidence>
+    <file verified="true">pipeline.py</file>
+    <check>Blocker 1: actual_model_verified is not True 조건 확인 (line ~3810) — None도 FAIL 처리됨</check>
+    <check>Blocker 2: CODEX_REQUIRED_FIELDS 6개 필드 추가 확인 (requested_model_id, actual_model_id, actual_model_verified, actual_model_source, review_provider, raw_output_path)</check>
+    <check>Blocker 3: cmd_review_codex_record ACCEPT blocking — actual_model_verified is not True 또는 actual_model_id != gpt-5.5 시 exit code 1 확인</check>
+    <check>Blocker 3: new_record에 6개 필드 기본값 추가 확인 (requested_model_id, actual_model_id, actual_model_verified, actual_model_source, review_provider, raw_output_path)</check>
+    <check>Blocker 4: history loop에서 actual_model_verified is True AND actual_model_id == CODEX_REQUIRED_MODEL_ID 조건 추가 확인</check>
+    <check>Blocker 5: _codex_run_via_codex_cli line 7805 — meta_model.strip() 확인 (.lower() 없음)</check>
+    <check>Blocker 5: _codex_run_via_openai_api line 7998 — str(raw_actual).strip() 확인 (.lower() 없음)</check>
+    <check>Blocker 5: fallback path line 8050 — str(raw_actual).strip() 확인 (.lower() 없음)</check>
+  </verification_evidence>
+  <boundary_check>
+    <declared_scope>pipeline.py</declared_scope>
+    <actual_diff>pipeline.py</actual_diff>
+    <micro_task_boundary>WITHIN_SCOPE</micro_task_boundary>
+    <blast_radius>SINGLE_FILE</blast_radius>
+    <verdict>PASS</verdict>
+  </boundary_check>
+  <failure_signature>none</failure_signature>
+</module_qa_report>

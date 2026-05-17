@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260517-CD57</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <step_id>MT-1</step_id>
+  <status>READY_FOR_QA</status>
+  <implemented_files>
+    <file>pipeline.py</file>
+  </implemented_files>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_functions>
+      <function>pipeline._check_codex_review_required (Blocker 1, 4)</function>
+      <function>pipeline.CODEX_REQUIRED_FIELDS constant (Blocker 2)</function>
+      <function>pipeline.cmd_review_codex_record (Blocker 3)</function>
+      <function>pipeline._codex_run_via_codex_cli (Blocker 5)</function>
+      <function>pipeline._codex_run_via_openai_api (Blocker 5)</function>
+    </target_functions>
+    <call_sites>
+      <site>pipeline.cmd_check (Dev/QA/PR phase gate에서 _check_codex_review_required 호출)</site>
+      <site>pipeline.cmd_review (review codex-record argparse dispatch)</site>
+      <site>pipeline._validate_codex_review_schema (CODEX_REQUIRED_FIELDS 참조)</site>
+    </call_sites>
+    <blast_radius>pipeline.py 단일 파일, 5개 Blocker 수정 — 코드 game 방어 강화</blast_radius>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py</git_diff_files>
+    <manifest_files>pipeline.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <changes_summary>
+    <change id="Blocker1">_check_codex_review_required: actual_model_verified is False → is not True (None도 FAIL 처리)</change>
+    <change id="Blocker2">CODEX_REQUIRED_FIELDS에 6개 필드 추가: requested_model_id, actual_model_id, actual_model_verified, actual_model_source, review_provider, raw_output_path</change>
+    <change id="Blocker3">cmd_review_codex_record: ACCEPT 시 evidence JSON의 actual_model_verified=True AND actual_model_id=gpt-5.5 검증 블록 추가. new_record에 6개 필드 기본값 추가</change>
+    <change id="Blocker4">history loop: actual_model_verified is True AND actual_model_id == CODEX_REQUIRED_MODEL_ID 조건 추가</change>
+    <change id="Blocker5">_codex_run_via_codex_cli, _codex_run_via_openai_api, fallback 3곳에서 .strip().lower() → .strip() (gpt-5.5 대소문자 exact match 보존)</change>
+  </changes_summary>
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+</module_handover>
