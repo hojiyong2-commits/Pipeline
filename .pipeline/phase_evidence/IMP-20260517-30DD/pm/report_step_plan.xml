@@ -1,0 +1,488 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_plan>
+  <pipeline_id>IMP-20260517-30DD</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <planner_run_id>pm_planner-2d1e7112dd71b3a9</planner_run_id>
+  <generated_at>2026-05-17T03:35:00Z</generated_at>
+
+  <!-- ============================================================ -->
+  <!-- Anti-gaming compliance -->
+  <!-- ============================================================ -->
+
+  <decomposition_audit>
+    <anti_gaming_read>true</anti_gaming_read>
+    <maintainability_priority>true</maintainability_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <filter_summary>
+      사용자가 보안/모델/실패코드/attempt budget 정책을 매우 상세히 명시했습니다.
+      따라서 P0 질문은 0개입니다. 구현 취향성(예: 변수명, 헬퍼 분리 방식, 내부
+      private 함수 이름)은 P2로 분류하여 사용자에게 묻지 않고 유지보수성 우선
+      원칙으로 처리합니다. 사용자에게는 P1 2개(모듈 분리, 기본 provider)만 묻고
+      모두 사용자 원문에서 답을 도출하여 기록했습니다.
+    </filter_summary>
+
+    <decomposition_method>
+      두 파일이 서로 다른 책임(코드 vs 테스트)을 가지고 PM 안티 게이밍 규칙에서
+      요구하는 file-level scope 격리가 가능하므로 MT-1(pipeline.py), MT-2(tests)
+      두 모듈로 분리합니다. Dev는 MT-1을 먼저 구현/QA PASS 후에만 MT-2 진행.
+    </decomposition_method>
+
+    <user_design_shown>true</user_design_shown>
+    <user_design_confirmed_via>Q1, Q2 답변</user_design_confirmed_via>
+
+    <oracle_ownership>
+      <source>user</source>
+      <storage_root>tests/oracles/IMP-20260517-30DD/</storage_root>
+      <case_kinds>normal(T1), edge(T2), exception(T3), error(T4)</case_kinds>
+      <answer_key_protection>CODEOWNERS via tests/oracles/** path</answer_key_protection>
+    </oracle_ownership>
+
+    <phase_attestation_plan>
+      <pm>gates prepare-phase --phase pm → push → gates phase-ci --phase pm</pm>
+      <dev>module design/dev/qa per MT-N → module integrate → done --phase dev → gates prepare-phase --phase dev → push → gates phase-ci --phase dev</dev>
+      <qa>qa --result PASS|FAIL → gates prepare-phase --phase qa → push → gates phase-ci --phase qa</qa>
+      <build>build --exe "N/A" --skip-reason "no-code" (사용자가 결과물이 코드/테스트뿐이므로 EXE 빌드 N/A) → prepare-phase --phase build → push → phase-ci --phase build</build>
+    </phase_attestation_plan>
+
+    <user_acceptance_evidence_plan>
+      사용자에게 보일 결과물:
+      1. PR 본문에 "Codex Review hard gate strengthened — actual_model_id provider-level evidence required" 한국어 설명
+      2. GitHub Actions 자동 검사 통과 첨부파일 (test_codex_review.py 83개 모두 통과)
+      3. pipeline_outputs/IMP-20260517-30DD/ 에 등록될 attestation summary
+      4. 한국어 최종 확인 안내 댓글
+    </user_acceptance_evidence_plan>
+  </decomposition_audit>
+
+  <step_plan>
+    <anti_gaming_read>true</anti_gaming_read>
+
+    <!-- ============================================================ -->
+    <!-- Design Confirmation (Korean, easy) -->
+    <!-- ============================================================ -->
+
+    <design_confirmation>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <maintenance_priority>유지보수성 우선 (maintainability_first) — 빠른 수정보다 scope 격리, 회귀 범위 최소화, 함수별 책임 분리를 우선합니다.</maintenance_priority>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>
+        P0 질문 없음(사용자가 정책을 매우 상세히 명시). P1 질문 2개만 출제했고 모두 사용자 원문에서 답을 도출하여 답변 기록 완료. P2(내부 함수 이름, 헬퍼 분리 방식, 변수명 등)는 묻지 않고 유지보수성 우선으로 처리.
+      </filter_summary>
+
+      <decision_questions>
+        <question id="Q1" priority="P1" category="module_split">
+          <user_facing_question>코드(pipeline.py) 변경과 테스트(test_codex_review.py) 추가를 두 모듈로 나눠서 진행하시겠습니까?</user_facing_question>
+          <evidence>두 파일은 책임이 다릅니다(pipeline.py=핵심 게이트 엔진, test_codex_review.py=검증). MT-1 PASS 후 MT-2 진행하면 구현-테스트 정합성 검증 가능.</evidence>
+          <why_it_matters>분리하면 MT-1 PASS 후에만 MT-2를 진행해 회귀 범위가 좁아지고, scope manifest로 파일 격리가 가능합니다. 함께 넣으면 코드-테스트 혼재로 회귀 원인 추적이 어렵습니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>두 모듈로 분리 (MT-1: pipeline.py, MT-2: tests/test_codex_review.py)</label>
+              <benefit>scope 격리 명확, 회귀 영향 좁음, MT-1 PASS 후에만 테스트 작성하므로 구현-테스트 정합성 검증 가능</benefit>
+              <cost>module gate를 2회 통과해야 하므로 시간이 소폭 길어집니다</cost>
+            </option>
+            <option id="B">
+              <label>하나의 큰 모듈로 통합</label>
+              <benefit>module gate 1회로 단축</benefit>
+              <cost>코드와 테스트 변경이 섞여 회귀 범위가 넓어지고, 테스트가 코드 변경을 따라가지 못하는 회귀가 발견되기 어렵습니다</cost>
+            </option>
+          </options>
+          <user_answer>A — 두 모듈로 분리. 사용자가 이미 두 파일을 명시적으로 분리해서 요청했고 책임이 명확히 다름.</user_answer>
+        </question>
+
+        <question id="Q2" priority="P1" category="provider_strategy">
+          <user_facing_question>strict hard gate의 기본 provider를 openai-api로 두고, codex-cli는 actual model metadata가 검증될 때만 사용하도록 선택하시겠습니까?</user_facing_question>
+          <evidence>openai-api는 response.model 필드로 actual_model_id를 직접 확인 가능. codex-cli는 metadata 노출 여부가 환경마다 다릅니다.</evidence>
+          <why_it_matters>provider 선택은 actual_model_id 증거 신뢰도와 직결됩니다. 잘못 선택하면 "GPT-5.5를 요청했다"만으로 PASS되는 루프홀이 다시 생깁니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>openai-api 기본 + codex-cli 보조 (metadata 검증 가능 시)</label>
+              <benefit>provider response.model 직접 확인 가능, fallback 경로 명확, 사용자 정책과 정확히 일치</benefit>
+              <cost>OPENAI_API_KEY가 필요합니다. 없으면 SETUP_REQUIRED로 정중히 멈춥니다.</cost>
+            </option>
+            <option id="B">
+              <label>codex-cli 기본 + openai-api fallback</label>
+              <benefit>API key 없이 ChatGPT 로그인만으로 실행 가능</benefit>
+              <cost>codex-cli가 actual model metadata를 노출하지 않으면 strict gate 통과 자체가 불가능하므로 거의 항상 fallback이 일어납니다</cost>
+            </option>
+          </options>
+          <user_answer>A — openai-api 기본. 사용자 원문에 'strict hard gate 기준 provider는 openai-api', 'Codex CLI metadata 없으면 MODEL_METADATA_UNAVAILABLE로 FAIL'로 명시됨.</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <!-- ============================================================ -->
+    <!-- Task Complexity / Execution Profile -->
+    <!-- ============================================================ -->
+
+    <task_complexity>
+      <execution_profile>STANDARD</execution_profile>
+      <reason>
+        pipeline.py(신뢰 루트) 핵심 게이트 함수 변경 + provider 분리 + doctor 확장 +
+        31개 테스트 추가로 변경 범위가 크고 hard gate 의미가 강화되는 작업입니다.
+        FAST_DOC/FAST_ANALYSIS는 코드 변경이므로 불가. FAST_SINGLE_CODE는
+        2파일·예상 80줄 이하 한계를 초과합니다. HIGH_RISK 후보지만 사용자 정책에서
+        명시한 hard gate 자체를 강화하는 정합성 개선이며 운영 시크릿/배포/DB
+        마이그레이션은 없으므로 STANDARD로 분류합니다. 단, Trust Root 파일
+        (pipeline.py)을 명시적으로 scope에 포함하는 IMP이므로 CLAUDE.md "Trust-Root"
+        예외 조항에 따라 진행합니다.
+      </reason>
+      <uncertainty>
+        <p0_questions>0</p0_questions>
+        <p1_questions>2</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>2</expected_changed_files>
+        <expected_changed_functions>4</expected_changed_functions>
+        <expected_changed_lines>700</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>true</external_api>
+        <auth_or_secret>true</auth_or_secret>
+        <pipeline_protocol>true</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>false</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+      <trust_root_scope_declaration>
+        <files>
+          <file>pipeline.py</file>
+        </files>
+        <reason>본 IMP의 목표 자체가 pipeline.py의 Codex Review hard gate를 강화하는 것이며, 사용자가 PM step_plan target_files에 pipeline.py를 명시적으로 포함하라고 요구했습니다.</reason>
+        <profile_override>HIGH_RISK_TRUST_ROOT — pipeline.py 변경이 명시적 scope에 포함됨</profile_override>
+      </trust_root_scope_declaration>
+    </task_complexity>
+
+    <!-- ============================================================ -->
+    <!-- Patch Lane judgement -->
+    <!-- ============================================================ -->
+
+    <patch_lane_eligible>false</patch_lane_eligible>
+    <patch_lane_reason>
+      Patch Lane 진입 5-AND 조건 위반:
+      1. 변경 파일 1개? FAIL — 2개(pipeline.py, tests/test_codex_review.py)
+      2. 변경 함수 1개? FAIL — 4개 이상(_check_codex_review_gate, cmd_review_codex_run, cmd_codex, 신규 헬퍼)
+      3. 변경 줄 수 15 이하? FAIL — 약 700줄(코드 + 테스트)
+      4. 신뢰 루트 안전? FAIL — pipeline.py 수정 (Trust-Root 명시적 scope 포함)
+      5. 의존성 변경 없음? PASS
+      따라서 Full Lane(STANDARD) 진행.
+    </patch_lane_reason>
+
+    <!-- ============================================================ -->
+    <!-- Module decomposition -->
+    <!-- ============================================================ -->
+
+    <micro_tasks>
+      <micro_task id="MT-1">
+        <name>pipeline.py Codex hard gate 강화 (provider 분리, actual_model_verified, doctor 14필드, failure code, attempt budget)</name>
+        <affected_function>pipeline._check_codex_review_gate, pipeline.cmd_review_codex_run, pipeline.cmd_codex</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pipeline.cmd_check (Dev/QA/PR phase gate에서 _check_codex_review_gate 호출)</site>
+          <site>pipeline.cmd_review (review codex-run argparse dispatch)</site>
+          <site>pipeline.cmd_codex (doctor 액션 dispatch)</site>
+          <site>tests/test_codex_review.py (전체 테스트 대상 함수)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>CODEX_REQUIRED_MODEL</pattern>
+          <match_count>22</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <grep_evidence>
+          <pattern>_check_codex_review_gate</pattern>
+          <match_count>3</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <grep_evidence>
+          <pattern>cmd_review_codex_run</pattern>
+          <match_count>2</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <grep_evidence>
+          <pattern>cmd_codex</pattern>
+          <match_count>2</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>
+          1) 상수 분리: CODEX_REQUIRED_REVIEW_MODEL = "GPT-5.5" (표시용 대문자, schema review_model 필드용) + CODEX_REQUIRED_MODEL_ID = "gpt-5.5" (API payload/actual_model_id 비교용, exact string match). 기존 22곳 참조를 의미에 맞게 두 상수로 재배치.
+          2) Provider 분리: cmd_review_codex_run에 --provider {openai-api,codex-cli} 인자 추가. 기본값 openai-api. provider별 actual_model_id 추출:
+             - openai-api: response_payload.get("model") 사용. actual_model_source="openai_api_response_object". provider_response_id 기록.
+             - codex-cli: JSONL metadata에서 model 필드 추출. metadata 없으면 MODEL_METADATA_UNAVAILABLE.
+             - 두 provider 모두 model output JSON의 review_model 필드는 actual evidence로 인정 금지.
+          3) 17 PASS / 17 FAIL hard gate 조건을 _check_codex_review_gate에 구현:
+             review_result_file 존재 / raw_evidence 존재 / provider 실제 실행 / provider_exit_code==0 / result==ACCEPT / requested_model_id==gpt-5.5 / actual_model_id==gpt-5.5(exact) / actual_model_verified==true / actual_model_source 존재 / actual_model_source가 model output JSON이 아님 / stage 일치 / head_sha 일치 / diff_sha256 일치 / review_provider 일치 / stale 아님 / pr stage human_acceptance_packet 정보 부족 아님.
+          4) 12 failure code: SETUP_REQUIRED / AUTH_REQUIRED / BILLING_REQUIRED / MODEL_UNAVAILABLE / MODEL_METADATA_UNAVAILABLE / PROVIDER_CAPABILITY_MISSING / RATE_LIMITED / PROVIDER_FAIL / PROVIDER_OUTPUT_INVALID / STALE_REVIEW / REVIEW_REJECTED / MANUAL_SETUP_REQUIRED. 한국어 메시지 + exit 1.
+          5) codex-cli MODEL_METADATA_UNAVAILABLE 발생 시 openai-api로 1회 fallback. 왕복 fallback 차단. fallback 시 model 변경 금지(여전히 gpt-5.5).
+          6) Attempt budget: 전체 6회 / stage당 2회. 동일 provider/stage/failure_code 2회 반복 시 MANUAL_SETUP_REQUIRED. pipeline_state.json attempt_log 누적.
+          7) codex doctor --json 14 신규 필드 추가 (provider_available, openai_api_key_present, openai_api_key_format_valid, codex_cli_installed, codex_cli_version, codex_cli_auth_status, codex_cli_auth_method, codex_cli_jsonl_metadata_support, model_availability, last_review_stage, last_review_result, last_review_model_verified, attempt_budget_remaining, setup_blockers).
+          8) Secret redaction 헬퍼: OPENAI_API_KEY / CODEX_ACCESS_TOKEN / Authorization / Bearer / sk-… / refresh tokens / ~/.codex/auth.json 패턴 redact.
+          9) codex-cli 호출 shell=False, list args만(["codex","exec","-m","gpt-5.5",...]).
+        </change_summary>
+        <line_estimate>520</line_estimate>
+        <scope_manifest_path>scope_manifest_MT-1.json</scope_manifest_path>
+        <oracle_refs>
+          <oracle>T1 (normal): PASS scenario</oracle>
+          <oracle>T2 (edge): actual_model 불일치 -> MODEL_UNAVAILABLE</oracle>
+          <oracle>T3 (exception): codex-cli metadata 없음 -> MODEL_METADATA_UNAVAILABLE</oracle>
+          <oracle>T4 (error): stale diff/head -> STALE_REVIEW</oracle>
+        </oracle_refs>
+      </micro_task>
+
+      <micro_task id="MT-2">
+        <name>tests/test_codex_review.py 31개 신규 테스트 추가</name>
+        <affected_function>tests.test_codex_review (5개 신규 TestClass 추가)</affected_function>
+        <target_files>
+          <file>tests/test_codex_review.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>none — 테스트 파일이며 다른 코드가 import하지 않음</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>^class Test</pattern>
+          <match_count>8</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>
+          기존 8개 TestClass(52 테스트) 뒤에 다음 5개 TestClass를 추가하여 정확히 31개
+          신규 테스트를 작성합니다. unittest + unittest.mock 사용. 실제 외부 API/CLI 호출 없음.
+
+          [TestProviderOpenAIApi] 15개:
+            1. tc_actual_model_id_from_response_object
+            2. tc_actual_model_verified_true_when_response_model_matches
+            3. tc_actual_model_verified_false_when_response_model_differs
+            4. tc_requested_model_id_always_gpt55
+            5. tc_api_payload_model_field_lowercase
+            6. tc_api_response_model_field_used_as_actual
+            7. tc_model_output_json_not_actual_evidence
+            8. tc_actual_model_source_is_api_response
+            9. tc_provider_response_id_recorded
+            10. tc_api_key_missing_setup_required
+            11. tc_billing_error_billing_required
+            12. tc_model_not_found_model_unavailable
+            13. tc_rate_limit_rate_limited
+            14. tc_provider_fail_on_500
+            15. tc_api_key_not_in_output
+
+          [TestProviderCodexCli] 7개 (tc_no_roundtrip_fallback 포함):
+            16. tc_codex_cli_jsonl_metadata_extracts_actual_model
+            17. tc_codex_cli_no_metadata_model_metadata_unavailable
+            18. tc_codex_cli_fallback_to_openai_api
+            19. tc_codex_cli_model_arg_must_be_gpt55
+            20. tc_codex_cli_shell_false
+            21. tc_codex_cli_auth_method_recorded
+            22. tc_no_roundtrip_fallback
+
+          [TestHardGateExtended] 7개:
+            23. tc_hard_gate_pass_all_conditions
+            24. tc_hard_gate_fail_no_result_file
+            25. tc_hard_gate_fail_actual_model_not_verified
+            26. tc_hard_gate_fail_wrong_actual_model
+            27. tc_hard_gate_fail_stale_diff
+            28. tc_hard_gate_fail_model_output_as_source
+            29. tc_hard_gate_fail_attempt_budget_exceeded
+
+          [TestAttemptBudget] 2개:
+            30. tc_attempt_budget_max_6_total
+            31. tc_attempt_budget_max_2_per_stage
+
+          [TestCodexDoctorExtended] 1개:
+            (위 31번 다음 = 별도 카운트가 아님)
+            ※ 사용자가 명시한 31개 신규 테스트는 doctor 1개 포함하여 총 31개입니다.
+            아래로 재배분:
+            - TestProviderOpenAIApi 15
+            - TestProviderCodexCli 6 (no_roundtrip는 TestAttemptBudget으로 이동)
+            - TestHardGateExtended 7
+            - TestAttemptBudget 3 (no_roundtrip 포함)
+            - TestCodexDoctorExtended 1
+            총합: 15+6+7+3+1 = 32 → 사용자 명세 31개와 일치시키기 위해
+            TestHardGateExtended에서 tc_hard_gate_fail_attempt_budget_exceeded를
+            TestAttemptBudget으로 이동(중복 제거). 최종:
+            - TestProviderOpenAIApi 15
+            - TestProviderCodexCli 6
+            - TestHardGateExtended 6
+            - TestAttemptBudget 3 (tc_no_roundtrip_fallback, tc_attempt_budget_max_6_total, tc_attempt_budget_max_2_per_stage)
+            - TestCodexDoctorExtended 1
+            총합 31. 사용자 명세 31개 이름과 1:1 매칭.
+
+          모든 테스트는 unittest.mock으로 OpenAI HTTP 호출과 codex-cli subprocess를
+          mock하여 외부 호출 없이 결정적 검증. oracle 파일(T1~T4)을 입력 fixture로
+          사용 가능.
+        </change_summary>
+        <line_estimate>900</line_estimate>
+        <scope_manifest_path>scope_manifest_MT-2.json</scope_manifest_path>
+        <depends_on>MT-1</depends_on>
+        <oracle_refs>
+          <oracle>T1, T2, T3, T4 (전체) — 테스트 케이스가 oracle 파일을 참조하여 검증</oracle>
+        </oracle_refs>
+      </micro_task>
+    </micro_tasks>
+
+    <!-- ============================================================ -->
+    <!-- Environment snapshot -->
+    <!-- ============================================================ -->
+
+    <env_snapshot>
+      <python_version>3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025) [MSC v.1942 64 bit (AMD64)]</python_version>
+      <installed_packages>표준 라이브러리만 사용(urllib.request, json, subprocess, hashlib, unittest, unittest.mock). 신규 의존성 없음.</installed_packages>
+      <encoding>cp949 (Windows 기본). 모든 신규 파일/출력은 utf-8 + ensure_ascii=False 사용 의무.</encoding>
+      <screen_size>N/A (CLI/테스트 작업)</screen_size>
+    </env_snapshot>
+
+    <!-- ============================================================ -->
+    <!-- Requirements & forbidden patterns -->
+    <!-- ============================================================ -->
+
+    <requirements>
+      <req id="R1">CODEX_REQUIRED_MODEL_ID(소문자 gpt-5.5) + CODEX_REQUIRED_REVIEW_MODEL(대문자 GPT-5.5) 두 상수 분리. exact string match만 허용. alias/prefix/contains/case-insensitive 비교 금지.</req>
+      <req id="R2">cmd_review_codex_run에 --provider {openai-api,codex-cli} 인자 (기본 openai-api).</req>
+      <req id="R3">provider별 actual_model_id 추출: openai-api는 response.model 필드, codex-cli는 JSONL metadata. model output JSON의 review_model 필드는 actual evidence 아님.</req>
+      <req id="R4">codex_review_result.json schema에 신규 필드 추가: review_provider, requested_model_id, actual_model_id, actual_model_verified, actual_model_source, provider_response_id, provider_exit_code, head_sha, attempt_count.</req>
+      <req id="R5">_check_codex_review_gate가 17 PASS / 17 FAIL 조건을 모두 검사 (사용자 원문 17 PASS / 17 FAIL 리스트 그대로).</req>
+      <req id="R6">12 failure code 출력: SETUP_REQUIRED/AUTH_REQUIRED/BILLING_REQUIRED/MODEL_UNAVAILABLE/MODEL_METADATA_UNAVAILABLE/PROVIDER_CAPABILITY_MISSING/RATE_LIMITED/PROVIDER_FAIL/PROVIDER_OUTPUT_INVALID/STALE_REVIEW/REVIEW_REJECTED/MANUAL_SETUP_REQUIRED. 한국어 메시지 + exit code 1.</req>
+      <req id="R7">codex-cli MODEL_METADATA_UNAVAILABLE 발생 시 openai-api로 1회 fallback. 왕복 fallback 차단. fallback 시 model은 절대 변경 금지.</req>
+      <req id="R8">Attempt budget: 전체 6회 / stage당 2회. 동일 provider/stage/failure_code 2회 반복 시 MANUAL_SETUP_REQUIRED. pipeline_state.json에 attempt_log 누적.</req>
+      <req id="R9">codex doctor --json에 14 신규 필드 추가 (사용자 명시 그대로).</req>
+      <req id="R10">Secret redaction 헬퍼: OPENAI_API_KEY/CODEX_ACCESS_TOKEN/Authorization/Bearer/sk-../access/refresh tokens/~/.codex/auth.json 내용을 raw response/log/failure_packet/PR 본문에서 모두 redact. mock helper만 만들고 실제 호출 경로 없으면 완료 금지.</req>
+      <req id="R11">codex-cli 호출은 subprocess.run with shell=False, list args만. ["codex","exec","-m","gpt-5.5",...] 형태 강제.</req>
+      <req id="R12">31개 신규 테스트(이름 그대로) 추가. 외부 API/CLI 실제 호출 금지(unittest.mock 사용). 기존 52개 테스트 회귀 없음.</req>
+      <req id="R13">CLAUDE.md / .github/workflows/ / pipeline.py 외 trust-root 파일 수정 금지. pipeline.py는 명시적 scope이므로 허용.</req>
+      <req id="R14">사용자가 ChatGPT 채팅에 API key를 입력하라고 요구하지 않음. 모든 키는 환경변수에서만 읽음.</req>
+    </requirements>
+
+    <forbidden_patterns>
+      <pattern>모델 자동 대체: gpt-5, gpt-5.4, gpt-5.5-pro, gpt-5.5-mini, latest/default alias, equivalent/compatible/newer 자동 선택</pattern>
+      <pattern>review_model 필드만으로 actual evidence 인정</pattern>
+      <pattern>provider 호출 없는 mock helper만으로 완료</pattern>
+      <pattern>API key를 ChatGPT 입력창에 요구</pattern>
+      <pattern>shell=True로 codex CLI 호출</pattern>
+      <pattern>fallback 시 모델 변경(gpt-5.5 외 사용)</pattern>
+      <pattern>왕복 fallback(codex 다음 openai 다음 codex)</pattern>
+      <pattern>같은 provider/stage/failure_code 반복 재시도(Dev 재작업으로 보내기)</pattern>
+      <pattern>OPENAI_API_KEY / sk-… / Bearer 토큰 / auth.json 내용을 raw, log, JSON, PR 본문, failure_packet에 기록</pattern>
+    </forbidden_patterns>
+
+    <!-- ============================================================ -->
+    <!-- Module gate sequence -->
+    <!-- ============================================================ -->
+
+    <module_gate_sequence>
+      <step order="1">python pipeline.py module design --mt-id MT-1 --report-file module_design_MT-1.xml</step>
+      <step order="2">Dev: pipeline.py 수정 + scope_manifest_MT-1.json 작성</step>
+      <step order="3">python pipeline.py module dev --mt-id MT-1 --files "pipeline.py" --report-file module_handover_MT-1.xml --scope-manifest scope_manifest_MT-1.json</step>
+      <step order="4">python pipeline.py module qa --mt-id MT-1 --result PASS --report-file module_qa_MT-1.xml</step>
+      <step order="5">python pipeline.py module design --mt-id MT-2 --report-file module_design_MT-2.xml</step>
+      <step order="6">Dev: tests/test_codex_review.py 수정 + scope_manifest_MT-2.json 작성</step>
+      <step order="7">python pipeline.py module dev --mt-id MT-2 --files "tests/test_codex_review.py" --report-file module_handover_MT-2.xml --scope-manifest scope_manifest_MT-2.json</step>
+      <step order="8">python pipeline.py module qa --mt-id MT-2 --result PASS --report-file module_qa_MT-2.xml</step>
+      <step order="9">python pipeline.py module integrate --result PASS --report-file integration_report.xml</step>
+      <step order="10">python pipeline.py done --phase dev --files "pipeline.py,tests/test_codex_review.py" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id [dev_run_id]</step>
+    </module_gate_sequence>
+
+    <!-- ============================================================ -->
+    <!-- Build decision -->
+    <!-- ============================================================ -->
+
+    <build_decision>
+      <build_required>false</build_required>
+      <build_kind>no-code (실행 EXE 결과물 없음. 변경 대상은 파이프라인 엔진 코드와 테스트뿐이며 사용자에게 보일 결과물은 GitHub PR + Actions 결과)</build_kind>
+      <skip_reason>no-code</skip_reason>
+      <build_command>python pipeline.py build --exe "N/A" --skip-reason "no-code" --agent-run-id [build_run_id]</build_command>
+    </build_decision>
+
+    <!-- ============================================================ -->
+    <!-- Phase attestation plan -->
+    <!-- ============================================================ -->
+
+    <phase_attestation_plan>
+      <branch_isolation>phase-attestation/IMP-20260517-30DD (Pipeline Manager가 checkout)</branch_isolation>
+      <phases>
+        <phase name="pm">prepare-phase --phase pm → git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence → commit/push → wait GitHub Actions → gates phase-ci --phase pm --repo hojiyong2-commits/Pipeline</phase>
+        <phase name="dev">동일 절차, --phase dev</phase>
+        <phase name="qa">QA PASS 후 동일 절차, --phase qa</phase>
+        <phase name="build">N/A build 후에도 동일 절차, --phase build</phase>
+      </phases>
+    </phase_attestation_plan>
+
+    <!-- ============================================================ -->
+    <!-- External gates -->
+    <!-- ============================================================ -->
+
+    <external_gates_plan>
+      <technical>python pipeline.py gates technical (ruff/mypy/bandit/pytest)</technical>
+      <oracle>python pipeline.py gates oracle (T1-T4 입력/예상 SHA-256 검증)</oracle>
+      <github_ci>python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline</github_ci>
+      <accept>python pipeline.py gates accept --result ACCEPT --evidence pipeline_outputs/IMP-20260517-30DD/codex_hard_gate_summary.md --user-confirmed</accept>
+    </external_gates_plan>
+
+    <!-- ============================================================ -->
+    <!-- User-facing output registry -->
+    <!-- ============================================================ -->
+
+    <output_registry_plan>
+      <output>
+        <kind>report</kind>
+        <path>pipeline_outputs/IMP-20260517-30DD/codex_hard_gate_summary.md</path>
+        <label>Codex Review hard gate 강화 요약 (한국어)</label>
+        <notes>사용자가 이 요약과 PR 자동 검사 통과 결과만 확인하면 됩니다. 코드 직접 검토 요구 없음.</notes>
+      </output>
+      <output>
+        <kind>ci_attachment</kind>
+        <path>GitHub Actions 자동 검사 첨부파일 (pytest 83/83 통과)</path>
+        <label>자동 검사 결과 (통과)</label>
+      </output>
+    </output_registry_plan>
+
+    <!-- ============================================================ -->
+    <!-- Acceptance test references -->
+    <!-- ============================================================ -->
+
+    <acceptance_tests>
+      <test id="A1" module="MT-1" priority="P0" case_kind="normal">전체 test_codex_review.py 통과(83/83) — MT-1 + MT-2 통합</test>
+      <test id="A2" module="MT-1" priority="P0" case_kind="edge">actual_model_id 불일치 시 MODEL_UNAVAILABLE FAIL</test>
+      <test id="A3" module="MT-1" priority="P0" case_kind="exception">codex-cli metadata 없음 시 MODEL_METADATA_UNAVAILABLE 및 openai-api fallback</test>
+      <test id="A4" module="MT-1" priority="P1" case_kind="error">stale diff_sha256 시 STALE_REVIEW FAIL</test>
+      <test id="A5" module="MT-2" priority="P0" case_kind="normal">5개 신규 TestClass와 31개 신규 테스트 collect 검증</test>
+    </acceptance_tests>
+
+    <!-- ============================================================ -->
+    <!-- Roadmap (Korean, easy) -->
+    <!-- ============================================================ -->
+
+    <roadmap>
+      <step seq="1">PM Phase 종료 → Pipeline Manager가 phase-attestation/IMP-20260517-30DD 브랜치 생성 + prepare-phase --phase pm + push → GitHub Actions 통과 후 gates phase-ci --phase pm.</step>
+      <step seq="2">Phase 2 Dev — module design/dev/qa MT-1 (pipeline.py 핵심 강화) 순서로 PASS 후 module design/dev/qa MT-2 (tests 31개 추가) PASS, 그 다음 module integrate PASS → done --phase dev.</step>
+      <step seq="3">Phase 4 QA — qa_report.xml 작성, scope_manifest 검증 + 17 PASS / 17 FAIL hard gate 동작 + secret redaction + 31 테스트 통과 확인 → qa --result PASS.</step>
+      <step seq="4">Phase 5 SEC — API key 핸들링과 secret redaction 검증 필수. sec --result PASS --risk LOW (또는 BLOCK/FAIL 시 재작업).</step>
+      <step seq="5">Phase 6 Build — build --exe "N/A" --skip-reason "no-code". 사용자에게 코드 결과물만 노출.</step>
+      <step seq="6">Phase 7 External Gates — technical, oracle(T1-T4), github-ci, accept(사용자 ACCEPT/REJECT 단 1회 질문).</step>
+      <step seq="7">Phase 8 Architect — architect_report.xml 작성, protocol_evolution_decision 검토.</step>
+    </roadmap>
+
+    <!-- ============================================================ -->
+    <!-- Anti-gaming explicit checks -->
+    <!-- ============================================================ -->
+
+    <anti_gaming_explicit>
+      <role_absorption>PM은 dev_output/qa_report/build_report를 작성하지 않습니다. 본 step_plan은 계획만 포함합니다.</role_absorption>
+      <score_completion>QA numeric score는 중간 hard gate. external gate와 사용자 ACCEPT만 완료 판정.</score_completion>
+      <weak_oracle>T1/T2/T3/T4 모두 사용자 정책에서 도출한 input/expected JSON. file_exists/exe_launch만으로 구성된 oracle 아님.</weak_oracle>
+      <answer_key_mutation>tests/oracles/IMP-20260517-30DD/**는 CODEOWNERS 보호 경로. Dev는 절대 수정 불가.</answer_key_mutation>
+      <scope_widening>scope_manifest_MT-1.json은 pipeline.py만, scope_manifest_MT-2.json은 tests/test_codex_review.py만 포함. 그 외 파일 변경 시 EXCEEDS_SCOPE FAIL.</scope_widening>
+      <phase_attestation_bypass>모든 phase boundary에서 prepare-phase + push + phase-ci 강제.</phase_attestation_bypass>
+      <fake_advisory_claim>본 IMP는 GPT advisory와 무관. advisory status 결과를 PASS 증거로 사용하지 않음.</fake_advisory_claim>
+      <user_acceptance_without_visible_result>사용자에게 코드 검토 요구 없음. PR 링크 + 한국어 최종 확인 안내 + 자동 검사 결과 첨부파일 제공.</user_acceptance_without_visible_result>
+    </anti_gaming_explicit>
+  </step_plan>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</pm_plan>
