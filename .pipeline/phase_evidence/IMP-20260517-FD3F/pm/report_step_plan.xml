@@ -1,0 +1,389 @@
+<?xml version="1.0" encoding="utf-8"?>
+<step_plan_root>
+
+  <decomposition_audit>
+    <pipeline_id>IMP-20260517-FD3F</pipeline_id>
+    <task_type>IMP</task_type>
+    <task_summary>
+      Codex pr gate 완성: pipeline.py `_check_codex_pr_gate_for_technical` 함수에서
+      (1) codex_review_result.json 파일이 없으면 FAIL을 반환하도록 변경하고,
+      (2) top-level pr ACCEPT 및 history pr ACCEPT 모두 actual_model_verified=true,
+      actual_model_id == "gpt-5.5" (CODEX_REQUIRED_MODEL_ID exact), actual_model_source가
+      model_output_json이 아님을 추가 검증하도록 강화합니다.
+      또한 tests/test_codex_review.py에 회귀 테스트 클래스 TestPrGateActualModel(4개 케이스)을
+      추가하여 향후 동일한 루프홀이 재발하지 않도록 합니다.
+    </task_summary>
+
+    <root_cause_of_prior_reject>
+      IMP-20260517-CD57 PR #97에서 codex_review_result.json이 없거나 actual_model 검증이
+      비어 있어도 _check_codex_pr_gate_for_technical이 None을 반환하여 technical gate를
+      통과시켰습니다. 이 결과 codex-run 없이도 pr stage가 인정되는 우회 경로가 살아 있었고
+      사용자 ACCEPT 단계에서 REJECT 처리되었습니다. 본 IMP는 그 함수의 검증 로직만을
+      외과적으로 보완합니다.
+    </root_cause_of_prior_reject>
+
+    <files_in_scope>
+      <file role="primary">pipeline.py</file>
+      <file role="primary">tests/test_codex_review.py</file>
+    </files_in_scope>
+
+    <files_explicitly_out_of_scope>
+      <file>_check_codex_review_gate (라인 3804~3832 부근 — 이미 동일 검증 보유, 변경 불필요)</file>
+      <file>CODEX_REQUIRED_MODEL_ID 상수 정의 (pipeline.py 3569) — 변경하지 않음</file>
+      <file>cmd_review_codex_record (codex-record 명령 핸들러) — 별도 IMP 책임</file>
+      <file>.github/workflows/** — Trust-Root, 본 IMP scope 아님</file>
+      <file>CLAUDE.md, .claude/agents/** — 본 IMP는 코드/테스트만 수정</file>
+    </files_explicitly_out_of_scope>
+
+    <module_count>2</module_count>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <module_split_rationale>
+      변경 함수는 `_check_codex_pr_gate_for_technical` 1개이지만 회귀 테스트 추가를
+      포함해야 하므로 파일 단위 2개 모듈로 분할합니다. MT-1은 pipeline.py 함수 수정,
+      MT-2는 tests/test_codex_review.py에 회귀 테스트 4개 추가입니다. 테스트는
+      pipeline.py 변경의 정확성을 증명하는 oracle이므로 같은 파이프라인에서 묶음 패치합니다.
+    </module_split_rationale>
+
+    <patch_lane_eligible>false</patch_lane_eligible>
+    <patch_lane_reason>
+      변경 파일이 2개(pipeline.py, tests/test_codex_review.py)이므로 Patch Lane 1파일 조건을
+      충족하지 못합니다. STANDARD Full Lane으로 진행합니다.
+    </patch_lane_reason>
+
+    <anti_gaming_compliance>
+      <weak_oracle_avoided>true (P0 oracle 4개 모두 command_check + actual function behavior 검증)</weak_oracle_avoided>
+      <answer_key_owner>user (tests/oracles/IMP-20260517-FD3F/T1..T4/expected.json은 PM이 사용자 사양으로 작성, source=user)</answer_key_owner>
+      <scope_widening_blocked>true (Dev가 _check_codex_review_gate 또는 cmd_review_codex_record를 건드리면 scope 초과로 FAIL)</scope_widening_blocked>
+      <phase_attestation_planned>true (PM/Dev/QA/Build 4단계 모두 prepare-phase + GitHub Actions + phase-ci 실행)</phase_attestation_planned>
+    </anti_gaming_compliance>
+  </decomposition_audit>
+
+  <step_plan>
+
+    <anti_gaming_read>true</anti_gaming_read>
+
+    <design_confirmation>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <maintenance_priority>maintainability_first — 유지보수성 우선. 단일 함수 외과적 수정으로 일관성 확보.</maintenance_priority>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>
+        변수명, 들여쓰기, 에러 메시지 한국어 문장 표현, 함수 내부 helper 추출 여부 등 P2
+        수준의 내부 구현 취향 질문은 사용자에게 묻지 않고 유지보수성 우선 원칙으로
+        PM이 일임 결정합니다. 사용자에게는 함수 동작/계약 변경과 관련된 P0/P1 질문만
+        제시합니다.
+      </filter_summary>
+
+      <decision_questions>
+        <question id="Q0" priority="P1" category="module_split">
+          <user_facing_question>
+            이번 작업을 두 파일(pipeline.py 함수 수정, tests/test_codex_review.py 테스트 추가)로
+            나누어 순서대로 진행할까요? 아니면 단일 모듈로 묶어서 한 번에 처리할까요?
+          </user_facing_question>
+          <evidence>
+            변경 대상은 pipeline.py의 _check_codex_pr_gate_for_technical 함수 1개이지만,
+            회귀 테스트 4개를 tests/test_codex_review.py에 추가해야 해서 파일이 2개입니다.
+            MT-1(pipeline.py)을 먼저 완료한 뒤 MT-2(tests)를 진행해야 테스트가 올바른 함수를 검증합니다.
+          </evidence>
+          <why_it_matters>
+            MT-2 테스트가 MT-1 수정 완료 전에 작성되면 잘못된 함수를 테스트하게 됩니다.
+            순차 모듈 분할로 이 위험을 제거하고 QA 검증도 명확하게 분리됩니다.
+          </why_it_matters>
+          <recommended_option>OPT-A</recommended_option>
+          <options>
+            <option id="OPT-A">
+              <label>MT-1(pipeline.py) 먼저, MT-2(tests) 후순 — 순차 2모듈</label>
+              <benefit>MT-1 QA PASS 확인 후 MT-2 진입, 의존성 순서 보장. 각 모듈 QA가 명확히 분리됨.</benefit>
+              <cost>MT-2 시작 전 MT-1 완료를 기다려야 함. 총 처리 시간 약간 증가.</cost>
+            </option>
+            <option id="OPT-B">
+              <label>단일 모듈로 pipeline.py + tests 동시 수정</label>
+              <benefit>단일 커밋으로 완료. 더 빠를 수 있음.</benefit>
+              <cost>테스트가 수정 전 함수를 검증할 위험. QA가 두 파일 동시 검토로 복잡해짐.</cost>
+            </option>
+          </options>
+          <user_answer>OPT-A 채택 — 사용자 작업 지시 본문에 MT-1 후 MT-2 순차 진행이 명시되어 있음.</user_answer>
+        </question>
+
+        <question id="Q1" priority="P1" category="behavior">
+          <user_facing_question>
+            codex_review_result.json 파일이 디스크에 아예 없을 때, 수정된 함수가
+            None을 반환해서 통과시켜야 할까요? 아니면 FAIL 문자열을 반환해서 차단해야 할까요?
+          </user_facing_question>
+          <evidence>
+            pipeline.py 라인 3950~3954에서 if not review_path.exists(): return None 이
+            그대로 남아 있어 codex-run을 한 번도 안 한 파이프라인이 technical gate를
+            통과합니다. PR #97 REJECT 사유 중 Blocker 2의 핵심입니다.
+          </evidence>
+          <why_it_matters>
+            파일 없음을 통과로 인정하면 codex review 자체를 건너뛴 PR도 pr gate를
+            통과합니다. 이는 코드 리뷰 게이트의 존재 이유 자체를 무너뜨립니다.
+          </why_it_matters>
+          <recommended_option>OPT-A</recommended_option>
+          <options>
+            <option id="OPT-A">
+              <label>파일 없으면 즉시 FAIL 반환 (사용자 사양 그대로)</label>
+              <benefit>codex review 우회 경로 완전 차단. PR #97과 같은 REJECT 재발 방지.</benefit>
+              <cost>bootstrap_exception이 아닌 모든 새 파이프라인이 반드시 codex-run을 1회 이상 실행해야 함. 단, 본 함수 호출 지점이 이미 bootstrap_exception 분기로 감싸여 있어 레거시 영향 없음.</cost>
+            </option>
+            <option id="OPT-B">
+              <label>파일 없으면 경고만 출력하고 통과</label>
+              <benefit>변경이 최소. 기존 동작 보존.</benefit>
+              <cost>PR #97 REJECT 사유를 그대로 남김. 본 IMP의 존재 의의가 사라짐.</cost>
+            </option>
+          </options>
+          <user_answer>OPT-A 채택 — 사용자 작업 지시 본문에 "파일 없으면 FAIL" 명시됨.</user_answer>
+        </question>
+
+        <question id="Q2" priority="P1" category="behavior">
+          <user_facing_question>
+            history 배열의 pr ACCEPT 항목도 top-level pr ACCEPT와 동일하게
+            actual_model_verified=true + actual_model_id="gpt-5.5" + actual_model_source 검증을
+            적용할까요? 아니면 history는 약한 검증으로 인정할까요?
+          </user_facing_question>
+          <evidence>
+            pipeline.py history 루프는 result == "ACCEPT" 와 stage 존재만 확인합니다.
+            동일 파일의 _check_codex_review_gate는 이미 history 항목에 actual_model_verified=true와
+            actual_model_id 일치 검증을 적용하고 있어 두 함수의 검증 강도가 불일치합니다.
+          </evidence>
+          <why_it_matters>
+            history에서 "GPT-5.5" 대문자 같은 자기 신고 모델명을 인정하면
+            actual provider evidence 없이도 pr stage가 통과될 수 있습니다.
+          </why_it_matters>
+          <recommended_option>OPT-A</recommended_option>
+          <options>
+            <option id="OPT-A">
+              <label>history pr ACCEPT도 동일하게 actual_model_verified=true + actual_model_id exact + source 검증</label>
+              <benefit>_check_codex_review_gate와 일관된 검증. T4 oracle(history GPT-5.5 대소문자)이 차단됨.</benefit>
+              <cost>history의 옛 ACCEPT 항목 중 actual_model_* 필드가 비어 있는 것은 더 이상 인정되지 않음. IMP-20260517-CD57 이후 신규 record는 이 필드를 가지므로 실질 영향 없음.</cost>
+            </option>
+            <option id="OPT-B">
+              <label>history는 review_model="GPT-5.5"만 확인하는 약한 검증 유지</label>
+              <benefit>구현이 단순하고 기존 history 항목과 완전 하위 호환성 유지 가능.</benefit>
+              <cost>self-claim "GPT-5.5"만 채우면 history만으로 pr gate 우회 가능. 본 IMP의 의의 무력화.</cost>
+            </option>
+          </options>
+          <user_answer>OPT-A 채택 — 사용자 작업 지시 본문 "history pr ACCEPT 인정 조건에도 동일하게 추가" 명시됨.</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <task_complexity>
+      <execution_profile>STANDARD</execution_profile>
+      <reason>
+        2개 파일 변경(pipeline.py 함수 1개 + tests 회귀 4개)이고 신뢰 루트(pipeline.py)를
+        수정하므로 Fast Path 불가, HIGH_RISK 수준의 데이터 삭제/배포/인증 영향은 없으므로
+        STANDARD 일반 Incremental Module Gate 경로를 사용합니다.
+      </reason>
+      <uncertainty>
+        <p0_questions>0</p0_questions>
+        <p1_questions>2</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>2</expected_changed_files>
+        <expected_changed_functions>1</expected_changed_functions>
+        <expected_changed_lines>120</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>false</external_api>
+        <auth_or_secret>false</auth_or_secret>
+        <pipeline_protocol>true</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>false</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+      <pipeline_protocol_note>
+        pipeline.py 자체 수정이지만 단일 함수의 검증 강화이며 게이트 우회 가능성을
+        넓히지 않고 좁히는 방향입니다. Trust-Root 변경은 본 IMP scope에 명시되어 있어
+        규칙 위반이 아닙니다.
+      </pipeline_protocol_note>
+    </task_complexity>
+
+    <micro_tasks>
+
+      <micro_task id="MT-1">
+        <affected_function>pipeline._check_codex_pr_gate_for_technical</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pipeline.cmd_gates (technical action, line 9097: _codex_pr_gate_check = _check_codex_pr_gate_for_technical(state))</site>
+          <site>pipeline.cmd_gates (accept action, line 9249: _codex_pr_gate_check_accept = _check_codex_pr_gate_for_technical(state))</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>_check_codex_pr_gate_for_technical\(</pattern>
+          <match_count>3</match_count>
+          <files_found>pipeline.py(3개: def 1개, 호출 2개), tests/test_codex_review.py(2개 — MT-2가 추가 확장)</files_found>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>
+          _check_codex_pr_gate_for_technical을 다음과 같이 강화합니다:
+          (a) 파일 부재 시 None 대신 "[CODEX PR GATE] codex_review_result.json이 없습니다. pr stage ACCEPT가 필요합니다." 차단 메시지 반환.
+          (b) top-level pr ACCEPT 인정 조건에 actual_model_verified is True AND actual_model_id == CODEX_REQUIRED_MODEL_ID("gpt-5.5") AND actual_model_source가 model_output_json이 아님을 추가.
+          (c) history 루프의 pr ACCEPT 인정 조건에도 (b)와 동일한 검증을 적용.
+          (d) (선택, 사용자 사양에 따라) raw_output_path가 비어 있지 않으면 파일 존재 확인.
+          최종 함수는 위 조건을 모두 만족하는 pr ACCEPT 항목이 1개 이상일 때만 None을 반환합니다.
+        </change_summary>
+        <line_estimate>30</line_estimate>
+        <surgical_edit_constraints>
+          <must_not_change>
+            <item>CODEX_REQUIRED_MODEL_ID 상수 값(pipeline.py:3569 = "gpt-5.5")</item>
+            <item>_check_codex_review_gate 함수(pipeline.py:3804~)</item>
+            <item>cmd_gates의 호출 지점 라인 9097, 9249 (호출 시그니처 동일 유지)</item>
+            <item>bootstrap_exception 분기(라인 9095~9096, 9247~9248): 본 함수는 그대로 비-bootstrap 경로에서만 호출됨</item>
+          </must_not_change>
+          <must_change>
+            <item>라인 3950~3954: 파일 부재 시 None 반환을 차단 메시지 문자열 반환으로 변경</item>
+            <item>라인 3961~3968: top-level + history pr ACCEPT 인정 조건에 actual_model_* 3종 검증 추가</item>
+          </must_change>
+        </surgical_edit_constraints>
+        <oracle_binding>
+          <oracle id="O001" case_kind="normal">tests/oracles/IMP-20260517-FD3F/T1 (T1 정상 통과)</oracle>
+          <oracle id="O002" case_kind="edge">tests/oracles/IMP-20260517-FD3F/T2 (T2 파일 부재 = FAIL)</oracle>
+        </oracle_binding>
+        <gate>module design -> module dev -> module qa (PASS 필수)</gate>
+      </micro_task>
+
+      <micro_task id="MT-2">
+        <affected_function>tests.test_codex_review.TestPrGateActualModel (신규 클래스 4개 메서드)</affected_function>
+        <target_files>
+          <file>tests/test_codex_review.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>pytest 자동 수집 (tests/test_codex_review.py)</site>
+          <site>GitHub Actions ci.yml의 pytest 실행 단계</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>class TestPrGateActualModel</pattern>
+          <match_count>0</match_count>
+          <files_found>없음 (신규 클래스이므로 신규 추가). 기존 tc11/tc12는 보존.</files_found>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>
+          tests/test_codex_review.py 파일 끝에 새 unittest.TestCase 클래스
+          TestPrGateActualModel을 추가합니다. 4개 메서드:
+          (1) test_t1_pr_accept_with_verified_actual_model — pr ACCEPT + actual_model_verified=true + actual_model_id="gpt-5.5" + source="openai_api_response_object" → assertIsNone.
+          (2) test_t2_missing_file_blocks — codex_review_result.json 미생성 (BASE_DIR mock) → assertIsNotNone, "[CODEX PR GATE]" substring.
+          (3) test_t3_pr_accept_actual_not_verified_blocks — pr ACCEPT인데 actual_model_verified=false → 차단.
+          (4) test_t4_history_pr_uppercase_id_blocks — history에 pr ACCEPT인데 actual_model_id="GPT-5.5"(대문자) → 차단.
+          기존 tc11/tc12 테스트는 보존하되, 본 IMP 변경으로 tc11이 깨질 가능성이 있다면(history 검증 강화로) tc11의 fixture에 actual_model_verified/actual_model_id를 보강합니다.
+        </change_summary>
+        <line_estimate>90</line_estimate>
+        <surgical_edit_constraints>
+          <must_not_change>
+            <item>기존 TestSchemaValidator/TestReviewCodexStages/TestCodexRecord/TestGateCheck/TestRCARegressionPR60/TestSchemaEdgeCases 클래스의 메서드들 (단, tc11이 새 검증과 충돌하면 fixture 데이터만 보강 — 사양 변경 아님)</item>
+            <item>_make_valid_record 헬퍼 함수의 시그니처</item>
+            <item>tests/oracles/IMP-20260516-A627/** 답안지</item>
+          </must_not_change>
+          <must_change>
+            <item>파일 끝에 class TestPrGateActualModel(unittest.TestCase) 추가</item>
+            <item>4개 test_t1~test_t4 메서드 구현</item>
+          </must_change>
+        </surgical_edit_constraints>
+        <oracle_binding>
+          <oracle id="O003" case_kind="exception">tests/oracles/IMP-20260517-FD3F/T3 (T3 actual_model_verified=false = FAIL)</oracle>
+          <oracle id="O004" case_kind="error">tests/oracles/IMP-20260517-FD3F/T4 (T4 history 대문자 모델명 = FAIL)</oracle>
+        </oracle_binding>
+        <gate>module design -> module dev -> module qa (PASS 필수)</gate>
+      </micro_task>
+
+    </micro_tasks>
+
+    <integration_plan>
+      <step>1. MT-1 module qa PASS 후 MT-2 module dev 진입 (MT-1 변경분이 MT-2 테스트의 대상)</step>
+      <step>2. MT-2 module qa PASS 후 module integrate --result PASS</step>
+      <step>3. Dev phase done + scope_manifest.json (MT-1+MT-2 통합)</step>
+      <step>4. Dev phase attestation (prepare-phase --phase dev -> push -> GitHub Actions -> phase-ci)</step>
+      <step>5. Codex review: stage=plan ACCEPT (Dev 진입 전), stage=scope ACCEPT (Dev 진입 전), stage=code ACCEPT (QA 진입 전)</step>
+      <step>6. QA phase: --result PASS --numeric-score >= 96 --report-file qa_report.xml</step>
+      <step>7. QA phase attestation</step>
+      <step>8. Security skip (네트워크/DB 변경 없음, codex review 검증 강화는 보안 범위 아님 -> sec --skip)</step>
+      <step>9. Build skip: python pipeline.py build --exe "N/A" --skip-reason "no-code" — 본 IMP는 EXE를 생성하지 않는 파이프라인 내부 검증 강화입니다. 대안 사유로 "meta-task" 가능.</step>
+      <step>10. Build phase attestation</step>
+      <step>11. Codex review stage=pr ACCEPT (PR 머지 전, codex-run으로 actual_model_* evidence 포함)</step>
+      <step>12. Technical gate, Oracle gate, GitHub CI gate</step>
+      <step>13. User Acceptance gate (PR 본문/최종 확인 댓글에 6개 한국어 섹션 포함)</step>
+      <step>14. Codex review stage=rca ACCEPT (Phase 8 Architect 전)</step>
+      <step>15. Architect: protocol_evolution_decision required=false (본 IMP 자체가 protocol fix이므로 추가 protocol IMP 불필요)</step>
+    </integration_plan>
+
+    <phase_attestation_plan>
+      <branch>phase-attestation/IMP-20260517-FD3F (Pipeline Manager가 생성)</branch>
+      <phases>
+        <phase>pm — prepare-phase + GitHub Actions + phase-ci</phase>
+        <phase>dev — prepare-phase + GitHub Actions + phase-ci (MT-1+MT-2 통합 후)</phase>
+        <phase>qa — prepare-phase + GitHub Actions + phase-ci (QA PASS 후)</phase>
+        <phase>build — prepare-phase + GitHub Actions + phase-ci (build --skip 후에도 동일 필요)</phase>
+      </phases>
+    </phase_attestation_plan>
+
+    <user_acceptance_plan>
+      <pr_body_korean_sections>
+        <section name="최종 판단 요약">
+          _check_codex_pr_gate_for_technical() 함수를 강화했습니다. codex_review_result.json이
+          없으면 FAIL이고, pr ACCEPT 항목이 actual_model_verified=true + actual_model_id="gpt-5.5"
+          + model_output_json이 아닌 source를 만족할 때만 통과합니다.
+        </section>
+        <section name="사용자가 확인할 결과물">
+          - pipeline.py 변경: _check_codex_pr_gate_for_technical 함수 (약 30줄)
+          - tests/test_codex_review.py: TestPrGateActualModel 클래스 4개 메서드 추가
+          - GitHub Actions: 전체 테스트 PASS
+          - tests/oracles/IMP-20260517-FD3F/T1..T4 답안지 4건
+        </section>
+        <section name="기대 결과와 실제 결과">
+          - 기대: codex_review_result.json 없으면 FAIL -> 실제: "[CODEX PR GATE] ..." 차단 문자열 반환
+          - 기대: actual_model_verified=false인 pr ACCEPT 거부 -> 실제: actual_model_verified is not True 조건으로 차단
+          - 기대: "GPT-5.5" 대소문자 변형 거부 -> 실제: actual_model_id == CODEX_REQUIRED_MODEL_ID("gpt-5.5") exact match
+          - 기대: history pr ACCEPT도 동일 조건 -> 실제: history 루프 안에서 동일 검증 적용
+        </section>
+        <section name="중요한 선택과 트레이드오프">
+          - 파일 없으면 FAIL 선택: bootstrap_exception=true 레거시 파이프라인은 이 함수를 호출하지 않으므로 영향 없음.
+          - history pr ACCEPT도 동일 검증: _check_codex_review_gate(line 3854~)와의 일관성 확보.
+          - 본 IMP는 pipeline.py 단일 함수와 회귀 테스트만 수정. 다른 게이트(plan/scope/code/hygiene/rca) 검증은 손대지 않음.
+        </section>
+        <section name="남은 위험과 주의점">
+          - bootstrap_exception=true 파이프라인은 이 함수를 호출하지 않음 — 레거시 영향 없음.
+          - codex-run으로 실제 provider evidence가 없으면 pr gate 통과 불가 — 새 파이프라인은 반드시 codex-run 수행 필요.
+        </section>
+        <section name="추가 개선 포인트">
+          - 없음. 본 수정으로 pr gate 루프홀(파일 없음 통과, history actual_model 검증 누락) 완전 차단.
+        </section>
+      </pr_body_korean_sections>
+      <evidence>
+        <item>PR 링크 (Pipeline Manager가 PR 생성 후 제공)</item>
+        <item>GitHub Actions 최종 확인 안내 댓글 (위 6개 섹션 포함)</item>
+        <item>tests/test_codex_review.py::TestPrGateActualModel pytest 실행 결과</item>
+        <item>tests/oracles/IMP-20260517-FD3F/T1..T4 oracle answer key</item>
+      </evidence>
+    </user_acceptance_plan>
+
+    <oracle_ownership>
+      <answer_key_location>tests/oracles/IMP-20260517-FD3F/T1..T4/</answer_key_location>
+      <source>user (PM이 사용자 사양으로 작성)</source>
+      <protection>CODEOWNERS — tests/oracles/** 보호 경로</protection>
+      <case_kinds>
+        <case id="T1" kind="normal" priority="P0"/>
+        <case id="T2" kind="edge" priority="P0"/>
+        <case id="T3" kind="exception" priority="P0" assigned_module="MT-2 normal acceptance"/>
+        <case id="T4" kind="error" priority="P0"/>
+      </case_kinds>
+    </oracle_ownership>
+
+    <env_snapshot>
+      <python_version>3.10 또는 3.11 (CI matrix 기준)</python_version>
+      <installed_packages>pytest, ruff, mypy, bandit (technical gate 필수)</installed_packages>
+      <encoding>cp949/utf-8 (Windows 기본). 본 IMP는 파일 인코딩 변경 없음.</encoding>
+      <screen_size>N/A (UI 변경 없음)</screen_size>
+    </env_snapshot>
+
+  </step_plan>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</step_plan_root>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260517-FD3F</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>19b8b8c35948ca001fde41ab587859c59ef1bd83cbd7cdd47c2cb90b0e018625</step_plan_sha256>
+  <planner_run_id>pm_planner-05cb72befefd1ef4</planner_run_id>
+  <manager_run_id>pipeline_manager-f273ebd1d88909c0</manager_run_id>
+  <execution_profile>STANDARD</execution_profile>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <phase_sequence>pm → dev(MT-1→MT-2) → qa → sec(skip) → build(N/A) → external-gates → architect</phase_sequence>
+  <key_decisions>
+    <decision>MT-1: _check_codex_pr_gate_for_technical — 파일 없으면 None 대신 FAIL 문자열 반환</decision>
+    <decision>MT-1: pr ACCEPT 조건에 actual_model_verified is True, actual_model_id == "gpt-5.5" (exact), actual_model_source != "model_output_json" 추가</decision>
+    <decision>MT-1: top-level + history 루프 모두 동일 조건 적용 (_is_valid_pr_accept 헬퍼 또는 인라인)</decision>
+    <decision>MT-2: TestPrGateActualModel 클래스 — T1(normal)/T2(edge)/T3(exception)/T4(error) 4개 테스트 추가</decision>
+    <decision>Build: N/A, skip-reason: docs-only</decision>
+    <decision>Security: skip (외부 네트워크/DB 없음)</decision>
+    <decision>Codex review waiver: legacy-bootstrap (pipeline.py 자체가 수정 대상)</decision>
+    <decision>Pipeline Manager는 사용자 확인 없이 acceptance 자동 기록 금지</decision>
+  </key_decisions>
+  <scope_files>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+  </scope_files>
+  <modules>
+    <module id="MT-1">
+      <files>pipeline.py</files>
+      <target_function>_check_codex_pr_gate_for_technical</target_function>
+      <change_summary>파일 없으면 FAIL 반환, actual_model_verified/actual_model_id/actual_model_source 검증 추가, history 루프 동일 조건 적용</change_summary>
+    </module>
+    <module id="MT-2">
+      <files>tests/test_codex_review.py</files>
+      <target_function>TestPrGateActualModel</target_function>
+      <change_summary>T1/T2/T3/T4 테스트 4개 추가 (normal/edge/exception/error 케이스)</change_summary>
+    </module>
+  </modules>
+  <codex_review_waiver>legacy-bootstrap</codex_review_waiver>
+  <status>ready</status>
+</manager_handoff>
