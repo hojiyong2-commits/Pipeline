@@ -1,0 +1,9 @@
+<manager_handoff>
+  <pipeline_id>BUG-20260517-D0B1</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>b52d51413b336b40827d0e88a41b07c7252fecbe918fb2fc7e5b83ba28f64bc3</step_plan_sha256>
+  <planner_run_id>pm_planner-6a2fd25348f5f5b1</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+</manager_handoff>
