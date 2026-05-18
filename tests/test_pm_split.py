@@ -141,7 +141,7 @@ def _install_agent_run(state: dict, phase: str, output_file: Path, root: Path) -
         "status": "COMPLETED",
         "started_at": started,
         "completed_at": completed,
-        "token_hash": "redacted",
+        "token_hash": "redacted",  # nosec B105 — 테스트 픽스처 더미 토큰 해시값, 실제 시크릿 아님
         "output_file": str(output_file_resolved),
         "output_sha256": pipeline._sha256_file(output_file_resolved),
         "evidence_files": [],

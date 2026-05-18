@@ -190,7 +190,7 @@ def _install_completed_agent_run(state: dict, phase: str, output_file: Path, roo
         "status": "COMPLETED",
         "started_at": started,
         "completed_at": completed,
-        "token_hash": "redacted",
+        "token_hash": "redacted",  # nosec B105 — 테스트 픽스처 더미 토큰 해시값, 실제 시크릿 아님
         "output_file": str(output_file),
         "output_sha256": pipeline._sha256_file(output_file),
         "evidence_files": [],
@@ -419,10 +419,18 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 "pipeline_id": "TMP-TECH-RELAXED",
                 "stage": "pr",
                 "result": "ACCEPT",
+                "reviewer": "openai-api",
                 "review_model": "GPT-5.5",
-                "actual_model_verified": True,
+                "requested_model_id": "gpt-5.5",
                 "actual_model_id": "gpt-5.5",
+                "actual_model_verified": True,
                 "actual_model_source": "openai_api_response_object",
+                "review_provider": "openai-api",
+                "raw_output_path": "raw_output.json",
+                "reviewed_files": ["pipeline.py"],
+                "findings": [],
+                "diff_sha256": "a" * 64,
+                "created_at": "2026-05-17T00:00:00Z",
                 "history": [],
             }
             (tmp_path / "codex_review_result.json").write_text(
@@ -818,7 +826,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                  mock.patch.object(pipeline, "_git_check_ignored", return_value=True):
                 copied = pipeline._copy_phase_evidence_file("TMP-IGNORED", "build", "report", str(source))
 
-        self.assertIsNotNone(copied)
+        assert copied is not None
         self.assertTrue(copied["requires_force_add"])
 
     def test_relaxed_tools_and_qa_numeric_score_are_documented_as_hard_gates(self) -> None:
@@ -998,7 +1006,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit="a" * 40,
                 workflow="CI",
                 artifact="pipeline-phase-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106 — 테스트 픽스처 환경변수명, 실제 시크릿 아님
             )
             with mock.patch.object(pipeline, "_require_state", return_value=state), \
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
@@ -1085,10 +1093,18 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 "pipeline_id": "TMP-ACCEPT-DEPLOY",
                 "stage": "pr",
                 "result": "ACCEPT",
+                "reviewer": "openai-api",
                 "review_model": "GPT-5.5",
-                "actual_model_verified": True,
+                "requested_model_id": "gpt-5.5",
                 "actual_model_id": "gpt-5.5",
+                "actual_model_verified": True,
                 "actual_model_source": "openai_api_response_object",
+                "review_provider": "openai-api",
+                "raw_output_path": "raw_output.json",
+                "reviewed_files": ["pipeline.py"],
+                "findings": [],
+                "diff_sha256": "a" * 64,
+                "created_at": "2026-05-17T00:00:00Z",
                 "history": [],
             }
             (root / "codex_review_result.json").write_text(
@@ -2635,7 +2651,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit=commit_sha,
                 workflow="CI",
                 artifact="pipeline-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106 — 테스트 픽스처 환경변수명, 실제 시크릿 아님
                 record=True,
             )
             run_payload = {
@@ -2710,7 +2726,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit=commit_sha,
                 workflow="CI",
                 artifact="pipeline-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106 — 테스트 픽스처 환경변수명, 실제 시크릿 아님
             )
             runs_payload = {
                 "workflow_runs": [{
