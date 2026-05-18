@@ -7867,13 +7867,13 @@ def _codex_run_via_codex_cli(
         )
     except FileNotFoundError:
         print(
-            f"[CODEX PROVIDER_CAPABILITY_MISSING] codex 명령을 실행할 수 없습니다.",
+            "[CODEX PROVIDER_CAPABILITY_MISSING] codex 명령을 실행할 수 없습니다.",
             file=sys.stderr,
         )
         sys.exit(1)
     except subprocess.TimeoutExpired:
         print(
-            f"[CODEX PROVIDER_FAIL] codex-cli 실행 시간 초과(180초).",
+            "[CODEX PROVIDER_FAIL] codex-cli 실행 시간 초과(180초).",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -8131,8 +8131,8 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
         if actual_model_id_raw == "MODEL_METADATA_UNAVAILABLE":
             # codex-cli가 metadata를 노출하지 않음 → openai-api로 1회 fallback (왕복 금지)
             print(
-                f"[CODEX MODEL_METADATA_UNAVAILABLE] codex-cli가 actual model metadata를 제공하지 않습니다. "
-                f"openai-api로 1회 fallback을 시도합니다.",
+                "[CODEX MODEL_METADATA_UNAVAILABLE] codex-cli가 actual model metadata를 제공하지 않습니다. "
+                "openai-api로 1회 fallback을 시도합니다.",
                 file=sys.stderr,
             )
             # fallback 시도 전 openai-api 버짓 확인
@@ -8197,11 +8197,7 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
-    # review_model 필드는 model output JSON에서 가져오지만 actual evidence로 인정하지 않음
-    # actual_model_id는 이미 provider-level에서 추출했음 (위 단계)
-    # review_model 필드는 표시용으로만 사용 (CODEX_REQUIRED_REVIEW_MODEL 형식)
-    model_from_output_json: str = str(parsed.get("review_model", "")).strip()
-
+    # review_model 필드는 표시용으로만 사용; actual evidence는 provider-level actual_model_id 기준
     # diff_sha256 비교: 모델 응답 hash와 현재 hash 비교
     response_diff_sha: str = str(parsed.get("diff_sha256", "")).strip()
     if not response_diff_sha:

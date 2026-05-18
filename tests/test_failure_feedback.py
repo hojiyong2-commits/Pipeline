@@ -19,12 +19,11 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from unittest import mock
 
 BASE_DIR = Path(__file__).resolve().parent.parent

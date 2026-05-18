@@ -17,10 +17,9 @@ from __future__ import annotations
 import json
 import os
 import sys
-import subprocess
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from unittest import mock
 
 # pipeline.py 를 패키지 형태로 import할 수 있도록 BASE_DIR 추가
