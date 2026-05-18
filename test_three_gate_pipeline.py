@@ -411,24 +411,42 @@ class ThreeGatePipelineTests(unittest.TestCase):
         state["pipeline_id"] = "TMP-TECH-RELAXED"
         _mark_phase_attestation_passed(state, "build")
         with tempfile.TemporaryDirectory() as tmp:
-            paths = {"technical_result": Path(tmp) / "technical_result.json"}
+            tmp_path = Path(tmp)
+            # BUG-20260517-D0B1: codex_review_result.json 없으면 gates technical이
+            # exit(1)하여 technical_result.json이 생성되지 않으므로 BASE_DIR를 mock하여 파일 제공
+            codex_review_data = {
+                "schema_version": 2,
+                "pipeline_id": "TMP-TECH-RELAXED",
+                "stage": "pr",
+                "result": "ACCEPT",
+                "review_model": "GPT-5.5",
+                "actual_model_verified": True,
+                "actual_model_id": "gpt-5.5",
+                "actual_model_source": "openai_api_response_object",
+                "history": [],
+            }
+            (tmp_path / "codex_review_result.json").write_text(
+                __import__("json").dumps(codex_review_data), encoding="utf-8"
+            )
+            paths = {"technical_result": tmp_path / "technical_result.json"}
             args = argparse.Namespace(gates_action="technical", strict_tools=False, relaxed_tools=True, timeout=5)
             with mock.patch.object(pipeline, "_require_state", return_value=state):
                 with mock.patch.object(pipeline, "_contract_paths", return_value=paths):
-                    with mock.patch.object(
-                        pipeline,
-                        "_run_technical_gate",
-                        return_value={
-                            "schema_version": 1,
-                            "pipeline_id": "TMP-TECH-RELAXED",
-                            "status": "PASS",
-                            "strict_tools": False,
-                            "checks": [],
-                        },
-                    ):
-                        with mock.patch.object(pipeline, "_save"):
-                            with self.assertRaises(SystemExit) as ctx:
-                                pipeline.cmd_gates(args)
+                    with mock.patch.object(pipeline, "BASE_DIR", tmp_path):
+                        with mock.patch.object(
+                            pipeline,
+                            "_run_technical_gate",
+                            return_value={
+                                "schema_version": 1,
+                                "pipeline_id": "TMP-TECH-RELAXED",
+                                "status": "PASS",
+                                "strict_tools": False,
+                                "checks": [],
+                            },
+                        ):
+                            with mock.patch.object(pipeline, "_save"):
+                                with self.assertRaises(SystemExit) as ctx:
+                                    pipeline.cmd_gates(args)
 
             result = pipeline._load_json_file(paths["technical_result"])
 
@@ -1060,6 +1078,22 @@ class ThreeGatePipelineTests(unittest.TestCase):
             artifact.write_text("accepted output", encoding="utf-8")
             deploy_root = root / "deploy-root"
             paths = {"user_validation": root / "user_validation.json"}
+            # BUG-20260517-D0B1: codex_review_result.json 없으면 gates accept가
+            # CODEX PR GATE 오류로 exit(1)하므로 BASE_DIR를 mock하여 파일 제공
+            codex_review_data = {
+                "schema_version": 2,
+                "pipeline_id": "TMP-ACCEPT-DEPLOY",
+                "stage": "pr",
+                "result": "ACCEPT",
+                "review_model": "GPT-5.5",
+                "actual_model_verified": True,
+                "actual_model_id": "gpt-5.5",
+                "actual_model_source": "openai_api_response_object",
+                "history": [],
+            }
+            (root / "codex_review_result.json").write_text(
+                __import__("json").dumps(codex_review_data), encoding="utf-8"
+            )
             args = argparse.Namespace(
                 gates_action="accept",
                 result="ACCEPT",
@@ -1072,6 +1106,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
                  mock.patch.object(pipeline, "_record_snapshot"), \
                  mock.patch.object(pipeline, "_save"), \
+                 mock.patch.object(pipeline, "BASE_DIR", root), \
                  mock.patch.dict(pipeline.os.environ, {"PIPELINE_DEPLOY_ROOT": str(deploy_root)}):
                 with self.assertRaises(SystemExit) as ctx:
                     pipeline.cmd_gates(args)
