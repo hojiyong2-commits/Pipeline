@@ -2399,6 +2399,21 @@ def _openai_advisory_required() -> bool:
     return os.environ.get("ENABLE_GPT_ADVISORY_REQUIRED") == "1"
 
 
+def _advisory_run_counts(pid: str) -> Tuple[int, int]:
+    """Returns (review_count, api_call_count) for the given pipeline's advisory directory."""
+    paths = _contract_paths(pid)
+    advisory_root = paths["advisory_root"]
+    review_count = 0
+    api_call_count = 0
+    if advisory_root.exists():
+        for rp in sorted(advisory_root.glob("*_review.json")):
+            data = _load_json_file(rp, {})
+            review_count += 1
+            if bool(data.get("api_called", str(data.get("status")) == "COMPLETED")):
+                api_call_count += 1
+    return review_count, api_call_count
+
+
 def _require_state() -> Dict[str, Any]:
     state = _load()
     if state is None:
@@ -3824,7 +3839,7 @@ def _check_codex_review_gate(
     if not review_path.exists():
         return False, (
             "[CODEX REVIEW REQUIRED] codex_review_result.json이 없습니다. "
-            "'python pipeline.py review codex --stage plan --result ACCEPT --review-model GPT-5.5' "
+            "'python pipeline.py review codex-run --stage plan --review-model GPT-5.5' "
             "로 Codex review를 먼저 수행하세요. "
             "legacy 파이프라인 등 waiver가 필요하면 "
             "--codex-review-waiver legacy-bootstrap 인자를 사용하세요."
@@ -3919,19 +3934,19 @@ def _check_codex_review_gate(
                     return False, (
                         "[CODEX REVIEW REQUIRED] Dev 진입 전 plan stage ACCEPT가 필요합니다. "
                         f"현재 통과된 stages: {all_stages_accepted}. "
-                        "'python pipeline.py review codex --stage plan --result ACCEPT --review-model GPT-5.5' 를 먼저 수행하세요."
+                        "'python pipeline.py review codex-run --stage plan --review-model GPT-5.5' 를 먼저 수행하세요."
                     )
                 elif not has_scope:
                     return False, (
                         "[CODEX REVIEW REQUIRED] Dev 진입 전 scope stage ACCEPT가 필요합니다. "
                         f"현재 통과된 stages: {all_stages_accepted}. "
-                        "'python pipeline.py review codex --stage scope --result ACCEPT --review-model GPT-5.5' 를 먼저 수행하세요."
+                        "'python pipeline.py review codex-run --stage scope --review-model GPT-5.5' 를 먼저 수행하세요."
                     )
         elif required_stage not in all_stages_accepted:
             return False, (
                 f"[CODEX REVIEW REQUIRED] {required_stage} stage ACCEPT가 필요합니다. "
                 f"현재 통과된 stages: {all_stages_accepted if all_stages_accepted else '없음'}. "
-                f"'python pipeline.py review codex --stage {required_stage} --result ACCEPT ...' 를 먼저 수행하세요."
+                f"'python pipeline.py review codex-run --stage {required_stage} ...' 를 먼저 수행하세요."
             )
 
     # findings 검증 (미해결 HIGH/CRITICAL)
@@ -3964,7 +3979,7 @@ def _check_codex_review_gate(
                 if current_sha != stored_sha:
                     return False, (
                         "[CODEX REVIEW REQUIRED] diff SHA256 불일치 — 코드가 Codex 리뷰 이후에 변경되었습니다. "
-                        "'python pipeline.py review codex --stage code --result ACCEPT ...' 로 리뷰를 갱신하세요."
+                        "'python pipeline.py review codex-run --stage code ...' 로 리뷰를 갱신하세요."
                     )
         except Exception as exc:
             logging.getLogger(__name__).warning("Codex review diff SHA check 실패: %s", exc)
@@ -6022,14 +6037,18 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
     # 기본 모드(REQUIRED 미설정)에서는 advisory가 수동 진단 도구이며 blocker가 아닙니다.
     if _openai_advisory_required():
         pid = str(state.get("pipeline_id", ""))
-        unresolved = _unresolved_critical_advisories(pid)
-        if unresolved:
-            blockers.append(f"unresolved GPT advisory CRITICAL findings: {len(unresolved)}")
+        api_key, _src = _openai_api_key()
+        if not api_key:
+            blockers.append("advisory required but OPENAI_API_KEY missing")
+        _review_count, _api_call_count = _advisory_run_counts(pid)
+        if _review_count == 0:
+            blockers.append("advisory required but not run (review_count=0)")
+        elif _api_call_count == 0:
+            blockers.append("advisory required but API was never called (all results SKIPPED or ERROR)")
         else:
-            # REQUIRED=1인데 OPENAI_API_KEY가 없으면 advisory를 실제로 수행할 수 없음 → 차단
-            api_key, _src = _openai_api_key()
-            if not api_key:
-                blockers.append("advisory required but OPENAI_API_KEY missing")
+            unresolved = _unresolved_critical_advisories(pid)
+            if unresolved:
+                blockers.append(f"unresolved GPT advisory CRITICAL findings: {len(unresolved)}")
     return blockers
 
 
@@ -9351,6 +9370,28 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not bootstrap_exception:
             _codex_pr_gate_check = _check_codex_pr_gate_for_technical(state)
             if _codex_pr_gate_check:
+                _record_failure_packet(
+                    state,
+                    "technical",
+                    {},
+                    command=[sys.executable, "pipeline.py", "review", "codex-record",
+                             "--stage", "pr", "--result", "ACCEPT",
+                             "--review-model", "GPT-5.5", "..."],
+                    note=_codex_pr_gate_check,
+                    status="BLOCKED",
+                    phase="dev",
+                    failure_code="codex_pr_gate_missing",
+                    failure_category="missing_evidence",
+                    summary_ko="Codex PR stage ACCEPT가 없어 technical gate에 진입할 수 없습니다.",
+                    expected="codex_review_result.json에 pr stage ACCEPT 기록",
+                    actual=_codex_pr_gate_check,
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="dev",
+                    required_actions=["python pipeline.py review codex-record --stage pr --result ACCEPT --review-model GPT-5.5 ... 실행"],
+                    retry_allowed=True,
+                )
+                _save(state)
                 _die(_codex_pr_gate_check)
         strict_tools = not bool(getattr(args, "relaxed_tools", False))
         if bool(getattr(args, "strict_tools", False)):
@@ -9563,6 +9604,28 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not bootstrap_exception_accept and result == "ACCEPT":
             _codex_pr_gate_check_accept = _check_codex_pr_gate_for_technical(state)
             if _codex_pr_gate_check_accept:
+                _record_failure_packet(
+                    state,
+                    "acceptance",
+                    {},
+                    command=[sys.executable, "pipeline.py", "review", "codex-record",
+                             "--stage", "pr", "--result", "ACCEPT",
+                             "--review-model", "GPT-5.5", "..."],
+                    note=_codex_pr_gate_check_accept,
+                    status="BLOCKED",
+                    phase="dev",
+                    failure_code="codex_pr_gate_missing_for_accept",
+                    failure_category="missing_evidence",
+                    summary_ko="ACCEPT 전에 Codex PR stage ACCEPT가 필요합니다.",
+                    expected="codex_review_result.json에 pr stage ACCEPT 기록",
+                    actual=_codex_pr_gate_check_accept,
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="dev",
+                    required_actions=["python pipeline.py review codex-record --stage pr --result ACCEPT --review-model GPT-5.5 ... 실행"],
+                    retry_allowed=True,
+                )
+                _save(state)
                 _die(f"[CODEX PR GATE REQUIRED] ACCEPT 전에 codex pr stage ACCEPT가 필요합니다: {_codex_pr_gate_check_accept}")
         deployment: Optional[Dict[str, Any]] = None
         evidence_validation: Optional[Dict[str, Any]] = None
@@ -9779,10 +9842,10 @@ def _call_openai_advisory(prompt: str, *, model: str, timeout: int) -> Dict[str,
     api_key, api_key_source = _openai_api_key()
     if not api_key:
         return {"status": "SKIPPED", "reason": "OPENAI_API_KEY is not set", "api_called": False, "findings": []}
-    if not _openai_advisory_enabled():
+    if not _openai_advisory_enabled() and not _openai_advisory_required():
         return {
             "status": "SKIPPED",
-            "reason": "ENABLE_GPT_ADVISORY is not 1",
+            "reason": "ENABLE_GPT_ADVISORY is not 1 and ENABLE_GPT_ADVISORY_REQUIRED is not 1",
             "api_called": False,
             "api_key_source": api_key_source,
             "findings": [],

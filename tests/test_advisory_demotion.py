@@ -125,27 +125,31 @@ class TestAdvisoryDemotionBlockers(unittest.TestCase):
                 self.assertEqual(advisory_blockers, [])
 
     def test_required_mode_no_critical_no_blocker(self) -> None:
-        """REQUIRED=1 + unresolved CRITICAL=0 + API key 있음 → blocker 없음."""
+        """REQUIRED=1 + unresolved CRITICAL=0 + API key 있음 + advisory 실행됨 → blocker 없음."""
         with _EnvGuard():
             os.environ["ENABLE_GPT_ADVISORY_REQUIRED"] = "1"
             os.environ["OPENAI_API_KEY"] = "sk-test-FAKE"
-            with _patch_unresolved_critical(0):
-                state = _make_minimal_state()
-                blockers = pipeline._external_gate_blockers(state)
-                advisory_blockers = [b for b in blockers if "advisory" in b.lower()]
-                self.assertEqual(advisory_blockers, [])
+            # advisory가 정상 실행된 상태를 모사 (review_count>=1, api_call_count>=1)
+            with mock.patch.object(pipeline, "_advisory_run_counts", return_value=(1, 1)):
+                with _patch_unresolved_critical(0):
+                    state = _make_minimal_state()
+                    blockers = pipeline._external_gate_blockers(state)
+                    advisory_blockers = [b for b in blockers if "advisory" in b.lower()]
+                    self.assertEqual(advisory_blockers, [])
 
     def test_required_mode_with_critical_blocks(self) -> None:
-        """REQUIRED=1 + unresolved CRITICAL≥1 → blocker로 등장."""
+        """REQUIRED=1 + unresolved CRITICAL≥1 + advisory 실행됨 → blocker로 등장."""
         with _EnvGuard():
             os.environ["ENABLE_GPT_ADVISORY_REQUIRED"] = "1"
             os.environ["OPENAI_API_KEY"] = "sk-test-FAKE"
-            with _patch_unresolved_critical(3):
-                state = _make_minimal_state()
-                blockers = pipeline._external_gate_blockers(state)
-                matches = [b for b in blockers if "unresolved GPT advisory CRITICAL findings" in b]
-                self.assertEqual(len(matches), 1, f"blockers={blockers}")
-                self.assertIn("3", matches[0])
+            # advisory가 정상 실행된 상태를 모사하여 unresolved CRITICAL blocker 경로로 진입
+            with mock.patch.object(pipeline, "_advisory_run_counts", return_value=(1, 1)):
+                with _patch_unresolved_critical(3):
+                    state = _make_minimal_state()
+                    blockers = pipeline._external_gate_blockers(state)
+                    matches = [b for b in blockers if "unresolved GPT advisory CRITICAL findings" in b]
+                    self.assertEqual(len(matches), 1, f"blockers={blockers}")
+                    self.assertIn("3", matches[0])
 
     def test_required_mode_no_api_key_blocks(self) -> None:
         """REQUIRED=1인데 OPENAI_API_KEY 없음 → 별도 blocker 등장."""
@@ -158,6 +162,36 @@ class TestAdvisoryDemotionBlockers(unittest.TestCase):
                     blockers = pipeline._external_gate_blockers(state)
                     matches = [b for b in blockers if "OPENAI_API_KEY missing" in b]
                     self.assertEqual(len(matches), 1, f"blockers={blockers}")
+
+    def test_required_mode_not_run_is_blocker(self) -> None:
+        """REQUIRED=1인데 advisory가 한 번도 실행되지 않으면 (review_count=0) COMPLETE blocker."""
+        with _EnvGuard():
+            os.environ["ENABLE_GPT_ADVISORY_REQUIRED"] = "1"
+            with mock.patch.object(pipeline, "_openai_api_key", return_value=("sk-test-FAKE", "process")):
+                with mock.patch.object(pipeline, "_advisory_run_counts", return_value=(0, 0)):
+                    with _patch_unresolved_critical(0):
+                        state = _make_minimal_state()
+                        blockers = pipeline._external_gate_blockers(state)
+                        not_run_blockers = [b for b in blockers if "review_count=0" in b or "not run" in b.lower()]
+                        self.assertTrue(
+                            len(not_run_blockers) >= 1,
+                            f"review_count=0인데 blocker 없음: {blockers}",
+                        )
+
+    def test_required_mode_all_skipped_is_blocker(self) -> None:
+        """REQUIRED=1인데 모든 advisory가 SKIPPED/ERROR면 (api_call_count=0) COMPLETE blocker."""
+        with _EnvGuard():
+            os.environ["ENABLE_GPT_ADVISORY_REQUIRED"] = "1"
+            with mock.patch.object(pipeline, "_openai_api_key", return_value=("sk-test-FAKE", "process")):
+                with mock.patch.object(pipeline, "_advisory_run_counts", return_value=(2, 0)):
+                    with _patch_unresolved_critical(0):
+                        state = _make_minimal_state()
+                        blockers = pipeline._external_gate_blockers(state)
+                        skipped_blockers = [b for b in blockers if "never called" in b or "api_call_count=0" in b.lower() or "SKIPPED" in b]
+                        self.assertTrue(
+                            len(skipped_blockers) >= 1,
+                            f"api_call_count=0인데 blocker 없음: {blockers}",
+                        )
 
 
 class TestAdvisoryDemotionAutoRun(unittest.TestCase):
@@ -250,6 +284,26 @@ class TestAdvisoryManualCall(unittest.TestCase):
                     # 핵심은 SKIPPED가 아니어야 한다는 점 (API 경로가 열렸음)
                     self.assertNotEqual(result["status"], "SKIPPED")
 
+    def test_required_mode_without_advisory_flag_enters_api_path(self) -> None:
+        """REQUIRED=1 + API key 있음 + ENABLE_GPT_ADVISORY 미설정 → SKIPPED 아님 (API 경로 진입)."""
+        with _EnvGuard():
+            os.environ["ENABLE_GPT_ADVISORY_REQUIRED"] = "1"
+            # ENABLE_GPT_ADVISORY는 의도적으로 미설정
+            self.assertNotIn("ENABLE_GPT_ADVISORY", os.environ)
+            fake_response = mock.MagicMock()
+            fake_response.read.return_value = json.dumps({
+                "output": [{"content": [{"text": json.dumps({"summary": "ok", "findings": []})}]}],
+            }).encode("utf-8")
+            with mock.patch.object(pipeline, "_openai_api_key", return_value=("sk-test-FAKE", "process")):
+                with mock.patch("urllib.request.urlopen", return_value=fake_response):
+                    fake_response.__enter__ = lambda s: s
+                    fake_response.__exit__ = lambda *a: None
+                    result = pipeline._call_openai_advisory("test prompt", model="gpt-5.5", timeout=5)
+                    self.assertNotEqual(
+                        result["status"], "SKIPPED",
+                        "REQUIRED=1이면 ENABLE_GPT_ADVISORY 없어도 API 호출 경로에 진입해야 합니다."
+                    )
+
 
 class TestAdvisoryBackwardCompat(unittest.TestCase):
     """기존 unresolved CRITICAL이 있는 파이프라인에서 REQUIRED 미설정 시 blocker 아님 확인."""
@@ -282,6 +336,27 @@ class TestAdvisoryBackwardCompat(unittest.TestCase):
                     )
                     # 기본 모드에서 advisory_mode_reason은 인사이트 메시지를 담아야 함
                     self.assertTrue(summary.get("advisory_mode_reason"))
+
+
+class TestForbiddenReviewCodexPattern(unittest.TestCase):
+    """review codex --result ACCEPT/REJECT 안내가 pipeline.py에서 제거되었는지 grep 검증."""
+
+    def test_forbidden_review_codex_result_pattern_absent(self) -> None:
+        """pipeline.py에 'review codex --stage ... --result ACCEPT/REJECT' 안내가 없어야 함."""
+        pipeline_py = BASE_DIR / "pipeline.py"
+        content = pipeline_py.read_text(encoding="utf-8", errors="replace")
+        # 금지 패턴: 에러 메시지에 review codex --result ACCEPT 또는 REJECT 안내
+        # 단, 가드 메시지("review codex` 명령은 --result ... 허용하지 않습니다")는 예외
+        import re
+        # 지시형 안내 패턴 (올바른 것처럼 제안하는 형태) 검색
+        forbidden = re.findall(
+            r"review codex --stage[^'\n]*--result (?:ACCEPT|REJECT)",
+            content,
+        )
+        self.assertEqual(
+            forbidden, [],
+            f"금지 패턴 발견 (지시형 안내에서 review codex --result ACCEPT/REJECT 사용): {forbidden}",
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
