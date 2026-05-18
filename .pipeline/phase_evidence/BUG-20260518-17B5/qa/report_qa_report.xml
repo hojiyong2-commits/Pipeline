@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260518-17B5</pipeline_id>
+  <from>qa-agent</from>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <failure_signature></failure_signature>
+  <checks>
+    <check name="MT-3_pytest_T5_T6">
+      <command>python -m pytest tests/test_codex_review.py::TestPrGateActualModel -v -q</command>
+      <result>PASS — 6 passed in 0.66s</result>
+    </check>
+    <check name="full_codex_review_suite">
+      <command>python -m pytest tests/test_codex_review.py -q</command>
+      <result>PASS — 58 passed, 11 subtests passed in 8.87s</result>
+    </check>
+    <check name="scope_boundary">
+      <result>PASS — 변경 파일 3개 모두 PM scope 내 (MT-1: test_three_gate_e2e.py, MT-2: test_three_gate_pipeline.py, MT-3: tests/test_codex_review.py)</result>
+    </check>
+    <check name="fixture_fields">
+      <result>PASS — codex_review_result fixture 20개 필드 포함 (schema_version, pipeline_id, stage, result, reviewer, review_model, requested_model_id, actual_model_id, actual_model_verified, actual_model_source, review_provider, raw_output_path, reviewed_files, findings, diff_sha256, created_at, history)</result>
+    </check>
+    <check name="new_tests_T5_T6">
+      <result>PASS — T5: model_output_json source → FAIL 검증. T6: actual_model_verified 누락 → FAIL 검증</result>
+    </check>
+  </checks>
+  <repeat_indicator>FIRST</repeat_indicator>
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <verification_evidence>
+    <evidence_file>dev_handover.xml</evidence_file>
+    <evidence_file>scope_manifest.json</evidence_file>
+    <test_run>58 passed, 0 failed</test_run>
+  </verification_evidence>
+</qa_report>
