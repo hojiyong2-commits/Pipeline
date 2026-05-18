@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260518-150C</pipeline_id>
+  <phase>qa</phase>
+  <agent_run_id>qa-5532ef5dd894cecb</agent_run_id>
+  <verdict>PASS</verdict>
+
+  <category_check>
+    <wa>N-A — 네트워크 호출 신규 없음. OpenAI advisory 호출은 manual diagnostic으로 강등, 기존 _call_openai_advisory의 timeout/retry 로직 보존</wa>
+    <ui>N-A — GUI 위젯 변경 없음</ui>
+    <fs>N-A — 신규 파일 IO 패턴 없음. failure_packet은 기존 _write_json 재사용 (atomic write 보존)</fs>
+    <pd>PASS — _openai_advisory_required()와 _openai_advisory_enabled() 책임 분리, _record_failure_packet 14 keyword-only 인자로 명시적 interface contract</pd>
+    <sec>N-A — Phase 5 security-agent 전담</sec>
+    <al>PASS — required_actions=[] 거부, failure_category invalid→unknown fallback, 3x same failure_code→BLOCKED 전이, attempt_count 정확</al>
+    <build>N-A — BUILD 카테고리 없음</build>
+    <vsce>N-A — VSCE 카테고리 없음</vsce>
+  </category_check>
+
+  <numeric_score>110</numeric_score>
+  <numeric_score_detail>
+    <wa score="20" max="20">N-A 항목이나 advisory 호출 경로 보존 확인</wa>
+    <ui score="20" max="20">N-A — UI 변경 없음</ui>
+    <fs score="20" max="20">N-A — 기존 _write_json 재사용</fs>
+    <pd score="10" max="10">모듈분리 5/인터페이스계약 5 (advisory required/enabled 분리, schema_v2 keyword-only 명시)</pd>
+    <al score="20" max="20">입력타입 검증 5(failure_category isinstance), 빈데이터 5(required_actions=[] 거부), 범위검증 5(BLOCKED threshold), 분기처리 5(SETUP_REQUIRED owner=User 강제)</al>
+    <build score="10" max="10">N-A — BUILD 카테고리 없음, 만점 카운팅</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="110" max="120"/>
+    <percentage>91.7</percentage>
+    <numeric_verdict>PASS(>=96/120)</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A — 신규 네트워크 호출 없음</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 신규 _openai_advisory_required, _record_failure_packet 모든 인자 타입 힌팅, mypy 0 issues</type_hinting_all>
+      <widget_naming>N-A — UI 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 기존 _write_json 재사용</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover.xml self_check execution_check PASS</execution_check_present>
+    <execution_check_verdict>PASS — pytest tests/ -q 234 passed, 신규 30 cases 포함</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 없음</vsce_build_evidence>
+    <functional_binding_verified>PASS — pipeline.py CLI 'advisory status' 실행 결과 advisory_mode 필드 존재 확인 (4-state)</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 시각적 참고자료 명시 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>7</scope_files_declared>
+    <evidence_files_submitted>7</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git show --stat d2cd863로 7 files changed 확인, scope_manifest.json 일치</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml line 48-61 decomposition_audit 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — step_plan.xml의 각 micro_task에 grep_evidence executed=true 확인 (PM step_plan anti_gaming_read=true)</grep_evidence_present>
+    <declared_functions>5</declared_functions>
+    <actual_modified_functions>5</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <module_qa_evidence>
+    <mt id="MT-1" verdict="PASS">advisory 강등 — _openai_advisory_required() 신규 함수 (FAILURE_PACKET_SCHEMA_VERSION=2, advisory_mode 4상태), cmd_done/cmd_contract auto-run REQUIRED 조건, _external_gate_blockers REQUIRED 분기 모두 grep 확인</mt>
+    <mt id="MT-2" verdict="PASS">failure_packet schema_v2 — FAILURE_CATEGORIES len=15 확인, FAILURE_BLOCKED_THRESHOLD=3, _record_failure_packet 14 keyword-only 인자 + required_actions=[] _die(exit=2), SETUP_REQUIRED owner=User 강제, 3x BLOCKED 전이 로직 검증</mt>
+    <mt id="MT-3" verdict="PASS">tests/test_advisory_demotion.py 15 cases (TestAdvisoryDemotionBlockers x5, TestAdvisoryDemotionAutoRun x3, TestAdvisoryStatusMode x3, TestAdvisoryManualCall x2, TestAdvisoryBackwardCompat x2) — 전체 PASSED</mt>
+    <mt id="MT-4" verdict="PASS">tests/test_failure_feedback.py 15 cases (TestRequiredActionsValidation x2, TestFailureCategoryEnum x4, TestSchemaV2Fields x2, TestOwnerRouting x2, TestBlockedTransition x3, TestPacketPersistence x1, TestCodexRejectSchemaV2 x1) — 전체 PASSED</mt>
+    <mt id="MT-5" verdict="PASS">4개 문서 동기화 — CLAUDE.md line 319 IMP-20260518-150C 반영, pm-agent.md line 87 ENABLE_GPT_ADVISORY_REQUIRED 반영, prompt-architect-agent.md line 71+73-77 schema_v2 + 15 카테고리 명시, test-harness-agent.md line 48 advisory_mode 진단 정책 반영</mt>
+  </module_qa_evidence>
+
+  <regression_check>
+    <pytest_total>234 passed (이전 204 + 신규 30)</pytest_total>
+    <codex_review_tests>83 passed (test_codex_review.py — Codex Review gate 영향 없음 확인)</codex_review_tests>
+    <mypy_pipeline_py>0 errors (Success: no issues found in 3 source files)</mypy_pipeline_py>
+    <verdict>PASS — regression 없음, mypy 0 issues</verdict>
+  </regression_check>
+
+  <high_risk_profile_check>
+    <reason>HIGH_RISK 프로필 — pipeline_protocol=true, advisory 기본 동작 변경 (BREAKING CHANGE)</reason>
+    <breaking_change_documented>PASS — CLAUDE.md 환경변수 표로 명시, pm-agent.md/test-harness-agent.md/prompt-architect-agent.md 모두 동기화</breaking_change_documented>
+    <rollback_strategy_present>PASS — dev_handover.xml rollback_strategy 명시 (호출 지점을 _openai_advisory_enabled로 되돌리면 원복)</rollback_strategy_present>
+    <backward_compat_preserved>PASS — schema_v1 호환 필드(attempt, packet_path, recorded_at, repair_owner, note, failed_checks, report_excerpt) 보존, _record_failure_packet keyword-only 인자 모두 기본값 있어 backward-compatible</backward_compat_preserved>
+    <trust_root_files_check>PASS — CLAUDE.md, .claude/agents/*.md 수정은 본 IMP PM target_files에 명시적 포함 (advisory 정책 문서 동기화 IMP), pipeline.py 수정도 본 IMP 핵심 scope. .github/workflows/** 미수정.</trust_root_files_check>
+  </high_risk_profile_check>
+
+  <key_acceptance_evidence>
+    <advisory_demotion>
+      <e1>FAILURE_PACKET_SCHEMA_VERSION=2 (pipeline.py:1852)</e1>
+      <e2>FAILURE_CATEGORIES len=15 (pipeline.py:1853-1869: 14 explicit + unknown)</e2>
+      <e3>_openai_advisory_required (pipeline.py:2393-2399) 신규 함수, ENABLE_GPT_ADVISORY_REQUIRED=='1' 검사</e3>
+      <e4>cmd_done dev branch (pipeline.py:4272) advisory auto-run을 _openai_advisory_required로 변경, 미설정시 '[GPT ADVISORY] auto-run disabled by default' 메시지</e4>
+      <e5>cmd_contract freeze branch (pipeline.py:5882) 동일 패턴</e5>
+      <e6>_external_gate_blockers (pipeline.py:6021-6023) advisory blocker도 REQUIRED 조건으로 한정</e6>
+      <e7>_advisory_status_summary (pipeline.py:6216-6245) advisory_mode 4상태 (not_run/skipped/required/blocking)</e7>
+      <e8>CLI 실행 확인: advisory status 출력에 advisory_mode=not_run 필드 존재</e8>
+    </advisory_demotion>
+    <failure_packet_schema_v2>
+      <e1>_record_failure_packet (pipeline.py:8788-8810) 14개 keyword-only 신규 인자</e1>
+      <e2>required_actions=[] 검증 (pipeline.py:8838-8851) _die(exit_code=2)</e2>
+      <e3>failure_category 정규화 (pipeline.py:8869) _normalize_failure_category 호출</e3>
+      <e4>SETUP_REQUIRED owner=User 강제 (pipeline.py:8875-8877)</e4>
+      <e5>3x same failure_code BLOCKED 전이 (pipeline.py:8880-8885) _count_same_failure_code_attempts</e5>
+      <e6>packet schema 필드 21개 (schema_v2 core) + legacy 7개 (pipeline.py:8887-8921)</e6>
+      <e7>state.failure_packets list에 schema_v2 핵심 필드 추가 (pipeline.py:8927+)</e7>
+    </failure_packet_schema_v2>
+    <test_coverage>
+      <e1>tests/test_advisory_demotion.py — 15 cases all PASS (TestAdvisoryDemotionBlockers/AutoRun/StatusMode/ManualCall/BackwardCompat)</e1>
+      <e2>tests/test_failure_feedback.py — 15 cases all PASS (TestRequiredActionsValidation/FailureCategoryEnum/SchemaV2Fields/OwnerRouting/BlockedTransition/PacketPersistence/CodexRejectSchemaV2)</e2>
+      <e3>전체 pytest 234 passed, regression 0</e3>
+      <e4>mypy 0 issues</e4>
+    </test_coverage>
+    <documentation_sync>
+      <e1>CLAUDE.md line 319 — 정책 강등 명시, 환경변수 2개 의미 표</e1>
+      <e2>pm-agent.md line 87 — PM Advisory 정책 반영, 4-state advisory_mode 안내</e2>
+      <e3>prompt-architect-agent.md line 71-77 — failure_packet schema_v2 섹션 + 15 카테고리 명시, advisory CRITICAL은 REQUIRED 모드에만 blocker</e3>
+      <e4>test-harness-agent.md line 13/48/96 — Phase 7 advisory 강등 안내, schema_v2 한국어 보고 양식</e4>
+    </documentation_sync>
+  </key_acceptance_evidence>
+
+  <codex_review_gate_note>
+    QA agent 검증 범위 외 항목: 'python pipeline.py check --phase qa' 실행 시 [CODEX REVIEW REQUIRED] diff SHA256 불일치로 차단됨. 이는 Codex code review가 dev DONE 이후 추가 commit으로 인해 갱신 필요한 상태로, Pipeline Manager가 'review codex --stage code' 갱신 후 qa 기록을 진행해야 함. QA agent는 실제 코드 품질과 테스트/문서 검증을 모두 PASS로 판정하며, Codex Review gate는 Pipeline Manager 책임 영역으로 위임함.
+  </codex_review_gate_note>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — 모든 카테고리 PASS, regression 0, mypy 0 issues, 신규 30 cases 전체 PASS.
+  </critical_issues>
+
+  <improvement_suggestions>
+    - schema_v2 packet 필드 수가 dev_handover의 '19 필드' 선언보다 실제 21개 core + 7개 legacy로 더 풍부함. 향후 문서에서 '21 schema_v2 core fields + legacy compat fields'로 정확히 표기 권장.
+    - advisory_mode 'blocking' 상태에 대한 사용자 안내 메시지를 한국어 한 줄로 강화하면 사용자 경험이 더 명확해질 수 있음 (선택적 개선, 본 IMP 범위 외).
+    - Codex Review gate는 dev DONE 이후 코드 변경 시 자동 갱신되지 않음. Pipeline Manager가 'review codex --stage code' 갱신 절차를 가이드 문서화하면 운영 효율이 향상될 수 있음.
+  </improvement_suggestions>
+</qa_report>
