@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260518-17B5</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: codex_review_result fixture strict 필드 보강 + pr gate 거절 테스트 추가</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>3개 테스트 파일의 fixture dict 필드 추가 및 신규 테스트 메서드 2개 추가. 파일 3개, 함수 3개로 FAST_SINGLE_CODE 조건 초과. STANDARD 경로 사용.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>3</expected_changed_functions>
+      <expected_changed_lines>60</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P0 질문 없음. 사용자가 3개 수정 대상, 필수 필드 전체, 신규 테스트 2개를 명시하여 모든 내용이 확정됨. 내부 변수명, dict 키 순서 같은 P2 질문은 생략.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>3개 파일을 각각 별도 MT로 나눠 진행합니다. MT-1(e2e), MT-2(pipeline), MT-3(codex_review 신규 테스트) 순서로 맞나요?</user_facing_question>
+        <evidence>사용자가 3개 파일과 변경 내용을 명시적으로 지정하였습니다.</evidence>
+        <why_it_matters>파일별 MT를 구분해야 scope_manifest가 정확히 매핑됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>파일별 MT-1/MT-2/MT-3 분리</label>
+            <benefit>scope 검증이 파일 단위로 명확합니다.</benefit>
+            <cost>없음 — 사용자 요구사항과 1:1 매핑됩니다.</cost>
+          </option>
+          <option id="B">
+            <label>단일 MT로 통합</label>
+            <benefit>MT 수가 줄어듭니다.</benefit>
+            <cost>scope 검증이 모호해지고 서로 다른 파일 변경이 한 MT에 섞입니다.</cost>
+          </option>
+        </options>
+        <user_answer>MT-1/MT-2/MT-3 파일별 분리로 진행 (사용자 요구사항 직접 명시)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: test_three_gate_e2e.py (현재 7필드 fixture), test_three_gate_pipeline.py (현재 7필드 fixture 2개), tests/test_codex_review.py (TestPrGateActualModel 클래스 — T1~T4 4개 테스트)
+    - Output: 전체 필드 fixture 3곳, 신규 테스트 2개 추가
+    - Validation: pytest 실행 후 관련 테스트 PASS
+  </interface_spec>
+
+  <requirements>
+    1. MT-1: test_three_gate_e2e.py line 429-438 fixture에 누락 필드 추가
+       - 추가 필드: schema_version=2, pipeline_id=pid(변수), reviewer="openai-api", review_model="GPT-5.5", requested_model_id="gpt-5.5", reviewed_files=["pipeline.py"], findings=[], diff_sha256="a"*64, created_at="2026-05-17T00:00:00Z", raw_output_path="raw_output.json", review_provider="openai-api"
+       - 기존 필드 유지: result, stage, actual_model_verified, actual_model_id, actual_model_source, history
+
+    2. MT-2: test_three_gate_pipeline.py 두 위치 fixture 보강
+       a) line 417-427 (pipeline_id="TMP-TECH-RELAXED"):
+          - 추가 필드: reviewer="openai-api", requested_model_id="gpt-5.5", raw_output_path="raw_output.json", review_provider="openai-api", reviewed_files=["pipeline.py"], findings=[], diff_sha256="a"*64, created_at="2026-05-17T00:00:00Z"
+          - 기존 필드 유지: schema_version, pipeline_id, stage, result, review_model, actual_model_verified, actual_model_id, actual_model_source, history
+       b) line 1083-1093 (pipeline_id="TMP-ACCEPT-DEPLOY"):
+          - 동일 필드 추가 (pipeline_id만 "TMP-ACCEPT-DEPLOY")
+
+    3. MT-3: tests/test_codex_review.py TestPrGateActualModel 클래스에 테스트 2개 추가
+       a) test_pr_gate_fails_when_actual_model_source_is_model_output_json:
+          - actual_model_source="model_output_json" → _check_codex_pr_gate_for_technical({}) 반환값이 None이 아님(FAIL)
+          - 전체 필드 fixture 사용 (T1 패턴 기반)
+       b) test_pr_gate_fails_when_actual_model_verified_missing:
+          - actual_model_verified 키 자체 누락(del) → FAIL
+          - 전체 필드 fixture 사용
+
+    4. FS 카테고리 필수: 모든 파일 쓰기는 encoding="utf-8" 명시 (기존 코드 패턴 유지)
+    5. 기존 T1~T4 테스트가 여전히 PASS 유지되어야 함 (회귀 금지)
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>test_three_gate_e2e (inline fixture dict, line 429-438)</affected_function>
+      <target_files>
+        <file>test_three_gate_e2e.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex_review_data.*dict|codex_review_data\s*=\s*\{</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>line 429-438 fixture dict에 schema_version, pipeline_id(pid), reviewer, review_model, requested_model_id, reviewed_files, findings, diff_sha256, created_at, raw_output_path, review_provider 필드 추가</change_summary>
+      <line_estimate>15</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>test_three_gate_pipeline (fixture dict 2개 — line 417-427, line 1083-1093)</affected_function>
+      <target_files>
+        <file>test_three_gate_pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex_review_data\s*=\s*\{</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>line 417-427 (TMP-TECH-RELAXED)와 line 1083-1093 (TMP-ACCEPT-DEPLOY) 두 fixture dict에 동일하게 누락 필드 추가</change_summary>
+      <line_estimate>20</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>TestPrGateActualModel 클래스 (tests/test_codex_review.py, line 1559-)</affected_function>
+      <target_files>
+        <file>tests/test_codex_review.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>class TestPrGateActualModel|test_pr_gate_fails_when_actual_model_source_is_model_output_json|test_pr_gate_fails_when_actual_model_verified_missing</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TestPrGateActualModel 클래스 끝에 test_pr_gate_fails_when_actual_model_source_is_model_output_json과 test_pr_gate_fails_when_actual_model_verified_missing 테스트 2개 추가</change_summary>
+      <line_estimate>50</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 프로젝트 환경</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>pylance, typeCheckingMode=basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - test_three_gate_e2e.py fixture에 schema_version, pipeline_id, reviewer, review_model, requested_model_id, reviewed_files, findings, diff_sha256, created_at 필드가 모두 포함됨
+    - test_three_gate_pipeline.py 두 fixture(TMP-TECH-RELAXED, TMP-ACCEPT-DEPLOY) 모두 동일하게 전체 필드 포함됨
+    - tests/test_codex_review.py에 test_pr_gate_fails_when_actual_model_source_is_model_output_json이 추가되고 model_output_json source → FAIL 검증
+    - tests/test_codex_review.py에 test_pr_gate_fails_when_actual_model_verified_missing이 추가되고 missing field → FAIL 검증
+    - 기존 T1~T4 테스트(test_T1_pr_accept_with_verified_actual_model 등)가 여전히 PASS
+    - pytest tests/test_codex_review.py::TestPrGateActualModel PASS
+    - pytest test_three_gate_e2e.py 관련 함수 PASS
+    - pytest test_three_gate_pipeline.py 관련 함수 PASS
+    - diff_sha256는 "a"*64 (64자리 hex 형식) 사용
+    - actual_model_verified 누락 케이스: del로 키 제거 후 _check_codex_pr_gate_for_technical 호출 시 None이 아닌 값 반환
+  </acceptance_criteria>
+
+  <forbidden>
+    - pipeline.py 수정 금지
+    - CLAUDE.md 수정 금지
+    - .github/workflows/** 수정 금지
+    - .claude/agents/*.md 수정 금지
+    - tests/oracles/** oracle 파일 수정 금지 (이미 생성된 T1, T2 oracle 파일 변경 불가)
+    - 신규 의존성 추가 금지
+    - 기존 T1~T4 테스트 로직 변경 금지 (회귀 금지)
+  </forbidden>
+
+  <handover_spec>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id_ref>BUG-20260518-17B5</pipeline_id_ref>
+    <evidence_files>
+      <file>test_three_gate_e2e.py</file>
+      <file>test_three_gate_pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+      <file>scope_manifest.json</file>
+    </evidence_files>
+    <expected_status>READY_FOR_QA</expected_status>
+  </handover_spec>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\test_three_gate_e2e.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\test_three_gate_pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_codex_review.py</file>
+    </target_files>
+    <phase_rules_excerpt>Dev는 MT-1, MT-2, MT-3 순서로 module design -> module dev -> module qa PASS 후 다음 MT 진입. scope_manifest_MT-N.json 생성 필수. Trust-Root 파일 수정 금지.</phase_rules_excerpt>
+    <prev_phase_summary>BUG-20260517-D0B1에서 codex_review_result.json minimal fake record 추가했으나 사용자 REJECT. 3가지 수정 지시: e2e fixture 보강, pipeline fixture 2곳 보강, pr gate 거절 테스트 2개 추가.</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<decomposition_audit>
+  <total_functions_identified>3</total_functions_identified>
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>3</grep_executions>
+  <split_decision>파일별 fixture/테스트 위치가 명확히 분리되어 있고 사용자 요구사항이 3개 파일별로 명시됨. 각 MT는 단일 파일을 대상으로 함.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
