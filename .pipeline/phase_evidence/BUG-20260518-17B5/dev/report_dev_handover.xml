@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260518-17B5</pipeline_id>
+  <evidence>
+    <file>test_three_gate_e2e.py</file>
+    <file>test_three_gate_pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>test_three_gate_e2e.py</file>
+      <file>test_three_gate_pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>test_three_gate_e2e fixture dict (MT-1), test_three_gate_pipeline fixture dict x2 (MT-2), TestPrGateActualModel class (MT-3)</target_function>
+    <change_type>test fixture enhancement + new test methods</change_type>
+    <blast_radius>test files only — no product code changes</blast_radius>
+  </impact_analysis>
+  <module_gate_summary>
+    <module id="MT-1" status="PASS"/>
+    <module id="MT-2" status="PASS"/>
+    <module id="MT-3" status="PASS"/>
+    <integration status="PASS"/>
+  </module_gate_summary>
+  <test_results>
+    <suite name="TestPrGateActualModel" passed="6" failed="0"/>
+  </test_results>
+</handover>
