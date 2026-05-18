@@ -1613,7 +1613,7 @@ class TestProviderOpenAIApi(unittest.TestCase):
     def _get_diff_sha(self) -> str:
         try:
             proc = subprocess.run(
-                ["git", "diff", "main", "HEAD"],
+                ["git", "diff", "main...HEAD"],
                 capture_output=True, cwd=str(PROJECT_ROOT), timeout=30,
             )
             diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
@@ -1861,7 +1861,7 @@ class TestProviderCodexCli(unittest.TestCase):
         """_codex_run_via_codex_cli mock 반환 (parsed, actual_model_id, auth_method)."""
         import hashlib, subprocess as _sp
         try:
-            proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
+            proc = _sp.run(["git", "diff", "main...HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
             diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
         except Exception:
@@ -1883,7 +1883,7 @@ class TestProviderCodexCli(unittest.TestCase):
         import io, hashlib, subprocess as _sp
 
         try:
-            proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
+            proc = _sp.run(["git", "diff", "main...HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
             diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
         except Exception:
@@ -1981,7 +1981,7 @@ class TestProviderCodexCli(unittest.TestCase):
         import hashlib, subprocess as _sp
 
         try:
-            proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
+            proc = _sp.run(["git", "diff", "main...HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
             diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
         except Exception:
@@ -2058,10 +2058,10 @@ class TestHardGateExtended(unittest.TestCase):
     """
 
     def _current_diff_sha(self) -> str:
-        """현재 git diff main..HEAD sha256 계산 (pipeline.py와 동일한 방식)."""
+        """현재 git diff main...HEAD sha256 계산 (pipeline.py와 동일한 방식)."""
         import hashlib, subprocess as _sp
         try:
-            proc = _sp.run(["git", "diff", "main", "HEAD"], capture_output=True,
+            proc = _sp.run(["git", "diff", "main...HEAD"], capture_output=True,
                            cwd=str(PROJECT_ROOT), timeout=30)
             diff = proc.stdout if proc.returncode == 0 else b"[fallback]"
         except Exception:
