@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260518-17B5</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-53eb72db73eff0da</planner_run_id>
+  <step_plan_sha256>405ca9298ba6470ac59f4af61c34a4b4f9e56df4bebbc10f09e6c039d0027cc9</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <summary>codex_review_result fixture 강화 + pr gate minimal fake 거절 테스트 추가. 3개 파일, 3개 MT, STANDARD 프로필. legacy-bootstrap codex waiver 적용.</summary>
+  <micro_tasks>
+    <mt id="MT-1" file="test_three_gate_e2e.py" status="PENDING"/>
+    <mt id="MT-2" file="test_three_gate_pipeline.py" status="PENDING"/>
+    <mt id="MT-3" file="tests/test_codex_review.py" status="PENDING"/>
+  </micro_tasks>
+  <codex_waiver>legacy-bootstrap</codex_waiver>
+  <build_skip_reason>no-code</build_skip_reason>
+</manager_handoff>
