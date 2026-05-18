@@ -190,7 +190,7 @@ def _install_completed_agent_run(state: dict, phase: str, output_file: Path, roo
         "status": "COMPLETED",
         "started_at": started,
         "completed_at": completed,
-        "token_hash": "redacted",
+        "token_hash": "redacted",  # nosec B105 — 테스트 픽스처 더미 토큰 해시값, 실제 시크릿 아님
         "output_file": str(output_file),
         "output_sha256": pipeline._sha256_file(output_file),
         "evidence_files": [],
@@ -1006,7 +1006,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit="a" * 40,
                 workflow="CI",
                 artifact="pipeline-phase-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106 — 테스트 픽스처 환경변수명, 실제 시크릿 아님
             )
             with mock.patch.object(pipeline, "_require_state", return_value=state), \
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
@@ -2651,7 +2651,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit=commit_sha,
                 workflow="CI",
                 artifact="pipeline-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106 — 테스트 픽스처 환경변수명, 실제 시크릿 아님
                 record=True,
             )
             run_payload = {
@@ -2726,7 +2726,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit=commit_sha,
                 workflow="CI",
                 artifact="pipeline-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106 — 테스트 픽스처 환경변수명, 실제 시크릿 아님
             )
             runs_payload = {
                 "workflow_runs": [{
