@@ -1,0 +1,53 @@
+{
+  "pipeline_id": "IMP-20260518-150C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._openai_advisory_enabled, pipeline._openai_advisory_required, pipeline.cmd_done(dev branch advisory auto-run), pipeline.cmd_contract(freeze branch advisory auto-run), pipeline._external_gate_blockers, pipeline._advisory_status_summary"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._record_failure_packet, pipeline._repair_owner_for_gate, pipeline.cmd_review_codex_record(REJECT branch)"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/test_advisory_demotion.py"
+      ],
+      "affected_functions": [
+        "tests.test_advisory_demotion.test_default_mode_advisory_not_blocker, test_required_mode_unresolved_critical_blocks, test_auto_run_disabled_by_default, test_status_output_states (총 15개 케이스)"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "tests/test_failure_feedback.py"
+      ],
+      "affected_functions": [
+        "tests.test_failure_feedback.test_required_actions_empty_rejected, test_failure_category_enum, test_same_failure_code_3x_blocked, test_schema_v2_fields, test_setup_required_owner_routing"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "CLAUDE.md",
+        ".claude/agents/pm-agent.md",
+        ".claude/agents/prompt-architect-agent.md",
+        ".claude/agents/test-harness-agent.md"
+      ],
+      "affected_functions": [
+        "documentation.CLAUDE_md_advisory_section, documentation.pm_agent_md_advisory, documentation.prompt_architect_agent_md_failure_schema, documentation.test_harness_agent_md_korean_summary"
+      ]
+    }
+  ]
+}
