@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260518-150C</pipeline_id>
+  <phase>dev</phase>
+  <status>DONE</status>
+  <agent_run_id>dev-7df4320b63b71e05</agent_run_id>
+
+  <scope_declaration>
+    <files_to_create>tests/test_advisory_demotion.py, tests/test_failure_feedback.py</files_to_create>
+    <files_to_modify>pipeline.py (MT-1+MT-2), CLAUDE.md (MT-5), .claude/agents/pm-agent.md (MT-5), .claude/agents/prompt-architect-agent.md (MT-5), .claude/agents/test-harness-agent.md (MT-5)</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>_openai_advisory_enabled, _record_failure_packet, _external_gate_blockers, _advisory_status_summary 위치를 Grep으로 확인</searched>
+      <decision>EXTEND — 기존 함수 시그니처는 유지하고 _openai_advisory_required 신규 추가, _record_failure_packet에 keyword-only 인자 14개 추가</decision>
+    </reuse_search>
+    <out_of_scope>tests/oracles/IMP-20260518-150C/** (PM이 작성한 oracle 파일 수정 금지), .github/workflows/**, .github/CODEOWNERS</out_of_scope>
+  </scope_declaration>
+
+  <changed_files>
+    <file>pipeline.py</file>
+    <file>tests/test_advisory_demotion.py</file>
+    <file>tests/test_failure_feedback.py</file>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+    <file>.claude/agents/prompt-architect-agent.md</file>
+    <file>.claude/agents/test-harness-agent.md</file>
+  </changed_files>
+  <evidence>
+    <module_design_files>module_design_MT-1.xml, module_design_MT-2.xml, module_design_MT-3.xml, module_design_MT-4.xml, module_design_MT-5.xml</module_design_files>
+    <module_handover_files>module_handover_MT-1.xml, module_handover_MT-2.xml, module_handover_MT-3.xml, module_handover_MT-4.xml, module_handover_MT-5.xml</module_handover_files>
+    <module_qa_files>module_qa_MT-1.xml, module_qa_MT-2.xml, module_qa_MT-3.xml, module_qa_MT-4.xml, module_qa_MT-5.xml</module_qa_files>
+    <scope_manifest_files>scope_manifest_MT-1.json, scope_manifest_MT-2.json, scope_manifest_MT-3.json, scope_manifest_MT-4.json, scope_manifest_MT-5.json</scope_manifest_files>
+    <integration_report>integration_report.xml</integration_report>
+    <test_results>python -m pytest tests/ -q -x → 234 passed (변경 전 204 + advisory 15 + failure 15)</test_results>
+  </evidence>
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>pipeline._openai_advisory_enabled, pipeline._openai_advisory_required(신규), pipeline.cmd_done(dev branch advisory auto-run), pipeline.cmd_contract(freeze branch advisory auto-run), pipeline._external_gate_blockers, pipeline._advisory_status_summary</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:cmd_done">dev DONE 후 advisory auto-run 호출</caller>
+      <caller location="pipeline.py:cmd_contract">freeze 후 advisory auto-run 호출</caller>
+      <caller location="pipeline.py:cmd_status">advisory status 출력</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>os.environ.get</dep>
+      <dep>_unresolved_critical_advisories</dep>
+      <dep>_openai_api_key</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>호출 분기 변경만, state 자체 변경은 없음 (auto-run 호출 빈도 감소)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>YES — _openai_advisory_required 신규 함수 추가 (기존 시그니처 변경 없음)</signature_change>
+      <breaking_change>YES — 기본 모드 동작 변경, REQUIRED 플래그 필요. CLAUDE.md에 마이그레이션 가이드 명시.</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — tests/test_advisory_demotion.py 15 cases</test_coverage>
+      <rollback_strategy>_openai_advisory_required 호출 지점을 _openai_advisory_enabled로 되돌리면 원복</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>pipeline._record_failure_packet, pipeline._repair_owner_for_gate, pipeline.cmd_review_codex_record(REJECT branch)</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:cmd_gates technical failure">_record_failure_packet 호출</caller>
+      <caller location="pipeline.py:cmd_gates oracle x2">_record_failure_packet 호출 (manifest + acceptance)</caller>
+      <caller location="pipeline.py:cmd_gates accept failure">_record_failure_packet 호출</caller>
+      <caller location="pipeline.py:cmd_gates github-ci failure">_record_failure_packet 호출</caller>
+      <caller location="pipeline.py:cmd_review_codex_record REJECT">failure_packet.json 직접 작성</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_contract_paths</dep>
+      <dep>_next_failure_attempt</dep>
+      <dep>_write_json</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>state.failure_packets list에 schema_v2 필드 추가 항목 누적</mutation>
+      <mutation>pipeline_contracts/{pid}/failures/{gate}_attempt_{n}.json 파일 저장</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>YES — _record_failure_packet keyword-only 인자 14개 추가 (모두 기본값 있어 backward-compatible)</signature_change>
+      <breaking_change>NO — 기존 5개 호출 지점은 추가 인자 없이도 동작. schema_v1 호환 필드 보존.</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — tests/test_failure_feedback.py 15 cases</test_coverage>
+      <rollback_strategy>schema_version=1 호환 필드 보존하므로 신규 필드 무시 시 원복</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-3</micro_task_id>
+    <target_function>tests.test_advisory_demotion (신규 파일)</target_function>
+    <upstream_callers><caller>none — 신규 테스트 파일</caller></upstream_callers>
+    <downstream_dependencies><dep>pipeline._openai_advisory_required, pipeline._external_gate_blockers, pipeline._advisory_status_summary, pipeline._call_openai_advisory</dep></downstream_dependencies>
+    <state_mutations><mutation>none — pure tests with mock + env guard</mutation></state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — 자체</test_coverage>
+      <rollback_strategy>파일 삭제</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-4</micro_task_id>
+    <target_function>tests.test_failure_feedback (신규 파일)</target_function>
+    <upstream_callers><caller>none — 신규 테스트 파일</caller></upstream_callers>
+    <downstream_dependencies><dep>pipeline._record_failure_packet, pipeline.FAILURE_CATEGORIES, pipeline.FAILURE_PACKET_SCHEMA_VERSION</dep></downstream_dependencies>
+    <state_mutations><mutation>none — tmpdir 격리 + _contract_paths mock</mutation></state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — 자체</test_coverage>
+      <rollback_strategy>파일 삭제</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-5</micro_task_id>
+    <target_function>documentation.CLAUDE_md_advisory_section, documentation.pm_agent_md_advisory, documentation.prompt_architect_agent_md_failure_schema, documentation.test_harness_agent_md_korean_summary</target_function>
+    <upstream_callers><caller>none — 문서</caller></upstream_callers>
+    <downstream_dependencies><dep>none</dep></downstream_dependencies>
+    <state_mutations><mutation>none — markdown 변경만</mutation></state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 정책 명시화</breaking_change>
+      <test_coverage>NONE — 문서</test_coverage>
+      <rollback_strategy>이전 wording 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <mt_summary>
+    <mt id="MT-1" status="PASS">advisory 기본 경로 강등 — _openai_advisory_required() 신규, cmd_done/cmd_contract auto-run을 REQUIRED 조건으로 변경, _external_gate_blockers REQUIRED 분기, _advisory_status_summary advisory_mode 4상태</mt>
+    <mt id="MT-2" status="PASS">failure_packet schema_v2 — FAILURE_CATEGORIES 15종, _record_failure_packet 14 신규 인자, required_actions=[] 거부, SETUP_REQUIRED owner=User, 3회 BLOCKED 전이, 5개 호출지점 + codex REJECT 통합</mt>
+    <mt id="MT-3" status="PASS">tests/test_advisory_demotion.py 15 cases (5 + 3 + 3 + 2 + 2)</mt>
+    <mt id="MT-4" status="PASS">tests/test_failure_feedback.py 15 cases (2 + 4 + 2 + 2 + 3 + 1 + 1)</mt>
+    <mt id="MT-5" status="PASS">4개 문서 동기화 (CLAUDE.md + pm-agent.md + prompt-architect-agent.md + test-harness-agent.md)</mt>
+  </mt_summary>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_advisory_demotion.py, tests/test_failure_feedback.py, CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/prompt-architect-agent.md, .claude/agents/test-harness-agent.md</git_diff_files>
+    <manifest_files>pipeline.py(MT-1+MT-2), tests/test_advisory_demotion.py(MT-3), tests/test_failure_feedback.py(MT-4), CLAUDE.md/.claude/agents/*.md(MT-5)</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false — Trust-Root 파일 중 CLAUDE.md와 .claude/agents/*.md는 본 IMP의 PM target_files에 명시적으로 포함됨 (advisory 정책 문서 동기화 IMP)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <self_check>
+    <python_version_syntax>PASS — python -m py_compile pipeline.py + tests/test_advisory_demotion.py + tests/test_failure_feedback.py</python_version_syntax>
+    <type_hinting>PASS — 신규 함수/테스트 모든 함수에 타입 힌팅</type_hinting>
+    <error_handling>PASS — _record_failure_packet에 required_actions 검증, OSError 보호 등</error_handling>
+    <execution_check>PASS — pytest tests/ -q -x → 234 passed, regression 없음</execution_check>
+    <impact_analysis_check>PASS — 5개 MT 모두 impact_analysis 명시</impact_analysis_check>
+    <frozen_codebase_check>PASS — scope 외 파일 미수정, minimal fix, OAR 0회, side-effect audit 완료</frozen_codebase_check>
+  </self_check>
+  <known_constraints>
+    BREAKING CHANGE: ENABLE_GPT_ADVISORY=1만 설정한 기존 사용자에게 advisory 자동 실행과 COMPLETE blocker가 더 이상 동작하지 않음. 동일 동작을 원하면 ENABLE_GPT_ADVISORY_REQUIRED=1을 추가로 설정해야 함. 이 마이그레이션 가이드는 CLAUDE.md에 기록됨.
+  </known_constraints>
+</handover>
