@@ -43,8 +43,9 @@ Harness must confirm:
 - integration is PASS
 - PM/Dev/QA/Build phase attestations are PASS
 - Technical, Oracle, and GitHub CI gates are PASS
-- unresolved GPT advisory CRITICAL findings are absent or explicitly resolved
 - the user has a real visible result path, screenshot, EXE, output file, or GitHub Actions attachment to inspect
+
+**Advisory는 외부 게이트 readiness 진단 대상이 아닙니다 (IMP-20260518-150C)**. `ENABLE_GPT_ADVISORY_REQUIRED=1` 인 경우에만 advisory unresolved CRITICAL을 blocker로 확인한다. 기본 모드(`advisory_mode=not_run` 또는 `skipped`)에서는 advisory 항목을 readiness 체크리스트에 포함하지 않는다. `python pipeline.py advisory status` 의 `advisory_mode` 가 `blocking` 일 때만 사용자에게 보고한다.
 
 ## User Acceptance Rule
 
@@ -89,6 +90,31 @@ Do not ask the user to review code. Provide:
 - Do not treat QA numeric score as final quality proof.
 - Do not treat GPT advisory as a scorer.
 - Do not ask the user to inspect code for final approval.
+
+## 차단됨 보고 형식 (Korean — IMP-20260518-150C)
+
+외부 게이트가 차단된 경우 사용자에게 아래 한국어 양식으로 보고한다. failure_packet 의 schema_v2 필드를 인용한다.
+
+```
+[차단됨]
+- 차단 위치: [phase / gate 이름]
+- 원인: [packet.summary_ko — 1줄 한국어 설명]
+- 카테고리: [packet.failure_category]
+- 기대값: [packet.expected]
+- 실제값: [packet.actual]
+- 필요한 조치: [packet.required_actions 목록 — 각 항목 한 줄]
+- 책임자: [packet.owner]
+- 되돌아갈 단계: [packet.return_phase]
+- 최소 재실행: [packet.minimal_rerun 또는 packet.command]
+- 증거: [packet.evidence_paths]
+- 시도 횟수: [packet.attempt_count]
+```
+
+`packet.status == "BLOCKED"` 인 경우 추가로 다음 줄을 표시한다:
+```
+- 차단 사유: [packet.escalation_reason] (3회 이상 동일 실패 — 구조적 재설계 필요)
+- 다음 조치: PM에게 step_plan 재설계를 요청하거나 prompt-architect-agent 를 호출하세요.
+```
 
 ## Deploy Path After ACCEPT
 

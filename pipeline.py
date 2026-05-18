@@ -1846,6 +1846,42 @@ class TournamentMeta(TypedDict, total=False):
 
 VERSION = "1.2.0"
 OPENAI_ADVISORY_MODEL = "gpt-5.5"
+
+# IMP-20260518-150C: failure_packet schema_version=2 표준화
+# 14종 명시적 카테고리 + unknown fallback (총 15개)
+FAILURE_PACKET_SCHEMA_VERSION = 2
+FAILURE_CATEGORIES: frozenset = frozenset({
+    "scope_mismatch",
+    "missing_evidence",
+    "stale_evidence",
+    "model_verification_failed",
+    "ci_failed",
+    "test_failed",
+    "typecheck_failed",
+    "security_failed",
+    "oracle_failed",
+    "user_acceptance_rejected",
+    "setup_required",
+    "provider_unavailable",
+    "document_implementation_mismatch",
+    "protocol_violation",
+    "unknown",
+})
+# 동일 (gate, failure_code) 조합이 이 횟수 이상 attempt되면 status=BLOCKED 전이
+FAILURE_BLOCKED_THRESHOLD = 3
+# gate -> (owner, return_phase) 표준 매핑
+_GATE_OWNER_RETURN_MAP: Dict[str, Tuple[str, str]] = {
+    "technical": ("Dev", "dev"),
+    "oracle": ("Dev", "dev"),
+    "github_ci": ("Dev", "dev"),
+    "acceptance": ("Dev", "dev"),
+    "codex_plan_review": ("PM", "pm"),
+    "codex_scope_review": ("PM", "pm"),
+    "codex_code_review": ("Dev", "dev"),
+    "codex_hygiene_review": ("Dev", "dev"),
+    "codex_pr_review": ("Dev", "dev"),
+    "codex_rca_review": ("PM", "pm"),
+}
 BASE_DIR   = Path(__file__).resolve().parent
 STATE_FILE = BASE_DIR / "pipeline_state.json"
 HISTORY_DIR = BASE_DIR / "pipeline_history"
@@ -2346,8 +2382,21 @@ def _openai_api_key() -> Tuple[Optional[str], str]:
 
 
 def _openai_advisory_enabled() -> bool:
-    """API advisory is opt-in because ChatGPT subscriptions do not include API quota."""
+    """API advisory is opt-in because ChatGPT subscriptions do not include API quota.
+
+    ``ENABLE_GPT_ADVISORY=1`` only means "API 호출 허용".
+    Auto-execution + COMPLETE blocker는 ``_openai_advisory_required()`` 가 분리하여 담당합니다.
+    """
     return os.environ.get("ENABLE_GPT_ADVISORY") == "1"
+
+
+def _openai_advisory_required() -> bool:
+    """``ENABLE_GPT_ADVISORY_REQUIRED=1`` 일 때만 자동 실행 + unresolved CRITICAL이 COMPLETE를 차단.
+
+    기본 모드(REQUIRED 미설정)에서는 advisory가 수동 진단 도구이며 COMPLETE를 막지 않습니다.
+    REQUIRED=1이면 ENABLE_GPT_ADVISORY=1로 간주(API 호출 허용)되므로 별도 flag 없이 자동 실행 가능합니다.
+    """
+    return os.environ.get("ENABLE_GPT_ADVISORY_REQUIRED") == "1"
 
 
 def _require_state() -> Dict[str, Any]:
@@ -4220,15 +4269,18 @@ def cmd_done(args: argparse.Namespace) -> None:
     state["current_phase"] = PHASE_ORDER[PHASE_ORDER.index(phase) + 1]
     _log_event(state, f"{phase} DONE | evidence: {evidence}")
     if phase == "dev":
-        review_files = _advisory_review_files_from_args(state, evidence)
-        advisory_result = _auto_run_openai_advisory(state, kind="gpt-code", files=review_files)
-        status = advisory_result.get("status")
-        if status == "COMPLETED":
-            print(GREEN(f"  [GPT ADVISORY] gpt-code completed via {OPENAI_ADVISORY_MODEL}"))
-        elif status == "SKIPPED":
-            print(YELLOW(f"  [GPT ADVISORY] gpt-code skipped: {advisory_result.get('reason')}"))
+        if _openai_advisory_required():
+            review_files = _advisory_review_files_from_args(state, evidence)
+            advisory_result = _auto_run_openai_advisory(state, kind="gpt-code", files=review_files)
+            status = advisory_result.get("status")
+            if status == "COMPLETED":
+                print(GREEN(f"  [GPT ADVISORY] gpt-code completed via {OPENAI_ADVISORY_MODEL}"))
+            elif status == "SKIPPED":
+                print(YELLOW(f"  [GPT ADVISORY] gpt-code skipped: {advisory_result.get('reason')}"))
+            else:
+                print(RED(f"  [GPT ADVISORY] gpt-code error: {advisory_result.get('reason')}"))
         else:
-            print(RED(f"  [GPT ADVISORY] gpt-code error: {advisory_result.get('reason')}"))
+            print(DIM("  [GPT ADVISORY] auto-run disabled by default (set ENABLE_GPT_ADVISORY_REQUIRED=1 to enable)"))
     _record_snapshot(state, phase, branch)
     _save_state_for(state, branch)
 
@@ -4856,8 +4908,25 @@ def cmd_status(args: argparse.Namespace) -> None:
     advisory = _advisory_status_summary(str(pid))
     print()
     print(BOLD("  GPT Advisory status:"))
+    mode = str(advisory.get("advisory_mode") or "not_run")
+    mode_reason = str(advisory.get("advisory_mode_reason") or "")
+    mode_label_map = {
+        "not_run": "NOT RUN — disabled by default",
+        "skipped": "SKIPPED",
+        "required": "REQUIRED",
+        "blocking": "BLOCKING",
+    }
+    mode_color = {
+        "not_run": YELLOW,
+        "skipped": DIM,
+        "required": GREEN,
+        "blocking": RED,
+    }.get(mode, YELLOW)
+    print(mode_color(f"    mode={mode_label_map.get(mode, mode.upper())}"))
+    if mode_reason:
+        print(DIM(f"    reason: {mode_reason}"))
     if advisory["review_count"] == 0:
-        print(YELLOW("    NOT RUN — no advisory review files recorded"))
+        print(DIM("    NOT RUN — no advisory review files recorded"))
     else:
         status_bits = ", ".join(f"{k}={v}" for k, v in sorted(advisory["status_counts"].items()))
         print(f"    reviews={advisory['review_count']} api_calls={advisory['api_call_count']} statuses={status_bits}")
@@ -4865,11 +4934,17 @@ def cmd_status(args: argparse.Namespace) -> None:
     if not advisory["api_key_present"]:
         print(DIM("    OPENAI_API_KEY not set; GPT advisory cannot call OpenAI."))
     elif not advisory["enabled"]:
-        print(DIM("    ENABLE_GPT_ADVISORY is not 1; GPT advisory auto-calls are disabled."))
+        print(DIM("    ENABLE_GPT_ADVISORY is not 1; GPT advisory API calls are disabled."))
+    elif advisory.get("required"):
+        print(DIM(
+            f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
+            f"REQUIRED mode — auto-calls enabled (key source: {advisory.get('api_key_source', 'unknown')})."
+        ))
     else:
         print(DIM(
             f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
-            f"auto-calls enabled (key source: {advisory.get('api_key_source', 'unknown')})."
+            f"API calls allowed manually (key source: {advisory.get('api_key_source', 'unknown')}). "
+            f"Auto-run is disabled because ENABLE_GPT_ADVISORY_REQUIRED is not 1."
         ))
 
     print()
@@ -5804,13 +5879,16 @@ def cmd_contract(args: argparse.Namespace) -> None:
                 "summary_path": str(paths["summary"]),
             }
             _log_event(state, f"contract_v2 frozen: {frozen_contract.get('contract_hash', '')[:12]}")
-            advisory_result = _auto_run_openai_advisory(state, kind="gpt-contract")
-            if advisory_result.get("status") == "COMPLETED":
-                print(GREEN(f"  [GPT ADVISORY] gpt-contract completed via {OPENAI_ADVISORY_MODEL}"))
-            elif advisory_result.get("status") == "SKIPPED":
-                print(YELLOW(f"  [GPT ADVISORY] gpt-contract skipped: {advisory_result.get('reason')}"))
+            if _openai_advisory_required():
+                advisory_result = _auto_run_openai_advisory(state, kind="gpt-contract")
+                if advisory_result.get("status") == "COMPLETED":
+                    print(GREEN(f"  [GPT ADVISORY] gpt-contract completed via {OPENAI_ADVISORY_MODEL}"))
+                elif advisory_result.get("status") == "SKIPPED":
+                    print(YELLOW(f"  [GPT ADVISORY] gpt-contract skipped: {advisory_result.get('reason')}"))
+                else:
+                    print(RED(f"  [GPT ADVISORY] gpt-contract error: {advisory_result.get('reason')}"))
             else:
-                print(RED(f"  [GPT ADVISORY] gpt-contract error: {advisory_result.get('reason')}"))
+                print(DIM("  [GPT ADVISORY] auto-run disabled by default (set ENABLE_GPT_ADVISORY_REQUIRED=1 to enable)"))
             _save(state)
         print(GREEN(f"\n[CONTRACT FROZEN] {pid}"))
         print(f"  contract_hash: {frozen_contract.get('contract_hash')}")
@@ -5940,10 +6018,18 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
         if not isinstance(info, dict) or info.get("status") != "PASS":
             blockers.append(f"{gate_name} gate must be PASS")
     blockers.extend(_phase_attestation_blockers(state))
-    pid = str(state.get("pipeline_id", ""))
-    unresolved = _unresolved_critical_advisories(pid)
-    if unresolved:
-        blockers.append(f"unresolved GPT advisory CRITICAL findings: {len(unresolved)}")
+    # GPT advisory CRITICAL은 ENABLE_GPT_ADVISORY_REQUIRED=1 일 때만 COMPLETE를 차단합니다.
+    # 기본 모드(REQUIRED 미설정)에서는 advisory가 수동 진단 도구이며 blocker가 아닙니다.
+    if _openai_advisory_required():
+        pid = str(state.get("pipeline_id", ""))
+        unresolved = _unresolved_critical_advisories(pid)
+        if unresolved:
+            blockers.append(f"unresolved GPT advisory CRITICAL findings: {len(unresolved)}")
+        else:
+            # REQUIRED=1인데 OPENAI_API_KEY가 없으면 advisory를 실제로 수행할 수 없음 → 차단
+            api_key, _src = _openai_api_key()
+            if not api_key:
+                blockers.append("advisory required but OPENAI_API_KEY missing")
     return blockers
 
 
@@ -6124,15 +6210,52 @@ def _advisory_status_summary(pid: str) -> Dict[str, Any]:
                 "reason": data.get("reason"),
                 "finding_count": len(data.get("findings", [])) if isinstance(data.get("findings"), list) else 0,
             })
+    review_count = len(review_files)
+    api_call_count = sum(1 for item in review_files if item.get("api_called"))
+    unresolved_critical_count = len(_unresolved_critical_advisories(pid))
+    api_call_enabled = bool(api_key) and _openai_advisory_enabled()
+    required = _openai_advisory_required()
+    # advisory_mode 4상태 분류:
+    #   not_run    : REQUIRED 미설정 (기본). advisory가 수동 진단 도구 (COMPLETE 차단 안함).
+    #   skipped    : ENABLE_GPT_ADVISORY=0 또는 API key 없음.
+    #   required   : REQUIRED=1이지만 unresolved CRITICAL=0.
+    #   blocking   : REQUIRED=1 + unresolved CRITICAL≥1 → COMPLETE 차단.
+    if required:
+        if unresolved_critical_count > 0:
+            advisory_mode = "blocking"
+            advisory_mode_reason = (
+                f"REQUIRED=1 + unresolved CRITICAL findings={unresolved_critical_count}"
+            )
+        elif not api_key:
+            advisory_mode = "blocking"
+            advisory_mode_reason = "REQUIRED=1 but OPENAI_API_KEY missing"
+        else:
+            advisory_mode = "required"
+            advisory_mode_reason = "REQUIRED=1; no unresolved CRITICAL"
+    elif not api_call_enabled:
+        advisory_mode = "skipped"
+        if not api_key:
+            advisory_mode_reason = "OPENAI_API_KEY not set"
+        else:
+            advisory_mode_reason = "ENABLE_GPT_ADVISORY not 1"
+    else:
+        # ENABLE_GPT_ADVISORY=1이지만 REQUIRED 미설정 → API 호출은 허용되나 자동 실행/blocker 없음
+        advisory_mode = "not_run"
+        advisory_mode_reason = (
+            "disabled by default (manual diagnostic only — set ENABLE_GPT_ADVISORY_REQUIRED=1 for blocker)"
+        )
     return {
         "api_key_present": bool(api_key),
         "api_key_source": api_key_source,
-        "enabled": bool(api_key) and _openai_advisory_enabled(),
-        "review_count": len(review_files),
-        "api_call_count": sum(1 for item in review_files if item.get("api_called")),
+        "enabled": api_call_enabled,
+        "required": required,
+        "advisory_mode": advisory_mode,
+        "advisory_mode_reason": advisory_mode_reason,
+        "review_count": review_count,
+        "api_call_count": api_call_count,
         "status_counts": status_counts,
         "reviews": review_files,
-        "unresolved_critical_count": len(_unresolved_critical_advisories(pid)),
+        "unresolved_critical_count": unresolved_critical_count,
     }
 
 
@@ -8481,7 +8604,7 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
     except Exception as _ste:
         logging.getLogger(__name__).warning("codex gate 기록 저장 실패: %s", _ste)
 
-    # REJECT인 경우 failure_packet.json 생성
+    # REJECT인 경우 failure_packet.json 생성 (schema_v2)
     if result_upper == "REJECT":
         gate_name = f"codex_{stage}_review"
         # D2: stage별 owner/return_phase 결정
@@ -8494,25 +8617,58 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
             "hygiene": "dev", "pr": "dev", "rca": "pm"
         }
         owner = _stage_owner_map.get(stage, "Dev")
-        packet: Dict[str, Any] = {
+        _return_phase = return_phase_arg or _stage_return_map.get(stage, "dev")
+        _required_actions = new_record.get("required_actions") or []
+        # required_actions가 비어있으면 notes를 폴백으로 사용
+        if not _required_actions and notes_arg:
+            _required_actions = [notes_arg]
+        if not _required_actions:
+            _required_actions = [
+                f"Codex review가 REJECT를 반환했습니다. {owner}가 {_return_phase} 단계로 돌아가 수정하세요."
+            ]
+        packet_v2: Dict[str, Any] = {
+            "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
+            "pipeline_id": active_pipeline_id,
+            "phase": _return_phase,
             "gate": gate_name,
+            "status": "FAIL",
+            "failure_code": f"codex_{stage}_reject",
+            "failure_category": "model_verification_failed",
+            "summary_ko": f"Codex {stage} stage 리뷰가 REJECT 되었습니다.",
+            "blocking_condition": f"codex {stage} stage ACCEPT 필요",
+            "expected": "Codex GPT-5.5 리뷰 ACCEPT",
+            "actual": "REJECT",
+            "evidence_paths": [str(evidence_arg)] if evidence_arg else [],
+            "command": [
+                sys.executable, "pipeline.py", "review", "codex-record",
+                "--stage", stage, "--result", "ACCEPT",
+                "--review-model", CODEX_REQUIRED_MODEL,
+            ],
+            "exit_code": 1,
+            "owner": owner,
+            "return_phase": _return_phase,
+            "minimal_rerun": [
+                f"python pipeline.py review codex-record --stage {stage} --result ACCEPT --review-model GPT-5.5 ..."
+            ],
+            "required_actions": list(_required_actions),
+            "retry_allowed": True,
+            "attempt_count": 1,
+            "created_at": now_ts,
+            # codex 특수 필드 (legacy 호환)
             "stage": stage,
             "result": "REJECT",
-            "owner": owner,
-            "return_phase": return_phase_arg or _stage_return_map.get(stage, "dev"),
             "notes": notes_arg or "",
-            "required_actions": new_record.get("required_actions", []),
-            "created_at": now_ts,
-            "evidence_file": str(evidence_arg),
+            "evidence_file": str(evidence_arg) if evidence_arg else "",
             "review_model": CODEX_REQUIRED_MODEL,
         }
         packet_path = BASE_DIR / "failure_packet.json"
         try:
-            packet_path.write_text(json.dumps(packet, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(f"[CODEX RECORD] REJECT — failure_packet.json 생성: {packet_path}")
+            packet_path.write_text(json.dumps(packet_v2, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"[CODEX RECORD] REJECT — failure_packet.json 생성 (schema_v2): {packet_path}")
             print(f"  gate: {gate_name}")
             print(f"  owner: {owner}")
-            print(f"  return_phase: {packet['return_phase']}")
+            print(f"  return_phase: {packet_v2['return_phase']}")
+            print(f"  failure_category: {packet_v2['failure_category']}")
         except OSError as exc:
             logging.getLogger(__name__).warning("failure_packet.json 저장 실패: %s", exc)
 
@@ -8587,6 +8743,48 @@ def _next_failure_attempt(paths: Dict[str, Path], gate_name: str) -> int:
     return (max(attempts) + 1) if attempts else 1
 
 
+def _normalize_failure_category(category: Optional[str]) -> str:
+    """invalid 카테고리는 'unknown'으로 대체하고 stderr 경고를 출력합니다."""
+    if not category:
+        return "unknown"
+    cat = str(category).strip().lower()
+    if cat in FAILURE_CATEGORIES:
+        return cat
+    sys.stderr.write(
+        f"[FAILURE PACKET WARN] failure_category='{category}' is not in FAILURE_CATEGORIES; "
+        f"defaulting to 'unknown'.\n"
+    )
+    return "unknown"
+
+
+def _gate_owner_and_return(gate_name: str, status: str = "FAIL") -> Tuple[str, str]:
+    """gate 이름과 status로부터 (owner, return_phase) 튜플 반환.
+
+    status=SETUP_REQUIRED 인 경우 owner='User'로 강제 라우팅.
+    """
+    if str(status).upper() == "SETUP_REQUIRED":
+        return ("User", "pm")
+    return _GATE_OWNER_RETURN_MAP.get(gate_name, ("Pipeline Manager", "dev"))
+
+
+def _count_same_failure_code_attempts(
+    state: Dict[str, Any], gate_name: str, failure_code: str
+) -> int:
+    """동일 (gate_name, failure_code) 조합의 누적 attempt 횟수를 반환."""
+    if not failure_code:
+        return 0
+    existing = state.get("failure_packets")
+    if not isinstance(existing, list):
+        return 0
+    count = 0
+    for item in existing:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("gate") or "") == gate_name and str(item.get("failure_code") or "") == failure_code:
+            count += 1
+    return count
+
+
 def _record_failure_packet(
     state: Dict[str, Any],
     gate_name: str,
@@ -8594,7 +8792,33 @@ def _record_failure_packet(
     *,
     command: Optional[List[str]] = None,
     note: str = "",
+    # IMP-20260518-150C schema_v2 확장 (모두 keyword-only, backward-compatible 기본값)
+    status: Optional[str] = None,
+    phase: str = "",
+    failure_code: str = "",
+    failure_category: Optional[str] = None,
+    summary_ko: str = "",
+    blocking_condition: str = "",
+    expected: str = "",
+    actual: str = "",
+    evidence_paths: Optional[List[str]] = None,
+    exit_code: int = -1,
+    owner: Optional[str] = None,
+    return_phase: Optional[str] = None,
+    required_actions: Optional[List[str]] = None,
+    retry_allowed: bool = True,
 ) -> Dict[str, Any]:
+    """schema_version=2 failure packet 생성 + 저장.
+
+    필수 검증:
+    - required_actions=[] → SystemExit(2) (호출자가 최소 1개 조치를 제공해야 함).
+      ``required_actions=None`` 인 backward-compatible 호출은 검증을 건너뛰고
+      report.summary 또는 기본 안내 문구를 사용한다.
+    - failure_category invalid → "unknown" 으로 대체 + stderr 경고.
+    - status=SETUP_REQUIRED → owner="User" 강제 라우팅.
+    - 동일 (gate, failure_code) 조합 attempt_count >= FAILURE_BLOCKED_THRESHOLD →
+      status=BLOCKED + escalation_reason='same_failure_code_repeated_3x' + external blocker.
+    """
     pid = str(state.get("pipeline_id") or "UNKNOWN")
     paths = _contract_paths(pid)
     attempt = _next_failure_attempt(paths, gate_name)
@@ -8609,16 +8833,84 @@ def _record_failure_packet(
         minimal_rerun = [command]
     else:
         minimal_rerun = [str(item) for item in command]
-    packet = {
-        "schema_version": 1,
+
+    # required_actions 검증 — schema_v2 신규 호출에서만 strict
+    if required_actions is not None:
+        if not isinstance(required_actions, list) or len(required_actions) == 0:
+            _die(
+                "[FAILURE PACKET ERROR] required_actions가 비어 있습니다. "
+                "최소 1개 조치를 제공하세요.",
+                exit_code=2,
+            )
+        required_actions_final: List[str] = [str(a) for a in required_actions if str(a).strip()]
+        if not required_actions_final:
+            _die(
+                "[FAILURE PACKET ERROR] required_actions가 비어 있습니다. "
+                "최소 1개 조치를 제공하세요.",
+                exit_code=2,
+            )
+    else:
+        # backward-compatible: 호출자가 제공하지 않으면 note + 기본 안내로 폴백
+        required_actions_final = [note] if note else ["Inspect failed_checks and report_excerpt to repair the gate."]
+
+    # status 결정
+    raw_status = (
+        status
+        or report.get("status")
+        or report.get("summary", {}).get("verdict")
+        or "FAIL"
+    )
+    final_status = str(raw_status).upper()
+    if final_status not in {"FAIL", "BLOCKED", "SETUP_REQUIRED"}:
+        # FAIL 아닌 임의 verdict는 그대로 보존
+        pass
+
+    # failure_category 정규화 (None 또는 invalid → 'unknown')
+    normalized_category = _normalize_failure_category(failure_category)
+
+    # owner/return_phase 결정
+    auto_owner, auto_return = _gate_owner_and_return(gate_name, final_status)
+    final_owner = owner if owner else auto_owner
+    final_return_phase = return_phase if return_phase else auto_return
+    if final_status == "SETUP_REQUIRED":
+        # SETUP_REQUIRED는 owner=User 강제 (호출자 override 차단)
+        final_owner = "User"
+
+    # 동일 (gate, failure_code) 조합 3회 이상이면 BLOCKED 전이
+    escalation_reason: Optional[str] = None
+    same_code_count = _count_same_failure_code_attempts(state, gate_name, failure_code) + 1
+    if failure_code and same_code_count >= FAILURE_BLOCKED_THRESHOLD and final_status != "SETUP_REQUIRED":
+        final_status = "BLOCKED"
+        escalation_reason = "same_failure_code_repeated_3x"
+        retry_allowed = False
+
+    packet: Dict[str, Any] = {
+        "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
         "pipeline_id": pid,
+        "phase": phase or final_return_phase,
         "gate": gate_name,
+        "status": final_status,
+        "failure_code": failure_code,
+        "failure_category": normalized_category,
+        "summary_ko": summary_ko or note or "",
+        "blocking_condition": blocking_condition or "",
+        "expected": expected or "",
+        "actual": actual or "",
+        "evidence_paths": list(evidence_paths) if isinstance(evidence_paths, list) else [],
+        "command": minimal_rerun,
+        "exit_code": int(exit_code) if isinstance(exit_code, int) else -1,
+        "owner": final_owner,
+        "return_phase": final_return_phase,
+        "minimal_rerun": minimal_rerun,
+        "required_actions": required_actions_final,
+        "retry_allowed": bool(retry_allowed),
+        "attempt_count": same_code_count if failure_code else attempt,
+        "created_at": _now(),
+        # legacy 호환 필드
         "attempt": attempt,
         "packet_path": str(packet_path),
         "recorded_at": _now(),
-        "status": report.get("status") or report.get("summary", {}).get("verdict") or "FAIL",
         "repair_owner": _repair_owner_for_gate(gate_name, report),
-        "minimal_rerun": minimal_rerun,
         "note": note,
         "failed_checks": failed_checks,
         "report_excerpt": {
@@ -8627,6 +8919,8 @@ def _record_failure_packet(
             "results": report.get("results", [])[:10] if isinstance(report.get("results"), list) else [],
         },
     }
+    if escalation_reason:
+        packet["escalation_reason"] = escalation_reason
     _write_json(packet_path, packet)
     state.setdefault("failure_packets", [])
     if isinstance(state["failure_packets"], list):
@@ -8637,6 +8931,15 @@ def _record_failure_packet(
             "packet_path": str(packet_path),
             "recorded_at": packet["recorded_at"],
             "repair_owner": packet["repair_owner"],
+            # schema_v2 핵심 필드 (조회용)
+            "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
+            "status": final_status,
+            "failure_code": failure_code,
+            "failure_category": normalized_category,
+            "owner": final_owner,
+            "return_phase": final_return_phase,
+            "attempt_count": packet["attempt_count"],
+            "escalation_reason": escalation_reason,
         })
     return packet
 
@@ -9078,12 +9381,41 @@ def cmd_gates(args: argparse.Namespace) -> None:
             report_file=str(paths["technical_result"]),
         )
         if result["status"] != "PASS":
+            failed_names = [
+                str(item.get("name"))
+                for item in result.get("checks", [])
+                if isinstance(item, dict) and item.get("status") in {"FAIL", "ERROR"}
+            ]
+            # 카테고리 분류: pytest/py_compile=test_failed, mypy=typecheck_failed, bandit=security_failed
+            if any(n == "mypy" for n in failed_names):
+                _tech_category = "typecheck_failed"
+            elif any(n == "bandit" for n in failed_names):
+                _tech_category = "security_failed"
+            elif any(n in {"pytest", "py_compile", "ruff"} for n in failed_names):
+                _tech_category = "test_failed"
+            else:
+                _tech_category = "test_failed"
             packet = _record_failure_packet(
                 state,
                 "technical",
                 result,
                 command=[sys.executable, "pipeline.py", "gates", "technical"],
                 note="Technical gate failed; use failed_checks and minimal_rerun for targeted repair.",
+                status="FAIL",
+                phase="dev",
+                failure_code=f"technical_{_tech_category}",
+                failure_category=_tech_category,
+                summary_ko="기술 게이트 실패 — 실패한 도구 검사를 수정해야 합니다.",
+                expected="ruff/mypy/bandit/py_compile/pytest 모두 PASS",
+                actual=f"실패한 검사: {', '.join(failed_names) if failed_names else 'unknown'}",
+                exit_code=1,
+                owner="Dev",
+                return_phase="dev",
+                required_actions=[
+                    "failed_checks 항목에서 실패한 도구의 로그를 확인하세요.",
+                    "해당 도구를 로컬에서 재실행하여 0개의 오류가 나올 때까지 코드를 수정하세요.",
+                    "수정 후 `python pipeline.py gates technical` 을 다시 실행하세요.",
+                ],
             )
             print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
         _log_event(state, f"technical gate {result['status']}")
@@ -9149,6 +9481,21 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 report,
                 command=[sys.executable, "pipeline.py", "contract", "audit"],
                 note="Oracle manifest is missing or malformed; repair user-owned oracle files before rerunning oracle gate.",
+                status="FAIL",
+                phase="qa",
+                failure_code="oracle_manifest_blocked",
+                failure_category="missing_evidence",
+                summary_ko="오라클 매니페스트가 누락되거나 잘못되었습니다.",
+                expected="tests/oracles/{pipeline_id}/ 아래 사용자 소유 오라클 파일이 audit PASS",
+                actual="; ".join(oracle_blockers),
+                exit_code=1,
+                owner="PM",
+                return_phase="pm",
+                required_actions=[
+                    "PM이 tests/oracles/{pipeline_id}/ 경로에 입력/기대 출력 파일을 추가하세요.",
+                    "`python pipeline.py contract add-oracle ...` 로 매니페스트에 등록하세요.",
+                    "`python pipeline.py contract audit` PASS 후 oracle gate를 다시 실행하세요.",
+                ],
             )
             _log_event(state, "oracle gate FAIL (manifest blockers)")
             _save(state)
@@ -9179,6 +9526,22 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 report,
                 command=[sys.executable, "pipeline.py", "gates", "oracle"],
                 note="Oracle gate failed; inspect failing results and output path resolution before broad rework.",
+                status="FAIL",
+                phase="qa",
+                failure_code="oracle_acceptance_fail",
+                failure_category="oracle_failed",
+                summary_ko="오라클 게이트 실패 — 실제 출력이 기대 출력과 다릅니다.",
+                expected="모든 oracle 케이스 PASS",
+                actual=f"verdict={verdict} (자세한 내용은 oracle_result.json 참조)",
+                evidence_paths=[str(paths["oracle_result"])],
+                exit_code=1,
+                owner="Dev",
+                return_phase="dev",
+                required_actions=[
+                    "oracle_result.json의 failing 케이스를 분석하세요.",
+                    "기대 출력과 실제 출력 차이를 좁히도록 Dev 코드를 수정하세요.",
+                    "수정 후 `python pipeline.py gates oracle` 을 다시 실행하세요.",
+                ],
             )
             print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
             state["phases"]["harness"]["status"] = "FAIL"
@@ -9252,6 +9615,21 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 report,
                 command=[sys.executable, "pipeline.py", "gates", "accept", "--result", "ACCEPT", "--evidence", "<repaired-result>", "--user-confirmed"],
                 note="User rejected the visible result; PM/Dev should repair the requested behavior or clarify requirements.",
+                status="FAIL",
+                phase="harness",
+                failure_code="user_acceptance_rejected",
+                failure_category="user_acceptance_rejected",
+                summary_ko="사용자가 결과물을 REJECT 했습니다.",
+                expected="사용자가 PR 결과/첨부물을 보고 ACCEPT 선택",
+                actual=f"result=REJECT notes={args.notes or '(no notes)'}",
+                exit_code=1,
+                owner="Dev",
+                return_phase="dev",
+                required_actions=[
+                    "사용자 거절 사유를 확인하고 PM이 요구사항을 명확히 하거나 Dev가 결과물을 수정하세요.",
+                    "수정 결과를 PR에 push하고 GitHub Actions가 PASS 인지 확인하세요.",
+                    "사용자에게 다시 PR 링크와 결과물을 제시하여 ACCEPT/REJECT를 받으세요.",
+                ],
             )
         state["current_phase"] = "architect"
         _log_event(state, f"user acceptance gate {gate_status}")
@@ -9282,6 +9660,22 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 verification,
                 command=[sys.executable, "pipeline.py", "gates", "github-ci", "--repo", args.repo or _github_repo_from_remote()],
                 note="GitHub CI gate failed; inspect Actions logs before local code changes.",
+                status="FAIL",
+                phase="build",
+                failure_code="github_ci_failed",
+                failure_category="ci_failed",
+                summary_ko="GitHub Actions CI가 실패했습니다.",
+                expected="모든 GitHub Actions workflow run PASS",
+                actual=f"run_id={verification.get('run_id')} status={verification.get('status')}",
+                evidence_paths=[str(_contract_paths(pid)["github_ci_result"])],
+                exit_code=1,
+                owner="Dev",
+                return_phase="dev",
+                required_actions=[
+                    "GitHub Actions 실패 로그를 확인하여 원인을 파악하세요.",
+                    "로컬 환경에서 동일 검사를 재현하고 코드를 수정하세요.",
+                    "수정 후 PR에 push하고 Actions가 PASS 한 뒤 `python pipeline.py gates github-ci` 를 다시 실행하세요.",
+                ],
             )
         _save(state)
         color = GREEN if verification["status"] == "PASS" else RED
