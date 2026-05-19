@@ -36,7 +36,7 @@ Codex technical review(GPT-5.5)는 파이프라인의 공식 hard gate입니다.
 
 ```powershell
 # stage별 기록 (plan/scope/code/hygiene)
-python pipeline.py review codex --stage plan --result ACCEPT --review-model GPT-5.5 --reviewer [ID]
+python pipeline.py review codex-run --stage plan --review-model GPT-5.5 --reviewer [ID]
 
 # pr/rca stage 공식 기록 (4중 검증 적용)
 python pipeline.py review codex-record --stage pr --result ACCEPT --review-model GPT-5.5 \
@@ -314,7 +314,16 @@ Claude Code는 사용자에게 승인(ACCEPT)을 묻기 전에 반드시 실제 
 
 GitHub에서 최종 사용자가 보게 되는 문서는 모두 쉬운 한국어로 작성한다. 대상은 PR 제목/본문, `.github/pull_request_template.md`, GitHub Actions의 **최종 확인 안내** 댓글, `human_acceptance_packet.md`, 사용자에게 전달하는 첨부파일 설명이다. `modified`, `added`, `CI: PASS`, `artifact`, `Actions`처럼 영어 상태값만 던지지 말고 `수정됨`, `새 파일`, `자동 검사: 통과`, `첨부파일`, `자동 검사 결과`처럼 한국어 설명으로 바꾼다. 꼭 필요한 식별자(`tests`, commit SHA, 명령어, ACCEPT/REJECT)는 backtick 안에 두고 바로 옆에 한국어 뜻을 붙인다.
 
-In the mandatory Three-Gate flow, `COMPLETE` is impossible until required phase attestations, Technical, Oracle, GitHub CI, and User Acceptance gates are all PASS. The technical gate is strict by default: missing ruff/mypy/bandit/pytest or missing Python evidence files fail unless `--relaxed-tools` is explicitly used. Oracle audit requires user-source hashes, at least one normal oracle, at least one edge/exception/error oracle, non-empty/non-placeholder expected outputs, and oracle files stored under `tests/oracles/**` so CODEOWNERS can protect the answer key. `--allow-no-oracle` is only for explicitly non-runnable docs/analysis/config work and cannot waive malformed, hashless, agent-sourced, weak, or non-codeowned oracle entries. GPT/OpenAI advisory reviews are optional, non-binding red-team reviews fixed to `gpt-5.5`; API calls happen only when `OPENAI_API_KEY` is present and `ENABLE_GPT_ADVISORY=1`. Unresolved CRITICAL advisory findings block COMPLETE, but GPT never awards PASS/FAIL, never compares oracles, and never replaces user acceptance. If `pipeline.py advisory status` shows `review_count=0` or `api_call_count=0`, advisory was not actually run; agents must not report "GPT advisory CRITICAL findings zero" as if an OpenAI review occurred.
+In the mandatory Three-Gate flow, `COMPLETE` is impossible until required phase attestations, Technical, Oracle, GitHub CI, and User Acceptance gates are all PASS. The technical gate is strict by default: missing ruff/mypy/bandit/pytest or missing Python evidence files fail unless `--relaxed-tools` is explicitly used. Oracle audit requires user-source hashes, at least one normal oracle, at least one edge/exception/error oracle, non-empty/non-placeholder expected outputs, and oracle files stored under `tests/oracles/**` so CODEOWNERS can protect the answer key. `--allow-no-oracle` is only for explicitly non-runnable docs/analysis/config work and cannot waive malformed, hashless, agent-sourced, weak, or non-codeowned oracle entries.
+
+GPT/OpenAI advisory reviews are demoted to **manual red-team diagnostics by default (IMP-20260518-150C)**. The two environment variables have separate meanings:
+
+| Environment variable | Default | What it allows |
+|---|---|---|
+| `ENABLE_GPT_ADVISORY=1` | unset (off) | API call permitted only. Manual `python pipeline.py advisory gpt-code/gpt-contract` can call OpenAI when `OPENAI_API_KEY` is also set. **No auto-run. No COMPLETE blocker.** |
+| `ENABLE_GPT_ADVISORY_REQUIRED=1` | unset (off) | Strict mode. Dev DONE / contract freeze auto-run advisory. Unresolved CRITICAL findings block COMPLETE. Missing `OPENAI_API_KEY` also blocks COMPLETE. |
+
+The advisory model is fixed to `gpt-5.5`. Unresolved CRITICAL advisory findings block COMPLETE **only when `ENABLE_GPT_ADVISORY_REQUIRED=1` is set**. In the default mode the advisory is a manual diagnostic tool and never blocks completion. GPT never awards PASS/FAIL, never compares oracles, and never replaces user acceptance. If `pipeline.py advisory status` shows `review_count=0` or `api_call_count=0`, advisory was not actually run; agents must not report "GPT advisory CRITICAL findings zero" as if an OpenAI review occurred. `pipeline.py status` reports advisory in one of four modes: `not_run` (default), `skipped` (key missing or call disabled), `required` (REQUIRED=1 with no unresolved CRITICAL), `blocking` (REQUIRED=1 with unresolved CRITICAL or missing key).
 
 `python pipeline.py gates technical --relaxed-tools` is diagnostic only. It may
 help inspect a machine missing ruff/mypy/bandit/pytest, but it always records a

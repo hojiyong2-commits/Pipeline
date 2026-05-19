@@ -68,7 +68,19 @@ Do not use `test_results.jsonl` or harness scores as a COMPLETE criterion. Old l
 | Oracle gate FAIL | failing oracle case, input/expected hashes, actual output | Dev behavior fix or user-approved oracle correction |
 | GitHub CI gate FAIL | Actions run logs and attestation JSON | fix CI/test failure, push again |
 | User Acceptance REJECT | visible result mismatch | PM clarification then Dev/module rework |
-| Unresolved advisory CRITICAL | advisory JSON and resolution records | fix, waive with user approval, or mark false positive |
+| Unresolved advisory CRITICAL (REQUIRED mode only) | advisory JSON and resolution records | fix, waive with user approval, or mark false positive. **In default mode (REQUIRED unset) advisory CRITICAL is NOT a COMPLETE blocker — IMP-20260518-150C** |
+
+## failure_packet schema_v2 (IMP-20260518-150C)
+
+`pipeline.py` 의 `_record_failure_packet` 은 `schema_version=2` 형식으로 표준화되어 있다. RCA 분석 시 packet 의 다음 필드를 반드시 활용한다:
+
+- `failure_category` — 14종 명시 카테고리 + `unknown` fallback (총 15개): `scope_mismatch`, `missing_evidence`, `stale_evidence`, `model_verification_failed`, `ci_failed`, `test_failed`, `typecheck_failed`, `security_failed`, `oracle_failed`, `user_acceptance_rejected`, `setup_required`, `provider_unavailable`, `document_implementation_mismatch`, `protocol_violation`, `unknown`. invalid 값은 자동으로 `unknown` 으로 대체되며 stderr 경고가 출력된다.
+- `status` — `FAIL` / `BLOCKED` / `SETUP_REQUIRED` 중 하나.
+- `failure_code` — `(gate, failure_code)` 단위로 카운트되는 식별자. 동일 조합이 3회 누적되면 `status` 가 자동으로 `BLOCKED` 로 전이되고 `escalation_reason="same_failure_code_repeated_3x"` 와 `retry_allowed=false` 가 기록된다. RCA에서는 BLOCKED 전이를 발견하면 같은 분석을 반복하지 말고 **구조적 재설계**(`<protocol_evolution_decision required=true>` 또는 PM 차원 step_plan 재설계)를 권고해야 한다.
+- `owner` / `return_phase` — `status=SETUP_REQUIRED` 인 경우 `owner` 가 자동으로 `"User"` 로 라우팅된다. RCA 보고서에는 사용자에게 어떤 환경 설정/도구 설치가 필요한지 한국어로 명시한다.
+- `required_actions` — 빈 리스트는 `_record_failure_packet` 단계에서 거부된다. RCA는 packet 의 `required_actions` 항목을 그대로 인용하지 말고, **반복 패턴**에 한해 새 권고를 추가한다.
+
+`<rca_report>` 출력 시 각 분석 항목에 대해 위 필드를 1줄 인용하여 근거를 표시한다.
 
 ## Protocol Evolution Decision
 
