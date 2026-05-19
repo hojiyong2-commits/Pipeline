@@ -707,5 +707,274 @@ class TestFailurePacketFileCreation(unittest.TestCase):
                 self.assertEqual(data["schema_version"], 2, f"{jf}: schema_version != 2")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 11: cmd_build 실제 경로에서 failure_packet JSON 생성 통합 테스트
+# ─────────────────────────────────────────────────────────────────────────────
+
+import argparse as _argparse
+
+
+class TestCmdBuildActualPathsCreateFailurePacket(unittest.TestCase):
+    """MT-2 추가: cmd_build 실제 코드 경로에서 failure_packet JSON 생성 검증.
+
+    각 테스트는 cmd_build를 실제로 호출하고 (mocked state 사용),
+    failures_root 디렉토리에 failure_packet JSON 파일이 생성되는지 확인합니다.
+    단순 _record_failure_packet 직접 호출이 아니라 실제 cmd_build 코드 경로를 실행합니다.
+    """
+
+    def _make_build_args(self, **kwargs: Any) -> _argparse.Namespace:
+        """cmd_build 호출용 최소 args 생성."""
+        defaults: Dict[str, Any] = {
+            "exe": "dist/app.exe",
+            "report_file": None,
+            "skip_reason": None,
+            "agent_run_id": None,
+            "build_deferred": False,
+            "branch": None,
+        }
+        defaults.update(kwargs)
+        return _argparse.Namespace(**defaults)
+
+    def _state_with_build_ready(self) -> Dict[str, Any]:
+        """build 진입 조건을 충족하는 state (QA PASS, SEC SKIP, current_phase=build)."""
+        state = _new_state()
+        state["current_phase"] = "build"
+        state["phases"]["qa"]["status"] = "PASS"
+        state["phases"]["qa"]["completed_at"] = "2026-01-01T02:00:00Z"
+        state["phases"]["sec"]["status"] = "SKIP"
+        state["phases"]["sec"]["completed_at"] = "2026-01-01T02:30:00Z"
+        # phase_attestations 비활성화 — check_gate 통과를 위해
+        state["phase_attestations"] = {"enabled": False, "phases": {}}
+        return state
+
+    def test_cmd_build_gate_blocked_creates_failure_packet(self) -> None:
+        """cmd_build gate 차단 시 failure_packet JSON 파일 생성 검증."""
+        with tempfile.TemporaryDirectory() as td:
+            sandbox = _ContractPathSandbox(Path(td), "IMP-20260519-EC9F")
+            with sandbox:
+                # QA PENDING → build gate blocked (current_phase != "build" 조건)
+                state = _new_state()
+                state["current_phase"] = "qa"
+                state["phases"]["qa"]["status"] = "PENDING"
+
+                args = self._make_build_args()
+
+                with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                     mock.patch.object(pipeline, "_save_state_for"), \
+                     mock.patch.object(pipeline, "_save"):
+                    try:
+                        pipeline.cmd_build(args)
+                    except SystemExit:
+                        pass
+
+            failures_root = sandbox.paths_dict["failures_root"]
+            created = list(failures_root.glob("*.json"))
+            self.assertGreater(
+                len(created), 0,
+                f"cmd_build gate blocked 경로에서 failure_packet JSON이 생성되지 않음. "
+                f"failures_root: {failures_root}, 파일들: {list(failures_root.iterdir())}",
+            )
+            packet = json.loads(created[0].read_text(encoding="utf-8"))
+            self.assertEqual(packet["schema_version"], 2)
+            self.assertIsInstance(packet.get("required_actions"), list)
+            self.assertGreater(len(packet["required_actions"]), 0)
+
+    def test_cmd_build_exe_missing_creates_failure_packet(self) -> None:
+        """EXE 파일 없음 경로에서 failure_packet JSON 파일 생성 검증."""
+        with tempfile.TemporaryDirectory() as td:
+            sandbox = _ContractPathSandbox(Path(td), "IMP-20260519-EC9F")
+            with sandbox:
+                state = self._state_with_build_ready()
+                # EXE 경로가 실제로 존재하지 않는 경로
+                missing_exe = str(Path(td) / "nonexistent_app.exe")
+                args = self._make_build_args(exe=missing_exe)
+
+                with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                     mock.patch.object(pipeline, "_save_state_for"), \
+                     mock.patch.object(pipeline, "_save"), \
+                     mock.patch.object(pipeline, "check_gate", return_value=(True, "")):
+                    try:
+                        pipeline.cmd_build(args)
+                    except SystemExit:
+                        pass
+
+            failures_root = sandbox.paths_dict["failures_root"]
+            created = list(failures_root.glob("*.json"))
+            self.assertGreater(
+                len(created), 0,
+                "EXE missing 경로에서 failure_packet JSON이 생성되지 않음",
+            )
+            packet = json.loads(created[0].read_text(encoding="utf-8"))
+            self.assertEqual(packet["schema_version"], 2)
+            self.assertIn("missing", packet.get("failure_code", "").lower())
+
+    def test_cmd_build_report_missing_creates_failure_packet(self) -> None:
+        """build_report.xml 없음 경로에서 failure_packet JSON 파일 생성 검증."""
+        with tempfile.TemporaryDirectory() as td:
+            sandbox = _ContractPathSandbox(Path(td), "IMP-20260519-EC9F")
+            with sandbox:
+                state = self._state_with_build_ready()
+                # 실제로 존재하는 EXE 경로 생성 (EXE exists, but report missing)
+                exe_path = Path(td) / "app.exe"
+                exe_path.write_bytes(b"fake exe")
+                # report_file은 존재하지 않는 경로
+                missing_report = str(Path(td) / "missing_report.xml")
+                args = self._make_build_args(exe=str(exe_path), report_file=missing_report)
+
+                with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                     mock.patch.object(pipeline, "_save_state_for"), \
+                     mock.patch.object(pipeline, "_save"), \
+                     mock.patch.object(pipeline, "check_gate", return_value=(True, "")):
+                    try:
+                        pipeline.cmd_build(args)
+                    except SystemExit:
+                        pass
+
+            failures_root = sandbox.paths_dict["failures_root"]
+            created = list(failures_root.glob("*.json"))
+            self.assertGreater(
+                len(created), 0,
+                "build_report.xml missing 경로에서 failure_packet JSON이 생성되지 않음",
+            )
+            packet = json.loads(created[0].read_text(encoding="utf-8"))
+            self.assertEqual(packet["schema_version"], 2)
+            self.assertIsInstance(packet.get("required_actions"), list)
+            self.assertGreater(len(packet["required_actions"]), 0)
+
+    def test_cmd_build_report_invalid_xml_creates_failure_packet(self) -> None:
+        """build_report.xml invalid XML 경로에서 failure_packet JSON 파일 생성 검증."""
+        with tempfile.TemporaryDirectory() as td:
+            sandbox = _ContractPathSandbox(Path(td), "IMP-20260519-EC9F")
+            with sandbox:
+                state = self._state_with_build_ready()
+                # 실제로 존재하는 EXE
+                exe_path = Path(td) / "app.exe"
+                exe_path.write_bytes(b"fake exe")
+                # 잘못된 XML (6-section 없음)
+                invalid_report = Path(td) / "invalid_report.xml"
+                invalid_report.write_text(
+                    "<build_report><section_1_command>cmd</section_1_command></build_report>",
+                    encoding="utf-8",
+                )
+                args = self._make_build_args(exe=str(exe_path), report_file=str(invalid_report))
+
+                with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                     mock.patch.object(pipeline, "_save_state_for"), \
+                     mock.patch.object(pipeline, "_save"), \
+                     mock.patch.object(pipeline, "check_gate", return_value=(True, "")):
+                    try:
+                        pipeline.cmd_build(args)
+                    except SystemExit:
+                        pass
+
+            failures_root = sandbox.paths_dict["failures_root"]
+            created = list(failures_root.glob("*.json"))
+            self.assertGreater(
+                len(created), 0,
+                "invalid XML 경로에서 failure_packet JSON이 생성되지 않음",
+            )
+            packet = json.loads(created[0].read_text(encoding="utf-8"))
+            self.assertEqual(packet["schema_version"], 2)
+            self.assertIn("invalid", packet.get("failure_code", "").lower())
+
+    def test_cmd_build_invalid_skip_reason_creates_failure_packet(self) -> None:
+        """invalid --skip-reason 경로에서 failure_packet JSON 파일 생성 검증."""
+        with tempfile.TemporaryDirectory() as td:
+            sandbox = _ContractPathSandbox(Path(td), "IMP-20260519-EC9F")
+            with sandbox:
+                state = self._state_with_build_ready()
+                # exe=N/A 이지만 skip_reason이 whitelist에 없음
+                args = self._make_build_args(exe="N/A", skip_reason="invalid_reason_xyz")
+
+                with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                     mock.patch.object(pipeline, "_save_state_for"), \
+                     mock.patch.object(pipeline, "_save"), \
+                     mock.patch.object(pipeline, "check_gate", return_value=(True, "")):
+                    try:
+                        pipeline.cmd_build(args)
+                    except SystemExit:
+                        pass
+
+            failures_root = sandbox.paths_dict["failures_root"]
+            created = list(failures_root.glob("*.json"))
+            self.assertGreater(
+                len(created), 0,
+                "invalid skip-reason 경로에서 failure_packet JSON이 생성되지 않음",
+            )
+            packet = json.loads(created[0].read_text(encoding="utf-8"))
+            self.assertEqual(packet["schema_version"], 2)
+            self.assertIn("skip_reason", packet.get("failure_code", "").lower())
+
+    def test_cmd_preflight_pr_actual_path_creates_failure_packet(self) -> None:
+        """_cmd_gates_preflight_pr 실제 함수 경로에서 failure_packet JSON 생성 검증.
+
+        string grep이 아니라 실제 _cmd_gates_preflight_pr 함수를 호출하여
+        failure_packet JSON 파일이 생성되는지 검증합니다.
+        """
+        self.assertTrue(
+            hasattr(pipeline, "_cmd_gates_preflight_pr"),
+            "_cmd_gates_preflight_pr 함수가 pipeline.py에 없음",
+        )
+
+        with tempfile.TemporaryDirectory() as td:  # nosec B108
+            sandbox = _ContractPathSandbox(Path(td), "IMP-20260519-EC9F")
+            with sandbox:
+                state = _new_state()
+                original_record = pipeline._record_failure_packet
+                recorded_packets: List[Dict[str, Any]] = []
+
+                def capturing_record(
+                    state_arg: Dict[str, Any],
+                    gate: str,
+                    report: Dict[str, Any],
+                    **kwargs: Any,
+                ) -> Dict[str, Any]:
+                    """_record_failure_packet 호출 캡처."""
+                    result = original_record(state_arg, gate, report, **kwargs)
+                    recorded_packets.append(result)
+                    return result
+
+                # request_file을 존재하지 않는 경로로 지정 → 파일 존재 체크 건너뜀
+                nonexist_request = str(Path(td) / "no_such_request.json")
+                args = _argparse.Namespace(
+                    phase="dev",
+                    branch=None,
+                    pipeline_id="IMP-20260519-EC9F",
+                    request_file=nonexist_request,
+                )
+
+                with mock.patch.object(pipeline, "_load_branch_state", return_value=state), \
+                     mock.patch.object(pipeline, "_load", return_value=state), \
+                     mock.patch.object(pipeline, "_save"), \
+                     mock.patch.object(
+                         pipeline, "_record_failure_packet", side_effect=capturing_record
+                     ), \
+                     mock.patch(
+                         "subprocess.run",
+                         return_value=mock.Mock(
+                             returncode=0,
+                             stdout=".github/workflows/ci.yml\n",
+                             stderr="",
+                         ),
+                     ):
+                    try:
+                        pipeline._cmd_gates_preflight_pr(args)
+                    except SystemExit:
+                        pass
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            failures_root = sandbox.paths_dict["failures_root"]
+            created = list(failures_root.glob("*.json"))
+
+            has_packet = len(created) > 0 or len(recorded_packets) > 0
+            self.assertTrue(
+                has_packet,
+                "_cmd_gates_preflight_pr 실패 경로에서 failure_packet이 생성되지 않음. "
+                f"recorded_packets={len(recorded_packets)}, "
+                f"failures={list(failures_root.iterdir())}",
+            )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

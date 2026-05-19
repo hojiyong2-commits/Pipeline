@@ -4662,6 +4662,24 @@ def cmd_build(args: argparse.Namespace) -> None:
 
     ok, reason = check_gate(state, "build")
     if not ok:
+        _record_failure_packet(
+            state,
+            "build_gate",
+            {},
+            failure_code="build_gate_blocked",
+            failure_category="missing_evidence",
+            summary_ko=f"Build 진입 차단 — {reason}",
+            expected="QA PASS, SEC SKIP/PASS 완료",
+            actual=reason,
+            owner="Pipeline Manager",
+            return_phase="qa",
+            required_actions=[
+                "python pipeline.py status 로 미완료 phase 확인",
+                "QA PASS 및 SEC SKIP/PASS 완료 후 재시도",
+            ],
+            retry_allowed=True,
+        )
+        _save(state)
         _die(f"[GATE BLOCKED] {reason}")
 
     exe = getattr(args, "exe", None)
@@ -4677,6 +4695,24 @@ def cmd_build(args: argparse.Namespace) -> None:
         # EXE 파일 실제 존재 검증
         exe_path = Path(str(exe))
         if not exe_path.exists():
+            _record_failure_packet(
+                state,
+                "build_exe_missing",
+                {},
+                failure_code="build_exe_missing",
+                failure_category="missing_artifact",
+                summary_ko=f"Build 실패 — EXE 파일 없음: {exe}",
+                expected=f"EXE 파일 존재: {exe}",
+                actual="파일 없음",
+                owner="Build",
+                return_phase="build",
+                required_actions=[
+                    "PyInstaller를 실행하여 EXE를 생성하세요: pyinstaller --onefile main.py",
+                    f"EXE 생성 확인 후 재실행: python pipeline.py build --exe {exe}",
+                ],
+                retry_allowed=True,
+            )
+            _save(state)
             _die(
                 f"\n[BUILD EXE GATE] EXE 파일 없음: {exe}\n"
                 "  PyInstaller dist/ 폴더에 EXE가 생성된 후 이 명령을 실행하세요.\n"
@@ -4686,6 +4722,24 @@ def cmd_build(args: argparse.Namespace) -> None:
             build_report_file = str(BASE_DIR / "dist" / "build_report.xml")
         build_report_path = Path(build_report_file)
         if not build_report_path.exists():
+            _record_failure_packet(
+                state,
+                "build_report_missing",
+                {},
+                failure_code="build_report_xml_missing",
+                failure_category="missing_artifact",
+                summary_ko=f"Build 실패 — build_report.xml 없음: {build_report_file}",
+                expected=f"build_report.xml 존재: {build_report_file}",
+                actual="파일 없음",
+                owner="Build",
+                return_phase="build",
+                required_actions=[
+                    "build-agent.md '## Output Format' 섹션의 6-Section Report 형식으로 build_report.xml을 작성하세요.",
+                    f"{build_report_file} 파일 생성 후 재실행",
+                ],
+                retry_allowed=True,
+            )
+            _save(state)
             print(RED(
                 f"\n[BUILD REPORT GATE] build_report.xml 파일 없음: {build_report_file}"
             ))
@@ -4707,10 +4761,46 @@ def cmd_build(args: argparse.Namespace) -> None:
             except (UnicodeDecodeError, OSError):
                 continue
         if not build_report_text:
+            _record_failure_packet(
+                state,
+                "build_report_read_error",
+                {},
+                failure_code="build_report_xml_read_error",
+                failure_category="invalid_artifact",
+                summary_ko=f"Build 실패 — build_report.xml 읽기 오류: {build_report_file}",
+                expected="UTF-8/CP949/Latin-1 인코딩으로 읽기 성공",
+                actual="모든 인코딩으로 읽기 실패",
+                owner="Build",
+                return_phase="build",
+                required_actions=[
+                    "build_report.xml 파일이 비어있지 않은지 확인하세요.",
+                    "UTF-8로 재저장 후 재실행하세요.",
+                ],
+                retry_allowed=True,
+            )
+            _save(state)
             print(RED(f"\n[BUILD REPORT GATE] build_report.xml 읽기 실패: {build_report_file}\n"))
             sys.exit(1)
         xml_ok, xml_msg = _verify_build_report_xml(build_report_text)
         if not xml_ok:
+            _record_failure_packet(
+                state,
+                "build_report_xml_invalid",
+                {},
+                failure_code="build_report_xml_invalid_structure",
+                failure_category="invalid_artifact",
+                summary_ko=f"Build 실패 — build_report.xml 6-Section 검증 실패: {xml_msg}",
+                expected="6개 섹션(section_1~section_6) + <status>BUILD SUCCESS</status>",
+                actual=xml_msg,
+                owner="Build",
+                return_phase="build",
+                required_actions=[
+                    "build_report.xml에 6개 섹션 XML 태그를 추가하세요 (build-agent.md '## Output Format' 참조).",
+                    "XML comment(<!-- -->)로 감싼 섹션은 유효하지 않으므로 실제 태그로 교체하세요.",
+                ],
+                retry_allowed=True,
+            )
+            _save(state)
             print(RED(f"\n[BUILD 6-SECTION GATE] XML 검증 실패: {xml_msg}"))
             print(RED("  build_report.xml에 6개 섹션과 <status>BUILD SUCCESS</status>가 실제 XML 태그로 포함되어야 합니다."))
             print(RED("  XML comment(<!-- -->)로 감싼 섹션은 유효하지 않습니다.\n"))
@@ -4725,6 +4815,26 @@ def cmd_build(args: argparse.Namespace) -> None:
         }
         reason = (skip_reason or "").strip()
         if len(reason) < 5 or reason.lower() not in SKIP_REASON_WHITELIST:
+            _record_failure_packet(
+                state,
+                "build_na_skip_reason_invalid",
+                {},
+                failure_code="build_na_invalid_skip_reason",
+                failure_category="invalid_argument",
+                summary_ko=(
+                    f"Build N/A 거부 — skip-reason이 whitelist에 없거나 길이 < 5: '{reason}'"
+                ),
+                expected=f"허용 목록 중 하나: {sorted(SKIP_REASON_WHITELIST)}",
+                actual=f"제공된 skip-reason: '{reason}'",
+                owner="Build",
+                return_phase="build",
+                required_actions=[
+                    f"--skip-reason을 허용 목록 중 하나로 변경하세요: {sorted(SKIP_REASON_WHITELIST)}",
+                    "예: --skip-reason \"meta-task\" 또는 --skip-reason \"streamlit\"",
+                ],
+                retry_allowed=True,
+            )
+            _save(state)
             _die(
                 "\n[BUILD N/A GATE] --exe \"N/A\" 기록 거부 — --skip-reason이 whitelist에 없거나 길이 < 5.\n"
                 f"  허용 목록(대소문자 무관): {sorted(SKIP_REASON_WHITELIST)}\n"

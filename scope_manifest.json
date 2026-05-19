@@ -1,0 +1,15 @@
+{
+  "pipeline_id": "IMP-20260519-EC9F",
+  "micro_tasks": [
+    {
+      "id": "MT-2-rework",
+      "files": [
+        "pipeline.py",
+        "tests/test_failure_feedback_ec9f.py"
+      ],
+      "affected_functions": [
+        "cmd_build"
+      ]
+    }
+  ]
+}
