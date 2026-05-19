@@ -2,13 +2,39 @@
   "pipeline_id": "IMP-20260519-EC9F",
   "micro_tasks": [
     {
-      "id": "MT-2-rework",
+      "id": "MT-1",
       "files": [
-        "pipeline.py",
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_print_failure_packet_console (신규), _record_failure_packet (수정 - 8851)"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "cmd_check (4031), cmd_qa (4360), cmd_sec (4508), cmd_build (4557), _validate_agent_run_receipt (3060), _cmd_gates_preflight_pr (9266)"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_record_failure_packet (8851), cmd_qa Circuit Breaker (4442)"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
         "tests/test_failure_feedback_ec9f.py"
       ],
       "affected_functions": [
-        "cmd_build"
+        "TestTechnicalGateFail, TestOracleGateFail, TestConsoleOutput, TestPhaseRouting, TestBlockedState (모두 신규 클래스)"
       ]
     }
   ]
