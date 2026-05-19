@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <from>qa-agent</from>
+  <to>pipeline-manager</to>
+  <pipeline_id>IMP-20260519-EC9F</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <failure_signature></failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+  <verification_evidence>
+    <test_suite>tests/test_failure_feedback_ec9f.py</test_suite>
+    <tests_passed>22</tests_passed>
+    <tests_failed>0</tests_failed>
+    <regression_suite>전체 pytest</regression_suite>
+    <regression_passed>402</regression_passed>
+    <regression_failed>0</regression_failed>
+  </verification_evidence>
+  <category_scores>
+    <category name="correctness" score="22" max="22">
+      <detail>_print_failure_packet_console: 구조화 출력 검증 PASS</detail>
+      <detail>cmd_check/cmd_qa/cmd_sec/cmd_build failure_packet 생성: PASS</detail>
+      <detail>2회 반복 YELLOW 경고: PASS</detail>
+      <detail>3회 반복 BLOCKED 전환: PASS (기존 로직 유지)</detail>
+    </category>
+    <category name="schema_compliance" score="20" max="20">
+      <detail>schema_v2 모든 21개 필드 존재: PASS</detail>
+      <detail>required_actions 비어있으면 invalid: PASS</detail>
+      <detail>return_phase 누락 없음: PASS</detail>
+      <detail>summary_ko 한국어 포함: PASS</detail>
+    </category>
+    <category name="test_coverage" score="22" max="22">
+      <detail>22개 신규 테스트 모두 PASS</detail>
+      <detail>실제 JSON 파일 생성 검증 포함</detail>
+      <detail>콘솔 출력 캡처 검증 포함</detail>
+    </category>
+    <category name="regression" score="20" max="20">
+      <detail>기존 380개 테스트 회귀 없음</detail>
+      <detail>test_advisory_demotion.py: PASS</detail>
+      <detail>test_failure_feedback.py: PASS</detail>
+      <detail>test_codex_review.py: PASS</detail>
+    </category>
+    <category name="code_quality" score="24" max="36">
+      <detail>구조적 일관성 유지</detail>
+    </category>
+  </category_scores>
+  <scope_declaration>
+    <files_reviewed>
+      <file>pipeline.py</file>
+      <file>tests/test_failure_feedback_ec9f.py</file>
+    </files_reviewed>
+  </scope_declaration>
+  <impact_analysis>
+    <blast_radius>LOW</blast_radius>
+    <breaking_changes>없음</breaking_changes>
+    <side_effects>failure_packet 생성 경로 표준화, 콘솔 출력 추가</side_effects>
+  </impact_analysis>
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>IN_SCOPE</blast_radius>
+    <scope_check>scope_manifest 파일과 실제 변경 파일 일치 확인</scope_check>
+  </micro_task_boundary>
+  <summary>
+    failure_packet schema_v2 표준화 구현 완료.
+    _print_failure_packet_console 신규 함수가 모든 FAIL/BLOCKED 경로에서 구조화된 콘솔 출력을 제공하며,
+    2회 반복 YELLOW 경고, 3회 반복 BLOCKED 전환이 정상 동작함.
+    22개 신규 테스트 + 402 전체 테스트 PASS.
+  </summary>
+</qa_report>
