@@ -2712,7 +2712,7 @@ def _check_acceptance_readiness(
             ["gh", "pr", "view", "--json", "isDraft,title,body,number,url"],
             capture_output=True, text=True, check=False
         )
-        if pr_result.returncode != 0 or not pr_result.stdout.strip():
+        if pr_result.returncode != 0 or not (pr_result.stdout or "").strip():
             return pass_result  # PR 없거나 gh CLI 없음 — 검사 생략
         pr_data = json.loads(pr_result.stdout)
     except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError):

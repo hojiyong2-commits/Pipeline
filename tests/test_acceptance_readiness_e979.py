@@ -9,13 +9,11 @@ oracle 파일: tests/oracles/IMP-20260519-E979/
 - normal_readiness_pass_allowed  (normal)
 - edge_ci_pass_but_readiness_fail (edge)
 """
-import importlib
 import json
 import pathlib
 import sys
-import types
 import unittest
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 # pipeline.py 직접 import — 테스트 실행 디렉토리에서 찾을 수 있도록 sys.path 보정

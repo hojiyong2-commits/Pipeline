@@ -1,0 +1,10 @@
+{
+  "test_case": "normal_packet_insufficient_blocked",
+  "description": "human acceptance packet의 판단 정보 상태가 '정보 부족'이면 BLOCKED 반환",
+  "call_args": {
+    "pr_draft": false,
+    "pr_body": "## 작업 요약\n작업 완료\n\n## 사용자가 확인할 결과물\n- pipeline.py 수정\n\n## 기대 결과와 실제 결과\n| 항목 | 기대 | 실제 |\n|---|---|---|\n| 검증 | 통과 | 통과 |\n\n## 중요한 선택과 트레이드오프\n정규식 사용\n\n## 검증\n테스트 5개 PASS",
+    "acceptance_packet_status": "정보 부족",
+    "acceptance_packet_path": "human_acceptance_packet.md"
+  }
+}

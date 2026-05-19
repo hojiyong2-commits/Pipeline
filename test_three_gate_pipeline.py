@@ -1068,10 +1068,16 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 user_confirmed=True,
             )
 
+            # _check_acceptance_readiness가 gh CLI를 호출하므로 subprocess.run을 mock:
+            # returncode=1 → PR 없음으로 간주, readiness 검사 생략(PASS 반환)
+            _no_pr_result = mock.MagicMock()
+            _no_pr_result.returncode = 1
+            _no_pr_result.stdout = ""
             with mock.patch.object(pipeline, "_require_state", return_value=state), \
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
                  mock.patch.object(pipeline, "_record_snapshot"), \
                  mock.patch.object(pipeline, "_save"), \
+                 mock.patch("subprocess.run", return_value=_no_pr_result), \
                  mock.patch.dict(pipeline.os.environ, {"PIPELINE_DEPLOY_ROOT": str(deploy_root)}):
                 with self.assertRaises(SystemExit) as ctx:
                     pipeline.cmd_gates(args)
