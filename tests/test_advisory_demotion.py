@@ -380,6 +380,16 @@ class TestForbiddenReviewCodexPattern(unittest.TestCase):
                     violations.append(f"{yml_file.name}: {match}")
         self.assertEqual(violations, [], f".github/workflows/*.yml에 금지 패턴 발견: {violations}")
 
+    def test_commands_dir_forbidden_pattern_absent(self) -> None:
+        """.claude/commands/**에 금지 패턴 없어야 함."""
+        commands_dir = BASE_DIR / ".claude" / "commands"
+        violations: List[str] = []
+        if commands_dir.exists():
+            for md_file in commands_dir.glob("*.md"):
+                for match in self._check_file(md_file):
+                    violations.append(f"{md_file.name}: {match}")
+        self.assertEqual(violations, [], f".claude/commands/*.md에 금지 패턴 발견: {violations}")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # self-verify 블록
