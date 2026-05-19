@@ -4,7 +4,7 @@
 [Purpose] ENABLE_GPT_ADVISORY=1과 ENABLE_GPT_ADVISORY_REQUIRED=1을 분리한 후
   - 기본 모드(REQUIRED 미설정): advisory가 자동 실행되지 않고 unresolved CRITICAL도 blocker가 아님
   - REQUIRED=1: 자동 실행 + unresolved CRITICAL이 COMPLETE를 차단
-이 규칙이 코드로 강제되고 있는지 17개 케이스로 검증한다.
+이 규칙이 코드로 강제되고 있는지 18개 케이스로 검증한다.
 [Assumptions] pipeline.py가 _openai_advisory_required(), _external_gate_blockers(),
   _advisory_status_summary()를 노출한다. OpenAI 실제 API 호출은 없다 (mock/패치).
 [Vulnerability & Risks] 환경변수 누수로 다른 테스트에 영향이 갈 수 있으므로
