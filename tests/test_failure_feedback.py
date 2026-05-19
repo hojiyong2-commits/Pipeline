@@ -398,20 +398,29 @@ class TestCodexRejectSchemaV2(unittest.TestCase):
 
 
 class TestCodexGateFailurePacket(unittest.TestCase):
-    """Codex PR gate 실패 시 failure_packet이 생성되는지 검증."""
+    """Codex PR gate 실패 시 failure_packet이 실제로 생성되는지 검증."""
 
-    def _make_state_with_bootstrap_exception(self) -> Dict[str, Any]:
-        """bootstrap_exception=True 상태 (Codex PR gate 검증 우회)."""
+    def _verify_schema_v2_packet(self, packet_path: Path) -> Dict[str, Any]:
+        """schema_v2 필드 전체 검증 + 데이터 반환."""
+        self.assertTrue(packet_path.exists(), f"packet 파일 없음: {packet_path}")
+        data = json.loads(packet_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["schema_version"], 2)
+        for field in (
+            "pipeline_id", "phase", "gate", "status", "failure_code",
+            "failure_category", "summary_ko", "required_actions",
+            "owner", "return_phase", "minimal_rerun", "created_at",
+        ):
+            self.assertIn(field, data, f"schema_v2 필수 필드 누락: {field}")
+        self.assertGreater(
+            len(data["required_actions"]), 0,
+            "required_actions는 최소 1개 이상이어야 합니다.",
+        )
+        return data
+
+    def _state(self, pid: str = "TEST-FP-CODEX") -> Dict[str, Any]:
         return {
-            "pipeline_id": "TEST-FP-CODEX",
-            "codex_bootstrap_exception": True,
-            "phases": {
-                "pm": {"status": "DONE"},
-                "dev": {"status": "DONE"},
-                "qa": {"status": "PASS"},
-                "build": {"status": "PASS"},
-                "harness": {"status": "PENDING"},
-            },
+            "pipeline_id": pid,
+            "failure_packets": [],
             "external_gates": {
                 "enabled": True,
                 "technical": {"status": "PENDING"},
@@ -419,56 +428,104 @@ class TestCodexGateFailurePacket(unittest.TestCase):
                 "acceptance": {"status": "PENDING"},
                 "github_ci": {"status": "PENDING"},
             },
-            "phase_attestations": {
-                "enabled": True,
-                "pm": {"status": "PASS"},
-                "dev": {"status": "PASS"},
-                "qa": {"status": "PASS"},
-                "build": {"status": "PASS"},
-            },
         }
 
-    def test_codex_pr_gate_failure_generates_packet(self) -> None:
-        """_check_codex_pr_gate_for_technical가 실패 반환 시 failure_packet이 생성된다.
+    def test_gates_technical_no_codex_pr_evidence_creates_packet(self) -> None:
+        """gates technical: Codex PR evidence 없을 때 failure_packet이 실제 생성되어야 함."""
+        with tempfile.TemporaryDirectory() as td:
+            with _ContractPathSandbox(Path(td)):
+                state = self._state()
+                packet = pipeline._record_failure_packet(
+                    state, "technical", _make_minimal_report(),
+                    status="FAIL",
+                    phase="build",
+                    failure_code="codex_pr_gate_missing",
+                    failure_category="missing_evidence",
+                    summary_ko="Technical gate: Codex PR stage evidence 없음",
+                    expected="codex_review_result.json에 pr stage ACCEPT + GPT-5.5",
+                    actual="codex pr stage ACCEPT 없음",
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="dev",
+                    required_actions=["python pipeline.py review codex-run --stage pr --review-model GPT-5.5 재실행"],
+                )
+                packet_path = Path(packet["packet_path"])
+                data = self._verify_schema_v2_packet(packet_path)
+                self.assertEqual(data["failure_code"], "codex_pr_gate_missing")
+                self.assertEqual(data["failure_category"], "missing_evidence")
+                self.assertTrue(packet_path.name.startswith("technical_attempt_"))
 
-        gates technical/accept 경로에서 codex pr gate 실패 시 _record_failure_packet이
-        호출되도록 수정한 코드를 ast로 정적 분석하여 직접 검증한다.
-        """
-        # 핵심 검증: 함수들이 존재하고 올바른 시그니처를 가지는지
-        self.assertTrue(
-            hasattr(pipeline, "_record_failure_packet"),
-            "_record_failure_packet 함수가 pipeline.py에 존재해야 합니다.",
-        )
-        self.assertTrue(
-            hasattr(pipeline, "_check_codex_pr_gate_for_technical"),
-            "_check_codex_pr_gate_for_technical 함수가 pipeline.py에 존재해야 합니다.",
-        )
+    def test_gates_accept_no_codex_pr_evidence_creates_packet(self) -> None:
+        """gates accept: Codex PR evidence 없을 때 failure_packet이 실제 생성되어야 함."""
+        with tempfile.TemporaryDirectory() as td:
+            with _ContractPathSandbox(Path(td)):
+                state = self._state()
+                packet = pipeline._record_failure_packet(
+                    state, "acceptance", _make_minimal_report(),
+                    status="FAIL",
+                    phase="build",
+                    failure_code="codex_pr_gate_missing_for_accept",
+                    failure_category="missing_evidence",
+                    summary_ko="Acceptance gate: Codex PR stage evidence 없음",
+                    expected="codex_review_result.json에 pr stage ACCEPT + GPT-5.5",
+                    actual="codex pr stage ACCEPT 없음",
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="dev",
+                    required_actions=["python pipeline.py review codex-run --stage pr --review-model GPT-5.5 재실행"],
+                )
+                packet_path = Path(packet["packet_path"])
+                data = self._verify_schema_v2_packet(packet_path)
+                self.assertEqual(data["failure_code"], "codex_pr_gate_missing_for_accept")
+                self.assertTrue(packet_path.name.startswith("acceptance_attempt_"))
 
-        # _check_codex_pr_gate_for_technical은 문제 시 에러 메시지를 반환해야 한다
-        state = self._make_state_with_bootstrap_exception()
-        state["codex_bootstrap_exception"] = False  # PR gate 검증 활성화
+    def test_wrong_model_creates_model_verification_failed_packet(self) -> None:
+        """wrong model → failure_category='model_verification_failed' packet 실제 생성."""
+        with tempfile.TemporaryDirectory() as td:
+            with _ContractPathSandbox(Path(td)):
+                state = self._state()
+                packet = pipeline._record_failure_packet(
+                    state, "technical", _make_minimal_report(),
+                    status="FAIL",
+                    phase="build",
+                    failure_code="codex_pr_gate_wrong_model",
+                    failure_category="model_verification_failed",
+                    summary_ko="review_model이 GPT-5.5가 아님",
+                    expected="review_model=GPT-5.5",
+                    actual="review_model=gpt-4o",
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="dev",
+                    required_actions=["codex_review_result.json의 review_model을 GPT-5.5로 수정 후 재실행"],
+                )
+                packet_path = Path(packet["packet_path"])
+                data = self._verify_schema_v2_packet(packet_path)
+                self.assertEqual(data["failure_category"], "model_verification_failed")
+                self.assertEqual(data["actual"], "review_model=gpt-4o")
 
-        # mock 반환값이 정상적으로 흐르는지 확인 (sanity check)
-        with mock.patch.object(pipeline, "_check_codex_pr_gate_for_technical",
-                                return_value="[CODEX PR GATE] pr stage ACCEPT 없음"):
-            result = pipeline._check_codex_pr_gate_for_technical(state)
-            self.assertIsNotNone(result)
-            self.assertIn("CODEX PR GATE", str(result))
-
-        # gates technical 경로의 코드에서 _record_failure_packet 호출이 추가되었는지
-        # 정적 검증 (pipeline.py 소스에 "codex_pr_gate_missing" failure_code 존재 여부)
-        pipeline_py = BASE_DIR / "pipeline.py"
-        content = pipeline_py.read_text(encoding="utf-8", errors="replace")
-        self.assertIn(
-            "codex_pr_gate_missing",
-            content,
-            "gates technical 경로에서 codex_pr_gate_missing failure_code로 _record_failure_packet 호출이 있어야 합니다.",
-        )
-        self.assertIn(
-            "codex_pr_gate_missing_for_accept",
-            content,
-            "gates accept 경로에서 codex_pr_gate_missing_for_accept failure_code로 _record_failure_packet 호출이 있어야 합니다.",
-        )
+    def test_stale_diff_sha_creates_stale_evidence_packet(self) -> None:
+        """stale diff SHA256 → failure_category='stale_evidence' packet 실제 생성."""
+        with tempfile.TemporaryDirectory() as td:
+            with _ContractPathSandbox(Path(td)):
+                state = self._state()
+                packet = pipeline._record_failure_packet(
+                    state, "technical", _make_minimal_report(),
+                    status="FAIL",
+                    phase="build",
+                    failure_code="codex_pr_gate_stale_evidence",
+                    failure_category="stale_evidence",
+                    summary_ko="diff_sha256가 현재 HEAD와 불일치",
+                    expected="diff_sha256 == 현재 HEAD diff SHA256",
+                    actual="diff_sha256 불일치 (오래된 리뷰)",
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="dev",
+                    required_actions=["최신 diff로 codex-run 재실행: python pipeline.py review codex-run --stage pr --review-model GPT-5.5"],
+                )
+                packet_path = Path(packet["packet_path"])
+                data = self._verify_schema_v2_packet(packet_path)
+                self.assertEqual(data["failure_category"], "stale_evidence")
+                self.assertIn("diff_sha256", data["summary_ko"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────

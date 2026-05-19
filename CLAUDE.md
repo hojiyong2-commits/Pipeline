@@ -36,7 +36,7 @@ Codex technical review(GPT-5.5)는 파이프라인의 공식 hard gate입니다.
 
 ```powershell
 # stage별 기록 (plan/scope/code/hygiene)
-python pipeline.py review codex --stage plan --result ACCEPT --review-model GPT-5.5 --reviewer [ID]
+python pipeline.py review codex-run --stage plan --review-model GPT-5.5 --reviewer [ID]
 
 # pr/rca stage 공식 기록 (4중 검증 적용)
 python pipeline.py review codex-record --stage pr --result ACCEPT --review-model GPT-5.5 \

@@ -19,7 +19,8 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional
 from unittest import mock
 
 # pipeline.py 를 패키지 형태로 import할 수 있도록 BASE_DIR 추가
@@ -339,24 +340,45 @@ class TestAdvisoryBackwardCompat(unittest.TestCase):
 
 
 class TestForbiddenReviewCodexPattern(unittest.TestCase):
-    """review codex --result ACCEPT/REJECT 안내가 pipeline.py에서 제거되었는지 grep 검증."""
+    """review codex --result ACCEPT/REJECT 안내가 소스 파일에서 제거되었는지 grep 검증."""
 
-    def test_forbidden_review_codex_result_pattern_absent(self) -> None:
-        """pipeline.py에 'review codex --stage ... --result ACCEPT/REJECT' 안내가 없어야 함."""
-        pipeline_py = BASE_DIR / "pipeline.py"
-        content = pipeline_py.read_text(encoding="utf-8", errors="replace")
-        # 금지 패턴: 에러 메시지에 review codex --result ACCEPT 또는 REJECT 안내
-        # 단, 가드 메시지("review codex` 명령은 --result ... 허용하지 않습니다")는 예외
-        import re
-        # 지시형 안내 패턴 (올바른 것처럼 제안하는 형태) 검색
-        forbidden = re.findall(
-            r"review codex --stage[^'\n]*--result (?:ACCEPT|REJECT)",
-            content,
-        )
-        self.assertEqual(
-            forbidden, [],
-            f"금지 패턴 발견 (지시형 안내에서 review codex --result ACCEPT/REJECT 사용): {forbidden}",
-        )
+    _FORBIDDEN_RE = re.compile(r"review codex --stage[^'\n]*--result (?:ACCEPT|REJECT)")
+
+    def _check_file(self, path: Path) -> List[str]:
+        if not path.exists():
+            return []
+        content = path.read_text(encoding="utf-8", errors="replace")
+        return self._FORBIDDEN_RE.findall(content)
+
+    def test_pipeline_py_forbidden_pattern_absent(self) -> None:
+        """pipeline.py에 금지 패턴 없어야 함."""
+        found = self._check_file(BASE_DIR / "pipeline.py")
+        self.assertEqual(found, [], f"pipeline.py에 금지 패턴 발견: {found}")
+
+    def test_claude_md_forbidden_pattern_absent(self) -> None:
+        """CLAUDE.md에 금지 패턴 없어야 함."""
+        found = self._check_file(BASE_DIR / "CLAUDE.md")
+        self.assertEqual(found, [], f"CLAUDE.md에 금지 패턴 발견: {found}")
+
+    def test_agent_md_files_forbidden_pattern_absent(self) -> None:
+        """.claude/agents/*.md 파일들에 금지 패턴 없어야 함."""
+        agents_dir = BASE_DIR / ".claude" / "agents"
+        violations: List[str] = []
+        if agents_dir.exists():
+            for md_file in agents_dir.glob("*.md"):
+                for match in self._check_file(md_file):
+                    violations.append(f"{md_file.name}: {match}")
+        self.assertEqual(violations, [], f".claude/agents/*.md에 금지 패턴 발견: {violations}")
+
+    def test_github_workflows_forbidden_pattern_absent(self) -> None:
+        """.github/workflows/**에 금지 패턴 없어야 함."""
+        workflows_dir = BASE_DIR / ".github" / "workflows"
+        violations: List[str] = []
+        if workflows_dir.exists():
+            for yml_file in workflows_dir.glob("*.yml"):
+                for match in self._check_file(yml_file):
+                    violations.append(f"{yml_file.name}: {match}")
+        self.assertEqual(violations, [], f".github/workflows/*.yml에 금지 패턴 발견: {violations}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

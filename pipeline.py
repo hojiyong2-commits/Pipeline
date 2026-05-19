@@ -4046,6 +4046,30 @@ def cmd_check(args: argparse.Namespace) -> None:
         if phase == "dev":
             cr_ok, cr_reason = _check_codex_review_gate(state, required_stage="plan")
             if not cr_ok:
+                _cr_dev_category = (
+                    "stale_evidence" if ("SHA256" in cr_reason or "diff" in cr_reason)
+                    else "model_verification_failed" if ("review_model" in cr_reason or "model" in cr_reason.lower())
+                    else "missing_evidence"
+                )
+                _record_failure_packet(
+                    state, "technical", {},
+                    command=[sys.executable, "pipeline.py", "review", "codex-run",
+                             "--stage", "plan", "--review-model", "GPT-5.5"],
+                    note=cr_reason,
+                    status="BLOCKED",
+                    phase="dev",
+                    failure_code=f"codex_review_{_cr_dev_category}",
+                    failure_category=_cr_dev_category,
+                    summary_ko=f"Dev 진입 차단 — Codex review gate: {cr_reason}",
+                    expected="codex_review_result.json에 plan/scope ACCEPT + GPT-5.5 + 최신 diff_sha256",
+                    actual=cr_reason,
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="pm",
+                    required_actions=["python pipeline.py review codex-run --stage plan --review-model GPT-5.5 재실행"],
+                    retry_allowed=True,
+                )
+                _save(state)
                 print()
                 print(RED("[CODEX REVIEW REQUIRED] Dev 진입 차단"))
                 print(RED(f"  사유: {cr_reason}"))
@@ -4055,6 +4079,30 @@ def cmd_check(args: argparse.Namespace) -> None:
         elif phase == "qa":
             cr_ok, cr_reason = _check_codex_review_gate(state, required_stage="code")
             if not cr_ok:
+                _cr_qa_category = (
+                    "stale_evidence" if ("SHA256" in cr_reason or "diff" in cr_reason)
+                    else "model_verification_failed" if ("review_model" in cr_reason or "model" in cr_reason.lower())
+                    else "missing_evidence"
+                )
+                _record_failure_packet(
+                    state, "technical", {},
+                    command=[sys.executable, "pipeline.py", "review", "codex-run",
+                             "--stage", "code", "--review-model", "GPT-5.5"],
+                    note=cr_reason,
+                    status="BLOCKED",
+                    phase="qa",
+                    failure_code=f"codex_review_{_cr_qa_category}",
+                    failure_category=_cr_qa_category,
+                    summary_ko=f"QA 진입 차단 — Codex review gate: {cr_reason}",
+                    expected="codex_review_result.json에 code ACCEPT + GPT-5.5 + 최신 diff_sha256",
+                    actual=cr_reason,
+                    exit_code=1,
+                    owner="QA",
+                    return_phase="dev",
+                    required_actions=["python pipeline.py review codex-run --stage code --review-model GPT-5.5 재실행"],
+                    retry_allowed=True,
+                )
+                _save(state)
                 print()
                 print(RED("[CODEX REVIEW REQUIRED] QA 진입 차단"))
                 print(RED(f"  사유: {cr_reason}"))
