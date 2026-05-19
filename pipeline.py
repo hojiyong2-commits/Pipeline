@@ -1026,6 +1026,10 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     "stop_signal.json",
     "test_results.jsonl",
     "test_results_v3.jsonl",
+    # IMP-20260519-E979: Codex review 인프라 파일 — pipeline.py review codex-record 명령이 갱신하는 파일.
+    # PM done 이후 review 기록 시 scope gate 충돌을 방지하기 위해 제외.
+    "codex_review_result.json",
+    "codex_run_raw.json",
 }
 
 
