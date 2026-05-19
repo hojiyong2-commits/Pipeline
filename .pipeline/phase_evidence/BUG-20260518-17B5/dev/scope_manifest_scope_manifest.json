@@ -1,0 +1,22 @@
+{
+  "pipeline_id": "BUG-20260518-17B5",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["test_three_gate_e2e.py"],
+      "affected_functions": ["test_three_gate_e2e (inline fixture dict, line 429-438)"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["test_three_gate_pipeline.py", "tests/test_pm_split.py", ".bandit"],
+      "affected_functions": [
+        "test_three_gate_pipeline (nosec B105/B106 주석 2개 — line 417-427, line 1083-1093) + tests/test_pm_split.py nosec B105 + .bandit 원복"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["tests/test_codex_review.py"],
+      "affected_functions": ["TestPrGateActualModel 클래스 (tests/test_codex_review.py, line 1559-)"]
+    }
+  ]
+}

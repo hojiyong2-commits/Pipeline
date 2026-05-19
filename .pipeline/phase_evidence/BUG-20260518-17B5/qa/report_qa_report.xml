@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260518-17B5</pipeline_id>
+  <from>qa-agent</from>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <failure_signature></failure_signature>
+  <rework_round>2</rework_round>
+  <rework_reason>PR #108 REJECT — .bandit 전역 skip 보안 완화 수정</rework_reason>
+  <checks>
+    <check name="bandit_B105_B106_removed">
+      <command>python -m bandit -r . --skip B101,B110,B603,B404,B405,B314,B607,B310,B311,B107 --tests B105,B106</command>
+      <result>PASS — No issues identified. .bandit 원복 + per-line nosec 5곳 확인</result>
+    </check>
+    <check name="bandit_global_config">
+      <result>PASS — .bandit skips: B101,B110,B603,B404,B405,B314,B607,B310,B311,B107 (B105,B106 제거됨 — 원복 확인)</result>
+    </check>
+    <check name="nosec_annotations">
+      <result>PASS — test_three_gate_pipeline.py line 193 (B105), 1009/2654/2729 (B106); tests/test_pm_split.py line 144 (B105) — 모두 사유 포함</result>
+    </check>
+    <check name="full_pytest_suite">
+      <command>python -m pytest test_three_gate_pipeline.py tests/test_pm_split.py tests/test_codex_review.py test_three_gate_e2e.py -x -q</command>
+      <result>PASS — 142 passed, 1 warning, 11 subtests passed in 58.38s</result>
+    </check>
+    <check name="mypy_clean">
+      <command>python -m mypy test_three_gate_pipeline.py tests/test_pm_split.py tests/test_codex_review.py test_three_gate_e2e.py --ignore-missing-imports</command>
+      <result>PASS — Success: no issues found in 4 source files</result>
+    </check>
+    <check name="scope_boundary">
+      <result>PASS — 변경 파일 5개 모두 PM scope 내 (MT-1: test_three_gate_e2e.py, MT-2: test_three_gate_pipeline.py + tests/test_pm_split.py + .bandit, MT-3: tests/test_codex_review.py)</result>
+    </check>
+  </checks>
+  <repeat_indicator>FIRST</repeat_indicator>
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <verification_evidence>
+    <evidence_file>dev_handover.xml</evidence_file>
+    <evidence_file>scope_manifest.json</evidence_file>
+    <test_run>142 passed, 0 failed, 11 subtests</test_run>
+  </verification_evidence>
+</qa_report>

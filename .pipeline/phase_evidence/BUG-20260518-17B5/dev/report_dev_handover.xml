@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260518-17B5</pipeline_id>
+  <evidence>
+    <file>test_three_gate_e2e.py</file>
+    <file>test_three_gate_pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+    <file>tests/test_pm_split.py</file>
+    <file>.bandit</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>test_three_gate_e2e.py</file>
+      <file>test_three_gate_pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+      <file>tests/test_pm_split.py</file>
+      <file>.bandit</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>test_three_gate_e2e fixture dict (MT-1), test_three_gate_pipeline nosec B105/B106 (MT-2), .bandit 원복 (MT-2), tests/test_pm_split.py nosec B105 (MT-2), TestPrGateActualModel class (MT-3)</target_function>
+    <change_type>test fixture enhancement + new test methods + bandit nosec per-line fix + .bandit revert</change_type>
+    <blast_radius>test files + security config only — no product code changes</blast_radius>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>.bandit, test_three_gate_pipeline.py, tests/test_pm_split.py</git_diff_files>
+    <manifest_files>test_three_gate_e2e.py, test_three_gate_pipeline.py, tests/test_codex_review.py, tests/test_pm_split.py, .bandit</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <rework_summary>
+    <reason>PR #108 REJECT — .bandit 전역 skip B105/B106 추가가 scope 밖 보안 완화</reason>
+    <fix>.bandit 원복 + per-line nosec 주석 5곳 추가 (B105 x2, B106 x3)</fix>
+    <test_results_after_fix>142 passed, mypy clean, bandit B105/B106 No issues identified</test_results_after_fix>
+  </rework_summary>
+  <module_gate_summary>
+    <module id="MT-1" status="PASS"/>
+    <module id="MT-2" status="PASS"/>
+    <module id="MT-3" status="PASS"/>
+    <integration status="PASS"/>
+  </module_gate_summary>
+  <test_results>
+    <suite name="all modified files" passed="142" failed="0" subtests="11"/>
+  </test_results>
+</handover>
