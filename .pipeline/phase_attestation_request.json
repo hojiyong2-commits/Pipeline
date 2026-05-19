@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-19T11:27:28Z",
+  "generated_at": "2026-05-19T11:28:26Z",
   "pipeline_id": "IMP-20260519-EC9F",
   "phase": "pm",
   "phase_status": "DONE",
-  "commit_hint": "3edc32c2c8b60163408bc808c5c1b24d6efc5a4c",
+  "commit_hint": "551b9a32e05eb7015b541d22e24ffc1a09b51bcb",
   "state": {
     "current_phase": "dev",
     "phase_completed_at": "2026-05-19T11:10:46Z",
