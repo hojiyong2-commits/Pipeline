@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260519-EC9F</pipeline_id>
+  <agent_run_id>dev-09b440932f334cf8</agent_run_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_failure_feedback_ec9f.py</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+  <micro_tasks_completed>
+    <mt id="MT-1">
+      <description>_print_failure_packet_console 신규 함수 추가 및 _record_failure_packet 연결</description>
+      <files_changed>pipeline.py</files_changed>
+      <functions_added>_print_failure_packet_console</functions_added>
+      <functions_modified>_record_failure_packet</functions_modified>
+    </mt>
+    <mt id="MT-2">
+      <description>cmd_check, cmd_qa FAIL, cmd_sec FAIL/BLOCK, _cmd_gates_preflight_pr FAIL 경로에 failure_packet 호출 추가</description>
+      <files_changed>pipeline.py</files_changed>
+      <functions_modified>cmd_check, cmd_qa, cmd_sec, _cmd_gates_preflight_pr</functions_modified>
+      <functions_added>_gate_return_phase_for_check</functions_added>
+    </mt>
+    <mt id="MT-3">
+      <description>same_code_count==2 YELLOW 경고 출력 추가 (_record_failure_packet 내부)</description>
+      <files_changed>pipeline.py</files_changed>
+      <functions_modified>_record_failure_packet</functions_modified>
+    </mt>
+    <mt id="MT-4">
+      <description>신규 테스트 파일 tests/test_failure_feedback_ec9f.py 작성 — 22개 테스트 전체 PASS</description>
+      <files_changed>tests/test_failure_feedback_ec9f.py</files_changed>
+    </mt>
+  </micro_tasks_completed>
+  <test_results>
+    <test_suite>tests/test_failure_feedback_ec9f.py</test_suite>
+    <passed>22</passed>
+    <failed>0</failed>
+    <subtests_passed>4</subtests_passed>
+    <regression_suite>all tests</regression_suite>
+    <regression_passed>402</regression_passed>
+    <regression_failed>0</regression_failed>
+  </test_results>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_failure_feedback_ec9f.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_functions>
+      <function>_print_failure_packet_console</function>
+      <function>_record_failure_packet</function>
+      <function>cmd_check</function>
+      <function>cmd_qa</function>
+      <function>cmd_sec</function>
+      <function>cmd_build</function>
+      <function>_cmd_gates_preflight_pr</function>
+    </target_functions>
+    <side_effects>failure_packet schema_v2 생성 경로 표준화, 2회 반복 YELLOW 경고 출력 추가</side_effects>
+    <risk_level>LOW</risk_level>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_failure_feedback_ec9f.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
