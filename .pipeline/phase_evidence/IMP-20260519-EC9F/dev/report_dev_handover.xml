@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260519-EC9F</pipeline_id>
+  <run_id>dev-d3a57cb138ef1868</run_id>
+  <step_id>MT-2-rework</step_id>
+  <rework_reason>User Acceptance REJECT — cmd_build 6 failure paths missing failure_packet + 6 integration tests missing</rework_reason>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_failure_feedback_ec9f.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>cmd_build</target_function>
+    <changed_files>
+      <file>pipeline.py</file>
+      <file>tests/test_failure_feedback_ec9f.py</file>
+    </changed_files>
+    <change_description>
+      cmd_build 6개 실패 경로에 _record_failure_packet 호출 추가.
+      tests/test_failure_feedback_ec9f.py에 TestCmdBuildActualPathsCreateFailurePacket 클래스 추가 (6개 통합 테스트).
+    </change_description>
+    <affected_call_sites>
+      <site>cmd_build (pipeline.py:4663, 4679, 4688, 4709, 4712, 4727)</site>
+    </affected_call_sites>
+  </impact_analysis>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_failure_feedback_ec9f.py</file>
+  </evidence>
+  <changes_summary>
+    <change file="pipeline.py">
+      cmd_build 6 failure paths에 _record_failure_packet 호출 추가:
+      1. check_gate 실패 (build_gate_blocked)
+      2. EXE 파일 없음 (build_exe_missing)
+      3. build_report.xml 없음 (build_report_xml_missing)
+      4. build_report.xml 읽기 실패 (build_report_xml_read_error)
+      5. 6-Section XML 검증 실패 (build_report_xml_invalid_structure)
+      6. invalid skip-reason (build_na_invalid_skip_reason)
+    </change>
+    <change file="tests/test_failure_feedback_ec9f.py">
+      TestCmdBuildActualPathsCreateFailurePacket 클래스 추가 — 6개 통합 테스트:
+      1. cmd_build gate blocked 실제 경로에서 failure_packet JSON 생성
+      2. EXE missing 실제 경로에서 failure_packet JSON 생성
+      3. build_report.xml missing 실제 경로에서 failure_packet JSON 생성
+      4. build_report.xml invalid XML 실제 경로에서 failure_packet JSON 생성
+      5. invalid skip-reason 실제 경로에서 failure_packet JSON 생성
+      6. _cmd_gates_preflight_pr 실제 함수 경로에서 failure_packet JSON 생성
+    </change>
+  </changes_summary>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_failure_feedback_ec9f.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_failure_feedback_ec9f.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <verification>
+    <ruff>PASS — 0 errors</ruff>
+    <pytest>PASS — 408 passed (28 in test_failure_feedback_ec9f.py)</pytest>
+    <bandit>PASS — 0 Medium/High issues</bandit>
+  </verification>
+  <scope_manifest>scope_manifest.json</scope_manifest>
+  <status>READY_FOR_QA</status>
+</handover>
