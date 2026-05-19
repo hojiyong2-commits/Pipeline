@@ -1011,6 +1011,8 @@ ATOMIC_SNAPSHOT_EXCLUDED_DIRS = {
     "venv",
     "env",
     "htmlcov",
+    # IMP-20260519-E979: pipeline_outputs는 배포 산출물 저장소이며 scope gate 대상이 아님
+    "pipeline_outputs",
 }
 
 ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
