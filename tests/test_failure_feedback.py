@@ -7,7 +7,7 @@
   - SETUP_REQUIRED → owner="User"
   - 동일 (gate, failure_code) 3회 → status=BLOCKED + escalation_reason
   - schema_version=2 + 19개 필드
-이 규칙이 코드로 강제되고 있는지 15개 케이스로 검증한다.
+이 규칙이 코드로 강제되고 있는지 19개 케이스로 검증한다.
 [Assumptions] pipeline.py가 _record_failure_packet, FAILURE_CATEGORIES,
   FAILURE_PACKET_SCHEMA_VERSION, FAILURE_BLOCKED_THRESHOLD를 노출한다.
   tmpdir로 _contract_paths 결과를 격리한다.
