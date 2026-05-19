@@ -4129,7 +4129,7 @@ def cmd_check(args: argparse.Namespace) -> None:
             owner="Pipeline Manager",
             return_phase=_gate_return_phase_for_check(phase),
             required_actions=[
-                f"python pipeline.py status 로 미완료 phase 확인",
+                "python pipeline.py status 로 미완료 phase 확인",
                 f"미완료 선행 phase를 완료한 후 다시 python pipeline.py check --phase {phase} 실행",
             ],
             retry_allowed=True,
@@ -4543,7 +4543,7 @@ def cmd_qa(args: argparse.Namespace) -> None:
             return_phase="dev",
             required_actions=[
                 "qa_report.xml 의 critical_issues 항목을 수정하세요",
-                f"python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>",
+                "python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>",
             ],
             retry_allowed=True,
         )
@@ -9506,7 +9506,6 @@ def _cmd_gates_preflight_pr(args: argparse.Namespace) -> None:
         except Exception:
             _pf_state = None
         if _pf_state is not None and isinstance(_pf_state, dict):
-            import pathlib as _pathlib
             _pf_pid = str(_pf_state.get("pipeline_id") or effective_pid or "UNKNOWN")
             _pf_paths = _contract_paths(_pf_pid)
             _attempt = _next_failure_attempt(_pf_paths, f"preflight_pr_{phase}")

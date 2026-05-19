@@ -332,7 +332,7 @@ class TestPrintFailurePacketConsoleOutput(unittest.TestCase):
             "actual": "ruff FAIL",
             "return_phase": "dev",
             "owner": "Dev",
-            "packet_path": "/tmp/failure.json",
+            "packet_path": "/tmp/failure.json",  # nosec B108
             "minimal_rerun": ["python", "pipeline.py", "gates", "technical"],
             "required_actions": ["ruff 오류 수정 후 재실행"],
             "escalation_reason": None,
@@ -358,7 +358,7 @@ class TestPrintFailurePacketConsoleOutput(unittest.TestCase):
             "actual": "BLOCKED",
             "return_phase": "dev",
             "owner": "Dev",
-            "packet_path": "/tmp/blocked.json",
+            "packet_path": "/tmp/blocked.json",  # nosec B108
             "minimal_rerun": [],
             "required_actions": ["critical fix"],
             "escalation_reason": "same_failure_code_repeated_3x",
