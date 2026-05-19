@@ -38,30 +38,30 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/IMP-20260519-EC9F/dev/report_dev_handover.xml",
-      "sha256": "ad7c967340d118b1fae63ec34d18338b044fc4ddb0dfba9afc92d5e8c4851e9d",
-      "size_bytes": 3044,
+      "sha256": "ef7eba8b7609fa30f4283ff96d89f9adc730598a2ce1e35685968e0c156d4e18",
+      "size_bytes": 2974,
       "requires_force_add": true
     },
     {
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260519-EC9F/dev/scope_manifest_scope_manifest.json",
-      "sha256": "530928cc4573e872aec4e433eebcb8057122c50d0f3ab231871f0e9916cd2d57",
-      "size_bytes": 1040,
+      "sha256": "8952605aa1bcc394318c8a2320dd0bfbf036bd341d2b14392f27a9dbd2053038",
+      "size_bytes": 1000,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
+  "workspace_file_checks": [],
+  "local_only_files": [
     {
       "path": "pipeline.py",
       "sha256": "be88dc68016d4afd161f7c1faef57cf7798aa1302a6c58e2e6c9d68aae89c7a4",
-      "size_bytes": 532627
+      "reason": "code_on_impl_branch"
     },
     {
       "path": "tests/test_failure_feedback_ec9f.py",
       "sha256": "ee251bae0b3045732d1020b5e9f7f6ad0a45c709da7f0e4e3186acbf3a5eed19",
-      "size_bytes": 35289
+      "reason": "code_on_impl_branch"
     }
-  ],
-  "local_only_files": []
+  ]
 }
