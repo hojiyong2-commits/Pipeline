@@ -4115,6 +4115,26 @@ def cmd_check(args: argparse.Namespace) -> None:
         print(GREEN(f"\n[GATE OK] {PHASE_LABELS.get(phase, phase)} 진입 가능\n"))
         sys.exit(0)
     else:
+        # MT-2 (IMP-20260519-EC9F): check gate 차단 시 failure_packet 생성
+        # 선행 phase가 완료되지 않아 진입이 차단된 경우
+        _record_failure_packet(
+            state,
+            f"check_{phase}",
+            {},
+            failure_code=f"gate_blocked_{phase}",
+            failure_category="missing_evidence",
+            summary_ko=f"{PHASE_LABELS.get(phase, phase)} 진입 차단 — {reason}",
+            expected=f"Phase {phase} 진입을 위한 선행 단계 완료",
+            actual=reason,
+            owner="Pipeline Manager",
+            return_phase=_gate_return_phase_for_check(phase),
+            required_actions=[
+                f"python pipeline.py status 로 미완료 phase 확인",
+                f"미완료 선행 phase를 완료한 후 다시 python pipeline.py check --phase {phase} 실행",
+            ],
+            retry_allowed=True,
+        )
+        _save(state)
         print()
         print(RED(f"[GATE BLOCKED] {PHASE_LABELS.get(phase, phase)} 진입 차단"))
         print(RED(f"  사유: {reason}"))
@@ -4131,6 +4151,21 @@ def cmd_check(args: argparse.Namespace) -> None:
             print(f"    {icon} {PHASE_LABELS[req_phase]} → [{expected}] (현재: {actual})")
         print()
         sys.exit(1)
+
+
+def _gate_return_phase_for_check(phase: str) -> str:
+    """check --phase [phase] 차단 시 복구해야 할 return_phase를 반환.
+
+    IMP-20260519-EC9F MT-2: cmd_check 실패 packet의 return_phase를 일관되게 결정.
+    """
+    mapping: Dict[str, str] = {
+        "dev": "pm",
+        "qa": "dev",
+        "sec": "dev",
+        "build": "qa",
+        "architect": "harness",
+    }
+    return mapping.get(phase, "pm")
 
 
 def cmd_done(args: argparse.Namespace) -> None:
@@ -4493,6 +4528,25 @@ def cmd_qa(args: argparse.Namespace) -> None:
         state["phases"]["dev"]["status"] = "PENDING"
         msg = RED("[QA FAIL] Phase 2 -Dev 재작업 필요")
         next_cmd = "python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>"
+        # MT-2 (IMP-20260519-EC9F): QA FAIL 시 failure_packet 생성
+        _sig = str(failure_sig or "")
+        _record_failure_packet(
+            state,
+            "qa",
+            {},
+            failure_code=f"qa_fail_{_sig.split(':')[0].lower() if _sig else 'unknown'}",
+            failure_category="test_failed",
+            summary_ko=f"QA FAIL — failure_signature={_sig or 'N/A'}, score={numeric_score}/{QA_MAX_SCORE}",
+            expected=f"QA numeric_score >= {QA_PASS_THRESHOLD}/{QA_MAX_SCORE} 모든 카테고리 PASS",
+            actual=f"numeric_score={numeric_score}, failure_signature={_sig or 'N/A'}",
+            owner="Dev",
+            return_phase="dev",
+            required_actions=[
+                "qa_report.xml 의 critical_issues 항목을 수정하세요",
+                f"python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>",
+            ],
+            retry_allowed=True,
+        )
 
     _log_event(state, f"qa {result}" + (f" numeric={numeric_score}" if numeric_score is not None else ""))
     _record_snapshot(state, "qa", branch)
@@ -4526,6 +4580,24 @@ def cmd_sec(args: argparse.Namespace) -> None:
             state["blocked"]        = True
             state["blocked_reason"] = f"SEC BLOCK -risk: {risk}"
             _log_event(state, f"sec BLOCK risk={risk}")
+            # MT-2 (IMP-20260519-EC9F): SEC BLOCK 시 failure_packet 생성
+            _record_failure_packet(
+                state,
+                "sec",
+                {},
+                failure_code="sec_block_critical",
+                failure_category="security_failed",
+                summary_ko=f"보안 감사 BLOCK — risk_level={risk}, Critical 취약점 발견",
+                expected="security_agent 감사 결과 SAFE (risk_level=LOW)",
+                actual=f"risk_level={risk}, BLOCK 판정",
+                owner="Dev",
+                return_phase="dev",
+                required_actions=[
+                    "security_audit 리포트의 CRITICAL finding remediation_code를 적용하세요",
+                    "python pipeline.py done --phase dev 이후 sec 재감사 실행",
+                ],
+                retry_allowed=True,
+            )
             _save_state_for(state, branch)
             _die(f"[SEC BLOCK] risk_level={risk} -dev-agent 수정 후 재감사 필요.", exit_code=2)
         if result == "FAIL":
@@ -4535,6 +4607,24 @@ def cmd_sec(args: argparse.Namespace) -> None:
             state["current_phase"] = "dev"
             state["phases"]["dev"]["status"] = "PENDING"
             _log_event(state, f"sec FAIL risk={risk}")
+            # MT-2 (IMP-20260519-EC9F): SEC FAIL 시 failure_packet 생성
+            _record_failure_packet(
+                state,
+                "sec",
+                {},
+                failure_code="sec_fail_high",
+                failure_category="security_failed",
+                summary_ko=f"보안 감사 FAIL — risk_level={risk}, HIGH 이상 취약점 발견",
+                expected="security_agent 감사 결과 SAFE 또는 LOW risk",
+                actual=f"risk_level={risk}, FAIL 판정 (Tier2 이상)",
+                owner="Dev",
+                return_phase="dev",
+                required_actions=[
+                    "security_audit 리포트의 HIGH/MEDIUM finding을 수정하세요",
+                    "python pipeline.py done --phase dev 이후 python pipeline.py sec 재실행",
+                ],
+                retry_allowed=True,
+            )
             _save_state_for(state, branch)
             print(YELLOW(f"\n[SEC FAIL] risk_level={risk} — Tier2 이상 발견"))
             print(f"\n  다음: {YELLOW('python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>')}\n")
@@ -8942,6 +9032,13 @@ def _record_failure_packet(
     # 동일 (gate, failure_code) 조합 3회 이상이면 BLOCKED 전이
     escalation_reason: Optional[str] = None
     same_code_count = _count_same_failure_code_attempts(state, gate_name, failure_code) + 1
+    # MT-3 (IMP-20260519-EC9F): 2회 반복 시 YELLOW 경고 (3회에서 BLOCKED 전환 전 조기 경보)
+    if failure_code and same_code_count == FAILURE_BLOCKED_THRESHOLD - 1 and final_status != "SETUP_REQUIRED":
+        print(YELLOW(
+            f"\n[FAILURE WARNING] 동일 failure_code '{failure_code}' {same_code_count}회 반복 "
+            f"— 다음 발생 시 BLOCKED로 전환됩니다\n"
+            f"  gate={gate_name}, 현재까지 {same_code_count}회 / 최대 {FAILURE_BLOCKED_THRESHOLD}회\n"
+        ))
     if failure_code and same_code_count >= FAILURE_BLOCKED_THRESHOLD and final_status != "SETUP_REQUIRED":
         final_status = "BLOCKED"
         escalation_reason = "same_failure_code_repeated_3x"
@@ -9004,7 +9101,81 @@ def _record_failure_packet(
             "attempt_count": packet["attempt_count"],
             "escalation_reason": escalation_reason,
         })
+    # MT-1 (IMP-20260519-EC9F): packet 생성 후 콘솔에 구조화된 요약 출력
+    _print_failure_packet_console(packet)
     return packet
+
+
+def _print_failure_packet_console(packet: Dict[str, Any]) -> None:
+    """failure_packet 내용을 구조화된 형식으로 콘솔에 출력.
+
+    IMP-20260519-EC9F MT-1: _record_failure_packet 호출 후 자동 실행되어
+    사용자/에이전트가 failure 원인과 복구 방법을 즉시 파악할 수 있도록 한다.
+
+    Args:
+        packet: _record_failure_packet이 반환한 schema_v2 failure packet dict.
+    """
+    if not isinstance(packet, dict):
+        return
+
+    status = str(packet.get("status") or "FAIL")
+    gate = str(packet.get("gate") or "")
+    failure_code = str(packet.get("failure_code") or "")
+    failure_category = str(packet.get("failure_category") or "")
+    summary_ko = str(packet.get("summary_ko") or "")
+    expected = str(packet.get("expected") or "")
+    actual = str(packet.get("actual") or "")
+    return_phase = str(packet.get("return_phase") or "")
+    owner = str(packet.get("owner") or "")
+    packet_path = str(packet.get("packet_path") or "")
+    minimal_rerun = packet.get("minimal_rerun") or []
+    required_actions = packet.get("required_actions") or []
+    escalation_reason = str(packet.get("escalation_reason") or "")
+
+    # 상태에 따른 색상 선택
+    if status == "BLOCKED":
+        color_fn = RED
+        header_label = "[FAILURE BLOCKED]"
+    else:
+        color_fn = YELLOW
+        header_label = "[FAILURE PACKET]"
+
+    print()
+    print(color_fn(f"{'=' * 60}"))
+    print(color_fn(f"  {header_label}  gate={gate}  status={status}"))
+    print(color_fn(f"{'=' * 60}"))
+
+    if failure_code:
+        print(color_fn(f"  failure_code     : {failure_code}"))
+    if failure_category:
+        print(color_fn(f"  failure_category : {failure_category}"))
+    if summary_ko:
+        print(color_fn(f"  summary_ko       : {summary_ko}"))
+    if expected:
+        print(color_fn(f"  expected         : {expected}"))
+    if actual:
+        print(color_fn(f"  actual           : {actual}"))
+    if return_phase:
+        print(color_fn(f"  return_phase     : {return_phase}"))
+    if owner:
+        print(color_fn(f"  owner            : {owner}"))
+    if escalation_reason:
+        print(RED(f"  escalation       : {escalation_reason}"))
+
+    if required_actions:
+        print(color_fn("  required_actions :"))
+        for idx, action in enumerate(required_actions, 1):
+            print(color_fn(f"    {idx}. {action}"))
+
+    if minimal_rerun:
+        rerun_str = " ".join(str(x) for x in minimal_rerun)
+        print(color_fn(f"  minimal_rerun    : {rerun_str}"))
+
+    if packet_path:
+        print(color_fn(f"  packet_path      : {packet_path}"))
+
+    print(color_fn(f"{'=' * 60}"))
+    print()
 
 
 def _dev_evidence_files(state: Dict[str, Any]) -> List[Path]:
@@ -9328,6 +9499,73 @@ def _cmd_gates_preflight_pr(args: argparse.Namespace) -> None:
             forbidden.append(f)
 
     if forbidden:
+        # MT-2 (IMP-20260519-EC9F): preflight-pr FAIL 시 failure_packet 생성 (state 로드 시도)
+        _pf_state: Optional[Dict[str, Any]] = None
+        try:
+            _pf_state = _load()
+        except Exception:
+            _pf_state = None
+        if _pf_state is not None and isinstance(_pf_state, dict):
+            import pathlib as _pathlib
+            _pf_pid = str(_pf_state.get("pipeline_id") or effective_pid or "UNKNOWN")
+            _pf_paths = _contract_paths(_pf_pid)
+            _attempt = _next_failure_attempt(_pf_paths, f"preflight_pr_{phase}")
+            _pf_packet_path = _failure_root_from_paths(_pf_paths) / f"preflight_pr_{phase}_attempt_{_attempt}.json"
+            _pf_packet: Dict[str, Any] = {
+                "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
+                "pipeline_id": _pf_pid,
+                "phase": phase,
+                "gate": f"preflight_pr_{phase}",
+                "status": "FAIL",
+                "failure_code": f"preflight_pr_scope_violation_{phase}",
+                "failure_category": "scope_mismatch",
+                "summary_ko": f"preflight-pr FAIL: phase={phase} PR 범위 초과 파일 발견",
+                "expected": f"PR에는 phase={phase} scope_manifest 내 파일만 포함",
+                "actual": f"forbidden 파일 {len(forbidden)}개: {', '.join(forbidden[:5])}",
+                "owner": "Dev",
+                "return_phase": "dev",
+                "required_actions": [
+                    f"금지 파일을 되돌리세요: {', '.join(forbidden[:3])}",
+                    "Trust-Root 파일(pipeline.py, CLAUDE.md, .github/workflows)은 별도 IMP 파이프라인으로 처리하세요",
+                ],
+                "retry_allowed": True,
+                "minimal_rerun": ["python", "pipeline.py", "gates", "preflight-pr", "--phase", phase],
+                "command": ["python", "pipeline.py", "gates", "preflight-pr", "--phase", phase],
+                "packet_path": str(_pf_packet_path),
+                "attempt": _attempt,
+                "attempt_count": _attempt,
+                "recorded_at": _now(),
+                "created_at": _now(),
+                "exit_code": 1,
+                "blocking_condition": "",
+                "evidence_paths": [],
+                "note": "",
+                "failed_checks": [],
+                "repair_owner": "Dev",
+                "report_excerpt": {"blockers": forbidden, "summary": {}, "results": []},
+                "escalation_reason": None,
+            }
+            _write_json(_pf_packet_path, _pf_packet)
+            _pf_state.setdefault("failure_packets", [])
+            if isinstance(_pf_state.get("failure_packets"), list):
+                _pf_state["failure_packets"].append({
+                    "gate": f"preflight_pr_{phase}",
+                    "attempt": _attempt,
+                    "path": str(_pf_packet_path),
+                    "packet_path": str(_pf_packet_path),
+                    "recorded_at": _pf_packet["recorded_at"],
+                    "repair_owner": "Dev",
+                    "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
+                    "status": "FAIL",
+                    "failure_code": _pf_packet["failure_code"],
+                    "failure_category": "scope_mismatch",
+                    "owner": "Dev",
+                    "return_phase": "dev",
+                    "attempt_count": _attempt,
+                    "escalation_reason": None,
+                })
+            _save(_pf_state)
+            _print_failure_packet_console(_pf_packet)
         print(f"[PIPELINE ERROR] preflight-pr FAIL: 다음 파일이 phase={phase} PR 범위를 벗어납니다:")
         for f in forbidden:
             print(f"  - {f}")
