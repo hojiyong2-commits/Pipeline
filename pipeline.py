@@ -2652,6 +2652,149 @@ def _validate_pr_title_matches_pipeline(state: Dict[str, Any]) -> None:
         return  # gh CLI 미설치 환경 — 검사 생략
 
 
+# IMP-20260519-E979: Final Acceptance Readiness Gate 상수 정의
+# (Documentation-Code Drift 방지 — CLAUDE.md와 동기화됨)
+TEMPORARY_PR_BODY_PATTERNS: List[str] = [
+    "작업 중입니다",
+    "Dev 완료 후 업데이트됩니다",
+    "PM phase attestation CI 확인용",
+    "아직 Dev 구현 완료 전",
+    "작업 중",
+    "진행 중",
+]
+
+# PR 본문에 반드시 포함되어야 하는 섹션 헤더 목록 (순서 무관, OR 쌍 지원)
+# 형식: str → 단일 필수 / (str, str) → 둘 중 하나 있으면 통과
+PR_REQUIRED_SECTIONS: List[Any] = [
+    ("작업 요약", "이번 요청과 완료 결과"),  # 둘 중 하나
+    "사용자가 확인할 결과물",
+    "기대 결과와 실제 결과",
+    "중요한 선택과 트레이드오프",
+    "검증",
+]
+
+
+def _check_acceptance_readiness(
+    state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """gates accept --result ACCEPT 실행 전 PR 품질 및 acceptance packet readiness hard gate.
+
+    반환값:
+        {
+            "status": "PASS" | "BLOCKED",
+            "failure_code": str,      # BLOCKED 시 원인 코드
+            "failure_category": str,
+            "blocked_reason": Optional[str],
+            "missing_sections": List[str],  # pr_body_incomplete 시 누락 섹션
+            "allow_accept": bool,
+        }
+
+    gh CLI 미설치 또는 PR 없음 시 검사 생략(기존 _validate_pr_title_matches_pipeline 패턴 유지).
+    """
+    pass_result: Dict[str, Any] = {
+        "status": "PASS",
+        "failure_code": "",
+        "failure_category": "",
+        "blocked_reason": None,
+        "missing_sections": [],
+        "allow_accept": True,
+    }
+
+    # gh CLI로 PR 메타데이터 조회
+    try:
+        pr_result = subprocess.run(
+            ["gh", "pr", "view", "--json", "isDraft,title,body,number,url"],
+            capture_output=True, text=True, check=False
+        )
+        if pr_result.returncode != 0 or not pr_result.stdout.strip():
+            return pass_result  # PR 없거나 gh CLI 없음 — 검사 생략
+        pr_data = json.loads(pr_result.stdout)
+    except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError):
+        return pass_result  # gh CLI 미설치 또는 파싱 실패 — 검사 생략
+
+    # --- 1. Draft PR 차단 ---
+    if pr_data.get("isDraft", False):
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_is_draft",
+            "failure_category": "missing_evidence",
+            "blocked_reason": (
+                "PR이 Draft 상태입니다. "
+                "Draft를 해제한 뒤 gates accept를 다시 실행하세요."
+            ),
+            "missing_sections": [],
+            "allow_accept": False,
+        }
+
+    pr_body: str = pr_data.get("body") or ""
+
+    # --- 2. 필수 섹션 검사 (섹션 누락이 임시 문구보다 우선 탐지) ---
+    missing_sections: List[str] = []
+    for section_spec in PR_REQUIRED_SECTIONS:
+        if isinstance(section_spec, tuple):
+            # OR 쌍: 둘 중 하나라도 있으면 통과
+            found = any(s in pr_body for s in section_spec)
+            if not found:
+                missing_sections.append(" 또는 ".join(section_spec))
+        else:
+            if section_spec not in pr_body:
+                missing_sections.append(section_spec)
+
+    if missing_sections:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_body_incomplete",
+            "failure_category": "missing_evidence",
+            "blocked_reason": "PR 본문에 임시 문구가 포함되어 있거나 필수 섹션이 누락되어 있습니다.",
+            "missing_sections": missing_sections,
+            "allow_accept": False,
+        }
+
+    # --- 3. 임시 문구 탐지 (섹션이 갖춰진 경우에만 검사) ---
+    for pattern in TEMPORARY_PR_BODY_PATTERNS:
+        if pattern in pr_body:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "pr_body_temporary",
+                "failure_category": "missing_evidence",
+                "blocked_reason": (
+                    f"PR 본문에 임시 문구가 포함되어 있습니다: '{pattern}'. "
+                    "PR 본문을 완성한 뒤 다시 실행하세요."
+                ),
+                "missing_sections": [],
+                "allow_accept": False,
+            }
+
+    # --- 4. human acceptance packet readiness 확인 ---
+    pid = str(state.get("pipeline_id") or "")
+    packet_candidates = [
+        BASE_DIR / f"human_acceptance_packet_{pid}.md",
+        BASE_DIR / "human_acceptance_packet_v2.md",
+        BASE_DIR / "human_acceptance_packet.md",
+    ]
+    for packet_path in packet_candidates:
+        if packet_path.is_file():
+            try:
+                packet_text = packet_path.read_text(encoding="utf-8")
+                if "정보 부족" in packet_text:
+                    return {
+                        "status": "BLOCKED",
+                        "failure_code": "acceptance_packet_insufficient",
+                        "failure_category": "missing_evidence",
+                        "blocked_reason": (
+                            "human acceptance packet의 판단 정보 상태가 '정보 부족'입니다. "
+                            "PR 본문과 acceptance packet을 보완한 뒤 다시 실행하세요."
+                        ),
+                        "missing_sections": [],
+                        "allow_accept": False,
+                    }
+            except OSError:
+                pass  # 읽기 실패 시 검사 생략
+            break  # 첫 번째 존재 파일만 검사
+
+    return pass_result
+
+
 _FORBIDDEN_ACCEPTANCE_EVIDENCE_PREFIXES = (
     ".pipeline/phase_evidence/",
     ".pipeline/agent_receipts/",
@@ -10032,6 +10175,43 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     prereq.append(f"{gate_name} gate must be PASS before user ACCEPT")
             if prereq:
                 _die("; ".join(prereq))
+            # IMP-20260519-E979: Final Acceptance Readiness Gate hard block
+            _readiness = _check_acceptance_readiness(state)
+            if not _readiness.get("allow_accept", True):
+                _record_failure_packet(
+                    state,
+                    "acceptance",
+                    {},
+                    command=[sys.executable, "pipeline.py", "gates", "accept",
+                             "--result", "ACCEPT", "--evidence", "<result-path>", "--user-confirmed"],
+                    note=_readiness.get("blocked_reason") or "acceptance readiness check failed",
+                    status="BLOCKED",
+                    phase="build",
+                    failure_code=str(_readiness.get("failure_code") or "readiness_blocked"),
+                    failure_category="missing_evidence",
+                    summary_ko=_readiness.get("blocked_reason") or "acceptance readiness gate BLOCKED",
+                    expected="PR 본문 완성 + acceptance packet 준비 완료 상태",
+                    actual=str(_readiness.get("failure_code") or "readiness_blocked"),
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="build",
+                    required_actions=[
+                        _readiness.get("blocked_reason") or "PR 본문 및 acceptance packet을 보완하세요.",
+                        "PR 본문에 필수 섹션(작업 요약/사용자가 확인할 결과물/기대 결과와 실제 결과/중요한 선택과 트레이드오프/검증)이 있는지 확인하세요.",
+                        "human_acceptance_packet.md에 '정보 부족' 문구가 없는지 확인하세요.",
+                        "보완 완료 후 python pipeline.py gates accept --result ACCEPT --evidence <result-path> --user-confirmed 를 다시 실행하세요.",
+                    ],
+                    retry_allowed=True,
+                )
+                _save(state)
+                missing = _readiness.get("missing_sections", [])
+                msg_parts = [
+                    f"[ACCEPTANCE READINESS GATE BLOCKED] {_readiness.get('blocked_reason')}",
+                ]
+                if missing:
+                    msg_parts.append("  누락 섹션: " + ", ".join(missing))
+                msg_parts.append("  PR 본문과 acceptance packet을 보완한 뒤 다시 실행하세요.")
+                _die("\n".join(msg_parts))
             _validate_pr_title_matches_pipeline(state)
             evidence_validation = _validate_user_acceptance_evidence(args.evidence)
             deployment = _deploy_accepted_outputs(state, args.evidence, args.notes, evidence_validation)
