@@ -54,6 +54,9 @@ logs/
 # Keep it out of main by default. Phase PRs must add it explicitly with:
 #   git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 
+# PR body staging files (local use only)
+pr_body_*.md
+
 # Generated harness / run reports
 _build_harness*.py
 harness_output*.xml
