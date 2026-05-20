@@ -2660,24 +2660,283 @@ def _validate_pr_title_matches_pipeline(state: Dict[str, Any]) -> None:
 
 # IMP-20260519-E979: Final Acceptance Readiness Gate 상수 정의
 # (Documentation-Code Drift 방지 — CLAUDE.md와 동기화됨)
+# Blocker 3 수정: "Draft PR" 임시 문구를 명시적으로 추가.
+# 매칭 방식: PR 본문을 줄 단위로 끊고, strip한 줄이 패턴으로 "시작"하면 임시 PR로 간주한다.
+# (정상 PR이 본문 문장 중간에 'Draft PR' 같은 단어를 언급하는 경우를 거짓 양성으로
+#  차단하지 않기 위해, substring 전체 검색이 아니라 줄-접두 검색을 사용한다.)
 TEMPORARY_PR_BODY_PATTERNS: List[str] = [
-    "작업 중입니다",
-    "Dev 완료 후 업데이트됩니다",
-    "PM phase attestation CI 확인용",
-    "아직 Dev 구현 완료 전",
     "작업 중",
+    "Draft PR",
+    "PM phase attestation CI 확인용",
+    "작업 중입니다",
     "진행 중",
+    "Dev 완료 후 업데이트됩니다",
+    "아직 Dev 구현 완료 전",
 ]
 
 # PR 본문에 반드시 포함되어야 하는 섹션 헤더 목록 (순서 무관, OR 쌍 지원)
-# 형식: str → 단일 필수 / (str, str) → 둘 중 하나 있으면 통과
+# 형식: str → 단일 필수 / tuple → 안의 항목 중 하나라도 있으면 통과 (OR 조건)
+# Blocker 3 수정: 첫 항목에 "최종 판단 요약"을 OR 후보로 추가.
 PR_REQUIRED_SECTIONS: List[Any] = [
-    ("작업 요약", "이번 요청과 완료 결과"),  # 둘 중 하나
+    ("작업 요약", "최종 판단 요약", "이번 요청과 완료 결과"),  # 셋 중 하나 (OR)
     "사용자가 확인할 결과물",
     "기대 결과와 실제 결과",
     "중요한 선택과 트레이드오프",
     "검증",
 ]
+
+# Blocker 2: human acceptance packet readiness — GitHub PR 댓글 태그
+_ACCEPTANCE_PACKET_COMMENT_TAG = "<!-- pipeline-human-acceptance-packet -->"
+# 정보 부족 / 판단 가능 상태 문구 (별표 강조 유무 모두 매칭)
+_ACCEPTANCE_PACKET_INSUFFICIENT_MARKER = "정보 부족"
+_ACCEPTANCE_PACKET_SUFFICIENT_MARKER = "판단 가능"
+# PR URL → owner/repo 추출용 정규식 (모듈 레벨 1회 컴파일 — Rule D2)
+_PR_URL_REPO_PATTERN = re.compile(
+    r"github\.com/([^/]+/[^/]+)/pull/(\d+)"
+)
+
+
+def _find_temporary_pr_body_pattern(pr_body: str) -> Optional[str]:
+    """PR 본문에 임시(placeholder) 문구가 줄 단위로 존재하면 그 패턴을 반환한다.
+
+    매칭 규칙: 본문을 줄 단위로 끊고, 각 줄을 strip한 뒤
+    그 줄이 TEMPORARY_PR_BODY_PATTERNS 중 하나로 "시작"하면 임시 문구로 간주한다.
+    (정상 PR이 문장 중간에 'Draft PR' 같은 단어를 설명용으로 언급하는 경우는
+     거짓 양성으로 차단하지 않기 위해 substring 전체 검색을 쓰지 않는다.)
+
+    Args:
+        pr_body: PR 본문 전체 텍스트.
+    Returns:
+        탐지된 임시 문구 패턴 문자열. 없으면 None.
+    """
+    if not pr_body:
+        return None
+    for raw_line in pr_body.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        for pattern in TEMPORARY_PR_BODY_PATTERNS:
+            if line.startswith(pattern):
+                return pattern
+    return None
+
+
+def _acceptance_blocked(
+    failure_code: str,
+    blocked_reason: str,
+    *,
+    return_phase: str = "build",
+    missing_sections: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """_check_acceptance_readiness용 BLOCKED 결과 dict 생성 헬퍼.
+
+    Args:
+        failure_code: 실패 원인 코드 (failure_packet schema_v2의 failure_code).
+        blocked_reason: 사용자에게 보여줄 차단 사유 (한국어).
+        return_phase: 재작업 담당 phase (기본 build).
+        missing_sections: PR 본문 누락 섹션 목록 (없으면 빈 리스트).
+    Returns:
+        status=BLOCKED, allow_accept=False인 결과 dict.
+    """
+    return {
+        "status": "BLOCKED",
+        "failure_code": failure_code,
+        "failure_category": "missing_evidence",
+        "blocked_reason": blocked_reason,
+        "missing_sections": list(missing_sections) if missing_sections else [],
+        "return_phase": return_phase,
+        "allow_accept": False,
+    }
+
+
+def _check_acceptance_packet_via_github(pr_url: str) -> Dict[str, Any]:
+    """GitHub PR 댓글에서 human acceptance packet readiness를 검증한다.
+
+    Blocker 2: 로컬 파일 대신 GitHub PR 댓글을 기본 검증 대상으로 한다.
+    `<!-- pipeline-human-acceptance-packet -->` 태그 댓글을 찾아
+    '판단 가능'/'정보 부족' 상태를 판정한다.
+
+    Args:
+        pr_url: gh pr view 가 반환한 PR URL (owner/repo/pr_number 추출용).
+    Returns:
+        status=PASS 또는 status=BLOCKED 결과 dict.
+        - 태그 댓글 없음 → acceptance_packet_missing
+        - 댓글에 '정보 부족' → acceptance_packet_insufficient
+        - 댓글 조회 실패(API/네트워크) → pr_comments_fetch_failed
+        - '판단 가능' 확인 → PASS
+    """
+    pass_result: Dict[str, Any] = {
+        "status": "PASS",
+        "failure_code": "",
+        "failure_category": "",
+        "blocked_reason": None,
+        "missing_sections": [],
+        "allow_accept": True,
+    }
+
+    # PR URL에서 owner/repo, PR 번호 추출
+    match = _PR_URL_REPO_PATTERN.search(pr_url or "")
+    if match is None:
+        return _acceptance_blocked(
+            "pr_comments_fetch_failed",
+            (
+                f"PR URL에서 저장소/번호를 추출하지 못해 acceptance packet 댓글을 "
+                f"조회할 수 없습니다: '{pr_url}'. PR 상태를 확인한 뒤 다시 실행하세요."
+            ),
+        )
+    repo_slug = match.group(1)
+    pr_number = match.group(2)
+
+    # gh api 로 PR 댓글 목록 조회
+    try:
+        comments_result = subprocess.run(
+            ["gh", "api", f"repos/{repo_slug}/issues/{pr_number}/comments",
+             "--paginate"],
+            capture_output=True, text=True, check=False,
+        )
+    except (FileNotFoundError, OSError) as exc:
+        return _acceptance_blocked(
+            "pr_comments_fetch_failed",
+            (
+                f"GitHub PR 댓글 조회에 실패했습니다(gh CLI 오류: {exc}). "
+                "네트워크와 gh 인증 상태를 확인한 뒤 다시 실행하세요."
+            ),
+        )
+
+    if comments_result.returncode != 0:
+        return _acceptance_blocked(
+            "pr_comments_fetch_failed",
+            (
+                "GitHub PR 댓글 조회에 실패했습니다"
+                f"(gh api exit code {comments_result.returncode}). "
+                + ((comments_result.stderr or "").strip()[:200])
+                + " 네트워크와 gh 인증 상태를 확인한 뒤 다시 실행하세요."
+            ),
+        )
+
+    raw_stdout = (comments_result.stdout or "").strip()
+    if not raw_stdout:
+        # 댓글이 0개여도 acceptance packet 댓글은 없는 것 — missing 처리
+        return _acceptance_blocked(
+            "acceptance_packet_missing",
+            (
+                "GitHub PR에 사용자 판단용 acceptance packet 댓글이 없습니다. "
+                "최종 확인 안내 댓글이 게시된 뒤 다시 실행하세요."
+            ),
+        )
+
+    try:
+        comments = json.loads(raw_stdout)
+    except (json.JSONDecodeError, ValueError) as exc:
+        return _acceptance_blocked(
+            "pr_comments_fetch_failed",
+            (
+                f"GitHub PR 댓글 응답을 해석하지 못했습니다(JSON 오류: {exc}). "
+                "잠시 후 다시 실행하세요."
+            ),
+        )
+
+    if not isinstance(comments, list):
+        return _acceptance_blocked(
+            "pr_comments_fetch_failed",
+            (
+                "GitHub PR 댓글 응답 형식이 올바르지 않습니다. "
+                "잠시 후 다시 실행하세요."
+            ),
+        )
+
+    # acceptance packet 태그 댓글 탐색
+    packet_comment_body: Optional[str] = None
+    for comment in comments:
+        if not isinstance(comment, dict):
+            continue
+        body = comment.get("body") or ""
+        if _ACCEPTANCE_PACKET_COMMENT_TAG in body:
+            packet_comment_body = body  # 마지막(최신) 태그 댓글을 사용
+
+    if packet_comment_body is None:
+        return _acceptance_blocked(
+            "acceptance_packet_missing",
+            (
+                "GitHub PR에 사용자 판단용 acceptance packet 댓글이 없습니다"
+                f"('{_ACCEPTANCE_PACKET_COMMENT_TAG}' 태그 미발견). "
+                "최종 확인 안내 댓글이 게시된 뒤 다시 실행하세요."
+            ),
+        )
+
+    # 정보 부족 우선 검사 (정보 부족이 있으면 판단 가능 문구가 있어도 BLOCKED)
+    if _ACCEPTANCE_PACKET_INSUFFICIENT_MARKER in packet_comment_body:
+        return _acceptance_blocked(
+            "acceptance_packet_insufficient",
+            (
+                "GitHub PR의 acceptance packet 댓글 판단 정보 상태가 '정보 부족'입니다. "
+                "PR 본문과 acceptance packet 댓글을 보완한 뒤 다시 실행하세요."
+            ),
+        )
+
+    if _ACCEPTANCE_PACKET_SUFFICIENT_MARKER in packet_comment_body:
+        return pass_result
+
+    # 태그 댓글은 있으나 판단 가능/정보 부족 상태 표기가 없음 — 불완전 packet
+    return _acceptance_blocked(
+        "acceptance_packet_insufficient",
+        (
+            "GitHub PR의 acceptance packet 댓글에 판단 정보 상태"
+            f"('{_ACCEPTANCE_PACKET_SUFFICIENT_MARKER}'/'"
+            f"{_ACCEPTANCE_PACKET_INSUFFICIENT_MARKER}') 표기가 없습니다. "
+            "acceptance packet 댓글을 보완한 뒤 다시 실행하세요."
+        ),
+    )
+
+
+def _check_acceptance_packet_via_local_file(state: Dict[str, Any]) -> Dict[str, Any]:
+    """로컬 human_acceptance_packet*.md 파일로 readiness를 검증하는 fallback.
+
+    Blocker 2: 테스트 환경 전용 fallback. 환경변수
+    PIPELINE_TEST_ACCEPTANCE_PACKET_PATH 가 설정된 경우 해당 경로를 우선 사용한다.
+
+    Args:
+        state: 파이프라인 state dict (pipeline_id 추출용).
+    Returns:
+        status=PASS 또는 status=BLOCKED 결과 dict.
+    """
+    pass_result: Dict[str, Any] = {
+        "status": "PASS",
+        "failure_code": "",
+        "failure_category": "",
+        "blocked_reason": None,
+        "missing_sections": [],
+        "allow_accept": True,
+    }
+
+    pid = str(state.get("pipeline_id") or "")
+    env_override = os.environ.get("PIPELINE_TEST_ACCEPTANCE_PACKET_PATH", "").strip()
+    packet_candidates: List[Path] = []
+    if env_override:
+        packet_candidates.append(Path(env_override))
+    packet_candidates.extend([
+        BASE_DIR / f"human_acceptance_packet_{pid}.md",
+        BASE_DIR / "human_acceptance_packet_v2.md",
+        BASE_DIR / "human_acceptance_packet.md",
+    ])
+
+    for packet_path in packet_candidates:
+        if packet_path.is_file():
+            try:
+                packet_text = packet_path.read_text(encoding="utf-8")
+            except OSError:
+                break  # 읽기 실패 시 검사 생략
+            if _ACCEPTANCE_PACKET_INSUFFICIENT_MARKER in packet_text:
+                return _acceptance_blocked(
+                    "acceptance_packet_insufficient",
+                    (
+                        "human acceptance packet의 판단 정보 상태가 '정보 부족'입니다. "
+                        "PR 본문과 acceptance packet을 보완한 뒤 다시 실행하세요."
+                    ),
+                )
+            break  # 첫 번째 존재 파일만 검사
+
+    return pass_result
 
 
 def _check_acceptance_readiness(
@@ -2692,10 +2951,16 @@ def _check_acceptance_readiness(
             "failure_category": str,
             "blocked_reason": Optional[str],
             "missing_sections": List[str],  # pr_body_incomplete 시 누락 섹션
+            "return_phase": str,      # BLOCKED 시 재작업 담당 phase
             "allow_accept": bool,
         }
 
-    gh CLI 미설치 또는 PR 없음 시 검사 생략(기존 _validate_pr_title_matches_pipeline 패턴 유지).
+    IMP-20260519-E979 REJECT 재작업:
+    - Blocker 1: gh CLI 없음 / gh pr view 실패 / PR 없음 / JSON 파싱 실패는 더 이상
+      PASS로 통과시키지 않고 BLOCKED를 반환한다(allow_accept=False).
+    - Blocker 2: human acceptance packet readiness는 GitHub PR 댓글을 기본으로 검증한다.
+      로컬 파일 검사는 PIPELINE_TEST_ACCEPTANCE_PACKET_PATH 환경변수가 설정된
+      테스트 환경에서만 사용하는 fallback이다.
     """
     pass_result: Dict[str, Any] = {
         "status": "PASS",
@@ -2703,42 +2968,100 @@ def _check_acceptance_readiness(
         "failure_category": "",
         "blocked_reason": None,
         "missing_sections": [],
+        "return_phase": "build",
         "allow_accept": True,
     }
 
-    # gh CLI로 PR 메타데이터 조회
+    # --- Blocker 1: gh CLI로 PR 메타데이터 조회 — 실패 시 BLOCKED ---
     try:
         pr_result = subprocess.run(
             ["gh", "pr", "view", "--json", "isDraft,title,body,number,url"],
-            capture_output=True, text=True, check=False
+            capture_output=True, text=True, check=False,
         )
-        if pr_result.returncode != 0 or not (pr_result.stdout or "").strip():
-            return pass_result  # PR 없거나 gh CLI 없음 — 검사 생략
-        pr_data = json.loads(pr_result.stdout)
-    except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError):
-        return pass_result  # gh CLI 미설치 또는 파싱 실패 — 검사 생략
+    except (FileNotFoundError, OSError):
+        # gh CLI 미설치 — 더 이상 PASS로 통과시키지 않음
+        return _acceptance_blocked(
+            "gh_cli_not_available",
+            (
+                "GitHub CLI(gh)가 설치되어 있지 않아 PR 상태를 검증할 수 없습니다. "
+                "gh CLI를 설치하고 인증한 뒤 gates accept를 다시 실행하세요."
+            ),
+        )
+
+    if pr_result.returncode != 0:
+        stderr_text = (pr_result.stderr or "").strip()
+        # PR 없음(404 / no pull requests found) → pr_not_found
+        lowered = stderr_text.lower()
+        if "no pull requests found" in lowered or "404" in lowered or "not found" in lowered:
+            return _acceptance_blocked(
+                "pr_not_found",
+                (
+                    "현재 브랜치에 연결된 GitHub PR을 찾을 수 없습니다. "
+                    "PR을 생성한 뒤 gates accept를 다시 실행하세요. "
+                    + stderr_text[:200]
+                ),
+            )
+        # 그 외 gh pr view 실패 → pr_view_failed
+        return _acceptance_blocked(
+            "pr_view_failed",
+            (
+                "gh pr view 명령이 실패했습니다"
+                f"(exit code {pr_result.returncode}). "
+                + stderr_text[:200]
+                + " gh 인증과 네트워크 상태를 확인한 뒤 다시 실행하세요."
+            ),
+        )
+
+    raw_stdout = (pr_result.stdout or "").strip()
+    if not raw_stdout:
+        # 출력이 비어 있음 → PR을 찾지 못한 것으로 간주
+        return _acceptance_blocked(
+            "pr_not_found",
+            (
+                "gh pr view 출력이 비어 있어 PR을 확인할 수 없습니다. "
+                "현재 브랜치에 연결된 PR이 있는지 확인한 뒤 다시 실행하세요."
+            ),
+        )
+
+    try:
+        pr_data = json.loads(raw_stdout)
+    except (json.JSONDecodeError, ValueError):
+        # JSON 파싱 실패 → pr_metadata_parse_error
+        return _acceptance_blocked(
+            "pr_metadata_parse_error",
+            (
+                "gh pr view 가 반환한 PR 메타데이터(JSON)를 해석하지 못했습니다. "
+                "잠시 후 gates accept를 다시 실행하세요."
+            ),
+        )
+
+    if not isinstance(pr_data, dict):
+        return _acceptance_blocked(
+            "pr_metadata_parse_error",
+            (
+                "gh pr view 가 반환한 PR 메타데이터 형식이 올바르지 않습니다. "
+                "잠시 후 gates accept를 다시 실행하세요."
+            ),
+        )
 
     # --- 1. Draft PR 차단 ---
     if pr_data.get("isDraft", False):
-        return {
-            "status": "BLOCKED",
-            "failure_code": "pr_is_draft",
-            "failure_category": "missing_evidence",
-            "blocked_reason": (
+        return _acceptance_blocked(
+            "pr_is_draft",
+            (
                 "PR이 Draft 상태입니다. "
                 "Draft를 해제한 뒤 gates accept를 다시 실행하세요."
             ),
-            "missing_sections": [],
-            "allow_accept": False,
-        }
+        )
 
     pr_body: str = pr_data.get("body") or ""
+    pr_url: str = pr_data.get("url") or ""
 
     # --- 2. 필수 섹션 검사 (섹션 누락이 임시 문구보다 우선 탐지) ---
     missing_sections: List[str] = []
     for section_spec in PR_REQUIRED_SECTIONS:
         if isinstance(section_spec, tuple):
-            # OR 쌍: 둘 중 하나라도 있으면 통과
+            # OR 그룹: 안의 항목 중 하나라도 있으면 통과
             found = any(s in pr_body for s in section_spec)
             if not found:
                 missing_sections.append(" 또는 ".join(section_spec))
@@ -2747,56 +3070,35 @@ def _check_acceptance_readiness(
                 missing_sections.append(section_spec)
 
     if missing_sections:
-        return {
-            "status": "BLOCKED",
-            "failure_code": "pr_body_incomplete",
-            "failure_category": "missing_evidence",
-            "blocked_reason": "PR 본문에 임시 문구가 포함되어 있거나 필수 섹션이 누락되어 있습니다.",
-            "missing_sections": missing_sections,
-            "allow_accept": False,
-        }
+        return _acceptance_blocked(
+            "pr_body_incomplete",
+            "PR 본문에 임시 문구가 포함되어 있거나 필수 섹션이 누락되어 있습니다.",
+            missing_sections=missing_sections,
+        )
 
     # --- 3. 임시 문구 탐지 (섹션이 갖춰진 경우에만 검사) ---
-    for pattern in TEMPORARY_PR_BODY_PATTERNS:
-        if pattern in pr_body:
-            return {
-                "status": "BLOCKED",
-                "failure_code": "pr_body_temporary",
-                "failure_category": "missing_evidence",
-                "blocked_reason": (
-                    f"PR 본문에 임시 문구가 포함되어 있습니다: '{pattern}'. "
-                    "PR 본문을 완성한 뒤 다시 실행하세요."
-                ),
-                "missing_sections": [],
-                "allow_accept": False,
-            }
+    # 줄 단위 접두 매칭 — 정상 본문의 우연한 단어 언급은 차단하지 않는다.
+    temporary_pattern = _find_temporary_pr_body_pattern(pr_body)
+    if temporary_pattern is not None:
+        return _acceptance_blocked(
+            "pr_body_temporary",
+            (
+                f"PR 본문에 임시 문구가 포함되어 있습니다: '{temporary_pattern}'. "
+                "PR 본문을 완성한 뒤 다시 실행하세요."
+            ),
+        )
 
-    # --- 4. human acceptance packet readiness 확인 ---
-    pid = str(state.get("pipeline_id") or "")
-    packet_candidates = [
-        BASE_DIR / f"human_acceptance_packet_{pid}.md",
-        BASE_DIR / "human_acceptance_packet_v2.md",
-        BASE_DIR / "human_acceptance_packet.md",
-    ]
-    for packet_path in packet_candidates:
-        if packet_path.is_file():
-            try:
-                packet_text = packet_path.read_text(encoding="utf-8")
-                if "정보 부족" in packet_text:
-                    return {
-                        "status": "BLOCKED",
-                        "failure_code": "acceptance_packet_insufficient",
-                        "failure_category": "missing_evidence",
-                        "blocked_reason": (
-                            "human acceptance packet의 판단 정보 상태가 '정보 부족'입니다. "
-                            "PR 본문과 acceptance packet을 보완한 뒤 다시 실행하세요."
-                        ),
-                        "missing_sections": [],
-                        "allow_accept": False,
-                    }
-            except OSError:
-                pass  # 읽기 실패 시 검사 생략
-            break  # 첫 번째 존재 파일만 검사
+    # --- 4. Blocker 2: human acceptance packet readiness 확인 ---
+    # 기본: GitHub PR 댓글 검증. fallback: 로컬 파일(테스트 환경 전용).
+    env_override = os.environ.get("PIPELINE_TEST_ACCEPTANCE_PACKET_PATH", "").strip()
+    if env_override:
+        # 테스트 환경 fallback — 로컬 파일로 검증
+        packet_result = _check_acceptance_packet_via_local_file(state)
+    else:
+        # 운영 기본 경로 — GitHub PR 댓글로 검증
+        packet_result = _check_acceptance_packet_via_github(pr_url)
+    if not packet_result.get("allow_accept", True):
+        return packet_result
 
     return pass_result
 
@@ -10184,6 +10486,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
             # IMP-20260519-E979: Final Acceptance Readiness Gate hard block
             _readiness = _check_acceptance_readiness(state)
             if not _readiness.get("allow_accept", True):
+                _readiness_return_phase = str(_readiness.get("return_phase") or "build")
                 _record_failure_packet(
                     state,
                     "acceptance",
@@ -10192,7 +10495,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
                              "--result", "ACCEPT", "--evidence", "<result-path>", "--user-confirmed"],
                     note=_readiness.get("blocked_reason") or "acceptance readiness check failed",
                     status="BLOCKED",
-                    phase="build",
+                    phase=_readiness_return_phase,
                     failure_code=str(_readiness.get("failure_code") or "readiness_blocked"),
                     failure_category="missing_evidence",
                     summary_ko=_readiness.get("blocked_reason") or "acceptance readiness gate BLOCKED",
@@ -10200,11 +10503,12 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     actual=str(_readiness.get("failure_code") or "readiness_blocked"),
                     exit_code=1,
                     owner="Dev",
-                    return_phase="build",
+                    return_phase=_readiness_return_phase,
                     required_actions=[
                         _readiness.get("blocked_reason") or "PR 본문 및 acceptance packet을 보완하세요.",
-                        "PR 본문에 필수 섹션(작업 요약/사용자가 확인할 결과물/기대 결과와 실제 결과/중요한 선택과 트레이드오프/검증)이 있는지 확인하세요.",
-                        "human_acceptance_packet.md에 '정보 부족' 문구가 없는지 확인하세요.",
+                        "PR이 Draft가 아닌 정식 PR 상태이고 gh CLI가 설치/인증되어 있는지 확인하세요.",
+                        "PR 본문에 필수 섹션(작업 요약 또는 최종 판단 요약/사용자가 확인할 결과물/기대 결과와 실제 결과/중요한 선택과 트레이드오프/검증)이 있는지 확인하세요.",
+                        "GitHub PR에 acceptance packet 댓글이 게시되어 있고 '판단 가능' 상태인지 확인하세요.",
                         "보완 완료 후 python pipeline.py gates accept --result ACCEPT --evidence <result-path> --user-confirmed 를 다시 실행하세요.",
                     ],
                     retry_allowed=True,
