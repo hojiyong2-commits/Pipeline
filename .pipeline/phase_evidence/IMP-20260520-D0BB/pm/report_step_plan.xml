@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260520-D0BB</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>WA, FS, PD</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 핵심 로직(gates accept hard gate 연결 + 새 CLI)과 CLAUDE.md + ci.yml 수정을 포함하며 Trust-Root 파일이 포함됨. 예상 변경 라인이 350줄 이상, 4개 마이크로태스크로 분할. HIGH_RISK 플래그 포함.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>4</expected_changed_files>
+      <expected_changed_functions>6</expected_changed_functions>
+      <expected_changed_lines>380</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>true</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>함수 내부 변수명, JSON 키 순서, BLOCKED 메시지 세부 문구 등 P2 취향 질문 제거. 기존 _acceptance_blocked() 패턴 일관성 우선 처리.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-2">
+        <user_facing_question>gates accept에서 consistency 실패 시 어떻게 처리할까요?</user_facing_question>
+        <evidence>_check_acceptance_readiness()는 4가지 조건을 직렬로 검사. consistency guard는 5번째 조건으로 연결.</evidence>
+        <why_it_matters>자동 실행되지 않으면 사용자가 ACCEPT를 눌러도 PR body와 실제 CI 결과 불일치 가능.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>gates accept 내부에서 _check_acceptance_readiness() 뒤에 자동 실행, BLOCKED 시 failure_packet 기록 후 차단</label>
+            <benefit>사용자가 별도 명령 필요 없음. 기존 readiness gate 패턴과 일관됨.</benefit>
+            <cost>phase-attestation 브랜치에서 gates accept 실행 시 consistency BLOCKED 추가. 실질 비용 없음.</cost>
+          </option>
+          <option id="B">
+            <label>gates consistency를 별도 독립 명령으로만 제공, gates accept에서는 결과 파일 존재 여부만 확인</label>
+            <benefit>기존 테스트 영향 최소화.</benefit>
+            <cost>사용자가 수동으로 먼저 실행해야 함. 건너뛰면 guard 무의미.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (gates accept 내부 자동 실행)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    Input: pipeline.py, GitHub PR (gh CLI), oracle input JSON: tests/oracles/IMP-20260520-D0BB/
+    Output: protocol_consistency_result.json (PASS), failure_packet.json (BLOCKED), tests/test_protocol_consistency.py, CLAUDE.md 섹션, ci.yml 단계
+    Validation: gates accept 시 consistency BLOCKED이면 exit 1 + failure_packet. gh CLI 없음/PR 없음/JSON 파싱 실패 모두 BLOCKED.
+  </interface_spec>
+
+  <requirements>
+    MT-1: _check_protocol_consistency(pr_number, repo, state) 함수 추가 (pipeline.py)
+      A. CI run ID 일치 검사 (PR body, acceptance packet 댓글, 실제 latest CI run ID 비교)
+      B. head SHA 일치 검사 (PR body/packet vs 실제 headRefOid, 짧은 SHA prefix 허용)
+      C. 테스트 수 일치 검사 (PR body vs acceptance packet에서 숫자 추출 후 비교)
+      D. changed files 일치 검사 (실제 PR diff vs PR body/packet 설명)
+      E. trust-root 변경 설명 의무 (pipeline.py, CLAUDE.md, .claude/**, .github/workflows/**, .bandit, .gitattributes, tests/**, test_*.py)
+      F. stale 설명 탐지 (.bandit 미변경인데 body/packet에 언급, stale run ID 등)
+      gh CLI 없음/실패/PR 없음/JSON 파싱 실패 = BLOCKED (PASS 금지)
+
+    MT-2: gates consistency CLI + gates accept 연결 (pipeline.py)
+      1. python pipeline.py gates consistency --repo ... --pr ... CLI
+      2. gates accept에서 _check_acceptance_readiness() PASS 후 consistency check 삽입
+      3. consistency BLOCKED = failure_packet schema_v2 + exit 1
+
+    MT-3: tests/test_protocol_consistency.py (19개 테스트)
+      oracle 기반, subprocess.run mock 사용
+
+    MT-4: CLAUDE.md Protocol Consistency Guard 섹션 + ci.yml consistency 단계
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._check_protocol_consistency</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates (action==accept 블록)</site>
+        <site>pipeline.cmd_gates (action==consistency 신규 블록)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _check_acceptance_readiness</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>6가지 일치 검사 로직(_check_protocol_consistency 함수) 신규 추가 — 약 200줄</change_summary>
+      <line_estimate>200</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline.cmd_gates</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates action==accept 블록 (line ~10524)</site>
+        <site>argparse gsub (line ~11851)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>action == "accept"</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>gates consistency CLI 추가 + cmd_gates accept 블록에 consistency hard gate 삽입 — 약 80줄</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>tests.test_protocol_consistency (신규 파일)</affected_function>
+      <target_files>
+        <file>tests/test_protocol_consistency.py</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_match/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_match/expected.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/expected.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/edge_sha_prefix_match/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/edge_sha_prefix_match/expected.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_bandit_stale_description/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_bandit_stale_description/expected.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/error_gh_cli_not_available/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/error_gh_cli_not_available/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>tests/test_acceptance_readiness_e979.py</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>test_protocol_consistency.py 신규 (19개 테스트) + oracle 파일 5쌍 — 약 300줄</change_summary>
+      <line_estimate>300</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>CLAUDE.md + ci.yml (신규 섹션/단계)</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Protocol Consistency Guard</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>CLAUDE.md Protocol Consistency Guard 섹션 추가 + ci.yml consistency 단계 추가 — 약 60줄</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <oracle_design>
+    <oracle_path>tests/oracles/IMP-20260520-D0BB/</oracle_path>
+    <cases>
+      <case id="normal_run_id_match" kind="normal">
+        <expected_schema>status: PASS, failure_code: ""</expected_schema>
+      </case>
+      <case id="normal_run_id_mismatch_body_packet" kind="normal">
+        <expected_schema>status: BLOCKED, failure_code: ci_run_id_mismatch</expected_schema>
+      </case>
+      <case id="edge_sha_prefix_match" kind="edge">
+        <expected_schema>status: PASS (sha prefix 일치)</expected_schema>
+      </case>
+      <case id="normal_bandit_stale_description" kind="normal">
+        <expected_schema>status: BLOCKED, failure_code: stale_file_description</expected_schema>
+      </case>
+      <case id="error_gh_cli_not_available" kind="error">
+        <expected_schema>status: BLOCKED, failure_code: gh_cli_not_available_for_consistency</expected_schema>
+      </case>
+    </cases>
+  </oracle_design>
+
+  <acceptance_criteria>
+    1. python pipeline.py gates consistency --repo hojiyong2-commits/Pipeline --pr N → PASS(exit 0) 또는 BLOCKED(exit 1)
+    2. gh CLI 없음/PR 없음/JSON 파싱 실패 → BLOCKED (PASS 금지)
+    3. .bandit 미변경인데 PR body에 언급 → BLOCKED(stale_file_description)
+    4. PR body run ID != latest CI run ID → BLOCKED(stale_run_id)
+    5. head SHA prefix 7자 이상 일치 → PASS
+    6. python -m pytest tests/test_protocol_consistency.py -v → 19개 모두 PASS
+    7. CLAUDE.md에 Protocol Consistency Guard 섹션 존재
+    8. ci.yml에 consistency check 단계 추가
+    9. gates accept ACCEPT 시 consistency BLOCKED이면 차단
+    10. 기존 python -m pytest -q PASS 유지
+  </acceptance_criteria>
+
+  <python_version>3.10</python_version>
+  <decomposition_audit>
+    <total_functions_identified>7</total_functions_identified>
+    <micro_task_count>4</micro_task_count>
+    <grep_executions>8</grep_executions>
+    <split_decision>pipeline.py 변경이 3개 이상 독립 기능 단위에 걸쳐 있고 예상 변경 라인이 약 350줄. MT-1~MT-4로 분할. Trust-Root 파일 포함으로 HIGH_RISK.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+</step_plan>

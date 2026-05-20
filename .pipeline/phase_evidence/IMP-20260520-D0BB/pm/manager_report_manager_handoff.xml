@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+  <pipeline_id>IMP-20260520-D0BB</pipeline_id>
+  <status>PM_DONE_READY_FOR_DEV</status>
+  <step_plan_sha256>c687dde15dc5607a26677f18e3791c5ce2c4dc4d10ac826559a8e0056d3116b0</step_plan_sha256>
+  <planner_run_id>pm_planner-4c630efa73a9b353</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._check_protocol_consistency</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <change_summary>6가지 일치 검사 로직(_check_protocol_consistency 함수) 신규 추가 — 약 200줄</change_summary>
+      <line_estimate>200</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>pipeline.cmd_gates</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <change_summary>gates consistency CLI 추가 + cmd_gates accept 블록에 consistency hard gate 삽입 — 약 80줄</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>tests.test_protocol_consistency (신규 파일)</affected_function>
+      <target_files>
+        <file>tests/test_protocol_consistency.py</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_match/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_match/expected.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/expected.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/edge_sha_prefix_match/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/edge_sha_prefix_match/expected.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_bandit_stale_description/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/normal_bandit_stale_description/expected.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/error_gh_cli_not_available/input.json</file>
+        <file>tests/oracles/IMP-20260520-D0BB/error_gh_cli_not_available/expected.json</file>
+      </target_files>
+      <change_summary>test_protocol_consistency.py 신규 (19개 테스트) + oracle 파일 5쌍 — 약 300줄</change_summary>
+      <line_estimate>300</line_estimate>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>CLAUDE.md + ci.yml (신규 섹션/단계)</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <change_summary>CLAUDE.md Protocol Consistency Guard 섹션 추가 + ci.yml consistency 단계 추가 — 약 60줄</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <design_summary>
+    <decision id="DQ-1">Option A 채택: gates accept 내부에서 _check_acceptance_readiness() 통과 후 자동으로 _check_protocol_consistency() 실행. BLOCKED 시 failure_packet schema_v2 기록 후 exit 1. 사용자가 별도 명령 없이도 consistency guard가 작동하며 기존 readiness gate 패턴과 일관됨.</decision>
+  </design_summary>
+
+  <next_phase>dev</next_phase>
+
+  <phase_attestation_plan>
+    <pm_branch>phase-attestation/IMP-20260520-D0BB-pm</pm_branch>
+    <dev_branch>impl/IMP-20260520-D0BB</dev_branch>
+  </phase_attestation_plan>
+
+  <contract_modules>
+    <module name="_check_protocol_consistency" file="pipeline.py" kind="function"/>
+    <module name="cmd_gates_consistency" file="pipeline.py" kind="function"/>
+    <module name="test_protocol_consistency" file="tests/test_protocol_consistency.py" kind="test"/>
+    <module name="CLAUDE_md_consistency_section" file="CLAUDE.md" kind="doc"/>
+    <module name="ci_yml_consistency_step" file=".github/workflows/ci.yml" kind="infra"/>
+  </contract_modules>
+
+  <oracle_summary>
+    <oracle case="normal_run_id_match" kind="normal" expected_status="PASS"/>
+    <oracle case="normal_run_id_mismatch_body_packet" kind="normal" expected_status="BLOCKED"/>
+    <oracle case="edge_sha_prefix_match" kind="edge" expected_status="PASS"/>
+    <oracle case="normal_bandit_stale_description" kind="normal" expected_status="BLOCKED"/>
+    <oracle case="error_gh_cli_not_available" kind="error" expected_status="BLOCKED"/>
+  </oracle_summary>
+
+  <manager_run_id>pipeline_manager-789ee07549a2206a</manager_run_id>
+</manager_handoff>
