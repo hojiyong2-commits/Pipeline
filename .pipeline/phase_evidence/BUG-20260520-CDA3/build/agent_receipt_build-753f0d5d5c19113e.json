@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260520-CDA3",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-753f0d5d5c19113e",
+  "status": "COMPLETED",
+  "started_at": "2026-05-20T15:17:08Z",
+  "completed_at": "2026-05-20T15:17:35Z",
+  "output_file": "build_report.xml",
+  "output_sha256": "bcfdd1f06984e0dee0b82d38f4554c4a00b89f6d4d93f6d16262fbaeeeabafbe",
+  "evidence_files": [],
+  "commit_sha": "799af22ae5a5b2bace6c5bda8dac987070d8ac1d"
+}

@@ -1,46 +1,38 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-20T15:14:18Z",
+  "generated_at": "2026-05-20T15:17:47Z",
   "pipeline_id": "BUG-20260520-CDA3",
-  "phase": "qa",
-  "phase_status": "PASS",
-  "commit_hint": "89935f7b77dbcda0674d0e373a3b4702984eae4b",
+  "phase": "build",
+  "phase_status": "DONE",
+  "commit_hint": "799af22ae5a5b2bace6c5bda8dac987070d8ac1d",
   "state": {
-    "current_phase": "sec",
-    "phase_completed_at": "2026-05-20T14:54:04Z",
-    "report_file": "qa_report.xml",
-    "evidence": null
+    "current_phase": "harness",
+    "phase_completed_at": "2026-05-20T15:17:41Z",
+    "report_file": null,
+    "evidence": "N/A"
   },
   "agent_run": {
-    "run_id": "qa-7d0829855ea7100b",
-    "phase": "qa",
-    "agent_id": "qa-agent",
+    "run_id": "build-753f0d5d5c19113e",
+    "phase": "build",
+    "agent_id": "build-agent",
     "status": "COMPLETED",
-    "output_file": "qa_report.xml",
-    "output_sha256": "3a55c30d411979a518147f3a680b4f0654252b3c78530766dfb1a2ae3ed3c1b2",
-    "receipt_path": ".pipeline/phase_evidence/BUG-20260520-CDA3/qa/agent_receipt_qa-7d0829855ea7100b.json",
-    "receipt_sha256": "ebac5c1ad68d229e91428683e44e0b780a9daeafd6afc0fc8040cbe851ba5ade",
-    "used_by_phase": "qa",
-    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260520-CDA3\\qa\\qa-7d0829855ea7100b.json"
+    "output_file": "build_report.xml",
+    "output_sha256": "bcfdd1f06984e0dee0b82d38f4554c4a00b89f6d4d93f6d16262fbaeeeabafbe",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260520-CDA3/build/agent_receipt_build-753f0d5d5c19113e.json",
+    "receipt_sha256": "c0a662307dce3fe750738c46dc5c5a2e37b69a7de75a9ecab0d8f29b9c6de796",
+    "used_by_phase": "build",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260520-CDA3\\build\\build-753f0d5d5c19113e.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\BUG-20260520-CDA3\\qa\\qa-7d0829855ea7100b.json",
-      "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/qa/agent_receipt_qa-7d0829855ea7100b.json",
-      "sha256": "ebac5c1ad68d229e91428683e44e0b780a9daeafd6afc0fc8040cbe851ba5ade",
-      "size_bytes": 496,
-      "requires_force_add": false
-    },
-    {
-      "label": "report",
-      "source": "qa_report.xml",
-      "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/qa/report_qa_report.xml",
-      "sha256": "3a55c30d411979a518147f3a680b4f0654252b3c78530766dfb1a2ae3ed3c1b2",
-      "size_bytes": 4544,
-      "requires_force_add": false
+      "source": ".pipeline\\agent_receipts\\BUG-20260520-CDA3\\build\\build-753f0d5d5c19113e.json",
+      "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/build/agent_receipt_build-753f0d5d5c19113e.json",
+      "sha256": "c0a662307dce3fe750738c46dc5c5a2e37b69a7de75a9ecab0d8f29b9c6de796",
+      "size_bytes": 508,
+      "requires_force_add": true
     }
   ],
   "workspace_file_checks": [],
