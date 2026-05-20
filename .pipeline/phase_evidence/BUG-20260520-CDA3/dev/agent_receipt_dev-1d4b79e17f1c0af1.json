@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260520-CDA3",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-1d4b79e17f1c0af1",
+  "status": "COMPLETED",
+  "started_at": "2026-05-20T14:06:05Z",
+  "completed_at": "2026-05-20T14:22:30Z",
+  "output_file": "dev_handover.xml",
+  "output_sha256": "3a7b46d1a9829b3bd3e6149f23be00740f191537a0781f35c3389f1a21d9c721",
+  "evidence_files": [],
+  "commit_sha": "e7b4e9ddc956b16af89006ea0b83f9120fc52baf"
+}

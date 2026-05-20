@@ -1,0 +1,18 @@
+{
+  "pipeline_id": "BUG-20260520-CDA3",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [".bandit", "failure_packet.json", "manager_handoff.xml"],
+      "affected_functions": ["none"]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "test_three_gate_pipeline.py",
+        "tests/test_pm_split.py"
+      ],
+      "affected_functions": ["none"]
+    }
+  ]
+}
