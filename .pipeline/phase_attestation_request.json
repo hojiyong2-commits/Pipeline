@@ -66,17 +66,20 @@
       "path": "tests/test_pm_split.py",
       "sha256": "6c75512550ef9b52bb994b07e514ebb4c2f4d39362e18d6e034cfd355cf200b2",
       "size_bytes": 13079
-    },
+    }
+  ],
+  "local_only_files": [
     {
       "path": "failure_packet.json",
       "sha256": "dd1e44b8f30b60a042a3a6dba5f453f4a612559d240f83fec873e4682972d8f9",
-      "size_bytes": 1343
+      "size_bytes": 1343,
+      "reason": "pipeline infrastructure file — not committed to repo"
     },
     {
       "path": "manager_handoff.xml",
       "sha256": "494e6dea6d69b7003896221efdec868ba516b2012c6b5f276b31059825c7d11c",
-      "size_bytes": 1003
+      "size_bytes": 1003,
+      "reason": "pipeline infrastructure file — not committed to repo"
     }
-  ],
-  "local_only_files": []
+  ]
 }
