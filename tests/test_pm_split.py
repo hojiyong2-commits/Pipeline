@@ -141,7 +141,7 @@ def _install_agent_run(state: dict, phase: str, output_file: Path, root: Path) -
         "status": "COMPLETED",
         "started_at": started,
         "completed_at": completed,
-        "token_hash": "redacted",
+        "token_hash": "redacted",  # nosec B105
         "output_file": str(output_file_resolved),
         "output_sha256": pipeline._sha256_file(output_file_resolved),
         "evidence_files": [],
