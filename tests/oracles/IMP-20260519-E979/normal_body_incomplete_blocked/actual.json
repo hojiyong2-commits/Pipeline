@@ -1,0 +1,12 @@
+{
+  "status": "BLOCKED",
+  "failure_code": "pr_body_incomplete",
+  "failure_category": "missing_evidence",
+  "blocked_reason": "PR 본문에 임시 문구가 포함되어 있거나 필수 섹션이 누락되어 있습니다.",
+  "missing_sections": [
+    "기대 결과와 실제 결과",
+    "중요한 선택과 트레이드오프",
+    "검증"
+  ],
+  "allow_accept": false
+}

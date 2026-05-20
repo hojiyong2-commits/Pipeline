@@ -1,0 +1,8 @@
+{
+  "status": "BLOCKED",
+  "failure_code": "acceptance_packet_insufficient",
+  "failure_category": "missing_evidence",
+  "blocked_reason": "human acceptance packet의 판단 정보 상태가 '정보 부족'입니다. PR 본문과 acceptance packet을 보완한 뒤 다시 실행하세요.",
+  "missing_sections": [],
+  "allow_accept": false
+}

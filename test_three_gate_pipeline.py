@@ -190,7 +190,7 @@ def _install_completed_agent_run(state: dict, phase: str, output_file: Path, roo
         "status": "COMPLETED",
         "started_at": started,
         "completed_at": completed,
-        "token_hash": "redacted",
+        "token_hash": "redacted",  # nosec B105
         "output_file": str(output_file),
         "output_sha256": pipeline._sha256_file(output_file),
         "evidence_files": [],
@@ -801,7 +801,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 copied = pipeline._copy_phase_evidence_file("TMP-IGNORED", "build", "report", str(source))
 
         self.assertIsNotNone(copied)
-        self.assertTrue(copied["requires_force_add"])
+        self.assertTrue(copied["requires_force_add"])  # type: ignore[index]
 
     def test_relaxed_tools_and_qa_numeric_score_are_documented_as_hard_gates(self) -> None:
         root = Path(__file__).resolve().parent
@@ -980,7 +980,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit="a" * 40,
                 workflow="CI",
                 artifact="pipeline-phase-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106
             )
             with mock.patch.object(pipeline, "_require_state", return_value=state), \
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
@@ -1068,7 +1068,18 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 user_confirmed=True,
             )
 
-            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+            # _check_acceptance_readiness는 gh CLI를 호출하므로 직접 mock하여 PASS 반환:
+            _pass_readiness = {
+                "status": "PASS",
+                "allow_accept": True,
+                "failure_code": "",
+                "failure_category": "",
+                "blocked_reason": None,
+                "missing_sections": [],
+                "return_phase": "build",
+            }
+            with mock.patch.object(pipeline, "_check_acceptance_readiness", return_value=_pass_readiness), \
+                 mock.patch.object(pipeline, "_require_state", return_value=state), \
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
                  mock.patch.object(pipeline, "_record_snapshot"), \
                  mock.patch.object(pipeline, "_save"), \
@@ -2600,7 +2611,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit=commit_sha,
                 workflow="CI",
                 artifact="pipeline-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106
                 record=True,
             )
             run_payload = {
@@ -2675,7 +2686,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 commit=commit_sha,
                 workflow="CI",
                 artifact="pipeline-attestation",
-                token_env="GITHUB_TOKEN",
+                token_env="GITHUB_TOKEN",  # nosec B106
             )
             runs_payload = {
                 "workflow_runs": [{
