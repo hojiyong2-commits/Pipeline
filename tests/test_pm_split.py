@@ -11,12 +11,9 @@ IMP-20260515-020F: PM split (pm_planner + pipeline_manager) 단위 테스트
   - done --phase pm 레거시 플로우(pm agent_run_id만 허용)
 """
 import argparse
-import json
 import tempfile
 from pathlib import Path
 from unittest import mock
-
-import pytest
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -141,7 +138,7 @@ def _install_agent_run(state: dict, phase: str, output_file: Path, root: Path) -
         "status": "COMPLETED",
         "started_at": started,
         "completed_at": completed,
-        "token_hash": "redacted",
+        "token_hash": "redacted",  # nosec B105
         "output_file": str(output_file_resolved),
         "output_sha256": pipeline._sha256_file(output_file_resolved),
         "evidence_files": [],
