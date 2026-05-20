@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-20T14:59:16Z",
+  "generated_at": "2026-05-20T15:14:18Z",
   "pipeline_id": "BUG-20260520-CDA3",
   "phase": "qa",
   "phase_status": "PASS",
-  "commit_hint": "e2f253005a1813e910b3a0de653d71dea2d04419",
+  "commit_hint": "89935f7b77dbcda0674d0e373a3b4702984eae4b",
   "state": {
     "current_phase": "sec",
     "phase_completed_at": "2026-05-20T14:54:04Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/qa/agent_receipt_qa-7d0829855ea7100b.json",
       "sha256": "ebac5c1ad68d229e91428683e44e0b780a9daeafd6afc0fc8040cbe851ba5ade",
       "size_bytes": 496,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -40,7 +40,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/qa/report_qa_report.xml",
       "sha256": "3a55c30d411979a518147f3a680b4f0654252b3c78530766dfb1a2ae3ed3c1b2",
       "size_bytes": 4544,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
