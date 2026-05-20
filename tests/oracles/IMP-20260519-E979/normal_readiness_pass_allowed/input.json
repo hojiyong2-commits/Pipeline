@@ -1,0 +1,9 @@
+{
+  "test_case": "normal_readiness_pass_allowed",
+  "description": "모든 readiness 조건을 통과하면 PASS를 반환하고 User Acceptance 요청 허용",
+  "call_args": {
+    "pr_draft": false,
+    "pr_body": "## 작업 요약\nIMP-20260519-E979: pipeline.py에 _check_acceptance_readiness() 함수를 추가하여 Draft PR, 임시 PR 본문, 정보 부족 acceptance packet 상태에서 gates accept를 hard gate로 차단합니다.\n\n## 사용자가 확인할 결과물\n- 수정된 pipeline.py (gates accept에 readiness 검증 추가)\n- tests/test_acceptance_readiness_e979.py (7개 테스트)\n\n## 기대 결과와 실제 결과\n| 항목 | 기대 | 실제 |\n|---|---|---|\n| Draft PR 차단 | BLOCKED | BLOCKED |\n| 임시 문구 차단 | BLOCKED | BLOCKED |\n| 정보 부족 차단 | BLOCKED | BLOCKED |\n| CI PASS + Draft 차단 | BLOCKED | BLOCKED |\n| 모두 정상 | PASS | PASS |\n\n## 중요한 선택과 트레이드오프\n키워드 목록 방식으로 임시 PR 본문 탐지. 정규식 대비 유지보수 용이.\n\n## 검증\n7개 테스트 PASS. 전체 회귀 PASS.",
+    "acceptance_packet_status": "판단 가능"
+  }
+}

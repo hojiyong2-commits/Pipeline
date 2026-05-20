@@ -1068,7 +1068,18 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 user_confirmed=True,
             )
 
-            with mock.patch.object(pipeline, "_require_state", return_value=state), \
+            # _check_acceptance_readiness는 gh CLI를 호출하므로 직접 mock하여 PASS 반환:
+            _pass_readiness = {
+                "status": "PASS",
+                "allow_accept": True,
+                "failure_code": "",
+                "failure_category": "",
+                "blocked_reason": None,
+                "missing_sections": [],
+                "return_phase": "build",
+            }
+            with mock.patch.object(pipeline, "_check_acceptance_readiness", return_value=_pass_readiness), \
+                 mock.patch.object(pipeline, "_require_state", return_value=state), \
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
                  mock.patch.object(pipeline, "_record_snapshot"), \
                  mock.patch.object(pipeline, "_save"), \

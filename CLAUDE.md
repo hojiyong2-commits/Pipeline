@@ -439,6 +439,23 @@ Phase 7 always uses external binary gates instead of numeric scoring:
 3. GitHub CI gate: `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
 4. User Acceptance gate: `python pipeline.py gates accept --result ACCEPT --evidence [file-or-screenshot] --user-confirmed`
 
+### Final Acceptance Readiness Gate (IMP-20260519-E979)
+
+`gates accept --result ACCEPT`는 실행 전 자동으로 PR readiness를 hard gate로 검증합니다. 아래 조건 중 하나라도 충족되면 BLOCKED(failure_category=`missing_evidence`)를 반환하며 ACCEPT가 차단됩니다.
+
+| 검사 순서 | 조건 | failure_code | 해결 방법 |
+|---|---|---|---|
+| 1 | PR이 Draft 상태 | `pr_is_draft` | Draft 해제 후 재실행 |
+| 2 | 필수 섹션 누락 (`작업 요약`, `사용자가 확인할 결과물`, `기대 결과와 실제 결과`, `중요한 선택과 트레이드오프`, `검증`) | `pr_body_incomplete` | PR 본문 완성 후 재실행 |
+| 3 | PR 본문에 임시 문구 포함 (`작업 중입니다`, `Dev 완료 후 업데이트됩니다`, `PM phase attestation CI 확인용` 등) | `pr_body_temporary` | PR 본문 완성 후 재실행 |
+| 4 | `human_acceptance_packet.md`에 "정보 부족" 포함 | `acceptance_packet_insufficient` | PR 본문과 packet 보완 후 재실행 |
+
+- 섹션 누락 검사(순서 2)가 임시 문구 검사(순서 3)보다 우선 수행됩니다. 섹션이 갖춰진 PR만 임시 문구를 검사합니다.
+- `gh` CLI 미설치 또는 열린 PR이 없으면 검사를 생략하고 PASS 반환합니다 (기존 동작 유지).
+- BLOCKED 시 `failure_packet.json`이 생성됩니다 (`return_phase: build`).
+- 구현 파일: `pipeline.py` (`TEMPORARY_PR_BODY_PATTERNS`, `PR_REQUIRED_SECTIONS`, `_check_acceptance_readiness()`).
+- 테스트: `tests/test_acceptance_readiness_e979.py` (11개 테스트, oracle 5개 케이스).
+
 Any gate FAIL means iterate the failing gate path. The test-harness-agent may diagnose, but must not invent a numeric score. `pipeline.py architect` blocks COMPLETE until all required phase attestations, all four external gates, and actual unresolved GPT advisory CRITICAL findings are clear. No advisory review file means "advisory not run", not "advisory passed". The user acceptance command must receive a real output file, screenshot, or attachment path through `--evidence`; after ACCEPT, the pipeline deploys accepted outputs to `G:\내 드라이브\터미널\<pipeline_id>`.
 
 After `gates accept --result ACCEPT` passes, the next required record command is `python pipeline.py architect --report-file architect_report.xml`. Three-Gate does not auto-complete at Phase 7; Phase 8 must record the final COMPLETE transition after confirming the external gate blockers are empty. `pipeline.py architect` never enters Phase 9 automatically. The architect report must include `<protocol_evolution_decision>`; if protocol or agent-rule evolution is needed, record `required=true` and start a separate IMP pipeline after this pipeline is complete.

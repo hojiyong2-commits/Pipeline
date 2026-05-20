@@ -1,0 +1,8 @@
+{
+  "status": "BLOCKED",
+  "failure_code": "pr_is_draft",
+  "failure_category": "missing_evidence",
+  "blocked_reason": "PR이 Draft 상태입니다. Draft를 해제한 뒤 gates accept를 다시 실행하세요.",
+  "missing_sections": [],
+  "allow_accept": false
+}
