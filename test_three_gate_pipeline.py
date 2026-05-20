@@ -801,7 +801,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 copied = pipeline._copy_phase_evidence_file("TMP-IGNORED", "build", "report", str(source))
 
         self.assertIsNotNone(copied)
-        self.assertTrue(copied["requires_force_add"])
+        self.assertTrue(copied["requires_force_add"])  # type: ignore[index]
 
     def test_relaxed_tools_and_qa_numeric_score_are_documented_as_hard_gates(self) -> None:
         root = Path(__file__).resolve().parent
