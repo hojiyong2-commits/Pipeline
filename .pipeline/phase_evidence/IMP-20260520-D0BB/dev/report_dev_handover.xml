@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260520-CDA3</pipeline_id>
+  <agent_run_id>dev-1d4b79e17f1c0af1</agent_run_id>
+  <evidence>
+    <file>.bandit</file>
+    <file>test_three_gate_pipeline.py</file>
+    <file>tests/test_pm_split.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_modified>
+      <file>.bandit</file>
+      <file>test_three_gate_pipeline.py</file>
+      <file>tests/test_pm_split.py</file>
+    </files_modified>
+    <scope_manifest>scope_manifest.json</scope_manifest>
+  </scope_declaration>
+  <scope_lock_check>
+    <git_diff_files>.bandit test_three_gate_pipeline.py tests/test_pm_split.py</git_diff_files>
+    <manifest_files>.bandit test_three_gate_pipeline.py tests/test_pm_split.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <module_gate_summary>
+    <module id="MT-1" status="PASS">.bandit: skips에서 B105/B106 제거, main 브랜치 기준값 복원</module>
+    <module id="MT-2" status="PASS">test_three_gate_pipeline.py, tests/test_pm_split.py: inline nosec 5건 추가</module>
+    <integration status="PASS">bandit exit_code=0, pytest 434 passed</integration>
+  </module_gate_summary>
+  <test_results>
+    <suite>python -m bandit -q --ini .bandit test_three_gate_pipeline.py tests/test_pm_split.py</suite>
+    <result>exit_code=0, B105/B106 추가 노출 없음</result>
+    <suite>python -m pytest -q</suite>
+    <result>434 passed in 55.91s</result>
+  </test_results>
+  <impact_analysis>
+    <target_function>none (설정 파일 + 테스트 픽스처 주석 변경)</target_function>
+    <scope>보안 검증기 정책 복원. 기존 테스트 로직 변경 없음, 5개 라인에 nosec 주석만 추가.</scope>
+    <regression_risk>LOW — nosec 주석 추가는 코드 동작 변경 없음</regression_risk>
+  </impact_analysis>
+  <status>READY_FOR_QA</status>
+</handover>
