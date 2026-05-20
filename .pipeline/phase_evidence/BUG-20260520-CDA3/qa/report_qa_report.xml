@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <from>qa-agent</from>
+  <to>pipeline-manager</to>
+  <pipeline_id>BUG-20260520-CDA3</pipeline_id>
+  <agent_run_id>qa-7d0829855ea7100b</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>100</numeric_score>
+  <failure_signature></failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <scope_declared>
+      <files>.bandit</files>
+      <functions>none</functions>
+    </scope_declared>
+    <scope_actual>
+      <files>.bandit</files>
+      <functions>none</functions>
+    </scope_actual>
+    <scope_verdict>WITHIN_SCOPE</scope_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <scope_declared>
+      <files>test_three_gate_pipeline.py, tests/test_pm_split.py</files>
+      <functions>none</functions>
+    </scope_declared>
+    <scope_actual>
+      <files>test_three_gate_pipeline.py, tests/test_pm_split.py</files>
+      <functions>none</functions>
+    </scope_actual>
+    <scope_verdict>WITHIN_SCOPE</scope_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <category_check>
+    <wa>N-A — 외부 HTTP 통신 없음</wa>
+    <ui>N-A — UI 컴포넌트 없음</ui>
+    <fs>N-A — 파일 시스템 쓰기 없음</fs>
+    <pd>PASS — 설정 파일 변경 + inline 주석 추가, 동작 변경 없음</pd>
+    <sec>PASS — bandit exit_code=0, nosec 코드 ID 명시 (B105/B106), bare nosec 0건</sec>
+    <al>N-A — 알고리즘 변경 없음</al>
+    <build>N-A — EXE 빌드 대상 아님(no-code)</build>
+  </category_check>
+
+  <acceptance_criteria_check>
+    <criterion id="AC-1" desc=".bandit skips에서 B105/B106 제거" result="PASS">
+      skips = B101,B110,B603,B404,B405,B314,B607,B310,B311,B107 (B105/B106 없음 확인)
+    </criterion>
+    <criterion id="AC-2" desc="nosec 주석 5건 코드 ID 명시" result="PASS">
+      test_three_gate_pipeline.py:193 — # nosec B105
+      test_three_gate_pipeline.py:983 — # nosec B106
+      test_three_gate_pipeline.py:2614 — # nosec B106
+      test_three_gate_pipeline.py:2689 — # nosec B106
+      tests/test_pm_split.py:144 — # nosec B105
+      bare nosec 0건 확인
+    </criterion>
+    <criterion id="AC-3" desc="bandit exit_code=0 — B105/B106 추가 노출 없음" result="PASS">
+      python -m bandit -q --ini .bandit test_three_gate_pipeline.py tests/test_pm_split.py → exit_code=0
+    </criterion>
+    <criterion id="AC-4" desc="pytest 434 PASS" result="PASS">
+      434 passed, 4 warnings, 15 subtests passed in 55.00s
+    </criterion>
+    <criterion id="AC-5" desc="scope 변경 파일 MT 범위 내" result="PASS">
+      .bandit (MT-1), test_three_gate_pipeline.py (MT-2), tests/test_pm_split.py (MT-2) 확인
+    </criterion>
+  </acceptance_criteria_check>
+
+  <oracle_validation>
+    <oracle_manifest_source>tests/oracles/BUG-20260520-CDA3/</oracle_manifest_source>
+    <cases_verified>
+      <case kind="normal">TC01 — bandit skip 복원 정상 케이스 PASS</case>
+      <case kind="edge">TC02 — nosec 주석 5건 적용 엣지 케이스 PASS</case>
+    </cases_verified>
+    <normal_count>1</normal_count>
+    <edge_count>1</edge_count>
+    <oracle_validated>true</oracle_validated>
+  </oracle_validation>
+
+  <verification_evidence>
+    <command>python -m bandit -q --ini .bandit test_three_gate_pipeline.py tests/test_pm_split.py</command>
+    <output>exit_code=0</output>
+    <command2>python -m pytest -q</command2>
+    <output2>434 passed, 4 warnings, 15 subtests passed in 55.00s</output2>
+    <nosec_count>5건 (코드 ID 명시)</nosec_count>
+    <bare_nosec>0건</bare_nosec>
+    <bandit_config_check>B105/B106 제거됨 — skips = B101,B110,B603,B404,B405,B314,B607,B310,B311,B107</bandit_config_check>
+  </verification_evidence>
+
+  <python39_compliance>
+    <match_case_usage>없음</match_case_usage>
+    <union_pipe_notation>없음</union_pipe_notation>
+    <lowercase_generics>없음</lowercase_generics>
+    <forbidden_stdlib>없음</forbidden_stdlib>
+    <verdict>PASS</verdict>
+  </python39_compliance>
+
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>없음</improvement_suggestions>
+
+  <summary>
+    .bandit에서 B105/B106 전역 skip 제거 완료.
+    test_three_gate_pipeline.py 3개 라인 + tests/test_pm_split.py 2개 라인에 nosec inline 주석 추가.
+    bandit exit_code=0, pytest 434 passed. scope 변경 파일 MT 범위 내 확인.
+  </summary>
+</qa_report>
