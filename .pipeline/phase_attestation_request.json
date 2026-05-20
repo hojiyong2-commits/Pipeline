@@ -1,85 +1,48 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-20T14:42:12Z",
+  "generated_at": "2026-05-20T14:54:16Z",
   "pipeline_id": "BUG-20260520-CDA3",
-  "phase": "dev",
-  "phase_status": "DONE",
+  "phase": "qa",
+  "phase_status": "PASS",
   "commit_hint": "0fbdaf00b8f1a350c98146654c6a2b3ca4a67fdf",
   "state": {
-    "current_phase": "qa",
-    "phase_completed_at": "2026-05-20T14:26:28Z",
-    "report_file": "dev_handover.xml",
-    "evidence": ".bandit,test_three_gate_pipeline.py,tests/test_pm_split.py,failure_packet.json,manager_handoff.xml"
+    "current_phase": "sec",
+    "phase_completed_at": "2026-05-20T14:54:04Z",
+    "report_file": "qa_report.xml",
+    "evidence": null
   },
   "agent_run": {
-    "run_id": "dev-1d4b79e17f1c0af1",
-    "phase": "dev",
-    "agent_id": "dev-agent",
+    "run_id": "qa-7d0829855ea7100b",
+    "phase": "qa",
+    "agent_id": "qa-agent",
     "status": "COMPLETED",
-    "output_file": "dev_handover.xml",
-    "output_sha256": "3a7b46d1a9829b3bd3e6149f23be00740f191537a0781f35c3389f1a21d9c721",
-    "receipt_path": ".pipeline/phase_evidence/BUG-20260520-CDA3/dev/agent_receipt_dev-1d4b79e17f1c0af1.json",
-    "receipt_sha256": "7fc8d0e74c48a35fc9e12209ff297ea22f6f54b8fd2c128d2a74256f32b70dca",
-    "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260520-CDA3\\dev\\dev-1d4b79e17f1c0af1.json"
+    "output_file": "qa_report.xml",
+    "output_sha256": "3a55c30d411979a518147f3a680b4f0654252b3c78530766dfb1a2ae3ed3c1b2",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260520-CDA3/qa/agent_receipt_qa-7d0829855ea7100b.json",
+    "receipt_sha256": "ebac5c1ad68d229e91428683e44e0b780a9daeafd6afc0fc8040cbe851ba5ade",
+    "used_by_phase": "qa",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260520-CDA3\\qa\\qa-7d0829855ea7100b.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\BUG-20260520-CDA3\\dev\\dev-1d4b79e17f1c0af1.json",
-      "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/dev/agent_receipt_dev-1d4b79e17f1c0af1.json",
-      "sha256": "7fc8d0e74c48a35fc9e12209ff297ea22f6f54b8fd2c128d2a74256f32b70dca",
-      "size_bytes": 502,
+      "source": ".pipeline\\agent_receipts\\BUG-20260520-CDA3\\qa\\qa-7d0829855ea7100b.json",
+      "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/qa/agent_receipt_qa-7d0829855ea7100b.json",
+      "sha256": "ebac5c1ad68d229e91428683e44e0b780a9daeafd6afc0fc8040cbe851ba5ade",
+      "size_bytes": 496,
       "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "dev_handover.xml",
-      "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/dev/report_dev_handover.xml",
-      "sha256": "3a7b46d1a9829b3bd3e6149f23be00740f191537a0781f35c3389f1a21d9c721",
-      "size_bytes": 2012,
-      "requires_force_add": true
-    },
-    {
-      "label": "scope_manifest",
-      "source": "scope_manifest.json",
-      "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/dev/scope_manifest_scope_manifest.json",
-      "sha256": "025cd6609bfc16d911e47d853ac22a26888c0175b3fd10ea187d3a07fcaac833",
-      "size_bytes": 376,
+      "source": "qa_report.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260520-CDA3/qa/report_qa_report.xml",
+      "sha256": "3a55c30d411979a518147f3a680b4f0654252b3c78530766dfb1a2ae3ed3c1b2",
+      "size_bytes": 4544,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": ".bandit",
-      "sha256": "2a84a1d2540862f597d788a93306fab56e443b33f613f11274ef10d8c6a1b795",
-      "size_bytes": 67
-    },
-    {
-      "path": "test_three_gate_pipeline.py",
-      "sha256": "d9ec552e1f42219f1e3078128e700c54941a0c36c941f05e1d5a84a25e84b2cf",
-      "size_bytes": 121156
-    },
-    {
-      "path": "tests/test_pm_split.py",
-      "sha256": "6c75512550ef9b52bb994b07e514ebb4c2f4d39362e18d6e034cfd355cf200b2",
-      "size_bytes": 13079
-    }
-  ],
-  "local_only_files": [
-    {
-      "path": "failure_packet.json",
-      "sha256": "dd1e44b8f30b60a042a3a6dba5f453f4a612559d240f83fec873e4682972d8f9",
-      "size_bytes": 1343,
-      "reason": "pipeline infrastructure file — not committed to repo"
-    },
-    {
-      "path": "manager_handoff.xml",
-      "sha256": "494e6dea6d69b7003896221efdec868ba516b2012c6b5f276b31059825c7d11c",
-      "size_bytes": 1003,
-      "reason": "pipeline infrastructure file — not committed to repo"
-    }
-  ]
+  "workspace_file_checks": [],
+  "local_only_files": []
 }

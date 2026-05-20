@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260520-CDA3",
+  "phase": "qa",
+  "agent_id": "qa-agent",
+  "run_id": "qa-7d0829855ea7100b",
+  "status": "COMPLETED",
+  "started_at": "2026-05-20T14:49:38Z",
+  "completed_at": "2026-05-20T14:51:38Z",
+  "output_file": "qa_report.xml",
+  "output_sha256": "3a55c30d411979a518147f3a680b4f0654252b3c78530766dfb1a2ae3ed3c1b2",
+  "evidence_files": [],
+  "commit_sha": "0fbdaf00b8f1a350c98146654c6a2b3ca4a67fdf"
+}
