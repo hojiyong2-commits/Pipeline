@@ -20,7 +20,7 @@
     "output_file": "dev_handover.xml",
     "output_sha256": "60dfcc2328d2e74eebdf92d0f3b0a728bde082183b19683f96f4e06a27026340",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260521-C675/dev/agent_receipt_dev-b5c45efca499c7b0.json",
-    "receipt_sha256": "9e7e42c1e4d371391d453bd658b928d10a8e568ce94eee7ed17c9e9477022f02",
+    "receipt_sha256": "22b3b0112db6285dcf3885ec1e5ce23c0f02f14b1fe961ae2c773d8451f9b19b",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260521-C675\\dev\\dev-b5c45efca499c7b0.json"
   },
@@ -51,17 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "f059989055a07f41d338964368c0d63b5e31c114c8828a1f0b7fda74abcef717",
-      "size_bytes": 605911
-    },
-    {
-      "path": "tests/test_protocol_consistency.py",
-      "sha256": "1b70d7d56436f4ba9770d2cfbb9c6bb01d787eee9d8f11f72b29ffedeb24ace6",
-      "size_bytes": 30373
-    }
-  ],
+  "workspace_file_checks": null,
   "local_only_files": []
 }
