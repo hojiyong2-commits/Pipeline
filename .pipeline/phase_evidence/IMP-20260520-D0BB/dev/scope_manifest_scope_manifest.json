@@ -1,0 +1,52 @@
+{
+  "pipeline_id": "IMP-20260520-D0BB",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_protocol_consistency"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.cmd_gates"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/test_protocol_consistency.py",
+        "tests/oracles/IMP-20260520-D0BB/normal_run_id_match/input.json",
+        "tests/oracles/IMP-20260520-D0BB/normal_run_id_match/expected.json",
+        "tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json",
+        "tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/expected.json",
+        "tests/oracles/IMP-20260520-D0BB/edge_sha_prefix_match/input.json",
+        "tests/oracles/IMP-20260520-D0BB/edge_sha_prefix_match/expected.json",
+        "tests/oracles/IMP-20260520-D0BB/normal_bandit_stale_description/input.json",
+        "tests/oracles/IMP-20260520-D0BB/normal_bandit_stale_description/expected.json",
+        "tests/oracles/IMP-20260520-D0BB/error_gh_cli_not_available/input.json",
+        "tests/oracles/IMP-20260520-D0BB/error_gh_cli_not_available/expected.json"
+      ],
+      "affected_functions": [
+        "tests.test_protocol_consistency (신규 파일)"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "CLAUDE.md",
+        ".github/workflows/ci.yml"
+      ],
+      "affected_functions": [
+        "CLAUDE.md + ci.yml (신규 섹션/단계)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260520-D0BB</pipeline_id>
+  <agent_run_id>dev-4b2ff5ec87fd6413</agent_run_id>
+  <handover_kind>qa_fail_repair</handover_kind>
+  <fixed_failure_signature>AL:98caca24</fixed_failure_signature>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_protocol_consistency.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_modified>
+      <file>pipeline.py</file>
+      <file>tests/test_protocol_consistency.py</file>
+    </files_modified>
+    <scope_manifest>scope_manifest.json</scope_manifest>
+  </scope_declaration>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_protocol_consistency.py</git_diff_files>
+    <manifest_files>pipeline.py (MT-1/MT-2), tests/test_protocol_consistency.py (MT-3) — scope_manifest.json files 배열에 포함</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <bug_fix_summary>
+    <problem>QA Round 2 FAIL (AL:98caca24) — test_latest_run_selected_when_run_id_is_largest가 standalone 함수로 _check_protocol_consistency를 latest_ci_run_id를 직접 인자로 호출하여 _collect_pr_consistency_data 코드 경로를 실제로 통과하지 않는 vacuous 회귀 테스트였음. OLD break 로직에서도 PASS하는 무효 테스트.</problem>
+    <fix>standalone 함수 제거 후 TestGhCliMock 클래스 메서드 test_multi_run_statuscheck_selects_latest로 교체. statusCheckRollup을 oldest-first로 배열([run 100 failure, run 26196164363 success])하고 _run_protocol_consistency_check를 mock subprocess로 호출하여 실제 _collect_pr_consistency_data 코드 경로를 통과. OLD break 코드: run 100 선택 → body의 26196164363과 불일치 → BLOCKED → exit 1 (테스트 FAIL). NEW max-ID 코드: run 26196164363 선택 → body와 일치 → PASS → exit 0 (테스트 PASS).</fix>
+    <test_count>tests/test_protocol_consistency.py: 20 tests (standalone function 제거 + 클래스 메서드 추가 = 동일 20개)</test_count>
+  </bug_fix_summary>
+  <impact_analysis>
+    <micro_task id="MT-3">
+      <target_function>tests.test_protocol_consistency</target_function>
+      <target_file>tests/test_protocol_consistency.py</target_file>
+      <change_summary>vacuous standalone 테스트 함수(29줄) 제거, TestGhCliMock 클래스 메서드(51줄) 추가. 기존 19개 테스트 회귀 없음. 총 20개 유지.</change_summary>
+    </micro_task>
+  </impact_analysis>
+  <side_effect_audit>
+    <signature_change>없음 — pipeline.py 함수 시그니처 불변, test 파일 테스트 수 동일(20개)</signature_change>
+    <callers>_collect_pr_consistency_data 호출자 2곳 불변</callers>
+  </side_effect_audit>
+  <test_results>
+    <pytest_protocol_consistency>python -m pytest tests/test_protocol_consistency.py -v → 20 passed</pytest_protocol_consistency>
+    <pytest_full>python -m pytest -q → 454 passed, 2 warnings (사전 존재 cp949 경고 2건, 회귀 0)</pytest_full>
+    <py_compile>python -m py_compile pipeline.py tests/test_protocol_consistency.py → PASS</py_compile>
+    <import_check>python -c "import pipeline" → PASS</import_check>
+  </test_results>
+  <module_gate_results>
+    <mt id="MT-1">PASS — pipeline.py 체크포인트 유효</mt>
+    <mt id="MT-2">PASS — pipeline.py 체크포인트 유효</mt>
+    <mt id="MT-3">PASS — 체크포인트 SHA 업데이트 (16013 bytes, 54ba98347c657f61591c2623c6242c77c8562ff975dddcd5ea63da693668398c)</mt>
+    <mt id="MT-4">PASS — 변경 없음, 기존 체크포인트 유효</mt>
+    <integration>PASS</integration>
+  </module_gate_results>
+</handover>
