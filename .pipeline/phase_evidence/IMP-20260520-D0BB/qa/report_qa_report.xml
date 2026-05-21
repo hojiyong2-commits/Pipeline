@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260520-D0BB</pipeline_id>
+  <qa_run_id>qa-7c0225b634c20332</qa_run_id>
+  <round>4</round>
+  <scope>MT-2 재검증 — pipeline.py gates consistency --dry-run / --input-file CLI 추가</scope>
+
+  <!-- Step 0: Handover 검증 -->
+  <handover_verification>
+    <from>dev-agent</from>
+    <agent_run_id>dev-1db1923d5d83fd8f</agent_run_id>
+    <handover_kind>mt2_implementation</handover_kind>
+    <evidence_files>
+      <file>pipeline.py</file>
+    </evidence_files>
+    <anti_gaming_read>true</anti_gaming_read>
+    <ui_category>absent — dev-agent handover만 수락</ui_category>
+    <scope_lock_check>PASS — dev_handover scope_lock_check verdict=PASS, git diff --name-only HEAD = pipeline.py 단일</scope_lock_check>
+    <handover_verdict>ACCEPT</handover_verdict>
+    <note>module_handover_MT-2.xml / module_design_MT-2.xml은 이전 파이프라인(BUG-20260520-CDA3) 잔여 파일이나, 이번 MT-2 재검증의 일차 증거는 dev_handover.xml + integration_report.xml + module_qa_MT-2.xml(모두 IMP-20260520-D0BB)이며 정합. 실제 git diff(pipeline.py 31+/2-)가 dev_handover 설명과 일치하므로 검증 진행 지장 없음.</note>
+  </handover_verification>
+
+  <!-- Step 0-B: anti_gaming_read 검증 -->
+  <anti_gaming_gate>
+    <tag_present>true</tag_present>
+    <tag_value>true</tag_value>
+    <verdict>PASS</verdict>
+  </anti_gaming_gate>
+
+  <!-- Step 0-C: judgment_calls_resolved 검증 -->
+  <judgment_calls_check>
+    <judgment_calls_block>absent — step_plan에 judgment_calls 블록 없음 (AMBIGUOUS 태스크 아님, P1 질문 1개는 design_confirmation에 기록)</judgment_calls_block>
+    <verdict>PASS (N/A)</verdict>
+  </judgment_calls_check>
+
+  <!-- 카테고리별 검증 -->
+  <category_check>
+    <wa>PASS — dry-run 경로는 비네트워크(파일 입력) 경로. json.loads(Path(input_file).read_text())가 try-except (OSError, ValueError) 분기로 감싸지고 exit 2 fallback 존재. timeout tuple/retry는 HTTP 미사용으로 N/A이나 입력 파싱 fallback 완비.</wa>
+    <ui>N-A — category_tags에 UI 없음</ui>
+    <fs>PASS — Path(input_file).read_text(encoding="utf-8") 사용, 읽기 실패 시 OSError 포착 후 명시적 메시지 + exit 2. 입력 파일 read-only이므로 원자적 쓰기/encoding fallback/traversal N/A.</fs>
+    <pd>PASS — dry-run 블록이 순수 함수 _check_protocol_consistency를 시그니처 변경 없이 호출. CLI 레이어(_run_protocol_consistency_check)와 검사 로직 분리 유지. God class 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — input_file 누락 시 exit 2, JSON 파싱 실패 시 exit 2, input_data.get(키, 기본값)으로 누락 키 방어. result.get("status") 부재 시 None → exit 1 안전 처리. bare except 없음.</al>
+    <build>N-A — category_tags에 BUILD 없음 (meta-task)</build>
+    <vsce>N-A — category_tags에 VSCE 없음</vsce>
+  </category_check>
+
+  <!-- Compliance Checklist -->
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A — dry-run은 비네트워크 경로, HTTP 호출 없음</timeout_tuple>
+      <retry_3x>N-A — 네트워크 호출 없음</retry_3x>
+      <error_branches_4>N-A — 4xx/5xx 분기는 비네트워크 경로에 해당 없음</error_branches_4>
+      <json_fallback>PASS — json.loads가 try-except (OSError, ValueError)로 감싸지고 exit 2 fallback 분기 존재</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A — UI 카테고리 미포함</type_hinting_all>
+      <widget_naming>N-A — UI 카테고리 미포함</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 입력 파일은 read-only, 이 변경에 파일 쓰기 없음</atomic_write>
+      <encoding_fallback>PASS — read_text(encoding="utf-8") 명시, 실패 시 OSError 포착 후 명시적 오류 처리</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로이나 테스트/CI 전용 dry-run 명령, traversal 차단 대상 아님</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <!-- Runtime Functional Verification -->
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover.xml test_results 블록에 dry_run_pass/dry_run_blocked/pytest 실행 증거 존재</execution_check_present>
+    <execution_check_verdict>PASS — QA가 직접 4개 oracle dry-run + pytest 20개 + 전체 454개 재실행하여 실증</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 미포함</vsce_build_evidence>
+    <functional_binding_verified>PASS — build_parser에 --dry-run(store_true)/--input-file add_argument 등록 확인. dry-run 블록이 _run_protocol_consistency_check 함수 내 docstring 직후 정확히 배치. getattr(args,'dry_run',False)로 기존 Namespace 후방 호환.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <!-- Visual Reference -->
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan requirements에 참고 이미지/파일 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <!-- Dead Code / Duplication 검사 -->
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+
+  <!-- Blast Radius (C-3) -->
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <c3_cross_verification>
+    <scope_files_declared>1 (pipeline.py)</scope_files_declared>
+    <evidence_files_submitted>1 (pipeline.py — dev_handover scope_declaration 기준)</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff --name-only HEAD = pipeline.py 단일, scope_manifest_MT-2.json files=[pipeline.py]와 일치</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <!-- Micro-task Boundary -->
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <decomposition_audit_present>PASS — step_plan에 decomposition_audit 블록 존재 (audit_result=SPLIT_REQUIRED)</decomposition_audit_present>
+    <grep_evidence_present>PASS — 각 micro_task에 grep_evidence executed=true 존재</grep_evidence_present>
+    <declared_functions>1 (pipeline.cmd_gates)</declared_functions>
+    <actual_modified_functions>2 (_run_protocol_consistency_check, build_parser)</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — 두 함수 변경은 모두 MT-2 affected_function(pipeline.cmd_gates 계열) + target_files(pipeline.py) 범위 내. build_parser는 cmd_gates의 argparse 등록 함수로 MT-2 affected_call_sites(argparse gsub line ~11851)에 명시됨.</modification>
+    </out_of_scope_modifications>
+    <scope_declared>pipeline.py</scope_declared>
+    <scope_actual>pipeline.py</scope_actual>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <!-- Numeric Score -->
+  <numeric_score>110</numeric_score>
+  <numeric_score_detail>
+    <wa score="20" max="20">JSON 파싱 try-except + 분기 + exit fallback 완비. dry-run은 비네트워크 경로로 timeout/retry 항목 면제, 입력 검증 만점.</wa>
+    <ui score="20" max="20">N/A — UI 카테고리 미포함, 만점 처리</ui>
+    <fs score="20" max="20">pathlib Path 사용, encoding 명시, OSError 포착 후 명시적 메시지. read-only 입력이므로 원자적 쓰기/traversal 면제, 적용 항목 만점.</fs>
+    <pd score="10" max="10">모듈 분리(5pt): 순수 함수 호출, CLI/검사 로직 분리. 인터페이스 계약(5pt): _check_protocol_consistency 시그니처 불변, 키워드 인자 정확 매칭.</pd>
+    <al score="20" max="20">0나눗셈 N/A, 범위 검증(getattr fallback), 입력 타입 검증(input_data.get 기본값), 빈 데이터 처리(누락 키/파일 방어), exit code 분기 전부 PASS.</al>
+    <build score="10" max="10">N/A — BUILD 카테고리 미포함, 만점 처리</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="110" max="120"/>
+    <percentage>91.7</percentage>
+    <numeric_verdict>PASS (110 &gt;= 96/120)</numeric_verdict>
+  </numeric_score_detail>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+
+  <!-- Circuit Breaker Signal -->
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>없음 — 8개 검증 필수 항목 + 2개 추가 방어 검증 전부 PASS. oracle 4건 expected.json 일치, pytest 20+454 전부 통과, argparse 후방 호환 확인.</critical_issues>
+
+  <improvement_suggestions>
+    1. (경미, 감점 아님) --dry-run --input-file 경로는 --repo/--pr이 동시에 주어져도 무시한다. 테스트/CI 전용 명령이므로 필수는 아니나, 향후 두 모드 동시 지정 시 경고 출력을 고려할 수 있다.
+    2. module_handover_MT-2.xml / module_design_MT-2.xml이 이전 파이프라인(BUG-20260520-CDA3) 내용으로 남아 있다. 이번 MT-2 정합 증거는 module_qa_MT-2.xml + integration_report.xml로 충분하나, stale 모듈 파일 정리 권장.
+  </improvement_suggestions>
+
+  <!-- Oracle 검증 -->
+  <oracle_verification>
+    <oracle_count>5</oracle_count>
+    <oracle_case_kinds>normal x3, edge x1, error x1</oracle_case_kinds>
+    <dry_run_validated>true — 4개 oracle(normal_run_id_match, normal_run_id_mismatch_body_packet, edge_sha_prefix_match, normal_bandit_stale_description)을 gates consistency --dry-run으로 직접 실행, expected.json 전부 일치</dry_run_validated>
+    <cases>
+      <case id="normal_run_id_match" expected="PASS/exit 0" actual="PASS/exit 0">PASS</case>
+      <case id="normal_run_id_mismatch_body_packet" expected="BLOCKED stale_run_id/exit 1" actual="BLOCKED stale_run_id/exit 1">PASS</case>
+      <case id="edge_sha_prefix_match" expected="PASS/exit 0" actual="PASS/exit 0">PASS</case>
+      <case id="normal_bandit_stale_description" expected="BLOCKED stale_file_description/exit 1" actual="BLOCKED stale_file_description/exit 1">PASS</case>
+      <case id="error_gh_cli_not_available">PASS (CLI 레이어 케이스 — dry-run 검증 대상 아님, test_gh_cli_not_available_returns_blocked_result가 subprocess mock으로 별도 검증)</case>
+    </cases>
+  </oracle_verification>
+
+  <!-- 검증 필수 항목 8개 실행 결과 -->
+  <verification_executed>
+    <item id="1" desc="check --phase qa --codex-review-waiver legacy-bootstrap">PASS — exit 0 ([GATE OK] Phase 4)</item>
+    <item id="2" desc="dry-run normal_run_id_match">PASS — exit 0, status=PASS</item>
+    <item id="3" desc="dry-run normal_run_id_mismatch_body_packet">PASS — exit 1, BLOCKED stale_run_id</item>
+    <item id="4" desc="dry-run edge_sha_prefix_match">PASS — exit 0, status=PASS</item>
+    <item id="5" desc="dry-run normal_bandit_stale_description">PASS — exit 1, BLOCKED stale_file_description</item>
+    <item id="6" desc="pytest tests/test_protocol_consistency.py -v">PASS — 20 passed</item>
+    <item id="7" desc="pytest -q 전체 회귀">PASS — 454 passed, 회귀 0 (cp949 경고 2건은 사전 존재, 이번 변경 무관)</item>
+    <item id="8" desc="argparse 호환성 (gates consistency --repo/--pr 경로)">PASS — --repo/--pr 정상 동작, getattr fallback으로 기존 Namespace 호환. TestGhCliMock 3개(dry_run 속성 없는 Namespace) 모두 PASS</item>
+    <item id="extra-1" desc="--dry-run --input-file 누락 방어">PASS — exit 2 + [CONSISTENCY ERROR] --dry-run requires --input-file</item>
+    <item id="extra-2" desc="존재하지 않는 input-file 방어">PASS — exit 2 + [CONSISTENCY ERROR] --input-file 읽기 실패: [Errno 2]</item>
+  </verification_executed>
+
+  <!-- 전체 테스트 결과 -->
+  <test_results>
+    <target_tests>python -m pytest tests/test_protocol_consistency.py -v → 20 passed</target_tests>
+    <full_suite>python -m pytest -q → 454 passed, 2 warnings, 15 subtests passed (cp949 기존 경고 2건, 회귀 0)</full_suite>
+    <argparse_help>python pipeline.py gates consistency --help → --repo/--pr/--dry-run/--input-file 4개 옵션 정상 노출</argparse_help>
+  </test_results>
+</qa_report>
