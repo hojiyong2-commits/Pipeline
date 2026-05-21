@@ -10882,6 +10882,27 @@ def _run_protocol_consistency_check(
         args: argparse Namespace (repo, pr 속성 필요).
         pid: pipeline_id.
     """
+    if getattr(args, "dry_run", False):
+        input_file = getattr(args, "input_file", None)
+        if not input_file:
+            print("[CONSISTENCY ERROR] --dry-run requires --input-file")
+            sys.exit(2)
+        try:
+            input_data = json.loads(Path(input_file).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"[CONSISTENCY ERROR] --input-file 읽기 실패: {exc}")
+            sys.exit(2)
+        result = _check_protocol_consistency(
+            pr_body=input_data.get("pr_body", ""),
+            acceptance_packet_body=input_data.get("acceptance_packet_body", ""),
+            pr_changed_files=input_data.get("pr_changed_files", []),
+            pr_head_sha=input_data.get("pr_head_sha", ""),
+            latest_ci_run_id=input_data.get("latest_ci_run_id", ""),
+            latest_ci_run_conclusion=input_data.get("latest_ci_run_conclusion", ""),
+        )
+        print(json.dumps(result, ensure_ascii=False))
+        sys.exit(0 if result.get("status") == "PASS" else 1)
+
     repo = args.repo
     pr_num = args.pr
 
@@ -12784,11 +12805,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Protocol consistency check between PR body, acceptance packet, and actual CI state",
     )
     p_gate_consistency.add_argument(
-        "--repo", required=True,
+        "--repo", required=False, default=None,
         help="owner/repo (예: hojiyong2-commits/Pipeline)",
     )
     p_gate_consistency.add_argument(
-        "--pr", required=True, help="PR 번호",
+        "--pr", required=False, default=None, help="PR 번호",
+    )
+    p_gate_consistency.add_argument(
+        "--dry-run", action="store_true", default=False,
+        help="gh CLI 없이 --input-file JSON으로 consistency 검사를 실행한다 (테스트/CI 용)",
+    )
+    p_gate_consistency.add_argument(
+        "--input-file", default=None,
+        help="--dry-run 시 사용할 입력 JSON 파일 경로",
     )
 
     p_gate_batch_ci = gsub.add_parser("batch-ci", help="변경 파일 목록을 기반으로 CI 모드(per_phase/batched) 결정")
