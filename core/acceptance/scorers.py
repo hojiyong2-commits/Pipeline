@@ -69,7 +69,9 @@ def _expected_actual(test: dict[str, Any], base_dir: Path, project_dir: Path | N
     # known project-root subdirectories (tests/, src/, etc.) so that test_set.json
     # entries that use project-root relative paths work correctly even when
     # base_dir is the contract directory.
-    def _smart_resolve(raw: str) -> Path:
+    # NOTE: named _resolve_path (not _smart_resolve) to avoid shadowing the
+    # module-level _smart_resolve(base_dir, path_str) helper.
+    def _resolve_path(raw: str) -> Path:
         p = Path(raw)
         if p.is_absolute():
             return p
@@ -82,9 +84,9 @@ def _expected_actual(test: dict[str, Any], base_dir: Path, project_dir: Path | N
         return base_dir / p
 
     if isinstance(then, dict) and then.get("expected_file"):
-        expected = _load_json(_smart_resolve(str(then["expected_file"])))
+        expected = _load_json(_resolve_path(str(then["expected_file"])))
     if isinstance(given, dict) and given.get("actual_file"):
-        actual = _load_json(_smart_resolve(str(given["actual_file"])))
+        actual = _load_json(_resolve_path(str(given["actual_file"])))
     return expected, actual
 
 
