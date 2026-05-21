@@ -334,6 +334,75 @@ class TestGhCliMock(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.code, 0)
 
+    def test_multi_run_statuscheck_selects_latest(self):
+        """statusCheckRollup oldest-first 배열에서 run ID 최대값을 선택하는지 검증.
+
+        OLD break 로직: 가장 오래된 run(100) 선택 → body의 26196164363과 불일치
+                        → stale_run_id BLOCKED → exit 1 (이 테스트 FAIL)
+        NEW max-ID 로직: 가장 큰 run(26196164363) 선택 → body와 일치
+                         → PASS → exit 0 (이 테스트 PASS)
+
+        _collect_pr_consistency_data 코드 경로를 실제로 통과하는 회귀 테스트.
+        """
+        from pipeline import _run_protocol_consistency_check
+        import argparse
+        state = {"pipeline_id": "IMP-20260520-D0BB"}
+        args = argparse.Namespace(repo="owner/repo", pr="1")
+
+        pr_json = json.dumps({
+            "body": (
+                "run: https://github.com/x/y/actions/runs/26196164363\n"
+                "SHA: abc1234\npipeline.py"
+            ),
+            "headRefOid": "abc1234def567890abcdef1234567890abcdef12",
+            "headRefName": "impl/IMP-20260520-D0BB",
+            "files": [{"path": "pipeline.py"}],
+            "statusCheckRollup": [
+                {
+                    "detailsUrl": "https://github.com/x/y/actions/runs/100",
+                    "conclusion": "failure",
+                },
+                {
+                    "detailsUrl": "https://github.com/x/y/actions/runs/26196164363",
+                    "conclusion": "success",
+                },
+            ],
+            "isDraft": False,
+            "title": "test PR",
+            "url": "https://github.com/x/y/pull/1",
+            "number": 1,
+        })
+
+        mock_pr_result = MagicMock()
+        mock_pr_result.returncode = 0
+        mock_pr_result.stdout = pr_json
+        mock_pr_result.stderr = ""
+
+        mock_comments_result = MagicMock()
+        mock_comments_result.returncode = 0
+        mock_comments_result.stdout = json.dumps([
+            {
+                "body": (
+                    "<!-- pipeline-human-acceptance-packet -->\n"
+                    "https://github.com/x/y/actions/runs/26196164363\nabc1234"
+                )
+            }
+        ])
+        mock_comments_result.stderr = ""
+
+        call_count = [0]
+
+        def mock_run(cmd, **kwargs):
+            call_count[0] += 1
+            return mock_pr_result if call_count[0] == 1 else mock_comments_result
+
+        with patch("pipeline.subprocess.run", side_effect=mock_run):
+            with self.assertRaises(SystemExit) as ctx:
+                _run_protocol_consistency_check(
+                    state, args, "IMP-20260520-D0BB"
+                )
+            self.assertEqual(ctx.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

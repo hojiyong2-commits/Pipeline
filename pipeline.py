@@ -10803,9 +10803,12 @@ def _collect_pr_consistency_data(
     except (FileNotFoundError, OSError, json.JSONDecodeError, ValueError):
         pass  # packet 없으면 일부 검사 SKIP
 
-    # 3. 최신 CI run ID 수집
+    # 3. 최신 CI run ID 수집 (run ID 최대값 = 가장 최신 run)
+    # statusCheckRollup은 oldest-first로 반환되므로 첫 항목 break 대신
+    # 정규식 매치 중 run ID 정수값이 최대인 항목을 선택한다.
     latest_ci_run_id = ""
     latest_ci_run_conclusion = ""
+    latest_ci_run_id_int = 0
     try:
         status_checks = pr_data.get("statusCheckRollup") or []
         for check in status_checks:
@@ -10814,9 +10817,15 @@ def _collect_pr_consistency_data(
             url = check.get("detailsUrl", "")
             m = _CONSISTENCY_RUN_ID_PATTERN.search(str(url))
             if m:
-                latest_ci_run_id = m.group(1)
-                latest_ci_run_conclusion = str(check.get("conclusion", ""))
-                break
+                run_id_str = m.group(1)
+                try:
+                    run_id_int = int(run_id_str)
+                except ValueError:
+                    run_id_int = 0
+                if run_id_int > latest_ci_run_id_int:
+                    latest_ci_run_id_int = run_id_int
+                    latest_ci_run_id = run_id_str
+                    latest_ci_run_conclusion = str(check.get("conclusion", ""))
         if not latest_ci_run_id:
             # gh run list로 최신 run 조회
             run_res = subprocess.run(
