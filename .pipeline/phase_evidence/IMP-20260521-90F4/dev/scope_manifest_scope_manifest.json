@@ -1,0 +1,59 @@
+{
+  "pipeline_id": "IMP-20260521-90F4",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._consistency_listed_files"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_acceptance_readiness"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._CONSISTENCY_TEST_COUNT_PATTERN 및 _check_protocol_consistency 검사 C"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_protocol_consistency (검사 A 주석, 검사 D acceptance packet 로직)"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "tests/test_protocol_consistency.py"
+      ],
+      "affected_functions": [
+        "tests.test_protocol_consistency (전체 파일)"
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "core/acceptance/scorers.py"
+      ],
+      "affected_functions": [
+        "core.acceptance.scorers.score_file_exists_check, score_file_output_check"
+      ]
+    }
+  ]
+}
