@@ -3069,14 +3069,20 @@ def _consistency_listed_files(text: str) -> "tuple[set, bool]":
         token = tokens[0] if tokens else ""
         # AB-2: colon 뒤 설명 제거 — `- 수정됨: **tests/test_x.py**` → `수정됨:` → 다음 토큰
         # `수정됨:` 같은 한국어 라벨은 파일이 아니므로 다음 토큰을 시도한다.
+        # `pipeline.py:` 처럼 파일명에 붙은 콜론은 콜론만 제거하고 파일명 보존.
         if token.endswith(":") and len(tokens) > 1:
-            # 라벨 뒤에 오는 첫 번째 파일 후보 토큰을 찾는다
-            token = ""
-            for t in tokens[1:]:
-                t_clean = re.sub(r"\*\*", "", t).rstrip(":").strip()
-                if t_clean and ("." in t_clean or "/" in t_clean):
-                    token = t_clean
-                    break
+            base = token.rstrip(":")
+            if "." in base or "/" in base or "\\" in base:
+                # `pipeline.py:` 또는 `tests/bar.py:` — 파일명에 붙은 콜론, 콜론만 제거
+                token = base
+            else:
+                # `수정됨:` 같은 한국어 라벨 — 다음 토큰에서 파일 후보 찾기
+                token = ""  # nosec B105 — 라벨 뒤 파일 후보 초기화, 비밀번호 아님
+                for t in tokens[1:]:
+                    t_clean = re.sub(r"\*\*", "", t).rstrip(":").strip()
+                    if t_clean and ("." in t_clean or "/" in t_clean or "\\" in t_clean):
+                        token = t_clean
+                        break
         else:
             # 후행 콜론 제거 — `- 변경된 파일:` 같은 라벨성 토큰의 콜론 정리.
             token = token.rstrip(":")
@@ -3312,7 +3318,7 @@ def _check_protocol_consistency(
     if has_packet_tag:
         packet_listed_files, packet_truncated = _consistency_listed_files(acceptance_packet_body)
     else:
-        packet_listed_files, packet_truncated = set(), False
+        packet_listed_files, _ = set(), False  # packet_truncated unused in this branch
     for listed in body_listed_files:
         normalized = listed.replace("\\", "/")
         if normalized and normalized not in changed_set:

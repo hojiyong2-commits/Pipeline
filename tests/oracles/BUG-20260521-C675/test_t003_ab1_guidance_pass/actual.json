@@ -1,0 +1,5 @@
+{
+  "is_insufficient_status_line": false,
+  "expected_blocked": false,
+  "description": "판단 가능 상태 선언 packet에서 결정 기준 섹션의 정보 부족 안내 문구는 PASS"
+}

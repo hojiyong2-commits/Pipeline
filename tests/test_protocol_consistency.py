@@ -702,5 +702,21 @@ class TestAB3TruncationMarker(unittest.TestCase):
         self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
 
 
+class TestAB2ColonFileParsing(unittest.TestCase):
+    """BUG-20260521-C675 AB-2: 파일명 뒤 콜론 처리 버그 회귀 테스트."""
+
+    def test_ab2_path_with_colon_suffix(self):
+        """- **pipeline.py**: 설명 패턴에서 pipeline.py 추출."""
+        from pipeline import _consistency_listed_files  # type: ignore
+        files, _ = _consistency_listed_files("- **pipeline.py**: 설명\n")
+        self.assertIn("pipeline.py", files)
+
+    def test_ab2_backtick_path_with_colon(self):
+        """- `tests/bar.py`: 수정 패턴에서 tests/bar.py 추출."""
+        from pipeline import _consistency_listed_files  # type: ignore
+        files, _ = _consistency_listed_files("- `tests/bar.py`: 수정\n")
+        self.assertIn("tests/bar.py", files)
+
+
 if __name__ == "__main__":
     unittest.main()
