@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260521-C675</pipeline_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_protocol_consistency.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_protocol_consistency.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_check_acceptance_packet_via_github, _check_acceptance_packet_via_local_file, _consistency_listed_files</target_function>
+    <affected_call_sites>
+      <site>_check_protocol_consistency (호출: _consistency_listed_files)</site>
+      <site>_run_acceptance_readiness_check (호출: _check_acceptance_packet_via_local_file)</site>
+    </affected_call_sites>
+    <blast_radius>SCOPED</blast_radius>
+    <change_summary>AB-1: regex 기반 insufficient 패턴 적용. AB-2: bold/backtick/em dash/colon 정규화. AB-3: truncation 감지 및 tuple 반환. 40개 테스트 전체 PASS.</change_summary>
+  </impact_analysis>
+  <module_gates>
+    <mt id="MT-1" status="PASS"/>
+    <mt id="MT-2" status="PASS"/>
+    <mt id="MT-3" status="PASS"/>
+  </module_gates>
+  <integration_gate status="PASS"/>
+  <status>READY_FOR_QA</status>
+</handover>
