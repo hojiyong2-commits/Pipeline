@@ -23,6 +23,23 @@ def _resolve(base_dir: Path, raw_path: str | None) -> Path:
     return path
 
 
+def _smart_resolve(base_dir: str, path_str: str) -> str:
+    """상대 경로를 프로젝트 루트 우선으로 해석한다.
+
+    절대 경로는 그대로 반환한다.
+    상대 경로는 프로젝트 루트(scorers.py의 상위 두 디렉터리)를 먼저 탐색하고,
+    없으면 base_dir 기준으로 해석한다.
+    """
+    p = Path(path_str)
+    if p.is_absolute():
+        return str(p)
+    project_root = Path(__file__).resolve().parent.parent
+    candidate = project_root / path_str
+    if candidate.exists():
+        return str(candidate)
+    return str(Path(base_dir) / path_str)
+
+
 def _load_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8-sig"))
@@ -88,7 +105,8 @@ def score_email_parse_check(test: dict[str, Any], base_dir: Path, project_dir: P
 def score_file_exists_check(test: dict[str, Any], base_dir: Path, project_dir: Path) -> tuple[bool, str, dict[str, Any]]:
     then = test.get("then", {})
     path_value = then.get("path") if isinstance(then, dict) else None
-    path = _resolve(base_dir, str(path_value) if path_value else None)
+    resolved = _smart_resolve(str(base_dir), str(path_value) if path_value else "")
+    path = Path(resolved) if resolved else _resolve(base_dir, str(path_value) if path_value else None)
     ok = path.exists()
     return ok, f"file exists: {path}" if ok else f"file missing: {path}", {"path": str(path)}
 
@@ -97,7 +115,8 @@ def score_file_output_check(test: dict[str, Any], base_dir: Path, project_dir: P
     then = test.get("then", {})
     if not isinstance(then, dict):
         raise ScoringError("then object is required")
-    path = _resolve(base_dir, str(then.get("path") or ""))
+    raw_path = str(then.get("path") or "")
+    path = Path(_smart_resolve(str(base_dir), raw_path)) if raw_path else _resolve(base_dir, raw_path)
     if not path.exists():
         return False, f"file missing: {path}", {"path": str(path)}
     contains = then.get("contains")
