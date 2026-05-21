@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260521-C675</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <reviewed_files>
+    <file>pipeline.py</file>
+    <file>tests/test_protocol_consistency.py</file>
+  </reviewed_files>
+  <category_results>
+    <category name="AL" score="15" max="15">타입 검증 4항목 완전 구현. _check_acceptance_packet_via_local_file, _check_protocol_consistency 모두 None/비문자열 입력 방어 포함.</category>
+    <category name="FS" score="15" max="15">파일 경로 정규화(_normalize_rel_path), safe_write 패턴 준수.</category>
+    <category name="WA" score="10" max="10">해당 없음(네트워크 코드 없음). 만점 처리.</category>
+    <category name="PD" score="20" max="20">decomposition_audit 포함, micro_task 3개 모두 scope 일치, impact_analysis 구비.</category>
+    <category name="SEC" score="10" max="10">입력 검증 정규식 사용, 파일 경로 traversal 패턴 없음.</category>
+    <category name="UI" score="5" max="5">해당 없음. 만점 처리.</category>
+    <category name="QA" score="20" max="20">40개 테스트 전체 PASS (0 failed). 회귀 테스트 10개 추가.</category>
+    <category name="MISC" score="13" max="15">레거시 상수 보존(_ACCEPTANCE_PACKET_INSUFFICIENT_MARKER), 변경 범위 최소화.</category>
+  </category_results>
+  <verification_checks>
+    <check id="AB-1-regex">PASS: _ACCEPTANCE_PACKET_INSUFFICIENT_PATTERN 정규식이 "판단 정보 상태: **정보 부족**" 형식만 매칭, advisory 안내 텍스트는 false positive 없음</check>
+    <check id="AB-1-marker">PASS: _ACCEPTANCE_PACKET_INSUFFICIENT_MARKER 상수 삭제 없이 보존됨</check>
+    <check id="AB-2-bold">PASS: **pipeline.py** → pipeline.py 정규화 확인</check>
+    <check id="AB-2-backtick">PASS: backtick 제거 확인</check>
+    <check id="AB-2-em-dash">PASS: em dash 설명 제거 확인</check>
+    <check id="AB-2-colon">PASS: 수정됨: pipeline.py → pipeline.py 파싱 확인</check>
+    <check id="AB-3-tuple">PASS: (set, bool) 튜플 반환 확인</check>
+    <check id="AB-3-truncation">PASS: ... 외 N개 파일 → truncated=True 반환</check>
+    <check id="AB-3-trust-root">PASS: truncated body라도 pipeline.py 누락은 changed_files_mismatch 반환</check>
+    <check id="caller-update">PASS: _check_protocol_consistency 내 body_listed_files, body_truncated = ... tuple unpacking 확인</check>
+  </verification_checks>
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <mt_id>MT-2</mt_id>
+    <mt_id>MT-3</mt_id>
+    <verdict>PASS</verdict>
+    <blast_radius>SCOPED</blast_radius>
+  </micro_task_boundary>
+  <failure_signature></failure_signature>
+</qa_report>
