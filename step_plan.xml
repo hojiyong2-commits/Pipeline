@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- IMP-20260521-90F4 step_plan — Protocol Consistency Guard v2 수정 -->
+<step_plan>
+  <pipeline_id>IMP-20260521-90F4</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning — Protocol Consistency Guard v2 수정</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, AL</category_tags>
+
+  <!-- ===================================================== -->
+  <!-- DECOMPOSITION AUDIT                                     -->
+  <!-- ===================================================== -->
+  <decomposition_audit>
+    <total_functions_identified>9</total_functions_identified>
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>8</grep_executions>
+    <split_decision>
+      수정 함수가 pipeline.py(3개 함수), tests/test_protocol_consistency.py(1개 파일 전체),
+      core/acceptance/scorers.py(2개 함수)에 걸쳐 있고, 각 결함(RCA-1~4)이 독립적으로
+      분리 가능하므로 기능 단위 6-task로 분할. 각 MT는 단일 함수 또는 단일 모듈 범위.
+    </split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <!-- ===================================================== -->
+  <!-- DESIGN CONFIRMATION                                     -->
+  <!-- ===================================================== -->
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      정규식 패턴 변수명, 함수 내부 변수명, 테스트 클래스/메서드 네이밍 등 P2 질문은
+      묻지 않고 기존 코드 스타일과 유지보수성 기준으로 PM이 결정했습니다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-6">
+        <user_facing_question>
+          core/acceptance/scorers.py의 경로 해석 버그(RCA-2)를 이번 파이프라인에서
+          함께 고칠까요, 아니면 별도 파이프라인으로 분리할까요?
+        </user_facing_question>
+        <evidence>
+          scorers.py 라인 88-111의 score_file_exists_check / score_file_output_check 가
+          _resolve(base_dir, ...) 사용으로 계약 디렉토리 기준 경로 해석 오류 발생.
+          _smart_resolve() 패턴이 이미 동일 파일에 구현되어 있어 적용 가능.
+          변경 범위: scorers.py 2개 함수, 약 20줄.
+        </evidence>
+        <why_it_matters>
+          이번에 수정하면 oracle gate 거짓 FAIL이 즉시 사라집니다.
+          분리하면 이 문제가 한 사이클 더 지속됩니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>이번 파이프라인에서 함께 수정 (MT-6 포함)</label>
+            <benefit>oracle gate 거짓 FAIL이 즉시 해소되고 RCA 원인을 한 번에 제거합니다.</benefit>
+            <cost>변경 파일이 pipeline.py + tests/ + scorers.py 로 늘어납니다(최대 3파일).</cost>
+          </option>
+          <option id="B">
+            <label>별도 파이프라인으로 분리</label>
+            <benefit>이번 파이프라인 범위가 작아져 검증이 단순해집니다.</benefit>
+            <cost>oracle gate 문제가 한 사이클 더 지속되고 별도 파이프라인 비용이 추가됩니다.</cost>
+          </option>
+        </options>
+        <user_answer>
+          사용자 요청 요구사항에 RCA-2 수정이 명시적으로 포함되어 있으므로
+          옵션 A로 진행 (MT-6 이번 파이프라인 포함).
+        </user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <!-- ===================================================== -->
+  <!-- INTERFACE SPEC                                          -->
+  <!-- ===================================================== -->
+  <interface_spec>
+    Input: pipeline.py (현재), tests/test_protocol_consistency.py (현재),
+           core/acceptance/scorers.py (현재), tests/oracles/IMP-20260521-90F4/ (5개 케이스)
+    Output: 동일 파일들 수정 완료 버전
+    Validation:
+      * _consistency_listed_files: 한국어 서술 불릿("- 장점:") 오탐 없음
+      * subprocess.run: encoding="utf-8" 명시 (라인 3380, 2799 근처)
+      * 테스트 수 정규식: "20 passed"(개별) vs "456 PASS"(전체) 구분
+      * acceptance packet changed files: 초과/누락 모두 BLOCKED
+      * phase attestation run ID: "runs/" URL 패턴만 추출하여 agent receipt ID와 혼동 없음
+      * scorers.py: project_dir 기준 경로 해석으로 거짓 FAIL 제거
+      * 테스트: 최소 18개 통과
+  </interface_spec>
+
+  <!-- ===================================================== -->
+  <!-- REQUIREMENTS                                            -->
+  <!-- ===================================================== -->
+  <requirements>
+    1. [MT-1, RCA-1] _consistency_listed_files: 불릿 항목 첫 토큰이
+       "." 또는 "/" 를 포함하거나 CONSISTENCY_TRUST_ROOT_FILES/PATTERNS에
+       매칭될 때만 파일 후보로 인정. "- 장점:", "- python", "- 최신" 등 제외.
+
+    2. [MT-2, RCA-3] subprocess encoding: _check_acceptance_readiness(라인 3380)과
+       comments 조회(라인 2799)의 subprocess.run에 encoding="utf-8" 추가.
+       _collect_pr_consistency_data 내 호출들은 이미 encoding="utf-8" 명시됨 — 확인만.
+
+    3. [MT-3, RCA-4] 테스트 수 정규식: _CONSISTENCY_TEST_COUNT_PATTERN 개선.
+       전략: findall 결과 int 최대값을 전체 테스트 수로 사용
+       (개별 파일 수 "20 passed"와 전체 수 "456 PASS" 공존 시 456 선택).
+       인라인 주석도 동일 MT에서 업데이트 (Documentation-Code Drift 방지).
+
+    4. [MT-4] acceptance packet changed files 정확 일치:
+       acceptance packet 불릿 목록이 실제 diff와 정확히 일치해야 함.
+       초과 파일(packet에만 있음) → stale_file_description BLOCKED.
+       누락 파일(diff에만 있음, 비-test 파일) → changed_files_mismatch BLOCKED.
+       PR body는 trust-root 파일만 설명 필수; 전체 파일 나열 불필요.
+
+    5. [MT-4] phase attestation run ID 구분:
+       _CONSISTENCY_RUN_ID_PATTERN = r"runs/(\d+)"이 이미 URL 기반이므로
+       "pm_planner-dc0ed5f257936dd8" 같은 agent receipt ID는 자동 제외됨.
+       확인 후 설명 주석 추가.
+
+    6. [MT-5] 테스트: tests/test_protocol_consistency.py에 최소 18개 테스트.
+       oracle IMP-20260521-90F4 케이스 5개 포함. 기존 IMP-20260520-D0BB 테스트 유지.
+
+    7. [MT-6, RCA-2] scorers.py: score_file_exists_check / score_file_output_check 내
+       _resolve(base_dir, ...)를 _smart_resolve 패턴으로 교체.
+       project_dir 우선 탐색 → fallback base_dir.
+
+    8. anti-gaming: PM micro_task 외 파일 수정 금지. scope_manifest 제출 필수.
+    9. Scope Lock: 각 MT 완료 후 git diff와 scope_manifest 비교 필수.
+   10. Documentation-Code Drift: _CONSISTENCY_TEST_COUNT_PATTERN 변경 시
+       관련 주석(라인 2968-2971)도 동일 MT에서 업데이트.
+  </requirements>
+
+  <!-- ===================================================== -->
+  <!-- TASK COMPLEXITY                                         -->
+  <!-- ===================================================== -->
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>
+      pipeline.py, tests/, core/acceptance/ 등 복수 파일 수정 및 테스트 18개 이상 요구.
+      trust-root 파일(pipeline.py, tests/) 수정 포함.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>9</expected_changed_functions>
+      <expected_changed_lines>160</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+    <risk_notes>
+      pipeline_protocol=true: pipeline.py의 gates accept 게이트 로직 수정.
+      core_parser_logic=true: 정규식 및 파일명 파서 수정.
+    </risk_notes>
+  </task_complexity>
+
+  <!-- ===================================================== -->
+  <!-- MICRO TASKS                                             -->
+  <!-- ===================================================== -->
+  <micro_tasks>
+
+    <micro_task id="MT-1">
+      <affected_function>pipeline._consistency_listed_files</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._check_protocol_consistency (라인 3254, 3256)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _consistency_listed_files</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        불릿 항목 첫 토큰 필터링 강화: "." 또는 "/" 포함 토큰, 또는
+        CONSISTENCY_TRUST_ROOT_FILES/PATTERNS 매칭 토큰만 파일 후보로 인정.
+        한국어 서술 단어("장점:", "python", "최신" 등) 오탐 제거.
+      </change_summary>
+      <line_estimate>20</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline._check_acceptance_readiness</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._check_acceptance_readiness → subprocess.run (라인 3380)</site>
+        <site>comments 조회 subprocess.run (라인 2799)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>capture_output=True, text=True, check=False</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _check_acceptance_readiness(라인 3380)과 comments 조회(라인 2799)의
+        subprocess.run 호출에 encoding="utf-8" 추가.
+        Windows cp949에서 한국어 PR 본문 디코드 실패 방지.
+      </change_summary>
+      <line_estimate>6</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._CONSISTENCY_TEST_COUNT_PATTERN 및 _check_protocol_consistency 검사 C</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._check_protocol_consistency 검사 C (라인 3230, 3232)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_CONSISTENCY_TEST_COUNT_PATTERN</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _CONSISTENCY_TEST_COUNT_PATTERN 개선 또는 검사 C 로직 수정.
+        전략: findall 결과 int 최대값을 전체 테스트 수로 사용
+        ("20 passed"와 "456 PASS" 공존 시 456 선택).
+        인라인 주석도 동일 MT에서 업데이트.
+      </change_summary>
+      <line_estimate>15</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>pipeline._check_protocol_consistency (검사 A 주석, 검사 D acceptance packet 로직)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._check_protocol_consistency 검사 A (라인 3145-3197)</site>
+        <site>pipeline._check_protocol_consistency 검사 D (라인 3276-3308)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_consistency_extract_run_ids</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        (1) 검사 A: _CONSISTENCY_RUN_ID_PATTERN = r"runs/(\d+)"이 URL 기반 추출이므로
+        phase attestation agent receipt run ID는 자동 제외됨을 확인하고 설명 주석 추가.
+        (2) 검사 D 확장: acceptance packet의 changed files 목록이 실제 PR diff와
+        정확히 일치해야 함. 초과 파일 → stale_file_description BLOCKED,
+        누락 파일(비-test) → changed_files_mismatch BLOCKED.
+      </change_summary>
+      <line_estimate>35</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>tests.test_protocol_consistency (전체 파일)</affected_function>
+      <target_files>
+        <file>tests/test_protocol_consistency.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>class Test|def test_</pattern>
+        <match_count>19</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        tests/test_protocol_consistency.py에 신규 테스트 추가 (최소 18개 총계):
+        - phase attestation run ID 구분 (2개)
+        - acceptance packet changed files 정확 일치 — 초과 파일 BLOCKED (2개)
+        - acceptance packet changed files 정확 일치 — 누락 파일 BLOCKED (2개)
+        - 전체 vs 개별 테스트 수 구분 (2개)
+        - 비파일 토큰 오탐 방지 _consistency_listed_files (3개)
+        - oracle IMP-20260521-90F4 케이스 5개 추가
+        기존 IMP-20260520-D0BB oracle 테스트 유지.
+      </change_summary>
+      <line_estimate>120</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>core.acceptance.scorers.score_file_exists_check, score_file_output_check</affected_function>
+      <target_files>
+        <file>core/acceptance/scorers.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline acceptance run 경로에서 호출</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def score_file_exists_check|def score_file_output_check</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        score_file_exists_check / score_file_output_check 내
+        _resolve(base_dir, ...)를 _smart_resolve 패턴으로 교체.
+        project_dir 우선 탐색 후 fallback base_dir.
+        oracle 84.62% 거짓 FAIL(CLAUDE.md, ci.yml 경로 해석 오류) 수정.
+      </change_summary>
+      <line_estimate>20</line_estimate>
+    </micro_task>
+
+  </micro_tasks>
+
+  <!-- ===================================================== -->
+  <!-- PYTHON VERSION                                          -->
+  <!-- ===================================================== -->
+  <python_version>3.10 — 기존 pipeline.py와 동일 버전 유지. type hint | 연산자(3.10+) 사용 중.</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.pythonPath 3.10, pylance typeCheckingMode=basic</vscode>
+  </env_specs>
+
+  <!-- ===================================================== -->
+  <!-- ACCEPTANCE CRITERIA                                     -->
+  <!-- ===================================================== -->
+  <acceptance_criteria>
+    1. _consistency_listed_files("- 장점:") → [] (오탐 없음)
+    2. _consistency_listed_files("- pipeline.py") → ["pipeline.py"] (정상 추출)
+    3. _consistency_listed_files("- .github/workflows/ci.yml") → [".github/workflows/ci.yml"]
+    4. PR body에 "pm_planner-dc0ed5f257936dd8" 포함 → CI run ID 비교 대상 아님 → PASS
+    5. PR body에 "runs/11111" + latest CI run ID "11111" → PASS
+    6. acceptance packet에 실제 diff에 없는 파일 포함 → stale_file_description BLOCKED
+    7. "20 passed\n456 PASS" 공존 → 전체 수 456만 비교
+    8. subprocess.run 호출에 encoding="utf-8" 추가 (라인 3380, 2799 근처)
+    9. score_file_exists_check("CLAUDE.md", base_dir=contract_dir, project_dir=ROOT) → PASS
+   10. python -m pytest tests/test_protocol_consistency.py → 18개 이상 PASS
+   11. 모든 기존 테스트(IMP-20260520-D0BB oracle 5개 포함) 회귀 없음
+   12. scope_manifest.json 제출 필수, PM micro_task 외 파일 수정 없음
+  </acceptance_criteria>
+
+  <!-- ===================================================== -->
+  <!-- FORBIDDEN                                               -->
+  <!-- ===================================================== -->
+  <forbidden>
+    - PM micro_task에 없는 파일 수정 금지 (Trust-Root 파일 외 무단 수정 금지)
+    - oracle expected.json 수정 금지 (이미 생성된 tests/oracles/IMP-20260521-90F4/**/expected.json)
+    - score_json_exact_match / _smart_resolve 기존 구현 변경 금지 (MT-6은 score_file_* 함수만)
+    - _consistency_extract_run_ids 정규식 변경 금지 (runs/ 패턴이 이미 올바름)
+    - 테스트 oracle을 에이전트가 임의로 변경하는 행위 금지
+    - Phase 7 acceptance 이전에 COMPLETE 선언 금지
+  </forbidden>
+
+  <!-- ===================================================== -->
+  <!-- CONTEXT INJECTION                                       -->
+  <!-- ===================================================== -->
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py (라인 2960-3342: _consistency_* 함수들)</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py (라인 3345-3415: _check_acceptance_readiness)</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py (라인 2795-2815: comments subprocess.run)</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_protocol_consistency.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\core\acceptance\scorers.py (라인 17-111)</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260521-90F4\</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Three-Gate, Option A, Incremental Module Gate 필수.
+      각 MT: module design → module dev → module qa PASS 순서.
+      module integrate PASS 후 done --phase dev.
+      scope_manifest_MT-N.json 각 MT마다 제출.
+      oracle expected.json 수정 금지.
+      subprocess.run에 encoding 추가는 동작 변화 없이 안전.
+    </phase_rules_excerpt>
+    <prev_phase_summary>
+      IMP-20260520-D0BB Protocol Consistency Guard 구현 완료.
+      Phase 8 RCA: 비파일 오탐(RCA-1), scorers 경로 오류(RCA-2),
+      subprocess encoding 누락(RCA-3), 테스트 수 정규식 오류(RCA-4) 발견.
+      이번 파이프라인 IMP-20260521-90F4에서 6개 MT로 수정.
+    </prev_phase_summary>
+  </context_injection>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</step_plan>
