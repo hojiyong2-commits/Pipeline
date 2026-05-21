@@ -451,21 +451,28 @@ class TestOracleCasesV2(unittest.TestCase):
 
 
 class TestListedFilesFilter(unittest.TestCase):
-    """_consistency_listed_files 비파일 오탐 방지 (3개)."""
+    """_consistency_listed_files 비파일 오탐 방지 (3개).
+
+    BUG-20260521-C675: _consistency_listed_files는 (set, bool) 튜플을 반환한다.
+    """
 
     def test_korean_desc_not_extracted(self):
         from pipeline import _consistency_listed_files
-        self.assertEqual(_consistency_listed_files("- 장점: 빠름\n- 단점: 느림\n"), set())
+        files, truncated = _consistency_listed_files("- 장점: 빠름\n- 단점: 느림\n")
+        self.assertEqual(files, set())
+        self.assertFalse(truncated)
 
     def test_command_not_extracted(self):
         from pipeline import _consistency_listed_files
-        self.assertEqual(_consistency_listed_files("- python -m pytest\n"), set())
+        files, truncated = _consistency_listed_files("- python -m pytest\n")
+        self.assertEqual(files, set())
+        self.assertFalse(truncated)
 
     def test_file_with_dot_extracted(self):
         from pipeline import _consistency_listed_files
-        r = _consistency_listed_files("- pipeline.py\n- .bandit\n")
-        self.assertIn("pipeline.py", r)
-        self.assertIn(".bandit", r)
+        files, truncated = _consistency_listed_files("- pipeline.py\n- .bandit\n")
+        self.assertIn("pipeline.py", files)
+        self.assertIn(".bandit", files)
 
 
 class TestTotalCountDistinction(unittest.TestCase):
@@ -492,6 +499,207 @@ class TestTotalCountDistinction(unittest.TestCase):
             latest_ci_run_conclusion="",
         )
         self.assertEqual(result["status"], "PASS")
+
+
+# ---------------------------------------------------------------------------
+# BUG-20260521-C675 회귀 테스트 (10개)
+# AB-1: acceptance packet 정보 부족 false positive 방지 (3개)
+# AB-2: bold/backtick/em dash/colon label 정규화 (4개)
+# AB-3: truncation marker 감지 (3개)
+# ---------------------------------------------------------------------------
+
+import os
+import tempfile
+
+
+class TestAB1AcceptancePacketFalsePositive(unittest.TestCase):
+    """AB-1: advisory 텍스트의 '정보 부족' 문자열이 packet status와 혼동되지 않아야 한다.
+
+    _ACCEPTANCE_PACKET_INSUFFICIENT_PATTERN regex를 직접 테스트한다.
+    _check_acceptance_packet_via_local_file은 환경변수 경유 파일 경로를 사용하므로
+    임시 파일 + PIPELINE_TEST_ACCEPTANCE_PACKET_PATH env로 테스트한다.
+    """
+
+    def _run_local_check(self, packet_content: str) -> dict:
+        """임시 파일에 packet_content를 쓰고 _check_acceptance_packet_via_local_file을 실행한다."""
+        from pipeline import _check_acceptance_packet_via_local_file
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(packet_content)
+            tmp_path = f.name
+        try:
+            orig = os.environ.get("PIPELINE_TEST_ACCEPTANCE_PACKET_PATH")
+            os.environ["PIPELINE_TEST_ACCEPTANCE_PACKET_PATH"] = tmp_path
+            result = _check_acceptance_packet_via_local_file({"pipeline_id": "TEST"})
+            if orig is not None:
+                os.environ["PIPELINE_TEST_ACCEPTANCE_PACKET_PATH"] = orig
+            else:
+                del os.environ["PIPELINE_TEST_ACCEPTANCE_PACKET_PATH"]
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        return result
+
+    def test_advisory_guidance_text_not_flagged(self):
+        """advisory 안내 문구에 '정보 부족'이 포함돼도 판단 정보 상태 선언이 아니면 PASS."""
+        content = (
+            "판단 정보 상태: **판단 가능**\n"
+            "GPT advisory가 정보 부족이면 수동 검토 권고\n"
+        )
+        result = self._run_local_check(content)
+        self.assertNotEqual(result.get("failure_code"), "acceptance_packet_insufficient")
+
+    def test_actual_insufficient_status_flagged(self):
+        """판단 정보 상태: **정보 부족** 형식이면 acceptance_packet_insufficient 반환."""
+        content = "판단 정보 상태: **정보 부족**\n"
+        result = self._run_local_check(content)
+        self.assertEqual(result.get("failure_code"), "acceptance_packet_insufficient")
+
+    def test_no_bold_insufficient_status_flagged(self):
+        """bold 없이 '판단 정보 상태: 정보 부족'도 insufficient로 감지한다."""
+        content = "판단 정보 상태: 정보 부족\n"
+        result = self._run_local_check(content)
+        self.assertEqual(result.get("failure_code"), "acceptance_packet_insufficient")
+
+
+class TestAB2FilePathNormalization(unittest.TestCase):
+    """AB-2: bold/backtick/em dash/colon label이 포함된 file path를 정상 파싱해야 한다."""
+
+    def _base_pr(self, files_section: str) -> str:
+        return (
+            "## 작업 요약\n변경\n\n"
+            "## 사용자가 확인할 결과물\n- pipeline.py\n\n"
+            "## 기대 결과와 실제 결과\n확인\n\n"
+            "## 중요한 선택과 트레이드오프\n없음\n\n"
+            "## 검증\nCI 통과\n\n"
+            + files_section
+        )
+
+    def test_bold_file_path_recognized(self):
+        """**pipeline.py** 형식의 bold file path가 pipeline.py로 정규화된다."""
+        pr_body = self._base_pr("변경 파일:\n- **pipeline.py**\n")
+        result = _check_protocol_consistency(
+            pr_body=pr_body,
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->\n판단 정보 상태: **판단 가능**\n변경 파일:\n- **pipeline.py**\n",
+            pr_changed_files=["pipeline.py"],
+            pr_head_sha="abc1234",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
+
+    def test_backtick_file_path_recognized(self):
+        """`pipeline.py` 형식의 backtick file path가 pipeline.py로 정규화된다."""
+        pr_body = self._base_pr("변경 파일:\n- `pipeline.py`\n")
+        result = _check_protocol_consistency(
+            pr_body=pr_body,
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->\n판단 정보 상태: **판단 가능**\n변경 파일:\n- `pipeline.py`\n",
+            pr_changed_files=["pipeline.py"],
+            pr_head_sha="abc1234",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
+
+    def test_em_dash_description_stripped(self):
+        """pipeline.py — 설명 형식에서 파일명만 추출된다."""
+        pr_body = self._base_pr("변경 파일:\n- pipeline.py — AB-1 수정\n")
+        result = _check_protocol_consistency(
+            pr_body=pr_body,
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->\n판단 정보 상태: **판단 가능**\n변경 파일:\n- pipeline.py — AB-1 수정\n",
+            pr_changed_files=["pipeline.py"],
+            pr_head_sha="abc1234",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
+
+    def test_colon_label_file_path_recognized(self):
+        """'수정됨: pipeline.py' 형식에서 파일명이 추출된다."""
+        pr_body = self._base_pr("변경 파일:\n- 수정됨: pipeline.py\n")
+        result = _check_protocol_consistency(
+            pr_body=pr_body,
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->\n판단 정보 상태: **판단 가능**\n변경 파일:\n- 수정됨: pipeline.py\n",
+            pr_changed_files=["pipeline.py"],
+            pr_head_sha="abc1234",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
+
+
+class TestAB3TruncationMarker(unittest.TestCase):
+    """AB-3: '... 외 N개 파일' truncation marker는 파일명이 아니라 truncation 신호다."""
+
+    def _base_pr(self, files_section: str) -> str:
+        # 사용자가 확인할 결과물 섹션에는 파일명이 아닌 설명만 포함하여
+        # body_listed_files 파싱에 영향을 주지 않도록 한다.
+        return (
+            "## 작업 요약\n변경\n\n"
+            "## 사용자가 확인할 결과물\n수정된 코드 검토 후 승인 부탁드립니다.\n\n"
+            "## 기대 결과와 실제 결과\n확인\n\n"
+            "## 중요한 선택과 트레이드오프\n없음\n\n"
+            "## 검증\nCI 통과\n\n"
+            + files_section
+        )
+
+    def test_truncation_marker_not_treated_as_filename(self):
+        """'... 외 3개 파일' 항목이 파일명으로 처리되지 않는다.
+
+        truncated body에서 일반 비trust-root 파일(README.md) 누락은 허용(PASS)이어야 한다.
+        """
+        pr_body = self._base_pr("변경 파일:\n- pipeline.py\n- tests/test_a.py\n- ... 외 3개 파일\n")
+        result = _check_protocol_consistency(
+            pr_body=pr_body,
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->\n판단 정보 상태: **판단 가능**\n",
+            # body에 나열된 파일은 모두 diff에 포함 (stale_file_description 방지)
+            pr_changed_files=["pipeline.py", "tests/test_a.py", "README.md"],
+            pr_head_sha="abc1234",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        # truncated body이므로 README.md 누락은 허용 — changed_files_mismatch가 아니어야 함
+        self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
+
+    def test_trust_root_missing_still_blocked_when_truncated(self):
+        """truncated PR body라도 trust-root 파일(pipeline.py) 누락은 BLOCKED.
+
+        PR body에 tests/test_a.py와 truncation marker만 있고 pipeline.py가 없을 때,
+        실제 diff에 pipeline.py가 있으면 changed_files_mismatch로 BLOCKED 되어야 한다.
+        검사 F(stale 탐지)를 피하기 위해 body에 나열된 파일은 실제 diff에도 포함해야 한다.
+        """
+        pr_body = self._base_pr("변경 파일:\n- tests/test_a.py\n- ... 외 3개 파일\n")
+        result = _check_protocol_consistency(
+            pr_body=pr_body,
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->\n판단 정보 상태: **판단 가능**\n",
+            # tests/test_a.py도 실제 diff에 포함하여 stale_file_description을 피함
+            pr_changed_files=["pipeline.py", "tests/test_a.py"],
+            pr_head_sha="abc1234",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        self.assertEqual(result["failure_code"], "changed_files_mismatch")
+
+    def test_english_truncation_marker(self):
+        """'and 2 more files' 영문 truncation도 감지된다.
+
+        truncated body에서 비trust-root 파일(tests/test_b.py) 누락은 허용(PASS)이어야 한다.
+        """
+        pr_body = self._base_pr("변경 파일:\n- pipeline.py\n- tests/test_a.py\n- and 2 more files\n")
+        result = _check_protocol_consistency(
+            pr_body=pr_body,
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->\n판단 정보 상태: **판단 가능**\n",
+            # body에 나열된 파일은 모두 diff에 포함 (stale_file_description 방지)
+            pr_changed_files=["pipeline.py", "tests/test_a.py", "tests/test_b.py"],
+            pr_head_sha="abc1234",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        # truncated body이므로 tests/test_b.py 누락은 허용
+        self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
 
 
 if __name__ == "__main__":

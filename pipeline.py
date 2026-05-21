@@ -2694,8 +2694,13 @@ PR_REQUIRED_SECTIONS: List[Any] = [
 
 # Blocker 2: human acceptance packet readiness — GitHub PR 댓글 태그
 _ACCEPTANCE_PACKET_COMMENT_TAG = "<!-- pipeline-human-acceptance-packet -->"
-# 정보 부족 / 판단 가능 상태 문구 (별표 강조 유무 모두 매칭)
-_ACCEPTANCE_PACKET_INSUFFICIENT_MARKER = "정보 부족"
+# 판단 정보 상태: **정보 부족** 또는 판단 정보 상태: 정보 부족 형태를 매칭.
+# 단순 substring "정보 부족"은 false positive를 일으키므로 regex 기반으로 변경.
+# "판단 정보 상태: 정보 부족이면 ..." 같은 안내 문구는 PASS.
+_ACCEPTANCE_PACKET_INSUFFICIENT_MARKER = "정보 부족"  # 레거시 참조용 (삭제 금지)
+_ACCEPTANCE_PACKET_INSUFFICIENT_PATTERN = re.compile(
+    r"판단\s*정보\s*상태\s*:\s*\*{0,2}\s*정보\s*부족\s*\*{0,2}"
+)
 _ACCEPTANCE_PACKET_SUFFICIENT_MARKER = "판단 가능"
 # PR URL → owner/repo 추출용 정규식 (모듈 레벨 1회 컴파일 — Rule D2)
 _PR_URL_REPO_PATTERN = re.compile(
@@ -2872,7 +2877,9 @@ def _check_acceptance_packet_via_github(pr_url: str) -> Dict[str, Any]:
         )
 
     # 정보 부족 우선 검사 (정보 부족이 있으면 판단 가능 문구가 있어도 BLOCKED)
-    if _ACCEPTANCE_PACKET_INSUFFICIENT_MARKER in packet_comment_body:
+    # AB-1: regex 기반 검사 — "판단 정보 상태: 정보 부족" 형식만 매칭
+    # 단순 substring은 "판단 정보 상태가 정보 부족이면..." 같은 안내 문구를 false positive 처리함
+    if _ACCEPTANCE_PACKET_INSUFFICIENT_PATTERN.search(packet_comment_body):
         return _acceptance_blocked(
             "acceptance_packet_insufficient",
             (
@@ -2933,7 +2940,8 @@ def _check_acceptance_packet_via_local_file(state: Dict[str, Any]) -> Dict[str, 
                 packet_text = packet_path.read_text(encoding="utf-8")
             except OSError:
                 break  # 읽기 실패 시 검사 생략
-            if _ACCEPTANCE_PACKET_INSUFFICIENT_MARKER in packet_text:
+            # AB-1: regex 기반 검사 — "판단 정보 상태: 정보 부족" 형식만 매칭
+            if _ACCEPTANCE_PACKET_INSUFFICIENT_PATTERN.search(packet_text):
                 return _acceptance_blocked(
                     "acceptance_packet_insufficient",
                     (
@@ -3015,7 +3023,7 @@ def _consistency_extract_shas(text: str) -> List[str]:
     return found
 
 
-def _consistency_listed_files(text: str) -> set:
+def _consistency_listed_files(text: str) -> "tuple[set, bool]":
     """PR body / packet의 불릿 목록(`- 파일`, `* 파일`)에서 파일명을 추출한다.
 
     불릿 첫 토큰 중 `.`(확장자/숨김파일) 또는 `/`(경로 구분자)를 포함하는
@@ -3023,36 +3031,66 @@ def _consistency_listed_files(text: str) -> set:
     서술/명령 텍스트의 첫 토큰은 파일이 아니므로 제외한다 (비파일 오탐 방지,
     IMP-20260521-90F4 MT-1).
 
+    AB-2 (BUG-20260521-C675): bold 마커(**) 및 em dash(—) 뒤 설명을 정규화한다.
+    AB-3 (BUG-20260521-C675): `...`, `... 외 N개 파일`, `and N more files` 같은
+    truncation marker를 파일명으로 취급하지 않는다.
+
     Args:
         text: 검색 대상 텍스트.
     Returns:
-        불릿 목록 항목에서 추출한 파일명 집합 (`.` 또는 `/` 포함 토큰만).
+        (files, truncated) — 파일명 집합과 truncation 감지 여부.
     """
+    # AB-3: truncation marker 패턴 (파일명으로 취급하지 않음)
+    _TRUNCATION_PATTERN = re.compile(
+        r"^\.\.\.$|^\.{3}\s*외\s*\d+\s*개?\s*파일|^and\s+\d+\s+more\s+files?",
+        re.IGNORECASE,
+    )
     if not text:
-        return set()
+        return set(), False
     files: set = set()
+    truncated = False
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not (line.startswith("- ") or line.startswith("* ")):
             continue
-        # 불릿 기호 제거 후 첫 토큰을 파일 후보로 본다 (괄호 설명 등 제외).
+        # 불릿 기호 제거 후 첫 토큰을 파일 후보로 본다.
         body = line[2:].strip()
         if not body:
             continue
+        # AB-2: bold 마커(**) 제거
+        body = re.sub(r"\*\*", "", body)
         # 백틱 제거
         body = body.replace("`", "")
+        # AB-2: 괄호 안 설명 제거 — `tests/foo.py (추가 10줄)` → `tests/foo.py`
+        body = re.sub(r"\([^)]*\)", "", body).strip()
+        # AB-2: em dash(—) 및 일반 dash(–) 뒤 설명 제거 — `pipeline.py — 전체 파싱 수정`
+        body = re.sub(r"\s*[—–]\s*.*$", "", body).strip()
         tokens = body.split()
         token = tokens[0] if tokens else ""
-        # 후행 콜론 제거 — `- 변경된 파일:` 같은 라벨성 토큰의 콜론 정리.
-        token = token.rstrip(":")
+        # AB-2: colon 뒤 설명 제거 — `- 수정됨: **tests/test_x.py**` → `수정됨:` → 다음 토큰
+        # `수정됨:` 같은 한국어 라벨은 파일이 아니므로 다음 토큰을 시도한다.
+        if token.endswith(":") and len(tokens) > 1:
+            # 라벨 뒤에 오는 첫 번째 파일 후보 토큰을 찾는다
+            token = ""
+            for t in tokens[1:]:
+                t_clean = re.sub(r"\*\*", "", t).rstrip(":").strip()
+                if t_clean and ("." in t_clean or "/" in t_clean):
+                    token = t_clean
+                    break
+        else:
+            # 후행 콜론 제거 — `- 변경된 파일:` 같은 라벨성 토큰의 콜론 정리.
+            token = token.rstrip(":")
         if not token:
             continue
+        # AB-3: truncation marker 감지
+        if _TRUNCATION_PATTERN.search(token):
+            truncated = True
+            continue
         # 파일처럼 보이는 토큰만 인정: 확장자/숨김파일(`.`) 또는 경로(`/`) 포함.
-        # 그 외 서술 텍스트('장점', 'python' 등)는 파일이 아니므로 제외한다.
         if "." not in token and "/" not in token:
             continue
         files.add(token)
-    return files
+    return files, truncated
 
 
 def _check_protocol_consistency(
@@ -3270,11 +3308,11 @@ def _check_protocol_consistency(
     # PR body에 실제 변경되지 않은 파일이 기술된 경우 차단한다.
     # acceptance packet의 파일 목록은 검사 D에서 별도 처리한다.
     changed_set = {str(f).replace("\\", "/") for f in pr_changed_files}
-    body_listed_files = _consistency_listed_files(pr_body)
-    packet_listed_files = (
-        _consistency_listed_files(acceptance_packet_body)
-        if has_packet_tag else set()
-    )
+    body_listed_files, body_truncated = _consistency_listed_files(pr_body)
+    if has_packet_tag:
+        packet_listed_files, packet_truncated = _consistency_listed_files(acceptance_packet_body)
+    else:
+        packet_listed_files, packet_truncated = set(), False
     for listed in body_listed_files:
         normalized = listed.replace("\\", "/")
         if normalized and normalized not in changed_set:
@@ -3300,6 +3338,7 @@ def _check_protocol_consistency(
         # 테스트 파일(tests/test_*.py 등)은 다수 변경 시 모두 나열이 어려우므로
         # 비-테스트 핵심 파일만 검사한다.
         missing_from_body: List[str] = []
+        trust_root_files = {".github/workflows", "pipeline.py", "CLAUDE.md", "tests/", ".claude/agents/"}
         for actual in sorted(changed_set):
             base = actual.rsplit("/", 1)[-1]
             is_test_file = (
@@ -3309,6 +3348,11 @@ def _check_protocol_consistency(
             if is_test_file:
                 continue
             if actual not in body_listed_set:
+                # AB-3: truncation marker가 있으면 일반 파일 누락은 허용.
+                # trust-root 파일은 truncation이 있어도 반드시 명시 필요.
+                is_trust_root = any(actual.startswith(tr) for tr in trust_root_files)
+                if body_truncated and not is_trust_root:
+                    continue  # truncated body에서 일반 파일 누락은 허용
                 missing_from_body.append(actual)
         if missing_from_body:
             return _blocked(
