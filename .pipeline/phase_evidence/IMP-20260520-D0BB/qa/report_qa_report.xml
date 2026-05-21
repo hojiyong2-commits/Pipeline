@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260520-D0BB</pipeline_id>
+  <qa_run_id>qa-83adce6f2f548d6e</qa_run_id>
+  <round>3</round>
+  <fixed_failure_signature>AL:98caca24</fixed_failure_signature>
+
+  <!-- Step 0: Handover 검증 -->
+  <handover_verification>
+    <from>dev-agent</from>
+    <evidence_files>
+      <file>pipeline.py</file>
+      <file>tests/test_protocol_consistency.py</file>
+    </evidence_files>
+    <anti_gaming_read>true</anti_gaming_read>
+    <ui_category>absent — dev-agent handover만 수락</ui_category>
+    <handover_verdict>ACCEPT</handover_verdict>
+  </handover_verification>
+
+  <!-- Step 0-B: anti_gaming_read 검증 -->
+  <anti_gaming_gate>
+    <tag_present>true</tag_present>
+    <tag_value>true</tag_value>
+    <verdict>PASS</verdict>
+  </anti_gaming_gate>
+
+  <!-- Step 0-C: judgment_calls_resolved 검증 -->
+  <judgment_calls_check>
+    <judgment_calls_block>absent — step_plan에 judgment_calls 블록 없음 (P1 질문 1개는 design_confirmation에 기록)</judgment_calls_block>
+    <verdict>PASS (N/A)</verdict>
+  </judgment_calls_check>
+
+  <!-- 카테고리별 검증 -->
+  <category_check>
+    <wa>PASS — subprocess.run을 통한 gh CLI 호출. _collect_pr_consistency_data에서 FileNotFoundError/OSError/json.JSONDecodeError/ValueError 모두 별도 except 블록 처리. JSON 파싱 fallback 구현. subprocess는 HTTP requests가 아니므로 timeout tuple 요건은 N/A이나 오류 분기 4종 모두 구현.</wa>
+    <ui>N-A — category_tags에 UI 없음</ui>
+    <fs>PASS (부분 감점) — _write_consistency_result에서 outpath.write_text() 직접 호출(tempfile+os.replace atomic 미적용). 그러나 pipeline.py 전반의 진단 결과 파일(failure_packet.json, acceptance_result.json 등)이 동일한 직접 write 패턴을 사용하므로 기존 코드베이스와 일관성 있음. 읽기 경로는 없음(FS read N/A). traversal 보호는 미해당(사용자 경로 입력 없음).</fs>
+    <pd>PASS — _check_protocol_consistency는 순수 함수로 완전 분리(subprocess/I/O 없음). Dict[str, Any] 인터페이스 계약 사용. 모듈 분리 우수. God class 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — 6개 인자 전부 None/isinstance 이중 검증 후 TypeError 발생. 빈 텍스트는 return [] 처리. 내부 정규식 매치 실패 시 skip 처리. int() 변환 실패 ValueError → run_id_int=0 fallback. 자동 FAIL 사유 없음.</al>
+    <build>N-A — category_tags에 BUILD 없음</build>
+    <vsce>N-A — category_tags에 VSCE 없음</vsce>
+  </category_check>
+
+  <!-- Compliance Checklist -->
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A — HTTP requests 직접 호출 없음. subprocess.run 호출이므로 HTTP timeout tuple 요건 N/A.</timeout_tuple>
+      <retry_3x>N-A — subprocess 호출이므로 HTTP retry N/A. gh CLI 자체 처리.</retry_3x>
+      <error_branches_4>PASS — FileNotFoundError/OSError, json.JSONDecodeError/ValueError, returncode!=0 분기 모두 구현</error_branches_4>
+      <json_fallback>PASS — json.loads() 호출 모두 try-except로 감싸고 fallback dict 반환</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PARTIAL — _write_consistency_result에서 outpath.write_text() 직접 사용. pipeline.py 기존 진단 파일 쓰기 패턴과 일관성 있으나 tempfile+os.replace 미적용. 감점 대상이나 FAIL 트리거 아님 (user-supplied path가 아닌 내부 고정 경로).</atomic_write>
+      <encoding_fallback>N-A — 이 기능에서 사용자 파일 읽기 없음</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로 없음, 내부 고정 경로 사용</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <!-- Runtime Functional Verification -->
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover.xml에 test_results 블록 존재</execution_check_present>
+    <execution_check_verdict>PASS — python -m pytest tests/test_protocol_consistency.py -v → 20 passed</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — _run_protocol_consistency_check가 cmd_gates에서 pipeline.py:11524에서 실제 호출됨. _check_protocol_consistency가 _run_protocol_consistency_check, _run_protocol_consistency_inline에서 실제 호출됨.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <!-- Dead Code 검사 -->
+  <dead_code_findings>0</dead_code_findings>
+
+  <!-- Duplication 검사 -->
+  <duplication_findings>0</duplication_findings>
+
+  <!-- Blast Radius (C-3) -->
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <c3_cross_verification>
+    <scope_files_declared>2 (pipeline.py, tests/test_protocol_consistency.py)</scope_files_declared>
+    <evidence_files_submitted>2 (pipeline.py, tests/test_protocol_consistency.py)</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff HEAD~1 --name-only 결과: pipeline.py, tests/test_protocol_consistency.py (scope_manifest MT-1,MT-2,MT-3 일치)</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <!-- Micro-task Boundary -->
+  <micro_task_boundary>
+    <mt_id>MT-3 (QA Round 2 FAIL 수정 대상)</mt_id>
+    <scope_declared>tests/test_protocol_consistency.py</scope_declared>
+    <scope_actual>tests/test_protocol_consistency.py</scope_actual>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <verdict>PASS</verdict>
+  </micro_task_boundary>
+
+  <!-- Numeric Score -->
+  <numeric_score>112</numeric_score>
+  <numeric_score_detail>
+    <wa score="17" max="20">WA 카테고리: 오류 분기 4종 + JSON fallback PASS. timeout tuple N/A (subprocess), retry N/A (gh CLI 자체 처리). -3pt (timeout/retry 부분 미충족)</wa>
+    <ui score="20" max="20">N/A — 카테고리 미포함, 만점 처리</ui>
+    <fs score="15" max="20">원자적 쓰기 PARTIAL(-5pt): _write_consistency_result에서 직접 write_text(). 인코딩 fallback N/A. traversal N/A.</fs>
+    <pd score="10" max="10">모듈 분리(5pt): 순수 함수 완전 분리. 인터페이스 계약(5pt): Dict[str, Any] 명시적 반환 타입 선언.</pd>
+    <al score="20" max="20">None/isinstance 이중 검증, ValueError fallback, 빈데이터 처리 전부 PASS</al>
+    <build score="10" max="10">N/A — 카테고리 미포함, 만점 처리</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="112" max="120"/>
+    <percentage>93.3</percentage>
+    <numeric_verdict>PASS (112 &gt;= 96/120)</numeric_verdict>
+  </numeric_score_detail>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+
+  <critical_issues>없음 — 모든 자동 FAIL 조건 미충족</critical_issues>
+
+  <improvement_suggestions>
+    1. _write_consistency_result에서 outpath.write_text() 대신 tempfile+os.replace atomic 패턴(_save() 참고) 적용 시 FS 만점 가능
+    2. WA 카테고리: subprocess.run에 timeout= 인자 추가 시 subprocess 타임아웃 보호 가능
+  </improvement_suggestions>
+
+  <!-- Oracle 검증 -->
+  <oracle_verification>
+    <oracle_count>5</oracle_count>
+    <oracle_case_kinds>normal x3, edge x1, error x1</oracle_case_kinds>
+    <all_passed>true</all_passed>
+    <cases>
+      <case id="normal_run_id_match">PASS</case>
+      <case id="normal_run_id_mismatch_body_packet">PASS</case>
+      <case id="edge_sha_prefix_match">PASS</case>
+      <case id="normal_bandit_stale_description">PASS</case>
+      <case id="error_gh_cli_not_available">PASS</case>
+    </cases>
+  </oracle_verification>
+
+  <!-- 전체 테스트 결과 -->
+  <test_results>
+    <target_tests>python -m pytest tests/test_protocol_consistency.py -v → 20 passed</target_tests>
+    <full_suite>python -m pytest tests/ -v → 320 passed, 2 warnings (cp949 기존 경고 2건)</full_suite>
+    <ruff>ruff check pipeline.py tests/test_protocol_consistency.py → All checks passed!</ruff>
+    <mypy>mypy pipeline.py --ignore-missing-imports → Success: no issues found in 1 source file</mypy>
+    <bandit>bandit pipeline.py -q → Low:72, Medium:9, High:0 (기존 baseline과 동일)</bandit>
+  </test_results>
+</qa_report>
