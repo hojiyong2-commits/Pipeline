@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<build_report>
+  <pipeline_id>IMP-20260522-0C83</pipeline_id>
+  <agent_run_id>build-d367b2e64fdffa73</agent_run_id>
+  <build_timestamp>2026-05-22T11:40:55Z</build_timestamp>
+  <status>N/A</status>
+  <skip_reason>meta-task</skip_reason>
+
+  <section_1_command>
+    <command>N/A</command>
+    <notes>meta-task — pipeline.py + tests/test_pipeline_metrics.py 변경. Python 파일만 변경되었으며 EXE 빌드 대상이 아님.</notes>
+  </section_1_command>
+
+  <section_2_output>
+    <exe_path>N/A</exe_path>
+    <exe_size>N/A</exe_size>
+    <notes>EXE 빌드 없음. 결과물은 pipeline.py 함수 추가 및 테스트 파일.</notes>
+  </section_2_output>
+
+  <section_3_verification>
+    <smoke_test>N/A</smoke_test>
+    <notes>python pipeline.py metrics status 명령으로 기능 검증 가능.</notes>
+  </section_3_verification>
+
+  <section_4_artifacts>
+    <artifact path="pipeline.py" kind="implementation"/>
+    <artifact path="tests/test_pipeline_metrics.py" kind="test"/>
+  </section_4_artifacts>
+
+  <section_5_skip_justification>
+    <task_type>meta-task</task_type>
+    <reason>이번 파이프라인은 pipeline.py에 metrics 수집 기능을 추가하는 meta-task입니다. 사용자에게 배포할 독립 EXE가 없으며, 기능은 pipeline.py CLI를 통해 직접 사용됩니다.</reason>
+  </section_5_skip_justification>
+
+  <section_6_qa_mapping>
+    <qa_report_file>qa_report.xml</qa_report_file>
+    <qa_numeric_score>110</qa_numeric_score>
+    <qa_result>PASS</qa_result>
+    <test_count>20</test_count>
+    <test_passed>20</test_passed>
+  </section_6_qa_mapping>
+</build_report>
