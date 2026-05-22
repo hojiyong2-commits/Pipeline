@@ -1,0 +1,5 @@
+{
+  "new_optional_fields_missing_ok": true,
+  "schema_version": 2,
+  "no_regression": true
+}

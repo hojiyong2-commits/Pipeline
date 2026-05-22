@@ -1,0 +1,37 @@
+{
+  "case_id": "T-005",
+  "case_kind": "normal",
+  "description": "metrics summary 한국어 출력에 필수 6개 섹션 포함 여부",
+  "pipeline_metrics": {
+    "pipeline_id": "IMP-20260522-0C83",
+    "total_elapsed": {
+      "started_at": "2026-05-22T00:10:00Z",
+      "completed_at": "2026-05-22T03:45:00Z",
+      "elapsed_seconds": 12900,
+      "elapsed_human": "3시간 35분 0초"
+    },
+    "phase_elapsed": {
+      "pm": {"elapsed_human": "15분 0초"},
+      "dev": {"elapsed_human": "1시간 15분 0초"},
+      "qa": {"elapsed_human": "30분 0초"}
+    },
+    "gate_elapsed": {
+      "technical": {"status": "PASS", "elapsed_human": "5분 0초"},
+      "oracle": {"status": "PASS", "elapsed_human": "3분 0초"}
+    },
+    "failure_retry_summary": {
+      "total_failure_packets": 2,
+      "most_repeated_failure_code": "ruff_error"
+    },
+    "github_actions_summary": {
+      "status": "completed",
+      "duration_human": "8분 32초"
+    },
+    "bottleneck_summary": {
+      "slowest_phase": "dev",
+      "slowest_gate": "technical",
+      "most_repeated_failure_code": "ruff_error",
+      "total_retry_count": 2
+    }
+  }
+}

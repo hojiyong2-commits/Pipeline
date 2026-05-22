@@ -1,0 +1,12 @@
+{
+  "total_failure_packets": 3,
+  "failure_code_counts": {
+    "ruff_error": 2,
+    "oracle_hash_mismatch": 1
+  },
+  "return_phase_distribution": {
+    "dev": 3
+  },
+  "most_repeated_failure_code": "ruff_error",
+  "most_repeated_failure_code_count": 2
+}
