@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260522-29C1</pipeline_id>
+  <phase>dev</phase>
+  <run_id>dev-00c366601a606f77</run_id>
+  <fix_forward>true</fix_forward>
+  <summary>4 blocker 수정 완료: gate started_at 분리, fallback 제거, acceptance packet metrics 포함</summary>
+  <changes>
+    <change file="pipeline.py">
+      <fix id="1">cmd_done에서 non-PM phase started_at fallback(_now()) 제거. PM만 pipeline_started_at 사용.</fix>
+      <fix id="2">cmd_qa에서 qa started_at fallback(_now()) 제거. 진입 시점 started_at 사용.</fix>
+      <fix id="3a">_set_external_gate에서 started_at 기록 제거 (completed_at만 기록).</fix>
+      <fix id="3b">technical/oracle/acceptance/github_ci gate 핸들러 진입 시점에 started_at 기록 추가.</fix>
+      <fix id="4">gates accept에서 human_acceptance_packet.md에 metrics summary 섹션 추가/갱신.</fix>
+    </change>
+    <change file="tests/test_pipeline_metrics_timestamps.py">
+      <fix id="5">T-008~T-011 통합 테스트 4개 추가 (총 11개 테스트).</fix>
+    </change>
+  </changes>
+  <test_results>11 metrics timestamp tests PASS, 전체 테스트 PASS</test_results>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_pipeline_metrics_timestamps.py</file>
+  </evidence>
+  <scope_declaration>
+    <pipeline_id>IMP-20260522-29C1</pipeline_id>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_pipeline_metrics_timestamps.py</file>
+    </files_to_modify>
+    <forbidden_files>
+      <file>CLAUDE.md</file>
+      <file>.github/workflows/ci.yml</file>
+    </forbidden_files>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline.py::cmd_done, pipeline.py::cmd_qa, pipeline.py::_set_external_gate, pipeline.py::cmd_gates(technical/oracle/acceptance/github_ci handlers), pipeline.py::_format_metrics_summary_ko</target_function>
+    <change_type>bug_fix</change_type>
+    <blast_radius>
+      <files_changed>2</files_changed>
+      <functions_changed>5</functions_changed>
+      <lines_estimated>40</lines_estimated>
+    </blast_radius>
+    <side_effects>
+      <effect>started_at fallback(_now()) 제거로 non-PM phase에서 started_at이 진입 시점 값만 사용됨</effect>
+      <effect>gate 핸들러 진입 시점에 started_at이 기록됨으로써 gate elapsed 계산 정확성 향상</effect>
+      <effect>acceptance packet에 metrics summary 섹션 추가</effect>
+    </side_effects>
+    <dependencies>없음 (기존 함수 수정만)</dependencies>
+    <mt_id>MT-1</mt_id>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_pipeline_metrics_timestamps.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_pipeline_metrics_timestamps.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260522-29C1</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_pipeline_metrics_timestamps.py</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_handover>
