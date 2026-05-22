@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260522-29C1: Pipeline Metrics Timestamp Instrumentation -->
+<!-- PM Planner Agent step_plan — 2026-05-22 -->
+
+<step_plan>
+  <pipeline_id>IMP-20260522-29C1</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: Pipeline Metrics Timestamp Instrumentation</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>PD, AL</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>변경 대상 pipeline.py는 trust-root 파일이며 파이프라인 상태 기록·gate 판정 인프라를 담고 있습니다. timestamp 기록 코드가 기존 gate 판정 로직이나 state 스키마를 잘못 건드리면 모든 파이프라인에 영향이 갑니다. 따라서 HIGH_RISK 프로필로 보수적 수리와 per-phase CI를 적용합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>11</expected_changed_functions>
+      <expected_changed_lines>240</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <total_functions_identified>11</total_functions_identified>
+    <micro_task_count>5</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <split_decision>변경 대상 함수가 11개이며 명백히 책임이 다른 4개 영역(① pipeline lifecycle timestamp 기록, ② phase timestamp 기록, ③ gate timestamp 기록, ④ metrics 출력/포맷/acceptance 연결)으로 분리됨. 함수 3개 이상·파일 영향 큼 → 분할 필수. metrics 읽기 측 함수(_phase_elapsed_summary/_gate_elapsed_summary)는 이미 started_at을 읽도록 작성되어 있어 "쓰기 측"이 핵심 결손. 따라서 쓰기(MT-1~3)와 읽기/표시 보정(MT-4)을 분리하고, 신규 테스트 파일을 MT-5로 격리.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>timestamp 변수의 내부 이름, helper 함수의 정확한 이름, datetime 파싱 코드를 함수마다 복붙할지 공용 helper로 뺄지 같은 코드 취향 질문은 사용자에게 묻지 않았습니다. 기존 pipeline.py가 이미 _now()와 %Y-%m-%dT%H:%M:%SZ 포맷을 표준으로 쓰고 있으므로 그 패턴을 그대로 따르며, 유지보수성 우선 원칙으로 PM이 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업을 "기록(시간 남기기)"과 "표시(metrics 화면)"로 나눠서 5개 작은 단위로 진행해도 될까요?</user_facing_question>
+        <evidence>pipeline.py 안의 metrics 화면 함수(_phase_elapsed_summary, _gate_elapsed_summary)는 이미 started_at 값을 읽도록 만들어져 있습니다. 실제로 비어 있는 부분은 "시작 시간을 어디에도 적지 않는다"는 점입니다. Grep으로 확인한 결과 phase 기록 4곳, gate 기록 1곳(공용 함수), 파이프라인 시작/완료 1곳에 시작 시간 기록이 빠져 있습니다.</evidence>
+        <why_it_matters>기록을 남기는 코드와 화면에 보여주는 코드를 한 덩어리로 합치면, 한 곳에서 실수해도 어디서 틀렸는지 찾기 어렵습니다. 작은 단위로 나누면 각 단위마다 따로 검증할 수 있어 trust-root 파일을 더 안전하게 고칠 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>5개 작은 단위(MT-1 파이프라인 시간, MT-2 phase 시간, MT-3 gate 시간, MT-4 화면/안내, MT-5 테스트)로 나눠서 진행</label>
+            <benefit>각 단위마다 따로 검증하고, 어디서 문제가 생겼는지 바로 찾을 수 있습니다. gate 판정 로직을 건드리지 않았다는 점을 단위별로 확인할 수 있습니다.</benefit>
+            <cost>module gate를 5번 통과해야 하므로 절차가 조금 더 깁니다.</cost>
+          </option>
+          <option id="B">
+            <label>"기록"과 "표시" 2개 큰 단위로만 나눠서 진행</label>
+            <benefit>모듈 검증 횟수가 줄어 절차가 더 빠릅니다.</benefit>
+            <cost>한 단위가 너무 커서(함수 8개 이상) 문제 발생 시 원인 추적이 어렵고, HIGH_RISK 파일에 권장되지 않습니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (5개 micro_task 단위 분할)</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="behavior" mt_id="MT-4">
+        <user_facing_question>최종 ACCEPT/REJECT를 묻기 직전 "최종 확인 안내"에 넣을 metrics 요약은 어느 수준으로 보여드릴까요?</user_facing_question>
+        <evidence>사용자 요청 5번에서 "토큰 사용량과 남은 컨텍스트는 실제 확인 가능할 때만 표시, 불가능하면 확인 불가라고 명시"를 요구했습니다. 코드를 확인한 결과 pipeline.py는 토큰 사용량/남은 컨텍스트 정보를 가지고 있지 않습니다(agent receipt에 tokens_used 필드가 항상 "unavailable"). 반면 시간(전체/phase별/gate별)은 이번 IMP로 실제 기록이 가능해집니다.</evidence>
+        <why_it_matters>안내에 추측한 숫자를 넣으면 사용자가 잘못된 정보로 ACCEPT/REJECT를 판단하게 됩니다. 요청 원칙 1·2번("숫자 추측 금지", "실제 기록된 값만 표시")을 지키려면 표시 범위를 명확히 정해야 합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>시간 정보(전체/phase별/gate별 소요 시간)는 실제 기록값으로 표시하고, 토큰·남은 컨텍스트는 항상 "확인 불가"로 명시</label>
+            <benefit>요청 원칙(추측 금지, 실제값만)을 그대로 지킵니다. 사용자는 시간 정보만큼은 신뢰할 수 있습니다.</benefit>
+            <cost>토큰 사용량은 영원히 "확인 불가"로 남습니다(별도 IMP에서 토큰 계측 인프라가 생기기 전까지).</cost>
+          </option>
+          <option id="B">
+            <label>토큰 사용량을 다른 방법으로 추정해서 함께 표시</label>
+            <benefit>안내가 더 풍부해 보입니다.</benefit>
+            <cost>추정값은 요청 원칙 1번("숫자 추측 금지")을 정면으로 위반합니다. 채택 불가.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (시간은 실제값, 토큰/컨텍스트는 "확인 불가" 고정 표시)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    Input: pipeline_state.json (state dict), agent receipts (state["agent_runs"])
+    Output: pipeline_state.json에 신규 timestamp 필드, python pipeline.py metrics status 화면 출력, gates accept 종료 메시지의 metrics 요약
+    Validation: 모든 timestamp는 _now() 포맷(%Y-%m-%dT%H:%M:%SZ) UTC 사용. 기록 없으면 "확인 불가". malformed 입력은 crash 없이 "확인 불가". 기존 state 필드 삭제·변경 금지.
+  </interface_spec>
+
+  <requirements>
+    pipeline run lifecycle timestamp 추가: pipeline_started_at, pipeline_completed_at, acceptance_requested_at, acceptance_recorded_at, total_elapsed_seconds.
+    phase별 timestamp 추가: PM/Dev/QA/Build 및 Technical/Oracle/GitHub CI/User Acceptance gate의 start/end/elapsed.
+    agent/session별 timestamp: pm-planner, pipeline-manager, dev-agent, qa-agent, build-agent, architect-agent, codex-run 세션의 start_time/end_time/elapsed_seconds를 receipt 또는 metrics source에서 읽을 수 있게.
+    metrics status 출력 개선: 기록값은 실제 시간, 없는 값은 "확인 불가", phase별 소요 시간 표, gate별 소요 시간 표, 반복 failure_code 요약 유지, 전체 elapsed time 표시.
+    final acceptance 요청 메시지에 metrics 요약 연결. 토큰 사용량 남은 컨텍스트는 실제 확인 가능할 때만 표시, 불가능하면 "확인 불가" 명시.
+    숫자 추측 금지. 실제 기록된 timestamp/duration만 표시. 기록 없으면 "확인 불가" 유지.
+    기존 gate 판정 로직(check_gate, _run_technical_gate, _set_external_gate의 status 결정 등) 약화·변경 금지.
+    pipeline_state.json 기존 필드(status, completed_at, evidence, report_file, notes, agent_id 등) 삭제·이름변경 금지. 신규 필드는 추가만.
+    PR hygiene: .pipeline/**, pipeline_contracts/**, pipeline_outputs/**, pipeline_state.json, pipeline_metrics.json, 루트 임시 산출물을 PR에 포함 금지.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.py::_new_state, pipeline.py::cmd_architect, pipeline.py::cmd_gates(accept action)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::cmd_new (calls _new_state)</site>
+        <site>pipeline.py::_ensure_v210_fields (state migration)</site>
+        <site>pipeline.py::_collect_pipeline_metrics (total_elapsed 계산)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _new_state|def cmd_architect|def _ensure_v210_fields|pipeline_created = state.get</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>파이프라인 lifecycle timestamp(pipeline_started_at/completed_at/acceptance_requested_at/acceptance_recorded_at/total_elapsed_seconds)를 _new_state에 추가하고 cmd_architect에서 completed_at·total_elapsed 기록, cmd_gates accept에서 acceptance_requested_at/recorded_at 기록.</change_summary>
+      <line_estimate>55</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>pipeline.py::_empty_phase, pipeline.py::cmd_done(phase 기록부), pipeline.py::cmd_qa(qa phase 기록부)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::cmd_new (calls _new_state then _empty_phase per phase)</site>
+        <site>pipeline.py::_phase_elapsed_summary (읽기 측 — 변경 불필요)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _empty_phase|state\["phases"\]\[phase\]\["completed_at"\]|state\["phases"\]\["qa"\]\["completed_at"\]</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>phase 기록에 started_at 기록 추가. cmd_done은 해당 phase에 진입 시점 또는 done 기록 시점에 started_at이 비어 있으면 채우고 completed_at 기록. cmd_qa도 qa phase started_at 보강. _empty_phase에 started_at:None 필드 추가.</change_summary>
+      <line_estimate>45</line_estimate>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>pipeline.py::_empty_external_gate, pipeline.py::_set_external_gate</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::cmd_gates technical action (calls _set_external_gate)</site>
+        <site>pipeline.py::cmd_gates oracle action (calls _set_external_gate x3)</site>
+        <site>pipeline.py::cmd_gates accept action (calls _set_external_gate)</site>
+        <site>pipeline.py::_new_external_gates (calls _empty_external_gate per gate)</site>
+        <site>pipeline.py::_ensure_external_gates (merges _empty_external_gate)</site>
+        <site>pipeline.py::_gate_elapsed_summary (읽기 측 — 변경 불필요)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _empty_external_gate|def _set_external_gate|gate\["completed_at"\] = _now\(\)</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>gate 기록에 started_at 추가. _empty_external_gate에 started_at:None 필드 추가. _set_external_gate는 gate의 started_at이 비어 있을 때만 기록(첫 진입 시점), completed_at은 매번 갱신. gate 판정 status 결정 로직은 변경 금지.</change_summary>
+      <line_estimate>40</line_estimate>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>pipeline.py::_agent_session_metrics_summary, pipeline.py::_format_metrics_summary_ko, pipeline.py::cmd_gates(accept action 종료 메시지)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::_collect_pipeline_metrics (calls _agent_session_metrics_summary)</site>
+        <site>pipeline.py::cmd_metrics status/summary (calls _format_metrics_summary_ko)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _agent_session_metrics_summary|def _format_metrics_summary_ko|USER ACCEPTANCE GATE</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_format_metrics_summary_ko에 agent/session 소요 시간 섹션 추가(토큰은 "확인 불가" 명시). _agent_session_metrics_summary는 codex-run 세션도 포함하도록 정리. cmd_gates accept 종료 직전에서 _collect_pipeline_metrics + _format_metrics_summary_ko 결과를 "최종 확인 안내 — 소요 시간 요약"으로 출력.</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+    <micro_task id="MT-5">
+      <affected_function>tests/test_pipeline_metrics_timestamps.py (신규 파일 7개 테스트 함수)</affected_function>
+      <target_files>
+        <file>tests/test_pipeline_metrics_timestamps.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pipeline_metrics_timestamps</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 테스트 파일 작성: (1) phase start/end 있으면 elapsed_seconds 계산, (2) timestamp 없으면 "확인 불가", (3) pipeline_started_at/completed_at으로 total_elapsed 계산, (4) gate별 duration 계산, (5) malformed timestamp crash 없이 "확인 불가", (6) acceptance 출력에 metrics summary 포함, (7) 실행 산출물 PR 미포함 hygiene 테스트.</change_summary>
+      <line_estimate>180</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <oracle_spec>
+    <oracle_storage_root>tests/oracles/IMP-20260522-29C1/</oracle_storage_root>
+    <oracle_case id="T-001" kind="normal" verifies="MT-2">
+      <description>phase(pm)에 started_at="2026-05-22T10:00:00Z", completed_at="2026-05-22T10:05:30Z"가 있을 때 _phase_elapsed_summary가 elapsed_seconds=330, elapsed_human="5분 30초"를 반환한다.</description>
+      <input_file>tests/oracles/IMP-20260522-29C1/T-001/input_state.json</input_file>
+      <expected_file>tests/oracles/IMP-20260522-29C1/T-001/expected_phase_elapsed.json</expected_file>
+    </oracle_case>
+    <oracle_case id="T-002" kind="edge" verifies="MT-2,MT-3">
+      <description>phase(dev)에 started_at이 없고 completed_at만 있을 때 _phase_elapsed_summary가 elapsed_seconds="확인 불가", reason="started_at 없음"을 반환한다.</description>
+      <input_file>tests/oracles/IMP-20260522-29C1/T-002/input_state.json</input_file>
+      <expected_file>tests/oracles/IMP-20260522-29C1/T-002/expected_phase_elapsed.json</expected_file>
+    </oracle_case>
+    <oracle_case id="T-003" kind="normal" verifies="MT-1">
+      <description>state에 pipeline_started_at="2026-05-22T09:00:00Z", pipeline_completed_at="2026-05-22T11:30:00Z"가 있을 때 _collect_pipeline_metrics의 total_elapsed가 elapsed_seconds=9000, elapsed_human="2시간 30분 0초"를 반환한다.</description>
+      <input_file>tests/oracles/IMP-20260522-29C1/T-003/input_state.json</input_file>
+      <expected_file>tests/oracles/IMP-20260522-29C1/T-003/expected_total_elapsed.json</expected_file>
+    </oracle_case>
+    <oracle_case id="T-004" kind="normal" verifies="MT-3">
+      <description>external_gates(technical)에 started_at="2026-05-22T10:10:00Z", completed_at="2026-05-22T10:10:45Z", status="PASS"가 있을 때 _gate_elapsed_summary가 elapsed_seconds=45, elapsed_human="45초", status="PASS"를 반환한다.</description>
+      <input_file>tests/oracles/IMP-20260522-29C1/T-004/input_state.json</input_file>
+      <expected_file>tests/oracles/IMP-20260522-29C1/T-004/expected_gate_elapsed.json</expected_file>
+    </oracle_case>
+    <oracle_case id="T-005" kind="edge" verifies="MT-2,MT-3">
+      <description>phase(qa)에 started_at="2026-13-99T99:99:99Z"(malformed), completed_at="2026-05-22T10:00:00Z"가 있을 때 _phase_elapsed_summary가 예외 없이 elapsed_seconds="확인 불가", reason="타임스탬프 파싱 오류"를 반환한다.</description>
+      <input_file>tests/oracles/IMP-20260522-29C1/T-005/input_state.json</input_file>
+      <expected_file>tests/oracles/IMP-20260522-29C1/T-005/expected_phase_elapsed.json</expected_file>
+    </oracle_case>
+  </oracle_spec>
+
+  <acceptance_criteria>
+    phase에 started_at/completed_at이 모두 있으면 _phase_elapsed_summary가 정수 elapsed_seconds와 한국어 elapsed_human을 반환한다.
+    phase에 started_at이 없으면 elapsed_seconds가 "확인 불가"이고 reason 필드에 누락 항목이 명시된다.
+    pipeline_started_at/pipeline_completed_at이 있으면 total_elapsed가 정수 초로 계산된다. 둘 중 하나라도 없으면 "확인 불가".
+    gate에 started_at/completed_at이 모두 있으면 gate_elapsed_seconds가 계산된다. 없으면 "확인 불가".
+    malformed timestamp를 넣어도 예외 없이 "확인 불가"를 반환한다.
+    phases/external_gates/agent_runs가 빈 dict이거나 키가 누락되어도 metrics 함수가 crash 없이 빈 결과를 반환한다.
+    python pipeline.py metrics status가 phase별 소요 시간 표와 gate별 소요 시간 표를 출력한다.
+    gates accept 실행 시 ACCEPT/REJECT 판단 전에 metrics 요약(전체/phase별/gate별 소요 시간)이 출력된다.
+    기존 테스트 python -m pytest -q 전체 통과.
+    tests/test_pipeline_metrics_timestamps.py의 7개 테스트 전부 통과.
+    PR diff에 .pipeline/**, pipeline_contracts/**, pipeline_outputs/**, pipeline_state.json이 포함되지 않는다.
+  </acceptance_criteria>
+
+  <forbidden>
+    기존 gate 판정 로직(check_gate, _run_technical_gate, _set_external_gate의 status 결정, _verify_github_ci_run, _check_acceptance_readiness 등)의 동작·조건 변경 금지.
+    pipeline_state.json 기존 필드 삭제·이름변경 금지. 신규 필드는 추가만 허용.
+    metrics에 실제 기록되지 않은 timestamp/duration을 추정·하드코딩으로 채우는 행위 금지.
+    토큰 사용량·남은 컨텍스트를 추정값으로 표시 금지.
+    MT-1~4 범위 밖 함수 수정 금지.
+    Trust-Root 파일 중 pipeline.py 외 파일 수정 금지.
+    .pipeline/**, pipeline_contracts/**, pipeline_outputs/**, pipeline_state.json을 PR에 포함 금지.
+    oracle 파일을 Dev가 수정하는 행위 금지.
+  </forbidden>
+</step_plan>
