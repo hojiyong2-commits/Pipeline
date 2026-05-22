@@ -117,6 +117,16 @@ jobs:
           PIPELINE_NO_DASHBOARD: "1"
         run: python -m pytest -q
 
+      - name: 프로토콜 일치성 검사
+        # IMP-20260520-D0BB: PR body / 최종 확인 안내 / CI 상태 일치 검증.
+        # consistency 실패가 CI 전체(및 phase attestation)를 막지 않도록
+        # continue-on-error로 두고, 실제 hard block은 gates accept 내부에서 수행.
+        if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python pipeline.py gates consistency --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }}
+
       - name: 자동 검사 증명 파일 만들기
         if: success()
         shell: pwsh
