@@ -1078,7 +1078,10 @@ class ThreeGatePipelineTests(unittest.TestCase):
                 "missing_sections": [],
                 "return_phase": "build",
             }
+            # _validate_pr_title_matches_pipeline도 gh CLI를 호출하므로 mock하여
+            # 가짜 pipeline ID "TMP-ACCEPT-DEPLOY"가 실제 PR 제목과 대조되지 않도록 격리:
             with mock.patch.object(pipeline, "_check_acceptance_readiness", return_value=_pass_readiness), \
+                 mock.patch.object(pipeline, "_validate_pr_title_matches_pipeline"), \
                  mock.patch.object(pipeline, "_require_state", return_value=state), \
                  mock.patch.object(pipeline, "_contract_paths", return_value=paths), \
                  mock.patch.object(pipeline, "_record_snapshot"), \

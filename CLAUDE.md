@@ -456,6 +456,26 @@ Phase 7 always uses external binary gates instead of numeric scoring:
 - 구현 파일: `pipeline.py` (`TEMPORARY_PR_BODY_PATTERNS`, `PR_REQUIRED_SECTIONS`, `_check_acceptance_readiness()`).
 - 테스트: `tests/test_acceptance_readiness_e979.py` (11개 테스트, oracle 5개 케이스).
 
+### Protocol Consistency Guard (IMP-20260520-D0BB)
+
+`gates accept --result ACCEPT` 실행 전 자동으로 PR 판단 자료 간의 일치성을 hard gate로 검증합니다. Final Acceptance Readiness Gate가 "정보 부족"을 막는다면, Protocol Consistency Guard는 "정보 불일치"를 막습니다. 아래 검사 중 하나라도 불일치하면 BLOCKED를 반환하며 ACCEPT가 차단됩니다.
+
+| 검사 항목 | 검사 내용 | failure_code | 해결 방법 |
+|---|---|---|---|
+| A. CI run ID | PR body/packet의 run ID가 실제 latest CI run과 다름 | `stale_run_id` | PR body/packet에서 최신 run ID로 갱신 |
+| B. head SHA | PR body/packet의 head SHA가 실제 PR head SHA와 다름 | `stale_head_sha` | 최신 commit SHA로 갱신 |
+| C. 테스트 수 | PR body와 packet의 테스트 통과 수가 다름 | `test_count_mismatch` | body와 packet을 동일 수치로 맞춤 |
+| D. changed files | PR body/packet에 언급된 파일이 실제 diff와 다름 | `changed_files_mismatch` | 실제 diff와 일치하도록 갱신 |
+| E. trust-root 설명 | trust-root 파일 변경이 PR body에 언급 없음 | `trust_root_change_undocumented` | PR body에 trust-root 파일 변경 명시 |
+| F. stale 설명 | 실제 변경 없는 파일을 변경했다고 설명 | `stale_file_description` | 잘못된 파일 설명 제거 |
+
+- gh CLI 없음 / PR 없음 / JSON 파싱 실패 → BLOCKED (PASS 금지)
+- 7자 이상 SHA prefix 일치는 PASS 허용
+- `python pipeline.py gates consistency --repo hojiyong2-commits/Pipeline --pr <N>` 로 단독 실행 가능
+- BLOCKED 시 `failure_packet.json` 생성 (`return_phase: build`)
+- 구현 파일: `pipeline.py` (`_check_protocol_consistency()`, `_run_protocol_consistency_check()`, `_write_consistency_result()`)
+- 테스트: `tests/test_protocol_consistency.py` (19개 테스트, oracle 5개 케이스)
+
 Any gate FAIL means iterate the failing gate path. The test-harness-agent may diagnose, but must not invent a numeric score. `pipeline.py architect` blocks COMPLETE until all required phase attestations, all four external gates, and actual unresolved GPT advisory CRITICAL findings are clear. No advisory review file means "advisory not run", not "advisory passed". The user acceptance command must receive a real output file, screenshot, or attachment path through `--evidence`; after ACCEPT, the pipeline deploys accepted outputs to `G:\내 드라이브\터미널\<pipeline_id>`.
 
 After `gates accept --result ACCEPT` passes, the next required record command is `python pipeline.py architect --report-file architect_report.xml`. Three-Gate does not auto-complete at Phase 7; Phase 8 must record the final COMPLETE transition after confirming the external gate blockers are empty. `pipeline.py architect` never enters Phase 9 automatically. The architect report must include `<protocol_evolution_decision>`; if protocol or agent-rule evolution is needed, record `required=true` and start a separate IMP pipeline after this pipeline is complete.
