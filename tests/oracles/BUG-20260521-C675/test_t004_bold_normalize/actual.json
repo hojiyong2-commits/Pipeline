@@ -1,0 +1,4 @@
+{
+  "extracted_files": ["pipeline.py", "tests/foo.py", "tests/bar.py"],
+  "description": "bold marker **, backtick, colon 뒤 설명, 괄호 안 추가/삭제 설명 제거 후 파일명 추출"
+}
