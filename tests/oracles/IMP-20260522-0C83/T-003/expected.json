@@ -1,0 +1,18 @@
+{
+  "case_id": "T-003",
+  "case_kind": "normal",
+  "failure_retry_summary": {
+    "total_failure_packets": 4,
+    "failure_code_counts": {
+      "ruff_error": 2,
+      "oracle_hash_mismatch": 1,
+      "pr_body_incomplete": 1
+    },
+    "return_phase_distribution": {
+      "dev": 3,
+      "build": 1
+    },
+    "most_repeated_failure_code": "ruff_error",
+    "most_repeated_failure_code_count": 2
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "case_id": "T-003",
+  "case_kind": "normal",
+  "description": "failure_packet 리스트 파싱 및 failure_code별 카운트 집계",
+  "failure_packets": [
+    {
+      "schema_version": 2,
+      "gate_name": "technical",
+      "failure_code": "ruff_error",
+      "return_phase": "dev"
+    },
+    {
+      "schema_version": 2,
+      "gate_name": "oracle",
+      "failure_code": "oracle_hash_mismatch",
+      "return_phase": "dev"
+    },
+    {
+      "schema_version": 2,
+      "gate_name": "technical",
+      "failure_code": "ruff_error",
+      "return_phase": "dev"
+    },
+    {
+      "schema_version": 2,
+      "gate_name": "acceptance",
+      "failure_code": "pr_body_incomplete",
+      "return_phase": "build"
+    }
+  ]
+}
