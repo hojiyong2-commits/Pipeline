@@ -1,0 +1,22 @@
+{
+  "case_id": "T-002",
+  "case_kind": "edge",
+  "description": "phase started_at 또는 completed_at이 없을 때 확인 불가 반환",
+  "phases": {
+    "pm": {
+      "status": "DONE",
+      "started_at": null,
+      "completed_at": "2026-05-22T00:25:00Z"
+    },
+    "dev": {
+      "status": "DONE",
+      "started_at": "2026-05-22T00:30:00Z",
+      "completed_at": null
+    },
+    "qa": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null
+    }
+  }
+}

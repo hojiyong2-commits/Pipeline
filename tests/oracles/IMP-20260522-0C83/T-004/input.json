@@ -1,0 +1,11 @@
+{
+  "case_id": "T-004",
+  "case_kind": "edge",
+  "description": "GitHub Actions API 조회 실패 시 unavailable 처리",
+  "github_state": {
+    "api_reachable": false,
+    "error": "ConnectionError: Failed to connect to api.github.com"
+  },
+  "repo": "hojiyong2-commits/Pipeline",
+  "run_id": null
+}

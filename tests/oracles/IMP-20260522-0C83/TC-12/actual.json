@@ -1,0 +1,12 @@
+{
+  "r1": {
+    "agent_id": "dev-agent",
+    "phase": "dev",
+    "status": "COMPLETED",
+    "started_at": "2026-05-22T00:30:00Z",
+    "completed_at": "2026-05-22T01:45:00Z",
+    "tokens_used": "unavailable",
+    "elapsed_human": "1시간 15분 0초",
+    "elapsed_seconds": 4500
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "status": "확인 불가",
+  "run_id": "확인 불가",
+  "url": "확인 불가",
+  "conclusion": "확인 불가",
+  "started_at": "확인 불가",
+  "completed_at": "확인 불가",
+  "duration_seconds": "확인 불가",
+  "duration_human": "확인 불가",
+  "elapsed_seconds": "확인 불가",
+  "elapsed_human": "확인 불가",
+  "commit_sha": "확인 불가",
+  "workflow_name": "확인 불가",
+  "unavailable_reason": "GitHub Actions API 조회 실패"
+}

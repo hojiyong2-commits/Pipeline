@@ -1,0 +1,27 @@
+{
+  "case_id": "T-002",
+  "case_kind": "edge",
+  "phase_elapsed": {
+    "pm": {
+      "started_at": null,
+      "completed_at": "2026-05-22T00:25:00Z",
+      "elapsed_seconds": "확인 불가",
+      "elapsed_human": "확인 불가",
+      "reason": "started_at 없음"
+    },
+    "dev": {
+      "started_at": "2026-05-22T00:30:00Z",
+      "completed_at": null,
+      "elapsed_seconds": "확인 불가",
+      "elapsed_human": "확인 불가",
+      "reason": "completed_at 없음"
+    },
+    "qa": {
+      "started_at": null,
+      "completed_at": null,
+      "elapsed_seconds": "확인 불가",
+      "elapsed_human": "확인 불가",
+      "reason": "started_at 없음, completed_at 없음"
+    }
+  }
+}

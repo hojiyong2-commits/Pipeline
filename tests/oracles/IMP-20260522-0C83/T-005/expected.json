@@ -1,0 +1,16 @@
+{
+  "case_id": "T-005",
+  "case_kind": "normal",
+  "required_sections_present": [
+    "전체 소요 시간",
+    "Phase별 소요 시간",
+    "Gate별 상태 및 소요 시간",
+    "실패/재시도 요약",
+    "GitHub Actions 요약",
+    "병목 요약"
+  ],
+  "all_sections_present": true,
+  "language": "korean",
+  "unavailable_values_shown_explicitly": true,
+  "no_estimated_values": true
+}

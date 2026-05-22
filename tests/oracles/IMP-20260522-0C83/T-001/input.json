@@ -1,0 +1,17 @@
+{
+  "case_id": "T-001",
+  "case_kind": "normal",
+  "description": "phase start/end 타임스탬프가 모두 있을 때 elapsed 계산 정확성",
+  "phases": {
+    "pm": {
+      "status": "DONE",
+      "started_at": "2026-05-22T00:10:00Z",
+      "completed_at": "2026-05-22T00:25:00Z"
+    },
+    "dev": {
+      "status": "DONE",
+      "started_at": "2026-05-22T00:30:00Z",
+      "completed_at": "2026-05-22T01:45:00Z"
+    }
+  }
+}

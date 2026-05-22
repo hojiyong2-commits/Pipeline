@@ -1,0 +1,9 @@
+{
+  "technical": {
+    "status": "PASS",
+    "started_at": "2026-05-22T02:00:00Z",
+    "completed_at": "2026-05-22T02:05:00Z",
+    "elapsed_seconds": 300,
+    "elapsed_human": "5분 0초"
+  }
+}
