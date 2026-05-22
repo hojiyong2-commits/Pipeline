@@ -13882,7 +13882,7 @@ def _github_actions_duration_summary(repo: Optional[str], run_id: Optional[str])
         elapsed_human: Any = "확인 불가"
         if started and completed:
             try:
-                from datetime import datetime, timezone
+                from datetime import datetime
                 t_start = datetime.fromisoformat(started.replace("Z", "+00:00"))
                 t_end = datetime.fromisoformat(completed.replace("Z", "+00:00"))
                 elapsed_sec = int((t_end - t_start).total_seconds())
@@ -14166,13 +14166,13 @@ def cmd_metrics(args: "argparse.Namespace") -> None:
         pr = getattr(args, "pr", None)
         output_path = getattr(args, "output", "pipeline_metrics.json")
         metrics = _collect_pipeline_metrics(state, repo=repo, pr=pr)
-        out = pathlib.Path(output_path)
+        out = Path(output_path)
         out.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
         print(GREEN(f"  [METRICS COLLECT] 수집 완료: {out}"))
         print(json.dumps(metrics, indent=2, ensure_ascii=False))
     elif sub == "summary":
         input_path = getattr(args, "input", "pipeline_metrics.json")
-        in_file = pathlib.Path(input_path)
+        in_file = Path(input_path)
         if not in_file.exists():
             _die(f"[METRICS ERROR] 입력 파일 없음: {input_path}")
         metrics = json.loads(in_file.read_text(encoding="utf-8"))
