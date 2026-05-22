@@ -1,0 +1,5 @@
+{
+  "is_insufficient_status_line": true,
+  "expected_blocked": true,
+  "description": "판단 정보 상태: **정보 부족** 는 상태 선언 라인이므로 BLOCKED 판정"
+}

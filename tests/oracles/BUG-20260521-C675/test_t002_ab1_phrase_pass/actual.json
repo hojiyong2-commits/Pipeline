@@ -1,0 +1,5 @@
+{
+  "is_insufficient_status_line": false,
+  "expected_blocked": false,
+  "description": "안내 문구의 정보 부족은 상태 선언이 아니므로 PASS. 판단 가능 선언이 있으면 PASS."
+}

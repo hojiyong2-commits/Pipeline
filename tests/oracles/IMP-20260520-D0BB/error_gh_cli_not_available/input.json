@@ -1,0 +1,4 @@
+{
+  "simulate_error": "FileNotFoundError",
+  "error_message": "gh CLI를 찾을 수 없습니다"
+}
