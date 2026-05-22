@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "TEST-004",
+  "external_gates": {
+    "technical": {
+      "status": "PASS",
+      "started_at": "2026-05-22T10:10:00Z",
+      "completed_at": "2026-05-22T10:10:45Z"
+    }
+  }
+}

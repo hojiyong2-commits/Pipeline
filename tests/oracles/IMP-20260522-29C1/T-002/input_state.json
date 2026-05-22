@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "TEST-002",
+  "phases": {
+    "dev": {
+      "status": "DONE",
+      "started_at": null,
+      "completed_at": "2026-05-22T10:00:00Z"
+    }
+  }
+}

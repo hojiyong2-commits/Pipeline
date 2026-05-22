@@ -1,0 +1,6 @@
+{
+  "phase": "qa",
+  "elapsed_seconds": "확인 불가",
+  "reason": "타임스탬프 파싱 오류",
+  "status": "PASS"
+}

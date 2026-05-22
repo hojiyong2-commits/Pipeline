@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "TEST-005",
+  "phases": {
+    "qa": {
+      "status": "PASS",
+      "started_at": "2026-13-99T99:99:99Z",
+      "completed_at": "2026-05-22T10:00:00Z"
+    }
+  }
+}

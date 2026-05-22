@@ -2076,6 +2076,9 @@ def _generate_id(pipeline_type: str) -> str:
 def _empty_phase(name: str) -> Dict[str, Any]:
     return {
         "status":         "PENDING",
+        # IMP-20260522-29C1 MT-2: phase 시작 시점. metrics status의
+        # phase_elapsed 계산에 사용. cmd_done/cmd_qa에서 채워진다.
+        "started_at":     None,
         "completed_at":   None,
         "evidence":       None,
         "notes":          [],
@@ -2089,6 +2092,9 @@ def _empty_phase(name: str) -> Dict[str, Any]:
 def _empty_external_gate() -> Dict[str, Any]:
     return {
         "status": "PENDING",
+        # IMP-20260522-29C1 MT-3: gate started_at 추가. _gate_elapsed_summary에서
+        # started_at/completed_at을 사용하여 실제 gate 소요 시간을 계산한다.
+        "started_at": None,
         "completed_at": None,
         "evidence": None,
         "report_file": None,
@@ -2263,6 +2269,13 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
         "description":   description,
         "created_at":    _now(),
         "updated_at":    _now(),
+        # IMP-20260522-29C1 MT-1: pipeline lifecycle timestamps.
+        # metrics status의 total_elapsed 계산을 위해 명시적 시작/종료 시점을 기록.
+        "pipeline_started_at": _now(),    # 파이프라인 최초 생성 시점
+        "pipeline_completed_at": None,    # cmd_architect COMPLETE 시 기록
+        "acceptance_requested_at": None,  # cmd_gates accept 시작 시 기록
+        "acceptance_recorded_at": None,   # ACCEPT PASS 기록 직후 기록
+        "total_elapsed_seconds": None,    # COMPLETE 시 (completed - started) 초
         "current_phase": "pm",
         "blocked":       False,
         "blocked_reason": None,
@@ -2327,6 +2340,19 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     state["phase_attestations"] = _ensure_phase_attestations(state)
     state["phase_attestations"]["enabled"] = True
     state["module_gates"] = _ensure_module_gates(state)
+    # IMP-20260522-29C1 MT-1: pipeline lifecycle timestamps 마이그레이션 (idempotent).
+    # 구버전 state에는 이 5개 필드가 없으므로 기본값을 채운다.
+    # 기존 파이프라인은 pipeline_started_at을 created_at으로 대체한다.
+    if "pipeline_started_at" not in state:
+        state["pipeline_started_at"] = state.get("created_at")
+    if "pipeline_completed_at" not in state:
+        state["pipeline_completed_at"] = None
+    if "acceptance_requested_at" not in state:
+        state["acceptance_requested_at"] = None
+    if "acceptance_recorded_at" not in state:
+        state["acceptance_recorded_at"] = None
+    if "total_elapsed_seconds" not in state:
+        state["total_elapsed_seconds"] = None
     return state
 
 
@@ -5337,6 +5363,16 @@ def cmd_done(args: argparse.Namespace) -> None:
             report_file,
         )
 
+    # IMP-20260522-29C1 MT-2: phase started_at fallback.
+    # pm phase는 pipeline_started_at을 시작 시점으로 사용한다.
+    # 그 외 phase는 started_at이 비어 있으면 done 시점을 best-effort로 기록한다.
+    if not state["phases"][phase].get("started_at"):
+        if phase == "pm":
+            state["phases"][phase]["started_at"] = (
+                state.get("pipeline_started_at") or state.get("created_at")
+            )
+        else:
+            state["phases"][phase]["started_at"] = _now()
     state["phases"][phase]["status"]       = "DONE"
     state["phases"][phase]["completed_at"] = _now()
     state["phases"][phase]["evidence"]     = evidence
@@ -5487,6 +5523,10 @@ def cmd_qa(args: argparse.Namespace) -> None:
         report_file,
     )
 
+    # IMP-20260522-29C1 MT-2: qa phase started_at fallback.
+    # check --phase qa에서 기록되지 않았으면 결과 기록 시점을 best-effort로 채운다.
+    if not state["phases"]["qa"].get("started_at"):
+        state["phases"]["qa"]["started_at"] = _now()
     state["phases"]["qa"]["status"]       = result
     state["phases"]["qa"]["completed_at"] = _now()
     state["phases"]["qa"]["evidence"]     = getattr(args, "agent_id", None)
@@ -6022,6 +6062,20 @@ def cmd_architect(args: argparse.Namespace) -> None:
                 + "; ".join(external_blockers)
             )
         # External gate PASS path: 파이프라인 정상 완료
+        # IMP-20260522-29C1 MT-1: 파이프라인 종료 시점과 전체 소요 시간 기록.
+        state["pipeline_completed_at"] = _now()
+        _ts_start = state.get("pipeline_started_at") or state.get("created_at")
+        if _ts_start:
+            try:
+                from datetime import datetime, timezone
+                _fmt = "%Y-%m-%dT%H:%M:%SZ"
+                _t0 = datetime.strptime(_ts_start, _fmt).replace(tzinfo=timezone.utc)
+                _t1 = datetime.strptime(
+                    state["pipeline_completed_at"], _fmt
+                ).replace(tzinfo=timezone.utc)
+                state["total_elapsed_seconds"] = int((_t1 - _t0).total_seconds())
+            except (ValueError, TypeError):
+                state["total_elapsed_seconds"] = None
         state["current_phase"] = "COMPLETE"
         # COMPLETE is a Phase 8 transition; protocol evolution is a separate IMP follow-up.
         state["terminal_state"] = "COMPLETE"
@@ -9934,6 +9988,10 @@ def _set_external_gate(
     state["external_gates"] = _ensure_external_gates(state)
     gate = state["external_gates"][gate_name]
     gate["status"] = status
+    # IMP-20260522-29C1 MT-3: gate started_at이 비어 있으면 completed_at과 동일 시점으로
+    # best-effort 기록. gate가 순간 완료되거나 이전에 started_at이 기록된 경우 모두 처리.
+    if not gate.get("started_at"):
+        gate["started_at"] = _now()
     gate["completed_at"] = _now()
     gate["evidence"] = evidence
     gate["report_file"] = report_file
@@ -11642,10 +11700,18 @@ def cmd_gates(args: argparse.Namespace) -> None:
             report_file=str(paths["user_validation"]),
             note=args.notes,
         )
+        # IMP-20260522-29C1 MT-1: acceptance 요청/기록 시점 저장.
+        # acceptance_requested_at은 accept 명령이 readiness/consistency gate를
+        # 통과하고 ACCEPT/REJECT를 실제로 기록하는 시점에 1회 기록한다.
+        if not state.get("acceptance_requested_at"):
+            state["acceptance_requested_at"] = _now()
         state["phases"]["harness"]["status"] = gate_status
         state["phases"]["harness"]["completed_at"] = _now()
         state["phases"]["harness"]["evidence"] = "three_gate_user_acceptance"
         state["phases"]["harness"]["report_file"] = str(paths["user_validation"])
+        if gate_status == "PASS":
+            # ACCEPT가 성공적으로 기록된 직후 시점.
+            state["acceptance_recorded_at"] = _now()
         if deployment:
             state["deployment"] = deployment
         if gate_status != "PASS":
@@ -11675,6 +11741,15 @@ def cmd_gates(args: argparse.Namespace) -> None:
         _log_event(state, f"user acceptance gate {gate_status}")
         _record_snapshot(state, "harness", None)
         _save(state)
+        # IMP-20260522-29C1 MT-4: gates accept 완료 시 메트릭 요약 출력
+        try:
+            _metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state))
+            print("\n" + "-" * 60)
+            print("[ 최종 확인 안내 — 소요 시간 요약 ]")
+            print(_metrics_str)
+            print("-" * 60)
+        except Exception:
+            pass
         color = GREEN if gate_status == "PASS" else RED
         print(color(f"\n[USER ACCEPTANCE GATE {gate_status}]"))
         print(f"  report: {paths['user_validation']}")
@@ -14052,6 +14127,18 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
         lines.append("  확인 불가")
     lines.append("")
 
+    # IMP-20260522-29C1 MT-4: 섹션 7 — 에이전트/세션별 소요 시간
+    lines.append("[ 에이전트/세션별 소요 시간 ]")
+    agent_sessions = metrics.get("agent_sessions", {})
+    if isinstance(agent_sessions, dict) and agent_sessions:
+        for _run_id, session in agent_sessions.items():
+            if isinstance(session, dict):
+                agent_id = session.get("agent_id", "확인 불가")
+                elapsed = session.get("elapsed_human", "확인 불가")
+                lines.append(f"  {agent_id}: {elapsed}")
+    lines.append("  (토큰 사용량: 확인 불가)")
+    lines.append("")
+
     return "\n".join(lines)
 
 
@@ -14086,19 +14173,21 @@ def _collect_pipeline_metrics(
     # agent session
     agent_sessions = _agent_session_metrics_summary(state)
 
-    # total elapsed (pipeline start → last completed phase)
-    pipeline_created = state.get("created_at")
-    pipeline_updated = state.get("updated_at")
+    # total elapsed (pipeline start → completion)
+    # IMP-20260522-29C1 MT-1: 명시적 lifecycle 필드를 우선 사용하고,
+    # 없으면 기존 created_at/updated_at로 fallback (구버전 state 호환).
+    pipeline_created = state.get("pipeline_started_at") or state.get("created_at")
+    pipeline_completed = state.get("pipeline_completed_at") or state.get("updated_at")
     total_elapsed: Dict[str, Any] = {
         "started_at": pipeline_created or "확인 불가",
-        "completed_at": pipeline_updated or "확인 불가",
+        "completed_at": pipeline_completed or "확인 불가",
     }
-    if pipeline_created and pipeline_updated:
+    if pipeline_created and pipeline_completed:
         try:
             from datetime import datetime, timezone
             fmt = "%Y-%m-%dT%H:%M:%SZ"
             t_start = datetime.strptime(pipeline_created, fmt).replace(tzinfo=timezone.utc)
-            t_end = datetime.strptime(pipeline_updated, fmt).replace(tzinfo=timezone.utc)
+            t_end = datetime.strptime(pipeline_completed, fmt).replace(tzinfo=timezone.utc)
             elapsed_sec = int((t_end - t_start).total_seconds())
             total_elapsed["elapsed_seconds"] = elapsed_sec
             hours, remainder = divmod(elapsed_sec, 3600)
