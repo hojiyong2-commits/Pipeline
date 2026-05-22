@@ -1,0 +1,5 @@
+{
+  "extracted_files": ["pipeline.py"],
+  "truncated": true,
+  "description": "... 외 N개 파일 및 and N more files 패턴은 파일명으로 오인하지 않음"
+}
