@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-22T04:52:03Z",
+  "generated_at": "2026-05-22T04:52:35Z",
   "pipeline_id": "IMP-20260522-0C83",
   "phase": "dev",
   "phase_status": "DONE",
@@ -18,9 +18,9 @@
     "agent_id": "dev-agent",
     "status": "COMPLETED",
     "output_file": "dev_handover.xml",
-    "output_sha256": "52383f57aa0a99508bbda6f9aa235962ac7debc01ee5d55cd07008649de4828b",
+    "output_sha256": "935f0eb317cde272678981d0a824d747189ae3ac4af5ef3ff410157493e1d2bc",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260522-0C83/dev/agent_receipt_dev-a69bd8788ca4639c.json",
-    "receipt_sha256": "67bfc23178be7c4176416600712662a37ec0dd0a69e98d2dd8f98fa49b0b9edc",
+    "receipt_sha256": "0fa490251644a57fa15a1cbe008832cc2f51dc38d1fb8d468a6dfae0dd217c00",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260522-0C83\\dev\\dev-a69bd8788ca4639c.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260522-0C83\\dev\\dev-a69bd8788ca4639c.json",
       "path": ".pipeline/phase_evidence/IMP-20260522-0C83/dev/agent_receipt_dev-a69bd8788ca4639c.json",
-      "sha256": "67bfc23178be7c4176416600712662a37ec0dd0a69e98d2dd8f98fa49b0b9edc",
+      "sha256": "0fa490251644a57fa15a1cbe008832cc2f51dc38d1fb8d468a6dfae0dd217c00",
       "size_bytes": 502,
       "requires_force_add": true
     },
@@ -38,16 +38,16 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/IMP-20260522-0C83/dev/report_dev_handover.xml",
-      "sha256": "52383f57aa0a99508bbda6f9aa235962ac7debc01ee5d55cd07008649de4828b",
-      "size_bytes": 2150,
+      "sha256": "935f0eb317cde272678981d0a824d747189ae3ac4af5ef3ff410157493e1d2bc",
+      "size_bytes": 2100,
       "requires_force_add": true
     },
     {
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260522-0C83/dev/scope_manifest_scope_manifest.json",
-      "sha256": "1f5b96edc041d9a86c82720b8e5983d5d7fc9e1233164bde6ba89d6568ae3e53",
-      "size_bytes": 1082,
+      "sha256": "5d8f7fd7e09b99364b7ff0392cf445422dc62d9645bf97d0b49a1b6a98f9aafc",
+      "size_bytes": 1042,
       "requires_force_add": true
     }
   ],
