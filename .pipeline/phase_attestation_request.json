@@ -1,67 +1,48 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-22T14:02:24Z",
+  "generated_at": "2026-05-22T14:10:18Z",
   "pipeline_id": "IMP-20260522-29C1",
-  "phase": "dev",
-  "phase_status": "DONE",
-  "commit_hint": "7bba727975e80449a9b764dbcb6ef8fc4c76b0f5",
+  "phase": "qa",
+  "phase_status": "PASS",
+  "commit_hint": "448a1ac634be6c071a7ef35fabcb0674db0de31d",
   "state": {
-    "current_phase": "qa",
-    "phase_completed_at": "2026-05-22T13:38:03Z",
-    "report_file": "dev_handover.xml",
-    "evidence": "pipeline.py,tests/test_pipeline_metrics_timestamps.py"
+    "current_phase": "sec",
+    "phase_completed_at": "2026-05-22T14:10:09Z",
+    "report_file": "qa_report.xml",
+    "evidence": null
   },
   "agent_run": {
-    "run_id": "dev-5e0822465552350d",
-    "phase": "dev",
-    "agent_id": "dev-agent",
+    "run_id": "qa-acff332ef974e9df",
+    "phase": "qa",
+    "agent_id": "qa-agent",
     "status": "COMPLETED",
-    "output_file": "dev_handover.xml",
-    "output_sha256": "935f0eb317cde272678981d0a824d747189ae3ac4af5ef3ff410157493e1d2bc",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260522-29C1/dev/agent_receipt_dev-5e0822465552350d.json",
-    "receipt_sha256": "e5884076080751996ebd5fbad0c636afa38ab5b44d350c58421dcbd73a2f7418",
-    "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260522-29C1\\dev\\dev-5e0822465552350d.json"
+    "output_file": "qa_report.xml",
+    "output_sha256": "e23027973387526c47b6f4472de8790e90708b7545b88d40c564eb211edc0131",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260522-29C1/qa/agent_receipt_qa-acff332ef974e9df.json",
+    "receipt_sha256": "945301bc8b89fc076208e8adb9da400c10e3cd6c73198437bc837999329436f2",
+    "used_by_phase": "qa",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260522-29C1\\qa\\qa-acff332ef974e9df.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260522-29C1\\dev\\dev-5e0822465552350d.json",
-      "path": ".pipeline/phase_evidence/IMP-20260522-29C1/dev/agent_receipt_dev-5e0822465552350d.json",
-      "sha256": "e5884076080751996ebd5fbad0c636afa38ab5b44d350c58421dcbd73a2f7418",
-      "size_bytes": 502,
-      "requires_force_add": false
+      "source": ".pipeline\\agent_receipts\\IMP-20260522-29C1\\qa\\qa-acff332ef974e9df.json",
+      "path": ".pipeline/phase_evidence/IMP-20260522-29C1/qa/agent_receipt_qa-acff332ef974e9df.json",
+      "sha256": "945301bc8b89fc076208e8adb9da400c10e3cd6c73198437bc837999329436f2",
+      "size_bytes": 496,
+      "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "dev_handover.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260522-29C1/dev/report_dev_handover.xml",
-      "sha256": "935f0eb317cde272678981d0a824d747189ae3ac4af5ef3ff410157493e1d2bc",
-      "size_bytes": 2100,
-      "requires_force_add": false
-    },
-    {
-      "label": "scope_manifest",
-      "source": "scope_manifest.json",
-      "path": ".pipeline/phase_evidence/IMP-20260522-29C1/dev/scope_manifest_scope_manifest.json",
-      "sha256": "9482daa9eb6d9a79c1e8c3cf807a118c8122bf2dfda456157f383079a9ecff51",
-      "size_bytes": 1224,
-      "requires_force_add": false
+      "source": "qa_report.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260522-29C1/qa/report_qa_report.xml",
+      "sha256": "e23027973387526c47b6f4472de8790e90708b7545b88d40c564eb211edc0131",
+      "size_bytes": 3190,
+      "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "ace567007b4878a5de84556dec607ae14bcc708a09267e11621c9f5e4c989e8f",
-      "size_bytes": 634230
-    },
-    {
-      "path": "tests/test_pipeline_metrics_timestamps.py",
-      "sha256": "88f82b96e583a35bfae2a5e631404b7502118ee0e9caf809a0dae9fead66ab08",
-      "size_bytes": 7866
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
