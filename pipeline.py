@@ -5363,16 +5363,14 @@ def cmd_done(args: argparse.Namespace) -> None:
             report_file,
         )
 
-    # IMP-20260522-29C1 MT-2: phase started_at fallback.
+    # IMP-20260522-29C1 MT-2 (fix-forward): phase started_at fallback.
     # pm phase는 pipeline_started_at을 시작 시점으로 사용한다.
-    # 그 외 phase는 started_at이 비어 있으면 done 시점을 best-effort로 기록한다.
-    if not state["phases"][phase].get("started_at"):
-        if phase == "pm":
-            state["phases"][phase]["started_at"] = (
-                state.get("pipeline_started_at") or state.get("created_at")
-            )
-        else:
-            state["phases"][phase]["started_at"] = _now()
+    # 그 외 phase는 check --phase 시점에 started_at이 기록되어야 한다.
+    # done 시점에 fallback으로 _now()를 기록하면 elapsed가 ≈0이 되므로 제거한다.
+    if not state["phases"]["pm"].get("started_at") and phase == "pm":
+        state["phases"]["pm"]["started_at"] = (
+            state.get("pipeline_started_at") or state.get("created_at")
+        )
     state["phases"][phase]["status"]       = "DONE"
     state["phases"][phase]["completed_at"] = _now()
     state["phases"][phase]["evidence"]     = evidence
@@ -5523,10 +5521,9 @@ def cmd_qa(args: argparse.Namespace) -> None:
         report_file,
     )
 
-    # IMP-20260522-29C1 MT-2: qa phase started_at fallback.
-    # check --phase qa에서 기록되지 않았으면 결과 기록 시점을 best-effort로 채운다.
-    if not state["phases"]["qa"].get("started_at"):
-        state["phases"]["qa"]["started_at"] = _now()
+    # IMP-20260522-29C1 MT-2 (fix-forward): qa phase started_at.
+    # check --phase qa 시점에 started_at이 기록되어야 한다.
+    # qa 결과 기록 시점에 fallback으로 _now()를 쓰면 elapsed ≈ 0이 되므로 제거한다.
     state["phases"]["qa"]["status"]       = result
     state["phases"]["qa"]["completed_at"] = _now()
     state["phases"]["qa"]["evidence"]     = getattr(args, "agent_id", None)
@@ -9988,10 +9985,9 @@ def _set_external_gate(
     state["external_gates"] = _ensure_external_gates(state)
     gate = state["external_gates"][gate_name]
     gate["status"] = status
-    # IMP-20260522-29C1 MT-3: gate started_at이 비어 있으면 completed_at과 동일 시점으로
-    # best-effort 기록. gate가 순간 완료되거나 이전에 started_at이 기록된 경우 모두 처리.
-    if not gate.get("started_at"):
-        gate["started_at"] = _now()
+    # IMP-20260522-29C1 fix-forward: started_at은 각 gate 핸들러의 진입 시점에 기록한다.
+    # 이 함수는 completed_at만 기록한다. started_at fallback(_now())을 여기서 쓰면
+    # completed_at과 동일 시점이 되어 elapsed ≈ 0이 된다.
     gate["completed_at"] = _now()
     gate["evidence"] = evidence
     gate["report_file"] = report_file
@@ -11318,6 +11314,12 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 )
                 _save(state)
                 _die(_codex_pr_gate_check)
+        # IMP-20260522-29C1 fix-forward: technical gate 시작 시점을 명령 진입 직후에 기록한다.
+        # _set_external_gate() 호출 시점이 아니라 여기서 기록해야 실제 소요 시간이 측정된다.
+        _tg = state.setdefault("external_gates", {}).setdefault("technical", {})
+        if not _tg.get("started_at"):
+            _tg["started_at"] = _now()
+            _save(state)
         strict_tools = not bool(getattr(args, "relaxed_tools", False))
         if bool(getattr(args, "strict_tools", False)):
             strict_tools = True
@@ -11391,6 +11393,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
         technical_gate = state.get("external_gates", {}).get("technical", {})
         if not isinstance(technical_gate, dict) or technical_gate.get("status") != "PASS":
             _die("oracle gate requires technical gate PASS first. Run `python pipeline.py gates technical`.")
+        # IMP-20260522-29C1 fix-forward: oracle gate 시작 시점을 명령 진입 직후에 기록한다.
+        _og = state.setdefault("external_gates", {}).setdefault("oracle", {})
+        if not _og.get("started_at"):
+            _og["started_at"] = _now()
+            _save(state)
         oracle_entries, oracle_blockers = _oracle_manifest_status(paths)
         if oracle_blockers:
             audit = _load_json_file(paths["contract_audit"])
@@ -11519,6 +11526,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
         sys.exit(0 if verdict == "PASS" else 1)
 
     if action == "accept":
+        # IMP-20260522-29C1 fix-forward: acceptance gate 시작 시점을 명령 진입 직후에 기록한다.
+        _ag = state.setdefault("external_gates", {}).setdefault("acceptance", {})
+        if not _ag.get("started_at"):
+            _ag["started_at"] = _now()
+            _save(state)
         if not getattr(args, "user_confirmed", False):
             _die("user acceptance gate requires --user-confirmed")
         result = str(args.result).upper()
@@ -11741,13 +11753,37 @@ def cmd_gates(args: argparse.Namespace) -> None:
         _log_event(state, f"user acceptance gate {gate_status}")
         _record_snapshot(state, "harness", None)
         _save(state)
-        # IMP-20260522-29C1 MT-4: gates accept 완료 시 메트릭 요약 출력
+        # IMP-20260522-29C1 MT-4 (fix-forward): gates accept 완료 시 메트릭 요약을
+        # 콘솔 출력뿐 아니라 human_acceptance_packet.md 파일에도 기록한다.
+        _metrics_str = "확인 불가"
         try:
             _metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state))
             print("\n" + "-" * 60)
             print("[ 최종 확인 안내 — 소요 시간 요약 ]")
             print(_metrics_str)
             print("-" * 60)
+        except Exception:
+            pass
+        # human_acceptance_packet.md 에 metrics summary 섹션 추가/갱신
+        try:
+            _packet_path = BASE_DIR / f"human_acceptance_packet_{pid}.md"
+            if not _packet_path.exists():
+                _packet_path = BASE_DIR / "human_acceptance_packet.md"
+            if _packet_path.exists():
+                _existing_text = _packet_path.read_text(encoding="utf-8")
+                _metrics_section = f"\n\n## 소요 시간 요약\n{_metrics_str}\n"
+                # 기존 섹션이 있으면 교체, 없으면 append
+                if "## 소요 시간 요약" in _existing_text:
+                    import re as _re
+                    _existing_text = _re.sub(
+                        r"\n\n## 소요 시간 요약\n.*?(?=\n\n#|\Z)",
+                        _metrics_section.rstrip("\n"),
+                        _existing_text,
+                        flags=_re.DOTALL,
+                    )
+                else:
+                    _existing_text = _existing_text.rstrip("\n") + _metrics_section
+                _packet_path.write_text(_existing_text, encoding="utf-8")
         except Exception:
             pass
         color = GREEN if gate_status == "PASS" else RED
@@ -11764,6 +11800,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
         return
 
     if action == "github-ci":
+        # IMP-20260522-29C1 fix-forward: github_ci gate 시작 시점을 명령 진입 직후에 기록한다.
+        _gcg = state.setdefault("external_gates", {}).setdefault("github_ci", {})
+        if not _gcg.get("started_at"):
+            _gcg["started_at"] = _now()
+            _save(state)
         verification = _verify_github_ci_run(
             repo=args.repo,
             commit=args.commit,
