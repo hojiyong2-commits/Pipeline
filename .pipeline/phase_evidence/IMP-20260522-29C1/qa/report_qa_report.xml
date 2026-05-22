@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260522-29C1</pipeline_id>
+  <agent_run_id>qa-83a8b960aaf8ea41</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>112</numeric_score>
+  <numeric_score>108</numeric_score>
+
+  <evidence_verified>
+    <file>pipeline.py (101줄 변경 — MT-1~MT-4 신규 필드 및 함수)</file>
+    <file>tests/test_pipeline_metrics_timestamps.py (신규 7개 테스트)</file>
+    <file>tests/oracles/IMP-20260522-29C1/ (T-001~T-005 oracle 파일)</file>
+  </evidence_verified>
+
+  <category_check>
+    <wa>N-A — 네트워크 통신 없음</wa>
+    <ui>N-A — GUI 없음. pipeline.py는 CLI 도구</ui>
+    <fs>PASS — oracle 파일 읽기에 pathlib.Path 사용. 인코딩 utf-8 명시. 외부 입력 경로 없음</fs>
+    <pd>PASS — 모든 신규 함수에 타입 힌팅 및 docstring 존재. 빈 phases/gates 안전 처리 확인. _ensure_v210_fields로 구버전 state 마이그레이션 idempotent 설계</pd>
+    <sec>PASS — 하드코딩 시크릿 없음. timestamp 파싱 시 try-except 안전 처리</sec>
+    <al>PASS — timestamp 파싱 실패 시 확인 불가 반환(크래시 없음). None/빈 값 방어 완비. 빈 dict/list 입력 정상 처리 확인</al>
+    <build>N-A — EXE 빌드 대상 아님(meta-task)</build>
+  </category_check>
+
+  <test_results>
+    <new_tests_passed>7</new_tests_passed>
+    <new_tests_failed>0</new_tests_failed>
+    <regression_tests_passed>369</regression_tests_passed>
+    <regression_tests_failed>0</regression_tests_failed>
+  </test_results>
+
+  <micro_task_boundary>
+    <mt id=MT-1>
+      <files_changed>pipeline.py</files_changed>
+      <functions_changed>_new_state, cmd_architect, _ensure_v210_fields</functions_changed>
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    </mt>
+    <mt id=MT-2>
+      <files_changed>pipeline.py</files_changed>
+      <functions_changed>_empty_phase, cmd_done, cmd_qa</functions_changed>
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    </mt>
+    <mt id=MT-3>
+      <files_changed>pipeline.py</files_changed>
+      <functions_changed>_empty_external_gate, _set_external_gate</functions_changed>
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    </mt>
+    <mt id=MT-4>
+      <files_changed>pipeline.py, tests/test_pipeline_metrics_timestamps.py</files_changed>
+      <functions_changed>_format_metrics_summary_ko, cmd_gates, _collect_pipeline_metrics</functions_changed>
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    </mt>
+    <mt id=MT-5>
+      <files_changed>tests/test_pipeline_metrics_timestamps.py, tests/oracles/IMP-20260522-29C1/</files_changed>
+      <functions_changed>7개 신규 테스트 함수</functions_changed>
+      <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    </mt>
+    <overall_verdict>PASS — 모든 변경 파일이 PM scope_manifest 범위 내에 있음</overall_verdict>
+  </micro_task_boundary>
+
+  <result>[PASS]</result>
+
+  <critical_issues>없음</critical_issues>
+
+  <improvement_suggestions>
+    - _phase_elapsed_summary와 _gate_elapsed_summary에 timestamp 포맷 상수 공유 가능(DRY). 기능 영향 없으므로 즉각 수정 불필요.
+  </improvement_suggestions>
+</qa_report>
