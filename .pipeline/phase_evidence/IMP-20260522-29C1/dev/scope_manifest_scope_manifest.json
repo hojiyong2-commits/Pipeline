@@ -1,0 +1,50 @@
+{
+  "pipeline_id": "IMP-20260522-29C1",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::_new_state, pipeline.py::cmd_architect, pipeline.py::cmd_gates(accept action)"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::_empty_phase, pipeline.py::cmd_done(phase 기록부), pipeline.py::cmd_qa(qa phase 기록부)"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::_empty_external_gate, pipeline.py::_set_external_gate"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::_agent_session_metrics_summary, pipeline.py::_format_metrics_summary_ko, pipeline.py::cmd_gates(accept action 종료 메시지)"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "tests/test_pipeline_metrics_timestamps.py"
+      ],
+      "affected_functions": [
+        "tests/test_pipeline_metrics_timestamps.py (신규 파일 7개 테스트 함수)"
+      ]
+    }
+  ]
+}
