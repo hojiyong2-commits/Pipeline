@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260522-0C83: Pipeline Observability & Cycle Time Metrics -->
+<!-- Pipeline Manager Agent handoff — 2026-05-22 -->
+<manager_handoff>
+  <pipeline_id>IMP-20260522-0C83</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-40eb56ad762aee5e</planner_run_id>
+  <manager_run_id>pipeline_manager-904e6ea4363279d9</manager_run_id>
+  <step_plan_sha256>fcb78f7068568fd7d2407414cfb8366b9971c7b2668b1fbfb0f90a6903213630</step_plan_sha256>
+  <execution_profile>HIGH_RISK</execution_profile>
+  <branch>impl/IMP-20260522-0C83</branch>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>ready</status>
+
+  <plan_summary>
+    PM Planner의 step_plan.xml을 수정 없이 그대로 실행합니다. pipeline.py에 metrics
+    수집 함수 7개(MT-1), CLI metrics subcommand(MT-2), failure_packet schema optional
+    필드 5개 확장(MT-3), tests/test_pipeline_metrics.py 신규 테스트 파일(MT-4)을
+    Incremental Module Gate 순서대로 구현합니다.
+  </plan_summary>
+
+  <micro_task_execution_order>
+    <micro_task id="MT-1">pipeline.py metrics 수집 함수 7개 신규 추가. design -> dev -> qa.</micro_task>
+    <micro_task id="MT-2">pipeline.py cmd_metrics + build_parser metrics subparser + COMMAND_MAP. design -> dev -> qa.</micro_task>
+    <micro_task id="MT-3">pipeline.py _record_failure_packet optional 인자 5개 추가. design -> dev -> qa.</micro_task>
+    <micro_task id="MT-4">tests/test_pipeline_metrics.py 신규 12개+ 테스트. design -> dev -> qa.</micro_task>
+    <integration>전체 MT QA PASS 후 module integrate PASS.</integration>
+  </micro_task_execution_order>
+
+  <scope_lock_policy>
+    MT-1/MT-2/MT-3 변경 파일은 pipeline.py 단일. MT-4 변경 파일은
+    tests/test_pipeline_metrics.py 단일. module dev 기록 직전 git diff --name-only로
+    실제 변경 파일을 scope_manifest와 비교하여 초과 파일이 있으면 기록 차단.
+    pipeline.py는 PM target_files에 명시된 Trust-Root 파일이며 HIGH_RISK 프로필로 진행.
+  </scope_lock_policy>
+
+  <gate_plan>
+    <pm>done --phase pm + prepare-phase --phase pm + phase-ci --phase pm</pm>
+    <dev>module design/dev/qa per MT + module integrate + done --phase dev + phase-ci --phase dev</dev>
+    <qa>codex code review + qa PASS + phase-ci --phase qa</qa>
+    <sec>외부 GitHub Actions API는 read-only 조회 -> sec PASS LOW 예상</sec>
+    <build>meta-task (pipeline.py 수정, EXE 대상 아님) -> build --exe N/A --skip-reason meta-task</build>
+    <external>gates technical / oracle / github-ci 모두 PASS 필요</external>
+    <architect>모든 외부 게이트 PASS 후 architect 기록</architect>
+  </gate_plan>
+
+  <codex_review_plan>
+    <stage name="plan">Dev 진입 전 codex-run --stage plan --review-model GPT-5.5</stage>
+    <stage name="code">QA 진입 전 codex-run --stage code --review-model GPT-5.5</stage>
+  </codex_review_plan>
+
+  <risk_notes>
+    <note>숫자 추측 절대 금지 — 실제 기록에서 읽을 수 없는 값은 "확인 불가" 또는 "unavailable"로 명시.</note>
+    <note>pipeline_state.json 구조 변경 금지 — metrics는 별도 pipeline_metrics.json으로만 저장.</note>
+    <note>_record_failure_packet 기존 18개+ 호출부 수정 금지 — optional keyword 인자만 시그니처에 추가.</note>
+    <note>기존 gate(technical/oracle/github_ci/acceptance/codex review) 로직 변경 절대 금지.</note>
+  </risk_notes>
+
+  <notes>PM Planning 완료. contract frozen (04c84928993d). 4개 MT 정의됨. oracle 5개 (T-001~T-005). 테스트 12개 (TC-01~TC-12).</notes>
+</manager_handoff>
