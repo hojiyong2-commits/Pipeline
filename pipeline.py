@@ -1036,6 +1036,9 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     # 이전 파이프라인 실행 시 존재했던 파일이 PM snapshot에 포함되어 scope gate 오탐을 유발하지 않도록 제외.
     "failure_packet.json",
     "protocol_consistency_result.json",
+    # IMP-20260522-0C83: Pipeline Manager 출력 파일 — PM done 이후 LF 정규화 등으로
+    # 파일이 갱신될 수 있으므로 dev scope gate 오탐을 방지하기 위해 제외.
+    "manager_handoff.xml",
 }
 
 
@@ -10047,6 +10050,12 @@ def _record_failure_packet(
     return_phase: Optional[str] = None,
     required_actions: Optional[List[str]] = None,
     retry_allowed: bool = True,
+    # IMP-20260522-0C83 metrics schema 확장 (모두 keyword-only, backward-compatible 기본값 None)
+    elapsed_before_failure: Optional[int] = None,
+    previous_attempt_count: Optional[int] = None,
+    repeated_failure_count: Optional[int] = None,
+    last_same_failure_at: Optional[str] = None,
+    suggested_minimal_rerun_reason: Optional[str] = None,
 ) -> Dict[str, Any]:
     """schema_version=2 failure packet 생성 + 저장.
 
@@ -10168,6 +10177,17 @@ def _record_failure_packet(
     }
     if escalation_reason:
         packet["escalation_reason"] = escalation_reason
+    # IMP-20260522-0C83 metrics 선택 필드 (None이 아닌 값만 포함)
+    if elapsed_before_failure is not None:
+        packet["elapsed_before_failure"] = int(elapsed_before_failure)
+    if previous_attempt_count is not None:
+        packet["previous_attempt_count"] = int(previous_attempt_count)
+    if repeated_failure_count is not None:
+        packet["repeated_failure_count"] = int(repeated_failure_count)
+    if last_same_failure_at is not None:
+        packet["last_same_failure_at"] = str(last_same_failure_at)
+    if suggested_minimal_rerun_reason is not None:
+        packet["suggested_minimal_rerun_reason"] = str(suggested_minimal_rerun_reason)
     _write_json(packet_path, packet)
     state.setdefault("failure_packets", [])
     if isinstance(state["failure_packets"], list):
@@ -13099,6 +13119,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_pt_attest = pt_sub.add_parser("attest", help="패치 완료 증거 기록")
     p_pt_attest.add_argument("--plan", default="patch_plan.json", help="patch_plan.json 경로")
 
+    # IMP-20260522-0C83: metrics subcommand (MT-2)
+    p_mt = sub.add_parser("metrics", help="파이프라인 관측성 메트릭 수집 및 요약")
+    mt_sub = p_mt.add_subparsers(dest="metrics_sub", required=True)
+
+    p_mt_collect = mt_sub.add_parser("collect", help="메트릭 수집 및 JSON 저장")
+    p_mt_collect.add_argument("--repo", default=None, help="GitHub 리포지토리 (owner/repo)")
+    p_mt_collect.add_argument("--pr", type=int, default=None, help="PR 번호")
+    p_mt_collect.add_argument("--output", default="pipeline_metrics.json", help="출력 JSON 경로")
+
+    p_mt_summary = mt_sub.add_parser("summary", help="저장된 메트릭 JSON을 한국어 요약으로 출력")
+    p_mt_summary.add_argument("--input", default="pipeline_metrics.json", help="입력 JSON 경로")
+
+    mt_sub.add_parser("status", help="현재 활성 파이프라인 기준 메트릭 상태 요약 출력")
+
     return parser
 
 
@@ -13684,6 +13718,473 @@ def _cmd_patch_attest(args: "argparse.Namespace") -> None:
     print(json.dumps(state["patch_lane"], indent=2, ensure_ascii=False))
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260522-0C83: Pipeline Observability & Cycle Time Metrics (MT-1)
+# ---------------------------------------------------------------------------
+
+def _phase_elapsed_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+    """phase별 started_at/completed_at에서 elapsed 계산. 값 없으면 '확인 불가' 반환."""
+    phases_data = state.get("phases", {})
+    result: Dict[str, Any] = {}
+    for phase_name, phase_info in phases_data.items():
+        if not isinstance(phase_info, dict):
+            continue
+        started = phase_info.get("started_at")
+        completed = phase_info.get("completed_at")
+        entry: Dict[str, Any] = {
+            "started_at": started,
+            "completed_at": completed,
+        }
+        if not started or not completed:
+            entry["elapsed_seconds"] = "확인 불가"
+            entry["elapsed_human"] = "확인 불가"
+            if not started and not completed:
+                entry["reason"] = "started_at 없음, completed_at 없음"
+            elif not started:
+                entry["reason"] = "started_at 없음"
+            else:
+                entry["reason"] = "completed_at 없음"
+        else:
+            try:
+                from datetime import datetime, timezone
+                fmt = "%Y-%m-%dT%H:%M:%SZ"
+                t_start = datetime.strptime(started, fmt).replace(tzinfo=timezone.utc)
+                t_end = datetime.strptime(completed, fmt).replace(tzinfo=timezone.utc)
+                elapsed_sec = int((t_end - t_start).total_seconds())
+                entry["elapsed_seconds"] = elapsed_sec
+                hours, remainder = divmod(elapsed_sec, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                if hours > 0:
+                    entry["elapsed_human"] = f"{hours}시간 {minutes}분 {seconds}초"
+                elif minutes > 0:
+                    entry["elapsed_human"] = f"{minutes}분 {seconds}초"
+                else:
+                    entry["elapsed_human"] = f"{seconds}초"
+            except (ValueError, TypeError):
+                entry["elapsed_seconds"] = "확인 불가"
+                entry["elapsed_human"] = "확인 불가"
+                entry["reason"] = "타임스탬프 파싱 오류"
+        result[phase_name] = entry
+    return result
+
+
+def _gate_elapsed_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+    """gate별 상태/소요시간. 없으면 '확인 불가'."""
+    gates_data = state.get("external_gates", {})
+    result: Dict[str, Any] = {}
+    for gate_name, gate_info in gates_data.items():
+        if not isinstance(gate_info, dict):
+            continue
+        gstatus = gate_info.get("status", "확인 불가")
+        started = gate_info.get("started_at")
+        completed = gate_info.get("completed_at")
+        entry: Dict[str, Any] = {
+            "status": gstatus,
+            "started_at": started,
+            "completed_at": completed,
+        }
+        if not started or not completed:
+            entry["elapsed_seconds"] = "확인 불가"
+            entry["elapsed_human"] = "확인 불가"
+        else:
+            try:
+                from datetime import datetime, timezone
+                fmt = "%Y-%m-%dT%H:%M:%SZ"
+                t_start = datetime.strptime(started, fmt).replace(tzinfo=timezone.utc)
+                t_end = datetime.strptime(completed, fmt).replace(tzinfo=timezone.utc)
+                elapsed_sec = int((t_end - t_start).total_seconds())
+                entry["elapsed_seconds"] = elapsed_sec
+                hours, remainder = divmod(elapsed_sec, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                if hours > 0:
+                    entry["elapsed_human"] = f"{hours}시간 {minutes}분 {seconds}초"
+                elif minutes > 0:
+                    entry["elapsed_human"] = f"{minutes}분 {seconds}초"
+                else:
+                    entry["elapsed_human"] = f"{seconds}초"
+            except (ValueError, TypeError):
+                entry["elapsed_seconds"] = "확인 불가"
+                entry["elapsed_human"] = "확인 불가"
+        result[gate_name] = entry
+    return result
+
+
+def _failure_retry_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+    """failure_packet 리스트에서 code별 카운트, return_phase 분포 집계."""
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+    paths = _contract_paths(pid)
+    failure_root = _failure_root_from_paths(paths)
+    packets: List[Dict[str, Any]] = []
+    if failure_root.exists():
+        for fp in failure_root.glob("*.json"):
+            try:
+                data = json.loads(fp.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    packets.append(data)
+            except (json.JSONDecodeError, OSError):
+                pass
+    total = len(packets)
+    code_counts: Dict[str, int] = {}
+    return_phase_dist: Dict[str, int] = {}
+    for pkt in packets:
+        fc = pkt.get("failure_code") or pkt.get("gate_name") or "unknown"
+        code_counts[fc] = code_counts.get(fc, 0) + 1
+        rp = pkt.get("return_phase") or "unknown"
+        return_phase_dist[rp] = return_phase_dist.get(rp, 0) + 1
+    most_repeated: Optional[str] = None
+    most_repeated_count: int = 0
+    if code_counts:
+        most_repeated = max(code_counts, key=lambda k: code_counts[k])
+        most_repeated_count = code_counts[most_repeated]
+    result: Dict[str, Any] = {
+        "total_failure_packets": total,
+        "failure_code_counts": code_counts,
+        "return_phase_distribution": return_phase_dist,
+    }
+    if most_repeated:
+        result["most_repeated_failure_code"] = most_repeated
+        result["most_repeated_failure_code_count"] = most_repeated_count
+    return result
+
+
+def _github_actions_duration_summary(repo: Optional[str], run_id: Optional[str]) -> Dict[str, Any]:
+    """GitHub Actions API 조회. 실패 시 '확인 불가' (추정값 금지)."""
+    unavailable: Dict[str, Any] = {
+        "status": "확인 불가",
+        "run_id": "확인 불가",
+        "url": "확인 불가",
+        "conclusion": "확인 불가",
+        "started_at": "확인 불가",
+        "completed_at": "확인 불가",
+        "duration_seconds": "확인 불가",
+        "duration_human": "확인 불가",
+        "elapsed_seconds": "확인 불가",
+        "elapsed_human": "확인 불가",
+        "commit_sha": "확인 불가",
+        "workflow_name": "확인 불가",
+        "unavailable_reason": "GitHub Actions API 조회 실패",
+    }
+    if not repo or not run_id:
+        return unavailable
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["gh", "run", "view", str(run_id), "--repo", repo, "--json",
+             "status,conclusion,createdAt,updatedAt,url,databaseId"],
+            capture_output=True, text=True, timeout=15
+        )
+        if result.returncode != 0:
+            return unavailable
+        data = json.loads(result.stdout)
+        started = data.get("createdAt")
+        completed = data.get("updatedAt")
+        elapsed_sec: Any = "확인 불가"
+        elapsed_human: Any = "확인 불가"
+        if started and completed:
+            try:
+                from datetime import datetime, timezone
+                t_start = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                t_end = datetime.fromisoformat(completed.replace("Z", "+00:00"))
+                elapsed_sec = int((t_end - t_start).total_seconds())
+                hours, remainder = divmod(elapsed_sec, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                if hours > 0:
+                    elapsed_human = f"{hours}시간 {minutes}분 {seconds}초"
+                elif minutes > 0:
+                    elapsed_human = f"{minutes}분 {seconds}초"
+                else:
+                    elapsed_human = f"{seconds}초"
+            except (ValueError, TypeError):
+                pass
+        result: Dict[str, Any] = {
+            "status": data.get("status", "확인 불가"),
+            "run_id": str(data.get("databaseId", run_id)),
+            "url": data.get("url", "확인 불가"),
+            "conclusion": data.get("conclusion", "확인 불가"),
+            "started_at": started or "확인 불가",
+            "completed_at": completed or "확인 불가",
+            "duration_seconds": elapsed_sec,
+            "duration_human": elapsed_human,
+            "elapsed_seconds": elapsed_sec,
+            "elapsed_human": elapsed_human,
+            "commit_sha": data.get("headSha", "확인 불가") or "확인 불가",
+            "workflow_name": data.get("workflowName", "확인 불가") or "확인 불가",
+        }
+        return result
+    except Exception:
+        return unavailable
+
+
+def _agent_session_metrics_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+    """receipt에서 agent_id/run_id/elapsed/tokens 읽기. token 없으면 unavailable."""
+    agent_runs = state.get("agent_runs", {})
+    result: Dict[str, Any] = {}
+    for run_id, run_info in agent_runs.items():
+        if not isinstance(run_info, dict):
+            continue
+        entry: Dict[str, Any] = {
+            "agent_id": run_info.get("agent_id", "확인 불가"),
+            "phase": run_info.get("phase", "확인 불가"),
+            "status": run_info.get("status", "확인 불가"),
+            "started_at": run_info.get("started_at", "확인 불가"),
+            "completed_at": run_info.get("completed_at", "확인 불가"),
+            "tokens_used": "unavailable",
+        }
+        started = run_info.get("started_at")
+        completed = run_info.get("completed_at")
+        if started and completed:
+            try:
+                from datetime import datetime, timezone
+                fmt = "%Y-%m-%dT%H:%M:%SZ"
+                t_start = datetime.strptime(started, fmt).replace(tzinfo=timezone.utc)
+                t_end = datetime.strptime(completed, fmt).replace(tzinfo=timezone.utc)
+                elapsed_sec = int((t_end - t_start).total_seconds())
+                hours, remainder = divmod(elapsed_sec, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                if hours > 0:
+                    entry["elapsed_human"] = f"{hours}시간 {minutes}분 {seconds}초"
+                elif minutes > 0:
+                    entry["elapsed_human"] = f"{minutes}분 {seconds}초"
+                else:
+                    entry["elapsed_human"] = f"{seconds}초"
+                entry["elapsed_seconds"] = elapsed_sec
+            except (ValueError, TypeError):
+                entry["elapsed_seconds"] = "확인 불가"
+                entry["elapsed_human"] = "확인 불가"
+        else:
+            entry["elapsed_seconds"] = "확인 불가"
+            entry["elapsed_human"] = "확인 불가"
+        result[run_id] = entry
+    return result
+
+
+def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
+    """한국어 요약 문자열 반환. 6개 필수 섹션 포함."""
+    lines: List[str] = []
+    pid = metrics.get("pipeline_id", "확인 불가")
+    lines.append(f"=== 파이프라인 메트릭 요약 [{pid}] ===")
+    lines.append("")
+
+    # 섹션 1: 전체 소요 시간
+    lines.append("[ 전체 소요 시간 ]")
+    total = metrics.get("total_elapsed", {})
+    if isinstance(total, dict):
+        t_started = total.get("started_at", "확인 불가")
+        t_completed = total.get("completed_at", "확인 불가")
+        t_elapsed = total.get("elapsed_human", "확인 불가")
+        lines.append(f"  시작: {t_started}")
+        lines.append(f"  종료: {t_completed}")
+        lines.append(f"  소요: {t_elapsed}")
+    else:
+        lines.append("  확인 불가")
+    lines.append("")
+
+    # 섹션 2: Phase별 소요 시간
+    lines.append("[ Phase별 소요 시간 ]")
+    phase_elapsed = metrics.get("phase_elapsed", {})
+    if isinstance(phase_elapsed, dict) and phase_elapsed:
+        for pname, pdata in phase_elapsed.items():
+            if isinstance(pdata, dict):
+                elapsed = pdata.get("elapsed_human", "확인 불가")
+                lines.append(f"  {pname}: {elapsed}")
+    else:
+        lines.append("  확인 불가")
+    lines.append("")
+
+    # 섹션 3: Gate별 상태 및 소요 시간
+    lines.append("[ Gate별 상태 및 소요 시간 ]")
+    gate_elapsed = metrics.get("gate_elapsed", {})
+    if isinstance(gate_elapsed, dict) and gate_elapsed:
+        for gname, gdata in gate_elapsed.items():
+            if isinstance(gdata, dict):
+                gstatus = gdata.get("status", "확인 불가")
+                gelapsed = gdata.get("elapsed_human", "확인 불가")
+                lines.append(f"  {gname}: {gstatus} ({gelapsed})")
+    else:
+        lines.append("  확인 불가")
+    lines.append("")
+
+    # 섹션 4: 실패/재시도 요약
+    lines.append("[ 실패/재시도 요약 ]")
+    failure_summary = metrics.get("failure_retry", {})
+    if isinstance(failure_summary, dict):
+        total_fp = failure_summary.get("total_failure_packets", 0)
+        lines.append(f"  총 실패 패킷: {total_fp}건")
+        code_counts = failure_summary.get("failure_code_counts", {})
+        if code_counts:
+            for code, cnt in code_counts.items():
+                lines.append(f"    {code}: {cnt}건")
+        rp_dist = failure_summary.get("return_phase_distribution", {})
+        if rp_dist:
+            lines.append("  return_phase 분포:")
+            for rp, cnt in rp_dist.items():
+                lines.append(f"    {rp}: {cnt}건")
+    else:
+        lines.append("  확인 불가")
+    lines.append("")
+
+    # 섹션 5: GitHub Actions 요약
+    lines.append("[ GitHub Actions 요약 ]")
+    gh_summary = metrics.get("github_actions", {})
+    if isinstance(gh_summary, dict):
+        run_id = gh_summary.get("run_id", "확인 불가")
+        conclusion = gh_summary.get("conclusion", "확인 불가")
+        elapsed = gh_summary.get("elapsed_human", "확인 불가")
+        url = gh_summary.get("url", "확인 불가")
+        lines.append(f"  run_id: {run_id}")
+        lines.append(f"  결과: {conclusion}")
+        lines.append(f"  소요: {elapsed}")
+        lines.append(f"  URL: {url}")
+    else:
+        lines.append("  확인 불가")
+    lines.append("")
+
+    # 섹션 6: 병목 요약
+    lines.append("[ 병목 요약 ]")
+    bottleneck = metrics.get("bottleneck", {})
+    if isinstance(bottleneck, dict) and bottleneck:
+        longest_phase = bottleneck.get("longest_phase", "확인 불가")
+        longest_elapsed = bottleneck.get("longest_phase_elapsed_human", "확인 불가")
+        lines.append(f"  가장 오래 걸린 Phase: {longest_phase} ({longest_elapsed})")
+        most_failures = bottleneck.get("most_failed_gate", "없음")
+        lines.append(f"  가장 많이 실패한 Gate: {most_failures}")
+    else:
+        lines.append("  확인 불가")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def _collect_pipeline_metrics(
+    state: Dict[str, Any],
+    repo: Optional[str] = None,
+    pr: Optional[int] = None,
+) -> Dict[str, Any]:
+    """전체 메트릭 수집 entry point."""
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+
+    # phase elapsed
+    phase_elapsed = _phase_elapsed_summary(state)
+
+    # gate elapsed
+    gate_elapsed = _gate_elapsed_summary(state)
+
+    # failure retry
+    failure_retry = _failure_retry_summary(state)
+
+    # github actions (latest phase CI run_id 조회 시도)
+    run_id_for_gh: Optional[str] = None
+    phase_ci_data = state.get("phase_attestations", {})
+    if isinstance(phase_ci_data, dict):
+        for _ph, att_data in phase_ci_data.items():
+            if isinstance(att_data, dict):
+                ci_run = att_data.get("ci_run_id")
+                if ci_run:
+                    run_id_for_gh = str(ci_run)
+    github_actions = _github_actions_duration_summary(repo, run_id_for_gh)
+
+    # agent session
+    agent_sessions = _agent_session_metrics_summary(state)
+
+    # total elapsed (pipeline start → last completed phase)
+    pipeline_created = state.get("created_at")
+    pipeline_updated = state.get("updated_at")
+    total_elapsed: Dict[str, Any] = {
+        "started_at": pipeline_created or "확인 불가",
+        "completed_at": pipeline_updated or "확인 불가",
+    }
+    if pipeline_created and pipeline_updated:
+        try:
+            from datetime import datetime, timezone
+            fmt = "%Y-%m-%dT%H:%M:%SZ"
+            t_start = datetime.strptime(pipeline_created, fmt).replace(tzinfo=timezone.utc)
+            t_end = datetime.strptime(pipeline_updated, fmt).replace(tzinfo=timezone.utc)
+            elapsed_sec = int((t_end - t_start).total_seconds())
+            total_elapsed["elapsed_seconds"] = elapsed_sec
+            hours, remainder = divmod(elapsed_sec, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            if hours > 0:
+                total_elapsed["elapsed_human"] = f"{hours}시간 {minutes}분 {seconds}초"
+            elif minutes > 0:
+                total_elapsed["elapsed_human"] = f"{minutes}분 {seconds}초"
+            else:
+                total_elapsed["elapsed_human"] = f"{seconds}초"
+        except (ValueError, TypeError):
+            total_elapsed["elapsed_seconds"] = "확인 불가"
+            total_elapsed["elapsed_human"] = "확인 불가"
+    else:
+        total_elapsed["elapsed_seconds"] = "확인 불가"
+        total_elapsed["elapsed_human"] = "확인 불가"
+
+    # bottleneck 계산
+    longest_phase: Optional[str] = None
+    longest_seconds: int = -1
+    for pname, pdata in phase_elapsed.items():
+        if isinstance(pdata, dict):
+            es = pdata.get("elapsed_seconds")
+            if isinstance(es, int) and es > longest_seconds:
+                longest_seconds = es
+                longest_phase = pname
+
+    failure_code_counts = failure_retry.get("failure_code_counts", {})
+    most_failed_gate: Optional[str] = None
+    if failure_code_counts:
+        most_failed_gate = max(failure_code_counts, key=lambda k: failure_code_counts[k])
+
+    bottleneck: Dict[str, Any] = {}
+    if longest_phase:
+        bottleneck["longest_phase"] = longest_phase
+        # get elapsed_human for that phase
+        lph_data = phase_elapsed.get(longest_phase, {})
+        bottleneck["longest_phase_elapsed_human"] = (
+            lph_data.get("elapsed_human", "확인 불가") if isinstance(lph_data, dict) else "확인 불가"
+        )
+    if most_failed_gate:
+        bottleneck["most_failed_gate"] = most_failed_gate
+    else:
+        bottleneck["most_failed_gate"] = "없음"
+
+    return {
+        "pipeline_id": pid,
+        "collected_at": _now(),
+        "total_elapsed": total_elapsed,
+        "phase_elapsed": phase_elapsed,
+        "gate_elapsed": gate_elapsed,
+        "failure_retry": failure_retry,
+        "github_actions": github_actions,
+        "agent_sessions": agent_sessions,
+        "bottleneck": bottleneck,
+    }
+
+
+def cmd_metrics(args: "argparse.Namespace") -> None:
+    """metrics collect|summary|status 명령 처리."""
+    sub = getattr(args, "metrics_sub", None)
+    if sub == "collect":
+        state = _load_state()
+        repo = getattr(args, "repo", None)
+        pr = getattr(args, "pr", None)
+        output_path = getattr(args, "output", "pipeline_metrics.json")
+        metrics = _collect_pipeline_metrics(state, repo=repo, pr=pr)
+        out = pathlib.Path(output_path)
+        out.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(GREEN(f"  [METRICS COLLECT] 수집 완료: {out}"))
+        print(json.dumps(metrics, indent=2, ensure_ascii=False))
+    elif sub == "summary":
+        input_path = getattr(args, "input", "pipeline_metrics.json")
+        in_file = pathlib.Path(input_path)
+        if not in_file.exists():
+            _die(f"[METRICS ERROR] 입력 파일 없음: {input_path}")
+        metrics = json.loads(in_file.read_text(encoding="utf-8"))
+        print(_format_metrics_summary_ko(metrics))
+    elif sub == "status":
+        state = _load_state()
+        metrics = _collect_pipeline_metrics(state)
+        print(_format_metrics_summary_ko(metrics))
+    else:
+        _die("[METRICS ERROR] 알 수 없는 metrics 서브명령. collect|summary|status 중 선택하세요.")
+
+
 COMMAND_MAP = {
     "new":                  cmd_new,
     "check":                cmd_check,
@@ -13717,6 +14218,7 @@ COMMAND_MAP = {
     "tournament-finalize":  cmd_tournament_finalize,
     "cluster":              cmd_cluster,
     "patch":                cmd_patch,
+    "metrics":              cmd_metrics,
 }
 
 
