@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260522-0C83: Pipeline Observability & Cycle Time Metrics -->
+<!-- PM Planner Agent step_plan — 2026-05-22 -->
+
+<step_plan>
+  <pipeline_id>IMP-20260522-0C83</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 4: Final Step Plan (Phase 2 Dev 진입 준비)</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, AL</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py (Trust-Root 파일)를 직접 수정합니다. metrics 함수 7개 신규 추가, CLI subcommand 1개 추가, failure_packet schema 확장, 테스트 파일 신규 생성이 포함되어 HIGH_RISK 프로필을 적용합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>10</expected_changed_functions>
+      <expected_changed_lines>520</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 함수명 스타일(_collect vs _gather), 출력 포맷 내 들여쓰기 수준, 한국어 단위 표기 방식(초/분/시간 표기) 등 P2 수준 코드 취향 질문은 묻지 않고, 사용자 요청에 이미 함수명이 명시되어 있으므로 그대로 따릅니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>metrics JSON 저장 위치: 별도 pipeline_metrics.json 파일로 저장할까요, 아니면 pipeline_state.json 안에 포함할까요?</user_facing_question>
+        <evidence>사용자 요청에 "python pipeline.py metrics collect --output pipeline_metrics.json" 형식이 명시되었습니다.</evidence>
+        <why_it_matters>저장 위치에 따라 Dev가 구현하는 파일 I/O 경로와 CLI 인자 설계가 달라집니다. 실수로 내부 state와 혼재하면 기존 gate 로직에 영향을 줄 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>별도 pipeline_metrics.json 파일 (--output 인자로 경로 지정)</label>
+            <benefit>기존 pipeline_state.json 구조에 영향 없음. 사용자가 원하는 경로에 저장 가능. 기존 gate 로직 무손상.</benefit>
+            <cost>파일이 하나 더 생성되므로 정리가 필요할 수 있습니다.</cost>
+          </option>
+          <option id="B">
+            <label>pipeline_state.json 내 embedded</label>
+            <benefit>단일 파일로 상태 일관성 유지.</benefit>
+            <cost>pipeline_state.json 구조 변경 → 기존 gate/status 로직 영향 위험. 사용자 요청과 다릅니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청에 명시됨 -- 추천안 A (별도 pipeline_metrics.json)로 진행</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="module_split" mt_id="MT-2">
+        <user_facing_question>metrics status 명령 출력 범위: 현재 활성 파이프라인 기준으로만 요약할까요, 아니면 전체 이력을 누적해서 보여줄까요?</user_facing_question>
+        <evidence>사용자 요청에 "python pipeline.py metrics status"가 포함되어 있으나 상세 범위는 명시되지 않았습니다. 단, collect/summary와 함께 현재 파이프라인 분석이 핵심 목적입니다.</evidence>
+        <why_it_matters>전체 이력 누적 방식은 추가 데이터 소스가 필요하고 구현 복잡도가 높아집니다. 현재 파이프라인 기준이 요청 맥락과 더 일치합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>현재 활성 파이프라인 pipeline_state.json 기준 요약</label>
+            <benefit>구현 단순, 기존 status 명령과 일관성 유지, 즉각 사용 가능.</benefit>
+            <cost>이전 파이프라인의 누적 비교는 불가.</cost>
+          </option>
+          <option id="B">
+            <label>전체 파이프라인 이력 누적 요약</label>
+            <benefit>장기 트렌드 분석 가능.</benefit>
+            <cost>추가 데이터 소스 필요, 이번 IMP 범위를 초과할 가능성. 사용자 요청 핵심과 거리 있음.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청에 명시됨 -- 추천안 A (현재 파이프라인 기준 요약)로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline_state.json (기존 파일, 읽기 전용), pipeline_contracts/ 하위 failure_packet 파일들, agent receipt 파일들
+    - Output: pipeline_metrics.json (신규 생성), stdout 한국어 요약 (metrics summary 명령), failure_packet schema_v2 optional 필드 추가
+    - Validation: pytest tests/test_pipeline_metrics.py 12개 이상 PASS, pipeline.py metrics collect 종료코드 0, metrics summary에 필수 6개 섹션 포함
+  </interface_spec>
+
+  <requirements>
+    - pipeline.py에 metrics 수집 함수 7개 추가:
+        _collect_pipeline_metrics(state, repo=None, pr=None): 전체 메트릭 수집 entry point
+        _phase_elapsed_summary(state): phase별 started_at/completed_at에서 elapsed 계산. 없으면 "확인 불가" 반환
+        _gate_elapsed_summary(state): gate별 상태/소요시간. 없으면 "확인 불가"
+        _failure_retry_summary(state): failure_packet 리스트에서 code별 카운트, return_phase 분포 집계
+        _github_actions_duration_summary(repo, run_id): GitHub Actions API 조회. 실패 시 "확인 불가" (추정값 금지)
+        _agent_session_metrics_summary(state): receipt에서 agent_id/run_id/elapsed/tokens 읽기. token 없으면 unavailable
+        _format_metrics_summary_ko(metrics): 한국어 요약 문자열 반환. 6개 필수 섹션 포함
+    - pipeline.py에 CLI subcommand "metrics" 추가 (cmd_metrics 함수):
+        metrics collect --repo REPO --pr N --output pipeline_metrics.json
+        metrics summary --input pipeline_metrics.json
+        metrics status (현재 활성 파이프라인 기준)
+        COMMAND_MAP에 "metrics": cmd_metrics 추가
+        build_parser()에 metrics subparser 추가
+    - failure_packet schema 확장 (_record_failure_packet 함수에 optional keyword 인자 추가):
+        elapsed_before_failure: Optional[int] = None
+        previous_attempt_count: Optional[int] = None
+        repeated_failure_count: Optional[int] = None
+        last_same_failure_at: Optional[str] = None
+        suggested_minimal_rerun_reason: Optional[str] = None
+        기존 호출 코드 변경 없음 (모두 optional, 기본값 None)
+    - tests/test_pipeline_metrics.py 신규 파일, 12개 이상 pytest 테스트
+    - 완료 금지: token usage 추정, GitHub Actions duration 추정, 기존 gate skip, tests 없이 문서만 수정
+    - 숫자 추측 금지 — 실제 기록에서 읽을 수 없는 값은 "확인 불가" 명시
+    - OpenAI/Codex API usage는 response usage로 제공될 때만 token 값 기록 (없으면 "unavailable")
+    - 기존 gate(technical, oracle, github_ci, acceptance, codex review) 동작 변경 절대 금지
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._collect_pipeline_metrics, pipeline._phase_elapsed_summary, pipeline._gate_elapsed_summary, pipeline._failure_retry_summary, pipeline._github_actions_duration_summary, pipeline._agent_session_metrics_summary, pipeline._format_metrics_summary_ko</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_metrics (MT-2에서 호출 예정 — 현재 미존재)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _collect_pipeline_metrics|def _phase_elapsed_summary|def _gate_elapsed_summary|def _failure_retry_summary|def _github_actions_duration_summary|def _agent_session_metrics_summary|def _format_metrics_summary_ko</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py에 metrics 수집 함수 7개 신규 추가. 기존 함수 수정 없음.</change_summary>
+      <line_estimate>200</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline.cmd_metrics, pipeline.build_parser (metrics subparser 추가), pipeline.COMMAND_MAP (metrics 키 추가)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.COMMAND_MAP["metrics"] = cmd_metrics (신규 등록)</site>
+        <site>pipeline.build_parser() 내 sub.add_parser("metrics", ...) (신규 추가)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>COMMAND_MAP|def build_parser|sub\.add_parser\("patch"\)</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_metrics 함수 신규 추가 + build_parser()에 metrics subparser 등록 + COMMAND_MAP에 "metrics" 키 추가. 기존 명령 영향 없음.</change_summary>
+      <line_estimate>120</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._record_failure_packet</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py 라인 5031, 5064, 5097, 5510, 5561, 5588, 5642, 5675, 5702, 5741, 5763, 5795 등 18개+ (기존 호출부 — 인자 추가 없이 그대로 동작해야 함)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_record_failure_packet\(</pattern>
+        <match_count>18</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_record_failure_packet 함수에 optional keyword 인자 5개 추가. 기본값 None. 기존 호출부 변경 불필요.</change_summary>
+      <line_estimate>30</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>tests.test_pipeline_metrics (신규 파일)</affected_function>
+      <target_files>
+        <file>tests/test_pipeline_metrics.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pipeline_metrics</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>tests/test_pipeline_metrics.py 신규 파일 생성. 12개 이상 pytest 테스트 포함. oracle 파일(tests/oracles/IMP-20260522-0C83/T-001~T-005) 활용.</change_summary>
+      <line_estimate>180</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.12 — 현재 환경에 Python 3.12가 설치되어 있음 (pipeline.py 기존 코드와 동일 버전)</python_version>
+  <env_specs>
+    <python>3.12</python>
+    <vscode>Python extension, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - pipeline.py에 metrics 수집 함수 7개 신규 추가 (기존 함수 수정 없음)
+    - python pipeline.py metrics collect --output pipeline_metrics.json 종료코드 0, pipeline_metrics.json 생성됨
+    - python pipeline.py metrics summary --input pipeline_metrics.json stdout에 한국어 6개 섹션 포함
+    - python pipeline.py metrics status 정상 실행 (종료코드 0)
+    - python pipeline.py metrics summary --input nonexistent.json 종료코드 1, [PIPELINE ERROR] 포함
+    - phase started_at/completed_at이 null인 경우 elapsed = "확인 불가" 출력 (추정값 금지)
+    - GitHub Actions API 조회 실패 시 모든 GA 필드 = "확인 불가"
+    - agent receipt에 token 정보 없으면 tokens = "unavailable"
+    - failure_packet에 elapsed_before_failure 등 optional 5개 필드 포함 가능 (기존 호출부 회귀 없음)
+    - pytest tests/test_pipeline_metrics.py -q 실행 시 12개 이상 테스트 PASS
+    - 기존 gate(technical, oracle, github_ci, acceptance, codex review) 동작 변경 없음
+    - pipeline.py 기존 모든 CLI 명령 회귀 없음
+    - 엣지케이스: 빈 failure_packets 리스트 처리 (total=0, most_repeated=None)
+    - 엣지케이스: phases 딕셔너리 일부 누락 시 KeyError 없이 처리
+    - 엣지케이스: pipeline_metrics.json 스키마에 schema_version=1, pipeline_id, collected_at 포함
+    - token usage 추정값 기록 금지 (response object 없으면 unavailable)
+    - 숫자 추측 금지 — 실제 기록에서 읽을 수 없는 값은 모두 "확인 불가"로 표시
+    - anti_gaming_check: Phase attestation, oracle gate, github_ci gate 동작 불변 확인
+  </acceptance_criteria>
+
+  <forbidden>
+    - 기존 gate 로직 (technical, oracle, acceptance, github_ci, codex review) 변경 또는 약화
+    - pipeline_state.json 구조 변경 (metrics는 별도 pipeline_metrics.json으로 분리)
+    - token usage 추정값 기록
+    - GitHub Actions duration 확인 없이 추정값 기록
+    - tests 없이 metrics 기능만 구현
+    - Trust-Root 파일 (.github/workflows/**, CLAUDE.md, .claude/agents/*.md, tests/oracles/**) 의도치 않은 수정
+    - 기존 _record_failure_packet 18개+ 호출부 수정
+    - scope_manifest_MT-N.json 없이 module dev 기록
+  </forbidden>
+
+  <handover_template>
+    <dev_qa_handover>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260522-0C83</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/test_pipeline_metrics.py</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </dev_qa_handover>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_pipeline_metrics.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260522-0C83\task_contract.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260522-0C83\test_set.json</file>
+    </target_files>
+    <phase_rules_excerpt>Dev는 MT-N 순서대로 module design -&gt; module dev -&gt; module qa를 거쳐야 합니다. 모든 MT-N QA PASS 후 module integrate PASS, 그 이후 done --phase dev 기록 가능. scope_manifest_MT-N.json 제출 필수. trust-root 파일(pipeline.py) 수정이므로 HIGH_RISK 프로필. _record_failure_packet 기존 호출부 수정 금지. 신규 optional 인자만 추가. 기존 gate 로직 변경 절대 금지. 숫자 추측 금지. "확인 불가" 명시 원칙 준수.</phase_rules_excerpt>
+    <prev_phase_summary>Phase 1 PM 계획 완료. Contract frozen (contract_hash: 04c84928993dea4b8c4e387bb608c8a57a616eb05dd513fb6a19a5360410d6ac). oracle 5개 (T-001~T-005, normal 3개 + edge 2개). 테스트 12개 (TC-01~TC-12).</prev_phase_summary>
+  </context_injection>
+
+</step_plan>
+
+<decomposition_audit>
+  <total_functions_identified>10</total_functions_identified>
+  <micro_task_count>4</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>함수 10개 신규 추가 (7개 수집 함수 MT-1, CLI 진입점 MT-2), 1개 기존 함수 시그니처 확장 (MT-3), 1개 테스트 파일 신규 (MT-4). 변경 파일 2개, 변경 함수 10개. MT-3은 MT-1~2와 완전 독립. MT-4는 MT-1~3 완료 후 진행.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
