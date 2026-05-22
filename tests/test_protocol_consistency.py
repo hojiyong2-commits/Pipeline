@@ -404,5 +404,95 @@ class TestGhCliMock(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 0)
 
 
+ORACLE_V2_BASE = ROOT / "tests" / "oracles" / "IMP-20260521-90F4"
+
+
+def load_oracle_v2(case_id: str):
+    inp = json.loads((ORACLE_V2_BASE / case_id / "input.json").read_text(encoding="utf-8"))
+    exp = json.loads((ORACLE_V2_BASE / case_id / "expected.json").read_text(encoding="utf-8"))
+    # _test_note 등 메타 키는 함수 인자로 전달하지 않는다.
+    inp = {k: v for k, v in inp.items() if not k.startswith("_")}
+    return inp, exp
+
+
+class TestOracleCasesV2(unittest.TestCase):
+    """IMP-20260521-90F4 oracle (5개)."""
+
+    def test_oracle_v2_normal_consistency_pass(self):
+        inp, exp = load_oracle_v2("normal_consistency_pass")
+        result = _check_protocol_consistency(**inp)
+        self.assertEqual(result["status"], exp["status"])
+        self.assertEqual(result["failure_code"], exp["failure_code"])
+        self.assertEqual(result["allow_accept"], exp["allow_accept"])
+
+    def test_oracle_v2_phase_attestation_not_confused(self):
+        inp, exp = load_oracle_v2("normal_phase_attestation_run_id_not_confused")
+        result = _check_protocol_consistency(**inp)
+        self.assertEqual(result["status"], exp["status"])
+        self.assertEqual(result["failure_code"], exp["failure_code"])
+
+    def test_oracle_v2_packet_files_exact_match(self):
+        inp, exp = load_oracle_v2("normal_packet_files_exact_match")
+        result = _check_protocol_consistency(**inp)
+        self.assertEqual(result["status"], exp["status"])
+        self.assertEqual(result["failure_code"], exp["failure_code"])
+
+    def test_oracle_v2_packet_extra_file_blocked(self):
+        inp, exp = load_oracle_v2("error_packet_files_extra_file")
+        result = _check_protocol_consistency(**inp)
+        self.assertEqual(result["status"], exp["status"])
+        self.assertEqual(result["failure_code"], exp["failure_code"])
+        self.assertEqual(result["allow_accept"], exp["allow_accept"])
+
+    def test_oracle_v2_total_count_distinguished(self):
+        inp, exp = load_oracle_v2("edge_total_count_distinguished")
+        result = _check_protocol_consistency(**inp)
+        self.assertEqual(result["status"], exp["status"])
+
+
+class TestListedFilesFilter(unittest.TestCase):
+    """_consistency_listed_files 비파일 오탐 방지 (3개)."""
+
+    def test_korean_desc_not_extracted(self):
+        from pipeline import _consistency_listed_files
+        self.assertEqual(_consistency_listed_files("- 장점: 빠름\n- 단점: 느림\n"), set())
+
+    def test_command_not_extracted(self):
+        from pipeline import _consistency_listed_files
+        self.assertEqual(_consistency_listed_files("- python -m pytest\n"), set())
+
+    def test_file_with_dot_extracted(self):
+        from pipeline import _consistency_listed_files
+        r = _consistency_listed_files("- pipeline.py\n- .bandit\n")
+        self.assertIn("pipeline.py", r)
+        self.assertIn(".bandit", r)
+
+
+class TestTotalCountDistinction(unittest.TestCase):
+    """전체/파일별 테스트 수 구분 (2개)."""
+
+    def test_max_count_used_as_total(self):
+        result = _check_protocol_consistency(
+            pr_body="파일별: 20 passed\n전체: 456 PASS",
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->\n456 PASS",
+            pr_changed_files=[],
+            pr_head_sha="",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        self.assertEqual(result["status"], "PASS")
+
+    def test_no_total_count_skips_check(self):
+        result = _check_protocol_consistency(
+            pr_body="변경 내용",
+            acceptance_packet_body="<!-- pipeline-human-acceptance-packet -->",
+            pr_changed_files=[],
+            pr_head_sha="",
+            latest_ci_run_id="",
+            latest_ci_run_conclusion="",
+        )
+        self.assertEqual(result["status"], "PASS")
+
+
 if __name__ == "__main__":
     unittest.main()

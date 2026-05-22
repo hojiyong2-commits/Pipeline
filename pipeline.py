@@ -2643,7 +2643,7 @@ def _validate_pr_title_matches_pipeline(state: Dict[str, Any]) -> None:
     try:
         pr_result = subprocess.run(
             ["gh", "pr", "view", "--json", "title,number,url"],
-            capture_output=True, text=True, check=False
+            capture_output=True, text=True, encoding="utf-8", check=False
         )
         if pr_result.returncode != 0:
             return  # PR 없음 — 다른 gate에서 차단됨
@@ -2799,7 +2799,7 @@ def _check_acceptance_packet_via_github(pr_url: str) -> Dict[str, Any]:
         comments_result = subprocess.run(
             ["gh", "api", f"repos/{repo_slug}/issues/{pr_number}/comments",
              "--paginate"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, encoding="utf-8", check=False,
         )
     except (FileNotFoundError, OSError) as exc:
         return _acceptance_blocked(
@@ -2962,6 +2962,8 @@ def _check_acceptance_packet_via_local_file(state: Dict[str, Any]) -> Dict[str, 
 
 # acceptance packet 식별 태그 — _ACCEPTANCE_PACKET_COMMENT_TAG 재사용
 # GitHub Actions run ID 추출 정규식 (모듈 레벨 1회 컴파일 — Rule D2)
+# "runs/\d+" URL 기반 추출: "dev-abc123", "pm_planner-xxx" 등
+# phase attestation receipt run ID는 URL에 "runs/"가 없으므로 자동 제외됨.
 _CONSISTENCY_RUN_ID_PATTERN = re.compile(r"runs/(\d+)")
 # head SHA 추출 정규식 (7~40자리 16진수, 단어 경계)
 _CONSISTENCY_SHA_PATTERN = re.compile(r"\b([0-9a-f]{7,40})\b")
@@ -3013,17 +3015,22 @@ def _consistency_extract_shas(text: str) -> List[str]:
     return found
 
 
-def _consistency_listed_files(text: str) -> List[str]:
+def _consistency_listed_files(text: str) -> set:
     """PR body / packet의 불릿 목록(`- 파일`, `* 파일`)에서 파일명을 추출한다.
+
+    불릿 첫 토큰 중 `.`(확장자/숨김파일) 또는 `/`(경로 구분자)를 포함하는
+    토큰만 파일 후보로 인정한다. `- 장점: 빠름`, `- python -m pytest` 같은
+    서술/명령 텍스트의 첫 토큰은 파일이 아니므로 제외한다 (비파일 오탐 방지,
+    IMP-20260521-90F4 MT-1).
 
     Args:
         text: 검색 대상 텍스트.
     Returns:
-        불릿 목록 항목에서 추출한 파일명 리스트.
+        불릿 목록 항목에서 추출한 파일명 집합 (`.` 또는 `/` 포함 토큰만).
     """
     if not text:
-        return []
-    files: List[str] = []
+        return set()
+    files: set = set()
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not (line.startswith("- ") or line.startswith("* ")):
@@ -3034,11 +3041,17 @@ def _consistency_listed_files(text: str) -> List[str]:
             continue
         # 백틱 제거
         body = body.replace("`", "")
-        token = body.split()[0] if body.split() else ""
-        # 파일처럼 보이는 토큰만 (확장자 또는 trust-root 파일명)
+        tokens = body.split()
+        token = tokens[0] if tokens else ""
+        # 후행 콜론 제거 — `- 변경된 파일:` 같은 라벨성 토큰의 콜론 정리.
+        token = token.rstrip(":")
         if not token:
             continue
-        files.append(token)
+        # 파일처럼 보이는 토큰만 인정: 확장자/숨김파일(`.`) 또는 경로(`/`) 포함.
+        # 그 외 서술 텍스트('장점', 'python' 등)는 파일이 아니므로 제외한다.
+        if "." not in token and "/" not in token:
+            continue
+        files.add(token)
     return files
 
 
@@ -3227,43 +3240,49 @@ def _check_protocol_consistency(
                 )
 
     # --- 검사 C: 테스트 통과 수 일치 ---
-    body_counts = _CONSISTENCY_TEST_COUNT_PATTERN.findall(pr_body)
-    packet_counts = (
+    # findall 전체 결과 중 최대값을 전체 테스트 수로 사용한다.
+    # 개별 파일 테스트 수(예: "20 passed")와 전체 테스트 수(예: "456 PASS")가
+    # 공존할 때, 첫 번째 값 대신 최대값을 사용해야 전체 수를 올바르게 비교한다.
+    body_counts_raw = _CONSISTENCY_TEST_COUNT_PATTERN.findall(pr_body)
+    packet_counts_raw = (
         _CONSISTENCY_TEST_COUNT_PATTERN.findall(acceptance_packet_body)
         if has_packet_tag else []
     )
-    if body_counts and packet_counts:
-        if body_counts[0] != packet_counts[0]:
+    body_count = max(int(c) for c in body_counts_raw) if body_counts_raw else None
+    packet_count = max(int(c) for c in packet_counts_raw) if packet_counts_raw else None
+    if body_count is not None and packet_count is not None:
+        if body_count != packet_count:
             return _blocked(
                 "test_count_mismatch",
                 (
-                    f"PR 본문의 테스트 통과 수({body_counts[0]} PASS)와 "
+                    f"PR 본문의 테스트 통과 수({body_count} PASS)와 "
                     f"acceptance packet의 테스트 통과 수"
-                    f"({packet_counts[0]} PASS)가 다릅니다. "
+                    f"({packet_count} PASS)가 다릅니다. "
                     "두 값을 동일 수치로 맞추세요."
                 ),
                 {
-                    "pr_body_test_count": body_counts[0],
-                    "packet_test_count": packet_counts[0],
+                    "pr_body_test_count": str(body_count),
+                    "packet_test_count": str(packet_count),
                 },
             )
 
     # --- 검사 F: stale 파일 설명 탐지 ---
-    # 실제 변경되지 않은 파일을 변경 파일 목록에 적은 경우 차단한다.
+    # PR body에 실제 변경되지 않은 파일이 기술된 경우 차단한다.
+    # acceptance packet의 파일 목록은 검사 D에서 별도 처리한다.
     changed_set = {str(f).replace("\\", "/") for f in pr_changed_files}
     body_listed_files = _consistency_listed_files(pr_body)
     packet_listed_files = (
         _consistency_listed_files(acceptance_packet_body)
-        if has_packet_tag else []
+        if has_packet_tag else set()
     )
-    for listed in body_listed_files + packet_listed_files:
+    for listed in body_listed_files:
         normalized = listed.replace("\\", "/")
         if normalized and normalized not in changed_set:
-            # 목록에 적힌 파일이 실제 diff에 없음 → stale 설명.
+            # PR body에 적힌 파일이 실제 diff에 없음 → stale 설명.
             return _blocked(
                 "stale_file_description",
                 (
-                    f"PR 본문 또는 acceptance packet의 변경 파일 목록에 "
+                    f"PR 본문의 변경 파일 목록에 "
                     f"'{listed}'가 있으나 실제 PR diff에는 변경되지 않았습니다. "
                     "실제 변경되지 않은 파일 설명을 제거하세요."
                 ),
@@ -3274,7 +3293,7 @@ def _check_protocol_consistency(
             )
 
     # --- 검사 D: changed files 일치 ---
-    # PR body에 명시적 파일 목록이 있을 때만 검사한다.
+    # PR body에 명시적 파일 목록이 있을 때만 body 기반 누락 파일 검사한다.
     if body_listed_files:
         body_listed_set = {f.replace("\\", "/") for f in body_listed_files}
         # 실제 changed files 중 body 목록에 없는 핵심 파일을 찾는다.
@@ -3307,7 +3326,61 @@ def _check_protocol_consistency(
                 },
             )
 
+    # acceptance packet의 파일 목록이 있을 때 실제 diff와 비교한다.
+    # packet에만 있고 diff에 없는 파일 → changed_files_mismatch (stale 설명).
+    # diff에 있지만 packet에 없는 파일(tests/ 제외) → changed_files_mismatch (누락).
+    if has_packet_tag and packet_listed_files:
+        packet_listed_set = {f.replace("\\", "/") for f in packet_listed_files}
+        # packet에만 있고 diff에 없는 파일 탐지
+        extra_in_packet: List[str] = []
+        for pf in sorted(packet_listed_set):
+            if pf not in changed_set:
+                extra_in_packet.append(pf)
+        if extra_in_packet:
+            return _blocked(
+                "changed_files_mismatch",
+                (
+                    "acceptance packet의 변경 파일 목록에 실제 PR diff에 없는 파일이 포함되어 있습니다. "
+                    f"실제 diff에 없는 파일: {', '.join(extra_in_packet)}. "
+                    "acceptance packet을 실제 diff와 일치시키세요."
+                ),
+                {
+                    "extra_in_packet": extra_in_packet,
+                    "actual_changed_files": sorted(changed_set),
+                    "packet_listed_files": sorted(packet_listed_set),
+                },
+            )
+        # diff에 있지만 packet에 없는 비-테스트 파일 탐지
+        missing_from_packet: List[str] = []
+        for actual in sorted(changed_set):
+            base = actual.rsplit("/", 1)[-1]
+            is_test_file = (
+                actual.startswith("tests/")
+                or base.startswith("test_")
+            )
+            if is_test_file:
+                continue
+            if actual not in packet_listed_set:
+                missing_from_packet.append(actual)
+        if missing_from_packet:
+            return _blocked(
+                "changed_files_mismatch",
+                (
+                    "acceptance packet의 변경 파일 목록이 실제 PR diff와 다릅니다. "
+                    f"실제 변경되었으나 packet에 없는 파일: "
+                    f"{', '.join(missing_from_packet)}. "
+                    "acceptance packet을 실제 diff와 일치시키세요."
+                ),
+                {
+                    "missing_from_packet": missing_from_packet,
+                    "actual_changed_files": sorted(changed_set),
+                    "packet_listed_files": sorted(packet_listed_set),
+                },
+            )
+
     # --- 검사 E: trust-root 변경 설명 의무 ---
+    # trust-root 파일은 PR body 또는 acceptance packet에 언급되어야 한다.
+    combined_text = pr_body + "\n" + acceptance_packet_body
     for actual in sorted(changed_set):
         base = actual.rsplit("/", 1)[-1]
         is_trust_root = base in CONSISTENCY_TRUST_ROOT_FILES or any(
@@ -3315,8 +3388,8 @@ def _check_protocol_consistency(
         )
         if not is_trust_root:
             continue
-        # trust-root 파일은 PR body에 substring으로 언급되어야 한다.
-        if base not in pr_body and actual not in pr_body:
+        # trust-root 파일은 PR body 또는 acceptance packet에 substring으로 언급되어야 한다.
+        if base not in combined_text and actual not in combined_text:
             return _blocked(
                 "trust_root_change_undocumented",
                 (
@@ -3379,7 +3452,7 @@ def _check_acceptance_readiness(
     try:
         pr_result = subprocess.run(
             ["gh", "pr", "view", "--json", "isDraft,title,body,number,url"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, encoding="utf-8", check=False,
         )
     except (FileNotFoundError, OSError):
         # gh CLI 미설치 — 더 이상 PASS로 통과시키지 않음
