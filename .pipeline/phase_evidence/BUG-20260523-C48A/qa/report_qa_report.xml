@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260523-C48A</pipeline_id>
+  <agent_id>qa-agent</agent_id>
+  <run_id>qa-ab6b89a0440f927a</run_id>
+  <timestamp>2026-05-24T00:05:00Z</timestamp>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <score_breakdown>
+    <category name="AL" score="25" max="25">핵심 버그 수정 로직 정확: ISOLATION_MARKERS와 ACTUAL_ASSERTION_KEYWORDS 분리, AND 조건 올바름</category>
+    <category name="FS" score="18" max="20">파일 읽기 utf-8+errors=replace 인코딩 방어, AST 파싱 에러 처리. ruff F401 -2pt</category>
+    <category name="PD" score="25" max="25">모듈 설계 명확, 상수 분리로 유지보수성 향상</category>
+    <category name="SEC" score="20" max="20">bandit 무위반, AST 기반 분석</category>
+    <category name="BUILD" score="10" max="10">N/A (meta-task)</category>
+    <category name="WA" score="0" max="0">N/A</category>
+    <category name="UI" score="0" max="0">N/A</category>
+    <category name="TEST" score="10" max="20">4개 자체 테스트 PASS, ruff F401 경고 -2pt</category>
+  </score_breakdown>
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <target_files>tools/check_cli_evidence_contract.py</target_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>SINGLE_FILE</blast_radius>
+  </micro_task_boundary>
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <target_files>tests/test_check_cli_evidence_contract.py</target_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>SINGLE_FILE</blast_radius>
+  </micro_task_boundary>
+  <test_results>
+    <test name="test_bad_isolation_only_run_cli" result="PASS" />
+    <test name="test_bad_isolation_only_pipeline_state_path" result="PASS" />
+    <test name="test_good_isolation_with_assertion" result="PASS" />
+    <test name="test_good_read_only_annotation" result="PASS" />
+  </test_results>
+  <oracle_verification>
+    <oracle id="TC-01" case_kind="error">
+      <verdict>PASS</verdict>
+    </oracle>
+    <oracle id="TC-02" case_kind="normal">
+      <verdict>PASS</verdict>
+    </oracle>
+  </oracle_verification>
+  <failure_signature>NONE</failure_signature>
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <pipeline_id>BUG-20260523-C48A</pipeline_id>
+    <status>READY_FOR_SEC</status>
+  </handover>
+</qa_report>
