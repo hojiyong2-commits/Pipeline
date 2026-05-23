@@ -46,7 +46,7 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/BUG-20260523-2692/dev/scope_manifest_scope_manifest.json",
-      "sha256": "a329af35ae8f7bec359a730c00f9b66277cf814a56db6eaeb8942108a8f4096d",
+      "sha256": "b45301bcd5a9cb0561f1751fc4c4edd46ebf08645b5a23177d2aa146334239a9",
       "size_bytes": 493,
       "requires_force_add": true
     }
