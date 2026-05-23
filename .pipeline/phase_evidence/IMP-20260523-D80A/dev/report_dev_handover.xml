@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+<dev_handover>
+  <pipeline_id>IMP-20260523-D80A</pipeline_id>
+  <phase>dev</phase>
+  <run_id>dev-9ebcab44c393026e</run_id>
+  <from>dev-agent</from>
+  <scope_declaration>
+    <files_to_modify>pipeline.py, tests/test_clarification_gate.py</files_to_modify>
+    <files_to_create>tests/test_clarification_gate.py</files_to_create>
+    <files_to_delete>none</files_to_delete>
+    <micro_tasks>MT-1, MT-2, MT-3, MT-4</micro_tasks>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline._check_pm_clarification_gate (신규), pipeline.cmd_check (수정 - phase==dev 분기), pipeline.cmd_done (수정 - argparse + pm phase 분기), tests.test_clarification_gate (신규)</target_function>
+    <side_effects>state["pm_clarification_gate"] 신규 dict 작성 (PM done 시), failure_packet.json 작성 (BLOCKED 시)</side_effects>
+    <blast_radius>pipeline.py 내 1개 신규 함수 + 2개 함수 hot-path 패치, 신규 테스트 파일 1개 (4 pytest TC + 1 unit self-verify)</blast_radius>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_clarification_gate.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_clarification_gate.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <module_summary>
+    <module id="MT-1">
+      <change>pipeline.py에 _check_pm_clarification_gate(state) 함수 신규 추가 (line 4824 직전). state.get("pm_clarification_gate")가 None이면 PASS (레거시 호환), clarification_needed=true 또는 acceptance_criteria가 빈 리스트면 FAIL.</change>
+    </module>
+    <module id="MT-2">
+      <change>cmd_check에서 codex review gate 블록이 끝난 직후, check_gate 호출 직전에 PM Clarification Gate 호출 코드 삽입. phase==dev 일 때만 동작. failure_packet 기록 + sys.exit(1).</change>
+    </module>
+    <module id="MT-3">
+      <change>argparse에 --clarification-needed, --no-clarification-needed, --clarification-assumptions, --clarification-criteria-source, --clarification-criteria 5개 인자 추가. cmd_done의 phase==pm 분기에서 state["pm_clarification_gate"] dict 생성/저장.</change>
+    </module>
+    <module id="MT-4">
+      <change>tests/test_clarification_gate.py 신규 작성. 4개 pytest TC + 1개 __main__ self-verify 블록. pipeline_state.json 백업/복원 패턴으로 격리. 모든 TC PASS 확인 완료.</change>
+    </module>
+  </module_summary>
+  <execution_check>
+    <python_compile>PASS — python -m py_compile pipeline.py + tests/test_clarification_gate.py 통과</python_compile>
+    <module_import>PASS — python -c "import pipeline" + _check_pm_clarification_gate callable 확인</module_import>
+    <self_verify>PASS — python tests/test_clarification_gate.py __main__ 블록 4개 unit assertion 통과</self_verify>
+    <pytest>PASS — 4/4 tests passed in 1.45s (TC-01~04 전부 PASS, pipeline_state.json 원복 확인)</pytest>
+    <state_integrity>PASS — diff pipeline_state.json pipeline_state.json.bak 결과 차이 없음</state_integrity>
+  </execution_check>
+  <self_check>
+    <python_version_syntax>PASS — Python 3.12, 호환 문법만 사용</python_version_syntax>
+    <type_hinting>PASS — _check_pm_clarification_gate(state: Dict[str, Any]) -> Tuple[bool, str]</type_hinting>
+    <error_handling>PASS — state.get() None-safe, cg.get() None-safe</error_handling>
+    <path_safety>PASS — pathlib.Path 사용, 상대 경로 없음</path_safety>
+    <security>PASS — 외부 입력 없음, state dict read-only 접근</security>
+    <al_edge_cases>PASS — state=None은 dict.get으로 KeyError 없이 처리, 빈 dict는 PASS 반환 (레거시 호환)</al_edge_cases>
+    <pd_policy>PASS — 명시적 (False, reason) 튜플 반환, 빈 reason 반환 없음 (FAIL은 항상 메시지 포함)</pd_policy>
+    <docstring>PASS — _check_pm_clarification_gate에 Purpose/Args/Returns 명시</docstring>
+    <impact_analysis_check>PASS — MT-1~4 각각 impact_analysis 블록 출력 완료, target/upstream/downstream/state_mutations/risk 4필드 채움</impact_analysis_check>
+    <frozen_codebase_check>PASS — scope 외 파일 미수정, minimal patch (라인 추가만, 기존 함수 시그니처 변경 없음), Side-Effect Audit 완료 (cmd_check/cmd_done 외 호출자 없음)</frozen_codebase_check>
+  </self_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_clarification_gate.py</file>
+    <file>scope_manifest.json</file>
+    <file>scope_manifest_MT-1.json</file>
+    <file>scope_manifest_MT-2.json</file>
+    <file>scope_manifest_MT-3.json</file>
+    <file>scope_manifest_MT-4.json</file>
+    <file>tests/oracles/IMP-20260523-E047/oracle_manifest.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-01/input.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-01/expected.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-02/input.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-02/expected.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-03/input.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-03/expected.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-04/input.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-04/expected.json</file>
+  </evidence>
+  <next_phase>QA</next_phase>
+</dev_handover>
+</handover>
