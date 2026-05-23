@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260523-2692</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>단일 테스트 파일 1개, 수정 함수 2개(patch_and_save, test_tc04_legacy_no_field_passes), import os 제거 포함 예상 15줄 이내. FAST_SINGLE_CODE는 micro_task 1개만 허용하므로 MT-1과 MT-2 분리를 위해 STANDARD 프로필 사용. 신규 의존성, 파일 이동, 외부 API 없음.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>15</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <total_functions_identified>2</total_functions_identified>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <split_decision>MT-1: patch_and_save + import os 제거 (같은 위치 근처, 얕은 병합 패치 추가). MT-2: test_tc04 함수 내 merged.update(patch) 이후 동일 pm attestation PASS 블록 추가. 파일은 1개이나 함수 책임 단위로 분리.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>버그 원인과 수정 방법이 코드 수준에서 완전히 분석된 상태입니다. P2 구현 취향 질문(변수명, 블록 위치 등)은 기존 코드 패턴에 맞게 PM이 처리합니다. P0/P1 모호성이 없어 사용자 확인이 필요한 질문이 없습니다.</filter_summary>
+    <user_response>NO_ASKUSER_REQUIRED</user_response>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 수정은 테스트 파일 1개(test_clarification_gate.py)만 건드리고 oracle 파일은 변경하지 않는 방식으로 진행해도 될까요?</user_facing_question>
+        <evidence>버그 원인이 테스트 코드의 얕은 merge 방식 문제로 확인되었습니다. oracle 파일(IMP-20260523-E047)은 정답 데이터이므로 변경하면 안 됩니다.</evidence>
+        <why_it_matters>oracle 파일을 수정하면 "답안지를 바꾸는" 것이 되어 파이프라인 무결성이 깨집니다. 테스트 코드만 수정해야 합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>테스트 코드(test_clarification_gate.py)만 수정</label>
+            <benefit>oracle 파일 무변경으로 답안지 보호. 수정 범위 최소.</benefit>
+            <cost>테스트 코드에 pm attestation 강제 블록이 추가되므로 테스트가 실제 pm attestation 상태에 의존하지 않게 됨 — 테스트 격리 범위가 명확해짐.</cost>
+          </option>
+          <option id="B">
+            <label>oracle 파일도 함께 수정</label>
+            <benefit>oracle 기대값을 현재 동작과 일치시킬 수 있으나, 이 경우는 oracle이 이미 올바른 기대값을 담고 있으므로 해당사항 없음.</benefit>
+            <cost>CODEOWNERS 보호 위반, 파이프라인 무결성 손상 위험. oracle 파일은 정답 데이터이므로 수정하면 안 됨.</cost>
+          </option>
+        </options>
+        <user_answer>태스크 설명에서 "oracle 파일은 수정 불필요 — 테스트 코드 레벨에서 수정"으로 명시됨 → 옵션 A 확정</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <current_step>Step 1: Dev — tests/test_clarification_gate.py 버그 수정</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <interface_spec>
+    - Input: tests/test_clarification_gate.py (현재 버전, import os F401 포함, patch_and_save shallow merge 버그 포함)
+    - Output: tests/test_clarification_gate.py (수정본 — import os 제거, patch_and_save에 pm attestation PASS 강제 블록 추가, test_tc04에 동일 블록 추가)
+    - Validation: pytest tests/test_clarification_gate.py -v 4/4 PASS; ruff check tests/test_clarification_gate.py exit 0 (F401 없음)
+  </interface_spec>
+
+  <requirements>
+    1. [MT-1] Line 15의 import os 제거 (ruff F401 위반 해소).
+    2. [MT-1] patch_and_save() 함수에서 shallow merge 이후 아래 블록 추가:
+         pa = merged.setdefault("phase_attestations", {})
+         if not isinstance(pa, dict):
+             pa = {}
+             merged["phase_attestations"] = pa
+         pa.setdefault("enabled", True)
+         pa.setdefault("phases", {}).setdefault("pm", {})["status"] = "PASS"
+       이 블록은 테스트가 clarification gate 자체만 검증하도록 pm attestation 상태를 고정합니다.
+    3. [MT-2] test_tc04_legacy_no_field_passes() 함수에서 merged.update(patch) 이후 동일한 pa 블록 추가(TC-03/04 exit 1 버그 수정).
+    4. oracle 파일(tests/oracles/IMP-20260523-E047/ 하위) 수정 금지 — 테스트 코드만 수정.
+    5. 이번 파이프라인의 oracle(tests/oracles/BUG-20260523-2692/TC-01, TC-02)은 PM이 이미 작성 완료:
+       - TC-01 (normal): pytest 4/4 PASS 확인
+       - TC-02 (edge): ruff F401 없음 확인
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>tests.test_clarification_gate.patch_and_save</affected_function>
+      <target_files>
+        <file>tests/test_clarification_gate.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>tests.test_clarification_gate._run_tc</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def patch_and_save</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>import os 제거(F401) + patch_and_save에 phase_attestations.phases.pm.status=PASS 강제 블록 추가</change_summary>
+      <line_estimate>12</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>tests.test_clarification_gate.test_tc04_legacy_no_field_passes</affected_function>
+      <target_files>
+        <file>tests/test_clarification_gate.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def test_tc04_legacy_no_field_passes</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>test_tc04 함수의 merged.update(patch) 이후 동일한 pa PASS 블록 추가(TC-03/04 exit 1 버그 수정)</change_summary>
+      <line_estimate>5</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 파이프라인 환경 일치</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>기본 pylance strict 설정 유지</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    1. pytest tests/test_clarification_gate.py -v 4/4 PASS, exit 0 (TC-01 oracle 충족)
+    2. python -m ruff check tests/test_clarification_gate.py exit 0, F401 없음 (TC-02 oracle 충족)
+    3. 엣지케이스: patch_and_save({}, {}) 호출 시 phase_attestations.phases.pm.status가 "PASS"로 설정됨
+    4. 엣지케이스: test_tc04에서 pm_clarification_gate 필드 없는 legacy 상태에서도 exit 0
+    5. 엣지케이스: 기존 phase_attestations가 이미 존재하는 state에서 patch_and_save 호출 시 다른 phase 상태 보존(pm만 PASS 강제)
+    6. oracle 파일(tests/oracles/IMP-20260523-E047/) 무변경 확인 — git diff로 검증
+    7. 변경 파일: tests/test_clarification_gate.py 1개만, scope_manifest 준수
+  </acceptance_criteria>
+
+  <forbidden>
+    - tests/oracles/IMP-20260523-E047/ 하위 파일 수정 금지
+    - pipeline.py 수정 금지
+    - CLAUDE.md / agent MD 수정 금지
+    - tests/test_clarification_gate.py 외 다른 파일 변경 금지
+    - import os를 실제 사용하도록 코드를 추가하는 방식으로 우회 금지 (제거가 올바른 수정)
+  </forbidden>
+
+  <handover_template>
+    <dev_to_qa_template>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>BUG-20260523-2692</pipeline_id>
+      <evidence>
+        <file>tests/test_clarification_gate.py</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </dev_to_qa_template>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_clarification_gate.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260523-2692\TC-01\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260523-2692\TC-01\expected.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260523-2692\TC-02\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260523-2692\TC-02\expected.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      FAST_SINGLE_CODE: 최대 2파일, 2함수, 80줄 이하. 삭제/이동/외부 API 없음.
+      Incremental Module Gate: module design to module dev to module qa PASS 순서.
+      Scope Lock: 변경 파일이 scope_manifest와 일치해야 module dev 기록 가능.
+      Oracle Gate: TC-01(normal), TC-02(edge) 모두 PASS 필요.
+    </phase_rules_excerpt>
+    <prev_phase_summary>신규 BUG 파이프라인 — PM 단계 완료 후 Dev 진입. 선행 phase 없음.</prev_phase_summary>
+  </context_injection>
+</step_plan>

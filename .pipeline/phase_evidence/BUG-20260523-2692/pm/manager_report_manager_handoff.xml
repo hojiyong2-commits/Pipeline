@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260523-2692</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-2bc1822dde60d0ab</planner_run_id>
+  <step_plan_sha256>0c4f10c970e800220947def382d16df930c67a34465a6825e24567abe744a902</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <micro_tasks>
+    <mt id="MT-1" target="tests/test_clarification_gate.py" function="patch_and_save" />
+    <mt id="MT-2" target="tests/test_clarification_gate.py" function="test_tc04_legacy_no_field_passes" />
+  </micro_tasks>
+  <oracle_status>TC-01 (normal) TC-02 (edge) 등록 완료</oracle_status>
+  <contract_status>FROZEN</contract_status>
+  <status>ready</status>
+  <phase_summary>
+    <pm>Contract frozen, step_plan ready. MT-1: patch_and_save fix (import os 제거 + phase_attestations pm PASS 설정). MT-2: test_tc04_legacy_no_field_passes fix (동일 phase_attestations 블록 추가).</pm>
+  </phase_summary>
+</manager_handoff>
