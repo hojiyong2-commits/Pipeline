@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Dict, Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -36,7 +36,6 @@ from pipeline import (
     _set_external_gate,
     _ensure_external_gates,
     _format_metrics_summary_ko,
-    _now,
     cmd_check,
     cmd_done,
     PR_REQUIRED_SECTIONS,
@@ -416,7 +415,7 @@ def test_acceptance_packet_includes_metrics_summary() -> None:
 
         # 두 번 append 시 중복되지 않는지 검증 (섹션 교체 로직)
         existing2 = tmp_path.read_text(encoding="utf-8")
-        new_metrics_section = f"\n\n## 소요 시간 요약\n새 메트릭\n"
+        new_metrics_section = "\n\n## 소요 시간 요약\n새 메트릭\n"
         if "## 소요 시간 요약" in existing2:
             existing2 = re.sub(
                 r"\n\n## 소요 시간 요약\n.*?(?=\n\n#|\Z)",
