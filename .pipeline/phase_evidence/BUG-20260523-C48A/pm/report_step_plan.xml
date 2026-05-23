@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pm-planner-agent output: BUG-20260523-C48A -->
+<!-- run_id: pm_planner-342ee5045b916e60 -->
+
+<decomposition_audit>
+  <total_functions_identified>3</total_functions_identified>
+  <micro_task_count>2</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <split_decision>
+    변경 대상 함수 3개(EVIDENCE_ASSERTION_KEYWORDS 상수 분리 + check_evidence_assertions 로직 수정 + scan_test_files 내 violation message 갱신)와 신규 파일 1개(test_check_cli_evidence_contract.py)를 2개 MT로 분리합니다.
+    MT-1: tools/check_cli_evidence_contract.py 수정(상수 분리 + 로직 변경 + 메시지 갱신)
+    MT-2: tests/test_check_cli_evidence_contract.py 신규 생성(4개 self-test 케이스) + oracle 파일 등록
+    기존 파일 변경 ~25줄 + 신규 파일 ~70줄 = 총 ~95줄이므로 STANDARD 프로필이 적합합니다.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260523-C48A</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>[FS, AL]</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>신규 파일 생성(tests/test_check_cli_evidence_contract.py ~70줄) + 기존 파일 수정(~25줄) = ~95줄로 FAST_SINGLE_CODE 80줄 기준 초과. 변경 파일 2개, 함수 2개 경계에서 STANDARD가 올바른 프로필입니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>95</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      사용자 REJECT 이유가 명확하고 구체적(5가지 수정 사항 열거, 변경 대상 상수명/함수명까지 지정)이므로
+      P0/P1 질문이 없습니다. 상수 이름(ISOLATION_MARKERS vs ISOLATION_KEYWORDS 등), 신규 테스트 함수 이름
+      같은 내부 구현 취향 질문은 사용자에게 묻지 않고 유지보수성 기준으로 PM이 정리했습니다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>격리 키워드(run_cli_with_temp_state, PIPELINE_STATE_PATH)를 evidence assertion에서 분리하여 "둘 다 있어야 통과"로 로직을 변경하는 방식으로 진행합니까?</user_facing_question>
+        <evidence>사용자가 IMP-20260523-9189를 REJECT하면서 "격리 키워드가 EVIDENCE_ASSERTION_KEYWORDS에 포함되어 있어서 helper 호출만 해도 evidence 있음으로 처리된다"고 구체적으로 명시했습니다.</evidence>
+        <why_it_matters>현재 버그는 격리 설정만 있고 실제 상태 검증 assertion이 없는 테스트를 잘못 통과시켜, CI가 약한 테스트를 걸러내지 못합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>ISOLATION_MARKERS + ACTUAL_ASSERTION_KEYWORDS 분리 후 AND 조건</label>
+            <benefit>격리만 있으면 violation, 격리와 assertion 모두 있어야 통과 — 버그가 정확히 수정됩니다.</benefit>
+            <cost>기존 테스트 중 isolation만 있고 assertion 없는 함수가 새로 violation 대상이 될 수 있습니다.</cost>
+          </option>
+          <option id="B">
+            <label>격리 키워드만 EVIDENCE_ASSERTION_KEYWORDS에서 제거</label>
+            <benefit>변경 범위가 더 작습니다.</benefit>
+            <cost>AND 조건이 없으므로 assertion 없이 다른 키워드(final_state 등)만 있어도 통과 — 근본 버그가 남습니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 REJECT 이유에 A 방식이 명시됨. 추천안 A로 진행.</user_answer>
+      </question>
+    </decision_questions>
+    <askuser>NO_ASKUSER_REQUIRED</askuser>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: tools/check_cli_evidence_contract.py (현재 버전, EVIDENCE_ASSERTION_KEYWORDS 단일 튜플)
+    - Output:
+        1. tools/check_cli_evidence_contract.py (수정됨 — ISOLATION_MARKERS + ACTUAL_ASSERTION_KEYWORDS 분리, check_evidence_assertions 로직 변경, violation message 갱신)
+        2. tests/test_check_cli_evidence_contract.py (신규 — 4개 self-test 케이스)
+        3. tests/oracles/BUG-20260523-C48A/TC-01/ (error oracle — isolation_only bad case -> exit 1)
+        4. tests/oracles/BUG-20260523-C48A/TC-02/ (normal oracle — read_only annotation good case -> exit 0)
+        5. scope_manifest_MT-1.json, scope_manifest_MT-2.json, scope_manifest.json
+    - Validation:
+        - python tools/check_cli_evidence_contract.py --path tests/ -> exit 0
+        - python -m pytest tests/test_check_cli_evidence_contract.py -v -> 4/4 PASS
+        - isolation_only 함수 -> exit 1 (FAIL)
+        - isolation + assertion 함수 -> exit 0 (OK)
+        - read_only annotation 함수 -> exit 0 (OK)
+  </interface_spec>
+
+  <requirements>
+    1. EVIDENCE_ASSERTION_KEYWORDS 단일 튜플을 두 개로 분리:
+       - ISOLATION_MARKERS = ("run_cli_with_temp_state", "PIPELINE_STATE_PATH")
+       - ACTUAL_ASSERTION_KEYWORDS = ("assert_post_state", "assert_file_effects", "final_state",
+           "event_log", "phase_attempt_history", "failure_packets", "failure_packet",
+           "artifact_manifest", "created_files", "modified_files")
+       - 제거 대상: "pipeline_state", "post_state" (너무 일반적, 오탐 위험)
+       - "final_state"는 result.final_state 패턴에 쓰이므로 유지
+
+    2. check_evidence_assertions(source) 함수 로직 변경:
+       - 기존: any(kw in source for kw in EVIDENCE_ASSERTION_KEYWORDS)
+       - 신규: has_isolation = any(kw in source for kw in ISOLATION_MARKERS)
+              has_assertion = any(kw in source for kw in ACTUAL_ASSERTION_KEYWORDS)
+              return has_isolation and has_assertion
+       - 함수 시그니처 유지 (bool 반환)
+       - read-only annotation 경로(has_allowlist)는 기존 그대로 유지
+
+    3. scan_test_files 내 violation message 갱신:
+       - "isolation marker(run_cli_with_temp_state/PIPELINE_STATE_PATH)는 있지만
+          evidence assertion(assert_post_state/assert_file_effects/final_state 등)이 없음.
+          실제 상태 검증 assertion을 추가하거나 # CLI_EVIDENCE_ALLOW_READ_ONLY: reason으로 표시할 것."
+       - 기존 메시지에서 "PIPELINE_STATE_PATH"를 evidence assertion으로 언급하는 부분 제거
+
+    4. tests/test_check_cli_evidence_contract.py 신규 생성:
+       - 4개 테스트 케이스 (bad×2, good×2):
+         * test_bad_isolation_only_run_cli: run_cli_with_temp_state + stdout-only assert -> exit 1
+         * test_bad_isolation_only_pipeline_state_path: PIPELINE_STATE_PATH + stdout-only -> exit 1
+         * test_good_isolation_with_assertion: run_cli_with_temp_state + assert_post_state -> exit 0
+         * test_good_read_only_annotation: CLI_EVIDENCE_ALLOW_READ_ONLY annotation -> exit 0
+       - 각 테스트는 tmp 파일을 생성하고 scan_test_files()를 직접 호출하는 방식
+       - 임시 파일은 pytest tmp_path 픽스처 사용 (자동 정리)
+       - import: from tools.check_cli_evidence_contract import scan_test_files
+
+    5. oracle 파일 등록 (tests/oracles/BUG-20260523-C48A/):
+       - TC-01/input.json + TC-01/expected.json (error case: isolation_only -> exit 1)
+       - TC-02/input.json + TC-02/expected.json (normal case: read_only annotation -> exit 0)
+       - source: "user", input/expected SHA-256 포함
+
+    6. CI: pytest가 tests/ 하위 test_*.py를 자동 수집하므로 ci.yml 변경 불필요
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>check_evidence_assertions</affected_function>
+      <target_files>
+        <file>tools/check_cli_evidence_contract.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>scan_test_files (line 291: has_evidence = check_evidence_assertions(func_source))</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>check_evidence_assertions</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        EVIDENCE_ASSERTION_KEYWORDS를 ISOLATION_MARKERS + ACTUAL_ASSERTION_KEYWORDS로 분리하고,
+        check_evidence_assertions 로직을 "둘 다 있어야 True" 조건으로 변경.
+        violation message도 "isolation은 있지만 assertion 없음" 형태로 갱신.
+        pipeline_state, post_state 키워드 제거(오탐 방지).
+      </change_summary>
+      <line_estimate>25</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>scan_test_files</affected_function>
+      <target_files>
+        <file>tests/test_check_cli_evidence_contract.py</file>
+        <file>tests/oracles/BUG-20260523-C48A/TC-01/input.json</file>
+        <file>tests/oracles/BUG-20260523-C48A/TC-01/expected.json</file>
+        <file>tests/oracles/BUG-20260523-C48A/TC-02/input.json</file>
+        <file>tests/oracles/BUG-20260523-C48A/TC-02/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_check_cli_evidence_contract</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        tests/test_check_cli_evidence_contract.py 신규 생성 (4개 self-test 케이스).
+        oracle TC-01(error: isolation_only bad)과 TC-02(normal: read_only good) 등록.
+        MT-1에서 수정된 scan_test_files를 직접 호출하여 수정 결과를 검증.
+      </change_summary>
+      <line_estimate>70</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    1. python tools/check_cli_evidence_contract.py --path tests/ 실행 결과 exit 0
+    2. python -m pytest tests/test_check_cli_evidence_contract.py -v -> 4/4 PASS
+    3. isolation marker만 있는 함수 -> linter violation (exit 1)
+    4. isolation + assert_post_state 있는 함수 -> linter OK (exit 0)
+    5. CLI_EVIDENCE_ALLOW_READ_ONLY annotation -> linter SKIP (exit 0)
+    6. ISOLATION_MARKERS, ACTUAL_ASSERTION_KEYWORDS 두 상수 존재
+    7. check_evidence_assertions가 has_isolation AND has_assertion 반환
+    8. "pipeline_state", "post_state" 키워드가 ACTUAL_ASSERTION_KEYWORDS에서 제거됨
+    9. oracle TC-01, TC-02에 source="user" 포함
+  </acceptance_criteria>
+
+  <forbidden>
+    - pipeline.py 수정 금지
+    - CLAUDE.md 수정 금지
+    - .github/workflows/ci.yml 수정 금지
+    - tests/oracles/ 기존 파일 수정 금지
+    - scan_test_files 함수 시그니처 변경 금지
+    - check_evidence_assertions 반환 타입 변경 금지 (bool)
+    - MT-1 완료 전 MT-2 진행 금지
+  </forbidden>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>

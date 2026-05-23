@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pipeline-manager-agent output: BUG-20260523-C48A -->
+<!-- run_id: pipeline_manager-20e29578fc58f571 -->
+
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>BUG-20260523-C48A</pipeline_id>
+  <planner_run_id>pm_planner-342ee5045b916e60</planner_run_id>
+  <manager_run_id>pipeline_manager-20e29578fc58f571</manager_run_id>
+  <step_plan_sha256>bfa38e2e0d1493688521f33a70e0a63d5ccc528927274925aec7b904ac4076f9</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+
+  <summary>
+    check_cli_evidence_contract.py의 EVIDENCE_ASSERTION_KEYWORDS에서 격리 키워드(run_cli_with_temp_state,
+    PIPELINE_STATE_PATH)를 분리하여 실제 evidence assertion과 구분하는 버그 수정.
+    MT-1: tools/check_cli_evidence_contract.py 상수 분리 및 로직 변경
+    MT-2: tests/test_check_cli_evidence_contract.py self-test 4개 + oracle TC-01/TC-02 등록
+  </summary>
+
+  <execution_profile>STANDARD</execution_profile>
+  <tier>1</tier>
+
+  <phase_plan>
+    <phase id="1" name="PM" status="IN_PROGRESS">
+      <actions>
+        <action>contract init</action>
+        <action>add-module linter_fix, linter_selftest</action>
+        <action>add-question Q1, answer Q1</action>
+        <action>contract audit, ready, freeze</action>
+        <action>pipeline done --phase pm</action>
+        <action>gates prepare-phase --phase pm</action>
+        <action>git add -f + commit + push + gates phase-ci --phase pm</action>
+      </actions>
+    </phase>
+    <phase id="2" name="Dev" status="PENDING">
+      <actions>
+        <action>git checkout -b impl/BUG-20260523-C48A</action>
+        <action>codex-run --stage plan</action>
+        <action>check --phase dev</action>
+        <action>module design MT-1</action>
+        <action>dev-agent spawn: tools/check_cli_evidence_contract.py 수정</action>
+        <action>module dev MT-1 + module qa MT-1 PASS</action>
+        <action>module design MT-2</action>
+        <action>dev-agent spawn: tests/test_check_cli_evidence_contract.py + oracles</action>
+        <action>module dev MT-2 + module qa MT-2 PASS</action>
+        <action>module integrate PASS</action>
+        <action>agent start/finish --phase dev</action>
+        <action>done --phase dev</action>
+        <action>gates prepare-phase --phase dev + push + phase-ci</action>
+        <action>contract add-oracle TC-01 (error) + TC-02 (normal)</action>
+      </actions>
+    </phase>
+    <phase id="4" name="QA" status="PENDING">
+      <actions>
+        <action>agent start/finish --phase qa</action>
+        <action>qa --result PASS --numeric-score N</action>
+        <action>gates prepare-phase --phase qa + push + phase-ci</action>
+      </actions>
+    </phase>
+    <phase id="5" name="Security" status="PENDING">
+      <actions>
+        <action>sec --skip (외부 네트워크/DB 없음)</action>
+      </actions>
+    </phase>
+    <phase id="6" name="Build" status="PENDING">
+      <actions>
+        <action>agent start/finish --phase build</action>
+        <action>build --exe "N/A" --skip-reason "meta-task"</action>
+        <action>gates prepare-phase --phase build + push + phase-ci</action>
+      </actions>
+    </phase>
+    <phase id="7" name="External Gates" status="PENDING">
+      <actions>
+        <action>gates technical</action>
+        <action>gates oracle</action>
+        <action>gates github-ci --repo hojiyong2-commits/Pipeline</action>
+        <action>gates accept --result ACCEPT --evidence &lt;경로&gt; --user-confirmed</action>
+      </actions>
+    </phase>
+    <phase id="8" name="Architect" status="PENDING">
+      <actions>
+        <action>architect --report-file architect_report.xml</action>
+      </actions>
+    </phase>
+  </phase_plan>
+
+  <scope_lock>
+    <allowed_files>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tests/test_check_cli_evidence_contract.py</file>
+      <file>tests/oracles/BUG-20260523-C48A/TC-01/input.json</file>
+      <file>tests/oracles/BUG-20260523-C48A/TC-01/expected.json</file>
+      <file>tests/oracles/BUG-20260523-C48A/TC-02/input.json</file>
+      <file>tests/oracles/BUG-20260523-C48A/TC-02/expected.json</file>
+    </allowed_files>
+    <forbidden_files>
+      <file>pipeline.py</file>
+      <file>CLAUDE.md</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>.claude/agents/*.md</file>
+    </forbidden_files>
+  </scope_lock>
+
+  <anti_gaming_read>true</anti_gaming_read>
+</manager_handoff>
