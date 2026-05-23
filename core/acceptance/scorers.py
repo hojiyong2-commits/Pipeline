@@ -286,9 +286,15 @@ def score_command_check(test: dict[str, Any], base_dir: Path, project_dir: Path)
     stderr_contains = then.get("stderr_contains")
     ok = proc.returncode == expected_returncode
     if stdout_contains is not None:
-        ok = ok and str(stdout_contains) in proc.stdout
+        if isinstance(stdout_contains, list):
+            ok = ok and all(s in proc.stdout for s in stdout_contains)
+        else:
+            ok = ok and str(stdout_contains) in proc.stdout
     if stderr_contains is not None:
-        ok = ok and str(stderr_contains) in proc.stderr
+        if isinstance(stderr_contains, list):
+            ok = ok and all(s in proc.stderr for s in stderr_contains)
+        else:
+            ok = ok and str(stderr_contains) in proc.stderr
     return ok, "command matched expectations" if ok else "command did not match expectations", {
         "command": resolved_command,
         "cwd": str(cwd),
