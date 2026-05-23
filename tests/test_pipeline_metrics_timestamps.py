@@ -1,6 +1,6 @@
 """IMP-20260522-29C1: Pipeline Metrics Timestamp Instrumentation 테스트
 
-13개 테스트:
+17개 테스트:
   - T-001: phase elapsed (both timestamps present)
   - T-002: phase elapsed (missing started_at)
   - T-003: total elapsed (lifecycle timestamps)
@@ -14,6 +14,10 @@
   - T-011: human_acceptance_packet.md에 metrics summary 섹션이 포함됨 (fix-forward 통합 테스트)
   - T-012: cmd_check PASS 시 phase.started_at이 기록됨 (fix-forward v3)
   - T-013: cmd_check PASS 시 기존 started_at을 덮어쓰지 않음 (fix-forward v3)
+  - T-014: TMP-* pipeline_id를 가진 state는 metrics에 확인 불가 반환 (fix-forward v7)
+  - T-015: state=None일 때 crash 없이 확인 불가 반환 (fix-forward v7)
+  - T-016: TMP-* state의 format_metrics_summary_ko 결과에 TMP-가 없어야 한다 (fix-forward v7)
+  - T-017: TMP-* state의 metrics에 PENDING이 없어야 한다 (fix-forward v7)
 """
 import argparse
 import json
@@ -567,3 +571,45 @@ def test_pr_body_bom_stripped_for_section_check() -> None:
             found = section_spec in pr_body_stripped
             label = section_spec
         assert found, f"BOM 제거 후에도 필수 섹션을 찾지 못했다: {label}"
+
+
+# IMP-20260522-29C1 fix-forward v7: TMP-* guard regression tests
+def test_metrics_tmp_pipeline_id_sanitized():
+    """T-014: TMP-* pipeline_id를 가진 state는 metrics에 확인 불가 반환."""
+    state = {
+        "pipeline_id": "TMP-HARNESS-AUTO",
+        "external_gates": {"technical": {"status": "PENDING", "started_at": None, "completed_at": None}},
+    }
+    metrics = _collect_pipeline_metrics(state)
+    assert metrics["pipeline_id"] == "확인 불가"
+    assert "note" in metrics
+    assert metrics["gate_elapsed"] == {}
+
+
+def test_metrics_none_state_sanitized():
+    """T-015: state=None일 때 crash 없이 확인 불가 반환."""
+    metrics = _collect_pipeline_metrics(None)
+    assert metrics["pipeline_id"] == "확인 불가"
+    assert "note" in metrics
+
+
+def test_formatted_metrics_no_tmp_id():
+    """T-016: TMP-* state의 format_metrics_summary_ko 결과에 TMP-가 없어야 한다."""
+    state = {"pipeline_id": "TMP-HARNESS-AUTO", "external_gates": {}}
+    metrics = _collect_pipeline_metrics(state)
+    summary = _format_metrics_summary_ko(metrics)
+    assert "TMP-" not in summary
+
+
+def test_formatted_metrics_no_pending_when_tmp():
+    """T-017: TMP-* state의 metrics에 PENDING이 없어야 한다. gate 요약 PASS와 PENDING 공존 방지."""
+    state = {
+        "pipeline_id": "TMP-HARNESS-AUTO",
+        "external_gates": {
+            "technical": {"status": "PENDING", "started_at": None, "completed_at": None},
+            "oracle": {"status": "PENDING", "started_at": None, "completed_at": None},
+        },
+    }
+    metrics = _collect_pipeline_metrics(state)
+    summary = _format_metrics_summary_ko(metrics)
+    assert "PENDING" not in summary

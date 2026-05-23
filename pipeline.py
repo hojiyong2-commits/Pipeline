@@ -14130,6 +14130,10 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
     pid = metrics.get("pipeline_id", "확인 불가")
     lines.append(f"=== 파이프라인 메트릭 요약 [{pid}] ===")
     lines.append("")
+    note = metrics.get("note")
+    if note:
+        lines.append(f"※ {note}")
+        lines.append("")
 
     # 섹션 1: 전체 소요 시간
     lines.append("[ 전체 소요 시간 ]")
@@ -14233,13 +14237,42 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _sanitized_metrics_unavailable(note: str) -> Dict[str, Any]:
+    """state가 없거나 TMP-* pipeline_id일 때 안전한 확인 불가 metrics 반환."""
+    return {
+        "pipeline_id": "확인 불가",
+        "collected_at": _now(),
+        "note": note,
+        "total_elapsed": {
+            "started_at": "확인 불가",
+            "completed_at": "확인 불가",
+            "elapsed_seconds": "확인 불가",
+            "elapsed_human": "확인 불가",
+        },
+        "phase_elapsed": {},
+        "gate_elapsed": {},
+        "failure_retry": {"total_failure_packets": 0, "failure_code_counts": {}, "return_phase_distribution": {}},
+        "github_actions": {},
+        "agent_sessions": {},
+        "bottleneck": {},
+    }
+
+
 def _collect_pipeline_metrics(
-    state: Dict[str, Any],
+    state: Optional[Dict[str, Any]],
     repo: Optional[str] = None,
     pr: Optional[int] = None,
 ) -> Dict[str, Any]:
     """전체 메트릭 수집 entry point."""
+    if state is None:
+        return _sanitized_metrics_unavailable(
+            "pipeline_state.json 없음 — CI 환경에서 실제 pipeline_state를 사용할 수 없습니다."
+        )
     pid = str(state.get("pipeline_id") or "UNKNOWN")
+    if pid.startswith("TMP-"):
+        return _sanitized_metrics_unavailable(
+            "임시 pipeline — CI 환경에서 실제 pipeline_state를 사용할 수 없습니다."
+        )
 
     # phase elapsed
     phase_elapsed = _phase_elapsed_summary(state)
