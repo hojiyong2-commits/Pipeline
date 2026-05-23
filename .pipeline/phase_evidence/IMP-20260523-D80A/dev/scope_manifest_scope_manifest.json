@@ -1,0 +1,41 @@
+{
+  "pipeline_id": "IMP-20260523-D80A",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_pm_clarification_gate"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.cmd_check"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.cmd_done"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "tests/test_clarification_gate.py"
+      ],
+      "affected_functions": [
+        "tests.test_clarification_gate (신규)"
+      ]
+    }
+  ]
+}
