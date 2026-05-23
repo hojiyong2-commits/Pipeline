@@ -1,0 +1,606 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pm-planner-agent output: IMP-20260523-9189 -->
+<!-- run_id: pm_planner-318b348c5f778b3d -->
+
+<decomposition_audit>
+  <total_functions_identified>12</total_functions_identified>
+  <micro_task_count>6</micro_task_count>
+  <grep_executions>14</grep_executions>
+  <split_decision>
+    신규 파일 4개(helpers/__init__.py, helpers/cli_evidence.py, tools/check_cli_evidence_contract.py, oracle 파일들),
+    기존 파일 수정 4개(test_return_phase_reentry.py, 기존 stdout-only 테스트들, ci.yml, Trust-Root 문서들).
+    Trust-Root 파일(CLAUDE.md, qa-agent.md, test-harness-agent.md, pm-agent.md, ci.yml)을 포함하므로
+    HIGH_RISK 프로필. 변경 범위가 6개 파일 그룹에 걸쳐 있어 MT-1~MT-6으로 분리.
+    MT-4(기존 테스트 회귀 정리)는 테스트 파일 다수에 allowlist 주석만 추가하는 경량 작업.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260523-9189</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <current_step>Step 1: PM Planning (IMP-20260523-9189)</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, BUILD</category_tags>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Task Complexity
+       ════════════════════════════════════════════════════════════════ -->
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>
+      Trust-Root 파일(CLAUDE.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md,
+      .claude/agents/pm-agent.md, .github/workflows/ci.yml)을 직접 수정하고,
+      새 CI lint gate(tools/check_cli_evidence_contract.py)를 workflow에 연결합니다.
+      CI 검사 실패 시 모든 PR이 차단되므로 HIGH_RISK 적용.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>12</expected_changed_files>
+      <expected_changed_functions>6</expected_changed_functions>
+      <expected_changed_lines>620</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       PM 설계 확인 게이트 (Design Confirmation)
+       ════════════════════════════════════════════════════════════════ -->
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      helper 함수 내부 변수명, check_cli_evidence_contract.py 의 정규식 표현 스타일,
+      allowlist 주석의 정확한 위치(함수 위 vs. 테스트 내부) 등 P2 구현 취향은
+      Dev에게 유지보수성 우선으로 위임합니다.
+    </filter_summary>
+
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-4">
+        <user_facing_question>
+          기존 테스트 파일(test_patch_lane.py, test_clarification_gate.py 등)에서
+          pipeline.py CLI를 subprocess로 실행하지만 상태 파일을 검증하지 않는 테스트들을,
+          새 helper 기반으로 전환할지 vs. read-only 주석만 달지 선택해야 합니다.
+
+          분석 결과:
+          - test_patch_lane.py — cluster init/close, patch plan, audit, verify 같은 상태 변경 명령을 사용하지만
+            PIPELINE_STATE_PATH 격리나 final_state 검증이 없음.
+            이 테스트들은 pipeline.py 내부 클러스터 상태(pipeline_state.json 별도 섹션)를 변경하므로
+            엄밀히는 상태 변경 CLI 범주에 해당합니다.
+          - test_clarification_gate.py — PIPELINE_STATE_PATH를 이미 주입하고 exitcode + stdout을 검증하지만
+            final_state 읽기는 없음. check --phase dev는 상태를 바꾸지 않는 read gate입니다.
+          - test_codex_review.py — 일부 subprocess 호출이 있으나 대부분 pipeline 내부 함수 직접 호출.
+        </user_facing_question>
+        <evidence>
+          grep "subprocess.run\|_run.*pipeline" tests/*.py 결과:
+          - test_patch_lane.py: cluster init/close/status, patch plan, audit, verify = 상태 변경 CLI (14개 테스트)
+          - test_clarification_gate.py: check --phase dev = 상태 검사 CLI이지만 state를 바꾸지 않음 (read gate)
+          - test_pipeline_metrics_timestamps.py: git diff only (pipeline.py CLI 없음)
+          - test_codex_review.py: 일부 subprocess 있으나 주로 internal function import
+        </evidence>
+        <why_it_matters>
+          test_patch_lane.py의 cluster init/close 등은 실제 pipeline_state.json 상태를 변경합니다.
+          이것들을 그냥 두면 새 lint gate가 이 테스트들을 FAIL로 잡게 됩니다.
+          범위와 작업량이 달라집니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>test_patch_lane.py만 helper로 전환, test_clarification_gate.py는 read-only 주석 추가</label>
+            <benefit>
+              가장 명확한 분류입니다.
+              test_patch_lane 클러스터/패치 명령은 상태 변경 CLI이므로 helper 전환 대상.
+              test_clarification_gate는 check --phase dev가 상태를 바꾸지 않고 읽기만 하므로 read-only 주석으로 정리.
+            </benefit>
+            <cost>
+              test_patch_lane의 PIPELINE_STATE_PATH 격리를 새로 추가해야 하므로 작업량이 조금 늘어납니다.
+            </cost>
+          </option>
+          <option id="B">
+            <label>test_patch_lane.py도 read-only 주석으로 처리하고 TC-01~03만 helper 전환</label>
+            <benefit>작업 범위가 가장 작습니다.</benefit>
+            <cost>
+              cluster init/close 등이 실제로 상태를 바꾸는데도 read-only 주석을 달면
+              새 lint gate 취지와 어긋납니다. 나중에 다시 고쳐야 할 수 있습니다.
+            </cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (사용자 원문 요청 기존 테스트 회귀 정리 지시에 따름)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       인터페이스 명세
+       ════════════════════════════════════════════════════════════════ -->
+  <interface_spec>
+    - Input: tests/*.py (기존 테스트 파일들), pipeline.py (state 구조 참조)
+    - Output:
+        tests/helpers/__init__.py (새 파일)
+        tests/helpers/cli_evidence.py (새 파일 - run_cli_with_temp_state, assert_post_state, assert_file_effects)
+        tools/__init__.py (새 파일)
+        tools/check_cli_evidence_contract.py (새 파일 - CLI Evidence Contract lint gate)
+        tests/test_return_phase_reentry.py (수정 - helper 기반으로 교체)
+        tests/test_patch_lane.py (수정 - cluster/patch 상태 변경 테스트에 helper 적용)
+        tests/test_clarification_gate.py (수정 - read-only allowlist 주석 추가)
+        CLAUDE.md (수정 - CLI Evidence Contract 강제 규칙 추가)
+        .claude/agents/qa-agent.md (수정 - 동일 규칙 추가)
+        .claude/agents/test-harness-agent.md (수정 - 동일 규칙 추가)
+        .claude/agents/pm-agent.md (수정 - 동일 규칙 추가)
+        .github/workflows/ci.yml (수정 - check_cli_evidence_contract 스텝 추가)
+        tests/oracles/IMP-20260523-9189/ (새 oracle 파일들)
+    - Validation:
+        python tools/check_cli_evidence_contract.py to exit 0
+        python -m pytest tests/test_return_phase_reentry.py -v to 3 passed
+        python -m pytest -q to 기존 테스트 회귀 없음
+        ruff check . to 0 violations
+  </interface_spec>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       요구사항
+       ════════════════════════════════════════════════════════════════ -->
+  <requirements>
+    [CLI Evidence Contract 정의]
+    - 상태 변경 CLI란: pipeline_state.json 변경, failure_packet.json 생성/읽기, event_log/phase_attempt_history/module_gates/external_gates 변경, 파일/디렉터리 생성/수정/삭제 명령
+    - stdout-only PASS 금지: 상태 변경 CLI 테스트는 final_state / post_state / created_files / modified_files / deleted_files / failure_packet / event_log / phase_attempt_history / artifact manifest 중 하나 이상을 반드시 검증
+
+    [tests/helpers/cli_evidence.py 필수 함수]
+    - run_cli_with_temp_state(initial_state, command, extra_files=None)
+        - tmp_path에 pipeline_state.json 생성
+        - PIPELINE_STATE_PATH 환경변수 주입
+        - side files는 temp workspace로 격리 (extra_files: Dict[str, str] - 파일명: 내용)
+        - subprocess 실행 후 final_state 다시 읽기
+        - file snapshot 비교 가능 (실행 전후 파일 목록 캡처)
+        - 반환: CliResult(returncode, output, final_state, temp_dir)
+    - assert_post_state(final_state, expected)
+        - 지원 필드: phases.{phase}.status, current_phase, blocked, revert_blocked,
+          blocked_reason_contains, failure_packets_contains, event_log_contains,
+          phase_attempt_history_contains, external_gates.{gate}.status, module_gates 관련 필드
+    - assert_file_effects(temp_dir, expected)
+        - 지원 필드: created_files (list), modified_files (list), deleted_files (list), not_created_files (list)
+
+    [tools/check_cli_evidence_contract.py lint gate]
+    - tests/**/*.py 스캔
+    - subprocess.run 또는 _run() 등으로 pipeline.py CLI를 실행하는 테스트 탐지
+    - 상태 변경 명령인데 final_state/post_state/file evidence/assert_post_state/assert_file_effects 호출 없으면 FAIL
+    - read-only allowlist (다음 명령은 stdout-only 허용):
+        --help, status, list, interface, metrics (조회), dry-run (state 변경 없는 경우)
+    - allowlist 명시 주석: # CLI_EVIDENCE_ALLOW_READ_ONLY: 이유
+    - exit 0 = 모든 상태 변경 테스트가 evidence 검증 포함 / exit 1 = 위반 목록 출력
+
+    [tests/test_return_phase_reentry.py 교체]
+    - _run_revert() helper를 run_cli_with_temp_state()로 완전 교체
+    - oracle 경로를 IMP-20260523-9189로 업데이트
+    - TC-01: exit 0, 한국어 안내, final_state.current_phase == "dev",
+             dev/qa/sec/build/harness/architect PENDING,
+             phase_attempt_history에 revert_target="dev", failure_code 기록
+    - TC-02: exit 0, final_state.current_phase == "pm",
+             pm/dev/qa/sec/build/harness/architect PENDING, phase_attempt_history 1개 이상
+    - TC-03: exit 1, final_state.blocked == True, final_state.revert_blocked == True,
+             blocked_reason에 반복/RCA 의미 포함, event_log에 revert blocked 기록
+
+    [기존 테스트 회귀 정리]
+    - test_patch_lane.py: cluster init/close/status, patch plan, audit, verify 테스트에 helper 적용
+      또는 각 테스트에 PIPELINE_STATE_PATH 격리 + final_state 검증 추가
+    - test_clarification_gate.py: check --phase dev는 state를 바꾸지 않으므로
+      # CLI_EVIDENCE_ALLOW_READ_ONLY: check --phase dev is a read gate, does not modify state
+      주석 추가
+    - 나머지 테스트(test_codex_review.py 등)에서 subprocess.run mock 패턴은 내부 함수 호출이므로
+      pipeline.py CLI 실행으로 간주하지 않음 (lint gate가 subprocess.run + pipeline.py 경로 조합만 탐지)
+
+    [Trust-Root 문서 반영]
+    - CLAUDE.md: CLI 상태 변경 기능은 stdout-only PASS 금지. 메시지는 증거가 아니다.
+      실행 후 state/file/artifact가 기대대로 바뀐 것을 검증해야 한다.
+      이 검증이 없으면 QA FAIL, CI FAIL. 적절한 섹션에 추가
+    - .claude/agents/qa-agent.md: 동일 문구 + QA 검증 체크리스트에 추가 (Step 0-D 항목)
+    - .claude/agents/test-harness-agent.md: 동일 문구 추가
+    - .claude/agents/pm-agent.md: 동일 문구 추가
+
+    [GitHub Actions ci.yml 연결]
+    - 자동 검사 실행 step 이전에 CLI Evidence Contract lint 검사 step 추가:
+        name: CLI Evidence Contract 검사
+        run: python tools/check_cli_evidence_contract.py
+    - 이 스텝 실패 시 PR merge 불가
+
+    [Documentation-Code Drift 방지 (IMP-20260507-0EDC)]
+    - 이 파이프라인의 새 규칙(CLI Evidence Contract)은 tools/check_cli_evidence_contract.py(코드)와
+      CLAUDE.md + agent MDs(문서) 두 곳에 동시에 반영해야 합니다.
+      문서만 변경하거나 코드만 변경하는 분리 패치 금지.
+
+    [최종 검증 의무]
+    - python tools/check_cli_evidence_contract.py to exit 0
+    - python -m pytest tests/test_return_phase_reentry.py -v to 3 passed
+    - python -m pytest -q to 기존 회귀 없음
+    - ruff check . to 0 violations
+    - GitHub Actions CI
+  </requirements>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Micro-tasks
+       ════════════════════════════════════════════════════════════════ -->
+  <micro_tasks>
+
+    <micro_task id="MT-1">
+      <affected_function>tests.helpers.cli_evidence.run_cli_with_temp_state, assert_post_state, assert_file_effects</affected_function>
+      <target_files>
+        <file>tests/helpers/__init__.py</file>
+        <file>tests/helpers/cli_evidence.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>tests.test_return_phase_reentry._run_revert (MT-3에서 교체됨)</site>
+        <site>tests.test_patch_lane._run (MT-4에서 활용됨)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _run_revert|from tests.helpers|cli_evidence</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        tests/helpers/ 디렉터리를 새로 생성하고 cli_evidence.py에
+        run_cli_with_temp_state / assert_post_state / assert_file_effects 3개 함수를 구현합니다.
+        __init__.py는 빈 패키지 마커입니다.
+      </change_summary>
+      <line_estimate>130</line_estimate>
+      <interface_contract>
+        Input: initial_state(dict), command(list[str]), extra_files(dict or None)
+        Output: CliResult(returncode:int, output:str, final_state:dict, temp_dir:Path)
+        Side effects: subprocess 격리 실행, 임시 디렉터리 자동 정리(caller가 with 블록 사용 시)
+        Dependencies: subprocess, tempfile, json, os, dataclasses
+      </interface_contract>
+      <verification_plan>
+        python -m pytest tests/test_return_phase_reentry.py -v (MT-3 의존하므로 MT-3 후 통합 검증)
+        독립 단위 테스트: TC-01 oracle input으로 run_cli_with_temp_state 직접 호출 후 CliResult 반환 확인
+      </verification_plan>
+      <integration_notes>
+        MT-3(test_return_phase_reentry 교체)와 MT-4(test_patch_lane 업데이트)가 이 모듈을 import합니다.
+        MT-1이 먼저 완료되어야 MT-3, MT-4 개발이 가능합니다.
+      </integration_notes>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>tools.check_cli_evidence_contract.main, scan_test_files, classify_command, check_evidence_assertions</affected_function>
+      <target_files>
+        <file>tools/__init__.py</file>
+        <file>tools/check_cli_evidence_contract.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>.github/workflows/ci.yml (MT-6에서 연결됨)</site>
+        <site>none (독립 스크립트)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>tools/check_cli_evidence_contract|CLI_EVIDENCE_ALLOW_READ_ONLY</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        tools/ 디렉터리를 새로 생성하고 check_cli_evidence_contract.py 스크립트를 구현합니다.
+        tests/**/*.py를 스캔하여 상태 변경 CLI 테스트 중 evidence 검증이 없는 테스트를 찾아내고 FAIL 처리합니다.
+      </change_summary>
+      <line_estimate>180</line_estimate>
+      <interface_contract>
+        Input: tests/**/*.py 파일 목록 (glob)
+        Output: stdout에 위반 목록 또는 PASS 메시지
+        Side effects: 없음 (읽기 전용 lint)
+        Exit code: 0 = clean, 1 = violations found
+        Read-only allowlist: --help, status, list, interface, metrics, dry-run
+        Allowlist 주석 패턴: # CLI_EVIDENCE_ALLOW_READ_ONLY: 이유
+        Evidence assertion 패턴:
+          final_state, post_state, assert_post_state, assert_file_effects,
+          pipeline_state, PIPELINE_STATE_PATH, event_log, phase_attempt_history,
+          failure_packets, failure_packet, artifact manifest, created_files, modified_files
+      </interface_contract>
+      <verification_plan>
+        python tools/check_cli_evidence_contract.py to exit 0 (MT-4 완료 후)
+        MT-4 전에 실행하면 test_patch_lane 위반으로 exit 1 (예상됨)
+      </verification_plan>
+      <integration_notes>
+        MT-4(기존 테스트 정리) 완료 후에야 exit 0을 기대할 수 있습니다.
+        MT-6(ci.yml 연결)은 이 스크립트 완성 후 진행합니다.
+      </integration_notes>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>tests.test_return_phase_reentry._run_revert, TestReturnPhaseReentry.test_tc01, test_tc02, test_tc03</affected_function>
+      <target_files>
+        <file>tests/test_return_phase_reentry.py</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-01/input.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-01/expected.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-02/input.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-02/expected.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-03/input.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-03/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>tests.helpers.cli_evidence.run_cli_with_temp_state (신규 의존)</site>
+        <site>tests.helpers.cli_evidence.assert_post_state (신규 의존)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _run_revert|class TestReturnPhaseReentry|ORACLE_DIR.*577F</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        test_return_phase_reentry.py의 _run_revert() helper를 run_cli_with_temp_state()로 교체합니다.
+        oracle 경로를 IMP-20260523-9189로 업데이트하고, TC-01~03의 assert_post_state 검증을 강화합니다.
+        oracle 파일은 기존 IMP-20260523-577F 내용을 기반으로 IMP-20260523-9189용으로 새로 작성합니다.
+        TC-01에 phase_attempt_history 항목 검증, TC-03에 event_log 검증을 추가합니다.
+      </change_summary>
+      <line_estimate>140</line_estimate>
+      <interface_contract>
+        oracle input.json: IMP-20260523-577F TC-01~03과 동일한 initial_state 구조 (pipeline_id만 변경)
+        oracle expected.json: post_state, event_log_contains, phase_attempt_history_contains 포함
+        TC-01 추가 검증: phase_attempt_history에 revert_target="dev" 항목 존재
+        TC-02 추가 검증: current_phase == "pm" (BUG-20260523-F4D6 완료분 검증)
+        TC-03 추가 검증: event_log에 "revert blocked" 포함
+      </interface_contract>
+      <verification_plan>
+        python -m pytest tests/test_return_phase_reentry.py -v to 3 passed
+        oracle SHA-256 해시가 input.json/expected.json에 기록되어 있어야 함
+      </verification_plan>
+      <integration_notes>
+        MT-1(cli_evidence.py) 완료 후에만 개발 가능합니다.
+        oracle 파일은 source="user" (사용자 요청 명세 기반)로 기록합니다.
+        기존 IMP-20260523-577F oracle 파일은 수정하지 않습니다.
+      </integration_notes>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>tests.test_patch_lane.TestClusterCommands, TestPatchVerify, tests.test_clarification_gate.*</affected_function>
+      <target_files>
+        <file>tests/test_patch_lane.py</file>
+        <file>tests/test_clarification_gate.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>tests.helpers.cli_evidence.run_cli_with_temp_state (test_patch_lane에서 활용)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def test_cluster_init|def test_patch_verify|def test_patch_plan|def test_clarification</pattern>
+        <match_count>18</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        test_patch_lane.py의 cluster init/close/status, patch plan, audit, verify 테스트에
+        PIPELINE_STATE_PATH 격리 및 final_state 검증을 추가합니다.
+        test_clarification_gate.py의 check --phase dev 테스트에
+        # CLI_EVIDENCE_ALLOW_READ_ONLY 주석을 추가합니다 (state를 바꾸지 않는 read gate).
+      </change_summary>
+      <line_estimate>120</line_estimate>
+      <interface_contract>
+        test_patch_lane: cluster init 후 pipeline_state에 clusters 섹션 생성 확인
+        test_patch_lane: patch verify PASS 후 patch_results 섹션에 verdict=PASS 기록 확인
+        test_clarification_gate: # CLI_EVIDENCE_ALLOW_READ_ONLY: check --phase dev reads but does not modify state
+      </interface_contract>
+      <verification_plan>
+        python tools/check_cli_evidence_contract.py to exit 0
+        python -m pytest tests/test_patch_lane.py -v to 기존 14개 모두 PASS
+        python -m pytest tests/test_clarification_gate.py -v to 4개 PASS
+      </verification_plan>
+      <integration_notes>
+        MT-1(cli_evidence.py), MT-2(check_cli_evidence_contract.py) 완료 후 개발합니다.
+        MT-2 스크립트로 이 파일들의 위반 여부를 검증합니다.
+      </integration_notes>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>CLAUDE.md CLI Evidence Contract 섹션, qa-agent.md QA Checklist 섹션, test-harness-agent.md Phase 7 진단 섹션, pm-agent.md 규칙 섹션</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (문서 수정)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>CLI.*evidence|stdout.only|상태 변경.*PASS 금지</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        4개 Trust-Root 문서에 CLI Evidence Contract 강제 규칙 문구를 추가합니다.
+        문구: CLI 상태 변경 기능은 stdout-only PASS 금지. 메시지는 증거가 아니다.
+        실행 후 state/file/artifact가 기대대로 바뀐 것을 검증해야 한다.
+        이 검증이 없으면 QA FAIL, CI FAIL.
+        CLAUDE.md에는 별도 섹션(## CLI Evidence Contract (IMP-20260523-9189))으로 추가합니다.
+        qa-agent.md에는 Step 0-D 항목으로 추가합니다.
+        test-harness-agent.md에는 Phase 7 진단 체크리스트에 추가합니다.
+        pm-agent.md에는 기존 규칙 섹션에 추가합니다.
+        Documentation-Code Drift 방지: 이 4개 파일 수정은 MT-2(코드)와 동일 PR 내에 포함됩니다.
+      </change_summary>
+      <line_estimate>80</line_estimate>
+      <interface_contract>
+        Input: 4개 문서 현재 상태
+        Output: CLI Evidence Contract 규칙이 각 문서의 적절한 위치에 추가됨
+        Side effects: 없음 (문서 수정)
+      </interface_contract>
+      <verification_plan>
+        grep -n "CLI.*상태.*변경\|stdout-only PASS 금지" CLAUDE.md .claude/agents/qa-agent.md
+          .claude/agents/test-harness-agent.md .claude/agents/pm-agent.md
+        to 4개 파일 모두 match 확인
+      </verification_plan>
+      <integration_notes>
+        MT-2(lint gate 코드)와 이 MT-5(문서)는 동일 PR에 포함되어
+        코드-문서 drift가 없어야 합니다.
+        MT-6(ci.yml) 이전에 완료합니다.
+      </integration_notes>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>.github/workflows/ci.yml 자동 검사 실행 step 앞에 새 step 추가</affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>GitHub Actions CI (자동 실행)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>check_cli_evidence_contract|CLI.*Evidence.*Contract.*step</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        ci.yml의 자동 검사 실행 step 이전에 CLI Evidence Contract 검사 step을 추가합니다.
+        run: python tools/check_cli_evidence_contract.py
+        이 step이 exit 1이면 PR merge 불가 (continue-on-error: false 기본값 사용).
+      </change_summary>
+      <line_estimate>8</line_estimate>
+      <interface_contract>
+        ci.yml step name: CLI Evidence Contract 검사
+        run: python tools/check_cli_evidence_contract.py
+        env: PIPELINE_NO_DASHBOARD: "1"
+        continue-on-error: false (기본)
+        위치: 구현 PR 위생 검사 step 이후, 자동 검사 실행 step 이전
+      </interface_contract>
+      <verification_plan>
+        cat .github/workflows/ci.yml | grep -A 3 "CLI Evidence Contract"
+        to step 존재 확인
+        GitHub Actions CI 실행 후 새 step이 PASS 확인
+      </verification_plan>
+      <integration_notes>
+        MT-2(스크립트), MT-4(기존 테스트 정리) 완료 후 진행합니다.
+        MT-4 미완료 상태에서 ci.yml을 추가하면 CI가 즉시 실패하므로 반드시 MT-4 후 진행합니다.
+      </integration_notes>
+    </micro_task>
+
+  </micro_tasks>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Python 버전 및 환경
+       ════════════════════════════════════════════════════════════════ -->
+  <python_version>3.12 - 프로젝트 ci.yml에 python-version: "3.12"로 고정됨</python_version>
+  <env_specs>
+    <python>3.12</python>
+    <vscode>python.defaultInterpreterPath 기존 설정 유지</vscode>
+  </env_specs>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       수락 기준 (Acceptance Criteria)
+       ════════════════════════════════════════════════════════════════ -->
+  <acceptance_criteria>
+    [정상 케이스]
+    1. python tools/check_cli_evidence_contract.py to exit 0, 위반 없음 출력
+    2. python -m pytest tests/test_return_phase_reentry.py -v to 3 passed (TC-01~03 모두)
+    3. python -m pytest -q to 기존 테스트 회귀 없음 (전체 PASS 유지)
+    4. ruff check . to 0 violations
+    5. CLAUDE.md, qa-agent.md, test-harness-agent.md, pm-agent.md에 CLI Evidence Contract 규칙 문구 존재
+
+    [엣지 케이스]
+    6. check_cli_evidence_contract.py 실행 시 # CLI_EVIDENCE_ALLOW_READ_ONLY 주석이 달린 테스트는 위반으로 잡지 않음
+    7. test_acceptance_readiness_e979.py처럼 patch("subprocess.run")으로 mock하는 테스트는 CLI 직접 실행이 아니므로 위반으로 잡지 않음
+    8. TC-03 검증: final_state.blocked=True, final_state.revert_blocked=True, event_log에 revert blocked 포함
+
+    [예외/오류 케이스]
+    9. check_cli_evidence_contract.py에 stdout-only 테스트 남아있으면 exit 1 + 위반 파일명/함수명 출력
+    10. oracle 파일 없으면 test_return_phase_reentry.py에서 FileNotFoundError 명시적 메시지
+    11. GitHub Actions CI - CLI Evidence Contract 검사 step이 실패하면 자동 검사 실행 step 미실행
+
+    [수락 보고서 포함 항목]
+    - 새 hard gate 위치: tools/check_cli_evidence_contract.py + ci.yml CLI Evidence Contract 검사 step
+    - stdout-only 탐지 방법: subprocess.run + pipeline.py 경로 조합 + evidence assertion 부재
+    - PR #203 REJECT 사유 종결: test_return_phase_reentry.py가 helper 기반으로 교체되어 stdout-only 탈피
+    - 수정된 테스트 목록: test_return_phase_reentry.py, test_patch_lane.py
+    - read-only allowlist: test_clarification_gate.py (check --phase dev 읽기 전용)
+
+    [anti-gaming 체크]
+    - step_plan에 anti_gaming_read=true 기록
+    - oracle source=user, 빈 expected 금지, placeholder 금지
+    - Trust-Root 파일 수정은 PM scope에 명시적으로 포함됨
+    - CI hard gate 추가이므로 continue-on-error: false 의무
+  </acceptance_criteria>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       금지 사항
+       ════════════════════════════════════════════════════════════════ -->
+  <forbidden>
+    - tests/oracles/IMP-20260523-577F/ 디렉터리의 기존 oracle 파일 수정 금지
+    - pipeline.py 수정 금지 (BUG-20260523-F4D6에서 이미 완료됨)
+    - 기존 통과 중인 테스트를 helper 적용 과정에서 실패하게 만드는 변경 금지
+    - MT-5(문서)와 MT-2(코드) 중 하나만 반영하는 분리 패치 금지 (Documentation-Code Drift)
+    - MT-6(ci.yml) 추가 시 continue-on-error: true 사용 금지 (hard gate 취지에 어긋남)
+    - test_codex_review.py, test_acceptance_readiness_e979.py 등 mock 기반 테스트에 불필요한 수정 금지
+    - oracle expected.json에 빈 값, TODO, TBD, placeholder 사용 금지
+    - pm-agent.md 수정 시 기존 anti_gaming_read, decomposition_audit 관련 규칙 삭제 금지
+  </forbidden>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Handover Template
+       ════════════════════════════════════════════════════════════════ -->
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260523-9189</pipeline_id>
+      <evidence>
+        <file>tests/helpers/__init__.py</file>
+        <file>tests/helpers/cli_evidence.py</file>
+        <file>tools/__init__.py</file>
+        <file>tools/check_cli_evidence_contract.py</file>
+        <file>tests/test_return_phase_reentry.py</file>
+        <file>tests/test_patch_lane.py</file>
+        <file>tests/test_clarification_gate.py</file>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.github/workflows/ci.yml</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-01/input.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-01/expected.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-02/input.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-02/expected.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-03/input.json</file>
+        <file>tests/oracles/IMP-20260523-9189/TC-03/expected.json</file>
+        <file>scope_manifest.json</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Context Injection (for downstream agents)
+       ════════════════════════════════════════════════════════════════ -->
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_return_phase_reentry.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_patch_lane.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_clarification_gate.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.github\workflows\ci.yml</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-577F\TC-01\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-577F\TC-01\expected.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-577F\TC-03\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-577F\TC-03\expected.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      HIGH_RISK 프로필: Trust-Root 파일 수정 포함. scope_lock_check 필수.
+      MT-1 완료 후 MT-3/MT-4 진행. MT-2+MT-4 완료 후 MT-6 진행.
+      oracle source=user. 기존 577F oracle 수정 금지.
+    </phase_rules_excerpt>
+    <prev_phase_summary>
+      BUG-20260523-F4D6 완료: pipeline.py cmd_revert BLOCKED 분기에 blocked/revert_blocked/blocked_reason/_log_event 추가,
+      test_return_phase_reentry.py에 post_state assertions 추가됨.
+      현재 3개 테스트 모두 PASS 중.
+    </prev_phase_summary>
+  </context_injection>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
