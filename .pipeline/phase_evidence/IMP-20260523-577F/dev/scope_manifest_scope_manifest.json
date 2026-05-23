@@ -1,0 +1,41 @@
+{
+  "pipeline_id": "IMP-20260523-577F",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "cmd_revert (신규), build_parser (subparser 추가), COMMAND_MAP (entry 추가)"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_reset_phases_from (신규), _ensure_v210_fields (phase_attempt_history 추가)"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_revert_budget_check (신규), REVERT_BUDGET 상수"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "tests/test_return_phase_reentry.py"
+      ],
+      "affected_functions": [
+        "TestReturnPhaseReentry (신규 테스트)"
+      ]
+    }
+  ]
+}
