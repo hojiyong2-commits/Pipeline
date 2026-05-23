@@ -15,11 +15,12 @@ ORACLE_DIR = Path("tests/oracles/IMP-20260523-577F")
 PIPELINE_PY = Path("pipeline.py")
 
 
-def _run_revert(initial_state: dict, extra_args: list | None = None) -> tuple[int, str]:
-    """임시 디렉터리에서 pipeline.py revert를 실행하고 (returncode, stdout+stderr)를 반환한다.
+def _run_revert(initial_state: dict, extra_args: list | None = None) -> tuple[int, str, dict]:
+    """임시 디렉터리에서 pipeline.py revert를 실행하고 (returncode, stdout+stderr, post_state)를 반환한다.
 
     PIPELINE_STATE_PATH 환경변수를 사용하여 임시 state 파일을 pipeline.py가 읽도록 한다.
     BASE_DIR가 pipeline.py 위치를 가리키므로 cwd 변경만으로는 state 파일 경로가 바뀌지 않는다.
+    post_state는 subprocess 완료 후 state_file을 다시 읽어 반환한다.
     """
     import os
     extra_args = extra_args or []
@@ -37,7 +38,10 @@ def _run_revert(initial_state: dict, extra_args: list | None = None) -> tuple[in
             encoding="utf-8",
             env=env,
         )
-        return result.returncode, result.stdout + result.stderr
+        after_state: dict = {}
+        if state_file.exists():
+            after_state = json.loads(state_file.read_text(encoding="utf-8"))
+        return result.returncode, result.stdout + result.stderr, after_state
 
 
 class TestReturnPhaseReentry:
@@ -54,7 +58,7 @@ class TestReturnPhaseReentry:
         return_phase = failure_packets[0]["return_phase"] if failure_packets else "dev"
 
         # --to 오버라이드로 failure_packet 없이도 동일 동작 검증
-        returncode, output = _run_revert(initial_state, extra_args=["--to", return_phase])
+        returncode, output, post_state = _run_revert(initial_state, extra_args=["--to", return_phase])
 
         assert returncode == oracle_expected["exit_code"], (
             f"TC-01: exit_code 불일치. 기대={oracle_expected['exit_code']}, 실제={returncode}\n출력:\n{output}"
@@ -62,6 +66,16 @@ class TestReturnPhaseReentry:
         for keyword in oracle_expected["stdout_contains"]:
             assert keyword in output, (
                 f"TC-01: stdout에 '{keyword}'가 없음.\n출력:\n{output}"
+            )
+
+        # post_state 검증: pm=DONE, dev/qa/sec/build/harness/architect=PENDING
+        phases_after = post_state.get("phases", {})
+        assert phases_after.get("pm", {}).get("status") == "DONE", (
+            f"TC-01: pm phase는 DONE이어야 함. 실제={phases_after.get('pm', {}).get('status')}\npost_state={post_state}"
+        )
+        for phase in ["dev", "qa", "sec", "build", "harness", "architect"]:
+            assert phases_after.get(phase, {}).get("status") == "PENDING", (
+                f"TC-01: {phase} phase는 PENDING이어야 함. 실제={phases_after.get(phase, {}).get('status')}\npost_state={post_state}"
             )
 
     def test_tc02_return_phase_pm_resets_all_after_pm(self) -> None:
@@ -72,7 +86,7 @@ class TestReturnPhaseReentry:
         failure_packets = initial_state.get("failure_packets", [])
         return_phase = failure_packets[0]["return_phase"] if failure_packets else "pm"
 
-        returncode, output = _run_revert(initial_state, extra_args=["--to", return_phase])
+        returncode, output, post_state = _run_revert(initial_state, extra_args=["--to", return_phase])
 
         assert returncode == 0, (
             f"TC-02: exit_code 불일치. 기대=0, 실제={returncode}\n출력:\n{output}"
@@ -81,6 +95,17 @@ class TestReturnPhaseReentry:
             assert keyword in output, (
                 f"TC-02: stdout에 '{keyword}'가 없음.\n출력:\n{output}"
             )
+
+        # post_state 검증: pm 포함 모든 7개 phase PENDING, phase_attempt_history 1개 이상
+        phases_after = post_state.get("phases", {})
+        for phase in ["pm", "dev", "qa", "sec", "build", "harness", "architect"]:
+            assert phases_after.get(phase, {}).get("status") == "PENDING", (
+                f"TC-02: {phase} phase는 PENDING이어야 함. 실제={phases_after.get(phase, {}).get('status')}\npost_state={post_state}"
+            )
+        attempt_history = post_state.get("phase_attempt_history", [])
+        assert len(attempt_history) >= 1, (
+            f"TC-02: phase_attempt_history는 1개 이상이어야 함. 실제={len(attempt_history)}\npost_state={post_state}"
+        )
 
     def test_tc03_revert_budget_exceeded_blocked(self) -> None:
         """TC-03 (edge): REVERT_BUDGET 초과 시 BLOCKED + exit 1 + RCA/architect 안내."""
@@ -95,7 +120,7 @@ class TestReturnPhaseReentry:
             "TC-03 oracle: phase_attempt_history에 3회 이상 이력이 있어야 함"
         )
 
-        returncode, output = _run_revert(initial_state, extra_args=["--to", return_phase])
+        returncode, output, post_state = _run_revert(initial_state, extra_args=["--to", return_phase])
 
         assert returncode == 1, (
             f"TC-03: exit_code 불일치. 기대=1 (BLOCKED), 실제={returncode}\n출력:\n{output}"
@@ -104,3 +129,15 @@ class TestReturnPhaseReentry:
             assert keyword in output, (
                 f"TC-03: stdout에 '{keyword}'가 없음.\n출력:\n{output}"
             )
+
+        # post_state 검증: blocked=True, revert_blocked=True, blocked_reason에 "동일한 실패가 반복" 포함
+        assert post_state.get("blocked") is True, (
+            f"TC-03: state['blocked']은 True여야 함. 실제={post_state.get('blocked')}\npost_state={post_state}"
+        )
+        assert post_state.get("revert_blocked") is True, (
+            f"TC-03: state['revert_blocked']은 True여야 함. 실제={post_state.get('revert_blocked')}\npost_state={post_state}"
+        )
+        blocked_reason = post_state.get("blocked_reason", "")
+        assert "동일한 실패가 반복" in blocked_reason, (
+            f"TC-03: blocked_reason에 '동일한 실패가 반복'이 없음. 실제={blocked_reason!r}\npost_state={post_state}"
+        )

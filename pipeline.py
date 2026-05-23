@@ -6464,6 +6464,10 @@ def cmd_revert(args: argparse.Namespace) -> None:
             "  반복 실패는 구조적 문제입니다. RCA 분석과 architect 검토가 필요합니다.\n"
             "  권장: python pipeline.py architect --report-file architect_report.xml\n"
         ))
+        state["blocked"] = True
+        state["revert_blocked"] = True
+        state["blocked_reason"] = "동일한 실패가 반복되어 RCA 필요"
+        _log_event(state, "revert blocked: 동일 실패 반복 — RCA 필요")
         _save(state)
         sys.exit(1)
 
