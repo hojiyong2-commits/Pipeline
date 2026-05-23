@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260523-577F</pipeline_id>
+  <agent_run_id>dev-cf9b0f015d036bf2</agent_run_id>
+  <scope_declaration>
+    <files_modified>
+      <file>pipeline.py</file>
+      <file>tests/test_return_phase_reentry.py</file>
+    </files_modified>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>cmd_revert (신규), build_parser, COMMAND_MAP</target_function>
+    <mt_id>MT-2</mt_id>
+    <target_function>_reset_phases_from (신규), _ensure_v210_fields</target_function>
+    <mt_id>MT-3</mt_id>
+    <target_function>_revert_budget_check (신규), REVERT_BUDGET 상수</target_function>
+    <mt_id>MT-4</mt_id>
+    <target_function>TestReturnPhaseReentry (신규 테스트)</target_function>
+  </impact_analysis>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_return_phase_reentry.py</file>
+    <file>dev_handover.xml</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <test_results>
+    <result>pytest tests/test_return_phase_reentry.py -v: 3 passed in 0.60s</result>
+    <result>pytest tests/ -q: 388 passed, 2 warnings in 21.64s</result>
+    <result>ruff check pipeline.py: All checks passed</result>
+  </test_results>
+  <scope_lock_check>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <status>READY_FOR_QA</status>
+</handover>
