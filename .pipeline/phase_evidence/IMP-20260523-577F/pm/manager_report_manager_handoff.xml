@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260523-577F</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-b1cb55b7b6479cde</manager_run_id>
+  <planner_run_id>pm_planner-03e3096fb3554d31</planner_run_id>
+  <step_plan_sha256>e3818a1db771993565ddb53126b3bb473dbd7956b250071537a2666323813a3e</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <p0_q1>C -- python pipeline.py revert (자동) + --to 오버라이드</p0_q1>
+  <p0_q2>A -- state["phase_attempt_history"] 리스트 보존</p0_q2>
+  <micro_tasks>
+    <mt id="MT-1" file="pipeline.py" functions="cmd_revert,build_parser,COMMAND_MAP" />
+    <mt id="MT-2" file="pipeline.py" functions="_reset_phases_from,_ensure_v210_fields" />
+    <mt id="MT-3" file="pipeline.py" functions="_revert_budget_check,REVERT_BUDGET" />
+    <mt id="MT-4" file="tests/test_return_phase_reentry.py" functions="test_tc01_return_phase_dev_resets_dev_and_later,test_tc02_return_phase_pm_resets_all_after_pm,test_tc03_revert_budget_exceeded_blocked" />
+  </micro_tasks>
+  <oracle_status>TC-01 (normal) TC-02 (normal) TC-03 (edge) 등록 완료 -- contract frozen</oracle_status>
+  <contract_status>FROZEN</contract_status>
+  <contract_hash>e6da30db3fd1039eb9bb2d6a2a0f33ddf98f3efeaa87b418376d70ad3c39c26d</contract_hash>
+  <status>READY_FOR_DEV</status>
+  <phase_summary>
+    <pm>Contract frozen. MT-1: cmd_revert CLI + argparse. MT-2: _reset_phases_from + phase_attempt_history. MT-3: REVERT_BUDGET + _revert_budget_check. MT-4: E2E 테스트 3케이스. HIGH_RISK 프로필 -- pipeline.py trust-root 파일 수정.</pm>
+  </phase_summary>
+</manager_handoff>

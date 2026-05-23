@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260523-577F",
+  "phase": "pipeline_manager",
+  "agent_id": "pipeline-manager-agent",
+  "run_id": "pipeline_manager-b1cb55b7b6479cde",
+  "status": "COMPLETED",
+  "started_at": "2026-05-23T12:07:01Z",
+  "completed_at": "2026-05-23T12:17:08Z",
+  "output_file": "manager_handoff.xml",
+  "output_sha256": "b16c087526246869da6c98dfd9e3c17ec6e94f68c0ec86a94a0d80689f961c12",
+  "evidence_files": [],
+  "commit_sha": "6b900ecf09f15bee32ea4d5bc39ebf521e2d7009"
+}
