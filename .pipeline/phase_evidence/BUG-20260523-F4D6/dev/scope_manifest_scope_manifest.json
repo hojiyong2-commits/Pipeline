@@ -1,0 +1,23 @@
+{
+  "pipeline_id": "BUG-20260523-F4D6",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "cmd_revert"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/test_return_phase_reentry.py"
+      ],
+      "affected_functions": [
+        "_run_revert"
+      ]
+    }
+  ]
+}
