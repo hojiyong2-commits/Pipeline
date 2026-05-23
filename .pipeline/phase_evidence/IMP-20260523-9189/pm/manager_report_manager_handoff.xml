@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pipeline-manager-agent output: IMP-20260523-9189 -->
+<!-- run_id: pipeline_manager-967ebd5d5a7234be -->
+<manager_handoff>
+  <pipeline_id>IMP-20260523-9189</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-967ebd5d5a7234be</manager_run_id>
+  <planner_run_id>pm_planner-318b348c5f778b3d</planner_run_id>
+  <step_plan_sha256>8ee1d4b99255dfa8272e2b0232e27f9f4f3c9c5bf6afedba73582520a2181688</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <micro_tasks>
+    <mt id="MT-1" files="tests/helpers/__init__.py,tests/helpers/cli_evidence.py" functions="run_cli_with_temp_state,assert_post_state,assert_file_effects" />
+    <mt id="MT-2" files="tools/__init__.py,tools/check_cli_evidence_contract.py" functions="main,scan_test_files,classify_command,check_evidence_assertions" />
+    <mt id="MT-3" files="tests/test_return_phase_reentry.py,tests/oracles/IMP-20260523-9189/TC-01/input.json,tests/oracles/IMP-20260523-9189/TC-01/expected.json,tests/oracles/IMP-20260523-9189/TC-02/input.json,tests/oracles/IMP-20260523-9189/TC-02/expected.json,tests/oracles/IMP-20260523-9189/TC-03/input.json,tests/oracles/IMP-20260523-9189/TC-03/expected.json" functions="_run_revert→run_cli_with_temp_state,TestReturnPhaseReentry.test_tc01,test_tc02,test_tc03" />
+    <mt id="MT-4" files="tests/test_patch_lane.py,tests/test_clarification_gate.py" functions="TestClusterCommands,TestPatchVerify" />
+    <mt id="MT-5" files="CLAUDE.md,.claude/agents/qa-agent.md,.claude/agents/test-harness-agent.md,.claude/agents/pm-agent.md" functions="CLI Evidence Contract 섹션 추가" />
+    <mt id="MT-6" files=".github/workflows/ci.yml" functions="CLI Evidence Contract 검사 step 추가" />
+  </micro_tasks>
+  <execution_profile>HIGH_RISK</execution_profile>
+  <oracle_status>oracle 파일은 MT-3 dev-agent 완료 후 add-oracle 예정</oracle_status>
+  <contract_status>PENDING_INIT</contract_status>
+  <status>PM_IN_PROGRESS</status>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>helper 함수 내부 변수명, check_cli_evidence_contract.py 정규식 스타일, allowlist 주석 위치 등 P2 구현 취향은 Dev에게 유지보수성 우선 위임.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-4">
+        <user_facing_question>기존 테스트(test_patch_lane.py, test_clarification_gate.py 등)에서 pipeline.py CLI를 실행하는 테스트들을, 새 helper 기반으로 전환할지 vs. read-only 주석만 달지 선택해야 합니다. test_patch_lane.py는 helper 전환, test_clarification_gate.py는 read-only 주석으로 진행합니까?</user_facing_question>
+        <evidence>grep 결과: test_patch_lane.py에 cluster init/close/status, patch plan/audit/verify = 상태 변경 CLI 14개 테스트. test_clarification_gate.py의 check --phase dev는 state를 바꾸지 않는 read gate.</evidence>
+        <why_it_matters>test_patch_lane 상태 변경 CLI를 read-only로 처리하면 새 lint gate 취지와 어긋납니다. 범위와 작업량이 달라집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>test_patch_lane.py만 helper로 전환, test_clarification_gate.py는 read-only 주석 추가</label>
+            <benefit>가장 명확한 분류. test_patch_lane 클러스터/패치 명령은 상태 변경 CLI이므로 helper 전환 대상.</benefit>
+            <cost>test_patch_lane의 PIPELINE_STATE_PATH 격리를 새로 추가해야 하므로 작업량이 조금 늘어남.</cost>
+          </option>
+          <option id="B">
+            <label>test_patch_lane.py도 read-only 주석으로 처리하고 TC-01~03만 helper 전환</label>
+            <benefit>작업 범위가 가장 작음.</benefit>
+            <cost>cluster init/close 등이 실제로 상태를 바꾸는데도 read-only 주석을 달면 새 lint gate 취지와 어긋남.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (사용자 원문 요청 기존 테스트 회귀 정리 지시에 따름)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+  <key_constraints>
+    <constraint>HIGH_RISK 프로필: Trust-Root 파일 수정 포함. scope_lock_check 필수</constraint>
+    <constraint>MT 순서 의존: MT-1 완료 후 MT-3/MT-4 진행. MT-2+MT-4 완료 후 MT-6 진행</constraint>
+    <constraint>oracle source=user 필수. 기존 IMP-20260523-577F oracle 수정 금지</constraint>
+    <constraint>MT-5(문서)와 MT-2(코드) 동일 PR 내 포함 (Documentation-Code Drift 방지)</constraint>
+    <constraint>MT-6 ci.yml에 continue-on-error: false 의무 (hard gate)</constraint>
+  </key_constraints>
+  <acceptance_criteria>
+    <criterion>python tools/check_cli_evidence_contract.py to exit 0</criterion>
+    <criterion>python -m pytest tests/test_return_phase_reentry.py -v to 3 passed</criterion>
+    <criterion>python -m pytest -q to 기존 테스트 회귀 없음</criterion>
+    <criterion>ruff check . to 0 violations</criterion>
+    <criterion>CLAUDE.md, qa-agent.md, test-harness-agent.md, pm-agent.md에 CLI Evidence Contract 규칙 존재</criterion>
+  </acceptance_criteria>
+  <phase_summary>
+    <pm>step_plan.xml 발행 완료 (6개 MT, HIGH_RISK 프로필). Contract init 및 PM DONE 기록 진행 중.</pm>
+  </phase_summary>
+</manager_handoff>
