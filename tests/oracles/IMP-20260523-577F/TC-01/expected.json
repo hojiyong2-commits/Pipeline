@@ -1,0 +1,29 @@
+{
+  "_comment": "TC-01 expected: revert 후 dev phase PENDING으로 리셋, qa/sec/build/harness/architect도 PENDING",
+  "exit_code": 0,
+  "stdout_contains": [
+    "dev",
+    "되돌아",
+    "다시",
+    "PENDING"
+  ],
+  "stdout_korean": true,
+  "post_state": {
+    "phases": {
+      "pm": {"status": "DONE"},
+      "dev": {"status": "PENDING"},
+      "qa": {"status": "PENDING"},
+      "sec": {"status": "PENDING"},
+      "build": {"status": "PENDING"},
+      "harness": {"status": "PENDING"},
+      "architect": {"status": "PENDING"}
+    },
+    "phase_attempt_history_contains": {
+      "phase": "dev",
+      "previous_status": "DONE"
+    }
+  },
+  "source": "user",
+  "input_sha256": "32cd77f08dd698b79b49a74286e8b9bf31611ca86132c1fce2748efa68747073",
+  "expected_sha256": "83f47a5752211ecc4cce2b05aadec261cfbf25928fb57499deffa1790a93049b"
+}
