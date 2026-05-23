@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-23T09:46:57Z",
+  "generated_at": "2026-05-23T10:08:42Z",
   "pipeline_id": "BUG-20260523-4532",
   "phase": "build",
   "phase_status": "DONE",
-  "commit_hint": "abfe488aa76df784f91cd363649e1d924ab7da1e",
+  "commit_hint": "071aecd1bb7b0b6e6b07200451c7af0166dd67dd",
   "state": {
     "current_phase": "harness",
     "phase_completed_at": "2026-05-23T09:46:44Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260523-4532/build/agent_receipt_build-e4f0163017b1bf0e.json",
       "sha256": "58eefda878a0ebe2a29406d6dbf13b90558b27870d9ecd9a9c8c3fffcb48bf6d",
       "size_bytes": 508,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
