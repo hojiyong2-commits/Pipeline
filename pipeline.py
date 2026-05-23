@@ -3121,8 +3121,9 @@ def _consistency_listed_files(text: str) -> "tuple[set, bool]":
         if _TRUNCATION_PATTERN.search(token):
             truncated = True
             continue
-        # 파일처럼 보이는 토큰만 인정: 확장자/숨김파일(`.`) 또는 경로(`/`) 포함.
-        if "." not in token and "/" not in token:
+        # 파일처럼 보이는 토큰만 인정: 경로(`/`) 포함이거나 올바른 확장자(`.` + 영숫자 접미어) 보유.
+        # 한국어 문장 끝의 `.`(예: `됩니다.`)은 파일명으로 취급하지 않는다 (IMP-20260522-29C1 fix-forward v5).
+        if "/" not in token and "\\" not in token and not re.search(r"\.[A-Za-z0-9_]{1,15}$", token):
             continue
         files.add(token)
     return files, truncated

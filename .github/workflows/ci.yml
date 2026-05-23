@@ -373,7 +373,7 @@ jobs:
           ### 먼저 볼 결론
 
           - 판단 정보 상태: **$decisionReadiness**
-          - 안내: $decisionAdvice
+          - 안내 — $decisionAdvice
           - PR 제목: $prTitle
 
           ### 이번 요청과 완료 결과
