@@ -5118,6 +5118,12 @@ def cmd_check(args: argparse.Namespace) -> None:
     ok, reason = check_gate(state, phase)
 
     if ok:
+        # IMP-20260522-29C1 fix-forward v3: phase 진입 시점(check PASS)에 started_at 기록.
+        # done/qa 완료 시점이 아닌 check PASS 순간에 기록해야 elapsed가 정확해진다.
+        _chk_phase = state.get("phases", {}).get(phase)
+        if isinstance(_chk_phase, dict) and not _chk_phase.get("started_at"):
+            _chk_phase["started_at"] = _now()
+            _save(state)
         print(GREEN(f"\n[GATE OK] {PHASE_LABELS.get(phase, phase)} 진입 가능\n"))
         sys.exit(0)
     else:
@@ -11210,6 +11216,45 @@ def _get_consistency_pr_target(state: Dict[str, Any]) -> Dict[str, str]:
     return {"repo": repo_slug, "pr": pr_number}
 
 
+def _update_pr_body_with_metrics(state: Dict[str, Any]) -> None:
+    """github-ci PASS 후 PR body에 소요 시간 요약 섹션을 업데이트한다.
+
+    IMP-20260522-29C1 fix-forward v3: 사용자가 ACCEPT/REJECT를 결정하기 전에
+    GitHub PR 화면에서 metrics 요약을 볼 수 있도록 PR body를 갱신한다.
+    gh CLI가 없거나 열린 PR이 없으면 조용히 skip한다.
+    """
+    try:
+        metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state))
+        metrics_section = f"\n\n## 소요 시간 요약\n```\n{metrics_str}\n```\n"
+        pr_view = subprocess.run(
+            ["gh", "pr", "view", "--json", "body,number"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        if pr_view.returncode != 0 or not pr_view.stdout.strip():
+            return
+        pr_info = json.loads(pr_view.stdout)
+        pr_body = pr_info.get("body") or ""
+        pr_num = pr_info.get("number")
+        if not pr_num:
+            return
+        if "## 소요 시간 요약" in pr_body:
+            pr_body = re.sub(
+                r"\n\n## 소요 시간 요약\n```\n.*?```\n",
+                metrics_section.rstrip("\n"),
+                pr_body,
+                flags=re.DOTALL,
+            )
+        else:
+            pr_body = pr_body.rstrip("\n") + metrics_section
+        subprocess.run(
+            ["gh", "pr", "edit", str(pr_num), "--body", pr_body],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        print("[METRICS] PR body에 소요 시간 요약 업데이트 완료")
+    except Exception:
+        pass
+
+
 def cmd_gates(args: argparse.Namespace) -> None:
     action = args.gates_action
 
@@ -11839,6 +11884,10 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 ],
             )
         _save(state)
+        # IMP-20260522-29C1 fix-forward v3: github-ci PASS 후 PR body에 metrics 업데이트.
+        # 사용자가 ACCEPT/REJECT를 결정하기 전에 PR 화면에서 소요 시간 요약을 볼 수 있도록 한다.
+        if verification["status"] == "PASS":
+            _update_pr_body_with_metrics(state)
         color = GREEN if verification["status"] == "PASS" else RED
         print(color(f"\n[GITHUB CI GATE {verification['status']}]"))
         print(f"  run_id: {verification.get('run_id')}")

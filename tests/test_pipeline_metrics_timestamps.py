@@ -1,6 +1,6 @@
 """IMP-20260522-29C1: Pipeline Metrics Timestamp Instrumentation 테스트
 
-11개 테스트:
+13개 테스트:
   - T-001: phase elapsed (both timestamps present)
   - T-002: phase elapsed (missing started_at)
   - T-003: total elapsed (lifecycle timestamps)
@@ -8,17 +8,21 @@
   - T-005: malformed timestamp -> unavailable, no crash
   - T-006: _format_metrics_summary_ko 출력에 필수 섹션 포함 확인
   - T-007: runtime artifacts not in git-tracked diff
-  - T-008: phase started_at이 done 시점에 덮어쓰이지 않음 (fix-forward 통합 테스트)
+  - T-008: cmd_done 실제 함수 경로 호출 시 phase started_at이 덮어쓰이지 않음
   - T-009: gate started_at이 completed_at보다 먼저 기록됨 (fix-forward 통합 테스트)
   - T-010: started_at 없으면 elapsed가 '확인 불가'로 유지됨 (fix-forward 통합 테스트)
   - T-011: human_acceptance_packet.md에 metrics summary 섹션이 포함됨 (fix-forward 통합 테스트)
+  - T-012: cmd_check PASS 시 phase.started_at이 기록됨 (fix-forward v3)
+  - T-013: cmd_check PASS 시 기존 started_at을 덮어쓰지 않음 (fix-forward v3)
 """
+import argparse
 import json
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Dict, Any
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -33,6 +37,8 @@ from pipeline import (
     _ensure_external_gates,
     _format_metrics_summary_ko,
     _now,
+    cmd_check,
+    cmd_done,
 )
 
 
@@ -191,43 +197,91 @@ def test_runtime_artifacts_not_in_git_tracked() -> None:
 # ── Fix-forward 통합 테스트 (IMP-20260522-29C1 4 blocker 수정 검증) ──────────────
 
 
-def test_phase_started_at_not_overwritten_on_done() -> None:
-    """T-008: phase started_at이 done 시점에 덮어쓰이지 않아야 한다.
+def test_cmd_done_does_not_overwrite_started_at() -> None:
+    """T-008: cmd_done --phase dev 호출 시 기존 phase.started_at이 유지되어야 한다.
 
     fix-forward: cmd_done에서 non-PM phase started_at fallback(_now()) 제거.
-    이전에 기록된 started_at이 done 호출 시 변경되지 않음을 검증한다.
+    실제 cmd_done 함수를 monkeypatch된 state로 호출하여 검증한다.
     """
     early_started_at = "2026-05-22T10:00:00Z"
 
-    # dev phase에 started_at을 미리 설정한 state 구성
     state: Dict[str, Any] = {
         "pipeline_id": "TEST-T008",
+        "terminal_state": None,
+        "blocked": False,
+        "current_phase": "dev",
+        "phase_attestations": {"enabled": False, "phases": {}},
         "phases": {
+            "pm": {
+                "status": "DONE",
+                "started_at": "2026-05-22T09:00:00Z",
+                "completed_at": "2026-05-22T10:00:00Z",
+            },
             "dev": {
                 "status": "PENDING",
                 "started_at": early_started_at,
                 "completed_at": None,
-            }
+                "agent_run_ids": [],
+                "modules": [],
+                "files_changed": [],
+                "scope_declared": False,
+            },
+            "qa": {"status": "PENDING", "started_at": None, "completed_at": None},
+            "sec": {"status": "PENDING", "started_at": None, "completed_at": None},
+            "build": {"status": "PENDING", "started_at": None, "completed_at": None},
+            "harness": {"status": "PENDING", "started_at": None, "completed_at": None},
+            "architect": {"status": "PENDING", "started_at": None, "completed_at": None},
         },
+        "module_gates": {"enabled": True, "modules": {}, "integration": None},
+        "agent_runs": {},
+        "event_log": [],
+        "failure_packets": [],
+        "outputs": {"items": []},
+        "contract_v2": {"enabled": False},
+        "pipeline_started_at": "2026-05-22T08:00:00Z",
+        "created_at": "2026-05-22T08:00:00Z",
+        "execution_profile": {"mode": "STANDARD"},
     }
 
-    # cmd_done의 fallback 로직을 직접 재현:
-    # fix-forward 적용 후에는 phase != "pm" 이면 started_at을 건드리지 않아야 한다.
-    phase = "dev"
-    if not state["phases"]["pm"].get("started_at") if "pm" in state["phases"] else False:
-        pass  # PM 전용 경로 — dev에는 해당 없음
+    args = argparse.Namespace(
+        phase="dev",
+        branch=None,
+        files="pipeline.py",
+        report_file="dev_handover.xml",
+        scope_declared=True,
+        scope_manifest="scope_manifest.json",
+        agent_run_id="dev-agent",
+        decomp=False,
+        clarification=False,
+        roadmap=False,
+        judgment_confirmed=False,
+        planner_run_id=None,
+        manager_run_id=None,
+        manager_report=None,
+    )
 
-    # 실제 코드에서 제거된 else 브랜치를 재현하여 동작 확인
-    # (아래가 올바른 동작: dev phase의 started_at이 변경되지 않아야 함)
-    state["phases"][phase]["status"] = "DONE"
-    state["phases"][phase]["completed_at"] = _now()
+    with patch("pipeline._load_branch_state", return_value=state), \
+         patch("pipeline._save_state_for"), \
+         patch("pipeline._save"), \
+         patch("pipeline.check_gate", return_value=(True, "")), \
+         patch("pipeline._module_gate_blockers", return_value=[]), \
+         patch("pipeline._validate_module_checkpoints"), \
+         patch("pipeline._validate_dev_handover_file", return_value={}), \
+         patch("pipeline._validate_dev_scope_manifest",
+               return_value={"micro_task_ids": ["MT-1"], "files": ["pipeline.py"]}), \
+         patch("pipeline._validate_agent_run_for_phase",
+               return_value={"run_id": "dev-agent", "agent_id": "dev-agent"}), \
+         patch("pipeline._record_snapshot"), \
+         patch("pipeline._log_event"), \
+         patch("pipeline._openai_advisory_required", return_value=False):
+        cmd_done(args)
 
     assert state["phases"]["dev"]["started_at"] == early_started_at, (
-        f"started_at이 done 시점에 덮어써졌다: "
+        f"cmd_done 호출 후 started_at이 덮어써졌다: "
         f"expected={early_started_at}, got={state['phases']['dev']['started_at']}"
     )
-    assert state["phases"]["dev"]["completed_at"] != state["phases"]["dev"]["started_at"], (
-        "completed_at이 started_at과 같아서는 안 된다 — elapsed가 0이 되므로"
+    assert state["phases"]["dev"]["status"] == "DONE", (
+        "cmd_done 후 status가 DONE이어야 한다"
     )
 
 
@@ -379,3 +433,91 @@ def test_acceptance_packet_includes_metrics_summary() -> None:
         )
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+# ── Fix-forward v3 테스트 (cmd_check started_at 기록 검증) ──────────────────
+
+
+def test_cmd_check_records_phase_started_at() -> None:
+    """T-012: check --phase dev PASS 시 phase.started_at이 기록되어야 한다.
+
+    IMP-20260522-29C1 fix-forward v3: cmd_check에서 PASS 시 started_at 기록 검증.
+    실제 cmd_check 함수를 monkeypatch된 state로 호출하여 검증한다.
+    """
+    state: Dict[str, Any] = {
+        "pipeline_id": "TEST-T012",
+        "terminal_state": None,
+        "phases": {
+            "pm": {
+                "status": "DONE",
+                "started_at": "2026-05-22T09:00:00Z",
+                "completed_at": "2026-05-22T10:00:00Z",
+            },
+            "dev": {
+                "status": "PENDING",
+                "started_at": None,
+                "completed_at": None,
+            },
+        },
+    }
+
+    args = argparse.Namespace(
+        phase="dev",
+        codex_review_waiver="legacy-bootstrap",
+        branch=None,
+    )
+
+    with patch("pipeline._load_branch_state", return_value=state), \
+         patch("pipeline._save"), \
+         patch("pipeline.check_gate", return_value=(True, "")):
+        with pytest.raises(SystemExit) as exc:
+            cmd_check(args)
+
+    assert exc.value.code == 0, (
+        f"check_gate PASS 시 cmd_check는 exit 0이어야 한다 (got {exc.value.code})"
+    )
+    assert state["phases"]["dev"]["started_at"] is not None, (
+        "cmd_check PASS 후 dev phase.started_at이 기록되지 않았다"
+    )
+    assert isinstance(state["phases"]["dev"]["started_at"], str), (
+        "started_at은 ISO 8601 문자열이어야 한다"
+    )
+
+
+def test_cmd_check_does_not_overwrite_existing_started_at() -> None:
+    """T-013: check --phase dev PASS 시 기존 started_at을 덮어쓰지 않아야 한다.
+
+    IMP-20260522-29C1 fix-forward v3: 이미 started_at이 설정된 phase에서
+    cmd_check를 재실행해도 기존 값이 유지되어야 한다.
+    """
+    early_started_at = "2026-05-22T08:00:00Z"
+
+    state: Dict[str, Any] = {
+        "pipeline_id": "TEST-T013",
+        "terminal_state": None,
+        "phases": {
+            "dev": {
+                "status": "PENDING",
+                "started_at": early_started_at,
+                "completed_at": None,
+            },
+        },
+    }
+
+    args = argparse.Namespace(
+        phase="dev",
+        codex_review_waiver="legacy-bootstrap",
+        branch=None,
+    )
+
+    with patch("pipeline._load_branch_state", return_value=state), \
+         patch("pipeline._save"), \
+         patch("pipeline.check_gate", return_value=(True, "")):
+        with pytest.raises(SystemExit) as exc:
+            cmd_check(args)
+
+    assert exc.value.code == 0
+    assert state["phases"]["dev"]["started_at"] == early_started_at, (
+        f"기존 started_at이 cmd_check 재실행 후 덮어써졌다: "
+        f"expected={early_started_at}, got={state['phases']['dev']['started_at']}"
+    )
