@@ -306,13 +306,28 @@ def score_command_check(test: dict[str, Any], base_dir: Path, project_dir: Path)
                 env = os.environ.copy()
                 env["PIPELINE_STATE_PATH"] = tmp_state_path
 
-                # Create an isolated cwd so that side-files (e.g. failure_packet.json)
-                # written or read by the subprocess do not interact with the live workspace.
-                tmp_dir = tempfile.TemporaryDirectory()
-                run_cwd = tmp_dir.name
+                # Determine whether the command is a pytest invocation.
+                # pytest tests need to run from the project root so that conftest.py,
+                # rootdir discovery, and relative oracle paths inside tests work correctly.
+                # For pytest commands we keep run_cwd=project_dir and rely solely on
+                # PIPELINE_STATE_PATH for state isolation (no tmp cwd isolation).
+                _is_pytest_cmd = any(
+                    part in ("pytest", "-m") or part.endswith("pytest")
+                    for part in run_command[:4]
+                ) or (len(run_command) > 2 and run_command[1] == "-m" and run_command[2] == "pytest")
+
+                if _is_pytest_cmd:
+                    # pytest commands: use project_dir as cwd for correct rootdir / conftest
+                    run_cwd = str(project_dir.resolve())
+                    # tmp_dir stays None — no side-file isolation needed for pytest
+                else:
+                    # Non-pytest (e.g. pipeline.py revert): use isolated tmp cwd to prevent
+                    # side-files (failure_packet.json etc.) from polluting the live workspace.
+                    tmp_dir = tempfile.TemporaryDirectory()
+                    run_cwd = tmp_dir.name
 
                 # Rewrite command so that relative "pipeline.py" becomes an absolute path,
-                # because the subprocess now runs in the temp dir, not in project_dir.
+                # because the subprocess may run in the temp dir, not in project_dir.
                 abs_project_dir = str(project_dir.resolve())
                 run_command = [
                     os.path.join(abs_project_dir, part) if part == "pipeline.py" else part
