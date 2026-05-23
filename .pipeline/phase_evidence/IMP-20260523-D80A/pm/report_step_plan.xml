@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260523-D80A: PM Clarification Gate — done --phase pm 확장 및 check --phase dev 게이트 -->
+<!-- PM Planner Agent step_plan — 2026-05-23 -->
+
+<pm_output>
+
+<decomposition_audit>
+  <total_functions_identified>5</total_functions_identified>
+  <micro_task_count>4</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>
+    MT-1: _check_pm_clarification_gate() 신규 함수 추가 — 게이트 검증 로직을 독립 함수로 분리.
+    MT-2: cmd_check()에 MT-1 함수 연결 — 호출 지점 분리로 테스트 용이성 확보.
+    MT-3: cmd_done() --phase pm 경로에 4개 인자 파싱 및 pm_clarification_gate 저장 — 기존 pm_gate_flags 블록과 동일 패턴.
+    MT-4: tests/test_clarification_gate.py 신규 작성 — TC-01~TC-04 oracle 소비 회귀 테스트.
+    변경 함수 4개, 변경 파일 2개(pipeline.py + 테스트), 예상 변경 약 80줄 — STANDARD 프로필 적합.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260523-D80A</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Phase (Planning)</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, PD</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 핵심 gate 로직 변경 + 테스트 신규 작성. Trust-Root 파일(pipeline.py, tests/) 수정 포함. STANDARD 유지하되 scope_manifest 엄격 관리.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>5</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>함수명(_check_pm_clarification_gate)은 기존 _check_codex_review_gate 패턴과 일치하도록 PM이 결정. 내부 변수명, 에러 메시지 문구 세부 스타일은 유지보수성 우선 원칙으로 처리하며 사용자에게 묻지 않음.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>레거시 파이프라인(pm_clarification_gate 필드가 없는 기존 상태)을 어떻게 처리할까요?</user_facing_question>
+        <evidence>기존 pipeline_state.json에는 pm_clarification_gate 필드가 없습니다. 새 게이트가 이 필드 부재를 BLOCKED로 처리하면 기존 파이프라인이 모두 막힙니다.</evidence>
+        <why_it_matters>선택에 따라 기존 파이프라인 100% 영향 여부가 결정됩니다. 잘못 선택하면 모든 레거시 파이프라인의 Dev 진입이 차단됩니다.</why_it_matters>
+        <recommended_option>B</recommended_option>
+        <options>
+          <option id="A">
+            <label>항상 필수 — pm_clarification_gate 없으면 BLOCKED</label>
+            <benefit>새 규칙이 즉시 모든 파이프라인에 강제 적용됩니다.</benefit>
+            <cost>기존 파이프라인이 모두 차단됩니다. 레거시 파이프라인 재작업 필요.</cost>
+          </option>
+          <option id="B">
+            <label>허용 — pm_clarification_gate 없으면 PASS (레거시 호환)</label>
+            <benefit>기존 파이프라인에 영향 없음. 새 파이프라인부터만 게이트 적용.</benefit>
+            <cost>신규 파이프라인이 의도적으로 필드를 빠뜨리면 게이트가 작동하지 않습니다.</cost>
+          </option>
+        </options>
+        <user_answer>B — pm_clarification_gate 필드가 없으면 PASS (레거시 파이프라인 호환)</user_answer>
+      </question>
+      <question id="DQ-2" priority="P0" category="module_split" mt_id="MT-3">
+        <user_facing_question>이 기능을 어떻게 저장할까요 — 별도 명령어를 만들까요, 아니면 기존 done --phase pm 명령어를 확장할까요?</user_facing_question>
+        <evidence>현재 done --phase pm에는 --decomp, --clarification, --roadmap 등 플래그가 이미 있습니다. 동일 패턴으로 확장하면 기존 명령어 인터페이스를 유지할 수 있습니다.</evidence>
+        <why_it_matters>새 명령어를 만들면 Pipeline Manager가 추가로 호출해야 하고, 기존 문서도 수정해야 합니다. 확장 방식은 변경 범위가 작습니다.</why_it_matters>
+        <recommended_option>B</recommended_option>
+        <options>
+          <option id="A">
+            <label>별도 명령어 신설 (예: pipeline.py pm-clarification)</label>
+            <benefit>명령 책임이 명확하게 분리됩니다.</benefit>
+            <cost>Pipeline Manager 호출 순서가 늘어나고, 문서 수정 범위가 큽니다.</cost>
+          </option>
+          <option id="B">
+            <label>done --phase pm 확장 — 4개 인자 추가</label>
+            <benefit>기존 인터페이스 유지, 변경 범위 최소화, 테스트 패턴 일관.</benefit>
+            <cost>done --phase pm 인자가 더 많아집니다.</cost>
+          </option>
+        </options>
+        <user_answer>B — 기존 done --phase pm 명령어에 4개 인자 추가</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline_state.json (pm_clarification_gate 필드 포함 또는 누락)
+    - Output: pipeline_state.json 업데이트 (pm_clarification_gate 저장), check --phase dev 시 exit 0/1
+    - Validation: TC-01~TC-04 oracle 파일 기반 회귀 테스트
+  </interface_spec>
+
+  <requirements>
+    - MT-1: pipeline.py에 _check_pm_clarification_gate(state) 함수 신규 추가
+      * state.get("pm_clarification_gate")가 None이면 레거시 호환으로 (True, "") 반환 (사용자 답변 B)
+      * clarification_needed=true이면 (False, "PM clarification이 미해소 상태입니다. done --phase pm --clarification-needed false로 해소 후 진행하세요.") 반환
+      * acceptance_criteria가 빈 리스트이면 (False, "acceptance_criteria가 비어 있습니다. done --phase pm --clarification-criteria 로 기준을 제공하세요.") 반환
+      * 위 조건 모두 통과 시 (True, "") 반환
+    - MT-2: cmd_check()의 phase == "dev" 분기에 _check_pm_clarification_gate(state) 호출 추가
+      * _check_codex_review_gate 호출 이후, check_gate() 호출 이전 위치에 삽입
+      * BLOCKED 시 _record_failure_packet + sys.exit(1) (기존 Codex gate 패턴과 동일)
+    - MT-3: cmd_done() --phase pm 경로에 4개 argparse 인자 파싱 및 저장
+      * 신규 인자 (p_done.add_argument): --clarification-needed (store_true/store_false pair), --clarification-assumptions (str, 기본값 "없음"), --clarification-criteria-source (str, choices: user/pm/inferred, 기본값 user), --clarification-criteria (str, 쉼표 구분)
+      * state["pm_clarification_gate"] 딕셔너리 저장: clarification_needed, assumptions, acceptance_criteria_source, acceptance_criteria(리스트), recorded_at(ISO timestamp)
+      * pm_analysis_gate 기존 업데이트 이후에 위치
+    - MT-4: tests/test_clarification_gate.py 신규 작성
+      * TC-01~TC-04 oracle 파일 소비 (tests/oracles/IMP-20260523-E047/ 기반)
+      * CLI subprocess 기반 테스트: python pipeline.py check --phase dev 호출 후 exit code 검증
+      * 각 TC마다 임시 pipeline_state.json 생성 후 명령 실행 후 exit code 비교 후 정리
+    - Documentation-Code Drift 방지 (IMP-20260507-0EDC): pm_clarification_gate 관련 인라인 주석을 pipeline.py MT-3 구현과 함께 작성. CLAUDE.md 수정은 Trust-Root 파일이므로 이 파이프라인 scope 외.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._check_pm_clarification_gate</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_check (MT-2에서 연결)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _check_codex_review_gate</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_check_pm_clarification_gate(state) 신규 함수 추가 — 레거시 None PASS, clarification_needed=true BLOCKED, acceptance_criteria=[] BLOCKED 로직</change_summary>
+      <line_estimate>20</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline.cmd_check</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_codex_review_gate\(state</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_check() phase == "dev" 분기에 _check_pm_clarification_gate(state) 호출 추가 — Codex gate 이후, check_gate() 이전</change_summary>
+      <line_estimate>15</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline.cmd_done</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.argparse p_done.add_argument 섹션</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>p_done\.add_argument</pattern>
+        <match_count>14</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>done --phase pm에 4개 인자 추가(--clarification-needed, --clarification-assumptions, --clarification-criteria-source, --clarification-criteria) 및 pm_clarification_gate 딕셔너리 state 저장</change_summary>
+      <line_estimate>35</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>tests.test_clarification_gate (신규)</affected_function>
+      <target_files>
+        <file>tests/test_clarification_gate.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>pm_clarification_gate</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TC-01~TC-04 oracle 소비 회귀 테스트 신규 작성 — 임시 pipeline_state.json 기반 CLI subprocess 검증</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.9 — 기존 pipeline.py가 3.9 기반이므로 동일 버전 유지</python_version>
+  <env_specs>
+    <python>3.9</python>
+    <vscode>python.defaultInterpreterPath 유지, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - TC-01: clarification_needed=true 상태에서 check --phase dev 실행 시 exit 1 반환 및 BLOCKED 메시지 출력
+    - TC-02: clarification_needed=false, acceptance_criteria=[] 상태에서 check --phase dev 실행 시 exit 1 반환
+    - TC-03: clarification_needed=false, acceptance_criteria 존재 상태에서 check --phase dev 실행 시 exit 0 반환
+    - TC-04: pm_clarification_gate 필드 없는 레거시 상태에서 check --phase dev 실행 시 exit 0 반환 (레거시 호환)
+    - done --phase pm --clarification-needed --clarification-criteria "기준1,기준2" 실행 후 state에 pm_clarification_gate 딕셔너리 저장 확인
+    - 기존 done --phase pm 명령어(새 인자 없이)가 여전히 정상 작동 (하위 호환성 유지)
+    - tests/test_clarification_gate.py의 모든 테스트가 pytest에서 PASS
+    - scope_manifest.json이 MT-1~MT-4 target_files와 정확히 일치
+    - oracle TC-01~TC-04 expected.json의 exit_code와 실제 결과 일치
+  </acceptance_criteria>
+
+  <forbidden>
+    - tests/oracles/IMP-20260523-E047/ 아래 oracle 파일 수정 금지 (answer-key mutation 금지)
+    - pipeline.py 외 Trust-Root 파일(CLAUDE.md, .github/workflows/**) 수정 금지
+    - 기존 check_gate() 함수 시그니처 변경 금지
+    - 기존 pm_analysis_gate 딕셔너리 구조 변경 금지
+    - MT-4 범위 외 기존 테스트 파일 수정 금지
+    - Codex gate 우회 금지 (--codex-review-waiver legacy-bootstrap 없이 check --phase dev 통과 시도 금지)
+  </forbidden>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_clarification_gate.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-E047\oracle_manifest.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      pm_clarification_gate 필드 구조 (pipeline_state.json 저장):
+      {
+        "clarification_needed": bool,
+        "assumptions": str,
+        "acceptance_criteria_source": "user"|"pm"|"inferred",
+        "acceptance_criteria": [str, ...],
+        "recorded_at": "ISO-8601 timestamp"
+      }
+      게이트 로직:
+      - 필드 없음(None) → PASS (레거시 호환, TC-04)
+      - clarification_needed=true → BLOCKED (TC-01)
+      - acceptance_criteria=[] → BLOCKED (TC-02)
+      - clarification_needed=false + acceptance_criteria 존재 → PASS (TC-03)
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM P0 질문 2개 해소 완료. 레거시 허용(B), done --phase pm 확장(B) 선택. oracle TC-01~TC-04 생성 완료.</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</pm_output>
