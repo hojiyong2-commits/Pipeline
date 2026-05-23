@@ -12,7 +12,6 @@ test_clarification_gate.py — IMP-20260523-D80A PM Clarification Gate 테스트
 """
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +31,14 @@ def load_state() -> dict:
 def patch_and_save(base_state: dict, patch: dict) -> dict:
     """base_state에 patch를 얕은 merge하여 pipeline_state.json에 기록."""
     merged = {**base_state, **patch}
+    # Ensure check --phase dev doesn't block on pm phase attestation —
+    # tests focus on the clarification gate, not attestation state.
+    pa = merged.setdefault("phase_attestations", {})
+    if not isinstance(pa, dict):
+        pa = {}
+        merged["phase_attestations"] = pa
+    pa.setdefault("enabled", True)
+    pa.setdefault("phases", {}).setdefault("pm", {})["status"] = "PASS"
     PIPELINE_STATE.write_text(
         json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -155,6 +162,13 @@ def test_tc04_legacy_no_field_passes():
         # patch_and_save 대신 직접 merge 후 기록
         patch = inp.get("pipeline_state_patch", {})
         merged.update(patch)
+        # Same fix as patch_and_save — ensure pm attestation passes.
+        pa = merged.setdefault("phase_attestations", {})
+        if not isinstance(pa, dict):
+            pa = {}
+            merged["phase_attestations"] = pa
+        pa.setdefault("enabled", True)
+        pa.setdefault("phases", {}).setdefault("pm", {})["status"] = "PASS"
         PIPELINE_STATE.write_text(
             json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
         )
