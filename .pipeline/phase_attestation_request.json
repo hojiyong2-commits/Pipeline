@@ -51,17 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "bfe769efb2edc157954c1326e1bf510b955a7a096ab0fd2d1d70d4b5a5eabcd0",
-      "size_bytes": 652354
-    },
-    {
-      "path": "tests/test_return_phase_reentry.py",
-      "sha256": "abd673ef845a3ce49eabfb2210a21cd0502fc394fcdf18c334e1fc43acc8b5bf",
-      "size_bytes": 7377
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
