@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_output>
+  <agent_receipt>
+    <run_id>pm_planner-03e3096fb3554d31</run_id>
+    <agent>pm-planner-agent</agent>
+    <pipeline_id>IMP-20260523-577F</pipeline_id>
+  </agent_receipt>
+
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <decomposition_audit>
+    <total_functions_identified>6</total_functions_identified>
+    <micro_task_count>4</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <split_decision>pipeline.py 신규 함수 4개 + 테스트 파일 1개: 기능별 MT 분리</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명, 한국어 문구 세부 표현, REVERT_BUDGET 값은 유지보수성 우선 처리. P0-Q1=C, P0-Q2=A 사용자 확정.</filter_summary>
+    <confirmed_by_user>P0-Q1: C(자동+오버라이드), P0-Q2: A(state내 phase_attempt_history) 확정.</confirmed_by_user>
+  </decomposition_audit>
+
+  <step_plan>
+    <pipeline_id>IMP-20260523-577F</pipeline_id>
+    <anti_gaming_read>true</anti_gaming_read>
+    <current_step>Step 1: PM Planning</current_step>
+    <tier>1</tier>
+    <target_agent>Dev</target_agent>
+    <model_tier>Opus</model_tier>
+    <category_tags>BUILD</category_tags>
+
+    <task_complexity>
+      <execution_profile>HIGH_RISK</execution_profile>
+      <reason>pipeline.py trust-root 파일 수정, 파이프라인 엔진 핵심 경로 변경</reason>
+      <uncertainty>
+        <p0_questions>0</p0_questions>
+        <p1_questions>0</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>2</expected_changed_files>
+        <expected_changed_functions>6</expected_changed_functions>
+        <expected_changed_lines>250</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>false</external_api>
+        <auth_or_secret>false</auth_or_secret>
+        <pipeline_protocol>true</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>true</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+    </task_complexity>
+
+    <design_confirmation>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <maintenance_priority>maintainability_first</maintenance_priority>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>내부 변수명, 코드 스타일, 사소한 구현 취향 질문은 묻지 않고 기존 패턴과 유지보수성 기준으로 PM이 정리했습니다.</filter_summary>
+      <decision_questions>
+        <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-1">
+          <user_facing_question>revert 명령 실행 방식을 어떻게 하면 좋을까요?</user_facing_question>
+          <evidence>failure_packet.json이 없을 수도 있으므로 자동 읽기 + 수동 오버라이드 옵션이 필요합니다.</evidence>
+          <why_it_matters>CLI 형태가 결정되어야 argparse와 구현 함수 설계가 확정됩니다.</why_it_matters>
+          <recommended_option>C</recommended_option>
+          <options>
+            <option id="A">
+              <label>failure_packet.json만 자동 읽기</label>
+              <benefit>구현이 단순하고 코드 경로가 하나여서 유지보수가 쉽습니다.</benefit>
+              <cost>failure_packet.json이 없거나 삭제된 경우 revert를 사용할 수 없습니다.</cost>
+            </option>
+            <option id="C">
+              <label>자동 읽기 + --to 오버라이드</label>
+              <benefit>failure_packet.json 유무와 관계없이 --to 플래그로 직접 phase를 지정할 수 있어 유연성이 높습니다.</benefit>
+              <cost>두 가지 경로를 모두 구현해야 하므로 코드량이 약간 증가합니다.</cost>
+            </option>
+          </options>
+          <user_answer>C -- python pipeline.py revert (자동) + --to 오버라이드 확정</user_answer>
+        </question>
+        <question id="DQ-2" priority="P1" category="module_split" mt_id="MT-2">
+          <user_facing_question>revert 전 기존 phase 증거를 어디에 보관할까요?</user_facing_question>
+          <evidence>되돌린 후 이전 시도 이력을 추적해야 budget check와 RCA에 활용할 수 있습니다.</evidence>
+          <why_it_matters>증거 보존 위치가 budget_check 로직과 직접 연결됩니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>state phase_attempt_history 리스트</label>
+              <benefit>pipeline_state.json 안에서 모두 관리되어 별도 파일 없이 이력 조회가 가능합니다.</benefit>
+              <cost>state 파일 크기가 이력 누적에 따라 약간 커질 수 있습니다.</cost>
+            </option>
+            <option id="B">
+              <label>별도 JSON 파일로 이력 관리</label>
+              <benefit>state와 이력이 분리되어 각각 독립적으로 관리할 수 있습니다.</benefit>
+              <cost>파일 경로 관리와 동기화가 필요해서 코드가 복잡해집니다.</cost>
+            </option>
+          </options>
+          <user_answer>A -- state["phase_attempt_history"] 리스트 보존 확정</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <interface_spec>
+      - Input: pipeline.py (현재 상태), failure_packet.json (옵션)
+      - Output: pipeline.py (revert 기능 추가), tests/test_return_phase_reentry.py (신규)
+      - Validation: pytest 3 passed, ruff clean, regression 없음
+    </interface_spec>
+
+    <requirements>
+      - [MT-1] cmd_revert 함수: failure_packet.json 자동 읽기 + --to 오버라이드, budget check 호출, phase 리셋 호출, 한국어 출력
+      - [MT-1] COMMAND_MAP에 "revert": cmd_revert 추가
+      - [MT-1] build_parser에 p_revert subparser 추가 (--to, --dry-run)
+      - [MT-2] _reset_phases_from 함수: return_phase부터 이후 모든 phase PENDING 리셋, phase_attempt_history 보존
+      - [MT-2] _ensure_v210_fields에 phase_attempt_history 마이그레이션 추가
+      - [MT-3] REVERT_BUDGET = 3 상수 추가 (FAILURE_BLOCKED_THRESHOLD 근처)
+      - [MT-3] _revert_budget_check 함수: 동일 조합 횟수 계산, 초과 시 BLOCKED + 한국어 안내
+      - [MT-4] tests/test_return_phase_reentry.py: TC-01(return_phase=dev), TC-02(return_phase=pm), TC-03(BLOCKED) 3케이스
+      - oracle 파일은 tests/oracles/IMP-20260523-577F/TC-0N/ 에 고정, 수정 금지
+    </requirements>
+
+    <micro_tasks>
+      <micro_task id="MT-1">
+        <affected_function>cmd_revert (신규), build_parser (subparser 추가), COMMAND_MAP (entry 추가)</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>COMMAND_MAP dict</site>
+          <site>build_parser subparsers</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>def cmd_revert|"revert".*cmd_revert</pattern>
+          <match_count>0</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>revert subcommand 진입점: failure_packet 읽기, --to 오버라이드, budget check, phase 리셋, 한국어 출력</change_summary>
+        <line_estimate>60</line_estimate>
+      </micro_task>
+      <micro_task id="MT-2">
+        <affected_function>_reset_phases_from (신규), _ensure_v210_fields (phase_attempt_history 추가)</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>cmd_revert (MT-1에서 호출)</site>
+          <site>_ensure_v210_fields</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>phase_attempt_history|_reset_phases_from</pattern>
+          <match_count>0</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>return_phase부터 이후 모든 phase PENDING 리셋, 기존 상태 phase_attempt_history에 보존</change_summary>
+        <line_estimate>65</line_estimate>
+      </micro_task>
+      <micro_task id="MT-3">
+        <affected_function>_revert_budget_check (신규), REVERT_BUDGET 상수</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>cmd_revert (MT-1에서 호출)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>REVERT_BUDGET|_revert_budget_check</pattern>
+          <match_count>0</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>동일 (return_phase, failure_code) 3회 초과 시 BLOCKED + 한국어 RCA 안내</change_summary>
+        <line_estimate>35</line_estimate>
+      </micro_task>
+      <micro_task id="MT-4">
+        <affected_function>TestReturnPhaseReentry (신규 테스트)</affected_function>
+        <target_files>
+          <file>tests/test_return_phase_reentry.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>none</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>test_return_phase_reentry</pattern>
+          <match_count>0</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>TC-01 return_phase=dev, TC-02 return_phase=pm, TC-03 BLOCKED 검증</change_summary>
+        <line_estimate>90</line_estimate>
+      </micro_task>
+    </micro_tasks>
+
+    <python_version>3.12 -- 현재 환경 기준</python_version>
+    <env_specs>
+      <python>3.12</python>
+    </env_specs>
+
+    <acceptance_criteria>
+      - python pipeline.py revert --help: revert 서브커맨드 도움말 출력 (exit 0)
+      - TC-01: return_phase=dev 상태에서 revert 실행 시 dev 이후 phases PENDING, exit 0, 한국어 안내 포함
+      - TC-02: return_phase=pm 상태에서 revert 실행 시 pm 이후 모든 phases PENDING, exit 0
+      - TC-03: 동일 failure_code REVERT_BUDGET(3) 초과 시 BLOCKED + exit 1 + RCA/architect 안내
+      - python -m pytest tests/test_return_phase_reentry.py -v: 3 passed
+      - ruff check pipeline.py: 0 errors
+      - 기존 pytest 전체 PASS (regression 없음)
+      - phase_attempt_history에 이전 시도 스냅샷 보존 확인
+      - failure_packet.json 없을 때 --to 오버라이드로 동작
+      - Codex review waiver: legacy-bootstrap 사용 (pilot 파이프라인)
+    </acceptance_criteria>
+
+    <roadmap>
+      <phase name="PM">IMP-20260523-577F 계획 수립 (현재 단계)</phase>
+      <phase name="Dev MT-1">cmd_revert CLI + argparser</phase>
+      <phase name="Dev MT-2">_reset_phases_from + phase_attempt_history</phase>
+      <phase name="Dev MT-3">REVERT_BUDGET + _revert_budget_check</phase>
+      <phase name="Dev MT-4">tests/test_return_phase_reentry.py</phase>
+      <phase name="QA">pytest 전체 + E2E 3케이스 + ruff 검증</phase>
+      <phase name="Build">N/A (테스트 전용) -- skip-reason: meta-task</phase>
+      <phase name="External Gates">Technical, Oracle, GitHub CI, User Acceptance</phase>
+    </roadmap>
+
+    <forbidden>
+      - oracle 파일(tests/oracles/IMP-20260523-577F/**) 수정 금지
+      - FAILURE_BLOCKED_THRESHOLD, _record_failure_packet, cmd_reset, cmd_unblock 기존 동작 변경 금지
+      - MT-N scope 외 파일 변경 금지
+      - pipeline.py, tests/test_return_phase_reentry.py 2개 파일만 변경 허용
+      - 숫자 점수로 완료 선언 금지, harness --score 경로 금지
+    </forbidden>
+
+    <handover_template>
+      <template_body>
+        <from>dev-agent</from>
+        <to>qa-agent</to>
+        <pipeline_id>IMP-20260523-577F</pipeline_id>
+        <evidence>
+          <file>pipeline.py</file>
+          <file>tests/test_return_phase_reentry.py</file>
+          <file>dev_handover.xml</file>
+          <file>scope_manifest.json</file>
+        </evidence>
+        <status>READY_FOR_QA</status>
+      </template_body>
+    </handover_template>
+
+    <context_injection>
+      <target_files>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_return_phase_reentry.py</file>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-577F\TC-01\input.json</file>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-577F\TC-01\expected.json</file>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-577F\TC-02\input.json</file>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260523-577F\TC-03\input.json</file>
+      </target_files>
+      <phase_rules_excerpt>HIGH_RISK 실행 프로필: pipeline.py는 trust-root 파일. per-module QA 필수. scope_manifest.json 제출 의무. scope_lock_check PASS 없으면 handover 금지.</phase_rules_excerpt>
+      <prev_phase_summary>PM 계획 수립 완료. 사용자 확정: P0-Q1=C (자동+오버라이드), P0-Q2=A (phase_attempt_history). Contract frozen.</prev_phase_summary>
+    </context_injection>
+  </step_plan>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</pm_output>
