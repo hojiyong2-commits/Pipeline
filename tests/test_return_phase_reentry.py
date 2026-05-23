@@ -11,8 +11,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
-
 ORACLE_DIR = Path("tests/oracles/IMP-20260523-577F")
 PIPELINE_PY = Path("pipeline.py")
 
@@ -54,7 +52,6 @@ class TestReturnPhaseReentry:
         # failure_packet.json을 임시 디렉터리에 배치하기 위해 --to 오버라이드 사용
         failure_packets = initial_state.get("failure_packets", [])
         return_phase = failure_packets[0]["return_phase"] if failure_packets else "dev"
-        failure_code = failure_packets[0]["failure_code"] if failure_packets else "unknown"
 
         # --to 오버라이드로 failure_packet 없이도 동일 동작 검증
         returncode, output = _run_revert(initial_state, extra_args=["--to", return_phase])
@@ -92,7 +89,6 @@ class TestReturnPhaseReentry:
         initial_state = oracle_input["initial_state"]
         failure_packets = initial_state.get("failure_packets", [])
         return_phase = failure_packets[0]["return_phase"] if failure_packets else "dev"
-        failure_code = failure_packets[0]["failure_code"] if failure_packets else "qa_logic_error"
 
         # phase_attempt_history에 이미 3회 기록 (TC-03 oracle에 있음)
         assert len(initial_state.get("phase_attempt_history", [])) >= 3, (
