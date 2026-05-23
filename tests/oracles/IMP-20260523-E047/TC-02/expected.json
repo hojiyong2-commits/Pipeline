@@ -1,0 +1,13 @@
+{
+  "case_id": "TC-02",
+  "case_kind": "edge",
+  "exit_code": 1,
+  "stdout_contains": ["BLOCKED", "acceptance_criteria"],
+  "state_after": {
+    "pm_clarification_gate": {
+      "clarification_needed": false,
+      "acceptance_criteria": []
+    }
+  },
+  "description": "acceptance_criteria가 비어 있으면 clarification_needed=false여도 Dev 진입 차단"
+}

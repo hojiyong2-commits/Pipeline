@@ -1,0 +1,44 @@
+{
+  "pipeline_id": "IMP-20260523-E047",
+  "source": "user",
+  "description": "pm_clarification_gate 기능 — done --phase pm 확장 및 check --phase dev 게이트 검증",
+  "cases": [
+    {
+      "case_id": "TC-01",
+      "case_kind": "normal",
+      "input": "tests/oracles/IMP-20260523-E047/TC-01/input.json",
+      "expected": "tests/oracles/IMP-20260523-E047/TC-01/expected.json",
+      "input_sha256": "e13a7bb65dc3438b36c44dd59cc28a99f6b8a9c908d15446e018f064e1d0f76c",
+      "expected_sha256": "a6d2e4330837e7fc88bc563f281a8c8ea0744a241ba57a386330391bdd5e18ce",
+      "description": "clarification_needed=true → check --phase dev → exit 1 (차단)"
+    },
+    {
+      "case_id": "TC-02",
+      "case_kind": "edge",
+      "input": "tests/oracles/IMP-20260523-E047/TC-02/input.json",
+      "expected": "tests/oracles/IMP-20260523-E047/TC-02/expected.json",
+      "input_sha256": "0abcb28cc273878e2d28e6f57ba3b8749743c6d773a5dc33983931e86586a61f",
+      "expected_sha256": "752b1cc5bcf24db7d93dd39934ee6447a4442a94d222ab7f83cfa066783fd401",
+      "description": "clarification_needed=false, acceptance_criteria=[] → check --phase dev → exit 1 (차단)"
+    },
+    {
+      "case_id": "TC-03",
+      "case_kind": "normal",
+      "input": "tests/oracles/IMP-20260523-E047/TC-03/input.json",
+      "expected": "tests/oracles/IMP-20260523-E047/TC-03/expected.json",
+      "input_sha256": "313dd9c4e6d9a5a1e7344bc387b8e8c9c6c258a72d80aa1acdc47c2cae5fb168",
+      "expected_sha256": "1d892b253fde617d446248169503cfe81d1de3d53b8888b26bdb0b2f9c9de09e",
+      "description": "clarification_needed=false, acceptance_criteria 존재 → check --phase dev → exit 0 (통과)"
+    },
+    {
+      "case_id": "TC-04",
+      "case_kind": "edge",
+      "input": "tests/oracles/IMP-20260523-E047/TC-04/input.json",
+      "expected": "tests/oracles/IMP-20260523-E047/TC-04/expected.json",
+      "input_sha256": "0adea7815c42ea9ce9f14fdfb2f44662a09b3990c99118b46af08e148d5d2060",
+      "expected_sha256": "6ca0dd9c8d2d9d066d2a81ee04fe13db31250e0c0d3611ad6c05ae861baf7560",
+      "description": "pm_clarification_gate 필드 없음(레거시) → check --phase dev → exit 0 (하위 호환 PASS)"
+    }
+  ],
+  "created_at": "2026-05-23T00:00:00Z"
+}

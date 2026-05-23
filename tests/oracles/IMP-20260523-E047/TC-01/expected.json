@@ -1,0 +1,12 @@
+{
+  "case_id": "TC-01",
+  "case_kind": "normal",
+  "exit_code": 1,
+  "stdout_contains": ["BLOCKED", "clarification_needed"],
+  "state_after": {
+    "pm_clarification_gate": {
+      "clarification_needed": true
+    }
+  },
+  "description": "clarification_needed=true 상태에서 check --phase dev는 반드시 exit 1 반환"
+}

@@ -1,0 +1,20 @@
+{
+  "case_id": "TC-01",
+  "case_kind": "normal",
+  "description": "clarification_needed=true 시 check --phase dev가 exit 1로 차단되어야 함",
+  "pipeline_state_patch": {
+    "pm_clarification_gate": {
+      "clarification_needed": true,
+      "assumptions": "없음",
+      "acceptance_criteria_source": "user",
+      "acceptance_criteria": []
+    },
+    "phases": {
+      "pm": { "status": "DONE" },
+      "dev": { "status": "PENDING" }
+    },
+    "current_phase": "dev"
+  },
+  "command": ["python", "pipeline.py", "check", "--phase", "dev"],
+  "codex_review_waiver": "legacy-bootstrap"
+}
