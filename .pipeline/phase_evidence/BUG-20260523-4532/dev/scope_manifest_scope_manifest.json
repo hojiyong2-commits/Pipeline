@@ -1,0 +1,33 @@
+{
+  "pipeline_id": "BUG-20260523-4532",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "module-level STATE_FILE constant + 4 hardcoded direct references (lines 8384, 8476, 8504, 9080)"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/test_clarification_gate.py"
+      ],
+      "affected_functions": [
+        "test_tc01, test_tc02, test_tc03, test_tc04, run_check, PIPELINE_STATE, load_state, patch_and_save, restore_state"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        ".gitignore",
+        "human_acceptance_packet.md"
+      ],
+      "affected_functions": [
+        ".gitignore file entry"
+      ]
+    }
+  ]
+}
