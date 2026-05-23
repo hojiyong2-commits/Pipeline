@@ -1,0 +1,43 @@
+{
+  "pipeline_id": "IMP-20260523-9189",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["tests/helpers/__init__.py", "tests/helpers/cli_evidence.py"],
+      "affected_functions": ["tests.helpers.cli_evidence.run_cli_with_temp_state, assert_post_state, assert_file_effects"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["tools/__init__.py", "tools/check_cli_evidence_contract.py"],
+      "affected_functions": ["tools.check_cli_evidence_contract.main, scan_test_files, classify_command, check_evidence_assertions"]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/test_return_phase_reentry.py",
+        "tests/oracles/IMP-20260523-9189/TC-01/input.json",
+        "tests/oracles/IMP-20260523-9189/TC-01/expected.json",
+        "tests/oracles/IMP-20260523-9189/TC-02/input.json",
+        "tests/oracles/IMP-20260523-9189/TC-02/expected.json",
+        "tests/oracles/IMP-20260523-9189/TC-03/input.json",
+        "tests/oracles/IMP-20260523-9189/TC-03/expected.json"
+      ],
+      "affected_functions": ["tests.test_return_phase_reentry._run_revert, TestReturnPhaseReentry.test_tc01, test_tc02, test_tc03"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["tests/test_patch_lane.py", "tests/test_clarification_gate.py"],
+      "affected_functions": ["tests.test_patch_lane.TestClusterCommands, TestPatchVerify, tests.test_clarification_gate.*"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["CLAUDE.md", ".claude/agents/qa-agent.md", ".claude/agents/test-harness-agent.md", ".claude/agents/pm-agent.md"],
+      "affected_functions": ["CLAUDE.md CLI Evidence Contract 섹션, qa-agent.md QA Checklist 섹션, test-harness-agent.md Phase 7 진단 섹션, pm-agent.md 규칙 섹션"]
+    },
+    {
+      "id": "MT-6",
+      "files": [".github/workflows/ci.yml"],
+      "affected_functions": [".github/workflows/ci.yml 자동 검사 실행 step 앞에 새 step 추가"]
+    }
+  ]
+}
