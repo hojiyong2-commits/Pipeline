@@ -9,8 +9,8 @@
 
 PR 제목: BUG-20260523-2692: test_clarification_gate.py TC-03/TC-04 수정 + scorers.py list stdout_contains 버그 수정
 PR 번호: 197
-head SHA: 2a0f44f063941266142408e5d6742976e54c4ec3
-GitHub CI run: 26327843680
+head SHA: 2211e612fbebde64ddfada6b2c9fa8b96c34a06b
+GitHub CI run: 26327906400
 
 ### 이번 요청과 완료 결과
 
@@ -51,7 +51,7 @@ GitHub CI run: 26327843680
 
 Technical gate: PASS (519/519 tests)
 Oracle gate: PASS (T1/T2 모두 PASS)
-GitHub CI gate: PASS (run 26327843680)
+GitHub CI gate: PASS (run 26327906400)
 Phase attestations: PM/Dev/QA/Build 모두 PASS
 
 ### 변경된 파일 (실제 PR diff 기준)
@@ -61,7 +61,7 @@ Phase attestations: PM/Dev/QA/Build 모두 PASS
 
 ### 승인 전에 볼 것
 
-GitHub Actions 결과: https://github.com/hojiyong2-commits/Pipeline/actions/runs/26327843680
+GitHub Actions 결과: https://github.com/hojiyong2-commits/Pipeline/actions/runs/26327906400
 PR: https://github.com/hojiyong2-commits/Pipeline/pull/197
 
 결과가 요청과 맞으면 승인(ACCEPT), 아니면 거절(REJECT) 후 이유를 짧게 적어주세요.
