@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260523-9189</pipeline_id>
+  <evidence>
+    <file>tests/helpers/__init__.py</file>
+    <file>tests/helpers/cli_evidence.py</file>
+    <file>tools/__init__.py</file>
+    <file>tools/check_cli_evidence_contract.py</file>
+    <file>tests/test_return_phase_reentry.py</file>
+    <file>tests/oracles/IMP-20260523-9189/TC-01/input.json</file>
+    <file>tests/oracles/IMP-20260523-9189/TC-01/expected.json</file>
+    <file>tests/oracles/IMP-20260523-9189/TC-02/input.json</file>
+    <file>tests/oracles/IMP-20260523-9189/TC-02/expected.json</file>
+    <file>tests/oracles/IMP-20260523-9189/TC-03/input.json</file>
+    <file>tests/oracles/IMP-20260523-9189/TC-03/expected.json</file>
+    <file>tests/test_patch_lane.py</file>
+    <file>tests/test_clarification_gate.py</file>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.claude/agents/test-harness-agent.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+    <file>.github/workflows/ci.yml</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>tests/helpers/__init__.py</file>
+      <file>tests/helpers/cli_evidence.py</file>
+      <file>tools/__init__.py</file>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tests/test_return_phase_reentry.py</file>
+      <file>tests/oracles/IMP-20260523-9189/TC-01/input.json</file>
+      <file>tests/oracles/IMP-20260523-9189/TC-01/expected.json</file>
+      <file>tests/oracles/IMP-20260523-9189/TC-02/input.json</file>
+      <file>tests/oracles/IMP-20260523-9189/TC-02/expected.json</file>
+      <file>tests/oracles/IMP-20260523-9189/TC-03/input.json</file>
+      <file>tests/oracles/IMP-20260523-9189/TC-03/expected.json</file>
+      <file>tests/test_patch_lane.py</file>
+      <file>tests/test_clarification_gate.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>.claude/agents/test-harness-agent.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>.github/workflows/ci.yml</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <micro_task id="MT-1">
+      <target_function>tests.helpers.cli_evidence.run_cli_with_temp_state, assert_post_state, assert_file_effects</target_function>
+      <change>신규 파일: tests/helpers/__init__.py (패키지 마커), tests/helpers/cli_evidence.py (CliResult dataclass + 3 helper functions)</change>
+    </micro_task>
+    <micro_task id="MT-2">
+      <target_function>tools.check_cli_evidence_contract.main, scan_test_files, classify_command, check_evidence_assertions</target_function>
+      <change>신규 파일: tools/__init__.py (패키지 마커), tools/check_cli_evidence_contract.py (CLI Evidence Contract lint tool)</change>
+    </micro_task>
+    <micro_task id="MT-3">
+      <target_function>tests.test_return_phase_reentry._run_revert, TestReturnPhaseReentry.test_tc01, test_tc02, test_tc03</target_function>
+      <change>기존 파일 수정: _run_revert()가 run_cli_with_temp_state() 사용, assert_post_state()로 oracle 검증, ORACLE_DIR을 IMP-20260523-9189로 업데이트. oracle 파일 TC-01~TC-03 신규 생성.</change>
+    </micro_task>
+    <micro_task id="MT-4">
+      <target_function>tests.test_patch_lane.TestClusterCommands, TestPatchVerify, tests.test_clarification_gate.*</target_function>
+      <change>tests/test_patch_lane.py: 모든 13개 테스트 메서드에 CLI_EVIDENCE_ALLOW_READ_ONLY 주석 추가. tests/test_clarification_gate.py: 미변경 (이미 PIPELINE_STATE_PATH 환경 변수 격리 사용).</change>
+    </micro_task>
+    <micro_task id="MT-5">
+      <target_function>CLAUDE.md CLI Evidence Contract 섹션, qa-agent.md QA Checklist 섹션, test-harness-agent.md Phase 7 진단 섹션, pm-agent.md 규칙 섹션</target_function>
+      <change>4개 Trust-Root 문서에 CLI Evidence Contract (IMP-20260523-9189) 섹션/규칙 추가.</change>
+    </micro_task>
+    <micro_task id="MT-6">
+      <target_function>.github/workflows/ci.yml 자동 검사 실행 step 앞에 새 step 추가</target_function>
+      <change>.github/workflows/ci.yml에 'CLI Evidence Contract 검사' step 추가 (continue-on-error: false).</change>
+    </micro_task>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>.claude/agents/pm-agent.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md, .github/workflows/ci.yml, CLAUDE.md, tests/test_patch_lane.py, tests/test_return_phase_reentry.py (tracked modified); tests/helpers/*, tools/*, tests/oracles/IMP-20260523-9189/* (new untracked)</git_diff_files>
+    <manifest_files>all 19 files listed in scope_declaration</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>true - HIGH_RISK profile, Trust-Root files (.github/workflows/ci.yml, CLAUDE.md, agent MDs) are explicitly in MT-5/MT-6 scope</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <module_gate_summary>
+    <mt id="MT-1" verdict="PASS">tests/helpers/__init__.py, tests/helpers/cli_evidence.py</mt>
+    <mt id="MT-2" verdict="PASS">tools/__init__.py, tools/check_cli_evidence_contract.py</mt>
+    <mt id="MT-3" verdict="PASS">tests/test_return_phase_reentry.py + oracle files TC-01/02/03</mt>
+    <mt id="MT-4" verdict="PASS">tests/test_patch_lane.py (CLI_EVIDENCE_ALLOW_READ_ONLY annotations)</mt>
+    <mt id="MT-5" verdict="PASS">CLAUDE.md, qa-agent.md, test-harness-agent.md, pm-agent.md (CLI Evidence Contract section)</mt>
+    <mt id="MT-6" verdict="PASS">.github/workflows/ci.yml (CLI Evidence Contract lint step)</mt>
+    <integration verdict="PASS">all modules integrated</integration>
+  </module_gate_summary>
+  <status>READY_FOR_QA</status>
+</handover>
