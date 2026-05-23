@@ -1885,6 +1885,8 @@ FAILURE_CATEGORIES: frozenset = frozenset({
 })
 # 동일 (gate, failure_code) 조합이 이 횟수 이상 attempt되면 status=BLOCKED 전이
 FAILURE_BLOCKED_THRESHOLD = 3
+# IMP-20260523-577F MT-3: 동일 (return_phase, failure_code) 조합 revert 허용 횟수
+REVERT_BUDGET = 3
 # gate -> (owner, return_phase) 표준 매핑
 _GATE_OWNER_RETURN_MAP: Dict[str, Tuple[str, str]] = {
     "technical": ("Dev", "dev"),
@@ -2341,6 +2343,13 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     state["phase_attestations"] = _ensure_phase_attestations(state)
     state["phase_attestations"]["enabled"] = True
     state["module_gates"] = _ensure_module_gates(state)
+    # IMP-20260523-577F MT-2: phase_attempt_history 마이그레이션 (idempotent).
+    # revert 시도 이력을 state 내 리스트로 관리한다.
+    if not isinstance(state.get("phase_attempt_history"), list):
+        state["phase_attempt_history"] = []
+    # event_log 마이그레이션 (idempotent).
+    if not isinstance(state.get("event_log"), list):
+        state["event_log"] = []
     # IMP-20260522-29C1 MT-1: pipeline lifecycle timestamps 마이그레이션 (idempotent).
     # 구버전 state에는 이 5개 필드가 없으므로 기본값을 채운다.
     # 기존 파이프라인은 pipeline_started_at을 created_at으로 대체한다.
@@ -6349,6 +6358,148 @@ def cmd_log(args: argparse.Namespace) -> None:
     _log_event(state, args.message)
     _save(state)
     print(GREEN(f"\n  [LOG] {args.message}\n"))
+
+
+# ── IMP-20260523-577F: revert 기능 ───────────────────────────────────────────
+
+def _revert_budget_check(state: Dict[str, Any], return_phase: str, failure_code: str) -> bool:
+    """동일 (return_phase, failure_code) 조합의 기존 revert 횟수를 확인한다.
+
+    REVERT_BUDGET 초과 시 True(차단) 반환. 미초과 시 False 반환.
+    phase_attempt_history 리스트에서 일치 항목 수를 센다.
+    """
+    history: List[Dict[str, Any]] = state.get("phase_attempt_history", [])
+    count = sum(
+        1 for entry in history
+        if entry.get("revert_target") == return_phase
+        and entry.get("failure_code") == failure_code
+    )
+    return count >= REVERT_BUDGET
+
+
+def _reset_phases_from(state: Dict[str, Any], return_phase: str, snapshot: Dict[str, Any]) -> None:
+    """return_phase부터 이후 모든 phase를 PENDING으로 리셋하고 스냅샷을 이력에 보존한다.
+
+    phase_attempt_history에 이전 시도 스냅샷을 기록한다.
+    pm은 특수 처리 없이 PENDING으로 리셋되며, 이후 phase도 동일하게 처리된다.
+    """
+    phases_order = PHASE_ORDER  # ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
+    try:
+        start_idx = phases_order.index(return_phase)
+    except ValueError:
+        _die(f"알 수 없는 return_phase: {return_phase!r}")
+
+    # 스냅샷을 phase_attempt_history에 기록
+    if not isinstance(state.get("phase_attempt_history"), list):
+        state["phase_attempt_history"] = []
+    state["phase_attempt_history"].append(snapshot)
+
+    # return_phase부터 이후 모든 phase를 PENDING으로 리셋
+    for phase in phases_order[start_idx:]:
+        if phase in state.get("phases", {}):
+            state["phases"][phase]["status"] = "PENDING"
+
+    state["current_phase"] = return_phase
+
+
+def cmd_revert(args: argparse.Namespace) -> None:
+    """failure_packet.json 또는 --to 오버라이드를 기반으로 phase를 되돌린다.
+
+    IMP-20260523-577F MT-1: cmd_revert CLI 진입점.
+    1. failure_packet.json 자동 읽기 (없으면 --to 오버라이드 필수)
+    2. _revert_budget_check으로 REVERT_BUDGET 초과 여부 확인
+    3. _reset_phases_from으로 return_phase부터 이후 phase PENDING 리셋
+    4. 한국어 완료 메시지 출력
+    """
+    state = _require_state()
+    pid = state.get("pipeline_id", "UNKNOWN")
+
+    # 1. return_phase 및 failure_code 결정
+    failure_packet_path = Path("failure_packet.json")
+    to_override: Optional[str] = getattr(args, "to", None)
+    dry_run: bool = getattr(args, "dry_run", False)
+
+    if to_override:
+        return_phase = to_override.lower()
+        # --to 오버라이드 시 state의 최신 failure_packet에서 failure_code를 읽는다.
+        # failure_packets가 없으면 "manual_override"로 기록한다.
+        existing_packets: List[Dict[str, Any]] = state.get("failure_packets", [])
+        if existing_packets:
+            latest_packet = existing_packets[-1]
+            failure_code = latest_packet.get("failure_code", "manual_override")
+        else:
+            failure_code = "manual_override"
+    elif failure_packet_path.exists():
+        try:
+            fp = json.loads(failure_packet_path.read_text(encoding="utf-8"))
+            return_phase = fp.get("return_phase", "")
+            failure_code = fp.get("failure_code", "unknown")
+        except (json.JSONDecodeError, OSError) as e:
+            _die(f"failure_packet.json 읽기 실패: {e}")
+    else:
+        print(RED(
+            "\n[REVERT ERROR] failure_packet.json이 없고 --to 오버라이드도 지정되지 않았습니다.\n"
+            "  사용법: python pipeline.py revert --to dev\n"
+        ))
+        sys.exit(1)
+
+    valid_phases = list(PHASE_ORDER)
+    if return_phase not in valid_phases:
+        print(RED(
+            f"\n[REVERT ERROR] 유효하지 않은 phase: {return_phase!r}\n"
+            f"  허용: {', '.join(valid_phases)}\n"
+        ))
+        sys.exit(1)
+
+    # 2. budget check
+    if _revert_budget_check(state, return_phase, failure_code):
+        count = sum(
+            1 for entry in state.get("phase_attempt_history", [])
+            if entry.get("revert_target") == return_phase
+            and entry.get("failure_code") == failure_code
+        )
+        print(RED(
+            f"\n[REVERT BLOCKED] 동일 ({return_phase}, {failure_code}) 조합으로 {count}회 revert 시도됨 "
+            f"— REVERT_BUDGET({REVERT_BUDGET}) 초과.\n"
+            "  반복 실패는 구조적 문제입니다. RCA 분석과 architect 검토가 필요합니다.\n"
+            "  권장: python pipeline.py architect --report-file architect_report.xml\n"
+        ))
+        state["blocked"] = True
+        state["revert_blocked"] = True
+        state["blocked_reason"] = "동일한 실패가 반복되어 RCA 필요"
+        _log_event(state, "revert blocked: 동일 실패 반복 — RCA 필요")
+        _save(state)
+        sys.exit(1)
+
+    if dry_run:
+        print(YELLOW(
+            f"\n[REVERT DRY-RUN] return_phase={return_phase}, failure_code={failure_code}\n"
+            f"  실제 변경 없이 dry-run 완료.\n"
+        ))
+        return
+
+    # 3. 스냅샷 생성 후 phase 리셋
+    snapshot: Dict[str, Any] = {
+        "revert_target": return_phase,
+        "failure_code": failure_code,
+        "reverted_at": _now(),
+        "attempt": len(state.get("phase_attempt_history", [])) + 1,
+        "phases_before": {
+            phase: data.get("status", "UNKNOWN")
+            for phase, data in state.get("phases", {}).items()
+        },
+    }
+    _reset_phases_from(state, return_phase, snapshot)
+    _log_event(state, f"revert: {return_phase} 이후 phase PENDING 리셋 (failure_code={failure_code})")
+    _save(state)
+
+    # 4. 한국어 완료 메시지
+    print(GREEN(
+        f"\n[REVERT OK] 파이프라인 {pid}이(가) {return_phase}(으)로 되돌아갔습니다.\n"
+        f"  {return_phase}부터 이후 모든 phase가 PENDING으로 리셋됩니다.\n"
+        f"  이전 시도 이력은 phase_attempt_history에 보존됩니다.\n"
+        f"  다시 시작하려면: python pipeline.py check --phase {return_phase}\n"
+    ))
 
 
 def cmd_unblock(args: argparse.Namespace) -> None:
@@ -13300,6 +13451,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_log = sub.add_parser("log", help="이벤트 로그 메시지 추가")
     p_log.add_argument("--message", required=True, help="기록할 메시지")
 
+    # revert (IMP-20260523-577F)
+    p_revert = sub.add_parser("revert", help="failure_packet 기반 phase 되돌리기")
+    p_revert.add_argument(
+        "--to", metavar="PHASE", default=None,
+        help="되돌릴 return_phase 오버라이드 (failure_packet.json 없을 때 사용)"
+    )
+    p_revert.add_argument(
+        "--dry-run", action="store_true", default=False,
+        help="실제 변경 없이 revert 대상만 출력"
+    )
+
     # unblock
     sub.add_parser("unblock", help="파이프라인 차단 해제")
 
@@ -14504,6 +14666,7 @@ COMMAND_MAP = {
     "status":               cmd_status,
     "interface":            cmd_interface,
     "log":                  cmd_log,
+    "revert":               cmd_revert,
     "unblock":              cmd_unblock,
     "terminate":            cmd_terminate,
     "list":                 cmd_list,

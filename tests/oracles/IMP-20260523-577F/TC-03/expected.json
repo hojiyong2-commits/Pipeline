@@ -1,0 +1,19 @@
+{
+  "_comment": "TC-03 expected: REVERT_BUDGET 초과 시 exit_code=1, BLOCKED 상태, RCA 안내 출력",
+  "exit_code": 1,
+  "stdout_contains": [
+    "BLOCKED",
+    "RCA",
+    "반복",
+    "architect"
+  ],
+  "stdout_korean": true,
+  "post_state": {
+    "blocked": true,
+    "revert_blocked": true,
+    "blocked_reason_contains": "동일한 실패가 반복"
+  },
+  "source": "user",
+  "input_sha256": "4e2809adf275899847c2cf6ee149126b7f8eb1217d32b40061956c7f9cc51479",
+  "expected_sha256": "af9ab0cd5bd4dc2b6496521abd164430e4edcfaa807219570a98150e7f4e8dd8"
+}
