@@ -20,7 +20,7 @@
     "output_file": "dev_handover.xml",
     "output_sha256": "fbbd48fd23ee1f95e64880205b720e1ab0aaeb27f8595eb706d8408b4f12f3d9",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260523-C48A/dev/agent_receipt_dev-c49b34e3808bb930.json",
-    "receipt_sha256": "d11933e4908f871395b92eac1af4c5284987e99c8740897d4aeae74cd9add376",
+    "receipt_sha256": "4949c3520347cc9d2ef71e5d7d5953f1b639197e1061f4012193bf2c17a87bfe",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260523-C48A\\dev\\dev-c49b34e3808bb930.json"
   },
@@ -30,24 +30,24 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260523-C48A\\dev\\dev-c49b34e3808bb930.json",
       "path": ".pipeline/phase_evidence/BUG-20260523-C48A/dev/agent_receipt_dev-c49b34e3808bb930.json",
-      "sha256": "d11933e4908f871395b92eac1af4c5284987e99c8740897d4aeae74cd9add376",
-      "size_bytes": 515,
+      "sha256": "4949c3520347cc9d2ef71e5d7d5953f1b639197e1061f4012193bf2c17a87bfe",
+      "size_bytes": 501,
       "requires_force_add": true
     },
     {
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/BUG-20260523-C48A/dev/report_dev_handover.xml",
-      "sha256": "fbbd48fd23ee1f95e64880205b720e1ab0aaeb27f8595eb706d8408b4f12f3d9",
-      "size_bytes": 1971,
+      "sha256": "64e0c80848b8fdce3204b6bf3f30577d1382c222a3e607a4f04a63d1aa6d3864",
+      "size_bytes": 1970,
       "requires_force_add": true
     },
     {
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/BUG-20260523-C48A/dev/scope_manifest_scope_manifest.json",
-      "sha256": "7de91b54da19165bd432e12b916332cabf7084a3e849efc1b9d4cd1c0496d7cf",
-      "size_bytes": 621,
+      "sha256": "4101a69ec96fc1c53bd87c3c26141dbcac32fc8e10f39d64293b86b6d76abe25",
+      "size_bytes": 620,
       "requires_force_add": true
     }
   ],
