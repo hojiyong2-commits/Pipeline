@@ -1,0 +1,49 @@
+{
+  "_comment": "TC-02 (normal): qa phase 상태에서 revert 실행 - pm으로 revert",
+  "case_id": "TC-02",
+  "case_kind": "normal",
+  "description": "qa FAIL 상태에서 revert 실행 시 pm phase로 돌아가고 pm/dev/qa/sec/build/harness/architect PENDING",
+  "initial_state": {
+    "pipeline_id": "IMP-20260523-9189",
+    "current_phase": "qa",
+    "phases": {
+      "pm": {
+        "status": "DONE"
+      },
+      "dev": {
+        "status": "DONE"
+      },
+      "qa": {
+        "status": "FAIL"
+      },
+      "sec": {
+        "status": "PENDING"
+      },
+      "build": {
+        "status": "PENDING"
+      },
+      "harness": {
+        "status": "PENDING"
+      },
+      "architect": {
+        "status": "PENDING"
+      }
+    },
+    "failure_packets": [
+      {
+        "gate": "qa",
+        "failure_code": "scope_exceeded",
+        "return_phase": "pm",
+        "owner": "PM",
+        "status": "FAIL",
+        "attempt": 1
+      }
+    ]
+  },
+  "command": [
+    "python",
+    "pipeline.py",
+    "revert"
+  ],
+  "env": {}
+}
