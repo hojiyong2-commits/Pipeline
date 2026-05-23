@@ -1,0 +1,5 @@
+{
+  "source_code": "def test_bad_isolation_only(tmp_path):\n    # CLI_EVIDENCE: uses run_cli_with_temp_state but no assertion\n    run_cli_with_temp_state([\"pipeline.py\", \"done\", \"--phase\", \"dev\"])\n    assert result.returncode == 0\n",
+  "description": "TC-01: isolation marker(run_cli_with_temp_state) 있지만 evidence assertion(assert_post_state 등) 없는 함수",
+  "case_kind": "error"
+}
