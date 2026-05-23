@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260523-D79F</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <mt_id>MT-1</mt_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>core/acceptance/scorers.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>score_command_check</target_function>
+    <target_file>core/acceptance/scorers.py</target_file>
+    <change_summary>subprocess.run 호출 전 given.actual_file에서 initial_state를 임시 파일로 쓰고 PIPELINE_STATE_PATH 환경변수를 주입. failure_packets도 격리된 임시 cwd의 failure_packet.json으로 기록. finally 블록에서 임시 파일 정리.</change_summary>
+    <lines_changed>45</lines_changed>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>core/acceptance/scorers.py</git_diff_files>
+    <manifest_files>core/acceptance/scorers.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>core/acceptance/scorers.py</file>
+    <file>module_handover_MT-1.xml</file>
+    <file>module_qa_MT-1.xml</file>
+    <file>integration_report.xml</file>
+    <file>scope_manifest_MT-1.json</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260523-D79F</pipeline_id>
+    <evidence>
+      <file>core/acceptance/scorers.py</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_handover>
