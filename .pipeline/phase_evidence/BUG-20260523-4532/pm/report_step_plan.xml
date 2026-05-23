@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_output>
+  <agent_receipt>
+    <run_id>pm_planner-bbd8b590a68261ee</run_id>
+    <token>tok_JhbgE2ISvAAEmYxDHqeJxjuvaL3NqeKGsJH1HTdBWmc</token>
+    <agent>pm-planner-agent</agent>
+    <pipeline_id>BUG-20260523-4532</pipeline_id>
+  </agent_receipt>
+
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <decomposition_audit>
+    <total_functions_identified>5</total_functions_identified>
+    <micro_task_count>3</micro_task_count>
+    <grep_executions>3</grep_executions>
+    <split_decision>3개 파일 변경(pipeline.py, tests/test_clarification_gate.py, .gitignore)이 독립 모듈로 분리 가능하고, pipeline.py가 trust-root 파일이므로 별도 MT-1로 격리. 테스트 리팩터는 MT-2, gitignore는 MT-3.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P0/P1 질문 없음 — REJECT 명세(3개 항목)가 이미 명확하고 구현 경로가 완전히 확정됨. P2 내부 구현 취향 질문(변수명 등)은 유지보수성 우선으로 처리함. 사용자 REJECT 명세가 설계 결정을 완전히 명시하므로 별도 AskUser 불필요.</filter_summary>
+    <confirmed_by_user>REJECT 명세(3개 항목)가 이미 사용자 답변으로 기능함. NO_ASKUSER_REQUIRED.</confirmed_by_user>
+  </decomposition_audit>
+
+  <step_plan>
+    <pipeline_id>BUG-20260523-4532</pipeline_id>
+    <anti_gaming_read>true</anti_gaming_read>
+    <current_step>Step 1: PM Planning</current_step>
+    <tier>1</tier>
+    <target_agent>Dev</target_agent>
+    <model_tier>Opus</model_tier>
+    <category_tags>FS, BUILD</category_tags>
+
+    <task_complexity>
+      <execution_profile>HIGH_RISK</execution_profile>
+      <reason>pipeline.py가 trust-root 파일이므로 HIGH_RISK 필수. pipeline.py PIPELINE_STATE_PATH env var 추가는 파이프라인 엔진 핵심 경로 변경이며, 잘못 수정 시 모든 파이프라인 상태 읽기/쓰기에 영향을 미침.</reason>
+      <uncertainty>
+        <p0_questions>0</p0_questions>
+        <p1_questions>0</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>3</expected_changed_files>
+        <expected_changed_functions>5</expected_changed_functions>
+        <expected_changed_lines>90</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>false</external_api>
+        <auth_or_secret>false</auth_or_secret>
+        <pipeline_protocol>true</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>true</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+    </task_complexity>
+
+    <design_confirmation>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <maintenance_priority>maintainability_first</maintenance_priority>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>내부 변수명, 코드 스타일, 사소한 구현 취향 질문은 묻지 않고 유지보수성 기준으로 PM이 정리했습니다. REJECT 명세 3개 항목이 설계 결정을 완전히 명시하므로 별도 사용자 확인 불필요.</filter_summary>
+      <decision_questions>
+        <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+          <user_facing_question>pipeline.py의 STATE_FILE 상수를 환경 변수(PIPELINE_STATE_PATH)로 오버라이드 가능하게 바꾸면 됩니까?</user_facing_question>
+          <evidence>grep 결과: pipeline.py에 BASE_DIR / "pipeline_state.json" 하드코드가 5곳 있음. STATE_FILE 정의(line 1902) + 4개 직접 참조(line 8384, 8476, 8504, 9080).</evidence>
+          <why_it_matters>테스트가 실제 pipeline_state.json을 변경하면 진행 중인 파이프라인 상태를 손상시킬 수 있습니다. env var로 격리해야 안전합니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>PIPELINE_STATE_PATH env var 지원 추가 + 하드코드 5곳을 STATE_FILE로 교체</label>
+              <benefit>테스트 격리가 완전해지고, 향후 CI 환경에서도 상태 파일 경로를 유연하게 지정 가능합니다.</benefit>
+              <cost>pipeline.py trust-root 파일 수정이므로 HIGH_RISK 검증 필요, 예상 10줄 변경.</cost>
+            </option>
+            <option id="B">
+              <label>테스트에서 mock/monkeypatch로 pipeline.py 내부 변수를 패치</label>
+              <benefit>pipeline.py 수정 불필요.</benefit>
+              <cost>subprocess 호출을 통한 실제 CLI 실행 방식의 테스트에는 적용 불가. 근본 격리 불가.</cost>
+            </option>
+          </options>
+          <user_answer>REJECT 명세에서 "PIPELINE_STATE_PATH env var 지원 추가"로 명시하였으므로 옵션 A로 확정.</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <interface_spec>
+      - Input: pipeline.py(현재), tests/test_clarification_gate.py(현재), .gitignore(현재)
+      - Output: pipeline.py(STATE_FILE env var 지원), tests/test_clarification_gate.py(tmp_path 격리), .gitignore(human_acceptance_packet.md 추가)
+      - Validation: pytest 4 passed, ruff clean, human_acceptance_packet.md git-untracked
+    </interface_spec>
+
+    <requirements>
+      - [MT-1] pipeline.py line 1902: STATE_FILE에 PIPELINE_STATE_PATH env var 오버라이드 추가
+      - [MT-1] pipeline.py line 8384, 8476, 8504, 9080: BASE_DIR / "pipeline_state.json" 직접 참조 5곳 중 4곳(정의 제외)을 STATE_FILE로 교체
+      - [MT-2] tests/test_clarification_gate.py: 각 TC 함수가 tmp_path pytest fixture를 받고 minimal clean state dict 작성 후 PIPELINE_STATE_PATH env var 주입
+      - [MT-2] load_state(), patch_and_save(), restore_state(), PIPELINE_STATE 상수 완전 제거
+      - [MT-2] minimal state dict 포함 항목: terminal_state=null, current_phase="dev", phases.pm.status="DONE", phases.dev.status="PENDING", phase_attestations.enabled=true, phase_attestations.phases.pm.status="PASS", pm_clarification_gate(TC별 다름)
+      - [MT-2] run_check() 함수에 env 파라미터 추가
+      - [MT-3] .gitignore에 human_acceptance_packet.md 추가
+      - [MT-3] git rm --cached human_acceptance_packet.md 실행하여 git 추적 제거
+      - HIGH_RISK 파일(pipeline.py) 수정이므로 per-module QA 특히 철저히 수행
+    </requirements>
+
+    <micro_tasks>
+      <micro_task id="MT-1">
+        <affected_function>module-level STATE_FILE constant + 4 hardcoded direct references (lines 8384, 8476, 8504, 9080)</affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>line 1902: STATE_FILE = BASE_DIR / "pipeline_state.json" (definition — env var 오버라이드 추가)</site>
+          <site>line 8384: _state_path = BASE_DIR / "pipeline_state.json" → STATE_FILE</site>
+          <site>line 8476: state_path = BASE_DIR / "pipeline_state.json" → STATE_FILE</site>
+          <site>line 8504: state_path = BASE_DIR / "pipeline_state.json" → STATE_FILE</site>
+          <site>line 9080: state_path = BASE_DIR / "pipeline_state.json" → STATE_FILE</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>BASE_DIR / "pipeline_state.json"</pattern>
+          <match_count>5</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>STATE_FILE에 PIPELINE_STATE_PATH env var 오버라이드 추가, hardcoded 직접 참조 4곳을 STATE_FILE로 교체</change_summary>
+        <line_estimate>10</line_estimate>
+      </micro_task>
+
+      <micro_task id="MT-2">
+        <affected_function>test_tc01, test_tc02, test_tc03, test_tc04, run_check, PIPELINE_STATE, load_state, patch_and_save, restore_state</affected_function>
+        <target_files>
+          <file>tests/test_clarification_gate.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>none</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>pipeline_state\.json</pattern>
+          <match_count>3</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>tmp_path fixture + PIPELINE_STATE_PATH env var 주입으로 real state 격리, backup/restore 패턴 완전 제거</change_summary>
+        <line_estimate>80</line_estimate>
+      </micro_task>
+
+      <micro_task id="MT-3">
+        <affected_function>.gitignore file entry</affected_function>
+        <target_files>
+          <file>.gitignore</file>
+        </target_files>
+        <affected_call_sites>
+          <site>none</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>human_acceptance_packet</pattern>
+          <match_count>0</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>human_acceptance_packet.md를 .gitignore에 추가, git rm --cached로 git 추적 제거</change_summary>
+        <line_estimate>1</line_estimate>
+      </micro_task>
+    </micro_tasks>
+
+    <python_version>3.10 — 기존 프로젝트 환경과 일치, Path/os.environ 호환 문제 없음</python_version>
+    <env_specs>
+      <python>3.10</python>
+      <vscode>Python 3.10 인터프리터, typeCheckingMode=basic</vscode>
+    </env_specs>
+
+    <acceptance_criteria>
+      - pytest tests/test_clarification_gate.py -v → "4 passed", 출력에 "pipeline_state.json" 문자열 없음
+      - ruff check tests/test_clarification_gate.py → exit 0, F401 없음
+      - git status → human_acceptance_packet.md가 untracked 또는 .gitignore에 의해 무시됨
+      - PIPELINE_STATE_PATH 환경 변수 설정 시 pipeline.py가 해당 경로를 state 파일로 사용
+      - pipeline.py 기존 기능 회귀 없음: python pipeline.py status 정상 동작
+      - 엣지케이스 1: PIPELINE_STATE_PATH 미설정 시 기존 BASE_DIR/pipeline_state.json 경로 유지
+      - 엣지케이스 2: TC 실행 중 실제 pipeline_state.json 변경 없음 (격리 검증)
+      - 엣지케이스 3: TC 병렬 실행 시 tmp_path 충돌 없음 (각 TC가 독립 tmp_path 사용)
+    </acceptance_criteria>
+
+    <oracle_plan>
+      <oracle_dir>tests/oracles/BUG-20260523-4532/</oracle_dir>
+      <oracle case_id="TC-01" case_kind="normal" input="tests/oracles/BUG-20260523-4532/TC-01/input.json" expected="tests/oracles/BUG-20260523-4532/TC-01/expected.json">
+        pytest 4 passed, pipeline_state.json 문자열 없음
+      </oracle>
+      <oracle case_id="TC-02" case_kind="edge" input="tests/oracles/BUG-20260523-4532/TC-02/input.json" expected="tests/oracles/BUG-20260523-4532/TC-02/expected.json">
+        ruff check F401 없음
+      </oracle>
+    </oracle_plan>
+
+    <roadmap>
+      <phase name="PM">BUG-20260523-4532 계획 수립 (현재 단계)</phase>
+      <phase name="Dev MT-1">pipeline.py STATE_FILE env var 지원 추가 (trust-root, HIGH_RISK 검증)</phase>
+      <phase name="Dev MT-2">tests/test_clarification_gate.py tmp_path 격리 리팩터</phase>
+      <phase name="Dev MT-3">.gitignore 업데이트 + git rm --cached human_acceptance_packet.md</phase>
+      <phase name="QA">4개 TC pytest PASS, ruff clean, regression 확인</phase>
+      <phase name="Build">N/A (test-only, no EXE) — skip-reason: meta-task</phase>
+      <phase name="External Gates">Technical, Oracle, GitHub CI, User Acceptance</phase>
+    </roadmap>
+
+    <forbidden>
+      - pipeline.py의 STATE_FILE 관련 이외 다른 함수/기능 수정 금지
+      - tests/ 디렉토리의 oracle 파일(tests/oracles/**) 수정 금지
+      - .github/workflows/** 수정 금지
+      - CLAUDE.md 수정 금지
+      - backup/restore 패턴으로 실제 pipeline_state.json을 건드리는 코드 신규 작성 금지
+      - PIPELINE_STATE_PATH 미설정 시 기본 경로 변경 금지 (기존 동작 보존)
+    </forbidden>
+
+    <handover_template>
+      <template_body>
+        <from>dev-agent</from>
+        <to>qa-agent</to>
+        <pipeline_id>BUG-20260523-4532</pipeline_id>
+        <evidence>
+          <file>pipeline.py</file>
+          <file>tests/test_clarification_gate.py</file>
+          <file>.gitignore</file>
+          <file>dev_handover.xml</file>
+          <file>scope_manifest.json</file>
+        </evidence>
+        <status>READY_FOR_QA</status>
+      </template_body>
+    </handover_template>
+
+    <context_injection>
+      <target_files>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_clarification_gate.py</file>
+        <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.gitignore</file>
+      </target_files>
+      <phase_rules_excerpt>HIGH_RISK 실행 프로필: pipeline.py는 trust-root 파일. per-module QA 필수. scope_manifest.json 제출 의무. scope_lock_check PASS 없으면 handover 금지.</phase_rules_excerpt>
+      <prev_phase_summary>BUG-20260523-2692 COMPLETE 후 사용자 REJECT 3항목: (1) human_acceptance_packet.md git 추적 제거, (2) test_clarification_gate.py tmp_path 격리, (3) SHA/run ID 재생성</prev_phase_summary>
+    </context_injection>
+  </step_plan>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</pm_output>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260523-4532</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-7e9c284049696429</manager_run_id>
+  <planner_run_id>pm_planner-3ead4bf2fa00a5d4</planner_run_id>
+  <step_plan_sha256>ec2defc24db7f1c108de7df48c35a44f3ef9aa259c6e5bb9de79dbccb9bc67d4</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <micro_tasks>
+    <mt id="MT-1" file="pipeline.py" />
+    <mt id="MT-2" file="tests/test_clarification_gate.py" />
+    <mt id="MT-3" file=".gitignore" />
+  </micro_tasks>
+  <oracle_status>TC-01 (normal) TC-02 (edge) 등록 완료</oracle_status>
+  <contract_status>FROZEN</contract_status>
+  <status>READY_FOR_DEV</status>
+  <phase_summary>
+    <pm>Contract frozen (d47b1428), step_plan ready. MT-1: pipeline.py PIPELINE_STATE_PATH env var 지원. MT-2: test_clarification_gate.py tmp_path 격리. MT-3: .gitignore human_acceptance_packet.md 추가.</pm>
+  </phase_summary>
+</manager_handoff>
