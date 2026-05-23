@@ -718,5 +718,35 @@ class TestAB2ColonFileParsing(unittest.TestCase):
         self.assertIn("tests/bar.py", files)
 
 
+def test_consistency_listed_files_korean_sentence_ending_not_extracted() -> None:
+    """됩니다. 같은 한국어 문장 끝의 마침표가 파일명으로 오추출되지 않아야 한다.
+
+    IMP-20260522-29C1 fix-forward v5: _consistency_listed_files에서
+    `- 안내: ...됩니다.` 불릿의 `됩니다.`가 파일명으로 인식되던 버그를 수정.
+    """
+    from pipeline import _consistency_listed_files
+
+    # 안내: 콜론 라벨 뒤 한국어 문장 — 됩니다. 이 파일명으로 추출되면 안 된다
+    text_with_korean_period = "- 안내: 아래 요약과 결과물이 요청과 맞으면 승인(ACCEPT)하면 됩니다."
+    files, _ = _consistency_listed_files(text_with_korean_period)
+    assert "됩니다." not in files, (
+        f"됩니다.가 파일명으로 오추출되었다: files={files}"
+    )
+
+    # 실제 파일명은 올바르게 추출되어야 한다
+    text_with_real_file = "- 수정됨: tests/test_pipeline_metrics_timestamps.py"
+    files2, _ = _consistency_listed_files(text_with_real_file)
+    assert "tests/test_pipeline_metrics_timestamps.py" in files2, (
+        f"실제 파일명이 추출되지 않았다: files2={files2}"
+    )
+
+    # 안내 — em dash 형식도 됩니다. 오추출 없어야 한다
+    text_with_em_dash = "- 안내 — 아래 요약과 결과물이 맞으면 승인하면 됩니다."
+    files3, _ = _consistency_listed_files(text_with_em_dash)
+    assert "됩니다." not in files3, (
+        f"안내 — 형식에서도 됩니다.가 오추출되었다: files3={files3}"
+    )
+
+
 if __name__ == "__main__":
     unittest.main()
