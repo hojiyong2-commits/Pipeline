@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260523-4532</pipeline_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_clarification_gate.py</file>
+    <file>.gitignore</file>
+    <file>dev_handover.xml</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_clarification_gate.py</file>
+      <file>.gitignore</file>
+    </files_to_modify>
+    <mt_mapping>
+      <entry mt="MT-1" file="pipeline.py" />
+      <entry mt="MT-2" file="tests/test_clarification_gate.py" />
+      <entry mt="MT-3" file=".gitignore" />
+    </mt_mapping>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>module-level STATE_FILE constant + 4 hardcoded direct references (lines 8384, 8476, 8504, 9080)</target_function>
+    <changed_files>
+      <file>pipeline.py</file>
+    </changed_files>
+    <side_effects>PIPELINE_STATE_PATH env var로 state 파일 경로를 오버라이드 가능. 미설정 시 기존 동작 유지.</side_effects>
+    <mt_id>MT-2</mt_id>
+    <target_function>test_tc01, test_tc02, test_tc03, test_tc04, run_check, PIPELINE_STATE, load_state, patch_and_save, restore_state</target_function>
+    <changed_files>
+      <file>tests/test_clarification_gate.py</file>
+    </changed_files>
+    <side_effects>실제 pipeline_state.json 미변경. tmp_path 격리로 병렬 안전.</side_effects>
+    <mt_id>MT-3</mt_id>
+    <target_function>.gitignore file entry</target_function>
+    <changed_files>
+      <file>.gitignore</file>
+    </changed_files>
+    <side_effects>human_acceptance_packet.md가 .gitignore에 추가되어 git 추적 해제됨.</side_effects>
+  </impact_analysis>
+  <module_gates>
+    <mt id="MT-1" verdict="PASS">pipeline.py STATE_FILE env var 지원</mt>
+    <mt id="MT-2" verdict="PASS">tests/test_clarification_gate.py tmp_path 격리</mt>
+    <mt id="MT-3" verdict="PASS">.gitignore human_acceptance_packet.md</mt>
+  </module_gates>
+  <integration_verdict>PASS</integration_verdict>
+  <pytest_result>4 passed in 1.66s</pytest_result>
+  <ruff_result>All checks passed</ruff_result>
+  <scope_lock_verdict>PASS</scope_lock_verdict>
+</handover>
