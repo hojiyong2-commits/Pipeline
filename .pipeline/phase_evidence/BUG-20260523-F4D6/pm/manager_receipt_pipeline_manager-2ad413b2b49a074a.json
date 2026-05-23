@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260523-F4D6",
+  "phase": "pipeline_manager",
+  "agent_id": "pipeline-manager-agent",
+  "run_id": "pipeline_manager-2ad413b2b49a074a",
+  "status": "COMPLETED",
+  "started_at": "2026-05-23T15:44:28Z",
+  "completed_at": "2026-05-23T15:44:32Z",
+  "output_file": "manager_handoff_F4D6.xml",
+  "output_sha256": "fa1b3ce95091793a0cece3e14174a6c7afbc3200d0ec25591c7fb6b8c4bf576a",
+  "evidence_files": [],
+  "commit_sha": "ed451f96f5f21d89d1817d07a68519e285fde121"
+}
