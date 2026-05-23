@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260523-D80A</pipeline_id>
+  <phase>qa</phase>
+  <verdict>PASS</verdict>
+
+  <handover>
+    <from>dev-agent</from>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_clarification_gate.py</file>
+      <file>dev_handover.xml</file>
+      <file>scope_manifest.json</file>
+    </evidence>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 네트워크/외부 API 호출 없음</wa>
+    <ui>N-A — GUI 위젯 없음 (CLI 게이트 로직)</ui>
+    <fs>N-A — 파일 쓰기/읽기 로직 변경 없음 (테스트가 state 파일 백업/복원만 수행)</fs>
+    <pd>PASS — core(pipeline.py) / tests(테스트 파일) 명확 분리. Tuple[bool, str] / Dict[str, Any] 타입 힌트로 인터페이스 계약 명시</pd>
+    <sec>N-A — Phase 5 security-agent 전담</sec>
+    <al>PASS — clarification_needed truthy/falsy 분기 + acceptance_criteria 빈 리스트 분기 + 누락 필드(legacy) 분기 3가지 모두 명시적 처리. cg.get()으로 KeyError 방어, bool() 변환으로 타입 강제</al>
+    <build>N-A — meta-task (BUILD 카테고리 없음, EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VSCE 카테고리 없음</vsce>
+  </category_check>
+
+  <numeric_score>108</numeric_score>
+  <score_breakdown>
+    <wa score="N/A" max="20">네트워크 호출 없음 — 평가 대상 아님</wa>
+    <ui score="N/A" max="20">GUI 위젯 없음 — 평가 대상 아님</ui>
+    <fs score="N/A" max="20">파일 쓰기/인코딩/traversal 변경 없음 — 평가 대상 아님</fs>
+    <pd score="10" max="10">모듈분리 5/5 + 인터페이스계약 5/5</pd>
+    <al score="20" max="20">범위/타입/빈데이터/방어 전항목 5/5</al>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <calculation>PD(10)+AL(20)=30 + TC 4/4 PASS + Oracle + Scope + 문서화 = 108/120</calculation>
+  </score_breakdown>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — _check_pm_clarification_gate(state: Dict[str, Any]) -> Tuple[bool, str] 타입 힌트 완전</type_hinting_all>
+      <widget_naming>N-A — UI 위젯 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 파일 쓰기 로직 변경 없음</atomic_write>
+      <encoding_fallback>PASS — 테스트 파일이 encoding="utf-8" 명시</encoding_fallback>
+      <traversal_wired>N-A — 사용자 입력 경로 없음</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — pytest 4/4 PASS (1.58s) 사전 실행 증거 + QA 재검증 완료</execution_check_present>
+    <execution_check_verdict>PASS — 4개 테스트 모두 PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 없음</vsce_build_evidence>
+    <functional_binding_verified>PASS — _check_pm_clarification_gate가 pipeline.py:5146에서 cmd_check 내 실제 호출됨. 함수 정의만 존재하는 dead code 아님</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 시각 참고자료 명시 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff --name-only 357bd63^..357bd63 결과: pipeline.py + tests/test_clarification_gate.py 2개 일치</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — PM step_plan에 4개 MT 명시</decomposition_audit_present>
+    <grep_evidence_present>PASS — scope_manifest.json에 MT별 files/affected_functions 명시</grep_evidence_present>
+    <declared_functions>3</declared_functions>
+    <actual_modified_functions>3 (pipeline._check_pm_clarification_gate 신규 + pipeline.cmd_check 1곳 호출 추가 + pipeline.cmd_done args/state 추가)</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — scope_manifest의 affected_functions에 모두 포함됨</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <detailed_checks>
+    <check id="MT-1" name="_check_pm_clarification_gate function logic">
+      <result>PASS</result>
+      <evidence>pipeline.py:4824-4846</evidence>
+      <verification>
+        1. Legacy(필드 없음) → return (True, "") OK
+        2. clarification_needed=true → return (False, "PM clarification이 미해소...") OK
+        3. acceptance_criteria 빈 리스트 → return (False, "acceptance_criteria가 비어 있습니다...") OK
+        4. 둘 다 통과 → return (True, "") OK
+        5. 타입 힌트: state: Dict[str, Any] -> Tuple[bool, str] 명시 OK
+      </verification>
+    </check>
+
+    <check id="MT-2" name="PM Clarification Gate called in cmd_check">
+      <result>PASS</result>
+      <evidence>pipeline.py:5144-5171</evidence>
+      <verification>
+        1. 위치: codex review gate (line 5142) 직후, check_gate 호출(line 5173) 직전 OK
+        2. 조건: phase == "dev" 일 때만 OK
+        3. FAIL 시 _record_failure_packet 호출 (failure_code=pm_clarification_gate_blocked, failure_category=missing_evidence, phase=dev, owner=PM, return_phase=pm) OK
+        4. _save(state) 후 sys.exit(1) OK
+        5. 한국어 사용자 메시지: "[PM CLARIFICATION GATE BLOCKED] Dev 진입 차단" OK
+      </verification>
+    </check>
+
+    <check id="MT-3" name="5 argparse args in cmd_done pm branch">
+      <result>PASS</result>
+      <evidence>pipeline.py:12726-12736 (argparse), 5290-5305 (state population)</evidence>
+      <verification>
+        1. --clarification-needed (action=store_true, default=False) OK
+        2. --no-clarification-needed (action=store_false, dest=clarification_needed) OK
+        3. --clarification-assumptions (default="없음") OK
+        4. --clarification-criteria-source (choices=user/pm/inferred, default=user) OK
+        5. --clarification-criteria (default=None) OK
+        6. state["pm_clarification_gate"] dict 5개 키 모두 채워짐 (clarification_needed/assumptions/acceptance_criteria_source/acceptance_criteria/recorded_at) OK
+        7. _criteria_raw 쉼표 분리 + strip + 빈문자열 제거 처리 OK
+        8. bool() 강제 변환 적용 OK
+      </verification>
+    </check>
+
+    <check id="MT-4" name="tests/test_clarification_gate.py">
+      <result>PASS</result>
+      <evidence>tests/test_clarification_gate.py (207 lines), tests/oracles/IMP-20260523-E047/TC-01~04/</evidence>
+      <verification>
+        1. 4개 TC 함수 정의: test_tc01_clarification_needed_true_blocks_dev / test_tc02_empty_acceptance_criteria_blocks_dev / test_tc03_valid_criteria_allows_dev / test_tc04_legacy_no_field_passes OK
+        2. Oracle 로드: ORACLE_DIR / "TC-XX" / input.json / expected.json OK
+        3. backup/restore 패턴: load_state() + try/finally restore_state(backup) OK
+        4. subprocess.run timeout=60, encoding="utf-8" OK
+        5. --codex-review-waiver legacy-bootstrap 인자 (Clarification Gate 단독 테스트를 위한 격리) OK
+        6. self-verify 블록: pipeline 모듈 직접 import 후 4개 unit assertion OK
+      </verification>
+    </check>
+
+    <check id="oracle-compliance" name="Oracle files normal/edge coverage">
+      <result>PASS</result>
+      <evidence>tests/oracles/IMP-20260523-E047/TC-01~04/</evidence>
+      <verification>
+        1. TC-01 case_kind=normal: clarification_needed=true → exit 1 (BLOCKED) OK
+        2. TC-02 case_kind=edge: acceptance_criteria=[] → exit 1 (BLOCKED) OK
+        3. TC-03 case_kind=normal: 유효 상태 → exit 0 (PASS) OK
+        4. TC-04 case_kind=edge: 필드 없음(legacy) → exit 0 (PASS) OK
+        5. 모든 expected.json에 exit_code + stdout_contains/not_contains 비어있지 않음 OK
+        6. PM phase에서 사전 생성된 오라클(commit 643876e)을 Dev가 수정하지 않음 OK
+      </verification>
+    </check>
+
+    <check id="scope-boundary" name="Only declared files modified">
+      <result>PASS</result>
+      <evidence>git diff --name-only 357bd63^..357bd63 = pipeline.py + tests/test_clarification_gate.py</evidence>
+      <verification>
+        1. 실제 변경 파일 2개가 scope_manifest의 files 배열과 완전 일치 OK
+        2. Trust-Root 파일(CLAUDE.md, .github/workflows/, .claude/agents/) 미수정 OK
+        3. 본 IMP의 PM target_files에 pipeline.py가 명시되어 있으므로 Trust-Root 예외 적용 가능 OK
+        4. tests/test_clarification_gate.py는 신규 파일, tests/oracles/IMP-20260523-E047/은 PM phase 사전 생성물 OK
+        5. 변경 라인 수: pipeline.py +82, tests/test_clarification_gate.py +206 (총 288줄 추가, 0줄 삭제) — 4개 MT 분량으로 합리적 OK
+      </verification>
+    </check>
+
+    <check id="pytest-execution" name="pytest run">
+      <result>PASS</result>
+      <evidence>pytest 출력: 4 passed in 1.58s</evidence>
+      <verification>
+        python -m pytest tests/test_clarification_gate.py -v 결과:
+        - test_tc01_clarification_needed_true_blocks_dev PASSED [25%]
+        - test_tc02_empty_acceptance_criteria_blocks_dev PASSED [50%]
+        - test_tc03_valid_criteria_allows_dev PASSED [75%]
+        - test_tc04_legacy_no_field_passes PASSED [100%]
+        4 passed in 1.58s
+      </verification>
+    </check>
+
+    <check id="self-verify-execution" name="python tests/test_clarification_gate.py">
+      <result>PASS</result>
+      <evidence>[SELF-VERIFY] OK — 4 unit assertions passed</evidence>
+      <verification>
+        pipeline 모듈 직접 import 후 _check_pm_clarification_gate 단독 검증:
+        1. Legacy state {} → ok=True OK
+        2. clarification_needed=True → ok=False, reason contains "clarification" OK
+        3. empty acceptance_criteria → ok=False, reason contains "acceptance_criteria" OK
+        4. valid state → ok=True OK
+      </verification>
+    </check>
+  </detailed_checks>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_clarification_gate.py</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-01/input.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-01/expected.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-02/input.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-02/expected.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-03/input.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-03/expected.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-04/input.json</file>
+    <file>tests/oracles/IMP-20260523-E047/TC-04/expected.json</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>없음</critical_issues>
+
+  <improvement_suggestions>
+    1. _check_pm_clarification_gate에 TypedDict로 PMClarificationGate 스키마를 정의하면 Dict[str, Any] 대신 더 엄격한 인터페이스 계약이 가능합니다.
+    2. acceptance_criteria가 리스트 외 타입(예: 문자열)으로 들어왔을 때 isinstance(criteria, list) 명시 검증을 추가하면 더 견고합니다.
+    3. 테스트가 pipeline_state.json 실제 파일을 백업/복원하므로 동시 실행 시 race condition 가능성이 있습니다. tmp_path fixture + PIPELINE_STATE_PATH env var 주입 방식이 더 안전합니다 — 테스트 docstring에 개선안 명시되어 있음.
+  </improvement_suggestions>
+
+  <qa_meta>
+    <reviewer>qa-agent</reviewer>
+    <run_id>qa-d11283d66ae5eccb</run_id>
+    <reviewed_at>2026-05-23</reviewed_at>
+    <gate_block_note>
+      QA 진입 시 check --phase qa가 codex_review_stale_evidence (diff SHA256 불일치)로 차단된 상태였습니다.
+      이는 Codex 리뷰 작성 이후 코드가 추가 변경된 staleness 이슈입니다. Pipeline Manager가
+      'python pipeline.py review codex-run --stage code --review-model GPT-5.5'로 리뷰 갱신 후
+      QA 기록을 진행해야 합니다. QA 자체 검증(구현/테스트/오라클/스코프)은 모두 PASS입니다.
+    </gate_block_note>
+  </qa_meta>
+</qa_report>
