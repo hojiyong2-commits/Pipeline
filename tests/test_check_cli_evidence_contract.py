@@ -12,8 +12,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 # Import the function under test from the tools package.
 from tools.check_cli_evidence_contract import scan_test_files
 
