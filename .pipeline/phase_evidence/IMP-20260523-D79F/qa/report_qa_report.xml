@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <agent_receipt>
+    <run_id>qa-2d1994453ba169d1</run_id>
+    <agent>qa-agent</agent>
+    <pipeline_id>IMP-20260523-D79F</pipeline_id>
+  </agent_receipt>
+
+  <numeric_score>108</numeric_score>
+  <verdict>PASS</verdict>
+
+  <handover_verification>
+    <from>dev-agent</from>
+    <evidence_files>core/acceptance/scorers.py, dev_handover.xml, scope_manifest.json</evidence_files>
+    <verdict>PASS — dev-agent handover 정상 수신, evidence 파일 모두 제출됨</verdict>
+  </handover_verification>
+
+  <anti_gaming_check>
+    <step_plan_anti_gaming_read>true</step_plan_anti_gaming_read>
+    <decomposition_audit_present>true</decomposition_audit_present>
+    <verdict>PASS</verdict>
+  </anti_gaming_check>
+
+  <scope_declaration>
+    <mt_id>MT-1</mt_id>
+    <files_verified>
+      <file>core/acceptance/scorers.py</file>
+    </files_verified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>score_command_check</target_function>
+    <target_file>core/acceptance/scorers.py</target_file>
+    <change_type>FUNCTION_BODY_MODIFICATION</change_type>
+    <signature_unchanged>true</signature_unchanged>
+    <new_imports>os, tempfile</new_imports>
+    <other_functions_affected>none</other_functions_affected>
+  </impact_analysis>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <declared_files>core/acceptance/scorers.py</declared_files>
+    <actual_changed_files>core/acceptance/scorers.py</actual_changed_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>SINGLE_FUNCTION</blast_radius>
+  </micro_task_boundary>
+
+  <category_check>
+    <fs>PASS — FS 카테고리. tempfile 생성 후 finally 블록에서 cleanup. encoding="utf-8" 사용. 경로 방어 적용.</fs>
+    <al>PASS — AL 카테고리. None 방어, 예외 처리(OSError, json.JSONDecodeError, KeyError). 빈 리스트 방어.</al>
+    <wa>N-A — 네트워크 호출 없음</wa>
+    <ui>N-A — UI 없음</ui>
+    <sec>N-A — Phase 5 전담</sec>
+    <build>N-A — meta-task, Phase 6 skip 예정</build>
+    <vsce>N-A — VS Code Extension 아님</vsce>
+  </category_check>
+
+  <scoring_detail>
+    <fs score="20" max="20">safe_write 5/5 (NamedTemporaryFile+cleanup), encoding 5/5 (utf-8 사용), traversal 5/5 (Path.is_absolute 방어), path_safety 5/5 (project_dir 기준 경로 해석)</fs>
+    <al score="18" max="20">예외처리 9/10 (OSError/JSONDecodeError/KeyError catch), 엣지케이스 9/10 (None방어, 빈리스트방어)</al>
+    <pd score="10" max="10">단일 함수 수정, type hints 완비</pd>
+    <wa score="N/A" max="N/A">카테고리 미해당</wa>
+    <ui score="N/A" max="N/A">카테고리 미해당</ui>
+    <build score="N/A" max="N/A">meta-task skip 예정</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS(≥96/120)</numeric_verdict>
+  </scoring_detail>
+
+  <code_quality>
+    <ruff>PASS — no issues</ruff>
+    <mypy>PASS — no issues</mypy>
+    <bandit>PASS — B404/B603 전역 skip (.bandit 설정), 실질적 HIGH/MEDIUM 없음</bandit>
+  </code_quality>
+
+  <oracle_verification>
+    <acceptance_run>python pipeline.py acceptance run --pipeline-id IMP-20260523-D79F</acceptance_run>
+    <score>100.0/100 (20/20 points)</score>
+    <t001>PASS — command_check normal: returncode=0, stdout contains PENDING</t001>
+    <t002>PASS — command_check edge: returncode=1, stdout contains BLOCKED</t002>
+    <oracle_source>tests/oracles/IMP-20260523-577F/**</oracle_source>
+    <verdict>PASS</verdict>
+  </oracle_verification>
+
+  <acceptance_criteria_verification>
+    <ac1>PASS — MT-1 scope: score_command_check 함수 내부만 변경 (diff 검증 완료)</ac1>
+    <ac2>PASS — import os, tempfile scorers.py 상단에 추가 (AST 검사 완료)</ac2>
+    <ac3>PASS — T-001(normal): given.actual_file+initial_state → PIPELINE_STATE_PATH 주입 → returncode=0, PENDING</ac3>
+    <ac4>PASS — T-002(edge): REVERT_BUDGET 초과 → returncode=1, BLOCKED</ac4>
+    <ac5>PASS — finally 블록에서 unlink(missing_ok=True) + TemporaryDirectory.cleanup() 확인</ac5>
+    <ac6>PASS — SCORERS 딕셔너리 무변경, score_command_check 외 함수 무변경</ac6>
+    <ac7>PASS — tests/oracles/IMP-20260523-577F/** 파일 무수정 (git diff 확인)</ac7>
+  </acceptance_criteria_verification>
+
+  <forbidden_check>
+    <oracle_files_unchanged>PASS — tests/oracles/ 변경 없음</oracle_files_unchanged>
+    <other_functions_unchanged>PASS — SCORERS dict 및 기타 scorer 함수 무변경</other_functions_unchanged>
+    <scope_only_1_file>PASS — core/acceptance/scorers.py 1개 파일만 변경</scope_only_1_file>
+  </forbidden_check>
+
+  <scope_lock_check>
+    <git_diff_files>core/acceptance/scorers.py</git_diff_files>
+    <manifest_files>core/acceptance/scorers.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <dead_code_findings>0</dead_code_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>없음</critical_issues>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <pipeline_id>IMP-20260523-D79F</pipeline_id>
+    <evidence>
+      <file>core/acceptance/scorers.py</file>
+      <file>qa_report.xml</file>
+    </evidence>
+    <status>QA_PASS</status>
+  </handover>
+</qa_report>
