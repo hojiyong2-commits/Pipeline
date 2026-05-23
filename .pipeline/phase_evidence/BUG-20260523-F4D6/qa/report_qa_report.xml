@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <agent_receipt>
+    <run_id>qa-0147c8613b00f563</run_id>
+    <agent>qa-agent</agent>
+    <pipeline_id>BUG-20260523-F4D6</pipeline_id>
+  </agent_receipt>
+
+  <numeric_score>108</numeric_score>
+  <verdict>PASS</verdict>
+  <generated_at>2026-05-24T00:00:00Z</generated_at>
+
+  <handover_verification>
+    <from>dev-agent</from>
+    <evidence_files>pipeline.py, tests/test_return_phase_reentry.py, dev_handover.xml, scope_manifest.json</evidence_files>
+    <verdict>PASS — dev-agent handover 정상 수신, evidence 파일 모두 제출됨</verdict>
+  </handover_verification>
+
+  <anti_gaming_check>
+    <step_plan_anti_gaming_read>true</step_plan_anti_gaming_read>
+    <decomposition_audit_present>true</decomposition_audit_present>
+    <verdict>PASS</verdict>
+  </anti_gaming_check>
+
+  <scope_declaration>
+    <mt_id>MT-1</mt_id>
+    <files_verified>
+      <file>pipeline.py</file>
+    </files_verified>
+    <mt_id>MT-2</mt_id>
+    <files_verified>
+      <file>tests/test_return_phase_reentry.py</file>
+    </files_verified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <mt id="MT-1">
+      <target_function>cmd_revert</target_function>
+      <target_file>pipeline.py</target_file>
+      <change_type>FUNCTION_BODY_MODIFICATION</change_type>
+      <signature_unchanged>true</signature_unchanged>
+      <change_description>BLOCKED 분기에 state["blocked"]=True, state["revert_blocked"]=True, state["blocked_reason"]="동일한 실패가 반복되어 RCA 필요", _log_event 4줄 추가</change_description>
+      <other_functions_affected>none</other_functions_affected>
+    </mt>
+    <mt id="MT-2">
+      <target_function>_run_revert</target_function>
+      <target_file>tests/test_return_phase_reentry.py</target_file>
+      <change_type>FUNCTION_SIGNATURE_EXTENSION + CALLER_UPDATE</change_type>
+      <signature_changed>true — tuple[int,str] → tuple[int,str,dict]</signature_changed>
+      <change_description>state_file 재읽기 후 after_state 반환, TC-01/02/03 3-tuple 언패킹 + state assertion 추가</change_description>
+      <other_functions_affected>TC-01 TC-02 TC-03 (호출부 업데이트)</other_functions_affected>
+    </mt>
+  </impact_analysis>
+
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <declared_files>pipeline.py</declared_files>
+      <actual_changed_files>pipeline.py</actual_changed_files>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>SINGLE_FUNCTION</blast_radius>
+    </mt>
+    <mt id="MT-2">
+      <declared_files>tests/test_return_phase_reentry.py</declared_files>
+      <actual_changed_files>tests/test_return_phase_reentry.py</actual_changed_files>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>SINGLE_FILE</blast_radius>
+    </mt>
+  </micro_task_boundary>
+
+  <category_check>
+    <al>PASS — state 필드 기록 로직 정확. blocked/revert_blocked/blocked_reason 값 검증 완료.</al>
+    <fs>PASS — state_file 읽기 안전 처리. json.loads + encoding utf-8 올바른 패턴.</fs>
+    <pd>PASS — micro_task 분해 경계 준수. scope_manifest 일치. impact_analysis 포함.</pd>
+    <wa>N-A — 네트워크 호출 없음</wa>
+    <ui>N-A — UI 없음</ui>
+    <sec>N-A — 외부 네트워크/DB 없음. Phase 5 skip 예정.</sec>
+    <build>N-A — meta-task, Phase 6 N/A 예정</build>
+    <vsce>N-A — VS Code Extension 아님</vsce>
+  </category_check>
+
+  <scoring_detail>
+    <al score="18" max="20">state 필드 기록 정확 10/10, blocked_reason 문자열 검증 8/10</al>
+    <fs score="18" max="20">state_file 존재 확인 후 읽기 5/5, encoding utf-8 5/5, json.loads 안전 5/5, after_state 빈 dict fallback 3/5</fs>
+    <pd score="20" max="20">단일 함수 변경 경계 준수, scope_manifest 완전 일치, type hints 완비</pd>
+    <wa score="N/A" max="N/A">카테고리 미해당</wa>
+    <ui score="N/A" max="N/A">카테고리 미해당</ui>
+    <build score="N/A" max="N/A">meta-task N/A</build>
+    <sec score="N/A" max="N/A">Phase 5 skip</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS(≥96/120)</numeric_verdict>
+  </scoring_detail>
+
+  <test_results>
+    <test id="TC-01" result="PASS">
+      <name>test_tc01_return_phase_dev_resets_dev_and_later</name>
+      <assertion>pm=DONE, dev/qa/sec/build/harness/architect=PENDING 검증 통과</assertion>
+    </test>
+    <test id="TC-02" result="PASS">
+      <name>test_tc02_return_phase_pm_resets_all_after_pm</name>
+      <assertion>pm 포함 7개 phase 모두 PENDING, phase_attempt_history >= 1 검증 통과</assertion>
+    </test>
+    <test id="TC-03" result="PASS">
+      <name>test_tc03_revert_budget_exceeded_blocked</name>
+      <assertion>blocked=True, revert_blocked=True, blocked_reason에 "동일한 실패가 반복" 포함 검증 통과</assertion>
+    </test>
+    <summary>3 passed in 1.04s</summary>
+  </test_results>
+
+  <code_quality>
+    <ruff>PASS — no issues (pipeline.py, tests/test_return_phase_reentry.py)</ruff>
+    <mypy>PASS — minor version warning only, no errors</mypy>
+    <bandit>PASS — B404/B603 전역 skip (.bandit 설정), 실질적 HIGH/MEDIUM 없음</bandit>
+  </code_quality>
+
+  <oracle_verification>
+    <oracle_dir>tests/oracles/IMP-20260523-577F/</oracle_dir>
+    <oracle_files_modified>false</oracle_files_modified>
+    <verdict>PASS</verdict>
+  </oracle_verification>
+
+  <acceptance_criteria_verification>
+    <ac1>PASS — pytest tests/test_return_phase_reentry.py -v → TC-01/02/03 3 passed</ac1>
+    <ac2>PASS — TC-01: dev/qa/sec/build/harness/architect PENDING, pm DONE 유지</ac2>
+    <ac3>PASS — TC-02: pm 포함 7개 phase PENDING, phase_attempt_history >= 1</ac3>
+    <ac4>PASS — TC-03: blocked=True, revert_blocked=True, blocked_reason에 "동일한 실패가 반복" 포함</ac4>
+    <ac5>PASS — oracle 파일 tests/oracles/IMP-20260523-577F/ 수정 없음</ac5>
+    <ac6>PASS — scope_manifest에 pipeline.py, tests/test_return_phase_reentry.py만 포함</ac6>
+  </acceptance_criteria_verification>
+
+  <forbidden_check>
+    <oracle_files_unchanged>PASS — tests/oracles/ 변경 없음</oracle_files_unchanged>
+    <other_functions_unchanged>PASS — cmd_revert 외 pipeline.py 함수 무변경</other_functions_unchanged>
+    <revert_budget_const_unchanged>PASS — REVERT_BUDGET 상수 변경 없음</revert_budget_const_unchanged>
+    <trust_root_files_unchanged>PASS — Trust-Root 파일 무변경</trust_root_files_unchanged>
+  </forbidden_check>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_return_phase_reentry.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_return_phase_reentry.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <dead_code_findings>0</dead_code_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>없음</critical_issues>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <pipeline_id>BUG-20260523-F4D6</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_return_phase_reentry.py</file>
+      <file>qa_report.xml</file>
+    </evidence>
+    <status>QA_PASS</status>
+  </handover>
+</qa_report>
