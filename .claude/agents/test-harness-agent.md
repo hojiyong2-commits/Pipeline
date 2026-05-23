@@ -44,6 +44,7 @@ Harness must confirm:
 - PM/Dev/QA/Build phase attestations are PASS
 - Technical, Oracle, and GitHub CI gates are PASS
 - the user has a real visible result path, screenshot, EXE, output file, or GitHub Actions attachment to inspect
+- **CLI Evidence Contract gate (IMP-20260523-9189):** `python tools/check_cli_evidence_contract.py` exit 0. exit 1 시 `PD:cli_evidence_contract_violation` — Technical gate FAIL 사유로 보고. CLI 상태 변경 명령을 stdout 메시지만으로 PASS 판정한 테스트가 있으면 해당 파일과 함수명을 보고서에 포함한다.
 
 **Advisory는 외부 게이트 readiness 진단 대상이 아닙니다 (IMP-20260518-150C)**. `ENABLE_GPT_ADVISORY_REQUIRED=1` 인 경우에만 advisory unresolved CRITICAL을 blocker로 확인한다. 기본 모드(`advisory_mode=not_run` 또는 `skipped`)에서는 advisory 항목을 readiness 체크리스트에 포함하지 않는다. `python pipeline.py advisory status` 의 `advisory_mode` 가 `blocking` 일 때만 사용자에게 보고한다.
 

@@ -1,0 +1,69 @@
+{
+  "_comment": "TC-03 (error): REVERT_BUDGET 초과 시 BLOCKED 전환",
+  "case_id": "TC-03",
+  "case_kind": "error",
+  "description": "동일 failure_code로 3회 이상 revert 시도 시 BLOCKED 상태 전환, event_log에 revert blocked 기록",
+  "initial_state": {
+    "pipeline_id": "IMP-20260523-9189",
+    "current_phase": "dev",
+    "phases": {
+      "pm": {
+        "status": "DONE"
+      },
+      "dev": {
+        "status": "FAIL"
+      },
+      "qa": {
+        "status": "PENDING"
+      },
+      "sec": {
+        "status": "PENDING"
+      },
+      "build": {
+        "status": "PENDING"
+      },
+      "harness": {
+        "status": "PENDING"
+      },
+      "architect": {
+        "status": "PENDING"
+      }
+    },
+    "phase_attempt_history": [
+      {
+        "revert_target": "dev",
+        "failure_code": "qa_logic_error",
+        "reverted_at": "2026-05-23T10:00:00Z",
+        "attempt": 1
+      },
+      {
+        "revert_target": "dev",
+        "failure_code": "qa_logic_error",
+        "reverted_at": "2026-05-23T11:00:00Z",
+        "attempt": 2
+      },
+      {
+        "revert_target": "dev",
+        "failure_code": "qa_logic_error",
+        "reverted_at": "2026-05-23T12:00:00Z",
+        "attempt": 3
+      }
+    ],
+    "failure_packets": [
+      {
+        "gate": "qa",
+        "failure_code": "qa_logic_error",
+        "return_phase": "dev",
+        "owner": "Dev",
+        "status": "FAIL",
+        "attempt": 3
+      }
+    ]
+  },
+  "command": [
+    "python",
+    "pipeline.py",
+    "revert"
+  ],
+  "env": {}
+}
