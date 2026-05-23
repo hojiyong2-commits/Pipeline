@@ -87,3 +87,6 @@ _cleanup_archive/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Human acceptance packets (local use only — not for git tracking)
+human_acceptance_packet.md

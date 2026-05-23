@@ -1899,7 +1899,8 @@ _GATE_OWNER_RETURN_MAP: Dict[str, Tuple[str, str]] = {
     "codex_rca_review": ("PM", "pm"),
 }
 BASE_DIR   = Path(__file__).resolve().parent
-STATE_FILE = BASE_DIR / "pipeline_state.json"
+_state_path_env = os.environ.get("PIPELINE_STATE_PATH")
+STATE_FILE = Path(_state_path_env) if _state_path_env else BASE_DIR / "pipeline_state.json"
 HISTORY_DIR = BASE_DIR / "pipeline_history"
 CONTRACTS_DIR = BASE_DIR / "pipeline_contracts"
 PIPELINE_CI_DIR = BASE_DIR / ".pipeline"
@@ -8381,7 +8382,7 @@ def cmd_codex(args: argparse.Namespace) -> None:
     _setup_blockers: List[str] = []
 
     try:
-        _state_path = BASE_DIR / "pipeline_state.json"
+        _state_path = STATE_FILE
         if _state_path.exists():
             _state_data = json.loads(_state_path.read_text(encoding="utf-8", errors="replace"))
             _codex_log: List[Dict[str, Any]] = _state_data.get("codex_attempt_log") or []
@@ -8473,7 +8474,7 @@ def cmd_preflight(args: argparse.Namespace) -> None:
     # 1. active pipeline_id 결정
     if not pipeline_id:
         try:
-            state_path = BASE_DIR / "pipeline_state.json"
+            state_path = STATE_FILE
             if state_path.exists():
                 state_data = json.loads(state_path.read_text(encoding="utf-8", errors="replace"))
                 pipeline_id = state_data.get("pipeline_id") or "UNKNOWN"
@@ -8501,7 +8502,7 @@ def cmd_preflight(args: argparse.Namespace) -> None:
     try:
         history_dir = BASE_DIR / "pipeline_history"
         candidate_state_files: List[Path] = []
-        state_path = BASE_DIR / "pipeline_state.json"
+        state_path = STATE_FILE
         if state_path.exists():
             candidate_state_files.append(state_path)
         if history_dir.exists():
@@ -9077,7 +9078,7 @@ def _save_codex_attempt_log(state: Dict[str, Any], attempt_log: List[Dict[str, A
         attempt_log: 저장할 시도 로그 리스트.
     """
     state["codex_attempt_log"] = attempt_log
-    state_path = BASE_DIR / "pipeline_state.json"
+    state_path = STATE_FILE
     try:
         state_path.write_text(
             json.dumps(state, ensure_ascii=False, indent=2),
