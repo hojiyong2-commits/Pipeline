@@ -1,0 +1,29 @@
+{
+  "_comment": "TC-02 expected: revert 후 pm 포함 모든 이후 phase PENDING으로 리셋",
+  "exit_code": 0,
+  "stdout_contains": [
+    "pm",
+    "되돌아",
+    "다시",
+    "PENDING"
+  ],
+  "stdout_korean": true,
+  "post_state": {
+    "phases": {
+      "pm": {"status": "PENDING"},
+      "dev": {"status": "PENDING"},
+      "qa": {"status": "PENDING"},
+      "sec": {"status": "PENDING"},
+      "build": {"status": "PENDING"},
+      "harness": {"status": "PENDING"},
+      "architect": {"status": "PENDING"}
+    },
+    "phase_attempt_history_contains": {
+      "phase": "pm",
+      "previous_status": "DONE"
+    }
+  },
+  "source": "user",
+  "input_sha256": "6071180a2794d2d2fe22fcc4e3735f1b8bacf248414532f9ce529fa4cd149db3",
+  "expected_sha256": "38d7fb371ea271126ce9e11c9d571371a880773d7a8dd7dd917d339f0fe149aa"
+}

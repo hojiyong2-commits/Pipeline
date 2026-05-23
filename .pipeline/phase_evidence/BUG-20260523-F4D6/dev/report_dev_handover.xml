@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260523-F4D6</pipeline_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_return_phase_reentry.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_return_phase_reentry.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>cmd_revert</target_function>
+    <change>BLOCKED 분기에 state["blocked"]=True, state["revert_blocked"]=True, state["blocked_reason"]="동일한 실패가 반복되어 RCA 필요", _log_event() 4줄 추가</change>
+    <mt_id>MT-2</mt_id>
+    <target_function>_run_revert</target_function>
+    <change>반환 타입 tuple[int,str] → tuple[int,str,dict], state_file 재읽기 추가, TC-01/02/03 3-tuple 언패킹 + state assertions 추가</change>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_return_phase_reentry.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_return_phase_reentry.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <test_results>pytest tests/test_return_phase_reentry.py -v: 3 passed (TC-01, TC-02, TC-03)</test_results>
+  <regression>pytest tests/ -q --ignore=tests/test_three_gate_pipeline.py -x: 388 passed, 0 failed</regression>
+  <status>READY_FOR_QA</status>
+</handover>
