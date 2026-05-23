@@ -1,0 +1,15 @@
+{
+  "case_id": "TC-04",
+  "case_kind": "edge",
+  "description": "pm_clarification_gate 필드 자체가 없는 레거시 상태 → check --phase dev가 exit 0으로 통과해야 함 (하위 호환)",
+  "pipeline_state_patch": {
+    "phases": {
+      "pm": { "status": "DONE" },
+      "dev": { "status": "PENDING" }
+    },
+    "current_phase": "dev"
+  },
+  "command": ["python", "pipeline.py", "check", "--phase", "dev"],
+  "codex_review_waiver": "legacy-bootstrap",
+  "note": "사용자 답변 B — pm_clarification_gate 없으면 레거시 파이프라인으로 간주하여 PASS"
+}

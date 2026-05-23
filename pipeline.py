@@ -1899,7 +1899,8 @@ _GATE_OWNER_RETURN_MAP: Dict[str, Tuple[str, str]] = {
     "codex_rca_review": ("PM", "pm"),
 }
 BASE_DIR   = Path(__file__).resolve().parent
-STATE_FILE = BASE_DIR / "pipeline_state.json"
+_state_path_env = os.environ.get("PIPELINE_STATE_PATH")
+STATE_FILE = Path(_state_path_env) if _state_path_env else BASE_DIR / "pipeline_state.json"
 HISTORY_DIR = BASE_DIR / "pipeline_history"
 CONTRACTS_DIR = BASE_DIR / "pipeline_contracts"
 PIPELINE_CI_DIR = BASE_DIR / ".pipeline"
@@ -4821,6 +4822,31 @@ def _validate_codex_review_schema(data: Dict[str, Any]) -> None:
             )
 
 
+def _check_pm_clarification_gate(state: Dict[str, Any]) -> Tuple[bool, str]:
+    """PM Clarification Gate — clarification_needed or empty acceptance_criteria blocks Dev entry.
+
+    IMP-20260523-D80A: PM이 모호한 요구사항을 Dev로 넘기지 못하게 막는 hard gate.
+
+    Args:
+        state: 현재 파이프라인 state dict.
+
+    Returns:
+        Tuple[bool, str]: (ok, reason_message).
+        - 레거시 파이프라인(pm_clarification_gate 필드 없음): PASS (하위 호환)
+        - clarification_needed=true: FAIL
+        - acceptance_criteria 비어 있음: FAIL
+        - 둘 다 통과: PASS
+    """
+    cg = state.get("pm_clarification_gate")
+    if cg is None:
+        return (True, "")  # Legacy pipeline: no field -> PASS (사용자 답변 B)
+    if cg.get("clarification_needed"):
+        return (False, "PM clarification이 미해소 상태입니다. done --phase pm --clarification-needed false로 해소 후 진행하세요.")
+    if not cg.get("acceptance_criteria"):
+        return (False, "acceptance_criteria가 비어 있습니다. done --phase pm --clarification-criteria로 기준을 제공하세요.")
+    return (True, "")
+
+
 def _check_codex_review_gate(
     state: Dict[str, Any],
     required_stage: Optional[str] = None,
@@ -5116,6 +5142,35 @@ def cmd_check(args: argparse.Namespace) -> None:
                 print()
                 sys.exit(1)
 
+    # PM Clarification Gate (IMP-20260523-D80A) — codex gate skip 여부와 무관하게 항상 동작
+    if phase == "dev":
+        cg_ok, cg_reason = _check_pm_clarification_gate(state)
+        if not cg_ok:
+            _record_failure_packet(
+                state, "technical", {},
+                command=[sys.executable, "pipeline.py", "done", "--phase", "pm",
+                         "--clarification-needed", "false", "--clarification-criteria", "..."],
+                note=cg_reason,
+                status="BLOCKED",
+                phase="dev",
+                failure_code="pm_clarification_gate_blocked",
+                failure_category="missing_evidence",
+                summary_ko=f"Dev 진입 차단 — PM Clarification Gate: {cg_reason}",
+                expected="clarification_needed=false AND acceptance_criteria 비어있지 않음",
+                actual=cg_reason,
+                exit_code=1,
+                owner="PM",
+                return_phase="pm",
+                required_actions=["python pipeline.py done --phase pm --clarification-needed false --clarification-criteria '...'"],
+                retry_allowed=True,
+            )
+            _save(state)
+            print()
+            print(RED("[PM CLARIFICATION GATE BLOCKED] Dev 진입 차단"))
+            print(RED(f"  사유: {cg_reason}"))
+            print()
+            sys.exit(1)
+
     ok, reason = check_gate(state, phase)
 
     if ok:
@@ -5233,6 +5288,22 @@ def cmd_done(args: argparse.Namespace) -> None:
         state["pm_analysis_gate"].update(pm_gate_flags)
         flags_summary = ", ".join(f"{k}={'Y' if v else 'N'}" for k, v in pm_gate_flags.items())
         print(GREEN(f"  [PM ANALYSIS GATE] {flags_summary}"))
+        # PM Clarification Gate 저장 (IMP-20260523-D80A)
+        _cn = bool(getattr(args, "clarification_needed", False))
+        _assumptions = str(getattr(args, "clarification_assumptions", "없음") or "없음")
+        _criteria_source = str(getattr(args, "clarification_criteria_source", "user") or "user")
+        _criteria_raw = getattr(args, "clarification_criteria", None)
+        _criteria_list: list = []
+        if _criteria_raw:
+            _criteria_list = [c.strip() for c in str(_criteria_raw).split(",") if c.strip()]
+        state["pm_clarification_gate"] = {
+            "clarification_needed": _cn,
+            "assumptions": _assumptions,
+            "acceptance_criteria_source": _criteria_source,
+            "acceptance_criteria": _criteria_list,
+            "recorded_at": _now(),
+        }
+        print(GREEN(f"  [PM CLARIFICATION GATE] clarification_needed={_cn}, criteria={len(_criteria_list)}개"))
         # AMBIGUOUS 감지: --decomp 선언했으나 --judgment-confirmed 미선언 시 경고
         if decomp_done and not judgment_confirmed:
             print(YELLOW(
@@ -8311,7 +8382,7 @@ def cmd_codex(args: argparse.Namespace) -> None:
     _setup_blockers: List[str] = []
 
     try:
-        _state_path = BASE_DIR / "pipeline_state.json"
+        _state_path = STATE_FILE
         if _state_path.exists():
             _state_data = json.loads(_state_path.read_text(encoding="utf-8", errors="replace"))
             _codex_log: List[Dict[str, Any]] = _state_data.get("codex_attempt_log") or []
@@ -8403,7 +8474,7 @@ def cmd_preflight(args: argparse.Namespace) -> None:
     # 1. active pipeline_id 결정
     if not pipeline_id:
         try:
-            state_path = BASE_DIR / "pipeline_state.json"
+            state_path = STATE_FILE
             if state_path.exists():
                 state_data = json.loads(state_path.read_text(encoding="utf-8", errors="replace"))
                 pipeline_id = state_data.get("pipeline_id") or "UNKNOWN"
@@ -8431,7 +8502,7 @@ def cmd_preflight(args: argparse.Namespace) -> None:
     try:
         history_dir = BASE_DIR / "pipeline_history"
         candidate_state_files: List[Path] = []
-        state_path = BASE_DIR / "pipeline_state.json"
+        state_path = STATE_FILE
         if state_path.exists():
             candidate_state_files.append(state_path)
         if history_dir.exists():
@@ -9007,7 +9078,7 @@ def _save_codex_attempt_log(state: Dict[str, Any], attempt_log: List[Dict[str, A
         attempt_log: 저장할 시도 로그 리스트.
     """
     state["codex_attempt_log"] = attempt_log
-    state_path = BASE_DIR / "pipeline_state.json"
+    state_path = STATE_FILE
     try:
         state_path.write_text(
             json.dumps(state, ensure_ascii=False, indent=2),
@@ -12652,6 +12723,18 @@ def build_parser() -> argparse.ArgumentParser:
                         help="[pm 전용] decomposition_audit이 AMBIGUOUS였고 "
                              "step_plan에 judgment_calls_resolved 블록이 포함됨을 선언 "
                              "(AMBIGUOUS 외 상황에서는 불필요)")
+    # PM Clarification Gate 인자 (IMP-20260523-D80A)
+    p_done.add_argument("--clarification-needed", action="store_true", default=False,
+                        help="[pm 전용] clarification이 아직 필요함을 기록 (해소 전)")
+    p_done.add_argument("--no-clarification-needed", action="store_false", dest="clarification_needed",
+                        help="[pm 전용] clarification이 해소되었음을 기록")
+    p_done.add_argument("--clarification-assumptions", default="없음",
+                        help="[pm 전용] PM이 추론한 전제 사항 (기본값: '없음')")
+    p_done.add_argument("--clarification-criteria-source", default="user",
+                        choices=["user", "pm", "inferred"],
+                        help="[pm 전용] acceptance_criteria 출처 (user/pm/inferred)")
+    p_done.add_argument("--clarification-criteria", default=None,
+                        help="[pm 전용] 검수 기준 목록 (쉼표 구분)")
     # MT-5: Frozen Codebase scope_declaration 선언 플래그 (IMP-20260506-A064)
     p_done.add_argument("--scope-declared", action="store_true", default=False,
                         help="[dev 전용] dev-agent가 <scope_declaration>을 출력했음을 선언")

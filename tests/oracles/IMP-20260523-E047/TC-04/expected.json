@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-04",
+  "case_kind": "edge",
+  "exit_code": 0,
+  "stdout_contains": [],
+  "stdout_not_contains": ["BLOCKED", "clarification"],
+  "state_after": {},
+  "description": "pm_clarification_gate 필드 없음 → 레거시 파이프라인 호환 PASS (사용자 답변 B)"
+}
