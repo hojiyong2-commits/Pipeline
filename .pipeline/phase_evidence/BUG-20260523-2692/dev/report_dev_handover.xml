@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260523-2692</pipeline_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>tests/test_clarification_gate.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>tests.test_clarification_gate.patch_and_save</target_function>
+    <target_function>tests.test_clarification_gate.test_tc04_legacy_no_field_passes</target_function>
+    <changes>
+      <change mt="MT-1">import os 제거 (F401), patch_and_save에 pm attestation PASS 블록 추가</change>
+      <change mt="MT-2">test_tc04에 merged.update(patch) 후 동일 pa 블록 추가</change>
+    </changes>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>tests/test_clarification_gate.py</git_diff_files>
+    <manifest_files>tests/test_clarification_gate.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>tests/test_clarification_gate.py</file>
+    <file>scope_manifest.json</file>
+    <file>module_qa_MT-1.xml</file>
+    <file>module_qa_MT-2.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+  <verification>
+    <pytest>pytest tests/test_clarification_gate.py -v: 4/4 PASS exit 0</pytest>
+    <ruff>ruff check tests/test_clarification_gate.py: All checks passed!</ruff>
+  </verification>
+  <status>READY_FOR_QA</status>
+</handover>

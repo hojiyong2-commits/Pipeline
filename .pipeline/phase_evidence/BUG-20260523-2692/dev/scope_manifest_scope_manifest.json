@@ -1,0 +1,23 @@
+{
+  "pipeline_id": "BUG-20260523-2692",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "tests/test_clarification_gate.py"
+      ],
+      "affected_functions": [
+        "tests.test_clarification_gate.patch_and_save"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/test_clarification_gate.py"
+      ],
+      "affected_functions": [
+        "tests.test_clarification_gate.test_tc04_legacy_no_field_passes"
+      ]
+    }
+  ]
+}
