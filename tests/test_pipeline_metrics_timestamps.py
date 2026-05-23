@@ -39,6 +39,7 @@ from pipeline import (
     _now,
     cmd_check,
     cmd_done,
+    PR_REQUIRED_SECTIONS,
 )
 
 
@@ -521,3 +522,49 @@ def test_cmd_check_does_not_overwrite_existing_started_at() -> None:
         f"기존 started_at이 cmd_check 재실행 후 덮어써졌다: "
         f"expected={early_started_at}, got={state['phases']['dev']['started_at']}"
     )
+
+
+# ── Fix-forward v4 회귀 테스트 (BOM 처리 검증) ─────────────────────────────
+
+
+def test_pr_body_bom_stripped_for_section_check() -> None:
+    """T-014: PR 본문 첫 줄에 BOM이 있어도 필수 섹션 파싱이 정상 작동해야 한다.
+
+    IMP-20260522-29C1 fix-forward v4: ci.yml의 Get-MarkdownSection과
+    pipeline.py의 _check_acceptance_readiness에서 BOM을 제거하여
+    ## 작업 요약 등 필수 섹션을 올바르게 인식하도록 수정.
+    """
+    bom = '﻿'
+    pr_body_with_bom = (
+        f'{bom}## 작업 요약\n콘텐츠\n'
+        '## 사용자가 확인할 결과물\n콘텐츠\n'
+        '## 기대 결과와 실제 결과\n콘텐츠\n'
+        '## 중요한 선택과 트레이드오프\n콘텐츠\n'
+        '## 검증\n콘텐츠'
+    )
+
+    # BOM 제거 전: 첫 줄이 '## '으로 시작하지 않아야 함 (BOM이 앞에 있음)
+    first_line_raw = pr_body_with_bom.split('\n')[0]
+    assert not first_line_raw.startswith('## '), (
+        "테스트 전제 오류: BOM이 있을 때 첫 줄이 '## '으로 시작하면 안 된다"
+    )
+
+    # BOM 제거 후: 첫 줄이 '## 작업 요약'으로 시작해야 함
+    pr_body_stripped = pr_body_with_bom.lstrip(bom)
+    first_line_stripped = pr_body_stripped.split('\n')[0]
+    assert first_line_stripped.startswith('## '), (
+        f"BOM 제거 후 첫 줄이 '## '으로 시작해야 한다: got {repr(first_line_stripped[:10])}"
+    )
+    assert first_line_stripped == '## 작업 요약', (
+        f"BOM 제거 후 첫 줄이 '## 작업 요약'이어야 한다: got {repr(first_line_stripped)}"
+    )
+
+    # BOM 제거 후 모든 필수 섹션이 검출되어야 함 (PR_REQUIRED_SECTIONS 기준)
+    for section_spec in PR_REQUIRED_SECTIONS:
+        if isinstance(section_spec, tuple):
+            found = any(s in pr_body_stripped for s in section_spec)
+            label = " 또는 ".join(section_spec)
+        else:
+            found = section_spec in pr_body_stripped
+            label = section_spec
+        assert found, f"BOM 제거 후에도 필수 섹션을 찾지 못했다: {label}"

@@ -3609,7 +3609,7 @@ def _check_acceptance_readiness(
             ),
         )
 
-    pr_body: str = pr_data.get("body") or ""
+    pr_body: str = (pr_data.get("body") or "").lstrip("﻿")
     pr_url: str = pr_data.get("url") or ""
 
     # --- 2. 필수 섹션 검사 (섹션 누락이 임시 문구보다 우선 탐지) ---

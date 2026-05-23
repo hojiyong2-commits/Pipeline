@@ -176,6 +176,7 @@ jobs:
           $pr = Invoke-RestMethod -Method Get -Uri $prUri -Headers $headers
           $prTitle = [string]$pr.title
           $prBody = [string]$pr.body
+          $prBody = $prBody.TrimStart([char]0xFEFF)
 
           function Get-MarkdownSection {
             param(
@@ -349,6 +350,19 @@ jobs:
             }
           }
 
+          # 파이프라인 메트릭 수집 (pipeline_state.json 없으면 '확인 불가')
+          $metricsOutput = ""
+          try {
+            $env:PIPELINE_NO_DASHBOARD = "1"
+            $rawMetrics = & python pipeline.py metrics status 2>&1
+            if ($LASTEXITCODE -eq 0 -and $null -ne $rawMetrics) {
+              $metricsOutput = ($rawMetrics -join "`n").Trim()
+            }
+          } catch { }
+          if ([string]::IsNullOrWhiteSpace($metricsOutput)) {
+            $metricsOutput = "(파이프라인 상태 파일이 없어 메트릭을 확인할 수 없습니다.)"
+          }
+
           $packet = @"
           <!-- pipeline-human-acceptance-packet -->
           ## 최종 확인 안내
@@ -422,6 +436,10 @@ jobs:
           - 판단 정보 상태가 **판단 가능**이고, 결과물이 요청과 맞으면 승인(ACCEPT).
           - 판단 정보 상태가 **정보 부족**이면 ACCEPT하지 말고 보완 요청 또는 거절(REJECT).
           - 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 거절(REJECT).
+
+          ## 소요 시간 요약
+
+          $metricsOutput
           "@
           Set-Content -Path human_acceptance_packet.md -Value $packet -Encoding UTF8
 
