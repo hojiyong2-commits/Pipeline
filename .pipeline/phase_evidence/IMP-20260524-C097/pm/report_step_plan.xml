@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pm-planner-agent output: IMP-20260524-C097 -->
+<!-- run_id: pm_planner-860d9dd9f8fbeb8a -->
+
+<decomposition_audit>
+  <total_functions_identified>5</total_functions_identified>
+  <!-- 1. _poll_github_ci_run (신규) — polling 루프 핵심
+       2. _wait_github_ci_sha_match (신규 내부 헬퍼) — SHA 필터 순수 함수
+       3. _github_latest_run_for_commit (기존 수정) — expected_head_sha 이중 검증
+       4. cmd_gates (기존 수정) — wait-github-ci 분기 추가
+       5. argparse gates 서브파서 (기존 수정) — wait-github-ci 파서 추가
+  -->
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>8</grep_executions>
+  <split_decision>
+    pipeline.py는 trust-root 파일이므로 HIGH_RISK 프로필.
+    변경 함수 5개이지만 모두 pipeline.py 단일 파일에 집중,
+    기능 경계로 3개 MT로 분리:
+    MT-1: wait-github-ci 신규 polling 로직
+    MT-2: 기존 github-ci SHA 검증 강화
+    MT-3: 테스트 파일 신규 생성
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260524-C097</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: GitHub CI Wait Optimizer — pipeline.py 확장 및 테스트</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>WA, FS</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>
+      pipeline.py는 trust-root 파일이며 파이프라인 엔진 핵심.
+      wait-github-ci 신규 명령, 기존 github-ci SHA 검증 변경,
+      테스트 추가가 포함됨. 파일 2개, 함수 5개, 예상 ~150줄.
+      core_parser_logic(argparse 수정)과 pipeline_protocol(trust-root 수정) 해당.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>5</expected_changed_functions>
+      <expected_changed_lines>150</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>true</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      함수 내부 변수명(poll_interval vs interval), 상태 enum 문자열 대소문자,
+      한국어 메시지 구체적 문구 등 P2 내부 취향 질문은 제외.
+      기존 패턴(_github_api_json, urllib)과 일치하는 방식으로 PM이 확정.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          새로운 "CI 대기" 명령(wait-github-ci)을 pipeline.py 안에 직접 추가할까요,
+          아니면 별도 파일(tools/ 등)로 분리할까요?
+        </user_facing_question>
+        <evidence>
+          현재 모든 gates 명령(github-ci, phase-ci, technical, oracle 등)이
+          pipeline.py의 cmd_gates 함수 안에 if/elif 분기로 구현됩니다.
+          gsub.add_parser 패턴 7건, _verify_github_ci_run 관련 호출 9건 확인.
+          사용자 요청 원문에 "pipeline.py에 gates wait-github-ci 명령을 추가"가 명시됨.
+        </evidence>
+        <why_it_matters>
+          별도 파일 분리 시 import 경로 관리와 두 곳 유지보수 필요.
+          pipeline.py 직접 추가는 token/error 처리 공유와 기존 패턴 일관성 확보.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>pipeline.py에 직접 추가 (기존 gates 패턴 일관성 유지)</label>
+            <benefit>_github_api_json, _github_token 공유 함수 즉시 재사용. 토큰/오류 처리 통일.</benefit>
+            <cost>pipeline.py가 약 150줄 더 길어짐.</cost>
+          </option>
+          <option id="B">
+            <label>tools/ 또는 별도 모듈로 분리</label>
+            <benefit>pipeline.py 크기 유지. 단위 테스트 독립성 높음.</benefit>
+            <cost>신규 모듈 추가. import 의존성과 PATH 관리 필요. 현재 코드베이스 패턴과 불일치.</cost>
+          </option>
+        </options>
+        <user_answer>A — 사용자 요청에 "pipeline.py에 직접 추가"가 명시. 기존 gates 패턴과 통일이 유지보수에 유리.</user_answer>
+      </question>
+
+      <question id="DQ-2" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          wait-github-ci가 CI run을 기다릴 때 어떤 방식으로 GitHub API를 호출할까요?
+          현재 코드베이스 방식(urllib 직접 사용)을 그대로 쓸까요,
+          아니면 gh CLI subprocess를 사용할까요?
+        </user_facing_question>
+        <evidence>
+          Grep 결과: _github_api_json(urllib.request 기반)이 _verify_github_ci_run,
+          _github_latest_run_for_commit 등 모든 주요 GitHub API 호출에서 사용.
+          gh CLI subprocess는 PR 댓글 조회 등 일부 보조 기능에서만 사용.
+        </evidence>
+        <why_it_matters>
+          urllib 방식은 GitHub token을 직접 관리하고 gh 설치 없이 동작.
+          gh CLI는 인증이 자동이지만 gh 설치 의존성이 생기고 기존 패턴과 달라짐.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>urllib 기반 _github_api_json 재사용</label>
+            <benefit>기존 패턴 일관성. GITHUB_TOKEN/GH_TOKEN 처리 공유. gh 없는 환경도 동작.</benefit>
+            <cost>polling 루프에서 HTTP 오류 처리를 명시적으로 구현해야 함.</cost>
+          </option>
+          <option id="B">
+            <label>gh CLI subprocess 사용</label>
+            <benefit>gh 인증 자동 처리. gh run watch 활용 가능.</benefit>
+            <cost>gh 미설치 환경 동작 불가. 기존 코드베이스 패턴과 불일치.</cost>
+          </option>
+        </options>
+        <user_answer>A — Q1 답변과 동일하게 urllib 기반 재사용. 기존 gates 패턴 통일이 의도됨.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline_state.json(활성 파이프라인 필수), --repo, --pr, --head-sha(필수), --timeout-sec(기본 900), --poll-sec(기본 10)
+    - Output: pipeline_state.json에 github_ci_wait 블록 기록, stdout 한국어 상태 보고, exit 0(PASS)/exit 1(그 외)
+    - Validation: head_sha 40자 hex 검증, timeout 양수 검증, poll_sec >= 5 검증
+  </interface_spec>
+
+  <requirements>
+    1. 신규 함수 _poll_github_ci_run 추가:
+       - 입력: repo, pr_num, expected_head_sha, timeout_sec, poll_sec, token
+       - GitHub API /repos/{repo}/actions/runs?head_sha={sha}&amp;per_page=20 polling
+       - 상태 7종: WAITING_FOR_TRIGGER, QUEUED, IN_PROGRESS, PASS, FAIL, CANCELLED, TIMEOUT
+       - 상태 변경 시 한국어 stdout 보고
+       - SHA 불일치 run 무시 (matched_head_sha=false)
+       - timeout_sec 초과 시 TIMEOUT 반환
+
+    2. cmd_gates에 "wait-github-ci" 분기 추가:
+       - _poll_github_ci_run 호출
+       - 결과를 pipeline_state.json의 github_ci_wait 블록에 기록
+       - _log_event로 이벤트 기록
+       - PASS가 아니면 exit 1
+
+    3. argparse gsub에 "wait-github-ci" 서브파서 추가:
+       --repo, --pr, --head-sha(필수), --timeout-sec(기본 900), --poll-sec(기본 10), --token-env(기본 GITHUB_TOKEN)
+
+    4. _github_latest_run_for_commit 및 _verify_github_ci_run에 expected_head_sha 이중 검증:
+       - run["head_sha"] != expected_head_sha 시 한국어 오류 메시지 포함 블로커
+       - 기존 동작(SHA 일치 케이스) 변경 없음
+
+    5. 오류 메시지 모두 한국어:
+       "최신 HEAD SHA 기준 run이 아직 생성되지 않았습니다."
+       "CI run SHA 불일치: 예상 {expected}, 실제 {actual}"
+       "대기 시간 초과 ({timeout_sec}초)."
+
+    6. 테스트 파일 tests/test_wait_github_ci.py 신규 생성:
+       - PIPELINE_STATE_PATH 환경변수로 격리
+       - TC01 oracle(SHA 일치 PASS) + TC02 oracle(SHA 불일치 WAITING_FOR_TRIGGER) 기반
+       - _poll_github_ci_run mock 단위 테스트 포함
+       - CLI Evidence Contract 규칙(BUG-20260524-897B) 준수: stdout-only 금지
+
+    7. Documentation-Code Drift 방지(IMP-20260507-0EDC):
+       - pipeline.py gates 서브파서 도움말에 wait-github-ci 추가
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_poll_github_ci_run (신규), cmd_gates (wait-github-ci 분기 추가), argparse gsub wait-github-ci 서브파서 추가</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_gates — if action == "wait-github-ci" 분기 신규</site>
+        <site>_github_api_json — _poll_github_ci_run 내 polling API 호출</site>
+        <site>_github_token — _poll_github_ci_run 내 token 획득</site>
+        <site>_log_event — pipeline_state.json 이벤트 기록</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_gates|if action == .github-ci.</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        pipeline.py에 _poll_github_ci_run 신규 함수 추가(polling 루프, SHA 검증, 상태 분류 7종) +
+        cmd_gates wait-github-ci 분기 + argparse 서브파서 등록.
+      </change_summary>
+      <line_estimate>100</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_github_latest_run_for_commit (기존 수정), _verify_github_ci_run (expected_head_sha 이중 검증)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_verify_github_ci_run — _github_latest_run_for_commit 호출 (라인 7962)</site>
+        <site>cmd_gates github-ci 분기 — _verify_github_ci_run 호출 (라인 11925)</site>
+        <site>_verify_github_phase_attestation_run — _github_latest_run_for_commit 호출 (라인 8038)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_github_latest_run_for_commit|_verify_github_ci_run|_record_github_ci_verification</pattern>
+        <match_count>9</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _github_latest_run_for_commit에 expected_head_sha 파라미터 추가(선택적, 기본 None).
+        제공 시 head_sha 불일치 run을 candidates 단계에서 필터.
+        run_blockers 체크를 더 명확한 한국어 메시지로 강화.
+        기존 동작(SHA 일치 케이스) 변경 없음.
+      </change_summary>
+      <line_estimate>30</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>신규 테스트 파일 tests/test_wait_github_ci.py 생성</affected_function>
+      <target_files>
+        <file>tests/test_wait_github_ci.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_wait_github|test_github_ci_wait</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        CLI Evidence Contract 준수 테스트(PIPELINE_STATE_PATH 격리, final_state/event_log assert).
+        TC01 oracle(SHA 일치 PASS) + TC02 oracle(SHA 불일치 WAITING_FOR_TRIGGER).
+        _poll_github_ci_run mock 단위 테스트 포함.
+        stdout-only 검증 금지(BUG-20260524-897B).
+      </change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 파이프라인 코드베이스 기준 버전</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>Pylance strict, Python 3.10 interpreter 지정</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    1. `python pipeline.py gates wait-github-ci --repo R --pr 1 --head-sha abc1234... --timeout-sec 30 --poll-sec 5` — SHA 일치 success run 발견 시 exit 0, pipeline_state.json github_ci_wait.status=PASS
+    2. SHA 불일치 run만 존재할 때 WAITING_FOR_TRIGGER 반환, exit 1
+    3. timeout_sec 초과 시 TIMEOUT 반환, exit 1
+    4. `python pipeline.py gates github-ci --repo R --commit expected_sha` — run head_sha != expected_sha 시 한국어 SHA 불일치 메시지 포함 FAIL
+    5. 기존 `gates github-ci` 정상 케이스(SHA 일치) 동작 회귀 없음
+    6. `pytest tests/test_wait_github_ci.py` 전체 PASS (CLI Evidence Contract 준수 포함)
+    7. `python pipeline.py contract audit` PASS 상태 유지
+    8. trust-root 파일(pipeline.py) 변경이므로 Codex plan/scope review ACCEPT 후 Dev 진입
+  </acceptance_criteria>
+
+  <forbidden>
+    - pipeline_state.json 스키마 기존 필드 삭제/이름 변경 금지
+    - _verify_github_ci_run 기존 시그니처 브레이킹 체인지 금지(8곳 호출부 영향)
+    - tests/oracles/ 파일 수정 금지(CODEOWNERS 보호)
+    - CLAUDE.md, agent MD 파일 수정 금지
+    - stdout-only 테스트(CLI Evidence Contract 위반) 금지
+    - 고정 시간 대기(time.sleep(600) 등) 추가 금지
+    - Phase attestation, Codex Review gate 우회 금지
+    - scope 외 파일(tests/oracles/** 포함) 변경 금지
+  </forbidden>
+
+  <handover_template>
+    <dev_to_qa_template>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260524-C097</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/test_wait_github_ci.py</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </dev_to_qa_template>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_wait_github_ci.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260524-C097\TC01\input.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260524-C097\TC01\expected.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260524-C097\TC02\input.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260524-C097\TC02\expected.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      - trust-root 파일(pipeline.py) 수정: HIGH_RISK 프로필, scope_lock_check PASS 필수
+      - Dev done: --scope-declared --scope-manifest scope_manifest.json --agent-run-id 필수
+      - CLI Evidence Contract: PIPELINE_STATE_PATH 격리, final_state/event_log assert, stdout-only 금지
+      - Codex plan stage ACCEPT 후 Dev 진입
+      - MT-1 → MT-2 → MT-3 순서로 module design/dev/qa PASS 후 integrate
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Phase 계획 완료. contract frozen (audit PASS). TC01/TC02 oracle 2개 등록.</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>

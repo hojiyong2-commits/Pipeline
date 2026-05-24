@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260524-C097</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-05dd1091aa4cb3b1</planner_run_id>
+  <step_plan_sha256>4e2cbec6c39a36f445542b7320546ba30e99bcda4a51b5c3727d7a63f2cead65</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <design_decisions>
+    <decision id="D1">wait-github-ci를 pipeline.py에 직접 추가. 기존 gates 서브커맨드 패턴 통일.</decision>
+    <decision id="D2">GitHub API는 기존 _github_api_json 패턴 재사용 (urllib 기반, gh CLI 의존성 없음).</decision>
+    <decision id="D3">HIGH_RISK 실행 프로필. pipeline.py는 trust-root 파일이므로 core_parser_logic + pipeline_protocol 해당.</decision>
+  </design_decisions>
+  <micro_tasks>
+    <mt id="MT-1" target="pipeline.py">_poll_github_ci_run 신규 함수 + gates wait-github-ci 분기 (~100줄)</mt>
+    <mt id="MT-2" target="pipeline.py">gates github-ci SHA 검증 강화 (~30줄)</mt>
+    <mt id="MT-3" target="tests/test_wait_github_ci.py">CLI Evidence Contract 준수 테스트 신규 생성 (~80줄)</mt>
+  </micro_tasks>
+</manager_handoff>
