@@ -1,0 +1,4 @@
+{
+  "has_oracle_quality_blocker": true,
+  "blocker_substring": "oracle_quality gate must be PASS"
+}

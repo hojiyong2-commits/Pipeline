@@ -7241,7 +7241,7 @@ def cmd_contract(args: argparse.Namespace) -> None:
         print(f"  test_set: {paths['test_set']}\n")
         return
 
-    if action in {"add-module", "add-question", "answer", "add-test", "add-oracle", "audit", "ready", "freeze", "show"}:
+    if action in {"add-module", "add-question", "answer", "add-test", "add-oracle", "audit", "audit-oracle", "ready", "freeze", "show"}:
         contract, test_set = _load_contract_bundle(load_json, paths, pid, action)
     else:
         _die(f"unknown contract action: {action}", exit_code=2)
@@ -7406,6 +7406,57 @@ def cmd_contract(args: argparse.Namespace) -> None:
             print(YELLOW(f"  WARN: {item}"))
         print(f"  report: {paths['contract_audit']}\n")
         sys.exit(0 if audit["status"] == "PASS" else 1)
+
+    if action == "audit-oracle":
+        # IMP-20260524-48C4: oracle quality 전용 감사 커맨드
+        allow_agent_gen = bool(getattr(args, "allow_agent_generated", False))
+        oracle_dir_arg = getattr(args, "oracle_dir", None)
+
+        if oracle_dir_arg is not None:
+            # --oracle-dir 지정 시: TC 디렉토리의 input.json에서 oracle entries 로드
+            oracle_dir_path = Path(oracle_dir_arg)
+            if not oracle_dir_path.is_absolute():
+                oracle_dir_path = BASE_DIR / oracle_dir_path
+            input_json_path = oracle_dir_path / "input.json"
+            if not input_json_path.exists():
+                print(RED(f"\n[CONTRACT AUDIT-ORACLE FAIL] {pid}"))
+                print(RED(f"  FAIL: input.json not found in oracle-dir: {oracle_dir_path}"))
+                sys.exit(1)
+            try:
+                tc_input = load_json(input_json_path)
+            except Exception as exc:
+                print(RED(f"\n[CONTRACT AUDIT-ORACLE FAIL] {pid}"))
+                print(RED(f"  FAIL: cannot load input.json: {exc}"))
+                sys.exit(1)
+            oracle_entries = tc_input.get("oracles") or tc_input.get("entries") or []
+            # TC input.json의 allow_agent_generated 필드도 참조 (args flag가 없으면)
+            if not allow_agent_gen:
+                allow_agent_gen = bool(tc_input.get("allow_agent_generated", False))
+        else:
+            # 기본: pipeline oracle_manifest.json 사용
+            oracle_manifest_path = paths["oracle_manifest"]
+            if not oracle_manifest_path.exists():
+                print(RED(f"\n[CONTRACT AUDIT-ORACLE FAIL] {pid}"))
+                print(RED("  FAIL: oracle_manifest.json not found"))
+                sys.exit(1)
+            try:
+                oracle_manifest = load_json(oracle_manifest_path)
+            except Exception as exc:
+                print(RED(f"\n[CONTRACT AUDIT-ORACLE FAIL] {pid}"))
+                print(RED(f"  FAIL: cannot load oracle_manifest.json: {exc}"))
+                sys.exit(1)
+            oracle_entries = oracle_manifest.get("entries") or oracle_manifest.get("oracles") or []
+
+        quality_result = _audit_oracle_quality(oracle_entries, allow_agent_generated=allow_agent_gen)
+        status = quality_result["status"]
+        failures = quality_result.get("failures", [])
+        color = GREEN if status == "PASS" else RED
+        print(color(f"\n[CONTRACT AUDIT-ORACLE {status}] {pid}"))
+        for f in failures:
+            print(RED(f"  {status}: {f}"))
+        if status == "PASS":
+            print(GREEN("  PASS: oracle quality checks passed"))
+        sys.exit(0 if status == "PASS" else 1)
 
     if action == "ready":
         report = readiness_report(contract, test_set)
@@ -7587,15 +7638,15 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
         info = gates.get(gate_name, {}) if isinstance(gates, dict) else {}
         if not isinstance(info, dict) or info.get("status") != "PASS":
             blockers.append(f"{gate_name} gate must be PASS")
-    # IMP-20260524-48C4 MT-2: oracle_quality PASS 조건 강제
-    oracle_quality = state.get("oracle_quality", {})
-    if isinstance(oracle_quality, dict) and oracle_quality:
-        oq_status = str(oracle_quality.get("status") or "").upper()
-        if oq_status != "PASS":
-            blockers.append(
-                f"oracle_quality gate must be PASS (current: {oq_status or 'not run'}). "
-                "Run `python pipeline.py gates oracle` to pass oracle quality gate."
-            )
+    # IMP-20260524-48C4 MT-2 + BUG-20260524-B794: oracle_quality PASS 조건 강제
+    # oracle_quality={} (초기값) / None / 누락 모두 차단
+    oracle_quality = state.get("oracle_quality")
+    oq_status = str((oracle_quality.get("status") if isinstance(oracle_quality, dict) else None) or "").upper()
+    if oq_status != "PASS":
+        blockers.append(
+            f"oracle_quality gate must be PASS (current: {oq_status or 'PENDING'}). "
+            "Run `python pipeline.py gates oracle` to pass oracle quality gate."
+        )
     blockers.extend(_phase_attestation_blockers(state))
     # GPT advisory CRITICAL은 ENABLE_GPT_ADVISORY_REQUIRED=1 일 때만 COMPLETE를 차단합니다.
     # 기본 모드(REQUIRED 미설정)에서는 advisory가 수동 진단 도구이며 blocker가 아닙니다.
@@ -13555,6 +13606,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_contract_audit.add_argument("--allow-no-oracle", action="store_true", default=False,
                                   help="User waiver for non-runnable/docs tasks; records warning, not a score")
     p_contract_audit.add_argument("--waiver-reason", default="")
+
+    p_contract_audit_oracle = csub.add_parser("audit-oracle", help="Oracle quality audit for a pipeline (IMP-20260524-48C4)")
+    p_contract_audit_oracle.add_argument("--pipeline-id", default=None)
+    p_contract_audit_oracle.add_argument("--allow-agent-generated", action="store_true", default=False)
+    p_contract_audit_oracle.add_argument("--oracle-dir", default=None, help="TC directory containing input.json with oracle entries (overrides oracle_manifest.json)")
 
     p_contract_ready = csub.add_parser("ready", help="Check Definition of Ready")
     p_contract_ready.add_argument("--pipeline-id", default=None)

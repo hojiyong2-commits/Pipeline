@@ -188,3 +188,189 @@ def test_ensure_v210_oracle_quality_init() -> None:
     assert state2["oracle_quality"] is existing, (
         "_ensure_v210_fields가 기존 oracle_quality를 덮어씀"
     )
+
+
+# =============================================================================
+# BUG-20260524-B794 MT-2: CLI 경로 subprocess 테스트 3개
+# =============================================================================
+
+
+def test_cli_audit_oracle_passes_with_normal_and_edge() -> None:
+    """CLI: contract audit-oracle --oracle-dir (normal+edge) → exit 0, stdout에 PASS 포함."""
+    import os
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # oracle input.json 생성 (normal + edge entries)
+        oracle_dir = os.path.join(tmpdir, "oracle_dir")
+        os.makedirs(oracle_dir)
+
+        expected_file = os.path.join(oracle_dir, "expected.json")
+        with open(expected_file, "w", encoding="utf-8") as f:
+            json.dump({"result": "ok", "count": 1}, f)
+
+        input_data = {
+            "oracles": [
+                {
+                    "name": "tc-normal",
+                    "case_kind": "normal",
+                    "expected_source": "user_provided",
+                    "expected_path": expected_file,
+                },
+                {
+                    "name": "tc-edge",
+                    "case_kind": "edge",
+                    "expected_source": "user_provided",
+                    "expected_path": expected_file,
+                },
+            ]
+        }
+        with open(os.path.join(oracle_dir, "input.json"), "w", encoding="utf-8") as f:
+            json.dump(input_data, f)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "pipeline.py",
+                "contract",
+                "audit-oracle",
+                "--oracle-dir",
+                oracle_dir,
+                "--pipeline-id",
+                "BUG-20260524-B794",
+            ],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        assert result.returncode == 0, (
+            f"exit code should be 0 for normal+edge oracle, got {result.returncode}. "
+            f"stdout: {result.stdout[:500]}"
+        )
+        assert "PASS" in result.stdout, (
+            f"stdout should contain PASS: {result.stdout[:500]}"
+        )
+
+
+def test_cli_audit_oracle_fails_with_normal_only() -> None:
+    """CLI: contract audit-oracle --oracle-dir (normal only, edge 없음) → exit 1, stdout에 FAIL 및 edge 언급 포함."""
+    import os
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        oracle_dir = os.path.join(tmpdir, "oracle_dir")
+        os.makedirs(oracle_dir)
+
+        expected_file = os.path.join(oracle_dir, "expected.json")
+        with open(expected_file, "w", encoding="utf-8") as f:
+            json.dump({"result": "ok"}, f)
+
+        # normal만 있음 (edge 없음)
+        input_data = {
+            "oracles": [
+                {
+                    "name": "tc-normal-only",
+                    "case_kind": "normal",
+                    "expected_source": "user_provided",
+                    "expected_path": expected_file,
+                }
+            ]
+        }
+        with open(os.path.join(oracle_dir, "input.json"), "w", encoding="utf-8") as f:
+            json.dump(input_data, f)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "pipeline.py",
+                "contract",
+                "audit-oracle",
+                "--oracle-dir",
+                oracle_dir,
+                "--pipeline-id",
+                "BUG-20260524-B794",
+            ],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        assert result.returncode != 0, (
+            f"exit code should be non-zero for normal-only oracle, got {result.returncode}"
+        )
+        assert "FAIL" in result.stdout, (
+            f"stdout should contain FAIL: {result.stdout[:500]}"
+        )
+        # edge_required 메시지 확인
+        assert "edge" in result.stdout.lower(), (
+            f"stdout should mention edge requirement: {result.stdout[:500]}"
+        )
+
+
+def test_oracle_quality_missing_blocks_architect() -> None:
+    """oracle_quality={} (초기값) 상태에서 _external_gate_blockers가 oracle_quality blocker를 생성하는지 검증.
+
+    BUG-20260524-B794 핵심 수정: oracle_quality={}(빈 dict)는 PASS가 아니므로
+    architect COMPLETE를 위한 external_gate_blockers에 포함되어야 합니다.
+    이 테스트는 _external_gate_blockers 함수를 직접 호출하여 blocker 생성을 검증합니다.
+    """
+    # oracle_quality={} (빈 dict) — 버그 수정 전에는 blocker 미생성
+    state_empty: Dict[str, Any] = {
+        "oracle_quality": {},
+        "external_gates": {
+            "enabled": True,
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "acceptance": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
+        "phase_attestations": {"enabled": False},
+    }
+    blockers_empty = pipeline._external_gate_blockers(state_empty)
+    oracle_blockers_empty = [b for b in blockers_empty if "oracle_quality" in b]
+    assert oracle_blockers_empty, (
+        f"oracle_quality={{}} 상태에서 oracle_quality blocker가 없음. "
+        f"전체 blockers: {blockers_empty}"
+    )
+    assert "PENDING" in oracle_blockers_empty[0], (
+        f"blocker 메시지에 PENDING이 없음: {oracle_blockers_empty[0]!r}"
+    )
+
+    # oracle_quality 누락 — 버그 수정 전에는 blocker 미생성
+    state_missing: Dict[str, Any] = {
+        "external_gates": {
+            "enabled": True,
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "acceptance": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
+        "phase_attestations": {"enabled": False},
+    }
+    blockers_missing = pipeline._external_gate_blockers(state_missing)
+    oracle_blockers_missing = [b for b in blockers_missing if "oracle_quality" in b]
+    assert oracle_blockers_missing, (
+        f"oracle_quality 누락 상태에서 oracle_quality blocker가 없음. "
+        f"전체 blockers: {blockers_missing}"
+    )
+
+    # oracle_quality={"status": "PASS"} — blocker 없어야 함 (회귀)
+    state_pass: Dict[str, Any] = {
+        "oracle_quality": {"status": "PASS"},
+        "external_gates": {
+            "enabled": True,
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "acceptance": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
+        "phase_attestations": {"enabled": False},
+    }
+    blockers_pass = pipeline._external_gate_blockers(state_pass)
+    oracle_blockers_pass = [b for b in blockers_pass if "oracle_quality" in b]
+    assert not oracle_blockers_pass, (
+        f"oracle_quality=PASS 상태에서 불필요한 blocker 생성: {oracle_blockers_pass}"
+    )
