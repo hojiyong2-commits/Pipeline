@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pm-planner-agent output: BUG-20260524-897B -->
+<!-- run_id: pm_planner-05b71dff541ace24 -->
+
+<decomposition_audit>
+  <total_functions_identified>4</total_functions_identified>
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>3개 MT로 분할: MT-1은 tools/ 파일 단일 함수 1줄 수정, MT-2는 tests/test_patch_lane.py 헬퍼+14개 테스트 isolation 추가, MT-3은 tests/test_check_cli_evidence_contract.py 신규 테스트 1개 추가. 각 MT가 독립적으로 모듈 QA 가능하고, MT-1 수정이 MT-2/MT-3의 검증 대상이 되는 의존 관계가 있으므로 순서는 MT-1 → MT-2 → MT-3이어야 한다.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260524-897B</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning — BUG-20260524-897B</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>3개 파일에 걸친 수정이며, 핵심 linter 로직 1줄 수정 + 테스트 파일 2개 수정(isolation 추가 + 신규 테스트 1개 추가)이다. 변경 파일 수 3개이므로 FAST_SINGLE_CODE 조건을 초과하여 STANDARD 프로필이 적절하다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>5</expected_changed_functions>
+      <expected_changed_lines>90</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>어떤 변수명을 쓸지, annotation 문구를 어떻게 쓸지, _run() 헬퍼 env 파라미터 이름 등 내부 구현 취향 질문은 묻지 않고 유지보수성 우선 원칙으로 PM이 처리했습니다.</filter_summary>
+    <askuser>NO_ASKUSER_REQUIRED</askuser>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-2">
+        <user_facing_question>test_patch_lane.py의 14개 테스트를 isolation 적용할 때, _run() 헬퍼에 env 파라미터를 추가하는 방식 vs. 상태 변경 테스트에만 CLI_EVIDENCE_ALLOW_READ_ONLY 어노테이션을 쓰는 방식 중 어느 쪽으로 진행할까요?</user_facing_question>
+        <evidence>사용자가 "simplest fix that satisfies the linter"를 명시하며 두 가지 접근법을 모두 언급하고, 읽기 전용 호출에는 annotation, 상태 변경 호출에는 PIPELINE_STATE_PATH env 주입을 권장했습니다.</evidence>
+        <why_it_matters>선택에 따라 테스트 코드 변경 범위와 테스트 의도의 명확성이 달라집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>혼합 접근: 읽기 전용 호출은 annotation, 상태 변경 호출은 env 주입</label>
+            <benefit>가장 minimal한 변경이며, 각 테스트의 의도(read-only vs. state-changing)가 코드에서 명확하게 드러납니다.</benefit>
+            <cost>테스트마다 다른 패턴을 사용하므로 일관성이 낮아 보일 수 있습니다.</cost>
+          </option>
+          <option id="B">
+            <label>_run() 헬퍼에 env 파라미터 추가하여 모든 상태 변경 호출에 PIPELINE_STATE_PATH 주입</label>
+            <benefit>모든 테스트가 동일한 isolation 패턴을 사용해 일관성이 높습니다.</benefit>
+            <cost>_run() 시그니처 변경으로 모든 호출부를 수정해야 하고, 읽기 전용 테스트에도 불필요한 tempfile을 생성하게 됩니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 "simplest" 접근을 명시적으로 언급 — 옵션 A(혼합 접근)로 확정. 읽기 전용(cluster detect, cluster status)은 CLI_EVIDENCE_ALLOW_READ_ONLY annotation, 상태 변경(cluster init, cluster close, patch verify 등)은 PIPELINE_STATE_PATH env 주입.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: tools/check_cli_evidence_contract.py (기존 소스), tests/test_patch_lane.py (기존 소스), tests/test_check_cli_evidence_contract.py (기존 소스)
+    - Output: 동일 파일들 — 1줄 수정 + isolation 추가 + 신규 테스트 1개
+    - Validation: python tools/check_cli_evidence_contract.py 실행 시 test_patch_lane.py 위반 0건, 신규 test_bad_direct_no_isolation 실행 시 violation 1건 반환
+  </interface_spec>
+
+  <requirements>
+    - MT-1: check_evidence_assertions()의 `return True` → `return False` (1줄 수정)
+      isolation 없는 상태 변경 CLI 호출은 violation으로 처리해야 한다.
+    - MT-2: test_patch_lane.py의 14개 테스트에 isolation 추가
+      * 읽기 전용(cluster detect, cluster status 계열): 함수 body에 CLI_EVIDENCE_ALLOW_READ_ONLY annotation 추가
+      * 상태 변경(cluster init, close, patch verify 등 나머지): 함수 body에 PIPELINE_STATE_PATH 키워드 참조 추가하여 isolation 요건 충족
+      * linter가 함수 수준에서 검사하므로, 각 test_ 함수 body에 해당 키워드가 포함되어야 함
+    - MT-3: tests/test_check_cli_evidence_contract.py에 신규 테스트 추가
+      test_bad_direct_no_isolation: direct subprocess로 pipeline.py done 호출 + isolation 없음 → violation 확인
+    - Documentation-Code Drift 방지: 변경하는 함수의 docstring도 함께 수정
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>check_evidence_assertions</affected_function>
+      <target_files>
+        <file>tools/check_cli_evidence_contract.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>scan_test_files: check_evidence_assertions 호출부</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def check_evidence_assertions</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>check_evidence_assertions()에서 isolation 없음 → True 반환하던 버그를 False로 수정. isolation 없는 상태 변경 CLI 호출은 항상 violation.</change_summary>
+      <line_estimate>3</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_run, 14개 test_* 메서드</affected_function>
+      <target_files>
+        <file>tests/test_patch_lane.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def test_</pattern>
+        <match_count>14</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>읽기 전용 테스트에는 CLI_EVIDENCE_ALLOW_READ_ONLY annotation 추가. 상태 변경 테스트에는 PIPELINE_STATE_PATH env 참조 추가하여 isolation 요건 충족.</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>test_bad_direct_no_isolation (신규)</affected_function>
+      <target_files>
+        <file>tests/test_check_cli_evidence_contract.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def test_bad_direct</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>test_bad_direct_no_isolation 추가: direct subprocess pipeline.py done + stdout-only assert + isolation 없음 → scan_test_files가 violation 1개 반환하는지 검증.</change_summary>
+      <line_estimate>30</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.defaultInterpreterPath 기존 설정 유지</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - python tools/check_cli_evidence_contract.py --path tests/ exit 0 (violations 0)
+    - python -m pytest tests/test_check_cli_evidence_contract.py -v 6/6 PASS
+    - test_bad_direct_no_isolation: isolation 없이 pipeline.py done 호출 → violation 1건 이상
+    - test_good_read_only_annotation: pipeline.py status + annotation → 위반 없음
+    - test_good_isolation_with_assertion: isolation + assertion → 위반 없음
+    - test_bad_state_changing_with_annotation: done + CLI_EVIDENCE_ALLOW_READ_ONLY → 위반
+    - test_patch_lane.py의 모든 cluster/patch 테스트: violation 0건
+  </acceptance_criteria>
+
+  <forbidden>
+    - ISOLATION_MARKERS, ACTUAL_ASSERTION_KEYWORDS 상수 수정 금지
+    - pipeline.py 수정 금지
+    - CLAUDE.md 수정 금지
+    - .github/workflows/ci.yml 수정 금지
+    - tests/test_patch_lane.py의 테스트 로직(assert 내용, 테스트 의도) 변경 금지 — isolation 추가만 허용
+    - scope 외 파일 변경 금지
+  </forbidden>
+
+  <handover_template>
+    <handover_fields>
+      <from_agent>dev-agent</from_agent>
+      <to_agent>qa-agent</to_agent>
+      <pipeline_id>BUG-20260524-897B</pipeline_id>
+      <evidence_files>tools/check_cli_evidence_contract.py, tests/test_patch_lane.py, tests/test_check_cli_evidence_contract.py, dev_handover.xml, scope_manifest.json</evidence_files>
+      <status_expected>READY_FOR_QA</status_expected>
+    </handover_fields>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tools\check_cli_evidence_contract.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_patch_lane.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_check_cli_evidence_contract.py</file>
+    </target_files>
+    <phase_rules_excerpt>Dev는 scope_manifest_MT-N.json 생성 필수. scope_lock_check 포함 handover 필수. 수정 후 pytest 검증 필수.</phase_rules_excerpt>
+    <prev_phase_summary>PM 설계 완료: MT-1(check_evidence_assertions 1줄 수정), MT-2(test_patch_lane isolation 추가), MT-3(신규 self-test 1개 추가)</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
