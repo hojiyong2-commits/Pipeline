@@ -7802,6 +7802,126 @@ def _github_latest_run_for_commit(
     return successful[0] if successful else candidates[0]
 
 
+def _poll_github_ci_run(
+    repo: str,
+    expected_head_sha: str,
+    timeout_sec: int,
+    poll_sec: int,
+    token: Optional[str],
+    pr_num: Optional[int] = None,
+) -> Dict[str, Any]:
+    """GitHub CI run을 expected_head_sha 기준으로 polling하여 완료 여부를 반환합니다.
+
+    IMP-20260524-C097 MT-1: blind wait(time.sleep) 대신 SHA 기반 정확한 CI run 추적.
+
+    Args:
+        repo: owner/repo 형식 GitHub 저장소.
+        expected_head_sha: 기대하는 head SHA (40자 full SHA 또는 prefix).
+        timeout_sec: 최대 대기 시간(초).
+        poll_sec: polling 간격(초).
+        token: GitHub API 토큰 (없으면 None).
+        pr_num: PR 번호 (로그 출력용, 없으면 None).
+
+    Returns:
+        Dict with keys:
+            wait_status: PASS | FAIL | TIMEOUT | WAITING_FOR_TRIGGER | CANCELLED
+            matched_head_sha: bool
+            conclusion: GitHub conclusion 값 또는 빈 문자열
+            run_id: GitHub run id 문자열 또는 None
+            elapsed_sec: 실제 소요 시간(초)
+    """
+    import time as _time
+
+    sha_prefix = expected_head_sha.lower()
+    pr_hint = f" (PR #{pr_num})" if pr_num else ""
+    start = _time.monotonic()
+    last_status: str = "WAITING_FOR_TRIGGER"
+    matched_run: Optional[Dict[str, Any]] = None
+
+    print(f"[CI 대기{pr_hint}] SHA={sha_prefix[:12]} 기준 run 검색 시작 (최대 {timeout_sec}초, {poll_sec}초 간격)")
+
+    while True:
+        elapsed = _time.monotonic() - start
+        if elapsed >= timeout_sec:
+            print(f"[CI 대기] {elapsed:.0f}초 경과 — TIMEOUT (기대 SHA run 미발견)")
+            return {
+                "wait_status": "TIMEOUT",
+                "matched_head_sha": False,
+                "conclusion": "",
+                "run_id": None,
+                "elapsed_sec": elapsed,
+            }
+
+        # GitHub API: head_sha 기반 run 목록 조회
+        query = urllib.parse.urlencode({"head_sha": expected_head_sha, "per_page": "20"})
+        try:
+            response = _github_api_json(
+                f"https://api.github.com/repos/{repo}/actions/runs?{query}",
+                token,
+            )
+        except SystemExit:
+            # _die()가 sys.exit(1)을 호출하므로 API 오류 시 FAIL 반환
+            elapsed = _time.monotonic() - start
+            return {
+                "wait_status": "FAIL",
+                "matched_head_sha": False,
+                "conclusion": "",
+                "run_id": None,
+                "elapsed_sec": elapsed,
+            }
+
+        runs = response.get("workflow_runs", [])
+        if not isinstance(runs, list):
+            runs = []
+
+        # SHA 일치 run 필터
+        sha_matched: List[Dict[str, Any]] = []
+        for run in runs:
+            if not isinstance(run, dict):
+                continue
+            run_sha = str(run.get("head_sha") or "").lower()
+            if run_sha.startswith(sha_prefix) or sha_prefix.startswith(run_sha[:len(sha_prefix)]):
+                sha_matched.append(run)
+
+        if not sha_matched:
+            print(f"[CI 대기] {elapsed:.0f}초 경과 — WAITING_FOR_TRIGGER (SHA 일치 run 없음)")
+            _time.sleep(poll_sec)
+            continue
+
+        # 가장 최신 SHA 일치 run 선택 (id 내림차순)
+        sha_matched.sort(key=lambda r: int(r.get("id") or 0), reverse=True)
+        current_run = sha_matched[0]
+        run_status = str(current_run.get("status") or "")
+        conclusion = str(current_run.get("conclusion") or "")
+        run_id_val = str(current_run.get("id") or "")
+
+        if run_status != "completed":
+            status_label = run_status or "queued/in_progress"
+            print(f"[CI 대기] {elapsed:.0f}초 경과 — {status_label.upper()} (run_id={run_id_val})")
+            matched_run = current_run
+            last_status = "IN_PROGRESS"
+            _time.sleep(poll_sec)
+            continue
+
+        # 완료된 run
+        elapsed = _time.monotonic() - start
+        if conclusion == "success":
+            wait_status = "PASS"
+        elif conclusion in ("cancelled", "skipped"):
+            wait_status = "CANCELLED"
+        else:
+            wait_status = "FAIL"
+
+        print(f"[CI 대기] {elapsed:.0f}초 경과 — {wait_status} (conclusion={conclusion}, run_id={run_id_val})")
+        return {
+            "wait_status": wait_status,
+            "matched_head_sha": True,
+            "conclusion": conclusion,
+            "run_id": run_id_val,
+            "elapsed_sec": elapsed,
+        }
+
+
 def _read_attestation_from_zip(zip_bytes: bytes, file_name: str = "pipeline_attestation.json") -> Dict[str, Any]:
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
@@ -11922,9 +12042,24 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not _gcg.get("started_at"):
             _gcg["started_at"] = _now()
             _save(state)
+        # IMP-20260524-C097 MT-2: --head-sha 옵션으로 SHA 이중 검증 강화.
+        # --commit과 --head-sha 모두 지정된 경우 이중 일치 여부를 사전 경고한다.
+        _cli_head_sha: Optional[str] = getattr(args, "head_sha", None) or None
+        _cli_commit: Optional[str] = getattr(args, "commit", None) or None
+        if _cli_head_sha and _cli_commit:
+            _sha_prefix = _cli_head_sha.lower()
+            _commit_lower = _cli_commit.lower()
+            if not (_commit_lower.startswith(_sha_prefix) or _sha_prefix.startswith(_commit_lower)):
+                print(
+                    f"[GITHUB CI] 경고: --head-sha ({_cli_head_sha[:12]})와 "
+                    f"--commit ({_cli_commit[:12]})이 일치하지 않습니다. "
+                    "--commit 값을 우선합니다."
+                )
+        # --head-sha만 지정된 경우 --commit 대용으로 사용
+        effective_commit: Optional[str] = _cli_commit or _cli_head_sha
         verification = _verify_github_ci_run(
             repo=args.repo,
-            commit=args.commit,
+            commit=effective_commit,
             run_id=args.run_id,
             artifact_name=args.artifact,
             token_env=args.token_env,
@@ -11965,6 +12100,54 @@ def cmd_gates(args: argparse.Namespace) -> None:
         print(f"  run_id: {verification.get('run_id')}")
         print(f"  report: {_contract_paths(pid)['github_ci_result']}\n")
         sys.exit(0 if verification["status"] == "PASS" else 1)
+
+    if action == "wait-github-ci":
+        # IMP-20260524-C097 MT-1: SHA 기반 CI run 추적 (blind wait 제거)
+        repo_arg: str = args.repo or _github_repo_from_remote()
+        head_sha_arg: str = getattr(args, "head_sha", "") or ""
+        timeout_arg: int = int(getattr(args, "timeout_sec", 600) or 600)
+        poll_arg: int = int(getattr(args, "poll_sec", 15) or 15)
+        pr_num_arg: Optional[int] = getattr(args, "pr", None)
+        token_arg = _github_token(getattr(args, "token_env", "GITHUB_TOKEN") or "GITHUB_TOKEN")
+
+        if not head_sha_arg:
+            # --head-sha 미지정 시 로컬 HEAD 사용
+            head_sha_arg = _git_rev_parse("HEAD") or ""
+        if not head_sha_arg:
+            _die("[CI 대기] --head-sha 인자 또는 로컬 git HEAD SHA를 확인할 수 없습니다.")
+
+        wait_result = _poll_github_ci_run(
+            repo=repo_arg,
+            expected_head_sha=head_sha_arg,
+            timeout_sec=timeout_arg,
+            poll_sec=poll_arg,
+            token=token_arg,
+            pr_num=pr_num_arg,
+        )
+
+        # pipeline_state.json에 결과 기록
+        # wait_status 키 이름은 oracle TC01/TC02 expected 스키마와 일치시킴 (IMP-20260524-C097 MT-3)
+        state.setdefault("github_ci_wait", {}).update({
+            "repo": repo_arg,
+            "head_sha": head_sha_arg,
+            "wait_status": wait_result["wait_status"],
+            "matched_head_sha": wait_result["matched_head_sha"],
+            "conclusion": wait_result["conclusion"],
+            "run_id": wait_result["run_id"],
+            "elapsed_sec": wait_result["elapsed_sec"],
+            "recorded_at": _now(),
+        })
+        _log_event(state, f"gates wait-github-ci: status={wait_result['wait_status']} sha={head_sha_arg[:12]}")
+        _save(state)
+
+        wait_status = wait_result["wait_status"]
+        color = GREEN if wait_status == "PASS" else RED
+        print(color(f"\n[CI 대기 결과] {wait_status}"))
+        print(f"  SHA: {head_sha_arg[:12]}")
+        print(f"  소요 시간: {wait_result['elapsed_sec']:.0f}초")
+        if wait_result["run_id"]:
+            print(f"  run_id: {wait_result['run_id']}")
+        sys.exit(0 if wait_status == "PASS" else 1)
 
     if action == "batch-ci":
         # batch-ci --probe --changed-files a,b,c
@@ -13225,6 +13408,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_github.add_argument("--workflow", default="CI", help="Workflow run name to search when --run-id is omitted")
     p_gate_github.add_argument("--artifact", default="pipeline-attestation", help="Required artifact name")
     p_gate_github.add_argument("--token-env", default="GITHUB_TOKEN", help="Optional env var containing a GitHub token")
+    # IMP-20260524-C097 MT-2: SHA 검증 강화 — 예상 head SHA를 명시적으로 전달 가능
+    p_gate_github.add_argument(
+        "--head-sha",
+        dest="head_sha",
+        default=None,
+        help="기대하는 head SHA (선택). 지정 시 CI run의 head_sha와 이중 검증 수행.",
+    )
+
+    # IMP-20260524-C097 MT-1: SHA 기반 CI run polling (blind wait 제거)
+    p_gate_wait_ci = gsub.add_parser(
+        "wait-github-ci",
+        help="head SHA 기준으로 GitHub CI run을 polling하여 완료를 대기합니다 (blind wait 대체)",
+    )
+    p_gate_wait_ci.add_argument("--repo", default=None, help="owner/repo; 기본값: origin remote")
+    p_gate_wait_ci.add_argument("--pr", type=int, default=None, help="PR 번호 (로그 출력용)")
+    p_gate_wait_ci.add_argument("--head-sha", dest="head_sha", default=None,
+                                help="기대하는 head SHA (기본값: 로컬 HEAD)")
+    p_gate_wait_ci.add_argument("--timeout-sec", dest="timeout_sec", type=int, default=600,
+                                help="최대 대기 시간(초, 기본값: 600)")
+    p_gate_wait_ci.add_argument("--poll-sec", dest="poll_sec", type=int, default=15,
+                                help="polling 간격(초, 기본값: 15)")
+    p_gate_wait_ci.add_argument("--token-env", dest="token_env", default="GITHUB_TOKEN",
+                                help="GitHub 토큰 환경 변수명")
 
     # GPT/OpenAI advisory reviews (non-binding; CRITICAL must be resolved)
     p_advisory = sub.add_parser("advisory", help="External advisory reviews and resolutions")
