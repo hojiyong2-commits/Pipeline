@@ -1,0 +1,34 @@
+<qa_report>
+  <pipeline_id>BUG-20260524-145A</pipeline_id>
+  <phase>qa</phase>
+  <agent_run_id>qa-0ab0d35d4ac7fb14</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <max_score>120</max_score>
+  <generated_at>2026-05-24T03:10:00Z</generated_at>
+  <scope_declaration>
+    <files_to_verify>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tests/test_patch_lane.py</file>
+    </files_to_verify>
+  </scope_declaration>
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <test_results>
+    <total_tests>19</total_tests>
+    <passed>19</passed>
+    <failed>0</failed>
+  </test_results>
+  <linter_result>PASS - no violations found</linter_result>
+  <verdict>PASS</verdict>
+  <failure_signature>none</failure_signature>
+  <repeat_indicator>NONE</repeat_indicator>
+</qa_report>
