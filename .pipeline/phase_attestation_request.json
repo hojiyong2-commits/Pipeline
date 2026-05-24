@@ -1,72 +1,72 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T02:15:13Z",
-  "pipeline_id": "IMP-20260516-D069",
+  "generated_at": "2026-05-24T11:31:26Z",
+  "pipeline_id": "IMP-20260524-48C4",
   "phase": "pm",
   "phase_status": "DONE",
-  "commit_hint": "3c89494a5df4c4dc5643557fdcda37c29c2ee755",
+  "commit_hint": "6b900ecf09f15bee32ea4d5bc39ebf521e2d7009",
   "state": {
     "current_phase": "dev",
-    "phase_completed_at": "2026-05-16T02:15:04Z",
+    "phase_completed_at": "2026-05-24T11:28:38Z",
     "report_file": "step_plan.xml",
     "evidence": null
   },
   "agent_run": {
-    "run_id": "pm_planner-b5a497091799a32d",
+    "run_id": "pm_planner-fc3eee1dfc827df4",
     "phase": "pm_planner",
     "agent_id": "pm-planner-agent",
     "status": "COMPLETED",
     "output_file": "step_plan.xml",
-    "output_sha256": "c2d6f13624e09f62867b65c41c61777c81a1415589c122a3139977e7e499e94c",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/agent_receipt_pm_planner-b5a497091799a32d.json",
-    "receipt_sha256": "13fe161a92ef67fa952627a5775350803e195b253c0e4614e9009b3fe001b451",
+    "output_sha256": "8f5f3a2b47b00a93c5e5efd675df1c250f7ccd8cac59e11d643f5ed574da6de6",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260524-48C4/pm/agent_receipt_pm_planner-fc3eee1dfc827df4.json",
+    "receipt_sha256": "ae8d10f83ed6200db911b434dd6002f2e7cc5c9f2822b08140f1fdd0e558edac",
     "used_by_phase": "pm",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pm_planner\\pm_planner-b5a497091799a32d.json"
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260524-48C4\\pm_planner\\pm_planner-fc3eee1dfc827df4.json"
   },
   "manager_run": {
-    "run_id": "pipeline_manager-ca12146a6b6069b6",
+    "run_id": "pipeline_manager-c7b82e02578ff524",
     "phase": "pipeline_manager",
     "agent_id": "pipeline-manager-agent",
     "status": "COMPLETED",
     "output_file": "manager_handoff.xml",
-    "output_sha256": "50d4c9ba4ed3cd2c5225e578b2f16ecbab463936908a926ef8e888cb9104d701",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_receipt_pipeline_manager-ca12146a6b6069b6.json",
-    "receipt_sha256": "6d30c199700d55e9c6bed50e1094a041fe5cebf0f7380d1904c10aea4fb7e296",
+    "output_sha256": "45381e0622c3526df5b081c640ab143314122e3ba235240b0b9978ef756196bd",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260524-48C4/pm/manager_receipt_pipeline_manager-c7b82e02578ff524.json",
+    "receipt_sha256": "6a5f5a9703ff89af7d02bf4407fcd6c46df609cad723c8b05f6f13ddda4f4ad7",
     "used_by_phase": "pm_manager",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pipeline_manager\\pipeline_manager-ca12146a6b6069b6.json"
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260524-48C4\\pipeline_manager\\pipeline_manager-c7b82e02578ff524.json"
   },
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pm_planner\\pm_planner-b5a497091799a32d.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/agent_receipt_pm_planner-b5a497091799a32d.json",
-      "sha256": "13fe161a92ef67fa952627a5775350803e195b253c0e4614e9009b3fe001b451",
-      "size_bytes": 519,
+      "source": ".pipeline\\agent_receipts\\IMP-20260524-48C4\\pm_planner\\pm_planner-fc3eee1dfc827df4.json",
+      "path": ".pipeline/phase_evidence/IMP-20260524-48C4/pm/agent_receipt_pm_planner-fc3eee1dfc827df4.json",
+      "sha256": "ae8d10f83ed6200db911b434dd6002f2e7cc5c9f2822b08140f1fdd0e558edac",
+      "size_bytes": 520,
       "requires_force_add": true
     },
     {
       "label": "manager_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pipeline_manager\\pipeline_manager-ca12146a6b6069b6.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_receipt_pipeline_manager-ca12146a6b6069b6.json",
-      "sha256": "6d30c199700d55e9c6bed50e1094a041fe5cebf0f7380d1904c10aea4fb7e296",
-      "size_bytes": 543,
+      "source": ".pipeline\\agent_receipts\\IMP-20260524-48C4\\pipeline_manager\\pipeline_manager-c7b82e02578ff524.json",
+      "path": ".pipeline/phase_evidence/IMP-20260524-48C4/pm/manager_receipt_pipeline_manager-c7b82e02578ff524.json",
+      "sha256": "6a5f5a9703ff89af7d02bf4407fcd6c46df609cad723c8b05f6f13ddda4f4ad7",
+      "size_bytes": 557,
       "requires_force_add": true
     },
     {
       "label": "report",
       "source": "step_plan.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/report_step_plan.xml",
-      "sha256": "c2d6f13624e09f62867b65c41c61777c81a1415589c122a3139977e7e499e94c",
-      "size_bytes": 28370,
+      "path": ".pipeline/phase_evidence/IMP-20260524-48C4/pm/report_step_plan.xml",
+      "sha256": "8f5f3a2b47b00a93c5e5efd675df1c250f7ccd8cac59e11d643f5ed574da6de6",
+      "size_bytes": 22235,
       "requires_force_add": true
     },
     {
       "label": "manager_report",
       "source": "manager_handoff.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_report_manager_handoff.xml",
-      "sha256": "50d4c9ba4ed3cd2c5225e578b2f16ecbab463936908a926ef8e888cb9104d701",
-      "size_bytes": 758,
+      "path": ".pipeline/phase_evidence/IMP-20260524-48C4/pm/manager_report_manager_handoff.xml",
+      "sha256": "45381e0622c3526df5b081c640ab143314122e3ba235240b0b9978ef756196bd",
+      "size_bytes": 3262,
       "requires_force_add": true
     }
   ],
