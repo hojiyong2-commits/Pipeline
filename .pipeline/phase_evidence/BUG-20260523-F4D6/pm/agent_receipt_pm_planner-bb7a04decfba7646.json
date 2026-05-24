@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260523-F4D6",
+  "phase": "pm_planner",
+  "agent_id": "pm-planner-agent",
+  "run_id": "pm_planner-bb7a04decfba7646",
+  "status": "COMPLETED",
+  "started_at": "2026-05-23T15:44:55Z",
+  "completed_at": "2026-05-23T15:44:59Z",
+  "output_file": "step_plan_F4D6.xml",
+  "output_sha256": "f0f1fcb83f56d6f11b01bf3384160677440412ff99d19668f596ad8f990572f4",
+  "evidence_files": [],
+  "commit_sha": "ed451f96f5f21d89d1817d07a68519e285fde121"
+}

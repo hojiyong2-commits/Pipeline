@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260523-F4D6</pipeline_id>
+  <manager_run_id>pipeline_manager-2ad413b2b49a074a</manager_run_id>
+  <planner_run_id>pm_planner-bb7a04decfba7646</planner_run_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>f0f1fcb83f56d6f11b01bf3384160677440412ff99d19668f596ad8f990572f4</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <generated_at>2026-05-23T15:45:00Z</generated_at>
+
+  <contract_status>
+    <frozen>true</frozen>
+    <contract_hash>148f5e11c8d8797ba12eb6a94f95eb601cdd57866ea00e59697cd5f4c6ed068b</contract_hash>
+    <modules>
+      <module id="revert-state-fields">cmd_revert BLOCKED 분기에 blocked/revert_blocked/blocked_reason 필드 기록</module>
+      <module id="test-state-verification">_run_revert post_state 반환 + TC-01/02/03 state assertion 추가</module>
+    </modules>
+    <oracles>
+      <oracle id="O001" case_kind="normal">tests/oracles/IMP-20260523-577F/TC-01</oracle>
+      <oracle id="O002" case_kind="edge">tests/oracles/IMP-20260523-577F/TC-03</oracle>
+    </oracles>
+  </contract_status>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <file>pipeline.py</file>
+      <function>cmd_revert</function>
+      <change>BLOCKED 분기에서 _save(state) 직전에 state 필드 4줄 + _log_event 호출 추가</change>
+    </micro_task>
+    <micro_task id="MT-2">
+      <file>tests/test_return_phase_reentry.py</file>
+      <function>_run_revert</function>
+      <change>3-tuple 반환 확장 + TC-01/02/03 post_state assertion 추가</change>
+    </micro_task>
+  </micro_tasks>
+
+  <phase_execution_plan>
+    <phase id="2" name="Dev">
+      <codex_waiver>legacy-bootstrap</codex_waiver>
+      <branch>impl/IMP-20260523-577F</branch>
+      <attestation_branch>phase-attestation/BUG-20260523-F4D6-dev</attestation_branch>
+    </phase>
+    <phase id="4" name="QA">
+      <attestation_branch>phase-attestation/BUG-20260523-F4D6-qa</attestation_branch>
+    </phase>
+    <phase id="5" name="SEC">
+      <action>skip — 외부 네트워크/DB 없음</action>
+    </phase>
+    <phase id="6" name="Build">
+      <action>N/A — meta-task (테스트/파이프라인 코드 수정)</action>
+      <attestation_branch>phase-attestation/BUG-20260523-F4D6-build</attestation_branch>
+    </phase>
+    <phase id="7" name="External Gates">
+      <gates>technical, oracle, github-ci, accept</gates>
+    </phase>
+  </phase_execution_plan>
+
+  <acceptance_criteria>
+    1. python -m pytest tests/test_return_phase_reentry.py -v → TC-01/02/03 3 passed
+    2. TC-01 post_state: pm=DONE, dev/qa/sec/build/harness/architect=PENDING
+    3. TC-02 post_state: 모든 phase PENDING, phase_attempt_history 1개 이상
+    4. TC-03 post_state: blocked=True, revert_blocked=True, blocked_reason에 "동일한 실패가 반복" 포함
+    5. oracle 파일 미수정
+    6. 회귀 없음
+  </acceptance_criteria>
+
+  <pm_attestation_branch>phase-attestation/BUG-20260523-F4D6-pm</pm_attestation_branch>
+</manager_handoff>

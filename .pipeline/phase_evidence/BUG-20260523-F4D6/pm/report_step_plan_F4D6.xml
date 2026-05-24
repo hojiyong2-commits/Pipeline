@@ -1,0 +1,146 @@
+<decomposition_audit>
+  <total_functions_identified>4</total_functions_identified>
+  <micro_task_count>2</micro_task_count>
+  <grep_executions>8</grep_executions>
+  <split_decision>
+    변경 대상이 2개 파일(pipeline.py, tests/test_return_phase_reentry.py)에 분산되며
+    각 파일의 수정 목적이 독립적(상태 기록 vs. 검증 로직)이므로 파일 단위로 분할합니다.
+    MT-1은 pipeline.py의 cmd_revert BLOCKED 분기에만 국한되며 (~5줄 추가),
+    MT-2는 _run_revert 시그니처 변경 + TC-01/02/03 assertion 추가 (~35줄)입니다.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260523-F4D6</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>2개 파일(pipeline.py, tests/test_return_phase_reentry.py), 3개 함수, 2개 micro-task — FAST_SINGLE_CODE는 micro_task 1개만 허용하므로 STANDARD 사용.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>3</expected_changed_functions>
+      <expected_changed_lines>40</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 Fix 1/Fix 2를 코드 수준으로 완전히 명세했습니다. P2 질문 필터링, 사용자 명세 그대로 따릅니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>MT-1(pipeline.py)과 MT-2(테스트 파일)로 나눠서 진행해도 될까요?</user_facing_question>
+        <evidence>수정 대상이 두 파일로 명확히 분리되고 각 목적이 독립적입니다 (상태 기록 vs. 검증 로직).</evidence>
+        <why_it_matters>파일별 분리가 검증 범위를 명확히 하고 scope lock 위반을 방지합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1(pipeline.py), MT-2(test 파일) 분리 진행</label>
+            <benefit>각 파일 scope lock 명확, 검증 위치 명확</benefit>
+            <cost>없음 — 범위가 작아 분리 비용이 낮습니다</cost>
+          </option>
+          <option id="B">
+            <label>단일 MT로 통합 진행</label>
+            <benefit>MT 수가 1개로 줄어 module design/dev/qa 기록 단계가 줄어들어 진행 속도가 빨라집니다</benefit>
+            <cost>scope 추적이 어려워지고 두 파일의 변경 범위 검증이 불명확해집니다</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 — 사용자 지시에 MT-1/MT-2 분리가 명시되었습니다</user_answer>
+      </question>
+    </decision_questions>
+    <user_response>NO_ASKUSER_REQUIRED</user_response>
+  </design_confirmation>
+
+  <requirements>
+    Fix 1 (pipeline.py — cmd_revert BLOCKED 분기):
+    _revert_budget_check가 True를 반환하는 분기에서 _save(state) 호출 직전에:
+      state["blocked"] = True
+      state["revert_blocked"] = True
+      state["blocked_reason"] = "동일한 실패가 반복되어 RCA 필요"
+    그리고 _log_event(state, "revert blocked: 동일 실패 반복 — RCA 필요") 호출 추가.
+
+    Fix 2 (tests/test_return_phase_reentry.py):
+    _run_revert() 내 subprocess 완료 후 state_file을 다시 읽어 post_state 반환:
+      after_state = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else {}
+      return result.returncode, result.stdout + result.stderr, after_state
+    반환 타입: tuple[int, str, dict]
+
+    TC-01 추가 assertion: phases dev/qa/sec/build/harness/architect 모두 PENDING
+    TC-02 추가 assertion: phases pm/dev/qa/sec/build/harness/architect 모두 PENDING + phase_attempt_history 1개 이상
+    TC-03 추가 assertion: state["blocked"]==True, state["revert_blocked"]==True, blocked_reason에 "동일한 실패가 반복" 포함
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>cmd_revert</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_revert</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_revert BLOCKED 분기에서 state blocked/revert_blocked/blocked_reason 필드 기록 + _log_event 호출 추가 (~5줄)</change_summary>
+      <line_estimate>5</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_run_revert</affected_function>
+      <target_files>
+        <file>tests/test_return_phase_reentry.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>TestReturnPhaseReentry.test_tc01_return_phase_dev_resets_dev_and_later</site>
+        <site>TestReturnPhaseReentry.test_tc02_return_phase_pm_resets_all_after_pm</site>
+        <site>TestReturnPhaseReentry.test_tc03_revert_budget_exceeded_blocked</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_run_revert</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_run_revert 반환 타입 tuple[int,str] → tuple[int,str,dict] 확장 + TC-01/02/03 post_state assertion 추가 (~35줄)</change_summary>
+      <line_estimate>35</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    1. pytest tests/test_return_phase_reentry.py -v → TC-01/02/03 PASS
+    2. TC-01: dev/qa/sec/build/harness/architect PENDING, pm DONE 유지
+    3. TC-02: pm 포함 모든 7개 phase PENDING, phase_attempt_history 1개 이상
+    4. TC-03: blocked=True, revert_blocked=True, blocked_reason에 "동일한 실패가 반복" 포함
+    5. oracle 파일(tests/oracles/IMP-20260523-577F/) 수정 없음
+    6. scope_manifest.json에 pipeline.py, tests/test_return_phase_reentry.py만 포함
+  </acceptance_criteria>
+
+  <forbidden>
+    - tests/oracles/IMP-20260523-577F/ 수정 금지
+    - cmd_revert 이외 pipeline.py 함수 수정 금지
+    - REVERT_BUDGET 상수 변경 금지
+    - Trust-Root 파일 수정 금지
+  </forbidden>
+</step_plan>
