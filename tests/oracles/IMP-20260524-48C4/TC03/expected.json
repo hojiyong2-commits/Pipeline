@@ -1,0 +1,15 @@
+{
+  "oracle_quality": {
+    "status": "FAIL",
+    "failures": [
+      "tc03-normal: oracle expected JSON is empty",
+      "tc03-edge: oracle expected JSON is a placeholder"
+    ],
+    "case_summary": {
+      "normal": 1,
+      "edge": 1,
+      "error": 0,
+      "regression": 0
+    }
+  }
+}

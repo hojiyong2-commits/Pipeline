@@ -1,0 +1,20 @@
+{
+  "scenario": "expected output이 빈 JSON {} (placeholder 수준) — quality FAIL 케이스",
+  "oracles": [
+    {
+      "name": "tc03-normal",
+      "case_kind": "normal",
+      "source": "user",
+      "expected_source": "user_provided",
+      "expected_is_empty_json": true
+    },
+    {
+      "name": "tc03-edge",
+      "case_kind": "edge",
+      "source": "user",
+      "expected_source": "user_provided",
+      "expected_is_placeholder": true
+    }
+  ],
+  "allow_agent_generated": false
+}

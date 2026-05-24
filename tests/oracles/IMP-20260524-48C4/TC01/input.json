@@ -1,0 +1,18 @@
+{
+  "scenario": "normal oracle + edge oracle 모두 존재, user_provided source, 실제 expected 품질 이상 없음",
+  "oracles": [
+    {
+      "name": "tc01-normal",
+      "case_kind": "normal",
+      "source": "user",
+      "expected_source": "user_provided"
+    },
+    {
+      "name": "tc01-edge",
+      "case_kind": "edge",
+      "source": "user",
+      "expected_source": "user_provided"
+    }
+  ],
+  "allow_agent_generated": false
+}

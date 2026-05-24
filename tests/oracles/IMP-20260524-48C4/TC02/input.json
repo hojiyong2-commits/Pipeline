@@ -1,0 +1,12 @@
+{
+  "scenario": "normal oracle만 존재, edge/exception/error oracle 없음",
+  "oracles": [
+    {
+      "name": "tc02-normal",
+      "case_kind": "normal",
+      "source": "user",
+      "expected_source": "user_provided"
+    }
+  ],
+  "allow_agent_generated": false
+}

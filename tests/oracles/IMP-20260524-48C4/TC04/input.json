@@ -1,0 +1,18 @@
+{
+  "scenario": "expected_source가 agent_generated이고 사용자 명시 승인(allow_agent_generated) 없음 — BLOCKED 케이스",
+  "oracles": [
+    {
+      "name": "tc04-normal",
+      "case_kind": "normal",
+      "source": "user",
+      "expected_source": "agent_generated"
+    },
+    {
+      "name": "tc04-edge",
+      "case_kind": "edge",
+      "source": "user",
+      "expected_source": "agent_generated"
+    }
+  ],
+  "allow_agent_generated": false
+}
