@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-24T01:05:41Z",
+  "pipeline_id": "BUG-20260523-28D3",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "88fdad4751337d8b7015236addbe06fde71c889b",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-24T00:57:03Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "tools/check_cli_evidence_contract.py,tests/test_check_cli_evidence_contract.py"
+  },
+  "agent_run": {
+    "run_id": "dev-12cbb18013d70704",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "64e0c80848b8fdce3204b6bf3f30577d1382c222a3e607a4f04a63d1aa6d3864",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260523-28D3/dev/agent_receipt_dev-12cbb18013d70704.json",
+    "receipt_sha256": "f5556f09803f3a773b2cf02661ca0bfffc572e6f35ac450bef065a96b931e0f1",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260523-28D3\\dev\\dev-12cbb18013d70704.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260523-28D3\\dev\\dev-12cbb18013d70704.json",
+      "path": ".pipeline/phase_evidence/BUG-20260523-28D3/dev/agent_receipt_dev-12cbb18013d70704.json",
+      "sha256": "f5556f09803f3a773b2cf02661ca0bfffc572e6f35ac450bef065a96b931e0f1",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260523-28D3/dev/report_dev_handover.xml",
+      "sha256": "64e0c80848b8fdce3204b6bf3f30577d1382c222a3e607a4f04a63d1aa6d3864",
+      "size_bytes": 1970,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260523-28D3/dev/scope_manifest_scope_manifest.json",
+      "sha256": "ab3b757ad2a9e4c618ad9620005f68c5a772d4fad0cd3b1c7ad26ff1499ac9a2",
+      "size_bytes": 465,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "tools/check_cli_evidence_contract.py",
+      "sha256": "8845494d8855f33d8c7d2279c3b8d30ac8a0eeafe956594c4780ec8bc1eae6c3",
+      "size_bytes": 14047
+    },
+    {
+      "path": "tests/test_check_cli_evidence_contract.py",
+      "sha256": "aef559f2292335db9725604a0cbaf1e22809112ebb807d4221aaaca10f9df4a3",
+      "size_bytes": 6301
+    }
+  ],
+  "local_only_files": []
+}
