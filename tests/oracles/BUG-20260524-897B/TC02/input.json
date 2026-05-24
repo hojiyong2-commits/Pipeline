@@ -1,0 +1,4 @@
+{
+  "test_function_source": "def test_good_read_only():\n    # CLI_EVIDENCE_ALLOW_READ_ONLY: status is read-only\n    result = subprocess.run([sys.executable, _PIPELINE, 'status'], capture_output=True)\n    assert result.returncode == 0\n",
+  "expected_violations": 0
+}

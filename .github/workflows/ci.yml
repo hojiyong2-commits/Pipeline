@@ -112,6 +112,12 @@ jobs:
           $env:GITHUB_BASE_SHA = $baseSha
           python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pipelineId --request-file $reqPath
 
+      - name: CLI Evidence Contract 검사
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'phase-attestation/')
+        env:
+          PIPELINE_NO_DASHBOARD: "1"
+        run: python tools/check_cli_evidence_contract.py --path tests
+
       - name: 자동 검사 실행
         env:
           PIPELINE_NO_DASHBOARD: "1"
