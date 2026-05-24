@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260524-48C4</pipeline_id>
+  <agent_run_id>qa-d845fe0fa8fb1f98</agent_run_id>
+  <result>PASS</result>
+  <numeric_score>108</numeric_score>
+  <verdict>PASS</verdict>
+
+  <scope_verification>
+    <micro_task_boundary>
+      <mt_id>MT-1</mt_id>
+      <scope_verdict>WITHIN_SCOPE</scope_verdict>
+      <affected_function>_audit_oracle_quality (신규), _ensure_v210_fields (초기화), _audit_contract_bundle (통합), cmd_gates oracle (quality check 추가), build_parser (--allow-agent-generated 인자)</affected_function>
+      <target_file>pipeline.py</target_file>
+    </micro_task_boundary>
+    <micro_task_boundary>
+      <mt_id>MT-2</mt_id>
+      <scope_verdict>WITHIN_SCOPE</scope_verdict>
+      <affected_function>_external_gate_blockers (oracle_quality PASS 조건 강제)</affected_function>
+      <target_file>pipeline.py</target_file>
+    </micro_task_boundary>
+    <micro_task_boundary>
+      <mt_id>MT-3</mt_id>
+      <scope_verdict>WITHIN_SCOPE</scope_verdict>
+      <affected_function>신규 테스트 파일 전체 (8개 테스트)</affected_function>
+      <target_file>tests/test_oracle_quality_gate.py</target_file>
+    </micro_task_boundary>
+    <micro_task_boundary>
+      <mt_id>MT-4</mt_id>
+      <scope_verdict>WITHIN_SCOPE</scope_verdict>
+      <affected_function>Oracle Quality Gate 정책 문서화 (4개 MD 파일)</affected_function>
+      <target_files>CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md</target_files>
+    </micro_task_boundary>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+  </scope_verification>
+
+  <test_results>
+    <suite name="test_oracle_quality_gate.py">
+      <total>8</total>
+      <passed>8</passed>
+      <failed>0</failed>
+      <duration_sec>0.78</duration_sec>
+    </suite>
+    <new_failures>0</new_failures>
+  </test_results>
+
+  <oracle_verification>
+    <case id="TC01">
+      <case_kind>normal</case_kind>
+      <result>PASS</result>
+    </case>
+    <case id="TC02">
+      <case_kind>edge</case_kind>
+      <result>PASS</result>
+    </case>
+    <case id="TC03">
+      <case_kind>error</case_kind>
+      <result>PASS</result>
+    </case>
+    <case id="TC04">
+      <case_kind>error</case_kind>
+      <result>PASS</result>
+    </case>
+  </oracle_verification>
+
+  <verdict>PASS</verdict>
+  <failure_signature>none</failure_signature>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <pipeline_id>IMP-20260524-48C4</pipeline_id>
+    <evidence>
+      <file>qa_report.xml</file>
+    </evidence>
+    <status>READY_FOR_SEC</status>
+  </handover>
+</qa_report>
