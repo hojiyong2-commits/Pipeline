@@ -7835,9 +7835,6 @@ def _poll_github_ci_run(
     sha_prefix = expected_head_sha.lower()
     pr_hint = f" (PR #{pr_num})" if pr_num else ""
     start = _time.monotonic()
-    last_status: str = "WAITING_FOR_TRIGGER"
-    matched_run: Optional[Dict[str, Any]] = None
-
     print(f"[CI 대기{pr_hint}] SHA={sha_prefix[:12]} 기준 run 검색 시작 (최대 {timeout_sec}초, {poll_sec}초 간격)")
 
     while True:
@@ -7898,8 +7895,6 @@ def _poll_github_ci_run(
         if run_status != "completed":
             status_label = run_status or "queued/in_progress"
             print(f"[CI 대기] {elapsed:.0f}초 경과 — {status_label.upper()} (run_id={run_id_val})")
-            matched_run = current_run
-            last_status = "IN_PROGRESS"
             _time.sleep(poll_sec)
             continue
 

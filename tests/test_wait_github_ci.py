@@ -17,8 +17,6 @@ import sys
 from typing import Any, Dict
 from unittest.mock import patch
 
-import pytest
-
 # pipeline.py를 import 하기 위해 프로젝트 루트를 sys.path에 추가
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
