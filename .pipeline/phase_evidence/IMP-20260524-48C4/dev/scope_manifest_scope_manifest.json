@@ -1,0 +1,25 @@
+{
+  "pipeline_id": "IMP-20260524-48C4",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_audit_oracle_quality (신규), _oracle_manifest_status (확장), cmd_contract audit-oracle (신규 서브커맨드), _new_state (oracle_quality 필드 추가), _ensure_v210_fields (마이그레이션), _audit_contract_bundle (통합), cmd_gates oracle 처리 블록 (quality check 추가)"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_external_gate_blockers, cmd_architect"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["tests/test_oracle_quality_gate.py"],
+      "affected_functions": ["신규 테스트 파일 전체"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["CLAUDE.md", ".claude/agents/pm-agent.md", ".claude/agents/qa-agent.md", ".claude/agents/test-harness-agent.md"],
+      "affected_functions": ["oracle quality 정책 문서 섹션"]
+    }
+  ]
+}
