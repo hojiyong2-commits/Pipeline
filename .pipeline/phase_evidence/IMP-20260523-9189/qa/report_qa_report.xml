@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <agent_receipt>
+    <run_id>qa-f32f7232343c66f8</run_id>
+    <agent>qa-agent</agent>
+    <pipeline_id>IMP-20260523-9189</pipeline_id>
+  </agent_receipt>
+
+  <numeric_score>109</numeric_score>
+  <verdict>PASS</verdict>
+  <generated_at>2026-05-24T00:10:00Z</generated_at>
+
+  <handover_verification>
+    <from>dev-agent</from>
+    <evidence_files>tests/helpers/__init__.py, tests/helpers/cli_evidence.py, tools/__init__.py, tools/check_cli_evidence_contract.py, tests/test_return_phase_reentry.py, tests/oracles/IMP-20260523-9189/TC-01/input.json, tests/oracles/IMP-20260523-9189/TC-01/expected.json, tests/oracles/IMP-20260523-9189/TC-02/input.json, tests/oracles/IMP-20260523-9189/TC-02/expected.json, tests/oracles/IMP-20260523-9189/TC-03/input.json, tests/oracles/IMP-20260523-9189/TC-03/expected.json, tests/test_patch_lane.py, tests/test_clarification_gate.py, CLAUDE.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md, .claude/agents/pm-agent.md, .github/workflows/ci.yml</evidence_files>
+    <verdict>PASS — dev-agent handover 정상 수신, 18개 evidence 파일 모두 제출됨</verdict>
+  </handover_verification>
+
+  <codex_review_check>
+    <stage>code</stage>
+    <result>ACCEPT</result>
+    <review_model>GPT-5.5</review_model>
+    <status>PASS — codex_review_result.json 확인 완료</status>
+  </codex_review_check>
+
+  <cli_evidence_contract_check>
+    <tool>python tools/check_cli_evidence_contract.py --verbose</tool>
+    <exit_code>0</exit_code>
+    <status>PASS — no violations found</status>
+    <details>
+      test_patch_lane.py: 14개 테스트 모두 CLI_EVIDENCE_ALLOW_READ_ONLY 어노테이션 정상 (SKIP 처리).
+      test_return_phase_reentry.py: run_cli_with_temp_state + assert_post_state 사용으로 PASS.
+      test_failure_feedback_ec9f.py: final_state/failure_packets 사용으로 evidence found.
+    </details>
+  </cli_evidence_contract_check>
+
+  <anti_gaming_check>
+    <step_plan_anti_gaming_read>true</step_plan_anti_gaming_read>
+    <decomposition_audit_present>true</decomposition_audit_present>
+    <verdict>PASS</verdict>
+  </anti_gaming_check>
+
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <declared_files>tests/helpers/__init__.py, tests/helpers/cli_evidence.py</declared_files>
+      <actual_changed_files>tests/helpers/__init__.py, tests/helpers/cli_evidence.py</actual_changed_files>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>NEW_FILES</blast_radius>
+    </mt>
+    <mt id="MT-2">
+      <declared_files>tools/__init__.py, tools/check_cli_evidence_contract.py</declared_files>
+      <actual_changed_files>tools/__init__.py, tools/check_cli_evidence_contract.py</actual_changed_files>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>NEW_FILES</blast_radius>
+    </mt>
+    <mt id="MT-3">
+      <declared_files>tests/test_return_phase_reentry.py, tests/oracles/IMP-20260523-9189/TC-01/input.json, tests/oracles/IMP-20260523-9189/TC-01/expected.json, tests/oracles/IMP-20260523-9189/TC-02/input.json, tests/oracles/IMP-20260523-9189/TC-02/expected.json, tests/oracles/IMP-20260523-9189/TC-03/input.json, tests/oracles/IMP-20260523-9189/TC-03/expected.json</declared_files>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>SINGLE_FILE_MODIFIED + NEW_ORACLE_FILES</blast_radius>
+    </mt>
+    <mt id="MT-4">
+      <declared_files>tests/test_patch_lane.py, tests/test_clarification_gate.py</declared_files>
+      <note>tests/test_clarification_gate.py 변경 없음 확인 (이미 PIPELINE_STATE_PATH 사용 중)</note>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>SINGLE_FILE_ANNOTATION_ONLY</blast_radius>
+    </mt>
+    <mt id="MT-5">
+      <declared_files>CLAUDE.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md, .claude/agents/pm-agent.md</declared_files>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>DOCUMENTATION_ONLY</blast_radius>
+    </mt>
+    <mt id="MT-6">
+      <declared_files>.github/workflows/ci.yml</declared_files>
+      <verdict>WITHIN_SCOPE</verdict>
+      <blast_radius>CI_STEP_ADDITION</blast_radius>
+      <continue_on_error_false>CONFIRMED</continue_on_error_false>
+    </mt>
+  </micro_task_boundary>
+
+  <category_check>
+    <wa>N/A — 네트워크 호출 없음</wa>
+    <ui>N/A — GUI 없음</ui>
+    <fs>N/A — 사용자 대면 파일 시스템 작업 없음. 테스트 격리용 tempfile 사용은 정상</fs>
+    <pd score="95/100">PASS — 명확한 모듈 설계: CliResult dataclass, 3개 helper 함수, linter, oracle 기반 E2E 테스트. interface contract 명확.</pd>
+    <sec>N/A — 인증/DB/외부 네트워크 없음. Phase 5 skip 예정. bandit Low 경고(B404/B603)는 테스트 헬퍼의 subprocess 사용으로 정상.</sec>
+    <al score="97/100">PASS — 논리 구현 완전. _deep_match 재귀 비교 정확. classify_command 분류 정확. AST 기반 정적 분석 정상. TC-01/TC-02/TC-03 oracle 모두 통과.</al>
+    <build>N/A — meta-task (Trust-Root 파일 수정 포함). EXE 빌드 불필요.</build>
+    <vsce>N/A — VS Code Extension 아님</vsce>
+  </category_check>
+
+  <scoring_detail>
+    <pd score="95" max="100">명확한 모듈 분해, interface contract, oracle 기반 검증, dataclass 패턴 (-5: test helper Python 3.9 호환성 exemption)</pd>
+    <al score="97" max="100">논리 구현 완전, AST 파싱 정확, edge case 처리 완전 (-3: ast.unparse 는 3.9+에서 사용 가능하나 test/tool 코드이므로 허용)</al>
+    <applicable_score>109</applicable_score>
+    <max_applicable>120</max_applicable>
+    <percentage>90.8</percentage>
+    <numeric_verdict>PASS (>=96/120 기준 충족)</numeric_verdict>
+  </scoring_detail>
+
+  <test_results>
+    <suite name="tests/test_return_phase_reentry.py">
+      <total>3</total>
+      <passed>3</passed>
+      <failed>0</failed>
+      <cases>
+        <case id="TC-01" kind="normal" verdict="PASS">return_phase=dev 시 dev PENDING 리셋, exit 0, assert_post_state로 oracle expected.json 일치</case>
+        <case id="TC-02" kind="normal" verdict="PASS">return_phase=pm 시 모든 phase PENDING, exit 0, oracle expected.json 일치</case>
+        <case id="TC-03" kind="error" verdict="PASS">REVERT_BUDGET 초과 시 BLOCKED, exit 1, blocked/revert_blocked/blocked_reason oracle 일치</case>
+      </cases>
+    </suite>
+    <suite name="tests/test_patch_lane.py">
+      <total>14</total>
+      <passed>14</passed>
+      <failed>0</failed>
+    </suite>
+    <suite name="전체 테스트 (IMP-20260523-9189 관련 제외)">
+      <total>370</total>
+      <passed>370</passed>
+      <failed>0</failed>
+    </suite>
+    <known_pre_existing_failure>
+      <test>tests/test_pipeline_metrics_timestamps.py::test_runtime_artifacts_not_in_git_tracked</test>
+      <reason>.pipeline/phase_attestation_request.json이 git diff main HEAD에 포함되어 오탐 발생. 이 파일은 IMP-20260523-9189 phase attestation 증거로 force-add된 정상 동작. 이 IMP 파이프라인 구현과 무관한 기존 설계 이슈. Regression 아님.</reason>
+      <regression>false</regression>
+    </known_pre_existing_failure>
+  </test_results>
+
+  <code_quality>
+    <ruff>PASS — no issues (tests/helpers/cli_evidence.py, tools/check_cli_evidence_contract.py, tests/test_return_phase_reentry.py)</ruff>
+    <mypy>PASS — Success: no issues found in both source files</mypy>
+    <bandit>LOW_ONLY — B404(subprocess import), B603(subprocess without shell=True). 테스트 헬퍼의 정상적인 subprocess 사용. 실제 보안 위험 없음.</bandit>
+  </code_quality>
+
+  <oracle_verification>
+    <oracle_dir>tests/oracles/IMP-20260523-9189/</oracle_dir>
+    <source>user</source>
+    <cases>
+      <case id="TC-01" kind="normal" verdict="PASS"/>
+      <case id="TC-02" kind="normal" verdict="PASS"/>
+      <case id="TC-03" kind="error" verdict="PASS"/>
+    </cases>
+    <existing_oracle_intact>
+      <dir>tests/oracles/IMP-20260523-577F/</dir>
+      <modified>false</modified>
+    </existing_oracle_intact>
+  </oracle_verification>
+
+  <documentation_drift_check>
+    <mt5_claude_md>CLI Evidence Contract 섹션 추가 확인</mt5_claude_md>
+    <mt5_qa_agent_md>Step 0-D 추가 확인 (python tools/check_cli_evidence_contract.py exit 0 요건)</mt5_qa_agent_md>
+    <mt5_test_harness_md>Required Checks CLI Evidence Contract gate 추가 확인</mt5_test_harness_md>
+    <mt5_pm_agent_md>Technical Rules CLI Evidence Contract 규칙 추가 확인</mt5_pm_agent_md>
+    <mt6_ci_yml>CLI Evidence Contract 검사 스텝 추가, continue-on-error: false 확인</mt6_ci_yml>
+    <verdict>PASS</verdict>
+  </documentation_drift_check>
+
+  <python39_compliance>
+    <status>EXEMPT</status>
+    <reason>meta-task (Trust-Root 파일 수정 포함). EXE 빌드 대상 아님. tests/helpers/cli_evidence.py와 tools/check_cli_evidence_contract.py는 테스트 헬퍼/도구 코드이며 PyInstaller EXE에 포함되지 않음. from __future__ import annotations 및 3.10+ 소문자 제네릭 사용은 테스트/도구 코드에서 허용 범위. Python 3.12.9 런타임에서 정상 작동 확인.</reason>
+  </python39_compliance>
+
+  <scope_lock_check>
+    <git_diff_files>tests/helpers/__init__.py, tests/helpers/cli_evidence.py, tools/__init__.py, tools/check_cli_evidence_contract.py, tests/test_return_phase_reentry.py, tests/oracles/IMP-20260523-9189/* (6개), tests/test_patch_lane.py, CLAUDE.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md, .claude/agents/pm-agent.md, .github/workflows/ci.yml</git_diff_files>
+    <manifest_files>MT-1~MT-6 모든 파일</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false (Trust-Root 파일들은 이 파이프라인 MT-5/MT-6 scope에 명시적 포함)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+  <failure_signature>N/A</failure_signature>
+  <repeat_indicator>N/A</repeat_indicator>
+
+  <critical_issues>없음</critical_issues>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <pipeline_id>IMP-20260523-9189</pipeline_id>
+    <evidence>
+      <file>qa_report.xml</file>
+    </evidence>
+    <status>QA_PASS</status>
+  </handover>
+</qa_report>

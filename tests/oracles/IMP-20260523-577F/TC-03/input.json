@@ -1,0 +1,51 @@
+{
+  "_comment": "TC-03 (edge): 동일 failure_code로 revert 예산 초과 시 BLOCKED/RCA 전환",
+  "case_id": "TC-03",
+  "case_kind": "edge",
+  "description": "동일 (return_phase, failure_code) 조합으로 REVERT_BUDGET (기본 3회) 초과 revert 시도 시 BLOCKED 상태로 전환되고 RCA 필요 메시지 출력",
+  "initial_state": {
+    "pipeline_id": "IMP-20260523-577F",
+    "current_phase": "dev",
+    "phases": {
+      "pm": {"status": "DONE"},
+      "dev": {"status": "FAIL"},
+      "qa": {"status": "PENDING"},
+      "sec": {"status": "PENDING"},
+      "build": {"status": "PENDING"},
+      "harness": {"status": "PENDING"},
+      "architect": {"status": "PENDING"}
+    },
+    "phase_attempt_history": [
+      {
+        "revert_target": "dev",
+        "failure_code": "qa_logic_error",
+        "reverted_at": "2026-05-23T10:00:00Z",
+        "attempt": 1
+      },
+      {
+        "revert_target": "dev",
+        "failure_code": "qa_logic_error",
+        "reverted_at": "2026-05-23T11:00:00Z",
+        "attempt": 2
+      },
+      {
+        "revert_target": "dev",
+        "failure_code": "qa_logic_error",
+        "reverted_at": "2026-05-23T12:00:00Z",
+        "attempt": 3
+      }
+    ],
+    "failure_packets": [
+      {
+        "gate": "qa",
+        "failure_code": "qa_logic_error",
+        "return_phase": "dev",
+        "owner": "Dev",
+        "status": "FAIL",
+        "attempt": 3
+      }
+    ]
+  },
+  "command": ["python", "pipeline.py", "revert"],
+  "env": {}
+}

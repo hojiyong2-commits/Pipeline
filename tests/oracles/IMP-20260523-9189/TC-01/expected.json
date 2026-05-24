@@ -1,0 +1,42 @@
+{
+  "_comment": "TC-01 expected: revert 후 dev PENDING, phase_attempt_history 기록, 한국어 안내",
+  "exit_code": 0,
+  "stdout_contains": [
+    "dev",
+    "PENDING"
+  ],
+  "stdout_korean": true,
+  "post_state": {
+    "current_phase": "dev",
+    "phases": {
+      "pm": {
+        "status": "DONE"
+      },
+      "dev": {
+        "status": "PENDING"
+      },
+      "qa": {
+        "status": "PENDING"
+      },
+      "sec": {
+        "status": "PENDING"
+      },
+      "build": {
+        "status": "PENDING"
+      },
+      "harness": {
+        "status": "PENDING"
+      },
+      "architect": {
+        "status": "PENDING"
+      }
+    },
+    "phase_attempt_history_contains": {
+      "revert_target": "dev",
+      "failure_code": "qa_logic_error"
+    }
+  },
+  "source": "user",
+  "input_sha256": "80acd0bca64ebdb653e0ca78ae1820a3df73da5549a4d50e3f0a5948ff2d5e0c",
+  "expected_sha256": "4f57d33e1bb85b5127042fb509a2afd4703d13cf37efb6af3ecc652e906efb6c"
+}

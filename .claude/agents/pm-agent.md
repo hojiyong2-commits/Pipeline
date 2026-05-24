@@ -342,6 +342,7 @@ QA가 동일 `<failure_signature>`(카테고리:해시 일치)로 **연속 2회 
 *   **Python Version:** PM은 3.9 또는 3.10 중 최적의 버전을 명시해야 합니다 (vscode env_specs 포함).
 *   **WA 카테고리 필수 조건:** timeout 튜플, 3회 retry, 상세 Exception 처리, 파싱 fallback 필수.
 *   **Documentation-Code Drift 방지 (IMP-20260507-0EDC):** pipeline.py 또는 CLAUDE.md의 수치값·플래그·enum 목록을 변경하는 micro_task는 `<requirements>`에 "해당 값을 참조하는 모든 prose 문서(CLAUDE.md 섹션, pipeline.py 인라인 주석, 관련 agent MD)를 동일 micro_task에서 함께 업데이트" 를 명시해야 합니다. 문서만 변경하거나 코드만 변경하는 분리 패치 금지.
+*   **CLI Evidence Contract (IMP-20260523-9189):** 파이프라인 CLI 상태 변경 명령(`pipeline.py done`, `qa`, `sec`, `build`, `contract`, `module`, `gates` 등)을 subprocess로 실행하는 테스트는 반드시 `run_cli_with_temp_state()` + `assert_post_state()`/`assert_file_effects()` 패턴을 사용하거나, `# CLI_EVIDENCE_ALLOW_READ_ONLY:` 주석으로 read-only 명령임을 명시해야 합니다. stdout 메시지만으로 PASS 판정하는 테스트는 증거로 인정되지 않습니다. PM은 테스트 코드를 작성하거나 기존 테스트를 참조하는 micro_task에 이 규칙을 `<requirements>`에 명시해야 합니다. CI 위반 시 `python tools/check_cli_evidence_contract.py`가 exit 1을 반환하며 QA가 `PD:cli_evidence_contract_violation`으로 FAIL 처리합니다.
 
 ---
 
