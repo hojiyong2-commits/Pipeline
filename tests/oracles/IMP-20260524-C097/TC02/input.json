@@ -1,0 +1,7 @@
+{
+  "scenario": "wait-github-ci SHA 불일치 — 오래된 run 무시 케이스",
+  "run_headSha": "old1234aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expected_headSha": "new5678bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "run_status": "completed",
+  "conclusion": "success"
+}

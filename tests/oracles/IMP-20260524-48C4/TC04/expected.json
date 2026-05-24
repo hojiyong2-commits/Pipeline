@@ -1,0 +1,15 @@
+{
+  "oracle_quality": {
+    "status": "BLOCKED",
+    "failures": [
+      "tc04-normal: expected_source=agent_generated requires explicit user approval (--allow-agent-generated)",
+      "tc04-edge: expected_source=agent_generated requires explicit user approval (--allow-agent-generated)"
+    ],
+    "case_summary": {
+      "normal": 1,
+      "edge": 1,
+      "error": 0,
+      "regression": 0
+    }
+  }
+}

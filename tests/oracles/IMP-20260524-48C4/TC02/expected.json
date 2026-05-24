@@ -1,0 +1,14 @@
+{
+  "oracle_quality": {
+    "status": "FAIL",
+    "failures": [
+      "oracle_manifest.json requires at least one edge/exception/error oracle"
+    ],
+    "case_summary": {
+      "normal": 1,
+      "edge": 0,
+      "error": 0,
+      "regression": 0
+    }
+  }
+}

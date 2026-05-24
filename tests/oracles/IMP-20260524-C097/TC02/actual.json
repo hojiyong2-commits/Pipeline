@@ -1,0 +1,5 @@
+{
+  "wait_status": "WAITING_FOR_TRIGGER",
+  "matched_head_sha": false,
+  "reason": "SHA 불일치: 최신 head SHA 기준의 run이 아직 생성되지 않음"
+}

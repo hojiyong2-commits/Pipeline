@@ -316,6 +316,13 @@ GitHub에서 최종 사용자가 보게 되는 문서는 모두 쉬운 한국어
 
 In the mandatory Three-Gate flow, `COMPLETE` is impossible until required phase attestations, Technical, Oracle, GitHub CI, and User Acceptance gates are all PASS. The technical gate is strict by default: missing ruff/mypy/bandit/pytest or missing Python evidence files fail unless `--relaxed-tools` is explicitly used. Oracle audit requires user-source hashes, at least one normal oracle, at least one edge/exception/error oracle, non-empty/non-placeholder expected outputs, and oracle files stored under `tests/oracles/**` so CODEOWNERS can protect the answer key. `--allow-no-oracle` is only for explicitly non-runnable docs/analysis/config work and cannot waive malformed, hashless, agent-sourced, weak, or non-codeowned oracle entries.
 
+**Oracle Quality Gate (IMP-20260524-48C4):** `python pipeline.py gates oracle` now enforces oracle quality before running acceptance tests. Quality failures block COMPLETE:
+- `normal` case count must be ≥ 1
+- `edge|exception|error|regression` case count must be ≥ 1
+- `expected` files must not be empty JSON (`{}`/`[]`/`""`) or contain placeholder strings (`TODO`, `PLACEHOLDER`, `TBD`, `N/A`)
+- `expected_source=agent_generated` is BLOCKED by default; use `--allow-agent-generated` to override or replace with `user_provided`/`production_sample`/`regression_capture`
+- `state["oracle_quality"]` records the gate result; `_external_gate_blockers()` enforces `oracle_quality.status == PASS` before COMPLETE
+
 GPT/OpenAI advisory reviews are demoted to **manual red-team diagnostics by default (IMP-20260518-150C)**. The two environment variables have separate meanings:
 
 | Environment variable | Default | What it allows |

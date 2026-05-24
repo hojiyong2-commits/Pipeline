@@ -1,0 +1,7 @@
+{
+  "scenario": "wait-github-ci SHA 일치, success conclusion",
+  "run_headSha": "abc1234def5678901234567890123456789abcde",
+  "expected_headSha": "abc1234def5678901234567890123456789abcde",
+  "run_status": "completed",
+  "conclusion": "success"
+}

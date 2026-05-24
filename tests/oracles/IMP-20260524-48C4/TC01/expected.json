@@ -1,0 +1,12 @@
+{
+  "oracle_quality": {
+    "status": "PASS",
+    "failures": [],
+    "case_summary": {
+      "normal": 1,
+      "edge": 1,
+      "error": 0,
+      "regression": 0
+    }
+  }
+}
