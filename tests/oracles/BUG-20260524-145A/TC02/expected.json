@@ -1,0 +1,5 @@
+{
+  "verdict": "VIOLATION",
+  "violation_count": 1,
+  "reason": "격리 있는데 evidence assertion 없음 — assert_post_state 등 필요"
+}

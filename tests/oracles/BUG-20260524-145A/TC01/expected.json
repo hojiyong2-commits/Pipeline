@@ -1,0 +1,5 @@
+{
+  "verdict": "NO_VIOLATION",
+  "violation_count": 0,
+  "reason": "격리 없는 통합 테스트는 CLI Evidence Contract 범위 밖"
+}
