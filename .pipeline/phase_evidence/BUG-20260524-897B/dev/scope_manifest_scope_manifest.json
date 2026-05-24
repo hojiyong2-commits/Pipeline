@@ -1,0 +1,20 @@
+{
+  "pipeline_id": "BUG-20260524-897B",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["tools/check_cli_evidence_contract.py"],
+      "affected_functions": ["check_evidence_assertions"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["tests/test_patch_lane.py"],
+      "affected_functions": ["_run, 14개 test_* 메서드"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["tests/test_check_cli_evidence_contract.py"],
+      "affected_functions": ["test_bad_direct_no_isolation (신규)"]
+    }
+  ]
+}
