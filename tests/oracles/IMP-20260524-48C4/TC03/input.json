@@ -6,14 +6,14 @@
       "case_kind": "normal",
       "source": "user",
       "expected_source": "user_provided",
-      "expected_is_empty_json": true
+      "expected_path": "tests/oracles/IMP-20260524-48C4/TC03/tc03_empty_expected.json"
     },
     {
       "name": "tc03-edge",
       "case_kind": "edge",
       "source": "user",
       "expected_source": "user_provided",
-      "expected_is_placeholder": true
+      "expected_path": "tests/oracles/IMP-20260524-48C4/TC03/tc03_placeholder_expected.json"
     }
   ],
   "allow_agent_generated": false
