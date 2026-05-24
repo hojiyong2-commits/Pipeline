@@ -1,0 +1,4 @@
+{
+  "test_function_source": "def test_bad_direct_no_isolation():\n    result = subprocess.run([sys.executable, _PIPELINE, 'done', '--phase', 'dev'], capture_output=True)\n    assert result.returncode == 0\n    assert 'DONE' in str(result.stdout)\n",
+  "expected_violations": 1
+}
