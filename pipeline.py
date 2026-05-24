@@ -7241,8 +7241,15 @@ def cmd_contract(args: argparse.Namespace) -> None:
         print(f"  test_set: {paths['test_set']}\n")
         return
 
-    if action in {"add-module", "add-question", "answer", "add-test", "add-oracle", "audit", "audit-oracle", "ready", "freeze", "show"}:
+    if action in {"add-module", "add-question", "answer", "add-test", "add-oracle", "audit", "ready", "freeze", "show"}:
         contract, test_set = _load_contract_bundle(load_json, paths, pid, action)
+    elif action == "audit-oracle":
+        # audit-oracle: --oracle-dir 지정 시 contract 파일 로딩 생략 가능
+        oracle_dir_early = getattr(args, "oracle_dir", None)
+        if oracle_dir_early is not None:
+            contract, test_set = {}, {}
+        else:
+            contract, test_set = _load_contract_bundle(load_json, paths, pid, action)
     else:
         _die(f"unknown contract action: {action}", exit_code=2)
 
