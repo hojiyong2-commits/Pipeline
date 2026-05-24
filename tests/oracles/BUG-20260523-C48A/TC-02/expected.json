@@ -1,0 +1,6 @@
+{
+  "violations_count": 0,
+  "exit_code": 0,
+  "description": "CLI_EVIDENCE_ALLOW_READ_ONLY annotation이 있으면 violation 없이 통과, exit 0",
+  "source": "user"
+}

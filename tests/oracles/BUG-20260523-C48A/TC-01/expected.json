@@ -1,0 +1,6 @@
+{
+  "violations_count_gte": 1,
+  "exit_code": 1,
+  "description": "isolation marker만 있고 evidence assertion 없으면 violation 발생, exit 1",
+  "source": "user"
+}

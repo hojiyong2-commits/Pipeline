@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>BUG-20260523-28D3</pipeline_id>
+  <manager_run_id>pipeline_manager-aba4e6c3524009f5</manager_run_id>
+  <planner_run_id>pm_planner-5d1f81fb98597ae0</planner_run_id>
+  <step_plan_sha256>d8ae2d175f046f50704c86e00cf1554c79c11618aa004f0959c9a17d4cf2c30a</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <summary>has_allowlist 분기 강화(MT-1) + read-only 테스트 수정 및 신규 추가(MT-2)</summary>
+</manager_handoff>
