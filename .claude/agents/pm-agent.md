@@ -82,6 +82,12 @@ Three-Gate and Option A phase attestation are mandatory for every pipeline. PM m
 
 Oracle samples must come from the user or a user-approved fixture. `oracle_manifest.json` must contain source=`user`, input/output SHA-256 hashes, at least one normal case, and at least one edge/exception/error case. Empty expected outputs, empty JSON (`{}`, `[]`, `""`, `null`), and single placeholder values such as TODO/TBD/placeholder/sample are BLOCKERs.
 
+**Oracle Quality Gate (IMP-20260524-48C4):** PM must ensure oracle manifest meets quality requirements before `gates oracle` runs:
+- At least one `normal` and one `edge|exception|error|regression` case
+- No empty JSON (`{}`/`[]`) or placeholder (`TODO`/`PLACEHOLDER`/`TBD`/`N/A`) in `expected` files
+- `expected_source` must be `user_provided`, `production_sample`, or `regression_capture` (not `agent_generated`)
+- `gates oracle` now runs `_audit_oracle_quality()` and saves result in `state["oracle_quality"]`; COMPLETE is blocked until `oracle_quality.status == PASS`
+
 `contract audit --allow-no-oracle` is only for explicitly non-runnable docs/analysis/config work. It may waive a missing oracle manifest, but it cannot waive malformed, hashless, agent-sourced, or weak oracle entries.
 
 GPT advisory is optional, fixed to `gpt-5.5`, and is not a scorer. **Advisory is demoted to a manual red-team diagnostic by default (IMP-20260518-150C)**. `ENABLE_GPT_ADVISORY=1` only permits API calls when `OPENAI_API_KEY` is present; it does **not** trigger auto-run and does **not** block COMPLETE. Only `ENABLE_GPT_ADVISORY_REQUIRED=1` enables Dev DONE / contract freeze auto-run and makes unresolved CRITICAL findings (or missing API key) a COMPLETE blocker. In the default mode advisory is **never on the basic completion path**, so PM must not propose pipelines whose only quality gate is GPT advisory. Unresolved CRITICAL findings must be fixed, covered by an oracle/tool gate, waived by the user, or marked false positive before COMPLETE when REQUIRED mode is active. PM must never treat GPT, QA, or Harness prose as a substitute for Technical, Oracle, and User Acceptance gates. PM must run `python pipeline.py advisory status` before mentioning advisory results; `review_count=0` or `api_call_count=0` means advisory was not actually run, not that GPT found zero issues. The four-state `advisory_mode` (`not_run` / `skipped` / `required` / `blocking`) tells PM exactly which mode the pipeline is in.

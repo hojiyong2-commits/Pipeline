@@ -79,7 +79,7 @@ import importlib.util
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict
 import re
 import socket
 import subprocess
@@ -2354,6 +2354,9 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         state["acceptance_recorded_at"] = None
     if "total_elapsed_seconds" not in state:
         state["total_elapsed_seconds"] = None
+    # IMP-20260524-48C4 MT-1: oracle_quality 상태 필드 초기화
+    if "oracle_quality" not in state:
+        state["oracle_quality"] = {}
     return state
 
 
@@ -6593,6 +6596,14 @@ ORACLE_PLACEHOLDER_STRINGS = {"", "todo", "tbd", "placeholder", "sample", "examp
 ORACLE_STORAGE_ROOT_REL = Path("tests") / "oracles"
 NON_ORACLE_DELIVERABLE_KINDS = {"doc", "docs", "markdown", "prompt", "analysis", "research", "policy", "config", "configuration"}
 
+# IMP-20260524-48C4 MT-1: Oracle Quality Gate 상수
+# oracle 단순 존재 여부 PASS 차단 — quality 기준 강제
+ORACLE_QUALITY_PLACEHOLDER_STRINGS: Set[str] = {"TODO", "PLACEHOLDER", "TBD", "N/A", "", "todo", "placeholder", "tbd", "n/a"}
+ORACLE_QUALITY_SHALLOW_TEST_TYPES: Set[str] = {"file_exists_check", "exe_launch_check", "process_check", "output_not_empty"}
+ORACLE_QUALITY_MIN_NORMAL: int = 1
+ORACLE_QUALITY_MIN_EDGE_ERROR: int = 1
+ORACLE_QUALITY_EXPECTED_SOURCE_ALLOWED: Set[str] = {"user_provided", "production_sample", "regression_capture", "user"}
+
 EXECUTION_PROFILES = {"FAST_DOC", "FAST_ANALYSIS", "FAST_SINGLE_CODE", "STANDARD", "HIGH_RISK"}
 FAST_EXECUTION_PROFILES = {"FAST_DOC", "FAST_ANALYSIS", "FAST_SINGLE_CODE"}
 FAST_PROFILE_MAX_FILES = 2
@@ -6805,6 +6816,183 @@ def _is_placeholder_scalar(value: Any) -> bool:
     return False
 
 
+def _audit_oracle_quality(
+    oracle_entries: List[Dict[str, Any]],
+    allow_agent_generated: bool = False,
+) -> Dict[str, Any]:
+    """IMP-20260524-48C4 MT-1: Oracle Quality Gate 감사 함수.
+
+    oracle 단순 존재 여부 PASS 차단 — 아래 품질 기준을 강제합니다:
+    1. normal 케이스 >= ORACLE_QUALITY_MIN_NORMAL (1개)
+    2. edge|error|exception|regression 케이스 >= ORACLE_QUALITY_MIN_EDGE_ERROR (1개)
+    3. expected 파일이 빈 JSON {}, 빈 배열 [], 빈 파일이면 FAIL
+    4. expected 파일에 ORACLE_QUALITY_PLACEHOLDER_STRINGS가 포함되면 FAIL
+    5. 모든 oracle entry가 ORACLE_QUALITY_SHALLOW_TEST_TYPES만이면 FAIL
+    6. expected_source == 'agent_generated' 이고 allow_agent_generated=False이면 BLOCKED
+    7. expected_sha256 필드가 있으면 실제 파일 해시와 비교, 불일치시 FAIL
+
+    Args:
+        oracle_entries: oracle_manifest.json의 entries 배열 (normalized list)
+        allow_agent_generated: agent_generated source를 허용할지 여부 (기본 False)
+
+    Returns:
+        {
+            "status": "PASS" | "FAIL" | "BLOCKED",
+            "failures": [...],
+            "case_summary": {"normal": N, "edge": N, "error": N, "regression": N}
+        }
+    """
+    failures: List[str] = []
+    case_summary: Dict[str, int] = {"normal": 0, "edge": 0, "error": 0, "regression": 0}
+    blocked: bool = False
+
+    if not oracle_entries:
+        return {
+            "status": "FAIL",
+            "failures": ["oracle_quality: no oracle entries to audit"],
+            "case_summary": case_summary,
+        }
+
+    # case_kind 집계
+    for entry in oracle_entries:
+        kind = str(entry.get("case_kind") or "normal").strip().lower()
+        if kind == "normal":
+            case_summary["normal"] += 1
+        elif kind in ("edge", "exception"):
+            case_summary["edge"] += 1
+        elif kind == "error":
+            case_summary["error"] += 1
+        elif kind == "regression":
+            case_summary["regression"] += 1
+
+    # 검사 1: normal 케이스 최소 1개
+    if case_summary["normal"] < ORACLE_QUALITY_MIN_NORMAL:
+        failures.append(
+            "oracle_quality: edge_required — normal 케이스가 부족합니다 "
+            f"(최소 {ORACLE_QUALITY_MIN_NORMAL}개 필요, 현재 {case_summary['normal']}개)"
+        )
+
+    # 검사 2: edge|error|exception|regression 최소 1개
+    edge_total = case_summary["edge"] + case_summary["error"] + case_summary["regression"]
+    if edge_total < ORACLE_QUALITY_MIN_EDGE_ERROR:
+        failures.append(
+            "oracle_quality: edge_required — edge|error|exception|regression 케이스가 부족합니다 "
+            f"(최소 {ORACLE_QUALITY_MIN_EDGE_ERROR}개 필요, 현재 {edge_total}개)"
+        )
+
+    # 검사 3~6: 각 entry 상세 검사
+    all_shallow = len(oracle_entries) > 0
+    for entry in oracle_entries:
+        name = str(entry.get("name") or entry.get("case_id") or "oracle")
+        # oracle source: 매니페스트의 source 필드 (데이터 출처), expected_source (기대 출력 출처) 별도 확인
+        data_source = str(entry.get("source") or "").strip().lower()
+        expected_source = str(entry.get("expected_source") or "").strip().lower()
+        # agent_generated 검사: expected_source가 명시적이면 그것을, 없으면 data_source를 사용
+        source_for_quality_check = expected_source if expected_source else data_source
+        test_type = str(entry.get("test_type") or entry.get("type") or "").strip().lower()
+        expected_path_str = str(entry.get("expected_path") or "")
+        expected_sha256 = str(entry.get("expected_sha256") or "").strip()
+
+        # 검사 6: agent_generated BLOCKED
+        if source_for_quality_check == "agent_generated" and not allow_agent_generated:
+            blocked = True
+            failures.append(
+                f"oracle_quality: {name}: expected_source=agent_generated — "
+                "에이전트 생성 expected는 기본 BLOCKED입니다. "
+                "--allow-agent-generated 플래그로 해제하거나 user_provided로 교체하세요."
+            )
+
+        # 검사 5: shallow test type 전용 여부
+        if test_type and test_type not in ORACLE_QUALITY_SHALLOW_TEST_TYPES:
+            all_shallow = False
+
+        # 검사 3, 4: expected 파일 내용 검사
+        if expected_path_str:
+            expected_path = Path(expected_path_str)
+            if not expected_path.is_absolute():
+                expected_path = BASE_DIR / expected_path
+            if expected_path.exists():
+                # 검사 7: sha256 불일치
+                if expected_sha256:
+                    actual_sha = _sha256_file(expected_path)
+                    if actual_sha != expected_sha256:
+                        failures.append(
+                            f"oracle_quality: {name}: expected_sha256 불일치 "
+                            f"(저장={expected_sha256[:8]}..., 실제={actual_sha[:8]}...)"
+                        )
+
+                # 검사 3, 4: 파일 내용 품질
+                if expected_path.suffix.lower() == ".json":
+                    try:
+                        value = json.loads(expected_path.read_text(encoding="utf-8-sig"))
+                        if value in ({}, [], "", None):
+                            failures.append(
+                                f"oracle_quality: {name}: expected JSON은 빈 값입니다 ({value!r})"
+                            )
+                        elif isinstance(value, dict):
+                            # 모든 값이 placeholder인지 검사
+                            all_placeholder = all(
+                                isinstance(v, str) and v.strip() in ORACLE_QUALITY_PLACEHOLDER_STRINGS
+                                for v in value.values()
+                            ) if value else False
+                            if all_placeholder:
+                                failures.append(
+                                    f"oracle_quality: {name}: expected JSON의 모든 값이 placeholder입니다"
+                                )
+                        elif isinstance(value, str):
+                            if value.strip() in ORACLE_QUALITY_PLACEHOLDER_STRINGS:
+                                failures.append(
+                                    f"oracle_quality: {name}: expected 값이 placeholder입니다 ({value!r})"
+                                )
+                    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                        pass  # 파일 내용 파싱 실패는 다른 게이트가 처리
+                else:
+                    # JSON이 아닌 파일: 전체 내용을 읽어 placeholder 검사
+                    try:
+                        text_content = expected_path.read_text(encoding="utf-8", errors="replace").strip()
+                        if not text_content:
+                            failures.append(
+                                f"oracle_quality: {name}: expected 파일이 비어 있습니다"
+                            )
+                        elif text_content.upper() in {s.upper() for s in ORACLE_QUALITY_PLACEHOLDER_STRINGS if s}:
+                            failures.append(
+                                f"oracle_quality: {name}: expected 파일이 placeholder입니다 ({text_content[:20]!r})"
+                            )
+                    except (OSError, UnicodeDecodeError):
+                        pass
+
+    # 검사 5: 모든 entry가 shallow test type만인 경우
+    if all_shallow and oracle_entries and not any(
+        str(e.get("test_type") or e.get("type") or "").strip().lower()
+        not in ORACLE_QUALITY_SHALLOW_TEST_TYPES
+        for e in oracle_entries
+        if str(e.get("test_type") or e.get("type") or "").strip()
+    ):
+        # test_type 필드가 있고 모두 shallow인 경우만 FAIL
+        has_test_type = any(
+            str(e.get("test_type") or e.get("type") or "").strip()
+            for e in oracle_entries
+        )
+        if has_test_type:
+            failures.append(
+                "oracle_quality: shallow_only — 모든 oracle이 file_exists/exe_launch 등 shallow 검사만 "
+                "포함합니다. 핵심 비즈니스 로직을 검증하는 oracle이 최소 1개 필요합니다."
+            )
+
+    if blocked:
+        status = "BLOCKED"
+    elif failures:
+        status = "FAIL"
+    else:
+        status = "PASS"
+
+    return {
+        "status": status,
+        "failures": failures,
+        "case_summary": case_summary,
+    }
+
+
 def _oracle_expected_quality_blockers(name: str, expected_path: Path) -> List[str]:
     blockers: List[str] = []
     try:
@@ -6969,6 +7157,16 @@ def _audit_contract_bundle(
             warnings.append(f"oracle gate waived by user: {waiver_reason or 'no reason provided'}")
     else:
         blockers.extend(oracle_blockers)
+
+    # IMP-20260524-48C4 MT-1: oracle quality 감사 통합 (contract audit 단계)
+    # oracle 단순 존재 여부 PASS 차단 — normal+edge 최소 케이스, placeholder, agent_generated 검사
+    if oracle_entries and not oracle_blockers:
+        quality_result = _audit_oracle_quality(oracle_entries)
+        if quality_result.get("status") == "BLOCKED":
+            blockers.append("oracle_quality: BLOCKED — agent_generated expected 감지. --allow-agent-generated 또는 user_provided로 교체하세요.")
+            blockers.extend(quality_result.get("failures", []))
+        elif quality_result.get("status") == "FAIL":
+            blockers.extend(quality_result.get("failures", []))
 
     status = "PASS" if not blockers else "FAIL"
     return {
@@ -7389,6 +7587,15 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
         info = gates.get(gate_name, {}) if isinstance(gates, dict) else {}
         if not isinstance(info, dict) or info.get("status") != "PASS":
             blockers.append(f"{gate_name} gate must be PASS")
+    # IMP-20260524-48C4 MT-2: oracle_quality PASS 조건 강제
+    oracle_quality = state.get("oracle_quality", {})
+    if isinstance(oracle_quality, dict) and oracle_quality:
+        oq_status = str(oracle_quality.get("status") or "").upper()
+        if oq_status != "PASS":
+            blockers.append(
+                f"oracle_quality gate must be PASS (current: {oq_status or 'not run'}). "
+                "Run `python pipeline.py gates oracle` to pass oracle quality gate."
+            )
     blockers.extend(_phase_attestation_blockers(state))
     # GPT advisory CRITICAL은 ENABLE_GPT_ADVISORY_REQUIRED=1 일 때만 COMPLETE를 차단합니다.
     # 기본 모드(REQUIRED 미설정)에서는 advisory가 수동 진단 도구이며 blocker가 아닙니다.
@@ -7800,6 +8007,121 @@ def _github_latest_run_for_commit(
         if run.get("status") == "completed" and run.get("conclusion") == "success"
     ]
     return successful[0] if successful else candidates[0]
+
+
+def _poll_github_ci_run(
+    repo: str,
+    expected_head_sha: str,
+    timeout_sec: int,
+    poll_sec: int,
+    token: Optional[str],
+    pr_num: Optional[int] = None,
+) -> Dict[str, Any]:
+    """GitHub CI run을 expected_head_sha 기준으로 polling하여 완료 여부를 반환합니다.
+
+    IMP-20260524-C097 MT-1: blind wait(time.sleep) 대신 SHA 기반 정확한 CI run 추적.
+
+    Args:
+        repo: owner/repo 형식 GitHub 저장소.
+        expected_head_sha: 기대하는 head SHA (40자 full SHA 또는 prefix).
+        timeout_sec: 최대 대기 시간(초).
+        poll_sec: polling 간격(초).
+        token: GitHub API 토큰 (없으면 None).
+        pr_num: PR 번호 (로그 출력용, 없으면 None).
+
+    Returns:
+        Dict with keys:
+            wait_status: PASS | FAIL | TIMEOUT | WAITING_FOR_TRIGGER | CANCELLED
+            matched_head_sha: bool
+            conclusion: GitHub conclusion 값 또는 빈 문자열
+            run_id: GitHub run id 문자열 또는 None
+            elapsed_sec: 실제 소요 시간(초)
+    """
+    import time as _time
+
+    sha_prefix = expected_head_sha.lower()
+    pr_hint = f" (PR #{pr_num})" if pr_num else ""
+    start = _time.monotonic()
+    print(f"[CI 대기{pr_hint}] SHA={sha_prefix[:12]} 기준 run 검색 시작 (최대 {timeout_sec}초, {poll_sec}초 간격)")
+
+    while True:
+        elapsed = _time.monotonic() - start
+        if elapsed >= timeout_sec:
+            print(f"[CI 대기] {elapsed:.0f}초 경과 — TIMEOUT (기대 SHA run 미발견)")
+            return {
+                "wait_status": "TIMEOUT",
+                "matched_head_sha": False,
+                "conclusion": "",
+                "run_id": None,
+                "elapsed_sec": elapsed,
+            }
+
+        # GitHub API: head_sha 기반 run 목록 조회
+        query = urllib.parse.urlencode({"head_sha": expected_head_sha, "per_page": "20"})
+        try:
+            response = _github_api_json(
+                f"https://api.github.com/repos/{repo}/actions/runs?{query}",
+                token,
+            )
+        except SystemExit:
+            # _die()가 sys.exit(1)을 호출하므로 API 오류 시 FAIL 반환
+            elapsed = _time.monotonic() - start
+            return {
+                "wait_status": "FAIL",
+                "matched_head_sha": False,
+                "conclusion": "",
+                "run_id": None,
+                "elapsed_sec": elapsed,
+            }
+
+        runs = response.get("workflow_runs", [])
+        if not isinstance(runs, list):
+            runs = []
+
+        # SHA 일치 run 필터
+        sha_matched: List[Dict[str, Any]] = []
+        for run in runs:
+            if not isinstance(run, dict):
+                continue
+            run_sha = str(run.get("head_sha") or "").lower()
+            if run_sha.startswith(sha_prefix) or sha_prefix.startswith(run_sha[:len(sha_prefix)]):
+                sha_matched.append(run)
+
+        if not sha_matched:
+            print(f"[CI 대기] {elapsed:.0f}초 경과 — WAITING_FOR_TRIGGER (SHA 일치 run 없음)")
+            _time.sleep(poll_sec)
+            continue
+
+        # 가장 최신 SHA 일치 run 선택 (id 내림차순)
+        sha_matched.sort(key=lambda r: int(r.get("id") or 0), reverse=True)
+        current_run = sha_matched[0]
+        run_status = str(current_run.get("status") or "")
+        conclusion = str(current_run.get("conclusion") or "")
+        run_id_val = str(current_run.get("id") or "")
+
+        if run_status != "completed":
+            status_label = run_status or "queued/in_progress"
+            print(f"[CI 대기] {elapsed:.0f}초 경과 — {status_label.upper()} (run_id={run_id_val})")
+            _time.sleep(poll_sec)
+            continue
+
+        # 완료된 run
+        elapsed = _time.monotonic() - start
+        if conclusion == "success":
+            wait_status = "PASS"
+        elif conclusion in ("cancelled", "skipped"):
+            wait_status = "CANCELLED"
+        else:
+            wait_status = "FAIL"
+
+        print(f"[CI 대기] {elapsed:.0f}초 경과 — {wait_status} (conclusion={conclusion}, run_id={run_id_val})")
+        return {
+            "wait_status": wait_status,
+            "matched_head_sha": True,
+            "conclusion": conclusion,
+            "run_id": run_id_val,
+            "elapsed_sec": elapsed,
+        }
 
 
 def _read_attestation_from_zip(zip_bytes: bytes, file_name: str = "pipeline_attestation.json") -> Dict[str, Any]:
@@ -11587,6 +11909,66 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _save(state)
             print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
             _die("; ".join(oracle_blockers))
+        # IMP-20260524-48C4 MT-1: oracle quality 감사 통합 (gates oracle)
+        allow_agent_gen = getattr(args, "allow_agent_generated", False)
+        quality_result = _audit_oracle_quality(oracle_entries, allow_agent_generated=allow_agent_gen)
+        state["oracle_quality"] = quality_result
+        _save(state)
+        if quality_result.get("status") == "BLOCKED":
+            failures_str = "; ".join(quality_result.get("failures", []))
+            packet = _record_failure_packet(
+                state,
+                "oracle",
+                quality_result,
+                command=[sys.executable, "pipeline.py", "gates", "oracle"],
+                note="Oracle quality gate BLOCKED: agent_generated expected 감지. user_provided로 교체하거나 --allow-agent-generated 사용.",
+                status="BLOCKED",
+                phase="pm",
+                failure_code="oracle_quality_blocked",
+                failure_category="oracle_quality",
+                summary_ko="오라클 품질 게이트 BLOCKED — agent_generated expected 감지.",
+                expected="source=user_provided/production_sample/regression_capture",
+                actual=failures_str,
+                exit_code=1,
+                owner="PM",
+                return_phase="pm",
+                required_actions=[
+                    "oracle_manifest.json의 agent_generated expected를 user_provided로 교체하세요.",
+                    "또는 `python pipeline.py gates oracle --allow-agent-generated` 를 사용하세요.",
+                ],
+            )
+            _log_event(state, "oracle quality gate BLOCKED")
+            _save(state)
+            print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
+            _die(f"[ORACLE QUALITY BLOCKED] {failures_str}")
+        elif quality_result.get("status") == "FAIL":
+            failures_str = "; ".join(quality_result.get("failures", []))
+            packet = _record_failure_packet(
+                state,
+                "oracle",
+                quality_result,
+                command=[sys.executable, "pipeline.py", "gates", "oracle"],
+                note="Oracle quality gate FAIL: normal+edge 최소 케이스 또는 placeholder expected 문제.",
+                status="FAIL",
+                phase="pm",
+                failure_code="oracle_quality_fail",
+                failure_category="oracle_quality",
+                summary_ko="오라클 품질 게이트 FAIL — 최소 케이스 또는 placeholder 위반.",
+                expected="normal >= 1, edge/error >= 1, non-placeholder expected",
+                actual=failures_str,
+                exit_code=1,
+                owner="PM",
+                return_phase="pm",
+                required_actions=[
+                    "normal case와 edge/error case가 각각 1개 이상 있는지 확인하세요.",
+                    "expected 파일에 TODO/PLACEHOLDER/TBD 같은 임시 값이 없는지 확인하세요.",
+                ],
+            )
+            _log_event(state, "oracle quality gate FAIL")
+            _save(state)
+            print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
+            _die(f"[ORACLE QUALITY FAIL] {failures_str}")
+
         from core.acceptance import run_acceptance
 
         report = run_acceptance(
@@ -11922,9 +12304,24 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not _gcg.get("started_at"):
             _gcg["started_at"] = _now()
             _save(state)
+        # IMP-20260524-C097 MT-2: --head-sha 옵션으로 SHA 이중 검증 강화.
+        # --commit과 --head-sha 모두 지정된 경우 이중 일치 여부를 사전 경고한다.
+        _cli_head_sha: Optional[str] = getattr(args, "head_sha", None) or None
+        _cli_commit: Optional[str] = getattr(args, "commit", None) or None
+        if _cli_head_sha and _cli_commit:
+            _sha_prefix = _cli_head_sha.lower()
+            _commit_lower = _cli_commit.lower()
+            if not (_commit_lower.startswith(_sha_prefix) or _sha_prefix.startswith(_commit_lower)):
+                print(
+                    f"[GITHUB CI] 경고: --head-sha ({_cli_head_sha[:12]})와 "
+                    f"--commit ({_cli_commit[:12]})이 일치하지 않습니다. "
+                    "--commit 값을 우선합니다."
+                )
+        # --head-sha만 지정된 경우 --commit 대용으로 사용
+        effective_commit: Optional[str] = _cli_commit or _cli_head_sha
         verification = _verify_github_ci_run(
             repo=args.repo,
-            commit=args.commit,
+            commit=effective_commit,
             run_id=args.run_id,
             artifact_name=args.artifact,
             token_env=args.token_env,
@@ -11965,6 +12362,54 @@ def cmd_gates(args: argparse.Namespace) -> None:
         print(f"  run_id: {verification.get('run_id')}")
         print(f"  report: {_contract_paths(pid)['github_ci_result']}\n")
         sys.exit(0 if verification["status"] == "PASS" else 1)
+
+    if action == "wait-github-ci":
+        # IMP-20260524-C097 MT-1: SHA 기반 CI run 추적 (blind wait 제거)
+        repo_arg: str = args.repo or _github_repo_from_remote()
+        head_sha_arg: str = getattr(args, "head_sha", "") or ""
+        timeout_arg: int = int(getattr(args, "timeout_sec", 600) or 600)
+        poll_arg: int = int(getattr(args, "poll_sec", 15) or 15)
+        pr_num_arg: Optional[int] = getattr(args, "pr", None)
+        token_arg = _github_token(getattr(args, "token_env", "GITHUB_TOKEN") or "GITHUB_TOKEN")
+
+        if not head_sha_arg:
+            # --head-sha 미지정 시 로컬 HEAD 사용
+            head_sha_arg = _git_rev_parse("HEAD") or ""
+        if not head_sha_arg:
+            _die("[CI 대기] --head-sha 인자 또는 로컬 git HEAD SHA를 확인할 수 없습니다.")
+
+        wait_result = _poll_github_ci_run(
+            repo=repo_arg,
+            expected_head_sha=head_sha_arg,
+            timeout_sec=timeout_arg,
+            poll_sec=poll_arg,
+            token=token_arg,
+            pr_num=pr_num_arg,
+        )
+
+        # pipeline_state.json에 결과 기록
+        # wait_status 키 이름은 oracle TC01/TC02 expected 스키마와 일치시킴 (IMP-20260524-C097 MT-3)
+        state.setdefault("github_ci_wait", {}).update({
+            "repo": repo_arg,
+            "head_sha": head_sha_arg,
+            "wait_status": wait_result["wait_status"],
+            "matched_head_sha": wait_result["matched_head_sha"],
+            "conclusion": wait_result["conclusion"],
+            "run_id": wait_result["run_id"],
+            "elapsed_sec": wait_result["elapsed_sec"],
+            "recorded_at": _now(),
+        })
+        _log_event(state, f"gates wait-github-ci: status={wait_result['wait_status']} sha={head_sha_arg[:12]}")
+        _save(state)
+
+        wait_status = wait_result["wait_status"]
+        color = GREEN if wait_status == "PASS" else RED
+        print(color(f"\n[CI 대기 결과] {wait_status}"))
+        print(f"  SHA: {head_sha_arg[:12]}")
+        print(f"  소요 시간: {wait_result['elapsed_sec']:.0f}초")
+        if wait_result["run_id"]:
+            print(f"  run_id: {wait_result['run_id']}")
+        sys.exit(0 if wait_status == "PASS" else 1)
 
     if action == "batch-ci":
         # batch-ci --probe --changed-files a,b,c
@@ -13178,6 +13623,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_oracle = gsub.add_parser("oracle", help="Run oracle/acceptance gate and record external gate result")
     p_gate_oracle.add_argument("--user-confirmed", action="store_true", default=False,
                                help="Backward-compatible no-op. Oracle gate is automatic; final user decision is gates accept.")
+    # IMP-20260524-48C4 MT-1: agent_generated expected 허용 옵션
+    p_gate_oracle.add_argument("--allow-agent-generated", action="store_true", default=False, dest="allow_agent_generated",
+                               help="agent_generated source oracle을 BLOCKED 처리하지 않고 허용한다 (기본 비허용)")
     p_gate_accept = gsub.add_parser("accept", help="Record user behavior acceptance")
     p_gate_accept.add_argument("--result", required=True, choices=["ACCEPT", "REJECT", "accept", "reject"])
     p_gate_accept.add_argument("--evidence", default=None, help="Output file, screenshot, or report shown to user")
@@ -13225,6 +13673,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_github.add_argument("--workflow", default="CI", help="Workflow run name to search when --run-id is omitted")
     p_gate_github.add_argument("--artifact", default="pipeline-attestation", help="Required artifact name")
     p_gate_github.add_argument("--token-env", default="GITHUB_TOKEN", help="Optional env var containing a GitHub token")
+    # IMP-20260524-C097 MT-2: SHA 검증 강화 — 예상 head SHA를 명시적으로 전달 가능
+    p_gate_github.add_argument(
+        "--head-sha",
+        dest="head_sha",
+        default=None,
+        help="기대하는 head SHA (선택). 지정 시 CI run의 head_sha와 이중 검증 수행.",
+    )
+
+    # IMP-20260524-C097 MT-1: SHA 기반 CI run polling (blind wait 제거)
+    p_gate_wait_ci = gsub.add_parser(
+        "wait-github-ci",
+        help="head SHA 기준으로 GitHub CI run을 polling하여 완료를 대기합니다 (blind wait 대체)",
+    )
+    p_gate_wait_ci.add_argument("--repo", default=None, help="owner/repo; 기본값: origin remote")
+    p_gate_wait_ci.add_argument("--pr", type=int, default=None, help="PR 번호 (로그 출력용)")
+    p_gate_wait_ci.add_argument("--head-sha", dest="head_sha", default=None,
+                                help="기대하는 head SHA (기본값: 로컬 HEAD)")
+    p_gate_wait_ci.add_argument("--timeout-sec", dest="timeout_sec", type=int, default=600,
+                                help="최대 대기 시간(초, 기본값: 600)")
+    p_gate_wait_ci.add_argument("--poll-sec", dest="poll_sec", type=int, default=15,
+                                help="polling 간격(초, 기본값: 15)")
+    p_gate_wait_ci.add_argument("--token-env", dest="token_env", default="GITHUB_TOKEN",
+                                help="GitHub 토큰 환경 변수명")
 
     # GPT/OpenAI advisory reviews (non-binding; CRITICAL must be resolved)
     p_advisory = sub.add_parser("advisory", help="External advisory reviews and resolutions")
