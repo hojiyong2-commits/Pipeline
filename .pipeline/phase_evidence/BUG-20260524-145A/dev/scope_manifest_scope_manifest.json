@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260524-145A",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "tools/check_cli_evidence_contract.py"
+      ],
+      "affected_functions": [
+        "check_evidence_assertions, scan_test_files"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/test_patch_lane.py"
+      ],
+      "affected_functions": [
+        "N/A (주석 제거)"
+      ]
+    }
+  ]
+}
