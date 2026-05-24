@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260524-48C4</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-fc3eee1dfc827df4</planner_run_id>
+  <manager_run_id>pipeline_manager-c7b82e02578ff524</manager_run_id>
+  <step_plan_sha256>8f5f3a2b47b00a93c5e5efd675df1c250f7ccd8cac59e11d643f5ed574da6de6</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <description>Oracle Quality Gate 강화: oracle 단순 존재 여부 PASS 차단, normal+edge 최소 케이스 강제, placeholder expected FAIL, agent_generated expected BLOCKED, oracle quality 상태 pipeline_state.json 기록, Three-Gate COMPLETE 조건에 oracle_quality PASS 포함</description>
+  <design_decisions>
+    <decision id="DQ-1">
+      <question>oracle quality 감사 위치</question>
+      <chosen>B</chosen>
+      <rationale>contract audit + gates oracle 두 위치 모두에서 감사 수행하여 중복 보호</rationale>
+    </decision>
+    <decision id="DQ-2">
+      <question>agent_generated 처리</question>
+      <chosen>B</chosen>
+      <rationale>기본 BLOCKED, --allow-agent-generated 플래그로 해제 가능</rationale>
+    </decision>
+  </design_decisions>
+  <micro_tasks>
+    <mt id="MT-1">
+      <file>pipeline.py</file>
+      <scope>_audit_oracle_quality() 신규 함수 + contract audit-oracle 서브커맨드 + gates oracle quality 통합 + state 초기화 + _ensure_v210_fields (약 180줄)</scope>
+    </mt>
+    <mt id="MT-2">
+      <file>pipeline.py</file>
+      <scope>_external_gate_blockers + cmd_architect에 oracle_quality PASS 조건 강제 (약 15줄)</scope>
+    </mt>
+    <mt id="MT-3">
+      <file>tests/test_oracle_quality_gate.py</file>
+      <scope>CLI Evidence Contract 준수 테스트 신규 파일 (약 180줄)</scope>
+    </mt>
+    <mt id="MT-4">
+      <files>CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md</files>
+      <scope>oracle quality 정책 문서화 (약 80줄)</scope>
+    </mt>
+  </micro_tasks>
+  <oracle_files>
+    <oracle>tests/oracles/IMP-20260524-48C4/TC01/ — normal: PASS 케이스</oracle>
+    <oracle>tests/oracles/IMP-20260524-48C4/TC02/ — edge: normal-only FAIL 케이스</oracle>
+    <oracle>tests/oracles/IMP-20260524-48C4/TC03/ — error: placeholder expected FAIL 케이스</oracle>
+    <oracle>tests/oracles/IMP-20260524-48C4/TC04/ — edge: agent_generated BLOCKED 케이스</oracle>
+  </oracle_files>
+  <phase_sequence>
+    <phase>PM done + PM phase CI</phase>
+    <phase>Codex review (legacy-bootstrap waiver)</phase>
+    <phase>Dev: MT-1 → MT-2 → MT-3 → MT-4 (Incremental Module Gate)</phase>
+    <phase>Dev phase CI</phase>
+    <phase>QA phase CI</phase>
+    <phase>SEC skip (외부 네트워크/DB 없음)</phase>
+    <phase>Build N/A (meta-task)</phase>
+    <phase>Build phase CI</phase>
+    <phase>Technical + Oracle + GitHub CI + User Acceptance gates</phase>
+  </phase_sequence>
+  <branch_info>
+    <impl_branch>impl/IMP-20260524-48C4</impl_branch>
+    <attestation_branch>phase-attestation/IMP-20260524-48C4</attestation_branch>
+  </branch_info>
+</manager_handoff>
