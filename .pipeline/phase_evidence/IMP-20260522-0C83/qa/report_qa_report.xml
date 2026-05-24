@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260522-0C83</pipeline_id>
+  <agent_run_id>qa-d99dda4aaaeda360</agent_run_id>
+  <qa_timestamp>2026-05-22T12:00:00Z</qa_timestamp>
+  <verdict>PASS</verdict>
+  <result>PASS</result>
+  <numeric_score>110</numeric_score>
+
+  <test_results>
+    <command>python -m pytest tests/test_pipeline_metrics.py -v</command>
+    <total>20</total>
+    <passed>20</passed>
+    <failed>0</failed>
+    <summary>20 passed in 0.08s</summary>
+  </test_results>
+
+  <category_verdicts>
+    <AL>
+      <verdict>PASS</verdict>
+      <checks>
+        <check name="phase_elapsed_seconds_correct">PASS — TC-01: PM 15분=900초, Dev 75분=4500초 정확</check>
+        <check name="missing_timestamp_unavailable">PASS — TC-02: 타임스탬프 누락 시 추정값 없이 확인 불가 문자열 반환</check>
+        <check name="failure_code_aggregation">PASS — TC-03: failure_packet 집계, most_repeated_failure_code 정확</check>
+        <check name="github_actions_unavailable">PASS — TC-04: repo/run_id None 시 duration_seconds 확인 불가</check>
+        <check name="format_ko_no_estimation">PASS — TC-05: 실제 값 없을 때 숫자 추정값 없이 확인 불가 표시</check>
+      </checks>
+    </AL>
+
+    <PD>
+      <verdict>PASS</verdict>
+      <checks>
+        <check name="backward_compatible_record_failure_packet">PASS — TC-06: 기존 호출 방식 정상, optional 필드 없으면 패킷에 포함 안 됨</check>
+        <check name="new_optional_fields_included_when_provided">PASS — TC-06: 5개 optional 필드 제공 시 패킷에 정확히 포함</check>
+        <check name="collect_pipeline_metrics_all_keys">PASS — TC-07: 9개 필수 키 모두 반환</check>
+        <check name="atomic_snapshot_excluded_files">PASS — failure_packet.json 등 제외 목록 추가 확인</check>
+        <check name="acceptance_packet_insufficient_regex">PASS — regex 패턴으로 개선 확인</check>
+        <check name="cmd_metrics_registered">PASS — COMMAND_MAP에 metrics 등재 확인</check>
+      </checks>
+    </PD>
+
+    <FS>
+      <verdict>PASS</verdict>
+      <checks>
+        <check name="oracle_files_readable">PASS — tests/oracles/IMP-20260522-0C83/T-001~T-005 정상</check>
+        <check name="encoding_utf8_explicit">PASS — subprocess 호출에 encoding utf-8 명시</check>
+      </checks>
+    </FS>
+
+    <WA>
+      <verdict>PASS</verdict>
+      <notes>GitHub Actions duration summary None 입력 시 즉시 확인 불가 반환. 추정값 없음.</notes>
+    </WA>
+
+    <SEC>
+      <verdict>PASS</verdict>
+      <checks>
+        <check name="no_hardcoded_secrets">PASS</check>
+        <check name="subprocess_encoding_explicit">PASS</check>
+        <check name="no_new_external_dependencies">PASS</check>
+      </checks>
+    </SEC>
+  </category_verdicts>
+
+  <scope_verification>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/test_pipeline_metrics.py</file>
+    </target_files>
+    <micro_task_boundary>
+      <verdict>PASS</verdict>
+      <note>MT-1~MT-4 scope_manifest.json 범위 내 변경만 확인됨.</note>
+    </micro_task_boundary>
+  </scope_verification>
+
+  <failure_signature>NONE</failure_signature>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <pipeline_id>IMP-20260522-0C83</pipeline_id>
+    <evidence>
+      <file>qa_report.xml</file>
+      <file>tests/test_pipeline_metrics.py</file>
+      <file>pipeline.py</file>
+    </evidence>
+    <status>READY_FOR_SEC</status>
+  </handover>
+</qa_report>
