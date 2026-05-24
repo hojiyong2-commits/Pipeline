@@ -1,0 +1,23 @@
+{
+  "pipeline_id": "BUG-20260523-28D3",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "tools/check_cli_evidence_contract.py"
+      ],
+      "affected_functions": [
+        "scan_test_files"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/test_check_cli_evidence_contract.py"
+      ],
+      "affected_functions": [
+        "test_good_read_only_annotation, test_bad_state_changing_with_annotation"
+      ]
+    }
+  ]
+}
