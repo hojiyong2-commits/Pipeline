@@ -51,17 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "tools/check_cli_evidence_contract.py",
-      "sha256": "ca7e0540df3938498a6d4077db033cd845e2c3fa9a8436cd2a970f0651183de6",
-      "size_bytes": 15545
-    },
-    {
-      "path": "tests/test_patch_lane.py",
-      "sha256": "6b8840c0d8d839f3b2fdc7f28c6b6c3ef0e57f9874764f286328c33676b8fe09",
-      "size_bytes": 12999
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
