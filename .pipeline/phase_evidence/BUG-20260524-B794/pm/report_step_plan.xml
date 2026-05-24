@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pm-planner-agent output: BUG-20260524-B794 -->
+<!-- run_id: pm_planner-20b98ca5201d5eed -->
+<!-- receipt_token: tok_PtuLdXbH1CBhki-5Axegs0TXwgFLvwykucjyK86CZjw -->
+
+<decomposition_audit>
+  <total_functions_identified>4</total_functions_identified>
+  <micro_task_count>2</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <split_decision>MT-1(pipeline.py _external_gate_blockers 수정)과 MT-2(test_oracle_quality_gate.py CLI 테스트 추가)는 파일과 역할이 완전히 분리됩니다. MT-1이 버그를 수정하고 MT-2가 이를 CLI 경로에서 검증하는 producer-consumer 관계이므로 2개 MT로 분리합니다.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260524-B794</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning — oracle_quality blocker 버그 수정</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py trust-root 파일 수정 포함, 테스트 파일 추가 포함. 이전 IMP-20260524-48C4의 연속 버그 수정으로 파일 범위가 2개 파일, 4개 함수/테스트로 한정됨. pipeline_protocol 수정이지만 함수 경계가 명확함.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>4</expected_changed_functions>
+      <expected_changed_lines>130</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>버그 위치와 수정 방향이 오케스트레이터 제공 프롬프트에 완전히 명시되어 있습니다. 변수명, 코드 스타일, 함수 분리 방식 등 P2 질문은 묻지 않고 수정 방향 그대로 적용합니다. P0/P1 질문이 0개이므로 clarification 없이 진행합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 버그 수정은 MT-1(pipeline.py 함수 수정)과 MT-2(테스트 추가) 두 단위로 나눠 진행합니다. 이 방식으로 진행할까요?</user_facing_question>
+        <evidence>Bug 1은 pipeline.py:7642-7650 _external_gate_blockers 함수 8줄 수정, Bug 2는 test_oracle_quality_gate.py에 3개 CLI 경로 테스트 함수 추가(약 120줄)로 파일과 역할이 완전히 분리됩니다.</evidence>
+        <why_it_matters>두 수정을 분리하면 각 단위별 검증이 쉽고, MT-1 수정이 MT-2 테스트에 의해 검증되는 producer-consumer 관계가 명확해집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1(pipeline.py 수정) → MT-2(테스트 추가) 순서로 분리 진행</label>
+            <benefit>수정 범위가 파일 단위로 명확, 각 MT별 module QA 가능, MT-1 수정을 MT-2에서 즉시 검증</benefit>
+            <cost>두 번의 module gate 필요 (속도 소폭 증가)</cost>
+          </option>
+          <option id="B">
+            <label>단일 MT로 통합 처리</label>
+            <benefit>module gate가 1회만 필요하여 절차가 단순하고, 두 수정을 동시에 커밋하면 PR 단위가 작아집니다</benefit>
+            <cost>파일/역할이 혼합되어 수정 범위 경계 불명확, 모듈별 검증 불가</cost>
+          </option>
+        </options>
+        <user_answer>프롬프트에서 MT-1과 MT-2로 명시적으로 분리 지정 — 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline.py (현재 버전), tests/test_oracle_quality_gate.py (현재 8개 테스트)
+    - Output: pipeline.py (_external_gate_blockers 버그 수정), tests/test_oracle_quality_gate.py (3개 CLI 테스트 추가)
+    - Validation: oracle_quality={} 또는 없을 때 blocker 반환, oracle_quality=PENDING 일 때 blocker 반환, CLI audit-oracle subprocess 테스트 3개 PASS
+  </interface_spec>
+
+  <requirements>
+    MT-1: pipeline.py _external_gate_blockers 함수 (line 약 7642) 수정
+      - 버그: oracle_quality={}(빈 dict) 또는 oracle_quality 키 없음이면 if isinstance(oracle_quality, dict) and oracle_quality 조건이 False가 되어 blocker 미생성
+      - 수정: oracle_quality가 없거나, 빈 dict이거나, status가 PASS가 아닌 모든 경우에 blocker 생성
+      - 수정 코드 (정확히 아래 패턴으로 구현):
+          oracle_quality = state.get("oracle_quality")
+          oq_status = str((oracle_quality.get("status") if isinstance(oracle_quality, dict) else None) or "").upper()
+          if oq_status != "PASS":
+              blockers.append(
+                  f"oracle_quality gate must be PASS (current: {oq_status or 'PENDING'}). "
+                  "Run `python pipeline.py gates oracle` to pass oracle quality gate."
+              )
+
+    MT-2: tests/test_oracle_quality_gate.py에 3개 CLI 경로 테스트 추가
+      - 모든 테스트는 PIPELINE_STATE_PATH 환경변수로 state 파일 격리 필수
+      - subprocess.run(sys.executable 사용)으로 실제 pipeline.py CLI 호출
+      - stdout-only assert 금지 — state 파일에서 final_state 직접 읽어 assert
+
+      1. test_cli_audit_oracle_normal_plus_edge_passes():
+         - 임시 디렉토리에 input.json (normal+edge oracle entries) 생성
+         - subprocess로 "pipeline.py contract audit-oracle --oracle-dir tmpdir --pipeline-id BUG-20260524-B794" 실행
+         - PIPELINE_STATE_PATH=isolated_state_file 환경변수 설정
+         - 실행 후 state 파일 읽어서 oracle_quality.status == "PASS" assert
+         - event_log에 oracle_quality 관련 이벤트 assert
+
+      2. test_cli_audit_oracle_normal_only_fails():
+         - normal-only oracle (edge 없음) input.json 생성
+         - subprocess 실행 (exit code 1 예상)
+         - state 파일에서 oracle_quality.status == "FAIL" assert
+         - oracle_quality.failures에 edge_required 메시지 assert
+
+      3. test_cli_oracle_quality_missing_blocks_architect():
+         - PIPELINE_STATE_PATH로 격리된 state 파일 생성: oracle_quality={}, external_gates 모두 PASS, phase_attestations 모두 PASS
+         - subprocess로 "pipeline.py architect --report-file /tmp/arch_report.xml" 실행
+         - exit code 1 assert (COMPLETE 차단)
+         - stderr/stdout에 "oracle_quality" 차단 메시지 assert
+
+    scope_manifest.json 생성 필수: MT-1과 MT-2 각각의 files/affected_functions 기록
+    dev_handover.xml 생성 필수: handover XML 포함
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._external_gate_blockers</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py:6136 (architect phase COMPLETE 경로)</site>
+        <site>pipeline.py:6259 (status 출력 경로)</site>
+        <site>pipeline.py:11731 (gates status 서브커맨드)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_external_gate_blockers</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>oracle_quality={}(빈 dict) 또는 미존재 시 blocker 누락 버그 수정: if isinstance(...) and oracle_quality 조건을 항상 oq_status != "PASS" 검사로 변경 (약 8줄 수정)</change_summary>
+      <line_estimate>8</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>test_cli_audit_oracle_normal_plus_edge_passes, test_cli_audit_oracle_normal_only_fails, test_cli_oracle_quality_missing_blocks_architect</affected_function>
+      <target_files>
+        <file>tests/test_oracle_quality_gate.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def test_</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>subprocess 기반 CLI 경로 테스트 3개 추가: PIPELINE_STATE_PATH 격리, state 파일 직접 assert, exit code 검증 포함 (약 120줄 추가)</change_summary>
+      <line_estimate>120</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.9 — 기존 파이프라인 환경과 일치</python_version>
+  <env_specs>
+    <python>3.9</python>
+    <vscode>python.pythonPath 기존 설정 유지, typeCheckingMode=basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - AC-1 (정상): oracle_quality={}(빈 dict) 상태에서 _external_gate_blockers() 호출 시 "oracle_quality gate must be PASS" 포함 blocker 반환 (TC01 oracle 검증)
+    - AC-2 (엣지): oracle_quality={"status": "PENDING"} 상태에서 blocker에 "PENDING" 포함 (TC02 oracle 검증)
+    - AC-3 (엣지): oracle_quality 키 자체가 없는 state에서도 blocker 반환 (PENDING과 동일 처리)
+    - AC-4 (CLI): subprocess 기반 test_cli_audit_oracle_normal_plus_edge_passes — exit code 0, state oracle_quality.status=="PASS"
+    - AC-5 (CLI): subprocess 기반 test_cli_audit_oracle_normal_only_fails — exit code 1, state oracle_quality.status=="FAIL", failures에 edge_required 포함
+    - AC-6 (CLI): subprocess 기반 test_cli_oracle_quality_missing_blocks_architect — exit code 1, stdout/stderr에 "oracle_quality" 차단 메시지
+    - AC-7 (회귀): oracle_quality={"status": "PASS"} 일 때 blocker 미생성
+    - AC-8 (회귀): 기존 테스트 8개 모두 PASS 유지
+    - scope_lock_check: git diff --name-only에 pipeline.py, tests/test_oracle_quality_gate.py만 포함
+    - Codex plan stage ACCEPT: Dev 진입 전 필수
+    - Codex code stage ACCEPT: QA 진입 전 필수
+  </acceptance_criteria>
+
+  <forbidden>
+    - oracle 파일(tests/oracles/BUG-20260524-B794/**) 수정 금지 — PM이 확정한 answer key
+    - tests/ 아래 다른 테스트 파일 수정 금지 (test_oracle_quality_gate.py만 대상)
+    - pipeline.py 외 제품 코드 파일 수정 금지
+    - stdout-only assert로만 구성된 CLI 테스트 금지
+    - subprocess 없이 _audit_oracle_quality() 직접 호출로 CLI 경로 테스트 대체 금지
+    - Phase 기록(done/qa/build 등) 직접 호출 금지 — Pipeline Manager 전담
+  </forbidden>
+
+  <handover_spec>
+    <!-- dev-agent가 qa-agent에 인계할 때 포함해야 할 내용 명세 -->
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <required_evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_oracle_quality_gate.py</file>
+      <file>dev_handover.xml</file>
+      <file>scope_manifest.json</file>
+    </required_evidence>
+    <target_status>READY_FOR_QA</target_status>
+  </handover_spec>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_oracle_quality_gate.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260524-B794\TC01\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260524-B794\TC01\expected.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260524-B794\TC02\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260524-B794\TC02\expected.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      MT-1: pipeline.py line 7642-7650 _external_gate_blockers 함수 oracle_quality 조건 수정.
+      MT-2: tests/test_oracle_quality_gate.py에 CLI subprocess 테스트 3개 추가.
+      Trust-Root 파일: pipeline.py, tests/** — scope 외 수정 절대 금지.
+      scope_lock_check 필수: git diff --name-only 결과가 scope_manifest와 일치해야 handover 허용.
+      PIPELINE_STATE_PATH 환경변수로 CLI 테스트 격리 필수.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Phase — BUG-20260524-B794 계획 완료, contract frozen, oracle TC01(normal)+TC02(edge) 등록 완료</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
