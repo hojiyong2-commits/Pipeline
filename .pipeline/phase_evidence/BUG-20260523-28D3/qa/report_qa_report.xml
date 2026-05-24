@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260523-28D3</pipeline_id>
+  <agent_run_id>qa-3060034fd5a07d69</agent_run_id>
+  <handover_check>
+    <qa_verdict>PASS — dev-agent handover 수신 확인. UI 없으므로 dev-agent handover만 요구.</qa_verdict>
+  </handover_check>
+  <anti_gaming_check>
+    <tag_present>true</tag_present>
+    <qa_verdict>PASS — step_plan.xml에 anti_gaming_read=true 존재</qa_verdict>
+  </anti_gaming_check>
+  <judgment_calls_check>
+    <qa_verdict>N-A — audit_result=SPLIT_REQUIRED, judgment_calls 블록 없음</qa_verdict>
+  </judgment_calls_check>
+  <category_check>
+    <wa>N-A</wa>
+    <ui>N-A</ui>
+    <fs>N-A</fs>
+    <pd>PASS — scan_test_files 단독 수정, core/ui 분리 해당 없음, 인터페이스 계약 유지</pd>
+    <sec>N-A — Phase 5 전담</sec>
+    <al>N-A</al>
+    <build>N-A</build>
+    <vsce>N-A</vsce>
+  </category_check>
+  <numeric_score>100</numeric_score>
+  <acceptance_criteria_check>
+    <ac id="1"><result>PASS — pytest 5/5</result></ac>
+    <ac id="2"><result>PASS — done+annotation → violations=1</result></ac>
+    <ac id="3"><result>PASS — status+annotation → violations=0</result></ac>
+    <ac id="4"><result>PASS — exit 0 on target file (기존 타 파일 위반은 사전 존재)</result></ac>
+    <ac id="5"><result>PASS — scope_manifest MT-1/MT-2 파일 일치</result></ac>
+    <ac id="6"><result>PASS — scope_lock_check PASS 포함</result></ac>
+  </acceptance_criteria_check>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope><file>없음</file></files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence><file>없음</file></files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>3</declared_functions>
+    <actual_modified_functions>3</actual_modified_functions>
+    <out_of_scope_modifications><modification>없음</modification></out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <runtime_functional_check>
+    <execution_check_present>PASS</execution_check_present>
+    <execution_check_verdict>PASS — 5/5 tests passed</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — violations=1 반환 확인</functional_binding_verified>
+  </runtime_functional_check>
+  <compliance_checklist>
+    <wa><timeout_tuple>N-A</timeout_tuple><retry_3x>N-A</retry_3x><error_branches_4>N-A</error_branches_4><json_fallback>N-A</json_fallback></wa>
+    <ui><type_hinting_all>N-A</type_hinting_all><widget_naming>N-A</widget_naming></ui>
+    <fs><atomic_write>N-A</atomic_write><encoding_fallback>N-A</encoding_fallback><traversal_wired>N-A</traversal_wired></fs>
+  </compliance_checklist>
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <improvement_suggestions>tests/ 전체 스캔 시 기존 test_patch_lane.py 등에서 20건 위반. 별도 BUG 파이프라인에서 수정 권고.</improvement_suggestions>
+</qa_report>
