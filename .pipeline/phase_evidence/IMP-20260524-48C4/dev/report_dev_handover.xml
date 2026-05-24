@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260524-48C4</pipeline_id>
+  <agent_run_id>dev-7851978b11e704bb</agent_run_id>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_oracle_quality_gate.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>.claude/agents/test-harness-agent.md</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>_audit_oracle_quality, _external_gate_blockers, _ensure_v210_fields, cmd_gates, build_parser (pipeline.py)</target_function>
+    <new_file>tests/test_oracle_quality_gate.py — 8개 oracle quality 테스트</new_file>
+    <doc_updates>CLAUDE.md, pm-agent.md, qa-agent.md, test-harness-agent.md — oracle quality 정책 섹션</doc_updates>
+  </impact_analysis>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_oracle_quality_gate.py</file>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.claude/agents/test-harness-agent.md</file>
+    <file>module_handover_MT-1.xml</file>
+    <file>module_handover_MT-2.xml</file>
+    <file>module_handover_MT-3.xml</file>
+    <file>module_handover_MT-4.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+
+  <module_gate_summary>
+    <module id="MT-1" status="PASS">_audit_oracle_quality + 5 constants + contract audit/gates oracle 통합</module>
+    <module id="MT-2" status="PASS">_external_gate_blockers oracle_quality 조건</module>
+    <module id="MT-3" status="PASS">tests/test_oracle_quality_gate.py 8 passed</module>
+    <module id="MT-4" status="PASS">4개 MD 파일 oracle quality 문서화</module>
+    <integration status="PASS"/>
+  </module_gate_summary>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py CLAUDE.md .claude/agents/pm-agent.md .claude/agents/qa-agent.md .claude/agents/test-harness-agent.md</git_diff_files>
+    <new_files>tests/test_oracle_quality_gate.py</new_files>
+    <manifest_files>pipeline.py tests/test_oracle_quality_gate.py CLAUDE.md .claude/agents/pm-agent.md .claude/agents/qa-agent.md .claude/agents/test-harness-agent.md</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <test_results>
+    <suite>tests/test_oracle_quality_gate.py</suite>
+    <passed>8</passed>
+    <failed>0</failed>
+  </test_results>
+
+  <status>READY_FOR_QA</status>
+</handover>
