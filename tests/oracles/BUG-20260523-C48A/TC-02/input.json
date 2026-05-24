@@ -1,0 +1,5 @@
+{
+  "source_code": "def test_good_read_only_annotation(tmp_path):\n    # CLI_EVIDENCE_ALLOW_READ_ONLY: 상태 조회만 하므로 evidence assertion 불필요\n    result = subprocess.run([\"python\", \"pipeline.py\", \"done\", \"--phase\", \"dev\"], capture_output=True)\n    assert result.returncode == 0\n",
+  "description": "TC-02: CLI_EVIDENCE_ALLOW_READ_ONLY annotation이 있는 함수 -> 허용됨",
+  "case_kind": "normal"
+}
