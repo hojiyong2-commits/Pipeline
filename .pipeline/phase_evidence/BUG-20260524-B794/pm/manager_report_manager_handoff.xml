@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260524-B794</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-20ab0ea5c4ca8101</planner_run_id>
+  <manager_run_id>pipeline_manager-99bd3832ccdca941</manager_run_id>
+  <step_plan_sha256>2a221056b52dc5fe53e4bf52d31ee9e0c96a8c474383d2c65b2ff890d599bb27</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <description>BUG-20260524-B794: IMP-20260524-48C4 REJECT 수정 — _external_gate_blockers oracle_quality 빈 dict/None/누락 차단 누락 버그 수정 + CLI 경로 테스트 3개 추가</description>
+  <design_decisions>
+    <decision id="DQ-1">
+      <question>oracle_quality 빈 dict 처리</question>
+      <chosen>A</chosen>
+      <rationale>빈 dict/None/누락 모두 blocker 처리 — oracle gate를 반드시 통과해야 COMPLETE 가능</rationale>
+    </decision>
+  </design_decisions>
+  <micro_tasks>
+    <mt id="MT-1">
+      <file>pipeline.py</file>
+      <scope>_external_gate_blockers 함수 7641-7649번 줄: oracle_quality={}/None/누락 시 blocker 생성 (약 8줄)</scope>
+    </mt>
+    <mt id="MT-2">
+      <file>tests/test_oracle_quality_gate.py</file>
+      <scope>CLI 경로 subprocess 테스트 3개 추가 (기존 8개 유지, 약 120줄 추가)</scope>
+    </mt>
+  </micro_tasks>
+  <oracle_files>
+    <oracle>tests/oracles/BUG-20260524-B794/TC01/ — normal: PASS 케이스</oracle>
+    <oracle>tests/oracles/BUG-20260524-B794/TC02/ — edge: FAIL 케이스</oracle>
+  </oracle_files>
+  <phase_sequence>
+    <phase>PM done + PM phase CI</phase>
+    <phase>Codex review waiver (legacy-bootstrap)</phase>
+    <phase>Dev: MT-1 → MT-2 (Incremental Module Gate)</phase>
+    <phase>Dev phase CI</phase>
+    <phase>QA phase CI</phase>
+    <phase>SEC skip (외부 네트워크/DB 없음)</phase>
+    <phase>Build N/A (meta-task)</phase>
+    <phase>Build phase CI</phase>
+    <phase>Technical + Oracle + GitHub CI + User Acceptance gates</phase>
+  </phase_sequence>
+  <branch_info>
+    <impl_branch>impl/IMP-20260524-48C4</impl_branch>
+    <attestation_branch>phase-attestation/BUG-20260524-B794</attestation_branch>
+  </branch_info>
+</manager_handoff>
