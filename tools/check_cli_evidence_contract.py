@@ -215,6 +215,44 @@ def _has_pipeline_wrapper(tree: ast.AST) -> bool:
     return False
 
 
+def _collect_subprocess_list_nodes(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> set[int]:
+    """Return the set of AST node ids for list/tuple nodes that appear as the
+    first positional argument to a subprocess.run/Popen/check_output/check_call
+    or os.system call.
+
+    This prevents false positives from data literals such as:
+      ``{"minimal_rerun": ["python", "pipeline.py", "gates", "technical"]}``
+    which are not actual CLI invocations.
+    """
+    subprocess_funcs = {
+        "run", "Popen", "check_output", "check_call", "call",
+    }
+    result: set[int] = set()
+    for node in ast.walk(func_node):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        # Match ``subprocess.run(...)`` / ``subprocess.Popen(...)`` etc.
+        is_subprocess_call = (
+            isinstance(func, ast.Attribute)
+            and func.attr in subprocess_funcs
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "subprocess"
+        )
+        # Also match bare ``run(...)`` when imported with ``from subprocess import run``.
+        is_bare_call = (
+            isinstance(func, ast.Name) and func.id in subprocess_funcs
+        )
+        if not (is_subprocess_call or is_bare_call):
+            continue
+        # The command is always the first positional argument.
+        if node.args and isinstance(node.args[0], (ast.List, ast.Tuple)):
+            result.add(id(node.args[0]))
+    return result
+
+
 def _find_pipeline_calls_in_function(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
     source_lines: list[str],
@@ -224,8 +262,10 @@ def _find_pipeline_calls_in_function(
 
     We detect two common patterns:
 
-    1. Direct pipeline.py invocation in a list literal:
+    1. Direct pipeline.py invocation in a subprocess list literal:
        ``subprocess.run(["python", "pipeline.py", "done", ...])``
+       Only lists that are the first argument of a subprocess call are
+       considered; data literals (e.g. fixture dicts) are excluded.
 
     2. Helper function calls where the first list element is the subcommand
        (only when ``has_wrapper=True``):
@@ -233,6 +273,9 @@ def _find_pipeline_calls_in_function(
        This covers files that wrap pipeline.py calls in a ``_run``/``_cli``
        helper and pass only the subcommand args.
     """
+    # Collect AST node ids that are subprocess first-arg lists.
+    subprocess_arg_ids = _collect_subprocess_list_nodes(func_node)
+
     found: list[tuple[int, str]] = []
     for node in ast.walk(func_node):
         if not isinstance(node, (ast.List, ast.Tuple)):
@@ -243,10 +286,16 @@ def _find_pipeline_calls_in_function(
 
         handled = False
         # Pattern 1: explicit "pipeline.py" string in the list.
+        # Only apply if this list node is a subprocess call argument.
         for i, val in enumerate(elems):
             if val is None:
                 continue
             if "pipeline.py" in val:
+                # Skip if this list is NOT a subprocess invocation argument
+                # (i.e. it is a data literal / fixture value).
+                if id(node) not in subprocess_arg_ids:
+                    handled = True
+                    break
                 sub = None
                 for j in range(i + 1, len(elems)):
                     if elems[j] is not None:
