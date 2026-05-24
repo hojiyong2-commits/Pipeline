@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260524-C097</pipeline_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_wait_github_ci.py</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_wait_github_ci.py</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>_poll_github_ci_run (신규), cmd_gates (wait-github-ci 분기), argparse wait-github-ci 서브파서</target_function>
+    <target_function>p_gate_github --head-sha 옵션, cmd_gates github-ci SHA 이중 검증</target_function>
+    <target_function>tests/test_wait_github_ci.py 신규 테스트 파일 (8개 테스트)</target_function>
+    <changed_lines_estimate>165</changed_lines_estimate>
+    <side_effects>없음 — 기존 github-ci 동작 유지, wait-github-ci는 신규 명령</side_effects>
+  </impact_analysis>
+
+  <module_summary>
+    <module id="MT-1" status="PASS">_poll_github_ci_run + gates wait-github-ci + argparse</module>
+    <module id="MT-2" status="PASS">github-ci --head-sha SHA 이중 검증</module>
+    <module id="MT-3" status="PASS">tests/test_wait_github_ci.py 8개 테스트</module>
+  </module_summary>
+</handover>
