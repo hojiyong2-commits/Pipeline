@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260524-897B</pipeline_id>
+  <run_id>qa-2a9c6990e7d40cd2</run_id>
+  <token>tok__QKLLF3cV0-f_uP-11cRIrdeFQzNx3mRY9SL665l3Ts</token>
+  <from>qa-agent</from>
+  <to>pipeline-manager-agent</to>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 없음. linter는 AST 정적 분석 + 파일 IO, 테스트는 subprocess CLI 호출.</wa>
+    <ui>N-A — GUI 위젯 없음. CLI tool + pytest 테스트.</ui>
+    <fs>PASS — tests/test_patch_lane.py에서 tempfile.NamedTemporaryFile + try/finally + os.unlink로 격리 환경 정리 (38회). encoding="utf-8" 명시 (10회). traversal/atomic write는 테스트 코드라 비적용.</fs>
+    <pd>PASS — 모듈 분리: tools/(linter) + tests/(self-test) + tests/(통합 테스트) 분리. _run/_parse_json/_make_patch_plan/_make_isolated_env 헬퍼 함수 명확한 책임. ISOLATION_MARKERS/ACTUAL_ASSERTION_KEYWORDS 상수 분리 유지.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — check_evidence_assertions: source 문자열 빈값/missing 키워드 모두 False 반환 (정상 동작). _make_isolated_env: tempfile failure 시 with 컨텍스트로 안전 처리. _parse_json: idx&lt;0이면 빈 dict 반환 (graceful degradation). bare except 없음.</al>
+    <build>N-A — BUILD 카테고리 태그 없음 (PM step_plan category_tags=FS).</build>
+    <vsce>N-A — VS Code Extension 아님.</vsce>
+  </category_check>
+
+  <numeric_score>120</numeric_score>
+  <numeric_score_detail>
+    <wa score="N/A" max="N/A">네트워크 호출 없음 — 비적용</wa>
+    <ui score="N/A" max="N/A">GUI 위젯 없음 — 비적용</ui>
+    <fs score="20" max="20">tempfile + try/finally + os.unlink 패턴 14회 적용, encoding 명시, errors="replace" fallback</fs>
+    <pd score="10" max="10">모듈분리 5/5 (linter/self-test/integration test 책임 분리), 인터페이스계약 5/5 (NamedTuple Violation, tuple[str, ...] 상수)</pd>
+    <al score="20" max="20">graceful degradation (빈 dict, False), 상수 None-guard (string_value), missing key 방어</al>
+    <build score="N/A" max="N/A">BUILD 카테고리 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="120" max="120"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+    <note>본 태스크 적용 카테고리(FS/PD/AL) 만점 50/50. 비적용 카테고리(WA/UI/BUILD/SEC)는 N/A 처리.</note>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — _run, _parse_json, _make_patch_plan, _make_isolated_env 모두 타입 힌팅. check_evidence_assertions(source: str) -&gt; bool. scan_test_files 등 함수 모두 타입 명시.</type_hinting_all>
+      <widget_naming>N-A — GUI 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — tempfile.NamedTemporaryFile 패턴 사용 (테스트 격리 목적). 직접 open(w) 후 write 패턴 없음.</atomic_write>
+      <encoding_fallback>PASS — utf-8 명시 + errors="replace" fallback (check_cli_evidence_contract.py line 284).</encoding_fallback>
+      <traversal_wired>N-A — user-supplied path 처리 없음 (linter는 fixed tests/ 디렉토리 스캔)</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover의 verification_results 5개 체크 모두 PASS 명시</execution_check_present>
+    <execution_check_verdict>PASS — py_compile_all/pytest_combined/linter_full/bug_reproduction_blocked/state_protection 모두 PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 없음</vsce_build_evidence>
+    <functional_binding_verified>PASS — QA가 직접 실행 확인: `python tools/check_cli_evidence_contract.py --path tests/` exit 0, `pytest tests/test_check_cli_evidence_contract.py -v` 6/6 PASS, `pytest tests/test_patch_lane.py -v` 14/14 PASS</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>3</scope_files_declared>
+    <evidence_files_submitted>3 (소스 파일) + 14개 모듈 산출물</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음 — git diff HEAD~1 HEAD 결과 변경 파일 7개 중 3개는 PM scope 일치, 4개는 oracle 파일(PM contract 자동 생성)</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff HEAD~1 HEAD --name-only로 실제 변경 7파일 확인, scope_manifest 3파일과 일치, oracle 파일은 PM contract scope 일부</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml line 5-11에 decomposition_audit 블록 존재 (total_functions_identified=4, micro_task_count=3, grep_executions=6, audit_result=SPLIT_REQUIRED)</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1/MT-2/MT-3 모두 grep_evidence executed=true, pattern/match_count 명시</grep_evidence_present>
+    <declared_functions>5 (check_evidence_assertions + _run + 14 test_* + test_bad_direct_no_isolation)</declared_functions>
+    <actual_modified_functions>5 (check_evidence_assertions 수정 + _run signature 변경 + 14개 test 격리 추가 + 신규 test 1개)</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — 모든 변경이 PM micro_tasks 범위 내</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <scope_lock_check>
+    <pm_target_files>tools/check_cli_evidence_contract.py, tests/test_patch_lane.py, tests/test_check_cli_evidence_contract.py</pm_target_files>
+    <dev_scope_lock_check>verdict=PASS, extra_files=none, trust_root_violation=false</dev_scope_lock_check>
+    <git_diff_HEAD>aa45191 커밋 변경 파일 7개: 3개 코드 (scope 일치) + 4개 oracle (PM contract 자동 생성)</git_diff_HEAD>
+    <trust_root_files_modified>없음 — .github/workflows/, pipeline.py, CLAUDE.md, tests/(oracle 외), .claude/agents/*.md 변경 없음 (origin/IMP-20260523-9189 베이스 대비 pm-agent.md 차이는 이전에 머지된 별개 커밋)</trust_root_files_modified>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <forbidden_compliance>
+    <isolation_markers_constant>UNCHANGED — line 88-91 그대로 유지 ("run_cli_with_temp_state", "PIPELINE_STATE_PATH")</isolation_markers_constant>
+    <actual_assertion_keywords_constant>UNCHANGED — line 95-106 그대로 유지 (10개 키워드)</actual_assertion_keywords_constant>
+    <pipeline_py_modified>NO — git diff HEAD~1 HEAD에 pipeline.py 없음</pipeline_py_modified>
+    <claude_md_modified>NO — CLAUDE.md 변경 없음</claude_md_modified>
+    <test_patch_lane_logic_changed>NO — 14개 테스트의 assert 내용/의도 변경 없음. isolation 패턴(_make_isolated_env + try/finally + env=_env)만 추가, _run signature에 env: dict = None 추가 (backward-compatible)</test_patch_lane_logic_changed>
+    <verdict>PASS</verdict>
+  </forbidden_compliance>
+
+  <acceptance_criteria_check>
+    <criteria_1>PASS — `python tools/check_cli_evidence_contract.py --path tests/` exit 0, "[CLI EVIDENCE CONTRACT] PASS -no violations found"</criteria_1>
+    <criteria_2>PASS — `python -m pytest tests/test_check_cli_evidence_contract.py -v` 6/6 passed in 0.06s</criteria_2>
+    <criteria_3>PASS — test_bad_direct_no_isolation 단독 실행 PASSED. assert "done" in subcommands 검증 통과</criteria_3>
+    <criteria_4>PASS — test_good_read_only_annotation: pipeline.py status + annotation → violations == []</criteria_4>
+    <criteria_5>PASS — test_good_isolation_with_assertion: run_cli_with_temp_state + assert_post_state → violations == []</criteria_5>
+    <criteria_6>PASS — test_bad_state_changing_with_annotation: done + CLI_EVIDENCE_ALLOW_READ_ONLY → len(violations) &gt;= 1</criteria_6>
+    <criteria_7>PASS — test_patch_lane.py 14/14 passed in 3.75s, 0 linter violations</criteria_7>
+  </acceptance_criteria_check>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — 모든 acceptance criteria 통과, forbidden 항목 준수, scope/trust-root 위반 없음.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. (선택) _make_isolated_env가 매번 tempfile을 생성하므로, pytest fixture로 추출하면 코드 중복이 줄어들 수 있음. 단, PM이 "simplest" 접근을 명시 확정했으므로 현재 패턴 유지가 적절.
+    2. (선택) check_evidence_assertions의 line 192 주석 "No isolation = violation for state-changing CLI calls." 는 함수 docstring에도 추가하면 호출자가 더 명확하게 의도를 파악할 수 있음 (이미 docstring에 유사 내용 있어 우선순위 낮음).
+    3. (선택) test_bad_direct_no_isolation 신규 테스트가 BUG-20260524-897B 회귀 방지 의도를 docstring에 명시하고 있어 우수. 향후 다른 회귀 테스트에도 같은 패턴 권장.
+  </improvement_suggestions>
+
+  <verification_summary>
+    - tools/check_cli_evidence_contract.py: MT-1 1줄 수정 적용 (line 192 return False) + docstring 동기화 + Purpose/Assumptions/Vulnerability 주석 추가. ISOLATION_MARKERS/ACTUAL_ASSERTION_KEYWORDS 상수 미수정.
+    - tests/test_patch_lane.py: MT-2 _run(env=None) signature 확장 + _make_isolated_env 헬퍼 추가 + 14개 테스트 모두 try/finally 격리 + docstring에 "Evidence: final_state 보호" 키워드 추가. 테스트 로직 미변경.
+    - tests/test_check_cli_evidence_contract.py: MT-3 test_bad_direct_no_isolation 신규 추가 (line 182-218). 기존 5개 테스트 미변경.
+    - Runtime: linter exit 0, self-test 6/6 PASS, integration test 14/14 PASS. 총 20개 테스트 실행 시간 약 3.8초.
+    - Scope: 모든 변경이 PM scope 내. Trust-Root 파일 미변경.
+  </verification_summary>
+</qa_report>
