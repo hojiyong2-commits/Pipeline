@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>BUG-20260524-145A</pipeline_id>
+  <manager_run_id>pipeline_manager-f1ad3cc8e499d26a</manager_run_id>
+  <planner_run_id>pm_planner-5175acd3ec6071b1</planner_run_id>
+  <step_plan_sha256>d030d8d54ba97878bd52ef28d0e5607835ff480d4caaf4b3fc013c84df627c75</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY_FOR_DEV</status>
+  <summary>check_evidence_assertions 수정 (MT-1) + test_patch_lane.py annotation 제거 (MT-2). Contract frozen.</summary>
+  <contract_status>FROZEN</contract_status>
+  <oracle_count>2</oracle_count>
+  <test_count>2</test_count>
+</manager_handoff>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <mt_id>MT-1</mt_id>
+  <pipeline_id>BUG-20260524-145A</pipeline_id>
+  <status>READY_FOR_MODULE_QA</status>
+  <affected_function>check_evidence_assertions, scan_test_files</affected_function>
+  <target_files>
+    <file>tools/check_cli_evidence_contract.py</file>
+  </target_files>
+  <change_summary>check_evidence_assertions: isolation 없으면 True 반환 (통합 테스트 제외). has_allowlist+state_changing: always violation with message + continue</change_summary>
+  <scope_lock_check>
+    <git_diff_files>tools/check_cli_evidence_contract.py</git_diff_files>
+    <manifest_files>tools/check_cli_evidence_contract.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <impact_analysis>
+    <target_function>check_evidence_assertions</target_function>
+    <change_type>logic_update</change_type>
+    <description>has_isolation이 False이면 True 반환 — 격리 없는 통합 테스트는 CLI Evidence Contract 범위 외</description>
+  </impact_analysis>
+  <impact_analysis_2>
+    <target_function>scan_test_files (has_allowlist 분기)</target_function>
+    <change_type>logic_update</change_type>
+    <description>has_allowlist+state_changing 시 항상 violation 메시지 추가 후 continue — fall-through 제거</description>
+  </impact_analysis_2>
+  <implemented_files>
+    <file>tools/check_cli_evidence_contract.py</file>
+  </implemented_files>
+  <self_check>
+    <tests_run>pytest tests/test_check_cli_evidence_contract.py -v</tests_run>
+    <result>5/5 PASS</result>
+    <scope_verified>PASS</scope_verified>
+  </self_check>
+</module_handover>
