@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_output>
+  <pipeline_id>BUG-20260524-145A</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tests/test_patch_lane.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>check_evidence_assertions</target_function>
+    <target_function>scan_test_files</target_function>
+    <changed_files>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tests/test_patch_lane.py</file>
+    </changed_files>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </impact_analysis>
+  <evidence>
+    <file>tools/check_cli_evidence_contract.py</file>
+    <file>tests/test_patch_lane.py</file>
+    <test_result>5/5 test_check_cli_evidence_contract.py PASS</test_result>
+    <linter_result>python tools/check_cli_evidence_contract.py --path tests/ exit 0</linter_result>
+  </evidence>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260524-145A</pipeline_id>
+    <status>READY_FOR_QA</status>
+  </handover>
+  <scope_lock_check>
+    <git_diff_files>tools/check_cli_evidence_contract.py, tests/test_patch_lane.py</git_diff_files>
+    <manifest_files>tools/check_cli_evidence_contract.py, tests/test_patch_lane.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</dev_output>
