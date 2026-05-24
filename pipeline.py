@@ -79,7 +79,7 @@ import importlib.util
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict
 import re
 import socket
 import subprocess
@@ -2354,6 +2354,9 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         state["acceptance_recorded_at"] = None
     if "total_elapsed_seconds" not in state:
         state["total_elapsed_seconds"] = None
+    # IMP-20260524-48C4 MT-1: oracle_quality 상태 필드 초기화
+    if "oracle_quality" not in state:
+        state["oracle_quality"] = {}
     return state
 
 
@@ -6593,6 +6596,14 @@ ORACLE_PLACEHOLDER_STRINGS = {"", "todo", "tbd", "placeholder", "sample", "examp
 ORACLE_STORAGE_ROOT_REL = Path("tests") / "oracles"
 NON_ORACLE_DELIVERABLE_KINDS = {"doc", "docs", "markdown", "prompt", "analysis", "research", "policy", "config", "configuration"}
 
+# IMP-20260524-48C4 MT-1: Oracle Quality Gate 상수
+# oracle 단순 존재 여부 PASS 차단 — quality 기준 강제
+ORACLE_QUALITY_PLACEHOLDER_STRINGS: Set[str] = {"TODO", "PLACEHOLDER", "TBD", "N/A", "", "todo", "placeholder", "tbd", "n/a"}
+ORACLE_QUALITY_SHALLOW_TEST_TYPES: Set[str] = {"file_exists_check", "exe_launch_check", "process_check", "output_not_empty"}
+ORACLE_QUALITY_MIN_NORMAL: int = 1
+ORACLE_QUALITY_MIN_EDGE_ERROR: int = 1
+ORACLE_QUALITY_EXPECTED_SOURCE_ALLOWED: Set[str] = {"user_provided", "production_sample", "regression_capture", "user"}
+
 EXECUTION_PROFILES = {"FAST_DOC", "FAST_ANALYSIS", "FAST_SINGLE_CODE", "STANDARD", "HIGH_RISK"}
 FAST_EXECUTION_PROFILES = {"FAST_DOC", "FAST_ANALYSIS", "FAST_SINGLE_CODE"}
 FAST_PROFILE_MAX_FILES = 2
@@ -6805,6 +6816,183 @@ def _is_placeholder_scalar(value: Any) -> bool:
     return False
 
 
+def _audit_oracle_quality(
+    oracle_entries: List[Dict[str, Any]],
+    allow_agent_generated: bool = False,
+) -> Dict[str, Any]:
+    """IMP-20260524-48C4 MT-1: Oracle Quality Gate 감사 함수.
+
+    oracle 단순 존재 여부 PASS 차단 — 아래 품질 기준을 강제합니다:
+    1. normal 케이스 >= ORACLE_QUALITY_MIN_NORMAL (1개)
+    2. edge|error|exception|regression 케이스 >= ORACLE_QUALITY_MIN_EDGE_ERROR (1개)
+    3. expected 파일이 빈 JSON {}, 빈 배열 [], 빈 파일이면 FAIL
+    4. expected 파일에 ORACLE_QUALITY_PLACEHOLDER_STRINGS가 포함되면 FAIL
+    5. 모든 oracle entry가 ORACLE_QUALITY_SHALLOW_TEST_TYPES만이면 FAIL
+    6. expected_source == 'agent_generated' 이고 allow_agent_generated=False이면 BLOCKED
+    7. expected_sha256 필드가 있으면 실제 파일 해시와 비교, 불일치시 FAIL
+
+    Args:
+        oracle_entries: oracle_manifest.json의 entries 배열 (normalized list)
+        allow_agent_generated: agent_generated source를 허용할지 여부 (기본 False)
+
+    Returns:
+        {
+            "status": "PASS" | "FAIL" | "BLOCKED",
+            "failures": [...],
+            "case_summary": {"normal": N, "edge": N, "error": N, "regression": N}
+        }
+    """
+    failures: List[str] = []
+    case_summary: Dict[str, int] = {"normal": 0, "edge": 0, "error": 0, "regression": 0}
+    blocked: bool = False
+
+    if not oracle_entries:
+        return {
+            "status": "FAIL",
+            "failures": ["oracle_quality: no oracle entries to audit"],
+            "case_summary": case_summary,
+        }
+
+    # case_kind 집계
+    for entry in oracle_entries:
+        kind = str(entry.get("case_kind") or "normal").strip().lower()
+        if kind == "normal":
+            case_summary["normal"] += 1
+        elif kind in ("edge", "exception"):
+            case_summary["edge"] += 1
+        elif kind == "error":
+            case_summary["error"] += 1
+        elif kind == "regression":
+            case_summary["regression"] += 1
+
+    # 검사 1: normal 케이스 최소 1개
+    if case_summary["normal"] < ORACLE_QUALITY_MIN_NORMAL:
+        failures.append(
+            "oracle_quality: edge_required — normal 케이스가 부족합니다 "
+            f"(최소 {ORACLE_QUALITY_MIN_NORMAL}개 필요, 현재 {case_summary['normal']}개)"
+        )
+
+    # 검사 2: edge|error|exception|regression 최소 1개
+    edge_total = case_summary["edge"] + case_summary["error"] + case_summary["regression"]
+    if edge_total < ORACLE_QUALITY_MIN_EDGE_ERROR:
+        failures.append(
+            "oracle_quality: edge_required — edge|error|exception|regression 케이스가 부족합니다 "
+            f"(최소 {ORACLE_QUALITY_MIN_EDGE_ERROR}개 필요, 현재 {edge_total}개)"
+        )
+
+    # 검사 3~6: 각 entry 상세 검사
+    all_shallow = len(oracle_entries) > 0
+    for entry in oracle_entries:
+        name = str(entry.get("name") or entry.get("case_id") or "oracle")
+        # oracle source: 매니페스트의 source 필드 (데이터 출처), expected_source (기대 출력 출처) 별도 확인
+        data_source = str(entry.get("source") or "").strip().lower()
+        expected_source = str(entry.get("expected_source") or "").strip().lower()
+        # agent_generated 검사: expected_source가 명시적이면 그것을, 없으면 data_source를 사용
+        source_for_quality_check = expected_source if expected_source else data_source
+        test_type = str(entry.get("test_type") or entry.get("type") or "").strip().lower()
+        expected_path_str = str(entry.get("expected_path") or "")
+        expected_sha256 = str(entry.get("expected_sha256") or "").strip()
+
+        # 검사 6: agent_generated BLOCKED
+        if source_for_quality_check == "agent_generated" and not allow_agent_generated:
+            blocked = True
+            failures.append(
+                f"oracle_quality: {name}: expected_source=agent_generated — "
+                "에이전트 생성 expected는 기본 BLOCKED입니다. "
+                "--allow-agent-generated 플래그로 해제하거나 user_provided로 교체하세요."
+            )
+
+        # 검사 5: shallow test type 전용 여부
+        if test_type and test_type not in ORACLE_QUALITY_SHALLOW_TEST_TYPES:
+            all_shallow = False
+
+        # 검사 3, 4: expected 파일 내용 검사
+        if expected_path_str:
+            expected_path = Path(expected_path_str)
+            if not expected_path.is_absolute():
+                expected_path = BASE_DIR / expected_path
+            if expected_path.exists():
+                # 검사 7: sha256 불일치
+                if expected_sha256:
+                    actual_sha = _sha256_file(expected_path)
+                    if actual_sha != expected_sha256:
+                        failures.append(
+                            f"oracle_quality: {name}: expected_sha256 불일치 "
+                            f"(저장={expected_sha256[:8]}..., 실제={actual_sha[:8]}...)"
+                        )
+
+                # 검사 3, 4: 파일 내용 품질
+                if expected_path.suffix.lower() == ".json":
+                    try:
+                        value = json.loads(expected_path.read_text(encoding="utf-8-sig"))
+                        if value in ({}, [], "", None):
+                            failures.append(
+                                f"oracle_quality: {name}: expected JSON은 빈 값입니다 ({value!r})"
+                            )
+                        elif isinstance(value, dict):
+                            # 모든 값이 placeholder인지 검사
+                            all_placeholder = all(
+                                isinstance(v, str) and v.strip() in ORACLE_QUALITY_PLACEHOLDER_STRINGS
+                                for v in value.values()
+                            ) if value else False
+                            if all_placeholder:
+                                failures.append(
+                                    f"oracle_quality: {name}: expected JSON의 모든 값이 placeholder입니다"
+                                )
+                        elif isinstance(value, str):
+                            if value.strip() in ORACLE_QUALITY_PLACEHOLDER_STRINGS:
+                                failures.append(
+                                    f"oracle_quality: {name}: expected 값이 placeholder입니다 ({value!r})"
+                                )
+                    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                        pass  # 파일 내용 파싱 실패는 다른 게이트가 처리
+                else:
+                    # JSON이 아닌 파일: 전체 내용을 읽어 placeholder 검사
+                    try:
+                        text_content = expected_path.read_text(encoding="utf-8", errors="replace").strip()
+                        if not text_content:
+                            failures.append(
+                                f"oracle_quality: {name}: expected 파일이 비어 있습니다"
+                            )
+                        elif text_content.upper() in {s.upper() for s in ORACLE_QUALITY_PLACEHOLDER_STRINGS if s}:
+                            failures.append(
+                                f"oracle_quality: {name}: expected 파일이 placeholder입니다 ({text_content[:20]!r})"
+                            )
+                    except (OSError, UnicodeDecodeError):
+                        pass
+
+    # 검사 5: 모든 entry가 shallow test type만인 경우
+    if all_shallow and oracle_entries and not any(
+        str(e.get("test_type") or e.get("type") or "").strip().lower()
+        not in ORACLE_QUALITY_SHALLOW_TEST_TYPES
+        for e in oracle_entries
+        if str(e.get("test_type") or e.get("type") or "").strip()
+    ):
+        # test_type 필드가 있고 모두 shallow인 경우만 FAIL
+        has_test_type = any(
+            str(e.get("test_type") or e.get("type") or "").strip()
+            for e in oracle_entries
+        )
+        if has_test_type:
+            failures.append(
+                "oracle_quality: shallow_only — 모든 oracle이 file_exists/exe_launch 등 shallow 검사만 "
+                "포함합니다. 핵심 비즈니스 로직을 검증하는 oracle이 최소 1개 필요합니다."
+            )
+
+    if blocked:
+        status = "BLOCKED"
+    elif failures:
+        status = "FAIL"
+    else:
+        status = "PASS"
+
+    return {
+        "status": status,
+        "failures": failures,
+        "case_summary": case_summary,
+    }
+
+
 def _oracle_expected_quality_blockers(name: str, expected_path: Path) -> List[str]:
     blockers: List[str] = []
     try:
@@ -6969,6 +7157,16 @@ def _audit_contract_bundle(
             warnings.append(f"oracle gate waived by user: {waiver_reason or 'no reason provided'}")
     else:
         blockers.extend(oracle_blockers)
+
+    # IMP-20260524-48C4 MT-1: oracle quality 감사 통합 (contract audit 단계)
+    # oracle 단순 존재 여부 PASS 차단 — normal+edge 최소 케이스, placeholder, agent_generated 검사
+    if oracle_entries and not oracle_blockers:
+        quality_result = _audit_oracle_quality(oracle_entries)
+        if quality_result.get("status") == "BLOCKED":
+            blockers.append("oracle_quality: BLOCKED — agent_generated expected 감지. --allow-agent-generated 또는 user_provided로 교체하세요.")
+            blockers.extend(quality_result.get("failures", []))
+        elif quality_result.get("status") == "FAIL":
+            blockers.extend(quality_result.get("failures", []))
 
     status = "PASS" if not blockers else "FAIL"
     return {
@@ -7389,6 +7587,15 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
         info = gates.get(gate_name, {}) if isinstance(gates, dict) else {}
         if not isinstance(info, dict) or info.get("status") != "PASS":
             blockers.append(f"{gate_name} gate must be PASS")
+    # IMP-20260524-48C4 MT-2: oracle_quality PASS 조건 강제
+    oracle_quality = state.get("oracle_quality", {})
+    if isinstance(oracle_quality, dict) and oracle_quality:
+        oq_status = str(oracle_quality.get("status") or "").upper()
+        if oq_status != "PASS":
+            blockers.append(
+                f"oracle_quality gate must be PASS (current: {oq_status or 'not run'}). "
+                "Run `python pipeline.py gates oracle` to pass oracle quality gate."
+            )
     blockers.extend(_phase_attestation_blockers(state))
     # GPT advisory CRITICAL은 ENABLE_GPT_ADVISORY_REQUIRED=1 일 때만 COMPLETE를 차단합니다.
     # 기본 모드(REQUIRED 미설정)에서는 advisory가 수동 진단 도구이며 blocker가 아닙니다.
@@ -11702,6 +11909,66 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _save(state)
             print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
             _die("; ".join(oracle_blockers))
+        # IMP-20260524-48C4 MT-1: oracle quality 감사 통합 (gates oracle)
+        allow_agent_gen = getattr(args, "allow_agent_generated", False)
+        quality_result = _audit_oracle_quality(oracle_entries, allow_agent_generated=allow_agent_gen)
+        state["oracle_quality"] = quality_result
+        _save(state)
+        if quality_result.get("status") == "BLOCKED":
+            failures_str = "; ".join(quality_result.get("failures", []))
+            packet = _record_failure_packet(
+                state,
+                "oracle",
+                quality_result,
+                command=[sys.executable, "pipeline.py", "gates", "oracle"],
+                note="Oracle quality gate BLOCKED: agent_generated expected 감지. user_provided로 교체하거나 --allow-agent-generated 사용.",
+                status="BLOCKED",
+                phase="pm",
+                failure_code="oracle_quality_blocked",
+                failure_category="oracle_quality",
+                summary_ko="오라클 품질 게이트 BLOCKED — agent_generated expected 감지.",
+                expected="source=user_provided/production_sample/regression_capture",
+                actual=failures_str,
+                exit_code=1,
+                owner="PM",
+                return_phase="pm",
+                required_actions=[
+                    "oracle_manifest.json의 agent_generated expected를 user_provided로 교체하세요.",
+                    "또는 `python pipeline.py gates oracle --allow-agent-generated` 를 사용하세요.",
+                ],
+            )
+            _log_event(state, "oracle quality gate BLOCKED")
+            _save(state)
+            print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
+            _die(f"[ORACLE QUALITY BLOCKED] {failures_str}")
+        elif quality_result.get("status") == "FAIL":
+            failures_str = "; ".join(quality_result.get("failures", []))
+            packet = _record_failure_packet(
+                state,
+                "oracle",
+                quality_result,
+                command=[sys.executable, "pipeline.py", "gates", "oracle"],
+                note="Oracle quality gate FAIL: normal+edge 최소 케이스 또는 placeholder expected 문제.",
+                status="FAIL",
+                phase="pm",
+                failure_code="oracle_quality_fail",
+                failure_category="oracle_quality",
+                summary_ko="오라클 품질 게이트 FAIL — 최소 케이스 또는 placeholder 위반.",
+                expected="normal >= 1, edge/error >= 1, non-placeholder expected",
+                actual=failures_str,
+                exit_code=1,
+                owner="PM",
+                return_phase="pm",
+                required_actions=[
+                    "normal case와 edge/error case가 각각 1개 이상 있는지 확인하세요.",
+                    "expected 파일에 TODO/PLACEHOLDER/TBD 같은 임시 값이 없는지 확인하세요.",
+                ],
+            )
+            _log_event(state, "oracle quality gate FAIL")
+            _save(state)
+            print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
+            _die(f"[ORACLE QUALITY FAIL] {failures_str}")
+
         from core.acceptance import run_acceptance
 
         report = run_acceptance(
@@ -13356,6 +13623,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_oracle = gsub.add_parser("oracle", help="Run oracle/acceptance gate and record external gate result")
     p_gate_oracle.add_argument("--user-confirmed", action="store_true", default=False,
                                help="Backward-compatible no-op. Oracle gate is automatic; final user decision is gates accept.")
+    # IMP-20260524-48C4 MT-1: agent_generated expected 허용 옵션
+    p_gate_oracle.add_argument("--allow-agent-generated", action="store_true", default=False, dest="allow_agent_generated",
+                               help="agent_generated source oracle을 BLOCKED 처리하지 않고 허용한다 (기본 비허용)")
     p_gate_accept = gsub.add_parser("accept", help="Record user behavior acceptance")
     p_gate_accept.add_argument("--result", required=True, choices=["ACCEPT", "REJECT", "accept", "reject"])
     p_gate_accept.add_argument("--evidence", default=None, help="Output file, screenshot, or report shown to user")
