@@ -76,7 +76,6 @@ class TestClusterCommands:
 
     def test_cluster_detect_returns_json(self):
         """cluster detect는 JSON을 반환하고 match_found 필드를 포함해야 한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: cluster 명령은 pipeline_state.json이 아닌 별도 cluster 파일만 수정합니다
         proc = _run(["cluster", "detect"])
         assert proc.returncode == 0, (
             f"exit code: {proc.returncode}\n{proc.stderr.decode('utf-8', errors='replace')}"
@@ -87,7 +86,6 @@ class TestClusterCommands:
 
     def test_cluster_init_creates_cluster(self):
         """cluster init은 CL- 접두사를 가진 클러스터 ID를 생성해야 한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: cluster 명령은 pipeline_state.json이 아닌 별도 cluster 파일만 수정합니다
         proc = _run(["cluster", "init", "--desc", "pytest test cluster"])
         assert proc.returncode == 0, (
             f"exit code: {proc.returncode}\n{proc.stderr.decode('utf-8', errors='replace')}"
@@ -102,7 +100,6 @@ class TestClusterCommands:
 
     def test_cluster_status_shows_all(self):
         """cluster status는 전체 클러스터 목록 JSON을 반환해야 한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: cluster 명령은 pipeline_state.json이 아닌 별도 cluster 파일만 수정합니다
         proc_init = _run(["cluster", "init", "--desc", "status test"])
         data_init = _parse_json(proc_init)
         cluster_id = data_init.get("id", "")
@@ -118,7 +115,6 @@ class TestClusterCommands:
 
     def test_cluster_close_sets_closed_at(self):
         """cluster close는 closed_at 타임스탬프를 기록해야 한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: cluster 명령은 pipeline_state.json이 아닌 별도 cluster 파일만 수정합니다
         proc_init = _run(["cluster", "init", "--desc", "close test"])
         data_init = _parse_json(proc_init)
         cluster_id = data_init.get("id", "")
@@ -139,7 +135,6 @@ class TestPatchAudit:
 
     def test_patch_plan_pass_within_limit(self):
         """15줄 이하 단일 파일/함수 계획은 PASS (exit 0)."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch plan/audit은 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
@@ -159,7 +154,6 @@ class TestPatchAudit:
 
     def test_patch_plan_fail_exceeds_15_lines(self):
         """16줄 이상 계획은 FAIL + lane=full (exit 1). auto-escalation 임계값=15."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch plan은 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
@@ -175,7 +169,6 @@ class TestPatchAudit:
 
     def test_patch_plan_fail_trust_root(self):
         """trust_root_changes=true이면 FAIL + lane=full."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch plan은 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
@@ -191,7 +184,6 @@ class TestPatchAudit:
 
     def test_patch_audit_pass(self):
         """patch audit은 유효한 계획에 대해 PASS를 반환해야 한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch audit은 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
@@ -215,7 +207,6 @@ class TestPatchVerify:
 
     def test_patch_verify_pass(self):
         """patch verify --result PASS는 --test-command와 함께 exit 0을 반환해야 한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch verify는 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
@@ -239,7 +230,6 @@ class TestPatchVerify:
 
     def test_patch_verify_fail(self):
         """patch verify --result FAIL은 exit 1을 반환해야 한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch verify는 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
@@ -263,7 +253,6 @@ class TestAutoEscalation:
 
     def test_exactly_15_lines_passes(self):
         """정확히 15줄은 PASS -- 임계값 이하."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch plan은 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
@@ -279,7 +268,6 @@ class TestAutoEscalation:
 
     def test_16_lines_fails(self):
         """16줄은 FAIL -- 임계값 초과."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch plan은 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8", dir=str(_ROOT)
         ) as f:
@@ -301,7 +289,6 @@ class TestPatchLaneForbidden:
 
     def test_cluster_init_has_forbidden_false(self):
         """새로 생성한 클러스터는 patch_lane_forbidden=false여야 한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: cluster 명령은 pipeline_state.json이 아닌 별도 cluster 파일만 수정합니다
         proc = _run(["cluster", "init", "--desc", "forbidden test"])
         assert proc.returncode == 0
         data = _parse_json(proc)
@@ -321,7 +308,6 @@ class TestPatchPlanSchema:
 
     def test_missing_scope_file_fails(self):
         """patch_scope.file 미지정 시 FAIL."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: patch plan은 임시 파일만 처리하며 pipeline_state.json을 수정하지 않습니다
         plan = {
             "schema_version": 1,
             "pipeline_id": "IMP-TEST-0000-0001",

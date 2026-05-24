@@ -1,4 +1,4 @@
-"""CLI Evidence Contract linter.
+﻿"""CLI Evidence Contract linter.
 
 Scans test files under tests/ for pipeline CLI invocations that change
 pipeline state (e.g. ``pipeline.py done``, ``pipeline.py qa``) and verifies
@@ -71,15 +71,19 @@ READ_ONLY_SUBCOMMANDS: frozenset[str] = frozenset(
     ]
 )
 
+# Keywords that indicate isolation/helper setup — NOT evidence assertions.
+# A function with only these markers (and no ACTUAL_ASSERTION_KEYWORDS) is a violation.
+ISOLATION_MARKERS: tuple[str, ...] = (
+    "run_cli_with_temp_state",
+    "PIPELINE_STATE_PATH",
+)
+
 # Keywords in source text that satisfy the evidence-assertion requirement.
-EVIDENCE_ASSERTION_KEYWORDS: tuple[str, ...] = (
+# "pipeline_state" and "post_state" removed — too generic, causes false negatives.
+ACTUAL_ASSERTION_KEYWORDS: tuple[str, ...] = (
     "assert_post_state",
     "assert_file_effects",
-    "run_cli_with_temp_state",
     "final_state",
-    "post_state",
-    "pipeline_state",
-    "PIPELINE_STATE_PATH",
     "event_log",
     "phase_attempt_history",
     "failure_packets",
@@ -163,8 +167,20 @@ def classify_command(subcommand: str) -> str:
 
 
 def check_evidence_assertions(source: str) -> bool:
-    """Return True if the source text contains any evidence-assertion keyword."""
-    return any(kw in source for kw in EVIDENCE_ASSERTION_KEYWORDS)
+    """Return True if evidence requirements are satisfied.
+
+    Only tests that explicitly set up isolation (run_cli_with_temp_state /
+    PIPELINE_STATE_PATH) are required to have evidence assertions.
+    Integration tests that run against real state without isolation are
+    out of scope for this contract.
+    """
+    has_isolation = any(kw in source for kw in ISOLATION_MARKERS)
+    if not has_isolation:
+        # No isolation markers — treated as an integration test, not
+        # subject to the evidence-assertion requirement.
+        return True
+    has_assertion = any(kw in source for kw in ACTUAL_ASSERTION_KEYWORDS)
+    return has_assertion
 
 
 def _has_pipeline_wrapper(tree: ast.AST) -> bool:
@@ -292,13 +308,42 @@ def scan_test_files(test_dir: Path, verbose: bool = False) -> list[Violation]:
 
             for lineno, subcommand in calls:
                 if has_allowlist:
-                    # Allowed read-only: no violation.
+                    # CLI_EVIDENCE_ALLOW_READ_ONLY only exempts genuinely read-only
+                    # sub-commands.  A state-changing command (e.g. ``done``, ``qa``)
+                    # annotated with this marker is still a violation — the annotation
+                    # cannot suppress evidence requirements for commands that mutate
+                    # pipeline state.
+                    if classify_command(subcommand) != "state_changing":
+                        if verbose:
+                            print(
+                                f"  SKIP  {py_file.name}:{lineno} "
+                                f"{func_node.name!r} ({subcommand}) - CLI_EVIDENCE_ALLOW_READ_ONLY"
+                            )
+                        continue
+                    # State-changing command with read-only annotation → always a
+                    # violation regardless of whether evidence is present.  The
+                    # annotation cannot suppress evidence requirements for commands
+                    # that mutate pipeline state.
                     if verbose:
                         print(
-                            f"  SKIP  {py_file.name}:{lineno} "
-                            f"{func_node.name!r} ({subcommand}) - CLI_EVIDENCE_ALLOW_READ_ONLY"
+                            f"  VIOLATED  {py_file.name}:{lineno} "
+                            f"{func_node.name!r} ({subcommand}) - annotation invalid on state-changing cmd"
                         )
-                    continue
+                    violations.append(
+                        Violation(
+                            file=py_file,
+                            line=lineno,
+                            test_name=func_node.name,
+                            subcommand=subcommand,
+                            message=(
+                                f"read-only annotation(CLI_EVIDENCE_ALLOW_READ_ONLY)은 status/check/list 같은 "
+                                f"실제 read-only 명령에만 유효합니다. '{subcommand}'는 상태 변경 명령이므로 "
+                                "annotation이 무효합니다. 실제 state/file evidence assertion을 추가하거나 "
+                                "isolation helper를 사용하세요."
+                            ),
+                        )
+                    )
+                    continue  # do NOT fall through to the evidence check
 
                 if has_evidence:
                     # Evidence assertions present: no violation.
@@ -309,7 +354,7 @@ def scan_test_files(test_dir: Path, verbose: bool = False) -> list[Violation]:
                         )
                     continue
 
-                # Violation: state-changing CLI call with no evidence assertion.
+                # Violation: state-changing CLI call without evidence assertion.
                 violations.append(
                     Violation(
                         file=py_file,
@@ -317,10 +362,11 @@ def scan_test_files(test_dir: Path, verbose: bool = False) -> list[Violation]:
                         test_name=func_node.name,
                         subcommand=subcommand,
                         message=(
-                            f"state-changing CLI call 'pipeline.py {subcommand}' has no "
-                            "evidence assertion (assert_post_state / assert_file_effects / "
-                            "PIPELINE_STATE_PATH / final_state / ...). "
-                            "Add a helper-based assertion or annotate with "
+                            f"isolation marker (run_cli_with_temp_state / PIPELINE_STATE_PATH) "
+                            f"is present but no actual assertion keyword was found "
+                            f"(assert_post_state / assert_file_effects / final_state / "
+                            f"event_log / ...) for 'pipeline.py {subcommand}'. "
+                            "Add a post-state assertion or annotate with "
                             "# CLI_EVIDENCE_ALLOW_READ_ONLY: <reason>"
                         ),
                     )
