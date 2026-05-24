@@ -5,6 +5,7 @@ works correctly:
   - isolation marker only  -> violation (exit 1)
   - isolation + assertion  -> OK (exit 0)
   - CLI_EVIDENCE_ALLOW_READ_ONLY annotation -> OK (exit 0)
+  - CLI_EVIDENCE_ALLOW_READ_ONLY on state-changing command -> violation (exit 1)
 """
 
 from __future__ import annotations
@@ -122,7 +123,8 @@ def test_good_isolation_with_assertion(tmp_path: Path) -> None:
 
 
 def test_good_read_only_annotation(tmp_path: Path) -> None:
-    """Function annotated with CLI_EVIDENCE_ALLOW_READ_ONLY should be skipped.
+    """Function annotated with CLI_EVIDENCE_ALLOW_READ_ONLY with a genuinely
+    read-only subcommand (status) should be skipped — no violation.
 
     Expected: scan_test_files returns 0 violations (exit 0 equivalent).
     """
@@ -134,7 +136,7 @@ def test_good_read_only_annotation(tmp_path: Path) -> None:
         def test_good_read_only_annotation(tmp_path):
             # CLI_EVIDENCE_ALLOW_READ_ONLY: read-only status check, no state change needed
             result = subprocess.run(
-                ["python", "pipeline.py", "done", "--phase", "dev"],
+                ["python", "pipeline.py", "status"],
                 capture_output=True,
             )
             assert result.returncode == 0
@@ -143,4 +145,34 @@ def test_good_read_only_annotation(tmp_path: Path) -> None:
     violations = scan_test_files(tmp_path)
     assert violations == [], (
         f"Expected 0 violations for CLI_EVIDENCE_ALLOW_READ_ONLY function, got {violations}"
+    )
+
+
+def test_bad_state_changing_with_annotation(tmp_path: Path) -> None:
+    """CLI_EVIDENCE_ALLOW_READ_ONLY annotation does NOT exempt state-changing commands.
+
+    A test that calls ``pipeline.py done`` (state-changing) and uses the
+    read-only annotation is still a violation — the annotation is only valid
+    for genuinely read-only subcommands like ``status`` or ``check``.
+
+    Expected: scan_test_files returns >= 1 violation.
+    """
+    _write_test_file(
+        tmp_path,
+        """\
+        import subprocess
+
+        def test_bad_state_changing_with_annotation(tmp_path):
+            # CLI_EVIDENCE_ALLOW_READ_ONLY: 상태 변경 명령에는 적용되지 않음
+            result = subprocess.run(
+                ["python", "pipeline.py", "done", "--phase", "dev"],
+                capture_output=True,
+            )
+            assert result.returncode == 0
+        """,
+    )
+    violations = scan_test_files(tmp_path)
+    assert len(violations) >= 1, (
+        f"Expected at least 1 violation when CLI_EVIDENCE_ALLOW_READ_ONLY is used "
+        f"with a state-changing command ('done'), got {len(violations)}"
     )

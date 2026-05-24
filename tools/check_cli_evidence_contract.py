@@ -303,13 +303,20 @@ def scan_test_files(test_dir: Path, verbose: bool = False) -> list[Violation]:
 
             for lineno, subcommand in calls:
                 if has_allowlist:
-                    # Allowed read-only: no violation.
-                    if verbose:
-                        print(
-                            f"  SKIP  {py_file.name}:{lineno} "
-                            f"{func_node.name!r} ({subcommand}) - CLI_EVIDENCE_ALLOW_READ_ONLY"
-                        )
-                    continue
+                    # CLI_EVIDENCE_ALLOW_READ_ONLY only exempts genuinely read-only
+                    # sub-commands.  A state-changing command (e.g. ``done``, ``qa``)
+                    # annotated with this marker is still a violation — the annotation
+                    # cannot suppress evidence requirements for commands that mutate
+                    # pipeline state.
+                    if classify_command(subcommand) != "state_changing":
+                        if verbose:
+                            print(
+                                f"  SKIP  {py_file.name}:{lineno} "
+                                f"{func_node.name!r} ({subcommand}) - CLI_EVIDENCE_ALLOW_READ_ONLY"
+                            )
+                        continue
+                    # Fall through: state-changing command with read-only annotation
+                    # is reported as a violation below.
 
                 if has_evidence:
                     # Evidence assertions present: no violation.
