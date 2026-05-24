@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-24T23:40:31Z",
+  "generated_at": "2026-05-24T23:44:59Z",
   "pipeline_id": "BUG-20260524-B794",
   "phase": "pm",
   "phase_status": "DONE",
@@ -20,7 +20,7 @@
     "output_file": "step_plan.xml",
     "output_sha256": "2a221056b52dc5fe53e4bf52d31ee9e0c96a8c474383d2c65b2ff890d599bb27",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260524-B794/pm/agent_receipt_pm_planner-20ab0ea5c4ca8101.json",
-    "receipt_sha256": "649d52ca7115ef98465d7281a8d2fc9c21c44f3e1270a297f61dc5c28f6d3fc9",
+    "receipt_sha256": "172d21f44f12042cde6ae4ddbb9cf1202fe6706e03715be457f7caa27cc155de",
     "used_by_phase": "pm",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260524-B794\\pm_planner\\pm_planner-20ab0ea5c4ca8101.json"
   },
@@ -32,7 +32,7 @@
     "output_file": "manager_handoff.xml",
     "output_sha256": "0a2efc7736f02cd2cb2d65cfa026395c3d18eb7312288a3f9a0cf24803467387",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260524-B794/pm/manager_receipt_pipeline_manager-99bd3832ccdca941.json",
-    "receipt_sha256": "d2589a27c22e7aa169917d0fb68bf86fbed61bfaea8b7d88177086542a08592b",
+    "receipt_sha256": "30841142dfea385e59e2f7c2af1bac5e909b2808c0a6687e940f0020837784c4",
     "used_by_phase": "pm_manager",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260524-B794\\pipeline_manager\\pipeline_manager-99bd3832ccdca941.json"
   },
@@ -41,16 +41,16 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260524-B794\\pm_planner\\pm_planner-20ab0ea5c4ca8101.json",
       "path": ".pipeline/phase_evidence/BUG-20260524-B794/pm/agent_receipt_pm_planner-20ab0ea5c4ca8101.json",
-      "sha256": "649d52ca7115ef98465d7281a8d2fc9c21c44f3e1270a297f61dc5c28f6d3fc9",
-      "size_bytes": 533,
+      "sha256": "172d21f44f12042cde6ae4ddbb9cf1202fe6706e03715be457f7caa27cc155de",
+      "size_bytes": 519,
       "requires_force_add": true
     },
     {
       "label": "manager_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260524-B794\\pipeline_manager\\pipeline_manager-99bd3832ccdca941.json",
       "path": ".pipeline/phase_evidence/BUG-20260524-B794/pm/manager_receipt_pipeline_manager-99bd3832ccdca941.json",
-      "sha256": "d2589a27c22e7aa169917d0fb68bf86fbed61bfaea8b7d88177086542a08592b",
-      "size_bytes": 557,
+      "sha256": "30841142dfea385e59e2f7c2af1bac5e909b2808c0a6687e940f0020837784c4",
+      "size_bytes": 543,
       "requires_force_add": true
     },
     {
