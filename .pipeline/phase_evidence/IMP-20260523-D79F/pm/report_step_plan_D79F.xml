@@ -1,0 +1,132 @@
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>3</grep_executions>
+  <split_decision>
+    score_command_check 함수(lines 263-304)만 수정 대상입니다.
+    호출부는 SCORERS 딕셔너리(line 308)에서만 참조되며 함수 시그니처 변경이 없으므로
+    호출부 수정이 필요 없습니다. 단일 MT-1로 충분합니다.
+  </split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260523-D79F</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: score_command_check 환경변수 주입 수정</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, AL</category_tags>
+
+  <task_complexity>
+    <execution_profile>FAST_SINGLE_CODE</execution_profile>
+    <reason>
+      core/acceptance/scorers.py 단일 파일의 score_command_check 함수(1개)만 수정합니다.
+      추가 줄 수는 약 18~22줄이며 FAST_SINGLE_CODE 임계값(80줄) 이하입니다.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>22</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      변수명, 임시파일 접두사, 예외 메시지 문구 같은 내부 구현 취향 질문은 묻지 않고
+      기존 코드 패턴(tests/test_clarification_gate.py, test_return_phase_reentry.py의
+      PIPELINE_STATE_PATH 주입 패턴)과 유지보수성 기준으로 PM이 정리했습니다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>score_command_check 함수 1개만 수정하는 MT-1 단위로 진행할까요?</user_facing_question>
+        <evidence>IMP-20260523-577F의 T-001/T-002/T-003 실패 원인이 score_command_check가 live pipeline_state.json을 참조하는 것입니다. given.actual_file의 initial_state를 임시파일로 주입하면 해결됩니다. Grep 결과: score_command_check 2개 매칭, import os/tempfile 없음 확인.</evidence>
+        <why_it_matters>수정 범위가 1개 함수에 집중되어야 검증이 쉽고 이후 유지보수가 명확합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1 단위 단일 함수 수정</label>
+            <benefit>변경 범위가 명확하고 검증 위치가 고정됩니다.</benefit>
+            <cost>향후 score_command_check 외 다른 scorer에 동일 패턴이 필요할 경우 별도 MT로 추가해야 합니다.</cost>
+          </option>
+          <option id="B">
+            <label>더 작게 분해 (import 추가와 함수 수정 분리)</label>
+            <benefit>각 변경을 더 세밀하게 확인 가능</benefit>
+            <cost>불필요한 확인 단계 증가</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (PM Planner 설계 확인 완료 — IMP-20260523-577F 분석 기반)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    - score_command_check 함수(core/acceptance/scorers.py, lines 263-304)만 수정
+    - 수정 내용: subprocess.run 호출 전 given.actual_file 확인 로직 추가
+      1. test.get("given", {}).get("actual_file") 경로가 존재하면:
+         a. 해당 JSON 파일을 로드하여 initial_state 키 추출
+         b. initial_state를 tempfile.NamedTemporaryFile(suffix=".json", delete=False)에 JSON 직렬화하여 저장
+         c. env = os.environ.copy() 후 env["PIPELINE_STATE_PATH"] = tmp.name 설정
+      2. actual_file이 없거나 initial_state가 없으면 env=None(기본값 상속)
+      3. finally 블록에서 임시 파일 삭제(Path(tmp.name).unlink(missing_ok=True))
+    - 함수 시그니처 변경 없음
+    - import 추가: os, tempfile
+    - oracle 파일(tests/oracles/IMP-20260523-577F/**) 수정 절대 금지
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>score_command_check</affected_function>
+      <target_files>
+        <file>core/acceptance/scorers.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>score_command_check</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        subprocess.run 호출 전 given.actual_file에서 initial_state를 임시 파일로 쓰고
+        PIPELINE_STATE_PATH 환경변수를 주입하여 오라클 테스트 T-001/002/003이 라이브
+        pipeline_state.json 대신 픽스처 상태를 읽도록 수정
+      </change_summary>
+      <line_estimate>22</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    - MT-1 module QA PASS: score_command_check 함수 내부에서만 변경 확인 (diff 범위 검증)
+    - import 추가 확인: os, tempfile이 scorers.py 상단에 추가됨
+    - 정상 케이스: test["given"]["actual_file"]이 initial_state를 포함하면 서브프로세스가
+      PIPELINE_STATE_PATH를 받아 실행됨 (TC-01, TC-02, TC-03 통과)
+    - 엣지 케이스 1: given 키가 없는 test - env=None, 기존 환경 상속
+    - 엣지 케이스 2: actual_file이 있으나 initial_state 키 없음 - env=None, 기존 동작 유지
+    - 임시 파일이 finally 블록에서 항상 삭제됨
+    - SCORERS 딕셔너리 및 기타 함수 무변경 확인
+    - oracle 파일(tests/oracles/IMP-20260523-577F/**) 무수정 확인
+  </acceptance_criteria>
+</step_plan>

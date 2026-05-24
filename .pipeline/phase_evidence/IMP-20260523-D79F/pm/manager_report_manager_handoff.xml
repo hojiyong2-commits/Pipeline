@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260523-D79F</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-0db1cb939d4e115c</manager_run_id>
+  <planner_run_id>pm_planner-5fd894b8f1f72b76</planner_run_id>
+  <step_plan_sha256>1d1c1aedf9525cb3a883589c00fa4c2e7bbb1d5ed34d2f3bd15b6d2338b49456</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <micro_tasks>
+    <mt id="MT-1" file="core/acceptance/scorers.py" functions="score_command_check" />
+  </micro_tasks>
+  <oracle_status>TC-01 (normal) TC-03 (edge) 등록 완료 -- contract frozen</oracle_status>
+  <contract_status>FROZEN</contract_status>
+  <contract_hash>f77c056b4368c6a100226df2b137bffe30cff056233bc49d3c03411e06118910</contract_hash>
+  <test_set_hash>b5c76b1e2488f54320dc6c63cbd79d695f42fbda0e16d79b44ae9e11c42741ec</test_set_hash>
+  <status>READY_FOR_DEV</status>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>임시 파일 변수명 등 내부 구현 취향 질문은 PM이 기존 패턴 기준으로 결정.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>score_command_check 함수 1개만 수정하는 MT-1 단위로 진행할까요?</user_facing_question>
+        <evidence>IMP-20260523-577F T-001/T-002/T-003 실패 원인이 live pipeline_state.json 참조. initial_state 임시파일 주입으로 해결.</evidence>
+        <why_it_matters>수정 범위가 1개 함수에 집중되어야 검증과 유지보수가 쉽습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A"><label>MT-1 단위 단일 함수 수정</label><benefit>변경 범위 명확</benefit><cost>없음</cost></option>
+          <option id="B"><label>더 작게 분해</label><benefit>세밀한 확인</benefit><cost>불필요한 단계 증가</cost></option>
+        </options>
+        <user_answer>추천안 A로 진행 (PM Planner 설계 확인 완료)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+  <phase_summary>
+    <pm>Contract frozen. MT-1: score_command_check에 PIPELINE_STATE_PATH 주입. FAST_SINGLE_CODE 프로필.</pm>
+  </phase_summary>
+</manager_handoff>
