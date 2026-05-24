@@ -7638,15 +7638,15 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
         info = gates.get(gate_name, {}) if isinstance(gates, dict) else {}
         if not isinstance(info, dict) or info.get("status") != "PASS":
             blockers.append(f"{gate_name} gate must be PASS")
-    # IMP-20260524-48C4 MT-2: oracle_quality PASS 조건 강제
-    oracle_quality = state.get("oracle_quality", {})
-    if isinstance(oracle_quality, dict) and oracle_quality:
-        oq_status = str(oracle_quality.get("status") or "").upper()
-        if oq_status != "PASS":
-            blockers.append(
-                f"oracle_quality gate must be PASS (current: {oq_status or 'not run'}). "
-                "Run `python pipeline.py gates oracle` to pass oracle quality gate."
-            )
+    # IMP-20260524-48C4 MT-2 + BUG-20260524-B794: oracle_quality PASS 조건 강제
+    # oracle_quality={} (초기값) / None / 누락 모두 차단
+    oracle_quality = state.get("oracle_quality")
+    oq_status = str((oracle_quality.get("status") if isinstance(oracle_quality, dict) else None) or "").upper()
+    if oq_status != "PASS":
+        blockers.append(
+            f"oracle_quality gate must be PASS (current: {oq_status or 'PENDING'}). "
+            "Run `python pipeline.py gates oracle` to pass oracle quality gate."
+        )
     blockers.extend(_phase_attestation_blockers(state))
     # GPT advisory CRITICAL은 ENABLE_GPT_ADVISORY_REQUIRED=1 일 때만 COMPLETE를 차단합니다.
     # 기본 모드(REQUIRED 미설정)에서는 advisory가 수동 진단 도구이며 blocker가 아닙니다.
