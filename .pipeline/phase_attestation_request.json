@@ -20,7 +20,7 @@
     "output_file": "dev_handover.xml",
     "output_sha256": "5f52b36f0de897f46db051ebf8fa4c19e38e2d083e6df1f80acabdd855eba866",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260524-C097/dev/agent_receipt_dev-3bfbde2fdb4705a0.json",
-    "receipt_sha256": "f34bfa0b672cbfbe00a6fc108c94881352d86d4d34dc8938c35867b31781a0be",
+    "receipt_sha256": "ce91d16f126cf6c9af5fb6851d54583e179df218c36fcbf09da79d5c686d8d8c",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260524-C097\\dev\\dev-3bfbde2fdb4705a0.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260524-C097\\dev\\dev-3bfbde2fdb4705a0.json",
       "path": ".pipeline/phase_evidence/IMP-20260524-C097/dev/agent_receipt_dev-3bfbde2fdb4705a0.json",
-      "sha256": "f34bfa0b672cbfbe00a6fc108c94881352d86d4d34dc8938c35867b31781a0be",
+      "sha256": "ce91d16f126cf6c9af5fb6851d54583e179df218c36fcbf09da79d5c686d8d8c",
       "size_bytes": 515,
       "requires_force_add": true
     },
