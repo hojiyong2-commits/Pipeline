@@ -1,0 +1,19 @@
+{
+  "_comment": "TC-03 expected: exit_code=1, BLOCKED=True, revert_blocked=True, event_log에 revert blocked",
+  "exit_code": 1,
+  "stdout_contains": [
+    "BLOCKED",
+    "RCA",
+    "architect"
+  ],
+  "stdout_korean": true,
+  "post_state": {
+    "blocked": true,
+    "revert_blocked": true,
+    "blocked_reason_contains": "반복",
+    "event_log_contains": "revert blocked"
+  },
+  "source": "user",
+  "input_sha256": "afb4dbedea40444a43602c8b45626b52ac1bf390a93abddd023073103517b97f",
+  "expected_sha256": "eecdeaefc578c30ddda03fa072cb0bf3e80f6945e1400289adde636429ae609f"
+}

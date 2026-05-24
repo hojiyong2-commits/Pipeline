@@ -1,0 +1,49 @@
+{
+  "_comment": "TC-01 (normal): return_phase=dev failure_packet 상태에서 revert 실행 - helper 기반 검증",
+  "case_id": "TC-01",
+  "case_kind": "normal",
+  "description": "run_cli_with_temp_state로 격리된 상태에서 revert 실행 시 dev phase PENDING 리셋 확인",
+  "initial_state": {
+    "pipeline_id": "IMP-20260523-9189",
+    "current_phase": "qa",
+    "phases": {
+      "pm": {
+        "status": "DONE"
+      },
+      "dev": {
+        "status": "DONE"
+      },
+      "qa": {
+        "status": "FAIL"
+      },
+      "sec": {
+        "status": "PENDING"
+      },
+      "build": {
+        "status": "PENDING"
+      },
+      "harness": {
+        "status": "PENDING"
+      },
+      "architect": {
+        "status": "PENDING"
+      }
+    },
+    "failure_packets": [
+      {
+        "gate": "qa",
+        "failure_code": "qa_logic_error",
+        "return_phase": "dev",
+        "owner": "Dev",
+        "status": "FAIL",
+        "attempt": 1
+      }
+    ]
+  },
+  "command": [
+    "python",
+    "pipeline.py",
+    "revert"
+  ],
+  "env": {}
+}

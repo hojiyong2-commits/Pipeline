@@ -1,0 +1,31 @@
+{
+  "_comment": "TC-02 (normal): return_phase=pm 인 failure_packet 상태에서 revert 실행 시 pm 이후 모든 phase PENDING",
+  "case_id": "TC-02",
+  "case_kind": "normal",
+  "description": "return_phase=pm 인 failure_packet이 있을 때 revert 실행 시 pm 포함 이후 모든 phases가 PENDING으로 리셋된다",
+  "initial_state": {
+    "pipeline_id": "IMP-20260523-577F",
+    "current_phase": "dev",
+    "phases": {
+      "pm": {"status": "DONE"},
+      "dev": {"status": "FAIL"},
+      "qa": {"status": "PENDING"},
+      "sec": {"status": "PENDING"},
+      "build": {"status": "PENDING"},
+      "harness": {"status": "PENDING"},
+      "architect": {"status": "PENDING"}
+    },
+    "failure_packets": [
+      {
+        "gate": "pm_scope",
+        "failure_code": "pm_scope_mismatch",
+        "return_phase": "pm",
+        "owner": "PM",
+        "status": "FAIL",
+        "attempt": 1
+      }
+    ]
+  },
+  "command": ["python", "pipeline.py", "revert"],
+  "env": {}
+}
