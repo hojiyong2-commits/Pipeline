@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- pm-planner-agent output: BUG-20260523-28D3 -->
+<!-- run_id: pm_planner-5d1f81fb98597ae0 -->
+
+<decomposition_audit>
+  <total_functions_identified>2</total_functions_identified>
+  <micro_task_count>2</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <split_decision>변경 파일이 2개(check_cli_evidence_contract.py의 scan_test_files 함수 내 allowlist 분기 / test_check_cli_evidence_contract.py의 test_good_read_only_annotation 함수)이며 각 파일당 변경 함수가 1개씩 독립적이므로 MT-1 / MT-2로 분리합니다.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260523-28D3</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>2개 파일, 2개 함수, 약 40줄 변경. state-changing 명령에 read-only annotation이 허용되어 계약 위반을 놓치는 버그 수정.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>40</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>REJECT 이유 4가지가 모두 구체적이고 사용자가 이미 확정한 내용. 구현 방식은 P2 수준이므로 PM이 직접 결정. 사용자 질문 없이 진행.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>scan_test_files의 allowlist 처리에서 classify_command 재사용 방식으로 진행해도 될까요?</user_facing_question>
+        <evidence>사용자 REJECT 이유 4번. classify_command가 이미 "read_only"/"state_changing" 반환하므로 재사용이 자연스럽습니다.</evidence>
+        <why_it_matters>READ_ONLY_SUBCOMMANDS 변경 시 allowlist 검사도 자동 동기화됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>classify_command 재사용</label>
+            <benefit>단일 소스 유지. READ_ONLY_SUBCOMMANDS 변경 시 자동 반영.</benefit>
+            <cost>루프 안에서 classify_command 재호출 (성능 영향 무시 가능).</cost>
+          </option>
+          <option id="B">
+            <label>별도 is_read_only_subcommand 함수</label>
+            <benefit>함수 이름이 명확하여 읽기 전용 여부를 즉시 파악 가능합니다.</benefit>
+            <cost>classify_command와 중복 로직, 상수 변경 시 두 곳 수정 필요, 유지보수 비용 증가.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 REJECT 이유에 A 방식이 명시됨. 옵션 A로 진행.</user_answer>
+      </question>
+    </decision_questions>
+    <askuser>NO_ASKUSER_REQUIRED</askuser>
+  </design_confirmation>
+
+  <requirements>
+    1. MT-1: scan_test_files의 has_allowlist 분기 수정
+       - 기존: has_allowlist=True이면 무조건 continue (state-changing 명령도 SKIP)
+       - 수정 후: classify_command(subcommand) == "read_only" 일 때만 continue
+         state-changing/unknown이면 Violation 추가
+       - 새 Violation.message: "read-only annotation(CLI_EVIDENCE_ALLOW_READ_ONLY)은 status/check/list 같은 실제 read-only 명령에만 유효합니다. '{subcommand}'는 상태 변경 명령이므로 annotation이 무효합니다. 실제 state/file evidence assertion을 추가하거나 isolation helper를 사용하세요."
+       - verbose 출력도 두 분기(read-only OK / state-changing VIOLATED)로 분리
+
+    2. MT-2: test_check_cli_evidence_contract.py 수정
+       - test_good_read_only_annotation: done → status 교체, 주석 업데이트
+       - test_bad_state_changing_with_annotation 신규 추가: done + CLI_EVIDENCE_ALLOW_READ_ONLY → violations >= 1 assert
+
+    3. 두 파일 외 다른 파일은 절대 수정하지 않음
+    4. ISOLATION_MARKERS, ACTUAL_ASSERTION_KEYWORDS, STATE_CHANGING_SUBCOMMANDS, READ_ONLY_SUBCOMMANDS 상수 변경 금지
+    5. scope_manifest_MT-1.json, scope_manifest_MT-2.json 제출 필수
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>scan_test_files</affected_function>
+      <target_files>
+        <file>tools/check_cli_evidence_contract.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>tools/check_cli_evidence_contract.main</site>
+        <site>tests/test_check_cli_evidence_contract.scan_test_files 호출부</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>has_allowlist</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>has_allowlist 분기에서 classify_command(subcommand) == "read_only" 조건 추가 — state-changing 명령에 read-only annotation 붙어있으면 Violation으로 기록</change_summary>
+      <line_estimate>18</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>test_good_read_only_annotation, test_bad_state_changing_with_annotation(신규)</affected_function>
+      <target_files>
+        <file>tests/test_check_cli_evidence_contract.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_good_read_only_annotation</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>test_good_read_only_annotation의 done → status 교체 + test_bad_state_changing_with_annotation 신규 추가(done + annotation → violation assert)</change_summary>
+      <line_estimate>22</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    1. pytest tests/test_check_cli_evidence_contract.py → 5/5 PASS (신규 포함)
+    2. test_bad_state_changing_with_annotation: done + CLI_EVIDENCE_ALLOW_READ_ONLY → violations >= 1
+    3. test_good_read_only_annotation (수정 후): status + CLI_EVIDENCE_ALLOW_READ_ONLY → violations == 0
+    4. python tools/check_cli_evidence_contract.py --path tests/ → exit 0
+    5. scope_manifest.json files가 두 수정 파일과 일치
+    6. scope_lock_check PASS 포함한 dev_handover.xml
+    7. Pipeline Manager: impl/IMP-20260523-9189 브랜치에 모든 변경 반영 + PR #224 CI 통과
+  </acceptance_criteria>
+
+  <forbidden>
+    - pipeline.py 수정 금지
+    - ci.yml 수정 금지
+    - tests/oracles/ 기존 파일 수정 금지
+    - ISOLATION_MARKERS/ACTUAL_ASSERTION_KEYWORDS/STATE_CHANGING_SUBCOMMANDS/READ_ONLY_SUBCOMMANDS 상수 변경 금지
+  </forbidden>
+
+  <handover_template>
+    <!--
+    <handover>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>BUG-20260523-28D3</pipeline_id>
+      <evidence>
+        <file>tools/check_cli_evidence_contract.py</file>
+        <file>tests/test_check_cli_evidence_contract.py</file>
+        <file>dev_handover.xml</file>
+        <file>scope_manifest.json</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover>
+    -->
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tools\check_cli_evidence_contract.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_check_cli_evidence_contract.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      STANDARD 실행 프로필. MT-1 module qa PASS 후 MT-2 진행. module integrate 후 Dev done.
+      Trust-Root 파일 수정 절대 금지. scope_lock_check PASS 없는 handover 거부.
+    </phase_rules_excerpt>
+    <prev_phase_summary>
+      BUG-20260523-C48A에서 ISOLATION_MARKERS/ACTUAL_ASSERTION_KEYWORDS 분리 완료됨.
+      이번 BUG-20260523-28D3: state-changing+annotation 버그 수정 + 테스트 교체 + PR #224 반영.
+    </prev_phase_summary>
+  </context_injection>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
