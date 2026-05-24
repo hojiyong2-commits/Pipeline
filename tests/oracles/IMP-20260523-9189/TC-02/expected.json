@@ -1,0 +1,39 @@
+{
+  "_comment": "TC-02 expected: revert 후 pm으로 전환, 모든 phase PENDING",
+  "exit_code": 0,
+  "stdout_contains": [
+    "pm",
+    "PENDING"
+  ],
+  "stdout_korean": true,
+  "post_state": {
+    "current_phase": "pm",
+    "phases": {
+      "pm": {
+        "status": "PENDING"
+      },
+      "dev": {
+        "status": "PENDING"
+      },
+      "qa": {
+        "status": "PENDING"
+      },
+      "sec": {
+        "status": "PENDING"
+      },
+      "build": {
+        "status": "PENDING"
+      },
+      "harness": {
+        "status": "PENDING"
+      },
+      "architect": {
+        "status": "PENDING"
+      }
+    },
+    "phase_attempt_history_min_count": 1
+  },
+  "source": "user",
+  "input_sha256": "3b200284dd94769f688b1854cea02d842be0b06ef5e74bb382a6dd4fb209872d",
+  "expected_sha256": "fc34e63bd52a98abc02471eb296a6bf231efbe13f6dccd0264b353d6c1b4d471"
+}

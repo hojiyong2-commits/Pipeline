@@ -1,0 +1,31 @@
+{
+  "_comment": "TC-01 (normal): return_phase=dev 인 failure_packet 상태에서 revert 실행",
+  "case_id": "TC-01",
+  "case_kind": "normal",
+  "description": "return_phase=dev 인 failure_packet이 있을 때 revert 실행 시 dev 이후 phases가 PENDING으로 리셋된다",
+  "initial_state": {
+    "pipeline_id": "IMP-20260523-577F",
+    "current_phase": "qa",
+    "phases": {
+      "pm": {"status": "DONE"},
+      "dev": {"status": "DONE"},
+      "qa": {"status": "FAIL"},
+      "sec": {"status": "SKIP"},
+      "build": {"status": "DONE"},
+      "harness": {"status": "PENDING"},
+      "architect": {"status": "PENDING"}
+    },
+    "failure_packets": [
+      {
+        "gate": "qa",
+        "failure_code": "qa_logic_error",
+        "return_phase": "dev",
+        "owner": "Dev",
+        "status": "FAIL",
+        "attempt": 1
+      }
+    ]
+  },
+  "command": ["python", "pipeline.py", "revert"],
+  "env": {}
+}

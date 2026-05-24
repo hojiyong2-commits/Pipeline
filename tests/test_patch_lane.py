@@ -11,13 +11,13 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 _ROOT = Path(__file__).resolve().parent.parent
 _PIPELINE = str(_ROOT / "pipeline.py")
 
 
-def _run(args: list, input_str: str = None) -> subprocess.CompletedProcess:
+def _run(args: list, input_str: Optional[str] = None) -> subprocess.CompletedProcess:
     """pipeline.py 서브커맨드 실행 헬퍼."""
     result = subprocess.run(
         [sys.executable, _PIPELINE] + args,

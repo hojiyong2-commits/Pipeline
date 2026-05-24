@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -271,16 +273,105 @@ def score_command_check(test: dict[str, Any], base_dir: Path, project_dir: Path)
     resolved_command = [sys.executable if part == "{python}" else str(part) for part in command]
     cwd = _resolve(base_dir, str(when["cwd"])) if when.get("cwd") else project_dir
     timeout = int(when.get("timeout_seconds", 30))
-    proc = subprocess.run(
-        resolved_command,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-        check=False,
-    )
+
+    # Inject PIPELINE_STATE_PATH from oracle given.actual_file if initial_state is present.
+    # When initial_state is found the test runs in an isolated temp directory so that
+    # side-files such as failure_packet.json are also isolated from the live workspace.
+    env: dict[str, str] | None = None
+    tmp_state_path: str | None = None
+    tmp_dir: Any = None  # tempfile.TemporaryDirectory object
+    run_cwd: str = str(cwd)
+    run_command = list(resolved_command)
+    given = test.get("given", {})
+    actual_file_rel = given.get("actual_file") if isinstance(given, dict) else None
+    if actual_file_rel:
+        # actual_file은 프로젝트 루트 기준 상대 경로(예: tests/oracles/...)이므로
+        # project_dir 기준으로 해석한다. 절대경로이면 그대로 사용.
+        p = Path(str(actual_file_rel))
+        actual_file_path = p if p.is_absolute() else project_dir / p
+        try:
+            with actual_file_path.open(encoding="utf-8") as fh:
+                actual_data = json.load(fh)
+            initial_state = actual_data.get("initial_state")
+            if initial_state is not None:
+                # Write initial_state to a temp pipeline_state.json file
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    suffix=".json",
+                    delete=False,
+                    encoding="utf-8",
+                ) as tmp:
+                    json.dump(initial_state, tmp, ensure_ascii=False)
+                    tmp_state_path = tmp.name
+                env = os.environ.copy()
+                env["PIPELINE_STATE_PATH"] = tmp_state_path
+
+                # Determine whether the command is a pytest invocation.
+                # pytest tests need to run from the project root so that conftest.py,
+                # rootdir discovery, and relative oracle paths inside tests work correctly.
+                # For pytest commands we keep run_cwd=project_dir and rely solely on
+                # PIPELINE_STATE_PATH for state isolation (no tmp cwd isolation).
+                _is_pytest_cmd = any(
+                    part in ("pytest", "-m") or part.endswith("pytest")
+                    for part in run_command[:4]
+                ) or (len(run_command) > 2 and run_command[1] == "-m" and run_command[2] == "pytest")
+
+                if _is_pytest_cmd:
+                    # pytest commands: use project_dir as cwd for correct rootdir / conftest
+                    run_cwd = str(project_dir.resolve())
+                    # tmp_dir stays None — no side-file isolation needed for pytest
+                else:
+                    # Non-pytest (e.g. pipeline.py revert): use isolated tmp cwd to prevent
+                    # side-files (failure_packet.json etc.) from polluting the live workspace.
+                    tmp_dir = tempfile.TemporaryDirectory()
+                    run_cwd = tmp_dir.name
+
+                # Rewrite command so that relative "pipeline.py" becomes an absolute path,
+                # because the subprocess may run in the temp dir, not in project_dir.
+                abs_project_dir = str(project_dir.resolve())
+                run_command = [
+                    os.path.join(abs_project_dir, part) if part == "pipeline.py" else part
+                    for part in run_command
+                ]
+
+                # If initial_state contains failure_packets, write the last one as
+                # failure_packet.json inside the isolated cwd so that `pipeline.py revert`
+                # can read the return_phase without touching the live failure_packet.json.
+                failure_packets = initial_state.get("failure_packets")
+                if isinstance(failure_packets, list) and failure_packets:
+                    fp_path = Path(run_cwd) / "failure_packet.json"
+                    with fp_path.open("w", encoding="utf-8") as fp_fh:
+                        json.dump(failure_packets[-1], fp_fh, ensure_ascii=False)
+        except (OSError, json.JSONDecodeError, KeyError):
+            env = None
+            tmp_state_path = None
+            if tmp_dir is not None:
+                tmp_dir.cleanup()
+                tmp_dir = None
+            run_cwd = str(cwd)
+            run_command = list(resolved_command)
+
+    try:
+        proc = subprocess.run(
+            run_command,
+            cwd=run_cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+            env=env,
+        )
+    finally:
+        if tmp_state_path is not None:
+            Path(tmp_state_path).unlink(missing_ok=True)
+        if tmp_dir is not None:
+            try:
+                tmp_dir.cleanup()
+            except OSError:
+                pass
+
     expected_returncode = int(then.get("returncode", 0))
     stdout_contains = then.get("stdout_contains")
     stderr_contains = then.get("stderr_contains")

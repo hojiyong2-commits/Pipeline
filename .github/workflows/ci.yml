@@ -112,6 +112,12 @@ jobs:
           $env:GITHUB_BASE_SHA = $baseSha
           python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pipelineId --request-file $reqPath
 
+      - name: CLI Evidence Contract 검사
+        # IMP-20260523-9189: CLI 상태 변경 명령을 stdout-only로 PASS 판정하는 테스트 금지.
+        # 위반 발견 시 CI 즉시 실패. continue-on-error: false 의무.
+        continue-on-error: false
+        run: python tools/check_cli_evidence_contract.py
+
       - name: 자동 검사 실행
         env:
           PIPELINE_NO_DASHBOARD: "1"
