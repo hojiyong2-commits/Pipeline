@@ -1686,6 +1686,44 @@ class TestPrGateActualModel(unittest.TestCase):
             "T4: history pr ACCEPT에서 actual_model_id='GPT-5.5'(대문자)이면 FAIL이어야 함",
         )
 
+    def test_pr_gate_fails_when_actual_model_source_is_model_output_json(self) -> None:
+        """T5(error): actual_model_source='model_output_json' → FAIL.
+
+        provider metadata가 아닌 모델 출력 JSON을 evidence로 사용하면 차단.
+        """
+        review_data = {
+            "result": "ACCEPT",
+            "stage": "pr",
+            "actual_model_verified": True,
+            "actual_model_id": "gpt-5.5",
+            "actual_model_source": "model_output_json",
+            "history": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "codex_review_result.json").write_text(
+                json.dumps(review_data), encoding="utf-8"
+            )
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                result = pl._check_codex_pr_gate_for_technical({})
+        assert result is not None, "T5: model_output_json source는 FAIL이어야 함"
+
+    def test_pr_gate_fails_when_actual_model_verified_missing(self) -> None:
+        """T6(edge): actual_model_verified 필드 자체 없으면 → FAIL."""
+        review_data = {
+            "result": "ACCEPT",
+            "stage": "pr",
+            "actual_model_id": "gpt-5.5",
+            "actual_model_source": "openai_api_response_object",
+            "history": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "codex_review_result.json").write_text(
+                json.dumps(review_data), encoding="utf-8"
+            )
+            with mock.patch.object(pl, "BASE_DIR", Path(tmpdir)):
+                result = pl._check_codex_pr_gate_for_technical({})
+        assert result is not None, "T6: actual_model_verified 누락 시 FAIL이어야 함"
+
 
 # ===========================================================================
 # 진입점
