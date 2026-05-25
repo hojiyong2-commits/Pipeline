@@ -716,6 +716,13 @@ def test_github_ci_gate_blocked_on_sha_mismatch(tmp_path: Path) -> None:
     env = make_env(state_file)
     # gh CLI 호출 차단: PATH에서 gh 제거하지 않더라도 가짜 repo로 인해 실패
     env["GH_TOKEN"] = ""
+    # Windows credential store 무력화: gh가 시스템 자격증명을 읽지 못하도록
+    gh_config_dir = tmp_path / "gh_config_empty"
+    gh_config_dir.mkdir(exist_ok=True)
+    env["GH_CONFIG_DIR"] = str(gh_config_dir)
+    fake_appdata = tmp_path / "fake_appdata"
+    fake_appdata.mkdir(exist_ok=True)
+    env["APPDATA"] = str(fake_appdata)
 
     result = run_cli(
         ["gates", "github-ci", "--repo", "hojiyong2-commits/Pipeline"],
