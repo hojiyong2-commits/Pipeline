@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260524-B794</pipeline_id>
+  <agent_run_id>qa-a767cdb03d004b6b</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <target_files>pipeline.py</target_files>
+      <actual_changed>pipeline.py</actual_changed>
+      <verdict>WITHIN_SCOPE</verdict>
+    </mt>
+    <mt id="MT-2">
+      <target_files>tests/test_oracle_quality_gate.py, test_three_gate_pipeline.py, tests/oracles/BUG-20260524-B794/TC01/expected.json, tests/oracles/BUG-20260524-B794/TC01/input.json, tests/oracles/BUG-20260524-B794/TC02/expected.json, tests/oracles/BUG-20260524-B794/TC02/input.json</target_files>
+      <actual_changed>tests/test_oracle_quality_gate.py, test_three_gate_pipeline.py, tests/oracles/BUG-20260524-B794/TC01/expected.json, tests/oracles/BUG-20260524-B794/TC01/input.json, tests/oracles/BUG-20260524-B794/TC02/expected.json, tests/oracles/BUG-20260524-B794/TC02/input.json</actual_changed>
+      <verdict>WITHIN_SCOPE</verdict>
+    </mt>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <scope_verification>
+    <scope_declared>true</scope_declared>
+    <impact_analysis_present>true</impact_analysis_present>
+  </scope_verification>
+
+  <behavior_verification>
+    <check name="oracle_quality empty dict blocks COMPLETE">PASS</check>
+    <check name="oracle_quality None blocks COMPLETE">PASS</check>
+    <check name="oracle_quality PENDING blocks COMPLETE">PASS</check>
+    <check name="audit-oracle --oracle-dir independence">PASS</check>
+    <check name="CLI exit code 0 with normal+edge">PASS</check>
+    <check name="CLI exit code 1 with normal only">PASS</check>
+    <check name="architect blocks when oracle_quality empty">PASS</check>
+  </behavior_verification>
+
+  <test_results>
+    <total>537</total>
+    <passed>537</passed>
+    <skipped>1</skipped>
+    <failed>0</failed>
+    <github_ci_run_id>26376561767</github_ci_run_id>
+    <github_ci_conclusion>success</github_ci_conclusion>
+  </test_results>
+
+  <oracle_verification>
+    <tc01 case="normal">PASS</tc01>
+    <tc02 case="edge">PASS</tc02>
+  </oracle_verification>
+
+  <codex_review>
+    <stage>code</stage>
+    <result>ACCEPT</result>
+    <review_model>GPT-5.5</review_model>
+  </codex_review>
+
+  <failure_signature>N/A</failure_signature>
+  <repeat_indicator>NONE</repeat_indicator>
+</qa_report>
