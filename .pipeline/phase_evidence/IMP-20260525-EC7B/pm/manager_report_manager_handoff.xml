@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>IMP-20260525-EC7B</pipeline_id>
+  <planner_run_id>pm_planner-36d0179daea7d00d</planner_run_id>
+  <manager_run_id>pipeline_manager-85d7cbc9f93ea8f2</manager_run_id>
+  <status>PM_COMPLETE</status>
+  <step_plan_sha256>deec3692cd3b13f3364101e09ae0a97a90fea2136a8f0b65d1f95c56db71d994</step_plan_sha256>
+  <contract_frozen>true</contract_frozen>
+  <oracle_count>2</oracle_count>
+  <micro_task_count>1</micro_task_count>
+  <next_phase>dev</next_phase>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+</manager_handoff>
