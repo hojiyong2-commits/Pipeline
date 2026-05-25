@@ -1,0 +1,28 @@
+{
+  "pipeline_id": "IMP-20260525-AA88",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["core/acceptance/scorers.py"],
+      "affected_functions": ["core.acceptance.scorers._smart_resolve"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._consistency_listed_files"]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/test_scorers_smart_resolve.py",
+        "tests/test_consistency_filter_falsepos.py",
+        "tests/oracles/IMP-20260525-AA88/TC-normal-consistency-filter/input.json",
+        "tests/oracles/IMP-20260525-AA88/TC-normal-consistency-filter/expected.json",
+        "tests/oracles/IMP-20260525-AA88/TC-error-score-not-file/input.json",
+        "tests/oracles/IMP-20260525-AA88/TC-error-score-not-file/expected.json",
+        "tests/oracles/IMP-20260525-AA88/oracle_manifest.json"
+      ],
+      "affected_functions": ["tests.test_scorers_smart_resolve, tests.test_consistency_filter_falsepos"]
+    }
+  ]
+}
