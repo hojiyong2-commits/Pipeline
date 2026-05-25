@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-25T01:59:13Z",
+  "generated_at": "2026-05-25T02:06:01Z",
   "pipeline_id": "BUG-20260525-39DE",
   "phase": "dev",
   "phase_status": "DONE",
@@ -46,8 +46,8 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/BUG-20260525-39DE/dev/scope_manifest_scope_manifest.json",
-      "sha256": "2df8f1039b0cee4fcfd39eef1ba3c2a0b95bb9ad4d35d65fc698c3362ce0afa3",
-      "size_bytes": 1076,
+      "sha256": "8f467ef546b7cb8bf901152c0229f5e5c74726d7af80f539f6798dbdf4a72232",
+      "size_bytes": 1045,
       "requires_force_add": true
     }
   ],
