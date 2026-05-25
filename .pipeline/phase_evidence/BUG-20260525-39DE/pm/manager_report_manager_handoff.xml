@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260525-39DE</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-02f1bbb5c7c6ee6a</planner_run_id>
+  <manager_run_id>pipeline_manager-0e6eacb8d9cbd0df</manager_run_id>
+  <step_plan_sha256>d1b157692235d70fae7bee36d17e6f5378ed143deddddeb0586d3fc47a542323</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <description>BUG-20260524-B794 2차 REJECT 수정: (1) test_oracle_quality_gate.py CLI 테스트 2개에 CLI_EVIDENCE_ALLOW_READ_ONLY 애노테이션 추가, (2) tools/check_cli_evidence_contract.py + tests/test_check_cli_evidence_contract.py 추가, (3) ci.yml에 CLI Evidence Contract 검사 스텝 추가</description>
+  <design_decisions>
+    <decision id="DQ-1">
+      <question>MT-1(애노테이션 2줄)과 MT-2(새 파일 2개 + ci.yml 스텝) 진행 순서</question>
+      <chosen>A</chosen>
+      <rationale>MT-1 먼저 완료 후 MT-2 진행 — MT-1 완료 후 MT-2 CI 스텝이 MT-1 결과를 PASS로 처리할 수 있음</rationale>
+    </decision>
+  </design_decisions>
+  <micro_tasks>
+    <mt id="MT-1">
+      <file>tests/test_oracle_quality_gate.py</file>
+      <scope>test_cli_audit_oracle_normal_plus_edge_passes, test_cli_audit_oracle_normal_only_fails 함수에 # CLI_EVIDENCE_ALLOW_READ_ONLY 애노테이션 각 1줄 추가 (총 2줄)</scope>
+    </mt>
+    <mt id="MT-2">
+      <file>tools/__init__.py</file>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tests/test_check_cli_evidence_contract.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC01/input.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC01/expected.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC02/input.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC02/expected.json</file>
+    </mt>
+  </micro_tasks>
+  <oracle_files>
+    <oracle>tests/oracles/BUG-20260525-39DE/TC01/ — normal: check_cli_evidence_contract.py PASS 케이스</oracle>
+    <oracle>tests/oracles/BUG-20260525-39DE/TC02/ — edge: CLI_EVIDENCE_ALLOW_READ_ONLY 주석 있는 코드에 PASS (위반 아님)</oracle>
+  </oracle_files>
+  <phase_sequence>
+    <phase>PM done + PM phase CI</phase>
+    <phase>Codex review waiver (legacy-bootstrap)</phase>
+    <phase>Dev: MT-1 → MT-2 (Incremental Module Gate)</phase>
+    <phase>Dev phase CI</phase>
+    <phase>QA phase CI</phase>
+    <phase>SEC skip (외부 네트워크/DB 없음)</phase>
+    <phase>Build N/A (meta-task)</phase>
+    <phase>Build phase CI</phase>
+    <phase>Technical + Oracle + GitHub CI + User Acceptance gates</phase>
+  </phase_sequence>
+  <branch_info>
+    <impl_branch>impl/BUG-20260524-B794</impl_branch>
+    <attestation_branch>phase-attestation/BUG-20260525-39DE</attestation_branch>
+  </branch_info>
+</manager_handoff>
