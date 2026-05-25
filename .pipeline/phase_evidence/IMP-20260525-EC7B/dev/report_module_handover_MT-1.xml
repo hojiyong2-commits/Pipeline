@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_handover>
+  <pipeline_id>IMP-20260525-EC7B</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <agent>dev-agent</agent>
+  <run_id>dev-55c5ebbccc295d12</run_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </files_to_modify>
+    <functions_to_modify>
+      <function>test_github_ci_gate_blocked_on_sha_mismatch</function>
+    </functions_to_modify>
+    <files_forbidden>
+      <note>scope_manifest_MT-1.json 외 파일 수정 금지</note>
+    </files_forbidden>
+  </scope_declaration>
+  <implemented_files>
+    <file>tests/e2e/test_real_cli_paths.py</file>
+  </implemented_files>
+  <self_check>
+    <python39_syntax>PASS</python39_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS</docstring>
+  </self_check>
+  <impact_analysis>
+    <target_function>tests.e2e.test_real_cli_paths.test_github_ci_gate_blocked_on_sha_mismatch</target_function>
+    <target_file>tests/e2e/test_real_cli_paths.py</target_file>
+    <changed_lines>11</changed_lines>
+    <change_type>replacement</change_type>
+    <other_functions_affected>none</other_functions_affected>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </impact_analysis>
+  <change_summary>GH_CONFIG_DIR+APPDATA 격리 코드(9줄)를 PATH fake-gh 바이너리 삽입 코드(11줄)로 교체</change_summary>
+  <test_result>8 passed in 33.86s</test_result>
+  <scope_lock_check>
+    <git_diff_files>tests/e2e/test_real_cli_paths.py</git_diff_files>
+    <manifest_files>tests/e2e/test_real_cli_paths.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260525-EC7B</pipeline_id>
+    <mt_id>MT-1</mt_id>
+    <evidence>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</module_handover>
