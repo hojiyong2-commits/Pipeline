@@ -1,0 +1,443 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_planner_output>
+
+<decomposition_audit>
+  <pipeline_id>IMP-20260516-D069</pipeline_id>
+  <task_summary>PR 오염 재발 방지를 위한 4개 신뢰 루트 변경: (1) preflight-pr gate 신규 추가, (2) gates accept evidence 범위 제한, (3) architect run_id/commit_sha 자동 검증, (4) CLAUDE.md Patch Lane 예시 보정, (5) 4개 회귀 테스트 추가</task_summary>
+  <classification>
+    <type>IMP</type>
+    <risk_tier>HIGH_RISK</risk_tier>
+    <rationale>pipeline.py core logic 변경 + 신뢰 루트 CLAUDE.md 수정 + acceptance/architect 게이트 동작 변경. FAST 프로필 불가능. Three-Gate, Option A, Incremental Module Gate 모두 필수.</rationale>
+  </classification>
+
+  <evidence_gathering>
+    <grep_evidence>
+      <pattern>def cmd_gates|def cmd_architect|preflight</pattern>
+      <target>pipeline.py</target>
+      <match_count>9</match_count>
+      <executed>true</executed>
+      <notes>cmd_gates(line 7050), cmd_architect(line 4209), 기존 cmd_preflight(line 6362) 확인. gates 서브커맨드는 init/status/prepare-phase/phase-ci/technical/oracle/accept/github-ci로 구성됨. preflight-pr는 신규 추가 액션.</notes>
+    </grep_evidence>
+    <grep_evidence>
+      <pattern>_validate_user_acceptance_evidence</pattern>
+      <target>pipeline.py</target>
+      <match_count>2</match_count>
+      <executed>true</executed>
+      <notes>line 2573 정의, line 7296 호출. 여기에 phase_evidence/contracts/state 경로 거부 로직 추가.</notes>
+    </grep_evidence>
+    <grep_evidence>
+      <pattern>patch verify</pattern>
+      <target>CLAUDE.md</target>
+      <match_count>2</match_count>
+      <executed>true</executed>
+      <notes>line 883 "python pipeline.py patch verify --plan patch_plan.json --result PASS" — --test-command/--evidence-file 없음. line 940은 텍스트 설명. 수정 대상은 line 883.</notes>
+    </grep_evidence>
+    <grep_evidence>
+      <pattern>phase_ci_run_id|phase_ci_commit_sha</pattern>
+      <target>pipeline.py</target>
+      <match_count>0_initial_to_verify</match_count>
+      <executed>true</executed>
+      <notes>phase attestation 결과는 _record_phase_ci_verification 통해 phase_ci_result/json에 저장. architect는 현재 run_id 비교 검증을 수행하지 않음. MT-3에서 추가.</notes>
+    </grep_evidence>
+    <grep_evidence>
+      <pattern>--test-command|--evidence-file</pattern>
+      <target>pipeline.py</target>
+      <match_count>5</match_count>
+      <executed>true</executed>
+      <notes>line 8573/8575 argparse 정의, line 9282/9295 cmd_patch verify에서 PASS 시 둘 중 하나 필수 강제. CLAUDE.md만 예시가 누락되어 사용자/agent가 잘못된 명령을 학습하는 문제.</notes>
+    </grep_evidence>
+  </evidence_gathering>
+
+  <files_in_scope>
+    <file purpose="MT-1,MT-2,MT-3: gates preflight-pr 추가, accept evidence 거부, architect run_id 검증">pipeline.py</file>
+    <file purpose="MT-4: Patch Lane 예시 1줄 수정">CLAUDE.md</file>
+    <file purpose="MT-5: 4개 회귀 테스트 추가">tests/test_pr_hygiene.py</file>
+    <file purpose="Oracle normal/edge 케이스">tests/oracles/IMP-20260516-D069/case_normal/</file>
+    <file purpose="Oracle edge 케이스">tests/oracles/IMP-20260516-D069/case_edge/</file>
+  </files_in_scope>
+
+  <out_of_scope>
+    <item>기존 gates technical/oracle/accept 동작 로직</item>
+    <item>architect의 COMPLETE 판정 분기 (run_id 검증만 추가)</item>
+    <item>CLAUDE.md의 Patch Lane 섹션 외 영역</item>
+    <item>다른 agent MD 파일</item>
+    <item>.github/workflows/*</item>
+  </out_of_scope>
+
+  <oracle_strategy>
+    <case id="case_normal" kind="normal">
+      <input_path>tests/oracles/IMP-20260516-D069/case_normal/input.json</input_path>
+      <expected_path>tests/oracles/IMP-20260516-D069/case_normal/expected.json</expected_path>
+      <description>clean PR (pm phase evidence만 포함)에서 gates preflight-pr --phase pm 이 PASS exit 0</description>
+      <source>user</source>
+    </case>
+    <case id="case_edge" kind="edge">
+      <input_path>tests/oracles/IMP-20260516-D069/case_edge/input.json</input_path>
+      <expected_path>tests/oracles/IMP-20260516-D069/case_edge/expected.json</expected_path>
+      <description>금지 파일(다른 phase evidence, pipeline_contracts/, pipeline_state.json)이 섞인 PR에서 preflight-pr FAIL exit 1, 어떤 파일이 위반했는지 출력</description>
+      <source>user</source>
+    </case>
+  </oracle_strategy>
+
+  <phase_attestation_plan>
+    <pm>step_plan.xml + planner/manager receipt → gates prepare-phase --phase pm → push → phase-ci</pm>
+    <dev>각 MT 모듈 design/dev/qa 순차 → module integrate → done --phase dev → prepare-phase dev → phase-ci dev</dev>
+    <qa>qa --result PASS → prepare-phase qa → phase-ci qa</qa>
+    <build>EXE 빌드 대상 아님. build --exe "N/A" --skip-reason "meta-task" → prepare-phase build → phase-ci build</build>
+  </phase_attestation_plan>
+
+  <user_acceptance_plan>
+    <evidence_kind>PR link (github.com/hojiyong2-commits/Pipeline/pull/N) + GitHub Actions run URL + pipeline_outputs/IMP-20260516-D069/test_summary.txt</evidence_kind>
+    <outputs_registry>Dev는 회귀 테스트 결과 텍스트와 변경 사항 요약을 pipeline outputs add 로 등록</outputs_registry>
+  </user_acceptance_plan>
+
+  <micro_task_count>5</micro_task_count>
+  <grep_executions>5</grep_executions>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+
+</decomposition_audit>
+
+<step_plan>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <design_confirmation>
+    <module_split_shown>true</module_split_shown>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintainability_default>true</maintainability_default>
+    <maintenance_priority>maintainability_first — 유지보수성 우선 원칙으로 PM이 결정. 빠른 수정보다 유지보수성이 항상 우선.</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 수준 질문(내부 변수명, 에러 메시지 어조, 로그 포맷)은 유지보수성 우선 원칙으로 PM이 결정. P0/P1 질문 없음.</filter_summary>
+    <fast_path_no_askuser>FAST_PATH_NO_ASKUSER — 사용자가 배경/필수 구현/제약을 전부 명시했고, 모듈 분해가 1가지로 결정적이며, oracle 전략과 실행 프로필이 사전 지정되어 있어 추가 사용자 질문 없이 진행</fast_path_no_askuser>
+
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split">
+        <user_facing_question>5개 모듈(MT-1~MT-5)을 순차적으로 구현하는 방식이 괜찮으신가요? 아니면 다른 분할 방식을 선택하시겠습니까?</user_facing_question>
+        <evidence>pipeline.py 변경(MT-1,2,3), CLAUDE.md 변경(MT-4), 테스트 추가(MT-5) — 파일 단위로 명확히 분리됩니다.</evidence>
+        <why_it_matters>모듈 분할 방식이 구현 순서와 QA 범위를 결정합니다. 각 MT가 독립적으로 검증 가능해야 합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>5개 MT 순차 구현 (현재 계획: MT-1~5 각각 독립 모듈)</label>
+            <benefit>각 MT가 단일 책임을 갖고 독립적으로 QA 검증 가능. 실패 범위가 명확히 격리됨.</benefit>
+            <cost>5번의 module gate cycle이 필요하여 실행 시간이 증가함.</cost>
+          </option>
+          <option id="B">
+            <label>pipeline.py 변경 묶음 + CLAUDE.md + 테스트 3단계 분리</label>
+            <benefit>module gate cycle 수가 3개로 줄어 실행 속도 향상.</benefit>
+            <cost>pipeline.py 내 3개 변경(MT-1,2,3)이 한 MT에 묶여 실패 격리가 어려워짐.</cost>
+          </option>
+        </options>
+        <user_answer>A — 사용자가 task description에서 5개 MT 구성을 명시적으로 제공했으므로 그대로 진행.</user_answer>
+      </question>
+    </decision_questions>
+
+    <module_split_summary>
+      <module id="MT-1">gates preflight-pr 신규 액션 — 현재 phase와 무관한 파일이 PR에 섞이는지 검사</module>
+      <module id="MT-2">_validate_user_acceptance_evidence 내부 phase evidence 경로 거부 강화</module>
+      <module id="MT-3">cmd_architect run_id/commit_sha 자동 검증 및 architect_report.xml 자동 채움</module>
+      <module id="MT-4">CLAUDE.md Patch Lane 예시 1줄 보정</module>
+      <module id="MT-5">4개 회귀 테스트 추가 (tests/test_pr_hygiene.py)</module>
+    </module_split_summary>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py core logic(gates, accept, architect) 수정 + 신뢰 루트 CLAUDE.md 수정 포함. HIGH_RISK 분류이며 FAST 프로필 사용 금지. STANDARD 프로필로 Incremental Module Gate 5개 모듈 순차 진행.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>4</expected_changed_functions>
+      <expected_changed_lines>320</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+    <risk_tier>HIGH_RISK</risk_tier>
+    <risk_tier_reason>pipeline.py(신뢰 루트) 코어 게이트 수정 + CLAUDE.md(신뢰 루트) 수정. 잘못 구현 시 모든 후속 파이프라인의 PR 위생/acceptance/COMPLETE 판정에 영향.</risk_tier_reason>
+  </task_complexity>
+
+  <patch_lane_eligible>false</patch_lane_eligible>
+  <patch_lane_eligibility_reason>변경 파일 3개(pipeline.py, CLAUDE.md, tests/test_pr_hygiene.py), 변경 함수 4개 이상, 신뢰 루트(CLAUDE.md/pipeline.py) 수정 포함, 예상 변경 줄 수 약 320줄(15줄 초과). 5-AND 조건 중 4개 위반으로 Full Lane 강제.</patch_lane_eligibility_reason>
+
+  <micro_tasks>
+
+    <micro_task id="MT-1">
+      <title>gates preflight-pr 신규 액션 추가</title>
+      <affected_function>pipeline.cmd_gates (action="preflight-pr" 분기 신설)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py argparse 'gates' sub-parser (p_g_preflight 신설)</site>
+        <site>tests/test_pr_hygiene.py::test_preflight_pr_fails_on_stale_pipeline_files (MT-5 신규)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>action == "preflight-pr"|preflight-pr</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        gates 서브커맨드에 preflight-pr 액션 신설. --phase pm|dev|qa|build 인자. 동작:
+        (1) git diff --name-only origin/main...HEAD 실행 (subprocess, capture_output, check=False, 실패 시 BLOCKER로 stderr 출력)
+        (2) 허용 파일 화이트리스트 구성:
+            - .pipeline/phase_attestation_request.json
+            - .pipeline/phase_evidence/&lt;pipeline_id&gt;/&lt;phase&gt;/** (현재 phase만)
+        (3) 금지 패턴: 다른 phase의 phase_evidence/, pipeline_contracts/, pipeline_outputs/, pipeline_state.json, *.py 제품 코드, *.md 문서 (단, 해당 phase의 evidence 폴더 안 파일은 예외)
+        (4) 위반 파일 발견 시 한국어 에러 메시지 + 위반 파일 목록 출력 + exit code 1
+        (5) 위반 없음 시 [PREFLIGHT-PR PASS] {phase} 출력 + exit code 0
+        구현 위치: cmd_gates 함수 내부에 if action == "preflight-pr": 블록 추가 (대략 line 7090 근처, prepare-phase 블록 뒤).
+        헬퍼: _classify_pr_file(path, phase, pid) → "allowed"|"forbidden:&lt;reason&gt;" 반환하는 내부 함수.
+      </change_summary>
+      <line_estimate>110</line_estimate>
+      <validation>
+        - python pipeline.py gates preflight-pr --phase pm 실행 시 clean PR에서 exit 0
+        - 다른 phase evidence 포함 시 exit 1 + 위반 파일 목록 출력
+        - pytest tests/test_pr_hygiene.py::test_preflight_pr_fails_on_stale_pipeline_files PASS
+      </validation>
+      <module_gate_sequence>
+        <step>module design --mt-id MT-1 --report-file module_design_MT-1.xml</step>
+        <step>module dev --mt-id MT-1 --files "pipeline.py" --report-file module_handover_MT-1.xml --scope-manifest scope_manifest_MT-1.json</step>
+        <step>module qa --mt-id MT-1 --result PASS --report-file module_qa_MT-1.xml</step>
+      </module_gate_sequence>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <title>gates accept evidence 내부 phase evidence 경로 거부</title>
+      <affected_function>pipeline._validate_user_acceptance_evidence</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates(action="accept") line 7296에서 호출</site>
+        <site>tests/test_pr_hygiene.py::test_accept_rejects_phase_evidence_path (MT-5 신규)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_validate_user_acceptance_evidence</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _validate_user_acceptance_evidence(line 2573) 함수에 거부 경로 검사 단계 추가:
+        - 각 evidence item에 대해 _is_internal_pipeline_path(item) 검사
+        - 거부 prefix 집합:
+            * .pipeline/phase_evidence/ (정규화 후 시작)
+            * .pipeline/agent_receipts/
+            * pipeline_contracts/
+            * pipeline_state.json (정확 일치)
+        - 허용 prefix: pipeline_outputs/, GitHub URL (이미 _is_evidence_url로 처리됨), 그 외 사용자 산출물 경로
+        - 거부 시 _die() 호출: [PIPELINE ERROR] acceptance evidence는 pipeline_outputs/ 또는 GitHub URL이어야 합니다. 내부 phase evidence 경로는 허용되지 않습니다.
+        - 기존 placeholder 검사, missing 검사, URL 처리, outputs_manifest 등록 검증은 모두 보존
+        - --user-confirmed 등 기타 인자는 호환 유지
+        구현 위치: line 2589 placeholder 검사 직후, line 2598 path 분류 루프 직전에 forbidden_internal 검사 블록 삽입.
+      </change_summary>
+      <line_estimate>40</line_estimate>
+      <validation>
+        - gates accept --result ACCEPT --evidence .pipeline/phase_evidence/foo --user-confirmed → exit 1
+        - gates accept --result ACCEPT --evidence pipeline_state.json --user-confirmed → exit 1
+        - gates accept --result ACCEPT --evidence pipeline_outputs/IMP-...XXXX/result.md --user-confirmed → 기존 검증 흐름 유지
+        - pytest tests/test_pr_hygiene.py::test_accept_rejects_phase_evidence_path PASS
+      </validation>
+      <module_gate_sequence>
+        <step>module design --mt-id MT-2 --report-file module_design_MT-2.xml</step>
+        <step>module dev --mt-id MT-2 --files "pipeline.py" --report-file module_handover_MT-2.xml --scope-manifest scope_manifest_MT-2.json</step>
+        <step>module qa --mt-id MT-2 --result PASS --report-file module_qa_MT-2.xml</step>
+      </module_gate_sequence>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <title>architect run_id/commit_sha 자동 검증 및 architect_report.xml 자동 채움</title>
+      <affected_function>pipeline.cmd_architect (+ 헬퍼 _verify_phase_attestation_consistency)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_architect(line 4209) - check_gate(state, "architect") 직후 검증 호출 삽입</site>
+        <site>tests/test_pr_hygiene.py::test_architect_fails_on_run_id_mismatch (MT-5 신규)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>cmd_architect|_record_phase_ci_verification</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        cmd_architect(line 4209) 내부에 다음 단계 추가:
+        (1) check_gate 직후, protocol_decision 파싱 직전에 _verify_phase_attestation_consistency(state) 호출
+        (2) 신규 헬퍼 _verify_phase_attestation_consistency(state):
+            - state phase_attestations phases 각 phase(pm/dev/qa/build)별로:
+                * state에 기록된 phase_ci_run_id, phase_ci_commit_sha 추출
+                * _contract_paths(pid)["phase_ci_root"] / f"{phase}_result.json" 파일에서 run_id, head_sha 추출
+                * 불일치 시 mismatch_list에 추가
+            - mismatch 발견 시 _die("[ARCHITECT BLOCKED] phase attestation run_id/commit_sha 불일치: ...")
+            - 모든 phase가 일치하면 verified=True 반환
+        (3) architect_report.xml 작성 시 PR 번호, run_id, commit_sha를 수동 문장이 아닌 phase_ci_result/json에서 자동 추출하여 채우는 헬퍼 _inject_phase_attestation_facts(report_path, state):
+            - 입력: protocol_decision report_file 경로의 XML
+            - state의 phase_ci 정보를 &lt;phase_attestation_facts&gt; 블록으로 주입 (이미 있으면 갱신, 없으면 추가)
+            - 기존 architect 본문은 건드리지 않음 (append-only)
+            - 호출 위치: state phases architect status = "DONE" 직전
+        (4) 기존 COMPLETE 판정 로직, terminal_state, archive, log_event 모두 보존
+      </change_summary>
+      <line_estimate>120</line_estimate>
+      <validation>
+        - state.json의 phase_ci_run_id가 phase_ci_result.json과 일치하면 architect 정상 진행
+        - 의도적으로 state에 잘못된 run_id를 박아두면 architect FAIL exit 1
+        - architect_report.xml 작성 후 &lt;phase_attestation_facts&gt; 블록에 4개 phase의 run_id/commit_sha가 자동 기재됨
+        - pytest tests/test_pr_hygiene.py::test_architect_fails_on_run_id_mismatch PASS
+      </validation>
+      <module_gate_sequence>
+        <step>module design --mt-id MT-3 --report-file module_design_MT-3.xml</step>
+        <step>module dev --mt-id MT-3 --files "pipeline.py" --report-file module_handover_MT-3.xml --scope-manifest scope_manifest_MT-3.json</step>
+        <step>module qa --mt-id MT-3 --result PASS --report-file module_qa_MT-3.xml</step>
+      </module_gate_sequence>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <title>CLAUDE.md Patch Lane 예시 1줄 수정</title>
+      <affected_function>CLAUDE.md (Patch Lane + Incident Cluster 섹션, line 883 부근)</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>tests/test_pr_hygiene.py::test_doc_cli_patch_verify_contract (MT-5 신규)</site>
+        <site>tests/test_doc_cli_contract.py (기존 — 영향 없음 확인용)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>patch verify --plan patch_plan.json --result PASS</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        CLAUDE.md line 883 (Patch Lane 운영 절차 코드블록의 3번 단계) 한 줄만 교체:
+        - 변경 전: python pipeline.py patch verify --plan patch_plan.json --result PASS
+        - 변경 후: python pipeline.py patch verify --plan patch_plan.json --result PASS --test-command "python -m pytest tests/test_patch_lane.py -q"
+                  (또는: python pipeline.py patch verify --plan patch_plan.json --result PASS --evidence-file verify_result.txt)
+        주의:
+        - line 940의 patch verify --result FAIL 텍스트 설명은 수정 금지 (FAIL은 test-command/evidence-file 불필요)
+        - Patch Lane 섹션 외 어떤 부분도 수정 금지
+        - 다른 코드 블록, 표, 헤더 절대 건드리지 않음
+      </change_summary>
+      <line_estimate>3</line_estimate>
+      <validation>
+        - CLAUDE.md line 883 부근에 --test-command 또는 --evidence-file 문자열 포함 확인
+        - line 940의 FAIL 설명은 그대로 유지
+        - pytest tests/test_pr_hygiene.py::test_doc_cli_patch_verify_contract PASS
+        - 기존 tests/test_doc_cli_contract.py 전체 PASS (regression 없음)
+      </validation>
+      <module_gate_sequence>
+        <step>module design --mt-id MT-4 --report-file module_design_MT-4.xml</step>
+        <step>module dev --mt-id MT-4 --files "CLAUDE.md" --report-file module_handover_MT-4.xml --scope-manifest scope_manifest_MT-4.json</step>
+        <step>module qa --mt-id MT-4 --result PASS --report-file module_qa_MT-4.xml</step>
+      </module_gate_sequence>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <title>4개 회귀 테스트 추가 (tests/test_pr_hygiene.py) + oracle 케이스</title>
+      <affected_function>tests.test_pr_hygiene (신규 파일, 4개 테스트 함수)</affected_function>
+      <target_files>
+        <file>tests/test_pr_hygiene.py</file>
+        <file>tests/oracles/IMP-20260516-D069/case_normal/input.json</file>
+        <file>tests/oracles/IMP-20260516-D069/case_normal/expected.json</file>
+        <file>tests/oracles/IMP-20260516-D069/case_edge/input.json</file>
+        <file>tests/oracles/IMP-20260516-D069/case_edge/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pytest collect (자동, conftest.py 통해)</site>
+        <site>module_qa_MT-5에서 직접 호출</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_preflight_pr_fails_on_stale_pipeline_files|test_accept_rejects_phase_evidence_path|test_architect_fails_on_run_id_mismatch|test_doc_cli_patch_verify_contract</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        tests/test_pr_hygiene.py 신규 작성 (test_patch_lane.py 스타일 따름):
+        1. test_preflight_pr_fails_on_stale_pipeline_files:
+           - tmp_path에 fake git diff output을 monkeypatch로 주입하거나 임시 git repo 사용
+           - .pipeline/phase_evidence/PID/dev/foo.json 같은 stale tracked file이 포함되면 gates preflight-pr --phase pm exit code != 0
+           - 출력에 위반 파일 경로 포함 확인
+        2. test_accept_rejects_phase_evidence_path:
+           - 활성 파이프라인 임시 setup
+           - gates accept --result ACCEPT --evidence .pipeline/phase_evidence/foo --user-confirmed → exit 1
+           - stderr/stdout에 [PIPELINE ERROR] acceptance evidence는 pipeline_outputs/ 메시지 포함
+        3. test_architect_fails_on_run_id_mismatch:
+           - pipeline_state.json의 phase_ci_run_id와 phase_ci_result/{phase}_result.json의 run_id를 서로 다르게 만든 후
+           - python pipeline.py architect --report-file architect_report.xml 실행 → exit 1
+           - stderr에 [ARCHITECT BLOCKED] phase attestation run_id/commit_sha 불일치 포함
+        4. test_doc_cli_patch_verify_contract:
+           - CLAUDE.md를 utf-8로 읽어 전체에서 patch verify --plan patch_plan.json --result PASS 다음 라인 또는 같은 라인에 --test-command 또는 --evidence-file 문자열이 있는지 정규식 검증
+           - 둘 다 없으면 assert 실패
+        oracle 케이스:
+        - case_normal/input.json: {"phase": "pm", "files": ["src/main.py"], "pipeline_id": "IMP-20260516-D069"} → expected.json: {"exit_code": 0, "status": "PASS"}
+        - case_edge/input.json: {"phase": "pm", "files": [".pipeline/phase_evidence/IMP-X/dev/handover.json", "pipeline_state.json"], "pipeline_id": "IMP-20260516-D069"} → expected.json: {"exit_code": 1, "status": "FAIL", "violations_contains": [".pipeline/phase_evidence/IMP-X/dev/handover.json", "pipeline_state.json"]}
+      </change_summary>
+      <line_estimate>180</line_estimate>
+      <validation>
+        - pytest tests/test_pr_hygiene.py -q → 4 passed, 0 failed
+        - pytest tests/ -q 전체 regression → 기존 테스트 영향 없음
+        - tests/oracles/IMP-20260516-D069/ 아래 normal/edge 케이스 SHA-256 등록 가능 (contract add-oracle)
+      </validation>
+      <module_gate_sequence>
+        <step>module design --mt-id MT-5 --report-file module_design_MT-5.xml</step>
+        <step>module dev --mt-id MT-5 --files "tests/test_pr_hygiene.py,tests/oracles/IMP-20260516-D069/case_normal/input.json,tests/oracles/IMP-20260516-D069/case_normal/expected.json,tests/oracles/IMP-20260516-D069/case_edge/input.json,tests/oracles/IMP-20260516-D069/case_edge/expected.json" --report-file module_handover_MT-5.xml --scope-manifest scope_manifest_MT-5.json</step>
+        <step>module qa --mt-id MT-5 --result PASS --report-file module_qa_MT-5.xml</step>
+      </module_gate_sequence>
+    </micro_task>
+
+  </micro_tasks>
+
+  <integration_plan>
+    <order>MT-1 → MT-2 → MT-3 → MT-4 → MT-5</order>
+    <rationale>MT-1/MT-2/MT-3는 pipeline.py 변경이라 같은 파일이지만 모듈 단위로 분리. MT-4는 CLAUDE.md 단독. MT-5는 앞 4개 모두 의존 (테스트가 앞 변경을 검증). MT-1~4 PASS 후 MT-5를 마지막에 통합 검증.</rationale>
+    <module_integrate>python pipeline.py module integrate --result PASS --report-file integration_report.xml</module_integrate>
+    <final_dev_done>python pipeline.py done --phase dev --files "pipeline.py,CLAUDE.md,tests/test_pr_hygiene.py,tests/oracles/IMP-20260516-D069/case_normal/input.json,tests/oracles/IMP-20260516-D069/case_normal/expected.json,tests/oracles/IMP-20260516-D069/case_edge/input.json,tests/oracles/IMP-20260516-D069/case_edge/expected.json" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id &lt;dev_run_id&gt;</final_dev_done>
+  </integration_plan>
+
+  <qa_plan>
+    <verification_axes>
+      <axis>Frozen Codebase: declared 7개 파일 외 변경 없음</axis>
+      <axis>Micro-task Surgical Edit: 각 MT의 affected_function이 실제 diff와 일치</axis>
+      <axis>Patch Lane CLAUDE.md 라인 보정 정확성 (line 940 FAIL 설명은 유지)</axis>
+      <axis>preflight-pr 화이트리스트/블랙리스트 동작 정확성</axis>
+      <axis>accept 거부 메시지 한국어 표현 일치</axis>
+      <axis>architect run_id 검증이 기존 COMPLETE 경로를 깨지 않음</axis>
+      <axis>4개 신규 테스트 + 기존 전체 pytest PASS</axis>
+    </verification_axes>
+    <oracle_run>python pipeline.py gates oracle (case_normal + case_edge 통과 필수)</oracle_run>
+  </qa_plan>
+
+  <build_plan>
+    <target>N/A — pipeline.py + CLAUDE.md + 테스트 파일 수정. EXE 빌드 대상 아님.</target>
+    <command>python pipeline.py build --exe "N/A" --skip-reason "meta-task" --report-file build_report.xml --agent-run-id &lt;build_run_id&gt;</command>
+  </build_plan>
+
+  <env_snapshot>
+    <python_version>사전 분석 결과 — pipeline.py 실행 가능, 기존 파이프라인 정상 동작</python_version>
+    <installed_packages>pytest 필수 (기존 설치 확인됨)</installed_packages>
+    <encoding>utf-8 강제 — 모든 신규 파일 utf-8 + LF</encoding>
+    <screen_size>N/A (RPA 아님)</screen_size>
+  </env_snapshot>
+
+  <protocol_compliance>
+    <three_gate>true — Technical/Oracle/GitHub CI/Acceptance 모두 통과 필요</three_gate>
+    <option_a>true — pm_planner + pipeline_manager + dev + qa + build receipt 필요</option_a>
+    <incremental_module_gate>true — 5개 MT 순차 module design/dev/qa + integrate</incremental_module_gate>
+    <classic_mode>false (금지)</classic_mode>
+  </protocol_compliance>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</pm_planner_output>
