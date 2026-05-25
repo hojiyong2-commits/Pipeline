@@ -1,75 +1,107 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T02:15:13Z",
-  "pipeline_id": "IMP-20260516-D069",
-  "phase": "pm",
+  "generated_at": "2026-05-25T01:54:05Z",
+  "pipeline_id": "BUG-20260525-39DE",
+  "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "3c89494a5df4c4dc5643557fdcda37c29c2ee755",
+  "commit_hint": "3b742de194e410c04212a9e4e995dcda2a50d875",
   "state": {
-    "current_phase": "dev",
-    "phase_completed_at": "2026-05-16T02:15:04Z",
-    "report_file": "step_plan.xml",
-    "evidence": null
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-25T01:48:55Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "tests/test_oracle_quality_gate.py,tests/test_patch_lane.py,tests/test_check_cli_evidence_contract.py,tools/check_cli_evidence_contract.py,tools/__init__.py,.github/workflows/ci.yml,tests/oracles/BUG-20260525-39DE/TC01/input.json,tests/oracles/BUG-20260525-39DE/TC01/expected.json,tests/oracles/BUG-20260525-39DE/TC02/input.json,tests/oracles/BUG-20260525-39DE/TC02/expected.json"
   },
   "agent_run": {
-    "run_id": "pm_planner-b5a497091799a32d",
-    "phase": "pm_planner",
-    "agent_id": "pm-planner-agent",
+    "run_id": "dev-c240ee6278af3aed",
+    "phase": "dev",
+    "agent_id": "dev-agent",
     "status": "COMPLETED",
-    "output_file": "step_plan.xml",
-    "output_sha256": "c2d6f13624e09f62867b65c41c61777c81a1415589c122a3139977e7e499e94c",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/agent_receipt_pm_planner-b5a497091799a32d.json",
-    "receipt_sha256": "13fe161a92ef67fa952627a5775350803e195b253c0e4614e9009b3fe001b451",
-    "used_by_phase": "pm",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pm_planner\\pm_planner-b5a497091799a32d.json"
+    "output_file": "dev_handover.xml",
+    "output_sha256": "7280f8b26255e28b27a906387a5dcf353c6a9fec85feb5bb1b3e9c7f9c8cdd18",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260525-39DE/dev/agent_receipt_dev-c240ee6278af3aed.json",
+    "receipt_sha256": "9bb1bd7f3334d300a9bf5a137cc048df89b060dbfe65c25bc9517c74b5233c2c",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260525-39DE\\dev\\dev-c240ee6278af3aed.json"
   },
-  "manager_run": {
-    "run_id": "pipeline_manager-ca12146a6b6069b6",
-    "phase": "pipeline_manager",
-    "agent_id": "pipeline-manager-agent",
-    "status": "COMPLETED",
-    "output_file": "manager_handoff.xml",
-    "output_sha256": "50d4c9ba4ed3cd2c5225e578b2f16ecbab463936908a926ef8e888cb9104d701",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_receipt_pipeline_manager-ca12146a6b6069b6.json",
-    "receipt_sha256": "6d30c199700d55e9c6bed50e1094a041fe5cebf0f7380d1904c10aea4fb7e296",
-    "used_by_phase": "pm_manager",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pipeline_manager\\pipeline_manager-ca12146a6b6069b6.json"
-  },
+  "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pm_planner\\pm_planner-b5a497091799a32d.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/agent_receipt_pm_planner-b5a497091799a32d.json",
-      "sha256": "13fe161a92ef67fa952627a5775350803e195b253c0e4614e9009b3fe001b451",
-      "size_bytes": 519,
-      "requires_force_add": true
-    },
-    {
-      "label": "manager_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pipeline_manager\\pipeline_manager-ca12146a6b6069b6.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_receipt_pipeline_manager-ca12146a6b6069b6.json",
-      "sha256": "6d30c199700d55e9c6bed50e1094a041fe5cebf0f7380d1904c10aea4fb7e296",
-      "size_bytes": 543,
+      "source": ".pipeline\\agent_receipts\\BUG-20260525-39DE\\dev\\dev-c240ee6278af3aed.json",
+      "path": ".pipeline/phase_evidence/BUG-20260525-39DE/dev/agent_receipt_dev-c240ee6278af3aed.json",
+      "sha256": "9bb1bd7f3334d300a9bf5a137cc048df89b060dbfe65c25bc9517c74b5233c2c",
+      "size_bytes": 502,
       "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "step_plan.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/report_step_plan.xml",
-      "sha256": "c2d6f13624e09f62867b65c41c61777c81a1415589c122a3139977e7e499e94c",
-      "size_bytes": 28370,
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260525-39DE/dev/report_dev_handover.xml",
+      "sha256": "7280f8b26255e28b27a906387a5dcf353c6a9fec85feb5bb1b3e9c7f9c8cdd18",
+      "size_bytes": 3101,
       "requires_force_add": true
     },
     {
-      "label": "manager_report",
-      "source": "manager_handoff.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_report_manager_handoff.xml",
-      "sha256": "50d4c9ba4ed3cd2c5225e578b2f16ecbab463936908a926ef8e888cb9104d701",
-      "size_bytes": 758,
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260525-39DE/dev/scope_manifest_scope_manifest.json",
+      "sha256": "2df8f1039b0cee4fcfd39eef1ba3c2a0b95bb9ad4d35d65fc698c3362ce0afa3",
+      "size_bytes": 1076,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [],
+  "workspace_file_checks": [
+    {
+      "path": "tests/test_oracle_quality_gate.py",
+      "sha256": "d6a9cb73a2ec631fdf310a4b154709c863dc841a52e3503fba150f42bd1097e2",
+      "size_bytes": 16318
+    },
+    {
+      "path": "tests/test_patch_lane.py",
+      "sha256": "436f14fabab7edb9088f9825869689be9d21922420a6a38a623f306a6f21e612",
+      "size_bytes": 16964
+    },
+    {
+      "path": "tests/test_check_cli_evidence_contract.py",
+      "sha256": "53cc8d3d1d2b94ccd13d60c1d8febd5cc0c224c0b9a9da78194778a9501db652",
+      "size_bytes": 7818
+    },
+    {
+      "path": "tools/check_cli_evidence_contract.py",
+      "sha256": "2c74819c7f2972ce20b51bdb39acaede4f22d661f8013895ec233c1011073e1a",
+      "size_bytes": 18571
+    },
+    {
+      "path": "tools/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "95e31b483f02787e776f58b076aabb36b784eac944608eaa45db05cbbc7d03af",
+      "size_bytes": 28607
+    },
+    {
+      "path": "tests/oracles/BUG-20260525-39DE/TC01/input.json",
+      "sha256": "ad521a8105901fde35b8981f70f65e51ca02372b18cf7cfe20ccf57aa4ca2dcc",
+      "size_bytes": 401
+    },
+    {
+      "path": "tests/oracles/BUG-20260525-39DE/TC01/expected.json",
+      "sha256": "ac30f6054f80f5fa2665eef8cdfb1cfae5be32ed07c4721d85f1591327f13c55",
+      "size_bytes": 164
+    },
+    {
+      "path": "tests/oracles/BUG-20260525-39DE/TC02/input.json",
+      "sha256": "99cd31c5f716c0a5664651b8b0a48766687a34adf292597d49bdcb1d98ef8100",
+      "size_bytes": 339
+    },
+    {
+      "path": "tests/oracles/BUG-20260525-39DE/TC02/expected.json",
+      "sha256": "d8186ff0ddae3ca341574889b850b1587ec62bbbad6774453369e8a338e9815e",
+      "size_bytes": 192
+    }
+  ],
   "local_only_files": []
 }

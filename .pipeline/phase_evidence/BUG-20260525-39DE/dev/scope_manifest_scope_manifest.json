@@ -1,0 +1,32 @@
+{
+  "pipeline_id": "BUG-20260525-39DE",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "tests/test_oracle_quality_gate.py"
+      ],
+      "affected_functions": [
+        "test_cli_audit_oracle_normal_plus_edge_passes, test_cli_audit_oracle_normal_only_fails"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tools/__init__.py",
+        "tools/check_cli_evidence_contract.py",
+        "tests/test_check_cli_evidence_contract.py",
+        "tests/test_patch_lane.py",
+        "tests/test_oracle_quality_gate.py",
+        ".github/workflows/ci.yml",
+        "tests/oracles/BUG-20260525-39DE/TC01/input.json",
+        "tests/oracles/BUG-20260525-39DE/TC01/expected.json",
+        "tests/oracles/BUG-20260525-39DE/TC02/input.json",
+        "tests/oracles/BUG-20260525-39DE/TC02/expected.json"
+      ],
+      "affected_functions": [
+        "scan_test_files, classify_command, check_evidence_assertions, test_cli_audit_oracle_normal_plus_edge_passes, test_cli_audit_oracle_normal_only_fails"
+      ]
+    }
+  ]
+}
