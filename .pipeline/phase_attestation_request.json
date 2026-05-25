@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-25T12:29:12Z",
+  "generated_at": "2026-05-25T12:34:37Z",
   "pipeline_id": "IMP-20260525-AA88",
   "phase": "qa",
   "phase_status": "PASS",
-  "commit_hint": "7becd26f147bcf04c3ae71aed5d1bd15bf456996",
+  "commit_hint": "4bf656067d917596dcc39b8ecf37d25d75bd28fe",
   "state": {
     "current_phase": "sec",
     "phase_completed_at": "2026-05-25T12:28:57Z",
@@ -18,9 +18,9 @@
     "agent_id": "qa-agent",
     "status": "COMPLETED",
     "output_file": "qa_report.xml",
-    "output_sha256": "8f67720b29a360e5b702c5ce210300de2be59de6615d03ee766e627690c3f552",
+    "output_sha256": "717b1c90fe3a09ff2698b9906564ed05c2fd2556202e486600b3b8dcb721f931",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260525-AA88/qa/agent_receipt_qa-fb48467d8ddffeff.json",
-    "receipt_sha256": "f37295513ad3a4304a0ac45acac0aa5073fa1062abc9911942ce916561438379",
+    "receipt_sha256": "8d639950acc0a4bb026c68a138ddae048cb37114abff1572dd63a94813e6d97a",
     "used_by_phase": "qa",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260525-AA88\\qa\\qa-fb48467d8ddffeff.json"
   },
@@ -30,17 +30,17 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260525-AA88\\qa\\qa-fb48467d8ddffeff.json",
       "path": ".pipeline/phase_evidence/IMP-20260525-AA88/qa/agent_receipt_qa-fb48467d8ddffeff.json",
-      "sha256": "f37295513ad3a4304a0ac45acac0aa5073fa1062abc9911942ce916561438379",
-      "size_bytes": 496,
-      "requires_force_add": true
+      "sha256": "8d639950acc0a4bb026c68a138ddae048cb37114abff1572dd63a94813e6d97a",
+      "size_bytes": 495,
+      "requires_force_add": false
     },
     {
       "label": "report",
       "source": "qa_report.xml",
       "path": ".pipeline/phase_evidence/IMP-20260525-AA88/qa/report_qa_report.xml",
-      "sha256": "8f67720b29a360e5b702c5ce210300de2be59de6615d03ee766e627690c3f552",
-      "size_bytes": 1590,
-      "requires_force_add": true
+      "sha256": "717b1c90fe3a09ff2698b9906564ed05c2fd2556202e486600b3b8dcb721f931",
+      "size_bytes": 1554,
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
