@@ -130,3 +130,22 @@ automatically deploys accepted outputs:
 Harness must include the deploy root path in the `<user_visible_result>` element so the user
 knows where to find the deployed artifact. If the deploy fails (e.g., Google Drive not mounted),
 report the failure but do not block ACCEPT — the user can manually copy from the evidence path.
+
+
+## Real CLI Path E2E Gate Policy (IMP-20260525-6FAC)
+
+내부 함수 테스트만으로 CLI 완료 판정 금지.
+핵심 파이프라인 흐름(new / done --phase pm|dev / gates technical|oracle|accept / architect)은
+`tests/e2e/test_real_cli_paths.py`의 Real CLI Path E2E 테스트로 검증 필수.
+`PIPELINE_STATE_PATH` 격리 + `final_state` assertion 없는 테스트는 CLI 검증으로 인정하지 않는다.
+
+### 근거
+- 내부 함수 직접 호출 테스트는 CLI 인자 파싱, 상태 전이, 파일 효과가 실제로 맞는지 보장하지 않는다.
+- `subprocess` 기반 E2E 테스트만이 실제 사용자가 치는 CLI 흐름을 검증한다.
+- `PIPELINE_STATE_PATH` 환경 변수로 격리된 state 파일을 사용하여 전역 `pipeline_state.json`을 수정하지 않는다.
+
+### 위반 감지
+QA/Harness는 `check_cli_evidence_contract.py` 또는 수동 검토로 아래를 확인한다:
+- 상태 변경 CLI 호출마다 `PIPELINE_STATE_PATH` 격리 사용 여부
+- `final_state` assertion 포함 여부 (stdout-only 검증 금지)
+- `subprocess` 기반 실제 CLI 실행 여부 (내부 함수 직접 임포트 금지)
