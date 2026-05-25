@@ -1,0 +1,10 @@
+{
+  "description": "oracle_quality 없는 state에서 architect --report-file 실행 시 차단되는지 검증",
+  "initial_state_patch": {
+    "oracle_quality": {},
+    "terminal_state": null
+  },
+  "cli_command": ["pipeline.py", "architect", "--report-file", "architect_report.xml"],
+  "expected_source": "user_provided",
+  "case_kind": "edge"
+}
