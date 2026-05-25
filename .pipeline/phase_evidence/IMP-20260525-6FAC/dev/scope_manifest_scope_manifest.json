@@ -1,0 +1,39 @@
+{
+  "pipeline_id": "IMP-20260525-6FAC",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "tests/e2e/__init__.py",
+        "tests/e2e/test_real_cli_paths.py",
+        "tests/oracles/IMP-20260525-6FAC/TC-normal-01/input.json",
+        "tests/oracles/IMP-20260525-6FAC/TC-normal-01/expected.json",
+        "tests/oracles/IMP-20260525-6FAC/TC-edge-01/input.json",
+        "tests/oracles/IMP-20260525-6FAC/TC-edge-01/expected.json"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_real_cli_paths.py::test_new_creates_state,\n        tests/e2e/test_real_cli_paths.py::test_done_pm_advances_phase,\n        tests/e2e/test_real_cli_paths.py::test_gates_technical_records_result,\n        tests/e2e/test_real_cli_paths.py::test_architect_blocked_without_oracle_quality,\n        tests/e2e/test_real_cli_paths.py::test_gates_accept_blocked_without_evidence,\n        tests/e2e/test_real_cli_paths.py::test_dev_blocked_without_clarification_criteria,\n        tests/e2e/test_real_cli_paths.py::test_return_phase_revert_resets_downstream,\n        tests/e2e/test_real_cli_paths.py::test_github_ci_gate_blocked_on_sha_mismatch"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        ".github/workflows/ci.yml"
+      ],
+      "affected_functions": [
+        ".github/workflows/ci.yml::jobs.tests.steps[자동 검사 실행 또는 신규 E2E 스텝]"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "CLAUDE.md",
+        ".claude/agents/qa-agent.md",
+        ".claude/agents/test-harness-agent.md"
+      ],
+      "affected_functions": [
+        "CLAUDE.md::Real CLI Path E2E Gate Policy 신규 섹션,\n        .claude/agents/qa-agent.md::Real CLI Path E2E Gate Policy 신규 섹션,\n        .claude/agents/test-harness-agent.md::Real CLI Path E2E Gate Policy 신규 섹션"
+      ]
+    }
+  ]
+}
