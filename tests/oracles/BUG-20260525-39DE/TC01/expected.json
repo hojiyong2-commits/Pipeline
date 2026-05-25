@@ -1,0 +1,5 @@
+{
+  "violations": 0,
+  "status": "PASS",
+  "description": "CLI_EVIDENCE_ALLOW_READ_ONLY 애노테이션이 있는 CLI 호출은 위반으로 처리하지 않음"
+}

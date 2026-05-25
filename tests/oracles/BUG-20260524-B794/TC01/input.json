@@ -1,0 +1,17 @@
+{
+  "oracle_quality": {},
+  "external_gates": {
+    "enabled": true,
+    "technical": {"status": "PASS"},
+    "oracle": {"status": "PASS"},
+    "acceptance": {"status": "PASS"},
+    "github_ci": {"status": "PASS"}
+  },
+  "phase_attestations": {
+    "enabled": true,
+    "pm": {"status": "PASS"},
+    "dev": {"status": "PASS"},
+    "qa": {"status": "PASS"},
+    "build": {"status": "PASS"}
+  }
+}

@@ -2299,6 +2299,7 @@ class ThreeGatePipelineTests(unittest.TestCase):
         state["external_gates"] = pipeline._new_external_gates(enabled=True)
         for gate in ("technical", "oracle", "acceptance", "github_ci"):
             state["external_gates"][gate]["status"] = "PASS"
+        state["oracle_quality"] = {"status": "PASS", "passed_at": "2026-05-25T00:00:00Z"}
         _mark_phase_attestation_passed(state, "pm", "dev", "qa", "build")
 
         saved = {}

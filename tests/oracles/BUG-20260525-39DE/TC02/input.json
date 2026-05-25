@@ -1,0 +1,4 @@
+{
+  "description": "CLI Evidence Contract 검사: 격리 없이 상태 변경 CLI를 호출하는 테스트 함수는 위반으로 탐지",
+  "test_code": "import subprocess\ndef test_state_changing():\n    result = subprocess.run(['python', 'pipeline.py', 'contract', 'freeze'], capture_output=True)\n    assert result.returncode == 0"
+}
