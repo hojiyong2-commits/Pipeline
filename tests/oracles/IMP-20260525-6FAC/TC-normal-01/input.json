@@ -1,0 +1,6 @@
+{
+  "description": "pipeline.py new --type IMP --desc '테스트' 실행 후 생성되는 state 구조",
+  "cli_command": ["pipeline.py", "new", "--type", "IMP", "--desc", "테스트용 파이프라인"],
+  "expected_source": "user_provided",
+  "case_kind": "normal"
+}
