@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260525-463F</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>tests.e2e.test_real_cli_paths.test_github_ci_gate_blocked_on_sha_mismatch</target_function>
+    <change_type>env_isolation_addition</change_type>
+    <lines_changed>7</lines_changed>
+  </impact_analysis>
+  <evidence>
+    <file>tests/e2e/test_real_cli_paths.py</file>
+  </evidence>
+  <scope_lock_check>
+    <git_diff_files>tests/e2e/test_real_cli_paths.py</git_diff_files>
+    <manifest_files>tests/e2e/test_real_cli_paths.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <change_summary>
+    test_github_ci_gate_blocked_on_sha_mismatch에 GH_CONFIG_DIR + APPDATA 빈 temp dir 설정 추가.
+    impl/IMP-20260525-6FAC 브랜치 커밋: c1061b6
+  </change_summary>
+</handover>
