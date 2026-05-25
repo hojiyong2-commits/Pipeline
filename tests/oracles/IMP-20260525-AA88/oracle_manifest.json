@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260525-AA88",
+  "source": "user",
+  "oracles": [
+    {
+      "case_id": "TC-normal-smart-resolve",
+      "case_kind": "normal",
+      "description": "_smart_resolve correctly finds path using parent.parent.parent (project root)",
+      "input_file": "tests/oracles/IMP-20260525-AA88/TC-normal-smart-resolve/input.json",
+      "expected_file": "tests/oracles/IMP-20260525-AA88/TC-normal-smart-resolve/expected.json",
+      "input_sha256": "ec4d8dfbc20b29d126eebfab5d36e80a11534d65fbe29683ce1fa49936ba8e37",
+      "expected_sha256": "5d5c6f392d15fbc5baa99fbb18c357a6360dbdb88bd600c2ab18abdbfcad28b0",
+      "expected_source": "user_provided"
+    },
+    {
+      "case_id": "TC-edge-parent-parent-fail",
+      "case_kind": "edge",
+      "description": "parent.parent (core/) level cannot find tests/ path — proves regression",
+      "input_file": "tests/oracles/IMP-20260525-AA88/TC-edge-parent-parent-fail/input.json",
+      "expected_file": "tests/oracles/IMP-20260525-AA88/TC-edge-parent-parent-fail/expected.json",
+      "input_sha256": "1314d7259a7e288e415586c228edc203d7660c5f695f88dd96a2d2bb0e2a3a9f",
+      "expected_sha256": "818baa5ac22846dde59979677989f773c70c50e0294b86c7e6e3018607815316",
+      "expected_source": "user_provided"
+    },
+    {
+      "case_id": "TC-normal-consistency-filter",
+      "case_kind": "normal",
+      "description": "_consistency_listed_files correctly extracts real file paths",
+      "input_file": "tests/oracles/IMP-20260525-AA88/TC-normal-consistency-filter/input.json",
+      "expected_file": "tests/oracles/IMP-20260525-AA88/TC-normal-consistency-filter/expected.json",
+      "input_sha256": "7e88235b265fcceebb185b362c260bceed1640326cbb8bb2c0e0f6ee84e820c5",
+      "expected_sha256": "39b90feae923e5e35a4ce5f5039d39040ae4ce5612f14b683b9dfa54529add7b",
+      "expected_source": "user_provided"
+    },
+    {
+      "case_id": "TC-error-score-not-file",
+      "case_kind": "error",
+      "description": "_consistency_listed_files returns empty set for score notation 120/120",
+      "input_file": "tests/oracles/IMP-20260525-AA88/TC-error-score-not-file/input.json",
+      "expected_file": "tests/oracles/IMP-20260525-AA88/TC-error-score-not-file/expected.json",
+      "input_sha256": "107756e021412f2b8fd4c5b2bc321331fa603866748391e64fac10a7455a8fca",
+      "expected_sha256": "95cbb6939a3da69fe2a29c13079aa2976805a5a10e2a113fb78ee09293824821",
+      "expected_source": "user_provided"
+    }
+  ]
+}

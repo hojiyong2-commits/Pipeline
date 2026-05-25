@@ -1,0 +1,4 @@
+{
+  "pr_body_line": "- tests/test_scorers_smart_resolve.py",
+  "description": "_consistency_listed_files should extract a real file path from a bullet line"
+}

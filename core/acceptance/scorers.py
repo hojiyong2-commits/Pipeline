@@ -23,17 +23,28 @@ def _resolve(base_dir: Path, raw_path: str | None) -> Path:
     return path
 
 
-def _smart_resolve(base_dir: str, path_str: str) -> str:
+def _smart_resolve(base_dir: str, path_str: str, project_dir: str | None = None) -> str:
     """상대 경로를 프로젝트 루트 우선으로 해석한다.
 
     절대 경로는 그대로 반환한다.
-    상대 경로는 프로젝트 루트(scorers.py의 상위 두 디렉터리)를 먼저 탐색하고,
+    상대 경로는 project_dir이 주어지면 그것을 먼저 탐색하고,
+    없으면 프로젝트 루트(scorers.py의 상위 세 디렉터리)를 탐색하고,
     없으면 base_dir 기준으로 해석한다.
+
+    scorers.py 파일 위치: <project_root>/core/acceptance/scorers.py
+    따라서 parent.parent.parent가 실제 project_root이다.
+    (parent = acceptance/, parent.parent = core/, parent.parent.parent = project root)
     """
     p = Path(path_str)
     if p.is_absolute():
         return str(p)
-    project_root = Path(__file__).resolve().parent.parent
+    # project_dir이 명시적으로 전달된 경우 최우선 탐색
+    if project_dir is not None:
+        candidate = Path(project_dir) / path_str
+        if candidate.exists():
+            return str(candidate)
+    # scorers.py 기준 project_root 탐색 (parent.parent.parent)
+    project_root = Path(__file__).resolve().parent.parent.parent
     candidate = project_root / path_str
     if candidate.exists():
         return str(candidate)
@@ -107,7 +118,7 @@ def score_email_parse_check(test: dict[str, Any], base_dir: Path, project_dir: P
 def score_file_exists_check(test: dict[str, Any], base_dir: Path, project_dir: Path) -> tuple[bool, str, dict[str, Any]]:
     then = test.get("then", {})
     path_value = then.get("path") if isinstance(then, dict) else None
-    resolved = _smart_resolve(str(base_dir), str(path_value) if path_value else "")
+    resolved = _smart_resolve(str(base_dir), str(path_value) if path_value else "", str(project_dir))
     path = Path(resolved) if resolved else _resolve(base_dir, str(path_value) if path_value else None)
     ok = path.exists()
     return ok, f"file exists: {path}" if ok else f"file missing: {path}", {"path": str(path)}
@@ -118,7 +129,7 @@ def score_file_output_check(test: dict[str, Any], base_dir: Path, project_dir: P
     if not isinstance(then, dict):
         raise ScoringError("then object is required")
     raw_path = str(then.get("path") or "")
-    path = Path(_smart_resolve(str(base_dir), raw_path)) if raw_path else _resolve(base_dir, raw_path)
+    path = Path(_smart_resolve(str(base_dir), raw_path, str(project_dir))) if raw_path else _resolve(base_dir, raw_path)
     if not path.exists():
         return False, f"file missing: {path}", {"path": str(path)}
     contains = then.get("contains")

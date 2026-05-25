@@ -1,0 +1,5 @@
+{
+  "path": "tests/oracles/IMP-20260525-AA88/TC-edge-parent-parent-fail/input.json",
+  "parent_parent_resolve": false,
+  "description": "parent.parent 기준(core/ 디렉토리)으로는 tests/oracles/... 경로를 찾지 못하는 엣지 케이스"
+}

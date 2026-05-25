@@ -1,0 +1,5 @@
+{
+  "exists": false,
+  "method": "parent.parent (wrong level)",
+  "description": "버그 상태(parent.parent)에서는 core/ 디렉토리가 project root로 오인되어 tests/ 하위 파일을 찾지 못해야 함. 수정 후(parent.parent.parent)에서는 찾아야 함."
+}

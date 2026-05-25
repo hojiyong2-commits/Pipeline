@@ -1,0 +1,4 @@
+{
+  "extracted": [],
+  "description": "Score notation 120/120 must NOT be extracted as a file path (false positive filter)"
+}
