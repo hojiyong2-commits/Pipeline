@@ -720,15 +720,19 @@ def test_github_ci_gate_blocked_on_sha_mismatch(tmp_path: Path) -> None:
     write_state(state_file, state)
 
     env = make_env(state_file)  # PIPELINE_STATE_PATH isolation via make_env
-    # gh CLI 호출 차단: PATH에서 gh 제거하지 않더라도 가짜 repo로 인해 실패
     env["GH_TOKEN"] = ""
-    # Windows credential store 무력화: gh가 시스템 자격증명을 읽지 못하도록
-    gh_config_dir = tmp_path / "gh_config_empty"
-    gh_config_dir.mkdir(exist_ok=True)
-    env["GH_CONFIG_DIR"] = str(gh_config_dir)
-    fake_appdata = tmp_path / "fake_appdata"
-    fake_appdata.mkdir(exist_ok=True)
-    env["APPDATA"] = str(fake_appdata)
+    # PATH 앞에 fake gh 바이너리 삽입 — wincred/GH_CONFIG_DIR/APPDATA 등 모든 인증 소스 차단
+    fake_gh_dir = tmp_path / "fake_gh_bin"
+    fake_gh_dir.mkdir(exist_ok=True)
+    if sys.platform == "win32":
+        (fake_gh_dir / "gh.cmd").write_text(
+            "@echo off\necho gh: authentication required 1>&2\nexit /b 1\n"
+        )
+    else:
+        fake_gh = fake_gh_dir / "gh"
+        fake_gh.write_text("#!/bin/sh\necho 'gh: authentication required' >&2\nexit 1\n")
+        fake_gh.chmod(0o755)
+    env["PATH"] = str(fake_gh_dir) + os.pathsep + env.get("PATH", os.environ.get("PATH", ""))
 
     result = run_cli(
         ["gates", "github-ci", "--repo", "hojiyong2-commits/Pipeline"],
