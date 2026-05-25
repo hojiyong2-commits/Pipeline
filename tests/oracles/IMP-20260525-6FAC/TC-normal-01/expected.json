@@ -1,0 +1,12 @@
+{
+  "oracle_quality": {
+    "case_kind": "normal",
+    "expected_source": "user_provided"
+  },
+  "expected_state_fields": {
+    "terminal_state": null,
+    "current_phase": "pm"
+  },
+  "expected_exit_code": 0,
+  "description": "pipeline.py new 실행 후 state에 current_phase=pm, terminal_state=null 기록 확인"
+}

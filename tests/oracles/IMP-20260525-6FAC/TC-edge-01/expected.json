@@ -1,0 +1,12 @@
+{
+  "oracle_quality": {
+    "case_kind": "edge",
+    "expected_source": "user_provided"
+  },
+  "expected_exit_code": 1,
+  "expected_blocker_contains": "oracle_quality",
+  "expected_state_fields": {
+    "terminal_state": null
+  },
+  "description": "oracle_quality PENDING 상태에서 architect --report-file 실행 시 returncode=1 및 oracle_quality 관련 오류 메시지 확인"
+}
