@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260525-463F: test_github_ci_gate_blocked_on_sha_mismatch GH_CONFIG_DIR 격리 수정 -->
+<!-- pm_planner agent_run_id: pm_planner-3b956ec4d9305797 -->
+
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>2</grep_executions>
+  <split_decision>단일 함수(test_github_ci_gate_blocked_on_sha_mismatch) 수정. SPLIT 불필요.</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260525-463F</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>격리 방법은 유지보수성 원칙으로 PM이 GH_CONFIG_DIR+APPDATA 조합으로 결정.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>test_github_ci_gate_blocked_on_sha_mismatch에서 GH_CONFIG_DIR + APPDATA를 빈 temp dir로 지정해 Windows credential store를 무력화하는 방식으로 수정해도 될까요?</user_facing_question>
+        <evidence>Windows gh CLI는 GH_CONFIG_DIR(없으면 %APPDATA%\GitHub CLI)에서 인증 정보를 읽음. 둘 다 빈 temp로 지정하면 저장된 자격증명 접근 차단.</evidence>
+        <why_it_matters>GH_TOKEN=""만으로는 Windows credential store를 막지 못해 실제 CI PASS를 반환, 테스트가 환경 의존적으로 실패.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>GH_CONFIG_DIR + APPDATA를 빈 temp dir로 지정</label>
+            <benefit>gh CLI가 어떤 인증 소스도 찾지 못해 완전 격리. 포터블하고 환경 독립적</benefit>
+            <cost>env 설정 2줄 추가. APPDATA 재지정으로 다른 Windows 앱에 영향 없음(subprocess 격리)</cost>
+          </option>
+          <option id="B">
+            <label>PATH 앞에 fake gh.cmd 삽입</label>
+            <benefit>gh 바이너리 자체를 교체해 확실히 차단</benefit>
+            <cost>임시 파일 생성/정리 필요, Windows cmd 파일 작성 복잡</cost>
+          </option>
+        </options>
+        <user_answer>REJECT 피드백에서 GH_CONFIG_DIR 또는 PATH fake gh 방식을 명시 권장 — 옵션 A 채택</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>FAST_SINGLE_CODE</execution_profile>
+    <reason>단일 파일(test_real_cli_paths.py) 단일 함수 수정, 4줄 이하 추가. 삭제/이동/외부 API/신규 의존성 없음.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>6</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <interface_spec>
+    Input: tests/e2e/test_real_cli_paths.py (현재 버전)
+    Output: test_github_ci_gate_blocked_on_sha_mismatch에 GH_CONFIG_DIR + APPDATA 격리 추가
+    Validation: pytest tests/e2e/ 전체 통과 (로컬 gh 인증 있어도 PASS 오탐 없음)
+  </interface_spec>
+
+  <requirements>
+    test_github_ci_gate_blocked_on_sha_mismatch 함수에서:
+    - gh_config_dir = tmp_path / "gh_config_empty"; gh_config_dir.mkdir(exist_ok=True)
+    - env["GH_CONFIG_DIR"] = str(gh_config_dir)
+    - fake_appdata = tmp_path / "fake_appdata"; fake_appdata.mkdir(exist_ok=True)
+    - env["APPDATA"] = str(fake_appdata)
+    위 4줄을 env["GH_TOKEN"] = "" 직후에 추가.
+    기존 나머지 로직(run_cli, final_state 검증) 변경 없음.
+    기존 테스트 8개 모두 통과 유지.
+    pytest 전체 통과 (556+ tests).
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>tests.e2e.test_real_cli_paths.test_github_ci_gate_blocked_on_sha_mismatch</affected_function>
+      <target_files>
+        <file>tests/e2e/test_real_cli_paths.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_github_ci_gate_blocked_on_sha_mismatch</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>GH_CONFIG_DIR + APPDATA를 빈 temp dir로 지정해 Windows credential store 격리. env["GH_TOKEN"]="" 직후 4줄 추가.</change_summary>
+      <line_estimate>6</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    pytest tests/e2e/test_real_cli_paths.py 8 passed (로컬 gh 인증 있어도)
+    pytest 전체 556+ passed, 0 failed
+    test_github_ci_gate_blocked_on_sha_mismatch: final_state.github_ci.status in (PENDING, FAIL) — PASS 아님
+    GitHub Actions CI PASS
+  </acceptance_criteria>
+
+  <forbidden>
+    test_real_cli_paths.py의 다른 테스트 함수 수정 금지
+    scope_manifest에 없는 파일 수정 금지
+    기존 oracle 파일 수정 금지
+  </forbidden>
+
+  <handover_template_note>dev-agent가 완료 후 qa-agent에게 tests/e2e/test_real_cli_paths.py 증거와 함께 READY_FOR_QA 인계</handover_template_note>
+
+  <context_injection>
+    <target_files>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </target_files>
+    <phase_rules_excerpt>IMP-20260525-463F: MT-1 단일 — test_real_cli_paths.py test_github_ci_gate_blocked_on_sha_mismatch 함수에 GH_CONFIG_DIR+APPDATA 격리 4줄 추가</phase_rules_excerpt>
+    <prev_phase_summary>IMP-20260525-AA88 REJECT: GH_TOKEN=""로는 Windows credential store 차단 불충분. GH_CONFIG_DIR 격리 필수.</prev_phase_summary>
+  </context_injection>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>
