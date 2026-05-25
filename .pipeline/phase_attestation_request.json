@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-25T01:25:32Z",
+  "generated_at": "2026-05-25T01:40:51Z",
   "pipeline_id": "BUG-20260525-39DE",
   "phase": "pm",
   "phase_status": "DONE",
-  "commit_hint": "02e9f39b045cadb0d8c7926c1df4e96fcfe06e36",
+  "commit_hint": "75b8d3fde90786a0dd5bb7cc86f28148a880e259",
   "state": {
     "current_phase": "dev",
     "phase_completed_at": "2026-05-25T01:22:17Z",
@@ -43,7 +43,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260525-39DE/pm/agent_receipt_pm_planner-02f1bbb5c7c6ee6a.json",
       "sha256": "36639bddd83b64e40d1b5f612db57d33fb66dacc975076a8f703c4dd5e1b00f5",
       "size_bytes": 520,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "manager_receipt",
@@ -51,7 +51,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260525-39DE/pm/manager_receipt_pipeline_manager-0e6eacb8d9cbd0df.json",
       "sha256": "86e90af0c22377cb8a3c991b25dbbda6c7d4e2ed922007d1cfc5f76d6f61d9ee",
       "size_bytes": 544,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -59,7 +59,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260525-39DE/pm/report_step_plan.xml",
       "sha256": "d1b157692235d70fae7bee36d17e6f5378ed143deddddeb0586d3fc47a542323",
       "size_bytes": 15318,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "manager_report",
@@ -67,7 +67,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260525-39DE/pm/manager_report_manager_handoff.xml",
       "sha256": "e481d27cae595acc5be1c93ee754b75330edfbb3e083bbeb294f6803947cc9b2",
       "size_bytes": 2979,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
