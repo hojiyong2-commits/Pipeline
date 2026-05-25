@@ -1,0 +1,111 @@
+<qa_report>
+  <pipeline_id>BUG-20260525-39DE</pipeline_id>
+  <qa_agent_run_id>qa-849836f544b6f7e2</qa_agent_run_id>
+  <result>PASS</result>
+  <numeric_score>108</numeric_score>
+
+  <scope_verification>
+    <declared_files>
+      <file>tests/test_oracle_quality_gate.py</file>
+      <file>tests/test_patch_lane.py</file>
+      <file>tests/test_check_cli_evidence_contract.py</file>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tools/__init__.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC01/input.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC01/expected.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC02/input.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC02/expected.json</file>
+    </declared_files>
+    <scope_match>PASS</scope_match>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <note>tests/test_oracle_quality_gate.py CLI 테스트 2개 PIPELINE_STATE_PATH 격리 방식으로 수정 완료</note>
+  </micro_task_boundary>
+
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <note>tools/check_cli_evidence_contract.py + tests/test_check_cli_evidence_contract.py + ci.yml 스텝 추가 완료</note>
+  </micro_task_boundary>
+
+  <micro_task_boundary>
+    <mt_id>MT-3</mt_id>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <note>tests/oracles/BUG-20260525-39DE/TC01,TC02 oracle 파일 추가 완료</note>
+  </micro_task_boundary>
+
+  <test_results>
+    <suite name="test_oracle_quality_gate.py">
+      <total>11</total>
+      <passed>11</passed>
+      <failed>0</failed>
+    </suite>
+    <suite name="test_check_cli_evidence_contract.py">
+      <total>6</total>
+      <passed>6</passed>
+      <failed>0</failed>
+    </suite>
+    <suite name="test_patch_lane.py">
+      <total>14</total>
+      <passed>14</passed>
+      <failed>0</failed>
+    </suite>
+    <suite name="full_suite">
+      <total>341</total>
+      <passed>341</passed>
+      <failed>0</failed>
+    </suite>
+  </test_results>
+
+  <cli_evidence_contract>
+    <result>PASS</result>
+    <violations>0</violations>
+    <note>tools/check_cli_evidence_contract.py --path tests: no violations found</note>
+  </cli_evidence_contract>
+
+  <contract_audit>
+    <result>PASS</result>
+    <note>pipeline.py contract audit: BUG-20260525-39DE audit PASS</note>
+  </contract_audit>
+
+  <acceptance_criteria_verification>
+    <criterion id="AC-1">
+      <description>test_oracle_quality_gate.py CLI 테스트 2개: PIPELINE_STATE_PATH 격리 + final_state 검증</description>
+      <result>PASS</result>
+      <evidence>test_cli_audit_oracle_normal_plus_edge_passes, test_cli_audit_oracle_normal_only_fails 모두 PASS</evidence>
+    </criterion>
+    <criterion id="AC-2">
+      <description>check_cli_evidence_contract.py: STATE_CHANGING_SUBCOMMANDS에 contract 포함, CLI_EVIDENCE_ALLOW_READ_ONLY 어노테이션 무효</description>
+      <result>PASS</result>
+      <evidence>test_bad_state_changing_with_annotation PASS</evidence>
+    </criterion>
+    <criterion id="AC-3">
+      <description>ci.yml: CLI Evidence Contract 검사 스텝 추가</description>
+      <result>PASS</result>
+      <evidence>python tools/check_cli_evidence_contract.py --path tests 스텝이 ci.yml에 추가됨</evidence>
+    </criterion>
+    <criterion id="AC-4">
+      <description>Oracle TC01(normal) + TC02(edge): non-empty, non-placeholder expected.json</description>
+      <result>PASS</result>
+      <evidence>TC01 expected.json: violations=0 / TC02 expected.json: violations=1</evidence>
+    </criterion>
+    <criterion id="AC-5">
+      <description>341개 전체 테스트 PASS</description>
+      <result>PASS</result>
+      <evidence>341 passed in 45.18s</evidence>
+    </criterion>
+  </acceptance_criteria_verification>
+
+  <failure_signature>none</failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+
+  <verdict>PASS</verdict>
+  <summary>BUG-20260525-39DE QA 검증 완료. 핵심 수정사항 모두 정상 동작 확인. 341개 테스트 전부 PASS.</summary>
+</qa_report>
