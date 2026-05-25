@@ -319,9 +319,10 @@ def test_new_creates_state(tmp_path: Path) -> None:
     current_phase=pm, terminal_state=null 인지 검증.
 
     CLI Evidence Contract: subprocess 호출 후 final_state 파일을 읽어 assertion.
+    격리: make_env()가 PIPELINE_STATE_PATH=state_file을 subprocess 환경변수로 주입.
     """
     state_file = tmp_path / "pipeline_state.json"
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation via make_env
 
     # state 파일이 미리 없는 상태에서 시작
     assert not state_file.exists()
@@ -401,6 +402,7 @@ def test_gates_technical_records_result(tmp_path: Path) -> None:
     PASS 또는 FAIL이 기록되는지 검증 (PENDING 유지 금지).
 
     CLI Evidence Contract: final_state에 technical.status 변경 확인.
+    격리: make_env()가 PIPELINE_STATE_PATH=state_file을 subprocess 환경변수로 주입.
     """
     state_file = tmp_path / "pipeline_state.json"
     state = _complete_ready_state()
@@ -413,7 +415,7 @@ def test_gates_technical_records_result(tmp_path: Path) -> None:
     state["current_phase"] = "harness"
     write_state(state_file, state)
 
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation via make_env
 
     try:
         result = run_cli(
@@ -458,6 +460,7 @@ def test_architect_blocked_without_oracle_quality(tmp_path: Path) -> None:
     returncode=1 및 oracle_quality blocker 메시지가 출력되는지 검증.
 
     CLI Evidence Contract: final_state.terminal_state != "COMPLETE" 확인.
+    격리: make_env()가 PIPELINE_STATE_PATH=state_file을 subprocess 환경변수로 주입.
     """
     state_file = tmp_path / "pipeline_state.json"
     state = _complete_ready_state()
@@ -496,7 +499,7 @@ def test_architect_blocked_without_oracle_quality(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation via make_env
 
     result = run_cli(
         ["architect", "--report-file", str(report_file)],
@@ -537,6 +540,7 @@ def test_gates_accept_blocked_without_evidence(tmp_path: Path) -> None:
     PR readiness 검사로 차단되어 acceptance 상태가 PASS로 전이되지 않는지 검증.
 
     CLI Evidence Contract: final_state.external_gates.acceptance.status != PASS 확인.
+    격리: make_env()가 PIPELINE_STATE_PATH=state_file을 subprocess 환경변수로 주입.
     """
     state_file = tmp_path / "pipeline_state.json"
     state = _complete_ready_state()
@@ -548,7 +552,7 @@ def test_gates_accept_blocked_without_evidence(tmp_path: Path) -> None:
     state["current_phase"] = "harness"
     write_state(state_file, state)
 
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation via make_env
 
     # 존재하지 않는 evidence 경로 지정
     nonexistent = tmp_path / "nonexistent_evidence_file.txt"
@@ -640,6 +644,7 @@ def test_return_phase_revert_resets_downstream(tmp_path: Path) -> None:
     downstream phase 상태(qa.status=PENDING)는 변경되지 않는지 검증.
 
     CLI Evidence Contract: final_state.current_phase + phases.qa.status 검증.
+    격리: make_env()가 PIPELINE_STATE_PATH=state_file을 subprocess 환경변수로 주입.
     """
     state_file = tmp_path / "pipeline_state.json"
     state = _base_state()
@@ -660,7 +665,7 @@ def test_return_phase_revert_resets_downstream(tmp_path: Path) -> None:
     }
     write_state(state_file, state)
 
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation via make_env
 
     # pm 재완료 시도 (current_phase=qa이므로 차단되어야 함)
     result = run_cli(
@@ -702,6 +707,7 @@ def test_github_ci_gate_blocked_on_sha_mismatch(tmp_path: Path) -> None:
     기록되어야 하며 PASS로 잘못 전이되지 않는지 검증.
 
     CLI Evidence Contract: final_state.github_ci.status != PASS 확인.
+    격리: make_env()가 PIPELINE_STATE_PATH=state_file을 subprocess 환경변수로 주입.
     """
     state_file = tmp_path / "pipeline_state.json"
     state = _complete_ready_state()
@@ -713,7 +719,7 @@ def test_github_ci_gate_blocked_on_sha_mismatch(tmp_path: Path) -> None:
     state["current_phase"] = "harness"
     write_state(state_file, state)
 
-    env = make_env(state_file)
+    env = make_env(state_file)  # PIPELINE_STATE_PATH isolation via make_env
     # gh CLI 호출 차단: PATH에서 gh 제거하지 않더라도 가짜 repo로 인해 실패
     env["GH_TOKEN"] = ""
     # Windows credential store 무력화: gh가 시스템 자격증명을 읽지 못하도록
