@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260525-AA88</pipeline_id>
+  <qa_run_id>qa-22fd325b6505dcb7</qa_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>112</numeric_score>
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <verdict>WITHIN_SCOPE</verdict>
+      <target_function>core.acceptance.scorers._smart_resolve</target_function>
+      <verified>parent.parent.parent project root 수정 + project_dir 인자 추가 확인</verified>
+    </mt>
+    <mt id="MT-2">
+      <verdict>WITHIN_SCOPE</verdict>
+      <target_function>pipeline._consistency_listed_files</target_function>
+      <verified>점수/타이밍 오탐 필터 2개 추가 확인</verified>
+    </mt>
+    <mt id="MT-3">
+      <verdict>WITHIN_SCOPE</verdict>
+      <target_function>tests.test_scorers_smart_resolve, tests.test_consistency_filter_falsepos</target_function>
+      <verified>14개 신규 테스트 + 4개 oracle 케이스 확인</verified>
+    </mt>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <scope_manifest_match>PASS</scope_manifest_match>
+  <trust_root_violation>false</trust_root_violation>
+  <test_results>
+    <new_tests_passed>14</new_tests_passed>
+    <regression>none</regression>
+    <total_suite_passed>415</total_suite_passed>
+    <e2e_passed>7</e2e_passed>
+    <e2e_preexisting_fail>test_github_ci_gate_blocked_on_sha_mismatch (IMP-20260525-6FAC pre-existing)</e2e_preexisting_fail>
+  </test_results>
+  <oracle_quality>PASS</oracle_quality>
+  <bug_fix_verified>true</bug_fix_verified>
+</qa_report>
