@@ -192,7 +192,7 @@ def test_ensure_v210_oracle_quality_init() -> None:
 # =============================================================================
 
 
-def test_cli_audit_oracle_passes_with_normal_and_edge() -> None:
+def test_cli_audit_oracle_normal_plus_edge_passes() -> None:
     """CLI: contract audit-oracle --oracle-dir (normal+edge) → exit 0, stdout에 PASS 포함."""
     import os
     import subprocess
@@ -251,7 +251,7 @@ def test_cli_audit_oracle_passes_with_normal_and_edge() -> None:
         )
 
 
-def test_cli_audit_oracle_fails_with_normal_only() -> None:
+def test_cli_audit_oracle_normal_only_fails() -> None:
     """CLI: contract audit-oracle --oracle-dir (normal only, edge 없음) → exit 1, stdout에 FAIL 및 edge 언급 포함."""
     import os
     import subprocess
@@ -307,7 +307,7 @@ def test_cli_audit_oracle_fails_with_normal_only() -> None:
         )
 
 
-def test_oracle_quality_missing_blocks_architect() -> None:
+def test_cli_oracle_quality_missing_blocks_architect() -> None:
     """oracle_quality={} (초기값) 상태에서 _external_gate_blockers가 oracle_quality blocker를 생성하는지 검증.
 
     BUG-20260524-B794 핵심 수정: oracle_quality={}(빈 dict)는 PASS가 아니므로
