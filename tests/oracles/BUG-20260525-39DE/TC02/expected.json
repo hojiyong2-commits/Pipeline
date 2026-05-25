@@ -1,0 +1,5 @@
+{
+  "violations": 1,
+  "status": "FAIL",
+  "description": "격리(mocker/tmp_path/monkeypatch) 없이 상태 변경 CLI(contract freeze)를 호출하는 테스트는 위반으로 탐지됨"
+}

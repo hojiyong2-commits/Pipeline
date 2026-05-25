@@ -1,0 +1,4 @@
+{
+  "description": "CLI Evidence Contract 검사: 애노테이션 있는 코드(위반 없음)에 PASS 반환",
+  "test_code": "# CLI_EVIDENCE_ALLOW_READ_ONLY: contract audit-oracle --oracle-dir is read-only; does not modify pipeline_state.json\nimport subprocess\nresult = subprocess.run(['python', 'pipeline.py', 'contract', 'audit-oracle', '--oracle-dir', 'tests/oracles'], capture_output=True)"
+}

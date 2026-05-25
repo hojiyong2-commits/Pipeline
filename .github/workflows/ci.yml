@@ -112,6 +112,10 @@ jobs:
           $env:GITHUB_BASE_SHA = $baseSha
           python pipeline.py gates preflight-pr --phase $phase --pipeline-id $pipelineId --request-file $reqPath
 
+      - name: CLI Evidence Contract 검사
+        # IMP-20260524-897B: pipeline.py 상태 변경 CLI 호출 격리 계약 검사
+        run: python tools/check_cli_evidence_contract.py --path tests
+
       - name: 자동 검사 실행
         env:
           PIPELINE_NO_DASHBOARD: "1"

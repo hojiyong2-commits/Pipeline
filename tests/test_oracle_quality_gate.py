@@ -199,6 +199,13 @@ def test_cli_audit_oracle_normal_plus_edge_passes() -> None:
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        # PIPELINE_STATE_PATH 격리: contract audit-oracle은 oracle_manifest만 읽으므로
+        # 임시 state 파일을 사용해 실제 pipeline_state.json이 변경되지 않도록 보호.
+        state_path = os.path.join(tmpdir, "pipeline_state_isolated.json")
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        env = {**os.environ, "PIPELINE_STATE_PATH": state_path}
+
         # oracle input.json 생성 (normal + edge entries)
         oracle_dir = os.path.join(tmpdir, "oracle_dir")
         os.makedirs(oracle_dir)
@@ -240,6 +247,15 @@ def test_cli_audit_oracle_normal_plus_edge_passes() -> None:
             capture_output=True,
             encoding="utf-8",
             errors="replace",
+            env=env,
+        )
+
+        # 격리된 state 파일이 빈 상태로 유지되어야 함 (final_state 검증)
+        with open(state_path, encoding="utf-8") as f:
+            final_state = json.load(f)
+        assert final_state == {}, (
+            f"contract audit-oracle should not write to pipeline_state.json, "
+            f"but final_state was: {final_state}"
         )
 
         assert result.returncode == 0, (
@@ -258,6 +274,13 @@ def test_cli_audit_oracle_normal_only_fails() -> None:
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        # PIPELINE_STATE_PATH 격리: contract audit-oracle은 oracle_manifest만 읽으므로
+        # 임시 state 파일을 사용해 실제 pipeline_state.json이 변경되지 않도록 보호.
+        state_path = os.path.join(tmpdir, "pipeline_state_isolated.json")
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        env = {**os.environ, "PIPELINE_STATE_PATH": state_path}
+
         oracle_dir = os.path.join(tmpdir, "oracle_dir")
         os.makedirs(oracle_dir)
 
@@ -293,6 +316,15 @@ def test_cli_audit_oracle_normal_only_fails() -> None:
             capture_output=True,
             encoding="utf-8",
             errors="replace",
+            env=env,
+        )
+
+        # 격리된 state 파일이 빈 상태로 유지되어야 함 (final_state 검증)
+        with open(state_path, encoding="utf-8") as f:
+            final_state = json.load(f)
+        assert final_state == {}, (
+            f"contract audit-oracle should not write to pipeline_state.json, "
+            f"but final_state was: {final_state}"
         )
 
         assert result.returncode != 0, (
