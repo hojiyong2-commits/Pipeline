@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "IMP-20260525-463F",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["tests/e2e/test_real_cli_paths.py"],
+      "affected_functions": ["tests.e2e.test_real_cli_paths.test_github_ci_gate_blocked_on_sha_mismatch"]
+    }
+  ]
+}
