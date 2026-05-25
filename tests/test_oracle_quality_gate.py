@@ -19,9 +19,7 @@ import json
 import pathlib
 import sys
 import tempfile
-from typing import Any, Dict, List
-
-import pytest
+from typing import Any, Dict
 
 # pipeline 모듈 import
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -65,7 +63,6 @@ def test_normal_plus_edge_passes() -> None:
 def test_normal_only_fails() -> None:
     """TC02: normal-only oracle (edge 없음) → status=FAIL, edge_required 메시지 포함."""
     data = _load_input("TC02")
-    expected = _load_expected("TC02")
     oracles = data["oracles"]
     allow = data.get("allow_agent_generated", False)
 
