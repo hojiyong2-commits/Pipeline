@@ -7,9 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
-from core.acceptance.scorers import _smart_resolve, ScoringError
+from core.acceptance.scorers import _smart_resolve
 
 
 # Project root is three levels up from this file: tests/ -> project root

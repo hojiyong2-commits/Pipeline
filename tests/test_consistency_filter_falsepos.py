@@ -5,11 +5,9 @@ notations (34.74s, 0.5s) are not extracted as file paths.
 """
 from __future__ import annotations
 
-import pytest
 
 # pipeline.py에서 _consistency_listed_files 가져오기
 import importlib
-import sys
 from pathlib import Path
 
 # pipeline.py는 패키지가 아닌 단일 파일 — 직접 임포트
