@@ -1,0 +1,213 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260525-AA88 Architect 권고 버그 2건 수정 -->
+<!-- pm_planner agent_run_id: pm_planner-49f9c449c08d7402 -->
+
+<decomposition_audit>
+  <total_functions_identified>4</total_functions_identified>
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <split_decision>_smart_resolve(3함수) MT-1, _consistency_listed_files MT-2, 테스트+oracle MT-3. 변경함수 4개 SPLIT_REQUIRED.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260525-AA88</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, AL</category_tags>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명 등 P2 취향은 유지보수성 원칙으로 PM이 정했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>_smart_resolve의 project_root를 parent.parent.parent로 수정하고 score_file_exists_check, score_file_output_check도 함께 수정해도 될까요?</user_facing_question>
+        <evidence>_smart_resolve 호출부 2곳(scorers.py 110/121행)이 base_dir 전달. parent.parent.parent가 실제 project root임 확인.</evidence>
+        <why_it_matters>test_set.json 우회 없이 tests/oracles/ 상대 경로를 찾으려면 올바른 project root 필요.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>_smart_resolve 수정 + score_file_exists_check, score_file_output_check에 project_dir 전달</label>
+            <benefit>근본 수정, 모든 호출 경로에서 올바른 project root 사용</benefit>
+            <cost>2개 함수에 project_dir 전달 로직 추가</cost>
+          </option>
+          <option id="B">
+            <label>_smart_resolve만 수정</label>
+            <benefit>변경 범위가 최소화되어 다른 호출 경로에 미치는 영향이 없음. project_dir 전달 없이 내부 경로만 수정</benefit>
+            <cost>score_file_exists_check와 score_file_output_check가 project_dir를 전달하지 않아 oracle 경로 탐색이 불완전할 수 있음</cost>
+          </option>
+        </options>
+        <user_answer>사전 분석에서 옵션 A 명시됨 — 근본 수정 방향 채택</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="module_split" mt_id="MT-2">
+        <user_facing_question>_consistency_listed_files에서 숫자/숫자(120/120)와 숫자.숫자s(34.74s) 패턴을 파일로 보지 않도록 필터 추가해도 될까요?</user_facing_question>
+        <evidence>오탐 확인: 120/120, 34.74s, 0.5s가 파일로 추출됨. 기존 43개 테스트에 영향 없음.</evidence>
+        <why_it_matters>PR body에 점수/타이밍이 있으면 changed_files_mismatch로 정상 파이프라인이 BLOCKED됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>숫자 시작 슬래시 패턴(digits/digits)과 숫자.숫자 패턴 필터 추가</label>
+            <benefit>오탐 제거로 정상 파이프라인이 점수 표기 때문에 BLOCKED되는 문제 해결. 기존 정상 케이스 영향 없음</benefit>
+            <cost>코드 5-10줄 증가. 정규식 패턴 관리 필요</cost>
+          </option>
+          <option id="B">
+            <label>파일 경로 조건을 더 엄격하게(알파벳 시작만 허용)</label>
+            <benefit>더 엄격한 파일 경로 검증으로 점수/타이밍 오탐을 포함한 다른 오탐 패턴도 방지</benefit>
+            <cost>숫자로 시작하는 실제 파일명(예: 1_test.py)이 누락될 수 있음. 기존 테스트 케이스 재검토 필요</cost>
+          </option>
+        </options>
+        <user_answer>사전 분석에서 옵션 A 명시됨 — 기존 동작 보존 방향 채택</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>2개 파일 수정 + 테스트 추가. pipeline.py는 순수 함수 내부 필터만 변경, 상태 전이 영향 없음.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>4</expected_changed_functions>
+      <expected_changed_lines>35</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <interface_spec>
+    Input: core/acceptance/scorers.py, pipeline.py (현재 버전)
+    Output: 수정된 scorers.py, 수정된 pipeline.py, 새 테스트 파일 2개, oracle 파일들
+    Validation: pytest 전체 통과, Real CLI Path E2E 충돌 없음
+  </interface_spec>
+
+  <requirements>
+    _smart_resolve project_root = parent.parent.parent 수정
+    score_file_exists_check에서 project_dir를 _smart_resolve에 전달
+    score_file_output_check에서 project_dir를 _smart_resolve에 전달
+    _smart_resolve 시그니처 변경 없이 내부 로직만 수정
+    _consistency_listed_files에서 숫자/숫자 패턴 오탐 제거
+    _consistency_listed_files에서 숫자.숫자 패턴 오탐 제거
+    기존 정상 파일 경로 추출 유지
+    기존 테스트 43개 모두 통과
+    oracle 파일: tests/oracles/IMP-20260525-AA88/ 아래
+    oracle_manifest.json: source=user_provided, SHA-256 해시, normal+error 각 1개
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>core.acceptance.scorers._smart_resolve</affected_function>
+      <target_files>
+        <file>core/acceptance/scorers.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>core.acceptance.scorers.score_file_exists_check</site>
+        <site>core.acceptance.scorers.score_file_output_check</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_smart_resolve</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_smart_resolve의 project_root를 parent.parent.parent로 수정. score_file_exists_check와 score_file_output_check에서 project_dir 전달.</change_summary>
+      <line_estimate>15</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline._consistency_listed_files</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._check_protocol_consistency</site>
+        <site>pipeline._run_protocol_consistency_check</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_consistency_listed_files</pattern>
+        <match_count>14</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_consistency_listed_files에서 숫자/숫자(120/120)와 숫자.숫자s(34.74s) 오탐 필터 추가.</change_summary>
+      <line_estimate>12</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>tests.test_scorers_smart_resolve, tests.test_consistency_filter_falsepos</affected_function>
+      <target_files>
+        <file>tests/test_scorers_smart_resolve.py</file>
+        <file>tests/test_consistency_filter_falsepos.py</file>
+        <file>tests/oracles/IMP-20260525-AA88/TC-normal-smart-resolve/input.json</file>
+        <file>tests/oracles/IMP-20260525-AA88/TC-normal-smart-resolve/expected.json</file>
+        <file>tests/oracles/IMP-20260525-AA88/TC-edge-parent-parent-fail/input.json</file>
+        <file>tests/oracles/IMP-20260525-AA88/TC-edge-parent-parent-fail/expected.json</file>
+        <file>tests/oracles/IMP-20260525-AA88/TC-normal-consistency-filter/input.json</file>
+        <file>tests/oracles/IMP-20260525-AA88/TC-normal-consistency-filter/expected.json</file>
+        <file>tests/oracles/IMP-20260525-AA88/TC-error-score-not-file/input.json</file>
+        <file>tests/oracles/IMP-20260525-AA88/TC-error-score-not-file/expected.json</file>
+        <file>tests/oracles/IMP-20260525-AA88/oracle_manifest.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_scorers_smart_resolve</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_smart_resolve 경로 수정 검증 테스트 5개 + _consistency_listed_files 오탐 방지 테스트 5개 + oracle 파일 4케이스 추가.</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    pytest tests/test_scorers_smart_resolve.py PASS (5개 이상)
+    pytest tests/test_consistency_filter_falsepos.py PASS (5개 이상)
+    기존 tests/test_protocol_consistency.py 43개 모두 통과
+    기존 test_contract_acceptance_v2.py 4개 모두 통과
+    전체 pytest 412+ passed 유지
+    _smart_resolve로 tests/oracles/IMP-20260525-AA88/ 경로 실제 찾음
+    parent.parent(core/) 기준으로는 못 찾는 케이스 증명
+    _consistency_listed_files 120/120 빈 집합 반환
+    _consistency_listed_files 34.74s 빈 집합 반환
+    _consistency_listed_files tests/test_x.py 정상 추출
+    GitHub Actions CI PASS
+  </acceptance_criteria>
+
+  <forbidden>
+    test_set.json 수정 금지
+    tests/oracles/ 기존 파일 수정 금지
+    _smart_resolve 시그니처 변경 금지
+    _consistency_listed_files 시그니처 변경 금지
+    e2e/test_real_cli_paths.py 수정 금지
+    scope_manifest에 없는 파일 수정 금지
+  </forbidden>
+
+  <context_injection>
+    <target_files>
+      <file>core/acceptance/scorers.py</file>
+      <file>pipeline.py</file>
+      <file>tests/test_protocol_consistency.py</file>
+      <file>core/acceptance/runner.py</file>
+    </target_files>
+    <phase_rules_excerpt>IMP-20260525-AA88: MT-1 scorers.py, MT-2 pipeline.py, MT-3 테스트+oracle. pipeline.py는 내부 필터만 수정.</phase_rules_excerpt>
+    <prev_phase_summary>IMP-20260525-6FAC COMPLETE. Architect: _smart_resolve parent.parent 버그, _consistency_listed_files 점수 오탐 2건 기록.</prev_phase_summary>
+  </context_injection>
+</step_plan>
