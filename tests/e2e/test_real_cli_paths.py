@@ -721,6 +721,7 @@ def test_github_ci_gate_blocked_on_sha_mismatch(tmp_path: Path) -> None:
 
     env = make_env(state_file)  # PIPELINE_STATE_PATH isolation via make_env
     env["GH_TOKEN"] = ""
+    env["GITHUB_TOKEN"] = ""
     # PATH 앞에 fake gh 바이너리 삽입 — wincred/GH_CONFIG_DIR/APPDATA 등 모든 인증 소스 차단
     fake_gh_dir = tmp_path / "fake_gh_bin"
     fake_gh_dir.mkdir(exist_ok=True)
@@ -733,9 +734,14 @@ def test_github_ci_gate_blocked_on_sha_mismatch(tmp_path: Path) -> None:
         fake_gh.write_text("#!/bin/sh\necho 'gh: authentication required' >&2\nexit 1\n")
         fake_gh.chmod(0o755)
     env["PATH"] = str(fake_gh_dir) + os.pathsep + env.get("PATH", os.environ.get("PATH", ""))
+    # --commit에 존재하지 않는 SHA를 전달하여 GitHub API가 matching CI run을 찾지 못하게 격리
+    # pipeline.py는 git credential fill로 토큰을 획득할 수 있으나, public repo라서
+    # 토큰 없이도 API 응답 가능 — 따라서 가짜 commit SHA로 run이 없는 상황을 강제
+    _fake_commit_sha = "0" * 40  # 존재하지 않는 SHA → API가 matching run을 못 찾아 FAIL/PENDING
 
     result = run_cli(
-        ["gates", "github-ci", "--repo", "hojiyong2-commits/Pipeline"],
+        ["gates", "github-ci", "--repo", "hojiyong2-commits/Pipeline",
+         "--commit", _fake_commit_sha],
         env=env,
         timeout=60,
     )
