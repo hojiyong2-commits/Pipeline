@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260525-39DE</pipeline_id>
+  <evidence>
+    <file>tests/test_oracle_quality_gate.py</file>
+    <file>tests/test_patch_lane.py</file>
+    <file>tests/test_check_cli_evidence_contract.py</file>
+    <file>tools/check_cli_evidence_contract.py</file>
+    <file>tools/__init__.py</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>tests/oracles/BUG-20260525-39DE/TC01/input.json</file>
+    <file>tests/oracles/BUG-20260525-39DE/TC01/expected.json</file>
+    <file>tests/oracles/BUG-20260525-39DE/TC02/input.json</file>
+    <file>tests/oracles/BUG-20260525-39DE/TC02/expected.json</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>tests/test_oracle_quality_gate.py</file>
+      <file>tests/test_patch_lane.py</file>
+      <file>tests/test_check_cli_evidence_contract.py</file>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tools/__init__.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC01/input.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC01/expected.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC02/input.json</file>
+      <file>tests/oracles/BUG-20260525-39DE/TC02/expected.json</file>
+    </files_to_modify>
+  </scope_declaration>
+  <module_gates>
+    <mt id="MT-1" status="PASS">tests/test_oracle_quality_gate.py - PIPELINE_STATE_PATH 격리 + final_state assertion 추가</mt>
+    <mt id="MT-2" status="PASS">tools/check_cli_evidence_contract.py 신규, tests/test_patch_lane.py 교체, .github/workflows/ci.yml 스텝 추가</mt>
+    <integration status="PASS"/>
+  </module_gates>
+  <impact_analysis>
+    <target_function>test_cli_audit_oracle_normal_plus_edge_passes, test_cli_audit_oracle_normal_only_fails, scan_test_files, classify_command, check_evidence_assertions</target_function>
+    <target_files>
+      <file>tests/test_oracle_quality_gate.py</file>
+      <file>tests/test_patch_lane.py</file>
+      <file>tests/test_check_cli_evidence_contract.py</file>
+      <file>tools/check_cli_evidence_contract.py</file>
+      <file>tools/__init__.py</file>
+      <file>.github/workflows/ci.yml</file>
+    </target_files>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <side_effects>
+      CI에 CLI Evidence Contract 검사 스텝 추가됨.
+      tests/test_patch_lane.py는 PIPELINE_STATE_PATH 격리 버전으로 교체됨.
+    </side_effects>
+    <scope_lock_check>
+      <git_diff_files>.github/workflows/ci.yml, tests/test_oracle_quality_gate.py, tests/test_patch_lane.py, tests/test_check_cli_evidence_contract.py (신규), tools/__init__.py (신규), tools/check_cli_evidence_contract.py (신규), tests/oracles/BUG-20260525-39DE/TC01-TC02 (신규)</git_diff_files>
+      <manifest_files>위 목록 전부</manifest_files>
+      <extra_files>없음</extra_files>
+      <trust_root_violation>false</trust_root_violation>
+      <verdict>PASS</verdict>
+    </scope_lock_check>
+  </impact_analysis>
+</handover>
