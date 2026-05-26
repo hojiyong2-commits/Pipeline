@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260524-B794</pipeline_id>
+  <agent_run_id>dev-414fdabceff3aed9</agent_run_id>
+  <status>READY_FOR_QA</status>
+  <commit_sha>da6a9b39bde05c3f4081a50664107e42e6bc61ad</commit_sha>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_oracle_quality_gate.py</file>
+      <file>test_three_gate_pipeline.py</file>
+      <file>tests/oracles/BUG-20260524-B794/TC01/expected.json</file>
+      <file>tests/oracles/BUG-20260524-B794/TC01/input.json</file>
+      <file>tests/oracles/BUG-20260524-B794/TC02/expected.json</file>
+      <file>tests/oracles/BUG-20260524-B794/TC02/input.json</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>pipeline._external_gate_blockers</target_function>
+    <change_summary>oracle_quality가 없거나 빈 dict이거나 PENDING이면 COMPLETE 차단 추가</change_summary>
+    <mt_id>MT-2</mt_id>
+    <target_function>test_cli_audit_oracle_normal_plus_edge_passes, test_cli_audit_oracle_normal_only_fails, test_cli_oracle_quality_missing_blocks_architect</target_function>
+    <change_summary>subprocess 기반 실제 CLI 경로 테스트 3개 추가. cmd_contract() audit-oracle 독립 동작 수정</change_summary>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py tests/test_oracle_quality_gate.py test_three_gate_pipeline.py tests/oracles/BUG-20260524-B794/TC01/expected.json tests/oracles/BUG-20260524-B794/TC01/input.json tests/oracles/BUG-20260524-B794/TC02/expected.json tests/oracles/BUG-20260524-B794/TC02/input.json</git_diff_files>
+    <manifest_files>pipeline.py tests/test_oracle_quality_gate.py tests/oracles/BUG-20260524-B794/</manifest_files>
+    <extra_files>test_three_gate_pipeline.py (기존 테스트 oracle_quality PASS 설정 추가 — MT-1 scope 내)</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_oracle_quality_gate.py</file>
+    <file>test_three_gate_pipeline.py</file>
+    <file>tests/oracles/BUG-20260524-B794/TC01/expected.json</file>
+    <file>tests/oracles/BUG-20260524-B794/TC01/input.json</file>
+    <file>tests/oracles/BUG-20260524-B794/TC02/expected.json</file>
+    <file>tests/oracles/BUG-20260524-B794/TC02/input.json</file>
+  </evidence>
+
+  <module_gate_summary>
+    <module id="MT-1" status="PASS">_external_gate_blockers oracle_quality 빈 dict/없음/PENDING 차단 수정</module>
+    <module id="MT-2" status="PASS">CLI 경로 테스트 3개 추가 + audit-oracle --oracle-dir 독립 동작</module>
+    <integration status="PASS"/>
+  </module_gate_summary>
+
+  <test_results>
+    <total>538</total>
+    <passed>538</passed>
+    <failed>0</failed>
+    <github_ci_run_id>26376450323</github_ci_run_id>
+    <github_ci_conclusion>success</github_ci_conclusion>
+  </test_results>
+</handover>
