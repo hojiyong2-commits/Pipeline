@@ -2295,6 +2295,18 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
         "outputs": {"items": []},
         "failure_packets": [],
         "protocol_evolution_decision": None,
+        # IMP-20260526-82E3 MT-1: 관측성 강화 - 5개 alias 키 (역호환 위해 기존 phases/external_gates와 병행 보존)
+        "phase_timings": {},                   # {phase: {elapsed_seconds: int}}
+        "gate_timings": {},                    # {gate: {elapsed_seconds: int}}
+        "agent_timings": {},                   # {run_id: {elapsed_seconds: int}}
+        "github_actions_timings": {            # 5상태 누적 시간 (초)
+            "WAITING_FOR_TRIGGER": 0,
+            "QUEUED": 0,
+            "IN_PROGRESS": 0,
+            "COMPLETED": 0,
+            "TIMEOUT": 0,
+        },
+        "failure_summary": {},                 # {failure_code: {count: int, is_repeat: bool}}
     }
 
 
@@ -2357,6 +2369,27 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     # IMP-20260524-48C4 MT-1: oracle_quality 상태 필드 초기화
     if "oracle_quality" not in state:
         state["oracle_quality"] = {}
+    # IMP-20260526-82E3 MT-1: 5개 관측성 alias 키 마이그레이션 (역호환, idempotent)
+    if "phase_timings" not in state:
+        state["phase_timings"] = {}
+    if "gate_timings" not in state:
+        state["gate_timings"] = {}
+    if "agent_timings" not in state:
+        state["agent_timings"] = {}
+    if "github_actions_timings" not in state or not isinstance(state.get("github_actions_timings"), dict):
+        state["github_actions_timings"] = {
+            "WAITING_FOR_TRIGGER": 0,
+            "QUEUED": 0,
+            "IN_PROGRESS": 0,
+            "COMPLETED": 0,
+            "TIMEOUT": 0,
+        }
+    else:
+        for _gh_state in ("WAITING_FOR_TRIGGER", "QUEUED", "IN_PROGRESS", "COMPLETED", "TIMEOUT"):
+            if _gh_state not in state["github_actions_timings"]:
+                state["github_actions_timings"][_gh_state] = 0
+    if "failure_summary" not in state:
+        state["failure_summary"] = {}
     return state
 
 
@@ -13923,6 +13956,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     mt_sub.add_parser("status", help="현재 활성 파이프라인 기준 메트릭 상태 요약 출력")
 
+    # IMP-20260526-82E3 MT-4: metrics report --json / --markdown
+    p_mt_report = mt_sub.add_parser(
+        "report",
+        help="현재 state 기준 metrics 보고서를 JSON 또는 한국어 Markdown으로 출력",
+    )
+    p_mt_report_fmt = p_mt_report.add_mutually_exclusive_group()
+    p_mt_report_fmt.add_argument(
+        "--json",
+        dest="format",
+        action="store_const",
+        const="json",
+        help="JSON 형식 출력 (기본값)",
+    )
+    p_mt_report_fmt.add_argument(
+        "--markdown",
+        dest="format",
+        action="store_const",
+        const="markdown",
+        help="한국어 Markdown 형식 출력",
+    )
+
     return parser
 
 
@@ -14599,6 +14653,250 @@ def _gate_elapsed_summary(state: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+# ── IMP-20260526-82E3 Observability Metrics Gate (MT-1~MT-4) ─────────────────
+
+
+def _parse_iso8601_z(ts: str) -> "datetime":
+    """ISO8601 'Z' 시각 문자열을 timezone-aware datetime으로 변환.
+
+    'YYYY-MM-DDTHH:MM:SSZ' 또는 'YYYY-MM-DDTHH:MM:SS+00:00' 형식을 지원한다.
+    IMP-20260526-82E3 MT-1.
+    """
+    from datetime import datetime
+    if not isinstance(ts, str) or not ts:
+        raise ValueError("타임스탬프가 비어 있습니다.")
+    cleaned = ts.replace("Z", "+00:00")
+    return datetime.fromisoformat(cleaned)
+
+
+def _elapsed_seconds(start: str, end: str) -> int:
+    """ISO8601 시작/종료 시각으로부터 elapsed_seconds(정수)를 계산.
+
+    음수가 발생하면 0으로 보정(잘못된 입력 방어).
+    IMP-20260526-82E3 MT-1.
+    """
+    t_start = _parse_iso8601_z(start)
+    t_end = _parse_iso8601_z(end)
+    delta = (t_end - t_start).total_seconds()
+    if delta < 0:
+        return 0
+    return int(delta)
+
+
+def _record_phase_timing(phase: str, start: str, end: str) -> Dict[str, Any]:
+    """Phase별 elapsed_seconds 기록용 순수 함수.
+
+    입력:
+      phase: phase 이름 (예: "dev", "qa")
+      start, end: ISO8601 'Z' 시각 문자열
+
+    출력:
+      {"phase": phase, "elapsed_seconds": int, "status": "recorded"}
+
+    Oracle TC-normal-phase-timing 사양 매칭.
+    IMP-20260526-82E3 MT-1.
+    """
+    return {
+        "phase": phase,
+        "elapsed_seconds": _elapsed_seconds(start, end),
+        "status": "recorded",
+    }
+
+
+def _record_gate_timing(gate: str, start: str, end: str) -> Dict[str, Any]:
+    """Gate별 elapsed_seconds 기록용 순수 함수.
+
+    입력:
+      gate: gate 이름 (예: "technical", "oracle")
+      start, end: ISO8601 'Z' 시각 문자열
+
+    출력:
+      {"gate": gate, "elapsed_seconds": int, "status": "recorded"}
+
+    Oracle TC-normal-gate-timing 사양 매칭.
+    IMP-20260526-82E3 MT-1.
+    """
+    return {
+        "gate": gate,
+        "elapsed_seconds": _elapsed_seconds(start, end),
+        "status": "recorded",
+    }
+
+
+# IMP-20260526-82E3 MT-2: GitHub Actions 5상태 표준 키
+_GITHUB_ACTIONS_STATES: tuple = (
+    "WAITING_FOR_TRIGGER",
+    "QUEUED",
+    "IN_PROGRESS",
+    "COMPLETED",
+    "TIMEOUT",
+)
+
+
+def _aggregate_github_actions_state_durations(
+    transitions: Optional[List[Dict[str, Any]]],
+) -> Dict[str, int]:
+    """GitHub Actions 상태 전이 리스트로부터 5상태 누적 시간 dict를 계산.
+
+    입력:
+      transitions: [{"state": "...", "duration": int 초}] 형태의 리스트.
+        state는 _GITHUB_ACTIONS_STATES 중 하나여야 한다(아니면 무시).
+        duration은 정수(초). 음수/잘못된 타입은 0으로 처리.
+
+    출력:
+      {"WAITING_FOR_TRIGGER":int, "QUEUED":int, "IN_PROGRESS":int,
+       "COMPLETED":int, "TIMEOUT":int}
+      누락된 상태 키는 0 유지.
+
+    오라클 사양: TC-normal-github-actions-timing.
+    IMP-20260526-82E3 MT-2.
+    """
+    result: Dict[str, int] = {key: 0 for key in _GITHUB_ACTIONS_STATES}
+    if not transitions:
+        return result
+    if not isinstance(transitions, list):
+        return result
+    for item in transitions:
+        if not isinstance(item, dict):
+            continue
+        state_name = item.get("state")
+        if state_name not in _GITHUB_ACTIONS_STATES:
+            continue
+        duration = item.get("duration")
+        if isinstance(duration, bool):  # bool은 int 서브타입이지만 의미상 부적합
+            continue
+        if not isinstance(duration, int):
+            continue
+        if duration < 0:
+            continue
+        result[state_name] += duration
+    return result
+
+
+def _wait_for_github_ci(
+    repo: str,
+    run_id: Optional[str] = None,
+    poll_interval_seconds: int = 10,
+    timeout_seconds: int = 1200,
+    clock: Optional[Any] = None,
+    poll_callback: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """GitHub Actions 상태를 폴링하면서 5상태 누적 시간을 측정.
+
+    이 함수는 단위 테스트에서 datetime/poll_callback을 주입해 Mock할 수 있다.
+    실제 운영 코드 경로(_run_github_phase_ci 등)는 별도 함수에서 처리하며,
+    이 함수는 IMP-20260526-82E3 MT-2 오라클 검증과 향후 통합을 위한 신규 표면이다.
+
+    입력:
+      repo: "owner/name"
+      run_id: 특정 run id (없으면 polling 함수가 None 반환 가능)
+      poll_interval_seconds: 폴링 간격
+      timeout_seconds: 최대 대기 시간
+      clock: datetime.datetime을 반환하는 callable (테스트 주입용; 기본 datetime.now)
+      poll_callback: (repo, run_id) -> dict (테스트 주입용 폴링 함수)
+
+    출력:
+      {"transitions": [...], "state_durations": {5상태: int}, "final_state": str,
+       "elapsed_seconds": int}
+
+    IMP-20260526-82E3 MT-2.
+    """
+    from datetime import datetime as _dt
+    if clock is None:
+        clock = lambda: _dt.now(tz=timezone.utc)
+    if poll_callback is None:
+        # Production 폴링은 별도 모듈에서 처리. callback이 없으면 즉시 unavailable 반환.
+        return {
+            "transitions": [],
+            "state_durations": _aggregate_github_actions_state_durations([]),
+            "final_state": "확인 불가",
+            "elapsed_seconds": 0,
+            "unavailable_reason": "poll_callback 미지정",
+        }
+    transitions: List[Dict[str, Any]] = []
+    current_state = "WAITING_FOR_TRIGGER"
+    last_change_at = clock()
+    started_at = last_change_at
+    timeout_at = None
+    try:
+        from datetime import timedelta as _td
+        timeout_at = started_at + _td(seconds=timeout_seconds)
+    except Exception:
+        timeout_at = None
+    final_state = current_state
+    while True:
+        now = clock()
+        if timeout_at is not None and now >= timeout_at:
+            # 현재 상태 누적 후 TIMEOUT 전이
+            duration = int((now - last_change_at).total_seconds())
+            if duration > 0:
+                transitions.append({"state": current_state, "duration": duration})
+            transitions.append({"state": "TIMEOUT", "duration": 0})
+            final_state = "TIMEOUT"
+            break
+        poll_result: Dict[str, Any] = poll_callback(repo, run_id) or {}
+        next_state = str(poll_result.get("state") or current_state)
+        if next_state not in _GITHUB_ACTIONS_STATES:
+            next_state = current_state
+        if next_state != current_state:
+            duration = int((now - last_change_at).total_seconds())
+            if duration > 0:
+                transitions.append({"state": current_state, "duration": duration})
+            current_state = next_state
+            last_change_at = now
+        if poll_result.get("done") or current_state == "COMPLETED":
+            duration = int((now - last_change_at).total_seconds())
+            if duration > 0:
+                transitions.append({"state": current_state, "duration": duration})
+            final_state = current_state
+            break
+    elapsed_total = int((clock() - started_at).total_seconds())
+    return {
+        "transitions": transitions,
+        "state_durations": _aggregate_github_actions_state_durations(transitions),
+        "final_state": final_state,
+        "elapsed_seconds": max(0, elapsed_total),
+    }
+
+
+def _compute_failure_summary_from_list(
+    failures: Optional[List[Dict[str, Any]]],
+    *,
+    repeat_threshold: int = 2,
+) -> Dict[str, Dict[str, Any]]:
+    """실패 리스트로부터 failure_code별 {count, is_repeat} 요약을 계산.
+
+    입력:
+      failures: [{"code": "..."}, ...] 형태 리스트.
+        code 키가 없거나 빈 항목은 무시.
+      repeat_threshold: is_repeat=True로 표시할 최소 반복 횟수 (기본 2회).
+
+    출력:
+      {code: {"count": int, "is_repeat": bool}, ...}
+      누락/빈 입력이면 빈 dict 반환.
+
+    오라클 사양: TC-normal-failure-summary.
+    IMP-20260526-82E3 MT-3.
+    """
+    result: Dict[str, Dict[str, Any]] = {}
+    if not failures or not isinstance(failures, list):
+        return result
+    counts: Dict[str, int] = {}
+    for item in failures:
+        if not isinstance(item, dict):
+            continue
+        code = item.get("code") or item.get("failure_code")
+        if not code or not isinstance(code, str):
+            continue
+        counts[code] = counts.get(code, 0) + 1
+    for code, cnt in counts.items():
+        result[code] = {
+            "count": cnt,
+            "is_repeat": cnt >= repeat_threshold,
+        }
+    return result
+
+
 def _failure_retry_summary(state: Dict[str, Any]) -> Dict[str, Any]:
     """failure_packet 리스트에서 code별 카운트, return_phase 분포 집계."""
     pid = str(state.get("pipeline_id") or "UNKNOWN")
@@ -14994,8 +15292,147 @@ def _collect_pipeline_metrics(
     }
 
 
+def _format_metrics_report_json(state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """state로부터 metrics report --json 출력용 dict를 계산.
+
+    IMP-20260526-82E3 MT-4. 오라클 사양:
+      - 입력에 phase_timings에 elapsed_seconds 정보가 있으면 longest_phase 계산
+      - github_actions_timings의 IN_PROGRESS 합계를 github_actions_wait_seconds로 노출
+      - pipeline_id를 그대로 보존
+      - 불확실한 값(null/빈 dict)은 "확인 불가"로 표시 (0초 속임 금지)
+
+    출력 키:
+      pipeline_id, longest_phase, github_actions_wait_seconds,
+      total_elapsed_display, longest_phase_display,
+      failure_summary, phase_timings, gate_timings, github_actions_timings,
+      collected_at
+    """
+    UNAVAILABLE = "확인 불가"
+    if not isinstance(state, dict):
+        return {
+            "pipeline_id": UNAVAILABLE,
+            "longest_phase": None,
+            "github_actions_wait_seconds": UNAVAILABLE,
+            "total_elapsed_display": UNAVAILABLE,
+            "longest_phase_display": UNAVAILABLE,
+            "failure_summary": {},
+            "phase_timings": {},
+            "gate_timings": {},
+            "github_actions_timings": {
+                "WAITING_FOR_TRIGGER": 0,
+                "QUEUED": 0,
+                "IN_PROGRESS": 0,
+                "COMPLETED": 0,
+                "TIMEOUT": 0,
+            },
+            "collected_at": _now(),
+        }
+    pid = state.get("pipeline_id") or UNAVAILABLE
+    phase_timings = state.get("phase_timings") or {}
+    gate_timings = state.get("gate_timings") or {}
+    gh_timings = state.get("github_actions_timings") or {}
+    failure_summary = state.get("failure_summary") or {}
+    total_elapsed = state.get("total_elapsed_seconds")
+
+    longest_phase: Optional[Dict[str, Any]] = None
+    longest_phase_display: Any = UNAVAILABLE
+    if isinstance(phase_timings, dict) and phase_timings:
+        best_name: Optional[str] = None
+        best_secs: int = -1
+        for name, info in phase_timings.items():
+            if not isinstance(info, dict):
+                continue
+            secs = info.get("elapsed_seconds")
+            if isinstance(secs, int) and not isinstance(secs, bool) and secs > best_secs:
+                best_secs = secs
+                best_name = str(name)
+        if best_name is not None:
+            longest_phase = {"name": best_name, "elapsed_seconds": best_secs}
+            longest_phase_display = f"{best_name} ({best_secs}초)"
+
+    gh_wait: Any
+    if isinstance(gh_timings, dict) and "IN_PROGRESS" in gh_timings:
+        in_progress = gh_timings.get("IN_PROGRESS")
+        gh_wait = in_progress if isinstance(in_progress, int) and not isinstance(in_progress, bool) else UNAVAILABLE
+    else:
+        gh_wait = UNAVAILABLE
+
+    if isinstance(total_elapsed, int) and not isinstance(total_elapsed, bool):
+        total_elapsed_display = f"{total_elapsed}초"
+    else:
+        total_elapsed_display = UNAVAILABLE
+
+    return {
+        "pipeline_id": pid,
+        "longest_phase": longest_phase,
+        "github_actions_wait_seconds": gh_wait,
+        "total_elapsed_display": total_elapsed_display,
+        "longest_phase_display": longest_phase_display,
+        "failure_summary": failure_summary if isinstance(failure_summary, dict) else {},
+        "phase_timings": phase_timings if isinstance(phase_timings, dict) else {},
+        "gate_timings": gate_timings if isinstance(gate_timings, dict) else {},
+        "github_actions_timings": gh_timings if isinstance(gh_timings, dict) else {},
+        "collected_at": _now(),
+    }
+
+
+def _format_metrics_report_markdown(state: Optional[Dict[str, Any]]) -> str:
+    """state로부터 metrics report --markdown 한국어 출력을 생성.
+
+    IMP-20260526-82E3 MT-4. 섹션 4개 포함:
+      - 전체 소요 시간
+      - Phase별 소요 시간
+      - GitHub Actions 대기 시간
+      - 실패/재시도 요약
+    누락 정보는 "확인 불가"로 표시.
+    """
+    report = _format_metrics_report_json(state)
+    pid = report.get("pipeline_id", "확인 불가")
+    lines: List[str] = []
+    lines.append(f"# 파이프라인 메트릭 보고서 [{pid}]")
+    lines.append("")
+    lines.append("## 전체 소요 시간")
+    lines.append(f"- 총 소요: {report.get('total_elapsed_display', '확인 불가')}")
+    lines.append(f"- 가장 오래 걸린 Phase: {report.get('longest_phase_display', '확인 불가')}")
+    lines.append("")
+    lines.append("## Phase별 소요 시간")
+    phase_timings = report.get("phase_timings", {})
+    if isinstance(phase_timings, dict) and phase_timings:
+        for name, info in phase_timings.items():
+            if isinstance(info, dict):
+                secs = info.get("elapsed_seconds", "확인 불가")
+                lines.append(f"- {name}: {secs}초")
+    else:
+        lines.append("- 확인 불가")
+    lines.append("")
+    lines.append("## GitHub Actions 대기 시간")
+    gh = report.get("github_actions_timings", {})
+    if isinstance(gh, dict) and gh:
+        for st in ("WAITING_FOR_TRIGGER", "QUEUED", "IN_PROGRESS", "COMPLETED", "TIMEOUT"):
+            val = gh.get(st, "확인 불가")
+            lines.append(f"- {st}: {val}초")
+    else:
+        lines.append("- 확인 불가")
+    lines.append("")
+    lines.append("## 실패/재시도 요약")
+    fs = report.get("failure_summary", {})
+    if isinstance(fs, dict) and fs:
+        for code, info in fs.items():
+            if isinstance(info, dict):
+                cnt = info.get("count", "확인 불가")
+                repeat = "반복" if info.get("is_repeat") else "1회"
+                lines.append(f"- {code}: {cnt}회 ({repeat})")
+    else:
+        lines.append("- 확인 불가")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def cmd_metrics(args: "argparse.Namespace") -> None:
-    """metrics collect|summary|status 명령 처리."""
+    """metrics collect|summary|status|report 명령 처리.
+
+    IMP-20260526-82E3 MT-4: report --json / report --markdown 서브명령 추가.
+    """
     sub = getattr(args, "metrics_sub", None)
     if sub == "collect":
         state = _load_state()
@@ -15018,8 +15455,27 @@ def cmd_metrics(args: "argparse.Namespace") -> None:
         state = _load_state()
         metrics = _collect_pipeline_metrics(state)
         print(_format_metrics_summary_ko(metrics))
+    elif sub == "report":
+        # IMP-20260526-82E3 MT-4: metrics report --json / --markdown
+        fmt = (getattr(args, "format", None) or "json").lower()
+        state_path_env = os.environ.get("PIPELINE_STATE_PATH")
+        state: Optional[Dict[str, Any]] = None
+        if state_path_env and Path(state_path_env).exists():
+            try:
+                state = json.loads(Path(state_path_env).read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                state = None
+        else:
+            state = _load()
+        if fmt == "json":
+            report = _format_metrics_report_json(state)
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        elif fmt == "markdown":
+            print(_format_metrics_report_markdown(state))
+        else:
+            _die(f"[METRICS ERROR] 지원하지 않는 --format: {fmt}. json|markdown 중 선택하세요.")
     else:
-        _die("[METRICS ERROR] 알 수 없는 metrics 서브명령. collect|summary|status 중 선택하세요.")
+        _die("[METRICS ERROR] 알 수 없는 metrics 서브명령. collect|summary|status|report 중 선택하세요.")
 
 
 COMMAND_MAP = {
