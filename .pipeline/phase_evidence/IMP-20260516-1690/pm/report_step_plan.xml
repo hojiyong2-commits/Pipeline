@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260516-1690</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <description>preflight-pr _classify_pr_file 엄격한 allowlist 재구현 + clean PR</description>
+  <created_by>pm-planner-agent</created_by>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>_classify_pr_file 수정은 pipeline_protocol 위험 플래그를 포함하고 3개 파일을 변경합니다. FAST_SINGLE_CODE 조건(2파일 이하, pipeline_protocol=false)을 충족하지 않아 STANDARD 프로필을 사용합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>50</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first — 유지보수성 우선. 새 파일이 추가되어도 allowlist 방식이 자동으로 차단하므로 장기적으로 유지보수가 용이합니다.</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명, 들여쓰기, 주석 스타일 등 P2 수준 내부 구현 취향 질문은 유지보수성 우선 원칙으로 자동 처리하여 사용자에게 묻지 않습니다.</filter_summary>
+
+    <decision_questions>
+      <question id="Q-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>_classify_pr_file 함수를 엄격한 allowlist 방식으로 바꾸는 방향으로 진행할까요?</user_facing_question>
+        <evidence>PR #41에서 251개 파일이 포함된 것은 _classify_pr_file의 마지막 라인이 "그 외 모든 파일은 허용"이었기 때문입니다. pipeline_contracts/**, 리포트 파일, 내부 산출물 모두 허용되었습니다.</evidence>
+        <why_it_matters>이 함수가 phase attestation PR의 오염을 막는 핵심 게이트입니다. allowlist 방식으로 바꾸면 새 내부 산출물이 추가되어도 자동으로 차단됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>엄격한 allowlist로 전환 (PM 추천)</label>
+            <benefit>새 파일이 추가되어도 자동으로 차단됨. PR #41 같은 오염 불가능. 명시적으로 허용된 것만 통과.</benefit>
+            <cost>attestation PR에 실수로 구현 파일 포함 시 즉시 FAIL — 의도된 동작이며 수정이 쉬움.</cost>
+          </option>
+          <option id="B">
+            <label>blocklist 방식 유지 + 추가 금지 패턴 등록</label>
+            <benefit>기존 동작 최대한 유지. 이미 알려진 경로만 금지.</benefit>
+            <cost>새 내부 산출물 경로가 추가될 때마다 blocklist 업데이트 필요. 유지보수 부담 높음. PR #41 같은 새 경로는 자동 차단 불가.</cost>
+          </option>
+        </options>
+        <user_answer>A — 엄격한 allowlist로 전환. PR #41 REJECT 사유와 올바른 구현 방향이 이미 명확히 제시됨.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <decomposition_audit>
+    <micro_task_count>1</micro_task_count>
+    <grep_executions>1</grep_executions>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+    <total_micro_tasks>1</total_micro_tasks>
+    <decomposition_method>단일 함수 수정 - allowlist 재구현</decomposition_method>
+    <atomic_unit>_classify_pr_file 함수 1개 + 관련 테스트 + CI step</atomic_unit>
+    <scope_bounded>true</scope_bounded>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <title>_classify_pr_file 엄격한 allowlist 재구현 + 회귀 테스트 + CI 연결</title>
+      <affected_function>pipeline._classify_pr_file</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+        <file>.github/workflows/ci.yml</file>
+        <file>tests/test_pr_hygiene.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._run_preflight_pr (내부 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_classify_pr_file</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_classify_pr_file을 blocklist 방식에서 엄격한 allowlist로 전환. .pipeline/phase_attestation_request.json과 .pipeline/phase_evidence/{pid}/{phase}/** 만 허용, 나머지 전부 forbidden 반환.</change_summary>
+      <line_estimate>50</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>
