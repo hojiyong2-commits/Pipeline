@@ -1,0 +1,15 @@
+{
+  "pipeline_id": "BUG-20260517-D0B1",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["tests/test_codex_review.py"],
+      "affected_functions": ["tests.test_codex_review.TestCodexPRGateForTechnical.test_T2_pr_gate_fails_when_no_review_file"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["test_three_gate_e2e.py"],
+      "affected_functions": ["test_three_gate_e2e.test_three_gate_e2e_full_meta_task_flow"]
+    }
+  ]
+}
