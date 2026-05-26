@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260525-6FAC</pipeline_id>
+  <agent_run_id>qa-4f0a6118c6570bc6</agent_run_id>
+  <verdict>PASS</verdict>
+
+  <handover_evidence_check>
+    <dev_handover_present>PASS — dev_handover.xml 제출됨</dev_handover_present>
+    <evidence_files_listed>PASS — 9개 파일 명시 (tests/e2e/__init__.py, test_real_cli_paths.py, oracle 4개, CLAUDE.md, qa-agent.md, test-harness-agent.md)</evidence_files_listed>
+    <ui_handover_required>NO — category_tags=FS,PD에 UI 미포함</ui_handover_required>
+  </handover_evidence_check>
+
+  <anti_gaming_read_check>
+    <tag_present>PASS — step_plan.xml line 22: anti_gaming_read=true</tag_present>
+  </anti_gaming_read_check>
+
+  <judgment_calls_resolved_check>
+    <judgment_calls_block>N-A — step_plan에 judgment_calls 블록 없음 (DQ-1 답변이 design_confirmation에 포함됨)</judgment_calls_block>
+    <verdict>PASS</verdict>
+  </judgment_calls_resolved_check>
+
+  <category_check>
+    <wa>N-A — 네트워크 호출 코드 없음 (subprocess CLI 실행만)</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>PASS — pathlib.Path 사용, JSON I/O encoding=utf-8 명시, tmp_path fixture로 격리</fs>
+    <pd>PASS — 8개 테스트 함수 단일 책임, run_cli/make_env/write_state/read_state 헬퍼 분리, _base_state/_complete_ready_state 템플릿 분리</pd>
+    <sec>N-A — Phase 5 security-agent 전담</sec>
+    <al>PASS — isinstance 타입 가드, state_file/state/args None 가드, TypeError raise</al>
+    <build>N-A — category_tags에 BUILD 없음</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+
+  <numeric_score>120</numeric_score>
+  <score_breakdown>
+    <wa score="0" max="0">N/A</wa>
+    <ui score="0" max="0">N/A</ui>
+    <fs score="20" max="20">pathlib.Path 사용(5pt), encoding=utf-8 명시 + errors=replace(5pt), tmp_path 격리(5pt), state 파일 write_text/read_text 안전 패턴(5pt)</fs>
+    <pd score="10" max="10">모듈 분리 5pt (헬퍼/템플릿/테스트 함수 영역 분리), 인터페이스 계약 5pt (Dict[str, Any] 타입힌트, Optional, List 명시)</pd>
+    <al score="20" max="20">isinstance 타입 가드(5pt), state_file None 가드(5pt), state 파라미터 타입 검증(5pt), FileNotFoundError raise(5pt)</al>
+    <build score="0" max="0">N/A — BUILD 태그 없음</build>
+    <sec score="0" max="0">Phase 5 전담</sec>
+    <total score="120" max="120"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 적용 가능 카테고리(FS/PD/AL) 모두 만점, 120점 만점 환산 120/120 (96/120 hard gate 충족)</numeric_verdict>
+  </score_breakdown>
+
+  <verification_items>
+    <item id="1">
+      <description>test_real_cli_paths.py에 8개 E2E 테스트 함수 존재</description>
+      <result>PASS</result>
+      <evidence>def test_ 패턴 8회 매칭: test_new_creates_state, test_done_pm_advances_phase, test_gates_technical_records_result, test_architect_blocked_without_oracle_quality, test_gates_accept_blocked_without_evidence, test_dev_blocked_without_clarification_criteria, test_return_phase_revert_resets_downstream, test_github_ci_gate_blocked_on_sha_mismatch</evidence>
+    </item>
+    <item id="2">
+      <description>각 테스트가 subprocess/실제 CLI 사용 (내부 함수 직접 import 금지)</description>
+      <result>PASS</result>
+      <evidence>subprocess.run/run_cli 호출 10회. `from pipeline import` 또는 `import pipeline` 검색 결과 0회. run_cli 헬퍼는 sys.executable + str(PIPELINE_PY)로 외부 프로세스 spawn.</evidence>
+    </item>
+    <item id="3">
+      <description>PIPELINE_STATE_PATH 환경변수로 격리된 state 파일 사용</description>
+      <result>PASS</result>
+      <evidence>PIPELINE_STATE_PATH 5회 등장 (헬퍼 make_env에서 일괄 주입). 모든 상태 변경 테스트가 tmp_path fixture로 임시 디렉토리에 state_file을 만들고 env로 격리.</evidence>
+    </item>
+    <item id="4">
+      <description>final_state 또는 state 기반 assertion 존재 (stdout-only 검증 금지)</description>
+      <result>PASS</result>
+      <evidence>read_state(state_file) 호출 8회 — 모든 테스트에서 CLI 실행 후 state 파일을 다시 읽어 current_phase, terminal_state, phases.*.status, external_gates.*.status, failure_packets 등 검증.</evidence>
+    </item>
+    <item id="5">
+      <description>oracle 파일 4개 존재 및 비어있지 않음</description>
+      <result>PASS</result>
+      <evidence>TC-normal-01/input.json(269B), expected.json(319B), TC-edge-01/input.json(349B), expected.json(385B). 모두 expected_source=user_provided, case_kind 명시, placeholder 없음.</evidence>
+    </item>
+    <item id="6">
+      <description>TC-normal-01과 TC-edge-01 존재</description>
+      <result>PASS</result>
+      <evidence>tests/oracles/IMP-20260525-6FAC/ 아래 두 디렉토리 모두 존재, 각 input.json/expected.json 정상.</evidence>
+    </item>
+    <item id="7">
+      <description>CLAUDE.md 말미에 Real CLI Path E2E Gate Policy 섹션 존재</description>
+      <result>PASS</result>
+      <evidence>CLAUDE.md line 1097: ## Real CLI Path E2E Gate Policy (IMP-20260525-6FAC). 근거 + 위반 감지 하위 섹션 포함.</evidence>
+    </item>
+    <item id="8">
+      <description>qa-agent.md 말미에 동일 섹션 존재</description>
+      <result>PASS</result>
+      <evidence>.claude/agents/qa-agent.md line 526: ## Real CLI Path E2E Gate Policy (IMP-20260525-6FAC). 본문 동일.</evidence>
+    </item>
+    <item id="9">
+      <description>test-harness-agent.md 말미에 동일 섹션 존재</description>
+      <result>PASS</result>
+      <evidence>.claude/agents/test-harness-agent.md line 135: ## Real CLI Path E2E Gate Policy (IMP-20260525-6FAC). 본문 동일.</evidence>
+    </item>
+    <item id="10">
+      <description>3개 파일 모두 내부 함수 테스트 금지, PIPELINE_STATE_PATH 격리 요구, final_state assertion 요구 내용 포함</description>
+      <result>PASS</result>
+      <evidence>3개 파일 모두 "내부 함수 테스트만으로 CLI 완료 판정 금지", "PIPELINE_STATE_PATH 격리", "final_state assertion 없는 테스트는 CLI 검증으로 인정하지 않는다", "subprocess 기반 실제 CLI 실행 여부 (내부 함수 직접 임포트 금지)" 문구 모두 포함.</evidence>
+    </item>
+    <item id="11">
+      <description>실제 pytest 실행 통과 여부</description>
+      <result>PASS</result>
+      <evidence>python -m pytest tests/e2e/test_real_cli_paths.py -v 실행 결과: 8 passed in 34.74s. 모든 8개 테스트가 실제 환경에서 PASS.</evidence>
+    </item>
+  </verification_items>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A — JSON load는 oracle 파일 신뢰 가능 경로, try/except 불필요</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 모든 함수에 타입 힌트 (def run_cli(args: List[str], env: Optional[Dict[str, str]] = None, timeout: int = 30) -> subprocess.CompletedProcess 등)</type_hinting_all>
+      <widget_naming>N-A — UI 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 테스트 파일은 tmp_path fixture 사용으로 atomic write 불필요</atomic_write>
+      <encoding_fallback>N-A — state 파일은 단일 encoding=utf-8 사용, fallback 불필요 (테스트 환경 통제됨)</encoding_fallback>
+      <traversal_wired>N-A — user input 경로 없음, tmp_path만 사용</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover.xml + module_handover_MT-*.xml에 통합/검증 결과 포함</execution_check_present>
+    <execution_check_verdict>PASS — 8 passed in 34.74s 실제 실행 증거 확보</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — subprocess 호출이 sys.executable + pipeline.py 절대 경로로 실제 외부 프로세스 spawn 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO — step_plan requirements에 참고 이미지/파일 미명시</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml line 5: decomposition_audit 블록 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1/MT-2/MT-3 모두 grep_evidence.executed=true</grep_evidence_present>
+    <declared_functions>3 (MT-1: 8개 테스트 함수, MT-2: ci.yml step, MT-3: 3개 정책 섹션)</declared_functions>
+    <actual_modified_functions>3 (동일)</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <scope_declaration>tests/e2e/__init__.py, tests/e2e/test_real_cli_paths.py, tests/oracles/IMP-20260525-6FAC/{TC-normal-01,TC-edge-01}/{input,expected}.json, .github/workflows/ci.yml, CLAUDE.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md</scope_declaration>
+    <actual_diff_matches>true — ci.yml은 MT-2 no-op 결정에 따라 미변경, 나머지 9개 파일 모두 scope 내 변경</actual_diff_matches>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>10 (ci.yml 포함)</scope_files_declared>
+    <evidence_files_submitted>9 (ci.yml은 no-op으로 evidence 미포함)</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>.github/workflows/ci.yml — MT-2 no-op 결정으로 실제 변경 없음 (scope_creep 아닌 의도된 no-op)</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <module_gate_status>
+    <mt_1>PASS</mt_1>
+    <mt_2>PASS</mt_2>
+    <mt_3>PASS</mt_3>
+    <integration>PASS</integration>
+  </module_gate_status>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+
+  <result>[PASS]</result>
+
+  <critical_issues>없음 — 모든 검증 항목 PASS</critical_issues>
+
+  <improvement_suggestions>
+    1. (선택) test_gates_technical_records_result는 240초 timeout과 pytest.skip 폴백을 사용하는데, CI 환경에서 ruff/mypy/bandit 도구가 모두 설치되지 않은 경우 항상 skip되어 회귀 가치가 떨어질 수 있음. 향후 도구 부재 시 monkeypatch로 _gate_technical 내부를 모킹하는 단위 테스트 추가 권장.
+    2. (선택) 헬퍼 함수(run_cli/make_env/write_state/read_state)가 module-level이라 다른 E2E 테스트 파일에서 재사용 어려움. 향후 tests/e2e/conftest.py로 fixture화하면 신규 E2E 테스트 추가 시 boilerplate 감소.
+    3. (선택) MT-2 no-op 결정의 근거(pytest 기본 탐색이 tests/e2e/ 자동 포함)는 step_plan 주석에만 있음. 향후 CLAUDE.md 정책 섹션에 "tests/e2e/는 pytest 기본 탐색 범위에 포함된다"라고 명시하면 후속 작업자에게 더 명확.
+  </improvement_suggestions>
+</qa_report>
