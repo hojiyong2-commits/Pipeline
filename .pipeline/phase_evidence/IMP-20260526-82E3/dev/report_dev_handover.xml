@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260526-82E3</pipeline_id>
+  <agent>dev-agent</agent>
+  <run_id>dev-40d4cd8a0682c0b0</run_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_metrics_observability_82e3.py</file>
+      <file>tests/e2e/test_metrics_cli_paths_82e3.py</file>
+    </files_to_modify>
+    <files_forbidden>
+      <file>.github/workflows/**</file>
+      <file>CLAUDE.md</file>
+      <file>tests/ (기존 파일)</file>
+      <file>.claude/agents/*.md</file>
+    </files_forbidden>
+    <forbidden_note>Trust-Root 파일 절대 금지. 신규 파일만 tests/ 아래 추가 허용.</forbidden_note>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>
+      pipeline._init_state, pipeline._ensure_v210_fields, pipeline._record_phase_timing,
+      pipeline._record_gate_timing, pipeline._aggregate_github_actions_state_durations,
+      pipeline._wait_for_github_ci, pipeline._compute_failure_summary_from_list,
+      pipeline._format_metrics_report_json, pipeline._format_metrics_report_markdown,
+      pipeline.cmd_metrics
+    </target_function>
+    <target_file>pipeline.py, tests/test_metrics_observability_82e3.py, tests/e2e/test_metrics_cli_paths_82e3.py</target_file>
+    <changed_lines>약 580</changed_lines>
+    <change_type>addition</change_type>
+    <other_functions_affected>none (기존 phases/external_gates/agent_runs/metrics collect/summary/status 분기 모두 보존)</other_functions_affected>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </impact_analysis>
+  <module_gates_summary>
+    <module mt_id="MT-1" verdict="PASS">5개 alias 키 + _record_phase_timing/_record_gate_timing</module>
+    <module mt_id="MT-2" verdict="PASS">_aggregate_github_actions_state_durations + _wait_for_github_ci</module>
+    <module mt_id="MT-3" verdict="PASS">_compute_failure_summary_from_list</module>
+    <module mt_id="MT-4" verdict="PASS">cmd_metrics report --json/--markdown + 2개 신규 포맷터</module>
+    <module mt_id="MT-5" verdict="PASS">단위 11 + E2E 3 신규 테스트</module>
+    <integration verdict="PASS">모든 모듈 통합 PASS, oracle 6 케이스 매칭</integration>
+  </module_gates_summary>
+  <test_evidence>
+    <local_pytest>전체 pytest 579 passed (회귀 0건; .pipeline/ git tracking hygiene 검사 1건 무관)</local_pytest>
+    <unit_tests>tests/test_metrics_observability_82e3.py: 11 passed</unit_tests>
+    <e2e_tests>tests/e2e/test_metrics_cli_paths_82e3.py: 3 passed</e2e_tests>
+    <oracle_match>6개 oracle 케이스 모두 매칭</oracle_match>
+  </test_evidence>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260526-82E3</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_metrics_observability_82e3.py</file>
+      <file>tests/e2e/test_metrics_cli_paths_82e3.py</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_handover>
