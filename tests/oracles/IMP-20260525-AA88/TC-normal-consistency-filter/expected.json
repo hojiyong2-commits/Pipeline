@@ -1,0 +1,4 @@
+{
+  "extracted": ["tests/test_scorers_smart_resolve.py"],
+  "description": "Real file path should be extracted from the bullet line"
+}

@@ -3125,6 +3125,13 @@ def _consistency_listed_files(text: str) -> "tuple[set, bool]":
         if _TRUNCATION_PATTERN.search(token):
             truncated = True
             continue
+        # IMP-20260525-AA88: 점수/타이밍 오탐 필터
+        # `120/120` 같은 숫자/숫자 패턴(점수 표기)은 파일 경로가 아니다.
+        if re.search(r"^\d+/\d+$", token):
+            continue
+        # `34.74s`, `0.5s` 같은 숫자.숫자s 패턴(타이밍 표기)은 파일 확장자가 아니다.
+        if re.search(r"^\d+(\.\d+)?s$", token):
+            continue
         # 파일처럼 보이는 토큰만 인정: 경로(`/`) 포함이거나 올바른 확장자(`.` + 영숫자 접미어) 보유.
         # 한국어 문장 끝의 `.`(예: `됩니다.`)은 파일명으로 취급하지 않는다 (IMP-20260522-29C1 fix-forward v5).
         if "/" not in token and "\\" not in token and not re.search(r"\.[A-Za-z0-9_]{1,15}$", token):

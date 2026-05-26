@@ -1,0 +1,5 @@
+{
+  "exists": true,
+  "method": "parent.parent.parent",
+  "description": "project root 기준으로 tests/oracles/... 경로를 찾아야 함. parent.parent만 사용하면 core/ 기준이 되어 찾지 못함"
+}
