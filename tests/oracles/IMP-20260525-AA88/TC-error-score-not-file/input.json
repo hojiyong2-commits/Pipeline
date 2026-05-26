@@ -1,0 +1,4 @@
+{
+  "pr_body_line": "- 120/120",
+  "description": "_consistency_listed_files should NOT extract score notation 120/120 as a file path"
+}

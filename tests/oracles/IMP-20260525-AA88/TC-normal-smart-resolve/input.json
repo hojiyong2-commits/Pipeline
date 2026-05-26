@@ -1,0 +1,4 @@
+{
+  "path": "tests/oracles/IMP-20260525-AA88/TC-normal-smart-resolve/input.json",
+  "description": "_smart_resolve로 실제 파일 찾기 — parent.parent.parent(project root) 기준으로 찾아야 함"
+}
