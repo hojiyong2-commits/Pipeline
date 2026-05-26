@@ -1,0 +1,37 @@
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260516-A627</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_codex_review.py</file>
+      <file>CLAUDE.md</file>
+    </files_to_modify>
+    <files_not_to_modify>all other files</files_not_to_modify>
+  </scope_declaration>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_codex_review.py</file>
+    <file>CLAUDE.md</file>
+  </evidence>
+  <impact_analysis>
+    <target_function>pipeline.cmd_review, pipeline.cmd_review_codex_record, pipeline._check_codex_review_gate, pipeline._check_codex_pr_gate_for_technical, pipeline._validate_dev_scope_manifest</target_function>
+    <affected_call_sites>
+      <site>pipeline.cmd_check (check --phase dev/qa)</site>
+      <site>pipeline.cmd_gates (technical, accept)</site>
+    </affected_call_sites>
+    <blast_radius>pipeline.py 단독 수정. tests/test_codex_review.py 테스트 추가.</blast_radius>
+    <risk>LOW</risk>
+  </impact_analysis>
+  <defects_fixed>
+    <d1>review codex ACCEPT/REJECT 차단</d1>
+    <d2>codex-record 6 stage 확장</d2>
+    <d3>plan AND scope 게이트</d3>
+    <d4>pr gate to technical+acceptance 연결</d4>
+    <d5>diff_sha256 빈 diff 비교</d5>
+    <d6>trust-root scope lock 강화</d6>
+  </defects_fixed>
+  <test_results>42 passed, 11 subtests passed</test_results>
+</handover>
