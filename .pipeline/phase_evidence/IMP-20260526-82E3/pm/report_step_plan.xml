@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260526-82E3: Observability / Metrics Gate 강화 -->
+<!-- pm_planner agent_run_id: pm_planner-e9d3ec059cea878b -->
+
+<decomposition_audit>
+  <total_functions_identified>10</total_functions_identified>
+  <micro_task_count>5</micro_task_count>
+  <grep_executions>5</grep_executions>
+  <split_decision>5개 독립 기능 그룹(스키마/GitHub타이밍/반복실패/metrics명령/테스트)으로 분할. 각 MT는 단일 관심사 원칙 준수.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260526-82E3</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning — Observability / Metrics Gate 강화</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, PD</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 대규모 수정 (~600줄 예상), 5개 MT, 신규 함수 7개 이상, 테스트 파일 2개 신규.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>4</expected_changed_files>
+      <expected_changed_functions>10</expected_changed_functions>
+      <expected_changed_lines>600</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>함수명 세부 컨벤션, 내부 dict 키 이름 등 P2 구현 취향 질문은 걸러냄. 유지보수성 기준으로 PM이 정리.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업을 5개 단계(스키마/GitHub타이밍/반복실패/metrics명령/테스트)로 나눠 순서대로 진행해도 될까요?</user_facing_question>
+        <evidence>요구사항 10개가 5개 독립 기능 그룹으로 분류됨. Grep으로 _init_state, _wait_for_github_ci, cmd_metrics 기존 함수 확인.</evidence>
+        <why_it_matters>5단계로 나누면 각 단계를 독립 검증할 수 있고 실패 시 원인 범위가 좁아집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>5개 MT 분해 (MT-1~MT-5 순차 진행)</label>
+            <benefit>각 MT 독립 검증 가능, 실패 범위 좁음</benefit>
+            <cost>MT 수가 많아 전체 진행 시간이 다소 길어질 수 있음</cost>
+          </option>
+          <option id="B">
+            <label>2개 MT로 통합 (스키마+타이밍 묶음 / metrics명령+테스트 묶음)</label>
+            <benefit>MT 수가 2개로 줄어들어 module gate 진행 횟수가 감소하고 전체 시간을 단축할 수 있음</benefit>
+            <cost>MT 범위가 커서 실패 시 원인 특정 어려움, 롤백 범위도 넓어짐</cost>
+          </option>
+        </options>
+        <user_answer>Option A 채택 — 5개 MT 분해로 진행</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="implementation" mt_id="MT-2">
+        <user_facing_question>GitHub Actions 대기 시간을 실제로 측정할까요, 아니면 추정값(API 폴링 간격 기반)을 쓸까요?</user_facing_question>
+        <evidence>기존 _wait_for_github_ci 함수에서 10초 간격 폴링 루프 확인 (Grep: _wait_for_github_ci match 1개).</evidence>
+        <why_it_matters>실측 vs 추정은 정확도와 테스트 복잡도에 영향을 줍니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>_wait_for_github_ci 실측 (실제 함수 내 datetime 측정, 테스트에서는 Mock)</label>
+            <benefit>실제 네트워크/폴링 포함 정확한 대기 시간 측정, Mock으로 단위 테스트 완전 가능</benefit>
+            <cost>기존 _wait_for_github_ci 함수에 datetime.now() 측정 코드를 추가해야 하며 상태 전이마다 누적 처리 로직이 필요함</cost>
+          </option>
+          <option id="B">
+            <label>추정값 (API 폴링 횟수 × 10초)</label>
+            <benefit>기존 함수 구조를 거의 수정하지 않고 폴링 횟수 카운트만 추가하면 되므로 구현이 간단함</benefit>
+            <cost>실제 네트워크 지연, 처리 오버헤드가 반영되지 않아 보고값과 실측 차이가 클 수 있으며 정확도가 낮음</cost>
+          </option>
+        </options>
+        <user_answer>Option A 채택 — _wait_for_github_ci 실측 방식</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline_state.json (기존 상태 파일)
+    - Output: pipeline_state.json (5개 alias 키 추가), metrics report (stdout JSON/Markdown)
+    - Validation: pytest 전체 통과, PIPELINE_STATE_PATH 격리 E2E 테스트 통과
+  </interface_spec>
+
+  <requirements>
+    1. pipeline_state.json 시간 기록 표준화: phase_timings, gate_timings, agent_timings, github_actions_timings, failure_summary 5개 alias 키
+    2. 각 phase/gate 시작·종료 시각 기록 (PM/Dev/QA/SEC/Build/Technical/Oracle/GitHub CI/Acceptance/Architect)
+    3. GitHub Actions 5상태 대기 시간 분리: WAITING_FOR_TRIGGER/QUEUED/IN_PROGRESS/COMPLETED/TIMEOUT
+    4. 실패/REJECT 반복 집계: failure_code별 횟수, 2회 이상=is_repeat, rejection_summary
+    5. metrics 명령 신규: python pipeline.py metrics status, metrics report --json, metrics report --markdown (한국어)
+    6. 최종 ACCEPT 요청/확인 안내에 metrics 요약 포함 (human_acceptance_packet.md)
+    7. 불확실한 값은 "확인 불가" (0초 속임 금지)
+    8. 테스트: CLI Evidence Contract 준수, PIPELINE_STATE_PATH 격리, final_state assert
+    9. 기존 pytest 전체(566개+) 통과 유지
+    10. 역호환성 유지: 기존 phases/gates 구조 보존
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._init_state, pipeline._collect_pipeline_metrics</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_new (calls _init_state)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_init_state|phase_timings|gate_timings|agent_timings</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_init_state에 5개 alias 키 추가, _collect_pipeline_metrics 신규 함수 구현</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline._wait_for_github_ci, pipeline._github_actions_duration_summary</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates_github_ci (calls _wait_for_github_ci)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_wait_for_github_ci|github_actions_timings</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_wait_for_github_ci 내 5상태 누적 시간 기록, _github_actions_duration_summary 신규</change_summary>
+      <line_estimate>100</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._failure_retry_summary</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_failure_retry_summary|failure_summary|rejection_summary</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>failure_code별 횟수 집계, is_repeat, rejection_summary, bottleneck 자동 계산 함수 신규</change_summary>
+      <line_estimate>100</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>pipeline.cmd_metrics, pipeline._format_metrics_report_json, pipeline._format_metrics_report_markdown</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.main (argument parsing 등록)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>cmd_metrics|metrics.*report|metrics.*status</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>metrics status/report --json/--markdown 서브명령 신규, gates accept 출력에 metrics 요약 포함</change_summary>
+      <line_estimate>200</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>tests.test_metrics_observability_82e3 (신규), tests.e2e.test_metrics_cli_paths_82e3 (신규)</affected_function>
+      <target_files>
+        <file>tests/test_metrics_observability_82e3.py</file>
+        <file>tests/e2e/test_metrics_cli_paths_82e3.py</file>
+        <file>tests/oracles/IMP-20260526-82E3/oracle_manifest.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_metrics_observability|test_metrics_cli_paths</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>단위 테스트 7개 + CLI E2E 테스트 3개 신규, CLI Evidence Contract 준수 (PIPELINE_STATE_PATH + final_state/JSON assert)</change_summary>
+      <line_estimate>200</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.9 — 기존 파이프라인 환경 유지</python_version>
+  <env_specs>
+    <python>3.9</python>
+    <vscode>Python 3.9, typeCheckingMode=basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    1. python pipeline.py metrics status — 현재 state에서 요약 출력 (정상 작동)
+    2. python pipeline.py metrics report --json — 유효한 JSON 출력
+    3. python pipeline.py metrics report --markdown — 한국어 섹션 포함 markdown 출력
+    4. phase_timings, gate_timings, agent_timings, github_actions_timings, failure_summary 키가 state에 존재
+    5. GitHub Actions 5상태(WAITING_FOR_TRIGGER/QUEUED/IN_PROGRESS/COMPLETED/TIMEOUT) 누적 시간 기록
+    6. failure_code 2회 이상 = is_repeat:true
+    7. null/빈 값 → "확인 불가" 출력 (0 속임 금지)
+    8. 기존 pytest 566개+ 전체 통과
+    9. PIPELINE_STATE_PATH 격리 E2E 테스트 3개 통과
+    10. CLI Evidence Contract: subprocess + PIPELINE_STATE_PATH + final_state/JSON assert
+    11. GitHub Actions CI 통과
+    12. TC-edge-unavailable-values oracle 통과 (null 값 "확인 불가")
+  </acceptance_criteria>
+
+  <forbidden>
+    - .github/workflows/** 수정 금지 (Trust-Root)
+    - CLAUDE.md 수정 금지 (Trust-Root)
+    - tests/ 내 기존 파일 수정 금지 (Trust-Root — 신규 파일만 허용)
+    - .claude/agents/*.md 수정 금지 (Trust-Root)
+    - oracle expected 파일을 Dev가 수정 금지
+    - scope_manifest 외 파일 변경 금지
+    - 0초/0ms 속임수 metrics 출력 금지 (불확실 = "확인 불가")
+  </forbidden>
+
+  <handover_spec>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260526-82E3</pipeline_id>
+    <evidence_files>
+      <file>pipeline.py</file>
+      <file>tests/test_metrics_observability_82e3.py</file>
+      <file>tests/e2e/test_metrics_cli_paths_82e3.py</file>
+      <file>tests/oracles/IMP-20260526-82E3/oracle_manifest.json</file>
+    </evidence_files>
+    <expected_status>READY_FOR_QA</expected_status>
+  </handover_spec>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_metrics_observability_82e3.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_metrics_cli_paths_82e3.py</file>
+    </target_files>
+    <phase_rules_excerpt>Three-Gate + Option A + Incremental Module Gate 필수. CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + final_state/JSON assert. Trust-Root 파일 수정 금지.</phase_rules_excerpt>
+    <prev_phase_summary>PM Planner 완료 (pm_planner-e9d3ec059cea878b). Pipeline Manager 토큰 발급됨. step_plan.xml 새로 작성됨.</prev_phase_summary>
+  </context_injection>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</step_plan>

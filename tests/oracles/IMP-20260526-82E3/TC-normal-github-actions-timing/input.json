@@ -1,0 +1,1 @@
+{"state_transitions": [{"state": "WAITING_FOR_TRIGGER", "duration": 60}, {"state": "IN_PROGRESS", "duration": 120}]}
