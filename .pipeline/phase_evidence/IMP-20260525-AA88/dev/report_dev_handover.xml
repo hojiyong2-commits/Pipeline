@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260525-AA88</pipeline_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>core/acceptance/scorers.py</file>
+      <file>pipeline.py</file>
+    </files_to_modify>
+    <files_to_create>
+      <file>tests/test_scorers_smart_resolve.py</file>
+      <file>tests/test_consistency_filter_falsepos.py</file>
+      <file>tests/oracles/IMP-20260525-AA88/TC-normal-consistency-filter/input.json</file>
+      <file>tests/oracles/IMP-20260525-AA88/TC-normal-consistency-filter/expected.json</file>
+      <file>tests/oracles/IMP-20260525-AA88/TC-error-score-not-file/input.json</file>
+      <file>tests/oracles/IMP-20260525-AA88/TC-error-score-not-file/expected.json</file>
+      <file>tests/oracles/IMP-20260525-AA88/oracle_manifest.json</file>
+    </files_to_create>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_smart_resolve</target_function>
+    <change>parent.parent to parent.parent.parent; project_dir kwarg added</change>
+    <target_function>score_file_exists_check</target_function>
+    <change>project_dir passed to _smart_resolve</change>
+    <target_function>score_file_output_check</target_function>
+    <change>project_dir passed to _smart_resolve</change>
+    <target_function>_consistency_listed_files</target_function>
+    <change>digit/digit and digit.digits+s false positive filters added</change>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>core/acceptance/scorers.py, pipeline.py (modified); tests/test_scorers_smart_resolve.py, tests/test_consistency_filter_falsepos.py, tests/oracles/IMP-20260525-AA88/* (new)</git_diff_files>
+    <manifest_files>all files in scope_manifest.json</manifest_files>
+    <extra_files>none</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>core/acceptance/scorers.py</file>
+    <file>pipeline.py</file>
+    <file>tests/test_scorers_smart_resolve.py</file>
+    <file>tests/test_consistency_filter_falsepos.py</file>
+    <file>tests/oracles/IMP-20260525-AA88/oracle_manifest.json</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+</handover>
