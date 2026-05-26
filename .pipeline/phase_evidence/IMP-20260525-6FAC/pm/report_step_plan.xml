@@ -1,0 +1,451 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260525-6FAC Real CLI Path E2E Gate -->
+<!-- pm_planner agent_run_id: pm_planner-4875d8591fe73dc0 -->
+
+<decomposition_audit>
+  <total_functions_identified>7</total_functions_identified>
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>8</grep_executions>
+  <split_decision>
+    MT-1: tests/e2e/test_real_cli_paths.py + oracle 파일 — 핵심 구현(~300줄) 단위로 분리.
+    MT-2: .github/workflows/ci.yml — CI hard gate step 추가, 15줄 이하 독립 변경.
+    MT-3: CLAUDE.md + qa-agent.md + test-harness-agent.md — 정책 문서 3개 동시 패치 의무
+          (IMP-20260507-0EDC: 정책 변경 시 producer+consumer 문서 동일 MT에서 묶음 패치).
+    변경 함수 기준: MT-1이 새 테스트 함수 8개, MT-2가 ci.yml step 1개 추가, MT-3가 문서 섹션 3개 추가.
+    변경 파일 기준: MT-1=2파일(py+oracle JSON), MT-2=1파일, MT-3=3파일 — 분할 기준(per-MT ≥3파일) 미초과 유지.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260525-6FAC</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: Real CLI Path E2E Gate 구현 (PM Planning)</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, PD</category_tags>
+
+  <!-- ───────────────────────────────────────────────────────────
+       PM 설계 확인 게이트
+  ─────────────────────────────────────────────────────────────── -->
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      테스트 함수 네이밍 방식(snake_case vs 기술적 줄임 표현), oracle 파일 JSON 들여쓰기 폭,
+      ci.yml step 이름 한글/영어 혼용 여부 같은 P2 취향 질문은 묻지 않고
+      기존 코드베이스 패턴(test_clarification_gate.py, ci.yml 기존 스텝 스타일)을 따르는 방향으로 PM이 정리했습니다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-2">
+        <user_facing_question>
+          CI에서 Real CLI Path E2E 테스트를 어떤 방식으로 실행할까요?
+
+          현재 ci.yml은 "자동 검사 실행" 스텝 한 곳에서 python -m pytest -q 로
+          tests/ 아래 모든 테스트를 실행합니다.
+
+          새로 추가할 E2E 테스트(tests/e2e/test_real_cli_paths.py)를 어떻게 포함할지 선택해야 합니다.
+        </user_facing_question>
+        <evidence>
+          ci.yml 115~118행: python -m pytest -q 단일 스텝.
+          tests/e2e/ 디렉터리가 새로 생기면 pytest 기본 탐색 범위에 들어가
+          기존 스텝에서도 자동으로 실행됩니다(별도 testpaths 설정 없음).
+          단, 별도 스텝으로 두면 CI 로그에서 E2E 결과만 따로 볼 수 있습니다.
+        </evidence>
+        <why_it_matters>
+          선택에 따라 ci.yml 변경 범위가 달라집니다.
+          옵션 A는 ci.yml에 줄을 추가하지 않아도 되고,
+          옵션 B는 ci.yml에 별도 스텝을 추가해야 합니다.
+          두 옵션 모두 CI에서 E2E 테스트를 실행한다는 목표는 동일하게 달성합니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>기존 pytest 스텝에 포함 (ci.yml 변경 최소화)</label>
+            <benefit>
+              ci.yml을 거의 수정하지 않아도 됩니다.
+              pytest가 tests/e2e/ 를 자동으로 탐색하므로 별도 설정 불필요.
+              Trust-Root 파일(ci.yml) 변경 범위가 줄어 scope-lock 위험이 낮습니다.
+            </benefit>
+            <cost>
+              CI 로그에서 E2E 결과와 단위 테스트 결과가 섞여 보입니다.
+              E2E 테스트만 빠르게 확인하려면 로컬에서 pytest tests/e2e/ 를 직접 실행해야 합니다.
+            </cost>
+          </option>
+          <option id="B">
+            <label>별도 스텝 "Real CLI Path E2E 검사" 추가 (ci.yml에 새 스텝)</label>
+            <benefit>
+              CI 로그에서 E2E 결과만 따로 볼 수 있습니다.
+              GitHub Actions UI에서 E2E 스텝만 re-run이 가능합니다.
+              실패 시 어느 레이어(단위 vs E2E)가 깨졌는지 즉시 식별됩니다.
+            </benefit>
+            <cost>
+              ci.yml에 스텝이 추가되므로 Trust-Root 파일 변경이 늘어납니다.
+              E2E 테스트가 기존 pytest 스텝에도 포함되면 중복 실행이 발생합니다
+              (별도 스텝 사용 시 기존 스텝 범위에서 tests/e2e/ 를 제외하는 추가 설정 필요).
+            </cost>
+          </option>
+        </options>
+        <user_answer>A — 기존 pytest에 자동 포함 (ci.yml 변경 없음). tests/e2e/ 는 pytest 기본 탐색으로 자동 실행됨.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <!-- ───────────────────────────────────────────────────────────
+       태스크 복잡도 프로필
+  ─────────────────────────────────────────────────────────────── -->
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>
+      테스트 파일 신규 생성(~300줄), CI 스텝 추가(~15줄), 프로토콜 문서 3개에 정책 섹션 추가(~15줄/문서) 목적.
+      Trust-Root 파일(.github/workflows/, CLAUDE.md, .claude/agents/*.md, tests/)을 변경하므로
+      STANDARD를 유지하되 pipeline_protocol=true로 마킹합니다.
+    </reason>
+    <uncertainty>
+      <p0_questions>1</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>8</expected_changed_files>
+      <!-- tests/e2e/__init__.py, test_real_cli_paths.py,
+           oracle 4개 JSON, ci.yml(조건부), CLAUDE.md, qa-agent.md, test-harness-agent.md -->
+      <expected_changed_functions>8</expected_changed_functions>
+      <!-- 새 테스트 함수 8개 (happy path 3 + failure 5) -->
+      <expected_changed_lines>360</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <!-- CLAUDE.md, .claude/agents/*.md, .github/workflows/ci.yml 변경 포함 -->
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <!-- ───────────────────────────────────────────────────────────
+       인터페이스 명세
+  ─────────────────────────────────────────────────────────────── -->
+  <interface_spec>
+    - Input:
+        * pipeline.py (CLI 엔트리포인트, subprocess로 호출)
+        * tests/oracles/IMP-20260525-6FAC/ (Dev가 생성, 사용자 승인 fixture)
+        * PIPELINE_STATE_PATH env var (격리된 tmp_path 주입)
+    - Output:
+        * tests/e2e/__init__.py (pytest 탐색용 빈 init)
+        * tests/e2e/test_real_cli_paths.py (새 E2E 테스트 파일 — 8개 테스트 함수)
+        * tests/oracles/IMP-20260525-6FAC/TC-normal-01/input.json
+        * tests/oracles/IMP-20260525-6FAC/TC-normal-01/expected.json
+        * tests/oracles/IMP-20260525-6FAC/TC-edge-01/input.json
+        * tests/oracles/IMP-20260525-6FAC/TC-edge-01/expected.json
+        * .github/workflows/ci.yml (DQ-1 답변에 따라 조건부 변경)
+        * CLAUDE.md (정책 섹션 추가)
+        * .claude/agents/qa-agent.md (정책 섹션 추가)
+        * .claude/agents/test-harness-agent.md (정책 섹션 추가)
+    - Validation:
+        * pytest tests/e2e/test_real_cli_paths.py -v → 8개 모두 PASS
+        * 전체 suite 60초 이내 완료
+        * 외부 GitHub API/PyInstaller/실제 EXE 빌드/외부 네트워크 호출 없음
+  </interface_spec>
+
+  <!-- ───────────────────────────────────────────────────────────
+       핵심 요구사항
+  ─────────────────────────────────────────────────────────────── -->
+  <requirements>
+    1. PIPELINE_STATE_PATH 격리 패턴: 모든 테스트는 tmp_path fixture로 격리된 state 파일을 사용한다.
+       기존 pipeline_state.json을 절대 변경하지 않는다.
+
+    2. final_state assertion 필수: 상태 변경 CLI 호출 후 state_file.read_text()로 JSON을 읽어
+       current_phase, terminal_state, 관련 필드를 assert로 검증한다.
+       stdout에 특정 문자열이 있는지만 확인하는 stdout-only 검증은 금지한다.
+
+    3. Happy path E2E 테스트 (최소 3개 함수):
+       - test_new_creates_state: pipeline.py new 실행 후 state 파일에 pipeline_id + current_phase=pm 기록 검증
+       - test_done_pm_advances_phase: PM 완료 후 current_phase가 dev로 전진하는지 검증
+         (상태 파일에 선행 phase를 직접 주입하는 방식으로 속도 확보)
+       - test_gates_technical_records_result: technical gate 실행 후 external_gates.technical 필드 기록 검증
+         (--relaxed-tools 사용, FAIL이라도 state에 기록 여부를 검증하는 방식)
+
+    4. 실패 케이스 E2E 테스트 (5개 함수 — 각 독립 state 파일 사용):
+       a) test_architect_blocked_without_oracle_quality:
+          oracle_quality 없는 state에서 architect --report-file 실행.
+          returncode=1 + stdout/stderr에 oracle_quality 언급 검증.
+          final_state에 terminal_state != COMPLETE 검증.
+
+       b) test_gates_accept_blocked_without_evidence:
+          acceptance evidence 파일 없이 gates accept --result ACCEPT --evidence missing.txt --user-confirmed 실행.
+          returncode=1 검증.
+          gh CLI 없는 환경에서도 evidence 파일 존재 여부로 먼저 차단되는 경로 검증.
+
+       c) test_dev_blocked_without_clarification_criteria:
+          pm_clarification_gate.acceptance_criteria=[] 상태에서
+          check --phase dev --codex-review-waiver legacy-bootstrap 실행.
+          returncode=1 + final_state에 failure_packet 관련 필드 기록 검증.
+
+       d) test_return_phase_revert_resets_downstream:
+          dev DONE 상태에서 done --phase pm 을 다시 실행하면(아직 dev PENDING 상태의 재기록 시뮬레이션)
+          current_phase=dev, qa/build 등 downstream phase status=PENDING 임을 검증.
+          (실제 return_phase 명령을 통한 revert를 state 직접 주입 + 재실행 방식으로 검증)
+
+       e) test_github_ci_gate_blocked_on_sha_mismatch:
+          github_ci gate 상태에 stale head_sha 기록된 state에서
+          gates github-ci --repo hojiyong2-commits/Pipeline 실행.
+          gh CLI 없거나 mock 환경에서 returncode != 0 또는 state에 github_ci.status != PASS 검증.
+          실제 GitHub API 호출 없이 state 주입 방식으로 처리.
+
+    5. Oracle 파일 세트 (tests/oracles/IMP-20260525-6FAC/):
+       - TC-normal-01/input.json + expected.json:
+           new 명령 실행 후 정상 state 구조 (current_phase=pm, pipeline_id 포함)
+       - TC-edge-01/input.json + expected.json:
+           oracle_quality 없는 state에서 architect 차단 — blockers 포함 구조
+       각 oracle 파일: source=user_provided, input/expected SHA-256 해시 포함.
+       expected.json은 빈 JSON({}, []) 또는 TODO/TBD/placeholder 아님.
+
+    6. CLI Evidence Contract 준수 (BUG-20260525-39DE):
+       모든 상태 변경 CLI 호출은 PIPELINE_STATE_PATH 격리 + final_state assertion.
+       이 규칙은 테스트 내 docstring에도 명시한다.
+
+    7. 테스트 속도:
+       - 각 테스트 함수: 5-10초 이내 (subprocess timeout=30 사용)
+       - 전체 suite: 60초 이내
+       - 외부 GitHub API, PyInstaller, 실제 EXE 빌드, 외부 네트워크 호출 절대 금지
+       - 속도 확보 전략: state 파일에 필요한 선행 phase를 직접 DONE으로 주입하고
+         검증 대상 phase만 실제 CLI로 실행
+
+    8. 문서 정책 추가 (MT-3 의무 — IMP-20260507-0EDC 준수):
+       CLAUDE.md, qa-agent.md, test-harness-agent.md에 동일 MT에서 함께 다음 섹션을 추가:
+       "내부 함수 테스트만으로 CLI 완료 판정 금지.
+        핵심 파이프라인 흐름(new / done --phase pm|dev / gates technical|oracle|accept / architect)은
+        tests/e2e/test_real_cli_paths.py의 Real CLI Path E2E 테스트로 검증 필수.
+        PIPELINE_STATE_PATH 격리 + final_state assertion 없는 테스트는 CLI 검증으로 인정하지 않는다."
+
+    9. tests/e2e/__init__.py는 빈 파일로 생성. 별도 conftest.py 또는 pytest.ini 설정 불필요.
+  </requirements>
+
+  <!-- ───────────────────────────────────────────────────────────
+       Micro-tasks
+  ─────────────────────────────────────────────────────────────── -->
+  <micro_tasks>
+
+    <micro_task id="MT-1">
+      <affected_function>
+        tests/e2e/test_real_cli_paths.py::test_new_creates_state,
+        tests/e2e/test_real_cli_paths.py::test_done_pm_advances_phase,
+        tests/e2e/test_real_cli_paths.py::test_gates_technical_records_result,
+        tests/e2e/test_real_cli_paths.py::test_architect_blocked_without_oracle_quality,
+        tests/e2e/test_real_cli_paths.py::test_gates_accept_blocked_without_evidence,
+        tests/e2e/test_real_cli_paths.py::test_dev_blocked_without_clarification_criteria,
+        tests/e2e/test_real_cli_paths.py::test_return_phase_revert_resets_downstream,
+        tests/e2e/test_real_cli_paths.py::test_github_ci_gate_blocked_on_sha_mismatch
+      </affected_function>
+      <target_files>
+        <file>tests/e2e/__init__.py</file>
+        <file>tests/e2e/test_real_cli_paths.py</file>
+        <file>tests/oracles/IMP-20260525-6FAC/TC-normal-01/input.json</file>
+        <file>tests/oracles/IMP-20260525-6FAC/TC-normal-01/expected.json</file>
+        <file>tests/oracles/IMP-20260525-6FAC/TC-edge-01/input.json</file>
+        <file>tests/oracles/IMP-20260525-6FAC/TC-edge-01/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+        <!-- 신규 파일 생성. pipeline.py 내부 함수는 subprocess로만 간접 호출 -->
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>tests/e2e|test_real_cli</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+        <!-- 결과: No files found — tests/e2e/ 디렉터리와 test_real_cli_paths.py 미존재 확인 -->
+      </grep_evidence>
+      <grep_evidence_2>
+        <pattern>PIPELINE_STATE_PATH</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+        <!-- pipeline.py 1902~1903행: STATE_FILE 설정.
+             tests/test_clarification_gate.py: 기존 패턴 확인 -->
+      </grep_evidence_2>
+      <grep_evidence_3>
+        <pattern>def run_cli|subprocess\.run.*PIPELINE_PY</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+        <!-- tests/test_clarification_gate.py 49~80행: 재사용 가능한 run_cli 헬퍼 패턴 확인 -->
+      </grep_evidence_3>
+      <change_summary>
+        Real CLI Path E2E 테스트 파일(8개 함수) + oracle JSON 파일 4개 신규 생성.
+        PIPELINE_STATE_PATH 격리 + final_state assertion 패턴 적용.
+      </change_summary>
+      <line_estimate>320</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>
+        .github/workflows/ci.yml::jobs.tests.steps[자동 검사 실행 또는 신규 E2E 스텝]
+      </affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+        <!-- DQ-1 답변 A이면 ci.yml 변경 없음(기존 pytest 스텝이 tests/e2e/ 자동 탐색).
+             답변 B이면 ci.yml에 별도 스텝 추가.
+             DQ-1 사용자 답변 확인 후 Dev가 처리. -->
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>python -m pytest -q|testpaths|e2e</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+        <!-- ci.yml 118행: python -m pytest -q — 기존 단일 스텝 확인.
+             testpaths 설정 없음 → 기본 pytest 탐색이 tests/e2e/도 포함 -->
+      </grep_evidence>
+      <change_summary>
+        DQ-1 답변에 따라:
+        A) ci.yml 변경 없음 — tests/e2e/ 를 pytest 기본 탐색 범위에서 자동 실행.
+        B) ci.yml에 "Real CLI Path E2E 검사" 스텝 추가 (~15줄).
+        사용자 답변 확인 후 Dev가 분기 적용.
+      </change_summary>
+      <line_estimate>15</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>
+        CLAUDE.md::Real CLI Path E2E Gate Policy 신규 섹션,
+        .claude/agents/qa-agent.md::Real CLI Path E2E Gate Policy 신규 섹션,
+        .claude/agents/test-harness-agent.md::Real CLI Path E2E Gate Policy 신규 섹션
+      </affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+        <!-- 문서 섹션 추가 — 코드 호출부 없음 -->
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Real CLI Path E2E|내부 함수 테스트만으로.*CLI 완료</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+        <!-- 결과: No matches — 세 문서 모두 해당 정책 섹션 미존재 확인 -->
+      </grep_evidence>
+      <grep_evidence_2>
+        <pattern>test_real_cli_paths|tests/e2e</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+        <!-- CLAUDE.md, qa-agent.md, test-harness-agent.md에 언급 없음 확인 -->
+      </grep_evidence_2>
+      <change_summary>
+        IMP-20260507-0EDC 준수: 정책 변경 시 producer+consumer 문서를 동일 MT에서 묶음 패치.
+        세 문서에 내부 함수 테스트만으로 CLI 완료 판정 금지 정책 섹션 추가.
+      </change_summary>
+      <line_estimate>45</line_estimate>
+    </micro_task>
+
+  </micro_tasks>
+
+  <!-- ───────────────────────────────────────────────────────────
+       Python 버전 및 환경
+  ─────────────────────────────────────────────────────────────── -->
+  <python_version>3.9 — setup.cfg mypy python_version=3.9 기준, 기존 코드베이스 호환</python_version>
+  <env_specs>
+    <python>3.9</python>
+    <vscode>pylance + python.pythonPath=3.9, typeCheckingMode=off (pipeline.py에 mypy ignore_errors=True)</vscode>
+  </env_specs>
+
+  <!-- ───────────────────────────────────────────────────────────
+       합격 기준
+  ─────────────────────────────────────────────────────────────── -->
+  <acceptance_criteria>
+    1. [기능] pytest tests/e2e/test_real_cli_paths.py 실행 시 8개 테스트 모두 PASS.
+    2. [격리] 모든 테스트가 PIPELINE_STATE_PATH 격리 사용 — 실제 pipeline_state.json 변경 없음.
+    3. [assertion] 모든 상태 변경 CLI 호출은 returncode + final_state JSON assertion 포함.
+       stdout-only 검증만 있는 테스트는 FAIL 처리.
+    4. [실패 케이스] 5개 실패 케이스(oracle_quality 차단, evidence 없음, clarification 없음,
+       return_phase revert, github-ci SHA 불일치)가 각각 returncode != 0 또는
+       state 차단 필드로 검증됨.
+    5. [속도] 전체 suite 60초 이내. 각 테스트 5-10초 이내.
+    6. [외부 호출 금지] 실제 GitHub API, PyInstaller, EXE 빌드, 외부 네트워크 호출 없음.
+    7. [oracle] tests/oracles/IMP-20260525-6FAC/TC-normal-01/ + TC-edge-01/ 각 input.json + expected.json 존재.
+       expected.json이 빈 JSON 또는 TODO/TBD/placeholder 아님.
+    8. [CI] DQ-1 답변에 따른 ci.yml 변경 — GitHub Actions에서 E2E 테스트가 실행됨.
+    9. [문서] CLAUDE.md, qa-agent.md, test-harness-agent.md 세 파일에 Real CLI Path E2E 정책 섹션 추가.
+   10. [엣지케이스 1] tmp_path 빈 디렉터리에서 new 명령이 state 파일을 새로 생성하는지 검증.
+   11. [엣지케이스 2] oracle_quality.status=None인 state에서 architect 차단 검증.
+   12. [엣지케이스 3] pm_clarification_gate 필드가 아예 없는 레거시 state에서
+       check --phase dev가 PASS(레거시 파이프라인 하위 호환)되는지 검증.
+  </acceptance_criteria>
+
+  <!-- ───────────────────────────────────────────────────────────
+       금지 사항
+  ─────────────────────────────────────────────────────────────── -->
+  <forbidden>
+    - pipeline.py 내부 함수를 import하여 직접 호출하는 화이트박스 테스트 작성 금지.
+      E2E 테스트는 반드시 subprocess 기반 실제 CLI 호출만 사용.
+    - 실제 GitHub API/네트워크/외부 서비스 호출 금지 (mock/stub/state 직접 주입으로 대체).
+    - EXE 빌드(PyInstaller) 호출 금지.
+    - PIPELINE_STATE_PATH 격리 없이 real pipeline_state.json을 변경하는 테스트 금지.
+    - stdout만 검증하고 final_state를 검증하지 않는 테스트 금지.
+    - oracle expected 파일에 빈 JSON({}, [], ""), TODO, TBD, placeholder, sample 사용 금지.
+    - oracle source를 agent_generated로 표시 금지 — user_provided만 허용.
+    - tests/oracles/ 외부 경로에 oracle 파일 저장 금지.
+    - DQ-1 사용자 답변 없이 ci.yml 변경 범위를 임의로 결정 금지.
+    - CLAUDE.md만 업데이트하고 qa-agent.md, test-harness-agent.md 중 하나를 누락하는 분리 패치 금지
+      (IMP-20260507-0EDC: 동일 MT에서 묶음 패치 의무).
+  </forbidden>
+
+  <!-- ───────────────────────────────────────────────────────────
+       Handover 템플릿
+  ─────────────────────────────────────────────────────────────── -->
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260525-6FAC</pipeline_id>
+      <evidence>
+        <file>tests/e2e/__init__.py</file>
+        <file>tests/e2e/test_real_cli_paths.py</file>
+        <file>tests/oracles/IMP-20260525-6FAC/TC-normal-01/input.json</file>
+        <file>tests/oracles/IMP-20260525-6FAC/TC-normal-01/expected.json</file>
+        <file>tests/oracles/IMP-20260525-6FAC/TC-edge-01/input.json</file>
+        <file>tests/oracles/IMP-20260525-6FAC/TC-edge-01/expected.json</file>
+        <file>.github/workflows/ci.yml</file>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+
+  <!-- ───────────────────────────────────────────────────────────
+       Context Injection (다음 Phase)
+  ─────────────────────────────────────────────────────────────── -->
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_real_cli_paths.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_clarification_gate.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.github\workflows\ci.yml</file>
+    </target_files>
+    <phase_rules_excerpt>
+      - PIPELINE_STATE_PATH 격리 필수: PIPELINE_STATE_PATH 없는 테스트는 real state 변경 위험.
+      - final_state assertion 필수: stdout-only 검증 금지 (BUG-20260525-39DE CLI Evidence Contract).
+      - oracle source=user_provided 필수 (oracle_quality gate IMP-20260524-48C4).
+      - Trust-Root 파일 변경 시 CODEOWNERS 리뷰 필요.
+      - IMP-20260507-0EDC: 정책 변경 시 producer+consumer 문서 동일 MT 묶음 패치.
+    </phase_rules_excerpt>
+    <prev_phase_summary>
+      PM 설계 완료. DQ-1(CI 실행 방식 A vs B) 사용자 답변 대기 중.
+      MT-1(E2E 테스트+oracle), MT-2(ci.yml), MT-3(문서 3개) 3개 모듈로 분해.
+    </prev_phase_summary>
+  </context_injection>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
