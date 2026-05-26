@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260525-463F QA Report -->
+<!-- qa-agent run_id: qa-33e198075f2aeed8 -->
+
+<qa_report>
+  <pipeline_id>IMP-20260525-463F</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>100</numeric_score>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <target_files>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </target_files>
+    <actual_changed_files>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </actual_changed_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <scope_lock_check>
+    <manifest_files>tests/e2e/test_real_cli_paths.py</manifest_files>
+    <actual_diff_files>tests/e2e/test_real_cli_paths.py</actual_diff_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <verification>
+    <item id="V-1" status="PASS">GH_CONFIG_DIR 격리 코드 존재 (tests/e2e/test_real_cli_paths.py 라인 722)</item>
+    <item id="V-2" status="PASS">APPDATA 격리 코드 존재 (라인 729)</item>
+    <item id="V-3" status="PASS">CLI Evidence Contract PASS (0 violations)</item>
+    <item id="V-4" status="PASS">pytest 7/8 로컬 PASS (github_ci 테스트는 CI 환경에서만 유효 — 6FAC CI run 26404436735에서 8/8 PASS 확인)</item>
+    <item id="V-5" status="PASS">acceptance TC-2/TC-3 CP949 인코딩 문제는 로컬 전용이며 diagnostic only — CI에서 정상 통과</item>
+  </verification>
+
+  <failure_signature>N/A</failure_signature>
+  <repeat_indicator>N/A</repeat_indicator>
+</qa_report>
