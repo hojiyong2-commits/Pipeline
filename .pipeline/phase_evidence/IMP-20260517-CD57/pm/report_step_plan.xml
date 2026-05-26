@@ -1,0 +1,398 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <decomposition_audit>
+    <pipeline_id>IMP-20260517-CD57</pipeline_id>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>3</grep_executions>
+    <type>IMP</type>
+    <description>Codex Review actual-model hard gate 완성 — 이전 파이프라인 IMP-20260517-30DD(PR #84)가 사용자에게 REJECT된 6개 blocker(5개 코드 + 1개 절차)를 수정한다.</description>
+    <blockers_analyzed>
+      <blocker id="1">
+        <summary>actual_model_verified 필드가 None(누락)일 때 통과하는 버그</summary>
+        <file>pipeline.py</file>
+        <line>3804</line>
+        <current_code>if actual_model_verified is False:</current_code>
+        <fix>if actual_model_verified is not True: (False와 None 모두 FAIL)</fix>
+      </blocker>
+      <blocker id="2">
+        <summary>CODEX_REQUIRED_FIELDS에 actual model evidence 6개 필드 누락</summary>
+        <file>pipeline.py</file>
+        <line>3609-3620</line>
+        <fix>requested_model_id / actual_model_id / actual_model_verified / actual_model_source / review_provider / raw_output_path 6개 필드를 CODEX_REQUIRED_FIELDS에 추가</fix>
+      </blocker>
+      <blocker id="3">
+        <summary>codex-record 수동 경로가 result=ACCEPT를 기록 가능</summary>
+        <file>pipeline.py</file>
+        <line>8407</line>
+        <fix>new_record에 actual_model_verified=False / actual_model_id="" / actual_model_source="codex_record_manual" / review_provider="manual" / raw_output_path="" 기본값을 채우고, result_upper=="ACCEPT" 이면서 actual_model_verified가 false/absent이면 [CODEX RECORD BLOCKED] 메시지와 함께 exit code 2로 차단</fix>
+      </blocker>
+      <blocker id="4">
+        <summary>history stage ACCEPT 인정 시 actual_model_verified 미검증</summary>
+        <file>pipeline.py</file>
+        <line>3847-3850</line>
+        <fix>history loop에서 h.get("actual_model_verified") is True AND str(h.get("actual_model_id","")).strip() == CODEX_REQUIRED_MODEL_ID인 경우에만 all_stages_accepted에 포함</fix>
+      </blocker>
+      <blocker id="5">
+        <summary>provider response의 model ID에 .strip().lower()를 적용하여 exact match 회피</summary>
+        <file>pipeline.py</file>
+        <lines>7793, 7986, 8038</lines>
+        <fix>.lower() 제거, .strip()만 사용. 비교는 항상 exact string match로 CODEX_REQUIRED_MODEL_ID("gpt-5.5")와 같아야 한다.</fix>
+      </blocker>
+      <blocker id="6">
+        <summary>acceptance packet 정보 부족 차단 없음 (절차 위반)</summary>
+        <file>N/A — Pipeline Manager 절차 준수 문제</file>
+        <fix>코드 수정 아님. 이 파이프라인에서는 Phase 7 gates accept를 사용자 명시 ACCEPT 입력 후에만 기록한다. Pipeline Manager가 임의로 acceptance를 기록하지 않도록 manager_handoff.xml에 명시한다.</fix>
+      </blocker>
+    </blockers_analyzed>
+    <grep_evidence_summary>
+      <pipeline_py_call_sites>
+        <pattern>_validate_codex_review_schema</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+        <locations>3623 (정의), 7446 (codex run 기록 경로), 8451 (codex-record 경로)</locations>
+      </pipeline_py_call_sites>
+      <pipeline_py_actual_model_sites>
+        <pattern>actual_model_verified</pattern>
+        <match_count>13</match_count>
+        <executed>true</executed>
+        <locations>3798~3825 (gate check), 6894 (snapshot read), 7952/7988/8040/8053 (provider 결과 기록), 8099~8131 (record 최종 확인), 8183 (로그)</locations>
+      </pipeline_py_actual_model_sites>
+      <pipeline_py_lower_sites>
+        <pattern>\.strip\(\)\.lower\(\)</pattern>
+        <match_count>17 전체, 그 중 actual_model_id 관련 3건</match_count>
+        <executed>true</executed>
+        <locations>7793 (codex-cli metadata), 7986 (openai-api response), 8038 (fallback openai-api response)</locations>
+      </pipeline_py_lower_sites>
+      <test_file_existence>
+        <pattern>tests/test_codex_review.py</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+        <locations>이미 존재하며 약 30개 테스트 케이스가 있다 — 신규 케이스를 추가로 작성한다(기존 케이스 제거 금지).</locations>
+      </test_file_existence>
+    </grep_evidence_summary>
+    <module_split_rationale>
+      <reasoning>
+        Blocker 1~5는 모두 pipeline.py 단일 파일 내 인접 함수(_check_codex_review_required, _codex_run_via_openai_api, _codex_run_via_codex_cli, cmd_review_codex_record)를 수정하며, 한 함수의 변경이 다른 함수의 동작 가정을 깬다. 따라서 MT-1로 묶어 단일 atomic patch로 처리한다.
+        Blocker 6은 코드 수정이 아니며 Pipeline Manager 절차 문서화로 처리한다. manager_handoff.xml의 acceptance 항목에 "Phase 7은 사용자 명시 입력 후에만 기록" 문구를 강제한다.
+        테스트 추가/수정(tests/test_codex_review.py)은 MT-2로 분리하여 MT-1 PASS 후 회귀 방지 테스트를 작성하고 oracle T1~T4를 코드로 실행한다.
+      </reasoning>
+      <files_count>2</files_count>
+      <functions_touched_estimate>5</functions_touched_estimate>
+      <lines_changed_estimate>~140 (MT-1 ~60 + MT-2 ~80)</lines_changed_estimate>
+    </module_split_rationale>
+    <patch_lane_eligible>false</patch_lane_eligible>
+    <patch_lane_reason>
+      Patch Lane 5-AND 조건 위반: (a) 변경 파일 = 2개 (pipeline.py + tests/test_codex_review.py), (b) 변경 함수 = 5개 추정, (c) 예상 라인 ~140줄로 15줄 임계 초과. 따라서 Full Lane(STANDARD profile + Incremental Module Gate)을 사용한다.
+    </patch_lane_reason>
+    <oracle_set>
+      <oracle case_id="T1" kind="normal">
+        <input>tests/oracles/IMP-20260517-CD57/T1/input.json</input>
+        <expected>tests/oracles/IMP-20260517-CD57/T1/expected.json</expected>
+        <scenario>actual_model_verified=true, actual_model_id="gpt-5.5" → gate PASS</scenario>
+      </oracle>
+      <oracle case_id="T2" kind="edge">
+        <input>tests/oracles/IMP-20260517-CD57/T2/input.json</input>
+        <expected>tests/oracles/IMP-20260517-CD57/T2/expected.json</expected>
+        <scenario>actual_model_verified 필드 없음(None) → gate FAIL (Blocker 1 회귀 방지)</scenario>
+      </oracle>
+      <oracle case_id="T3" kind="exception">
+        <input>tests/oracles/IMP-20260517-CD57/T3/input.json</input>
+        <expected>tests/oracles/IMP-20260517-CD57/T3/expected.json</expected>
+        <scenario>actual_model_id="GPT-5.5"(대문자) → exact match 위반으로 FAIL (Blocker 5 회귀 방지)</scenario>
+      </oracle>
+      <oracle case_id="T4" kind="error">
+        <input>tests/oracles/IMP-20260517-CD57/T4/input.json</input>
+        <expected>tests/oracles/IMP-20260517-CD57/T4/expected.json</expected>
+        <scenario>codex-record stage=pr result=ACCEPT → [CODEX RECORD BLOCKED] exit 2 (Blocker 3 회귀 방지)</scenario>
+      </oracle>
+    </oracle_set>
+    <contract_state>
+      <contract_hash>a66a85f2fb46d9ada14c43abf6547eaa78683dbe1557a8a876933bc108a9f322</contract_hash>
+      <test_set_hash>6d69dd666ae43a54a5214584e33305d11361d143419f52fff1ed816c20f0ff3c</test_set_hash>
+      <audit_status>PASS</audit_status>
+      <frozen>true</frozen>
+    </contract_state>
+    <env_snapshot>
+      <python_version>(Pipeline Manager가 측정)</python_version>
+      <installed_packages>RPA/스크래핑 카테고리 아님 — Tier 2 미해당, 환경 스냅샷 측정 생략</installed_packages>
+      <encoding>cp949 (Windows 11 기본)</encoding>
+      <screen_size>N/A</screen_size>
+      <reason>본 작업은 pipeline 엔진 내부 검증 로직 수정 + 단위/통합 테스트 추가로, RPA/스크래핑/스케줄러/ETL 카테고리에 해당하지 않으므로 환경 스냅샷 의무가 없다.</reason>
+    </env_snapshot>
+  </decomposition_audit>
+
+  <step_plan>
+    <anti_gaming_read>true</anti_gaming_read>
+
+    <design_confirmation>
+      <module_split_presented>true</module_split_presented>
+      <module_split_user_confirmed>true</module_split_user_confirmed>
+      <maintenance_priority>유지보수성 우선 (maintainability_first)</maintenance_priority>
+      <low_value_questions_filtered>true</low_value_questions_filtered>
+      <filter_summary>
+        다음과 같은 P2/내부 구현 취향 질문은 묻지 않고 유지보수성 우선 원칙으로 결정했다:
+        (a) "actual_model_verified is not True" vs "actual_model_verified is False or actual_model_verified is None" 중 어느 표현을 쓸지 — 명시적이고 짧은 `is not True`로 결정.
+        (b) CODEX_REQUIRED_FIELDS 추가 시 6개 필드의 리스트 순서 — 의미 그룹(기존 필드 → 신규 actual model 필드)으로 묶어서 추가.
+        (c) [CODEX RECORD BLOCKED] 메시지의 정확한 문구 — 사용자가 다음 단계를 알 수 있도록 안내 포함.
+        (d) 신규 테스트 함수명 컨벤션 — 기존 test_codex_review.py의 패턴(test_xxx)을 따른다.
+      </filter_summary>
+
+      <decision_questions>
+        <question id="Q0" priority="P0" category="module_split">
+          <user_facing_question>이번 작업을 MT-1(pipeline.py 코드 수정)과 MT-2(테스트 추가) 두 모듈로 나눌까요?</user_facing_question>
+          <evidence>수정 대상은 pipeline.py(Blocker 1~5 코드 결함)와 tests/test_codex_review.py(회귀 방지 테스트)로 역할이 명확히 다르며, MT-1 PASS 후 MT-2를 진행해야 테스트가 의미 있습니다.</evidence>
+          <why_it_matters>모듈을 분리하면 코드 수정과 테스트 작성을 독립적으로 검증할 수 있어 MT-1 버그가 MT-2 테스트에 영향 주는 것을 막습니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>MT-1(pipeline.py) → MT-2(테스트) 순차 진행</label>
+              <benefit>MT-1 PASS 확인 후 MT-2 테스트 작성 가능, 각 단계 독립 검증</benefit>
+              <cost>두 단계로 나뉘어 총 시간이 다소 늘어납니다</cost>
+            </option>
+            <option id="B">
+              <label>MT-1과 MT-2를 하나의 모듈로 합산 처리</label>
+              <benefit>한 번에 처리하여 단계 수를 줄일 수 있습니다</benefit>
+              <cost>코드와 테스트를 동시 수정하면 검증 경계가 모호해져 회귀 방지 효과가 떨어집니다</cost>
+            </option>
+          </options>
+          <user_answer>A — MT-1 PASS 후 MT-2 진행하는 순차 분리로 합의</user_answer>
+        </question>
+
+        <question id="Q1" priority="P0" category="acceptance_procedure">
+          <user_facing_question>Phase 7 acceptance를 사용자가 직접 "ACCEPT"를 입력한 후에만 기록할까요?</user_facing_question>
+          <evidence>이전 파이프라인 IMP-20260517-30DD가 6개 blocker로 REJECT되었습니다. 그 중 1개(Blocker 6)는 Pipeline Manager가 사용자 확인 없이 acceptance를 기록한 절차 위반입니다.</evidence>
+          <why_it_matters>Blocker 6은 코드 수정이 아니라 파이프라인 운영 절차 문제입니다. 이번 파이프라인에서 Phase 7 gates accept를 어떻게 처리할지 미리 합의해야 같은 사고가 반복되지 않습니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>사용자 명시 입력 후 gates accept 기록</label>
+              <benefit>사용자 의사 없이 자동 ACCEPT 기록이 불가능해진다. 이번 파이프라인은 절차로 Blocker 6을 막는다.</benefit>
+              <cost>사용자가 응답할 때까지 대기 시간이 발생한다.</cost>
+            </option>
+            <option id="B">
+              <label>Technical/Oracle/GitHub CI PASS 시 자동 기록</label>
+              <benefit>대기 시간이 줄어든다.</benefit>
+              <cost>사용자가 실제 결과물을 확인하지 않은 채 ACCEPT가 기록되어 Blocker 6과 같은 사고가 재발한다. CLAUDE.md 규칙에도 위배.</cost>
+            </option>
+          </options>
+          <user_answer>A — 사용자 명시 ACCEPT/REJECT 입력 후에만 기록</user_answer>
+        </question>
+
+        <question id="Q2" priority="P1" category="error_message">
+          <user_facing_question>codex-record가 ACCEPT를 시도할 때 차단 메시지에 다음 행동 안내를 포함할까요?</user_facing_question>
+          <evidence>Blocker 3은 codex-record(수동 기록 경로)가 result=ACCEPT를 만들 수 있게 한 버그입니다. 차단 시 메시지에 어떤 정보를 줄지 결정해야 합니다.</evidence>
+          <why_it_matters>차단 시 메시지를 어떻게 줄지에 따라 사용자가 다음 행동을 결정합니다. 단순히 "BLOCKED"만 출력하면 사용자가 무엇을 해야 할지 모릅니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>사유 + 다음 행동 안내 포함</label>
+              <benefit>사용자가 즉시 다음 단계를 알 수 있다. 운영 친화적.</benefit>
+              <cost>메시지가 1줄 길어진다.</cost>
+            </option>
+            <option id="B">
+              <label>[CODEX RECORD BLOCKED] 메시지만</label>
+              <benefit>로그 크기가 최소화되어 출력이 간결해지고 로그 파싱이 단순해진다.</benefit>
+              <cost>사용자가 무엇을 해야 할지 모른다. 운영 마찰 증가.</cost>
+            </option>
+          </options>
+          <user_answer>A — 사유 + 다음 행동 안내 포함</user_answer>
+        </question>
+
+        <question id="Q3" priority="P1" category="schema_enforcement">
+          <user_facing_question>실제 모델 증거 6개 필드를 CODEX_REQUIRED_FIELDS에 모두 필수로 추가할까요?</user_facing_question>
+          <evidence>Blocker 2의 6개 신규 필드(requested_model_id, actual_model_id, actual_model_verified, actual_model_source, review_provider, raw_output_path)를 CODEX_REQUIRED_FIELDS에 추가하면 기존 파일과 호환성 문제가 생길 수 있습니다.</evidence>
+          <why_it_matters>6개 필드를 optional로 두면 schema가 actual evidence를 강제하지 않아 리뷰 파일 작성자가 누락할 수 있고 Blocker 1의 부분 수정에 그칩니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>6개 필드 모두 필수로 추가</label>
+              <benefit>이번 IMP의 목적인 "actual evidence 강제"가 분명히 작동한다. Blocker 1과 함께 누락도 FAIL로 처리.</benefit>
+              <cost>이전 파이프라인의 review 파일이 그대로는 사용 불가. 그러나 본 파이프라인 신규 작성이라 영향 없음.</cost>
+            </option>
+            <option id="B">
+              <label>6개 필드를 optional로 두기</label>
+              <benefit>기존 파이프라인의 codex_review_result.json 파일을 그대로 재사용할 수 있어 후방호환성이 유지된다.</benefit>
+              <cost>schema가 actual evidence를 강제하지 않아 review 파일 작성자가 누락할 수 있다. Blocker 1의 부분 수정에 그침.</cost>
+            </option>
+          </options>
+          <user_answer>A — 6개 필드 모두 CODEX_REQUIRED_FIELDS에 필수 추가</user_answer>
+        </question>
+
+        <question id="Q4" priority="P1" category="model_id_matching">
+          <user_facing_question>모델 ID 비교를 대소문자 구분 exact match로만 할까요?</user_facing_question>
+          <evidence>Blocker 5의 .lower() 제거 후 actual_model_id는 exact string "gpt-5.5"와만 일치해야 합니다. provider response가 "GPT-5.5"를 반환하면 FAIL이 됩니다.</evidence>
+          <why_it_matters>OpenAI API가 모델 버전을 정확히 어떻게 반환하는지에 따라 정상 케이스에서도 FAIL이 발생할 수 있습니다. 검증 강도와 유연성 사이에서 선택이 필요합니다.</why_it_matters>
+          <recommended_option>A</recommended_option>
+          <options>
+            <option id="A">
+              <label>exact equal 비교만 허용</label>
+              <benefit>가장 엄격한 검증. 의도하지 않은 모델 사용을 100% 차단.</benefit>
+              <cost>OpenAI가 버전을 붙여 반환하면 별도 IMP로 상수를 갱신해야 한다. 그러나 이는 의도된 변경 관리 통제.</cost>
+            </option>
+            <option id="B">
+              <label>prefix 매칭 허용 (startswith)</label>
+              <benefit>모델 마이너 버전 변화에 자동 적응.</benefit>
+              <cost>예상치 못한 변종 모델(gpt-5.5-mini 등)을 자동 허용하여 검증 강도가 약해진다. Blocker 5의 본래 의도와 모순.</cost>
+            </option>
+          </options>
+          <user_answer>A — exact equal 유지, 모델 변경은 별도 IMP에서 처리</user_answer>
+        </question>
+      </decision_questions>
+    </design_confirmation>
+
+    <task_complexity>
+      <execution_profile>STANDARD</execution_profile>
+      <reason>본 작업은 pipeline.py 신뢰 루트 파일을 수정하므로 Patch Lane 5-AND 조건 위반(파일 수 2개, 함수 ~5개, 라인 ~140). HIGH_RISK는 인증/삭제/배포/DB 마이그레이션이 아니므로 해당 안 됨. STANDARD 프로필로 Incremental Module Gate(MT-1 → MT-2)를 적용한다.</reason>
+      <uncertainty>
+        <p0_questions>1</p0_questions>
+        <p1_questions>3</p1_questions>
+        <output_format_clear>true</output_format_clear>
+      </uncertainty>
+      <blast_radius>
+        <expected_changed_files>2</expected_changed_files>
+        <expected_changed_functions>5</expected_changed_functions>
+        <expected_changed_lines>140</expected_changed_lines>
+      </blast_radius>
+      <risk_flags>
+        <data_deletion>false</data_deletion>
+        <file_move>false</file_move>
+        <external_api>false</external_api>
+        <auth_or_secret>false</auth_or_secret>
+        <pipeline_protocol>true</pipeline_protocol>
+        <build_or_deploy>false</build_or_deploy>
+        <core_parser_logic>false</core_parser_logic>
+        <database_or_migration>false</database_or_migration>
+        <new_dependency>false</new_dependency>
+      </risk_flags>
+      <pipeline_protocol_note>
+        pipeline.py(신뢰 루트 파일) 수정은 본 IMP의 정당한 범위. CLAUDE.md, agent MD, .github/workflows/** 는 건드리지 않는다. CODEOWNERS 보호 경로의 변경은 PR에서 그대로 드러난다.
+      </pipeline_protocol_note>
+    </task_complexity>
+
+    <micro_tasks>
+      <micro_task id="MT-1">
+        <name>pipeline.py — Blocker 1~5 (5개 코드 결함) 수정</name>
+        <affected_function>
+          pipeline.py:_check_codex_review_required(상수 CODEX_REQUIRED_FIELDS 포함);
+          pipeline.py:_codex_run_via_openai_api 호출부 (line 7986 .strip().lower());
+          pipeline.py:_codex_run_via_codex_cli (line 7793 .strip().lower());
+          pipeline.py:cmd_review_codex_run fallback (line 8038 .strip().lower());
+          pipeline.py:cmd_review_codex_record (line 8407 new_record 및 result=ACCEPT 차단)
+        </affected_function>
+        <target_files>
+          <file>pipeline.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>_check_codex_review_required (라인 3784 정의; pipeline 내부에서 dev/qa 게이트가 호출)</site>
+          <site>_validate_codex_review_schema (라인 7446 codex run 기록 경로, 라인 8451 codex-record 경로) — CODEX_REQUIRED_FIELDS 변경이 양쪽에 영향</site>
+          <site>cmd_review_codex_run (provider 결과 기록 후 schema 검증)</site>
+          <site>cmd_review_codex_record (manual 기록 경로 — Blocker 3 ACCEPT 차단)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>_validate_codex_review_schema</pattern>
+          <match_count>3</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>
+          (1) CODEX_REQUIRED_FIELDS에 6개 필드(requested_model_id, actual_model_id, actual_model_verified, actual_model_source, review_provider, raw_output_path) 추가.
+          (2) _check_codex_review_required 라인 3804: `if actual_model_verified is False:` → `if actual_model_verified is not True:` 로 변경 (False와 None 모두 FAIL).
+          (3) _check_codex_review_required 라인 3847~3850 history loop: ACCEPT 인정 조건에 `h.get("actual_model_verified") is True and str(h.get("actual_model_id","")).strip() == CODEX_REQUIRED_MODEL_ID` 추가.
+          (4) provider response 처리부 라인 7793/7986/8038: `.strip().lower()` → `.strip()` 만 사용. actual_model_verified 비교는 exact equal `== CODEX_REQUIRED_MODEL_ID` 유지.
+          (5) cmd_review_codex_record (라인 8407 new_record): actual_model_verified=False, actual_model_id="", actual_model_source="codex_record_manual", review_provider="manual", raw_output_path="" 기본값 추가. 그리고 result_upper == "ACCEPT"이면 _validate_codex_review_schema 호출 전에 [CODEX RECORD BLOCKED] 메시지와 다음 행동 안내(codex-run --provider openai-api)를 stderr로 출력하고 exit code 2로 즉시 종료.
+        </change_summary>
+        <line_estimate>60</line_estimate>
+        <module_dependencies>독립 모듈 — MT-2 의존성 없음. MT-1을 먼저 PASS한 뒤 MT-2를 진행한다.</module_dependencies>
+      </micro_task>
+
+      <micro_task id="MT-2">
+        <name>tests/test_codex_review.py — Blocker 1~4 회귀 방지 테스트 추가 (oracle T1~T4 대응)</name>
+        <affected_function>
+          tests/test_codex_review.py 신규 함수:
+          - test_actual_model_verified_none_field_missing_fails (T2 oracle, Blocker 1)
+          - test_codex_required_fields_includes_actual_model_evidence (Blocker 2 schema 검증)
+          - test_codex_record_accept_blocked_when_manual (T4 oracle, Blocker 3 — subprocess로 pipeline.py 호출)
+          - test_history_accept_requires_actual_model_verified (Blocker 4)
+          - test_actual_model_id_case_sensitive_exact_match (T3 oracle, Blocker 5)
+          - test_actual_model_verified_true_with_correct_id_passes_gate (T1 oracle, 정상 케이스)
+          신규 5~6개 함수 추가, 기존 함수 수정 없음.
+        </affected_function>
+        <target_files>
+          <file>tests/test_codex_review.py</file>
+        </target_files>
+        <affected_call_sites>
+          <site>none (테스트 파일은 다른 모듈에서 import하지 않음)</site>
+        </affected_call_sites>
+        <grep_evidence>
+          <pattern>tests/test_codex_review.py 존재 여부</pattern>
+          <match_count>1</match_count>
+          <executed>true</executed>
+        </grep_evidence>
+        <change_summary>
+          T1~T4 oracle 케이스를 pytest 함수로 옮기되, 입력은 tests/oracles/IMP-20260517-CD57/T*/input.json 파일을 직접 읽어와 임시 codex_review_result.json으로 작성하고, `pipeline._check_codex_review_required(state, required_stage="pr")` 또는 subprocess `python pipeline.py review codex-record ...`를 호출한다. 반환값/exit code를 pipeline_outputs/IMP-20260517-CD57/T*_actual.json에 기록하여 contract test_set.json의 actual_file과 일치시킨다. expected.json과 같은지 비교한다. 신규 테스트는 모두 PASS해야 한다.
+        </change_summary>
+        <line_estimate>80</line_estimate>
+        <module_dependencies>MT-1 PASS 후 진행. MT-1의 코드 변경이 안 되어 있으면 T2/T3/T4 테스트가 모두 실패한다(현재 버그 코드에서는 통과해버리므로).</module_dependencies>
+      </micro_task>
+    </micro_tasks>
+
+    <oracle_test_plan>
+      <ownership>사용자(PM이 본 step_plan에서 oracle 입력/예상 출력 파일을 생성)</ownership>
+      <storage>tests/oracles/IMP-20260517-CD57/&lt;case_id&gt;/{input,expected}.json — CODEOWNERS 보호 경로</storage>
+      <case_count>4 (T1 normal, T2 edge, T3 exception, T4 error)</case_count>
+      <execution>MT-2가 작성한 pytest 케이스가 oracle 파일을 직접 읽어 시뮬레이션 → pipeline_outputs/IMP-20260517-CD57/T*_actual.json 산출 → contract test_set.json의 json_exact_match 또는 command_check가 비교</execution>
+      <do_not_mutate>Dev가 expected.json을 수정하면 QA가 자동 FAIL. oracle은 사용자 source.</do_not_mutate>
+    </oracle_test_plan>
+
+    <phase_attestation_plan>
+      <pm>
+        Pipeline Manager 기록 단계가 step_plan.xml과 manager_handoff.xml로 PM phase done 후 gates prepare-phase --phase pm 실행. 브랜치 phase-attestation/IMP-20260517-CD57로 push, GitHub Actions 완료 후 gates phase-ci --phase pm 기록.
+      </pm>
+      <dev>
+        MT-1 → module design/dev/qa per MT-N, MT-2 동일. module integrate PASS 후 done --phase dev. 그리고 gates prepare-phase --phase dev → push → phase-ci 기록.
+      </dev>
+      <qa>
+        QA report에 scope_manifest와 실제 diff 비교 결과 포함. PASS면 done --phase qa --numeric-score (≥96) 후 phase attestation.
+      </qa>
+      <build>
+        Phase 6에서 EXE 빌드 대상 아님(pipeline 내부 검증 로직 수정). `python pipeline.py build --exe "N/A" --skip-reason "meta-task"`로 기록 후 phase attestation.
+      </build>
+    </phase_attestation_plan>
+
+    <user_acceptance_plan>
+      <evidence_target>pipeline_outputs/IMP-20260517-CD57/ 아래 결과물 등록 (PR 링크, GitHub Actions 자동 검사 결과, pytest 통과 출력 캡처)</evidence_target>
+      <attachments_required>
+        <item>PR 링크 (브랜치 phase-attestation/IMP-20260517-CD57)</item>
+        <item>GitHub Actions의 한국어 "최종 확인 안내" PR 댓글</item>
+        <item>pytest tests/test_codex_review.py -q 통과 스크린샷 또는 출력 텍스트</item>
+        <item>codex_review_result.json 예시 파일 (정상 케이스 T1)</item>
+      </attachments_required>
+      <user_question>Phase 7 마지막에 사용자에게 "ACCEPT 또는 REJECT" 한 번만 묻는다. 코드 검토 요구 금지.</user_question>
+      <pipeline_manager_constraint>
+        Q1 사용자 응답(옵션 A)에 따라, Pipeline Manager는 Technical/Oracle/GitHub CI 게이트가 모두 PASS여도 사용자의 명시적 "ACCEPT" 응답 없이는 `gates accept --result ACCEPT --user-confirmed`를 기록하지 않는다. 이전 파이프라인(IMP-20260517-30DD) Blocker 6 재발 방지.
+      </pipeline_manager_constraint>
+    </user_acceptance_plan>
+
+    <codex_review_plan>
+      <plan_stage>Dev 진입 전 plan stage Codex review ACCEPT 필요. python pipeline.py review codex-run --stage plan --provider openai-api 로 실행 (manual codex-record는 ACCEPT 불가).</plan_stage>
+      <scope_stage>Dev 진입 전 scope stage Codex review ACCEPT 필요. plan과 동일하게 codex-run.</scope_stage>
+      <code_stage>QA 진입 전 code stage Codex review.</code_stage>
+      <hygiene_stage>PR 생성 전 hygiene stage.</hygiene_stage>
+      <pr_stage>PR 머지 전 pr stage 4중 검증 (head-sha, diff-sha256, evidence, raw_output).</pr_stage>
+      <rca_stage>Phase 8 Architect 전 rca stage.</rca_stage>
+      <note>모든 stage는 codex-run --provider openai-api 또는 codex-cli (model metadata 노출 시)로 실행하여 actual_model_verified=true 보장. codex-record는 ACCEPT 기록 불가하므로 사용하지 않는다.</note>
+    </codex_review_plan>
+
+    <interface_contract>
+      <contract_file>pipeline_contracts/IMP-20260517-CD57/task_contract.json</contract_file>
+      <test_set_file>pipeline_contracts/IMP-20260517-CD57/test_set.json</test_set_file>
+      <contract_hash>a66a85f2fb46d9ada14c43abf6547eaa78683dbe1557a8a876933bc108a9f322</contract_hash>
+      <test_set_hash>6d69dd666ae43a54a5214584e33305d11361d143419f52fff1ed816c20f0ff3c</test_set_hash>
+      <audit>PASS</audit>
+      <frozen>true</frozen>
+      <ready>true</ready>
+    </interface_contract>
+  </step_plan>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</root>
