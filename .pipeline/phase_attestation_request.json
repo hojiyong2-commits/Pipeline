@@ -1,75 +1,77 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-16T02:15:13Z",
-  "pipeline_id": "IMP-20260516-D069",
-  "phase": "pm",
+  "generated_at": "2026-05-25T09:45:28Z",
+  "pipeline_id": "IMP-20260525-6FAC",
+  "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "3c89494a5df4c4dc5643557fdcda37c29c2ee755",
+  "commit_hint": "97b4d8e5eced357e2516576b039c63a206859ba6",
   "state": {
-    "current_phase": "dev",
-    "phase_completed_at": "2026-05-16T02:15:04Z",
-    "report_file": "step_plan.xml",
-    "evidence": null
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-25T09:34:52Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "tests/e2e/__init__.py,tests/e2e/test_real_cli_paths.py,tests/oracles/IMP-20260525-6FAC/TC-normal-01/input.json,tests/oracles/IMP-20260525-6FAC/TC-normal-01/expected.json,tests/oracles/IMP-20260525-6FAC/TC-edge-01/input.json,tests/oracles/IMP-20260525-6FAC/TC-edge-01/expected.json,.github/workflows/ci.yml,CLAUDE.md,.claude/agents/qa-agent.md,.claude/agents/test-harness-agent.md"
   },
   "agent_run": {
-    "run_id": "pm_planner-b5a497091799a32d",
-    "phase": "pm_planner",
-    "agent_id": "pm-planner-agent",
+    "run_id": "dev-d69cd01ab24445a5",
+    "phase": "dev",
+    "agent_id": "dev-agent",
     "status": "COMPLETED",
-    "output_file": "step_plan.xml",
-    "output_sha256": "c2d6f13624e09f62867b65c41c61777c81a1415589c122a3139977e7e499e94c",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/agent_receipt_pm_planner-b5a497091799a32d.json",
-    "receipt_sha256": "13fe161a92ef67fa952627a5775350803e195b253c0e4614e9009b3fe001b451",
-    "used_by_phase": "pm",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pm_planner\\pm_planner-b5a497091799a32d.json"
+    "output_file": "dev_handover.xml",
+    "output_sha256": "9eaeeb03c1da7d32024a161ede5ede8795aadb0eb40682e9d188b29f43a04f1f",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260525-6FAC/dev/agent_receipt_dev-d69cd01ab24445a5.json",
+    "receipt_sha256": "5ec1e607140e90642526d5ec16e2343b2af46448fca81fdda457530ead1c099c",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260525-6FAC\\dev\\dev-d69cd01ab24445a5.json"
   },
-  "manager_run": {
-    "run_id": "pipeline_manager-ca12146a6b6069b6",
-    "phase": "pipeline_manager",
-    "agent_id": "pipeline-manager-agent",
-    "status": "COMPLETED",
-    "output_file": "manager_handoff.xml",
-    "output_sha256": "50d4c9ba4ed3cd2c5225e578b2f16ecbab463936908a926ef8e888cb9104d701",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_receipt_pipeline_manager-ca12146a6b6069b6.json",
-    "receipt_sha256": "6d30c199700d55e9c6bed50e1094a041fe5cebf0f7380d1904c10aea4fb7e296",
-    "used_by_phase": "pm_manager",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pipeline_manager\\pipeline_manager-ca12146a6b6069b6.json"
-  },
+  "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pm_planner\\pm_planner-b5a497091799a32d.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/agent_receipt_pm_planner-b5a497091799a32d.json",
-      "sha256": "13fe161a92ef67fa952627a5775350803e195b253c0e4614e9009b3fe001b451",
-      "size_bytes": 519,
-      "requires_force_add": true
-    },
-    {
-      "label": "manager_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260516-D069\\pipeline_manager\\pipeline_manager-ca12146a6b6069b6.json",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_receipt_pipeline_manager-ca12146a6b6069b6.json",
-      "sha256": "6d30c199700d55e9c6bed50e1094a041fe5cebf0f7380d1904c10aea4fb7e296",
-      "size_bytes": 543,
-      "requires_force_add": true
+      "source": ".pipeline\\agent_receipts\\IMP-20260525-6FAC\\dev\\dev-d69cd01ab24445a5.json",
+      "path": ".pipeline/phase_evidence/IMP-20260525-6FAC/dev/agent_receipt_dev-d69cd01ab24445a5.json",
+      "sha256": "5ec1e607140e90642526d5ec16e2343b2af46448fca81fdda457530ead1c099c",
+      "size_bytes": 502,
+      "requires_force_add": false
     },
     {
       "label": "report",
-      "source": "step_plan.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/report_step_plan.xml",
-      "sha256": "c2d6f13624e09f62867b65c41c61777c81a1415589c122a3139977e7e499e94c",
-      "size_bytes": 28370,
-      "requires_force_add": true
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260525-6FAC/dev/report_dev_handover.xml",
+      "sha256": "9eaeeb03c1da7d32024a161ede5ede8795aadb0eb40682e9d188b29f43a04f1f",
+      "size_bytes": 3413,
+      "requires_force_add": false
     },
     {
-      "label": "manager_report",
-      "source": "manager_handoff.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260516-D069/pm/manager_report_manager_handoff.xml",
-      "sha256": "50d4c9ba4ed3cd2c5225e578b2f16ecbab463936908a926ef8e888cb9104d701",
-      "size_bytes": 758,
-      "requires_force_add": true
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260525-6FAC/dev/scope_manifest_scope_manifest.json",
+      "sha256": "cc0f7810dbf75b74ffef90aae242bf96a568bb2e7a1a319fe19201c23725c230",
+      "size_bytes": 1843,
+      "requires_force_add": false
     }
   ],
-  "workspace_file_checks": [],
+  "workspace_file_checks": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "96d29d60f2d6f5eb976ed1a7229c9435731cacb0e627ba90e1a866cbae30bfb9",
+      "size_bytes": 28406
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "30a3da80f398c916f284473232ffd56422740c6c2512aaa5ffab1bdec778d4ea",
+      "size_bytes": 83360
+    },
+    {
+      "path": ".claude/agents/qa-agent.md",
+      "sha256": "787e633523328d4b9871c51de0bb9adba04d25dbdbe85cecd5000cc875e17e2b",
+      "size_bytes": 31200
+    },
+    {
+      "path": ".claude/agents/test-harness-agent.md",
+      "sha256": "8f73d2c84a3e74a16982d0afca501b664eefd302dd0837c96cccef7bad24511f",
+      "size_bytes": 6529
+    }
+  ],
   "local_only_files": []
 }
