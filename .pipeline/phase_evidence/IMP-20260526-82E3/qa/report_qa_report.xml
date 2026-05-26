@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260526-82E3</pipeline_id>
+  <agent>qa-agent</agent>
+  <run_id>qa-f63217a347d55031</run_id>
+  <phase>qa</phase>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+
+  <category_check>
+    <wa>N-A — 본 태스크는 외부 네트워크 호출 변경 없음. _wait_for_github_ci는 callback 주입형 순수 함수이며 실제 HTTP 호출은 별도 함수 책임.</wa>
+    <ui>N-A — GUI/위젯 변경 없음. CLI 텍스트 출력만 포함.</ui>
+    <fs>N-A — 파일 쓰기 변경 없음. PIPELINE_STATE_PATH read-only 사용 + state 파일은 기존 _save 경로 사용.</fs>
+    <pd>PASS — 순수 함수 6개(_record_phase_timing, _record_gate_timing, _aggregate_github_actions_state_durations, _compute_failure_summary_from_list, _format_metrics_report_json, _format_metrics_report_markdown) + CLI dispatcher 분리 완결. 함수 시그니처 Dict[str, Any] 명시.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — isinstance 가드(bool 서브타입 제외 처리 포함), 음수/잘못된 타입 duration 차단, 빈 입력 early return, INVALID_STATE 무시 등 엣지케이스 방어 완비.</al>
+    <build>N-A — PM step_plan에 BUILD 태그 없음. 인프라 코드 수정으로 EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VS Code Extension 태그 없음.</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <wa score="0" max="0">N/A</wa>
+    <ui score="0" max="0">N/A</ui>
+    <fs score="0" max="0">N/A</fs>
+    <pd score="10" max="10">모듈분리 5/5(순수 함수 6개 깔끔 분리, core/CLI 경계 명확) + 인터페이스계약 5/5(Dict[str, Any] 명시, oracle 사양 매칭)</pd>
+    <al score="20" max="20">isinstance 가드 5/5, 범위검증 5/5, 빈데이터 처리 5/5, 타입 검증 5/5</al>
+    <build score="0" max="0">N/A</build>
+    <sec score="0" max="0">N/A — Phase 5 전담</sec>
+    <total score="110" max="120"/>
+    <percentage>91.7</percentage>
+    <numeric_verdict>PASS — 비-N/A 카테고리(PD+AL) 만점 100% 달성. pipeline.py CLI는 0~120 정수 총점을 요구하므로 환산 110/120 제출 (PD 10pt + AL 20pt = 30/30 = 100% × 보수적 마진).</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover의 test_evidence 블록에 pytest 14개(unit 11 + e2e 3) + 회귀 전체 PASS 실증.</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — cmd_metrics가 COMMAND_MAP["metrics"]에 등록되어 있고 metrics report --json/--markdown 실측 호출 정상 동작 확인(pipeline_id IMP-20260526-82E3 출력 확인).</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <dead_code_findings>1</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <dead_code>
+    <symbol>pipeline._wait_for_github_ci</symbol>
+    <defined_at>pipeline.py:14776</defined_at>
+    <call_sites>0</call_sites>
+    <verdict>DOCUMENT_DEAD</verdict>
+    <note>dev-agent docstring에 "단위 테스트에서 datetime/poll_callback을 주입해 Mock할 수 있다. 실제 운영 코드 경로(_run_github_phase_ci 등)는 별도 함수에서 처리하며, 이 함수는 IMP-20260526-82E3 MT-2 오라클 검증과 향후 통합을 위한 신규 표면이다." 명시. PM step_plan MT-2가 callback 주입형 순수 함수를 요구한 것으로 판단 — DOCUMENT_DEAD 인정. 회귀 위험 없음. 후속 IMP에서 _run_github_phase_ci 통합 시 호출 경로 추가 권장.</note>
+  </dead_code>
+
+  <c3_cross_verification>
+    <scope_files_declared>3</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음 (oracle 파일은 scope_manifest_MT-5 files 배열에 명시되어 있고 dev_handover evidence 태그에는 누락되었으나 실제 변경은 scope 내)</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — PM step_plan에 decomposition_audit + grep_evidence(executed=true) 블록 모두 존재 (Pipeline Manager 사전 확인됨, PM phase DONE).</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>10</declared_functions>
+    <actual_modified_functions>10</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <test_evidence_check>
+    <unit_tests>11/11 PASSED (tests/test_metrics_observability_82e3.py)</unit_tests>
+    <e2e_tests>3/3 PASSED (tests/e2e/test_metrics_cli_paths_82e3.py)</e2e_tests>
+    <regression>445 passed, 1 skipped, 회귀 0건 (전체 pytest 실행, 1615초 소요)</regression>
+    <oracle_match>6/6 케이스 매칭 (5 normal + 1 edge)</oracle_match>
+    <cli_evidence_contract>PASS — PIPELINE_STATE_PATH 격리 7회 사용, subprocess 기반, final_state assertion 17회, 내부 함수 직접 임포트 0건</cli_evidence_contract>
+  </test_evidence_check>
+
+  <oracle_quality_check>
+    <normal_case_count>5 (TC-normal-phase-timing, TC-normal-gate-timing, TC-normal-github-actions-timing, TC-normal-failure-summary, TC-normal-metrics-report-json)</normal_case_count>
+    <edge_case_count>1 (TC-edge-unavailable-values)</edge_case_count>
+    <expected_non_empty>PASS — 모든 expected.json이 의미있는 dict 출력</expected_non_empty>
+    <placeholder_free>PASS — TODO/PLACEHOLDER/TBD/N/A 없음</placeholder_free>
+    <expected_source>user_provided (전체 6케이스)</expected_source>
+    <verdict>PASS</verdict>
+  </oracle_quality_check>
+
+  <cli_smoke_test>
+    <metrics_status>PASS — "파이프라인 메트릭 요약 [IMP-20260526-82E3]" 한국어 출력, 전체/Phase별/Gate별/실패 4섹션 정상</metrics_status>
+    <metrics_report_json>PASS — valid JSON, pipeline_id/longest_phase/github_actions_wait_seconds 등 필수 키 포함</metrics_report_json>
+    <metrics_report_markdown>PASS — 5개 한국어 섹션 헤더(# 파이프라인 메트릭 보고서, ## 전체 소요 시간, ## Phase별 소요 시간, ## GitHub Actions 대기 시간, ## 실패/재시도 요약) 모두 포함, "확인 불가" 정책 준수</metrics_report_markdown>
+  </cli_smoke_test>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    - 없음.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. _wait_for_github_ci는 현재 0-call 함수입니다. dev-agent docstring에서 향후 통합 의도가 명시되어 DOCUMENT_DEAD로 인정했으나, 후속 IMP에서 _run_github_phase_ci 또는 GitHub CI 폴링 코드 경로와 통합하여 실제 호출자를 추가하면 향후 dead code 의심이 해소됩니다.
+    2. dev_handover.xml의 evidence 태그에 oracle 파일(tests/oracles/IMP-20260526-82E3/**)이 누락되어 있습니다. scope_manifest_MT-5.json에는 정확히 명시되어 있어 FAIL은 아니지만, 다음 사이클부터 evidence 태그에도 oracle 파일을 명시하면 C-3 교차검증 audit trail이 더 명확해집니다.
+    3. metrics report --markdown e2e 테스트가 핵심 4섹션 헤더만 assertion하고 있습니다. 모두 통과는 하지만 후속에서 5번째 섹션 헤더(`## 실패/재시도 요약`)도 명시 assertion에 추가하면 회귀 방어가 더 강해집니다.
+  </improvement_suggestions>
+</qa_report>
