@@ -189,3 +189,31 @@ def test_check_phase_within_budget():
         assert "[차단됨]" not in output
     finally:
         os.unlink(state_path)
+
+
+def test_check_phase_blocked_when_budget_exceeded():
+    """budget 한도 초과 시 check --phase dev가 budget으로 차단됨 (oracle TC-normal-budget-blocked)"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+        state = make_isolated_state()
+        # dev 3회 FAIL — 한도(3) 초과
+        state["attempt_budget"]["attempts"]["dev"] = [
+            {"outcome": "FAIL", "failure_code": "technical_test_failed"},
+            {"outcome": "FAIL", "failure_code": "technical_test_failed"},
+            {"outcome": "FAIL", "failure_code": "technical_test_failed"},
+        ]
+        state["attempt_budget"]["blocked_phases"] = {"dev": True}
+        json.dump(state, f, ensure_ascii=False)
+        state_path = f.name
+
+    try:
+        env = {**os.environ, "PIPELINE_STATE_PATH": state_path}
+        result = subprocess.run(
+            [sys.executable, PIPELINE_PY, "check", "--phase", "dev"],
+            capture_output=True, text=True, env=env, encoding='utf-8', errors='replace'
+        )
+        assert result.returncode != 0, "budget 초과 시 비-0 exit이어야 합니다"
+        output = (result.stdout or "") + (result.stderr or "")
+        assert any(kw in output for kw in ["BUDGET_EXCEEDED", "재시도 한도", "BLOCKED", "budget"]), \
+            f"budget 차단 메시지가 없습니다: {output[:300]}"
+    finally:
+        os.unlink(state_path)
