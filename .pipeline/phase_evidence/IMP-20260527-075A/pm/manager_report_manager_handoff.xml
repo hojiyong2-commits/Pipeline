@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>IMP-20260527-075A</pipeline_id>
+  <manager_run_id>pipeline_manager-1b9c8f003406cf07</manager_run_id>
+  <planner_run_id>pm_planner-2af389f7ffea0db3</planner_run_id>
+  <step_plan_sha256>6ce66d52f310d1de67bacbe7121127dba40983aad0dc11885baf76af28531871</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>PM_COMPLETE</status>
+  <contract_frozen>true</contract_frozen>
+  <design_confirmation_verified>true</design_confirmation_verified>
+  <dq1_answer>A — phase별 한도(dev:3, qa:3, gate:5)</dq1_answer>
+  <dq2_answer>A — 3회째부터 RCA 이관(repeat_failure_code_threshold=3)</dq2_answer>
+  <askuser_required>false</askuser_required>
+  <oracle_count>4</oracle_count>
+  <micro_tasks>MT-1,MT-2,MT-3,MT-4</micro_tasks>
+  <target_files>pipeline.py,tests/test_attempt_budget_075a.py,tests/e2e/test_real_cli_paths.py</target_files>
+</manager_handoff>

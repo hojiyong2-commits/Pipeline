@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260527-075A: Cost/Attempt Budget Gate -->
+<!-- pm_planner agent_run_id: pm_planner-363bd464f6f9334d -->
+
+<decomposition_audit>
+  <total_functions_identified>9</total_functions_identified>
+  <micro_task_count>4</micro_task_count>
+  <grep_executions>3</grep_executions>
+  <split_decision>pipeline.py 단일 파일이지만 변경 함수가 9개(_record_attempt_budget, _check_attempt_budget, _is_budget_blocked, _detect_repeat_failure_code, _korean_budget_message, cmd_budget, _cmd_budget_status, _cmd_budget_reset, cmd_check 통합)로 3개 이상이고 예상 라인이 약 360라인이므로 함수 책임 단위로 4개 micro_task로 분할. 핵심 budget 로직(MOD-1), CLI 추가(MOD-2), check 게이트 통합(MOD-3), 테스트 신규 파일(MOD-4) 4축으로 분리. tests/test_attempt_budget_075a.py(신규)와 tests/e2e/test_real_cli_paths.py(추가 케이스)는 테스트 모듈에서 함께 다룸.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260527-075A</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning — Cost/Attempt Budget Gate 설계</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>PD, AL</category_tags>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 변수명(예: attempts vs attempt_log), 함수 prefix(_record vs _append), 한국어 메시지 정확한 어휘 등 사용자 가치가 낮은 P2 질문은 사용자에게 묻지 않고 pipeline.py 기존 패턴(스네이크 케이스, _record_failure_packet 스타일)과 유지보수성 기준으로 PM이 결정했습니다. budget 기본값과 반복 임계값처럼 실제 게이트 동작을 좌우하는 P1 질문만 사용자 확인을 받습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>phase별 재시도 한도를 따로 둘까요(dev: 3, qa: 3, gate: 5), 아니면 모든 phase에 한 가지 값(예: 3)만 둘까요?</user_facing_question>
+        <evidence>pipeline.py에 이미 qa_fail_history와 Circuit Breaker가 있지만 dev 재진입과 gate 재시도는 무제한입니다. Phase 7 external gate는 retry 비용이 더 크므로 한도를 따로 잡는 편이 추적이 쉽습니다.</evidence>
+        <why_it_matters>한도가 너무 낮으면 정상적인 1~2회 재시도조차 막혀 불편해지고, 너무 높으면 무한 루프를 막지 못합니다. phase별로 다르게 잡으면 사용자에게 보여줄 메시지도 더 명확해집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>phase별 한도 (dev:3, qa:3, gate:5)</label>
+            <benefit>각 phase 특성(코드 수정, 검증, 외부 호출)에 맞게 한도가 달라 실수로 인한 차단이 적습니다. 사용자 메시지에 "남은 재시도 2회 / 한도 3회" 같이 phase별로 안내할 수 있습니다.</benefit>
+            <cost>설정 키가 3개로 늘어나서 향후 조정할 때 위치가 조금 더 많아집니다.</cost>
+          </option>
+          <option id="B">
+            <label>전역 단일 한도 (모든 phase 3회)</label>
+            <benefit>구성과 메시지가 단순합니다.</benefit>
+            <cost>외부 게이트(GitHub CI 등)가 일시적 네트워크 오류로 3회 안에 통과하지 못하면 강제 RCA로 이관되어 사용자 피로가 커집니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 — phase별 한도(dev:3, qa:3, gate:5)를 적용합니다. 이는 사용자 요청 원문의 "phase별, gate별, provider/API 호출별 최대 재시도 횟수를 정의한다"와 일치합니다.</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="threshold" mt_id="MT-1">
+        <user_facing_question>같은 failure_code가 몇 번째부터 RCA로 이관되어야 하나요? 2회째부터 즉시 RCA로 보낼지, 3회째부터 보낼지?</user_facing_question>
+        <evidence>현재 pipeline.py의 Circuit Breaker(_check_circuit_breaker)는 qa 2회 같은 signature 실패에서 즉시 Architect 이관입니다. budget gate는 dev/gate/provider까지 확장되므로 임계값을 다시 합의해야 합니다.</evidence>
+        <why_it_matters>임계값이 2회면 일시적 동일 오류(예: 동일 import 오류 1회 + 우연한 동일 코드 1회)도 곧장 RCA로 가서 정상 작업 흐름이 끊깁니다. 3회면 같은 원인이 분명히 반복된다는 충분한 신호가 됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>3회째부터 RCA 이관 (repeat_failure_code_threshold=3)</label>
+            <benefit>일시적 같은 오류는 2회까지 자가 수정 기회를 주고, 3회째에 RCA로 이관해 "정말 반복 중"이라는 신호를 확보합니다. budget 한도(dev:3, qa:3)와도 자연스럽게 정렬됩니다.</benefit>
+            <cost>RCA 이관이 한 사이클 늦어집니다.</cost>
+          </option>
+          <option id="B">
+            <label>2회째부터 RCA 이관 (기존 Circuit Breaker와 동일)</label>
+            <benefit>같은 원인 반복을 가장 빠르게 차단합니다. 기존 qa Circuit Breaker와 동일한 정책이라 일관됩니다.</benefit>
+            <cost>일시적 동일 오류(예: 동일 줄 typo 두 번)에도 RCA로 가서 단순 재시도면 끝났을 일을 크게 만듭니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 — 3회째부터 RCA 이관. 기존 qa Circuit Breaker(2회)는 그대로 유지하고, budget gate는 3회 임계값으로 차등 적용. 두 기제는 보완적으로 작동합니다.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py(신뢰 루트 파일)와 신규 테스트 파일을 함께 수정하는 작업으로 코드 변경 라인 ~360, 함수 9개 영향. FAST 프로필 조건(파일 2개·라인 80 이하) 초과 + trust_root 변경 발생.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>9</expected_changed_functions>
+      <expected_changed_lines>360</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <interface_spec>
+    - Input: 사용자가 phase별 재시도(`pipeline.py check --phase X`, `done --phase X`, `gates X`) 호출 또는 `python pipeline.py budget status|reset` CLI 호출.
+    - Output: budget 한도 내일 때 정상 진행, 초과 시 exit 1 + 한국어 차단 메시지 + `failure_packet.json` 갱신(`failure_code=BUDGET_EXCEEDED` 또는 `REPEAT_FAILURE_CODE`, `return_phase=architect`). `budget status`는 phase별 attempts/한도/남은 횟수와 반복 failure_code를 한국어로 출력.
+    - Validation: `pipeline_state.json` 내부 `attempt_budget` 키(신규)에 phase별 attempts 누적, 모든 변경은 동일 트랜잭션(load → mutate → save) 내에서 수행.
+  </interface_spec>
+
+  <requirements>
+    - pipeline.py에 attempt budget 관리 함수 3종(`_record_attempt_budget`, `_check_attempt_budget`, `_is_budget_blocked`)을 추가하고, 동일 failure_code 반복 감지(`_detect_repeat_failure_code`)와 한국어 메시지 생성(`_korean_budget_message`)을 함께 구현합니다.
+    - pipeline_state.json 최상위에 `attempt_budget` dict 신설: `{"config": {"dev_max_attempts": 3, "qa_max_attempts": 3, "gate_max_attempts": 5, "repeat_failure_code_threshold": 3}, "attempts": {"dev": [...], "qa": [...], "gate": [...]}, "blocked_phases": {}}`. 기존 키(`qa_fail_history`, `failure_packets`)는 변경하지 않습니다.
+    - `cmd_check` 함수 내 dev/qa/build phase 분기에서 `_is_budget_blocked(state, phase)` 호출을 추가하여 budget 초과 시 exit 1로 차단하고 failure_packet을 갱신합니다.
+    - `cmd_qa`, `cmd_done` 함수의 FAIL 경로에서 `_record_attempt_budget(state, phase, outcome="FAIL", failure_code=...)`을 호출하여 attempts에 누적합니다. PASS 경로에서는 해당 phase attempts를 초기화합니다.
+    - CLI 명령 추가: `python pipeline.py budget status [--pipeline-id ID]`와 `python pipeline.py budget reset --phase dev|qa|gate --reason TEXT`. argparse에 `p_budget` 서브파서를 등록하고 `cmd_budget` dispatcher 함수를 추가합니다. `--reason` 누락 시 argparse가 exit 2로 종료해야 합니다.
+    - failure_packet.json 갱신 시 `failure_code` 필드는 `BUDGET_EXCEEDED` 또는 `REPEAT_FAILURE_CODE`, `return_phase` 필드는 `architect`로 설정. 기존 `_record_failure_packet` 함수를 재사용합니다.
+    - 한국어 사용자 메시지 의무: budget 차단 시 stdout/stderr에 "재시도 한도", "초과", "Architect", phase명, 남은 횟수가 포함되어야 합니다. 반복 failure_code 시 "동일", failure_code 문자열, "Architect"가 포함되어야 합니다.
+    - 신규 테스트 파일 `tests/test_attempt_budget_075a.py` 생성: 최소 6개 함수(`test_budget_pass_within_limit`, `test_budget_exceeded_blocks_phase`, `test_repeat_failure_code_triggers_rca`, `test_cli_budget_status_command`, `test_cli_budget_reset_requires_reason`, `test_check_phase_within_budget`, `test_check_phase_blocked_when_budget_exceeded`). 모든 CLI 검증은 `PIPELINE_STATE_PATH` 격리된 임시 state 파일을 사용해야 합니다.
+    - `tests/e2e/test_real_cli_paths.py`에 budget E2E 케이스를 추가하여 `subprocess`로 `python pipeline.py budget status`, `budget reset`, budget 초과 시 `check --phase dev` exit 1을 검증합니다. `final_state` assertion 필수.
+    - Documentation-Code Drift 방지: pipeline.py에 새 기본값(`dev_max_attempts=3`, `qa_max_attempts=3`, `gate_max_attempts=5`, `repeat_failure_code_threshold=3`)이 추가되면 동일 micro_task 안에서 pipeline.py 내부 docstring/주석을 새 값과 일치하도록 갱신합니다. CLAUDE.md 본문 추가/수정은 이 파이프라인 scope 밖(별도 protocol evolution IMP 필요).
+    - Real CLI Path E2E Gate: 모든 신규 CLI 검증은 internal function direct call이 아닌 subprocess 기반이어야 하고 `PIPELINE_STATE_PATH` 격리 + `final_state` assertion이 포함되어야 합니다(IMP-20260525-6FAC 정책).
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._record_attempt_budget</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_check</site>
+        <site>pipeline.cmd_qa</site>
+        <site>pipeline.cmd_done</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _record_failure_packet|qa_fail_history|failure_packets</pattern>
+        <match_count>14</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py에 attempt budget 핵심 로직 5개 함수 추가(_record_attempt_budget, _check_attempt_budget, _is_budget_blocked, _detect_repeat_failure_code, _korean_budget_message). pipeline_state.json 신규 키 attempt_budget 도입.</change_summary>
+      <line_estimate>140</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>pipeline.cmd_budget</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.main(argparse dispatch)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_patch|def cmd_cluster|p_budget|subparsers.add_parser</pattern>
+        <match_count>9</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py에 budget CLI 추가: cmd_budget dispatcher + _cmd_budget_status + _cmd_budget_reset 함수, argparse `budget` 서브파서 등록(`budget status`, `budget reset --phase --reason`).</change_summary>
+      <line_estimate>100</line_estimate>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>pipeline.cmd_check</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_check (dev/qa/build 분기)</site>
+        <site>pipeline.cmd_qa (FAIL 경로)</site>
+        <site>pipeline.cmd_done (FAIL 시그니처 분기)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_check|def cmd_qa|def cmd_done|_record_failure_packet</pattern>
+        <match_count>15</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_check에 budget 차단 검사 삽입(dev/qa/build phase 진입 직전 _is_budget_blocked 호출). cmd_qa/cmd_done FAIL 경로에서 _record_attempt_budget 호출. PASS 경로에서 attempts 초기화.</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>tests.test_attempt_budget_075a (신규 파일)</affected_function>
+      <target_files>
+        <file>tests/test_attempt_budget_075a.py</file>
+        <file>tests/e2e/test_real_cli_paths.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PIPELINE_STATE_PATH|final_state|subprocess</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>tests/test_attempt_budget_075a.py 신규 작성(최소 6개 테스트 함수). tests/e2e/test_real_cli_paths.py에 budget 관련 E2E 케이스 추가(`-k budget`으로 선택 가능). 모든 테스트는 PIPELINE_STATE_PATH 격리 + final_state assertion 필수.</change_summary>
+      <line_estimate>240</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 pipeline.py 환경과 일치. argparse, json, subprocess, pathlib만 사용하므로 신규 의존성 없음.</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>기존 .vscode/settings.json 그대로. pythonVersion 3.10, typeCheckingMode basic 유지.</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - 4개 모든 oracle 케이스가 PASS: TC-normal-budget-pass(정상 재시도 허용), TC-normal-budget-blocked(초과 시 BLOCKED + failure_packet 생성), TC-edge-repeat-failure-code(동일 failure_code 3회 시 REPEAT_FAILURE_CODE), TC-edge-reset-no-reason(reason 누락 시 비-0 exit).
+    - 신규 단위 테스트 `tests/test_attempt_budget_075a.py` 모든 함수 PASS.
+    - `tests/e2e/test_real_cli_paths.py` budget 관련 E2E 테스트 PASS (PIPELINE_STATE_PATH 격리 + final_state assertion 포함).
+    - 전체 pytest 실행 시 기존 테스트 영향 없음(회귀 0건).
+    - `python pipeline.py budget status` 명령이 phase별 attempts/한도/남은 횟수와 반복 failure_code를 한국어로 출력. exit 0.
+    - `python pipeline.py budget reset --phase dev --reason "사용자 확인 후 재시작"` 정상 동작, exit 0. `--reason` 누락 시 argparse가 exit 2로 종료.
+    - `python pipeline.py check --phase dev`가 budget 한도 초과 시 exit 1 + 한국어 차단 메시지 + `failure_packet.json` 생성 또는 갱신.
+    - dev phase 1회 FAIL 후 `pipeline.py check --phase dev`는 여전히 exit 0(한도 내).
+    - QA 진입 가능: `python pipeline.py check --phase qa` 통과 (단위 테스트 + E2E PASS 전제).
+    - GitHub Actions CI PASS.
+    - 최종 ACCEPT/REJECT 보고서에 한국어로 phase별 attempts, 반복 failure_code, budget 초과 여부 요약.
+    - Codex Review Gate: plan stage Codex ACCEPT(Dev 진입 전), scope stage Codex ACCEPT(scope_manifest 확정 후), code stage Codex ACCEPT(QA 진입 전). review_model 반드시 "GPT-5.5".
+    - Scope Lock: Dev가 변경하는 파일은 정확히 [pipeline.py, tests/test_attempt_budget_075a.py, tests/e2e/test_real_cli_paths.py] 3개. 그 외 파일 변경 발견 시 module dev 기록 차단.
+    - PR Body 한국어 의무: PR 본문에 작업 요약, 사용자가 확인할 결과물, 기대/실제 결과, 중요한 선택과 트레이드오프(DQ-1, DQ-2), 검증 5개 섹션 한국어로 작성.
+  </acceptance_criteria>
+
+  <forbidden>
+    - CLAUDE.md, `.claude/agents/*.md`, `.github/workflows/**` 수정 금지(이 파이프라인 scope 밖, 별도 IMP 필요).
+    - 기존 `qa_fail_history` 키 의미 변경 금지(Circuit Breaker 기존 동작 보존).
+    - 기존 `_record_failure_packet` 함수 시그니처 변경 금지(추가 호출만 허용).
+    - 신규 외부 의존성 추가 금지(argparse, json, subprocess, pathlib만 사용).
+    - 새 budget 기본값을 사용자 명시 없이 임의 변경 금지(dev:3, qa:3, gate:5, threshold:3 고정).
+    - dev-agent가 scope_manifest.json에 등록되지 않은 파일을 수정하면 module dev 기록 차단.
+    - 단위 테스트나 E2E에서 전역 `pipeline_state.json`을 직접 수정 금지(반드시 PIPELINE_STATE_PATH 격리).
+  </forbidden>
+
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260527-075A</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/test_attempt_budget_075a.py</file>
+        <file>tests/e2e/test_real_cli_paths.py</file>
+        <file>scope_manifest.json</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_real_cli_paths.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260527-075A\task_contract.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260527-075A\test_set.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      - Three-Gate + Option A + Incremental Module Gate 필수(Classic 금지).
+      - PM 설계 확인 게이트 통과(DQ-1: phase별 한도 A 선택, DQ-2: 임계값 3 선택).
+      - Codex Review Gate(plan/scope/code stage) GPT-5.5 ACCEPT 필요.
+      - Real CLI Path E2E Gate: subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion(IMP-20260525-6FAC).
+      - Scope Lock: scope_manifest.json 외 파일 변경 차단(IMP-20260516-77AA).
+      - Documentation-Code Drift 방지: budget 기본값 변경 시 동일 micro_task 안에서 pipeline.py 주석/docstring 동시 갱신.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Planner 완료 — 4개 모듈(MOD-1..4)과 8개 P0 command_check 테스트, 4개 oracle(2 normal + 2 edge) 등록, contract freeze 완료(contract_hash=b6c9c86a..., test_set_hash=73417c38...). DQ-1/DQ-2 추천안 사용자 답변 기록.</prev_phase_summary>
+  </context_injection>
+
+  <askuser>
+    <required>false</required>
+    <reason>DQ-1, DQ-2의 추천안(A/A)이 사용자 요청 원문("phase별, gate별, provider/API 호출별 최대 재시도 횟수를 정의한다", "같은 failure_code가 반복되면 단순 재시도가 아니라 Architect/RCA로 보내도록 한다")과 정확히 일치하며, 추천안 거절 사유가 없으므로 추가 사용자 응답 없이 Pipeline Manager가 진행 가능. 응답이 필요할 경우 NO_ASKUSER_REQUIRED로 처리.</reason>
+  </askuser>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
