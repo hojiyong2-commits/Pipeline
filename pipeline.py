@@ -5271,7 +5271,7 @@ def cmd_check(args: argparse.Namespace) -> None:
                     owner="Pipeline Manager",
                     return_phase="architect",
                     required_actions=[
-                        f"prompt-architect-agent로 이관하여 RCA 수행",
+                        "prompt-architect-agent로 이관하여 RCA 수행",
                         f"사용자 확인 후 `python pipeline.py budget reset --phase {budget_phase} --reason ...`로 재시작",
                     ],
                     retry_allowed=False,
