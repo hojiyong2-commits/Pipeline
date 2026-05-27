@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260527-075A</pipeline_id>
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260527-075A</pipeline_id>
+    <status>READY_FOR_QA</status>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_attempt_budget_075a.py</file>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+      <file>scope_manifest_075A.json</file>
+    </evidence>
+  </handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_attempt_budget_075a.py</file>
+    <file>tests/e2e/test_real_cli_paths.py</file>
+    <file>scope_manifest_075A.json</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_attempt_budget_075a.py</file>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </files_to_modify>
+    <trust_root_changes>false</trust_root_changes>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline._record_attempt_budget + 관련 5함수 + cmd_budget + cmd_check/qa/done 통합</target_function>
+    <added_state_keys>attempt_budget.config, attempts, blocked_phases</added_state_keys>
+    <preserves>qa_fail_history, Circuit Breaker, _record_failure_packet 시그니처, _new_state 기존 키, _ensure_v210_fields 기존 마이그레이션</preserves>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_real_cli_paths.py, tests/test_attempt_budget_075a.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_attempt_budget_075a.py, tests/e2e/test_real_cli_paths.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <module_summary>
+    <module id="MT-1">_record_attempt_budget 등 6개 budget 함수 + state 기본값 (PASS)</module>
+    <module id="MT-2">budget status/reset CLI + argparse 등록 + dispatch (PASS)</module>
+    <module id="MT-3">cmd_check/cmd_qa/cmd_done budget hook 통합 (PASS)</module>
+    <module id="MT-4">단위 테스트 7개 + E2E 3개 (PASS) + 전체 회귀 459 PASS</module>
+  </module_summary>
+  <verification>
+    - 단위 테스트: tests/test_attempt_budget_075a.py 7/7 PASS
+    - E2E 테스트: tests/e2e/test_real_cli_paths.py -k budget 3/3 PASS
+    - 회귀: python -m pytest tests/ -q : 459 passed, 0 fail
+    - CLI 수동: python pipeline.py budget status -> exit 0, 한국어 출력
+    - CLI 수동: python pipeline.py budget reset --phase dev --reason "..." -> exit 0
+    - CLI 수동: python pipeline.py budget reset --phase dev -> exit 2 (--reason required)
+  </verification>
+</dev_handover>
