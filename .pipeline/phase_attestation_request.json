@@ -38,7 +38,7 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/BUG-20260527-5CF4/dev/report_dev_handover.xml",
-      "sha256": "2405c23344746feabd4936c226545938d46281c7c2ea0c4ab7aa60585453f298",
+      "sha256": "559e8ddca7f12afd335d75c53b361a79c25431c819e684dca5fab1caf3abcb35",
       "size_bytes": 1267,
       "requires_force_add": true
     },
@@ -46,7 +46,7 @@
       "label": "scope_manifest",
       "source": "scope_manifest_MT-1.json",
       "path": ".pipeline/phase_evidence/BUG-20260527-5CF4/dev/scope_manifest_scope_manifest_MT-1.json",
-      "sha256": "b2cd06166c9b490d4892ed29623fdeb1f24a394e7769a1ad99bcba232a20f692",
+      "sha256": "ae00061a423b807f24f5a6b470c8887f42e832d05eaf8671293ada07e771f8d7",
       "size_bytes": 228,
       "requires_force_add": true
     }
