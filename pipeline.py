@@ -15050,7 +15050,7 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
     """한국어 요약 문자열 반환. 6개 필수 섹션 포함."""
     lines: List[str] = []
     pid = metrics.get("pipeline_id", "확인 불가")
-    lines.append(f"=== 파이프라인 메트릭 요약 [{pid}] ===")
+    lines.append(f"=== 파이프라인 metrics 요약 [{pid}] ===")
     lines.append("")
     note = metrics.get("note")
     if note:
@@ -15306,6 +15306,10 @@ def _format_metrics_report_json(state: Optional[Dict[str, Any]]) -> Dict[str, An
       total_elapsed_display, longest_phase_display,
       failure_summary, phase_timings, gate_timings, github_actions_timings,
       collected_at
+
+    IMP-20260526-82E3 REJECT fix: 합성 필드(phase_timings/failure_summary 등)를
+    직접 state에서 읽는 대신 _collect_pipeline_metrics(state)를 통해 실제 phases
+    딕셔너리 기반 데이터를 수집하도록 변경.
     """
     UNAVAILABLE = "확인 불가"
     if not isinstance(state, dict):
@@ -15327,40 +15331,110 @@ def _format_metrics_report_json(state: Optional[Dict[str, Any]]) -> Dict[str, An
             },
             "collected_at": _now(),
         }
+
     pid = state.get("pipeline_id") or UNAVAILABLE
-    phase_timings = state.get("phase_timings") or {}
-    gate_timings = state.get("gate_timings") or {}
-    gh_timings = state.get("github_actions_timings") or {}
-    failure_summary = state.get("failure_summary") or {}
-    total_elapsed = state.get("total_elapsed_seconds")
 
-    longest_phase: Optional[Dict[str, Any]] = None
-    longest_phase_display: Any = UNAVAILABLE
-    if isinstance(phase_timings, dict) and phase_timings:
-        best_name: Optional[str] = None
-        best_secs: int = -1
-        for name, info in phase_timings.items():
-            if not isinstance(info, dict):
-                continue
-            secs = info.get("elapsed_seconds")
-            if isinstance(secs, int) and not isinstance(secs, bool) and secs > best_secs:
-                best_secs = secs
-                best_name = str(name)
-        if best_name is not None:
-            longest_phase = {"name": best_name, "elapsed_seconds": best_secs}
-            longest_phase_display = f"{best_name} ({best_secs}초)"
+    # 실제 phases 딕셔너리가 있으면 _collect_pipeline_metrics를 통해 실제 데이터 수집.
+    # phases 딕셔너리가 없는 경우(oracle test fixture 등)는 기존 합성 필드 방식으로 fallback.
+    has_phases = isinstance(state.get("phases"), dict) and bool(state.get("phases"))
 
+    if has_phases:
+        # _collect_pipeline_metrics를 통해 실제 phases 데이터 기반으로 수집
+        metrics = _collect_pipeline_metrics(state)
+
+        # phase_timings: _collect_pipeline_metrics의 phase_elapsed 기반
+        phase_elapsed = metrics.get("phase_elapsed", {})
+        phase_timings: Dict[str, Any] = {}
+        for pname, pdata in phase_elapsed.items():
+            if isinstance(pdata, dict):
+                phase_timings[pname] = {
+                    "elapsed_seconds": pdata.get("elapsed_seconds"),
+                    "elapsed_human": pdata.get("elapsed_human"),
+                }
+
+        # gate_timings: _collect_pipeline_metrics의 gate_elapsed 기반
+        gate_elapsed = metrics.get("gate_elapsed", {})
+        gate_timings: Dict[str, Any] = {}
+        for gname, gdata in gate_elapsed.items():
+            if isinstance(gdata, dict):
+                gate_timings[gname] = {
+                    "elapsed_seconds": gdata.get("elapsed_seconds"),
+                    "elapsed_human": gdata.get("elapsed_human"),
+                }
+
+        # failure_summary: _collect_pipeline_metrics의 failure_retry 기반
+        failure_retry = metrics.get("failure_retry", {})
+        failure_summary: Dict[str, Any] = {}
+        fc = failure_retry.get("failure_code_counts", {})
+        repeated = failure_retry.get("repeated_failures", [])
+        for code, cnt in fc.items():
+            failure_summary[code] = {
+                "count": cnt,
+                "is_repeat": code in repeated,
+            }
+
+        # total_elapsed: _collect_pipeline_metrics의 total_elapsed 기반
+        total_elapsed_info = metrics.get("total_elapsed", {})
+        total_elapsed_display = total_elapsed_info.get("elapsed_human", UNAVAILABLE)
+        if not total_elapsed_display or total_elapsed_display == UNAVAILABLE:
+            total_elapsed_display = UNAVAILABLE
+
+        # longest_phase: _collect_pipeline_metrics의 bottleneck 기반
+        bottleneck = metrics.get("bottleneck", {})
+        longest_phase_name = bottleneck.get("longest_phase")
+        longest_phase_elapsed_human = bottleneck.get("longest_phase_elapsed_human", UNAVAILABLE)
+        longest_phase: Optional[Dict[str, Any]] = None
+        longest_phase_display: Any = UNAVAILABLE
+        if longest_phase_name:
+            lp_data = phase_elapsed.get(longest_phase_name, {})
+            lp_secs = lp_data.get("elapsed_seconds") if isinstance(lp_data, dict) else None
+            if isinstance(lp_secs, int) and not isinstance(lp_secs, bool):
+                longest_phase = {"name": longest_phase_name, "elapsed_seconds": lp_secs}
+            longest_phase_display = f"{longest_phase_name} ({longest_phase_elapsed_human})"
+    else:
+        # Fallback: phases 딕셔너리 없음 — 기존 합성 필드 방식으로 처리 (oracle test fixture 호환)
+        phase_timings = state.get("phase_timings") or {}
+        gate_timings = state.get("gate_timings") or {}
+        failure_summary = state.get("failure_summary") or {}
+        total_elapsed = state.get("total_elapsed_seconds")
+
+        longest_phase = None
+        longest_phase_display = UNAVAILABLE
+        if isinstance(phase_timings, dict) and phase_timings:
+            best_name: Optional[str] = None
+            best_secs: int = -1
+            for name, info in phase_timings.items():
+                if not isinstance(info, dict):
+                    continue
+                secs = info.get("elapsed_seconds")
+                if isinstance(secs, int) and not isinstance(secs, bool) and secs > best_secs:
+                    best_secs = secs
+                    best_name = str(name)
+            if best_name is not None:
+                longest_phase = {"name": best_name, "elapsed_seconds": best_secs}
+                longest_phase_display = f"{best_name} ({best_secs}초)"
+
+        if isinstance(total_elapsed, int) and not isinstance(total_elapsed, bool):
+            total_elapsed_display = f"{total_elapsed}초"
+        else:
+            total_elapsed_display = UNAVAILABLE
+
+    # github_actions_timings: 기존 state 필드 또는 기본값 (has_phases와 무관하게 동일 처리)
+    gh_timings = state.get("github_actions_timings") or {
+        "WAITING_FOR_TRIGGER": 0,
+        "QUEUED": 0,
+        "IN_PROGRESS": 0,
+        "COMPLETED": 0,
+        "TIMEOUT": 0,
+    }
+
+    # github_actions_wait_seconds
     gh_wait: Any
     if isinstance(gh_timings, dict) and "IN_PROGRESS" in gh_timings:
         in_progress = gh_timings.get("IN_PROGRESS")
         gh_wait = in_progress if isinstance(in_progress, int) and not isinstance(in_progress, bool) else UNAVAILABLE
     else:
         gh_wait = UNAVAILABLE
-
-    if isinstance(total_elapsed, int) and not isinstance(total_elapsed, bool):
-        total_elapsed_display = f"{total_elapsed}초"
-    else:
-        total_elapsed_display = UNAVAILABLE
 
     return {
         "pipeline_id": pid,
@@ -15401,7 +15475,13 @@ def _format_metrics_report_markdown(state: Optional[Dict[str, Any]]) -> str:
         for name, info in phase_timings.items():
             if isinstance(info, dict):
                 secs = info.get("elapsed_seconds", "확인 불가")
-                lines.append(f"- {name}: {secs}초")
+                elapsed_human = info.get("elapsed_human")
+                if elapsed_human and elapsed_human != "확인 불가":
+                    lines.append(f"- {name}: {elapsed_human}")
+                elif isinstance(secs, int) and not isinstance(secs, bool):
+                    lines.append(f"- {name}: {secs}초")
+                else:
+                    lines.append(f"- {name}: 확인 불가")
     else:
         lines.append("- 확인 불가")
     lines.append("")
