@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260526-82E3</pipeline_id>
+  <run_id>dev-5e29811e823cddc5</run_id>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>_format_metrics_report_json</target_function>
+    <target_function>_format_metrics_report_markdown</target_function>
+    <change_type>bug_fix</change_type>
+    <description>
+      REJECT 수정: _format_metrics_report_json이 state.get("phase_timings") 등 합성 필드를
+      직접 읽어 실제 데이터가 비어있는 문제를 수정.
+      phases 딕셔너리가 있으면 _collect_pipeline_metrics(state)를 통해 실제 데이터 수집.
+      phases 딕셔너리가 없는 경우(oracle test fixture 등) 기존 합성 필드 방식으로 fallback.
+      _format_metrics_report_markdown의 elapsed_seconds가 문자열일 때 elapsed_human 우선 표시 수정.
+    </description>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py</git_diff_files>
+    <manifest_files>pipeline.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <evidence>
+    <file>pipeline.py</file>
+  </evidence>
+
+  <verification>
+    <test_result>14 passed (tests/test_metrics_observability_82e3.py)</test_result>
+    <test_result>3 passed (tests/e2e/test_metrics_cli_paths_82e3.py)</test_result>
+    <manual_check>python pipeline.py metrics report --json — phase_timings/failure_summary 실제 데이터 확인</manual_check>
+    <manual_check>python pipeline.py metrics report --markdown — 한국어 섹션 실제 데이터 확인</manual_check>
+  </verification>
+</handover>
