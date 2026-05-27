@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260527-075A</pipeline_id>
+  <agent>qa-agent</agent>
+  <run_id>qa-f97fe2fbd74bbe14</run_id>
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 없음 (내부 state 조작 + CLI만 추가)</wa>
+    <ui>N-A — GUI 위젯 없음 (CLI 한국어 출력만 추가, 위젯 네이밍 무관)</ui>
+    <fs>N-A — 파일 I/O는 기존 _load_state/_save 재사용. 신규 파일 쓰기 패턴 없음</fs>
+    <pd>PASS — core 로직(budget 6함수)과 CLI 디스패처(cmd_budget)가 명확히 분리됨. _ensure_attempt_budget_keys는 idempotent guard로 인터페이스 계약 명시. AttemptBudgetResult dict 시그니처(blocked/attempts_used/max_attempts/failure_code/repeat_failure_code) 일관 유지.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — phase not in ATTEMPT_BUDGET_PHASES 가드, threshold&lt;=0 가드, isinstance(entry, dict) 가드, 빈 attempts 리스트 처리, max(0, maxn-used) 음수 방어 모두 확인됨. bare except 없음.</al>
+    <build>N-A — meta-task (pipeline.py 기능 추가, EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+  <numeric_score>115</numeric_score>
+  <verdict>PASS</verdict>
+  <numeric_score_detail>
+    <wa score="0" max="0">N/A — 네트워크 호출 없음</wa>
+    <ui score="0" max="0">N/A — GUI 위젯 없음</ui>
+    <fs score="0" max="0">N/A — 신규 파일 I/O 없음</fs>
+    <pd score="10" max="10">모듈분리 5/5 (budget 함수와 CLI 함수 명확 분리), 인터페이스계약 5/5 (Dict[str, Any] 반환 + 키 명세 docstring 명시)</pd>
+    <al score="20" max="20">0나눗셈 N/A(나눗셈 없음), 경계값 5/5 (max(0, maxn-used)), 타입가드 5/5 (isinstance dict), 빈데이터 5/5 (attempts 빈 리스트 정상 처리), repeat threshold&lt;=0 가드 5/5</al>
+    <build score="0" max="0">N/A — meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="115" max="120"/>
+    <percentage>95.8</percentage>
+    <numeric_verdict>PASS (≥96/120) — 적용 카테고리 PD+AL 만점 30/30 (100%), 비적용 카테고리(WA/UI/FS/BUILD)는 max-credit으로 환산하여 115/120</numeric_verdict>
+  </numeric_score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — budget 6함수 + cmd_budget 모두 타입힌팅 완전</type_hinting_all>
+      <widget_naming>N-A — GUI 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 기존 _save 재사용</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover.xml verification 블록에 단위 7/7, E2E 3/3, 회귀 459 passed, CLI 수동 3시나리오 명시</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — cmd_budget이 argparse subparser p_budget에 실제 등록되어 있고 dispatch 경로 확인됨. CLI 실행 결과 한국어 출력 + exit 코드 정확.</functional_binding_verified>
+  </runtime_functional_check>
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 명시 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml decomposition_audit 블록 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — 4개 MT 모두 grep_evidence executed=true 확인</grep_evidence_present>
+    <declared_functions>9 (6 budget 코어 + cmd_budget + _cmd_budget_status + _cmd_budget_reset)</declared_functions>
+    <actual_modified_functions>9 (PM 선언과 일치)</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <c3_cross_verification>
+    <scope_files_declared>3 (pipeline.py, tests/test_attempt_budget_075a.py, tests/e2e/test_real_cli_paths.py)</scope_files_declared>
+    <evidence_files_submitted>3 (동일)</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — main 대비 git diff: pipeline.py, tests/test_attempt_budget_075a.py, tests/e2e/test_real_cli_paths.py + tests/oracles/IMP-20260527-075A/** (oracle 케이스는 PM step_plan 요구사항으로 인정)</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음
+  </critical_issues>
+  <improvement_suggestions>
+    - (선택) cmd_budget reset 시 phase=gate에 대해서도 추후 cluster_id별 reset 옵션 고려 가능. 현 작업 범위 외이며 필수 아님.
+    - (선택) budget status JSON 출력 옵션 (--format json) 추가 시 자동화 친화성 향상. 현 한국어 출력은 사용자용으로 적합.
+  </improvement_suggestions>
+  <test_execution_summary>
+    - 단위 테스트 (tests/test_attempt_budget_075a.py): 7/7 PASS
+    - E2E 테스트 (tests/e2e/test_real_cli_paths.py -k budget): 3/3 PASS
+    - 전체 회귀 (tests/): 459 passed, 0 fail
+    - CLI 수동 1 (budget status): exit 0, 한국어 출력 확인
+    - CLI 수동 2 (budget reset --phase dev): exit 2, --reason required 메시지 확인
+    - CLI 수동 3 (budget reset --phase dev --reason ...): exit 0, BUDGET_RESET 한국어 메시지 + 감사 로그 기록 확인
+    - ruff pipeline.py: 누적 1132건은 신규 작업 무관 (기존 prior issues)
+    - bandit pipeline.py: High 0건, Medium 9건 (기존), Low 82건 (기존)
+  </test_execution_summary>
+</qa_report>
