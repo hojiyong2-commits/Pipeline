@@ -167,3 +167,21 @@ def test_format_metrics_report_json_matches_tc_edge_unavailable_values():
             f"_format_metrics_report_json 결과의 '{key}'가 oracle expected와 다릅니다. "
             f"result[{key}]={result.get(key)}, expected={val}"
         )
+
+
+# ── Oracle test_set.json 호환 alias 함수 (TC-mod1/2/3 테스트 이름 매핑) ────────
+
+
+def test_phase_timing_recorded() -> None:
+    """Oracle TC-mod1-phase-timing 호환 alias."""
+    test_record_phase_timing_matches_oracle_tc_normal()
+
+
+def test_github_actions_timing_accumulated() -> None:
+    """Oracle TC-mod2-github-timing 호환 alias."""
+    test_aggregate_github_actions_state_durations_matches_oracle()
+
+
+def test_failure_code_count() -> None:
+    """Oracle TC-mod3-failure-repeat 호환 alias."""
+    test_compute_failure_summary_matches_oracle()
