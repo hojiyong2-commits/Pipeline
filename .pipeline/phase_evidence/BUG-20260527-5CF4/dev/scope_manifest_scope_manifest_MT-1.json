@@ -1,0 +1,10 @@
+﻿{
+  "pipeline_id": "BUG-20260527-5CF4",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py", "tests/e2e/test_status_exit_code_5cf4.py"],
+      "affected_functions": ["pipeline.cmd_status"]
+    }
+  ]
+}

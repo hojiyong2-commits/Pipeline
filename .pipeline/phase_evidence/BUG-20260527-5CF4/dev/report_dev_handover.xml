@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260527-5CF4</pipeline_id>
+  <agent_run_id>dev-9fab5b23844174d1</agent_run_id>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_status_exit_code_5cf4.py</file>
+    </files_to_modify>
+    <trust_root_changes>false</trust_root_changes>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline.cmd_status</target_function>
+    <change>terminal_state(COMPLETE/FAILED/TERMINATED/None) + blocked=true + 활성 파이프라인 없음 모든 케이스에서 exit code 0 보장. state["phases"][phase] KeyError를 .get()으로 방어. 보조 함수 예외를 try/except로 흡수.</change>
+    <upstream_callers>COMMAND_MAP["status"]</upstream_callers>
+    <state_mutations>none</state_mutations>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </impact_analysis>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_status_exit_code_5cf4.py</file>
+    <file>scope_manifest_MT-1.json</file>
+  </evidence>
+  <verification>pytest tests/e2e/test_status_exit_code_5cf4.py: 5/5 PASS. test_real_cli_paths.py: 11/11 PASS.</verification>
+</handover>
