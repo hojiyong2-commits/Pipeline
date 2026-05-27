@@ -15050,7 +15050,7 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
     """한국어 요약 문자열 반환. 6개 필수 섹션 포함."""
     lines: List[str] = []
     pid = metrics.get("pipeline_id", "확인 불가")
-    lines.append(f"=== 파이프라인 메트릭 요약 [{pid}] ===")
+    lines.append(f"=== 파이프라인 metrics 요약 [{pid}] ===")
     lines.append("")
     note = metrics.get("note")
     if note:
