@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>IMP-20260517-30DD</pipeline_id>
+  <build_type>N/A</build_type>
+  <skip_reason>docs-only</skip_reason>
+
+  <section_1_command>
+    <command>N/A — 문서/파이프라인 메타 태스크. EXE 빌드 대상 아님.</command>
+    <rationale>pipeline.py 및 tests/test_codex_review.py 변경은 파이프라인 엔진 개선 작업으로 독립 실행 EXE가 없습니다.</rationale>
+  </section_1_command>
+
+  <section_2_result>
+    <status>SKIPPED</status>
+    <reason>EXE 빌드 대상 아님 (pipeline.py + tests 파일만 변경)</reason>
+  </section_2_result>
+
+  <section_3_artifacts>
+    <artifact>없음 — N/A 빌드</artifact>
+  </section_3_artifacts>
+
+  <section_4_validation>
+    <syntax_check>python -m py_compile pipeline.py → PASS</syntax_check>
+    <test_run>python -m pytest tests/test_codex_review.py -q → 83 passed, 11 subtests passed</test_run>
+  </section_4_validation>
+
+  <section_5_notes>
+    <note>IMP-20260517-30DD: Codex Review provider-level actual_model_id 검증 강화. 신규 함수: _codex_run_via_openai_api, _codex_run_via_codex_cli, _redact_secrets, _save_codex_attempt_log.</note>
+  </section_5_notes>
+
+  <section_6_qa_mapping>
+    <qa_result>PASS</qa_result>
+    <qa_numeric_score>114/120</qa_numeric_score>
+    <build_outcome>N/A (docs-only)</build_outcome>
+    <deployment_target>파이프라인 엔진으로 직접 사용</deployment_target>
+  </section_6_qa_mapping>
+
+  <verdict>N/A</verdict>
+</build_report>
