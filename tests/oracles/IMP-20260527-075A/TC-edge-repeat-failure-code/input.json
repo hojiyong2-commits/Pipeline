@@ -1,0 +1,19 @@
+{
+  "case_id": "TC-edge-repeat-failure-code",
+  "case_kind": "edge",
+  "description": "동일 failure_code(TYPE_ERROR)가 budget 한도와 무관하게 임계값(3회) 이상 반복되면 즉시 RCA 이관 신호가 발행되어야 한다.",
+  "pipeline_id": "TEST-PIPELINE-003",
+  "phase": "qa",
+  "budget_config": {
+    "dev_max_attempts": 5,
+    "qa_max_attempts": 5,
+    "gate_max_attempts": 10,
+    "repeat_failure_code_threshold": 3
+  },
+  "attempts_history": [
+    {"phase": "qa", "outcome": "FAIL", "failure_code": "TYPE_ERROR", "timestamp": "2026-05-27T05:00:00Z"},
+    {"phase": "qa", "outcome": "FAIL", "failure_code": "TYPE_ERROR", "timestamp": "2026-05-27T05:05:00Z"},
+    {"phase": "qa", "outcome": "FAIL", "failure_code": "TYPE_ERROR", "timestamp": "2026-05-27T05:10:00Z"}
+  ],
+  "check_phase": "qa"
+}

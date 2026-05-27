@@ -1,0 +1,21 @@
+{
+  "case_id": "TC-normal-budget-blocked",
+  "expected_source": "user_provided",
+  "budget_check_result": {
+    "status": "BLOCKED",
+    "blocked": true,
+    "phase": "dev",
+    "attempts_used": 3,
+    "attempts_max": 3,
+    "remaining_attempts": 0,
+    "failure_packet_created": true,
+    "failure_packet_failure_code": "BUDGET_EXCEEDED",
+    "failure_packet_return_phase": "architect",
+    "rca_handoff_required": true
+  },
+  "korean_user_message_must_contain": [
+    "재시도 한도",
+    "초과",
+    "Architect"
+  ]
+}

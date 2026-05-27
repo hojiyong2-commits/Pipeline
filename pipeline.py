@@ -2307,6 +2307,17 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
             "TIMEOUT": 0,
         },
         "failure_summary": {},                 # {failure_code: {count: int, is_repeat: bool}}
+        # IMP-20260527-075A MT-1: Cost/Attempt Budget Gate
+        "attempt_budget": {
+            "config": {
+                "dev_max_attempts": 3,
+                "qa_max_attempts": 3,
+                "gate_max_attempts": 5,
+                "repeat_failure_code_threshold": 3,
+            },
+            "attempts": {"dev": [], "qa": [], "gate": []},
+            "blocked_phases": {},
+        },
     }
 
 
@@ -2390,6 +2401,20 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
                 state["github_actions_timings"][_gh_state] = 0
     if "failure_summary" not in state:
         state["failure_summary"] = {}
+    # IMP-20260527-075A MT-1: Cost/Attempt Budget Gate 마이그레이션
+    # _ensure_attempt_budget_keys는 더 정교한 검증을 수행하지만 _ensure_v210_fields는
+    # 호출 순서상 _record_failure_packet 정의 전에 실행되므로 여기서는 dict 형태만 보장.
+    if not isinstance(state.get("attempt_budget"), dict):
+        state["attempt_budget"] = {
+            "config": {
+                "dev_max_attempts": 3,
+                "qa_max_attempts": 3,
+                "gate_max_attempts": 5,
+                "repeat_failure_code_threshold": 3,
+            },
+            "attempts": {"dev": [], "qa": [], "gate": []},
+            "blocked_phases": {},
+        }
     return state
 
 
@@ -5214,6 +5239,50 @@ def cmd_check(args: argparse.Namespace) -> None:
             print()
             sys.exit(1)
 
+    # IMP-20260527-075A MT-3: attempt budget gate — dev/qa/build 진입 직전 budget 차단 검사.
+    # phase별 한도 초과 또는 동일 failure_code 반복 시 exit 1 + 한국어 메시지 + failure_packet.
+    if phase in ("dev", "qa", "build"):
+        # build phase는 budget 추적 대상이 아니므로 dev/qa만 검사 (build는 gate 카테고리)
+        budget_phase = phase if phase in ("dev", "qa") else None
+        if budget_phase is not None:
+            _ensure_attempt_budget_keys(state)
+            bg_check = _check_attempt_budget(state, budget_phase)
+            if bg_check["blocked"]:
+                msg = _korean_budget_message(
+                    budget_phase,
+                    bg_check["attempts_used"],
+                    bg_check["max_attempts"],
+                    bg_check["failure_code"],
+                    bg_check.get("repeat_failure_code"),
+                )
+                _record_failure_packet(
+                    state, "technical", {},
+                    command=[sys.executable, "pipeline.py", "budget", "reset",
+                             "--phase", budget_phase, "--reason", "재시도 한도 초과 후 사용자 확인 재시작"],
+                    note=msg,
+                    status="BLOCKED",
+                    phase=budget_phase,
+                    failure_code=str(bg_check["failure_code"]),
+                    failure_category="missing_evidence",
+                    summary_ko=msg,
+                    expected=f"{budget_phase} phase 재시도 한도 내",
+                    actual=msg,
+                    exit_code=1,
+                    owner="Pipeline Manager",
+                    return_phase="architect",
+                    required_actions=[
+                        f"prompt-architect-agent로 이관하여 RCA 수행",
+                        f"사용자 확인 후 `python pipeline.py budget reset --phase {budget_phase} --reason ...`로 재시작",
+                    ],
+                    retry_allowed=False,
+                )
+                _save(state)
+                print()
+                print(RED(f"[GATE BLOCKED] {budget_phase} phase 재시도 한도 초과"))
+                print(RED(f"  {msg}"))
+                print()
+                sys.exit(1)
+
     ok, reason = check_gate(state, phase)
 
     if ok:
@@ -5501,6 +5570,10 @@ def cmd_done(args: argparse.Namespace) -> None:
         state["phases"][phase]["agent_id"] = agent_run["agent_id"]
     state["current_phase"] = PHASE_ORDER[PHASE_ORDER.index(phase) + 1]
     _log_event(state, f"{phase} DONE | evidence: {evidence}")
+    # IMP-20260527-075A MT-3: dev DONE PASS 시 dev attempt budget 초기화 (성공 = 새 사이클)
+    if phase == "dev":
+        _ensure_attempt_budget_keys(state)
+        _record_attempt_budget(state, "dev", "PASS")
     if phase == "dev":
         if _openai_advisory_required():
             review_files = _advisory_review_files_from_args(state, evidence)
@@ -5625,6 +5698,13 @@ def cmd_qa(args: argparse.Namespace) -> None:
         # PASS 시 qa_fail_history 초기화 (새 사이클 시작)
         if state.get("qa_fail_history"):
             state["qa_fail_history"] = []
+
+    # IMP-20260527-075A MT-3: attempt budget 누적/초기화 (qa phase)
+    _ensure_attempt_budget_keys(state)
+    if result == "FAIL":
+        _record_attempt_budget(state, "qa", "FAIL", failure_code=failure_sig)
+    else:
+        _record_attempt_budget(state, "qa", "PASS")
 
     # ── QA Report Hallucination Gate ──────────────────────────────────────────
     report_file: Optional[str] = getattr(args, "report_file", None)
@@ -10580,6 +10660,200 @@ def _count_same_failure_code_attempts(
     return count
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260527-075A: Cost/Attempt Budget Gate (MT-1)
+# ---------------------------------------------------------------------------
+# 목적: phase별(dev/qa/gate)·gate별 최대 재시도 횟수를 강제하고, 동일 failure_code
+#       3회 반복 시 Architect/RCA로 자동 이관한다. Circuit Breaker(qa 동일 signature
+#       2회)와 보완적으로 작동한다.
+#
+# state 신규 키:
+#   state["attempt_budget"] = {
+#     "config": {
+#       "dev_max_attempts": 3, "qa_max_attempts": 3, "gate_max_attempts": 5,
+#       "repeat_failure_code_threshold": 3,
+#     },
+#     "attempts": {"dev": [...], "qa": [...], "gate": [...]},
+#     "blocked_phases": {phase: {"failure_code": str, "blocked_at": iso}},
+#   }
+# attempts 항목: {"outcome": "FAIL"|"PASS", "failure_code": str|None, "timestamp": iso}
+# ---------------------------------------------------------------------------
+
+ATTEMPT_BUDGET_PHASES = ("dev", "qa", "gate")
+ATTEMPT_BUDGET_DEFAULTS = {
+    "dev_max_attempts": 3,
+    "qa_max_attempts": 3,
+    "gate_max_attempts": 5,
+    "repeat_failure_code_threshold": 3,
+}
+
+
+def _ensure_attempt_budget_keys(state: Dict[str, Any]) -> None:
+    """state["attempt_budget"] dict 구조를 idempotent 하게 보장한다.
+
+    구버전 state에 attempt_budget이 없거나 일부 키만 있는 경우 기본값으로 채운다.
+    이미 존재하는 값은 변경하지 않는다.
+    """
+    if not isinstance(state.get("attempt_budget"), dict):
+        state["attempt_budget"] = {}
+    ab = state["attempt_budget"]
+    if not isinstance(ab.get("config"), dict):
+        ab["config"] = dict(ATTEMPT_BUDGET_DEFAULTS)
+    else:
+        for key, default in ATTEMPT_BUDGET_DEFAULTS.items():
+            if key not in ab["config"] or not isinstance(ab["config"][key], int):
+                ab["config"][key] = default
+    if not isinstance(ab.get("attempts"), dict):
+        ab["attempts"] = {p: [] for p in ATTEMPT_BUDGET_PHASES}
+    else:
+        for p in ATTEMPT_BUDGET_PHASES:
+            if not isinstance(ab["attempts"].get(p), list):
+                ab["attempts"][p] = []
+    if not isinstance(ab.get("blocked_phases"), dict):
+        ab["blocked_phases"] = {}
+
+
+def _record_attempt_budget(
+    state: Dict[str, Any],
+    phase: str,
+    outcome: str,
+    failure_code: Optional[str] = None,
+) -> None:
+    """phase별 attempts 리스트에 시도 결과를 누적한다.
+
+    - outcome="FAIL": attempts에 FAIL entry 추가. failure_code도 함께 기록.
+      _detect_repeat_failure_code 호출하여 반복 failure_code 감지.
+    - outcome="PASS": attempts 리스트와 blocked_phases 항목 초기화 (성공 시 한도 리셋).
+    """
+    if phase not in ATTEMPT_BUDGET_PHASES:
+        return
+    if outcome not in ("FAIL", "PASS"):
+        return
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+    if outcome == "PASS":
+        ab["attempts"][phase] = []
+        if phase in ab["blocked_phases"]:
+            del ab["blocked_phases"][phase]
+        return
+    # FAIL
+    entry: Dict[str, Any] = {
+        "outcome": "FAIL",
+        "failure_code": failure_code or None,
+        "timestamp": _now(),
+    }
+    ab["attempts"][phase].append(entry)
+    # 반복 failure_code 감지 (3회째에 자동 표시)
+    repeat_fc = _detect_repeat_failure_code(state, phase)
+    if repeat_fc is not None:
+        ab["blocked_phases"][phase] = {
+            "failure_code": "REPEAT_FAILURE_CODE",
+            "repeat_failure_code": repeat_fc,
+            "blocked_at": _now(),
+        }
+
+
+def _check_attempt_budget(state: Dict[str, Any], phase: str) -> Dict[str, Any]:
+    """phase의 attempt budget 상태를 반환한다.
+
+    반환 dict 키:
+      - blocked (bool): 한도 초과 또는 반복 failure_code 시 True
+      - attempts_used (int): 누적 FAIL 횟수
+      - max_attempts (int): 해당 phase 한도
+      - failure_code (str|None): "BUDGET_EXCEEDED" | "REPEAT_FAILURE_CODE" | None
+      - repeat_failure_code (str|None): 반복 감지된 failure_code 문자열
+    """
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+    if phase not in ATTEMPT_BUDGET_PHASES:
+        return {
+            "blocked": False,
+            "attempts_used": 0,
+            "max_attempts": 0,
+            "failure_code": None,
+            "repeat_failure_code": None,
+        }
+    max_key = f"{phase}_max_attempts"
+    max_attempts = int(ab["config"].get(max_key, ATTEMPT_BUDGET_DEFAULTS.get(max_key, 3)))
+    attempts = [e for e in ab["attempts"].get(phase, []) if isinstance(e, dict) and e.get("outcome") == "FAIL"]
+    attempts_used = len(attempts)
+    repeat_fc = _detect_repeat_failure_code(state, phase)
+    blocked = False
+    failure_code: Optional[str] = None
+    if repeat_fc is not None:
+        blocked = True
+        failure_code = "REPEAT_FAILURE_CODE"
+    elif attempts_used >= max_attempts:
+        blocked = True
+        failure_code = "BUDGET_EXCEEDED"
+    return {
+        "blocked": blocked,
+        "attempts_used": attempts_used,
+        "max_attempts": max_attempts,
+        "failure_code": failure_code,
+        "repeat_failure_code": repeat_fc,
+    }
+
+
+def _is_budget_blocked(state: Dict[str, Any], phase: str) -> bool:
+    """phase의 attempt budget이 차단 상태인지 반환."""
+    return bool(_check_attempt_budget(state, phase).get("blocked"))
+
+
+def _detect_repeat_failure_code(state: Dict[str, Any], phase: str) -> Optional[str]:
+    """동일 failure_code가 threshold 횟수 이상 연속/누적되었는지 검사.
+
+    config["repeat_failure_code_threshold"](기본 3) 회 이상 같은 failure_code가
+    attempts 리스트에 나타나면 그 failure_code 문자열을 반환. 없으면 None.
+    """
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+    if phase not in ATTEMPT_BUDGET_PHASES:
+        return None
+    threshold = int(ab["config"].get("repeat_failure_code_threshold",
+                                     ATTEMPT_BUDGET_DEFAULTS["repeat_failure_code_threshold"]))
+    if threshold <= 0:
+        return None
+    counts: Dict[str, int] = {}
+    for entry in ab["attempts"].get(phase, []):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("outcome") != "FAIL":
+            continue
+        fc = entry.get("failure_code")
+        if not fc:
+            continue
+        counts[str(fc)] = counts.get(str(fc), 0) + 1
+    for fc, n in counts.items():
+        if n >= threshold:
+            return fc
+    return None
+
+
+def _korean_budget_message(
+    phase: str,
+    attempts_used: int,
+    max_attempts: int,
+    failure_code: Optional[str],
+    repeat_failure_code: Optional[str] = None,
+) -> str:
+    """budget 차단 시 사용자에게 보여줄 한국어 메시지 생성.
+
+    "재시도 한도", "초과", "Architect", phase 이름, 남은 횟수를 항상 포함한다.
+    """
+    remaining = max(0, max_attempts - attempts_used)
+    if failure_code == "REPEAT_FAILURE_CODE" and repeat_failure_code:
+        return (
+            f"동일 failure_code '{repeat_failure_code}' {attempts_used}회 반복 — "
+            f"{phase} phase 재시도 한도 안에 있어도 같은 원인이 누적되어 "
+            f"Architect/RCA로 이관합니다. 남은 재시도: {remaining}회."
+        )
+    return (
+        f"재시도 한도 초과 — {phase} phase {attempts_used}/{max_attempts}회 실패. "
+        f"남은 재시도: {remaining}회. Architect로 이관합니다."
+    )
+
+
 def _record_failure_packet(
     state: Dict[str, Any],
     gate_name: str,
@@ -13923,6 +14197,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_cl_close = cl_sub.add_parser("close", help="클러스터 종료")
     p_cl_close.add_argument("--cluster-id", required=True, help="종료할 클러스터 ID")
 
+    # IMP-20260527-075A MT-2: budget subcommand (Cost/Attempt Budget Gate)
+    p_bg = sub.add_parser("budget", help="attempt budget 관리 (phase별 재시도 한도)")
+    bg_sub = p_bg.add_subparsers(dest="budget_sub", required=True)
+
+    p_bg_status = bg_sub.add_parser("status", help="attempt budget 현황 출력 (한국어)")
+    p_bg_status.add_argument("--pipeline-id", default=None, help="대상 파이프라인 ID (미지정 시 현재 활성)")
+
+    p_bg_reset = bg_sub.add_parser("reset", help="phase별 attempt budget 초기화 (관리자 작업)")
+    p_bg_reset.add_argument("--phase", required=True, choices=["dev", "qa", "gate"],
+                            help="초기화할 phase 이름")
+    p_bg_reset.add_argument("--reason", required=True,
+                            help="초기화 사유 (감사 로그용, 필수)")
+
     # IMP-20260513-4C0B: patch subcommand
     p_pt = sub.add_parser("patch", help="Patch Lane 관리")
     pt_sub = p_pt.add_subparsers(dest="patch_sub", required=True)
@@ -14180,6 +14467,106 @@ def _load_patch_plan(plan_file: str) -> Dict[str, Any]:
             f"[PIPELINE ERROR] patch_plan.json schema_version은 1이어야 합니다. 현재: {schema_ver!r}"
         )
     return plan
+
+
+# ---------------------------------------------------------------------------
+# IMP-20260527-075A MT-2: budget CLI (Cost/Attempt Budget Gate)
+# ---------------------------------------------------------------------------
+
+def cmd_budget(args: "argparse.Namespace") -> None:
+    """budget 서브커맨드 라우터.
+
+    서브커맨드:
+      status -- phase별 attempt budget 현황 한국어 출력
+      reset  -- 특정 phase의 attempts 초기화 (--reason 필수)
+    """
+    sub = getattr(args, "budget_sub", None)
+    if sub == "status":
+        _cmd_budget_status(args)
+    elif sub == "reset":
+        _cmd_budget_reset(args)
+    else:
+        _die(f"[BUDGET ERROR] 알 수 없는 서브커맨드: {sub!r}")
+
+
+def _cmd_budget_status(args: "argparse.Namespace") -> None:
+    """phase별 attempt budget 현황을 한국어로 출력."""
+    state = _load_state()
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+
+    print(f"\n=== {pid} attempt budget 현황 ===\n")
+    for phase in ATTEMPT_BUDGET_PHASES:
+        result = _check_attempt_budget(state, phase)
+        used = result["attempts_used"]
+        maxn = result["max_attempts"]
+        remaining = max(0, maxn - used)
+        if result["blocked"]:
+            status_label = "[차단됨]"
+        else:
+            status_label = "[정상]"
+        print(f"  {phase} phase: 사용 {used}회 / 한도 {maxn}회 (남은 재시도: {remaining}회) {status_label}")
+
+    # 반복 failure_code 요약
+    print()
+    repeat_found = False
+    for phase in ATTEMPT_BUDGET_PHASES:
+        repeat_fc = _detect_repeat_failure_code(state, phase)
+        if repeat_fc:
+            print(f"  반복 failure_code 감지 — {phase} phase: '{repeat_fc}' (Architect/RCA 이관 권장)")
+            repeat_found = True
+    if not repeat_found:
+        print("  반복 failure_code: 없음")
+
+    # 차단된 phase 요약
+    blocked = ab.get("blocked_phases") or {}
+    if blocked:
+        print()
+        print("  차단된 phase 상세:")
+        for phase, info in blocked.items():
+            if isinstance(info, dict):
+                fc = info.get("failure_code", "?")
+                print(f"    - {phase}: {fc}")
+
+    # 보존 정책: state 저장하지 않음 (status는 read-only)
+    print()
+    sys.exit(0)
+
+
+def _cmd_budget_reset(args: "argparse.Namespace") -> None:
+    """특정 phase의 attempts 리스트와 blocked_phases 항목을 초기화.
+
+    --phase: 초기화할 phase (dev/qa/gate)
+    --reason: 초기화 사유 (감사 로그용, argparse required=True로 강제)
+    """
+    state = _load_state()
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+    phase = args.phase
+    reason = str(args.reason or "").strip()
+    if not reason:
+        _die("[BUDGET ERROR] --reason 값이 비어 있습니다. 초기화 사유를 명시하세요.")
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+    prev_attempts = len(ab["attempts"].get(phase, []))
+    ab["attempts"][phase] = []
+    if phase in ab["blocked_phases"]:
+        del ab["blocked_phases"][phase]
+    # 감사 이벤트 기록 (state.event_log에 추가)
+    state.setdefault("event_log", []).append({
+        "ts": _now(),
+        "type": "BUDGET_RESET",
+        "phase": phase,
+        "previous_attempts": prev_attempts,
+        "reason": reason,
+    })
+    _save(state)
+    print(GREEN(
+        f"\n[BUDGET RESET] {pid} — {phase} phase attempt budget 초기화 완료\n"
+        f"  이전 attempts: {prev_attempts}회 -> 0회\n"
+        f"  사유: {reason}\n"
+    ))
+    sys.exit(0)
 
 
 def cmd_cluster(args: "argparse.Namespace") -> None:
@@ -15592,6 +15979,7 @@ COMMAND_MAP = {
     "cluster":              cmd_cluster,
     "patch":                cmd_patch,
     "metrics":              cmd_metrics,
+    "budget":               cmd_budget,
 }
 
 
