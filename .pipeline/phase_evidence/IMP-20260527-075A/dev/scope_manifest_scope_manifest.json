@@ -1,0 +1,30 @@
+{
+  "pipeline_id": "IMP-20260527-075A",
+  "files": [
+    "pipeline.py",
+    "tests/test_attempt_budget_075a.py",
+    "tests/e2e/test_real_cli_paths.py"
+  ],
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._record_attempt_budget"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_budget"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_check"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["tests/test_attempt_budget_075a.py", "tests/e2e/test_real_cli_paths.py"],
+      "affected_functions": ["tests.test_attempt_budget_075a (신규 파일)"]
+    }
+  ]
+}
