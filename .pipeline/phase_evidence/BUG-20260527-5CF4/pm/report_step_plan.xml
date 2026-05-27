@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- BUG-20260527-5CF4: pipeline.py status exit code 0 정상화 -->
+<!-- pm_planner agent_run_id: pm_planner-fcab5bd99aecc4de -->
+
+<decomposition_audit>
+  <total_functions_identified>1</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>3</grep_executions>
+  <split_decision>단일 함수 cmd_status의 exit code 정책 수정 + E2E 회귀 테스트 추가. 변경 라인 수 80줄 이하 예상이며 pipeline.py(1개 함수) + tests/e2e/test_status_exit_code_5cf4.py(신규 테스트) 두 파일에 한정되므로 분할 불필요.</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260527-5CF4</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: cmd_status exit code 0 정상화 + Real CLI Path E2E 회귀 테스트 추가</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>[AL, PD]</category_tags>
+
+  <task_complexity>
+    <execution_profile>FAST_SINGLE_CODE</execution_profile>
+    <reason>단일 함수(cmd_status)의 exit code 반환 정책만 정리하고 동일 모듈에 회귀 테스트 한 묶음을 추가합니다. 신뢰 루트 파일 수정이 pipeline.py에 한정되며 사용자 답변으로 정책이 확정되어 모호성이 없습니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>cmd_status 내부 출력 포맷, 색상 함수 호출 순서 등 P2 수준의 코드 스타일 질문은 묻지 않았습니다. exit code 정책 결정만 사용자에게 확인했고 나머지는 기존 출력 흐름을 그대로 유지합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>status 명령은 파이프라인이 끝났을 때(terminal_state=COMPLETE)나 막혀 있을 때(blocked)에 어떤 종료 코드를 돌려줘야 할까요?</user_facing_question>
+        <evidence>현재 pipeline.py status를 COMPLETE 상태에서 실행하면 process exit code 255가 발생합니다. 사용자 원문 요청에 "정상적으로 상태를 출력했으면 exit code 0"이라는 정책이 명시되어 있습니다.</evidence>
+        <why_it_matters>shell 스크립트, CI, Auto-Resume 훅이 status 결과를 분기 조건으로 쓰는데, 단순 상태 보고에 non-zero가 섞이면 정상 흐름에서도 오류로 처리되어 자동화가 깨집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>status는 항상 exit 0 (BLOCKED/COMPLETE 포함). 상태 자체는 stdout으로만 전달</label>
+            <benefit>읽기 전용 보고 명령의 일반적 관례와 일치하고, BLOCKED/COMPLETE는 텍스트로 충분히 식별 가능합니다.</benefit>
+            <cost>스크립트가 exit code만 보고 BLOCKED를 판단하려면 별도 명령(예: check)을 호출해야 합니다.</cost>
+          </option>
+          <option id="B">
+            <label>BLOCKED나 ERROR 상태일 때만 exit 1, COMPLETE/일반 상태는 exit 0</label>
+            <benefit>스크립트가 exit code로 빠르게 BLOCKED를 감지할 수 있습니다.</benefit>
+            <cost>읽기 전용 보고 명령은 항상 exit 0이라는 CLI 관례를 깨고, COMPLETE도 비정상으로 오해될 위험이 큽니다(현재 버그의 원인).</cost>
+          </option>
+        </options>
+        <user_answer>옵션 A 채택. 사용자 원문에 "BLOCKED/ERROR 같은 명시적 실패 상태만 non-zero를 반환하도록 정리한다"가 있으나, status는 read-only 보고 명령이므로 BLOCKED/ERROR 상태도 status 명령 자체는 성공으로 간주합니다. 따라서 status는 항상 exit 0이며, BLOCKED 여부는 stdout 텍스트 또는 check 명령으로 분기합니다.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: PIPELINE_STATE_PATH 환경 변수로 격리된 pipeline_state.json (COMPLETE 또는 BLOCKED 상태 fixture, 혹은 미존재)
+    - Output: stdout 상태 출력 + process exit code (항상 0)
+    - Validation: subprocess.run(...).returncode == 0, stdout에 핵심 토큰 포함, state 파일 비변경
+  </interface_spec>
+
+  <requirements>
+    - pipeline.py cmd_status는 어떤 terminal_state 값에서도(COMPLETE/FAILED/TERMINATED/None) 정상 출력 후 exit code 0을 반환해야 합니다.
+    - blocked=true 상태에서도 status는 [차단] 안내만 출력하고 exit code 0을 유지합니다.
+    - 활성 파이프라인이 없는 경우(state 파일 부재)에도 안내만 출력하고 exit code 0 (현재 동작과 동일하게 유지).
+    - cmd_status 내부 및 그 호출 경로에서 sys.exit(...) 또는 raise를 통해 non-zero 종료를 일으키는 코드가 없는지 점검하고, 발견되면 제거합니다.
+    - cmd_status가 호출하는 보조 함수(예: _advisory_status_summary, _external_gate_blockers, _execution_profile, _ensure_output_registry)에서 발생할 수 있는 예외(KeyError/AttributeError 등)는 try/except로 감싸 상태 출력을 중단시키지 않고 경고 메시지로 표기합니다. 예외 발생 시에도 exit code 0 유지.
+    - 신규 회귀 테스트는 tests/e2e/test_status_exit_code_5cf4.py에 추가합니다. subprocess.run으로 python pipeline.py status를 호출하고 PIPELINE_STATE_PATH 환경 변수로 임시 state 파일을 가리킵니다.
+    - 회귀 테스트는 최소 3개 케이스를 포함합니다: (1) terminal_state=COMPLETE, (2) blocked=true + current_phase=dev, (3) 활성 파이프라인 없음(state 파일 부재).
+    - 각 테스트는 returncode == 0 assertion + stdout_contains assertion + state 파일 비변경 assertion(SHA-256 비교 또는 mtime)을 포함합니다.
+    - Documentation-Code Drift 방지: cmd_status의 exit code 정책 변경은 동일 micro_task에서 함수 docstring 한 줄 업데이트를 함께 수행합니다 ("status는 읽기 전용 보고 명령이며 항상 exit 0을 반환한다" 명시).
+    - Real CLI Path E2E 정책(IMP-20260525-6FAC) 준수: PIPELINE_STATE_PATH 격리 + subprocess 기반 실행 + final_state assertion.
+    - Anti-Gaming: cmd_status를 빈 함수로 만들거나 출력 흐름을 제거해 테스트만 통과시키는 패턴 금지. 기존 stdout 토큰("파이프라인:", "Phase 현황", "[차단]", "terminal_state=", "활성 파이프라인 없음")은 유지되어야 합니다.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.cmd_status</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+        <file>tests/e2e/test_status_exit_code_5cf4.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.COMMAND_MAP["status"]</site>
+        <site>pipeline._main_impl</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_status|"status":\s+cmd_status|sys.exit\(</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_status가 terminal_state 값과 무관하게 정상 출력 후 exit 0을 반환하도록 정리하고, 보조 함수 예외 발생 시에도 함수가 unhandled 예외로 중단되지 않도록 방어 코드를 추가한 뒤, PIPELINE_STATE_PATH 격리 기반 subprocess 회귀 테스트 3건을 추가합니다.</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 프로젝트가 3.10 기반이며 pipeline.py 다른 테스트도 3.10에서 검증됨</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>해당 버전 provider 설정 유지, typeCheckingMode=basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - subprocess.run(["python", "pipeline.py", "status"], env={..., "PIPELINE_STATE_PATH": tmp_complete_state}).returncode == 0 (terminal_state=COMPLETE fixture).
+    - subprocess.run(["python", "pipeline.py", "status"], env={..., "PIPELINE_STATE_PATH": tmp_blocked_state}).returncode == 0 + stdout에 "[차단]" 포함.
+    - subprocess.run(["python", "pipeline.py", "status"], env={..., "PIPELINE_STATE_PATH": missing_path}).returncode == 0 + stdout에 "활성 파이프라인 없음" 포함.
+    - tests/e2e/test_status_exit_code_5cf4.py 신규 추가, pytest 실행 시 3 케이스 모두 PASS.
+    - 기존 pytest 전체 회귀 테스트 PASS (특히 tests/e2e/test_real_cli_paths.py 영향 없음).
+    - Codex Review Gate plan/scope/code stage ACCEPT (review_model=GPT-5.5).
+    - 신뢰 루트 파일 변경: pipeline.py만 (이번 파이프라인 scope_manifest_MT-1.json에 명시). tests/e2e/test_status_exit_code_5cf4.py는 신규 테스트 파일로 PM target_files에 명시되어 있음.
+  </acceptance_criteria>
+
+  <forbidden>
+    - cmd_status 내부에서 sys.exit(non_zero) 또는 raise SystemExit(non_zero) 추가 금지.
+    - main()의 EXPECTED_CLI_EXCEPTIONS 처리 로직을 변경하여 status 외 명령의 exit code 계약을 흔드는 패치 금지(status 한정 수정).
+    - PM target_files에 명시되지 않은 파일 수정 금지 (특히 .github/workflows/**, CLAUDE.md, agent MD).
+    - pipeline_state.json(실제 파일)을 테스트가 직접 수정 금지. PIPELINE_STATE_PATH 격리 fixture만 사용.
+    - 테스트가 PASS하도록 cmd_status를 빈 함수로 만들거나 stdout 출력 흐름을 제거하는 게이트 회피 금지(실제 상태 출력 유지 필수).
+    - PM scope 외 파일이 변경되어 있으면 module dev 기록 차단 (Scope Lock 의무, IMP-20260516-77AA).
+  </forbidden>
+
+  <handover_template>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260527-5CF4</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_status_exit_code_5cf4.py</file>
+      <file>scope_manifest_MT-1.json</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_real_cli_paths.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260527-5CF4\TC-normal-status-complete\input.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260527-5CF4\TC-normal-status-complete\expected.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260527-5CF4\TC-edge-status-blocked\input.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\BUG-20260527-5CF4\TC-edge-status-blocked\expected.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Real CLI Path E2E Gate Policy (IMP-20260525-6FAC): 내부 함수 테스트만으로 CLI 완료 판정 금지. 핵심 파이프라인 흐름은 Real CLI Path E2E 테스트로 검증 필수. PIPELINE_STATE_PATH 격리 + final_state assertion 없는 테스트는 CLI 검증으로 인정하지 않는다.
+      FAST_SINGLE_CODE 프로필: 최대 2파일, 최대 2함수, 예상 80줄 이하. 본 step은 pipeline.py(cmd_status) + tests/e2e/test_status_exit_code_5cf4.py 두 파일에 한정.
+      Codex Review Gate: Dev 진입 전 plan/scope stage ACCEPT, QA 진입 전 code stage ACCEPT 필수 (review_model=GPT-5.5).
+      Scope Lock (IMP-20260516-77AA): Pipeline Manager는 module dev 기록 직전 git diff --name-only HEAD와 scope_manifest_MT-1.json의 files 배열을 반드시 비교. 초과 파일 발견 시 module dev 기록 거부.
+    </phase_rules_excerpt>
+    <prev_phase_summary>이전 파이프라인(IMP-20260525-6FAC)에서 Real CLI Path E2E 정책이 도입되었으며, 이번 BUG는 그 정책을 cmd_status에도 적용하는 회귀 작업입니다.</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>

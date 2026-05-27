@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260527-5CF4</pipeline_id>
+  <manager_run_id>pipeline_manager-b9b9b3f66d372788</manager_run_id>
+  <planner_run_id>pm_planner-fcab5bd99aecc4de</planner_run_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>d8e94874400c135d5c94da0a052efb96b432b291f698b0e9ad5cb976f5b7182d</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <step_plan_accepted>true</step_plan_accepted>
+  <dq_answers>
+    <answer id="DQ-1">모듈 분리: MT-1 단일 모듈로 진행. cmd_status + E2E 테스트를 한 묶음으로 처리합니다.</answer>
+  </dq_answers>
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING">cmd_status exit code 0 정상화 + E2E 테스트 추가</mt>
+  </micro_tasks>
+  <notes>FAST_SINGLE_CODE 프로필. 변경 파일: pipeline.py, tests/e2e/test_status_exit_code_5cf4.py</notes>
+</manager_handoff>
