@@ -6309,29 +6309,67 @@ def cmd_architect(args: argparse.Namespace) -> None:
 
 
 def cmd_status(args: argparse.Namespace) -> None:
-    """현재 파이프라인 상태 출력."""
-    state = _load()
+    """현재 파이프라인 상태 출력 (BUG-20260527-5CF4: 항상 exit 0 보장).
+
+    설계 원칙:
+    - state 누락/손상/필드 부분 누락 등 모든 비정상 상황에서도 unhandled exception 없이
+      안내 메시지를 출력하고 정상 반환한다. argparse subcommand 함수가 정상 반환하면
+      Python interpreter는 exit code 0으로 종료한다.
+    - terminal_state(COMPLETE/FAILED/TERMINATED/None), blocked=true, phases 키 부분 누락
+      모든 케이스를 모두 통과해야 한다.
+    - 각 출력 블록은 독립적으로 try/except를 가지며 한 블록 실패가 다른 블록을 차단하지
+      않는다.
+    """
+    try:
+        state = _load()
+    except SystemExit:
+        # _die() → sys.exit(1)이 호출된 경우. status는 항상 0이어야 하므로 안내만.
+        print(YELLOW("\n  상태 로드 실패 — pipeline_state.json을 확인하세요.\n"))
+        return
+    except Exception as exc:
+        print(YELLOW(f"\n  상태 로드 중 오류: {exc}\n"))
+        return
+
     if state is None:
         print(YELLOW("\n  활성 파이프라인 없음. `python pipeline.py new` 로 시작하세요.\n"))
         return
 
-    state = _ensure_v210_fields(state)
-    pid         = state["pipeline_id"]
-    description = state["description"]
-    current     = state["current_phase"]
+    try:
+        state = _ensure_v210_fields(state)
+    except Exception as exc:
+        print(YELLOW(f"\n  state 마이그레이션 중 오류: {exc}\n"))
+        # 마이그레이션 실패해도 가능한 만큼 출력
+    if not isinstance(state, dict):
+        print(YELLOW("\n  상태 파일 구조가 예상과 다릅니다 (dict 아님).\n"))
+        return
+
+    pid         = state.get("pipeline_id", "UNKNOWN")
+    description = state.get("description", "")
+    current     = state.get("current_phase", "UNKNOWN")
     blocked     = state.get("blocked", False)
     terminal    = state.get("terminal_state")
 
-    print()
-    print(BOLD(f"  파이프라인: {CYAN(pid)}"))
-    print(f"  설명: {description}")
-    print(f"  생성: {state['created_at']}  갱신: {state['updated_at']}")
-    profile = _execution_profile(state)
-    profile_mode = str(profile.get("mode") or "STANDARD")
-    fast_label = "빠른 경로" if profile_mode in FAST_EXECUTION_PROFILES else "표준 경로"
-    print(f"  실행 프로필: {profile_mode} ({fast_label})")
+    try:
+        print()
+        print(BOLD(f"  파이프라인: {CYAN(pid)}"))
+        print(f"  설명: {description}")
+        print(f"  생성: {state.get('created_at', '')}  갱신: {state.get('updated_at', '')}")
+    except Exception as exc:
+        print(DIM(f"    [헤더 출력 오류: {exc}]"))
+
+    try:
+        profile = _execution_profile(state)
+        profile_mode = str(profile.get("mode") or "STANDARD")
+        fast_label = "빠른 경로" if profile_mode in FAST_EXECUTION_PROFILES else "표준 경로"
+        print(f"  실행 프로필: {profile_mode} ({fast_label})")
+    except Exception as exc:
+        print(DIM(f"    [실행 프로필 조회 오류: {exc}]"))
+
     if blocked:
-        print(RED(f"  [차단] {state.get('blocked_reason', '')}"))
+        try:
+            print(RED(f"  [차단] {state.get('blocked_reason', '')}"))
+        except Exception:
+            print(RED("  [차단]"))
     # v2.10 Auto-Compact: 종료 상태 표시 (Stop hook이 이 필드를 읽음)
     if terminal:
         print(YELLOW(f"  [종료 상태] terminal_state={terminal}"))
@@ -6339,132 +6377,174 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(BOLD("  Phase 현황:"))
     print()
 
+    phases_dict = state.get("phases") if isinstance(state.get("phases"), dict) else {}
     for phase in PHASE_ORDER:
-        info    = state["phases"][phase]
-        status  = info["status"]
-        label   = PHASE_LABELS[phase]
-        ev      = info.get("evidence") or ""
+        try:
+            info = phases_dict.get(phase) if isinstance(phases_dict, dict) else None
+            if not isinstance(info, dict):
+                # 누락된 phase는 PENDING으로 표시
+                info = {"status": "PENDING", "evidence": "", "completed_at": ""}
+            status  = info.get("status", "PENDING")
+            label   = PHASE_LABELS.get(phase, phase)
+            ev      = info.get("evidence") or ""
 
-        if status in ("DONE", "PASS", "SKIP"):
-            icon  = GREEN("✓")
-            color = GREEN
-        elif status == "FAIL":
-            icon  = RED("✗")
-            color = RED
-        elif status == "PENDING" and phase == current:
-            icon  = YELLOW("→")
-            color = YELLOW
-        else:
-            icon  = DIM("·")
-            color = DIM
-
-        ts = f"  {info['completed_at'][:16] if info['completed_at'] else ''}"
-        print(f"    {icon} {color(label):<42} [{color(status):<8}]{ts}")
-        if ev:
-            print(DIM(f"        증거: {ev}"))
-
-    gates = state.get("external_gates", {})
-    if isinstance(gates, dict) and gates.get("enabled"):
-        print()
-        print(BOLD("  External Gate 현황:"))
-        for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
-            gate = gates.get(gate_name, {})
-            if not isinstance(gate, dict):
-                continue
-            status = str(gate.get("status", "PENDING"))
-            color = GREEN if status == "PASS" else RED if status == "FAIL" else YELLOW
-            print(f"    {color(gate_name):<16} [{color(status):<8}] {gate.get('completed_at') or ''}")
-            if gate.get("evidence"):
-                print(DIM(f"        증거: {gate.get('evidence')}"))
-        blockers = _external_gate_blockers(state)
-        if blockers and terminal != "COMPLETE":
-            print(RED("    blockers: " + "; ".join(blockers)))
-
-    outputs = _ensure_output_registry(state)
-    if outputs.get("items"):
-        print()
-        print(BOLD("  사용자가 확인할 결과물:"))
-        for item in outputs.get("items", [])[:10]:
-            if not isinstance(item, dict):
-                continue
-            label = item.get("label") or item.get("kind") or "output"
-            public_path = item.get("public_path") or item.get("source_path")
-            print(f"    - {label}: {public_path}")
-
-    failures = state.get("failure_packets")
-    if isinstance(failures, list) and failures:
-        print()
-        print(BOLD("  최근 실패 패킷:"))
-        for item in failures[-3:]:
-            if not isinstance(item, dict):
-                continue
-            print(f"    - {item.get('gate')} -> {item.get('repair_owner')} ({item.get('packet_path')})")
-
-    advisory = _advisory_status_summary(str(pid))
-    print()
-    print(BOLD("  GPT Advisory status:"))
-    mode = str(advisory.get("advisory_mode") or "not_run")
-    mode_reason = str(advisory.get("advisory_mode_reason") or "")
-    mode_label_map = {
-        "not_run": "NOT RUN — disabled by default",
-        "skipped": "SKIPPED",
-        "required": "REQUIRED",
-        "blocking": "BLOCKING",
-    }
-    mode_color = {
-        "not_run": YELLOW,
-        "skipped": DIM,
-        "required": GREEN,
-        "blocking": RED,
-    }.get(mode, YELLOW)
-    print(mode_color(f"    mode={mode_label_map.get(mode, mode.upper())}"))
-    if mode_reason:
-        print(DIM(f"    reason: {mode_reason}"))
-    if advisory["review_count"] == 0:
-        print(DIM("    NOT RUN — no advisory review files recorded"))
-    else:
-        status_bits = ", ".join(f"{k}={v}" for k, v in sorted(advisory["status_counts"].items()))
-        print(f"    reviews={advisory['review_count']} api_calls={advisory['api_call_count']} statuses={status_bits}")
-        print(f"    unresolved_critical={advisory['unresolved_critical_count']}")
-    if not advisory["api_key_present"]:
-        print(DIM("    OPENAI_API_KEY not set; GPT advisory cannot call OpenAI."))
-    elif not advisory["enabled"]:
-        print(DIM("    ENABLE_GPT_ADVISORY is not 1; GPT advisory API calls are disabled."))
-    elif advisory.get("required"):
-        print(DIM(
-            f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
-            f"REQUIRED mode — auto-calls enabled (key source: {advisory.get('api_key_source', 'unknown')})."
-        ))
-    else:
-        print(DIM(
-            f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
-            f"API calls allowed manually (key source: {advisory.get('api_key_source', 'unknown')}). "
-            f"Auto-run is disabled because ENABLE_GPT_ADVISORY_REQUIRED is not 1."
-        ))
-
-    print()
-    if current == "COMPLETE":
-        print(GREEN("  ✓ 파이프라인 완료\n"))
-    else:
-        gate_ok, reason = check_gate(state, current) if current in GATE_RULES else (True, "")
-        if gate_ok:
-            print(f"  현재 단계: {YELLOW(PHASE_LABELS.get(current, current))}")
-            if current == "harness":
-                print(f"  확인 명령: {YELLOW('python pipeline.py gates status')}")
-                print(f"  다음 게이트: {YELLOW('technical -> oracle -> github-ci -> accept')}")
+            if status in ("DONE", "PASS", "SKIP"):
+                icon  = GREEN("✓")
+                color = GREEN
+            elif status == "FAIL":
+                icon  = RED("✗")
+                color = RED
+            elif status == "PENDING" and phase == current:
+                icon  = YELLOW("→")
+                color = YELLOW
             else:
-                print(f"  확인 명령: {YELLOW(f'python pipeline.py check --phase {current}')}")
-        else:
-            print(RED(f"  [차단] {reason}"))
+                icon  = DIM("·")
+                color = DIM
+
+            completed_at = info.get("completed_at") or ""
+            ts = f"  {completed_at[:16] if completed_at else ''}"
+            print(f"    {icon} {color(label):<42} [{color(status):<8}]{ts}")
+            if ev:
+                print(DIM(f"        증거: {ev}"))
+        except Exception as exc:
+            print(DIM(f"    [phase={phase} 표시 오류: {exc}]"))
+
+    try:
+        gates = state.get("external_gates", {})
+        if isinstance(gates, dict) and gates.get("enabled"):
+            print()
+            print(BOLD("  External Gate 현황:"))
+            for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
+                gate = gates.get(gate_name, {})
+                if not isinstance(gate, dict):
+                    continue
+                gstatus = str(gate.get("status", "PENDING"))
+                gcolor = GREEN if gstatus == "PASS" else RED if gstatus == "FAIL" else YELLOW
+                print(f"    {gcolor(gate_name):<16} [{gcolor(gstatus):<8}] {gate.get('completed_at') or ''}")
+                if gate.get("evidence"):
+                    print(DIM(f"        증거: {gate.get('evidence')}"))
+            try:
+                blockers = _external_gate_blockers(state)
+            except Exception:
+                blockers = []
+            if blockers and terminal != "COMPLETE":
+                print(RED("    blockers: " + "; ".join(blockers)))
+    except Exception as exc:
+        print(DIM(f"    [External Gate 출력 오류: {exc}]"))
+
+    try:
+        outputs = _ensure_output_registry(state)
+        if outputs.get("items"):
+            print()
+            print(BOLD("  사용자가 확인할 결과물:"))
+            for item in outputs.get("items", [])[:10]:
+                if not isinstance(item, dict):
+                    continue
+                label = item.get("label") or item.get("kind") or "output"
+                public_path = item.get("public_path") or item.get("source_path")
+                print(f"    - {label}: {public_path}")
+    except Exception as exc:
+        print(DIM(f"    [출력 등록부 표시 오류: {exc}]"))
+
+    try:
+        failures = state.get("failure_packets")
+        if isinstance(failures, list) and failures:
+            print()
+            print(BOLD("  최근 실패 패킷:"))
+            for item in failures[-3:]:
+                if not isinstance(item, dict):
+                    continue
+                print(f"    - {item.get('gate')} -> {item.get('repair_owner')} ({item.get('packet_path')})")
+    except Exception as exc:
+        print(DIM(f"    [실패 패킷 표시 오류: {exc}]"))
+
+    try:
+        advisory = _advisory_status_summary(str(pid))
         print()
+        print(BOLD("  GPT Advisory status:"))
+        mode = str(advisory.get("advisory_mode") or "not_run")
+        mode_reason = str(advisory.get("advisory_mode_reason") or "")
+        mode_label_map = {
+            "not_run": "NOT RUN — disabled by default",
+            "skipped": "SKIPPED",
+            "required": "REQUIRED",
+            "blocking": "BLOCKING",
+        }
+        mode_color = {
+            "not_run": YELLOW,
+            "skipped": DIM,
+            "required": GREEN,
+            "blocking": RED,
+        }.get(mode, YELLOW)
+        print(mode_color(f"    mode={mode_label_map.get(mode, mode.upper())}"))
+        if mode_reason:
+            print(DIM(f"    reason: {mode_reason}"))
+        if advisory.get("review_count", 0) == 0:
+            print(DIM("    NOT RUN — no advisory review files recorded"))
+        else:
+            status_counts = advisory.get("status_counts", {}) or {}
+            status_bits = ", ".join(f"{k}={v}" for k, v in sorted(status_counts.items()))
+            print(f"    reviews={advisory.get('review_count', 0)} api_calls={advisory.get('api_call_count', 0)} statuses={status_bits}")
+            print(f"    unresolved_critical={advisory.get('unresolved_critical_count', 0)}")
+        if not advisory.get("api_key_present"):
+            print(DIM("    OPENAI_API_KEY not set; GPT advisory cannot call OpenAI."))
+        elif not advisory.get("enabled"):
+            print(DIM("    ENABLE_GPT_ADVISORY is not 1; GPT advisory API calls are disabled."))
+        elif advisory.get("required"):
+            print(DIM(
+                f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
+                f"REQUIRED mode — auto-calls enabled (key source: {advisory.get('api_key_source', 'unknown')})."
+            ))
+        else:
+            print(DIM(
+                f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
+                f"API calls allowed manually (key source: {advisory.get('api_key_source', 'unknown')}). "
+                f"Auto-run is disabled because ENABLE_GPT_ADVISORY_REQUIRED is not 1."
+            ))
+    except Exception as exc:
+        print(DIM(f"    [Advisory 상태 표시 오류: {exc}]"))
+
+    try:
+        print()
+        if current == "COMPLETE":
+            print(GREEN("  ✓ 파이프라인 완료\n"))
+        else:
+            try:
+                gate_ok, reason = check_gate(state, current) if current in GATE_RULES else (True, "")
+            except Exception as exc:
+                gate_ok, reason = True, ""
+                print(DIM(f"    [게이트 체크 오류: {exc}]"))
+            if gate_ok:
+                print(f"  현재 단계: {YELLOW(PHASE_LABELS.get(current, current))}")
+                if current == "harness":
+                    print(f"  확인 명령: {YELLOW('python pipeline.py gates status')}")
+                    print(f"  다음 게이트: {YELLOW('technical -> oracle -> github-ci -> accept')}")
+                else:
+                    print(f"  확인 명령: {YELLOW(f'python pipeline.py check --phase {current}')}")
+            else:
+                print(RED(f"  [차단] {reason}"))
+            print()
+    except Exception as exc:
+        print(DIM(f"    [현재 단계 안내 오류: {exc}]"))
 
     # Recent log
-    log = state.get("event_log", [])[-5:]
-    if log:
-        print(DIM("  최근 이벤트:"))
-        for entry in log:
-            print(DIM(f"    {entry['ts'][:16]}  {entry['msg']}"))
-        print()
+    try:
+        log = state.get("event_log", [])
+        if isinstance(log, list):
+            log = log[-5:]
+        else:
+            log = []
+        if log:
+            print(DIM("  최근 이벤트:"))
+            for entry in log:
+                if not isinstance(entry, dict):
+                    continue
+                ts = str(entry.get("ts", ""))[:16]
+                msg = entry.get("msg", "")
+                print(DIM(f"    {ts}  {msg}"))
+            print()
+    except Exception as exc:
+        print(DIM(f"    [최근 이벤트 표시 오류: {exc}]"))
 
 
 def cmd_log(args: argparse.Namespace) -> None:
