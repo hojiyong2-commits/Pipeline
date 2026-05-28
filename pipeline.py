@@ -13876,6 +13876,13 @@ def cmd_tournament_finalize(args: argparse.Namespace) -> None:
 
 
 # ── CLI parser ───────────────────────────────────────────────────────────────
+# IMP-20260528-0A9E MT-2: golden task 상수 (build_parser보다 앞서 정의)
+_GOLDEN_TASKS_DIR: str = "tests/golden_tasks"
+_GOLDEN_SCHEMA_REQUIRED_FIELDS: List[str] = [
+    "id", "description", "command", "smoke",
+    "allowed_files", "forbidden_files", "acceptance_criteria", "return_phase",
+]
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -14652,6 +14659,25 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_const",
         const="markdown",
         help="한국어 Markdown 형식 출력",
+    )
+
+    # IMP-20260528-0A9E MT-2: golden task CLI 서브파서
+    p_golden = sub.add_parser("golden", help="Golden Task Regression Suite — 회귀 검증")
+    golden_sub = p_golden.add_subparsers(dest="golden_sub", required=True)
+
+    p_golden_list = golden_sub.add_parser("list", help="등록된 golden task 목록 조회")
+    p_golden_list.add_argument(
+        "--tasks-dir", dest="tasks_dir", default=_GOLDEN_TASKS_DIR,
+        help=f"golden tasks 디렉터리 (기본값: {_GOLDEN_TASKS_DIR})",
+    )
+
+    p_golden_run = golden_sub.add_parser("run", help="golden task 실행")
+    p_golden_run.add_argument("--task", default=None, help="실행할 태스크 ID")
+    p_golden_run.add_argument("--all", action="store_true", default=False, help="모든 태스크 실행")
+    p_golden_run.add_argument("--smoke", action="store_true", default=False, help="smoke=true 태스크만 실행")
+    p_golden_run.add_argument(
+        "--tasks-dir", dest="tasks_dir", default=_GOLDEN_TASKS_DIR,
+        help=f"golden tasks 디렉터리 (기본값: {_GOLDEN_TASKS_DIR})",
     )
 
     return parser
@@ -16335,6 +16361,320 @@ def cmd_metrics(args: "argparse.Namespace") -> None:
         _die("[METRICS ERROR] 알 수 없는 metrics 서브명령. collect|summary|status|report 중 선택하세요.")
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260528-0A9E: Golden Task Regression Suite (MT-2 + MT-3)
+# ---------------------------------------------------------------------------
+# 상수(_GOLDEN_TASKS_DIR, _GOLDEN_SCHEMA_REQUIRED_FIELDS)는 build_parser 앞에 정의됨
+
+
+def _validate_golden_schema(task_data: Dict[str, Any], task_file: str) -> None:
+    """golden_task.json 필수 필드 검증 — 누락 시 SystemExit(2)."""
+    missing = [f for f in _GOLDEN_SCHEMA_REQUIRED_FIELDS if f not in task_data]
+    if missing:
+        print(f"[PIPELINE ERROR] golden_task.json 스키마 오류 — 필수 필드 누락: {missing} (파일: {task_file})")
+        raise SystemExit(2)
+
+
+def _load_golden_tasks(tasks_dir: str) -> List[Dict[str, Any]]:
+    """tasks_dir 하위의 모든 golden_task.json을 로드하여 반환.
+
+    각 태스크 디렉터리의 golden_task.json을 읽어 스키마 검증 후 반환합니다.
+    스키마 오류 시 exit code 2 + [PIPELINE ERROR] 출력.
+    """
+    base = Path(tasks_dir)
+    if not base.is_dir():
+        print(f"[PIPELINE ERROR] golden tasks 디렉터리를 찾을 수 없습니다: {tasks_dir}")
+        raise SystemExit(2)
+    tasks: List[Dict[str, Any]] = []
+    for task_dir in sorted(base.iterdir()):
+        if not task_dir.is_dir():
+            continue
+        task_file = task_dir / "golden_task.json"
+        if not task_file.exists():
+            continue
+        try:
+            raw = task_file.read_text(encoding="utf-8")
+            data: Dict[str, Any] = json.loads(raw)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"[PIPELINE ERROR] golden_task.json 읽기 실패: {task_file} — {exc}")
+            raise SystemExit(2)
+        _validate_golden_schema(data, str(task_file))
+        data["_task_dir"] = str(task_dir)
+        tasks.append(data)
+    return tasks
+
+
+def _cmd_golden_list(args: "argparse.Namespace") -> None:
+    """golden list — 등록된 golden task 목록을 표 형식으로 출력."""
+    tasks_dir = getattr(args, "tasks_dir", _GOLDEN_TASKS_DIR)
+    tasks = _load_golden_tasks(tasks_dir)
+    if not tasks:
+        print("  (등록된 golden task 없음)")
+        return
+    print(f"{'ID':<50} {'Smoke':<7} {'Return Phase'}")
+    print("-" * 75)
+    for t in tasks:
+        smoke_flag = "true " if t.get("smoke") else "false"
+        print(f"{t['id']:<50} {smoke_flag:<7} {t.get('return_phase', 'dev')}")
+    print(f"\n  총 {len(tasks)}개 태스크")
+
+
+def _verify_forbidden_files(task: Dict[str, Any]) -> List[str]:
+    """task의 forbidden_files 패턴에 매칭되는 파일이 존재하는지 확인.
+
+    Returns: 발견된 금지 파일 목록 (빈 리스트면 위반 없음).
+    """
+    import fnmatch
+    violations: List[str] = []
+    forbidden_patterns: List[str] = task.get("forbidden_files", [])
+    if not forbidden_patterns:
+        return violations
+    # 현재 작업 디렉터리 전체에서 검사
+    try:
+        for entry in Path(".").rglob("*"):
+            if not entry.is_file():
+                continue
+            rel = str(entry).replace("\\", "/")
+            for pattern in forbidden_patterns:
+                if fnmatch.fnmatch(entry.name, pattern) or fnmatch.fnmatch(rel, pattern):
+                    violations.append(rel)
+                    break
+    except (PermissionError, OSError):
+        pass
+    return violations
+
+
+def _verify_allowed_files(task: Dict[str, Any], changed_files: Optional[List[str]] = None) -> List[str]:
+    """task의 allowed_files 패턴에 매칭되지 않는 변경 파일이 있는지 확인.
+
+    Returns: allowed_files에 포함되지 않은 파일 목록 (빈 리스트면 모두 허용됨).
+    """
+    import fnmatch
+    import subprocess as _subprocess
+    allowed_patterns: List[str] = task.get("allowed_files", [])
+    if not allowed_patterns:
+        return []
+    if changed_files is None:
+        # git status --short로 변경 파일 목록 획득
+        try:
+            result = _subprocess.run(
+                ["git", "diff", "--name-only", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+            )
+            changed_files = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+        except (OSError, _subprocess.TimeoutExpired):
+            return []
+    violations: List[str] = []
+    for f in changed_files:
+        rel = f.replace("\\", "/")
+        allowed = any(
+            __import__("fnmatch").fnmatch(rel, p) or __import__("fnmatch").fnmatch(Path(rel).name, p)
+            for p in allowed_patterns
+        )
+        if not allowed:
+            violations.append(rel)
+    return violations
+
+
+def _compare_expected_actual(task: Dict[str, Any], run_result: Dict[str, Any]) -> List[str]:
+    """expected/ 디렉터리의 기대값과 실제 실행 결과를 비교.
+
+    Returns: 불일치 항목 목록 (빈 리스트면 모두 일치).
+    """
+    task_dir = Path(task.get("_task_dir", ""))
+    expected_dir = task_dir / "expected"
+    if not expected_dir.is_dir():
+        return []
+    mismatches: List[str] = []
+    for exp_file in sorted(expected_dir.iterdir()):
+        if not exp_file.is_file() or exp_file.suffix != ".json":
+            continue
+        try:
+            expected_data: Dict[str, Any] = json.loads(exp_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            mismatches.append(f"{exp_file.name}: 파일 읽기 실패")
+            continue
+        for key, exp_val in expected_data.items():
+            actual_val = run_result.get(key)
+            if key == "stdout_contains":
+                # stdout_contains는 목록 — 각 항목이 실제 stdout에 포함되는지 확인
+                stdout_text = run_result.get("stdout", "")
+                items: List[str] = exp_val if isinstance(exp_val, list) else [exp_val]
+                for item in items:
+                    if item not in stdout_text:
+                        mismatches.append(f"{exp_file.name}: stdout에 '{item}' 미포함")
+            elif key == "error_contains":
+                stderr_text = run_result.get("stderr", "") + run_result.get("stdout", "")
+                if exp_val not in stderr_text:
+                    mismatches.append(f"{exp_file.name}: 오류 메시지에 '{exp_val}' 미포함")
+            elif key == "failure_reason_contains":
+                fp_text = run_result.get("failure_packet_content", "")
+                if exp_val not in fp_text:
+                    mismatches.append(f"{exp_file.name}: failure_packet에 '{exp_val}' 미포함")
+            elif actual_val != exp_val:
+                mismatches.append(f"{exp_file.name}: {key} 기대={exp_val} 실제={actual_val}")
+    return mismatches
+
+
+def _write_golden_failure_packet(task: Dict[str, Any], mismatches: List[str], violations: List[str]) -> None:
+    """FAIL 시 golden_failure_packet.json 생성."""
+    packet: Dict[str, Any] = {
+        "task_id": task.get("id", "unknown"),
+        "result": "FAIL",
+        "return_phase": task.get("return_phase", "dev"),
+        "mismatches": mismatches,
+        "forbidden_violations": violations,
+        "recorded_at": _now(),
+    }
+    out_path = Path("golden_failure_packet.json")
+    try:
+        out_path.write_text(json.dumps(packet, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        print(f"[GOLDEN] failure_packet 기록 실패: {exc}")
+
+
+def _golden_run_one(task: Dict[str, Any]) -> Dict[str, Any]:
+    """단일 golden task 실행 및 검증.
+
+    실행 순서:
+      1. forbidden_files 검사 — 위반 파일 존재 시 즉시 FAIL
+      2. command 실행 (subprocess)
+      3. expected/ 파일과 실제 결과 비교
+      4. FAIL 시 golden_failure_packet.json 생성
+
+    Returns: {"result": "PASS"|"FAIL", "exit_code": int, "violations": [...], "mismatches": [...]}
+    """
+    import subprocess as _subprocess
+    task_id: str = task.get("id", "unknown")
+
+    # 1. forbidden_files 검사
+    violations = _verify_forbidden_files(task)
+    if violations:
+        print(f"  [GOLDEN FAIL] {task_id} — forbidden 파일 발견: {violations[:3]}")
+        run_result: Dict[str, Any] = {
+            "result": "FAIL",
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "",
+            "failure_packet_written": True,
+            "violations": violations,
+            "mismatches": [],
+        }
+        _write_golden_failure_packet(task, [], violations)
+        return run_result
+
+    # 2. command 실행
+    cmd: str = task.get("command", "")
+    if not cmd:
+        return {"result": "FAIL", "exit_code": 1, "stdout": "", "stderr": "command 없음", "violations": [], "mismatches": ["command 필드 비어 있음"]}
+
+    try:
+        proc = _subprocess.run(
+            cmd.split(),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        stdout_text = proc.stdout or ""
+        stderr_text = proc.stderr or ""
+        actual_exit = proc.returncode
+    except _subprocess.TimeoutExpired:
+        return {"result": "FAIL", "exit_code": 1, "stdout": "", "stderr": "TimeoutExpired", "violations": [], "mismatches": ["command 실행 타임아웃"]}
+    except OSError as exc:
+        return {"result": "FAIL", "exit_code": 1, "stdout": "", "stderr": str(exc), "violations": [], "mismatches": [f"command 실행 오류: {exc}"]}
+
+    # 3. acceptance_criteria 기반 expected/ 비교
+    run_result_data: Dict[str, Any] = {
+        "exit_code": actual_exit,
+        "stdout": stdout_text,
+        "stderr": stderr_text,
+        "result": "PASS" if actual_exit == 0 else "FAIL",
+        "failure_packet_written": Path("golden_failure_packet.json").exists(),
+        "failure_packet_content": "",
+    }
+    fp_path = Path("golden_failure_packet.json")
+    if fp_path.exists():
+        try:
+            run_result_data["failure_packet_content"] = fp_path.read_text(encoding="utf-8")
+        except OSError:
+            pass
+
+    mismatches = _compare_expected_actual(task, run_result_data)
+
+    if mismatches or violations:
+        run_result_data["result"] = "FAIL"
+        run_result_data["failure_packet_written"] = True
+        run_result_data["violations"] = violations
+        run_result_data["mismatches"] = mismatches
+        _write_golden_failure_packet(task, mismatches, violations)
+        print(f"  [GOLDEN FAIL] {task_id} — 불일치: {mismatches[:3]}")
+    else:
+        run_result_data["result"] = "PASS"
+        run_result_data["violations"] = []
+        run_result_data["mismatches"] = []
+        print(f"  [GOLDEN PASS] {task_id}")
+
+    return run_result_data
+
+
+def _cmd_golden_run(args: "argparse.Namespace") -> None:
+    """golden run [--task ID | --all | --smoke] — golden task 실행."""
+    tasks_dir = getattr(args, "tasks_dir", _GOLDEN_TASKS_DIR)
+    all_tasks = _load_golden_tasks(tasks_dir)
+
+    task_id = getattr(args, "task", None)
+    run_all = getattr(args, "all", False)
+    smoke_only = getattr(args, "smoke", False)
+
+    if task_id:
+        targets = [t for t in all_tasks if t["id"] == task_id]
+        if not targets:
+            print(f"[PIPELINE ERROR] golden task를 찾을 수 없습니다: {task_id}")
+            raise SystemExit(2)
+    elif run_all:
+        targets = all_tasks
+    elif smoke_only:
+        targets = [t for t in all_tasks if t.get("smoke")]
+    else:
+        print("[PIPELINE ERROR] golden run 옵션이 필요합니다: --task ID | --all | --smoke")
+        raise SystemExit(2)
+
+    if not targets:
+        print("  (실행할 golden task 없음)")
+        return
+
+    pass_count = 0
+    fail_count = 0
+    results: List[Dict[str, Any]] = []
+    for task in targets:
+        print(f"\n  [GOLDEN RUN] {task['id']}")
+        result = _golden_run_one(task)
+        results.append({"id": task["id"], **result})
+        if result.get("result") == "PASS":
+            pass_count += 1
+        else:
+            fail_count += 1
+
+    print(f"\n  Golden Run 결과: PASS={pass_count} FAIL={fail_count} / 총 {len(targets)}")
+
+    if fail_count > 0:
+        raise SystemExit(1)
+
+
+def cmd_golden(args: "argparse.Namespace") -> None:
+    """golden list | run — Golden Task Regression Suite CLI.
+
+    IMP-20260528-0A9E MT-2/MT-3: golden task 목록 조회 및 실행.
+    """
+    sub = getattr(args, "golden_sub", None)
+    if sub == "list":
+        _cmd_golden_list(args)
+    elif sub == "run":
+        _cmd_golden_run(args)
+    else:
+        _die("[GOLDEN ERROR] 알 수 없는 golden 서브명령. list|run 중 선택하세요.")
+
+
 COMMAND_MAP = {
     "new":                  cmd_new,
     "check":                cmd_check,
@@ -16370,6 +16710,7 @@ COMMAND_MAP = {
     "patch":                cmd_patch,
     "metrics":              cmd_metrics,
     "budget":               cmd_budget,
+    "golden":               cmd_golden,
 }
 
 

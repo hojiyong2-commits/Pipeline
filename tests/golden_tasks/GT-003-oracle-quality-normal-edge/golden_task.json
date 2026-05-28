@@ -1,0 +1,23 @@
+{
+  "id": "GT-003-oracle-quality-normal-edge",
+  "description": "contract audit --allow-no-oracle 없이 normal + edge 오라클이 모두 존재할 때 oracle quality gate가 PASS하는지 검증",
+  "command": "python pipeline.py gates oracle",
+  "smoke": true,
+  "allowed_files": [
+    "pipeline_state.json",
+    "pipeline_contracts/**",
+    "tests/oracles/**"
+  ],
+  "forbidden_files": [
+    "scope_manifest*.json",
+    "module_design_*.xml",
+    "module_handover_*.xml",
+    "module_qa_*.xml"
+  ],
+  "acceptance_criteria": [
+    "audit_result == PASS",
+    "normal_case_count >= 1",
+    "edge_case_count >= 1"
+  ],
+  "return_phase": "dev"
+}

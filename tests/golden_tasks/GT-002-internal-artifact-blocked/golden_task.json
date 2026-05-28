@@ -1,0 +1,21 @@
+{
+  "id": "GT-002-internal-artifact-blocked",
+  "description": "forbidden 파일(내부 아티팩트)이 존재할 때 golden run이 FAIL + failure_packet을 작성하는지 검증",
+  "command": "python pipeline.py golden run --task GT-002-internal-artifact-blocked",
+  "smoke": true,
+  "allowed_files": [
+    "pipeline_state.json"
+  ],
+  "forbidden_files": [
+    "scope_manifest*.json",
+    "module_design_*.xml",
+    "module_handover_*.xml",
+    "module_qa_*.xml"
+  ],
+  "acceptance_criteria": [
+    "exit_code == 1",
+    "result == FAIL",
+    "failure_packet_written == true"
+  ],
+  "return_phase": "dev"
+}
