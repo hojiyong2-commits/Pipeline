@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-28T13:27:58Z",
+  "generated_at": "2026-05-28T13:35:59Z",
   "pipeline_id": "IMP-20260528-3898",
   "phase": "qa",
   "phase_status": "PASS",
-  "commit_hint": "4e1d2e70bcad4feaac429d9651f6c1ecae451a6b",
+  "commit_hint": "2174be723d0c35096a4845aeed29e243a7505264",
   "state": {
     "current_phase": "sec",
     "phase_completed_at": "2026-05-28T13:27:41Z",
@@ -18,9 +18,9 @@
     "agent_id": "qa-agent",
     "status": "COMPLETED",
     "output_file": "qa_report.xml",
-    "output_sha256": "dd24ffba8af1a35edd9709ec58b6a66128515e4a4f59a983e0f751ecaa19e402",
+    "output_sha256": "a56174fe27e1d8d8dfd5d98c19e15a5f6cc21745f1483dcd4c5ff5c67fce1bf3",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260528-3898/qa/agent_receipt_qa-e071fdcac4f5326a.json",
-    "receipt_sha256": "c9557b21eb43a49300061e0a57ac508251ef6025ea6164697ccb001a2a43bd0b",
+    "receipt_sha256": "41961df557592591588a5984c693454b3df7d95ac87a169de2b930ec774863bf",
     "used_by_phase": "qa",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260528-3898\\qa\\qa-e071fdcac4f5326a.json"
   },
@@ -30,17 +30,17 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260528-3898\\qa\\qa-e071fdcac4f5326a.json",
       "path": ".pipeline/phase_evidence/IMP-20260528-3898/qa/agent_receipt_qa-e071fdcac4f5326a.json",
-      "sha256": "c9557b21eb43a49300061e0a57ac508251ef6025ea6164697ccb001a2a43bd0b",
+      "sha256": "41961df557592591588a5984c693454b3df7d95ac87a169de2b930ec774863bf",
       "size_bytes": 496,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
       "source": "qa_report.xml",
       "path": ".pipeline/phase_evidence/IMP-20260528-3898/qa/report_qa_report.xml",
-      "sha256": "dd24ffba8af1a35edd9709ec58b6a66128515e4a4f59a983e0f751ecaa19e402",
-      "size_bytes": 1637,
-      "requires_force_add": true
+      "sha256": "a56174fe27e1d8d8dfd5d98c19e15a5f6cc21745f1483dcd4c5ff5c67fce1bf3",
+      "size_bytes": 1606,
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],

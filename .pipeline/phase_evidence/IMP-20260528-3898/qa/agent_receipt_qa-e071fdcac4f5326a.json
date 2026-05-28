@@ -9,7 +9,7 @@
   "started_at": "2026-05-28T13:27:33Z",
   "completed_at": "2026-05-28T13:27:36Z",
   "output_file": "qa_report.xml",
-  "output_sha256": "dd24ffba8af1a35edd9709ec58b6a66128515e4a4f59a983e0f751ecaa19e402",
+  "output_sha256": "a56174fe27e1d8d8dfd5d98c19e15a5f6cc21745f1483dcd4c5ff5c67fce1bf3",
   "evidence_files": [],
   "commit_sha": "4e1d2e70bcad4feaac429d9651f6c1ecae451a6b"
 }
