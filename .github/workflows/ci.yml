@@ -566,6 +566,7 @@ jobs:
 
       - name: PR에 최종 확인 안내 남기기
         if: success() && github.event_name == 'pull_request'
+        continue-on-error: true
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
