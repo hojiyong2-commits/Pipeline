@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260528-0A9E</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>tests/golden_tasks/GT-001-status-complete-exit0/golden_task.json</file>
+    <file>tests/golden_tasks/GT-001-status-complete-exit0/input/state.json</file>
+    <file>tests/golden_tasks/GT-001-status-complete-exit0/expected/stdout_contains.json</file>
+    <file>tests/golden_tasks/GT-002-internal-artifact-blocked/golden_task.json</file>
+    <file>tests/golden_tasks/GT-002-internal-artifact-blocked/input/changed_files.json</file>
+    <file>tests/golden_tasks/GT-002-internal-artifact-blocked/expected/result.json</file>
+    <file>tests/golden_tasks/GT-003-oracle-quality-normal-edge/golden_task.json</file>
+    <file>tests/golden_tasks/GT-003-oracle-quality-normal-edge/input/oracle_manifest.json</file>
+    <file>tests/golden_tasks/GT-003-oracle-quality-normal-edge/expected/audit_result.json</file>
+    <file>tests/golden_tasks/README.md</file>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_golden_tasks.py</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>CLAUDE.md</file>
+  </evidence>
+  <module_gates>
+    <mt id="MT-1" status="QA_PASS" />
+    <mt id="MT-2" status="QA_PASS" />
+    <mt id="MT-3" status="QA_PASS" />
+    <mt id="MT-4" status="QA_PASS" />
+    <mt id="MT-5" status="QA_PASS" />
+    <integration status="PASS" />
+  </module_gates>
+  <scope_declaration>
+    <files_modified>pipeline.py, .github/workflows/ci.yml, CLAUDE.md</files_modified>
+    <files_created>tests/golden_tasks/**, tests/e2e/test_golden_tasks.py</files_created>
+  </scope_declaration>
+  <scope_lock_check>
+    <verdict>PASS</verdict>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+  </scope_lock_check>
+  <impact_analysis>
+    <target_function>pipeline.cmd_golden, pipeline._golden_run_one, tests.e2e.test_golden_tasks.test_suite, github.workflows.ci.golden_smoke_step, tests.golden_tasks.scaffold_directory_seed</target_function>
+    <changed_functions>
+      <function>pipeline.cmd_golden (신규 추가)</function>
+      <function>pipeline._cmd_golden_list (신규 추가)</function>
+      <function>pipeline._cmd_golden_run (신규 추가)</function>
+      <function>pipeline._golden_run_one (신규 추가)</function>
+      <function>pipeline._verify_forbidden_files (신규 추가)</function>
+      <function>pipeline._verify_allowed_files (신규 추가)</function>
+      <function>pipeline._compare_expected_actual (신규 추가)</function>
+      <function>pipeline._write_golden_failure_packet (신규 추가)</function>
+      <function>pipeline._load_golden_tasks (신규 추가)</function>
+      <function>pipeline._validate_golden_schema (신규 추가)</function>
+      <function>pipeline.build_parser (golden 서브파서 추가)</function>
+      <function>pipeline.COMMAND_MAP (golden 등록)</function>
+    </changed_functions>
+    <affected_call_sites>
+      <site>pipeline.main — argparse에서 cmd_golden 라우팅</site>
+      <site>tests/e2e/test_golden_tasks.py — subprocess로 golden list/run 호출</site>
+      <site>.github/workflows/ci.yml — golden run --smoke CI 단계</site>
+    </affected_call_sites>
+    <blast_radius>WITHIN_SCOPE — 기존 cmd_* 함수 미변경, 신규 cmd_golden 계열 함수만 추가</blast_radius>
+  </impact_analysis>
+  <test_summary>
+    <e2e_tests_run>14</e2e_tests_run>
+    <e2e_tests_passed>14</e2e_tests_passed>
+    <e2e_tests_failed>0</e2e_tests_failed>
+  </test_summary>
+</handover>

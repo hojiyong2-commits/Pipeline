@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-28T22:53:07Z",
+  "pipeline_id": "IMP-20260528-0A9E",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "23bb5ec07508573079a2d266cc247a040224decd",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-28T22:52:58Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "tests/golden_tasks/GT-001-status-complete-exit0/golden_task.json,tests/golden_tasks/GT-001-status-complete-exit0/input/state.json,tests/golden_tasks/GT-001-status-complete-exit0/expected/stdout_contains.json,tests/golden_tasks/GT-002-internal-artifact-blocked/golden_task.json,tests/golden_tasks/GT-002-internal-artifact-blocked/input/changed_files.json,tests/golden_tasks/GT-002-internal-artifact-blocked/expected/result.json,tests/golden_tasks/GT-003-oracle-quality-normal-edge/golden_task.json,tests/golden_tasks/GT-003-oracle-quality-normal-edge/input/oracle_manifest.json,tests/golden_tasks/GT-003-oracle-quality-normal-edge/expected/audit_result.json,tests/golden_tasks/README.md,pipeline.py,tests/e2e/test_golden_tasks.py,.github/workflows/ci.yml,CLAUDE.md"
+  },
+  "agent_run": {
+    "run_id": "dev-9d86ad3f509102a2",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "fe544191f8c83e3253696f8714f4557d33c9de0acad529334dd9ff7d625228c7",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260528-0A9E/dev/agent_receipt_dev-9d86ad3f509102a2.json",
+    "receipt_sha256": "049c651566fdc3e53549fb00af16222909a8cb73461307c1596b881d262065f6",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260528-0A9E\\dev\\dev-9d86ad3f509102a2.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260528-0A9E\\dev\\dev-9d86ad3f509102a2.json",
+      "path": ".pipeline/phase_evidence/IMP-20260528-0A9E/dev/agent_receipt_dev-9d86ad3f509102a2.json",
+      "sha256": "049c651566fdc3e53549fb00af16222909a8cb73461307c1596b881d262065f6",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260528-0A9E/dev/report_dev_handover.xml",
+      "sha256": "fe544191f8c83e3253696f8714f4557d33c9de0acad529334dd9ff7d625228c7",
+      "size_bytes": 3598,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260528-0A9E/dev/scope_manifest_scope_manifest.json",
+      "sha256": "2bede3d8dc4fd0507e8afa982017baaea6dfe8c94104fb9dd6ee4ff515ae09af",
+      "size_bytes": 1548,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "tests/golden_tasks/GT-001-status-complete-exit0/golden_task.json",
+      "sha256": "e630a2ea132bf64f84a965f225fba90f77a63820d4ed701100f84e32d88667bc",
+      "size_bytes": 530
+    },
+    {
+      "path": "tests/golden_tasks/GT-001-status-complete-exit0/input/state.json",
+      "sha256": "e194abdb45a0de8609f32c442792e5df4cef02f39bf9a7ea4deb40257231685b",
+      "size_bytes": 168
+    },
+    {
+      "path": "tests/golden_tasks/GT-001-status-complete-exit0/expected/stdout_contains.json",
+      "sha256": "973f8903ce2f12b6ff0a56c5c3a4f1f003cf239fe0142656358ffbcec7a9313f",
+      "size_bytes": 71
+    },
+    {
+      "path": "tests/golden_tasks/GT-002-internal-artifact-blocked/golden_task.json",
+      "sha256": "395201aaffb1c6b8b17bd825d83b591516a78e5c4a1e460f7e9b13cd1e76be27",
+      "size_bytes": 611
+    },
+    {
+      "path": "tests/golden_tasks/GT-002-internal-artifact-blocked/input/changed_files.json",
+      "sha256": "dbbe6d290369ec4690a3df199ee8cbf08c79b12d778e97547cd6a7d942a43ffe",
+      "size_bytes": 305
+    },
+    {
+      "path": "tests/golden_tasks/GT-002-internal-artifact-blocked/expected/result.json",
+      "sha256": "1384f2a62a702bc8adad5a57d32073f38bc98886d8bceba194198b49576f028c",
+      "size_bytes": 117
+    },
+    {
+      "path": "tests/golden_tasks/GT-003-oracle-quality-normal-edge/golden_task.json",
+      "sha256": "d97b37f5c295113b3f338ab1da24bfc379e84ddbdf6029560816b55f75f8a3b1",
+      "size_bytes": 646
+    },
+    {
+      "path": "tests/golden_tasks/GT-003-oracle-quality-normal-edge/input/oracle_manifest.json",
+      "sha256": "1a468924e33b74ba84e96bf1ccc98efc4da57676e5cf744501a7fedf49cb2166",
+      "size_bytes": 678
+    },
+    {
+      "path": "tests/golden_tasks/GT-003-oracle-quality-normal-edge/expected/audit_result.json",
+      "sha256": "b957a1243e3719da7512d67bd2def41b7b73ef307582441a724214bda6dbe8e0",
+      "size_bytes": 105
+    },
+    {
+      "path": "tests/golden_tasks/README.md",
+      "sha256": "b282aeb155742b418e80d9ec7e9c8504e193decda911a208dec6cacce18a6609",
+      "size_bytes": 2688
+    },
+    {
+      "path": "pipeline.py",
+      "sha256": "4d9402b21ce5d9b85520e5732984ed7b291bcb8a4262eba744c38dace82cb562",
+      "size_bytes": 741552
+    },
+    {
+      "path": "tests/e2e/test_golden_tasks.py",
+      "sha256": "2f7af8f41c9e929e769840390733ea16bdee8a444494ecb3f55d21273693f353",
+      "size_bytes": 12089
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "24bf1b7422c9a30ac4691f7e4bf190ee71bf8ec3d1e99abd0ed13ca8c8c105c1",
+      "size_bytes": 27507
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "8d0c6c4755dc2b96cfd7b9893b12c845a1298e0fad398e70ea7af8d2dbbe7b2e",
+      "size_bytes": 84670
+    }
+  ],
+  "local_only_files": []
+}
