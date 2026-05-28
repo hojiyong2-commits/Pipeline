@@ -1039,6 +1039,9 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     # IMP-20260522-0C83: Pipeline Manager 출력 파일 — PM done 이후 LF 정규화 등으로
     # 파일이 갱신될 수 있으므로 dev scope gate 오탐을 방지하기 위해 제외.
     "manager_handoff.xml",
+    # IMP-20260528-3898: gates accept 완료 시 pipeline.py가 자동 갱신하는 런타임 파일.
+    # PM snapshot 이후 accept 또는 다른 파이프라인 완료 시 변경되어 scope gate 오탐을 유발함.
+    "human_acceptance_packet.md",
 }
 
 
@@ -1943,6 +1946,83 @@ DEFAULT_DEPLOY_ROOT_CANDIDATES = (
     Path(r"G:\내드라이브\터미널"),
 )
 
+# IMP-20260528-3898 MT-1: 워크스페이스 내부 산출물 패턴 — SSoT.
+# pipeline 실행 중 생성되는 임시/내부 파일들로, PR diff 또는 배포물에 섞이면 안 됩니다.
+# 이 상수를 수정하면 _is_internal_artifact(), preflight-pr-impl,
+# _deployment_artifacts() 필터가 모두 자동으로 업데이트됩니다.
+WORKSPACE_INTERNAL_PATTERNS: List[str] = [
+    # phase 보고서 및 인수인계 파일
+    "build_report.xml",
+    "qa_report.xml",
+    "dev_handover.xml",
+    "architect_report.xml",
+    "integration_report.xml",
+    "manager_handoff.xml",
+    # scope / module gate 파일
+    "scope_manifest.json",
+    # MT-N 단위 scope/module 파일 (접두사 패턴)
+    "scope_manifest_MT-",
+    "module_design_MT-",
+    "module_handover_MT-",
+    "module_qa_MT-",
+    # 실패 / 진단 파일
+    "failure_packet.json",
+    "acceptance_result.json",
+    "codex_review_result.json",
+    "codex_run_raw.json",
+    "protocol_consistency_result.json",
+    # 기타 파이프라인 런타임 파일
+    "step_plan.xml",
+    "stop_signal.json",
+    "test_results.jsonl",
+    "test_results_v3.jsonl",
+    "acceptance_comment.json",
+    "acceptance_packet.md",
+    "bandit_e2e_result.json",
+    "bandit_e2e_result2.json",
+]
+
+# 디렉터리 접두사 패턴 (이 경로 아래 모든 파일은 내부 산출물)
+WORKSPACE_INTERNAL_DIR_PREFIXES: List[str] = [
+    ".pipeline/",
+    "pipeline_contracts/",
+]
+
+
+def _is_internal_artifact(path: str) -> bool:
+    """경로가 workspace 내부 산출물인지 판정합니다 (WORKSPACE_INTERNAL_PATTERNS SSoT 사용).
+
+    PR diff 또는 배포물에 포함될 수 없는 파이프라인 런타임 파일을 감지합니다.
+
+    Args:
+        path: 검사할 파일 경로 (절대/상대 모두 허용, 백슬래시 자동 변환)
+
+    Returns:
+        True이면 내부 산출물, False이면 일반 파일
+    """
+    normalized = path.replace("\\", "/").strip()
+    # 파일명(basename) 추출
+    basename = normalized.split("/")[-1] if "/" in normalized else normalized
+
+    # 디렉터리 접두사 검사
+    for dir_prefix in WORKSPACE_INTERNAL_DIR_PREFIXES:
+        if normalized.startswith(dir_prefix) or normalized == dir_prefix.rstrip("/"):
+            return True
+
+    # 정확한 파일명 일치 또는 접두사 패턴 일치
+    for pattern in WORKSPACE_INTERNAL_PATTERNS:
+        if pattern.endswith("-") or not pattern.endswith((".xml", ".json", ".jsonl", ".md")):
+            # 접두사 패턴 (예: "scope_manifest_MT-", "module_design_MT-")
+            if basename.startswith(pattern):
+                return True
+        else:
+            # 정확한 파일명 일치
+            if basename == pattern:
+                return True
+
+    return False
+
+
 PHASE_ORDER = ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
 
 PHASE_LABELS = {
@@ -2307,6 +2387,17 @@ def _new_state(pipeline_id: str, pipeline_type: str, description: str) -> Dict[s
             "TIMEOUT": 0,
         },
         "failure_summary": {},                 # {failure_code: {count: int, is_repeat: bool}}
+        # IMP-20260527-075A MT-1: Cost/Attempt Budget Gate
+        "attempt_budget": {
+            "config": {
+                "dev_max_attempts": 3,
+                "qa_max_attempts": 3,
+                "gate_max_attempts": 5,
+                "repeat_failure_code_threshold": 3,
+            },
+            "attempts": {"dev": [], "qa": [], "gate": []},
+            "blocked_phases": {},
+        },
     }
 
 
@@ -2390,6 +2481,20 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
                 state["github_actions_timings"][_gh_state] = 0
     if "failure_summary" not in state:
         state["failure_summary"] = {}
+    # IMP-20260527-075A MT-1: Cost/Attempt Budget Gate 마이그레이션
+    # _ensure_attempt_budget_keys는 더 정교한 검증을 수행하지만 _ensure_v210_fields는
+    # 호출 순서상 _record_failure_packet 정의 전에 실행되므로 여기서는 dict 형태만 보장.
+    if not isinstance(state.get("attempt_budget"), dict):
+        state["attempt_budget"] = {
+            "config": {
+                "dev_max_attempts": 3,
+                "qa_max_attempts": 3,
+                "gate_max_attempts": 5,
+                "repeat_failure_code_threshold": 3,
+            },
+            "attempts": {"dev": [], "qa": [], "gate": []},
+            "blocked_phases": {},
+        }
     return state
 
 
@@ -3867,7 +3972,21 @@ def _register_output_item(
     return item
 
 
-def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> List[Path]:
+def _deployment_artifacts(
+    state: Dict[str, Any],
+    evidence: Optional[str],
+) -> Tuple[List[Path], List[str]]:
+    """배포 대상 산출물 경로 목록과 차단된 내부 산출물 이름 목록을 반환합니다.
+
+    IMP-20260528-3898 MT-3: _is_internal_artifact() SSoT를 사용하여 내부 산출물을
+    배포 대상에서 자동 제외합니다. 차단된 파일 이름 목록은 deployment_manifest.json의
+    blocked_internal_artifacts 필드에 기록됩니다.
+
+    Returns:
+        (allowed_paths, blocked_names) 튜플.
+        allowed_paths: 배포할 파일 Path 목록 (내부 산출물 제외)
+        blocked_names: 차단된 내부 산출물 파일 이름 목록
+    """
     candidates: List[str] = []
     candidates.extend(_split_evidence_paths(evidence))
     outputs = _ensure_output_registry(state)
@@ -3882,8 +4001,16 @@ def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> Lis
                 candidates.extend(_split_evidence_paths(phase.get("evidence")))
 
     result: List[Path] = []
-    seen: set[str] = set()
+    blocked: List[str] = []
+    seen: set = set()
     for raw in candidates:
+        # 내부 산출물은 배포에서 제외 (SSoT: WORKSPACE_INTERNAL_PATTERNS)
+        normalized = raw.replace("\\", "/").strip() if raw else ""
+        basename = normalized.split("/")[-1] if "/" in normalized else normalized
+        if _is_internal_artifact(raw):
+            if basename and basename not in blocked:
+                blocked.append(basename)
+            continue
         path = _resolve_artifact_path(raw)
         if not path:
             continue
@@ -3892,7 +4019,7 @@ def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> Lis
             continue
         seen.add(key)
         result.append(path)
-    return result
+    return result, blocked
 
 
 def _copy_deployment_artifact(src: Path, deploy_dir: Path) -> Dict[str, Any]:
@@ -3927,7 +4054,8 @@ def _deploy_accepted_outputs(
     pid = str(state.get("pipeline_id") or "UNKNOWN")
     deploy_root = _deployment_root()
     deploy_dir = deploy_root / pid
-    artifacts = _deployment_artifacts(state, evidence)
+    # IMP-20260528-3898 MT-3: 내부 산출물 필터 적용 — 튜플 언패킹
+    artifacts, blocked_internal = _deployment_artifacts(state, evidence)
     external_urls = list((evidence_validation or {}).get("urls") or [])
     if not artifacts and not external_urls:
         _die(
@@ -3947,6 +4075,8 @@ def _deploy_accepted_outputs(
         "notes": notes or "",
         "artifacts": copied,
         "external_urls": external_urls,
+        # IMP-20260528-3898 MT-3: 차단된 내부 산출물 목록 기록
+        "blocked_internal_artifacts": blocked_internal,
     }
     manifest_path = deploy_dir / "deployment_manifest.json"
     _write_json(manifest_path, manifest)
@@ -5214,6 +5344,50 @@ def cmd_check(args: argparse.Namespace) -> None:
             print()
             sys.exit(1)
 
+    # IMP-20260527-075A MT-3: attempt budget gate — dev/qa/build 진입 직전 budget 차단 검사.
+    # phase별 한도 초과 또는 동일 failure_code 반복 시 exit 1 + 한국어 메시지 + failure_packet.
+    if phase in ("dev", "qa", "build"):
+        # build phase는 budget 추적 대상이 아니므로 dev/qa만 검사 (build는 gate 카테고리)
+        budget_phase = phase if phase in ("dev", "qa") else None
+        if budget_phase is not None:
+            _ensure_attempt_budget_keys(state)
+            bg_check = _check_attempt_budget(state, budget_phase)
+            if bg_check["blocked"]:
+                msg = _korean_budget_message(
+                    budget_phase,
+                    bg_check["attempts_used"],
+                    bg_check["max_attempts"],
+                    bg_check["failure_code"],
+                    bg_check.get("repeat_failure_code"),
+                )
+                _record_failure_packet(
+                    state, "technical", {},
+                    command=[sys.executable, "pipeline.py", "budget", "reset",
+                             "--phase", budget_phase, "--reason", "재시도 한도 초과 후 사용자 확인 재시작"],
+                    note=msg,
+                    status="BLOCKED",
+                    phase=budget_phase,
+                    failure_code=str(bg_check["failure_code"]),
+                    failure_category="missing_evidence",
+                    summary_ko=msg,
+                    expected=f"{budget_phase} phase 재시도 한도 내",
+                    actual=msg,
+                    exit_code=1,
+                    owner="Pipeline Manager",
+                    return_phase="architect",
+                    required_actions=[
+                        "prompt-architect-agent로 이관하여 RCA 수행",
+                        f"사용자 확인 후 `python pipeline.py budget reset --phase {budget_phase} --reason ...`로 재시작",
+                    ],
+                    retry_allowed=False,
+                )
+                _save(state)
+                print()
+                print(RED(f"[GATE BLOCKED] {budget_phase} phase 재시도 한도 초과"))
+                print(RED(f"  {msg}"))
+                print()
+                sys.exit(1)
+
     ok, reason = check_gate(state, phase)
 
     if ok:
@@ -5501,6 +5675,10 @@ def cmd_done(args: argparse.Namespace) -> None:
         state["phases"][phase]["agent_id"] = agent_run["agent_id"]
     state["current_phase"] = PHASE_ORDER[PHASE_ORDER.index(phase) + 1]
     _log_event(state, f"{phase} DONE | evidence: {evidence}")
+    # IMP-20260527-075A MT-3: dev DONE PASS 시 dev attempt budget 초기화 (성공 = 새 사이클)
+    if phase == "dev":
+        _ensure_attempt_budget_keys(state)
+        _record_attempt_budget(state, "dev", "PASS")
     if phase == "dev":
         if _openai_advisory_required():
             review_files = _advisory_review_files_from_args(state, evidence)
@@ -5625,6 +5803,13 @@ def cmd_qa(args: argparse.Namespace) -> None:
         # PASS 시 qa_fail_history 초기화 (새 사이클 시작)
         if state.get("qa_fail_history"):
             state["qa_fail_history"] = []
+
+    # IMP-20260527-075A MT-3: attempt budget 누적/초기화 (qa phase)
+    _ensure_attempt_budget_keys(state)
+    if result == "FAIL":
+        _record_attempt_budget(state, "qa", "FAIL", failure_code=failure_sig)
+    else:
+        _record_attempt_budget(state, "qa", "PASS")
 
     # ── QA Report Hallucination Gate ──────────────────────────────────────────
     report_file: Optional[str] = getattr(args, "report_file", None)
@@ -6229,29 +6414,67 @@ def cmd_architect(args: argparse.Namespace) -> None:
 
 
 def cmd_status(args: argparse.Namespace) -> None:
-    """현재 파이프라인 상태 출력."""
-    state = _load()
+    """현재 파이프라인 상태 출력 (BUG-20260527-5CF4: 항상 exit 0 보장).
+
+    설계 원칙:
+    - state 누락/손상/필드 부분 누락 등 모든 비정상 상황에서도 unhandled exception 없이
+      안내 메시지를 출력하고 정상 반환한다. argparse subcommand 함수가 정상 반환하면
+      Python interpreter는 exit code 0으로 종료한다.
+    - terminal_state(COMPLETE/FAILED/TERMINATED/None), blocked=true, phases 키 부분 누락
+      모든 케이스를 모두 통과해야 한다.
+    - 각 출력 블록은 독립적으로 try/except를 가지며 한 블록 실패가 다른 블록을 차단하지
+      않는다.
+    """
+    try:
+        state = _load()
+    except SystemExit:
+        # _die() → sys.exit(1)이 호출된 경우. status는 항상 0이어야 하므로 안내만.
+        print(YELLOW("\n  상태 로드 실패 — pipeline_state.json을 확인하세요.\n"))
+        return
+    except Exception as exc:
+        print(YELLOW(f"\n  상태 로드 중 오류: {exc}\n"))
+        return
+
     if state is None:
         print(YELLOW("\n  활성 파이프라인 없음. `python pipeline.py new` 로 시작하세요.\n"))
         return
 
-    state = _ensure_v210_fields(state)
-    pid         = state["pipeline_id"]
-    description = state["description"]
-    current     = state["current_phase"]
+    try:
+        state = _ensure_v210_fields(state)
+    except Exception as exc:
+        print(YELLOW(f"\n  state 마이그레이션 중 오류: {exc}\n"))
+        # 마이그레이션 실패해도 가능한 만큼 출력
+    if not isinstance(state, dict):
+        print(YELLOW("\n  상태 파일 구조가 예상과 다릅니다 (dict 아님).\n"))
+        return
+
+    pid         = state.get("pipeline_id", "UNKNOWN")
+    description = state.get("description", "")
+    current     = state.get("current_phase", "UNKNOWN")
     blocked     = state.get("blocked", False)
     terminal    = state.get("terminal_state")
 
-    print()
-    print(BOLD(f"  파이프라인: {CYAN(pid)}"))
-    print(f"  설명: {description}")
-    print(f"  생성: {state['created_at']}  갱신: {state['updated_at']}")
-    profile = _execution_profile(state)
-    profile_mode = str(profile.get("mode") or "STANDARD")
-    fast_label = "빠른 경로" if profile_mode in FAST_EXECUTION_PROFILES else "표준 경로"
-    print(f"  실행 프로필: {profile_mode} ({fast_label})")
+    try:
+        print()
+        print(BOLD(f"  파이프라인: {CYAN(pid)}"))
+        print(f"  설명: {description}")
+        print(f"  생성: {state.get('created_at', '')}  갱신: {state.get('updated_at', '')}")
+    except Exception as exc:
+        print(DIM(f"    [헤더 출력 오류: {exc}]"))
+
+    try:
+        profile = _execution_profile(state)
+        profile_mode = str(profile.get("mode") or "STANDARD")
+        fast_label = "빠른 경로" if profile_mode in FAST_EXECUTION_PROFILES else "표준 경로"
+        print(f"  실행 프로필: {profile_mode} ({fast_label})")
+    except Exception as exc:
+        print(DIM(f"    [실행 프로필 조회 오류: {exc}]"))
+
     if blocked:
-        print(RED(f"  [차단] {state.get('blocked_reason', '')}"))
+        try:
+            print(RED(f"  [차단] {state.get('blocked_reason', '')}"))
+        except Exception:
+            print(RED("  [차단]"))
     # v2.10 Auto-Compact: 종료 상태 표시 (Stop hook이 이 필드를 읽음)
     if terminal:
         print(YELLOW(f"  [종료 상태] terminal_state={terminal}"))
@@ -6259,132 +6482,174 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(BOLD("  Phase 현황:"))
     print()
 
+    phases_dict = state.get("phases") if isinstance(state.get("phases"), dict) else {}
     for phase in PHASE_ORDER:
-        info    = state["phases"][phase]
-        status  = info["status"]
-        label   = PHASE_LABELS[phase]
-        ev      = info.get("evidence") or ""
+        try:
+            info = phases_dict.get(phase) if isinstance(phases_dict, dict) else None
+            if not isinstance(info, dict):
+                # 누락된 phase는 PENDING으로 표시
+                info = {"status": "PENDING", "evidence": "", "completed_at": ""}
+            status  = info.get("status", "PENDING")
+            label   = PHASE_LABELS.get(phase, phase)
+            ev      = info.get("evidence") or ""
 
-        if status in ("DONE", "PASS", "SKIP"):
-            icon  = GREEN("✓")
-            color = GREEN
-        elif status == "FAIL":
-            icon  = RED("✗")
-            color = RED
-        elif status == "PENDING" and phase == current:
-            icon  = YELLOW("→")
-            color = YELLOW
-        else:
-            icon  = DIM("·")
-            color = DIM
-
-        ts = f"  {info['completed_at'][:16] if info['completed_at'] else ''}"
-        print(f"    {icon} {color(label):<42} [{color(status):<8}]{ts}")
-        if ev:
-            print(DIM(f"        증거: {ev}"))
-
-    gates = state.get("external_gates", {})
-    if isinstance(gates, dict) and gates.get("enabled"):
-        print()
-        print(BOLD("  External Gate 현황:"))
-        for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
-            gate = gates.get(gate_name, {})
-            if not isinstance(gate, dict):
-                continue
-            status = str(gate.get("status", "PENDING"))
-            color = GREEN if status == "PASS" else RED if status == "FAIL" else YELLOW
-            print(f"    {color(gate_name):<16} [{color(status):<8}] {gate.get('completed_at') or ''}")
-            if gate.get("evidence"):
-                print(DIM(f"        증거: {gate.get('evidence')}"))
-        blockers = _external_gate_blockers(state)
-        if blockers and terminal != "COMPLETE":
-            print(RED("    blockers: " + "; ".join(blockers)))
-
-    outputs = _ensure_output_registry(state)
-    if outputs.get("items"):
-        print()
-        print(BOLD("  사용자가 확인할 결과물:"))
-        for item in outputs.get("items", [])[:10]:
-            if not isinstance(item, dict):
-                continue
-            label = item.get("label") or item.get("kind") or "output"
-            public_path = item.get("public_path") or item.get("source_path")
-            print(f"    - {label}: {public_path}")
-
-    failures = state.get("failure_packets")
-    if isinstance(failures, list) and failures:
-        print()
-        print(BOLD("  최근 실패 패킷:"))
-        for item in failures[-3:]:
-            if not isinstance(item, dict):
-                continue
-            print(f"    - {item.get('gate')} -> {item.get('repair_owner')} ({item.get('packet_path')})")
-
-    advisory = _advisory_status_summary(str(pid))
-    print()
-    print(BOLD("  GPT Advisory status:"))
-    mode = str(advisory.get("advisory_mode") or "not_run")
-    mode_reason = str(advisory.get("advisory_mode_reason") or "")
-    mode_label_map = {
-        "not_run": "NOT RUN — disabled by default",
-        "skipped": "SKIPPED",
-        "required": "REQUIRED",
-        "blocking": "BLOCKING",
-    }
-    mode_color = {
-        "not_run": YELLOW,
-        "skipped": DIM,
-        "required": GREEN,
-        "blocking": RED,
-    }.get(mode, YELLOW)
-    print(mode_color(f"    mode={mode_label_map.get(mode, mode.upper())}"))
-    if mode_reason:
-        print(DIM(f"    reason: {mode_reason}"))
-    if advisory["review_count"] == 0:
-        print(DIM("    NOT RUN — no advisory review files recorded"))
-    else:
-        status_bits = ", ".join(f"{k}={v}" for k, v in sorted(advisory["status_counts"].items()))
-        print(f"    reviews={advisory['review_count']} api_calls={advisory['api_call_count']} statuses={status_bits}")
-        print(f"    unresolved_critical={advisory['unresolved_critical_count']}")
-    if not advisory["api_key_present"]:
-        print(DIM("    OPENAI_API_KEY not set; GPT advisory cannot call OpenAI."))
-    elif not advisory["enabled"]:
-        print(DIM("    ENABLE_GPT_ADVISORY is not 1; GPT advisory API calls are disabled."))
-    elif advisory.get("required"):
-        print(DIM(
-            f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
-            f"REQUIRED mode — auto-calls enabled (key source: {advisory.get('api_key_source', 'unknown')})."
-        ))
-    else:
-        print(DIM(
-            f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
-            f"API calls allowed manually (key source: {advisory.get('api_key_source', 'unknown')}). "
-            f"Auto-run is disabled because ENABLE_GPT_ADVISORY_REQUIRED is not 1."
-        ))
-
-    print()
-    if current == "COMPLETE":
-        print(GREEN("  ✓ 파이프라인 완료\n"))
-    else:
-        gate_ok, reason = check_gate(state, current) if current in GATE_RULES else (True, "")
-        if gate_ok:
-            print(f"  현재 단계: {YELLOW(PHASE_LABELS.get(current, current))}")
-            if current == "harness":
-                print(f"  확인 명령: {YELLOW('python pipeline.py gates status')}")
-                print(f"  다음 게이트: {YELLOW('technical -> oracle -> github-ci -> accept')}")
+            if status in ("DONE", "PASS", "SKIP"):
+                icon  = GREEN("✓")
+                color = GREEN
+            elif status == "FAIL":
+                icon  = RED("✗")
+                color = RED
+            elif status == "PENDING" and phase == current:
+                icon  = YELLOW("→")
+                color = YELLOW
             else:
-                print(f"  확인 명령: {YELLOW(f'python pipeline.py check --phase {current}')}")
-        else:
-            print(RED(f"  [차단] {reason}"))
+                icon  = DIM("·")
+                color = DIM
+
+            completed_at = info.get("completed_at") or ""
+            ts = f"  {completed_at[:16] if completed_at else ''}"
+            print(f"    {icon} {color(label):<42} [{color(status):<8}]{ts}")
+            if ev:
+                print(DIM(f"        증거: {ev}"))
+        except Exception as exc:
+            print(DIM(f"    [phase={phase} 표시 오류: {exc}]"))
+
+    try:
+        gates = state.get("external_gates", {})
+        if isinstance(gates, dict) and gates.get("enabled"):
+            print()
+            print(BOLD("  External Gate 현황:"))
+            for gate_name in ("technical", "oracle", "acceptance", "github_ci"):
+                gate = gates.get(gate_name, {})
+                if not isinstance(gate, dict):
+                    continue
+                gstatus = str(gate.get("status", "PENDING"))
+                gcolor = GREEN if gstatus == "PASS" else RED if gstatus == "FAIL" else YELLOW
+                print(f"    {gcolor(gate_name):<16} [{gcolor(gstatus):<8}] {gate.get('completed_at') or ''}")
+                if gate.get("evidence"):
+                    print(DIM(f"        증거: {gate.get('evidence')}"))
+            try:
+                blockers = _external_gate_blockers(state)
+            except Exception:
+                blockers = []
+            if blockers and terminal != "COMPLETE":
+                print(RED("    blockers: " + "; ".join(blockers)))
+    except Exception as exc:
+        print(DIM(f"    [External Gate 출력 오류: {exc}]"))
+
+    try:
+        outputs = _ensure_output_registry(state)
+        if outputs.get("items"):
+            print()
+            print(BOLD("  사용자가 확인할 결과물:"))
+            for item in outputs.get("items", [])[:10]:
+                if not isinstance(item, dict):
+                    continue
+                label = item.get("label") or item.get("kind") or "output"
+                public_path = item.get("public_path") or item.get("source_path")
+                print(f"    - {label}: {public_path}")
+    except Exception as exc:
+        print(DIM(f"    [출력 등록부 표시 오류: {exc}]"))
+
+    try:
+        failures = state.get("failure_packets")
+        if isinstance(failures, list) and failures:
+            print()
+            print(BOLD("  최근 실패 패킷:"))
+            for item in failures[-3:]:
+                if not isinstance(item, dict):
+                    continue
+                print(f"    - {item.get('gate')} -> {item.get('repair_owner')} ({item.get('packet_path')})")
+    except Exception as exc:
+        print(DIM(f"    [실패 패킷 표시 오류: {exc}]"))
+
+    try:
+        advisory = _advisory_status_summary(str(pid))
         print()
+        print(BOLD("  GPT Advisory status:"))
+        mode = str(advisory.get("advisory_mode") or "not_run")
+        mode_reason = str(advisory.get("advisory_mode_reason") or "")
+        mode_label_map = {
+            "not_run": "NOT RUN — disabled by default",
+            "skipped": "SKIPPED",
+            "required": "REQUIRED",
+            "blocking": "BLOCKING",
+        }
+        mode_color = {
+            "not_run": YELLOW,
+            "skipped": DIM,
+            "required": GREEN,
+            "blocking": RED,
+        }.get(mode, YELLOW)
+        print(mode_color(f"    mode={mode_label_map.get(mode, mode.upper())}"))
+        if mode_reason:
+            print(DIM(f"    reason: {mode_reason}"))
+        if advisory.get("review_count", 0) == 0:
+            print(DIM("    NOT RUN — no advisory review files recorded"))
+        else:
+            status_counts = advisory.get("status_counts", {}) or {}
+            status_bits = ", ".join(f"{k}={v}" for k, v in sorted(status_counts.items()))
+            print(f"    reviews={advisory.get('review_count', 0)} api_calls={advisory.get('api_call_count', 0)} statuses={status_bits}")
+            print(f"    unresolved_critical={advisory.get('unresolved_critical_count', 0)}")
+        if not advisory.get("api_key_present"):
+            print(DIM("    OPENAI_API_KEY not set; GPT advisory cannot call OpenAI."))
+        elif not advisory.get("enabled"):
+            print(DIM("    ENABLE_GPT_ADVISORY is not 1; GPT advisory API calls are disabled."))
+        elif advisory.get("required"):
+            print(DIM(
+                f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
+                f"REQUIRED mode — auto-calls enabled (key source: {advisory.get('api_key_source', 'unknown')})."
+            ))
+        else:
+            print(DIM(
+                f"    GPT advisory model fixed to {OPENAI_ADVISORY_MODEL}; "
+                f"API calls allowed manually (key source: {advisory.get('api_key_source', 'unknown')}). "
+                f"Auto-run is disabled because ENABLE_GPT_ADVISORY_REQUIRED is not 1."
+            ))
+    except Exception as exc:
+        print(DIM(f"    [Advisory 상태 표시 오류: {exc}]"))
+
+    try:
+        print()
+        if current == "COMPLETE":
+            print(GREEN("  ✓ 파이프라인 완료\n"))
+        else:
+            try:
+                gate_ok, reason = check_gate(state, current) if current in GATE_RULES else (True, "")
+            except Exception as exc:
+                gate_ok, reason = True, ""
+                print(DIM(f"    [게이트 체크 오류: {exc}]"))
+            if gate_ok:
+                print(f"  현재 단계: {YELLOW(PHASE_LABELS.get(current, current))}")
+                if current == "harness":
+                    print(f"  확인 명령: {YELLOW('python pipeline.py gates status')}")
+                    print(f"  다음 게이트: {YELLOW('technical -> oracle -> github-ci -> accept')}")
+                else:
+                    print(f"  확인 명령: {YELLOW(f'python pipeline.py check --phase {current}')}")
+            else:
+                print(RED(f"  [차단] {reason}"))
+            print()
+    except Exception as exc:
+        print(DIM(f"    [현재 단계 안내 오류: {exc}]"))
 
     # Recent log
-    log = state.get("event_log", [])[-5:]
-    if log:
-        print(DIM("  최근 이벤트:"))
-        for entry in log:
-            print(DIM(f"    {entry['ts'][:16]}  {entry['msg']}"))
-        print()
+    try:
+        log = state.get("event_log", [])
+        if isinstance(log, list):
+            log = log[-5:]
+        else:
+            log = []
+        if log:
+            print(DIM("  최근 이벤트:"))
+            for entry in log:
+                if not isinstance(entry, dict):
+                    continue
+                ts = str(entry.get("ts", ""))[:16]
+                msg = entry.get("msg", "")
+                print(DIM(f"    {ts}  {msg}"))
+            print()
+    except Exception as exc:
+        print(DIM(f"    [최근 이벤트 표시 오류: {exc}]"))
 
 
 def cmd_log(args: argparse.Namespace) -> None:
@@ -10580,6 +10845,200 @@ def _count_same_failure_code_attempts(
     return count
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260527-075A: Cost/Attempt Budget Gate (MT-1)
+# ---------------------------------------------------------------------------
+# 목적: phase별(dev/qa/gate)·gate별 최대 재시도 횟수를 강제하고, 동일 failure_code
+#       3회 반복 시 Architect/RCA로 자동 이관한다. Circuit Breaker(qa 동일 signature
+#       2회)와 보완적으로 작동한다.
+#
+# state 신규 키:
+#   state["attempt_budget"] = {
+#     "config": {
+#       "dev_max_attempts": 3, "qa_max_attempts": 3, "gate_max_attempts": 5,
+#       "repeat_failure_code_threshold": 3,
+#     },
+#     "attempts": {"dev": [...], "qa": [...], "gate": [...]},
+#     "blocked_phases": {phase: {"failure_code": str, "blocked_at": iso}},
+#   }
+# attempts 항목: {"outcome": "FAIL"|"PASS", "failure_code": str|None, "timestamp": iso}
+# ---------------------------------------------------------------------------
+
+ATTEMPT_BUDGET_PHASES = ("dev", "qa", "gate")
+ATTEMPT_BUDGET_DEFAULTS = {
+    "dev_max_attempts": 3,
+    "qa_max_attempts": 3,
+    "gate_max_attempts": 5,
+    "repeat_failure_code_threshold": 3,
+}
+
+
+def _ensure_attempt_budget_keys(state: Dict[str, Any]) -> None:
+    """state["attempt_budget"] dict 구조를 idempotent 하게 보장한다.
+
+    구버전 state에 attempt_budget이 없거나 일부 키만 있는 경우 기본값으로 채운다.
+    이미 존재하는 값은 변경하지 않는다.
+    """
+    if not isinstance(state.get("attempt_budget"), dict):
+        state["attempt_budget"] = {}
+    ab = state["attempt_budget"]
+    if not isinstance(ab.get("config"), dict):
+        ab["config"] = dict(ATTEMPT_BUDGET_DEFAULTS)
+    else:
+        for key, default in ATTEMPT_BUDGET_DEFAULTS.items():
+            if key not in ab["config"] or not isinstance(ab["config"][key], int):
+                ab["config"][key] = default
+    if not isinstance(ab.get("attempts"), dict):
+        ab["attempts"] = {p: [] for p in ATTEMPT_BUDGET_PHASES}
+    else:
+        for p in ATTEMPT_BUDGET_PHASES:
+            if not isinstance(ab["attempts"].get(p), list):
+                ab["attempts"][p] = []
+    if not isinstance(ab.get("blocked_phases"), dict):
+        ab["blocked_phases"] = {}
+
+
+def _record_attempt_budget(
+    state: Dict[str, Any],
+    phase: str,
+    outcome: str,
+    failure_code: Optional[str] = None,
+) -> None:
+    """phase별 attempts 리스트에 시도 결과를 누적한다.
+
+    - outcome="FAIL": attempts에 FAIL entry 추가. failure_code도 함께 기록.
+      _detect_repeat_failure_code 호출하여 반복 failure_code 감지.
+    - outcome="PASS": attempts 리스트와 blocked_phases 항목 초기화 (성공 시 한도 리셋).
+    """
+    if phase not in ATTEMPT_BUDGET_PHASES:
+        return
+    if outcome not in ("FAIL", "PASS"):
+        return
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+    if outcome == "PASS":
+        ab["attempts"][phase] = []
+        if phase in ab["blocked_phases"]:
+            del ab["blocked_phases"][phase]
+        return
+    # FAIL
+    entry: Dict[str, Any] = {
+        "outcome": "FAIL",
+        "failure_code": failure_code or None,
+        "timestamp": _now(),
+    }
+    ab["attempts"][phase].append(entry)
+    # 반복 failure_code 감지 (3회째에 자동 표시)
+    repeat_fc = _detect_repeat_failure_code(state, phase)
+    if repeat_fc is not None:
+        ab["blocked_phases"][phase] = {
+            "failure_code": "REPEAT_FAILURE_CODE",
+            "repeat_failure_code": repeat_fc,
+            "blocked_at": _now(),
+        }
+
+
+def _check_attempt_budget(state: Dict[str, Any], phase: str) -> Dict[str, Any]:
+    """phase의 attempt budget 상태를 반환한다.
+
+    반환 dict 키:
+      - blocked (bool): 한도 초과 또는 반복 failure_code 시 True
+      - attempts_used (int): 누적 FAIL 횟수
+      - max_attempts (int): 해당 phase 한도
+      - failure_code (str|None): "BUDGET_EXCEEDED" | "REPEAT_FAILURE_CODE" | None
+      - repeat_failure_code (str|None): 반복 감지된 failure_code 문자열
+    """
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+    if phase not in ATTEMPT_BUDGET_PHASES:
+        return {
+            "blocked": False,
+            "attempts_used": 0,
+            "max_attempts": 0,
+            "failure_code": None,
+            "repeat_failure_code": None,
+        }
+    max_key = f"{phase}_max_attempts"
+    max_attempts = int(ab["config"].get(max_key, ATTEMPT_BUDGET_DEFAULTS.get(max_key, 3)))
+    attempts = [e for e in ab["attempts"].get(phase, []) if isinstance(e, dict) and e.get("outcome") == "FAIL"]
+    attempts_used = len(attempts)
+    repeat_fc = _detect_repeat_failure_code(state, phase)
+    blocked = False
+    failure_code: Optional[str] = None
+    if repeat_fc is not None:
+        blocked = True
+        failure_code = "REPEAT_FAILURE_CODE"
+    elif attempts_used >= max_attempts:
+        blocked = True
+        failure_code = "BUDGET_EXCEEDED"
+    return {
+        "blocked": blocked,
+        "attempts_used": attempts_used,
+        "max_attempts": max_attempts,
+        "failure_code": failure_code,
+        "repeat_failure_code": repeat_fc,
+    }
+
+
+def _is_budget_blocked(state: Dict[str, Any], phase: str) -> bool:
+    """phase의 attempt budget이 차단 상태인지 반환."""
+    return bool(_check_attempt_budget(state, phase).get("blocked"))
+
+
+def _detect_repeat_failure_code(state: Dict[str, Any], phase: str) -> Optional[str]:
+    """동일 failure_code가 threshold 횟수 이상 연속/누적되었는지 검사.
+
+    config["repeat_failure_code_threshold"](기본 3) 회 이상 같은 failure_code가
+    attempts 리스트에 나타나면 그 failure_code 문자열을 반환. 없으면 None.
+    """
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+    if phase not in ATTEMPT_BUDGET_PHASES:
+        return None
+    threshold = int(ab["config"].get("repeat_failure_code_threshold",
+                                     ATTEMPT_BUDGET_DEFAULTS["repeat_failure_code_threshold"]))
+    if threshold <= 0:
+        return None
+    counts: Dict[str, int] = {}
+    for entry in ab["attempts"].get(phase, []):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("outcome") != "FAIL":
+            continue
+        fc = entry.get("failure_code")
+        if not fc:
+            continue
+        counts[str(fc)] = counts.get(str(fc), 0) + 1
+    for fc, n in counts.items():
+        if n >= threshold:
+            return fc
+    return None
+
+
+def _korean_budget_message(
+    phase: str,
+    attempts_used: int,
+    max_attempts: int,
+    failure_code: Optional[str],
+    repeat_failure_code: Optional[str] = None,
+) -> str:
+    """budget 차단 시 사용자에게 보여줄 한국어 메시지 생성.
+
+    "재시도 한도", "초과", "Architect", phase 이름, 남은 횟수를 항상 포함한다.
+    """
+    remaining = max(0, max_attempts - attempts_used)
+    if failure_code == "REPEAT_FAILURE_CODE" and repeat_failure_code:
+        return (
+            f"동일 failure_code '{repeat_failure_code}' {attempts_used}회 반복 — "
+            f"{phase} phase 재시도 한도 안에 있어도 같은 원인이 누적되어 "
+            f"Architect/RCA로 이관합니다. 남은 재시도: {remaining}회."
+        )
+    return (
+        f"재시도 한도 초과 — {phase} phase {attempts_used}/{max_attempts}회 실패. "
+        f"남은 재시도: {remaining}회. Architect로 이관합니다."
+    )
+
+
 def _record_failure_packet(
     state: Dict[str, Any],
     gate_name: str,
@@ -11015,6 +11474,19 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
             failures += 1
     else:
         command = [sys.executable, "-m", "pytest", "-q"]
+        # pytest 실행 전에 전역 STATE_FILE 내용을 메모리에 백업한다.
+        # pytest 스위트 안의 일부 테스트(예: test_three_gate_pipeline.py)가
+        # pipeline.py 내부 함수를 임포트하여 _save(state)를 호출하면서
+        # TMP-HARNESS-AUTO 등 테스트 전용 state로 STATE_FILE을 덮어쓸 수 있다.
+        # 실행 완료 후 STATE_FILE이 오염되었으면 백업으로 복원한다.
+        _orig_state_bytes: Optional[bytes] = None
+        try:
+            if STATE_FILE.exists():
+                _orig_state_bytes = STATE_FILE.read_bytes()
+        except OSError:
+            pass
+        _proc_exc: Optional[Exception] = None
+        proc = None
         try:
             proc = subprocess.run(
                 command,
@@ -11027,13 +11499,29 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
+            _proc_exc = exc
+        finally:
+            # STATE_FILE이 오염되었으면 원래 내용으로 복원한다.
+            try:
+                if _orig_state_bytes is not None and STATE_FILE.exists():
+                    current_bytes = STATE_FILE.read_bytes()
+                    if current_bytes != _orig_state_bytes:
+                        with tempfile.NamedTemporaryFile(
+                            mode="wb", dir=STATE_FILE.parent, delete=False, suffix=".tmp"
+                        ) as _restore_tmp:
+                            _restore_tmp.write(_orig_state_bytes)
+                            _restore_path = _restore_tmp.name
+                        os.replace(_restore_path, str(STATE_FILE))
+            except Exception:
+                pass
+        if _proc_exc is not None:
             failures += 1
             checks.append({
                 "name": "pytest",
                 "status": "ERROR",
                 "command": command,
                 "version": _technical_gate_tool_version("pytest", timeout),
-                "message": str(exc),
+                "message": str(_proc_exc),
             })
             return {
                 "schema_version": 1,
@@ -11230,6 +11718,167 @@ def _cmd_gates_preflight_pr(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     print(GREEN(f"[PREFLIGHT-PR PASS] phase={phase} changed={len(changed_files)}개 파일"))
+    sys.exit(0)
+
+
+# IMP-20260528-3898 MT-2: preflight-pr-impl — 구현 PR(impl 브랜치) 위생 검사.
+# preflight-pr(phase-attestation PR 전용)과 별개로, 구현 PR에 내부 산출물이
+# 섞이지 않았는지 _is_internal_artifact() SSoT를 사용하여 검사합니다.
+def _cmd_gates_preflight_pr_impl(args: argparse.Namespace) -> None:
+    """preflight-pr-impl: 구현 PR에 내부 산출물이 포함되지 않았는지 검사합니다.
+
+    _is_internal_artifact() (WORKSPACE_INTERNAL_PATTERNS SSoT)를 사용하여
+    pipeline 런타임 파일(build_report.xml, scope_manifest_MT-*.json 등)이
+    구현 PR diff에 포함되어 있으면 exit 1로 차단합니다.
+
+    tests/oracles/ 경로는 의도적으로 허용됩니다 (사용자 제공 oracle 파일).
+    """
+    # merge-base 기반 git diff (CI shallow clone 지원)
+    base_sha = os.environ.get("GITHUB_BASE_SHA", "").strip()
+    if not base_sha:
+        _mb = subprocess.run(
+            ["git", "merge-base", "origin/main", "HEAD"],
+            capture_output=True, text=True, check=False,
+        )
+        if _mb.returncode == 0:
+            base_sha = _mb.stdout.strip()
+
+    if base_sha:
+        diff_cmd = ["git", "diff", "--name-only", f"{base_sha}...HEAD"]
+    else:
+        diff_cmd = ["git", "diff", "--name-only", "origin/main...HEAD"]
+
+    result = subprocess.run(diff_cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        _die(
+            f"[PIPELINE ERROR] preflight-pr-impl: git diff 실패: {result.stderr.strip()}",
+            exit_code=1,
+        )
+    changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+
+    # 삭제된 파일은 내부 산출물 검사에서 제외 (정리 행위로 허용)
+    if base_sha:
+        deleted_diff_cmd = ["git", "diff", "--diff-filter=D", "--name-only", f"{base_sha}...HEAD"]
+    else:
+        deleted_diff_cmd = ["git", "diff", "--diff-filter=D", "--name-only", "origin/main...HEAD"]
+    deleted_result = subprocess.run(
+        deleted_diff_cmd,
+        capture_output=True, text=True, check=False,
+    )
+    deleted_files: set = set()
+    if deleted_result.returncode == 0:
+        deleted_files = {f.strip() for f in deleted_result.stdout.splitlines() if f.strip()}
+
+    # 내부 산출물 감지 — tests/oracles/, phase attestation 경로, 삭제된 파일은 허용
+    blocked: List[str] = []
+    allowed: List[str] = []
+    for f in changed_files:
+        normalized = f.replace("\\", "/").strip()
+        # 삭제된 파일은 허용 (내부 파일 정리 행위)
+        if f in deleted_files:
+            allowed.append(f)
+        # oracle 파일은 명시적 허용 (WORKSPACE_INTERNAL_PATTERNS와 무관)
+        elif normalized.startswith("tests/oracles/"):
+            allowed.append(f)
+        # .pipeline/** 내부 디렉토리는 impl 브랜치에서 차단 (.gitignore 대상, 강제 추가로만 가능)
+        # phase-attestation/* 브랜치의 evidence 파일도 impl PR에는 포함하면 안 됨
+        # (IMP-20260528-3898: 사용자 REJECT — impl PR diff에 .pipeline/** 포함 차단)
+        elif normalized.startswith(".pipeline/"):
+            blocked.append(f)
+        elif _is_internal_artifact(f):
+            blocked.append(f)
+        else:
+            allowed.append(f)
+
+    if blocked:
+        # failure_packet 기록 (state 로드 시도)
+        _pf_state: Optional[Dict[str, Any]] = None
+        try:
+            _pf_state = _load()
+        except Exception:
+            _pf_state = None
+        if _pf_state is not None and isinstance(_pf_state, dict):
+            _pf_pid = str(_pf_state.get("pipeline_id") or "UNKNOWN")
+            _pf_paths = _contract_paths(_pf_pid)
+            _attempt = _next_failure_attempt(_pf_paths, "preflight_pr_impl")
+            _pf_packet_path = (
+                _failure_root_from_paths(_pf_paths) / f"preflight_pr_impl_attempt_{_attempt}.json"
+            )
+            _pf_packet: Dict[str, Any] = {
+                "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
+                "pipeline_id": _pf_pid,
+                "phase": "dev",
+                "gate": "preflight_pr_impl",
+                "status": "FAIL",
+                "failure_code": "preflight_pr_impl_internal_artifact",
+                "failure_category": "internal_artifact_in_pr",
+                "summary_ko": (
+                    f"preflight-pr-impl FAIL: 구현 PR에 내부 산출물 {len(blocked)}개 포함"
+                ),
+                "expected": "구현 PR에 내부 산출물(build_report.xml 등) 미포함",
+                "actual": f"차단 파일 {len(blocked)}개: {', '.join(blocked[:5])}",
+                "owner": "Dev",
+                "return_phase": "dev",
+                "required_actions": [
+                    "아래 내부 산출물을 .gitignore에 추가하거나 git rm --cached로 되돌리세요: "
+                    + ", ".join(blocked[:3]),
+                    "내부 산출물은 PR에 포함하지 않습니다 (pipeline 런타임 전용 파일).",
+                ],
+                "retry_allowed": True,
+                "minimal_rerun": [
+                    "python", "pipeline.py", "gates", "preflight-pr-impl",
+                ],
+                "command": [
+                    "python", "pipeline.py", "gates", "preflight-pr-impl",
+                ],
+                "packet_path": str(_pf_packet_path),
+                "attempt": _attempt,
+                "attempt_count": _attempt,
+                "recorded_at": _now(),
+                "created_at": _now(),
+                "exit_code": 1,
+                "blocking_condition": "",
+                "evidence_paths": [],
+                "note": "",
+                "failed_checks": [],
+                "repair_owner": "Dev",
+                "report_excerpt": {"blockers": blocked, "allowed": allowed, "summary": {}},
+                "escalation_reason": None,
+            }
+            _write_json(_pf_packet_path, _pf_packet)
+            _pf_state.setdefault("failure_packets", [])
+            if isinstance(_pf_state.get("failure_packets"), list):
+                _pf_state["failure_packets"].append({
+                    "gate": "preflight_pr_impl",
+                    "attempt": _attempt,
+                    "path": str(_pf_packet_path),
+                    "packet_path": str(_pf_packet_path),
+                    "recorded_at": _pf_packet["recorded_at"],
+                    "repair_owner": "Dev",
+                    "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
+                    "status": "FAIL",
+                    "failure_code": _pf_packet["failure_code"],
+                    "failure_category": "internal_artifact_in_pr",
+                    "owner": "Dev",
+                    "return_phase": "dev",
+                    "attempt_count": _attempt,
+                    "escalation_reason": None,
+                })
+            _save(_pf_state)
+            _print_failure_packet_console(_pf_packet)
+        print("[PIPELINE ERROR] preflight-pr-impl FAIL: 다음 내부 산출물이 구현 PR에 포함되어 있습니다:")
+        for f in blocked:
+            print(f"  - {f}")
+        print("  해결: .gitignore에 해당 파일을 추가하거나 git rm --cached로 되돌리세요.")
+        sys.exit(1)
+
+    print(
+        GREEN(
+            f"[PREFLIGHT-PR-IMPL PASS] "
+            f"changed={len(changed_files)}개 파일 / "
+            f"blocked=0 / allowed={len(allowed)}개"
+        )
+    )
     sys.exit(0)
 
 
@@ -11753,6 +12402,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
     # preflight-pr는 pipeline_state.json 없이도 동작 (CI 환경 지원)
     if action == "preflight-pr":
         _cmd_gates_preflight_pr(args)
+        return
+
+    # IMP-20260528-3898 MT-2: preflight-pr-impl — 구현 PR 내부 산출물 검사 (state 없이도 동작)
+    if action == "preflight-pr-impl":
+        _cmd_gates_preflight_pr_impl(args)
         return
 
     state = _require_state()
@@ -13743,6 +14397,16 @@ def build_parser() -> argparse.ArgumentParser:
                                      default=".pipeline/phase_attestation_request.json",
                                      help="phase_attestation_request.json 경로")
 
+    # IMP-20260528-3898 MT-2: preflight-pr-impl — 구현 PR 내부 산출물 검사
+    gsub.add_parser(
+        "preflight-pr-impl",
+        help=(
+            "구현 PR(impl 브랜치)에 pipeline 내부 산출물(build_report.xml, "
+            "scope_manifest_MT-*.json 등)이 포함되지 않았는지 검사합니다. "
+            "WORKSPACE_INTERNAL_PATTERNS SSoT 사용. CI에서 gates preflight-pr-impl로 호출."
+        ),
+    )
+
     p_gate_consistency = gsub.add_parser(
         "consistency",
         help="Protocol consistency check between PR body, acceptance packet, and actual CI state",
@@ -13922,6 +14586,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_cl_close = cl_sub.add_parser("close", help="클러스터 종료")
     p_cl_close.add_argument("--cluster-id", required=True, help="종료할 클러스터 ID")
+
+    # IMP-20260527-075A MT-2: budget subcommand (Cost/Attempt Budget Gate)
+    p_bg = sub.add_parser("budget", help="attempt budget 관리 (phase별 재시도 한도)")
+    bg_sub = p_bg.add_subparsers(dest="budget_sub", required=True)
+
+    p_bg_status = bg_sub.add_parser("status", help="attempt budget 현황 출력 (한국어)")
+    p_bg_status.add_argument("--pipeline-id", default=None, help="대상 파이프라인 ID (미지정 시 현재 활성)")
+
+    p_bg_reset = bg_sub.add_parser("reset", help="phase별 attempt budget 초기화 (관리자 작업)")
+    p_bg_reset.add_argument("--phase", required=True, choices=["dev", "qa", "gate"],
+                            help="초기화할 phase 이름")
+    p_bg_reset.add_argument("--reason", required=True,
+                            help="초기화 사유 (감사 로그용, 필수)")
 
     # IMP-20260513-4C0B: patch subcommand
     p_pt = sub.add_parser("patch", help="Patch Lane 관리")
@@ -14180,6 +14857,106 @@ def _load_patch_plan(plan_file: str) -> Dict[str, Any]:
             f"[PIPELINE ERROR] patch_plan.json schema_version은 1이어야 합니다. 현재: {schema_ver!r}"
         )
     return plan
+
+
+# ---------------------------------------------------------------------------
+# IMP-20260527-075A MT-2: budget CLI (Cost/Attempt Budget Gate)
+# ---------------------------------------------------------------------------
+
+def cmd_budget(args: "argparse.Namespace") -> None:
+    """budget 서브커맨드 라우터.
+
+    서브커맨드:
+      status -- phase별 attempt budget 현황 한국어 출력
+      reset  -- 특정 phase의 attempts 초기화 (--reason 필수)
+    """
+    sub = getattr(args, "budget_sub", None)
+    if sub == "status":
+        _cmd_budget_status(args)
+    elif sub == "reset":
+        _cmd_budget_reset(args)
+    else:
+        _die(f"[BUDGET ERROR] 알 수 없는 서브커맨드: {sub!r}")
+
+
+def _cmd_budget_status(args: "argparse.Namespace") -> None:
+    """phase별 attempt budget 현황을 한국어로 출력."""
+    state = _load_state()
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+
+    print(f"\n=== {pid} attempt budget 현황 ===\n")
+    for phase in ATTEMPT_BUDGET_PHASES:
+        result = _check_attempt_budget(state, phase)
+        used = result["attempts_used"]
+        maxn = result["max_attempts"]
+        remaining = max(0, maxn - used)
+        if result["blocked"]:
+            status_label = "[차단됨]"
+        else:
+            status_label = "[정상]"
+        print(f"  {phase} phase: 사용 {used}회 / 한도 {maxn}회 (남은 재시도: {remaining}회) {status_label}")
+
+    # 반복 failure_code 요약
+    print()
+    repeat_found = False
+    for phase in ATTEMPT_BUDGET_PHASES:
+        repeat_fc = _detect_repeat_failure_code(state, phase)
+        if repeat_fc:
+            print(f"  반복 failure_code 감지 — {phase} phase: '{repeat_fc}' (Architect/RCA 이관 권장)")
+            repeat_found = True
+    if not repeat_found:
+        print("  반복 failure_code: 없음")
+
+    # 차단된 phase 요약
+    blocked = ab.get("blocked_phases") or {}
+    if blocked:
+        print()
+        print("  차단된 phase 상세:")
+        for phase, info in blocked.items():
+            if isinstance(info, dict):
+                fc = info.get("failure_code", "?")
+                print(f"    - {phase}: {fc}")
+
+    # 보존 정책: state 저장하지 않음 (status는 read-only)
+    print()
+    sys.exit(0)
+
+
+def _cmd_budget_reset(args: "argparse.Namespace") -> None:
+    """특정 phase의 attempts 리스트와 blocked_phases 항목을 초기화.
+
+    --phase: 초기화할 phase (dev/qa/gate)
+    --reason: 초기화 사유 (감사 로그용, argparse required=True로 강제)
+    """
+    state = _load_state()
+    pid = str(state.get("pipeline_id") or "UNKNOWN")
+    phase = args.phase
+    reason = str(args.reason or "").strip()
+    if not reason:
+        _die("[BUDGET ERROR] --reason 값이 비어 있습니다. 초기화 사유를 명시하세요.")
+    _ensure_attempt_budget_keys(state)
+    ab = state["attempt_budget"]
+    prev_attempts = len(ab["attempts"].get(phase, []))
+    ab["attempts"][phase] = []
+    if phase in ab["blocked_phases"]:
+        del ab["blocked_phases"][phase]
+    # 감사 이벤트 기록 (state.event_log에 추가)
+    state.setdefault("event_log", []).append({
+        "ts": _now(),
+        "type": "BUDGET_RESET",
+        "phase": phase,
+        "previous_attempts": prev_attempts,
+        "reason": reason,
+    })
+    _save(state)
+    print(GREEN(
+        f"\n[BUDGET RESET] {pid} — {phase} phase attempt budget 초기화 완료\n"
+        f"  이전 attempts: {prev_attempts}회 -> 0회\n"
+        f"  사유: {reason}\n"
+    ))
+    sys.exit(0)
 
 
 def cmd_cluster(args: "argparse.Namespace") -> None:
@@ -15592,6 +16369,7 @@ COMMAND_MAP = {
     "cluster":              cmd_cluster,
     "patch":                cmd_patch,
     "metrics":              cmd_metrics,
+    "budget":               cmd_budget,
 }
 
 

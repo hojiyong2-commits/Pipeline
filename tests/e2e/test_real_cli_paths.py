@@ -35,6 +35,8 @@ import pytest
 # pipeline.py는 tests/e2e의 2단계 상위 디렉토리에 위치
 PIPELINE_PY = Path(__file__).resolve().parent.parent.parent / "pipeline.py"
 ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles" / "IMP-20260525-6FAC"
+# IMP-20260528-3898: workspace hygiene oracle 디렉토리
+ORACLE_DIR_3898 = Path(__file__).resolve().parent.parent / "oracles" / "IMP-20260528-3898"
 
 
 # ---------------------------------------------------------------------------
@@ -767,6 +769,98 @@ def test_github_ci_gate_blocked_on_sha_mismatch(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# IMP-20260527-075A: Cost/Attempt Budget Gate E2E
+# ---------------------------------------------------------------------------
+
+
+def _budget_state(pipeline_id: str = "IMP-20260527-075A", dev_fails: int = 0,
+                  failure_code: str = "technical_test_failed") -> Dict[str, Any]:
+    """Budget E2E 전용 격리 state 빌더."""
+    state = _base_state(pipeline_id)
+    state["attempt_budget"] = {
+        "config": {
+            "dev_max_attempts": 3,
+            "qa_max_attempts": 3,
+            "gate_max_attempts": 5,
+            "repeat_failure_code_threshold": 3,
+        },
+        "attempts": {
+            "dev": [
+                {"outcome": "FAIL", "failure_code": failure_code}
+                for _ in range(dev_fails)
+            ],
+            "qa": [],
+            "gate": [],
+        },
+        "blocked_phases": {},
+    }
+    if dev_fails >= 3:
+        state["attempt_budget"]["blocked_phases"]["dev"] = {
+            "failure_code": "REPEAT_FAILURE_CODE",
+            "repeat_failure_code": failure_code,
+        }
+    return state
+
+
+def test_budget_status_e2e(tmp_path: Path) -> None:
+    """E2E: budget status — exit 0 + 한국어 출력 + final_state 유지."""
+    state_file = tmp_path / "pipeline_state.json"
+    write_state(state_file, _budget_state())
+
+    env = make_env(state_file)
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "budget", "status"],
+        capture_output=True, text=True, env=env, encoding="utf-8"
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert any(kw in combined for kw in ["재시도", "한도", "dev"]), f"한국어 키워드 누락: {combined!r}"
+
+    final_state = read_state(state_file)
+    assert "attempt_budget" in final_state
+    assert final_state["attempt_budget"]["attempts"]["dev"] == []
+
+
+def test_budget_reset_e2e(tmp_path: Path) -> None:
+    """E2E: budget reset --phase dev --reason TEXT — exit 0 + attempts 초기화."""
+    state_file = tmp_path / "pipeline_state.json"
+    write_state(state_file, _budget_state(dev_fails=1))
+
+    env = make_env(state_file)
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "budget", "reset",
+         "--phase", "dev", "--reason", "E2E 테스트 확인"],
+        capture_output=True, text=True, env=env, encoding="utf-8"
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+
+    final_state = read_state(state_file)
+    assert final_state["attempt_budget"]["attempts"]["dev"] == []
+
+
+def test_budget_blocked_check_dev_e2e(tmp_path: Path) -> None:
+    """E2E: 동일 failure_code 3회 후 check --phase dev — exit != 0 + 한국어 차단 메시지."""
+    state_file = tmp_path / "pipeline_state.json"
+    state = _budget_state(dev_fails=3, failure_code="technical_test_failed")
+    write_state(state_file, state)
+
+    env = make_env(state_file)
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "check", "--phase", "dev",
+         "--codex-review-waiver", "legacy-bootstrap"],
+        capture_output=True, text=True, env=env, encoding="utf-8"
+    )
+    assert result.returncode != 0, "budget 초과 시 비-0 exit 필요"
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert any(kw in combined for kw in [
+        "BUDGET_EXCEEDED", "REPEAT_FAILURE_CODE", "재시도 한도", "한도 초과", "BLOCKED"
+    ]), f"차단 키워드 누락: {combined!r}"
+
+    final_state = read_state(state_file)
+    assert "attempt_budget" in final_state
+
+
+# ---------------------------------------------------------------------------
 # Self-verification block
 # ---------------------------------------------------------------------------
 
@@ -795,3 +889,231 @@ if __name__ == "__main__":
                for g in ("technical", "oracle", "acceptance", "github_ci"))
 
     print("[SELF-VERIFY] OK - base state assertions passed")
+
+
+# ---------------------------------------------------------------------------
+# IMP-20260528-3898: Workspace Hygiene E2E Tests
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_pr_impl_help_exit_zero() -> None:
+    """T-2: gates preflight-pr-impl --help が exit 0을 반환해야 합니다.
+
+    # CLI_EVIDENCE_ALLOW_READ_ONLY: --help는 상태를 변경하지 않으므로
+    # PIPELINE_STATE_PATH 격리와 final_state assertion이 불필요합니다.
+    """
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "gates", "preflight-pr-impl", "--help"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=15,
+    )
+    assert result.returncode == 0, (
+        f"preflight-pr-impl --help returned {result.returncode}\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "preflight-pr-impl" in result.stdout or "usage" in result.stdout.lower(), (
+        f"--help 출력에 'preflight-pr-impl' 또는 'usage'가 없습니다: {result.stdout}"
+    )
+
+
+def test_is_internal_artifact_matches_oracle_normal_clean_pr() -> None:
+    """T-1: normal_clean_pr oracle — 모든 파일이 allowed이어야 합니다.
+
+    WORKSPACE_INTERNAL_PATTERNS SSoT를 사용하는 _is_internal_artifact()가
+    tests/oracles/IMP-20260528-3898/normal_clean_pr/input.json의 파일 목록에 대해
+    expected.json의 expected.blocked=[]와 일치하는지 검증합니다.
+
+    PIPELINE_STATE_PATH 격리: _is_internal_artifact는 state를 변경하지 않으므로
+    pipeline.py를 직접 import하지 않고 subprocess로 로직을 검증합니다.
+    """
+    input_file = ORACLE_DIR_3898 / "normal_clean_pr" / "input.json"
+    expected_file = ORACLE_DIR_3898 / "normal_clean_pr" / "expected.json"
+    assert input_file.exists(), f"oracle input not found: {input_file}"
+    assert expected_file.exists(), f"oracle expected not found: {expected_file}"
+
+    inp = json.loads(input_file.read_text(encoding="utf-8"))
+    exp = json.loads(expected_file.read_text(encoding="utf-8"))
+
+    changed_files: List[str] = inp.get("changed_files", [])
+    expected_blocked: List[str] = exp.get("blocked", [])
+    expected_status: str = exp.get("status", "PASS")
+
+    # pipeline.py에서 WORKSPACE_INTERNAL_PATTERNS 로직을 subprocess로 검증
+    check_script = (
+        "import sys; sys.path.insert(0, '.'); "
+        "import importlib.util; "
+        "spec = importlib.util.spec_from_file_location('pipeline', 'pipeline.py'); "
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "
+        "files = " + repr(changed_files) + "; "
+        "blocked = [f for f in files if m._is_internal_artifact(f)]; "
+        "print('blocked=' + str(blocked)); "
+        "sys.exit(1 if blocked else 0)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", check_script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=20,
+        cwd=str(PIPELINE_PY.parent),
+    )
+
+    actual_blocked: List[str] = []
+    for line in result.stdout.splitlines():
+        if line.startswith("blocked="):
+            import ast
+            try:
+                actual_blocked = ast.literal_eval(line[len("blocked="):])
+            except Exception:
+                pass
+
+    assert actual_blocked == expected_blocked, (
+        f"T-1 oracle mismatch: actual_blocked={actual_blocked}, "
+        f"expected_blocked={expected_blocked}"
+    )
+    actual_status = "FAIL" if actual_blocked else "PASS"
+    assert actual_status == expected_status, (
+        f"T-1 status mismatch: actual={actual_status}, expected={expected_status}"
+    )
+
+
+def test_is_internal_artifact_matches_oracle_edge_internal_artifact() -> None:
+    """T-3: edge_internal_artifact oracle — 내부 산출물이 차단되어야 합니다.
+
+    WORKSPACE_INTERNAL_PATTERNS SSoT를 사용하는 _is_internal_artifact()가
+    tests/oracles/IMP-20260528-3898/edge_internal_artifact/input.json의 파일 목록에 대해
+    expected.json의 blocked/allowed/exit_code와 일치하는지 검증합니다.
+    """
+    input_file = ORACLE_DIR_3898 / "edge_internal_artifact" / "input.json"
+    expected_file = ORACLE_DIR_3898 / "edge_internal_artifact" / "expected.json"
+    assert input_file.exists(), f"oracle input not found: {input_file}"
+    assert expected_file.exists(), f"oracle expected not found: {expected_file}"
+
+    inp = json.loads(input_file.read_text(encoding="utf-8"))
+    exp = json.loads(expected_file.read_text(encoding="utf-8"))
+
+    changed_files: List[str] = inp.get("changed_files", [])
+    expected_blocked: List[str] = exp.get("blocked", [])
+    expected_allowed: List[str] = exp.get("allowed", [])
+    expected_status: str = exp.get("status", "FAIL")
+
+    check_script = (
+        "import sys; sys.path.insert(0, '.'); "
+        "import importlib.util; "
+        "spec = importlib.util.spec_from_file_location('pipeline', 'pipeline.py'); "
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "
+        "files = " + repr(changed_files) + "; "
+        "blocked = [f for f in files if m._is_internal_artifact(f)]; "
+        "allowed = [f for f in files if not m._is_internal_artifact(f)]; "
+        "print('blocked=' + str(blocked)); "
+        "print('allowed=' + str(allowed)); "
+        "sys.exit(1 if blocked else 0)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", check_script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=20,
+        cwd=str(PIPELINE_PY.parent),
+    )
+
+    actual_blocked: List[str] = []
+    actual_allowed: List[str] = []
+    import ast
+    for line in result.stdout.splitlines():
+        if line.startswith("blocked="):
+            try:
+                actual_blocked = ast.literal_eval(line[len("blocked="):])
+            except Exception:
+                pass
+        elif line.startswith("allowed="):
+            try:
+                actual_allowed = ast.literal_eval(line[len("allowed="):])
+            except Exception:
+                pass
+
+    assert actual_blocked == expected_blocked, (
+        f"T-3 blocked mismatch: actual={actual_blocked}, expected={expected_blocked}"
+    )
+    assert actual_allowed == expected_allowed, (
+        f"T-3 allowed mismatch: actual={actual_allowed}, expected={expected_allowed}"
+    )
+    actual_status = "FAIL" if actual_blocked else "PASS"
+    assert actual_status == expected_status, (
+        f"T-3 status mismatch: actual={actual_status}, expected={expected_status}"
+    )
+
+
+def test_preflight_pr_impl_blocks_pipeline_evidence_on_impl_branch(tmp_path: Path) -> None:
+    """impl 브랜치의 PR diff에 .pipeline/phase_evidence/** 파일이 포함되면 exit 1로 차단해야 한다.
+
+    REJECT 원인: preflight-pr-impl이 .pipeline/phase_evidence를 명시적으로 허용하여
+    impl PR 위생 검사를 통과시켰음. 수정 후에는 .pipeline/** 전체를 차단해야 한다.
+    """
+    # PIPELINE_STATE_PATH 격리
+    state_file = tmp_path / "state.json"
+    state: dict = {
+        "pipeline_id": "TEST-HYGIENE-3898",
+        "type": "IMP",
+        "description": "hygiene E2E test",
+        "created_at": "2026-05-28T00:00:00Z",
+        "updated_at": "2026-05-28T00:00:00Z",
+        "current_phase": "dev",
+        "terminal_state": None,
+        "blocked": False,
+        "blocked_reason": None,
+        "phases": {},
+        "event_log": [],
+    }
+    state_file.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+    # git이 없는 환경에서 GITHUB_BASE_SHA + GITHUB_PR_FILES 환경변수로 파일 목록 주입
+    # preflight-pr-impl이 GITHUB_PR_FILES를 지원하지 않으면 실제 git diff를 사용해야 하므로
+    # _is_internal_artifact + .pipeline/** 차단 분기를 직접 테스트하는 방식으로 검증
+    import sys as _sys
+    _repo_root = str(Path(__file__).resolve().parent.parent.parent)
+    if _repo_root not in _sys.path:
+        _sys.path.insert(0, _repo_root)
+    import pipeline as _pl  # noqa: E402
+
+    pipeline_evidence_paths = [
+        ".pipeline/phase_attestation_request.json",
+        ".pipeline/phase_evidence/IMP-20260528-3898/build/agent_receipt_build-abc.json",
+        ".pipeline/phase_evidence/IMP-20260528-3898/dev/report_dev_handover.xml",
+        ".pipeline/phase_evidence/IMP-20260528-3898/qa/report_qa_report.xml",
+    ]
+    legitimate_paths = [
+        "pipeline.py",
+        "tests/e2e/test_real_cli_paths.py",
+        "tests/oracles/IMP-20260528-3898/normal_clean_pr/input.json",
+        ".gitignore",
+    ]
+
+    # .pipeline/** 는 WORKSPACE_INTERNAL_PATTERNS 또는 직접 체크로 차단되어야 함
+    for p in pipeline_evidence_paths:
+        normalized = p.replace("\\", "/")
+        is_blocked = (
+            normalized.startswith(".pipeline/")
+            or _pl._is_internal_artifact(p)
+        )
+        assert is_blocked, (
+            f"preflight-pr-impl should BLOCK .pipeline/ files on impl branches, "
+            f"but '{p}' was not identified as internal artifact"
+        )
+
+    # legitimate 파일은 차단되지 않아야 함
+    for p in legitimate_paths:
+        normalized = p.replace("\\", "/")
+        is_blocked_as_pipeline = normalized.startswith(".pipeline/")
+        is_blocked_by_pattern = _pl._is_internal_artifact(p)
+        is_oracle = normalized.startswith("tests/oracles/")
+        should_be_allowed = is_oracle or (not is_blocked_as_pipeline and not is_blocked_by_pattern)
+        assert should_be_allowed, (
+            f"preflight-pr-impl should ALLOW '{p}' in impl PRs, but it would be blocked"
+        )

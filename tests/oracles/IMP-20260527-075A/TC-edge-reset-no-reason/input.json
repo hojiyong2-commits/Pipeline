@@ -1,0 +1,19 @@
+{
+  "case_id": "TC-edge-reset-no-reason",
+  "case_kind": "edge",
+  "description": "`python pipeline.py budget reset --phase dev` 명령에 --reason 인자가 빠지면 CLI는 비-0 exit code로 실패해야 한다. budget은 변경되지 않는다.",
+  "pipeline_id": "TEST-PIPELINE-004",
+  "phase": "dev",
+  "budget_config": {
+    "dev_max_attempts": 3,
+    "qa_max_attempts": 3,
+    "gate_max_attempts": 5,
+    "repeat_failure_code_threshold": 3
+  },
+  "attempts_history": [
+    {"phase": "dev", "outcome": "FAIL", "failure_code": "TYPE_ERROR", "timestamp": "2026-05-27T05:00:00Z"},
+    {"phase": "dev", "outcome": "FAIL", "failure_code": "TYPE_ERROR", "timestamp": "2026-05-27T05:05:00Z"},
+    {"phase": "dev", "outcome": "FAIL", "failure_code": "TYPE_ERROR", "timestamp": "2026-05-27T05:10:00Z"}
+  ],
+  "cli_command": "python pipeline.py budget reset --phase dev"
+}

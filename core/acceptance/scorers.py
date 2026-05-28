@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -271,27 +273,80 @@ def score_exe_launch_check(test: dict[str, Any], base_dir: Path, project_dir: Pa
         return False, f"EXE launch failed: {exc}", {"exe": str(exe_path)}
 
 
+def _build_command_check_env(
+    given: dict[str, Any],
+    base_dir: Path,
+    project_dir: Path,
+) -> tuple[dict[str, str], str | None]:
+    """given 블록의 isolation/fixture/env를 처리하여 subprocess 환경변수를 반환한다.
+
+    Returns:
+        (env_dict, tmp_dir_to_cleanup) — tmp_dir_to_cleanup은 사용 후 삭제할 임시 디렉토리
+        경로이거나 None.
+    """
+    env = dict(os.environ)
+    tmp_dir: str | None = None
+
+    isolation = given.get("isolation")
+    if isolation == "PIPELINE_STATE_PATH":
+        fixture_path = given.get("fixture")
+        if fixture_path:
+            # fixture 파일에서 state를 읽어 임시 파일에 씀
+            resolved_fixture = Path(fixture_path)
+            if not resolved_fixture.is_absolute():
+                resolved_fixture = project_dir / fixture_path
+            try:
+                fixture_data = json.loads(resolved_fixture.read_text(encoding="utf-8"))
+                state_content = fixture_data.get("preconditions", {}).get("state_file") or {}
+            except (OSError, json.JSONDecodeError, AttributeError):
+                state_content = {}
+        else:
+            state_content = {}
+        tmp_dir = tempfile.mkdtemp(prefix="oracle_cmd_check_")
+        tmp_state = os.path.join(tmp_dir, "oracle_isolated_state.json")
+        with open(tmp_state, "w", encoding="utf-8") as f:
+            json.dump(state_content, f, ensure_ascii=False, indent=2)
+        env["PIPELINE_STATE_PATH"] = tmp_state
+
+    # when.env 오버라이드 지원
+    extra_env = given.get("env")
+    if isinstance(extra_env, dict):
+        env.update({str(k): str(v) for k, v in extra_env.items()})
+
+    return env, tmp_dir
+
+
 def score_command_check(test: dict[str, Any], base_dir: Path, project_dir: Path) -> tuple[bool, str, dict[str, Any]]:
     when = test.get("when", {})
     then = test.get("then", {})
+    given = test.get("given", {})
     if not isinstance(when, dict) or not isinstance(then, dict):
         raise ScoringError("when and then objects are required")
+    if not isinstance(given, dict):
+        given = {}
     command = when.get("command")
     if not isinstance(command, list) or not command:
         raise ScoringError("when.command must be a non-empty list")
     resolved_command = [sys.executable if part == "{python}" else str(part) for part in command]
     cwd = _resolve(base_dir, str(when["cwd"])) if when.get("cwd") else project_dir
     timeout = int(when.get("timeout_seconds", 30))
-    proc = subprocess.run(
-        resolved_command,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-        check=False,
-    )
+    cmd_env, tmp_dir = _build_command_check_env(given, base_dir, project_dir)
+    try:
+        proc = subprocess.run(
+            resolved_command,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env=cmd_env,
+            check=False,
+        )
+    finally:
+        if tmp_dir is not None:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     expected_returncode = int(then.get("returncode", 0))
     stdout_contains = then.get("stdout_contains")
     stderr_contains = then.get("stderr_contains")

@@ -180,6 +180,12 @@ def test_runtime_artifacts_not_in_git_tracked() -> None:
         "pipeline_contracts/",
         "pipeline_outputs/",
     ]
+    # phase attestation evidence는 프로토콜상 의도적으로 PR에 force-add됨
+    # CLAUDE.md "Phase Evidence Git Hygiene" 참조
+    phase_attestation_allowed_prefixes = [
+        ".pipeline/phase_evidence/",
+        ".pipeline/phase_attestation_request.json",
+    ]
     result = subprocess.run(
         ["git", "diff", "--name-only", "main", "HEAD"],
         capture_output=True,
@@ -190,6 +196,12 @@ def test_runtime_artifacts_not_in_git_tracked() -> None:
         pytest.skip("git diff main HEAD 실패 — git 이력 없음")
     changed_files = result.stdout.splitlines()
     for changed in changed_files:
+        # phase attestation 경로는 허용
+        if any(
+            changed.startswith(prefix) or changed == prefix
+            for prefix in phase_attestation_allowed_prefixes
+        ):
+            continue
         for pattern in forbidden_patterns:
             assert pattern not in changed, f"PR에 포함 금지 파일: {changed}"
         for dir_pattern in forbidden_dirs:

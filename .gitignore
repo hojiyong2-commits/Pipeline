@@ -90,3 +90,17 @@ Thumbs.db
 
 # Human acceptance packets (local use only — not for git tracking)
 human_acceptance_packet.md
+
+# IMP-20260528-3898: 추가 내부 산출물 (WORKSPACE_INTERNAL_PATTERNS SSoT 보완)
+codex_review_result.json
+codex_run_raw.json
+protocol_consistency_result.json
+bandit_e2e_result*.json
+acceptance_comment.json
+acceptance_packet.md
+restore_*.py
+test_artifacts/
+manager_handoff.xml
+preflight_report.json
+failure_packet.json
+pipeline_outputs/

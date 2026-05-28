@@ -32,52 +32,13 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: 구현 PR 위생 검사 (내부 산출물 오염 방지)
+        # IMP-20260528-3898 MT-4: SSoT 호출로 교체 — WORKSPACE_INTERNAL_PATTERNS를 pipeline.py가 관리
         if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'phase-attestation/')
-        shell: pwsh
         env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PIPELINE_NO_DASHBOARD: "1"
         run: |
-          $ErrorActionPreference = "Stop"
-          $baseRef = "${{ github.event.pull_request.base.ref }}"
-          if ([string]::IsNullOrWhiteSpace($baseRef)) { $baseRef = "main" }
-          git fetch origin $baseRef --depth=50
-          $baseSha = "${{ github.event.pull_request.base.sha }}"
-          if ([string]::IsNullOrWhiteSpace($baseSha)) {
-            $baseSha = git merge-base "origin/$baseRef" HEAD
-          }
-          $changedFiles = git diff --name-only "$baseSha" HEAD
-          $forbiddenPatterns = @(
-            '^\.pipeline[/\\]',
-            '^pipeline_contracts[/\\]',
-            '^pipeline_outputs[/\\]',
-            '^pipeline_state.*\.json$',
-            '^build_report\.xml$',
-            '^qa_report\.xml$',
-            '^codex_review_result\.json$',
-            '^integration_report\.xml$',
-            '^dev_handover\.xml$',
-            '^step_plan\.xml$',
-            '^architect_report\.xml$',
-            'module_.*\.xml$',
-            '^scope_manifest.*\.json$',
-            '^preflight_report\.json$',
-            '^failure_packet\.json$',
-            '^manager_handoff\.xml$'
-          )
-          $violations = @()
-          foreach ($file in $changedFiles) {
-            foreach ($pattern in $forbiddenPatterns) {
-              if ($file -match $pattern) {
-                $violations += $file
-                break
-              }
-            }
-          }
-          if ($violations.Count -gt 0) {
-            Write-Error "[PIPELINE ERROR] 구현 PR에 내부 파이프라인 산출물이 포함되어 있습니다:`n$($violations -join [System.Environment]::NewLine)"
-            exit 1
-          }
-          Write-Host "구현 PR 위생 검사 통과 — 내부 산출물 없음 ($($changedFiles.Count)개 파일 확인)"
+          python pipeline.py gates preflight-pr-impl
 
       - name: 단계 PR 위생 검사 (preflight-pr)
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'phase-attestation/')
@@ -159,6 +120,7 @@ jobs:
 
       - name: 최종 확인 안내 만들기
         if: success() && github.event_name == 'pull_request'
+        continue-on-error: true
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -604,6 +566,7 @@ jobs:
 
       - name: PR에 최종 확인 안내 남기기
         if: success() && github.event_name == 'pull_request'
+        continue-on-error: true
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}

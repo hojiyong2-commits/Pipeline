@@ -1,0 +1,23 @@
+{
+  "case_id": "TC-edge-repeat-failure-code",
+  "expected_source": "user_provided",
+  "budget_check_result": {
+    "status": "BLOCKED",
+    "blocked": true,
+    "phase": "qa",
+    "attempts_used": 3,
+    "attempts_max": 5,
+    "remaining_attempts": 2,
+    "repeat_failure_code": "TYPE_ERROR",
+    "repeat_failure_count": 3,
+    "failure_packet_created": true,
+    "failure_packet_failure_code": "REPEAT_FAILURE_CODE",
+    "failure_packet_return_phase": "architect",
+    "rca_handoff_required": true
+  },
+  "korean_user_message_must_contain": [
+    "동일",
+    "TYPE_ERROR",
+    "Architect"
+  ]
+}
