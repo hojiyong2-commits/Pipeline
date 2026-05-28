@@ -1058,7 +1058,7 @@ def test_preflight_pr_impl_blocks_pipeline_evidence_on_impl_branch(tmp_path: Pat
     """
     # PIPELINE_STATE_PATH 격리
     state_file = tmp_path / "state.json"
-    state = {
+    state: dict = {
         "pipeline_id": "TEST-HYGIENE-3898",
         "type": "IMP",
         "description": "hygiene E2E test",
