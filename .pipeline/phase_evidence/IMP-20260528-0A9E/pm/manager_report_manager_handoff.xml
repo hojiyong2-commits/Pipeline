@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260528-0A9E</pipeline_id>
+  <manager_run_id>pipeline_manager-1bce7471185dd2b1</manager_run_id>
+  <planner_run_id>pm_planner-f8a20ae7e86f4b24</planner_run_id>
+  <from>pipeline-manager-agent</from>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <step_plan_sha256>74ce9537b3671970f42fe693695adb0004066e7723b716632571271e119e1810</step_plan_sha256>
+  <step_plan_accepted>true</step_plan_accepted>
+  <status>READY_FOR_DEV</status>
+  <design_answers>
+    <answer id="DQ-1">A — 요약 표 + golden_report.md 첨부</answer>
+    <answer id="DQ-2">A — smoke=true 3개 모두 CI 실행</answer>
+  </design_answers>
+  <phase_plan>
+    <phase id="MT-1" name="GoldenTaskScaffold" target="tests/golden_tasks/">tests/golden_tasks/ 디렉터리 + 3개 golden task seed 파일</phase>
+    <phase id="MT-2" name="GoldenCLI" target="pipeline.py">pipeline.py golden list/run CLI 추가</phase>
+    <phase id="MT-3" name="GoldenRunnerCore" target="pipeline.py">_golden_run_one, _verify_allowed/forbidden, _compare_expected, failure_packet 추가</phase>
+    <phase id="MT-4" name="GoldenE2ETests" target="tests/e2e/test_golden_tasks.py">E2E 테스트 — subprocess + PIPELINE_STATE_PATH 격리</phase>
+    <phase id="MT-5" name="CIIntegration" target=".github/workflows/ci.yml, CLAUDE.md">ci.yml Golden Task Smoke + CLAUDE.md golden 정책 섹션</phase>
+  </phase_plan>
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING">tests/golden_tasks/ 구조 + GT-001/002/003 seed</mt>
+    <mt id="MT-2" status="PENDING">pipeline.py cmd_golden list/run 추가</mt>
+    <mt id="MT-3" status="PENDING">pipeline.py _golden_run_one 검증 코어 추가</mt>
+    <mt id="MT-4" status="PENDING">tests/e2e/test_golden_tasks.py 작성</mt>
+    <mt id="MT-5" status="PENDING">ci.yml smoke 단계 + CLAUDE.md 동기화</mt>
+  </micro_tasks>
+  <notes>HIGH_RISK 프로필. 변경 파일: tests/golden_tasks/**, pipeline.py, tests/e2e/test_golden_tasks.py, .github/workflows/ci.yml, CLAUDE.md</notes>
+  <branch>impl/IMP-20260528-0A9E</branch>
+</manager_handoff>
