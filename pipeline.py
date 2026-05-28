@@ -11821,7 +11821,7 @@ def _cmd_gates_preflight_pr_impl(args: argparse.Namespace) -> None:
                 "owner": "Dev",
                 "return_phase": "dev",
                 "required_actions": [
-                    f"아래 내부 산출물을 .gitignore에 추가하거나 git rm --cached로 되돌리세요: "
+                    "아래 내부 산출물을 .gitignore에 추가하거나 git rm --cached로 되돌리세요: "
                     + ", ".join(blocked[:3]),
                     "내부 산출물은 PR에 포함하지 않습니다 (pipeline 런타임 전용 파일).",
                 ],
