@@ -11369,6 +11369,18 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
             failures += 1
     else:
         command = [sys.executable, "-m", "pytest", "-q"]
+        _tmp_state_file = tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, mode="w", encoding="utf-8"
+        )
+        try:
+            _tmp_state_file.write("{}")
+            _tmp_state_file.close()
+            _gate_env = {**os.environ, "PIPELINE_STATE_PATH": _tmp_state_file.name}
+        except OSError:
+            _gate_env = dict(os.environ)
+        _tmp_state_path = _tmp_state_file.name
+        _proc_exc: Optional[Exception] = None
+        proc = None
         try:
             proc = subprocess.run(
                 command,
@@ -11378,16 +11390,24 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
                 encoding="utf-8",
                 errors="replace",
                 timeout=timeout,
+                env=_gate_env,
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
+            _proc_exc = exc
+        finally:
+            try:
+                os.unlink(_tmp_state_path)
+            except OSError:
+                pass
+        if _proc_exc is not None:
             failures += 1
             checks.append({
                 "name": "pytest",
                 "status": "ERROR",
                 "command": command,
                 "version": _technical_gate_tool_version("pytest", timeout),
-                "message": str(exc),
+                "message": str(_proc_exc),
             })
             return {
                 "schema_version": 1,

@@ -31,9 +31,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-import pytest
+from typing import Any, Dict, Optional
 
 
 # pipeline.py는 tests/e2e의 2단계 상위 디렉토리에 위치
