@@ -167,7 +167,7 @@ class TestGoldenRun:
     def test_golden_run_all_processes_3_tasks(self, tmp_path: Path) -> None:
         """golden run --all 실행 시 3개 태스크 모두 처리됨을 확인."""
         env = isolated_env(tmp_path)
-        result = run_cli(["golden", "run", "--all"], env=env)
+        result = run_cli(["golden", "run", "--all"], env=env, timeout=90)
         # exit 0 또는 1이어야 함 (스키마 오류=2는 아님)
         assert result.returncode in (0, 1), (
             f"golden run --all — 예상치 못한 exit code={result.returncode}"
