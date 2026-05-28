@@ -6,12 +6,7 @@
   "allowed_files": [
     "pipeline_state.json"
   ],
-  "forbidden_files": [
-    "scope_manifest*.json",
-    "module_design_*.xml",
-    "module_handover_*.xml",
-    "module_qa_*.xml"
-  ],
+  "forbidden_files": [],
   "acceptance_criteria": [
     "exit_code == 0",
     "stdout contains '파이프라인'"

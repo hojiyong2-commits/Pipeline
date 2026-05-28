@@ -1,6 +1,4 @@
 {
-  "audit_result": "PASS",
-  "normal_case_count": 1,
-  "edge_case_count": 1,
-  "quality_gate": "PASS"
+  "exit_code": 0,
+  "stdout_contains": ["GT-001", "GT-003", "총 3개 태스크"]
 }

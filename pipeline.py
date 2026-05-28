@@ -16572,6 +16572,8 @@ def _golden_run_one(task: Dict[str, Any]) -> Dict[str, Any]:
             cmd.split(),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
         )
         stdout_text = proc.stdout or ""

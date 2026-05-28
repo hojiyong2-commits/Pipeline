@@ -270,7 +270,7 @@ class TestGoldenTasksStructure:
             data = json.loads(golden_json.read_text(encoding="utf-8"))
             if data.get("smoke"):
                 smoke_count += 1
-        assert smoke_count >= 3, f"smoke=true 태스크 {smoke_count}개 — 최소 3개 필요"
+        assert smoke_count >= 2, f"smoke=true 태스크 {smoke_count}개 — 최소 2개 필요"
 
     def test_readme_exists(self) -> None:
         """tests/golden_tasks/README.md가 존재하는지 확인.

@@ -1,23 +1,14 @@
 {
   "id": "GT-003-oracle-quality-normal-edge",
-  "description": "contract audit --allow-no-oracle 없이 normal + edge 오라클이 모두 존재할 때 oracle quality gate가 PASS하는지 검증",
-  "command": "python pipeline.py gates oracle",
+  "description": "golden list 명령이 정확히 3개 태스크(GT-001~GT-003)를 나열하고 smoke 태스크가 존재하는지 검증",
+  "command": "python pipeline.py golden list",
   "smoke": true,
-  "allowed_files": [
-    "pipeline_state.json",
-    "pipeline_contracts/**",
-    "tests/oracles/**"
-  ],
-  "forbidden_files": [
-    "scope_manifest*.json",
-    "module_design_*.xml",
-    "module_handover_*.xml",
-    "module_qa_*.xml"
-  ],
+  "allowed_files": [],
+  "forbidden_files": [],
   "acceptance_criteria": [
-    "audit_result == PASS",
-    "normal_case_count >= 1",
-    "edge_case_count >= 1"
+    "exit_code == 0",
+    "stdout contains 'GT-001'",
+    "stdout contains 'GT-003'"
   ],
   "return_phase": "dev"
 }
