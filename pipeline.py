@@ -16449,7 +16449,6 @@ def _verify_allowed_files(task: Dict[str, Any], changed_files: Optional[List[str
 
     Returns: allowed_files에 포함되지 않은 파일 목록 (빈 리스트면 모두 허용됨).
     """
-    import fnmatch
     import subprocess as _subprocess
     allowed_patterns: List[str] = task.get("allowed_files", [])
     if not allowed_patterns:
@@ -16461,7 +16460,7 @@ def _verify_allowed_files(task: Dict[str, Any], changed_files: Optional[List[str
                 ["git", "diff", "--name-only", "HEAD"],
                 capture_output=True, text=True, timeout=10,
             )
-            changed_files = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+            changed_files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
         except (OSError, _subprocess.TimeoutExpired):
             return []
     violations: List[str] = []

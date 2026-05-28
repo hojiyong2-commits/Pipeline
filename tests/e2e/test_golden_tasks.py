@@ -19,11 +19,10 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
-import pytest
+import pytest  # noqa: F401 — pytest fixtures (tmp_path) 사용을 위해 필요
 
 # pipeline.py는 tests/e2e의 2단계 상위 디렉토리에 위치
 PIPELINE_PY = Path(__file__).resolve().parent.parent.parent / "pipeline.py"
