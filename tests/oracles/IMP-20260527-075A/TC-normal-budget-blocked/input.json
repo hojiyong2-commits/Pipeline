@@ -1,0 +1,19 @@
+{
+  "case_id": "TC-normal-budget-blocked",
+  "case_kind": "normal",
+  "description": "dev phase에서 max_attempts (3회)를 초과하여 4회째 재진입을 시도하면 BLOCKED 처리되고 failure_packet이 생성되어야 한다.",
+  "pipeline_id": "TEST-PIPELINE-002",
+  "phase": "dev",
+  "budget_config": {
+    "dev_max_attempts": 3,
+    "qa_max_attempts": 3,
+    "gate_max_attempts": 5,
+    "repeat_failure_code_threshold": 3
+  },
+  "attempts_history": [
+    {"phase": "dev", "outcome": "FAIL", "failure_code": "TYPE_ERROR", "timestamp": "2026-05-27T05:00:00Z"},
+    {"phase": "dev", "outcome": "FAIL", "failure_code": "IMPORT_ERROR", "timestamp": "2026-05-27T05:05:00Z"},
+    {"phase": "dev", "outcome": "FAIL", "failure_code": "SYNTAX_ERROR", "timestamp": "2026-05-27T05:10:00Z"}
+  ],
+  "check_phase": "dev"
+}

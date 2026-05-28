@@ -767,6 +767,98 @@ def test_github_ci_gate_blocked_on_sha_mismatch(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# IMP-20260527-075A: Cost/Attempt Budget Gate E2E
+# ---------------------------------------------------------------------------
+
+
+def _budget_state(pipeline_id: str = "IMP-20260527-075A", dev_fails: int = 0,
+                  failure_code: str = "technical_test_failed") -> Dict[str, Any]:
+    """Budget E2E 전용 격리 state 빌더."""
+    state = _base_state(pipeline_id)
+    state["attempt_budget"] = {
+        "config": {
+            "dev_max_attempts": 3,
+            "qa_max_attempts": 3,
+            "gate_max_attempts": 5,
+            "repeat_failure_code_threshold": 3,
+        },
+        "attempts": {
+            "dev": [
+                {"outcome": "FAIL", "failure_code": failure_code}
+                for _ in range(dev_fails)
+            ],
+            "qa": [],
+            "gate": [],
+        },
+        "blocked_phases": {},
+    }
+    if dev_fails >= 3:
+        state["attempt_budget"]["blocked_phases"]["dev"] = {
+            "failure_code": "REPEAT_FAILURE_CODE",
+            "repeat_failure_code": failure_code,
+        }
+    return state
+
+
+def test_budget_status_e2e(tmp_path: Path) -> None:
+    """E2E: budget status — exit 0 + 한국어 출력 + final_state 유지."""
+    state_file = tmp_path / "pipeline_state.json"
+    write_state(state_file, _budget_state())
+
+    env = make_env(state_file)
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "budget", "status"],
+        capture_output=True, text=True, env=env, encoding="utf-8"
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert any(kw in combined for kw in ["재시도", "한도", "dev"]), f"한국어 키워드 누락: {combined!r}"
+
+    final_state = read_state(state_file)
+    assert "attempt_budget" in final_state
+    assert final_state["attempt_budget"]["attempts"]["dev"] == []
+
+
+def test_budget_reset_e2e(tmp_path: Path) -> None:
+    """E2E: budget reset --phase dev --reason TEXT — exit 0 + attempts 초기화."""
+    state_file = tmp_path / "pipeline_state.json"
+    write_state(state_file, _budget_state(dev_fails=1))
+
+    env = make_env(state_file)
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "budget", "reset",
+         "--phase", "dev", "--reason", "E2E 테스트 확인"],
+        capture_output=True, text=True, env=env, encoding="utf-8"
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+
+    final_state = read_state(state_file)
+    assert final_state["attempt_budget"]["attempts"]["dev"] == []
+
+
+def test_budget_blocked_check_dev_e2e(tmp_path: Path) -> None:
+    """E2E: 동일 failure_code 3회 후 check --phase dev — exit != 0 + 한국어 차단 메시지."""
+    state_file = tmp_path / "pipeline_state.json"
+    state = _budget_state(dev_fails=3, failure_code="technical_test_failed")
+    write_state(state_file, state)
+
+    env = make_env(state_file)
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "check", "--phase", "dev",
+         "--codex-review-waiver", "legacy-bootstrap"],
+        capture_output=True, text=True, env=env, encoding="utf-8"
+    )
+    assert result.returncode != 0, "budget 초과 시 비-0 exit 필요"
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert any(kw in combined for kw in [
+        "BUDGET_EXCEEDED", "REPEAT_FAILURE_CODE", "재시도 한도", "한도 초과", "BLOCKED"
+    ]), f"차단 키워드 누락: {combined!r}"
+
+    final_state = read_state(state_file)
+    assert "attempt_budget" in final_state
+
+
+# ---------------------------------------------------------------------------
 # Self-verification block
 # ---------------------------------------------------------------------------
 

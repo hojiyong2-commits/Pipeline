@@ -1,0 +1,19 @@
+{
+  "case_id": "TC-edge-reset-no-reason",
+  "expected_source": "user_provided",
+  "cli_result": {
+    "exit_code": 2,
+    "exit_code_nonzero": true,
+    "stderr_must_contain": [
+      "reason",
+      "필수"
+    ],
+    "state_changed": false,
+    "attempts_after_reset_count": 3
+  },
+  "korean_user_message_must_contain": [
+    "reason",
+    "필수",
+    "취소"
+  ]
+}

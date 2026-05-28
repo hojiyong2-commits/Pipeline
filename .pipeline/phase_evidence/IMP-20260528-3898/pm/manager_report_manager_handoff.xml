@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260528-3898</pipeline_id>
+  <planner_run_id>pm_planner-624df89711031e2e</planner_run_id>
+  <manager_run_id>pipeline_manager-eb7590a900e98e1e</manager_run_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>5d7470da6305814933b5d008b3e0dcb792b27645f75a7c82ce21fd3f919e805b</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <step_plan_accepted>true</step_plan_accepted>
+  <design_decisions>
+    <decision id="DQ-1">A — pipeline.py SSoT, CI가 gates preflight-pr-impl 호출</decision>
+    <decision id="DQ-2">A — 내부 산출물 차단 + deployment_manifest blocked_internal_artifacts 기록</decision>
+  </design_decisions>
+  <phase_plan>
+    <phase id="MT-1" name="WorkspaceHygieneSSoT" target="pipeline.py">WORKSPACE_INTERNAL_PATTERNS 상수 + _is_internal_artifact() 신설</phase>
+    <phase id="MT-2" name="PreflightPrImpl" target="pipeline.py">gates preflight-pr-impl 서브커맨드 신설</phase>
+    <phase id="MT-3" name="DeployArtifactFilter" target="pipeline.py">_deployment_artifacts/_deploy_accepted_outputs 내부 산출물 필터 + manifest 기록</phase>
+    <phase id="MT-4" name="CIGitignore" target=".github/workflows/ci.yml, .gitignore">ci.yml SSoT 호출 교체 + .gitignore 보강</phase>
+    <phase id="MT-5" name="E2ETests" target="tests/e2e/test_real_cli_paths.py">Real CLI Path E2E 테스트 3개 추가</phase>
+  </phase_plan>
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING">WORKSPACE_INTERNAL_PATTERNS + _is_internal_artifact() 신설</mt>
+    <mt id="MT-2" status="PENDING">gates preflight-pr-impl 서브커맨드 신설</mt>
+    <mt id="MT-3" status="PENDING">_deployment_artifacts 내부 산출물 필터 + manifest 기록</mt>
+    <mt id="MT-4" status="PENDING">ci.yml SSoT 교체 + .gitignore 보강</mt>
+    <mt id="MT-5" status="PENDING">E2E 테스트 3개 추가</mt>
+  </micro_tasks>
+  <notes>STANDARD 프로필. 변경 파일: pipeline.py, .github/workflows/ci.yml, .gitignore, tests/e2e/test_real_cli_paths.py</notes>
+</manager_handoff>
