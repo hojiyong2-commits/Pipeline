@@ -1,1 +1,1 @@
-{"status": "FAIL", "blocked": ["build_report.xml", "scope_manifest_MT-1.json", "failure_packet.json"], "allowed": ["pipeline.py", "tests/oracles/X/case/input.json"], "exit_code": 1}
+{"status": "FAIL", "blocked": ["build_report.xml", "scope_manifest_MT-1.json", "failure_packet.json", ".pipeline/phase_evidence/IMP-20260528-3898/pm/receipt.json", ".pipeline/phase_attestation_request.json"], "allowed": ["pipeline.py", "tests/oracles/X/case/input.json"], "exit_code": 1}

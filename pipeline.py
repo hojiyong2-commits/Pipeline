@@ -11780,12 +11780,11 @@ def _cmd_gates_preflight_pr_impl(args: argparse.Namespace) -> None:
         # oracle 파일은 명시적 허용 (WORKSPACE_INTERNAL_PATTERNS와 무관)
         elif normalized.startswith("tests/oracles/"):
             allowed.append(f)
-        # phase attestation 파일은 허용 — impl 브랜치에서 force-add하는 경우
-        # (CLAUDE.md: "phase evidence files are transient CI inputs, force-added on phase branch")
-        elif normalized == ".pipeline/phase_attestation_request.json":
-            allowed.append(f)
-        elif normalized.startswith(".pipeline/phase_evidence/"):
-            allowed.append(f)
+        # .pipeline/** 내부 디렉토리는 impl 브랜치에서 차단 (.gitignore 대상, 강제 추가로만 가능)
+        # phase-attestation/* 브랜치의 evidence 파일도 impl PR에는 포함하면 안 됨
+        # (IMP-20260528-3898: 사용자 REJECT — impl PR diff에 .pipeline/** 포함 차단)
+        elif normalized.startswith(".pipeline/"):
+            blocked.append(f)
         elif _is_internal_artifact(f):
             blocked.append(f)
         else:
