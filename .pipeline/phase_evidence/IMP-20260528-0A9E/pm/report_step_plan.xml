@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260528-0A9E: Golden Task Regression Suite -->
+<!-- pm_planner agent_run_id: pm_planner-f8a20ae7e86f4b24 -->
+
+<decomposition_audit>
+  <total_functions_identified>9</total_functions_identified>
+  <micro_task_count>5</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>사용자 요청 10개 항목을 책임 단위로 5개 micro_task로 묶었습니다. (1) golden task 디렉터리/스키마/3개 task seed (FS 영역), (2) golden CLI subcommand 추가 (AL 영역, pipeline.py), (3) allowed_files/forbidden_files/expected 검증 로직 + failure_packet 통합, (4) E2E subprocess 테스트 추가, (5) CI 워크플로우 smoke 통합. 동일 사이클에서 producer(pipeline.py)와 consumer(ci.yml, tests, docs)를 함께 패치하여 분리 패치를 금지합니다.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260528-0A9E</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: Golden Task Regression Suite 구현 계획</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>AL, FS, BUILD</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>Trust-Root 파일(pipeline.py, .github/workflows/ci.yml, tests/**)을 신규 명령어 + 새 디렉토리(tests/golden_tasks/) + CI 단계 추가로 변경합니다. 새 의존성은 없지만 pipeline.py에 새 CLI 서브명령(golden list/run/run --all)이 추가되어 단일 함수/파일을 넘는 변경이며 HIGH_RISK 트리거 중 "pipeline_protocol"과 "build_or_deploy(CI)"에 해당합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>2</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>10</expected_changed_files>
+      <expected_changed_functions>9</expected_changed_functions>
+      <expected_changed_lines>650</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>true</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 변수명, golden_task.json 키의 camelCase/snake_case 같은 코드 스타일 취향, 함수 분리 위치(같은 cmd_golden 함수 안에서 처리할지 별도 _golden_runner 모듈로 뺄지) 같은 P2 질문은 사용자에게 묻지 않고 기존 pipeline.py 패턴(cmd_*/_cmd_* 분리, snake_case)을 그대로 따릅니다. 유지보수성을 최우선으로 둡니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-2">
+        <user_facing_question>golden run --task 또는 --all 명령이 실패했을 때, 실패한 golden task 결과를 어디까지 화면에 보여드릴까요?</user_facing_question>
+        <evidence>사용자 요청 "사용자에게는 한국어로 어떤 golden task가 통과/실패했는지 쉽게 보여준다"는 표시 형태를 두 가지로 해석할 수 있습니다 (간단 표 vs 상세 diff). 기존 pipeline.py는 [PIPELINE ERROR] 한 줄 + JSON 파일 기록 패턴을 씁니다.</evidence>
+        <why_it_matters>실패 정보 양이 너무 적으면 사용자가 원인을 못 찾고, 너무 많으면 콘솔이 어지러워 ACCEPT/REJECT 판단이 어렵습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>요약 표(통과/실패/사유 1줄) + 상세 내용은 failure_packet.json과 pipeline_outputs/&lt;pipeline_id&gt;/golden_report.md에 저장</label>
+            <benefit>화면이 깔끔하고, 사용자는 PR/Actions에서 첨부파일로 상세를 열어볼 수 있어 ACCEPT 판단이 쉽습니다.</benefit>
+            <cost>실패 원인을 보려면 한 단계 더 파일을 열어야 합니다.</cost>
+          </option>
+          <option id="B">
+            <label>실패한 task의 expected vs actual diff를 콘솔에 전부 출력</label>
+            <benefit>한 화면에서 모든 실패 원인을 즉시 볼 수 있습니다.</benefit>
+            <cost>여러 golden task가 실패하면 콘솔이 매우 길어지고, CI 로그가 무거워집니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 — 요약 표 + golden_report.md 첨부 방식</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="ci_scope" mt_id="MT-5">
+        <user_facing_question>CI에서 "최소 smoke golden task"를 어느 범위로 정의할까요?</user_facing_question>
+        <evidence>사용자 요청 "CI에서 최소 smoke golden task를 실행한다"는 범위가 모호합니다. 3개 golden task 모두 CI에서 돌릴지, 일부만 돌릴지 선택지가 있습니다.</evidence>
+        <why_it_matters>CI 시간 vs 회귀 안전망 사이 트레이드오프이며, 너무 적게 잡으면 회귀 검출력이 약하고 너무 많이 잡으면 CI가 무거워집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>3개 golden task 전부 CI에서 smoke로 실행 (현재 등록된 모든 smoke=true task)</label>
+            <benefit>회귀 검출 범위가 최대이고, smoke 플래그로 명시적으로 표시되어 향후 task 추가 시에도 일관성 있습니다.</benefit>
+            <cost>CI 시간이 증가하지만 (subprocess 3회) golden task가 status/preflight/oracle 검증 정도라 1분 미만 예상.</cost>
+          </option>
+          <option id="B">
+            <label>가장 빠른 1개(예: status COMPLETE)만 smoke로 CI 실행, 나머지는 로컬 전용</label>
+            <benefit>CI 시간 영향이 거의 없습니다.</benefit>
+            <cost>CI에서 회귀를 검출 못 하고, 머지 후 발견될 위험이 있습니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 — smoke=true 표시된 3개 모두 CI 실행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: tests/golden_tasks/&lt;task_id&gt;/golden_task.json (필수 필드: id, description, input, expected, allowed_files, forbidden_files, acceptance_criteria, smoke), tests/golden_tasks/&lt;task_id&gt;/input/*, tests/golden_tasks/&lt;task_id&gt;/expected/*
+    - Output:
+      * stdout: 한국어 요약 표 (task_id | 결과 | 사유)
+      * pipeline_outputs/&lt;active_pipeline_id&gt;/golden_report.md (사용자 확인용 보고서)
+      * failure_packet.json (실패 시 task_id, failure_code, return_phase, blocked_reason 포함)
+      * exit code: 모든 task PASS=0, 1개 이상 FAIL=1, 스키마 오류=2
+    - Validation:
+      * golden_task.json 스키마 검증 (필수 키 누락 시 [PIPELINE ERROR] + exit 2)
+      * allowed_files 외 파일 변경 감지 시 FAIL
+      * forbidden_files 변경 감지 시 FAIL
+      * expected 출력과 actual 출력의 정규화 비교 (JSON deep equal 또는 normalized text)
+  </interface_spec>
+
+  <requirements>
+    - tests/golden_tasks/ 디렉터리 신규 생성 (CODEOWNERS 보호 대상 추가)
+    - golden_task.json JSON Schema 정의 (id 패턴, smoke boolean, return_phase enum)
+    - pipeline.py에 cmd_golden + 서브파서 추가: list, run --task &lt;id&gt;, run --all, run --smoke
+    - allowed_files / forbidden_files 검증은 _is_internal_artifact() 와 같은 SSoT 패턴(GOLDEN_TASK_ALLOWED_GLOBS) 사용
+    - expected 비교는 JSON deep-equal 우선, 텍스트는 줄 단위 정규화 후 비교
+    - 실패 시 failure_packet.json 작성 — schema_v2 호환 (failure_code, return_phase, blocked_reason)
+    - return_phase 매핑: golden task 실패는 기본 "dev" (사용자가 acceptance_criteria에서 override 가능)
+    - 3개 golden task seed (모두 smoke=true):
+      * GT-001-status-complete-exit0: `python pipeline.py status` 종료 코드 0
+      * GT-002-internal-artifact-blocked: `preflight-pr-impl` 가 build_report.xml 등을 차단
+      * GT-003-oracle-quality-normal-edge: `contract audit-oracle` 이 normal+edge 1개씩 통과
+    - 모든 golden task는 PIPELINE_STATE_PATH 격리 + subprocess 기반 실제 CLI 호출 (BUG-20260525-39DE CLI Evidence Contract 준수)
+    - tests/e2e/test_golden_tasks.py 추가: list/run/run --all/실패 케이스 모두 subprocess + final_state assertion 포함
+    - .github/workflows/ci.yml에 "Golden Task Smoke 실행" 단계 추가 (preflight-pr-impl 단계 직후, 한국어 step name)
+    - pipeline_outputs/&lt;pipeline_id&gt;/golden_report.md 자동 생성 후 `python pipeline.py outputs add` 로 등록
+    - 최종 ACCEPT 보고서(human_acceptance_packet.md)에 golden task 결과 표 포함 의무
+    - Documentation-Code Drift 방지 (IMP-20260507-0EDC): pipeline.py 신규 명령 추가 시 CLAUDE.md 의 "## Pipeline Enforcer 연동" 표에 golden 명령 행 추가, 인라인 주석 동기화
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>tests.golden_tasks.scaffold_directory_seed</affected_function>
+      <target_files>
+        <file>tests/golden_tasks/GT-001-status-complete-exit0/golden_task.json</file>
+        <file>tests/golden_tasks/GT-001-status-complete-exit0/input/state.json</file>
+        <file>tests/golden_tasks/GT-001-status-complete-exit0/expected/stdout_contains.json</file>
+        <file>tests/golden_tasks/GT-002-internal-artifact-blocked/golden_task.json</file>
+        <file>tests/golden_tasks/GT-002-internal-artifact-blocked/input/changed_files.json</file>
+        <file>tests/golden_tasks/GT-002-internal-artifact-blocked/expected/result.json</file>
+        <file>tests/golden_tasks/GT-003-oracle-quality-normal-edge/golden_task.json</file>
+        <file>tests/golden_tasks/GT-003-oracle-quality-normal-edge/input/oracle_manifest.json</file>
+        <file>tests/golden_tasks/GT-003-oracle-quality-normal-edge/expected/audit_result.json</file>
+        <file>tests/golden_tasks/README.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>tests/golden_tasks</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>tests/golden_tasks/ 신규 디렉터리 + 3개 golden task seed (input/expected/golden_task.json) + README</change_summary>
+      <line_estimate>180</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline.cmd_golden</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.main (argparse subparser 등록)</site>
+        <site>pipeline.cmd_outputs (golden_report.md 자동 등록 경로)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>^def cmd_|sub\.add_parser\(</pattern>
+        <match_count>120</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py에 cmd_golden 서브명령 추가 (list/run --task/run --all/run --smoke) + JSON 스키마 검증 헬퍼 (_load_golden_task, _validate_golden_schema, _cmd_golden_list, _cmd_golden_run)</change_summary>
+      <line_estimate>220</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._golden_run_one</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_golden_run</site>
+        <site>pipeline._acceptance_blocked (failure_packet schema_v2 재사용)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_is_internal_artifact|failure_packet\.json|return_phase</pattern>
+        <match_count>15</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>golden task 실행/검증 코어 (_golden_run_one, _verify_allowed_files, _verify_forbidden_files, _compare_expected_actual, _write_golden_failure_packet): allowed/forbidden 파일 검증 + expected 비교 + failure_packet 작성 + golden_report.md 생성</change_summary>
+      <line_estimate>180</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>tests.e2e.test_golden_tasks.test_suite</affected_function>
+      <target_files>
+        <file>tests/e2e/test_golden_tasks.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PIPELINE_STATE_PATH|subprocess\.run|final_state</pattern>
+        <match_count>40</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>E2E subprocess 테스트 (CLI Evidence Contract 준수): golden list / run --task / run --all PASS / run 실패 케이스 / 스키마 오류 케이스 모두 PIPELINE_STATE_PATH 격리</change_summary>
+      <line_estimate>220</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>github.workflows.ci.golden_smoke_step</affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+        <file>CLAUDE.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>CI workflow tests job — preflight-pr-impl 단계 직후</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>preflight-pr-impl|gates preflight</pattern>
+        <match_count>6</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>ci.yml에 "Golden Task Smoke 실행" 한국어 단계 추가 + CLAUDE.md "Pipeline Enforcer 연동" 표에 golden 명령 정책 섹션 추가 (Documentation-Code Drift 방지)</change_summary>
+      <line_estimate>50</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.12 — CI 환경 일치 (.github/workflows/ci.yml python-version "3.12")</python_version>
+  <env_specs>
+    <python>3.12</python>
+    <vscode>Pylance basic, pythonAnalysis.extraPaths 기본값. 신규 의존성 없음 — requirements.txt 변경 없음.</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - `python pipeline.py golden list` 가 3개 task를 한국어 요약 표로 출력하고 exit 0 반환
+    - `python pipeline.py golden run --task GT-001-status-complete-exit0` 가 PASS 시 exit 0, 실패 시 failure_packet.json 작성 + exit 1
+    - `python pipeline.py golden run --all` 이 3개 모두 실행하고 요약 표 + pipeline_outputs/&lt;id&gt;/golden_report.md 생성
+    - `python pipeline.py golden run --smoke` 가 smoke=true task만 필터해서 실행
+    - 의도적으로 GT-002의 allowed_files 외 파일을 추가한 fixture 케이스가 EXCEEDS_SCOPE FAIL을 정확히 검출
+    - 스키마 위반(필수 키 누락) 시 [PIPELINE ERROR] + exit 2 (절대 traceback 출력 금지)
+    - failure_packet.json 에 schema_v2 호환 필드(failure_code, return_phase, blocked_reason, task_id) 포함
+    - golden_report.md 가 한국어 표 형식으로 (task_id | 결과 | 사유 | 상세 링크) 작성됨
+    - tests/e2e/test_golden_tasks.py 의 모든 테스트가 PIPELINE_STATE_PATH 격리 + final_state assertion 포함 (CLI Evidence Contract PASS)
+    - CI 워크플로우의 "Golden Task Smoke 실행" 단계가 PR/push 양쪽에서 실행되고 실패 시 CI 빨강 표시
+    - CLAUDE.md 의 Pipeline Enforcer 연동 표에 golden 명령 정책 섹션 추가 (Drift 방지)
+    - 엣지케이스 최소 3개: (1) golden_task.json 누락 디렉터리, (2) input 파일 누락, (3) expected 파일 누락
+    - Codex Review Gate plan stage ACCEPT 필요 (Dev 진입 전)
+    - Codex Review Gate scope stage ACCEPT 필요 (Dev 진입 전, allowed_files/forbidden_files 자동 계산)
+    - Codex Review Gate code stage ACCEPT 필요 (QA 진입 전)
+  </acceptance_criteria>
+
+  <forbidden>
+    - pipeline.py 의 기존 cmd_* 함수 시그니처/동작 변경 금지 (신규 cmd_golden만 추가)
+    - WORKSPACE_INTERNAL_PATTERNS 수정 금지 (SSoT 보호 — golden task 결과물은 별도 GOLDEN_TASK_OUTPUT_DIR 패턴으로 처리)
+    - .github/workflows/ci.yml 의 기존 단계 순서/내용 변경 금지 (신규 단계만 추가)
+    - tests/oracles/** 디렉터리 변경 금지 (oracle과 golden task는 별도 책임)
+    - 새 Python 패키지 추가 금지 (requirements.txt/requirements-dev.txt 변경 금지)
+    - golden_task.json 스키마를 oracle expected.json 형식과 혼동 금지 (golden은 acceptance_criteria + allowed_files 보유)
+    - main 브랜치에 직접 commit 금지 — phase-attestation/IMP-20260528-0A9E 브랜치 사용
+    - 임시 파일(scope_manifest.json, module_*.xml, build_report.xml 등) 을 PR에 포함 금지 — preflight-pr-impl 이 차단
+  </forbidden>
+
+  <handover_template>
+    <handover_ref>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260528-0A9E</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/golden_tasks/GT-001-status-complete-exit0/golden_task.json</file>
+        <file>tests/golden_tasks/GT-002-internal-artifact-blocked/golden_task.json</file>
+        <file>tests/golden_tasks/GT-003-oracle-quality-normal-edge/golden_task.json</file>
+        <file>tests/e2e/test_golden_tasks.py</file>
+        <file>.github/workflows/ci.yml</file>
+        <file>CLAUDE.md</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_ref>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_real_cli_paths.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.github\workflows\ci.yml</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260528-3898\normal_clean_pr\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\CLAUDE.md</file>
+    </target_files>
+    <phase_rules_excerpt>
+      - HIGH_RISK 프로필: pipeline.py + ci.yml 동시 변경, conservative repair + per-phase CI 의무
+      - Trust-Root 파일 (pipeline.py, .github/workflows/**, CLAUDE.md, tests/**) 변경은 phase-attestation/IMP-20260528-0A9E 브랜치 + CODEOWNERS 승인 경로 필수
+      - CLI Evidence Contract (BUG-20260525-39DE): 상태 변경 CLI 호출마다 PIPELINE_STATE_PATH 격리 + final_state assertion
+      - Real CLI Path E2E Gate Policy (IMP-20260525-6FAC): 내부 함수 직접 호출 테스트 금지, subprocess 기반 실제 CLI 호출만 인정
+      - Producer-Consumer Bundle Patch: pipeline.py 신규 명령 + ci.yml + CLAUDE.md 동시 패치, 분리 패치 금지
+      - WORKSPACE_INTERNAL_PATTERNS / _is_internal_artifact() 는 SSoT — golden task 결과물은 별도 패턴 사용
+      - Codex Review Gate plan/scope/code stage ACCEPT 필수 (GPT-5.5 모델)
+    </phase_rules_excerpt>
+    <prev_phase_summary>새 파이프라인. 기존 IMP-20260528-3898 (preflight-pr-impl + WORKSPACE_INTERNAL_PATTERNS SSoT)가 머지된 상태에서 시작.</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
