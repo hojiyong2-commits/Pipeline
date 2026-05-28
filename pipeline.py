@@ -11369,16 +11369,17 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
             failures += 1
     else:
         command = [sys.executable, "-m", "pytest", "-q"]
-        _tmp_state_file = tempfile.NamedTemporaryFile(
-            suffix=".json", delete=False, mode="w", encoding="utf-8"
-        )
+        # pytest 실행 전에 전역 STATE_FILE 내용을 메모리에 백업한다.
+        # pytest 스위트 안의 일부 테스트(예: test_three_gate_pipeline.py)가
+        # pipeline.py 내부 함수를 임포트하여 _save(state)를 호출하면서
+        # TMP-HARNESS-AUTO 등 테스트 전용 state로 STATE_FILE을 덮어쓸 수 있다.
+        # 실행 완료 후 STATE_FILE이 오염되었으면 백업으로 복원한다.
+        _orig_state_bytes: Optional[bytes] = None
         try:
-            _tmp_state_file.write("{}")
-            _tmp_state_file.close()
-            _gate_env = {**os.environ, "PIPELINE_STATE_PATH": _tmp_state_file.name}
+            if STATE_FILE.exists():
+                _orig_state_bytes = STATE_FILE.read_bytes()
         except OSError:
-            _gate_env = dict(os.environ)
-        _tmp_state_path = _tmp_state_file.name
+            pass
         _proc_exc: Optional[Exception] = None
         proc = None
         try:
@@ -11390,15 +11391,23 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
                 encoding="utf-8",
                 errors="replace",
                 timeout=timeout,
-                env=_gate_env,
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             _proc_exc = exc
         finally:
+            # STATE_FILE이 오염되었으면 원래 내용으로 복원한다.
             try:
-                os.unlink(_tmp_state_path)
-            except OSError:
+                if _orig_state_bytes is not None and STATE_FILE.exists():
+                    current_bytes = STATE_FILE.read_bytes()
+                    if current_bytes != _orig_state_bytes:
+                        with tempfile.NamedTemporaryFile(
+                            mode="wb", dir=STATE_FILE.parent, delete=False, suffix=".tmp"
+                        ) as _restore_tmp:
+                            _restore_tmp.write(_orig_state_bytes)
+                            _restore_path = _restore_tmp.name
+                        os.replace(_restore_path, str(STATE_FILE))
+            except Exception:
                 pass
         if _proc_exc is not None:
             failures += 1
