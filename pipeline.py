@@ -11769,7 +11769,7 @@ def _cmd_gates_preflight_pr_impl(args: argparse.Namespace) -> None:
     if deleted_result.returncode == 0:
         deleted_files = {f.strip() for f in deleted_result.stdout.splitlines() if f.strip()}
 
-    # 내부 산출물 감지 — tests/oracles/ 경로와 삭제된 파일은 허용
+    # 내부 산출물 감지 — tests/oracles/, phase attestation 경로, 삭제된 파일은 허용
     blocked: List[str] = []
     allowed: List[str] = []
     for f in changed_files:
@@ -11779,6 +11779,12 @@ def _cmd_gates_preflight_pr_impl(args: argparse.Namespace) -> None:
             allowed.append(f)
         # oracle 파일은 명시적 허용 (WORKSPACE_INTERNAL_PATTERNS와 무관)
         elif normalized.startswith("tests/oracles/"):
+            allowed.append(f)
+        # phase attestation 파일은 허용 — impl 브랜치에서 force-add하는 경우
+        # (CLAUDE.md: "phase evidence files are transient CI inputs, force-added on phase branch")
+        elif normalized == ".pipeline/phase_attestation_request.json":
+            allowed.append(f)
+        elif normalized.startswith(".pipeline/phase_evidence/"):
             allowed.append(f)
         elif _is_internal_artifact(f):
             blocked.append(f)
