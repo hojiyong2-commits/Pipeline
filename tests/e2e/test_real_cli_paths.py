@@ -35,6 +35,8 @@ import pytest
 # pipeline.py는 tests/e2e의 2단계 상위 디렉토리에 위치
 PIPELINE_PY = Path(__file__).resolve().parent.parent.parent / "pipeline.py"
 ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles" / "IMP-20260525-6FAC"
+# IMP-20260528-3898: workspace hygiene oracle 디렉토리
+ORACLE_DIR_3898 = Path(__file__).resolve().parent.parent / "oracles" / "IMP-20260528-3898"
 
 
 # ---------------------------------------------------------------------------
@@ -887,3 +889,162 @@ if __name__ == "__main__":
                for g in ("technical", "oracle", "acceptance", "github_ci"))
 
     print("[SELF-VERIFY] OK - base state assertions passed")
+
+
+# ---------------------------------------------------------------------------
+# IMP-20260528-3898: Workspace Hygiene E2E Tests
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_pr_impl_help_exit_zero() -> None:
+    """T-2: gates preflight-pr-impl --help が exit 0을 반환해야 합니다.
+
+    # CLI_EVIDENCE_ALLOW_READ_ONLY: --help는 상태를 변경하지 않으므로
+    # PIPELINE_STATE_PATH 격리와 final_state assertion이 불필요합니다.
+    """
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "gates", "preflight-pr-impl", "--help"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=15,
+    )
+    assert result.returncode == 0, (
+        f"preflight-pr-impl --help returned {result.returncode}\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "preflight-pr-impl" in result.stdout or "usage" in result.stdout.lower(), (
+        f"--help 출력에 'preflight-pr-impl' 또는 'usage'가 없습니다: {result.stdout}"
+    )
+
+
+def test_is_internal_artifact_matches_oracle_normal_clean_pr() -> None:
+    """T-1: normal_clean_pr oracle — 모든 파일이 allowed이어야 합니다.
+
+    WORKSPACE_INTERNAL_PATTERNS SSoT를 사용하는 _is_internal_artifact()가
+    tests/oracles/IMP-20260528-3898/normal_clean_pr/input.json의 파일 목록에 대해
+    expected.json의 expected.blocked=[]와 일치하는지 검증합니다.
+
+    PIPELINE_STATE_PATH 격리: _is_internal_artifact는 state를 변경하지 않으므로
+    pipeline.py를 직접 import하지 않고 subprocess로 로직을 검증합니다.
+    """
+    input_file = ORACLE_DIR_3898 / "normal_clean_pr" / "input.json"
+    expected_file = ORACLE_DIR_3898 / "normal_clean_pr" / "expected.json"
+    assert input_file.exists(), f"oracle input not found: {input_file}"
+    assert expected_file.exists(), f"oracle expected not found: {expected_file}"
+
+    inp = json.loads(input_file.read_text(encoding="utf-8"))
+    exp = json.loads(expected_file.read_text(encoding="utf-8"))
+
+    changed_files: List[str] = inp.get("changed_files", [])
+    expected_blocked: List[str] = exp.get("blocked", [])
+    expected_status: str = exp.get("status", "PASS")
+
+    # pipeline.py에서 WORKSPACE_INTERNAL_PATTERNS 로직을 subprocess로 검증
+    check_script = (
+        "import sys; sys.path.insert(0, '.'); "
+        "import importlib.util; "
+        "spec = importlib.util.spec_from_file_location('pipeline', 'pipeline.py'); "
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "
+        "files = " + repr(changed_files) + "; "
+        "blocked = [f for f in files if m._is_internal_artifact(f)]; "
+        "print('blocked=' + str(blocked)); "
+        "sys.exit(1 if blocked else 0)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", check_script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=20,
+        cwd=str(PIPELINE_PY.parent),
+    )
+
+    actual_blocked: List[str] = []
+    for line in result.stdout.splitlines():
+        if line.startswith("blocked="):
+            import ast
+            try:
+                actual_blocked = ast.literal_eval(line[len("blocked="):])
+            except Exception:
+                pass
+
+    assert actual_blocked == expected_blocked, (
+        f"T-1 oracle mismatch: actual_blocked={actual_blocked}, "
+        f"expected_blocked={expected_blocked}"
+    )
+    actual_status = "FAIL" if actual_blocked else "PASS"
+    assert actual_status == expected_status, (
+        f"T-1 status mismatch: actual={actual_status}, expected={expected_status}"
+    )
+
+
+def test_is_internal_artifact_matches_oracle_edge_internal_artifact() -> None:
+    """T-3: edge_internal_artifact oracle — 내부 산출물이 차단되어야 합니다.
+
+    WORKSPACE_INTERNAL_PATTERNS SSoT를 사용하는 _is_internal_artifact()가
+    tests/oracles/IMP-20260528-3898/edge_internal_artifact/input.json의 파일 목록에 대해
+    expected.json의 blocked/allowed/exit_code와 일치하는지 검증합니다.
+    """
+    input_file = ORACLE_DIR_3898 / "edge_internal_artifact" / "input.json"
+    expected_file = ORACLE_DIR_3898 / "edge_internal_artifact" / "expected.json"
+    assert input_file.exists(), f"oracle input not found: {input_file}"
+    assert expected_file.exists(), f"oracle expected not found: {expected_file}"
+
+    inp = json.loads(input_file.read_text(encoding="utf-8"))
+    exp = json.loads(expected_file.read_text(encoding="utf-8"))
+
+    changed_files: List[str] = inp.get("changed_files", [])
+    expected_blocked: List[str] = exp.get("blocked", [])
+    expected_allowed: List[str] = exp.get("allowed", [])
+    expected_status: str = exp.get("status", "FAIL")
+
+    check_script = (
+        "import sys; sys.path.insert(0, '.'); "
+        "import importlib.util; "
+        "spec = importlib.util.spec_from_file_location('pipeline', 'pipeline.py'); "
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "
+        "files = " + repr(changed_files) + "; "
+        "blocked = [f for f in files if m._is_internal_artifact(f)]; "
+        "allowed = [f for f in files if not m._is_internal_artifact(f)]; "
+        "print('blocked=' + str(blocked)); "
+        "print('allowed=' + str(allowed)); "
+        "sys.exit(1 if blocked else 0)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", check_script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=20,
+        cwd=str(PIPELINE_PY.parent),
+    )
+
+    actual_blocked: List[str] = []
+    actual_allowed: List[str] = []
+    import ast
+    for line in result.stdout.splitlines():
+        if line.startswith("blocked="):
+            try:
+                actual_blocked = ast.literal_eval(line[len("blocked="):])
+            except Exception:
+                pass
+        elif line.startswith("allowed="):
+            try:
+                actual_allowed = ast.literal_eval(line[len("allowed="):])
+            except Exception:
+                pass
+
+    assert actual_blocked == expected_blocked, (
+        f"T-3 blocked mismatch: actual={actual_blocked}, expected={expected_blocked}"
+    )
+    assert actual_allowed == expected_allowed, (
+        f"T-3 allowed mismatch: actual={actual_allowed}, expected={expected_allowed}"
+    )
+    actual_status = "FAIL" if actual_blocked else "PASS"
+    assert actual_status == expected_status, (
+        f"T-3 status mismatch: actual={actual_status}, expected={expected_status}"
+    )

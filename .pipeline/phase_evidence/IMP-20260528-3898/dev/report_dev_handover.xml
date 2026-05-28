@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260528-3898</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>.github/workflows/ci.yml</file>
+      <file>.gitignore</file>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline.WORKSPACE_INTERNAL_PATTERNS / pipeline._is_internal_artifact / pipeline._cmd_gates_preflight_pr_impl / pipeline._deployment_artifacts / pipeline._deploy_accepted_outputs</target_function>
+    <change_type>new_function_and_constant</change_type>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py .github/workflows/ci.yml .gitignore tests/e2e/test_real_cli_paths.py</git_diff_files>
+    <manifest_files>pipeline.py .github/workflows/ci.yml .gitignore tests/e2e/test_real_cli_paths.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>.gitignore</file>
+    <file>tests/e2e/test_real_cli_paths.py</file>
+    <file>tests/oracles/IMP-20260528-3898/normal_clean_pr/input.json</file>
+    <file>tests/oracles/IMP-20260528-3898/normal_clean_pr/expected.json</file>
+    <file>tests/oracles/IMP-20260528-3898/edge_internal_artifact/input.json</file>
+    <file>tests/oracles/IMP-20260528-3898/edge_internal_artifact/expected.json</file>
+    <file>tests/oracles/IMP-20260528-3898/error_deploy_internal_evidence/input.json</file>
+    <file>tests/oracles/IMP-20260528-3898/error_deploy_internal_evidence/expected.json</file>
+  </evidence>
+  <module_gate_summary>
+    <mt id="MT-1" status="PASS">WORKSPACE_INTERNAL_PATTERNS + _is_internal_artifact</mt>
+    <mt id="MT-2" status="PASS">gates preflight-pr-impl 서브커맨드</mt>
+    <mt id="MT-3" status="PASS">_deployment_artifacts 내부 산출물 필터</mt>
+    <mt id="MT-4" status="PASS">ci.yml SSoT 교체 + .gitignore 보강</mt>
+    <mt id="MT-5" status="PASS">E2E 테스트 3개 추가 (14 passed)</mt>
+    <integration status="PASS">모든 MT 통합 완료</integration>
+  </module_gate_summary>
+</handover>

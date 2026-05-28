@@ -1039,6 +1039,9 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     # IMP-20260522-0C83: Pipeline Manager 출력 파일 — PM done 이후 LF 정규화 등으로
     # 파일이 갱신될 수 있으므로 dev scope gate 오탐을 방지하기 위해 제외.
     "manager_handoff.xml",
+    # IMP-20260528-3898: gates accept 완료 시 pipeline.py가 자동 갱신하는 런타임 파일.
+    # PM snapshot 이후 accept 또는 다른 파이프라인 완료 시 변경되어 scope gate 오탐을 유발함.
+    "human_acceptance_packet.md",
 }
 
 
@@ -1942,6 +1945,83 @@ DEFAULT_DEPLOY_ROOT_CANDIDATES = (
     Path(r"G:\내 드라이브\터미널"),
     Path(r"G:\내드라이브\터미널"),
 )
+
+# IMP-20260528-3898 MT-1: 워크스페이스 내부 산출물 패턴 — SSoT.
+# pipeline 실행 중 생성되는 임시/내부 파일들로, PR diff 또는 배포물에 섞이면 안 됩니다.
+# 이 상수를 수정하면 _is_internal_artifact(), preflight-pr-impl,
+# _deployment_artifacts() 필터가 모두 자동으로 업데이트됩니다.
+WORKSPACE_INTERNAL_PATTERNS: List[str] = [
+    # phase 보고서 및 인수인계 파일
+    "build_report.xml",
+    "qa_report.xml",
+    "dev_handover.xml",
+    "architect_report.xml",
+    "integration_report.xml",
+    "manager_handoff.xml",
+    # scope / module gate 파일
+    "scope_manifest.json",
+    # MT-N 단위 scope/module 파일 (접두사 패턴)
+    "scope_manifest_MT-",
+    "module_design_MT-",
+    "module_handover_MT-",
+    "module_qa_MT-",
+    # 실패 / 진단 파일
+    "failure_packet.json",
+    "acceptance_result.json",
+    "codex_review_result.json",
+    "codex_run_raw.json",
+    "protocol_consistency_result.json",
+    # 기타 파이프라인 런타임 파일
+    "step_plan.xml",
+    "stop_signal.json",
+    "test_results.jsonl",
+    "test_results_v3.jsonl",
+    "acceptance_comment.json",
+    "acceptance_packet.md",
+    "bandit_e2e_result.json",
+    "bandit_e2e_result2.json",
+]
+
+# 디렉터리 접두사 패턴 (이 경로 아래 모든 파일은 내부 산출물)
+WORKSPACE_INTERNAL_DIR_PREFIXES: List[str] = [
+    ".pipeline/",
+    "pipeline_contracts/",
+]
+
+
+def _is_internal_artifact(path: str) -> bool:
+    """경로가 workspace 내부 산출물인지 판정합니다 (WORKSPACE_INTERNAL_PATTERNS SSoT 사용).
+
+    PR diff 또는 배포물에 포함될 수 없는 파이프라인 런타임 파일을 감지합니다.
+
+    Args:
+        path: 검사할 파일 경로 (절대/상대 모두 허용, 백슬래시 자동 변환)
+
+    Returns:
+        True이면 내부 산출물, False이면 일반 파일
+    """
+    normalized = path.replace("\\", "/").strip()
+    # 파일명(basename) 추출
+    basename = normalized.split("/")[-1] if "/" in normalized else normalized
+
+    # 디렉터리 접두사 검사
+    for dir_prefix in WORKSPACE_INTERNAL_DIR_PREFIXES:
+        if normalized.startswith(dir_prefix) or normalized == dir_prefix.rstrip("/"):
+            return True
+
+    # 정확한 파일명 일치 또는 접두사 패턴 일치
+    for pattern in WORKSPACE_INTERNAL_PATTERNS:
+        if pattern.endswith("-") or not pattern.endswith((".xml", ".json", ".jsonl", ".md")):
+            # 접두사 패턴 (예: "scope_manifest_MT-", "module_design_MT-")
+            if basename.startswith(pattern):
+                return True
+        else:
+            # 정확한 파일명 일치
+            if basename == pattern:
+                return True
+
+    return False
+
 
 PHASE_ORDER = ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
 
@@ -3892,7 +3972,21 @@ def _register_output_item(
     return item
 
 
-def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> List[Path]:
+def _deployment_artifacts(
+    state: Dict[str, Any],
+    evidence: Optional[str],
+) -> Tuple[List[Path], List[str]]:
+    """배포 대상 산출물 경로 목록과 차단된 내부 산출물 이름 목록을 반환합니다.
+
+    IMP-20260528-3898 MT-3: _is_internal_artifact() SSoT를 사용하여 내부 산출물을
+    배포 대상에서 자동 제외합니다. 차단된 파일 이름 목록은 deployment_manifest.json의
+    blocked_internal_artifacts 필드에 기록됩니다.
+
+    Returns:
+        (allowed_paths, blocked_names) 튜플.
+        allowed_paths: 배포할 파일 Path 목록 (내부 산출물 제외)
+        blocked_names: 차단된 내부 산출물 파일 이름 목록
+    """
     candidates: List[str] = []
     candidates.extend(_split_evidence_paths(evidence))
     outputs = _ensure_output_registry(state)
@@ -3907,8 +4001,16 @@ def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> Lis
                 candidates.extend(_split_evidence_paths(phase.get("evidence")))
 
     result: List[Path] = []
-    seen: set[str] = set()
+    blocked: List[str] = []
+    seen: set = set()
     for raw in candidates:
+        # 내부 산출물은 배포에서 제외 (SSoT: WORKSPACE_INTERNAL_PATTERNS)
+        normalized = raw.replace("\\", "/").strip() if raw else ""
+        basename = normalized.split("/")[-1] if "/" in normalized else normalized
+        if _is_internal_artifact(raw):
+            if basename and basename not in blocked:
+                blocked.append(basename)
+            continue
         path = _resolve_artifact_path(raw)
         if not path:
             continue
@@ -3917,7 +4019,7 @@ def _deployment_artifacts(state: Dict[str, Any], evidence: Optional[str]) -> Lis
             continue
         seen.add(key)
         result.append(path)
-    return result
+    return result, blocked
 
 
 def _copy_deployment_artifact(src: Path, deploy_dir: Path) -> Dict[str, Any]:
@@ -3952,7 +4054,8 @@ def _deploy_accepted_outputs(
     pid = str(state.get("pipeline_id") or "UNKNOWN")
     deploy_root = _deployment_root()
     deploy_dir = deploy_root / pid
-    artifacts = _deployment_artifacts(state, evidence)
+    # IMP-20260528-3898 MT-3: 내부 산출물 필터 적용 — 튜플 언패킹
+    artifacts, blocked_internal = _deployment_artifacts(state, evidence)
     external_urls = list((evidence_validation or {}).get("urls") or [])
     if not artifacts and not external_urls:
         _die(
@@ -3972,6 +4075,8 @@ def _deploy_accepted_outputs(
         "notes": notes or "",
         "artifacts": copied,
         "external_urls": external_urls,
+        # IMP-20260528-3898 MT-3: 차단된 내부 산출물 목록 기록
+        "blocked_internal_artifacts": blocked_internal,
     }
     manifest_path = deploy_dir / "deployment_manifest.json"
     _write_json(manifest_path, manifest)
@@ -11616,6 +11721,162 @@ def _cmd_gates_preflight_pr(args: argparse.Namespace) -> None:
     sys.exit(0)
 
 
+# IMP-20260528-3898 MT-2: preflight-pr-impl — 구현 PR(impl 브랜치) 위생 검사.
+# preflight-pr(phase-attestation PR 전용)과 별개로, 구현 PR에 내부 산출물이
+# 섞이지 않았는지 _is_internal_artifact() SSoT를 사용하여 검사합니다.
+def _cmd_gates_preflight_pr_impl(args: argparse.Namespace) -> None:
+    """preflight-pr-impl: 구현 PR에 내부 산출물이 포함되지 않았는지 검사합니다.
+
+    _is_internal_artifact() (WORKSPACE_INTERNAL_PATTERNS SSoT)를 사용하여
+    pipeline 런타임 파일(build_report.xml, scope_manifest_MT-*.json 등)이
+    구현 PR diff에 포함되어 있으면 exit 1로 차단합니다.
+
+    tests/oracles/ 경로는 의도적으로 허용됩니다 (사용자 제공 oracle 파일).
+    """
+    # merge-base 기반 git diff (CI shallow clone 지원)
+    base_sha = os.environ.get("GITHUB_BASE_SHA", "").strip()
+    if not base_sha:
+        _mb = subprocess.run(
+            ["git", "merge-base", "origin/main", "HEAD"],
+            capture_output=True, text=True, check=False,
+        )
+        if _mb.returncode == 0:
+            base_sha = _mb.stdout.strip()
+
+    if base_sha:
+        diff_cmd = ["git", "diff", "--name-only", f"{base_sha}...HEAD"]
+    else:
+        diff_cmd = ["git", "diff", "--name-only", "origin/main...HEAD"]
+
+    result = subprocess.run(diff_cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        _die(
+            f"[PIPELINE ERROR] preflight-pr-impl: git diff 실패: {result.stderr.strip()}",
+            exit_code=1,
+        )
+    changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+
+    # 삭제된 파일은 내부 산출물 검사에서 제외 (정리 행위로 허용)
+    if base_sha:
+        deleted_diff_cmd = ["git", "diff", "--diff-filter=D", "--name-only", f"{base_sha}...HEAD"]
+    else:
+        deleted_diff_cmd = ["git", "diff", "--diff-filter=D", "--name-only", "origin/main...HEAD"]
+    deleted_result = subprocess.run(
+        deleted_diff_cmd,
+        capture_output=True, text=True, check=False,
+    )
+    deleted_files: set = set()
+    if deleted_result.returncode == 0:
+        deleted_files = {f.strip() for f in deleted_result.stdout.splitlines() if f.strip()}
+
+    # 내부 산출물 감지 — tests/oracles/ 경로와 삭제된 파일은 허용
+    blocked: List[str] = []
+    allowed: List[str] = []
+    for f in changed_files:
+        normalized = f.replace("\\", "/").strip()
+        # 삭제된 파일은 허용 (내부 파일 정리 행위)
+        if f in deleted_files:
+            allowed.append(f)
+        # oracle 파일은 명시적 허용 (WORKSPACE_INTERNAL_PATTERNS와 무관)
+        elif normalized.startswith("tests/oracles/"):
+            allowed.append(f)
+        elif _is_internal_artifact(f):
+            blocked.append(f)
+        else:
+            allowed.append(f)
+
+    if blocked:
+        # failure_packet 기록 (state 로드 시도)
+        _pf_state: Optional[Dict[str, Any]] = None
+        try:
+            _pf_state = _load()
+        except Exception:
+            _pf_state = None
+        if _pf_state is not None and isinstance(_pf_state, dict):
+            _pf_pid = str(_pf_state.get("pipeline_id") or "UNKNOWN")
+            _pf_paths = _contract_paths(_pf_pid)
+            _attempt = _next_failure_attempt(_pf_paths, "preflight_pr_impl")
+            _pf_packet_path = (
+                _failure_root_from_paths(_pf_paths) / f"preflight_pr_impl_attempt_{_attempt}.json"
+            )
+            _pf_packet: Dict[str, Any] = {
+                "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
+                "pipeline_id": _pf_pid,
+                "phase": "dev",
+                "gate": "preflight_pr_impl",
+                "status": "FAIL",
+                "failure_code": "preflight_pr_impl_internal_artifact",
+                "failure_category": "internal_artifact_in_pr",
+                "summary_ko": (
+                    f"preflight-pr-impl FAIL: 구현 PR에 내부 산출물 {len(blocked)}개 포함"
+                ),
+                "expected": "구현 PR에 내부 산출물(build_report.xml 등) 미포함",
+                "actual": f"차단 파일 {len(blocked)}개: {', '.join(blocked[:5])}",
+                "owner": "Dev",
+                "return_phase": "dev",
+                "required_actions": [
+                    f"아래 내부 산출물을 .gitignore에 추가하거나 git rm --cached로 되돌리세요: "
+                    + ", ".join(blocked[:3]),
+                    "내부 산출물은 PR에 포함하지 않습니다 (pipeline 런타임 전용 파일).",
+                ],
+                "retry_allowed": True,
+                "minimal_rerun": [
+                    "python", "pipeline.py", "gates", "preflight-pr-impl",
+                ],
+                "command": [
+                    "python", "pipeline.py", "gates", "preflight-pr-impl",
+                ],
+                "packet_path": str(_pf_packet_path),
+                "attempt": _attempt,
+                "attempt_count": _attempt,
+                "recorded_at": _now(),
+                "created_at": _now(),
+                "exit_code": 1,
+                "blocking_condition": "",
+                "evidence_paths": [],
+                "note": "",
+                "failed_checks": [],
+                "repair_owner": "Dev",
+                "report_excerpt": {"blockers": blocked, "allowed": allowed, "summary": {}},
+                "escalation_reason": None,
+            }
+            _write_json(_pf_packet_path, _pf_packet)
+            _pf_state.setdefault("failure_packets", [])
+            if isinstance(_pf_state.get("failure_packets"), list):
+                _pf_state["failure_packets"].append({
+                    "gate": "preflight_pr_impl",
+                    "attempt": _attempt,
+                    "path": str(_pf_packet_path),
+                    "packet_path": str(_pf_packet_path),
+                    "recorded_at": _pf_packet["recorded_at"],
+                    "repair_owner": "Dev",
+                    "schema_version": FAILURE_PACKET_SCHEMA_VERSION,
+                    "status": "FAIL",
+                    "failure_code": _pf_packet["failure_code"],
+                    "failure_category": "internal_artifact_in_pr",
+                    "owner": "Dev",
+                    "return_phase": "dev",
+                    "attempt_count": _attempt,
+                    "escalation_reason": None,
+                })
+            _save(_pf_state)
+            _print_failure_packet_console(_pf_packet)
+        print("[PIPELINE ERROR] preflight-pr-impl FAIL: 다음 내부 산출물이 구현 PR에 포함되어 있습니다:")
+        for f in blocked:
+            print(f"  - {f}")
+        print("  해결: .gitignore에 해당 파일을 추가하거나 git rm --cached로 되돌리세요.")
+        sys.exit(1)
+
+    print(
+        GREEN(
+            f"[PREFLIGHT-PR-IMPL PASS] "
+            f"changed={len(changed_files)}개 파일 / "
+            f"blocked=0 / allowed={len(allowed)}개"
+        )
+    )
+    sys.exit(0)
+
+
 # ===================================================================
 # IMP-20260520-D0BB: Protocol Consistency Guard — CLI 레이어
 # [Purpose]: gates consistency 명령과 gates accept hard gate에서 gh CLI로
@@ -12136,6 +12397,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
     # preflight-pr는 pipeline_state.json 없이도 동작 (CI 환경 지원)
     if action == "preflight-pr":
         _cmd_gates_preflight_pr(args)
+        return
+
+    # IMP-20260528-3898 MT-2: preflight-pr-impl — 구현 PR 내부 산출물 검사 (state 없이도 동작)
+    if action == "preflight-pr-impl":
+        _cmd_gates_preflight_pr_impl(args)
         return
 
     state = _require_state()
@@ -14125,6 +14391,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_preflight_pr.add_argument("--request-file", dest="request_file",
                                      default=".pipeline/phase_attestation_request.json",
                                      help="phase_attestation_request.json 경로")
+
+    # IMP-20260528-3898 MT-2: preflight-pr-impl — 구현 PR 내부 산출물 검사
+    gsub.add_parser(
+        "preflight-pr-impl",
+        help=(
+            "구현 PR(impl 브랜치)에 pipeline 내부 산출물(build_report.xml, "
+            "scope_manifest_MT-*.json 등)이 포함되지 않았는지 검사합니다. "
+            "WORKSPACE_INTERNAL_PATTERNS SSoT 사용. CI에서 gates preflight-pr-impl로 호출."
+        ),
+    )
 
     p_gate_consistency = gsub.add_parser(
         "consistency",
