@@ -1,3 +1,72 @@
+<!-- v1 안정화 릴리즈: IMP-20260529-D5DC -->
+# Pipeline v1 안정화 릴리즈 가이드
+
+> **v1.0 기준선 — 실제 업무 사용 가능 (2026-05-30)**
+> 이 파이프라인은 Security & Secrets Boundary(IMP-20260529-D8BA)까지 머지된 상태로 v1 기준선이 고정됩니다.
+
+## 빠른 시작
+
+```powershell
+# 새 파이프라인 시작
+python pipeline.py new --type FEAT|BUG|IMP --desc "작업 설명"
+# 현재 상태 확인
+python pipeline.py status
+# 전체 게이트 상태 확인
+python pipeline.py gates status
+```
+
+## 포함된 핵심 게이트 (v1.0)
+
+| 게이트 | 명령어 | 도입 IMP |
+|---|---|---|
+| Security & Secrets Boundary | `python pipeline.py gates secrets` | IMP-20260529-D8BA |
+| Golden Task | `python pipeline.py golden run --smoke` | IMP-20260528-0A9E |
+| Workspace Hygiene | `python pipeline.py preflight-pr-impl` | IMP-20260528-3898 |
+| Cost/Attempt Budget | `python pipeline.py budget status` | IMP-20260527-075A |
+| Observability Metrics | `python pipeline.py metrics report` | IMP-20260526-82E3 |
+| Oracle Quality Gate | `python pipeline.py gates oracle` | IMP-20260524-48C4 |
+| Real CLI Path E2E | `pytest tests/e2e/ -v` | IMP-20260525-6FAC |
+| Phase Attestation (Option A) | `python pipeline.py gates phase-ci --phase pm` | IMP-20260516-D069 |
+
+## ACCEPT / REJECT 판단 기준
+
+사용자는 **코드가 아니라 결과물**을 보고 판단합니다.
+
+**ACCEPT 조건 (모두 충족 시):**
+- PR 링크와 GitHub Actions CI 결과가 제공됨
+- 요청한 기능이 결과물(파일, EXE, 문서, 출력)에 실제로 반영됨
+- GitHub Actions CI가 PASS 상태
+- 추측 문구("아마도", "확인 필요", "예상") 없음
+
+**REJECT 조건 (하나라도 해당 시):**
+- 요청한 기능이 빠져 있음
+- CI가 FAIL 상태
+- 결과물 경로/링크가 제공되지 않음
+- 실제 동작이 요청과 다름
+
+## 실패 시 대응 절차
+
+| 상황 | 명령어 |
+|---|---|
+| 어느 phase가 막혔는지 확인 | `python pipeline.py status` |
+| Technical gate 실패 | `python pipeline.py gates technical` → 오류 메시지 확인 |
+| Oracle gate 실패 | `python pipeline.py gates oracle` → 기대값 vs 실제값 비교 |
+| CI 실패 | GitHub Actions 로그 확인 → Dev 재작업 |
+| Secrets gate 실패 | `python pipeline.py gates secrets` → 마스킹된 파일 경로 확인 후 제거 |
+| QA 동일 실패 2회 반복 | Circuit Breaker 발동 → `python pipeline.py status` 확인 |
+
+## 현재 알려진 제한사항 (v1.0)
+
+1. **Codex Review (GPT-5.5)**: OpenAI API 쿼터 소진 시 `review codex-record`로 수동 기록 필요
+2. **Google Drive 배포**: `G:\내 드라이브\터미널\` 경로가 마운트되지 않으면 배포 단계 SKIP
+3. **Windows 전용**: `pipeline.py`는 Windows PowerShell 환경에서 개발됨. Linux/macOS는 경로 구분자 조정 필요
+4. **Phase attestation**: GitHub Actions가 실행되지 않는 환경(오프라인)에서는 phase-ci gate 수동 처리 필요
+5. **git tag**: v1.0 태그는 자동 생성되지 않음 — ACCEPT 후 사용자가 직접 `git tag v1.0 && git push origin v1.0` 실행
+
+---
+
+(기존 README.md 내용은 이 주석 줄 바로 다음부터 계속 이어집니다)
+
 # Pipeline — 자체 개선형 다중 에이전트 파이프라인
 
 작업 순서, 외부 검증, 사용자 최종 승인을 강제하는 파이프라인입니다.
