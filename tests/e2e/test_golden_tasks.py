@@ -339,13 +339,13 @@ class TestGT002Regression:
             f"GT-002 smoke={data.get('smoke')!r} — True여야 CI smoke 테스트에 포함됨"
         )
 
-    def test_gt002_runs_under_5s_and_fails_correctly(self, tmp_path: Path) -> None:
-        """GT-002 golden run이 5초 이내 종료되고 exit code 1을 반환해야 함.
+    def test_gt002_runs_under_5s_and_passes_correctly(self, tmp_path: Path) -> None:
+        """GT-002 golden run이 5초 이내 종료되고 exit code 0을 반환해야 함.
 
         BUG: 자기 재귀로 60초 타임아웃까지 블로킹됨.
         수정 후: preflight-pr-impl --files 방식이어서 즉시 결과 반환.
 
-        acceptable exit codes: 1 (FAIL — 내부 산출물 detected)
+        acceptable exit codes: 0 (PASS — expected/result.json과 일치)
         expected: 5초 이내 완료
         """
         import time
@@ -360,9 +360,9 @@ class TestGT002Regression:
         )
         elapsed = time.monotonic() - start
 
-        # exit code 1 = FAIL (내부 산출물 blocked) — 정상 동작
-        assert result.returncode == 1, (
-            f"GT-002 golden run — exit 1(FAIL) 기대, 실제={result.returncode}\n"
+        # exit code 0 = PASS (GT-002 정상 PASS) — 정상 동작
+        assert result.returncode == 0, (
+            f"GT-002 golden run — exit 0(PASS) 기대, 실제={result.returncode}\n"
             f"stdout: {result.stdout[:300]}\nstderr: {result.stderr[:300]}"
         )
 
@@ -372,9 +372,9 @@ class TestGT002Regression:
             "자기 재귀 버그가 재발했을 수 있습니다."
         )
 
-        # blocked 메시지 출력 확인
+        # GT-002 정상 PASS 메시지 출력 확인
         combined = result.stdout + result.stderr
-        assert "blocked" in combined.lower() or "FAIL" in combined or "GOLDEN FAIL" in combined, (
-            f"GT-002: 'blocked' 또는 'FAIL' 메시지 미출력\n"
+        assert "PASS" in combined or "pass" in combined.lower(), (
+            f"GT-002: 'PASS' 메시지 미출력\n"
             f"stdout: {result.stdout[:300]}"
         )
