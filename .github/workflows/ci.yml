@@ -48,6 +48,15 @@ jobs:
         run: |
           python pipeline.py golden run --smoke
 
+      - name: Secrets Boundary 검사 (민감 정보 차단)
+        # IMP-20260529-D8BA MT-4: PR diff + 주요 report 파일에서 secret-like 문자열 자동 검사.
+        # impl 브랜치 PR + phase-attestation 브랜치 PR + push:main 모두에서 실행 (hard gate, continue-on-error 금지).
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PIPELINE_NO_DASHBOARD: "1"
+        run: |
+          python pipeline.py gates secrets
+
       - name: 단계 PR 위생 검사 (preflight-pr)
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'phase-attestation/')
         shell: pwsh

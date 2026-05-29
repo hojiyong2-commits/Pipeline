@@ -1,0 +1,6 @@
+{
+  "description": "PR diff에 OpenAI API key 모양 dummy 문자열이 포함된 경우. 실제 키가 아닌 명백한 dummy fixture (EXAMPLE 마커 + AAAA 패딩) 이지만 prefix sk- 패턴은 일치하므로 scanner가 잡아야 한다.",
+  "scan_targets": [
+    {"name": "pr_diff.txt", "content": "diff --git a/.env b/.env\n+OPENAI_API_KEY=sk-EXAMPLEdummyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"}
+  ]
+}

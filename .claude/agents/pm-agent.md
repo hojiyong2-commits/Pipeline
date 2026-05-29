@@ -675,3 +675,11 @@ In test/local environments, `PIPELINE_DEPLOY_ROOT` overrides the deploy root.
   <deploy_note>ACCEPT 후 pipeline.py가 결과물을 deploy_path로 자동 복사하고 deployment_manifest.json을 작성합니다.</deploy_note>
 </pipeline_complete>
 ```
+
+## Secrets Boundary 규칙 (IMP-20260529-D8BA)
+
+`step_plan.xml`에 실제 API 키, 토큰, `approval-secret`, `server-identity-key`, OAuth 리프레시 토큰 등을 절대 명시하지 않습니다. 사용자 요청에 secret이 포함되어 있으면 PM은 secret을 mask 처리한 후 step_plan에 기록합니다.
+
+테스트 케이스(oracle 파일 포함)에도 dummy/EXAMPLE 값만 사용합니다 (prefix `sk-` 다음에 `EXAMPLE_DUMMY_` 본체와 `A` 패딩을 분할 작성). 실제 secret 형식의 값을 oracle에 두면 `python pipeline.py gates secrets`가 hard gate로 차단합니다.
+
+SSoT 패턴 목록은 `pipeline.py`의 `SECRET_PATTERNS` 상수와 CLAUDE.md의 "Security & Secrets Boundary" 섹션을 참조합니다.

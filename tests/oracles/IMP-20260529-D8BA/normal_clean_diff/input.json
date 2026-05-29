@@ -1,0 +1,9 @@
+{
+  "description": "PR diff와 모든 report 파일이 secret-like 문자열을 전혀 포함하지 않는 정상 케이스",
+  "scan_targets": [
+    {"name": "pr_diff.txt", "content": "diff --git a/pipeline.py b/pipeline.py\n+def hello():\n+    return 'world'\n"},
+    {"name": "failure_packet.json", "content": "{\"gate\":\"technical\",\"status\":\"PASS\"}\n"},
+    {"name": "deployment_manifest.json", "content": "{\"pipeline_id\":\"X\",\"artifacts\":[]}\n"},
+    {"name": "acceptance_packet.md", "content": "## 최종 확인 안내\n- 자동 검사: 통과\n"}
+  ]
+}

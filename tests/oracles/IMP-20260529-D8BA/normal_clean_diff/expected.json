@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "exit_code": 0,
+  "findings": [],
+  "summary_ko": "secret-like 문자열을 찾지 못했습니다. 보안 게이트를 통과했습니다."
+}

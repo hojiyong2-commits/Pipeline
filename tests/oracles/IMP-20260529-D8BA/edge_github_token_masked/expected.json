@@ -1,0 +1,15 @@
+{
+  "status": "FAIL",
+  "exit_code": 1,
+  "findings": [
+    {
+      "source": "failure_packet.json",
+      "pattern_name": "github_pat",
+      "masked_match": "ghp_EXAMP****"
+    }
+  ],
+  "must_not_appear_in_output": [
+    "ghp_EXAMPLEdummyTokenAAAAAAAAAAAAAAAAAAAAAA"
+  ],
+  "summary_ko": "GitHub Personal Access Token 형식의 문자열이 failure_packet.json에 포함되어 있습니다."
+}

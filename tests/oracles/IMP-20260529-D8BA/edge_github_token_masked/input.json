@@ -1,0 +1,6 @@
+{
+  "description": "failure_packet.json에 GitHub PAT 모양 dummy 문자열이 들어간 경우. ghp_ prefix 패턴 검출 + 마스킹 출력 검증.",
+  "scan_targets": [
+    {"name": "failure_packet.json", "content": "{\"gate\":\"technical\",\"note\":\"token=ghp_EXAMPLEdummyTokenAAAAAAAAAAAAAAAAAAAAAA\"}\n"}
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "description": "report 파일에 PEM private key block 모양 dummy 텍스트가 포함된 경우. BEGIN PRIVATE KEY 패턴 검출.",
+  "scan_targets": [
+    {"name": "build_report.xml", "content": "<build_report>\n<key>-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDexampleDUMMYAAA\n-----END PRIVATE KEY-----</key>\n</build_report>\n"}
+  ]
+}

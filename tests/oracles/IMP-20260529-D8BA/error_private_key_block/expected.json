@@ -1,0 +1,15 @@
+{
+  "status": "FAIL",
+  "exit_code": 1,
+  "findings": [
+    {
+      "source": "build_report.xml",
+      "pattern_name": "private_key_block",
+      "masked_match": "-----BEGIN PRIVATE KEY-----****"
+    }
+  ],
+  "must_not_appear_in_output": [
+    "MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDexampleDUMMYAAA"
+  ],
+  "summary_ko": "PEM private key block 표식이 build_report.xml에 포함되어 있습니다."
+}
