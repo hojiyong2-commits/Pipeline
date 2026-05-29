@@ -1,0 +1,9 @@
+{
+  "changed_files": [
+    "pipeline.py",
+    "scope_manifest_MT-1.json",
+    "module_design_MT-1.xml"
+  ],
+  "scenario": "forbidden_file_present",
+  "description": "scope_manifest_MT-1.json과 module_design_MT-1.xml은 내부 아티팩트이므로 forbidden_files 규칙에 의해 차단되어야 함"
+}

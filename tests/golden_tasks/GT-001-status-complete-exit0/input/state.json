@@ -1,0 +1,6 @@
+{
+  "pipeline_id": "GT-TEST-001",
+  "description": "GT-001 테스트용 완료 상태 파이프라인",
+  "current_phase": "COMPLETE",
+  "terminal_state": "COMPLETE"
+}

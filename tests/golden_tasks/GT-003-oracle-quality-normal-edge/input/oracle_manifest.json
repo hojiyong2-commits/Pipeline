@@ -1,0 +1,23 @@
+{
+  "pipeline_id": "GT-TEST-003",
+  "oracles": [
+    {
+      "case_id": "O001",
+      "case_kind": "normal",
+      "input_file": "tests/oracles/GT-TEST-003/normal/input.json",
+      "expected_file": "tests/oracles/GT-TEST-003/normal/expected.json",
+      "expected_source": "user_provided",
+      "input_sha256": "abc123",
+      "expected_sha256": "def456"
+    },
+    {
+      "case_id": "O002",
+      "case_kind": "edge",
+      "input_file": "tests/oracles/GT-TEST-003/edge/input.json",
+      "expected_file": "tests/oracles/GT-TEST-003/edge/expected.json",
+      "expected_source": "user_provided",
+      "input_sha256": "ghi789",
+      "expected_sha256": "jkl012"
+    }
+  ]
+}
