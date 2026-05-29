@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260529-40C9",
+  "phase": "pm_planner",
+  "agent_id": "pm-planner-agent",
+  "run_id": "pm_planner-4e401f4aca97db98",
+  "status": "COMPLETED",
+  "started_at": "2026-05-29T10:42:25Z",
+  "completed_at": "2026-05-29T10:48:12Z",
+  "output_file": "step_plan.xml",
+  "output_sha256": "7c420688291831c3a031d422874adaf0a4cc1440b1a1c1fb25aaf53483b8df2c",
+  "evidence_files": [],
+  "commit_sha": "658e1dc63343bf45f791abac1a1baecddb696e78",
+  "notes": "handover_template 내 handover 태그를 handover_spec으로 rename (PM ROLE GATE 호환성). SHA256 업데이트됨."
+}
