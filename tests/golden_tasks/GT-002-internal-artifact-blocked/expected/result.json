@@ -1,5 +1,5 @@
 {
   "exit_code": 1,
-  "stdout_contains": ["blocked"],
+  "stdout_contains": ["FAIL"],
   "result": "FAIL"
 }
