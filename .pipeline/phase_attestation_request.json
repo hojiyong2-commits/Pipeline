@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-29T23:12:41Z",
+  "pipeline_id": "IMP-20260529-D5DC",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "06a03cfe74570be0826a7aefd54bc7bdee48cb16",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-29T23:12:37Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "README.md,RELEASE_NOTES.md"
+  },
+  "agent_run": {
+    "run_id": "dev-b194ae6d8d6c19f2",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "abfa1450cfad09865433f8e3b8c10f2009fdf6154c859fc22c1dc3ef0a917bc6",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260529-D5DC/dev/agent_receipt_dev-b194ae6d8d6c19f2.json",
+    "receipt_sha256": "62e6e6d4745cf7bbddcd21935b0627246fa1ac937613194ac0af393289257cb1",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260529-D5DC\\dev\\dev-b194ae6d8d6c19f2.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260529-D5DC\\dev\\dev-b194ae6d8d6c19f2.json",
+      "path": ".pipeline/phase_evidence/IMP-20260529-D5DC/dev/agent_receipt_dev-b194ae6d8d6c19f2.json",
+      "sha256": "62e6e6d4745cf7bbddcd21935b0627246fa1ac937613194ac0af393289257cb1",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260529-D5DC/dev/report_dev_handover.xml",
+      "sha256": "abfa1450cfad09865433f8e3b8c10f2009fdf6154c859fc22c1dc3ef0a917bc6",
+      "size_bytes": 1163,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260529-D5DC/dev/scope_manifest_scope_manifest.json",
+      "sha256": "1854c93851a7aaa51de1098c21112e5e2de87cc8536df33c6197c2debe000c9f",
+      "size_bytes": 378,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "README.md",
+      "sha256": "d60c5fdd042240f4abc6b25be2b8a0d9007ec23ed0b3168f91084ff036d1a2a0",
+      "size_bytes": 13631
+    },
+    {
+      "path": "RELEASE_NOTES.md",
+      "sha256": "f106bde97f42cb6956836ae2d93ac6311d77ad98f60a475ad6ff7d4bbf063ff0",
+      "size_bytes": 3481
+    }
+  ],
+  "local_only_files": []
+}
