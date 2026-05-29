@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260529-D5DC",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-3f59fa66e6e3ae4c",
+  "status": "COMPLETED",
+  "started_at": "2026-05-29T23:31:52Z",
+  "completed_at": "2026-05-29T23:32:06Z",
+  "output_file": "build_report_d5dc.xml",
+  "output_sha256": "d15b7972b34c2df6158cbe3a20ea2dcd1fe3945b9c63286cf7bcece4f8086f6e",
+  "evidence_files": [],
+  "commit_sha": "66ba2d59a9a55f381f9d8d0bf313c4dc7930e7a7"
+}
