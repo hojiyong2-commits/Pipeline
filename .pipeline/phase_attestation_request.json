@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-29T11:34:51Z",
+  "generated_at": "2026-05-29T11:39:16Z",
   "pipeline_id": "BUG-20260529-40C9",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "23bb5ec07508573079a2d266cc247a040224decd",
+  "commit_hint": "ff18f5441d01073bdf4823f38bed37e60928d074",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-29T11:32:33Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260529-40C9/dev/agent_receipt_dev-8d6a15adc43674da.json",
       "sha256": "8de5acf005279a8f7f00e0d15f1a36f72b9e7203c25da538bc18eebfe5bc8313",
       "size_bytes": 502,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -40,15 +40,15 @@
       "path": ".pipeline/phase_evidence/BUG-20260529-40C9/dev/report_dev_handover.xml",
       "sha256": "eee2adcead9ce64cbc05a48b692ea8f32869034fd73ca3f36417371fa7f25568",
       "size_bytes": 2667,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/BUG-20260529-40C9/dev/scope_manifest_scope_manifest.json",
-      "sha256": "69aa112ad23d3a79cfcc3d10f54793680c874da16604c67076c18cbc40c44e46",
-      "size_bytes": 1042,
-      "requires_force_add": true
+      "sha256": "932fbf811044296d11c4b8b806f6db6b4a3d2e334321bfd2b5258f7308ecb74c",
+      "size_bytes": 1001,
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [
