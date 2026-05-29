@@ -1,0 +1,1 @@
+pairing: codex-relay://pair?serverUrl=https://example.com&token=EXAMPLE_DUMMY_AAAA

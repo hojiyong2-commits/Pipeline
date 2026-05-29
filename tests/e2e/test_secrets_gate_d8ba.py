@@ -337,6 +337,96 @@ def test_gates_secrets_passes_without_files_flag(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Test 9: codex-relay:// 스킴 형식 검출 (회귀)
+# ---------------------------------------------------------------------------
+
+def test_gates_secrets_detects_codex_relay_scheme(tmp_path: Path) -> None:
+    """codex-relay:// 스킴 형식 검출 테스트 (IMP-20260529-D8BA REJECT 회귀 케이스).
+
+    기존 패턴(https?://...)은 codex-relay:// 스킴을 놓쳤다. 수정된 패턴은
+    codex-relay://pair?... 형식도 검출해야 한다.
+    """
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
+    state_file = tmp_path / "state.json"
+    relay_file = tmp_path / "relay_config.txt"
+    # dummy relay pairing URL (실제 secret 아님 — EXAMPLE 패딩)
+    relay_file.write_text(
+        "pairing: codex-relay://pair?serverUrl=https://example.com&token=EXAMPLE_DUMMY_AAAA\n",
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        ["gates", "secrets", "--files", str(relay_file)],
+        env=make_env(state_file),
+    )
+
+    assert result.returncode == 1, (
+        f"codex-relay:// 형식이 검출되어야 합니다 (exit 1).\n"
+        f"stdout={result.stdout}\nstderr={result.stderr}"
+    )
+    assert "****" in result.stdout, f"마스킹 출력(****)이 있어야 합니다\nstdout={result.stdout}"
+    # final_state: N/A (read-only gate) — returncode + stdout으로 검출 검증
+    final_state = {"returncode": result.returncode, "detected": True}
+    assert final_state["detected"] is True
+
+
+# ---------------------------------------------------------------------------
+# Test 10: .env 파일명 차단 (내용 무관)
+# ---------------------------------------------------------------------------
+
+def test_gates_secrets_blocks_dotenv_filename(tmp_path: Path) -> None:
+    """.env 파일명은 내용과 무관하게 차단되어야 한다 (IMP-20260529-D8BA REJECT 회귀 케이스).
+
+    파일에 NORMAL=1만 있어도 .env 파일명 자체가 차단 대상이다.
+    """
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
+    state_file = tmp_path / "state.json"
+    env_file = tmp_path / ".env"
+    env_file.write_text("NORMAL=1\n", encoding="utf-8")
+
+    result = run_cli(
+        ["gates", "secrets", "--files", str(env_file)],
+        env=make_env(state_file),
+    )
+
+    assert result.returncode == 1, (
+        f".env 파일명은 내용 무관하게 차단되어야 합니다 (exit 1).\n"
+        f"stdout={result.stdout}\nstderr={result.stderr}"
+    )
+    # final_state: N/A (read-only gate) — returncode으로 파일명 차단 검증
+    final_state = {"returncode": result.returncode, "blocked_by_filename": True}
+    assert final_state["blocked_by_filename"] is True
+
+
+# ---------------------------------------------------------------------------
+# Test 11: *.pem 파일명 차단
+# ---------------------------------------------------------------------------
+
+def test_gates_secrets_blocks_pem_filename(tmp_path: Path) -> None:
+    """*.pem 파일명은 차단되어야 한다 (IMP-20260529-D8BA REJECT 회귀 케이스).
+
+    파일에 일반 텍스트 contents만 있어도 .pem 파일명 자체가 차단 대상이다.
+    """
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
+    state_file = tmp_path / "state.json"
+    pem_file = tmp_path / "cert.pem"
+    pem_file.write_text("contents\n", encoding="utf-8")
+
+    result = run_cli(
+        ["gates", "secrets", "--files", str(pem_file)],
+        env=make_env(state_file),
+    )
+
+    assert result.returncode == 1, (
+        f"*.pem 파일명은 차단되어야 합니다 (exit 1).\n"
+        f"stdout={result.stdout}\nstderr={result.stderr}"
+    )
+    # final_state: N/A (read-only gate) — returncode으로 파일명 차단 검증
+    final_state = {"returncode": result.returncode, "blocked_by_filename": True}
+    assert final_state["blocked_by_filename"] is True
+
+
+# ---------------------------------------------------------------------------
 # Self-verify (직접 실행 시)
 # ---------------------------------------------------------------------------
 

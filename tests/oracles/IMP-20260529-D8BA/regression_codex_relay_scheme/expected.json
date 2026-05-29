@@ -1,0 +1,6 @@
+{
+  "exit_code": 1,
+  "masked": true,
+  "pattern_detected": "codex_relay_pairing_url",
+  "description": "codex-relay:// 스킴 형식이 검출되어야 한다 (REJECT 회귀 케이스)"
+}

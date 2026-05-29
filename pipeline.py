@@ -2046,7 +2046,7 @@ SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]"]] = [
     ("bearer_token",            re.compile(r"Bearer\s+[A-Za-z0-9+/=_.\-]{20,}")),
     ("approval_secret",         re.compile(r"approval[-_]secret\s*[:=]\s*\S+")),
     ("server_identity_key",     re.compile(r"server[-_]identity[-_]key\s*[:=]\s*\S+")),
-    ("codex_relay_pairing_url", re.compile(r"https?://[^/\s]*codex[^/\s]*/pair[^\s\"']*")),
+    ("codex_relay_pairing_url", re.compile(r"(?:https?://[^/\s]*codex[^/\s]*/pair[^\s\"']*|codex-relay://[^\s\"']*pair[^\s\"']*)")),
     ("private_key_block",       re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
 ]
 
@@ -12082,8 +12082,43 @@ def _cmd_gates_secrets(args: argparse.Namespace) -> None:
             if p.exists() and p.is_file() and p not in files_to_scan:
                 files_to_scan.append(p)
 
-    # 파일 내용 스캔
+    # 파일명 검사 (내용과 무관하게 secret 파일명 패턴이면 차단)
     all_findings: List[Dict[str, Any]] = []
+    for file_path in files_to_scan:
+        fname = file_path.name
+        if _is_secret_filename(fname):
+            all_findings.append({
+                "file": str(file_path),
+                "pattern_name": "secret_filename",
+                "masked": f"[파일명 차단] {_mask_secret(fname, prefix_len=2)}",
+            })
+
+    # git diff 파일 경로 기반 파일명 검사 (--files 미지정 시 PR diff 경로도 검사)
+    if not explicit_files:
+        try:
+            base_ref = getattr(args, "base_ref", None) or "origin/main"
+            result = subprocess.run(
+                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+                capture_output=True, text=True, cwd=str(BASE_DIR), timeout=30,
+                encoding="utf-8", errors="replace",
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    rel = line.strip()
+                    if not rel:
+                        continue
+                    # 파일명만 추출하여 secret filename 패턴 검사
+                    diff_fname = rel.split("/")[-1]
+                    if _is_secret_filename(diff_fname):
+                        all_findings.append({
+                            "file": rel,
+                            "pattern_name": "secret_filename_in_diff",
+                            "masked": f"[PR diff 파일명 차단] {_mask_secret(diff_fname, prefix_len=2)}",
+                        })
+        except Exception:
+            pass
+
+    # 파일 내용 스캔
     for file_path in files_to_scan:
         # 자기 자신(pipeline.py) 및 SSoT 정의 파일은 검사 제외:
         # SECRET_PATTERNS 자체가 정규식 리터럴이므로 false positive 발생 위험.
