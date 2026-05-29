@@ -1,6 +1,5 @@
 {
   "exit_code": 1,
-  "result": "FAIL",
-  "failure_packet_written": true,
-  "failure_reason_contains": "forbidden"
+  "stdout_contains": ["blocked"],
+  "result": "FAIL"
 }

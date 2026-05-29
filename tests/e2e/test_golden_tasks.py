@@ -281,3 +281,100 @@ class TestGoldenTasksStructure:
         assert readme.exists(), f"README.md 없음: {readme}"
         content = readme.read_text(encoding="utf-8")
         assert "golden" in content.lower(), "README.md에 'golden' 언급 없음"
+
+
+# ---------------------------------------------------------------------------
+# BUG-20260529-40C9 MT-4: GT-002 회귀 테스트 3건
+# ---------------------------------------------------------------------------
+
+class TestGT002Regression:
+    """GT-002-internal-artifact-blocked 회귀 테스트.
+
+    BUG-20260529-40C9 이슈:
+    - GT-002 command가 `golden run --task GT-002-...`이어서 자기 재귀 발생 (60초 타임아웃)
+    - _verify_forbidden_files가 워크스페이스 전체를 rglob 스캔하여 비결정적 결과
+    - smoke=false로 CI에서 검출 불가
+
+    수정 후 검증:
+    1. GT-002 command에 자기 재귀 패턴이 없어야 함
+    2. GT-002 smoke=true여야 함
+    3. GT-002가 5초 이내 종료되고 exit code 1(FAIL)이어야 함
+    """
+
+    def test_gt002_no_self_recursion(self) -> None:
+        """GT-002 command에 자기 재귀 호출 패턴이 없어야 함.
+
+        BUG: command가 `python pipeline.py golden run --task GT-002-...`이면
+        `_golden_run_one`이 자기 자신을 subprocess로 실행하여 무한 재귀 발생.
+
+        # CLI_EVIDENCE_ALLOW_READ_ONLY: golden_task.json 파일 읽기만, state 변경 없음
+        """
+        gt002_dir = GOLDEN_TASKS_DIR / "GT-002-internal-artifact-blocked"
+        golden_json = gt002_dir / "golden_task.json"
+        assert golden_json.exists(), f"GT-002 golden_task.json 없음: {golden_json}"
+
+        data = json.loads(golden_json.read_text(encoding="utf-8"))
+        command: str = data.get("command", "")
+
+        # 자기 재귀 패턴: command에 "golden run" 이 포함되면 _golden_run_one이 자기를 호출
+        assert "golden run" not in command, (
+            f"GT-002 command에 자기 재귀 패턴 'golden run' 발견: {command!r}\n"
+            "수정 필요: command를 preflight-pr-impl 등 직접 CLI 호출로 변경하세요."
+        )
+
+    def test_gt002_smoke_enabled(self) -> None:
+        """GT-002 smoke=true여야 CI에서 검출 가능.
+
+        BUG: smoke=false이면 `golden run --smoke`가 GT-002를 건너뛰어
+        CI에서 재귀 버그가 검출되지 않음.
+
+        # CLI_EVIDENCE_ALLOW_READ_ONLY: golden_task.json 파일 읽기만, state 변경 없음
+        """
+        gt002_dir = GOLDEN_TASKS_DIR / "GT-002-internal-artifact-blocked"
+        golden_json = gt002_dir / "golden_task.json"
+        assert golden_json.exists(), f"GT-002 golden_task.json 없음: {golden_json}"
+
+        data = json.loads(golden_json.read_text(encoding="utf-8"))
+        assert data.get("smoke") is True, (
+            f"GT-002 smoke={data.get('smoke')!r} — True여야 CI smoke 테스트에 포함됨"
+        )
+
+    def test_gt002_runs_under_5s_and_fails_correctly(self, tmp_path: Path) -> None:
+        """GT-002 golden run이 5초 이내 종료되고 exit code 1을 반환해야 함.
+
+        BUG: 자기 재귀로 60초 타임아웃까지 블로킹됨.
+        수정 후: preflight-pr-impl --files 방식이어서 즉시 결과 반환.
+
+        acceptable exit codes: 1 (FAIL — 내부 산출물 detected)
+        expected: 5초 이내 완료
+        """
+        import time
+        env = isolated_env(tmp_path)
+        task_id = "GT-002-internal-artifact-blocked"
+
+        start = time.monotonic()
+        result = run_cli(
+            ["golden", "run", "--task", task_id],
+            env=env,
+            timeout=10,  # 10초 타임아웃 (5초 이내 완료 검증)
+        )
+        elapsed = time.monotonic() - start
+
+        # exit code 1 = FAIL (내부 산출물 blocked) — 정상 동작
+        assert result.returncode == 1, (
+            f"GT-002 golden run — exit 1(FAIL) 기대, 실제={result.returncode}\n"
+            f"stdout: {result.stdout[:300]}\nstderr: {result.stderr[:300]}"
+        )
+
+        # 5초 이내 완료 검증
+        assert elapsed < 5.0, (
+            f"GT-002 golden run이 {elapsed:.1f}초 소요 — 5초 이내 완료 필요\n"
+            "자기 재귀 버그가 재발했을 수 있습니다."
+        )
+
+        # blocked 메시지 출력 확인
+        combined = result.stdout + result.stderr
+        assert "blocked" in combined.lower() or "FAIL" in combined or "GOLDEN FAIL" in combined, (
+            f"GT-002: 'blocked' 또는 'FAIL' 메시지 미출력\n"
+            f"stdout: {result.stdout[:300]}"
+        )

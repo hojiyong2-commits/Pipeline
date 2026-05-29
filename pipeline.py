@@ -1042,6 +1042,9 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     # IMP-20260528-3898: gates accept 완료 시 pipeline.py가 자동 갱신하는 런타임 파일.
     # PM snapshot 이후 accept 또는 다른 파이프라인 완료 시 변경되어 scope gate 오탐을 유발함.
     "human_acceptance_packet.md",
+    # BUG-20260529-40C9 MT-2: golden task 실행 시 생성되는 런타임 파일.
+    # 개발·테스트 중 golden run으로 인해 생성/삭제될 수 있으므로 scope gate 오탐 방지.
+    "golden_failure_packet.json",
 }
 
 
@@ -11733,41 +11736,48 @@ def _cmd_gates_preflight_pr_impl(args: argparse.Namespace) -> None:
 
     tests/oracles/ 경로는 의도적으로 허용됩니다 (사용자 제공 oracle 파일).
     """
-    # merge-base 기반 git diff (CI shallow clone 지원)
-    base_sha = os.environ.get("GITHUB_BASE_SHA", "").strip()
-    if not base_sha:
-        _mb = subprocess.run(
-            ["git", "merge-base", "origin/main", "HEAD"],
+    # BUG-20260529-40C9 MT-1: --files 옵션이 지정된 경우 git diff 대신 명시적 파일 목록 사용
+    explicit_files: Optional[str] = getattr(args, "files", None)
+    if explicit_files is not None:
+        changed_files = [f.strip() for f in explicit_files.split(",") if f.strip()]
+        # --files 모드에서는 삭제 파일 추적 불가 → 빈 세트로 처리
+        deleted_files: set = set()
+    else:
+        # merge-base 기반 git diff (CI shallow clone 지원)
+        base_sha = os.environ.get("GITHUB_BASE_SHA", "").strip()
+        if not base_sha:
+            _mb = subprocess.run(
+                ["git", "merge-base", "origin/main", "HEAD"],
+                capture_output=True, text=True, check=False,
+            )
+            if _mb.returncode == 0:
+                base_sha = _mb.stdout.strip()
+
+        if base_sha:
+            diff_cmd = ["git", "diff", "--name-only", f"{base_sha}...HEAD"]
+        else:
+            diff_cmd = ["git", "diff", "--name-only", "origin/main...HEAD"]
+
+        result = subprocess.run(diff_cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            _die(
+                f"[PIPELINE ERROR] preflight-pr-impl: git diff 실패: {result.stderr.strip()}",
+                exit_code=1,
+            )
+        changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+
+        # 삭제된 파일은 내부 산출물 검사에서 제외 (정리 행위로 허용)
+        if base_sha:
+            deleted_diff_cmd = ["git", "diff", "--diff-filter=D", "--name-only", f"{base_sha}...HEAD"]
+        else:
+            deleted_diff_cmd = ["git", "diff", "--diff-filter=D", "--name-only", "origin/main...HEAD"]
+        deleted_result = subprocess.run(
+            deleted_diff_cmd,
             capture_output=True, text=True, check=False,
         )
-        if _mb.returncode == 0:
-            base_sha = _mb.stdout.strip()
-
-    if base_sha:
-        diff_cmd = ["git", "diff", "--name-only", f"{base_sha}...HEAD"]
-    else:
-        diff_cmd = ["git", "diff", "--name-only", "origin/main...HEAD"]
-
-    result = subprocess.run(diff_cmd, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        _die(
-            f"[PIPELINE ERROR] preflight-pr-impl: git diff 실패: {result.stderr.strip()}",
-            exit_code=1,
-        )
-    changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
-
-    # 삭제된 파일은 내부 산출물 검사에서 제외 (정리 행위로 허용)
-    if base_sha:
-        deleted_diff_cmd = ["git", "diff", "--diff-filter=D", "--name-only", f"{base_sha}...HEAD"]
-    else:
-        deleted_diff_cmd = ["git", "diff", "--diff-filter=D", "--name-only", "origin/main...HEAD"]
-    deleted_result = subprocess.run(
-        deleted_diff_cmd,
-        capture_output=True, text=True, check=False,
-    )
-    deleted_files: set = set()
-    if deleted_result.returncode == 0:
-        deleted_files = {f.strip() for f in deleted_result.stdout.splitlines() if f.strip()}
+        deleted_files = set()
+        if deleted_result.returncode == 0:
+            deleted_files = {f.strip() for f in deleted_result.stdout.splitlines() if f.strip()}
 
     # 내부 산출물 감지 — tests/oracles/, phase attestation 경로, 삭제된 파일은 허용
     blocked: List[str] = []
@@ -14405,12 +14415,21 @@ def build_parser() -> argparse.ArgumentParser:
                                      help="phase_attestation_request.json 경로")
 
     # IMP-20260528-3898 MT-2: preflight-pr-impl — 구현 PR 내부 산출물 검사
-    gsub.add_parser(
+    # BUG-20260529-40C9 MT-1: --files 옵션 추가 (git diff 대신 명시적 파일 목록 지정 가능)
+    _p_preflight_impl = gsub.add_parser(
         "preflight-pr-impl",
         help=(
             "구현 PR(impl 브랜치)에 pipeline 내부 산출물(build_report.xml, "
             "scope_manifest_MT-*.json 등)이 포함되지 않았는지 검사합니다. "
             "WORKSPACE_INTERNAL_PATTERNS SSoT 사용. CI에서 gates preflight-pr-impl로 호출."
+        ),
+    )
+    _p_preflight_impl.add_argument(
+        "--files",
+        default=None,
+        help=(
+            "쉼표로 구분된 파일 목록 (git diff 대신 사용). "
+            "golden task 등 테스트 픽스처에서 재현 가능한 입력을 제공할 때 사용합니다."
         ),
     )
 
@@ -16419,8 +16438,19 @@ def _cmd_golden_list(args: "argparse.Namespace") -> None:
     print(f"\n  총 {len(tasks)}개 태스크")
 
 
-def _verify_forbidden_files(task: Dict[str, Any]) -> List[str]:
-    """task의 forbidden_files 패턴에 매칭되는 파일이 존재하는지 확인.
+def _verify_forbidden_files(
+    task: Dict[str, Any],
+    file_list: Optional[List[str]] = None,
+) -> List[str]:
+    """task의 forbidden_files 패턴에 매칭되는 파일이 있는지 확인.
+
+    BUG-20260529-40C9 MT-2: 워크스페이스 전체 rglob 스캔 제거.
+    file_list 파라미터가 제공된 경우 해당 목록만 검사합니다.
+    file_list가 None이면 빈 목록으로 처리(워크스페이스 스캔 금지).
+
+    Args:
+        task: golden_task.json 내용 (forbidden_files 패턴 목록 포함)
+        file_list: 검사할 파일 경로 목록. None이면 [] 처리 (스캔 없음).
 
     Returns: 발견된 금지 파일 목록 (빈 리스트면 위반 없음).
     """
@@ -16429,18 +16459,18 @@ def _verify_forbidden_files(task: Dict[str, Any]) -> List[str]:
     forbidden_patterns: List[str] = task.get("forbidden_files", [])
     if not forbidden_patterns:
         return violations
-    # 현재 작업 디렉터리 전체에서 검사
-    try:
-        for entry in Path(".").rglob("*"):
-            if not entry.is_file():
-                continue
-            rel = str(entry).replace("\\", "/")
-            for pattern in forbidden_patterns:
-                if fnmatch.fnmatch(entry.name, pattern) or fnmatch.fnmatch(rel, pattern):
-                    violations.append(rel)
-                    break
-    except (PermissionError, OSError):
-        pass
+    # file_list가 None이면 검사 대상 없음 — 워크스페이스 rglob 스캔 금지
+    if file_list is None:
+        return violations
+    for entry_str in file_list:
+        rel = entry_str.replace("\\", "/").strip()
+        if not rel:
+            continue
+        entry_name = rel.rsplit("/", 1)[-1]
+        for pattern in forbidden_patterns:
+            if fnmatch.fnmatch(entry_name, pattern) or fnmatch.fnmatch(rel, pattern):
+                violations.append(rel)
+                break
     return violations
 
 
@@ -16547,7 +16577,19 @@ def _golden_run_one(task: Dict[str, Any]) -> Dict[str, Any]:
     task_id: str = task.get("id", "unknown")
 
     # 1. forbidden_files 검사
-    violations = _verify_forbidden_files(task)
+    # BUG-20260529-40C9 MT-2: file_list를 input/changed_files.json에서 읽어 전달
+    # (워크스페이스 rglob 스캔 제거 — 재현 불가 문제 해결)
+    _file_list: Optional[List[str]] = None
+    _task_dir = Path(task.get("_task_dir", ""))
+    _input_cf = _task_dir / "input" / "changed_files.json"
+    if _input_cf.is_file():
+        try:
+            _cf_data = json.loads(_input_cf.read_text(encoding="utf-8"))
+            if isinstance(_cf_data.get("changed_files"), list):
+                _file_list = [str(f) for f in _cf_data["changed_files"] if f]
+        except (OSError, json.JSONDecodeError):
+            pass
+    violations = _verify_forbidden_files(task, file_list=_file_list)
     if violations:
         print(f"  [GOLDEN FAIL] {task_id} — forbidden 파일 발견: {violations[:3]}")
         run_result: Dict[str, Any] = {
