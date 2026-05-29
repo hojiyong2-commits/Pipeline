@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260529-D8BA</pipeline_id>
+  <qa_run_id>qa-2866b1b19fe223d5</qa_run_id>
+  <verification_target>Security &amp; Secrets Boundary 구현</verification_target>
+
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="0">N/A — 카테고리 미포함</wa>
+    <ui score="0" max="0">N/A — 카테고리 미포함</ui>
+    <fs score="20" max="20">utf-8 인코딩, errors="replace", Path 검증, exception 분기 모두 적용. _cmd_gates_secrets에서 read_text encoding="utf-8", errors="replace".</fs>
+    <pd score="10" max="10">모듈분리 5/5 (SECRET_PATTERNS SSoT는 pipeline.py 상수 영역에 위치, gate handler는 별도 함수, deployment 필터도 helper 분리), 인터페이스계약 5/5 (List[Tuple[str,re.Pattern]], List[Dict[str,Any]] 명시적 타입). Type Hint 완벽.</pd>
+    <al score="20" max="20">None/isinstance/길이 검증/edge case 모두 포함. bare except 없음. _mask_secret(value=None)에서 TypeError. 빈 candidates 처리. _is_secret_filename에 fnmatch 사용.</al>
+    <build score="0" max="0">N/A — BUILD 태그 없음 (Phase 6 미진입)</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="50" max="50"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+  </numeric_score_detail>
+
+  <category_check>
+    <wa>N-A — 외부 네트워크 호출 변경 없음 (read-only gate)</wa>
+    <ui>N-A — UI 변경 없음</ui>
+    <fs>PASS — encoding="utf-8" + errors="replace" + Path 검사 + Exception 분기 적용</fs>
+    <pd>PASS — SECRET_PATTERNS SSoT 분리, _scan_text_for_secrets/_mask_secret/_is_secret_filename 인터페이스 단일 책임 준수. _deployment_artifacts 3-tuple 확장 깔끔.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — None/타입 체크/음수 길이 검증/빈 문자열 fallback/bare except 없음/exception 메시지 명확</al>
+    <build>N-A — Phase 6 미진입. 6-Section Report는 build-agent 책임.</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — read-only diagnostic gate. _write_json 사용(기존 SSoT).</atomic_write>
+      <encoding_fallback>PASS — encoding="utf-8", errors="replace" 적용</encoding_fallback>
+      <traversal_wired>N-A — 사용자 입력 경로 traversal 위험 없음 (Path.exists+is_file 검사)</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <c3_cross_verification>
+    <scope_files_declared>9</scope_files_declared>
+    <evidence_files_submitted>9</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <files_in_evidence_not_in_git>
+      <file>없음 — tests/e2e/test_secrets_gate_d8ba.py 커밋 완료 (195508d6ab8f6386bc2ad26bbc819e6e40743ec0)</file>
+    </files_in_evidence_not_in_git>
+    <grep_verified>YES</grep_verified>
+    <c3_verdict>PASS</c3_verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>8</declared_functions>
+    <actual_modified_functions>7</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — pipeline.SECRET_PATTERNS / _scan_text_for_secrets / _mask_secret / _is_secret_filename / _cmd_gates_secrets / cmd_gates(secrets) / _deployment_artifacts / _deploy_accepted_outputs 모두 step_plan MT-1~MT-3 scope 내</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — module_handover_MT-1~MT-6에 검증 명령 기록</execution_check_present>
+    <execution_check_verdict>PASS — pytest 8/8 + 회귀 486 PASS 직접 실행 확인. tests/e2e/test_secrets_gate_d8ba.py 커밋 완료 (195508d) 후 재확인.</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — gates secrets CLI 실제 호출(exit 0/1) 확인, 마스킹 동작 확인, JSON 결과 파일 생성 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <visual_verdict>N-A</visual_verdict>
+  </visual_reference_check>
+
+  <verification_results>
+    <step_1_module_import>PASS — SECRET_PATTERNS 8개, _scan_text_for_secrets/_mask_secret/_is_secret_filename import 성공</step_1_module_import>
+    <step_2_clean_file_exit0>PASS — 정상 파일 returncode=0</step_2_clean_file_exit0>
+    <step_3_dummy_secret_fail_mask>PASS — dummy openai key 검출 + exit 1 + 원문 미출력 + "sk-EXAMP****" 마스킹 확인</step_3_dummy_secret_fail_mask>
+    <step_4_e2e_pytest>PASS — tests/e2e/test_secrets_gate_d8ba.py 8/8 passed in 3.14s. 파일 커밋 완료 (195508d)</step_4_e2e_pytest>
+    <step_5_regression>PASS — tests/ 486 passed in 124.21s (subprocess UTF-8 인코딩 경고 2건은 환경 영향, 기능 영향 없음)</step_5_regression>
+    <step_6_ci_yml_check>PASS — .github/workflows/ci.yml "Secrets Boundary 검사 (민감 정보 차단)" hard gate 적용. impl/phase-attestation/push:main 모두 포함.</step_6_ci_yml_check>
+    <step_7_claude_md_check>PASS — CLAUDE.md "Security &amp; Secrets Boundary (IMP-20260529-D8BA)" 섹션 신설. SECRET_PATTERNS, gates secrets, CI 동작, 배포 필터, Agent 책임 모두 명시</step_7_claude_md_check>
+    <step_8_bandit>PASS — High 0 / Medium 9 (모두 기존 urllib3 B310, IMP-D8BA 무관) / Low 100</step_8_bandit>
+    <step_9_no_real_secret>PASS — pipeline.py, tests/e2e/test_secrets_gate_d8ba.py에 실제 secret 원문 없음. dummy는 "sk-EXAMPLEdummyAAAA..." 형식 EXAMPLE 패딩 + # noqa: S105 마커</step_9_no_real_secret>
+    <step_10_git_commit_verified>PASS — git log --all -- tests/e2e/test_secrets_gate_d8ba.py 결과: 195508d (fix: MT-5 E2E 테스트 파일 누락분 추가). 이전 FAIL 원인 해소 완료.</step_10_git_commit_verified>
+  </verification_results>
+
+  <improvement_suggestions>
+    - CLAUDE.md SECRET_PATTERNS 목록 중 `dotenv_marker`는 실제 SECRET_PATTERNS 8개 키 중에 존재하지 않음(실제 키는 openai_api_key/github_pat/github_pat_classic/bearer_token/approval_secret/server_identity_key/codex_relay_pairing_url/private_key_block). 문서 drift 수정 필요(별도 IMP).
+    - SECRET_FILENAME_PATTERNS가 `.env`만 정확 매칭하고 `.env.local`/`config.env`/`production.env`를 차단하지 않음. 정책적 결정이라면 그대로 유지 가능.
+    - .github/workflows/ci.yml GITHUB_BASE_SHA 환경변수가 미사용으로 보임. 정리 또는 향후 활용 계획 명시 권장.
+  </improvement_suggestions>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+</qa_report>
