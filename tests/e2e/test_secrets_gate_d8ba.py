@@ -124,6 +124,7 @@ def write_text_utf8(path: Path, content: str) -> None:
 
 def test_gates_secrets_passes_on_clean_file(tmp_path: Path) -> None:
     """일반 텍스트만 포함한 파일은 gates secrets 통과 (exit 0)."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     clean_file = tmp_path / "clean.txt"
     write_text_utf8(clean_file, "hello world, this is a clean file with no secrets")
@@ -135,7 +136,6 @@ def test_gates_secrets_passes_on_clean_file(tmp_path: Path) -> None:
 
     assert result.returncode == 0, f"clean 파일은 exit 0 기대, 실제={result.returncode}\nstdout={result.stdout}\nstderr={result.stderr}"
     # gates secrets는 read-only diagnostic — pipeline_state.json을 변경하지 않음
-    # final_state: N/A (state-mutation 없음, stdout/returncode으로 결과 검증)
     final_state = {"returncode": result.returncode, "finding_count": 0}
     assert final_state["returncode"] == 0
 
@@ -146,6 +146,7 @@ def test_gates_secrets_passes_on_clean_file(tmp_path: Path) -> None:
 
 def test_gates_secrets_detects_openai_key_dummy(tmp_path: Path) -> None:
     """OpenAI dummy key가 포함된 파일은 exit 1 + 마스킹된 값 출력."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     bad_file = tmp_path / "with_openai.txt"
     write_text_utf8(bad_file, f"API key: {DUMMY_OPENAI_KEY}\nother content")
@@ -171,6 +172,7 @@ def test_gates_secrets_detects_openai_key_dummy(tmp_path: Path) -> None:
 
 def test_gates_secrets_detects_github_pat_dummy(tmp_path: Path) -> None:
     """GitHub PAT dummy 토큰이 포함된 파일은 exit 1 + 마스킹된 값 출력."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     bad_file = tmp_path / "with_ghp.txt"
     write_text_utf8(bad_file, f"github token = {DUMMY_GH_PAT}\nend")
@@ -196,6 +198,7 @@ def test_gates_secrets_detects_github_pat_dummy(tmp_path: Path) -> None:
 
 def test_gates_secrets_detects_private_key_block(tmp_path: Path) -> None:
     """-----BEGIN ... PRIVATE KEY----- 블록이 포함된 파일은 exit 1."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     bad_file = tmp_path / "with_pk.pem"
     write_text_utf8(
@@ -220,6 +223,7 @@ def test_gates_secrets_detects_private_key_block(tmp_path: Path) -> None:
 
 def test_gates_secrets_detects_bearer_token_dummy(tmp_path: Path) -> None:
     """Authorization: Bearer ... 라인이 포함된 파일은 exit 1."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     bad_file = tmp_path / "with_bearer.txt"
     write_text_utf8(bad_file, f"{DUMMY_BEARER_LINE}\nuser-agent: test")
@@ -241,6 +245,7 @@ def test_gates_secrets_detects_bearer_token_dummy(tmp_path: Path) -> None:
 
 def test_gates_secrets_masks_original_value(tmp_path: Path) -> None:
     """검출 결과 출력에 원본 secret 값은 미노출되고 마스킹 표시(****)가 포함."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     bad_file = tmp_path / "with_openai_mask.txt"
     write_text_utf8(bad_file, f"key={DUMMY_OPENAI_KEY}")
@@ -312,6 +317,7 @@ def test_deployment_blocks_secret_artifact(tmp_path: Path) -> None:
 
 def test_gates_secrets_passes_without_files_flag(tmp_path: Path) -> None:
     """--files 옵션 없이 실행해도 에러 없이 실행 (exit 0 또는 1, traceback 없음)."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     env = make_env(state_file)
 
