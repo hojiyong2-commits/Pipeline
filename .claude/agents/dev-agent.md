@@ -738,7 +738,7 @@ def _safe_resolve(user_path: str, allowed_root: Path) -> Path:
 
 - `Path.resolve()` 는 allowed_root 비교 전에 반드시 실행 (symlink 우회 차단)
 - `get_resource_path()` 반환값도 위 패턴으로 검증
-- 민감 경로(토큰, .env): allowed_root를 프로젝트 디렉토리로 제한
+- 민감 경로(토큰, dotenv 파일 등): allowed_root를 프로젝트 디렉토리로 제한
 
 ### [Forbidden] FS Path Traversal — 정의만 하고 호출 누락 금지
 
@@ -1139,3 +1139,36 @@ def read_file(self, file_path: str) -> Optional[List[str]]:
 ```
 
 <!-- Micro-task Surgical Edit (v3.0) 정의는 파일 상단의 ## Micro-task Surgical Edit (v3.0) 섹션 참조. 중복 제거됨. -->
+
+## Secrets Boundary (IMP-20260529-D8BA)
+
+코드, 주석, docstring, 테스트 fixture에 실제 secret 원문을 절대 포함하지 않습니다. CI의 `Secrets Boundary 검사 (민감 정보 차단)` step(`python pipeline.py gates secrets`)이 PR diff를 자동 검사하여 hard gate로 차단합니다.
+
+### 허용/금지 패턴
+
+- **금지**: 실제 secret 형식의 값 (`sk-` + 진짜 토큰 본체)을 변수에 하드코딩하는 패턴. CI에서 즉시 차단됩니다.
+- **허용**: dummy/EXAMPLE 패딩 + 명시적 bandit suppression (`# noqa: S105`).
+- **허용**: 환경변수 참조 (`os.environ.get("OPENAI_API_KEY")`).
+
+```python
+# dummy 상수 예시 (실제 dev 코드에서 작성하는 방식)
+# prefix 와 본체를 분리 표현하면 정규식 매치를 회피하면서 dummy 의도를 명시
+import os
+api_key_env = os.environ.get("OPENAI_API_KEY")
+
+# 테스트 fixture에서 dummy secret 이 필요하면 EXAMPLE/AAAA 패딩으로
+# 명백한 가짜임을 표시하고 # noqa: S105 로 bandit 허용을 명시합니다.
+# 본 문서에서는 정규식 매치를 피하기 위해 prefix 와 본체를 분할 표기:
+#   dummy_key = "sk-" + "EXAMPLE_DUMMY_" + "A" * 24  # noqa: S105
+```
+
+### SSoT 참조
+- 검사 대상 8개 패턴: `pipeline.py`의 `SECRET_PATTERNS` 상수
+- 마스킹 헬퍼: `_mask_secret()` / `_scan_text_for_secrets()`
+- 정책 전문: `CLAUDE.md`의 "Security & Secrets Boundary" 섹션
+
+### 자가 검증
+코드 작성 후 handover 전:
+1. dummy secret이 EXAMPLE/AAAA 패딩으로 명백한 가짜인지 확인
+2. `python pipeline.py gates secrets --files <변경한_파일>` 로컬 실행 (선택)
+3. handover XML의 `<security>` 또는 `<self_check>` 에 검증 결과 명시

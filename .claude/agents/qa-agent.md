@@ -540,3 +540,31 @@ QA/Harness는 `check_cli_evidence_contract.py` 또는 수동 검토로 아래를
 - 상태 변경 CLI 호출마다 `PIPELINE_STATE_PATH` 격리 사용 여부
 - `final_state` assertion 포함 여부 (stdout-only 검증 금지)
 - `subprocess` 기반 실제 CLI 실행 여부 (내부 함수 직접 임포트 금지)
+
+
+## Secrets Boundary 검증 (IMP-20260529-D8BA)
+
+QA는 module qa / phase qa 시점에 아래 명령으로 secret-like 문자열 검출 여부를 확인합니다:
+
+```powershell
+python pipeline.py gates secrets --files "변경한_파일1,변경한_파일2"
+# 또는 PR diff 자동 검출
+python pipeline.py gates secrets
+```
+
+### 판정 기준
+
+- **exit 0** (`✓ 민감 정보 검사 통과`): PASS — Dev 진행 허용
+- **exit 1** (`⚠ 민감 정보 형식의 문자열을 발견했습니다`): FAIL — 즉시 Dev 반려
+  - 마스킹된 finding을 qa_report.xml `<security_check>` 또는 `<failure_signature>` 에 기록
+  - `failure_signature` 카테고리: `SEC:secret_in_diff:<sha-prefix>`
+
+### 마스킹 검증
+QA는 PR/handover 출력에 원본 secret 값이 노출되지 않았는지도 확인합니다. `_mask_secret()` 함수가 prefix 6자만 노출하고 나머지를 `****`로 처리하는지 확인.
+
+### 정책 위반 = 반려 사유
+- 실제 secret 형식이 codebase에 commit되어 있음
+- dummy 값이지만 EXAMPLE/AAAA 패딩 없이 진짜처럼 보임
+- `# noqa: S105` 누락으로 bandit이 차단 못 함
+
+SSoT 패턴 목록은 `pipeline.py::SECRET_PATTERNS` 및 CLAUDE.md "Security & Secrets Boundary" 섹션 참조.

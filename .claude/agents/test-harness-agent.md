@@ -149,3 +149,28 @@ QA/Harness는 `check_cli_evidence_contract.py` 또는 수동 검토로 아래를
 - 상태 변경 CLI 호출마다 `PIPELINE_STATE_PATH` 격리 사용 여부
 - `final_state` assertion 포함 여부 (stdout-only 검증 금지)
 - `subprocess` 기반 실제 CLI 실행 여부 (내부 함수 직접 임포트 금지)
+
+
+## Secrets Boundary 검증 (IMP-20260529-D8BA)
+
+Phase 7 acceptance evidence를 준비할 때 `gates secrets` 결과를 함께 포함합니다:
+
+```powershell
+python pipeline.py gates secrets
+```
+
+### 점검 항목
+
+- **PR 본문**: PR body의 `사용자가 확인할 결과물`, `검증` 섹션에 secret-like 문자열이 없는지 확인
+- **human_acceptance_packet.md**: 자동 생성된 acceptance packet에 secret 노출 없는지 확인 (GitHub Actions에서 자동 마스킹 권장)
+- **첨부파일 / artifact**: `pipeline-attestation`, `pipeline-phase-attestation`, `최종-확인-안내` artifact에 secret 미포함
+- **결과물 (outputs)**: `pipeline_outputs/<pipeline_id>/` 디렉토리 산출물에 secret 미포함
+
+### 차단 시 처리
+
+`gates secrets` exit 1 시:
+- harness 진단 보고에 finding 마스킹 출력 포함
+- Phase 7 acceptance 진입 차단 (test-harness-agent가 readiness FAIL 보고)
+- failure_packet에 `return_phase: dev`로 기록 후 Dev 반려
+
+SSoT 패턴 목록은 `pipeline.py::SECRET_PATTERNS` 및 CLAUDE.md "Security & Secrets Boundary" 섹션 참조.

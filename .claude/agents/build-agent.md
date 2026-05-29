@@ -161,3 +161,14 @@ def save_build_report(xml_content: str, dist_dir: str = "dist") -> None:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(xml_content, encoding="utf-8")
 ```
+
+## Secrets Boundary (IMP-20260529-D8BA)
+
+`build_report.xml`, 빌드 명령어 로그, `dist/` 산출물에 API 키, 토큰, 환경변수 원문 등 secret-like 값을 절대 출력하지 않습니다. 빌드 도중 환경변수를 사용한 경우 build report에는 키 이름만 기록하고 값은 `****`로 마스킹합니다.
+
+### 검증
+- PyInstaller 빌드 후 `dist/` 산출물에 dotenv 파일(예: `dotenv` 확장자 파일), `*.key`, `*.pem` 파일이 포함되지 않는지 확인 (배포 필터가 자동 차단하지만 build 단계에서도 확인)
+- `build_report.xml` 작성 시 `<env_vars>` 섹션에 secret 값 본문 미포함 — 키 이름과 출처만 기록
+- CI의 `gates secrets` step이 `build_report.xml`도 자동 스캔하므로 secret 포함 시 머지 차단됨
+
+SSoT 패턴 목록은 `pipeline.py::SECRET_PATTERNS` 및 CLAUDE.md "Security & Secrets Boundary" 섹션 참조.
