@@ -1,0 +1,97 @@
+<qa_report>
+  <pipeline_id>BUG-20260529-40C9</pipeline_id>
+  <agent_id>qa-agent</agent_id>
+  <run_id>qa-21e614c3cb28dca6</run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>106</numeric_score>
+  <max_score>120</max_score>
+
+  <micro_task_boundary>
+    <task id="MT-1">
+      <target_files>pipeline.py</target_files>
+      <affected_functions>_cmd_gates_preflight_pr_impl + argparse 등록 (preflight-pr-impl)</affected_functions>
+      <verdict>WITHIN_SCOPE</verdict>
+    </task>
+    <task id="MT-2">
+      <target_files>pipeline.py</target_files>
+      <affected_functions>_verify_forbidden_files (워크스페이스 스캔 to fixture 기반)</affected_functions>
+      <verdict>WITHIN_SCOPE</verdict>
+    </task>
+    <task id="MT-3">
+      <target_files>tests/golden_tasks/GT-002-internal-artifact-blocked/golden_task.json, tests/golden_tasks/GT-002-internal-artifact-blocked/expected/result.json</target_files>
+      <affected_functions>GT-002 golden_task.json (재귀 호출 제거 + smoke=true)</affected_functions>
+      <verdict>WITHIN_SCOPE</verdict>
+    </task>
+    <task id="MT-4">
+      <target_files>tests/e2e/test_golden_tasks.py</target_files>
+      <affected_functions>test_golden_tasks.py (GT-002 재현 가능성 회귀 테스트)</affected_functions>
+      <verdict>WITHIN_SCOPE</verdict>
+    </task>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <category_scores>
+    <category name="AL" score="25" max="25">
+      <finding type="PASS">_verify_forbidden_files file_list=None 시 빈 반환 (rglob 제거 확인)</finding>
+      <finding type="PASS">_cmd_gates_preflight_pr_impl --files 파싱 로직 정확 (split, strip, empty filter)</finding>
+      <finding type="PASS">_golden_run_one에서 file_list를 input/changed_files.json에서 읽어 전달</finding>
+    </category>
+    <category name="FS" score="15" max="15">
+      <finding type="PASS">_golden_run_one: OSError, json.JSONDecodeError 예외 처리 포함</finding>
+      <finding type="PASS">Path 기반 파일 읽기, encoding=utf-8 명시</finding>
+    </category>
+    <category name="PD" score="20" max="20">
+      <finding type="PASS">_verify_forbidden_files 시그니처 변경으로 워크스페이스 rglob 스캔 정책 완전 제거</finding>
+      <finding type="PASS">ATOMIC_SNAPSHOT_EXCLUDED_FILES에 golden_failure_packet.json 추가</finding>
+    </category>
+    <category name="TEST" score="20" max="20">
+      <finding type="PASS">TestGT002Regression 3개 테스트 모두 PASS</finding>
+      <finding type="PASS">전체 테스트 17/17 PASS (test_golden_tasks.py)</finding>
+      <finding type="PASS">전체 테스트 468/469 (1개 기존 pre-existing 실패, BUG와 무관)</finding>
+    </category>
+    <category name="SEC" score="10" max="10">
+      <finding type="PASS">bandit High severity 이슈 없음</finding>
+      <finding type="PASS">새로운 보안 취약점 미도입</finding>
+    </category>
+    <category name="CODE" score="16" max="20">
+      <finding type="PASS">ruff ALL PASS</finding>
+      <finding type="PASS">mypy PASS (no issues)</finding>
+      <finding type="INFO">기존 코드 스타일 일관성 유지</finding>
+    </category>
+  </category_scores>
+
+  <acceptance_criteria_check>
+    <criterion id="AC-1" description="GT-002 command에 golden run 자기 재귀 없음">PASS</criterion>
+    <criterion id="AC-2" description="GT-002 smoke=true (CI 검출 가능)">PASS</criterion>
+    <criterion id="AC-3" description="_verify_forbidden_files rglob 스캔 제거">PASS</criterion>
+    <criterion id="AC-4" description="preflight-pr-impl --files 파라미터 추가">PASS</criterion>
+    <criterion id="AC-5" description="GT-002 golden run이 5초 이내 exit=1 반환">PASS</criterion>
+    <criterion id="AC-6" description="MT-4 회귀 테스트 3개 PASS">PASS</criterion>
+  </acceptance_criteria_check>
+
+  <edge_case_check>
+    <case description="file_list=None to 빈 반환 (워크스페이스 스캔 없음)">PASS</case>
+    <case description="forbidden 파일 없는 경우 to PASS">PASS</case>
+    <case description="forbidden 파일 있는 경우 to FAIL + packet 생성">PASS</case>
+    <case description="input/changed_files.json 없는 경우 to file_list=None 처리">PASS</case>
+    <case description="malformed JSON in changed_files.json to 예외 처리 후 file_list=None">PASS</case>
+  </edge_case_check>
+
+  <pre_existing_failure>
+    <test>tests/e2e/test_real_cli_paths.py::test_gates_technical_records_result</test>
+    <reason>Codex PR gate가 test 격리 state에서도 요구됨 - BUG-20260529-40C9 변경과 무관한 기존 실패</reason>
+    <confirmed>main 브랜치에서도 동일하게 실패함 확인</confirmed>
+  </pre_existing_failure>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <pipeline_id>BUG-20260529-40C9</pipeline_id>
+    <verdict>PASS</verdict>
+    <numeric_score>106</numeric_score>
+    <evidence>
+      <file>qa_report.xml</file>
+    </evidence>
+    <status>READY_FOR_SEC</status>
+  </handover>
+</qa_report>
