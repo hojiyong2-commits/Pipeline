@@ -40,6 +40,14 @@ jobs:
         run: |
           python pipeline.py gates preflight-pr-impl
 
+      - name: Golden Task Smoke 실행 (회귀 검증)
+        # IMP-20260528-0A9E MT-5: smoke=true golden task 전체 실행 — pipeline.py 핵심 흐름 회귀 검증
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'phase-attestation/')
+        env:
+          PIPELINE_NO_DASHBOARD: "1"
+        run: |
+          python pipeline.py golden run --smoke
+
       - name: 단계 PR 위생 검사 (preflight-pr)
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'phase-attestation/')
         shell: pwsh

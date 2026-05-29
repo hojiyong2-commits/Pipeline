@@ -1,0 +1,14 @@
+{
+  "id": "GT-003-oracle-quality-normal-edge",
+  "description": "golden list 명령이 정확히 3개 태스크(GT-001~GT-003)를 나열하고 smoke 태스크가 존재하는지 검증",
+  "command": "python pipeline.py golden list",
+  "smoke": true,
+  "allowed_files": [],
+  "forbidden_files": [],
+  "acceptance_criteria": [
+    "exit_code == 0",
+    "stdout contains 'GT-001'",
+    "stdout contains 'GT-003'"
+  ],
+  "return_phase": "dev"
+}
