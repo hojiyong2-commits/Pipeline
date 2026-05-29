@@ -1,0 +1,42 @@
+{
+  "pipeline_id": "BUG-20260529-40C9",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_preflight_pr_impl + argparse 등록 (preflight-pr-impl)"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_verify_forbidden_files (워크스페이스 스캔 → fixture 기반)"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/golden_tasks/GT-002-internal-artifact-blocked/golden_task.json",
+        "tests/golden_tasks/GT-002-internal-artifact-blocked/expected/result.json"
+      ],
+      "affected_functions": [
+        "GT-002 golden_task.json (재귀 호출 제거 + smoke=true)"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "tests/e2e/test_golden_tasks.py"
+      ],
+      "affected_functions": [
+        "test_golden_tasks.py (GT-002 재현 가능성 회귀 테스트)"
+      ]
+    }
+  ]
+}
