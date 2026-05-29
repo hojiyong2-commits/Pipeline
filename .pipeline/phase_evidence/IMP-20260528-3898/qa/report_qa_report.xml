@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260528-3898</pipeline_id>
+  <qa_run_id>qa-00c81b3b50d6fb3d</qa_run_id>
+  <step0_precondition>
+    <handover_present>true</handover_present>
+    <evidence_files_listed>true</evidence_files_listed>
+    <actual_code_submitted>true</actual_code_submitted>
+    <precondition_verdict>PRECONDITION PASS</precondition_verdict>
+  </step0_precondition>
+  <category_check>
+    <wa>N/A</wa>
+    <ui>N/A</ui>
+    <fs>PASS</fs>
+    <pd>PASS</pd>
+    <sec>PASS</sec>
+    <al>PASS</al>
+    <build>N/A</build>
+  </category_check>
+  <micro_task_boundary>
+    <mt id="MT-1" scope_verdict="WITHIN_SCOPE">pipeline.py WORKSPACE_INTERNAL_PATTERNS, WORKSPACE_INTERNAL_DIR_PREFIXES, _is_internal_artifact 추가.</mt>
+    <mt id="MT-2" scope_verdict="WITHIN_SCOPE">pipeline.py _cmd_gates_preflight_pr_impl 및 argparse 등록. phase attestation 경로 허용 예외 처리.</mt>
+    <mt id="MT-3" scope_verdict="WITHIN_SCOPE">_deployment_artifacts 반환 타입 Tuple 변경, _deploy_accepted_outputs 튜플 언패킹, blocked_internal_artifacts 기록.</mt>
+    <mt id="MT-4" scope_verdict="WITHIN_SCOPE">.github/workflows/ci.yml SSoT 교체 및 continue-on-error 추가. .gitignore 13개 패턴 추가.</mt>
+    <mt id="MT-5" scope_verdict="WITHIN_SCOPE">tests/e2e/test_real_cli_paths.py 3개 테스트 추가. oracle 6개 파일 추가.</mt>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <numeric_score>108</numeric_score>
+  <critical_issues>none</critical_issues>
+</qa_report>

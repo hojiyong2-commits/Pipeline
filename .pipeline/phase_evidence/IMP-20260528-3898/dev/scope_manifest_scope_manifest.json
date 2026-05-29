@@ -1,0 +1,57 @@
+{
+  "pipeline_id": "IMP-20260528-3898",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.WORKSPACE_INTERNAL_PATTERNS / pipeline._is_internal_artifact"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_preflight_pr_impl"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._deployment_artifacts / pipeline._deploy_accepted_outputs"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        ".github/workflows/ci.yml",
+        ".gitignore"
+      ],
+      "affected_functions": [
+        ".github/workflows/ci.yml (구현 PR 위생 검사 step) / .gitignore"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "tests/e2e/test_real_cli_paths.py",
+        "tests/oracles/IMP-20260528-3898/normal_clean_pr/input.json",
+        "tests/oracles/IMP-20260528-3898/normal_clean_pr/expected.json",
+        "tests/oracles/IMP-20260528-3898/edge_internal_artifact/input.json",
+        "tests/oracles/IMP-20260528-3898/edge_internal_artifact/expected.json",
+        "tests/oracles/IMP-20260528-3898/error_deploy_internal_evidence/input.json",
+        "tests/oracles/IMP-20260528-3898/error_deploy_internal_evidence/expected.json"
+      ],
+      "affected_functions": [
+        "tests.e2e.test_real_cli_paths (workspace hygiene E2E 케이스)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260529-40C9</pipeline_id>
+  <manager_run_id>pipeline_manager-55bc134316a1c364</manager_run_id>
+  <planner_run_id>pm_planner-4e401f4aca97db98</planner_run_id>
+  <from>pipeline-manager-agent</from>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <step_plan_sha256>7c420688291831c3a031d422874adaf0a4cc1440b1a1c1fb25aaf53483b8df2c</step_plan_sha256>
+  <status>READY_FOR_DEV</status>
+  <design_answers>
+    <answer id="DQ-1">A — preflight-pr-impl --files 방식</answer>
+  </design_answers>
+  <branch>impl/BUG-20260529-40C9</branch>
+  <contract_status>frozen</contract_status>
+  <phase_plan>
+    <phase id="MT-1" name="PreflightFilesOption" target="pipeline.py">_cmd_gates_preflight_pr_impl에 --files 옵션 추가</phase>
+    <phase id="MT-2" name="VerifyForbiddenFixture" target="pipeline.py">_verify_forbidden_files 워크스페이스 스캔 제거, file_list 파라미터로 변경</phase>
+    <phase id="MT-3" name="GT002Redesign" target="tests/golden_tasks/GT-002-internal-artifact-blocked/">GT-002 command 재설계 + smoke=true + expected 갱신</phase>
+    <phase id="MT-4" name="GT002RegressionTests" target="tests/e2e/test_golden_tasks.py">GT-002 회귀 E2E 테스트 3건 추가</phase>
+  </phase_plan>
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING">pipeline.py — _cmd_gates_preflight_pr_impl --files 옵션</mt>
+    <mt id="MT-2" status="PENDING">pipeline.py — _verify_forbidden_files 수정</mt>
+    <mt id="MT-3" status="PENDING">GT-002 golden_task.json + expected/result.json 재작성</mt>
+    <mt id="MT-4" status="PENDING">test_golden_tasks.py — GT-002 회귀 테스트 3건</mt>
+  </micro_tasks>
+  <notes>BUG 파이프라인. 변경 파일: pipeline.py, tests/golden_tasks/GT-002-internal-artifact-blocked/**, tests/e2e/test_golden_tasks.py, tests/oracles/BUG-20260529-40C9/**</notes>
+</manager_handoff>
