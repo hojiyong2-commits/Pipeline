@@ -1,0 +1,18 @@
+{
+  "status": "FAIL",
+  "exit_code": 1,
+  "findings": [
+    {
+      "source": "acceptance_packet.md",
+      "pattern_name": "codex_relay_pairing_url"
+    },
+    {
+      "source": "acceptance_packet.md",
+      "pattern_name": "approval_secret"
+    }
+  ],
+  "must_not_appear_in_output": [
+    "EXAMPLEdummyApprovalCodeAAA"
+  ],
+  "summary_ko": "Codex Relay pairing URL과 approval-secret이 acceptance packet에 포함되어 있습니다."
+}

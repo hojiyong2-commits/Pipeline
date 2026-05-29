@@ -1,0 +1,9 @@
+{
+  "description": "배포 evidence 후보 파일 중 .env 파일과 server-identity-key 파일이 포함된 경우. _deployment_artifacts() 필터가 차단하고 deployment_manifest.json의 blocked_secret_artifacts에 기록해야 한다.",
+  "evidence_candidates": [
+    {"name": "dist/app.exe", "secret_like": false},
+    {"name": ".env", "secret_like": true},
+    {"name": "server-identity-key.pem", "secret_like": true},
+    {"name": "report.md", "secret_like": false}
+  ]
+}

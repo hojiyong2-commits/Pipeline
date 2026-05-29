@@ -1,0 +1,16 @@
+{
+  "status": "FAIL",
+  "exit_code": 1,
+  "findings": [
+    {
+      "source": "pr_diff.txt",
+      "pattern_name": "openai_api_key",
+      "masked_match": "sk-EXAMP****",
+      "line_hint": "+OPENAI_API_KEY=sk-EXAMP****"
+    }
+  ],
+  "must_not_appear_in_output": [
+    "sk-EXAMPLEdummyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  ],
+  "summary_ko": "OpenAI API 키 형식의 문자열이 PR diff에 포함되어 있습니다. 마스킹된 일부만 출력됩니다."
+}

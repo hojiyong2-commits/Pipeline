@@ -1,0 +1,6 @@
+{
+  "description": "acceptance packet markdown에 Codex Relay pairing URL 모양 dummy 문자열이 포함된 경우. codex-relay pairing URL 패턴 + approval-secret 키워드 검출.",
+  "scan_targets": [
+    {"name": "acceptance_packet.md", "content": "## 최종 확인 안내\n관리자 페어링: https://codex-relay.example.invalid/pair?approval-secret=EXAMPLEdummyApprovalCodeAAA\n"}
+  ]
+}

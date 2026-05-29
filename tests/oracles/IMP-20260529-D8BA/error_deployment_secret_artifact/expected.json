@@ -1,0 +1,7 @@
+{
+  "status": "BLOCKED_AND_RECORDED",
+  "deployed_artifact_basenames": ["app.exe", "report.md"],
+  "blocked_secret_artifacts": [".env", "server-identity-key.pem"],
+  "manifest_field_present": "blocked_secret_artifacts",
+  "summary_ko": "secret 파일 2개를 배포에서 제외하고 deployment_manifest.json의 blocked_secret_artifacts에 기록했습니다."
+}
