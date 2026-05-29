@@ -26,15 +26,11 @@ test_secrets_gate_d8ba.py — IMP-20260529-D8BA MT-5 Secrets Boundary Gate E2E T
 #   읽기만 하고 pipeline_state.json을 변경하지 않음.
 """
 
-import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
-
-import pytest
 
 
 # pipeline.py는 tests/e2e의 2단계 상위 디렉토리에 위치
@@ -305,7 +301,7 @@ def test_deployment_blocks_secret_artifact(tmp_path: Path) -> None:
     assert result.returncode == 0, f".env 내용에서 secret 검출 실패\nstdout={result.stdout}\nstderr={result.stderr}"
     assert "BLOCKED_COUNT=" in result.stdout, f"차단 결과 미출력\nstdout={result.stdout}"
     # 최소 1건 이상 차단되어야 함
-    line = [l for l in result.stdout.splitlines() if l.startswith("BLOCKED_COUNT=")][0]
+    line = [ln for ln in result.stdout.splitlines() if ln.startswith("BLOCKED_COUNT=")][0]
     count = int(line.split("=", 1)[1])
     assert count >= 1, f".env 내용에서 1건 이상 차단 기대, 실제={count}"
 
