@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- IMP-20260529-D8BA: Security & Secrets Boundary -->
+<!-- pm_planner agent_run_id: pm_planner-f5f04bbc49930833 -->
+
+<pm_planner_round1>
+
+<decomposition_audit>
+  <total_functions_identified>9</total_functions_identified>
+  <micro_task_count>6</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <split_decision>
+    pipeline.py(SSoT 패턴+gates 분기+배포 필터) / .github/workflows/ci.yml(CI 단계) / tests/e2e(E2E 검증) / 6개 문서(Doc Sync) 4개 축으로 자연 분리되므로 MT 6개로 나눈다.
+    M-1(SSoT) → M-2(gates 서브커맨드) → M-3(배포 필터) 순서가 필수 — M-2는 M-1의 SECRET_PATTERNS/_scan_text_for_secrets/_mask_secret 헬퍼에 의존, M-3은 M-1 헬퍼에 의존.
+    M-4(CI)와 M-5(E2E)는 M-2/M-3 완료 후. M-6(Doc Sync)는 마지막에 정책을 문서에 반영.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260529-D8BA</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning — Security &amp; Secrets Boundary</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>SEC, PD, FS, BUILD</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py(파이프라인 엔진), .github/workflows/ci.yml(CI 워크플로우), CLAUDE.md(최상위 프로토콜), 5개 agent MD 모두가 Trust-Root 파일이며 동시에 수정된다. 보안 게이트 추가는 잘못 구현 시 secret 누출 또는 정상 PR 차단으로 이어질 수 있는 risk-critical 작업이다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>3</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>9</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>700</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>true</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>true</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      내부 변수명, 정규식 문법 디테일, 함수 위치(파일 어느 줄), 마스킹 별표 개수(4 vs 6 vs 8), exit code 숫자(1 vs 2) 같은 P2 구현 취향 질문은 묻지 않았다. 기존 SSoT 패턴(WORKSPACE_INTERNAL_PATTERNS, _is_internal_artifact)을 그대로 따라가는 것이 유지보수성 측면에서 가장 일관성 있으므로 PM이 결정했다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 보안 기능은 6개 모듈로 나눠 차례대로 만들어도 될까요? (M-1 패턴 정의 → M-2 명령 → M-3 배포 차단 → M-4 CI → M-5 테스트 → M-6 문서)</user_facing_question>
+        <evidence>요청 본문이 SSoT 패턴, 명령 추가, 배포 필터, CI 추가, 테스트 추가, 문서 6개 영역을 명확히 분리해서 적었기 때문에 그대로 따랐습니다.</evidence>
+        <why_it_matters>한 번에 다 만들면 어디서 문제가 났는지 찾기 어렵습니다. 모듈별로 끊으면 각 단계마다 작게 검증할 수 있고, 보안 기능이라 잘못된 부분이 보이면 되돌리기 쉽습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>요청서 그대로 6개 모듈로 분해</label>
+            <benefit>요청한 6개 영역과 1:1 매칭이라 빠뜨림이 없고, 검증 위치가 명확합니다. 기존 IMP-20260528-3898과 같은 SSoT 패턴이라 유지보수도 쉽습니다.</benefit>
+            <cost>모듈 게이트가 6번 돌아 시간이 조금 더 걸립니다 (수 분 단위).</cost>
+          </option>
+          <option id="B">
+            <label>"코드(M-1+M-2+M-3) + CI(M-4) + 테스트(M-5) + 문서(M-6)" 4개로 합치기</label>
+            <benefit>모듈 수가 줄어 조금 더 빠릅니다.</benefit>
+            <cost>한 모듈이 너무 커서 실패 시 어디서 났는지 찾기 어렵고, _scan_text_for_secrets 변경이 어디까지 번지는지 추적이 어려워집니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (요청서 형식과 동일하므로 사용자 확인 불필요한 기본 분해)</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="implementation_strategy" mt_id="MT-1">
+        <user_facing_question>secret 패턴을 어떻게 정의할까요? 기존 WORKSPACE_INTERNAL_PATTERNS 처럼 모듈 최상단 상수(A) vs 별도 파일(B)?</user_facing_question>
+        <evidence>이미 pipeline.py:1956에 WORKSPACE_INTERNAL_PATTERNS 상수 SSoT 패턴이 있고, IMP-20260528-3898 회고에서 "SSoT 한 곳에 모으는 게 좋다"가 확인된 패턴입니다.</evidence>
+        <why_it_matters>패턴을 어디 두느냐에 따라 나중에 OpenAI가 새 키 prefix를 만들거나, 새 토큰 형식이 생겼을 때 어디서 고쳐야 하는지가 결정됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>pipeline.py 모듈 상단에 SECRET_PATTERNS 상수 + _scan_text_for_secrets/_mask_secret 헬퍼 — 기존 WORKSPACE_INTERNAL_PATTERNS와 동일 패턴</label>
+            <benefit>기존 코드 패턴과 100% 일치, import 1줄로 어디서나 사용. 테스트도 `from pipeline import SECRET_PATTERNS` 한 줄.</benefit>
+            <cost>pipeline.py가 약 80줄 더 커집니다.</cost>
+          </option>
+          <option id="B">
+            <label>pipeline_secrets.py 별도 파일로 분리</label>
+            <benefit>관심사 분리가 깔끔하고 pipeline.py 길이 증가 없음.</benefit>
+            <cost>기존 SSoT 패턴과 달라 일관성이 깨지고, import 경로가 새로 생겨 IMP-20260528-3898과 다른 패턴이 됩니다. 신규 파일이 Trust-Root에 추가되는 risk.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (기존 SSoT 패턴 유지, 신규 Trust-Root 파일 회피)</user_answer>
+      </question>
+      <question id="DQ-3" priority="P1" category="ci_scope" mt_id="MT-4">
+        <user_facing_question>CI에서 secrets gate를 어디서 실행할까요? PR + phase-attestation 둘 다(A) vs PR만(B)?</user_facing_question>
+        <evidence>사용자 요청 본문 3번에 "PR마다 실행, phase-attestation 브랜치에서도 민감정보 검사는 가능하면 실행"이라고 명시되어 있습니다.</evidence>
+        <why_it_matters>phase-attestation 브랜치에서도 누가 실수로 secret을 push하면 phase 증명 PR을 통해 secret이 GitHub Actions 로그에 남을 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>PR + phase-attestation 브랜치 모두에서 실행 (사용자 요청 그대로)</label>
+            <benefit>모든 PR이 100% secret 검사 통과해야 머지 가능. 누락 경로 없음.</benefit>
+            <cost>CI 시간 약 5~15초 추가 (단순 텍스트 스캔이라 매우 짧음).</cost>
+          </option>
+          <option id="B">
+            <label>PR만 (phase-attestation 브랜치는 작은 변경이라 생략)</label>
+            <benefit>CI 시간 약간 단축.</benefit>
+            <cost>phase-attestation PR을 통한 secret 누출 경로가 열려 있음. 사용자 요청과 어긋남.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (사용자 요청 본문에 명시됨)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: PR diff (git diff origin/{base}...HEAD) OR --files 옵션 명시 파일 목록 + 표준 report 파일 5종(failure_packet.json, deployment_manifest.json, build_report.xml, qa_report.xml, human_acceptance_packet.md / acceptance_packet.md)
+    - Output: stdout에 마스킹된 finding 목록 + .pipeline/secrets_gate_result.json (선택), exit code 0(PASS) 또는 1(FAIL)
+    - Validation: secret-like 문자열 발견 시 exit 1, 원문은 절대 출력 금지, 8자 prefix + **** 마스킹 형식
+  </interface_spec>
+
+  <requirements>
+    - SECRET_PATTERNS SSoT 상수: openai_api_key(sk-, sk-proj-), github_pat(ghp_, github_pat_, gho_, ghu_, ghs_), bearer_token, dotenv_marker(.env), approval_secret, server_identity_key, codex_relay_pairing_url, private_key_block(-----BEGIN ... PRIVATE KEY-----) 등 최소 7개 패턴
+    - _scan_text_for_secrets(text) → List[Finding{pattern_name, matched_substring, mask}] 헬퍼
+    - _mask_secret(value, prefix_len=8) → "prefix****" 형식, 길이 8 미만은 전체 마스킹
+    - gates secrets 서브커맨드: --files (옵션, 콤마구분), --base-ref (옵션 git diff base), --report-files (콤마구분 추가 검사 대상)
+    - 기본 검사 대상: PR diff(가능하면) + 작업 디렉토리 내 failure_packet.json / deployment_manifest.json / build_report.xml / qa_report.xml / human_acceptance_packet.md / acceptance_packet.md 가 있으면 자동 포함
+    - _deployment_artifacts() 수정: secret-like 파일명(.env, *.key, *.pem, server-identity-key*, *.envrc 등) OR 파일 내용 스캔에서 secret 발견된 경우 차단 → 반환값 튜플에 (allowed, blocked_internal, blocked_secret) 3-tuple로 확장
+    - _deploy_accepted_outputs(): manifest에 "blocked_secret_artifacts" 필드 신설
+    - ci.yml: tests 잡 안에 "Secrets Boundary 검사" 단계 추가 — PR + phase-attestation 브랜치 모두에서 실행, fetch-depth 부족 시 fallback (전체 작업 디렉토리 스캔)
+    - tests/e2e/test_secrets_gate_d8ba.py: subprocess 기반 E2E 테스트 8개 이상 (정상 PASS 1개, 가짜 secret FAIL 4개, 마스킹 출력 검증 1개, 배포 차단 1개, 정상 배포 1개)
+    - CLAUDE.md "Security &amp; Secrets Boundary" 섹션 신설 (gates secrets 사용법, SECRET_PATTERNS 위치, 배포 필터 정책)
+    - pm-agent.md / dev-agent.md / qa-agent.md / build-agent.md / test-harness-agent.md 각각 "Secrets Boundary" 1~3줄 정책 섹션 추가
+    - 모든 사용자 대상 출력은 쉬운 한국어 (예: "secret 형식의 문자열을 찾았습니다. 마스킹된 일부만 보여드립니다.")
+    - 절대 금지: 테스트/로그/PR/소스코드에 실제 secret 원문 포함. 모든 fixture는 EXAMPLE/dummy 마커 + AAAA 패딩으로 명백한 가짜.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.SECRET_PATTERNS, pipeline._scan_text_for_secrets, pipeline._mask_secret</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>WORKSPACE_INTERNAL_PATTERNS|_is_internal_artifact</pattern>
+        <match_count>15</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>WORKSPACE_INTERNAL_PATTERNS 인근(약 1956~2020 line)에 SECRET_PATTERNS 상수 + _scan_text_for_secrets() + _mask_secret() SSoT 추가. 7~10개 named pattern (re.Pattern 또는 raw string 튜플).</change_summary>
+      <line_estimate>120</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline.cmd_gates(action=="secrets"), pipeline._cmd_gates_secrets, argparse p_gates secrets parser</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates (line 12409)</site>
+        <site>pipeline build_parser p_gates section (line 14375)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>gsub.add_parser.*preflight-pr-impl|action == "preflight-pr-impl"</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_gates() 시작부 preflight-pr/preflight-pr-impl 분기와 같은 패턴으로 action=="secrets" 분기 추가. argparse에 p_gates_secrets 서브파서 추가 (--files, --base-ref, --report-files, --output-json). 검사 결과 마스킹 출력 + .pipeline/secrets_gate_result.json 기록 + exit 1 on FAIL. _is_internal_artifact()와 동일하게 state 없이도 동작해야 함 (CI 환경 지원).</change_summary>
+      <line_estimate>200</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._deployment_artifacts, pipeline._deploy_accepted_outputs</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._deploy_accepted_outputs (line 4051 호출처)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _deployment_artifacts|blocked_internal_artifacts</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_deployment_artifacts()를 (allowed, blocked_internal) 2-tuple → (allowed, blocked_internal, blocked_secret) 3-tuple로 확장. secret 판정: 파일명 패턴(.env, *.key, *.pem, server-identity-key*) OR 파일 내용 스캔에서 SECRET_PATTERNS 매치. _deploy_accepted_outputs() manifest에 "blocked_secret_artifacts" 필드 추가. 호출자 1곳 동시 수정.</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>(CI 워크플로우 단계 — Python 함수 아님)</affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>gates preflight-pr-impl|gates preflight-pr</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>tests 잡에 "Secrets Boundary 검사" 단계 신설. PR (impl 브랜치) + PR (phase-attestation 브랜치) 두 if 조건 모두 매칭. `python pipeline.py gates secrets`로 호출. fetch-depth 0이 이미 설정되어 있어 git diff 가능. 실패 시 step 실패 → 머지 차단. continue-on-error 사용 금지(hard gate).</change_summary>
+      <line_estimate>30</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>tests.e2e.test_secrets_gate_d8ba (신규 모듈)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_secrets_gate_d8ba.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 파일)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def run_cli|PIPELINE_STATE_PATH</pattern>
+        <match_count>20</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>tests/e2e/test_real_cli_paths.py와 동일한 subprocess 헬퍼 패턴 재사용 — run_cli, make_env, tmp_path 격리. 최소 8개 테스트: (1) test_gates_secrets_passes_on_clean_diff, (2) test_gates_secrets_detects_openai_key_dummy, (3) test_gates_secrets_detects_github_pat_dummy, (4) test_gates_secrets_detects_private_key_block, (5) test_gates_secrets_detects_codex_relay_url, (6) test_gates_secrets_masks_original_value, (7) test_deployment_blocks_secret_artifacts, (8) test_deployment_allows_clean_artifacts. oracle 파일 6개 활용 + dummy fixture만 사용.</change_summary>
+      <line_estimate>250</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>(문서 섹션 — Python 함수 아님)</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/dev-agent.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>.claude/agents/build-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Workspace Hygiene|Three-Gate|Final Acceptance Readiness Gate</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>CLAUDE.md에 "## Security &amp; Secrets Boundary (IMP-20260529-D8BA)" 섹션 신설 — gates secrets 명령어, SECRET_PATTERNS SSoT 위치(pipeline.py), 배포 필터 정책(blocked_secret_artifacts), CI hard-gate 동작 설명. 각 agent MD에 1~3줄 정책 섹션 추가 — Dev는 "secret 원문 절대 commit 금지", QA는 "gates secrets PASS 여부 확인", Build는 "build_report.xml에 secret 출력 금지", PM은 "step_plan에 실제 secret 명시 금지", Harness는 "gates secrets 결과를 acceptance evidence에 포함".</change_summary>
+      <line_estimate>120</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — pipeline.py 기존 코드와 동일, ci.yml은 3.12로 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>기존 설정 유지 (provider/typeCheckingMode 변경 없음)</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - `python pipeline.py gates secrets --help` exit 0
+    - `python pipeline.py gates secrets --files tests/oracles/IMP-20260529-D8BA/normal_clean_diff/input.json` exit 0
+    - `python pipeline.py gates secrets --files tests/oracles/IMP-20260529-D8BA/edge_openai_key_in_diff/input.json` exit 1, stdout에 마스킹된 키 접두사 포함 AND 원본 키 미포함 (openai_api_key 패턴)
+    - `python pipeline.py gates secrets --files tests/oracles/IMP-20260529-D8BA/edge_github_token_masked/input.json` exit 1, 마스킹된 토큰 접두사 포함 AND 원본 토큰 미포함 (github_pat 패턴)
+    - `python pipeline.py gates secrets --files tests/oracles/IMP-20260529-D8BA/error_private_key_block/input.json` exit 1
+    - `python pipeline.py gates secrets --files tests/oracles/IMP-20260529-D8BA/regression_codex_relay_url/input.json` exit 1
+    - tests/e2e/test_secrets_gate_d8ba.py 전체 PASS (8개 이상)
+    - tests/test_*.py 기존 테스트 모두 PASS (회귀 0)
+    - ci.yml에 "gates secrets" 단계 포함, PR 머지 시 자동 실행
+    - 배포 evidence 후보에 .env/server-identity-key.pem 포함 시 deployment_manifest.json의 blocked_secret_artifacts에 기록 + 실제 파일 미복사
+    - CLAUDE.md에 "Security &amp; Secrets Boundary" 섹션 존재
+    - Real CLI Path E2E Gate Policy 준수 (PIPELINE_STATE_PATH 격리, final_state assertion, subprocess 기반)
+    - pipeline.py 내 secret 원문(실제 키) 0개 — 모든 fixture는 EXAMPLE/dummy 마커 + AAAA 패딩
+    - oracle 파일 (tests/oracles/IMP-20260529-D8BA/) CODEOWNERS 보호 대상에 자동 포함
+    - Codex Review Gate plan/scope/code/hygiene 4단계 ACCEPT 필수 (Dev/QA 진입 전)
+  </acceptance_criteria>
+
+  <forbidden>
+    - 실제 OpenAI/GitHub/내부 시스템 secret 원문을 코드/테스트/로그/PR/문서 어디에든 포함 금지
+    - SECRET_PATTERNS 정의를 pipeline.py 외 별도 파일로 분리 (SSoT 깨짐)
+    - gates secrets가 발견 결과 원문을 stdout/stderr/파일에 출력 (반드시 마스킹)
+    - PM step_plan에 정의되지 않은 Trust-Root 파일 수정 (CODEOWNERS, README.md, .gitignore 추가 변경 등)
+    - dev-agent가 MT-N 순서를 어기고 동시 진행
+    - module qa gate 통과 없이 module integrate 진행
+    - tests/oracles/IMP-20260529-D8BA/ 외 다른 oracle 디렉토리에 본 파이프라인 fixture 작성
+    - oracle expected 파일에 placeholder(TODO/TBD/PLACEHOLDER) 또는 빈 JSON({}/[]) 사용
+    - GPT advisory를 완료 게이트로 의존 (기본 비활성 상태이며 manual 진단 도구임)
+  </forbidden>
+
+  <!-- handover_template: dev-agent가 qa-agent에게 인계할 때 사용하는 양식 (PM 참고용, 실제 handover는 dev-agent가 출력)
+    from: dev-agent | to: qa-agent | pipeline_id: IMP-20260529-D8BA
+    evidence: pipeline.py, .github/workflows/ci.yml, tests/e2e/test_secrets_gate_d8ba.py,
+              CLAUDE.md, .claude/agents/dev-agent.md, .claude/agents/qa-agent.md,
+              scope_manifest.json | status: READY_FOR_QA
+  -->
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.github\workflows\ci.yml</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\CLAUDE.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_real_cli_paths.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260529-D8BA\normal_clean_diff\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260529-D8BA\edge_openai_key_in_diff\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260529-D8BA\edge_github_token_masked\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260529-D8BA\error_private_key_block\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260529-D8BA\error_deployment_secret_artifact\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260529-D8BA\regression_codex_relay_url\input.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260529-D8BA\task_contract.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260529-D8BA\test_set.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      - CLAUDE.md "## Real CLI Path E2E Gate Policy (IMP-20260525-6FAC)": 상태 변경 CLI 호출마다 PIPELINE_STATE_PATH 격리 + final_state assertion 필수
+      - CLAUDE.md "## Scope Lock 강제 규칙 (IMP-20260516-77AA)": Trust-Root 파일은 본 파이프라인 PM scope에 명시된 경우에만 수정 가능
+      - CLAUDE.md "## Incremental Module Gate": MT-1 → MT-2 → MT-3 → MT-4 → MT-5 → MT-6 순서로 design/dev/qa gate 통과 후 integrate
+      - CLAUDE.md "## Oracle Quality Gate (IMP-20260524-48C4)": expected 파일 non-empty + non-placeholder + expected_source=user_provided
+      - 코덱스 리뷰 게이트 (plan/scope/code/hygiene/pr/rca) 6단계 — Dev/QA 진입 전 ACCEPT 필요
+    </phase_rules_excerpt>
+    <prev_phase_summary>contract frozen (hash=8015927897c5225c..., test_set=f6013bd13f8e9d1a...), 10 tests P0=8/P1=2, oracle 6 cases (normal=1, edge=2, exception=1, error=2)</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</pm_planner_round1>
