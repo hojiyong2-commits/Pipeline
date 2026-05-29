@@ -2026,6 +2026,110 @@ def _is_internal_artifact(path: str) -> bool:
     return False
 
 
+# ─── Secret Patterns SSoT (IMP-20260529-D8BA MT-1) ───────────────────────────
+# [Purpose]: 민감 정보(API key/token/private key 등) 탐지 패턴을 단일 출처(SSoT)로
+#   관리한다. gates secrets 명령, 배포 필터(_deployment_artifacts), 외부 리뷰
+#   redaction(_redact_for_external_review)이 동일한 패턴 목록을 사용한다.
+# [Assumptions]: 패턴은 형식만 매칭한다(실제 검증 X). false positive는 마스킹
+#   처리로 사용자에게 알리며 원문은 절대 출력/저장하지 않는다.
+# [Vulnerability & Risks]: 패턴이 너무 느슨하면 일반 텍스트에서 false positive
+#   가 발생할 수 있다. 너무 빡세면 새로운 비밀 포맷을 놓친다. 신규 비밀 포맷이
+#   등장하면 이 SSoT에만 추가하면 전체 게이트가 동기 업데이트된다.
+# [Improvement]: entropy 기반 휴리스틱(Shannon entropy)을 추가하면 EXAMPLE/
+#   AAAA 패딩 false positive를 더 줄일 수 있다.
+#
+# 절대 금지: 이 상수나 헬퍼 함수에 실제 secret 원문을 포함하지 마세요.
+SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]"]] = [
+    ("openai_api_key",          re.compile(r"sk-[A-Za-z0-9_\-]{20,}")),
+    ("github_pat",              re.compile(r"gh[psoua]_[A-Za-z0-9_]{10,}")),
+    ("github_pat_classic",      re.compile(r"github_pat_[A-Za-z0-9_]{10,}")),
+    ("bearer_token",            re.compile(r"Bearer\s+[A-Za-z0-9+/=_.\-]{20,}")),
+    ("approval_secret",         re.compile(r"approval[-_]secret\s*[:=]\s*\S+")),
+    ("server_identity_key",     re.compile(r"server[-_]identity[-_]key\s*[:=]\s*\S+")),
+    ("codex_relay_pairing_url", re.compile(r"https?://[^/\s]*codex[^/\s]*/pair[^\s\"']*")),
+    ("private_key_block",       re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+]
+
+# secret 파일명 패턴 (배포 차단용)
+SECRET_FILENAME_PATTERNS: List[str] = [
+    ".env", ".envrc", "*.key", "*.pem", "server-identity-key*",
+]
+
+
+def _mask_secret(value: str, prefix_len: int = 8) -> str:
+    """민감 정보 문자열을 마스킹한다. prefix_len 자 이후는 ****로 대체.
+
+    Args:
+        value: 마스킹할 원본 문자열.
+        prefix_len: 노출할 접두사 길이(기본 8).
+    Returns:
+        prefix + "****" 형태의 마스킹된 문자열. 원본보다 짧으면 "****" 단독.
+    Raises:
+        TypeError: value가 str이 아닌 경우.
+    """
+    if value is None:
+        raise TypeError("value must not be None")
+    if not isinstance(value, str):
+        raise TypeError(f"value must be str, got {type(value).__name__}")
+    if prefix_len < 0:
+        raise ValueError(f"prefix_len must be >= 0, got {prefix_len}")  # negative not allowed: prefix length cannot be negative
+    if len(value) <= prefix_len:
+        return "****"
+    return value[:prefix_len] + "****"
+
+
+def _scan_text_for_secrets(text: str) -> List[Dict[str, Any]]:
+    """텍스트에서 SECRET_PATTERNS를 검색한다.
+
+    Args:
+        text: 검사 대상 텍스트.
+    Returns:
+        List of {pattern_name, masked, position} dicts. 원문은 반환하지 않는다.
+    Raises:
+        TypeError: text가 None이거나 str이 아닌 경우.
+    """
+    if text is None:
+        raise TypeError("text must not be None")
+    if not isinstance(text, str):
+        raise TypeError(f"text must be str, got {type(text).__name__}")
+    findings: List[Dict[str, Any]] = []
+    for pattern_name, pattern in SECRET_PATTERNS:
+        for m in pattern.finditer(text):
+            findings.append({
+                "pattern_name": pattern_name,
+                "masked": _mask_secret(m.group(0)),
+                "position": m.start(),
+            })
+    return findings
+
+
+def _is_secret_filename(path: str) -> bool:
+    """파일명이 secret 파일 패턴인지 판정한다.
+
+    Args:
+        path: 검사할 파일 경로(절대/상대 모두 허용).
+    Returns:
+        secret 파일명 패턴과 일치하면 True.
+    Raises:
+        TypeError: path가 None이거나 str이 아닌 경우.
+    """
+    import fnmatch
+    if path is None:
+        raise TypeError("path must not be None")
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    normalized = path.replace("\\", "/").strip()
+    basename = normalized.split("/")[-1] if "/" in normalized else normalized
+    for pattern in SECRET_FILENAME_PATTERNS:
+        if "*" in pattern or "?" in pattern or "[" in pattern:
+            if fnmatch.fnmatch(basename, pattern):
+                return True
+        else:
+            if basename == pattern:
+                return True
+    return False
+
+
 PHASE_ORDER = ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
 
 PHASE_LABELS = {
@@ -3978,17 +4082,22 @@ def _register_output_item(
 def _deployment_artifacts(
     state: Dict[str, Any],
     evidence: Optional[str],
-) -> Tuple[List[Path], List[str]]:
-    """배포 대상 산출물 경로 목록과 차단된 내부 산출물 이름 목록을 반환합니다.
+) -> Tuple[List[Path], List[str], List[str]]:
+    """배포 대상 산출물 경로 목록과 차단된 산출물 이름 목록을 반환한다.
 
     IMP-20260528-3898 MT-3: _is_internal_artifact() SSoT를 사용하여 내부 산출물을
-    배포 대상에서 자동 제외합니다. 차단된 파일 이름 목록은 deployment_manifest.json의
-    blocked_internal_artifacts 필드에 기록됩니다.
+    배포 대상에서 자동 제외한다.
+    IMP-20260529-D8BA MT-1: SECRET_PATTERNS / SECRET_FILENAME_PATTERNS SSoT를
+    사용하여 민감 정보가 포함된/민감 정보 파일명을 배포 대상에서 자동 제외한다.
+
+    차단된 파일 이름 목록은 deployment_manifest.json의 blocked_internal_artifacts /
+    blocked_secret_artifacts 필드에 각각 기록된다.
 
     Returns:
-        (allowed_paths, blocked_names) 튜플.
-        allowed_paths: 배포할 파일 Path 목록 (내부 산출물 제외)
-        blocked_names: 차단된 내부 산출물 파일 이름 목록
+        (allowed_paths, blocked_internal, blocked_secret) 3-tuple.
+        allowed_paths: 배포할 파일 Path 목록 (내부/민감 산출물 제외)
+        blocked_internal: 차단된 내부 산출물 파일 이름 목록
+        blocked_secret: 차단된 민감 정보 산출물 파일 이름 목록
     """
     candidates: List[str] = []
     candidates.extend(_split_evidence_paths(evidence))
@@ -4005,6 +4114,7 @@ def _deployment_artifacts(
 
     result: List[Path] = []
     blocked: List[str] = []
+    blocked_secret: List[str] = []
     seen: set = set()
     for raw in candidates:
         # 내부 산출물은 배포에서 제외 (SSoT: WORKSPACE_INTERNAL_PATTERNS)
@@ -4014,15 +4124,30 @@ def _deployment_artifacts(
             if basename and basename not in blocked:
                 blocked.append(basename)
             continue
-        path = _resolve_artifact_path(raw)
-        if not path:
+        # IMP-20260529-D8BA MT-1: secret 파일명 패턴 검사 (.env/*.key/*.pem 등)
+        if _is_secret_filename(raw):
+            if basename and basename not in blocked_secret:
+                blocked_secret.append(basename)
             continue
-        key = str(path).lower()
+        # IMP-20260529-D8BA MT-1: 파일 내용에서 secret 검사
+        candidate_path = _resolve_artifact_path(raw)
+        if candidate_path and candidate_path.is_file():
+            try:
+                content = candidate_path.read_text(encoding="utf-8", errors="replace")
+                if _scan_text_for_secrets(content):
+                    if basename and basename not in blocked_secret:
+                        blocked_secret.append(basename)
+                    continue
+            except Exception:
+                pass  # 읽기 실패는 secret 검사 통과로 간주(다른 경로에서 차단됨)
+        if not candidate_path:
+            continue
+        key = str(candidate_path).lower()
         if key in seen:
             continue
         seen.add(key)
-        result.append(path)
-    return result, blocked
+        result.append(candidate_path)
+    return result, blocked, blocked_secret
 
 
 def _copy_deployment_artifact(src: Path, deploy_dir: Path) -> Dict[str, Any]:
@@ -4057,8 +4182,8 @@ def _deploy_accepted_outputs(
     pid = str(state.get("pipeline_id") or "UNKNOWN")
     deploy_root = _deployment_root()
     deploy_dir = deploy_root / pid
-    # IMP-20260528-3898 MT-3: 내부 산출물 필터 적용 — 튜플 언패킹
-    artifacts, blocked_internal = _deployment_artifacts(state, evidence)
+    # IMP-20260528-3898 MT-3 / IMP-20260529-D8BA MT-1: 내부/민감 산출물 필터 — 3-tuple
+    artifacts, blocked_internal, blocked_secret = _deployment_artifacts(state, evidence)
     external_urls = list((evidence_validation or {}).get("urls") or [])
     if not artifacts and not external_urls:
         _die(
@@ -4080,6 +4205,8 @@ def _deploy_accepted_outputs(
         "external_urls": external_urls,
         # IMP-20260528-3898 MT-3: 차단된 내부 산출물 목록 기록
         "blocked_internal_artifacts": blocked_internal,
+        # IMP-20260529-D8BA MT-1: 차단된 민감 정보 산출물 목록 기록
+        "blocked_secret_artifacts": blocked_secret,
     }
     manifest_path = deploy_dir / "deployment_manifest.json"
     _write_json(manifest_path, manifest)
@@ -11892,6 +12019,146 @@ def _cmd_gates_preflight_pr_impl(args: argparse.Namespace) -> None:
     sys.exit(0)
 
 
+# ─── IMP-20260529-D8BA MT-1: gates secrets 서브커맨드 ─────────────────────────
+def _cmd_gates_secrets(args: argparse.Namespace) -> None:
+    """민감 정보 검사 게이트: PR diff와 주요 보고서에서 secret-like 문자열을 검사한다.
+
+    발견 시 exit 1. 원문은 절대 출력하지 않고 마스킹된 접두사만 표시한다.
+    state 파일 없이도 동작하며 pipeline_state.json을 변경하지 않는 read-only gate.
+
+    Args:
+        args: argparse Namespace (files, base_ref, report_files 옵션).
+    """
+    files_to_scan: List[Path] = []
+    explicit_files = getattr(args, "files", None)
+
+    if explicit_files:
+        # --files 명시 시 git diff 우회
+        for raw in explicit_files.split(","):
+            f = raw.strip()
+            if not f:
+                continue
+            p = Path(f)
+            if p.exists() and p.is_file():
+                files_to_scan.append(p)
+    else:
+        # git diff 기반 (PR diff)
+        try:
+            base_ref = getattr(args, "base_ref", None) or "origin/main"
+            result = subprocess.run(
+                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+                capture_output=True, text=True, cwd=str(BASE_DIR), timeout=30,
+                encoding="utf-8", errors="replace",
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    rel = line.strip()
+                    if not rel:
+                        continue
+                    p = BASE_DIR / rel
+                    if p.exists() and p.is_file():
+                        files_to_scan.append(p)
+        except Exception:
+            pass  # git 실패 시 기본 보고서만 검사
+
+    # 기본 보고서 파일 자동 포함 (PR diff와 무관하게 항상 검사)
+    if not explicit_files:
+        for fname in (
+            "failure_packet.json", "deployment_manifest.json", "build_report.xml",
+            "qa_report.xml", "human_acceptance_packet.md", "acceptance_packet.md",
+        ):
+            p = BASE_DIR / fname
+            if p.exists() and p.is_file() and p not in files_to_scan:
+                files_to_scan.append(p)
+
+    # --report-files 추가
+    extra = getattr(args, "report_files", None)
+    if extra:
+        for raw in extra.split(","):
+            f = raw.strip()
+            if not f:
+                continue
+            p = Path(f)
+            if p.exists() and p.is_file() and p not in files_to_scan:
+                files_to_scan.append(p)
+
+    # 파일 내용 스캔
+    all_findings: List[Dict[str, Any]] = []
+    for file_path in files_to_scan:
+        # 자기 자신(pipeline.py) 및 SSoT 정의 파일은 검사 제외:
+        # SECRET_PATTERNS 자체가 정규식 리터럴이므로 false positive 발생 위험.
+        try:
+            resolved = file_path.resolve()
+            if resolved.name == "pipeline.py":
+                continue
+            # tests/oracles 및 tests/e2e의 dummy 테스트 데이터는 검사 제외
+            try:
+                rel = resolved.relative_to(BASE_DIR)
+                rel_str = str(rel).replace("\\", "/")
+                if rel_str.startswith("tests/oracles/") or rel_str.startswith("tests/e2e/"):
+                    continue
+            except ValueError:
+                pass
+        except Exception:
+            pass
+        try:
+            text = file_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        for finding in _scan_text_for_secrets(text):
+            finding["file"] = str(file_path)
+            all_findings.append(finding)
+
+    # 결과 저장 (.pipeline/secrets_gate_result.json — read-only diagnostic)
+    gate_result: Dict[str, Any] = {
+        "status": "FAIL" if all_findings else "PASS",
+        "finding_count": len(all_findings),
+        "files_scanned": [str(f) for f in files_to_scan],
+        "findings_masked": [
+            {"file": f["file"], "pattern": f["pattern_name"], "masked": f["masked"]}
+            for f in all_findings
+        ],
+        "generated_at": _now(),
+    }
+    try:
+        gate_result_path = BASE_DIR / ".pipeline" / "secrets_gate_result.json"
+        gate_result_path.parent.mkdir(exist_ok=True)
+        _write_json(gate_result_path, gate_result)
+    except Exception:
+        pass  # 결과 파일 저장 실패는 게이트 결과에 영향 없음
+
+    if all_findings:
+        print(f"\n[민감 정보 검사 실패] {len(all_findings)}개의 민감 정보 형식 문자열을 발견했습니다.")
+        for f in all_findings:
+            print(f"  ⚠  패턴: {f['pattern_name']} | 파일: {f['file']} | 마스킹: {f['masked']}")
+        print("\n원문은 출력하지 않습니다. 마스킹된 접두사만 표시합니다.")
+        print("해결: 해당 파일에서 민감 정보를 제거하거나 환경변수로 분리하세요.")
+        # failure_packet console 출력 (dict 형식)
+        failure_packet: Dict[str, Any] = {
+            "gate": "secrets",
+            "status": "FAIL",
+            "failure_code": "secrets_found",
+            "failure_category": "security",
+            "summary_ko": f"민감 정보 형식 문자열 {len(all_findings)}개 발견 — 원문 마스킹 처리됨",
+            "expected": "민감 정보 패턴 0개",
+            "actual": f"민감 정보 패턴 {len(all_findings)}개 발견",
+            "return_phase": "dev",
+            "owner": "Dev",
+            "required_actions": ["해당 파일에서 민감 정보 제거 후 재실행"],
+        }
+        try:
+            _print_failure_packet_console(failure_packet)
+        except Exception:
+            pass
+        sys.exit(1)
+
+    print(GREEN(
+        f"[민감 정보 검사 통과] "
+        f"검사 파일 {len(files_to_scan)}개에서 민감 정보를 발견하지 못했습니다."
+    ))
+    sys.exit(0)
+
+
 # ===================================================================
 # IMP-20260520-D0BB: Protocol Consistency Guard — CLI 레이어
 # [Purpose]: gates consistency 명령과 gates accept hard gate에서 gh CLI로
@@ -12417,6 +12684,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
     # IMP-20260528-3898 MT-2: preflight-pr-impl — 구현 PR 내부 산출물 검사 (state 없이도 동작)
     if action == "preflight-pr-impl":
         _cmd_gates_preflight_pr_impl(args)
+        return
+
+    # IMP-20260529-D8BA MT-1: secrets — 민감 정보 검사 (state 없이도 동작)
+    if action == "secrets":
+        _cmd_gates_secrets(args)
         return
 
     state = _require_state()
@@ -13220,16 +13492,28 @@ def cmd_gates(args: argparse.Namespace) -> None:
     _die(f"unknown gates action: {action}", exit_code=2)
 
 
-SECRET_PATTERNS = [
-    re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]{12,})"),
-    re.compile(r"sk-[A-Za-z0-9_\-]{16,}"),
-]
+# IMP-20260529-D8BA MT-1: SECRET_PATTERNS는 SSoT(상단 ~line 2030)로 통합되었다.
+# 기존 _redact_for_external_review 전용 보조 패턴(키-값 형식)은 별도 상수로 보존하고,
+# 외부 리뷰 redaction은 SSoT 패턴 + 보조 패턴을 함께 적용한다.
+_REDACTION_KV_PATTERN = re.compile(
+    r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]{12,})"
+)
 
 
 def _redact_for_external_review(text: str) -> str:
+    """외부(OpenAI 등) 리뷰에 코드/보고서 텍스트를 전달하기 전 민감 정보를 [REDACTED]로 치환.
+
+    IMP-20260529-D8BA MT-1: SECRET_PATTERNS SSoT(상단)와 키-값 형식 보조 패턴을
+    함께 적용한다.
+    """
     redacted = text
-    for pattern in SECRET_PATTERNS:
-        redacted = pattern.sub(lambda m: m.group(0).replace(m.group(2), "[REDACTED]") if len(m.groups()) >= 2 else "[REDACTED]", redacted)
+    # SSoT 패턴(SECRET_PATTERNS)은 전체 매치를 [REDACTED]로 치환
+    for _pattern_name, pattern in SECRET_PATTERNS:
+        redacted = pattern.sub("[REDACTED]", redacted)
+    # 키-값 형식 보조 패턴은 값(group 2)만 치환하여 키 이름은 컨텍스트로 남긴다
+    redacted = _REDACTION_KV_PATTERN.sub(
+        lambda m: m.group(0).replace(m.group(2), "[REDACTED]"), redacted
+    )
     return redacted
 
 
@@ -14431,6 +14715,24 @@ def build_parser() -> argparse.ArgumentParser:
             "쉼표로 구분된 파일 목록 (git diff 대신 사용). "
             "golden task 등 테스트 픽스처에서 재현 가능한 입력을 제공할 때 사용합니다."
         ),
+    )
+
+    # IMP-20260529-D8BA MT-1: gates secrets — 민감 정보 검사 gate
+    p_gate_secrets = gsub.add_parser(
+        "secrets",
+        help="민감 정보 검사 — PR diff와 주요 보고서에서 API 키/토큰/비밀 문자열을 검사한다.",
+    )
+    p_gate_secrets.add_argument(
+        "--files", default=None,
+        help="검사할 파일 목록 (콤마 구분). 지정 시 git diff 대신 해당 파일 내용을 스캔한다.",
+    )
+    p_gate_secrets.add_argument(
+        "--base-ref", dest="base_ref", default=None,
+        help="git diff base reference (기본: origin/main). --files 없을 때 사용.",
+    )
+    p_gate_secrets.add_argument(
+        "--report-files", dest="report_files", default=None,
+        help="추가 검사 대상 보고서 파일 목록 (콤마 구분).",
     )
 
     p_gate_consistency = gsub.add_parser(
