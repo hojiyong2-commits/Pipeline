@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "FEAT-20260530-6F07",
+  "phase": "qa",
+  "agent_id": "qa-agent",
+  "run_id": "qa-44a845910baa69ed",
+  "status": "COMPLETED",
+  "started_at": "2026-05-30T16:42:24Z",
+  "completed_at": "2026-05-30T16:42:29Z",
+  "output_file": "qa_report.xml",
+  "output_sha256": "122db45f860382a0bd4758205ef99c63061e2a8bf177f12d8d8955c3761bc39e",
+  "evidence_files": [],
+  "commit_sha": "db00bf9f1572ad309bd1178a7045f7549eaacb87"
+}
