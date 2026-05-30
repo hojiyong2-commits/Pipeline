@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "FEAT-20260530-86AA",
+  "pipeline_type": "FEAT",
+  "created_at": "2026-05-30T01:55:43Z",
+  "updated_at": "2026-05-30T01:57:50Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "ICPartAutomation v2: 칼럼명 기반 동적 매핑, 이전행 상속 버그 수정, 기타 버그 확인, IC-Part 개선점 분석",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MOD-1",
+      "name": "IC-Part 동적 칼럼 매핑 + 상속 버그 수정",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    },
+    {
+      "id": "MOD-2",
+      "name": "추가 버그 분석 보고서",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "DQ-1",
+      "module": null,
+      "severity": "P0",
+      "question": "병합셀 헤더 읽기 방식",
+      "options": [],
+      "answer": "A: 3행과 4행 모두 스캔, 값이 있는 셀을 칼럼명으로 사용",
+      "resolved": true
+    },
+    {
+      "id": "DQ-2",
+      "module": null,
+      "severity": "P0",
+      "question": "IC-Part 칼럼명 SSoT",
+      "options": [],
+      "answer": "A: IC-Part.xlsx 3행에서 확인한 실제 칼럼명 사용 (오더배포/Project ID/Order No(IFS)/PO No./IC/Line No./Contract Amount/Delivery Date/Incoterm/CORB-LINK)",
+      "resolved": true
+    },
+    {
+      "id": "DQ-3",
+      "module": null,
+      "severity": "P1",
+      "question": "상속 버그 수정 범위",
+      "options": [],
+      "answer": "A: row_num-1만 확인, 직전 행이 비면 None 반환",
+      "resolved": true
+    },
+    {
+      "id": "DQ-4",
+      "module": null,
+      "severity": "P1",
+      "question": "분석 보고서 전달 방식",
+      "options": [],
+      "answer": "A: analysis_report.md 생성, PR에 첨부",
+      "resolved": true
+    }
+  ],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-30T01:57:50Z",
+  "contract_hash": "0945f772b7fad39cdb7af0c0cf6abffc51e1b22a0e6571872ca941fc46756dc4",
+  "test_set_hash": "d7fdcebf99c118fb0e61da68f233c930b5ff56c3da137aca890dcde5120428ad"
+}

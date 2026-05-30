@@ -1,0 +1,4 @@
+{
+  "project_id_col": 10,
+  "reason": "동적 매핑이 Project ID를 J열(col 10)에서 찾아냄"
+}
