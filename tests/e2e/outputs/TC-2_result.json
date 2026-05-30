@@ -1,5 +1,7 @@
 {
-  "matched_tickers": ["000660"],
+  "matched_tickers": [
+    "000660"
+  ],
   "not_matched_tickers": [],
   "explanation": {
     "000660": "[golden_cross] 충족: MACD(12,26,9) 골든크로스 발생"
