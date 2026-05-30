@@ -2,7 +2,7 @@
 
 **릴리즈 날짜:** 2026-05-30
 **기준 커밋:** 8b7548296add560b63c8ee910954d3cab14887cb
-**태그:** v1.0 — ACCEPT 후 사용자가 직접 생성: `git tag v1.0 8b75482 && git push origin v1.0`
+**태그:** v1.0 — PR #356 merge 후 main 최신화: `git pull origin main && git tag v1.0 && git push origin v1.0`
 
 ## v1.0 안정화 릴리즈
 
@@ -27,7 +27,7 @@
 |---|---|
 | Security & Secrets Boundary | `python pipeline.py gates secrets` |
 | Golden Task | `python pipeline.py golden run --smoke` |
-| Workspace Hygiene | `python pipeline.py preflight-pr-impl` |
+| Workspace Hygiene | `python pipeline.py gates preflight-pr-impl` |
 | Cost/Attempt Budget | `python pipeline.py budget status` |
 | Observability Metrics | `python pipeline.py metrics report` |
 | Oracle Quality Gate | `python pipeline.py gates oracle` |
@@ -55,7 +55,7 @@
 
 ## 다음 단계
 
-- v1.0 태그 생성: `git tag v1.0 8b75482 && git push origin v1.0`
+- v1.0 태그 생성: PR #356 merge 후 main 최신화 → `git pull origin main && git tag v1.0 && git push origin v1.0`
 - v1.1 로드맵: 추후 별도 IMP 파이프라인으로 계획
 
 ## 부록: 게이트별 검증 명령

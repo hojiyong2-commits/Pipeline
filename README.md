@@ -21,7 +21,7 @@ python pipeline.py gates status
 |---|---|---|
 | Security & Secrets Boundary | `python pipeline.py gates secrets` | IMP-20260529-D8BA |
 | Golden Task | `python pipeline.py golden run --smoke` | IMP-20260528-0A9E |
-| Workspace Hygiene | `python pipeline.py preflight-pr-impl` | IMP-20260528-3898 |
+| Workspace Hygiene | `python pipeline.py gates preflight-pr-impl` | IMP-20260528-3898 |
 | Cost/Attempt Budget | `python pipeline.py budget status` | IMP-20260527-075A |
 | Observability Metrics | `python pipeline.py metrics report` | IMP-20260526-82E3 |
 | Oracle Quality Gate | `python pipeline.py gates oracle` | IMP-20260524-48C4 |
