@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>IMP-20260530-4CD8</pipeline_id>
+  <agent_run_id>build-f49131942dc3c0fb</agent_run_id>
+
+  <section_1_command>
+    cd FEAT-20260426-332E and pyinstaller --noconfirm KittingMapper.spec
+    (KittingMapper.spec: onefile=YES, windowed=YES, console=False, upx=True)
+  </section_1_command>
+
+  <section_2_spec>
+    <onefile>YES</onefile>
+    <windowed>YES</windowed>
+    <hiddenimports>
+      <!-- 표준 hook 자동 탐지: openpyxl, lxml, win32com, pywintypes, tkinter, PIL, numpy, charset_normalizer -->
+    </hiddenimports>
+    <datas>
+      <!-- 없음 — 설정 파일은 EXE 옆 런타임 로드 방식 -->
+    </datas>
+    <excludes>
+      <!-- 없음 -->
+    </excludes>
+  </section_2_spec>
+
+  <section_3_output>
+    <exe_path>FEAT-20260426-332E/dist/KittingMapper.exe</exe_path>
+    <size_mb>36.1 MB (37,818,834 bytes)</size_mb>
+    <meipass_helper>YES — main.py에서 sys.frozen / sys._MEIPASS 방어 패턴 적용됨</meipass_helper>
+  </section_3_output>
+
+  <section_4_verification>
+    <dll_included>YES — python312.dll, numpy.libs, win32com, pywintypes, Tcl/Tk DLL 모두 포함</dll_included>
+    <upx_risk>YES — spec 파일 upx=True 설정. 기존 운영 spec 유지.</upx_risk>
+    <zero_dependency>YES — --onefile 단일 파일, 외부 DLL 별도 배포 불필요</zero_dependency>
+    <console_hidden>YES — console=False, windowed 모드 적용됨</console_hidden>
+  </section_4_verification>
+
+  <section_5_optimization>
+    빌드 크기 36.1 MB는 openpyxl, win32com(Outlook COM), lxml, PIL, numpy, Tkinter를
+    모두 포함하는 업무 자동화 앱 기준 정상 범위입니다.
+    UPX 압축(upx=True) 이미 적용되어 추가 최적화 여지 제한적입니다.
+  </section_5_optimization>
+
+  <section_6_qa_mapping>
+    <qa_result>PASS (QA receipt: qa-31959761f9de493e, numeric_score: 120/120)</qa_result>
+    <critical_issues_resolved>
+      <item issue="MT-1: lookup_packing_dimensions parameter rename project_id to sn" resolved="YES" />
+      <item issue="MT-2: 3 call sites updated in main.py and ui/app.py" resolved="YES" />
+    </critical_issues_resolved>
+  </section_6_qa_mapping>
+
+  <status>BUILD SUCCESS</status>
+</build_report>
