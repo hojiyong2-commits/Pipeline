@@ -1,7 +1,7 @@
 # Pipeline v1.0 릴리즈 노트
 
 **릴리즈 날짜:** 2026-05-30
-**기준 커밋:** 8b7548296add560b63c8ee910954d3cab14887cb
+**기준 커밋:** PR #356 merge 후 최신 main
 **태그:** v1.0 — PR #356 merge 후 main 최신화: `git pull origin main && git tag v1.0 && git push origin v1.0`
 
 ## v1.0 안정화 릴리즈

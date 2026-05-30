@@ -61,7 +61,7 @@ python pipeline.py gates status
 2. **Google Drive 배포**: `G:\내 드라이브\터미널\` 경로가 마운트되지 않으면 배포 단계 SKIP
 3. **Windows 전용**: `pipeline.py`는 Windows PowerShell 환경에서 개발됨. Linux/macOS는 경로 구분자 조정 필요
 4. **Phase attestation**: GitHub Actions가 실행되지 않는 환경(오프라인)에서는 phase-ci gate 수동 처리 필요
-5. **git tag**: v1.0 태그는 자동 생성되지 않음 — ACCEPT 후 사용자가 직접 `git tag v1.0 && git push origin v1.0` 실행
+5. **git tag**: v1.0 태그는 자동 생성되지 않음 — PR #356 merge 후 main 최신화 → `git pull origin main && git tag v1.0 && git push origin v1.0`
 
 ---
 
