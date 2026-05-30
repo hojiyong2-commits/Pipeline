@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260530-B69C</pipeline_id>
+  <scope_declaration>
+    <files_to_modify/>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>N/A — 코드 변경 없음</target_function>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>없음</git_diff_files>
+    <manifest_files>없음</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <note>코드 변경 없음 — PyInstaller 재빌드 전용 파이프라인</note>
+  </evidence>
+  <status>READY_FOR_QA</status>
+</handover>

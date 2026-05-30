@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_output>
+
+<decomposition_audit>
+  <total_functions_identified>4</total_functions_identified>
+  <micro_task_count>2</micro_task_count>
+  <grep_executions>3</grep_executions>
+  <split_decision>
+    변경 함수 1개(lookup_packing_dimensions 시그니처+내부)와 3개 콜사이트(main.py 1곳, ui/app.py 2곳)를
+    함수 변경(MT-1)과 호출부 변경(MT-2)으로 분리. 변경 파일 3개이므로 STANDARD 프로필.
+    파일 수 3개는 분할 의무(>=3개) 경계에 해당하나, 변경 내용이 단순 파라미터명 교체이고
+    MT-1/MT-2로 자연 분리되므로 2개 MT로 처리. 100라인 초과 없음.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260530-4CD8</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <current_step>Step 1: PM Planning — packing_detail_reader 조회 키 변경 (project_id → sn)</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      내부 변수명 스타일(proj_id_stripped → sn_stripped), 로그 메시지 문구,
+      파라미터 인수 순서는 기존 패턴과 일관성을 유지하는 방향으로 PM이 결정하고
+      사용자에게 묻지 않습니다. pending 재조회 경로(_pe["project_id"] → _pe["sn"])도
+      동일 함수의 동일 인자 변경이므로 MT-2 범위에 포함합니다.
+    </filter_summary>
+    <decision_questions>
+      <no_askuser_required>true</no_askuser_required>
+      <reason>
+        사용자가 변경 전/후 동작, 대상 파일 3개, 수정 함수 시그니처, 호출부 인자를
+        모두 명시했습니다. 기술적 모호성이 없으므로 clarification 없이 진행합니다.
+      </reason>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          이번 작업은 핵심 함수 변경(MT-1)과 호출부 변경(MT-2)으로 나눠서 진행해도 될까요?
+        </user_facing_question>
+        <evidence>
+          packing_detail_reader.py 함수 1개 변경 + main.py/ui/app.py 호출부 3곳 변경으로
+          자연스럽게 2개 MT로 분리됩니다.
+        </evidence>
+        <why_it_matters>
+          핵심 함수를 먼저 완성한 뒤 호출부를 맞추면, 변경 단계마다 검증이 가능하고
+          실수가 생겨도 수정 범위를 좁게 유지할 수 있습니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1: 함수 변경 → MT-2: 호출부 변경 순서로 진행</label>
+            <benefit>각 단계에서 독립 검증 가능, 롤백 범위 최소화</benefit>
+            <cost>MT가 2개로 늘어나지만 각각 매우 작음</cost>
+          </option>
+          <option id="B">
+            <label>파일 3개를 한 번에 변경</label>
+            <benefit>작업 횟수가 1회로 줄어듦</benefit>
+            <cost>오류 발생 시 원인 파악이 어렵고 검증 위치가 불명확함</cost>
+          </option>
+        </options>
+        <user_answer>
+          사용자가 변경 범위를 명확히 지정했으므로 추천안 A(MT-1 → MT-2)로 진행합니다.
+        </user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>
+      변경 파일 수가 3개(packing_detail_reader.py, main.py, ui/app.py)이므로
+      FAST_SINGLE_CODE(최대 2파일) 조건을 초과합니다. 신뢰 루트 파일 없음,
+      새 의존성 없음. 표준 경로를 사용합니다.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>3</expected_changed_functions>
+      <expected_changed_lines>35</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>true</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <interface_spec>
+    - Input: FEAT-20260426-332E/core/packing_detail_reader.py, main.py, ui/app.py (Python 소스)
+    - Output: 변경된 3개 Python 파일 + scope_manifest.json + dev_handover.xml
+    - Validation:
+        1. lookup_packing_dimensions(file_path, sn, sheet_name) 시그니처 확인
+        2. main.py 148행 인자가 sn으로 전달됨
+        3. ui/app.py 457행, 572행 인자가 각각 sn, _pe["sn"]으로 전달됨
+        4. 기존 로직(K열 날짜 필터, 가장 가까운 날짜 선택, F*G*H Jkg 조합) 그대로 유지
+  </interface_spec>
+
+  <requirements>
+    - MT-1: packing_detail_reader.py
+      * lookup_packing_dimensions 시그니처: (file_path, sn, sheet_name) — project_id 파라미터 제거
+      * 내부 변수명 proj_id_stripped → sn_stripped (또는 동등한 이름)
+      * docstring, TypeError/ValueError 메시지, 로그 포맷 문자열의 "project_id" → "sn"
+      * D열 슬래시 분리 검색 로직: if sn_stripped not in parts (기존 패턴 유지)
+      * K열 날짜 필터, 날짜 선택, 치수 조합 로직 변경 없음
+      * AL 타입 검증 4항목 유지: None 체크(TypeError), isinstance 체크(TypeError),
+        빈 문자열 체크(ValueError), 경계값 처리
+    - MT-2: main.py + ui/app.py 호출부
+      * main.py _cli_main(): line 147-149의 lookup_packing_dimensions 호출에서
+        두 번째 인자를 project_id → sn으로 변경
+        (sn은 line 137에서 kit_row["sn"]으로 이미 선언됨)
+      * ui/app.py _pipeline_worker(): line 456-458의 호출에서
+        두 번째 인자를 project_id → sn으로 변경
+        (sn은 line 447에서 kit_row["sn"]으로 이미 선언됨)
+      * ui/app.py _pipeline_worker(): line 571-573의 pending 재조회 호출에서
+        두 번째 인자를 _pe["project_id"] → _pe["sn"]으로 변경
+        (_pe["sn"]은 PendingEntry TypedDict에 존재함)
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>core.packing_detail_reader.lookup_packing_dimensions</affected_function>
+      <target_files>
+        <file>FEAT-20260426-332E/core/packing_detail_reader.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>FEAT-20260426-332E/main.py:_cli_main (line 147)</site>
+        <site>FEAT-20260426-332E/ui/app.py:KittingMapperApp._pipeline_worker (line 456)</site>
+        <site>FEAT-20260426-332E/ui/app.py:KittingMapperApp._pipeline_worker (line 571, pending)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def lookup_packing_dimensions</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        lookup_packing_dimensions 시그니처 project_id → sn 변경,
+        내부 변수명 및 docstring/로그 일치화. 검색/필터/조합 로직 불변.
+      </change_summary>
+      <line_estimate>20</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_cli_main (main.py), KittingMapperApp._pipeline_worker (ui/app.py)</affected_function>
+      <target_files>
+        <file>FEAT-20260426-332E/main.py</file>
+        <file>FEAT-20260426-332E/ui/app.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>lookup_packing_dimensions\(.*project_id</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        main.py 148행, ui/app.py 457행, 572행의 두 번째 인자를
+        project_id/_pe["project_id"] → sn/_pe["sn"]으로 교체.
+      </change_summary>
+      <line_estimate>12</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <oracle_plan>
+    <oracle_dir>tests/oracles/IMP-20260530-4CD8/</oracle_dir>
+    <cases>
+      <case id="case_normal_sn_match" kind="normal">
+        <input>tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/input.json</input>
+        <expected>tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/expected.json</expected>
+        <description>sn으로 D열 일치 → 치수 문자열 반환 (60*40*30 12.5kg)</description>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="case_edge_sn_not_found" kind="edge">
+        <input>tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/input.json</input>
+        <expected>tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/expected.json</expected>
+        <description>sn이 D열에 없음 → None 반환</description>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="case_edge_no_k_date" kind="edge">
+        <input>tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/input.json</input>
+        <expected>tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/expected.json</expected>
+        <description>sn 일치하지만 K열 날짜 없음 → None 반환</description>
+        <expected_source>user_provided</expected_source>
+      </case>
+    </cases>
+  </oracle_plan>
+
+  <python_version>3.9 — 기존 FEAT-20260426-332E 프로젝트와 동일 버전 유지</python_version>
+  <env_specs>
+    <python>3.9</python>
+    <vscode>python.defaultInterpreterPath = python3.9, typeCheckingMode = basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    1. lookup_packing_dimensions(file_path, sn, sheet_name) 시그니처 — project_id 파라미터 없음
+    2. sn 값이 D열에 있고 K열 날짜 있을 때 치수 문자열 반환 (oracle case_normal_sn_match)
+    3. sn 값이 D열에 없을 때 None 반환 (oracle case_edge_sn_not_found)
+    4. sn 일치하지만 K열 날짜 없을 때 None 반환 (oracle case_edge_no_k_date)
+    5. main.py 148행: 두 번째 인자가 sn (project_id 아님)
+    6. ui/app.py 457행: 두 번째 인자가 sn (project_id 아님)
+    7. ui/app.py 572행: 두 번째 인자가 _pe["sn"] (_pe["project_id"] 아님)
+    8. AL 타입 검증 4항목(None/isinstance/빈 문자열/경계값) 모두 유지
+    9. D열 슬래시 분리 매칭("SN-A/SN-B"에서 sn으로 찾기) 로직 유지
+    10. K열 날짜 필터 및 가장 가까운 날짜 선택 로직 변경 없음
+    11. Codex plan stage ACCEPT (Dev 진입 전)
+    12. Codex code stage ACCEPT (QA 진입 전)
+    13. EXE 빌드 성공 (PyInstaller --onefile --windowed)
+    14. GitHub CI gate PASS
+    15. 사용자 ACCEPT 후 G:\내 드라이브\터미널\IMP-20260530-4CD8\ 배포 확인
+  </acceptance_criteria>
+
+  <forbidden>
+    - lookup_packing_dimensions K열 날짜 필터 로직 변경 금지
+    - 가장 가까운 날짜 선택(min + abs) 로직 변경 금지
+    - F*G*H Jkg 치수 조합 방식 변경 금지
+    - AL 타입 검증 4항목 삭제 금지
+    - order_lines_reader.py, excel_mapper.py, outlook_reader.py 등 다른 파일 변경 금지
+    - pending_store.py의 PendingEntry TypedDict 스키마 변경 금지
+    - Trust-Root 파일(.github/workflows/**, pipeline.py, CLAUDE.md, tests/**, .claude/agents/*.md) 변경 금지
+    - 우회 패턴: 숫자 점수로 COMPLETE 선언, file_exists_check만으로 oracle 통과 주장, phase receipt 없이 done 기록
+  </forbidden>
+
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260530-4CD8</pipeline_id>
+      <evidence>
+        <file>FEAT-20260426-332E/core/packing_detail_reader.py</file>
+        <file>FEAT-20260426-332E/main.py</file>
+        <file>FEAT-20260426-332E/ui/app.py</file>
+        <file>scope_manifest.json</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\core\packing_detail_reader.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\main.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\FEAT-20260426-332E\ui\app.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Dev: FS 카테고리 — 파일 쓰기 없으므로 safe_write/encoding/traversal 해당 없음.
+      AL 타입 검증 4항목 필수 유지. scope_manifest.json 생성 필수.
+      module design → module dev → module qa 순서 엄수.
+      scope_lock_check verdict=PASS 없으면 handover 출력 금지.
+      Codex Review: plan stage ACCEPT 후 Dev 시작, code stage ACCEPT 후 QA 시작.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Planning — 파이프라인 IMP-20260530-4CD8 생성 완료, step_plan.xml 확정</prev_phase_summary>
+  </context_injection>
+
+</step_plan>
+
+</pm_output>
