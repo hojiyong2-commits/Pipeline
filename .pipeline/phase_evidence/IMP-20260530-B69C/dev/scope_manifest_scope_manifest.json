@@ -1,0 +1,10 @@
+{
+  "pipeline_id": "IMP-20260530-B69C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["ic_part_src/dist/ICPartAutomation.exe"],
+      "affected_functions": ["PyInstaller build + deploy copy"]
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-30T22:25:07Z",
+  "pipeline_id": "IMP-20260530-4CD8",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "c502d9939dbdb82a50053693fa0cf25609adc2df",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-30T22:25:00Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "FEAT-20260426-332E/core/packing_detail_reader.py,FEAT-20260426-332E/main.py,FEAT-20260426-332E/ui/app.py"
+  },
+  "agent_run": {
+    "run_id": "dev-d33de83de3dacbb5",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "dd51756d06dcac63a8296c9ebe2974e8dee758cfbd58fb94021788ba3ed20015",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260530-4CD8/dev/agent_receipt_dev-d33de83de3dacbb5.json",
+    "receipt_sha256": "affbefbb9458fd012432bf8e355de73a390a9b1a08dcd9e27979ea400d2dc799",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260530-4CD8\\dev\\dev-d33de83de3dacbb5.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260530-4CD8\\dev\\dev-d33de83de3dacbb5.json",
+      "path": ".pipeline/phase_evidence/IMP-20260530-4CD8/dev/agent_receipt_dev-d33de83de3dacbb5.json",
+      "sha256": "affbefbb9458fd012432bf8e355de73a390a9b1a08dcd9e27979ea400d2dc799",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260530-4CD8/dev/report_dev_handover.xml",
+      "sha256": "dd51756d06dcac63a8296c9ebe2974e8dee758cfbd58fb94021788ba3ed20015",
+      "size_bytes": 1647,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260530-4CD8/dev/scope_manifest_scope_manifest.json",
+      "sha256": "22f852baa09d2a05bbeef5850dc50bdaa587e203afc1a29eaf8075064060de0b",
+      "size_bytes": 556,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "FEAT-20260426-332E/core/packing_detail_reader.py",
+      "sha256": "f6a48d6c39770f66134ecfc84f429abe6f20f30159d99ce183ec4c1fd8cdf824",
+      "size_bytes": 14049
+    },
+    {
+      "path": "FEAT-20260426-332E/main.py",
+      "sha256": "e5cedcbec60a5c2dfcfe20db7deba804dd02b43d2a5c58cda94d8c8b3fbfa804",
+      "size_bytes": 10368
+    },
+    {
+      "path": "FEAT-20260426-332E/ui/app.py",
+      "sha256": "8f09113c40f95a186b3864cb1c8f5c30a4bf8a40b2858df3d6e69e94cc58500d",
+      "size_bytes": 31112
+    }
+  ],
+  "local_only_files": []
+}
