@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>FEAT-20260530-6F07</pipeline_id>
+  <agent_id>dev-agent</agent_id>
+  <run_id>dev-d6a59f8dce922c71</run_id>
+  <status>DONE</status>
+  <scope_declaration>
+    <files_to_modify>
+      rule_watcher/__init__.py, rule_watcher/config.py, rule_watcher/db.py, pyproject.toml,
+      rule_watcher/providers/__init__.py, rule_watcher/providers/base.py, rule_watcher/providers/mock_provider.py, rule_watcher/providers/data_service.py,
+      rule_watcher/providers/kis_provider.py, tests/test_kis_provider.py,
+      rule_watcher/indicators/__init__.py, rule_watcher/indicators/trend.py, rule_watcher/indicators/momentum.py, rule_watcher/indicators/volatility.py, rule_watcher/indicators/volume.py, rule_watcher/indicators/price.py, tests/test_indicators.py,
+      rule_watcher/engine/__init__.py, rule_watcher/engine/rule_model.py, rule_watcher/engine/rulebook_engine.py, rule_watcher/engine/screening_engine.py, tests/test_rulebook_engine.py,
+      rule_watcher/alert/__init__.py, rule_watcher/alert/notifiers.py, rule_watcher/alert/alert_engine.py, tests/test_alert_engine.py,
+      rule_watcher/ui/__init__.py, rule_watcher/ui/app.py, rule_watcher/ui/watchlist_tab.py, rule_watcher/ui/rulebook_tab.py, rule_watcher/ui/results_tab.py, rule_watcher/ui/alert_tab.py, rule_watcher/ui/scheduler.py, main.py,
+      README.md, sample_rulebooks/oversold_rebound.json, sample_rulebooks/trend_breakout.json, sample_rulebooks/volume_surge.json,
+      tests/test_integration.py, tests/e2e/test_rule_watcher_e2e.py
+    </files_to_modify>
+  </scope_declaration>
+  <module_summary>
+    <mt id="MT-1" status="PASS">프로젝트 스캐폴딩 (rule_watcher 패키지, config, db, pyproject.toml)</mt>
+    <mt id="MT-2" status="PASS">Data Provider 계층 (BaseProvider ABC, MockProvider, DataService 싱글톤)</mt>
+    <mt id="MT-3" status="PASS">KISProvider v1 stub (mock fallback, 15/sec throttle 준비)</mt>
+    <mt id="MT-4" status="PASS">21개 기술 지표 계산 엔진 (trend/momentum/volatility/volume/price)</mt>
+    <mt id="MT-5" status="PASS">룰북 모델 + RuleEvaluator + ScreeningEngine</mt>
+    <mt id="MT-6" status="PASS">AlertEngine + cooldown + InAppNotifier + SoundNotifier + NotifierRegistry</mt>
+    <mt id="MT-7" status="PASS">Streamlit 4탭 UI + AppScheduler background thread</mt>
+    <mt id="MT-8" status="PASS">README(한국어) + 샘플 룰북 3개 + 통합/E2E 테스트</mt>
+  </module_summary>
+  <test_summary>
+    <total_tests>81</total_tests>
+    <passed>81</passed>
+    <failed>0</failed>
+    <oracle_tc1>PASS -- RSI 과매도 조건 선별</oracle_tc1>
+    <oracle_tc2>PASS -- MACD 골든크로스 조건 선별</oracle_tc2>
+    <oracle_tc3>PASS -- cooldown 중복 알림 방지</oracle_tc3>
+    <oracle_tc4>PASS -- API 키 없이 mock provider 실행</oracle_tc4>
+  </test_summary>
+  <impact_analysis>
+    <target_function>project_scaffold, create_db_schema, init_config_loader, BaseProvider.get_ohlcv, MockProvider.*, DataService.get_provider, KISProvider.*, calc_sma, calc_ema, calc_macd, calc_adx, calc_rsi, calc_stochastic, calc_stoch_rsi, calc_cci, calc_roc, calc_bollinger, calc_atr, calc_donchian, calc_volume_ma, calc_obv, calc_mfi, calc_vwap, calc_prev_high_breakout, calc_near_high, calc_ma_cross, calc_gap, calc_price_condition, RuleCondition.evaluate, RuleGroup.evaluate, RuleBook.evaluate_all, ScreeningEngine.screen_ticker, AlertEngine.trigger, AlertEngine.check_cooldown, InAppNotifier.notify, SoundNotifier.notify, NotifierRegistry.register, WatchlistTab.render, RulebookTab.render, ResultsTab.render, AlertTab.render, AppScheduler.start, write_readme, write_sample_rulebooks, integration_test_runner</target_function>
+    <changed_files>rule_watcher/, tests/, main.py, README.md, sample_rulebooks/</changed_files>
+    <side_effects>신규 SQLite DB 파일 생성 (첫 실행 시), .env 파일 읽기 (선택적), Streamlit 웹 서버 기동 (main.py 실행 시)</side_effects>
+  </impact_analysis>
+  <scope_lock_check>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <handover>
+    <evidence>rule_watcher/, tests/, main.py, README.md, sample_rulebooks/</evidence>
+    <qa_ready>true</qa_ready>
+    <notes>전체 8개 모듈 PASS, 통합 게이트 PASS, 81개 테스트 통과. QA 단계 진행 준비 완료.</notes>
+  </handover>
+</dev_handover>
