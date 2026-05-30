@@ -804,6 +804,8 @@ def _inject_text_cell(xml_str: str, cell_ref: str, value: str) -> str:
     if n == 0:
         logger.warning("Cell %s not found in sheet1.xml — creating", cell_ref)
         col_m = re.match(r'([A-Za-z]+)(\d+)$', cell_ref)
+        if col_m is None:
+            raise ValueError(f"Invalid cell_ref format: {cell_ref!r}")
         col_letter = col_m.group(1)
         row_num_val = int(col_m.group(2))
         s_val = _find_col_style(result, col_letter, row_num_val)
@@ -843,6 +845,8 @@ def _inject_date_cell(xml_str: str, cell_ref: str, serial: int) -> str:
     if n == 0:
         logger.warning("Date cell %s not found in sheet1.xml — creating", cell_ref)
         col_m = re.match(r'([A-Za-z]+)(\d+)$', cell_ref)
+        if col_m is None:
+            raise ValueError(f"Invalid cell_ref format: {cell_ref!r}")
         col_letter = col_m.group(1)
         row_num_val = int(col_m.group(2))
         s_val = _find_col_style(result, col_letter, row_num_val)
@@ -1564,7 +1568,9 @@ def write_ic_part_zip(
 
     sheet1_bytes_new: bytes = sheet1_str.encode("utf-8")
 
-    import tempfile as _tempfile, shutil as _shutil, os as _os
+    import tempfile as _tempfile
+    import shutil as _shutil
+    import os as _os
     _tmp_path: Optional[str] = None
     try:
         _fd, _tmp_path = _tempfile.mkstemp(suffix=".xlsx", dir=_tempfile.gettempdir())
@@ -1752,9 +1758,15 @@ if __name__ == "__main__":
         assert og.format_line_nos() == "#1,2,4"
 
         # apply_sub_order_suffixes
-        og_a = OrderGroup(); og_a.order_no = "X100050542"; og_a.delivery_date = _date(2026, 6, 2)
-        og_b = OrderGroup(); og_b.order_no = "X100050542"; og_b.delivery_date = _date(2026, 6, 25)
-        og_c = OrderGroup(); og_c.order_no = "X100050542"; og_c.delivery_date = _date(2026, 7, 1)
+        og_a = OrderGroup()
+        og_a.order_no = "X100050542"
+        og_a.delivery_date = _date(2026, 6, 2)
+        og_b = OrderGroup()
+        og_b.order_no = "X100050542"
+        og_b.delivery_date = _date(2026, 6, 25)
+        og_c = OrderGroup()
+        og_c.order_no = "X100050542"
+        og_c.delivery_date = _date(2026, 7, 1)
         apply_sub_order_suffixes([og_a, og_b, og_c])
         assert og_a.order_no == "X100050542"
         assert og_b.order_no == "X100050542-2"
@@ -1825,7 +1837,7 @@ if __name__ == "__main__":
         assert _det_date_b == 0
 
         # add_line with col overrides
-        _row = [None] * 10
+        _row: List[Any] = [None] * 10
         _row[1] = "X100050999"
         _row[0] = datetime(2026, 6, 10)
         _row[2] = 5
