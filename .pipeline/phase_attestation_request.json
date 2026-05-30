@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-30T05:50:52Z",
+  "pipeline_id": "IMP-20260530-B69C",
+  "phase": "build",
+  "phase_status": "DONE",
+  "commit_hint": "93e1b9f20d390fdb830e21cfe33ba0ac0a157e2d",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-05-30T05:50:47Z",
+    "report_file": "build_report.xml",
+    "evidence": "ic_part_src/dist/ICPartAutomation.exe"
+  },
+  "agent_run": {
+    "run_id": "build-7f58d75d8df7c0c7",
+    "phase": "build",
+    "agent_id": "build-agent",
+    "status": "COMPLETED",
+    "output_file": "build_report.xml",
+    "output_sha256": "8423ea931d37f4c431e1f55cc4690f5aaccdd4603e6474c3d8bce06e9e16de36",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260530-B69C/build/agent_receipt_build-7f58d75d8df7c0c7.json",
+    "receipt_sha256": "8c44cd2b381cff2e2a26fbaca48c34d4bc7d03ca76c915af0a800fe6eb556f3e",
+    "used_by_phase": "build",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260530-B69C\\build\\build-7f58d75d8df7c0c7.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260530-B69C\\build\\build-7f58d75d8df7c0c7.json",
+      "path": ".pipeline/phase_evidence/IMP-20260530-B69C/build/agent_receipt_build-7f58d75d8df7c0c7.json",
+      "sha256": "8c44cd2b381cff2e2a26fbaca48c34d4bc7d03ca76c915af0a800fe6eb556f3e",
+      "size_bytes": 508,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "build_report.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260530-B69C/build/report_build_report.xml",
+      "sha256": "8423ea931d37f4c431e1f55cc4690f5aaccdd4603e6474c3d8bce06e9e16de36",
+      "size_bytes": 2843,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": [
+    {
+      "path": "ic_part_src\\dist\\ICPartAutomation.exe",
+      "sha256": "4478d6865f518cf2098024bc7b00c63ac698e11d5dcd93ba1d7eb4290747865e",
+      "reason": "ignored_or_outside_git_checkout"
+    }
+  ]
+}

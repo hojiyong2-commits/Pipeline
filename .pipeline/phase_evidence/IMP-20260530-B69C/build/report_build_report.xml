@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>IMP-20260530-B69C</pipeline_id>
+  <phase>build</phase>
+  <agent_run_id>build-7f58d75d8df7c0c7</agent_run_id>
+
+  <section_1_command>
+    cd ic_part_src &amp;&amp; pyinstaller --noconfirm ICPartAutomation.spec
+  </section_1_command>
+
+  <section_2_spec>
+    <onefile>YES</onefile>
+    <windowed>YES</windowed>
+    <spec_file>ic_part_src/ICPartAutomation.spec</spec_file>
+    <entry_point>ic_part_src/main.py</entry_point>
+    <python_version>3.12</python_version>
+    <datas><item src="resources" dest="." /></datas>
+    <excludes><item>none</item></excludes>
+  </section_2_spec>
+
+  <section_3_output>
+    <exe_path>ic_part_src/dist/ICPartAutomation.exe</exe_path>
+    <size_mb>36.07</size_mb>
+    <size_bytes>37809048</size_bytes>
+    <size_check>PASS (10MB 초과 확인)</size_check>
+    <meipass_helper>NO</meipass_helper>
+    <deploy_path>G:\내 드라이브\터미널\ICPartAutomation.exe</deploy_path>
+    <deploy_status>SUCCESS</deploy_status>
+  </section_3_output>
+
+  <section_4_verification>
+    <dll_included>YES</dll_included>
+    <upx_risk>NO</upx_risk>
+    <zero_dependency>YES</zero_dependency>
+    <console_hidden>YES</console_hidden>
+    <tc_1_normal>
+      <description>dist/ICPartAutomation.exe 생성 및 10MB 초과</description>
+      <verdict>PASS</verdict>
+    </tc_1_normal>
+    <tc_2_edge>
+      <description>G:\내 드라이브\터미널\ICPartAutomation.exe 복사 및 크기 10MB 초과</description>
+      <verdict>PASS</verdict>
+    </tc_2_edge>
+    <tc_3_edge>
+      <description>기존 구버전(2026-05-12) EXE 덮어쓰기 성공</description>
+      <verdict>PASS</verdict>
+    </tc_3_edge>
+    <source_check>
+      <source_files_modified>false</source_files_modified>
+      <spec_file_modified>false</spec_file_modified>
+      <new_dependencies>false</new_dependencies>
+    </source_check>
+  </section_4_verification>
+
+  <section_5_optimization>
+    <note>코드 변경 없는 재빌드. 최적화 항목 없음.</note>
+    <upx_size_reduction>N/A</upx_size_reduction>
+    <upx_risk_assessment>N/A</upx_risk_assessment>
+  </section_5_optimization>
+
+  <section_6_qa_mapping>
+    <qa_result>QA PASS</qa_result>
+    <qa_score>110</qa_score>
+    <critical_issues_resolved>없음 — 코드 변경 없는 재빌드</critical_issues_resolved>
+    <upx_size_reduction>N/A</upx_size_reduction>
+    <upx_risk_assessment>N/A</upx_risk_assessment>
+    <build_based_on>FEAT-20260530-86AA (order_mapper.py 상속 버그 수정 + 동적 칼럼 매핑)</build_based_on>
+    <replaces>구버전 ICPartAutomation.exe (2026-05-12)</replaces>
+  </section_6_qa_mapping>
+
+  <status>BUILD SUCCESS</status>
+  <exe_path>ic_part_src/dist/ICPartAutomation.exe</exe_path>
+  <deploy_path>G:\내 드라이브\터미널\ICPartAutomation.exe</deploy_path>
+</build_report>
