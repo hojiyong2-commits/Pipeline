@@ -18,7 +18,7 @@
     "agent_id": "dev-agent",
     "status": "COMPLETED",
     "output_file": "dev_handover.xml",
-    "output_sha256": "dd51756d06dcac63a8296c9ebe2974e8dee758cfbd58fb94021788ba3ed20015",
+    "output_sha256": "f853d449548fa5bb50c6ee48896deb23435a4060936209b191b0278a02e5bac6",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260530-4CD8/dev/agent_receipt_dev-d33de83de3dacbb5.json",
     "receipt_sha256": "affbefbb9458fd012432bf8e355de73a390a9b1a08dcd9e27979ea400d2dc799",
     "used_by_phase": "dev",
@@ -38,7 +38,7 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/IMP-20260530-4CD8/dev/report_dev_handover.xml",
-      "sha256": "dd51756d06dcac63a8296c9ebe2974e8dee758cfbd58fb94021788ba3ed20015",
+      "sha256": "f853d449548fa5bb50c6ee48896deb23435a4060936209b191b0278a02e5bac6",
       "size_bytes": 1647,
       "requires_force_add": true
     },
@@ -46,7 +46,7 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260530-4CD8/dev/scope_manifest_scope_manifest.json",
-      "sha256": "22f852baa09d2a05bbeef5850dc50bdaa587e203afc1a29eaf8075064060de0b",
+      "sha256": "371b2d7581dbf11c9b4c448579aa16d8ec183352c865432d22e49e4793267ca3",
       "size_bytes": 556,
       "requires_force_add": true
     }
