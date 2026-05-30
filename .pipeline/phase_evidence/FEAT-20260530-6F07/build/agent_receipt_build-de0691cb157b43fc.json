@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "FEAT-20260530-6F07",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-de0691cb157b43fc",
+  "status": "COMPLETED",
+  "started_at": "2026-05-30T16:54:53Z",
+  "completed_at": "2026-05-30T16:55:15Z",
+  "output_file": "build_report_6f07.xml",
+  "output_sha256": "8308c7501529f6cd862b556cd24d1954fe613ff8541833de40ba7a1a75f2dc72",
+  "evidence_files": [],
+  "commit_sha": "db00bf9f1572ad309bd1178a7045f7549eaacb87"
+}
