@@ -58,6 +58,131 @@ ICPART_COL_CORB_PATH: int = 18     # R
 ICPART_DATA_START_ROW: int = 6
 
 # ---------------------------------------------------------------------------
+# IC-Part 헤더 SSoT 매핑 (FEAT-20260530-86AA MT-2)
+# ---------------------------------------------------------------------------
+# 칼럼 헤더 텍스트(소문자, strip) → 논리 필드명 매핑.
+# IC-Part 시트 3행/4행에서 읽은 칼럼명을 이 표로 조회하여 논리 필드명을 결정합니다.
+# 폴백 컬럼 인덱스(1-based): folder_date=8(H), project_id=9(I), order_no=10(J),
+#   po_no=11(K), ic=12(L), line_no=13(M), contract_amount=14(N),
+#   delivery_date=15(O), incoterm=17(Q), corb_path=18(R)
+ICPART_HEADER_MAP: Dict[str, str] = {
+    "오더배포": "folder_date",
+    "project id": "project_id",
+    "order no\n(ifs)": "order_no",
+    "order no": "order_no",
+    "po no.": "po_no",
+    "po no": "po_no",
+    "ic": "ic",
+    "line no.": "line_no",
+    "line no": "line_no",
+    "contract amount": "contract_amount",
+    "delivery date": "delivery_date",
+    "incoterm": "incoterm",
+    "corb - link": "corb_path",
+    "corb path": "corb_path",
+}
+
+# 논리 필드명 → 폴백 컬럼 인덱스(1-based)
+_ICPART_FALLBACK_COLS: Dict[str, int] = {
+    "folder_date":       ICPART_COL_FOLDER_DATE,
+    "project_id":        ICPART_COL_PROJECT_ID,
+    "order_no":          ICPART_COL_ORDER_NO,
+    "po_no":             ICPART_COL_PO_NO,
+    "ic":                ICPART_COL_IC,
+    "line_no":           ICPART_COL_LINE_NO,
+    "contract_amount":   ICPART_COL_CONTRACT_AMOUNT,
+    "delivery_date":     ICPART_COL_DELIVERY_DATE,
+    "incoterm":          ICPART_COL_INCOTERM,
+    "corb_path":         ICPART_COL_CORB_PATH,
+}
+
+
+def _detect_icpart_columns(ws_xml: str) -> Dict[str, int]:
+    """IC-Part Sheet1의 3행과 4행을 스캔하여 논리 필드명 → 1-based column index 매핑을 반환합니다.
+
+    FEAT-20260530-86AA (MT-2): 칼럼명 기반 동적 매핑.
+    openpyxl 병합셀은 왼쪽 위 셀(3행)에만 값이 있고 4행은 None이므로 두 행을 모두 스캔합니다.
+    ICPART_HEADER_MAP으로 논리 필드명에 매핑하고, 감지 실패 항목은 _ICPART_FALLBACK_COLS로 채웁니다.
+
+    Args:
+        ws_xml: IC-Part Sheet1의 XML 문자열 (xl/worksheets/sheet1.xml 내용).
+
+    Returns:
+        Dict[str, int] — {logical_field: col_index (1-based)}.
+        모든 논리 필드가 포함됩니다 (감지 실패 항목은 폴백 값).
+    """
+    if ws_xml is None:
+        raise TypeError("ws_xml must not be None")
+
+    detected: Dict[str, int] = {}
+
+    # 3행과 4행 스캔 (병합셀 대응)
+    for scan_row in (3, 4):
+        # 해당 행의 모든 셀을 찾습니다
+        row_pattern = re.compile(
+            r'<row\b[^>]*\br="' + str(scan_row) + r'"[^>]*>(.*?)</row>',
+            re.DOTALL,
+        )
+        row_match = row_pattern.search(ws_xml)
+        if not row_match:
+            continue
+        row_content = row_match.group(1)
+
+        # 각 셀에서 칼럼 인덱스와 텍스트 값을 추출
+        cell_pattern = re.compile(
+            r'<c\s+r="([A-Z]+)' + str(scan_row) + r'"[^>]*>(.*?)</c>',
+            re.DOTALL,
+        )
+        for cm in cell_pattern.finditer(row_content):
+            col_letter = cm.group(1)
+            cell_body = cm.group(2)
+            # inlineStr 값 추출
+            is_match = re.search(r'<is><t[^>]*>(.*?)</t></is>', cell_body, re.DOTALL)
+            if not is_match:
+                # v 태그도 확인 (숫자/공유 문자열)
+                v_match = re.search(r'<v>(.*?)</v>', cell_body, re.DOTALL)
+                if not v_match:
+                    continue
+                cell_text = v_match.group(1).strip()
+            else:
+                cell_text = is_match.group(1).strip()
+
+            if not cell_text:
+                continue
+
+            normalized = cell_text.lower().strip()
+            if normalized in ICPART_HEADER_MAP:
+                field = ICPART_HEADER_MAP[normalized]
+                if field not in detected:
+                    # openpyxl 컬럼 문자 → 1-based 인덱스 변환
+                    col_idx = _col_letter_to_index(col_letter)
+                    detected[field] = col_idx
+
+    # 감지 실패 항목은 폴백으로 채우고 WARNING 로그
+    result: Dict[str, int] = {}
+    for field, fallback in _ICPART_FALLBACK_COLS.items():
+        if field in detected:
+            result[field] = detected[field]
+        else:
+            logger.warning(
+                "IC-Part 헤더에서 '%s' 칼럼 감지 실패 — 폴백 컬럼 %d 사용",
+                field, fallback,
+            )
+            result[field] = fallback
+
+    logger.info("IC-Part 동적 칼럼 매핑 결과: %s", result)
+    return result
+
+
+def _col_letter_to_index(col_letter: str) -> int:
+    """Excel 칼럼 문자(A, B, ..., Z, AA, AB, ...)를 1-based 인덱스로 변환합니다."""
+    result = 0
+    for ch in col_letter.upper():
+        result = result * 26 + (ord(ch) - ord('A') + 1)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # IC mapping
 # ---------------------------------------------------------------------------
 IC_MAP_EXACT: Dict[str, str] = {
@@ -409,40 +534,48 @@ def _clone_row_xml(
 
 
 def _find_cell_with_value(xml_str: str, col: str, row_num: int) -> Optional[str]:
-    """Scan backward from row_num-1 to ICPART_DATA_START_ROW and return the nearest
-    non-self-closing cell XML for col with the ref updated to col+row_num.
+    """Check only row_num-1 and return the cell XML for col if it has an actual value.
+
+    FEAT-20260530-86AA (MT-1): 상속 버그 수정 — 이전에는 row_num-1 ~ ICPART_DATA_START_ROW까지
+    역방향 전체 스캔하여 멀리 있는 행의 값을 잘못 상속했습니다. 사용자 요구("바로 위 행만")에 따라
+    row_num-1 단일 행만 검사합니다. 직전 행이 비어 있으면 None을 반환합니다.
+
     Only considers cells that contain <v> or <is> (actual value, not style-only).
     """
-    for scan_row in range(row_num - 1, ICPART_DATA_START_ROW - 1, -1):
-        src_ref = col + str(scan_row)
-        tag_m = re.search(r'<c\s+r="' + re.escape(src_ref) + r'"[^>]*>', xml_str)
-        if not tag_m:
-            continue
-        tag_str = tag_m.group(0)
-        if tag_str.rstrip().endswith('/>'):
-            continue  # self-closing, no value
-        close_pos = xml_str.find('</c>', tag_m.end())
-        if close_pos == -1:
-            continue
-        content = xml_str[tag_m.end():close_pos]
-        if '<v>' not in content and '<is>' not in content:
-            continue
-        cell_xml = tag_str + content + '</c>'
-        # Update ref row number
-        cell_xml = cell_xml.replace(f'r="{src_ref}"', f'r="{col}{row_num}"')
-        return cell_xml
-    return None
+    scan_row = row_num - 1
+    if scan_row < ICPART_DATA_START_ROW:
+        return None
+    src_ref = col + str(scan_row)
+    tag_m = re.search(r'<c\s+r="' + re.escape(src_ref) + r'"[^>]*>', xml_str)
+    if not tag_m:
+        return None
+    tag_str = tag_m.group(0)
+    if tag_str.rstrip().endswith('/>'):
+        return None  # self-closing, no value
+    close_pos = xml_str.find('</c>', tag_m.end())
+    if close_pos == -1:
+        return None
+    content = xml_str[tag_m.end():close_pos]
+    if '<v>' not in content and '<is>' not in content:
+        return None
+    cell_xml = tag_str + content + '</c>'
+    # Update ref row number
+    cell_xml = cell_xml.replace(f'r="{src_ref}"', f'r="{col}{row_num}"')
+    return cell_xml
 
 
-def _find_cell_with_formula(
+def _find_template_formula_anywhere(
     xml_str: str,
     col: str,
     row_num: int,
     shared_formulas: Optional[Dict[int, Tuple[int, str]]] = None,
 ) -> Optional[str]:
-    """Scan backward from row_num-1 to ICPART_DATA_START_ROW and return formula cell XML
-    for col adapted to row_num. Expands shared formula references to inline formulas.
-    Drops cached <v> so Excel recalculates.
+    """Scan backward from row_num-1 to ICPART_DATA_START_ROW for a formula cell to use as
+    a template when cloning rows in _ensure_row_exists.
+
+    This is the full-range scan helper used only by _ensure_row_exists to preserve
+    row-cloning behaviour. Do NOT use for backfill from live data rows — use
+    _find_cell_with_formula instead.
     """
     for scan_row in range(row_num - 1, ICPART_DATA_START_ROW - 1, -1):
         src_ref = col + str(scan_row)
@@ -462,7 +595,6 @@ def _find_cell_with_formula(
         cell_xml = tag_str + content + '</c>'
         cell_xml = cell_xml.replace(f'r="{src_ref}"', f'r="{col}{row_num}"')
 
-        # Expand shared formula dependencies → inline
         if shared_formulas and 't="shared"' in cell_xml:
             def _exp(mc: re.Match) -> str:
                 si_m2 = re.search(r'\bsi="(\d+)"', mc.group(0))
@@ -490,19 +622,92 @@ def _find_cell_with_formula(
                 flags=re.DOTALL,
             )
 
-        # Adjust inline <f>content</f> row numbers (scan_row → row_num)
-        def _adj(mc: re.Match) -> str:
+        def _adj_t(mc: re.Match) -> str:
             return '<f>' + re.sub(
                 r'([A-Za-z]+)' + str(scan_row) + r'\b',
                 lambda lm: lm.group(1) + str(row_num),
                 mc.group(1),
             ) + '</f>'
-        cell_xml = re.sub(r'<f>(.*?)</f>', _adj, cell_xml, flags=re.DOTALL)
-
-        # Drop stale cached value
+        cell_xml = re.sub(r'<f>(.*?)</f>', _adj_t, cell_xml, flags=re.DOTALL)
         cell_xml = re.sub(r'<v>.*?</v>', '', cell_xml, flags=re.DOTALL)
         return cell_xml
     return None
+
+
+def _find_cell_with_formula(
+    xml_str: str,
+    col: str,
+    row_num: int,
+    shared_formulas: Optional[Dict[int, Tuple[int, str]]] = None,
+) -> Optional[str]:
+    """Check only row_num-1 and return formula cell XML for col adapted to row_num.
+
+    FEAT-20260530-86AA (MT-1): 상속 버그 수정 — 이전에는 row_num-1 ~ ICPART_DATA_START_ROW까지
+    역방향 전체 스캔하여 멀리 있는 수식을 잘못 상속했습니다. row_num-1 단일 행만 검사합니다.
+    직전 행에 수식이 없으면 None을 반환합니다.
+
+    Expands shared formula references to inline formulas. Drops cached <v> so Excel recalculates.
+    """
+    scan_row = row_num - 1
+    if scan_row < ICPART_DATA_START_ROW:
+        return None
+    src_ref = col + str(scan_row)
+    tag_m = re.search(r'<c\s+r="' + re.escape(src_ref) + r'"[^>]*>', xml_str)
+    if not tag_m:
+        return None
+    tag_str = tag_m.group(0)
+    if tag_str.rstrip().endswith('/>'):
+        return None
+    close_pos = xml_str.find('</c>', tag_m.end())
+    if close_pos == -1:
+        return None
+    content = xml_str[tag_m.end():close_pos]
+    if '<f' not in content:
+        return None
+
+    cell_xml = tag_str + content + '</c>'
+    cell_xml = cell_xml.replace(f'r="{src_ref}"', f'r="{col}{row_num}"')
+
+    # Expand shared formula dependencies → inline
+    if shared_formulas and 't="shared"' in cell_xml:
+        def _exp(mc: re.Match) -> str:
+            si_m2 = re.search(r'\bsi="(\d+)"', mc.group(0))
+            if not si_m2:
+                return mc.group(0)
+            si = int(si_m2.group(1))
+            if si not in shared_formulas:
+                return mc.group(0)
+            base_row, formula = shared_formulas[si]
+            adj = re.sub(
+                r'([A-Za-z]+)' + str(base_row) + r'\b',
+                lambda lm: lm.group(1) + str(row_num),
+                formula,
+            )
+            return f'<f>{adj}</f>'
+        cell_xml = re.sub(
+            r'<f\b[^>]*/\s*>',
+            lambda mc: _exp(mc) if 't="shared"' in mc.group(0) else mc.group(0),
+            cell_xml,
+        )
+        cell_xml = re.sub(
+            r'<f\b[^>]*\bt="shared"[^>]*>.*?</f>',
+            _exp,
+            cell_xml,
+            flags=re.DOTALL,
+        )
+
+    # Adjust inline <f>content</f> row numbers (scan_row → row_num)
+    def _adj(mc: re.Match) -> str:
+        return '<f>' + re.sub(
+            r'([A-Za-z]+)' + str(scan_row) + r'\b',
+            lambda lm: lm.group(1) + str(row_num),
+            mc.group(1),
+        ) + '</f>'
+    cell_xml = re.sub(r'<f>(.*?)</f>', _adj, cell_xml, flags=re.DOTALL)
+
+    # Drop stale cached value
+    cell_xml = re.sub(r'<v>.*?</v>', '', cell_xml, flags=re.DOTALL)
+    return cell_xml
 
 
 def _inject_or_replace_cell(xml_str: str, row_num: int, col: str, new_cell_xml: str) -> str:
@@ -599,6 +804,8 @@ def _inject_text_cell(xml_str: str, cell_ref: str, value: str) -> str:
     if n == 0:
         logger.warning("Cell %s not found in sheet1.xml — creating", cell_ref)
         col_m = re.match(r'([A-Za-z]+)(\d+)$', cell_ref)
+        if col_m is None:
+            raise ValueError(f"Invalid cell_ref format: {cell_ref!r}")
         col_letter = col_m.group(1)
         row_num_val = int(col_m.group(2))
         s_val = _find_col_style(result, col_letter, row_num_val)
@@ -638,6 +845,8 @@ def _inject_date_cell(xml_str: str, cell_ref: str, serial: int) -> str:
     if n == 0:
         logger.warning("Date cell %s not found in sheet1.xml — creating", cell_ref)
         col_m = re.match(r'([A-Za-z]+)(\d+)$', cell_ref)
+        if col_m is None:
+            raise ValueError(f"Invalid cell_ref format: {cell_ref!r}")
         col_letter = col_m.group(1)
         row_num_val = int(col_m.group(2))
         s_val = _find_col_style(result, col_letter, row_num_val)
@@ -819,11 +1028,40 @@ class OrderGroup:
 # ---------------------------------------------------------------------------
 
 _HEADER_MAP: Dict[str, str] = {
+    # Customer name variants
     "customer name": "customer_name",
+    "customer": "customer_name",
+    # Project ID variants
     "project id": "project_id",
     "project_id": "project_id",
+    "project no": "project_id",
+    "project no.": "project_id",
+    # PO No variants (FEAT-20260530-86AA MT-5)
     "order ref 1": "po_no",
+    "po no": "po_no",
+    "po no.": "po_no",
+    "po number": "po_no",
+    "purchase order": "po_no",
+    "purchase order ref": "po_no",
+    # Order No variants
+    "order no": "order_no",
+    "order no.": "order_no",
+    "order number": "order_no",
+    # Line No variants
     "line no": "line_no",
+    "line no.": "line_no",
+    "line number": "line_no",
+    # Delivery date variants
+    "delivery date": "delivery_date",
+    "wanted delivery date": "delivery_date",
+    "req. delivery date": "delivery_date",
+    "requested delivery date": "delivery_date",
+    # Incoterm variants
+    "incoterm": "incoterm",
+    "incoterms": "incoterm",
+    # Contract amount variants
+    "contract amount": "contract_amount",
+    "contract value": "contract_amount",
 }
 
 
@@ -1115,17 +1353,26 @@ def write_ic_part_zip(
     sheet1_bytes: bytes = all_zip_data["xl/worksheets/sheet1.xml"]
     sheet1_str: str = sheet1_bytes.decode("utf-8")
 
-    # Find last occupied row in K column (PO No.) — only cells with actual <v> value.
+    # FEAT-20260530-86AA (MT-2/MT-3): IC-Part 동적 칼럼 감지
+    # 3행/4행을 스캔하여 논리 필드명 → 1-based col idx 매핑을 구성합니다.
+    # 감지 실패 시 ICPART_COL_* 폴백 + WARNING 로그 (기존 동작 유지).
+    _dyn_cols: Dict[str, int] = _detect_icpart_columns(sheet1_str)
+
+    # FEAT-20260530-86AA (MT-4): 동적 칼럼 letter로 정규식 생성 (K/I 하드코딩 제거)
+    # _dyn_cols는 앞서 _detect_icpart_columns로 구성됨 (감지 실패 시 폴백).
+    _po_no_letter = _col_letter(_dyn_cols["po_no"])     # 기본 K, 동적 감지 시 다른 letter
+    _pid_letter   = _col_letter(_dyn_cols["project_id"])  # 기본 I
+
+    # Find last occupied row in PO No. column — only cells with actual <v> value.
     # BUG-20260429-6B72: previous regex matched format-only cells (no <v> tag),
     # causing false "last written row" when template had formatting-only cells.
     # Fix: two-branch alternation — branch 1 captures self-closing cells (no value, skipped);
     # branch 2 captures open/close cells and filters for <v> presence.
     # Inner content boundary (?:(?!</?c[\s>]).)*? prevents spanning into adjacent <c> elements.
-    # IMP-20260509-F8BF: PO No. column shifted from L (12) to K (11) — regex updated accordingly.
+    # FEAT-20260530-86AA (MT-4): K 하드코딩 → _po_no_letter 동적 letter 사용.
     _l_cell_pattern = re.compile(
-        r'<c\s[^>]*\br="K(\d+)"[^>]*/>'               # branch 1: self-closing — no value
-        r'|'
-        r'<c\s[^>]*\br="K(\d+)"[^>]*>((?:(?!</?c[\s>]).)*?)</c>',  # branch 2: open/close
+        rf'<c\s[^>]*\br="{_po_no_letter}(\d+)"[^>]*/>'                                          # branch 1
+        rf'|<c\s[^>]*\br="{_po_no_letter}(\d+)"[^>]*>((?:(?!</?c[\s>]).)*?)</c>',                # branch 2
         re.DOTALL,
     )
     _l_filled = [
@@ -1151,13 +1398,13 @@ def write_ic_part_zip(
             for si in _ss_root.findall("x:si", _ss_ns)
         ]
 
-    # Extract existing Project IDs from I column — both inlineStr and shared-string
-    # IMP-20260509-F8BF: Project ID column shifted from J (10) to I (9) — regex updated.
+    # FEAT-20260530-86AA (MT-4): Project ID column letter 동적 사용 (I 하드코딩 제거)
+    # Extract existing Project IDs from project_id column — both inlineStr and shared-string
     existing_project_ids: Set[str] = set()
 
     # inlineStr cells: <c r="I6" ... t="inlineStr"><is><t>B42728KR</t></is></c>
     for row_str, val in re.findall(
-        r'<c r="I(\d+)"[^>]*t="inlineStr"[^>]*><is><t>([^<]*)</t></is></c>',
+        rf'<c r="{_pid_letter}(\d+)"[^>]*t="inlineStr"[^>]*><is><t>([^<]*)</t></is></c>',
         sheet1_str
     ):
         if int(row_str) >= ICPART_DATA_START_ROW and val.strip():
@@ -1165,7 +1412,7 @@ def write_ic_part_zip(
 
     # shared-string cells: <c r="I6" t="s"><v>383</v></c>
     for row_str, idx_str in re.findall(
-        r'<c r="I(\d+)"[^>]*t="s"[^>]*><v>(\d+)</v></c>',
+        rf'<c r="{_pid_letter}(\d+)"[^>]*t="s"[^>]*><v>(\d+)</v></c>',
         sheet1_str
     ):
         if int(row_str) >= ICPART_DATA_START_ROW:
@@ -1256,16 +1503,17 @@ def write_ic_part_zip(
         # a single-group order leaves the O column empty.
         line_no_val: str = group.format_line_nos() if order_date_count[group.order_no] > 1 else ""
 
+        # FEAT-20260530-86AA (MT-3): 동적 칼럼 인덱스 사용 (폴백: ICPART_COL_*)
         text_cols: List[Tuple[int, Optional[str]]] = [
-            (ICPART_COL_PROJECT_ID,      group.project_id),
-            (ICPART_COL_ORDER_NO,        group.order_no),
-            (ICPART_COL_PO_NO,           group.po_no),
-            (ICPART_COL_IC,              map_ic(group.customer_name)),
-            # ICPART_COL_CUSTOMER_NAME removed — Customer Name no longer written to IC-Part
-            (ICPART_COL_LINE_NO,         line_no_val),
-            (ICPART_COL_INCOTERM,        group.incoterm),
-            (ICPART_COL_CONTRACT_AMOUNT, group.contract_amount),
-            (ICPART_COL_CORB_PATH,       group.corb_path),
+            (_dyn_cols["project_id"],       group.project_id),
+            (_dyn_cols["order_no"],         group.order_no),
+            (_dyn_cols["po_no"],            group.po_no),
+            (_dyn_cols["ic"],               map_ic(group.customer_name)),
+            # customer_name column removed — Customer Name no longer written to IC-Part
+            (_dyn_cols["line_no"],          line_no_val),
+            (_dyn_cols["incoterm"],         group.incoterm),
+            (_dyn_cols["contract_amount"],  group.contract_amount),
+            (_dyn_cols["corb_path"],        group.corb_path),
         ]
         for col_idx, val in text_cols:
             if val is None or str(val).strip() == "":
@@ -1274,12 +1522,12 @@ def write_ic_part_zip(
             sheet1_str = _inject_text_cell(sheet1_str, cell_ref, str(val))
 
         if group.delivery_date is not None:
-            cell_ref = f"{_col_letter(ICPART_COL_DELIVERY_DATE)}{row_num}"
+            cell_ref = f"{_col_letter(_dyn_cols['delivery_date'])}{row_num}"
             serial = date_to_serial(group.delivery_date)
             sheet1_str = _inject_date_cell(sheet1_str, cell_ref, serial)
 
         if group.folder_date is not None:
-            cell_ref_i = f"{_col_letter(ICPART_COL_FOLDER_DATE)}{row_num}"
+            cell_ref_i = f"{_col_letter(_dyn_cols['folder_date'])}{row_num}"
             serial_i = date_to_serial(group.folder_date)
             sheet1_str = _inject_date_cell(sheet1_str, cell_ref_i, serial_i)
 
@@ -1320,7 +1568,9 @@ def write_ic_part_zip(
 
     sheet1_bytes_new: bytes = sheet1_str.encode("utf-8")
 
-    import tempfile as _tempfile, shutil as _shutil, os as _os
+    import tempfile as _tempfile
+    import shutil as _shutil
+    import os as _os
     _tmp_path: Optional[str] = None
     try:
         _fd, _tmp_path = _tempfile.mkstemp(suffix=".xlsx", dir=_tempfile.gettempdir())
@@ -1508,9 +1758,15 @@ if __name__ == "__main__":
         assert og.format_line_nos() == "#1,2,4"
 
         # apply_sub_order_suffixes
-        og_a = OrderGroup(); og_a.order_no = "X100050542"; og_a.delivery_date = _date(2026, 6, 2)
-        og_b = OrderGroup(); og_b.order_no = "X100050542"; og_b.delivery_date = _date(2026, 6, 25)
-        og_c = OrderGroup(); og_c.order_no = "X100050542"; og_c.delivery_date = _date(2026, 7, 1)
+        og_a = OrderGroup()
+        og_a.order_no = "X100050542"
+        og_a.delivery_date = _date(2026, 6, 2)
+        og_b = OrderGroup()
+        og_b.order_no = "X100050542"
+        og_b.delivery_date = _date(2026, 6, 25)
+        og_c = OrderGroup()
+        og_c.order_no = "X100050542"
+        og_c.delivery_date = _date(2026, 7, 1)
         apply_sub_order_suffixes([og_a, og_b, og_c])
         assert og_a.order_no == "X100050542"
         assert og_b.order_no == "X100050542-2"
@@ -1581,7 +1837,7 @@ if __name__ == "__main__":
         assert _det_date_b == 0
 
         # add_line with col overrides
-        _row = [None] * 10
+        _row: List[Any] = [None] * 10
         _row[1] = "X100050999"
         _row[0] = datetime(2026, 6, 10)
         _row[2] = 5
