@@ -454,12 +454,12 @@ class KittingMapperApp(tk.Tk):
                     elif "포장반" in kit_place:
                         try:
                             dims_result = lookup_packing_dimensions(
-                                packing_detail_path, project_id,
+                                packing_detail_path, sn,
                                 sheet_name=packing_detail_sheet,
                             )
                         except Exception as exc:
                             logger.warning(
-                                "치수 조회 실패 project_id '%s': %s", project_id, exc
+                                "치수 조회 실패 sn '%s': %s", sn, exc
                             )
                             dims_result = None
 
@@ -569,7 +569,7 @@ class KittingMapperApp(tk.Tk):
                     for _pe in existing_pending:
                         try:
                             _dims = lookup_packing_dimensions(
-                                packing_detail_path, _pe["project_id"],
+                                packing_detail_path, _pe["sn"],
                                 sheet_name=packing_detail_sheet,
                             )
                         except Exception as _exc:

@@ -145,18 +145,18 @@ def _cli_main() -> None:
             elif "포장반" in kit_place:
                 try:
                     dims_result = lookup_packing_dimensions(
-                        packing_detail_path, project_id,
+                        packing_detail_path, sn,
                         sheet_name=packing_detail_sheet,
                     )
                 except FileNotFoundError:
                     logger.warning(
-                        "Packing detail file not found; skipping dimensions for project_id '%s'",
-                        project_id,
+                        "Packing detail file not found; skipping dimensions for sn '%s'",
+                        sn,
                     )
                     dims_result = None
                 except Exception as exc:
                     logger.warning(
-                        "Error looking up dimensions for project_id '%s': %s", project_id, exc
+                        "Error looking up dimensions for sn '%s': %s", sn, exc
                     )
                     dims_result = None
 
