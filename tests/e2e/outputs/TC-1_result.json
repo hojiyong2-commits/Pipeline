@@ -1,0 +1,12 @@
+{
+  "matched_tickers": [
+    "005930"
+  ],
+  "not_matched_tickers": [
+    "035720"
+  ],
+  "explanation": {
+    "005930": "[oversold] 충족: RSI(14)가 0.00로 30.00보다 낮음"
+  },
+  "result_count": 1
+}

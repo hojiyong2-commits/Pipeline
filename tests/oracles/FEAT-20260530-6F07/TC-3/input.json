@@ -1,0 +1,9 @@
+{
+  "test_case": "TC-3",
+  "description": "cooldown 기간 내 동일 종목 알림 중복 방지",
+  "ticker": "005930",
+  "rule_id": "rsi_oversold",
+  "trigger_count": 2,
+  "cooldown_minutes": 30,
+  "trigger_interval_minutes": 5
+}

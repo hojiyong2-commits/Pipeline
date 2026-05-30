@@ -1,0 +1,27 @@
+{
+  "rulebook_id": "sample-volume-surge",
+  "name": "거래량 급증 후보",
+  "description": "거래량이 20일 이동평균의 2배 이상이고 RSI가 50 이상인 종목 — 상승 모멘텀을 동반한 거래량 급증 신호.",
+  "groups": [
+    {
+      "name": "거래량 급증 + 상승 모멘텀",
+      "logic": "AND",
+      "conditions": [
+        {
+          "indicator": "VOLUME_MA_RATIO",
+          "operator": ">",
+          "threshold": 2.0,
+          "params": {"period": 20},
+          "description": "거래량이 20일 평균의 2배 이상"
+        },
+        {
+          "indicator": "RSI",
+          "operator": ">",
+          "threshold": 50.0,
+          "params": {"period": 14},
+          "description": "RSI(14) > 50 (상승 모멘텀)"
+        }
+      ]
+    }
+  ]
+}

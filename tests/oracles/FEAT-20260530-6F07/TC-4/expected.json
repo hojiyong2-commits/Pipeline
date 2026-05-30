@@ -1,0 +1,6 @@
+{
+  "provider_used": "mock",
+  "app_started": true,
+  "error": null,
+  "startup_message": "API 키가 설정되지 않아 mock 데이터 모드로 실행합니다."
+}

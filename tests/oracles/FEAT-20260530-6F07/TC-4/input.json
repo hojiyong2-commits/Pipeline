@@ -1,0 +1,6 @@
+{
+  "test_case": "TC-4",
+  "description": "API 키 환경변수 없음 → mock provider 자동 전환",
+  "env_vars_set": [],
+  "env_vars_absent": ["KIS_APP_KEY", "KIS_APP_SECRET", "KIS_ACCOUNT_NO"]
+}

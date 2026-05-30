@@ -1,0 +1,27 @@
+{
+  "rulebook_id": "sample-trend-breakout",
+  "name": "추세 돌파 후보",
+  "description": "MACD 골든크로스가 발생하고 RSI가 40 이상인 종목 — 단기 모멘텀이 전환되며 중립 이상의 강도를 유지하는 신호.",
+  "groups": [
+    {
+      "name": "MACD 골든크로스 + 중립 이상 모멘텀",
+      "logic": "AND",
+      "conditions": [
+        {
+          "indicator": "MACD_CROSS",
+          "operator": "is_true",
+          "threshold": 0.0,
+          "params": {"fast_period": 12, "slow_period": 26, "signal_period": 9, "lookback": 3},
+          "description": "최근 3봉 내 MACD 골든크로스 발생"
+        },
+        {
+          "indicator": "RSI",
+          "operator": ">",
+          "threshold": 40.0,
+          "params": {"period": 14},
+          "description": "RSI(14) > 40 (중립 이상)"
+        }
+      ]
+    }
+  ]
+}
