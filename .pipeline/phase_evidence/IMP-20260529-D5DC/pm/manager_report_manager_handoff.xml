@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260529-D5DC</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-01be53a69693a4c5</manager_run_id>
+  <planner_run_id>pm_planner-f23b35fc247d8571</planner_run_id>
+  <step_plan_sha256>56204637792cb5c6b10295de125a40fe481e91f726330cb4e7461985f89ed113</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <handoff_status>ready</handoff_status>
+  <micro_tasks>
+    <task id="MT-1">README.md 추가형 수정</task>
+    <task id="MT-2">RELEASE_NOTES.md 신규 작성</task>
+    <task id="MT-3">RELEASE_NOTES.md 게이트별 SHA + 검증 명령 부록</task>
+  </micro_tasks>
+  <design_decisions>
+    <decision id="DQ-1">README 추가형 — 기존 보존 + 상단 v1 섹션</decision>
+    <decision id="DQ-2">RELEASE_NOTES.md만 PR 머지, git tag는 사용자 직접</decision>
+  </design_decisions>
+</manager_handoff>
