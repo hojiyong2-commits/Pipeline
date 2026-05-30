@@ -259,8 +259,7 @@ class SoundNotifier(BaseNotifier):
         Args:
             payload: 알림 내용 (소리에는 사용되지 않으나 인터페이스 유지).
         Returns:
-            True: 재생 성공 또는 비Windows (silent skip).
-            False: Windows에서 winsound 호출 실패.
+            True: 재생 성공, Windows 오디오 장치 없음, 또는 비Windows (silent skip).
         Raises:
             TypeError: payload가 None이거나 AlertPayload가 아닌 경우.
         """
@@ -280,7 +279,8 @@ class SoundNotifier(BaseNotifier):
             winsound.Beep(self.frequency, self.duration)
             return True
         except Exception:  # noqa: BLE001 — notifier 실패가 앱을 중단하면 안 됨
-            return False
+            # 소리 재생 실패(오디오 장치 없음 등)는 앱에 영향 없음 — True 반환
+            return True
 
 
 class NotifierRegistry:
