@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "rule-watcher"
+version = "1.0.0"
+description = "한국주식 Rule Watcher — 룰 기반 종목 감시 앱"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.35.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

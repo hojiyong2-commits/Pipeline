@@ -1,75 +1,317 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-30T13:27:14Z",
+  "generated_at": "2026-05-30T15:19:22Z",
   "pipeline_id": "FEAT-20260530-6F07",
-  "phase": "pm",
+  "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "cbd421d022134801e6de120f731f498b152d9d07",
+  "commit_hint": "944067d53f54486978f05a93be74a41137ae65cc",
   "state": {
-    "current_phase": "dev",
-    "phase_completed_at": "2026-05-30T13:27:10Z",
-    "report_file": "step_plan.xml",
-    "evidence": null
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-30T15:19:13Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "rule_watcher/__init__.py,rule_watcher/config.py,rule_watcher/db.py,requirements.txt,pyproject.toml,.env.example,rule_watcher/providers/__init__.py,rule_watcher/providers/base.py,rule_watcher/providers/mock_provider.py,rule_watcher/providers/data_service.py,tests/fixtures/mock_ohlcv.json,rule_watcher/providers/kis_provider.py,rule_watcher/providers/kis_websocket.py,tests/test_kis_provider.py,rule_watcher/indicators/__init__.py,rule_watcher/indicators/trend.py,rule_watcher/indicators/momentum.py,rule_watcher/indicators/volatility.py,rule_watcher/indicators/volume.py,rule_watcher/indicators/price.py,tests/test_indicators.py,rule_watcher/engine/__init__.py,rule_watcher/engine/rule_model.py,rule_watcher/engine/rulebook_engine.py,rule_watcher/engine/screening_engine.py,tests/test_rulebook_engine.py,tests/oracles/FEAT-20260530-6F07/TC-1/input.json,tests/oracles/FEAT-20260530-6F07/TC-1/expected.json,tests/oracles/FEAT-20260530-6F07/TC-2/input.json,tests/oracles/FEAT-20260530-6F07/TC-2/expected.json,rule_watcher/alert/__init__.py,rule_watcher/alert/alert_engine.py,rule_watcher/alert/notifiers.py,tests/test_alert_engine.py,tests/oracles/FEAT-20260530-6F07/TC-3/input.json,tests/oracles/FEAT-20260530-6F07/TC-3/expected.json,tests/oracles/FEAT-20260530-6F07/TC-4/input.json,tests/oracles/FEAT-20260530-6F07/TC-4/expected.json,rule_watcher/ui/__init__.py,rule_watcher/ui/app.py,rule_watcher/ui/watchlist_tab.py,rule_watcher/ui/rulebook_tab.py,rule_watcher/ui/results_tab.py,rule_watcher/ui/alert_tab.py,rule_watcher/ui/scheduler.py,main.py,README.md,sample_rulebooks/oversold_rebound.json,sample_rulebooks/trend_breakout.json,sample_rulebooks/volume_surge.json,tests/test_integration.py,tests/e2e/test_rule_watcher_e2e.py"
   },
   "agent_run": {
-    "run_id": "pm_planner-94d2c56222b87093",
-    "phase": "pm_planner",
-    "agent_id": "pm-planner-agent",
+    "run_id": "dev-292191e2c23bf906",
+    "phase": "dev",
+    "agent_id": "dev-agent",
     "status": "COMPLETED",
-    "output_file": "step_plan.xml",
-    "output_sha256": "8b5c2208f84313ab734a4567881b364de87d9ee9d4a891dec39d2667aacf3887",
-    "receipt_path": ".pipeline/phase_evidence/FEAT-20260530-6F07/pm/agent_receipt_pm_planner-94d2c56222b87093.json",
-    "receipt_sha256": "852f95f1db385042697432aa98df49dd16d1747514e8cf86cd2398721953ae6e",
-    "used_by_phase": "pm",
-    "receipt_source_path": ".pipeline\\agent_receipts\\FEAT-20260530-6F07\\pm_planner\\pm_planner-94d2c56222b87093.json"
+    "output_file": "dev_handover.xml",
+    "output_sha256": "b2613de8e7c6db6bf373079980dc2df6669d22e6d5a5eb142012a984ad186e7e",
+    "receipt_path": ".pipeline/phase_evidence/FEAT-20260530-6F07/dev/agent_receipt_dev-292191e2c23bf906.json",
+    "receipt_sha256": "3ed37b6122e06132d7badd642dde7bb4e8e17a96907734fb27c44a344b79bd18",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\FEAT-20260530-6F07\\dev\\dev-292191e2c23bf906.json"
   },
-  "manager_run": {
-    "run_id": "pipeline_manager-4b48ba4ec400f976",
-    "phase": "pipeline_manager",
-    "agent_id": "pipeline-manager-agent",
-    "status": "COMPLETED",
-    "output_file": "manager_handoff.xml",
-    "output_sha256": "61fb302f8a6cbe4733c8e3504369f4f2e5c8491e7f3eeb080e950f10e4e79d6b",
-    "receipt_path": ".pipeline/phase_evidence/FEAT-20260530-6F07/pm/manager_receipt_pipeline_manager-4b48ba4ec400f976.json",
-    "receipt_sha256": "15725a49f15a647d25f0526e8a90fd77c67209212be16af30f857e0beffc4139",
-    "used_by_phase": "pm_manager",
-    "receipt_source_path": ".pipeline\\agent_receipts\\FEAT-20260530-6F07\\pipeline_manager\\pipeline_manager-4b48ba4ec400f976.json"
-  },
+  "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\FEAT-20260530-6F07\\pm_planner\\pm_planner-94d2c56222b87093.json",
-      "path": ".pipeline/phase_evidence/FEAT-20260530-6F07/pm/agent_receipt_pm_planner-94d2c56222b87093.json",
-      "sha256": "852f95f1db385042697432aa98df49dd16d1747514e8cf86cd2398721953ae6e",
-      "size_bytes": 534,
-      "requires_force_add": true
-    },
-    {
-      "label": "manager_receipt",
-      "source": ".pipeline\\agent_receipts\\FEAT-20260530-6F07\\pipeline_manager\\pipeline_manager-4b48ba4ec400f976.json",
-      "path": ".pipeline/phase_evidence/FEAT-20260530-6F07/pm/manager_receipt_pipeline_manager-4b48ba4ec400f976.json",
-      "sha256": "15725a49f15a647d25f0526e8a90fd77c67209212be16af30f857e0beffc4139",
-      "size_bytes": 558,
+      "source": ".pipeline\\agent_receipts\\FEAT-20260530-6F07\\dev\\dev-292191e2c23bf906.json",
+      "path": ".pipeline/phase_evidence/FEAT-20260530-6F07/dev/agent_receipt_dev-292191e2c23bf906.json",
+      "sha256": "3ed37b6122e06132d7badd642dde7bb4e8e17a96907734fb27c44a344b79bd18",
+      "size_bytes": 503,
       "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "step_plan.xml",
-      "path": ".pipeline/phase_evidence/FEAT-20260530-6F07/pm/report_step_plan.xml",
-      "sha256": "8b5c2208f84313ab734a4567881b364de87d9ee9d4a891dec39d2667aacf3887",
-      "size_bytes": 28301,
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/FEAT-20260530-6F07/dev/report_dev_handover.xml",
+      "sha256": "b2613de8e7c6db6bf373079980dc2df6669d22e6d5a5eb142012a984ad186e7e",
+      "size_bytes": 4441,
       "requires_force_add": true
     },
     {
-      "label": "manager_report",
-      "source": "manager_handoff.xml",
-      "path": ".pipeline/phase_evidence/FEAT-20260530-6F07/pm/manager_report_manager_handoff.xml",
-      "sha256": "61fb302f8a6cbe4733c8e3504369f4f2e5c8491e7f3eeb080e950f10e4e79d6b",
-      "size_bytes": 1632,
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/FEAT-20260530-6F07/dev/scope_manifest_scope_manifest.json",
+      "sha256": "c9396ae31fbb23f10a55459a387fadb8ef5edc6bd2ea5f8a4370d5c80371838a",
+      "size_bytes": 4671,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [],
+  "workspace_file_checks": [
+    {
+      "path": "rule_watcher/__init__.py",
+      "sha256": "63f91bb05d822f7834793d78dac51e2809542a525a30162f6ba9b4248c3a2c8a",
+      "size_bytes": 372
+    },
+    {
+      "path": "rule_watcher/config.py",
+      "sha256": "3d9bcd03636860b65afaadcd7bc94e7d3f51f298ed8b466c90fa7b0962f810da",
+      "size_bytes": 3169
+    },
+    {
+      "path": "rule_watcher/db.py",
+      "sha256": "e4e1d91c5716b34eebb59942181a1fb6d10a487e66239dbb94bbbb09f95c06e3",
+      "size_bytes": 6219
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "bf741be6c09795a6a9fe10e488c1e702f47e726ca6f9ad685916785fa05aef98",
+      "size_bytes": 194
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "9f1e042893f86989f5c4c4754becd1e6fd3c52e409fb276bce1ae9be9dde5bec",
+      "size_bytes": 487
+    },
+    {
+      "path": ".env.example",
+      "sha256": "ac7532c1165913cf1b8b9a20904aa9240c78ce52cb5b4a86a73c480eba759e69",
+      "size_bytes": 546
+    },
+    {
+      "path": "rule_watcher/providers/__init__.py",
+      "sha256": "7b12cff9aed15e9e37d18818efa3231795ef63a767bcb0d4aac38e973a015d15",
+      "size_bytes": 605
+    },
+    {
+      "path": "rule_watcher/providers/base.py",
+      "sha256": "11f20bf27330ac29429a8781d6fec5b418acaa39f186d7d9cc2becf1048493a8",
+      "size_bytes": 1945
+    },
+    {
+      "path": "rule_watcher/providers/mock_provider.py",
+      "sha256": "b8bcfdc2bdebe4a13ffd43339d5029ba9df574a0e5e8b55acbadf562a9f3a8d3",
+      "size_bytes": 7597
+    },
+    {
+      "path": "rule_watcher/providers/data_service.py",
+      "sha256": "e801fb79a1915561baecdc1426a4743c18c55e16363a98e6e42ce128c9e51335",
+      "size_bytes": 6441
+    },
+    {
+      "path": "tests/fixtures/mock_ohlcv.json",
+      "sha256": "b3302c006d6c9ce2226c577e1c51bb7ccc3d2147b67ac3f00fe793375d58aeb9",
+      "size_bytes": 321
+    },
+    {
+      "path": "rule_watcher/providers/kis_provider.py",
+      "sha256": "35002cf7f01409ba86585229da7e744ca363912437a2b3ef4bb69a57f8ba2ba8",
+      "size_bytes": 5666
+    },
+    {
+      "path": "rule_watcher/providers/kis_websocket.py",
+      "sha256": "ecb5a7770ecfe547d2a4cd00c39ec1856d6f78524cfabf4892f77adb11132014",
+      "size_bytes": 3441
+    },
+    {
+      "path": "tests/test_kis_provider.py",
+      "sha256": "aa01e7e94aaf3b8731678807479d1cbd4b6e27f249d3be77811ff08e96fbfe21",
+      "size_bytes": 4778
+    },
+    {
+      "path": "rule_watcher/indicators/__init__.py",
+      "sha256": "64dec375dc762a0410ac2fd6a64d9d337f3a256c7161f6a05d5f4c3635cefb51",
+      "size_bytes": 1404
+    },
+    {
+      "path": "rule_watcher/indicators/trend.py",
+      "sha256": "dfe2363192d9851608093a0c455e9e55fc17df29c589fa58c472bbcd366cfd44",
+      "size_bytes": 5643
+    },
+    {
+      "path": "rule_watcher/indicators/momentum.py",
+      "sha256": "263b6dcb97e5eb74dec18652fc33e7c8e308b7749eb3dfad4a8eb31ffa205452",
+      "size_bytes": 5637
+    },
+    {
+      "path": "rule_watcher/indicators/volatility.py",
+      "sha256": "82afcabcccf3d74c21fedf062f6fa1f1d5b2cacccf700d0f9f728f0b97377696",
+      "size_bytes": 4529
+    },
+    {
+      "path": "rule_watcher/indicators/volume.py",
+      "sha256": "17c6dabbae6374c35f1fd29e21d299802a642977217d2cdf902fc0a6afb6a0fa",
+      "size_bytes": 3917
+    },
+    {
+      "path": "rule_watcher/indicators/price.py",
+      "sha256": "a16581deb0eb693c961ff6818f0aacf16b03fc2341db2927545868fdbb9f1cae",
+      "size_bytes": 8236
+    },
+    {
+      "path": "tests/test_indicators.py",
+      "sha256": "e8385ac5a17530fc577178761f702bbf6746459585592e464877e0e6938830d0",
+      "size_bytes": 10986
+    },
+    {
+      "path": "rule_watcher/engine/__init__.py",
+      "sha256": "4f27588075a531b3f517a224cb5ddb4fbd0f7e8ad2500982a18e6e875b95dca0",
+      "size_bytes": 1041
+    },
+    {
+      "path": "rule_watcher/engine/rule_model.py",
+      "sha256": "3544714607337596a5a72b79d84d6143b921bf82852efac65e0fc58faf288f06",
+      "size_bytes": 18141
+    },
+    {
+      "path": "rule_watcher/engine/rulebook_engine.py",
+      "sha256": "f992516e1c3c2616b4e84561343821e6bebae85344c20e50494f5099cbf09f4b",
+      "size_bytes": 22312
+    },
+    {
+      "path": "rule_watcher/engine/screening_engine.py",
+      "sha256": "18efe63e012ac75702dc092cb25e3ad5daba88f6abd4e6a26dcfddbac4dbf918",
+      "size_bytes": 9854
+    },
+    {
+      "path": "tests/test_rulebook_engine.py",
+      "sha256": "ef316162906ef5b9d570a998096cab842ff69d3269d5d3c87b7305d71e2771af",
+      "size_bytes": 18405
+    },
+    {
+      "path": "tests/oracles/FEAT-20260530-6F07/TC-1/input.json",
+      "sha256": "cce7418c640fe630edb38ad0c7f112623b7dd64564004ad4b5491a2f70a40d97",
+      "size_bytes": 1971
+    },
+    {
+      "path": "tests/oracles/FEAT-20260530-6F07/TC-1/expected.json",
+      "sha256": "80dec7b70d7741b348714a5c3cb0c736b105788909db9f6c507b7fdcb98c189f",
+      "size_bytes": 217
+    },
+    {
+      "path": "tests/oracles/FEAT-20260530-6F07/TC-2/input.json",
+      "sha256": "5f0f1035f9ec0db477a376a3cb322ca46df7fc4d9bbe92c3601f69629856a73a",
+      "size_bytes": 1654
+    },
+    {
+      "path": "tests/oracles/FEAT-20260530-6F07/TC-2/expected.json",
+      "sha256": "2f62be7b93e4c3dbaee9bd966e028a1f46862c8a7485ff6d3063ab0d568b89c9",
+      "size_bytes": 184
+    },
+    {
+      "path": "rule_watcher/alert/__init__.py",
+      "sha256": "ed17ec54f60371d3c6129d493b0acc43b3518d38ba11c2c3242409a4ed93ac35",
+      "size_bytes": 876
+    },
+    {
+      "path": "rule_watcher/alert/alert_engine.py",
+      "sha256": "4ab10a20a1042027b99e553f61bd465a1dd2dbfd3e54bdf0ed43d9ec40e662ea",
+      "size_bytes": 17712
+    },
+    {
+      "path": "rule_watcher/alert/notifiers.py",
+      "sha256": "e862b0cc5275987af33d69f01da4e82a0be07f3b20c6b558fe8b3718ab8a6d08",
+      "size_bytes": 16419
+    },
+    {
+      "path": "tests/test_alert_engine.py",
+      "sha256": "a7101a1060b5507633d32b2c9c2c18ea60f2d6335710ad050ab9583e411b298c",
+      "size_bytes": 11035
+    },
+    {
+      "path": "tests/oracles/FEAT-20260530-6F07/TC-3/input.json",
+      "sha256": "888b3bc430b1a9bfe6bdb67af36fb1b66451e94cb6260642d8fb95761386b82e",
+      "size_bytes": 233
+    },
+    {
+      "path": "tests/oracles/FEAT-20260530-6F07/TC-3/expected.json",
+      "sha256": "0eec42c5a0f62f170fb3859544a8c138e1fcef211a7d300e37c8aa2e5432fcd2",
+      "size_bytes": 190
+    },
+    {
+      "path": "tests/oracles/FEAT-20260530-6F07/TC-4/input.json",
+      "sha256": "009c1446e09fc8b1a2171d66e5229d20431ea23ad319f67a47cd2000be7f56fd",
+      "size_bytes": 202
+    },
+    {
+      "path": "tests/oracles/FEAT-20260530-6F07/TC-4/expected.json",
+      "sha256": "99990fac5225dad8427c6a7de6a093f7224c48502a28cea3c19c505220905faf",
+      "size_bytes": 167
+    },
+    {
+      "path": "rule_watcher/ui/__init__.py",
+      "sha256": "c41f01b8422c38fffa8aa2b769937564462f8ecadd8142cd5d427b0cb27a20f9",
+      "size_bytes": 1098
+    },
+    {
+      "path": "rule_watcher/ui/app.py",
+      "sha256": "b2e424829d2c6c64330b75cea8f8eebdf27d0fe0e611c3358d431c8b8dbab6b9",
+      "size_bytes": 2853
+    },
+    {
+      "path": "rule_watcher/ui/watchlist_tab.py",
+      "sha256": "ecce7082e347c2156e8580ed57c195738afceb747669f7baf2c6c68ee81a655a",
+      "size_bytes": 7649
+    },
+    {
+      "path": "rule_watcher/ui/rulebook_tab.py",
+      "sha256": "3d9e2776c8ec79dddcfc47b069dd9a413fd29af22ffcfa6ba21d893bf0a45e23",
+      "size_bytes": 12122
+    },
+    {
+      "path": "rule_watcher/ui/results_tab.py",
+      "sha256": "58f59474a2d9b107efa85a164f589119dc7928060136dbdb847afc4ec30a5f25",
+      "size_bytes": 8521
+    },
+    {
+      "path": "rule_watcher/ui/alert_tab.py",
+      "sha256": "622d92006c188125526ce5ad229ec65fc9a4ae6f3a24dedcb5d1048a0b29757b",
+      "size_bytes": 5692
+    },
+    {
+      "path": "rule_watcher/ui/scheduler.py",
+      "sha256": "f6ffc03ece698fa37e5d0ae917439bdcd58c518c5113fc92dbfa862f736de8fc",
+      "size_bytes": 6185
+    },
+    {
+      "path": "main.py",
+      "sha256": "6c56ea56d4c8f3fef2d8f88d702b2025d87eedb16e3c103ea9c8e9270f9bab91",
+      "size_bytes": 4316
+    },
+    {
+      "path": "README.md",
+      "sha256": "b724c968b889df2912f88fb59f750562110ad58ee78827b1ad685b8ab5dc51a5",
+      "size_bytes": 1998
+    },
+    {
+      "path": "sample_rulebooks/oversold_rebound.json",
+      "sha256": "bde373c945134cc5dab370ded5e09889e64f7b97a44128d028810afcf455113f",
+      "size_bytes": 735
+    },
+    {
+      "path": "sample_rulebooks/trend_breakout.json",
+      "sha256": "7a0898baf66698edc9be2b9fdfa537a97c52a657b05060ffb70769ac7dde110e",
+      "size_bytes": 878
+    },
+    {
+      "path": "sample_rulebooks/volume_surge.json",
+      "sha256": "4f1e217167dfd23e2f00ad75680f28264a1e172f27f6cb03e6c0eda2c80308cc",
+      "size_bytes": 798
+    },
+    {
+      "path": "tests/test_integration.py",
+      "sha256": "48f61e7bbf589a63dcddeb63d6d1d133ae4373211e52ceedab84f57df586a520",
+      "size_bytes": 8005
+    },
+    {
+      "path": "tests/e2e/test_rule_watcher_e2e.py",
+      "sha256": "dce3429634eec623b1bd1737feb30d2b61df4c43310c82ea8b89a00a3a2ae6ea",
+      "size_bytes": 5539
+    }
+  ],
   "local_only_files": []
 }

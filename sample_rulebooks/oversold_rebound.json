@@ -1,0 +1,27 @@
+{
+  "rulebook_id": "sample-oversold-rebound",
+  "name": "과매도 반등 후보",
+  "description": "RSI가 30 미만이고 ADX가 20 이상인 종목 — 과매도 구간에서 방향성 있는 반등 후보를 찾습니다.",
+  "groups": [
+    {
+      "name": "과매도 + 방향성",
+      "logic": "AND",
+      "conditions": [
+        {
+          "indicator": "RSI",
+          "operator": "<",
+          "threshold": 30.0,
+          "params": {"period": 14},
+          "description": "RSI(14) < 30"
+        },
+        {
+          "indicator": "ADX",
+          "operator": ">",
+          "threshold": 20.0,
+          "params": {"period": 14},
+          "description": "ADX(14) > 20 (방향성 확인)"
+        }
+      ]
+    }
+  ]
+}
