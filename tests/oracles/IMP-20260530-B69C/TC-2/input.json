@@ -1,0 +1,8 @@
+{
+  "case_id": "TC-2",
+  "case_kind": "edge",
+  "description": "배포 경로 G:\\내 드라이브\\터미널\\ICPartAutomation.exe 파일 크기 검증 (10MB 초과)",
+  "check": "file_size_gt",
+  "target_path": "G:\\내 드라이브\\터미널\\ICPartAutomation.exe",
+  "size_threshold_bytes": 10485760
+}
