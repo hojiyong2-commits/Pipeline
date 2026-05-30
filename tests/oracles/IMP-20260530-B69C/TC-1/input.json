@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-1",
+  "case_kind": "normal",
+  "description": "PyInstaller 재빌드 후 dist/ICPartAutomation.exe 파일 생성 확인",
+  "build_command": "pyinstaller --noconfirm ic_part_src/ICPartAutomation.spec",
+  "working_dir": "ic_part_src",
+  "check": "file_exists",
+  "target_path": "ic_part_src/dist/ICPartAutomation.exe"
+}

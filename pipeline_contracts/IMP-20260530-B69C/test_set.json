@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260530-B69C",
+  "created_at": "2026-05-30T05:01:48Z",
+  "updated_at": "2026-05-30T05:03:38Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "TC-1",
+      "module": "MT-1",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "action": "pyinstaller build",
+        "actual_file": "ic_part_src/dist/ICPartAutomation.exe"
+      },
+      "when": {
+        "spec": "ic_part_src/ICPartAutomation.spec"
+      },
+      "then": {
+        "path": "ic_part_src/dist/ICPartAutomation.exe",
+        "size_gt_bytes": 10485760
+      }
+    },
+    {
+      "id": "TC-2",
+      "module": "MT-1",
+      "type": "file_output_check",
+      "priority": "P0",
+      "case_kind": "edge",
+      "points": 10,
+      "given": {
+        "action": "deploy copy",
+        "actual_file": "G:/내 드라이브/터미널/ICPartAutomation.exe"
+      },
+      "when": {
+        "source": "ic_part_src/dist/ICPartAutomation.exe",
+        "dest": "G:/내 드라이브/터미널/ICPartAutomation.exe"
+      },
+      "then": {
+        "path": "G:/내 드라이브/터미널/ICPartAutomation.exe",
+        "size_gt_bytes": 10485760
+      }
+    }
+  ],
+  "frozen_at": "2026-05-30T05:03:38Z",
+  "test_set_hash": "4537d583028a343925ab8a78698c050bb8912c4e76162cad9d0a109b862ad130",
+  "contract_hash": "af602fa52bfa7192f11a65fbbabb76840d4aa1dd4122577c0b0c431d50562030"
+}

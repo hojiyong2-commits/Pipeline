@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260530-B69C",
+  "pipeline_type": "IMP",
+  "created_at": "2026-05-30T05:01:48Z",
+  "updated_at": "2026-05-30T05:03:38Z",
+  "status": "frozen",
+  "frozen": true,
+  "goal": "ICPartAutomation.exe PyInstaller 재빌드 — FEAT-20260530-86AA 코드 변경 반영",
+  "task_profile": {
+    "domain": "general",
+    "task_kind": null,
+    "deliverable_kind": null,
+    "success_signal": []
+  },
+  "environment": {
+    "target_os": "Windows",
+    "target_python": null,
+    "constraints": [],
+    "external_connectors_allowed": null
+  },
+  "deliverables": [],
+  "build_target": {
+    "required": null,
+    "type": null,
+    "notes": "Set required=true for runnable apps/packages; use false for docs, prompts, analysis, or MD-only work."
+  },
+  "execution": {
+    "mode": null,
+    "entrypoint": null,
+    "user_trigger": null
+  },
+  "modules": [
+    {
+      "id": "MT-1",
+      "name": "PyInstaller 재빌드 및 배포",
+      "inputs": [],
+      "outputs": [],
+      "acceptance_rules": [],
+      "exceptions": []
+    }
+  ],
+  "questions": [],
+  "assumptions": [],
+  "acceptance_threshold": 80,
+  "definition_of_ready": {
+    "min_normal_tests_per_module": 1,
+    "min_edge_cases_total": 1,
+    "allow_p1_defaults": true
+  },
+  "frozen_at": "2026-05-30T05:03:38Z",
+  "contract_hash": "af602fa52bfa7192f11a65fbbabb76840d4aa1dd4122577c0b0c431d50562030",
+  "test_set_hash": "4537d583028a343925ab8a78698c050bb8912c4e76162cad9d0a109b862ad130"
+}

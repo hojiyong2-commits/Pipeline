@@ -1,0 +1,9 @@
+{
+  "case_id": "TC-2",
+  "case_kind": "edge",
+  "result": "PASS",
+  "file_exists": true,
+  "path": "G:\\내 드라이브\\터미널\\ICPartAutomation.exe",
+  "size_gt_bytes": 10485760,
+  "description": "배포 경로의 ICPartAutomation.exe 크기가 10MB(10485760 bytes) 초과여야 함"
+}
