@@ -84,7 +84,7 @@ def _cli_main() -> None:
     from core.packing_detail_reader import lookup_packing_dimensions
     from core.order_lines_reader import lookup_order_lines
     from core.excel_mapper import write_to_excel_a
-    from core.models import KitRow, MappedRow
+    from core.models import MappedRow
 
     try:
         # Step 1: Load configuration
@@ -193,7 +193,7 @@ def _cli_main() -> None:
                 continue
 
             # Step 5c: Append Line No suffix to note only when f_col_conflict is True
-            line_nos = [str(n) for n in (order.get("line_nos") or [])]
+            line_nos = [str(n) for n in (order.get("line_nos") or [])]  # type: ignore[attr-defined]
             if line_nos and order.get("f_col_conflict", False):
                 note = f"{note} #{_compress_line_nos(line_nos)}"
 

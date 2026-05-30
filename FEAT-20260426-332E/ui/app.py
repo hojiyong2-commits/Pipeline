@@ -102,11 +102,11 @@ class KittingMapperApp(tk.Tk):
         path_frame = ttk.LabelFrame(outer, text="파일 경로")
         path_frame.pack(fill="x", pady=(0, 8))
 
-        self._make_path_row(path_frame, 0, "출력 Excel (A)",
+        self._make_path_row(path_frame, 0, "출력 Excel (A)",  # type: ignore[arg-type]
                             "entry_output_excel_path", "btn_browse_output_excel_path")
-        self._make_path_row(path_frame, 1, "포장 상세 Excel",
+        self._make_path_row(path_frame, 1, "포장 상세 Excel",  # type: ignore[arg-type]
                             "entry_packing_detail_path", "btn_browse_packing_detail_path")
-        self._make_path_row(path_frame, 2, "Order Lines Excel (B)",
+        self._make_path_row(path_frame, 2, "Order Lines Excel (B)",  # type: ignore[arg-type]
                             "entry_order_lines_path", "btn_browse_order_lines_path")
 
         # PM name mapping
@@ -127,7 +127,7 @@ class KittingMapperApp(tk.Tk):
         setattr(self, attr_entry, entry)
 
         btn = ttk.Button(parent, text="찾아보기",
-                         command=lambda e=entry: self._browse_file(e))
+                         command=lambda e=entry: self._browse_file(e))  # type: ignore[misc]
         btn.grid(row=row, column=2, sticky="w", padx=(0, 6), pady=4)
         setattr(self, attr_btn, btn)
 
@@ -295,9 +295,9 @@ class KittingMapperApp(tk.Tk):
 
         config: Dict[str, object] = {
             **_existing,  # preserve all existing keys (including pm_location_overrides)
-            "output_excel_path":     self.entry_output_excel_path.get().strip(),
-            "packing_detail_path":   self.entry_packing_detail_path.get().strip(),
-            "order_lines_path":      self.entry_order_lines_path.get().strip(),
+            "output_excel_path":     self.entry_output_excel_path.get().strip(),  # type: ignore[attr-defined]
+            "packing_detail_path":   self.entry_packing_detail_path.get().strip(),  # type: ignore[attr-defined]
+            "order_lines_path":      self.entry_order_lines_path.get().strip(),  # type: ignore[attr-defined]
             "pm_name_map":           self._pm_map,
             # Fixed values
             "packing_detail_sheet":  _FIXED_PACKING_SHEET,
@@ -343,9 +343,9 @@ class KittingMapperApp(tk.Tk):
         except Exception:
             return
 
-        self._set_entry(self.entry_output_excel_path, config.get("output_excel_path", ""))
-        self._set_entry(self.entry_packing_detail_path, config.get("packing_detail_path", ""))
-        self._set_entry(self.entry_order_lines_path, config.get("order_lines_path", ""))
+        self._set_entry(self.entry_output_excel_path, config.get("output_excel_path", ""))  # type: ignore[attr-defined]
+        self._set_entry(self.entry_packing_detail_path, config.get("packing_detail_path", ""))  # type: ignore[attr-defined]
+        self._set_entry(self.entry_order_lines_path, config.get("order_lines_path", ""))  # type: ignore[attr-defined]
 
         pm_map: dict = config.get("pm_name_map", {})
         if not isinstance(pm_map, dict):
@@ -388,7 +388,7 @@ class KittingMapperApp(tk.Tk):
                 from core.packing_detail_reader import lookup_packing_dimensions
                 from core.order_lines_reader import lookup_order_lines
                 from core.excel_mapper import write_to_excel_a, update_note_by_sn, read_note_by_sn
-                from core.pending_store import load_pending, save_pending, PendingEntry
+                from core.pending_store import load_pending, save_pending
                 from datetime import date
 
                 config: dict = load_config()

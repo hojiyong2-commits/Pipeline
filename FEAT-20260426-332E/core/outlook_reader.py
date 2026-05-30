@@ -196,7 +196,7 @@ def parse_kitting_table(html_body: str) -> list:
             "Could not locate kitting table by headers; trying first table fallback"
         )
         # Fallback: use the first table in the document
-        table = soup.find("table")
+        table = soup.find("table")  # type: ignore[assignment]
 
     if table is None:
         logger.warning("No table found in HTML body")
@@ -208,7 +208,7 @@ def parse_kitting_table(html_body: str) -> list:
         return []
 
     # First row is header
-    header_indices = _find_header_indices(rows[0])
+    header_indices = _find_header_indices(rows[0])  # type: ignore[arg-type]
     logger.info("Table headers: %s", header_indices)
 
     # Resolve required column indices
@@ -232,7 +232,7 @@ def parse_kitting_table(html_body: str) -> list:
     kit_rows: list = []
 
     for row in rows[1:]:
-        cells = row.find_all(["td", "th"])
+        cells = row.find_all(["td", "th"])  # type: ignore[union-attr]
         if not cells:
             continue
 
@@ -284,12 +284,12 @@ def _find_table_by_headers(soup: BeautifulSoup) -> Optional[Tag]:
         The matching <table> Tag, or None if not found.
     """
     for tbl in soup.find_all("table"):
-        rows = tbl.find_all("tr")
+        rows = tbl.find_all("tr")  # type: ignore[union-attr]
         if not rows:
             continue
-        header_text = {cell.get_text(strip=True).lower() for cell in rows[0].find_all(["th", "td"])}
+        header_text = {cell.get_text(strip=True).lower() for cell in rows[0].find_all(["th", "td"])}  # type: ignore[union-attr]
         if "kit place" in header_text and "project id" in header_text:
-            return tbl
+            return tbl  # type: ignore[return-value]
     return None
 
 

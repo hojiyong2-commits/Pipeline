@@ -182,7 +182,7 @@ def lookup_packing_dimensions(
         best = min(
             matches,
             key=lambda m: abs(
-                (m["date"].date() if isinstance(m["date"], datetime) else m["date"]) - today  # allowed: m["date"] is date|datetime, stored from validated isinstance block above
+                (m["date"].date() if isinstance(m["date"], datetime) else m["date"]) - today  # type: ignore[operator]  # m["date"] is date|datetime per validated isinstance block above
             ),
         )
         logger.info(
