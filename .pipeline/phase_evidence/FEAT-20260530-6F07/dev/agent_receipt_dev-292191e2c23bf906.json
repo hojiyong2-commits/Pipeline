@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "FEAT-20260530-6F07",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-292191e2c23bf906",
+  "status": "COMPLETED",
+  "started_at": "2026-05-30T15:18:44Z",
+  "completed_at": "2026-05-30T15:18:49Z",
+  "output_file": "dev_handover.xml",
+  "output_sha256": "b2613de8e7c6db6bf373079980dc2df6669d22e6d5a5eb142012a984ad186e7e",
+  "evidence_files": [],
+  "commit_sha": "944067d53f54486978f05a93be74a41137ae65cc"
+}
