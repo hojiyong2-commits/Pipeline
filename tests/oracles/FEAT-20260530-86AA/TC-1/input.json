@@ -1,8 +1,4 @@
 {
-  "description": "row 16이 비어 있고 row 10에 값이 있을 때 _find_cell_with_value(xml, 'U', 17) 결과",
-  "function": "_find_cell_with_value",
-  "col": "U",
-  "row_num": 17,
-  "xml_has_value_at_row": 10,
-  "xml_row_16_empty": true
+  "result": null,
+  "reason": "row_num-1(=16)이 비어 있으므로 상속 없음"
 }

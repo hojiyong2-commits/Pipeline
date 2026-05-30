@@ -1,6 +1,4 @@
 {
-  "description": "IC-Part 헤더에서 Project ID가 I열 대신 J열에 있을 때 동적 매핑 결과",
-  "header_row_3": {"J": "Project ID", "K": "PO No.", "L": "Order No"},
-  "expected_field": "project_id",
-  "expected_col_index": 10
+  "project_id_col": 10,
+  "reason": "동적 매핑이 Project ID를 J열(col 10)에서 찾아냄"
 }
