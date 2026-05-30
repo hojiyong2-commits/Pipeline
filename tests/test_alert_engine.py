@@ -11,7 +11,7 @@ import datetime
 import json
 import pathlib
 import tempfile
-from typing import Any, Dict
+from typing import Generator
 
 import pytest
 
@@ -38,7 +38,7 @@ def _make_result(ticker: str = "005930", matched: bool = True) -> ScreenResult:
 
 
 @pytest.fixture
-def tmp_db_path() -> str:
+def tmp_db_path() -> Generator[str, None, None]:
     f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     f.close()
     yield f.name

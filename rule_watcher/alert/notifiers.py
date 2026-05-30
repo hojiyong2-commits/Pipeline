@@ -11,7 +11,7 @@ from __future__ import annotations
 import threading
 from abc import ABC, abstractmethod
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Deque, Dict, List, Optional
 
 

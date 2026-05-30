@@ -248,9 +248,9 @@ class RuleEvaluator:
         if ind == "STOCH_K":
             k_period = int(params.get("k_period", 14))
             d_period = int(params.get("d_period", 3))
-            res = calc_stochastic(df, k_period=k_period, d_period=d_period)
+            res_stoch = calc_stochastic(df, k_period=k_period, d_period=d_period)
             return self._eval_series_scalar(
-                res.k, cond, label=f"Stochastic %K({k_period},{d_period})"
+                res_stoch.k, cond, label=f"Stochastic %K({k_period},{d_period})"
             )
 
         if ind == "STOCH_RSI_K":
@@ -300,9 +300,9 @@ class RuleEvaluator:
                 lookback = int(lookback_raw)
             except (TypeError, ValueError):
                 lookback = 0
-            res = calc_macd(df, fast=fast, slow=slow, signal=signal)
+            res_macd = calc_macd(df, fast=fast, slow=slow, signal=signal)
             cross_found = self._detect_macd_cross(
-                res.macd, res.signal, lookback=lookback
+                res_macd.macd, res_macd.signal, lookback=lookback
             )
             label = f"MACD({fast},{slow},{signal})"
             if lookback > 0:
@@ -318,17 +318,17 @@ class RuleEvaluator:
         if ind == "BOLLINGER_UPPER":
             period = int(params.get("period", 20))
             std_dev = float(params.get("std_dev", 2.0))
-            res = calc_bollinger(df, period=period, std_dev=std_dev)
+            res_bb = calc_bollinger(df, period=period, std_dev=std_dev)
             return self._eval_series_scalar(
-                res.upper, cond, label=f"볼린저 상단({period},{std_dev})"
+                res_bb.upper, cond, label=f"볼린저 상단({period},{std_dev})"
             )
 
         if ind == "BOLLINGER_LOWER":
             period = int(params.get("period", 20))
             std_dev = float(params.get("std_dev", 2.0))
-            res = calc_bollinger(df, period=period, std_dev=std_dev)
+            res_bb = calc_bollinger(df, period=period, std_dev=std_dev)
             return self._eval_series_scalar(
-                res.lower, cond, label=f"볼린저 하단({period},{std_dev})"
+                res_bb.lower, cond, label=f"볼린저 하단({period},{std_dev})"
             )
 
         if ind == "ATR":
@@ -409,9 +409,9 @@ class RuleEvaluator:
             if ma_type not in ("sma", "ema"):
                 return False, f"룰 평가 실패: ma_type은 'sma' 또는 'ema'여야 합니다, got {ma_type!r}"
             period = int(params.get("period", 200))
-            res = calc_ma_cross(df, ma_type=ma_type, period=period)
+            res_mac = calc_ma_cross(df, ma_type=ma_type, period=period)  # type: ignore[arg-type]
             return self._eval_bool(
-                res.is_cross_up,
+                res_mac.is_cross_up,
                 cond,
                 label_true=f"{ma_type.upper()}({period}) 상향 돌파",
                 label_false=f"{ma_type.upper()}({period}) 상향 돌파 없음",
@@ -423,9 +423,9 @@ class RuleEvaluator:
             if ma_type not in ("sma", "ema"):
                 return False, f"룰 평가 실패: ma_type은 'sma' 또는 'ema'여야 합니다, got {ma_type!r}"
             period = int(params.get("period", 200))
-            res = calc_ma_cross(df, ma_type=ma_type, period=period)
+            res_mac = calc_ma_cross(df, ma_type=ma_type, period=period)  # type: ignore[arg-type]
             return self._eval_bool(
-                res.is_cross_down,
+                res_mac.is_cross_down,
                 cond,
                 label_true=f"{ma_type.upper()}({period}) 하향 돌파",
                 label_false=f"{ma_type.upper()}({period}) 하향 돌파 없음",
@@ -433,22 +433,22 @@ class RuleEvaluator:
 
         if ind == "GAP_UP":
             threshold_pct = float(params.get("threshold_pct", 2.0))
-            res = calc_gap(df, threshold_pct=threshold_pct)
+            res_gap = calc_gap(df, threshold_pct=threshold_pct)
             return self._eval_bool(
-                res.is_gap_up,
+                res_gap.is_gap_up,
                 cond,
-                label_true=f"갭상승 {res.gap_pct:.2f}% (기준 {threshold_pct}% 이상)",
-                label_false=f"갭상승 미발생 (현재 {res.gap_pct:.2f}%)",
+                label_true=f"갭상승 {res_gap.gap_pct:.2f}% (기준 {threshold_pct}% 이상)",
+                label_false=f"갭상승 미발생 (현재 {res_gap.gap_pct:.2f}%)",
             )
 
         if ind == "GAP_DOWN":
             threshold_pct = float(params.get("threshold_pct", 2.0))
-            res = calc_gap(df, threshold_pct=threshold_pct)
+            res_gap = calc_gap(df, threshold_pct=threshold_pct)
             return self._eval_bool(
-                res.is_gap_down,
+                res_gap.is_gap_down,
                 cond,
-                label_true=f"갭하락 {res.gap_pct:.2f}% (기준 -{threshold_pct}% 이하)",
-                label_false=f"갭하락 미발생 (현재 {res.gap_pct:.2f}%)",
+                label_true=f"갭하락 {res_gap.gap_pct:.2f}% (기준 -{threshold_pct}% 이하)",
+                label_false=f"갭하락 미발생 (현재 {res_gap.gap_pct:.2f}%)",
             )
 
         # 이론적으로 도달 불가 (INDICATOR_TYPES 사전 검사 통과 시)
