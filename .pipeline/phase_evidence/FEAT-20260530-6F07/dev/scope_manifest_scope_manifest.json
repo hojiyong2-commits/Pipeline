@@ -106,12 +106,13 @@
     {
       "id": "MT-8",
       "files": [
-        "README.md",
+        "RULE_WATCHER_README.md",
         "sample_rulebooks/oversold_rebound.json",
         "sample_rulebooks/trend_breakout.json",
         "sample_rulebooks/volume_surge.json",
         "tests/test_integration.py",
-        "tests/e2e/test_rule_watcher_e2e.py"
+        "tests/e2e/test_rule_watcher_e2e.py",
+        "rule_watcher/alert/notifiers.py"
       ],
       "affected_functions": [
         "write_readme, write_sample_rulebooks, integration_test_runner"

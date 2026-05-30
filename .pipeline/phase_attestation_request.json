@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-30T15:37:09Z",
+  "generated_at": "2026-05-30T15:59:47Z",
   "pipeline_id": "FEAT-20260530-6F07",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "d60671b842aa4a2180256a055bf7f350e36a559e",
+  "commit_hint": "d7936e4ed20798f3a2c0d3c24c78cbf3c9ec027e",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-05-30T15:19:13Z",
@@ -46,8 +46,8 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/FEAT-20260530-6F07/dev/scope_manifest_scope_manifest.json",
-      "sha256": "c9396ae31fbb23f10a55459a387fadb8ef5edc6bd2ea5f8a4370d5c80371838a",
-      "size_bytes": 4671,
+      "sha256": "191f5bcaf2654b215b60e283353a82b15932709839bdb62923966b222f96c08a",
+      "size_bytes": 4728,
       "requires_force_add": true
     }
   ],
@@ -214,8 +214,8 @@
     },
     {
       "path": "rule_watcher/alert/notifiers.py",
-      "sha256": "e862b0cc5275987af33d69f01da4e82a0be07f3b20c6b558fe8b3718ab8a6d08",
-      "size_bytes": 16419
+      "sha256": "3ae37ead54b54e08bd6299e2c7be78e1de6a1cdaa156a63469ebcfbd75a650d6",
+      "size_bytes": 16499
     },
     {
       "path": "tests/test_alert_engine.py",
@@ -284,8 +284,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "b724c968b889df2912f88fb59f750562110ad58ee78827b1ad685b8ab5dc51a5",
-      "size_bytes": 1998
+      "sha256": "b422ad47d7d2443d7a1bcfc1e8134421e3f41aa11de0de313c4b86ea14964cc7",
+      "size_bytes": 13660
     },
     {
       "path": "sample_rulebooks/oversold_rebound.json",
