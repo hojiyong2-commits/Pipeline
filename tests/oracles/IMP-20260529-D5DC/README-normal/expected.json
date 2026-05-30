@@ -1,0 +1,29 @@
+{
+  "case_id": "README-normal",
+  "required_sections": [
+    "v1 안정화 릴리즈",
+    "빠른 시작",
+    "실패 시 대응",
+    "알려진 제한사항",
+    "ACCEPT",
+    "REJECT"
+  ],
+  "required_keywords": [
+    "Security & Secrets Boundary",
+    "Golden Task",
+    "Observability Metrics",
+    "Cost/Attempt Budget",
+    "Workspace Hygiene",
+    "Oracle Quality",
+    "Real CLI Path E2E",
+    "gates secrets",
+    "golden run",
+    "metrics report"
+  ],
+  "forbidden_strings": [
+    "TODO",
+    "TBD",
+    "PLACEHOLDER"
+  ],
+  "minimum_line_count": 200
+}

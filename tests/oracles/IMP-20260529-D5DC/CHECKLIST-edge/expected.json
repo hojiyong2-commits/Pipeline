@@ -1,0 +1,23 @@
+{
+  "case_id": "CHECKLIST-edge",
+  "required_verification_commands": [
+    "pytest"
+  ],
+  "required_per_gate_verification": [
+    "IMP-20260529-D8BA",
+    "IMP-20260528-0A9E",
+    "IMP-20260528-3898",
+    "IMP-20260527-075A",
+    "IMP-20260526-82E3",
+    "IMP-20260524-48C4",
+    "IMP-20260525-6FAC"
+  ],
+  "required_user_judgment_section": "실제 업무 사용 가능 여부",
+  "forbidden_strings": [
+    "확인 필요",
+    "예상",
+    "추정",
+    "아마도"
+  ],
+  "minimum_evidence_commits": 7
+}
