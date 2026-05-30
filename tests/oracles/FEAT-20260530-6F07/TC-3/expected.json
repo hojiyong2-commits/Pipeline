@@ -1,0 +1,5 @@
+{
+  "alerts_sent": 1,
+  "alerts_suppressed": 1,
+  "reason": "cooldown 30분 이내에 동일 종목(005930) + 동일 룰(rsi_oversold) 알림이 2번 트리거됐지만 1번만 기록됨"
+}

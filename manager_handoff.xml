@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <to>dev-agent</to>
+  <pipeline_id>FEAT-20260530-6F07</pipeline_id>
+  <manager_run_id>pipeline_manager-4b48ba4ec400f976</manager_run_id>
+  <planner_run_id>pm_planner-94d2c56222b87093</planner_run_id>
+  <step_plan_sha256>8b5c2208f84313ab734a4567881b364de87d9ee9d4a891dec39d2667aacf3887</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <status>PM_COMPLETE</status>
+  <design_decisions>
+    <decision id="DQ-1">mock provider로 앱 완성, KIS 인터페이스 준비</decision>
+    <decision id="DQ-2">관심종목 중심, screener 계층 분리</decision>
+    <decision id="DQ-3">앱 내부 알림 + 소리만</decision>
+    <decision id="DQ-4">Streamlit 로컬 웹앱</decision>
+  </design_decisions>
+  <build_plan>N/A — streamlit (skip-reason: streamlit)</build_plan>
+  <oracle_files>
+    <oracle>tests/oracles/FEAT-20260530-6F07/TC-1</oracle>
+    <oracle>tests/oracles/FEAT-20260530-6F07/TC-2</oracle>
+    <oracle>tests/oracles/FEAT-20260530-6F07/TC-3</oracle>
+    <oracle>tests/oracles/FEAT-20260530-6F07/TC-4</oracle>
+  </oracle_files>
+  <contract>
+    <frozen>true</frozen>
+    <contract_hash>e87cada764efcc67b17d327010c0d16a8b0888e3953562483bfe0ca9076049f8</contract_hash>
+    <test_set_hash>c32ff5d2f2b0316f353cc2799dc24030684451b268824d543377576e2c5bff09</test_set_hash>
+    <module_count>8</module_count>
+    <oracle_count>4</oracle_count>
+    <test_count>10</test_count>
+  </contract>
+</manager_handoff>

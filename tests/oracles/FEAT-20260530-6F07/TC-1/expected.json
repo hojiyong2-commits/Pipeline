@@ -1,0 +1,8 @@
+{
+  "matched_tickers": ["005930"],
+  "not_matched_tickers": ["035720"],
+  "explanation": {
+    "005930": "RSI(14)가 약 25~28 수준으로 30보다 낮음 (연속 하락 데이터 기준)"
+  },
+  "result_count": 1
+}

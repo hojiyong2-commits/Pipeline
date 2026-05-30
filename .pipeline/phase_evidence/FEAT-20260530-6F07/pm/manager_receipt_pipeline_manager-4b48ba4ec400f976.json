@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "FEAT-20260530-6F07",
+  "phase": "pipeline_manager",
+  "agent_id": "pipeline-manager-agent",
+  "run_id": "pipeline_manager-4b48ba4ec400f976",
+  "status": "COMPLETED",
+  "started_at": "2026-05-30T13:15:09Z",
+  "completed_at": "2026-05-30T13:21:38Z",
+  "output_file": "manager_handoff.xml",
+  "output_sha256": "61fb302f8a6cbe4733c8e3504369f4f2e5c8491e7f3eeb080e950f10e4e79d6b",
+  "evidence_files": [],
+  "commit_sha": "cbd421d022134801e6de120f731f498b152d9d07"
+}

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260530-B69C</pipeline_id>
+  <phase>qa</phase>
+  <agent_run_id>qa-cd0bacbc337cfa89</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+
+  <scope_verification>
+    <declared_files>없음 (코드 변경 없는 재빌드 전용 파이프라인)</declared_files>
+    <actual_diff>없음 — 소스 코드 변경 없음</actual_diff>
+    <scope_match>PASS</scope_match>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <target>PyInstaller build + deploy copy</target>
+    <files_expected>ic_part_src/dist/ICPartAutomation.exe (빌드 산출물)</files_expected>
+    <files_actual>없음 (코드 변경 없음, 빌드는 Build phase에서 수행)</files_actual>
+    <verdict>IN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <note>코드 변경 없는 재빌드 파이프라인 — 소스 코드 수정 없음 확인</note>
+  </micro_task_boundary>
+
+  <impact_analysis_check>
+    <verdict>PASS</verdict>
+    <note>impact_analysis: 코드 변경 없음 확인. scope_lock_check verdict=PASS 확인.</note>
+  </impact_analysis_check>
+
+  <trust_root_check>
+    <pipeline_protocol_changed>false</pipeline_protocol_changed>
+    <trust_root_files_changed>false</trust_root_files_changed>
+    <verdict>PASS</verdict>
+  </trust_root_check>
+
+  <forbidden_check>
+    <source_files_modified>false</source_files_modified>
+    <spec_file_modified>false</spec_file_modified>
+    <new_dependencies_added>false</new_dependencies_added>
+    <verdict>PASS</verdict>
+    <note>ic_part_src/main.py, order_mapper.py, app.py, automation.py 미수정 확인. ICPartAutomation.spec 미수정 확인.</note>
+  </forbidden_check>
+
+  <acceptance_criteria_check>
+    <tc id="TC-1">
+      <description>빌드 후 dist/ICPartAutomation.exe 존재 및 크기 10MB 초과</description>
+      <status>PENDING — Build phase에서 검증 예정</status>
+    </tc>
+    <tc id="TC-2">
+      <description>G:\내 드라이브\터미널\ICPartAutomation.exe 복사 및 크기 10MB 초과</description>
+      <status>PENDING — Build phase에서 검증 예정</status>
+    </tc>
+  </acceptance_criteria_check>
+
+  <scope_lock_verification>
+    <changed_files>없음</changed_files>
+    <trust_root_files_changed>false</trust_root_files_changed>
+    <scope_manifest_match>PASS</scope_manifest_match>
+  </scope_lock_verification>
+
+  <failure_summary>없음</failure_summary>
+  <failure_signature/>
+
+  <summary>
+    코드 변경 없는 PyInstaller 재빌드 전용 파이프라인.
+    소스 코드 수정 없음 확인, scope 초과 없음, trust-root 파일 변경 없음.
+    실제 빌드 산출물(EXE) 검증은 Build phase(Phase 6)에서 수행됩니다.
+    QA 관점에서 dev scope와 micro-task 경계 준수 여부를 검증하여 PASS 판정합니다.
+  </summary>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager</to>
+    <pipeline_id>IMP-20260530-B69C</pipeline_id>
+    <evidence>
+      <file>qa_report.xml</file>
+      <note>코드 변경 없음 — 빌드 산출물은 Build phase에서 생성</note>
+    </evidence>
+    <status>READY_FOR_BUILD</status>
+  </handover>
+</qa_report>
