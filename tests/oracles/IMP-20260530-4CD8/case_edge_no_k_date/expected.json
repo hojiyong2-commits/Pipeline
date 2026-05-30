@@ -1,0 +1,5 @@
+{
+  "return_type": "null",
+  "return_value": null,
+  "description": "sn='SN-NOKDATE' 가 D열에 있지만 K열 날짜 없음 → None 반환 (포장 미완료)"
+}
