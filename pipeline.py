@@ -15356,7 +15356,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate_accept.add_argument("--user-confirmed", action="store_true", default=False)
     # IMP-20260531-BBDB MT-3: --acceptance-code (gates request-accept가 발급한 일회용 nonce 코드)
     p_gate_accept.add_argument("--acceptance-code", dest="acceptance_code", default=None,
-        help="gates request-accept가 발급한 승인/거절 코드 (예: ACCEPT-IMP-20260531-BBDB-XXXXXXXX)")
+        help="One-time code from gates request-accept (e.g. ACCEPT-IMP-20260531-BBDB-XXXXXXXX)")
     p_gate_preflight_pr = gsub.add_parser("preflight-pr", help="PR에 섞인 무관한 파일을 검사하여 phase attestation 오염을 차단")
     p_gate_preflight_pr.add_argument("--phase", required=True, choices=["pm", "dev", "qa", "build"],
                                      help="검사할 phase (pm|dev|qa|build)")
