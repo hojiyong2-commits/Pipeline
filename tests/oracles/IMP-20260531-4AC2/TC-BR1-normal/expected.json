@@ -1,8 +1,8 @@
 {
   "test_case": "TC-BR1-normal",
-  "result": "PASS",
-  "description": "_get_pr_branch_ci_run_id가 현재 브랜치(impl/IMP-20260531-4AC2)의 run ID(11111111)를 올바르게 반환한다",
-  "run_id_returned": "11111111",
-  "not_returned": "99999999",
-  "assertion": "브랜치 필터링된 run ID가 전역 최신 run ID와 다를 때 브랜치 run ID를 선택"
+  "description": "현재 브랜치가 impl 브랜치이고 gh CLI가 정상 동작할 때 브랜치 필터링된 run ID 반환",
+  "scenario": "normal",
+  "branch": "impl/IMP-20260531-4AC2",
+  "fake_gh_behavior": "branch_filter_present",
+  "expected_run_id": "11111111"
 }

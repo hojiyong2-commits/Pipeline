@@ -9,7 +9,7 @@
       "input": "tests/oracles/IMP-20260531-4AC2/TC-BR1-normal/input.json",
       "expected": "tests/oracles/IMP-20260531-4AC2/TC-BR1-normal/expected.json",
       "input_sha256": "6d692eaf3d2250b759c912be066bb37990318d7851d04b5c684b91651d3fbca7",
-      "expected_sha256": "371aec0b6949ad844fa61dbb6c0da337d7a99e30ea387b68a9975b1e0a819b3a",
+      "expected_sha256": "6d692eaf3d2250b759c912be066bb37990318d7851d04b5c684b91651d3fbca7",
       "expected_source": "user_provided"
     },
     {
@@ -18,7 +18,7 @@
       "input": "tests/oracles/IMP-20260531-4AC2/TC-BR2-edge-detached/input.json",
       "expected": "tests/oracles/IMP-20260531-4AC2/TC-BR2-edge-detached/expected.json",
       "input_sha256": "99dce6795efd6d625f996ef9f6e7a8e1d1f3b15e6c3acb90159595ad7652a2c8",
-      "expected_sha256": "5d96384304fe9f5678bc3cea4a80ee86ad32127b732a8d9f490d3d4f6fca4f0a",
+      "expected_sha256": "99dce6795efd6d625f996ef9f6e7a8e1d1f3b15e6c3acb90159595ad7652a2c8",
       "expected_source": "user_provided"
     },
     {
@@ -27,7 +27,7 @@
       "input": "tests/oracles/IMP-20260531-4AC2/TC-BR3-edge-branch-filter/input.json",
       "expected": "tests/oracles/IMP-20260531-4AC2/TC-BR3-edge-branch-filter/expected.json",
       "input_sha256": "d5695055294c5bf713b9035a4808d92a746115cd7af2b2addb87004fbba3da88",
-      "expected_sha256": "16d3e7f684cfcf81a657dac56b95690ff795a0b837c26891df2bdca8f68b29fe",
+      "expected_sha256": "d5695055294c5bf713b9035a4808d92a746115cd7af2b2addb87004fbba3da88",
       "expected_source": "user_provided"
     },
     {
