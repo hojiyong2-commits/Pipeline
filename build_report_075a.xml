@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>IMP-20260527-075A</pipeline_id>
+  <section_1_command>N/A — pipeline.py 기능 추가 (Cost/Attempt Budget Gate), EXE 빌드 불필요</section_1_command>
+  <section_2_output>N/A — meta-task, 실행 파일 산출물 없음</section_2_output>
+  <section_3_artifacts>없음 — pipeline.py 및 테스트 파일 수정 (코드 산출물)</section_3_artifacts>
+  <section_4_verification>skip-reason: meta-task. 변경 파일: pipeline.py, tests/test_attempt_budget_075a.py, tests/e2e/test_real_cli_paths.py</section_4_verification>
+  <section_5_known_issues>없음</section_5_known_issues>
+  <section_6_qa_mapping>QA PASS (110/120) — 7개 단위 테스트 + 3개 E2E 테스트 + 459 전체 테스트 통과 확인</section_6_qa_mapping>
+</build_report>

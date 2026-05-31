@@ -1,0 +1,28 @@
+{
+  "case_id": "edge_user_confirmed_still_blocked",
+  "case_kind": "edge",
+  "verdict": "PASS",
+  "results": {
+    "step_1_gates_accept_user_confirmed_only": {
+      "status": "PASS",
+      "expected_exit_code": 1,
+      "expected_substring_in_output": "acceptance_code_required",
+      "expected_warning_substring": "더 이상 ACCEPT를 통과시키지 않습니다",
+      "details": "gates accept --user-confirmed (단독)는 BLOCKED 처리되고 명확한 한국어 경고 출력"
+    },
+    "step_2_argparse_preserved": {
+      "status": "PASS",
+      "expected_exit_code": 0,
+      "expected_substring_in_stdout": "--user-confirmed",
+      "details": "argparse에서 --user-confirmed 인자 자체는 살아있음 (기존 스크립트 호환)"
+    },
+    "step_3_harness_subcommand_preserved_but_blocked": {
+      "status": "PASS",
+      "expected_help_exit_code": 0,
+      "expected_call_exit_code": 1,
+      "expected_call_substring": "THREE GATE BLOCKED",
+      "details": "harness 서브커맨드는 argparse에 보존되되, 호출 시 cmd_harness가 차단"
+    }
+  },
+  "summary": "Backward-compat 인자 보존 + 성공 경로 차단 양립 검증 완료. 인자 완전 삭제 회귀(파괴적 변경) 차단 + 인자 보존으로 인한 우회 회귀(사용자 안전) 차단을 동시에 보장."
+}

@@ -1,0 +1,17 @@
+{
+  "case_id": "TC-edge-status-blocked",
+  "case_kind": "edge",
+  "description": "blocked=true, current_phase=dev 상태의 pipeline_state.json을 PIPELINE_STATE_PATH로 격리한 뒤 `python pipeline.py status`를 subprocess로 실행한 경우, BLOCKED 상태여도 status 명령 자체는 성공해야 한다.",
+  "preconditions": {
+    "state_file": {
+      "pipeline_id": "TEST-BLOCKED-FIXTURE",
+      "current_phase": "dev",
+      "terminal_state": null,
+      "blocked": true,
+      "blocked_reason": "scope manifest mismatch (테스트 fixture)"
+    },
+    "isolation": "PIPELINE_STATE_PATH 환경 변수로 임시 state 파일 경로 지정"
+  },
+  "command": ["python", "pipeline.py", "status"],
+  "expected_behavior": "stdout에 [차단] 표시가 포함되고 process exit code는 0 — status는 BLOCKED 상태도 정상적으로 보고할 뿐 명령 자체는 성공"
+}

@@ -11280,11 +11280,6 @@ def _check_attempt_budget(state: Dict[str, Any], phase: str) -> Dict[str, Any]:
     }
 
 
-def _is_budget_blocked(state: Dict[str, Any], phase: str) -> bool:
-    """phase의 attempt budget이 차단 상태인지 반환."""
-    return bool(_check_attempt_budget(state, phase).get("blocked"))
-
-
 def _detect_repeat_failure_code(state: Dict[str, Any], phase: str) -> Optional[str]:
     """동일 failure_code가 threshold 횟수 이상 연속/누적되었는지 검사.
 
@@ -16763,92 +16758,6 @@ def _aggregate_github_actions_state_durations(
     return result
 
 
-def _wait_for_github_ci(
-    repo: str,
-    run_id: Optional[str] = None,
-    poll_interval_seconds: int = 10,
-    timeout_seconds: int = 1200,
-    clock: Optional[Any] = None,
-    poll_callback: Optional[Any] = None,
-) -> Dict[str, Any]:
-    """GitHub Actions 상태를 폴링하면서 5상태 누적 시간을 측정.
-
-    이 함수는 단위 테스트에서 datetime/poll_callback을 주입해 Mock할 수 있다.
-    실제 운영 코드 경로(_run_github_phase_ci 등)는 별도 함수에서 처리하며,
-    이 함수는 IMP-20260526-82E3 MT-2 오라클 검증과 향후 통합을 위한 신규 표면이다.
-
-    입력:
-      repo: "owner/name"
-      run_id: 특정 run id (없으면 polling 함수가 None 반환 가능)
-      poll_interval_seconds: 폴링 간격
-      timeout_seconds: 최대 대기 시간
-      clock: datetime.datetime을 반환하는 callable (테스트 주입용; 기본 datetime.now)
-      poll_callback: (repo, run_id) -> dict (테스트 주입용 폴링 함수)
-
-    출력:
-      {"transitions": [...], "state_durations": {5상태: int}, "final_state": str,
-       "elapsed_seconds": int}
-
-    IMP-20260526-82E3 MT-2.
-    """
-    from datetime import datetime as _dt
-    if clock is None:
-        clock = lambda: _dt.now(tz=timezone.utc)
-    if poll_callback is None:
-        # Production 폴링은 별도 모듈에서 처리. callback이 없으면 즉시 unavailable 반환.
-        return {
-            "transitions": [],
-            "state_durations": _aggregate_github_actions_state_durations([]),
-            "final_state": "확인 불가",
-            "elapsed_seconds": 0,
-            "unavailable_reason": "poll_callback 미지정",
-        }
-    transitions: List[Dict[str, Any]] = []
-    current_state = "WAITING_FOR_TRIGGER"
-    last_change_at = clock()
-    started_at = last_change_at
-    timeout_at = None
-    try:
-        from datetime import timedelta as _td
-        timeout_at = started_at + _td(seconds=timeout_seconds)
-    except Exception:
-        timeout_at = None
-    final_state = current_state
-    while True:
-        now = clock()
-        if timeout_at is not None and now >= timeout_at:
-            # 현재 상태 누적 후 TIMEOUT 전이
-            duration = int((now - last_change_at).total_seconds())
-            if duration > 0:
-                transitions.append({"state": current_state, "duration": duration})
-            transitions.append({"state": "TIMEOUT", "duration": 0})
-            final_state = "TIMEOUT"
-            break
-        poll_result: Dict[str, Any] = poll_callback(repo, run_id) or {}
-        next_state = str(poll_result.get("state") or current_state)
-        if next_state not in _GITHUB_ACTIONS_STATES:
-            next_state = current_state
-        if next_state != current_state:
-            duration = int((now - last_change_at).total_seconds())
-            if duration > 0:
-                transitions.append({"state": current_state, "duration": duration})
-            current_state = next_state
-            last_change_at = now
-        if poll_result.get("done") or current_state == "COMPLETED":
-            duration = int((now - last_change_at).total_seconds())
-            if duration > 0:
-                transitions.append({"state": current_state, "duration": duration})
-            final_state = current_state
-            break
-    elapsed_total = int((clock() - started_at).total_seconds())
-    return {
-        "transitions": transitions,
-        "state_durations": _aggregate_github_actions_state_durations(transitions),
-        "final_state": final_state,
-        "elapsed_seconds": max(0, elapsed_total),
-    }
-
-
 def _compute_failure_summary_from_list(
     failures: Optional[List[Dict[str, Any]]],
     *,
@@ -17639,37 +17548,6 @@ def _verify_forbidden_files(
             if fnmatch.fnmatch(entry_name, pattern) or fnmatch.fnmatch(rel, pattern):
                 violations.append(rel)
                 break
-    return violations
-
-
-def _verify_allowed_files(task: Dict[str, Any], changed_files: Optional[List[str]] = None) -> List[str]:
-    """task의 allowed_files 패턴에 매칭되지 않는 변경 파일이 있는지 확인.
-
-    Returns: allowed_files에 포함되지 않은 파일 목록 (빈 리스트면 모두 허용됨).
-    """
-    import subprocess as _subprocess
-    allowed_patterns: List[str] = task.get("allowed_files", [])
-    if not allowed_patterns:
-        return []
-    if changed_files is None:
-        # git status --short로 변경 파일 목록 획득
-        try:
-            result = _subprocess.run(
-                ["git", "diff", "--name-only", "HEAD"],
-                capture_output=True, text=True, timeout=10,
-            )
-            changed_files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-        except (OSError, _subprocess.TimeoutExpired):
-            return []
-    violations: List[str] = []
-    for f in changed_files:
-        rel = f.replace("\\", "/")
-        allowed = any(
-            __import__("fnmatch").fnmatch(rel, p) or __import__("fnmatch").fnmatch(Path(rel).name, p)
-            for p in allowed_patterns
-        )
-        if not allowed:
-            violations.append(rel)
     return violations
 
 

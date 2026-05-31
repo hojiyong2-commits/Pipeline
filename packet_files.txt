@@ -1,0 +1,9 @@
+﻿python : Traceback (most recent call last):
+At line:2 char:1
++ python -c "
++ ~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "<string>", line 14, in <module>
+UnicodeEncodeError: 'cp949' codec can't encode character '\u2014' in position 10: illegal multibyte sequence
