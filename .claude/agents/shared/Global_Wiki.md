@@ -85,7 +85,7 @@ QA rejects any handover missing `<evidence>` with real file paths.
 | qa | `python pipeline.py check --phase qa` | `python pipeline.py qa --result PASS --numeric-score N --report-file qa_report.xml --agent-run-id <run_id>` or `--result FAIL --numeric-score N --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <run_id>` |
 | sec | `python pipeline.py check --phase sec` | `python pipeline.py sec --result PASS --risk LOW` or `--skip` |
 | build | `python pipeline.py check --phase build` | `python pipeline.py build --exe "dist/app.exe" --report-file dist/build_report.xml --agent-run-id <run_id>` or `--exe "N/A" --skip-reason "meta-task" --agent-run-id <run_id>` + phase attestation |
-| external gates | `python pipeline.py gates status` | `gates technical`, `gates oracle`, `gates github-ci --repo hojiyong2-commits/Pipeline`, `gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed` |
+| external gates | `python pipeline.py gates status` | `gates technical`, `gates oracle`, `gates github-ci --repo hojiyong2-commits/Pipeline`, `gates request-accept --evidence <경로>` → 사용자 승인 코드 → `gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>` |
 
 **Legacy harness diagnostic:** `<test_code>` CDATA/strict unittest evidence rules are retained only for old harness diagnostic regression tests. New `/Task` completion uses external gates and phase/module attestations.
 | architect | `python pipeline.py check --phase architect` | `python pipeline.py architect --report-file architect_report.xml` |

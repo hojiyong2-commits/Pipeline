@@ -170,7 +170,10 @@ Build phase CI가 PASS되기 전에는 Phase 7로 넘어가지 않는다.
 python pipeline.py gates technical
 python pipeline.py gates oracle
 python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
-python pipeline.py gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed
+# 1단계: request-accept 실행 → 사용자에게 일회용 승인 코드 표시
+python pipeline.py gates request-accept --evidence <결과물-경로>
+# 2단계: 사용자가 코드를 직접 입력하면 Pipeline Manager가 실행
+python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pipeline_id>-<nonce>
 ```
 
 승인(ACCEPT) 전에 사용자가 봐야 하는 것은 코드가 아니라 결과물이다. 마지막 작업 담당자는 반드시 다음을 제공한다:

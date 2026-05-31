@@ -142,7 +142,7 @@ PyInstaller 명령어 실행 전 반드시 수행:
     Build agent는 도구 누락을 우회하기 위해 `--relaxed-tools`를 권고하지 말고, 필요한 도구/증거를 보강하도록 보고해야 합니다.
 
     Phase 7 사용자 ACCEPT 후 자동 배포:
-    `python pipeline.py gates accept --result ACCEPT --evidence [path] --user-confirmed` 가 PASS되면,
+    `python pipeline.py gates accept --result ACCEPT --evidence [path] --acceptance-code ACCEPT-<pid>-<nonce>` 가 PASS되면,
     pipeline.py가 승인된 결과물을 `G:\내 드라이브\터미널\<pipeline_id>` 경로로 자동 복사하고
     `deployment_manifest.json`(파일 목록 + SHA-256 해시)을 함께 작성합니다.
     테스트/로컬 환경에서는 `PIPELINE_DEPLOY_ROOT` 환경 변수로 배포 루트를 재정의할 수 있습니다.
