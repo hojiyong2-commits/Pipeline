@@ -139,6 +139,7 @@ def test_nonce_reused_on_same_conditions(tmp_path: Path) -> None:
 
     Oracle: tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/expected.json
       nonce_reused=true, reason_contains="모두 같습니다"
+    격리: PIPELINE_STATE_PATH 환경 변수로 state 파일을 tmp_path 안에 격리
     """
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
@@ -191,6 +192,7 @@ def test_force_new_code_always_new_nonce(tmp_path: Path) -> None:
 
     Oracle: tests/oracles/IMP-20260531-AEF0/edge_force_new_code/expected.json
       nonce_reused=false, reason_contains="--force-new-code 옵션이 지정되어"
+    격리: PIPELINE_STATE_PATH 환경 변수로 state 파일을 tmp_path 안에 격리
     """
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
@@ -234,6 +236,7 @@ def test_new_nonce_when_evidence_sha_changed(tmp_path: Path) -> None:
 
     Oracle: tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/expected.json
       nonce_reused=false, reason_contains="결과물 파일 내용이 달라서"
+    격리: PIPELINE_STATE_PATH 환경 변수로 state 파일을 tmp_path 안에 격리
     """
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
@@ -279,6 +282,7 @@ def test_new_nonce_when_pr_sha_changed(tmp_path: Path) -> None:
 
     Oracle: tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/expected.json
       nonce_reused=false, reason_contains="PR head SHA가 달라서"
+    격리: PIPELINE_STATE_PATH 환경 변수로 state 파일을 tmp_path 안에 격리
 
     gh CLI 없는 환경에서는 pr_head_sha=""를 반환하므로,
     기존 요청의 pr_head_sha를 "old_sha_value"(비어 있지 않음)로 설정하여 불일치를 유발합니다.
@@ -325,6 +329,7 @@ def test_new_nonce_when_ci_run_changed(tmp_path: Path) -> None:
 
     Oracle: tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/expected.json
       nonce_reused=false, reason_contains="GitHub Actions run ID가 달라서"
+    격리: PIPELINE_STATE_PATH 환경 변수로 state 파일을 tmp_path 안에 격리
 
     gh CLI 없는 환경: ci_run_id=""가 반환되므로,
     기존 요청의 ci_run_id를 "99999999"(비어 있지 않음)로 설정하여 불일치를 유발합니다.
@@ -371,6 +376,7 @@ def test_new_nonce_when_status_not_pending(tmp_path: Path) -> None:
 
     Oracle: tests/oracles/IMP-20260531-AEF0/edge_status_not_pending/expected.json
       nonce_reused=false, reason_contains="새 코드를 발급합니다"
+    격리: PIPELINE_STATE_PATH 환경 변수로 state 파일을 tmp_path 안에 격리
     """
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
