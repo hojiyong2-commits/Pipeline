@@ -6234,7 +6234,7 @@ def cmd_sec(args: argparse.Namespace) -> None:
             )
             _save_state_for(state, branch)
             print(YELLOW(f"\n[SEC FAIL] risk_level={risk} — Tier2 이상 발견"))
-            print(f"\n  다음: {YELLOW('python pipeline.py done --phase dev --files \"수정된파일들\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>')}\n")
+            print("\n  다음: " + YELLOW('python pipeline.py done --phase dev --files "수정된파일들" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>') + "\n")
             return
         status = "PASS"
         msg    = GREEN(f"[SEC PASS] risk_level={risk}")
@@ -6682,7 +6682,7 @@ def cmd_architect(args: argparse.Namespace) -> None:
     if harness_verdict == "FAIL":
         print(YELLOW(f"\n[ARCHITECT DONE — REWORK]{branch_tag} {pid_display}"))
         print(YELLOW("  External gate FAIL 경로: Phase 2 (Dev) 재작업 필요"))
-        print(f"\n  다음 단계: {YELLOW('python pipeline.py done --phase dev --files \"..\" --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>')}")
+        print("\n  다음 단계: " + YELLOW('python pipeline.py done --phase dev --files ".." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>'))
     else:
         print(GREEN(f"\n[PIPELINE COMPLETE]{branch_tag} {pid_display}"))
         archive_path = HISTORY_DIR / f"{pid_display}_COMPLETE.json"
@@ -6980,7 +6980,7 @@ def cmd_terminate(args: argparse.Namespace) -> None:
     _save(state)
     print(RED(f"\n[TERMINATED] 파이프라인 {pid} 종료됨"))
     print(f"  보관: {archive.name}")
-    print(f"  새 파이프라인 시작: {YELLOW('python pipeline.py new --type FEAT|BUG|IMP --desc \"..\"')}")
+    print("  새 파이프라인 시작: " + YELLOW('python pipeline.py new --type FEAT|BUG|IMP --desc ".."'))
     print()
 
 
