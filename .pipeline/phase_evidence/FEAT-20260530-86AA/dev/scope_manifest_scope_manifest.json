@@ -1,0 +1,39 @@
+{
+  "pipeline_id": "FEAT-20260530-86AA",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["ic_part_src/order_mapper.py"],
+      "affected_functions": ["order_mapper._find_cell_with_value, order_mapper._find_cell_with_formula"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["ic_part_src/order_mapper.py"],
+      "affected_functions": ["order_mapper._detect_icpart_columns (신규), order_mapper.ICPART_HEADER_MAP (신규 상수)"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["ic_part_src/order_mapper.py"],
+      "affected_functions": ["order_mapper.write_to_ic_part"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["ic_part_src/order_mapper.py"],
+      "affected_functions": ["order_mapper.write_to_ic_part (_l_cell_pattern, existing_project_ids 추출, sheet2 A2 쓰기)"]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "ic_part_src/order_mapper.py",
+        "pipeline_outputs/FEAT-20260530-86AA/analysis_report.md",
+        "logs/app.log",
+        "logs/dashboard.log",
+        "logs/token_log.jsonl",
+        "logs/logs_backup_tmp/app.log",
+        "logs/logs_backup_tmp/dashboard.log",
+        "logs/logs_backup_tmp/token_log.jsonl"
+      ],
+      "affected_functions": ["order_mapper._HEADER_MAP (확장), order_mapper._detect_columns_from_header, 신규 analysis_report.md 생성"]
+    }
+  ]
+}
