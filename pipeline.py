@@ -12972,6 +12972,31 @@ def _get_pr_body_text() -> Optional[str]:
     return None
 
 
+def _get_pr_changed_files() -> List[str]:
+    """현재 PR의 변경 파일 목록을 gh CLI로 조회.
+
+    Returns:
+        변경 파일 경로 리스트 (빈 리스트면 gh CLI 없거나 PR 없음).
+    Raises:
+        없음.
+    """
+    try:
+        r = subprocess.run(
+            ["gh", "pr", "view", "--json", "files", "--jq", "[.files[].path]"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode == 0:
+            out = r.stdout.strip()
+            if out:
+                parsed = json.loads(out)
+                if isinstance(parsed, list):
+                    return [str(p) for p in parsed]
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError, json.JSONDecodeError):
+        pass
+    return []
+
+
 def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> None:
     """GitHub PR에 최종 확인 안내 댓글을 생성하거나 최신 내용으로 갱신.
 
@@ -13001,6 +13026,13 @@ def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Non
     if ci_run_id:
         ci_link = f"https://github.com/hojiyong2-commits/Pipeline/actions/runs/{ci_run_id}"
 
+    # PR 변경 파일 목록 (IMP-20260531-BBDB: 정확한 파일 수 표시로 stale "3개" 문제 해결)
+    changed_files = _get_pr_changed_files()
+    files_section = ""
+    if changed_files:
+        files_list = "\n".join(f"- {f}" for f in sorted(changed_files))
+        files_section = f"\n### 변경된 파일 ({len(changed_files)}개)\n{files_list}\n"
+
     comment_body = f"""<!-- pipeline-human-acceptance-packet -->
 ## 최종 확인 안내
 
@@ -13010,52 +13042,51 @@ def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Non
 판단 정보 상태: **판단 가능**
 
 ### 확인할 결과물
-- 결과물: `{evidence}`
+- 결과물: {evidence}
 - PR: {pr_url}
 - GitHub Actions: {ci_link}
-- 승인 요청 ID: `{request_id}`
-
+- 승인 요청 ID: {request_id}
+{files_section}
 ### 승인 방법
-결과물을 확인하신 후 아래 코드를 **정확히** 입력하세요:
+결과물을 확인하신 후 아래 코드를 **정확히** 입력하세요.
 
-**[O] 승인:**
-```
-{accept_code}
-```
+**[O] 승인:** {accept_code}
 
-**[X] 거절:**
-```
-{reject_code}: 거절 이유
-```
+**[X] 거절:** {reject_code}: 거절 이유
 
-> 주의: 이 코드는 일회용입니다. PR에 새 커밋이 push되면 새 코드가 필요합니다.
-> `python pipeline.py gates request-accept --evidence <결과물>` 로 재발급하세요.
+주의: 이 코드는 일회용입니다. PR에 새 커밋이 push되면 새 코드가 필요합니다.
+재발급: python pipeline.py gates request-accept --evidence <결과물>
 """
 
     try:
-        # 기존 acceptance-packet 댓글 찾아서 수정, 없으면 새로 생성
+        # 기존 acceptance-packet 댓글 전부 삭제 후 새로 생성 (nonce 누적 방지)
         r = subprocess.run(
             ["gh", "pr", "view", "--json", "comments", "--jq",
-             '[.comments[] | select(.body | contains("pipeline-human-acceptance-packet"))] | .[0].databaseId // empty'],
+             '[.comments[] | select(.body | contains("pipeline-human-acceptance-packet")) | .databaseId]'],
             capture_output=True, text=True, timeout=10,
             encoding="utf-8", errors="replace",
         )
-        existing_id = r.stdout.strip() if r.returncode == 0 else ""
+        if r.returncode == 0 and r.stdout.strip():
+            try:
+                old_ids = json.loads(r.stdout.strip())
+            except (json.JSONDecodeError, ValueError):
+                old_ids = []
+            for old_id in old_ids:
+                if old_id:
+                    subprocess.run(
+                        ["gh", "api",
+                         f"repos/hojiyong2-commits/Pipeline/issues/comments/{old_id}",
+                         "-X", "DELETE"],
+                        capture_output=True, timeout=10,
+                        encoding="utf-8", errors="replace",
+                    )
 
-        if existing_id:
-            subprocess.run(
-                ["gh", "api",
-                 f"repos/hojiyong2-commits/Pipeline/issues/comments/{existing_id}",
-                 "-X", "PATCH", "-f", f"body={comment_body}"],
-                capture_output=True, timeout=15,
-                encoding="utf-8", errors="replace",
-            )
-        else:
-            subprocess.run(
-                ["gh", "pr", "comment", "--body", comment_body],
-                capture_output=True, timeout=15,
-                encoding="utf-8", errors="replace",
-            )
+        # 새 댓글 생성
+        subprocess.run(
+            ["gh", "pr", "comment", "--body", comment_body],
+            capture_output=True, timeout=15,
+            encoding="utf-8", errors="replace",
+        )
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return  # gh CLI 실패는 silent — 콘솔 발급 코드는 항상 표시됨
 
@@ -13128,11 +13159,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     print("  [X] 거절하시려면 아래 형식으로 입력하세요:")
     print(f"     {reject_code}: 거절 이유")
     print("=" * 62)
-    print()
-    # 모바일에서 한 번에 복사할 수 있는 text 블록 (IMP-20260531-BBDB)
-    print("  ── 모바일 복사용 — 승인 코드만 ─────────────────────────")
-    print(f"  {accept_code}")
-    print("  ───────────────────────────────────────────────────────")
     print()
     print(f"  승인 요청 ID: {req['request_id']}  (acceptance_request.json 저장됨)")
     _log_event(state, f"acceptance request issued: request_id={req['request_id']} nonce={nonce}")
