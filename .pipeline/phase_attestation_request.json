@@ -44,5 +44,41 @@
     }
   ],
   "workspace_file_checks": [],
-  "local_only_files": []
+  "local_only_files": [
+    {
+      "path": "pipeline.py",
+      "expected_sha256": null,
+      "label": "MT-1: dead helpers removed"
+    },
+    {
+      "path": "AGENTS.md",
+      "expected_sha256": null,
+      "label": "MT-2: new sections added"
+    },
+    {
+      "path": ".codex/agents/build-agent.toml",
+      "expected_sha256": null,
+      "label": "MT-3: stale pattern removed"
+    },
+    {
+      "path": ".codex/agents/test-harness-agent.toml",
+      "expected_sha256": null,
+      "label": "MT-3: stale pattern removed"
+    },
+    {
+      "path": ".codex/agents/pm-agent.toml",
+      "expected_sha256": null,
+      "label": "MT-3: stale pattern removed"
+    },
+    {
+      "path": ".claude/agents/pm-agent.md",
+      "expected_sha256": null,
+      "label": "MT-3: stale pattern removed"
+    },
+    {
+      "path": "tests/test_legacy_cleanup_b0ab.py",
+      "expected_sha256": null,
+      "label": "MT-4: regression tests"
+    }
+  ]
 }
