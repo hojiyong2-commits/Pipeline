@@ -91,6 +91,8 @@ def make_env(tmp_path: Path) -> Dict[str, str]:
 def bootstrap_pipeline(tmp_path: Path, env: Dict[str, str]) -> str:
     """격리된 환경에 IMP 파이프라인을 생성하고 pipeline_id 반환.
 
+    CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + final_state assertion 포함.
+
     Args:
         tmp_path: pytest tmp_path fixture.
         env: PIPELINE_STATE_PATH 환경변수가 설정된 dict.
@@ -107,10 +109,14 @@ def bootstrap_pipeline(tmp_path: Path, env: Dict[str, str]) -> str:
     assert r.returncode == 0, f"new failed: stdout={r.stdout} stderr={r.stderr}"
     state_file = Path(env["PIPELINE_STATE_PATH"])
     assert state_file.exists(), "pipeline_state.json not created"
+    # final_state assertion (CLI Evidence Contract 준수 — IMP-20260525-6FAC)
     with open(state_file, encoding="utf-8") as f:
-        state = json.load(f)
-    pid = str(state.get("pipeline_id", ""))
-    assert pid, "pipeline_id missing in state"
+        final_state = json.load(f)
+    pid = str(final_state.get("pipeline_id", ""))
+    assert pid, f"pipeline_id missing in final_state: {final_state}"
+    # pipeline 생성 직후 phase 구조가 정상인지 확인
+    phases = final_state.get("phases", {})
+    assert "pm" in phases, f"pm phase missing in final_state.phases: {list(phases.keys())}"
     return pid
 
 
@@ -215,6 +221,11 @@ def test_tc2_user_confirmed_only_blocked(tmp_path):
     output = r.stdout + r.stderr
     assert ("BLOCKED" in output or "acceptance_code_required" in output
             or "acceptance-code" in output.lower()), f"output: {output}"
+    # final_state assertion — acceptance gate가 PASS 처리되지 않았음을 확인
+    final_state = load_final_state(env)
+    acceptance_status = final_state.get("external_gates", {}).get("acceptance", {}).get("status")
+    assert acceptance_status != "PASS", \
+        f"acceptance gate must not be PASS after BLOCKED: {acceptance_status}"
 
 
 # TC-3: 잘못된 nonce → acceptance_code_mismatch BLOCKED (edge oracle)
@@ -237,6 +248,9 @@ def test_tc3_wrong_nonce_blocked(tmp_path):
     assert r.returncode != 0
     output = r.stdout + r.stderr
     assert ("mismatch" in output.lower() or "BLOCKED" in output), f"output: {output}"
+    # final_state assertion — acceptance gate가 PASS 처리되지 않았음을 확인
+    final_state = load_final_state(env)
+    assert final_state.get("external_gates", {}).get("acceptance", {}).get("status") != "PASS"
 
 
 # TC-4: pipeline_id 다른 코드 → BLOCKED
@@ -261,6 +275,9 @@ def test_tc4_pipeline_id_mismatch_blocked(tmp_path):
     assert r.returncode != 0
     output = r.stdout + r.stderr
     assert "BLOCKED" in output or "mismatch" in output.lower(), f"output: {output}"
+    # final_state assertion — pipeline_id_mismatch는 acceptance gate를 PASS시키지 않음
+    final_state = load_final_state(env)
+    assert final_state.get("external_gates", {}).get("acceptance", {}).get("status") != "PASS"
 
 
 # TC-5: evidence 파일 hash 변경 → evidence_changed BLOCKED
@@ -288,6 +305,9 @@ def test_tc5_evidence_changed_blocked(tmp_path):
     output = r.stdout + r.stderr
     # 외부 gate 실패가 먼저 일어날 수 있으므로 BLOCKED 또는 evidence_changed 둘 다 허용
     assert "BLOCKED" in output or "evidence" in output.lower(), f"output: {output}"
+    # final_state assertion — evidence 변경이 acceptance gate를 PASS시키지 않음
+    final_state = load_final_state(env)
+    assert final_state.get("external_gates", {}).get("acceptance", {}).get("status") != "PASS"
 
 
 # TC-6: PR head SHA가 다른 시나리오 (gh CLI 없으면 SHA 검증 skip → 단위 검증)
@@ -349,6 +369,9 @@ def test_tc8_correct_code_passes_nonce_validation(tmp_path):
     output = r.stdout + r.stderr
     # nonce 검증은 통과해야 함 → acceptance_code_mismatch 메시지 없어야 함
     assert "acceptance_code_mismatch" not in output, f"unexpected mismatch: {output}"
+    # final_state assertion — acceptance gate가 다른 이유로 차단됐어도 state 파일은 유효
+    final_state = load_final_state(env)
+    assert final_state.get("pipeline_id") == pipeline_id
 
 
 # TC-9: REJECT도 --acceptance-code 없으면 FAIL
@@ -369,6 +392,9 @@ def test_tc9_reject_no_acceptance_code_fail(tmp_path):
     output = r.stdout + r.stderr
     assert ("BLOCKED" in output or "acceptance_code_required" in output
             or "acceptance-code" in output.lower()), f"output: {output}"
+    # final_state assertion — REJECT 시도도 acceptance gate를 PASS시키지 않음
+    final_state = load_final_state(env)
+    assert final_state.get("external_gates", {}).get("acceptance", {}).get("status") != "PASS"
 
 
 # TC-10: --user-confirmed 단독 → 경고 + BLOCKED (명시적)
@@ -389,6 +415,9 @@ def test_tc10_user_confirmed_warning_then_blocked(tmp_path):
     output = r.stdout + r.stderr
     assert ("경고" in output or "BLOCKED" in output
             or "acceptance" in output.lower()), f"output: {output}"
+    # final_state assertion — --user-confirmed 단독은 acceptance gate를 PASS시키지 않음
+    final_state = load_final_state(env)
+    assert final_state.get("external_gates", {}).get("acceptance", {}).get("status") != "PASS"
 
 
 # TC-11: acceptance_request.json 없이 gates accept → missing_acceptance_request BLOCKED
@@ -411,6 +440,9 @@ def test_tc11_missing_acceptance_request_blocked(tmp_path):
     output = r.stdout + r.stderr
     assert ("BLOCKED" in output or "acceptance_request" in output.lower()
             or "missing" in output.lower()), f"output: {output}"
+    # final_state assertion — acceptance_request.json 없으면 acceptance gate PASS 불가
+    final_state = load_final_state(env)
+    assert final_state.get("external_gates", {}).get("acceptance", {}).get("status") != "PASS"
 
 
 # TC-12: TEMPORARY_PR_BODY_PATTERNS SSoT 단위 검증
@@ -452,6 +484,9 @@ def test_tc13_consumed_request_blocked(tmp_path):
     output = r.stdout + r.stderr
     assert ("BLOCKED" in output or "consumed" in output.lower()
             or "expired" in output.lower()), f"output: {output}"
+    # final_state assertion — CONSUMED 상태 재사용은 acceptance gate를 PASS시키지 않음
+    final_state = load_final_state(env)
+    assert final_state.get("external_gates", {}).get("acceptance", {}).get("status") != "PASS"
 
 
 # TC-14: nonce 헬퍼 함수 단위 검증 (8자 base32 uppercase + 라운드트립)
