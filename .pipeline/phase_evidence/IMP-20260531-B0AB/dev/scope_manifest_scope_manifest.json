@@ -1,0 +1,30 @@
+{
+  "pipeline_id": "IMP-20260531-B0AB",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_is_budget_blocked, _wait_for_github_ci, _verify_allowed_files"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["AGENTS.md"],
+      "affected_functions": ["CLAUDE.md/AGENTS.md/README.md 내 Phase 7 외부 게이트 설명 및 User Acceptance Nonce Gate 섹션 (텍스트만)"]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        ".codex/agents/build-agent.toml",
+        ".codex/agents/test-harness-agent.toml",
+        ".codex/agents/pm-agent.toml",
+        ".claude/agents/pm-agent.md"
+      ],
+      "affected_functions": [".codex/agents/*.toml과 .claude/agents/*.md의 Phase 7 / Deploy Path 설명 (텍스트만)"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["tests/test_legacy_cleanup_b0ab.py"],
+      "affected_functions": ["tests/test_legacy_cleanup_b0ab.py (신규 파일 생성)"]
+    }
+  ]
+}
