@@ -1,0 +1,92 @@
+<qa_report>
+  <pipeline_id>IMP-20260531-4AC2</pipeline_id>
+  <rework_round>2</rework_round>
+  <qa_run_id>qa-421ac1c90a18f7d7</qa_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+
+  <scope_verification>
+    <files_reviewed>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+      <file>tests/oracles/IMP-20260531-4AC2/TC-BR1-normal/input.json</file>
+      <file>tests/oracles/IMP-20260531-4AC2/TC-BR1-normal/expected.json</file>
+      <file>tests/oracles/IMP-20260531-4AC2/TC-BR3-edge/input.json</file>
+      <file>tests/oracles/IMP-20260531-4AC2/TC-BR3-edge/expected.json</file>
+      <file>tests/oracles/IMP-20260531-4AC2/oracle_manifest.json</file>
+    </files_reviewed>
+    <scope_match>PASS</scope_match>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <target_function>pipeline._get_pr_branch_ci_run_id</target_function>
+    <actual_changed_functions>pipeline._get_pr_branch_ci_run_id (PIPELINE_TEST_GIT_BRANCH/PIPELINE_TEST_CI_RUN_ID 환경변수 override 추가)</actual_changed_functions>
+    <verdict>PASS</verdict>
+    <blast_radius>MINIMAL</blast_radius>
+  </micro_task_boundary>
+
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <target_function>tests.e2e.test_ci_run_id_filter_4ac2 (TC-CLI-1, TC-CLI-3, TC-STALE-CLI Real CLI Path E2E)</target_function>
+    <actual_changed_functions>TC-CLI-1, TC-CLI-3, TC-STALE-CLI 3개 Real CLI Path E2E 테스트 추가</actual_changed_functions>
+    <verdict>PASS</verdict>
+    <blast_radius>TEST_ONLY</blast_radius>
+  </micro_task_boundary>
+
+  <test_results>
+    <suite>tests/e2e/test_ci_run_id_filter_4ac2.py</suite>
+    <total>8</total>
+    <passed>8</passed>
+    <failed>0</failed>
+    <test_cases>
+      <test id="TC-BR1">test_tc_br1_normal_branch_run_id — PASS</test>
+      <test id="TC-BR2">test_tc_br2_edge_detached_head — PASS</test>
+      <test id="TC-BR3">test_tc_br3_edge_branch_filter_vs_global — PASS</test>
+      <test id="TC-BR4">test_tc_br4_edge_gh_cli_missing — PASS</test>
+      <test id="TC-BR5">test_tc_br5_edge_empty_output — PASS</test>
+      <test id="TC-CLI-1">test_tc_cli1_request_accept_stores_branch_run_id — PASS (Real CLI Path)</test>
+      <test id="TC-CLI-3">test_tc_cli3_branch_filter_not_global_latest — PASS (Real CLI Path)</test>
+      <test id="TC-STALE-CLI">test_tc_stale_cli_gates_accept_blocks_on_stale_run_id — PASS (Real CLI Path)</test>
+    </test_cases>
+  </test_results>
+
+  <full_suite_results>
+    <total>601</total>
+    <passed>601</passed>
+    <failed>0</failed>
+    <warnings>2 (cp949 encoding warning — 기존 테스트의 인코딩 경고, 기능과 무관)</warnings>
+  </full_suite_results>
+
+  <real_cli_path_compliance>
+    <policy>IMP-20260525-6FAC Real CLI Path E2E Gate Policy</policy>
+    <subprocess_based>true</subprocess_based>
+    <pipeline_state_path_isolation>true</pipeline_state_path_isolation>
+    <final_state_assertion>true</final_state_assertion>
+    <verdict>PASS — TC-CLI-1, TC-CLI-3, TC-STALE-CLI 모두 subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion 포함</verdict>
+  </real_cli_path_compliance>
+
+  <impact_analysis_check>
+    <scope_declaration_present>true</scope_declaration_present>
+    <impact_analysis_present>true</impact_analysis_present>
+    <scope_lock_check_verdict>PASS</scope_lock_check_verdict>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+  </impact_analysis_check>
+
+  <category_scores>
+    <WA>N/A</WA>
+    <FS>N/A</FS>
+    <PD>PASS — _get_pr_branch_ci_run_id 환경변수 override 설계. 기존 로직 무변경, 환경변수 미설정 시 기존 경로 그대로.</PD>
+    <AL>PASS — branch/run_id 필터링 로직, 환경변수 조건 분기.</AL>
+    <SEC>PASS — PIPELINE_TEST_GIT_BRANCH/PIPELINE_TEST_CI_RUN_ID는 테스트 전용 override, 프로덕션 동작 무변경.</SEC>
+    <BUILD>N/A — meta-task, EXE 빌드 불필요.</BUILD>
+  </category_scores>
+
+  <result>PASS</result>
+  <verdict_rationale>
+    8개 E2E 테스트 전부 PASS. TC-CLI-1, TC-CLI-3, TC-STALE-CLI가 IMP-20260525-6FAC Real CLI Path E2E 정책
+    (subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion)을 완전히 준수합니다.
+    전체 601개 테스트 PASS. scope_lock_check PASS. micro_task 범위 초과 없음.
+  </verdict_rationale>
+</qa_report>
