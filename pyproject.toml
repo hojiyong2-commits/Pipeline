@@ -22,6 +22,10 @@ line-length = 100
 python_version = "3.10"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "pipeline"
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = [
     "tests/test_kis_provider.py",

@@ -81,7 +81,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict
+from typing import Any, Dict, List, NoReturn, Optional, Set, Tuple, TypedDict
 import re
 import socket
 import subprocess
@@ -2640,7 +2640,7 @@ def _log_event(state: Dict[str, Any], message: str) -> None:
     state["event_log"].append({"ts": _now(), "msg": message})
 
 
-def _die(message: str, exit_code: int = 1) -> None:
+def _die(message: str, exit_code: int = 1) -> NoReturn:
     print(RED(f"\n[PIPELINE ERROR] {message}"), file=sys.stderr)
     sys.exit(exit_code)
 
