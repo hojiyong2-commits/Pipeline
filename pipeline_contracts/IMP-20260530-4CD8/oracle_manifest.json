@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260530-4CD8",
+  "created_at": "2026-05-30T21:53:03Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260530-4CD8\\case_normal_sn_match\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260530-4CD8\\case_normal_sn_match\\expected.json",
+      "input_sha256": "2a7f76182cf9874c3e470eba6aa2c008409d82c7ae8beeb14f3463edde5f7515",
+      "expected_sha256": "82b41a2beea7630e2b3d1ac5dba7d7cf080f48860e2b4f437afe93824d9550dd",
+      "added_at": "2026-05-30T21:53:03Z",
+      "updated_at": "2026-05-31T00:00:00Z",
+      "notes": "input.json을 실제 함수 호출 파라미터(sn, sheet_rows)로 교체 — input != expected 구조로 변경"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260530-4CD8\\case_edge_sn_not_found\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260530-4CD8\\case_edge_sn_not_found\\expected.json",
+      "input_sha256": "9b7819f2666f25577b0706ee629aeb6e588248f187a0f170ab088a50a7848017",
+      "expected_sha256": "5cbfd6f5e96119ec3f63e5ec4878ae84109670c18996189c46c62625749a1868",
+      "added_at": "2026-05-30T21:53:07Z",
+      "updated_at": "2026-05-31T00:00:00Z",
+      "notes": "input.json을 실제 함수 호출 파라미터(sn, sheet_rows)로 교체"
+    },
+    {
+      "name": "O003",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260530-4CD8\\case_edge_no_k_date\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260530-4CD8\\case_edge_no_k_date\\expected.json",
+      "input_sha256": "fa35b4e60c0ccda8fe4b133857a343fff2557aaee6e62e8aef447f5102238341",
+      "expected_sha256": "55bb8e7087eb86c546941cf8cf5cb5ccf5be6ca47779c5e3d8de292a066fcdbb",
+      "added_at": "2026-05-30T21:53:08Z",
+      "updated_at": "2026-05-31T00:00:00Z",
+      "notes": "input.json을 실제 함수 호출 파라미터(sn, sheet_rows)로 교체"
+    }
+  ],
+  "updated_at": "2026-05-31T00:00:00Z"
+}

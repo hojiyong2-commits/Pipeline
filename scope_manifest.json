@@ -1,0 +1,25 @@
+{
+  "pipeline_id": "IMP-20260530-4CD8",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "FEAT-20260426-332E/core/packing_detail_reader.py"
+      ],
+      "affected_functions": [
+        "core.packing_detail_reader.lookup_packing_dimensions"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "FEAT-20260426-332E/main.py",
+        "FEAT-20260426-332E/ui/app.py",
+        "FEAT-20260426-332E/core/outlook_reader.py"
+      ],
+      "affected_functions": [
+        "_cli_main (main.py), KittingMapperApp._pipeline_worker (ui/app.py), parse_kitting_table (outlook_reader.py — type: ignore 주석 추가)"
+      ]
+    }
+  ]
+}

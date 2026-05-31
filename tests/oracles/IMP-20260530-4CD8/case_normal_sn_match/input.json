@@ -1,5 +1,7 @@
 {
-  "return_type": "str",
-  "return_value": "60*40*30 12.5kg",
-  "description": "sn='SN-ALPHA' 로 D열에서 일치하는 행을 찾고 F*G*H Jkg 형식 반환"
+  "description": "sn='SN-ALPHA' 로 D열에서 일치하는 행을 찾고 F*G*H Jkg 형식 반환",
+  "sn": "SN-ALPHA",
+  "sheet_rows": [
+    {"col_d": "SN-ALPHA", "col_f": "60", "col_g": "40", "col_h": "30", "col_j": "12.5", "col_k_date": "2026-04-30"}
+  ]
 }

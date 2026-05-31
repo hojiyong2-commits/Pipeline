@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260530-4CD8",
+  "created_at": "2026-05-30T21:52:33Z",
+  "updated_at": "2026-05-31T00:00:00Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "TC-1",
+      "module": "MOD-1",
+      "type": "pytest_run",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "oracle_input_file": "tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/input.json",
+        "description": "sn='SN-ALPHA' — 임시 xlsx 생성 후 lookup_packing_dimensions 실제 호출"
+      },
+      "when": {
+        "command": "python -m pytest tests/test_packing_detail_oracle_4cd8.py::TestOracleNormalSnMatch -v",
+        "call": "lookup_packing_dimensions(tmp_path, sn='SN-ALPHA') — 임시 xlsx 기반 실제 실행"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/expected.json",
+        "expected_return_value": "60*40*30 12.5kg",
+        "expected_return_type": "str"
+      }
+    },
+    {
+      "id": "TC-2",
+      "module": "MOD-1",
+      "type": "pytest_run",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 5,
+      "given": {
+        "oracle_input_file": "tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/input.json",
+        "description": "sn='SN-NOTEXIST' — D열에 없는 sn → None 반환"
+      },
+      "when": {
+        "command": "python -m pytest tests/test_packing_detail_oracle_4cd8.py::TestOracleEdgeSnNotFound -v",
+        "call": "lookup_packing_dimensions(tmp_path, sn='SN-NOTEXIST') — 임시 xlsx 기반 실제 실행"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/expected.json",
+        "expected_return_value": null,
+        "expected_return_type": "null"
+      }
+    },
+    {
+      "id": "TC-3",
+      "module": "MOD-1",
+      "type": "pytest_run",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 5,
+      "given": {
+        "oracle_input_file": "tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/input.json",
+        "description": "sn='SN-NOKDATE' — K열 날짜 없음 → None 반환 (포장 미완료)"
+      },
+      "when": {
+        "command": "python -m pytest tests/test_packing_detail_oracle_4cd8.py::TestOracleEdgeNoKDate -v",
+        "call": "lookup_packing_dimensions(tmp_path, sn='SN-NOKDATE') — 임시 xlsx 기반 실제 실행"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/expected.json",
+        "expected_return_value": null,
+        "expected_return_type": "null"
+      }
+    },
+    {
+      "id": "TC-4",
+      "module": "MOD-2",
+      "type": "pytest_run",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 5,
+      "given": {
+        "description": "main.py 호출부 검증 — project_id= 인자 제거, sn 전달 확인"
+      },
+      "when": {
+        "command": "python -m pytest tests/test_packing_detail_oracle_4cd8.py::TestCallerSnPassThrough::test_main_py_passes_sn_not_project_id -v",
+        "call": "main.py 소스 분석 — lookup_packing_dimensions 호출 시 project_id= 인자 없음 확인"
+      },
+      "then": {
+        "expected_return_type": "no_project_id_kwarg",
+        "description": "main.py에서 project_id= 키워드 인자 사용 없음"
+      }
+    },
+    {
+      "id": "TC-5",
+      "module": "MOD-3",
+      "type": "pytest_run",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 5,
+      "given": {
+        "description": "ui/app.py 호출부 검증 — project_id= 인자 제거, sn 전달 확인"
+      },
+      "when": {
+        "command": "python -m pytest tests/test_packing_detail_oracle_4cd8.py::TestCallerSnPassThrough::test_ui_app_py_passes_sn_not_project_id -v",
+        "call": "ui/app.py 소스 분석 — lookup_packing_dimensions 모든 호출부에서 project_id= 인자 없음 확인"
+      },
+      "then": {
+        "expected_return_type": "no_project_id_kwarg",
+        "description": "ui/app.py에서 project_id= 키워드 인자 사용 없음"
+      }
+    }
+  ],
+  "frozen_at": "2026-05-31T00:00:00Z",
+  "test_set_hash": "77e668915e5da85c2fb0dd91616875fdb81dd7804830d9655b3f0adef1aad737",
+  "contract_hash": "d31a8a795d640e5893ea0510efe99ae8bda90a89f364f5d4669046dd503eda2f"
+}
