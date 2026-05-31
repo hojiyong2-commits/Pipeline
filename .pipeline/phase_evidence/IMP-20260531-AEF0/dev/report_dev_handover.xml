@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_output>
+  <pipeline_id>IMP-20260531-AEF0</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+      <file>tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/input.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/expected.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/input.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/expected.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/input.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/expected.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/input.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/expected.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_status_not_pending/input.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_status_not_pending/expected.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_consumed_new_nonce/input.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_consumed_new_nonce/expected.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_force_new_code/input.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/edge_force_new_code/expected.json</file>
+      <file>tests/oracles/IMP-20260531-AEF0/oracle_manifest.json</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>_should_reuse_acceptance_nonce</target_function>
+    <change_type>new_function</change_type>
+    <location>pipeline.py (line ~2894 직전)</location>
+    <description>
+      5-field 비교(pipeline_id / evidence / evidence_sha256 / pr_head_sha / github_ci_run_id)로
+      기존 acceptance_request를 재사용할지 판단하는 신규 헬퍼.
+      force_new=True이면 무조건 새 코드 발급.
+    </description>
+    <affected_callers>
+      <caller>_cmd_gates_request_accept (직접 호출)</caller>
+    </affected_callers>
+    <blast_radius>MINIMAL — 신규 함수로 기존 동작에 영향 없음</blast_radius>
+  </impact_analysis>
+
+  <self_check>
+    <python39_syntax>PASS — match/case 없음, Union[] 없음 (Optional[str] 사용)</python39_syntax>
+    <type_hinting>PASS — 모든 함수 파라미터+리턴 타입 명시</type_hinting>
+    <error_handling>PASS — None 체크, status 불일치 모두 처리</error_handling>
+    <path_safety>PASS — 파일 경로 처리 없음 (기존 함수 위임)</path_safety>
+    <security>PASS — 실제 secret 없음, EXAMPLE dummy 사용</security>
+    <al_edge_cases>PASS — force_new None 방어, status 빈 문자열 처리</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <docstring>PASS — Args/Returns/Raises 포함</docstring>
+  </self_check>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_request_accept_nonce_reuse_aef0.py, tests/oracles/IMP-20260531-AEF0/**</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>true (pipeline.py — HIGH_RISK 프로필 적용 중)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+  </evidence>
+
+  <test_results>
+    <suite>tests/e2e/test_request_accept_nonce_reuse_aef0.py</suite>
+    <total>6</total>
+    <passed>6</passed>
+    <failed>0</failed>
+    <result>PASS</result>
+  </test_results>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260531-AEF0</pipeline_id>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_output>
