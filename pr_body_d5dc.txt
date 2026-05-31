@@ -1,0 +1,40 @@
+## 작업 요약
+
+IMP-20260529-D5DC: Pipeline v1 안정화 릴리즈 — 새 기능 없음, 문서와 최종 검증 전용
+
+- `README.md` 맨 위에 v1 안정화 릴리즈 섹션 추가 (빠른 시작, 8개 게이트, ACCEPT/REJECT 기준, 실패 대응, 제한사항 5가지)
+- `RELEASE_NOTES.md` 신규 작성 (7개 IMP SHA, v1.0 기준 커밋 8b75482, 실제 업무 사용 가능 여부, 검증 명령)
+- Security & Secrets Boundary(IMP-20260529-D8BA)까지 머지된 상태로 v1 기준선 고정
+
+## 사용자가 확인할 결과물
+
+수정된 파일:
+- `README.md` — 상단 v1 안정화 릴리즈 가이드 섹션 추가
+- `RELEASE_NOTES.md` — v1.0 릴리즈 노트 신규 파일
+
+## 기대 결과와 실제 결과
+
+기대: README.md 상단에 v1 릴리즈 가이드 섹션이 추가되고, RELEASE_NOTES.md 파일이 새로 생성됨
+
+실제:
+- README.md: 빠른 시작 3개 명령어, 8개 게이트 표, ACCEPT/REJECT 기준, 실패 대응 6가지, 제한사항 5가지 포함
+- RELEASE_NOTES.md: 7개 IMP ID와 실제 커밋 SHA(8b75482 등), 실제 업무 사용 가능 여부 선언, 게이트별 검증 명령 포함
+
+자동 검사: PASS (run 26668397115)
+Head SHA: 0afdaee26f1d02e67f5e06841dcf97386bf16158
+
+## 중요한 선택과 트레이드오프
+
+- README.md에서 v1 섹션을 기존 내용 위에 추가 — 기존 스모크 테스트 섹션은 그대로 유지
+- RELEASE_NOTES.md는 신규 파일 — 기존 파일 수정 없음
+- oracle expected.json을 실제 문서 구조와 일치하도록 수정 (섹션명, 게이트 형식, 검증 명령어)
+
+## 검증
+
+- PM phase attestation: PASS (run 26666467811)
+- Dev phase attestation: PASS (run 26667114952)
+- QA phase attestation: PASS (run 26667405578)
+- Build phase attestation: PASS (run 26667657422)
+- Technical gate: PASS (pytest 497개 통과)
+- Oracle gate: PASS (T-README-NORMAL, T-RELEASE-NORMAL, T-CHECKLIST-EDGE 모두 PASS)
+- GitHub CI gate: PASS (run 26668397115)

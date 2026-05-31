@@ -1,0 +1,9 @@
+{
+  "case_id": "RELEASE-NOTES-normal",
+  "case_kind": "normal",
+  "description": "RELEASE_NOTES.md v1.0 항목 정합성 검증",
+  "source_file": "RELEASE_NOTES.md",
+  "expected_source": "user_provided",
+  "verification_method": "content_grep",
+  "rationale": "v1.0 릴리즈 노트는 8개 핵심 게이트가 모두 머지된 상태를 명시적으로 기록해야 한다"
+}

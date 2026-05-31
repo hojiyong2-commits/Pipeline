@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>IMP-20260531-BBDB</pipeline_id>
+  <section_1_command>N/A — meta-task (pipeline.py + CLAUDE.md + agent MD 수정, EXE 빌드 대상 아님)</section_1_command>
+  <section_2_result>SKIP</section_2_result>
+  <section_3_artifacts>없음 — 실행 파일 미생성. User Acceptance Nonce Gate는 pipeline.py 내부 CLI 동작 변경이며 별도 산출물이 없습니다.</section_3_artifacts>
+  <section_4_validation>N/A (EXE 검증 대상 없음). 기능 검증은 Phase 4 QA가 tests/e2e/test_user_acceptance_nonce_bbdb.py 14 케이스 PASS로 완료.</section_4_validation>
+  <section_5_notes>User Acceptance Nonce Gate 구현(MT-1~MT-6)은 파이프라인 인프라 개선이며 EXE 빌드 대상이 아닙니다. skip_reason=meta-task 로 기록합니다.</section_5_notes>
+  <section_6_qa_mapping>QA verdict PASS (numeric_score=110/120), regression 605/605 PASS, BBDB E2E 14/14 PASS, Codex code stage ACCEPT 기준.</section_6_qa_mapping>
+</build_report>

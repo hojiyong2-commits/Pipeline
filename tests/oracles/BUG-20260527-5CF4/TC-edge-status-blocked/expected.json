@@ -1,0 +1,19 @@
+{
+  "case_id": "TC-edge-status-blocked",
+  "expected_exit_code": 0,
+  "expected_stdout_contains": [
+    "파이프라인:",
+    "TEST-BLOCKED-FIXTURE",
+    "[차단]",
+    "scope manifest mismatch"
+  ],
+  "expected_stderr_not_contains": [
+    "Traceback"
+  ],
+  "expected_final_state": {
+    "pipeline_id": "TEST-BLOCKED-FIXTURE",
+    "current_phase": "dev",
+    "blocked": true
+  },
+  "rationale": "BLOCKED 상태도 status 명령 입장에서는 정상 출력이므로 exit code 0. 명시적으로 실행 실패가 아닌 보고 대상은 0이 정답이다."
+}

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>IMP-20260529-D5DC</pipeline_id>
+  <run_id>build-3f59fa66e6e3ae4c</run_id>
+  <section_1_command>
+    <command>N/A — docs-only 태스크</command>
+    <reason>README.md 및 RELEASE_NOTES.md 문서 수정 전용 작업이므로 EXE 빌드 대상이 아닙니다.</reason>
+  </section_1_command>
+  <section_2_output>
+    <exe_path>N/A</exe_path>
+    <skip_reason>docs-only</skip_reason>
+    <status>SKIPPED</status>
+  </section_2_output>
+  <section_3_verification>
+    <result>N/A — 결과물은 README.md와 RELEASE_NOTES.md 파일</result>
+    <artifacts>
+      <file>README.md</file>
+      <file>RELEASE_NOTES.md</file>
+    </artifacts>
+  </section_3_verification>
+  <section_4_environment>
+    <note>docs-only 빌드 환경 불필요</note>
+  </section_4_environment>
+  <section_5_issues>
+    <issue>없음</issue>
+  </section_5_issues>
+  <section_6_qa_mapping>
+    <qa_run_id>qa-c548d401bf0a4520</qa_run_id>
+    <qa_numeric_score>110</qa_numeric_score>
+    <qa_verdict>PASS</qa_verdict>
+  </section_6_qa_mapping>
+  <status>SUCCESS</status>
+</build_report>

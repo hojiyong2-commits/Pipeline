@@ -1,0 +1,144 @@
+<!-- pipeline-human-acceptance-packet -->
+## 최종 확인 안내
+
+이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, **아래 결과 요약과 실제 결과물**이 요청과 맞는지만 확인하세요.
+이 안내는 CI가 끝날 때마다 새 댓글을 만들지 않고 같은 댓글을 갱신합니다. GitHub가 댓글 생성 시각을 오래전으로 보여도 아래 갱신 시각이 최신 기준입니다.
+
+### 먼저 볼 결론
+
+- 판단 정보 상태: **판단 가능**
+- 안내 — 아래 요약과 결과물이 요청과 맞으면 승인(ACCEPT)하면 됩니다.
+- PR 제목: feat(IMP-20260530-4CD8): packing_detail_reader 조회 키 project_id → sn 변경
+
+### 이번 요청과 완료 결과
+
+packing_detail_reader.py의 `lookup_packing_dimensions` 함수 검색 키를 `project_id`에서 `sn`으로 변경합니다. 호출부 3곳(main.py, ui/app.py 2군데)도 함께 수정되며, outlook_reader.py에 mypy 타입 주석이 추가됩니다.
+
+### 사용자가 실제로 확인할 것
+
+- `FEAT-20260426-332E/dist/KittingMapper.exe` (빌드 완료, 36.1 MB)
+- oracle 케이스 3개 PASS: 실제 `lookup_packing_dimensions` 함수 실행으로 검증 (normal 1개, edge 2개)
+- pytest 5개 케이스 PASS (`tests/test_packing_detail_oracle_4cd8.py`)
+
+### 기대 결과와 실제 결과 비교
+
+- **기대**: `lookup_packing_dimensions(file_path, sn="...")` 형식으로 sn으로 포장 치수 조회
+- **실제**:
+  - `packing_detail_reader.py` 파라미터명 `project_id → sn` 변경 완료
+  - `main.py:147`, `ui/app.py:456`, `ui/app.py:571` 세 호출부 모두 수정
+  - `outlook_reader.py`: mypy type: ignore 주석 5곳 추가 (기존 pre-existing 오류 억제)
+  - Technical(ruff/mypy/bandit/pytest), Oracle, GitHub CI 모두 PASS
+
+### 중요한 선택과 트레이드오프
+
+- MT-1: `lookup_packing_dimensions` 함수 시그니처 `project_id: str → sn: str` 변경, 내부 변수명/로그 메시지 일관성 유지
+- MT-2: 3개 호출부(`main.py:147`, `ui/app.py:456`, `ui/app.py:571`)를 `project_id → sn` 인자로 수정
+- `outlook_reader.py`: pre-existing mypy 오류(BeautifulSoup Tag/None 타입 불일치)를 type: ignore 주석으로 처리
+- oracle input.json을 실제 함수 실행 파라미터(sn, sheet_rows)로 교체, actual_output.json을 실제 실행 결과로 생성
+
+### 남은 위험과 주의점
+
+- 별도 주의점이 적혀 있지 않습니다.
+
+### 추가 개선 포인트
+
+- 별도 후속 개선 포인트가 적혀 있지 않습니다.
+
+### GitHub가 자동으로 확인한 것
+
+- 자동 검사: 통과
+- 마지막 갱신: 2026-05-31 00:33:50 UTC
+- 필수 검사 이름: `tests`
+- 실제로 실행한 검사: `python -m pytest -q`
+- 이번 변경 번호: `36f73b68a89a44cae334fc073ca049155677552f`
+- 작업 흐름: `impl/IMP-20260530-4CD8` 브랜치를 `main` 브랜치로 합치기
+- 자동 검사 결과와 첨부파일 보기: https://github.com/hojiyong2-commits/Pipeline/actions/runs/26698982122
+
+### 작업 담당자가 보고한 검증
+
+- Technical gate PASS (ruff, mypy, bandit, pytest 모두 통과)
+- Oracle gate PASS (TC-1~TC-5, 30점 만점 — actual_output.json vs expected.json 일치 확인)
+  - TC-1: sn=SN-ALPHA → 60*40*30 12.5kg PASS
+  - TC-2: sn=SN-NOTEXIST → None PASS
+  - TC-3: sn=SN-NOKDATE (K날짜 없음) → None PASS
+  - TC-4/5: main.py, ui/app.py 호출부에서 project_id= 인자 없음 확인 PASS
+- GitHub CI PASS (run #26698982122, commit: 36f73b6)
+- Build SUCCESS: KittingMapper.exe 36.1 MB
+
+### 변경된 파일
+
+- 수정됨: `FEAT-20260426-332E/core/outlook_reader.py` (추가 6줄, 삭제 6줄)
+- 수정됨: `FEAT-20260426-332E/core/packing_detail_reader.py` (추가 24줄, 삭제 24줄)
+- 수정됨: `FEAT-20260426-332E/main.py` (추가 6줄, 삭제 6줄)
+- 수정됨: `FEAT-20260426-332E/ui/app.py` (추가 14줄, 삭제 14줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/actual_output.json` (추가 4줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/expected.json` (추가 4줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/input.json` (추가 7줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/actual_output.json` (추가 4줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/expected.json` (추가 4줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/input.json` (추가 7줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/actual_output.json` (추가 4줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/expected.json` (추가 4줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/input.json` (추가 7줄, 삭제 0줄)
+- 새 파일: `tests/test_packing_detail_oracle_4cd8.py` (추가 161줄, 삭제 0줄)
+
+### 사용자가 확인해야 할 중요 파일 변경
+
+- `tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/actual_output.json`
+- `tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/expected.json`
+- `tests/oracles/IMP-20260530-4CD8/case_edge_no_k_date/input.json`
+- `tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/actual_output.json`
+- `tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/expected.json`
+- `tests/oracles/IMP-20260530-4CD8/case_edge_sn_not_found/input.json`
+- `tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/actual_output.json`
+- `tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/expected.json`
+- `tests/oracles/IMP-20260530-4CD8/case_normal_sn_match/input.json`
+- `tests/test_packing_detail_oracle_4cd8.py`
+
+### 승인 전에 볼 것
+
+- 위 **사용자가 실제로 확인할 것**에 적힌 결과 링크/경로를 여세요.
+- 첨부파일이 있으면 위 자동 검사 링크에서 여세요.
+- 화면, 엑셀, EXE, 생성 파일이 **기대 결과와 실제 결과 비교**와 맞는지 확인하세요.
+- 업무 결과물이 따로 없는 규칙/문서 작업이면, **이번 요청과 완료 결과**, 자동 검사 통과 여부, 중요 파일 변경 목록을 확인하세요.
+- 코드 내용을 직접 이해하려고 애쓰지 않아도 됩니다. 요청한 결과가 나왔는지, 원하지 않은 결과물이 섞이지 않았는지만 보면 됩니다.
+- 결과가 틀리거나 빠졌으면 거절(REJECT)을 고르고 짧게 이유를 적으세요.
+
+### 결정 기준
+
+- 판단 정보 상태가 **판단 가능**이고, 결과물이 요청과 맞으면 승인(ACCEPT).
+- 판단 정보 상태가 **정보 부족**이면 ACCEPT하지 말고 보완 요청 또는 거절(REJECT).
+- 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 거절(REJECT).
+
+## 소요 시간 요약
+
+=== 파이프라인 metrics 요약 [확인 불가] ===
+
+※ pipeline_state.json 없음 — CI 환경에서 실제 pipeline_state를 사용할 수 없습니다.
+
+[ 전체 소요 시간 ]
+  시작: 확인 불가
+  종료: 확인 불가
+  소요: 확인 불가
+
+[ Phase별 소요 시간 ]
+  확인 불가
+
+[ Gate별 상태 및 소요 시간 ]
+  확인 불가
+
+[ 실패/재시도 요약 ]
+  총 실패 패킷: 0건
+
+[ GitHub Actions 요약 ]
+  run_id: 확인 불가
+  결과: 확인 불가
+  소요: 확인 불가
+  URL: 확인 불가
+
+[ 병목 요약 ]
+  확인 불가
+
+[ 에이전트/세션별 소요 시간 ]
+  (토큰 사용량: 확인 불가)
+

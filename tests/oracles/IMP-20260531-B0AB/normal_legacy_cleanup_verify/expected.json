@@ -1,0 +1,28 @@
+{
+  "case_id": "normal_legacy_cleanup_verify",
+  "case_kind": "normal",
+  "verdict": "PASS",
+  "results": {
+    "dead_helpers_removed": {
+      "status": "PASS",
+      "details": "pipeline.py에서 _is_budget_blocked, _wait_for_github_ci, _verify_allowed_files 함수 정의가 모두 제거됨"
+    },
+    "harness_score_blocked": {
+      "status": "PASS",
+      "details": "cmd_harness가 [THREE GATE BLOCKED] 메시지와 함께 exit code 1로 종료",
+      "expected_exit_code": 1,
+      "expected_substring": "THREE GATE BLOCKED"
+    },
+    "user_confirmed_only_blocked": {
+      "status": "PASS",
+      "details": "--user-confirmed 단독은 [BLOCKED] acceptance_code_required로 거부됨",
+      "expected_exit_code": 1,
+      "expected_substring": "acceptance_code_required"
+    },
+    "stale_phrases_removed": {
+      "status": "PASS",
+      "details": "build-agent.toml, test-harness-agent.toml(2곳), pm-agent.toml/md, CLAUDE.md/AGENTS.md(Phase 7 표), README.md에서 --user-confirmed 성공 경로 묘사 문구가 모두 제거되거나 nonce-gate 정식 흐름으로 교체됨"
+    }
+  },
+  "summary": "Pipeline v1 legacy cleanup 정상 완료 — dead code 제거, harness --score 차단 유지, --user-confirmed 단독 BLOCKED 유지, stale 문구 정리 완료"
+}

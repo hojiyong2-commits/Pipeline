@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>IMP-20260530-B69C</pipeline_id>
+  <planner_run_id>pm_planner-250f7ff66cde5535</planner_run_id>
+  <step_plan_sha256>8be19a0ec367a63a25e1f87a5db643a4dd5dafe3b0737ba1405a4b5590b9c4ee</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>PM_PHASE_COMPLETE</status>
+  <build_target>ic_part_src/dist/ICPartAutomation.exe</build_target>
+  <deploy_target>G:\내 드라이브\터미널\ICPartAutomation.exe</deploy_target>
+  <no_code_changes>true</no_code_changes>
+  <task_summary>코드 변경 없는 PyInstaller 재빌드 전용 파이프라인. FEAT-20260530-86AA 변경사항이 반영된 새 EXE 생성.</task_summary>
+</manager_handoff>

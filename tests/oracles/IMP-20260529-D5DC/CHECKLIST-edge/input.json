@@ -1,0 +1,9 @@
+{
+  "case_id": "CHECKLIST-edge",
+  "case_kind": "edge",
+  "description": "v1.0 안정화 체크리스트 — main 미반영 게이트가 있을 때의 보고 정확성 검증 (edge case)",
+  "source_file": "RELEASE_NOTES.md",
+  "expected_source": "user_provided",
+  "verification_method": "content_grep",
+  "rationale": "사용자가 '실제 업무에 사용 가능' 판단을 내릴 수 있으려면 8개 게이트가 모두 main에 반영되었는지에 대한 명시적 진술과 검증 명령이 RELEASE_NOTES에 있어야 한다. 일부만 반영된 상태에서도 정확히 보고할 수 있어야 한다."
+}

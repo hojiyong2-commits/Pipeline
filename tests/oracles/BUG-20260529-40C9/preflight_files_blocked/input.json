@@ -1,0 +1,1 @@
+{"files": ["pipeline.py", "build_report.xml", "scope_manifest_MT-1.json"], "command": "gates preflight-pr-impl --files"}

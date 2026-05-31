@@ -1,0 +1,20 @@
+{
+  "case_id": "TC-normal-status-complete",
+  "expected_exit_code": 0,
+  "expected_stdout_contains": [
+    "파이프라인:",
+    "TEST-COMPLETE-FIXTURE",
+    "Phase 현황",
+    "terminal_state=COMPLETE"
+  ],
+  "expected_stderr_not_contains": [
+    "Traceback",
+    "PIPELINE ERROR"
+  ],
+  "expected_final_state": {
+    "pipeline_id": "TEST-COMPLETE-FIXTURE",
+    "current_phase": "COMPLETE",
+    "terminal_state": "COMPLETE"
+  },
+  "rationale": "status는 읽기 전용 출력 명령이므로 terminal_state=COMPLETE라도 정상 출력 시 exit code 0이어야 한다. state 파일은 변경되지 않아야 한다."
+}

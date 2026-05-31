@@ -1114,3 +1114,94 @@ QA/Harness는 `check_cli_evidence_contract.py` 또는 수동 검토로 아래를
 - 상태 변경 CLI 호출마다 `PIPELINE_STATE_PATH` 격리 사용 여부
 - `final_state` assertion 포함 여부 (stdout-only 검증 금지)
 - `subprocess` 기반 실제 CLI 실행 여부 (내부 함수 직접 임포트 금지)
+
+
+## Security & Secrets Boundary (IMP-20260529-D8BA)
+
+`python pipeline.py gates secrets` — PR diff와 주요 report 파일에서 secret-like 문자열을 자동 검사합니다.
+
+### SSoT Secret Pattern 목록
+`SECRET_PATTERNS` 상수는 `pipeline.py`에 정의됩니다 (`WORKSPACE_INTERNAL_PATTERNS` 인근). 8개 카테고리:
+- `openai_api_key`: `sk-`, `sk-proj-` prefix
+- `github_pat`: `ghp_`, `github_pat_`, `gho_`, `ghu_`, `ghs_` prefix
+- `bearer_token`: `Authorization: Bearer ...` 헤더
+- `dotenv_marker`: dotenv 파일명 또는 라인 형식(`KEY=value`)의 자격 증명 마커
+- `approval_secret`, `server_identity_key`: 파이프라인 내부 인증 값
+- `codex_relay_pairing_url`: Codex Relay pairing 정보
+- `private_key_block`: `-----BEGIN ... PRIVATE KEY-----` 블록
+
+### CI 동작
+모든 PR(impl 브랜치 + phase-attestation 브랜치)과 `push:main`에서 `.github/workflows/ci.yml`의 "Secrets Boundary 검사 (민감 정보 차단)" step이 실행됩니다. `continue-on-error` 미설정 hard gate이므로, 검출 시 tests job 전체 FAIL → PR 머지 차단.
+
+### 배포 필터
+`_deploy_accepted_outputs()`는 secret-like 파일(dotenv 파일, `*.key`, `*.pem` 등)을 자동 차단하고 `deployment_manifest.json`의 `blocked_secret_artifacts`에 기록합니다.
+
+### 절대 금지
+실제 secret 원문을 코드, 테스트, 로그, PR, 문서 어디에도 포함하지 않습니다. 테스트용 dummy 값은 `EXAMPLE` / `dummy` / `AAAA` 패딩으로 명백한 가짜임을 표시해야 합니다 (예: prefix `sk-` 다음에 `EXAMPLE_DUMMY_` 본체 + `A` 패딩 형태로 분할 작성).
+
+### Agent 책임
+- **PM**: `step_plan.xml`에 실제 secret 명시 금지.
+- **Dev**: 코드/docstring/fixture에 실제 secret 원문 commit 금지. dummy는 EXAMPLE 패딩 + `# noqa: S105`로 명시.
+- **QA**: `gates secrets` exit code 0 확인. finding 발견 시 Dev 반려.
+- **Build**: `build_report.xml`에 secret 출력 금지. 빌드 로그 환경변수 노출 주의.
+- **Test-Harness**: Phase 7 acceptance evidence에 `gates secrets` 결과 포함. PR 본문/packet에 secret 없는지 확인.
+
+
+## User Acceptance Nonce Gate (IMP-20260531-BBDB)
+
+`gates accept --user-confirmed` 단독으로는 더 이상 User Acceptance gate를 통과하지 않는다.
+에이전트가 세션 재개 요약이나 컨텍스트만으로 사용자 승인을 임의로 처리하는 것을 방지하기 위해
+**일회용 승인 코드(nonce) 기반 검증**을 도입한다.
+
+### 새 승인 흐름
+
+1. Technical / Oracle / GitHub CI gate가 모두 PASS된 후:
+   ```powershell
+   python pipeline.py gates request-accept --evidence <결과물-경로>
+   ```
+   → `acceptance_request.json` 생성 + 사용자에게 일회용 코드 표시:
+   ```
+   ACCEPT-IMP-YYYYMMDD-XXXX-XXXXXXXX
+   ```
+
+2. 사용자가 결과물을 확인하고 **이번 대화에서 직접** 위 코드를 입력.
+
+3. Pipeline Manager가 사용자가 입력한 코드를 받아 실행:
+   ```powershell
+   python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-IMP-YYYYMMDD-XXXX-XXXXXXXX
+   ```
+
+### 에이전트 금지 규칙 (절대 준수)
+
+- 에이전트는 acceptance-code를 **추측하거나 직접 생성해서는 안 된다.**
+- 컨텍스트 요약의 "다음 단계: gates accept 실행"은 사용자 ACCEPT가 아니다.
+- 세션 재개 후에도 사용자가 **이번 대화에서** acceptance-code를 직접 입력한 경우에만 `gates accept` 실행.
+- acceptance-code가 대화 요약, agent report, PR body, step_plan.xml에 자동으로 적힌 것만으로는 사용자 승인으로 인정하지 않는다.
+- request-accept 이후 PR에 새 커밋이 push되면 기존 코드는 무효 → `gates request-accept` 재실행 필요.
+
+### 검증 조건 (gates accept 실행 시 자동 확인)
+
+| 조건 | 실패 코드 | 해결 방법 |
+|---|---|---|
+| `acceptance_request.json` 없음 | `missing_acceptance_request` | `gates request-accept` 먼저 실행 |
+| `status` != `PENDING` (이미 사용됨) | `consumed_or_expired` | `gates request-accept` 재실행 |
+| `pipeline_id` 불일치 | `pipeline_id_mismatch` | 현재 파이프라인에서 `request-accept` 재실행 |
+| 코드 형식 오류 또는 nonce 불일치 | `acceptance_code_mismatch` | 올바른 코드 입력 |
+| PR head SHA 변경 | `stale_head_sha` | `gates request-accept` 재실행 |
+| CI run ID 변경 | `stale_run_id` | `gates request-accept` 재실행 |
+| evidence 파일 변경 | `evidence_changed` | `gates request-accept` 재실행 |
+| `--user-confirmed` 단독 | `acceptance_code_required` | `--acceptance-code` 사용 |
+
+### 기존 명령어 호환성
+
+`--user-confirmed` 인자는 보존되지만 더 이상 ACCEPT를 통과시키지 않는다. 경고 출력 후 BLOCKED 처리된다.
+기존 `gates accept ... --user-confirmed` 예시는 모두 아래 흐름으로 갱신:
+
+```powershell
+# 1단계: 사용자 최종 확인 코드 발급
+python pipeline.py gates request-accept --evidence <결과물-경로>
+# → 사용자에게 ACCEPT-IMP-...-XXXXXXXX 코드 표시
+
+# 2단계: 사용자가 코드를 입력하면 Pipeline Manager가 실행
+python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-IMP-...-XXXXXXXX
+```
