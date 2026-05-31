@@ -47,7 +47,8 @@
     python pipeline.py gates oracle
     python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
     python pipeline.py outputs add --kind report --path report.md --label "최종 보고서"
-    python pipeline.py gates accept --result ACCEPT --evidence output.png --user-confirmed
+    python pipeline.py gates request-accept --evidence output.png
+    python pipeline.py gates accept --result ACCEPT --evidence output.png --acceptance-code ACCEPT-<pid>-<nonce>
     python pipeline.py advisory status
     python pipeline.py architect --report-file architect_report.xml
     python pipeline.py terminate
@@ -1983,6 +1984,8 @@ WORKSPACE_INTERNAL_PATTERNS: List[str] = [
     "test_results_v3.jsonl",
     "acceptance_comment.json",
     "acceptance_packet.md",
+    "human_acceptance_packet.md",  # IMP-20260531-BBDB: nonce gate 생성 파일
+    "acceptance_request.json",     # IMP-20260531-BBDB: nonce gate 생성 파일
     "bandit_e2e_result.json",
     "bandit_e2e_result2.json",
 ]
@@ -3104,6 +3107,11 @@ TEMPORARY_PR_BODY_PATTERNS: List[str] = [
     "진행 중",
     "Dev 완료 후 업데이트됩니다",
     "아직 Dev 구현 완료 전",
+    # IMP-20260531-BBDB: PR #368 stale 문구 패턴 명시 추가
+    "Dev phase 진행 중",
+    "빌드 완료 후 업데이트 예정",
+    "KittingMapper.exe 빌드 완료 후",
+    "빌드 완료 후 업데이트됩니다",
 ]
 
 # IMP-20260531-BBDB MT-1: User Acceptance Nonce Gate
@@ -4436,7 +4444,7 @@ def _agent_run_start(state: Dict[str, Any], phase: str, agent_id: Optional[str])
                 failure_path.write_text(json.dumps(failure_data, ensure_ascii=False, indent=2), encoding="utf-8")
             except OSError:
                 pass
-            _die(failure_data["message"])
+            _die(str(failure_data["message"]))
 
     gate_phase = "pm" if phase in {"pm_planner", "pipeline_manager"} else phase
     ok, reason = check_gate(state, gate_phase)
@@ -4638,7 +4646,7 @@ def _git_check_ignored(path: Path) -> bool:
 
 def _workspace_check_for_file(path: Path) -> Dict[str, Any]:
     return {
-        "path": _normalize_rel_path(path),
+        "path": _normalize_rel_path(str(path)),
         "sha256": _sha256_file(path),
         "size_bytes": path.stat().st_size,
     }
@@ -4661,7 +4669,7 @@ def _copy_phase_evidence_file(pid: str, phase: str, label: str, raw_path: Option
     return {
         "label": label,
         "source": _display_path(path),
-        "path": _normalize_rel_path(dest),
+        "path": _normalize_rel_path(str(dest)),
         "sha256": _sha256_file(dest),
         "size_bytes": dest.stat().st_size,
         "requires_force_add": ignored_by_git,
@@ -6480,7 +6488,8 @@ def cmd_build(args: argparse.Namespace) -> None:
     print(f"       {YELLOW('python pipeline.py gates technical')}")
     print(f"       {YELLOW('python pipeline.py gates oracle')}")
     print(f"       {YELLOW('python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline')}")
-    print(f"       {YELLOW('python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed')}")
+    print(f"       {YELLOW('python pipeline.py gates request-accept --evidence [결과물-경로]')}  ← 1단계: 사용자에게 코드 표시")
+    print(f"       {YELLOW('python pipeline.py gates accept --result ACCEPT --evidence [경로] --acceptance-code ACCEPT-<pid>-<nonce>')}  ← 2단계: 사용자 코드 입력 후")
     print()
 
 
@@ -6498,7 +6507,8 @@ def cmd_harness(args: argparse.Namespace) -> None:
         "       python pipeline.py gates technical\n"
         "       python pipeline.py gates oracle\n"
         "       python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline\n"
-        "       python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed"
+        "       python pipeline.py gates request-accept --evidence [결과물-경로]  (1단계: 사용자에게 코드 표시)\n"
+        "       python pipeline.py gates accept --result ACCEPT --evidence [경로] --acceptance-code ACCEPT-<pid>-<nonce>  (2단계: 사용자 코드 입력 후)"
     )
 
 
@@ -7076,7 +7086,8 @@ def cmd_interface(args: argparse.Namespace) -> None:
                 'External gates only: python pipeline.py gates technical; '
                 'python pipeline.py gates oracle; '
                 'python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline; '
-                'python pipeline.py gates accept --result ACCEPT --evidence PATH --user-confirmed'
+                'python pipeline.py gates request-accept --evidence PATH; '
+                'python pipeline.py gates accept --result ACCEPT --evidence PATH --acceptance-code ACCEPT-<pid>-<nonce>'
             ),
             "required_xml": ["<harness_diagnostic>"],
         },
@@ -8322,7 +8333,7 @@ def cmd_module(args: argparse.Namespace) -> None:
             mt_id=mt_id,
         )
         scope = _validate_module_scope_manifest(
-            getattr(args, "scope_manifest", None),
+            getattr(args, "scope_manifest", None) or "",
             state,
             mt_id,
             getattr(args, "files", None),
@@ -8920,7 +8931,7 @@ def _verify_github_ci_run(
     if commit and re.fullmatch(r"[0-9a-fA-F]{40}", commit):
         commit_sha = commit
     else:
-        commit_sha = _git_rev_parse(commit or "HEAD")
+        commit_sha = _git_rev_parse(commit or "HEAD") or ""
     if not commit_sha:
         _die("could not infer commit sha; pass --commit explicitly")
     token = _github_token(token_env)
@@ -8996,7 +9007,7 @@ def _verify_github_phase_attestation_run(
     if commit and re.fullmatch(r"[0-9a-fA-F]{40}", commit):
         commit_sha = commit
     else:
-        commit_sha = _git_rev_parse(commit or "HEAD")
+        commit_sha = _git_rev_parse(commit or "HEAD") or ""
     if not commit_sha:
         _die("could not infer commit sha; pass --commit explicitly")
     token = _github_token(token_env)
@@ -9804,7 +9815,7 @@ def cmd_review(args: argparse.Namespace) -> None:
         if not active_pipeline_id:
             try:
                 st = _load_state()
-                active_pipeline_id = st.get("pipeline_id", "")
+                active_pipeline_id = st.get("pipeline_id", "") if st is not None else ""
             except Exception:
                 active_pipeline_id = ""
 
@@ -10582,9 +10593,11 @@ def cmd_review_codex_run(args: argparse.Namespace) -> None:
 
     # 10. 결과 파일 저장
     findings: List[Dict[str, Any]] = parsed.get("findings", [])
+    _current_state = _load()
+    _current_pipeline_id: str = _current_state.get("pipeline_id", "") if _current_state is not None else ""
     result_data: Dict[str, Any] = {
         "schema_version": 2,
-        "pipeline_id": _load().get("pipeline_id", "") if _load() else "",
+        "pipeline_id": _current_pipeline_id,
         "stage": stage_arg,
         "review_model": CODEX_REQUIRED_REVIEW_MODEL,  # 표시용 대문자 GPT-5.5
         "result": result_from_model,
@@ -10832,7 +10845,7 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
     if not active_pipeline_id:
         try:
             st = _load_state()
-            active_pipeline_id = st.get("pipeline_id", "")
+            active_pipeline_id = st.get("pipeline_id", "") if st is not None else ""
         except Exception:
             active_pipeline_id = ""
 
@@ -11770,9 +11783,9 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
         except OSError:
             pass
         _proc_exc: Optional[Exception] = None
-        proc = None
+        pytest_proc: Optional[subprocess.CompletedProcess[str]] = None
         try:
-            proc = subprocess.run(
+            pytest_proc = subprocess.run(
                 command,
                 cwd=str(BASE_DIR),
                 capture_output=True,
@@ -11818,7 +11831,7 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
                 "execution_profile": profile.get("mode"),
                 "checks": checks,
             }
-        status = "PASS" if proc.returncode == 0 else "FAIL"
+        status = "PASS" if pytest_proc is not None and pytest_proc.returncode == 0 else "FAIL"
         if status == "FAIL":
             failures += 1
         checks.append({
@@ -11826,9 +11839,9 @@ def _run_technical_gate(state: Dict[str, Any], *, strict_tools: bool = True, tim
             "status": status,
             "command": command,
             "version": _technical_gate_tool_version("pytest", timeout),
-            "returncode": proc.returncode,
-            "stdout": proc.stdout[-4000:],
-            "stderr": proc.stderr[-4000:],
+            "returncode": pytest_proc.returncode if pytest_proc is not None else -1,
+            "stdout": pytest_proc.stdout[-4000:] if pytest_proc is not None else "",
+            "stderr": pytest_proc.stderr[-4000:] if pytest_proc is not None else "",
         })
 
     return {
@@ -12282,8 +12295,8 @@ def _cmd_gates_secrets(args: argparse.Namespace) -> None:
                 continue
             # tests/oracles 및 tests/e2e의 dummy 테스트 데이터는 검사 제외
             try:
-                rel = resolved.relative_to(BASE_DIR)
-                rel_str = str(rel).replace("\\", "/")
+                rel_path = resolved.relative_to(BASE_DIR)
+                rel_str = str(rel_path).replace("\\", "/")
                 if rel_str.startswith("tests/oracles/") or rel_str.startswith("tests/e2e/"):
                     continue
             except ValueError:
@@ -13116,6 +13129,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     print(f"     {reject_code}: 거절 이유")
     print("=" * 62)
     print()
+    # 모바일에서 한 번에 복사할 수 있는 text 블록 (IMP-20260531-BBDB)
+    print("  ── 모바일 복사용 — 승인 코드만 ─────────────────────────")
+    print(f"  {accept_code}")
+    print("  ───────────────────────────────────────────────────────")
+    print()
     print(f"  승인 요청 ID: {req['request_id']}  (acceptance_request.json 저장됨)")
     _log_event(state, f"acceptance request issued: request_id={req['request_id']} nonce={nonce}")
     _save(state)
@@ -13889,8 +13907,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     state,
                     "acceptance",
                     {},
-                    command=[sys.executable, "pipeline.py", "gates", "accept",
-                             "--result", "ACCEPT", "--evidence", "<result-path>", "--user-confirmed"],
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", "<result-path>"],
                     note=_readiness.get("blocked_reason") or "acceptance readiness check failed",
                     status="BLOCKED",
                     phase=_readiness_return_phase,
@@ -13907,7 +13925,9 @@ def cmd_gates(args: argparse.Namespace) -> None:
                         "PR이 Draft가 아닌 정식 PR 상태이고 gh CLI가 설치/인증되어 있는지 확인하세요.",
                         "PR 본문에 필수 섹션(작업 요약 또는 최종 판단 요약/사용자가 확인할 결과물/기대 결과와 실제 결과/중요한 선택과 트레이드오프/검증)이 있는지 확인하세요.",
                         "GitHub PR에 acceptance packet 댓글이 게시되어 있고 '판단 가능' 상태인지 확인하세요.",
-                        "보완 완료 후 python pipeline.py gates accept --result ACCEPT --evidence <result-path> --user-confirmed 를 다시 실행하세요.",
+                        "보완 완료 후: (1) python pipeline.py gates request-accept --evidence <result-path> 로 새 코드 발급"
+                        " → (2) 사용자가 코드 입력 → (3) python pipeline.py gates accept --result ACCEPT"
+                        " --evidence <result-path> --acceptance-code ACCEPT-<pid>-<nonce>",
                     ],
                     retry_allowed=True,
                 )
@@ -13952,9 +13972,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     state,
                     "acceptance",
                     {},
-                    command=[sys.executable, "pipeline.py", "gates", "accept",
-                             "--result", "ACCEPT", "--evidence",
-                             "<result-path>", "--user-confirmed"],
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", "<result-path>"],
                     note=(
                         _consistency_result.get("blocked_reason")
                         or "protocol consistency check failed"
@@ -14020,7 +14039,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
             state,
             "acceptance",
             gate_status,
-            evidence=args.evidence or "user_confirmed",
+            evidence=args.evidence or "acceptance_code_confirmed",
             report_file=str(paths["user_validation"]),
             note=args.notes,
         )
@@ -14043,7 +14062,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 state,
                 "acceptance",
                 report,
-                command=[sys.executable, "pipeline.py", "gates", "accept", "--result", "ACCEPT", "--evidence", "<repaired-result>", "--user-confirmed"],
+                command=[sys.executable, "pipeline.py", "gates", "request-accept", "--evidence", "<repaired-result>"],
                 note="User rejected the visible result; PM/Dev should repair the requested behavior or clarify requirements.",
                 status="FAIL",
                 phase="harness",
@@ -14640,8 +14659,8 @@ def cmd_advisory(args: argparse.Namespace) -> None:
         if not candidates:
             _die(f"advisory finding id not found in current review files: {args.id}")
         if len(candidates) > 1:
-            files = sorted({str(item.get("review_file") or "") for item in candidates})
-            _die(f"advisory finding id is ambiguous; re-run with --review-file. Matches: {files}")
+            ambiguous_files: List[str] = sorted({str(item.get("review_file") or "") for item in candidates})
+            _die(f"advisory finding id is ambiguous; re-run with --review-file. Matches: {ambiguous_files}")
         finding = candidates[0]
         resolutions = _load_advisory_resolutions(pid)
         items = resolutions.setdefault("items", [])
@@ -16018,6 +16037,8 @@ def cmd_budget(args: "argparse.Namespace") -> None:
 def _cmd_budget_status(args: "argparse.Namespace") -> None:
     """phase별 attempt budget 현황을 한국어로 출력."""
     state = _load_state()
+    if state is None:
+        _die("[BUDGET] pipeline_state.json이 없습니다.")
     pid = str(state.get("pipeline_id") or "UNKNOWN")
     _ensure_attempt_budget_keys(state)
     ab = state["attempt_budget"]
@@ -16067,6 +16088,8 @@ def _cmd_budget_reset(args: "argparse.Namespace") -> None:
     --reason: 초기화 사유 (감사 로그용, argparse required=True로 강제)
     """
     state = _load_state()
+    if state is None:
+        _die("[BUDGET] pipeline_state.json이 없습니다.")
     pid = str(state.get("pipeline_id") or "UNKNOWN")
     phase = args.phase
     reason = str(args.reason or "").strip()
@@ -16237,7 +16260,7 @@ def _cmd_cluster_attach(args: "argparse.Namespace") -> None:
         _die(f"[CLUSTER ERROR] 클러스터가 7일 경과로 자동 close됨: {cluster_id}")
 
     state = _load_state()
-    pipeline_id = str(state.get("pipeline_id") or "")
+    pipeline_id = str(state.get("pipeline_id") or "") if state is not None else ""
     if pipeline_id and pipeline_id not in cl.get("pipelines", []):
         cl.setdefault("pipelines", []).append(pipeline_id)
         _save_cluster_json(cl)
@@ -16356,6 +16379,8 @@ def _cmd_patch_audit(args: "argparse.Namespace") -> None:
     if audit_result["verdict"] == "ESCALATE":
         # pipeline_state에 lane=full 기록
         state = _load_state()
+        if state is None:
+            _die("[PATCH] pipeline_state.json이 없습니다.")
         state["patch_lane"] = {"lane": "full", "escalated_at": _now(), "reasons": audit_result["reasons"]}
         _save_state(state)
 
@@ -16682,7 +16707,7 @@ def _aggregate_github_actions_state_durations(
             continue
         if duration < 0:
             continue
-        result[state_name] += duration
+        result[str(state_name)] += duration
     return result
 
 
