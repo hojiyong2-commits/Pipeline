@@ -13059,20 +13059,43 @@ def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Non
 """
 
     try:
-        # 기존 acceptance-packet 댓글 전부 삭제 후 새로 생성 (nonce 누적 방지)
-        r = subprocess.run(
-            ["gh", "pr", "view", "--json", "comments", "--jq",
-             '[.comments[] | select(.body | contains("pipeline-human-acceptance-packet")) | .databaseId]'],
-            capture_output=True, text=True, timeout=10,
-            encoding="utf-8", errors="replace",
-        )
-        if r.returncode == 0 and r.stdout.strip():
-            try:
-                old_ids = json.loads(r.stdout.strip())
-            except (json.JSONDecodeError, ValueError):
-                old_ids = []
-            for old_id in old_ids:
-                if old_id:
+        # PR 번호 조회 (pr_url에서 추출 또는 gh CLI 사용)
+        pr_number = ""
+        if pr_url:
+            import re as _re
+            m = _re.search(r"/pull/(\d+)", pr_url)
+            if m:
+                pr_number = m.group(1)
+        if not pr_number:
+            r_num = subprocess.run(
+                ["gh", "pr", "view", "--json", "number", "--jq", ".number"],
+                capture_output=True, text=True, timeout=10,
+                encoding="utf-8", errors="replace",
+            )
+            if r_num.returncode == 0:
+                pr_number = r_num.stdout.strip()
+
+        # 기존 acceptance-packet 댓글 전부 삭제 (Python 파싱 — jq 의존 없음)
+        if pr_number:
+            r_comments = subprocess.run(
+                ["gh", "api",
+                 f"repos/hojiyong2-commits/Pipeline/issues/{pr_number}/comments",
+                 "--paginate"],
+                capture_output=True, text=True, timeout=30,
+                encoding="utf-8", errors="replace",
+            )
+            if r_comments.returncode == 0 and r_comments.stdout.strip():
+                try:
+                    all_comments = json.loads(r_comments.stdout.strip())
+                    tag = "pipeline-human-acceptance-packet"
+                    old_ids = [
+                        str(c["id"])
+                        for c in all_comments
+                        if isinstance(c, dict) and tag in str(c.get("body", ""))
+                    ]
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    old_ids = []
+                for old_id in old_ids:
                     subprocess.run(
                         ["gh", "api",
                          f"repos/hojiyong2-commits/Pipeline/issues/comments/{old_id}",
