@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260531-B0AB</pipeline_id>
+  <qa_run_id>qa-a476cd1e5834cb78</qa_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+  <timestamp>2026-05-31T08:30:00Z</timestamp>
+
+  <verification_summary>
+    <check id="QA-1" name="Dead helpers removed from pipeline.py">
+      <status>PASS</status>
+      <detail>_is_budget_blocked, _wait_for_github_ci, _verify_allowed_files all ABSENT</detail>
+    </check>
+    <check id="QA-2" name="Protected functions preserved in pipeline.py">
+      <status>PASS</status>
+      <detail>_record_phase_timing, _record_gate_timing, _compute_failure_summary_from_list, cmd_harness all PRESENT</detail>
+    </check>
+    <check id="QA-3" name="argparse --user-confirmed preserved">
+      <status>PASS</status>
+      <detail>add_argument with user-confirmed found 3 times</detail>
+    </check>
+    <check id="QA-4" name="pipeline.py AST parse">
+      <status>PASS</status>
+      <detail>ast.parse succeeded, no syntax errors</detail>
+    </check>
+    <check id="QA-5" name="AGENTS.md new sections added">
+      <status>PASS</status>
+      <detail>Security and Secrets Boundary (IMP-20260529-D8BA) section present. User Acceptance Nonce Gate (IMP-20260531-BBDB) section present.</detail>
+    </check>
+    <check id="QA-6" name="MT-3 stale --user-confirmed success-path removed">
+      <status>PASS</status>
+      <detail>build-agent.toml, test-harness-agent.toml, pm-agent.toml, pm-agent.md all CLEAN</detail>
+    </check>
+    <check id="QA-7" name="tests/test_legacy_cleanup_b0ab.py exists and 5 tests pass">
+      <status>PASS</status>
+      <detail>5 passed: test_dead_helpers_removed, test_harness_score_blocked, test_user_confirmed_only_blocked, test_stale_phrases_removed_in_root_docs, test_agent_md_files_have_no_user_confirmed_success_path</detail>
+    </check>
+    <check id="QA-8" name="Full test suite">
+      <status>PASS</status>
+      <detail>94 passed, 0 failed</detail>
+    </check>
+    <check id="QA-9" name="Scope check">
+      <status>PASS</status>
+      <detail>7 scope files match scope_manifest exactly. Extra changed files are prior pipeline worktree artifacts not modified by this pipeline.</detail>
+    </check>
+  </verification_summary>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id><verdict>WITHIN_SCOPE</verdict>
+    <mt_id>MT-2</mt_id><verdict>WITHIN_SCOPE</verdict>
+    <mt_id>MT-3</mt_id><verdict>WITHIN_SCOPE</verdict>
+    <mt_id>MT-4</mt_id><verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <failure_signature>NONE</failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+
+  <scoring_breakdown>
+    <category name="Function Removal Correctness" score="20" max="20"/>
+    <category name="Protected Function Preservation" score="20" max="20"/>
+    <category name="Documentation Sync AGENTS.md" score="20" max="20"/>
+    <category name="Stale Pattern Cleanup MT-3" score="15" max="15"/>
+    <category name="Regression Test Coverage" score="20" max="20"/>
+    <category name="Full Suite Pass" score="15" max="15"/>
+  </scoring_breakdown>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager</to>
+    <pipeline_id>IMP-20260531-B0AB</pipeline_id>
+    <status>READY_FOR_QA_RECORD</status>
+    <evidence>
+      <file>qa_report.xml</file>
+    </evidence>
+  </handover>
+</qa_report>

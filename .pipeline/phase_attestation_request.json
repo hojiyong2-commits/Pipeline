@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-31T08:39:41Z",
+  "pipeline_id": "IMP-20260531-B0AB",
+  "phase": "qa",
+  "phase_status": "PASS",
+  "commit_hint": "bd8377cd71d7e2ef19b12ae8ea785a04ed85a036",
+  "state": {
+    "current_phase": "sec",
+    "phase_completed_at": "2026-05-31T08:34:36Z",
+    "report_file": "qa_report.xml",
+    "evidence": null
+  },
+  "agent_run": {
+    "run_id": "qa-a476cd1e5834cb78",
+    "phase": "qa",
+    "agent_id": "qa-agent",
+    "status": "COMPLETED",
+    "output_file": "qa_report.xml",
+    "output_sha256": "1add78b1732450dca965686777e5cb01b434b1b0e9796662e5789359b29a0b50",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260531-B0AB/qa/agent_receipt_qa-a476cd1e5834cb78.json",
+    "receipt_sha256": "f3b84859d09a6d9d57f82766eab7b6f80bbcd6f8bb49c78dc98670b5169a1061",
+    "used_by_phase": "qa",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260531-B0AB\\qa\\qa-a476cd1e5834cb78.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260531-B0AB\\qa\\qa-a476cd1e5834cb78.json",
+      "path": ".pipeline/phase_evidence/IMP-20260531-B0AB/qa/agent_receipt_qa-a476cd1e5834cb78.json",
+      "sha256": "f3b84859d09a6d9d57f82766eab7b6f80bbcd6f8bb49c78dc98670b5169a1061",
+      "size_bytes": 496,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "qa_report.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260531-B0AB/qa/report_qa_report.xml",
+      "sha256": "1add78b1732450dca965686777e5cb01b434b1b0e9796662e5789359b29a0b50",
+      "size_bytes": 3389,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": [
+    {
+      "path": "pipeline.py",
+      "expected_sha256": null,
+      "label": "MT-1: dead helpers removed"
+    },
+    {
+      "path": "AGENTS.md",
+      "expected_sha256": null,
+      "label": "MT-2: new sections added"
+    },
+    {
+      "path": ".codex/agents/build-agent.toml",
+      "expected_sha256": null,
+      "label": "MT-3: stale pattern removed"
+    },
+    {
+      "path": ".codex/agents/test-harness-agent.toml",
+      "expected_sha256": null,
+      "label": "MT-3: stale pattern removed"
+    },
+    {
+      "path": ".codex/agents/pm-agent.toml",
+      "expected_sha256": null,
+      "label": "MT-3: stale pattern removed"
+    },
+    {
+      "path": ".claude/agents/pm-agent.md",
+      "expected_sha256": null,
+      "label": "MT-3: stale pattern removed"
+    },
+    {
+      "path": "tests/test_legacy_cleanup_b0ab.py",
+      "expected_sha256": null,
+      "label": "MT-4: regression tests"
+    }
+  ]
+}
