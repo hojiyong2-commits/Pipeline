@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260531-B0AB",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-e9747798697f312a",
+  "status": "COMPLETED",
+  "started_at": "2026-05-31T08:43:09Z",
+  "completed_at": "2026-05-31T08:43:28Z",
+  "output_file": "build_report_b0ab.xml",
+  "output_sha256": "59c8221c03d8dcc4b06a39eee2b23cb7d1c9ac02aa84a96eed23ca9989e6f09c",
+  "evidence_files": [],
+  "commit_sha": "9074818f0eb75441b0a31abbc1a2be092e0dbeba"
+}
