@@ -51,42 +51,42 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "e1e69856808e52a4cce107cdfa8299d044fdad5638fdd59bc10705a34caa0cb2",
-      "size_bytes": 795129
-    },
-    {
-      "path": "AGENTS.md",
-      "sha256": "8b5b3a99a0eb61bfdd780c5b991efd61053e5dc7a4313d6ca75a72b27a493361",
-      "size_bytes": 90213
-    },
+  "workspace_file_checks": [],
+  "local_only_files": [
     {
       "path": ".codex/agents/build-agent.toml",
       "sha256": "f01298394ad16b17beb73ba33017a07bb3c1d9894dc09f214b7654c3189d625e",
-      "size_bytes": 9635
+      "reason": "git_untracked_in_phase_attestation_branch"
     },
     {
       "path": ".codex/agents/test-harness-agent.toml",
       "sha256": "046430fa88e6cce67690e2fe036dddc597705be8dbb1f575a07834d7cb870313",
-      "size_bytes": 7895
+      "reason": "git_untracked_in_phase_attestation_branch"
     },
     {
       "path": ".codex/agents/pm-agent.toml",
       "sha256": "71c45ac3885c2f7a19e8b8941aa114549aad5ecdf13af5d290b12c91e5bd6cdc",
-      "size_bytes": 48944
+      "reason": "git_untracked_in_phase_attestation_branch"
+    },
+    {
+      "path": "pipeline.py",
+      "sha256": "e1e69856808e52a4cce107cdfa8299d044fdad5638fdd59bc10705a34caa0cb2",
+      "reason": "phase_attestation_branch_workspace_only"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "8b5b3a99a0eb61bfdd780c5b991efd61053e5dc7a4313d6ca75a72b27a493361",
+      "reason": "phase_attestation_branch_workspace_only"
     },
     {
       "path": ".claude/agents/pm-agent.md",
       "sha256": "02859b85c808afb6faf0bb4ff011f56e92ffbe115507f4c98a1c305f25570137",
-      "size_bytes": 51650
+      "reason": "phase_attestation_branch_workspace_only"
     },
     {
       "path": "tests/test_legacy_cleanup_b0ab.py",
       "sha256": "e4a22672c6237c52c7661c1e62f081b38364e94befb7326cf2223bb99e7b9abc",
-      "size_bytes": 6206
+      "reason": "phase_attestation_branch_workspace_only"
     }
-  ],
-  "local_only_files": []
+  ]
 }
