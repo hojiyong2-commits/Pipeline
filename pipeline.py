@@ -12984,17 +12984,39 @@ def _get_current_pr_head_sha() -> Optional[str]:
     return None
 
 
-def _get_latest_ci_run_id() -> Optional[str]:
-    """최신 GitHub Actions CI run ID를 gh CLI로 조회.
+def _get_pr_branch_ci_run_id(branch: Optional[str] = None) -> Optional[str]:
+    """현재 PR/브랜치에 해당하는 GitHub Actions CI run ID 조회.
 
+    전역 최신 run 대신 현재 브랜치의 최신 run만 선택하여
+    phase-attestation 브랜치나 다른 PR run 오염을 방지한다.
+    IMP-20260531-4AC2: _get_latest_ci_run_id 대체 함수.
+
+    Args:
+        branch: 명시적 브랜치명. None이면 git rev-parse --abbrev-ref HEAD 자동 조회.
     Returns:
-        run ID 문자열 또는 None (gh CLI 미설치/run 없음).
+        run ID 문자열 또는 None (gh CLI 미설치/run 없음/detached HEAD).
     Raises:
         없음.
     """
+    if branch is None:
+        # 현재 git 브랜치 자동 조회
+        try:
+            br_res = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, timeout=5,
+                encoding="utf-8", errors="replace",
+            )
+            if br_res.returncode == 0:
+                branch = br_res.stdout.strip()
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            return None
+    # detached HEAD 또는 빈 문자열 안전 폴백
+    if not branch or branch == "HEAD":
+        return None
     try:
         r = subprocess.run(
-            ["gh", "run", "list", "--limit", "1", "--json", "databaseId",
+            ["gh", "run", "list", "--branch", branch, "--limit", "1",
+             "--json", "databaseId",
              "--jq", ".[0].databaseId"],
             capture_output=True, text=True, timeout=10,
             encoding="utf-8", errors="replace",
@@ -13005,6 +13027,20 @@ def _get_latest_ci_run_id() -> Optional[str]:
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
     return None
+
+
+def _get_latest_ci_run_id() -> Optional[str]:
+    """[DEPRECATED] 브랜치 필터 없는 전역 최신 CI run 조회.
+
+    IMP-20260531-4AC2: _get_pr_branch_ci_run_id()로 위임.
+    하위 호환성 유지 목적으로 보존.
+
+    Returns:
+        run ID 문자열 또는 None (gh CLI 미설치/run 없음/detached HEAD).
+    Raises:
+        없음.
+    """
+    return _get_pr_branch_ci_run_id()
 
 
 def _get_pr_body_text() -> Optional[str]:
@@ -13207,7 +13243,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # PR/CI 정보 가져오기 (gh CLI 없으면 빈 문자열)
     pr_url = _get_current_pr_url() or ""
     pr_head_sha = _get_current_pr_head_sha() or ""
-    ci_run_id = _get_latest_ci_run_id() or ""
+    ci_run_id = _get_pr_branch_ci_run_id() or ""
 
     # IMP-20260531-AEF0 MT-1: 기존 요청 로드 → 재사용 판단
     force_new = bool(getattr(args, "force_new_code", False))
@@ -13848,7 +13884,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
         # CI run ID 변경 확인 (gh CLI 실패 시 BLOCKED — 검증 불가 = 안전 실패)
         _stored_run = str(_req.get("github_ci_run_id", "") or "")
         if _stored_run:
-            _current_run_raw = _get_latest_ci_run_id()
+            _current_run_raw = _get_pr_branch_ci_run_id()
             _current_run = str(_current_run_raw).strip() if _current_run_raw is not None else ""
             if not _current_run:
                 _record_failure_packet(
