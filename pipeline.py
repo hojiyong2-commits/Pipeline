@@ -3539,6 +3539,9 @@ def _consistency_listed_files(text: str) -> "tuple[set, bool]":
         # `34.74s`, `0.5s` 같은 숫자.숫자s 패턴(타이밍 표기)은 파일 확장자가 아니다.
         if re.search(r"^\d+(\.\d+)?s$", token):
             continue
+        # IMP-20260531-BBDB: URL은 파일 경로가 아니다 — http/https로 시작하면 제외.
+        if token.startswith("http://") or token.startswith("https://"):
+            continue
         # 파일처럼 보이는 토큰만 인정: 경로(`/`) 포함이거나 올바른 확장자(`.` + 영숫자 접미어) 보유.
         # 한국어 문장 끝의 `.`(예: `됩니다.`)은 파일명으로 취급하지 않는다 (IMP-20260522-29C1 fix-forward v5).
         if "/" not in token and "\\" not in token and not re.search(r"\.[A-Za-z0-9_]{1,15}$", token):
@@ -13042,10 +13045,10 @@ def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Non
 판단 정보 상태: **판단 가능**
 
 ### 확인할 결과물
-- 결과물: {evidence}
-- PR: {pr_url}
-- GitHub Actions: {ci_link}
-- 승인 요청 ID: {request_id}
+결과물: {evidence}
+PR: {pr_url}
+GitHub Actions: {ci_link}
+승인 요청 ID: {request_id}
 {files_section}
 ### 승인 방법
 결과물을 확인하신 후 아래 코드를 **정확히** 입력하세요.
