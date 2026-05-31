@@ -1,0 +1,7 @@
+{
+  "scenario": "PR head SHA가 변경된 경우 (새 커밋 push됨) gates request-accept 재실행",
+  "existing_status": "PENDING",
+  "change": "pr_head_sha 다름 (새 커밋이 push됨)",
+  "force_new_code": false,
+  "expected_nonce_reused": false
+}

@@ -1,0 +1,7 @@
+{
+  "scenario": "evidence 파일 SHA가 변경된 경우 gates request-accept 재실행",
+  "existing_status": "PENDING",
+  "change": "evidence_sha256 다름 (파일 내용 변경됨)",
+  "force_new_code": false,
+  "expected_nonce_reused": false
+}

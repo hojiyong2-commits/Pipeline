@@ -1,0 +1,7 @@
+{
+  "scenario": "--force-new-code 옵션 지정 시 동일 조건이어도 새 코드 발급",
+  "existing_status": "PENDING",
+  "change": "--force-new-code 플래그 지정 (나머지는 동일)",
+  "force_new_code": true,
+  "expected_nonce_reused": false
+}
