@@ -18,13 +18,10 @@ TC-BR1 ~ TC-BR5 — PIPELINE_STATE_PATH 격리 + subprocess 기반 실제 CLI.
 """
 from __future__ import annotations
 
-import json
-import os
 import subprocess
-import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from typing import List
+from unittest.mock import patch
 
 # ─── 헬퍼 ──────────────────────────────────────────────────────────────────────
 
