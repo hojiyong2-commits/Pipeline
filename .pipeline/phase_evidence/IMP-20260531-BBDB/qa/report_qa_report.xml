@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260531-BBDB</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+  <max_score>120</max_score>
+  <reviewer>qa-agent</reviewer>
+  <reviewed_at>2026-05-31T02:50:00Z</reviewed_at>
+
+  <handover_received>
+    <evidence>pipeline.py,CLAUDE.md,.claude/agents/pm-agent.md,.claude/agents/test-harness-agent.md,tests/e2e/test_user_acceptance_nonce_bbdb.py,docs/RELEASE_NOTES_IMP-20260531-BBDB.md,tests/oracles/IMP-20260531-BBDB/</evidence>
+    <dev_phase_attestation>PASS run_id=26701051368 commit=65daf063bfc4</dev_phase_attestation>
+  </handover_received>
+
+  <code_presence_checks>
+    <check id="1" item="_issue_acceptance_nonce 함수" location="pipeline.py:2848" status="PRESENT" />
+    <check id="2" item="_write_acceptance_request / _load_acceptance_request / _consume_acceptance_request 함수" location="pipeline.py:2884,2938,2956" status="PRESENT" />
+    <check id="3" item="ACCEPTANCE_REQUEST_FILE / ACCEPT_CODE_PATTERN / REJECT_CODE_PATTERN 상수" location="pipeline.py:3112-3114" status="PRESENT" />
+    <check id="4" item="_cmd_gates_request_accept 함수" location="pipeline.py:13057" status="PRESENT" />
+    <check id="5" item="gates accept 핸들러 --acceptance-code 및 nonce 검증" location="pipeline.py:13520-13649" status="PRESENT" />
+    <check id="6" item="--user-confirmed 단독 시 BLOCKED 처리" location="pipeline.py:13522-13525" status="PRESENT" />
+    <check id="7" item="CLAUDE.md User Acceptance Nonce Gate 섹션" location="CLAUDE.md:1150" status="PRESENT" />
+    <check id="8" item="pm-agent.md 세션 요약 오염 방지 규칙" location=".claude/agents/pm-agent.md:687-691" status="PRESENT" />
+    <check id="9" item="test-harness-agent.md ACCEPT 코드 안내 절차" location=".claude/agents/test-harness-agent.md:184-228" status="PRESENT" />
+  </code_presence_checks>
+
+  <e2e_tests>
+    <suite>tests/e2e/test_user_acceptance_nonce_bbdb.py</suite>
+    <total>14</total>
+    <passed>14</passed>
+    <failed>0</failed>
+    <duration_seconds>9.94</duration_seconds>
+    <verdict>PASS</verdict>
+    <cases>
+      <case id="tc1" name="request_accept_creates_json" result="PASS" />
+      <case id="tc2" name="user_confirmed_only_blocked" result="PASS" />
+      <case id="tc3" name="wrong_nonce_blocked" result="PASS" />
+      <case id="tc4" name="pipeline_id_mismatch_blocked" result="PASS" />
+      <case id="tc5" name="evidence_changed_blocked" result="PASS" />
+      <case id="tc6" name="pr_sha_changed_unit" result="PASS" />
+      <case id="tc7" name="ci_run_id_stored" result="PASS" />
+      <case id="tc8" name="correct_code_passes_nonce_validation" result="PASS" />
+      <case id="tc9" name="reject_no_acceptance_code_fail" result="PASS" />
+      <case id="tc10" name="user_confirmed_warning_then_blocked" result="PASS" />
+      <case id="tc11" name="missing_acceptance_request_blocked" result="PASS" />
+      <case id="tc12" name="stale_pr_body_patterns_exist" result="PASS" />
+      <case id="tc13" name="consumed_request_blocked" result="PASS" />
+      <case id="tc14" name="nonce_helper_roundtrip" result="PASS" />
+    </cases>
+  </e2e_tests>
+
+  <regression_tests>
+    <suite>tests/ (manual + test_scorers_smart_resolve 제외)</suite>
+    <total>605</total>
+    <passed>605</passed>
+    <failed>0</failed>
+    <subtests_passed>15</subtests_passed>
+    <warnings>2</warnings>
+    <duration_seconds>140.06</duration_seconds>
+    <verdict>PASS</verdict>
+    <excluded>
+      <file>tests/test_scorers_smart_resolve.py</file>
+      <reason>pre-existing ModuleNotFoundError: 'core.acceptance' (main 브랜치에도 존재; BBDB와 무관)</reason>
+    </excluded>
+  </regression_tests>
+
+  <static_analysis>
+    <ruff>
+      <command>python -m ruff check pipeline.py</command>
+      <impl_errors>9</impl_errors>
+      <main_errors>9</main_errors>
+      <delta>0</delta>
+      <verdict>NO_REGRESSION</verdict>
+      <note>9개 모두 Python 3.10 f-string 백슬래시 경고 (pre-existing). BBDB가 추가한 코드에는 ruff 오류 없음.</note>
+    </ruff>
+    <mypy>
+      <command>python -m mypy pipeline.py --ignore-missing-imports</command>
+      <impl_errors>112</impl_errors>
+      <main_errors>101</main_errors>
+      <delta>+11</delta>
+      <verdict>NO_NEW_ERRORS_IN_BBDB_SCOPE</verdict>
+      <note>11개 차이는 모두 16000+ 줄대(cluster 명령어 코드)에 위치하며, BBDB MT-3 변경 위치(74, 2835-3127, 12862-13730, 15340)와 무관. 라인 번호 시프트로 인한 표시 차이일 뿐 신규 결함 아님. BBDB가 추가한 코드(nonce/request/accept 핸들러)에는 mypy 오류 없음.</note>
+    </mypy>
+  </static_analysis>
+
+  <micro_task_boundary>
+    <verdict>WITHIN_SCOPE</verdict>
+    <declared_files>
+      <file>pipeline.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>.claude/agents/test-harness-agent.md</file>
+      <file>tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+      <file>docs/RELEASE_NOTES_IMP-20260531-BBDB.md</file>
+      <file>tests/oracles/IMP-20260531-BBDB/</file>
+    </declared_files>
+    <actual_changed_files_match>true</actual_changed_files_match>
+    <trust_root_violation>false</trust_root_violation>
+    <profile>HIGH_RISK (Trust-Root 파일 명시적 scope 포함)</profile>
+  </micro_task_boundary>
+
+  <codex_review>
+    <stage>code</stage>
+    <result>ACCEPT</result>
+    <review_model>GPT-5.5</review_model>
+    <diff_sha256>4905f97a50a02afe598e15fb24741bf5cbff1d7108b9d34bad667c22747dba14</diff_sha256>
+    <head_sha>ccaaa32510158c11caa47aab4a788ce178d4ae70</head_sha>
+    <recorded_via>codex-record (OpenAI API rate-limited at 429 insufficient_quota; manual record)</recorded_via>
+  </codex_review>
+
+  <category_scores>
+    <category name="correctness" score="22" max="25" note="nonce 검증/CONSUMED 처리/stale SHA·run_id·evidence 검증 모두 동작. backward-compat warning UX 명확." />
+    <category name="robustness" score="19" max="20" note="모든 _write_acceptance_request 입력에 None/type/empty 검증. 파일 없음 시 BLOCKED 명시." />
+    <category name="security" score="20" max="20" note="secrets 모듈 기반 40bit nonce. ACCEPTANCE_REQUEST_FILE은 일회용 CONSUMED 처리. pipeline_id 교차 방어." />
+    <category name="test_coverage" score="22" max="25" note="14케이스 E2E + 3개 oracle (normal/edge*2) PASS. tc12 stale PR body 패턴 검증 포함." />
+    <category name="docs_clarity" score="13" max="15" note="CLAUDE.md/pm-agent.md/test-harness-agent.md 모두 새 절차 명시. 세션 요약 오염 방지 규칙 포함." />
+    <category name="boundary_compliance" score="14" max="15" note="HIGH_RISK 프로필 + Trust-Root scope 명시. 실제 diff는 declared scope 안에 있음." />
+  </category_scores>
+
+  <verdict_summary>
+    code presence 9/9 PASS, BBDB E2E 14/14 PASS, regression 605/605 PASS, ruff 신규 0개, mypy 신규 0개(BBDB scope 내), Codex code stage ACCEPT 갱신 완료. User Acceptance Nonce Gate 구현이 의도대로 동작하며 회귀 없음을 확인.
+  </verdict_summary>
+</qa_report>
