@@ -1,75 +1,132 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-31T11:06:51Z",
+  "generated_at": "2026-05-31T11:39:42Z",
   "pipeline_id": "IMP-20260531-AEF0",
-  "phase": "pm",
+  "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "5914ff1b110d8fe2a642a565a7795513e7aa6025",
+  "commit_hint": "fc4bdf0aa28a80ac12cbfe281ecd675ec5429ba8",
   "state": {
-    "current_phase": "dev",
-    "phase_completed_at": "2026-05-31T11:05:41Z",
-    "report_file": "step_plan.xml",
-    "evidence": null
+    "current_phase": "qa",
+    "phase_completed_at": "2026-05-31T11:31:05Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/input.json,tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/expected.json,tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/input.json,tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/expected.json,tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/input.json,tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/expected.json,tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/input.json,tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/expected.json,tests/oracles/IMP-20260531-AEF0/edge_consumed_new_nonce/input.json,tests/oracles/IMP-20260531-AEF0/edge_consumed_new_nonce/expected.json,tests/oracles/IMP-20260531-AEF0/edge_force_new_code/input.json,tests/oracles/IMP-20260531-AEF0/edge_force_new_code/expected.json,tests/oracles/IMP-20260531-AEF0/oracle_manifest.json"
   },
   "agent_run": {
-    "run_id": "pm_planner-39061099fc66d162",
-    "phase": "pm_planner",
-    "agent_id": "pm-planner-agent",
+    "run_id": "dev-6b26c29eb75458b3",
+    "phase": "dev",
+    "agent_id": "dev-agent",
     "status": "COMPLETED",
-    "output_file": "step_plan.xml",
-    "output_sha256": "ade5cfd50096b85139ebc54655901b6b3eb9e5132d5fd4bf31f566a6bd02f7f6",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260531-AEF0/pm/agent_receipt_pm_planner-39061099fc66d162.json",
-    "receipt_sha256": "3d08c607b5818eb69a0c2b07fc2c4488f706652587ea61474a03f26f97920e25",
-    "used_by_phase": "pm",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\pm_planner\\pm_planner-39061099fc66d162.json"
+    "output_file": "dev_handover.xml",
+    "output_sha256": "2b91652b1390e600770ae855b7bdaa79197faddf53b66c2bc7b9a02c9f7ea329",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260531-AEF0/dev/agent_receipt_dev-6b26c29eb75458b3.json",
+    "receipt_sha256": "381353499390a8bcce61650b4bf5790ded86def346914ec0ff627fc1c89d37b2",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\dev\\dev-6b26c29eb75458b3.json"
   },
-  "manager_run": {
-    "run_id": "pipeline_manager-bbb9d628abfa9841",
-    "phase": "pipeline_manager",
-    "agent_id": "pipeline-manager-agent",
-    "status": "COMPLETED",
-    "output_file": "manager_handoff.xml",
-    "output_sha256": "03ce90d412defe3418cdf3d9b5cbf64c6b55cd40c61e866b5d35fffb5f41d115",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260531-AEF0/pm/manager_receipt_pipeline_manager-bbb9d628abfa9841.json",
-    "receipt_sha256": "42deed96cdb4f2e910363dbc9c5e7c04ad2aec52690be17b5ffb4a5364247276",
-    "used_by_phase": "pm_manager",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\pipeline_manager\\pipeline_manager-bbb9d628abfa9841.json"
-  },
+  "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\pm_planner\\pm_planner-39061099fc66d162.json",
-      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/pm/agent_receipt_pm_planner-39061099fc66d162.json",
-      "sha256": "3d08c607b5818eb69a0c2b07fc2c4488f706652587ea61474a03f26f97920e25",
-      "size_bytes": 520,
-      "requires_force_add": true
-    },
-    {
-      "label": "manager_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\pipeline_manager\\pipeline_manager-bbb9d628abfa9841.json",
-      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/pm/manager_receipt_pipeline_manager-bbb9d628abfa9841.json",
-      "sha256": "42deed96cdb4f2e910363dbc9c5e7c04ad2aec52690be17b5ffb4a5364247276",
-      "size_bytes": 544,
+      "source": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\dev\\dev-6b26c29eb75458b3.json",
+      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/dev/agent_receipt_dev-6b26c29eb75458b3.json",
+      "sha256": "381353499390a8bcce61650b4bf5790ded86def346914ec0ff627fc1c89d37b2",
+      "size_bytes": 502,
       "requires_force_add": true
     },
     {
       "label": "report",
-      "source": "step_plan.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/pm/report_step_plan.xml",
-      "sha256": "ade5cfd50096b85139ebc54655901b6b3eb9e5132d5fd4bf31f566a6bd02f7f6",
-      "size_bytes": 20180,
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/dev/report_dev_handover.xml",
+      "sha256": "2b91652b1390e600770ae855b7bdaa79197faddf53b66c2bc7b9a02c9f7ea329",
+      "size_bytes": 3892,
       "requires_force_add": true
     },
     {
-      "label": "manager_report",
-      "source": "manager_handoff.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/pm/manager_report_manager_handoff.xml",
-      "sha256": "03ce90d412defe3418cdf3d9b5cbf64c6b55cd40c61e866b5d35fffb5f41d115",
-      "size_bytes": 2650,
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/dev/scope_manifest_scope_manifest.json",
+      "sha256": "91997322c6386c4913c4814ac248313e4c768afa881d68bdeb67958ed37b5c73",
+      "size_bytes": 1519,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "cb21998f30663f6afeec48a502d01fe1ac0b51de490d78cfdb37e8eb59527368",
+      "size_bytes": 799793
+    },
+    {
+      "path": "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+      "sha256": "156c1a1d98c7835e5119cf6dc7d9f987e470e9472b99c39249d460f1bf02913f",
+      "size_bytes": 15528
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/input.json",
+      "sha256": "dd2d3a98118a0dfdf0a5f2bb1085288a6ca8b647aadf660b7c2e4e7b2d5c22ca",
+      "size_bytes": 227
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/expected.json",
+      "sha256": "128c07e01cc48c02eb23661aac8809420dced00a27da910e54dee0da5afe1355",
+      "size_bytes": 100
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/input.json",
+      "sha256": "7386209c0a1a7dee9d0fe5b7337f9ad5c3b0479cbe887ee8e52a8fcb44bfe3e0",
+      "size_bytes": 248
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/expected.json",
+      "sha256": "48e35b1fd4e21bf89e1aebb6d639e47ffe3d8ee8383b10949386b3092b9bf09e",
+      "size_bytes": 117
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/input.json",
+      "sha256": "2d6599a994bcfce98f957b29b3ad20fa57141bd828b82e005607411c7308085f",
+      "size_bytes": 255
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/expected.json",
+      "sha256": "e458b00d24b4bd738f8cb4a83383bb6e9099ee5de6286da6c4df44dff3b10184",
+      "size_bytes": 105
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/input.json",
+      "sha256": "e675f1f5ea24870e1289a52bdd792dde300403dbcd82f348f43534febe8565b4",
+      "size_bytes": 254
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/expected.json",
+      "sha256": "a35b27d0bfdb762d5b169217500667abf68de603c386326c952f20dd2aa25345",
+      "size_bytes": 115
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_consumed_new_nonce/input.json",
+      "sha256": "1e0721bb6f3555f84dc6e84d333a7066fab5690aecb7ee2f469aae4d19135a36",
+      "size_bytes": 248
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_consumed_new_nonce/expected.json",
+      "sha256": "b33b63035d78e9e8eca79d0d9128eb53da9ec25fe1b1e418f1aa13f9d5725c84",
+      "size_bytes": 109
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_force_new_code/input.json",
+      "sha256": "7885fbfef06561bc5732fa3188bd28f59180227714ac1d94c3131f1497fb3f59",
+      "size_bytes": 259
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/edge_force_new_code/expected.json",
+      "sha256": "1669193806f4ae9139284893997bbdf34951de94ab9ff4936551de4d65d9803d",
+      "size_bytes": 120
+    },
+    {
+      "path": "tests/oracles/IMP-20260531-AEF0/oracle_manifest.json",
+      "sha256": "56ad7933b06617b0407562c6c2014db4cb8965037a295f5d8a25578231b3e116",
+      "size_bytes": 4009
+    }
+  ],
   "local_only_files": []
 }
