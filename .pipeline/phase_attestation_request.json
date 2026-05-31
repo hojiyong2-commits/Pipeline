@@ -1,54 +1,46 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-05-31T11:39:42Z",
+  "generated_at": "2026-05-31T12:15:37Z",
   "pipeline_id": "IMP-20260531-AEF0",
-  "phase": "dev",
-  "phase_status": "DONE",
-  "commit_hint": "fc4bdf0aa28a80ac12cbfe281ecd675ec5429ba8",
+  "phase": "qa",
+  "phase_status": "PASS",
+  "commit_hint": "a559fc5a41811a5b33a6c5ba5c9f8bb6d4ee04c0",
   "state": {
-    "current_phase": "qa",
-    "phase_completed_at": "2026-05-31T11:31:05Z",
-    "report_file": "dev_handover.xml",
-    "evidence": "pipeline.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/input.json,tests/oracles/IMP-20260531-AEF0/normal_nonce_reuse/expected.json,tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/input.json,tests/oracles/IMP-20260531-AEF0/edge_evidence_sha_changed/expected.json,tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/input.json,tests/oracles/IMP-20260531-AEF0/edge_pr_sha_changed/expected.json,tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/input.json,tests/oracles/IMP-20260531-AEF0/edge_ci_run_changed/expected.json,tests/oracles/IMP-20260531-AEF0/edge_consumed_new_nonce/input.json,tests/oracles/IMP-20260531-AEF0/edge_consumed_new_nonce/expected.json,tests/oracles/IMP-20260531-AEF0/edge_force_new_code/input.json,tests/oracles/IMP-20260531-AEF0/edge_force_new_code/expected.json,tests/oracles/IMP-20260531-AEF0/oracle_manifest.json"
+    "current_phase": "sec",
+    "phase_completed_at": "2026-05-31T12:15:07Z",
+    "report_file": "qa_report.xml",
+    "evidence": null
   },
   "agent_run": {
-    "run_id": "dev-6b26c29eb75458b3",
-    "phase": "dev",
-    "agent_id": "dev-agent",
+    "run_id": "qa-b1960c04698a704a",
+    "phase": "qa",
+    "agent_id": "qa-agent",
     "status": "COMPLETED",
-    "output_file": "dev_handover.xml",
-    "output_sha256": "2b91652b1390e600770ae855b7bdaa79197faddf53b66c2bc7b9a02c9f7ea329",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260531-AEF0/dev/agent_receipt_dev-6b26c29eb75458b3.json",
-    "receipt_sha256": "381353499390a8bcce61650b4bf5790ded86def346914ec0ff627fc1c89d37b2",
-    "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\dev\\dev-6b26c29eb75458b3.json"
+    "output_file": "qa_report.xml",
+    "output_sha256": "8c2a3dcb39cad3ddb86985055ff7dfa6c75b6e1feaef6c240321d2f14ec9d633",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260531-AEF0/qa/agent_receipt_qa-b1960c04698a704a.json",
+    "receipt_sha256": "9f9ba417fb975d4e53670ece50bcbe177f9b0254b9c1e4c46f51ce986ed8f1bd",
+    "used_by_phase": "qa",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\qa\\qa-b1960c04698a704a.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\dev\\dev-6b26c29eb75458b3.json",
-      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/dev/agent_receipt_dev-6b26c29eb75458b3.json",
-      "sha256": "381353499390a8bcce61650b4bf5790ded86def346914ec0ff627fc1c89d37b2",
-      "size_bytes": 502,
-      "requires_force_add": true
+      "source": ".pipeline\\agent_receipts\\IMP-20260531-AEF0\\qa\\qa-b1960c04698a704a.json",
+      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/qa/agent_receipt_qa-b1960c04698a704a.json",
+      "sha256": "9f9ba417fb975d4e53670ece50bcbe177f9b0254b9c1e4c46f51ce986ed8f1bd",
+      "size_bytes": 496,
+      "requires_force_add": false
     },
     {
       "label": "report",
-      "source": "dev_handover.xml",
-      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/dev/report_dev_handover.xml",
-      "sha256": "2b91652b1390e600770ae855b7bdaa79197faddf53b66c2bc7b9a02c9f7ea329",
-      "size_bytes": 3892,
-      "requires_force_add": true
-    },
-    {
-      "label": "scope_manifest",
-      "source": "scope_manifest.json",
-      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/dev/scope_manifest_scope_manifest.json",
-      "sha256": "813217779e86c762103ca85b2884619e4c7ef94449ebb1ec9bb02443d650ee2e",
-      "size_bytes": 1484,
-      "requires_force_add": true
+      "source": "qa_report.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260531-AEF0/qa/report_qa_report.xml",
+      "sha256": "811826bf1e8cbf017525ae4ec6fa27be3ef7b57d7c8fe2409b6f9ea0546f6ae8",
+      "size_bytes": 2045,
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
