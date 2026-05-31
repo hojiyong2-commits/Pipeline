@@ -1,0 +1,7 @@
+{
+  "scenario": "기존 acceptance_request의 status가 PENDING이 아닌 경우 (이미 사용됨)",
+  "existing_status": "CONSUMED",
+  "change": "status가 CONSUMED (이미 승인에 사용됨)",
+  "force_new_code": false,
+  "expected_nonce_reused": false
+}

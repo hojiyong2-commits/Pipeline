@@ -2891,6 +2891,58 @@ def _compute_file_sha256(path: str) -> Optional[str]:
         return None
 
 
+# ─── IMP-20260531-AEF0 MT-1: nonce 재사용 판단 헬퍼 ─────────────────────────────
+def _should_reuse_acceptance_nonce(
+    existing_req: Dict[str, Any],
+    new_pipeline_id: str,
+    new_evidence: str,
+    new_evidence_sha256: Optional[str],
+    new_pr_head_sha: str,
+    new_ci_run_id: str,
+    force_new: bool = False,
+) -> "tuple[bool, str]":
+    """기존 acceptance_request를 재사용할지 5-field 비교로 판단.
+
+    동일 조건(pipeline_id / evidence / evidence_sha256 또는 evidence_url /
+    pr_head_sha / github_ci_run_id)이고 기존 코드가 PENDING 상태이면 재사용.
+    하나라도 다르거나 force_new=True이면 새 코드 발급.
+
+    Args:
+        existing_req: 기존 acceptance_request.json 데이터 dict.
+        new_pipeline_id: 현재 pipeline_id.
+        new_evidence: 결과물 경로 또는 URL.
+        new_evidence_sha256: 결과물 파일 SHA-256 (URL이면 None).
+        new_pr_head_sha: 현재 PR head commit SHA.
+        new_ci_run_id: 현재 GitHub Actions run ID.
+        force_new: True이면 조건과 무관하게 항상 새 코드 발급.
+    Returns:
+        (should_reuse: bool, reason_ko: str) 튜플.
+    Raises:
+        없음.
+    """
+    if force_new:
+        return False, "--force-new-code 옵션이 지정되어 새 코드를 발급합니다."
+    if existing_req.get("status") != "PENDING":
+        status_val = existing_req.get("status", "알 수 없음")
+        return False, f"기존 코드 상태가 {status_val}이어서 새 코드를 발급합니다."
+    if existing_req.get("pipeline_id") != new_pipeline_id:
+        return False, "파이프라인 ID가 달라서 새 코드를 발급합니다."
+    if existing_req.get("evidence") != new_evidence:
+        return False, "결과물 경로가 달라서 새 코드를 발급합니다."
+    if new_evidence_sha256 is not None:
+        if existing_req.get("evidence_sha256") != new_evidence_sha256:
+            return False, "결과물 파일 내용이 달라서(SHA-256 변경) 새 코드를 발급합니다."
+    else:
+        # URL 기반 증거: evidence_url 필드로 비교
+        if existing_req.get("evidence_url") != new_evidence:
+            return False, "결과물 URL이 달라서 새 코드를 발급합니다."
+    if existing_req.get("pr_head_sha") != new_pr_head_sha:
+        return False, "PR head SHA가 달라서(새 커밋이 push됨) 새 코드를 발급합니다."
+    if str(existing_req.get("github_ci_run_id", "")) != str(new_ci_run_id):
+        return False, "GitHub Actions run ID가 달라서 새 코드를 발급합니다."
+    return True, "PR, 결과물, CI 상태가 모두 같습니다."
+
+
 def _write_acceptance_request(
     pipeline_id: str,
     evidence: str,
@@ -13157,15 +13209,46 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     pr_head_sha = _get_current_pr_head_sha() or ""
     ci_run_id = _get_latest_ci_run_id() or ""
 
-    # acceptance_request.json 생성
-    req = _write_acceptance_request(pipeline_id, str(evidence), pr_url, pr_head_sha, ci_run_id)
-    nonce = req["nonce"]
+    # IMP-20260531-AEF0 MT-1: 기존 요청 로드 → 재사용 판단
+    force_new = bool(getattr(args, "force_new_code", False))
+    evidence_str = str(evidence)
+    is_url = evidence_str.startswith(("http://", "https://"))
+    new_evidence_sha256: Optional[str] = None if is_url else _compute_file_sha256(evidence_str)
+
+    existing_req = _load_acceptance_request()
+    reuse = False
+    reuse_reason = ""
+    if existing_req is not None:
+        reuse, reuse_reason = _should_reuse_acceptance_nonce(
+            existing_req,
+            pipeline_id,
+            evidence_str,
+            new_evidence_sha256,
+            pr_head_sha,
+            ci_run_id,
+            force_new=force_new,
+        )
+
+    if reuse and existing_req is not None:
+        # 기존 코드 재사용: acceptance_request.json 유지, 표시만 업데이트
+        req = existing_req
+        nonce = req["nonce"]
+        print()
+        print(f"  [재사용] {reuse_reason}")
+    else:
+        # 새 코드 발급
+        if existing_req is not None:
+            print()
+            print(f"  [새 코드 발급] {reuse_reason}")
+        req = _write_acceptance_request(pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id)
+        nonce = req["nonce"]
+
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
     reject_code = f"REJECT-{pipeline_id}-{nonce}"
 
     # GitHub 최종 확인 댓글 생성/갱신 (gh CLI 없으면 건너뜀)
     try:
-        _update_github_acceptance_comment(req, str(evidence))
+        _update_github_acceptance_comment(req, evidence_str)
     except Exception:
         pass  # GitHub 댓글 실패해도 코드 발급은 계속
 
@@ -13189,7 +13272,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     print("=" * 62)
     print()
     print(f"  승인 요청 ID: {req['request_id']}  (acceptance_request.json 저장됨)")
-    _log_event(state, f"acceptance request issued: request_id={req['request_id']} nonce={nonce}")
+    reused_label = "재사용" if reuse else "신규 발급"
+    _log_event(state, f"acceptance request {reused_label}: request_id={req['request_id']} nonce={nonce}")
     _save(state)
 
 
@@ -15542,6 +15626,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="사용자 최종 확인 코드(nonce) 발급 — acceptance_request.json 생성 + PR 댓글 갱신",
     )
     p_gate_req.add_argument("--evidence", required=True, help="결과물 경로(파일) 또는 URL(http://, https://)")
+    # IMP-20260531-AEF0 MT-1: --force-new-code — 동일 조건이어도 새 nonce 강제 발급
+    p_gate_req.add_argument(
+        "--force-new-code",
+        dest="force_new_code",
+        action="store_true",
+        default=False,
+        help="기존 코드가 PENDING이고 조건이 같아도 새 코드를 강제 발급합니다.",
+    )
 
     p_gate_accept = gsub.add_parser("accept", help="Record user behavior acceptance")
     p_gate_accept.add_argument("--result", required=True, choices=["ACCEPT", "REJECT", "accept", "reject"])

@@ -1,0 +1,7 @@
+{
+  "scenario": "GitHub Actions CI run ID가 변경된 경우 gates request-accept 재실행",
+  "existing_status": "PENDING",
+  "change": "github_ci_run_id 다름 (새 CI run 트리거됨)",
+  "force_new_code": false,
+  "expected_nonce_reused": false
+}

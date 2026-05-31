@@ -1,0 +1,7 @@
+{
+  "scenario": "동일 evidence/pr_sha/ci_run_id 조건에서 gates request-accept 재실행",
+  "existing_status": "PENDING",
+  "change": "없음 (모두 동일)",
+  "force_new_code": false,
+  "expected_nonce_reused": true
+}

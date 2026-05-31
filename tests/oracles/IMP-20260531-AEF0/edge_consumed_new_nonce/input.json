@@ -1,0 +1,7 @@
+{
+  "scenario": "status=CONSUMED인 기존 코드가 있을 때 gates request-accept 재실행",
+  "existing_status": "CONSUMED",
+  "change": "없음 (동일 evidence/pr_sha/ci_run_id)",
+  "force_new_code": false,
+  "expected_nonce_reused": false
+}
