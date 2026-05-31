@@ -1,5 +1,4 @@
 {
   "return_type": "null",
-  "return_value": null,
-  "description": "sn='SN-NOTEXIST' 가 D열에 없으면 None 반환"
+  "return_value": null
 }
