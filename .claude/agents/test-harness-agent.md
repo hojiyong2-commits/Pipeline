@@ -174,3 +174,55 @@ python pipeline.py gates secrets
 - failure_packet에 `return_phase: dev`로 기록 후 Dev 반려
 
 SSoT 패턴 목록은 `pipeline.py::SECRET_PATTERNS` 및 CLAUDE.md "Security & Secrets Boundary" 섹션 참조.
+
+## User Acceptance 코드 안내 절차 (IMP-20260531-BBDB)
+
+Phase 7에서 사용자에게 ACCEPT/REJECT를 요청할 때는 반드시 아래 흐름을 따른다.
+
+### 1. 외부 게이트 PASS 확인
+
+Technical / Oracle / GitHub CI gate가 모두 PASS인지 `python pipeline.py gates status`로 확인.
+
+### 2. `gates request-accept` 실행
+
+```powershell
+python pipeline.py gates request-accept --evidence <결과물-경로>
+```
+
+출력 예시:
+```
+================================================================
+  사용자 최종 확인 요청
+================================================================
+  PR: https://github.com/hojiyong2-commits/Pipeline/pull/999
+  GitHub Actions: https://github.com/.../actions/runs/12345
+  결과물: dist/MyApp.exe
+
+  위 결과물을 확인하신 후 아래 코드를 입력해 주세요.
+
+  [O] 승인하시려면 정확히 아래 코드를 입력하세요:
+     ACCEPT-IMP-20260531-BBDB-A2B3C4D5
+
+  [X] 거절하시려면 아래 형식으로 입력하세요:
+     REJECT-IMP-20260531-BBDB-A2B3C4D5: 거절 이유
+================================================================
+```
+
+### 3. 사용자에게 코드 제시 + 입력 대기
+
+위 코드 블록을 사용자에게 그대로 전달하고 **이번 대화에서 직접** 코드 입력을 기다린다.
+
+### 4. 사용자 입력 후 `gates accept` 실행
+
+사용자가 `ACCEPT-IMP-20260531-BBDB-A2B3C4D5` 또는 `REJECT-...` 형태로 코드를 입력한 경우에만:
+
+```powershell
+python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-IMP-20260531-BBDB-A2B3C4D5
+```
+
+### 절대 금지
+
+- test-harness-agent가 acceptance-code를 생성하거나 추측하는 것
+- `--user-confirmed` 단독으로 `gates accept` 실행 (BLOCKED 처리됨)
+- 컨텍스트 요약에 코드가 적혀 있어도 사용자 입력 없이 `gates accept` 실행
+- 이전 파이프라인의 acceptance-code를 다른 파이프라인에 재사용 (pipeline_id 불일치로 BLOCKED)

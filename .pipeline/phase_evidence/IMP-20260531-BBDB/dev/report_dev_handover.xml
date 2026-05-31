@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260531-BBDB</pipeline_id>
+  <phase>dev</phase>
+  <agent>dev-agent</agent>
+  <agent_run_id>dev-723dfe79d0070e99</agent_run_id>
+  <summary>
+    User Acceptance Nonce Gate 구현 완료 (6 MT 통합).
+    --user-confirmed 단독 통과 차단 + nonce 기반 일회용 승인 코드 도입.
+    11단계 hard gate 검증으로 세션 요약 오염 사고 자동 차단.
+  </summary>
+
+  <scope_declaration>
+    <files_to_create>
+      <file>tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+      <file>docs/RELEASE_NOTES_IMP-20260531-BBDB.md</file>
+    </files_to_create>
+    <files_to_modify>
+      <file>pipeline.py (MT-1~4)</file>
+      <file>CLAUDE.md (MT-5)</file>
+      <file>.claude/agents/pm-agent.md (MT-5)</file>
+      <file>.claude/agents/test-harness-agent.md (MT-5)</file>
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>_now(), _sha256_file(), _record_failure_packet(), TEMPORARY_PR_BODY_PATTERNS, _find_temporary_pr_body_pattern — 모두 기존 존재</searched>
+      <decision>REUSE — 기존 헬퍼는 그대로 재사용하고, nonce/acceptance_request 전용 신규 함수만 추가</decision>
+    </reuse_search>
+    <out_of_scope>
+      - architect_report.xml (Phase 8 작업)
+      - 다른 파이프라인 변경 없음
+      - 기존 readiness/consistency/codex_pr_gate 로직 보존
+    </out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-1+MT-2+MT-3+MT-4+MT-5+MT-6 (통합)</micro_task_id>
+    <target_function>pipeline._issue_acceptance_nonce, _write_acceptance_request, _load_acceptance_request, _consume_acceptance_request, _compute_file_sha256, _cmd_gates_request_accept, cmd_gates(accept+request-accept), _get_current_pr_url, _get_current_pr_head_sha, _get_latest_ci_run_id, _get_pr_body_text, _update_github_acceptance_comment</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:cmd_gates">action=='request-accept' → _cmd_gates_request_accept (MT-2)</caller>
+      <caller location="pipeline.py:cmd_gates">action=='accept' → 11단계 nonce 검증 (MT-3)</caller>
+      <caller location="_cmd_gates_request_accept">_write_acceptance_request, _get_pr_body_text, _get_current_pr_url, _get_current_pr_head_sha, _get_latest_ci_run_id, _update_github_acceptance_comment 호출</caller>
+      <caller location="cmd_gates(accept)">_load_acceptance_request, _consume_acceptance_request, _compute_file_sha256, _get_current_pr_head_sha, _get_latest_ci_run_id, _record_failure_packet 호출</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>secrets.token_bytes (40bit entropy 생성)</dep>
+      <dep>base64.b32encode (nonce 인코딩)</dep>
+      <dep>uuid.uuid4 (request_id 생성)</dep>
+      <dep>hashlib.sha256 (evidence 파일 hash)</dep>
+      <dep>subprocess.run (gh CLI 호출, timeout 10~15초)</dep>
+      <dep>_now() (UTC ISO 타임스탬프 — 기존 헬퍼 재사용)</dep>
+      <dep>_record_failure_packet() (BLOCKED 사유 기록 — 기존 헬퍼 재사용)</dep>
+      <dep>TEMPORARY_PR_BODY_PATTERNS + _find_temporary_pr_body_pattern (SSoT 재사용)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>acceptance_request.json (BASE_DIR) — write/replace (MT-1 _write_acceptance_request)</mutation>
+      <mutation>acceptance_request.json status=CONSUMED 전이 (MT-3 _consume_acceptance_request)</mutation>
+      <mutation>pipeline_state.json events 로그 추가 (acceptance request issued, acceptance code consumed)</mutation>
+      <mutation>pipeline_contracts/[pid]/failures/acceptance_attempt_N.json 생성 (실패 시 7종 failure_code)</mutation>
+      <mutation>GitHub PR 댓글 (acceptance-packet 태그) PATCH 또는 신규 생성 (silent, optional)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>YES — cmd_gates(accept) 분기에 nonce 검증 11단계 추가. --user-confirmed 단독 통과 차단. --acceptance-code 신규 인자.</signature_change>
+      <breaking_change>YES (의도된 변경) — 기존 `gates accept --user-confirmed` 흐름은 모두 BLOCKED 처리. CLAUDE.md / agent MD에 새 흐름 문서화. RELEASE_NOTES에 하위 호환성 명시.</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — tests/e2e/test_user_acceptance_nonce_bbdb.py 14 케이스 + tests/oracles/IMP-20260531-BBDB/ 3종 (PM 제공).</test_coverage>
+      <rollback_strategy>git revert HEAD 후 pipeline_state.json의 MT-1~MT-6 checkpoint 초기화. RELEASE_NOTES + CLAUDE.md / agent MD 섹션 제거. tests/e2e/test_user_acceptance_nonce_bbdb.py 삭제.</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <files>
+    <file>pipeline.py (MT-1~4: nonce 헬퍼, request-accept CLI, gates accept 변경, GitHub PR/CI 헬퍼)</file>
+    <file>CLAUDE.md (MT-5: User Acceptance Nonce Gate 섹션)</file>
+    <file>.claude/agents/pm-agent.md (MT-5: 세션 요약 오염 방지 규칙)</file>
+    <file>.claude/agents/test-harness-agent.md (MT-5: ACCEPT 코드 안내 4단계)</file>
+    <file>tests/e2e/test_user_acceptance_nonce_bbdb.py (MT-6: 14 케이스 E2E)</file>
+    <file>tests/oracles/IMP-20260531-BBDB/* (MT-6: 3종 oracle — PM 제공)</file>
+    <file>docs/RELEASE_NOTES_IMP-20260531-BBDB.md (MT-6: 변경 내역)</file>
+  </files>
+  <module_gate_status>
+    <module mt_id="MT-1">PASS — checkpoint saved</module>
+    <module mt_id="MT-2">PASS — checkpoint saved</module>
+    <module mt_id="MT-3">PASS — checkpoint saved</module>
+    <module mt_id="MT-4">PASS — checkpoint saved</module>
+    <module mt_id="MT-5">PASS — checkpoint saved</module>
+    <module mt_id="MT-6">PASS — checkpoint saved</module>
+    <integration>PASS — integration_report.xml 기록</integration>
+  </module_gate_status>
+  <verification>
+    <check name="py_compile">PASS — python -m py_compile pipeline.py</check>
+    <check name="e2e_pytest">PASS — pytest tests/e2e/test_user_acceptance_nonce_bbdb.py -q → 14 passed in 11.87s</check>
+    <check name="cli_help">PASS — gates request-accept / gates accept --acceptance-code 정상 출력</check>
+    <check name="nonce_roundtrip">PASS — _issue_acceptance_nonce → _write → _load → _consume 정상</check>
+  </verification>
+  <evidence>
+    <item type="test_result">pytest tests/e2e/test_user_acceptance_nonce_bbdb.py -q → 14 passed</item>
+    <item type="oracle">tests/oracles/IMP-20260531-BBDB/ (normal + 2개 edge, PM 제공)</item>
+    <item type="release_notes">docs/RELEASE_NOTES_IMP-20260531-BBDB.md</item>
+    <item type="module_reports">module_design_MT-1~6.xml, module_handover_MT-1~6.xml, module_qa_MT-1~6.xml</item>
+  </evidence>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/test-harness-agent.md, tests/e2e/test_user_acceptance_nonce_bbdb.py, tests/oracles/IMP-20260531-BBDB/*, docs/RELEASE_NOTES_IMP-20260531-BBDB.md</git_diff_files>
+    <manifest_files>위 모든 파일이 scope_manifest.json에 포함</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false (Trust-Root 파일들이 PM step_plan target_files에 명시되어 있음)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <handover_to_qa>
+    Dev phase 완료. QA agent는 (1) 모든 MT의 module_qa_*.xml PASS 확인,
+    (2) integration_report.xml 검토, (3) tests/e2e/test_user_acceptance_nonce_bbdb.py 재실행으로 14 케이스 확인,
+    (4) CLAUDE.md/pm-agent.md/test-harness-agent.md 새 규칙 검토,
+    (5) pipeline.py nonce 검증 로직 (11단계) 검토를 수행하면 됩니다.
+  </handover_to_qa>
+</handover>

@@ -74,9 +74,11 @@ def _force_utf8_stdio() -> None:
 
 _force_utf8_stdio()
 
+import base64
 import hashlib
 import importlib.util
 import secrets
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict
@@ -2833,6 +2835,151 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# IMP-20260531-BBDB MT-1: User Acceptance Nonce Gate 헬퍼 (5개)
+# [Purpose]: --user-confirmed 단독 통과 차단을 위한 일회용 승인 코드(nonce) 파일 I/O.
+# [Assumptions]: BASE_DIR 또는 현재 작업 디렉토리에 acceptance_request.json 저장.
+#                evidence는 파일 경로(SHA-256 계산) 또는 URL(http://, https://) 둘 다 허용.
+# [Vulnerability & Risks]:
+#   - 40bit nonce 엔트로피는 단일 PR 라이프사이클 동안 충돌 가능성 무시 가능하지만,
+#     수십만 회 발급 시 birthday paradox 위험 존재.
+#   - 파일 시스템 권한이 group-writable이면 다른 사용자가 nonce 위조 가능 (Windows 권한 의존).
+# [Improvement]: HMAC 서명 + per-pipeline 비밀키로 확장하여 위조 차단.
+
+def _issue_acceptance_nonce() -> str:
+    """8자 base32 uppercase nonce 생성 (40bit 엔트로피, 일회용 승인 코드용).
+
+    Returns:
+        8자 base32 문자열 (예: "A2B3C4D5"). secrets 모듈로 암호학적 안전성 보장.
+    Raises:
+        없음.
+    """
+    raw = secrets.token_bytes(5)  # 40 bits → base32 8자
+    return base64.b32encode(raw).decode("ascii").rstrip("=")[:8]
+
+
+def _compute_file_sha256(path: str) -> Optional[str]:
+    """파일 SHA-256 계산. 파일이 없거나 읽기 불가하면 None.
+
+    Args:
+        path: 파일 경로 문자열.
+    Returns:
+        SHA-256 hex digest 또는 None (파일 없음/IO 오류).
+    Raises:
+        없음 (OSError swallow — gate 로직이 None을 검사하여 stale 판정).
+    """
+    if path is None:
+        return None
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def _write_acceptance_request(
+    pipeline_id: str,
+    evidence: str,
+    pr_url: str,
+    pr_head_sha: str,
+    ci_run_id: str,
+) -> Dict[str, Any]:
+    """acceptance_request.json 작성 후 데이터 dict 반환.
+
+    Args:
+        pipeline_id: 활성 pipeline_id (예: IMP-20260531-BBDB).
+        evidence: 결과물 경로(파일) 또는 URL(http://, https://).
+        pr_url: 현재 PR URL (gh CLI 없으면 빈 문자열).
+        pr_head_sha: PR head commit SHA (gh CLI 없으면 빈 문자열).
+        ci_run_id: GitHub Actions run ID (gh CLI 없으면 빈 문자열).
+    Returns:
+        기록된 acceptance_request 데이터 dict (status=PENDING).
+    Raises:
+        TypeError: pipeline_id 또는 evidence가 None.
+        ValueError: pipeline_id가 빈 문자열.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if evidence is None:
+        raise TypeError("evidence must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if not isinstance(evidence, str):
+        raise TypeError(f"evidence must be str, got {type(evidence).__name__}")
+    if len(pipeline_id) == 0:
+        raise ValueError("pipeline_id must not be empty")
+    nonce = _issue_acceptance_nonce()
+    request_id = str(uuid.uuid4())[:8]
+    is_url = evidence.startswith(("http://", "https://"))
+    evidence_sha256 = None if is_url else _compute_file_sha256(evidence)
+    data: Dict[str, Any] = {
+        "schema_version": 1,
+        "pipeline_id": pipeline_id,
+        "request_id": request_id,
+        "nonce": nonce,
+        "created_at": _now(),
+        "pr_url": pr_url or "",
+        "pr_head_sha": pr_head_sha or "",
+        "github_ci_run_id": str(ci_run_id) if ci_run_id else "",
+        "evidence": evidence,
+        "evidence_sha256": evidence_sha256,
+        "evidence_url": evidence if is_url else None,
+        "status": "PENDING",
+    }
+    with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    return data
+
+
+def _load_acceptance_request() -> Optional[Dict[str, Any]]:
+    """acceptance_request.json 로드. 없거나 파싱 오류 시 None.
+
+    Returns:
+        파싱된 dict 또는 None (파일 없음/JSON 오류).
+    Raises:
+        없음 (OSError/JSONDecodeError swallow).
+    """
+    try:
+        with open(ACCEPTANCE_REQUEST_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            return None
+        return data
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _consume_acceptance_request(req: Dict[str, Any], result: str) -> None:
+    """acceptance_request.json 상태를 CONSUMED로 갱신하여 재기록.
+
+    Args:
+        req: 기존 acceptance_request dict.
+        result: ACCEPT 또는 REJECT.
+    Raises:
+        TypeError: req 또는 result가 None.
+        ValueError: result가 ACCEPT/REJECT 외 값.
+    """
+    if req is None:
+        raise TypeError("req must not be None")
+    if result is None:
+        raise TypeError("result must not be None")
+    if not isinstance(req, dict):
+        raise TypeError(f"req must be dict, got {type(req).__name__}")
+    if not isinstance(result, str):
+        raise TypeError(f"result must be str, got {type(result).__name__}")
+    if result not in {"ACCEPT", "REJECT"}:
+        raise ValueError(f"result must be ACCEPT or REJECT, got {result!r}")
+    req["status"] = "CONSUMED"
+    req["consumed_at"] = _now()
+    req["consumed_result"] = result
+    with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
+        json.dump(req, fh, ensure_ascii=False, indent=2)
+
+
 def _display_path(path: Path) -> str:
     try:
         return str(path.resolve().relative_to(BASE_DIR))
@@ -2958,6 +3105,13 @@ TEMPORARY_PR_BODY_PATTERNS: List[str] = [
     "Dev 완료 후 업데이트됩니다",
     "아직 Dev 구현 완료 전",
 ]
+
+# IMP-20260531-BBDB MT-1: User Acceptance Nonce Gate
+# acceptance_request.json 파일명 + ACCEPT/REJECT 코드 정규식.
+# nonce는 8자 base32 uppercase (예: A2B3C4D5). pipeline_id 패턴: TYPE-YYYYMMDD-XXXX.
+ACCEPTANCE_REQUEST_FILE = "acceptance_request.json"
+ACCEPT_CODE_PATTERN = re.compile(r"^ACCEPT-([A-Z]+-\d{8}-[A-Z0-9]{4})-([A-Z2-7]{8})$")
+REJECT_CODE_PATTERN = re.compile(r"^REJECT-([A-Z]+-\d{8}-[A-Z0-9]{4})-([A-Z2-7]{8})$")
 
 # PR 본문에 반드시 포함되어야 하는 섹션 헤더 목록 (순서 무관, OR 쌍 지원)
 # 형식: str → 단일 필수 / tuple → 안의 항목 중 하나라도 있으면 통과 (OR 조건)
@@ -12708,6 +12862,265 @@ def _update_pr_body_with_metrics(state: Dict[str, Any]) -> None:
         pass
 
 
+# ─── IMP-20260531-BBDB MT-4: GitHub PR/CI 조회 + 댓글 갱신 헬퍼 ─────────────────
+# [Purpose]: gh CLI로 현재 PR URL/head SHA/CI run ID/PR body 조회. PR 댓글 갱신.
+# [Assumptions]: gh CLI 설치 + 인증된 환경. 미설치 시 모든 함수가 None/빈 문자열 반환.
+# [Vulnerability & Risks]:
+#   - gh CLI timeout 미준수 시 hang 가능 (각 호출 10~15초 timeout 설정).
+#   - PR 댓글 갱신 실패 시 silent — 콘솔 발급 코드는 항상 진행.
+# [Improvement]: GitHub REST API 직접 호출로 gh CLI 의존성 제거.
+
+def _get_current_pr_url() -> Optional[str]:
+    """현재 브랜치의 PR URL을 gh CLI로 조회. 없으면 None.
+
+    Returns:
+        PR URL 문자열 또는 None (gh CLI 미설치/PR 없음/오류).
+    Raises:
+        없음.
+    """
+    try:
+        r = subprocess.run(
+            ["gh", "pr", "view", "--json", "url", "--jq", ".url"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode == 0:
+            out = r.stdout.strip()
+            return out if out else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def _get_current_pr_head_sha() -> Optional[str]:
+    """현재 PR의 head commit SHA를 gh CLI로 조회.
+
+    Returns:
+        head SHA 문자열 또는 None (gh CLI 미설치/오류).
+    Raises:
+        없음.
+    """
+    try:
+        r = subprocess.run(
+            ["gh", "pr", "view", "--json", "headRefOid", "--jq", ".headRefOid"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode == 0:
+            out = r.stdout.strip()
+            return out if out else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def _get_latest_ci_run_id() -> Optional[str]:
+    """최신 GitHub Actions CI run ID를 gh CLI로 조회.
+
+    Returns:
+        run ID 문자열 또는 None (gh CLI 미설치/run 없음).
+    Raises:
+        없음.
+    """
+    try:
+        r = subprocess.run(
+            ["gh", "run", "list", "--limit", "1", "--json", "databaseId",
+             "--jq", ".[0].databaseId"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode == 0:
+            out = r.stdout.strip()
+            return out if out else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def _get_pr_body_text() -> Optional[str]:
+    """현재 PR 본문 텍스트를 gh CLI로 조회.
+
+    Returns:
+        PR 본문 문자열 또는 None (gh CLI 미설치/PR 없음).
+    Raises:
+        없음.
+    """
+    try:
+        r = subprocess.run(
+            ["gh", "pr", "view", "--json", "body", "--jq", ".body"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode == 0:
+            out = r.stdout
+            return out if out else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> None:
+    """GitHub PR에 최종 확인 안내 댓글을 생성하거나 최신 내용으로 갱신.
+
+    기존 acceptance-packet 태그(<!-- pipeline-human-acceptance-packet -->)
+    가 있는 댓글이 있으면 PATCH로 갱신, 없으면 신규 생성.
+
+    Args:
+        req: acceptance_request dict (pipeline_id, nonce, request_id, pr_url, github_ci_run_id 포함).
+        evidence: 결과물 경로 또는 URL.
+    Raises:
+        없음 (모든 외부 호출 실패는 swallow).
+    """
+    if req is None:
+        return
+    if not isinstance(req, dict):
+        return
+    pipeline_id = str(req.get("pipeline_id", ""))
+    nonce = str(req.get("nonce", ""))
+    request_id = str(req.get("request_id", ""))
+    pr_url = str(req.get("pr_url", "") or "")
+    ci_run_id = str(req.get("github_ci_run_id", "") or "")
+
+    accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
+    reject_code = f"REJECT-{pipeline_id}-{nonce}"
+
+    ci_link = ""
+    if ci_run_id:
+        ci_link = f"https://github.com/hojiyong2-commits/Pipeline/actions/runs/{ci_run_id}"
+
+    comment_body = f"""<!-- pipeline-human-acceptance-packet -->
+## 최종 확인 안내
+
+이 댓글은 사용자 최종 승인/거절 판단에 사용됩니다.
+**아래 확인 코드를 통해서만 승인이 가능합니다.**
+
+판단 정보 상태: **판단 가능**
+
+### 확인할 결과물
+- 결과물: `{evidence}`
+- PR: {pr_url}
+- GitHub Actions: {ci_link}
+- 승인 요청 ID: `{request_id}`
+
+### 승인 방법
+결과물을 확인하신 후 아래 코드를 **정확히** 입력하세요:
+
+**[O] 승인:**
+```
+{accept_code}
+```
+
+**[X] 거절:**
+```
+{reject_code}: 거절 이유
+```
+
+> 주의: 이 코드는 일회용입니다. PR에 새 커밋이 push되면 새 코드가 필요합니다.
+> `python pipeline.py gates request-accept --evidence <결과물>` 로 재발급하세요.
+"""
+
+    try:
+        # 기존 acceptance-packet 댓글 찾아서 수정, 없으면 새로 생성
+        r = subprocess.run(
+            ["gh", "pr", "view", "--json", "comments", "--jq",
+             '[.comments[] | select(.body | contains("pipeline-human-acceptance-packet"))] | .[0].databaseId // empty'],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        existing_id = r.stdout.strip() if r.returncode == 0 else ""
+
+        if existing_id:
+            subprocess.run(
+                ["gh", "api",
+                 f"repos/hojiyong2-commits/Pipeline/issues/comments/{existing_id}",
+                 "-X", "PATCH", "-f", f"body={comment_body}"],
+                capture_output=True, timeout=15,
+                encoding="utf-8", errors="replace",
+            )
+        else:
+            subprocess.run(
+                ["gh", "pr", "comment", "--body", comment_body],
+                capture_output=True, timeout=15,
+                encoding="utf-8", errors="replace",
+            )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return  # gh CLI 실패는 silent — 콘솔 발급 코드는 항상 표시됨
+
+
+# ─── IMP-20260531-BBDB MT-2: gates request-accept 서브커맨드 ───────────────────
+# [Purpose]: 사용자 최종 확인 코드(nonce) 발급. acceptance_request.json 생성 + PR 댓글 갱신.
+# [Assumptions]: 활성 pipeline_state.json 존재. gh CLI는 선택적(없으면 빈 문자열).
+# [Vulnerability & Risks]:
+#   - PR 본문 stale 문구 검사가 gh CLI 의존이라 CI 외 환경에서는 검사 생략 가능.
+#   - 동일 evidence 경로에 대해 여러 번 호출하면 마지막 nonce만 유효 (이전 코드 무효화는 정상 동작).
+# [Improvement]: pre-flight로 모든 외부 gate PASS 여부도 함께 검사하여 조기 차단.
+def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
+    """gates request-accept 핸들러: nonce 발급 + acceptance_request.json + 사용자 코드 표시.
+
+    Args:
+        args: argparse Namespace (evidence 필수).
+        state: 활성 pipeline_state.
+    Raises:
+        SystemExit: PR 본문 stale 문구 발견 시 BLOCKED.
+    """
+    pipeline_id = str(state.get("pipeline_id", ""))
+    if not pipeline_id:
+        _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다.")
+    evidence = getattr(args, "evidence", None)
+    if evidence is None or not str(evidence).strip():
+        _die("[BLOCKED] --evidence는 필수입니다 (결과물 경로 또는 URL).")
+
+    # stale 문구 차단 (기존 TEMPORARY_PR_BODY_PATTERNS SSoT 사용)
+    pr_body = _get_pr_body_text()
+    if pr_body:
+        stale = _find_temporary_pr_body_pattern(pr_body)
+        if stale:
+            _die(
+                f"[BLOCKED] PR 본문에 stale 문구가 있습니다: '{stale}'\n"
+                "  PR 본문을 최신 상태로 갱신한 후 gates request-accept를 다시 실행하세요."
+            )
+
+    # PR/CI 정보 가져오기 (gh CLI 없으면 빈 문자열)
+    pr_url = _get_current_pr_url() or ""
+    pr_head_sha = _get_current_pr_head_sha() or ""
+    ci_run_id = _get_latest_ci_run_id() or ""
+
+    # acceptance_request.json 생성
+    req = _write_acceptance_request(pipeline_id, str(evidence), pr_url, pr_head_sha, ci_run_id)
+    nonce = req["nonce"]
+    accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
+    reject_code = f"REJECT-{pipeline_id}-{nonce}"
+
+    # GitHub 최종 확인 댓글 생성/갱신 (gh CLI 없으면 건너뜀)
+    try:
+        _update_github_acceptance_comment(req, str(evidence))
+    except Exception:
+        pass  # GitHub 댓글 실패해도 코드 발급은 계속
+
+    print()
+    print("=" * 62)
+    print("  사용자 최종 확인 요청")
+    print("=" * 62)
+    if pr_url:
+        print(f"  PR: {pr_url}")
+    if ci_run_id:
+        print(f"  GitHub Actions: https://github.com/hojiyong2-commits/Pipeline/actions/runs/{ci_run_id}")
+    print(f"  결과물: {evidence}")
+    print()
+    print("  위 결과물을 확인하신 후 아래 코드를 입력해 주세요.")
+    print()
+    print("  [O] 승인하시려면 정확히 아래 코드를 입력하세요:")
+    print(f"     {accept_code}")
+    print()
+    print("  [X] 거절하시려면 아래 형식으로 입력하세요:")
+    print(f"     {reject_code}: 거절 이유")
+    print("=" * 62)
+    print()
+    print(f"  승인 요청 ID: {req['request_id']}  (acceptance_request.json 저장됨)")
+    _log_event(state, f"acceptance request issued: request_id={req['request_id']} nonce={nonce}")
+    _save(state)
+
+
 def cmd_gates(args: argparse.Namespace) -> None:
     action = args.gates_action
 
@@ -12739,6 +13152,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
         _log_event(state, "GitHub phase attestations enabled (mandatory)")
         _save(state)
         print(GREEN(f"\n[THREE GATE + PHASE ATTESTATION ENABLED] {pid}\n"))
+        return
+
+    # IMP-20260531-BBDB MT-2: gates request-accept — User Acceptance Nonce 발급
+    if action == "request-accept":
+        _cmd_gates_request_accept(args, state)
         return
 
     if action == "status":
@@ -13099,11 +13517,214 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if not _ag.get("started_at"):
             _ag["started_at"] = _now()
             _save(state)
-        if not getattr(args, "user_confirmed", False):
-            _die("user acceptance gate requires --user-confirmed")
+        # IMP-20260531-BBDB MT-3: --acceptance-code 기반 nonce 검증으로 교체.
+        # --user-confirmed 단독은 backward-compatible no-op (경고 후 BLOCKED).
+        if getattr(args, "user_confirmed", False) and not getattr(args, "acceptance_code", None):
+            print(YELLOW("[경고] --user-confirmed는 더 이상 ACCEPT를 통과시키지 않습니다."))
+            print(YELLOW("  gates request-accept --evidence <경로> 를 먼저 실행하여 승인 코드를 발급받으세요."))
+            _die("[BLOCKED] --acceptance-code 가 필요합니다. (acceptance_code_required)")
+        if not getattr(args, "acceptance_code", None):
+            _die(
+                "[BLOCKED] 승인 코드가 없습니다. (acceptance_code_required)\n"
+                "  python pipeline.py gates request-accept --evidence <결과물-경로>\n"
+                "를 먼저 실행하여 ACCEPT-...-XXXXXXXX 코드를 발급받으세요."
+            )
         result = str(args.result).upper()
         if result not in {"ACCEPT", "REJECT"}:
             _die("[USER ACCEPTANCE BLOCKED] --result는 ACCEPT 또는 REJECT만 허용됩니다.")
+
+        # IMP-20260531-BBDB MT-3: acceptance_request.json 로드 + nonce/SHA/run_id 검증
+        _req = _load_acceptance_request()
+        if _req is None:
+            _record_failure_packet(
+                state, "acceptance", {},
+                command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                         "--evidence", "<result-path>"],
+                note="acceptance_request.json missing — gates request-accept 미실행",
+                status="BLOCKED", phase="harness",
+                failure_code="missing_acceptance_request",
+                failure_category="missing_evidence",
+                summary_ko="acceptance_request.json이 없습니다. gates request-accept를 먼저 실행하세요.",
+                expected="acceptance_request.json 존재 (status=PENDING)",
+                actual="파일 없음",
+                exit_code=1, owner="Pipeline Manager", return_phase="build",
+                required_actions=["python pipeline.py gates request-accept --evidence <결과물-경로> 를 먼저 실행"],
+                retry_allowed=True,
+            )
+            _save(state)
+            _die(
+                "[BLOCKED] acceptance_request.json 이 없습니다. (missing_acceptance_request)\n"
+                "  python pipeline.py gates request-accept --evidence <경로>\n"
+                "를 먼저 실행하세요."
+            )
+
+        _req_status = str(_req.get("status", ""))
+        if _req_status != "PENDING":
+            _record_failure_packet(
+                state, "acceptance", {},
+                command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                         "--evidence", "<result-path>"],
+                note=f"acceptance_request.json status={_req_status} (이미 사용됨)",
+                status="BLOCKED", phase="harness",
+                failure_code="consumed_or_expired",
+                failure_category="missing_evidence",
+                summary_ko=f"이미 사용된 승인 요청입니다 (status={_req_status}).",
+                expected="status=PENDING",
+                actual=f"status={_req_status}",
+                exit_code=1, owner="Pipeline Manager", return_phase="build",
+                required_actions=["python pipeline.py gates request-accept 를 다시 실행하여 새 코드 발급"],
+                retry_allowed=True,
+            )
+            _save(state)
+            _die(
+                f"[BLOCKED] 이미 사용된 승인 요청입니다 (status={_req_status}). "
+                "(consumed_or_expired)\n"
+                "  python pipeline.py gates request-accept 를 다시 실행하여 새 코드를 발급받으세요."
+            )
+
+        _req_pipeline_id = str(_req.get("pipeline_id", ""))
+        if _req_pipeline_id != pid:
+            _record_failure_packet(
+                state, "acceptance", {},
+                command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                         "--evidence", "<result-path>"],
+                note=f"acceptance_request.json pipeline_id={_req_pipeline_id} != active {pid}",
+                status="BLOCKED", phase="harness",
+                failure_code="pipeline_id_mismatch",
+                failure_category="missing_evidence",
+                summary_ko="승인 요청의 pipeline_id가 현재 파이프라인과 다릅니다.",
+                expected=f"pipeline_id={pid}", actual=f"pipeline_id={_req_pipeline_id}",
+                exit_code=1, owner="Pipeline Manager", return_phase="build",
+                required_actions=["python pipeline.py gates request-accept 를 현재 파이프라인에서 다시 실행"],
+                retry_allowed=True,
+            )
+            _save(state)
+            _die(
+                f"[BLOCKED] 승인 요청의 pipeline_id ({_req_pipeline_id}) 가 "
+                f"현재 파이프라인 ({pid}) 과 다릅니다. (pipeline_id_mismatch)\n"
+                "  gates request-accept 를 다시 실행하세요."
+            )
+
+        # 코드 형식 및 nonce 검증
+        _code_str = str(getattr(args, "acceptance_code", "") or "")
+        _expected_prefix = f"{result}-{pid}-"
+        if not _code_str.startswith(_expected_prefix):
+            _record_failure_packet(
+                state, "acceptance", {},
+                command=[sys.executable, "pipeline.py", "gates", "accept",
+                         "--result", result, "--evidence", "<path>",
+                         "--acceptance-code", _expected_prefix + "XXXXXXXX"],
+                note=f"acceptance code format mismatch: {_code_str!r}",
+                status="BLOCKED", phase="harness",
+                failure_code="acceptance_code_mismatch",
+                failure_category="missing_evidence",
+                summary_ko=f"승인 코드 형식이 올바르지 않습니다. 예: {_expected_prefix}XXXXXXXX",
+                expected=f"{_expected_prefix}<8자 nonce>",
+                actual=_code_str,
+                exit_code=1, owner="Pipeline Manager", return_phase="build",
+                required_actions=[f"{_expected_prefix}<8자> 형태의 코드를 입력하세요."],
+                retry_allowed=True,
+            )
+            _save(state)
+            _die(f"[BLOCKED] 승인 코드 형식 오류 (acceptance_code_mismatch). 예: {_expected_prefix}XXXXXXXX")
+
+        _submitted_nonce = _code_str[len(_expected_prefix):]
+        _stored_nonce = str(_req.get("nonce", ""))
+        if _submitted_nonce != _stored_nonce:
+            _record_failure_packet(
+                state, "acceptance", {},
+                command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                         "--evidence", "<result-path>"],
+                note=f"nonce mismatch: submitted={_submitted_nonce!r} stored={_stored_nonce!r}",
+                status="BLOCKED", phase="harness",
+                failure_code="acceptance_code_mismatch",
+                failure_category="missing_evidence",
+                summary_ko="승인 코드의 nonce가 일치하지 않습니다.",
+                expected=f"nonce={_stored_nonce}", actual=f"nonce={_submitted_nonce}",
+                exit_code=1, owner="Pipeline Manager", return_phase="build",
+                required_actions=["올바른 nonce 코드를 입력하거나 gates request-accept 를 다시 실행하세요."],
+                retry_allowed=True,
+            )
+            _save(state)
+            _die("[BLOCKED] 승인 코드 nonce 불일치 (acceptance_code_mismatch)")
+
+        # PR head SHA 변경 확인 (gh CLI 없으면 skip)
+        _stored_sha = str(_req.get("pr_head_sha", "") or "")
+        if _stored_sha:
+            _current_sha = _get_current_pr_head_sha() or ""
+            if _current_sha and _stored_sha and not (
+                _current_sha.startswith(_stored_sha[:7]) or _stored_sha.startswith(_current_sha[:7])
+            ):
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", "<result-path>"],
+                    note=f"PR head SHA changed: stored={_stored_sha[:7]} current={_current_sha[:7]}",
+                    status="BLOCKED", phase="harness",
+                    failure_code="stale_head_sha",
+                    failure_category="missing_evidence",
+                    summary_ko="PR 에 새 커밋이 추가되었습니다. 새 코드를 발급받아야 합니다.",
+                    expected=f"head_sha={_stored_sha[:7]}", actual=f"head_sha={_current_sha[:7]}",
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=["python pipeline.py gates request-accept 를 다시 실행하여 최신 코드 발급"],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die("[BLOCKED] PR head SHA 변경됨 (stale_head_sha) — gates request-accept 재실행 필요")
+
+        # CI run ID 변경 확인
+        _stored_run = str(_req.get("github_ci_run_id", "") or "")
+        if _stored_run:
+            _current_run = _get_latest_ci_run_id() or ""
+            if _current_run and _stored_run and str(_current_run) != str(_stored_run):
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", "<result-path>"],
+                    note=f"CI run ID changed: stored={_stored_run} current={_current_run}",
+                    status="BLOCKED", phase="harness",
+                    failure_code="stale_run_id",
+                    failure_category="missing_evidence",
+                    summary_ko="GitHub Actions run 이 변경되었습니다. 새 코드를 발급받아야 합니다.",
+                    expected=f"run_id={_stored_run}", actual=f"run_id={_current_run}",
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=["python pipeline.py gates request-accept 를 다시 실행하여 최신 코드 발급"],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die("[BLOCKED] CI run ID 변경됨 (stale_run_id) — gates request-accept 재실행 필요")
+
+        # evidence 파일 hash 확인 (URL 또는 file 없음 시 skip)
+        _stored_sha256 = _req.get("evidence_sha256")
+        _evidence_arg = args.evidence or _req.get("evidence", "")
+        if (
+            _stored_sha256
+            and isinstance(_evidence_arg, str)
+            and not _evidence_arg.startswith(("http://", "https://"))
+        ):
+            _current_sha256 = _compute_file_sha256(_evidence_arg)
+            if _current_sha256 and _current_sha256 != _stored_sha256:
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", _evidence_arg],
+                    note=f"evidence file hash changed: stored={_stored_sha256[:12]} current={_current_sha256[:12]}",
+                    status="BLOCKED", phase="harness",
+                    failure_code="evidence_changed",
+                    failure_category="missing_evidence",
+                    summary_ko="결과물 파일이 변경되었습니다. 새 코드를 발급받아야 합니다.",
+                    expected=f"sha256={_stored_sha256[:12]}...",
+                    actual=f"sha256={_current_sha256[:12]}...",
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=["python pipeline.py gates request-accept 를 다시 실행"],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die("[BLOCKED] evidence 파일 변경됨 (evidence_changed) — gates request-accept 재실행 필요")
+
+        # 모든 검증 통과 → CONSUMED 처리
+        _consume_acceptance_request(_req, result)
+        _log_event(state, f"acceptance code consumed: request_id={_req.get('request_id')} result={result}")
         # D4: pr gate → acceptance gate 연결 (bootstrap_exception 제외)
         bootstrap_exception_accept = state.get("codex_bootstrap_exception", False)
         if not bootstrap_exception_accept and result == "ACCEPT":
@@ -14719,11 +15340,21 @@ def build_parser() -> argparse.ArgumentParser:
     # IMP-20260524-48C4 MT-1: agent_generated expected 허용 옵션
     p_gate_oracle.add_argument("--allow-agent-generated", action="store_true", default=False, dest="allow_agent_generated",
                                help="agent_generated source oracle을 BLOCKED 처리하지 않고 허용한다 (기본 비허용)")
+    # IMP-20260531-BBDB MT-2: gates request-accept — 사용자 최종 확인 코드(nonce) 발급
+    p_gate_req = gsub.add_parser(
+        "request-accept",
+        help="사용자 최종 확인 코드(nonce) 발급 — acceptance_request.json 생성 + PR 댓글 갱신",
+    )
+    p_gate_req.add_argument("--evidence", required=True, help="결과물 경로(파일) 또는 URL(http://, https://)")
+
     p_gate_accept = gsub.add_parser("accept", help="Record user behavior acceptance")
     p_gate_accept.add_argument("--result", required=True, choices=["ACCEPT", "REJECT", "accept", "reject"])
     p_gate_accept.add_argument("--evidence", default=None, help="Output file, screenshot, or report shown to user")
     p_gate_accept.add_argument("--notes", default=None)
     p_gate_accept.add_argument("--user-confirmed", action="store_true", default=False)
+    # IMP-20260531-BBDB MT-3: --acceptance-code (gates request-accept가 발급한 일회용 nonce 코드)
+    p_gate_accept.add_argument("--acceptance-code", dest="acceptance_code", default=None,
+        help="gates request-accept가 발급한 승인/거절 코드 (예: ACCEPT-IMP-20260531-BBDB-XXXXXXXX)")
     p_gate_preflight_pr = gsub.add_parser("preflight-pr", help="PR에 섞인 무관한 파일을 검사하여 phase attestation 오염을 차단")
     p_gate_preflight_pr.add_argument("--phase", required=True, choices=["pm", "dev", "qa", "build"],
                                      help="검사할 phase (pm|dev|qa|build)")

@@ -1145,3 +1145,63 @@ QA/Harness는 `check_cli_evidence_contract.py` 또는 수동 검토로 아래를
 - **QA**: `gates secrets` exit code 0 확인. finding 발견 시 Dev 반려.
 - **Build**: `build_report.xml`에 secret 출력 금지. 빌드 로그 환경변수 노출 주의.
 - **Test-Harness**: Phase 7 acceptance evidence에 `gates secrets` 결과 포함. PR 본문/packet에 secret 없는지 확인.
+
+
+## User Acceptance Nonce Gate (IMP-20260531-BBDB)
+
+`gates accept --user-confirmed` 단독으로는 더 이상 User Acceptance gate를 통과하지 않는다.
+에이전트가 세션 재개 요약이나 컨텍스트만으로 사용자 승인을 임의로 처리하는 것을 방지하기 위해
+**일회용 승인 코드(nonce) 기반 검증**을 도입한다.
+
+### 새 승인 흐름
+
+1. Technical / Oracle / GitHub CI gate가 모두 PASS된 후:
+   ```powershell
+   python pipeline.py gates request-accept --evidence <결과물-경로>
+   ```
+   → `acceptance_request.json` 생성 + 사용자에게 일회용 코드 표시:
+   ```
+   ACCEPT-IMP-YYYYMMDD-XXXX-XXXXXXXX
+   ```
+
+2. 사용자가 결과물을 확인하고 **이번 대화에서 직접** 위 코드를 입력.
+
+3. Pipeline Manager가 사용자가 입력한 코드를 받아 실행:
+   ```powershell
+   python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-IMP-YYYYMMDD-XXXX-XXXXXXXX
+   ```
+
+### 에이전트 금지 규칙 (절대 준수)
+
+- 에이전트는 acceptance-code를 **추측하거나 직접 생성해서는 안 된다.**
+- 컨텍스트 요약의 "다음 단계: gates accept 실행"은 사용자 ACCEPT가 아니다.
+- 세션 재개 후에도 사용자가 **이번 대화에서** acceptance-code를 직접 입력한 경우에만 `gates accept` 실행.
+- acceptance-code가 대화 요약, agent report, PR body, step_plan.xml에 자동으로 적힌 것만으로는 사용자 승인으로 인정하지 않는다.
+- request-accept 이후 PR에 새 커밋이 push되면 기존 코드는 무효 → `gates request-accept` 재실행 필요.
+
+### 검증 조건 (gates accept 실행 시 자동 확인)
+
+| 조건 | 실패 코드 | 해결 방법 |
+|---|---|---|
+| `acceptance_request.json` 없음 | `missing_acceptance_request` | `gates request-accept` 먼저 실행 |
+| `status` != `PENDING` (이미 사용됨) | `consumed_or_expired` | `gates request-accept` 재실행 |
+| `pipeline_id` 불일치 | `pipeline_id_mismatch` | 현재 파이프라인에서 `request-accept` 재실행 |
+| 코드 형식 오류 또는 nonce 불일치 | `acceptance_code_mismatch` | 올바른 코드 입력 |
+| PR head SHA 변경 | `stale_head_sha` | `gates request-accept` 재실행 |
+| CI run ID 변경 | `stale_run_id` | `gates request-accept` 재실행 |
+| evidence 파일 변경 | `evidence_changed` | `gates request-accept` 재실행 |
+| `--user-confirmed` 단독 | `acceptance_code_required` | `--acceptance-code` 사용 |
+
+### 기존 명령어 호환성
+
+`--user-confirmed` 인자는 보존되지만 더 이상 ACCEPT를 통과시키지 않는다. 경고 출력 후 BLOCKED 처리된다.
+기존 `gates accept ... --user-confirmed` 예시는 모두 아래 흐름으로 갱신:
+
+```powershell
+# 1단계: 사용자 최종 확인 코드 발급
+python pipeline.py gates request-accept --evidence <결과물-경로>
+# → 사용자에게 ACCEPT-IMP-...-XXXXXXXX 코드 표시
+
+# 2단계: 사용자가 코드를 입력하면 Pipeline Manager가 실행
+python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-IMP-...-XXXXXXXX
+```
