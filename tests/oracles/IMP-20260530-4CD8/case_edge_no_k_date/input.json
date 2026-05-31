@@ -1,0 +1,7 @@
+{
+  "description": "sn='SN-NOKDATE' 가 D열에 있지만 K열 날짜 없음 → None 반환 (포장 미완료)",
+  "sn": "SN-NOKDATE",
+  "sheet_rows": [
+    {"col_d": "SN-NOKDATE", "col_f": "50", "col_g": "30", "col_h": "20", "col_j": "9.0", "col_k_date": null}
+  ]
+}

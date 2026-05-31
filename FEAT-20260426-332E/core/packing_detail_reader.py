@@ -4,7 +4,7 @@ Opens the Excel file in read_only + data_only mode (bypasses file locks —
 openpyxl reads ZIP bytes directly; data_only=True returns cached formula
 values instead of formula strings).
 
-Search key : Column D (Project Id/S/N)
+Search key : Column D (S/N)
 Date filter : Column K (Crating Date) — rows with no valid K date are excluded;
               when multiple rows match, the one with K date closest to today is selected.
 Dimensions  : Columns F, G, H, J
@@ -32,14 +32,14 @@ _DEFAULT_SHEET = "2021년"
 
 def lookup_packing_dimensions(
     file_path: str,
-    project_id: str,
+    sn: str,
     sheet_name: Optional[str] = None,
 ) -> Optional[str]:
-    """Look up packing dimensions for a given Project Id from the packing detail Excel.
+    """Look up packing dimensions for a given S/N from the packing detail Excel.
 
     Opens the file with openpyxl read_only=True, data_only=True (no COM, no GUI
-    popup; data_only returns cached VLOOKUP values). Searches column D (Project
-    Id/S/N) for project_id. Rows with no valid K (Crating Date) are excluded.
+    popup; data_only returns cached VLOOKUP values). Searches column D (S/N)
+    for sn. Rows with no valid K (Crating Date) are excluded.
     When multiple rows match, the row whose K date is closest to date.today()
     is selected automatically (no conflict list is returned).
 
@@ -50,15 +50,15 @@ def lookup_packing_dimensions(
 
     Args:
         file_path: Absolute or relative path to the packing detail Excel file.
-        project_id: The Project Id/S/N value to search for in column D.
+        sn: The S/N value to search for in column D.
         sheet_name: Sheet to search in. Defaults to "2021년".
 
     Returns:
         None or a dimension string.
 
     Raises:
-        TypeError: If file_path or project_id is None or wrong type.
-        ValueError: If file_path or project_id is an empty string.
+        TypeError: If file_path or sn is None or wrong type.
+        ValueError: If file_path or sn is an empty string.
         FileNotFoundError: If the Excel file does not exist at file_path.
         RuntimeError: If the workbook cannot be opened.
     """
@@ -70,12 +70,12 @@ def lookup_packing_dimensions(
     if len(file_path.strip()) == 0:
         raise ValueError("file_path must not be empty")
 
-    if project_id is None:
-        raise TypeError("project_id must not be None")
-    if not isinstance(project_id, str):
-        raise TypeError(f"project_id must be str, got {type(project_id).__name__}")
-    if len(project_id.strip()) == 0:
-        raise ValueError("project_id must not be empty")
+    if sn is None:
+        raise TypeError("sn must not be None")
+    if not isinstance(sn, str):
+        raise TypeError(f"sn must be str, got {type(sn).__name__}")
+    if len(sn.strip()) == 0:
+        raise ValueError("sn must not be empty")
     # sheet_name: None allowed (triggers default); no negative numeric value possible for str — no boundary check needed.
 
     path = Path(file_path)
@@ -109,7 +109,7 @@ def lookup_packing_dimensions(
                 ws.title,
             )
 
-        proj_id_stripped = project_id.strip()
+        sn_stripped = sn.strip()
         matches: List[Dict[str, object]] = []
 
         for row_idx, row in enumerate(ws.iter_rows(), start=1):
@@ -121,7 +121,7 @@ def lookup_packing_dimensions(
             if d_val is None:
                 continue
             parts = [p.strip() for p in str(d_val).strip().split('/')]
-            if proj_id_stripped not in parts:
+            if sn_stripped not in parts:
                 continue
 
             # Column K date filter (1-based _COL_CRATING_DATE = 11 → 0-based = 10)
@@ -169,8 +169,8 @@ def lookup_packing_dimensions(
 
         match_count = len(matches)
         logger.info(
-            "project_id='%s' → %d matching row(s) with valid K date",
-            proj_id_stripped, match_count,
+            "sn='%s' → %d matching row(s) with valid K date",
+            sn_stripped, match_count,
         )
 
         if match_count == 0:
@@ -182,12 +182,12 @@ def lookup_packing_dimensions(
         best = min(
             matches,
             key=lambda m: abs(
-                (m["date"].date() if isinstance(m["date"], datetime) else m["date"]) - today  # allowed: m["date"] is date|datetime, stored from validated isinstance block above
+                (m["date"].date() if isinstance(m["date"], datetime) else m["date"]) - today  # type: ignore[operator]  # m["date"] is date|datetime per validated isinstance block above
             ),
         )
         logger.info(
-            "project_id='%s' — %d rows found, selected closest to today(%s): row=%s date=%s",
-            proj_id_stripped, match_count, today, best["row"], best["date"],
+            "sn='%s' — %d rows found, selected closest to today(%s): row=%s date=%s",
+            sn_stripped, match_count, today, best["row"], best["date"],
         )
         return str(best["dims"])
 
@@ -282,7 +282,7 @@ if __name__ == "__main__":
 
         # --- Test 3: no match at all ---
         result3 = lookup_packing_dimensions(tmp_path, "PROJ-NOTEXIST")
-        assert result3 is None, f"Expected None for missing project_id, got {result3}"
+        assert result3 is None, f"Expected None for missing sn, got {result3}"
 
         # --- Test 4: multiple rows → closest-to-today selected (near_date wins over far_date) ---
         result4 = lookup_packing_dimensions(tmp_path, "PROJ-MULTI")
@@ -298,7 +298,7 @@ if __name__ == "__main__":
 
         try:
             lookup_packing_dimensions(tmp_path, None)  # type: ignore[arg-type]
-            assert False, "Expected TypeError for None project_id"
+            assert False, "Expected TypeError for None sn"
         except TypeError:
             pass
 
@@ -311,7 +311,7 @@ if __name__ == "__main__":
 
         try:
             lookup_packing_dimensions(tmp_path, "   ")
-            assert False, "Expected ValueError for empty project_id"
+            assert False, "Expected ValueError for empty sn"
         except ValueError:
             pass
 

@@ -1,0 +1,7 @@
+{
+  "description": "sn='SN-NOTEXIST' 가 D열에 없으면 None 반환",
+  "sn": "SN-NOTEXIST",
+  "sheet_rows": [
+    {"col_d": "SN-OTHER", "col_f": "10", "col_g": "20", "col_h": "30", "col_j": "5.0", "col_k_date": "2026-04-30"}
+  ]
+}

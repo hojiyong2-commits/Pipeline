@@ -84,7 +84,7 @@ def _cli_main() -> None:
     from core.packing_detail_reader import lookup_packing_dimensions
     from core.order_lines_reader import lookup_order_lines
     from core.excel_mapper import write_to_excel_a
-    from core.models import KitRow, MappedRow
+    from core.models import MappedRow
 
     try:
         # Step 1: Load configuration
@@ -145,18 +145,18 @@ def _cli_main() -> None:
             elif "포장반" in kit_place:
                 try:
                     dims_result = lookup_packing_dimensions(
-                        packing_detail_path, project_id,
+                        packing_detail_path, sn,
                         sheet_name=packing_detail_sheet,
                     )
                 except FileNotFoundError:
                     logger.warning(
-                        "Packing detail file not found; skipping dimensions for project_id '%s'",
-                        project_id,
+                        "Packing detail file not found; skipping dimensions for sn '%s'",
+                        sn,
                     )
                     dims_result = None
                 except Exception as exc:
                     logger.warning(
-                        "Error looking up dimensions for project_id '%s': %s", project_id, exc
+                        "Error looking up dimensions for sn '%s': %s", sn, exc
                     )
                     dims_result = None
 
@@ -193,7 +193,7 @@ def _cli_main() -> None:
                 continue
 
             # Step 5c: Append Line No suffix to note only when f_col_conflict is True
-            line_nos = [str(n) for n in (order.get("line_nos") or [])]
+            line_nos = [str(n) for n in (order.get("line_nos") or [])]  # type: ignore[attr-defined]
             if line_nos and order.get("f_col_conflict", False):
                 note = f"{note} #{_compress_line_nos(line_nos)}"
 
