@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_planner_output>
+
+<decomposition_audit>
+  <total_functions_identified>6</total_functions_identified>
+  <micro_task_count>4</micro_task_count>
+  <grep_executions>7</grep_executions>
+  <split_decision>
+    사용자 원문이 명시한 4개 영역(pipeline.py dead code, root docs stale, agent MD stale, regression tests)을 그대로 4개 MT로 1:1 매핑. 사전 grep 조사 결과:
+    1) --user-confirmed 17개 파일 매칭, 그 중 성공 경로처럼 설명하는 stale 문구는 .codex/agents/build-agent.toml:141, .codex/agents/test-harness-agent.toml:21,118, .claude/agents/pm-agent.md:297(Phase 7 표), .codex/agents/pm-agent.toml:293에 집중됨.
+    2) pipeline.py 본체에는 이미 nonce gate(IMP-20260531-BBDB) + 경고 + BLOCKED 처리가 완료되어 있어 본체 로직 수정 불필요. argparse parser는 backward-compat 유지.
+    3) harness --score는 cmd_harness가 이미 _die로 차단 처리(pipeline.py:6499) 완료. 문서/agent MD에서는 모두 "차단됨"으로 일관 표현 중. 잔여 정리 없음.
+    4) pipeline.py 본체 dead helper: _is_budget_blocked(L11283), _wait_for_github_ci(L16766), _verify_allowed_files(L17645) — 모두 정의만 있고 pipeline.py 내 호출 0회, 다른 .py(tests 포함)에서도 import 0회. 안전하게 삭제 가능.
+    5) _record_phase_timing, _record_gate_timing, _compute_failure_summary_from_list는 tests/test_metrics_observability_82e3.py에서 호출하므로 보존 (dead 아님).
+    6) MT 분할 의무 케이스 검토: 변경 함수 ≥3개(dead helper 3개 삭제) ⇒ 단일 파일 내 격리된 삭제이고 호출 사이트 0개이므로 MT-1로 묶음 유지. 단, 함수별 영향 범위(call site)는 모두 빈 목록임을 grep evidence로 명시.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260531-B0AB</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: Pipeline v1 Legacy Cleanup (Dead Code + Stale Docs)</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>[PD, META]</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>사용자 원문이 HIGH_RISK 지정. Trust-Root 파일(pipeline.py, CLAUDE.md, AGENTS.md, .claude/agents/*.md, .codex/agents/*.toml) 다수 수정 포함. dead helper 삭제는 정의만 제거하므로 호출 안전성은 grep으로 사전 증명되었으나, Trust-Root 보호 정책상 conservative repair + per-phase CI가 강제됨.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>10</expected_changed_files>
+      <expected_changed_functions>3</expected_changed_functions>
+      <expected_changed_lines>250</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자 원문이 이미 4개 MT 후보(MT-1 pipeline dead code, MT-2 root docs, MT-3 agent MD, MT-4 회귀 테스트), HIGH_RISK 프로필, backward-compat 인자 처리 원칙, oracle 파일 경로까지 모두 명시했으므로 내부 변수명/코드 스타일/사소한 함수명 같은 P2 질문은 묻지 않음. 핵심 결정만 contract에 P0/P1 질문으로 기록.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업의 위험도(execution_profile)를 HIGH_RISK로 설정해도 될까요?</user_facing_question>
+        <evidence>pipeline.py 본체 dead 함수 3개 삭제 + CLAUDE.md, AGENTS.md, README.md, .claude/agents/*.md, .codex/agents/*.toml 동시 수정. Trust-Root 파일 다수 포함.</evidence>
+        <why_it_matters>HIGH_RISK는 conservative repair + per-phase CI를 강제하므로 잘못 삭제했을 때 빨리 발견되고 되돌리기 쉽습니다. STANDARD로 낮추면 Trust-Root 변경이 한 묶음 PR로 들어가 사후 REJECT 위험이 커집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>HIGH_RISK 사용 (사용자 원문 지침대로)</label>
+            <benefit>per-phase CI로 각 MT의 회귀가 즉시 드러나고, Trust-Root 변경이 보호 절차를 따릅니다.</benefit>
+            <cost>각 MT마다 module qa + CI 대기로 시간이 약간 더 걸립니다.</cost>
+          </option>
+          <option id="B">
+            <label>STANDARD로 낮춤</label>
+            <benefit>전체 작업 시간이 줄어듭니다.</benefit>
+            <cost>Trust-Root 파일을 한 PR에 넣어 머지 후 사후 REJECT가 발생하면 되돌리기 어렵습니다.</cost>
+          </option>
+        </options>
+        <user_answer>A — 사용자 원문이 "이 작업은 HIGH_RISK 프로필이다"라고 명시함</user_answer>
+      </question>
+      <question id="DQ-2" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>--user-confirmed, --three-gate 같은 backward-compat 인자를 어떻게 다룰까요?</user_facing_question>
+        <evidence>pipeline.py argparse에서 5곳에 --user-confirmed가 정의됨. 일부는 이미 backward-compatible no-op + 경고로 처리됨. 외부 스크립트가 이 인자를 호출할 가능성 있음.</evidence>
+        <why_it_matters>인자를 완전 삭제하면 기존 스크립트가 argparse 오류로 깨집니다(파괴적 변경). 인자를 두면서 성공 경로로 인정하면 사용자 안전(nonce gate)이 깨집니다. 양쪽 모두 회귀이므로 두 회귀를 동시에 막아야 합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>인자는 보존, 성공 경로만 차단 + 회귀 테스트로 증명 (사용자 원문 지침)</label>
+            <benefit>기존 스크립트 호환 + 우회 차단 양립. 회귀 테스트로 두 보장을 모두 자동 검증.</benefit>
+            <cost>인자가 살아있어 사용자가 잠시 혼란할 수 있으나 경고 메시지로 안내됨.</cost>
+          </option>
+          <option id="B">
+            <label>인자 완전 삭제</label>
+            <benefit>코드가 더 짧아집니다.</benefit>
+            <cost>외부 스크립트가 ArgumentError로 깨집니다(파괴적 변경).</cost>
+          </option>
+        </options>
+        <user_answer>A — 사용자 원문이 "backward-compatible parser 인자는 무작정 삭제하지 말 것"이라고 명시함</user_answer>
+      </question>
+      <question id="DQ-3" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>정의만 있고 어디에서도 호출/import되지 않는 helper 함수 3개를 이번 IMP에서 모두 삭제할까요?</user_facing_question>
+        <evidence>grep 결과: _is_budget_blocked, _wait_for_github_ci, _verify_allowed_files 세 함수 모두 pipeline.py 내 정의 1회만 존재. tests/* 포함 다른 .py에서 호출/import 0회. _record_phase_timing 등 다른 helper는 tests에서 사용 중이므로 dead가 아님(보존).</evidence>
+        <why_it_matters>실제 사용처가 0인 코드는 read 비용만 늘리고 미래 변경 시 잘못된 참조가 될 수 있습니다. 단, 향후 기능 확장을 미리 준비한 함수일 가능성도 있어 한 번 사용자 확인이 필요합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>3개 모두 삭제 (추천)</label>
+            <benefit>pipeline.py가 짧아지고 dead reference 위험 제거. grep으로 사용처 0개 사전 확인 완료.</benefit>
+            <cost>향후 사용하고 싶으면 git history에서 복원 필요.</cost>
+          </option>
+          <option id="B">
+            <label>3개 함수 그대로 보존</label>
+            <benefit>나중에 호출할 일이 생기면 바로 사용 가능.</benefit>
+            <cost>현재 dead 상태 유지. "Legacy Cleanup" 작업 목적에 맞지 않음.</cost>
+          </option>
+        </options>
+        <user_answer>A — 사용자 원문이 "정의만 있고 호출되지 않는 함수" 점검을 명시했고 grep으로 안전성 사전 증명됨</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: 현재 pipeline.py(17954줄), CLAUDE.md, AGENTS.md, README.md, .claude/agents/*.md, .codex/agents/*.toml
+    - Output: dead helper 3개 제거된 pipeline.py + stale 문구 제거된 문서/agent MD/TOML + tests/test_legacy_cleanup_b0ab.py 신규 회귀 테스트
+    - Validation: contract test_set의 7개 command_check 모두 PASS + oracle 2개 케이스(normal_legacy_cleanup_verify + edge_user_confirmed_still_blocked) PASS + harness --score 호출 시 차단 유지 + --user-confirmed 단독 호출 시 acceptance_code_required로 BLOCKED 유지
+  </interface_spec>
+
+  <requirements>
+    - 사용자 원문 지침을 엄격히 따른다: 1) dead code 삭제 2) stale 문구 정리 3) backward-compat 인자는 보존(성공 경로만 차단) 4) 회귀 테스트로 두 회귀(인자 삭제로 인한 파괴적 변경, 인자 우회로 인한 사용자 안전 깨짐) 모두 자동 검증.
+    - Three-Gate, Option A phase attestation, Incremental Module Gate, Codex Review Gate(plan/scope/code/hygiene/pr/rca 6단계), GitHub CI, Oracle, Technical, User Acceptance Nonce Gate 모두 유지.
+    - User Acceptance는 request-accept + acceptance-code 흐름만 성공 경로로 남긴다.
+    - 회귀 테스트는 utf-8 + ensure_ascii=False를 유지하고, subprocess 기반 차단 검증만 수행(상태 변경 없음 — PIPELINE_STATE_PATH 격리 불필요).
+    - 한국어 세션 언어 규칙 준수(PR 제목/본문, 커밋 메시지 등).
+    - 신뢰 루트 파일 수정이므로 모든 MT 완료 후 module integrate → done --phase dev → Dev phase attestation 순서를 한 번씩 정상 통과해야 함.
+    - Codex Review Gate: plan stage ACCEPT는 Dev 진입 전에 필요, scope stage는 자동 계산, code stage ACCEPT는 QA 진입 전에 필요.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_is_budget_blocked, _wait_for_github_ci, _verify_allowed_files</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>\b_is_budget_blocked\b|\b_wait_for_github_ci\b|\b_verify_allowed_files\b</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py에서 호출처가 0개인 dead helper 3개의 def 블록(docstring 포함)을 완전 삭제. argparse, cmd_harness, gates accept 본체 로직은 손대지 않음. _check_attempt_budget 등 호출 대상 함수는 그대로 유지.</change_summary>
+      <line_estimate>30</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>CLAUDE.md/AGENTS.md/README.md 내 Phase 7 외부 게이트 설명 및 User Acceptance Nonce Gate 섹션 (텍스트만)</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>AGENTS.md</file>
+        <file>README.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>--user-confirmed</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        CLAUDE.md L1155, L1196, L1200, L1201과 AGENTS.md 동일 위치, README.md(있다면)에서: 1) "기존 --user-confirmed 예시"를 nonce gate(request-accept → --acceptance-code) 정식 흐름으로 교체. 2) Phase 7 표 row에서 --user-confirmed로 끝나는 명령 예시를 --acceptance-code 흐름으로 교체. 3) "Classic mode is forbidden", "Contract v2" 정식 명칭은 그대로 유지(현재 모드의 정식 명칭). 본체 로직 수정 없음 — 문서 텍스트만.
+      </change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>.codex/agents/*.toml과 .claude/agents/*.md의 Phase 7 / Deploy Path 설명 (텍스트만)</affected_function>
+      <target_files>
+        <file>.codex/agents/build-agent.toml</file>
+        <file>.codex/agents/test-harness-agent.toml</file>
+        <file>.codex/agents/pm-agent.toml</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>--user-confirmed</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        1) .codex/agents/build-agent.toml L141: "gates accept ... --user-confirmed 가 PASS되면" 문구를 "gates accept ... --acceptance-code &lt;코드&gt; 가 PASS되면"으로 교체.
+        2) .codex/agents/test-harness-agent.toml L21(가이드라인 7번): --user-confirmed → request-accept + --acceptance-code 흐름으로 교체.
+        3) .codex/agents/test-harness-agent.toml L118(Deploy Path After ACCEPT 섹션 헤더): 동일하게 교체.
+        4) .codex/agents/pm-agent.toml L293 Phase 7 표 row와 .claude/agents/pm-agent.md L297 Phase 7 표 row에서 --user-confirmed 명령 예시를 --acceptance-code 흐름으로 교체.
+        5) .claude/agents/test-harness-agent.md에 동일 stale 문구가 남아 있는지 grep으로 추가 확인하고 정리.
+        본체 동작 변경 없음 — agent prompt 텍스트만.
+      </change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>tests/test_legacy_cleanup_b0ab.py (신규 파일 생성)</affected_function>
+      <target_files>
+        <file>tests/test_legacy_cleanup_b0ab.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_legacy_cleanup_b0ab</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        신규 회귀 테스트 파일 작성. 필수 5개 테스트:
+        1) test_dead_helpers_removed — pipeline.py source를 utf-8로 읽어 "def _is_budget_blocked", "def _wait_for_github_ci", "def _verify_allowed_files"가 0회 매칭되는지 assert.
+        2) test_harness_score_blocked — subprocess.run(["python","pipeline.py","harness","--score","100","--verdict","PASS"]) 실행, returncode != 0 AND ("THREE GATE BLOCKED" in stdout+stderr) assert.
+        3) test_user_confirmed_only_blocked — subprocess.run(["python","pipeline.py","gates","accept","--result","ACCEPT","--evidence","nonexistent.txt","--user-confirmed"]) 실행, returncode != 0 AND ("acceptance_code_required" in stdout+stderr) assert. 추가로 한국어 경고 문구("더 이상 ACCEPT를 통과시키지 않습니다") 포함 확인.
+        4) test_stale_phrases_removed_in_root_docs — CLAUDE.md / AGENTS.md / README.md 파일을 utf-8로 읽어 success-path 정규식(예: r"ACCEPT --evidence \[[^\]]+\] --user-confirmed`?$" 또는 "--user-confirmed.*PASS")으로 매칭 0회 assert. BLOCKED 설명에 인용된 패턴(예: "--user-confirmed 단독")은 명시적으로 허용.
+        5) test_agent_md_files_have_no_user_confirmed_success_path — .codex/agents/build-agent.toml, .codex/agents/test-harness-agent.toml, .codex/agents/pm-agent.toml, .claude/agents/pm-agent.md를 utf-8로 읽어 success-path 매칭 0회 assert.
+        subprocess 호출 시 cwd를 repo 루트로 명시. PIPELINE_STATE_PATH 격리는 불필요(state 변경 없음 — 단순 차단 검증). 모든 파일 열기는 encoding="utf-8".
+      </change_summary>
+      <line_estimate>120</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — pipeline.py가 이미 3.10 호환 syntax 사용 중이며 신규 패키지 추가 없음</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>기존 typeCheckingMode 유지 — 신규 패키지 없음</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    - contract test_set의 7개 command_check 모두 returncode=0 + "passed" 출력 포함
+    - oracle 2개 케이스(normal_legacy_cleanup_verify, edge_user_confirmed_still_blocked) 모두 PASS
+    - pipeline.py의 _is_budget_blocked, _wait_for_github_ci, _verify_allowed_files 함수 def 0회 매칭
+    - python pipeline.py harness --score 100 --verdict PASS 호출 시 exit 1 + "THREE GATE BLOCKED" 출력 유지
+    - python pipeline.py gates accept --result ACCEPT --evidence x --user-confirmed (단독) 호출 시 exit 1 + "acceptance_code_required" + "더 이상 ACCEPT를 통과시키지 않습니다" 출력 유지
+    - python pipeline.py gates accept --help 출력에 --user-confirmed 인자 보존 확인 (backward-compat)
+    - python pipeline.py harness --help 출력에 Legacy harness diagnostic 설명 보존 확인 (서브커맨드 보존 + 호출 시만 차단)
+    - CLAUDE.md, AGENTS.md, README.md, .codex/agents/*.toml, .claude/agents/pm-agent.md에서 "ACCEPT --evidence [...] --user-confirmed"가 성공 경로처럼 보이는 문구 0회 매칭
+    - tests/test_legacy_cleanup_b0ab.py가 신규로 존재하고 pytest -q 단독 실행 시 모든 테스트 PASS
+    - User Acceptance gate는 request-accept + --acceptance-code 흐름으로만 ACCEPT 통과 가능 (--user-confirmed 단독은 BLOCKED 유지)
+    - Codex Review Gate plan/scope/code stage 모두 ACCEPT 필요 (review_model: GPT-5.5)
+  </acceptance_criteria>
+
+  <forbidden>
+    - pipeline.py의 argparse parser에서 --user-confirmed / --three-gate / --phase-attestations / --strict-tools / --score 인자 자체 삭제 (backward-compat 보존 의무)
+    - cmd_harness 함수 자체 삭제 (서브커맨드 자체는 보존, 차단 메시지만 유지)
+    - "Classic mode is forbidden" 같은 명시적 차단 문구 삭제 (사용자 가시성 보호)
+    - tests/test_metrics_observability_82e3.py가 사용하는 _record_phase_timing / _record_gate_timing / _compute_failure_summary_from_list 삭제 (dead 아님 — tests에서 호출 중)
+    - 신규 의존성 추가, 신규 패키지 추가, 파일 이동·삭제 (Trust-Root 정책상 별도 IMP)
+    - 본 MT 외 파일(예: .github/workflows/ci.yml, pipeline_state.json, .pipeline/**) 수정 — scope manifest 위반
+    - acceptance_request.json, deployment_manifest.json 등 런타임 생성 파일 PR에 포함
+  </forbidden>
+
+  <handover_template>
+    <handover_example>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260531-B0AB</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>CLAUDE.md</file>
+        <file>AGENTS.md</file>
+        <file>README.md</file>
+        <file>.codex/agents/build-agent.toml</file>
+        <file>.codex/agents/test-harness-agent.toml</file>
+        <file>.codex/agents/pm-agent.toml</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+        <file>tests/test_legacy_cleanup_b0ab.py</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_example>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\CLAUDE.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\AGENTS.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\README.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.codex\agents\build-agent.toml</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.codex\agents\test-harness-agent.toml</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.codex\agents\pm-agent.toml</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\pm-agent.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\test-harness-agent.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260531-B0AB\normal_legacy_cleanup_verify\input.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260531-B0AB\edge_user_confirmed_still_blocked\input.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260531-B0AB\task_contract.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260531-B0AB\test_set.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      - Three-Gate, Option A phase attestation, Incremental Module Gate 강제 유지.
+      - User Acceptance Nonce Gate (IMP-20260531-BBDB): --user-confirmed 단독 BLOCKED, --acceptance-code 만이 성공 경로.
+      - Trust-Root 파일 수정 시 HIGH_RISK 실행 프로필 강제, conservative repair + per-phase CI.
+      - 모든 MT 완료 후 module integrate → done --phase dev → Dev phase attestation → Codex Review (code stage) → QA.
+      - Scope Lock 강제: git diff --name-only가 scope_manifest_MT-N.json의 files 배열과 정확히 일치해야 module dev 기록 허용.
+      - 한국어 세션 언어 규칙: PR 제목/본문, 커밋 메시지, 사용자 안내문 모두 쉬운 한국어.
+      - 6단계 Codex Review (plan/scope/code/hygiene/pr/rca): review_model=GPT-5.5, REJECT 시 failure_packet.json 생성.
+    </phase_rules_excerpt>
+    <prev_phase_summary>Phase 1 PM Planner 완료: 사용자 원문 명시 4개 MT 분해, grep 사전 조사 7회, contract v2 init+4 modules+3 questions+2 oracles(normal+edge)+7 tests freeze 완료. dead helper 3개 안전성 grep 증명. backward-compat 인자 보존 원칙 확정. contract_hash=291b2bbf, test_set_hash=8a618fe3.</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+</pm_planner_output>
