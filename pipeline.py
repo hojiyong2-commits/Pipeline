@@ -13529,8 +13529,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 "  python pipeline.py gates request-accept --evidence <결과물-경로>\n"
                 "를 먼저 실행하여 ACCEPT-...-XXXXXXXX 코드를 발급받으세요."
             )
-        result = str(args.result).upper()
-        if result not in {"ACCEPT", "REJECT"}:
+        accept_decision: str = str(args.result).upper()
+        if accept_decision not in {"ACCEPT", "REJECT"}:
             _die("[USER ACCEPTANCE BLOCKED] --result는 ACCEPT 또는 REJECT만 허용됩니다.")
 
         # IMP-20260531-BBDB MT-3: acceptance_request.json 로드 + nonce/SHA/run_id 검증
@@ -13607,12 +13607,12 @@ def cmd_gates(args: argparse.Namespace) -> None:
 
         # 코드 형식 및 nonce 검증
         _code_str = str(getattr(args, "acceptance_code", "") or "")
-        _expected_prefix = f"{result}-{pid}-"
+        _expected_prefix = f"{accept_decision}-{pid}-"
         if not _code_str.startswith(_expected_prefix):
             _record_failure_packet(
                 state, "acceptance", {},
                 command=[sys.executable, "pipeline.py", "gates", "accept",
-                         "--result", result, "--evidence", "<path>",
+                         "--result", accept_decision, "--evidence", "<path>",
                          "--acceptance-code", _expected_prefix + "XXXXXXXX"],
                 note=f"acceptance code format mismatch: {_code_str!r}",
                 status="BLOCKED", phase="harness",
@@ -13723,11 +13723,13 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 _die("[BLOCKED] evidence 파일 변경됨 (evidence_changed) — gates request-accept 재실행 필요")
 
         # 모든 검증 통과 → CONSUMED 처리
-        _consume_acceptance_request(_req, result)
-        _log_event(state, f"acceptance code consumed: request_id={_req.get('request_id')} result={result}")
+        # 위 _req is None 분기에서 _die 종료 보장 — None 가능성 없음
+        assert _req is not None  # nosec B101
+        _consume_acceptance_request(_req, accept_decision)
+        _log_event(state, f"acceptance code consumed: request_id={_req.get('request_id')} result={accept_decision}")
         # D4: pr gate → acceptance gate 연결 (bootstrap_exception 제외)
         bootstrap_exception_accept = state.get("codex_bootstrap_exception", False)
-        if not bootstrap_exception_accept and result == "ACCEPT":
+        if not bootstrap_exception_accept and accept_decision == "ACCEPT":
             _codex_pr_gate_check_accept = _check_codex_pr_gate_for_technical(state)
             if _codex_pr_gate_check_accept:
                 _record_failure_packet(
@@ -13755,7 +13757,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 _die(f"[CODEX PR GATE REQUIRED] ACCEPT 전에 codex pr stage ACCEPT가 필요합니다: {_codex_pr_gate_check_accept}")
         deployment: Optional[Dict[str, Any]] = None
         evidence_validation: Optional[Dict[str, Any]] = None
-        if result == "ACCEPT":
+        if accept_decision == "ACCEPT":
             prereq = []
             for gate_name in ("technical", "oracle", "github_ci"):
                 gate = state["external_gates"].get(gate_name, {})
@@ -13880,13 +13882,13 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _validate_pr_title_matches_pipeline(state)
             evidence_validation = _validate_user_acceptance_evidence(args.evidence)
             deployment = _deploy_accepted_outputs(state, args.evidence, args.notes, evidence_validation)
-        gate_status = "PASS" if result == "ACCEPT" else "FAIL"
+        gate_status = "PASS" if accept_decision == "ACCEPT" else "FAIL"
         report = {
             "schema_version": 1,
             "generated_at": _now(),
             "pipeline_id": pid,
             "status": gate_status,
-            "result": result,
+            "result": accept_decision,
             "evidence": args.evidence,
             "validated_evidence": evidence_validation or {},
             "notes": args.notes or "",
@@ -16774,7 +16776,7 @@ def _github_actions_duration_summary(repo: Optional[str], run_id: Optional[str])
                     elapsed_human = f"{seconds}초"
             except (ValueError, TypeError):
                 pass
-        result: Dict[str, Any] = {
+        metrics: Dict[str, Any] = {
             "status": data.get("status", "확인 불가"),
             "run_id": str(data.get("databaseId", run_id)),
             "url": data.get("url", "확인 불가"),
@@ -16788,7 +16790,7 @@ def _github_actions_duration_summary(repo: Optional[str], run_id: Optional[str])
             "commit_sha": data.get("headSha", "확인 불가") or "확인 불가",
             "workflow_name": data.get("workflowName", "확인 불가") or "확인 불가",
         }
-        return result
+        return metrics
     except Exception:
         return unavailable
 
@@ -17329,19 +17331,19 @@ def cmd_metrics(args: "argparse.Namespace") -> None:
         # IMP-20260526-82E3 MT-4: metrics report --json / --markdown
         fmt = (getattr(args, "format", None) or "json").lower()
         state_path_env = os.environ.get("PIPELINE_STATE_PATH")
-        state: Optional[Dict[str, Any]] = None
+        report_state: Optional[Dict[str, Any]] = None
         if state_path_env and Path(state_path_env).exists():
             try:
-                state = json.loads(Path(state_path_env).read_text(encoding="utf-8"))
+                report_state = json.loads(Path(state_path_env).read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
-                state = None
+                report_state = None
         else:
-            state = _load()
+            report_state = _load()
         if fmt == "json":
-            report = _format_metrics_report_json(state)
+            report = _format_metrics_report_json(report_state)
             print(json.dumps(report, ensure_ascii=False, indent=2))
         elif fmt == "markdown":
-            print(_format_metrics_report_markdown(state))
+            print(_format_metrics_report_markdown(report_state))
         else:
             _die(f"[METRICS ERROR] 지원하지 않는 --format: {fmt}. json|markdown 중 선택하세요.")
     else:

@@ -26,8 +26,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pytest
-
 PIPELINE_PY = Path(__file__).resolve().parent.parent.parent / "pipeline.py"
 ORACLE_DIR = Path(__file__).resolve().parent.parent / "oracles" / "IMP-20260531-BBDB"
 
