@@ -22,7 +22,8 @@ Pipeline completion is controlled only by:
 4. `python pipeline.py gates technical`.
 5. `python pipeline.py gates oracle`.
 6. `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`.
-7. `python pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed`.
+7. `python pipeline.py gates request-accept --evidence [결과물-경로]` → 사용자에게 일회용 승인 코드 표시.
+8. 사용자가 코드를 직접 입력하면: `python pipeline.py gates accept --result ACCEPT --evidence [경로] --acceptance-code ACCEPT-<pipeline_id>-<nonce>`.
 8. `python pipeline.py architect --report-file architect_report.xml`.
 
 If any item is PENDING or FAIL, Harness reports the blocker and returns control to the relevant phase. It must not invent a score-based bypass.
@@ -119,7 +120,7 @@ Do not ask the user to review code. Provide:
 
 ## Deploy Path After ACCEPT
 
-When `gates accept --result ACCEPT --evidence [path] --user-confirmed` succeeds, the pipeline
+When `gates accept --result ACCEPT --evidence [path] --acceptance-code ACCEPT-<pid>-<nonce>` succeeds, the pipeline
 automatically deploys accepted outputs:
 
 - **Default deploy root:** `G:\내 드라이브\터미널\<pipeline_id>\`

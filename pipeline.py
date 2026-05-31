@@ -13648,11 +13648,28 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _save(state)
             _die("[BLOCKED] 승인 코드 nonce 불일치 (acceptance_code_mismatch)")
 
-        # PR head SHA 변경 확인 (gh CLI 없으면 skip)
+        # PR head SHA 변경 확인 (gh CLI 실패 시 BLOCKED — 검증 불가 = 안전 실패)
         _stored_sha = str(_req.get("pr_head_sha", "") or "")
         if _stored_sha:
-            _current_sha = _get_current_pr_head_sha() or ""
-            if _current_sha and _stored_sha and not (
+            _current_sha = _get_current_pr_head_sha()
+            if not _current_sha:
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", "<result-path>"],
+                    note="gh CLI 실패 또는 PR 정보 조회 불가 — PR head SHA 검증 불가",
+                    status="BLOCKED", phase="harness",
+                    failure_code="sha_verification_failed",
+                    failure_category="missing_evidence",
+                    summary_ko="PR head SHA 검증 불가 (gh CLI 실패) — gates request-accept 재실행 필요",
+                    expected=f"head_sha={_stored_sha[:7]}", actual="unknown (gh CLI failed)",
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=["gh CLI 설치/인증 확인 후 python pipeline.py gates request-accept 재실행"],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die("[BLOCKED] PR head SHA 검증 불가 (sha_verification_failed) — gh CLI 실패")
+            elif not (
                 _current_sha.startswith(_stored_sha[:7]) or _stored_sha.startswith(_current_sha[:7])
             ):
                 _record_failure_packet(
@@ -13672,11 +13689,29 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 _save(state)
                 _die("[BLOCKED] PR head SHA 변경됨 (stale_head_sha) — gates request-accept 재실행 필요")
 
-        # CI run ID 변경 확인
+        # CI run ID 변경 확인 (gh CLI 실패 시 BLOCKED — 검증 불가 = 안전 실패)
         _stored_run = str(_req.get("github_ci_run_id", "") or "")
         if _stored_run:
-            _current_run = _get_latest_ci_run_id() or ""
-            if _current_run and _stored_run and str(_current_run) != str(_stored_run):
+            _current_run_raw = _get_latest_ci_run_id()
+            _current_run = str(_current_run_raw).strip() if _current_run_raw is not None else ""
+            if not _current_run:
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", "<result-path>"],
+                    note="gh CLI 실패 또는 CI run 정보 조회 불가 — run ID 검증 불가",
+                    status="BLOCKED", phase="harness",
+                    failure_code="run_id_verification_failed",
+                    failure_category="missing_evidence",
+                    summary_ko="CI run ID 검증 불가 (gh CLI 실패) — gates request-accept 재실행 필요",
+                    expected=f"run_id={_stored_run}", actual="unknown (gh CLI failed)",
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=["gh CLI 설치/인증 확인 후 python pipeline.py gates request-accept 재실행"],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die("[BLOCKED] CI run ID 검증 불가 (run_id_verification_failed) — gh CLI 실패")
+            elif _current_run != str(_stored_run):
                 _record_failure_packet(
                     state, "acceptance", {},
                     command=[sys.executable, "pipeline.py", "gates", "request-accept",
@@ -13694,7 +13729,70 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 _save(state)
                 _die("[BLOCKED] CI run ID 변경됨 (stale_run_id) — gates request-accept 재실행 필요")
 
-        # evidence 파일 hash 확인 (URL 또는 file 없음 시 skip)
+        # Issue 2: evidence 경로 일치 확인 (request-accept 시 기록한 경로와 동일해야 함)
+        _stored_evidence_path = str(_req.get("evidence", "") or "")
+        _provided_evidence_path = str(args.evidence or "")
+        if _provided_evidence_path and _stored_evidence_path:
+            _is_url_ev = (
+                _stored_evidence_path.startswith(("http://", "https://"))
+                or _provided_evidence_path.startswith(("http://", "https://"))
+            )
+            if _is_url_ev:
+                if _stored_evidence_path != _provided_evidence_path:
+                    _record_failure_packet(
+                        state, "acceptance", {},
+                        command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                                 "--evidence", _stored_evidence_path],
+                        note=(
+                            f"evidence URL mismatch: stored={_stored_evidence_path}"
+                            f" provided={_provided_evidence_path}"
+                        ),
+                        status="BLOCKED", phase="harness",
+                        failure_code="evidence_path_mismatch",
+                        failure_category="missing_evidence",
+                        summary_ko="evidence URL이 request-accept 시 기록과 다릅니다.",
+                        expected=_stored_evidence_path, actual=_provided_evidence_path,
+                        exit_code=1, owner="Pipeline Manager", return_phase="build",
+                        required_actions=[
+                            "request-accept 시 기록한 동일한 evidence URL을 사용하거나"
+                            " request-accept 재실행"
+                        ],
+                        retry_allowed=True,
+                    )
+                    _save(state)
+                    _die("[BLOCKED] evidence URL 불일치 (evidence_path_mismatch)")
+            else:
+                try:
+                    _norm_stored_ev = str(Path(_stored_evidence_path).resolve())
+                    _norm_provided_ev = str(Path(_provided_evidence_path).resolve())
+                except Exception:  # noqa: BLE001
+                    _norm_stored_ev = _stored_evidence_path
+                    _norm_provided_ev = _provided_evidence_path
+                if _norm_stored_ev != _norm_provided_ev:
+                    _record_failure_packet(
+                        state, "acceptance", {},
+                        command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                                 "--evidence", _stored_evidence_path],
+                        note=(
+                            f"evidence path mismatch: stored={_stored_evidence_path}"
+                            f" provided={_provided_evidence_path}"
+                        ),
+                        status="BLOCKED", phase="harness",
+                        failure_code="evidence_path_mismatch",
+                        failure_category="missing_evidence",
+                        summary_ko="evidence 경로가 request-accept 시 기록과 다릅니다.",
+                        expected=_stored_evidence_path, actual=_provided_evidence_path,
+                        exit_code=1, owner="Pipeline Manager", return_phase="build",
+                        required_actions=[
+                            "request-accept 시 기록한 동일한 evidence 경로를 사용하거나"
+                            " request-accept 재실행"
+                        ],
+                        retry_allowed=True,
+                    )
+                    _save(state)
+                    _die("[BLOCKED] evidence 경로 불일치 (evidence_path_mismatch)")
+
+        # evidence 파일 hash 확인 (URL이면 hash skip; 파일 없음/읽기실패 → BLOCKED)
         _stored_sha256 = _req.get("evidence_sha256")
         _evidence_arg = args.evidence or _req.get("evidence", "")
         if (
@@ -13703,12 +13801,36 @@ def cmd_gates(args: argparse.Namespace) -> None:
             and not _evidence_arg.startswith(("http://", "https://"))
         ):
             _current_sha256 = _compute_file_sha256(_evidence_arg)
-            if _current_sha256 and _current_sha256 != _stored_sha256:
+            if _current_sha256 is None:
                 _record_failure_packet(
                     state, "acceptance", {},
                     command=[sys.executable, "pipeline.py", "gates", "request-accept",
                              "--evidence", _evidence_arg],
-                    note=f"evidence file hash changed: stored={_stored_sha256[:12]} current={_current_sha256[:12]}",
+                    note=f"evidence file missing or unreadable: {_evidence_arg}",
+                    status="BLOCKED", phase="harness",
+                    failure_code="evidence_missing",
+                    failure_category="missing_evidence",
+                    summary_ko="결과물 파일이 없거나 읽을 수 없습니다.",
+                    expected=f"sha256={_stored_sha256[:12]}...",
+                    actual="file_missing_or_unreadable",
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=[
+                        "결과물 파일이 존재하는지 확인 후"
+                        " python pipeline.py gates request-accept 재실행"
+                    ],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die("[BLOCKED] evidence 파일 없음/읽기 실패 (evidence_missing)")
+            elif _current_sha256 != _stored_sha256:
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", _evidence_arg],
+                    note=(
+                        f"evidence file hash changed:"
+                        f" stored={_stored_sha256[:12]} current={_current_sha256[:12]}"
+                    ),
                     status="BLOCKED", phase="harness",
                     failure_code="evidence_changed",
                     failure_category="missing_evidence",
@@ -13721,12 +13843,6 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 )
                 _save(state)
                 _die("[BLOCKED] evidence 파일 변경됨 (evidence_changed) — gates request-accept 재실행 필요")
-
-        # 모든 검증 통과 → CONSUMED 처리
-        # 위 _req is None 분기에서 _die 종료 보장 — None 가능성 없음
-        assert _req is not None  # nosec B101
-        _consume_acceptance_request(_req, accept_decision)
-        _log_event(state, f"acceptance code consumed: request_id={_req.get('request_id')} result={accept_decision}")
         # D4: pr gate → acceptance gate 연결 (bootstrap_exception 제외)
         bootstrap_exception_accept = state.get("codex_bootstrap_exception", False)
         if not bootstrap_exception_accept and accept_decision == "ACCEPT":
@@ -13882,6 +13998,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _validate_pr_title_matches_pipeline(state)
             evidence_validation = _validate_user_acceptance_evidence(args.evidence)
             deployment = _deploy_accepted_outputs(state, args.evidence, args.notes, evidence_validation)
+        # Issue 5: 모든 blocker 검증 통과 후 CONSUMED 처리 (D4/prereq/readiness/consistency 이후)
+        # 위 _req is None 분기에서 _die 종료 보장 — None 가능성 없음
+        assert _req is not None  # nosec B101
+        _consume_acceptance_request(_req, accept_decision)
+        _log_event(state, f"acceptance code consumed: request_id={_req.get('request_id')} result={accept_decision}")
         gate_status = "PASS" if accept_decision == "ACCEPT" else "FAIL"
         report = {
             "schema_version": 1,

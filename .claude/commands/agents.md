@@ -1034,7 +1034,8 @@ BLOCK 판정이 아닌 경우에도, 다음 방어 코드가 없으면 반드시
 4. `python pipeline.py gates technical`
 5. `python pipeline.py gates oracle`
 6. `python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline`
-7. `python pipeline.py gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed`
+7. `python pipeline.py gates request-accept --evidence <결과물-경로>` → 사용자에게 일회용 승인 코드 표시
+8. 사용자가 코드를 직접 입력하면: `python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pipeline_id>-<nonce>`
 
 ## Required Checks
 Harness 역할로 호출되면 아래 명령 출력 또는 동등한 상태 정보를 확인하고, 부족한 항목만 한국어로 짧게 보고합니다.

@@ -115,7 +115,10 @@ python pipeline.py gates phase-ci --phase build --repo hojiyong2-commits/Pipelin
 python pipeline.py gates technical
 python pipeline.py gates oracle
 python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
-python pipeline.py gates accept --result ACCEPT --evidence <실제-결과물-경로-또는-첨부파일> --user-confirmed
+# 1단계: request-accept 실행 → 사용자에게 일회용 승인 코드 표시
+python pipeline.py gates request-accept --evidence <결과물-경로>
+# 2단계: 사용자가 코드를 직접 입력하면 Pipeline Manager가 실행
+python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pipeline_id>-<nonce>
 python pipeline.py architect --report-file architect_report.xml
 ```
 
@@ -135,7 +138,7 @@ python pipeline.py architect --report-file architect_report.xml
 | Phase 5 — SEC | 문서 작업이라 보안 검사는 생략 | `pipeline.py sec --skip` |
 | Phase 6 — Build | 문서 작업이라 EXE 빌드는 해당 없음 | `pipeline.py build --exe "N/A" --skip-reason "docs-only"` |
 | Phase A — 단계별 CI | PM/Dev/QA/Build마다 GitHub 자동 검증 통과 | `pipeline.py gates prepare-phase --phase dev` 후 `pipeline.py gates phase-ci --phase dev` |
-| Phase 7 — Three-Gate | 기술 검사, Oracle 검사, GitHub 자동 검사, 사용자 승인 | `pipeline.py gates accept --result ACCEPT --evidence [실제-결과물-경로-또는-첨부파일] --user-confirmed` |
+| Phase 7 — Three-Gate | 기술 검사, Oracle 검사, GitHub 자동 검사, 사용자 승인 | `gates request-accept --evidence [경로]` → 사용자 승인 코드 → `gates accept --acceptance-code ACCEPT-<pid>-<nonce>` |
 | Phase 8 — Architect | 원인 분석과 후속 개선 여부 판단 | `pipeline.py architect --report-file architect_report.xml` |
 
 ### 확인된 제약
