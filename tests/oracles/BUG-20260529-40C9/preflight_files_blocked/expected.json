@@ -1,0 +1,1 @@
+{"exit_code": 1, "blocked": ["build_report.xml", "scope_manifest_MT-1.json"], "allowed": ["pipeline.py"]}

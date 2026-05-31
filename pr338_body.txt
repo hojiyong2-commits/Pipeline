@@ -1,0 +1,44 @@
+## 작업 요약
+
+IMP-20260528-0A9E Golden Task Regression Suite 구현 PR입니다.
+
+골든 태스크 회귀 테스트 시스템을 추가하여 핵심 파이프라인 흐름을 자동으로 검증합니다.
+
+## 사용자가 확인할 결과물
+
+- 골든 태스크 시드: GT-001~GT-003 (tests/golden_tasks/ 디렉토리)
+- `tests/e2e/test_golden_tasks.py`: 14개 E2E 테스트 (subprocess + PIPELINE_STATE_PATH 격리)
+- `pipeline.py`: `golden list` / `golden run` CLI 명령어 추가
+- `.github/workflows/ci.yml`: Golden Task Smoke 단계 (PR에서만 실행)
+- `CLAUDE.md`: Real CLI Path E2E Gate Policy에 golden task 정책 추가
+
+## 기대 결과와 실제 결과
+
+- 기대: `python pipeline.py golden list` → 3개 골든 태스크 나열 (exit 0)
+- 기대: `python pipeline.py golden run --smoke` → GT-001, GT-003 PASS (exit 0)
+- 기대: 14개 E2E 테스트 모두 통과
+- 실제: 로컬 테스트 14개 중 14개 통과 확인
+- 실제: CI 자동 검사 통과 (run_id: 26608584478, commit: 658e1dc)
+
+## 중요한 선택과 트레이드오프
+
+- 스키마 고정: 8개 필수 필드(id/description/command/smoke/allowed_files/forbidden_files/acceptance_criteria/return_phase)
+- E2E 테스트: subprocess 기반 + PIPELINE_STATE_PATH 격리 (IMP-20260525-6FAC 정책 준수)
+- GT-002 smoke=false: forbidden 감지 시나리오 테스트는 smoke 제외 (항상 exit 1)
+- CI: phase-attestation 브랜치에서는 smoke 테스트 건너뜀 (무한 루프 방지)
+
+## 검증
+
+- 모듈 게이트: MT-1~MT-5 module design→dev→qa 모두 PASS
+- integration gate: PASS
+- Dev done: dev-9d86ad3f509102a2
+- QA PASS: qa-d462a8d8002a8bb0 (108/120)
+- Build: EXE 빌드 없음 (meta-task — 문서/정책/테스트만 변경)
+- Dev phase-ci: 통과 (run 26607399488)
+- QA phase-ci: 통과 (run 26607625251)
+- Build phase-ci: 통과 (run 26607790461)
+- Technical gate: 통과
+- Oracle gate: 통과
+- GitHub CI gate: 14 PASS (run 26608584478)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

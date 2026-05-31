@@ -1,0 +1,26 @@
+{
+  "case_id": "RELEASE-NOTES-normal",
+  "required_version_tag": "v1.0",
+  "required_imp_ids": [
+    "IMP-20260524-48C4",
+    "IMP-20260525-6FAC",
+    "IMP-20260526-82E3",
+    "IMP-20260527-075A",
+    "IMP-20260528-3898",
+    "IMP-20260528-0A9E",
+    "IMP-20260529-D8BA"
+  ],
+  "required_sections": [
+    "v1.0 안정화 릴리즈",
+    "포함된 핵심 게이트",
+    "알려진 제한사항",
+    "다음 단계"
+  ],
+  "forbidden_strings": [
+    "TODO",
+    "TBD",
+    "PLACEHOLDER",
+    "작성 중"
+  ],
+  "minimum_line_count": 40
+}

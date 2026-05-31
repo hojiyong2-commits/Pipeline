@@ -1,0 +1,1 @@
+{"task_id": "GT-002-internal-artifact-blocked", "scenario": "forbidden_file_present", "command": "golden run --task GT-002-internal-artifact-blocked"}

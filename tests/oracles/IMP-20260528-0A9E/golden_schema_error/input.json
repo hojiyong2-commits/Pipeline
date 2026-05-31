@@ -1,0 +1,1 @@
+{"task_file": "missing_required_fields.json", "command": "golden run --task GT-MISSING"}

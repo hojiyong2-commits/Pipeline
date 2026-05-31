@@ -1,0 +1,1 @@
+{"schema_version": 1, "pipeline_id": "IMP-TEST-0000-0001", "patch_scope": {"file": "pipeline.py", "function": "cmd_cluster", "expected_lines_changed_max": 10}, "forbidden": {"trust_root_changes": false, "new_dependencies": false, "file_move_or_delete": false, "packaging_changes": false}}

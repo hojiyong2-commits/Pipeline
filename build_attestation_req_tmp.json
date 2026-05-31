@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-05-30T03:12:46Z",
+  "pipeline_id": "FEAT-20260530-86AA",
+  "phase": "build",
+  "phase_status": "DONE",
+  "commit_hint": "223a3d15e4adedc590fe0132227675818da83939",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-05-30T03:11:54Z",
+    "report_file": null,
+    "evidence": "N/A"
+  },
+  "agent_run": {
+    "run_id": "build-51863ca1308daf85",
+    "phase": "build",
+    "agent_id": "build-agent",
+    "status": "COMPLETED",
+    "output_file": "build_report.xml",
+    "output_sha256": "c8aeada47fbbbe3d6d466f1585ac8c5d3e5fcec0cc7491d65f7457aa252c85bc",
+    "receipt_path": ".pipeline/phase_evidence/FEAT-20260530-86AA/build/agent_receipt_build-51863ca1308daf85.json",
+    "receipt_sha256": "2eb4197c1160c3c4a62f446d0a1a19da1e88553bf411055048633d555db0cffe",
+    "used_by_phase": "build",
+    "receipt_source_path": ".pipeline\\agent_receipts\\FEAT-20260530-86AA\\build\\build-51863ca1308daf85.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\FEAT-20260530-86AA\\build\\build-51863ca1308daf85.json",
+      "path": ".pipeline/phase_evidence/FEAT-20260530-86AA/build/agent_receipt_build-51863ca1308daf85.json",
+      "sha256": "2eb4197c1160c3c4a62f446d0a1a19da1e88553bf411055048633d555db0cffe",
+      "size_bytes": 509,
+      "requires_force_add": false
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": []
+}

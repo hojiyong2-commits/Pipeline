@@ -1,0 +1,272 @@
+{
+  "version": "1.2.0",
+  "pipeline_id": "TMP-HARNESS-AUTO",
+  "type": "IMP",
+  "description": "sample",
+  "created_at": "2026-05-27T02:55:47Z",
+  "updated_at": "2026-05-27T02:56:44Z",
+  "pipeline_started_at": "2026-05-27T02:55:47Z",
+  "pipeline_completed_at": null,
+  "acceptance_requested_at": null,
+  "acceptance_recorded_at": null,
+  "total_elapsed_seconds": null,
+  "current_phase": "harness",
+  "blocked": false,
+  "blocked_reason": null,
+  "phases": {
+    "pm": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "dev": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "qa": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "sec": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "build": {
+      "status": "DONE",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "harness": {
+      "status": "PENDING",
+      "started_at": "2026-05-27T02:55:47Z",
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "architect": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    }
+  },
+  "event_log": [],
+  "terminal_state": null,
+  "harness_fail_count": 0,
+  "agent_runs": {},
+  "external_gates": {
+    "enabled": true,
+    "mode": "three_gate",
+    "technical": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "oracle": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "acceptance": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "github_ci": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    }
+  },
+  "phase_attestations": {
+    "enabled": true,
+    "mode": "github_actions_per_phase",
+    "required_phases": [
+      "pm",
+      "dev",
+      "qa",
+      "build"
+    ],
+    "phases": {
+      "pm": {
+        "status": "PENDING",
+        "completed_at": null,
+        "phase": "pm",
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
+      },
+      "dev": {
+        "status": "PENDING",
+        "completed_at": null,
+        "phase": "dev",
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
+      },
+      "qa": {
+        "status": "PENDING",
+        "completed_at": null,
+        "phase": "qa",
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
+      },
+      "build": {
+        "status": "PASS",
+        "completed_at": "2026-05-27T02:55:47Z",
+        "phase": "build",
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
+      }
+    }
+  },
+  "module_gates": {
+    "enabled": true,
+    "mode": "incremental_module_gate",
+    "sequence": [],
+    "modules": {},
+    "integration": {
+      "status": "PENDING",
+      "completed_at": null,
+      "report_file": null,
+      "evidence": null,
+      "notes": []
+    }
+  },
+  "execution_profile": {
+    "mode": "STANDARD",
+    "status": "ACTIVE",
+    "reason": "",
+    "max_micro_tasks": null,
+    "product_code_write_allowed": true,
+    "phase_ci_mode": "per_phase",
+    "repair_mode": "standard",
+    "risk_review_required": false,
+    "risk_categories": [],
+    "declared_at": null,
+    "escalated_at": null,
+    "escalation_reason": null
+  },
+  "outputs": {
+    "items": []
+  },
+  "failure_packets": [
+    {
+      "gate": "check_dev",
+      "attempt": 97,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\TMP-HARNESS-AUTO\\failures\\check_dev_attempt_97.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\TMP-HARNESS-AUTO\\failures\\check_dev_attempt_97.json",
+      "recorded_at": "2026-05-27T02:56:41Z",
+      "repair_owner": "Pipeline Manager repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "gate_blocked_dev",
+      "failure_category": "missing_evidence",
+      "owner": "Pipeline Manager",
+      "return_phase": "pm",
+      "attempt_count": 1,
+      "escalation_reason": null
+    }
+  ],
+  "protocol_evolution_decision": null,
+  "phase_timings": {},
+  "gate_timings": {},
+  "agent_timings": {},
+  "github_actions_timings": {
+    "WAITING_FOR_TRIGGER": 0,
+    "QUEUED": 0,
+    "IN_PROGRESS": 0,
+    "COMPLETED": 0,
+    "TIMEOUT": 0
+  },
+  "failure_summary": {},
+  "oracle_quality": {},
+  "codex_review_gates": {
+    "codex_code_rejected_at": "2026-05-27T02:56:38Z",
+    "codex_code_result": "ACCEPT",
+    "codex_code_accepted_at": "2026-05-27T02:56:38Z",
+    "codex_plan_accepted_at": "2026-05-27T02:56:39Z",
+    "codex_plan_result": "REJECT",
+    "codex_scope_accepted_at": "2026-05-27T02:56:39Z",
+    "codex_scope_result": "REJECT",
+    "codex_pr_rejected_at": "2026-05-27T02:56:40Z",
+    "codex_pr_result": "REJECT",
+    "codex_plan_rejected_at": "2026-05-27T02:56:42Z",
+    "codex_scope_rejected_at": "2026-05-27T02:56:43Z",
+    "codex_hygiene_rejected_at": "2026-05-27T02:56:43Z",
+    "codex_hygiene_result": "REJECT",
+    "codex_rca_rejected_at": "2026-05-27T02:56:44Z",
+    "codex_rca_result": "REJECT"
+  },
+  "codex_attempt_log": [
+    {
+      "provider": "openai-api",
+      "stage": "code",
+      "failure_code": "SETUP_REQUIRED",
+      "ts": "2026-05-27T02:56:45Z"
+    },
+    {
+      "provider": "openai-api",
+      "stage": "code",
+      "failure_code": "SETUP_REQUIRED",
+      "ts": "2026-05-27T02:56:45Z"
+    }
+  ]
+}

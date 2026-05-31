@@ -1,0 +1,45 @@
+{
+  "case_id": "normal_legacy_cleanup_verify",
+  "case_kind": "normal",
+  "description": "Pipeline v1 legacy cleanup 후 정상 검증: dead helper 3개 제거됨, harness --score 차단 유지, --user-confirmed 단독 BLOCKED 유지, stale 문구 제거됨.",
+  "checks": [
+    {
+      "name": "dead_helpers_removed",
+      "description": "정의만 있던 dead helper 3개가 pipeline.py에서 완전히 삭제되었는지 확인",
+      "command_kind": "grep_absent",
+      "patterns": ["def _is_budget_blocked", "def _wait_for_github_ci", "def _verify_allowed_files"],
+      "target_file": "pipeline.py"
+    },
+    {
+      "name": "harness_score_blocked",
+      "description": "pipeline.py harness --score 호출 시 [THREE GATE BLOCKED] 메시지로 차단되는지 확인",
+      "command_kind": "subprocess_exit_nonzero",
+      "command": ["python", "pipeline.py", "harness", "--score", "100", "--verdict", "PASS"],
+      "expected_stderr_or_stdout_contains": "THREE GATE BLOCKED"
+    },
+    {
+      "name": "user_confirmed_only_blocked",
+      "description": "gates accept --user-confirmed (단독)는 BLOCKED 처리되는지 확인",
+      "command_kind": "subprocess_exit_nonzero",
+      "command": ["python", "pipeline.py", "gates", "accept", "--result", "ACCEPT", "--evidence", "test.txt", "--user-confirmed"],
+      "expected_stderr_or_stdout_contains": "acceptance_code_required"
+    },
+    {
+      "name": "stale_phrases_removed",
+      "description": "agent TOML/MD에서 --user-confirmed를 성공 경로로 설명하는 문구가 제거되었는지 확인",
+      "command_kind": "grep_absent",
+      "patterns": [
+        "gates accept --result ACCEPT --evidence \\[path\\] --user-confirmed.*PASS",
+        "gates accept --result ACCEPT --evidence \\[.*\\] --user-confirmed.*succeeds",
+        "ACCEPT --evidence \\[.*\\] --user-confirmed`.*$"
+      ],
+      "target_files": [
+        ".codex/agents/build-agent.toml",
+        ".codex/agents/test-harness-agent.toml",
+        ".codex/agents/pm-agent.toml",
+        ".claude/agents/pm-agent.md"
+      ]
+    }
+  ],
+  "expected_result": "PASS"
+}

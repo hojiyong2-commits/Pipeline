@@ -1,0 +1,16 @@
+{
+  "case_id": "TC-normal-status-complete",
+  "case_kind": "normal",
+  "description": "terminal_state=COMPLETE 상태의 pipeline_state.json을 PIPELINE_STATE_PATH로 격리한 뒤 `python pipeline.py status`를 subprocess로 실행한 경우, status 명령은 정상적으로 상태를 출력해야 한다.",
+  "preconditions": {
+    "state_file": {
+      "pipeline_id": "TEST-COMPLETE-FIXTURE",
+      "current_phase": "COMPLETE",
+      "terminal_state": "COMPLETE",
+      "blocked": false
+    },
+    "isolation": "PIPELINE_STATE_PATH 환경 변수로 임시 state 파일 경로 지정"
+  },
+  "command": ["python", "pipeline.py", "status"],
+  "expected_behavior": "stdout에 파이프라인 상태가 출력되고 process exit code는 0"
+}
