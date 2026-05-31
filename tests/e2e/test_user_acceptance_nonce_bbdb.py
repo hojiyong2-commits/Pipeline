@@ -545,12 +545,11 @@ def test_tc14_nonce_helper_roundtrip(tmp_path):
 # Helper: fake gh CLI (Windows .cmd / Unix shell script)
 # ---------------------------------------------------------------------------
 
-def make_fake_gh(tmp_path: Path, sha: str = "", run_id: str = "", pr_body: str = "") -> None:
+def make_fake_gh(tmp_path: Path, sha: str = "", run_id: str = "") -> None:
     """tmp_path에 fake gh CLI를 생성 (make_env의 PATH가 tmp_path이므로 gh로 실행됨).
 
     sha: `gh pr view --json headRefOid` 응답값 (비어 있으면 exit 1)
     run_id: `gh run list` 응답값 (비어 있으면 exit 1)
-    pr_body: `gh pr view --json body` 응답값 (비어 있으면 empty json)
 
     주의: PATH=str(tmp_path) 환경에서만 실행됨.
     Windows: gh.cmd (batch), Unix: gh (shell script + chmod 755).
@@ -558,7 +557,6 @@ def make_fake_gh(tmp_path: Path, sha: str = "", run_id: str = "", pr_body: str =
     if sys.platform == "win32":
         sha_escaped = sha.replace('"', '""')
         run_escaped = run_id.replace('"', '""')
-        body_escaped = pr_body.replace('"', '""').replace("\n", "!LF!")
         # Windows batch는 if/elif 체인이 복잡하므로, %* 전체를 체크하는 대신
         # 두 번째 인자(%2)로 분기
         script = (
