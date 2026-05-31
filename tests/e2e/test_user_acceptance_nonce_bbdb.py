@@ -180,7 +180,9 @@ def load_final_state(env: Dict[str, str]) -> Dict[str, Any]:
 # TC-1: request-accept가 acceptance_request.json을 생성 (normal oracle)
 def test_tc1_request_accept_creates_json(tmp_path):
     """gates request-accept 실행 시 acceptance_request.json이 PENDING 상태로 생성된다."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     pipeline_id = bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test result", encoding="utf-8")
@@ -206,7 +208,9 @@ def test_tc1_request_accept_creates_json(tmp_path):
 # TC-2: --user-confirmed 단독은 acceptance_code_required로 BLOCKED (edge oracle)
 def test_tc2_user_confirmed_only_blocked(tmp_path):
     """--user-confirmed 단독으로는 ACCEPT gate를 통과하지 못한다."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test", encoding="utf-8")
@@ -231,7 +235,9 @@ def test_tc2_user_confirmed_only_blocked(tmp_path):
 # TC-3: 잘못된 nonce → acceptance_code_mismatch BLOCKED (edge oracle)
 def test_tc3_wrong_nonce_blocked(tmp_path):
     """잘못된 nonce로 ACCEPT 시도 시 acceptance_code_mismatch."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     pipeline_id = bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test", encoding="utf-8")
@@ -256,7 +262,9 @@ def test_tc3_wrong_nonce_blocked(tmp_path):
 # TC-4: pipeline_id 다른 코드 → BLOCKED
 def test_tc4_pipeline_id_mismatch_blocked(tmp_path):
     """다른 pipeline_id의 코드로 ACCEPT 시도 시 BLOCKED."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     pipeline_id = bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test", encoding="utf-8")
@@ -283,7 +291,9 @@ def test_tc4_pipeline_id_mismatch_blocked(tmp_path):
 # TC-5: evidence 파일 hash 변경 → evidence_changed BLOCKED
 def test_tc5_evidence_changed_blocked(tmp_path):
     """request-accept 이후 evidence 파일이 변경되면 evidence_changed BLOCKED."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     pipeline_id = bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("original content", encoding="utf-8")
@@ -351,7 +361,9 @@ def test_tc7_ci_run_id_stored(tmp_path):
 # TC-8: 올바른 코드 + 동일 상태 → nonce 검증 통과 (다른 gate에서 실패해도 무관)
 def test_tc8_correct_code_passes_nonce_validation(tmp_path):
     """올바른 acceptance-code + 동일 evidence → nonce 검증은 통과한다."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     pipeline_id = bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test result", encoding="utf-8")
@@ -377,7 +389,9 @@ def test_tc8_correct_code_passes_nonce_validation(tmp_path):
 # TC-9: REJECT도 --acceptance-code 없으면 FAIL
 def test_tc9_reject_no_acceptance_code_fail(tmp_path):
     """REJECT도 --acceptance-code 없으면 acceptance_code_required로 FAIL."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test", encoding="utf-8")
@@ -400,7 +414,9 @@ def test_tc9_reject_no_acceptance_code_fail(tmp_path):
 # TC-10: --user-confirmed 단독 → 경고 + BLOCKED (명시적)
 def test_tc10_user_confirmed_warning_then_blocked(tmp_path):
     """--user-confirmed 플래그만 있으면 경고 출력 후 BLOCKED."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test", encoding="utf-8")
@@ -423,7 +439,9 @@ def test_tc10_user_confirmed_warning_then_blocked(tmp_path):
 # TC-11: acceptance_request.json 없이 gates accept → missing_acceptance_request BLOCKED
 def test_tc11_missing_acceptance_request_blocked(tmp_path):
     """acceptance_request.json 없이 acceptance-code 입력 시 BLOCKED."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     pipeline_id = bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test", encoding="utf-8")
@@ -465,7 +483,9 @@ def test_tc12_stale_pr_body_patterns_exist():
 # TC-13: status=CONSUMED → consumed_or_expired BLOCKED
 def test_tc13_consumed_request_blocked(tmp_path):
     """status=CONSUMED인 acceptance_request로 gates accept 시도 → consumed_or_expired BLOCKED."""
+    # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
     env = make_env(tmp_path)
+    assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     pipeline_id = bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test", encoding="utf-8")
