@@ -1,0 +1,27 @@
+{
+  "case_id": "edge_user_confirmed_still_blocked",
+  "case_kind": "edge",
+  "description": "Edge case: legacy cleanup 후에도 --user-confirmed 인자 자체는 argparse에서 받아들이지만 (backward-compat) 단독 사용은 ACCEPT를 통과시키지 않고 명확한 한국어 경고 + BLOCKED 처리되어야 한다. 인자가 완전히 사라지면 기존 스크립트가 ArgumentError로 깨지므로 보존 필수.",
+  "scenario": {
+    "step_1": {
+      "command": ["python", "pipeline.py", "gates", "accept", "--result", "ACCEPT", "--evidence", "anything.txt", "--user-confirmed"],
+      "expected_exit_code": 1,
+      "expected_stderr_substring": "acceptance_code_required",
+      "expected_stdout_or_stderr_contains_warning": "더 이상 ACCEPT를 통과시키지 않습니다"
+    },
+    "step_2": {
+      "command": ["python", "pipeline.py", "gates", "accept", "--help"],
+      "expected_exit_code": 0,
+      "expected_stdout_contains": "--user-confirmed",
+      "rationale": "argparse 파서에서 인자 자체는 보존 (backward-compatible no-op)"
+    },
+    "step_3": {
+      "command": ["python", "pipeline.py", "harness", "--help"],
+      "expected_exit_code": 0,
+      "expected_stdout_contains": "Legacy harness diagnostic",
+      "rationale": "harness 서브커맨드 자체는 보존하되 호출 시 차단 (cmd_harness가 _die)"
+    }
+  },
+  "expected_result": "PASS",
+  "rationale_for_edge": "단순 PASS가 아니라 'backward-compat 인자 보존 + 성공 경로 차단'이라는 두 요구를 동시에 검증하는 edge case. 인자를 완전 삭제하면 기존 스크립트가 깨지고(파괴적 변경), 인자를 두면서 ACCEPT를 통과시키면 사용자 안전이 깨진다. 양쪽 모두 회귀를 막아야 한다."
+}
