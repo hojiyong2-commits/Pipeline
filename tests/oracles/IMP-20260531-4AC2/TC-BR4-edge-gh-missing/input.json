@@ -1,0 +1,8 @@
+{
+  "test_case": "TC-BR4-edge-gh-missing",
+  "description": "gh CLI가 없거나 FileNotFoundError 발생 시",
+  "scenario": "edge",
+  "branch": "impl/IMP-20260531-4AC2",
+  "fake_gh_behavior": "raises_FileNotFoundError",
+  "expected_run_id": null
+}

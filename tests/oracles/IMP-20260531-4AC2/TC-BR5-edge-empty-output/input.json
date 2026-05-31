@@ -1,0 +1,8 @@
+{
+  "test_case": "TC-BR5-edge-empty-output",
+  "description": "gh CLI가 성공(returncode=0)이나 빈 문자열 출력 시",
+  "scenario": "edge",
+  "branch": "impl/IMP-20260531-4AC2",
+  "fake_gh_behavior": "returns_empty_string",
+  "expected_run_id": null
+}

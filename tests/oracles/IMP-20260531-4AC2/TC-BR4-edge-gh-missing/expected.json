@@ -1,0 +1,7 @@
+{
+  "test_case": "TC-BR4-edge-gh-missing",
+  "result": "PASS",
+  "description": "gh CLI FileNotFoundError 시 _get_pr_branch_ci_run_id가 None을 반환한다 (예외 전파 없음)",
+  "run_id_returned": null,
+  "assertion": "gh CLI 미설치 환경에서 조용히 None 반환, 예외 발생 금지"
+}

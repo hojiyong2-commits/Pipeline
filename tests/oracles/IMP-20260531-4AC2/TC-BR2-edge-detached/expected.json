@@ -1,0 +1,7 @@
+{
+  "test_case": "TC-BR2-edge-detached",
+  "result": "PASS",
+  "description": "detached HEAD 상태(branch='HEAD')에서 _get_pr_branch_ci_run_id가 None을 반환한다",
+  "run_id_returned": null,
+  "assertion": "branch == 'HEAD'이면 gh CLI 호출 없이 None 반환 (안전 폴백)"
+}
