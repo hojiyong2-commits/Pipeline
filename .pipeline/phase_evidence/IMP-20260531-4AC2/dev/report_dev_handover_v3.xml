@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260531-4AC2</pipeline_id>
+  <version>v3</version>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+    </files_to_modify>
+    <reason>REWORK v3: PIPELINE_TEST_GIT_BRANCH / PIPELINE_TEST_CI_RUN_ID 환경변수 프로덕션 코드 완전 제거 + shutil.which 기반 PATH fake 방식으로 교체</reason>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>pipeline._get_pr_branch_ci_run_id</target_function>
+    <change_type>MODIFY</change_type>
+    <description>PIPELINE_TEST_GIT_BRANCH / PIPELINE_TEST_CI_RUN_ID os.environ.get 코드 완전 제거. shutil.which("git") / shutil.which("gh") 추가하여 PATH fake 방식 테스트 지원.</description>
+    <affected_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+    </affected_files>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_ci_run_id_filter_4ac2.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_ci_run_id_filter_4ac2.py, oracle 파일들</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <changes>
+    <change mt_id="MT-1">
+      <file>pipeline.py</file>
+      <description>_get_pr_branch_ci_run_id에서 PIPELINE_TEST_GIT_BRANCH / PIPELINE_TEST_CI_RUN_ID os.environ.get 코드 완전 제거. shutil.which("git") / shutil.which("gh") 추가. Windows PATH fake 방식(.cmd 스크립트) 테스트 지원.</description>
+    </change>
+    <change mt_id="MT-1">
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+      <description>_setup_fake_env 방식(PIPELINE_TEST_* 환경변수) 완전 제거. _setup_fake_bins(tmp_path) 방식으로 교체. TC-CLI-1, TC-CLI-3, TC-STALE-CLI 업데이트. 8개 테스트 모두 PASS.</description>
+    </change>
+    <change mt_id="MT-2">
+      <description>oracle 파일 변경 없음 (TC-BR1-normal, TC-BR3-edge 유지)</description>
+    </change>
+  </changes>
+
+  <test_results>
+    <command>python -m pytest tests/e2e/test_ci_run_id_filter_4ac2.py -v</command>
+    <result>8 passed, 0 failed</result>
+    <tests>TC-BR1, TC-BR2, TC-BR3, TC-BR4, TC-BR5, TC-CLI-1, TC-CLI-3, TC-STALE-CLI</tests>
+  </test_results>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+    <file>module_design_MT-1_v3.xml</file>
+    <file>module_handover_MT-1_v3.xml</file>
+    <file>module_qa_MT-1_v3.xml</file>
+    <file>module_design_MT-2_v3.xml</file>
+    <file>module_handover_MT-2_v3.xml</file>
+    <file>module_qa_MT-2_v3.xml</file>
+  </evidence>
+</handover>
