@@ -1,0 +1,8 @@
+{
+  "test_case": "TC-BR3-edge-branch-filter",
+  "result": "PASS",
+  "description": "_get_pr_branch_ci_run_id가 전역 최신(99999999)이 아닌 현재 브랜치의 run(11111111)을 선택한다",
+  "run_id_returned": "11111111",
+  "not_returned": "99999999",
+  "assertion": "--branch 옵션으로 브랜치 필터링하여 phase-attestation 브랜치 run 오염 방지"
+}

@@ -1,0 +1,8 @@
+{
+  "test_case": "TC-BR1-normal",
+  "description": "현재 브랜치가 impl 브랜치이고 gh CLI가 정상 동작할 때 브랜치 필터링된 run ID 반환",
+  "scenario": "normal",
+  "branch": "impl/IMP-20260531-4AC2",
+  "fake_gh_behavior": "branch_filter_present",
+  "expected_run_id": "11111111"
+}

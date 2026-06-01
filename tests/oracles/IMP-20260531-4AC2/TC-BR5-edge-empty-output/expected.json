@@ -1,0 +1,7 @@
+{
+  "test_case": "TC-BR5-edge-empty-output",
+  "result": "PASS",
+  "description": "gh run list가 빈 출력 반환 시 _get_pr_branch_ci_run_id가 None을 반환한다",
+  "run_id_returned": null,
+  "assertion": "빈 문자열 출력은 None으로 처리 (run 없음 상태)"
+}

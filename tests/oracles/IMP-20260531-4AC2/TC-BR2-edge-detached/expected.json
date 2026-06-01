@@ -1,0 +1,8 @@
+{
+  "test_case": "TC-BR2-edge-detached",
+  "description": "detached HEAD 상태에서 branch가 HEAD로 반환될 때",
+  "scenario": "edge",
+  "branch": "HEAD",
+  "fake_gh_behavior": "not_called",
+  "expected_run_id": null
+}
