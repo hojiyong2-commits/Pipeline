@@ -28,6 +28,7 @@ TC-CLI-1, TC-CLI-3, TC-STALE-CLI — Real CLI Path E2E 테스트 (IMP-20260525-6
 격리 전략 (Real CLI Path E2E):
   - PIPELINE_STATE_PATH 환경 변수 + cwd=tmp_path 로 완전 격리
   - tmp_path/bin/ 에 fake git.cmd / fake gh.cmd 생성 → PATH 최우선 추가
+  - shutil.which 기반 pipeline.py가 PATH fake bins를 올바르게 선택함
   - final_state assertion: acceptance_request.json 내용 직접 검증
 """
 from __future__ import annotations
@@ -154,58 +155,53 @@ def test_tc_br3_edge_branch_filter_vs_global(tmp_path: Path) -> None:
         result = pipeline._get_pr_branch_ci_run_id(branch=IMPL_BRANCH)
 
     assert result == IMPL_BRANCH_RUN_ID, (
-        f"TC-BR3 FAIL: expected branch run '{IMPL_BRANCH_RUN_ID}', got {repr(result)}"
+        f"TC-BR3 FAIL: expected '{IMPL_BRANCH_RUN_ID}' but got {repr(result)}\n"
+        f"calls: {call_log}"
     )
     assert result != GLOBAL_LATEST_RUN_ID, (
-        f"TC-BR3 FAIL: must NOT return global latest run '{GLOBAL_LATEST_RUN_ID}'"
+        f"TC-BR3 FAIL: 전역 최신 run({GLOBAL_LATEST_RUN_ID})이 반환됨 — 브랜치 필터 미작동\n"
+        f"calls: {call_log}"
     )
-    # --branch 옵션이 gh 호출에 포함되었는지 확인
-    gh_calls = [c for c in call_log if "gh" in c[0]]
-    assert len(gh_calls) > 0, "TC-BR3 FAIL: gh CLI not called"
-    assert any("--branch" in c for c in gh_calls), (
-        f"TC-BR3 FAIL: --branch option not used in gh call. calls={gh_calls}"
+    # gh에 --branch 옵션이 포함된 호출이 있어야 함
+    branch_filtered_calls = [c for c in call_log if "gh" in c[0] and "--branch" in c]
+    assert branch_filtered_calls, (
+        f"TC-BR3 FAIL: gh CLI에 --branch 옵션 없이 호출됨\ncalls: {call_log}"
     )
 
 
 # ─── TC-BR4 (edge) ─────────────────────────────────────────────────────────────
 
-def test_tc_br4_edge_gh_cli_missing(tmp_path: Path) -> None:
-    """TC-BR4: gh CLI가 없을 때 FileNotFoundError → None 반환.
+def test_tc_br4_edge_gh_file_not_found(tmp_path: Path) -> None:
+    """TC-BR4: gh CLI FileNotFoundError → None 반환 (예외 전파 없음).
 
-    subprocess.run이 FileNotFoundError를 raise하면
-    _get_pr_branch_ci_run_id가 조용히 None을 반환해야 한다.
+    gh CLI가 설치되어 있지 않은 환경에서도 파이프라인이 중단되지 않아야 한다.
     """
     pipeline = _import_pipeline()
 
-    def raise_file_not_found(cmd, **kwargs):
-        if "gh" in cmd[0]:
-            raise FileNotFoundError(f"No such file: {cmd[0]}")
+    def fake_subprocess_run(cmd, **kwargs):
+        if "gh" in str(cmd[0]):
+            raise FileNotFoundError("gh not found")
         return _make_completed_process(returncode=0, stdout="")
 
-    with patch.object(pipeline.subprocess, "run", side_effect=raise_file_not_found):
-        try:
-            result = pipeline._get_pr_branch_ci_run_id(branch=IMPL_BRANCH)
-        except FileNotFoundError as exc:
-            assert False, (
-                f"TC-BR4 FAIL: FileNotFoundError should be caught, not propagated: {exc}"
-            )
+    with patch.object(pipeline.subprocess, "run", side_effect=fake_subprocess_run):
+        result = pipeline._get_pr_branch_ci_run_id(branch=IMPL_BRANCH)
 
     assert result is None, (
-        f"TC-BR4 FAIL: gh CLI missing should return None, got {repr(result)}"
+        f"TC-BR4 FAIL: FileNotFoundError should return None, got {repr(result)}"
     )
 
 
 # ─── TC-BR5 (edge) ─────────────────────────────────────────────────────────────
 
-def test_tc_br5_edge_empty_output(tmp_path: Path) -> None:
+def test_tc_br5_edge_gh_empty_output(tmp_path: Path) -> None:
     """TC-BR5: gh CLI 빈 출력 → None 반환.
 
-    gh가 returncode=0이나 빈 문자열 반환 시 None이어야 한다.
+    gh run list가 결과 없이 빈 문자열을 반환할 때 None을 반환해야 한다.
     """
     pipeline = _import_pipeline()
 
     def fake_subprocess_run(cmd, **kwargs):
-        if "gh" in cmd[0]:
+        if "gh" in str(cmd[0]):
             return _make_completed_process(returncode=0, stdout="")
         return _make_completed_process(returncode=0, stdout="")
 
@@ -213,21 +209,37 @@ def test_tc_br5_edge_empty_output(tmp_path: Path) -> None:
         result = pipeline._get_pr_branch_ci_run_id(branch=IMPL_BRANCH)
 
     assert result is None, (
-        f"TC-BR5 FAIL: empty gh output should return None, got {repr(result)}"
+        f"TC-BR5 FAIL: empty output should return None, got {repr(result)}"
     )
 
 
-# ─── Real CLI Path E2E 헬퍼 ────────────────────────────────────────────────────
+# ─── CLI E2E 공통 헬퍼 ─────────────────────────────────────────────────────────
 
 DUMMY_CLI_PIPELINE_ID = "IMP-20260531-4AC2"
 
 
 def _write_harness_state(state_path: Path, pipeline_id: str) -> None:
-    """harness phase 진입 가능한 최소 state를 JSON으로 작성."""
+    """Real CLI Path E2E 테스트용 격리 파이프라인 state 작성."""
     state = {
-        "schema_version": 2,
+        "schema_version": 3,
         "pipeline_id": pipeline_id,
+        "type": "IMP",
+        "description": "CI run ID 브랜치 필터 테스트",
+        "created_at": "2026-05-31T00:00:00Z",
+        "updated_at": "2026-05-31T00:00:00Z",
+        "pipeline_started_at": "2026-05-31T00:00:00Z",
+        "pipeline_completed_at": None,
+        "acceptance_requested_at": None,
+        "acceptance_recorded_at": None,
+        "total_elapsed_seconds": None,
         "current_phase": "harness",
+        "blocked": False,
+        "blocked_reason": None,
+        "terminal_state": None,
+        "harness_fail_count": 0,
+        "agent_runs": {},
+        "phase_attestations": {"enabled": False},
+        "codex_bootstrap_exception": True,
         "phases": {
             "pm": {"status": "DONE"},
             "dev": {"status": "DONE"},
@@ -249,20 +261,50 @@ def _write_harness_state(state_path: Path, pipeline_id: str) -> None:
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _setup_fake_env(impl_branch_run_id: str = IMPL_BRANCH_RUN_ID) -> Dict[str, str]:
-    """Real CLI Path E2E용 테스트 환경 변수 반환.
+def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]:
+    """Real CLI Path E2E용 fake git/gh 바이너리 생성 및 PATH 환경 반환.
 
-    PIPELINE_TEST_GIT_BRANCH: git rev-parse 호출 없이 브랜치명 주입.
-    PIPELINE_TEST_CI_RUN_ID:  gh run list 호출 없이 run ID 주입 (브랜치 필터 결과).
+    Windows에서 subprocess.run(['git', ...])가 PATH의 git.cmd보다 git.exe를
+    우선 선택하는 PATHEXT 문제를 pipeline.py의 shutil.which 사용으로 해결한다.
+    shutil.which는 PATH 순서를 올바르게 따르므로 tmp_path/bin/ 앞에 추가하면
+    fake git.cmd / fake gh.cmd가 우선 선택된다.
 
-    IMP-20260531-4AC2: Windows에서 subprocess.run(['git', ...])가 PATH의
-    git.cmd보다 git.exe를 우선 선택하는 PATHEXT 문제를 우회하기 위해
-    환경 변수 override 방식 사용 (pipeline.py _get_pr_branch_ci_run_id 참조).
+    Args:
+        tmp_path: pytest tmp_path 픽스처
+        stale_mode: True이면 gh가 항상 22222222 반환 (stale 시나리오)
+
+    Returns:
+        {"PATH": "<bin_dir>;<original_PATH>"} 형태의 env dict
     """
-    return {
-        "PIPELINE_TEST_GIT_BRANCH": IMPL_BRANCH,
-        "PIPELINE_TEST_CI_RUN_ID": impl_branch_run_id,
-    }
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    (bin_dir / "fake_git.py").write_text(
+        "import sys\nprint('impl/IMP-20260531-4AC2')\nsys.exit(0)\n",
+        encoding="utf-8",
+    )
+    (bin_dir / "git.cmd").write_text(
+        '@echo off\npython "%~dp0fake_git.py" %*\nexit /b %errorlevel%\n',
+        encoding="utf-8",
+    )
+    if stale_mode:
+        (bin_dir / "fake_gh.py").write_text(
+            "import sys\nprint('22222222')\nsys.exit(0)\n",
+            encoding="utf-8",
+        )
+    else:
+        (bin_dir / "fake_gh.py").write_text(
+            "import sys\nargs = sys.argv[1:]\n"
+            "print('11111111' if '--branch' in args else '99999999')\n"
+            "sys.exit(0)\n",
+            encoding="utf-8",
+        )
+    (bin_dir / "gh.cmd").write_text(
+        '@echo off\npython "%~dp0fake_gh.py" %*\nexit /b %errorlevel%\n',
+        encoding="utf-8",
+    )
+    original_path = os.environ.get("PATH", "")
+    new_path = str(bin_dir) + os.pathsep + original_path
+    return {"PATH": new_path}
 
 
 def _run_cli(
@@ -293,12 +335,12 @@ def test_tc_cli1_request_accept_stores_branch_run_id(tmp_path: Path) -> None:
     """TC-CLI-1 (normal): gates request-accept --evidence <file>이 acceptance_request.json에
     github_ci_run_id = '11111111' (브랜치 필터 결과)을 기록한다.
 
-    PIPELINE_TEST_GIT_BRANCH=impl/IMP-20260531-4AC2 (git rev-parse 우회)
-    PIPELINE_TEST_CI_RUN_ID=11111111 (gh run list 우회 — 브랜치 필터 결과)
+    fake PATH bins: git.cmd → impl/IMP-20260531-4AC2, gh.cmd --branch → 11111111
+    shutil.which가 fake bin을 우선 선택하므로 실제 git/gh 없이도 동작.
 
     final_state: acceptance_request.json.github_ci_run_id == '11111111'
                  acceptance_request.json.github_ci_run_id != '99999999'
-    격리: PIPELINE_STATE_PATH + cwd=tmp_path + 환경 변수 override
+    격리: PIPELINE_STATE_PATH + cwd=tmp_path + fake PATH bins
     """
     state_path = tmp_path / "pipeline_state.json"
     evidence_path = tmp_path / "evidence.txt"
@@ -307,7 +349,7 @@ def test_tc_cli1_request_accept_stores_branch_run_id(tmp_path: Path) -> None:
     _write_harness_state(state_path, DUMMY_CLI_PIPELINE_ID)
     evidence_path.write_text("test evidence", encoding="utf-8")
 
-    fake_env = _setup_fake_env(impl_branch_run_id=IMPL_BRANCH_RUN_ID)
+    fake_env = _setup_fake_bins(tmp_path, stale_mode=False)
 
     result = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
@@ -337,17 +379,18 @@ def test_tc_cli1_request_accept_stores_branch_run_id(tmp_path: Path) -> None:
 
 def test_tc_cli3_branch_filter_not_global_latest(tmp_path: Path) -> None:
     """TC-CLI-3 (edge): 전역 최신 run이 99999999이더라도
-    PIPELINE_TEST_CI_RUN_ID=11111111 (브랜치 필터 결과)이
+    gh.cmd --branch → 11111111 (브랜치 필터 결과)이
     acceptance_request.json에 기록된다.
 
     이것이 이 IMP의 핵심 검증 케이스 (CLI path).
 
-    PIPELINE_TEST_GIT_BRANCH=impl/IMP-20260531-4AC2 (git rev-parse 우회)
-    PIPELINE_TEST_CI_RUN_ID=11111111 (브랜치 run — 99999999 전역 최신 아님)
+    fake PATH bins: git.cmd → impl/IMP-20260531-4AC2
+                   gh.cmd --branch → 11111111, gh.cmd 무분기 → 99999999
+    shutil.which가 fake bin을 우선 선택.
 
     final_state: acceptance_request.json.github_ci_run_id == '11111111'
                  (99999999가 아니라 브랜치 필터 결과가 저장됨)
-    격리: PIPELINE_STATE_PATH + cwd=tmp_path + 환경 변수 override
+    격리: PIPELINE_STATE_PATH + cwd=tmp_path + fake PATH bins
     """
     state_path = tmp_path / "pipeline_state.json"
     evidence_path = tmp_path / "evidence.txt"
@@ -355,8 +398,7 @@ def test_tc_cli3_branch_filter_not_global_latest(tmp_path: Path) -> None:
 
     _write_harness_state(state_path, DUMMY_CLI_PIPELINE_ID)
     evidence_path.write_text("test evidence", encoding="utf-8")
-    # 브랜치 run ID를 11111111 (전역 최신 99999999가 아님)로 명시
-    fake_env = _setup_fake_env(impl_branch_run_id=IMPL_BRANCH_RUN_ID)
+    fake_env = _setup_fake_bins(tmp_path, stale_mode=False)
 
     result = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
@@ -387,16 +429,15 @@ def test_tc_cli3_branch_filter_not_global_latest(tmp_path: Path) -> None:
 
 def test_tc_stale_cli_gates_accept_blocks_on_stale_run_id(tmp_path: Path) -> None:
     """TC-STALE-CLI (edge): acceptance_request.json에 github_ci_run_id=11111111이 저장된 후,
-    PIPELINE_TEST_CI_RUN_ID=22222222 (현재 run이 달라진 상황)이면
-    gates accept가 stale_run_id BLOCKED를 반환한다.
+    현재 run이 22222222 (다른 값)이면 gates accept가 stale_run_id BLOCKED를 반환한다.
 
     단계:
       1. acceptance_request.json에 github_ci_run_id=11111111 직접 기록
-      2. PIPELINE_TEST_CI_RUN_ID=22222222 주입 (현재 run이 바뀐 상황)
+      2. fake PATH bins: gh.cmd → 항상 22222222 반환 (stale 시나리오)
       3. gates accept 실행 → stale_run_id BLOCKED (exit != 0)
 
     final_state: exit code != 0, stdout/stderr에 'stale_run_id' 또는 'run' 포함
-    격리: PIPELINE_STATE_PATH + cwd=tmp_path + 환경 변수 override
+    격리: PIPELINE_STATE_PATH + cwd=tmp_path + fake PATH bins (stale_mode=True)
     """
     state_path = tmp_path / "pipeline_state.json"
     evidence_path = tmp_path / "evidence.txt"
@@ -406,7 +447,7 @@ def test_tc_stale_cli_gates_accept_blocks_on_stale_run_id(tmp_path: Path) -> Non
     evidence_path.write_text("test evidence", encoding="utf-8")
 
     # acceptance_request.json에 github_ci_run_id=11111111 직접 기록 (request-accept 시점)
-    nonce = "TESTNNCE"  # 8자 더미 nonce
+    nonce = "TESTNNCE"  # 8자 더미 nonce (A-Z2-7: E는 유효)
     req_data = {
         "schema_version": 1,
         "pipeline_id": DUMMY_CLI_PIPELINE_ID,
@@ -425,12 +466,8 @@ def test_tc_stale_cli_gates_accept_blocks_on_stale_run_id(tmp_path: Path) -> Non
         json.dumps(req_data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    # PIPELINE_TEST_CI_RUN_ID=22222222 — 현재 CI run이 바뀐 상황 (stale)
-    stale_run_id = "22222222"
-    fake_env = {
-        "PIPELINE_TEST_GIT_BRANCH": IMPL_BRANCH,
-        "PIPELINE_TEST_CI_RUN_ID": stale_run_id,
-    }
+    # fake PATH bins: gh.cmd → 22222222 (stale_mode=True)
+    fake_env = _setup_fake_bins(tmp_path, stale_mode=True)
 
     # gates accept 실행: ACCEPT 코드로 시도 → stale_run_id BLOCKED 예상
     accept_code = f"ACCEPT-{DUMMY_CLI_PIPELINE_ID}-{nonce}"

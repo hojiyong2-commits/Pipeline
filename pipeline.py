@@ -12991,10 +12991,6 @@ def _get_pr_branch_ci_run_id(branch: Optional[str] = None) -> Optional[str]:
     phase-attestation 브랜치나 다른 PR run 오염을 방지한다.
     IMP-20260531-4AC2: _get_latest_ci_run_id 대체 함수.
 
-    테스트 환경 변수 override (IMP-20260531-4AC2 Real CLI Path E2E 지원):
-      PIPELINE_TEST_GIT_BRANCH:    이 값이 설정되면 git rev-parse 호출을 건너뛰고 해당 브랜치명 사용.
-      PIPELINE_TEST_CI_RUN_ID:     이 값이 설정되면 gh run list 호출을 건너뛰고 해당 run ID 반환.
-                                    브랜치가 HEAD/빈값이면 override도 적용되지 않음 (정상 폴백).
     Args:
         branch: 명시적 브랜치명. None이면 git rev-parse --abbrev-ref HEAD 자동 조회.
     Returns:
@@ -13002,33 +12998,30 @@ def _get_pr_branch_ci_run_id(branch: Optional[str] = None) -> Optional[str]:
     Raises:
         없음.
     """
-    # 테스트 환경 변수: git 브랜치 override
-    test_branch_override = os.environ.get("PIPELINE_TEST_GIT_BRANCH", "").strip()
     if branch is None:
-        if test_branch_override:
-            branch = test_branch_override
-        else:
-            # 현재 git 브랜치 자동 조회
-            try:
-                br_res = subprocess.run(
-                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                    capture_output=True, text=True, timeout=5,
-                    encoding="utf-8", errors="replace",
-                )
-                if br_res.returncode == 0:
-                    branch = br_res.stdout.strip()
-            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                return None
+        # 현재 git 브랜치 자동 조회 (shutil.which로 PATH에서 첫 번째 git 실행 파일 사용)
+        git_path = shutil.which("git") or "git"
+        try:
+            br_res = subprocess.run(
+                [git_path, "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, timeout=5,
+                encoding="utf-8", errors="replace",
+            )
+            if br_res.returncode == 0:
+                branch = br_res.stdout.strip()
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            return None
     # detached HEAD 또는 빈 문자열 안전 폴백
     if not branch or branch == "HEAD":
         return None
-    # 테스트 환경 변수: CI run ID override (브랜치가 유효할 때만)
-    test_run_id_override = os.environ.get("PIPELINE_TEST_CI_RUN_ID", "").strip()
-    if test_run_id_override:
-        return test_run_id_override
+    # shutil.which로 PATH에서 첫 번째 gh 실행 파일 사용
+    # Windows에서 .CMD가 .EXE보다 PATH 우선이 아니므로 which로 명시적 경로 확보
+    gh_path = shutil.which("gh")
+    if not gh_path:
+        return None
     try:
         r = subprocess.run(
-            ["gh", "run", "list", "--branch", branch, "--limit", "1",
+            [gh_path, "run", "list", "--branch", branch, "--limit", "1",
              "--json", "databaseId",
              "--jq", ".[0].databaseId"],
             capture_output=True, text=True, timeout=10,
