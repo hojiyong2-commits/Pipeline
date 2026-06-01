@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260531-4AC2</pipeline_id>
+  <version>v3</version>
+  <agent_id>qa-agent</agent_id>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+
+  <scope_declaration>
+    <files_reviewed>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+      <file>tests/oracles/IMP-20260531-4AC2/TC-BR1-normal/input.json</file>
+      <file>tests/oracles/IMP-20260531-4AC2/TC-BR1-normal/expected.json</file>
+      <file>tests/oracles/IMP-20260531-4AC2/TC-BR3-edge/input.json</file>
+      <file>tests/oracles/IMP-20260531-4AC2/TC-BR3-edge/expected.json</file>
+      <file>tests/oracles/IMP-20260531-4AC2/oracle_manifest.json</file>
+    </files_reviewed>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>pipeline._get_pr_branch_ci_run_id</target_function>
+    <change_type>MODIFY</change_type>
+    <description>
+      PIPELINE_TEST_GIT_BRANCH / PIPELINE_TEST_CI_RUN_ID os.environ.get 코드 완전 제거.
+      shutil.which("git") / shutil.which("gh") 추가하여 PATH 기반 바이너리 해석 지원.
+      테스트는 fake PATH 방식(.cmd 스크립트)으로 교체.
+    </description>
+  </impact_analysis>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+    </target_files>
+    <actual_changed_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+    </actual_changed_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <mt_id>MT-2</mt_id>
+  <oracle_check>
+    <oracle_unchanged>PASS — oracle 파일 변경 없음</oracle_unchanged>
+    <oracle_quality>PASS — normal(TC-BR1) + edge(TC-BR3) 케이스 포함, source=user</oracle_quality>
+    <oracle_content>PASS — expected 파일 비어 있지 않음, placeholder 없음</oracle_content>
+  </oracle_check>
+
+  <checks>
+    <check id="1" category="CODE_CORRECTNESS">
+      <description>PIPELINE_TEST_GIT_BRANCH / PIPELINE_TEST_CI_RUN_ID 환경변수 완전 제거</description>
+      <result>PASS</result>
+      <evidence>grep으로 pipeline.py 검색 — 두 환경변수 모두 발견되지 않음</evidence>
+    </check>
+    <check id="2" category="CODE_CORRECTNESS">
+      <description>shutil.which("git") / shutil.which("gh") 추가로 PATH fake 방식 지원</description>
+      <result>PASS</result>
+      <evidence>pipeline.py에서 shutil.which("git"), shutil.which("gh") 사용 확인</evidence>
+    </check>
+    <check id="3" category="TESTS">
+      <description>8개 테스트 PASS (TC-BR1~BR5 mock 기반 + TC-CLI-1, TC-CLI-3, TC-STALE-CLI PATH fake 기반)</description>
+      <result>PASS</result>
+      <evidence>python -m pytest tests/e2e/test_ci_run_id_filter_4ac2.py -v → 8 passed, 0 failed</evidence>
+    </check>
+    <check id="4" category="SCOPE_LOCK">
+      <description>scope_manifest 범위 내 변경만 존재</description>
+      <result>PASS</result>
+      <evidence>pipeline.py + tests/e2e/test_ci_run_id_filter_4ac2.py + oracle 파일만 변경</evidence>
+    </check>
+    <check id="5" category="ORACLE_QUALITY">
+      <description>oracle_manifest.json — normal + edge 케이스, source=user, non-empty expected</description>
+      <result>PASS</result>
+      <evidence>TC-BR1-normal (normal), TC-BR3-edge (edge) 모두 유효한 내용 포함</evidence>
+    </check>
+    <check id="6" category="PRODUCTION_CODE_PURITY">
+      <description>테스트 전용 환경변수가 프로덕션 코드에 없음 — gate 신뢰성 보장</description>
+      <result>PASS</result>
+      <evidence>이번 IMP의 핵심 목적 달성 — env var inject 방식 완전 제거</evidence>
+    </check>
+    <check id="7" category="CLI_E2E">
+      <description>Real CLI Path E2E 테스트 (PIPELINE_STATE_PATH 격리 + final_state assertion)</description>
+      <result>PASS</result>
+      <evidence>TC-CLI-1, TC-CLI-3, TC-STALE-CLI — subprocess 기반 실제 CLI 흐름 검증</evidence>
+    </check>
+    <check id="8" category="WINDOWS_COMPATIBILITY">
+      <description>Windows PATHEXT 우선순위 문제 해결 — shutil.which가 .CMD 파일 올바르게 해석</description>
+      <result>PASS</result>
+      <evidence>fake_git.cmd, fake_gh.cmd 방식으로 Windows에서 PATH fake 검증 완료</evidence>
+    </check>
+  </checks>
+
+  <failure_signature>NONE</failure_signature>
+
+  <test_results>
+    <command>python -m pytest tests/e2e/test_ci_run_id_filter_4ac2.py -v</command>
+    <result>8 passed, 0 failed</result>
+    <tests>
+      TC-BR1, TC-BR2, TC-BR3, TC-BR4, TC-BR5 (mock 기반),
+      TC-CLI-1, TC-CLI-3, TC-STALE-CLI (PATH fake 기반 Real CLI E2E)
+    </tests>
+  </test_results>
+
+  <summary>
+    IMP-20260531-4AC2 v3 REWORK: PIPELINE_TEST_GIT_BRANCH / PIPELINE_TEST_CI_RUN_ID
+    프로덕션 코드에서 완전 제거. shutil.which 기반 PATH fake 방식으로 교체.
+    8개 테스트 모두 PASS. 프로덕션 코드 순수성 회복 및 gate 신뢰성 보장.
+  </summary>
+</qa_report>
