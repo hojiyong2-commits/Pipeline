@@ -144,3 +144,4 @@ PM/Dev/Module-QA/Oracle/Codex Review 경로에 AC 연결을 강제합니다.
 - `case_edge_01` — legacy state 하위 호환
 - `case_error_01` — 단독 추상 AC 차단
 
+<!-- ci-trigger: 2026-06-03T08:01:28Z -->
