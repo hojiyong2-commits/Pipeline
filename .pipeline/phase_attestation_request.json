@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260601-0DF5\\dev\\dev-ee4b7822943de9a5.json",
       "path": ".pipeline/phase_evidence/IMP-20260601-0DF5/dev/agent_receipt_dev-ee4b7822943de9a5.json",
-      "sha256": "fed45257d88db68ca292ec37929a2415b6e0e16575f1bbeb3b50105f1dbdd10e",
+      "sha256": "3d5a2b07f63beced6a6f484f15ee9df3b1db864d57353f8b462d88dec4a83a84",
       "size_bytes": 542,
       "requires_force_add": true
     },
@@ -51,27 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "3596b0a0a21721afecd9766fd31b3c8099bf498a41d6a21a4807ee7bd68ef141",
-      "size_bytes": 833234
-    },
-    {
-      "path": "tests/e2e/test_hygiene_0df5.py",
-      "sha256": "68cd40ac4852e4c81277e7d8420d8b8ef6538cc3748098fdc89b70e4761e88a8",
-      "size_bytes": 9306
-    },
-    {
-      "path": "RELEASE_NOTES.md",
-      "sha256": "f4a64449eb6ea8f037e2109743669ec4cb8a7816822ce0467e5c7302b1163b75",
-      "size_bytes": 5122
-    },
-    {
-      "path": "CLAUDE.md",
-      "sha256": "c4b63b0792b7116a6410217a5a55b21027ec2bfed137177f9e4f34bb0379a332",
-      "size_bytes": 92339
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
