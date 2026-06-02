@@ -67,7 +67,7 @@ def test_T1_scan_candidate(tmp_path: Path) -> None:
         assert c.get("age_days_gte", 0) >= 7
 
 
-def test_T2_archive_move(tmp_path: Path) -> None:
+def test_T2_archive_dry_run_does_not_move(tmp_path: Path) -> None:
     """archive --dry-run 시 moved가 비고 dry_run=true가 반환된다."""
     deploy_root = tmp_path / "deploy"
     deploy_root.mkdir()
@@ -80,6 +80,94 @@ def test_T2_archive_move(tmp_path: Path) -> None:
     assert output["status"] in ("OK", "OK_WITH_BLOCKED")
     assert output["dry_run"] is True
     assert output["moved"] == []
+
+
+def test_archive_moves_old_candidate_to_jjikkeogi_folder(tmp_path: Path) -> None:
+    """실제 archive --older-than 7d 가 원본 파일을 이동하는지 검증 (dry-run 없음).
+
+    검증 내용:
+    - repo root의 후보 파일이 archive 후 사라짐
+    - PIPELINE_DEPLOY_ROOT/찌꺼기/YYYY-MM-DD/ 아래로 이동됨
+    - JSON moved 배열에 파일 포함
+    """
+    import time
+    import datetime
+
+    workspace_root = PIPELINE_PY.parent  # pipeline.py 가 있는 디렉토리
+    test_file_name = "comment_hygiene_e2e_verify.txt"  # HYGIENE_ARCHIVE_PATTERNS의 comment_*.txt 매칭
+    test_file = workspace_root / test_file_name
+
+    # 테스트 파일 생성 후 mtime을 8일 전으로 설정
+    test_file.write_text(
+        "hygiene archive E2E 검증용 임시 파일 — 테스트 완료 후 자동 삭제됩니다",
+        encoding="utf-8"
+    )
+    eight_days_ago = time.time() - 8 * 24 * 3600
+    os.utime(str(test_file), (eight_days_ago, eight_days_ago))
+
+    deploy_root = tmp_path / "deploy"
+    state_path = tmp_path / "pipeline_state_test.json"
+    # 완료 상태 파이프라인으로 설정 (활성 파이프라인 보호 방지)
+    state_path.write_text(
+        json.dumps({
+            "schema_version": 2,
+            "pipeline_id": "IMP-20260601-0DF5",
+            "current_phase": "COMPLETE",
+            "phases": {}, "external_gates": {},
+            "events": [], "event_log": []
+        }, ensure_ascii=False),
+        encoding="utf-8"
+    )
+
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    env["PIPELINE_DEPLOY_ROOT"] = str(deploy_root)
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(PIPELINE_PY),
+             "hygiene", "archive", "--older-than", "7d", "--json"],
+            capture_output=True,
+            timeout=60,
+            env=env,
+        )
+        stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+        stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+
+        assert result.returncode == 0, (
+            f"hygiene archive 실패 (returncode={result.returncode}):\n"
+            f"stdout: {stdout}\nstderr: {stderr}"
+        )
+
+        # 원본 파일이 workspace에서 사라졌는지 확인
+        assert not test_file.exists(), (
+            f"archive 후에도 원본 파일이 workspace에 남아있습니다: {test_file}\n"
+            f"stdout: {stdout}\nstderr: {stderr}"
+        )
+
+        # deploy_root/찌꺼기/YYYY-MM-DD/ 아래로 이동됐는지 확인
+        today = datetime.date.today().isoformat()
+        expected_dest = deploy_root / "찌꺼기" / today / test_file_name
+        assert expected_dest.exists(), (
+            f"이동 목적지에 파일이 없습니다: {expected_dest}\n"
+            f"stdout: {stdout}\nstderr: {stderr}"
+        )
+
+        # JSON 출력의 moved 배열에 파일이 포함되는지 확인
+        # moved 항목 구조: {"path": "원본파일명", "dest": "이동목적지경로"}
+        output_data = json.loads(stdout)
+        moved_names = [Path(m["path"]).name for m in output_data.get("moved", [])]
+        assert test_file_name in moved_names, (
+            f"moved 배열에 '{test_file_name}'이 없습니다: {moved_names}\n"
+            f"stdout: {stdout}"
+        )
+        assert len(output_data.get("moved", [])) > 0, "moved 배열이 비어있습니다"
+
+    finally:
+        # 테스트 실패 시 원본 파일 정리 (이동 성공했으면 이미 없음)
+        if test_file.exists():
+            test_file.unlink(missing_ok=True)
 
 
 def test_T3_secret_block(tmp_path: Path) -> None:
