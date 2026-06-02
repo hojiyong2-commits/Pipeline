@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-02T22:56:06Z",
+  "generated_at": "2026-06-02T23:20:27Z",
   "pipeline_id": "IMP-20260602-1ABE",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "38943600df528038ce98ad7c19e49f50eff0118a",
+  "commit_hint": "e1d7b82f81ad356c0dce480574d9a23206fc6106",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-06-02T22:37:31Z",
@@ -119,8 +119,8 @@
     },
     {
       "path": "RELEASE_NOTES.md",
-      "sha256": "f47e18164d119bd8a49c2f581ea1ead62c9d94fa7d94a867bf8992ab7c4e6343",
-      "size_bytes": 6535
+      "sha256": "84c51a42d46f2cd9268d252d2715b91dd1321b594d2ba13a265a38b986825b02",
+      "size_bytes": 6577
     }
   ],
   "local_only_files": []
