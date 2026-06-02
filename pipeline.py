@@ -16092,7 +16092,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_hy_schedule = hygiene_sub.add_parser("schedule", help="Windows 작업 스케줄러 등록/조회")
     schedule_sub_parser = p_hy_schedule.add_subparsers(dest="schedule_sub", required=True)
 
-    p_hy_sch_install = schedule_sub_parser.add_parser("install", help="매주 일요일 02:00 hygiene archive 등록")
+    p_hy_sch_install = schedule_sub_parser.add_parser("install", help="매주 월요일 09:00 hygiene archive 등록")
     p_hy_sch_install.add_argument(
         "--dry-run", dest="dry_run", action="store_true", default=False,
         help="실제 등록 없이 명령어만 출력",
@@ -18496,6 +18496,31 @@ def cmd_hygiene_archive(args: "argparse.Namespace") -> None:
         manifest_path = BASE_DIR / ".pipeline" / "hygiene" / f"archive_{archive_date}.json"
         _hygiene_write_manifest(result, manifest_path)
         result["manifest_path"] = str(manifest_path)
+        # cleanup_manifest.json을 pipeline_contracts/{pid}/ 에도 저장 (oracle gate용)
+        try:
+            state_pid = (state.get("pipeline_id") or "").strip()
+            if state_pid:
+                cleanup_path = BASE_DIR / "pipeline_contracts" / state_pid / "cleanup_manifest.json"
+                cleanup_path.parent.mkdir(parents=True, exist_ok=True)
+                cleanup_manifest: Dict[str, Any] = {
+                    "pipeline_id": state_pid,
+                    "executed_at": archive_date,
+                    "moved": result["moved"],
+                    "blocked": result["blocked"],
+                    "excluded": [
+                        {"path": e["path"], "reason": e["reason"]}
+                        for e in result["excluded"]
+                    ],
+                    "move_errors": result["move_errors"],
+                    "total_bytes": 0,
+                    "status": result["status"],
+                }
+                cleanup_path.write_text(
+                    json.dumps(cleanup_manifest, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+        except Exception:
+            pass
 
     if json_output:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -18568,8 +18593,8 @@ import subprocess as _subprocess_mt2
 
 _HYGIENE_TASK_NAME = "PipelineHygieneWeekly"
 _HYGIENE_SCHEDULE_TRIGGER = "WEEKLY"
-_HYGIENE_SCHEDULE_DAY = "SUN"
-_HYGIENE_SCHEDULE_TIME = "02:00"
+_HYGIENE_SCHEDULE_DAY = "MON"
+_HYGIENE_SCHEDULE_TIME = "09:00"
 
 
 def _hygiene_schtasks_dry_run() -> str:
@@ -18593,7 +18618,7 @@ def _hygiene_schtasks_dry_run() -> str:
 
 
 def _hygiene_schedule_install(dry_run: bool = False) -> Dict[str, Any]:
-    """Windows 작업 스케줄러에 매주 일요일 02:00 hygiene archive 작업을 등록합니다.
+    """Windows 작업 스케줄러에 매주 월요일 09:00 hygiene archive 작업을 등록합니다.
 
     Args:
         dry_run: True이면 명령어만 출력하고 실제 등록하지 않음.
@@ -18728,7 +18753,7 @@ def _hygiene_schedule_status() -> Dict[str, Any]:
 def cmd_hygiene_schedule(args: "argparse.Namespace") -> None:
     """hygiene schedule install | status — Windows 작업 스케줄러 등록/조회.
 
-    install: 매주 일요일 02:00 hygiene archive 작업 등록
+    install: 매주 월요일 09:00 hygiene archive 작업 등록
     status: 등록 상태 조회
 
     IMP-20260601-0DF5 MT-2

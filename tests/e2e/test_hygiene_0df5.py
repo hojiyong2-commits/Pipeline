@@ -259,12 +259,20 @@ def test_T7_drive_missing(tmp_path: Path) -> None:
 
 
 def test_T8_schedule_install_dryrun(tmp_path: Path) -> None:
-    """schedule install --dry-run은 exit 0이고 schtasks 명령어를 출력한다."""
+    """schedule install --dry-run은 exit 0이고 schtasks 명령에 MON/09:00/weekly/archive가 포함된다."""
     env = isolated_env(tmp_path)
     result = run_cli(["hygiene", "schedule", "install", "--dry-run"], env=env)
     assert result.returncode == 0, f"schedule install --dry-run 실패: {result.stderr}"
     combined = result.stdout + result.stderr
-    assert "schtasks" in combined.lower() or "DRY" in combined
+    # 스케줄 파라미터 검증
+    assert "/SC WEEKLY" in combined or "/sc weekly" in combined.lower(), \
+        f"/SC WEEKLY 없음: {combined}"
+    assert "/D MON" in combined or "/d mon" in combined.lower(), \
+        f"/D MON 없음 (일요일이 아닌 월요일이어야 함): {combined}"
+    assert "/ST 09:00" in combined or "/st 09:00" in combined.lower(), \
+        f"/ST 09:00 없음 (02:00이 아닌 09:00이어야 함): {combined}"
+    assert "hygiene archive --older-than 7d" in combined, \
+        f"'hygiene archive --older-than 7d' 없음: {combined}"
 
 
 def test_T9_schedule_status_safe(tmp_path: Path) -> None:
