@@ -1,4 +1,5 @@
 # Pipeline v1.0 릴리즈 노트
+<!-- IMP-20260602-1ABE dev attestation marker -->
 
 **릴리즈 날짜:** 2026-05-30
 **기준 커밋:** PR #356 merge 후 최신 main
