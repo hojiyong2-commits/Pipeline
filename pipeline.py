@@ -18306,7 +18306,7 @@ def _hygiene_collect_candidates(
             except (OSError, PermissionError):
                 continue
     except (OSError, PermissionError) as exc:
-        _warn(f"[HYGIENE] BASE_DIR 스캔 오류: {exc}")
+        print(f"[HYGIENE] BASE_DIR 스캔 오류: {exc}")
     return results
 
 
@@ -18746,7 +18746,7 @@ def cmd_hygiene_schedule(args: "argparse.Namespace") -> None:
             if status == "INSTALLED":
                 print(f"[HYGIENE SCHEDULE] 작업 등록 완료: {_HYGIENE_TASK_NAME}")
             elif status == "DRY_RUN":
-                print(f"[HYGIENE SCHEDULE DRY RUN] 등록 명령:")
+                print("[HYGIENE SCHEDULE DRY RUN] 등록 명령:")
                 print(f"  {result['command']}")
             else:
                 print(f"[HYGIENE SCHEDULE BLOCKED] {result['error']}")
