@@ -2003,6 +2003,69 @@ WORKSPACE_INTERNAL_DIR_PREFIXES: List[str] = [
     "pipeline_contracts/",
 ]
 
+# ---------------------------------------------------------------------------
+# IMP-20260601-0DF5 MT-1: Hygiene Scan/Archive — SSoT 상수
+# ---------------------------------------------------------------------------
+# 이 상수들을 수정하면 cmd_hygiene_scan, cmd_hygiene_archive,
+# _hygiene_collect_candidates, _hygiene_classify가 모두 자동 반영됩니다.
+#
+# HYGIENE_ARCHIVE_PATTERNS: glob 패턴으로 정의된 임시 산출물 파일명 패턴.
+#   pipeline 실행 중 생성되는 보고서·댓글·진단 파일로,
+#   7일 이상 방치 시 Google Drive 찌꺼기 폴더로 정리합니다.
+#
+# HYGIENE_PROTECTED_PATHS: 절대 archive하지 않을 정확한 파일명 목록.
+# HYGIENE_PROTECTED_PREFIXES: 절대 archive하지 않을 경로 접두사 목록.
+#   이 목록의 경로 아래 있는 파일은 나이/git 상태에 관계없이 보호됩니다.
+# ---------------------------------------------------------------------------
+
+HYGIENE_ARCHIVE_PATTERNS: List[str] = [
+    "build_report*.xml",
+    "qa_report*.xml",
+    "dev_handover*.xml",
+    "architect_report*.xml",
+    "acceptance_request.json",
+    "acceptance_packet_body.txt",
+    "human_acceptance_packet*.md",
+    "comment_*.txt",
+    "comment_*.json",
+    "pr_body_*.txt",
+    "pr_body_*.json",
+    "runs_tmp.json",
+    "tmp*.json",
+    "*_req.json",
+    "debug_parse.py",
+    "test_packet_parse.py",
+    "test_pr_parse.py",
+    "bandit_e2e_result*.json",
+    "codex_review_result*.json",
+    "codex_run_raw*.json",
+    "protocol_consistency_result*.json",
+    "failure_packet.json",
+    "acceptance_comment.json",
+    "acceptance_packet.md",
+]
+
+HYGIENE_PROTECTED_PATHS: List[str] = [
+    "pipeline.py",
+    "CLAUDE.md",
+    "README.md",
+    "RELEASE_NOTES.md",
+    "pyproject.toml",
+    ".gitignore",
+    ".gitattributes",
+]
+
+HYGIENE_PROTECTED_PREFIXES: List[str] = [
+    ".github/",
+    ".claude/",
+    ".codex/",
+    ".pipeline/",
+    "tests/oracles/",
+    "tests/",
+    "pipeline_contracts/",
+    "pipeline_outputs/",
+]
+
 
 def _is_internal_artifact(path: str) -> bool:
     """경로가 workspace 내부 산출물인지 판정합니다 (WORKSPACE_INTERNAL_PATTERNS SSoT 사용).
@@ -15997,6 +16060,54 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"golden tasks 디렉터리 (기본값: {_GOLDEN_TASKS_DIR})",
     )
 
+    # IMP-20260601-0DF5 MT-1: hygiene scan/archive 서브파서
+    p_hygiene = sub.add_parser("hygiene", help="임시 산출물 정리 (scan/archive)")
+    hygiene_sub = p_hygiene.add_subparsers(dest="hygiene_sub", required=True)
+
+    p_hy_scan = hygiene_sub.add_parser("scan", help="임시 산출물 스캔 (이동 없음)")
+    p_hy_scan.add_argument(
+        "--older-than", dest="older_than", default="7d",
+        help="이 일수 이상 된 파일만 후보로 표시 (기본값: 7d)",
+    )
+    p_hy_scan.add_argument(
+        "--json", dest="json", action="store_true", default=False,
+        help="JSON 형식으로 출력",
+    )
+
+    p_hy_archive = hygiene_sub.add_parser("archive", help="임시 산출물을 찌꺼기 폴더로 이동")
+    p_hy_archive.add_argument(
+        "--older-than", dest="older_than", default="7d",
+        help="이 일수 이상 된 파일만 이동 (기본값: 7d)",
+    )
+    p_hy_archive.add_argument(
+        "--json", dest="json", action="store_true", default=False,
+        help="JSON 형식으로 출력",
+    )
+    p_hy_archive.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", default=False,
+        help="실제 이동 없이 결과만 미리 확인",
+    )
+
+    # IMP-20260601-0DF5 MT-2: hygiene schedule 서브파서
+    p_hy_schedule = hygiene_sub.add_parser("schedule", help="Windows 작업 스케줄러 등록/조회")
+    schedule_sub_parser = p_hy_schedule.add_subparsers(dest="schedule_sub", required=True)
+
+    p_hy_sch_install = schedule_sub_parser.add_parser("install", help="매주 일요일 02:00 hygiene archive 등록")
+    p_hy_sch_install.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", default=False,
+        help="실제 등록 없이 명령어만 출력",
+    )
+    p_hy_sch_install.add_argument(
+        "--json", dest="json", action="store_true", default=False,
+        help="JSON 형식으로 출력",
+    )
+
+    p_hy_sch_status = schedule_sub_parser.add_parser("status", help="작업 스케줄러 등록 상태 조회")
+    p_hy_sch_status.add_argument(
+        "--json", dest="json", action="store_true", default=False,
+        help="JSON 형식으로 출력",
+    )
+
     return parser
 
 
@@ -17905,6 +18016,765 @@ def cmd_golden(args: "argparse.Namespace") -> None:
         _die("[GOLDEN ERROR] 알 수 없는 golden 서브명령. list|run 중 선택하세요.")
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260601-0DF5 MT-1: Hygiene Scan/Archive 핵심 로직
+# ---------------------------------------------------------------------------
+
+import fnmatch as _fnmatch
+import datetime as _datetime
+import shutil as _shutil
+
+
+def _hygiene_is_git_tracked(rel_path: str) -> bool:
+    """파일이 git tracked 상태인지 확인합니다.
+
+    Args:
+        rel_path: BASE_DIR 기준 상대 경로 (슬래시 구분자 사용 가능).
+
+    Returns:
+        True이면 git이 추적하는 파일, False이면 untracked 또는 git 미사용.
+    """
+    import subprocess as _subprocess
+    try:
+        result = _subprocess.run(
+            ["git", "ls-files", "--error-unmatch", rel_path],
+            capture_output=True,
+            cwd=str(BASE_DIR),
+        )
+        return result.returncode == 0
+    except OSError:
+        return False
+
+
+def _hygiene_is_git_staged(rel_path: str) -> bool:
+    """파일이 git staged(index에 추가된) 상태인지 확인합니다.
+
+    Args:
+        rel_path: BASE_DIR 기준 상대 경로.
+
+    Returns:
+        True이면 staged, False이면 아님.
+    """
+    import subprocess as _subprocess
+    try:
+        result = _subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            capture_output=True,
+            text=True,
+            cwd=str(BASE_DIR),
+        )
+        if result.returncode != 0:
+            return False
+        staged_files = [line.strip().replace("\\", "/") for line in result.stdout.splitlines()]
+        normalized = rel_path.replace("\\", "/")
+        return normalized in staged_files
+    except OSError:
+        return False
+
+
+def _hygiene_matches_archive_pattern(filename: str) -> bool:
+    """파일명이 HYGIENE_ARCHIVE_PATTERNS 중 하나와 일치하는지 확인합니다.
+
+    Args:
+        filename: 검사할 파일명 (basename only).
+
+    Returns:
+        일치 패턴이 있으면 True.
+    """
+    for pattern in HYGIENE_ARCHIVE_PATTERNS:
+        if _fnmatch.fnmatch(filename, pattern):
+            return True
+    return False
+
+
+def _hygiene_classify(
+    rel_path: str,
+    mtime_epoch: float,
+    older_than_days: int,
+    active_pipeline_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """파일 하나의 hygiene 분류 결과를 반환합니다 (단독 호출용, git을 직접 호출).
+
+    Args:
+        rel_path: BASE_DIR 기준 상대 경로.
+        mtime_epoch: 파일 최종 수정 시각 (Unix timestamp).
+        older_than_days: 이 일수 이상이어야 후보가 됨.
+        active_pipeline_ids: 현재 활성 파이프라인 ID 목록 (파일명 보호에 사용).
+
+    Returns:
+        {
+            "rel_path": str,
+            "age_days": float,
+            "disposition": "candidate" | "excluded" | "blocked",
+            "reason": str | None,
+        }
+    """
+    tracked = _hygiene_get_tracked_files()
+    staged = _hygiene_get_staged_files()
+    return _hygiene_classify_fast(rel_path, mtime_epoch, older_than_days,
+                                  active_pipeline_ids, tracked, staged)
+
+
+def _hygiene_classify_fast(
+    rel_path: str,
+    mtime_epoch: float,
+    older_than_days: int,
+    active_pipeline_ids: Optional[List[str]],
+    tracked_files: set,
+    staged_files: set,
+) -> Dict[str, Any]:
+    """파일 하나의 hygiene 분류 결과를 반환합니다 (사전 조회된 git 집합 사용).
+
+    보호 우선순위 (높을수록 먼저 적용):
+      1. git tracked → exclude(reason=git_tracked)
+      2. git staged  → exclude(reason=git_staged)
+      3. HYGIENE_PROTECTED_PATHS/PREFIXES → exclude(reason=trust_root_protected 등)
+      4. 활성 pipeline_id가 파일명에 포함 → exclude(reason=active_pipeline_in_name)
+      5. HYGIENE_ARCHIVE_PATTERNS 불일치 → exclude(reason=not_archive_pattern)
+      6. secret 패턴 감지 → blocked(reason=secret_detected)
+      7. 임계값 미만 나이 → exclude(reason=younger_than_threshold)
+      8. 모두 통과 → candidate
+
+    Args:
+        rel_path: BASE_DIR 기준 상대 경로.
+        mtime_epoch: 파일 최종 수정 시각 (Unix timestamp).
+        older_than_days: 이 일수 이상이어야 후보가 됨.
+        active_pipeline_ids: 현재 활성 파이프라인 ID 목록.
+        tracked_files: git ls-files로 사전 조회한 tracked 파일 집합.
+        staged_files: git diff --cached로 사전 조회한 staged 파일 집합.
+
+    Returns:
+        {
+            "rel_path": str,
+            "age_days": float,
+            "disposition": "candidate" | "excluded" | "blocked",
+            "reason": str | None,
+        }
+    """
+    normalized = rel_path.replace("\\", "/")
+    basename = normalized.split("/")[-1]
+    now_epoch = _datetime.datetime.now(_datetime.timezone.utc).timestamp()
+    age_days = (now_epoch - mtime_epoch) / 86400.0
+
+    # 1. git tracked
+    if normalized in tracked_files or basename in tracked_files:
+        return {"rel_path": normalized, "age_days": age_days,
+                "disposition": "excluded", "reason": "git_tracked"}
+
+    # 2. git staged
+    if normalized in staged_files:
+        return {"rel_path": normalized, "age_days": age_days,
+                "disposition": "excluded", "reason": "git_staged"}
+
+    # 3. HYGIENE_PROTECTED_PATHS (정확한 파일명 일치)
+    if basename in HYGIENE_PROTECTED_PATHS or normalized in HYGIENE_PROTECTED_PATHS:
+        return {"rel_path": normalized, "age_days": age_days,
+                "disposition": "excluded", "reason": "trust_root_protected"}
+
+    # 3b. HYGIENE_PROTECTED_PREFIXES
+    for prefix in HYGIENE_PROTECTED_PREFIXES:
+        if normalized.startswith(prefix):
+            if prefix in (".github/",):
+                reason = "github_dir_protected"
+            elif prefix in (".claude/",):
+                reason = "claude_dir_protected"
+            elif prefix in ("tests/oracles/", "tests/"):
+                reason = "oracle_protected"
+            else:
+                reason = "trust_root_protected"
+            return {"rel_path": normalized, "age_days": age_days,
+                    "disposition": "excluded", "reason": reason}
+
+    # 4. 활성 파이프라인 ID가 파일명에 포함
+    if active_pipeline_ids:
+        for pid in active_pipeline_ids:
+            if pid and pid in basename:
+                return {"rel_path": normalized, "age_days": age_days,
+                        "disposition": "excluded", "reason": "active_pipeline_in_name"}
+
+    # 5. 아카이브 패턴 일치 여부 확인 (secret 검사 전에 패턴 필터링)
+    if not _hygiene_matches_archive_pattern(basename):
+        return {"rel_path": normalized, "age_days": age_days,
+                "disposition": "excluded", "reason": "not_archive_pattern"}
+
+    # 6. secret 패턴 검사 (아카이브 대상 파일만)
+    full_path = BASE_DIR / normalized
+    try:
+        content = full_path.read_text(encoding="utf-8", errors="replace")
+        findings = _scan_text_for_secrets(content)
+        if findings:
+            return {"rel_path": normalized, "age_days": age_days,
+                    "disposition": "blocked", "reason": "secret_detected"}
+    except (OSError, PermissionError):
+        return {"rel_path": normalized, "age_days": age_days,
+                "disposition": "excluded", "reason": "read_error"}
+
+    # 7. 나이 임계값
+    if age_days < older_than_days:
+        return {"rel_path": normalized, "age_days": age_days,
+                "disposition": "excluded", "reason": "younger_than_threshold"}
+
+    # 8. 모두 통과 → 후보
+    return {"rel_path": normalized, "age_days": age_days,
+            "disposition": "candidate", "reason": None}
+
+
+def _hygiene_get_tracked_files() -> set:
+    """git ls-files를 한 번 실행하여 tracked 파일 집합을 반환합니다.
+
+    개별 파일마다 git을 호출하는 대신 한 번의 호출로 성능을 최적화합니다.
+
+    Returns:
+        tracked 파일명(최상위 파일의 basename) 집합. git 사용 불가 시 빈 집합.
+    """
+    import subprocess as _subprocess
+    try:
+        result = _subprocess.run(
+            ["git", "ls-files"],
+            capture_output=True,
+            text=True,
+            cwd=str(BASE_DIR),
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return set()
+        return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    except (OSError, _subprocess.TimeoutExpired):
+        return set()
+
+
+def _hygiene_get_staged_files() -> set:
+    """git diff --cached를 한 번 실행하여 staged 파일 집합을 반환합니다.
+
+    Returns:
+        staged 파일명 집합. git 사용 불가 시 빈 집합.
+    """
+    import subprocess as _subprocess
+    try:
+        result = _subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            capture_output=True,
+            text=True,
+            cwd=str(BASE_DIR),
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return set()
+        return {line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()}
+    except (OSError, _subprocess.TimeoutExpired):
+        return set()
+
+
+def _hygiene_collect_candidates(
+    older_than_days: int,
+    active_pipeline_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """BASE_DIR를 스캔하여 hygiene 대상 파일 목록을 수집합니다.
+
+    서브디렉터리는 탐색하지 않습니다 (최상위 파일만).
+    숨김 디렉터리(.git 등) 아래 파일은 제외됩니다.
+    git ls-files를 한 번만 호출하여 성능을 최적화합니다.
+
+    Args:
+        older_than_days: 이 일수 이상 된 파일만 후보.
+        active_pipeline_ids: 활성 파이프라인 ID 목록 (파일명 보호).
+
+    Returns:
+        각 파일의 분류 결과 딕셔너리 목록.
+    """
+    # git tracked/staged 파일을 한 번에 조회 (파일마다 git 호출 방지)
+    tracked_files = _hygiene_get_tracked_files()
+    staged_files = _hygiene_get_staged_files()
+
+    results: List[Dict[str, Any]] = []
+    try:
+        for entry in BASE_DIR.iterdir():
+            if entry.is_dir():
+                continue
+            try:
+                stat = entry.stat()
+                rel = entry.name  # 최상위 파일이므로 basename = rel_path
+                classification = _hygiene_classify_fast(
+                    rel_path=rel,
+                    mtime_epoch=stat.st_mtime,
+                    older_than_days=older_than_days,
+                    active_pipeline_ids=active_pipeline_ids,
+                    tracked_files=tracked_files,
+                    staged_files=staged_files,
+                )
+                results.append(classification)
+            except (OSError, PermissionError):
+                continue
+    except (OSError, PermissionError) as exc:
+        _warn(f"[HYGIENE] BASE_DIR 스캔 오류: {exc}")
+    return results
+
+
+def _hygiene_move_file(
+    rel_path: str,
+    archive_date_str: str,
+) -> Dict[str, Any]:
+    """파일을 archive 폴더로 이동합니다.
+
+    대상: _deployment_root() / "찌꺼기" / YYYY-MM-DD / rel_path
+    원본 상대 경로 구조를 보존합니다.
+
+    Args:
+        rel_path: BASE_DIR 기준 상대 경로.
+        archive_date_str: "YYYY-MM-DD" 형식 날짜 문자열.
+
+    Returns:
+        {
+            "rel_path": str,
+            "dest": str (이동 완료 대상 경로),
+            "status": "moved" | "error",
+            "error": str | None,
+        }
+    """
+    src = BASE_DIR / rel_path
+    try:
+        deploy_root = _deployment_root()
+    except SystemExit:
+        return {"rel_path": rel_path, "dest": None, "status": "error",
+                "error": "deploy_root_not_found"}
+
+    dest_dir = deploy_root / "찌꺼기" / archive_date_str / Path(rel_path).parent
+    dest_file = deploy_root / "찌꺼기" / archive_date_str / rel_path
+
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        _shutil.move(str(src), str(dest_file))
+        return {"rel_path": rel_path, "dest": str(dest_file), "status": "moved", "error": None}
+    except (OSError, PermissionError) as exc:
+        return {"rel_path": rel_path, "dest": None, "status": "error", "error": str(exc)}
+
+
+def _hygiene_write_manifest(
+    result: Dict[str, Any],
+    manifest_path: Path,
+) -> None:
+    """hygiene archive 결과를 JSON manifest 파일로 기록합니다.
+
+    blocked 항목은 파일을 이동하지 않았음을 manifest에 명시합니다.
+
+    Args:
+        result: cmd_hygiene_archive가 반환하는 결과 딕셔너리.
+        manifest_path: manifest를 저장할 파일 경로.
+    """
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(manifest_path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+
+def cmd_hygiene_scan(args: "argparse.Namespace") -> None:
+    """hygiene scan — 임시 산출물 스캔 (실제 이동 없음).
+
+    7일 이상 된 HYGIENE_ARCHIVE_PATTERNS 일치 파일을 찾아 목록을 출력합니다.
+    실제 파일 이동은 하지 않습니다.
+
+    IMP-20260601-0DF5 MT-1
+    """
+    older_than_str: str = getattr(args, "older_than", "7d")
+    json_output: bool = getattr(args, "json", False)
+
+    try:
+        older_than_days = _parse_older_than(older_than_str)
+    except ValueError as exc:
+        _die(f"[HYGIENE ERROR] --older-than 형식 오류: {exc}. 예: 7d, 14d")
+
+    # 활성 파이프라인 ID 수집
+    state = _load_state() or {}
+    active_ids: List[str] = []
+    pid = state.get("pipeline_id")
+    if pid:
+        active_ids.append(pid)
+
+    all_items = _hygiene_collect_candidates(older_than_days, active_ids)
+
+    candidates = [i for i in all_items if i["disposition"] == "candidate"]
+    blocked = [i for i in all_items if i["disposition"] == "blocked"]
+    excluded = [i for i in all_items if i["disposition"] == "excluded"]
+
+    result: Dict[str, Any] = {
+        "status": "OK",
+        "older_than_days": older_than_days,
+        "scanned_total": len(all_items),
+        "candidates": [
+            {
+                "path": c["rel_path"],
+                "age_days_gte": int(c["age_days"]),
+                "blocked": False,
+            }
+            for c in candidates
+        ],
+        "blocked": [
+            {"path": b["rel_path"], "reason": b["reason"]}
+            for b in blocked
+        ],
+        "excluded": [
+            {"path": e["rel_path"], "reason": e["reason"]}
+            for e in excluded
+        ],
+        "moved": [],
+        "note": "scan 모드는 후보만 표시. 실제 이동 없음.",
+    }
+
+    if json_output:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"[HYGIENE SCAN] {older_than_days}일 이상 된 임시 산출물 스캔 결과")
+        print(f"  후보: {len(candidates)}개  차단: {len(blocked)}개  제외: {len(excluded)}개")
+        for c in candidates:
+            print(f"  [후보] {c['rel_path']}  ({int(c['age_days'])}일 경과)")
+        for b in blocked:
+            print(f"  [차단] {b['rel_path']}  reason={b['reason']}")
+
+
+def cmd_hygiene_archive(args: "argparse.Namespace") -> None:
+    """hygiene archive — 임시 산출물을 Google Drive 찌꺼기 폴더로 이동.
+
+    후보 파일을 _deployment_root()/찌꺼기/YYYY-MM-DD/ 아래로 이동합니다.
+    blocked 파일(secret 감지)은 이동하지 않고 manifest에 기록합니다.
+
+    IMP-20260601-0DF5 MT-1
+    """
+    older_than_str: str = getattr(args, "older_than", "7d")
+    json_output: bool = getattr(args, "json", False)
+    dry_run: bool = getattr(args, "dry_run", False)
+
+    try:
+        older_than_days = _parse_older_than(older_than_str)
+    except ValueError as exc:
+        _die(f"[HYGIENE ERROR] --older-than 형식 오류: {exc}. 예: 7d, 14d")
+
+    state = _load_state() or {}
+    active_ids: List[str] = []
+    pid = state.get("pipeline_id")
+    if pid:
+        active_ids.append(pid)
+
+    all_items = _hygiene_collect_candidates(older_than_days, active_ids)
+
+    candidates = [i for i in all_items if i["disposition"] == "candidate"]
+    blocked_items = [i for i in all_items if i["disposition"] == "blocked"]
+    excluded_items = [i for i in all_items if i["disposition"] == "excluded"]
+
+    archive_date = _datetime.datetime.now(_datetime.timezone.utc).strftime("%Y-%m-%d")
+    moved: List[Dict[str, Any]] = []
+    move_errors: List[Dict[str, Any]] = []
+
+    if not dry_run:
+        for c in candidates:
+            move_result = _hygiene_move_file(c["rel_path"], archive_date)
+            if move_result["status"] == "moved":
+                moved.append({"path": c["rel_path"], "dest": move_result["dest"]})
+            else:
+                move_errors.append({"path": c["rel_path"], "error": move_result["error"]})
+
+    status = "OK_WITH_BLOCKED" if blocked_items else "OK"
+
+    result: Dict[str, Any] = {
+        "status": status,
+        "older_than_days": older_than_days,
+        "archive_date": archive_date,
+        "dry_run": dry_run,
+        "moved": moved,
+        "move_errors": move_errors,
+        "blocked": [
+            {"path": b["rel_path"], "reason": b["reason"]}
+            for b in blocked_items
+        ],
+        "excluded": [
+            {"path": e["rel_path"], "reason": e["reason"]}
+            for e in excluded_items
+        ],
+        "manifest_must_record_blocked": bool(blocked_items),
+    }
+
+    # manifest 기록
+    if not dry_run:
+        manifest_path = BASE_DIR / ".pipeline" / "hygiene" / f"archive_{archive_date}.json"
+        _hygiene_write_manifest(result, manifest_path)
+        result["manifest_path"] = str(manifest_path)
+
+    if json_output:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"[HYGIENE ARCHIVE] {older_than_days}일 이상 된 산출물 이동 결과")
+        if dry_run:
+            print("  [DRY RUN] 실제 파일 이동 없음")
+        print(f"  이동: {len(moved)}개  차단: {len(blocked_items)}개  오류: {len(move_errors)}개")
+        for m in moved:
+            print(f"  [이동] {m['path']} → {m['dest']}")
+        for b in blocked_items:
+            print(f"  [차단] {b['path']}  reason={b['reason']}")
+        for e in move_errors:
+            print(f"  [오류] {e['path']}  error={e['error']}")
+
+
+def _parse_older_than(value: str) -> int:
+    """'7d', '14d' 형식의 문자열을 일수(int)로 변환합니다.
+
+    Args:
+        value: '7d' 또는 '14d' 형식 문자열.
+
+    Returns:
+        일수 (양수 정수).
+
+    Raises:
+        ValueError: 형식이 잘못된 경우.
+    """
+    if not value or not isinstance(value, str):
+        raise ValueError(f"올바른 형식이 아닙니다: {value!r}")
+    v = value.strip().lower()
+    if v.endswith("d"):
+        try:
+            days = int(v[:-1])
+        except ValueError:
+            raise ValueError(f"일수를 파싱할 수 없습니다: {value!r}")
+        if days <= 0:
+            raise ValueError(f"일수는 양수여야 합니다: {days}")
+        return days
+    raise ValueError(f"'7d' 형식이 필요합니다. 받은 값: {value!r}")
+
+
+def cmd_hygiene(args: "argparse.Namespace") -> None:
+    """hygiene scan | archive | schedule — 임시 산출물 정리 CLI.
+
+    scan: 후보 목록만 표시 (파일 이동 없음)
+    archive: 후보를 Google Drive 찌꺼기 폴더로 이동
+    schedule: Windows 작업 스케줄러 등록/상태 확인
+
+    IMP-20260601-0DF5 MT-1/MT-2
+    """
+    sub = getattr(args, "hygiene_sub", None)
+    if sub == "scan":
+        cmd_hygiene_scan(args)
+    elif sub == "archive":
+        cmd_hygiene_archive(args)
+    elif sub == "schedule":
+        cmd_hygiene_schedule(args)
+    else:
+        _die("[HYGIENE ERROR] 알 수 없는 hygiene 서브명령. scan|archive|schedule 중 선택하세요.")
+
+
+# ---------------------------------------------------------------------------
+# IMP-20260601-0DF5 MT-2: Hygiene Schedule — Windows 작업 스케줄러 연동
+# ---------------------------------------------------------------------------
+
+import platform as _platform
+import subprocess as _subprocess_mt2
+
+
+_HYGIENE_TASK_NAME = "PipelineHygieneWeekly"
+_HYGIENE_SCHEDULE_TRIGGER = "WEEKLY"
+_HYGIENE_SCHEDULE_DAY = "SUN"
+_HYGIENE_SCHEDULE_TIME = "02:00"
+
+
+def _hygiene_schtasks_dry_run() -> str:
+    """schtasks 등록에 사용할 명령어 문자열을 반환합니다 (실제 실행 없음).
+
+    Returns:
+        schtasks 등록 명령어 문자열.
+    """
+    import sys
+    python_exe = sys.executable
+    pipeline_path = str(BASE_DIR / "pipeline.py")
+    cmd = (
+        f'schtasks /Create /SC {_HYGIENE_SCHEDULE_TRIGGER} '
+        f'/D {_HYGIENE_SCHEDULE_DAY} '
+        f'/ST {_HYGIENE_SCHEDULE_TIME} '
+        f'/TN "{_HYGIENE_TASK_NAME}" '
+        f'/TR "\\"{python_exe}\\" \\"{pipeline_path}\\" hygiene archive --older-than 7d" '
+        f'/F'
+    )
+    return cmd
+
+
+def _hygiene_schedule_install(dry_run: bool = False) -> Dict[str, Any]:
+    """Windows 작업 스케줄러에 매주 일요일 02:00 hygiene archive 작업을 등록합니다.
+
+    Args:
+        dry_run: True이면 명령어만 출력하고 실제 등록하지 않음.
+
+    Returns:
+        {
+            "status": "INSTALLED" | "DRY_RUN" | "BLOCKED",
+            "command": str,
+            "error": str | None,
+            "manual_hint": str | None,
+        }
+    """
+    cmd_str = _hygiene_schtasks_dry_run()
+
+    if dry_run:
+        return {
+            "status": "DRY_RUN",
+            "command": cmd_str,
+            "error": None,
+            "manual_hint": f"수동 등록 명령: {cmd_str}",
+        }
+
+    if _platform.system() != "Windows":
+        return {
+            "status": "BLOCKED",
+            "command": cmd_str,
+            "error": f"Windows 전용 기능입니다. 현재 OS: {_platform.system()}",
+            "manual_hint": "Windows 환경에서 실행하세요.",
+        }
+
+    import sys
+    python_exe = sys.executable
+    pipeline_path = str(BASE_DIR / "pipeline.py")
+    schtasks_args = [
+        "schtasks", "/Create",
+        "/SC", _HYGIENE_SCHEDULE_TRIGGER,
+        "/D", _HYGIENE_SCHEDULE_DAY,
+        "/ST", _HYGIENE_SCHEDULE_TIME,
+        "/TN", _HYGIENE_TASK_NAME,
+        "/TR", f'"{python_exe}" "{pipeline_path}" hygiene archive --older-than 7d',
+        "/F",
+    ]
+
+    try:
+        result = _subprocess_mt2.run(
+            schtasks_args,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return {
+                "status": "INSTALLED",
+                "command": cmd_str,
+                "error": None,
+                "manual_hint": None,
+            }
+        else:
+            error_msg = result.stderr.strip() or result.stdout.strip()
+            return {
+                "status": "BLOCKED",
+                "command": cmd_str,
+                "error": f"schtasks 등록 실패 (exit {result.returncode}): {error_msg}",
+                "manual_hint": f"수동 등록 명령: {cmd_str}",
+            }
+    except _subprocess_mt2.TimeoutExpired:
+        return {
+            "status": "BLOCKED",
+            "command": cmd_str,
+            "error": "schtasks 명령 타임아웃 (30초)",
+            "manual_hint": f"수동 등록 명령: {cmd_str}",
+        }
+    except (OSError, FileNotFoundError) as exc:
+        return {
+            "status": "BLOCKED",
+            "command": cmd_str,
+            "error": f"schtasks 실행 오류: {exc}",
+            "manual_hint": f"수동 등록 명령: {cmd_str}",
+        }
+
+
+def _hygiene_schedule_status() -> Dict[str, Any]:
+    """Windows 작업 스케줄러에서 hygiene 작업 등록 상태를 조회합니다.
+
+    Returns:
+        {
+            "status": "INSTALLED" | "NOT_INSTALLED" | "ERROR" | "NOT_WINDOWS",
+            "task_name": str,
+            "details": str | None,
+        }
+    """
+    if _platform.system() != "Windows":
+        return {
+            "status": "NOT_WINDOWS",
+            "task_name": _HYGIENE_TASK_NAME,
+            "details": f"Windows 전용 기능. 현재 OS: {_platform.system()}",
+        }
+
+    try:
+        result = _subprocess_mt2.run(
+            ["schtasks", "/Query", "/TN", _HYGIENE_TASK_NAME, "/FO", "LIST"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            return {
+                "status": "INSTALLED",
+                "task_name": _HYGIENE_TASK_NAME,
+                "details": result.stdout.strip(),
+            }
+        else:
+            return {
+                "status": "NOT_INSTALLED",
+                "task_name": _HYGIENE_TASK_NAME,
+                "details": result.stderr.strip() or "작업 없음",
+            }
+    except _subprocess_mt2.TimeoutExpired:
+        return {
+            "status": "ERROR",
+            "task_name": _HYGIENE_TASK_NAME,
+            "details": "schtasks 조회 타임아웃 (15초)",
+        }
+    except (OSError, FileNotFoundError) as exc:
+        return {
+            "status": "ERROR",
+            "task_name": _HYGIENE_TASK_NAME,
+            "details": f"schtasks 실행 오류: {exc}",
+        }
+
+
+def cmd_hygiene_schedule(args: "argparse.Namespace") -> None:
+    """hygiene schedule install | status — Windows 작업 스케줄러 등록/조회.
+
+    install: 매주 일요일 02:00 hygiene archive 작업 등록
+    status: 등록 상태 조회
+
+    IMP-20260601-0DF5 MT-2
+    """
+    schedule_sub = getattr(args, "schedule_sub", None)
+    json_output: bool = getattr(args, "json", False)
+    dry_run: bool = getattr(args, "dry_run", False)
+
+    if schedule_sub == "install":
+        result = _hygiene_schedule_install(dry_run=dry_run)
+        if json_output:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            status = result["status"]
+            if status == "INSTALLED":
+                print(f"[HYGIENE SCHEDULE] 작업 등록 완료: {_HYGIENE_TASK_NAME}")
+            elif status == "DRY_RUN":
+                print(f"[HYGIENE SCHEDULE DRY RUN] 등록 명령:")
+                print(f"  {result['command']}")
+            else:
+                print(f"[HYGIENE SCHEDULE BLOCKED] {result['error']}")
+                if result.get("manual_hint"):
+                    print(f"  수동 명령: {result['manual_hint']}")
+                raise SystemExit(1)
+
+    elif schedule_sub == "status":
+        result = _hygiene_schedule_status()
+        if json_output:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            status = result["status"]
+            if status == "INSTALLED":
+                print(f"[HYGIENE SCHEDULE] 등록됨: {_HYGIENE_TASK_NAME}")
+                if result.get("details"):
+                    print(result["details"])
+            elif status == "NOT_INSTALLED":
+                print(f"[HYGIENE SCHEDULE] 미등록: {_HYGIENE_TASK_NAME}")
+                print("  등록하려면: python pipeline.py hygiene schedule install")
+            elif status == "NOT_WINDOWS":
+                print(f"[HYGIENE SCHEDULE] {result['details']}")
+            else:
+                print(f"[HYGIENE SCHEDULE ERROR] {result.get('details', '알 수 없는 오류')}")
+    else:
+        _die("[HYGIENE ERROR] hygiene schedule 서브명령이 필요합니다. install|status 중 선택하세요.")
+
+
 COMMAND_MAP = {
     "new":                  cmd_new,
     "check":                cmd_check,
@@ -17941,6 +18811,7 @@ COMMAND_MAP = {
     "metrics":              cmd_metrics,
     "budget":               cmd_budget,
     "golden":               cmd_golden,
+    "hygiene":              cmd_hygiene,
 }
 
 

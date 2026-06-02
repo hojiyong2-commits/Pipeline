@@ -1208,3 +1208,37 @@ python pipeline.py gates request-accept --evidence <결과물-경로>
 # 2단계: 사용자가 코드를 입력하면 Pipeline Manager가 실행
 python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-IMP-...-XXXXXXXX
 ```
+
+## Weekly Cleanup Archive — Hygiene CLI (IMP-20260601-0DF5)
+
+`pipeline.py hygiene` 서브커맨드는 7일 이상 된 임시 산출물을 정기적으로 정리합니다.
+Google Drive 찌꺼기 폴더(`PIPELINE_DEPLOY_ROOT/찌꺼기/YYYY-MM-DD/`)로 이동하며,
+보호 파일과 활성 파이프라인 파일은 자동으로 제외됩니다.
+
+### 서브커맨드 요약
+
+| 명령 | 역할 |
+|---|---|
+| `hygiene scan --older-than 7d --json` | 이동 후보 목록만 확인 (파일 변경 없음) |
+| `hygiene archive --older-than 7d --dry-run` | 이동 시뮬레이션 (실제 이동 없음) |
+| `hygiene archive --older-than 7d` | 실제 이동 실행 |
+| `hygiene schedule install --dry-run` | Windows 작업 스케줄러 등록 명령 확인 |
+| `hygiene schedule install` | Windows 작업 스케줄러 실제 등록 (관리자 권한 필요) |
+| `hygiene schedule status` | 스케줄 등록 상태 확인 |
+
+### SSoT 상수 위치
+
+`HYGIENE_ARCHIVE_PATTERNS` (이동 대상 글로브 패턴), `HYGIENE_PROTECTED_PATHS` (보호 파일명),
+`HYGIENE_PROTECTED_PREFIXES` (보호 경로 접두사)는 모두 `pipeline.py` 내 SSoT 상수로 관리됩니다.
+패턴을 변경할 때는 `pipeline.py`의 해당 상수를 직접 수정합니다.
+
+### 에이전트 책임
+
+- **Dev**: 새 임시 산출물 파일명이 `HYGIENE_ARCHIVE_PATTERNS`에 없으면 해당 패턴을 추가하는 micro-task를 별도 MT로 포함합니다.
+- **QA**: `tests/e2e/test_hygiene_0df5.py` E2E 테스트 11개가 모두 PASS인지 확인합니다.
+- **Pipeline Manager**: 배포 후 `pipeline.py hygiene archive --older-than 7d` 실행 여부를 확인하고, `PIPELINE_DEPLOY_ROOT` 환경 변수가 설정되어 있는지 점검합니다.
+
+### 환경 변수
+
+- `PIPELINE_DEPLOY_ROOT`: 찌꺼기 이동 대상 루트 (기본값: `G:\내 드라이브\터미널`)
+- `PIPELINE_STATE_PATH`: E2E 테스트용 state 파일 경로 격리에 사용

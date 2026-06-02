@@ -60,6 +60,42 @@
 
 ## 부록: 게이트별 검증 명령
 
+### Weekly Cleanup Archive (Hygiene)
+
+7일 이상 된 임시 산출물을 스캔하거나 Google Drive 찌꺼기 폴더로 이동합니다.
+
+```powershell
+# 후보 파일 목록 확인 (파일 이동 없음)
+python pipeline.py hygiene scan --older-than 7d --json
+
+# 실제 이동 전 dry-run 확인
+python pipeline.py hygiene archive --older-than 7d --json --dry-run
+
+# 실제 이동 (PIPELINE_DEPLOY_ROOT 아래 찌꺼기/YYYY-MM-DD/ 폴더로 이동)
+python pipeline.py hygiene archive --older-than 7d
+
+# Windows 작업 스케줄러에 주간 자동 실행 등록 (dry-run)
+python pipeline.py hygiene schedule install --dry-run
+
+# Windows 작업 스케줄러에 실제 등록 (관리자 권한 필요)
+python pipeline.py hygiene schedule install
+
+# 스케줄 등록 상태 확인
+python pipeline.py hygiene schedule status
+```
+
+**보호 파일 목록** (이동 대상에서 항상 제외):
+- `pipeline.py`, `CLAUDE.md`, `README.md`, `RELEASE_NOTES.md`, `pyproject.toml`, `.gitignore`, `.gitattributes`
+- `.github/`, `.claude/`, `.codex/`, `.pipeline/`, `tests/`, `pipeline_contracts/`, `pipeline_outputs/` 디렉토리
+
+**이동 대상 패턴** (`HYGIENE_ARCHIVE_PATTERNS` SSoT 상수):
+- `build_report*.xml`, `qa_report*.xml`, `dev_handover*.xml`, `architect_report*.xml`
+- `failure_packet.json`, `acceptance_comment.json`, `bandit_e2e_result*.json`, `codex_review_result*.json` 등
+
+**환경 변수**:
+- `PIPELINE_DEPLOY_ROOT`: 찌꺼기 이동 대상 루트 (기본값: `G:\내 드라이브\터미널`)
+- `PIPELINE_STATE_PATH`: 격리 테스트 시 state 파일 경로 지정
+
 ### Security & Secrets Boundary
 ```powershell
 python pipeline.py gates secrets
