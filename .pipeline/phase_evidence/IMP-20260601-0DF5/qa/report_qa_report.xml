@@ -1,0 +1,77 @@
+<qa_report>
+  <pipeline_id>IMP-20260601-0DF5</pipeline_id>
+  <agent_run_id>qa-7ee3cc8244f02ce9</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>116</numeric_score>
+
+  <scope_declaration>
+    <files_verified>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_hygiene_0df5.py</file>
+      <file>RELEASE_NOTES.md</file>
+      <file>CLAUDE.md</file>
+    </files_verified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>cmd_hygiene, cmd_hygiene_scan, cmd_hygiene_archive, cmd_hygiene_schedule, _hygiene_collect_candidates, _hygiene_classify_fast, _hygiene_get_tracked_files, _hygiene_get_staged_files, _hygiene_schedule_install, _hygiene_schedule_status</target_function>
+    <affected_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_hygiene_0df5.py</file>
+      <file>RELEASE_NOTES.md</file>
+      <file>CLAUDE.md</file>
+    </affected_files>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </impact_analysis>
+
+  <micro_task_boundary>
+    <target_files>pipeline.py tests/e2e/test_hygiene_0df5.py RELEASE_NOTES.md CLAUDE.md</target_files>
+    <actual_changed_files>pipeline.py tests/e2e/test_hygiene_0df5.py RELEASE_NOTES.md CLAUDE.md</actual_changed_files>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <test_results>
+    <e2e_tests>
+      <total>11</total>
+      <passed>11</passed>
+      <failed>0</failed>
+      <duration_seconds>8.78</duration_seconds>
+      <test_file>tests/e2e/test_hygiene_0df5.py</test_file>
+    </e2e_tests>
+  </test_results>
+
+  <category_scores>
+    <category name="FS" score="28" max="30">
+      <check name="safe_read_file">PASS — HYGIENE_PROTECTED_PATHS/PREFIXES 경계 검증</check>
+      <check name="encoding">PASS — 모든 파일 읽기 UTF-8 명시</check>
+      <check name="traversal">PASS — git tracked 파일만 대상, allowed_root 위반 없음</check>
+    </category>
+    <category name="AL" score="28" max="30">
+      <check name="edge_cases">PASS — secret_detected, younger_than_threshold, active_pipeline_skip 등 엣지케이스 처리</check>
+      <check name="validation">PASS — HYGIENE_ARCHIVE_PATTERNS fnmatch, older_than_days int 검증</check>
+    </category>
+    <category name="PD" score="30" max="30">
+      <check name="sst_constants">PASS — HYGIENE_ARCHIVE_PATTERNS, HYGIENE_PROTECTED_PATHS, HYGIENE_PROTECTED_PREFIXES SSoT 상수</check>
+      <check name="module_gate">PASS — MT-1~MT-4 모두 PASS, integration PASS</check>
+      <check name="docs_sync">PASS — RELEASE_NOTES.md + CLAUDE.md 동기화 (IMP-20260507-0EDC 준수)</check>
+    </category>
+    <category name="BUILD" score="30" max="30">
+      <check name="no_new_deps">PASS — 신규 의존성 없음, 표준 라이브러리만 사용</check>
+      <check name="scope_lock">PASS — scope_manifest 파일과 실제 변경 파일 일치</check>
+    </category>
+  </category_scores>
+
+  <findings>
+    <finding severity="INFO">
+      <description>_hygiene_classify_fast 함수에서 datetime.now(timezone.utc) 사용 — utcnow() deprecation 방지</description>
+      <status>OK</status>
+    </finding>
+    <finding severity="INFO">
+      <description>E2E 테스트에서 PIPELINE_STATE_PATH 격리 사용 — 전역 state 오염 방지</description>
+      <status>OK</status>
+    </finding>
+  </findings>
+
+  <failure_signature>N/A</failure_signature>
+  <repeat_indicator>N/A</repeat_indicator>
+</qa_report>
