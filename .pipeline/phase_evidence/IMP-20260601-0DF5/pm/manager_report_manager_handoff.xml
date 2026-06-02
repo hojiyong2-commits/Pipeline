@@ -1,0 +1,22 @@
+<manager_handoff>
+  <pipeline_id>IMP-20260601-0DF5</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-6b72df0d81c21ea3</manager_run_id>
+  <planner_run_id>pm_planner-ac2ca83e50642945</planner_run_id>
+  <step_plan_sha256>12003d540f19d2255e63aa831dc9e71a7e3dc7a9687226eb765ddd2bf3e1f9fc</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>ready_for_dev</status>
+  <design_decisions>
+    <decision id="DQ-1">A — HYGIENE_ARCHIVE_PATTERNS을 pipeline.py 안에 SSoT 상수로 관리</decision>
+    <decision id="DQ-2">A — schedule install 실패 시 BLOCKED + 한국어 오류 메시지 + 수동 명령 안내</decision>
+  </design_decisions>
+  <micro_tasks>
+    <mt id="MT-1" target="pipeline.py" lines="320">scan/archive 핵심 로직 + SSoT 상수</mt>
+    <mt id="MT-2" target="pipeline.py" lines="180">schedule install/status 서브커맨드</mt>
+    <mt id="MT-3" target="tests/e2e/test_hygiene_0df5.py" lines="380">11개 E2E 테스트</mt>
+    <mt id="MT-4" target="RELEASE_NOTES.md,CLAUDE.md" lines="60">사용법 문서</mt>
+  </micro_tasks>
+  <execution_profile>HIGH_RISK</execution_profile>
+</manager_handoff>
