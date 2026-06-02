@@ -20,7 +20,7 @@
     "output_file": "dev_handover.xml",
     "output_sha256": "f6d4e08aa5a65f9d44266051595b39aec6d70f5e9cfb3d1e426bf715bfc68527",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260601-0DF5/dev/agent_receipt_dev-ee4b7822943de9a5.json",
-    "receipt_sha256": "fed45257d88db68ca292ec37929a2415b6e0e16575f1bbeb3b50105f1dbdd10e",
+    "receipt_sha256": "3d5a2b07f63beced6a6f484f15ee9df3b1db864d57353f8b462d88dec4a83a84",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260601-0DF5\\dev\\dev-ee4b7822943de9a5.json"
   },
@@ -46,7 +46,7 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260601-0DF5/dev/scope_manifest_scope_manifest.json",
-      "sha256": "2035f7be099ccff9a4093266bca2ed14ea0fb1a5e23ec948a8a67be7b67fc0e7",
+      "sha256": "67dcab733b9ebba2a477c1fd6ddc34fc820a54e3948e18976c99adb0aa49b22d",
       "size_bytes": 1458,
       "requires_force_add": true
     }
