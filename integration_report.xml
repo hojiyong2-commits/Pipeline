@@ -1,0 +1,17 @@
+<integration_report>
+  <pipeline_id>IMP-20260601-0DF5</pipeline_id>
+  <integration_verdict>PASS</integration_verdict>
+  <modules_integrated>
+    <module id="MT-1">pipeline.py scan/archive 핵심 로직 + SSoT 상수 — PASS</module>
+    <module id="MT-2">pipeline.py schedule install/status 서브커맨드 — PASS</module>
+    <module id="MT-3">tests/e2e/test_hygiene_0df5.py 11개 E2E 테스트 — PASS (11/11)</module>
+    <module id="MT-4">RELEASE_NOTES.md, CLAUDE.md 사용법 문서 — PASS</module>
+  </modules_integrated>
+  <integration_verification>
+    <item>MT-1 + MT-2: pipeline.py cmd_hygiene가 scan/archive/schedule 모두 라우팅 — 통합 확인</item>
+    <item>MT-3: E2E 테스트가 MT-1+MT-2 구현을 subprocess로 검증 — 통합 확인</item>
+    <item>MT-4: 문서가 MT-1+MT-2 CLI 명령어와 일치 — 통합 확인</item>
+    <item>HYGIENE_ARCHIVE_PATTERNS SSoT 상수가 코드(MT-1)와 문서(MT-4)에 동기화됨</item>
+    <item>no_regression: 기존 pipeline.py 명령어들 정상 동작 — 추가 함수가 기존 COMMAND_MAP에 영향 없음</item>
+  </integration_verification>
+</integration_report>

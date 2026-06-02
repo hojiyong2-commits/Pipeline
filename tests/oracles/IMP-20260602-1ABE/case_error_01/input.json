@@ -1,0 +1,10 @@
+{
+  "scenario": "abstract_ac_blocked",
+  "description": "단독 추상 AC 문구 → PM done 차단",
+  "step_plan_acceptance_criteria": [
+    {"ac_id": "AC-1", "requirement": "정상 동작", "must_verify": true, "source": "user", "user_visible": true, "expected_evidence": ""}
+  ],
+  "micro_tasks": [
+    {"id": "MT-1", "covers_ac": ["AC-1"]}
+  ]
+}

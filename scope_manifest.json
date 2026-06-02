@@ -1,0 +1,182 @@
+{
+  "pipeline_id": "IMP-20260602-1ABE",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline._parse_structured_ac (신규), pipeline._validate_structured_ac_block (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "ABSTRACT_AC_PATTERNS frozenset (15개 패턴) + _parse_structured_ac() + _validate_structured_ac_block() 8개 규칙"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline.cmd_done (5873줄 — pm 경로 확장), pipeline._parse_atomic_plan (1166줄 — structured AC 저장 추가)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-2"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "cmd_done PM 경로에 requirements_tracking + structured_acceptance_criteria state 최상위 저장 + legacy 자동 백필"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline.cmd_module (8402줄 — module qa 경로 확장)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_check_module_qa_ac_verification + _get_mt_covers_ac/iqr helper + cmd_module qa PASS 분기 검증 호출"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline._cmd_gates_request_accept (13286줄 — AC 충족표 출력 추가)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-4"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_build_ac_fulfillment_table + _format_ac_fulfillment_output + 5개 helper + request-accept 통합 + acceptance_request.json 저장"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline._validate_dev_scope_manifest 또는 신규 _validate_implemented_tasks (scope manifest 검증 경로)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_ABSTRACT_EVIDENCE_PATTERNS + _validate_implemented_tasks + 2곳(_validate_dev_scope_manifest, _validate_module_scope_manifest) 호출 + scope 반환값에 implemented_tasks 보존"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline._audit_oracle_quality (7544줄 — ac_ids 필드 검증 추가)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-6"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_audit_oracle_quality state 파라미터 + ac_ids 검증 + 호출자 3곳(contract audit, gates oracle, audit) 동기화"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py",
+        "CLAUDE.md",
+        ".claude/agents/pm-agent.md",
+        ".claude/agents/dev-agent.md",
+        ".claude/agents/qa-agent.md",
+        ".claude/agents/test-harness-agent.md"
+      ],
+      "affected_functions": [
+        "pipeline._check_codex_review_gate (5440줄 — criteria_review blocking 검사 추가),\n        CLAUDE.md (Codex Review AC Coverage Mode 섹션 추가),\n        .claude/agents/pm-agent.md (structured AC 설계 절차 추가),\n        .claude/agents/dev-agent.md (implemented_tasks 기록 의무 추가),\n        .claude/agents/qa-agent.md (criteria_verification 출력 의무 추가),\n        .claude/agents/test-harness-agent.md (AC 충족표 확인 의무 추가)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": ["AC-7", "AC-8"],
+          "changed_files": [
+            "pipeline.py",
+            "CLAUDE.md",
+            ".claude/agents/pm-agent.md",
+            ".claude/agents/dev-agent.md",
+            ".claude/agents/qa-agent.md",
+            ".claude/agents/test-harness-agent.md"
+          ],
+          "implementation_evidence": [
+            "CODEX_COVERAGE_CHECK_FIELDS + _validate_codex_coverage_checks + _check_codex_review_gate에 coverage_checks 7개 필드 + criteria_review blocking 검사 추가",
+            "CLAUDE.md + 4개 agent MD 각 역할별 AC Tracking 섹션 추가"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        "tests/e2e/test_ac_tracking_1abe.py",
+        "tests/oracles/IMP-20260602-1ABE/case_normal_01/input.json",
+        "tests/oracles/IMP-20260602-1ABE/case_normal_01/expected.json",
+        "tests/oracles/IMP-20260602-1ABE/case_edge_01/input.json",
+        "tests/oracles/IMP-20260602-1ABE/case_edge_01/expected.json",
+        "tests/oracles/IMP-20260602-1ABE/case_error_01/input.json",
+        "tests/oracles/IMP-20260602-1ABE/case_error_01/expected.json"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_ac_tracking_1abe.py (신규), tests/oracles/IMP-20260602-1ABE/ (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8",
+          "implemented_ac": ["AC-9"],
+          "changed_files": ["tests/e2e/test_ac_tracking_1abe.py"],
+          "implementation_evidence": [
+            "tests/e2e/test_ac_tracking_1abe.py — 46개 테스트 PASS (회귀 2개 포함)",
+            "oracle 3개 케이스 (case_normal_01, case_edge_01, case_error_01) PM에서 등록한 그대로 사용"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": ["RELEASE_NOTES.md"],
+      "affected_functions": [
+        "RELEASE_NOTES.md (IMP-20260602-1ABE 항목 추가)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-9",
+          "implemented_ac": ["AC-8"],
+          "changed_files": ["RELEASE_NOTES.md"],
+          "implementation_evidence": [
+            "RELEASE_NOTES.md에 IMP-20260602-1ABE 섹션 추가 — 변경 내용 7개 영역 + legacy 정책 4개 + 회귀 2개 + oracle 3개"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -813,6 +813,197 @@ def _require_design_true(element: Any, path: str, label: str) -> None:
         _die(f"[PM DESIGN GATE] {label} must be true/confirmed: <{path}>")
 
 
+# ─── Structured AC Tracking SSoT (IMP-20260602-1ABE MT-1) ────────────────────
+# [Purpose]: PM step_plan.xml의 <acceptance_criteria> 구조화 블록을 파싱/검증하고,
+#   pipeline 전 phase에서 AC가 끊기지 않고 추적되도록 한다.
+# [Assumptions]: AC id는 AC-숫자 형식. micro_task의 covers_ac 또는 covers_iqr이
+#   PM step_plan에 존재. legacy 파이프라인은 acceptance_criteria 블록이 없을 수
+#   있고 그 경우에는 structured AC 검증을 건너뛴다 (하위 호환).
+# [Vulnerability & Risks]: 추상 AC 차단 패턴은 frozenset 단순 매칭이므로
+#   완전 일치/공백 trim만 검사한다. "정상 동작 + 구체값" 같은 결합 문구는
+#   허용하므로 단독 추상 문구만 차단한다.
+# [Improvement]: 추후 fuzzy matching, 문장 임베딩 기반 의미 추출, AC 자동
+#   품질 점수화 등을 추가할 수 있다.
+ABSTRACT_AC_PATTERNS: frozenset = frozenset({
+    "정상 동작", "테스트 통과", "문제 없음", "잘 처리됨", "오류 없음",
+    "사용자 요구 반영", "작동", "동작", "works", "working", "implemented",
+    "기능 구현", "완료", "done", "finished",
+})
+
+
+def _parse_structured_ac(step_plan_root: Any) -> List[Dict[str, Any]]:
+    """step_plan.xml의 <acceptance_criteria>/<criterion> 블록을 파싱한다.
+
+    Args:
+        step_plan_root: ElementTree element (step_plan 또는 root XML element).
+    Returns:
+        list[dict] — 각 dict는 ac_id, requirement, must_verify, source,
+        user_visible, expected_evidence 키를 포함한다.
+        acceptance_criteria 블록이 없으면 빈 리스트 반환.
+    Raises:
+        TypeError: step_plan_root가 None인 경우.
+    """
+    if step_plan_root is None:
+        raise TypeError("step_plan_root must not be None")
+
+    ac_root = step_plan_root.find("acceptance_criteria")
+    if ac_root is None:
+        return []
+
+    structured: List[Dict[str, Any]] = []
+    for crit in ac_root.findall("criterion"):
+        # ac_id: id 속성 또는 ac_id 속성
+        ac_id = (crit.get("id") or crit.get("ac_id") or "").strip()
+        # requirement: text 자식 요소 또는 requirement 자식 요소
+        text_el = crit.find("text")
+        requirement_el = crit.find("requirement")
+        if text_el is not None and text_el.text:
+            requirement = text_el.text.strip()
+        elif requirement_el is not None and requirement_el.text:
+            requirement = requirement_el.text.strip()
+        else:
+            # 직접 텍스트만 있는 경우
+            requirement = (crit.text or "").strip()
+
+        # must_verify: 기본 true
+        must_verify_raw = (crit.get("must_verify") or "true").strip().lower()
+        must_verify = must_verify_raw in ("true", "yes", "y", "1")
+
+        # source: 기본 "pm"
+        source = (crit.get("source") or "pm").strip()
+
+        # user_visible: 기본 true
+        user_visible_raw = (crit.get("user_visible") or "true").strip().lower()
+        user_visible = user_visible_raw in ("true", "yes", "y", "1")
+
+        # expected_evidence: 속성 또는 자식 요소
+        expected_evidence = (crit.get("expected_evidence") or "").strip()
+        if not expected_evidence:
+            evidence_el = crit.find("expected_evidence")
+            if evidence_el is not None and evidence_el.text:
+                expected_evidence = evidence_el.text.strip()
+
+        structured.append({
+            "ac_id": ac_id,
+            "requirement": requirement,
+            "must_verify": must_verify,
+            "source": source,
+            "user_visible": user_visible,
+            "expected_evidence": expected_evidence,
+        })
+
+    return structured
+
+
+def _validate_structured_ac_block(
+    structured_ac: List[Dict[str, Any]],
+    micro_tasks: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """structured AC 8개 검증 규칙 적용.
+
+    Args:
+        structured_ac: _parse_structured_ac()가 반환한 리스트.
+        micro_tasks: PM step_plan의 micro_tasks 리스트 (covers_ac/covers_iqr 포함 가능).
+    Returns:
+        {"valid": True, "ac_count": N, "mt_count": N} 또는
+        {"valid": False, "error": "[AC GATE] ..."}
+    """
+    if structured_ac is None:
+        return {"valid": False, "error": "[AC GATE] structured_ac is None"}
+    if micro_tasks is None:
+        return {"valid": False, "error": "[AC GATE] micro_tasks is None"}
+
+    # 규칙 1: AC 없음
+    if not structured_ac:
+        return {"valid": False, "error": "[AC GATE] step_plan에 criterion 요소가 없습니다"}
+
+    # 규칙 2, 3, 4: 각 AC 검증
+    seen_ids: set = set()
+    ac_id_pattern = re.compile(r"^AC-\d+$")
+    valid_ac_ids: set = set()
+    for ac in structured_ac:
+        ac_id = ac.get("ac_id", "")
+        requirement = ac.get("requirement", "")
+
+        # 규칙 2: AC id 형식
+        if not ac_id_pattern.match(ac_id):
+            return {
+                "valid": False,
+                "error": f"[AC GATE] AC id 형식 오류: {ac_id} — AC-숫자 형식이어야 합니다",
+            }
+
+        # 규칙 3: 중복 AC id
+        if ac_id in seen_ids:
+            return {"valid": False, "error": f"[AC GATE] AC id 중복: {ac_id}"}
+        seen_ids.add(ac_id)
+        valid_ac_ids.add(ac_id)
+
+        # 규칙 4: 추상 AC 단독 (requirement 전체가 ABSTRACT_AC_PATTERNS 중 하나)
+        stripped = requirement.strip()
+        if stripped in ABSTRACT_AC_PATTERNS:
+            return {
+                "valid": False,
+                "error": (
+                    f"[AC GATE] AC-{ac_id.replace('AC-', '')} 문구가 추상적입니다: "
+                    f"'{stripped}' — 구체적인 성공 조건으로 바꾸세요"
+                ),
+            }
+
+    # 규칙 5, 6: MT covers_ac 검증
+    mt_covers_ac: Dict[str, List[str]] = {}
+    for mt in micro_tasks:
+        mt_id = str(mt.get("id", ""))
+        covers_ac_raw = mt.get("covers_ac")
+        covers_iqr_raw = mt.get("covers_iqr")
+
+        # covers_ac, covers_iqr이 문자열이면 콤마 분리, 리스트면 그대로
+        def _normalize_covers(value: Any) -> List[str]:
+            if value is None:
+                return []
+            if isinstance(value, list):
+                return [str(v).strip() for v in value if str(v).strip()]
+            if isinstance(value, str):
+                return [v.strip() for v in value.split(",") if v.strip()]
+            return []
+
+        covers_ac_list = _normalize_covers(covers_ac_raw)
+        covers_iqr_list = _normalize_covers(covers_iqr_raw)
+        mt_covers_ac[mt_id] = covers_ac_list
+
+        # 규칙 5: MT에 covers_ac도 covers_iqr도 없음 → 차단
+        if not covers_ac_list and not covers_iqr_list:
+            return {"valid": False, "error": f"[AC GATE] MT-{mt_id.replace('MT-', '')}에 covers_ac가 없습니다"}
+
+        # 규칙 6: covers_ac의 모든 id가 valid_ac_ids에 있어야 함
+        for ac_id in covers_ac_list:
+            if ac_id not in valid_ac_ids:
+                return {
+                    "valid": False,
+                    "error": (
+                        f"[AC GATE] MT-{mt_id.replace('MT-', '')}.covers_ac에 "
+                        f"알 수 없는 AC id: {ac_id}"
+                    ),
+                }
+
+    # 규칙 7: must_verify=true AC가 어떤 MT covers_ac에도 없으면 차단
+    all_covered_ac: set = set()
+    for cov in mt_covers_ac.values():
+        all_covered_ac.update(cov)
+
+    for ac in structured_ac:
+        ac_id = ac.get("ac_id", "")
+        if ac.get("must_verify") and ac_id not in all_covered_ac:
+            return {
+                "valid": False,
+                "error": (
+                    f"[AC GATE] AC-{ac_id.replace('AC-', '')} (must_verify=true)이 "
+                    "어떤 MT와도 연결되지 않았습니다"
+                ),
+            }
+
+    return {"valid": True, "ac_count": len(structured_ac), "mt_count": len(micro_tasks)}
+
+
 def _validate_pm_design_confirmation(step_plan: Any, micro_tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     confirmation = step_plan.find("design_confirmation")
     if confirmation is None:
@@ -1241,15 +1432,30 @@ def _validate_pm_step_plan_file(report_file: str, state: Dict[str, Any]) -> Dict
         if not target_files:
             _die(f"[ATOMIC PLAN GATE] {mt_id} requires <target_files><file>...</file></target_files>")
 
+        # IMP-20260602-1ABE MT-1: covers_ac / covers_iqr 파싱 (있을 때만)
+        covers_ac_text = _child_text(element, "covers_ac")
+        covers_iqr_text = _child_text(element, "covers_iqr")
+        covers_ac_list = [s.strip() for s in covers_ac_text.split(",") if s.strip()] if covers_ac_text else []
+        covers_iqr_list = [s.strip() for s in covers_iqr_text.split(",") if s.strip()] if covers_iqr_text else []
+
         micro_tasks.append({
             "id": mt_id,
             "affected_function": affected_function,
             "target_files": target_files,
             "change_summary": change_summary,
+            "covers_ac": covers_ac_list,
+            "covers_iqr": covers_iqr_list,
         })
 
     design_confirmation = _validate_pm_design_confirmation(step_plan, micro_tasks)
     execution_profile = _parse_task_complexity(step_plan, micro_tasks)
+
+    # IMP-20260602-1ABE MT-1: structured AC 파싱 및 검증 (acceptance_criteria 블록 있을 때만)
+    structured_ac = _parse_structured_ac(step_plan)
+    if structured_ac:
+        ac_result = _validate_structured_ac_block(structured_ac, micro_tasks)
+        if not ac_result.get("valid"):
+            _die(ac_result.get("error", "[AC GATE] structured AC validation failed"))
 
     return {
         "report_file": str(path),
@@ -1260,6 +1466,7 @@ def _validate_pm_step_plan_file(report_file: str, state: Dict[str, Any]) -> Dict
         "design_confirmation": design_confirmation,
         "execution_profile": execution_profile,
         "project_snapshot": _atomic_project_snapshot(),
+        "structured_acceptance_criteria": structured_ac,
     }
 
 
@@ -1422,6 +1629,108 @@ def _normalize_rel_path(raw: str) -> str:
     return normalized
 
 
+# ─── Dev scope_manifest implemented_tasks (IMP-20260602-1ABE MT-5) ───────────
+_ABSTRACT_EVIDENCE_PATTERNS: frozenset = frozenset({
+    "구현 완료", "완료", "done", "finished", "implemented", "구현됨", "구현",
+    "works", "working", "ok", "OK",
+})
+
+
+def _validate_implemented_tasks(
+    state: Dict[str, Any],
+    manifest: Dict[str, Any],
+) -> Dict[str, Any]:
+    """scope_manifest.json의 micro_tasks[i].implemented_tasks 검증.
+
+    requirements_tracking.enabled=true 파이프라인에서만 강제. legacy는 자동 PASS.
+
+    Args:
+        state: 현재 파이프라인 state.
+        manifest: 이미 로드된 scope_manifest dict.
+    Returns:
+        {"valid": True, "reason": str} 또는 {"valid": False, "error": str}
+    """
+    rt = state.get("requirements_tracking") or {}
+    if not rt.get("enabled"):
+        return {"valid": True, "reason": "legacy state — implemented_tasks 검증 생략"}
+
+    micro_tasks_in_manifest = manifest.get("micro_tasks") or []
+    if not micro_tasks_in_manifest:
+        return {"valid": True, "reason": "scope_manifest micro_tasks 비어있음"}
+
+    structured_ac = state.get("structured_acceptance_criteria") or []
+    valid_ac_ids: set = {
+        str(ac.get("ac_id", "")).strip()
+        for ac in structured_ac
+        if isinstance(ac, dict) and ac.get("ac_id")
+    }
+
+    atomic_plan = state.get("atomic_plan") or {}
+    pm_mt_ids: set = {
+        str(mt.get("id", ""))
+        for mt in atomic_plan.get("micro_tasks", [])
+        if isinstance(mt, dict) and mt.get("id")
+    }
+
+    for mt in micro_tasks_in_manifest:
+        if not isinstance(mt, dict):
+            continue
+        mt_id = str(mt.get("id", ""))
+        implemented_tasks = mt.get("implemented_tasks")
+
+        if not implemented_tasks:
+            if valid_ac_ids:
+                return {
+                    "valid": False,
+                    "error": (
+                        f"[DEV SCOPE GATE] {mt_id}에 implemented_tasks가 없습니다. "
+                        "requirements_tracking.enabled=true 파이프라인에서는 필수입니다."
+                    ),
+                }
+            continue
+
+        if not isinstance(implemented_tasks, list):
+            return {
+                "valid": False,
+                "error": f"[DEV SCOPE GATE] {mt_id}.implemented_tasks는 리스트여야 합니다",
+            }
+
+        for task in implemented_tasks:
+            if not isinstance(task, dict):
+                continue
+            task_mt_id = str(task.get("mt_id", ""))
+            if pm_mt_ids and task_mt_id and task_mt_id not in pm_mt_ids:
+                return {
+                    "valid": False,
+                    "error": f"[DEV SCOPE GATE] 알 수 없는 mt_id: {task_mt_id}",
+                }
+
+            for ac_id in task.get("implemented_ac", []):
+                ac_id_str = str(ac_id).strip()
+                if valid_ac_ids and ac_id_str not in valid_ac_ids:
+                    return {
+                        "valid": False,
+                        "error": f"[DEV SCOPE GATE] 알 수 없는 AC id: {ac_id_str}",
+                    }
+
+            evidence_list = task.get("implementation_evidence") or []
+            if isinstance(evidence_list, list) and evidence_list:
+                # 모든 evidence가 abstract면 차단
+                normalized = [str(e).strip() for e in evidence_list if str(e).strip()]
+                if normalized and all(
+                    e in _ABSTRACT_EVIDENCE_PATTERNS for e in normalized
+                ):
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"[DEV SCOPE GATE] {task_mt_id}의 implementation_evidence가 "
+                            f"추상적입니다: {evidence_list}"
+                        ),
+                    }
+
+    return {"valid": True, "checked_mt_count": len(micro_tasks_in_manifest)}
+
+
 def _validate_dev_scope_manifest(
     manifest_file: str,
     state: Dict[str, Any],
@@ -1547,12 +1856,26 @@ def _validate_dev_scope_manifest(
     if actual_missing_evidence:
         _die(f"[ATOMIC SCOPE GATE] actual file changes missing from --files evidence: {actual_missing_evidence}")
 
+    # IMP-20260602-1ABE MT-5: implemented_tasks 검증 (requirements_tracking.enabled=true만 적용)
+    impl_check = _validate_implemented_tasks(state, manifest)
+    if not impl_check.get("valid"):
+        _die(impl_check.get("error", "[DEV SCOPE GATE] implemented_tasks validation failed"))
+
+    # implemented_tasks를 scope dict에 보존하여 _build_ac_fulfillment_table에서 활용
+    implemented_tasks_collected: List[Dict[str, Any]] = []
+    for mt in manifest.get("micro_tasks", []):
+        if isinstance(mt, dict):
+            for task in mt.get("implemented_tasks") or []:
+                if isinstance(task, dict):
+                    implemented_tasks_collected.append(task)
+
     return {
         "manifest_file": str(path),
         "validated_at": _now(),
         "micro_task_ids": sorted(manifest_ids),
         "files": sorted(manifest_files),
         "affected_functions": sorted(manifest_functions),
+        "implemented_tasks": implemented_tasks_collected,
         "actual_diff": {
             "added": actual_diff.get("added", []),
             "modified": actual_diff.get("modified", []),
@@ -1792,12 +2115,25 @@ def _validate_module_scope_manifest(
     extra_functions = sorted(manifest_functions - allowed_functions)
     if extra_functions:
         _die(f"[MODULE SCOPE GATE] affected_functions outside {mt_id} plan: {extra_functions}")
+
+    # IMP-20260602-1ABE MT-5: implemented_tasks 검증 + 보존
+    impl_check = _validate_implemented_tasks(state, manifest)
+    if not impl_check.get("valid"):
+        _die(impl_check.get("error", "[MODULE SCOPE GATE] implemented_tasks validation failed"))
+    implemented_tasks_preserved: List[Dict[str, Any]] = []
+    for _mt_entry in manifest.get("micro_tasks", []):
+        if isinstance(_mt_entry, dict):
+            for _task in _mt_entry.get("implemented_tasks") or []:
+                if isinstance(_task, dict):
+                    implemented_tasks_preserved.append(_task)
+
     return {
         "manifest_file": str(path),
         "validated_at": _now(),
         "micro_task_id": mt_id,
         "files": sorted(manifest_files),
         "affected_functions": sorted(manifest_functions),
+        "implemented_tasks": implemented_tasks_preserved,
     }
 
 
@@ -5374,6 +5710,43 @@ def _check_pm_clarification_gate(state: Dict[str, Any]) -> Tuple[bool, str]:
     return (True, "")
 
 
+# ─── Codex Review coverage_checks (IMP-20260602-1ABE MT-7) ──────────────────
+CODEX_COVERAGE_CHECK_FIELDS: List[str] = [
+    "all_ac_reviewed",
+    "diff_values_match_ac",
+    "tests_assert_core_values",
+    "no_dry_run_substitution",
+    "no_stale_sha",
+    "no_stale_ci_run",
+    "user_facing_korean_ok",
+]
+
+
+def _validate_codex_coverage_checks(review_data: Dict[str, Any]) -> Dict[str, Any]:
+    """coverage_checks 7개 필드 검증. 하나라도 false/누락이면 FAIL.
+
+    legacy codex_review_result.json(coverage_checks 키 자체가 없음)은 PASS 처리하여
+    하위 호환성을 유지한다.
+    """
+    coverage_checks = review_data.get("coverage_checks")
+    if coverage_checks is None:
+        return {"valid": True, "reason": "coverage_checks 없음 — legacy codex review"}
+
+    if not isinstance(coverage_checks, dict):
+        return {"valid": False, "errors": ["coverage_checks는 dict여야 합니다"]}
+
+    issues: List[str] = []
+    for field in CODEX_COVERAGE_CHECK_FIELDS:
+        if field not in coverage_checks:
+            issues.append(f"coverage_checks.{field} 필드가 누락되었습니다")
+        elif coverage_checks[field] is not True:
+            issues.append(f"coverage_checks.{field} = {coverage_checks[field]} (FAIL)")
+
+    if issues:
+        return {"valid": False, "errors": issues}
+    return {"valid": True}
+
+
 def _check_codex_review_gate(
     state: Dict[str, Any],
     required_stage: Optional[str] = None,
@@ -5522,6 +5895,33 @@ def _check_codex_review_gate(
             f"{', '.join(ids)}. "
             f"'python pipeline.py review resolve --id <ID>' 로 해소 후 재시도."
         )
+
+    # IMP-20260602-1ABE MT-7: coverage_checks 7개 필드 검증
+    coverage_result = _validate_codex_coverage_checks(review_data)
+    if not coverage_result.get("valid"):
+        return False, (
+            "[CODEX REVIEW REQUIRED] coverage_checks 검증 실패: "
+            + "; ".join(coverage_result.get("errors", []))
+        )
+
+    # IMP-20260602-1ABE MT-7: criteria_review blocking FAIL/UNCLEAR 검사
+    criteria_review = review_data.get("criteria_review") or []
+    if isinstance(criteria_review, list) and criteria_review:
+        blocking_items = [
+            item for item in criteria_review
+            if isinstance(item, dict)
+            and item.get("blocking") is True
+            and str(item.get("status", "")).upper() in ("FAIL", "UNCLEAR")
+        ]
+        if blocking_items:
+            details = ", ".join(
+                f"{item.get('ac_id', '?')}={item.get('status', '?')}"
+                for item in blocking_items
+            )
+            return False, (
+                "[CODEX REVIEW REQUIRED] criteria_review FAIL/UNCLEAR blocking 항목 "
+                f"{len(blocking_items)}개: {details}"
+            )
 
     # diff_sha256 최신성 검증
     stored_sha = str(review_data.get("diff_sha256", ""))
@@ -5875,6 +6275,30 @@ def cmd_done(args: argparse.Namespace) -> None:
             "recorded_at": _now(),
         }
         print(GREEN(f"  [PM CLARIFICATION GATE] clarification_needed={_cn}, criteria={len(_criteria_list)}개"))
+        # IMP-20260602-1ABE MT-2: structured AC를 state 상위 키로 저장 + requirements_tracking 플래그
+        # _validate_pm_step_plan_file가 atomic_plan에 structured_acceptance_criteria를 채워둔다 (MT-1).
+        # 여기서는 그 값을 state 상위로 복사하고 requirements_tracking을 활성화한다.
+        # legacy 호환: structured AC가 있고 pm_clarification_gate.acceptance_criteria가 비어있으면
+        # structured AC의 requirement 문자열로 자동 백필 (기존 코드 깨지지 않도록).
+        _atomic_plan = state.get("atomic_plan") or {}
+        _structured_ac_from_plan = _atomic_plan.get("structured_acceptance_criteria") or []
+        if _structured_ac_from_plan:
+            state["requirements_tracking"] = {
+                "enabled": True,
+                "schema_version": 1,
+                "recorded_at": _now(),
+            }
+            state["structured_acceptance_criteria"] = _structured_ac_from_plan
+            # legacy 자동 백필: pm_clarification_gate.acceptance_criteria가 비어있을 때만
+            if not state["pm_clarification_gate"].get("acceptance_criteria"):
+                state["pm_clarification_gate"]["acceptance_criteria"] = [
+                    str(ac.get("requirement", "")).strip()
+                    for ac in _structured_ac_from_plan
+                    if ac.get("requirement")
+                ]
+            print(GREEN(
+                f"  [REQUIREMENTS TRACKING] enabled=true structured_ac={len(_structured_ac_from_plan)}개"
+            ))
         # AMBIGUOUS 감지: --decomp 선언했으나 --judgment-confirmed 미선언 시 경고
         if decomp_done and not judgment_confirmed:
             print(YELLOW(
@@ -7481,6 +7905,7 @@ def _is_placeholder_scalar(value: Any) -> bool:
 def _audit_oracle_quality(
     oracle_entries: List[Dict[str, Any]],
     allow_agent_generated: bool = False,
+    state: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """IMP-20260524-48C4 MT-1: Oracle Quality Gate 감사 함수.
 
@@ -7563,6 +7988,33 @@ def _audit_oracle_quality(
                 "에이전트 생성 expected는 기본 BLOCKED입니다. "
                 "--allow-agent-generated 플래그로 해제하거나 user_provided로 교체하세요."
             )
+
+        # IMP-20260602-1ABE MT-6: ac_ids 검증 (requirements_tracking.enabled=true만 적용)
+        if state is not None and state.get("requirements_tracking", {}).get("enabled"):
+            structured_ac = state.get("structured_acceptance_criteria") or []
+            valid_ac_ids: set = {
+                str(ac.get("ac_id", "")).strip()
+                for ac in structured_ac
+                if isinstance(ac, dict) and ac.get("ac_id")
+            }
+            if valid_ac_ids:
+                entry_ac_ids = entry.get("ac_ids")
+                if not entry_ac_ids:
+                    failures.append(
+                        f"[ORACLE AC GATE] oracle entry {name}: "
+                        "requirements_tracking.enabled=true 파이프라인에서 ac_ids가 없습니다"
+                    )
+                elif not isinstance(entry_ac_ids, list):
+                    failures.append(
+                        f"[ORACLE AC GATE] oracle entry {name}: ac_ids는 리스트여야 합니다"
+                    )
+                else:
+                    for ac_id in entry_ac_ids:
+                        if str(ac_id).strip() not in valid_ac_ids:
+                            failures.append(
+                                f"[ORACLE AC GATE] oracle entry {name}: "
+                                f"AC id '{ac_id}'는 PM에 없는 id입니다"
+                            )
 
         # 검사 5: shallow test type 전용 여부
         if test_type and test_type not in ORACLE_QUALITY_SHALLOW_TEST_TYPES:
@@ -7823,7 +8275,8 @@ def _audit_contract_bundle(
     # IMP-20260524-48C4 MT-1: oracle quality 감사 통합 (contract audit 단계)
     # oracle 단순 존재 여부 PASS 차단 — normal+edge 최소 케이스, placeholder, agent_generated 검사
     if oracle_entries and not oracle_blockers:
-        quality_result = _audit_oracle_quality(oracle_entries)
+        # IMP-20260602-1ABE MT-6: state 전달로 ac_ids 검증 활성화
+        quality_result = _audit_oracle_quality(oracle_entries, state=state)
         if quality_result.get("status") == "BLOCKED":
             blockers.append("oracle_quality: BLOCKED — agent_generated expected 감지. --allow-agent-generated 또는 user_provided로 교체하세요.")
             blockers.extend(quality_result.get("failures", []))
@@ -8116,7 +8569,8 @@ def cmd_contract(args: argparse.Namespace) -> None:
                 sys.exit(1)
             oracle_entries = oracle_manifest.get("entries") or oracle_manifest.get("oracles") or []
 
-        quality_result = _audit_oracle_quality(oracle_entries, allow_agent_generated=allow_agent_gen)
+        # IMP-20260602-1ABE MT-6: state 전달로 ac_ids 검증 활성화
+        quality_result = _audit_oracle_quality(oracle_entries, allow_agent_generated=allow_agent_gen, state=state)
         status = quality_result["status"]
         failures = quality_result.get("failures", [])
         color = GREEN if status == "PASS" else RED
@@ -8336,6 +8790,119 @@ def _external_gate_blockers(state: Dict[str, Any]) -> List[str]:
     return blockers
 
 
+# ─── Module QA AC Verification (IMP-20260602-1ABE MT-3) ──────────────────────
+def _get_mt_covers_ac(state: Dict[str, Any], mt_id: str) -> List[str]:
+    """state.atomic_plan에서 mt_id의 covers_ac 리스트 반환 (없으면 빈 리스트)."""
+    atomic_plan = state.get("atomic_plan") or {}
+    for mt in atomic_plan.get("micro_tasks", []):
+        if isinstance(mt, dict) and str(mt.get("id", "")) == mt_id:
+            covers = mt.get("covers_ac")
+            if isinstance(covers, list):
+                return [str(c).strip() for c in covers if str(c).strip()]
+            if isinstance(covers, str):
+                return [c.strip() for c in covers.split(",") if c.strip()]
+            return []
+    return []
+
+
+def _get_mt_covers_iqr(state: Dict[str, Any], mt_id: str) -> List[str]:
+    """state.atomic_plan에서 mt_id의 covers_iqr 리스트 반환 (없으면 빈 리스트)."""
+    atomic_plan = state.get("atomic_plan") or {}
+    for mt in atomic_plan.get("micro_tasks", []):
+        if isinstance(mt, dict) and str(mt.get("id", "")) == mt_id:
+            covers = mt.get("covers_iqr")
+            if isinstance(covers, list):
+                return [str(c).strip() for c in covers if str(c).strip()]
+            if isinstance(covers, str):
+                return [c.strip() for c in covers.split(",") if c.strip()]
+            return []
+    return []
+
+
+def _check_module_qa_ac_verification(
+    state: Dict[str, Any],
+    mt_id: str,
+    report_xml_path: Optional[str],
+) -> Dict[str, Any]:
+    """module qa report의 ac_verification 블록 검증.
+
+    Args:
+        state: 현재 파이프라인 state.
+        mt_id: 검증 대상 micro_task id.
+        report_xml_path: module qa report XML 파일 경로.
+    Returns:
+        {"valid": True, "reason": str} 또는 {"valid": False, "error": str}
+
+    적용 정책:
+    - requirements_tracking.enabled=true가 아닌 legacy state: skip (PASS)
+    - structured_acceptance_criteria 비어있는데 requirements_tracking.enabled=true: FAIL
+    - covers_ac 없는 MT (legacy 또는 covers_iqr만 있는 문서 MT): PASS
+    - covers_ac 있는 MT: ac_verification 블록에 모든 covers_ac id가 있어야 PASS
+    """
+    rt = state.get("requirements_tracking") or {}
+    if not rt.get("enabled"):
+        return {"valid": True, "reason": "legacy state — requirements_tracking 비활성, ac 검증 생략"}
+
+    structured_ac = state.get("structured_acceptance_criteria") or []
+    if not structured_ac:
+        return {
+            "valid": False,
+            "error": (
+                "[AC GATE] requirements_tracking.enabled=true이지만 "
+                "structured_acceptance_criteria가 비어 있습니다. PM step_plan에 "
+                "<acceptance_criteria> 블록이 있는지 확인하세요."
+            ),
+        }
+
+    mt_covers_ac = _get_mt_covers_ac(state, mt_id)
+    if not mt_covers_ac:
+        mt_covers_iqr = _get_mt_covers_iqr(state, mt_id)
+        if mt_covers_iqr:
+            return {
+                "valid": True,
+                "reason": f"{mt_id}는 covers_iqr만 있는 문서 전용 MT — ac_verification 생략",
+            }
+        return {"valid": True, "reason": f"{mt_id}에 covers_ac 없음 — legacy MT 취급"}
+
+    if not report_xml_path or not Path(report_xml_path).exists():
+        return {
+            "valid": False,
+            "error": f"[AC GATE] {mt_id} module qa report 파일이 없습니다: {report_xml_path}",
+        }
+
+    try:
+        tree = ET.parse(report_xml_path)
+        root = tree.getroot()
+        ac_verification = root.find(".//ac_verification")
+        if ac_verification is None:
+            return {
+                "valid": False,
+                "error": (
+                    f"[AC GATE] {mt_id} module qa report에 ac_verification 블록이 없습니다. "
+                    f"covers_ac={mt_covers_ac}"
+                ),
+            }
+        verified_ac_ids: set = {
+            (c.get("ac_id") or "").strip()
+            for c in ac_verification.findall("criterion")
+            if c.get("ac_id")
+        }
+        missing = [ac for ac in mt_covers_ac if ac not in verified_ac_ids]
+        if missing:
+            return {
+                "valid": False,
+                "error": (
+                    f"[AC GATE] {mt_id} ac_verification에서 아래 AC가 누락되었습니다: {missing}"
+                ),
+            }
+        return {"valid": True, "verified_ac": sorted(verified_ac_ids)}
+    except (ET.ParseError, OSError) as exc:
+        return {
+            "valid": False,
+            "error": f"[AC GATE] module qa report 파싱 오류: {exc}",
+        }
+
+
 def cmd_module(args: argparse.Namespace) -> None:
     """Incremental module gate for PM micro_tasks."""
     action = args.module_action
@@ -8431,6 +8998,13 @@ def cmd_module(args: argparse.Namespace) -> None:
         verdict = (verdict_el.text or "").strip().upper() if verdict_el is not None and verdict_el.text else ""
         if verdict != result:
             _die(f"[MODULE QA GATE] CLI --result {result} does not match report <verdict> {verdict}")
+        # IMP-20260602-1ABE MT-3: PASS 시 ac_verification 블록 검증 (requirements_tracking.enabled=true만 적용)
+        if result == "PASS":
+            ac_check = _check_module_qa_ac_verification(
+                state, mt_id, report["report_file"]
+            )
+            if not ac_check.get("valid"):
+                _die(ac_check.get("error", "[AC GATE] module qa ac_verification 검증 실패"))
         module["qa"] = {
             **_empty_module_step(),
             "status": result,
@@ -13220,6 +13794,181 @@ GitHub Actions: {ci_link}
 #   - PR 본문 stale 문구 검사가 gh CLI 의존이라 CI 외 환경에서는 검사 생략 가능.
 #   - 동일 evidence 경로에 대해 여러 번 호출하면 마지막 nonce만 유효 (이전 코드 무효화는 정상 동작).
 # [Improvement]: pre-flight로 모든 외부 gate PASS 여부도 함께 검사하여 조기 차단.
+# ─── AC Fulfillment Table (IMP-20260602-1ABE MT-4) ──────────────────────────
+def _get_acs_linked_mts(state: Dict[str, Any], ac_id: str) -> List[str]:
+    """structured AC id에 연결된 MT 목록 반환."""
+    linked: List[str] = []
+    atomic_plan = state.get("atomic_plan") or {}
+    for mt in atomic_plan.get("micro_tasks", []):
+        if not isinstance(mt, dict):
+            continue
+        mt_id = str(mt.get("id", ""))
+        covers = mt.get("covers_ac")
+        if isinstance(covers, list) and ac_id in [str(c).strip() for c in covers]:
+            linked.append(mt_id)
+        elif isinstance(covers, str):
+            cov_list = [c.strip() for c in covers.split(",")]
+            if ac_id in cov_list:
+                linked.append(mt_id)
+    return linked
+
+
+def _get_impl_evidence_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
+    """scope_manifest의 implemented_tasks에서 AC id의 implementation_evidence 수집."""
+    evidence: List[str] = []
+    gates = state.get("module_gates") or {}
+    modules = gates.get("modules") or {}
+    if not isinstance(modules, dict):
+        return evidence
+    for mt_id, module in modules.items():
+        if not isinstance(module, dict):
+            continue
+        dev_step = module.get("dev") or {}
+        scope = dev_step.get("scope") or {}
+        # scope에는 _validate_module_scope_manifest 결과가 들어있을 수도,
+        # 또는 implemented_tasks가 별도 저장될 수도 있다.
+        # implemented_tasks가 scope에 보존되었으면 거기서 추출
+        implemented = scope.get("implemented_tasks") if isinstance(scope, dict) else None
+        if not isinstance(implemented, list):
+            continue
+        for task in implemented:
+            if not isinstance(task, dict):
+                continue
+            if ac_id in task.get("implemented_ac", []):
+                for ev in task.get("implementation_evidence", []):
+                    evidence.append(f"{mt_id}: {ev}")
+    return evidence
+
+
+def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
+    """module qa report 파일에서 ac_verification 결과 수집."""
+    verifications: List[str] = []
+    gates = state.get("module_gates") or {}
+    modules = gates.get("modules") or {}
+    if not isinstance(modules, dict):
+        return verifications
+    for mt_id, module in modules.items():
+        if not isinstance(module, dict):
+            continue
+        qa_step = module.get("qa") or {}
+        report_file = qa_step.get("report_file")
+        if not report_file or not Path(report_file).exists():
+            continue
+        try:
+            tree = ET.parse(report_file)
+            root = tree.getroot()
+            ac_ver = root.find(".//ac_verification")
+            if ac_ver is None:
+                continue
+            for crit in ac_ver.findall("criterion"):
+                if crit.get("ac_id") == ac_id:
+                    status = crit.get("status", "?")
+                    ev = crit.get("evidence", "")
+                    verifications.append(f"{mt_id} qa: {status} — {ev[:80]}")
+        except (ET.ParseError, OSError):
+            continue
+    return verifications
+
+
+def _get_codex_status_for_ac(ac_id: str) -> str:
+    """codex_review_result.json의 criteria_review에서 AC id 상태 반환."""
+    review_path = BASE_DIR / "codex_review_result.json"
+    if not review_path.exists():
+        return "N/A"
+    try:
+        data = json.loads(review_path.read_text(encoding="utf-8", errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return "N/A"
+    criteria_review = data.get("criteria_review") or []
+    if not isinstance(criteria_review, list):
+        return "N/A"
+    for item in criteria_review:
+        if isinstance(item, dict) and item.get("ac_id") == ac_id:
+            return str(item.get("status", "?"))
+    return "N/A"
+
+
+def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """structured AC 기록에서 AC 충족표를 자동 조립한다 (legacy면 None)."""
+    structured_ac = state.get("structured_acceptance_criteria") or []
+    if not structured_ac:
+        return None
+
+    table: List[Dict[str, Any]] = []
+    for ac in structured_ac:
+        if not isinstance(ac, dict):
+            continue
+        ac_id = ac.get("ac_id", "")
+        linked_mt = _get_acs_linked_mts(state, ac_id)
+        impl_evidence = _get_impl_evidence_for_ac(state, ac_id)
+        verifications = _get_qa_verification_for_ac(state, ac_id)
+        codex_status = _get_codex_status_for_ac(ac_id)
+
+        # result 판정
+        result = "PASS"
+        if not impl_evidence:
+            result = "PENDING"
+        if not verifications:
+            result = "PENDING"
+
+        table.append({
+            "ac_id": ac_id,
+            "requirement": ac.get("requirement", ""),
+            "linked_mt": linked_mt,
+            "implementation_evidence": impl_evidence,
+            "verification": verifications,
+            "codex_status": codex_status,
+            "result": result,
+            "user_visible": ac.get("user_visible", True),
+        })
+    return table
+
+
+def _format_ac_fulfillment_output(
+    table: List[Dict[str, Any]],
+    iqr_summary: Optional[List[str]] = None,
+) -> str:
+    """모바일 친화적 줄바꿈 형식으로 충족표 출력 문자열 생성."""
+    lines: List[str] = []
+    lines.append("[요구사항 충족표]")
+    lines.append("")
+
+    user_visible = [e for e in table if e.get("user_visible", True)]
+    internal = [e for e in table if not e.get("user_visible", True)]
+
+    for entry in user_visible:
+        lines.append(f"{entry['ac_id']}:")
+        lines.append("요구사항:")
+        req = entry.get("requirement", "")
+        # 60자 단위 줄바꿈
+        for i in range(0, len(req), 60):
+            lines.append(f"  {req[i:i+60]}")
+        linked = entry.get("linked_mt", [])
+        lines.append(f"구현 작업: {', '.join(linked) if linked else '(없음)'}")
+        impl = entry.get("implementation_evidence", [])
+        lines.append(f"구현 근거: {' / '.join(impl[:2]) if impl else '(없음)'}")
+        verif = entry.get("verification", [])
+        lines.append(f"검증: {' / '.join(verif[:2]) if verif else '(없음)'}")
+        lines.append(f"결과: {entry.get('result', '?')}")
+        lines.append("")
+
+    if internal:
+        lines.append("[자동 검증 요약]")
+        lines.append("")
+        for entry in internal:
+            req = entry.get("requirement", "")[:60]
+            lines.append(f"{entry['ac_id']}: {entry.get('result', '?')} — {req}")
+        lines.append("")
+
+    if iqr_summary:
+        lines.append("[내부 품질 조건]")
+        for iqr in iqr_summary:
+            lines.append(f"  {iqr}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
     """gates request-accept 핸들러: nonce 발급 + acceptance_request.json + 사용자 코드 표시.
 
@@ -13294,6 +14043,22 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     except Exception:
         pass  # GitHub 댓글 실패해도 코드 발급은 계속
 
+    # IMP-20260602-1ABE MT-4: AC 충족표 자동 조립 + 출력 (legacy면 생략)
+    ac_table = _build_ac_fulfillment_table(state)
+    if ac_table is not None:
+        # acceptance_request.json에 ac_fulfillment_table 저장 (재로드 후 갱신)
+        try:
+            req_path = BASE_DIR / "acceptance_request.json"
+            if req_path.exists():
+                req_data = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
+                req_data["ac_fulfillment_table"] = ac_table
+                req_path.write_text(
+                    json.dumps(req_data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+        except (OSError, json.JSONDecodeError) as exc:
+            print(YELLOW(f"  [AC TABLE] acceptance_request.json 저장 실패: {exc}"))
+
     print()
     print("=" * 62)
     print("  사용자 최종 확인 요청")
@@ -13304,6 +14069,12 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         print(f"  GitHub Actions: https://github.com/hojiyong2-commits/Pipeline/actions/runs/{ci_run_id}")
     print(f"  결과물: {evidence}")
     print()
+
+    # IMP-20260602-1ABE MT-4: AC 충족표 출력 (PR/CI 정보 다음, 승인 코드 직전)
+    if ac_table:
+        print()
+        print(_format_ac_fulfillment_output(ac_table))
+
     print("  위 결과물을 확인하신 후 아래 코드를 입력해 주세요.")
     print()
     print("  [O] 승인하시려면 정확히 아래 코드를 입력하세요:")
@@ -13596,7 +14367,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _die("; ".join(oracle_blockers))
         # IMP-20260524-48C4 MT-1: oracle quality 감사 통합 (gates oracle)
         allow_agent_gen = getattr(args, "allow_agent_generated", False)
-        quality_result = _audit_oracle_quality(oracle_entries, allow_agent_generated=allow_agent_gen)
+        # IMP-20260602-1ABE MT-6: state 전달로 ac_ids 검증 활성화
+        quality_result = _audit_oracle_quality(oracle_entries, allow_agent_generated=allow_agent_gen, state=state)
         state["oracle_quality"] = quality_result
         _save(state)
         if quality_result.get("status") == "BLOCKED":

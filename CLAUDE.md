@@ -1208,3 +1208,85 @@ python pipeline.py gates request-accept --evidence <결과물-경로>
 # 2단계: 사용자가 코드를 입력하면 Pipeline Manager가 실행
 python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-IMP-...-XXXXXXXX
 ```
+
+
+## Structured AC Tracking (IMP-20260602-1ABE)
+
+PM → Dev → Codex Review → QA → Oracle → request-accept 전 phase에서 사용자 요구사항(AC)이 끊기지 않도록 기존 게이트를 확장한 추적 구조입니다. 새 대형 게이트는 추가하지 않고 PM, Dev, QA, Oracle, request-accept 각 단계의 기존 검증에 AC 연결을 강제합니다.
+
+### AC 스키마 (PM step_plan.xml 필수)
+
+PM은 모든 새 파이프라인의 `step_plan.xml`에 아래 구조화 블록을 포함해야 합니다.
+
+```xml
+<acceptance_criteria>
+  <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+    <text>사용자가 확인 가능한 구체적인 성공 조건 (예: 매주 월요일 09:00에 예약된다)</text>
+  </criterion>
+  <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+    <text>7일 이상 된 파일만 이동된다 (구체적 임계값 포함)</text>
+  </criterion>
+</acceptance_criteria>
+```
+
+필수 필드: `ac_id`, `requirement`, `must_verify`, `source`, `user_visible`, `expected_evidence`.
+선택 필드: `linked_questions`, `notes`, `priority`.
+
+### 추상 AC 차단
+
+`ABSTRACT_AC_PATTERNS` SSoT(`pipeline.py` 내) 에 포함된 단독 추상 문구는 PM done 차단됩니다.
+차단 대상: "정상 동작", "테스트 통과", "문제 없음", "잘 처리됨", "오류 없음", "사용자 요구 반영", "작동", "동작", "works", "working", "implemented", "기능 구현", "완료", "done", "finished".
+**단독 추상 문구만 차단**합니다. 구체값과 결합된 문구(예: "정상 동작 — 5초 이내 응답")는 허용.
+
+### MT 연결 (covers_ac / covers_iqr)
+
+각 `<micro_task>`는 `<covers_ac>AC-N, AC-M</covers_ac>` 또는 `<covers_iqr>IQR-N</covers_iqr>`을 포함해야 합니다.
+- `covers_ac`: 해당 MT가 구현하는 AC id 목록 (콤마 구분)
+- `covers_iqr`: 문서 전용 MT용 내부 품질 조건 (AC 미연결 허용)
+- 둘 다 없는 MT는 PM done 차단
+
+### legacy 판정 기준
+
+| state 상태 | 판정 |
+|---|---|
+| `requirements_tracking` 필드 없음 | legacy (하위 호환, AC 검증 생략) |
+| `requirements_tracking.enabled=true` | 새 파이프라인 (모든 AC 추적 강제) |
+| `requirements_tracking` 있는데 `structured_acceptance_criteria` 비어있음 | FAIL (legacy 취급 금지) |
+
+### Phase별 AC 추적 의무
+
+| Phase | 의무 |
+|---|---|
+| PM | step_plan.xml에 acceptance_criteria 블록 + MT covers_ac, 8개 검증 규칙 PASS |
+| Dev | scope_manifest.json의 micro_tasks에 implemented_tasks 필드 (mt_id, implemented_ac, implementation_evidence) |
+| Module QA | module_qa_MT-N.xml에 ac_verification 블록 (covers_ac 모두 포함) |
+| Codex Review | codex_review_result.json에 coverage_checks 7개 필드 + criteria_review (blocking 항목 PASS) |
+| Oracle | oracle_manifest.json entry마다 ac_ids 필드 |
+| QA | qa_report.xml에 criteria_verification 블록 |
+| request-accept | AC 충족표 자동 조립 + 콘솔 출력 + acceptance_request.json 저장 |
+
+### Codex Review coverage_checks 7개 필드 (QA 진입 hard gate)
+
+`codex_review_result.json`의 `coverage_checks` 객체에는 아래 7개 필드가 모두 `true`여야 QA gate 통과:
+
+| 필드 | 의미 |
+|---|---|
+| all_ac_reviewed | 모든 AC가 리뷰됨 |
+| diff_values_match_ac | diff의 구체값(상수, 임계값 등)이 사용자 AC의 값과 일치 |
+| tests_assert_core_values | 테스트가 핵심 비즈니스 값을 assert (단순 import/file_exists 아님) |
+| no_dry_run_substitution | dry-run 시뮬레이션만으로 실제 동작 AC를 대체하지 않음 |
+| no_stale_sha | head SHA 최신 |
+| no_stale_ci_run | CI run 최신 |
+| user_facing_korean_ok | 사용자에게 보이는 텍스트가 한국어 명확 |
+
+하나라도 누락/`false`면 `[CODEX REVIEW REQUIRED] coverage_checks 검증 실패` 로 QA 차단.
+
+`criteria_review` 배열의 `blocking=true` + `status=FAIL/UNCLEAR` 항목이 있으면 QA 차단.
+
+### request-accept 출력 순서
+
+```
+[요구사항 충족표]    ← user_visible AC별
+[자동 검증 요약]     ← user_visible=false IQR/내부 AC
+[승인 코드]          ← 별도 줄 (코드블록 없이, 모바일 복사 가능)
+```
