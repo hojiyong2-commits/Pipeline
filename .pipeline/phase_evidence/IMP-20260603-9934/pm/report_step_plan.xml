@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260603-9934</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: Final Packet Freeze Guard 구현</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>PD, FS, AL</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 신뢰 루트 파일 수정 + 4개 문서(CLAUDE.md, agent MD 2개, RELEASE_NOTES.md) 동시 수정 + 12개 E2E 테스트 추가. 변경 함수 5개 이상, 변경 파일 5개로 Fast Path 진입 조건(파일 2개 이하, 함수 2개 이하, 80줄 이하) 모두 초과.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>5</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>450</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <env_snapshot>
+    <python_version>3.10 (PM 권장)</python_version>
+    <encoding>cp949 (Windows 기본) — utf-8 + ensure_ascii=False로 명시 처리</encoding>
+    <scope>pipeline.py 단일 모듈 + tests/e2e + docs</scope>
+  </env_snapshot>
+
+  <python_version>3.10 — 기존 pipeline.py와 동일 버전, dataclass/typing 기능 안정성</python_version>
+
+  <interface_spec>
+    Input:
+      - acceptance_request.json (기존 schema_version=1) — schema_version=2 확장
+      - human_acceptance_packet.md (frozen 대상)
+      - CLI args: --force-new-request, --force-new-code
+    Output:
+      - acceptance_request.json (packet_path, packet_sha256, packet_frozen_at 3개 신규 필드 추가)
+      - status enum 확장: PENDING | CONSUMED | EXPIRED | STALE_PACKET
+      - 한국어 차단 메시지 ([FINAL PACKET FREEZE] prefix)
+    Validation:
+      - request-accept 시 packet_sha256 저장 필수
+      - gates accept 시 packet_sha256 일치 검증
+      - report final-packet 기본 차단 (PENDING + packet_sha256 있을 때)
+      - update-pr-body는 packet_sha256 불일치 시 차단
+  </interface_spec>
+
+  <decomposition_audit>
+    <total_functions_identified>8</total_functions_identified>
+    <micro_task_count>5</micro_task_count>
+    <grep_executions>3</grep_executions>
+    <split_decision>pipeline.py 내 변경 함수가 8개 이상(_write_acceptance_request, _should_reuse_acceptance_nonce, _cmd_gates_request_accept, _auto_generate_final_packet_and_update_pr, _cmd_gates_accept, _cmd_report_final_packet, _cmd_report_update_pr_body, 신규 _compute_packet_sha256/_check_packet_freeze 헬퍼)이며, 테스트/문서가 동반되어 책임 단위로 5개 MT로 분할: (1) 스키마 확장 + request-accept 저장, (2) gates accept 검증 + STALE_PACKET, (3) report final-packet/update-pr-body 차단 + --force 옵션, (4) E2E 12개 테스트, (5) 문서.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 수준의 내부 변수명, 함수명 prefix, 콘솔 색상(YELLOW vs RED), JSON 들여쓰기 같은 코드 스타일 취향 질문은 묻지 않고 기존 pipeline.py 패턴(예: _check_packet_freshness_against_actual 형식, ACCEPT-/STALE_PACKET 라벨, YELLOW 경고 색상)을 그대로 따릅니다. status enum 추가도 기존 PENDING/CONSUMED 라벨링 컨벤션과 동일 형식으로 STALE_PACKET/EXPIRED 추가.</filter_summary>
+    <decision_questions>
+      <question id="DQ-0" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업을 5개 모듈(MT-1 스키마 확장 / MT-2 accept 검증 / MT-3 report 차단 / MT-4 E2E 테스트 / MT-5 문서)로 나눠 순서대로 진행해도 될까요?</user_facing_question>
+        <evidence>pipeline.py 변경 함수가 8개(스키마 저장, accept 검증, report 차단, 헬퍼 2개)이며, 테스트 12개와 문서 4개가 동반됩니다. 책임 단위로 분리하면 각 MT의 검증이 명확해집니다.</evidence>
+        <why_it_matters>모듈을 잘게 나눠야 단계별로 검증할 수 있고, 한 MT가 실패해도 다른 MT는 보존됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>5개 MT로 나눠 순차 진행 (추천)</label>
+            <benefit>각 모듈을 독립적으로 검증할 수 있고, 실패 시 해당 MT만 재작업합니다.</benefit>
+            <cost>MT가 많아 pipeline.py module design/dev/qa 명령을 5회 실행해야 합니다.</cost>
+          </option>
+          <option id="B">
+            <label>한꺼번에 구현</label>
+            <benefit>진행 속도가 빠릅니다.</benefit>
+            <cost>한 번에 너무 많은 변경이 생겨 문제 발생 시 원인 파악이 어렵습니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 — 5개 MT로 나눠 단계적으로 구현하고 검증합니다.</user_answer>
+      </question>
+      <question id="DQ-1" priority="P1" category="freeze_scope" mt_id="MT-2">
+        <user_facing_question>packet freeze 차단은 어떤 status에서 동작해야 할까요? PENDING 상태일 때만 차단할까요, 아니면 packet_sha256이 기록되어 있기만 해도 차단할까요?</user_facing_question>
+        <evidence>사용자 원문 "acceptance_request.json이 status=PENDING이고 packet_sha256이 기록되어 있으면, 아래 명령은 기본적으로 차단한다"라는 문구에서 PENDING 조건이 명시되어 있습니다. CONSUMED는 이미 승인 완료 상태이므로 packet 재생성을 차단할 이유가 없고, EXPIRED는 명시적 폐기 상태입니다.</evidence>
+        <why_it_matters>차단 범위가 너무 좁으면 같은 사례(승인 코드 만료)가 재발할 수 있고, 너무 넓으면 사용자가 새 파이프라인을 시작할 때마다 force 옵션을 요구받게 됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>PENDING 상태일 때만 차단 (추천)</label>
+            <benefit>사용자 원문 요청과 정확히 일치. CONSUMED(이미 승인 완료) 이후에는 새 파이프라인의 packet을 자유롭게 만들 수 있어 워크플로우가 자연스러움.</benefit>
+            <cost>STALE_PACKET으로 표시된 request는 새 request-accept 시 자동으로 재발급되어야 하므로 분기 로직이 약간 더 복잡.</cost>
+          </option>
+          <option id="B">
+            <label>packet_sha256이 있기만 해도 차단</label>
+            <benefit>로직이 더 단순. 한 번 frozen된 packet은 항상 보호됨.</benefit>
+            <cost>CONSUMED 이후에도 packet 재생성이 차단되어, 다음 파이프라인 시작 시 매번 --force-new-request 옵션을 요구받음. 사용자 워크플로우 마찰 증가.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 — 사용자 원문에 "status=PENDING이고 packet_sha256이 기록되어 있으면" 명시되어 있으며, 이는 가장 합리적인 freeze 범위입니다. CONSUMED 이후에는 packet 재생성을 허용해야 워크플로우가 자연스럽습니다.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 실행 시 acceptance_request.json에 packet_path, packet_sha256, packet_frozen_at 3개 필드가 저장된다.</text>
+      <expected_evidence>acceptance_request.json 파일 내용에 세 필드 존재 + 값이 비어있지 않음</expected_evidence>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>gates accept 실행 시 human_acceptance_packet.md의 현재 SHA256과 저장된 packet_sha256이 다르면 차단되고, status는 STALE_PACKET으로 표시된다.</text>
+      <expected_evidence>packet 파일 변경 후 gates accept 실행 시 [FINAL PACKET FREEZE] 메시지 출력 + acceptance_request.json status=STALE_PACKET</expected_evidence>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>acceptance_request.json status=PENDING + packet_sha256 기록 상태에서 python pipeline.py report final-packet 실행은 기본적으로 차단된다.</text>
+      <expected_evidence>report final-packet 실행 시 [FINAL PACKET FREEZE] 메시지 출력 + exit code 1</expected_evidence>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>report final-packet --force-new-request 옵션은 기존 PENDING request를 EXPIRED(reason=final_packet_regenerated)로 변경하고 새 packet을 만든다. 새 nonce는 만들지 않는다.</text>
+      <expected_evidence>--force-new-request 실행 후 기존 request status=EXPIRED + 새 packet 생성됨 + nonce 변경 없음</expected_evidence>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept --force-new-code 옵션은 기존 PENDING request를 EXPIRED로 변경하고 새 packet + 새 nonce + 새 packet_sha256을 발급한다.</text>
+      <expected_evidence>--force-new-code 실행 후 기존 request status=EXPIRED + 새 nonce 발급 + 새 packet_sha256 저장됨</expected_evidence>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 재실행 시 PR/CI/evidence/packet이 모두 같으면 기존 nonce를 재사용하고 [재사용] 메시지를 출력한다.</text>
+      <expected_evidence>동일 조건 2회 실행 시 콘솔에 [재사용] 출력 + nonce 동일 + acceptance_request.json 변경 없음</expected_evidence>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>report update-pr-body는 packet 파일을 재생성하지 않고 PR 본문만 갱신한다. packet_sha256 불일치 시 차단된다.</text>
+      <expected_evidence>update-pr-body 실행 전후 packet 파일 mtime/SHA256 변경 없음. 불일치 시 [FINAL PACKET FREEZE] 메시지 + exit code 1</expected_evidence>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>--user-confirmed 단독 사용은 차단되며 acceptance-code가 필수라는 기존 Nonce Gate 동작이 유지된다.</text>
+      <expected_evidence>--user-confirmed 단독 사용 시 acceptance_code_required 실패 코드 + 기존 Nonce Gate 테스트 통과</expected_evidence>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="false">
+      <text>CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/test-harness-agent.md, RELEASE_NOTES.md에 Final Packet Freeze Guard 규칙이 명시된다.</text>
+      <expected_evidence>4개 파일에 "Final Packet Freeze Guard", "frozen", "STALE_PACKET", "--force-new-request", "--force-new-code" 키워드 포함</expected_evidence>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="false">
+      <text>gates accept 직전에 report final-packet이 자동 실행되는 경로(_auto_generate_final_packet_and_update_pr를 gates accept 흐름에서 호출)가 코드에 없다.</text>
+      <expected_evidence>_cmd_gates_accept 함수 내 _auto_generate_final_packet_and_update_pr 호출 없음 (Grep 검증)</expected_evidence>
+    </criterion>
+  </acceptance_criteria>
+
+  <requirements>
+    - acceptance_request.json 스키마 확장: packet_path, packet_sha256, packet_frozen_at 3개 필드 추가. schema_version=2로 bump.
+    - status enum 확장: PENDING | CONSUMED | EXPIRED | STALE_PACKET. STALE_PACKET은 packet 변경 감지 시 자동 표시. EXPIRED는 --force-new-request 또는 --force-new-code 호출 시 표시 (reason 필드 함께 저장).
+    - 신규 헬퍼 함수: _compute_packet_sha256(path: Path) → Optional[str], _check_packet_freeze_status(req, current_packet_sha256) → Tuple[bool, str]. 기존 _compute_file_sha256 패턴 재사용.
+    - gates request-accept 흐름:
+        a) evidence/PR/CI stale 검증 (기존)
+        b) packet 자동 생성 → SHA256 계산
+        c) acceptance_request.json에 packet_path, packet_sha256, packet_frozen_at 저장
+        d) 기존 PENDING request가 있고 packet_sha256도 일치 시 [재사용] 출력
+        e) --force-new-code: 기존 PENDING request를 EXPIRED(reason=user_forced_new_code)로 변경 후 새 nonce 발급
+    - gates accept 흐름:
+        a) acceptance_request.json 존재 확인
+        b) status=PENDING 확인 (STALE_PACKET/EXPIRED/CONSUMED은 acceptance_code_consumed_or_expired)
+        c) acceptance-code nonce 일치 확인
+        d) evidence path/sha256 일치 확인
+        e) packet_path 존재 확인
+        f) packet_sha256 일치 확인 — 불일치 시 status를 STALE_PACKET으로 변경, [FINAL PACKET FREEZE] 메시지 출력 + 차단
+    - report final-packet 차단 로직:
+        a) acceptance_request.json status=PENDING 확인
+        b) packet_sha256 필드 존재 확인 (legacy schema_version=1은 차단하지 않음 — 하위 호환)
+        c) 차단 시 [FINAL PACKET FREEZE] 메시지 + force 옵션 안내 + exit code 1
+        d) --force-new-request: 기존 request status=EXPIRED(reason=final_packet_regenerated) 후 새 packet 생성 (새 nonce 없음)
+    - report update-pr-body 추가 검증:
+        a) PENDING request 존재 + packet_sha256 기록 시 현재 packet 파일 SHA256과 비교
+        b) 일치 시 PR 본문만 갱신 (packet 파일은 절대 재생성하지 않음)
+        c) 불일치 시 [FINAL PACKET FREEZE] 메시지 + exit code 1
+    - _cmd_gates_accept에서 _auto_generate_final_packet_and_update_pr 절대 호출 금지 (코드 경로 자체를 제거하여 재발 방지)
+    - Nonce Gate 기존 검증(--user-confirmed 차단, --acceptance-code 필수)은 무손상 유지. 새 검증은 기존 검증 통과 후 추가 실행.
+    - 한국어 사용자-facing 문구: [FINAL PACKET FREEZE] prefix + 줄바꿈 + force 옵션 안내. 한 줄 120자 이하.
+    - utf-8 + ensure_ascii=False로 JSON 저장 (기존 _write_acceptance_request 패턴).
+    - schema_version=2 도입. legacy schema_version=1 acceptance_request는 packet_sha256 없어도 차단하지 않음 (하위 호환).
+    - 임시 산출물 hygiene: 신규 패턴 추가 불필요 (acceptance_request.json은 보호 대상).
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <title>acceptance_request.json 스키마 확장 + request-accept 저장 로직</title>
+      <covers_ac>AC-1, AC-5, AC-6</covers_ac>
+      <affected_function>pipeline._write_acceptance_request, pipeline._should_reuse_acceptance_nonce, pipeline._cmd_gates_request_accept, pipeline._compute_packet_sha256</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_gates_request_accept</site>
+        <site>pipeline._auto_generate_final_packet_and_update_pr</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_write_acceptance_request|_should_reuse_acceptance_nonce|_auto_generate_final_packet_and_update_pr</pattern>
+        <match_count>15</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>schema_version=2 bump + packet_path/packet_sha256/packet_frozen_at 3개 필드 추가 + _compute_packet_sha256 헬퍼 신규 + _should_reuse_acceptance_nonce에 packet_sha256 동등성 비교 추가 + --force-new-code argparse 옵션 추가 + 기존 PENDING request EXPIRED 처리 + 자동 packet 생성 직후 packet_sha256 저장 로직.</change_summary>
+      <line_estimate>120</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <title>gates accept에서 packet_sha256 검증 + STALE_PACKET 처리</title>
+      <covers_ac>AC-2, AC-8, AC-10</covers_ac>
+      <affected_function>pipeline._cmd_gates_accept, pipeline._check_packet_freeze_status</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates (gates accept 디스패치)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_accept|acceptance_code_mismatch|status.*CONSUMED</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_check_packet_freeze_status 헬퍼 신규(packet 파일 SHA256 재계산 + 저장된 packet_sha256과 비교) + _cmd_gates_accept에 evidence_sha256 검증 후 packet_sha256 검증 단계 삽입 + 불일치 시 acceptance_request.json status=STALE_PACKET + [FINAL PACKET FREEZE] 한국어 차단 메시지 + exit code 1 + _cmd_gates_accept 본문에서 _auto_generate_final_packet_and_update_pr 호출 경로 제거 검증(Grep으로 호출 없음 확인) + 기존 --user-confirmed 차단 및 --acceptance-code 필수 규칙 무손상 유지.</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <title>report final-packet/update-pr-body 차단 + --force-new-request 옵션</title>
+      <covers_ac>AC-3, AC-4, AC-7</covers_ac>
+      <affected_function>pipeline._cmd_report_final_packet, pipeline._cmd_report_update_pr_body, pipeline.cmd_report</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_report (report 서브명령 디스패치)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_report_final_packet|def _cmd_report_update_pr_body|cmd_report</pattern>
+        <match_count>12</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_cmd_report_final_packet에 PENDING+packet_sha256 차단 로직 추가 + --force-new-request argparse 옵션 추가 + force 옵션 시 기존 request status=EXPIRED(reason=final_packet_regenerated) + 새 packet 생성(새 nonce 없음) + _cmd_report_update_pr_body에 packet_sha256 일치 검증 추가(불일치 시 차단) + packet 파일 재생성 금지(현재 파일 그대로 읽기만) + cmd_report argparse에 --force-new-request flag 추가 + 한국어 차단 메시지 표준화.</change_summary>
+      <line_estimate>110</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <title>E2E 테스트 12개 추가 (tests/e2e/test_freeze_guard_9934.py)</title>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-10</covers_ac>
+      <affected_function>tests.e2e.test_freeze_guard_9934.test_*</affected_function>
+      <target_files>
+        <file>tests/e2e/test_freeze_guard_9934.py</file>
+        <file>tests/oracles/IMP-20260603-9934/case_normal_01/input.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_normal_01/expected.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_edge_01/input.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_edge_01/expected.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_error_01/input.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_error_01/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PIPELINE_STATE_PATH|subprocess.run|final_state</pattern>
+        <match_count>30</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>tests/e2e/test_freeze_guard_9934.py 신규 작성 — 12개 테스트 함수: (1) test_request_accept_stores_packet_sha256, (2) test_gates_accept_passes_with_matching_packet_sha256, (3) test_gates_accept_fails_when_packet_changed, (4) test_packet_change_marks_status_stale_packet, (5) test_report_final_packet_blocked_when_pending, (6) test_force_new_request_expires_pending_and_creates_new_packet, (7) test_force_new_code_expires_pending_and_issues_new_nonce, (8) test_request_accept_reuses_nonce_when_all_match, (9) test_update_pr_body_does_not_regenerate_packet, (10) test_update_pr_body_fails_on_packet_sha256_mismatch, (11) test_gates_accept_does_not_auto_run_report_final_packet, (12) test_user_confirmed_alone_still_blocked_nonce_gate_preserved). 모든 테스트는 subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion. oracle 3개 케이스(normal/edge/error) JSON 파일 함께 생성.</change_summary>
+      <line_estimate>320</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <title>문서 업데이트 (CLAUDE.md + 2개 agent MD + RELEASE_NOTES.md)</title>
+      <covers_ac>AC-9</covers_ac>
+      <affected_function>none (docs-only)</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+        <file>RELEASE_NOTES.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PR Packet SSoT|IMP-20260603-2E3D|human_acceptance_packet</pattern>
+        <match_count>18</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>CLAUDE.md에 "Final Packet Freeze Guard (IMP-20260603-9934)" 섹션 신규 추가 — request-accept 이후 packet frozen 규칙 + STALE_PACKET 상태 + --force-new-request / --force-new-code 사용법 + 에이전트 절대 금지 사항(gates accept 직전 packet 재생성 금지, context summary의 "final packet 재생성" 자동 실행 금지) 명시. pm-agent.md에는 PM이 step_plan에서 packet freeze를 acceptance_criteria에 포함하도록 안내. test-harness-agent.md에는 Phase 7 packet 무결성 진단 절차 추가. RELEASE_NOTES.md에 IMP-20260603-9934 항목 추가.</change_summary>
+      <line_estimate>90</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <env_specs>
+    <python>3.10</python>
+    <vscode>Pylance + typeCheckingMode=basic (기존 pipeline.py 설정 유지)</vscode>
+  </env_specs>
+
+  <forbidden>
+    - _auto_generate_final_packet_and_update_pr를 _cmd_gates_accept에서 호출 추가 (Final Packet Freeze Guard의 근본 원인 — 절대 금지)
+    - 기존 Nonce Gate 검증 약화: --user-confirmed 단독 허용 금지, --acceptance-code 필수 규칙 유지
+    - PR Packet SSoT 구조(IMP-20260603-2E3D) 파괴: PIPELINE_FINAL_PACKET_START/END 블록 형식 변경 금지
+    - schema_version=1 legacy acceptance_request 호환성 파괴 금지 (packet_sha256 없는 경우는 차단하지 않음)
+    - Three-Gate / Option A / AC Tracking / Oracle / Technical / GitHub CI 게이트 우회 금지
+    - acceptance_request.json 외 다른 파일(deployment_manifest.json, codex_review_result.json 등) 스키마 변경 금지
+    - pipeline.py 외 코드 파일(.py, .ps1) 수정 금지. 문서(.md)와 테스트(tests/)만 신규 변경 허용
+    - E2E 테스트에서 내부 함수 직접 import 금지 (subprocess + PIPELINE_STATE_PATH + final_state assertion 의무)
+    - Trust-Root 파일 중 scope_manifest에 명시되지 않은 파일 수정 금지 (.github/workflows/**, tests/ 외 다른 위치, .claude/agents/ 중 pm-agent.md/test-harness-agent.md 외 다른 agent MD)
+  </forbidden>
+
+  <handover_template>
+    <!-- dev-agent가 완료 시 아래 형식의 handover XML을 qa-agent에게 전달합니다 -->
+    <dev_to_qa_handover_spec>
+      <from_agent>dev-agent</from_agent>
+      <to_agent>qa-agent</to_agent>
+      <pipeline_id>IMP-20260603-9934</pipeline_id>
+      <evidence_files>
+        <file>pipeline.py</file>
+        <file>tests/e2e/test_freeze_guard_9934.py</file>
+        <file>tests/oracles/IMP-20260603-9934/case_normal_01/input.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_normal_01/expected.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_edge_01/input.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_edge_01/expected.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_error_01/input.json</file>
+        <file>tests/oracles/IMP-20260603-9934/case_error_01/expected.json</file>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+        <file>RELEASE_NOTES.md</file>
+      </evidence_files>
+      <expected_status>READY_FOR_QA</expected_status>
+    </dev_to_qa_handover_spec>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\CLAUDE.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\pm-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\test-harness-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\RELEASE_NOTES.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_user_acceptance_nonce_bbdb.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_request_accept_nonce_reuse_aef0.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_final_packet_2e3d.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      CLAUDE.md "User Acceptance Nonce Gate (IMP-20260531-BBDB)" 섹션: --user-confirmed 단독 차단, --acceptance-code 필수, evidence/PR/CI 일치 검증.
+      CLAUDE.md "PR Packet SSoT (IMP-20260603-2E3D)" 섹션: pipeline.py가 packet 자동 생성 + PR 본문 자동 업데이트. PIPELINE_FINAL_PACKET_START/END 블록.
+      CLAUDE.md "Real CLI Path E2E Gate Policy (IMP-20260525-6FAC)" 섹션: subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion 의무.
+      Scope Lock 강제 규칙 (IMP-20260516-77AA): scope_manifest에 명시된 파일만 변경. Trust-Root 파일 중 scope 외 변경 시 자동 차단.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Planner 신규 파이프라인. 사용자 원문 요청 8개 필수 구현 사항을 5개 MT로 분해. P0 질문 없음, P1 1개(packet freeze 차단 범위 — PENDING만 차단으로 추천 확정).</prev_phase_summary>
+  </context_injection>
+</step_plan>
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
