@@ -1,10 +1,5 @@
 {
-  "scenario": "legacy_state_backward_compat",
-  "description": "requirements_tracking 필드 없는 오래된 state — AC 추적 없이 module qa PASS 허용",
-  "state_before": {},
-  "module_qa_report": {
-    "mt_id": "MT-1",
-    "result": "PASS",
-    "ac_verification": null
-  }
+  "outcome": "PASS",
+  "reason": "requirements_tracking 필드 없는 legacy state — ac_verification 없이 module qa PASS 허용",
+  "legacy_mode": true
 }

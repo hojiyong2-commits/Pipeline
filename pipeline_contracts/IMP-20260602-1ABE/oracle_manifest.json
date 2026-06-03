@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260602-1ABE",
+  "created_at": "2026-06-02T21:41:37Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260602-1ABE\\case_normal_01\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260602-1ABE\\case_normal_01\\expected.json",
+      "input_sha256": "a362f7bab8630aacde9a68f2a2c9d4d1c48623fc3cd093e6b699d9925d0da958",
+      "expected_sha256": "a362f7bab8630aacde9a68f2a2c9d4d1c48623fc3cd093e6b699d9925d0da958",
+      "added_at": "2026-06-02T21:41:37Z"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260602-1ABE\\case_edge_01\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260602-1ABE\\case_edge_01\\expected.json",
+      "input_sha256": "7066bda1cfc93abdd89243556ecc3399588cd1949d0935e4832d129e8b2b42be",
+      "expected_sha256": "7066bda1cfc93abdd89243556ecc3399588cd1949d0935e4832d129e8b2b42be",
+      "added_at": "2026-06-02T21:41:37Z"
+    },
+    {
+      "name": "O003",
+      "description": "",
+      "source": "user",
+      "case_kind": "error",
+      "input_path": "tests\\oracles\\IMP-20260602-1ABE\\case_error_01\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260602-1ABE\\case_error_01\\expected.json",
+      "input_sha256": "821d1168cf072b40f718464cf2baa8e5ed3cefc2f2c6282daaf95d8454ab5239",
+      "expected_sha256": "821d1168cf072b40f718464cf2baa8e5ed3cefc2f2c6282daaf95d8454ab5239",
+      "added_at": "2026-06-02T21:41:38Z"
+    }
+  ],
+  "updated_at": "2026-06-02T21:41:38Z"
+}
