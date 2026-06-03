@@ -252,3 +252,13 @@ Harness는 `gates request-accept` 실행 시 자동 조립되는 AC 충족표를
 - AC 충족표를 임의로 PASS로 위변조하여 출력
 - user_visible PENDING AC를 무시한 채 사용자에게 ACCEPT 요청
 - ac_fulfillment_table의 evidence를 추상 문구로 임의 채움
+
+### PR Packet SSoT 규칙 (IMP-20260603-2E3D)
+
+Harness는 Phase 7 외부 게이트 진단 시 PR 본문의 "최종 확인 안내" 블록이 비어 있거나
+에이전트 자유서술이면 `<harness_diagnostic><user_packet_ready>false</user_packet_ready>`로
+보고합니다. `python pipeline.py report final-packet`과 `python pipeline.py report
+update-pr-body`로만 packet과 PR 본문을 갱신합니다. `gates request-accept`가 이 두 명령을
+자동으로 호출하므로 Harness는 직접 호출하지 않아도 됩니다. PR 본문의
+`<!-- PIPELINE_FINAL_PACKET_START -->` ~ `<!-- PIPELINE_FINAL_PACKET_END -->` 블록 안을
+손으로 수정하는 것은 금지입니다.

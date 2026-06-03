@@ -751,3 +751,12 @@ PM은 모든 새 파이프라인에서 `step_plan.xml`에 `<acceptance_criteria>
 - 추상 문구 단독("정상 동작") 차단은 PM이 step_plan 작성 시 자가 검열로 회피해야 합니다.
 - AC requirement는 사용자가 PR 본문에서 읽고 직접 확인 가능한 구체적 결과(상수, 임계값, 동작 시점, 출력 형식 등)를 포함해야 합니다.
 - P0/P1 사용자 질문(AskUser)을 통해 결정된 사항을 그대로 AC로 옮길 때 `linked_questions` 필드로 추적 가능.
+
+### PR Packet SSoT 규칙 (IMP-20260603-2E3D)
+
+PR 본문의 "최종 확인 안내"와 `human_acceptance_packet.md`는 PM이 자유서술로 작성하지 않습니다.
+`python pipeline.py report final-packet` 결과만 사용합니다. PM은 step_plan을 작성할 때
+acceptance_criteria의 requirement 문구가 그대로 자동 생성 packet의 AC 충족표에 들어간다는
+점을 인지하고, 사용자가 PR에서 직접 확인 가능한 구체적 결과로만 작성합니다.
+PR 본문의 `<!-- PIPELINE_FINAL_PACKET_START -->` ~ `<!-- PIPELINE_FINAL_PACKET_END -->`
+블록은 PM이나 다른 에이전트가 임의로 수정하지 않습니다.

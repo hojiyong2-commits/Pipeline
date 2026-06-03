@@ -1,3 +1,50 @@
+# Pipeline 릴리즈 노트
+
+## IMP-20260603-2E3D — PR Packet SSoT
+
+**머지 예정 / 작업 중:** 사용자 ACCEPT/REJECT 판단 자료(PR 본문의 "최종 확인 안내",
+`human_acceptance_packet.md`)를 에이전트 자유서술 대신 `pipeline.py`가 실제 git/gh/state
+자료로 자동 생성하도록 SSoT를 강제합니다.
+
+### 신규 명령
+
+- `python pipeline.py report final-packet` — `human_acceptance_packet.md` 자동 생성.
+  PR head SHA, CI run ID, `git diff origin/main...HEAD --name-only` 결과(변경 파일 수
+  자동 산출), 게이트 상태, AC 충족표, 승인 코드(`acceptance_request.json`에 있을 때)를
+  포함합니다. 모든 줄 120자 이하, 승인 코드는 독립 줄로 출력합니다.
+- `python pipeline.py report update-pr-body` — 현재 PR 본문의
+  `<!-- PIPELINE_FINAL_PACKET_START -->` ~ `<!-- PIPELINE_FINAL_PACKET_END -->` 블록을
+  최신 packet 내용으로 교체합니다. 블록이 없으면 PR 본문 끝에 추가합니다. gh CLI가
+  없으면 graceful skip.
+
+### gates request-accept 통합 흐름 (순환 구조 해결)
+
+`gates request-accept`가 다음 단계를 한 흐름으로 묶어 final packet 부재로 인한 차단 순환을
+제거합니다.
+
+1. 실제 PR head SHA / CI run ID / git diff 변경 파일을 직접 조회.
+2. `human_acceptance_packet.md`가 있고 실제 상태와 다르면 BLOCKED + 한국어 재실행 명령.
+   packet 부재는 차단하지 않음.
+3. 검증 통과 시 nonce 발급(또는 조건 동일 시 재사용) + packet 자동 생성 + gh CLI 있으면
+   PR 본문 자동 업데이트.
+
+기존 Nonce Gate(`gates accept` 단계의 `--user-confirmed` 단독 차단,
+`--acceptance-code` 필수), Three-Gate, AC Tracking, Protocol Consistency Guard,
+Final Acceptance Readiness Gate는 그대로 유지됩니다.
+
+### 신규 SSoT 상수
+
+- `PIPELINE_FINAL_PACKET_START_MARKER` / `PIPELINE_FINAL_PACKET_END_MARKER`
+- `HUMAN_ACCEPTANCE_PACKET_FILE = "human_acceptance_packet.md"`
+- `PACKET_LINE_MAX_WIDTH = 120`
+
+### 사용자가 확인할 결과물
+
+- `human_acceptance_packet.md` (PR head SHA, CI run ID, 변경 파일, AC 충족표, 승인 코드 포함)
+- PR 본문의 PIPELINE_FINAL_PACKET 블록 (`gh pr view`로 확인 가능)
+
+---
+
 # Pipeline v1.0 릴리즈 노트
 
 **릴리즈 날짜:** 2026-05-30

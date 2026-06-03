@@ -1226,3 +1226,12 @@ Dev는 `requirements_tracking.enabled=true`인 새 파이프라인에서 `scope_
 ```
 
 `covers_iqr`만 있는 문서 전용 MT는 ac_verification 면제됩니다.
+
+### PR Packet SSoT 규칙 (IMP-20260603-2E3D)
+
+Dev는 코드 변경 후 PR 본문의 "최종 확인 안내" 블록을 손으로 작성하지 않습니다.
+`python pipeline.py report final-packet`과 `python pipeline.py report update-pr-body`만
+사용하여 packet과 PR 본문을 갱신합니다. `gates request-accept` 단계가 이 두 명령을 자동으로
+실행하므로, Dev는 명시적으로 호출하지 않아도 됩니다. PR 본문의
+`<!-- PIPELINE_FINAL_PACKET_START -->` ~ `<!-- PIPELINE_FINAL_PACKET_END -->` 블록 안을
+임의로 수정하면 PR consistency 검사가 BLOCKED를 반환할 수 있으므로 절대 수정하지 않습니다.

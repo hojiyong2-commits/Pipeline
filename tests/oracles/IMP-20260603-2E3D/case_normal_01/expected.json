@@ -1,0 +1,9 @@
+{
+  "outcome": "PASS",
+  "final_packet_generated": true,
+  "packet_has_pr_sha": true,
+  "packet_has_ci_run_id": true,
+  "packet_has_changed_files": true,
+  "packet_has_ac_table": true,
+  "packet_has_accept_code": true
+}
