@@ -1,0 +1,33 @@
+<architect_report>
+  <rca_mode>COMPLETE</rca_mode>
+  <rca_summary>IMP-20260531-4AC2 완료: _get_pr_branch_ci_run_id()가 현재 브랜치 기준 CI run만 선택하도록 개선. PIPELINE_TEST_* env var 없이 fake git/gh PATH 방식으로 Real CLI Path E2E 검증 완료. 3차 시도에서 사용자 ACCEPT.</rca_summary>
+  <protocol_evolution_decision>
+    <required>false</required>
+    <reason>none</reason>
+    <scope>none</scope>
+    <recommended_pipeline_type>IMP</recommended_pipeline_type>
+  </protocol_evolution_decision>
+
+<phase_attestation_facts>
+  <phase name="pm">
+    <phase_ci_run_id></phase_ci_run_id>
+    <phase_ci_commit_sha></phase_ci_commit_sha>
+    <phase_ci_pr_number></phase_ci_pr_number>
+  </phase>
+  <phase name="dev">
+    <phase_ci_run_id></phase_ci_run_id>
+    <phase_ci_commit_sha></phase_ci_commit_sha>
+    <phase_ci_pr_number></phase_ci_pr_number>
+  </phase>
+  <phase name="qa">
+    <phase_ci_run_id></phase_ci_run_id>
+    <phase_ci_commit_sha></phase_ci_commit_sha>
+    <phase_ci_pr_number></phase_ci_pr_number>
+  </phase>
+  <phase name="build">
+    <phase_ci_run_id></phase_ci_run_id>
+    <phase_ci_commit_sha></phase_ci_commit_sha>
+    <phase_ci_pr_number></phase_ci_pr_number>
+  </phase>
+</phase_attestation_facts>
+</architect_report>

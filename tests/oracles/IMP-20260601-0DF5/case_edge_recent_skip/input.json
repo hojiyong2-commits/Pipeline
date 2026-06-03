@@ -1,0 +1,11 @@
+{
+  "case_kind": "edge",
+  "description": "7일 미만 파일은 archive 대상에서 제외된다 (5일 전 파일은 보호)",
+  "workspace_fixture": {
+    "files": [
+      {"path": "build_report_RECENT.xml", "mtime_days_ago": 5, "git_status": "untracked"},
+      {"path": "build_report_OLDONE.xml", "mtime_days_ago": 30, "git_status": "untracked"}
+    ]
+  },
+  "command": "python pipeline.py hygiene archive --older-than 7d --json"
+}

@@ -1,0 +1,16 @@
+{
+  "case_kind": "edge",
+  "description": "secret 패턴(예: sk-EXAMPLE_DUMMY... 또는 ghp_EXAMPLE_DUMMY...)이 포함된 임시 파일은 archive하지 않고 BLOCKED 보고",
+  "workspace_fixture": {
+    "files": [
+      {
+        "path": "comment_with_secret.txt",
+        "mtime_days_ago": 30,
+        "git_status": "untracked",
+        "content_has_secret_pattern": true,
+        "secret_kind": "openai_api_key_dummy"
+      }
+    ]
+  },
+  "command": "python pipeline.py hygiene archive --older-than 7d --json"
+}

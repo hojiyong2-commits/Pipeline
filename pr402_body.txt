@@ -1,0 +1,25 @@
+﻿## 작업 요약
+
+IMP-20260602-1ABE PM 단계 phase attestation 요청입니다.
+
+- 파이프라인: IMP-20260602-1ABE (요구사항 추적 구조 개선 — PM structured AC)
+- PM phase DONE 완료
+- Contract 초기화: 10개 모듈, 3개 oracle (normal/edge/error), 11개 테스트
+
+PM phase CI 검증 중입니다. Dev 진입 전 phase attestation PASS를 확인합니다.
+
+## 사용자가 확인할 결과물
+
+PM phase attestation 요청 — CI 자동 검사 결과를 확인합니다.
+
+## 기대 결과와 실제 결과
+
+PM phase evidence 파일들이 올바르게 생성되었으며 CI에서 검증됩니다.
+
+## 중요한 선택과 트레이드오프
+
+structured AC 스키마 고정 (하위 호환 방식 선택).
+
+## 검증
+
+PM done 완료, contract frozen 완료, phase evidence force-add 완료.

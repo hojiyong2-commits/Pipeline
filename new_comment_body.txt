@@ -1,0 +1,120 @@
+﻿<!-- pipeline-human-acceptance-packet -->
+## 최종 확인 안내
+
+이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, **아래 결과 요약과 실제 결과물**이 요청과 맞는지만 확인하세요.
+이 안내는 CI가 끝날 때마다 새 댓글을 만들지 않고 같은 댓글을 갱신합니다. GitHub가 댓글 생성 시각을 오래전으로 보여도 아래 갱신 시각이 최신 기준입니다.
+
+### 먼저 볼 결론
+
+- 판단 정보 상태: **판단 가능**
+- 안내 — 아래 요약과 결과물이 요청과 맞으면 승인(ACCEPT)하면 됩니다.
+- PR 제목: feat(IMP-20260527-075A): Cost/Attempt Budget Gate 구현 — phase별 재시도 한도 강제 + budget status/reset CLI 추가
+
+### 이번 요청과 완료 결과
+
+IMP-20260527-075A: Cost/Attempt Budget Gate 구현
+같은 phase/gate failure가 무한 반복되지 않도록 pipeline.py에 attempt budget을 강제합니다.
+
+변경 파일:
+- pipeline.py — 6개 신규 함수 + budget CLI + cmd_check/qa/done 통합
+- tests/test_attempt_budget_075a.py — 8개 단위 테스트 (신규)
+- tests/e2e/test_real_cli_paths.py — budget E2E 3개 추가
+- oracle 케이스 4개 신규 (TC-normal-budget-pass, TC-normal-budget-blocked, TC-edge-repeat-failure-code, TC-edge-reset-no-reason)
+
+### 사용자가 실제로 확인할 것
+
+- `python pipeline.py budget status` 명령 실행 시 phase별 재시도 현황이 한국어로 출력됩니다
+- `python pipeline.py budget reset --phase dev --reason "..."` 명령으로 초기화 가능
+- budget 한도 초과(dev 3회, qa 3회, gate 5회) 시 자동으로 BLOCKED + failure_packet.json 생성
+- 동일 failure_code 3회 반복 시 REPEAT_FAILURE_CODE + Architect 이관 안내
+- 전체 pytest: 459+ passed, 0 fail
+
+### 기대 결과와 실제 결과 비교
+
+| 항목 | 기대 결과 | 실제 결과 |
+|---|---|---|
+| budget status CLI | 한국어 출력, exit 0 | 확인됨 |
+| budget reset (reason 없음) | exit 2 | 확인됨 |
+| budget reset (reason 있음) | exit 0, attempts 초기화 | 확인됨 |
+| budget 초과 시 check | exit 1 + BLOCKED | 확인됨 |
+| 전체 pytest | 회귀 0건 | 459+ passed |
+
+### 중요한 선택과 트레이드오프
+
+**DQ-1 (phase별 한도)**: dev:3, qa:3, gate:5 선택 (option A)
+- 장점: 각 phase 특성에 맞는 한도, 명확한 사용자 메시지
+- 단점: 설정 키 3개로 증가
+**DQ-2 (반복 임계값)**: 3회째부터 RCA 이관 (option A)
+- 장점: 일시적 동일 오류에 2회 자가 수정 기회 제공
+- 단점: RCA 이관이 한 사이클 늦어짐
+- 기존 qa Circuit Breaker(2회)와 보완적으로 동작
+
+### 남은 위험과 주의점
+
+- 별도 주의점이 적혀 있지 않습니다.
+
+### 추가 개선 포인트
+
+- 별도 후속 개선 포인트가 적혀 있지 않습니다.
+
+### GitHub가 자동으로 확인한 것
+
+- 자동 검사: 통과
+- 마지막 갱신: 2026-05-27 06:25:46 UTC
+- 필수 검사 이름: `tests`
+- 실제로 실행한 검사: `python -m pytest -q`
+- 이번 변경 번호: `d327cef6b56b408abedbda4d5bf1419b5568a50f`
+- 작업 흐름: `impl/IMP-20260527-075A` 브랜치를 `main` 브랜치로 합치기
+- 자동 검사 결과와 첨부파일 보기: https://github.com/hojiyong2-commits/Pipeline/actions/runs/26494583355
+
+### 작업 담당자가 보고한 검증
+
+- 단위 테스트: 8/8 PASS (tests/test_attempt_budget_075a.py)
+- E2E 테스트: 3/3 PASS (tests/e2e/test_real_cli_paths.py -k budget)
+- 전체 pytest: 459+ passed, 0 fail
+- phase attestation (pm/dev/qa/build): 모두 PASS
+- Technical gate: PASS
+- Oracle gate: PASS (8/8 케이스, 100점)
+
+### 변경된 파일
+
+- 수정됨: `pipeline.py` (추가 388줄, 삭제 0줄)
+- 수정됨: `tests/e2e/test_real_cli_paths.py` (추가 92줄, 삭제 0줄)
+- 새 파일: `tests/oracles/IMP-20260527-075A/TC-edge-repeat-failure-code/expected.json`
+- 새 파일: `tests/oracles/IMP-20260527-075A/TC-edge-repeat-failure-code/input.json`
+- 새 파일: `tests/oracles/IMP-20260527-075A/TC-edge-reset-no-reason/expected.json`
+- 새 파일: `tests/oracles/IMP-20260527-075A/TC-edge-reset-no-reason/input.json`
+- 새 파일: `tests/oracles/IMP-20260527-075A/TC-normal-budget-blocked/expected.json`
+- 새 파일: `tests/oracles/IMP-20260527-075A/TC-normal-budget-blocked/input.json`
+- 새 파일: `tests/oracles/IMP-20260527-075A/TC-normal-budget-pass/expected.json`
+- 새 파일: `tests/oracles/IMP-20260527-075A/TC-normal-budget-pass/input.json`
+- 새 파일: `tests/test_attempt_budget_075a.py`
+
+### 사용자가 확인해야 할 중요 파일 변경
+
+- `pipeline.py`
+- `tests/e2e/test_real_cli_paths.py`
+- `tests/oracles/IMP-20260527-075A/TC-edge-repeat-failure-code/expected.json`
+- `tests/oracles/IMP-20260527-075A/TC-edge-repeat-failure-code/input.json`
+- `tests/oracles/IMP-20260527-075A/TC-edge-reset-no-reason/expected.json`
+- `tests/oracles/IMP-20260527-075A/TC-edge-reset-no-reason/input.json`
+- `tests/oracles/IMP-20260527-075A/TC-normal-budget-blocked/expected.json`
+- `tests/oracles/IMP-20260527-075A/TC-normal-budget-blocked/input.json`
+- `tests/oracles/IMP-20260527-075A/TC-normal-budget-pass/expected.json`
+- `tests/oracles/IMP-20260527-075A/TC-normal-budget-pass/input.json`
+- `tests/test_attempt_budget_075a.py`
+
+### 승인 전에 볼 것
+
+- 위 **사용자가 실제로 확인할 것**에 적힌 결과 링크/경로를 여세요.
+- 첨부파일이 있으면 위 자동 검사 링크에서 여세요.
+- 화면, 엑셀, EXE, 생성 파일이 **기대 결과와 실제 결과 비교**와 맞는지 확인하세요.
+- 업무 결과물이 따로 없는 규칙/문서 작업이면, **이번 요청과 완료 결과**, 자동 검사 통과 여부, 중요 파일 변경 목록을 확인하세요.
+- 코드 내용을 직접 이해하려고 애쓰지 않아도 됩니다. 요청한 결과가 나왔는지, 원하지 않은 결과물이 섞이지 않았는지만 보면 됩니다.
+- 결과가 틀리거나 빠졌으면 거절(REJECT)을 고르고 짧게 이유를 적으세요.
+
+### 결정 기준
+
+- 판단 정보 상태가 **판단 가능**이고, 결과물이 요청과 맞으면 승인(ACCEPT).
+- 판단 정보 상태가 **정보 부족**이면 ACCEPT하지 말고 보완 요청 또는 거절(REJECT).
+- 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 거절(REJECT).

@@ -1,0 +1,891 @@
+{
+  "pipeline_id": "IMP-20260601-0DF5",
+  "executed_at": "2026-06-02",
+  "moved": [],
+  "blocked": [],
+  "excluded": [
+    {
+      "path": ".bandit",
+      "reason": "git_tracked"
+    },
+    {
+      "path": ".env.example",
+      "reason": "git_tracked"
+    },
+    {
+      "path": ".gitattributes",
+      "reason": "git_tracked"
+    },
+    {
+      "path": ".gitignore",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "aa88_req.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "acceptance_comment_new.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "acceptance_packet_body.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "acceptance_request.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "AGENTS.md",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "agent_office_control.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "analyze_fails.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "analyze_packet.py",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "architect_report.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "architect_report_final.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "benchmark_v3_summary.json",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "build_attestation_req_tmp.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "build_report.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_075a.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_0a9e.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_4ac2_v3.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_5cf4.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_6f07.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_aef0.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_b0ab.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_d5dc.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "build_report_fix.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "CLAUDE.md",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "codex_review_result.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "codex_run_raw.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comments_376.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "comments_temp.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "comment_4584990276.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_4584990276_updated.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_4584990276_v2.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_4584990276_v3.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_body_raw.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_patch.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_patch2.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_patch_4cd8.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_patch_4cd8_v2.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_patch_final.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_raw.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_raw2.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_updated.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "comment_update_final.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "contract_check.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "debug_parse.py",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "dev_handover.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "dev_handover_fix.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "dev_handover_fix2.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "dev_handover_v2.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "dev_handover_v3.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "ec7b_req.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "EmailMonitor.spec",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "EmailMonitorFile.spec",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "EmailMonitorFileFolder.spec",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "eval_harness_v2.json",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "eval_harness_v3.json",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "ExcelReportApp.spec",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "failure_packet.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "generate_oracle_outputs.py",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "golden_failure_packet.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_B77A.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_BUG-20260507-C2E2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_E886.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_IMP-20260507-0EDC.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_IMP-20260507-1A4F.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_IMP-20260507-35C5.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_IMP-20260507-46AB.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_IMP-20260507-F493.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_output_phase9.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_skip_prior100.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_test_4D27.py",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_test_BUG_20260507_C2E2.py",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "harness_test_E886.py",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "human_acceptance_packet.md",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "ICPartAutomation.spec",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "integration_report.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "integration_report_v2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "KittingMapper.spec",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "main.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "manager_handoff.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-1.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-1_v2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-1_v3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-2_v2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-2_v3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-4.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-5.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_design_MT-6.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_dev_MT-1.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_dev_MT-2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_dev_MT-3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_dev_MT-4.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_dev_MT-5.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_dev_MT-6.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-1.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-1_v2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-1_v3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-2_v2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-2_v3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-4.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-5.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_handover_MT-6.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-1.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-1_v2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-1_v3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-2_v2.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-2_v3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-3.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-4.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-5.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "module_qa_MT-6.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "new_acceptance_packet.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "new_comment_body.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "packet_files.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pipeline.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "pipeline_state.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pipeline_state_TMP_contaminated_backup.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pipeline_state_TMP_contaminated_backup2.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pipeline_state_TMP_HARNESS_backup.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pipeline_state_TMP_HARNESS_backup3.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pipeline_state_TMP_HARNESS_backup_6f07.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr301.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr313.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr338_body.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr364_comments.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr364_packet_content.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr384_body.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr384_body_display.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr384_body_final.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "protocol_consistency_result.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_075a.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_body_294.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_body_6f07_final.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_body_86aa_final.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_body_b69c_final.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_body_current.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_current.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_current_376.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_d5dc.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_final.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_body_final.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_final2.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_final3.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_fixed2_376.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_fixed3_376.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_fixed4_376.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_fixed_376.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_latest.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_latest_updated.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_tail.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_update.md",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_body_updated.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_updated2.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_body_updated_4cd8.txt",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "pr_comment_326.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_info_check.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_list_all.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pr_list_tmp.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "pyproject.toml",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "qa_report.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "qa_report_0a9e.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "qa_report_fix.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "qa_report_fix3.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "qa_report_v3.xml",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "README.md",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "record_harness.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "RELEASE_NOTES.md",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "requirements-dev.txt",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "requirements.txt",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "ruff.toml",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "RULE_WATCHER_README.md",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "runs_tmp.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "scope_manifest.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_075A.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_fix2.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_fix3.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_fix4.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-1.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-1_v2.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-1_v3.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-2.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-2_v2.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-2_v3.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-3.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-4.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-5.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_MT-6.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_v2.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "scope_manifest_v3.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "score_v3.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "setup.cfg",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "step_plan.xml",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "stop_signal.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "tc2_then.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "tc2_when.json",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "test_contract_acceptance_v2.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "test_harness_6198.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "test_hello.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "test_packet_parse.py",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "test_pipeline_gates.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "test_pr_parse.py",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "test_three_gate_e2e.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "test_three_gate_pipeline.py",
+      "reason": "git_tracked"
+    },
+    {
+      "path": "tmpei0mxixr.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "tmpvknru8h6.json",
+      "reason": "younger_than_threshold"
+    },
+    {
+      "path": "tmp_comment_body.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "tmp_comment_body2.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "tmp_pr_body.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "tmp_pr_body_lf.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "updated_packet_body.txt",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "_build_harness.py",
+      "reason": "not_archive_pattern"
+    },
+    {
+      "path": "_build_harness2.py",
+      "reason": "not_archive_pattern"
+    }
+  ],
+  "move_errors": [],
+  "total_bytes": 0,
+  "status": "OK"
+}

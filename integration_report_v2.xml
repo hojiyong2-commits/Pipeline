@@ -1,0 +1,15 @@
+<integration_report>
+  <pipeline_id>IMP-20260531-4AC2</pipeline_id>
+  <rework_round>2</rework_round>
+  <modules_integrated>
+    <module>MT-1 (pipeline.py + tests/e2e/test_ci_run_id_filter_4ac2.py)</module>
+    <module>MT-2 (oracle 파일 5개)</module>
+  </modules_integrated>
+  <integration_test>
+    <command>python -m pytest tests/e2e/test_ci_run_id_filter_4ac2.py -v</command>
+    <total>8</total>
+    <passed>8</passed>
+    <failed>0</failed>
+  </integration_test>
+  <integration_verdict>PASS</integration_verdict>
+</integration_report>

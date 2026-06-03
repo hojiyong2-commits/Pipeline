@@ -1,0 +1,50 @@
+## 최종 판단 요약
+
+`request-accept` 재실행 시 동일 조건이면 기존 nonce를 재사용하는 로직을 구현했습니다. 보안 불변 조건(gates accept 단계 검증 로직)은 그대로 유지하면서 UX를 개선했습니다.
+
+## 사용자가 확인할 결과물
+
+- `pipeline.py` — `_should_reuse_acceptance_nonce` 신규 함수 추가 (5-field 비교: pipeline_id / evidence / evidence_sha256 / pr_head_sha / github_ci_run_id), `_cmd_gates_request_accept` 수정 (기존 요청 로드 → 재사용/신규 분기 → 한국어 안내), `--force-new-code` 옵션 추가
+- `tests/e2e/test_request_accept_nonce_reuse_aef0.py` — E2E 테스트 6개 (TC-R1~R6) 모두 PASS
+- oracle 파일 7케이스: `tests/oracles/IMP-20260531-AEF0/` 아래 normal 1개 + edge 6개
+
+GitHub Actions 자동 검사: 통과 (run ID: 26712881195, commit: 27b17041004e31a68ed4e1cf536192963082d51f)
+
+## 기대 결과와 실제 결과
+
+기대: 동일 evidence/PR SHA/CI run ID/PENDING 상태에서 `gates request-accept` 재실행 시 기존 nonce가 유지됨.
+실제: TC-R1 E2E 테스트에서 검증 완료 — 두 번 연속 실행해도 nonce 불변.
+
+기대: evidence SHA / PR head SHA / CI run ID / CONSUMED 상태 / --force-new-code 중 하나라도 다르면 새 nonce 발급.
+실제: TC-R2~R6 E2E 테스트에서 각 조건별로 검증 완료.
+
+## 중요한 선택과 트레이드오프
+
+`_should_reuse_acceptance_nonce` 순수 함수로 분리 (파일 I/O 없음) → 테스트 용이성 확보.
+재사용 시에도 `_update_github_acceptance_comment` 재호출 → PR 댓글은 항상 최신 상태 유지.
+기존 TC1~TC18 nonce gate 테스트 전부 PASS 유지 — 보안 회귀 없음.
+
+## 남은 위험과 주의점
+
+없음. gates accept 단계의 `_consume_acceptance_request`, `_cmd_gates_accept` 함수는 수정하지 않았으며 보안 불변 조건 유지.
+
+## 추가 개선 포인트
+
+`_get_latest_ci_run_id()`의 전역 `gh run list --limit 1` 사용 방식 (phase-attestation 브랜치 run을 잘못 반환할 수 있는 문제)은 별도 IMP에서 PR 브랜치 필터 적용 권장.
+
+## 검증
+
+- ruff: 통과
+- mypy: 통과
+- bandit: 통과
+- pytest (E2E 포함): 통과
+- GitHub Actions CI: 통과 (run 26712881195)
+- head SHA: 27b17041004e31a68ed4e1cf536192963082d51f
+- Technical gate: PASS
+- Oracle gate: PASS
+- GitHub CI gate: PASS
+
+---
+pipeline_id: IMP-20260531-AEF0
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>IMP-20260531-B0AB</pipeline_id>
+  <build_run_id>build-e9747798697f312a</build_run_id>
+  <status>N/A</status>
+  <skip_reason>meta-task</skip_reason>
+  <timestamp>2026-05-31T08:43:30Z</timestamp>
+
+  <section_1_command>N/A — meta-task, no EXE build required</section_1_command>
+  <section_2_output>N/A</section_2_output>
+  <section_3_verification>N/A</section_3_verification>
+  <section_4_artifacts>None — documentation and code cleanup only</section_4_artifacts>
+  <section_5_notes>IMP-20260531-B0AB is a legacy cleanup pipeline (delete dead helpers, sync docs, add regression tests). No runnable EXE deliverable.</section_5_notes>
+  <section_6_qa_mapping>N/A — coverage by tests/test_legacy_cleanup_b0ab.py (5 tests, all PASS)</section_6_qa_mapping>
+</build_report>

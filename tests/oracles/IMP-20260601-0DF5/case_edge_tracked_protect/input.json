@@ -1,0 +1,14 @@
+{
+  "case_kind": "edge",
+  "description": "git tracked 파일, tests/oracles/**, .github/**, .claude/**, pipeline.py, CLAUDE.md는 archive 후보에서 절대 제외",
+  "workspace_fixture": {
+    "files": [
+      {"path": "pipeline.py",                                "mtime_days_ago": 365, "git_status": "tracked"},
+      {"path": "CLAUDE.md",                                  "mtime_days_ago": 365, "git_status": "tracked"},
+      {"path": "tests/oracles/IMP-20260601-0DF5/case_normal_scan/input.json", "mtime_days_ago": 365, "git_status": "tracked"},
+      {"path": ".github/workflows/ci.yml",                   "mtime_days_ago": 365, "git_status": "tracked"},
+      {"path": ".claude/agents/pm-agent.md",                 "mtime_days_ago": 365, "git_status": "tracked"}
+    ]
+  },
+  "command": "python pipeline.py hygiene archive --older-than 7d --json"
+}

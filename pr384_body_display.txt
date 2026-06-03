@@ -1,0 +1,90 @@
+﻿## 작업 요약
+
+IMP-20260531-AEF0 PM phase attestation 확인용 초기 PR입니다.
+
+구현 예정:
+- `_should_reuse_acceptance_nonce` 신규 헬퍼 함수
+- `_cmd_gates_request_accept` 수정 (nonce 재사용 분기)
+- `--force-new-code` argparse 옵션 추가
+- E2E 테스트 6개 (TC-R1~R6)
+
+## 사용자가 확인할 결과물
+
+(Dev/QA 완료 후 업데이트 예정)
+
+## 기대 결과와 실제 결과
+
+(Dev/QA 완료 후 업데이트 예정)
+
+## 중요한 선택과 트레이드오프
+
+(Dev/QA 완료 후 업데이트 예정)
+
+## 검증
+
+(Dev/QA 완료 후 업데이트 예정)
+
+---
+pipeline_id: IMP-20260531-AEF0
+phase: PM attestation
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+## 소요 시간 요약
+```
+=== 파이프라인 metrics 요약 [IMP-20260531-AEF0] ===
+
+[ 전체 소요 시간 ]
+  시작: 2026-05-31T10:39:04Z
+  종료: 2026-05-31T12:44:11Z
+  소요: 2시간 5분 7초
+
+[ Phase별 소요 시간 ]
+  pm: 26분 37초
+  dev: 14분 5초
+  qa: 4분 28초
+  sec: 4초
+  build: 22초
+  harness: 확인 불가
+  architect: 확인 불가
+
+[ Gate별 상태 및 소요 시간 ]
+  technical: PASS (1분 23초)
+  oracle: PASS (15초)
+  acceptance: PENDING (확인 불가)
+  github_ci: PASS (8분 44초)
+
+[ 실패/재시도 요약 ]
+  총 실패 패킷: 7건
+    gate_blocked_dev: 2건
+    codex_review_stale_evidence: 2건
+    pm_clarification_gate_blocked: 2건
+    technical_test_failed: 1건
+  return_phase 분포:
+    pm: 5건
+    dev: 2건
+
+[ GitHub Actions 요약 ]
+  run_id: 확인 불가
+  결과: 확인 불가
+  소요: 확인 불가
+  URL: 확인 불가
+
+[ 병목 요약 ]
+  가장 오래 걸린 Phase: pm (26분 37초)
+  가장 많이 실패한 Gate: gate_blocked_dev
+
+[ 에이전트/세션별 소요 시간 ]
+  pm-planner-agent: 12분 25초
+  pipeline-manager-agent: 7분 37초
+  pipeline-manager-agent: 4초
+  pipeline-manager-agent: 4초
+  dev-agent: 13분 35초
+  qa-agent: 3분 53초
+  qa-agent: 4초
+  build-agent: 14초
+  (토큰 사용량: 확인 불가)
+
+```
+
+

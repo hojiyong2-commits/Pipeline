@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260526-82E3</pipeline_id>
+  <phase>qa</phase>
+  <run_id>qa-c600893bd73ea9bc</run_id>
+  <category_check>
+    <wa>N/A — 네트워크 통신 없음</wa>
+    <ui>N/A — GUI 없음</ui>
+    <fs>PASS — oracle 파일 pathlib.Path + utf-8 로드 안전</fs>
+    <pd>PASS — MT-1~MT-5 micro-task 경계 명확, 함수 분리</pd>
+    <sec>PASS — 하드코딩 시크릿 없음, 외부 네트워크 없음</sec>
+    <al>PASS — 빈 컨테이너/None/0 처리, INVALID_STATE 무시, is_repeat 로직 확인</al>
+    <build>N/A — EXE 빌드 대상 아님</build>
+  </category_check>
+  <result>[PASS]</result>
+  <numeric_score>110</numeric_score>
+  <test_results>
+    <unit_tests>14 passed</unit_tests>
+    <e2e_tests>3 passed</e2e_tests>
+    <full_suite>449 passed</full_suite>
+  </test_results>
+  <verdict>PASS</verdict>
+  <micro_task_boundary>
+    <mt id="MT-1">
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_functions>pipeline._init_state, pipeline._collect_pipeline_metrics</affected_functions>
+      <verdict>PASS</verdict>
+    </mt>
+    <mt id="MT-2">
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_functions>pipeline._wait_for_github_ci, pipeline._github_actions_duration_summary</affected_functions>
+      <verdict>PASS</verdict>
+    </mt>
+    <mt id="MT-3">
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_functions>pipeline._failure_retry_summary</affected_functions>
+      <verdict>PASS</verdict>
+    </mt>
+    <mt id="MT-4">
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_functions>pipeline.cmd_metrics, pipeline._format_metrics_report_json, pipeline._format_metrics_report_markdown</affected_functions>
+      <verdict>PASS</verdict>
+    </mt>
+    <mt id="MT-5">
+      <target_files>
+        <file>tests/test_metrics_observability_82e3.py</file>
+        <file>tests/e2e/test_metrics_cli_paths_82e3.py</file>
+        <file>tests/oracles/IMP-20260526-82E3/oracle_manifest.json</file>
+      </target_files>
+      <affected_functions>tests.test_metrics_observability_82e3, tests.e2e.test_metrics_cli_paths_82e3</affected_functions>
+      <verdict>PASS</verdict>
+    </mt>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <scope_exceeded>false</scope_exceeded>
+  </micro_task_boundary>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    tests/test_metrics_observability_82e3.py의 from __future__ import annotations는 테스트 전용 파일이므로 감점 없음.
+    metrics report --json의 total_elapsed_display "확인 불가"는 정상 동작.
+  </improvement_suggestions>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py,tests/test_metrics_observability_82e3.py,tests/e2e/test_metrics_cli_paths_82e3.py,tests/oracles/IMP-20260526-82E3/oracle_manifest.json</git_diff_files>
+    <manifest_files>pipeline.py,tests/test_metrics_observability_82e3.py,tests/e2e/test_metrics_cli_paths_82e3.py,tests/oracles/IMP-20260526-82E3/oracle_manifest.json</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <pipeline_id>IMP-20260526-82E3</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_metrics_observability_82e3.py</file>
+      <file>tests/e2e/test_metrics_cli_paths_82e3.py</file>
+      <file>tests/oracles/IMP-20260526-82E3/oracle_manifest.json</file>
+    </evidence>
+    <status>READY_FOR_GATES</status>
+  </handover>
+</qa_report>

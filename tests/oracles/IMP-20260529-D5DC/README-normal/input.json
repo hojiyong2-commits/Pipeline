@@ -1,0 +1,9 @@
+{
+  "case_id": "README-normal",
+  "case_kind": "normal",
+  "description": "v1 안정화 릴리즈를 위해 README.md가 갖춰야 하는 사용자 관점 필수 섹션 검증",
+  "source_file": "README.md",
+  "expected_source": "user_provided",
+  "verification_method": "content_grep",
+  "rationale": "README는 v1 사용자의 첫 진입점이므로 8개 핵심 게이트(Security/Golden Task/Metrics/Budget/Workspace Hygiene/Oracle Quality/Real CLI Path E2E)와 빠른 시작/실패 대응/제한사항이 모두 명시되어야 한다"
+}

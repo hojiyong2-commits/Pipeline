@@ -1,0 +1,60 @@
+- 자동 검사 결과: CI run 26583023252 PASS
+- 커밋: c733602 (최신)
+- 브랜치: impl/IMP-20260528-3898
+- 테스트 통과: 469/469 (로컬), CI 자동 검사 통과
+
+### 변경된 파일
+
+새로 추가됨:
+- tests/e2e/test_real_cli_paths.py (E2E 테스트 3개 추가)
+- tests/oracles/IMP-20260528-3898/ (oracle 파일 6개)
+
+수정됨:
+- pipeline.py (WORKSPACE_INTERNAL_PATTERNS SSoT, _is_internal_artifact(), gates preflight-pr-impl 강화, _deployment_artifacts Tuple allowlist 강화)
+- .github/workflows/ci.yml (구현 PR 위생 검사 step에 Python 기반 preflight-pr-impl 추가)
+- .gitignore (13개 내부 산출물 패턴 추가)
+- core/acceptance/scorers.py (관련 수정)
+
+삭제됨:
+- .pipeline/phase_attestation_request.json (D — main의 이전 phase 증거 파일 제거)
+- .pipeline/phase_evidence/IMP-20260516-D069/pm/** (D — 이전 파이프라인 증거 파일 제거)
+
+### 이전 REJECT와 수정 내용
+
+- 이전 REJECT 사유: preflight-pr-impl이 .pipeline/phase_evidence를 명시 허용하여 impl PR에 내부 산출물이 포함됨
+- 수정 내용: .pipeline/** 전체를 blocked 패턴으로 분류, E2E 회귀 방지 테스트 추가
+- 추가 수정: mypy var-annotated 오류 수정, oracle manifest O002 해시 갱신
+
+## 소요 시간 요약
+```
+=== 파이프라인 metrics 요약 [확인 불가] ===
+
+※ 임시 pipeline — CI 환경에서 실제 pipeline_state를 사용할 수 없습니다.
+
+[ 전체 소요 시간 ]
+  시작: 확인 불가
+  종료: 확인 불가
+  소요: 확인 불가
+
+[ Phase별 소요 시간 ]
+  확인 불가
+
+[ Gate별 상태 및 소요 시간 ]
+  확인 불가
+
+[ 실패/재시도 요약 ]
+  총 실패 패킷: 0건
+
+[ GitHub Actions 요약 ]
+  run_id: 확인 불가
+  결과: 확인 불가
+  소요: 확인 불가
+  URL: 확인 불가
+
+[ 병목 요약 ]
+  확인 불가
+
+[ 에이전트/세션별 소요 시간 ]
+  (토큰 사용량: 확인 불가)
+
+```

@@ -1,0 +1,11 @@
+{
+  "task_id": "GT-002-internal-artifact-blocked",
+  "result": "FAIL",
+  "return_phase": "dev",
+  "mismatches": [],
+  "forbidden_violations": [
+    "scope_manifest_MT-1.json",
+    "module_design_MT-1.xml"
+  ],
+  "recorded_at": "2026-05-29T12:08:17Z"
+}

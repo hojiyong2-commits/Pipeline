@@ -1,0 +1,14 @@
+{
+  "case_kind": "normal",
+  "description": "7일 이상 된 build_report*.xml, qa_report*.xml, comment_*.txt 파일이 스캔 후보로 잡힌다",
+  "workspace_fixture": {
+    "files": [
+      {"path": "build_report_OLD123.xml", "mtime_days_ago": 30, "git_status": "untracked"},
+      {"path": "qa_report_OLD456.xml",   "mtime_days_ago": 14, "git_status": "untracked"},
+      {"path": "comment_999.txt",        "mtime_days_ago": 10, "git_status": "untracked"},
+      {"path": "pr_body_999.txt",        "mtime_days_ago": 8,  "git_status": "untracked"}
+    ],
+    "active_pipeline_id": "IMP-20260601-OTHER"
+  },
+  "command": "python pipeline.py hygiene scan --json --older-than 7d"
+}

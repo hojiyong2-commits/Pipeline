@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>IMP-20260531-AEF0</pipeline_id>
+  <agent_run_id>build-3b8d02b71a110c95</agent_run_id>
+  <section_1_command>N/A — meta-task (pipeline.py 내부 함수 + 테스트 파일 변경, EXE 빌드 불필요)</section_1_command>
+  <section_2_output>N/A</section_2_output>
+  <section_3_verification>meta-task: EXE 빌드 대상 아님. pipeline.py 함수 변경 및 E2E 테스트 추가는 PyInstaller 빌드 없이 직접 검증.</section_3_verification>
+  <section_4_artifacts>없음 — EXE 생성 불필요</section_4_artifacts>
+  <section_5_skip_reason>meta-task — pipeline.py 내부 로직 및 테스트 파일만 변경됨</section_5_skip_reason>
+  <section_6_qa_mapping>QA PASS (numeric_score=108/120, run_id=qa-b1960c04698a704a)</section_6_qa_mapping>
+  <status>N/A</status>
+  <exe_path>N/A</exe_path>
+</build_report>

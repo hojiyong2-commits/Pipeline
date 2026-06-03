@@ -1,0 +1,138 @@
+<!-- pipeline-human-acceptance-packet -->
+## 최종 확인 안내
+
+이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, **아래 결과 요약과 실제 결과물**이 요청과 맞는지만 확인하세요.
+이 안내는 CI가 끝날 때마다 새 댓글을 만들지 않고 같은 댓글을 갱신합니다. GitHub가 댓글 생성 시각을 오래전으로 보여도 아래 갱신 시각이 최신 기준입니다.
+
+### 먼저 볼 결론
+
+- 판단 정보 상태: **판단 가능**
+- 안내 — 아래 요약과 결과물이 요청과 맞으면 승인(ACCEPT)하면 됩니다.
+- PR 제목: feat(IMP-20260601-0DF5): pipeline.py에 hygiene scan/archive/schedule 서브커맨드 추가 [PM phase attestation]
+
+### 이번 요청과 완료 결과
+
+IMP-20260601-0DF5: pipeline.py에 `hygiene` 서브커맨드 추가 (scan / archive / schedule)
+7일 이상 된 임시 산출물(build_report*.xml, qa_report*.xml, failure_packet.json 등)을 스캔하거나
+Google Drive 찌꺼기 폴더로 이동하는 기능을 pipeline.py에 추가하고,
+Windows 작업 스케줄러 등록 명령도 구현했습니다.
+
+### 사용자가 실제로 확인할 것
+
+```powershell
+# 후보 파일 목록 확인 (파일 이동 없음)
+python pipeline.py hygiene scan --older-than 7d --json
+# 실제 이동 전 dry-run 확인
+python pipeline.py hygiene archive --older-than 7d --json --dry-run
+# Windows 작업 스케줄러 등록 (dry-run)
+python pipeline.py hygiene schedule install --dry-run
+# 스케줄 상태 확인
+python pipeline.py hygiene schedule status
+```
+
+### 기대 결과와 실제 결과 비교
+
+| 항목 | 기대 | 실제 |
+|---|---|---|
+| E2E 테스트 | 12개 PASS | 12/12 PASS |
+| QA 점수 | 96 이상 | 116/120 |
+| 보호 파일 이동 방지 | pipeline.py, CLAUDE.md 등 이동 안 됨 | PASS |
+| dry-run 모드 | moved=[] 반환 | PASS |
+| 스케줄러 dry-run | schtasks 명령어 출력 | PASS |
+| GitHub CI | PASS | PASS (run_id: 26819820352) |
+
+### 중요한 선택과 트레이드오프
+
+1. **SSoT 상수 도입**: `HYGIENE_ARCHIVE_PATTERNS`, `HYGIENE_PROTECTED_PATHS`, `HYGIENE_PROTECTED_PREFIXES` 를 pipeline.py 상단에 정의하여 한 곳에서 관리
+2. **git tracked 파일만 대상**: rglob 대신 `git ls-files` 기반 파일 목록으로 실제 관리되는 파일만 스캔
+3. **cleanup_manifest.json 듀얼 저장**: `.pipeline/hygiene/`과 `pipeline_contracts/{pid}/`에 모두 저장하여 oracle gate 검증 가능
+
+### 남은 위험과 주의점
+
+- 별도 주의점이 적혀 있지 않습니다.
+
+### 추가 개선 포인트
+
+- 별도 후속 개선 포인트가 적혀 있지 않습니다.
+
+### GitHub가 자동으로 확인한 것
+
+- 자동 검사: 통과
+- 마지막 갱신: 2026-06-02 13:12:25 UTC
+- 필수 검사 이름: `tests`
+- 실제로 실행한 검사: `python -m pytest -q`
+- 이번 변경 번호: `29054c75ed412c4e2f7a7528e5524a004c2d65f0`
+- 작업 흐름: `impl/IMP-20260601-0DF5` 브랜치를 `main` 브랜치로 합치기
+- 자동 검사 결과와 첨부파일 보기: https://github.com/hojiyong2-commits/Pipeline/actions/runs/26821932092
+
+### 작업 담당자가 보고한 검증
+
+- Technical gate: PASS (ruff, mypy, bandit, pytest)
+- Oracle gate: PASS (12개 E2E 테스트, score=100)
+- GitHub CI gate: PASS (run_id: 26819820352, head SHA: 37cdcb5)
+- QA phase: PASS (116/120)
+- Build phase: N/A (meta-task)
+- Phase attestation: PM/Dev/QA/Build 모두 PASS
+---
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+### 변경된 파일
+
+- 수정됨: `CLAUDE.md` (추가 34줄, 삭제 0줄)
+- 수정됨: `RELEASE_NOTES.md` (추가 36줄, 삭제 0줄)
+- 수정됨: `pipeline.py` (추가 896줄, 삭제 0줄)
+- 새 파일: `tests/e2e/test_hygiene_0df5.py` (추가 317줄, 삭제 0줄)
+
+### 사용자가 확인해야 할 중요 파일 변경
+
+- `CLAUDE.md`
+- `pipeline.py`
+- `tests/e2e/test_hygiene_0df5.py`
+
+### 승인 전에 볼 것
+
+- 위 **사용자가 실제로 확인할 것**에 적힌 결과 링크/경로를 여세요.
+- 첨부파일이 있으면 위 자동 검사 링크에서 여세요.
+- 화면, 엑셀, EXE, 생성 파일이 **기대 결과와 실제 결과 비교**와 맞는지 확인하세요.
+- 업무 결과물이 따로 없는 규칙/문서 작업이면, **이번 요청과 완료 결과**, 자동 검사 통과 여부, 중요 파일 변경 목록을 확인하세요.
+- 코드 내용을 직접 이해하려고 애쓰지 않아도 됩니다. 요청한 결과가 나왔는지, 원하지 않은 결과물이 섞이지 않았는지만 보면 됩니다.
+- 결과가 틀리거나 빠졌으면 거절(REJECT)을 고르고 짧게 이유를 적으세요.
+
+### 결정 기준
+
+- 판단 정보 상태가 **판단 가능**이고, 결과물이 요청과 맞으면 승인(ACCEPT).
+- 판단 정보 상태가 **정보 부족**이면 ACCEPT하지 말고 보완 요청 또는 거절(REJECT).
+- 결과가 없거나, 데이터/화면이 틀리거나, 원하지 않은 파일이 섞였으면 거절(REJECT).
+
+## 소요 시간 요약
+
+=== 파이프라인 metrics 요약 [확인 불가] ===
+
+※ pipeline_state.json 없음 — CI 환경에서 실제 pipeline_state를 사용할 수 없습니다.
+
+[ 전체 소요 시간 ]
+  시작: 확인 불가
+  종료: 확인 불가
+  소요: 확인 불가
+
+[ Phase별 소요 시간 ]
+  확인 불가
+
+[ Gate별 상태 및 소요 시간 ]
+  확인 불가
+
+[ 실패/재시도 요약 ]
+  총 실패 패킷: 0건
+
+[ GitHub Actions 요약 ]
+  run_id: 확인 불가
+  결과: 확인 불가
+  소요: 확인 불가
+  URL: 확인 불가
+
+[ 병목 요약 ]
+  확인 불가
+
+[ 에이전트/세션별 소요 시간 ]
+  (토큰 사용량: 확인 불가)
+

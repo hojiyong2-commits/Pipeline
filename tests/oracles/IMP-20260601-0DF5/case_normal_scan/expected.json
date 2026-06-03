@@ -1,0 +1,13 @@
+{
+  "status": "OK",
+  "candidates": [
+    {"path": "build_report_OLD123.xml", "age_days_gte": 7, "blocked": false},
+    {"path": "qa_report_OLD456.xml",   "age_days_gte": 7, "blocked": false},
+    {"path": "comment_999.txt",        "age_days_gte": 7, "blocked": false},
+    {"path": "pr_body_999.txt",        "age_days_gte": 7, "blocked": false}
+  ],
+  "excluded_reasons_must_not_contain": ["git_tracked", "trust_root", "active_pipeline"],
+  "blocked": [],
+  "moved": [],
+  "note": "scan 모드는 후보만 표시. 실제 이동 없음."
+}

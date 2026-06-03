@@ -1,0 +1,37 @@
+﻿<!-- pipeline-human-acceptance-packet -->
+## ���� Ȯ�� �ȳ�
+
+�� ����� ����� ���� ����/���� �Ǵܿ� ���˴ϴ�.
+**�Ʒ� Ȯ�� �ڵ带 ���ؼ��� ������ �����մϴ�.**
+
+�Ǵ� ���� ����: **�Ǵ� ����**
+
+### Ȯ���� �����
+�����: tests/test_legacy_cleanup_b0ab.py
+PR: https://github.com/hojiyong2-commits/Pipeline/pull/376
+GitHub Actions: https://github.com/hojiyong2-commits/Pipeline/actions/runs/26709134557
+���� ��û ID: e94b304d
+
+### ����� ���� (11��)
+- .claude/agents/pm-agent.md
+- .codex/agents/build-agent.toml
+- .codex/agents/pm-agent.toml
+- .codex/agents/test-harness-agent.toml
+- AGENTS.md
+- pipeline.py
+- tests/oracles/IMP-20260531-B0AB/edge_user_confirmed_still_blocked/expected.json
+- tests/oracles/IMP-20260531-B0AB/edge_user_confirmed_still_blocked/input.json
+- tests/oracles/IMP-20260531-B0AB/normal_legacy_cleanup_verify/expected.json
+- tests/oracles/IMP-20260531-B0AB/normal_legacy_cleanup_verify/input.json
+- tests/test_legacy_cleanup_b0ab.py
+
+### ���� ���
+������� Ȯ���Ͻ� �� �Ʒ� �ڵ带 **��Ȯ��** �Է��ϼ���.
+
+**[O] ����:** ACCEPT-IMP-20260531-B0AB-G4GJLSJU
+
+**[X] ����:** REJECT-IMP-20260531-B0AB-G4GJLSJU: ���� ����
+
+����: �� �ڵ�� ��ȸ���Դϴ�. PR�� �� Ŀ���� push�Ǹ� �� �ڵ尡 �ʿ��մϴ�.
+��߱�: python pipeline.py gates request-accept --evidence <�����>
+

@@ -1,0 +1,36 @@
+<!-- pipeline-human-acceptance-packet -->
+## 최종 확인 안내
+
+이 댓글은 사용자 최종 승인/거절 판단에 사용됩니다.
+**아래 확인 코드를 통해서만 승인이 가능합니다.**
+
+판단 정보 상태: **판단 가능**
+
+### 확인할 결과물
+결과물: tests/test_legacy_cleanup_b0ab.py
+PR: https://github.com/hojiyong2-commits/Pipeline/pull/376
+GitHub Actions: https://github.com/hojiyong2-commits/Pipeline/actions/runs/26709061863
+승인 요청 ID: e94b304d
+
+### 변경된 파일 (11개)
+- .claude/agents/pm-agent.md
+- .codex/agents/build-agent.toml
+- .codex/agents/pm-agent.toml
+- .codex/agents/test-harness-agent.toml
+- AGENTS.md
+- pipeline.py
+- tests/oracles/IMP-20260531-B0AB/edge_user_confirmed_still_blocked/expected.json
+- tests/oracles/IMP-20260531-B0AB/edge_user_confirmed_still_blocked/input.json
+- tests/oracles/IMP-20260531-B0AB/normal_legacy_cleanup_verify/expected.json
+- tests/oracles/IMP-20260531-B0AB/normal_legacy_cleanup_verify/input.json
+- tests/test_legacy_cleanup_b0ab.py
+
+### 승인 방법
+결과물을 확인하신 후 아래 코드를 **정확히** 입력하세요.
+
+**[O] 승인:** ACCEPT-IMP-20260531-B0AB-G4GJLSJU
+
+**[X] 거절:** REJECT-IMP-20260531-B0AB-G4GJLSJU: 거절 이유
+
+주의: 이 코드는 일회용입니다. PR에 새 커밋이 push되면 새 코드가 필요합니다.
+재발급: python pipeline.py gates request-accept --evidence <결과물>
