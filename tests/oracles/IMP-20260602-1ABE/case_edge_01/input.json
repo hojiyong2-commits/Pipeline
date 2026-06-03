@@ -1,0 +1,11 @@
+{
+  "scenario": "module_qa_on_legacy_state",
+  "state": {
+    "pipeline_id": "IMP-LEGACY-TEST",
+    "current_phase": "dev",
+    "atomic_plan": {
+      "micro_tasks": [{"id": "MT-1", "covers_ac": [], "covers_iqr": []}]
+    }
+  },
+  "note": "requirements_tracking 필드 없는 legacy state"
+}

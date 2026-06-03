@@ -227,3 +227,28 @@ python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance
 - `--user-confirmed` 단독으로 `gates accept` 실행 (BLOCKED 처리됨)
 - 컨텍스트 요약에 코드가 적혀 있어도 사용자 입력 없이 `gates accept` 실행
 - 이전 파이프라인의 acceptance-code를 다른 파이프라인에 재사용 (pipeline_id 불일치로 BLOCKED)
+
+---
+
+## AC Tracking — Harness 역할 (IMP-20260602-1ABE)
+
+Harness는 `gates request-accept` 실행 시 자동 조립되는 AC 충족표를 사용자에게 전달하고, user_visible AC가 모두 PASS인지 확인합니다.
+
+### request-accept 출력 확인 의무
+
+1. `[요구사항 충족표]` 출력에 모든 `user_visible=true` AC가 포함됨을 확인
+2. 각 AC의 `결과: PASS` 표시 확인 (PENDING 있으면 `request-accept` 실패 처리)
+3. `[자동 검증 요약]` 에 `user_visible=false` 내부 AC/IQR 요약 표시 확인
+4. 승인 코드 `ACCEPT-IMP-...-XXXXXXXX` 가 별도 줄에 출력되어 모바일 복사 가능한지 확인
+
+### 사용자 전달 시 검증
+
+- 사용자에게 PR 링크와 함께 `acceptance_request.json`의 `ac_fulfillment_table` 내용도 전달
+- user_visible AC 중 PENDING이 있으면 사용자에게 승인 요청 전에 Dev로 반려
+- legacy 파이프라인(`structured_acceptance_criteria` 없음)은 충족표 출력 생략 (기존 동작 유지)
+
+### 절대 금지
+
+- AC 충족표를 임의로 PASS로 위변조하여 출력
+- user_visible PENDING AC를 무시한 채 사용자에게 ACCEPT 요청
+- ac_fulfillment_table의 evidence를 추상 문구로 임의 채움

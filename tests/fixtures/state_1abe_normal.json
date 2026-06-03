@@ -1,0 +1,325 @@
+{
+  "version": "1.2.0",
+  "pipeline_id": "IMP-20260602-1ABE",
+  "type": "IMP",
+  "description": "요구사항 추적 구조 개선 — PM structured AC(AC-N), MT covers_ac 연결, Dev implemented_tasks, QA criteria_verification, Oracle ac_ids, Codex AC Coverage Review, request-accept AC 충족표 출력",
+  "created_at": "2026-06-02T14:25:43Z",
+  "updated_at": "2026-06-03T01:10:11Z",
+  "pipeline_started_at": "2026-06-02T14:25:43Z",
+  "pipeline_completed_at": null,
+  "acceptance_requested_at": null,
+  "acceptance_recorded_at": null,
+  "total_elapsed_seconds": null,
+  "current_phase": "dev",
+  "blocked": false,
+  "blocked_reason": null,
+  "terminal_state": null,
+  "harness_fail_count": 0,
+  "phases": {
+    "pm": {
+      "status": "DONE",
+      "completed_at": "2026-06-02T22:00:00Z",
+      "evidence": "step_plan.xml",
+      "agent_run_id": "pm-fixture-001",
+      "started_at": "2026-06-02T21:50:00Z"
+    },
+    "dev": {
+      "status": "PENDING",
+      "started_at": "2026-06-03T00:58:10Z",
+      "completed_at": null
+    },
+    "qa": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null
+    },
+    "sec": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null
+    },
+    "build": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null
+    },
+    "harness": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null
+    },
+    "architect": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null
+    }
+  },
+  "event_log": [
+    {
+      "ts": "2026-06-03T00:59:26Z",
+      "msg": "acceptance request 신규 발급: request_id=97f3f9e9 nonce=4QSXRD5U"
+    },
+    {
+      "ts": "2026-06-03T01:09:16Z",
+      "msg": "acceptance request 재사용: request_id=97f3f9e9 nonce=4QSXRD5U"
+    },
+    {
+      "ts": "2026-06-03T01:10:11Z",
+      "msg": "acceptance request 재사용: request_id=97f3f9e9 nonce=4QSXRD5U"
+    }
+  ],
+  "agent_runs": {},
+  "external_gates": {
+    "enabled": true,
+    "mode": "three_gate",
+    "technical": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "oracle": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "acceptance": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    },
+    "github_ci": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "report_file": null,
+      "notes": []
+    }
+  },
+  "requirements_tracking": {
+    "enabled": true,
+    "schema_version": "1",
+    "recorded_at": "2026-06-02T22:00:00Z"
+  },
+  "structured_acceptance_criteria": [
+    {
+      "ac_id": "AC-1",
+      "requirement": "PM step_plan.xml에 criterion AC-N 블록 필수화 (must_verify, source, user_visible, expected_evidence 포함)",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": " 함수 구현 + 8개 검증 규칙 적용"
+    },
+    {
+      "ac_id": "AC-2",
+      "requirement": "추상 AC 문구 단독 차단 — ABSTRACT_AC_PATTERNS 15개 패턴 SSoT 적용",
+      "must_verify": true,
+      "source": "user",
+      "user_visible": true,
+      "expected_evidence": " 상수 정의 +  구현"
+    }
+  ],
+  "atomic_plan": {
+    "micro_tasks": [
+      {
+        "id": "MT-1",
+        "covers_ac": [
+          "AC-1",
+          "AC-2"
+        ]
+      }
+    ]
+  },
+  "module_gates": {
+    "enabled": true,
+    "mode": "incremental_module_gate",
+    "sequence": [],
+    "modules": {},
+    "integration": {
+      "status": "PENDING",
+      "completed_at": null,
+      "report_file": null,
+      "evidence": null,
+      "notes": []
+    }
+  },
+  "contract_v2": {
+    "enabled": true,
+    "frozen": true,
+    "status": "frozen",
+    "contract_hash": "633dc761602eaba613c89b0e0fa2191073f6e0c206d1e8f10ecadda2ccfcffca",
+    "test_set_hash": "0dc01d712914d202f3c972902207a9a0c5ee66beb4e50f9f90c3283780612f7b",
+    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260602-1ABE\\task_contract.json",
+    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260602-1ABE\\test_set.json",
+    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260602-1ABE\\acceptance_summary.md"
+  },
+  "phase_attestations": {
+    "enabled": true,
+    "mode": "github_actions_per_phase",
+    "required_phases": [
+      "pm",
+      "dev",
+      "qa",
+      "build"
+    ],
+    "phases": {
+      "pm": {
+        "status": "PASS",
+        "completed_at": "2026-06-02T21:58:17Z",
+        "phase": "pm",
+        "run_id": "26850341229",
+        "commit_sha": "5ec8b15c23788c7ac8ecda6bed13e756ce514e66",
+        "evidence": "github_actions_phase_run:26850341229",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260602-1ABE\\gates\\phase_ci\\pm_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
+      },
+      "dev": {
+        "status": "PASS",
+        "completed_at": "2026-06-03T00:14:29Z",
+        "phase": "dev",
+        "run_id": "26855647749",
+        "commit_sha": "d83877da07c15a6bef6aa2c4694ca0e619f390e1",
+        "evidence": "github_actions_phase_run:26855647749",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260602-1ABE\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
+      },
+      "qa": {
+        "status": "PASS",
+        "completed_at": "2026-06-03T00:39:43Z",
+        "phase": "qa",
+        "run_id": "26856520108",
+        "commit_sha": "9b4dd1d3a9ae9baf6b7d4baf39ca6615abca639d",
+        "evidence": "github_actions_phase_run:26856520108",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260602-1ABE\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
+      },
+      "build": {
+        "status": "PASS",
+        "completed_at": "2026-06-03T00:43:29Z",
+        "phase": "build",
+        "run_id": "26856642218",
+        "commit_sha": "30fc592ed6cf30c70de3abc625faa9d1fd40e61c",
+        "evidence": "github_actions_phase_run:26856642218",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260602-1ABE\\gates\\phase_ci\\build_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
+      }
+    }
+  },
+  "execution_profile": {
+    "mode": "HIGH_RISK",
+    "status": "ACTIVE",
+    "reason": "Trust-Root 파일 6개(pipeline.py, CLAUDE.md, pm-agent.md, dev-agent.md, qa-agent.md, test-harness-agent.md) 수정 포함.\n      pipeline.py는 파이프라인 엔진이며 AC 파싱/검증 로직 변경은 모든 기존 파이프라인에 영향을 줄 수 있음.\n      HIGH_RISK 프로필 필수. conservative repair 적용. per-phase CI 필수.",
+    "max_micro_tasks": null,
+    "product_code_write_allowed": true,
+    "phase_ci_mode": "per_phase",
+    "repair_mode": "conservative",
+    "risk_review_required": true,
+    "risk_categories": [
+      "core_parser_logic",
+      "pipeline_protocol"
+    ],
+    "declared_at": "2026-06-02T21:47:57Z",
+    "escalated_at": null,
+    "escalation_reason": null,
+    "uncertainty": {
+      "p0_questions": 0,
+      "p1_questions": 1,
+      "output_format_clear": true
+    },
+    "blast_radius": {
+      "expected_changed_files": 9,
+      "expected_changed_functions": 18,
+      "expected_changed_lines": 420
+    },
+    "risk_flags": {
+      "data_deletion": false,
+      "file_move": false,
+      "external_api": false,
+      "auth_or_secret": false,
+      "pipeline_protocol": true,
+      "build_or_deploy": false,
+      "core_parser_logic": true,
+      "database_or_migration": false,
+      "new_dependency": false
+    }
+  },
+  "oracle_quality": {
+    "status": "PASS",
+    "failures": [],
+    "case_summary": {
+      "normal": 1,
+      "edge": 1,
+      "error": 1,
+      "regression": 0
+    }
+  },
+  "attempt_budget": {
+    "config": {
+      "dev_max_attempts": 3,
+      "qa_max_attempts": 3,
+      "gate_max_attempts": 5,
+      "repeat_failure_code_threshold": 3
+    },
+    "attempts": {
+      "dev": [],
+      "qa": [],
+      "gate": []
+    },
+    "blocked_phases": {}
+  },
+  "pm_clarification_gate": {
+    "clarification_needed": false,
+    "assumptions": "없음",
+    "acceptance_criteria_source": "user",
+    "acceptance_criteria": [
+      "AC-1: step_plan.xml에 structured AC 없거나 MT에 covers_ac 없거나 must_verify AC가 MT와 미연결이면 PM done 실패. 추상 문구 차단.",
+      "AC-2: PM done 후 requirements_tracking.enabled=true 플래그와 structured_acceptance_criteria가 pipeline_state.json에 저장됨. legacy summary 자동 생성. 역방향 생성 금지.",
+      "AC-3: requirements_tracking.enabled=true 파이프라인에서 module qa 시 ac_verification 없으면 FAIL. requirements_tracking 없는 오래된 state만 하위 호환.",
+      "AC-4: request-accept 시 user_visible AC별 충족표를 줄바꿈 형식으로 출력. user_visible AC가 PASS 아니면 차단. ac_fulfillment_table 저장.",
+      "AC-5: requirements_tracking.enabled=true 파이프라인에서 Dev scope_manifest에 implemented_tasks 없거나 PM에 없는 AC id 참조 시 Dev done 실패.",
+      "AC-6: requirements_tracking.enabled=true 파이프라인에서 oracle entry에 ac_ids 없거나 PM에 없는 AC id 참조 시 oracle audit 실패.",
+      "AC-7: codex_review_result.json에 criteria_review와 coverage_checks 7개 bool 필드 모두 있어야 QA 진입 가능. false이거나 누락 시 QA 차단.",
+      "AC-8: pm-agent.md, dev-agent.md, qa-agent.md, test-harness-agent.md, CLAUDE.md에 AC Tracking 섹션 추가됨."
+    ],
+    "recorded_at": "2026-06-02T21:47:57Z"
+  },
+  "pm_analysis_gate": {
+    "decomp": true,
+    "clarification": true,
+    "roadmap": true,
+    "judgment_confirmed": false
+  },
+  "failure_packets": [],
+  "failure_summary": {},
+  "outputs": {
+    "items": []
+  },
+  "codex_review_gates": {
+    "codex_code_accepted_at": "2026-06-03T00:18:06Z",
+    "codex_code_result": "ACCEPT"
+  },
+  "protocol_evolution_decision": null,
+  "phase_timings": {},
+  "gate_timings": {},
+  "agent_timings": {},
+  "github_actions_timings": {
+    "WAITING_FOR_TRIGGER": 0,
+    "QUEUED": 0,
+    "IN_PROGRESS": 0,
+    "COMPLETED": 0,
+    "TIMEOUT": 0
+  }
+}

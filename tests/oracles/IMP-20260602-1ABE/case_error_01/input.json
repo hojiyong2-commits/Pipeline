@@ -1,0 +1,12 @@
+{
+  "scenario": "pm_done_with_abstract_ac_text",
+  "step_plan": {
+    "has_acceptance_criteria": true,
+    "criteria": [
+      {"id": "AC-1", "text": "정상 동작"}
+    ],
+    "micro_tasks": [
+      {"id": "MT-1", "covers_ac": ["AC-1"]}
+    ]
+  }
+}

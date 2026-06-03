@@ -1,0 +1,14 @@
+{
+  "scenario": "pm_done_with_valid_structured_ac",
+  "step_plan": {
+    "has_acceptance_criteria": true,
+    "criteria": [
+      {"id": "AC-1", "text": "매주 월요일 09:00에 Windows 작업 스케줄러가 등록된다", "must_verify": true, "source": "user"},
+      {"id": "AC-2", "text": "7일 이상 지난 내부 산출물만 G:\\내 드라이브\\터미널\\찌꺼기\\YYYY-MM-DD 로 이동된다", "must_verify": true, "source": "user"}
+    ],
+    "micro_tasks": [
+      {"id": "MT-1", "covers_ac": ["AC-1"], "title": "스케줄러 등록 로직"},
+      {"id": "MT-2", "covers_ac": ["AC-2"], "title": "아카이브 필터 로직"}
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "outcome": "PASS",
+  "reason": "requirements_tracking 필드 없는 legacy state에서 ac_verification 없이 module qa PASS 허용",
+  "legacy_mode": true
+}
