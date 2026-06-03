@@ -3312,6 +3312,26 @@ def _compute_file_sha256(path: str) -> Optional[str]:
         return None
 
 
+# ─── IMP-20260603-9934 MT-1: packet SHA-256 계산 ────────────────────────────────
+def _compute_packet_sha256(packet_path: "Union[str, Path]") -> Optional[str]:
+    """human_acceptance_packet.md 파일의 SHA-256 hex digest를 반환한다.
+
+    acceptance_request.json에 저장되는 packet_sha256 값으로 사용된다.
+    파일이 없거나 읽기 불가이면 None을 반환한다 (예외 미발생).
+
+    Args:
+        packet_path: human_acceptance_packet.md 경로 (str 또는 Path).
+    Returns:
+        SHA-256 hex digest 문자열 또는 None (파일 없음 / IO 오류).
+    Raises:
+        없음.
+    """
+    if packet_path is None:
+        return None
+    path_str = str(packet_path)
+    return _compute_file_sha256(path_str)
+
+
 # ─── IMP-20260531-AEF0 MT-1: nonce 재사용 판단 헬퍼 ─────────────────────────────
 def _should_reuse_acceptance_nonce(
     existing_req: Dict[str, Any],
@@ -3370,17 +3390,24 @@ def _write_acceptance_request(
     pr_url: str,
     pr_head_sha: str,
     ci_run_id: str,
+    packet_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """acceptance_request.json 작성 후 데이터 dict 반환.
 
+    IMP-20260603-9934 MT-1: schema_version=2로 확장.
+    packet_path, packet_sha256, packet_frozen_at 3개 필드를 추가 저장한다.
+    packet_path가 None이면 _packet_output_path() 경로를 사용한다.
+    packet 파일이 없으면 packet_sha256=None, packet_frozen_at=None으로 기록한다.
+
     Args:
-        pipeline_id: 활성 pipeline_id (예: IMP-20260531-BBDB).
+        pipeline_id: 활성 pipeline_id (예: IMP-20260603-9934).
         evidence: 결과물 경로(파일) 또는 URL(http://, https://).
         pr_url: 현재 PR URL (gh CLI 없으면 빈 문자열).
         pr_head_sha: PR head commit SHA (gh CLI 없으면 빈 문자열).
         ci_run_id: GitHub Actions run ID (gh CLI 없으면 빈 문자열).
+        packet_path: human_acceptance_packet.md 절대 경로 (None이면 자동 탐색).
     Returns:
-        기록된 acceptance_request 데이터 dict (status=PENDING).
+        기록된 acceptance_request 데이터 dict (status=PENDING, schema_version=2).
     Raises:
         TypeError: pipeline_id 또는 evidence가 None.
         ValueError: pipeline_id가 빈 문자열.
@@ -3399,8 +3426,16 @@ def _write_acceptance_request(
     request_id = str(uuid.uuid4())[:8]
     is_url = evidence.startswith(("http://", "https://"))
     evidence_sha256 = None if is_url else _compute_file_sha256(evidence)
+
+    # IMP-20260603-9934 MT-1: packet freeze 필드 계산
+    resolved_packet_path: Path = (
+        Path(packet_path) if packet_path is not None else _packet_output_path()
+    )
+    computed_packet_sha256 = _compute_packet_sha256(resolved_packet_path)
+    packet_frozen_at: Optional[str] = _now() if computed_packet_sha256 is not None else None
+
     data: Dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "pipeline_id": pipeline_id,
         "request_id": request_id,
         "nonce": nonce,
@@ -3412,6 +3447,10 @@ def _write_acceptance_request(
         "evidence_sha256": evidence_sha256,
         "evidence_url": evidence if is_url else None,
         "status": "PENDING",
+        # IMP-20260603-9934 MT-1: Final Packet Freeze Guard 필드 (schema_version=2)
+        "packet_path": str(resolved_packet_path),
+        "packet_sha256": computed_packet_sha256,
+        "packet_frozen_at": packet_frozen_at,
     }
     with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
@@ -10369,11 +10408,49 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
     실제 git/gh/state/acceptance_request 자료를 모아 human_acceptance_packet.md를 작성한다.
     acceptance_request.json이 있으면 승인 코드를 포함하고, 없으면 "승인 코드 발급 전" 라인을
     출력한다. 콘솔에 요약을 출력한다.
+
+    IMP-20260603-9934 MT-3: PENDING + packet_sha256 상태에서 기본 차단.
+    --force-new-request 옵션으로 해제 가능 (기존 PENDING을 EXPIRED로 처리 후 재생성).
+    _cmd_gates_accept는 NEVER 이 함수를 호출하지 않는다.
     """
     state = _require_state()
     state = _ensure_v210_fields(state)
     base_ref = str(getattr(args, "base", "origin/main") or "origin/main")
+    force_new_request = bool(getattr(args, "force_new_request", False))
+
+    # IMP-20260603-9934 MT-3: PENDING + packet_sha256 있으면 재생성 차단
     acceptance_request = _load_acceptance_request()
+    if (
+        not force_new_request
+        and acceptance_request is not None
+        and acceptance_request.get("status") == "PENDING"
+        and acceptance_request.get("packet_sha256") is not None
+    ):
+        req_id = acceptance_request.get("request_id", "(unknown)")
+        _die(
+            "[FINAL PACKET FREEZE] acceptance_request.json이 PENDING 상태입니다. "
+            "packet 재생성이 차단됩니다.\n"
+            f"  request_id: {req_id}\n"
+            "  이미 발급된 승인 코드로 진행하거나,\n"
+            "  강제 재생성이 필요하면 --force-new-request 옵션을 사용하세요:\n"
+            "  python pipeline.py report final-packet --force-new-request"
+        )
+
+    # IMP-20260603-9934 MT-3: --force-new-request 시 기존 PENDING을 EXPIRED로 처리
+    if force_new_request and acceptance_request is not None and acceptance_request.get("status") == "PENDING":
+        acceptance_request["status"] = "EXPIRED"
+        acceptance_request["expired_reason"] = "final_packet_regenerated"
+        try:
+            with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as _fh:
+                json.dump(acceptance_request, _fh, ensure_ascii=False, indent=2)
+            print(YELLOW(
+                "  [--force-new-request] 기존 PENDING 요청이 EXPIRED로 처리되었습니다. "
+                "새 packet을 생성합니다. 새 승인 코드가 필요하면 gates request-accept를 재실행하세요."
+            ))
+        except OSError:
+            pass
+        # 재로드 (EXPIRED 상태 반영)
+        acceptance_request = _load_acceptance_request()
     evidence = _collect_packet_evidence(
         state, acceptance_request=acceptance_request, base_ref=base_ref
     )
@@ -10405,7 +10482,30 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
 
     human_acceptance_packet.md를 읽어 PR 본문의 PIPELINE_FINAL_PACKET 블록을 교체한다.
     블록이 없으면 PR 본문 끝에 추가한다. gh CLI가 없으면 안내 후 graceful skip.
+
+    IMP-20260603-9934 MT-3: PENDING + packet_sha256 상태에서 기본 차단.
+    --force-new-request 옵션으로 해제 가능.
     """
+    force_new_request = bool(getattr(args, "force_new_request", False))
+
+    # IMP-20260603-9934 MT-3: PENDING + packet_sha256 있으면 PR 본문 업데이트 차단
+    _acceptance_req_upd = _load_acceptance_request()
+    if (
+        not force_new_request
+        and _acceptance_req_upd is not None
+        and _acceptance_req_upd.get("status") == "PENDING"
+        and _acceptance_req_upd.get("packet_sha256") is not None
+    ):
+        req_id = _acceptance_req_upd.get("request_id", "(unknown)")
+        _die(
+            "[FINAL PACKET FREEZE] acceptance_request.json이 PENDING 상태입니다. "
+            "PR 본문 업데이트가 차단됩니다.\n"
+            f"  request_id: {req_id}\n"
+            "  이미 발급된 승인 코드로 진행하거나,\n"
+            "  강제 갱신이 필요하면 --force-new-request 옵션을 사용하세요:\n"
+            "  python pipeline.py report update-pr-body --force-new-request"
+        )
+
     packet_path = _packet_output_path()
     if not packet_path.exists():
         _die(
@@ -14561,6 +14661,59 @@ def _format_ac_fulfillment_output(
     return "\n".join(lines)
 
 
+# ─── IMP-20260603-9934 MT-2: Final Packet Freeze Guard — gates accept 검증 ──────
+def _check_packet_freeze_status(req: Dict[str, Any]) -> Optional[str]:
+    """gates accept 호출 시 packet_sha256 freeze 상태를 검증한다.
+
+    IMP-20260603-9934 MT-2 핵심 로직:
+    - schema_version=1 또는 packet_sha256=None이면 검증 생략 (하위 호환).
+    - schema_version=2 + packet_sha256 있음: 현재 packet 파일의 sha256을 계산하여 비교.
+    - sha256 불일치 시 STALE_PACKET failure_code 문자열을 반환.
+    - 파일 없음/읽기 실패 시에도 STALE_PACKET 반환 (packet이 삭제된 경우 차단).
+
+    Args:
+        req: acceptance_request.json 데이터 dict (최소 schema_version, packet_sha256,
+             packet_path 필드 포함).
+    Returns:
+        None — 검증 통과 (하위 호환 포함).
+        str — 오류 메시지 (STALE_PACKET 차단 사유).
+    Raises:
+        없음.
+    """
+    schema_version = req.get("schema_version", 1)
+    stored_packet_sha256 = req.get("packet_sha256")
+
+    # schema_version=1 또는 packet_sha256=None이면 검증 생략 (legacy 하위 호환)
+    if schema_version != 2 or stored_packet_sha256 is None:
+        return None
+
+    stored_packet_path = req.get("packet_path")
+    if not stored_packet_path:
+        # packet_path 없음: 검증 불가 → STALE_PACKET 처리
+        return (
+            "[FINAL PACKET FREEZE] acceptance_request.json에 packet_path가 없습니다. "
+            "gates request-accept 를 재실행하세요."
+        )
+
+    current_sha256 = _compute_packet_sha256(stored_packet_path)
+    if current_sha256 is None:
+        return (
+            f"[FINAL PACKET FREEZE] packet 파일이 없거나 읽을 수 없습니다: {stored_packet_path}\n"
+            "  gates request-accept 를 재실행하거나 packet 파일을 복원하세요."
+        )
+
+    if current_sha256 != stored_packet_sha256:
+        return (
+            "[FINAL PACKET FREEZE] human_acceptance_packet.md가 request-accept 이후 변경되었습니다. "
+            "(STALE_PACKET)\n"
+            f"  저장된 sha256: {stored_packet_sha256[:16]}...\n"
+            f"  현재 sha256:   {current_sha256[:16]}...\n"
+            "  gates request-accept 를 재실행하여 새 코드를 발급받으세요."
+        )
+
+    return None
+
+
 def _check_packet_freshness_against_actual(
     packet_path: Path,
     actual_pr_head_sha: str,
@@ -14763,10 +14916,23 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         print(f"  [재사용] {reuse_reason}")
     else:
         # 새 코드 발급
+        # IMP-20260603-9934 MT-1: --force-new-code 시 기존 PENDING을 EXPIRED로 처리
         if existing_req is not None:
             print()
             print(f"  [새 코드 발급] {reuse_reason}")
-        req = _write_acceptance_request(pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id)
+            if force_new and existing_req.get("status") == "PENDING":
+                existing_req["status"] = "EXPIRED"
+                existing_req["expired_reason"] = "force_new_code"
+                try:
+                    with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as _fh:
+                        json.dump(existing_req, _fh, ensure_ascii=False, indent=2)
+                except OSError:
+                    pass  # 덮어쓰기 실패해도 새 요청 발급은 계속
+        # IMP-20260603-9934 MT-1: packet_path를 _write_acceptance_request에 전달 (schema_version=2)
+        req = _write_acceptance_request(
+            pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id,
+            packet_path=str(packet_path),
+        )
         nonce = req["nonce"]
 
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
@@ -15562,6 +15728,27 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 )
                 _save(state)
                 _die("[BLOCKED] evidence 파일 변경됨 (evidence_changed) — gates request-accept 재실행 필요")
+        # IMP-20260603-9934 MT-2: Final Packet Freeze Guard — packet_sha256 검증
+        _freeze_msg = _check_packet_freeze_status(_req)
+        if _freeze_msg:
+            _record_failure_packet(
+                state, "acceptance", {},
+                command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                         "--evidence", str(args.evidence or "")],
+                note=_freeze_msg,
+                status="BLOCKED", phase="harness",
+                failure_code="stale_packet",
+                failure_category="missing_evidence",
+                summary_ko="human_acceptance_packet.md가 승인 요청 이후 변경되었습니다. (STALE_PACKET)",
+                expected="packet_sha256 일치",
+                actual="packet_sha256 불일치",
+                exit_code=1, owner="Pipeline Manager", return_phase="build",
+                required_actions=["python pipeline.py gates request-accept 를 재실행하여 새 코드 발급"],
+                retry_allowed=True,
+            )
+            _save(state)
+            _die(_freeze_msg)
+
         # D4: pr gate → acceptance gate 연결 (bootstrap_exception 제외)
         bootstrap_exception_accept = state.get("codex_bootstrap_exception", False)
         if not bootstrap_exception_accept and accept_decision == "ACCEPT":
@@ -16848,9 +17035,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--base", default="origin/main", metavar="REF",
         help="git diff 비교 기준 ref (기본값: origin/main)",
     )
-    report_sub.add_parser(
+    # IMP-20260603-9934 MT-3: --force-new-request — PENDING 차단 해제 옵션
+    p_report_final.add_argument(
+        "--force-new-request", dest="force_new_request", action="store_true", default=False,
+        help="PENDING acceptance_request가 있어도 packet 재생성 (기존 PENDING은 EXPIRED 처리)",
+    )
+    p_report_update = report_sub.add_parser(
         "update-pr-body",
         help="현재 PR 본문의 PIPELINE_FINAL_PACKET 블록을 최신 packet 내용으로 교체",
+    )
+    # IMP-20260603-9934 MT-3: --force-new-request — PENDING 차단 해제 옵션
+    p_report_update.add_argument(
+        "--force-new-request", dest="force_new_request", action="store_true", default=False,
+        help="PENDING acceptance_request가 있어도 PR 본문 업데이트 (기존 PENDING은 EXPIRED 처리)",
     )
 
     # Codex compatibility hooks
