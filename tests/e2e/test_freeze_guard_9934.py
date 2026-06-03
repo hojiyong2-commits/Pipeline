@@ -26,8 +26,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pytest
-
 PIPELINE_PY = Path(__file__).resolve().parent.parent.parent / "pipeline.py"
 ORACLE_DIR = (
     Path(__file__).resolve().parent.parent
@@ -250,13 +248,13 @@ class TestRequestAcceptStoresPacketSha256:
 
         # 커맨드가 실행되었음을 확인 (exit code에 무관하게 파일 생성 여부로 판단)
         # request-accept가 gh/git CLI 없이도 동작해야 함
-        combined = result.stdout + result.stderr
+        failure_packet = result.stdout + result.stderr
         # 적어도 파이프라인 처리 시도 출력이 있어야 한다
         assert result.returncode is not None  # subprocess 자체는 실행됨
+        assert isinstance(failure_packet, str)
 
         # acceptance_request.json이 생성된 경우 schema_version=2 확인
         # (생성되지 않은 경우는 환경 제약으로 스킵)
-        fallback_req = Path(PIPELINE_PY).parent / "acceptance_request.json"
         if req_path.is_file():
             # final_state: acceptance_request.json의 최종 상태를 검증한다
             final_state = json.loads(req_path.read_text(encoding="utf-8"))
