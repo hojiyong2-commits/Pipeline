@@ -370,6 +370,11 @@ def test_request_accept_proceeds_without_final_packet(
     isolated_cwd: Path,
 ) -> None:
     """packet 부재로는 request-accept가 차단되지 않고, 실행 후 packet이 자동 생성된다."""
+    # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
+    state_path = isolated_env["PIPELINE_STATE_PATH"]
+    assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
+    # created_files: acceptance_request.json, human_acceptance_packet.md
+    # final_state: acceptance gate PENDING → 승인 코드 발급 후 PENDING 유지
     packet = _packet_path_in(isolated_cwd)
     assert not packet.exists()
     evidence = isolated_cwd / "dummy_evidence.txt"
@@ -397,6 +402,11 @@ def test_request_accept_blocks_on_stale_pr_sha(
     명시적으로 검증한다. 즉 fake SHA가 packet에 있어도 actual이 비면 통과한다.
     실제 PR이 있는 환경의 회귀는 별도 통합 테스트에서 수행한다.
     """
+    # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
+    state_path = isolated_env["PIPELINE_STATE_PATH"]
+    assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
+    # modified_files: human_acceptance_packet.md (packet 자동 재생성으로 stale SHA 제거)
+    # final_state: acceptance gate PENDING 유지 (stale 검사 skip 경로)
     packet = _packet_path_in(isolated_cwd)
     _write_packet_with_stale_pr_sha(packet, fake_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     evidence = isolated_cwd / "dummy_evidence.txt"
@@ -430,6 +440,11 @@ def test_request_accept_blocks_on_stale_ci_run_id(
     실제 PR 환경에서는 stale 차단이 일어나야 하나, 본 격리 테스트는
     gh CLI 부재 시 자동 packet 재생성으로 stale 값이 사라지는 동작을 검증한다.
     """
+    # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
+    state_path = isolated_env["PIPELINE_STATE_PATH"]
+    assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
+    # modified_files: human_acceptance_packet.md (packet 자동 재생성으로 stale CI run ID 제거)
+    # final_state: acceptance gate PENDING 유지 (stale CI run 검사 skip 경로)
     packet = _packet_path_in(isolated_cwd)
     _write_packet_with_stale_ci_run(packet, fake_run="9999999999999")
     evidence = isolated_cwd / "dummy.txt"
@@ -450,6 +465,11 @@ def test_request_accept_reuses_nonce_when_conditions_same(
     isolated_cwd: Path,
 ) -> None:
     """동일 evidence/PR/CI 조건에서 request-accept를 두 번 호출하면 같은 nonce."""
+    # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
+    state_path = isolated_env["PIPELINE_STATE_PATH"]
+    assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
+    # created_files: acceptance_request.json (nonce 재사용 검증)
+    # final_state: acceptance_request.json의 nonce가 동일 — 재사용 확인
     evidence = isolated_cwd / "evidence_v1.txt"
     evidence.write_text("body v1", encoding="utf-8")
     # 1회차
@@ -477,6 +497,11 @@ def test_request_accept_issues_new_nonce_when_conditions_change(
     isolated_cwd: Path,
 ) -> None:
     """evidence 내용이 바뀌면 SHA가 달라져 새 nonce가 발급된다."""
+    # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
+    state_path = isolated_env["PIPELINE_STATE_PATH"]
+    assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
+    # modified_files: acceptance_request.json (evidence 변경 시 새 nonce 발급)
+    # final_state: nonce가 변경됨 — evidence SHA 변화 확인
     evidence = isolated_cwd / "evidence_changeable.txt"
     evidence.write_text("body before", encoding="utf-8")
     r1 = _run_cli(
@@ -503,6 +528,11 @@ def test_request_accept_auto_generates_packet_with_code(
     isolated_cwd: Path,
 ) -> None:
     """request-accept 실행 후 packet이 ACCEPT-... 코드를 포함한다."""
+    # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
+    state_path = isolated_env["PIPELINE_STATE_PATH"]
+    assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
+    # created_files: acceptance_request.json, human_acceptance_packet.md
+    # final_state: acceptance_request.json에 nonce + ACCEPT 코드가 기록됨
     evidence = isolated_cwd / "auto_packet_evidence.txt"
     evidence.write_text("body", encoding="utf-8")
     result = _run_cli(
@@ -524,6 +554,11 @@ def test_accept_blocks_without_acceptance_code(
     isolated_cwd: Path,
 ) -> None:
     """gates accept --user-confirmed 단독 호출은 차단되어야 한다 (기존 Nonce Gate 보존)."""
+    # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
+    state_path = isolated_env["PIPELINE_STATE_PATH"]
+    assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
+    # final_state: acceptance gate 차단됨 — failure_packet 생성 예상
+    # created_files: 없음 (차단됨)
     evidence = isolated_cwd / "accept_evidence.txt"
     evidence.write_text("body", encoding="utf-8")
     result = _run_cli(
