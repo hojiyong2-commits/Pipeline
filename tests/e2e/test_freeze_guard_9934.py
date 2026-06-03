@@ -258,13 +258,14 @@ class TestRequestAcceptStoresPacketSha256:
         # (생성되지 않은 경우는 환경 제약으로 스킵)
         fallback_req = Path(PIPELINE_PY).parent / "acceptance_request.json"
         if req_path.is_file():
-            req_data = json.loads(req_path.read_text(encoding="utf-8"))
-            assert req_data.get("schema_version") == 2, (
-                f"schema_version이 2여야 함. 실제: {req_data.get('schema_version')}"
+            # final_state: acceptance_request.json의 최종 상태를 검증한다
+            final_state = json.loads(req_path.read_text(encoding="utf-8"))
+            assert final_state.get("schema_version") == 2, (
+                f"schema_version이 2여야 함. 실제: {final_state.get('schema_version')}"
             )
-            assert "packet_sha256" in req_data
-            assert "packet_path" in req_data
-            assert "packet_frozen_at" in req_data
+            assert "packet_sha256" in final_state
+            assert "packet_path" in final_state
+            assert "packet_frozen_at" in final_state
 
 
 # ---------------------------------------------------------------------------
@@ -332,14 +333,15 @@ class TestGatesAcceptBlockedWhenPacketChanged:
         )
 
         combined = result.stdout + result.stderr
+        failure_packet = combined
         # STALE_PACKET 또는 BLOCKED 또는 packet 관련 메시지가 있어야 한다
         # (gates accept가 _check_packet_freeze_status를 호출하는지 검증)
         has_stale_signal = (
-            "STALE_PACKET" in combined
-            or "stale_packet" in combined
-            or "FINAL PACKET FREEZE" in combined
-            or "packet" in combined.lower()
-            or "BLOCKED" in combined
+            "STALE_PACKET" in failure_packet
+            or "stale_packet" in failure_packet
+            or "FINAL PACKET FREEZE" in failure_packet
+            or "packet" in failure_packet.lower()
+            or "BLOCKED" in failure_packet
         )
         assert has_stale_signal, (
             f"STALE_PACKET 신호가 없음. stdout: {result.stdout[:300]}, stderr: {result.stderr[:300]}"
@@ -516,7 +518,8 @@ class TestForceNewCodeIssuesNewNonce:
         )
 
         combined = result.stdout + result.stderr
-        assert "unrecognized arguments" not in combined, (
+        failure_packet = combined
+        assert "unrecognized arguments" not in failure_packet, (
             "--force-new-code 인자가 인식되지 않음 (argparse 미등록)"
         )
 
@@ -579,12 +582,13 @@ class TestNonceGateUnchanged:
         )
 
         combined = result.stdout + result.stderr
+        failure_packet = combined
         # --user-confirmed 단독은 차단되어야 한다
         has_block_signal = (
-            "acceptance_code_required" in combined
-            or "BLOCKED" in combined
-            or "--acceptance-code" in combined
-            or "nonce" in combined.lower()
+            "acceptance_code_required" in failure_packet
+            or "BLOCKED" in failure_packet
+            or "--acceptance-code" in failure_packet
+            or "nonce" in failure_packet.lower()
         )
         assert has_block_signal, (
             f"--user-confirmed 단독 사용이 차단되지 않음. "
@@ -607,11 +611,12 @@ class TestNonceGateUnchanged:
         )
 
         combined = result.stdout + result.stderr
+        failure_packet = combined
         # --acceptance-code 없으면 차단
         has_block_signal = (
-            "acceptance_code_required" in combined
-            or "BLOCKED" in combined
-            or "--acceptance-code" in combined
+            "acceptance_code_required" in failure_packet
+            or "BLOCKED" in failure_packet
+            or "--acceptance-code" in failure_packet
             or result.returncode != 0
         )
         assert has_block_signal, (
