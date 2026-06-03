@@ -1,0 +1,8 @@
+{
+  "schema_version": 2,
+  "packet_sha256_stored": true,
+  "packet_path_set": true,
+  "packet_frozen_at_set": true,
+  "status": "PENDING",
+  "gates_accept_with_matching_sha256": "PASS"
+}
