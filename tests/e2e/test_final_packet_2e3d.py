@@ -758,9 +758,48 @@ def test_15_clean_pr_body_removes_console_artifacts() -> None:
     assert "[O] 승인하시려면" not in cleaned, "'[O] 승인하시려면' 미제거"
     assert "PR: (gh 없음)" not in cleaned, "'PR: (gh 없음)' 패턴이 제거되지 않음"
     assert "CI run: (없음)" not in cleaned, "'CI run: (없음)' 패턴이 제거되지 않음"
+    assert "REJECT-IMP-TEST-OLDCODE" not in cleaned, "구 REJECT 코드가 제거되지 않음"
     # 블록 안 내용은 보존
     assert "정상 packet 내용" in cleaned, "블록 안 내용이 보존되어야 함"
     # "다음 단계: python pipeline.py report update" 패턴은 제거됨
     assert "다음 단계: python pipeline.py report update" not in cleaned, (
         "'다음 단계: python pipeline.py report update' 미제거"
     )
+
+
+# ─── 16) _clean_pr_body_artifacts가 블록 밖 구 REJECT 코드를 제거 (버그 4 회귀 방지) ──
+def test_16_clean_pr_body_removes_stale_reject_codes() -> None:
+    """버그 4 회귀 방지: _clean_pr_body_artifacts가 블록 밖 구 REJECT 코드를 제거하고,
+    블록 안의 현재 nonce REJECT 예시는 보존한다.
+
+    [Context]: ACCEPT 코드는 제거하지만 REJECT 코드는 남아 있는 버그(IMP-20260603-2E3D)를
+    방지한다. 블록 밖 구 REJECT 코드만 제거, 블록 안 현재 nonce 코드는 보존해야 한다.
+    PIPELINE_STATE_PATH 격리: 불필요 (함수 직접 호출 테스트).
+    final_state: 구 REJECT 코드 없음, 현재 nonce REJECT 예시 보존.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("pipeline", str(PIPELINE_PY))
+    assert spec is not None and spec.loader is not None, "pipeline.py 로드 실패"
+    pipeline_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pipeline_mod)  # type: ignore[union-attr]
+
+    clean_fn = getattr(pipeline_mod, "_clean_pr_body_artifacts", None)
+    assert clean_fn is not None, "_clean_pr_body_artifacts 함수가 pipeline.py에 없음"
+
+    pipeline_id = "IMP-TEST-REJECT"
+    current_nonce = "NEWNONCE"
+    old_reject = f"REJECT-{pipeline_id}-OLDCODE: 거절 이유"
+    current_reject = f"REJECT-{pipeline_id}-{current_nonce}: 거절 이유"  # 블록 안 거절 예시
+
+    pr_body = (
+        "## 작업 요약\n\n"
+        f"이전 거절 코드: {old_reject}\n\n"
+        "<!-- PIPELINE_FINAL_PACKET_START -->\n"
+        f"거절 예시:\n{current_reject}\n"
+        "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+    )
+    cleaned = clean_fn(pr_body, pipeline_id, current_nonce)
+
+    assert old_reject not in cleaned, f"구 REJECT 코드({old_reject})가 제거되지 않음"
+    assert current_reject in cleaned, f"현재 REJECT 예시({current_reject})가 블록 안에서 제거됨"

@@ -10299,12 +10299,16 @@ def _clean_pr_body_artifacts(
             if re.search(pat, line):
                 artifact = True
                 break
-        # 구 승인 코드 라인 제거 (현재 nonce 제외)
+        # 구 승인/거절 코드 라인 제거 (현재 nonce 제외)
         if not artifact and pipeline_id:
             pid_esc = re.escape(pipeline_id)
             accept_m = re.search(rf"ACCEPT-{pid_esc}-([A-Z0-9]{{4,16}})", line)
             if accept_m and accept_m.group(1) != current_nonce:
                 artifact = True
+            if not artifact:
+                reject_m = re.search(rf"REJECT-{pid_esc}-([A-Z0-9]{{4,16}})", line)
+                if reject_m and reject_m.group(1) != current_nonce:
+                    artifact = True
         if not artifact:
             cleaned.append(line)
     # 연속 빈 줄 3개 이상 → 2개로 정리
