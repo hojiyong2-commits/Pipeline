@@ -8338,8 +8338,8 @@ def _audit_contract_bundle(
     # IMP-20260524-48C4 MT-1: oracle quality 감사 통합 (contract audit 단계)
     # oracle 단순 존재 여부 PASS 차단 — normal+edge 최소 케이스, placeholder, agent_generated 검사
     if oracle_entries and not oracle_blockers:
-        # IMP-20260602-1ABE MT-6: state 전달로 ac_ids 검증 활성화
-        quality_result = _audit_oracle_quality(oracle_entries, state=state)
+        # IMP-20260602-1ABE MT-6: state는 _audit_contract_bundle 컨텍스트에서 사용 불가 — None 전달
+        quality_result = _audit_oracle_quality(oracle_entries, state=None)
         if quality_result.get("status") == "BLOCKED":
             blockers.append("oracle_quality: BLOCKED — agent_generated expected 감지. --allow-agent-generated 또는 user_provided로 교체하세요.")
             blockers.extend(quality_result.get("failures", []))
