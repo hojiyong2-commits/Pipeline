@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-03T02:54:34Z",
+  "generated_at": "2026-06-03T02:55:01Z",
   "pipeline_id": "IMP-20260602-1ABE",
   "phase": "qa",
   "phase_status": "PASS",
-  "commit_hint": "3cbce9e2115e97af31c8a862fa55471026a563e1",
+  "commit_hint": "73a451a666de903f99bc28b4b1bb9b36d878dd60",
   "state": {
     "current_phase": "architect",
     "phase_completed_at": "2026-06-03T00:23:20Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260602-1ABE/qa/agent_receipt_qa-8abcd0edc34a571f.json",
       "sha256": "9637e34acb10f6c34d5d6e7a3f7f1ce47c8edf15f7b8c544120708b62d6267d0",
       "size_bytes": 496,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -40,7 +40,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260602-1ABE/qa/report_qa_report.xml",
       "sha256": "13075a20bf12665f172b16578625b97d97d97d0ce7b69e58010f8973cdd5bd8f",
       "size_bytes": 3631,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
