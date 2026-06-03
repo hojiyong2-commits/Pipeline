@@ -82,7 +82,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, NoReturn, Optional, Set, Tuple, TypedDict
+from typing import Any, Dict, List, NoReturn, Optional, Set, Tuple, TypedDict, Union
 import re
 import socket
 import subprocess
