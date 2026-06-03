@@ -10096,7 +10096,10 @@ def _collect_packet_evidence(
         )
 
     external_gates = state.get("external_gates") or {}
-    gates = external_gates.get("gates") or {}
+    # 버그 1 수정 (IMP-20260603-2E3D): pipeline_state.json의 external_gates는
+    # {"technical": {...}, "oracle": {...}, ...} 형식이다. ".get("gates")"는 없는 키이므로
+    # 항상 빈 dict를 반환해 모든 게이트 상태가 PENDING으로 표시되었다.
+    gates = external_gates
     gate_status: Dict[str, str] = {}
     for key in ("technical", "oracle", "github_ci", "acceptance"):
         g = gates.get(key) or {}
@@ -10237,6 +10240,76 @@ def _write_human_acceptance_packet(content: str) -> Path:
     return path
 
 
+def _clean_pr_body_artifacts(
+    pr_body: str, pipeline_id: str = "", current_nonce: str = ""
+) -> str:
+    """PR 본문에서 파이프라인 콘솔 아티팩트와 구 승인 코드를 정리한다.
+
+    PIPELINE_FINAL_PACKET 블록 안은 건드리지 않음. 블록 밖의 아래 패턴을 제거한다:
+    - [FINAL PACKET ...] 콘솔 덤프 라인
+    - [PR 본문 자동 업데이트] / [새 코드 발급] / [재사용] 라인
+    - ={20,} 구분선
+    - [O] 승인하시려면 / [X] 거절하시려면 라인
+    - "위 결과물을 확인하신 후" 라인
+    - "다음 단계: python pipeline.py report update" 라인
+    - 현재 nonce가 아닌 구 ACCEPT-<pipeline_id>-... 코드 라인
+
+    Args:
+        pr_body: 현재 PR 본문 텍스트.
+        pipeline_id: 현재 파이프라인 ID (구 승인 코드 식별용).
+        current_nonce: 현재 유효한 nonce (이 nonce를 포함한 코드는 보존).
+    Returns:
+        정리된 PR 본문 텍스트.
+    """
+    lines = pr_body.split("\n")
+    cleaned: List[str] = []
+    in_block = False
+    start_marker = PIPELINE_FINAL_PACKET_START_MARKER
+    end_marker = PIPELINE_FINAL_PACKET_END_MARKER
+    # 아티팩트 패턴 목록 (블록 밖에서만 적용)
+    _artifact_patterns = [
+        r"\[FINAL PACKET",
+        r"\[PR 본문 자동 업데이트\]",
+        r"\[새 코드 발급\]",
+        r"\[재사용\]",
+        r"={20,}",
+        r"\[O\]\s+승인하시려면",
+        r"\[X\]\s+거절하시려면",
+        r"위\s+결과물을\s+확인하신\s+후",
+        r"다음\s+단계:\s+python\s+pipeline\.py\s+report\s+update",
+        r"사용자\s+최종\s+확인\s+요청",
+    ]
+    for line in lines:
+        if start_marker in line:
+            in_block = True
+            cleaned.append(line)
+            continue
+        if end_marker in line:
+            in_block = False
+            cleaned.append(line)
+            continue
+        if in_block:
+            cleaned.append(line)
+            continue
+        # 블록 밖: 아티팩트 패턴 검사
+        artifact = False
+        for pat in _artifact_patterns:
+            if re.search(pat, line):
+                artifact = True
+                break
+        # 구 승인 코드 라인 제거 (현재 nonce 제외)
+        if not artifact and pipeline_id:
+            pid_esc = re.escape(pipeline_id)
+            accept_m = re.search(rf"ACCEPT-{pid_esc}-([A-Z0-9]{{4,16}})", line)
+            if accept_m and accept_m.group(1) != current_nonce:
+                artifact = True
+        if not artifact:
+            cleaned.append(line)
+    # 연속 빈 줄 3개 이상 → 2개로 정리
+    result = re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned))
+    return result
+
+
 def _replace_pr_body_packet_block(pr_body: str, packet_content: str) -> str:
     """PR 본문에서 PIPELINE_FINAL_PACKET_START/END 블록을 교체하고, 없으면 끝에 추가.
 
@@ -10344,7 +10417,17 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
         return
 
     current_body = _get_pr_body_text() or ""
-    new_body = _replace_pr_body_packet_block(current_body, packet_content)
+
+    # 버그 2+3 수정 (IMP-20260603-2E3D): 블록 교체 전 콘솔 아티팩트와 구 승인 코드 제거
+    state = _load_active_state()
+    acceptance_req = _load_acceptance_request()
+    current_nonce = (
+        acceptance_req.get("nonce", "") if isinstance(acceptance_req, dict) else ""
+    )
+    pipeline_id_str = str(state.get("pipeline_id", "") if state else "") or ""
+    cleaned_body = _clean_pr_body_artifacts(current_body, pipeline_id_str, current_nonce)
+
+    new_body = _replace_pr_body_packet_block(cleaned_body, packet_content)
     ok = _gh_edit_pr_body(new_body)
     if not ok:
         print(YELLOW(

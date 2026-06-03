@@ -576,3 +576,191 @@ def test_accept_blocks_without_acceptance_code(
         or "blocked" in combined
         or "code" in combined
     ), f"Nonce Gate 메시지가 출력되지 않음: {result.stdout}\n{result.stderr}"
+
+
+# ─── 13) 게이트 PASS 상태가 final packet에 정확히 표시 (버그 1 회귀 방지) ────────
+def test_13_final_packet_shows_pass_gate_status(tmp_path: Path) -> None:
+    """버그 1 회귀 방지: external_gates 직접 구조에서 PASS가 packet에 올바르게 표시된다.
+
+    [Context]: pipeline_state.json의 external_gates는 {"technical": {...}, "oracle": {...}}
+    형식이다. 이전 코드는 .get("gates") 때문에 항상 빈 dict를 반환해 모든 상태가 PENDING이었다.
+    PIPELINE_STATE_PATH 격리 사용. final_state: packet에 Technical/Oracle/GitHub CI PASS 확인.
+    """
+    state_file = tmp_path / "pipeline_state.json"
+    state = {
+        "version": "1.2.0",
+        "pipeline_id": "IMP-TEST-GATE",
+        "type": "IMP",
+        "description": "버그 1 회귀 방지 fixture",
+        "created_at": "2026-06-03T00:00:00Z",
+        "updated_at": "2026-06-03T00:00:00Z",
+        "current_phase": "external_gates",
+        "blocked": False,
+        "blocked_reason": None,
+        "phases": {
+            "pm": {"status": "PASS"},
+            "dev": {"status": "PASS"},
+            "qa": {"status": "PASS"},
+            "sec": {"status": "PASS"},
+            "build": {"status": "PASS"},
+            "harness": {"status": "PENDING"},
+            "architect": {"status": "PENDING"},
+        },
+        "external_gates": {
+            "enabled": True,
+            "mode": "three_gate",
+            "technical": {"status": "PASS", "recorded_at": "2026-06-03T00:00:00Z"},
+            "oracle": {"status": "PASS", "recorded_at": "2026-06-03T00:00:00Z"},
+            "github_ci": {"status": "PASS", "recorded_at": "2026-06-03T00:00:00Z"},
+            "acceptance": {"status": "PENDING"},
+        },
+        "structured_acceptance_criteria": [],
+        "requirements_tracking": {"enabled": True, "schema_version": 1},
+        "pm_clarification_gate": {
+            "clarification_needed": False,
+            "assumptions": "fixture",
+            "acceptance_criteria_source": "user",
+            "acceptance_criteria": [],
+        },
+        "event_log": [],
+        "agent_runs": {},
+        "module_gates": {
+            "enabled": True, "modules": {},
+            "integration": {"status": "PENDING"},
+        },
+        "atomic_plan": {"micro_tasks": [], "structured_acceptance_criteria": []},
+        "phase_attestations": {
+            "enabled": True,
+            "phases": {
+                "pm": {"status": "PASS"},
+                "dev": {"status": "PASS"},
+                "qa": {"status": "PASS"},
+                "build": {"status": "PASS"},
+            },
+        },
+    }
+    state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    env = {**os.environ, "PIPELINE_STATE_PATH": str(state_file), "PIPELINE_NO_DASHBOARD": "1"}
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "report", "final-packet"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=env, cwd=str(PIPELINE_PY.parent),
+    )
+    # final-packet은 항상 packet 파일을 PIPELINE_PY.parent에 저장 (cwd 기준)
+    packet_path = PIPELINE_PY.parent / "human_acceptance_packet.md"
+    assert packet_path.exists(), (
+        f"human_acceptance_packet.md가 생성되지 않음\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    content = packet_path.read_text(encoding="utf-8")
+    assert "Technical: PASS" in content, f"Technical PASS 없음\n{content[:800]}"
+    assert "Oracle: PASS" in content, f"Oracle PASS 없음\n{content[:800]}"
+    assert "GitHub CI: PASS" in content, f"GitHub CI PASS 없음\n{content[:800]}"
+    # 게이트 상태 섹션에서 Technical/Oracle/GitHub CI가 PENDING이면 안 됨
+    gate_idx = content.find("게이트 상태:")
+    if gate_idx != -1:
+        gate_section = content[gate_idx : gate_idx + 300]
+        assert "Technical: PENDING" not in gate_section, (
+            f"Technical이 PENDING으로 잘못 표시됨\n{gate_section}"
+        )
+        assert "Oracle: PENDING" not in gate_section, (
+            f"Oracle이 PENDING으로 잘못 표시됨\n{gate_section}"
+        )
+        assert "GitHub CI: PENDING" not in gate_section, (
+            f"GitHub CI가 PENDING으로 잘못 표시됨\n{gate_section}"
+        )
+
+
+# ─── 14) _clean_pr_body_artifacts가 구 승인 코드를 제거 (버그 2 회귀 방지) ────────
+def test_14_clean_pr_body_removes_stale_accept_codes() -> None:
+    """버그 2 회귀 방지: _clean_pr_body_artifacts가 구 ACCEPT 코드를 제거하고 현재 코드는 보존한다.
+
+    [Context]: update-pr-body 실행 시 이전 승인 코드가 PR 본문에 남아 있으면
+    혼란을 야기한다. 현재 nonce 코드는 보존, 구 코드는 제거해야 한다.
+    PIPELINE_STATE_PATH 격리: 불필요 (함수 직접 호출 테스트).
+    final_state: cleaned 텍스트에 구 코드 없음, 현재 코드 있음.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("pipeline", str(PIPELINE_PY))
+    assert spec is not None and spec.loader is not None, "pipeline.py 로드 실패"
+    pipeline_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pipeline_mod)  # type: ignore[union-attr]
+
+    clean_fn = getattr(pipeline_mod, "_clean_pr_body_artifacts", None)
+    assert clean_fn is not None, "_clean_pr_body_artifacts 함수가 pipeline.py에 없음"
+
+    pipeline_id = "IMP-TEST-CLEAN"
+    current_nonce = "NEWNONCE1"
+    old_code = f"ACCEPT-{pipeline_id}-OLDCODE1"
+    new_code = f"ACCEPT-{pipeline_id}-{current_nonce}"
+
+    pr_body = (
+        "## 작업 요약\n\n"
+        f"이전 승인 코드: {old_code}\n\n"
+        "<!-- PIPELINE_FINAL_PACKET_START -->\n"
+        f"승인 코드:\n{new_code}\n"
+        "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+    )
+    cleaned = clean_fn(pr_body, pipeline_id, current_nonce)
+
+    assert old_code not in cleaned, f"구 코드({old_code})가 제거되지 않음\n{cleaned}"
+    assert new_code in cleaned, f"현재 코드({new_code})가 블록 안에서 보존되어야 함\n{cleaned}"
+
+
+# ─── 15) _clean_pr_body_artifacts가 콘솔 덤프를 정리 (버그 3 회귀 방지) ───────────
+def test_15_clean_pr_body_removes_console_artifacts() -> None:
+    """버그 3 회귀 방지: _clean_pr_body_artifacts가 파이프라인 콘솔 덤프를 제거한다.
+
+    [Context]: report final-packet / request-accept의 콘솔 출력이 PR 본문에
+    복사-붙여넣기 되는 패턴을 update-pr-body가 정리해야 한다.
+    PIPELINE_STATE_PATH 격리: 불필요 (함수 직접 호출 테스트).
+    final_state: cleaned 텍스트에 콘솔 아티팩트 없음, 블록 안 내용 보존.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("pipeline", str(PIPELINE_PY))
+    assert spec is not None and spec.loader is not None, "pipeline.py 로드 실패"
+    pipeline_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pipeline_mod)  # type: ignore[union-attr]
+
+    clean_fn = getattr(pipeline_mod, "_clean_pr_body_artifacts", None)
+    assert clean_fn is not None, "_clean_pr_body_artifacts 함수가 pipeline.py에 없음"
+
+    pr_body = (
+        "## 사용자가 확인할 결과물\n\n"
+        "- \n"
+        "[FINAL PACKET 작성 완료]\n"
+        "  파일: human_acceptance_packet.md\n"
+        "  PR: (gh 없음)\n"
+        "  CI run: (없음)\n"
+        "  다음 단계: python pipeline.py report update-pr-body 후 실행\n\n"
+        "  [새 코드 발급] 결과물 경로가 달라서 새 코드를 발급합니다.\n\n"
+        "  [FINAL PACKET 자동 생성] human_acceptance_packet.md\n"
+        "  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패\n\n"
+        "==============================================================\n"
+        "  사용자 최종 확인 요청\n"
+        "==============================================================\n\n"
+        "  [O] 승인하시려면 정확히 아래 코드를 입력하세요:\n"
+        "     ACCEPT-IMP-TEST-OLDCODE\n\n"
+        "  [X] 거절하시려면 아래 형식으로 입력하세요:\n"
+        "     REJECT-IMP-TEST-OLDCODE: 이유\n\n"
+        "<!-- PIPELINE_FINAL_PACKET_START -->\n"
+        "정상 packet 내용\n"
+        "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+    )
+    cleaned = clean_fn(pr_body, "IMP-TEST", "NEWNONCE2")
+
+    assert "[FINAL PACKET 작성 완료]" not in cleaned, "'[FINAL PACKET 작성 완료]' 미제거"
+    assert "[새 코드 발급]" not in cleaned, "'[새 코드 발급]' 미제거"
+    assert "[FINAL PACKET 자동 생성]" not in cleaned, "'[FINAL PACKET 자동 생성]' 미제거"
+    assert "[PR 본문 자동 업데이트]" not in cleaned, "'[PR 본문 자동 업데이트]' 미제거"
+    assert "사용자 최종 확인 요청" not in cleaned, "'사용자 최종 확인 요청' 미제거"
+    assert "[O] 승인하시려면" not in cleaned, "'[O] 승인하시려면' 미제거"
+    # 블록 안 내용은 보존
+    assert "정상 packet 내용" in cleaned, "블록 안 내용이 보존되어야 함"
+    # PR: (gh 없음) 라인 — [FINAL PACKET ...] 라인에 포함된 줄이므로 제거됨
+    # (실제로는 같은 줄이 아니라 별도 줄이지만 [FINAL PACKET] 라인 이후 연속 라인이 아니므로 보존)
+    # 하지만 "다음 단계: python pipeline.py report update" 패턴은 제거됨
+    assert "다음 단계: python pipeline.py report update" not in cleaned, (
+        "'다음 단계: python pipeline.py report update' 미제거"
+    )
