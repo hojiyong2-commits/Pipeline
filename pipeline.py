@@ -1239,6 +1239,9 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     # BUG-20260529-40C9 MT-2: golden task 실행 시 생성되는 런타임 파일.
     # 개발·테스트 중 golden run으로 인해 생성/삭제될 수 있으므로 scope gate 오탐 방지.
     "golden_failure_packet.json",
+    # IMP-20260603-2E3D: gates request-accept가 생성하는 런타임 파일.
+    # PM snapshot 이후 nonce 발급 시 생성되거나 갱신되므로 dev scope gate 오탐 방지.
+    "acceptance_request.json",
 }
 
 
@@ -9953,6 +9956,512 @@ def cmd_outputs(args: argparse.Namespace) -> None:
     _die(f"unknown outputs action: {action}", exit_code=2)
 
 
+# ─── IMP-20260603-2E3D MT-1: PR Packet SSoT ───────────────────────────────────
+# 사용자 ACCEPT 판단 자료(human_acceptance_packet.md)와 PR 본문의 최종 확인 안내
+# 블록을 에이전트 자유서술 대신 pipeline.py가 실제 git/gh/state 데이터로
+# 자동 생성한다.
+
+PIPELINE_FINAL_PACKET_START_MARKER = "<!-- PIPELINE_FINAL_PACKET_START -->"
+PIPELINE_FINAL_PACKET_END_MARKER = "<!-- PIPELINE_FINAL_PACKET_END -->"
+HUMAN_ACCEPTANCE_PACKET_FILE = "human_acceptance_packet.md"
+PACKET_LINE_MAX_WIDTH = 120
+
+
+def _wrap_packet_line(line: str, max_width: int = PACKET_LINE_MAX_WIDTH) -> List[str]:
+    """packet의 한 줄을 max_width 이하로 줄바꿈한다.
+
+    URL, 코드, 절대경로 같은 공백 없는 토큰이 들어 있어도 max_width 한도를 깨지 않도록
+    공백 분할 후 길이 누적 방식으로 줄바꿈한다. 공백 없는 단일 토큰이 한도를 넘으면
+    그대로 한 줄로 둔다(승인 코드, 긴 URL은 그대로 사용해야 하므로 강제 분할 금지).
+
+    Args:
+        line: 입력 줄 (개행 없음 가정).
+        max_width: 한 줄 최대 길이.
+    Returns:
+        max_width 이하 줄들의 list.
+    """
+    if not isinstance(line, str):
+        return [str(line)]
+    if len(line) <= max_width:
+        return [line]
+    tokens = line.split(" ")
+    out: List[str] = []
+    buf = ""
+    for tok in tokens:
+        if not buf:
+            buf = tok
+            continue
+        candidate = buf + " " + tok
+        if len(candidate) <= max_width:
+            buf = candidate
+        else:
+            out.append(buf)
+            buf = tok
+    if buf:
+        out.append(buf)
+    return out
+
+
+def _wrap_packet_text(text: str, max_width: int = PACKET_LINE_MAX_WIDTH) -> str:
+    """전체 packet text를 줄 단위로 max_width 이하로 보장.
+
+    Args:
+        text: 멀티라인 텍스트.
+        max_width: 한 줄 최대 길이.
+    Returns:
+        모든 줄이 max_width 이하인 텍스트 (개행 유지).
+    """
+    if not isinstance(text, str):
+        text = str(text)
+    out_lines: List[str] = []
+    for raw in text.split("\n"):
+        out_lines.extend(_wrap_packet_line(raw, max_width))
+    return "\n".join(out_lines)
+
+
+def _get_git_diff_files(base: str = "origin/main") -> List[str]:
+    """git diff base...HEAD --name-only 결과를 그대로 반환.
+
+    Args:
+        base: 비교 기준 ref (기본 origin/main).
+    Returns:
+        변경 파일 경로 list. 외부 도구 부재 시 빈 list.
+    Raises:
+        없음.
+    """
+    git_path = shutil.which("git") or "git"
+    diff_range = f"{base}...HEAD"
+    try:
+        r = subprocess.run(
+            [git_path, "diff", diff_range, "--name-only"],
+            capture_output=True, text=True, timeout=15,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode == 0:
+            lines = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+            return lines
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return []
+
+
+def _get_pr_number_from_url(pr_url: str) -> Optional[str]:
+    """PR URL에서 PR 번호를 추출한다.
+
+    Args:
+        pr_url: https://github.com/<owner>/<repo>/pull/<num> 형식 URL.
+    Returns:
+        PR 번호 문자열 또는 None.
+    """
+    if not isinstance(pr_url, str) or not pr_url:
+        return None
+    m = re.search(r"/pull/(\d+)", pr_url)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _collect_packet_evidence(
+    state: Dict[str, Any],
+    acceptance_request: Optional[Dict[str, Any]] = None,
+    base_ref: str = "origin/main",
+) -> Dict[str, Any]:
+    """실제 git/gh/state 데이터를 모아 packet 자료를 반환한다.
+
+    gh CLI나 git이 없으면 해당 필드는 빈 문자열/빈 리스트로 채워지며 graceful degradation.
+
+    Args:
+        state: 활성 pipeline_state.
+        acceptance_request: 있으면 nonce/승인 코드 포함, 없으면 "발급 전".
+        base_ref: git diff 비교 기준 ref.
+    Returns:
+        dict with keys: pipeline_id, pr_url, pr_number, pr_head_sha,
+            ci_run_id, actions_url, changed_files (list[str]),
+            gate_status (dict), structured_ac (list),
+            ac_fulfillment_table (list or None),
+            acceptance_request (dict or None), generated_at.
+    Raises:
+        없음.
+    """
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+    pr_url = _get_current_pr_url() or ""
+    pr_head_sha = _get_current_pr_head_sha() or ""
+    ci_run_id = _get_pr_branch_ci_run_id() or ""
+    pr_number = _get_pr_number_from_url(pr_url) or ""
+    changed_files = _get_git_diff_files(base=base_ref)
+    actions_url = ""
+    if ci_run_id:
+        actions_url = (
+            f"https://github.com/hojiyong2-commits/Pipeline/actions/runs/{ci_run_id}"
+        )
+
+    external_gates = state.get("external_gates") or {}
+    # 버그 1 수정 (IMP-20260603-2E3D): pipeline_state.json의 external_gates는
+    # {"technical": {...}, "oracle": {...}, ...} 형식이다. ".get("gates")"는 없는 키이므로
+    # 항상 빈 dict를 반환해 모든 게이트 상태가 PENDING으로 표시되었다.
+    gates = external_gates
+    gate_status: Dict[str, str] = {}
+    for key in ("technical", "oracle", "github_ci", "acceptance"):
+        g = gates.get(key) or {}
+        if isinstance(g, dict):
+            gate_status[key] = str(g.get("status", "PENDING"))
+        else:
+            gate_status[key] = "PENDING"
+
+    structured_ac = state.get("structured_acceptance_criteria") or []
+    ac_table = _build_ac_fulfillment_table(state)
+
+    return {
+        "pipeline_id": pipeline_id,
+        "pr_url": pr_url,
+        "pr_number": pr_number,
+        "pr_head_sha": pr_head_sha,
+        "ci_run_id": ci_run_id,
+        "actions_url": actions_url,
+        "changed_files": changed_files,
+        "gate_status": gate_status,
+        "structured_ac": structured_ac,
+        "ac_fulfillment_table": ac_table,
+        "acceptance_request": acceptance_request,
+        "generated_at": _now(),
+    }
+
+
+def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
+    """packet 텍스트를 생성한다. 120자/줄 제한 + 승인 코드 독립 줄.
+
+    Args:
+        evidence: _collect_packet_evidence 결과 dict.
+    Returns:
+        packet 본문 문자열 (markdown-friendly, 헤더는 일반 텍스트).
+    Raises:
+        없음.
+    """
+    pipeline_id = str(evidence.get("pipeline_id", "") or "")
+    pr_url = str(evidence.get("pr_url", "") or "")
+    pr_head_sha = str(evidence.get("pr_head_sha", "") or "")
+    ci_run_id = str(evidence.get("ci_run_id", "") or "")
+    actions_url = str(evidence.get("actions_url", "") or "")
+    changed_files = list(evidence.get("changed_files") or [])
+    gate_status = evidence.get("gate_status") or {}
+    ac_table = evidence.get("ac_fulfillment_table")
+    acceptance_request = evidence.get("acceptance_request")
+
+    lines: List[str] = []
+    lines.append("[최종 확인 안내]")
+    lines.append("")
+    lines.append("파이프라인:")
+    lines.append(pipeline_id or "(없음)")
+    lines.append("")
+    lines.append("PR:")
+    lines.append(pr_url or "(gh CLI 없음 또는 PR 없음)")
+    lines.append("")
+    lines.append("GitHub Actions:")
+    lines.append(actions_url or "(CI run 없음)")
+    lines.append("")
+    lines.append("PR head SHA:")
+    lines.append(pr_head_sha or "(조회 불가)")
+    lines.append("")
+    lines.append("CI run ID:")
+    lines.append(ci_run_id or "(조회 불가)")
+    lines.append("")
+    lines.append("게이트 상태:")
+    lines.append(f"Technical: {gate_status.get('technical', 'PENDING')}")
+    lines.append(f"Oracle: {gate_status.get('oracle', 'PENDING')}")
+    lines.append(f"GitHub CI: {gate_status.get('github_ci', 'PENDING')}")
+    lines.append(f"User Acceptance: {gate_status.get('acceptance', 'PENDING')}")
+    lines.append("")
+    lines.append("변경 파일:")
+    lines.append(f"총 {len(changed_files)}개")
+    lines.append("")
+    if changed_files:
+        for path in changed_files:
+            lines.append(path)
+    else:
+        lines.append("(git diff 결과 없음 또는 git CLI 없음)")
+    lines.append("")
+    lines.append("요구사항 충족표:")
+    lines.append("")
+    if ac_table:
+        ac_block = _format_ac_fulfillment_output(ac_table)
+        for ac_line in ac_block.split("\n"):
+            lines.append(ac_line)
+    else:
+        lines.append("(structured AC 없음 — legacy 파이프라인)")
+        lines.append("")
+    lines.append("사용자가 확인할 것:")
+    lines.append("")
+    lines.append("1. PR 링크를 연다.")
+    lines.append("2. GitHub Actions 자동 검사가 성공인지 본다.")
+    lines.append("3. 요구사항 충족표를 본다.")
+    lines.append("4. 결과물이 요청과 맞으면 승인 코드를 입력한다.")
+    lines.append("5. 틀리면 거절 코드 뒤에 이유를 적는다.")
+    lines.append("")
+    lines.append("승인 코드:")
+    if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
+        nonce = str(acceptance_request.get("nonce"))
+        lines.append(f"ACCEPT-{pipeline_id}-{nonce}")
+        lines.append("")
+        lines.append("거절 예시:")
+        lines.append(f"REJECT-{pipeline_id}-{nonce}: 이유")
+    else:
+        lines.append("승인 코드 발급 전 — gates request-accept를 먼저 실행하세요")
+        lines.append("")
+        lines.append("거절 예시:")
+        lines.append("승인 코드 발급 전 — gates request-accept를 먼저 실행하세요")
+
+    raw = "\n".join(lines)
+    return _wrap_packet_text(raw, PACKET_LINE_MAX_WIDTH)
+
+
+def _packet_output_path() -> Path:
+    """현재 cwd 기준 human_acceptance_packet.md 경로를 반환한다.
+
+    BASE_DIR은 pipeline.py 위치라 격리된 E2E 테스트에서 활성 cwd와 다를 수 있다.
+    배포 환경에서는 보통 BASE_DIR == cwd이므로 결과는 동일하나, 테스트에서 cwd가
+    다르면 그 cwd에 packet을 작성한다.
+    """
+    try:
+        return Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_FILE
+    except OSError:
+        return BASE_DIR / HUMAN_ACCEPTANCE_PACKET_FILE
+
+
+def _write_human_acceptance_packet(content: str) -> Path:
+    """human_acceptance_packet.md를 작업 디렉터리에 저장한다.
+
+    Args:
+        content: packet 본문 문자열.
+    Returns:
+        저장 파일 절대 Path.
+    """
+    path = _packet_output_path()
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _clean_pr_body_artifacts(
+    pr_body: str, pipeline_id: str = "", current_nonce: str = ""
+) -> str:
+    """PR 본문에서 파이프라인 콘솔 아티팩트와 구 승인 코드를 정리한다.
+
+    PIPELINE_FINAL_PACKET 블록 안은 건드리지 않음. 블록 밖의 아래 패턴을 제거한다:
+    - [FINAL PACKET ...] 콘솔 덤프 라인
+    - [PR 본문 자동 업데이트] / [새 코드 발급] / [재사용] 라인
+    - ={20,} 구분선
+    - [O] 승인하시려면 / [X] 거절하시려면 라인
+    - "위 결과물을 확인하신 후" 라인
+    - "다음 단계: python pipeline.py report update" 라인
+    - 현재 nonce가 아닌 구 ACCEPT-<pipeline_id>-... 코드 라인
+
+    Args:
+        pr_body: 현재 PR 본문 텍스트.
+        pipeline_id: 현재 파이프라인 ID (구 승인 코드 식별용).
+        current_nonce: 현재 유효한 nonce (이 nonce를 포함한 코드는 보존).
+    Returns:
+        정리된 PR 본문 텍스트.
+    """
+    lines = pr_body.split("\n")
+    cleaned: List[str] = []
+    in_block = False
+    start_marker = PIPELINE_FINAL_PACKET_START_MARKER
+    end_marker = PIPELINE_FINAL_PACKET_END_MARKER
+    # 아티팩트 패턴 목록 (블록 밖에서만 적용)
+    _artifact_patterns = [
+        r"\[FINAL PACKET",
+        r"\[PR 본문 자동 업데이트\]",
+        r"\[새 코드 발급\]",
+        r"\[재사용\]",
+        r"={20,}",
+        r"\[O\]\s+승인하시려면",
+        r"\[X\]\s+거절하시려면",
+        r"위\s+결과물을\s+확인하신\s+후",
+        r"다음\s+단계:\s+python\s+pipeline\.py\s+report\s+update",
+        r"사용자\s+최종\s+확인\s+요청",
+        r"^\s*PR:\s*\(gh",
+        r"^\s*CI\s+run:\s*\(없음\)",
+    ]
+    for line in lines:
+        if start_marker in line:
+            in_block = True
+            cleaned.append(line)
+            continue
+        if end_marker in line:
+            in_block = False
+            cleaned.append(line)
+            continue
+        if in_block:
+            cleaned.append(line)
+            continue
+        # 블록 밖: 아티팩트 패턴 검사
+        artifact = False
+        for pat in _artifact_patterns:
+            if re.search(pat, line):
+                artifact = True
+                break
+        # 구 승인/거절 코드 라인 제거 (현재 nonce 제외)
+        if not artifact and pipeline_id:
+            pid_esc = re.escape(pipeline_id)
+            accept_m = re.search(rf"ACCEPT-{pid_esc}-([A-Z0-9]{{4,16}})", line)
+            if accept_m and accept_m.group(1) != current_nonce:
+                artifact = True
+            if not artifact:
+                reject_m = re.search(rf"REJECT-{pid_esc}-([A-Z0-9]{{4,16}})", line)
+                if reject_m and reject_m.group(1) != current_nonce:
+                    artifact = True
+        if not artifact:
+            cleaned.append(line)
+    # 연속 빈 줄 3개 이상 → 2개로 정리
+    result = re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned))
+    return result
+
+
+def _replace_pr_body_packet_block(pr_body: str, packet_content: str) -> str:
+    """PR 본문에서 PIPELINE_FINAL_PACKET_START/END 블록을 교체하고, 없으면 끝에 추가.
+
+    Args:
+        pr_body: 현재 PR 본문 텍스트.
+        packet_content: 새 packet 본문.
+    Returns:
+        교체/추가된 PR 본문 텍스트.
+    """
+    start = PIPELINE_FINAL_PACKET_START_MARKER
+    end = PIPELINE_FINAL_PACKET_END_MARKER
+    new_block = f"{start}\n{packet_content}\n{end}"
+    if pr_body is None:
+        pr_body = ""
+    if start in pr_body and end in pr_body:
+        pattern = re.compile(
+            re.escape(start) + r".*?" + re.escape(end),
+            re.DOTALL,
+        )
+        return pattern.sub(new_block, pr_body, count=1)
+    if pr_body and not pr_body.endswith("\n"):
+        pr_body += "\n"
+    return pr_body + "\n" + new_block + "\n"
+
+
+def _gh_edit_pr_body(new_body: str) -> bool:
+    """gh CLI로 현재 PR 본문을 갱신한다. gh 없으면 False 반환.
+
+    Args:
+        new_body: 새 PR 본문.
+    Returns:
+        True 갱신 성공, False gh 없음 또는 오류.
+    """
+    gh_path = shutil.which("gh")
+    if not gh_path:
+        return False
+    try:
+        r = subprocess.run(
+            [gh_path, "pr", "edit", "--body", new_body],
+            capture_output=True, text=True, timeout=30,
+            encoding="utf-8", errors="replace",
+        )
+        return r.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
+def _cmd_report_final_packet(args: argparse.Namespace) -> None:
+    """report final-packet 핸들러.
+
+    실제 git/gh/state/acceptance_request 자료를 모아 human_acceptance_packet.md를 작성한다.
+    acceptance_request.json이 있으면 승인 코드를 포함하고, 없으면 "승인 코드 발급 전" 라인을
+    출력한다. 콘솔에 요약을 출력한다.
+    """
+    state = _require_state()
+    state = _ensure_v210_fields(state)
+    base_ref = str(getattr(args, "base", "origin/main") or "origin/main")
+    acceptance_request = _load_acceptance_request()
+    evidence = _collect_packet_evidence(
+        state, acceptance_request=acceptance_request, base_ref=base_ref
+    )
+    content = _build_final_packet_content(evidence)
+    out_path = _write_human_acceptance_packet(content)
+
+    pid = evidence.get("pipeline_id") or "(unknown)"
+    pr_url = evidence.get("pr_url") or "(gh 없음)"
+    ci_run_id = evidence.get("ci_run_id") or "(없음)"
+    n_files = len(evidence.get("changed_files") or [])
+    has_code = bool(acceptance_request and acceptance_request.get("nonce"))
+    code_label = "포함" if has_code else "발급 전"
+
+    print(GREEN("\n[FINAL PACKET 작성 완료]"))
+    print(f"  파일: {_display_path(out_path)}")
+    print(f"  파이프라인: {pid}")
+    print(f"  PR: {pr_url}")
+    print(f"  CI run: {ci_run_id}")
+    print(f"  변경 파일: {n_files}개")
+    print(f"  승인 코드: {code_label}")
+    print(
+        "  다음 단계: python pipeline.py report update-pr-body 후 "
+        "gates request-accept --evidence <결과물>\n"
+    )
+
+
+def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
+    """report update-pr-body 핸들러.
+
+    human_acceptance_packet.md를 읽어 PR 본문의 PIPELINE_FINAL_PACKET 블록을 교체한다.
+    블록이 없으면 PR 본문 끝에 추가한다. gh CLI가 없으면 안내 후 graceful skip.
+    """
+    packet_path = _packet_output_path()
+    if not packet_path.exists():
+        _die(
+            "[REPORT UPDATE-PR-BODY] human_acceptance_packet.md가 없습니다. "
+            "먼저 'python pipeline.py report final-packet'을 실행하세요."
+        )
+    packet_content = packet_path.read_text(encoding="utf-8", errors="replace")
+
+    if not shutil.which("gh"):
+        print(YELLOW(
+            "\n[REPORT UPDATE-PR-BODY] gh CLI가 없어 PR 본문을 갱신하지 않습니다.\n"
+            "  현재 packet 내용은 다음 파일에 보존됩니다: "
+            f"{_display_path(packet_path)}\n"
+        ))
+        return
+
+    current_body = _get_pr_body_text() or ""
+
+    # 버그 2+3 수정 (IMP-20260603-2E3D): 블록 교체 전 콘솔 아티팩트와 구 승인 코드 제거
+    try:
+        state = _require_state()
+    except SystemExit:
+        state = {}
+    acceptance_req = _load_acceptance_request()
+    current_nonce = (
+        acceptance_req.get("nonce", "") if isinstance(acceptance_req, dict) else ""
+    )
+    pipeline_id_str = str(state.get("pipeline_id", "") if state else "") or ""
+    cleaned_body = _clean_pr_body_artifacts(current_body, pipeline_id_str, current_nonce)
+
+    new_body = _replace_pr_body_packet_block(cleaned_body, packet_content)
+    ok = _gh_edit_pr_body(new_body)
+    if not ok:
+        print(YELLOW(
+            "\n[REPORT UPDATE-PR-BODY] PR 본문 갱신에 실패했습니다. "
+            "PR이 열려 있고 gh 인증이 유효한지 확인하세요.\n"
+        ))
+        return
+    print(GREEN("\n[PR 본문 갱신 완료] PIPELINE_FINAL_PACKET 블록이 최신 packet으로 교체되었습니다.\n"))
+
+
+def cmd_report(args: argparse.Namespace) -> None:
+    """report 서브커맨드 디스패처 — final-packet | update-pr-body."""
+    action = getattr(args, "report_action", None)
+    if action == "final-packet":
+        _cmd_report_final_packet(args)
+        return
+    if action == "update-pr-body":
+        _cmd_report_update_pr_body(args)
+        return
+    _die(
+        "[REPORT ERROR] report 서브명령이 필요합니다. final-packet|update-pr-body 중 선택하세요.",
+        exit_code=2,
+    )
+
+
 def cmd_codex(args: argparse.Namespace) -> None:
     """Codex compatibility hooks for running the same mandatory pipeline."""
     action = args.codex_action
@@ -14052,14 +14561,148 @@ def _format_ac_fulfillment_output(
     return "\n".join(lines)
 
 
+def _check_packet_freshness_against_actual(
+    packet_path: Path,
+    actual_pr_head_sha: str,
+    actual_ci_run_id: str,
+    actual_changed_files: List[str],
+) -> Optional[str]:
+    """human_acceptance_packet.md가 이미 있을 때 실제 PR/CI/git 상태와 stale 비교.
+
+    IMP-20260603-2E3D MT-2: packet 부재는 차단하지 않고, packet이 있고 실제 상태와 다를 때만
+    BLOCKED 메시지를 반환한다. None 반환 시 stale 아님.
+
+    Args:
+        packet_path: human_acceptance_packet.md 경로.
+        actual_pr_head_sha: 현재 PR head SHA (gh CLI 없으면 빈 문자열).
+        actual_ci_run_id: 현재 latest CI run ID.
+        actual_changed_files: 현재 git diff 변경 파일 목록.
+    Returns:
+        stale 메시지(한국어) 또는 None(stale 아님 / packet 부재 / 실제 정보 없음).
+    Raises:
+        없음.
+    """
+    if not packet_path.exists():
+        return None
+    try:
+        packet_text = packet_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    rerun_hint = (
+        "\n  다음 명령으로 packet을 새로 만들고 재시도하세요:\n"
+        "    python pipeline.py report final-packet\n"
+        "    python pipeline.py report update-pr-body\n"
+        "    python pipeline.py gates request-accept --evidence <결과물>"
+    )
+
+    # PR head SHA 비교 — packet의 "PR head SHA:" 다음 줄
+    if actual_pr_head_sha:
+        m = re.search(r"^PR head SHA:\s*\n([^\n]+)", packet_text, re.MULTILINE)
+        if m:
+            packet_sha = m.group(1).strip()
+            if packet_sha and not packet_sha.startswith("(") and packet_sha != actual_pr_head_sha:
+                return (
+                    "[FINAL PACKET GATE] 최종 확인 안내가 최신 PR 상태와 다릅니다.\n"
+                    "  PR head SHA가 바뀌었습니다.\n\n"
+                    f"  현재 PR head SHA: {actual_pr_head_sha}\n"
+                    f"  packet의 PR head SHA: {packet_sha}"
+                    + rerun_hint
+                )
+
+    # CI run ID 비교 — packet의 "CI run ID:" 다음 줄
+    if actual_ci_run_id:
+        m = re.search(r"^CI run ID:\s*\n([^\n]+)", packet_text, re.MULTILINE)
+        if m:
+            packet_ci = m.group(1).strip()
+            if packet_ci and not packet_ci.startswith("(") and packet_ci != actual_ci_run_id:
+                return (
+                    "[FINAL PACKET GATE] 최종 확인 안내가 최신 CI 상태와 다릅니다.\n"
+                    "  GitHub Actions run ID가 바뀌었습니다.\n\n"
+                    f"  현재 CI run ID: {actual_ci_run_id}\n"
+                    f"  packet의 CI run ID: {packet_ci}"
+                    + rerun_hint
+                )
+
+    # 변경 파일 set 비교 — "변경 파일:\n총 N개\n" 다음 빈 줄까지의 파일 경로 추출
+    if actual_changed_files:
+        m = re.search(
+            r"^변경 파일:\s*\n총\s+\d+개\s*\n\s*\n((?:[^\n]+\n)+?)\s*\n",
+            packet_text,
+            re.MULTILINE,
+        )
+        if m:
+            packet_files_block = m.group(1)
+            packet_files = {
+                ln.strip() for ln in packet_files_block.split("\n")
+                if ln.strip() and not ln.strip().startswith("(")
+            }
+            actual_set = {str(f).strip() for f in actual_changed_files if str(f).strip()}
+            if packet_files and packet_files != actual_set:
+                only_actual = sorted(actual_set - packet_files)
+                only_packet = sorted(packet_files - actual_set)
+                detail_lines: List[str] = []
+                if only_actual:
+                    detail_lines.append(
+                        f"  실제 diff에만 있는 파일: {', '.join(only_actual[:5])}"
+                        + (" 외" if len(only_actual) > 5 else "")
+                    )
+                if only_packet:
+                    detail_lines.append(
+                        f"  packet에만 있는 파일: {', '.join(only_packet[:5])}"
+                        + (" 외" if len(only_packet) > 5 else "")
+                    )
+                detail = "\n".join(detail_lines)
+                return (
+                    "[FINAL PACKET GATE] 최종 확인 안내가 실제 변경 파일과 다릅니다.\n\n"
+                    + detail + rerun_hint
+                )
+
+    return None
+
+
+def _auto_generate_final_packet_and_update_pr(
+    state: Dict[str, Any],
+    acceptance_request: Dict[str, Any],
+) -> Dict[str, Any]:
+    """nonce 발급 직후 final packet을 자동 생성하고 PR 본문을 자동 업데이트한다.
+
+    Args:
+        state: 활성 pipeline_state.
+        acceptance_request: 방금 발급/재사용한 acceptance_request dict (nonce 포함).
+    Returns:
+        dict {"packet_path": str, "pr_body_updated": bool}.
+    Raises:
+        없음 (외부 도구 부재 시 graceful skip).
+    """
+    evidence_payload = _collect_packet_evidence(
+        state, acceptance_request=acceptance_request, base_ref="origin/main"
+    )
+    content = _build_final_packet_content(evidence_payload)
+    packet_path = _write_human_acceptance_packet(content)
+    pr_updated = False
+    if shutil.which("gh"):
+        current_body = _get_pr_body_text() or ""
+        new_body = _replace_pr_body_packet_block(current_body, content)
+        pr_updated = _gh_edit_pr_body(new_body)
+    return {
+        "packet_path": _display_path(packet_path),
+        "pr_body_updated": pr_updated,
+    }
+
+
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
-    """gates request-accept 핸들러: nonce 발급 + acceptance_request.json + 사용자 코드 표시.
+    """gates request-accept 핸들러: stale 검증 + nonce 발급 + packet 자동 생성 + PR 본문 자동 업데이트.
+
+    IMP-20260603-2E3D MT-2: packet 부재로는 차단하지 않는다. packet이 있고 실제 PR/CI/git 상태와
+    다르면 BLOCKED를 반환한다. 검증 통과 시 nonce 발급/재사용 후 final packet을 자동 생성하고
+    gh CLI가 있으면 PR 본문의 PIPELINE_FINAL_PACKET 블록도 자동 업데이트한다.
 
     Args:
         args: argparse Namespace (evidence 필수).
         state: 활성 pipeline_state.
     Raises:
-        SystemExit: PR 본문 stale 문구 발견 시 BLOCKED.
+        SystemExit: PR 본문 stale 문구 또는 packet stale 발견 시 BLOCKED.
     """
     pipeline_id = str(state.get("pipeline_id", ""))
     if not pipeline_id:
@@ -14082,6 +14725,15 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     pr_url = _get_current_pr_url() or ""
     pr_head_sha = _get_current_pr_head_sha() or ""
     ci_run_id = _get_pr_branch_ci_run_id() or ""
+    actual_changed_files = _get_git_diff_files(base="origin/main")
+
+    # IMP-20260603-2E3D MT-2: final packet stale 검증 (packet 부재는 차단하지 않음)
+    packet_path = _packet_output_path()
+    stale_msg = _check_packet_freshness_against_actual(
+        packet_path, pr_head_sha, ci_run_id, actual_changed_files
+    )
+    if stale_msg:
+        _die(stale_msg)
 
     # IMP-20260531-AEF0 MT-1: 기존 요청 로드 → 재사용 판단
     force_new = bool(getattr(args, "force_new_code", False))
@@ -14141,6 +14793,20 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 )
         except (OSError, json.JSONDecodeError) as exc:
             print(YELLOW(f"  [AC TABLE] acceptance_request.json 저장 실패: {exc}"))
+
+    # IMP-20260603-2E3D MT-2: final packet 자동 생성 + PR 본문 자동 업데이트
+    try:
+        # acceptance_request.json을 디스크에서 다시 읽어 최신 ac_fulfillment_table 반영
+        latest_req = _load_acceptance_request() or req
+        auto_result = _auto_generate_final_packet_and_update_pr(state, latest_req)
+        print()
+        print(f"  [FINAL PACKET 자동 생성] {auto_result['packet_path']}")
+        if auto_result["pr_body_updated"]:
+            print("  [PR 본문 자동 업데이트] PIPELINE_FINAL_PACKET 블록 교체 완료")
+        else:
+            print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
+    except (OSError, ValueError, KeyError) as exc:
+        print(YELLOW(f"  [FINAL PACKET] 자동 생성 중 오류 (계속 진행): {exc}"))
 
     print()
     print("=" * 62)
@@ -16167,6 +16833,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_outputs_add.add_argument("--no-copy", action="store_true", default=False,
                                help="Keep the original file path instead of copying to pipeline_outputs/<pipeline_id>/")
     osub.add_parser("status", help="Show registered user-visible outputs")
+
+    # IMP-20260603-2E3D MT-1: report — PR Packet SSoT 명령
+    p_report = sub.add_parser(
+        "report",
+        help="PR 본문 / 최종 확인 안내 자동 생성 (final-packet | update-pr-body)",
+    )
+    report_sub = p_report.add_subparsers(dest="report_action", required=True)
+    p_report_final = report_sub.add_parser(
+        "final-packet",
+        help="human_acceptance_packet.md 생성 (실제 git/gh/state 자료 기반)",
+    )
+    p_report_final.add_argument(
+        "--base", default="origin/main", metavar="REF",
+        help="git diff 비교 기준 ref (기본값: origin/main)",
+    )
+    report_sub.add_parser(
+        "update-pr-body",
+        help="현재 PR 본문의 PIPELINE_FINAL_PACKET 블록을 최신 packet 내용으로 교체",
+    )
 
     # Codex compatibility hooks
     p_codex = sub.add_parser("codex", help="Codex compatibility checks for the mandatory pipeline")
@@ -19608,6 +20293,7 @@ COMMAND_MAP = {
     "github":               cmd_github,
     "agent":                cmd_agent,
     "outputs":              cmd_outputs,
+    "report":               cmd_report,
     "codex":                cmd_codex,
     "preflight":            cmd_preflight,
     "review":               cmd_review,

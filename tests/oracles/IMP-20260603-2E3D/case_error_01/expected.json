@@ -1,0 +1,6 @@
+{
+  "outcome": "BLOCKED",
+  "reason": "stale_packet",
+  "error_code": "STALE_HEAD_SHA",
+  "message": "final packet의 PR head SHA가 실제 PR head SHA와 다릅니다."
+}
