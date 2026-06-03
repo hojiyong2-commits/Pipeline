@@ -1,0 +1,42 @@
+{
+  "pipeline_id": "IMP-20260601-0DF5",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::cmd_hygiene_scan, pipeline.py::cmd_hygiene_archive, pipeline.py::_hygiene_collect_candidates, pipeline.py::_hygiene_classify, pipeline.py::_hygiene_move_file, pipeline.py::_hygiene_write_manifest"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::cmd_hygiene_schedule, pipeline.py::_hygiene_schedule_install, pipeline.py::_hygiene_schedule_status, pipeline.py::_hygiene_schtasks_dry_run"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/e2e/test_hygiene_0df5.py"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_hygiene_0df5.py::test_T1_scan_candidate, test_T2_archive_move, test_T3_secret_block, test_T4_recent_skip, test_T5_protect_paths, test_T6_active_pipeline_skip, test_T7_drive_missing, test_T8_schedule_install_dryrun, test_T9_schedule_status_safe, test_T10_e2e_subprocess_isolated, test_T11_docs_section"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "RELEASE_NOTES.md",
+        "CLAUDE.md"
+      ],
+      "affected_functions": [
+        "RELEASE_NOTES.md::\"Weekly Cleanup Archive\" 섹션 추가, CLAUDE.md::\"Workspace Hygiene Archive\" 섹션 추가"
+      ]
+    }
+  ]
+}
