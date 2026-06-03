@@ -1172,3 +1172,57 @@ api_key_env = os.environ.get("OPENAI_API_KEY")
 1. dummy secret이 EXAMPLE/AAAA 패딩으로 명백한 가짜인지 확인
 2. `python pipeline.py gates secrets --files <변경한_파일>` 로컬 실행 (선택)
 3. handover XML의 `<security>` 또는 `<self_check>` 에 검증 결과 명시
+
+---
+
+## AC Tracking — Dev 역할 (IMP-20260602-1ABE)
+
+Dev는 `requirements_tracking.enabled=true`인 새 파이프라인에서 `scope_manifest.json` (전체 + MT-N별 모두) 에 `implemented_tasks` 필드를 필수로 포함해야 합니다.
+
+### scope_manifest.json 필수 형식
+
+```json
+{
+  "pipeline_id": "...",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["..."],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "구체적 함수명/상수명/코드 변경 설명 (추상 문구 단독 금지)"
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Dev done 차단 조건
+
+- `implemented_tasks` 누락 (requirements_tracking.enabled=true + structured AC 있을 때)
+- `implemented_ac`에 PM에 없는 AC id 참조
+- `implementation_evidence`가 단독 추상 문구만 포함 ("구현 완료", "완료", "done" 등 `_ABSTRACT_EVIDENCE_PATTERNS`)
+- `mt_id`가 PM `<micro_tasks>`에 없는 id
+
+### module qa report 필수 형식
+
+각 `module_qa_MT-N.xml`에 아래 블록을 포함합니다. covers_ac의 모든 id가 ac_verification에 있어야 PASS:
+
+```xml
+<module_qa_report>
+  <mt_id>MT-N</mt_id>
+  <verdict>PASS</verdict>
+  <ac_verification>
+    <criterion ac_id="AC-N" status="PASS" evidence="구체적 검증 증거"/>
+  </ac_verification>
+</module_qa_report>
+```
+
+`covers_iqr`만 있는 문서 전용 MT는 ac_verification 면제됩니다.

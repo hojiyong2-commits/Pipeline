@@ -709,3 +709,45 @@ SSoT 패턴 목록은 `pipeline.py`의 `SECRET_PATTERNS` 상수와 CLAUDE.md의 
 ### 세션 요약 안전 처리
 
 세션 압축 / 재개 후 처음 실행하는 명령은 항상 `python pipeline.py status` 이다. 그 결과에 `current_phase=COMPLETE`가 아니더라도, acceptance-code를 사용자에게 직접 받지 않은 상태에서 `gates accept`를 실행하면 BLOCKED + failure_packet이 생성되어 자동 차단된다.
+
+---
+
+## AC Tracking — PM 역할 (IMP-20260602-1ABE)
+
+PM은 모든 새 파이프라인에서 `step_plan.xml`에 `<acceptance_criteria>` 구조화 블록을 필수로 포함해야 합니다. 자세한 스키마/검증 규칙은 `CLAUDE.md` "Structured AC Tracking" 섹션을 참조합니다.
+
+### 의무 출력 (step_plan.xml)
+
+```xml
+<acceptance_criteria>
+  <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+    <text>사용자가 확인 가능한 구체적인 성공 조건</text>
+  </criterion>
+</acceptance_criteria>
+
+<micro_tasks>
+  <micro_task id="MT-1">
+    ...
+    <covers_ac>AC-1</covers_ac>
+    <!-- 또는 문서 전용 MT는 -->
+    <covers_iqr>IQR-1</covers_iqr>
+  </micro_task>
+</micro_tasks>
+```
+
+### PM done 차단 조건 (8개 검증 규칙)
+
+1. AC 블록 없음
+2. AC id 형식 오류 (AC-숫자 아님)
+3. 중복 AC id
+4. 단독 추상 AC 문구 (`ABSTRACT_AC_PATTERNS` SSoT 매칭)
+5. MT에 covers_ac도 covers_iqr도 없음
+6. covers_ac에 알 수 없는 AC id 참조
+7. must_verify=true AC가 어떤 MT와도 미연결
+8. covers_iqr만 있는 문서 MT는 ac_verification 면제 (허용)
+
+### 사용자 질문 작성 지침
+
+- 추상 문구 단독("정상 동작") 차단은 PM이 step_plan 작성 시 자가 검열로 회피해야 합니다.
+- AC requirement는 사용자가 PR 본문에서 읽고 직접 확인 가능한 구체적 결과(상수, 임계값, 동작 시점, 출력 형식 등)를 포함해야 합니다.
+- P0/P1 사용자 질문(AskUser)을 통해 결정된 사항을 그대로 AC로 옮길 때 `linked_questions` 필드로 추적 가능.

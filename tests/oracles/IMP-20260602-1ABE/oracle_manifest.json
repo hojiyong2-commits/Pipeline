@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260602-1ABE",
+  "created_at": "2026-06-03T00:00:00Z",
+  "oracles": [
+    {
+      "id": "O001",
+      "name": "O001",
+      "case_kind": "normal",
+      "source": "user",
+      "description": "structured AC 정상 파싱 — requirements_tracking.enabled=true, AC-1~AC-2 정의, MT covers_ac 연결 완비",
+      "input_path": "tests/oracles/IMP-20260602-1ABE/case_normal_01/input.json",
+      "expected_path": "tests/oracles/IMP-20260602-1ABE/case_normal_01/expected.json",
+      "input_sha256": "a362f7bab8630aacde9a68f2a2c9d4d1c48623fc3cd093e6b699d9925d0da958",
+      "expected_sha256": "a362f7bab8630aacde9a68f2a2c9d4d1c48623fc3cd093e6b699d9925d0da958",
+      "ac_ids": ["AC-1", "AC-2"],
+      "expected_source": "user_provided"
+    },
+    {
+      "id": "O002",
+      "name": "O002",
+      "case_kind": "edge",
+      "source": "user",
+      "description": "legacy state 하위 호환 — requirements_tracking 필드 없는 오래된 state는 AC 추적 없이 통과",
+      "input_path": "tests/oracles/IMP-20260602-1ABE/case_edge_01/input.json",
+      "expected_path": "tests/oracles/IMP-20260602-1ABE/case_edge_01/expected.json",
+      "input_sha256": "7066bda1cfc93abdd89243556ecc3399588cd1949d0935e4832d129e8b2b42be",
+      "expected_sha256": "7066bda1cfc93abdd89243556ecc3399588cd1949d0935e4832d129e8b2b42be",
+      "ac_ids": ["AC-5"],
+      "expected_source": "user_provided"
+    },
+    {
+      "id": "O003",
+      "name": "O003",
+      "case_kind": "error",
+      "source": "user",
+      "description": "추상 AC 차단 — 단독 추상 문구 AC는 PM done 실패",
+      "input_path": "tests/oracles/IMP-20260602-1ABE/case_error_01/input.json",
+      "expected_path": "tests/oracles/IMP-20260602-1ABE/case_error_01/expected.json",
+      "input_sha256": "821d1168cf072b40f718464cf2baa8e5ed3cefc2f2c6282daaf95d8454ab5239",
+      "expected_sha256": "821d1168cf072b40f718464cf2baa8e5ed3cefc2f2c6282daaf95d8454ab5239",
+      "ac_ids": ["AC-1"],
+      "expected_source": "user_provided"
+    }
+  ]
+}
