@@ -599,3 +599,11 @@ QA는 `requirements_tracking.enabled=true`인 새 파이프라인에서 `qa_repo
 
 - 회귀 1: 사용자 AC가 "월요일 09:00"인데 diff가 "SUN/02:00" → coverage_checks.diff_values_match_ac=false → QA 차단
 - 회귀 2: 사용자 AC가 "실제 파일 이동"인데 테스트가 dry-run만 검증 → coverage_checks.no_dry_run_substitution=false → QA 차단
+
+### PR Packet SSoT 규칙 (IMP-20260603-2E3D)
+
+QA는 PR 본문의 "최종 확인 안내"와 `human_acceptance_packet.md`가 `python pipeline.py
+report final-packet` 결과로만 작성되었는지 검사합니다. 에이전트가 PIPELINE_FINAL_PACKET 블록
+안을 자유서술로 채웠거나 packet의 PR head SHA / CI run ID / 변경 파일 set이 실제 상태와
+다르면 `gates request-accept`가 BLOCKED를 반환해야 합니다. QA는 packet 형식과 내용이
+실제 `gates request-accept` 출력과 일치하는지 회귀 검증합니다.

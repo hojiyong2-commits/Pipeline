@@ -1,0 +1,6 @@
+{
+  "outcome": "BLOCKED",
+  "reason": "final_packet_missing",
+  "error_code": "FINAL_PACKET_MISSING",
+  "message": "final packet이 없습니다. python pipeline.py report final-packet을 먼저 실행하세요."
+}
