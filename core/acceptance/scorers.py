@@ -137,6 +137,14 @@ def score_file_output_check(test: dict[str, Any], base_dir: Path, project_dir: P
     contains = then.get("contains")
     if contains is not None:
         text = path.read_text(encoding="utf-8", errors="replace")
+        # contains가 리스트이면 모든 항목이 파일에 있는지 확인한다.
+        if isinstance(contains, list):
+            missing = [s for s in contains if str(s) not in text]
+            ok = not missing
+            return ok, "file contains expected text" if ok else "file does not contain expected text", {
+                "path": str(path),
+                "contains": contains,
+            }
         ok = str(contains) in text
         return ok, "file contains expected text" if ok else "file does not contain expected text", {
             "path": str(path),
@@ -277,13 +285,16 @@ def _build_command_check_env(
     given: dict[str, Any],
     base_dir: Path,
     project_dir: Path,
+    when: dict[str, Any] | None = None,
 ) -> tuple[dict[str, str], str | None]:
-    """given 블록의 isolation/fixture/env를 처리하여 subprocess 환경변수를 반환한다.
+    """given/when 블록의 isolation/fixture/env를 처리하여 subprocess 환경변수를 반환한다.
 
     Returns:
         (env_dict, tmp_dir_to_cleanup) — tmp_dir_to_cleanup은 사용 후 삭제할 임시 디렉토리
         경로이거나 None.
     """
+    if when is None:
+        when = {}
     env = dict(os.environ)
     tmp_dir: str | None = None
 
@@ -308,10 +319,20 @@ def _build_command_check_env(
             json.dump(state_content, f, ensure_ascii=False, indent=2)
         env["PIPELINE_STATE_PATH"] = tmp_state
 
-    # when.env 오버라이드 지원
+    # given.env 오버라이드 지원
     extra_env = given.get("env")
     if isinstance(extra_env, dict):
         env.update({str(k): str(v) for k, v in extra_env.items()})
+
+    # when.env 오버라이드 지원 (given.env보다 낮은 우선순위 — given이 더 구체적)
+    # test_set.json에서 when.env에 환경변수를 지정하는 경우를 지원한다.
+    when_env = when.get("env")
+    if isinstance(when_env, dict):
+        for k, v in when_env.items():
+            k_str = str(k)
+            # given.env가 이미 같은 키를 설정했다면 when.env는 덮어쓰지 않는다.
+            if k_str not in (extra_env or {}):
+                env[k_str] = str(v)
 
     return env, tmp_dir
 
@@ -330,7 +351,7 @@ def score_command_check(test: dict[str, Any], base_dir: Path, project_dir: Path)
     resolved_command = [sys.executable if part == "{python}" else str(part) for part in command]
     cwd = _resolve(base_dir, str(when["cwd"])) if when.get("cwd") else project_dir
     timeout = int(when.get("timeout_seconds", 30))
-    cmd_env, tmp_dir = _build_command_check_env(given, base_dir, project_dir)
+    cmd_env, tmp_dir = _build_command_check_env(given, base_dir, project_dir, when=when)
     try:
         proc = subprocess.run(
             resolved_command,

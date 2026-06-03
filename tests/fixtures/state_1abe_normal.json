@@ -4,7 +4,7 @@
   "type": "IMP",
   "description": "요구사항 추적 구조 개선 — PM structured AC(AC-N), MT covers_ac 연결, Dev implemented_tasks, QA criteria_verification, Oracle ac_ids, Codex AC Coverage Review, request-accept AC 충족표 출력",
   "created_at": "2026-06-02T14:25:43Z",
-  "updated_at": "2026-06-03T00:59:26Z",
+  "updated_at": "2026-06-03T01:10:11Z",
   "pipeline_started_at": "2026-06-02T14:25:43Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
@@ -58,6 +58,14 @@
     {
       "ts": "2026-06-03T00:59:26Z",
       "msg": "acceptance request 신규 발급: request_id=97f3f9e9 nonce=4QSXRD5U"
+    },
+    {
+      "ts": "2026-06-03T01:09:16Z",
+      "msg": "acceptance request 재사용: request_id=97f3f9e9 nonce=4QSXRD5U"
+    },
+    {
+      "ts": "2026-06-03T01:10:11Z",
+      "msg": "acceptance request 재사용: request_id=97f3f9e9 nonce=4QSXRD5U"
     }
   ],
   "agent_runs": {},
