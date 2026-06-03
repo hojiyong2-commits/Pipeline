@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-03T00:28:47Z",
+  "generated_at": "2026-06-03T00:36:57Z",
   "pipeline_id": "IMP-20260602-1ABE",
   "phase": "qa",
   "phase_status": "PASS",
-  "commit_hint": "80e965d032e99ab5658165de22e918dcfb966288",
+  "commit_hint": "df4437d56c9833c29cc5a08e1128de98ab310910",
   "state": {
     "current_phase": "sec",
     "phase_completed_at": "2026-06-03T00:23:20Z",
@@ -18,9 +18,9 @@
     "agent_id": "qa-agent",
     "status": "COMPLETED",
     "output_file": "qa_report.xml",
-    "output_sha256": "3bc6b43b79209cb0b86079bee7863e5d06fb98c90a7b56a8c520e6cd852422db",
+    "output_sha256": "13075a20bf12665f172b16578625b97d97d97d0ce7b69e58010f8973cdd5bd8f",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260602-1ABE/qa/agent_receipt_qa-8abcd0edc34a571f.json",
-    "receipt_sha256": "1034380610cba3e40c5b814fb0ceeb0feacdbbd6466edcabbe01c1365985e04c",
+    "receipt_sha256": "9637e34acb10f6c34d5d6e7a3f7f1ce47c8edf15f7b8c544120708b62d6267d0",
     "used_by_phase": "qa",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260602-1ABE\\qa\\qa-8abcd0edc34a571f.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260602-1ABE\\qa\\qa-8abcd0edc34a571f.json",
       "path": ".pipeline/phase_evidence/IMP-20260602-1ABE/qa/agent_receipt_qa-8abcd0edc34a571f.json",
-      "sha256": "1034380610cba3e40c5b814fb0ceeb0feacdbbd6466edcabbe01c1365985e04c",
+      "sha256": "9637e34acb10f6c34d5d6e7a3f7f1ce47c8edf15f7b8c544120708b62d6267d0",
       "size_bytes": 496,
       "requires_force_add": false
     },
@@ -38,8 +38,8 @@
       "label": "report",
       "source": "qa_report.xml",
       "path": ".pipeline/phase_evidence/IMP-20260602-1ABE/qa/report_qa_report.xml",
-      "sha256": "3bc6b43b79209cb0b86079bee7863e5d06fb98c90a7b56a8c520e6cd852422db",
-      "size_bytes": 3697,
+      "sha256": "13075a20bf12665f172b16578625b97d97d97d0ce7b69e58010f8973cdd5bd8f",
+      "size_bytes": 3631,
       "requires_force_add": false
     }
   ],
