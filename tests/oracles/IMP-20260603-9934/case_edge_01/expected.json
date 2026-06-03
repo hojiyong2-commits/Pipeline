@@ -1,0 +1,7 @@
+{
+  "old_nonce_status": "EXPIRED",
+  "old_nonce_reason": "final_packet_regenerated",
+  "new_nonce_issued": true,
+  "new_packet_sha256_stored": true,
+  "new_status": "PENDING"
+}
