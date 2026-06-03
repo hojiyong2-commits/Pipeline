@@ -24,10 +24,10 @@
     "tests/oracles/IMP-20260602-1ABE/case_normal_01/input.json",
     "tests/oracles/IMP-20260602-1ABE/oracle_manifest.json"
   ],
-  "diff_sha256": "72193d4ae11b6f767ed4b517715f7e1aa3b2e553b526a365c48d9de73df86271",
+  "diff_sha256": "fd38c4deb0d11ba299c3433dcec5b60b089ff728f68ba2b3aedc6c8e1e041fcc",
   "findings": [],
   "created_at": "2026-06-03T00:18:06Z",
-  "updated_at": "2026-06-03T01:00:00Z",
+  "updated_at": "2026-06-03T01:10:00Z",
   "head_sha": "ddc3821",
   "notes": "Code review updated for IMP-20260602-1ABE: AC tracking implementation. All MT-1 through MT-6 changes are within scope. No security findings.",
   "history": [
@@ -37,7 +37,7 @@
       "review_model": "GPT-5.5",
       "reviewer": "pipeline-manager-agent",
       "created_at": "2026-06-03T00:18:06Z",
-      "diff_sha256": "72193d4ae11b6f767ed4b517715f7e1aa3b2e553b526a365c48d9de73df86271",
+      "diff_sha256": "fd38c4deb0d11ba299c3433dcec5b60b089ff728f68ba2b3aedc6c8e1e041fcc",
       "recorded_via": "codex-record"
     },
     {
