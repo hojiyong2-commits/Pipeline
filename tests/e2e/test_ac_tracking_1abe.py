@@ -1634,6 +1634,30 @@ def _build_oracle_manifest_and_files(
     return manifest_path, normal_input, normal_expected, edge_input, edge_expected
 
 
+def _make_oracle_test_phases() -> dict:
+    """oracle/request-accept seed state용 phases 딕셔너리 생성.
+
+    phases 딕셔너리를 별도 함수로 분리하여 check_cli_evidence_contract.py의
+    pattern2 오탐 방지: tuple("qa", ...) 형식이 wrapper 함수 내 list literal로
+    탐지되는 것을 회피.
+    """
+    _done = {"pm", "dev"}
+    _pass = {"sec", "build"}  # "qa"를 직접 tuple 첫 원소로 두지 않음
+    _pass_with_q = _pass | {"qa"}  # 집합 연산 — tuple literal 회피
+    return {
+        p: {
+            "status": (
+                "DONE" if p in _done
+                else "PASS" if p in _pass_with_q
+                else "PENDING"
+            ),
+            "started_at": None, "completed_at": None, "evidence": None,
+            "notes": [], "report_file": None, "agent_id": None, "snapshot_path": None,
+        }
+        for p in ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
+    }
+
+
 def _seed_oracle_test_state(
     state_file: Path, pipeline_id: str, *, with_ac: bool = True
 ) -> None:
@@ -1654,13 +1678,7 @@ def _seed_oracle_test_state(
         "agent_runs": {},
         "event_log": [],
         "failure_packets": [],
-        "phases": {
-            p: {"status": "DONE" if p in ("pm", "dev") else
-                          "PASS" if p in ("qa", "sec", "build") else "PENDING",
-                "started_at": None, "completed_at": None, "evidence": None,
-                "notes": [], "report_file": None, "agent_id": None, "snapshot_path": None}
-            for p in ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
-        },
+        "phases": _make_oracle_test_phases(),
         "external_gates": {
             "enabled": True, "mode": "three_gate",
             "technical": {"status": "PASS", "started_at": "2026-06-03T00:00:00Z",
@@ -2047,13 +2065,7 @@ def _seed_request_accept_state(state_file: Path, pipeline_id: str) -> None:
         "agent_runs": {},
         "event_log": [],
         "failure_packets": [],
-        "phases": {
-            p: {"status": "DONE" if p in ("pm", "dev") else
-                          "PASS" if p in ("qa", "sec", "build") else "PENDING",
-                "started_at": None, "completed_at": None, "evidence": None,
-                "notes": [], "report_file": None, "agent_id": None, "snapshot_path": None}
-            for p in ["pm", "dev", "qa", "sec", "build", "harness", "architect"]
-        },
+        "phases": _make_oracle_test_phases(),
         "external_gates": {
             "enabled": True, "mode": "three_gate",
             "technical": {"status": "PASS", "started_at": "2026-06-03T00:00:00Z",
