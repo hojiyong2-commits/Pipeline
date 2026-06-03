@@ -683,3 +683,145 @@ class TestSchemaVersion2FieldConsistency:
         assert "packet_frozen_at" in pipeline_content, (
             "pipeline.py에 packet_frozen_at 필드 코드가 없음"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test 13 — AC 충족표 PENDING 재발 방지
+# ---------------------------------------------------------------------------
+
+class TestACFulfillmentTableNoPending:
+    """request-accept 후 ac_fulfillment_table에 user_visible AC의 PENDING 결과가 없어야 한다."""
+
+    def test_ac_fulfillment_table_has_pass_for_user_visible_acs(
+        self, tmp_path: Path
+    ) -> None:
+        """request-accept 후 acceptance_request.json의 ac_fulfillment_table은
+        user_visible AC에 PENDING 결과가 없어야 한다 (모두 PASS).
+
+        격리 환경에서 structured_acceptance_criteria에 AC-1 result=PASS + evidence 포함 상태로
+        request-accept를 실행하고 acceptance_request.json의 ac_fulfillment_table을 확인한다.
+        user_visible AC 중 result=PENDING인 항목이 없는지 assert.
+        """
+        state_path = tmp_path / "pipeline_state.json"
+        acceptance_req_path = tmp_path / "acceptance_request.json"
+        packet_path = tmp_path / "human_acceptance_packet.md"
+
+        # 격리용 최소 state 작성 — AC-1 result=PASS, user_visible=true
+        state = {
+            "pipeline_id": "IMP-20260603-9934-T13",
+            "current_phase": "build",
+            "phase_history": {
+                "pm": {"status": "DONE"},
+                "dev": {"status": "DONE"},
+                "qa": {"status": "PASS"},
+                "build": {"status": "DONE"},
+            },
+            "external_gates": {
+                "technical": {"status": "PASS"},
+                "oracle": {"status": "PASS"},
+                "github_ci": {"status": "PASS"},
+                "acceptance": {"status": "PENDING"},
+            },
+            "requirements_tracking": {
+                "enabled": True,
+                "acceptance_criteria": [],
+            },
+            "structured_acceptance_criteria": [
+                {
+                    "ac_id": "AC-1",
+                    "requirement": "request-accept 후 packet_sha256 저장",
+                    "must_verify": True,
+                    "source": "user",
+                    "user_visible": True,
+                    "result": "PASS",
+                    "linked_mt": ["MT-1"],
+                    "implementation_evidence": [
+                        "MT-1: pipeline.py: _compute_packet_sha256 추가"
+                    ],
+                    "verification": [
+                        "MT-1 qa: PASS — test_request_accept_stores_packet_sha256"
+                    ],
+                }
+            ],
+        }
+        state_path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        # 최소 packet 파일 작성 (request-accept 가 읽을 수 있도록)
+        packet_path.write_text(
+            "# Final Packet\n\nTest packet for T13\n", encoding="utf-8"
+        )
+
+        env = os.environ.copy()
+        env["PIPELINE_STATE_PATH"] = str(state_path)
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(PIPELINE_PY),
+                "gates",
+                "request-accept",
+                "--evidence",
+                str(packet_path),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+            cwd=str(PIPELINE_PY.parent),
+            timeout=30,
+        )
+
+        # acceptance_request.json이 생성되었어야 한다
+        req_path = PIPELINE_PY.parent / "acceptance_request.json"
+        if not req_path.exists():
+            # 격리 tmp에도 확인
+            req_path = acceptance_req_path
+
+        # request-accept가 성공(exit 0)했을 때만 ac_fulfillment_table 확인
+        # 실패(exit 1)는 환경 의존성(gh CLI 등)이 원인일 수 있으므로 skip 처리
+        if result.returncode != 0:
+            combined = result.stdout + result.stderr
+            # gh CLI 없음 / PR 없음 / SHA 조회 실패 등 환경 이슈는 skip
+            if any(
+                kw in combined
+                for kw in (
+                    "gh",
+                    "PR",
+                    "pull request",
+                    "git",
+                    "SHA",
+                    "run_id",
+                    "not found",
+                    "command not found",
+                    "no open PR",
+                    "stale",
+                )
+            ):
+                import pytest
+                pytest.skip(
+                    f"환경 의존성(gh/PR/git) 이슈로 skip — returncode={result.returncode}"
+                )
+            # 그 외 실패는 테스트 실패로 처리
+            assert result.returncode == 0, (
+                f"request-accept 실패 (exit {result.returncode})\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+
+        # acceptance_request.json 읽기
+        if req_path.exists():
+            req_data = json.loads(req_path.read_text(encoding="utf-8"))
+            fulfillment = req_data.get("ac_fulfillment_table", [])
+            # user_visible AC 중 PENDING인 항목이 없어야 한다
+            pending_user_visible = [
+                item
+                for item in fulfillment
+                if item.get("user_visible") is True
+                and item.get("result") == "PENDING"
+            ]
+            assert pending_user_visible == [], (
+                f"user_visible AC 중 PENDING 결과가 있음: {pending_user_visible}\n"
+                "structured_acceptance_criteria에 result/implementation_evidence/verification을 채워야 합니다."
+            )

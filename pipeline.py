@@ -14581,7 +14581,13 @@ def _get_codex_status_for_ac(ac_id: str) -> str:
 
 
 def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
-    """structured AC 기록에서 AC 충족표를 자동 조립한다 (legacy면 None)."""
+    """structured AC 기록에서 AC 충족표를 자동 조립한다 (legacy면 None).
+
+    증거 조회 우선순위:
+    1. module_gates / module qa XML (동적으로 수집)
+    2. structured_acceptance_criteria에 직접 저장된 implementation_evidence / verification / result
+       (module QA AC tracking 이전 수동 업데이트 또는 재처리 케이스)
+    """
     structured_ac = state.get("structured_acceptance_criteria") or []
     if not structured_ac:
         return None
@@ -14596,12 +14602,33 @@ def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str
         verifications = _get_qa_verification_for_ac(state, ac_id)
         codex_status = _get_codex_status_for_ac(ac_id)
 
-        # result 판정
-        result = "PASS"
+        # 폴백: module_gates 조회 결과가 비어 있으면 structured_acceptance_criteria에
+        # 직접 저장된 값을 사용한다 (module QA AC tracking 이전 수동 업데이트 케이스).
         if not impl_evidence:
-            result = "PENDING"
+            stored_evidence = ac.get("implementation_evidence")
+            if isinstance(stored_evidence, list) and stored_evidence:
+                impl_evidence = stored_evidence
+
         if not verifications:
-            result = "PENDING"
+            stored_verif = ac.get("verification")
+            if isinstance(stored_verif, list) and stored_verif:
+                verifications = stored_verif
+
+        if not linked_mt:
+            stored_linked = ac.get("linked_mt")
+            if isinstance(stored_linked, list) and stored_linked:
+                linked_mt = stored_linked
+
+        # result 판정: structured_ac에 명시적 result=PASS가 있고 증거도 있으면 PASS
+        stored_result = ac.get("result")
+        if stored_result == "PASS" and impl_evidence and verifications:
+            result = "PASS"
+        else:
+            result = "PASS"
+            if not impl_evidence:
+                result = "PENDING"
+            if not verifications:
+                result = "PENDING"
 
         table.append({
             "ac_id": ac_id,
