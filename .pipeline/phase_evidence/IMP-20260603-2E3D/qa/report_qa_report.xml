@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260603-2E3D</pipeline_id>
+  <agent_id>qa-agent</agent_id>
+  <generated_at>2026-06-03T10:15:00Z</generated_at>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager</to>
+    <pipeline_id>IMP-20260603-2E3D</pipeline_id>
+    <status>READY_FOR_BUILD</status>
+    <evidence>
+      <file>qa_report.xml</file>
+      <file>tests/e2e/test_final_packet_2e3d.py</file>
+    </evidence>
+  </handover>
+  <test_results>
+    <suite name="E2E test_final_packet_2e3d.py" total="12" passed="12" failed="0">
+      <test name="test_final_packet_generated_with_pr_sha_and_ci_run" result="PASS"/>
+      <test name="test_final_packet_shows_pending_when_no_acceptance_request" result="PASS"/>
+      <test name="test_final_packet_includes_accept_code_when_request_exists" result="PASS"/>
+      <test name="test_final_packet_lines_within_120_chars" result="PASS"/>
+      <test name="test_final_packet_accept_code_on_separate_line" result="PASS"/>
+      <test name="test_request_accept_proceeds_without_final_packet" result="PASS"/>
+      <test name="test_request_accept_blocks_on_stale_pr_sha" result="PASS"/>
+      <test name="test_request_accept_blocks_on_stale_ci_run_id" result="PASS"/>
+      <test name="test_request_accept_reuses_nonce_when_conditions_same" result="PASS"/>
+      <test name="test_request_accept_issues_new_nonce_when_conditions_change" result="PASS"/>
+      <test name="test_request_accept_auto_generates_packet_with_code" result="PASS"/>
+      <test name="test_accept_blocks_without_acceptance_code" result="PASS"/>
+    </suite>
+  </test_results>
+  <scope_verification>
+    <micro_task_boundary>
+      <mt_id>MT-1</mt_id>
+      <files_declared>pipeline.py</files_declared>
+      <verdict>PASS</verdict>
+    </micro_task_boundary>
+    <micro_task_boundary>
+      <mt_id>MT-2</mt_id>
+      <files_declared>pipeline.py</files_declared>
+      <verdict>PASS</verdict>
+    </micro_task_boundary>
+    <micro_task_boundary>
+      <mt_id>MT-3</mt_id>
+      <files_declared>CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/dev-agent.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md, RELEASE_NOTES.md</files_declared>
+      <verdict>PASS</verdict>
+    </micro_task_boundary>
+    <micro_task_boundary>
+      <mt_id>MT-4</mt_id>
+      <files_declared>tests/e2e/test_final_packet_2e3d.py</files_declared>
+      <verdict>PASS</verdict>
+    </micro_task_boundary>
+    <blast_radius>IN_SCOPE</blast_radius>
+  </scope_verification>
+  <acceptance_criteria_verification>
+    <ac id="AC-1" status="PASS"/>
+    <ac id="AC-2" status="PASS"/>
+    <ac id="AC-3" status="PASS"/>
+    <ac id="AC-4" status="PASS"/>
+    <ac id="AC-5" status="PASS"/>
+  </acceptance_criteria_verification>
+  <static_analysis>
+    <tool name="ruff" result="PASS"/>
+    <tool name="cli_evidence_contract" result="PASS"/>
+  </static_analysis>
+  <failure_signature>none</failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+  <scoring>
+    <total score="110" max="120"/>
+  </scoring>
+</qa_report>
