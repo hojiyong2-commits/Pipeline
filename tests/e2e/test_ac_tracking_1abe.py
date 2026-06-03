@@ -7,16 +7,11 @@ Structured AC Tracking E2E 테스트
 #            Dev scope_manifest implemented_tasks 검증, Oracle ac_ids 검증,
 #            Codex Review coverage_checks hard gate가 정확히 동작하는지 검증.
 # [Assumptions]: pipeline.py에서 함수 직접 import 가능 + subprocess CLI 호출 시
-#                PIPELINE_STATE_PATH 격리. 일부 테스트는 함수 단위 검증으로 처리.
-# [Vulnerability & Risks]:
-#   - gh CLI 없는 환경에서 request-accept 일부 stale 검사는 skip.
-#   - 함수 직접 import 테스트는 CLI 인자 파싱은 검증하지 않음 (별도 케이스에서 처리).
-# [Improvement]: PIPELINE_STATE_PATH 격리한 full PM→Dev 흐름 테스트를 추가하면
-#                CLI 인자 파싱까지 한 번에 검증 가능.
+#                PIPELINE_STATE_PATH 격리.
 
 # CLI Evidence Contract (IMP-20260525-6FAC):
 # - 상태 변경 CLI 호출은 PIPELINE_STATE_PATH 격리 + final_state assertion 포함
-# - 함수 직접 호출 테스트는 별도로 비-CLI 영역에서만 사용
+# - 함수 직접 호출 테스트는 비-CLI 내부 로직 검증용
 """
 
 import sys
@@ -729,3 +724,286 @@ if __name__ == "__main__":
     test_codex_coverage_check_fields_count()
     test_ac_table_legacy_returns_none()
     print("[SELF-VERIFY] OK")
+
+
+# ── CLI E2E 테스트 (IQR-1 compliant) ──
+# subprocess.run(['python', 'pipeline.py', ...]) + PIPELINE_STATE_PATH 격리 + final_state assertion
+# (IMP-20260525-6FAC: Real CLI Path E2E Gate Policy)
+
+import json  # noqa: E402 (모듈 수준 이미 sys 등 import됨; 추가 import 허용)
+import os  # noqa: E402
+import subprocess  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_PY = REPO_ROOT / "pipeline.py"
+
+
+def _run_pipeline_cli(*args: str, state_path: Path, env_extra: dict | None = None):
+    """pipeline.py를 subprocess로 실행. (CompletedProcess, final_state_dict) 반환."""
+    env = {**os.environ, "PIPELINE_STATE_PATH": str(state_path), "PYTHONIOENCODING": "utf-8"}
+    if env_extra:
+        env.update(env_extra)
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY)] + list(args),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        cwd=str(REPO_ROOT),
+    )
+    final_state: dict = {}
+    if state_path.exists():
+        try:
+            final_state = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return result, final_state
+
+
+def _seed_state(state_path: Path, data: dict) -> None:
+    """격리된 state 파일에 초기 데이터 쓰기."""
+    state_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _make_target_file(tmp_path: Path) -> Path:
+    """module qa checkpoint용 실제 파일 생성 (절대 경로 반환)."""
+    target = tmp_path / "dummy_target.py"
+    target.write_text("# dummy target for checkpoint\ndef test_func(): pass\n", encoding="utf-8")
+    return target
+
+
+def _base_module_qa_state(pipeline_id: str = "IMP-20260602-TEST", target_file: str = "") -> dict:
+    """module qa CLI E2E 테스트용 최소 state 시드.
+
+    target_file: module checkpoint용 실제 파일의 절대 경로 문자열.
+    """
+    tf = [target_file] if target_file else []
+    return {
+        "pipeline_id": pipeline_id,
+        "current_phase": "dev",
+        "phases": {
+            "pm": {"status": "DONE"},
+            "dev": {"status": "PENDING"},
+        },
+        "event_log": [],
+        "requirements_tracking": {"enabled": True},
+        "structured_acceptance_criteria": [
+            {"ac_id": "AC-1", "requirement": "테스트용 구체적 성공 조건 — subprocess 격리 검증"}
+        ],
+        "atomic_plan": {
+            "micro_tasks": [
+                {
+                    "id": "MT-1",
+                    "covers_ac": ["AC-1"],
+                    "covers_iqr": [],
+                    "target_files": tf,
+                    "affected_function": "test_func",
+                }
+            ]
+        },
+        "module_gates": {
+            "enabled": True,
+            "sequence": ["MT-1"],
+            "modules": {
+                "MT-1": {
+                    "id": "MT-1",
+                    "status": "DEV_DONE",
+                    "order": 1,
+                    "target_files": tf,
+                    "affected_function": "test_func",
+                    "design": {"status": "PASS", "completed_at": "2026-06-03T00:00:00Z", "report_file": None},
+                    "dev": {"status": "DONE", "completed_at": "2026-06-03T00:01:00Z", "report_file": None},
+                    "qa": {"status": "PENDING", "completed_at": None, "report_file": None},
+                    "checkpoint": None,
+                }
+            },
+            "integration": {"status": "PENDING"},
+        },
+    }
+
+
+def _write_module_qa_report(report_path: Path, *, with_ac_verification: bool) -> None:
+    """module qa report XML 작성 헬퍼."""
+    ac_block = ""
+    if with_ac_verification:
+        ac_block = (
+            '<ac_verification>'
+            '<criterion ac_id="AC-1" status="PASS" evidence="test_func() 검증 완료"/>'
+            '</ac_verification>'
+        )
+    report_path.write_text(
+        f'<module_qa_report>'
+        f'<mt_id>MT-1</mt_id>'
+        f'<verdict>PASS</verdict>'
+        f'<verification_evidence>테스트 완료</verification_evidence>'
+        f'{ac_block}'
+        f'</module_qa_report>',
+        encoding="utf-8",
+    )
+
+
+def test_cli_module_qa_blocks_when_no_ac_verification(tmp_path):
+    """[IQR-1] covers_ac 있는 MT에 ac_verification 없는 report → CLI exit != 0 + state PASS 아님.
+
+    subprocess 실행 + PIPELINE_STATE_PATH 격리 + final_state assertion (IMP-20260525-6FAC).
+    """
+    state_file = tmp_path / "pipeline_state.json"
+    report_file = tmp_path / "module_qa_MT-1.xml"
+    target_file = _make_target_file(tmp_path)
+
+    _seed_state(state_file, _base_module_qa_state(target_file=str(target_file)))
+    _write_module_qa_report(report_file, with_ac_verification=False)
+
+    result, final_state = _run_pipeline_cli(
+        "module", "qa",
+        "--mt-id", "MT-1",
+        "--result", "PASS",
+        "--report-file", str(report_file),
+        state_path=state_file,
+    )
+
+    # CLI는 0이 아닌 exit code로 종료해야 함 (AC gate 차단)
+    assert result.returncode != 0, (
+        f"exit code {result.returncode}: ac_verification 없는 report가 PASS되면 안 됨\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+
+    # final_state에서 MT-1 module qa status가 PASS가 아님을 확인
+    mt1_qa_status = (
+        final_state
+        .get("module_gates", {})
+        .get("modules", {})
+        .get("MT-1", {})
+        .get("qa", {})
+        .get("status")
+    )
+    assert mt1_qa_status != "PASS", (
+        f"MT-1 qa status가 PASS로 기록되었으나 ac_verification 없는 report였음: {mt1_qa_status}"
+    )
+
+
+def test_cli_module_qa_passes_when_ac_verification_present(tmp_path):
+    """[IQR-1] covers_ac 있는 MT에 ac_verification 포함 report → CLI exit 0 + state PASS 기록.
+
+    subprocess 실행 + PIPELINE_STATE_PATH 격리 + final_state assertion (IMP-20260525-6FAC).
+    """
+    state_file = tmp_path / "pipeline_state.json"
+    report_file = tmp_path / "module_qa_MT-1.xml"
+    target_file = _make_target_file(tmp_path)
+
+    _seed_state(state_file, _base_module_qa_state(target_file=str(target_file)))
+    _write_module_qa_report(report_file, with_ac_verification=True)
+
+    result, final_state = _run_pipeline_cli(
+        "module", "qa",
+        "--mt-id", "MT-1",
+        "--result", "PASS",
+        "--report-file", str(report_file),
+        state_path=state_file,
+    )
+
+    # CLI는 exit 0으로 종료해야 함
+    assert result.returncode == 0, (
+        f"exit code {result.returncode}: ac_verification 있는 report가 FAIL됨\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+
+    # final_state에서 module_gates.modules.MT-1.qa.status == "PASS" 확인
+    mt1_qa_status = (
+        final_state
+        .get("module_gates", {})
+        .get("modules", {})
+        .get("MT-1", {})
+        .get("qa", {})
+        .get("status")
+    )
+    assert mt1_qa_status == "PASS", (
+        f"MT-1 qa status가 PASS로 기록되지 않음: {mt1_qa_status}\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+
+
+def test_cli_module_qa_legacy_state_passes_without_ac_verification(tmp_path):
+    """[IQR-1] requirements_tracking 없는 legacy state → ac_verification 없어도 exit 0 + PASS.
+
+    legacy backward compatibility 검증.
+    subprocess 실행 + PIPELINE_STATE_PATH 격리 + final_state assertion (IMP-20260525-6FAC).
+    """
+    state_file = tmp_path / "pipeline_state.json"
+    report_file = tmp_path / "module_qa_MT-1.xml"
+    target_file = _make_target_file(tmp_path)
+    tf = [str(target_file)]
+
+    # legacy state: requirements_tracking 키 없음
+    legacy_state = {
+        "pipeline_id": "IMP-20260602-LEGACY",
+        "current_phase": "dev",
+        "phases": {
+            "pm": {"status": "DONE"},
+            "dev": {"status": "PENDING"},
+        },
+        "event_log": [],
+        "atomic_plan": {
+            "micro_tasks": [
+                {
+                    "id": "MT-1",
+                    "covers_ac": ["AC-1"],
+                    "covers_iqr": [],
+                    "target_files": tf,
+                    "affected_function": "legacy_func",
+                }
+            ]
+        },
+        "module_gates": {
+            "enabled": True,
+            "sequence": ["MT-1"],
+            "modules": {
+                "MT-1": {
+                    "id": "MT-1",
+                    "status": "DEV_DONE",
+                    "order": 1,
+                    "target_files": tf,
+                    "affected_function": "legacy_func",
+                    "design": {"status": "PASS", "completed_at": "2026-06-03T00:00:00Z", "report_file": None},
+                    "dev": {"status": "DONE", "completed_at": "2026-06-03T00:01:00Z", "report_file": None},
+                    "qa": {"status": "PENDING", "completed_at": None, "report_file": None},
+                    "checkpoint": None,
+                }
+            },
+            "integration": {"status": "PENDING"},
+        },
+        # requirements_tracking 키 없음 → legacy 취급
+    }
+
+    _seed_state(state_file, legacy_state)
+    _write_module_qa_report(report_file, with_ac_verification=False)
+
+    result, final_state = _run_pipeline_cli(
+        "module", "qa",
+        "--mt-id", "MT-1",
+        "--result", "PASS",
+        "--report-file", str(report_file),
+        state_path=state_file,
+    )
+
+    # legacy state는 ac_verification 없어도 PASS
+    assert result.returncode == 0, (
+        f"exit code {result.returncode}: legacy state가 ac_verification 없어도 PASS여야 함\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+
+    # final_state에서 module gate 정상 기록 확인
+    mt1_status = (
+        final_state
+        .get("module_gates", {})
+        .get("modules", {})
+        .get("MT-1", {})
+        .get("status")
+    )
+    assert mt1_status == "PASS", (
+        f"MT-1 module status가 PASS로 기록되지 않음: {mt1_status}\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
