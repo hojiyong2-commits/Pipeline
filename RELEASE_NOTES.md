@@ -135,3 +135,47 @@ pytest tests/ -q
 python pipeline.py gates status
 python pipeline.py status
 ```
+
+---
+
+## IMP-20260602-1ABE — 요구사항 추적 구조 개선
+
+사용자 요구사항(AC)이 PM → Dev → Codex Review → QA → Oracle → request-accept까지
+끊기지 않고 추적되도록 기존 게이트를 확장했습니다. 새 대형 게이트 추가 없이 기존
+PM/Dev/Module-QA/Oracle/Codex Review 경로에 AC 연결을 강제합니다.
+
+### 변경 내용
+
+- **PM** `step_plan.xml`에 structured AC 블록 필수화 (AC-N 형태, 6개 필드: `ac_id`, `requirement`, `must_verify`, `source`, `user_visible`, `expected_evidence`)
+- **PM** 8개 검증 규칙 (`pipeline._validate_structured_ac_block`):
+  빈 AC, AC id 형식, 중복 id, 단독 추상 문구 (`ABSTRACT_AC_PATTERNS` SSoT 15개), MT covers_ac 누락, 알 수 없는 AC id, must_verify=true 미연결, covers_iqr 허용
+- **state** `requirements_tracking` 플래그 (enabled, schema_version, recorded_at) + `structured_acceptance_criteria` 최상위 키 저장
+- **Module QA** report XML에 `<ac_verification><criterion ac_id="AC-N"/></ac_verification>` 블록 필수화 (covers_ac 있는 MT만, 새 파이프라인 한정)
+- **Dev** `scope_manifest.json`의 micro_tasks에 `implemented_tasks` 필수화 (mt_id, implemented_ac, implementation_evidence; 추상 evidence 단독 차단)
+- **Oracle** `oracle_manifest.json` entry에 `ac_ids` 필드 필수화 (새 파이프라인 한정)
+- **Codex Review** `coverage_checks` 7개 필드 hard gate (QA 진입 차단):
+  `all_ac_reviewed`, `diff_values_match_ac`, `tests_assert_core_values`, `no_dry_run_substitution`, `no_stale_sha`, `no_stale_ci_run`, `user_facing_korean_ok`
+- **Codex Review** `criteria_review` blocking=true + FAIL/UNCLEAR 항목 차단
+- **request-accept** AC별 충족표 자동 조립 + 모바일 친화적 출력 + `acceptance_request.json`에 `ac_fulfillment_table` 저장
+- **CLAUDE.md** "Structured AC Tracking" 섹션 추가
+- **agent MD 4개** (pm-agent, dev-agent, qa-agent, test-harness-agent) AC Tracking 역할별 섹션 추가
+
+### legacy 호환 정책
+
+- `requirements_tracking` 필드 없는 state → legacy로 자동 판정, 모든 AC 검증 skip
+- `requirements_tracking.enabled=true`인데 `structured_acceptance_criteria` 비어있음 → FAIL (legacy 취급 금지)
+- `covers_ac` 없는 MT → ac_verification 면제 (legacy MT 또는 `covers_iqr`만 있는 문서 MT)
+- legacy codex_review_result.json (`coverage_checks` 키 자체 없음) → 기존 동작 유지
+
+### E2E 테스트
+
+`tests/e2e/test_ac_tracking_1abe.py` — 46개 테스트 (회귀 2개 포함):
+- 회귀 1: 사용자 AC=MON/09:00, diff=SUN/02:00 → `diff_values_match_ac=false` 차단
+- 회귀 2: 사용자 AC=실제 파일 이동, 테스트=dry-run만 → `no_dry_run_substitution=false` 차단
+
+### Oracle 케이스 (`tests/oracles/IMP-20260602-1ABE/`)
+
+- `case_normal_01` — structured AC 정상 파싱
+- `case_edge_01` — legacy state 하위 호환
+- `case_error_01` — 단독 추상 AC 차단
+

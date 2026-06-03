@@ -1,0 +1,16 @@
+{
+  "scenario": "structured_ac_parse_normal",
+  "description": "requirements_tracking.enabled=true 파이프라인에서 PM done 호출 시 structured AC가 저장됨",
+  "state_before": {
+    "requirements_tracking": {"enabled": true, "schema_version": 1},
+    "structured_acceptance_criteria": null
+  },
+  "step_plan_acceptance_criteria": [
+    {"ac_id": "AC-1", "requirement": "매주 월요일 09:00에 예약된다", "must_verify": true, "source": "user", "user_visible": true, "expected_evidence": "/D MON, /ST 09:00, /SC WEEKLY 포함 확인"},
+    {"ac_id": "AC-2", "requirement": "7일 이상 된 파일만 이동된다", "must_verify": true, "source": "user", "user_visible": true, "expected_evidence": "8일 전 파일 이동됨, 6일 전 파일 미이동 확인"}
+  ],
+  "micro_tasks": [
+    {"id": "MT-1", "covers_ac": ["AC-1"]},
+    {"id": "MT-2", "covers_ac": ["AC-2"]}
+  ]
+}
