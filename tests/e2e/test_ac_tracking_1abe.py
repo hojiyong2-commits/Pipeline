@@ -1074,7 +1074,7 @@ def test_cli_pm_done_saves_requirements_tracking_when_ac_valid(tmp_path):
 
 def _make_scope_manifest(tmp_path: Path, pipeline_id: str, *, with_implemented_tasks: bool, target_file: str) -> Path:
     """_validate_dev_scope_manifest 검증용 scope_manifest.json 생성."""
-    mt_entry = {
+    mt_entry: dict = {
         "id": "MT-1",
         "files": [target_file],
         "affected_functions": ["tests.e2e.cli_e2e_gate_func"],
@@ -1200,7 +1200,7 @@ def _seed_pm_done_state_for_dev(
     codex_bootstrap_exception=true 로 trust-root/diff check 우회.
     checkpoint는 target_file의 실제 SHA256으로 채워야 _validate_module_checkpoints 통과.
     """
-    state = {
+    state: dict = {
         "version": "2.1.0",
         "pipeline_id": pipeline_id,
         "type": "IMP",
@@ -1545,7 +1545,7 @@ def _build_oracle_manifest_and_files(
     def sha256_file(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
-    normal_entry = {
+    normal_entry: dict = {
         "name": "case_normal_01",
         "source": "user",
         "case_kind": "normal",
@@ -1556,7 +1556,7 @@ def _build_oracle_manifest_and_files(
         "expected_source": "user_provided",
         "test_type": "behavior_check",
     }
-    edge_entry = {
+    edge_entry: dict = {
         "name": "case_edge_01",
         "source": "user",
         "case_kind": "edge",
@@ -2027,7 +2027,7 @@ def _seed_request_accept_state(state_file: Path, pipeline_id: str) -> None:
     """gates request-accept 테스트용 state:
     requirements_tracking.enabled=True + structured_acceptance_criteria + 모든 gate PASS.
     """
-    state = {
+    state: dict = {
         "version": "2.1.0",
         "pipeline_id": pipeline_id,
         "type": "IMP",
