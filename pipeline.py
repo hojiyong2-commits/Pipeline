@@ -1450,12 +1450,11 @@ def _validate_pm_step_plan_file(report_file: str, state: Dict[str, Any]) -> Dict
     design_confirmation = _validate_pm_design_confirmation(step_plan, micro_tasks)
     execution_profile = _parse_task_complexity(step_plan, micro_tasks)
 
-    # IMP-20260602-1ABE MT-1: structured AC 파싱 및 검증 (acceptance_criteria 블록 있을 때만)
+    # IMP-20260602-1ABE MT-1: structured AC 파싱 및 검증 (AC 없으면 항상 실패)
     structured_ac = _parse_structured_ac(step_plan)
-    if structured_ac:
-        ac_result = _validate_structured_ac_block(structured_ac, micro_tasks)
-        if not ac_result.get("valid"):
-            _die(ac_result.get("error", "[AC GATE] structured AC validation failed"))
+    ac_result = _validate_structured_ac_block(structured_ac, micro_tasks)
+    if not ac_result.get("valid"):
+        _die(ac_result.get("error", "[AC GATE] structured AC validation failed"))
 
     return {
         "report_file": str(path),

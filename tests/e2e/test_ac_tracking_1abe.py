@@ -1013,16 +1013,14 @@ def test_cli_pm_done_blocks_when_ac_missing(tmp_path):
 
     result, final_state, _pid = _run_full_pm_done(tmp_path, state_file, with_ac=False)
 
-    # AC 블록이 없으면 _validate_structured_ac_block을 통과하지 못해야 함
-    # (acceptance_criteria 없으면 빈 structured_ac → requirements_tracking 미활성 → PASS 가능)
-    # 실제로는 AC가 없으면 requirements_tracking.enabled가 False 상태이므로
-    # done 자체는 통과하지만 state에 requirements_tracking.enabled=True가 없어야 함.
-    # 정확한 검증: with_ac=False 이면 requirements_tracking.enabled != True
-    rt_enabled = (
-        final_state.get("requirements_tracking", {}).get("enabled", False)
+    # AC 블록이 없으면 done --phase pm은 exit code != 0 이어야 함
+    assert result.returncode != 0, (
+        f"AC 없는 step_plan인데 PM done이 통과됨 (returncode=0)\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
-    assert not rt_enabled, (
-        f"AC 없는 step_plan인데 requirements_tracking.enabled=True로 기록됨: {rt_enabled}\n"
+    pm_status = final_state.get("pm_status", "")
+    assert pm_status != "DONE", (
+        f"AC 없는 step_plan인데 pm_status=DONE으로 기록됨: {pm_status}\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
 
