@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260603-2E3D</pipeline_id>
+  <agent_run_id>dev-422832daead35c70</agent_run_id>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>.claude/agents/dev-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>.claude/agents/test-harness-agent.md</file>
+      <file>RELEASE_NOTES.md</file>
+      <file>tests/e2e/test_final_packet_2e3d.py</file>
+    </files_to_modify>
+    <files_actually_modified>
+      <file>pipeline.py</file>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>.claude/agents/dev-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>.claude/agents/test-harness-agent.md</file>
+      <file>RELEASE_NOTES.md</file>
+      <file>tests/e2e/test_final_packet_2e3d.py</file>
+    </files_actually_modified>
+    <out_of_scope_changes>none</out_of_scope_changes>
+  </scope_declaration>
+
+  <impact_analysis>
+    <mt id="MT-1" target="pipeline.py">_cmd_report_final_packet, _cmd_report_update_pr_body, _build_final_packet_content, _collect_packet_evidence + 보조 헬퍼 + argparse + COMMAND_MAP</mt>
+    <mt id="MT-2" target="pipeline.py">_cmd_gates_request_accept 수정 + _check_packet_freshness_against_actual + _auto_generate_final_packet_and_update_pr</mt>
+    <mt id="MT-3" target="CLAUDE.md, 4 agent MD, RELEASE_NOTES.md">PR Packet SSoT 규칙 일관 문서화 (IQR-1)</mt>
+    <mt id="MT-4" target="tests/e2e/test_final_packet_2e3d.py">12개 E2E 테스트 (subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion)</mt>
+    <call_sites_verified>모든 변경 함수가 main argparse 라우터 외 다른 함수에서 호출되지 않거나, 호출부가 동일 PR 내에서 함께 갱신됨</call_sites_verified>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/dev-agent.md, .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md, RELEASE_NOTES.md, tests/e2e/test_final_packet_2e3d.py, tests/oracles/IMP-20260603-2E3D/* (PM에서 oracle 생성)</git_diff_files>
+    <manifest_files>위 8개 + tests/oracles/IMP-20260603-2E3D/* (PM/contract에서 등록)</manifest_files>
+    <extra_files>없음 (본 파이프라인 외 tests/oracles/IMP-20260602-1ABE는 별도 파이프라인 잔여이며 본 PR에 포함하지 않음)</extra_files>
+    <trust_root_violation>false — PM이 step_plan에 명시적으로 포함한 trust-root 파일만 수정 (CLAUDE.md, 4 agent MD, pipeline.py)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <module_summary>
+    <module id="MT-1" status="PASS"/>
+    <module id="MT-2" status="PASS"/>
+    <module id="MT-3" status="PASS"/>
+    <module id="MT-4" status="PASS"/>
+    <integration status="PASS"/>
+  </module_summary>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>CLAUDE.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+    <file>.claude/agents/dev-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>.claude/agents/test-harness-agent.md</file>
+    <file>RELEASE_NOTES.md</file>
+    <file>tests/e2e/test_final_packet_2e3d.py</file>
+    <file>tests/oracles/IMP-20260603-2E3D/case_normal_01/input.json</file>
+    <file>tests/oracles/IMP-20260603-2E3D/case_normal_01/expected.json</file>
+    <file>tests/oracles/IMP-20260603-2E3D/case_edge_01/input.json</file>
+    <file>tests/oracles/IMP-20260603-2E3D/case_edge_01/expected.json</file>
+    <file>tests/oracles/IMP-20260603-2E3D/case_error_01/input.json</file>
+    <file>tests/oracles/IMP-20260603-2E3D/case_error_01/expected.json</file>
+    <file>tests/oracles/IMP-20260603-2E3D/oracle_manifest.json</file>
+    <file>scope_manifest.json</file>
+    <file>dev_handover.xml</file>
+  </evidence>
+
+  <status>READY_FOR_QA</status>
+
+  <impact_analysis_global>
+    <summary>본 PR은 사용자 ACCEPT/REJECT 판단 자료(human_acceptance_packet.md + PR 본문 PIPELINE_FINAL_PACKET 블록)를 에이전트 자유서술 대신 pipeline.py 자동 생성으로 강제한다. gates request-accept가 검증 + nonce 발급 + packet 자동 생성 + PR 본문 자동 업데이트를 한 흐름으로 묶어 순환 구조를 제거한다.</summary>
+    <product_code_changes>pipeline.py (신규 명령 report, 통합 흐름 gates request-accept, 보조 헬퍼 + SSoT 상수)</product_code_changes>
+    <doc_changes>CLAUDE.md, 4 agent MD, RELEASE_NOTES.md (PR Packet SSoT 규칙)</doc_changes>
+    <test_changes>tests/e2e/test_final_packet_2e3d.py (12개 신규 E2E 테스트, 12 passed)</test_changes>
+  </impact_analysis_global>
+</handover>

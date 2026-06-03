@@ -1,0 +1,79 @@
+{
+  "pipeline_id": "IMP-20260603-2E3D",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_cmd_report_final_packet, _cmd_report_update_pr_body, _build_final_packet_content, _collect_packet_evidence"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-4"],
+          "implementation_evidence": [
+            "pipeline.py: _cmd_report_final_packet, _build_final_packet_content, _collect_packet_evidence — AC-1 (human_acceptance_packet.md 자동 생성)",
+            "pipeline.py: _cmd_report_update_pr_body, _replace_pr_body_packet_block, _gh_edit_pr_body — AC-2 (PIPELINE_FINAL_PACKET 블록 치환)",
+            "pipeline.py: _wrap_packet_line, _wrap_packet_text, PACKET_LINE_MAX_WIDTH=120 — AC-4 (한 줄 120자 한도, 승인 코드 독립 줄)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_cmd_gates_request_accept, _check_pr_freshness, _auto_generate_final_packet_with_code, _auto_update_pr_body"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-3", "AC-5"],
+          "implementation_evidence": [
+            "pipeline.py: _check_packet_freshness_against_actual (PR head SHA / CI run ID / 변경 파일 stale 비교; packet 부재 시 차단 없음) — AC-3",
+            "pipeline.py: _auto_generate_final_packet_and_update_pr (nonce 발급 후 packet 자동 생성 + PR 본문 자동 업데이트) — AC-3",
+            "pipeline.py: _cmd_gates_request_accept 수정 (stale 검사 + nonce 재사용/발급 + 자동 packet 생성 + PR 본문 자동 업데이트 한 흐름으로 통합, 기존 Nonce Gate 분리 유지) — AC-3, AC-5"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "CLAUDE.md",
+        ".claude/agents/pm-agent.md",
+        ".claude/agents/dev-agent.md",
+        ".claude/agents/qa-agent.md",
+        ".claude/agents/test-harness-agent.md",
+        "RELEASE_NOTES.md"
+      ],
+      "affected_functions": ["N/A (문서 수정)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-3"],
+          "covers_iqr": ["IQR-1"],
+          "implementation_evidence": [
+            "CLAUDE.md: ## PR Packet SSoT (IMP-20260603-2E3D) 섹션 추가 — AC-3",
+            "4개 agent MD: PR Packet SSoT 규칙 한 단락씩 추가 — IQR-1",
+            "RELEASE_NOTES.md: IMP-20260603-2E3D 항목 추가"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["tests/e2e/test_final_packet_2e3d.py"],
+      "affected_functions": ["N/A (새 파일)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"],
+          "implementation_evidence": [
+            "tests/e2e/test_final_packet_2e3d.py: 12개 E2E 테스트 (subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion). pytest 12 passed in 31s. AC-1~AC-5 모두 최소 1개 테스트로 커버"
+          ]
+        }
+      ]
+    }
+  ]
+}
