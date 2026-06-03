@@ -756,11 +756,11 @@ def test_15_clean_pr_body_removes_console_artifacts() -> None:
     assert "[PR 본문 자동 업데이트]" not in cleaned, "'[PR 본문 자동 업데이트]' 미제거"
     assert "사용자 최종 확인 요청" not in cleaned, "'사용자 최종 확인 요청' 미제거"
     assert "[O] 승인하시려면" not in cleaned, "'[O] 승인하시려면' 미제거"
+    assert "PR: (gh 없음)" not in cleaned, "'PR: (gh 없음)' 패턴이 제거되지 않음"
+    assert "CI run: (없음)" not in cleaned, "'CI run: (없음)' 패턴이 제거되지 않음"
     # 블록 안 내용은 보존
     assert "정상 packet 내용" in cleaned, "블록 안 내용이 보존되어야 함"
-    # PR: (gh 없음) 라인 — [FINAL PACKET ...] 라인에 포함된 줄이므로 제거됨
-    # (실제로는 같은 줄이 아니라 별도 줄이지만 [FINAL PACKET] 라인 이후 연속 라인이 아니므로 보존)
-    # 하지만 "다음 단계: python pipeline.py report update" 패턴은 제거됨
+    # "다음 단계: python pipeline.py report update" 패턴은 제거됨
     assert "다음 단계: python pipeline.py report update" not in cleaned, (
         "'다음 단계: python pipeline.py report update' 미제거"
     )

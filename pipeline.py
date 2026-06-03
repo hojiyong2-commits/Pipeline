@@ -10278,6 +10278,8 @@ def _clean_pr_body_artifacts(
         r"위\s+결과물을\s+확인하신\s+후",
         r"다음\s+단계:\s+python\s+pipeline\.py\s+report\s+update",
         r"사용자\s+최종\s+확인\s+요청",
+        r"^\s*PR:\s*\(gh",
+        r"^\s*CI\s+run:\s*\(없음\)",
     ]
     for line in lines:
         if start_marker in line:
