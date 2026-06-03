@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260603-2E3D</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-1c4d52a70034574d</manager_run_id>
+  <planner_run_id>pm_planner-2a0c76a3fcb6d433</planner_run_id>
+  <step_plan_sha256>7f801bdd660bbbe8b505390362662055f3d53a080caeaa7ab4554c074530226c</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <status>ready_for_dev</status>
+  <user_design_confirmed>true</user_design_confirmed>
+  <user_answer_summary>
+    사용자가 순환 구조 해결안 확정.
+    핵심: request-accept가 final packet을 자동 생성하도록 변경 (final packet 없어도 차단 안 됨).
+    request-accept는 실제 PR head SHA / CI run ID / git diff를 직접 조회하여 stale 검사.
+    조건 같으면 nonce 재사용, 조건 바뀌면 새 nonce.
+    변경 파일 수는 git diff 결과로 실시간 산출 (8개 등 고정 금지).
+    MT-4 테스트 12개 사용자 확정.
+  </user_answer_summary>
+  <design_decisions>
+    <decision id="DQ-1">A — 4-module split (MT-1 명령 / MT-2 게이트 통합 / MT-3 문서 / MT-4 E2E)</decision>
+    <decision id="DQ-2">A — PIPELINE_FINAL_PACKET_START/END 마커 사용자 명시 그대로 사용</decision>
+    <decision id="USER-CONFIRMED">request-accept 통합 흐름: 검증 → nonce 발급 → packet 자동생성 → PR 본문 자동 업데이트</decision>
+  </design_decisions>
+  <contract_frozen>true</contract_frozen>
+  <oracles_added>3</oracles_added>
+  <modules_added>4</modules_added>
+  <micro_tasks>
+    <mt id="MT-1" target="pipeline.py">_cmd_report_final_packet / _cmd_report_update_pr_body / _build_final_packet_content 추가</mt>
+    <mt id="MT-2" target="pipeline.py">_cmd_gates_request_accept 수정: 실제 상태 검증 + nonce 발급 + final packet 자동생성 + PR 본문 자동업데이트 통합</mt>
+    <mt id="MT-3" target="CLAUDE.md,.claude/agents/pm-agent.md,.claude/agents/dev-agent.md,.claude/agents/qa-agent.md,.claude/agents/test-harness-agent.md,RELEASE_NOTES.md">PR Packet SSoT 규칙 추가</mt>
+    <mt id="MT-4" target="tests/e2e/test_final_packet_2e3d.py">E2E 테스트 12개 신규 (subprocess + PIPELINE_STATE_PATH 격리 + final_state assertion)</mt>
+  </micro_tasks>
+  <execution_profile>STANDARD</execution_profile>
+  <next_phase>dev</next_phase>
+</manager_handoff>

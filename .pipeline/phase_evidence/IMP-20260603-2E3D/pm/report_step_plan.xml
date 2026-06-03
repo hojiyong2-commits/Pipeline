@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan pipeline_id="IMP-20260603-2E3D">
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>신규 명령 추가(pipeline.py report final-packet / update-pr-body) + gates request-accept 검증 통합(stale 검사 + nonce 발급 + 자동 packet 생성 + PR 본문 자동 업데이트) + agent MD 4개 + CLAUDE.md 규칙 + E2E 테스트 — 다중 파일 변경이며 신뢰 루트(pipeline.py, CLAUDE.md, agent MD)를 함께 바꾸는 IMP 작업입니다. 순환 구조 해결을 위해 request-accept가 final packet을 자동 생성합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>0</expected_changed_files>
+      <expected_changed_functions>10</expected_changed_functions>
+      <expected_changed_lines>700</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>true</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <total_functions_identified>8</total_functions_identified>
+    <micro_task_count>4</micro_task_count>
+    <grep_executions>3</grep_executions>
+    <split_decision>
+      4개 micro-task로 책임 분리:
+      (1) report final-packet / update-pr-body 명령 신규 (pipeline.py 명령 추가)
+      (2) gates request-accept 최신성 검사 연결 (기존 함수에 게이트 삽입)
+      (3) CLAUDE.md / agent MD 4개 / RELEASE_NOTES.md 규칙 추가 (문서)
+      (4) E2E 테스트 10개 신규 파일
+      코드 변경 모듈(MT-1, MT-2)과 문서 모듈(MT-3), 테스트 모듈(MT-4)이 책임이 다르므로 별도 module gate로 검증해야 합니다.
+    </split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <module_count>4</module_count>
+    <split_reason>final-packet 명령 / request-accept 게이트 수정 / 문서 규칙 / E2E 테스트로 책임 분리</split_reason>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>마커 문자열명(PIPELINE_FINAL_PACKET_START/END), 함수명, 상수명 등 P2 구현 취향 질문은 묻지 않고 유지보수성과 기존 패턴(예: PROTOCOL_CONSISTENCY_GUARD, NONCE_GATE 등 기존 SSoT 명명 규약) 우선으로 PM이 정리했습니다.</filter_summary>
+  </decomposition_audit>
+
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 /Task 명령으로 요구사항을 매우 상세히 직접 제공했습니다(문제, 근본 원인, 목표, 8개 필수 구현 항목 명시). P2 수준 내부 변수명·마커 문자열·코드 스타일 질문은 묻지 않고 기존 코드 패턴(PROTOCOL_CONSISTENCY_GUARD, NONCE_GATE 등 기존 SSoT 명명 규약)을 따라 처리합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이 작업을 4개 모듈(명령 추가 / 게이트 연결 / 문서 / E2E 테스트)로 나눠 진행해도 될까요?</user_facing_question>
+        <evidence>사용자 요청에 "필수 구현 항목" 8개가 명시되어 있고, 그 중 1·2(report 명령), 3(게이트 연결), 7(문서 4종), 8(E2E 테스트)이 서로 책임이 다른 영역입니다.</evidence>
+        <why_it_matters>모듈을 잘 나누면 각 영역의 검증 위치가 명확해지고, 한 모듈이 실패해도 다른 모듈의 진행을 막지 않습니다. 또 신뢰 루트(pipeline.py, CLAUDE.md, agent MD)를 한 번에 바꾸는 위험을 module gate 4단계로 점검할 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>4개 모듈로 분할 (MT-1 명령 / MT-2 게이트 / MT-3 문서 / MT-4 E2E)</label>
+            <benefit>각 영역 책임이 명확하고 module QA가 단계별로 차단합니다. E2E 테스트는 명령과 게이트가 모두 완성된 후 마지막에 검증합니다.</benefit>
+            <cost>module gate를 4회 통과해야 하므로 절차가 약간 더 깁니다.</cost>
+          </option>
+          <option id="B">
+            <label>1개 통합 모듈로 진행</label>
+            <benefit>module gate가 한 번이라 빠릅니다.</benefit>
+            <cost>신뢰 루트(pipeline.py + CLAUDE.md + agent MD + 테스트)를 한 번에 바꾸므로 어디서 무너졌는지 추적이 어렵습니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 /Task 명령에 직접 4모듈 절차를 명시했습니다. 추천안 A로 진행.</user_answer>
+      </question>
+      <question id="DQ-2" priority="P1" category="design" mt_id="MT-1">
+        <user_facing_question>final packet의 PR 본문 삽입 마커로 사용자가 명시한 PIPELINE_FINAL_PACKET_START / PIPELINE_FINAL_PACKET_END를 그대로 사용해도 될까요?</user_facing_question>
+        <evidence>사용자 요청에 "PR 본문의 &lt;!-- PIPELINE_FINAL_PACKET_START --&gt; 블록을 최신 packet으로 업데이트"라고 명시되어 있습니다.</evidence>
+        <why_it_matters>마커 이름이 기존 다른 SSoT(예: PROTOCOL_CONSISTENCY_GUARD)와 충돌하지 않아야 update-pr-body가 다른 영역을 건드리지 않습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>사용자 명시 마커(PIPELINE_FINAL_PACKET_START/END) 그대로 사용</label>
+            <benefit>사용자 요청 원문과 일치하며 grep과 도구 호환성이 좋음.</benefit>
+            <cost>없음(기존 마커와 충돌하지 않음, grep 확인 완료).</cost>
+          </option>
+          <option id="B">
+            <label>다른 이름 제안 (예: PIPELINE_PACKET_BLOCK_START)</label>
+            <benefit>마커 이름이 약간 더 짧아 PR 본문에서 시각적으로 덜 차지함.</benefit>
+            <cost>사용자 요청 원문 마커와 달라져 사용자와 에이전트 간 혼동 위험이 있음.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (사용자 요청 원문 마커 그대로 사용).</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>[PD]</category_tags>
+
+  <interface_spec>
+    - Input: PR open 상태, pipeline_state.json, gate 결과, git diff, gh CLI (PR head SHA / CI run ID 조회)
+    - Output: human_acceptance_packet.md (PR head SHA / CI run ID / 변경 파일 / AC 충족표 / 일회용 승인 코드 포함), 업데이트된 PR 본문
+    - Validation: report final-packet 후 packet 존재 + gates request-accept가 stale시 BLOCKED 처리
+  </interface_spec>
+
+  <requirements>
+    - python pipeline.py report final-packet 명령 추가:
+      - 입력: 현재 pipeline_id (state에서 자동 읽음)
+      - 동작: 실제 git diff (origin/main...HEAD --name-only), gh CLI로 PR head SHA, gh CLI로 CI run ID, state["external_gates"] 상태, contract의 acceptance_criteria + AC table을 읽어서 packet 생성
+      - acceptance_request.json 존재 시 승인 코드 포함, 없으면 "승인 코드 발급 전 — gates request-accept를 먼저 실행하세요" 라인 출력
+      - 출력: human_acceptance_packet.md
+      - 변경 파일 수는 git diff 결과를 실시간으로 읽어 자동 산출 (8개 등 고정 금지)
+    - python pipeline.py report update-pr-body 명령 추가:
+      - 동작: 현재 PR 본문에서 &lt;!-- PIPELINE_FINAL_PACKET_START --&gt; ~ &lt;!-- PIPELINE_FINAL_PACKET_END --&gt; 블록을 찾아 최신 packet 내용으로 치환
+      - 마커 없으면 PR 본문 끝에 새 블록 추가
+      - gh pr edit으로 본문 갱신
+    - gates request-accept 검증/발급 통합 (순환 구조 해결):
+      - 실제 PR head SHA / CI run ID / git diff를 직접 조회하여 stale 여부 검사 (final packet 없어도 검사 가능)
+      - packet이 이미 있고 packet의 head_sha != 실제 PR head SHA → BLOCKED + STALE_HEAD_SHA
+      - packet이 이미 있고 packet의 ci_run_id != 실제 latest CI run ID → BLOCKED + STALE_CI_RUN
+      - packet이 이미 있고 packet의 file_list != 실제 git diff 파일 목록 → BLOCKED + STALE_FILE_LIST
+      - 검증 통과 시: nonce 발급/재사용 (조건 같으면 같은 nonce 유지, 다르면 새 nonce)
+      - nonce 발급 후 final packet 자동 생성 (승인 코드 포함)
+      - gh CLI 있으면 PR 본문 PIPELINE_FINAL_PACKET 블록 자동 업데이트
+      - final packet 없다고 차단하지 않음 (request-accept가 만들어 줌)
+    - 기존 Nonce Gate(--user-confirmed 단독 차단, --acceptance-code 필수)는 그대로 유지
+    - Three-Gate, AC Tracking, Protocol Consistency Guard, Final Acceptance Readiness Gate와 충돌 없음
+    - 모든 메시지·packet 본문은 쉬운 한국어 (Korean Session Language Rule 준수)
+    - packet의 모든 줄이 120자 이하, 승인 코드는 독립 줄 (모바일 복사 가능)
+    - tests/e2e/test_final_packet_2e3d.py 10개 이상 테스트, PIPELINE_STATE_PATH 격리, subprocess 기반 final_state assertion 포함
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <title>report final-packet / update-pr-body 명령 구현</title>
+      <covers_ac>AC-1, AC-2, AC-4</covers_ac>
+      <affected_function>_cmd_report_final_packet, _cmd_report_update_pr_body, _build_final_packet_content, _collect_packet_evidence</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>main argparse 라우터 (report 서브커맨드 추가)</site>
+        <site>_cmd_report (기존 함수가 있다면 final-packet/update-pr-body 분기 추가, 없다면 신규)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_report|report.*final.packet|PIPELINE_FINAL_PACKET</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py에 report final-packet / update-pr-body 서브커맨드 추가, _build_final_packet_content가 실제 git/gh/state/contract 데이터를 모두 모아 human_acceptance_packet.md를 자동 생성</change_summary>
+      <line_estimate>280</line_estimate>
+      <expected_evidence>
+        - _cmd_report_final_packet 함수 존재
+        - _cmd_report_update_pr_body 함수 존재
+        - _build_final_packet_content 함수 존재
+        - PIPELINE_FINAL_PACKET_START / PIPELINE_FINAL_PACKET_END 마커 상수 SSoT 정의
+        - python pipeline.py report final-packet 실행 후 human_acceptance_packet.md 생성 확인
+        - packet 안에 PR head SHA, CI run ID, 변경 파일 목록, AC 충족표, 승인 코드가 모두 포함됨
+        - packet 모든 줄이 120자 이하, 승인 코드는 독립 줄
+      </expected_evidence>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <title>gates request-accept 검증/발급/패킷생성 통합 (순환 구조 해결)</title>
+      <covers_ac>AC-3, AC-5</covers_ac>
+      <affected_function>_cmd_gates_request_accept, _check_pr_freshness, _auto_generate_final_packet_with_code, _auto_update_pr_body</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept (기존 함수 수정 — 실제 상태 검증 + nonce 발급 + 자동 packet 생성 + PR 본문 자동 업데이트 통합)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_request_accept|request.accept</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>request-accept가 실제 git/gh 상태를 직접 조회하여 stale 검사를 수행. packet이 있고 stale이면 차단, 없으면 정상 진행하여 nonce 발급 후 packet 자동 생성. final packet 부재로는 차단하지 않음. 기존 Nonce Gate는 그대로 유지.</change_summary>
+      <line_estimate>140</line_estimate>
+      <expected_evidence>
+        - _check_pr_freshness 함수 존재 (실제 PR head SHA / CI run ID / git diff 직접 조회)
+        - _auto_generate_final_packet_with_code 함수 존재 (nonce 발급 후 packet 자동 생성)
+        - _auto_update_pr_body 함수 존재 (gh CLI 있으면 PR 본문 자동 업데이트)
+        - stale 조건: STALE_HEAD_SHA, STALE_CI_RUN, STALE_FILE_LIST (packet이 이미 있을 때만 검사)
+        - final packet 없어도 request-accept 차단 안 됨
+        - 조건이 같으면 nonce 재사용, 조건이 바뀌면 새 nonce 발급
+        - 각 조건마다 한국어 안내 + 재실행 명령 출력
+        - 기존 Nonce Gate(--user-confirmed 단독 차단, acceptance-code 필수)는 그대로 유지됨을 확인
+      </expected_evidence>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <title>CLAUDE.md / agent MD 4개 / RELEASE_NOTES.md 규칙 추가</title>
+      <covers_ac>AC-3</covers_ac>
+      <covers_iqr>IQR-1</covers_iqr>
+      <affected_function>N/A (문서 수정)</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/dev-agent.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+        <file>RELEASE_NOTES.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PIPELINE_FINAL_PACKET|final.packet|PR 본문.*손으로</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>각 MD 파일에 "PR 본문과 최종 확인 안내는 pipeline.py report final-packet 결과를 사용한다. 에이전트가 자유서술로 작성하지 않는다." 규칙을 추가하고 IMP-20260603-2E3D 항목을 RELEASE_NOTES.md에 기록.</change_summary>
+      <line_estimate>120</line_estimate>
+      <expected_evidence>
+        - CLAUDE.md에 "PR Packet SSoT (IMP-20260603-2E3D)" 섹션 존재
+        - pm-agent.md / dev-agent.md / qa-agent.md / test-harness-agent.md 각각에 PR 본문 자유서술 금지 + final packet 사용 의무 규칙 존재
+        - RELEASE_NOTES.md에 IMP-20260603-2E3D 항목 존재
+      </expected_evidence>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <title>E2E 테스트 12개 추가 (tests/e2e/test_final_packet_2e3d.py)</title>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5</covers_ac>
+      <affected_function>N/A (새 파일)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_final_packet_2e3d.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_final_packet|test_request_accept_blocks|tests/e2e/test_final_packet_2e3d</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>12개 E2E 테스트 신규 파일 생성. PIPELINE_STATE_PATH 격리 + subprocess 기반 실제 CLI 실행 + final_state assertion 포함. 사용자 확정 흐름(순환 구조 해결)을 모두 커버.</change_summary>
+      <line_estimate>460</line_estimate>
+      <expected_evidence>
+        - tests/e2e/test_final_packet_2e3d.py 파일 존재
+        - 모든 테스트가 subprocess.run으로 python pipeline.py를 실제 호출
+        - PIPELINE_STATE_PATH 환경 변수로 state 파일 격리
+        - 사용자 확정 12개 테스트:
+          1. test_final_packet_generated_with_pr_sha_and_ci_run (packet 생성 기본)
+          2. test_final_packet_shows_pending_when_no_acceptance_request (acceptance_request 없으면 "승인 코드 발급 전")
+          3. test_final_packet_includes_accept_code_when_request_exists (acceptance_request 있으면 승인 코드 포함)
+          4. test_final_packet_lines_within_120_chars (한 줄 120자 이하)
+          5. test_final_packet_accept_code_on_separate_line (승인 코드 독립 줄)
+          6. test_request_accept_proceeds_without_final_packet (final packet 없어도 request-accept 실행됨)
+          7. test_request_accept_blocks_on_stale_pr_sha (stale PR SHA 차단)
+          8. test_request_accept_blocks_on_stale_ci_run_id (stale CI run ID 차단)
+          9. test_request_accept_reuses_nonce_when_conditions_same (조건 같으면 nonce 재사용)
+          10. test_request_accept_issues_new_nonce_when_conditions_change (조건 바뀌면 새 nonce)
+          11. test_request_accept_auto_generates_packet_with_code (request-accept 후 packet에 승인 코드 포함)
+          12. test_accept_blocks_without_acceptance_code (--user-confirmed 단독 차단 유지)
+      </expected_evidence>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 코드베이스와 일치, gh CLI 호출은 subprocess 기반이므로 버전 제약 없음</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>typeCheckingMode: basic, provider: ms-python.python</vscode>
+  </env_specs>
+
+  <env_snapshot>
+    <python_version>3.10.x</python_version>
+    <installed_packages>pytest, requests (기존 코드베이스 의존성 유지, 신규 의존성 없음)</installed_packages>
+    <encoding>utf-8</encoding>
+    <screen_size>N/A</screen_size>
+  </env_snapshot>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py report final-packet 실행 시 실제 PR head SHA, CI run ID, git diff로 자동 산출한 변경 파일 목록, AC 충족표가 포함된 human_acceptance_packet.md가 생성된다. acceptance_request.json이 있으면 승인 코드 포함, 없으면 "승인 코드 발급 전" 상태로 생성된다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py report update-pr-body 실행 시 현재 PR 본문의 PIPELINE_FINAL_PACKET 블록이 최신 packet 내용으로 교체된다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 실행 시 실제 PR head SHA / CI run ID / git diff를 직접 조회하여 검증한다. packet이 이미 있고 stale이면 차단되며 한국어 안내가 출력된다. 검증 통과 시 nonce 발급/재사용 후 final packet 자동 생성 + PR 본문 자동 업데이트가 수행되며, final packet 부재로는 차단하지 않는다.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>final packet에 너무 긴 한 줄(120자 초과)이 없고, 승인 코드가 독립된 줄로 출력된다 (모바일 복사 가능 형식).</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="false">
+      <text>기존 Nonce Gate(--user-confirmed 단독 차단, acceptance-code 필수)와 Three-Gate, AC Tracking, Protocol Consistency Guard, Final Acceptance Readiness Gate가 깨지지 않는다.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <ac_mt_map>
+    <map ac="AC-1" mt="MT-1"/>
+    <map ac="AC-2" mt="MT-1"/>
+    <map ac="AC-3" mt="MT-2"/>
+    <map ac="AC-3" mt="MT-3"/>
+    <map ac="AC-4" mt="MT-1"/>
+    <map ac="AC-5" mt="MT-2"/>
+    <map ac="AC-1" mt="MT-4"/>
+    <map ac="AC-2" mt="MT-4"/>
+    <map ac="AC-3" mt="MT-4"/>
+    <map ac="AC-4" mt="MT-4"/>
+    <map ac="AC-5" mt="MT-4"/>
+  </ac_mt_map>
+
+  <internal_quality_requirements>
+    <iqr id="IQR-1">
+      <text>각 agent MD 4개와 CLAUDE.md, RELEASE_NOTES.md가 모두 일관된 final packet 사용 규칙을 가지며, 누가 어느 단계에서 어느 명령을 실행하는지 명시한다.</text>
+      <covered_by>MT-3</covered_by>
+    </iqr>
+  </internal_quality_requirements>
+
+  <forbidden>
+    - pipeline.py SSoT 상수(PROTOCOL_CONSISTENCY_GUARD, NONCE_GATE, HYGIENE 등) 다른 SSoT 영역 수정 금지
+    - tests/e2e 외 다른 테스트 디렉토리 수정 금지
+    - 실제 PR을 마음대로 머지하거나 closed 처리 금지
+    - 실제 OPENAI_API_KEY / GH_TOKEN 등 비밀값을 코드/테스트에 하드코딩 금지
+    - PR 본문에 자유서술 한국어 작성 금지 (final packet 결과만 사용)
+    - --user-confirmed 단독으로 ACCEPT 통과시키는 우회 코드 추가 금지 (기존 Nonce Gate 보존)
+  </forbidden>
+
+  <handover_template_spec>
+    <description>Dev agent should output handover XML with from=dev-agent, to=qa-agent, including evidence files listed in micro_tasks target_files, plus scope_manifest.json and dev_handover.xml.</description>
+    <expected_evidence_files>
+      pipeline.py, CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/dev-agent.md,
+      .claude/agents/qa-agent.md, .claude/agents/test-harness-agent.md, RELEASE_NOTES.md,
+      tests/e2e/test_final_packet_2e3d.py, scope_manifest.json, dev_handover.xml
+    </expected_evidence_files>
+  </handover_template_spec>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\CLAUDE.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\pm-agent.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\dev-agent.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\qa-agent.md</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\test-harness-agent.md</file>
+    </target_files>
+    <phase_rules_excerpt>
+      CLAUDE.md "User Acceptance Nonce Gate (IMP-20260531-BBDB)" 섹션 + "Final Acceptance Readiness Gate (IMP-20260519-E979)" 섹션 + "Protocol Consistency Guard (IMP-20260520-D0BB)" 섹션. 신규 게이트는 위 3개 기존 게이트의 _check_protocol_consistency 패턴과 동일한 구조(detection 함수 + result writer + 한국어 안내 + failure_packet.json)를 따른다.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Planner — 4개 모듈로 분할, contract frozen (hash 8c8e48... / 204f28...), oracle 3개(normal/edge/error) 확정.</prev_phase_summary>
+  </context_injection>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
