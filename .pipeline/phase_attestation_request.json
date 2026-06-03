@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-03T02:55:13Z",
+  "generated_at": "2026-06-03T02:55:21Z",
   "pipeline_id": "IMP-20260602-1ABE",
   "phase": "build",
   "phase_status": "DONE",
-  "commit_hint": "3cbce9e2115e97af31c8a862fa55471026a563e1",
+  "commit_hint": "6fe19ee38ca60696aa3883c2959597bf448d87b5",
   "state": {
     "current_phase": "architect",
     "phase_completed_at": "2026-06-03T00:40:32Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/IMP-20260602-1ABE/build/agent_receipt_build-90b4a67da681a30c.json",
       "sha256": "573149e8167f026d681b1c85979666ebb8d4429e79e742c5d8a5e328a0f52fc8",
       "size_bytes": 508,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [],
