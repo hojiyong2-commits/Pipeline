@@ -10419,7 +10419,10 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
     current_body = _get_pr_body_text() or ""
 
     # 버그 2+3 수정 (IMP-20260603-2E3D): 블록 교체 전 콘솔 아티팩트와 구 승인 코드 제거
-    state = _load_active_state()
+    try:
+        state = _require_state()
+    except SystemExit:
+        state = {}
     acceptance_req = _load_acceptance_request()
     current_nonce = (
         acceptance_req.get("nonce", "") if isinstance(acceptance_req, dict) else ""
