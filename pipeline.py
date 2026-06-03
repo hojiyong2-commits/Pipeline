@@ -8304,6 +8304,7 @@ def _oracle_manifest_status(paths: Dict[str, Path]) -> Tuple[List[Dict[str, Any]
             "expected_path": _display_path(expected_path),
             "input_sha256": input_hash,
             "expected_sha256": expected_hash,
+            "ac_ids": entry.get("ac_ids", []),   # IMP-20260602-1ABE: ac_ids 검증을 위해 보존
         })
     return normalized, blockers
 

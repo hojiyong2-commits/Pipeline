@@ -1,6 +1,12 @@
 {
-  "outcome": "FAIL",
-  "error_code": "AC_GATE_ABSTRACT_TEXT",
-  "blocked_ac_id": "AC-1",
-  "reason": "AC 문구가 추상적입니다: '정상 동작' — 구체적인 성공 조건으로 바꾸세요"
+  "scenario": "pm_done_with_abstract_ac_text",
+  "step_plan": {
+    "has_acceptance_criteria": true,
+    "criteria": [
+      {"id": "AC-1", "text": "정상 동작"}
+    ],
+    "micro_tasks": [
+      {"id": "MT-1", "covers_ac": ["AC-1"]}
+    ]
+  }
 }

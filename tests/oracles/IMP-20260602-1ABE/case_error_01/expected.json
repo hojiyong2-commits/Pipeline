@@ -2,5 +2,5 @@
   "outcome": "FAIL",
   "error_code": "AC_GATE_ABSTRACT_TEXT",
   "blocked_ac_id": "AC-1",
-  "reason": "AC 문구가 추상적입니다: '정상 동작' — 구체적인 성공 조건으로 바꾸세요"
+  "reason": "AC 텍스트가 추상적입니다: '정상 동작' — 구체적인 성공 조건으로 바꾸세요"
 }

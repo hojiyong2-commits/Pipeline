@@ -1781,16 +1781,14 @@ def test_cli_gates_oracle_blocks_when_ac_ids_missing(tmp_path):
 
 
 def test_cli_gates_oracle_passes_with_valid_ac_ids(tmp_path):
-    """[IQR-1 게이트3-PASS] 정상 oracle manifest (normal+edge 케이스, user_provided) 포함
+    """[IQR-1 게이트3-PASS] requirements_tracking.enabled=true + oracle ac_ids=[AC-1] 포함
     → gates oracle exit 0 + oracle gate PASS.
 
-    NOTE: pipeline.py _oracle_manifest_status()의 normalized entry 변환 시 ac_ids 필드가
-    제거되므로 (IMP-20260602-1ABE 알려진 pipeline.py 버그), PASS 테스트는 ac_ids 검사를
-    우회하도록 state의 structured_acceptance_criteria를 비워서 valid_ac_ids={} 로 만든다.
-    이 방식으로 oracle quality (normal+edge 케이스, non-placeholder, user_provided) 검증은
-    정상 수행되고 gates oracle PASS를 확인한다.
+    pipeline.py _oracle_manifest_status() normalized entry에 ac_ids 필드가 보존되어
+    (IMP-20260602-1ABE 버그 수정 후) requirements_tracking.enabled=true 상태에서
+    ac_ids=["AC-1"] 포함 oracle entry가 정상적으로 검증 통과되어야 한다.
 
-    subprocess 실행 + PIPELINE_STATE_PATH 격리 + final_state assertion.
+    subprocess 실행 + PIPELINE_STATE_PATH 격리 + final_state assertion (IMP-20260525-6FAC).
     """
     pipeline_id = "IMP-20260603-ORA2"
     state_file = tmp_path / "pipeline_state.json"
@@ -1798,7 +1796,6 @@ def test_cli_gates_oracle_passes_with_valid_ac_ids(tmp_path):
 
     contracts_dir = REPO_ROOT / "pipeline_contracts"
     contracts_pid_dir = contracts_dir / pipeline_id
-
 
     # setup: 이전 실행 잔존 파일 정리 (WinError 5 방지)
     import shutil
@@ -1811,9 +1808,10 @@ def test_cli_gates_oracle_passes_with_valid_ac_ids(tmp_path):
         _build_oracle_manifest_and_files(
             contracts_dir, pipeline_id, oracle_dir, with_ac_ids=True
         )
-        # with_ac=False: structured_acceptance_criteria를 비워서 valid_ac_ids={}
-        # → ac_ids 검사 건너뜀 (pipeline.py normalized entry에서 ac_ids 제거 버그 우회)
-        _seed_oracle_test_state(state_file, pipeline_id, with_ac=False)
+        # with_ac=True: requirements_tracking.enabled=True AND structured_acceptance_criteria=[AC-1]
+        # 버그 수정(문제 1)으로 _oracle_manifest_status() normalized entry에 ac_ids가 보존되어
+        # _audit_oracle_quality()가 ac_ids=["AC-1"]을 올바르게 읽고 검증 통과해야 함
+        _seed_oracle_test_state(state_file, pipeline_id, with_ac=True)
 
         result, final_state = _run_pipeline_cli(
             "gates", "oracle",
@@ -1824,7 +1822,7 @@ def test_cli_gates_oracle_passes_with_valid_ac_ids(tmp_path):
             final_state.get("external_gates", {}).get("oracle", {}).get("status")
         )
         assert result.returncode == 0, (
-            f"유효한 oracle manifest인데 exit code != 0\n"
+            f"유효한 oracle manifest (ac_ids=AC-1 포함, requirements_tracking.enabled=true)인데 exit code != 0\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
         assert oracle_gate_status == "PASS", (
