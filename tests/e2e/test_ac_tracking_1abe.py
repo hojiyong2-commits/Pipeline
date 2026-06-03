@@ -19,7 +19,6 @@ Structured AC Tracking E2E 테스트
 # - 함수 직접 호출 테스트는 별도로 비-CLI 영역에서만 사용
 """
 
-import os
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
