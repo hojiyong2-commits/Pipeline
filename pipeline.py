@@ -14975,6 +14975,28 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
 
     # IMP-20260602-1ABE MT-4: AC 충족표 자동 조립 + 출력 (legacy면 생략)
     ac_table = _build_ac_fulfillment_table(state)
+
+    # IMP-20260603-9934 MT-R2: "qa: ?" 모호한 검증 차단
+    if ac_table:
+        ambiguous_entries = []
+        for ac_entry in ac_table:
+            if not ac_entry.get("user_visible", True):
+                continue
+            for v in ac_entry.get("verification", []):
+                # "qa: ?" 또는 "qa: ? —" 패턴 (상태값이 ?인 경우)
+                if " qa: ?" in v or "검증: ?" in v:
+                    ambiguous_entries.append(f"  {ac_entry['ac_id']}: {v[:80]}")
+        if ambiguous_entries:
+            print("[REQUEST ACCEPT 차단]")
+            print("AC 충족표에 검증 결과가 불명확한 항목이 있습니다.")
+            print("")
+            for ae in ambiguous_entries:
+                print(ae)
+            print("")
+            print("검증 근거에 'qa: ?' 가 있으면 승인 코드를 발급할 수 없습니다.")
+            print("module_qa XML의 <criterion status> 속성을 PASS/FAIL/SKIP으로 수정하세요.")
+            sys.exit(1)
+
     if ac_table is not None:
         # acceptance_request.json에 ac_fulfillment_table 저장 (재로드 후 갱신)
         try:
