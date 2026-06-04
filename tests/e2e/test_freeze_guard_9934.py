@@ -1646,7 +1646,6 @@ def test_request_accept_to_gates_accept_round_trip(tmp_path: Path) -> None:
 
     state_path = tmp_path / "pipeline_state.json"
     acceptance_req_path = tmp_path / "acceptance_request.json"
-    packet_path = tmp_path / "human_acceptance_packet.md"
     evidence_path = tmp_path / "evidence.md"
 
     state = {
@@ -1802,7 +1801,6 @@ def test_url_evidence_does_not_overwrite_evidence_sha256(tmp_path: Path) -> None
     # (초기값 없으면 null 또는 evidence 파일 SHA — packet SHA가 아니어야 함)
     packet_path = tmp_path / "human_acceptance_packet.md"
     if packet_path.exists():
-        packet_sha = _sha256_of(packet_path)
         evidence_sha = req_data.get("evidence_sha256")
         # evidence가 packet이 아닌 경우: evidence_sha256 != packet_sha256 이어야 함
         stored_packet_sha = req_data.get("packet_sha256")
