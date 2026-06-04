@@ -14169,7 +14169,22 @@ def _update_pr_body_with_metrics(state: Dict[str, Any]) -> None:
     gh CLI가 없거나 열린 PR이 없으면 조용히 skip한다.
     """
     try:
-        metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state))
+        # external_gates에서 저장된 repo 정보를 추출하거나 gh CLI로 조회
+        _repo_for_metrics: Optional[str] = None
+        try:
+            _gh_pr_repo = subprocess.run(
+                ["gh", "pr", "view", "--json", "headRepository"],
+                capture_output=True, text=True, timeout=5, encoding="utf-8",
+            )
+            if _gh_pr_repo.returncode == 0:
+                _repo_info = json.loads(_gh_pr_repo.stdout)
+                _owner = _repo_info.get("headRepository", {}).get("owner", {}).get("login", "")
+                _rname = _repo_info.get("headRepository", {}).get("name", "")
+                if _owner and _rname:
+                    _repo_for_metrics = f"{_owner}/{_rname}"
+        except Exception:
+            pass
+        metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state, repo=_repo_for_metrics))
         metrics_section = f"\n\n## 소요 시간 요약\n```\n{metrics_str}\n```\n"
         pr_view = subprocess.run(
             ["gh", "pr", "view", "--json", "body,number"],
@@ -19103,15 +19118,24 @@ def _collect_pipeline_metrics(
     # failure retry
     failure_retry = _failure_retry_summary(state)
 
-    # github actions (latest phase CI run_id 조회 시도)
+    # github actions (phase CI run_id 또는 external github_ci gate run_id)
     run_id_for_gh: Optional[str] = None
+    # 1. phase_attestations.phases에서 최신 run_id 조회 (올바른 경로)
     phase_ci_data = state.get("phase_attestations", {})
-    if isinstance(phase_ci_data, dict):
-        for _ph, att_data in phase_ci_data.items():
+    phases_dict = phase_ci_data.get("phases", {}) if isinstance(phase_ci_data, dict) else {}
+    if isinstance(phases_dict, dict):
+        for _ph, att_data in phases_dict.items():
             if isinstance(att_data, dict):
-                ci_run = att_data.get("ci_run_id")
+                ci_run = att_data.get("run_id")  # "ci_run_id" → "run_id" (올바른 키)
                 if ci_run:
                     run_id_for_gh = str(ci_run)
+    # 2. fallback: external_gates.github_ci.evidence에서 run_id 추출
+    if run_id_for_gh is None:
+        ext_gates = state.get("external_gates", {}) if isinstance(state, dict) else {}
+        gh_ci_gate = ext_gates.get("github_ci", {}) if isinstance(ext_gates, dict) else {}
+        ev_str = gh_ci_gate.get("evidence", "") if isinstance(gh_ci_gate, dict) else ""
+        if isinstance(ev_str, str) and ev_str.startswith("github_actions_run:"):
+            run_id_for_gh = ev_str.split(":", 1)[1]
     github_actions = _github_actions_duration_summary(repo, run_id_for_gh)
 
     # agent session
