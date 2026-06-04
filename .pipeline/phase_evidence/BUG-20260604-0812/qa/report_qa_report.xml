@@ -1,7 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <qa_report>
   <pipeline_id>BUG-20260604-0812</pipeline_id>
-  <agent_run_id>qa-0c910c420057159f</agent_run_id>
+  <agent_id>qa-agent</agent_id>
+  <run_id>qa-45c37352ccc7064b</run_id>
+  <generated_at>2026-06-04T15:37:00Z</generated_at>
   <phase>qa</phase>
   <result>PASS</result>
   <timestamp>2026-06-04T14:57:00Z</timestamp>
@@ -48,7 +50,14 @@
     <verdict>PASS</verdict>
   </pytest_execution>
 
-  <numeric_score>108</numeric_score>
+  <numeric_score>110</numeric_score>
+
+  <tool_results_v2>
+    <ruff>PASS — All checks passed! (0 issues, F841 fixed)</ruff>
+    <mypy>PASS — Success: no issues found in 1 source file</mypy>
+    <bandit>PASS — High: 0, Medium: 11 (pre-existing, not introduced by this fix)</bandit>
+    <pytest>PASS — 25 passed, 4 skipped in 90.13s</pytest>
+  </tool_results_v2>
 
   <micro_task_boundary>
     <mt_id>MT-1</mt_id>
