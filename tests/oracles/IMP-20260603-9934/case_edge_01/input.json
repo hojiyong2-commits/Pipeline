@@ -1,0 +1,11 @@
+{
+  "scenario": "force_new_request_expires_pending",
+  "pipeline_id": "IMP-20260603-9934",
+  "phase": "edge_force_new",
+  "description": "--force-new-request 옵션으로 기존 PENDING 코드를 EXPIRED 처리하고 새 코드를 발급하는 엣지 케이스",
+  "actions": [
+    {"step": "run_request_accept", "evidence": "human_acceptance_packet.md"},
+    {"step": "modify_packet_file"},
+    {"step": "run_request_accept_with_force_new_request"}
+  ]
+}

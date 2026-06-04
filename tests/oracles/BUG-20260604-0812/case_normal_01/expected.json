@@ -1,0 +1,21 @@
+{
+  "case_id": "case_normal_01",
+  "case_kind": "normal",
+  "expected_outcome": "PASS",
+  "expected_state_after_request_accept": {
+    "acceptance_request.json": {
+      "schema_version": 2,
+      "status": "PENDING",
+      "packet_sha256_must_equal_actual_packet_sha256": true,
+      "packet_path_set": true,
+      "packet_frozen_at_set": true,
+      "evidence_sha256_matches_packet_when_evidence_is_packet": true
+    }
+  },
+  "expected_round_trip": {
+    "request_accept_exit_code": 0,
+    "gates_accept_with_correct_code_outcome": "ACCEPT",
+    "gates_accept_blocked_with_stale_packet": false
+  },
+  "regression_prevention": "이 케이스는 SHA 순서 버그가 다시 들어오지 않도록 보장. 수정 전에는 두 SHA 값이 다르므로 round-trip이 stale_packet으로 BLOCKED, 수정 후에는 동일하여 ACCEPT 성공"
+}

@@ -230,6 +230,28 @@ python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance
 
 ---
 
+## Final Packet Freeze Guard 검증 (IMP-20260603-9934)
+
+Phase 7 acceptance evidence 점검 시 아래 항목을 추가로 확인한다.
+
+### gates request-accept 실행 후 확인
+
+- `acceptance_request.json`의 `schema_version` 값이 `2`인지 확인한다.
+- `packet_sha256`, `packet_path`, `packet_frozen_at` 필드가 모두 존재하는지 확인한다.
+- `packet_sha256`가 64자 hex string인지 확인한다.
+
+### gates accept 차단 조건 인지
+
+- packet 파일이 `request-accept` 이후 변조되면 `failure_code: stale_packet`으로 BLOCKED.
+- `stale_packet` 발생 시 사용자에게 안내: `gates request-accept --force-new-code`로 재발급 필요.
+
+### report 명령 차단 인지
+
+- `report final-packet` 또는 `report update-pr-body`가 PENDING+packet_sha256로 차단되면
+  `--force-new-request` 옵션을 안내한다.
+
+---
+
 ## AC Tracking — Harness 역할 (IMP-20260602-1ABE)
 
 Harness는 `gates request-accept` 실행 시 자동 조립되는 AC 충족표를 사용자에게 전달하고, user_visible AC가 모두 PASS인지 확인합니다.

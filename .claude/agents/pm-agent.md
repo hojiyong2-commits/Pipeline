@@ -712,6 +712,25 @@ SSoT 패턴 목록은 `pipeline.py`의 `SECRET_PATTERNS` 상수와 CLAUDE.md의 
 
 ---
 
+## Final Packet Freeze Guard — PM 준수 규칙 (IMP-20260603-9934)
+
+`gates request-accept` 실행 후 `human_acceptance_packet.md`가 변조되면
+`gates accept`가 `STALE_PACKET`으로 차단됩니다.
+
+### PM 주의 사항
+
+1. `gates request-accept` 실행 전에 `report final-packet`으로 packet을 먼저 확정합니다.
+2. packet 확정 후 내용을 임의로 수정하지 않습니다 — 수정이 필요하면 `--force-new-code`로 재발급.
+3. `report final-packet` / `report update-pr-body`가 PENDING+packet_sha256로 차단되면
+   `--force-new-request`를 사용하거나 `gates request-accept --force-new-code`로 재발급.
+4. `failure_code: stale_packet` 발생 시 → `gates request-accept --force-new-code` 실행.
+
+### 실패 케이스 추가
+
+- `stale_packet` → packet 변조 감지. `gates request-accept --force-new-code` 실행 후 사용자에게 새 코드 제시.
+
+---
+
 ## AC Tracking — PM 역할 (IMP-20260602-1ABE)
 
 PM은 모든 새 파이프라인에서 `step_plan.xml`에 `<acceptance_criteria>` 구조화 블록을 필수로 포함해야 합니다. 자세한 스키마/검증 규칙은 `CLAUDE.md` "Structured AC Tracking" 섹션을 참조합니다.
