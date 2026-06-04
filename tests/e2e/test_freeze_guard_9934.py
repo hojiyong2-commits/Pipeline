@@ -868,7 +868,7 @@ class TestNonceConsistency:
         )
 
         assert result.returncode == 0, (
-            f"request-accept 실패: "
+            "request-accept 실패: "
             + (result.stdout + result.stderr)[:400]
         )
 
@@ -884,7 +884,7 @@ class TestNonceConsistency:
         nonce_pattern = re_module.compile(r"ACCEPT-[A-Z]+-\d{8}-[A-Z0-9]{4}-([A-Z2-7]{8})")
         match = nonce_pattern.search(combined_output)
         assert match is not None, (
-            f"콘솔 출력에 ACCEPT 코드 없음: "
+            "콘솔 출력에 ACCEPT 코드 없음: "
             + (result.stdout + result.stderr)[:300]
         )
 
@@ -1228,8 +1228,6 @@ class TestRequestAcceptPacketShaMatchesActual:
             cwd=str(tmp_path),
             timeout=30,
         )
-
-        combined = result.stdout + result.stderr
 
         # 환경 이슈(gh/PR/git/stale)로 실패한 경우도 hard assert
         assert result.returncode == 0, (
