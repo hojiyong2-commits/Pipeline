@@ -1209,6 +1209,45 @@ python pipeline.py gates request-accept --evidence <결과물-경로>
 python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-IMP-...-XXXXXXXX
 ```
 
+## Final Packet Freeze Guard (IMP-20260603-9934)
+
+`gates request-accept` 실행 시 `human_acceptance_packet.md`의 SHA-256 해시를
+`acceptance_request.json`에 freeze하여 승인 코드 발급 이후 packet 변조를 차단합니다.
+
+### schema_version=2 확장 필드
+
+`acceptance_request.json`에 다음 3개 필드가 추가됩니다:
+
+- `packet_path` — freeze 시점의 `human_acceptance_packet.md` 절대 경로
+- `packet_sha256` — freeze 시점의 파일 SHA-256 hex digest
+- `packet_frozen_at` — freeze 타임스탬프 (ISO 8601)
+
+`schema_version=1` legacy 파일은 이 필드가 없으므로 차단 없이 통과합니다 (하위 호환).
+
+### 차단 조건
+
+| 명령 | 차단 조건 | failure_code | 해결 방법 |
+|---|---|---|---|
+| `gates accept` | `packet_sha256` 불일치 (packet 변조) | `stale_packet` | `gates request-accept` 재실행 |
+| `report final-packet` | `PENDING + packet_sha256` 상태 | — | `--force-new-request` 사용 |
+| `report update-pr-body` | `PENDING + packet_sha256` 상태 | — | `--force-new-request` 사용 |
+
+### 강제 재발급 옵션
+
+- `report final-packet --force-new-request` / `report update-pr-body --force-new-request`:
+  기존 PENDING nonce를 EXPIRED로 처리하고 packet을 새로 생성합니다.
+- `gates request-accept --force-new-code`:
+  기존 PENDING nonce를 EXPIRED로 처리하고 새 nonce + 새 `packet_sha256`를 발급합니다.
+
+### 에이전트 책임
+
+- **PM**: step_plan에 `gates request-accept` 흐름이 schema_version=2를 사용함을 명시합니다.
+- **Dev**: `_write_acceptance_request` 호출 시 `packet_path` 인자를 전달합니다. 누락 시 AC-1 FAIL.
+- **Test-Harness**: Phase 7 acceptance evidence 점검 시 `schema_version=2` 여부와
+  `packet_sha256` 필드 존재를 확인합니다.
+
+---
+
 ## Weekly Cleanup Archive — Hygiene CLI (IMP-20260601-0DF5)
 
 `pipeline.py hygiene` 서브커맨드는 7일 이상 된 임시 산출물을 정기적으로 정리합니다.

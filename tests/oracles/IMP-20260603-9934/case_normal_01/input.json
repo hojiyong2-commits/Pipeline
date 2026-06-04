@@ -1,0 +1,10 @@
+{
+  "scenario": "request_accept_stores_packet_sha256",
+  "pipeline_id": "IMP-20260603-9934",
+  "phase": "normal_flow",
+  "description": "gates request-accept 실행 후 acceptance_request.json에 packet_sha256가 저장되는 정상 흐름",
+  "actions": [
+    {"step": "run_request_accept", "evidence": "human_acceptance_packet.md"},
+    {"step": "read_acceptance_request_json"}
+  ]
+}
