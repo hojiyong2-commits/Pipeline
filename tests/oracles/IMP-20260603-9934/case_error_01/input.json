@@ -1,0 +1,11 @@
+{
+  "scenario": "gates_accept_blocked_when_packet_changed",
+  "pipeline_id": "IMP-20260603-9934",
+  "phase": "error_stale_packet",
+  "description": "request-accept 이후 packet 파일이 변경된 상태에서 gates accept 실행 시 STALE_PACKET으로 차단되는 오류 케이스",
+  "actions": [
+    {"step": "run_request_accept", "evidence": "human_acceptance_packet.md"},
+    {"step": "modify_packet_content_externally"},
+    {"step": "run_gates_accept", "acceptance_code": "ACCEPT-IMP-20260603-9934-TESTCODE"}
+  ]
+}

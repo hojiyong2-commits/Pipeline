@@ -1,0 +1,20 @@
+{
+  "case_id": "case_error_01",
+  "case_kind": "error",
+  "description": "evidence가 URL인 경우(http/https) packet 갱신 시 evidence_sha256은 건드리지 않아야 함 (URL evidence 보호)",
+  "scenario": {
+    "step_1": "BUG 파이프라인 생성 + PM/Dev/QA/Build phase + technical/oracle/github_ci gate 모두 PASS",
+    "step_2": "python pipeline.py gates request-accept --evidence https://example.com/result.html 실행",
+    "step_3": "acceptance_request.json을 읽어 evidence_sha256 값 추출",
+    "step_4": "evidence_sha256 == null 인지 확인 (URL이면 SHA 없음)",
+    "step_5": "packet_sha256 != null 이면서 정상 packet SHA와 일치하는지 확인"
+  },
+  "assertions": [
+    "request-accept exit code == 0",
+    "acceptance_request.json의 evidence_url == 'https://example.com/result.html'",
+    "acceptance_request.json의 evidence_sha256 == null (URL 보호)",
+    "acceptance_request.json의 packet_sha256 == 실제 packet SHA (정상 갱신)",
+    "SHA 재계산 로직이 URL evidence를 packet SHA로 덮어쓰지 않음"
+  ],
+  "verifies": "AC-2: URL evidence 보호 — packet 자동 생성 직후 SHA 재계산 로직이 URL evidence_sha256(=null)을 침범하지 않고, packet_sha256만 신규 packet 값으로 갱신함"
+}

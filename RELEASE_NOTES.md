@@ -1,5 +1,34 @@
 # Pipeline 릴리즈 노트
 
+## IMP-20260603-9934 — Final Packet Freeze Guard
+
+**머지 예정:** `acceptance_request.json`에 `packet_sha256`를 freeze하여 `request-accept` 이후
+`human_acceptance_packet.md`가 변조되면 `gates accept`를 차단합니다. `report final-packet`과
+`report update-pr-body`도 PENDING+packet_sha256 상태에서 기본 차단합니다.
+
+### 신규 동작
+
+- `gates request-accept` — `schema_version=2` 확장: `packet_path`, `packet_sha256`,
+  `packet_frozen_at` 3개 필드를 `acceptance_request.json`에 저장합니다.
+- `gates accept` — 저장된 `packet_sha256`와 현재 packet 파일의 해시를 비교합니다.
+  불일치 시 `STALE_PACKET`으로 차단합니다 (failure_code: `stale_packet`).
+- `report final-packet` / `report update-pr-body` — `acceptance_request.json`이
+  `PENDING + packet_sha256` 상태이면 기본 차단합니다. `--force-new-request`로 해제
+  (기존 PENDING을 EXPIRED 처리 후 재생성).
+- `gates request-accept --force-new-code` — 기존 PENDING nonce를 EXPIRED로 처리하고
+  새 nonce + 새 packet_sha256를 발급합니다.
+
+### 하위 호환
+
+- `schema_version=1` legacy `acceptance_request.json`은 `packet_sha256` 검사를 건너뜁니다.
+  기존 파이프라인에서 동작 변경 없습니다.
+
+### 테스트
+
+- `tests/e2e/test_freeze_guard_9934.py` — 19개 E2E 테스트 (oracle 3개 schema 검증 포함)
+
+---
+
 ## IMP-20260603-2E3D — PR Packet SSoT
 
 **머지 예정 / 작업 중:** 사용자 ACCEPT/REJECT 판단 자료(PR 본문의 "최종 확인 안내",
