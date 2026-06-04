@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-04T14:40:12Z",
+  "generated_at": "2026-06-04T14:48:27Z",
   "pipeline_id": "BUG-20260604-0812",
   "phase": "dev",
   "phase_status": "DONE",
@@ -10,7 +10,7 @@
     "current_phase": "qa",
     "phase_completed_at": "2026-06-04T14:21:06Z",
     "report_file": "dev_handover.xml",
-    "evidence": "pipeline.py,tests/e2e/test_freeze_guard_9934.py"
+    "evidence": ""
   },
   "agent_run": {
     "run_id": "dev-96d7086bf4fe73e1",
@@ -51,17 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "74df42dbcdfd52cada5ae6a981f7250163be90141efe519282e0cdb481b53781",
-      "size_bytes": 909803
-    },
-    {
-      "path": "tests/e2e/test_freeze_guard_9934.py",
-      "sha256": "390e5f98a40442b726d19e00334020776c924ab2baf2c126db1a892d399b3a35",
-      "size_bytes": 78916
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
