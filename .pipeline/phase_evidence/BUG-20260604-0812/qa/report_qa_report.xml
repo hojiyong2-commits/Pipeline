@@ -1,43 +1,69 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <qa_report>
   <pipeline_id>BUG-20260604-0812</pipeline_id>
+  <agent_run_id>qa-0c910c420057159f</agent_run_id>
   <phase>qa</phase>
-  <agent_run_id>qa-fd378851c57615f4</agent_run_id>
-  <verdict>PASS</verdict>
-  <numeric_score>108</numeric_score>
-  <summary>
-    MT-1 구현 검증: _cmd_gates_request_accept SHA 순서 버그 수정.
-    packet 자동 생성 후 SHA 재계산 로직이 올바르게 삽입되어 있으며,
-    URL evidence 보호 조건, OSError/JSONDecodeError graceful continue가 모두 구현됨.
-    E2E 테스트 25개 중 21 PASS, 4 SKIP (PR/CI 환경 의존 - 로컬에서 SKIP은 정상).
-  </summary>
-  <test_results>
-    <total>25</total>
-    <passed>21</passed>
-    <failed>0</failed>
-    <skipped>4</skipped>
-    <error>0</error>
-  </test_results>
-  <criteria_verification>
-    <criterion id="AC-1" status="PASS">packet_sha256가 실제 생성된 packet 파일의 SHA-256과 일치함.</criterion>
-    <criterion id="AC-2" status="PASS">evidence가 URL인 경우 evidence_sha256을 변경하지 않음.</criterion>
-    <criterion id="AC-3" status="PASS">OSError/JSONDecodeError 발생 시 YELLOW 경고만 출력하고 계속 진행.</criterion>
-    <criterion id="AC-4" status="PASS">신규 E2E 테스트 2개 추가됨: TestRequestAcceptPacketShaMatchesActual, TestRequestAcceptToGatesAcceptRoundTrip.</criterion>
-  </criteria_verification>
+  <result>PASS</result>
+  <timestamp>2026-06-04T14:57:00Z</timestamp>
+
   <scope_verification>
-    <changed_files><file>pipeline.py</file><file>tests/e2e/test_freeze_guard_9934.py</file></changed_files>
-    <scope_match>true</scope_match>
-    <trust_root_violation>false</trust_root_violation>
+    <manifest_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_freeze_guard_9934.py</file>
+    </manifest_files>
+    <extra_files_outside_scope>없음</extra_files_outside_scope>
+    <verdict>PASS</verdict>
   </scope_verification>
+
+  <check_1_pipeline_die_handler>
+    <description>pipeline.py line 15047-15048: except (OSError, json.JSONDecodeError) handler → _die() 호출</description>
+    <expected>_die() BLOCKED</expected>
+    <actual>_die("[SHA 갱신 실패] ...")</actual>
+    <verdict>PASS</verdict>
+  </check_1_pipeline_die_handler>
+
+  <check_2_t1>
+    <description>T1: test_request_accept_packet_sha_matches_actual_packet — subprocess CLI 기반, pytest.skip 없음</description>
+    <verdict>PASS</verdict>
+  </check_2_t1>
+
+  <check_3_t2>
+    <description>T2: test_request_accept_to_gates_accept_round_trip — subprocess CLI 기반, returncode==0 + match is not None assertion</description>
+    <verdict>PASS</verdict>
+  </check_3_t2>
+
+  <check_4_t3>
+    <description>T3: test_url_evidence_does_not_overwrite_evidence_sha256 — subprocess CLI 기반, packet_sha256 필드 확인</description>
+    <verdict>PASS</verdict>
+  </check_4_t3>
+
+  <check_5_t4>
+    <description>T4: test_graceful_continue_on_sha_update_error — subprocess CLI 기반, OSError 유도, returncode != 0 (BLOCKED)</description>
+    <verdict>PASS</verdict>
+  </check_5_t4>
+
+  <pytest_execution>
+    <command>python -m pytest tests/e2e/test_freeze_guard_9934.py -q --tb=short</command>
+    <result>25 passed, 4 skipped in 80.98s</result>
+    <verdict>PASS</verdict>
+  </pytest_execution>
+
+  <numeric_score>108</numeric_score>
+
   <micro_task_boundary>
     <mt_id>MT-1</mt_id>
-    <verdict>WITHIN_SCOPE</verdict>
-    <blast_radius>MINIMAL</blast_radius>
+    <verdict>PASS</verdict>
+    <blast_radius>IN_SCOPE</blast_radius>
   </micro_task_boundary>
+
   <handover>
     <from>qa-agent</from>
-    <to>build-agent</to>
-    <pipeline_id>BUG-20260604-0812</pipeline_id>
-    <status>READY_FOR_BUILD</status>
+    <to>pipeline-manager</to>
+    <step_id>MT-1</step_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_freeze_guard_9934.py</file>
+    </evidence>
+    <status>QA_PASS</status>
   </handover>
 </qa_report>
