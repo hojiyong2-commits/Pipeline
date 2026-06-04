@@ -14879,8 +14879,23 @@ def _auto_generate_final_packet_and_update_pr(
     Raises:
         없음 (외부 도구 부재 시 graceful skip).
     """
+    # PR base 자동 감지: main이 아닌 경우 PR base를 사용
+    _auto_base_ref = "origin/main"
+    try:
+        _pr_view = subprocess.run(
+            ["gh", "pr", "view", "--json", "baseRefName"],
+            capture_output=True, text=True, timeout=5,
+            encoding="utf-8", errors="replace",
+        )
+        if _pr_view.returncode == 0 and _pr_view.stdout.strip():
+            _pr_info = json.loads(_pr_view.stdout)
+            _pr_base = str(_pr_info.get("baseRefName", "") or "")
+            if _pr_base and _pr_base not in ("main", "master", "HEAD"):
+                _auto_base_ref = f"origin/{_pr_base}"
+    except Exception:
+        pass
     evidence_payload = _collect_packet_evidence(
-        state, acceptance_request=acceptance_request, base_ref="origin/main"
+        state, acceptance_request=acceptance_request, base_ref=_auto_base_ref
     )
     content = _build_final_packet_content(evidence_payload)
     packet_path = _write_human_acceptance_packet(content)
