@@ -15025,6 +15025,28 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     except (OSError, ValueError, KeyError) as exc:
         print(YELLOW(f"  [FINAL PACKET] 자동 생성 중 오류 (계속 진행): {exc}"))
 
+    # BUG-20260604-0812 MT-1: packet 자동 생성 후 SHA 재계산 + acceptance_request.json 갱신.
+    # _write_acceptance_request는 packet 생성 전에 SHA를 계산하므로 항상 구(舊) SHA가 저장된다.
+    # packet 자동 생성(_auto_generate_final_packet_and_update_pr) 완료 후 실제 SHA로 덮어쓴다.
+    _new_packet_sha256 = _compute_packet_sha256(packet_path)
+    if _new_packet_sha256 is not None:
+        try:
+            _req_path = Path(ACCEPTANCE_REQUEST_FILE)
+            if _req_path.exists():
+                _req_data = json.loads(_req_path.read_text(encoding="utf-8", errors="replace"))
+                _req_data["packet_sha256"] = _new_packet_sha256
+                _req_data["packet_frozen_at"] = _now()
+                # evidence가 packet 파일 자체인 경우에만 evidence_sha256도 갱신.
+                # URL evidence(http/https)는 건드리지 않는다 (AC-3 준수).
+                if not is_url and evidence_str == str(packet_path):
+                    _req_data["evidence_sha256"] = _new_packet_sha256
+                _req_path.write_text(
+                    json.dumps(_req_data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+        except (OSError, json.JSONDecodeError) as _sha_exc:
+            print(YELLOW(f"  [SHA 갱신] acceptance_request.json SHA 갱신 실패 (계속 진행): {_sha_exc}"))
+
     print()
     print("=" * 62)
     print("  사용자 최종 확인 요청")

@@ -1,0 +1,21 @@
+{
+  "case_id": "case_error_01",
+  "case_kind": "error",
+  "expected_outcome": "PASS",
+  "expected_state_after_request_accept": {
+    "acceptance_request.json": {
+      "schema_version": 2,
+      "status": "PENDING",
+      "evidence_url_is_set": true,
+      "evidence_sha256": null,
+      "packet_sha256_matches_actual_packet_sha256": true,
+      "packet_path_set": true
+    }
+  },
+  "expected_protection": {
+    "url_evidence_not_overwritten": true,
+    "sha_update_only_touches_packet_sha256": true,
+    "evidence_sha256_remains_null_for_url": true
+  },
+  "regression_prevention": "이 케이스는 SHA 재계산 로직이 URL evidence를 잘못 packet SHA로 덮어쓰지 않도록 보장. evidence_sha256은 evidence가 파일일 때만 업데이트되고 URL일 때는 null 유지"
+}

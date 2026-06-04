@@ -1,0 +1,15 @@
+{
+  "pipeline_id": "BUG-20260604-0812",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_freeze_guard_9934.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_request_accept"
+      ]
+    }
+  ]
+}

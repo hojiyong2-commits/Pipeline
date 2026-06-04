@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-04T12:52:35Z",
+  "pipeline_id": "BUG-20260604-0812",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "5f1815df91aeda5c2b1caf0723a1295ac08be634",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-04T12:52:30Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_freeze_guard_9934.py"
+  },
+  "agent_run": {
+    "run_id": "dev-593812c4ff493dcb",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "53c8a36f42e6be3f8e0372b1c2683b7401a0fd3de72782ad261494147991bc6f",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260604-0812/dev/agent_receipt_dev-593812c4ff493dcb.json",
+    "receipt_sha256": "0ba405836d9ef214196fc6bc4ca90845f078f98f83098c2329c4325651d0949c",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260604-0812\\dev\\dev-593812c4ff493dcb.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260604-0812\\dev\\dev-593812c4ff493dcb.json",
+      "path": ".pipeline/phase_evidence/BUG-20260604-0812/dev/agent_receipt_dev-593812c4ff493dcb.json",
+      "sha256": "0ba405836d9ef214196fc6bc4ca90845f078f98f83098c2329c4325651d0949c",
+      "size_bytes": 589,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260604-0812/dev/report_dev_handover.xml",
+      "sha256": "53c8a36f42e6be3f8e0372b1c2683b7401a0fd3de72782ad261494147991bc6f",
+      "size_bytes": 2321,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260604-0812/dev/scope_manifest_scope_manifest.json",
+      "sha256": "e9b27fa54a82e823caf03bd7307d74b306f0d6c94e6b997f4fcccf45d109fe57",
+      "size_bytes": 275,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "225719b517c5a4a1d9d223dca79344d89d576d1f49a7d394daaa2a8c03303be8",
+      "size_bytes": 909772
+    },
+    {
+      "path": "tests/e2e/test_freeze_guard_9934.py",
+      "sha256": "f894b7d691d665f40d8bd7946a43bf27a1dffa9c1990bdb86e2f5af9ba00bb85",
+      "size_bytes": 64481
+    }
+  ],
+  "local_only_files": []
+}
