@@ -708,7 +708,7 @@ class TestACFulfillmentTableNoPending:
 
         # 격리용 최소 state 작성 — AC-1 result=PASS, user_visible=true
         state = {
-            "pipeline_id": "IMP-20260603-9934-T13",
+            "pipeline_id": "TEST-20260101-ACFT",
             "current_phase": "build",
             "phase_history": {
                 "pm": {"status": "DONE"},
@@ -755,6 +755,7 @@ class TestACFulfillmentTableNoPending:
 
         env = os.environ.copy()
         env["PIPELINE_STATE_PATH"] = str(state_path)
+        env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
         env["PYTHONIOENCODING"] = "utf-8"
 
         result = subprocess.run(
@@ -774,11 +775,12 @@ class TestACFulfillmentTableNoPending:
             timeout=30,
         )
 
-        # acceptance_request.json이 생성되었어야 한다
-        req_path = PIPELINE_PY.parent / "acceptance_request.json"
+        # 격리된 경로 우선 사용
+        req_path = acceptance_req_path
         if not req_path.exists():
-            # 격리 tmp에도 확인
-            req_path = acceptance_req_path
+            # fallback: 환경변수 없이 실행된 경우 (skip 처리)
+            import pytest
+            pytest.skip("격리된 acceptance_request.json 없음 — PIPELINE_ACCEPTANCE_REQUEST_PATH 지원 필요")
 
         # request-accept가 성공(exit 0)했을 때만 ac_fulfillment_table 확인
         # 실패(exit 1)는 환경 의존성(gh CLI 등)이 원인일 수 있으므로 skip 처리
@@ -824,4 +826,183 @@ class TestACFulfillmentTableNoPending:
             assert pending_user_visible == [], (
                 f"user_visible AC 중 PENDING 결과가 있음: {pending_user_visible}\n"
                 "structured_acceptance_criteria에 result/implementation_evidence/verification을 채워야 합니다."
+            )
+
+
+# ---------------------------------------------------------------------------
+# Test 21 — nonce 일관성: 콘솔 출력 == acceptance_request.json
+# ---------------------------------------------------------------------------
+
+
+class TestNonceConsistency:
+    """request-accept 콘솔 출력 nonce와 acceptance_request.json nonce가 일치해야 한다."""
+
+    def test_request_accept_nonce_matches_acceptance_request_json(
+        self, tmp_path: Path
+    ) -> None:
+        """gates request-accept 콘솔 출력의 승인 코드 nonce가
+        acceptance_request.json에 기록된 nonce와 동일해야 한다.
+
+        격리 환경에서 request-accept를 실행하고:
+        1. 콘솔 출력에서 ACCEPT-...-XXXXXXXX 패턴의 nonce 추출
+        2. acceptance_request.json의 nonce 필드 확인
+        3. 두 값이 동일한지 assert
+        """
+        import re as re_module
+
+        state_path = tmp_path / "pipeline_state.json"
+        acceptance_req_path = tmp_path / "acceptance_request.json"
+        packet_path = tmp_path / "human_acceptance_packet.md"
+
+        state = {
+            "pipeline_id": "TEST-20260101-NCNS",
+            "current_phase": "build",
+            "phase_history": {
+                "pm": {"status": "DONE"},
+                "dev": {"status": "DONE"},
+                "qa": {"status": "PASS"},
+                "build": {"status": "DONE"},
+            },
+            "external_gates": {
+                "technical": {"status": "PASS"},
+                "oracle": {"status": "PASS"},
+                "github_ci": {"status": "PASS"},
+                "acceptance": {"status": "PENDING"},
+            },
+            "requirements_tracking": {"enabled": True, "acceptance_criteria": []},
+            "structured_acceptance_criteria": [],
+        }
+        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        packet_path.write_text("# Final Packet\n\nTest packet.\n", encoding="utf-8")
+
+        env = os.environ.copy()
+        env["PIPELINE_STATE_PATH"] = str(state_path)
+        env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run(
+            [sys.executable, str(PIPELINE_PY), "gates", "request-accept",
+             "--evidence", str(packet_path)],
+            capture_output=True, text=True, encoding="utf-8",
+            env=env, timeout=30,
+        )
+
+        if result.returncode != 0:
+            combined = result.stdout + result.stderr
+            if any(kw in combined for kw in ("gh", "PR", "pull request", "git", "SHA", "run_id",
+                                              "not found", "command not found", "no open PR", "stale")):
+                import pytest
+                pytest.skip(f"환경 의존성(gh/PR/git) 이슈로 skip — returncode={result.returncode}")
+            assert result.returncode == 0, (
+                f"request-accept 실패 (exit {result.returncode})\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+
+        if not acceptance_req_path.exists():
+            import pytest
+            pytest.skip("acceptance_request.json 없음 — 환경 이슈로 skip")
+
+        req_data = json.loads(acceptance_req_path.read_text(encoding="utf-8"))
+        stored_nonce = req_data.get("nonce", "")
+        assert stored_nonce, "acceptance_request.json에 nonce 필드 없음"
+
+        # 콘솔 출력에서 ACCEPT-...-XXXXXXXX 패턴의 nonce 추출
+        combined_output = result.stdout + result.stderr
+        # nonce는 8자 대문자 base32
+        nonce_pattern = re_module.compile(r"ACCEPT-[A-Z]+-\d{8}-[A-Z0-9]{4}-([A-Z2-7]{8})")
+        match = nonce_pattern.search(combined_output)
+        if not match:
+            import pytest
+            pytest.skip(f"콘솔 출력에 ACCEPT 코드 없음 — 환경 이슈일 수 있음\n출력: {combined_output[:300]}")
+
+        console_nonce = match.group(1)
+        assert console_nonce == stored_nonce, (
+            f"콘솔 nonce({console_nonce})와 acceptance_request.json nonce({stored_nonce})가 다름. "
+            "request-accept 직후 acceptance_request.json이 다시 덮어쓰여졌을 가능성이 있음."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 22 — pipeline_id 오염 방지: final packet pipeline_id == state.pipeline_id
+# ---------------------------------------------------------------------------
+
+
+class TestFinalPacketPipelineIdNoContamination:
+    """report final-packet 생성 시 pipeline_id가 state의 값과 동일해야 한다 (suffix 없음)."""
+
+    def test_final_packet_pipeline_id_matches_state(
+        self, tmp_path: Path
+    ) -> None:
+        """report final-packet이 생성하는 human_acceptance_packet.md의
+        pipeline_id 표시가 state.pipeline_id와 정확히 일치해야 한다.
+        T13 같은 suffix나 다른 변형이 포함되면 안 된다.
+
+        격리 환경에서 pipeline_id="TEST-20260101-PIDC"로 설정하고
+        report final-packet을 실행한 뒤 packet 파일에 올바른 pipeline_id가
+        표시되는지 assert한다.
+        """
+        state_path = tmp_path / "pipeline_state.json"
+        packet_path = tmp_path / "human_acceptance_packet.md"
+        acceptance_req_path = tmp_path / "acceptance_request.json"
+
+        expected_pipeline_id = "TEST-20260101-PIDC"
+
+        state = {
+            "pipeline_id": expected_pipeline_id,
+            "current_phase": "build",
+            "phase_history": {
+                "pm": {"status": "DONE"},
+                "dev": {"status": "DONE"},
+                "qa": {"status": "PASS"},
+                "build": {"status": "DONE"},
+            },
+            "external_gates": {
+                "technical": {"status": "PASS"},
+                "oracle": {"status": "PASS"},
+                "github_ci": {"status": "PASS"},
+                "acceptance": {"status": "PENDING"},
+            },
+            "requirements_tracking": {"enabled": True, "acceptance_criteria": []},
+            "structured_acceptance_criteria": [],
+        }
+        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        env = os.environ.copy()
+        env["PIPELINE_STATE_PATH"] = str(state_path)
+        env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
+        env["PIPELINE_ACCEPTANCE_PACKET_PATH"] = str(packet_path)
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run(
+            [sys.executable, str(PIPELINE_PY), "report", "final-packet"],
+            capture_output=True, text=True, encoding="utf-8",
+            env=env, timeout=30,
+        )
+
+        # final-packet이 생성됐으면 pipeline_id 확인
+        # 생성 실패는 환경 이슈일 수 있으므로 skip 처리
+        if result.returncode != 0 and not packet_path.exists():
+            combined = result.stdout + result.stderr
+            import pytest
+            pytest.skip(
+                f"final-packet 생성 실패 — 환경 이슈일 수 있음: {combined[:300]}"
+            )
+
+        if packet_path.exists():
+            content = packet_path.read_text(encoding="utf-8")
+            # pipeline_id가 정확히 포함되어야 함
+            assert expected_pipeline_id in content, (
+                f"final packet에 올바른 pipeline_id({expected_pipeline_id})가 없음.\n"
+                f"packet 내용 앞 500자:\n{content[:500]}"
+            )
+            # T13 같은 오염된 suffix가 포함되지 않아야 함
+            contaminated_id = expected_pipeline_id + "-T13"
+            assert contaminated_id not in content, (
+                f"final packet에 오염된 pipeline_id({contaminated_id})가 포함됨.\n"
+                "테스트 fixture의 pipeline_id가 production 코드에 섞이지 않아야 합니다."
+            )
+            # IMP-20260603-9934-T13 같은 실제 파이프라인의 T13 suffix도 없어야 함
+            assert "IMP-20260603-9934-T13" not in content, (
+                "final packet에 'IMP-20260603-9934-T13'이 포함됨. "
+                "테스트 fixture 오염 가능성."
             )

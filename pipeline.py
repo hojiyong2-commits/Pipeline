@@ -3636,7 +3636,9 @@ TEMPORARY_PR_BODY_PATTERNS: List[str] = [
 # IMP-20260531-BBDB MT-1: User Acceptance Nonce Gate
 # acceptance_request.json 파일명 + ACCEPT/REJECT 코드 정규식.
 # nonce는 8자 base32 uppercase (예: A2B3C4D5). pipeline_id 패턴: TYPE-YYYYMMDD-XXXX.
-ACCEPTANCE_REQUEST_FILE = "acceptance_request.json"
+ACCEPTANCE_REQUEST_FILE: str = os.environ.get(
+    "PIPELINE_ACCEPTANCE_REQUEST_PATH", "acceptance_request.json"
+)
 ACCEPT_CODE_PATTERN = re.compile(r"^ACCEPT-([A-Z]+-\d{8}-[A-Z0-9]{4})-([A-Z2-7]{8})$")
 REJECT_CODE_PATTERN = re.compile(r"^REJECT-([A-Z]+-\d{8}-[A-Z0-9]{4})-([A-Z2-7]{8})$")
 
