@@ -1,0 +1,19 @@
+{
+  "case_id": "case_normal_01",
+  "case_kind": "normal",
+  "description": "gates request-accept 실행 후 acceptance_request.json.packet_sha256가 새로 생성된 human_acceptance_packet.md의 실제 SHA-256과 일치해야 함 (SHA 순서 버그 수정)",
+  "scenario": {
+    "step_1": "격리된 PIPELINE_STATE_PATH로 BUG 파이프라인 생성 + PM/Dev/QA/Build phase + technical/oracle/github_ci gate 모두 PASS",
+    "step_2": "python pipeline.py gates request-accept --evidence <packet-path> 실행",
+    "step_3": "acceptance_request.json을 읽어 packet_sha256 값 추출",
+    "step_4": "현재 human_acceptance_packet.md 파일의 SHA-256 hex digest 계산",
+    "step_5": "두 값이 일치하는지 확인 (수정 전: 불일치, 수정 후: 일치)"
+  },
+  "assertions": [
+    "request-accept exit code == 0",
+    "acceptance_request.json의 packet_sha256 != null",
+    "acceptance_request.json의 packet_sha256 == _compute_packet_sha256(human_acceptance_packet.md)",
+    "후속 gates accept --acceptance-code <code> 호출이 stale_packet 으로 BLOCKED 되지 않고 ACCEPT로 통과"
+  ],
+  "verifies": "AC-1: SHA 순서 버그 수정 — packet 자동 생성 직후 acceptance_request.json의 packet_sha256이 신규 packet의 실제 SHA로 갱신됨"
+}
