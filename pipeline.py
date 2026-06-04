@@ -14178,10 +14178,17 @@ def _update_pr_body_with_metrics(state: Dict[str, Any]) -> None:
             )
             if _gh_pr_repo.returncode == 0:
                 _repo_info = json.loads(_gh_pr_repo.stdout)
-                _owner = _repo_info.get("headRepository", {}).get("owner", {}).get("login", "")
-                _rname = _repo_info.get("headRepository", {}).get("name", "")
-                if _owner and _rname:
-                    _repo_for_metrics = f"{_owner}/{_rname}"
+                _hr = _repo_info.get("headRepository", {})
+                # nameWithOwner가 있으면 직접 사용 (예: "hojiyong2-commits/Pipeline")
+                _name_with_owner = _hr.get("nameWithOwner", "")
+                if _name_with_owner:
+                    _repo_for_metrics = _name_with_owner
+                else:
+                    # fallback: owner.login + name 조합
+                    _owner = _hr.get("owner", {}).get("login", "")
+                    _rname = _hr.get("name", "")
+                    if _owner and _rname:
+                        _repo_for_metrics = f"{_owner}/{_rname}"
         except Exception:
             pass
         metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state, repo=_repo_for_metrics))
