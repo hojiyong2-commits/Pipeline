@@ -1,0 +1,7 @@
+{
+  "status": "STALE_PACKET",
+  "blocked": true,
+  "gates_accept_result": "BLOCKED",
+  "failure_code": "stale_packet",
+  "message_contains": "packet"
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260604-0812</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-a8d9b0cdd4e093c7</manager_run_id>
+  <planner_run_id>pm_planner-0cdf2e113dce9e46</planner_run_id>
+  <step_plan_sha256>e7747155beb73bb3fab1bdd3374d12c0d1df98d6a7f58c8eeee9c68d3093e24a</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>ready_for_dev</status>
+  <user_design_confirmed>true</user_design_confirmed>
+  <user_answer_summary>SHA 순서 버그 수정. _auto_generate_final_packet_and_update_pr 이후 packet_sha256 재계산 + acceptance_request.json 갱신. evidence == packet인 경우 evidence_sha256도 함께 갱신. URL evidence는 변경하지 않음. 실패 시 graceful continue.</user_answer_summary>
+</manager_handoff>
