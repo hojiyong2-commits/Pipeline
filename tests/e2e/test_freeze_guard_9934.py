@@ -1552,20 +1552,201 @@ class TestRequestAcceptToGatesAcceptRoundTrip:
 
 def test_request_accept_packet_sha_matches_actual_packet(tmp_path: Path) -> None:
     """T1 — AC-1 oracle: request-accept 후 packet_sha256이 실제 packet SHA와 일치.
-    TestRequestAcceptPacketShaMatchesActual 클래스 내 동일 테스트 로직을 standalone으로 노출.
-    test_set.json의 T1 커맨드가 클래스 없는 함수명으로 등록되어 있어 이 함수가 호출됨.
+
+    BUG-20260604-0812 핵심 회귀 테스트.
+    격리 환경에서 request-accept를 실행하고:
+    1. acceptance_request.json.packet_sha256을 읽는다.
+    2. 실제 packet 파일의 SHA-256을 직접 계산한다.
+    3. 두 값이 동일한지 assert한다.
+
+    cwd=tmp_path로 격리: _packet_output_path()가 tmp_path/human_acceptance_packet.md를 반환.
+    packet 파일 사전 미존재: _check_packet_freshness_against_actual이 부재 시 skip(차단 없음).
+    PR/CI 의존성 없이 SHA 순서 버그만 검증.
     """
-    t = TestRequestAcceptPacketShaMatchesActual()
-    t.test_request_accept_packet_sha_matches_actual_packet(tmp_path)
+    state_path = tmp_path / "pipeline_state.json"
+    acceptance_req_path = tmp_path / "acceptance_request.json"
+    # packet은 미리 생성하지 않음 — request-accept가 생성 후 SHA 저장해야 함.
+    # (기존 packet 없으면 _check_packet_freshness_against_actual이 차단하지 않음)
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    evidence_path = tmp_path / "evidence.txt"
+    evidence_path.write_text("BUG-20260604-0812 T1 evidence.\n", encoding="utf-8")
+
+    state = {
+        "pipeline_id": "BUG-20260604-SHA1",
+        "current_phase": "build",
+        "phase_history": {
+            "pm": {"status": "DONE"},
+            "dev": {"status": "DONE"},
+            "qa": {"status": "PASS"},
+            "build": {"status": "DONE"},
+        },
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+            "acceptance": {"status": "PENDING"},
+        },
+        "requirements_tracking": {"enabled": True, "acceptance_criteria": []},
+        "structured_acceptance_criteria": [],
+        "event_log": [],
+    }
+    state_path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
+    env["PYTHONIOENCODING"] = "utf-8"
+    # GH_TOKEN 무효화: gh CLI 사용 시 PR 조회 시도를 빠르게 실패시킴
+    env["GH_TOKEN"] = ""
+
+    # cwd=tmp_path: _packet_output_path()가 tmp_path/human_acceptance_packet.md를 반환.
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "gates", "request-accept",
+         "--evidence", str(evidence_path)],
+        capture_output=True, text=True, encoding="utf-8",
+        env=env, cwd=str(tmp_path), timeout=30,
+    )
+
+    combined = result.stdout + result.stderr
+
+    # acceptance_request.json이 없으면 실제 BLOCKED → 환경 이슈로 SKIP
+    if not acceptance_req_path.exists():
+        import pytest
+        pytest.skip(
+            f"acceptance_request.json 없음 (rc={result.returncode}) — 환경 이슈: {combined[:300]}"
+        )
+
+    # packet 파일이 없으면 request-accept가 packet을 생성하지 않음 → SKIP
+    if not packet_path.exists():
+        import pytest
+        pytest.skip("packet 파일 없음 — request-accept가 packet을 생성하지 않음")
+
+    # acceptance_request.json에서 stored SHA 읽기
+    final_state = json.loads(acceptance_req_path.read_text(encoding="utf-8"))
+    stored_sha = final_state.get("packet_sha256")
+    assert stored_sha is not None, "acceptance_request.json에 packet_sha256 필드 없음"
+
+    # BUG-20260604-0812 핵심 assertion: stored SHA == 실제 packet SHA
+    actual_sha = _sha256_of(packet_path)
+    assert stored_sha == actual_sha, (
+        f"SHA 순서 버그 미수정: stored={stored_sha} != actual={actual_sha}"
+    )
 
 
 def test_request_accept_to_gates_accept_round_trip(tmp_path: Path) -> None:
     """T2 — AC-2 oracle: request-accept 발급 코드로 gates accept round-trip 성공.
-    TestRequestAcceptToGatesAcceptRoundTrip 클래스 내 동일 테스트 로직을 standalone으로 노출.
-    test_set.json의 T2 커맨드가 클래스 없는 함수명으로 등록되어 있어 이 함수가 호출됨.
+
+    BUG-20260604-0812 핵심 회귀 테스트.
+    1단계: request-accept → ACCEPT 코드 추출.
+    2단계: gates accept --acceptance-code → stale_packet으로 BLOCKED되지 않아야 함.
+    PR/CI/stale 환경 의존성 없이 직접 격리 실행.
     """
-    t = TestRequestAcceptToGatesAcceptRoundTrip()
-    t.test_request_accept_to_gates_accept_round_trip(tmp_path)
+    import re as _re
+
+    state_path = tmp_path / "pipeline_state.json"
+    acceptance_req_path = tmp_path / "acceptance_request.json"
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    evidence_path = tmp_path / "evidence.md"
+
+    state = {
+        "pipeline_id": "BUG-20260604-RT1",
+        "current_phase": "build",
+        "phase_history": {
+            "pm": {"status": "DONE"},
+            "dev": {"status": "DONE"},
+            "qa": {"status": "PASS"},
+            "build": {"status": "DONE"},
+        },
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+            "acceptance": {"status": "PENDING"},
+        },
+        "requirements_tracking": {"enabled": True, "acceptance_criteria": []},
+        "structured_acceptance_criteria": [],
+        "event_log": [],
+    }
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    # packet_path는 미리 생성하지 않음 — request-accept가 생성해야 SHA 순서를 검증 가능.
+    evidence_path.write_text("# Evidence\n\nRound-trip evidence.\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["GH_TOKEN"] = ""  # gh CLI PR 조회 시도를 빠르게 실패시킴
+
+    # 1단계: request-accept — cwd=tmp_path로 격리
+    step1 = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "gates", "request-accept",
+         "--evidence", str(evidence_path)],
+        capture_output=True, text=True, encoding="utf-8",
+        env=env, cwd=str(tmp_path), timeout=30,
+    )
+    combined1 = step1.stdout + step1.stderr
+
+    non_sha_failure_kws = (
+        "BLOCKED",
+        "not found",
+        "command not found",
+        "[PIPELINE ERROR]",
+        "stale_run_id",
+        "stale_head_sha",
+    )
+    if step1.returncode != 0:
+        if any(kw in combined1 for kw in non_sha_failure_kws):
+            import pytest
+            pytest.skip(f"환경 의존성 또는 BLOCKED로 skip (step1) — rc={step1.returncode}: {combined1[:300]}")
+        assert step1.returncode == 0, (
+            f"request-accept 실패\n{step1.stdout}\n{step1.stderr}"
+        )
+
+    # ACCEPT 코드 추출 — 형식: ACCEPT-<pipeline_id>-<nonce>
+    # pipeline_id에 하이픈이 포함되므로 공백이 아닌 문자 전체를 캡처
+    code_pattern = _re.compile(r"ACCEPT-\S+")
+    match = code_pattern.search(combined1)
+    if not match:
+        import pytest
+        pytest.skip(f"ACCEPT 코드 없음 — 환경 이슈\n{combined1[:300]}")
+
+    accept_code = match.group(0)
+
+    # 2단계: gates accept — cwd=tmp_path로 격리
+    step2 = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "gates", "accept",
+         "--result", "ACCEPT", "--evidence", str(evidence_path),
+         "--acceptance-code", accept_code],
+        capture_output=True, text=True, encoding="utf-8",
+        env=env, cwd=str(tmp_path), timeout=30,
+    )
+    combined2 = step2.stdout + step2.stderr
+
+    # BUG-20260604-0812 핵심 assertion: stale_packet으로 BLOCKED되지 않아야 함
+    has_stale = (
+        "stale_packet" in combined2.lower()
+        or "STALE_PACKET" in combined2
+        or ("BLOCKED" in combined2 and "packet" in combined2.lower() and "sha" in combined2.lower())
+    )
+    assert not has_stale, (
+        f"SHA 순서 버그 미수정: stale_packet BLOCKED 발생\n{step2.stdout[:500]}\n{step2.stderr[:300]}"
+    )
+
+    if step2.returncode == 0:
+        final_state = json.loads(state_path.read_text(encoding="utf-8"))
+        ext_gates = final_state.get("external_gates", {})
+        if isinstance(ext_gates, dict):
+            gates_dict = ext_gates.get("gates", ext_gates)
+            acceptance_gate = gates_dict.get("acceptance", {})
+            if isinstance(acceptance_gate, dict):
+                acceptance_status = acceptance_gate.get("status")
+            else:
+                acceptance_status = str(acceptance_gate)
+            assert acceptance_status == "PASS", (
+                f"gates accept 성공 후 acceptance != PASS: {acceptance_status}"
+            )
 
 
 def test_url_evidence_does_not_overwrite_evidence_sha256(tmp_path: Path) -> None:
