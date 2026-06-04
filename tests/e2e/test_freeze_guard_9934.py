@@ -1611,17 +1611,16 @@ def test_request_accept_packet_sha_matches_actual_packet(tmp_path: Path) -> None
 
     combined = result.stdout + result.stderr
 
-    # acceptance_request.json이 없으면 실제 BLOCKED → 환경 이슈로 SKIP
-    if not acceptance_req_path.exists():
-        import pytest
-        pytest.skip(
-            f"acceptance_request.json 없음 (rc={result.returncode}) — 환경 이슈: {combined[:300]}"
-        )
+    # acceptance_request.json이 없으면 실패 — BUG-20260604-0812 핵심 회귀 확인
+    assert acceptance_req_path.exists(), (
+        f"acceptance_request.json 없음 (rc={result.returncode}) — "
+        f"request-accept가 정상 완료되지 않음: {combined[:400]}"
+    )
 
-    # packet 파일이 없으면 request-accept가 packet을 생성하지 않음 → SKIP
-    if not packet_path.exists():
-        import pytest
-        pytest.skip("packet 파일 없음 — request-accept가 packet을 생성하지 않음")
+    # packet 파일이 없으면 request-accept가 packet을 생성하지 않은 것 — hard fail
+    assert packet_path.exists(), (
+        "packet 파일 없음 — request-accept가 human_acceptance_packet.md를 생성하지 않음"
+    )
 
     # acceptance_request.json에서 stored SHA 읽기
     final_state = json.loads(acceptance_req_path.read_text(encoding="utf-8"))
@@ -1688,29 +1687,17 @@ def test_request_accept_to_gates_accept_round_trip(tmp_path: Path) -> None:
     )
     combined1 = step1.stdout + step1.stderr
 
-    non_sha_failure_kws = (
-        "BLOCKED",
-        "not found",
-        "command not found",
-        "[PIPELINE ERROR]",
-        "stale_run_id",
-        "stale_head_sha",
+    assert step1.returncode == 0, (
+        f"request-accept 실패 (rc={step1.returncode})\n{step1.stdout}\n{step1.stderr}"
     )
-    if step1.returncode != 0:
-        if any(kw in combined1 for kw in non_sha_failure_kws):
-            import pytest
-            pytest.skip(f"환경 의존성 또는 BLOCKED로 skip (step1) — rc={step1.returncode}: {combined1[:300]}")
-        assert step1.returncode == 0, (
-            f"request-accept 실패\n{step1.stdout}\n{step1.stderr}"
-        )
 
     # ACCEPT 코드 추출 — 형식: ACCEPT-<pipeline_id>-<nonce>
     # pipeline_id에 하이픈이 포함되므로 공백이 아닌 문자 전체를 캡처
     code_pattern = _re.compile(r"ACCEPT-\S+")
     match = code_pattern.search(combined1)
-    if not match:
-        import pytest
-        pytest.skip(f"ACCEPT 코드 없음 — 환경 이슈\n{combined1[:300]}")
+    assert match is not None, (
+        f"ACCEPT 코드 없음 — request-accept 출력에서 승인 코드를 찾을 수 없음\n{combined1[:400]}"
+    )
 
     accept_code = match.group(0)
 
@@ -1750,47 +1737,140 @@ def test_request_accept_to_gates_accept_round_trip(tmp_path: Path) -> None:
 
 
 def test_url_evidence_does_not_overwrite_evidence_sha256(tmp_path: Path) -> None:
-    """T3 — url_evidence oracle: URL evidence인 경우 evidence_sha256을 변경하지 않음.
+    """T3 — url_evidence oracle: URL evidence가 아닌 경우 evidence_sha256 필드가 저장됨.
     test_set.json T3는 -k url_evidence 필터로 이 함수를 선택한다.
-    pipeline.py 구현에서 is_url 조건이 올바르게 동작하는지 코드 패턴으로 검증.
-    """
-    import pathlib as _pl
 
-    pipeline_content = _pl.Path(str(PIPELINE_PY)).read_text(encoding="utf-8")
-    # URL evidence 보호 조건이 코드에 있어야 함
-    has_url_guard = (
-        "is_url" in pipeline_content
-        and "evidence_sha256" in pipeline_content
+    실제 subprocess CLI 테스트:
+    1. 격리 state + evidence 파일 + 기존 acceptance_request.json(ORIGINAL_HASH) 생성
+    2. request-accept 실행 (evidence = 일반 파일)
+    3. acceptance_request.json에서 packet_sha256 필드 저장 확인
+    4. evidence가 packet이 아닌 경우 evidence_sha256은 원본 유지 확인
+    """
+    state_path = tmp_path / "pipeline_state.json"
+    acceptance_req_path = tmp_path / "acceptance_request.json"
+    evidence_path = tmp_path / "evidence_other.txt"
+    evidence_path.write_text("T3 evidence (not packet file).\n", encoding="utf-8")
+
+    state = {
+        "pipeline_id": "BUG-20260604-T3",
+        "current_phase": "build",
+        "phase_history": {
+            "pm": {"status": "DONE"},
+            "dev": {"status": "DONE"},
+            "qa": {"status": "PASS"},
+            "build": {"status": "DONE"},
+        },
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+            "acceptance": {"status": "PENDING"},
+        },
+        "requirements_tracking": {"enabled": True, "acceptance_criteria": []},
+        "structured_acceptance_criteria": [],
+        "event_log": [],
+    }
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["GH_TOKEN"] = ""
+
+    # request-accept 실행 — cwd=tmp_path로 격리
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "gates", "request-accept",
+         "--evidence", str(evidence_path)],
+        capture_output=True, text=True, encoding="utf-8",
+        env=env, cwd=str(tmp_path), timeout=30,
     )
-    assert has_url_guard, (
-        "pipeline.py에 URL evidence 보호 조건(is_url + evidence_sha256) 코드가 없음."
+    combined = result.stdout + result.stderr
+
+    assert acceptance_req_path.exists(), (
+        f"acceptance_request.json 없음 (rc={result.returncode}): {combined[:400]}"
     )
-    # URL evidence 케이스에서 evidence_sha256을 null로 두는 패턴 확인
-    has_null_evidence = (
-        '"evidence_sha256": null' in pipeline_content
-        or "evidence_sha256=None" in pipeline_content
-        or "evidence_sha256: null" in pipeline_content
-        or ("not is_url" in pipeline_content and "evidence_sha256" in pipeline_content)
+
+    req_data = json.loads(acceptance_req_path.read_text(encoding="utf-8"))
+
+    # packet_sha256 필드가 저장되어야 함 (BUG-20260604-0812 핵심 수정)
+    assert "packet_sha256" in req_data, (
+        "acceptance_request.json에 packet_sha256 필드 없음 — SHA 순서 버그 미수정"
     )
-    assert has_null_evidence, (
-        "pipeline.py에 URL evidence일 때 evidence_sha256을 null로 유지하는 코드가 없음."
-    )
+
+    # evidence가 packet 파일이 아닌 경우, evidence_sha256은 변경되면 안 됨
+    # (초기값 없으면 null 또는 evidence 파일 SHA — packet SHA가 아니어야 함)
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    if packet_path.exists():
+        packet_sha = _sha256_of(packet_path)
+        evidence_sha = req_data.get("evidence_sha256")
+        # evidence가 packet이 아닌 경우: evidence_sha256 != packet_sha256 이어야 함
+        stored_packet_sha = req_data.get("packet_sha256")
+        assert evidence_sha != stored_packet_sha, (
+            f"evidence가 packet이 아닌데 evidence_sha256이 packet_sha256과 같음: {evidence_sha}"
+        )
 
 
 def test_graceful_continue_on_sha_update_error(tmp_path: Path) -> None:
-    """T4 — graceful oracle: SHA 갱신 실패 시 graceful continue.
+    """T4 — graceful oracle: SHA 갱신 실패 시 BLOCKED(exit code != 0).
     test_set.json T4는 -k graceful 필터로 이 함수를 선택한다.
-    pipeline.py 구현에서 OSError/JSONDecodeError 처리가 있는지 코드 패턴으로 검증.
-    """
-    import pathlib as _pl
 
-    pipeline_content = _pl.Path(str(PIPELINE_PY)).read_text(encoding="utf-8")
-    # SHA 갱신 실패 시 graceful continue를 위한 try/except 패턴 확인
-    has_graceful = (
-        "OSError" in pipeline_content
-        and "JSONDecodeError" in pipeline_content
-        and "SHA 갱신" in pipeline_content
+    BUG-20260604-0812 수정 후 동작:
+    - graceful continue(계속 진행) 대신 BLOCKED로 차단해야 함.
+
+    실제 subprocess CLI 테스트:
+    1. 격리 state 생성
+    2. PIPELINE_ACCEPTANCE_REQUEST_PATH가 디렉토리를 가리키도록 설정
+       → 파일 쓰기 시 OSError 발생 유도
+    3. request-accept 실행
+    4. exit code != 0 (BLOCKED) 확인 — graceful continue가 아님
+    """
+    state_path = tmp_path / "pipeline_state.json"
+
+    # PIPELINE_ACCEPTANCE_REQUEST_PATH를 디렉토리로 설정 → 파일 쓰기 불가 → OSError
+    # acceptance_request.json이라는 이름의 디렉토리를 생성
+    blocked_dir = tmp_path / "acceptance_request.json"
+    blocked_dir.mkdir(parents=True, exist_ok=True)
+
+    evidence_path = tmp_path / "evidence_t4.txt"
+    evidence_path.write_text("T4 evidence.\n", encoding="utf-8")
+
+    state = {
+        "pipeline_id": "BUG-20260604-T4",
+        "current_phase": "build",
+        "phase_history": {
+            "pm": {"status": "DONE"},
+            "dev": {"status": "DONE"},
+            "qa": {"status": "PASS"},
+            "build": {"status": "DONE"},
+        },
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+            "acceptance": {"status": "PENDING"},
+        },
+        "requirements_tracking": {"enabled": True, "acceptance_criteria": []},
+        "structured_acceptance_criteria": [],
+        "event_log": [],
+    }
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(blocked_dir)  # 디렉토리 → OSError 유도
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["GH_TOKEN"] = ""
+
+    result = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "gates", "request-accept",
+         "--evidence", str(evidence_path)],
+        capture_output=True, text=True, encoding="utf-8",
+        env=env, cwd=str(tmp_path), timeout=30,
     )
-    assert has_graceful, (
-        "pipeline.py에 SHA 갱신 실패 시 graceful continue 코드(OSError + JSONDecodeError + SHA 갱신 메시지)가 없음."
+    combined = result.stdout + result.stderr
+
+    # BUG-20260604-0812 수정 후: OSError 발생 시 BLOCKED(exit code != 0)
+    assert result.returncode != 0, (
+        f"SHA 갱신 실패 시 graceful continue(exit 0) — BLOCKED여야 함: {combined[:400]}"
     )

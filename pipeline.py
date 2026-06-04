@@ -15045,7 +15045,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                     encoding="utf-8",
                 )
         except (OSError, json.JSONDecodeError) as _sha_exc:
-            print(YELLOW(f"  [SHA 갱신] acceptance_request.json SHA 갱신 실패 (계속 진행): {_sha_exc}"))
+            _die(f"[SHA 갱신 실패] acceptance_request.json 갱신 실패 — 승인 코드 발급이 차단됩니다.\n  오류: {_sha_exc}")
 
     print()
     print("=" * 62)

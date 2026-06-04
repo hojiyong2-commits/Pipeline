@@ -1,0 +1,16 @@
+{
+  "pipeline_id": "BUG-20260604-0812",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py", "tests/e2e/test_freeze_guard_9934.py"],
+      "affected_functions": [
+        "_cmd_gates_request_accept",
+        "test_graceful_continue_on_sha_update_error",
+        "test_url_evidence_does_not_overwrite_evidence_sha256",
+        "test_request_accept_packet_sha_matches_actual_packet",
+        "test_request_accept_to_gates_accept_round_trip"
+      ]
+    }
+  ]
+}
