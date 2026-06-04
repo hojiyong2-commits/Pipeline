@@ -710,6 +710,7 @@ class TestACFulfillmentTableNoPending:
         state = {
             "pipeline_id": "TEST-20260101-ACFT",
             "current_phase": "build",
+            "event_log": [],
             "phase_history": {
                 "pm": {"status": "DONE"},
                 "dev": {"status": "DONE"},
@@ -757,6 +758,7 @@ class TestACFulfillmentTableNoPending:
         env["PIPELINE_STATE_PATH"] = str(state_path)
         env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
         env["PYTHONIOENCODING"] = "utf-8"
+        env["GH_TOKEN"] = ""
 
         result = subprocess.run(
             [
@@ -771,46 +773,22 @@ class TestACFulfillmentTableNoPending:
             text=True,
             encoding="utf-8",
             env=env,
-            cwd=str(PIPELINE_PY.parent),
+            cwd=str(tmp_path),
             timeout=30,
         )
 
         # 격리된 경로 우선 사용
         req_path = acceptance_req_path
-        if not req_path.exists():
-            # fallback: 환경변수 없이 실행된 경우 (skip 처리)
-            import pytest
-            pytest.skip("격리된 acceptance_request.json 없음 — PIPELINE_ACCEPTANCE_REQUEST_PATH 지원 필요")
+        assert req_path.exists(), (
+            f"acceptance_request.json 없음 (rc={result.returncode}): "
+            + (result.stdout + result.stderr)[:300]
+        )
 
-        # request-accept가 성공(exit 0)했을 때만 ac_fulfillment_table 확인
-        # 실패(exit 1)는 환경 의존성(gh CLI 등)이 원인일 수 있으므로 skip 처리
-        if result.returncode != 0:
-            combined = result.stdout + result.stderr
-            # gh CLI 없음 / PR 없음 / SHA 조회 실패 등 환경 이슈는 skip
-            if any(
-                kw in combined
-                for kw in (
-                    "gh",
-                    "PR",
-                    "pull request",
-                    "git",
-                    "SHA",
-                    "run_id",
-                    "not found",
-                    "command not found",
-                    "no open PR",
-                    "stale",
-                )
-            ):
-                import pytest
-                pytest.skip(
-                    f"환경 의존성(gh/PR/git) 이슈로 skip — returncode={result.returncode}"
-                )
-            # 그 외 실패는 테스트 실패로 처리
-            assert result.returncode == 0, (
-                f"request-accept 실패 (exit {result.returncode})\n"
-                f"stdout: {result.stdout}\nstderr: {result.stderr}"
-            )
+        # request-accept가 성공(exit 0)했는지 확인
+        assert result.returncode == 0, (
+            f"request-accept 실패 (exit {result.returncode}): "
+            + (result.stdout + result.stderr)[:400]
+        )
 
         # acceptance_request.json 읽기
         if req_path.exists():
@@ -857,6 +835,7 @@ class TestNonceConsistency:
         state = {
             "pipeline_id": "TEST-20260101-NCNS",
             "current_phase": "build",
+            "event_log": [],
             "phase_history": {
                 "pm": {"status": "DONE"},
                 "dev": {"status": "DONE"},
@@ -879,28 +858,21 @@ class TestNonceConsistency:
         env["PIPELINE_STATE_PATH"] = str(state_path)
         env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
         env["PYTHONIOENCODING"] = "utf-8"
+        env["GH_TOKEN"] = ""
 
         result = subprocess.run(
             [sys.executable, str(PIPELINE_PY), "gates", "request-accept",
              "--evidence", str(packet_path)],
             capture_output=True, text=True, encoding="utf-8",
-            env=env, timeout=30,
+            env=env, cwd=str(tmp_path), timeout=30,
         )
 
-        if result.returncode != 0:
-            combined = result.stdout + result.stderr
-            if any(kw in combined for kw in ("gh", "PR", "pull request", "git", "SHA", "run_id",
-                                              "not found", "command not found", "no open PR", "stale")):
-                import pytest
-                pytest.skip(f"환경 의존성(gh/PR/git) 이슈로 skip — returncode={result.returncode}")
-            assert result.returncode == 0, (
-                f"request-accept 실패 (exit {result.returncode})\n"
-                f"stdout: {result.stdout}\nstderr: {result.stderr}"
-            )
+        assert result.returncode == 0, (
+            f"request-accept 실패: "
+            + (result.stdout + result.stderr)[:400]
+        )
 
-        if not acceptance_req_path.exists():
-            import pytest
-            pytest.skip("acceptance_request.json 없음 — 환경 이슈로 skip")
+        assert acceptance_req_path.exists(), "acceptance_request.json 없음"
 
         req_data = json.loads(acceptance_req_path.read_text(encoding="utf-8"))
         stored_nonce = req_data.get("nonce", "")
@@ -911,9 +883,10 @@ class TestNonceConsistency:
         # nonce는 8자 대문자 base32
         nonce_pattern = re_module.compile(r"ACCEPT-[A-Z]+-\d{8}-[A-Z0-9]{4}-([A-Z2-7]{8})")
         match = nonce_pattern.search(combined_output)
-        if not match:
-            import pytest
-            pytest.skip(f"콘솔 출력에 ACCEPT 코드 없음 — 환경 이슈일 수 있음\n출력: {combined_output[:300]}")
+        assert match is not None, (
+            f"콘솔 출력에 ACCEPT 코드 없음: "
+            + (result.stdout + result.stderr)[:300]
+        )
 
         console_nonce = match.group(1)
         assert console_nonce == stored_nonce, (
@@ -972,20 +945,19 @@ class TestFinalPacketPipelineIdNoContamination:
         env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
         env["PIPELINE_ACCEPTANCE_PACKET_PATH"] = str(packet_path)
         env["PYTHONIOENCODING"] = "utf-8"
+        env["GH_TOKEN"] = ""
 
         result = subprocess.run(
             [sys.executable, str(PIPELINE_PY), "report", "final-packet"],
             capture_output=True, text=True, encoding="utf-8",
-            env=env, timeout=30,
+            env=env, cwd=str(tmp_path), timeout=30,
         )
 
         # final-packet이 생성됐으면 pipeline_id 확인
-        # 생성 실패는 환경 이슈일 수 있으므로 skip 처리
         if result.returncode != 0 and not packet_path.exists():
-            combined = result.stdout + result.stderr
-            import pytest
-            pytest.skip(
-                f"final-packet 생성 실패 — 환경 이슈일 수 있음: {combined[:300]}"
+            combined_err = result.stdout + result.stderr
+            assert False, (
+                f"final-packet 생성 실패 (exit {result.returncode}): {combined_err[:300]}"
             )
 
         if packet_path.exists():
@@ -1109,6 +1081,7 @@ class TestAmbiguousVerificationBlocked:
         env["PIPELINE_STATE_PATH"] = str(state_path)
         env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
         env["PYTHONIOENCODING"] = "utf-8"
+        env["GH_TOKEN"] = ""
 
         result = subprocess.run(
             [
@@ -1123,6 +1096,7 @@ class TestAmbiguousVerificationBlocked:
             text=True,
             encoding="utf-8",
             env=env,
+            cwd=str(tmp_path),
             timeout=30,
         )
 
@@ -1138,7 +1112,7 @@ class TestAmbiguousVerificationBlocked:
             # 테스트 목적에 맞게 차단됨
             return
 
-        # 환경 이슈(gh/PR/git)로 실패한 경우 skip
+        # 환경 이슈(gh/PR/git)로 실패한 경우는 hard assert
         if result.returncode != 0 and any(
             kw in combined
             for kw in (
@@ -1157,28 +1131,14 @@ class TestAmbiguousVerificationBlocked:
                 "FREEZE",
             )
         ):
-            import pytest
-
-            pytest.skip(
-                f"환경 이슈(gh/PR/git)로 skip — returncode={result.returncode}"
-            )
+            assert False, f"환경 이슈로 request-accept 실패: {combined[:400]}"
 
         # request-accept가 성공(exit 0)하면 오류 — "qa: ?"가 있어도 통과되면 안 됨
-        # 단, module QA XML이 report_file 절대경로로 설정되어야 pipeline.py가 읽을 수 있음
-        # 파일이 없거나 읽기 불가로 인해 fallback으로 verification이 빈 경우 → skip
         if result.returncode == 0:
-            if not bad_xml_path.exists():
-                import pytest
-
-                pytest.skip("module_qa XML 없음 — 환경 이슈로 skip")
+            assert bad_xml_path.exists(), "module_qa XML 없음"
             # "qa: ?" 차단이 구현되어 있으면 exit code 1이어야 함
-            # 구현이 없으면 이 테스트는 FAIL
-            # 현재 pipeline.py에 차단 구현이 있으면 exit 0은 오류
-            import pytest
-
-            pytest.skip(
-                "request-accept가 차단되지 않음 — pipeline.py에 qa:? 차단 로직 미구현 또는 "
-                "module_qa XML 파일 경로를 pipeline.py가 읽지 못함 (환경 이슈 가능)"
+            assert False, (
+                f"request-accept가 차단되지 않음 — qa:? 차단 로직이 작동하지 않음: {combined[:400]}"
             )
 
 
@@ -1218,6 +1178,7 @@ class TestRequestAcceptPacketShaMatchesActual:
         state = {
             "pipeline_id": "BUG-20260604-SHA1",
             "current_phase": "build",
+            "event_log": [],
             "phase_history": {
                 "pm": {"status": "DONE"},
                 "dev": {"status": "DONE"},
@@ -1249,6 +1210,7 @@ class TestRequestAcceptPacketShaMatchesActual:
         env["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
         env["PIPELINE_ACCEPTANCE_PACKET_PATH"] = str(packet_path)
         env["PYTHONIOENCODING"] = "utf-8"
+        env["GH_TOKEN"] = ""
 
         result = subprocess.run(
             [
@@ -1263,43 +1225,20 @@ class TestRequestAcceptPacketShaMatchesActual:
             text=True,
             encoding="utf-8",
             env=env,
+            cwd=str(tmp_path),
             timeout=30,
         )
 
         combined = result.stdout + result.stderr
 
-        # 환경 이슈(gh/PR/git/stale)로 실패한 경우 skip
-        if result.returncode != 0:
-            if any(
-                kw in combined
-                for kw in (
-                    "gh",
-                    "PR",
-                    "pull request",
-                    "git",
-                    "run_id",
-                    "not found",
-                    "command not found",
-                    "no open PR",
-                    "stale",
-                    "stale_",
-                )
-            ):
-                import pytest
-                pytest.skip(
-                    f"환경 이슈(gh/PR/git/stale)로 skip — returncode={result.returncode}\n"
-                    f"출력: {combined[:400]}"
-                )
-            # 환경 이슈가 아닌 실패는 테스트 실패로 처리
-            assert result.returncode == 0, (
-                f"request-accept 실패 (exit {result.returncode})\n"
-                f"stdout: {result.stdout}\nstderr: {result.stderr}"
-            )
+        # 환경 이슈(gh/PR/git/stale)로 실패한 경우도 hard assert
+        assert result.returncode == 0, (
+            f"request-accept 실패 (exit {result.returncode})\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
 
-        # acceptance_request.json이 없으면 환경 이슈로 skip
-        if not acceptance_req_path.exists():
-            import pytest
-            pytest.skip("acceptance_request.json 없음 — 환경 이슈로 skip")
+        # acceptance_request.json이 없으면 hard assert
+        assert acceptance_req_path.exists(), "acceptance_request.json 없음"
 
         # final_state: acceptance_request.json 검증
         final_state = json.loads(acceptance_req_path.read_text(encoding="utf-8"))
@@ -1314,9 +1253,7 @@ class TestRequestAcceptPacketShaMatchesActual:
         )
 
         # packet 파일이 생성/갱신되었어야 함
-        if not packet_path.exists():
-            import pytest
-            pytest.skip("packet 파일이 없음 — request-accept가 packet을 생성하지 않음")
+        assert packet_path.exists(), "packet 파일이 없음 — request-accept가 packet을 생성하지 않음"
 
         # 실제 packet 파일의 SHA-256을 직접 계산
         actual_sha = _sha256_of(packet_path)
@@ -1365,6 +1302,7 @@ class TestRequestAcceptToGatesAcceptRoundTrip:
         state = {
             "pipeline_id": "BUG-20260604-RT01",
             "current_phase": "external_gates",
+            "event_log": [],
             "phase_history": {
                 "pm": {"status": "DONE"},
                 "dev": {"status": "DONE"},
@@ -1422,6 +1360,7 @@ class TestRequestAcceptToGatesAcceptRoundTrip:
         env_base["PIPELINE_ACCEPTANCE_REQUEST_PATH"] = str(acceptance_req_path)
         env_base["PIPELINE_ACCEPTANCE_PACKET_PATH"] = str(packet_path)
         env_base["PYTHONIOENCODING"] = "utf-8"
+        env_base["GH_TOKEN"] = ""
 
         # 1단계: gates request-accept 실행
         step1 = subprocess.run(
@@ -1437,47 +1376,30 @@ class TestRequestAcceptToGatesAcceptRoundTrip:
             text=True,
             encoding="utf-8",
             env=env_base,
+            cwd=str(tmp_path),
             timeout=30,
         )
 
         combined1 = step1.stdout + step1.stderr
 
-        # 환경 이슈로 실패한 경우 skip
-        if step1.returncode != 0:
-            if any(
-                kw in combined1
-                for kw in (
-                    "gh", "PR", "pull request", "git", "run_id",
-                    "not found", "command not found", "no open PR",
-                    "stale", "stale_",
-                )
-            ):
-                import pytest
-                pytest.skip(
-                    f"1단계(request-accept) 환경 이슈로 skip — "
-                    f"returncode={step1.returncode}\n출력: {combined1[:400]}"
-                )
-            assert step1.returncode == 0, (
-                f"request-accept 실패 (exit {step1.returncode})\n"
-                f"stdout: {step1.stdout}\nstderr: {step1.stderr}"
-            )
+        # 환경 이슈도 포함하여 hard assert
+        assert step1.returncode == 0, (
+            f"request-accept 실패 (exit {step1.returncode})\n"
+            f"stdout: {step1.stdout}\nstderr: {step1.stderr}"
+        )
 
-        # acceptance_request.json이 없으면 skip
-        if not acceptance_req_path.exists():
-            import pytest
-            pytest.skip("acceptance_request.json 없음 — 환경 이슈로 skip")
+        # acceptance_request.json이 없으면 hard assert
+        assert acceptance_req_path.exists(), "acceptance_request.json 없음"
 
         # 승인 코드 추출 (콘솔 출력에서)
         nonce_pattern = re_module.compile(
             r"ACCEPT-([A-Z]+-\d{8}-[A-Z0-9]{4})-([A-Z2-7]{8})"
         )
         match = nonce_pattern.search(combined1)
-        if not match:
-            import pytest
-            pytest.skip(
-                f"1단계 콘솔 출력에 ACCEPT 코드 없음 — 환경 이슈 가능\n"
-                f"출력: {combined1[:400]}"
-            )
+        assert match is not None, (
+            f"1단계 콘솔 출력에 ACCEPT 코드 없음\n"
+            f"출력: {combined1[:400]}"
+        )
 
         accept_code = match.group(0)  # 전체 ACCEPT-...-NONCE 문자열
 
@@ -1499,6 +1421,7 @@ class TestRequestAcceptToGatesAcceptRoundTrip:
             text=True,
             encoding="utf-8",
             env=env_base,
+            cwd=str(tmp_path),
             timeout=30,
         )
 
