@@ -3957,6 +3957,44 @@ def _consistency_extract_shas(text: str) -> List[str]:
     return found
 
 
+def _consistency_extract_packet_block(pr_body: str) -> str:
+    """PR 본문에서 PIPELINE_FINAL_PACKET 블록 안 텍스트만 추출한다.
+
+    IMP-20260605-9EF5: 검사 A(run_id) / 검사 B(head SHA)는 PR 본문 전체가 아닌
+    이 블록 안의 텍스트만 보조 검증 대상으로 사용한다. 블록 밖 자유서술의
+    run_id/SHA는 검증 대상이 아니다 — pipeline.py가 자동 생성한 verification_json과
+    PIPELINE_FINAL_PACKET 블록 안의 값만 SSoT로 신뢰한다.
+
+    마커 상수 (PIPELINE_FINAL_PACKET_START_MARKER / END_MARKER)는 line ~9982에
+    정의되며, Python은 함수 호출 시점에 모듈 글로벌을 lookup하므로 forward-reference로
+    문제없이 동작한다.
+
+    Args:
+        pr_body: PR 본문 전체 텍스트.
+    Returns:
+        블록 안 텍스트 (시작 마커 이후 ~ 종료 마커 이전). 블록이 없거나
+        마커 순서가 잘못되었으면 빈 문자열.
+    """
+    # [Purpose]: PR 본문에서 SSoT 검증 대상 텍스트(블록 안)만 분리한다.
+    # [Assumptions]: PIPELINE_FINAL_PACKET 마커 상수가 모듈 글로벌로 존재한다.
+    # [Vulnerability & Risks]: 마커 문자열이 본문 다른 곳에 우연히 같은 형태로
+    #   포함되면 오인할 수 있으나, HTML 주석 형태(<!-- ... -->)라 사용자가
+    #   문서 본문에 실수로 쓸 확률이 극히 낮다.
+    # [Improvement]: 향후 마커 사이에 여러 블록이 있을 경우 첫 번째 블록만 사용하므로,
+    #   복수 블록 처리가 필요해지면 모든 블록을 join하도록 확장 가능.
+    if pr_body is None:
+        return ""
+    if not isinstance(pr_body, str):
+        return ""
+    if not pr_body:
+        return ""
+    start = pr_body.find(PIPELINE_FINAL_PACKET_START_MARKER)
+    end = pr_body.find(PIPELINE_FINAL_PACKET_END_MARKER)
+    if start == -1 or end == -1 or end <= start:
+        return ""
+    return pr_body[start + len(PIPELINE_FINAL_PACKET_START_MARKER):end]
+
+
 def _consistency_listed_files(text: str) -> "tuple[set, bool]":
     """PR body / packet의 불릿 목록(`- 파일`, `* 파일`)에서 파일명을 추출한다.
 
@@ -4155,87 +4193,140 @@ def _check_protocol_consistency(
     has_packet_tag = _ACCEPTANCE_PACKET_COMMENT_TAG in acceptance_packet_body
 
     # --- 검사 A: CI run ID 일치 ---
-    body_run_ids = _consistency_extract_run_ids(pr_body)
+    # IMP-20260605-9EF5: verification_json SSoT 기준으로 변경.
+    # PR 본문 전체 텍스트 파싱 제거 — PIPELINE_FINAL_PACKET 블록 안 텍스트와
+    # verification_json만 보조/주 검증 대상이다. 블록 밖 자유서술은
+    # 사용자 안내용이며 검증 대상이 아니다.
+    if verification_json is None:
+        return _blocked(
+            "verification_json_missing",
+            (
+                "verification_json(human_acceptance_packet.json)이 없습니다. "
+                "'python pipeline.py gates request-accept --evidence <결과물-경로>'를 "
+                "먼저 실행하여 verification_json을 생성하세요."
+            ),
+            {"location": "pre_check_a"},
+        )
+
+    vj_run_id = str(verification_json.get("ci_run_id", "") or "")
+    if latest_ci_run_id and vj_run_id and vj_run_id != latest_ci_run_id:
+        return _blocked(
+            "stale_run_id",
+            (
+                f"verification_json의 GitHub CI run ID({vj_run_id})가 실제 "
+                f"최신 CI run ID({latest_ci_run_id})와 다릅니다. "
+                "'python pipeline.py gates request-accept'를 재실행하여 "
+                "verification_json을 갱신하세요."
+            ),
+            {
+                "expected_run_id": latest_ci_run_id,
+                "vj_run_id": vj_run_id,
+                "location": "verification_json",
+            },
+        )
+
+    # PIPELINE_FINAL_PACKET 블록 안의 run ID 보조 검증 (블록 밖 자유서술은 무시)
+    packet_block_text = _consistency_extract_packet_block(pr_body)
+    block_run_ids = (
+        _consistency_extract_run_ids(packet_block_text)
+        if packet_block_text else []
+    )
+    if block_run_ids and vj_run_id:
+        block_run_id = block_run_ids[0]
+        if block_run_id != vj_run_id:
+            return _blocked(
+                "stale_run_id",
+                (
+                    f"PIPELINE_FINAL_PACKET 블록 안의 run ID({block_run_id})가 "
+                    f"verification_json의 run ID({vj_run_id})와 다릅니다. "
+                    "블록 안의 값을 verification_json과 일치시키거나 "
+                    "'python pipeline.py report final-packet'을 재실행하세요."
+                ),
+                {
+                    "expected_run_id": vj_run_id,
+                    "packet_block_run_id": block_run_id,
+                    "location": "packet_block",
+                },
+            )
+
+    # acceptance_packet_body(human_acceptance_packet.md) 검증 유지 — packet 파일은
+    # verification_json의 인간 렌더링이므로 같은 SSoT 안에 속한다.
     packet_run_ids = (
         _consistency_extract_run_ids(acceptance_packet_body)
         if has_packet_tag else []
     )
-    if body_run_ids:
-        body_run_id = body_run_ids[0]
-        if latest_ci_run_id and body_run_id != latest_ci_run_id:
-            return _blocked(
-                "stale_run_id",
-                (
-                    f"PR 본문의 GitHub CI run ID({body_run_id})가 실제 "
-                    f"최신 CI run ID({latest_ci_run_id})와 다릅니다. "
-                    "stale run ID를 최신 값으로 갱신하세요."
-                ),
-                {
-                    "expected_run_id": latest_ci_run_id,
-                    "pr_body_run_id": body_run_id,
-                    "location": "pr_body",
-                },
-            )
-    if packet_run_ids:
+    if packet_run_ids and vj_run_id:
         packet_run_id = packet_run_ids[0]
-        if latest_ci_run_id and packet_run_id != latest_ci_run_id:
+        if packet_run_id != vj_run_id:
             return _blocked(
                 "stale_run_id",
                 (
                     f"acceptance packet의 GitHub CI run ID({packet_run_id})가 "
-                    f"실제 최신 CI run ID({latest_ci_run_id})와 다릅니다. "
-                    "stale run ID를 최신 값으로 갱신하세요."
+                    f"verification_json의 run ID({vj_run_id})와 다릅니다. "
+                    "'python pipeline.py report final-packet'을 재실행하여 "
+                    "packet을 갱신하세요."
                 ),
                 {
-                    "expected_run_id": latest_ci_run_id,
+                    "expected_run_id": vj_run_id,
                     "packet_run_id": packet_run_id,
                     "location": "acceptance_packet",
                 },
             )
-    if body_run_ids and packet_run_ids:
-        if body_run_ids[0] != packet_run_ids[0]:
+
+    # --- 검사 B: head SHA 일치 ---
+    # IMP-20260605-9EF5: verification_json SSoT 기준. PR 본문 전체 텍스트 파싱 제거.
+    # PIPELINE_FINAL_PACKET 블록 안의 SHA만 보조 검증 대상. 블록 밖 자유서술 무시.
+    vj_head_sha = str(verification_json.get("pr_head_sha", "") or "")
+    if pr_head_sha and vj_head_sha:
+        vj_sha_lower = vj_head_sha.lower()
+        head_sha_lower = pr_head_sha.lower()
+        # prefix 매칭 (7자 이상) — 양쪽 방향 모두 허용
+        sha_ok = (
+            len(vj_sha_lower) >= 7 and head_sha_lower.startswith(vj_sha_lower)
+        ) or (
+            len(head_sha_lower) >= 7 and vj_sha_lower.startswith(head_sha_lower)
+        )
+        if not sha_ok:
             return _blocked(
-                "stale_run_id",
+                "stale_head_sha",
                 (
-                    f"PR 본문의 run ID({body_run_ids[0]})와 acceptance packet의 "
-                    f"run ID({packet_run_ids[0]})가 서로 다릅니다. "
-                    "두 값을 최신 run ID로 일치시키세요."
+                    f"verification_json의 head SHA({vj_head_sha[:12]}...)가 실제 "
+                    f"PR head SHA({pr_head_sha[:12]}...)와 일치하지 않습니다. "
+                    "'python pipeline.py gates request-accept'를 재실행하여 "
+                    "verification_json을 갱신하세요."
                 ),
                 {
-                    "expected_run_id": latest_ci_run_id,
-                    "pr_body_run_id": body_run_ids[0],
-                    "packet_run_id": packet_run_ids[0],
-                    "location": "pr_body_vs_packet",
+                    "expected_head_sha": pr_head_sha,
+                    "vj_head_sha": vj_head_sha,
+                    "location": "verification_json",
                 },
             )
 
-    # --- 검사 B: head SHA 일치 ---
-    # run ID(순수 숫자)는 SHA 후보에서 제외 — 16진수지만 SHA가 아님.
-    body_run_id_set = set(body_run_ids)
-    if pr_head_sha:
-        head_sha_lower = pr_head_sha.lower()
-        body_sha_candidates = [
-            s for s in _consistency_extract_shas(pr_body)
-            if s not in body_run_id_set
-        ]
-        # SHA 후보 중 head SHA의 prefix(>=7자)인 것이 하나라도 있으면 PASS.
-        if body_sha_candidates:
-            sha_match = any(
-                len(s) >= 7 and head_sha_lower.startswith(s)
-                for s in body_sha_candidates
+    # PIPELINE_FINAL_PACKET 블록 안의 SHA 보조 검증 (블록 밖 자유서술은 무시)
+    # packet_block_text는 위 검사 A에서 이미 추출됨.
+    if packet_block_text and pr_head_sha:
+        block_sha_candidates = list(
+            _consistency_extract_shas(packet_block_text)
+        )
+        if block_sha_candidates:
+            head_sha_lower_b = pr_head_sha.lower()
+            block_sha_match = any(
+                len(s) >= 7 and head_sha_lower_b.startswith(s.lower())
+                for s in block_sha_candidates
             )
-            if not sha_match:
+            if not block_sha_match:
                 return _blocked(
                     "stale_head_sha",
                     (
-                        f"PR 본문의 head SHA가 실제 PR head SHA"
+                        f"PIPELINE_FINAL_PACKET 블록 안의 SHA가 실제 PR head SHA"
                         f"({pr_head_sha[:12]}...)와 일치하지 않습니다. "
-                        "최신 commit SHA로 갱신하세요."
+                        "블록 안의 SHA를 갱신하거나 "
+                        "'python pipeline.py report final-packet'을 재실행하세요."
                     ),
                     {
                         "expected_head_sha": pr_head_sha,
-                        "pr_body_sha_candidates": body_sha_candidates,
-                        "location": "pr_body",
+                        "packet_block_sha_candidates": block_sha_candidates,
+                        "location": "packet_block",
                     },
                 )
 
