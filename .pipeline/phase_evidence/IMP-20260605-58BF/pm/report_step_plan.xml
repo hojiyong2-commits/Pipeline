@@ -1,0 +1,549 @@
+<decomposition_audit>
+  <total_functions_identified>9</total_functions_identified>
+  <micro_task_count>6</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>
+    이 작업은 6개의 명확히 분리된 책임 영역을 가집니다:
+    (1) report final-packet JSON 생성, (2) Consistency Guard 재작성,
+    (3) gates request-accept 의 verification_json 기록, (4) gates accept 의 verification_json SHA/changed_files 검증,
+    (5) hygiene cleanup-workspace --after-complete 신규 구현, (6) 문서 동기화.
+    각각 다른 파일 영역과 다른 검증 oracle을 가지므로 6개의 독립 micro-task로 분할합니다.
+    파일 수 기준: pipeline.py 1개, .claude/agents/*.md 2개, CLAUDE.md 1개, RELEASE_NOTES.md 1개, tests/ 5개 (=총 10 파일).
+    함수 수: 신규 함수 4개(_build_verification_json, _write_verification_json,
+    _hygiene_cleanup_workspace, _verify_verification_json_freshness) + 기존 함수 5개 수정.
+    이 규모는 단일 task로 처리 시 SCOPE 위반 → 6개 분할 필수.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260605-58BF</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Phase 1: PM (Planning) — Verification JSON SSoT 구현 계획</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>PD, AL, FS</category_tags>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      내부 변수명, JSON 키 순서, 함수명 카멜/스네이크 스타일, 한국어 메시지의 미세한 표현 같은 P2 질문은
+      묻지 않았습니다. 기존 pipeline.py의 명명 컨벤션과 한국어 문체를 그대로 유지합니다.
+      Pipeline Manager가 module dev 시점에 scope_manifest와 git diff를 대조하여 P2 결정을 자동 일관성 유지합니다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-5">
+        <user_facing_question>
+          작업공간 정리 기능은 기존 'python pipeline.py hygiene archive --older-than 7d' 명령을 확장할까요,
+          아니면 새로운 'python pipeline.py hygiene cleanup-workspace --after-complete' 서브명령으로 분리할까요?
+        </user_facing_question>
+        <evidence>
+          사용자 요청에 'hygiene cleanup-workspace --after-complete' 명령어가 정확히 명시되어 있고,
+          기존 hygiene archive는 7일 경과 기준의 정기 정리인 반면, cleanup-workspace는
+          파이프라인 COMPLETE 직후 즉시 실행되는 일회성 정리로 동작 의미가 다릅니다.
+          cleanup_manifest.json 출력도 별도 SSoT가 필요합니다.
+        </evidence>
+        <why_it_matters>
+          하나의 명령어를 재사용하면 두 가지 다른 동작이 한 함수에 섞여 유지보수가 어려워집니다.
+          새 서브명령으로 분리하면 archive(정기 정리, 7일 기준)와 cleanup-workspace(즉시 정리, terminal_state 기준)가
+          명확히 구분되어 향후 규칙 추가 시 충돌이 없습니다.
+        </why_it_matters>
+        <recommended_option>B</recommended_option>
+        <options>
+          <option id="A">
+            <label>기존 hygiene archive 확장 (--after-complete 플래그 추가)</label>
+            <benefit>새 서브명령 등록이 필요 없고 코드 분량이 적습니다.</benefit>
+            <cost>archive와 cleanup-workspace의 BLOCKED 조건(terminal_state, tracked changes)이 한 함수에 섞여 cognitive load 증가. 출력 manifest 스키마도 갈래로 분기 필요.</cost>
+          </option>
+          <option id="B">
+            <label>새 서브명령 hygiene cleanup-workspace --after-complete 추가 (사용자 요청과 동일)</label>
+            <benefit>archive(정기)와 cleanup-workspace(즉시)가 명확히 분리. cleanup_manifest.json 스키마 독립. terminal_state/tracked 검사도 cleanup-workspace에서만 강제.</benefit>
+            <cost>cmd_hygiene 디스패처와 argparse 분기 추가 (소량의 boilerplate).</cost>
+          </option>
+        </options>
+        <user_answer>추천안 B로 진행 (사용자 요청에 'hygiene cleanup-workspace --after-complete'가 명시되어 있으므로 명령어 그대로 신규 서브명령으로 구현)</user_answer>
+      </question>
+
+      <question id="DQ-2" priority="P0" category="module_split" mt_id="MT-2">
+        <user_facing_question>
+          Consistency Guard가 PR 본문에서 파일명을 추출하는 로직(_consistency_listed_files)을 완전히 제거할까요,
+          아니면 changed_files 검증에서만 비활성화하고 다른 검증(test_count_mismatch 등)을 위해 유지할까요?
+        </user_facing_question>
+        <evidence>
+          현재 _check_protocol_consistency()의 검사 D(changed_files_mismatch)와 검사 F(stale_file_description)만이
+          _consistency_listed_files를 호출합니다 (pipeline.py:4248-4250).
+          다른 검사 A(CI run ID), B(head SHA), C(test count), E(trust root) 는 PR 본문에서
+          숫자 패턴만 추출하므로 영향받지 않습니다.
+        </evidence>
+        <why_it_matters>
+          완전 제거(옵션 A)는 코드가 줄지만 향후 자유서술 검증이 필요할 때 재추가 비용이 발생합니다.
+          changed_files만 JSON 기준으로 바꾸는 옵션 B는 PR 본문 파싱 함수 자체는 보존하면서 검사 D/F만
+          JSON-only로 전환하므로 회귀 영향이 최소이고 사용자 요청 의도와 정확히 일치합니다.
+        </why_it_matters>
+        <recommended_option>B</recommended_option>
+        <options>
+          <option id="A">
+            <label>_consistency_listed_files 완전 제거</label>
+            <benefit>죽은 코드 제거, 라인 수 감소.</benefit>
+            <cost>다른 잠재적 사용처 회귀 가능. 옵션 B 대비 변경 범위가 큼.</cost>
+          </option>
+          <option id="B">
+            <label>_consistency_listed_files는 보존하되 호출처(검사 D/F)에서 JSON 기반 검증으로 교체</label>
+            <benefit>PR 본문 파싱 함수 자체는 살아 있어 향후 다른 검증에 재사용 가능. 변경 범위 최소.</benefit>
+            <cost>죽은 코드처럼 보이는 함수가 남음 (deprecation 주석 필요).</cost>
+          </option>
+        </options>
+        <user_answer>추천안 B로 진행 (changed_files 검증만 JSON-only로 교체, _consistency_listed_files는 deprecation 주석과 함께 보존하여 회귀 위험 최소화)</user_answer>
+      </question>
+
+      <question id="DQ-3" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          human_acceptance_packet.json의 'requirements' 필드는 어떤 형식으로 채울까요?
+        </user_facing_question>
+        <evidence>
+          사용자 요청의 최소 필드 목록에 'requirements: []' 가 명시되어 있습니다.
+          현재 pipeline_state.json에는 IMP-20260602-1ABE에서 도입된 'structured_acceptance_criteria' 배열이 있고,
+          _build_ac_fulfillment_table()이 이를 사용자 친화적 표로 변환합니다.
+        </evidence>
+        <why_it_matters>
+          requirements가 빈 배열만 항상 들어가면 기계 검증에 쓸모가 없습니다.
+          structured_acceptance_criteria를 그대로 직렬화하면 PR 본문 표시 + 기계 검증 양쪽에서 동일 출처를 사용 가능.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>pipeline_state.structured_acceptance_criteria 전체를 JSON으로 직렬화 (각 AC의 id/text/source/user_visible/expected_evidence/status 포함)</label>
+            <benefit>기존 SSoT 재사용. AC 추적과 자연스럽게 연동.</benefit>
+            <cost>structured AC가 없는 legacy 파이프라인에서는 빈 배열이 됨 (수용 가능 — 사용자 요청도 '[]' 허용).</cost>
+          </option>
+          <option id="B">
+            <label>ac_fulfillment_table만 직렬화 (사용자가 볼 행 단위 요약)</label>
+            <benefit>사용자가 볼 행 단위 요약만 담아 JSON이 간결하고 직관적.</benefit>
+            <cost>원본 AC 메타데이터(source, must_verify 등) 손실. 기계 검증용으로는 정보 부족.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (structured_acceptance_criteria 전체 직렬화 + 같은 자료로 ac_fulfillment_table을 한 번 더 포함하여 기계/사람 양쪽 가능)</user_answer>
+      </question>
+
+      <question id="DQ-4" priority="P1" category="module_split" mt_id="MT-5">
+        <user_facing_question>
+          source-code-like 파일(.py, .ts 같이 user 소스로 보일 가능성이 있는 파일)을
+          어떻게 식별하고 어디로 보관할까요?
+        </user_facing_question>
+        <evidence>
+          사용자 요청의 필수 구현 9+10번에 'source code 가능 파일은 possible-source-leftovers로 별도 보관' 명시.
+          HYGIENE_ARCHIVE_PATTERNS은 *_report.xml, comment_*.txt 같은 명확한 임시물 패턴 위주이고,
+          .py / .ts / .ps1 같은 코드 확장자는 archive 대상에서 제외됨.
+        </evidence>
+        <why_it_matters>
+          archive 가능 패턴에 안 잡히는 .py 파일 등이 untracked로 남아 있으면 무엇이 코드인지 정리 결과인지 사용자가 헷갈립니다.
+          source-like 파일은 별도 폴더(possible-source-leftovers)에 분리 보관해야 사용자가 안전하게 검토할 수 있습니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>확장자 기반 식별: .py, .ts, .js, .ps1, .sh 등 source extensions → possible-source-leftovers/ 서브폴더</label>
+            <benefit>명확하고 빠른 식별. 사용자가 폴더만 보면 코드/임시물 구분 가능.</benefit>
+            <cost>확장자만으로 100% 정확하진 않음 (예: 실험용 임시 .py도 함께 분리됨 — 안전 측 fallback).</cost>
+          </option>
+          <option id="B">
+            <label>git ls-files 캐시와 비교하여 추적 이력이 없는 코드 파일만 분리</label>
+            <benefit>추적 이력 기반으로 미추적 코드 파일만 정밀하게 분리 가능.</benefit>
+            <cost>구현 복잡, git CLI 의존도 증가.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (확장자 기반 식별로 단순/명확/안전. 코드 확장자 집합은 SSoT 상수 HYGIENE_SOURCE_LIKE_EXTENSIONS로 관리)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>
+      pipeline.py와 CLAUDE.md (trust-root)를 함께 수정하는 protocol-level 작업입니다.
+      micro-task 6개, 신규 함수 4개, 기존 함수 5개 수정, 신규 테스트 약 30개를 작성하므로
+      Fast Path 진입 조건(1 file / 1 function / ≤15 lines)을 명확히 초과합니다.
+      외부 API/인증/시크릿/파일이동/DB 마이그레이션 같은 HIGH_RISK 자동 트리거 조건은 충족하지 않지만,
+      trust-root(pipeline.py, CLAUDE.md, agent MD) 변경과 core_parser_logic(Consistency Guard) 변경이 있으므로
+      risk_flags 에 pipeline_protocol=true, core_parser_logic=true 를 명시합니다.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>10</expected_changed_files>
+      <expected_changed_functions>9</expected_changed_functions>
+      <expected_changed_lines>800</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <interface_spec>
+    - Input:
+      - report final-packet 호출: 기존 동일 (state, gh, git diff)
+      - gates request-accept: --evidence 인자 동일
+      - gates accept: --acceptance-code (기존) + verification_json 검증 추가
+      - hygiene cleanup-workspace --after-complete: 신규 (없음)
+    - Output:
+      - human_acceptance_packet.md (기존 한국어 유지)
+      - human_acceptance_packet.json (신규 SSoT)
+      - acceptance_request.json (verification_json_path, verification_json_sha256 추가)
+      - cleanup_manifest.json (신규, hygiene cleanup-workspace 산출)
+    - Validation: 모든 변경은 기존 schema_version=1 을 보존 (추가 필드만 더함). gh/git 부재 graceful skip 유지.
+  </interface_spec>
+
+  <requirements>
+    [공통]
+    - 로드맵 모드: SOP 면제 키워드 '자동 진행'에 따라 User Roadmap Presentation Gate는 생략. 단, 모든 설계 결정은 design_confirmation에 기록되어 있음.
+    - anti_gaming_rules.md Read 완료: anti_gaming_read=true 명시.
+    - trust-root 변경: pipeline.py, CLAUDE.md, .claude/agents/*.md 를 수정. 모든 변경은 본 파이프라인 step_plan.target_files 에 사전 명시되어 있으므로 IMP scope 내 정당 변경. ci.yml 은 수정하지 않음.
+    - 세션 언어 규칙: 새 한국어 메시지는 모두 명확한 한국어로 작성. backtick 안 영어 명령어는 옆에 한국어 설명 동반.
+
+    [verification JSON SSoT 설계 규칙]
+    - human_acceptance_packet.json schema_version=1 고정 (향후 변경 시 새 schema_version 으로 마이그레이션).
+    - 필수 키: schema_version, pipeline_id, pr_url, pr_head_sha, github_ci_run_id, changed_files, gates, requirements, acceptance_code, reject_code_example, generated_at.
+    - changed_files 는 git diff origin/main...HEAD --name-only 결과. base ref 기본 origin/main.
+    - acceptance_code 는 acceptance_request.json 이 있을 때만 채워지고 없으면 빈 문자열("").
+    - gates 객체는 {technical, oracle, github_ci, acceptance: PASS|FAIL|BLOCKED|PENDING}.
+    - 파일 인코딩: UTF-8, ensure_ascii=False, indent=2, LF newline.
+
+    [기계 검증 vs 사용자 렌더링 분리 규칙]
+    - PR 본문, human_acceptance_packet.md 는 사용자가 읽는 렌더링 결과. 기계 검증의 입력으로 사용하지 않음.
+    - Consistency Guard 의 changed_files 검사는 human_acceptance_packet.json.changed_files 만 신뢰.
+    - PR 본문 검증은 PIPELINE_FINAL_PACKET 블록 안의 메타데이터(pipeline_id, PR head SHA, CI run ID, acceptance_code)만 JSON 과 비교.
+    - PR 본문 블록 밖 자유서술 텍스트는 검증 입력으로 사용 금지.
+
+    [hygiene cleanup-workspace 규칙]
+    - terminal_state != COMPLETE → BLOCKED (failure_code=cleanup_workspace_terminal_state_required, exit 1).
+    - git status --porcelain 결과에 tracked 파일 변경 라인이 있으면 BLOCKED (failure_code=cleanup_workspace_tracked_changes_present, exit 1).
+    - 이동 대상: HYGIENE_ARCHIVE_PATTERNS 일치 + WORKSPACE_INTERNAL_PATTERNS 일치인 untracked 산출물.
+    - 보호: HYGIENE_PROTECTED_PATHS, HYGIENE_PROTECTED_PREFIXES.
+    - 보관 경로: PIPELINE_DEPLOY_ROOT/찌꺼기/YYYY-MM-DD/[pipeline_id 또는 cleanup-YYYYMMDD-HHMMSS]/.
+    - source-like 파일(*.py, *.ts, *.js, *.ps1, *.sh)은 보관 폴더 하위 possible-source-leftovers/ 서브폴더로 분리.
+    - 모든 이동 후 git status --porcelain 비어 있어야 함. tracked 파일은 절대 이동하지 않음.
+    - cleanup_manifest.json: 키 셋은 {pipeline_id, executed_at, terminal_state, destination_root, moved, possible_source_leftovers, blocked, move_errors, total_bytes, status}. status 는 OK 또는 BLOCKED.
+
+    [acceptance_request.json 확장 규칙]
+    - 기존 필드 (schema_version, pipeline_id, request_id, nonce, created_at, pr_url, pr_head_sha, github_ci_run_id, evidence, evidence_sha256, evidence_url, status) 보존.
+    - 신규 필드: verification_json_path (str, packet json 절대 경로), verification_json_sha256 (str, SHA256 hex).
+    - schema_version 은 1 유지 (필드 추가는 backward-compatible).
+
+    [gates accept 검증 강화 규칙]
+    - 기존 검증 (acceptance_code, pr_head_sha, ci_run_id, evidence_sha256) 그대로 유지.
+    - 추가 검증 1: acceptance_request.verification_json_sha256 과 현재 human_acceptance_packet.json 의 SHA256 비교. 다르면 BLOCKED (failure_code=verification_json_changed).
+    - 추가 검증 2: human_acceptance_packet.json.changed_files vs 실제 git diff. 다르면 BLOCKED (failure_code=changed_files_mismatch_vs_verification_json).
+    - 두 검증 모두 acceptance_code mismatch 검증 직후, evidence_sha256 검증 다음 단계에 배치.
+
+    [stale_file_description 재정의]
+    - 오직 verification_json.changed_files 에 실제 PR diff 에 없는 파일이 있을 때만 발동.
+    - PR 본문 자유서술 기반 오탐은 발생하지 않음 (검증 로직에서 _consistency_listed_files(pr_body) 호출 제거).
+
+    [PR 본문 검증 최소화]
+    - 검사 항목 5개만 유지:
+      1. PIPELINE_FINAL_PACKET 블록 존재
+      2. 블록 안 pipeline_id == JSON.pipeline_id
+      3. 블록 안 PR head SHA == JSON.pr_head_sha (7자 prefix 매칭)
+      4. 블록 안 CI run ID == JSON.github_ci_run_id
+      5. 블록 안 acceptance_code == JSON.acceptance_code (있을 때만)
+    - 블록 밖 텍스트(작업 요약, 사용자가 확인할 결과물 등)는 사용자 렌더링용으로만 취급.
+
+    [문서 동기화 규칙]
+    - CLAUDE.md "PR Packet SSoT (IMP-20260603-2E3D)" 섹션 뒤에 "Verification JSON SSoT (IMP-20260605-58BF)" 섹션 추가.
+    - pm-agent.md, test-harness-agent.md 에 verification JSON SSoT 관련 짧은 정책 단락 추가.
+    - RELEASE_NOTES.md 에 IMP-20260605-58BF 항목 추가.
+    - 모든 문서 변경은 같은 micro-task 에서 함께 패치 (Documentation-Code Drift 방지 IMP-20260507-0EDC).
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.py::_cmd_report_final_packet, pipeline.py::_build_verification_json, pipeline.py::_write_verification_json, pipeline.py::_auto_generate_final_packet_and_update_pr</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+        <file>tests/test_verification_json_ssot.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::cmd_report</site>
+        <site>pipeline.py::_cmd_gates_request_accept</site>
+        <site>pipeline.py::_auto_generate_final_packet_and_update_pr</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_cmd_report_final_packet|_auto_generate_final_packet_and_update_pr|_collect_packet_evidence|_build_final_packet_content</pattern>
+        <match_count>14</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        report final-packet 실행 시 human_acceptance_packet.md 와 함께 human_acceptance_packet.json (SSoT)
+        파일을 동일 디렉토리에 생성. 신규 _build_verification_json(evidence, acceptance_request) 와
+        _write_verification_json(content, base_dir) 추가. 필드: schema_version=1, pipeline_id, pr_url,
+        pr_head_sha, github_ci_run_id, changed_files, gates, requirements, acceptance_code,
+        reject_code_example, generated_at. requirements 는 state.structured_acceptance_criteria
+        직렬화 + ac_fulfillment_table 함께 포함. _auto_generate_final_packet_and_update_pr 도 동시 갱신.
+        T-FP-001 P0 normal 검증을 위한 oracle 은 case_normal_01/expected.json.
+      </change_summary>
+      <line_estimate>180</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline.py::_check_protocol_consistency, pipeline.py::_consistency_listed_files (deprecation 주석), pipeline.py::_run_protocol_consistency_check</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+        <file>tests/test_consistency_guard_json_basis.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::_run_protocol_consistency_check</site>
+        <site>pipeline.py::_check_acceptance_readiness</site>
+        <site>pipeline.py::cmd_gates (action == "consistency")</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_protocol_consistency|_consistency_listed_files</pattern>
+        <match_count>11</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _check_protocol_consistency 시그니처에 verification_json (dict | None) 매개변수 추가.
+        검사 D(changed_files_mismatch)와 검사 F(stale_file_description) 로직을 verification_json 기준으로 재작성:
+        - verification_json.changed_files 가 None 이면 두 검사 skip (legacy 안전 fallback).
+        - 있으면 verification_json.changed_files vs pr_changed_files 만 비교. PR 본문 _consistency_listed_files 호출 제거.
+        _consistency_listed_files 함수 자체는 보존하되 deprecation docstring 추가 (다른 검사에선 미사용).
+        _run_protocol_consistency_check 는 human_acceptance_packet.json 로드 + SHA256 검증 후 함수에 전달.
+        T-CG-001/002/003 oracle 은 case_normal_01, case_edge_01, case_error_01.
+      </change_summary>
+      <line_estimate>140</line_estimate>
+      <covers_ac>AC-3, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline.py::_write_acceptance_request, pipeline.py::_cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+        <file>tests/test_acceptance_request_verification_json.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::_cmd_gates_request_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_write_acceptance_request|verification_json_path|verification_json_sha256</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _write_acceptance_request 시그니처에 verification_json_path, verification_json_sha256 인자 추가.
+        acceptance_request.json 에 두 필드 기록. 기존 필드(nonce/evidence/evidence_sha256/pr_head_sha/
+        github_ci_run_id/status=PENDING) 그대로 보존. _cmd_gates_request_accept 는 인자 채워 호출:
+        path 는 _verification_json_output_path() 로 계산, SHA256 은 _compute_file_sha256() 로 계산.
+        T-RA-001 oracle 은 case_normal_01/expected.json.
+      </change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>pipeline.py::cmd_gates (action == "accept" block), pipeline.py::_verify_verification_json_freshness (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+        <file>tests/test_gates_accept_verification_json.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::cmd_gates</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>if action == "accept"</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        gates accept --result ACCEPT 검증 단계에 2개 추가:
+        (1) verification_json SHA 검증: acceptance_request.verification_json_sha256 != 현재 human_acceptance_packet.json
+            SHA256 이면 _record_failure_packet(failure_code=verification_json_changed, exit 1).
+        (2) verification_json.changed_files vs 실제 git diff (origin/main): 다르면
+            failure_code=changed_files_mismatch_vs_verification_json, exit 1.
+        두 검증 모두 acceptance_code/nonce 검증 이후, evidence_sha256 검증 이전에 배치.
+        gh CLI 부재 시 graceful skip (기존 패턴 따름).
+        T-AC-001/002 oracle 은 case_regression_01.
+      </change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>pipeline.py::cmd_hygiene_cleanup_workspace (신규), pipeline.py::cmd_hygiene (디스패처), pipeline.py 인자 파서 추가</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+        <file>tests/test_hygiene_cleanup_workspace.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::cmd_hygiene</site>
+        <site>pipeline.py main argparse 분기</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>cmd_hygiene_archive|HYGIENE_ARCHIVE_PATTERNS|HYGIENE_PROTECTED_PATHS</pattern>
+        <match_count>14</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        신규 cmd_hygiene_cleanup_workspace(args) 함수 추가:
+        1. terminal_state != COMPLETE → BLOCKED (cleanup_workspace_terminal_state_required, exit 1).
+        2. git status --porcelain 의 tracked 변경 라인이 있으면 BLOCKED (cleanup_workspace_tracked_changes_present, exit 1).
+        3. _hygiene_collect_candidates 재사용하되 age 기준 0일로 호출, untracked만 필터.
+        4. 이동 경로: _deployment_root()/찌꺼기/YYYY-MM-DD/[pipeline_id 또는 cleanup-YYYYMMDD-HHMMSS]/.
+        5. source-like(*.py, *.ts, *.js, *.ps1, *.sh) → possible-source-leftovers/ 서브폴더로 이동.
+        6. cleanup_manifest.json 작성 (스키마: pipeline_id, executed_at, terminal_state, destination_root, moved, possible_source_leftovers, blocked, move_errors, total_bytes, status).
+        7. cmd_hygiene 디스패처에 'cleanup-workspace' 분기 추가, argparse 에 --after-complete 추가.
+        SSoT 상수 HYGIENE_SOURCE_LIKE_EXTENSIONS = {'.py','.ts','.js','.ps1','.sh'} 추가.
+        T-HG-001/002/003/004 oracle 은 case_error_02 + 신규 생성된 fixture.
+      </change_summary>
+      <line_estimate>200</line_estimate>
+      <covers_ac>AC-7, AC-8, AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>N/A — 문서 전용 micro-task</affected_function>
+      <target_files>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+        <file>RELEASE_NOTES.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PR Packet SSoT|human_acceptance_packet</pattern>
+        <match_count>23</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        문서 동기화 (Documentation-Code Drift 방지):
+        - CLAUDE.md: "PR Packet SSoT (IMP-20260603-2E3D)" 섹션 뒤에
+          "Verification JSON SSoT (IMP-20260605-58BF)" 섹션 추가. 핵심 내용:
+          (a) 기계 검증 기준은 human_acceptance_packet.json. PR 본문/MD packet 은 사용자 렌더링용.
+          (b) acceptance_request.json 에 verification_json_path/sha256 기록 의무.
+          (c) hygiene cleanup-workspace --after-complete 운영 규칙.
+        - .claude/agents/pm-agent.md: design_confirmation 패턴 보존 + verification JSON SSoT 참조 단락.
+        - .claude/agents/test-harness-agent.md: Phase 7 외부 게이트 진단 시 human_acceptance_packet.json 을
+          기준으로 changed_files 를 점검한다는 짧은 정책 단락 추가.
+        - RELEASE_NOTES.md: IMP-20260605-58BF 항목 추가 (4-5줄 요약).
+        T-DOC-001 oracle: CLAUDE.md/RELEASE_NOTES.md 키워드 substring check.
+      </change_summary>
+      <line_estimate>100</line_estimate>
+      <covers_ac>AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 pipeline.py 와 동일 버전 유지. type hints (Optional, Dict, List) 그대로 사용</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>Pylance, typeCheckingMode=basic. 기존 .vscode/settings.json 그대로</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py report final-packet 실행 시 human_acceptance_packet.md 와 human_acceptance_packet.json 두 파일이 동일 디렉토리에 생성되고, JSON 에는 schema_version=1, pipeline_id, pr_url, pr_head_sha, github_ci_run_id, changed_files, gates, requirements, acceptance_code, reject_code_example 가 모두 포함된다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>human_acceptance_packet.json.changed_files 는 git diff origin/main...HEAD --name-only 와 정확히 동일한 파일 목록이다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>Protocol Consistency Guard 의 changed_files 검사는 PR 본문 자유서술 텍스트를 파싱하지 않고 오직 human_acceptance_packet.json.changed_files 와 실제 PR diff 만 비교한다. PR 본문에 'github_actions.run_id', 'pipeline_state.json' 같은 dotted 식별자가 있어도 stale_file_description 가 발동하지 않는다.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 실행 후 acceptance_request.json 에는 verification_json_path 와 verification_json_sha256 가 추가로 기록되어 있다. 기존 필드(nonce, evidence_sha256, pr_head_sha, github_ci_run_id, status=PENDING) 는 그대로 보존된다.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>gates accept --result ACCEPT 실행 시 acceptance_request.verification_json_sha256 != 현재 human_acceptance_packet.json SHA256 이거나 JSON.changed_files != 실제 PR diff 이면 BLOCKED 처리되고 한국어 BLOCKED 메시지에 'gates request-accept 재실행' 안내가 포함된다.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>stale_file_description 은 오직 verification_json.changed_files 기준으로만 발동하며, PR 본문 자유서술 기반 오탐은 발생하지 않는다.</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py hygiene cleanup-workspace --after-complete 명령이 동작하며, terminal_state != COMPLETE 이면 BLOCKED (failure_code=cleanup_workspace_terminal_state_required, exit code 1) 로 거부한다.</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>cleanup-workspace 실행 후 git status --porcelain 결과가 빈 줄이다. tracked 파일은 절대 이동되지 않으며, untracked 파일 중 archive 패턴/내부 산출물만 G:\내 드라이브\터미널\찌꺼기\YYYY-MM-DD\[pipeline_id 또는 cleanup-timestamp]\ 로 이동된다.</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>cleanup_manifest.json 이 생성되고 moved, possible_source_leftovers, blocked, destination_root, total_bytes, status 키를 포함한다. .py/.ts/.js/.ps1/.sh 확장자 untracked 파일은 possible-source-leftovers 서브폴더로 이동된다.</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>CLAUDE.md, .claude/agents/pm-agent.md, .claude/agents/test-harness-agent.md, RELEASE_NOTES.md 에 verification JSON SSoT 정책과 hygiene cleanup-workspace 운영 규칙이 모두 명시되어 있고, 기계 검증의 기준은 PR 본문 자유서술이 아니라 human_acceptance_packet.json 이라고 문서에 명확히 적혀 있다.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <forbidden>
+    - 본 step_plan 에 명시되지 않은 파일 수정 (특히 .github/workflows/*, build_agent.md, build report 등 무관 영역).
+    - schema_version 변경 (1 에서 다른 값으로 올리지 않음). 필드 추가는 backward-compatible.
+    - 기존 acceptance_code nonce 검증, evidence_sha256 검증, codex pr gate 검증 로직 변경.
+    - _consistency_listed_files 의 호출처를 검사 D/F 외 다른 검사에서도 보존하는 변경 (D/F 외에는 원래 호출 없음).
+    - cleanup-workspace 에서 tracked 파일을 단 1개라도 이동.
+    - PR 본문 자유서술을 changed_files 검증 입력으로 사용 (회귀 금지 — 본 IMP 의 핵심 목적).
+    - hygiene archive (기존 명령) 동작 변경.
+    - Frozen contract/test_set 의 임의 수정 (pipeline.py contract --force 사용 금지 — 본 step_plan 외 변경 금지).
+  </forbidden>
+
+  <handover_template>
+    <!-- dev-agent가 QA에 인계할 때 사용하는 handover XML 예시 (PM planning 참조용) -->
+    <handover_example>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260605-58BF</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/test_verification_json_ssot.py</file>
+        <file>tests/test_consistency_guard_json_basis.py</file>
+        <file>tests/test_acceptance_request_verification_json.py</file>
+        <file>tests/test_gates_accept_verification_json.py</file>
+        <file>tests/test_hygiene_cleanup_workspace.py</file>
+        <file>CLAUDE.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/test-harness-agent.md</file>
+        <file>RELEASE_NOTES.md</file>
+        <file>scope_manifest.json</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_example>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\CLAUDE.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\pm-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\test-harness-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\RELEASE_NOTES.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260605-58BF\task_contract.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260605-58BF\test_set.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Three-Gate + Option A phase attestation + Incremental Module Gate 필수.
+      pipeline.py done --phase dev 는 모든 MT-N 의 module design/dev/qa PASS + module integrate PASS 이후에만 통과.
+      MT-N 별로 module design → module dev → module qa 순서로 진행하고 직전 MT 가 PASS 되어야 다음 MT 시작 가능.
+      Scope Lock: dev-agent 의 git diff 출력이 scope_manifest_MT-N.json 의 files 배열과 정확히 일치해야 module dev 기록 가능.
+      Trust-root 파일 (pipeline.py, CLAUDE.md, .claude/agents/*.md) 변경은 본 IMP scope 내 정당. ci.yml 수정 금지.
+    </phase_rules_excerpt>
+    <prev_phase_summary>
+      Pipeline 신규 생성 (IMP-20260605-58BF). Contract v2 frozen 완료
+      (contract_hash=59d9d73b..., test_set_hash=8e0cd889...). Oracle 5건 등록 (normal/edge/error/error/regression).
+      Module 5개 (MOD-FINAL-PACKET-JSON, MOD-CONSISTENCY-GUARD-JSON, MOD-ACCEPT-JSON-SHA-VERIFY,
+      MOD-HYGIENE-CLEANUP-WORKSPACE, MOD-DOCS-VERIFICATION-JSON). Test 12개 (P0=11, P1=1) 모두 contract audit PASS.
+    </prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
