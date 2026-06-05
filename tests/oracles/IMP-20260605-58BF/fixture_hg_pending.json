@@ -1,0 +1,9 @@
+{
+  "preconditions": {
+    "state_file": {
+      "pipeline_id": "IMP-20260605-58BF",
+      "terminal_state": null,
+      "current_phase": "dev"
+    }
+  }
+}

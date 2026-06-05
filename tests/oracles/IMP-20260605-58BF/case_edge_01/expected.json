@@ -1,10 +1,11 @@
 {
-  "outcome": "PASS",
-  "consistency_guard_status": "PASS",
-  "stale_file_description_triggered": false,
-  "false_positive_avoided": true,
-  "guard_did_not_parse_pr_body_freetext_for_files": true,
-  "regression_fixed_for": "github_actions.run_id_misparsed_as_filename",
-  "json_changed_files_matches_diff": true,
-  "json_basis_used_for_changed_files_check": true
+  "schema_version": 2,
+  "pipeline_id": "IMP-20260605-58BF",
+  "generated_at": "2026-06-05T13:22:46Z",
+  "status": "PASS",
+  "failure_code": "",
+  "failure_category": "",
+  "blocked_reason": "",
+  "allow_accept": true,
+  "details": {}
 }
