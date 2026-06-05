@@ -1,0 +1,67 @@
+{
+  "pipeline_id": "IMP-20260605-58BF",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py",
+        "tests/test_verification_json_ssot.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::_cmd_report_final_packet, pipeline.py::_build_verification_json, pipeline.py::_write_verification_json, pipeline.py::_auto_generate_final_packet_and_update_pr"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py",
+        "tests/test_consistency_guard_json_basis.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::_check_protocol_consistency, pipeline.py::_consistency_listed_files (deprecation 주석), pipeline.py::_run_protocol_consistency_check, pipeline.py::_run_protocol_consistency_inline"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py",
+        "tests/test_acceptance_request_verification_json.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::_write_acceptance_request, pipeline.py::_cmd_gates_request_accept"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py",
+        "tests/test_gates_accept_verification_json.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::_verify_verification_json_freshness, pipeline.py::cmd_gates"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py",
+        "tests/test_hygiene_cleanup_workspace.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::cmd_hygiene_cleanup_workspace (신규), pipeline.py::cmd_hygiene (디스패처), pipeline.py 인자 파서 추가"
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "CLAUDE.md",
+        ".claude/agents/pm-agent.md",
+        ".claude/agents/test-harness-agent.md",
+        "RELEASE_NOTES.md"
+      ],
+      "affected_functions": [
+        "N/A — 문서 전용 micro-task"
+      ]
+    }
+  ]
+}
