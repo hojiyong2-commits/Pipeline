@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260605-9EF5</pipeline_id>
+  <from>qa-agent</from>
+  <verdict>PASS</verdict>
+
+  <handover_evidence_check>
+    <dev_handover_present>PASS — dev_handover.xml 제출됨, evidence에 pipeline.py / tests/test_consistency_guard_a_b_json_basis.py / CLAUDE.md / tests/test_protocol_consistency.py / tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json 모두 명시</dev_handover_present>
+    <ui_handover_required>NO — category_tags=[PD, AL]이므로 UI handover 불필요</ui_handover_required>
+    <scope_lock_check_present>PASS — Dev handover scope_lock_check verdict=PASS, scope_amendment_reason에 회귀 파일 정당화</scope_lock_check_present>
+  </handover_evidence_check>
+
+  <category_check>
+    <wa>N-A — category_tags에 WA 없음 (네트워크/HTTP 호출 미사용)</wa>
+    <ui>N-A — category_tags에 UI 없음 (GUI 변경 없음)</ui>
+    <fs>N-A — 파일 I/O 변경 없음 (순수 문자열 처리)</fs>
+    <pd>PASS — _consistency_extract_packet_block 신규 헬퍼로 책임 분리, _check_protocol_consistency 검사 A/B 분기마다 명확한 location 메타데이터, _blocked 클로저로 응답 dict 통일</pd>
+    <sec>N-A — Phase 5 security-agent 전담</sec>
+    <al>PASS — None 입력 / 빈 문자열 / not isinstance / 마커 없음 / end&lt;=start / SHA prefix &lt;7자 모두 안전 분기</al>
+    <build>N-A — 빌드 영향 없음</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+
+  <numeric_score>108
+    <wa score="N/A" max="20">N/A — 카테고리 미해당</wa>
+    <ui score="N/A" max="20">N/A — 카테고리 미해당</ui>
+    <fs score="N/A" max="20">N/A — 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/인터페이스계약 5 — 헬퍼 함수 추출, location 메타데이터 명확, Dict[str, Any] 타입 명시</pd>
+    <al score="20" max="20">0나눗셈 N/A, 범위검증 5(len>=7), 타입검증 5(None/isinstance), 빈데이터 5(or "" fallback), 분기명확 5</al>
+    <build score="N/A" max="10">N/A</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="30" max="30"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 카테고리별 비율 100% (PD 10/10, AL 20/20). 카테고리 적용 가능한 항목만 합산했을 때 만점.</numeric_verdict>
+  </numeric_score>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover &lt;self_check&gt;&lt;execution_check&gt; PASS (py_compile + import + pytest 88 passed)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _consistency_extract_packet_block가 _check_protocol_consistency 내부에서 실제 호출됨 (pipeline.py:4229). 단순 정의가 아니라 호출 경로가 코드에서 확인됨.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 명시 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — PM step_plan에 &lt;decomposition_audit&gt; 블록 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — 3개 MT 모두 &lt;grep_evidence&gt;&lt;executed&gt;true&lt;/executed&gt; 포함</grep_evidence_present>
+    <declared_functions>3</declared_functions>
+    <actual_modified_functions>3</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>5</scope_files_declared>
+    <evidence_files_submitted>5</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음 (PM context_injection.target_files에 tests/oracles/IMP-20260605-9EF5/ 디렉토리 포함, scope_amendment_reason에서 oracle 신규 생성 정당화)</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff origin/main...HEAD --name-only 결과와 evidence/scope 매칭 확인</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <ac_verification>
+    <ac id="AC-1" status="PASS">test_a_free_text_stale_run_id_ignored_when_packet_block_fresh + case_normal_01 + 직접 시뮬레이션 검증</ac>
+    <ac id="AC-2" status="PASS">test_a_packet_block_stale_run_id_blocked + case_edge_01 + 직접 시뮬레이션 (BLOCKED stale_run_id packet_block)</ac>
+    <ac id="AC-3" status="PASS">test_a_verification_json_stale_blocked (location=verification_json)</ac>
+    <ac id="AC-4" status="PASS">test_b_free_text_stale_sha_ignored_when_packet_block_fresh + case_edge_02</ac>
+    <ac id="AC-5" status="PASS">test_b_verification_json_stale_blocked (BLOCKED stale_head_sha verification_json)</ac>
+    <ac id="AC-6" status="PASS">test_a_verification_json_missing_blocked + case_error_01 + 직접 시뮬레이션 (BLOCKED verification_json_missing)</ac>
+    <ac id="AC-7" status="PASS">case_regression_01 + 직접 시뮬레이션 (자유서술 stale + 블록/vj 최신 → PASS)</ac>
+    <ac id="AC-8" status="PASS">test_a_packet_block_stale_run_id_blocked (블록 안 stale → BLOCKED)</ac>
+    <ac id="AC-9" status="PASS">CLAUDE.md grep "IMP-20260605-9EF5" 매치 확인 (2건: 검사 A/B 표 + Verification JSON SSoT 섹션 끝)</ac>
+    <ac id="AC-10" status="PASS">tests/test_protocol_consistency.py 43 PASS 확인 (test_a_b_existing_43_tests_intact)</ac>
+  </ac_verification>
+
+  <test_execution_summary>
+    <test_run>
+      <command>python -m pytest tests/test_consistency_guard_a_b_json_basis.py tests/test_protocol_consistency.py -v</command>
+      <result>53 passed in 1.92s</result>
+    </test_run>
+    <test_run>
+      <command>python -m pytest tests/ --ignore=tests/test_scorers_smart_resolve.py -q</command>
+      <result>776 passed, 6 failed (모두 본 IMP와 무관한 pre-existing failures: codex_review/AC-tracking flaky/hygiene oracle 누락/pm_split AC GATE)</result>
+    </test_run>
+    <test_run>
+      <command>QA 직접 시뮬레이션 (AC-2/6/7)</command>
+      <result>AC-2 BLOCKED stale_run_id / AC-6 BLOCKED verification_json_missing / AC-7 PASS — 의도대로 동작</result>
+    </test_run>
+    <test_run>
+      <command>git stash → main 회귀 baseline 비교</command>
+      <result>6개 실패가 main 기준에서도 동일하게 실패 — 본 IMP 변경 무관함 확인</result>
+    </test_run>
+  </test_execution_summary>
+
+  <result>[PASS] 모든 카테고리 PASS/N-A 및 numeric_verdict=PASS. AC-1~10 모두 검증 완료. 88 PASS 회귀 보호. C-3/PD/AL/Runtime 게이트 통과.</result>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. tests/test_consistency_guard_a_b_json_basis.py의 test_a_b_existing_43_tests_intact가 subprocess pytest를 호출하여 실행 시간이 길어진다 (~12초). 향후 최적화 시 module-level 함수 import + 직접 호출로 단축 가능.
+    2. _consistency_extract_packet_block 함수는 첫 번째 PIPELINE_FINAL_PACKET 블록만 처리한다. 사용자가 실수로 본문 내에 마커를 중복 작성하면 두 번째 블록은 무시됨. 현재 위험은 낮으나 PR template에 마커 중복 검출 룰을 추가하면 안정성 향상 가능.
+    3. PM atomic_plan의 MT target_files에 tests/oracles/IMP-20260605-9EF5/ 5개 case 디렉토리가 명시되지 않아 dev DONE 명령이 ATOMIC SCOPE GATE에서 차단됨. Dev handover의 scope_amendment_reason이 정당화 제공하나, 향후 PM step_plan은 oracle 신규 생성 시 명시적 target_files 포함이 더 견고함.
+    4. 본 PR과 무관한 pre-existing test failures(6개)는 본 IMP 범위 외이나, 추후 별도 IMP에서 정리 권장 (codex_review dependency / AC-tracking flaky / hygiene oracle 누락 / pm_split AC GATE).
+  </improvement_suggestions>
+</qa_report>
