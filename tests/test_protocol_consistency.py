@@ -327,7 +327,9 @@ class TestGhCliMock(unittest.TestCase):
                 return mock_pr_result
             return mock_comments_result
 
-        with patch("pipeline.subprocess.run", side_effect=mock_run):
+        with patch("pipeline.subprocess.run", side_effect=mock_run), \
+             patch("pipeline._load_verification_json",
+                   return_value={"changed_files": ["pipeline.py"]}):
             with self.assertRaises(SystemExit) as ctx:
                 _run_protocol_consistency_check(
                     state, args, "IMP-20260520-D0BB"
@@ -396,7 +398,9 @@ class TestGhCliMock(unittest.TestCase):
             call_count[0] += 1
             return mock_pr_result if call_count[0] == 1 else mock_comments_result
 
-        with patch("pipeline.subprocess.run", side_effect=mock_run):
+        with patch("pipeline.subprocess.run", side_effect=mock_run), \
+             patch("pipeline._load_verification_json",
+                   return_value={"changed_files": ["pipeline.py"]}):
             with self.assertRaises(SystemExit) as ctx:
                 _run_protocol_consistency_check(
                     state, args, "IMP-20260520-D0BB"
