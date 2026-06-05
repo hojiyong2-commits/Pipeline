@@ -14169,7 +14169,29 @@ def _update_pr_body_with_metrics(state: Dict[str, Any]) -> None:
     gh CLI가 없거나 열린 PR이 없으면 조용히 skip한다.
     """
     try:
-        metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state))
+        # external_gates에서 저장된 repo 정보를 추출하거나 gh CLI로 조회
+        _repo_for_metrics: Optional[str] = None
+        try:
+            _gh_pr_repo = subprocess.run(
+                ["gh", "pr", "view", "--json", "headRepository"],
+                capture_output=True, text=True, timeout=5, encoding="utf-8",
+            )
+            if _gh_pr_repo.returncode == 0:
+                _repo_info = json.loads(_gh_pr_repo.stdout)
+                _hr = _repo_info.get("headRepository", {})
+                # nameWithOwner가 있으면 직접 사용 (예: "hojiyong2-commits/Pipeline")
+                _name_with_owner = _hr.get("nameWithOwner", "")
+                if _name_with_owner:
+                    _repo_for_metrics = _name_with_owner
+                else:
+                    # fallback: owner.login + name 조합
+                    _owner = _hr.get("owner", {}).get("login", "")
+                    _rname = _hr.get("name", "")
+                    if _owner and _rname:
+                        _repo_for_metrics = f"{_owner}/{_rname}"
+        except Exception:
+            pass
+        metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state, repo=_repo_for_metrics))
         metrics_section = f"\n\n## 소요 시간 요약\n```\n{metrics_str}\n```\n"
         pr_view = subprocess.run(
             ["gh", "pr", "view", "--json", "body,number"],
@@ -14677,7 +14699,7 @@ def _format_ac_fulfillment_output(
         lines.append("[자동 검증 요약]")
         lines.append("")
         for entry in internal:
-            req = entry.get("requirement", "")[:60]
+            req = entry.get("requirement", "")
             lines.append(f"{entry['ac_id']}: {entry.get('result', '?')} — {req}")
         lines.append("")
 
@@ -14857,8 +14879,23 @@ def _auto_generate_final_packet_and_update_pr(
     Raises:
         없음 (외부 도구 부재 시 graceful skip).
     """
+    # PR base 자동 감지: main이 아닌 경우 PR base를 사용
+    _auto_base_ref = "origin/main"
+    try:
+        _pr_view = subprocess.run(
+            ["gh", "pr", "view", "--json", "baseRefName"],
+            capture_output=True, text=True, timeout=5,
+            encoding="utf-8", errors="replace",
+        )
+        if _pr_view.returncode == 0 and _pr_view.stdout.strip():
+            _pr_info = json.loads(_pr_view.stdout)
+            _pr_base = str(_pr_info.get("baseRefName", "") or "")
+            if _pr_base and _pr_base not in ("main", "master", "HEAD"):
+                _auto_base_ref = f"origin/{_pr_base}"
+    except Exception:
+        pass
     evidence_payload = _collect_packet_evidence(
-        state, acceptance_request=acceptance_request, base_ref="origin/main"
+        state, acceptance_request=acceptance_request, base_ref=_auto_base_ref
     )
     content = _build_final_packet_content(evidence_payload)
     packet_path = _write_human_acceptance_packet(content)
@@ -15024,6 +15061,28 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
     except (OSError, ValueError, KeyError) as exc:
         print(YELLOW(f"  [FINAL PACKET] 자동 생성 중 오류 (계속 진행): {exc}"))
+
+    # BUG-20260604-0812 MT-1: packet 자동 생성 후 SHA 재계산 + acceptance_request.json 갱신.
+    # _write_acceptance_request는 packet 생성 전에 SHA를 계산하므로 항상 구(舊) SHA가 저장된다.
+    # packet 자동 생성(_auto_generate_final_packet_and_update_pr) 완료 후 실제 SHA로 덮어쓴다.
+    _new_packet_sha256 = _compute_packet_sha256(packet_path)
+    if _new_packet_sha256 is not None:
+        try:
+            _req_path = Path(ACCEPTANCE_REQUEST_FILE)
+            if _req_path.exists():
+                _req_data = json.loads(_req_path.read_text(encoding="utf-8", errors="replace"))
+                _req_data["packet_sha256"] = _new_packet_sha256
+                _req_data["packet_frozen_at"] = _now()
+                # evidence가 packet 파일 자체인 경우에만 evidence_sha256도 갱신.
+                # URL evidence(http/https)는 건드리지 않는다 (AC-3 준수).
+                if not is_url and evidence_str == str(packet_path):
+                    _req_data["evidence_sha256"] = _new_packet_sha256
+                _req_path.write_text(
+                    json.dumps(_req_data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+        except (OSError, json.JSONDecodeError) as _sha_exc:
+            _die(f"[SHA 갱신 실패] acceptance_request.json 갱신 실패 — 승인 코드 발급이 차단됩니다.\n  오류: {_sha_exc}")
 
     print()
     print("=" * 62)
@@ -18947,30 +19006,34 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
         lines.append("  확인 불가")
     lines.append("")
 
-    # 섹션 2: Phase별 소요 시간
-    lines.append("[ Phase별 소요 시간 ]")
+    # 섹션 2: Phase별 소요 시간 (실제 데이터 있는 항목만, 빈 섹션 생략)
     phase_elapsed = metrics.get("phase_elapsed", {})
-    if isinstance(phase_elapsed, dict) and phase_elapsed:
+    phase_lines = []
+    if isinstance(phase_elapsed, dict):
         for pname, pdata in phase_elapsed.items():
             if isinstance(pdata, dict):
                 elapsed = pdata.get("elapsed_human", "확인 불가")
-                lines.append(f"  {pname}: {elapsed}")
-    else:
-        lines.append("  확인 불가")
-    lines.append("")
+                if elapsed != "확인 불가":
+                    phase_lines.append(f"  {pname}: {elapsed}")
+    if phase_lines:
+        lines.append("[ Phase별 소요 시간 ]")
+        lines.extend(phase_lines)
+        lines.append("")
 
-    # 섹션 3: Gate별 상태 및 소요 시간
-    lines.append("[ Gate별 상태 및 소요 시간 ]")
+    # 섹션 3: Gate별 상태 및 소요 시간 (실제 데이터 있는 항목만, 빈 섹션 생략)
     gate_elapsed = metrics.get("gate_elapsed", {})
-    if isinstance(gate_elapsed, dict) and gate_elapsed:
+    gate_lines = []
+    if isinstance(gate_elapsed, dict):
         for gname, gdata in gate_elapsed.items():
             if isinstance(gdata, dict):
                 gstatus = gdata.get("status", "확인 불가")
                 gelapsed = gdata.get("elapsed_human", "확인 불가")
-                lines.append(f"  {gname}: {gstatus} ({gelapsed})")
-    else:
-        lines.append("  확인 불가")
-    lines.append("")
+                if gstatus != "확인 불가" or gelapsed != "확인 불가":
+                    gate_lines.append(f"  {gname}: {gstatus} ({gelapsed})")
+    if gate_lines:
+        lines.append("[ Gate별 상태 및 소요 시간 ]")
+        lines.extend(gate_lines)
+        lines.append("")
 
     # 섹션 4: 실패/재시도 요약
     lines.append("[ 실패/재시도 요약 ]")
@@ -19007,30 +19070,32 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
         lines.append("  확인 불가")
     lines.append("")
 
-    # 섹션 6: 병목 요약
-    lines.append("[ 병목 요약 ]")
+    # 섹션 6: 병목 요약 (실제 데이터 없으면 생략)
     bottleneck = metrics.get("bottleneck", {})
     if isinstance(bottleneck, dict) and bottleneck:
         longest_phase = bottleneck.get("longest_phase", "확인 불가")
-        longest_elapsed = bottleneck.get("longest_phase_elapsed_human", "확인 불가")
-        lines.append(f"  가장 오래 걸린 Phase: {longest_phase} ({longest_elapsed})")
-        most_failures = bottleneck.get("most_failed_gate", "없음")
-        lines.append(f"  가장 많이 실패한 Gate: {most_failures}")
-    else:
-        lines.append("  확인 불가")
-    lines.append("")
+        if longest_phase != "확인 불가":
+            lines.append("[ 병목 요약 ]")
+            longest_elapsed = bottleneck.get("longest_phase_elapsed_human", "확인 불가")
+            lines.append(f"  가장 오래 걸린 Phase: {longest_phase} ({longest_elapsed})")
+            most_failures = bottleneck.get("most_failed_gate", "없음")
+            lines.append(f"  가장 많이 실패한 Gate: {most_failures}")
+            lines.append("")
 
-    # IMP-20260522-29C1 MT-4: 섹션 7 — 에이전트/세션별 소요 시간
-    lines.append("[ 에이전트/세션별 소요 시간 ]")
+    # IMP-20260522-29C1 MT-4: 섹션 7 — 에이전트/세션별 소요 시간 (실제 데이터 있는 항목만)
     agent_sessions = metrics.get("agent_sessions", {})
+    agent_lines = []
     if isinstance(agent_sessions, dict) and agent_sessions:
         for _run_id, session in agent_sessions.items():
             if isinstance(session, dict):
                 agent_id = session.get("agent_id", "확인 불가")
                 elapsed = session.get("elapsed_human", "확인 불가")
-                lines.append(f"  {agent_id}: {elapsed}")
-    lines.append("  (토큰 사용량: 확인 불가)")
-    lines.append("")
+                if elapsed != "확인 불가":
+                    agent_lines.append(f"  {agent_id}: {elapsed}")
+    if agent_lines:
+        lines.append("[ 에이전트/세션별 소요 시간 ]")
+        lines.extend(agent_lines)
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -19081,15 +19146,24 @@ def _collect_pipeline_metrics(
     # failure retry
     failure_retry = _failure_retry_summary(state)
 
-    # github actions (latest phase CI run_id 조회 시도)
+    # github actions (phase CI run_id 또는 external github_ci gate run_id)
     run_id_for_gh: Optional[str] = None
+    # 1. phase_attestations.phases에서 최신 run_id 조회 (올바른 경로)
     phase_ci_data = state.get("phase_attestations", {})
-    if isinstance(phase_ci_data, dict):
-        for _ph, att_data in phase_ci_data.items():
+    phases_dict = phase_ci_data.get("phases", {}) if isinstance(phase_ci_data, dict) else {}
+    if isinstance(phases_dict, dict):
+        for _ph, att_data in phases_dict.items():
             if isinstance(att_data, dict):
-                ci_run = att_data.get("ci_run_id")
+                ci_run = att_data.get("run_id")  # "ci_run_id" → "run_id" (올바른 키)
                 if ci_run:
                     run_id_for_gh = str(ci_run)
+    # 2. fallback: external_gates.github_ci.evidence에서 run_id 추출
+    if run_id_for_gh is None:
+        ext_gates = state.get("external_gates", {}) if isinstance(state, dict) else {}
+        gh_ci_gate = ext_gates.get("github_ci", {}) if isinstance(ext_gates, dict) else {}
+        ev_str = gh_ci_gate.get("evidence", "") if isinstance(gh_ci_gate, dict) else ""
+        if isinstance(ev_str, str) and ev_str.startswith("github_actions_run:"):
+            run_id_for_gh = ev_str.split(":", 1)[1]
     github_actions = _github_actions_duration_summary(repo, run_id_for_gh)
 
     # agent session
