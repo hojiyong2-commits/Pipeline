@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-05T11:59:30Z",
+  "generated_at": "2026-06-05T12:38:25Z",
   "pipeline_id": "IMP-20260605-58BF",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "befca59e496fb4bac60aac7664e1bbf37a0de052",
+  "commit_hint": "bfc10e3fbd97e6abbd31bfad0252bcbf9f07c470",
   "state": {
     "current_phase": "qa",
-    "phase_completed_at": "2026-06-05T11:54:08Z",
+    "phase_completed_at": "2026-06-05T12:37:53Z",
     "report_file": "dev_handover.xml",
-    "evidence": "pipeline.py,tests/test_verification_json_ssot.py,tests/test_consistency_guard_json_basis.py,tests/test_acceptance_request_verification_json.py,tests/test_gates_accept_verification_json.py,tests/test_hygiene_cleanup_workspace.py,CLAUDE.md,.claude/agents/pm-agent.md,.claude/agents/test-harness-agent.md,RELEASE_NOTES.md"
+    "evidence": "pipeline.py,tests/test_verification_json_ssot.py,tests/test_consistency_guard_json_basis.py,tests/test_acceptance_request_verification_json.py,tests/test_gates_accept_verification_json.py,tests/test_hygiene_cleanup_workspace.py,CLAUDE.md,.claude/agents/pm-agent.md,.claude/agents/test-harness-agent.md,RELEASE_NOTES.md,tests/test_protocol_consistency.py"
   },
   "agent_run": {
-    "run_id": "dev-32c08ec6df8b6ef5",
+    "run_id": "dev-eedefff7bd452783",
     "phase": "dev",
     "agent_id": "dev-agent",
     "status": "COMPLETED",
     "output_file": "dev_handover.xml",
-    "output_sha256": "687dddc075d07fca1ca065b8afc5acda56e5d238f08d66b4140f58e6d6042baa",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/agent_receipt_dev-32c08ec6df8b6ef5.json",
-    "receipt_sha256": "42a33afe949ba53a6fe9323a77ef656df552ff32d865bc7fe74449df11fbd16f",
+    "output_sha256": "eb0d8bba2579a02a9be7b3c3aa14bebdc257994356b8f6a6872830dde885e8c8",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/agent_receipt_dev-eedefff7bd452783.json",
+    "receipt_sha256": "55bdd3efa5a9f94fe1b7bbe4202e81b72cf6debfa6faa4c9faaf840c5db54c70",
     "used_by_phase": "dev",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260605-58BF\\dev\\dev-32c08ec6df8b6ef5.json"
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260605-58BF\\dev\\dev-eedefff7bd452783.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260605-58BF\\dev\\dev-32c08ec6df8b6ef5.json",
-      "path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/agent_receipt_dev-32c08ec6df8b6ef5.json",
-      "sha256": "42a33afe949ba53a6fe9323a77ef656df552ff32d865bc7fe74449df11fbd16f",
+      "source": ".pipeline\\agent_receipts\\IMP-20260605-58BF\\dev\\dev-eedefff7bd452783.json",
+      "path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/agent_receipt_dev-eedefff7bd452783.json",
+      "sha256": "55bdd3efa5a9f94fe1b7bbe4202e81b72cf6debfa6faa4c9faaf840c5db54c70",
       "size_bytes": 502,
       "requires_force_add": true
     },
@@ -38,17 +38,17 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/report_dev_handover.xml",
-      "sha256": "687dddc075d07fca1ca065b8afc5acda56e5d238f08d66b4140f58e6d6042baa",
-      "size_bytes": 3308,
-      "requires_force_add": true
+      "sha256": "eb0d8bba2579a02a9be7b3c3aa14bebdc257994356b8f6a6872830dde885e8c8",
+      "size_bytes": 3404,
+      "requires_force_add": false
     },
     {
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/scope_manifest_scope_manifest.json",
-      "sha256": "c2a2b76a9850f9986cb7c25f43bc209b8622c705a1158c3b59f9d159dfb962e8",
-      "size_bytes": 1899,
-      "requires_force_add": true
+      "sha256": "ab65c66de9fc0e4e7ec1e764941989c759cbace62e3bb1c7914ace73d3c67dce",
+      "size_bytes": 1945,
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [
@@ -76,6 +76,11 @@
       "path": "RELEASE_NOTES.md",
       "sha256": "e1444693faffa35fa587a35bfbef9bed8ddf73c62cc48f817f17da5d37e0d885",
       "size_bytes": 10320
+    },
+    {
+      "path": "tests/test_protocol_consistency.py",
+      "sha256": "27511fe84437aa2b611cfd47516248fe06321238d071d20b0306a1f2587c77f8",
+      "size_bytes": 32714
     }
   ],
   "local_only_files": []

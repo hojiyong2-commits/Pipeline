@@ -57,7 +57,8 @@
         "CLAUDE.md",
         ".claude/agents/pm-agent.md",
         ".claude/agents/test-harness-agent.md",
-        "RELEASE_NOTES.md"
+        "RELEASE_NOTES.md",
+        "tests/test_protocol_consistency.py"
       ],
       "affected_functions": [
         "N/A — 문서 전용 micro-task"

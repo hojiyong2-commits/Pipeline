@@ -15,6 +15,7 @@
     <file>.claude/agents/pm-agent.md</file>
     <file>.claude/agents/test-harness-agent.md</file>
     <file>RELEASE_NOTES.md</file>
+    <file>tests/test_protocol_consistency.py</file>
   </evidence>
   <scope_declaration>
     <files_to_modify>
@@ -28,6 +29,7 @@
       <file>.claude/agents/pm-agent.md</file>
       <file>.claude/agents/test-harness-agent.md</file>
       <file>RELEASE_NOTES.md</file>
+      <file>tests/test_protocol_consistency.py</file>
     </files_to_modify>
   </scope_declaration>
   <impact_analysis>
@@ -53,7 +55,7 @@
     <module id="MT-3" status="PASS">_write_acceptance_request vj_path/sha256 필드</module>
     <module id="MT-4" status="PASS">_verify_verification_json_freshness + gates accept 통합</module>
     <module id="MT-5" status="PASS">cmd_hygiene_cleanup_workspace + HYGIENE_SOURCE_LIKE_EXTENSIONS</module>
-    <module id="MT-6" status="PASS">문서 동기화 (CLAUDE.md, pm-agent.md, test-harness-agent.md, RELEASE_NOTES.md)</module>
+    <module id="MT-6" status="PASS">문서 동기화 + test_protocol_consistency.py regression fix (VJ mock)</module>
   </module_summary>
   <test_results>
     <total_tests>40</total_tests>
