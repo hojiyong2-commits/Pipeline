@@ -1,0 +1,11 @@
+{
+  "outcome": "BLOCKED",
+  "consistency_guard_status": "BLOCKED",
+  "failure_code": "stale_file_description",
+  "failure_category": "protocol_violation",
+  "blocked_source": "human_acceptance_packet.json.changed_files",
+  "blocked_file": "nonexistent_module.py",
+  "stale_file_description_triggered": true,
+  "return_phase": "build",
+  "allow_accept": false
+}

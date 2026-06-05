@@ -760,3 +760,10 @@ acceptance_criteria의 requirement 문구가 그대로 자동 생성 packet의 A
 점을 인지하고, 사용자가 PR에서 직접 확인 가능한 구체적 결과로만 작성합니다.
 PR 본문의 `<!-- PIPELINE_FINAL_PACKET_START -->` ~ `<!-- PIPELINE_FINAL_PACKET_END -->`
 블록은 PM이나 다른 에이전트가 임의로 수정하지 않습니다.
+
+### Verification JSON SSoT (IMP-20260605-58BF)
+
+`report final-packet` 실행 시 `human_acceptance_packet.json`이 함께 생성됩니다.
+이 JSON 파일은 Protocol Consistency Guard D/F 검사의 기계 검증 기준으로,
+PM은 `acceptance_criteria` 작성 시 사용자가 확인 가능한 구체적 결과물 경로를
+`--evidence` 인자로 제공할 수 있도록 step_plan에 명시합니다.

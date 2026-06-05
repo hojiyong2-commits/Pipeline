@@ -1,0 +1,20 @@
+{
+  "case_kind": "regression",
+  "description": "gates accept --result ACCEPT 실행 시 acceptance_request.json의 verification_json_sha256가 현재 human_acceptance_packet.json의 SHA256과 일치해야 한다. 일치하지 않으면 BLOCKED. 또한 JSON.changed_files != 실제 PR diff면 BLOCKED. (request-accept 이후 packet JSON이 손으로 수정되거나 PR에 새 commit이 push된 경우 회귀 보호)",
+  "scenario": {
+    "request_time": {
+      "verification_json_sha256": "abc123_sha_at_request_time",
+      "verification_json_changed_files": ["pipeline.py", "tests/test_x.py"],
+      "pr_head_sha": "sha_at_request",
+      "ci_run_id": "111"
+    },
+    "accept_time": {
+      "current_json_sha256": "def456_sha_after_manual_edit",
+      "current_json_changed_files": ["pipeline.py", "tests/test_x.py"],
+      "pr_head_sha": "sha_at_request",
+      "ci_run_id": "111"
+    }
+  },
+  "expected_outcome": "BLOCKED",
+  "expected_failure_code": "verification_json_changed"
+}

@@ -1,0 +1,10 @@
+{
+  "outcome": "BLOCKED",
+  "failure_code": "verification_json_changed",
+  "failure_category": "missing_evidence",
+  "verification_json_sha_compared": true,
+  "verification_json_sha_match": false,
+  "return_phase": "build",
+  "allow_accept": false,
+  "required_action_includes": "gates request-accept"
+}

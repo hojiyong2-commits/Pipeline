@@ -1,0 +1,15 @@
+{
+  "outcome": "PASS",
+  "final_packet_md_generated": true,
+  "final_packet_json_generated": true,
+  "json_schema_version": 1,
+  "json_pipeline_id_matches": true,
+  "json_pr_head_sha_matches": true,
+  "json_github_ci_run_id_matches": true,
+  "json_changed_files_matches_diff": true,
+  "json_acceptance_code_field_present": true,
+  "json_gates_field_present": true,
+  "json_requirements_field_present": true,
+  "consistency_guard_status": "PASS",
+  "stale_file_description_triggered": false
+}

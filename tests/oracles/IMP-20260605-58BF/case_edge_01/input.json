@@ -1,0 +1,12 @@
+{
+  "case_kind": "edge",
+  "description": "PR 본문 자유서술에 'github_actions.run_id', 'pipeline_state.json', 'evidence_sha256' 같은 점 표기 dotted 식별자가 포함되어 있지만 파일이 아니라 내부 값 경로 설명일 때. Guard는 JSON changed_files만 검사하므로 오탐 없이 PASS.",
+  "scenario": {
+    "pr_head_sha": "1234567890abcdef1234567890abcdef12345678",
+    "ci_run_id": "9999999002",
+    "pr_body_free_text": "- pipeline_state.json의 github_actions.run_id 필드 비교 로직 추가\n- evidence_sha256 검증 강화\n- changed_files SSoT는 human_acceptance_packet.json 기준\n- pipeline_contracts/IMP-X/cleanup_manifest.json 자동 기록",
+  "actual_pr_diff_files": ["pipeline.py", "CLAUDE.md", "tests/test_verification_json_ssot.py"],
+  "json_changed_files": ["pipeline.py", "CLAUDE.md", "tests/test_verification_json_ssot.py"]
+  },
+  "expected_outcome": "PASS"
+}

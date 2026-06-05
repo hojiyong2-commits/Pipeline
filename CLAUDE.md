@@ -1365,3 +1365,31 @@ python pipeline.py report update-pr-body
 기존 Nonce Gate(`gates accept` 단계에서 `--user-confirmed` 단독 차단, `--acceptance-code`
 필수)는 본 흐름과 분리되어 그대로 유지된다. Three-Gate, AC Tracking,
 Protocol Consistency Guard, Final Acceptance Readiness Gate도 함께 유지된다.
+
+## Verification JSON SSoT (IMP-20260605-58BF)
+
+`human_acceptance_packet.json`은 Protocol Consistency Guard D/F 검사의 **기계 검증 기준 파일**이다.
+`human_acceptance_packet.md`와 PR 본문은 사용자 렌더링용이며, D/F 검사는 JSON 파일의 `changed_files` 배열을 기준으로 수행한다.
+
+### 핵심 규칙
+
+- `report final-packet` 실행 시 `human_acceptance_packet.json`이 `human_acceptance_packet.md`와 동시에 생성된다.
+- `gates accept` 실행 시 `acceptance_request.json`에 `verification_json_path`와 `verification_json_sha256`이 기록된다.
+- `gates accept`는 실행 전 `_verify_verification_json_freshness`로 freshness를 검증한다.
+  - JSON 파일이 없거나 SHA가 다르면 `verification_json_changed` BLOCKED.
+  - JSON의 `changed_files`에 있는 파일이 현재 PR diff에 없으면 `changed_files_mismatch_vs_verification_json` BLOCKED.
+- Protocol Consistency Guard D/F 검사는 `verification_json`이 제공된 경우 JSON `changed_files`를 기준으로 동작하고, 미제공 시 텍스트 파싱 fallback을 사용한다.
+
+### cleanup-workspace 운영 규칙
+
+파이프라인 완료(`terminal_state=COMPLETE`) 후 작업 공간 임시 파일을 정리하려면:
+
+```powershell
+python pipeline.py hygiene cleanup-workspace --after-complete
+```
+
+- `terminal_state != COMPLETE`이면 즉시 `cleanup_workspace_terminal_state_required` BLOCKED(exit 1).
+- tracked 변경이 있으면 `cleanup_workspace_tracked_changes_present` BLOCKED(exit 1).
+- source-like 파일(`.py`, `.ts`, `.js`, `.ps1`, `.sh`)은 `possible-source-leftovers/` 서브폴더로 이동.
+- 결과는 `cleanup_manifest.json`에 기록된다.
+- `HYGIENE_SOURCE_LIKE_EXTENSIONS` SSoT 상수(`pipeline.py`)로 source-like 확장자를 관리한다.

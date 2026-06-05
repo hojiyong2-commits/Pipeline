@@ -2419,6 +2419,10 @@ HYGIENE_PROTECTED_PREFIXES: List[str] = [
     "pipeline_outputs/",
 ]
 
+# IMP-20260605-58BF MT-5: cleanup-workspace SSoT 상수
+# source-like 확장자: 이 확장자의 파일은 cleanup-workspace 시 possible-source-leftovers/ 서브폴더로 이동.
+HYGIENE_SOURCE_LIKE_EXTENSIONS: frozenset = frozenset({".py", ".ts", ".js", ".ps1", ".sh"})
+
 
 def _is_internal_artifact(path: str) -> bool:
     """경로가 workspace 내부 산출물인지 판정합니다 (WORKSPACE_INTERNAL_PATTERNS SSoT 사용).
@@ -3370,8 +3374,14 @@ def _write_acceptance_request(
     pr_url: str,
     pr_head_sha: str,
     ci_run_id: str,
+    verification_json_path: Optional[str] = None,
+    verification_json_sha256: Optional[str] = None,
 ) -> Dict[str, Any]:
     """acceptance_request.json 작성 후 데이터 dict 반환.
+
+    IMP-20260605-58BF MT-3: verification_json_path와 verification_json_sha256을
+    acceptance_request.json에 기록한다. gates accept 시 verification_json 동일성
+    검사(_verify_verification_json_freshness)에서 이 값을 사용한다.
 
     Args:
         pipeline_id: 활성 pipeline_id (예: IMP-20260531-BBDB).
@@ -3379,6 +3389,8 @@ def _write_acceptance_request(
         pr_url: 현재 PR URL (gh CLI 없으면 빈 문자열).
         pr_head_sha: PR head commit SHA (gh CLI 없으면 빈 문자열).
         ci_run_id: GitHub Actions run ID (gh CLI 없으면 빈 문자열).
+        verification_json_path: human_acceptance_packet.json 경로 (없으면 None).
+        verification_json_sha256: human_acceptance_packet.json SHA-256 (없으면 None).
     Returns:
         기록된 acceptance_request 데이터 dict (status=PENDING).
     Raises:
@@ -3411,6 +3423,8 @@ def _write_acceptance_request(
         "evidence": evidence,
         "evidence_sha256": evidence_sha256,
         "evidence_url": evidence if is_url else None,
+        "verification_json_path": verification_json_path,
+        "verification_json_sha256": verification_json_sha256,
         "status": "PENDING",
     }
     with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
@@ -3946,6 +3960,10 @@ def _consistency_extract_shas(text: str) -> List[str]:
 def _consistency_listed_files(text: str) -> "tuple[set, bool]":
     """PR body / packet의 불릿 목록(`- 파일`, `* 파일`)에서 파일명을 추출한다.
 
+    @deprecated IMP-20260605-58BF MT-2: _check_protocol_consistency에 verification_json이
+    제공될 때 검사 D/F는 이 함수 대신 JSON의 changed_files 필드를 사용한다.
+    이 함수는 verification_json이 없는 하위 호환 경로에서만 계속 사용된다.
+
     불릿 첫 토큰 중 `.`(확장자/숨김파일) 또는 `/`(경로 구분자)를 포함하는
     토큰만 파일 후보로 인정한다. `- 장점: 빠름`, `- python -m pytest` 같은
     서술/명령 텍스트의 첫 토큰은 파일이 아니므로 제외한다 (비파일 오탐 방지,
@@ -4037,16 +4055,21 @@ def _check_protocol_consistency(
     pr_head_sha: str,
     latest_ci_run_id: str,
     latest_ci_run_conclusion: str,
+    verification_json: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """PR body / acceptance packet / 실제 CI 상태 사이의 일치성을 검사하는 순수 함수.
+
+    IMP-20260605-58BF MT-2: verification_json 파라미터가 제공되면 검사 D/F에서
+    PR 본문 텍스트 파싱(_consistency_listed_files) 대신 JSON의 changed_files를 사용한다.
+    검사 A/B/C/E는 기존 텍스트 기반 로직을 유지한다.
 
     검사 항목 (하나라도 불일치하면 BLOCKED):
         A. CI run ID 일치 (stale_run_id)
         B. head SHA 일치 (stale_head_sha)
         C. 테스트 통과 수 일치 (test_count_mismatch)
-        D. changed files 일치 (changed_files_mismatch)
+        D. changed files 일치 (changed_files_mismatch) — verification_json 우선
         E. trust-root 변경 설명 의무 (trust_root_change_undocumented)
-        F. stale 파일 설명 탐지 (stale_file_description)
+        F. stale 파일 설명 탐지 (stale_file_description) — verification_json 우선
 
     이 함수는 순수 함수이다 — subprocess, _save, 파일 I/O를 호출하지 않는다.
 
@@ -4057,6 +4080,8 @@ def _check_protocol_consistency(
         pr_head_sha: 실제 PR head commit SHA.
         latest_ci_run_id: 실제 최신 GitHub Actions run ID.
         latest_ci_run_conclusion: 최신 CI run의 결론 (success 등).
+        verification_json: human_acceptance_packet.json 내용 dict (선택). 제공 시
+            검사 D/F에서 PR 본문 텍스트 파싱 대신 JSON의 changed_files 필드를 사용.
     Returns:
         {
             "status": "PASS" | "BLOCKED",
@@ -4241,123 +4266,174 @@ def _check_protocol_consistency(
                 },
             )
 
-    # --- 검사 F: stale 파일 설명 탐지 ---
-    # PR body에 실제 변경되지 않은 파일이 기술된 경우 차단한다.
-    # acceptance packet의 파일 목록은 검사 D에서 별도 처리한다.
+    # --- 검사 F + D: stale 파일 설명 탐지 및 changed files 일치 ---
+    # IMP-20260605-58BF MT-2: verification_json이 제공되면 JSON의 changed_files를
+    # 공식 파일 목록 소스로 사용하고, PR 본문 텍스트 파싱(_consistency_listed_files)은
+    # 생략한다. verification_json이 없으면 기존 텍스트 파싱 경로를 유지한다.
     changed_set = {str(f).replace("\\", "/") for f in pr_changed_files}
-    body_listed_files, body_truncated = _consistency_listed_files(pr_body)
-    if has_packet_tag:
-        packet_listed_files, packet_truncated = _consistency_listed_files(acceptance_packet_body)
+
+    # verification_json 기반 경로 (IMP-20260605-58BF MT-2)
+    if verification_json is not None and isinstance(verification_json, dict):
+        json_changed_files = [
+            str(f).replace("\\", "/")
+            for f in (verification_json.get("changed_files") or [])
+        ]
+        json_changed_set = {f for f in json_changed_files if f}
+
+        # 검사 F (JSON 기반): JSON 파일 목록에 실제 diff에 없는 파일이 있으면 BLOCKED
+        for listed in sorted(json_changed_set):
+            if listed and listed not in changed_set:
+                return _blocked(
+                    "stale_file_description",
+                    (
+                        f"verification_json의 변경 파일 목록에 "
+                        f"'{listed}'가 있으나 실제 PR diff에는 변경되지 않았습니다. "
+                        "verification_json(human_acceptance_packet.json)을 재생성하세요."
+                    ),
+                    {
+                        "stale_file": listed,
+                        "actual_changed_files": sorted(changed_set),
+                        "source": "verification_json",
+                    },
+                )
+
+        # 검사 D (JSON 기반): 실제 diff 파일 중 JSON 목록에 없는 비-테스트 파일 탐지
+        trust_root_files_d = {".github/workflows", "pipeline.py", "CLAUDE.md", "tests/", ".claude/agents/"}
+        missing_from_json: List[str] = []
+        for actual in sorted(changed_set):
+            base = actual.rsplit("/", 1)[-1]
+            is_test_file = (
+                actual.startswith("tests/")
+                or base.startswith("test_")
+            )
+            if is_test_file:
+                continue
+            if actual not in json_changed_set:
+                is_trust_root = any(actual.startswith(tr) for tr in trust_root_files_d)
+                if not is_trust_root:
+                    continue  # 비-trust-root 파일 누락은 허용 (JSON이 최신이라 가정)
+                missing_from_json.append(actual)
+        if missing_from_json:
+            return _blocked(
+                "changed_files_mismatch_vs_verification_json",
+                (
+                    "verification_json의 변경 파일 목록이 실제 PR diff와 다릅니다. "
+                    f"실제 변경된 trust-root 파일이 JSON에 없습니다: "
+                    f"{', '.join(missing_from_json)}. "
+                    "verification_json(human_acceptance_packet.json)을 재생성하세요."
+                ),
+                {
+                    "missing_from_json": missing_from_json,
+                    "actual_changed_files": sorted(changed_set),
+                    "json_changed_files": sorted(json_changed_set),
+                    "source": "verification_json",
+                },
+            )
     else:
-        packet_listed_files, _ = set(), False  # packet_truncated unused in this branch
-    for listed in body_listed_files:
-        normalized = listed.replace("\\", "/")
-        if normalized and normalized not in changed_set:
-            # PR body에 적힌 파일이 실제 diff에 없음 → stale 설명.
-            return _blocked(
-                "stale_file_description",
-                (
-                    f"PR 본문의 변경 파일 목록에 "
-                    f"'{listed}'가 있으나 실제 PR diff에는 변경되지 않았습니다. "
-                    "실제 변경되지 않은 파일 설명을 제거하세요."
-                ),
-                {
-                    "stale_file": listed,
-                    "actual_changed_files": sorted(changed_set),
-                },
-            )
+        # 기존 텍스트 파싱 경로 (verification_json 없을 때 하위 호환)
+        body_listed_files, body_truncated = _consistency_listed_files(pr_body)
+        if has_packet_tag:
+            packet_listed_files, packet_truncated = _consistency_listed_files(acceptance_packet_body)
+        else:
+            packet_listed_files, _ = set(), False  # packet_truncated unused in this branch
 
-    # --- 검사 D: changed files 일치 ---
-    # PR body에 명시적 파일 목록이 있을 때만 body 기반 누락 파일 검사한다.
-    if body_listed_files:
-        body_listed_set = {f.replace("\\", "/") for f in body_listed_files}
-        # 실제 changed files 중 body 목록에 없는 핵심 파일을 찾는다.
-        # 테스트 파일(tests/test_*.py 등)은 다수 변경 시 모두 나열이 어려우므로
-        # 비-테스트 핵심 파일만 검사한다.
-        missing_from_body: List[str] = []
-        trust_root_files = {".github/workflows", "pipeline.py", "CLAUDE.md", "tests/", ".claude/agents/"}
-        for actual in sorted(changed_set):
-            base = actual.rsplit("/", 1)[-1]
-            is_test_file = (
-                actual.startswith("tests/")
-                or base.startswith("test_")
-            )
-            if is_test_file:
-                continue
-            if actual not in body_listed_set:
-                # AB-3: truncation marker가 있으면 일반 파일 누락은 허용.
-                # trust-root 파일은 truncation이 있어도 반드시 명시 필요.
-                is_trust_root = any(actual.startswith(tr) for tr in trust_root_files)
-                if body_truncated and not is_trust_root:
-                    continue  # truncated body에서 일반 파일 누락은 허용
-                missing_from_body.append(actual)
-        if missing_from_body:
-            return _blocked(
-                "changed_files_mismatch",
-                (
-                    "PR 본문의 변경 파일 목록이 실제 PR diff와 다릅니다. "
-                    f"실제 변경되었으나 본문에 없는 파일: "
-                    f"{', '.join(missing_from_body)}. "
-                    "PR 본문 목록을 실제 diff와 일치시키세요."
-                ),
-                {
-                    "missing_from_body": missing_from_body,
-                    "actual_changed_files": sorted(changed_set),
-                    "pr_body_listed_files": sorted(body_listed_set),
-                },
-            )
+        # 검사 F (텍스트 기반): PR body에 실제 변경되지 않은 파일이 기술된 경우 차단
+        for listed in body_listed_files:
+            normalized = listed.replace("\\", "/")
+            if normalized and normalized not in changed_set:
+                return _blocked(
+                    "stale_file_description",
+                    (
+                        f"PR 본문의 변경 파일 목록에 "
+                        f"'{listed}'가 있으나 실제 PR diff에는 변경되지 않았습니다. "
+                        "실제 변경되지 않은 파일 설명을 제거하세요."
+                    ),
+                    {
+                        "stale_file": listed,
+                        "actual_changed_files": sorted(changed_set),
+                    },
+                )
 
-    # acceptance packet의 파일 목록이 있을 때 실제 diff와 비교한다.
-    # packet에만 있고 diff에 없는 파일 → changed_files_mismatch (stale 설명).
-    # diff에 있지만 packet에 없는 파일(tests/ 제외) → changed_files_mismatch (누락).
-    if has_packet_tag and packet_listed_files:
-        packet_listed_set = {f.replace("\\", "/") for f in packet_listed_files}
-        # packet에만 있고 diff에 없는 파일 탐지
-        extra_in_packet: List[str] = []
-        for pf in sorted(packet_listed_set):
-            if pf not in changed_set:
-                extra_in_packet.append(pf)
-        if extra_in_packet:
-            return _blocked(
-                "changed_files_mismatch",
-                (
-                    "acceptance packet의 변경 파일 목록에 실제 PR diff에 없는 파일이 포함되어 있습니다. "
-                    f"실제 diff에 없는 파일: {', '.join(extra_in_packet)}. "
-                    "acceptance packet을 실제 diff와 일치시키세요."
-                ),
-                {
-                    "extra_in_packet": extra_in_packet,
-                    "actual_changed_files": sorted(changed_set),
-                    "packet_listed_files": sorted(packet_listed_set),
-                },
-            )
-        # diff에 있지만 packet에 없는 비-테스트 파일 탐지
-        missing_from_packet: List[str] = []
-        for actual in sorted(changed_set):
-            base = actual.rsplit("/", 1)[-1]
-            is_test_file = (
-                actual.startswith("tests/")
-                or base.startswith("test_")
-            )
-            if is_test_file:
-                continue
-            if actual not in packet_listed_set:
-                missing_from_packet.append(actual)
-        if missing_from_packet:
-            return _blocked(
-                "changed_files_mismatch",
-                (
-                    "acceptance packet의 변경 파일 목록이 실제 PR diff와 다릅니다. "
-                    f"실제 변경되었으나 packet에 없는 파일: "
-                    f"{', '.join(missing_from_packet)}. "
-                    "acceptance packet을 실제 diff와 일치시키세요."
-                ),
-                {
-                    "missing_from_packet": missing_from_packet,
-                    "actual_changed_files": sorted(changed_set),
-                    "packet_listed_files": sorted(packet_listed_set),
-                },
-            )
+        # 검사 D (텍스트 기반): PR body에 명시적 파일 목록이 있을 때만 누락 파일 검사
+        if body_listed_files:
+            body_listed_set = {f.replace("\\", "/") for f in body_listed_files}
+            missing_from_body: List[str] = []
+            trust_root_files = {".github/workflows", "pipeline.py", "CLAUDE.md", "tests/", ".claude/agents/"}
+            for actual in sorted(changed_set):
+                base = actual.rsplit("/", 1)[-1]
+                is_test_file = (
+                    actual.startswith("tests/")
+                    or base.startswith("test_")
+                )
+                if is_test_file:
+                    continue
+                if actual not in body_listed_set:
+                    is_trust_root = any(actual.startswith(tr) for tr in trust_root_files)
+                    if body_truncated and not is_trust_root:
+                        continue
+                    missing_from_body.append(actual)
+            if missing_from_body:
+                return _blocked(
+                    "changed_files_mismatch",
+                    (
+                        "PR 본문의 변경 파일 목록이 실제 PR diff와 다릅니다. "
+                        f"실제 변경되었으나 본문에 없는 파일: "
+                        f"{', '.join(missing_from_body)}. "
+                        "PR 본문 목록을 실제 diff와 일치시키세요."
+                    ),
+                    {
+                        "missing_from_body": missing_from_body,
+                        "actual_changed_files": sorted(changed_set),
+                        "pr_body_listed_files": sorted(body_listed_set),
+                    },
+                )
+
+        if has_packet_tag and packet_listed_files:
+            packet_listed_set = {f.replace("\\", "/") for f in packet_listed_files}
+            extra_in_packet: List[str] = []
+            for pf in sorted(packet_listed_set):
+                if pf not in changed_set:
+                    extra_in_packet.append(pf)
+            if extra_in_packet:
+                return _blocked(
+                    "changed_files_mismatch",
+                    (
+                        "acceptance packet의 변경 파일 목록에 실제 PR diff에 없는 파일이 포함되어 있습니다. "
+                        f"실제 diff에 없는 파일: {', '.join(extra_in_packet)}. "
+                        "acceptance packet을 실제 diff와 일치시키세요."
+                    ),
+                    {
+                        "extra_in_packet": extra_in_packet,
+                        "actual_changed_files": sorted(changed_set),
+                        "packet_listed_files": sorted(packet_listed_set),
+                    },
+                )
+            missing_from_packet: List[str] = []
+            for actual in sorted(changed_set):
+                base = actual.rsplit("/", 1)[-1]
+                is_test_file = (
+                    actual.startswith("tests/")
+                    or base.startswith("test_")
+                )
+                if is_test_file:
+                    continue
+                if actual not in packet_listed_set:
+                    missing_from_packet.append(actual)
+            if missing_from_packet:
+                return _blocked(
+                    "changed_files_mismatch",
+                    (
+                        "acceptance packet의 변경 파일 목록이 실제 PR diff와 다릅니다. "
+                        f"실제 변경되었으나 packet에 없는 파일: "
+                        f"{', '.join(missing_from_packet)}. "
+                        "acceptance packet을 실제 diff와 일치시키세요."
+                    ),
+                    {
+                        "missing_from_packet": missing_from_packet,
+                        "actual_changed_files": sorted(changed_set),
+                        "packet_listed_files": sorted(packet_listed_set),
+                    },
+                )
 
     # --- 검사 E: trust-root 변경 설명 의무 ---
     # trust-root 파일은 PR body 또는 acceptance packet에 언급되어야 한다.
@@ -4394,6 +4470,53 @@ def _check_protocol_consistency(
         "allow_accept": True,
         "details": {},
     }
+
+
+def _verify_verification_json_freshness(req: Dict[str, Any]) -> Optional[str]:
+    """acceptance_request.json에 기록된 verification_json SHA256이 현재 파일과 일치하는지 검사.
+
+    IMP-20260605-58BF MT-4: gates accept 전에 verification_json이 request-accept 이후
+    변경되지 않았는지 확인한다. 변경됐으면 실패 코드 문자열을 반환하고, 정상이면 None.
+
+    Args:
+        req: acceptance_request.json 내용 dict.
+    Returns:
+        None (검증 통과 또는 verification_json 미기록 시 스킵) 또는
+        failure_code 문자열 ("verification_json_changed" 또는 "changed_files_mismatch_vs_verification_json").
+    """
+    if not isinstance(req, dict):
+        return None
+    stored_vj_sha = req.get("verification_json_sha256")
+    stored_vj_path = req.get("verification_json_path")
+    if not stored_vj_sha or not stored_vj_path:
+        # verification_json이 기록되지 않은 경우 (legacy 또는 파일 없었던 경우) 스킵
+        return None
+    # 현재 verification_json 파일 SHA256 계산
+    try:
+        vj_path = Path(stored_vj_path)
+        if not vj_path.exists():
+            # 파일이 없으면 변경된 것으로 간주
+            return "verification_json_changed"
+        current_sha = _sha256_file(vj_path)
+        if current_sha.lower() != stored_vj_sha.lower():
+            return "verification_json_changed"
+    except (OSError, TypeError):
+        # 경로 오류 등 예외 시 안전 실패
+        return "verification_json_changed"
+    # verification_json 내용 로드 후 changed_files 재검사
+    try:
+        vj_data = json.loads(vj_path.read_text(encoding="utf-8"))
+        current_pr_files = _get_git_diff_files(base="origin/main")
+        current_set = {str(f).replace("\\", "/") for f in current_pr_files}
+        vj_files = [str(f).replace("\\", "/") for f in (vj_data.get("changed_files") or [])]
+        vj_set = set(vj_files)
+        # vj에 있는 파일이 실제 PR diff에 없으면 불일치
+        for listed in sorted(vj_set):
+            if listed and listed not in current_set:
+                return "changed_files_mismatch_vs_verification_json"
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass  # 파싱 실패 시 SHA 검증만 수행 (이미 통과)
+    return None
 
 
 def _check_acceptance_readiness(
@@ -10240,6 +10363,127 @@ def _write_human_acceptance_packet(content: str) -> Path:
     return path
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260605-58BF MT-1: Verification JSON SSoT
+# human_acceptance_packet.json — packet의 기계 판독 가능 JSON 버전.
+# _check_protocol_consistency와 gates accept의 파싱 소스를 PR 본문 텍스트에서
+# 이 JSON으로 교체하여 PR 본문 파싱 오탐을 제거한다.
+# ---------------------------------------------------------------------------
+
+HUMAN_ACCEPTANCE_PACKET_JSON_FILE = "human_acceptance_packet.json"
+
+
+def _packet_json_output_path() -> Path:
+    """현재 cwd 기준 human_acceptance_packet.json 경로를 반환한다.
+
+    Returns:
+        human_acceptance_packet.json의 절대 Path.
+    Raises:
+        없음 (OSError fallback → BASE_DIR 사용).
+    """
+    try:
+        return Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
+    except OSError:
+        return BASE_DIR / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
+
+
+def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
+    """packet evidence dict를 JSON-serializable verification dict로 변환한다.
+
+    Verification JSON은 _check_protocol_consistency 검사 D/F의 공식 소스로,
+    PR 본문 텍스트 파싱 대신 이 구조화 데이터를 사용한다.
+
+    Args:
+        evidence: _collect_packet_evidence 반환 dict.
+    Returns:
+        {
+            "schema_version": 1,
+            "pipeline_id": str,
+            "generated_at": str,
+            "pr_url": str,
+            "pr_number": str,
+            "pr_head_sha": str,
+            "ci_run_id": str,
+            "actions_url": str,
+            "changed_files": list[str],
+            "gate_status": dict,
+            "structured_ac": list,
+            "ac_fulfillment_table": list or None,
+            "acceptance_code": str or None,
+        }
+    Raises:
+        없음.
+    """
+    pipeline_id = str(evidence.get("pipeline_id", "") or "")
+    pr_url = str(evidence.get("pr_url", "") or "")
+    pr_number = str(evidence.get("pr_number", "") or "")
+    pr_head_sha = str(evidence.get("pr_head_sha", "") or "")
+    ci_run_id = str(evidence.get("ci_run_id", "") or "")
+    actions_url = str(evidence.get("actions_url", "") or "")
+    changed_files = list(evidence.get("changed_files") or [])
+    gate_status = dict(evidence.get("gate_status") or {})
+    structured_ac = list(evidence.get("structured_ac") or [])
+    ac_table = evidence.get("ac_fulfillment_table")
+    acceptance_request = evidence.get("acceptance_request")
+
+    acceptance_code: Optional[str] = None
+    if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
+        nonce = str(acceptance_request["nonce"])
+        acceptance_code = f"ACCEPT-{pipeline_id}-{nonce}"
+
+    return {
+        "schema_version": 1,
+        "pipeline_id": pipeline_id,
+        "generated_at": str(evidence.get("generated_at", "") or _now()),
+        "pr_url": pr_url,
+        "pr_number": pr_number,
+        "pr_head_sha": pr_head_sha,
+        "ci_run_id": ci_run_id,
+        "actions_url": actions_url,
+        "changed_files": changed_files,
+        "gate_status": gate_status,
+        "structured_ac": structured_ac,
+        "ac_fulfillment_table": ac_table,
+        "acceptance_code": acceptance_code,
+    }
+
+
+def _write_verification_json(verification_json: Dict[str, Any]) -> Path:
+    """human_acceptance_packet.json을 작업 디렉터리에 저장한다.
+
+    Args:
+        verification_json: _build_verification_json 반환 dict.
+    Returns:
+        저장 파일 절대 Path.
+    Raises:
+        없음 (OSError 시 상위 호출자가 처리).
+    """
+    path = _packet_json_output_path()
+    path.write_text(
+        json.dumps(verification_json, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _load_verification_json() -> Optional[Dict[str, Any]]:
+    """human_acceptance_packet.json 로드. 없거나 파싱 오류 시 None.
+
+    Returns:
+        파싱된 dict 또는 None.
+    Raises:
+        없음 (OSError/JSONDecodeError swallow).
+    """
+    path = _packet_json_output_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        if not isinstance(data, dict):
+            return None
+        return data
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def _clean_pr_body_artifacts(
     pr_body: str, pipeline_id: str = "", current_nonce: str = ""
 ) -> str:
@@ -10380,6 +10624,13 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
     content = _build_final_packet_content(evidence)
     out_path = _write_human_acceptance_packet(content)
 
+    # IMP-20260605-58BF MT-1: JSON 버전도 함께 작성 (verification_json SSoT)
+    try:
+        verification_json = _build_verification_json(evidence)
+        json_path = _write_verification_json(verification_json)
+    except (OSError, TypeError, ValueError):
+        json_path = None
+
     pid = evidence.get("pipeline_id") or "(unknown)"
     pr_url = evidence.get("pr_url") or "(gh 없음)"
     ci_run_id = evidence.get("ci_run_id") or "(없음)"
@@ -10389,6 +10640,8 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
 
     print(GREEN("\n[FINAL PACKET 작성 완료]"))
     print(f"  파일: {_display_path(out_path)}")
+    if json_path is not None:
+        print(f"  JSON: {_display_path(json_path)}")
     print(f"  파이프라인: {pid}")
     print(f"  PR: {pr_url}")
     print(f"  CI run: {ci_run_id}")
@@ -13959,6 +14212,9 @@ def _run_protocol_consistency_check(
         print(f"[CONSISTENCY BLOCKED] {result.get('blocked_reason')}")
         sys.exit(1)
 
+    # IMP-20260605-58BF MT-2: verification_json 로드하여 검사 D/F에 전달
+    vj = _load_verification_json()
+
     # consistency 검사 실행
     result = _check_protocol_consistency(
         pr_body=collected["pr_body"],
@@ -13967,6 +14223,7 @@ def _run_protocol_consistency_check(
         pr_head_sha=collected["pr_head_sha"],
         latest_ci_run_id=collected["latest_ci_run_id"],
         latest_ci_run_conclusion=collected["latest_ci_run_conclusion"],
+        verification_json=vj,
     )
 
     _write_consistency_result(state, result, pid)
@@ -14008,6 +14265,8 @@ def _run_protocol_consistency_inline(
     if not collected.get("ok"):
         return collected["result"]
 
+    # IMP-20260605-58BF MT-2: verification_json을 로드하여 D/F 검사에 활용
+    vj = _load_verification_json()
     return _check_protocol_consistency(
         pr_body=collected["pr_body"],
         acceptance_packet_body=collected["acceptance_packet_body"],
@@ -14015,6 +14274,7 @@ def _run_protocol_consistency_inline(
         pr_head_sha=collected["pr_head_sha"],
         latest_ci_run_id=collected["latest_ci_run_id"],
         latest_ci_run_conclusion=collected["latest_ci_run_conclusion"],
+        verification_json=vj,
     )
 
 
@@ -14680,6 +14940,16 @@ def _auto_generate_final_packet_and_update_pr(
     )
     content = _build_final_packet_content(evidence_payload)
     packet_path = _write_human_acceptance_packet(content)
+
+    # IMP-20260605-58BF MT-1: JSON 버전도 함께 작성 (verification_json SSoT)
+    json_path_str: Optional[str] = None
+    try:
+        verification_json = _build_verification_json(evidence_payload)
+        json_path = _write_verification_json(verification_json)
+        json_path_str = _display_path(json_path)
+    except (OSError, TypeError, ValueError):
+        pass
+
     pr_updated = False
     if shutil.which("gh"):
         current_body = _get_pr_body_text() or ""
@@ -14687,6 +14957,7 @@ def _auto_generate_final_packet_and_update_pr(
         pr_updated = _gh_edit_pr_body(new_body)
     return {
         "packet_path": _display_path(packet_path),
+        "json_path": json_path_str,
         "pr_body_updated": pr_updated,
     }
 
@@ -14766,7 +15037,21 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         if existing_req is not None:
             print()
             print(f"  [새 코드 발급] {reuse_reason}")
-        req = _write_acceptance_request(pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id)
+        # IMP-20260605-58BF MT-3: verification_json 경로 및 SHA256 기록
+        vj_path_for_req = None
+        vj_sha_for_req = None
+        try:
+            vj_p = _packet_json_output_path()
+            if vj_p.exists():
+                vj_path_for_req = str(vj_p)
+                vj_sha_for_req = _sha256_file(vj_p)
+        except (OSError, TypeError):
+            pass
+        req = _write_acceptance_request(
+            pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id,
+            verification_json_path=vj_path_for_req,
+            verification_json_sha256=vj_sha_for_req,
+        )
         nonce = req["nonce"]
 
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
@@ -15562,6 +15847,36 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 )
                 _save(state)
                 _die("[BLOCKED] evidence 파일 변경됨 (evidence_changed) — gates request-accept 재실행 필요")
+        # IMP-20260605-58BF MT-4: verification_json freshness 검사
+        # request-accept 이후 verification_json이 변경됐으면 BLOCKED
+        _vj_freshness_code = _verify_verification_json_freshness(_req)
+        if _vj_freshness_code:
+            _record_failure_packet(
+                state, "acceptance", {},
+                command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                         "--evidence", str(getattr(args, "evidence", "<result-path>") or "")],
+                note=f"verification_json freshness check failed: {_vj_freshness_code}",
+                status="BLOCKED", phase="harness",
+                failure_code=_vj_freshness_code,
+                failure_category="missing_evidence",
+                summary_ko=(
+                    "verification_json(human_acceptance_packet.json)이 승인 요청 이후 변경되었습니다. "
+                    "gates request-accept를 다시 실행하세요."
+                ),
+                expected="verification_json SHA256 일치",
+                actual=f"failure_code={_vj_freshness_code}",
+                exit_code=1, owner="Pipeline Manager", return_phase="build",
+                required_actions=[
+                    "python pipeline.py report final-packet 을 재실행한 뒤",
+                    "python pipeline.py gates request-accept --evidence <경로> 를 다시 실행하세요.",
+                ],
+                retry_allowed=True,
+            )
+            _save(state)
+            _die(
+                f"[BLOCKED] verification_json 변경 감지 ({_vj_freshness_code}) — "
+                "gates request-accept 재실행 필요"
+            )
         # D4: pr gate → acceptance gate 연결 (bootstrap_exception 제외)
         bootstrap_exception_accept = state.get("codex_bootstrap_exception", False)
         if not bootstrap_exception_accept and accept_decision == "ACCEPT":
@@ -17583,6 +17898,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_hy_sch_status.add_argument(
         "--json", dest="json", action="store_true", default=False,
         help="JSON 형식으로 출력",
+    )
+
+    # IMP-20260605-58BF MT-5: cleanup-workspace 서브파서
+    p_hy_cleanup = hygiene_sub.add_parser(
+        "cleanup-workspace",
+        help="파이프라인 완료 후 untracked 임시 파일 정리 (COMPLETE 상태 필수)",
+    )
+    p_hy_cleanup.add_argument(
+        "--after-complete", dest="after_complete", action="store_true", default=False,
+        help="파이프라인 완료 후 자동 정리 모드 (terminal_state=COMPLETE 검증 포함)",
     )
 
     return parser
@@ -20040,14 +20365,182 @@ def _parse_older_than(value: str) -> int:
     raise ValueError(f"'7d' 형식이 필요합니다. 받은 값: {value!r}")
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260605-58BF MT-5: cleanup-workspace — 파이프라인 완료 후 작업 공간 정리
+# ---------------------------------------------------------------------------
+
+
+def cmd_hygiene_cleanup_workspace(args: "argparse.Namespace") -> None:
+    """hygiene cleanup-workspace — 파이프라인 완료 후 untracked 임시 파일 정리.
+
+    파이프라인이 COMPLETE 상태이고 tracked 변경이 없을 때,
+    untracked 파일들을 _deployment_root()/찌꺼기/YYYY-MM-DD/{session_id}/ 로 이동합니다.
+    source-like(*.py, *.ts, *.js, *.ps1, *.sh) 파일은 possible-source-leftovers/ 서브폴더로 이동합니다.
+    cleanup_manifest.json을 작성하여 이동 내역을 기록합니다.
+
+    IMP-20260605-58BF MT-5
+
+    Args:
+        args: argparse.Namespace. after_complete 속성(bool, optional) 포함 가능.
+    """
+    state = _load_state() or {}
+    pipeline_id: str = (state.get("pipeline_id") or "").strip()
+    terminal_state: Optional[str] = state.get("terminal_state")
+
+    # 1. COMPLETE 상태 확인
+    if terminal_state != "COMPLETE":
+        result: Dict[str, Any] = {
+            "status": "BLOCKED",
+            "failure_code": "cleanup_workspace_terminal_state_required",
+            "message": (
+                f"파이프라인 terminal_state={terminal_state!r}. "
+                "cleanup-workspace는 terminal_state=COMPLETE일 때만 실행됩니다."
+            ),
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        raise SystemExit(1)
+
+    # 2. tracked 변경 없음 확인 (git status --porcelain)
+    try:
+        import subprocess as _sp_cw
+        git_result = _sp_cw.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            cwd=str(BASE_DIR),
+        )
+        # 인덱스(tracked) 변경은 앞 두 글자 중 첫 번째가 공백이 아님
+        # 형식: XY filename, X=index status, Y=worktree status
+        tracked_lines = []
+        for line in (git_result.stdout or "").splitlines():
+            if len(line) >= 2 and line[0] not in (" ", "?", "!"):
+                tracked_lines.append(line)
+        if tracked_lines:
+            result2: Dict[str, Any] = {
+                "status": "BLOCKED",
+                "failure_code": "cleanup_workspace_tracked_changes_present",
+                "message": "tracked 변경이 있습니다. commit 또는 stash 후 다시 실행하세요.",
+                "tracked_changes": tracked_lines,
+            }
+            print(json.dumps(result2, ensure_ascii=False, indent=2))
+            raise SystemExit(1)
+    except (OSError, FileNotFoundError):
+        # git CLI 없음: 경고 후 계속
+        print("[HYGIENE CLEANUP-WORKSPACE] WARNING: git CLI 없음, tracked 변경 검사 생략.")
+        tracked_lines = []
+
+    # 3. untracked 파일 수집 (age=0일 기준)
+    # _hygiene_classify_fast는 git tracked 파일을 disposition=excluded(reason=git_tracked)로 분류.
+    # disposition=candidate인 파일은 이미 untracked/unstaged + archive 패턴 일치 파일이다.
+    active_ids: List[str] = []
+    if pipeline_id:
+        active_ids.append(pipeline_id)
+    all_items = _hygiene_collect_candidates(older_than_days=0, active_pipeline_ids=active_ids)
+    untracked_candidates = [
+        item for item in all_items
+        if item.get("disposition") == "candidate"
+    ]
+
+    # 4. 이동 경로 결정
+    try:
+        deploy_root = _deployment_root()
+    except SystemExit:
+        result3: Dict[str, Any] = {
+            "status": "BLOCKED",
+            "failure_code": "deploy_root_not_found",
+            "message": "배포 루트 폴더를 찾지 못했습니다. PIPELINE_DEPLOY_ROOT를 설정하세요.",
+        }
+        print(json.dumps(result3, ensure_ascii=False, indent=2))
+        raise SystemExit(1)
+
+    now = _datetime.datetime.now(_datetime.timezone.utc)
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%Y%m%d-%H%M%S")
+    session_id = pipeline_id if pipeline_id else f"cleanup-{time_str}"
+    dest_base = deploy_root / "찌꺼기" / date_str / session_id
+
+    # 5. 파일 이동
+    moved: List[Dict[str, Any]] = []
+    possible_source_leftovers: List[Dict[str, Any]] = []
+    move_errors: List[Dict[str, Any]] = []
+    total_bytes: int = 0
+
+    for item in untracked_candidates:
+        rel_path: str = item.get("rel_path", "")
+        if not rel_path:
+            continue
+        src = BASE_DIR / rel_path
+        ext = Path(rel_path).suffix.lower()
+        is_source_like = ext in HYGIENE_SOURCE_LIKE_EXTENSIONS
+
+        if is_source_like:
+            dest_dir = dest_base / "possible-source-leftovers"
+        else:
+            dest_dir = dest_base
+
+        dest_file = dest_dir / Path(rel_path).name
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            file_size = src.stat().st_size if src.exists() else 0
+            _shutil.move(str(src), str(dest_file))
+            total_bytes += file_size
+            entry: Dict[str, Any] = {"path": rel_path, "dest": str(dest_file), "size_bytes": file_size}
+            if is_source_like:
+                possible_source_leftovers.append(entry)
+            else:
+                moved.append(entry)
+        except (OSError, PermissionError) as exc:
+            move_errors.append({"path": rel_path, "error": str(exc)})
+
+    # 6. cleanup_manifest.json 작성
+    status_str = "OK" if not move_errors else "OK_WITH_ERRORS"
+    if not untracked_candidates:
+        status_str = "empty"
+
+    manifest: Dict[str, Any] = {
+        "pipeline_id": pipeline_id,
+        "executed_at": now.isoformat(),
+        "terminal_state": terminal_state,
+        "destination_root": str(dest_base),
+        "moved": moved,
+        "possible_source_leftovers": possible_source_leftovers,
+        "blocked": [],
+        "move_errors": move_errors,
+        "total_bytes": total_bytes,
+        "status": status_str,
+    }
+
+    manifest_path = BASE_DIR / "cleanup_manifest.json"
+    try:
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(f"[HYGIENE CLEANUP-WORKSPACE] WARNING: cleanup_manifest.json 저장 실패: {exc}")
+
+    # 7. 결과 출력
+    total_moved = len(moved) + len(possible_source_leftovers)
+    print(f"[HYGIENE CLEANUP-WORKSPACE] 완료: 이동={total_moved}개 "
+          f"(source-like={len(possible_source_leftovers)}개)  오류={len(move_errors)}개")
+    for m in moved:
+        print(f"  [이동] {m['path']} → {m['dest']}")
+    for s in possible_source_leftovers:
+        print(f"  [source-like] {s['path']} → {s['dest']}")
+    for e in move_errors:
+        print(f"  [오류] {e['path']}  {e['error']}")
+    print(f"  manifest: {manifest_path}")
+
+
 def cmd_hygiene(args: "argparse.Namespace") -> None:
-    """hygiene scan | archive | schedule — 임시 산출물 정리 CLI.
+    """hygiene scan | archive | schedule | cleanup-workspace — 임시 산출물 정리 CLI.
 
     scan: 후보 목록만 표시 (파일 이동 없음)
     archive: 후보를 Google Drive 찌꺼기 폴더로 이동
     schedule: Windows 작업 스케줄러 등록/상태 확인
+    cleanup-workspace: 파이프라인 완료 후 untracked 임시 파일 정리 (IMP-20260605-58BF MT-5)
 
-    IMP-20260601-0DF5 MT-1/MT-2
+    IMP-20260601-0DF5 MT-1/MT-2 / IMP-20260605-58BF MT-5
     """
     sub = getattr(args, "hygiene_sub", None)
     if sub == "scan":
@@ -20056,8 +20549,10 @@ def cmd_hygiene(args: "argparse.Namespace") -> None:
         cmd_hygiene_archive(args)
     elif sub == "schedule":
         cmd_hygiene_schedule(args)
+    elif sub == "cleanup-workspace":
+        cmd_hygiene_cleanup_workspace(args)
     else:
-        _die("[HYGIENE ERROR] 알 수 없는 hygiene 서브명령. scan|archive|schedule 중 선택하세요.")
+        _die("[HYGIENE ERROR] 알 수 없는 hygiene 서브명령. scan|archive|schedule|cleanup-workspace 중 선택하세요.")
 
 
 # ---------------------------------------------------------------------------

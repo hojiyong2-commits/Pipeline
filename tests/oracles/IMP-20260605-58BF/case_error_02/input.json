@@ -1,0 +1,13 @@
+{
+  "case_kind": "error",
+  "description": "hygiene cleanup-workspace --after-complete 실행 시 terminal_state != COMPLETE면 BLOCKED. 또한 tracked file 변경(git index 또는 worktree)이 있으면 BLOCKED. untracked 내부 산출물만 이동 가능.",
+  "scenario": {
+    "terminal_state": "PENDING",
+    "git_status": {
+      "tracked_modified": ["pipeline.py"],
+      "untracked_internal_artifacts": ["build_report.xml", "qa_report.xml"]
+    }
+  },
+  "expected_outcome": "BLOCKED",
+  "expected_failure_code": "cleanup_workspace_terminal_state_required"
+}
