@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "failure_code": "",
+  "failure_category": "",
+  "blocked_reason": null,
+  "return_phase": "build",
+  "allow_accept": true,
+  "details": {}
+}
