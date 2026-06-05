@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-05T11:54:30Z",
+  "pipeline_id": "IMP-20260605-58BF",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "6772558a20f619507bb3c9b9364887dbcdc0382b",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-05T11:54:08Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/test_verification_json_ssot.py,tests/test_consistency_guard_json_basis.py,tests/test_acceptance_request_verification_json.py,tests/test_gates_accept_verification_json.py,tests/test_hygiene_cleanup_workspace.py,CLAUDE.md,.claude/agents/pm-agent.md,.claude/agents/test-harness-agent.md,RELEASE_NOTES.md"
+  },
+  "agent_run": {
+    "run_id": "dev-32c08ec6df8b6ef5",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "687dddc075d07fca1ca065b8afc5acda56e5d238f08d66b4140f58e6d6042baa",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/agent_receipt_dev-32c08ec6df8b6ef5.json",
+    "receipt_sha256": "42a33afe949ba53a6fe9323a77ef656df552ff32d865bc7fe74449df11fbd16f",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260605-58BF\\dev\\dev-32c08ec6df8b6ef5.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260605-58BF\\dev\\dev-32c08ec6df8b6ef5.json",
+      "path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/agent_receipt_dev-32c08ec6df8b6ef5.json",
+      "sha256": "42a33afe949ba53a6fe9323a77ef656df552ff32d865bc7fe74449df11fbd16f",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/report_dev_handover.xml",
+      "sha256": "687dddc075d07fca1ca065b8afc5acda56e5d238f08d66b4140f58e6d6042baa",
+      "size_bytes": 3308,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260605-58BF/dev/scope_manifest_scope_manifest.json",
+      "sha256": "c2a2b76a9850f9986cb7c25f43bc209b8622c705a1158c3b59f9d159dfb962e8",
+      "size_bytes": 1899,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "50aa54485b98fdb32bfcfb1417e3ee3e2f2249f5bbebc95363f156276e9e13ea",
+      "size_bytes": 917996
+    },
+    {
+      "path": "tests/test_verification_json_ssot.py",
+      "sha256": "8b5d9d27da6debf65f837df25da2edc21f8ac9040fa134ea3562580c81f1c8d9",
+      "size_bytes": 8295
+    },
+    {
+      "path": "tests/test_consistency_guard_json_basis.py",
+      "sha256": "75591d9542a832792a33d6434c10f1d935a34dd60a1d64588418d2df2bef79f9",
+      "size_bytes": 13592
+    },
+    {
+      "path": "tests/test_acceptance_request_verification_json.py",
+      "sha256": "b6347e681cebb7a2719d58af783e81242972f64c00310b47060dfddb9adca3bc",
+      "size_bytes": 10939
+    },
+    {
+      "path": "tests/test_gates_accept_verification_json.py",
+      "sha256": "d97c6df7fa27f38e88278ed35cbefefb38f1fb58b7b2f400ab087c813213560f",
+      "size_bytes": 5962
+    },
+    {
+      "path": "tests/test_hygiene_cleanup_workspace.py",
+      "sha256": "1aa4ce9ad513432239b5109bf66451b3543cc95f5e640711da7747ff83de6535",
+      "size_bytes": 10694
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "4746af2c0291d95453b0c0f780a60373c2d91872ffc078145acd2dba31b039d0",
+      "size_bytes": 100955
+    },
+    {
+      "path": ".claude/agents/pm-agent.md",
+      "sha256": "3d14212e8e8fae56bc5c1a048ba3fe87a7b9ec4b4ce91598180a738e70e43470",
+      "size_bytes": 54314
+    },
+    {
+      "path": ".claude/agents/test-harness-agent.md",
+      "sha256": "24c7bfcb4c653a5c221a7c945f0a791af38b03b249268c88199fa612a61111f7",
+      "size_bytes": 13097
+    },
+    {
+      "path": "RELEASE_NOTES.md",
+      "sha256": "a61dfbebb7281cca0d87122b05010f17da03c5c765a3269ae03dadea1f3c6d22",
+      "size_bytes": 11202
+    }
+  ],
+  "local_only_files": []
+}
