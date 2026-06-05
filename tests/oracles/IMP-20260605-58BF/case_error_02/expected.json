@@ -1,0 +1,10 @@
+{
+  "outcome": "BLOCKED",
+  "failure_code": "cleanup_workspace_terminal_state_required",
+  "blocked_reason_includes": "terminal_state",
+  "files_moved_count": 0,
+  "cleanup_manifest_written": false,
+  "git_status_after_run": "unchanged",
+  "tracked_files_not_moved": true,
+  "untracked_files_not_moved_due_to_block": true
+}

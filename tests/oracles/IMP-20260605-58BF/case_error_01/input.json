@@ -1,0 +1,13 @@
+{
+  "case_kind": "error",
+  "description": "human_acceptance_packet.json의 changed_files에 실제 PR diff에 없는 파일이 포함된 경우. Guard는 stale_file_description으로 BLOCKED.",
+  "scenario": {
+    "pr_head_sha": "aaaa1111bbbb2222cccc3333dddd4444eeee5555",
+    "ci_run_id": "9999999003",
+    "actual_pr_diff_files": ["pipeline.py"],
+    "json_changed_files": ["pipeline.py", "nonexistent_module.py"],
+    "pr_body_free_text": "PR 본문은 자유서술. 더 이상 파일 검증 대상이 아님."
+  },
+  "expected_outcome": "BLOCKED",
+  "expected_failure_code": "stale_file_description"
+}

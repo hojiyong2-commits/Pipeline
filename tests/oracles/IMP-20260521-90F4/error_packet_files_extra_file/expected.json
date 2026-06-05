@@ -1,19 +1,19 @@
 {
   "status": "BLOCKED",
-  "failure_code": "changed_files_mismatch",
+  "failure_code": "stale_file_description",
   "failure_category": "protocol_violation",
-  "blocked_reason": "acceptance packet의 변경 파일 목록에 실제 PR diff에 없는 파일이 포함되어 있습니다. 실제 diff에 없는 파일: CLAUDE.md. acceptance packet을 실제 diff와 일치시키세요.",
+  "blocked_reason": "verification_json의 변경 파일 목록에 실제 PR diff에 없는 파일이 포함되어 있습니다. 실제 diff에 없는 파일: CLAUDE.md. verification_json을 실제 diff와 일치시키세요.",
   "return_phase": "build",
   "allow_accept": false,
   "details": {
-    "extra_in_packet": [
+    "extra_in_verification": [
       "CLAUDE.md"
     ],
     "actual_changed_files": [
       "core/acceptance/scorers.py",
       "pipeline.py"
     ],
-    "packet_listed_files": [
+    "verification_listed_files": [
       "CLAUDE.md",
       "core/acceptance/scorers.py",
       "pipeline.py"

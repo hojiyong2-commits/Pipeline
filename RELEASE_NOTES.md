@@ -1,5 +1,20 @@
 # Pipeline 릴리즈 노트
 
+## IMP-20260605-58BF — Verification JSON SSoT
+
+Protocol Consistency Guard D/F 검사를 PR 본문 텍스트 파싱에서 `human_acceptance_packet.json`
+JSON 기반으로 전환합니다. `final-packet` 실행 시 MD와 JSON이 동시 생성되며, `gates accept`는
+JSON SHA freshness를 자동 검증합니다. `hygiene cleanup-workspace` 서브커맨드도 추가됩니다.
+
+### 주요 변경
+
+- `_build_verification_json` / `_write_verification_json` / `_load_verification_json` 신규 함수
+- `_check_protocol_consistency(verification_json=...)`: D/F 검사 JSON 기반 처리
+- `_verify_verification_json_freshness`: `gates accept` 시 JSON freshness 검증
+- `_write_acceptance_request`: `verification_json_path`/`sha256` 필드 추가
+- `hygiene cleanup-workspace`: 파이프라인 완료 후 untracked 파일 정리
+- `HYGIENE_SOURCE_LIKE_EXTENSIONS` SSoT 상수 추가
+
 ## IMP-20260603-2E3D — PR Packet SSoT
 
 **머지 예정 / 작업 중:** 사용자 ACCEPT/REJECT 판단 자료(PR 본문의 "최종 확인 안내",

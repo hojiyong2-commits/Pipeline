@@ -1,0 +1,13 @@
+{
+  "case_kind": "normal",
+  "description": "report final-packet 실행 시 human_acceptance_packet.md와 human_acceptance_packet.json이 함께 생성되고, JSON의 changed_files가 실제 PR diff와 동일하면 Consistency Guard PASS",
+  "scenario": {
+    "pr_head_sha": "abc123def456789012345678901234567890abcd",
+    "ci_run_id": "9999999001",
+    "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/1234",
+    "actual_pr_diff_files": ["pipeline.py", "tests/test_verification_json_ssot.py"],
+    "pr_body_free_text_contains": "pipeline_state.json의 github_actions.run_id 필드 갱신",
+    "json_changed_files": ["pipeline.py", "tests/test_verification_json_ssot.py"]
+  },
+  "expected_outcome": "PASS"
+}
