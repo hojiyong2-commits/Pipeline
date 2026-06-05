@@ -5,5 +5,6 @@
   "pr_head_sha": "abc1234def567890abcdef1234567890abcdef12",
   "latest_ci_run_id": "22222",
   "latest_ci_run_conclusion": "success",
+  "verification_json": {"schema_version": 1, "changed_files": ["pipeline.py"]},
   "_test_note": "phase attestation run ID(pm_planner-dc0ed5f257936dd8)는 CI run ID와 비교 대상이 아님. GitHub CI 섹션의 runs/22222만 비교 -> PASS"
 }

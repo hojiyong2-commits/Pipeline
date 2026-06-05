@@ -4,5 +4,6 @@
   "pr_changed_files": ["pipeline.py"],
   "pr_head_sha": "abc1234def567890abcdef1234567890abcdef12",
   "latest_ci_run_id": "11111",
-  "latest_ci_run_conclusion": "success"
+  "latest_ci_run_conclusion": "success",
+  "verification_json": {"schema_version": 1, "changed_files": ["pipeline.py"]}
 }

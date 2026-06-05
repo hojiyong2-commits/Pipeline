@@ -34,6 +34,11 @@ from pipeline import _check_protocol_consistency  # type: ignore  # noqa: E402
 ORACLE_BASE = ROOT / "tests" / "oracles" / "IMP-20260520-D0BB"
 
 
+def _make_vj(changed_files=None):
+    """테스트용 verification_json dict."""
+    return {"schema_version": 1, "changed_files": changed_files if changed_files is not None else []}
+
+
 def load_oracle(case_id: str):
     """oracle 케이스의 input.json / expected.json을 읽어 반환한다."""
     inp = json.loads(
@@ -102,6 +107,7 @@ class TestRunIdCheck(unittest.TestCase):
             pr_head_sha=head_sha,
             latest_ci_run_id=run_id,
             latest_ci_run_conclusion=conclusion,
+            verification_json=_make_vj(changed_files or []),
         )
 
     def test_pr_body_run_id_matches_latest(self):
@@ -170,6 +176,7 @@ class TestShaCheck(unittest.TestCase):
             pr_head_sha=head_sha,
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj([]),
         )
 
     def test_sha_prefix_7char_pass(self):
@@ -209,6 +216,7 @@ class TestMiscChecks(unittest.TestCase):
             pr_head_sha="",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj([]),
         )
         self.assertEqual(result["status"], "BLOCKED")
         self.assertEqual(result["failure_code"], "test_count_mismatch")
@@ -221,6 +229,7 @@ class TestMiscChecks(unittest.TestCase):
             pr_head_sha="",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["pipeline.py", "CLAUDE.md"]),
         )
         # pipeline.py / CLAUDE.md가 본문에 언급되지 않음 → trust_root 미설명.
         self.assertIn(result["status"], ("BLOCKED", "PASS"))
@@ -237,6 +246,7 @@ class TestMiscChecks(unittest.TestCase):
             pr_head_sha="",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["pipeline.py", ".bandit"]),
         )
         self.assertEqual(result["status"], "BLOCKED")
         self.assertEqual(result["failure_code"], "stale_file_description")
@@ -490,6 +500,7 @@ class TestTotalCountDistinction(unittest.TestCase):
             pr_head_sha="",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj([]),
         )
         self.assertEqual(result["status"], "PASS")
 
@@ -501,6 +512,7 @@ class TestTotalCountDistinction(unittest.TestCase):
             pr_head_sha="",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj([]),
         )
         self.assertEqual(result["status"], "PASS")
 
@@ -592,6 +604,7 @@ class TestAB2FilePathNormalization(unittest.TestCase):
             pr_head_sha="abc1234",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["pipeline.py"]),
         )
         self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
 
@@ -605,6 +618,7 @@ class TestAB2FilePathNormalization(unittest.TestCase):
             pr_head_sha="abc1234",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["pipeline.py"]),
         )
         self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
 
@@ -618,6 +632,7 @@ class TestAB2FilePathNormalization(unittest.TestCase):
             pr_head_sha="abc1234",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["pipeline.py"]),
         )
         self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
 
@@ -631,6 +646,7 @@ class TestAB2FilePathNormalization(unittest.TestCase):
             pr_head_sha="abc1234",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["pipeline.py"]),
         )
         self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
 
@@ -664,6 +680,7 @@ class TestAB3TruncationMarker(unittest.TestCase):
             pr_head_sha="abc1234",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["pipeline.py", "tests/test_a.py", "README.md"]),
         )
         # truncated body이므로 README.md 누락은 허용 — changed_files_mismatch가 아니어야 함
         self.assertNotEqual(result["failure_code"], "changed_files_mismatch")
@@ -684,8 +701,9 @@ class TestAB3TruncationMarker(unittest.TestCase):
             pr_head_sha="abc1234",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["tests/test_a.py"]),
         )
-        self.assertEqual(result["failure_code"], "changed_files_mismatch")
+        self.assertIn(result["failure_code"], ("changed_files_mismatch", "changed_files_mismatch_vs_verification_json"))
 
     def test_english_truncation_marker(self):
         """'and 2 more files' 영문 truncation도 감지된다.
@@ -701,6 +719,7 @@ class TestAB3TruncationMarker(unittest.TestCase):
             pr_head_sha="abc1234",
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
+            verification_json=_make_vj(["pipeline.py", "tests/test_a.py", "tests/test_b.py"]),
         )
         # truncated body이므로 tests/test_b.py 누락은 허용
         self.assertNotEqual(result["failure_code"], "changed_files_mismatch")

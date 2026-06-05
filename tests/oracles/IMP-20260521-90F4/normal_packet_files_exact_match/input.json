@@ -5,5 +5,6 @@
   "pr_head_sha": "abc1234def567890abcdef1234567890abcdef12",
   "latest_ci_run_id": "33333",
   "latest_ci_run_conclusion": "success",
+  "verification_json": {"schema_version": 1, "changed_files": ["pipeline.py", "tests/test_protocol_consistency.py"]},
   "_test_note": "acceptance packet changed files가 실제 PR diff와 정확히 일치(pipeline.py, tests/test_protocol_consistency.py) -> PASS"
 }

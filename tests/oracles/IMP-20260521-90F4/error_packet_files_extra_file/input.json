@@ -5,5 +5,6 @@
   "pr_head_sha": "abc1234def567890abcdef1234567890abcdef12",
   "latest_ci_run_id": "44444",
   "latest_ci_run_conclusion": "success",
-  "_test_note": "acceptance packet에 CLAUDE.md가 포함되어 있으나 실제 PR diff에는 없음 -> changed_files_mismatch BLOCKED"
+  "verification_json": {"schema_version": 1, "changed_files": ["pipeline.py", "core/acceptance/scorers.py", "CLAUDE.md"]},
+  "_test_note": "verification_json에 CLAUDE.md가 포함되어 있으나 pr_changed_files에는 없음 -> stale_file_description BLOCKED"
 }

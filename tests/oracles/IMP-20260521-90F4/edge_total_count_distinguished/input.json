@@ -5,5 +5,6 @@
   "pr_head_sha": "abc1234def567890abcdef1234567890abcdef12",
   "latest_ci_run_id": "55555",
   "latest_ci_run_conclusion": "success",
+  "verification_json": {"schema_version": 1, "changed_files": ["pipeline.py"]},
   "_test_note": "PR body에 '20 passed'(개별 파일)와 '456 PASS'(전체)가 공존. 전체 수(456)만 비교 -> body=456, packet=456 일치 -> PASS. 개별 파일 수(20)가 전체 수와 혼동되면 test_count_mismatch 거짓 차단 발생"
 }
