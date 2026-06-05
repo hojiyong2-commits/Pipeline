@@ -11,5 +11,6 @@
   "output_file": "dev_handover.xml",
   "output_sha256": "57a29eeb4b2e4762e01950e11d82bbd912fa38ba0a424d7706ec649a873f3cc6",
   "evidence_files": [],
-  "pipeline_id_verified": true
+  "pipeline_id_verified": true,
+  "receipt_type": "agent-run-receipt-v1"
 }
