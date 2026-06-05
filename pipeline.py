@@ -4297,28 +4297,17 @@ def _check_protocol_consistency(
                     },
                 )
 
-        # 검사 D (JSON 기반): 실제 diff 파일 중 JSON 목록에 없는 비-테스트 파일 탐지
-        trust_root_files_d = {".github/workflows", "pipeline.py", "CLAUDE.md", "tests/", ".claude/agents/"}
+        # 검사 D (JSON 기반): 실제 diff 파일 중 JSON 목록에 없는 파일 탐지 (완전 일치 필요)
         missing_from_json: List[str] = []
         for actual in sorted(changed_set):
-            base = actual.rsplit("/", 1)[-1]
-            is_test_file = (
-                actual.startswith("tests/")
-                or base.startswith("test_")
-            )
-            if is_test_file:
-                continue
             if actual not in json_changed_set:
-                is_trust_root = any(actual.startswith(tr) for tr in trust_root_files_d)
-                if not is_trust_root:
-                    continue  # 비-trust-root 파일 누락은 허용 (JSON이 최신이라 가정)
                 missing_from_json.append(actual)
         if missing_from_json:
             return _blocked(
                 "changed_files_mismatch_vs_verification_json",
                 (
                     "verification_json의 변경 파일 목록이 실제 PR diff와 다릅니다. "
-                    f"실제 변경된 trust-root 파일이 JSON에 없습니다: "
+                    f"실제 변경된 파일이 JSON에 없습니다: "
                     f"{', '.join(missing_from_json)}. "
                     "verification_json(human_acceptance_packet.json)을 재생성하세요."
                 ),
@@ -4330,110 +4319,16 @@ def _check_protocol_consistency(
                 },
             )
     else:
-        # 기존 텍스트 파싱 경로 (verification_json 없을 때 하위 호환)
-        body_listed_files, body_truncated = _consistency_listed_files(pr_body)
-        if has_packet_tag:
-            packet_listed_files, packet_truncated = _consistency_listed_files(acceptance_packet_body)
-        else:
-            packet_listed_files, _ = set(), False  # packet_truncated unused in this branch
-
-        # 검사 F (텍스트 기반): PR body에 실제 변경되지 않은 파일이 기술된 경우 차단
-        for listed in body_listed_files:
-            normalized = listed.replace("\\", "/")
-            if normalized and normalized not in changed_set:
-                return _blocked(
-                    "stale_file_description",
-                    (
-                        f"PR 본문의 변경 파일 목록에 "
-                        f"'{listed}'가 있으나 실제 PR diff에는 변경되지 않았습니다. "
-                        "실제 변경되지 않은 파일 설명을 제거하세요."
-                    ),
-                    {
-                        "stale_file": listed,
-                        "actual_changed_files": sorted(changed_set),
-                    },
-                )
-
-        # 검사 D (텍스트 기반): PR body에 명시적 파일 목록이 있을 때만 누락 파일 검사
-        if body_listed_files:
-            body_listed_set = {f.replace("\\", "/") for f in body_listed_files}
-            missing_from_body: List[str] = []
-            trust_root_files = {".github/workflows", "pipeline.py", "CLAUDE.md", "tests/", ".claude/agents/"}
-            for actual in sorted(changed_set):
-                base = actual.rsplit("/", 1)[-1]
-                is_test_file = (
-                    actual.startswith("tests/")
-                    or base.startswith("test_")
-                )
-                if is_test_file:
-                    continue
-                if actual not in body_listed_set:
-                    is_trust_root = any(actual.startswith(tr) for tr in trust_root_files)
-                    if body_truncated and not is_trust_root:
-                        continue
-                    missing_from_body.append(actual)
-            if missing_from_body:
-                return _blocked(
-                    "changed_files_mismatch",
-                    (
-                        "PR 본문의 변경 파일 목록이 실제 PR diff와 다릅니다. "
-                        f"실제 변경되었으나 본문에 없는 파일: "
-                        f"{', '.join(missing_from_body)}. "
-                        "PR 본문 목록을 실제 diff와 일치시키세요."
-                    ),
-                    {
-                        "missing_from_body": missing_from_body,
-                        "actual_changed_files": sorted(changed_set),
-                        "pr_body_listed_files": sorted(body_listed_set),
-                    },
-                )
-
-        if has_packet_tag and packet_listed_files:
-            packet_listed_set = {f.replace("\\", "/") for f in packet_listed_files}
-            extra_in_packet: List[str] = []
-            for pf in sorted(packet_listed_set):
-                if pf not in changed_set:
-                    extra_in_packet.append(pf)
-            if extra_in_packet:
-                return _blocked(
-                    "changed_files_mismatch",
-                    (
-                        "acceptance packet의 변경 파일 목록에 실제 PR diff에 없는 파일이 포함되어 있습니다. "
-                        f"실제 diff에 없는 파일: {', '.join(extra_in_packet)}. "
-                        "acceptance packet을 실제 diff와 일치시키세요."
-                    ),
-                    {
-                        "extra_in_packet": extra_in_packet,
-                        "actual_changed_files": sorted(changed_set),
-                        "packet_listed_files": sorted(packet_listed_set),
-                    },
-                )
-            missing_from_packet: List[str] = []
-            for actual in sorted(changed_set):
-                base = actual.rsplit("/", 1)[-1]
-                is_test_file = (
-                    actual.startswith("tests/")
-                    or base.startswith("test_")
-                )
-                if is_test_file:
-                    continue
-                if actual not in packet_listed_set:
-                    missing_from_packet.append(actual)
-            if missing_from_packet:
-                return _blocked(
-                    "changed_files_mismatch",
-                    (
-                        "acceptance packet의 변경 파일 목록이 실제 PR diff와 다릅니다. "
-                        f"실제 변경되었으나 packet에 없는 파일: "
-                        f"{', '.join(missing_from_packet)}. "
-                        "acceptance packet을 실제 diff와 일치시키세요."
-                    ),
-                    {
-                        "missing_from_packet": missing_from_packet,
-                        "actual_changed_files": sorted(changed_set),
-                        "packet_listed_files": sorted(packet_listed_set),
-                    },
-                )
+        # verification_json이 없으면 BLOCKED — PR 본문 텍스트 파싱 fallback 제거 (IMP-20260605-58BF)
+        return _blocked(
+            "verification_json_missing",
+            (
+                "changed_files 검증에 필요한 verification_json"
+                "(human_acceptance_packet.json)이 없습니다. "
+                "gates request-accept를 먼저 실행하여 verification_json을 생성하세요."
+            ),
+            {"source": "verification_json"},
+        )
 
     # --- 검사 E: trust-root 변경 설명 의무 ---
     # trust-root 파일은 PR body 또는 acceptance packet에 언급되어야 한다.
@@ -4481,16 +4376,16 @@ def _verify_verification_json_freshness(req: Dict[str, Any]) -> Optional[str]:
     Args:
         req: acceptance_request.json 내용 dict.
     Returns:
-        None (검증 통과 또는 verification_json 미기록 시 스킵) 또는
-        failure_code 문자열 ("verification_json_changed" 또는 "changed_files_mismatch_vs_verification_json").
+        None (검증 통과) 또는
+        failure_code 문자열 ("verification_json_missing", "verification_json_changed" 또는 "changed_files_mismatch_vs_verification_json").
     """
     if not isinstance(req, dict):
         return None
     stored_vj_sha = req.get("verification_json_sha256")
     stored_vj_path = req.get("verification_json_path")
     if not stored_vj_sha or not stored_vj_path:
-        # verification_json이 기록되지 않은 경우 (legacy 또는 파일 없었던 경우) 스킵
-        return None
+        # verification_json 필드가 없으면 BLOCKED (IMP-20260605-58BF)
+        return "verification_json_missing"
     # 현재 verification_json 파일 SHA256 계산
     try:
         vj_path = Path(stored_vj_path)
@@ -15860,7 +15755,7 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 failure_code=_vj_freshness_code,
                 failure_category="missing_evidence",
                 summary_ko=(
-                    "verification_json(human_acceptance_packet.json)이 승인 요청 이후 변경되었습니다. "
+                    "verification_json(human_acceptance_packet.json)이 없거나 승인 요청 이후 변경되었습니다. "
                     "gates request-accept를 다시 실행하세요."
                 ),
                 expected="verification_json SHA256 일치",

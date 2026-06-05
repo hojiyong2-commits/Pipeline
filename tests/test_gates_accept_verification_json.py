@@ -75,14 +75,14 @@ class TestVerifyVerificationJsonFreshness(unittest.TestCase):
                 result = _verify_verification_json_freshness(req)
             self.assertIsNone(result)
 
-    def test_normal_skip_when_no_vj_fields(self) -> None:
-        """req에 vj 경로/SHA가 없으면 None (스킵) (normal)."""
+    def test_normal_blocked_when_no_vj_fields(self) -> None:
+        """req에 vj 경로/SHA가 없으면 verification_json_missing BLOCKED (normal)."""
         req: Dict[str, Any] = {
             "pipeline_id": "IMP-20260605-58BF",
             "nonce": "ABCDEFGH",
         }
         result = _verify_verification_json_freshness(req)
-        self.assertIsNone(result)
+        self.assertEqual(result, "verification_json_missing")
 
     def test_edge_returns_changed_when_file_missing(self) -> None:
         """vj 파일이 없으면 verification_json_changed 반환 (edge)."""
@@ -127,17 +127,17 @@ class TestVerifyVerificationJsonFreshness(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_error_empty_req(self) -> None:
-        """빈 dict req이면 None 반환 (스킵) (error)."""
+        """빈 dict req이면 verification_json_missing 반환 (error)."""
         result = _verify_verification_json_freshness({})
-        self.assertIsNone(result)
+        self.assertEqual(result, "verification_json_missing")
 
-    def test_normal_skip_when_only_sha_field(self) -> None:
-        """sha만 있고 path가 없으면 None 반환 (스킵) (normal)."""
+    def test_normal_blocked_when_only_sha_field(self) -> None:
+        """sha만 있고 path가 없으면 verification_json_missing 반환 (normal)."""
         req = {
             "verification_json_sha256": "aabbcc",
         }
         result = _verify_verification_json_freshness(req)
-        self.assertIsNone(result)
+        self.assertEqual(result, "verification_json_missing")
 
 
 if __name__ == "__main__":

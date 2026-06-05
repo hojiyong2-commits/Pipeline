@@ -120,12 +120,30 @@ class TestCheckProtocolConsistencyJsonBasis(unittest.TestCase):
         self.assertFalse(result.get("allow_accept", True))
         self.assertEqual(result.get("failure_code"), "changed_files_mismatch_vs_verification_json")
 
-    def test_edge_json_fallback_when_no_vj(self) -> None:
-        """verification_json 미제공 시 텍스트 파싱 경로로 fallback (edge)."""
+    def test_edge_json_blocked_when_no_vj(self) -> None:
+        """verification_json 미제공 시 verification_json_missing으로 BLOCKED (edge)."""
         args = _base_args(changed_files=["src/module.py"])
         result = _check_protocol_consistency(**args, verification_json=None)
-        # fallback 경로에서 changed_files_mismatch_vs_verification_json failure_code 없음
-        self.assertNotEqual(result.get("failure_code"), "changed_files_mismatch_vs_verification_json")
+        self.assertFalse(result.get("allow_accept", True))
+        self.assertEqual(result.get("failure_code"), "verification_json_missing")
+
+    def test_edge_json_d_check_non_trust_root_missing_blocked(self) -> None:
+        """vj에 없는 비-trust-root 파일이 pr_changed_files에 있어도 D 검사 BLOCKED (edge)."""
+        # vj에는 src/module.py만, 실제 diff에는 src/extra.py 추가 (비-trust-root)
+        vj = _make_vj(changed_files=["src/module.py"])
+        args = _base_args(changed_files=["src/module.py", "src/extra.py"])
+        result = _check_protocol_consistency(**args, verification_json=vj)
+        self.assertFalse(result.get("allow_accept", True))
+        self.assertEqual(result.get("failure_code"), "changed_files_mismatch_vs_verification_json")
+
+    def test_edge_no_vj_with_dotted_id_in_pr_body_blocked(self) -> None:
+        """verification_json 없음 + PR 본문에 github_actions.run_id 있어도 fallback 없이 BLOCKED (edge)."""
+        args = _base_args(changed_files=["src/module.py"])
+        # PR 본문에 dotted 식별자 포함
+        args["pr_body"] = args["pr_body"] + "\ngithub_actions.run_id\nacceptance_request.json.packet_sha256\npipeline_state.json"
+        result = _check_protocol_consistency(**args, verification_json=None)
+        self.assertFalse(result.get("allow_accept", True))
+        self.assertEqual(result.get("failure_code"), "verification_json_missing")
 
     def test_error_json_d_check_empty_changed_files(self) -> None:
         """vj.changed_files가 빈 리스트이고 pr_changed_files도 비어있으면 PASS (error/edge)."""
