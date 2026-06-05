@@ -14699,7 +14699,7 @@ def _format_ac_fulfillment_output(
         lines.append("[자동 검증 요약]")
         lines.append("")
         for entry in internal:
-            req = entry.get("requirement", "")[:60]
+            req = entry.get("requirement", "")
             lines.append(f"{entry['ac_id']}: {entry.get('result', '?')} — {req}")
         lines.append("")
 
@@ -19006,30 +19006,34 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
         lines.append("  확인 불가")
     lines.append("")
 
-    # 섹션 2: Phase별 소요 시간
-    lines.append("[ Phase별 소요 시간 ]")
+    # 섹션 2: Phase별 소요 시간 (실제 데이터 있는 항목만, 빈 섹션 생략)
     phase_elapsed = metrics.get("phase_elapsed", {})
-    if isinstance(phase_elapsed, dict) and phase_elapsed:
+    phase_lines = []
+    if isinstance(phase_elapsed, dict):
         for pname, pdata in phase_elapsed.items():
             if isinstance(pdata, dict):
                 elapsed = pdata.get("elapsed_human", "확인 불가")
-                lines.append(f"  {pname}: {elapsed}")
-    else:
-        lines.append("  확인 불가")
-    lines.append("")
+                if elapsed != "확인 불가":
+                    phase_lines.append(f"  {pname}: {elapsed}")
+    if phase_lines:
+        lines.append("[ Phase별 소요 시간 ]")
+        lines.extend(phase_lines)
+        lines.append("")
 
-    # 섹션 3: Gate별 상태 및 소요 시간
-    lines.append("[ Gate별 상태 및 소요 시간 ]")
+    # 섹션 3: Gate별 상태 및 소요 시간 (실제 데이터 있는 항목만, 빈 섹션 생략)
     gate_elapsed = metrics.get("gate_elapsed", {})
-    if isinstance(gate_elapsed, dict) and gate_elapsed:
+    gate_lines = []
+    if isinstance(gate_elapsed, dict):
         for gname, gdata in gate_elapsed.items():
             if isinstance(gdata, dict):
                 gstatus = gdata.get("status", "확인 불가")
                 gelapsed = gdata.get("elapsed_human", "확인 불가")
-                lines.append(f"  {gname}: {gstatus} ({gelapsed})")
-    else:
-        lines.append("  확인 불가")
-    lines.append("")
+                if gstatus != "확인 불가" or gelapsed != "확인 불가":
+                    gate_lines.append(f"  {gname}: {gstatus} ({gelapsed})")
+    if gate_lines:
+        lines.append("[ Gate별 상태 및 소요 시간 ]")
+        lines.extend(gate_lines)
+        lines.append("")
 
     # 섹션 4: 실패/재시도 요약
     lines.append("[ 실패/재시도 요약 ]")
@@ -19066,30 +19070,32 @@ def _format_metrics_summary_ko(metrics: Dict[str, Any]) -> str:
         lines.append("  확인 불가")
     lines.append("")
 
-    # 섹션 6: 병목 요약
-    lines.append("[ 병목 요약 ]")
+    # 섹션 6: 병목 요약 (실제 데이터 없으면 생략)
     bottleneck = metrics.get("bottleneck", {})
     if isinstance(bottleneck, dict) and bottleneck:
         longest_phase = bottleneck.get("longest_phase", "확인 불가")
-        longest_elapsed = bottleneck.get("longest_phase_elapsed_human", "확인 불가")
-        lines.append(f"  가장 오래 걸린 Phase: {longest_phase} ({longest_elapsed})")
-        most_failures = bottleneck.get("most_failed_gate", "없음")
-        lines.append(f"  가장 많이 실패한 Gate: {most_failures}")
-    else:
-        lines.append("  확인 불가")
-    lines.append("")
+        if longest_phase != "확인 불가":
+            lines.append("[ 병목 요약 ]")
+            longest_elapsed = bottleneck.get("longest_phase_elapsed_human", "확인 불가")
+            lines.append(f"  가장 오래 걸린 Phase: {longest_phase} ({longest_elapsed})")
+            most_failures = bottleneck.get("most_failed_gate", "없음")
+            lines.append(f"  가장 많이 실패한 Gate: {most_failures}")
+            lines.append("")
 
-    # IMP-20260522-29C1 MT-4: 섹션 7 — 에이전트/세션별 소요 시간
-    lines.append("[ 에이전트/세션별 소요 시간 ]")
+    # IMP-20260522-29C1 MT-4: 섹션 7 — 에이전트/세션별 소요 시간 (실제 데이터 있는 항목만)
     agent_sessions = metrics.get("agent_sessions", {})
+    agent_lines = []
     if isinstance(agent_sessions, dict) and agent_sessions:
         for _run_id, session in agent_sessions.items():
             if isinstance(session, dict):
                 agent_id = session.get("agent_id", "확인 불가")
                 elapsed = session.get("elapsed_human", "확인 불가")
-                lines.append(f"  {agent_id}: {elapsed}")
-    lines.append("  (토큰 사용량: 확인 불가)")
-    lines.append("")
+                if elapsed != "확인 불가":
+                    agent_lines.append(f"  {agent_id}: {elapsed}")
+    if agent_lines:
+        lines.append("[ 에이전트/세션별 소요 시간 ]")
+        lines.extend(agent_lines)
+        lines.append("")
 
     return "\n".join(lines)
 
