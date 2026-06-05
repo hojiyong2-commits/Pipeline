@@ -11,14 +11,13 @@ IMP-20260605-58BF MT-2: _check_protocol_consistency JSON-basis 검사 테스트.
   - _run_protocol_consistency_inline 이 _load_verification_json()를 호출하고
     그 결과를 _check_protocol_consistency에 전달한다.
 """
-import json
 import os
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import unittest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -26,9 +25,6 @@ if str(ROOT) not in sys.path:
 
 from pipeline import (  # type: ignore  # noqa: E402
     _check_protocol_consistency,
-    _load_verification_json,
-    _write_verification_json,
-    _build_verification_json,
 )
 
 
@@ -198,7 +194,7 @@ class TestRunProtocolConsistencyPassesVj(unittest.TestCase):
                 with patch("pipeline._collect_pr_consistency_data", return_value=collected_ok):
                     with patch("pipeline._load_verification_json", return_value=None) as mock_load:
                         with patch("pipeline._check_protocol_consistency",
-                                   return_value={"allow_accept": True}) as mock_check:
+                                   return_value={"allow_accept": True}):
                             _run_protocol_consistency_inline(
                                 state, "owner/repo", "1", "IMP-20260605-58BF"
                             )

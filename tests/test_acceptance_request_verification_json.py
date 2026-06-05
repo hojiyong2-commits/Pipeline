@@ -7,14 +7,13 @@ IMP-20260605-58BF MT-3: _write_acceptance_request의 verification_json 필드 �
   - verification_json 파일 없을 때 None 필드로 graceful 처리
   - _cmd_gates_request_accept가 verification_json_path/sha256을 acceptance_request.json에 기록
 """
-import json
 import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -80,6 +79,7 @@ class TestWriteAcceptanceRequestVerificationJson(unittest.TestCase):
                 # 파일로도 확인
                 loaded = _load_acceptance_request()
                 self.assertIsNotNone(loaded)
+                assert loaded is not None
                 self.assertEqual(loaded["verification_json_path"], str(vj_path))
                 self.assertEqual(loaded["verification_json_sha256"], vj_sha)
             finally:
@@ -184,6 +184,7 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
 
                 loaded = _load_acceptance_request()
                 self.assertIsNotNone(loaded)
+                assert loaded is not None
                 # verification_json_path가 기록되었는지 확인
                 self.assertIsNotNone(loaded.get("verification_json_path"))
                 self.assertIsNotNone(loaded.get("verification_json_sha256"))
@@ -228,6 +229,7 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
 
                 loaded = _load_acceptance_request()
                 self.assertIsNotNone(loaded)
+                assert loaded is not None
                 self.assertIsNone(loaded.get("verification_json_path"))
                 self.assertIsNone(loaded.get("verification_json_sha256"))
             finally:

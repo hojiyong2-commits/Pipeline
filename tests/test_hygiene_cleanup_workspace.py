@@ -94,7 +94,6 @@ class TestCleanupWorkspaceNormal(unittest.TestCase):
         file_contents: str = "test content",
     ) -> Path:
         """임시 디렉터리에서 cleanup-workspace를 실행하고 manifest 경로를 반환."""
-        import importlib
         import pipeline as _pipeline_module  # type: ignore
 
         orig_base_dir = _pipeline_module.BASE_DIR

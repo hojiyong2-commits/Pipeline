@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -80,7 +80,7 @@ class TestBuildVerificationJson(unittest.TestCase):
         """evidence에 빈 changed_files가 전달되면 빈 리스트로 반환된다 (edge)."""
         # _build_verification_json은 evidence dict를 그대로 매핑하므로
         # evidence["changed_files"]가 명시적으로 빈 리스트이면 결과도 빈 리스트여야 한다.
-        evidence = {
+        evidence: Dict[str, Any] = {
             "pipeline_id": "IMP-20260605-58BF",
             "pr_url": "",
             "pr_number": "",
@@ -153,6 +153,7 @@ class TestWriteVerificationJson(unittest.TestCase):
                 _write_verification_json(vj)
                 loaded = _load_verification_json()
                 self.assertIsNotNone(loaded)
+                assert loaded is not None
                 self.assertEqual(loaded["acceptance_code"], "ACCEPT-IMP-20260605-58BF-ZZZZZZZZ")
             finally:
                 os.chdir(orig_cwd)

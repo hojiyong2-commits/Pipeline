@@ -10,7 +10,6 @@ IMP-20260605-58BF MT-4: _verify_verification_json_freshness 테스트.
   - vj SHA가 동일하지만 changed_files 불일치 시 "changed_files_mismatch_vs_verification_json"
 """
 import hashlib
-import json
 import os
 import sys
 import tempfile
@@ -36,7 +35,7 @@ def _sha256_bytes(data: bytes) -> str:
 
 def _make_vj_file(tmpdir: Path, changed_files: Optional[list] = None) -> tuple:
     """verification_json 파일을 생성하고 (path, sha256) 반환."""
-    evidence = {
+    evidence: Dict[str, Any] = {
         "pipeline_id": "IMP-20260605-58BF",
         "pr_url": "",
         "pr_number": "",
