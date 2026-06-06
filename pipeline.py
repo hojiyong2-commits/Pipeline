@@ -10314,7 +10314,7 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     lines.append("1. PR 링크를 연다.")
     lines.append("2. GitHub Actions 자동 검사가 성공인지 본다.")
     lines.append("3. 요구사항 충족표를 본다.")
-    lines.append(f"4. 결과물이 요청과 맞으면 아래 승인 코드를 GitHub PR 댓글에 한 줄로 남긴다.")
+    lines.append("4. 결과물이 요청과 맞으면 아래 승인 코드를 GitHub PR 댓글에 한 줄로 남긴다.")
     lines.append(f"   현재 허용 승인자: {PIPELINE_ALLOWED_APPROVER}")
     lines.append("   Claude/Codex가 대신 입력할 수 없습니다. 반드시 사람이 직접 입력해야 합니다.")
     lines.append("5. 틀리면 거절 코드 뒤에 이유를 적는다.")
