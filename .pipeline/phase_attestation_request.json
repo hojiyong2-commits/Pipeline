@@ -51,12 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "gate_roi_report.md",
-      "sha256": "a1224e51e436fef663ef3683ee80847a3aca997aad1c5566f2c45c389e8b1c88",
-      "size_bytes": 11096
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
