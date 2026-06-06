@@ -38,8 +38,8 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/IMP-20260606-D9F4/dev/report_dev_handover.xml",
-      "sha256": "4c97d65e0dea042178f7125a95fcb98334ff466e146e36ecfbe5f2e2c7876706",
-      "size_bytes": 2171,
+      "sha256": "e230b02492c24a08cfabc630d8985e9eb16a6bf531c888eafc6d6a5fc94d1557",
+      "size_bytes": 2115,
       "requires_force_add": true
     },
     {
@@ -51,22 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "65680d0d2a30ab7fe4fb1071da9570375ef4032312f31ca5f6e3cced4ded48c8",
-      "size_bytes": 930070
-    },
-    {
-      "path": "tests/e2e/test_real_cli_paths.py",
-      "sha256": "1a7ab60b66e89beb2bce4cccac19fb25e4e93a6917d611c465df3510b145bca6",
-      "size_bytes": 64734
-    },
-    {
-      "path": ".github/workflows/ci.yml",
-      "sha256": "c3552aebf98d6a533c05f1a7e8b5bd0375f84062c2705e9b404d7214249ede25",
-      "size_bytes": 28410
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
