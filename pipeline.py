@@ -2427,10 +2427,11 @@ HYGIENE_SOURCE_LIKE_EXTENSIONS: frozenset = frozenset({".py", ".ts", ".js", ".ps
 # IMP-20260606-D9F4 MT-1: User Acceptance Provenance Gate — SSoT 상수
 # ---------------------------------------------------------------------------
 # PR 댓글 외부 승인 검증에 사용되는 허용 승인자 계정.
-# 환경 변수 PIPELINE_ALLOWED_APPROVER로 재정의 가능 (기본값: "hojiyong2").
+# 환경 변수 PIPELINE_ALLOWED_APPROVER로 재정의 가능 (기본값: "hojiyong2-commits").
 # 이 상수는 _check_pr_approver_provenance()에서만 참조합니다.
+# IMP-20260606-D9F4 REJECT fix: 기본값을 실제 GitHub 사용자명으로 수정.
 # ---------------------------------------------------------------------------
-PIPELINE_ALLOWED_APPROVER: str = os.environ.get("PIPELINE_ALLOWED_APPROVER", "hojiyong2")
+PIPELINE_ALLOWED_APPROVER: str = os.environ.get("PIPELINE_ALLOWED_APPROVER", "hojiyong2-commits")
 
 
 def _is_internal_artifact(path: str) -> bool:
@@ -10307,15 +10308,18 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     else:
         lines.append("(structured AC 없음 — legacy 파이프라인)")
         lines.append("")
+    # IMP-20260606-D9F4 REJECT fix: "이 대화창" → "GitHub PR 댓글" + 승인자 표시
     lines.append("사용자가 확인할 것:")
     lines.append("")
     lines.append("1. PR 링크를 연다.")
     lines.append("2. GitHub Actions 자동 검사가 성공인지 본다.")
     lines.append("3. 요구사항 충족표를 본다.")
-    lines.append("4. 결과물이 요청과 맞으면 승인 코드를 입력한다.")
+    lines.append(f"4. 결과물이 요청과 맞으면 아래 승인 코드를 GitHub PR 댓글에 한 줄로 남긴다.")
+    lines.append(f"   현재 허용 승인자: {PIPELINE_ALLOWED_APPROVER}")
+    lines.append("   Claude/Codex가 대신 입력할 수 없습니다. 반드시 사람이 직접 입력해야 합니다.")
     lines.append("5. 틀리면 거절 코드 뒤에 이유를 적는다.")
     lines.append("")
-    lines.append("승인 코드:")
+    lines.append("승인 코드 (GitHub PR 댓글에 정확히 한 줄로 입력):")
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
         nonce = str(acceptance_request.get("nonce"))
         lines.append(f"ACCEPT-{pipeline_id}-{nonce}")
@@ -15124,9 +15128,24 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         print()
         print(_format_ac_fulfillment_output(ac_table))
 
-    print("  위 결과물을 확인하신 후 아래 코드를 입력해 주세요.")
+    # IMP-20260606-D9F4 REJECT fix: 최종 안내를 "이 대화창" 대신 "GitHub PR 댓글" 명시로 변경.
+    # 현재 허용 승인자도 명확히 표시.
+    print(f"  현재 허용 승인자: {PIPELINE_ALLOWED_APPROVER}")
     print()
-    print("  [O] 승인하시려면 정확히 아래 코드를 입력하세요:")
+    print("  ★ 승인 방법: GitHub PR 댓글에 아래 코드를 한 줄로 남겨 주세요.")
+    print("    Claude/Codex가 대신 입력할 수 없습니다. 반드시 사람이 직접 입력해야 합니다.")
+    print()
+    print("  GitHub PR 댓글 작성 방법:")
+    if pr_url:
+        print(f"    1. 위 PR 링크({pr_url})를 엽니다.")
+    else:
+        print("    1. PR 링크를 엽니다 (github.com에서 해당 PR을 찾으세요).")
+    print("    2. 댓글 입력창에 아래 코드를 정확히 한 줄로 입력합니다.")
+    print("    3. 코드 외에 다른 내용을 입력하면 승인이 거부됩니다.")
+    print("    4. 댓글을 게시한 뒤, 아래 명령을 실행합니다:")
+    print(f"       python pipeline.py gates accept --result ACCEPT --evidence {evidence} --acceptance-code {accept_code}")
+    print()
+    print("  [O] 승인 코드 (GitHub PR 댓글에 정확히 한 줄로 입력):")
     print(f"     {accept_code}")
     print()
     print("  [X] 거절하시려면 아래 형식으로 입력하세요:")
@@ -15290,12 +15309,14 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         _body: str = str(_comment.get("body", "") or "")
         _cid: str = str(_comment.get("id", "") or "")
         if _author == allowed_approver:
-            # 승인 코드 포함 여부 확인 (accept_code가 있으면 정확히 확인, 없으면 ACCEPT 접두사만 확인)
-            if accept_code and accept_code in _body:
+            # IMP-20260606-D9F4 REJECT fix: 댓글 본문이 승인 코드와 정확히 일치해야 PASS.
+            # "포함" 검사(accept_code in _body)는 pipeline이 자동 생성한 최종 확인 안내 댓글도
+            # 승인으로 오인할 수 있으므로, strip 후 exact match로 변경.
+            if accept_code and _body.strip() == accept_code:
                 _found_approver = _author
                 _found_comment_id = _cid
                 break
-            elif not accept_code and ("ACCEPT-" + pipeline_id) in _body:
+            elif not accept_code and _body.strip() == ("ACCEPT-" + pipeline_id):
                 _found_approver = _author
                 _found_comment_id = _cid
                 break

@@ -1371,8 +1371,9 @@ class TestProvenance:
     def test_gates_accept_provenance_no_approver_comment(self, tmp_path: Path) -> None:
         """E2E: 허용 승인자 댓글이 없으면 pr_approver_missing BLOCKED 반환.
 
-        Scenario: gh CLI는 있지만 PR 댓글에 허용 승인자(hojiyong2)의 승인 코드 없음.
-        Expected: returncode=1, stdout에 pr_approver_missing 포함.
+        Scenario: gh CLI는 있지만 PR 댓글에 허용 승인자(hojiyong2-commits)의 승인 코드 없음.
+        Expected: returncode=1, stdout에 pr_approver_missing만 포함 (fetch_failed 아님).
+        IMP-20260606-D9F4 REJECT fix: 안정적인 fake gh로 정확히 pr_approver_missing만 기대.
         """
         state_file = tmp_path / "pipeline_state.json"
         evidence_file = tmp_path / "evidence.txt"
@@ -1386,7 +1387,7 @@ class TestProvenance:
         # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
         _write_acceptance_request(tmp_path, nonce, evidence_file)
 
-        # 모의 gh 스크립트: PR 있지만 댓글에 승인자 없음
+        # 모의 gh 스크립트: PR 있지만 댓글에 승인자(hojiyong2-commits) 없음
         mock_bin_dir = tmp_path / "mock_bin"
         mock_bin_dir.mkdir()
 
@@ -1420,9 +1421,14 @@ class TestProvenance:
         )
 
         combined = result.stdout + result.stderr
-        # pr_approver_missing 또는 pr_approver_fetch_failed (모킹 환경 한계로 fetch_failed도 허용)
-        assert ("pr_approver_missing" in combined or "pr_approver_fetch_failed" in combined), (
-            f"Expected 'pr_approver_missing' or 'pr_approver_fetch_failed' in output.\n"
+        # IMP-20260606-D9F4 REJECT fix: fake gh가 안정적으로 작동하면 pr_approver_missing만 기대.
+        # pr_approver_fetch_failed는 허용하지 않음 — 모킹이 정상이면 반드시 missing이어야 함.
+        assert "pr_approver_missing" in combined, (
+            f"Expected 'pr_approver_missing' in output (fetch_failed not allowed — check fake gh mock).\n"
+            f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
+        )
+        assert "pr_approver_fetch_failed" not in combined, (
+            f"'pr_approver_fetch_failed' must NOT be in output — fake gh mock should be stable.\n"
             f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
         )
 
@@ -1437,8 +1443,9 @@ class TestProvenance:
     def test_gates_accept_provenance_approver_present(self, tmp_path: Path) -> None:
         """E2E: 허용 승인자 댓글이 있을 때 provenance PASS로 진행.
 
-        Scenario: gh CLI 모킹으로 hojiyong2가 승인 코드를 댓글로 남긴 상황.
-        Expected: stdout에 "provenance" 포함 (PASS 진행 또는 다음 gate로 이동).
+        Scenario: gh CLI 모킹으로 hojiyong2-commits가 승인 코드를 정확히 한 줄로 댓글 작성.
+        Expected: pr_approver_missing/fetch_failed 없음 + state.acceptance.provenance_check PASS.
+        IMP-20260606-D9F4 REJECT fix: 기본 승인자를 hojiyong2-commits으로 수정 + state 직접 검증.
         Note: 다음 gate(readiness/consistency)가 실패할 수 있으나 provenance 자체는 통과.
         """
         state_file = tmp_path / "pipeline_state.json"
@@ -1456,15 +1463,16 @@ class TestProvenance:
         # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
         _write_acceptance_request(tmp_path, nonce, evidence_file)
 
-        # 모의 gh 스크립트: hojiyong2가 승인 코드 댓글 작성
+        # 모의 gh 스크립트: hojiyong2-commits가 승인 코드를 정확히 한 줄로 댓글 작성
+        # IMP-20260606-D9F4 REJECT fix: 기본 승인자가 hojiyong2-commits으로 변경됨
         mock_bin_dir = tmp_path / "mock_bin"
         mock_bin_dir.mkdir()
 
         pr_list = [{"number": 999, "headRefName": "impl/IMP-20260606-D9F4"}]
         comments_data_approver = {"comments": [
             {
-                "author": {"login": "hojiyong2"},
-                "body": accept_code,
+                "author": {"login": "hojiyong2-commits"},
+                "body": accept_code,  # exact match — 코드만 한 줄
                 "id": "c99",
             }
         ]}
@@ -1488,18 +1496,37 @@ class TestProvenance:
         )
 
         combined = result.stdout + result.stderr
-        # provenance가 PASS되면 stdout에 "provenance" 포함
-        # (다음 gate에서 실패해도 provenance 관련 출력은 있어야 함)
-        # pr_approver_fetch_failed or pr_approver_missing이 없어야 함
-        assert ("pr_approver_fetch_failed" not in combined and "pr_approver_missing" not in combined) or result.returncode == 0, (
-            f"Expected provenance to PASS when approver comment present.\n"
+        # pr_approver_fetch_failed or pr_approver_missing이 없어야 함 — provenance가 PASS되어야 함
+        assert "pr_approver_fetch_failed" not in combined, (
+            f"pr_approver_fetch_failed must NOT appear when approver comment is present.\n"
+            f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
+        )
+        assert "pr_approver_missing" not in combined, (
+            f"pr_approver_missing must NOT appear when hojiyong2-commits comment is present.\n"
             f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
         )
 
-        # final_state 확인
+        # IMP-20260606-D9F4 REJECT fix: state.acceptance.provenance_check 직접 검증
         final_state = read_state(state_file)
         assert final_state.get("pipeline_id") == "IMP-20260606-D9F4", (
             f"final_state must have correct pipeline_id, got: {final_state.get('pipeline_id')}"
+        )
+        # provenance_check가 state에 기록되었는지 확인
+        acceptance_state = final_state.get("acceptance", {})
+        prov = acceptance_state.get("provenance_check", {})
+        assert prov.get("status") == "PASS", (
+            f"state.acceptance.provenance_check.status must be PASS, got: {prov}\n"
+            f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
+        )
+        assert prov.get("approver") == "hojiyong2-commits", (
+            f"state.acceptance.provenance_check.approver must be 'hojiyong2-commits', "
+            f"got: {prov.get('approver')}"
+        )
+        assert "comment_id" in prov, (
+            f"state.acceptance.provenance_check must contain 'comment_id', got: {prov}"
+        )
+        assert "checked_at" in prov, (
+            f"state.acceptance.provenance_check must contain 'checked_at', got: {prov}"
         )
 
     def test_gates_accept_provenance_env_override(self, tmp_path: Path) -> None:
