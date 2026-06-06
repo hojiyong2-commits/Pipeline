@@ -12512,6 +12512,9 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
 
     print(f"[CODEX RECORD] stage={stage} result={result_upper} 공식 기록 완료: {review_result_path}")
     if result_upper == "ACCEPT":
+        base_info = f"  base_ref={base_arg}" if base_arg else ""
+        if base_info:
+            print(base_info)
         print("  4중 검증: review_model(1/4) + head_sha(2/4) + diff_sha256(3/4) + evidence JSON(4/4) 모두 통과")
     else:
         print(f"  REJECT 기록 완료. failure_packet.json을 참조하여 {owner}가 수정 후 재시도하세요.")
