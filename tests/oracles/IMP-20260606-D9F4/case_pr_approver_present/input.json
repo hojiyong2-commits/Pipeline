@@ -1,0 +1,8 @@
+{
+  "scenario": "approver_comment_present",
+  "gates_accept_args": ["--result", "ACCEPT", "--evidence", "pipeline.py", "--acceptance-code", "ACCEPT-IMP-20260606-D9F4-TESTNOCE"],
+  "gh_available": true,
+  "approver_login": "hojiyong2",
+  "comment_body": "ACCEPT-IMP-20260606-D9F4-TESTNOCE",
+  "pipeline_id": "IMP-20260606-D9F4"
+}

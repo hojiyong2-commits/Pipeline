@@ -1,0 +1,6 @@
+{
+  "exit_code": 1,
+  "failure_code": "pr_approver_fetch_failed",
+  "status": "BLOCKED",
+  "message_contains": "gh CLI"
+}

@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_planner_output>
+
+<decomposition_audit>
+  <total_functions_identified>5</total_functions_identified>
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>
+    MT-1: pipeline.py — _check_pr_approver_provenance 신규 함수 추가 + cmd_gates accept 분기 연결 (약 90줄).
+    MT-2: tests/e2e/test_real_cli_paths.py — Provenance Gate E2E 테스트 케이스 4개 추가 (약 80줄).
+    MT-3: .github/workflows/ci.yml — Provenance Gate 정책 주석 추가 (no-op, 약 15줄).
+    변경 파일 3개(pipeline.py, E2E 테스트, ci.yml), 함수 4개 이상 → STANDARD 프로필, SPLIT_REQUIRED.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260606-D9F4</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Phase — User Acceptance Provenance Gate 구현</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>IMP, FS, WA</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>gates accept 흐름에 외부 승인자(PR 댓글 작성자) 검증 로직을 추가하며, pipeline.py와 E2E 테스트, CI 워크플로우에 걸쳐 여러 함수/파일을 수정합니다. pipeline.py는 trust-root 파일입니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>4</expected_changed_functions>
+      <expected_changed_lines>185</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 변수명(allowed_approver vs approver_login), 에러 메시지 한국어 문구 길이,
+함수 파일 내 위치(위쪽/아래쪽) 같은 P2 질문은 묻지 않고 기존 코드 패턴과 유지보수성 기준으로
+PM이 직접 결정했습니다.</filter_summary>
+    <decision_questions>
+
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          gh CLI 없거나 GitHub API 실패 시 어떻게 할까요?
+          A: Hard fail — BLOCKED 반환 (에이전트 우회 원천 차단)
+          B: Soft skip — 경고만 출력하고 통과
+        </user_facing_question>
+        <evidence>gates accept 흐름의 기존 gh CLI 실패 처리 패턴(sha_verification_failed, run_id_verification_failed)은
+이미 BLOCKED를 반환합니다. 일관성상 A가 자연스럽고, B는 에이전트가 의도적으로 gh CLI를
+우회할 수 있는 구멍이 됩니다.</evidence>
+        <why_it_matters>B를 선택하면 로컬에서만 동작하는 에이전트가 GitHub 외부 승인 없이 ACCEPT를
+통과시킬 수 있어 Provenance Gate의 핵심 목적이 무너집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>Hard fail — gh CLI 없거나 API 실패 시 BLOCKED 반환</label>
+            <benefit>에이전트가 GitHub 없이 ACCEPT를 우회하는 경로를 원천 차단합니다.</benefit>
+            <cost>네트워크 문제나 gh 미설치 환경에서 ACCEPT 실행 자체가 차단됩니다.
+gh CLI 설치 및 인증이 필수 선행 조건이 됩니다.</cost>
+          </option>
+          <option id="B">
+            <label>Soft skip — 경고만 출력하고 통과</label>
+            <benefit>네트워크 문제나 gh 미설치 환경에서도 ACCEPT를 완료할 수 있습니다.</benefit>
+            <cost>에이전트가 gh CLI 없이도 승인을 완료할 수 있어 Provenance Gate의 목적이 희석됩니다.</cost>
+          </option>
+        </options>
+        <user_answer>옵션 A — Hard fail. gh CLI 없거나 API 실패 시 BLOCKED 반환.</user_answer>
+      </question>
+
+      <question id="DQ-2" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          허용 승인자(PR 댓글 작성자) 기본값과 설정 방법을 어떻게 할까요?
+          A: 기본값 "hojiyong2", env PIPELINE_ALLOWED_APPROVER로 override
+          B: 기본값 없음, 반드시 env로 명시해야 ACCEPT 가능
+        </user_facing_question>
+        <evidence>현재 파이프라인 state.json에는 특정 사용자 개념이 없습니다.
+기본값을 두면 별도 설정 없이도 기존 워크플로우가 작동합니다.
+env override를 지원하면 다른 환경에서도 재사용 가능합니다.</evidence>
+        <why_it_matters>기본값 없이 env 필수로 하면 기존 파이프라인이 즉시 차단됩니다.
+기본값을 두면 신규 강화이지만 기존 작업 흐름이 유지됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>기본값 "hojiyong2", env PIPELINE_ALLOWED_APPROVER로 override</label>
+            <benefit>기존 작업 흐름 유지. 별도 설정 없이도 바로 동작합니다.</benefit>
+            <cost>기본값이 하드코딩되어 다른 사용자 환경에서는 env 설정이 필요합니다.</cost>
+          </option>
+          <option id="B">
+            <label>기본값 없음, 반드시 env로 명시해야 ACCEPT 가능</label>
+            <benefit>실수로 잘못된 승인자가 통과되는 경우를 방지합니다.</benefit>
+            <cost>기존 파이프라인 모두 env 설정을 추가해야 하며, 설정 없으면 즉시 차단됩니다.</cost>
+          </option>
+        </options>
+        <user_answer>옵션 A — 기본값 "hojiyong2", env PIPELINE_ALLOWED_APPROVER로 override 가능.</user_answer>
+      </question>
+
+      <question id="DQ-3" priority="P1" category="module_split" mt_id="MT-3">
+        <user_facing_question>
+          GitHub Environment secrets 강화 수준을 어떻게 할까요?
+          A: 위험 문서화만 (주석 + 안내 메시지), GitHub Environment 강화 경로 안내
+          B: ci.yml에 environment: production 직접 추가 (현재 파이프라인 범위 내)
+        </user_facing_question>
+        <evidence>ci.yml은 Trust-Root 파일입니다. 현재 파이프라인에서 ci.yml을 수정하는 것은
+이미 scope에 들어 있으나(MT-3에서 주석 추가), 실제 GitHub Environment 설정은
+GitHub 웹 UI에서 해야 하는 외부 작업입니다.</evidence>
+        <why_it_matters>B를 선택하면 ci.yml 변경 범위가 커지고 기존 워크플로우가 변경되어
+다른 파이프라인에 영향을 줄 수 있습니다. A는 최소 변경으로 가이드를 제공합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>위험 문서화만 (주석 + 안내 메시지, GitHub Environment 강화 경로 안내)</label>
+            <benefit>ci.yml 변경 최소화, 기존 워크플로우 무영향. 사용자가 선택적으로 강화 가능.</benefit>
+            <cost>실제 GitHub Environment secrets 보호는 사용자가 별도로 설정해야 합니다.</cost>
+          </option>
+          <option id="B">
+            <label>ci.yml에 environment: production 직접 추가</label>
+            <benefit>자동화된 환경 분리로 secrets 보호 효과가 즉각 적용됩니다.</benefit>
+            <cost>ci.yml 변경 범위가 커지고, GitHub 웹 UI에서 Environment 사전 생성이 필요합니다.
+사전 설정 없이 push하면 CI가 즉시 차단됩니다.</cost>
+          </option>
+        </options>
+        <user_answer>옵션 A — 위험 문서화만. 주석 + 안내 메시지로 GitHub Environment 강화 경로 안내.</user_answer>
+      </question>
+
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline_state.json (기존), acceptance_request.json (기존), gh CLI PR 댓글 API 응답
+    - Output: pipeline_state.json 갱신 (provenance_check 필드 추가), failure_packet.json (BLOCKED 시)
+    - Validation: gh pr view --json comments 응답에서 commenter.login == allowed_approver 확인;
+      PIPELINE_ALLOWED_APPROVER env 또는 기본값 "hojiyong2" 사용
+  </interface_spec>
+
+  <requirements>
+    1. gates accept --result ACCEPT 실행 시 기존 nonce/SHA/run_id 검증 완료 후 PR 댓글 승인자 검증을 추가 수행한다.
+    2. 허용 승인자는 PIPELINE_ALLOWED_APPROVER 환경변수 우선, 없으면 기본값 "hojiyong2"를 사용한다.
+    3. gh CLI 없거나 GitHub API 실패 시 BLOCKED를 반환한다 (failure_code: pr_approver_fetch_failed).
+    4. PR에 열린 댓글이 없거나 허용 승인자 댓글이 없으면 BLOCKED (failure_code: pr_approver_missing).
+    5. 승인자 검증 성공 시 state["provenance_check"] = {"status": "PASS", "approver": login, "checked_at": ISO8601} 기록.
+    6. E2E 테스트: tests/e2e/test_real_cli_paths.py에 provenance gate 검증 케이스 추가 (PIPELINE_STATE_PATH 격리).
+    7. ci.yml: provenance gate 관련 주석 및 위험 안내 메시지 추가. no-op 변경으로 Trust-Root 파일 수정 범위 최소화.
+    8. 모든 에러 메시지는 한국어로 작성하고 [PIPELINE ERROR] 접두사를 사용한다.
+    9. Secret 패턴 차단: GH_TOKEN 실제값을 코드/테스트에 포함하지 않는다. 더미는 EXAMPLE 패딩 사용.
+    10. Documentation-Code Drift 방지: pipeline.py 상수/플래그 변경 시 관련 인라인 주석도 동일 MT에서 업데이트.
+    11. _check_pr_approver_provenance 함수는 state를 직접 수정하지 않고 결과 dict를 반환한다 (caller가 state 갱신).
+    12. PIPELINE_ALLOWED_APPROVER 상수는 pipeline.py SSoT 상수 블록에 추가한다.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._check_pr_approver_provenance (신규), pipeline.cmd_gates (accept 분기 확장)</affected_function>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4</covers_ac>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_gates (accept 분기, 기존 CI run ID 검증 완료 직후 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_gates|action == .accept.|_stored_nonce|CI run ID 변경</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _check_pr_approver_provenance(state) 신규 함수를 추가하고,
+        cmd_gates accept 분기에서 기존 CI run ID 검증 완료 직후 호출한다.
+        허용 승인자는 PIPELINE_ALLOWED_APPROVER env 우선, 기본값 "hojiyong2".
+        gh CLI 없거나 API 실패 시 BLOCKED (failure_code: pr_approver_fetch_failed).
+        댓글 없거나 허용 승인자 댓글 없으면 BLOCKED (failure_code: pr_approver_missing).
+        성공 시 state["provenance_check"] 기록 후 기존 _consume_acceptance_request 흐름 진행.
+      </change_summary>
+      <line_estimate>90</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>tests/e2e/test_real_cli_paths.py — test_gates_accept_provenance_* 케이스 추가</affected_function>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4</covers_ac>
+      <target_files>
+        <file>tests/e2e/test_real_cli_paths.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>없음 (테스트 파일 단독 추가)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_real_cli_paths|PIPELINE_STATE_PATH|subprocess.*pipeline|gates.*accept</pattern>
+        <match_count>12</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        PIPELINE_STATE_PATH 격리 + subprocess 기반 E2E 테스트 케이스 추가.
+        케이스: (1) gh CLI 없음 → BLOCKED (pr_approver_fetch_failed),
+        (2) 허용 승인자 댓글 없음 → BLOCKED (pr_approver_missing),
+        (3) 허용 승인자 댓글 있음 → PASS(mock gh),
+        (4) PIPELINE_ALLOWED_APPROVER env → 해당 값으로 검증.
+        final_state assertion 포함. 실제 GH_TOKEN 사용 금지 (더미 EXAMPLE 패딩).
+      </change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>ci.yml — Provenance Gate 정책 주석 추가 (no-op)</affected_function>
+      <covers_iqr>IQR-1</covers_iqr>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>없음 (주석 추가만, 실행 로직 변경 없음)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>gates accept|PIPELINE_ALLOWED_APPROVER|provenance|approver</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        ci.yml에 Provenance Gate 관련 정책 주석 추가.
+        내용: PIPELINE_ALLOWED_APPROVER 환경변수 설명, GitHub Environment secrets 강화 경로 안내.
+        실행 step 추가/변경 없음 (no-op 주석 블록만 추가).
+        Trust-Root 파일 최소 변경 원칙 준수.
+      </change_summary>
+      <line_estimate>15</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.9 — 기존 파이프라인 Python 버전과 일치, subprocess/os 표준 라이브러리만 사용</python_version>
+  <env_specs>
+    <python>3.9</python>
+    <vscode>python.defaultInterpreterPath 기존 설정 유지, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>gates accept 실행 시 PR 댓글 승인자 확인이 추가된다 — gh CLI 없으면 BLOCKED 반환 (Hard fail, failure_code: pr_approver_fetch_failed)</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>허용 승인자는 PIPELINE_ALLOWED_APPROVER env 우선, 기본값 "hojiyong2" — PR 댓글 작성자(login)가 이 값과 일치해야 PASS</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>E2E 테스트 4개 케이스(gh CLI 없음/댓글 없음/승인자 댓글 있음/env override)가 모두 PASS — PIPELINE_STATE_PATH 격리 + final_state assertion 포함</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>ci.yml에 PIPELINE_ALLOWED_APPROVER 정책 주석과 GitHub Environment 강화 경로 안내가 추가된다 — CI 실행 동작 변경 없음 (no-op)</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <forbidden>
+    1. 실제 GH_TOKEN 또는 GITHUB_TOKEN 값을 코드/테스트/PR에 포함하지 않는다.
+    2. MT-1/2/3 외 파일(oracle 파일, CLAUDE.md, .claude/agents/*.md 등)을 수정하지 않는다.
+    3. ci.yml에 실행 step 추가/변경하지 않는다 (주석만 허용).
+    4. 기존 gates accept 검증 순서(nonce → SHA → run_id → provenance)를 바꾸지 않는다.
+    5. 기존 E2E 테스트 케이스를 수정/삭제하지 않는다.
+    6. _check_pr_approver_provenance가 state를 직접 수정하지 않는다 (caller 책임).
+    7. 에러 메시지에 실제 사용자 이름 외 개인정보를 포함하지 않는다.
+    8. 테스트에서 subprocess 대신 내부 함수 직접 import 사용 금지 (IMP-20260525-6FAC).
+    9. PIPELINE_STATE_PATH 격리 없는 테스트 작성 금지.
+  </forbidden>
+
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260606-D9F4</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/e2e/test_real_cli_paths.py</file>
+        <file>.github/workflows/ci.yml</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_real_cli_paths.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.github\workflows\ci.yml</file>
+    </target_files>
+    <phase_rules_excerpt>
+      MT-1: pipeline.py에서 cmd_gates accept 분기 마지막(CI run ID 검증 완료 후)에
+      _check_pr_approver_provenance 호출 삽입. 반환 BLOCKED 시 _record_failure_packet + _die.
+      PASS 시 state["provenance_check"] 갱신.
+      MT-2: tests/e2e/test_real_cli_paths.py에 PIPELINE_STATE_PATH 격리 E2E 케이스 4개 추가.
+      final_state assertion 필수. 실제 GH_TOKEN 사용 금지.
+      MT-3: .github/workflows/ci.yml에 주석만 추가. 실행 step 변경 없음.
+      scope_manifest_MT-N.json 필수 생성. scope_lock_check verdict PASS 후 handover 출력 필수.
+      IMP-20260525-6FAC: subprocess 기반 + PIPELINE_STATE_PATH 격리 + final_state assertion.
+      IMP-20260602-1ABE: scope_manifest.json의 micro_tasks에 implemented_ac 필드 포함 필수.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Phase — 사용자 3개 설계 질문 답변 완료:
+DQ-1=옵션A(Hard fail, gh CLI 없으면 BLOCKED), DQ-2=옵션A(기본값 hojiyong2 + PIPELINE_ALLOWED_APPROVER env override), DQ-3=옵션A(ci.yml 주석만, 실행 step 변경 없음).</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+</pm_planner_output>
