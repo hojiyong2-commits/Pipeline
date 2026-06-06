@@ -34,9 +34,32 @@ from pipeline import _check_protocol_consistency  # type: ignore  # noqa: E402
 ORACLE_BASE = ROOT / "tests" / "oracles" / "IMP-20260520-D0BB"
 
 
-def _make_vj(changed_files=None):
-    """테스트용 verification_json dict."""
-    return {"schema_version": 1, "changed_files": changed_files if changed_files is not None else []}
+def _make_vj(changed_files=None, ci_run_id="", pr_head_sha=""):
+    """테스트용 verification_json dict.
+
+    IMP-20260605-9EF5: 검사 A/B도 verification_json SSoT 기준으로 변경되었기 때문에
+    각 테스트가 ci_run_id / pr_head_sha 필드를 지정할 수 있어야 한다.
+    """
+    return {
+        "schema_version": 1,
+        "ci_run_id": ci_run_id,
+        "pr_head_sha": pr_head_sha,
+        "changed_files": changed_files if changed_files is not None else [],
+    }
+
+
+PACKET_START = "<!-- PIPELINE_FINAL_PACKET_START -->"
+PACKET_END = "<!-- PIPELINE_FINAL_PACKET_END -->"
+
+
+def _wrap_in_packet_block(text):
+    """텍스트를 PIPELINE_FINAL_PACKET 블록 마커로 감싼다.
+
+    IMP-20260605-9EF5: 검사 A/B는 블록 안 텍스트만 보조 검증 대상이므로,
+    옛 옛 정책(`pr_body` 자유서술의 stale 값 검증)을 보존하려면 동일한
+    텍스트를 블록 안에 넣어야 한다.
+    """
+    return PACKET_START + "\n" + text + "\n" + PACKET_END
 
 
 def load_oracle(case_id: str):
@@ -96,10 +119,26 @@ class TestOracleCases(unittest.TestCase):
 
 
 class TestRunIdCheck(unittest.TestCase):
-    """검사 A: CI run ID 일치 (5개 테스트)."""
+    """검사 A: CI run ID 일치 (5개 테스트).
 
-    def _call(self, pr_body="", packet_body="", changed_files=None,
-              head_sha="abc1234", run_id="111", conclusion="success"):
+    IMP-20260605-9EF5 이후 검사 A는 verification_json SSoT 기준으로 동작한다.
+    이 클래스의 테스트들은 검사 A의 의도(stale run_id 차단)를 새 정책에 맞게
+    PIPELINE_FINAL_PACKET 블록 또는 verification_json 자체에 stale 값을 넣어
+    동일한 BLOCKED 결과를 검증한다.
+    """
+
+    def _call(
+        self, pr_body="", packet_body="", changed_files=None,
+        head_sha="abc1234", run_id="111", conclusion="success",
+        vj_run_id=None, vj_head_sha=None,
+    ):
+        # vj_run_id / vj_head_sha 미지정 시 latest와 동일한 값을 verification_json에 채워
+        # 검사 A/B가 verification_json 자체에서 fail하지 않도록 한다.
+        vj = _make_vj(
+            changed_files or [],
+            ci_run_id=vj_run_id if vj_run_id is not None else run_id,
+            pr_head_sha=vj_head_sha if vj_head_sha is not None else head_sha,
+        )
         return _check_protocol_consistency(
             pr_body=pr_body,
             acceptance_packet_body=packet_body,
@@ -107,12 +146,16 @@ class TestRunIdCheck(unittest.TestCase):
             pr_head_sha=head_sha,
             latest_ci_run_id=run_id,
             latest_ci_run_conclusion=conclusion,
-            verification_json=_make_vj(changed_files or []),
+            verification_json=vj,
         )
 
     def test_pr_body_run_id_matches_latest(self):
+        # IMP-20260605-9EF5: PIPELINE_FINAL_PACKET 블록 안의 run ID가 vj/latest와
+        # 일치하면 PASS.
         result = self._call(
-            pr_body="run: https://github.com/x/y/actions/runs/111",
+            pr_body=_wrap_in_packet_block(
+                "run: https://github.com/x/y/actions/runs/111"
+            ),
             packet_body=(
                 "<!-- pipeline-human-acceptance-packet -->\n"
                 "https://github.com/x/y/actions/runs/111"
@@ -123,8 +166,12 @@ class TestRunIdCheck(unittest.TestCase):
         self.assertTrue(result["allow_accept"])
 
     def test_pr_body_stale_run_id_blocked(self):
+        # IMP-20260605-9EF5: 블록 안 stale run ID → BLOCKED(stale_run_id, packet_block).
+        # 옛 정책(pr_body 자유서술 stale 검사)은 deprecated — 동일 의도를 packet block 검사로 보존.
         result = self._call(
-            pr_body="run: https://github.com/x/y/actions/runs/999",
+            pr_body=_wrap_in_packet_block(
+                "run: https://github.com/x/y/actions/runs/999"
+            ),
             run_id="111",
         )
         self.assertEqual(result["status"], "BLOCKED")
@@ -132,8 +179,11 @@ class TestRunIdCheck(unittest.TestCase):
         self.assertFalse(result["allow_accept"])
 
     def test_packet_stale_run_id_blocked(self):
+        # acceptance_packet_body의 stale run_id는 새 정책에서도 BLOCKED 유지.
         result = self._call(
-            pr_body="run: https://github.com/x/y/actions/runs/111",
+            pr_body=_wrap_in_packet_block(
+                "run: https://github.com/x/y/actions/runs/111"
+            ),
             packet_body=(
                 "<!-- pipeline-human-acceptance-packet -->\n"
                 "https://github.com/x/y/actions/runs/999"
@@ -144,19 +194,23 @@ class TestRunIdCheck(unittest.TestCase):
         self.assertEqual(result["failure_code"], "stale_run_id")
 
     def test_body_packet_disagree_on_run_id(self):
+        # IMP-20260605-9EF5: 블록 안 run_id(100)와 vj/latest(200) 불일치 → BLOCKED.
         result = self._call(
-            pr_body="run: https://github.com/x/y/actions/runs/100",
+            pr_body=_wrap_in_packet_block(
+                "run: https://github.com/x/y/actions/runs/100"
+            ),
             packet_body=(
                 "<!-- pipeline-human-acceptance-packet -->\n"
                 "https://github.com/x/y/actions/runs/200"
             ),
             run_id="200",
         )
-        # body run ID (100) != latest (200) → BLOCKED
+        # block run ID (100) != vj/latest (200) → BLOCKED
         self.assertEqual(result["status"], "BLOCKED")
         self.assertEqual(result["failure_code"], "stale_run_id")
 
     def test_no_run_id_in_body_skips_check(self):
+        # 블록도 자유서술도 run_id 없으면 검사 A skip → PASS.
         result = self._call(
             pr_body="no run id here",
             run_id="111",
@@ -165,10 +219,24 @@ class TestRunIdCheck(unittest.TestCase):
 
 
 class TestShaCheck(unittest.TestCase):
-    """검사 B: head SHA 일치 (3개 테스트)."""
+    """검사 B: head SHA 일치 (3개 테스트).
 
-    def _call(self, pr_body="", packet_body="",
-              head_sha="abc1234def567890abcdef1234567890abcdef12"):
+    IMP-20260605-9EF5 이후 검사 B는 verification_json SSoT 기준으로 동작한다.
+    옛 정책(pr_body 자유서술 SHA 검증)은 deprecated이며, 동일한 의도를
+    PIPELINE_FINAL_PACKET 블록 안의 SHA로 검증한다.
+    """
+
+    def _call(
+        self, pr_body="", packet_body="",
+        head_sha="abc1234def567890abcdef1234567890abcdef12",
+        vj_head_sha=None,
+    ):
+        # vj_head_sha 미지정 시 pr_head_sha와 동일한 값을 verification_json에 채움.
+        vj = _make_vj(
+            [],
+            ci_run_id="",
+            pr_head_sha=vj_head_sha if vj_head_sha is not None else head_sha,
+        )
         return _check_protocol_consistency(
             pr_body=pr_body,
             acceptance_packet_body=packet_body,
@@ -176,26 +244,31 @@ class TestShaCheck(unittest.TestCase):
             pr_head_sha=head_sha,
             latest_ci_run_id="",
             latest_ci_run_conclusion="",
-            verification_json=_make_vj([]),
+            verification_json=vj,
         )
 
     def test_sha_prefix_7char_pass(self):
+        # IMP-20260605-9EF5: PIPELINE_FINAL_PACKET 블록 안 7자 SHA prefix → PASS.
         result = self._call(
-            pr_body="이번 변경 번호: abc1234",
+            pr_body=_wrap_in_packet_block("이번 변경 번호: abc1234"),
             head_sha="abc1234def567890abcdef1234567890abcdef12",
         )
         self.assertEqual(result["status"], "PASS")
 
     def test_sha_full_match_pass(self):
+        # IMP-20260605-9EF5: PIPELINE_FINAL_PACKET 블록 안 full SHA 매칭 → PASS.
         result = self._call(
-            pr_body="SHA: abc1234def567890abcdef1234567890abcdef12",
+            pr_body=_wrap_in_packet_block(
+                "SHA: abc1234def567890abcdef1234567890abcdef12"
+            ),
             head_sha="abc1234def567890abcdef1234567890abcdef12",
         )
         self.assertEqual(result["status"], "PASS")
 
     def test_sha_mismatch_blocked(self):
+        # IMP-20260605-9EF5: 블록 안 stale SHA → BLOCKED(stale_head_sha, packet_block).
         result = self._call(
-            pr_body="이번 변경 번호: 0000000",
+            pr_body=_wrap_in_packet_block("이번 변경 번호: 0000000"),
             head_sha="abc1234def567890abcdef1234567890abcdef12",
         )
         self.assertEqual(result["status"], "BLOCKED")

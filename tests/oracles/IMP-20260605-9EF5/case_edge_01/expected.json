@@ -1,0 +1,13 @@
+{
+  "status": "BLOCKED",
+  "failure_code": "stale_run_id",
+  "failure_category": "protocol_violation",
+  "blocked_reason": "PIPELINE_FINAL_PACKET 블록 안의 run ID(27015551111)가 verification_json의 run ID(27024225022)와 다릅니다. 블록 안의 값을 verification_json과 일치시키거나 'python pipeline.py report final-packet'을 재실행하세요.",
+  "return_phase": "build",
+  "allow_accept": false,
+  "details": {
+    "expected_run_id": "27024225022",
+    "packet_block_run_id": "27015551111",
+    "location": "packet_block"
+  }
+}
