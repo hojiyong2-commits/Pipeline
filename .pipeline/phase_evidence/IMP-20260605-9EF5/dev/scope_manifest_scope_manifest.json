@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260605-9EF5",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._check_protocol_consistency"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6"],
+          "implementation_evidence": "pipeline._check_protocol_consistency 검사 A/B를 verification_json SSoT 기준으로 변경. _consistency_extract_packet_block 신규 헬퍼 추가. verification_json=None 시 BLOCKED(verification_json_missing). PR 본문 전체 _consistency_extract_run_ids/_shas 호출 제거."
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/test_consistency_guard_a_b_json_basis.py",
+        "tests/test_protocol_consistency.py",
+        "tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json"
+      ],
+      "affected_functions": [
+        "tests.test_consistency_guard_a_b_json_basis.test_*"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-7", "AC-8", "AC-10"],
+          "implementation_evidence": "신규 테스트 파일(10개) + 기존 test_protocol_consistency.py _make_vj/TestRunIdCheck._call 업데이트 (검사 A/B 새 정책 반영) + oracle input 업데이트."
+        }
+      ]
+    },
+    {
+      "id": "MT-2b",
+      "files": [
+        "tests/test_protocol_consistency.py",
+        "tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json"
+      ],
+      "affected_functions": [
+        "tests.test_protocol_consistency._make_vj"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2b",
+          "implemented_ac": ["AC-8", "AC-10"],
+          "implementation_evidence": "tests/test_protocol_consistency.py: _make_vj 헬퍼를 새 정책(verification_json 파라미터)에 맞게 업데이트. oracle input 업데이트."
+        }
+      ]
+    },
+    {
+      "id": "MT-2c",
+      "files": [
+        "tests/test_protocol_consistency.py"
+      ],
+      "affected_functions": [
+        "tests.test_protocol_consistency.TestRunIdCheck._call"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2c",
+          "implemented_ac": ["AC-8", "AC-10"],
+          "implementation_evidence": "tests/test_protocol_consistency.py: TestRunIdCheck._call을 새 정책에 맞게 업데이트 (PIPELINE_FINAL_PACKET 블록 사용)."
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["CLAUDE.md"],
+      "affected_functions": ["CLAUDE.md::Protocol Consistency Guard / Verification JSON SSoT section"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-9"],
+          "implementation_evidence": "CLAUDE.md 두 위치 갱신 — Protocol Consistency Guard 표 검사 A/B 행 + Verification JSON SSoT 섹션 끝 1줄."
+        }
+      ]
+    }
+  ]
+}
