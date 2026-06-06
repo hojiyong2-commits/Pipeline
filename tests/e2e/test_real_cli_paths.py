@@ -1336,6 +1336,7 @@ class TestProvenance:
 
         env = make_env(state_file)
         env["PATH"] = path_without_gh
+        env["PIPELINE_STATE_PATH"] = str(state_file)  # PIPELINE_STATE_PATH 격리 (IMP-20260525-6FAC)
 
         result = _run_cli_in_dir(
             ["gates", "accept", "--result", "ACCEPT",
@@ -1402,6 +1403,7 @@ class TestProvenance:
 
         env = make_env(state_file)
         env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
+        env["PIPELINE_STATE_PATH"] = str(state_file)  # PIPELINE_STATE_PATH 격리 (IMP-20260525-6FAC)
 
         result = _run_cli_in_dir(
             ["gates", "accept", "--result", "ACCEPT",
@@ -1475,6 +1477,7 @@ class TestProvenance:
 
         env = make_env(state_file)
         env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
+        env["PIPELINE_STATE_PATH"] = str(state_file)  # PIPELINE_STATE_PATH 격리 (IMP-20260525-6FAC)
 
         result = _run_cli_in_dir(
             ["gates", "accept", "--result", "ACCEPT",
@@ -1542,6 +1545,7 @@ class TestProvenance:
         env = make_env(state_file)
         env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
         env["PIPELINE_ALLOWED_APPROVER"] = "testapprover"
+        env["PIPELINE_STATE_PATH"] = str(state_file)  # PIPELINE_STATE_PATH 격리 (IMP-20260525-6FAC)
 
         result = _run_cli_in_dir(
             ["gates", "accept", "--result", "ACCEPT",
