@@ -1,0 +1,62 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<dev_output>
+  <pipeline_id>IMP-20260606-0159</pipeline_id>
+  <mt_id>MT-1</mt_id>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>gate_roi_report.md</file>
+    </files_to_modify>
+    <product_code_modified>false</product_code_modified>
+    <execution_profile>FAST_ANALYSIS</execution_profile>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>none</target_function>
+    <affected_files>
+      <file>gate_roi_report.md</file>
+    </affected_files>
+    <affected_call_sites>none</affected_call_sites><affected_functions><function>none</function></affected_functions>
+    <blast_radius>MD 파일 1개 추가. 제품 코드 수정 없음.</blast_radius>
+  </impact_analysis>
+
+  <module_handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260606-0159</pipeline_id>
+    <mt_id>MT-1</mt_id>
+    <status>READY_FOR_QA</status>
+    <summary>pipeline_history 10개 파이프라인 데이터를 분석하여 gate_roi_report.md를 작성했습니다. 제품 코드 수정 없음.</summary>
+  </module_handover>
+
+  <implemented_files>
+    <file>gate_roi_report.md</file>
+  </implemented_files>
+
+  <self_check>
+    <scope_verified>true</scope_verified>
+    <trust_root_violation>false</trust_root_violation>
+    <product_code_modified>false</product_code_modified>
+    <extra_files>없음</extra_files>
+    <verdict>PASS</verdict>
+  </self_check>
+
+  <scope_lock_check>
+    <git_diff_files>gate_roi_report.md</git_diff_files>
+    <manifest_files>gate_roi_report.md</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260606-0159</pipeline_id>
+    <evidence>
+      <file>gate_roi_report.md</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_output>
+
