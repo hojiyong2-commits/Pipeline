@@ -1,0 +1,30 @@
+{
+  "pipeline_id": "IMP-20260606-9E38",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py",
+        "tests/test_codex_record_base_9e38.py"
+      ],
+      "affected_functions": [
+        "pipeline.py::cmd_review_codex_record 및 argparse codex-record 섹션"
+      ],
+      "implemented_ac": [
+        "AC-1",
+        "AC-2",
+        "AC-3",
+        "AC-4"
+      ],
+      "implementation_evidence": [
+        "argparse codex-record에 --base REF 인수 추가 (default=main, dest=base_ref_arg)",
+        "cmd_review_codex_record 함수 상단 base_arg 추출",
+        "git rev-parse로 base_ref 유효성 사전 검사",
+        "_collect_git_diff_meta(base_arg) 호출로 diff_sha256/reviewed_files 자동 계산",
+        "new_record에 base_ref 필드 추가",
+        "잘못된 base ref 시 한국어 오류 메시지 + exit code 1",
+        "테스트 파일: tests/test_codex_record_base_9e38.py (4개 E2E 테스트)"
+      ]
+    }
+  ]
+}
