@@ -1570,5 +1570,5 @@ class TestProvenance:
         # final_state 확인
         final_state = read_state(state_file)
         assert final_state.get("pipeline_id") == "IMP-20260606-D9F4", (
-            f"final_state must have correct pipeline_id"
+            "final_state must have correct pipeline_id"
         )
