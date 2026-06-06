@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-06T02:15:33Z",
+  "pipeline_id": "IMP-20260606-0159",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "edcd06083cbef11ffd6dd37c0ca0b91a65f40629",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-06T02:15:29Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "gate_roi_report.md"
+  },
+  "agent_run": {
+    "run_id": "dev-b4a23c1e79258997",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "3d93a0252adf9ce3012d7201a5074fd61e5e5f25c79ab25611000976fbca3e09",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260606-0159/dev/agent_receipt_dev-b4a23c1e79258997.json",
+    "receipt_sha256": "c6ca671f639caac5663773bfbaa2fe2efd446faeaff931519373580e7c62b584",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260606-0159\\dev\\dev-b4a23c1e79258997.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260606-0159\\dev\\dev-b4a23c1e79258997.json",
+      "path": ".pipeline/phase_evidence/IMP-20260606-0159/dev/agent_receipt_dev-b4a23c1e79258997.json",
+      "sha256": "c6ca671f639caac5663773bfbaa2fe2efd446faeaff931519373580e7c62b584",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260606-0159/dev/report_dev_handover.xml",
+      "sha256": "3d93a0252adf9ce3012d7201a5074fd61e5e5f25c79ab25611000976fbca3e09",
+      "size_bytes": 2213,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_MT-1.json",
+      "path": ".pipeline/phase_evidence/IMP-20260606-0159/dev/scope_manifest_scope_manifest_MT-1.json",
+      "sha256": "4bd6544d89f351f4e12f6563f36974256a983869a6e17b03b1d510b5ee320980",
+      "size_bytes": 176,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "gate_roi_report.md",
+      "sha256": "a1224e51e436fef663ef3683ee80847a3aca997aad1c5566f2c45c389e8b1c88",
+      "size_bytes": 11096
+    }
+  ],
+  "local_only_files": []
+}
