@@ -54,18 +54,18 @@
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "9264e6f37c4050dee643fc9c6deea6764ba0695f1d037b458621be2abeee6bf5",
-      "size_bytes": 931756
+      "sha256": "04a1bdd6fc68e2eb6e5d45007efb0c525999265cb85ee4a19f0f356ed967c3aa",
+      "size_bytes": 918493
     },
     {
       "path": "tests/e2e/test_real_cli_paths.py",
-      "sha256": "fafea1b89aaa4f949ee397852c8fe55cf17c6151c57d930a20688bfa20d01372",
-      "size_bytes": 66548
+      "sha256": "ed3ba4df8de45238c4bb9f039224e3b59788ec65c54e0dd53343b76bc38dfe0f",
+      "size_bytes": 46001
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "c3552aebf98d6a533c05f1a7e8b5bd0375f84062c2705e9b404d7214249ede25",
-      "size_bytes": 28410
+      "sha256": "bcb34d679d81811ac1bfa61813e12b58489c18a205db5ca0f9e3108560e6fbb1",
+      "size_bytes": 27986
     }
   ],
   "local_only_files": []
