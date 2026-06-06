@@ -12164,6 +12164,7 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
     output_path_arg: Optional[str] = getattr(args, "output", None)
     reviewer_arg: str = getattr(args, "reviewer", "unknown") or "unknown"
     pipeline_id_arg: str = getattr(args, "pipeline_id_arg", "") or ""
+    base_arg: str = getattr(args, "base_ref_arg", "main") or "main"
 
     review_result_path = Path(output_path_arg) if output_path_arg else BASE_DIR / "codex_review_result.json"
 
@@ -12237,7 +12238,7 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
         # 빈 diff(returncode=0, stdout=b"")도 sha256(b"")과 비교하여 검증을 건너뛰지 않는다.
         try:
             _diff_proc = subprocess.run(
-                ["git", "diff", "main...HEAD"],
+                ["git", "diff", f"{base_arg}...HEAD"],
                 capture_output=True,
                 cwd=str(BASE_DIR),
                 timeout=30,
@@ -12338,15 +12339,30 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
         except Exception as exc:
             logging.getLogger(__name__).warning("기존 review 파일 로드 실패: %s", exc)
 
-    # diff_sha256 계산 (인자로 없으면 현재 diff에서 계산)
+    # --base 유효성 사전 검사: git rev-parse로 브랜치/커밋 존재 확인
+    _base_valid_proc = subprocess.run(
+        ["git", "rev-parse", "--verify", base_arg],
+        capture_output=True,
+        cwd=str(BASE_DIR),
+        timeout=10,
+    )
+    if _base_valid_proc.returncode != 0:
+        _die(
+            f"[CODEX RECORD] --base '{base_arg}' 기준 diff 계산에 실패했습니다. "
+            "브랜치 이름이 올바른지 확인하세요.",
+            exit_code=1,
+        )
+        return
+
+    # diff_sha256 계산 (인자로 없으면 --base 기준 현재 diff에서 자동 계산)
     if not diff_sha256_arg or not diff_sha256_arg.strip():
-        _, computed_diff_sha = _collect_git_diff_meta("main")
+        _, computed_diff_sha = _collect_git_diff_meta(base_arg)
         diff_sha256_final = computed_diff_sha
     else:
         diff_sha256_final = diff_sha256_arg.strip()
 
-    # reviewed_files 수집
-    reviewed_files, _ = _collect_git_diff_meta("main")
+    # reviewed_files 수집 (--base 기준으로 자동 계산)
+    reviewed_files, _ = _collect_git_diff_meta(base_arg)
 
     # 신규 기록 생성
     new_record: Dict[str, Any] = {
@@ -12357,6 +12373,7 @@ def cmd_review_codex_record(args: argparse.Namespace) -> None:
         "result": result_upper,
         "reviewer": reviewer_arg,
         "review_model": CODEX_REQUIRED_MODEL,
+        "base_ref": base_arg,
         "reviewed_files": reviewed_files,
         "diff_sha256": diff_sha256_final,
         "findings": existing_findings,
@@ -17332,6 +17349,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_review_record.add_argument(
         "--pipeline-id", dest="pipeline_id_arg", default="",
         metavar="ID", help="파이프라인 ID (생략 시 활성 state에서 자동 추출)",
+    )
+    p_review_record.add_argument(
+        "--base", dest="base_ref_arg", default="main",
+        metavar="REF",
+        help="diff 계산 기준 브랜치/커밋 (기본값: main). 이 값을 기준으로 diff_sha256과 reviewed_files가 자동 계산됩니다.",
     )
     p_review_record.add_argument(
         "--output", default=None,
