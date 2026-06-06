@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260606-D9F4</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+      <file>.github/workflows/ci.yml</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>pipeline._check_pr_approver_provenance (신규), pipeline.cmd_gates (accept 분기 확장)</target_function>
+    <target_function>tests.e2e.test_real_cli_paths.TestProvenance (신규 클래스)</target_function>
+    <target_function>ci.yml — Provenance Gate 정책 주석 추가 (no-op)</target_function>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </impact_analysis>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_real_cli_paths.py</file>
+    <file>.github/workflows/ci.yml</file>
+    <file>module_handover_MT-1.xml</file>
+    <file>module_handover_MT-2.xml</file>
+    <file>module_handover_MT-3.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+
+  <module_gate_summary>
+    <module id="MT-1" status="PASS">pipeline.py — _check_pr_approver_provenance + cmd_gates 연결</module>
+    <module id="MT-2" status="PASS">tests/e2e/test_real_cli_paths.py — TestProvenance 4개 E2E 테스트</module>
+    <module id="MT-3" status="PASS">.github/workflows/ci.yml — 정책 주석 추가 (no-op)</module>
+    <integration status="PASS">모든 모듈 통합 완료</integration>
+  </module_gate_summary>
+
+  <test_results>
+    <test_run>pytest tests/e2e/test_real_cli_paths.py::TestProvenance — 4 passed in 4.00s</test_run>
+    <test_run>ci.yml YAML 구문 유효성 — PASS</test_run>
+  </test_results>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260606-D9F4</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+      <file>.github/workflows/ci.yml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_handover>
