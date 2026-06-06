@@ -262,6 +262,8 @@ class TestReviewedFilesAuto:
     def test_reviewed_files_auto(self, tmp_path: Path) -> None:
         """--base main 실행 시 reviewed_files 필드가 자동으로 채워진다.
 
+        PIPELINE_STATE_PATH 격리 + 실제 CLI subprocess 실행.
+        final_state = output 파일 내용을 검사한다.
         reviewed_files는 리스트 타입이어야 하며 None이 아니어야 한다.
         """
         oracle = load_oracle("case_base_auto")
@@ -310,6 +312,8 @@ class TestManualShaBackwardCompat:
     def test_manual_sha_backward_compat(self, tmp_path: Path) -> None:
         """--diff-sha256 수동 입력 시 해당 SHA가 그대로 기록된다.
 
+        PIPELINE_STATE_PATH 격리 + 실제 CLI subprocess 실행.
+        final_state = output 파일 내용을 검사한다.
         --base 없이 기존 방식으로 실행했을 때 하위 호환이 유지됨을 검증.
         """
         oracle = load_oracle("case_manual_sha")
@@ -364,7 +368,11 @@ class TestInvalidBaseError:
     """AC-3: 존재하지 않는 --base ref 입력 시 한국어 오류 메시지 + exit code 1."""
 
     def test_invalid_base_error(self, tmp_path: Path) -> None:
-        """존재하지 않는 브랜치를 --base에 지정하면 exit code 1 + 한국어 오류가 출력된다."""
+        """존재하지 않는 브랜치를 --base에 지정하면 exit code 1 + 한국어 오류가 출력된다.
+
+        PIPELINE_STATE_PATH 격리 + 실제 CLI subprocess 실행.
+        final_state = output 파일 미생성을 검사한다 (오류 시 파일 미생성).
+        """
         state_file = tmp_path / "pipeline_state.json"
         output_file = tmp_path / "codex_review_result_invalid.json"
         write_state(state_file, _min_pipeline_state())
