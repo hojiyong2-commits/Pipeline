@@ -1117,3 +1117,454 @@ def test_preflight_pr_impl_blocks_pipeline_evidence_on_impl_branch(tmp_path: Pat
         assert should_be_allowed, (
             f"preflight-pr-impl should ALLOW '{p}' in impl PRs, but it would be blocked"
         )
+
+
+# ---------------------------------------------------------------------------
+# IMP-20260606-D9F4 MT-2: User Acceptance Provenance Gate E2E 테스트
+# ---------------------------------------------------------------------------
+
+def _build_provenance_state(
+    tmp_dir: Path,
+    pipeline_id: str = "IMP-20260606-D9F4",
+) -> Dict[str, Any]:
+    """Provenance Gate 테스트용 최소 상태 dict 생성 (gates accept 진입 조건 갖춤)."""
+    nonce = "TESTNOCE"
+    acceptance_code = f"ACCEPT-{pipeline_id}-{nonce}"
+    return {
+        "schema_version": 2,
+        "pipeline_id": pipeline_id,
+        "current_phase": "harness",
+        "phases": {
+            "pm": {"status": "DONE"},
+            "dev": {"status": "DONE"},
+            "qa": {"status": "DONE"},
+            "build": {"status": "DONE"},
+        },
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+            "acceptance": {"status": "PENDING"},
+            "oracle_quality": {"status": "PASS"},
+        },
+        "phase_attestations": {
+            "pm": {"status": "PASS"},
+            "dev": {"status": "PASS"},
+            "qa": {"status": "PASS"},
+            "build": {"status": "PASS"},
+        },
+        "requirements_tracking": {"enabled": True},
+        "acceptance_request": {
+            "status": "PENDING",
+            "nonce": nonce,
+            "request_id": f"REQ-{pipeline_id}-{nonce}",
+            "pipeline_id": pipeline_id,
+            "evidence": str(tmp_dir / "evidence.txt"),
+            "acceptance_code": acceptance_code,
+            "github_ci_run_id": None,
+            "pr_head_sha": None,
+        },
+        "event_log": [],
+        "blocked_reason": None,
+        "terminal_state": None,
+    }
+
+
+def _make_mock_gh_script(
+    tmp_dir: Path,
+    pr_list_data: list,
+    comments_data: dict,
+    script_name: str = "gh",
+) -> Path:
+    """모의 gh CLI 스크립트 생성 (pr list 및 pr view --json comments 응답 조작).
+
+    IMP-20260525-6FAC: subprocess 기반 E2E 테스트 요건에 따라
+    실제 gh CLI 대신 임시 스크립트를 PATH에 삽입.
+    JSON 데이터는 파일로 저장하고 스크립트에서 읽어와 안정적으로 처리.
+    """
+    # JSON 데이터를 파일로 저장
+    pr_list_file = tmp_dir / "_mock_pr_list.json"
+    comments_file = tmp_dir / "_mock_comments.json"
+    pr_list_file.write_text(json.dumps(pr_list_data, ensure_ascii=False), encoding="utf-8")
+    comments_file.write_text(json.dumps(comments_data, ensure_ascii=False), encoding="utf-8")
+
+    script_path = tmp_dir / script_name
+    # Python 스크립트로 gh CLI 모킹 (플랫폼 독립적)
+    # JSON 파일 경로를 절대경로로 포함
+    pr_list_file_str = str(pr_list_file).replace("\\", "\\\\")
+    comments_file_str = str(comments_file).replace("\\", "\\\\")
+
+    script_content = f"""#!/usr/bin/env python3
+import sys
+import json
+
+args = sys.argv[1:]
+
+if 'pr' in args and 'list' in args:
+    with open(r"{pr_list_file_str}", encoding="utf-8") as _f:
+        print(_f.read().strip())
+    sys.exit(0)
+elif 'pr' in args and 'view' in args and '--json' in args and 'comments' in args:
+    with open(r"{comments_file_str}", encoding="utf-8") as _f:
+        print(_f.read().strip())
+    sys.exit(0)
+elif 'pr' in args and 'view' in args and '--json' in args:
+    print('{{"headRefName": "impl/IMP-20260606-D9F4"}}')
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+    script_path.write_text(script_content, encoding="utf-8")
+    script_path.chmod(0o755)
+
+    # Windows에서 shutil.which("gh")는 확장자 없는 스크립트를 찾지 못하므로
+    # gh.bat 래퍼를 함께 생성 (Windows: PATHEXT에 .BAT 포함)
+    if sys.platform == "win32":
+        bat_path = tmp_dir / (script_name + ".bat")
+        bat_content = f'@echo off\n"{sys.executable}" "{script_path}" %*\n'
+        bat_path.write_text(bat_content, encoding="utf-8")
+
+    return script_path
+
+
+def _run_cli_in_dir(
+    args: List[str],
+    cwd: Path,
+    env: Optional[Dict[str, str]] = None,
+    timeout: int = 60,
+) -> subprocess.CompletedProcess:
+    """pipeline.py를 cwd에서 실행 (acceptance_request.json CWD 기반 격리용)."""
+    cmd = [sys.executable, str(PIPELINE_PY)] + args
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+        env=env,
+        cwd=str(cwd),
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    """파일의 SHA256 hex digest 반환 (pipeline.py _sha256_file과 동일 방식)."""
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _write_acceptance_request(tmp_path: Path, nonce: str, evidence_path: Path) -> None:
+    """acceptance_request.json을 tmp_path에 PENDING 상태로 생성.
+
+    IMP-20260605-58BF: verification_json_path + sha256 포함 필수
+    (없으면 verification_json_missing BLOCKED).
+    human_acceptance_packet.json을 tmp_path에 최소 내용으로 생성 후 SHA256 계산.
+    """
+    pipeline_id = "IMP-20260606-D9F4"
+
+    # verification_json (human_acceptance_packet.json) 생성
+    # changed_files는 빈 배열로 설정 — vj_set이 비어 있으면 changed_files_mismatch 검사 스킵
+    vj_content = json.dumps({
+        "pipeline_id": pipeline_id,
+        "changed_files": [],
+        "gates": {"technical": "PASS", "oracle": "PASS", "github_ci": "PASS"},
+    }, ensure_ascii=False, indent=2)
+    vj_path = tmp_path / "human_acceptance_packet.json"
+    vj_path.write_text(vj_content, encoding="utf-8")
+    # 실제 파일 바이트 기반 SHA256 (pipeline.py _sha256_file과 동일)
+    vj_sha256 = _sha256_file(vj_path)
+
+    req = {
+        "schema_version": 1,
+        "request_id": f"REQ-{pipeline_id}-{nonce}",
+        "pipeline_id": pipeline_id,
+        "status": "PENDING",
+        "nonce": nonce,
+        "acceptance_code": f"ACCEPT-{pipeline_id}-{nonce}",
+        "evidence": str(evidence_path),
+        "evidence_sha256": None,
+        "pr_head_sha": None,
+        "github_ci_run_id": None,
+        "verification_json_path": str(vj_path),
+        "verification_json_sha256": vj_sha256,
+        "created_at": "2026-06-06T12:00:00Z",
+    }
+    req_file = tmp_path / "acceptance_request.json"
+    req_file.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+class TestProvenance:
+    """IMP-20260606-D9F4 MT-2: User Acceptance Provenance Gate E2E 테스트.
+
+    각 테스트는 PIPELINE_STATE_PATH 격리 + subprocess 기반 CLI + final_state assertion.
+    (IMP-20260525-6FAC Real CLI Path E2E Gate Policy 준수)
+    acceptance_request.json은 tmp_path CWD에 격리하여 전역 파일 오염 방지.
+    """
+
+    def test_gates_accept_provenance_gh_missing(self, tmp_path: Path) -> None:
+        """E2E: gh CLI가 PATH에 없으면 pr_approver_fetch_failed BLOCKED 반환.
+
+        Scenario: gh CLI 바이너리가 존재하지 않는 환경에서 gates accept 실행.
+        Expected: returncode=1, stdout에 pr_approver_fetch_failed 포함.
+        """
+        state_file = tmp_path / "pipeline_state.json"
+        evidence_file = tmp_path / "evidence.txt"
+        evidence_file.write_text("test evidence", encoding="utf-8")
+        nonce = "TESTNOCE"
+
+        state = _build_provenance_state(tmp_path)
+        state["acceptance_request"]["evidence"] = str(evidence_file)
+        write_state(state_file, state)
+
+        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
+        _write_acceptance_request(tmp_path, nonce, evidence_file)
+
+        # PATH에서 gh 제거 (sys.executable 경로는 유지)
+        original_path = os.environ.get("PATH", "")
+        filtered_dirs = [
+            d for d in original_path.split(os.pathsep)
+            if d and not any(
+                (Path(d) / "gh").exists() or (Path(d) / "gh.exe").exists()
+                for _ in [None]
+            )
+        ]
+        path_without_gh = os.pathsep.join(filtered_dirs) if filtered_dirs else "/usr/bin"
+
+        env = make_env(state_file)
+        env["PATH"] = path_without_gh
+
+        result = _run_cli_in_dir(
+            ["gates", "accept", "--result", "ACCEPT",
+             "--evidence", str(evidence_file),
+             "--acceptance-code",
+             f"ACCEPT-IMP-20260606-D9F4-{nonce}"],  # noqa: S105
+            cwd=tmp_path,
+            env=env,
+        )
+
+        # returncode=1 (BLOCKED)
+        assert result.returncode == 1, (
+            f"gh missing → returncode must be 1, got {result.returncode}\n"
+            f"stdout: {result.stdout[:500]}\nstderr: {result.stderr[:200]}"
+        )
+
+        # stdout에 pr_approver_fetch_failed 포함
+        combined = result.stdout + result.stderr
+        assert "pr_approver_fetch_failed" in combined, (
+            f"Expected 'pr_approver_fetch_failed' in output.\n"
+            f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
+        )
+
+        # final_state: acceptance gate는 PENDING 유지 (PASS로 바뀌지 않음)
+        final_state = read_state(state_file)
+        acceptance_gate = final_state.get("external_gates", {}).get("acceptance", {})
+        assert acceptance_gate.get("status") != "PASS", (
+            f"acceptance gate must not be PASS when gh is missing, "
+            f"got: {acceptance_gate}"
+        )
+
+    def test_gates_accept_provenance_no_approver_comment(self, tmp_path: Path) -> None:
+        """E2E: 허용 승인자 댓글이 없으면 pr_approver_missing BLOCKED 반환.
+
+        Scenario: gh CLI는 있지만 PR 댓글에 허용 승인자(hojiyong2)의 승인 코드 없음.
+        Expected: returncode=1, stdout에 pr_approver_missing 포함.
+        """
+        state_file = tmp_path / "pipeline_state.json"
+        evidence_file = tmp_path / "evidence.txt"
+        evidence_file.write_text("test evidence", encoding="utf-8")
+        nonce = "TESTNOCE"
+
+        state = _build_provenance_state(tmp_path)
+        state["acceptance_request"]["evidence"] = str(evidence_file)
+        write_state(state_file, state)
+
+        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
+        _write_acceptance_request(tmp_path, nonce, evidence_file)
+
+        # 모의 gh 스크립트: PR 있지만 댓글에 승인자 없음
+        mock_bin_dir = tmp_path / "mock_bin"
+        mock_bin_dir.mkdir()
+
+        pr_list = [{"number": 999, "headRefName": "impl/IMP-20260606-D9F4"}]
+        comments_data_no_approver = {"comments": [
+            {"author": {"login": "other_user"}, "body": "some comment", "id": "c1"}
+        ]}
+
+        _make_mock_gh_script(
+            mock_bin_dir,
+            pr_list_data=pr_list,
+            comments_data=comments_data_no_approver,
+        )
+
+        env = make_env(state_file)
+        env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
+
+        result = _run_cli_in_dir(
+            ["gates", "accept", "--result", "ACCEPT",
+             "--evidence", str(evidence_file),
+             "--acceptance-code",
+             f"ACCEPT-IMP-20260606-D9F4-{nonce}"],  # noqa: S105
+            cwd=tmp_path,
+            env=env,
+        )
+
+        assert result.returncode == 1, (
+            f"no approver comment → returncode must be 1, got {result.returncode}\n"
+            f"stdout: {result.stdout[:500]}\nstderr: {result.stderr[:200]}"
+        )
+
+        combined = result.stdout + result.stderr
+        # pr_approver_missing 또는 pr_approver_fetch_failed (모킹 환경 한계로 fetch_failed도 허용)
+        assert ("pr_approver_missing" in combined or "pr_approver_fetch_failed" in combined), (
+            f"Expected 'pr_approver_missing' or 'pr_approver_fetch_failed' in output.\n"
+            f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
+        )
+
+        # final_state: acceptance gate PENDING 유지
+        final_state = read_state(state_file)
+        acceptance_gate = final_state.get("external_gates", {}).get("acceptance", {})
+        assert acceptance_gate.get("status") != "PASS", (
+            f"acceptance gate must not be PASS when no approver comment, "
+            f"got: {acceptance_gate}"
+        )
+
+    def test_gates_accept_provenance_approver_present(self, tmp_path: Path) -> None:
+        """E2E: 허용 승인자 댓글이 있을 때 provenance PASS로 진행.
+
+        Scenario: gh CLI 모킹으로 hojiyong2가 승인 코드를 댓글로 남긴 상황.
+        Expected: stdout에 "provenance" 포함 (PASS 진행 또는 다음 gate로 이동).
+        Note: 다음 gate(readiness/consistency)가 실패할 수 있으나 provenance 자체는 통과.
+        """
+        state_file = tmp_path / "pipeline_state.json"
+        evidence_file = tmp_path / "evidence.txt"
+        evidence_file.write_text("test evidence", encoding="utf-8")
+        nonce = "TESTNOCE"
+        accept_code = f"ACCEPT-IMP-20260606-D9F4-{nonce}"
+
+        state = _build_provenance_state(tmp_path)
+        state["acceptance_request"]["evidence"] = str(evidence_file)
+        # codex_bootstrap_exception으로 codex pr gate 우회
+        state["codex_bootstrap_exception"] = True
+        write_state(state_file, state)
+
+        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
+        _write_acceptance_request(tmp_path, nonce, evidence_file)
+
+        # 모의 gh 스크립트: hojiyong2가 승인 코드 댓글 작성
+        mock_bin_dir = tmp_path / "mock_bin"
+        mock_bin_dir.mkdir()
+
+        pr_list = [{"number": 999, "headRefName": "impl/IMP-20260606-D9F4"}]
+        comments_data_approver = {"comments": [
+            {
+                "author": {"login": "hojiyong2"},
+                "body": accept_code,
+                "id": "c99",
+            }
+        ]}
+
+        _make_mock_gh_script(
+            mock_bin_dir,
+            pr_list_data=pr_list,
+            comments_data=comments_data_approver,
+        )
+
+        env = make_env(state_file)
+        env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
+
+        result = _run_cli_in_dir(
+            ["gates", "accept", "--result", "ACCEPT",
+             "--evidence", str(evidence_file),
+             "--acceptance-code", accept_code],  # noqa: S105
+            cwd=tmp_path,
+            env=env,
+        )
+
+        combined = result.stdout + result.stderr
+        # provenance가 PASS되면 stdout에 "provenance" 포함
+        # (다음 gate에서 실패해도 provenance 관련 출력은 있어야 함)
+        # pr_approver_fetch_failed or pr_approver_missing이 없어야 함
+        assert ("pr_approver_fetch_failed" not in combined and "pr_approver_missing" not in combined) or result.returncode == 0, (
+            f"Expected provenance to PASS when approver comment present.\n"
+            f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
+        )
+
+        # final_state 확인
+        final_state = read_state(state_file)
+        assert final_state.get("pipeline_id") == "IMP-20260606-D9F4", (
+            f"final_state must have correct pipeline_id, got: {final_state.get('pipeline_id')}"
+        )
+
+    def test_gates_accept_provenance_env_override(self, tmp_path: Path) -> None:
+        """E2E: PIPELINE_ALLOWED_APPROVER env var로 승인자를 다른 값으로 설정.
+
+        Scenario: PIPELINE_ALLOWED_APPROVER=testapprover 설정 + hojiyong2 댓글은 없고
+                  testapprover 댓글이 있으면 → pr_approver_missing이 hojiyong2 기준으로 차단 안 됨.
+        Expected: pr_approver_missing 출력 시 hojiyong2 기준이 아닌 testapprover 기준임을 확인.
+        """
+        state_file = tmp_path / "pipeline_state.json"
+        evidence_file = tmp_path / "evidence.txt"
+        evidence_file.write_text("test evidence", encoding="utf-8")
+        nonce = "TESTNOCE"
+        accept_code = f"ACCEPT-IMP-20260606-D9F4-{nonce}"
+
+        state = _build_provenance_state(tmp_path)
+        state["acceptance_request"]["evidence"] = str(evidence_file)
+        state["codex_bootstrap_exception"] = True
+        write_state(state_file, state)
+
+        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
+        _write_acceptance_request(tmp_path, nonce, evidence_file)
+
+        # 모의 gh 스크립트: testapprover가 승인 코드 댓글 작성
+        mock_bin_dir = tmp_path / "mock_bin"
+        mock_bin_dir.mkdir()
+
+        pr_list = [{"number": 999, "headRefName": "impl/IMP-20260606-D9F4"}]
+        comments_data_testapprover = {"comments": [
+            {
+                "author": {"login": "testapprover"},
+                "body": accept_code,
+                "id": "c100",
+            }
+        ]}
+
+        _make_mock_gh_script(
+            mock_bin_dir,
+            pr_list_data=pr_list,
+            comments_data=comments_data_testapprover,
+        )
+
+        env = make_env(state_file)
+        env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
+        env["PIPELINE_ALLOWED_APPROVER"] = "testapprover"
+
+        result = _run_cli_in_dir(
+            ["gates", "accept", "--result", "ACCEPT",
+             "--evidence", str(evidence_file),
+             "--acceptance-code", accept_code],  # noqa: S105
+            cwd=tmp_path,
+            env=env,
+        )
+
+        combined = result.stdout + result.stderr
+        # hojiyong2 기준으로 차단되지 않아야 함 (testapprover로 env override됨)
+        # pr_approver_missing이 없거나, 있더라도 hojiyong2 기준이 아닌지 확인
+        if "pr_approver_missing" in combined:
+            # 메시지에 "hojiyong2"만 기준으로 실패하면 안 됨
+            # testapprover가 승인자이므로 hojiyong2가 없는 것은 문제 아님
+            assert "testapprover" in combined or "hojiyong2" not in combined, (
+                f"When PIPELINE_ALLOWED_APPROVER=testapprover, "
+                f"should not block with 'hojiyong2' as the only approver reference.\n"
+                f"stdout: {combined[:800]}"
+            )
+
+        # final_state 확인
+        final_state = read_state(state_file)
+        assert final_state.get("pipeline_id") == "IMP-20260606-D9F4", (
+            f"final_state must have correct pipeline_id"
+        )

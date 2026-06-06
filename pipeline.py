@@ -2423,6 +2423,15 @@ HYGIENE_PROTECTED_PREFIXES: List[str] = [
 # source-like 확장자: 이 확장자의 파일은 cleanup-workspace 시 possible-source-leftovers/ 서브폴더로 이동.
 HYGIENE_SOURCE_LIKE_EXTENSIONS: frozenset = frozenset({".py", ".ts", ".js", ".ps1", ".sh"})
 
+# ---------------------------------------------------------------------------
+# IMP-20260606-D9F4 MT-1: User Acceptance Provenance Gate — SSoT 상수
+# ---------------------------------------------------------------------------
+# PR 댓글 외부 승인 검증에 사용되는 허용 승인자 계정.
+# 환경 변수 PIPELINE_ALLOWED_APPROVER로 재정의 가능 (기본값: "hojiyong2").
+# 이 상수는 _check_pr_approver_provenance()에서만 참조합니다.
+# ---------------------------------------------------------------------------
+PIPELINE_ALLOWED_APPROVER: str = os.environ.get("PIPELINE_ALLOWED_APPROVER", "hojiyong2")
+
 
 def _is_internal_artifact(path: str) -> bool:
     """경로가 workspace 내부 산출물인지 판정합니다 (WORKSPACE_INTERNAL_PATTERNS SSoT 사용).
@@ -15130,6 +15139,197 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     _save(state)
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260606-D9F4 MT-1: User Acceptance Provenance Gate
+# ---------------------------------------------------------------------------
+
+def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
+    """GitHub PR 댓글에서 허용 승인자의 승인 코드를 검증합니다.
+
+    gates accept 실행 시 호출되어, 실제 GitHub PR 댓글에 허용 승인자가
+    올바른 승인 코드를 남겼는지 확인합니다.
+
+    IMP-20260606-D9F4 MT-1: User Acceptance Provenance Gate.
+
+    동작 순서:
+      1. gh CLI 설치 여부 확인 → 없으면 pr_approver_fetch_failed BLOCKED
+      2. 열린 PR 목록 조회 → PR 없으면 pr_approver_fetch_failed BLOCKED
+      3. 현재 브랜치와 일치하는 PR 찾기
+      4. PR 댓글 조회 → 실패 시 pr_approver_fetch_failed BLOCKED
+      5. 허용 승인자(PIPELINE_ALLOWED_APPROVER)가 승인 코드를 남겼는지 확인
+         → 없으면 pr_approver_missing BLOCKED
+      6. 성공 시 PASS 반환
+
+    Args:
+        state: 파이프라인 상태 dict (pipeline_id, acceptance_request 필드 필요)
+
+    Returns:
+        dict: status (PASS|BLOCKED), failure_code, message, approver, comment_id, checked_at
+    """
+    import json as _json
+    import subprocess as _subprocess
+    import shutil as _shutil
+    from datetime import datetime as _datetime, timezone as _timezone
+
+    pipeline_id: str = str(state.get("pipeline_id", "") or "")
+    acceptance_req: Dict[str, Any] = state.get("acceptance_request") or {}
+    nonce: str = str(acceptance_req.get("nonce", "") or "")
+    allowed_approver: str = PIPELINE_ALLOWED_APPROVER
+
+    accept_code: str = f"ACCEPT-{pipeline_id}-{nonce}" if (pipeline_id and nonce) else ""
+
+    # 1. gh CLI 설치 확인
+    # shutil.which로 찾은 경로를 명시적으로 사용 (Windows에서 .bat 래퍼가 PATH에 있을 때
+    # subprocess.run(["gh", ...])는 실제 gh.exe를 찾지만 shutil.which는 .bat를 반환하므로
+    # 명시적 경로를 사용해야 테스트 모킹이 올바르게 동작한다.)
+    _gh_path: Optional[str] = _shutil.which("gh")
+    if not _gh_path:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_approver_fetch_failed",
+            "message": (
+                "[PIPELINE ERROR] gh CLI가 설치되어 있지 않습니다 (pr_approver_fetch_failed). "
+                "gh CLI를 설치하고 'gh auth login'으로 인증한 뒤 다시 실행하세요."
+            ),
+            "approver": None,
+            "comment_id": None,
+            "checked_at": _datetime.now(_timezone.utc).isoformat(),
+        }
+
+    # 2. 현재 브랜치 확인
+    try:
+        _branch_result = _subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=10
+        )
+        current_branch: str = _branch_result.stdout.strip()
+    except Exception:  # noqa: BLE001
+        current_branch = ""
+
+    # 3. 열린 PR 목록 조회 (현재 브랜치와 일치하는 PR 찾기)
+    pr_number: Optional[str] = None
+    try:
+        _pr_list_result = _subprocess.run(
+            [_gh_path, "pr", "list", "--state", "open", "--json", "number,headRefName"],
+            capture_output=True, text=True, timeout=30
+        )
+        if _pr_list_result.returncode == 0 and _pr_list_result.stdout.strip():
+            _pr_list: List[Dict[str, Any]] = _json.loads(_pr_list_result.stdout)
+            for _pr in _pr_list:
+                if current_branch and _pr.get("headRefName", "") == current_branch:
+                    pr_number = str(_pr["number"])
+                    break
+            if pr_number is None and _pr_list:
+                # 브랜치 매칭 실패 시 첫 번째 PR 사용 (state의 PR 번호 우선)
+                _state_pr = (
+                    state.get("github_ci", {}).get("pr_number")
+                    or state.get("acceptance_request", {}).get("pr_number")
+                )
+                if _state_pr:
+                    pr_number = str(_state_pr)
+                else:
+                    pr_number = str(_pr_list[0]["number"])
+    except Exception:  # noqa: BLE001
+        pass
+
+    if pr_number is None:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_approver_fetch_failed",
+            "message": (
+                "[PIPELINE ERROR] 열린 PR을 찾을 수 없습니다 (pr_approver_fetch_failed). "
+                "GitHub PR이 생성되어 있고 gh CLI가 올바르게 인증되어 있는지 확인하세요."
+            ),
+            "approver": None,
+            "comment_id": None,
+            "checked_at": _datetime.now(_timezone.utc).isoformat(),
+        }
+
+    # 4. PR 댓글 조회
+    try:
+        _comments_result = _subprocess.run(
+            [_gh_path, "pr", "view", pr_number, "--json", "comments"],
+            capture_output=True, text=True, timeout=30
+        )
+        if _comments_result.returncode != 0 or not _comments_result.stdout.strip():
+            return {
+                "status": "BLOCKED",
+                "failure_code": "pr_approver_fetch_failed",
+                "message": (
+                    f"[PIPELINE ERROR] PR #{pr_number} 댓글 조회 실패 (pr_approver_fetch_failed). "
+                    "gh CLI 인증 상태를 확인하세요."
+                ),
+                "approver": None,
+                "comment_id": None,
+                "checked_at": _datetime.now(_timezone.utc).isoformat(),
+            }
+        _pr_data: Dict[str, Any] = _json.loads(_comments_result.stdout)
+        _comments: List[Dict[str, Any]] = _pr_data.get("comments", []) or []
+    except Exception:  # noqa: BLE001
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_approver_fetch_failed",
+            "message": (
+                "[PIPELINE ERROR] PR 댓글 파싱 실패 (pr_approver_fetch_failed). "
+                "gh CLI 버전을 확인하고 다시 시도하세요."
+            ),
+            "approver": None,
+            "comment_id": None,
+            "checked_at": _datetime.now(_timezone.utc).isoformat(),
+        }
+
+    # 5. 허용 승인자의 승인 코드 댓글 확인
+    _found_approver: Optional[str] = None
+    _found_comment_id: Optional[str] = None
+    for _comment in _comments:
+        _author: str = (
+            _comment.get("author", {}).get("login", "")
+            or _comment.get("login", "")
+            or ""
+        )
+        _body: str = str(_comment.get("body", "") or "")
+        _cid: str = str(_comment.get("id", "") or "")
+        if _author == allowed_approver:
+            # 승인 코드 포함 여부 확인 (accept_code가 있으면 정확히 확인, 없으면 ACCEPT 접두사만 확인)
+            if accept_code and accept_code in _body:
+                _found_approver = _author
+                _found_comment_id = _cid
+                break
+            elif not accept_code and ("ACCEPT-" + pipeline_id) in _body:
+                _found_approver = _author
+                _found_comment_id = _cid
+                break
+
+    if _found_approver is None:
+        _approver_hint = f" (확인 대상: {allowed_approver})" if allowed_approver else ""
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_approver_missing",
+            "message": (
+                f"[PIPELINE ERROR] PR #{pr_number}에서 허용 승인자{_approver_hint}의 "
+                f"승인 코드 댓글을 찾을 수 없습니다 (pr_approver_missing). "
+                f"GitHub PR에 허용 승인자({allowed_approver})가 승인 코드를 남겨야 합니다. "
+                f"승인 코드 형식: {accept_code or 'ACCEPT-<pipeline_id>-<nonce>'}"
+            ),
+            "approver": None,
+            "comment_id": None,
+            "checked_at": _datetime.now(_timezone.utc).isoformat(),
+        }
+
+    # 6. PASS
+    _checked_at = _datetime.now(_timezone.utc).isoformat()
+    return {
+        "status": "PASS",
+        "failure_code": "",
+        "message": f"Provenance PASS — approver={_found_approver} PR=#{pr_number}",
+        "approver": _found_approver,
+        "comment_id": _found_comment_id,
+        "pr_number": pr_number,
+        "checked_at": _checked_at,
+        "provenance": True,
+    }
+
+
 def cmd_gates(args: argparse.Namespace) -> None:
     action = args.gates_action
 
@@ -15883,6 +16083,48 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 f"[BLOCKED] verification_json 변경 감지 ({_vj_freshness_code}) — "
                 "gates request-accept 재실행 필요"
             )
+        # IMP-20260606-D9F4 MT-1: User Acceptance Provenance Gate
+        # CI run ID / head SHA / evidence 검증 완료 이후, Codex PR gate 이전에 실행.
+        # GitHub PR 댓글에서 허용 승인자(PIPELINE_ALLOWED_APPROVER)의 승인 코드를 확인.
+        if accept_decision == "ACCEPT":
+            _prov_result = _check_pr_approver_provenance(state)
+            if _prov_result["status"] == "BLOCKED":
+                _prov_failure_code = str(_prov_result.get("failure_code") or "pr_approver_fetch_failed")
+                _prov_message = str(_prov_result.get("message") or "pr_approver_fetch_failed")
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "accept",
+                             "--result", "ACCEPT", "--evidence", "<result-path>",
+                             "--acceptance-code", f"ACCEPT-{pid}-<nonce>"],
+                    note=_prov_message,
+                    status="BLOCKED", phase="harness",
+                    failure_code=_prov_failure_code,
+                    failure_category="missing_evidence",
+                    summary_ko=(
+                        "GitHub PR 댓글에서 허용 승인자의 승인 코드를 찾을 수 없습니다. "
+                        f"허용 승인자({PIPELINE_ALLOWED_APPROVER})가 PR에 승인 코드 댓글을 남겨야 합니다."
+                    ),
+                    expected=f"PR 댓글: approver={PIPELINE_ALLOWED_APPROVER} body contains ACCEPT-{pid}-<nonce>",
+                    actual=_prov_failure_code,
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=[
+                        f"GitHub PR에서 {PIPELINE_ALLOWED_APPROVER} 계정으로 승인 코드 댓글을 남기세요.",
+                        "댓글 형식: ACCEPT-<pipeline_id>-<nonce>",
+                        "댓글 작성 후 pipeline.py gates accept를 다시 실행하세요.",
+                    ],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die(_prov_message)
+            # provenance PASS → state에 기록
+            state.setdefault("acceptance", {})["provenance_check"] = {
+                "status": "PASS",
+                "approver": _prov_result.get("approver"),
+                "comment_id": _prov_result.get("comment_id"),
+                "pr_number": _prov_result.get("pr_number"),
+                "checked_at": _prov_result.get("checked_at"),
+            }
+            _save(state)
         # D4: pr gate → acceptance gate 연결 (bootstrap_exception 제외)
         bootstrap_exception_accept = state.get("codex_bootstrap_exception", False)
         if not bootstrap_exception_accept and accept_decision == "ACCEPT":
