@@ -9,7 +9,7 @@
   "started_at": "2026-06-06T21:09:40Z",
   "completed_at": "2026-06-06T21:09:44Z",
   "output_file": "dev_handover.xml",
-  "output_sha256": "4c97d65e0dea042178f7125a95fcb98334ff466e146e36ecfbe5f2e2c7876706",
+  "output_sha256": "e230b02492c24a08cfabc630d8985e9eb16a6bf531c888eafc6d6a5fc94d1557",
   "evidence_files": [],
   "commit_sha": "84b2bf2e55fc052b1595fdef09f0caa63deaf71e"
 }

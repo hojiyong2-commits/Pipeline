@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-06T21:17:56Z",
+  "generated_at": "2026-06-06T21:22:39Z",
   "pipeline_id": "IMP-20260606-D9F4",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "da2692ad74ba198d6ac660327a43548886e05492",
+  "commit_hint": "65e692860db8db73908294a49f2a54433b0d214a",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-06-06T21:12:33Z",
@@ -18,9 +18,9 @@
     "agent_id": "dev-agent",
     "status": "COMPLETED",
     "output_file": "dev_handover.xml",
-    "output_sha256": "4c97d65e0dea042178f7125a95fcb98334ff466e146e36ecfbe5f2e2c7876706",
+    "output_sha256": "e230b02492c24a08cfabc630d8985e9eb16a6bf531c888eafc6d6a5fc94d1557",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260606-D9F4/dev/agent_receipt_dev-7c488b9ff6dbb6cb.json",
-    "receipt_sha256": "7d81e604236ecef3d75b76860ffc47e4a98c1a02eaa53342bc227ea2664c0af0",
+    "receipt_sha256": "a6c3d46c8497e00c912f641687df6666f4e6f0476e658d2a0f9fdf62e96467d4",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260606-D9F4\\dev\\dev-7c488b9ff6dbb6cb.json"
   },
@@ -30,16 +30,16 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260606-D9F4\\dev\\dev-7c488b9ff6dbb6cb.json",
       "path": ".pipeline/phase_evidence/IMP-20260606-D9F4/dev/agent_receipt_dev-7c488b9ff6dbb6cb.json",
-      "sha256": "7d81e604236ecef3d75b76860ffc47e4a98c1a02eaa53342bc227ea2664c0af0",
-      "size_bytes": 502,
+      "sha256": "a6c3d46c8497e00c912f641687df6666f4e6f0476e658d2a0f9fdf62e96467d4",
+      "size_bytes": 501,
       "requires_force_add": true
     },
     {
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/IMP-20260606-D9F4/dev/report_dev_handover.xml",
-      "sha256": "4c97d65e0dea042178f7125a95fcb98334ff466e146e36ecfbe5f2e2c7876706",
-      "size_bytes": 2171,
+      "sha256": "e230b02492c24a08cfabc630d8985e9eb16a6bf531c888eafc6d6a5fc94d1557",
+      "size_bytes": 2115,
       "requires_force_add": true
     },
     {
@@ -54,18 +54,18 @@
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "04a1bdd6fc68e2eb6e5d45007efb0c525999265cb85ee4a19f0f356ed967c3aa",
-      "size_bytes": 918493
+      "sha256": "9264e6f37c4050dee643fc9c6deea6764ba0695f1d037b458621be2abeee6bf5",
+      "size_bytes": 931756
     },
     {
       "path": "tests/e2e/test_real_cli_paths.py",
-      "sha256": "ed3ba4df8de45238c4bb9f039224e3b59788ec65c54e0dd53343b76bc38dfe0f",
-      "size_bytes": 46001
+      "sha256": "fafea1b89aaa4f949ee397852c8fe55cf17c6151c57d930a20688bfa20d01372",
+      "size_bytes": 66548
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "bcb34d679d81811ac1bfa61813e12b58489c18a205db5ca0f9e3108560e6fbb1",
-      "size_bytes": 27986
+      "sha256": "c3552aebf98d6a533c05f1a7e8b5bd0375f84062c2705e9b404d7214249ede25",
+      "size_bytes": 28410
     }
   ],
   "local_only_files": []
