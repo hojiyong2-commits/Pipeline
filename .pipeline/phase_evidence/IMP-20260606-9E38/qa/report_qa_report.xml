@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260606-9E38</pipeline_id>
+  <mt_id>MT-1</mt_id>
+  <agent_run_id>qa-33da9f76336dcecf</agent_run_id>
+
+  <category_check>
+    <wa>N-A — 네트워크 통신 없음</wa>
+    <ui>N-A — GUI 없음</ui>
+    <fs>PASS — pathlib.Path 사용, tmp_path 격리, 파일 존재 여부 검증 포함</fs>
+    <pd>PASS — MT-1 단일 함수 변경, scope_lock_check verdict=PASS, base_ref 로직 _collect_git_diff_meta() 위임으로 책임 분리 명확, 엣지케이스 커버</pd>
+    <sec>PASS — 하드코딩 시크릿 없음, git rev-parse --verify 사전 검증, subprocess shell=False, 테스트 dummy 값 EXAMPLE_DUMMY_ 패딩 준수</sec>
+    <al>PASS — base_arg 추출 getattr fallback, diff_sha256_arg 빈값 분기, subprocess returncode 0 조건 분기 포함</al>
+    <build>N-A — meta-task(pipeline.py 수정), EXE 빌드 대상 아님</build>
+  </category_check>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <scope_lock_check_present>PASS — Dev scope_lock_check verdict=PASS, 변경 파일 pipeline.py+tests/test_codex_record_base_9e38.py만</scope_lock_check_present>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <test_results>
+    <test id="T1" name="test_base_auto_diff_sha256">PASS — subprocess+PIPELINE_STATE_PATH 격리+final_state assertion, exit code 0, base_ref=main, diff_sha256 자동 계산 기록</test>
+    <test id="T2" name="test_reviewed_files_auto">PASS — reviewed_files 리스트 타입 자동 채움 확인</test>
+    <test id="T3" name="test_manual_sha_backward_compat">PASS — --diff-sha256 수동 방식 하위 호환, manual SHA 그대로 기록</test>
+    <test id="T4" name="test_invalid_base_error">PASS — exit code 1 + 한국어 오류 메시지 확인</test>
+  </test_results>
+
+  <ac_verification>
+    <criterion id="AC-1" result="PASS">--base main 시 diff_sha256 자동 계산되어 codex_review_result.json에 base_ref=main과 함께 기록</criterion>
+    <criterion id="AC-2" result="PASS">기존 --diff-sha256 수동 방식 그대로 동작, 수동 입력 SHA 그대로 기록</criterion>
+    <criterion id="AC-3" result="PASS">잘못된 base ref 시 exit code 1 + 한국어 오류 메시지 출력</criterion>
+    <criterion id="AC-4" result="PASS">reviewed_files 필드가 git diff --name-only 기준으로 자동 채워짐</criterion>
+    <criterion id="AC-5" result="PASS">pipeline.py 라인 12241 base_arg 기반 diff 계산으로 stale evidence 차단 계속 동작</criterion>
+  </ac_verification>
+
+  <numeric_score>100</numeric_score>
+  <verdict>PASS</verdict>
+
+  <result>[PASS]</result>
+
+  <critical_issues>없음</critical_issues>
+
+  <improvement_suggestions>
+    - tests/test_codex_record_base_9e38.py: ruff fixable 미사용 import 3건(tempfile, pytest, 미사용 변수) — 동작 무영향
+  </improvement_suggestions>
+</qa_report>
