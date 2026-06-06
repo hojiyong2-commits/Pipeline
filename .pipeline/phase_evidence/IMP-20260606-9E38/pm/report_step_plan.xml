@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pm_planner_output>
+
+<decomposition_audit>
+  <total_functions_identified>2</total_functions_identified>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>3</grep_executions>
+  <split_decision>변경 대상은 pipeline.py 내 cmd_review_codex_record 함수와 argparse codex-record 섹션 2곳입니다. 두 곳 모두 동일 파일의 동일 기능(codex-record)에 속하며 함께 변경해야 일관성이 유지됩니다. 예상 변경 줄 수는 약 35줄로 단일 MT로 처리합니다.</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260606-9E38</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Phase — codex-record --base 인수 추가</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py는 trust-root 파일(core_parser_logic=true, pipeline_protocol=true)이므로 STANDARD 프로필을 사용합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>35</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명(base_arg 등), 코드 스타일, 함수 내부 배치 순서 등 P2 수준 질문은 기존 코드 패턴(getattr 방식)에 맞춰 PM이 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>--base 인수를 생략했을 때 기본값을 어떻게 할까요?</user_facing_question>
+        <evidence>현재 코드(라인 12343, 12349)는 "main"을 하드코딩으로 사용합니다. --base 생략 시 동일하게 "main"으로 동작하면 기존 명령어를 전혀 바꾸지 않아도 됩니다.</evidence>
+        <why_it_matters>기본값이 "main"이면 --base 인수 없이 기존 방식으로 실행해도 지금과 똑같이 동작합니다. 기본값이 없으면 기존 파이프라인 전체가 영향을 받습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>기본값 "main" — --base 생략 시 자동으로 main 브랜치 기준 계산</label>
+            <benefit>기존 파이프라인 명령어를 수정하지 않아도 됩니다. 하위 호환이 완전히 유지됩니다.</benefit>
+            <cost>main 외 브랜치를 주로 쓰는 환경에서는 처음에 --base를 명시해야 합니다.</cost>
+          </option>
+          <option id="B">
+            <label>기본값 없음 — --base 또는 --diff-sha256 중 하나를 반드시 입력해야 함</label>
+            <benefit>base_ref를 명시하지 않아도 되는 모호한 상황을 차단합니다.</benefit>
+            <cost>기존에 --diff-sha256만 사용하던 모든 파이프라인에 --base main 추가가 필요하여 대규모 수정이 발생합니다.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 — 기본값 "main" 채택</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline.py 수정 (cmd_review_codex_record 함수 + argparse codex-record 섹션)
+    - Output: --base 인수가 추가된 pipeline.py + tests/test_codex_record_base_9e38.py 신규 생성
+    - Validation: --base main 실행 시 diff_sha256 자동 계산 기록, 기존 --diff-sha256 방식 하위 호환
+  </interface_spec>
+
+  <requirements>
+    - pipeline.py::cmd_review_codex_record 함수에 --base 인수 처리 로직 추가
+    - argparse codex-record 섹션(라인 17304 아래)에 --base 인수 추가: default="main", dest="base_ref_arg", metavar="REF"
+    - cmd_review_codex_record 상단에서 base_arg 추출: getattr(args, "base_ref_arg", "main") or "main"
+    - --base 주어지면 git diff base...HEAD 기준으로 diff_sha256과 reviewed_files 자동 계산
+    - --base 없고 --diff-sha256도 없을 때: 기본값 "main"으로 _collect_git_diff_meta("main") 호출 (기존 동작 유지)
+    - --base 없고 --diff-sha256 있을 때: 기존 수동 방식 그대로 유지 (하위 호환)
+    - 라인 12343: _collect_git_diff_meta("main") → _collect_git_diff_meta(base_arg) 교체
+    - 라인 12349: _collect_git_diff_meta("main") → _collect_git_diff_meta(base_arg) 교체
+    - 라인 12240: ["git", "diff", "main...HEAD"] → ["git", "diff", f"{base_arg}...HEAD"] 교체
+    - new_record에 "base_ref": base_arg 필드 추가 (optional_str_fields에 이미 "base_ref" 존재 — schema 변경 불필요)
+    - base_ref git diff 실패 시 한국어 오류: "[CODEX RECORD] --base '...' 기준 diff 계산에 실패했습니다. 브랜치 이름이 올바른지 확인하세요."
+    - 사용자-facing 메시지는 모두 쉬운 한국어로 작성
+    - 테스트 파일: tests/test_codex_record_base_9e38.py — 아래 4개 테스트 포함
+      1. test_base_auto_diff_sha256: --base main 사용 시 diff_sha256 자동 계산 기록 (PIPELINE_STATE_PATH 격리 필수)
+      2. test_reviewed_files_auto: reviewed_files 자동 채움 확인
+      3. test_manual_sha_backward_compat: --diff-sha256 수동 방식 동작 유지 (base_ref_arg 없을 때)
+      4. test_invalid_base_error: 잘못된 base ref 시 한국어 오류 메시지 + exit code 1
+    - IMP-20260525-6FAC 요건: 각 테스트는 subprocess 기반 실제 CLI 실행 + PIPELINE_STATE_PATH 격리 + final_state assertion 포함
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.py::cmd_review_codex_record 및 argparse codex-record 섹션</affected_function>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5</covers_ac>
+      <target_files>
+        <file>pipeline.py</file>
+        <file>tests/test_codex_record_base_9e38.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::cmd_review (라인 11492 — codex-record 분기에서 cmd_review_codex_record 호출)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>cmd_review_codex_record</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>argparse에 --base 인수 추가(default="main"), cmd_review_codex_record 함수 상단에서 base_arg 추출, 하드코딩된 "main" 3곳을 base_arg로 교체, new_record에 base_ref 필드 추가, 신규 테스트 파일 생성</change_summary>
+      <line_estimate>35</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.9 — 기존 파이프라인 환경 유지</python_version>
+  <env_specs>
+    <python>3.9</python>
+    <vscode>기존 설정 유지 (변경 없음)</vscode>
+  </env_specs>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py review codex-record --base main --stage plan --result ACCEPT --review-model GPT-5.5 --head-sha SHA 실행 시 codex_review_result.json에 diff_sha256이 자동 계산되어 기록되고 base_ref="main" 필드도 저장된다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>기존 --diff-sha256 SHA256값 방식(--base 없이)이 계속 동작한다. 수동 입력 SHA가 그대로 codex_review_result.json에 기록된다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>잘못된 --base ref(존재하지 않는 브랜치 이름)를 입력하면 "[CODEX RECORD] --base '...' 기준 diff 계산에 실패했습니다" 한국어 오류 메시지가 출력되고 exit code 1이 반환된다.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="false">
+      <text>reviewed_files 필드가 git diff --name-only base...HEAD 기준으로 자동 채워진다 (--base 사용 시).</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="false">
+      <text>diff 변경 후 stale evidence 차단이 계속 동작한다 — QA 진입 시 현재 diff_sha256과 codex_review_result.json의 diff_sha256이 불일치하면 BLOCKED 반환.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <forbidden>
+    - pipeline.py 외 trust-root 파일(.github/workflows/**, CLAUDE.md, .claude/agents/*.md) 수정 금지
+    - tests/oracles/** 파일을 Dev가 수정하는 것 금지
+    - _collect_git_diff_meta 함수 시그니처 변경 금지 (이미 base_ref 파라미터 있음)
+    - argparse 기존 인수(--diff-sha256, --head-sha, --evidence 등) 제거 또는 동작 변경 금지
+    - base_ref schema v2 검증 로직(_validate_codex_review_schema) 변경 금지
+    - 사용자-facing 메시지 영어로 작성 금지 (모두 한국어 필수)
+    - 테스트에서 subprocess 대신 내부 함수 직접 import 사용 금지 (IMP-20260525-6FAC)
+    - PIPELINE_STATE_PATH 격리 없는 테스트 작성 금지
+  </forbidden>
+
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260606-9E38</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/test_codex_record_base_9e38.py</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_codex_record_base_9e38.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Dev는 MT-1 하나만 구현합니다.
+      module design MT-1 → module dev MT-1 (scope_manifest_MT-1.json 필수) → module qa MT-1 → module integrate → dev done.
+      scope_manifest_MT-1.json: files=["pipeline.py", "tests/test_codex_record_base_9e38.py"].
+      trust-root 파일(pipeline.py) 수정이므로 scope_lock_check verdict=PASS 후 handover 출력 필수.
+      IMP-20260525-6FAC: Real CLI Path E2E 테스트 — subprocess 기반 + PIPELINE_STATE_PATH 격리 + final_state assertion.
+      IMP-20260602-1ABE: scope_manifest.json의 micro_tasks에 implemented_ac 필드 포함 필수.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM phase 완료 — MT-1 단일 태스크. pipeline.py trust-root 파일 수정. --base 인수 추가로 diff_sha256 자동 계산 구현.</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+</pm_planner_output>
