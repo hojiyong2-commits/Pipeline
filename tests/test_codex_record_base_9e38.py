@@ -22,11 +22,8 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # 경로 설정
@@ -368,8 +365,6 @@ class TestInvalidBaseError:
 
     def test_invalid_base_error(self, tmp_path: Path) -> None:
         """존재하지 않는 브랜치를 --base에 지정하면 exit code 1 + 한국어 오류가 출력된다."""
-        oracle = load_oracle("case_manual_sha")  # edge oracle 재활용
-
         state_file = tmp_path / "pipeline_state.json"
         output_file = tmp_path / "codex_review_result_invalid.json"
         write_state(state_file, _min_pipeline_state())
