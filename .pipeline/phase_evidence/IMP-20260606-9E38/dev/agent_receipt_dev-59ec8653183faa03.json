@@ -9,7 +9,7 @@
   "started_at": "2026-06-06T03:57:50Z",
   "completed_at": "2026-06-06T03:57:54Z",
   "output_file": "module_handover_MT-1.xml",
-  "output_sha256": "035c5e96e2ed6af50c03d0db64686c0fbd312dbcc935c42c0041b619539e1c32",
+  "output_sha256": "eebbe803501dad5b579843bbba3ea8f049d9a254661bdabbc6bf3ba98afa81bf",
   "evidence_files": [],
   "commit_sha": "b8a43ca1496f3162c4ab7c61d11ea227134203dc"
 }
