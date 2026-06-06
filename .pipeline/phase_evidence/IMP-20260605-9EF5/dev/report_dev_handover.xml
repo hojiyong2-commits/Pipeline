@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260605-9EF5</pipeline_id>
+  <status>READY_FOR_QA</status>
+
+  <summary>
+    Protocol Consistency Guard 검사 A(run_id) / 검사 B(head SHA)를 verification_json SSoT
+    기준으로 변경. PR 본문 자유서술의 run_id/SHA는 더 이상 검증 대상이 아니며,
+    PIPELINE_FINAL_PACKET 블록 안의 값과 verification_json만 신뢰 루트로 사용된다.
+    verification_json이 없으면 즉시 BLOCKED(verification_json_missing)로 차단.
+    검사 D/F (IMP-20260605-58BF)의 SSoT 기준과 일관성을 유지한다.
+  </summary>
+
+  <implemented_files>
+    <file role="MT-1 core">pipeline.py</file>
+    <file role="MT-2 new tests">tests/test_consistency_guard_a_b_json_basis.py</file>
+    <file role="MT-3 docs">CLAUDE.md</file>
+    <file role="MT-1 regression (scope_amendment)">tests/test_protocol_consistency.py</file>
+    <file role="MT-1 regression (scope_amendment)">tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json</file>
+  </implemented_files>
+
+  <scope_declaration>
+    <files_to_create>tests/test_consistency_guard_a_b_json_basis.py (MT-2 신규)</files_to_create>
+    <files_to_modify>pipeline.py (MT-1), CLAUDE.md (MT-3), tests/test_protocol_consistency.py (MT-1 회귀 — PM target_files 포함), tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json (MT-1 회귀 — scope_amendment 명시)</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      _consistency_extract_run_ids / _consistency_extract_shas 기존 함수는 시그니처 변경 금지 (forbidden 조항). packet_block_text 및 acceptance_packet_body에 적용하는 형태로 재사용. _consistency_extract_packet_block은 신규 헬퍼로 추가.
+    </reuse_search>
+    <out_of_scope>검사 C/D/E/F 로직 변경, _verify_verification_json_freshness 변경, verification_json 스키마 변경, _consistency_extract_run_ids/_shas 시그니처 변경, PR 본문 자유서술 stale 값에 대한 경고 추가 (forbidden 조항).</out_of_scope>
+  </scope_declaration>
+
+  <scope_lock_check>
+    <git_diff_files>CLAUDE.md, pipeline.py, tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json, tests/test_protocol_consistency.py</git_diff_files>
+    <untracked_files>tests/test_consistency_guard_a_b_json_basis.py</untracked_files>
+    <manifest_files>pipeline.py (MT-1), tests/test_consistency_guard_a_b_json_basis.py (MT-2), CLAUDE.md (MT-3)</manifest_files>
+    <extra_files>tests/test_protocol_consistency.py, tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <scope_amendment_reason>
+      [Side-Effect Audit 결과] MT-1의 정책 변경(검사 A/B → verification_json SSoT)은 기존
+      tests/test_protocol_consistency.py의 5개 회귀 테스트와 oracle 1개에 직접 영향을 미칩니다
+      (옛 정책: PR body 자유서술 stale 검증). 이는 PM target_files에 포함된 파일들에 대한
+      필연적 회귀 수정이며 새 정책 정의의 핵심 부분입니다.
+
+      [PM 계획과 일치성]
+      PM step_plan의 context_injection.target_files에는 다음 4개 파일이 모두 포함됨:
+      - pipeline.py (MT-1 target)
+      - tests/test_consistency_guard_a_b_json_basis.py (MT-2 target)
+      - tests/test_protocol_consistency.py (PM target_files이지만 어느 MT에도 속하지 않음 — PM 계획의 분리 누락)
+      - CLAUDE.md (MT-3 target)
+
+      tests/test_consistency_guard_json_basis.py (PM context_injection)는 본 작업에서 무변경.
+      tests/oracles/IMP-20260605-9EF5/ (PM context_injection)는 본 작업에서 사용만 (oracle 갱신은 IMP-20260520-D0BB 디렉토리).
+
+      [Trust-Root 검증]
+      tests/test_protocol_consistency.py: PM target_files 명시 — 정당화됨.
+      tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json:
+        PM target_files에 명시되지 않았으나, 같은 회귀 보호 정책의 연쇄 결과이며
+        tests/ 하위 디렉토리. expected.json은 변경하지 않음 (옛 의도 BLOCKED+stale_run_id 보존).
+
+      모든 변경 파일이 PM step_plan의 의도된 영향 범위 안에 있으며, Trust-Root violation 없음.
+    </scope_amendment_reason>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>pipeline._check_protocol_consistency</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:14089">_run_protocol_consistency_check (dry-run path) — verification_json 미전달, 이제 BLOCKED(verification_json_missing) 반환</caller>
+      <caller location="pipeline.py:14114">_run_protocol_consistency_check (CLI path) — _load_verification_json() 결과 전달</caller>
+      <caller location="pipeline.py:14165">_run_protocol_consistency_inline (gates accept inline path) — _load_verification_json() 결과 전달</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_consistency_extract_run_ids (packet_block_text, acceptance_packet_body에 적용)</dep>
+      <dep>_consistency_extract_shas (packet_block_text에 적용)</dep>
+      <dep>_consistency_extract_packet_block (신규)</dep>
+      <dep>PIPELINE_FINAL_PACKET_START_MARKER, PIPELINE_FINAL_PACKET_END_MARKER (모듈 상수)</dep>
+    </downstream_dependencies>
+    <state_mutations><mutation>none — pure function</mutation></state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>YES — verification_json=None 호출이 BLOCKED로 변경. 회귀 테스트 갱신 완료.</breaking_change>
+      <test_coverage>EXISTING (43 PASS) + NEW (10 PASS) = 88 PASS 합계</test_coverage>
+      <rollback_strategy>git revert로 pipeline.py 검사 A/B 블록과 신규 헬퍼만 되돌리면 IMP-58BF 상태로 복귀</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>tests.test_consistency_guard_a_b_json_basis.test_*</target_function>
+    <upstream_callers><caller location="none">pytest discovery</caller></upstream_callers>
+    <downstream_dependencies>
+      <dep>pipeline._check_protocol_consistency (검증 대상)</dep>
+      <dep>subprocess.run (test_a_b_existing_43_tests_intact)</dep>
+    </downstream_dependencies>
+    <state_mutations><mutation>none</mutation></state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 신규 파일</breaking_change>
+      <test_coverage>NEW (10 cases)</test_coverage>
+      <rollback_strategy>파일 삭제</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-3</micro_task_id>
+    <target_function>CLAUDE.md::Protocol Consistency Guard 표 검사 A/B 행 + Verification JSON SSoT 섹션 1줄</target_function>
+    <upstream_callers><caller location="none">문서</caller></upstream_callers>
+    <downstream_dependencies><dep>사람 독자만</dep></downstream_dependencies>
+    <state_mutations><mutation>none</mutation></state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 문서 명문화는 코드 동작 무영향</breaking_change>
+      <test_coverage>NONE — documentation (회귀 88 PASS로 간접 검증)</test_coverage>
+      <rollback_strategy>git revert</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <verification>
+    <unit_tests>
+      <test_run>
+        <command>python -m pytest tests/test_consistency_guard_a_b_json_basis.py -v</command>
+        <result>10 passed</result>
+      </test_run>
+      <test_run>
+        <command>python -m pytest tests/test_protocol_consistency.py -q</command>
+        <result>43 passed (회귀 테스트 5개 새 정책에 맞춰 갱신)</result>
+      </test_run>
+      <regression>
+        <command>python -m pytest tests/test_protocol_consistency.py tests/test_consistency_guard_json_basis.py tests/test_gates_accept_verification_json.py tests/test_verification_json_ssot.py tests/test_consistency_guard_a_b_json_basis.py tests/test_acceptance_request_verification_json.py -q</command>
+        <result>88 passed</result>
+      </regression>
+      <syntax>
+        <command>python -m py_compile pipeline.py tests/test_consistency_guard_a_b_json_basis.py</command>
+        <result>exit 0</result>
+      </syntax>
+    </unit_tests>
+    <module_gates>
+      <mt id="MT-1" verdict="PASS" />
+      <mt id="MT-2" verdict="PASS" />
+      <mt id="MT-3" verdict="PASS" />
+      <integration verdict="PASS" />
+    </module_gates>
+  </verification>
+
+  <self_check>
+    <python_version_syntax>PASS — Python 3.10 호환</python_version_syntax>
+    <type_hinting>PASS — 신규 함수 모두 타입 힌트 명시</type_hinting>
+    <error_handling>PASS — None 입력 / 마커 없음 / vj=None 모두 안전 처리</error_handling>
+    <path_safety>PASS — pathlib.Path 사용</path_safety>
+    <security>PASS — 비밀 노출 없음, dummy 값에 EXAMPLE 식별 패턴 없음 필요 없음 (sk- 접두사 없음)</security>
+    <al_edge_cases>PASS — None / 빈 문자열 / isinstance 모든 분기 처리</al_edge_cases>
+    <pd_policy>PASS — pure function, BLOCKED dict 반환만</pd_policy>
+    <fs_encoding_fallback>PASS — subprocess.run encoding="utf-8" errors="replace"</fs_encoding_fallback>
+    <docstring>PASS — 4-line 자기반성 헤더 포함</docstring>
+    <execution_check>PASS
+      (1) py_compile pipeline.py + tests/test_consistency_guard_a_b_json_basis.py — exit 0
+      (2) import _check_protocol_consistency, _consistency_extract_packet_block — 성공
+      (3) pytest 88 passed (확장 회귀 세트)
+    </execution_check>
+    <async_bridge_check>SKIP</async_bridge_check>
+    <playwright_wait_check>SKIP</playwright_wait_check>
+    <impact_analysis_check>PASS — 3개 MT 각각 impact_analysis 출력 완료</impact_analysis_check>
+    <frozen_codebase_check>PASS — Frozen / Minimal / OAR 1회 / Pre-Fix Snapshot / Side-Effect Audit / Multi-location Sync 전체 확인</frozen_codebase_check>
+    <fs_traversal_wiring>SKIP — 파일 I/O 없음</fs_traversal_wiring>
+    <loop_ceiling_check>SKIP</loop_ceiling_check>
+    <wa_session_mount>SKIP</wa_session_mount>
+    <vsce_check>SKIP</vsce_check>
+    <reference_check>N-A</reference_check>
+  </self_check>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_consistency_guard_a_b_json_basis.py</file>
+    <file>CLAUDE.md</file>
+    <file>tests/test_protocol_consistency.py</file>
+    <file>tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json</file>
+    <file>scope_manifest.json</file>
+    <file>module_handover_MT-1.xml</file>
+    <file>module_handover_MT-2.xml</file>
+    <file>module_handover_MT-3.xml</file>
+    <file>module_qa_MT-1.xml</file>
+    <file>module_qa_MT-2.xml</file>
+    <file>module_qa_MT-3.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+
+  <next_action>
+    [구현 완료 상태]
+    - MT-1 / MT-2 / MT-3 module gate 모두 PASS
+    - module integrate PASS
+    - 회귀 테스트 88 PASS
+
+    [현재 dev DONE 차단 사유 — Pipeline Manager/PM 갱신 필요]
+    python pipeline.py done --phase dev 실행 시 ATOMIC SCOPE GATE에서 차단됨:
+      "files outside PM micro_task target_files:
+       ['tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json',
+        'tests/test_protocol_consistency.py']"
+
+    PM step_plan의 atomic_plan.micro_tasks 각 항목의 target_files에 두 파일이 포함되지
+    않아서 발생. 그러나 두 파일 변경은 MT-1 정책 변경(검사 A/B → verification_json SSoT)의
+    직접 회귀 보호이며 PM step_plan의 context_injection.target_files에는 tests/test_protocol_consistency.py가
+    이미 포함되어 있음. PM 계획의 MT 분리에서 누락된 결함.
+
+    [필요 조치 — 둘 중 하나]
+    (A) Pipeline Manager가 PM atomic_plan.micro_tasks[MT-1].target_files를 확장:
+         "pipeline.py", "tests/test_protocol_consistency.py",
+         "tests/oracles/IMP-20260520-D0BB/normal_run_id_mismatch_body_packet/input.json"
+    (B) 회귀 변경을 별도 IMP 파이프라인으로 분리 (본 IMP는 pipeline.py + 신규 테스트 + CLAUDE.md로 종료,
+         별도 IMP에서 회귀 갱신만 처리)
+
+    선택은 Pipeline Manager/PM 책임. dev-agent는 두 경로 모두 즉시 대응 가능합니다.
+
+    [Codex review 갱신]
+    본 IMP 시작 시 Codex review gate가 stale_evidence BLOCKED 상태였음.
+    Pipeline Manager가 코드 변경 완료 후 review codex-run --stage code를 재실행해야 함.
+
+    [다음 단계 (PM atomic_plan 갱신 완료 후)]
+    1. python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id dev-e5a3738db295731e
+    2. python pipeline.py gates prepare-phase --phase dev (phase attestation 준비)
+    3. GitHub Actions phase-ci dev PASS 후 QA spawn
+  </next_action>
+</handover>
