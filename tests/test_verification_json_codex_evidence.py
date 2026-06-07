@@ -36,8 +36,6 @@ from pipeline import (  # type: ignore  # noqa: E402
     _verify_verification_json_freshness,
     _get_ci_run_head_sha,
     _write_acceptance_request,
-    HUMAN_ACCEPTANCE_PACKET_JSON_FILE,
-    HUMAN_ACCEPTANCE_PACKET_FILE,
 )
 
 ORACLE_BASE = ROOT / "tests" / "oracles" / "IMP-20260607-E656"
@@ -206,7 +204,7 @@ class TestBuildFinalPacketContent(unittest.TestCase):
         content = _build_final_packet_content(evidence)
         self.assertIn("[Codex 검토용]", content)
         lines = content.splitlines()
-        first_non_empty = next((l for l in lines if l.strip()), "")
+        first_non_empty = next((ln for ln in lines if ln.strip()), "")
         self.assertEqual(first_non_empty, "[Codex 검토용]")
 
     def test_normal_codex_block_has_required_fields(self) -> None:
@@ -233,7 +231,7 @@ class TestBuildFinalPacketContent(unittest.TestCase):
         expected_code = "ACCEPT-IMP-TEST-0001-XXXX-ABCD1234"
 
         lines = content.splitlines()
-        standalone_lines = [l.strip() for l in lines if l.strip() == expected_code]
+        standalone_lines = [ln.strip() for ln in lines if ln.strip() == expected_code]
         self.assertTrue(
             len(standalone_lines) >= 1,
             f"승인 코드가 독립 줄에 없음. 콘텐츠 일부:\n{content[:600]}",
@@ -248,10 +246,10 @@ class TestBuildFinalPacketContent(unittest.TestCase):
         reject_code = "REJECT-IMP-TEST-0001-XXXX-ABCD1234: 이유"
 
         lines = content.splitlines()
-        reject_lines = [l.strip() for l in lines if l.strip() == reject_code]
+        reject_lines = [ln.strip() for ln in lines if ln.strip() == reject_code]
         self.assertTrue(
             len(reject_lines) >= 1,
-            f"거절 예시가 독립 줄에 없음.",
+            "거절 예시가 독립 줄에 없음.",
         )
 
     def test_edge_no_nonce_shows_placeholder(self) -> None:
@@ -270,13 +268,13 @@ class TestBuildFinalPacketContent(unittest.TestCase):
         content = input_data["packet_md_content"]
 
         lines = content.splitlines()
-        standalone_lines = [l.strip() for l in lines if l.strip() == code]
+        standalone_lines = [ln.strip() for ln in lines if ln.strip() == code]
         code_on_standalone = len(standalone_lines) >= 1
         no_prefix_on_same_line = code_on_standalone
         codex_block_present = "[Codex 검토용]" in content
 
         reject_example = "REJECT-IMP-TEST-0001-XXXX-ABCD1234: 이유"
-        reject_standalone = [l.strip() for l in lines if l.strip() == reject_example]
+        reject_standalone = [ln.strip() for ln in lines if ln.strip() == reject_example]
         reject_on_standalone = len(reject_standalone) >= 1
 
         self.assertEqual(code_on_standalone, expected["code_on_standalone_line"])
@@ -505,7 +503,7 @@ class TestVerifyVerificationJsonFreshness(unittest.TestCase):
 
     def test_edge_missing_fields_returns_missing(self) -> None:
         """verification_json_path 없으면 'verification_json_missing' 반환 (edge)."""
-        req = {}
+        req: Dict[str, Any] = {}
         result = _verify_verification_json_freshness(req)
         self.assertEqual(result, "verification_json_missing")
 
@@ -588,8 +586,8 @@ class TestHygieneCleanupWorkspaceOutputFormat(unittest.TestCase):
             try:
                 os.chdir(tmpdir)
                 output = self._run_cleanup(tmpdir)
-                lines = [l for l in output.splitlines() if l.strip()]
-                verbose_lines = [l for l in lines if l.strip().startswith("[이동]") or "→" in l]
+                lines = [ln for ln in output.splitlines() if ln.strip()]
+                verbose_lines = [ln for ln in lines if ln.strip().startswith("[이동]") or "→" in ln]
                 self.assertEqual(
                     len(verbose_lines), 0,
                     f"개별 파일 이동 줄 발견: {verbose_lines}",
