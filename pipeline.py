@@ -1242,6 +1242,12 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     # IMP-20260603-2E3D: gates request-accept가 생성하는 런타임 파일.
     # PM snapshot 이후 nonce 발급 시 생성되거나 갱신되므로 dev scope gate 오탐 방지.
     "acceptance_request.json",
+    # IMP-20260607-E656: report final-packet이 생성하는 런타임 파일.
+    # PM snapshot 이후 packet 생성 시 나타나므로 dev scope gate 오탐 방지.
+    "human_acceptance_packet.json",
+    # IMP-20260607-E656: hygiene cleanup-workspace가 생성하는 런타임 파일.
+    # PM snapshot 이후 cleanup 실행 시 나타나므로 dev scope gate 오탐 방지.
+    "cleanup_manifest.json",
 }
 
 
@@ -1321,7 +1327,9 @@ def _atomic_changed_files(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         "added": added,
         "modified": modified,
         "deleted": deleted,
-        "changed": sorted(set(added + modified + deleted)),
+        # IMP-20260607-E656: Scope gate는 "추가/수정된 파일"만 검사.
+        # deleted 파일은 이전 파이프라인 잔재일 수 있으며 현재 scope와 무관하므로 제외.
+        "changed": sorted(set(added + modified)),
     }
 
 
