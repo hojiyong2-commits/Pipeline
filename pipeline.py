@@ -14959,7 +14959,11 @@ def _get_codex_status_for_ac(ac_id: str) -> str:
 
 def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     """structured AC 기록에서 AC 충족표를 자동 조립한다 (legacy면 None)."""
-    structured_ac = state.get("structured_acceptance_criteria") or []
+    structured_ac = (
+        state.get("structured_acceptance_criteria")
+        or state.get("atomic_plan", {}).get("structured_acceptance_criteria")
+        or []
+    )
     if not structured_ac:
         return None
 

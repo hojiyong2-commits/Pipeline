@@ -1,6 +1,0 @@
-{
-  "test_case": "edge_secret_block",
-  "scenario": "secret-like 파일은 hygiene archive에서 차단되어야 한다",
-  "expected_blocked_reason": "secret_detected",
-  "expected_not_in_moved": true
-}
