@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -92,7 +93,7 @@ def run_acceptance(
         else:
             try:
                 ok, message, details = scorer(test, base_dir, project_dir)
-            except (OSError, ValueError, TimeoutError, ScoringError) as exc:
+            except (OSError, ValueError, TimeoutError, subprocess.TimeoutExpired, ScoringError) as exc:
                 ok = False
                 message = str(exc)
                 details = {"error": type(exc).__name__}

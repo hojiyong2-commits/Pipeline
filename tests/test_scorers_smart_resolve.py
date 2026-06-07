@@ -5,14 +5,37 @@ IMP-20260525-AA88 MT-1: Verifies that _smart_resolve uses parent.parent.parent
 """
 from __future__ import annotations
 
+import importlib
+import importlib.util
+import sys
 from pathlib import Path
 
 
-from core.acceptance.scorers import _smart_resolve
+# 프로젝트 루트를 sys.path에 추가
+# 주의: test_packing_detail_oracle_4cd8.py 등이 FEAT-20260426-332E 디렉터리를
+# sys.path[0]에 추가하여 'core' 모듈을 다른 패키지로 등록할 수 있다.
+# sys.modules에서 기존 core/core.acceptance 등록을 제거하고 프로젝트 루트 기준으로
+# 재로드하여 충돌을 해소한다.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_SCORERS_PATH = _PROJECT_ROOT / "core" / "acceptance" / "scorers.py"
+
+# sys.modules에서 충돌 가능성이 있는 기존 core 관련 모듈을 제거
+for _key in [k for k in sys.modules if k == "core" or k.startswith("core.")]:
+    del sys.modules[_key]
+
+# 프로젝트 루트를 sys.path 맨 앞에 삽입
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+elif sys.path[0] != str(_PROJECT_ROOT):
+    # 이미 있더라도 맨 앞에 오도록 재배치
+    sys.path.remove(str(_PROJECT_ROOT))
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from core.acceptance.scorers import _smart_resolve  # noqa: E402
 
 
-# Project root is three levels up from this file: tests/ -> project root
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Project root is two levels up from this file: tests/ -> project root
+PROJECT_ROOT = _PROJECT_ROOT
 
 
 class TestSmartResolveUsesProjectRoot:
@@ -37,8 +60,8 @@ class TestSmartResolveUsesProjectRoot:
         - parent.parent = core/
         - parent.parent.parent = <project_root>  ← 올바른 위치
         """
-        from core.acceptance import scorers as scorers_module
-        scorers_path = Path(scorers_module.__file__).resolve()
+        # importlib를 통해 scorers 모듈 경로를 직접 확인 (sys.modules['core'] 충돌 우회)
+        scorers_path = _SCORERS_PATH.resolve()
         # parent.parent는 core/ 디렉터리
         core_dir = scorers_path.parent.parent
         # parent.parent.parent는 project root

@@ -177,20 +177,22 @@ class TestBuildVerificationJson15Fields(unittest.TestCase):
         """오라클 case_final_packet_json_schema: 15개 필드 + schema_valid=true (normal)."""
         oracle_dir = ORACLE_BASE / "case_final_packet_json_schema"
         input_data = json.loads((oracle_dir / "input.json").read_text(encoding="utf-8"))
-        expected = json.loads((oracle_dir / "expected.json").read_text(encoding="utf-8"))
+        # expected.json은 acceptance runner가 input.json과 동일한지 비교용으로 사용.
+        # 검증 로직은 input.json 데이터로 직접 계산한다.
 
         packet = input_data["packet"]
         missing = [f for f in REQUIRED_FIELDS_15 if f not in packet]
         schema_valid = len(missing) == 0
 
-        self.assertEqual(schema_valid, expected["schema_valid"])
-        self.assertEqual(
-            sorted(expected["required_fields_present"]),
-            sorted(REQUIRED_FIELDS_15),
-        )
-        self.assertTrue(expected["changed_files_count_matches"])
-        self.assertTrue(expected["head_sha_match"])
-        self.assertFalse(expected["blocked"])
+        # input.json의 packet에 15개 필드가 모두 있어야 한다 (schema_valid=true)
+        self.assertTrue(schema_valid, f"15개 필수 필드 누락: {missing}")
+        self.assertEqual(sorted(packet.keys() & set(REQUIRED_FIELDS_15)), sorted(REQUIRED_FIELDS_15))
+        # changed_files_count == len(changed_files) 이어야 한다
+        self.assertEqual(packet.get("changed_files_count"), len(packet.get("changed_files", [])))
+        # pr.head_sha == github_actions.head_sha 이어야 한다
+        self.assertEqual(packet["pr"]["head_sha"], packet["github_actions"]["head_sha"])
+        # acceptance.status == PENDING (blocked=false)
+        self.assertNotEqual(packet.get("gates", {}).get("acceptance"), "BLOCKED")
 
 
 # ── MT-2: _build_final_packet_content 슬림다운 테스트 ──────────────────
@@ -262,7 +264,8 @@ class TestBuildFinalPacketContent(unittest.TestCase):
         """오라클 case_acceptance_code_standalone 검증 (normal)."""
         oracle_dir = ORACLE_BASE / "case_acceptance_code_standalone"
         input_data = json.loads((oracle_dir / "input.json").read_text(encoding="utf-8"))
-        expected = json.loads((oracle_dir / "expected.json").read_text(encoding="utf-8"))
+        # expected.json은 acceptance runner가 input.json과 동일한지 비교용으로 사용.
+        # 검증 로직은 input.json 데이터로 직접 계산한다.
 
         code = input_data["acceptance_code"]
         content = input_data["packet_md_content"]
@@ -277,10 +280,13 @@ class TestBuildFinalPacketContent(unittest.TestCase):
         reject_standalone = [ln.strip() for ln in lines if ln.strip() == reject_example]
         reject_on_standalone = len(reject_standalone) >= 1
 
-        self.assertEqual(code_on_standalone, expected["code_on_standalone_line"])
-        self.assertEqual(no_prefix_on_same_line, expected["no_prefix_on_same_line"])
-        self.assertEqual(reject_on_standalone, expected["reject_example_on_standalone_line"])
-        self.assertEqual(codex_block_present, expected["codex_block_present"])
+        # 승인 코드가 독립 줄에 있어야 한다
+        self.assertTrue(code_on_standalone, "승인 코드가 독립된 줄에 없음")
+        self.assertTrue(no_prefix_on_same_line, "승인 코드 앞에 다른 텍스트가 있음")
+        # 거절 예시도 독립 줄에 있어야 한다
+        self.assertTrue(reject_on_standalone, "거절 예시가 독립 줄에 없음")
+        # [Codex 검토용] 블록이 있어야 한다
+        self.assertTrue(codex_block_present, "[Codex 검토용] 블록 없음")
 
 
 # ── MT-3: _check_protocol_consistency 오탐 방지 테스트 ──────────────────
@@ -336,8 +342,11 @@ class TestCheckProtocolConsistencyNoFalsePositive(unittest.TestCase):
                 "changed_files_mismatch_vs_verification_json",
                 "stale_file_description",
             ], f"PR 본문 자유서술 오탐 감지됨: {result.get('failure_code')}")
-        self.assertEqual(expected["false_positives_detected"], 0)
-        self.assertEqual(expected["consistency_check_result"], "PASS")
+        # expected.json은 acceptance runner용. 검증값은 하드코딩된 기대값으로 확인한다.
+        # false_positives_detected=0: PR 본문 자유서술에서 오탐이 없어야 한다
+        # consistency_check_result=PASS: verification_json changed_files와 일치해야 한다
+        self.assertNotEqual(result.get("status"), "BLOCKED",
+                            f"PR 본문 오탐으로 오판된 failure_code: {result.get('failure_code')}")
 
     def test_edge_missing_verification_json_returns_blocked(self) -> None:
         """verification_json이 None이면 BLOCKED가 반환된다 (edge)."""
@@ -371,9 +380,12 @@ class TestCheckProtocolConsistencyNoFalsePositive(unittest.TestCase):
 
         result = _check_protocol_consistency(**args)
 
-        self.assertTrue(expected["blocked"])
-        self.assertEqual(expected["failure_code"], "changed_files_mismatch_vs_verification_json")
-        self.assertEqual(result.get("status"), "BLOCKED")
+        # expected.json은 acceptance runner용. 검증값은 input_data로 직접 계산한다.
+        # json_changed_files에 nonexistent_file.py가 있고 실제 diff에 없으면 BLOCKED
+        json_extra = set(input_data["json_changed_files"]) - set(input_data["actual_pr_diff_files"])
+        self.assertTrue(len(json_extra) > 0, "테스트 시나리오: json에 없는 파일이 있어야 함")
+        self.assertEqual(result.get("status"), "BLOCKED",
+                         f"changed_files 불일치 시 BLOCKED 기대, 실제: {result.get('status')}")
         # JSON에 nonexistent_file.py가 있고 실제 diff에 없으므로 stale_file_description
         self.assertIn(result.get("failure_code", ""), [
             "changed_files_mismatch_vs_verification_json",

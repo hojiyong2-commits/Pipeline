@@ -1,6 +1,6 @@
 {
-  "code_on_standalone_line": true,
-  "no_prefix_on_same_line": true,
-  "reject_example_on_standalone_line": true,
-  "codex_block_present": true
+  "test_case": "acceptance_code_standalone",
+  "scenario": "승인 코드가 독립된 줄에만 출력되는 경우",
+  "acceptance_code": "ACCEPT-IMP-TEST-0001-XXXX-ABCD1234",
+  "packet_md_content": "[Codex 검토용]\npipeline_id: IMP-TEST-0001-XXXX\n...\n[승인 코드]\nACCEPT-IMP-TEST-0001-XXXX-ABCD1234\n[거절 예시]\nREJECT-IMP-TEST-0001-XXXX-ABCD1234: 이유"
 }

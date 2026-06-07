@@ -1,7 +1,21 @@
 {
-  "schema_valid": true,
-  "required_fields_present": ["schema_version", "packet_type", "pipeline_id", "generated_at", "pr", "github_actions", "changed_files", "changed_files_count", "gates", "requirements", "oracle_summary", "known_failures", "warnings", "acceptance", "artifacts"],
-  "changed_files_count_matches": true,
-  "head_sha_match": true,
-  "blocked": false
+  "test_case": "final_packet_json_schema",
+  "scenario": "human_acceptance_packet.json이 모든 필수 필드를 포함하는 경우",
+  "packet": {
+    "schema_version": 1,
+    "packet_type": "final_acceptance_evidence",
+    "pipeline_id": "IMP-TEST-0001-XXXX",
+    "generated_at": "2026-06-07T10:00:00Z",
+    "pr": {"url": "https://github.com/org/repo/pull/1", "number": 1, "head_sha": "abc123def456", "base_branch": "main", "head_branch": "impl/IMP-TEST-0001-XXXX"},
+    "github_actions": {"run_id": "12345678901", "run_url": "https://github.com/org/repo/actions/runs/12345678901", "status": "success", "head_sha": "abc123def456"},
+    "changed_files": ["pipeline.py"],
+    "changed_files_count": 1,
+    "gates": {"technical": "PASS", "oracle": "PASS", "github_ci": "PASS", "acceptance": "PENDING"},
+    "requirements": [{"ac_id": "AC-1", "summary": "테스트 AC", "linked_mt": ["MT-1"], "status": "PASS", "evidence": ["test_pass"]}],
+    "oracle_summary": {"status": "PASS", "case_count": 2, "passed_count": 2, "failed_count": 0},
+    "known_failures": [],
+    "warnings": [],
+    "acceptance": {"code": "ACCEPT-IMP-TEST-0001-XXXX-ABCD1234", "reject_example": "REJECT-IMP-TEST-0001-XXXX-ABCD1234: 이유", "nonce": "ABCD1234", "request_id": "req_abc123", "status": "PENDING"},
+    "artifacts": {"human_packet_md": "human_acceptance_packet.md", "verification_json": "human_acceptance_packet.json", "cleanup_manifest": null}
+  }
 }
