@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-07T22:08:43Z",
+  "pipeline_id": "IMP-20260607-E656",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "4ba5121c6ab7b106d6c3f29586288dae20568973",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-06-07T22:04:30Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,.gitignore,CLAUDE.md,.claude/agents/dev-agent.md,.claude/agents/pm-agent.md,.claude/agents/qa-agent.md,.claude/agents/test-harness-agent.md,core/acceptance/runner.py,core/acceptance/scorers.py,tests/test_verification_json_codex_evidence.py,tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/expected.json,tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/input.json,tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/expected.json,tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/input.json,tests/oracles/IMP-20260607-E656/case_changed_files_mismatch/expected.json,tests/oracles/IMP-20260607-E656/case_changed_files_mismatch/input.json,tests/oracles/IMP-20260607-E656/case_acceptance_code_standalone/expected.json,tests/oracles/IMP-20260607-E656/case_acceptance_code_standalone/input.json,tests/e2e/test_final_packet_2e3d.py,tests/e2e/test_ac_tracking_1abe.py,tests/test_pm_split.py,tests/conftest.py,tests/test_scorers_smart_resolve.py,tests/oracles/IMP-20260601-0DF5/case_edge_secret_block/expected.json,tests/oracles/IMP-20260601-0DF5/case_edge_secret_block/input.json"
+  },
+  "agent_run": {
+    "run_id": "dev-28ba8891c69b259c",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "24895eac33fd3220d669180b482a03e08d3664033ddd9e4b21776acb19be4880",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260607-E656/dev/agent_receipt_dev-28ba8891c69b259c.json",
+    "receipt_sha256": "7d127d1516e49980ffe6c1fd17a454ba71a9e54a5af1142987d44a01e119444e",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260607-E656\\dev\\dev-28ba8891c69b259c.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260607-E656\\dev\\dev-28ba8891c69b259c.json",
+      "path": ".pipeline/phase_evidence/IMP-20260607-E656/dev/agent_receipt_dev-28ba8891c69b259c.json",
+      "sha256": "7d127d1516e49980ffe6c1fd17a454ba71a9e54a5af1142987d44a01e119444e",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260607-E656/dev/report_dev_handover.xml",
+      "sha256": "24895eac33fd3220d669180b482a03e08d3664033ddd9e4b21776acb19be4880",
+      "size_bytes": 2361,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260607-E656/dev/scope_manifest_scope_manifest.json",
+      "sha256": "920a652d2df7c0f3f8e3985bd259b1a7828d70b51288604fcf606d16ec5f4336",
+      "size_bytes": 3140,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "10b5ad735b1d41aa45dda0a6341088154cdfbd418fbcf716791aa342ace3d1ce",
+      "size_bytes": 950870
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "c75a93bb0164116770f86249917b60591c77a22553c61ed338640ef0b220eed7",
+      "size_bytes": 2196
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "04cd2ceb05c8da08d2d66f947139df0b01f8443d1ff930ae2f184f9e2045e9ed",
+      "size_bytes": 103532
+    },
+    {
+      "path": ".claude/agents/dev-agent.md",
+      "sha256": "b0ab6f110e3996218acb081d6964a3c633f5737d05efd50fb1526ccea18570c0",
+      "size_bytes": 68057
+    },
+    {
+      "path": ".claude/agents/pm-agent.md",
+      "sha256": "ed3cf174e38222aa8eeb1cc4b63956063c8488be7afbee26d3d31f4821a48d07",
+      "size_bytes": 55106
+    },
+    {
+      "path": ".claude/agents/qa-agent.md",
+      "sha256": "510e93105a93cbf6bedc54a632ca5347afe40cbe6773ff405d1403d4a94b0744",
+      "size_bytes": 36572
+    },
+    {
+      "path": ".claude/agents/test-harness-agent.md",
+      "sha256": "8cc86e8d2842fabeebc76ead3f6efce235c5fc165eee896eab1c1bad400087e8",
+      "size_bytes": 13487
+    },
+    {
+      "path": "core/acceptance/runner.py",
+      "sha256": "f5469ab6e9b0de83d1cf5a19812cb15b6a427dcec0a5165a09e39227d81906af",
+      "size_bytes": 5801
+    },
+    {
+      "path": "core/acceptance/scorers.py",
+      "sha256": "1ff515193248041df12836ef1a4acd7babee282a87cbd1ef0e26b0b0f8868aad",
+      "size_bytes": 17442
+    },
+    {
+      "path": "tests/test_verification_json_codex_evidence.py",
+      "sha256": "9a39de170befe1c838dcdd25bbb35990bc3c8a37700c592380d45b7da51811e4",
+      "size_bytes": 31121
+    },
+    {
+      "path": "tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/expected.json",
+      "sha256": "7a176a17a6c735a85402f8a0fe450c57d36920a7392c6a8cb47d98394f4b1645",
+      "size_bytes": 1437
+    },
+    {
+      "path": "tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/input.json",
+      "sha256": "7a176a17a6c735a85402f8a0fe450c57d36920a7392c6a8cb47d98394f4b1645",
+      "size_bytes": 1437
+    },
+    {
+      "path": "tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/expected.json",
+      "sha256": "ec5aa2ad3d6ed238f1d3bacdecd2082f01ab17dd4ff8daa2234f22298ea7b160",
+      "size_bytes": 589
+    },
+    {
+      "path": "tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/input.json",
+      "sha256": "ec5aa2ad3d6ed238f1d3bacdecd2082f01ab17dd4ff8daa2234f22298ea7b160",
+      "size_bytes": 589
+    },
+    {
+      "path": "tests/oracles/IMP-20260607-E656/case_changed_files_mismatch/expected.json",
+      "sha256": "a7b0626b46240883e975746d16426b0f737003bc8dc0bb40c9f67d88beaf93ac",
+      "size_bytes": 222
+    },
+    {
+      "path": "tests/oracles/IMP-20260607-E656/case_changed_files_mismatch/input.json",
+      "sha256": "a7b0626b46240883e975746d16426b0f737003bc8dc0bb40c9f67d88beaf93ac",
+      "size_bytes": 222
+    },
+    {
+      "path": "tests/oracles/IMP-20260607-E656/case_acceptance_code_standalone/expected.json",
+      "sha256": "c78d12d76a89aa2cc390662e11ae45c358493139a2af19d76102b14ed51cf458",
+      "size_bytes": 377
+    },
+    {
+      "path": "tests/oracles/IMP-20260607-E656/case_acceptance_code_standalone/input.json",
+      "sha256": "c78d12d76a89aa2cc390662e11ae45c358493139a2af19d76102b14ed51cf458",
+      "size_bytes": 377
+    },
+    {
+      "path": "tests/e2e/test_final_packet_2e3d.py",
+      "sha256": "70de8f1b0cd5a11888a45637adedb6ddd7a274b069b7f99c45fe16854032215a",
+      "size_bytes": 37528
+    },
+    {
+      "path": "tests/e2e/test_ac_tracking_1abe.py",
+      "sha256": "863dbf4acbbabd311f5fe7bf92597a00ad698a13cc6c5d5cfa24945f02902e9a",
+      "size_bytes": 103456
+    },
+    {
+      "path": "tests/test_pm_split.py",
+      "sha256": "bf3f586af0fdf4c9601372b9df7cf4e1dbe20651722b790f3deb8f5a246477e5",
+      "size_bytes": 13309
+    },
+    {
+      "path": "tests/conftest.py",
+      "sha256": "e5e8639b5a0201b3d9a9dbbcaced53fd94057cb1a15cc24813d0a915ad6c6fbc",
+      "size_bytes": 694
+    },
+    {
+      "path": "tests/test_scorers_smart_resolve.py",
+      "sha256": "414327b9195f80dc1869e832a075dc1d657c7e6172b98f10b50f1527aded7d1f",
+      "size_bytes": 4969
+    }
+  ],
+  "local_only_files": [
+    {
+      "path": "tests\\oracles\\IMP-20260601-0DF5\\case_edge_secret_block\\expected.json",
+      "sha256": "6602f9494cced46b74159c060af971e88b43903c1ab6c26600245a353549f4fb",
+      "reason": "ignored_or_outside_git_checkout"
+    },
+    {
+      "path": "tests\\oracles\\IMP-20260601-0DF5\\case_edge_secret_block\\input.json",
+      "sha256": "21156786342e0d8145fb5fc7ab8f8a02701ebe7c400c90a2d8e93815d19282c6",
+      "reason": "ignored_or_outside_git_checkout"
+    }
+  ]
+}
