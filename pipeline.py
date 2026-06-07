@@ -15219,7 +15219,7 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         _branch_result = _subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, encoding='utf-8', timeout=10
         )
         current_branch: str = _branch_result.stdout.strip()
     except Exception:  # noqa: BLE001
@@ -15230,7 +15230,7 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         _pr_list_result = _subprocess.run(
             [_gh_path, "pr", "list", "--state", "open", "--json", "number,headRefName"],
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, encoding='utf-8', timeout=30
         )
         if _pr_list_result.returncode == 0 and _pr_list_result.stdout.strip():
             _pr_list: List[Dict[str, Any]] = _json.loads(_pr_list_result.stdout)
@@ -15268,7 +15268,7 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         _comments_result = _subprocess.run(
             [_gh_path, "pr", "view", pr_number, "--json", "comments"],
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, encoding='utf-8', timeout=30
         )
         if _comments_result.returncode != 0 or not _comments_result.stdout.strip():
             return {
