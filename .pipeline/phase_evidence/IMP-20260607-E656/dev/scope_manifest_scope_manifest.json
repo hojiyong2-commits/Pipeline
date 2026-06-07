@@ -1,0 +1,45 @@
+{
+  "pipeline_id": "IMP-20260607-E656",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._build_verification_json, pipeline._write_verification_json"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py", "tests/e2e/test_final_packet_2e3d.py"],
+      "affected_functions": ["pipeline._build_final_packet_content, pipeline._check_packet_freshness_against_actual"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._check_protocol_consistency"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._write_acceptance_request, pipeline._cmd_gates_request_accept"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py", "tests/e2e/test_ac_tracking_1abe.py", "tests/test_pm_split.py"],
+      "affected_functions": ["pipeline.cmd_gates_accept, pipeline._verify_verification_json_freshness, pipeline._validate_ac_table_before_request_accept"]
+    },
+    {
+      "id": "MT-6",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_hygiene_cleanup_workspace"]
+    },
+    {
+      "id": "MT-7",
+      "files": ["CLAUDE.md", ".claude/agents/pm-agent.md", ".claude/agents/qa-agent.md", ".claude/agents/test-harness-agent.md", ".claude/agents/dev-agent.md"],
+      "affected_functions": ["none (doc-only)"]
+    },
+    {
+      "id": "MT-8",
+      "files": ["tests/test_verification_json_codex_evidence.py", "tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/expected.json", "tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/expected.json", "tests/oracles/IMP-20260607-E656/case_changed_files_mismatch/expected.json", "tests/oracles/IMP-20260607-E656/case_acceptance_code_standalone/expected.json"],
+      "affected_functions": ["tests.test_verification_json_codex_evidence"]
+    }
+  ]
+}
