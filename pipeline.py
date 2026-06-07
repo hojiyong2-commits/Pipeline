@@ -14685,12 +14685,34 @@ def _get_acs_linked_mts(state: Dict[str, Any], ac_id: str) -> List[str]:
 
 
 def _get_impl_evidence_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
-    """scope_manifest의 implemented_tasks에서 AC id의 implementation_evidence 수집."""
+    """scope_manifest의 implemented_tasks에서 AC id의 implementation_evidence 수집.
+
+    IMP-20260606-D9F4: implemented_ac가 비어있어도 atomic_plan.covers_ac로 연결된
+    MT의 implementation_evidence를 fallback으로 수집한다.
+    """
     evidence: List[str] = []
     gates = state.get("module_gates") or {}
     modules = gates.get("modules") or {}
     if not isinstance(modules, dict):
         return evidence
+
+    # atomic_plan에서 ac_id를 커버하는 MT 목록 미리 계산 (fallback용)
+    covers_ac_mts: set = set()
+    atomic_plan = state.get("atomic_plan") or {}
+    for mt in atomic_plan.get("micro_tasks", []):
+        if not isinstance(mt, dict):
+            continue
+        mt_plan_id = str(mt.get("id", ""))
+        covers = mt.get("covers_ac")
+        if isinstance(covers, list):
+            cov_list = [str(c).strip() for c in covers]
+        elif isinstance(covers, str):
+            cov_list = [c.strip() for c in covers.split(",")]
+        else:
+            cov_list = []
+        if ac_id in cov_list:
+            covers_ac_mts.add(mt_plan_id)
+
     for mt_id, module in modules.items():
         if not isinstance(module, dict):
             continue
@@ -14705,9 +14727,15 @@ def _get_impl_evidence_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
         for task in implemented:
             if not isinstance(task, dict):
                 continue
-            if ac_id in task.get("implemented_ac", []):
+            task_ac_list = task.get("implemented_ac", [])
+            if ac_id in task_ac_list:
+                # 직접 연결: implemented_ac에 ac_id가 있는 경우
                 for ev in task.get("implementation_evidence", []):
                     evidence.append(f"{mt_id}: {ev}")
+            elif not task_ac_list and mt_id in covers_ac_mts:
+                # fallback: implemented_ac 비어있고 covers_ac로 연결된 MT
+                for ev in task.get("implementation_evidence", []):
+                    evidence.append(f"{mt_id}(covers_ac): {ev}")
     return evidence
 
 
@@ -14769,22 +14797,29 @@ def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str
     for ac in structured_ac:
         if not isinstance(ac, dict):
             continue
-        ac_id = ac.get("ac_id", "")
+        ac_id = ac.get("ac_id") or ac.get("id", "")
         linked_mt = _get_acs_linked_mts(state, ac_id)
         impl_evidence = _get_impl_evidence_for_ac(state, ac_id)
         verifications = _get_qa_verification_for_ac(state, ac_id)
         codex_status = _get_codex_status_for_ac(ac_id)
 
-        # result 판정
+        # result 판정: impl_evidence 또는 verifications 중 하나라도 있으면 PASS
+        # fallback: linked_mts 중 하나라도 module dev DONE 상태이면 PASS
+        # (implements_ac가 비어도 covers_ac로 연결된 MT가 완료된 경우 대응)
         result = "PASS"
-        if not impl_evidence:
-            result = "PENDING"
-        if not verifications:
-            result = "PENDING"
+        if not impl_evidence and not verifications:
+            # fallback: linked_mts 중 하나라도 dev DONE인지 확인
+            modules = (state.get("module_gates") or {}).get("modules") or {}
+            linked_dev_done = any(
+                isinstance(modules.get(mt), dict)
+                and (modules.get(mt) or {}).get("dev", {}).get("status") == "DONE"
+                for mt in linked_mt
+            )
+            result = "PASS" if linked_dev_done else "PENDING"
 
         table.append({
             "ac_id": ac_id,
-            "requirement": ac.get("requirement", ""),
+            "requirement": ac.get("requirement") or ac.get("text", ""),
             "linked_mt": linked_mt,
             "implementation_evidence": impl_evidence,
             "verification": verifications,
@@ -14793,6 +14828,30 @@ def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str
             "user_visible": ac.get("user_visible", True),
         })
     return table
+
+
+def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[str]:
+    """AC 충족표에 PENDING 항목이 있으면 차단 메시지 반환. 정상이면 None.
+
+    IMP-20260606-D9F4: legacy 파이프라인(requirements_tracking.enabled=false)은
+    검사 생략. AC table이 비어있어도 검사 생략.
+    """
+    if not state.get("requirements_tracking", {}).get("enabled"):
+        return None  # legacy 파이프라인은 검사 생략
+    ac_table = _build_ac_fulfillment_table(state)
+    if not ac_table:
+        return None  # AC 없으면 검사 생략
+    pending_acs = [
+        entry["ac_id"]
+        for entry in ac_table
+        if entry.get("result") == "PENDING"
+    ]
+    if pending_acs:
+        return (
+            f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다: {', '.join(pending_acs)}.\n"
+            "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
+        )
+    return None
 
 
 def _format_ac_fulfillment_output(
@@ -15000,6 +15059,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     evidence = getattr(args, "evidence", None)
     if evidence is None or not str(evidence).strip():
         _die("[BLOCKED] --evidence는 필수입니다 (결과물 경로 또는 URL).")
+
+    # IMP-20260606-D9F4: AC table 사전 검증 (PENDING 항목 있으면 차단)
+    ac_blocker = _validate_ac_table_before_request_accept(state)
+    if ac_blocker:
+        _die(ac_blocker)
 
     # stale 문구 차단 (기존 TEMPORARY_PR_BODY_PATTERNS SSoT 사용)
     pr_body = _get_pr_body_text()
