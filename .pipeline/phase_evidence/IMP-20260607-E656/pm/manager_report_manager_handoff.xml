@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260607-E656</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-241c21539ddf5468</planner_run_id>
+  <manager_run_id>pipeline_manager-51314a1fc75b2231</manager_run_id>
+  <step_plan_sha256>260009be6ece75e5131b4fe426aef629f49596d48b3863ea5726e87ae56babdf</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <status>ready</status>
+  <anti_gaming_read>true</anti_gaming_read>
+  <generated_at>2026-06-07T10:00:00Z</generated_at>
+  <pm_phase_status>DONE</pm_phase_status>
+
+  <contract_status>
+    <frozen>true</frozen>
+    <contract_hash>8683722abfb1383129e6f8de01d6b57ff3d26b5eff3ec9391b92bc3bded695de</contract_hash>
+    <test_set_hash>73f626ccf8adeb1911818444d3db93b58e73ea1c69b57ee9787d8cac5b58ff82</test_set_hash>
+    <modules>8</modules>
+    <tests>10</tests>
+    <oracles>4</oracles>
+  </contract_status>
+
+  <task_summary>
+    Verification JSON SSoT 중심 최종보고서/승인 흐름 단순화:
+    - human_acceptance_packet.json을 Codex 검토용 Evidence Packet으로 승격 (MT-1)
+    - 최종보고서 슬림다운 (MT-2)
+    - PR 본문 자유서술 검증 축소 — JSON SSoT만 기계 검증 대상 (MT-3)
+    - gates request-accept 연동 강화 (MT-4)
+    - gates accept 추가 검증 (MT-5)
+    - cleanup-workspace 결과 요약화 (MT-6)
+    - 문서 업데이트 (MT-7)
+    - 테스트 32개 + Oracle 4개 (MT-8)
+  </task_summary>
+
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING" target="pipeline.py">
+      <name>verification_json_schema — Verification JSON 스키마 강화</name>
+    </mt>
+    <mt id="MT-2" status="PENDING" target="pipeline.py">
+      <name>packet_slimdown — 최종보고서 슬림다운</name>
+    </mt>
+    <mt id="MT-3" status="PENDING" target="pipeline.py">
+      <name>pr_body_verification_reduction — PR 본문 자유서술 검증 축소</name>
+    </mt>
+    <mt id="MT-4" status="PENDING" target="pipeline.py">
+      <name>request_accept_freeze — gates request-accept 연동 강화</name>
+    </mt>
+    <mt id="MT-5" status="PENDING" target="pipeline.py">
+      <name>gates_accept_verification — gates accept 추가 검증</name>
+    </mt>
+    <mt id="MT-6" status="PENDING" target="pipeline.py">
+      <name>cleanup_summary — cleanup-workspace 결과 요약화</name>
+    </mt>
+    <mt id="MT-7" status="PENDING" target="CLAUDE.md">
+      <name>documentation_update — 문서 업데이트</name>
+    </mt>
+    <mt id="MT-8" status="PENDING" target="tests/">
+      <name>tests_and_oracles — 테스트 32개 + Oracle 4개</name>
+    </mt>
+  </micro_tasks>
+
+  <next_phase>dev</next_phase>
+  <user_response>NO_ASKUSER_REQUIRED — DQ-1/DQ-2 모두 사용자 원문에 명시적 답변 포함</user_response>
+
+  <notes>
+    Trust-root 파일(pipeline.py, CLAUDE.md, tests/**) 수정이므로 scope_lock_check verdict=PASS 필수.
+    IMP-20260525-6FAC E2E 요건: subprocess 기반, PIPELINE_STATE_PATH 격리, final_state assertion.
+    PR 본문 자유서술은 기계 검증 입력이 아님 — JSON SSoT(human_acceptance_packet.json)만 검증 대상.
+  </notes>
+</manager_handoff>

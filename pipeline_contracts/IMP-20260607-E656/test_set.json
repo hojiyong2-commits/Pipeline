@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260607-E656",
+  "created_at": "2026-06-07T09:55:11Z",
+  "updated_at": "2026-06-07T09:59:01Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "T-1",
+      "module": "MT-1",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/input.json"
+      },
+      "when": {
+        "action": "validate_schema"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/expected.json"
+      }
+    },
+    {
+      "id": "T-2",
+      "module": "MT-3",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/input.json"
+      },
+      "when": {
+        "action": "pr_body_false_positive_normal"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/expected.json"
+      }
+    },
+    {
+      "id": "T-3",
+      "module": "MT-5",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/input.json"
+      },
+      "when": {
+        "action": "gates_accept_consistency_check_normal"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260607-E656/case_final_packet_json_schema/expected.json"
+      }
+    },
+    {
+      "id": "T-3b",
+      "module": "MT-5",
+      "type": "json_exact_match",
+      "priority": "P1",
+      "case_kind": "error",
+      "points": 5,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260607-E656/case_changed_files_mismatch/input.json"
+      },
+      "when": {
+        "action": "gates_accept_consistency_check_error"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260607-E656/case_changed_files_mismatch/expected.json"
+      }
+    },
+    {
+      "id": "T-4",
+      "module": "MT-4",
+      "type": "json_exact_match",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260607-E656/case_acceptance_code_standalone/input.json"
+      },
+      "when": {
+        "action": "request_accept_code_format_normal"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260607-E656/case_acceptance_code_standalone/expected.json"
+      }
+    },
+    {
+      "id": "T-4b",
+      "module": "MT-4",
+      "type": "json_exact_match",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 5,
+      "given": {
+        "actual_file": "tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/input.json"
+      },
+      "when": {
+        "action": "pr_body_false_positive_check"
+      },
+      "then": {
+        "expected_file": "tests/oracles/IMP-20260607-E656/case_pr_body_no_false_positive/expected.json"
+      }
+    },
+    {
+      "id": "T-5",
+      "module": "MT-2",
+      "type": "file_output_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 5,
+      "given": {
+        "command": "python pipeline.py report final-packet"
+      },
+      "when": {
+        "action": "generate_packet"
+      },
+      "then": {
+        "path": "human_acceptance_packet.md"
+      }
+    },
+    {
+      "id": "T-6",
+      "module": "MT-6",
+      "type": "file_output_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 5,
+      "given": {
+        "command": "python pipeline.py hygiene cleanup-workspace --after-complete"
+      },
+      "when": {
+        "action": "cleanup"
+      },
+      "then": {
+        "path": "cleanup_manifest.json"
+      }
+    },
+    {
+      "id": "T-7",
+      "module": "MT-7",
+      "type": "file_output_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 5,
+      "given": {
+        "target": "CLAUDE.md"
+      },
+      "when": {
+        "action": "check_documentation"
+      },
+      "then": {
+        "path": "CLAUDE.md"
+      }
+    },
+    {
+      "id": "T-8",
+      "module": "MT-8",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "normal",
+      "points": 5,
+      "given": {},
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "tests/",
+          "-q",
+          "--tb=short"
+        ]
+      },
+      "then": {
+        "returncode": 0
+      }
+    }
+  ],
+  "frozen_at": "2026-06-07T09:59:01Z",
+  "test_set_hash": "73f626ccf8adeb1911818444d3db93b58e73ea1c69b57ee9787d8cac5b58ff82",
+  "contract_hash": "8683722abfb1383129e6f8de01d6b57ff3d26b5eff3ec9391b92bc3bded695de"
+}

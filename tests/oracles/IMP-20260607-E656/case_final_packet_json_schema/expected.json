@@ -1,0 +1,7 @@
+{
+  "schema_valid": true,
+  "required_fields_present": ["schema_version", "packet_type", "pipeline_id", "generated_at", "pr", "github_actions", "changed_files", "changed_files_count", "gates", "requirements", "oracle_summary", "known_failures", "warnings", "acceptance", "artifacts"],
+  "changed_files_count_matches": true,
+  "head_sha_match": true,
+  "blocked": false
+}

@@ -1,0 +1,6 @@
+{
+  "blocked": true,
+  "failure_code": "changed_files_mismatch_vs_verification_json",
+  "extra_in_json": ["nonexistent_file.py"],
+  "missing_from_json": []
+}

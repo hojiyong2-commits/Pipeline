@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260607-E656",
+  "created_at": "2026-06-07T09:56:48Z",
+  "oracles": [
+    {
+      "name": "O001",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260607-E656\\case_final_packet_json_schema\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260607-E656\\case_final_packet_json_schema\\expected.json",
+      "input_sha256": "7a176a17a6c735a85402f8a0fe450c57d36920a7392c6a8cb47d98394f4b1645",
+      "expected_sha256": "4b001ba010e2aa1b6fdcb7e240d6885bef092ff7f1bd447a03054afdc83c98d6",
+      "added_at": "2026-06-07T09:56:48Z"
+    },
+    {
+      "name": "O002",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260607-E656\\case_pr_body_no_false_positive\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260607-E656\\case_pr_body_no_false_positive\\expected.json",
+      "input_sha256": "2582ff0a007eae80be2cb4924a53559261c5bed588404c0058763a4e5a958f45",
+      "expected_sha256": "7dda1944bd1613774a156901ada3f201985637b723cda1904ed964a38ebcc111",
+      "added_at": "2026-06-07T09:56:53Z"
+    },
+    {
+      "name": "O003",
+      "description": "",
+      "source": "user",
+      "case_kind": "edge",
+      "input_path": "tests\\oracles\\IMP-20260607-E656\\case_changed_files_mismatch\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260607-E656\\case_changed_files_mismatch\\expected.json",
+      "input_sha256": "a7b0626b46240883e975746d16426b0f737003bc8dc0bb40c9f67d88beaf93ac",
+      "expected_sha256": "3d58bc82cfc1eaffb7f3794bbd0a344ba9f6a7c749bc99d9bd04c1f808f9dd3a",
+      "added_at": "2026-06-07T09:56:54Z"
+    },
+    {
+      "name": "O004",
+      "description": "",
+      "source": "user",
+      "case_kind": "normal",
+      "input_path": "tests\\oracles\\IMP-20260607-E656\\case_acceptance_code_standalone\\input.json",
+      "expected_path": "tests\\oracles\\IMP-20260607-E656\\case_acceptance_code_standalone\\expected.json",
+      "input_sha256": "c78d12d76a89aa2cc390662e11ae45c358493139a2af19d76102b14ed51cf458",
+      "expected_sha256": "29728ef3a7eff57424134b41d4ce851d67ef07bfff41fe9eb8eaf9debad066a0",
+      "added_at": "2026-06-07T09:56:54Z"
+    }
+  ],
+  "updated_at": "2026-06-07T09:56:54Z"
+}
