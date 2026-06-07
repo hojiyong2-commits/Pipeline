@@ -91,6 +91,11 @@ def _minimal_step_plan_xml(pipeline_id: str = "TMP-PM-SPLIT-TEST") -> str:
       </question>
     </decision_questions>
   </design_confirmation>
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>테스트 최소 기준 — main.run 정상 동작 확인.</text>
+    </criterion>
+  </acceptance_criteria>
   <micro_tasks>
     <micro_task id="MT-1">
       <affected_function>main.run</affected_function>
@@ -101,6 +106,7 @@ def _minimal_step_plan_xml(pipeline_id: str = "TMP-PM-SPLIT-TEST") -> str:
         <executed>true</executed>
       </grep_evidence>
       <change_summary>Update run behavior</change_summary>
+      <covers_ac>AC-1</covers_ac>
     </micro_task>
   </micro_tasks>
 </step_plan>

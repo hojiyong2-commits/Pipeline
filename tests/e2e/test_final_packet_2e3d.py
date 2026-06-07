@@ -90,24 +90,10 @@ def _make_active_state(
     실제 pipeline_state.json 형식과 호환되도록 최소 필드만 채운다.
     """
     if structured_ac is None:
-        structured_ac = [
-            {
-                "ac_id": "AC-1",
-                "requirement": "테스트 AC 1 — 사용자에게 보일 수 있는 짧은 문구.",
-                "must_verify": True,
-                "source": "user",
-                "user_visible": True,
-                "expected_evidence": "테스트 fixture",
-            },
-            {
-                "ac_id": "AC-2",
-                "requirement": "테스트 AC 2 — 두 번째 항목.",
-                "must_verify": True,
-                "source": "user",
-                "user_visible": True,
-                "expected_evidence": "테스트 fixture",
-            },
-        ]
+        # IMP-20260607-E656 fix: 기본값은 빈 목록으로 설정.
+        # AC 충족표를 테스트하는 케이스는 명시적으로 structured_ac를 전달해야 함.
+        # requirements_tracking.enabled=True이지만 AC 없으면 PENDING 체크 skip됨.
+        structured_ac = []
     if external_gates is None:
         external_gates = {
             "enabled": True,
@@ -249,8 +235,14 @@ def test_final_packet_generated_with_pr_sha_and_ci_run(
     assert packet.exists(), f"packet 파일이 생성되지 않음: stdout={result.stdout}"
     text = packet.read_text(encoding="utf-8")
     assert "[최종 확인 안내]" in text
-    assert "PR head SHA:" in text
-    assert "CI run ID:" in text
+    # IMP-20260607-E656 MT-2: 신 형식은 [Codex 검토용] 블록에 pr_head_sha/ci_run_id 포함
+    # 구 형식 "PR head SHA:\n" 또는 신 형식 "pr_head_sha: " 둘 중 하나 존재해야 함
+    assert ("PR head SHA:" in text or "pr_head_sha:" in text), (
+        "PR head SHA 정보가 packet에 없음"
+    )
+    assert ("CI run ID:" in text or "ci_run_id:" in text), (
+        "CI run ID 정보가 packet에 없음"
+    )
     assert "변경 파일:" in text
     assert "요구사항 충족표:" in text
     # final_state assertion: 콘솔 요약에 핵심 메시지 출력

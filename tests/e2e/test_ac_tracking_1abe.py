@@ -2086,7 +2086,34 @@ def _seed_request_accept_state(state_file: Path, pipeline_id: str) -> None:
                 for p in ["pm", "dev", "qa", "build"]
             },
         },
-        "module_gates": {"enabled": True, "sequence": [], "modules": {}, "integration": {"status": "PASS"}},
+        "module_gates": {
+            "enabled": True, "sequence": ["MT-1"], "integration": {"status": "PASS"},
+            "modules": {
+                "MT-1": {
+                    "id": "MT-1", "status": "PASS",
+                    "dev": {
+                        "status": "DONE",
+                        "scope": {
+                            "implemented_tasks": [
+                                {
+                                    "mt_id": "MT-1",
+                                    "implemented_ac": ["AC-1", "AC-2"],
+                                    "implementation_evidence": ["request-accept CLI E2E 구현 완료"],
+                                }
+                            ]
+                        }
+                    },
+                    "qa": {
+                        "status": "PASS",
+                        "report_file": "module_qa_MT-1.xml",
+                        "ac_verification": [
+                            {"ac_id": "AC-1", "verification": "test_cli_request_accept_generates_ac_fulfillment_table PASS"},
+                            {"ac_id": "AC-2", "verification": "IQR 내부 AC PASS"},
+                        ],
+                    },
+                }
+            },
+        },
         "execution_profile": {
             "mode": "STANDARD", "status": "ACTIVE", "reason": "", "max_micro_tasks": None,
             "product_code_write_allowed": True, "phase_ci_mode": "per_phase",
@@ -2106,20 +2133,42 @@ def _seed_request_accept_state(state_file: Path, pipeline_id: str) -> None:
         "requirements_tracking": {
             "enabled": True, "schema_version": 1, "recorded_at": "2026-06-03T00:01:00Z"
         },
+        # IMP-20260607-E656 fix: AC를 한 개 추가하고 module_qa XML 파일도 실제로 생성하여
+        # _get_impl_evidence_for_ac + _get_qa_verification_for_ac 모두 PASS 반환하게 함.
+        # 이렇게 해야 _validate_ac_table_before_request_accept가 PASS를 반환하고
+        # [요구사항 충족표] stdout 출력도 생성됨.
         "structured_acceptance_criteria": [
-            {"ac_id": "AC-1", "requirement": "request-accept CLI E2E 구체적 성공 조건 — AC 충족표 생성 확인",
-             "must_verify": True, "source": "user", "user_visible": True, "expected_evidence": ""},
-            {"ac_id": "AC-2", "requirement": "내부 IQR 조건 — 자동 검증 요약 섹션에 표시",
-             "must_verify": True, "source": "pm", "user_visible": False, "expected_evidence": ""},
+            {
+                "ac_id": "AC-1",
+                "requirement": "gates request-accept 실행 시 AC 충족표가 생성된다",
+                "must_verify": True,
+                "source": "user",
+                "user_visible": True,
+            }
         ],
         "atomic_plan": {
             "micro_tasks": [
-                {"id": "MT-1", "covers_ac": ["AC-1", "AC-2"], "covers_iqr": [],
+                {"id": "MT-1", "covers_ac": ["AC-1"], "covers_iqr": [],
                  "target_files": ["tests/e2e/test_ac_tracking_1abe.py"],
                  "affected_function": "tests.e2e.cli_e2e_gate_func"},
             ]
         },
     }
+    # module_qa XML 파일 생성 — _get_qa_verification_for_ac가 파일에서 읽음
+    qa_report_path = state_file.parent / "module_qa_MT-1.xml"
+    qa_report_path.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<module_qa_report>\n"
+        '  <ac_verification>\n'
+        '    <ac id="AC-1" status="PASS">\n'
+        '      <verification>test_cli_request_accept_generates_ac_fulfillment_table PASS</verification>\n'
+        '    </ac>\n'
+        '  </ac_verification>\n'
+        "</module_qa_report>\n",
+        encoding="utf-8",
+    )
+    # module_gates의 qa.report_file을 절대 경로로 업데이트
+    state["module_gates"]["modules"]["MT-1"]["qa"]["report_file"] = str(qa_report_path)
     state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

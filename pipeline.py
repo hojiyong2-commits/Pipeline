@@ -15094,33 +15094,51 @@ def _check_packet_freshness_against_actual(
         "    python pipeline.py gates request-accept --evidence <결과물>"
     )
 
-    # PR head SHA 비교 — packet의 "PR head SHA:" 다음 줄
+    # PR head SHA 비교 — 두 형식 지원:
+    # 구 형식(IMP-20260603-2E3D): "PR head SHA:\n{sha}"
+    # 신 형식(IMP-20260607-E656): "[Codex 검토용]\n...pr_head_sha: {sha}"
     if actual_pr_head_sha:
-        m = re.search(r"^PR head SHA:\s*\n([^\n]+)", packet_text, re.MULTILINE)
-        if m:
-            packet_sha = m.group(1).strip()
-            if packet_sha and not packet_sha.startswith("(") and packet_sha != actual_pr_head_sha:
-                return (
-                    "[FINAL PACKET GATE] 최종 확인 안내가 최신 PR 상태와 다릅니다.\n"
-                    "  PR head SHA가 바뀌었습니다.\n\n"
-                    f"  현재 PR head SHA: {actual_pr_head_sha}\n"
-                    f"  packet의 PR head SHA: {packet_sha}"
-                    + rerun_hint
-                )
+        packet_sha = None
+        # 신 형식: Codex 블록의 "pr_head_sha: {sha}"
+        m_new = re.search(r"^pr_head_sha:\s+([^\n(][^\n]*)", packet_text, re.MULTILINE)
+        if m_new:
+            packet_sha = m_new.group(1).strip()
+        if packet_sha is None:
+            # 구 형식: "PR head SHA:\n{sha}"
+            m_old = re.search(r"^PR head SHA:\s*\n([^\n]+)", packet_text, re.MULTILINE)
+            if m_old:
+                packet_sha = m_old.group(1).strip()
+        if packet_sha and not packet_sha.startswith("(") and packet_sha != actual_pr_head_sha:
+            return (
+                "[FINAL PACKET GATE] 최종 확인 안내가 최신 PR 상태와 다릅니다.\n"
+                "  PR head SHA가 바뀌었습니다.\n\n"
+                f"  현재 PR head SHA: {actual_pr_head_sha}\n"
+                f"  packet의 PR head SHA: {packet_sha}"
+                + rerun_hint
+            )
 
-    # CI run ID 비교 — packet의 "CI run ID:" 다음 줄
+    # CI run ID 비교 — 두 형식 지원:
+    # 구 형식(IMP-20260603-2E3D): "CI run ID:\n{id}"
+    # 신 형식(IMP-20260607-E656): "[Codex 검토용]\n...ci_run_id: {id}"
     if actual_ci_run_id:
-        m = re.search(r"^CI run ID:\s*\n([^\n]+)", packet_text, re.MULTILINE)
-        if m:
-            packet_ci = m.group(1).strip()
-            if packet_ci and not packet_ci.startswith("(") and packet_ci != actual_ci_run_id:
-                return (
-                    "[FINAL PACKET GATE] 최종 확인 안내가 최신 CI 상태와 다릅니다.\n"
-                    "  GitHub Actions run ID가 바뀌었습니다.\n\n"
-                    f"  현재 CI run ID: {actual_ci_run_id}\n"
-                    f"  packet의 CI run ID: {packet_ci}"
-                    + rerun_hint
-                )
+        packet_ci = None
+        # 신 형식: Codex 블록의 "ci_run_id: {id}"
+        m_new_ci = re.search(r"^ci_run_id:\s+([^\n(][^\n]*)", packet_text, re.MULTILINE)
+        if m_new_ci:
+            packet_ci = m_new_ci.group(1).strip()
+        if packet_ci is None:
+            # 구 형식: "CI run ID:\n{id}"
+            m_old_ci = re.search(r"^CI run ID:\s*\n([^\n]+)", packet_text, re.MULTILINE)
+            if m_old_ci:
+                packet_ci = m_old_ci.group(1).strip()
+        if packet_ci and not packet_ci.startswith("(") and packet_ci != actual_ci_run_id:
+            return (
+                "[FINAL PACKET GATE] 최종 확인 안내가 최신 CI 상태와 다릅니다.\n"
+                "  GitHub Actions run ID가 바뀌었습니다.\n\n"
+                f"  현재 CI run ID: {actual_ci_run_id}\n"
+                f"  packet의 CI run ID: {packet_ci}"
+                + rerun_hint
+            )
 
     # 변경 파일 set 비교 — "변경 파일:\n총 N개\n" 다음 빈 줄까지의 파일 경로 추출
     if actual_changed_files:
