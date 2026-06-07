@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-07T10:11:17Z",
+  "generated_at": "2026-06-07T10:21:25Z",
   "pipeline_id": "IMP-20260607-E656",
   "phase": "pm",
   "phase_status": "DONE",
@@ -20,7 +20,7 @@
     "output_file": "step_plan.xml",
     "output_sha256": "260009be6ece75e5131b4fe426aef629f49596d48b3863ea5726e87ae56babdf",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260607-E656/pm/agent_receipt_pm_planner-241c21539ddf5468.json",
-    "receipt_sha256": "c491f26d61c26aac37638c802fc5a3501e4ee47a1d40a9cc8fbd7c2809d39c9f",
+    "receipt_sha256": "60d22e777240f64a9e4a92c83e9305981dc188fe28b061f14c441ec817650cd8",
     "used_by_phase": "pm",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260607-E656\\pm_planner\\pm_planner-241c21539ddf5468.json"
   },
@@ -32,7 +32,7 @@
     "output_file": "manager_handoff.xml",
     "output_sha256": "4c4ab51e4c2547a14b3cf17ca063874f39a66784cb92900bb982c0b8f7e4f3e7",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260607-E656/pm/manager_receipt_pipeline_manager-51314a1fc75b2231.json",
-    "receipt_sha256": "121a3cfa8753b8c0c31fd7481c11a3b2ac581a01b2c45118094765c07b5da69f",
+    "receipt_sha256": "8dc31c4619d63047b0ad84718013726617b231c0e6f5ddeafefe17ff0398caf2",
     "used_by_phase": "pm_manager",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260607-E656\\pipeline_manager\\pipeline_manager-51314a1fc75b2231.json"
   },
@@ -41,16 +41,16 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260607-E656\\pm_planner\\pm_planner-241c21539ddf5468.json",
       "path": ".pipeline/phase_evidence/IMP-20260607-E656/pm/agent_receipt_pm_planner-241c21539ddf5468.json",
-      "sha256": "c491f26d61c26aac37638c802fc5a3501e4ee47a1d40a9cc8fbd7c2809d39c9f",
-      "size_bytes": 533,
+      "sha256": "60d22e777240f64a9e4a92c83e9305981dc188fe28b061f14c441ec817650cd8",
+      "size_bytes": 519,
       "requires_force_add": true
     },
     {
       "label": "manager_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260607-E656\\pipeline_manager\\pipeline_manager-51314a1fc75b2231.json",
       "path": ".pipeline/phase_evidence/IMP-20260607-E656/pm/manager_receipt_pipeline_manager-51314a1fc75b2231.json",
-      "sha256": "121a3cfa8753b8c0c31fd7481c11a3b2ac581a01b2c45118094765c07b5da69f",
-      "size_bytes": 557,
+      "sha256": "8dc31c4619d63047b0ad84718013726617b231c0e6f5ddeafefe17ff0398caf2",
+      "size_bytes": 543,
       "requires_force_add": true
     },
     {
