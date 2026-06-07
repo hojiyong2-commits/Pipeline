@@ -5,8 +5,7 @@ IMP-20260525-AA88 MT-1: Verifies that _smart_resolve uses parent.parent.parent
 """
 from __future__ import annotations
 
-import importlib
-import importlib.util
+import importlib  # noqa: F401
 import sys
 from pathlib import Path
 

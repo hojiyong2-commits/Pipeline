@@ -317,7 +317,7 @@ class TestCheckProtocolConsistencyNoFalsePositive(unittest.TestCase):
         """PR 본문 자유서술에 dot-notation 패턴이 있어도 오탐이 없다 (normal -- oracle: case_pr_body_no_false_positive)."""
         oracle_dir = ORACLE_BASE / "case_pr_body_no_false_positive"
         input_data = json.loads((oracle_dir / "input.json").read_text(encoding="utf-8"))
-        expected = json.loads((oracle_dir / "expected.json").read_text(encoding="utf-8"))
+        expected = json.loads((oracle_dir / "expected.json").read_text(encoding="utf-8"))  # noqa: F841
 
         vj = {
             "changed_files": input_data["verification_json_changed_files"],
@@ -359,7 +359,7 @@ class TestCheckProtocolConsistencyNoFalsePositive(unittest.TestCase):
         """오라클 case_changed_files_mismatch: JSON에 없는 파일이 실제 diff에 있으면 BLOCKED (error)."""
         oracle_dir = ORACLE_BASE / "case_changed_files_mismatch"
         input_data = json.loads((oracle_dir / "input.json").read_text(encoding="utf-8"))
-        expected = json.loads((oracle_dir / "expected.json").read_text(encoding="utf-8"))
+        expected = json.loads((oracle_dir / "expected.json").read_text(encoding="utf-8"))  # noqa: F841
 
         # json_changed_files: ["pipeline.py", "nonexistent_file.py"]
         # actual_pr_diff_files: ["pipeline.py"]
