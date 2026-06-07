@@ -1235,3 +1235,16 @@ Dev는 코드 변경 후 PR 본문의 "최종 확인 안내" 블록을 손으로
 실행하므로, Dev는 명시적으로 호출하지 않아도 됩니다. PR 본문의
 `<!-- PIPELINE_FINAL_PACKET_START -->` ~ `<!-- PIPELINE_FINAL_PACKET_END -->` 블록 안을
 임의로 수정하면 PR consistency 검사가 BLOCKED를 반환할 수 있으므로 절대 수정하지 않습니다.
+
+### Verification JSON 스키마 (IMP-20260607-E656)
+
+Dev가 `_build_verification_json`을 구현하거나 수정할 때는 아래 15개 필드가 모두 포함되어야 한다:
+`schema_version`, `packet_type`, `pipeline_id`, `generated_at`, `pr`, `github_actions`,
+`changed_files`, `changed_files_count`, `gates`, `requirements`, `oracle_summary`,
+`known_failures`, `warnings`, `acceptance`, `artifacts`.
+
+BLOCKED 조건: `changed_files_count != len(changed_files)` 또는 `pr.head_sha != github_actions.head_sha`.
+
+`acceptance_request.json`에는 `verification_json_path`, `verification_json_sha256`에 더해
+`packet_path` (human_acceptance_packet.md 경로), `packet_sha256` (해당 파일 SHA256),
+`github_ci_head_sha` (CI run head SHA, gh CLI로 조회)도 포함되어야 한다.

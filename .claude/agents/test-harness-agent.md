@@ -164,7 +164,7 @@ python pipeline.py gates secrets
 
 - **PR 본문**: PR body의 `사용자가 확인할 결과물`, `검증` 섹션에 secret-like 문자열이 없는지 확인
 - **human_acceptance_packet.md**: 자동 생성된 acceptance packet에 secret 노출 없는지 확인 (GitHub Actions에서 자동 마스킹 권장)
-- **human_acceptance_packet.json**: Verification JSON SSoT(IMP-20260605-58BF). D/F 검사 기준 파일. `changed_files` 배열이 실제 PR diff와 일치하는지 확인 (`gates accept` 실행 전 자동 검증됨).
+- **human_acceptance_packet.json**: Verification JSON SSoT(IMP-20260605-58BF, IMP-20260607-E656). D/F 검사 기준 파일. 15개 필수 필드(`schema_version`, `packet_type`, `pipeline_id`, `generated_at`, `pr`, `github_actions`, `changed_files`, `changed_files_count`, `gates`, `requirements`, `oracle_summary`, `known_failures`, `warnings`, `acceptance`, `artifacts`) 포함 여부 및 `changed_files` 배열이 실제 PR diff와 일치하는지 확인 (`gates accept` 실행 전 자동 검증됨). `acceptance_request.json`에 `packet_sha256`, `github_ci_head_sha` 기록 여부도 함께 확인한다.
 - **첨부파일 / artifact**: `pipeline-attestation`, `pipeline-phase-attestation`, `최종-확인-안내` artifact에 secret 미포함
 - **결과물 (outputs)**: `pipeline_outputs/<pipeline_id>/` 디렉토리 산출물에 secret 미포함
 
