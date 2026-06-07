@@ -14740,7 +14740,12 @@ def _get_impl_evidence_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
 
 
 def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
-    """module qa report 파일에서 ac_verification 결과 수집."""
+    """module qa report 파일에서 ac_verification 결과 수집.
+
+    IMP-20260606-D9F4: 두 가지 XML 형식 지원
+    - Format 1: <ac_verification><ac id="..."><verification>text</verification></ac>
+    - Format 2: <acceptance_criteria_check><criterion id="..."><text>text</text></criterion>
+    """
     verifications: List[str] = []
     gates = state.get("module_gates") or {}
     modules = gates.get("modules") or {}
@@ -14756,14 +14761,31 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
         try:
             tree = ET.parse(report_file)
             root = tree.getroot()
+
+            # Format 1: <ac_verification><ac id="AC-X" status="PASS"><verification>text</verification></ac>
             ac_ver = root.find(".//ac_verification")
-            if ac_ver is None:
-                continue
-            for crit in ac_ver.findall("criterion"):
-                if crit.get("ac_id") == ac_id:
-                    status = crit.get("status", "?")
-                    ev = crit.get("evidence", "")
-                    verifications.append(f"{mt_id} qa: {status} — {ev[:80]}")
+            if ac_ver is not None:
+                for crit in ac_ver.findall("ac"):
+                    if crit.get("id") == ac_id:
+                        status = crit.get("status", "?")
+                        ver_elem = crit.find("verification")
+                        ver_text = (ver_elem.text or "").strip() if ver_elem is not None else ""
+                        if not ver_text:
+                            desc_elem = crit.find("description")
+                            ver_text = (desc_elem.text or "").strip() if desc_elem is not None else ""
+                        if ver_text:
+                            verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
+
+            # Format 2: <acceptance_criteria_check><criterion id="AC-X" status="PASS"><text>text</text></criterion>
+            acc_check = root.find(".//acceptance_criteria_check")
+            if acc_check is not None:
+                for crit in acc_check.findall("criterion"):
+                    if crit.get("id") == ac_id:
+                        status = crit.get("status", "?")
+                        text_elem = crit.find("text")
+                        ver_text = (text_elem.text or "").strip() if text_elem is not None else ""
+                        if ver_text:
+                            verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
         except (ET.ParseError, OSError):
             continue
     return verifications
@@ -14803,19 +14825,9 @@ def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str
         verifications = _get_qa_verification_for_ac(state, ac_id)
         codex_status = _get_codex_status_for_ac(ac_id)
 
-        # result 판정: impl_evidence 또는 verifications 중 하나라도 있으면 PASS
-        # fallback: linked_mts 중 하나라도 module dev DONE 상태이면 PASS
-        # (implements_ac가 비어도 covers_ac로 연결된 MT가 완료된 경우 대응)
-        result = "PASS"
-        if not impl_evidence and not verifications:
-            # fallback: linked_mts 중 하나라도 dev DONE인지 확인
-            modules = (state.get("module_gates") or {}).get("modules") or {}
-            linked_dev_done = any(
-                isinstance(modules.get(mt), dict)
-                and (modules.get(mt) or {}).get("dev", {}).get("status") == "DONE"
-                for mt in linked_mt
-            )
-            result = "PASS" if linked_dev_done else "PENDING"
+        # result 판정: impl_evidence AND verifications 둘 다 있어야 PASS
+        # IMP-20260606-D9F4: 구현 근거와 검증이 모두 채워진 AC만 PASS
+        result = "PASS" if (impl_evidence and verifications) else "PENDING"
 
         table.append({
             "ac_id": ac_id,
