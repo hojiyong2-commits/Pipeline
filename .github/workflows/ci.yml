@@ -1,5 +1,11 @@
 name: CI
 
+# IMP-20260606-D9F4 MT-3: User Acceptance Provenance Gate 정책
+# gates accept는 GitHub PR 댓글 외부 승인 증거 없이 PASS될 수 없습니다.
+# 허용 승인자(PIPELINE_ALLOWED_APPROVER, 기본값 hojiyong2)가 PR에 승인 코드를
+# 직접 댓글로 남겨야 하며, 에이전트는 이 코드를 추측하거나 직접 생성할 수 없습니다.
+# _check_pr_approver_provenance() — pipeline.py 참조.
+
 on:
   pull_request:
   push:

@@ -1,0 +1,6 @@
+{
+  "scenario": "gh_cli_not_installed",
+  "gates_accept_args": ["--result", "ACCEPT", "--evidence", "pipeline.py", "--acceptance-code", "ACCEPT-IMP-20260606-D9F4-TESTNOCE"],
+  "gh_available": false,
+  "pipeline_id": "IMP-20260606-D9F4"
+}
