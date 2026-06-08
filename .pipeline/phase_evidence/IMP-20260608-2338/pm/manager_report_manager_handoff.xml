@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260608-2338</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-4af948cad0a9a0f2</planner_run_id>
+  <manager_run_id>pipeline_manager-3e8a44b2cd0f76d6</manager_run_id>
+  <step_plan_sha256>4214cd8c04a0a18b83c142261e99e879e2189accd29ccb3aab92aeba0ab41437</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <status>ready</status>
+  <anti_gaming_read>true</anti_gaming_read>
+  <generated_at>2026-06-08T12:21:00Z</generated_at>
+  <pm_phase_status>DONE</pm_phase_status>
+
+  <task_summary>
+    User Acceptance Gate 동기화 수정 (최소 수정):
+    - MT-1: _check_pr_approver_provenance — acceptance_request.json 직접 로드 우선, state fallback, 실패 메시지 실제 nonce 표시
+    - MT-2: _cmd_gates_request_accept — 패킷 생성 완료 후 SHA 재계산하여 acceptance_request.json 갱신
+    - MT-3: 단위 테스트 6개 추가 (tests/test_acceptance_provenance_2338.py)
+  </task_summary>
+
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING" target="pipeline.py">
+      <name>_check_pr_approver_provenance: acceptance_request.json 우선 로드</name>
+    </mt>
+    <mt id="MT-2" status="PENDING" target="pipeline.py">
+      <name>_cmd_gates_request_accept: 패킷 생성 후 SHA 재기록</name>
+    </mt>
+    <mt id="MT-3" status="PENDING" target="tests/test_acceptance_provenance_2338.py">
+      <name>단위 테스트 6개 추가</name>
+    </mt>
+  </micro_tasks>
+
+  <next_phase>dev</next_phase>
+  <user_response>NO_ASKUSER_REQUIRED</user_response>
+
+  <notes>
+    변경 파일: pipeline.py, tests/test_acceptance_provenance_2338.py
+    Trust-root 파일(pipeline.py, tests/**) 수정이므로 scope_lock_check verdict=PASS 필수.
+    E2E 요건: subprocess 기반, PIPELINE_STATE_PATH 격리, final_state assertion.
+    금지: CLAUDE.md/agent MD/ci.yml 수정.
+  </notes>
+</manager_handoff>
