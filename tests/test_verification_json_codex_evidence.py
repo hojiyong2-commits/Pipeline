@@ -141,11 +141,22 @@ class TestBuildVerificationJson15Fields(unittest.TestCase):
         self.assertEqual(result["changed_files_count"], 3)
         self.assertEqual(result["changed_files_count"], len(result["changed_files"]))
 
-    def test_edge_empty_changed_files_count_zero(self) -> None:
-        """빈 changed_files이면 changed_files_count가 0이다 (edge)."""
+    def test_edge_empty_changed_files_blocked(self) -> None:
+        """빈 changed_files이면 blocked=True이고 blocked_reasons에 empty 사유가 포함된다 (edge)."""
         ev = _make_evidence(changed_files=[])
         result = _build_verification_json(ev)
         self.assertEqual(result["changed_files_count"], 0)
+        self.assertTrue(result["blocked"], "빈 changed_files는 blocked=True여야 합니다")
+        self.assertTrue(
+            len(result["blocked_reasons"]) > 0,
+            "blocked_reasons가 비어있으면 안 됩니다"
+        )
+        # blocked_reasons 중 하나에 "빈 배열" 또는 "changed_files" 언급이 있어야 함
+        reasons_text = " ".join(result["blocked_reasons"]).lower()
+        self.assertTrue(
+            "changed_files" in reasons_text,
+            f"blocked_reasons에 'changed_files' 언급 없음: {result['blocked_reasons']}"
+        )
 
     def test_edge_not_blocked_when_sha_match(self) -> None:
         """pr.head_sha == github_actions.head_sha이면 blocked=False이다 (edge)."""

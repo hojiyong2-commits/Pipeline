@@ -10250,24 +10250,45 @@ def _collect_packet_evidence(
     structured_ac = state.get("structured_acceptance_criteria") or []
     ac_table = _build_ac_fulfillment_table(state)
 
-    # IMP-20260608: oracle_summary, known_failures를 evidence에 포함 (Codex 블록용)
+    # IMP-20260608: oracle_summary를 oracle_result.json에서 직접 읽는다.
+    # 기존 human_acceptance_packet.json 참조는 자기 자신을 순환 참조하는 버그가 있었음.
     oracle_summary_for_evidence: Dict[str, Any] = {}
     try:
-        _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
-        if _vj_path.exists():
-            _vj = json.loads(_vj_path.read_text(encoding="utf-8", errors="replace"))
-            oracle_summary_for_evidence = _vj.get("oracle_summary") or {}
-    except (OSError, json.JSONDecodeError):
-        pass
+        _oracle_paths = _contract_paths(pipeline_id)
+        _oracle_result_path = _oracle_paths.get("oracle_result")
+        if _oracle_result_path is not None and _oracle_result_path.exists():
+            _oracle_result = json.loads(
+                _oracle_result_path.read_text(encoding="utf-8", errors="replace")
+            )
+            _summary = _oracle_result.get("summary") or {}
+            _results = _oracle_result.get("results") or []
+            _verdict = str(_summary.get("verdict") or gate_status.get("oracle", "PENDING"))
+            _passed = int(_summary.get("passed") or 0)
+            _failed = int(_summary.get("failed") or 0)
+            _total = len(_results)
+            oracle_summary_for_evidence = {
+                "status": _verdict,
+                "case_count": _total,
+                "passed_count": _passed,
+                "failed_count": _failed,
+            }
+        else:
+            # oracle_result.json이 없을 때는 gate_status에서 최소 정보 조합
+            oracle_summary_for_evidence = {
+                "status": gate_status.get("oracle", "PENDING"),
+                "case_count": 0,
+                "passed_count": 0,
+                "failed_count": 0,
+            }
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        oracle_summary_for_evidence = {
+            "status": gate_status.get("oracle", "PENDING"),
+            "case_count": 0,
+            "passed_count": 0,
+            "failed_count": 0,
+        }
 
     known_failures_for_evidence: List[Any] = []
-    try:
-        _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
-        if _vj_path.exists():
-            _vj = json.loads(_vj_path.read_text(encoding="utf-8", errors="replace"))
-            known_failures_for_evidence = list(_vj.get("known_failures") or [])
-    except (OSError, json.JSONDecodeError):
-        pass
 
     return {
         "pipeline_id": pipeline_id,
@@ -10640,6 +10661,12 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
 
     # BLOCKED 검증 규칙
     blocked_reasons: List[str] = []
+    # 규칙 0: changed_files 빈 배열 → BLOCKED (PR diff 누락)
+    if not changed_files:
+        blocked_reasons.append(
+            "changed_files가 빈 배열입니다. PR diff를 확인하세요 "
+            "(git diff origin/main...HEAD --name-only 실행 후 report final-packet 재실행)"
+        )
     # 규칙 1: changed_files_count != len(changed_files) → BLOCKED
     if changed_files_count != len(changed_files):
         blocked_reasons.append(
