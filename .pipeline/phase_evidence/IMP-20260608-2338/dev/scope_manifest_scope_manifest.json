@@ -1,0 +1,32 @@
+﻿{
+    "micro_tasks":  [
+                        {
+                            "affected_functions":  [
+                                                       "pipeline._check_pr_approver_provenance"
+                                                   ],
+                            "files":  [
+                                          "pipeline.py"
+                                      ],
+                            "id":  "MT-1"
+                        },
+                        {
+                            "affected_functions":  [
+                                                       "pipeline._cmd_gates_request_accept"
+                                                   ],
+                            "files":  [
+                                          "pipeline.py"
+                                      ],
+                            "id":  "MT-2"
+                        },
+                        {
+                            "affected_functions":  [
+                                                       "tests.test_acceptance_provenance_2338"
+                                                   ],
+                            "files":  [
+                                          "tests/test_acceptance_provenance_2338.py"
+                                      ],
+                            "id":  "MT-3"
+                        }
+                    ],
+    "pipeline_id":  "IMP-20260608-2338"
+}
