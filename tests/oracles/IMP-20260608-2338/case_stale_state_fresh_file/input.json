@@ -1,0 +1,16 @@
+{
+  "description": "state의 acceptance_request가 낡고 acceptance_request.json 파일에 최신 nonce가 있는 경우",
+  "scenario": "MT-1 수정 검증: _check_pr_approver_provenance가 파일 기반 nonce를 우선 사용",
+  "state_acceptance_request": {
+    "nonce": "STALE_NONCE_OLD",
+    "pipeline_id": "IMP-20260608-2338"
+  },
+  "file_acceptance_request": {
+    "nonce": "FRESH_NONCE_NEW",
+    "pipeline_id": "IMP-20260608-2338",
+    "status": "PENDING"
+  },
+  "pr_comment": "ACCEPT-IMP-20260608-2338-FRESH_NONCE_NEW",
+  "commenter": "hojiyong2-commits",
+  "expected_behavior": "파일의 최신 nonce(FRESH_NONCE_NEW)로 PR 댓글 검증 — PASS"
+}

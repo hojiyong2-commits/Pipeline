@@ -15558,6 +15558,24 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             print("  [PR 본문 자동 업데이트] PIPELINE_FINAL_PACKET 블록 교체 완료")
         else:
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
+        # IMP-20260608-2338 MT-2: 패킷 재생성 후 acceptance_request.json의
+        # packet_sha256/packet_path를 실제 파일 기준으로 갱신 (reuse 경로 제외)
+        if not reuse:
+            try:
+                _new_pkt_path = Path(auto_result["packet_path"])
+                if _new_pkt_path.exists():
+                    _new_pkt_sha = _sha256_file(_new_pkt_path)
+                    _req_path = BASE_DIR / "acceptance_request.json"
+                    if _req_path.exists():
+                        _req_data = json.loads(_req_path.read_text(encoding="utf-8", errors="replace"))
+                        _req_data["packet_path"] = str(_new_pkt_path)
+                        _req_data["packet_sha256"] = _new_pkt_sha
+                        _req_path.write_text(
+                            json.dumps(_req_data, ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
+            except (OSError, json.JSONDecodeError, TypeError):
+                pass  # 갱신 실패 시 기존 값 유지 (치명적이지 않음)
     except (OSError, ValueError, KeyError) as exc:
         print(YELLOW(f"  [FINAL PACKET] 자동 생성 중 오류 (계속 진행): {exc}"))
 
@@ -15641,11 +15659,16 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     from datetime import datetime as _datetime, timezone as _timezone
 
     pipeline_id: str = str(state.get("pipeline_id", "") or "")
-    acceptance_req: Dict[str, Any] = state.get("acceptance_request") or {}
-    nonce: str = str(acceptance_req.get("nonce", "") or "")
     allowed_approver: str = PIPELINE_ALLOWED_APPROVER
-
-    accept_code: str = f"ACCEPT-{pipeline_id}-{nonce}" if (pipeline_id and nonce) else ""
+    # IMP-20260608-2338 MT-1: acceptance_request.json 우선 로드 (state fallback)
+    _ar_from_file = _load_acceptance_request()
+    acceptance_req: Dict[str, Any] = (
+        _ar_from_file
+        if (_ar_from_file is not None and _ar_from_file.get("pipeline_id") == pipeline_id)
+        else (state.get("acceptance_request") or {})
+    )
+    nonce: str = str(acceptance_req.get("nonce", "") or "")
+    accept_code: str = f"ACCEPT-{pipeline_id}-{nonce}" if (pipeline_id and nonce) else f"ACCEPT-{pipeline_id}-<nonce>"
 
     # 1. gh CLI 설치 확인
     # shutil.which로 찾은 경로를 명시적으로 사용 (Windows에서 .bat 래퍼가 PATH에 있을 때
@@ -15780,7 +15803,7 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
                 f"[PIPELINE ERROR] PR #{pr_number}에서 허용 승인자{_approver_hint}의 "
                 f"승인 코드 댓글을 찾을 수 없습니다 (pr_approver_missing). "
                 f"GitHub PR에 허용 승인자({allowed_approver})가 승인 코드를 남겨야 합니다. "
-                f"승인 코드 형식: {accept_code or 'ACCEPT-<pipeline_id>-<nonce>'}"
+                f"승인 코드 형식: {accept_code}"
             ),
             "approver": None,
             "comment_id": None,

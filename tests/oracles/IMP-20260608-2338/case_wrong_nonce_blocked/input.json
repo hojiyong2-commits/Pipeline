@@ -1,0 +1,16 @@
+{
+  "description": "올바른 승인자가 잘못된 nonce로 댓글을 남긴 경우",
+  "scenario": "MT-1 수정 검증: 잘못된 nonce는 계속 BLOCKED",
+  "state_acceptance_request": {
+    "nonce": "CORRECT_NONCE",
+    "pipeline_id": "IMP-20260608-2338"
+  },
+  "file_acceptance_request": {
+    "nonce": "CORRECT_NONCE",
+    "pipeline_id": "IMP-20260608-2338",
+    "status": "PENDING"
+  },
+  "pr_comment": "ACCEPT-IMP-20260608-2338-WRONG_NONCE",
+  "commenter": "hojiyong2-commits",
+  "expected_behavior": "잘못된 nonce — BLOCKED (pr_approver_missing)"
+}
