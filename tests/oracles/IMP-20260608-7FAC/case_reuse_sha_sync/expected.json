@@ -1,0 +1,36 @@
+{
+  "case_id": "case_reuse_sha_sync",
+  "case_kind": "normal",
+  "expectations": {
+    "acceptance_request_after_sync": {
+      "pipeline_id": "TEST-IMP-7FAC",
+      "request_id": "req-original",
+      "nonce": "REUSE001",
+      "evidence": "human_acceptance_packet.md",
+      "evidence_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "verification_json_path": "human_acceptance_packet.json",
+      "verification_json_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "packet_path": "human_acceptance_packet.md",
+      "packet_sha256_must_equal": "sha256(actual_packet_bytes)",
+      "github_ci_head_sha": "abcdef1234567890abcdef1234567890abcdef12",
+      "status": "PENDING"
+    },
+    "preserved_fields": [
+      "pipeline_id",
+      "request_id",
+      "nonce",
+      "evidence",
+      "evidence_sha256",
+      "verification_json_path",
+      "verification_json_sha256",
+      "github_ci_head_sha",
+      "status"
+    ],
+    "changed_fields": [
+      "packet_path",
+      "packet_sha256"
+    ],
+    "freshness_outcome_when_packet_unchanged": "PASS",
+    "notes": "reuse=True 경로에서도 신규 발급 경로와 동일한 helper로 packet_path/packet_sha256을 동기화한다. 기존 nonce/request_id/evidence/evidence_sha256/verification_json_sha256/github_ci_head_sha는 절대 변경되지 않는다."
+  }
+}

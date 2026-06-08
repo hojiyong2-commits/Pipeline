@@ -15406,6 +15406,39 @@ def _get_ci_run_head_sha(run_id: str) -> Optional[str]:
     return None
 
 
+def _sync_acceptance_request_with_packet(packet_path: Path, state: Dict[str, Any]) -> None:
+    """acceptance_request.json의 packet_path/packet_sha256을 실제 파일 기준으로 갱신한다.
+
+    IMP-20260608-7FAC MT-1: reuse=True/False 양 경로에서 공유하는 helper.
+    packet_path와 packet_sha256만 갱신하며, 다른 필드(nonce, request_id 등)는 보존한다.
+    파일 I/O 실패나 JSON 파싱 오류는 모두 삼킨다 (치명적이지 않음).
+
+    Args:
+        packet_path: 실제 human_acceptance_packet.md 파일 경로.
+        state: 활성 pipeline_state (state["acceptance_request"] 도 갱신한다).
+    """
+    try:
+        if not packet_path.exists():
+            return
+        new_pkt_sha = _sha256_file(packet_path)
+        req_path = BASE_DIR / "acceptance_request.json"
+        if not req_path.exists():
+            return
+        req_data = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
+        req_data["packet_path"] = str(packet_path)
+        req_data["packet_sha256"] = new_pkt_sha
+        req_path.write_text(
+            json.dumps(req_data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        # state["acceptance_request"] 도 동기화
+        if isinstance(state.get("acceptance_request"), dict):
+            state["acceptance_request"]["packet_path"] = str(packet_path)
+            state["acceptance_request"]["packet_sha256"] = new_pkt_sha
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass  # 갱신 실패 시 기존 값 유지 (치명적이지 않음)
+
+
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
     """gates request-accept 핸들러: stale 검증 + nonce 발급 + packet 자동 생성 + PR 본문 자동 업데이트.
 
@@ -15558,24 +15591,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             print("  [PR 본문 자동 업데이트] PIPELINE_FINAL_PACKET 블록 교체 완료")
         else:
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
-        # IMP-20260608-2338 MT-2: 패킷 재생성 후 acceptance_request.json의
-        # packet_sha256/packet_path를 실제 파일 기준으로 갱신 (reuse 경로 제외)
-        if not reuse:
-            try:
-                _new_pkt_path = Path(auto_result["packet_path"])
-                if _new_pkt_path.exists():
-                    _new_pkt_sha = _sha256_file(_new_pkt_path)
-                    _req_path = BASE_DIR / "acceptance_request.json"
-                    if _req_path.exists():
-                        _req_data = json.loads(_req_path.read_text(encoding="utf-8", errors="replace"))
-                        _req_data["packet_path"] = str(_new_pkt_path)
-                        _req_data["packet_sha256"] = _new_pkt_sha
-                        _req_path.write_text(
-                            json.dumps(_req_data, ensure_ascii=False, indent=2),
-                            encoding="utf-8",
-                        )
-            except (OSError, json.JSONDecodeError, TypeError):
-                pass  # 갱신 실패 시 기존 값 유지 (치명적이지 않음)
+        # IMP-20260608-7FAC MT-1: reuse/non-reuse 양 경로에서 helper로 packet_sha256 동기화
+        _sync_acceptance_request_with_packet(Path(auto_result["packet_path"]), state)
     except (OSError, ValueError, KeyError) as exc:
         print(YELLOW(f"  [FINAL PACKET] 자동 생성 중 오류 (계속 진행): {exc}"))
 

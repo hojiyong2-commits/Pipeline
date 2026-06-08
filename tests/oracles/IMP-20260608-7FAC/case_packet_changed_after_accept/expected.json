@@ -1,0 +1,14 @@
+{
+  "case_id": "case_packet_changed_after_accept",
+  "case_kind": "edge",
+  "expectations": {
+    "gate_outcome": "BLOCKED",
+    "failure_code": "packet_sha256_changed",
+    "failure_category": "missing_evidence",
+    "return_phase": "build",
+    "retry_allowed": true,
+    "required_actions_must_include": "python pipeline.py gates request-accept 를 다시 실행",
+    "preserved_existing_behavior": "기존 packet freshness 검증 로직 (line ~16608: _current_pkt_sha.lower() != _stored_pkt_sha.lower())을 그대로 사용해 BLOCKED 처리한다. 본 IMP는 reuse 경로의 packet_sha256 정합성만 갱신하며 freshness 가드를 약화하지 않는다.",
+    "notes": "reuse 경로 동기화 helper는 gates request-accept 시점 packet과 acceptance_request.json을 일치시키되, 이후 외부 변경에 대한 freshness 가드는 그대로 유지한다."
+  }
+}
