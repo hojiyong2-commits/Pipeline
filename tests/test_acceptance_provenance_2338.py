@@ -15,7 +15,6 @@ IMP-20260608-2338: _check_pr_approver_provenance + _cmd_gates_request_accept 수
 """
 import hashlib
 import json
-import os
 import sys
 import tempfile
 import unittest
@@ -241,7 +240,7 @@ class TestPacketSha256Sync(unittest.TestCase):
             auto_result = {"packet_path": str(new_packet), "pr_body_updated": False}
             if not reuse:
                 try:
-                    _new_pkt_path = Path(auto_result["packet_path"])
+                    _new_pkt_path = Path(str(auto_result["packet_path"]))
                     if _new_pkt_path.exists():
                         _new_pkt_sha = pipeline_mod._sha256_file(_new_pkt_path)
                         if req_path.exists():
