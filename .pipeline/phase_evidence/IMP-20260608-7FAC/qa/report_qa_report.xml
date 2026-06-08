@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260608-7FAC</pipeline_id>
+  <qa_run_id>qa-04d0514202887e4b</qa_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+
+  <handover_evidence_check>
+    <handover_present>PASS</handover_present>
+    <evidence_files_exist>PASS</evidence_files_exist>
+    <code_submitted>PASS</code_submitted>
+  </handover_evidence_check>
+
+  <category_check>
+    <wa>N-A — 네트워크 통신 코드 변경 없음</wa>
+    <ui>N-A — GUI 관련 변경 없음</ui>
+    <fs>PASS — pathlib.Path 사용, encoding 완비, req_path 존재 체크</fs>
+    <pd>PASS — 단일 helper 함수 분리, 양 경로 공유, docstring 완비</pd>
+    <sec>PASS — 하드코딩 시크릿 없음, 삼중 예외 방어 완비</sec>
+    <al>PASS — exists() 초기 방어, isinstance 타입 검증, 모든 경로 보장</al>
+    <build>N-A — meta-task, EXE 빌드 대상 아님</build>
+  </category_check>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <mt_verdict>WITHIN_SCOPE</mt_verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <test_execution>
+    <new_tests>5/5 PASS</new_tests>
+    <regression_tests>644 PASS</regression_tests>
+  </test_execution>
+
+  <result>[PASS]</result>
+  <critical_issues>없음</critical_issues>
+</qa_report>
