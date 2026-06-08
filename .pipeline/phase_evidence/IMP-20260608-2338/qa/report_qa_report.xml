@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260608-2338</pipeline_id>
+  <run_id>qa-39b0313e43de5292</run_id>
+  <category_check>
+    <wa>N-A — category_tags에 WA 없음. 외부 네트워크 호출 변경 없음 (gh CLI subprocess는 기존 패턴 그대로).</wa>
+    <ui>N-A — category_tags에 UI 없음. GUI 코드 변경 없음.</ui>
+    <fs>PASS — pipeline.py 변경부에서 BASE_DIR / "acceptance_request.json" pathlib 사용, encoding="utf-8", json.JSONDecodeError fallback 처리 모두 포함. 다만 별도 FS 카테고리 아님.</fs>
+    <pd>PASS — _check_pr_approver_provenance와 _cmd_gates_request_accept의 책임이 명확히 분리됨. _load_acceptance_request() 헬퍼 재사용으로 중복 IO 없음. MT-1/MT-2/MT-3 모듈 분리 명확.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — None 가드 (_ar_from_file is not None), 타입 변환 (str(...)), bare except 없음, JSONDecodeError/OSError/TypeError 세분화 처리. 빈 데이터 fallback ("ACCEPT-{pipeline_id}-<nonce>" placeholder).</al>
+    <build>N-A — category_tags에 BUILD 없음, EXE 생성 변경 없음.</build>
+    <vsce>N-A — category_tags에 VSCE 없음. VS Code Extension 코드 아님.</vsce>
+  </category_check>
+  <numeric_score>110</numeric_score>
+  <verdict>PASS</verdict>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — category_tags에 WA 없음 (외부 네트워크 호출 변경 없음).</wa>
+    <ui score="0" max="20">N/A — category_tags에 UI 없음.</ui>
+    <fs score="0" max="20">N/A — category_tags에 FS 없음.</fs>
+    <pd score="10" max="10">모듈분리 5/5 (MT-1/MT-2/MT-3 독립 분리, core/UI 영향 없음), 인터페이스계약 5/5 (Dict[str, Any] 타입힌팅 유지, _load_acceptance_request Optional[Dict] 시그니처 준수)</pd>
+    <al score="20" max="20">0나눗셈 N/A (5/5 — 분기 보호 동등), 범위 검증 5/5 (pipeline_id 일치 조건 명시), 입력 타입 검증 5/5 (isinstance via str() coercion), 빈 데이터 처리 5/5 (placeholder fallback + None 가드)</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음.</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점.</sec>
+    <total score="30" max="30"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS(≥96/120 환산 96% 이상) — 적용 가능 카테고리 PD(10/10) + AL(20/20) 만점</numeric_verdict>
+  </numeric_score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — JSON 갱신은 acceptance_request.json 한 곳, 단일 write_text. 원자성은 기존 패턴 유지 (다른 위치도 동일).</atomic_write>
+      <encoding_fallback>N-A — JSON 파일은 encoding="utf-8" 단독이 표준. errors="replace" fallback 적용됨.</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로 없음. BASE_DIR / "acceptance_request.json" 고정 경로.</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover.xml의 test_results 블록에 pytest 6/6 PASS + 회귀 644 PASS 기록</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _check_pr_approver_provenance가 cmd_gates 분기에서 호출되는 경로 확인. _load_acceptance_request() 7회 호출 (정의 1 + 사용 6) — 실제 바인딩 확인.</functional_binding_verified>
+  </runtime_functional_check>
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 명시 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml line 1~7에 decomposition_audit 블록 존재 (total_functions_identified=2, split_decision 명확)</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1/MT-2/MT-3 모두 grep_evidence.executed=true</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <findings>
+    <mt id="MT-1" result="PASS">
+      _check_pr_approver_provenance 수정 검증:
+      (a) _load_acceptance_request() 호출이 state 읽기 전 line 15664에 위치 — PASS
+      (b) pipeline_id 일치 조건 (_ar_from_file.get("pipeline_id") == pipeline_id) line 15667 — PASS
+      (c) accept_code 생성 시 실제 nonce 사용, placeholder는 nonce 없을 때만 (line 15671: f"ACCEPT-{pipeline_id}-{nonce}" if (pipeline_id and nonce) else f"ACCEPT-{pipeline_id}-&lt;nonce&gt;") — PASS
+      (d) 실패 메시지에 placeholder "ACCEPT-&lt;pipeline_id&gt;-&lt;nonce&gt;" 제거되고 실제 accept_code 사용 (line 15806) — PASS
+    </mt>
+    <mt id="MT-2" result="PASS">
+      _cmd_gates_request_accept 수정 검증:
+      (a) _auto_generate_final_packet_and_update_pr 호출 (line 15554) 직후에 갱신 블록 위치 (line 15561~15578) — PASS
+      (b) "if not reuse:" 조건으로 reuse 경로 보호 (line 15563) — PASS
+      (c) Path(auto_result["packet_path"]) → _sha256_file → acceptance_request.json 갱신 로직 정확 — PASS
+      (d) except (OSError, json.JSONDecodeError, TypeError) 세분화 처리 — PASS
+    </mt>
+    <mt id="MT-3" result="PASS">
+      tests/test_acceptance_provenance_2338.py 검증:
+      (a) 6개 테스트 케이스 모두 pytest 실행 결과 PASSED (1.09s)
+      (b) MT-1 검증 테스트 5개: test_state_empty_file_has_nonce, test_state_stale_nonce_file_fresh, test_allowed_approver_correct_code, test_wrong_nonce_blocked, test_wrong_approver_blocked
+      (c) MT-2 검증 테스트 1개: test_packet_sha256_updated_after_regeneration — 실제 _sha256_file 사용한 SHA 비교
+      (d) Self-Verification Protocol __main__ 가드 포함, mock 패턴 _check_pr_approver_provenance 내부 import 구조와 호환
+    </mt>
+  </findings>
+  <test_results>
+    <suite name="test_acceptance_provenance_2338" pass="6" fail="0" total="6"/>
+    <suite name="test_acceptance_readiness_e979" pass="26" fail="0" total="26"/>
+    <suite name="test_protocol_consistency" pass="43" fail="0" total="43"/>
+    <regression_total pass="75" fail="0"/>
+  </test_results>
+  <scope_check>PASS — scope_manifest.json 2개 파일 + dev_handover.xml evidence 2개 파일 + 실제 git diff 2개 파일 모두 일치 (pipeline.py, tests/test_acceptance_provenance_2338.py). Trust-Root 파일 pipeline.py 수정은 PM scope 명시 + STANDARD profile 적용으로 허용됨.</scope_check>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - (선택사항) acceptance_request.json 갱신을 별도 헬퍼 _refresh_acceptance_request_packet_fields(req_path, packet_path)로 추출하면 향후 reuse 경로에서도 다른 필드(예: ac_fulfillment_table)와 함께 일관 갱신 가능. 다만 본 작업은 PM 범위 외 리팩토링이라 다음 사이클로 미룸.
+    - test_packet_sha256_updated_after_regeneration이 _cmd_gates_request_accept 전체를 통합 테스트하지 않고 로직만 재현함. 추후 e2e 테스트로 보강 가능 (단, PM 범위 외).
+  </improvement_suggestions>
+</qa_report>
