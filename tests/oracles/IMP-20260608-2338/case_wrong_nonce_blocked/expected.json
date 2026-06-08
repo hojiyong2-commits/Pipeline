@@ -1,0 +1,7 @@
+{
+  "result": "BLOCKED",
+  "failure_code": "pr_approver_missing",
+  "description": "올바른 승인자지만 잘못된 nonce 댓글 — BLOCKED 처리",
+  "gate": "pr_approver",
+  "verdict": "wrong_nonce_blocked"
+}

@@ -1,0 +1,8 @@
+{
+  "result": "PASS",
+  "nonce_source": "acceptance_request.json",
+  "nonce_used": "FRESH_NONCE_NEW",
+  "description": "state의 낡은 nonce 대신 파일의 최신 nonce를 사용하여 PR 댓글 검증 통과",
+  "gate": "pr_approver",
+  "verdict": "allowed_approver_with_correct_code"
+}
