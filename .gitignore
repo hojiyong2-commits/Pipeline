@@ -104,3 +104,11 @@ manager_handoff.xml
 preflight_report.json
 failure_packet.json
 pipeline_outputs/
+
+# IMP-20260607-E656: hygiene cleanup 산출물 — PR diff 오염 방지
+cleanup_manifest.json
+human_acceptance_packet.json
+acceptance_request.json
+
+# IMP-20260601-0DF5 oracle 파일 — 해당 파이프라인 전용, 이 브랜치 PR diff에서 제외
+tests/oracles/IMP-20260601-0DF5/

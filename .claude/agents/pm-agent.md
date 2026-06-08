@@ -761,9 +761,20 @@ acceptance_criteria의 requirement 문구가 그대로 자동 생성 packet의 A
 PR 본문의 `<!-- PIPELINE_FINAL_PACKET_START -->` ~ `<!-- PIPELINE_FINAL_PACKET_END -->`
 블록은 PM이나 다른 에이전트가 임의로 수정하지 않습니다.
 
-### Verification JSON SSoT (IMP-20260605-58BF)
+### Verification JSON SSoT (IMP-20260605-58BF, IMP-20260607-E656)
 
 `report final-packet` 실행 시 `human_acceptance_packet.json`이 함께 생성됩니다.
 이 JSON 파일은 Protocol Consistency Guard D/F 검사의 기계 검증 기준으로,
 PM은 `acceptance_criteria` 작성 시 사용자가 확인 가능한 구체적 결과물 경로를
 `--evidence` 인자로 제공할 수 있도록 step_plan에 명시합니다.
+
+`gates request-accept` 실행 시 `acceptance_request.json`에 자동으로 저장되는 신규 필드:
+- `packet_path`: `human_acceptance_packet.md` 경로 (packet SHA 검증용)
+- `packet_sha256`: `human_acceptance_packet.md` SHA256 해시
+- `github_ci_head_sha`: CI run의 head SHA (gh CLI `run view --json headSha`로 조회)
+
+이 필드들은 `gates accept` 실행 시 추가 검증에 사용됩니다:
+- `packet_sha256_changed` BLOCKED: 저장 이후 packet 파일이 변경된 경우
+- `stale_head_sha` BLOCKED (ci_head_sha 기반): 저장 이후 PR head SHA가 변경된 경우
+
+재실행이 필요한 경우: PR에 새 커밋이 push되거나 packet이 재생성된 경우 `gates request-accept`를 다시 실행하여 새 코드와 저장값을 갱신합니다.

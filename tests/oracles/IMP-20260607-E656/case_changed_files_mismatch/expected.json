@@ -1,0 +1,6 @@
+{
+  "test_case": "changed_files_mismatch",
+  "scenario": "JSON changed_files와 실제 PR diff가 다른 경우",
+  "json_changed_files": ["pipeline.py", "nonexistent_file.py"],
+  "actual_pr_diff_files": ["pipeline.py"]
+}

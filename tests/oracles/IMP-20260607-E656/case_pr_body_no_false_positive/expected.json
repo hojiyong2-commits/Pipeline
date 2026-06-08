@@ -1,0 +1,6 @@
+{
+  "test_case": "pr_body_false_positive",
+  "scenario": "PR 본문 자유서술에 오탐 유발 문구들이 포함된 경우",
+  "pr_body_free_text": "이 PR은 github_actions.run_id 필드를 확인합니다. acceptance_request.json.packet_sha256 값을 검증합니다. pipeline_state.json 파일이 변경됩니다. external_gates.github_ci 상태를 확인합니다. foo.bar.baz 패턴을 처리합니다. --acceptance-code 옵션을 사용합니다. G:\\내 드라이브\\터미널 경로를 참조합니다.",
+  "verification_json_changed_files": ["core/acceptance/scorers.py"]
+}

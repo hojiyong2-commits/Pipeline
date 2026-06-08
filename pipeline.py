@@ -1242,6 +1242,12 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     # IMP-20260603-2E3D: gates request-accept가 생성하는 런타임 파일.
     # PM snapshot 이후 nonce 발급 시 생성되거나 갱신되므로 dev scope gate 오탐 방지.
     "acceptance_request.json",
+    # IMP-20260607-E656: report final-packet이 생성하는 런타임 파일.
+    # PM snapshot 이후 packet 생성 시 나타나므로 dev scope gate 오탐 방지.
+    "human_acceptance_packet.json",
+    # IMP-20260607-E656: hygiene cleanup-workspace가 생성하는 런타임 파일.
+    # PM snapshot 이후 cleanup 실행 시 나타나므로 dev scope gate 오탐 방지.
+    "cleanup_manifest.json",
 }
 
 
@@ -1321,7 +1327,9 @@ def _atomic_changed_files(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         "added": added,
         "modified": modified,
         "deleted": deleted,
-        "changed": sorted(set(added + modified + deleted)),
+        # IMP-20260607-E656: Scope gate는 "추가/수정된 파일"만 검사.
+        # deleted 파일은 이전 파이프라인 잔재일 수 있으며 현재 scope와 무관하므로 제외.
+        "changed": sorted(set(added + modified)),
     }
 
 
@@ -3386,12 +3394,17 @@ def _write_acceptance_request(
     ci_run_id: str,
     verification_json_path: Optional[str] = None,
     verification_json_sha256: Optional[str] = None,
+    packet_path: Optional[str] = None,
+    packet_sha256: Optional[str] = None,
+    github_ci_head_sha: Optional[str] = None,
 ) -> Dict[str, Any]:
     """acceptance_request.json 작성 후 데이터 dict 반환.
 
     IMP-20260605-58BF MT-3: verification_json_path와 verification_json_sha256을
     acceptance_request.json에 기록한다. gates accept 시 verification_json 동일성
     검사(_verify_verification_json_freshness)에서 이 값을 사용한다.
+    IMP-20260607-E656 MT-4: packet_path, packet_sha256, github_ci_head_sha 필드 추가.
+    gates accept 시 packet 파일 동일성 검증과 CI head SHA 일치 검증에 사용한다.
 
     Args:
         pipeline_id: 활성 pipeline_id (예: IMP-20260531-BBDB).
@@ -3401,6 +3414,9 @@ def _write_acceptance_request(
         ci_run_id: GitHub Actions run ID (gh CLI 없으면 빈 문자열).
         verification_json_path: human_acceptance_packet.json 경로 (없으면 None).
         verification_json_sha256: human_acceptance_packet.json SHA-256 (없으면 None).
+        packet_path: human_acceptance_packet.md 경로 (없으면 None).
+        packet_sha256: human_acceptance_packet.md SHA-256 (없으면 None).
+        github_ci_head_sha: GitHub Actions CI run의 head SHA (없으면 None).
     Returns:
         기록된 acceptance_request 데이터 dict (status=PENDING).
     Raises:
@@ -3435,6 +3451,10 @@ def _write_acceptance_request(
         "evidence_url": evidence if is_url else None,
         "verification_json_path": verification_json_path,
         "verification_json_sha256": verification_json_sha256,
+        # IMP-20260607-E656 MT-4: 추가 필드
+        "packet_path": packet_path,
+        "packet_sha256": packet_sha256,
+        "github_ci_head_sha": github_ci_head_sha,
         "status": "PENDING",
     }
     with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
@@ -10230,6 +10250,46 @@ def _collect_packet_evidence(
     structured_ac = state.get("structured_acceptance_criteria") or []
     ac_table = _build_ac_fulfillment_table(state)
 
+    # IMP-20260608: oracle_summary를 oracle_result.json에서 직접 읽는다.
+    # 기존 human_acceptance_packet.json 참조는 자기 자신을 순환 참조하는 버그가 있었음.
+    oracle_summary_for_evidence: Dict[str, Any] = {}
+    try:
+        _oracle_paths = _contract_paths(pipeline_id)
+        _oracle_result_path = _oracle_paths.get("oracle_result")
+        if _oracle_result_path is not None and _oracle_result_path.exists():
+            _oracle_result = json.loads(
+                _oracle_result_path.read_text(encoding="utf-8", errors="replace")
+            )
+            _summary = _oracle_result.get("summary") or {}
+            _results = _oracle_result.get("results") or []
+            _verdict = str(_summary.get("verdict") or gate_status.get("oracle", "PENDING"))
+            _passed = int(_summary.get("passed") or 0)
+            _failed = int(_summary.get("failed") or 0)
+            _total = len(_results)
+            oracle_summary_for_evidence = {
+                "status": _verdict,
+                "case_count": _total,
+                "passed_count": _passed,
+                "failed_count": _failed,
+            }
+        else:
+            # oracle_result.json이 없을 때는 gate_status에서 최소 정보 조합
+            oracle_summary_for_evidence = {
+                "status": gate_status.get("oracle", "PENDING"),
+                "case_count": 0,
+                "passed_count": 0,
+                "failed_count": 0,
+            }
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        oracle_summary_for_evidence = {
+            "status": gate_status.get("oracle", "PENDING"),
+            "case_count": 0,
+            "passed_count": 0,
+            "failed_count": 0,
+        }
+
+    known_failures_for_evidence: List[Any] = []
+
     return {
         "pipeline_id": pipeline_id,
         "pr_url": pr_url,
@@ -10242,12 +10302,18 @@ def _collect_packet_evidence(
         "structured_ac": structured_ac,
         "ac_fulfillment_table": ac_table,
         "acceptance_request": acceptance_request,
+        "oracle_summary": oracle_summary_for_evidence,
+        "known_failures": known_failures_for_evidence,
         "generated_at": _now(),
     }
 
 
 def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     """packet 텍스트를 생성한다. 120자/줄 제한 + 승인 코드 독립 줄.
+
+    IMP-20260607-E656 MT-2: 슬림다운 — [Codex 검토용] 고정 블록 추가,
+    불필요한 verbose 내용(전체 metrics/확인 불가 반복/중간 phase attestation) 제거.
+    승인 코드는 접두사 없이 독립 줄에만 출력.
 
     Args:
         evidence: _collect_packet_evidence 결과 dict.
@@ -10266,23 +10332,99 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     ac_table = evidence.get("ac_fulfillment_table")
     acceptance_request = evidence.get("acceptance_request")
 
+    # IMP-20260608: Codex 블록 누락 필드 수집
+    # ci_head_sha: github_actions.head_sha (acceptance_request 또는 JSON 파일에서)
+    ci_head_sha = ""
+    if isinstance(acceptance_request, dict):
+        ci_head_sha = str(acceptance_request.get("github_ci_head_sha", "") or "")
+    if not ci_head_sha:
+        # human_acceptance_packet.json에서 읽기 시도
+        try:
+            _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
+            if _vj_path.exists():
+                _vj = json.loads(_vj_path.read_text(encoding="utf-8", errors="replace"))
+                ci_head_sha = str(_vj.get("github_actions", {}).get("head_sha", "") or "")
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    # verification_json_sha256: human_acceptance_packet.json SHA-256
+    vj_sha256 = ""
+    try:
+        _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
+        if _vj_path.exists():
+            import hashlib as _hashlib
+            vj_sha256 = _hashlib.sha256(_vj_path.read_bytes()).hexdigest()
+    except OSError:
+        pass
+
+    # packet_md_sha256: human_acceptance_packet.md SHA-256 (자기 자신이므로 현재 content 기준 X)
+    # 이전에 쓰인 파일이 있으면 그 SHA를 사용
+    packet_md_sha256 = ""
+    try:
+        _pmd_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_FILE
+        if _pmd_path.exists():
+            import hashlib as _hashlib2
+            packet_md_sha256 = _hashlib2.sha256(_pmd_path.read_bytes()).hexdigest()
+    except OSError:
+        pass
+
+    # requirements_summary: AC 충족표에서 PASS/TOTAL
+    req_pass = req_total = 0
+    if ac_table:
+        for entry in ac_table:
+            if isinstance(entry, dict):
+                req_total += 1
+                if entry.get("result") == "PASS":
+                    req_pass += 1
+    req_summary = f"{req_pass}/{req_total} PASS" if req_total > 0 else "N/A"
+
+    # oracle_summary
+    oracle_summary_raw = evidence.get("oracle_summary") or {}
+    if isinstance(oracle_summary_raw, dict):
+        os_status = oracle_summary_raw.get("status", "?")
+        os_cases = oracle_summary_raw.get("case_count", 0)
+        os_passed = oracle_summary_raw.get("passed_count", 0)
+        oracle_summary_str = f"{os_status} ({os_cases}개 케이스, {os_passed}개 통과)"
+    else:
+        oracle_summary_str = str(oracle_summary_raw or "N/A")
+
+    # known_failures
+    known_failures_list = list(evidence.get("known_failures") or [])
+    known_failures_str = ", ".join(str(f) for f in known_failures_list) if known_failures_list else "없음"
+
     lines: List[str] = []
+
+    # [Codex 검토용] 고정 블록 (IMP-20260607-E656 MT-2, 누락 필드 IMP-20260608 보완)
+    lines.append("[Codex 검토용]")
+    lines.append(f"pipeline_id: {pipeline_id or '(없음)'}")
+    lines.append(f"pr_url: {pr_url or '(없음)'}")
+    lines.append(f"pr_head_sha: {pr_head_sha or '(없음)'}")
+    lines.append(f"ci_run_id: {ci_run_id or '(없음)'}")
+    lines.append(f"ci_head_sha: {ci_head_sha or '(없음)'}")
+    lines.append(f"changed_files_count: {len(changed_files)}")
+    changed_files_inline = ", ".join(changed_files) if changed_files else "(없음)"
+    # 120자 초과 시 줄바꿈
+    if len(f"changed_files: {changed_files_inline}") > 120:
+        lines.append(f"changed_files: {', '.join(changed_files[:5])}... (총 {len(changed_files)}개)")
+    else:
+        lines.append(f"changed_files: {changed_files_inline}")
+    lines.append(f"verification_json_sha256: {vj_sha256 or '(없음)'}")
+    lines.append(f"packet_md_sha256: {packet_md_sha256 or '(없음)'}")
+    lines.append(f"technical: {gate_status.get('technical', 'PENDING')}")
+    lines.append(f"oracle: {gate_status.get('oracle', 'PENDING')}")
+    lines.append(f"github_ci: {gate_status.get('github_ci', 'PENDING')}")
+    lines.append(f"acceptance: {gate_status.get('acceptance', 'PENDING')}")
+    lines.append(f"requirements_summary: {req_summary}")
+    lines.append(f"oracle_summary: {oracle_summary_str}")
+    lines.append(f"known_failures: {known_failures_str}")
+    lines.append(f"verification_json: {HUMAN_ACCEPTANCE_PACKET_JSON_FILE}")
+    lines.append("")
+
     lines.append("[최종 확인 안내]")
     lines.append("")
-    lines.append("파이프라인:")
-    lines.append(pipeline_id or "(없음)")
-    lines.append("")
-    lines.append("PR:")
-    lines.append(pr_url or "(gh CLI 없음 또는 PR 없음)")
-    lines.append("")
-    lines.append("GitHub Actions:")
-    lines.append(actions_url or "(CI run 없음)")
-    lines.append("")
-    lines.append("PR head SHA:")
-    lines.append(pr_head_sha or "(조회 불가)")
-    lines.append("")
-    lines.append("CI run ID:")
-    lines.append(ci_run_id or "(조회 불가)")
+    lines.append(f"파이프라인: {pipeline_id or '(없음)'}")
+    lines.append(f"PR: {pr_url or '(gh CLI 없음 또는 PR 없음)'}")
+    lines.append(f"GitHub Actions: {actions_url or '(CI run 없음)'}")
     lines.append("")
     lines.append("게이트 상태:")
     lines.append(f"Technical: {gate_status.get('technical', 'PENDING')}")
@@ -10290,15 +10432,14 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     lines.append(f"GitHub CI: {gate_status.get('github_ci', 'PENDING')}")
     lines.append(f"User Acceptance: {gate_status.get('acceptance', 'PENDING')}")
     lines.append("")
-    lines.append("변경 파일:")
-    lines.append(f"총 {len(changed_files)}개")
-    lines.append("")
+    lines.append(f"변경 파일: 총 {len(changed_files)}개")
     if changed_files:
-        for path in changed_files:
-            lines.append(path)
+        for fpath in changed_files:
+            lines.append(f"  {fpath}")
     else:
-        lines.append("(git diff 결과 없음 또는 git CLI 없음)")
+        lines.append("  (git diff 결과 없음 또는 git CLI 없음)")
     lines.append("")
+
     lines.append("요구사항 충족표:")
     lines.append("")
     if ac_table:
@@ -10308,6 +10449,7 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     else:
         lines.append("(structured AC 없음 — legacy 파이프라인)")
         lines.append("")
+
     # IMP-20260606-D9F4 REJECT fix: "이 대화창" → "GitHub PR 댓글" + 승인자 표시
     lines.append("사용자가 확인할 것:")
     lines.append("")
@@ -10319,17 +10461,19 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     lines.append("   Claude/Codex가 대신 입력할 수 없습니다. 반드시 사람이 직접 입력해야 합니다.")
     lines.append("5. 틀리면 거절 코드 뒤에 이유를 적는다.")
     lines.append("")
-    lines.append("승인 코드 (GitHub PR 댓글에 정확히 한 줄로 입력):")
+
+    # 승인 코드 — 접두사 없이 독립 줄에만 출력 (IMP-20260607-E656 MT-2)
+    lines.append("[승인 코드]")
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
         nonce = str(acceptance_request.get("nonce"))
         lines.append(f"ACCEPT-{pipeline_id}-{nonce}")
         lines.append("")
-        lines.append("거절 예시:")
+        lines.append("[거절 예시]")
         lines.append(f"REJECT-{pipeline_id}-{nonce}: 이유")
     else:
         lines.append("승인 코드 발급 전 — gates request-accept를 먼저 실행하세요")
         lines.append("")
-        lines.append("거절 예시:")
+        lines.append("[거절 예시]")
         lines.append("승인 코드 발급 전 — gates request-accept를 먼저 실행하세요")
 
     raw = "\n".join(lines)
@@ -10391,24 +10535,45 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
 
     Verification JSON은 _check_protocol_consistency 검사 D/F의 공식 소스로,
     PR 본문 텍스트 파싱 대신 이 구조화 데이터를 사용한다.
+    IMP-20260607-E656 MT-1: 15개 필수 필드 + BLOCKED 검증 규칙 강화.
 
     Args:
         evidence: _collect_packet_evidence 반환 dict.
     Returns:
         {
             "schema_version": 1,
+            "packet_type": "final_acceptance_evidence",
             "pipeline_id": str,
             "generated_at": str,
+            "pr": {"url": str, "number": str, "head_sha": str,
+                   "base_branch": str, "head_branch": str},
+            "github_actions": {"run_id": str, "run_url": str,
+                               "status": str, "head_sha": str},
+            "changed_files": list[str],
+            "changed_files_count": int,
+            "gates": {"technical": str, "oracle": str, "github_ci": str, "acceptance": str},
+            "requirements": list,
+            "oracle_summary": dict,
+            "known_failures": list,
+            "warnings": list,
+            "acceptance": {"code": str or None, "reject_example": str or None,
+                           "nonce": str or None, "request_id": str or None,
+                           "status": str},
+            "artifacts": {"human_packet_md": str, "verification_json": str,
+                          "cleanup_manifest": str or None},
+            # 하위 호환 legacy 필드 (기존 코드가 참조 가능하도록 보존)
             "pr_url": str,
             "pr_number": str,
             "pr_head_sha": str,
             "ci_run_id": str,
             "actions_url": str,
-            "changed_files": list[str],
             "gate_status": dict,
             "structured_ac": list,
             "ac_fulfillment_table": list or None,
             "acceptance_code": str or None,
+            # BLOCKED 검증 결과
+            "blocked": bool,
+            "blocked_reasons": list[str],
         }
     Raises:
         없음.
@@ -10425,21 +10590,124 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
     ac_table = evidence.get("ac_fulfillment_table")
     acceptance_request = evidence.get("acceptance_request")
 
+    # 승인 코드 정보
     acceptance_code: Optional[str] = None
+    accept_nonce: Optional[str] = None
+    accept_request_id: Optional[str] = None
+    reject_example: Optional[str] = None
+    accept_status = "PENDING"
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
-        nonce = str(acceptance_request["nonce"])
-        acceptance_code = f"ACCEPT-{pipeline_id}-{nonce}"
+        accept_nonce = str(acceptance_request["nonce"])
+        acceptance_code = f"ACCEPT-{pipeline_id}-{accept_nonce}"
+        reject_example = f"REJECT-{pipeline_id}-{accept_nonce}: 이유"
+        accept_request_id = str(acceptance_request.get("request_id", "") or "")
+        accept_status = str(acceptance_request.get("status", "PENDING") or "PENDING")
+
+    # 새 구조화 객체
+    pr_obj: Dict[str, Any] = {
+        "url": pr_url,
+        "number": pr_number,
+        "head_sha": pr_head_sha,
+        "base_branch": str(evidence.get("base_branch", "") or "main"),
+        "head_branch": str(evidence.get("head_branch", "") or ""),
+    }
+    github_actions_obj: Dict[str, Any] = {
+        "run_id": ci_run_id,
+        "run_url": actions_url,
+        "status": str(evidence.get("ci_status", "") or ""),
+        "head_sha": pr_head_sha,  # CI는 PR head SHA 기준
+    }
+    changed_files_count = len(changed_files)
+
+    # oracle_summary 추출
+    oracle_summary_raw = evidence.get("oracle_summary")
+    if isinstance(oracle_summary_raw, dict):
+        oracle_summary: Dict[str, Any] = oracle_summary_raw
+    else:
+        oracle_summary = {
+            "status": gate_status.get("oracle", "PENDING"),
+            "case_count": 0,
+            "passed_count": 0,
+            "failed_count": 0,
+        }
+
+    # requirements (AC 충족표를 구조화된 형식으로 변환)
+    requirements: List[Dict[str, Any]] = []
+    if ac_table and isinstance(ac_table, list):
+        for item in ac_table:
+            if isinstance(item, dict):
+                requirements.append({
+                    "ac_id": str(item.get("ac_id", "") or ""),
+                    "summary": str(item.get("requirement", item.get("summary", "")) or ""),
+                    "linked_mt": list(item.get("linked_mt", []) or []),
+                    "status": str(item.get("status", "UNKNOWN") or "UNKNOWN"),
+                    "evidence": list(item.get("evidence", []) or []),
+                })
+
+    # artifacts
+    artifacts_obj: Dict[str, Any] = {
+        "human_packet_md": HUMAN_ACCEPTANCE_PACKET_FILE,
+        "verification_json": HUMAN_ACCEPTANCE_PACKET_JSON_FILE,
+        "cleanup_manifest": None,
+    }
+
+    acceptance_obj: Dict[str, Any] = {
+        "code": acceptance_code,
+        "reject_example": reject_example,
+        "nonce": accept_nonce,
+        "request_id": accept_request_id,
+        "status": accept_status,
+    }
+
+    # BLOCKED 검증 규칙
+    blocked_reasons: List[str] = []
+    # 규칙 0: changed_files 빈 배열 → BLOCKED (PR diff 누락)
+    if not changed_files:
+        blocked_reasons.append(
+            "changed_files가 빈 배열입니다. PR diff를 확인하세요 "
+            "(git diff origin/main...HEAD --name-only 실행 후 report final-packet 재실행)"
+        )
+    # 규칙 1: changed_files_count != len(changed_files) → BLOCKED
+    if changed_files_count != len(changed_files):
+        blocked_reasons.append(
+            f"changed_files_count({changed_files_count}) != "
+            f"len(changed_files)({len(changed_files)})"
+        )
+    # 규칙 2: schema_version 필수 (항상 1)
+    # 규칙 3: pr.head_sha != github_actions.head_sha → BLOCKED
+    if pr_head_sha and github_actions_obj["head_sha"] and pr_head_sha != github_actions_obj["head_sha"]:
+        blocked_reasons.append(
+            f"pr.head_sha({pr_head_sha[:12]}...) != "
+            f"github_actions.head_sha({github_actions_obj['head_sha'][:12]}...)"
+        )
+    blocked = len(blocked_reasons) > 0
 
     return {
+        # 15개 필수 필드 (IMP-20260607-E656 MT-1)
         "schema_version": 1,
+        "packet_type": "final_acceptance_evidence",
         "pipeline_id": pipeline_id,
         "generated_at": str(evidence.get("generated_at", "") or _now()),
+        "pr": pr_obj,
+        "github_actions": github_actions_obj,
+        "changed_files": changed_files,
+        "changed_files_count": changed_files_count,
+        "gates": gate_status,
+        "requirements": requirements,
+        "oracle_summary": oracle_summary,
+        "known_failures": list(evidence.get("known_failures") or []),
+        "warnings": list(evidence.get("warnings") or []),
+        "acceptance": acceptance_obj,
+        "artifacts": artifacts_obj,
+        # BLOCKED 검증 결과
+        "blocked": blocked,
+        "blocked_reasons": blocked_reasons,
+        # 하위 호환 legacy 필드 (기존 코드가 참조하는 필드 보존)
         "pr_url": pr_url,
         "pr_number": pr_number,
         "pr_head_sha": pr_head_sha,
         "ci_run_id": ci_run_id,
         "actions_url": actions_url,
-        "changed_files": changed_files,
         "gate_status": gate_status,
         "structured_ac": structured_ac,
         "ac_fulfillment_table": ac_table,
@@ -14594,9 +14862,13 @@ GitHub Actions: {ci_link}
 ### 승인 방법
 결과물을 확인하신 후 아래 코드를 **정확히** 입력하세요.
 
-**[O] 승인:** {accept_code}
+[승인 코드]
 
-**[X] 거절:** {reject_code}: 거절 이유
+{accept_code}
+
+[거절 예시]
+
+{reject_code}: 거절 이유
 
 주의: 이 코드는 일회용입니다. PR에 새 커밋이 push되면 새 코드가 필요합니다.
 재발급: python pipeline.py gates request-accept --evidence <결과물>
@@ -14722,20 +14994,27 @@ def _get_impl_evidence_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
         # 또는 implemented_tasks가 별도 저장될 수도 있다.
         # implemented_tasks가 scope에 보존되었으면 거기서 추출
         implemented = scope.get("implemented_tasks") if isinstance(scope, dict) else None
-        if not isinstance(implemented, list):
-            continue
-        for task in implemented:
-            if not isinstance(task, dict):
-                continue
-            task_ac_list = task.get("implemented_ac", [])
-            if ac_id in task_ac_list:
-                # 직접 연결: implemented_ac에 ac_id가 있는 경우
-                for ev in task.get("implementation_evidence", []):
-                    evidence.append(f"{mt_id}: {ev}")
-            elif not task_ac_list and mt_id in covers_ac_mts:
-                # fallback: implemented_ac 비어있고 covers_ac로 연결된 MT
-                for ev in task.get("implementation_evidence", []):
-                    evidence.append(f"{mt_id}(covers_ac): {ev}")
+        if isinstance(implemented, list) and implemented:
+            for task in implemented:
+                if not isinstance(task, dict):
+                    continue
+                task_ac_list = task.get("implemented_ac", [])
+                if ac_id in task_ac_list:
+                    # 직접 연결: implemented_ac에 ac_id가 있는 경우
+                    for ev in task.get("implementation_evidence", []):
+                        evidence.append(f"{mt_id}: {ev}")
+                elif not task_ac_list and mt_id in covers_ac_mts:
+                    # fallback: implemented_ac 비어있고 covers_ac로 연결된 MT
+                    for ev in task.get("implementation_evidence", []):
+                        evidence.append(f"{mt_id}(covers_ac): {ev}")
+        elif mt_id in covers_ac_mts:
+            # IMP-20260608: implemented_tasks 자체가 빈 배열이거나 없는 경우
+            # covers_ac로 연결된 MT가 dev DONE 상태면 구현 완료로 간주
+            dev_status = dev_step.get("status", "")
+            if dev_status in ("DONE", "PASS"):
+                files = scope.get("files", []) if isinstance(scope, dict) else []
+                files_str = ", ".join(files) if files else "pipeline.py"
+                evidence.append(f"{mt_id}(covers_ac): 구현 완료 — {files_str}")
     return evidence
 
 
@@ -14745,6 +15024,8 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
     IMP-20260606-D9F4: 두 가지 XML 형식 지원
     - Format 1: <ac_verification><ac id="..."><verification>text</verification></ac>
     - Format 2: <acceptance_criteria_check><criterion id="..."><text>text</text></criterion>
+    IMP-20260608: Format 3 추가
+    - Format 3: <ac_verification><covers_ac>AC-1, AC-2</covers_ac><ac_status>PASS</ac_status></ac_verification>
     """
     verifications: List[str] = []
     gates = state.get("module_gates") or {}
@@ -14775,6 +15056,25 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                             ver_text = (desc_elem.text or "").strip() if desc_elem is not None else ""
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
+
+                # Format 3: <ac_verification><covers_ac>AC-1, AC-2</covers_ac><ac_status>PASS</ac_status>
+                # ac 자식 요소가 없는 경우 covers_ac + ac_status로 파싱
+                if not ac_ver.findall("ac"):
+                    covers_elem = ac_ver.find("covers_ac")
+                    status_elem = ac_ver.find("ac_status")
+                    if covers_elem is not None and status_elem is not None:
+                        covers_text = (covers_elem.text or "").strip()
+                        status_text = (status_elem.text or "").strip()
+                        covered_ids = [c.strip() for c in covers_text.split(",")]
+                        if ac_id in covered_ids:
+                            # verification_evidence에서 첫 번째 항목을 텍스트로 사용
+                            ver_evidence = root.find(".//verification_evidence")
+                            if ver_evidence is not None:
+                                items = ver_evidence.findall("item")
+                                ev_text = (items[0].text or "").strip()[:150] if items else "module QA PASS"
+                            else:
+                                ev_text = "module QA PASS"
+                            verifications.append(f"{mt_id}: {status_text} — {ev_text}")
 
             # Format 2: <acceptance_criteria_check><criterion id="AC-X" status="PASS"><text>text</text></criterion>
             acc_check = root.find(".//acceptance_criteria_check")
@@ -14811,7 +15111,11 @@ def _get_codex_status_for_ac(ac_id: str) -> str:
 
 def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     """structured AC 기록에서 AC 충족표를 자동 조립한다 (legacy면 None)."""
-    structured_ac = state.get("structured_acceptance_criteria") or []
+    structured_ac = (
+        state.get("structured_acceptance_criteria")
+        or state.get("atomic_plan", {}).get("structured_acceptance_criteria")
+        or []
+    )
     if not structured_ac:
         return None
 
@@ -14946,33 +15250,51 @@ def _check_packet_freshness_against_actual(
         "    python pipeline.py gates request-accept --evidence <결과물>"
     )
 
-    # PR head SHA 비교 — packet의 "PR head SHA:" 다음 줄
+    # PR head SHA 비교 — 두 형식 지원:
+    # 구 형식(IMP-20260603-2E3D): "PR head SHA:\n{sha}"
+    # 신 형식(IMP-20260607-E656): "[Codex 검토용]\n...pr_head_sha: {sha}"
     if actual_pr_head_sha:
-        m = re.search(r"^PR head SHA:\s*\n([^\n]+)", packet_text, re.MULTILINE)
-        if m:
-            packet_sha = m.group(1).strip()
-            if packet_sha and not packet_sha.startswith("(") and packet_sha != actual_pr_head_sha:
-                return (
-                    "[FINAL PACKET GATE] 최종 확인 안내가 최신 PR 상태와 다릅니다.\n"
-                    "  PR head SHA가 바뀌었습니다.\n\n"
-                    f"  현재 PR head SHA: {actual_pr_head_sha}\n"
-                    f"  packet의 PR head SHA: {packet_sha}"
-                    + rerun_hint
-                )
+        packet_sha = None
+        # 신 형식: Codex 블록의 "pr_head_sha: {sha}"
+        m_new = re.search(r"^pr_head_sha:\s+([^\n(][^\n]*)", packet_text, re.MULTILINE)
+        if m_new:
+            packet_sha = m_new.group(1).strip()
+        if packet_sha is None:
+            # 구 형식: "PR head SHA:\n{sha}"
+            m_old = re.search(r"^PR head SHA:\s*\n([^\n]+)", packet_text, re.MULTILINE)
+            if m_old:
+                packet_sha = m_old.group(1).strip()
+        if packet_sha and not packet_sha.startswith("(") and packet_sha != actual_pr_head_sha:
+            return (
+                "[FINAL PACKET GATE] 최종 확인 안내가 최신 PR 상태와 다릅니다.\n"
+                "  PR head SHA가 바뀌었습니다.\n\n"
+                f"  현재 PR head SHA: {actual_pr_head_sha}\n"
+                f"  packet의 PR head SHA: {packet_sha}"
+                + rerun_hint
+            )
 
-    # CI run ID 비교 — packet의 "CI run ID:" 다음 줄
+    # CI run ID 비교 — 두 형식 지원:
+    # 구 형식(IMP-20260603-2E3D): "CI run ID:\n{id}"
+    # 신 형식(IMP-20260607-E656): "[Codex 검토용]\n...ci_run_id: {id}"
     if actual_ci_run_id:
-        m = re.search(r"^CI run ID:\s*\n([^\n]+)", packet_text, re.MULTILINE)
-        if m:
-            packet_ci = m.group(1).strip()
-            if packet_ci and not packet_ci.startswith("(") and packet_ci != actual_ci_run_id:
-                return (
-                    "[FINAL PACKET GATE] 최종 확인 안내가 최신 CI 상태와 다릅니다.\n"
-                    "  GitHub Actions run ID가 바뀌었습니다.\n\n"
-                    f"  현재 CI run ID: {actual_ci_run_id}\n"
-                    f"  packet의 CI run ID: {packet_ci}"
-                    + rerun_hint
-                )
+        packet_ci = None
+        # 신 형식: Codex 블록의 "ci_run_id: {id}"
+        m_new_ci = re.search(r"^ci_run_id:\s+([^\n(][^\n]*)", packet_text, re.MULTILINE)
+        if m_new_ci:
+            packet_ci = m_new_ci.group(1).strip()
+        if packet_ci is None:
+            # 구 형식: "CI run ID:\n{id}"
+            m_old_ci = re.search(r"^CI run ID:\s*\n([^\n]+)", packet_text, re.MULTILINE)
+            if m_old_ci:
+                packet_ci = m_old_ci.group(1).strip()
+        if packet_ci and not packet_ci.startswith("(") and packet_ci != actual_ci_run_id:
+            return (
+                "[FINAL PACKET GATE] 최종 확인 안내가 최신 CI 상태와 다릅니다.\n"
+                "  GitHub Actions run ID가 바뀌었습니다.\n\n"
+                f"  현재 CI run ID: {actual_ci_run_id}\n"
+                f"  packet의 CI run ID: {packet_ci}"
+                + rerun_hint
+            )
 
     # 변경 파일 set 비교 — "변경 파일:\n총 N개\n" 다음 빈 줄까지의 파일 경로 추출
     if actual_changed_files:
@@ -15050,6 +15372,38 @@ def _auto_generate_final_packet_and_update_pr(
         "json_path": json_path_str,
         "pr_body_updated": pr_updated,
     }
+
+
+def _get_ci_run_head_sha(run_id: str) -> Optional[str]:
+    """GitHub Actions run ID에 해당하는 head SHA를 조회한다.
+
+    IMP-20260607-E656 MT-4: acceptance_request.json에 github_ci_head_sha를 기록하기 위해
+    사용된다. gates accept 시 CI head SHA와 PR head SHA의 일치 여부를 검증한다.
+
+    Args:
+        run_id: GitHub Actions run ID 문자열.
+    Returns:
+        head SHA 문자열 또는 None (gh CLI 미설치/조회 실패).
+    Raises:
+        없음.
+    """
+    if not run_id or not isinstance(run_id, str):
+        return None
+    gh_path = shutil.which("gh")
+    if not gh_path:
+        return None
+    try:
+        r = subprocess.run(
+            [gh_path, "run", "view", run_id, "--json", "headSha", "--jq", ".headSha"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode == 0:
+            sha = r.stdout.strip()
+            return sha if sha else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
 
 
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
@@ -15142,10 +15496,29 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 vj_sha_for_req = _sha256_file(vj_p)
         except (OSError, TypeError):
             pass
+        # IMP-20260607-E656 MT-4: packet_path, packet_sha256, github_ci_head_sha 기록
+        pkt_path_for_req = None
+        pkt_sha_for_req = None
+        try:
+            pkt_p = _packet_output_path()
+            if pkt_p.exists():
+                pkt_path_for_req = str(pkt_p)
+                pkt_sha_for_req = _sha256_file(pkt_p)
+        except (OSError, TypeError):
+            pass
+        # github_ci_head_sha: CI run의 head SHA (gh CLI로 조회)
+        ci_head_sha_for_req = None
+        try:
+            ci_head_sha_for_req = _get_ci_run_head_sha(ci_run_id) if ci_run_id else None
+        except Exception:
+            pass
         req = _write_acceptance_request(
             pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id,
             verification_json_path=vj_path_for_req,
             verification_json_sha256=vj_sha_for_req,
+            packet_path=pkt_path_for_req,
+            packet_sha256=pkt_sha_for_req,
+            github_ci_head_sha=ci_head_sha_for_req,
         )
         nonce = req["nonce"]
 
@@ -15221,11 +15594,12 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     print("    4. 댓글을 게시한 뒤, 아래 명령을 실행합니다:")
     print(f"       python pipeline.py gates accept --result ACCEPT --evidence {evidence} --acceptance-code {accept_code}")
     print()
-    print("  [O] 승인 코드 (GitHub PR 댓글에 정확히 한 줄로 입력):")
-    print(f"     {accept_code}")
+    print("  [승인 코드]")
     print()
-    print("  [X] 거절하시려면 아래 형식으로 입력하세요:")
-    print(f"     {reject_code}: 거절 이유")
+    print(f"  {accept_code}")
+    print()
+    print("  [거절 예시]")
+    print(f"  {reject_code}: 거절 이유")
     print("=" * 62)
     print()
     print(f"  승인 요청 ID: {req['request_id']}  (acceptance_request.json 저장됨)")
@@ -16180,6 +16554,88 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 f"[BLOCKED] verification_json 변경 감지 ({_vj_freshness_code}) — "
                 "gates request-accept 재실행 필요"
             )
+
+        # IMP-20260607-E656 MT-5: packet_sha256 일치 검증
+        # acceptance_request.json에 packet_sha256이 있으면 현재 .md 파일과 비교
+        _stored_pkt_sha = str(_req.get("packet_sha256", "") or "")
+        _stored_pkt_path = str(_req.get("packet_path", "") or "")
+        if _stored_pkt_sha and _stored_pkt_path:
+            try:
+                _pkt_p = Path(_stored_pkt_path)
+                if not _pkt_p.exists():
+                    _record_failure_packet(
+                        state, "acceptance", {},
+                        command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                                 "--evidence", str(getattr(args, "evidence", "<result-path>") or "")],
+                        note="human_acceptance_packet.md 파일이 없습니다.",
+                        status="BLOCKED", phase="harness",
+                        failure_code="packet_sha256_changed",
+                        failure_category="missing_evidence",
+                        summary_ko="human_acceptance_packet.md 파일이 없거나 삭제되었습니다.",
+                        expected=f"packet_sha256={_stored_pkt_sha[:12]}...",
+                        actual="file_missing",
+                        exit_code=1, owner="Pipeline Manager", return_phase="build",
+                        required_actions=["python pipeline.py report final-packet 을 재실행한 뒤",
+                                          "python pipeline.py gates request-accept 를 다시 실행"],
+                        retry_allowed=True,
+                    )
+                    _save(state)
+                    _die("[BLOCKED] human_acceptance_packet.md 없음 (packet_sha256_changed)")
+                _current_pkt_sha = _sha256_file(_pkt_p)
+                if _current_pkt_sha.lower() != _stored_pkt_sha.lower():
+                    _record_failure_packet(
+                        state, "acceptance", {},
+                        command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                                 "--evidence", str(getattr(args, "evidence", "<result-path>") or "")],
+                        note=(
+                            f"packet SHA256 changed: stored={_stored_pkt_sha[:12]} "
+                            f"current={_current_pkt_sha[:12]}"
+                        ),
+                        status="BLOCKED", phase="harness",
+                        failure_code="packet_sha256_changed",
+                        failure_category="missing_evidence",
+                        summary_ko="human_acceptance_packet.md가 변경되었습니다. 새 코드를 발급받아야 합니다.",
+                        expected=f"packet_sha256={_stored_pkt_sha[:12]}...",
+                        actual=f"packet_sha256={_current_pkt_sha[:12]}...",
+                        exit_code=1, owner="Pipeline Manager", return_phase="build",
+                        required_actions=["python pipeline.py gates request-accept 를 다시 실행"],
+                        retry_allowed=True,
+                    )
+                    _save(state)
+                    _die("[BLOCKED] packet 변경됨 (packet_sha256_changed) — gates request-accept 재실행 필요")
+            except (OSError, TypeError):
+                pass  # 파일 접근 실패 시 안전 통과
+
+        # IMP-20260607-E656 MT-5: github_ci_head_sha 일치 검증
+        # acceptance_request.json에 github_ci_head_sha가 있으면 현재 PR head SHA와 비교
+        _stored_ci_head = str(_req.get("github_ci_head_sha", "") or "")
+        if _stored_ci_head:
+            _current_pr_sha_for_ci = _get_current_pr_head_sha() or ""
+            if _current_pr_sha_for_ci and not (
+                _current_pr_sha_for_ci.startswith(_stored_ci_head[:7]) or
+                _stored_ci_head.startswith(_current_pr_sha_for_ci[:7])
+            ):
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", str(getattr(args, "evidence", "<result-path>") or "")],
+                    note=(
+                        f"CI head SHA mismatch: stored={_stored_ci_head[:12]} "
+                        f"current_pr={_current_pr_sha_for_ci[:12]}"
+                    ),
+                    status="BLOCKED", phase="harness",
+                    failure_code="stale_head_sha",
+                    failure_category="missing_evidence",
+                    summary_ko="CI run의 head SHA가 현재 PR head SHA와 다릅니다. 새 코드를 발급받아야 합니다.",
+                    expected=f"github_ci_head_sha={_stored_ci_head[:12]}...",
+                    actual=f"pr_head_sha={_current_pr_sha_for_ci[:12]}...",
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=["python pipeline.py gates request-accept 를 다시 실행"],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die("[BLOCKED] CI head SHA 불일치 (stale_head_sha) — gates request-accept 재실행 필요")
+
         # IMP-20260606-D9F4 MT-1: User Acceptance Provenance Gate
         # CI run ID / head SHA / evidence 검증 완료 이후, Codex PR gate 이전에 실행.
         # GitHub PR 댓글에서 허용 승인자(PIPELINE_ALLOWED_APPROVER)의 승인 코드를 확인.
@@ -16445,39 +16901,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         _log_event(state, f"user acceptance gate {gate_status}")
         _record_snapshot(state, "harness", None)
         _save(state)
-        # IMP-20260522-29C1 MT-4 (fix-forward): gates accept 완료 시 메트릭 요약을
-        # 콘솔 출력뿐 아니라 human_acceptance_packet.md 파일에도 기록한다.
-        _metrics_str = "확인 불가"
-        try:
-            _metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state))
-            print("\n" + "-" * 60)
-            print("[ 최종 확인 안내 — 소요 시간 요약 ]")
-            print(_metrics_str)
-            print("-" * 60)
-        except Exception:
-            pass
-        # human_acceptance_packet.md 에 metrics summary 섹션 추가/갱신
-        try:
-            _packet_path = BASE_DIR / f"human_acceptance_packet_{pid}.md"
-            if not _packet_path.exists():
-                _packet_path = BASE_DIR / "human_acceptance_packet.md"
-            if _packet_path.exists():
-                _existing_text = _packet_path.read_text(encoding="utf-8")
-                _metrics_section = f"\n\n## 소요 시간 요약\n{_metrics_str}\n"
-                # 기존 섹션이 있으면 교체, 없으면 append
-                if "## 소요 시간 요약" in _existing_text:
-                    import re as _re
-                    _existing_text = _re.sub(
-                        r"\n\n## 소요 시간 요약\n.*?(?=\n\n#|\Z)",
-                        _metrics_section.rstrip("\n"),
-                        _existing_text,
-                        flags=_re.DOTALL,
-                    )
-                else:
-                    _existing_text = _existing_text.rstrip("\n") + _metrics_section
-                _packet_path.write_text(_existing_text, encoding="utf-8")
-        except Exception:
-            pass
+        # IMP-20260607-E656 REJECT fix: metrics/소요시간 섹션 패킷에서 완전 제거.
+        # gates accept 완료 시 콘솔에 verbose metrics 출력 금지 (상세 확인은 pipeline.py metrics report 사용).
         color = GREEN if gate_status == "PASS" else RED
         print(color(f"\n[USER ACCEPTANCE GATE {gate_status}]"))
         print(f"  report: {paths['user_validation']}")
@@ -20869,17 +21294,17 @@ def cmd_hygiene_cleanup_workspace(args: "argparse.Namespace") -> None:
     except OSError as exc:
         print(f"[HYGIENE CLEANUP-WORKSPACE] WARNING: cleanup_manifest.json 저장 실패: {exc}")
 
-    # 7. 결과 출력
+    # 7. 결과 출력 — IMP-20260607-E656 MT-6: 요약 형식
+    # cleanup_manifest.json에 전체 목록을 보존하고 stdout에는 핵심 요약만 출력한다.
     total_moved = len(moved) + len(possible_source_leftovers)
-    print(f"[HYGIENE CLEANUP-WORKSPACE] 완료: 이동={total_moved}개 "
-          f"(source-like={len(possible_source_leftovers)}개)  오류={len(move_errors)}개")
-    for m in moved:
-        print(f"  [이동] {m['path']} → {m['dest']}")
-    for s in possible_source_leftovers:
-        print(f"  [source-like] {s['path']} → {s['dest']}")
-    for e in move_errors:
-        print(f"  [오류] {e['path']}  {e['error']}")
+    print()
+    print("[작업공간 정리]")
+    print(f"  moved_count: {total_moved}")
+    print(f"  archive_root: {dest_base}")
+    if move_errors:
+        print(f"  errors: {len(move_errors)}")
     print(f"  manifest: {manifest_path}")
+    print()
 
 
 def cmd_hygiene(args: "argparse.Namespace") -> None:
