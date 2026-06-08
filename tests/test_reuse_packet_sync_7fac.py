@@ -26,12 +26,9 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import textwrap
 from pathlib import Path
 from typing import Any, Dict
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # Oracle 경로 (CODEOWNERS 보호 영역)
