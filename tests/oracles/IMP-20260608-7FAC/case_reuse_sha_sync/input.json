@@ -1,0 +1,27 @@
+{
+  "case_id": "case_reuse_sha_sync",
+  "case_kind": "normal",
+  "description": "reuse=True 경로에서 final packet이 재생성된 직후 acceptance_request.json의 packet_sha256과 packet_path가 실제 packet 파일과 동기화되는지 확인한다.",
+  "scenario": "기존 acceptance_request.json(packet_sha256=OLD)이 존재하고, gates request-accept가 reuse=True 분기로 진입한다. 분기 안에서 _auto_generate_final_packet_and_update_pr이 packet 파일을 재작성하면 SHA가 NEW로 바뀐다. 이후 동기화 helper가 acceptance_request.json의 packet_path/packet_sha256을 NEW SHA와 실제 경로로 갱신한다.",
+  "inputs": {
+    "initial_acceptance_request": {
+      "pipeline_id": "TEST-IMP-7FAC",
+      "request_id": "req-original",
+      "nonce": "REUSE001",
+      "evidence": "human_acceptance_packet.md",
+      "evidence_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "verification_json_path": "human_acceptance_packet.json",
+      "verification_json_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "packet_path": "old_packet.md",
+      "packet_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "github_ci_head_sha": "abcdef1234567890abcdef1234567890abcdef12",
+      "status": "PENDING"
+    },
+    "reuse_decision": true,
+    "auto_result": {
+      "packet_path": "human_acceptance_packet.md",
+      "pr_body_updated": false
+    },
+    "actual_packet_bytes": "# Final Packet (regenerated for reuse path)\n실제 본문 — reuse=True\n"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "case_id": "case_packet_changed_after_accept",
+  "case_kind": "edge",
+  "description": "동기화 helper로 reuse=True 경로 acceptance_request.json이 갱신된 이후, packet 파일이 외부 편집으로 변경되면 gates accept의 freshness 검증이 여전히 BLOCKED(packet_sha256_changed)로 막아야 한다.",
+  "scenario": "gates request-accept(reuse=True) 직후 acceptance_request.json.packet_sha256 = SHA(A). 사용자가 ACCEPT 코드를 입력하기 전에 외부 편집기로 packet 파일을 수정해 SHA(B) ≠ SHA(A)가 되었다. 이 상태에서 gates accept 실행 시 packet_sha256_changed로 차단되어야 한다.",
+  "inputs": {
+    "acceptance_request": {
+      "pipeline_id": "TEST-IMP-7FAC",
+      "request_id": "req-original",
+      "nonce": "REUSE001",
+      "packet_path": "human_acceptance_packet.md",
+      "packet_sha256": "AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111",
+      "status": "PENDING"
+    },
+    "current_packet_bytes": "# Tampered packet content (manually edited)\n",
+    "expected_packet_sha256_recomputed_from_current_bytes": "stored != current"
+  }
+}
