@@ -1,0 +1,45 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260608-2338</pipeline_id>
+  <phase>dev</phase>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_acceptance_provenance_2338.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline._check_pr_approver_provenance, pipeline._cmd_gates_request_accept</target_function>
+    <upstream_callers>
+      <caller>cmd_gates (gates accept 분기)</caller>
+      <caller>cmd_gates (gates request-accept 분기)</caller>
+    </upstream_callers>
+    <state_mutations>
+      <mutation>MT-1: pure read (state/파일 읽기만)</mutation>
+      <mutation>MT-2: acceptance_request.json packet_sha256/packet_path 갱신</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <blast_radius>LOW</blast_radius>
+      <regression_risk>LOW</regression_risk>
+      <security_impact>NONE</security_impact>
+      <data_integrity>MAINTAINED</data_integrity>
+    </risk_assessment>
+  </impact_analysis>
+  <changed_files>
+    <file>pipeline.py</file>
+    <file>tests/test_acceptance_provenance_2338.py</file>
+  </changed_files>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_acceptance_provenance_2338.py</file>
+  </evidence>
+  <test_results>
+    <suite>test_acceptance_provenance_2338</suite>
+    <passed>6</passed>
+    <failed>0</failed>
+    <regression_suite>644 passed, 0 failed</regression_suite>
+  </test_results>
+</handover>
