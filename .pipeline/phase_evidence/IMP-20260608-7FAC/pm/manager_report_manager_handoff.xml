@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260608-7FAC</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-18e211a370fc73a0</planner_run_id>
+  <manager_run_id>pipeline_manager-c89c27e1f78045f8</manager_run_id>
+  <step_plan_sha256>87e38012784a7acad1d55dbb7a59b7436f65ccef134941eb39d8bf501895e8f0</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <status>ready</status>
+  <anti_gaming_read>true</anti_gaming_read>
+  <generated_at>2026-06-09T00:00:00Z</generated_at>
+  <pm_phase_status>IN_PROGRESS</pm_phase_status>
+
+  <task_summary>
+    request-accept 재사용 경로(reuse=True) packet_sha256 동기화 수정:
+    - MT-1: pipeline.py — _sync_acceptance_request_with_packet helper 추가 + reuse=True/False 양 경로에서 helper 호출
+    - MT-2: tests/test_reuse_packet_sync_7fac.py — 신규 테스트 파일 5개 테스트 추가
+  </task_summary>
+
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING" target="pipeline.py">
+      <name>_sync_acceptance_request_with_packet helper 추가 + _cmd_gates_request_accept reuse 양 경로 통합</name>
+    </mt>
+    <mt id="MT-2" status="PENDING" target="tests/test_reuse_packet_sync_7fac.py">
+      <name>reuse=True/False 경로 helper 동작 및 freshness 가드 회귀 테스트 5개</name>
+    </mt>
+  </micro_tasks>
+
+  <next_phase>dev</next_phase>
+  <user_response>NO_ASKUSER_REQUIRED</user_response>
+
+  <notes>
+    변경 파일: pipeline.py, tests/test_reuse_packet_sync_7fac.py
+    신뢰 루트 파일 변경 없음 (CLAUDE.md/agent MD/.github/workflows 수정 금지).
+    E2E 요건: subprocess 기반, PIPELINE_STATE_PATH 격리, final_state assertion.
+    freshness 가드(_verify_packet_freshness) 로직 자체는 변경하지 않음.
+  </notes>
+</manager_handoff>
