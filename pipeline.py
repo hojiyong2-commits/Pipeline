@@ -14835,9 +14835,13 @@ GitHub Actions: {ci_link}
 ### 승인 방법
 결과물을 확인하신 후 아래 코드를 **정확히** 입력하세요.
 
-**[O] 승인:** {accept_code}
+[승인 코드]
 
-**[X] 거절:** {reject_code}: 거절 이유
+{accept_code}
+
+[거절 예시]
+
+{reject_code}: 거절 이유
 
 주의: 이 코드는 일회용입니다. PR에 새 커밋이 push되면 새 코드가 필요합니다.
 재발급: python pipeline.py gates request-accept --evidence <결과물>
@@ -15563,11 +15567,12 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     print("    4. 댓글을 게시한 뒤, 아래 명령을 실행합니다:")
     print(f"       python pipeline.py gates accept --result ACCEPT --evidence {evidence} --acceptance-code {accept_code}")
     print()
-    print("  [O] 승인 코드 (GitHub PR 댓글에 정확히 한 줄로 입력):")
-    print(f"     {accept_code}")
+    print("  [승인 코드]")
     print()
-    print("  [X] 거절하시려면 아래 형식으로 입력하세요:")
-    print(f"     {reject_code}: 거절 이유")
+    print(f"  {accept_code}")
+    print()
+    print("  [거절 예시]")
+    print(f"  {reject_code}: 거절 이유")
     print("=" * 62)
     print()
     print(f"  승인 요청 ID: {req['request_id']}  (acceptance_request.json 저장됨)")
@@ -16869,39 +16874,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         _log_event(state, f"user acceptance gate {gate_status}")
         _record_snapshot(state, "harness", None)
         _save(state)
-        # IMP-20260522-29C1 MT-4 (fix-forward): gates accept 완료 시 메트릭 요약을
-        # 콘솔 출력뿐 아니라 human_acceptance_packet.md 파일에도 기록한다.
-        _metrics_str = "확인 불가"
-        try:
-            _metrics_str = _format_metrics_summary_ko(_collect_pipeline_metrics(state))
-            print("\n" + "-" * 60)
-            print("[ 최종 확인 안내 — 소요 시간 요약 ]")
-            print(_metrics_str)
-            print("-" * 60)
-        except Exception:
-            pass
-        # human_acceptance_packet.md 에 metrics summary 섹션 추가/갱신
-        try:
-            _packet_path = BASE_DIR / f"human_acceptance_packet_{pid}.md"
-            if not _packet_path.exists():
-                _packet_path = BASE_DIR / "human_acceptance_packet.md"
-            if _packet_path.exists():
-                _existing_text = _packet_path.read_text(encoding="utf-8")
-                _metrics_section = f"\n\n## 소요 시간 요약\n{_metrics_str}\n"
-                # 기존 섹션이 있으면 교체, 없으면 append
-                if "## 소요 시간 요약" in _existing_text:
-                    import re as _re
-                    _existing_text = _re.sub(
-                        r"\n\n## 소요 시간 요약\n.*?(?=\n\n#|\Z)",
-                        _metrics_section.rstrip("\n"),
-                        _existing_text,
-                        flags=_re.DOTALL,
-                    )
-                else:
-                    _existing_text = _existing_text.rstrip("\n") + _metrics_section
-                _packet_path.write_text(_existing_text, encoding="utf-8")
-        except Exception:
-            pass
+        # IMP-20260607-E656 REJECT fix: metrics/소요시간 섹션 패킷에서 완전 제거.
+        # gates accept 완료 시 콘솔에 verbose metrics 출력 금지 (상세 확인은 pipeline.py metrics report 사용).
         color = GREEN if gate_status == "PASS" else RED
         print(color(f"\n[USER ACCEPTANCE GATE {gate_status}]"))
         print(f"  report: {paths['user_validation']}")
