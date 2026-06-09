@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260609-2044</pipeline_id>
+  <agent_run_id>qa-3f29bf167bfd2e51</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>115</numeric_score>
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 변경 없음</wa>
+    <ui>N-A — GUI 위젯 변경 없음</ui>
+    <fs>N-A — 신규 파일 I/O 없음 (PM step_plan에 FS 태그가 있으나 본 변경은 내부 비즈니스 로직 한정)</fs>
+    <pd>PASS — 모듈 분리 5pt + 인터페이스 계약 5pt 만점 (함수 단위 격리, Dict/Optional/List 타입 힌팅 명시)</pd>
+    <al>N-A — AL 카테고리 없음 (다만 try-except OSError/ValueError/KeyError 분기로 예외 처리 강화)</al>
+    <build>N-A — EXE 빌드 대상 아님</build>
+    <sec>N-A — Phase 5 security-agent 전담</sec>
+    <vsce>N-A — VSCE 카테고리 없음</vsce>
+  </category_check>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>6</declared_functions>
+    <actual_modified_functions>4개 함수 수정 (_validate_ac_table_before_request_accept, _build_verification_json, _build_final_packet_content, _cmd_gates_request_accept) + 신규 테스트 파일 1개</actual_modified_functions>
+    <out_of_scope_modifications>없음</out_of_scope_modifications>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_request_accept_sst_2044.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_request_accept_sst_2044.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+  </scope_lock_check>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff main...HEAD --name-only로 실제 변경 파일 2개 확인</grep_verified>
+  </c3_cross_verification>
+  <runtime_functional_check>
+    <execution_check_present>PASS — MT-1~MT-6 self_check/execution_check 모두 PASS</execution_check_present>
+    <execution_check_verdict>PASS — py_compile + import + pytest 11/11 PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — _cmd_gates_request_accept의 _die() 호출, _build_verification_json의 result key 변경, _validate_ac_table_before_request_accept의 카테고리 분리 로직, _build_final_packet_content의 pipeline_outputs 라벨 모두 실제 코드 경로에서 확인</functional_binding_verified>
+  </runtime_functional_check>
+  <verification_evidence>
+    <test_sst_2044>11/11 PASS — 5개 oracle fixture (normal_ac_pass, edge_ac_pending_blocked, edge_req_0_n_blocked, edge_packet_fail_blocked, edge_ac_summary_mismatch)</test_sst_2044>
+    <test_nonce_bbdb>22/22 PASS — AC-7 회귀 검증 완료</test_nonce_bbdb>
+    <test_provenance_c4f8>1 failed (main 브랜치 사전 결함, git stash로 동일 KeyError 재현) — AC-8 EXEMPT_PRE_EXISTING</test_provenance_c4f8>
+    <pipeline_py_compile>PASS</pipeline_py_compile>
+  </verification_evidence>
+  <ac_verification>
+    <ac id="AC-1" status="PASS">Format1/2/3 fixture 테스트 PASS</ac>
+    <ac id="AC-2" status="PASS">AC verification 없는 fixture → BLOCKED 확인</ac>
+    <ac id="AC-3" status="PASS">requirements_summary 0/N → BLOCKED 확인</ac>
+    <ac id="AC-4" status="PASS">JSON/MD/PR AC summary 동기화 — item.get("result") 수정으로 보장</ac>
+    <ac id="AC-5" status="PASS">패킷 생성 예외 → _die() BLOCKED 확인</ac>
+    <ac id="AC-6" status="PASS">pipeline_outputs/ 로컬/배포 산출물 표시 테스트 PASS</ac>
+    <ac id="AC-7" status="PASS">nonce gate 22/22 PASS</ac>
+    <ac id="AC-8" status="EXEMPT_PRE_EXISTING">main 브랜치 사전 결함 — 본 파이프라인 변경과 무관</ac>
+  </ac_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - AC-8 사전 결함(test_acceptance_provenance_c4f8.py의 oracle/test KeyError 불일치)은 별도 IMP 파이프라인에서 수정 권장
+    - MT-1/MT-2의 카테고리 분리 메시지는 한국어로 명확하나 향후 i18n 지원 시 메시지 키 분리 검토 가능
+  </improvement_suggestions>
+</qa_report>
