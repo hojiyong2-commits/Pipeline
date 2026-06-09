@@ -1,6 +1,7 @@
 {
-  "scenario": "reuse=True 경로에서 human_acceptance_packet.json이 갱신된 후 verification_json_path/verification_json_sha256 동기화 전 상태",
-  "acceptance_request": {
+  "scenario": "reuse=True 경로에서 _sync_acceptance_request_with_packet 호출 후 동기화 완료 상태",
+  "expected_outcome": "SYNCED",
+  "acceptance_request_after_sync": {
     "pipeline_id": "IMP-20260609-C4F8",
     "nonce": "TEST_NONCE_12345678",
     "status": "PENDING",
@@ -9,8 +10,14 @@
     "packet_path": "/path/to/human_acceptance_packet.md",
     "packet_sha256": "old_packet_sha_dummy",
     "verification_json_path": "/path/to/human_acceptance_packet.json",
-    "verification_json_sha256": "STALE_SHA_BEFORE_SYNC",
+    "verification_json_sha256": "NEW_ACTUAL_SHA_AFTER_PACKET_REGEN",
     "github_ci_head_sha": "deadbeef1234"
   },
-  "verification_json_actual_sha": "NEW_ACTUAL_SHA_AFTER_PACKET_REGEN"
+  "assertions": [
+    "verification_json_sha256 == SHA256(human_acceptance_packet.json)",
+    "verification_json_path == str(Path(packet_path).parent / 'human_acceptance_packet.json')",
+    "packet_sha256 unchanged",
+    "nonce unchanged",
+    "github_ci_head_sha unchanged"
+  ]
 }
