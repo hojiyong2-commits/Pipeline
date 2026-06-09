@@ -1,0 +1,21 @@
+{
+  "pipeline_id": "IMP-20260609-C4F8",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._cmd_gates_request_accept"]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/test_acceptance_provenance_c4f8.py",
+        "tests/oracles/IMP-20260609-C4F8/normal_reuse_sync/input.json",
+        "tests/oracles/IMP-20260609-C4F8/normal_reuse_sync/expected.json",
+        "tests/oracles/IMP-20260609-C4F8/edge_external_json_change/input.json",
+        "tests/oracles/IMP-20260609-C4F8/edge_external_json_change/expected.json"
+      ],
+      "affected_functions": ["tests.test_acceptance_provenance_c4f8.*"]
+    }
+  ]
+}
