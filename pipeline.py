@@ -17,6 +17,7 @@
   - Failure Packet으로 실패 gate의 수리 담당자와 증거 파일 기록
 
 현재 `pipeline.py harness --score ...`는 완료 경로가 아니며 CLI에서 차단됩니다.
+  (SSoT: Three-Gate External Authority — CLAUDE.md "Three-Gate External Authority Mode" 섹션)
 
 대표 사용법:
     python pipeline.py new --type BUG --desc "버튼 작동 안 함"
@@ -7209,10 +7210,14 @@ def cmd_harness(args: argparse.Namespace) -> None:
     Harness helpers such as validate_test_evidence() remain available for unit tests and
     diagnostics, but the CLI command no longer mutates pipeline_state.json. Completion is
     owned by external gates only.
+
+    SSoT: Three-Gate External Authority (CLAUDE.md "Three-Gate External Authority Mode").
+    COMPLETE 조건: Technical / Oracle / GitHub CI / User Acceptance 4개 gate 모두 PASS 필수.
     """
     _load_branch_state(args)
     _die(
         "\n[THREE GATE BLOCKED] `pipeline.py harness --score`는 현재 필수 파이프라인의 완료 경로가 아닙니다 (not a completion path).\n"
+        "  SSoT: Three-Gate External Authority (CLAUDE.md) — harness 숫자 점수는 COMPLETE 조건이 아닙니다.\n"
         "  대신 아래 외부 게이트를 순서대로 사용하세요:\n"
         "       python pipeline.py gates technical\n"
         "       python pipeline.py gates oracle\n"
@@ -7367,6 +7372,7 @@ def cmd_architect(args: argparse.Namespace) -> None:
             _die(
                 "[THREE GATE BLOCKED] COMPLETE requires external gates and advisory resolution: "
                 + "; ".join(external_blockers)
+                + "\n  SSoT: Three-Gate External Authority (CLAUDE.md) / Verification JSON SSoT (IMP-20260605-58BF)"
             )
         # External gate PASS path: 파이프라인 정상 완료
         # IMP-20260522-29C1 MT-1: 파이프라인 종료 시점과 전체 소요 시간 기록.
@@ -16260,14 +16266,17 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _ag["started_at"] = _now()
             _save(state)
         # IMP-20260531-BBDB MT-3: --acceptance-code 기반 nonce 검증으로 교체.
+        # SSoT: User Acceptance Nonce Gate (IMP-20260531-BBDB) — --user-confirmed 단독 통과 차단.
         # --user-confirmed 단독은 backward-compatible no-op (경고 후 BLOCKED).
         if getattr(args, "user_confirmed", False) and not getattr(args, "acceptance_code", None):
             print(YELLOW("[경고] --user-confirmed는 더 이상 ACCEPT를 통과시키지 않습니다."))
+            print(YELLOW("  SSoT: User Acceptance Nonce Gate (IMP-20260531-BBDB)"))
             print(YELLOW("  gates request-accept --evidence <경로> 를 먼저 실행하여 승인 코드를 발급받으세요."))
             _die("[BLOCKED] --acceptance-code 가 필요합니다. (acceptance_code_required)")
         if not getattr(args, "acceptance_code", None):
             _die(
                 "[BLOCKED] 승인 코드가 없습니다. (acceptance_code_required)\n"
+                "  SSoT: User Acceptance Nonce Gate (IMP-20260531-BBDB)\n"
                 "  python pipeline.py gates request-accept --evidence <결과물-경로>\n"
                 "를 먼저 실행하여 ACCEPT-...-XXXXXXXX 코드를 발급받으세요."
             )
