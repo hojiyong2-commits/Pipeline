@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-08T14:01:00Z",
+  "pipeline_id": "IMP-20260608-2338",
+  "phase": "build",
+  "phase_status": "DONE",
+  "commit_hint": "b933377125af2074e6df15b7181761fcd51d70d7",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-06-08T14:00:55Z",
+    "report_file": null,
+    "evidence": "N/A"
+  },
+  "agent_run": {
+    "run_id": "build-ea8639acce652070",
+    "phase": "build",
+    "agent_id": "build-agent",
+    "status": "COMPLETED",
+    "output_file": "build_report.xml",
+    "output_sha256": "e6e3f6f338ddbad2bb9c1d0365ce6903fc89c2105baf7a4d0c13c029e7981c22",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260608-2338/build/agent_receipt_build-ea8639acce652070.json",
+    "receipt_sha256": "f940d03c22ee91f718b3ba2a088d089730046b88878614af9628ea80d35a687b",
+    "used_by_phase": "build",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260608-2338\\build\\build-ea8639acce652070.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260608-2338\\build\\build-ea8639acce652070.json",
+      "path": ".pipeline/phase_evidence/IMP-20260608-2338/build/agent_receipt_build-ea8639acce652070.json",
+      "sha256": "f940d03c22ee91f718b3ba2a088d089730046b88878614af9628ea80d35a687b",
+      "size_bytes": 508,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": []
+}
