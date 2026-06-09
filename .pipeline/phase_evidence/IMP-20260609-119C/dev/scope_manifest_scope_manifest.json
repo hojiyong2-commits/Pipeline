@@ -1,0 +1,27 @@
+{
+  "pipeline_id": "IMP-20260609-119C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py",
+        "deadcode_cleanup_report.md"
+      ],
+      "affected_functions": [
+        "cmd_harness"
+      ],
+      "implemented_ac": [
+        "AC-1",
+        "AC-2",
+        "AC-3",
+        "AC-4",
+        "AC-5",
+        "AC-6"
+      ],
+      "implementation_evidence": [
+        "pipeline.py: 6개 위치 SSoT 인용 보강",
+        "deadcode_cleanup_report.md: 보고서 작성 완료"
+      ]
+    }
+  ]
+}
