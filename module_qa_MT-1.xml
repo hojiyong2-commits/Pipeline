@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<module_qa>
+  <mt_id>MT-1</mt_id>
+  <pipeline_id>IMP-20260609-119C</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+
+  <module_qa_report>
+    <result>PASS</result>
+    <mt_id>MT-1</mt_id>
+    <files_verified>pipeline.py, deadcode_cleanup_report.md</files_verified>
+    <ac_coverage>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6</ac_coverage>
+    <regression_pass>true</regression_pass>
+    <scope_clean>true</scope_clean>
+  </module_qa_report>
+
+  <verification_evidence>
+    <evidence_file>module_handover_MT-1.xml</evidence_file>
+    <evidence_file>scope_manifest_MT-1.json</evidence_file>
+    <evidence_file>deadcode_cleanup_report.md</evidence_file>
+    <test_run>harness --score returncode=1 THREE GATE BLOCKED PASS</test_run>
+    <test_run>gates accept --user-confirmed returncode=1 acceptance_code_required PASS</test_run>
+  </verification_evidence>
+
+  <scope_verification>
+    <declared_files>pipeline.py, deadcode_cleanup_report.md</declared_files>
+    <actual_diff_files>pipeline.py, deadcode_cleanup_report.md (new)</actual_diff_files>
+    <scope_exceeded>false</scope_exceeded>
+    <trust_root_modified>false</trust_root_modified>
+    <micro_task_boundary>WITHIN_SCOPE</micro_task_boundary>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </scope_verification>
+
+  <ac_verification>
+    <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6</covers_ac>
+    <ac_status>PASS</ac_status>
+  </ac_verification>
+
+  <regression_results>
+    <test id="T-1" result="PASS">harness --score BLOCKED: returncode=1, THREE GATE BLOCKED 포함</test>
+    <test id="T-2" result="PASS">--user-confirmed 단독 BLOCKED: returncode=1, acceptance_code_required 포함</test>
+    <test id="T-3" result="PASS">import pipeline: 구문 오류 없음</test>
+  </regression_results>
+
+  <quality_checks>
+    <check name="function_signature_unchanged">PASS</check>
+    <check name="control_flow_unchanged">PASS</check>
+    <check name="ssot_citations_added">PASS — 6개 위치 모두 확인</check>
+    <check name="new_file_complete">PASS — A/B/C/D/테스트/위험 섹션 포함</check>
+  </quality_checks>
+</module_qa>
