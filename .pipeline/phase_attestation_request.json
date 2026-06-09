@@ -46,7 +46,7 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260609-119C/dev/scope_manifest_scope_manifest.json",
-      "sha256": "507d4b3300e9d95a663a021a4ebb5c8443dfacc2f31a25bcbb5faeae5301defa",
+      "sha256": "8f941b69f93ee5e28c0a8446d0b6163e767be6bd6ced556e0996164f3aa14cd9",
       "size_bytes": 561,
       "requires_force_add": true
     }
