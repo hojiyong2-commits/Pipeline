@@ -15406,16 +15406,27 @@ def _get_ci_run_head_sha(run_id: str) -> Optional[str]:
     return None
 
 
-def _sync_acceptance_request_with_packet(packet_path: Path, state: Dict[str, Any]) -> None:
+def _sync_acceptance_request_with_packet(
+    packet_path: Path,
+    state: Dict[str, Any],
+    verification_json_path: Optional[Path] = None,
+) -> None:
     """acceptance_request.json의 packet_path/packet_sha256을 실제 파일 기준으로 갱신한다.
 
     IMP-20260608-7FAC MT-1: reuse=True/False 양 경로에서 공유하는 helper.
+    IMP-20260609-C4F8 MT-1: verification_json_path 파라미터 추가 —
+        reuse=True 경로에서 human_acceptance_packet.json을 재생성한 후
+        acceptance_request.json의 verification_json_path/verification_json_sha256을
+        실제 JSON 파일 SHA와 동기화한다.
     packet_path와 packet_sha256만 갱신하며, 다른 필드(nonce, request_id 등)는 보존한다.
     파일 I/O 실패나 JSON 파싱 오류는 모두 삼킨다 (치명적이지 않음).
 
     Args:
         packet_path: 실제 human_acceptance_packet.md 파일 경로.
         state: 활성 pipeline_state (state["acceptance_request"] 도 갱신한다).
+        verification_json_path: 선택적. human_acceptance_packet.json 파일 경로.
+            전달 시 acceptance_request.json의 verification_json_path/
+            verification_json_sha256도 갱신한다. (IMP-20260609-C4F8)
     """
     try:
         if not packet_path.exists():
@@ -15427,6 +15438,14 @@ def _sync_acceptance_request_with_packet(packet_path: Path, state: Dict[str, Any
         req_data = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
         req_data["packet_path"] = str(packet_path)
         req_data["packet_sha256"] = new_pkt_sha
+        # IMP-20260609-C4F8 MT-1: verification_json_path 동기화
+        if verification_json_path is not None and verification_json_path.exists():
+            new_vj_sha = _sha256_file(verification_json_path)
+            req_data["verification_json_path"] = str(verification_json_path)
+            req_data["verification_json_sha256"] = new_vj_sha
+            if isinstance(state.get("acceptance_request"), dict):
+                state["acceptance_request"]["verification_json_path"] = str(verification_json_path)
+                state["acceptance_request"]["verification_json_sha256"] = new_vj_sha
         req_path.write_text(
             json.dumps(req_data, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -15592,7 +15611,9 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         else:
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
         # IMP-20260608-7FAC MT-1: reuse/non-reuse 양 경로에서 helper로 packet_sha256 동기화
-        _sync_acceptance_request_with_packet(Path(auto_result["packet_path"]), state)
+        # IMP-20260609-C4F8 MT-1: verification_json_path 동기화 — packet_path 기준으로 JSON 경로 계산
+        json_path = Path(auto_result["packet_path"]).parent / "human_acceptance_packet.json"
+        _sync_acceptance_request_with_packet(Path(auto_result["packet_path"]), state, verification_json_path=json_path)
     except (OSError, ValueError, KeyError) as exc:
         print(YELLOW(f"  [FINAL PACKET] 자동 생성 중 오류 (계속 진행): {exc}"))
 

@@ -1,0 +1,16 @@
+{
+  "scenario": "gates request-accept 완료 후 human_acceptance_packet.json이 외부에서 변경된 엣지 케이스",
+  "acceptance_request": {
+    "pipeline_id": "IMP-20260609-C4F8",
+    "nonce": "TEST_NONCE_EDGE5678",
+    "status": "PENDING",
+    "evidence": "pipeline.py",
+    "evidence_sha256": "def456dummy",
+    "packet_path": "/path/to/human_acceptance_packet.md",
+    "packet_sha256": "original_packet_sha",
+    "verification_json_path": "/path/to/human_acceptance_packet.json",
+    "verification_json_sha256": "ORIGINAL_JSON_SHA_AT_REQUEST_TIME",
+    "github_ci_head_sha": "cafebabe5678"
+  },
+  "verification_json_actual_sha": "CHANGED_SHA_AFTER_EXTERNAL_EDIT"
+}

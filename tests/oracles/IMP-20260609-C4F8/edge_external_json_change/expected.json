@@ -1,0 +1,12 @@
+{
+  "scenario": "request-accept 후 JSON 외부 변경 시 gates accept BLOCKED",
+  "expected_outcome": "BLOCKED",
+  "expected_failure_code": "verification_json_changed",
+  "expected_behavior": "gates accept 실행 시 verification_json_sha256이 실제 파일 SHA와 다르므로 BLOCKED 반환",
+  "assertions": [
+    "gates accept returns BLOCKED",
+    "failure_code == 'verification_json_changed'",
+    "acceptance_request.status remains PENDING (not consumed)",
+    "pipeline COMPLETE is prevented"
+  ]
+}
