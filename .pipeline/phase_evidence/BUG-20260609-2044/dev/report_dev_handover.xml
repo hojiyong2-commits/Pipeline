@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260609-2044</pipeline_id>
+  <agent>dev-agent</agent>
+  <run_id>dev-3f6637596d3c0e7c</run_id>
+  <verdict>READY_FOR_QA</verdict>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_request_accept_sst_2044.py</file>
+    </files_to_modify>
+    <frozen_files>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/*.md</file>
+      <file>.github/workflows/**</file>
+      <file>tests/oracles/**</file>
+    </frozen_files>
+  </scope_declaration>
+
+  <impact_analysis>
+    <pipeline_id>BUG-20260609-2044</pipeline_id>
+    <summary>
+      MT-1~MT-6 모든 micro_task의 함수 수준 영향 분석을 module_handover_MT-N.xml에 상세 기록.
+      pipeline.py의 4개 핵심 함수 (line 10317~15700)와 1개 신규 테스트 파일 작성.
+    </summary>
+    <micro_tasks>
+      <mt id="MT-1">
+        <target>pipeline._get_qa_verification_for_ac</target>
+        <impact>verification 누락 분기 추가 — pure function, signature 미변경</impact>
+      </mt>
+      <mt id="MT-2">
+        <target>pipeline._validate_ac_table_before_request_accept</target>
+        <impact>0/N 상태 강화 — pure function, signature 미변경</impact>
+      </mt>
+      <mt id="MT-3">
+        <target>pipeline._cmd_gates_request_accept</target>
+        <impact>packet 생성 실패 BLOCKED — sys.exit(1) 추가, 외부 동작 변경 (의도)</impact>
+      </mt>
+      <mt id="MT-4">
+        <target>pipeline._build_verification_json</target>
+        <impact>한 줄 key 수정 (status→result) — pure function</impact>
+      </mt>
+      <mt id="MT-5">
+        <target>pipeline._build_final_packet_content</target>
+        <impact>pipeline_outputs/ 경로 라벨 추가 — pure function</impact>
+      </mt>
+      <mt id="MT-6">
+        <target>tests.test_request_accept_sst_2044 (신규)</target>
+        <impact>신규 테스트 파일 — pipeline import only, 격리된 tempfile 사용</impact>
+      </mt>
+    </micro_tasks>
+  </impact_analysis>
+
+  <implementation_summary>
+    BUG-20260609-2044는 gates request-accept의 AC tracking 방어와 final packet 생성 원자성을 단일화합니다.
+
+    핵심 변경:
+    1. _validate_ac_table_before_request_accept: verification 누락 / impl_evidence 누락 / 완전 PENDING 세 카테고리 분리
+       (MT-1 + MT-2 통합)
+    2. _cmd_gates_request_accept: final packet 자동 생성 try/except에서 _die로 BLOCKED 처리
+       (MT-3 — 승인 코드 발급 원자성)
+    3. _build_verification_json: requirements[*]["status"] 키 수정 (item.get("result", ...))
+       (MT-4 — verification JSON 정확도)
+    4. _build_final_packet_content: pipeline_outputs/ gitignored 경로에 "(로컬/배포 산출물)" 표시
+       (MT-5 — PR 가시성 명확화)
+    5. tests/test_request_accept_sst_2044.py 신규: 11개 테스트 / 5개 oracle (MT-6)
+
+    AC 커버리지: AC-1~AC-7 PASS, AC-8은 main 브랜치 사전 결함이므로 EXEMPT_PRE_EXISTING.
+  </implementation_summary>
+
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/test_request_accept_sst_2044.py</file>
+  </implemented_files>
+
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS — _die 사용으로 단일 흐름 처리</error_handling>
+    <path_safety>N/A — 파일 경로 변경 없음</path_safety>
+    <security>PASS — secret 미포함</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <fs_encoding_fallback>N/A — 텍스트 파일 읽기 신규 추가 없음</fs_encoding_fallback>
+    <docstring>PASS</docstring>
+    <execution_check>PASS — py_compile + import + pytest 11/11 PASS</execution_check>
+    <impact_analysis_check>PASS — 6개 module_handover에 각각 출력</impact_analysis_check>
+    <frozen_codebase_check>PASS — 6개 함수만 수정, frozen file 0건</frozen_codebase_check>
+  </self_check>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_request_accept_sst_2044.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_request_accept_sst_2044.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <regression_tests>
+    <test id="T-1" result="PASS">python -m py_compile pipeline.py</test>
+    <test id="T-2" result="PASS">python -c "import pipeline"</test>
+    <test id="T-3" result="PASS">pytest tests/test_request_accept_sst_2044.py — 11/11 PASS</test>
+    <test id="T-4" result="PASS">pytest tests/e2e/test_user_acceptance_nonce_bbdb.py — 22/22 PASS</test>
+    <test id="T-5" result="KNOWN_FAILURE_PREEXISTING">
+      tests/test_acceptance_provenance_c4f8.py::test_reuse_true_syncs_verification_json_sha —
+      main 브랜치 사전 결함 (oracle/test 키 불일치), 변경 무관
+    </test>
+  </regression_tests>
+
+  <module_gate_summary>
+    <module mt_id="MT-1" verdict="PASS" qa_score="110"/>
+    <module mt_id="MT-2" verdict="PASS" qa_score="110"/>
+    <module mt_id="MT-3" verdict="PASS" qa_score="110"/>
+    <module mt_id="MT-4" verdict="PASS" qa_score="110"/>
+    <module mt_id="MT-5" verdict="PASS" qa_score="110"/>
+    <module mt_id="MT-6" verdict="PASS" qa_score="110"/>
+    <integration verdict="PASS"/>
+  </module_gate_summary>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260609-2044</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_request_accept_sst_2044.py</file>
+      <file>scope_manifest.json</file>
+      <file>integration_report.xml</file>
+      <file>module_handover_MT-1.xml</file>
+      <file>module_handover_MT-2.xml</file>
+      <file>module_handover_MT-3.xml</file>
+      <file>module_handover_MT-4.xml</file>
+      <file>module_handover_MT-5.xml</file>
+      <file>module_handover_MT-6.xml</file>
+      <file>module_qa_MT-1.xml</file>
+      <file>module_qa_MT-2.xml</file>
+      <file>module_qa_MT-3.xml</file>
+      <file>module_qa_MT-4.xml</file>
+      <file>module_qa_MT-5.xml</file>
+      <file>module_qa_MT-6.xml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_handover>

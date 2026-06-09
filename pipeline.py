@@ -10441,7 +10441,12 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     lines.append(f"변경 파일: 총 {len(changed_files)}개")
     if changed_files:
         for fpath in changed_files:
-            lines.append(f"  {fpath}")
+            # BUG-20260609-2044 MT-5: pipeline_outputs/ 경로는 gitignored 로컬 산출물
+            # PR blob 링크 생성 생략, 로컬/배포 산출물 구분 표시
+            if str(fpath).startswith("pipeline_outputs/") or str(fpath).startswith("pipeline_outputs\\"):
+                lines.append(f"  {fpath} (로컬/배포 산출물 — PR에서 직접 열람 불가)")
+            else:
+                lines.append(f"  {fpath}")
     else:
         lines.append("  (git diff 결과 없음 또는 git CLI 없음)")
     lines.append("")
@@ -10646,7 +10651,7 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
                     "ac_id": str(item.get("ac_id", "") or ""),
                     "summary": str(item.get("requirement", item.get("summary", "")) or ""),
                     "linked_mt": list(item.get("linked_mt", []) or []),
-                    "status": str(item.get("status", "UNKNOWN") or "UNKNOWN"),
+                    "status": str(item.get("result", "UNKNOWN") or "UNKNOWN"),  # BUG-20260609-2044 MT-4: "result" not "status"
                     "evidence": list(item.get("evidence", []) or []),
                 })
 
@@ -15157,20 +15162,51 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
 
     IMP-20260606-D9F4: legacy 파이프라인(requirements_tracking.enabled=false)은
     검사 생략. AC table이 비어있어도 검사 생략.
+    BUG-20260609-2044 MT-1/MT-2: verification 없음(검증 없음)과 impl_evidence 없음(미완료)을
+    별도 메시지로 구분하여 BLOCKED 처리.
     """
     if not state.get("requirements_tracking", {}).get("enabled"):
         return None  # legacy 파이프라인은 검사 생략
     ac_table = _build_ac_fulfillment_table(state)
     if not ac_table:
         return None  # AC 없으면 검사 생략
-    pending_acs = [
-        entry["ac_id"]
-        for entry in ac_table
-        if entry.get("result") == "PENDING"
-    ]
+
+    no_verification_acs: List[str] = []
+    no_impl_acs: List[str] = []
+    pending_acs: List[str] = []
+
+    for entry in ac_table:
+        if entry.get("result") != "PENDING":
+            continue
+        ac_id = entry["ac_id"]
+        has_impl = bool(entry.get("implementation_evidence"))
+        has_verif = bool(entry.get("verification"))
+        if not has_verif and not has_impl:
+            pending_acs.append(ac_id)
+        elif not has_verif:
+            no_verification_acs.append(ac_id)
+        else:
+            no_impl_acs.append(ac_id)
+
+    parts: List[str] = []
+    if no_verification_acs:
+        parts.append(
+            f"검증 없음 — module_qa 보고서에서 검증 결과를 찾을 수 없음: {', '.join(no_verification_acs)}"
+        )
+    if no_impl_acs:
+        parts.append(
+            f"구현 근거 없음: {', '.join(no_impl_acs)}"
+        )
     if pending_acs:
+        parts.append(
+            f"미완료 항목 (구현 근거 및 검증 모두 없음): {', '.join(pending_acs)}"
+        )
+
+    if parts:
+        detail = "\n".join(f"  - {p}" for p in parts)
         return (
-            f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다: {', '.join(pending_acs)}.\n"
+            f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다.\n"
+            f"{detail}\n"
             "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
         )
     return None
@@ -15606,6 +15642,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             print(YELLOW(f"  [AC TABLE] acceptance_request.json 저장 실패: {exc}"))
 
     # IMP-20260603-2E3D MT-2: final packet 자동 생성 + PR 본문 자동 업데이트
+    # BUG-20260609-2044 MT-3: 예외 시 경고+계속 패턴을 BLOCKED(_die)로 변경.
+    # 승인 코드(accept_code) 출력은 패킷 생성 성공 검증 이후에만 수행.
     try:
         # acceptance_request.json을 디스크에서 다시 읽어 최신 ac_fulfillment_table 반영
         latest_req = _load_acceptance_request() or req
@@ -15621,7 +15659,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         json_path = Path(auto_result["packet_path"]).parent / "human_acceptance_packet.json"
         _sync_acceptance_request_with_packet(Path(auto_result["packet_path"]), state, verification_json_path=json_path)
     except (OSError, ValueError, KeyError) as exc:
-        print(YELLOW(f"  [FINAL PACKET] 자동 생성 중 오류 (계속 진행): {exc}"))
+        _die(
+            f"[PIPELINE ERROR] final packet 자동 생성 실패 — 승인 코드 발급 차단.\n"
+            f"  오류: {exc}\n"
+            "  gates request-accept를 다시 실행하세요."
+        )
 
     print()
     print("=" * 62)
