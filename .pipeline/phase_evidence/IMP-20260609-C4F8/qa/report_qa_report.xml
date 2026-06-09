@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260609-C4F8</pipeline_id>
+  <qa_run_id>qa-39d1eef61ac8fce8</qa_run_id>
+  <phase>qa</phase>
+  <verdict>PASS</verdict>
+
+  <numeric_score>112</numeric_score>
+  <score_breakdown>
+    <correctness>38/40</correctness>
+    <robustness>28/30</robustness>
+    <test_coverage>25/25</test_coverage>
+    <scope_compliance>10/10</scope_compliance>
+    <backward_compat>9/10</backward_compat>
+    <code_quality>2/5</code_quality>
+  </score_breakdown>
+
+  <test_results>
+    <suite name="tests/test_acceptance_provenance_c4f8.py">
+      <total>5</total>
+      <passed>5</passed>
+      <failed>0</failed>
+      <tests>
+        <test name="test_reuse_true_syncs_verification_json_sha" result="PASS"/>
+        <test name="test_reuse_true_syncs_verification_json_path" result="PASS"/>
+        <test name="test_reuse_false_new_issue_syncs" result="PASS"/>
+        <test name="test_existing_fields_preserved_with_json_sync" result="PASS"/>
+        <test name="test_external_json_change_blocks_accept" result="PASS"/>
+      </tests>
+    </suite>
+    <suite name="tests/ (전체 회귀)">
+      <total>846</total>
+      <passed>846</passed>
+      <failed>0</failed>
+      <warnings>2 (cp949 인코딩 기존 이슈 — 이번 변경과 무관)</warnings>
+    </suite>
+  </test_results>
+
+  <scope_declaration>
+    <files_modified>
+      <file>pipeline.py</file>
+      <file>tests/test_acceptance_provenance_c4f8.py</file>
+      <file>tests/oracles/IMP-20260609-C4F8/normal_reuse_sync/input.json</file>
+      <file>tests/oracles/IMP-20260609-C4F8/normal_reuse_sync/expected.json</file>
+      <file>tests/oracles/IMP-20260609-C4F8/edge_external_json_change/input.json</file>
+      <file>tests/oracles/IMP-20260609-C4F8/edge_external_json_change/expected.json</file>
+    </files_modified>
+    <scope_manifest_compliant>true</scope_manifest_compliant>
+    <trust_root_violation>false</trust_root_violation>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>pipeline._sync_acceptance_request_with_packet</target_function>
+    <change_type>parameter_addition</change_type>
+    <backward_compatible>true</backward_compatible>
+    <description>
+      Optional[Path] = None 파라미터 추가로 기존 호출부 영향 없음.
+      reuse=True 경로 호출부 1곳에서만 json_path 계산 후 전달.
+    </description>
+  </impact_analysis>
+
+  <verification_checks>
+    <check name="함수_시그니처" result="PASS">
+      verification_json_path: Optional[Path] = None 파라미터 추가 확인
+    </check>
+    <check name="동기화_로직" result="PASS">
+      if verification_json_path is not None and verification_json_path.exists(): SHA 계산 및 두 필드 갱신
+    </check>
+    <check name="호출부_json_path_계산" result="PASS">
+      Path(auto_result["packet_path"]).parent / "human_acceptance_packet.json" 정확
+    </check>
+    <check name="state_동기화" result="PASS">
+      state["acceptance_request"]["verification_json_path"] 및 sha256 갱신 확인
+    </check>
+    <check name="기존_필드_보존" result="PASS">
+      nonce, evidence, github_ci_head_sha 등 기존 필드 손상 없음 (test_existing_fields_preserved_with_json_sync PASS)
+    </check>
+    <check name="scope_boundary" result="PASS">
+      변경 파일 전부 scope_manifest 범위 내, Trust-Root 파일 불포함
+    </check>
+    <check name="oracle_검증" result="PASS">
+      normal_reuse_sync (정상 케이스), edge_external_json_change (엣지 케이스) 2개 oracle 존재
+    </check>
+  </verification_checks>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>MINIMAL</blast_radius>
+    <affected_function>pipeline._sync_acceptance_request_with_packet</affected_function>
+    <actual_changed_lines>approx 12 (helper 내부 IMP-20260609-C4F8 블록 + 호출부 2줄)</actual_changed_lines>
+  </micro_task_boundary>
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>MINIMAL</blast_radius>
+    <affected_function>tests.test_acceptance_provenance_c4f8.*</affected_function>
+    <actual_changed_lines>~520 (신규 테스트 파일 + oracle 4개)</actual_changed_lines>
+  </micro_task_boundary>
+
+  <failure_signature>NONE</failure_signature>
+
+  <summary>
+    IMP-20260609-C4F8 QA PASS.
+    - _sync_acceptance_request_with_packet에 verification_json_path Optional 파라미터 추가.
+    - reuse=True 경로에서 human_acceptance_packet.json SHA를 acceptance_request.json에 동기화.
+    - 5개 신규 테스트 및 846개 전체 회귀 테스트 PASS.
+    - scope_manifest 범위 내 변경, backward compatibility 유지.
+  </summary>
+</qa_report>
