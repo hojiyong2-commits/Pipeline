@@ -1,0 +1,13 @@
+{
+  "returncode": 1,
+  "stdout_excerpt": "[THREE GATE BLOCKED] `pipeline.py harness --score`는 현재 필수 파이프라인의 완료 경로가 아닙니다 (not a completion path).",
+  "stdout_must_contain": [
+    "THREE GATE BLOCKED",
+    "gates technical",
+    "gates oracle",
+    "gates github-ci"
+  ],
+  "oracle_kind": "normal",
+  "verified_at": "2026-06-09",
+  "source": "user_provided"
+}

@@ -1,0 +1,7 @@
+{
+  "oracle_type": "command_check",
+  "command": ["python", "pipeline.py", "gates", "accept", "--result", "ACCEPT", "--user-confirmed"],
+  "expected_returncode": 1,
+  "expected_stdout_contains": ["acceptance_code_required", "BLOCKED", "--acceptance-code"],
+  "description": "--user-confirmed 단독 사용은 Nonce Gate(IMP-20260531-BBDB)에 의해 BLOCKED 처리되고 --acceptance-code 사용을 안내해야 한다"
+}

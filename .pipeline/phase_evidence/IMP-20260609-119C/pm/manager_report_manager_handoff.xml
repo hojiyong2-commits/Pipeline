@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260609-119C</pipeline_id>
+  <run_id>pipeline_manager-bfe6320e76b68641</run_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-c4b701fc170e64b1</planner_run_id>
+  <manager_run_id>pipeline_manager-bfe6320e76b68641</manager_run_id>
+  <status>READY_FOR_DEV</status>
+  <contract_frozen>true</contract_frozen>
+  <codex_review_stage>scope</codex_review_stage>
+  <pm_done>true</pm_done>
+  <phase_attestation_pm>PENDING_CI</phase_attestation_pm>
+  <step_plan_sha256>8b4e309a398449915b95de07d59536a7ac187a0378ecae91cd958598037c99e1</step_plan_sha256>
+  <planner_run_id>pm_planner-c4b701fc170e64b1</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <micro_tasks>
+    <task id="MT-1">
+      <files>pipeline.py, deadcode_cleanup_report.md</files>
+      <description>pipeline.py 6개 헬프/docstring 위치에 SSoT 인용 보강 + 분류 보고서 작성. 함수 시그니처/제어 흐름 변경 없음. dead code 삭제 없음.</description>
+    </task>
+  </micro_tasks>
+  <oracle_files>
+    <oracle case="normal">tests/oracles/IMP-20260609-119C/normal_harness_blocked/</oracle>
+    <oracle case="edge">tests/oracles/IMP-20260609-119C/edge_user_confirmed_blocked/</oracle>
+  </oracle_files>
+  <next_phase>dev</next_phase>
+  <user_response>NO_ASKUSER_REQUIRED</user_response>
+</manager_handoff>

@@ -1,0 +1,12 @@
+{
+  "returncode": 1,
+  "stdout_excerpt": "[BLOCKED] --acceptance-code 가 필요합니다. (acceptance_code_required)",
+  "stdout_must_contain": [
+    "BLOCKED",
+    "acceptance_code_required",
+    "--acceptance-code"
+  ],
+  "oracle_kind": "edge",
+  "verified_at": "2026-06-09",
+  "source": "user_provided"
+}

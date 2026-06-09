@@ -1,0 +1,7 @@
+{
+  "oracle_type": "command_check",
+  "command": ["python", "pipeline.py", "harness", "--score", "100", "--verdict", "PASS", "--test-output-file", "dummy.xml"],
+  "expected_returncode": 1,
+  "expected_stdout_contains": ["THREE GATE BLOCKED", "gates technical", "gates oracle"],
+  "description": "pipeline.py harness --score는 Three-Gate 완료 경로가 아니므로 BLOCKED 메시지와 함께 exit code 1을 반환해야 한다"
+}
