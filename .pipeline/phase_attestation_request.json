@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-09T13:31:00Z",
+  "pipeline_id": "IMP-20260609-119C",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "627db32190a75eaad765ddb6b2719f694658c0f0",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-09T13:30:51Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,deadcode_cleanup_report.md"
+  },
+  "agent_run": {
+    "run_id": "dev-49a26c36c365ee4f",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "0033842a1930bc7aa237d293216083e78ff2b09f7b4d0d51cd299889a4097a48",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260609-119C/dev/agent_receipt_dev-49a26c36c365ee4f.json",
+    "receipt_sha256": "e24d19415205d5da149059b1fbdfe040035fe49a19ad106d9f7e11a04d691416",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260609-119C\\dev\\dev-49a26c36c365ee4f.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260609-119C\\dev\\dev-49a26c36c365ee4f.json",
+      "path": ".pipeline/phase_evidence/IMP-20260609-119C/dev/agent_receipt_dev-49a26c36c365ee4f.json",
+      "sha256": "e24d19415205d5da149059b1fbdfe040035fe49a19ad106d9f7e11a04d691416",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260609-119C/dev/report_dev_handover.xml",
+      "sha256": "0033842a1930bc7aa237d293216083e78ff2b09f7b4d0d51cd299889a4097a48",
+      "size_bytes": 1974,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260609-119C/dev/scope_manifest_scope_manifest.json",
+      "sha256": "507d4b3300e9d95a663a021a4ebb5c8443dfacc2f31a25bcbb5faeae5301defa",
+      "size_bytes": 561,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "62f76400ba4fcb8bc7d230bb5c567eeb05e2ec227b956cd5d1bba4769c187cff",
+      "size_bytes": 961216
+    },
+    {
+      "path": "deadcode_cleanup_report.md",
+      "sha256": "fd05000a02b9093a9d6972a28a529f63c6b7218d4d88daebe36f4fb89481fd0f",
+      "size_bytes": 7380
+    }
+  ],
+  "local_only_files": []
+}

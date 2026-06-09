@@ -1,0 +1,63 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260609-119C</pipeline_id>
+  <agent_run_id>dev-49a26c36c365ee4f</agent_run_id>
+  <status>READY_FOR_QA</status>
+
+  <scope_declaration>
+    <files_modified>
+      <file>pipeline.py</file>
+    </files_modified>
+    <files_created>
+      <file>deadcode_cleanup_report.md</file>
+    </files_created>
+    <frozen_files_unchanged>
+      <file>CLAUDE.md</file>
+      <file>.claude/agents/*.md</file>
+      <file>tests/**</file>
+    </frozen_files_unchanged>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>cmd_harness</target_function>
+    <changed_files>
+      <file>pipeline.py</file>
+      <file>deadcode_cleanup_report.md</file>
+    </changed_files>
+    <change_type>docstring_and_message_text_only</change_type>
+    <function_signature_changed>false</function_signature_changed>
+    <control_flow_changed>false</control_flow_changed>
+    <lines_changed>40</lines_changed>
+  </impact_analysis>
+
+  <mt_summary>
+    <mt id="MT-1" status="PASS">
+      <description>pipeline.py 6개 헬프/docstring SSoT 인용 보강 + deadcode_cleanup_report.md 작성</description>
+      <module_qa>PASS</module_qa>
+    </mt>
+  </mt_summary>
+
+  <integration_result>PASS</integration_result>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py</git_diff_files>
+    <new_files>deadcode_cleanup_report.md</new_files>
+    <manifest_files>pipeline.py, deadcode_cleanup_report.md</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260609-119C</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>deadcode_cleanup_report.md</file>
+      <file>scope_manifest.json</file>
+      <file>integration_report.xml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover>
+</dev_handover>
