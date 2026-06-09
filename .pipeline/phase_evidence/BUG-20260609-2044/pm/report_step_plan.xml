@@ -1,0 +1,250 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260609-2044</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Phase (Planning)</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, PD</category_tags>
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py 신뢰 루트 파일 수정. _cmd_gates_request_accept 원자성 변경, _get_qa_verification_for_ac 포맷 파싱 강화, _build_verification_json/_build_final_packet_content SSoT 동기화, pipeline_outputs gitignore 표시 정합성 수정.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>180</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 변수명, 코드 스타일 질문은 묻지 않음. 사용자 요청이 함수/범위/수락 기준을 명시하여 P0 질문 없음.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>module_qa XML을 읽을 때 Format1/2/3 세 가지를 모두 지원하면서, 파싱 결과가 비어있으면 request-accept를 차단하는 방식으로 진행해도 될까요?</user_facing_question>
+        <evidence>_get_qa_verification_for_ac는 Format1/2/3 fallback 파싱을 하지만, 결과가 빈 배열이어도 PENDING으로만 처리되고 request-accept가 계속 진행되는 버그가 있습니다.</evidence>
+        <why_it_matters>포맷 fallback을 유지하면서 결과 부재만 차단해야 기존 module_qa XML 호환성을 유지하고 버그를 근본 수정할 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>3포맷 fallback 유지 + 결과 부재 시 BLOCKED</label>
+            <benefit>기존 module_qa XML 호환성 유지. 결과 없는 케이스만 차단하여 거짓 양성 최소화.</benefit>
+            <cost>포맷 감지 로직이 복잡해짐.</cost>
+          </option>
+          <option id="B">
+            <label>Format1만 표준으로 강제</label>
+            <benefit>XML 파싱 분기 코드가 줄어들어 _get_qa_verification_for_ac 함수 크기가 약 40% 감소하고 테스트 케이스 수도 줄어듭니다.</benefit>
+            <cost>기존 Format2/3 module_qa XML 파이프라인이 모두 깨짐. 하위 호환성 파괴.</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 - 사용자 요청 원문 일치: 기존 포맷 fallback 유지하되 결과 부재 시 BLOCKED 처리.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+  <interface_spec>
+    Input: pipeline_state.json (module_gates.modules 포함), module_qa_MT-N.xml 파일들
+    Output: human_acceptance_packet.md, human_acceptance_packet.json (AC summary 동기화), acceptance_request.json (SHA 동기화)
+    Validation: gates request-accept 실행 시 AC PENDING 또는 packet 생성 실패 시 exit(1) + BLOCKED 메시지
+  </interface_spec>
+  <requirements>
+    MT-1: _get_qa_verification_for_ac - Format1/2/3 파싱 결과 모두 비어있으면 명시적 오류로 처리
+    MT-2: _validate_ac_table_before_request_accept - requirements_summary 0/N 또는 PENDING 존재 시 BLOCKED 강화
+    MT-3: _cmd_gates_request_accept - 패킷 생성 예외 시 경고+계속 금지, BLOCKED 변경. 승인 코드는 패킷 성공 후에만 출력
+    MT-4: _build_verification_json - requirements[*][status]를 ac_table[result]에서 정확히 복사 (UNKNOWN 기본값 버그 수정)
+    MT-5: _build_final_packet_content - pipeline_outputs/ gitignored 경로 PR blob 링크 생성 생략
+    MT-6: tests/test_request_accept_sst_2044.py - oracle fixture 기반 6개 시나리오 검증
+    HIGH_RISK: conservative repair - 기존 동작 변경 최소화
+  </requirements>
+  <decomposition_audit>
+    <total_functions_identified>8</total_functions_identified>
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>8</grep_executions>
+    <split_decision>함수별 분리. MT-1 파싱, MT-2 검증, MT-3 원자성, MT-4 SSoT 동기화, MT-5 링크 표시, MT-6 테스트.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._get_qa_verification_for_ac</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._build_ac_fulfillment_table (line 15135)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_get_qa_verification_for_ac</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Format1/2/3 파싱 결과가 모두 비어있으면 빈 배열 반환 + _validate 단계에서 명시적 오류로 구분 처리</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-1, AC-3</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>pipeline._validate_ac_table_before_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_gates_request_accept (line 15488)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_validate_ac_table_before_request_accept</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>requirements_summary 0/N 및 verification 없음으로 PENDING 판정된 AC 차단 강화. 오류 메시지에 verification 없음 구분 포함</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-2, AC-1</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>pipeline._cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline 메인 dispatcher (line 15906)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_cmd_gates_request_accept</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>패킷 자동 생성 예외 시 경고+계속 진행 패턴을 BLOCKED(_die)로 변경. 승인 코드 출력을 패킷 생성 성공 검증 이후로 이동</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-3, AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>pipeline._build_verification_json</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._auto_generate_final_packet_and_update_pr (line 15365)</site>
+        <site>pipeline._cmd_gates_report_final_packet (line 10902)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_build_verification_json</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>requirements[*][status]를 ac_table[result]에서 정확히 복사. JSON과 MD의 AC summary 동기화 보장</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-4, AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-5">
+      <affected_function>pipeline._build_final_packet_content</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._auto_generate_final_packet_and_update_pr (line 15359)</site>
+        <site>pipeline._cmd_gates_report_final_packet (line 10897)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_build_final_packet_content</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>evidence 경로가 pipeline_outputs/로 시작하면 gitignored 안내로 변경. PR blob 링크 생성 생략, 로컬/배포 산출물 구분 표시</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-6</covers_ac>
+    </micro_task>
+    <micro_task id="MT-6">
+      <affected_function>tests.test_request_accept_sst_2044 (신규)</affected_function>
+      <target_files>
+        <file>tests/test_request_accept_sst_2044.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_request_accept_sst_2044</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>oracle fixture 기반 6개 시나리오 검증 테스트 파일 신규 작성</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8</covers_ac>
+    </micro_task>
+  </micro_tasks>
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>module_qa XML Format1/2/3 fixture 각각에서 AC table이 올바르게 PASS로 생성된다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>AC verification 없는 fixture에서 request-accept가 BLOCKED 처리되고 승인 코드가 출력되지 않는다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>requirements_summary 0/N PASS 상태에서 request-accept가 BLOCKED 처리되고 승인 코드가 출력되지 않는다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>human_acceptance_packet.json, .md, PR 본문 PIPELINE_FINAL_PACKET의 AC summary가 동일하다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>final packet 생성 또는 PR 본문 업데이트가 실패하면 request-accept가 BLOCKED 처리되고 승인 코드가 발급되지 않는다</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>pipeline_outputs/ gitignored 경로를 PR 직접 열람 링크로 표시하지 않는다 (로컬/배포 산출물로 구분)</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="internal" user_visible="false">
+      <text>기존 nonce gate 테스트(tests/e2e/test_user_acceptance_nonce_bbdb.py)가 계속 PASS</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="internal" user_visible="false">
+      <text>기존 acceptance provenance 테스트(tests/test_acceptance_provenance_c4f8.py)가 계속 PASS</text>
+    </criterion>
+  </acceptance_criteria>
+  <python_version>3.10</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>Pylance strict</vscode>
+  </env_specs>
+  <forbidden>
+    Trust-Root 파일 외 다른 파일(CLAUDE.md, agent MD, ci.yml, tests/oracles/**)을 이 파이프라인에서 수정하지 않음.
+    새 External Gate 또는 새 phase 추가 금지.
+    User Acceptance nonce 의미 변경 금지.
+    unrelated dead code cleanup 금지.
+    승인 코드를 final packet 생성 전에 출력하는 순서 금지.
+    oracle expected 파일을 Dev가 수정 금지.
+    scope_manifest에 없는 파일 변경 금지 (Scope Lock).
+  </forbidden>
+  <handover_template>
+    <handover_spec>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>BUG-20260609-2044</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/test_request_accept_sst_2044.py</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_spec>
+  </handover_template>
+  <context_injection>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/test_request_accept_sst_2044.py</file>
+    </target_files>
+    <phase_rules_excerpt>HIGH_RISK 프로필: conservative repair + 기존 nonce gate 호환성 유지. pipeline.py 수정은 Scope Lock 강제. Dev done은 module design/dev/qa 순서 필수.</phase_rules_excerpt>
+    <prev_phase_summary>PM 설계 완료 - oracle 5개 등록, 계약 동결됨 (contract_hash: 7d4ef32e)</prev_phase_summary>
+  </context_injection>
+</step_plan>
