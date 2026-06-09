@@ -318,16 +318,16 @@ def test_existing_fields_preserved_with_json_sync(tmp_path):
         f"nonce가 변경됨. expected={preserved_nonce}, actual={result_req['nonce']}"
     )
     assert result_req["evidence_sha256"] == preserved_evidence_sha, (
-        f"evidence_sha256이 변경됨."
+        "evidence_sha256이 변경됨."
     )
     assert result_req["github_ci_head_sha"] == preserved_ci_sha, (
-        f"github_ci_head_sha가 변경됨."
+        "github_ci_head_sha가 변경됨."
     )
     assert result_req["request_id"] == "req-preserve-test", (
-        f"request_id가 변경됨."
+        "request_id가 변경됨."
     )
     assert result_req["pipeline_id"] == "IMP-20260609-C4F8", (
-        f"pipeline_id가 변경됨."
+        "pipeline_id가 변경됨."
     )
 
 
@@ -342,9 +342,6 @@ def test_external_json_change_blocks_accept(tmp_path):
     """
     oracle_edge_input = _load_oracle_input(_ORACLE_EDGE)
     oracle_edge_expected = _load_oracle_expected(_ORACLE_EDGE)
-
-    # 격리된 state 파일
-    state_file = tmp_path / "pipeline_state_test.json"
 
     # 초기 JSON 파일 생성 (request-accept 시점의 내용)
     original_json_content = json.dumps({
