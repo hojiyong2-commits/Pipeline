@@ -1,0 +1,20 @@
+{
+  "case_id": "edge_ac_incomplete",
+  "expected_outcome": "BLOCKED",
+  "exit_code": 1,
+  "failure_code_in": [
+    "ac_completeness_not_cached",
+    "module_integrate_not_pass"
+  ],
+  "stdout_contains_substrings": [
+    "[PIPELINE ERROR]",
+    "module integrate"
+  ],
+  "no_artifact_overwritten": {
+    "human_acceptance_packet_md_unchanged": true,
+    "human_acceptance_packet_json_unchanged": true,
+    "acceptance_request_json_not_created": true
+  },
+  "blocked_before_materialization": true,
+  "must_not_issue_acceptance_code": true
+}

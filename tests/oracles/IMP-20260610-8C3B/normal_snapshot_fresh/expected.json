@@ -1,0 +1,32 @@
+{
+  "case_id": "normal_snapshot_fresh",
+  "expected_outcome": "ACCEPTANCE_CODE_ISSUED",
+  "exit_code": 0,
+  "acceptance_request_status": "PENDING",
+  "acceptance_code_format": "ACCEPT-IMP-20260610-8C3B-{nonce}",
+  "materialization_atomic": true,
+  "artifacts_generated": {
+    "human_acceptance_packet_md": true,
+    "human_acceptance_packet_json": true,
+    "acceptance_request_json": true,
+    "pr_body_packet_block_updated": true
+  },
+  "consistency_invariants": {
+    "verification_json_requirements_summary_equals_packet_md_requirements_summary": true,
+    "verification_json_requirements_summary_equals_pr_body_ac_summary": true,
+    "acceptance_request_packet_sha256_equals_actual_packet_md_sha256": true,
+    "acceptance_request_verification_json_sha256_equals_actual_packet_json_sha256": true,
+    "ac_table_pass_count_in_all_artifacts": 2,
+    "ac_table_total_count_in_all_artifacts": 2,
+    "no_stale_sha_present": true
+  },
+  "stdout_contains_substrings": [
+    "[FINAL PACKET 자동 생성]",
+    "사용자 최종 확인 요청",
+    "ACCEPT-IMP-20260610-8C3B-"
+  ],
+  "stdout_must_not_contain": [
+    "[BLOCKED]",
+    "[PIPELINE ERROR]"
+  ]
+}

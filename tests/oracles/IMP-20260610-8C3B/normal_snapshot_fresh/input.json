@@ -1,0 +1,21 @@
+{
+  "case_id": "normal_snapshot_fresh",
+  "kind": "normal",
+  "description": "정상 AC evidence(impl + verification)가 module integrate PASS로 캐싱된 상태에서 request-accept 최초 1회 실행으로 _materialize_acceptance_snapshot이 모든 산출물을 atomic하게 생성하고 승인 코드가 발급된다.",
+  "preconditions": {
+    "requirements_tracking_enabled": true,
+    "structured_ac": [
+      {"ac_id": "AC-1", "requirement": "request-accept fresh 경로에서 verification JSON과 packet JSON, packet MD가 동일한 AC summary를 가진다", "must_verify": true, "user_visible": true},
+      {"ac_id": "AC-2", "requirement": "_materialize_acceptance_snapshot 성공 직후에만 ACCEPT 코드가 발급된다", "must_verify": true, "user_visible": true}
+    ],
+    "module_integrate_status": "PASS",
+    "requirements_summary_cached": "2/2 PASS",
+    "all_ac_impl_evidence_present": true,
+    "all_ac_verifications_present": true,
+    "acceptance_request_existing": null,
+    "evidence_path": "pipeline_outputs/IMP-20260610-8C3B/report.md"
+  },
+  "cli_invocation": [
+    "python pipeline.py gates request-accept --evidence pipeline_outputs/IMP-20260610-8C3B/report.md"
+  ]
+}

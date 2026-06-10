@@ -1,0 +1,29 @@
+{
+  "case_id": "normal_snapshot_reuse",
+  "expected_outcome": "ACCEPTANCE_CODE_REUSED_WITH_FRESH_ARTIFACTS",
+  "exit_code": 0,
+  "acceptance_request_status": "PENDING",
+  "nonce_reused": true,
+  "request_id_reused": true,
+  "artifacts_re_materialized": {
+    "human_acceptance_packet_md_rewritten": true,
+    "human_acceptance_packet_json_rewritten": true,
+    "acceptance_request_packet_sha256_updated_to_actual": true,
+    "acceptance_request_verification_json_sha256_updated_to_actual": true,
+    "stale_packet_sha256_present_after_call": false,
+    "stale_verification_json_sha256_present_after_call": false
+  },
+  "consistency_invariants": {
+    "acceptance_request_packet_sha256_equals_actual_packet_md_sha256": true,
+    "acceptance_request_verification_json_sha256_equals_actual_packet_json_sha256": true,
+    "verification_json_requirements_summary_equals_packet_md_requirements_summary": true
+  },
+  "stdout_contains_substrings": [
+    "[재사용]",
+    "[FINAL PACKET 자동 생성]",
+    "ACCEPT-IMP-20260610-8C3B-"
+  ],
+  "stdout_must_not_contain": [
+    "[BLOCKED]"
+  ]
+}
