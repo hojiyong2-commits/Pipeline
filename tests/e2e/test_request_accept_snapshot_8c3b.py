@@ -271,6 +271,11 @@ def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
     # requirements_tracking.enabled=True 설정
     state["requirements_tracking"] = {"enabled": True}
 
+    # module_gates.integration.status = PASS 설정 (module integrate 완료 시뮬레이션)
+    state.setdefault("module_gates", {})
+    state["module_gates"].setdefault("integration", {})
+    state["module_gates"]["integration"]["status"] = "PASS"
+
     # ac_completeness 캐시를 complete=True로 직접 설정 (module integrate PASS 시뮬레이션)
     state["ac_completeness"] = {
         "cached_at": "2026-06-10T00:00:00Z",
@@ -527,6 +532,66 @@ def test_tc4_ac_incomplete_no_integrate_cache(tmp_path):
                 f"oracle 기대 문자열 '{substr}'이 stdout/stderr에 없음\n"
                 f"combined: {combined[:600]}"
             )
+
+
+# TC-4b (regression): integration PASS 아님 + ac_completeness 캐시 있음 → BLOCKED
+def test_tc4b_integration_not_pass_with_cache_blocked(tmp_path):
+    """TC-4b: module_gates.integration.status가 PASS가 아닌데 ac_completeness 캐시가 있어도
+    BLOCKED되어야 한다. (regression: stale 캐시만으로 통과하는 결함 방지)
+
+    oracle: tests/oracles/IMP-20260610-8C3B/edge_ac_incomplete/
+    CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + returncode assertion.
+    """
+    env = make_env(tmp_path)
+
+    r_new = run_cli(
+        ["new", "--type", "IMP", "--desc", "tc4b integration not pass regression"],
+        env=env,
+    )
+    assert r_new.returncode == 0, f"new failed: {r_new.stdout} {r_new.stderr}"
+
+    state_file = Path(env["PIPELINE_STATE_PATH"])
+    with open(state_file, encoding="utf-8") as f:
+        state = json.load(f)
+
+    # requirements_tracking 활성화
+    state["requirements_tracking"] = {"enabled": True}
+
+    # ac_completeness 캐시는 있음 (complete=True) — stale 캐시 시뮬레이션
+    state["ac_completeness"] = {
+        "cached_at": "2026-06-10T00:00:00Z",
+        "total": 1,
+        "pending_count": 0,
+        "pending_ids": [],
+        "complete": True,
+    }
+
+    # module_gates.integration.status = FAIL (또는 PENDING) — PASS가 아님
+    state.setdefault("module_gates", {})
+    state["module_gates"]["integration"] = {"status": "FAIL"}
+
+    with open(state_file, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+    ev_file = write_evidence_file(tmp_path, "tc4b regression evidence")
+
+    r = run_cli(
+        ["gates", "request-accept", "--evidence", str(ev_file)],
+        env=env,
+    )
+
+    # BLOCKED: integration PASS가 아니면 stale 캐시 있어도 차단
+    combined = r.stdout + r.stderr
+    assert r.returncode != 0, (
+        f"TC-4b 위반: integration FAIL인데 request-accept가 성공해서는 안 됨\n"
+        f"returncode={r.returncode}\nstdout: {r.stdout[:600]}\nstderr: {r.stderr[:300]}"
+    )
+    assert "[PIPELINE ERROR]" in combined, (
+        f"BLOCKED 메시지([PIPELINE ERROR]) 없음\nstdout: {r.stdout[:600]}"
+    )
+    assert "module integrate" in combined, (
+        f"'module integrate' 안내 없음\nstdout: {r.stdout[:600]}"
+    )
 
 
 # TC-5 (edge): 잘못된 acceptance-code로 gates accept 실행 시 BLOCKED

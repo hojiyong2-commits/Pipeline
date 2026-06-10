@@ -15192,29 +15192,44 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
     별도 메시지로 구분하여 BLOCKED 처리.
     IMP-20260610-8C3B MT-2: state["ac_completeness"] 캐시가 있으면 캐시를 우선 사용하여
     _build_ac_fulfillment_table 재실행 비용을 제거한다.
+    IMP-20260610-8C3B AC-4 (3차 REJECT 수정): module_gates.integration.status == "PASS"를
+    ac_completeness 캐시 확인보다 먼저 검증하여 stale 캐시 우회를 방지한다.
     """
     if not state.get("requirements_tracking", {}).get("enabled"):
         return None  # legacy 파이프라인은 검사 생략
 
-    # IMP-20260610-8C3B MT-2: integrate PASS 시 캐시된 completeness 확인
-    ac_completeness = state.get("ac_completeness")
-    if isinstance(ac_completeness, dict):
-        pending_ids = ac_completeness.get("pending_ids") or []
-        if not pending_ids:
-            return None  # 캐시에 PENDING 없음 — 검사 통과
-        # 캐시에 PENDING 항목이 있으면 차단
-        detail = f"  - 미완료 항목 (캐시 기준): {', '.join(str(p) for p in pending_ids)}"
+    # AC-4: module_gates.integration.status == "PASS" 확인 (캐시보다 먼저)
+    integration_status = (
+        state.get("module_gates", {})
+        .get("integration", {})
+        .get("status", "")
+    )
+    if integration_status != "PASS":
         return (
-            f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다.\n"
-            f"{detail}\n"
-            "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
+            "[PIPELINE ERROR] module integrate가 PASS 상태가 아닙니다.\n"
+            f"  현재 상태: {integration_status or 'PENDING'}\n"
+            "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
         )
 
-    # 캐시 없음 = module integrate PASS 미완료 → BLOCKED (IMP-20260610-8C3B AC-4)
+    # AC-4: ac_completeness 캐시 확인 (integration PASS 후에만 의미 있음)
+    ac_completeness = state.get("ac_completeness")
+    if not isinstance(ac_completeness, dict):
+        return (
+            "[PIPELINE ERROR] ac_completeness 캐시가 없습니다.\n"
+            "  module integrate PASS가 완료되어야 request-accept를 실행할 수 있습니다.\n"
+            "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
+        )
+
+    pending_ids = ac_completeness.get("pending_ids") or []
+    if not pending_ids:
+        return None  # 캐시에 PENDING 없음 — 검사 통과
+
+    # 캐시에 PENDING 항목이 있으면 차단
+    detail = f"  - 미완료 항목 (캐시 기준): {', '.join(str(p) for p in pending_ids)}"
     return (
-        "[PIPELINE ERROR] ac_completeness 캐시가 없습니다.\n"
-        "  module integrate PASS가 완료되어야 request-accept를 실행할 수 있습니다.\n"
-        "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
+        f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다.\n"
+        f"{detail}\n"
+        "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
     )
 
 
