@@ -25,7 +25,7 @@ Round 1 must not output or simulate downstream agent artifacts:
 `pipeline.py done --phase pm` parses the saved PM report and rejects non-PM output blocks. PM must save the final Round 1 output to `step_plan.xml` and record:
 
 ```bash
-python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id> [--judgment-confirmed]
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml [--judgment-confirmed]
 ```
 
 The phase record must use a completed PM receipt, then request GitHub phase attestation:
@@ -97,7 +97,7 @@ PM completion is hard-gated by the atomic step plan in every pipeline:
 - The file must contain `<decomposition_audit>`, `<step_plan>`, and `<step_plan><design_confirmation>`.
 - `<step_plan>` must contain `<micro_tasks>`; each `<micro_task>` needs `id`, `<affected_function>`, `<target_files><file>...</file></target_files>`, `<grep_evidence><executed>true</executed>`, `<pattern>`, `<match_count>`, and `<change_summary>`.
 - `<design_confirmation>` must record the user-facing PM design confirmation before Dev: module split shown, module split confirmed, maintainability-first priority, low-value question filtering, and at least one P0/P1 `module_split` question with easy wording, evidence, recommendation, two options, benefit/cost tradeoffs, and the user answer. P2/internal preference questions must be filtered instead of asked.
-- The recorded command is `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id> [--judgment-confirmed]`.
+- The recorded command is `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml [--judgment-confirmed]`.
 - If `audit_result` is `AMBIGUOUS`, `<judgment_calls_resolved>` is mandatory before PM done.
 
 ## Codex Review Gate (IMP-20260516-A627 이후 필수)
@@ -288,7 +288,7 @@ PM 에이전트는 사용자의 요청을 받으면 **반드시 아래의 순서
 
 | Phase | 진입 게이트 | spawn 대상 | 완료 후 PM 행동 | 실패 시 |
 |---|---|---|---|---|
-| Phase 1 — PM | (없음 — PM 자신이 실행) | — | step_plan 발행 완료 후 `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id> [--judgment-confirmed]`, `gates prepare-phase --phase pm`, push, `gates phase-ci --phase pm`. 모든 파이프라인에서 `<decomposition_audit>`/`<micro_tasks>` hard gate. | clarification 재발행 |
+| Phase 1 — PM | (없음 — PM 자신이 실행) | — | step_plan 발행 완료 후 `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml [--judgment-confirmed]`, `gates prepare-phase --phase pm`, push, `gates phase-ci --phase pm`. 모든 파이프라인에서 `<decomposition_audit>`/`<micro_tasks>` hard gate. | clarification 재발행 |
 | Phase 2 — Dev | `python pipeline.py check --phase dev` exit 0 | `dev-agent` (Tier per category_tags) | 모든 `MT-N`에 대해 `module design -> module dev -> module qa PASS`, 이후 `module integrate PASS`, `<handover>` 수신 → `python pipeline.py done --phase dev --files "..." --report-file dev_handover.xml --scope-declared --scope-manifest scope_manifest.json --agent-run-id <dev_run_id>`, Dev phase attestation. 모든 파이프라인에서 PM micro_task 범위 hard gate. | dev 재spawn (최대 2회) |
 | Phase 3 — UI/dev subphase | dev DONE 기록 전후의 **선택적 Dev 보조 단계**. `category_tags`에 `UI` 포함 시에만 spawn. 미포함 시 생략하고 Phase 4(QA) 직행. | `ui-app-agent` (`category_tags`에 `UI` 포함 시에만) | `<handover>` 수신 (UI→QA). pipeline.py 전용 `ui` phase는 없으며 UI 산출물은 dev evidence 또는 QA evidence에 포함. | ui 재spawn |
 | Phase 4 — QA | `python pipeline.py check --phase qa` exit 0 | `qa-agent` | `<qa_report>` 읽고 verdict 판정. PASS → `python pipeline.py qa --result PASS --numeric-score [0~120] --report-file qa_report.xml --agent-run-id <qa_run_id>` → QA phase attestation → Phase 5 / FAIL → `python pipeline.py qa --result FAIL --numeric-score [0~120] --failure-sig "[category]:[hash]" --report-file qa_report.xml --agent-run-id <qa_run_id>` → dev 재spawn | Circuit Breaker 검사 (아래 참조). **numeric-score 96 미만 시 PASS 기록 거부 (hard gate).** |
