@@ -1,0 +1,17 @@
+{
+  "case_id": "edge_wrong_code",
+  "kind": "edge",
+  "description": "정상 발급된 acceptance code와 다른 잘못된 코드(잘못된 nonce 또는 잘못된 형식)로 gates accept를 호출하면 BLOCKED. 정상 발급 경로(materialization 성공)는 영향 없음.",
+  "preconditions": {
+    "acceptance_request_existing": {
+      "status": "PENDING",
+      "nonce": "EXAMPLE_VALID_NONCE_CCCC",
+      "request_id": "validid1"
+    },
+    "valid_accept_code": "ACCEPT-IMP-20260610-8C3B-EXAMPLE_VALID_NONCE_CCCC",
+    "wrong_code_attempted": "ACCEPT-IMP-20260610-8C3B-WRONG_NONCE_DDDD"
+  },
+  "cli_invocation": [
+    "python pipeline.py gates accept --result ACCEPT --evidence pipeline_outputs/IMP-20260610-8C3B/report.md --acceptance-code ACCEPT-IMP-20260610-8C3B-WRONG_NONCE_DDDD"
+  ]
+}

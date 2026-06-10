@@ -1,0 +1,28 @@
+{
+  "case_id": "normal_snapshot_reuse",
+  "kind": "edge",
+  "description": "reuse=True 경로(동일 PR head SHA + 동일 CI run + 동일 evidence SHA + PENDING 기존 코드)에서 _materialize_acceptance_snapshot이 다시 호출되어 nonce만 재사용하고 verification JSON / packet JSON / packet MD / acceptance_request manifest의 SHA가 모두 새로 계산된다.",
+  "preconditions": {
+    "requirements_tracking_enabled": true,
+    "structured_ac": [
+      {"ac_id": "AC-1", "requirement": "reuse 경로에서도 fresh materialization과 동일한 산출물 SHA 일치성을 보장한다", "must_verify": true, "user_visible": true}
+    ],
+    "module_integrate_status": "PASS",
+    "requirements_summary_cached": "1/1 PASS",
+    "all_ac_impl_evidence_present": true,
+    "all_ac_verifications_present": true,
+    "acceptance_request_existing": {
+      "status": "PENDING",
+      "nonce": "EXAMPLE_REUSE_NONCE_AAAA",
+      "request_id": "reuseid1",
+      "packet_sha256": "outdated_packet_sha_AAAA_to_be_overwritten",
+      "verification_json_sha256": "outdated_vj_sha_AAAA_to_be_overwritten"
+    },
+    "pr_head_sha_unchanged": true,
+    "ci_run_id_unchanged": true,
+    "evidence_sha_unchanged": true
+  },
+  "cli_invocation": [
+    "python pipeline.py gates request-accept --evidence pipeline_outputs/IMP-20260610-8C3B/report.md"
+  ]
+}

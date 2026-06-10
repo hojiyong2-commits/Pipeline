@@ -1,0 +1,18 @@
+{
+  "case_id": "edge_sha_mismatch",
+  "expected_outcome": "BLOCKED",
+  "exit_code": 1,
+  "failure_code_in": [
+    "verification_json_changed",
+    "packet_sha256_changed"
+  ],
+  "stdout_contains_substrings": [
+    "[BLOCKED]"
+  ],
+  "must_not_issue_acceptance": true,
+  "must_not_consume_request": true,
+  "post_block_state": {
+    "acceptance_request_status_still_pending": true,
+    "no_deploy_executed": true
+  }
+}

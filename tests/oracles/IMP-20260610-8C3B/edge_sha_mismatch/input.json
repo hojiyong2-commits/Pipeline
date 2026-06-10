@@ -1,0 +1,21 @@
+{
+  "case_id": "edge_sha_mismatch",
+  "kind": "edge",
+  "description": "acceptance_request.json의 packet_sha256(또는 verification_json_sha256) 값이 디스크에 있는 실제 파일 SHA-256과 다른 외부 변조 시나리오. gates accept --acceptance-code 실행 시 BLOCKED.",
+  "preconditions": {
+    "acceptance_request_existing": {
+      "status": "PENDING",
+      "nonce": "EXAMPLE_TAMPER_NONCE_BBBB",
+      "packet_path": "human_acceptance_packet.md",
+      "packet_sha256": "FAKE_OLD_SHA_BBBB_NOT_MATCHING_ACTUAL_FILE",
+      "verification_json_path": "human_acceptance_packet.json",
+      "verification_json_sha256": "FAKE_OLD_VJ_SHA_BBBB"
+    },
+    "actual_packet_md_present": true,
+    "actual_packet_json_present": true,
+    "tampering_type": "manifest_recorded_sha_mismatches_actual_file_sha"
+  },
+  "cli_invocation": [
+    "python pipeline.py gates accept --result ACCEPT --evidence pipeline_outputs/IMP-20260610-8C3B/report.md --acceptance-code ACCEPT-IMP-20260610-8C3B-EXAMPLE_TAMPER_NONCE_BBBB"
+  ]
+}

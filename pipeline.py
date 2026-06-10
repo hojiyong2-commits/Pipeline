@@ -1208,6 +1208,9 @@ ATOMIC_SNAPSHOT_EXCLUDED_DIRS = {
     "htmlcov",
     # IMP-20260519-E979: pipeline_outputs는 배포 산출물 저장소이며 scope gate 대상이 아님
     "pipeline_outputs",
+    # IMP-20260610-8C3B: ic_part_src는 KittingMapper 전용 소스 디렉토리이며 pipeline 인프라 scope gate 대상이 아님.
+    # 이 디렉토리의 파일은 별도 파이프라인이 관리하므로 다른 파이프라인의 PM snapshot에서 제외.
+    "ic_part_src",
 }
 
 ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
@@ -1249,6 +1252,12 @@ ATOMIC_SNAPSHOT_EXCLUDED_FILES = {
     # IMP-20260607-E656: hygiene cleanup-workspace가 생성하는 런타임 파일.
     # PM snapshot 이후 cleanup 실행 시 나타나므로 dev scope gate 오탐 방지.
     "cleanup_manifest.json",
+    # IMP-20260610-8C3B: PR body 임시 파일 — gates/report 명령이 PR 본문 갱신 시 생성하는 런타임 파일.
+    # PM snapshot 이후 PR 작업 중 생성/삭제될 수 있으므로 dev scope gate 오탐 방지.
+    "pr_body_temp.md",
+    # IMP-20260610-8C3B: KittingMapper 전용 테스트 파일 — 별도 파이프라인이 관리하는 파일로
+    # pipeline 인프라 scope gate 대상이 아님. 다른 파이프라인 PM snapshot 비교 오탐 방지.
+    "test_order_mapper.py",
 }
 
 
@@ -9286,6 +9295,23 @@ def cmd_module(args: argparse.Namespace) -> None:
             "report_file": report["report_file"],
         }
         state["module_gates"]["integration"] = gates["integration"]
+        # IMP-20260610-8C3B MT-2: integrate PASS 시 AC completeness를 캐시한다.
+        # _validate_ac_table_before_request_accept는 이 캐시의 존재 여부만 확인한다.
+        if result == "PASS":
+            try:
+                ac_table = _build_ac_fulfillment_table(state)
+                if ac_table is not None:
+                    pending_ids = [e["ac_id"] for e in ac_table if e.get("result") != "PASS"]
+                    state["ac_completeness"] = {
+                        "cached_at": _now(),
+                        "total": len(ac_table),
+                        "pending_count": len(pending_ids),
+                        "pending_ids": pending_ids,
+                        "complete": len(pending_ids) == 0,
+                    }
+            except Exception as exc:  # noqa: BLE001
+                # AC 캐시 실패 → integration은 영향 없지만 명시적으로 경고 기록 (IMP-20260610-8C3B AC-4)
+                print(f"  [WARNING] ac_completeness 캐시 저장 실패: {exc}")
         _log_event(state, f"module integration {result}")
         _save(state)
         color = GREEN if result == "PASS" else RED
@@ -15164,52 +15190,47 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
     검사 생략. AC table이 비어있어도 검사 생략.
     BUG-20260609-2044 MT-1/MT-2: verification 없음(검증 없음)과 impl_evidence 없음(미완료)을
     별도 메시지로 구분하여 BLOCKED 처리.
+    IMP-20260610-8C3B MT-2: state["ac_completeness"] 캐시가 있으면 캐시를 우선 사용하여
+    _build_ac_fulfillment_table 재실행 비용을 제거한다.
+    IMP-20260610-8C3B AC-4 (3차 REJECT 수정): module_gates.integration.status == "PASS"를
+    ac_completeness 캐시 확인보다 먼저 검증하여 stale 캐시 우회를 방지한다.
     """
     if not state.get("requirements_tracking", {}).get("enabled"):
         return None  # legacy 파이프라인은 검사 생략
-    ac_table = _build_ac_fulfillment_table(state)
-    if not ac_table:
-        return None  # AC 없으면 검사 생략
 
-    no_verification_acs: List[str] = []
-    no_impl_acs: List[str] = []
-    pending_acs: List[str] = []
-
-    for entry in ac_table:
-        if entry.get("result") != "PENDING":
-            continue
-        ac_id = entry["ac_id"]
-        has_impl = bool(entry.get("implementation_evidence"))
-        has_verif = bool(entry.get("verification"))
-        if not has_verif and not has_impl:
-            pending_acs.append(ac_id)
-        elif not has_verif:
-            no_verification_acs.append(ac_id)
-        else:
-            no_impl_acs.append(ac_id)
-
-    parts: List[str] = []
-    if no_verification_acs:
-        parts.append(
-            f"검증 없음 — module_qa 보고서에서 검증 결과를 찾을 수 없음: {', '.join(no_verification_acs)}"
-        )
-    if no_impl_acs:
-        parts.append(
-            f"구현 근거 없음: {', '.join(no_impl_acs)}"
-        )
-    if pending_acs:
-        parts.append(
-            f"미완료 항목 (구현 근거 및 검증 모두 없음): {', '.join(pending_acs)}"
-        )
-
-    if parts:
-        detail = "\n".join(f"  - {p}" for p in parts)
+    # AC-4: module_gates.integration.status == "PASS" 확인 (캐시보다 먼저)
+    integration_status = (
+        state.get("module_gates", {})
+        .get("integration", {})
+        .get("status", "")
+    )
+    if integration_status != "PASS":
         return (
-            f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다.\n"
-            f"{detail}\n"
-            "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
+            "[PIPELINE ERROR] module integrate가 PASS 상태가 아닙니다.\n"
+            f"  현재 상태: {integration_status or 'PENDING'}\n"
+            "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
         )
-    return None
+
+    # AC-4: ac_completeness 캐시 확인 (integration PASS 후에만 의미 있음)
+    ac_completeness = state.get("ac_completeness")
+    if not isinstance(ac_completeness, dict):
+        return (
+            "[PIPELINE ERROR] ac_completeness 캐시가 없습니다.\n"
+            "  module integrate PASS가 완료되어야 request-accept를 실행할 수 있습니다.\n"
+            "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
+        )
+
+    pending_ids = ac_completeness.get("pending_ids") or []
+    if not pending_ids:
+        return None  # 캐시에 PENDING 없음 — 검사 통과
+
+    # 캐시에 PENDING 항목이 있으면 차단
+    detail = f"  - 미완료 항목 (캐시 기준): {', '.join(str(p) for p in pending_ids)}"
+    return (
+        f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다.\n"
+        f"{detail}\n"
+        "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
+    )
 
 
 def _format_ac_fulfillment_output(
@@ -15375,44 +15396,215 @@ def _check_packet_freshness_against_actual(
     return None
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260610-8C3B MT-1: Acceptance Snapshot Materialization
+# ---------------------------------------------------------------------------
+
+def _materialize_acceptance_snapshot(
+    state: Dict[str, Any],
+    acceptance_request: Dict[str, Any],
+) -> Dict[str, Any]:
+    """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
+
+    IMP-20260610-8C3B 2차 REJECT 결함 C 수정: MD 먼저 커밋 후 JSON 실패 시 partial 상태 방지.
+    모든 temp 파일을 먼저 쓰고 SHA를 계산한 뒤, 마지막에 모두 한꺼번에 os.replace로 커밋.
+    _sync_acceptance_request_with_packet 직접 호출 제거 — acceptance_request 동기화를 이 함수 안에서 수행.
+
+    Args:
+        state: 활성 pipeline_state dict.
+        acceptance_request: 방금 발급/재사용한 acceptance_request dict (nonce 포함).
+    Returns:
+        dict with keys:
+            "packet_path": str — human_acceptance_packet.md 경로
+            "json_path": Optional[str] — human_acceptance_packet.json 경로
+            "pr_body_updated": bool — PR 본문 갱신 여부
+            "sha_manifest": dict — 생성된 파일들의 SHA-256 매니페스트
+    Raises:
+        OSError: temp 파일 쓰기 실패 시
+        ValueError: evidence_payload 조립 또는 verification_json 생성 실패 시
+        TypeError: 직렬화 불가 객체 포함 시
+    """
+    # Phase 1: 순수 계산 (I/O 없음) — 실패 시 아무 파일도 안 써짐
+    evidence_payload = _collect_packet_evidence(
+        state, acceptance_request=acceptance_request, base_ref="origin/main"
+    )
+    content = _build_final_packet_content(evidence_payload)
+    verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
+
+    packet_path = _packet_output_path()
+    packet_path.parent.mkdir(parents=True, exist_ok=True)
+    json_out_path = _packet_json_output_path()
+    json_out_path.parent.mkdir(parents=True, exist_ok=True)
+    req_path = BASE_DIR / "acceptance_request.json"
+
+    tmp_pkt = packet_path.with_suffix(".md.tmp")
+    tmp_json = json_out_path.with_suffix(".json.tmp")
+    tmp_req = req_path.with_suffix(".json.tmp")
+
+    temps = [tmp_pkt, tmp_json, tmp_req]
+
+    try:
+        # Phase 2: 모든 temp 파일 쓰기 (아직 아무것도 커밋 안 됨)
+        tmp_pkt.write_text(content, encoding="utf-8")
+        tmp_json.write_text(
+            json.dumps(verification_json, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # SHA는 temp 파일에서 계산 (실제 경로가 아님)
+        pkt_sha = _sha256_file(tmp_pkt)
+        json_sha = _sha256_file(tmp_json)
+
+        # acceptance_request 동기화 (temp로)
+        if req_path.exists():
+            req_data = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
+        else:
+            req_data = dict(acceptance_request)
+        req_data["packet_path"] = str(packet_path)
+        req_data["packet_sha256"] = pkt_sha
+        req_data["verification_json_path"] = str(json_out_path)
+        req_data["verification_json_sha256"] = json_sha
+        tmp_req.write_text(
+            json.dumps(req_data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        # 실패 시 모든 temp 파일 정리 (아직 아무것도 커밋 안 됨)
+        for t in temps:
+            if t.exists():
+                try:
+                    t.unlink()
+                except OSError:
+                    pass
+        raise
+
+    # Phase 3: 모든 temp를 원자적으로 커밋 (여기서부터는 부분 실패 가능성 낮음)
+    os.replace(str(tmp_pkt), str(packet_path))
+    os.replace(str(tmp_json), str(json_out_path))
+    os.replace(str(tmp_req), str(req_path))
+
+    # 메모리 state도 동기화
+    if isinstance(state.get("acceptance_request"), dict):
+        state["acceptance_request"]["packet_path"] = str(packet_path)
+        state["acceptance_request"]["packet_sha256"] = pkt_sha
+        state["acceptance_request"]["verification_json_path"] = str(json_out_path)
+        state["acceptance_request"]["verification_json_sha256"] = json_sha
+
+    # Phase 4: PR 본문 갱신 (best-effort, 원자성 필요 없음)
+    pr_updated = False
+    if shutil.which("gh"):
+        current_body = _get_pr_body_text() or ""
+        new_body = _replace_pr_body_packet_block(current_body, content)
+        pr_updated = _gh_edit_pr_body(new_body)
+
+    sha_manifest: Dict[str, Optional[str]] = {
+        "packet_sha256": pkt_sha,
+        "json_sha256": json_sha,
+    }
+
+    return {
+        "packet_path": _display_path(packet_path),
+        "json_path": _display_path(json_out_path),
+        "pr_body_updated": pr_updated,
+        "sha_manifest": sha_manifest,
+    }
+
+
+def _verify_acceptance_snapshot(
+    state: Dict[str, Any],
+    sha_manifest: Dict[str, Optional[str]],
+) -> Optional[str]:
+    """materialization 직후 산출물 SHA가 acceptance_request.json 기록과 일치하는지 검증한다.
+
+    IMP-20260610-8C3B MT-1: post-materialization verification.
+    일치하지 않으면 오류 메시지를 반환한다. None 반환 시 PASS.
+
+    _materialize_acceptance_snapshot이 BASE_DIR/acceptance_request.json을 업데이트한다.
+    따라서 검증도 동일한 BASE_DIR 경로의 파일을 기준으로 수행한다.
+    pipeline_id 불일치는 PASS(비교 skip)로 처리한다.
+    파일 없음/파싱 실패/SHA 필드 누락은 오류 메시지를 반환한다 (IMP-20260610-8C3B 2차 REJECT 결함 B).
+
+    Args:
+        state: 활성 pipeline_state dict.
+        sha_manifest: _materialize_acceptance_snapshot이 반환한 sha_manifest dict.
+    Returns:
+        오류 메시지 문자열 또는 None (PASS).
+    """
+    # _materialize_acceptance_snapshot이 os.replace로 BASE_DIR에 파일을 커밋하므로 동일 경로로 읽음
+    req_path = BASE_DIR / "acceptance_request.json"
+    if not req_path.exists():
+        return "[SNAPSHOT VERIFY] acceptance_request.json 없음 — SHA 검증 불가"
+    try:
+        req = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        return "[SNAPSHOT VERIFY] acceptance_request.json 파싱 실패 — SHA 검증 불가"
+
+    if not isinstance(req, dict):
+        return "[SNAPSHOT VERIFY] acceptance_request.json 형식 오류"
+
+    # pipeline_id 불일치 시 다른 파이프라인의 잔류 파일이므로 비교 생략
+    current_pid = str(state.get("pipeline_id", "") or "")
+    req_pid = str(req.get("pipeline_id", "") or "")
+    if current_pid and req_pid and current_pid != req_pid:
+        return None  # 다른 파이프라인의 acceptance_request.json — 비교 skip
+
+    packet_sha_expected = sha_manifest.get("packet_sha256")
+    packet_sha_recorded = req.get("packet_sha256")
+    if not packet_sha_expected:
+        return "[SNAPSHOT VERIFY] sha_manifest에 packet_sha256 없음"
+    if not packet_sha_recorded:
+        return "[SNAPSHOT VERIFY] acceptance_request.json에 packet_sha256 없음"
+    if packet_sha_expected != packet_sha_recorded:
+        return (
+            f"[SNAPSHOT VERIFY] packet SHA 불일치.\n"
+            f"  생성 직후: {packet_sha_expected}\n"
+            f"  acceptance_request.json: {packet_sha_recorded}"
+        )
+
+    json_sha_expected = sha_manifest.get("json_sha256")
+    json_sha_recorded = req.get("verification_json_sha256")
+    if not json_sha_expected:
+        return "[SNAPSHOT VERIFY] sha_manifest에 json_sha256 없음"
+    if not json_sha_recorded:
+        return "[SNAPSHOT VERIFY] acceptance_request.json에 verification_json_sha256 없음"
+    if json_sha_expected != json_sha_recorded:
+        return (
+            f"[SNAPSHOT VERIFY] verification_json SHA 불일치.\n"
+            f"  생성 직후: {json_sha_expected}\n"
+            f"  acceptance_request.json: {json_sha_recorded}"
+        )
+
+    return None
+
+
 def _auto_generate_final_packet_and_update_pr(
     state: Dict[str, Any],
     acceptance_request: Dict[str, Any],
 ) -> Dict[str, Any]:
     """nonce 발급 직후 final packet을 자동 생성하고 PR 본문을 자동 업데이트한다.
 
+    IMP-20260610-8C3B MT-1: 내부적으로 _materialize_acceptance_snapshot을 호출한다.
+    하위 호환성을 위해 기존 반환 형식(packet_path, json_path, pr_body_updated)을 유지하고,
+    _cmd_gates_request_accept가 _verify_acceptance_snapshot을 실행할 수 있도록
+    sha_manifest도 반환한다.
+
     Args:
         state: 활성 pipeline_state.
         acceptance_request: 방금 발급/재사용한 acceptance_request dict (nonce 포함).
     Returns:
-        dict {"packet_path": str, "pr_body_updated": bool}.
+        dict {"packet_path": str, "json_path": Optional[str], "pr_body_updated": bool,
+              "sha_manifest": dict}.
     Raises:
-        없음 (외부 도구 부재 시 graceful skip).
+        OSError: packet 파일 쓰기 실패 시 (호출자가 처리).
+        ValueError: evidence_payload 조립 실패 시 (호출자가 처리).
     """
-    evidence_payload = _collect_packet_evidence(
-        state, acceptance_request=acceptance_request, base_ref="origin/main"
-    )
-    content = _build_final_packet_content(evidence_payload)
-    packet_path = _write_human_acceptance_packet(content)
-
-    # IMP-20260605-58BF MT-1: JSON 버전도 함께 작성 (verification_json SSoT)
-    json_path_str: Optional[str] = None
-    try:
-        verification_json = _build_verification_json(evidence_payload)
-        json_path = _write_verification_json(verification_json)
-        json_path_str = _display_path(json_path)
-    except (OSError, TypeError, ValueError):
-        pass
-
-    pr_updated = False
-    if shutil.which("gh"):
-        current_body = _get_pr_body_text() or ""
-        new_body = _replace_pr_body_packet_block(current_body, content)
-        pr_updated = _gh_edit_pr_body(new_body)
+    result = _materialize_acceptance_snapshot(state, acceptance_request)
     return {
-        "packet_path": _display_path(packet_path),
-        "json_path": json_path_str,
-        "pr_body_updated": pr_updated,
+        "packet_path": result["packet_path"],
+        "json_path": result["json_path"],
+        "pr_body_updated": result["pr_body_updated"],
+        "sha_manifest": result.get("sha_manifest", {}),
     }
 
 
@@ -15497,7 +15689,7 @@ def _sync_acceptance_request_with_packet(
             state["acceptance_request"]["packet_path"] = str(packet_path)
             state["acceptance_request"]["packet_sha256"] = new_pkt_sha
     except (OSError, json.JSONDecodeError, TypeError):
-        pass  # 갱신 실패 시 기존 값 유지 (치명적이지 않음)
+        raise  # AC-3 원자성: 갱신 실패 시 호출자에게 예외 전파 (실패 삼킴 금지)
 
 
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
@@ -15641,23 +15833,27 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         except (OSError, json.JSONDecodeError) as exc:
             print(YELLOW(f"  [AC TABLE] acceptance_request.json 저장 실패: {exc}"))
 
-    # IMP-20260603-2E3D MT-2: final packet 자동 생성 + PR 본문 자동 업데이트
-    # BUG-20260609-2044 MT-3: 예외 시 경고+계속 패턴을 BLOCKED(_die)로 변경.
-    # 승인 코드(accept_code) 출력은 패킷 생성 성공 검증 이후에만 수행.
+    # IMP-20260610-8C3B MT-1: _auto_generate_final_packet_and_update_pr(→_materialize_acceptance_snapshot)으로
+    # fresh/reuse 통합 materialization. 승인 코드(accept_code) 출력은 snapshot 생성 +
+    # _verify_acceptance_snapshot PASS 이후에만 수행.
     try:
         # acceptance_request.json을 디스크에서 다시 읽어 최신 ac_fulfillment_table 반영
         latest_req = _load_acceptance_request() or req
-        auto_result = _auto_generate_final_packet_and_update_pr(state, latest_req)
+        snapshot_result = _auto_generate_final_packet_and_update_pr(state, latest_req)
         print()
-        print(f"  [FINAL PACKET 자동 생성] {auto_result['packet_path']}")
-        if auto_result["pr_body_updated"]:
+        print(f"  [FINAL PACKET 자동 생성] {snapshot_result['packet_path']}")
+        if snapshot_result["pr_body_updated"]:
             print("  [PR 본문 자동 업데이트] PIPELINE_FINAL_PACKET 블록 교체 완료")
         else:
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
-        # IMP-20260608-7FAC MT-1: reuse/non-reuse 양 경로에서 helper로 packet_sha256 동기화
-        # IMP-20260609-C4F8 MT-1: verification_json_path 동기화 — packet_path 기준으로 JSON 경로 계산
-        json_path = Path(auto_result["packet_path"]).parent / "human_acceptance_packet.json"
-        _sync_acceptance_request_with_packet(Path(auto_result["packet_path"]), state, verification_json_path=json_path)
+        # IMP-20260610-8C3B MT-1: post-materialization SHA 검증
+        verify_err = _verify_acceptance_snapshot(state, snapshot_result.get("sha_manifest", {}))
+        if verify_err:
+            _die(
+                f"[PIPELINE ERROR] snapshot SHA 검증 실패 — 승인 코드 발급 차단.\n"
+                f"  {verify_err}\n"
+                "  gates request-accept를 다시 실행하세요."
+            )
     except (OSError, ValueError, KeyError) as exc:
         _die(
             f"[PIPELINE ERROR] final packet 자동 생성 실패 — 승인 코드 발급 차단.\n"
