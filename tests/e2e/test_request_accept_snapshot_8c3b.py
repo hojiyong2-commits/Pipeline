@@ -249,7 +249,7 @@ def test_tc2_reuse_path_updates_packet_sha(tmp_path):
     CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + final_state assertion.
     """
     env = make_env(tmp_path)
-    pid = bootstrap_pipeline_legacy(tmp_path, env)
+    bootstrap_pipeline_legacy(tmp_path, env)
     ev_file = write_evidence_file(tmp_path)
 
     # 첫 번째 실행
