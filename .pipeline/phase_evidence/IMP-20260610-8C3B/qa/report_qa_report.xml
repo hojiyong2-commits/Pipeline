@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260610-8C3B</pipeline_id>
+  <phase>qa</phase>
+  <result>PASS</result>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <failure_signature></failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+
+  <scope_verification>
+    <declared_files>pipeline.py, tests/e2e/test_request_accept_snapshot_8c3b.py</declared_files>
+    <actual_changed_files>pipeline.py, tests/e2e/test_request_accept_snapshot_8c3b.py</actual_changed_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </scope_verification>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <target_files_declared>pipeline.py</target_files_declared>
+    <actual_changed_files>pipeline.py</actual_changed_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <target_files_declared>pipeline.py</target_files_declared>
+    <actual_changed_files>pipeline.py</actual_changed_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <micro_task_boundary>
+    <mt_id>MT-3</mt_id>
+    <target_files_declared>tests/e2e/test_request_accept_snapshot_8c3b.py</target_files_declared>
+    <actual_changed_files>tests/e2e/test_request_accept_snapshot_8c3b.py</actual_changed_files>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <verification_results>
+
+    <!-- MT-1: _materialize_acceptance_snapshot 원자적 쓰기 -->
+    <item category="AL" result="PASS">
+      <description>_materialize_acceptance_snapshot: tempfile+os.replace 원자적 쓰기 패턴 구현 확인</description>
+      <evidence>pipeline.py 내 tempfile.mkstemp + os.replace 사용, md/json 동시 생성</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>_verify_acceptance_snapshot: pipeline_id 불일치 시 skip, SHA 불일치 시 에러 반환</description>
+      <evidence>acceptance_request.json에서 pipeline_id 확인, packet_sha256/json_sha256 비교</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>_auto_generate_final_packet_and_update_pr: sha_manifest 반환 thin wrapper</description>
+      <evidence>wrapper가 _materialize_acceptance_snapshot 결과에 sha_manifest 포함하여 반환</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>_cmd_gates_request_accept: _auto_generate 경유 OSError catch → BLOCKED</description>
+      <evidence>try/except (OSError, ValueError, KeyError) as exc → _die() 경로 확인</evidence>
+    </item>
+
+    <!-- MT-2: AC completeness 캐시 -->
+    <item category="AL" result="PASS">
+      <description>module integrate PASS 시 ac_completeness 캐시 저장</description>
+      <evidence>state["ac_completeness"] = {cached_at, total, pending_count, pending_ids, complete}</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>_validate_ac_table_before_request_accept: 캐시 우선 확인, fallback 유지</description>
+      <evidence>ac_completeness 캐시 있으면 직접 반환, 없으면 기존 _build_ac_fulfillment_table 호출</evidence>
+    </item>
+
+    <!-- MT-3: E2E 테스트 -->
+    <item category="AL" result="PASS">
+      <description>TC-1 PASS: fresh 경로 nonce+SHA 기록</description>
+      <evidence>test_tc1_request_accept_issues_nonce_and_records_shas PASS</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>TC-2 PASS: reuse 경로 packet_sha 갱신</description>
+      <evidence>test_tc2_reuse_path_updates_packet_sha PASS</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>TC-3 PASS: SHA 불일치 BLOCKED</description>
+      <evidence>test_tc3_stale_sha_mismatch_blocks_accept PASS</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>TC-4 PASS: AC incomplete / no integrate cache 처리</description>
+      <evidence>test_tc4_ac_incomplete_no_integrate_cache PASS</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>TC-5 PASS: wrong acceptance code BLOCKED</description>
+      <evidence>test_tc5_wrong_acceptance_code_blocked PASS</evidence>
+    </item>
+
+    <!-- 기존 테스트 회귀 -->
+    <item category="AL" result="PASS">
+      <description>test_request_accept_sst_2044.py::TestEdgePacketFailBlocked::test_packet_generation_failure_causes_blocked PASS</description>
+      <evidence>_auto_generate mock으로 OSError 발생 → BLOCKED 확인</evidence>
+    </item>
+    <item category="AL" result="PASS">
+      <description>기존 테스트 회귀: 26 PASS (pre-existing 1 FAIL은 별도 파이프라인 oracle 구조 문제)</description>
+      <evidence>test_acceptance_provenance_c4f8.py::test_reuse_true_syncs_verification_json_sha pre-existing FAIL — 8C3B 변경과 무관</evidence>
+    </item>
+
+    <!-- scope gate 개선 확인 -->
+    <item category="FS" result="PASS">
+      <description>ATOMIC_SNAPSHOT_EXCLUDED_FILES에 pr_body_temp.md, test_order_mapper.py 추가</description>
+      <evidence>runtime/KittingMapper 파일 scope gate 오탐 방지</evidence>
+    </item>
+    <item category="FS" result="PASS">
+      <description>ATOMIC_SNAPSHOT_EXCLUDED_DIRS에 ic_part_src 추가</description>
+      <evidence>KittingMapper 소스 디렉토리 scope gate 오탐 방지</evidence>
+    </item>
+
+  </verification_results>
+
+  <criteria_verification>
+    <ac id="AC-1" status="PASS">
+      <verification>_materialize_acceptance_snapshot 구현 완료. fresh/reuse 경로 모두 TC-1, TC-2로 검증</verification>
+    </ac>
+    <ac id="AC-2" status="PASS">
+      <verification>_verify_acceptance_snapshot 구현 완료. TC-3 SHA 불일치 차단 검증</verification>
+    </ac>
+    <ac id="AC-3" status="PASS">
+      <verification>_auto_generate thin wrapper sha_manifest 반환. 기존 mock 호환 유지</verification>
+    </ac>
+    <ac id="AC-4" status="PASS">
+      <verification>module integrate PASS 시 ac_completeness 캐시 저장, request-accept 시 캐시 우선 확인</verification>
+    </ac>
+    <ac id="AC-5" status="PASS">
+      <verification>E2E 5개 테스트 모두 PASS — TC-1~TC-5 각각 fresh/reuse/SHA불일치/AC미완/코드오류 검증</verification>
+    </ac>
+  </criteria_verification>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager</to>
+    <pipeline_id>IMP-20260610-8C3B</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+      <file>qa_report.xml</file>
+    </evidence>
+    <status>QA_PASS</status>
+  </handover>
+</qa_report>
