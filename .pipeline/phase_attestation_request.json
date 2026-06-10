@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-10T22:41:46Z",
+  "generated_at": "2026-06-10T22:56:06Z",
   "pipeline_id": "IMP-20260610-982B",
   "phase": "pm",
   "phase_status": "DONE",
-  "commit_hint": "f4861b2d33f1dd6438610eeede1c43199c4b3b6e",
+  "commit_hint": "972903fdea1a7c3e7a054ce323372dd1656ec1d5",
   "state": {
     "current_phase": "dev",
     "phase_completed_at": "2026-06-10T22:41:42Z",
@@ -18,9 +18,9 @@
     "agent_id": "pm-planner-agent",
     "status": "COMPLETED",
     "output_file": "step_plan.xml",
-    "output_sha256": "63b9bf8bd5e90792cd65189d67be033b869e67ef4b3205a10da960a5645086c1",
+    "output_sha256": "b1f9b7d4733e974f7accd86bc5701810935de4f2939e8e95110c609c08ed4f9c",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260610-982B/pm/agent_receipt_pm_planner-4ca8bd9fe7e8d7bd.json",
-    "receipt_sha256": "b34e3f1e0ba120b5c03ad666dae8b50723df85cb43aa3c6251cd46057358aecd",
+    "receipt_sha256": "c88128fd7a226fef8c3f4c93f9ce6687ed802f4c8757eb476855b27dc4b7772a",
     "used_by_phase": "pm",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260610-982B\\pm_planner\\pm_planner-4ca8bd9fe7e8d7bd.json"
   },
@@ -41,8 +41,8 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260610-982B\\pm_planner\\pm_planner-4ca8bd9fe7e8d7bd.json",
       "path": ".pipeline/phase_evidence/IMP-20260610-982B/pm/agent_receipt_pm_planner-4ca8bd9fe7e8d7bd.json",
-      "sha256": "b34e3f1e0ba120b5c03ad666dae8b50723df85cb43aa3c6251cd46057358aecd",
-      "size_bytes": 533,
+      "sha256": "c88128fd7a226fef8c3f4c93f9ce6687ed802f4c8757eb476855b27dc4b7772a",
+      "size_bytes": 519,
       "requires_force_add": true
     },
     {
@@ -57,8 +57,8 @@
       "label": "report",
       "source": "step_plan.xml",
       "path": ".pipeline/phase_evidence/IMP-20260610-982B/pm/report_step_plan.xml",
-      "sha256": "63b9bf8bd5e90792cd65189d67be033b869e67ef4b3205a10da960a5645086c1",
-      "size_bytes": 6688,
+      "sha256": "b1f9b7d4733e974f7accd86bc5701810935de4f2939e8e95110c609c08ed4f9c",
+      "size_bytes": 6558,
       "requires_force_add": true
     },
     {
