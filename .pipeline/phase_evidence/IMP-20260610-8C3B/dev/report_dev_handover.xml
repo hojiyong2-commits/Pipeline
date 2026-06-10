@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260610-8C3B</pipeline_id>
+  <phase>dev</phase>
+  <agent_run_id>dev-fb7e2fa6db88ef96</agent_run_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_materialize_acceptance_snapshot, _verify_acceptance_snapshot, _auto_generate_final_packet_and_update_pr, _cmd_gates_request_accept, cmd_module (integrate PASS 분기), _validate_ac_table_before_request_accept</target_function>
+    <changed_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+    </changed_files>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <call_sites_affected>gates request-accept 흐름, module integrate 흐름</call_sites_affected>
+  </impact_analysis>
+  <module_gates>
+    <module id="MT-1" status="QA_PASS"/>
+    <module id="MT-2" status="QA_PASS"/>
+    <module id="MT-3" status="QA_PASS"/>
+    <integration status="PASS"/>
+  </module_gates>
+  <scope_declared>true</scope_declared>
+  <status>READY_FOR_QA</status>
+  <summary>
+    MT-1: _materialize_acceptance_snapshot, _verify_acceptance_snapshot 추가,
+    _auto_generate_final_packet_and_update_pr sha_manifest 반환 확장,
+    _cmd_gates_request_accept _auto_generate 통해 원자적 materialization + verify.
+    MT-2: cmd_module integrate PASS 시 ac_completeness 캐시, _validate 캐시 우선 사용.
+    MT-3: tests/e2e/test_request_accept_snapshot_8c3b.py 5개 E2E 테스트 생성.
+    전체 테스트: 664+197=861 PASS.
+  </summary>
+</handover>
