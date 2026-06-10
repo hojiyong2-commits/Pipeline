@@ -1,0 +1,19 @@
+{
+  "case_id": "edge_ac_incomplete",
+  "kind": "edge",
+  "description": "module integrate가 아직 PASS되지 않은 상태에서 request-accept를 실행하면 AC completeness 캐시가 비어 있어 즉시 BLOCKED. 이 케이스가 _materialize_acceptance_snapshot 진입 전에 차단됨을 보장한다 (PR 본문이나 packet 생성으로 AC 미완료가 발견되어서는 안 된다).",
+  "preconditions": {
+    "requirements_tracking_enabled": true,
+    "structured_ac": [
+      {"ac_id": "AC-1", "requirement": "AC completeness는 module integrate 단계에서만 확정된다", "must_verify": true, "user_visible": true},
+      {"ac_id": "AC-2", "requirement": "AC completeness 캐시 없이 request-accept를 호출하면 BLOCKED된다", "must_verify": true, "user_visible": true}
+    ],
+    "module_integrate_status": "PENDING",
+    "requirements_summary_cached": null,
+    "module_qa_for_AC-2_missing": true,
+    "acceptance_request_existing": null
+  },
+  "cli_invocation": [
+    "python pipeline.py gates request-accept --evidence pipeline_outputs/IMP-20260610-8C3B/report.md"
+  ]
+}
