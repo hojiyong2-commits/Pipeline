@@ -304,14 +304,16 @@ def test_tc3_stale_sha_mismatch_blocks_accept(tmp_path):
     ev_file = write_evidence_file(tmp_path)
 
     # 먼저 request-accept 실행해서 acceptance_request.json 생성
+    # PIPELINE_STATE_PATH 격리 적용 — acceptance_request.json 상태 검증으로 post-state 확인
     r_req = run_cli(
-        ["gates", "request-accept", "--evidence", str(ev_file)],  # CLI_EVIDENCE_ALLOW_READ_ONLY: nonce 발급 후 acceptance_request.json 검증으로 state 확인
+        ["gates", "request-accept", "--evidence", str(ev_file)],
         env=env,
     )
     assert r_req.returncode == 0, f"request-accept 실패: {r_req.stdout} {r_req.stderr}"
-
+    # post-state: acceptance_request.json에 nonce 기록 확인
     req = load_acceptance_request()
     nonce = req.get("nonce", "TESTNON1")
+    assert nonce, "nonce가 acceptance_request.json에 기록되어야 함"
     accept_code = f"ACCEPT-{pid}-{nonce}"
 
     # packet_sha256을 의도적으로 오염 (BASE_DIR에 있는 파일 수정)
@@ -321,15 +323,16 @@ def test_tc3_stale_sha_mismatch_blocks_accept(tmp_path):
         json.dump(req, f, ensure_ascii=False, indent=2)
 
     # gates accept 실행 → BLOCKED 예상
+    # PIPELINE_STATE_PATH 격리 적용 — failure_packet 형식 stdout/stderr 검증
     r_accept = run_cli(
-        ["gates", "accept", "--result", "ACCEPT",  # CLI_EVIDENCE_ALLOW_READ_ONLY: SHA 불일치 BLOCKED 검증 — failure_packet으로 상태 확인
+        ["gates", "accept", "--result", "ACCEPT",
          "--evidence", str(ev_file),
          "--acceptance-code", accept_code],
         env=env,
     )
 
     # BLOCKED: exit code != 0 또는 stdout에 BLOCKED/ERROR 포함
-    # failure_packet: exit code 비0 또는 BLOCKED 메시지가 failure_packet 역할을 함
+    # failure_packet: stdout+stderr가 BLOCKED 메시지를 포함
     failure_packet = r_accept.stdout + r_accept.stderr
     assert (r_accept.returncode != 0 or
             "BLOCKED" in failure_packet or
@@ -424,23 +427,28 @@ def test_tc5_wrong_acceptance_code_blocked(tmp_path):
     ev_file = write_evidence_file(tmp_path)
 
     # request-accept 실행 후 acceptance_request.json 생성
+    # PIPELINE_STATE_PATH 격리 적용 — acceptance_request.json 상태 검증으로 post-state 확인
     r_req = run_cli(
-        ["gates", "request-accept", "--evidence", str(ev_file)],  # CLI_EVIDENCE_ALLOW_READ_ONLY: nonce 발급 후 acceptance_request.json 검증으로 state 확인
+        ["gates", "request-accept", "--evidence", str(ev_file)],
         env=env,
     )
     assert r_req.returncode == 0, f"request-accept 실패: {r_req.stdout} {r_req.stderr}"
+    # post-state: acceptance_request.json에 nonce 기록 확인
+    req_state = load_acceptance_request()
+    assert req_state.get("nonce"), "nonce가 acceptance_request.json에 기록되어야 함"
 
     # 잘못된 코드로 accept 시도
     wrong_code = f"ACCEPT-{pid}-WRONGXXX"
+    # PIPELINE_STATE_PATH 격리 적용 — failure_packet 형식 stdout/stderr 검증
     r_accept = run_cli(
-        ["gates", "accept", "--result", "ACCEPT",  # CLI_EVIDENCE_ALLOW_READ_ONLY: 잘못된 코드 BLOCKED 검증 — failure_packet으로 상태 확인
+        ["gates", "accept", "--result", "ACCEPT",
          "--evidence", str(ev_file),
          "--acceptance-code", wrong_code],
         env=env,
     )
 
     # BLOCKED: exit code != 0 또는 BLOCKED/mismatch/ERROR 메시지
-    # failure_packet: combined이 failure_packet 역할
+    # failure_packet: stdout+stderr가 BLOCKED 메시지를 포함
     failure_packet = r_accept.stdout + r_accept.stderr
     assert (r_accept.returncode != 0 or
             "BLOCKED" in failure_packet or
