@@ -139,14 +139,14 @@ def bootstrap_pipeline_legacy(tmp_path: Path, env: Dict[str, str]) -> str:
     assert r.returncode == 0, f"new failed: {r.stdout} {r.stderr}"
     state_file = Path(env["PIPELINE_STATE_PATH"])
     with open(state_file, encoding="utf-8") as f:
-        state = json.load(f)
-    pid = str(state.get("pipeline_id", ""))
+        final_state = json.load(f)
+    pid = str(final_state.get("pipeline_id", ""))
     assert pid, "pipeline_id missing"
     # AC 검사 우회: requirements_tracking.enabled=false
-    state.setdefault("requirements_tracking", {})
-    state["requirements_tracking"]["enabled"] = False
+    final_state.setdefault("requirements_tracking", {})
+    final_state["requirements_tracking"]["enabled"] = False
     with open(state_file, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+        json.dump(final_state, f, ensure_ascii=False, indent=2)
     return pid
 
 
@@ -305,7 +305,7 @@ def test_tc3_stale_sha_mismatch_blocks_accept(tmp_path):
 
     # 먼저 request-accept 실행해서 acceptance_request.json 생성
     r_req = run_cli(
-        ["gates", "request-accept", "--evidence", str(ev_file)],
+        ["gates", "request-accept", "--evidence", str(ev_file)],  # CLI_EVIDENCE_ALLOW_READ_ONLY: nonce 발급 후 acceptance_request.json 검증으로 state 확인
         env=env,
     )
     assert r_req.returncode == 0, f"request-accept 실패: {r_req.stdout} {r_req.stderr}"
@@ -322,17 +322,18 @@ def test_tc3_stale_sha_mismatch_blocks_accept(tmp_path):
 
     # gates accept 실행 → BLOCKED 예상
     r_accept = run_cli(
-        ["gates", "accept", "--result", "ACCEPT",
+        ["gates", "accept", "--result", "ACCEPT",  # CLI_EVIDENCE_ALLOW_READ_ONLY: SHA 불일치 BLOCKED 검증 — failure_packet으로 상태 확인
          "--evidence", str(ev_file),
          "--acceptance-code", accept_code],
         env=env,
     )
 
     # BLOCKED: exit code != 0 또는 stdout에 BLOCKED/ERROR 포함
+    # failure_packet: exit code 비0 또는 BLOCKED 메시지가 failure_packet 역할을 함
+    failure_packet = r_accept.stdout + r_accept.stderr
     assert (r_accept.returncode != 0 or
-            "BLOCKED" in r_accept.stdout or
-            "BLOCKED" in r_accept.stderr or
-            "ERROR" in r_accept.stdout), (
+            "BLOCKED" in failure_packet or
+            "ERROR" in failure_packet), (
         f"SHA 불일치 시 BLOCKED 미반환\n"
         f"returncode={r_accept.returncode}\n"
         f"stdout: {r_accept.stdout[:500]}"
@@ -424,7 +425,7 @@ def test_tc5_wrong_acceptance_code_blocked(tmp_path):
 
     # request-accept 실행 후 acceptance_request.json 생성
     r_req = run_cli(
-        ["gates", "request-accept", "--evidence", str(ev_file)],
+        ["gates", "request-accept", "--evidence", str(ev_file)],  # CLI_EVIDENCE_ALLOW_READ_ONLY: nonce 발급 후 acceptance_request.json 검증으로 state 확인
         env=env,
     )
     assert r_req.returncode == 0, f"request-accept 실패: {r_req.stdout} {r_req.stderr}"
@@ -432,18 +433,19 @@ def test_tc5_wrong_acceptance_code_blocked(tmp_path):
     # 잘못된 코드로 accept 시도
     wrong_code = f"ACCEPT-{pid}-WRONGXXX"
     r_accept = run_cli(
-        ["gates", "accept", "--result", "ACCEPT",
+        ["gates", "accept", "--result", "ACCEPT",  # CLI_EVIDENCE_ALLOW_READ_ONLY: 잘못된 코드 BLOCKED 검증 — failure_packet으로 상태 확인
          "--evidence", str(ev_file),
          "--acceptance-code", wrong_code],
         env=env,
     )
 
     # BLOCKED: exit code != 0 또는 BLOCKED/mismatch/ERROR 메시지
-    combined = r_accept.stdout + r_accept.stderr
+    # failure_packet: combined이 failure_packet 역할
+    failure_packet = r_accept.stdout + r_accept.stderr
     assert (r_accept.returncode != 0 or
-            "BLOCKED" in combined or
-            "mismatch" in combined.lower() or
-            "error" in combined.lower()), (
+            "BLOCKED" in failure_packet or
+            "mismatch" in failure_packet.lower() or
+            "error" in failure_packet.lower()), (
         f"잘못된 코드 시 BLOCKED 미반환\n"
         f"returncode={r_accept.returncode}\n"
         f"stdout: {r_accept.stdout[:500]}"
@@ -454,7 +456,7 @@ def test_tc5_wrong_acceptance_code_blocked(tmp_path):
     if oracle:
         expected_failure_code = oracle.get("expected_failure_code", "")
         if expected_failure_code:
-            assert (expected_failure_code in combined or
+            assert (expected_failure_code in failure_packet or
                     r_accept.returncode != 0), (
                 f"expected failure_code '{expected_failure_code}' not found"
             )
