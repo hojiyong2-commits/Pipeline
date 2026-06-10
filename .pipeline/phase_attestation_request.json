@@ -46,22 +46,11 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260610-8C3B/dev/scope_manifest_scope_manifest.json",
-      "sha256": "2b1c949e94da8f4b61a432020e25bebd34b56238bba3d665f0152095aa426ccb",
+      "sha256": "5e385c2ad274e33e7a10506e736b746cb731e447b5aa3ee939ee7cbf278f6f7e",
       "size_bytes": 1098,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "dc97773b0634d933bccfdd65bfc7f7b0c4f1a19c8b3654e464eeefec21cb9cea",
-      "size_bytes": 972050
-    },
-    {
-      "path": "tests/e2e/test_request_accept_snapshot_8c3b.py",
-      "sha256": "8a74253e9cb519c9d9e0c5edcd4e00562f6b500fd213cfcf96e7c48147be174c",
-      "size_bytes": 17837
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
