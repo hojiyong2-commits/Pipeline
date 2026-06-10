@@ -540,7 +540,7 @@ def test_tc4b_integration_not_pass_with_cache_blocked(tmp_path):
     BLOCKED되어야 한다. (regression: stale 캐시만으로 통과하는 결함 방지)
 
     oracle: tests/oracles/IMP-20260610-8C3B/edge_ac_incomplete/
-    CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + returncode assertion.
+    CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + final_state assertion (returncode + stderr).
     """
     env = make_env(tmp_path)
 
