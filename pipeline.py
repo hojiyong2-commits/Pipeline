@@ -15391,8 +15391,9 @@ def _materialize_acceptance_snapshot(
 ) -> Dict[str, Any]:
     """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
 
-    fresh 경로와 reuse 경로 모두 이 함수를 통해 동일한 materialization 절차를 거친다.
-    tempfile + os.replace 패턴으로 partial-write를 방지한다.
+    IMP-20260610-8C3B 2차 REJECT 결함 C 수정: MD 먼저 커밋 후 JSON 실패 시 partial 상태 방지.
+    모든 temp 파일을 먼저 쓰고 SHA를 계산한 뒤, 마지막에 모두 한꺼번에 os.replace로 커밋.
+    _sync_acceptance_request_with_packet 직접 호출 제거 — acceptance_request 동기화를 이 함수 안에서 수행.
 
     Args:
         state: 활성 pipeline_state dict.
@@ -15404,72 +15405,92 @@ def _materialize_acceptance_snapshot(
             "pr_body_updated": bool — PR 본문 갱신 여부
             "sha_manifest": dict — 생성된 파일들의 SHA-256 매니페스트
     Raises:
-        OSError: packet 파일 쓰기 실패 시 (tempfile 단계 실패 포함)
-        ValueError: evidence_payload 조립 실패 시
+        OSError: temp 파일 쓰기 실패 시
+        ValueError: evidence_payload 조립 또는 verification_json 생성 실패 시
+        TypeError: 직렬화 불가 객체 포함 시
     """
+    # Phase 1: 순수 계산 (I/O 없음) — 실패 시 아무 파일도 안 써짐
     evidence_payload = _collect_packet_evidence(
         state, acceptance_request=acceptance_request, base_ref="origin/main"
     )
     content = _build_final_packet_content(evidence_payload)
+    verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
 
-    # tempfile + os.replace 원자적 쓰기 (partial-write 방지)
     packet_path = _packet_output_path()
     packet_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_pkt = packet_path.with_suffix(".md.tmp")
-    try:
-        tmp_pkt.write_text(content, encoding="utf-8")
-        os.replace(str(tmp_pkt), str(packet_path))
-    except OSError:
-        if tmp_pkt.exists():
-            try:
-                tmp_pkt.unlink()
-            except OSError:
-                pass
-        raise
+    json_out_path = _packet_json_output_path()
+    json_out_path.parent.mkdir(parents=True, exist_ok=True)
+    req_path = BASE_DIR / "acceptance_request.json"
 
-    # IMP-20260605-58BF MT-1: JSON 버전도 원자적으로 함께 작성
-    json_path: Optional[Path] = None
+    tmp_pkt = packet_path.with_suffix(".md.tmp")
+    tmp_json = json_out_path.with_suffix(".json.tmp")
+    tmp_req = req_path.with_suffix(".json.tmp")
+
+    temps = [tmp_pkt, tmp_json, tmp_req]
+
     try:
-        verification_json = _build_verification_json(evidence_payload)
-        json_out_path = _packet_json_output_path()
-        json_out_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_json = json_out_path.with_suffix(".json.tmp")
-        try:
-            tmp_json.write_text(
-                json.dumps(verification_json, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            os.replace(str(tmp_json), str(json_out_path))
-            json_path = json_out_path
-        except OSError:
-            if tmp_json.exists():
+        # Phase 2: 모든 temp 파일 쓰기 (아직 아무것도 커밋 안 됨)
+        tmp_pkt.write_text(content, encoding="utf-8")
+        tmp_json.write_text(
+            json.dumps(verification_json, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # SHA는 temp 파일에서 계산 (실제 경로가 아님)
+        pkt_sha = _sha256_file(tmp_pkt)
+        json_sha = _sha256_file(tmp_json)
+
+        # acceptance_request 동기화 (temp로)
+        if req_path.exists():
+            req_data = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
+        else:
+            req_data = dict(acceptance_request)
+        req_data["packet_path"] = str(packet_path)
+        req_data["packet_sha256"] = pkt_sha
+        req_data["verification_json_path"] = str(json_out_path)
+        req_data["verification_json_sha256"] = json_sha
+        tmp_req.write_text(
+            json.dumps(req_data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        # 실패 시 모든 temp 파일 정리 (아직 아무것도 커밋 안 됨)
+        for t in temps:
+            if t.exists():
                 try:
-                    tmp_json.unlink()
+                    t.unlink()
                 except OSError:
                     pass
-            raise  # JSON 쓰기 실패 시 예외 전파 — 4개 산출물 원자성 조건 (IMP-20260610-8C3B AC-3)
-    except (OSError, TypeError, ValueError):
-        raise  # JSON 생성 실패 시 예외 전파
+        raise
 
-    # PR 본문 자동 갱신
+    # Phase 3: 모든 temp를 원자적으로 커밋 (여기서부터는 부분 실패 가능성 낮음)
+    os.replace(str(tmp_pkt), str(packet_path))
+    os.replace(str(tmp_json), str(json_out_path))
+    os.replace(str(tmp_req), str(req_path))
+
+    # 메모리 state도 동기화
+    if isinstance(state.get("acceptance_request"), dict):
+        state["acceptance_request"]["packet_path"] = str(packet_path)
+        state["acceptance_request"]["packet_sha256"] = pkt_sha
+        state["acceptance_request"]["verification_json_path"] = str(json_out_path)
+        state["acceptance_request"]["verification_json_sha256"] = json_sha
+
+    # Phase 4: PR 본문 갱신 (best-effort, 원자성 필요 없음)
     pr_updated = False
     if shutil.which("gh"):
         current_body = _get_pr_body_text() or ""
         new_body = _replace_pr_body_packet_block(current_body, content)
         pr_updated = _gh_edit_pr_body(new_body)
 
-    # acceptance_request.json 동기화 (IMP-20260608-7FAC / IMP-20260609-C4F8)
-    _sync_acceptance_request_with_packet(packet_path, state, verification_json_path=json_path)
-
-    # SHA-256 매니페스트 구성
     sha_manifest: Dict[str, Optional[str]] = {
-        "packet_sha256": _sha256_file(packet_path) if packet_path.exists() else None,
-        "json_sha256": _sha256_file(json_path) if (json_path is not None and json_path.exists()) else None,
+        "packet_sha256": pkt_sha,
+        "json_sha256": json_sha,
     }
 
     return {
         "packet_path": _display_path(packet_path),
-        "json_path": _display_path(json_path) if json_path is not None else None,
+        "json_path": _display_path(json_out_path),
         "pr_body_updated": pr_updated,
         "sha_manifest": sha_manifest,
     }
@@ -15484,9 +15505,10 @@ def _verify_acceptance_snapshot(
     IMP-20260610-8C3B MT-1: post-materialization verification.
     일치하지 않으면 오류 메시지를 반환한다. None 반환 시 PASS.
 
-    _sync_acceptance_request_with_packet은 BASE_DIR/acceptance_request.json을 업데이트한다.
+    _materialize_acceptance_snapshot이 BASE_DIR/acceptance_request.json을 업데이트한다.
     따라서 검증도 동일한 BASE_DIR 경로의 파일을 기준으로 수행한다.
-    pipeline_id 불일치 또는 파일 없음은 PASS(비교 skip)로 처리한다.
+    pipeline_id 불일치는 PASS(비교 skip)로 처리한다.
+    파일 없음/파싱 실패/SHA 필드 누락은 오류 메시지를 반환한다 (IMP-20260610-8C3B 2차 REJECT 결함 B).
 
     Args:
         state: 활성 pipeline_state dict.
@@ -15494,17 +15516,17 @@ def _verify_acceptance_snapshot(
     Returns:
         오류 메시지 문자열 또는 None (PASS).
     """
-    # _sync_acceptance_request_with_packet이 BASE_DIR에 파일을 쓰므로 동일 경로로 읽음
+    # _materialize_acceptance_snapshot이 os.replace로 BASE_DIR에 파일을 커밋하므로 동일 경로로 읽음
     req_path = BASE_DIR / "acceptance_request.json"
     if not req_path.exists():
-        return None  # 파일 없음 — 비교 대상 없으므로 PASS
+        return "[SNAPSHOT VERIFY] acceptance_request.json 없음 — SHA 검증 불가"
     try:
         req = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
     except (OSError, json.JSONDecodeError):
-        return None  # 파싱 실패 — 비교 불가이므로 PASS
+        return "[SNAPSHOT VERIFY] acceptance_request.json 파싱 실패 — SHA 검증 불가"
 
     if not isinstance(req, dict):
-        return None
+        return "[SNAPSHOT VERIFY] acceptance_request.json 형식 오류"
 
     # pipeline_id 불일치 시 다른 파이프라인의 잔류 파일이므로 비교 생략
     current_pid = str(state.get("pipeline_id", "") or "")
@@ -15514,7 +15536,11 @@ def _verify_acceptance_snapshot(
 
     packet_sha_expected = sha_manifest.get("packet_sha256")
     packet_sha_recorded = req.get("packet_sha256")
-    if packet_sha_expected and packet_sha_recorded and packet_sha_expected != packet_sha_recorded:
+    if not packet_sha_expected:
+        return "[SNAPSHOT VERIFY] sha_manifest에 packet_sha256 없음"
+    if not packet_sha_recorded:
+        return "[SNAPSHOT VERIFY] acceptance_request.json에 packet_sha256 없음"
+    if packet_sha_expected != packet_sha_recorded:
         return (
             f"[SNAPSHOT VERIFY] packet SHA 불일치.\n"
             f"  생성 직후: {packet_sha_expected}\n"
@@ -15523,7 +15549,11 @@ def _verify_acceptance_snapshot(
 
     json_sha_expected = sha_manifest.get("json_sha256")
     json_sha_recorded = req.get("verification_json_sha256")
-    if json_sha_expected and json_sha_recorded and json_sha_expected != json_sha_recorded:
+    if not json_sha_expected:
+        return "[SNAPSHOT VERIFY] sha_manifest에 json_sha256 없음"
+    if not json_sha_recorded:
+        return "[SNAPSHOT VERIFY] acceptance_request.json에 verification_json_sha256 없음"
+    if json_sha_expected != json_sha_recorded:
         return (
             f"[SNAPSHOT VERIFY] verification_json SHA 불일치.\n"
             f"  생성 직후: {json_sha_expected}\n"
@@ -15644,7 +15674,7 @@ def _sync_acceptance_request_with_packet(
             state["acceptance_request"]["packet_path"] = str(packet_path)
             state["acceptance_request"]["packet_sha256"] = new_pkt_sha
     except (OSError, json.JSONDecodeError, TypeError):
-        pass  # 갱신 실패 시 기존 값 유지 (치명적이지 않음)
+        raise  # AC-3 원자성: 갱신 실패 시 호출자에게 예외 전파 (실패 삼킴 금지)
 
 
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:

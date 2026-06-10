@@ -240,6 +240,96 @@ def test_tc1_request_accept_issues_nonce_and_records_shas(tmp_path):
             assert key in req, f"oracle 필수 key '{key}' 누락"
 
 
+# TC-1b (normal): requirements_tracking.enabled=True + ac_completeness 캐시 완료 상태에서
+# gates request-accept가 성공하고 nonce가 발급됨을 확인 (결함 D 커버리지 보완)
+def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
+    """TC-1b: requirements_tracking.enabled=True + ac_completeness 캐시가 complete=True인 경우
+    gates request-accept가 성공(exit 0)하고 acceptance_request.json에 nonce가 기록됨을 확인.
+
+    TC-1/TC-2의 bootstrap_pipeline_legacy가 requirements_tracking.enabled=False로 우회하므로
+    실제 ac_completeness 캐시 경로를 검증하지 못하는 결함 D를 보완한다.
+
+    oracle: tests/oracles/IMP-20260610-8C3B/normal_snapshot_fresh/
+    CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + final_state assertion.
+    """
+    env = make_env(tmp_path)
+
+    # 새 파이프라인 생성 (AC 추적 활성화 — bootstrap_pipeline_legacy 우회 아님)
+    r_new = run_cli(
+        ["new", "--type", "IMP", "--desc", "ac completeness cache test tc1b"],
+        env=env,
+    )
+    assert r_new.returncode == 0, f"new failed: {r_new.stdout} {r_new.stderr}"
+
+    state_file = Path(env["PIPELINE_STATE_PATH"])
+    with open(state_file, encoding="utf-8") as f:
+        state = json.load(f)
+
+    pid = str(state.get("pipeline_id", ""))
+    assert pid, "pipeline_id missing"
+
+    # requirements_tracking.enabled=True 설정
+    state["requirements_tracking"] = {"enabled": True}
+
+    # ac_completeness 캐시를 complete=True로 직접 설정 (module integrate PASS 시뮬레이션)
+    state["ac_completeness"] = {
+        "cached_at": "2026-06-10T00:00:00Z",
+        "total": 1,
+        "pending_count": 0,
+        "pending_ids": [],
+        "complete": True,
+    }
+
+    # structured_acceptance_criteria에 충족된 AC 항목 추가
+    state["structured_acceptance_criteria"] = [
+        {
+            "id": "AC-1",
+            "text": "snapshot materialization이 원자적으로 완료된다",
+            "must_verify": True,
+            "source": "user",
+            "user_visible": True,
+        }
+    ]
+
+    with open(state_file, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+    ev_file = write_evidence_file(tmp_path, "tc1b ac completeness cache evidence")
+
+    r = run_cli(
+        ["gates", "request-accept", "--evidence", str(ev_file)],
+        env=env,
+    )
+
+    # 1. CLI 성공 여부 (exit 0)
+    assert r.returncode == 0, (
+        f"TC-1b: ac_completeness complete=True인데 request-accept 실패 "
+        f"(returncode={r.returncode})\n"
+        f"stdout: {r.stdout[:600]}\nstderr: {r.stderr[:300]}"
+    )
+
+    # 2. acceptance_request.json에 nonce 기록 확인 (final_state assertion)
+    req = load_acceptance_request()
+    assert req, "acceptance_request.json 미생성"
+    assert req.get("pipeline_id") == pid, f"pipeline_id 불일치: {req.get('pipeline_id')}"
+
+    nonce = req.get("nonce", "")
+    assert nonce, "nonce 없음"
+    assert len(nonce) == 8, f"nonce 길이 불일치: {len(nonce)}"
+
+    # 3. packet_sha256 기록 확인
+    pkt_sha = req.get("packet_sha256")
+    assert pkt_sha, "packet_sha256 미기록 — ac_completeness 캐시 경로 미검증"
+    assert len(pkt_sha) == 64, f"packet_sha256 형식 불일치: {pkt_sha}"
+
+    # 4. stdout에 승인 코드 포함 확인
+    accept_code = f"ACCEPT-{pid}-{nonce}"
+    assert accept_code in r.stdout, (
+        f"stdout에 승인 코드 없음. expected: {accept_code}\n"
+        f"stdout: {r.stdout[:500]}"
+    )
+
+
 # TC-2 (normal): reuse 경로에서 snapshot 재실행 시 packet_sha256 갱신 확인
 def test_tc2_reuse_path_updates_packet_sha(tmp_path):
     """TC-2: 동일 조건에서 request-accept를 두 번 실행하면 reuse 경로에서도
