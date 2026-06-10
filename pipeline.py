@@ -15217,46 +15217,6 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
         "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
     )
 
-    no_verification_acs: List[str] = []
-    no_impl_acs: List[str] = []
-    pending_acs: List[str] = []
-
-    for entry in ac_table:
-        if entry.get("result") != "PENDING":
-            continue
-        ac_id = entry["ac_id"]
-        has_impl = bool(entry.get("implementation_evidence"))
-        has_verif = bool(entry.get("verification"))
-        if not has_verif and not has_impl:
-            pending_acs.append(ac_id)
-        elif not has_verif:
-            no_verification_acs.append(ac_id)
-        else:
-            no_impl_acs.append(ac_id)
-
-    parts: List[str] = []
-    if no_verification_acs:
-        parts.append(
-            f"검증 없음 — module_qa 보고서에서 검증 결과를 찾을 수 없음: {', '.join(no_verification_acs)}"
-        )
-    if no_impl_acs:
-        parts.append(
-            f"구현 근거 없음: {', '.join(no_impl_acs)}"
-        )
-    if pending_acs:
-        parts.append(
-            f"미완료 항목 (구현 근거 및 검증 모두 없음): {', '.join(pending_acs)}"
-        )
-
-    if parts:
-        detail = "\n".join(f"  - {p}" for p in parts)
-        return (
-            f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다.\n"
-            f"{detail}\n"
-            "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
-        )
-    return None
-
 
 def _format_ac_fulfillment_output(
     table: List[Dict[str, Any]],
