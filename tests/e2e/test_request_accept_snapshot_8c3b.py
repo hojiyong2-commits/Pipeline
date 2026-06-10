@@ -354,11 +354,14 @@ def test_tc3_stale_sha_mismatch_blocks_accept(tmp_path):
 
 
 # TC-4 (edge): AC incomplete — module integrate 없이 request-accept 실행 시
-# requirements_tracking.enabled=true 파이프라인에서 BLOCKED 또는 경고 확인
+# requirements_tracking.enabled=true + ac_completeness 캐시 없음 → BLOCKED 기대
 def test_tc4_ac_incomplete_no_integrate_cache(tmp_path):
     """TC-4: requirements_tracking.enabled=true이고 module integrate가 완료되지 않아
     ac_completeness 캐시가 없는 상태에서 request-accept를 실행하면
-    AC 검증 경로(fallback)가 동작하는지 확인한다.
+    BLOCKED(exit code != 0)가 반환되어야 한다. (IMP-20260610-8C3B AC-4)
+
+    수정 전 동작: structured_acceptance_criteria=[]이면 캐시 없어도 성공(exit 0) — 결함
+    수정 후 동작: requirements_tracking.enabled=true + 캐시 없음 → 항상 BLOCKED(exit 1)
 
     oracle: tests/oracles/IMP-20260610-8C3B/edge_ac_incomplete/
     CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + final_state assertion.
@@ -376,12 +379,21 @@ def test_tc4_ac_incomplete_no_integrate_cache(tmp_path):
     with open(state_file, encoding="utf-8") as f:
         state = json.load(f)
 
-    # requirements_tracking 활성화 + ac_completeness 캐시 없음 (integrate 미실행 시뮬레이션)
+    # requirements_tracking 활성화 + ac_completeness 캐시 없음 (integrate 미완료 시뮬레이션)
     state["requirements_tracking"] = {"enabled": True}
-    # ac_completeness 캐시 없음 (키 자체 없음)
+    # ac_completeness 캐시 없음 (키 자체 없음 — module integrate 미실행 상태)
     state.pop("ac_completeness", None)
-    # structured_acceptance_criteria 비어있음 (AC 없음 → 검사 생략 경로)
-    state["structured_acceptance_criteria"] = []
+    # structured_acceptance_criteria에 실제 pending AC 항목 추가
+    # (AC-4 결함 검출: 캐시 없는데 AC가 있는 경우 반드시 BLOCKED여야 함)
+    state["structured_acceptance_criteria"] = [
+        {
+            "id": "AC-1",
+            "text": "snapshot materialization이 원자적으로 완료된다",
+            "must_verify": True,
+            "source": "user",
+            "user_visible": True,
+        }
+    ]
 
     with open(state_file, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
@@ -393,26 +405,38 @@ def test_tc4_ac_incomplete_no_integrate_cache(tmp_path):
         env=env,
     )
 
-    # AC 없으면 검사 생략 → request-accept 성공 (exit 0)
-    # AC가 있고 PENDING이면 BLOCKED
-    # 여기서는 structured_acceptance_criteria=[] → 검사 생략 → 성공 예상
-    assert r.returncode == 0, (
-        f"AC 없는 경우 request-accept가 실패해서는 안 됨\n"
+    # AC-4 요구사항: requirements_tracking.enabled=true + ac_completeness 캐시 없음
+    # → BLOCKED (exit code != 0) 이어야 한다.
+    # module integrate PASS 없이 request-accept가 성공하면 AC-4 결함 재발
+    combined = r.stdout + r.stderr
+    assert r.returncode != 0, (
+        f"AC-4 위반: module integrate 없이 request-accept가 성공해서는 안 됨\n"
         f"returncode={r.returncode}\n"
-        f"stdout: {r.stdout[:500]}\nstderr: {r.stderr[:300]}"
+        f"stdout: {r.stdout[:600]}\nstderr: {r.stderr[:300]}"
     )
 
-    # ac_completeness 캐시 없이도 정상 동작함을 확인
-    req = load_acceptance_request()
-    assert req.get("nonce"), "nonce 미발급"
+    # stdout에 BLOCKED 메시지와 module integrate 안내가 포함되어야 함
+    assert "[PIPELINE ERROR]" in combined, (
+        f"BLOCKED 메시지([PIPELINE ERROR])가 stdout/stderr에 없음\n"
+        f"stdout: {r.stdout[:600]}"
+    )
+    assert "module integrate" in combined, (
+        f"'module integrate' 안내가 stdout/stderr에 없음\n"
+        f"stdout: {r.stdout[:600]}"
+    )
 
-    # oracle 참조
+    # oracle 참조 (post-state assertion)
     oracle = _oracle("edge_ac_incomplete")
     if oracle:
-        expected_exit = oracle.get("expected_exit_code", 0)
+        expected_exit = oracle.get("exit_code", 1)
         assert r.returncode == expected_exit, (
-            f"expected exit {expected_exit}, got {r.returncode}"
+            f"oracle expected exit {expected_exit}, got {r.returncode}"
         )
+        for substr in oracle.get("stdout_contains_substrings", []):
+            assert substr in combined, (
+                f"oracle 기대 문자열 '{substr}'이 stdout/stderr에 없음\n"
+                f"combined: {combined[:600]}"
+            )
 
 
 # TC-5 (edge): 잘못된 acceptance-code로 gates accept 실행 시 BLOCKED

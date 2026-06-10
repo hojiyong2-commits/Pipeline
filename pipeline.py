@@ -9309,8 +9309,9 @@ def cmd_module(args: argparse.Namespace) -> None:
                         "pending_ids": pending_ids,
                         "complete": len(pending_ids) == 0,
                     }
-            except Exception:  # noqa: BLE001
-                pass  # AC 캐시 실패 시 기존 동작 유지 (integration PASS 영향 없음)
+            except Exception as exc:  # noqa: BLE001
+                # AC 캐시 실패 → integration은 영향 없지만 명시적으로 경고 기록 (IMP-20260610-8C3B AC-4)
+                print(f"  [WARNING] ac_completeness 캐시 저장 실패: {exc}")
         _log_event(state, f"module integration {result}")
         _save(state)
         color = GREEN if result == "PASS" else RED
@@ -15209,10 +15210,12 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
             "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
         )
 
-    # 캐시 없으면 기존 방식으로 직접 계산
-    ac_table = _build_ac_fulfillment_table(state)
-    if not ac_table:
-        return None  # AC 없으면 검사 생략
+    # 캐시 없음 = module integrate PASS 미완료 → BLOCKED (IMP-20260610-8C3B AC-4)
+    return (
+        "[PIPELINE ERROR] ac_completeness 캐시가 없습니다.\n"
+        "  module integrate PASS가 완료되어야 request-accept를 실행할 수 있습니다.\n"
+        "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
+    )
 
     no_verification_acs: List[str] = []
     no_impl_acs: List[str] = []
@@ -15484,10 +15487,9 @@ def _materialize_acceptance_snapshot(
                     tmp_json.unlink()
                 except OSError:
                     pass
-            # JSON 쓰기 실패는 md 파일 생성 성공 이후이므로 경고만 기록
-            json_path = None
+            raise  # JSON 쓰기 실패 시 예외 전파 — 4개 산출물 원자성 조건 (IMP-20260610-8C3B AC-3)
     except (OSError, TypeError, ValueError):
-        json_path = None
+        raise  # JSON 생성 실패 시 예외 전파
 
     # PR 본문 자동 갱신
     pr_updated = False
