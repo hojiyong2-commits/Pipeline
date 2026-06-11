@@ -54,24 +54,25 @@
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "89f47ca4879d1621a29b1535493fb39854f3141221d1ef5372719aebc6f52e72",
-      "size_bytes": 981316
-    },
-    {
-      "path": "tests/e2e/test_pr_body_readiness_a716.py",
-      "sha256": "3729126766e16eba67281c02e64f378ab4ee8f3f8206bc254f64bf98c1cc543b",
-      "size_bytes": 29512
+      "sha256": "e7851463e5cf282d1a18ffbc03f429257e3e43eccad6b19fd7dfdde44d8e57e7",
+      "size_bytes": 972010
     },
     {
       "path": "tests/conftest.py",
-      "sha256": "66d5887c0140aa2378ea4e7c94337609c252e2ef1384852d1f66e0998cf77ee2",
-      "size_bytes": 4385
+      "sha256": "e5e8639b5a0201b3d9a9dbbcaced53fd94057cb1a15cc24813d0a915ad6c6fbc",
+      "size_bytes": 694
+    }
+  ],
+  "local_only_files": [
+    {
+      "path": "tests/e2e/test_pr_body_readiness_a716.py",
+      "sha256": "3729126766e16eba67281c02e64f378ab4ee8f3f8206bc254f64bf98c1cc543b",
+      "reason": "new_file_not_on_main_branch"
     },
     {
       "path": ".claude/agents/pipeline-manager-agent.md",
       "sha256": "73ad828a2dca9771b85c5d99be1632d754d7ff928a2f562f649a2551aa3df4b4",
-      "size_bytes": 5787
+      "reason": "new_file_not_on_main_branch"
     }
-  ],
-  "local_only_files": []
+  ]
 }
