@@ -1,0 +1,20 @@
+{
+  "verdict": "PASS",
+  "checks": {
+    "file_exists": true,
+    "has_audit_purpose_section": true,
+    "has_scope_section": true,
+    "has_sot_reference_section": true,
+    "has_classification_criteria_section": true,
+    "has_delete_candidate_high_section": true,
+    "has_delete_candidate_low_section": true,
+    "has_modify_candidate_section": true,
+    "has_preserve_section": true,
+    "has_needs_investigation_section": true,
+    "no_product_code_modified": true,
+    "no_agent_md_modified": true,
+    "no_workflow_modified": true,
+    "no_oracle_modified": true
+  },
+  "description": "정상 케이스: repo_wide_legacy_audit.md 파일이 존재하고 9개 필수 섹션을 모두 포함하며, 제품 코드/agent MD/워크플로우/오라클 파일은 수정되지 않음"
+}

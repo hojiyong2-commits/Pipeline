@@ -1,0 +1,21 @@
+{
+  "check": "repo_wide_legacy_audit.md 파일이 존재하고 필수 섹션을 포함하는지 확인",
+  "target_file": "repo_wide_legacy_audit.md",
+  "required_sections": [
+    "감사 목적",
+    "감사 범위",
+    "현재 SSoT 기준",
+    "분류 기준",
+    "DELETE_CANDIDATE_HIGH",
+    "DELETE_CANDIDATE_LOW",
+    "MODIFY_CANDIDATE",
+    "PRESERVE",
+    "NEEDS_INVESTIGATION"
+  ],
+  "forbidden_modifications": [
+    "pipeline.py",
+    ".claude/agents/*.md",
+    ".github/workflows/",
+    "tests/oracles/"
+  ]
+}
