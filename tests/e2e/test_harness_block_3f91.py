@@ -23,8 +23,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pytest
-
 PIPELINE_PY = Path(__file__).resolve().parent.parent.parent / "pipeline.py"
 
 
