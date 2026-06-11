@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260610-982B</pipeline_id>
+  <agent_run_id>qa-06ea1c6e47cc1291</agent_run_id>
+  <qa_agent>qa-agent</qa_agent>
+  <verified_at>2026-06-11T01:00:00Z</verified_at>
+
+  <scope_verification>
+    <declared_files>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>cleanup_report.md</file>
+      <file>pipeline.py</file>
+      <file>tests/test_acceptance_provenance_c4f8.py</file>
+      <file>tests/test_reuse_packet_sync_7fac.py</file>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+      <file>tests/oracles/IMP-20260610-8C3B/**</file>
+    </declared_files>
+    <actual_changed_files>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>.pipeline/phase_attestation_request.json</file>
+      <file>.pipeline/phase_evidence/IMP-20260610-982B/dev/agent_receipt_dev-ca9f7366fa5085cb.json</file>
+      <file>.pipeline/phase_evidence/IMP-20260610-982B/dev/report_dev_handover.xml</file>
+      <file>.pipeline/phase_evidence/IMP-20260610-982B/dev/scope_manifest_scope_manifest.json</file>
+      <file>cleanup_report.md</file>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+      <file>tests/oracles/IMP-20260610-8C3B/edge_ac_incomplete/expected.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/edge_ac_incomplete/input.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/edge_sha_mismatch/expected.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/edge_sha_mismatch/input.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/edge_wrong_code/expected.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/edge_wrong_code/input.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/normal_snapshot_fresh/expected.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/normal_snapshot_fresh/input.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/normal_snapshot_reuse/expected.json</file>
+      <file>tests/oracles/IMP-20260610-8C3B/normal_snapshot_reuse/input.json</file>
+      <file>tests/test_acceptance_provenance_c4f8.py (DELETED)</file>
+      <file>tests/test_reuse_packet_sync_7fac.py (DELETED)</file>
+    </actual_changed_files>
+    <scope_lock_verdict>PASS</scope_lock_verdict>
+    <note>pipeline evidence 파일(.pipeline/)은 phase attestation 인프라 파일로 scope 외 변경 허용. IMP-20260610-8C3B oracles/test는 해당 파이프라인의 기존 작업물.</note>
+  </scope_verification>
+
+  <criteria_verification>
+    <criterion id="AC-1" text="_sync_acceptance_request_with_packet 함수 완전 제거">
+      <verdict>PASS</verdict>
+      <evidence>def _sync_acceptance_request_with_packet 검색 결과 없음. line 15411 docstring 언급은 삭제 기록 주석이며 호출이 아님.</evidence>
+    </criterion>
+    <criterion id="AC-2" text="tests/test_acceptance_provenance_c4f8.py 삭제">
+      <verdict>PASS</verdict>
+      <evidence>git diff main...HEAD에서 deleted file mode 100644 확인</evidence>
+    </criterion>
+    <criterion id="AC-3" text="tests/test_reuse_packet_sync_7fac.py 삭제">
+      <verdict>PASS</verdict>
+      <evidence>git diff main...HEAD에서 deleted file mode 100644 확인</evidence>
+    </criterion>
+    <criterion id="AC-4" text="cleanup_report.md에 제거/수정/보존 항목 분리 기록">
+      <verdict>PASS</verdict>
+      <evidence>제거 3건(함수 1 + 테스트 2), 수정 1건(pm-agent.md), 보존 7건 명확히 구분</evidence>
+    </criterion>
+    <criterion id="AC-5" text="_build_ac_fulfillment_table 등 guard rail 함수 보존">
+      <verdict>PASS</verdict>
+      <evidence>_build_ac_fulfillment_table 1 def + 5 calls 존재 확인. cmd_harness 차단 블록, --user-confirmed no-op 경고 블록, acceptance run --record 차단 블록 모두 보존.</evidence>
+    </criterion>
+    <criterion id="AC-6" text=".claude/agents/pm-agent.md done --phase pm 명령 SSoT 일치">
+      <verdict>PASS</verdict>
+      <evidence>--planner-run-id, --manager-run-id, --manager-report 인자로 갱신됨. 구버전 --agent-run-id 방식 제거 확인.</evidence>
+    </criterion>
+    <criterion id="AC-7" text="ruff F 카테고리 PASS">
+      <verdict>PASS</verdict>
+      <evidence>python -m ruff check pipeline.py --select=F → All checks passed!</evidence>
+    </criterion>
+    <criterion id="AC-8" text="pytest 전체 PASS (pre-existing regression 제외)">
+      <verdict>PASS</verdict>
+      <evidence>4개 pre-existing failures (test_request_accept_sst_2044, test_acceptance_request_verification_json) 확인 — main 브랜치에서도 동일 실패. 이번 변경으로 도입된 새 실패 없음. tests/e2e/test_request_accept_snapshot_8c3b.py 7/7 PASS.</evidence>
+    </criterion>
+  </criteria_verification>
+
+  <test_results>
+    <suite name="tests/e2e/test_request_accept_snapshot_8c3b.py">
+      <passed>7</passed>
+      <failed>0</failed>
+    </suite>
+    <suite name="tests/ (non-e2e, excluding pre-existing failures)">
+      <passed>642</passed>
+      <failed>0</failed>
+      <pre_existing_failures>4</pre_existing_failures>
+    </suite>
+  </test_results>
+
+  <numeric_score>100</numeric_score>
+  <numeric_score_note>Dead code audit 파이프라인. 제거/수정/보존 기준 모두 충족. pre-existing regression 4개는 IMP-20260610-982B 범위 외.</numeric_score_note>
+
+  <micro_task_boundary>
+    <mt_id>MT-1</mt_id>
+    <declared_files>cleanup_report.md</declared_files>
+    <actual_files>cleanup_report.md</actual_files>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <micro_task_boundary>
+    <mt_id>MT-2</mt_id>
+    <declared_files>pipeline.py, tests/test_acceptance_provenance_c4f8.py, tests/test_reuse_packet_sync_7fac.py</declared_files>
+    <actual_files>pipeline.py, tests/test_acceptance_provenance_c4f8.py (deleted), tests/test_reuse_packet_sync_7fac.py (deleted), tests/e2e/test_request_accept_snapshot_8c3b.py, tests/oracles/IMP-20260610-8C3B/**</actual_files>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <note>E2E 테스트와 oracle 파일은 IMP-20260610-8C3B 이전 파이프라인 작업물로 scope 포함</note>
+  </micro_task_boundary>
+  <micro_task_boundary>
+    <mt_id>MT-3</mt_id>
+    <declared_files>.claude/agents/pm-agent.md</declared_files>
+    <actual_files>.claude/agents/pm-agent.md</actual_files>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <verdict>PASS</verdict>
+  <result>PASS</result>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager-agent</to>
+    <step_id>MT-1 through MT-3</step_id>
+    <evidence>
+      <file>qa_report.xml</file>
+      <file>pipeline.py</file>
+      <file>cleanup_report.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+    </evidence>
+    <status>READY_FOR_BUILD</status>
+  </handover>
+</qa_report>
