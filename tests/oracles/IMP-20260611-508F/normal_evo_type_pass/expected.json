@@ -1,0 +1,7 @@
+{
+  "case_id": "normal_evo_type_pass",
+  "expected_outcome": "PASS",
+  "exit_code": 0,
+  "recommended_pipeline_type": "IMP",
+  "required": false
+}

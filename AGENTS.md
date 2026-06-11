@@ -533,6 +533,11 @@ The architect report must include:
 </protocol_evolution_decision>
 ```
 
+> **[필수] Protocol Evolution recommended_pipeline_type 규칙:**
+> - `required=true/false`와 무관하게 `<recommended_pipeline_type>`은 항상 `IMP`
+> - `required=false`여도 `IMP` 유지 (다른 값은 pipeline.py에서 즉시 BLOCKED)
+> - 자동 보정 없음 — 잘못된 산출물은 차단됨
+
 Start a separate IMP when:
 - `AGENTS.md`, `pipeline.py`, agent MD, or `/task` skill rules disagree.
 - A hard gate can be bypassed or records the wrong state.

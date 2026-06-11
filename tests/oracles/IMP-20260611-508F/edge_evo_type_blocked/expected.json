@@ -1,0 +1,12 @@
+{
+  "case_id": "edge_evo_type_blocked",
+  "expected_outcome": "BLOCKED",
+  "exit_code": 1,
+  "stdout_contains_substrings": [
+    "[PIPELINE ERROR]",
+    "actual  : T",
+    "expected: IMP",
+    "IMP</recommended_pipeline_type>"
+  ],
+  "no_raw_traceback": true
+}
