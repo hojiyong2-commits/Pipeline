@@ -15123,6 +15123,23 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                         ver_text = (text_elem.text or "").strip() if text_elem is not None else ""
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
+
+            # Format 4: <ac_verification><criterion id="AC-X" status="PASS"><check>...</check></criterion>
+            # module_qa report에서 생성된 <criterion> 태그 직접 파싱
+            if ac_ver is not None:
+                for crit in ac_ver.findall("criterion"):
+                    if crit.get("id") == ac_id:
+                        status = crit.get("status", "?")
+                        check_elem = crit.find("check")
+                        evidence_elem = crit.find("evidence")
+                        ver_text = ""
+                        if check_elem is not None and check_elem.text:
+                            ver_text = check_elem.text.strip()[:150]
+                        elif evidence_elem is not None and evidence_elem.text:
+                            ver_text = evidence_elem.text.strip()[:150]
+                        if ver_text:
+                            verifications.append(f"{mt_id}: {status} — {ver_text}")
+
         except (ET.ParseError, OSError):
             continue
     return verifications
@@ -18396,8 +18413,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # harness
     p_harness = sub.add_parser("harness", help="Legacy harness diagnostic 기록. 현재 /Task 완료 경로에서는 차단됨")
-    p_harness.add_argument("--score", required=True, type=int, help="Legacy diagnostic percentage only; not a completion score")
-    p_harness.add_argument("--verdict", required=True, choices=["PASS", "FAIL", "pass", "fail"])
+    p_harness.add_argument("--score", required=False, default=None, type=int, help="Legacy diagnostic percentage only; not a completion score (ignored — command always blocked)")
+    p_harness.add_argument("--verdict", required=False, default=None, choices=["PASS", "FAIL", "pass", "fail"])
     p_harness.add_argument("--branch", metavar="BRANCH", default=None,
                            help="브랜치 ID (A-Z 대문자 1글자). 지정 시 브랜치 state 파일 사용.")
     p_harness.add_argument("--test-output-file", default=None,
