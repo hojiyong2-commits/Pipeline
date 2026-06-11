@@ -3,7 +3,8 @@
 **파이프라인:** IMP-20260610-982B  
 **작성일:** 2026-06-11  
 **작성자:** dev-agent (MT-1)  
-**목적:** pipeline.py 및 agent MD의 구버전 잔재/dead code를 audit-first 방식으로 정리
+**목적:** pipeline.py 및 agent MD의 구버전 잔재/dead code를 audit-first 방식으로 정리  
+**External Gates 검증일:** 2026-06-11 (Technical PASS, Oracle PASS)
 
 ---
 
