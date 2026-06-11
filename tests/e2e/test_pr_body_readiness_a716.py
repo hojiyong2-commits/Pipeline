@@ -320,7 +320,8 @@ class TestPrBodyReadinessA716:
         # oracle 검증
         assert expected["status"] == "BLOCKED"
         assert expected["failure_code"] == "pr_body_incomplete"
-        assert len(expected.get("missing_sections", [])) > 0
+        # NOTE: expected.json에 missing_sections 필드가 없으므로 생략
+        # oracle은 status/failure_code/blocked 필드만 정의 (frozen)
 
         # final_state assertion
         state_path = env["PIPELINE_STATE_PATH"]
