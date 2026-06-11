@@ -14876,14 +14876,19 @@ def _get_latest_ci_run_id() -> Optional[str]:
 def _get_pr_body_text() -> Optional[str]:
     """현재 PR 본문 텍스트를 gh CLI로 조회.
 
+    IMP-20260611-A716 MT-5: PIPELINE_GH_EXECUTABLE 환경변수로 gh 경로를 오버라이드 지원.
+    환경변수 값이 .py 파일이면 [sys.executable, path, ...] 형태로 실행 (테스트 mock 지원).
+    그 외는 [path, ...] 직접 실행.
+
     Returns:
         PR 본문 문자열 또는 None (gh CLI 미설치/PR 없음).
     Raises:
         없음.
     """
+    gh_args_prefix = _build_gh_cmd_prefix()
     try:
         r = subprocess.run(
-            ["gh", "pr", "view", "--json", "body", "--jq", ".body"],
+            gh_args_prefix + ["pr", "view", "--json", "body", "--jq", ".body"],
             capture_output=True, text=True, timeout=10,
             encoding="utf-8", errors="replace",
         )
@@ -14893,6 +14898,25 @@ def _get_pr_body_text() -> Optional[str]:
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
     return None
+
+
+def _build_gh_cmd_prefix() -> List[str]:
+    """gh CLI 호출 명령어 prefix 반환.
+
+    IMP-20260611-A716 MT-5: PIPELINE_GH_EXECUTABLE 환경변수 지원.
+    - 값이 .py 파일: [sys.executable, path] 반환 (Python 스크립트 직접 실행)
+    - 그 외 파일 경로: [path] 반환
+    - 미설정: ["gh"] 반환 (기존 동작)
+
+    Returns:
+        subprocess 명령 prefix 리스트.
+    """
+    gh_override = os.environ.get("PIPELINE_GH_EXECUTABLE")
+    if gh_override:
+        if gh_override.lower().endswith(".py"):
+            return [sys.executable, gh_override]
+        return [gh_override]
+    return ["gh"]
 
 
 def _get_pr_changed_files() -> List[str]:
@@ -15757,18 +15781,24 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         _die(ac_blocker)
 
     # IMP-20260611-A716 MT-2: _validate_pr_body_readiness SSoT — 섹션 + 임시 문구 통합 검사
+    # Bug 1 수정(IMP-20260611-A716): PR body fetch 실패(None) 시 validator skip 금지 — BLOCKED 반환
     pr_body = _get_pr_body_text()
-    if pr_body:
-        body_check = _validate_pr_body_readiness(pr_body)
-        if not body_check.get("allow_accept", True):
-            failure_code = body_check.get("failure_code", "pr_body_invalid")
-            blocked_reason = body_check.get("blocked_reason", "PR 본문을 완성한 뒤 다시 실행하세요.")
-            missing = body_check.get("missing_sections") or []
-            msg = f"[BLOCKED] failure_code={failure_code}\n  {blocked_reason}"
-            if missing:
-                msg += "\n  누락 섹션: " + ", ".join(missing)
-            msg += "\n  PR 본문을 최신 상태로 갱신한 후 gates request-accept를 다시 실행하세요."
-            _die(msg)
+    if pr_body is None:
+        _die(
+            "[BLOCKED] failure_code=pr_body_not_found\n"
+            "  PR 본문을 가져올 수 없습니다. gh CLI가 설치되어 있고 열린 PR이 있는지 확인하세요.\n"
+            "  PR 본문을 완성한 후 gates request-accept를 다시 실행하세요."
+        )
+    body_check = _validate_pr_body_readiness(pr_body)  # type: ignore[arg-type]
+    if not body_check.get("allow_accept", True):
+        failure_code = body_check.get("failure_code", "pr_body_invalid")
+        blocked_reason = body_check.get("blocked_reason", "PR 본문을 완성한 뒤 다시 실행하세요.")
+        missing = body_check.get("missing_sections") or []
+        msg = f"[BLOCKED] failure_code={failure_code}\n  {blocked_reason}"
+        if missing:
+            msg += "\n  누락 섹션: " + ", ".join(missing)
+        msg += "\n  PR 본문을 최신 상태로 갱신한 후 gates request-accept를 다시 실행하세요."
+        _die(msg)
 
     # PR/CI 정보 가져오기 (gh CLI 없으면 빈 문자열)
     pr_url = _get_current_pr_url() or ""
@@ -15842,19 +15872,25 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         except Exception:
             pass
         # IMP-20260611-A716 MT-4: PR body snapshot 계산
+        # Bug 2 수정(IMP-20260611-A716): pr_body 없어도 필드는 항상 기록 (None → FAIL, null)
+        import hashlib as _hashlib
         pr_body_sha256_for_req: Optional[str] = None
         pr_body_readiness_for_req: Optional[str] = None
         required_sections_present_for_req: Optional[bool] = None
         temporary_phrases_absent_for_req: Optional[bool] = None
-        validated_at_for_req: Optional[str] = None
+        validated_at_for_req: Optional[str] = _now()
         if pr_body:
-            import hashlib as _hashlib
             pr_body_sha256_for_req = _hashlib.sha256(pr_body.encode("utf-8")).hexdigest()
             body_check_result = _validate_pr_body_readiness(pr_body)
             pr_body_readiness_for_req = body_check_result.get("status", "PASS")
             required_sections_present_for_req = len(body_check_result.get("missing_sections") or []) == 0
             temporary_phrases_absent_for_req = body_check_result.get("failure_code", "") != "pr_body_temporary"
-            validated_at_for_req = _now()
+        else:
+            # pr_body 없음 → FAIL 상태로 명시 기록 (Bug 2 수정)
+            pr_body_sha256_for_req = None
+            pr_body_readiness_for_req = "FAIL"
+            required_sections_present_for_req = False
+            temporary_phrases_absent_for_req = False
         req = _write_acceptance_request(
             pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id,
             verification_json_path=vj_path_for_req,
