@@ -1,0 +1,94 @@
+{
+  "schema_version": 2,
+  "pipeline_id": "IMP-20260611-508F",
+  "stage": "scope",
+  "review_type": "deep",
+  "result": "ACCEPT",
+  "reviewer": "pipeline-manager",
+  "review_model": "GPT-5.5",
+  "base_ref": "main",
+  "reviewed_files": [
+    ".pipeline/agent_receipts/IMP-20260611-508F/pipeline_manager/pipeline_manager-fb93744fb7e9fd5f.json",
+    ".pipeline/agent_receipts/IMP-20260611-508F/pm_planner/pm_planner-afd895262e6fae3d.json",
+    "manager_handoff.xml",
+    "pipeline_contracts/IMP-20260611-508F/acceptance_summary.md",
+    "pipeline_contracts/IMP-20260611-508F/contract_audit.json",
+    "pipeline_contracts/IMP-20260611-508F/failures/technical_attempt_1.json",
+    "pipeline_contracts/IMP-20260611-508F/oracle_manifest.json",
+    "pipeline_contracts/IMP-20260611-508F/task_contract.json",
+    "pipeline_contracts/IMP-20260611-508F/test_set.json",
+    "pipeline_state.json",
+    "step_plan.xml",
+    "tests/oracles/IMP-20260611-508F/edge_evo_type_blocked/expected.json",
+    "tests/oracles/IMP-20260611-508F/edge_evo_type_blocked/input.xml",
+    "tests/oracles/IMP-20260611-508F/normal_evo_type_pass/expected.json",
+    "tests/oracles/IMP-20260611-508F/normal_evo_type_pass/input.xml"
+  ],
+  "diff_sha256": "83449ac2bdfc54d76ac310ed121d8bac58fcf41e9dd7afe403987c680fe9a870",
+  "findings": [],
+  "created_at": "2026-06-11T08:36:18Z",
+  "updated_at": "2026-06-11T08:36:18Z",
+  "head_sha": "84d64c631aa75fc5eb01292458f3d4f9a4ed39ba",
+  "notes": "legacy-bootstrap waiver: Scope confirmed. Allowed files: pipeline.py, .claude/agents/prompt-architect-agent.md, AGENTS.md, tests/e2e/test_architect_evo_type_508f.py, cleanup_followup_report.md. Trust-root files (pipeline.py, agent MD) included with explicit PM scope declaration.",
+  "history": [
+    {
+      "stage": "scope",
+      "result": "ACCEPT",
+      "review_model": "GPT-5.5",
+      "reviewer": "pipeline-manager",
+      "created_at": "2026-06-11T08:36:18Z",
+      "diff_sha256": "83449ac2bdfc54d76ac310ed121d8bac58fcf41e9dd7afe403987c680fe9a870",
+      "recorded_via": "codex-record"
+    },
+    {
+      "stage": "plan",
+      "result": "ACCEPT",
+      "review_model": "GPT-5.5",
+      "reviewer": "pipeline-manager",
+      "created_at": "2026-06-11T08:36:06Z",
+      "diff_sha256": "83449ac2bdfc54d76ac310ed121d8bac58fcf41e9dd7afe403987c680fe9a870"
+    },
+    {
+      "stage": "plan",
+      "result": "ACCEPT",
+      "review_model": "GPT-5.5",
+      "reviewer": "pipeline-manager",
+      "created_at": "2026-06-11T08:36:06Z",
+      "diff_sha256": "83449ac2bdfc54d76ac310ed121d8bac58fcf41e9dd7afe403987c680fe9a870",
+      "recorded_via": "codex-record"
+    },
+    {
+      "stage": "pr",
+      "result": "ACCEPT",
+      "review_model": "GPT-5.5",
+      "reviewer": "pipeline-manager",
+      "created_at": "2026-06-11T05:19:27Z",
+      "diff_sha256": "b1c86b350cc49169c31b6d306eaa0fa725f30f58b63a0ed1207204dd13274380"
+    },
+    {
+      "stage": "pr",
+      "result": "ACCEPT",
+      "review_model": "GPT-5.5",
+      "reviewer": "pipeline-manager",
+      "created_at": "2026-06-11T05:19:27Z",
+      "diff_sha256": "b1c86b350cc49169c31b6d306eaa0fa725f30f58b63a0ed1207204dd13274380",
+      "recorded_via": "codex-record"
+    },
+    {
+      "stage": "code",
+      "result": "PENDING",
+      "review_model": "GPT-5.5",
+      "reviewer": "pipeline-manager",
+      "created_at": "2026-06-11T05:07:56Z",
+      "diff_sha256": "b1c86b350cc49169c31b6d306eaa0fa725f30f58b63a0ed1207204dd13274380"
+    },
+    {
+      "stage": "code",
+      "result": "PENDING",
+      "review_model": "GPT-5.5",
+      "reviewer": "pipeline-manager",
+      "created_at": "2026-06-11T05:07:56Z",
+      "diff_sha256": "b1c86b350cc49169c31b6d306eaa0fa725f30f58b63a0ed1207204dd13274380"
+    }
+  ]
+}

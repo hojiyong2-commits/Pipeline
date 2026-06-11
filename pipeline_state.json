@@ -4,7 +4,7 @@
   "type": "IMP",
   "description": "Protocol Evolution recommended_pipeline_type 오류 메시지 개선 + prompt-architect 지침 보강 + 3F91 DEFERRED audit",
   "created_at": "2026-06-11T08:14:57Z",
-  "updated_at": "2026-06-11T08:34:55Z",
+  "updated_at": "2026-06-11T08:37:00Z",
   "pipeline_started_at": "2026-06-11T08:14:57Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
@@ -133,6 +133,10 @@
     {
       "ts": "2026-06-11T08:34:31Z",
       "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-06-11T08:37:00Z",
+      "msg": "phase attestation request prepared: pm"
     }
   ],
   "terminal_state": null,
@@ -154,7 +158,7 @@
       "receipt_path": ".pipeline\\agent_receipts\\IMP-20260611-508F\\pm_planner\\pm_planner-afd895262e6fae3d.json",
       "receipt_sha256": "8c5f7d4f0c83d5753dbfb86dacf57188759c511978c8ea8ba15b1094831da7cc",
       "used_by_phase": "pm",
-      "used_at": "2026-06-11T08:34:31Z",
+      "used_at": "2026-06-11T08:36:59Z",
       "commit_sha": "ce5dde837e5ae1fc3a803fb7f5f87c08d4cce619",
       "notes": ""
     },
@@ -174,7 +178,7 @@
       "receipt_path": ".pipeline\\agent_receipts\\IMP-20260611-508F\\pipeline_manager\\pipeline_manager-fb93744fb7e9fd5f.json",
       "receipt_sha256": "e53cc46247a6b4d7ebac7b8b4d60ac3fc2f1ec6dfd890bf8a3225b66491514a4",
       "used_by_phase": "pm_manager",
-      "used_at": "2026-06-11T08:34:31Z",
+      "used_at": "2026-06-11T08:36:59Z",
       "commit_sha": "ce5dde837e5ae1fc3a803fb7f5f87c08d4cce619",
       "notes": ""
     }
@@ -499,6 +503,38 @@
       "return_phase": "pm",
       "attempt_count": 1,
       "escalation_reason": null
+    },
+    {
+      "gate": "technical",
+      "attempt": 2,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260611-508F\\failures\\technical_attempt_2.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260611-508F\\failures\\technical_attempt_2.json",
+      "recorded_at": "2026-06-11T08:36:23Z",
+      "repair_owner": "Dev repair",
+      "schema_version": 2,
+      "status": "BLOCKED",
+      "failure_code": "pm_clarification_gate_blocked",
+      "failure_category": "missing_evidence",
+      "owner": "PM",
+      "return_phase": "pm",
+      "attempt_count": 1,
+      "escalation_reason": null
+    },
+    {
+      "gate": "check_dev",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260611-508F\\failures\\check_dev_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260611-508F\\failures\\check_dev_attempt_1.json",
+      "recorded_at": "2026-06-11T08:36:55Z",
+      "repair_owner": "Pipeline Manager repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "gate_blocked_dev",
+      "failure_category": "missing_evidence",
+      "owner": "Pipeline Manager",
+      "return_phase": "pm",
+      "attempt_count": 1,
+      "escalation_reason": null
     }
   ],
   "protocol_evolution_decision": null,
@@ -548,7 +584,13 @@
     "clarification_needed": false,
     "assumptions": "없음",
     "acceptance_criteria_source": "user",
-    "acceptance_criteria": [],
+    "acceptance_criteria": [
+      "AC-1: _parse_protocol_evolution_decision() 함수에서 recommended_pipeline_type!=IMP 시 [PIPELINE ERROR] 형식 오류 출력",
+      "AC-2: exit code 1, raw traceback 없음",
+      "AC-3: prompt-architect-agent.md에 IMP 강제 원칙 섹션 포함",
+      "AC-4: AGENTS.md Protocol Evolution 섹션에 recommended_pipeline_type=IMP 강제 명시",
+      "AC-5: 회귀 테스트 tests/e2e/test_architect_evo_type_508f.py PASS"
+    ],
     "recorded_at": "2026-06-11T08:34:16Z"
   },
   "atomic_plan": {
@@ -15403,5 +15445,11 @@
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
+  },
+  "codex_review_gates": {
+    "codex_plan_accepted_at": "2026-06-11T08:36:06Z",
+    "codex_plan_result": "ACCEPT",
+    "codex_scope_accepted_at": "2026-06-11T08:36:18Z",
+    "codex_scope_result": "ACCEPT"
   }
 }
