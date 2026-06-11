@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scope_declaration>
+  <files_to_modify>pipeline.py (_validate_pr_body_readiness 신규, _cmd_gates_request_accept 수정, _check_acceptance_readiness 리팩터링, _write_acceptance_request 수정, _cmd_gates_accept pr_body_stale 추가)</files_to_modify>
+  <files_to_create>tests/e2e/test_pr_body_readiness_a716.py, .claude/agents/pipeline-manager-agent.md</files_to_create>
+  <files_to_delete>없음</files_to_delete>
+  <out_of_scope>CLAUDE.md 수정, 기존 agent MD 수정, oracle 파일 수정</out_of_scope>
+</scope_declaration>
+
+<impact_analysis>
+  <micro_task_id>MT-1</micro_task_id>
+  <target_function>pipeline._validate_pr_body_readiness (신규)</target_function>
+  <upstream_callers>
+    <caller location="none">신규 함수 — MT-2, MT-3에서 호출</caller>
+  </upstream_callers>
+  <downstream_dependencies>
+    <dep>pipeline.TEMPORARY_PR_BODY_PATTERNS</dep>
+    <dep>pipeline.PR_REQUIRED_SECTIONS</dep>
+  </downstream_dependencies>
+  <state_mutations>
+    <mutation>없음 — 순수 검증 함수</mutation>
+  </state_mutations>
+  <risk_assessment>
+    <signature_change>NEW</signature_change>
+    <breaking_change>NO</breaking_change>
+    <test_coverage>NEW — MT-6 E2E 테스트에서 검증</test_coverage>
+    <rollback_strategy>git checkout pipeline.py</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<impact_analysis>
+  <micro_task_id>MT-2</micro_task_id>
+  <target_function>pipeline._cmd_gates_request_accept</target_function>
+  <upstream_callers>
+    <caller location="pipeline.py">_cmd_dispatch — gates request-accept</caller>
+  </upstream_callers>
+  <downstream_dependencies>
+    <dep>pipeline._validate_pr_body_readiness (MT-1)</dep>
+  </downstream_dependencies>
+  <state_mutations>
+    <mutation>BLOCKED 시 failure_packet.json 생성</mutation>
+  </state_mutations>
+  <risk_assessment>
+    <signature_change>NO — 기존 시그니처 유지</signature_change>
+    <breaking_change>NO — 검증 추가만</breaking_change>
+    <test_coverage>MT-6 TC-1에서 검증</test_coverage>
+    <rollback_strategy>git checkout pipeline.py</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<impact_analysis>
+  <micro_task_id>MT-3</micro_task_id>
+  <target_function>pipeline._check_acceptance_readiness</target_function>
+  <upstream_callers>
+    <caller location="pipeline.py">_cmd_gates_accept — ACCEPT 경로</caller>
+  </upstream_callers>
+  <downstream_dependencies>
+    <dep>pipeline._validate_pr_body_readiness (MT-1)</dep>
+  </downstream_dependencies>
+  <state_mutations>
+    <mutation>없음 — 검증 함수</mutation>
+  </state_mutations>
+  <risk_assessment>
+    <signature_change>NO</signature_change>
+    <breaking_change>NO</breaking_change>
+    <test_coverage>MT-6 TC-2에서 검증</test_coverage>
+    <rollback_strategy>git checkout pipeline.py</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<impact_analysis>
+  <micro_task_id>MT-4</micro_task_id>
+  <target_function>pipeline._write_acceptance_request</target_function>
+  <upstream_callers>
+    <caller location="pipeline.py">_cmd_gates_request_accept</caller>
+  </upstream_callers>
+  <downstream_dependencies>
+    <dep>acceptance_request.json (pr_body_sha256 등 5개 신규 필드)</dep>
+  </downstream_dependencies>
+  <state_mutations>
+    <mutation>acceptance_request.json에 pr_body_sha256, pr_body_readiness, required_sections_present, temporary_phrases_absent, validated_at 저장</mutation>
+  </state_mutations>
+  <risk_assessment>
+    <signature_change>NO — 기존 필드 보존, 신규 필드 추가</signature_change>
+    <breaking_change>NO</breaking_change>
+    <test_coverage>MT-6 TC-4에서 간접 검증</test_coverage>
+    <rollback_strategy>git checkout pipeline.py</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<impact_analysis>
+  <micro_task_id>MT-5</micro_task_id>
+  <target_function>pipeline._cmd_gates_accept — pr_body_stale 검사</target_function>
+  <upstream_callers>
+    <caller location="pipeline.py">_cmd_dispatch — gates accept ACCEPT 경로</caller>
+  </upstream_callers>
+  <downstream_dependencies>
+    <dep>acceptance_request.json pr_body_sha256 (MT-4)</dep>
+    <dep>pipeline._get_pr_body_text</dep>
+  </downstream_dependencies>
+  <state_mutations>
+    <mutation>BLOCKED 시 failure_packet.json 생성 (pr_body_stale)</mutation>
+  </state_mutations>
+  <risk_assessment>
+    <signature_change>NO</signature_change>
+    <breaking_change>NO — gh CLI 없으면 스킵</breaking_change>
+    <test_coverage>MT-6 TC-4, TC-5에서 검증</test_coverage>
+    <rollback_strategy>git checkout pipeline.py</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<handover>
+  <from>dev-agent</from>
+  <pipeline_id>IMP-20260611-A716</pipeline_id>
+  <phase>dev</phase>
+  <summary>
+    gates request-accept / accept PR body readiness SSoT 통합 구현.
+    7개 micro-task(MT-1~MT-7) 모두 module design/dev/qa PASS + integration PASS.
+    _validate_pr_body_readiness 신규 함수가 두 경로를 통합, pr_body_stale 신규 failure_code 추가.
+  </summary>
+  <files>
+    <file role="modified">pipeline.py — MT-1~5 (5개 함수 변경)</file>
+    <file role="created">tests/e2e/test_pr_body_readiness_a716.py — 5개 E2E 테스트 (MT-6)</file>
+    <file role="created">.claude/agents/pipeline-manager-agent.md — 게이트 절차 문서 (MT-7)</file>
+  </files>
+  <dependencies>없음 — 신규 외부 라이브러리 추가 없음</dependencies>
+  <entry_point>pipeline.py CLI — gates request-accept / gates accept</entry_point>
+  <env_vars>테스트: PIPELINE_STATE_PATH (격리용)</env_vars>
+  <known_constraints>
+    gh CLI 없는 환경에서는 PR 본문 조회 불가 — pr_body_stale 검사 스킵. CLAUDE.md와 기존 agent MD 파일은 수정하지 않음.
+  </known_constraints>
+  <evidence>
+    <execution>python -m py_compile pipeline.py → OK</execution>
+    <execution>python -m pytest tests/e2e/test_pr_body_readiness_a716.py -v → 5 passed</execution>
+  </evidence>
+  <module_gate_summary>
+    MT-1 PASS, MT-2 PASS, MT-3 PASS, MT-4 PASS, MT-5 PASS, MT-6 PASS, MT-7 PASS, integration PASS
+  </module_gate_summary>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_pr_body_readiness_a716.py, .claude/agents/pipeline-manager-agent.md</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_pr_body_readiness_a716.py, .claude/agents/pipeline-manager-agent.md</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false (모두 본 HIGH_RISK IMP의 공식 target_files)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
