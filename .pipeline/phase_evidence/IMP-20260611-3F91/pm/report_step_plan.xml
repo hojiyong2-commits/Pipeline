@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<decomposition_audit>
+  <total_functions_identified>4</total_functions_identified>
+  <micro_task_count>4</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <split_decision>pipeline.py harness CLI(MT-1), E2E 테스트(MT-2), AGENTS.md 경로(MT-3), 보고서(MT-4) 4개 독립 단위로 분할. 각 변경 대상 파일이 다르므로 단일 MT로 합칠 이유 없음.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260611-3F91</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>IMP, FS</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py 수정이 포함되어 있으며, 파이프라인 엔진 자체의 Trust-Root 파일 변경 작업입니다. harness CLI 경로 제거 오류는 레거시 동작 차단이지만 pipeline.py 수정이므로 HIGH_RISK 프로파일을 적용합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>4</expected_changed_files>
+      <expected_changed_functions>3</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 원문에 4개 MT와 모든 변경 범위를 명확히 지정하였으므로, 내부 변수명, 메시지 문구 세부 조정 같은 P2 질문은 묻지 않고 기존 패턴(THREE GATE BLOCKED 메시지 형식)으로 PM이 결정했습니다.</filter_summary>
+    <no_askuser>true</no_askuser>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>harness 레거시 CLI를 정리할 때, --score와 --verdict 인자를 optional로 유지할까요(권장), 아니면 서브파서 자체를 제거할까요?</user_facing_question>
+        <evidence>현재 python pipeline.py harness 단독 실행 시 argparse가 --score, --verdict required 오류를 냅니다(exit 2). cmd_harness 함수는 이 인자들을 실제로 사용하지 않고 항상 THREE GATE BLOCKED를 출력합니다.</evidence>
+        <why_it_matters>AC-1(인자 없이)과 AC-2(--score 100 포함) 모두 [THREE GATE BLOCKED] + non-zero exit를 요구합니다. --score가 required이면 harness 단독 호출은 argparse 오류(exit 2)가 납니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>--score, --verdict를 optional(required=False)로 변경, cmd_harness는 항상 THREE GATE BLOCKED 출력</label>
+            <benefit>AC-1, AC-2 모두 충족. 코드 변경 최소화. 기존 test_legacy_cleanup_b0ab.py 테스트 호환 유지.</benefit>
+            <cost>기존 스크립트가 인자 없이 호출 시 오류 대신 BLOCKED 메시지를 보게 됨(오히려 의도된 동작).</cost>
+          </option>
+          <option id="B">
+            <label>harness 서브파서 자체를 제거하고 COMMAND_MAP에서 삭제</label>
+            <benefit>완전한 제거 — 파서에 harness가 더 이상 존재하지 않음.</benefit>
+            <cost>기존 tests/test_legacy_cleanup_b0ab.py::test_harness_score_blocked()가 subprocess로 harness --score 호출을 기대하므로 별도 수정 필요. 더 큰 변경 범위.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 원문에서 "Three-Gate 차단 방어 로직은 보존"을 명시했으므로, 추천안 A(optional로 변경)로 진행합니다.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline.py (harness CLI 정의 lines 18397-18411, cmd_harness 함수 line 7216), AGENTS.md (경로 오기 20건), tests/e2e/ (디렉토리)
+    - Output: pipeline.py (harness argparse required=False 수정), AGENTS.md (.Codex 경로 수정), tests/e2e/test_harness_block_3f91.py (신규), legacy_cleanup_execution_report.md (신규)
+    - Validation: python pipeline.py harness exit 1 + THREE GATE BLOCKED, python pipeline.py harness --score 100 --verdict PASS exit 1 + THREE GATE BLOCKED, grep ".Codex/agents" AGENTS.md → 0 matches
+  </interface_spec>
+
+  <requirements>
+    - MT-1: pipeline.py harness 서브파서 --score, --verdict를 required=False로 변경. cmd_harness 함수는 인자와 무관하게 항상 [THREE GATE BLOCKED] 메시지 + sys.exit(1) 반환. _parse_harness_report_et는 call graph 분석 결과 _extract_test_code → validate_test_evidence 체인에 속하며, validate_test_evidence는 외부 호출 없음(DEFERRED). numeric score / classic harness COMPLETE 경로는 cmd_harness의 _die() 차단으로 이미 제거됨.
+    - MT-2: tests/e2e/test_harness_block_3f91.py 신규 생성. subprocess 기반 CLI 테스트 2개: (1) harness 단독 실행 시 [THREE GATE BLOCKED] + exit!=0 + "error: the following arguments are required" 없음, (2) harness --score 100 --verdict PASS 시 동일. PIPELINE_STATE_PATH 격리 변수 사용, final_state assertion 포함. IMP-20260525-6FAC Real CLI Path E2E Gate Policy 준수.
+    - MT-3: AGENTS.md 에이전트 테이블(lines 62-74) 및 본문 내 .Codex/agents 경로 20건 전체를 .claude/agents로 수정. pm-planner-agent.md, pipeline-manager-agent.md는 실제 파일이 없으므로 경로 표기만 수정하고 파일 생성 금지(DEFERRED).
+    - MT-4: legacy_cleanup_execution_report.md 신규 생성. REMOVED/MODIFIED/PRESERVED/DEFERRED 4개 섹션으로 분류하여 1차 정리 결과 기록.
+    - 공통: 기존 tests/test_legacy_cleanup_b0ab.py::test_harness_score_blocked() 테스트가 계속 PASS되어야 함.
+    - 변경 파일: pipeline.py, tests/e2e/test_harness_block_3f91.py, AGENTS.md, legacy_cleanup_execution_report.md 4개 파일만.
+    - Documentation-Code Drift 방지(IMP-20260507-0EDC): pipeline.py harness 인자 변경 시 --score/--verdict help 문자열도 동시 업데이트.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.build_parser, pipeline.cmd_harness</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>COMMAND_MAP["harness"] = cmd_harness (line 21813)</site>
+        <site>build_parser 내 p_harness 정의 (lines 18397-18411)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>p_harness.add_argument.*--score.*required=True</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>harness argparse에서 --score, --verdict를 required=False로 변경 → harness 단독 실행도 THREE GATE BLOCKED + exit 1 반환. _parse_harness_report_et DEFERRED 기록.</change_summary>
+      <line_estimate>10</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>new file</affected_function>
+      <target_files>
+        <file>tests/e2e/test_harness_block_3f91.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_harness_block_3f91</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>subprocess 기반 harness 차단 동작 E2E 테스트 2개 신규 작성. PIPELINE_STATE_PATH 격리 + final_state assertion 포함.</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>AGENTS.md 에이전트 테이블 및 경로 참조</affected_function>
+      <target_files>
+        <file>AGENTS.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>\.Codex/agents</pattern>
+        <match_count>20</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>AGENTS.md .Codex/agents 경로 오기 20건 전체를 .claude/agents로 수정. 파일 생성 없음.</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-5, AC-6, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>new file</affected_function>
+      <target_files>
+        <file>legacy_cleanup_execution_report.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>legacy_cleanup_execution_report</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>레거시 정리 결과 보고서 신규 생성. REMOVED/MODIFIED/PRESERVED/DEFERRED 4섹션.</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-7, AC-8, AC-9</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py harness 실행 시 [THREE GATE BLOCKED] 메시지 포함 + non-zero exit (argparse 오류 "error: the following arguments are required" 없음)</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py harness --score 100 --verdict PASS 실행 시 argparse 오류가 아닌 [THREE GATE BLOCKED] 메시지 + non-zero exit</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>classic harness / numeric score 기반 COMPLETE 경로 제거 — cmd_harness 함수가 항상 [THREE GATE BLOCKED] + exit(1) 반환</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="false">
+      <text>_parse_harness_report_et call graph 분석 근거 확인: _extract_test_code가 호출, validate_test_evidence 체인 일부. 불확실하므로 DEFERRED 기록됨</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>AGENTS.md 에이전트 테이블에서 .Codex/agents → .claude/agents로 수정됨. grep ".Codex/agents" AGENTS.md → 0 matches</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>pm-planner-agent.md, pipeline-manager-agent.md 신규 파일 생성 없음. 파일 부재는 DEFERRED 기록됨</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>legacy_cleanup_execution_report.md 파일 존재 + REMOVED/MODIFIED/PRESERVED/DEFERRED 4개 섹션 포함</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>변경 파일이 pipeline.py, tests/e2e/test_harness_block_3f91.py, AGENTS.md, legacy_cleanup_execution_report.md 4개 범위 내에 있음</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="false">
+      <text>Technical/Oracle/GitHub CI gate PASS + request-accept 승인 코드 발급 후 사용자 ACCEPT</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 기존 pipeline.py 호환 버전 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>Python 3.10, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <forbidden>
+    - pm-planner-agent.md, pipeline-manager-agent.md 신규 파일 생성 금지
+    - tests/oracles/** orphaned 파일 정리 금지
+    - request-accept/Verification JSON/Nonce Gate/AC Tracking 로직 수정 금지
+    - ci.yml 수정 금지
+    - agent MD 대규모 재작성 금지
+    - 불확실한 dead code (_parse_harness_report_et 등) 삭제 금지 — DEFERRED로 기록
+    - pipeline.py 외 Trust-Root 파일 무단 수정 금지 (AGENTS.md는 MT-3 범위 내에서만 허용)
+    - MT 범위 외 파일 수정 금지 (IMP-20260516-77AA Scope Lock)
+    - scope_manifest에 없는 파일 변경 시 module dev 기록 차단
+  </forbidden>
+
+  <handover_spec>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260611-3F91</pipeline_id>
+    <evidence_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_harness_block_3f91.py</file>
+      <file>AGENTS.md</file>
+      <file>legacy_cleanup_execution_report.md</file>
+      <file>scope_manifest.json</file>
+    </evidence_files>
+    <status>READY_FOR_QA</status>
+  </handover_spec>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\AGENTS.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_real_cli_paths.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_legacy_cleanup_b0ab.py</file>
+    </target_files>
+    <phase_rules_excerpt>HIGH_RISK 실행 프로파일: pipeline.py(Trust-Root) 수정. Scope Lock 강제: git diff --name-only가 scope_manifest와 일치해야 함. IMP-20260525-6FAC Real CLI Path E2E: PIPELINE_STATE_PATH 격리 + final_state assertion 필수. IMP-20260516-77AA Scope Lock: MT 범위 외 파일 변경 시 module dev 기록 차단. AGENTS.md는 Trust-Root이므로 MT-3에서만 수정.</phase_rules_excerpt>
+    <prev_phase_summary>신규 파이프라인 — 이전 Phase 없음. Contract frozen: 965fe98f. test_set frozen: 3c475164.</prev_phase_summary>
+  </context_injection>
+</step_plan>
