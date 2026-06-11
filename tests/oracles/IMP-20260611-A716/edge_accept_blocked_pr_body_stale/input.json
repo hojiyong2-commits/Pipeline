@@ -1,0 +1,8 @@
+{
+  "scenario": "gates accept with stale PR body (changed after request-accept)",
+  "command": "gates accept",
+  "result": "ACCEPT",
+  "pr_body_sha256_saved": "aaaaaaaabbbbbbbbccccccccdddddddd0000000011111111222222223333333344444444",
+  "pr_body_sha256_current": "eeeeeeeeffffffff0000000011111111222222223333333344444444aaaaaaaabbbbbbbb",
+  "expected_outcome": "BLOCKED"
+}
