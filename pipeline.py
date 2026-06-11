@@ -15123,6 +15123,23 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                         ver_text = (text_elem.text or "").strip() if text_elem is not None else ""
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
+
+            # Format 4: <ac_verification><criterion id="AC-X" status="PASS"><check>...</check></criterion>
+            # module_qa report에서 생성된 <criterion> 태그 직접 파싱
+            if ac_ver is not None:
+                for crit in ac_ver.findall("criterion"):
+                    if crit.get("id") == ac_id:
+                        status = crit.get("status", "?")
+                        check_elem = crit.find("check")
+                        evidence_elem = crit.find("evidence")
+                        ver_text = ""
+                        if check_elem is not None and check_elem.text:
+                            ver_text = check_elem.text.strip()[:150]
+                        elif evidence_elem is not None and evidence_elem.text:
+                            ver_text = evidence_elem.text.strip()[:150]
+                        if ver_text:
+                            verifications.append(f"{mt_id}: {status} — {ver_text}")
+
         except (ET.ParseError, OSError):
             continue
     return verifications

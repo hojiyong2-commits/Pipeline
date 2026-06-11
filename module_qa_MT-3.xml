@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+  <mt_id>MT-3</mt_id>
+  <pipeline_id>IMP-20260611-3F91</pipeline_id>
+  <verdict>PASS</verdict>
+  <verification_evidence>
+    <ac_verification>
+      <criterion id="AC-3" status="PASS">
+        <check>AGENTS.md .Codex/agents 출현 횟수 = 0</check>
+        <evidence>grep -c .Codex/agents AGENTS.md = 0 확인. grep -c .claude/agents AGENTS.md = 20 확인.</evidence>
+      </criterion>
+      <criterion id="AC-5" status="PASS">
+        <check>AGENTS.md .Codex/agents 경로 오기 20건 전체 .claude/agents로 수정 확인</check>
+        <evidence>grep ".Codex/agents" AGENTS.md = 0 matches. 에이전트 테이블(lines 62-74), 금지 목록, cleanup 섹션, 보호 파일 목록 포함 20건 전체 교체 완료.</evidence>
+      </criterion>
+      <criterion id="AC-6" status="PASS">
+        <check>pm-planner-agent.md, pipeline-manager-agent.md 파일 미생성 확인</check>
+        <evidence>.claude/agents/pm-planner-agent.md 없음. .claude/agents/pipeline-manager-agent.md 없음. 경로 참조만 수정, 파일 생성 없음 (DEFERRED 기록).</evidence>
+      </criterion>
+    </ac_verification>
+    <scope_check>
+      <no_extra_files_modified>true</no_extra_files_modified>
+      <trust_root_violation>false</trust_root_violation>
+      <pm_planner_pipeline_manager_files_not_created>true (DEFERRED)</pm_planner_pipeline_manager_files_not_created>
+    </scope_check>
+  </verification_evidence>
+</module_qa_report>
