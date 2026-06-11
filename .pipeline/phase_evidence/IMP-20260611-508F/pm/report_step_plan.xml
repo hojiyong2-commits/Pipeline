@@ -1,0 +1,347 @@
+<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260611-508F</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: Protocol Evolution Error Message 개선 + 3F91 Cleanup Audit</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>IMP, FS</category_tags>
+
+  <!-- ================================================================ -->
+  <!-- DECOMPOSITION AUDIT                                                -->
+  <!-- ================================================================ -->
+  <decomposition_audit>
+    <total_functions_identified>6</total_functions_identified>
+    <micro_task_count>5</micro_task_count>
+    <grep_executions>8</grep_executions>
+    <split_decision>
+      MT-1: pipeline.py _parse_protocol_evolution_decision() 오류 메시지 개선 (1함수, 1파일).
+      MT-2: .claude/agents/prompt-architect-agent.md 지침 보강 (1문서).
+      MT-3: AGENTS.md Protocol Evolution 원칙 보강 (1문서).
+      MT-4: tests/e2e/test_architect_evo_type_508f.py 신규 회귀 테스트.
+      MT-5: cleanup_followup_report.md 생성 및 3F91 DEFERRED audit (분석 산출물).
+      HIGH_RISK: pipeline.py(trust-root) 포함, conservative repair 적용.
+    </split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <!-- ================================================================ -->
+  <!-- TASK COMPLEXITY                                                     -->
+  <!-- ================================================================ -->
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>MT-1이 pipeline.py(trust-root file)를 수정합니다. _parse_protocol_evolution_decision() 함수의 _die() 메시지 개선이 핵심 변경입니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>5</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <!-- ================================================================ -->
+  <!-- DESIGN CONFIRMATION                                                -->
+  <!-- ================================================================ -->
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>오류 메시지 줄바꿈 위치, 테스트 함수명 세부 명명, AGENTS.md 섹션 위치 등 P2 질문은 기존 패턴에 맞춰 처리합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>pipeline.py 오류 메시지 개선 범위를 _parse_protocol_evolution_decision() 함수 하나로만 제한할까요, 아니면 유사한 다른 오류 메시지도 함께 개선할까요?</user_facing_question>
+        <evidence>Grep 결과: pipeline.py:1178-1179에 단일 _die() 호출. AC-1 범위는 이 함수로 명시됨.</evidence>
+        <why_it_matters>MT-1 범위를 1함수로 제한하면 회귀 위험이 낮고 리뷰가 쉽습니다. 범위를 넓히면 scope 초과 위험이 증가합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1 단위 — _parse_protocol_evolution_decision() 내 단일 _die() 개선만</label>
+            <benefit>변경 범위 최소, 회귀 위험 낮음, AC 범위와 정확히 일치</benefit>
+            <cost>다른 유사 메시지는 별도 파이프라인에서 처리해야 함</cost>
+          </option>
+          <option id="B">
+            <label>관련 _die() 메시지 일괄 개선 (범위 확장)</label>
+            <benefit>유사한 모든 오류 메시지에 [PIPELINE ERROR] 형식이 통일되어 사용자 경험이 일관적으로 개선됨 (함수 5개 이상 동시 개선 효과)</benefit>
+            <cost>AC 미명시 변경 — scope 초과 위험, QA/review 복잡도 증가</cost>
+          </option>
+        </options>
+        <user_answer>추천안 A로 진행 (사용자 요청 AC-1이 해당 함수만 지정)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <!-- ================================================================ -->
+  <!-- INTERFACE SPEC                                                      -->
+  <!-- ================================================================ -->
+  <interface_spec>
+    - Input: pipeline.py (함수 _parse_protocol_evolution_decision, line 1178-1179)
+    - Input: .claude/agents/prompt-architect-agent.md (Protocol Evolution Decision 섹션)
+    - Input: AGENTS.md (Phase 9 섹션)
+    - Output: 개선된 오류 메시지 (actual/expected/복구 XML/설명 포함, traceback 없음)
+    - Output: prompt-architect-agent.md 보강 (IMP 강제 원칙 NOTICE 추가)
+    - Output: AGENTS.md 보강 (required=false여도 IMP 유지 문구 추가)
+    - Output: tests/e2e/test_architect_evo_type_508f.py (신규 회귀 테스트)
+    - Output: cleanup_followup_report.md (REMOVED/MODIFIED/PRESERVED/DEFERRED 4섹션)
+    - Validation: exit non-zero + [PIPELINE ERROR] + actual + expected + 복구 XML + traceback 없음
+  </interface_spec>
+
+  <!-- ================================================================ -->
+  <!-- REQUIREMENTS                                                        -->
+  <!-- ================================================================ -->
+  <requirements>
+    [AC-1] pipeline.py _parse_protocol_evolution_decision() _die() 메시지 개선:
+      actual 값(예: actual: T), expected: IMP, Protocol Evolution 설명 한 줄,
+      복구용 XML 예시 블록(4줄), raw traceback 없음.
+
+    [AC-2] 차단 정책 유지:
+      recommended_type != "IMP" 조건 유지.
+      기존 빈 문자열/None to IMP 기본값 처리(line 1168) 수정 금지.
+
+    [AC-3] prompt-architect-agent.md Protocol Evolution Decision 섹션 근처에
+      required=true/false 무관 IMP 강제 원칙 짧게 추가 (중복 줄 늘리기 금지).
+
+    [AC-4] AGENTS.md Phase 9 섹션에
+      required=false여도 IMP 유지, 자동 보정 없음, 잘못된 값은 차단 원칙 짧게 추가.
+
+    [AC-5] tests/e2e/test_architect_evo_type_508f.py 신규:
+      parametrize로 T, FEAT(또는 BUG/TASK 중 1개) 케이스 검증.
+      exit non-zero, [PIPELINE ERROR], actual 값, IMP, 복구 XML 확인.
+      tmp_path, subprocess, final_state assertion 패턴 준수.
+
+    [AC-6] 정상 케이스(IMP) 회귀 테스트 포함, 기존 테스트 깨지지 않음.
+
+    [AC-7] cleanup_followup_report.md에 3F91 DEFERRED 항목 audit:
+      _parse_harness_report_et, _extract_test_code, cmd_harness,
+      tests/oracles orphaned, pm-planner-agent.md / pipeline-manager-agent.md.
+
+    [AC-8] cleanup_followup_report.md REMOVED/MODIFIED/PRESERVED/DEFERRED 4섹션,
+      각 항목 파일/함수명/라인번호/처리결과/사유, 식별자 backtick 표시.
+
+    [AC-9] harness CLI 기존 동작 유지: THREE GATE BLOCKED + exit 1.
+
+    [AC-10] gates request-accept AC 충족표 N/N PASS.
+
+    HIGH_RISK 규칙: conservative repair, pipeline.py는 MT-1 지정 함수만 변경.
+    Doc-Code Drift 방지: pipeline.py _die() 변경 시 문서 동일 사이클 업데이트.
+  </requirements>
+
+  <!-- ================================================================ -->
+  <!-- MICRO TASKS                                                         -->
+  <!-- ================================================================ -->
+  <micro_tasks>
+
+    <micro_task id="MT-1">
+      <affected_function>pipeline._parse_protocol_evolution_decision</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_architect (line 7351: protocol_decision = _parse_protocol_evolution_decision(...))</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>recommended_type != .IMP.</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_parse_protocol_evolution_decision() line 1178-1179의 _die() 메시지를 actual/expected/설명/복구XML 포함 형식으로 개선. 차단 조건(!=IMP)과 기본값 처리는 유지.</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>prompt-architect-agent.md Protocol Evolution Decision section</affected_function>
+      <target_files>
+        <file>.claude/agents/prompt-architect-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>## Protocol Evolution Decision</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Protocol Evolution Decision 섹션 XML 예시 직후에 required 무관 IMP 강제 NOTICE 블록 추가 (8줄 이내).</change_summary>
+      <line_estimate>8</line_estimate>
+      <covers_ac>AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>AGENTS.md Phase 9 section</affected_function>
+      <target_files>
+        <file>AGENTS.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Phase 9.*Protocol Evolution|recommended_pipeline_type.*IMP</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>AGENTS.md Phase 9 섹션의 XML 예시 직후에 required=false여도 IMP 유지, 자동 보정 없음 원칙 문구 추가 (7줄 이내).</change_summary>
+      <line_estimate>7</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>TestArchitectEvoType (신규 테스트 클래스)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_architect_evo_type_508f.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_architect.*evo_type|architect.*508f</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 E2E 테스트 파일. parametrize로 잘못된 recommended_pipeline_type 케이스(T, FEAT) + 정상 케이스(IMP) 검증. tmp_path/subprocess/final_state assertion 패턴 준수.</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-5, AC-6, AC-9, AC-10</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>cleanup_followup_report.md (신규 분석 산출물)</affected_function>
+      <target_files>
+        <file>cleanup_followup_report.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_parse_harness_report_et|_extract_test_code|cmd_harness</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>3F91 DEFERRED 항목 audit 결과 기록. REMOVED/MODIFIED/PRESERVED/DEFERRED 4섹션. 불확실한 항목은 DEFERRED 유지. 실제 코드 삭제 없음.</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-7, AC-8</covers_ac>
+    </micro_task>
+
+  </micro_tasks>
+
+  <!-- ================================================================ -->
+  <!-- PYTHON VERSION / ENV                                               -->
+  <!-- ================================================================ -->
+  <python_version>3.10 — 기존 pipeline.py 환경과 동일</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.defaultInterpreterPath: python3.10, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <!-- ================================================================ -->
+  <!-- ACCEPTANCE CRITERIA                                                -->
+  <!-- ================================================================ -->
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py architect --report-file [recommended_pipeline_type=T인 파일] 실행 시 [PIPELINE ERROR]가 포함된 stderr가 출력되고, actual: T, expected: IMP, Protocol Evolution 설명 한 줄, 복구용 XML 예시가 모두 포함된다. raw Python traceback은 없다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>잘못된 recommended_pipeline_type(T, TASK, FEAT, BUG 등 명시적 오류값)이면 exit non-zero로 차단된다. 기존 빈 태그/None to IMP 기본값 처리 정책은 변경 없이 유지된다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="false">
+      <text>.claude/agents/prompt-architect-agent.md Protocol Evolution Decision 섹션에 required=true/false 무관 IMP 강제 원칙이 명확히 기재된다 (required=false 케이스 명시 포함).</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="false">
+      <text>AGENTS.md Phase 9 섹션에 required=false여도 IMP 유지, 잘못된 값은 차단(자동 보정 없음) 원칙이 포함된다.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>tests/e2e/test_architect_evo_type_508f.py가 존재하고 recommended_pipeline_type=T 및 FEAT(또는 BUG/TASK 중 1개) 케이스 테스트가 포함된다. 각 테스트: exit non-zero, [PIPELINE ERROR] 포함, actual 값 포함, IMP 포함, 복구 XML 포함. pytest PASS.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>recommended_pipeline_type=IMP인 정상 architect report에서 기존 테스트(test_real_cli_paths.py 등)가 깨지지 않는다. pytest tests/ 전체 통과.</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="false">
+      <text>cleanup_followup_report.md에 IMP-20260611-3F91 DEFERRED 항목 (_parse_harness_report_et, _extract_test_code, cmd_harness, tests/oracles orphaned, pm-planner-agent.md / pipeline-manager-agent.md) audit 결과가 함수명 단위로 기재된다.</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>cleanup_followup_report.md가 존재하고 REMOVED/MODIFIED/PRESERVED/DEFERRED 4섹션을 포함한다. 각 항목에 파일, 함수명/경로, 라인번호, 처리 이유가 기재된다. 식별자가 backtick으로 표시된다.</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py harness → [THREE GATE BLOCKED] + exit 1 (argparse 오류 없음). python pipeline.py harness --score 100 → [THREE GATE BLOCKED] + exit 1. tests/e2e/test_harness_block_3f91.py PASS 유지.</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 실행 시 출력되는 AC 충족표에 AC-1부터 AC-9까지 모두 PASS로 표시된다. PENDING인 AC가 있으면 승인 코드를 발급하지 않는다.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <!-- ================================================================ -->
+  <!-- FORBIDDEN                                                           -->
+  <!-- ================================================================ -->
+  <forbidden>
+    - pipeline.py _child_text(decision, "recommended_pipeline_type", "IMP") 기본값 로직 수정 금지
+    - recommended_type != "IMP" 차단 조건 완화/제거 금지
+    - 잘못된 값 자동 normalize(IMP로 자동 수정) 금지
+    - 신규 에이전트 MD 파일 생성 금지 (pm-planner-agent.md, pipeline-manager-agent.md 포함)
+    - tests/oracles/ 파일 삭제 (call graph 분석 미완료 상태) 금지
+    - 불확실한 dead code 삭제 금지
+    - unrelated refactor / 대량 포맷팅 / 파일 경로만 바꾸는 churn 금지
+    - hard gate 완화 금지
+    - _die() 호출 시그니처 변경 금지 (메시지 내용만 수정)
+    - MT-1 지정 함수 외 pipeline.py 변경 금지
+  </forbidden>
+
+  <!-- ================================================================ -->
+  <!-- HANDOVER TEMPLATE                                                  -->
+  <!-- ================================================================ -->
+  <handover_template>
+    <!-- dev-agent가 QA에게 인계 시 사용하는 handover 양식 예시 -->
+    <handover_example>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <pipeline_id>IMP-20260611-508F</pipeline_id>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>.claude/agents/prompt-architect-agent.md</file>
+        <file>AGENTS.md</file>
+        <file>tests/e2e/test_architect_evo_type_508f.py</file>
+        <file>cleanup_followup_report.md</file>
+        <file>scope_manifest.json</file>
+        <file>dev_handover.xml</file>
+      </evidence>
+      <status>READY_FOR_QA</status>
+    </handover_example>
+  </handover_template>
+
+  <!-- ================================================================ -->
+  <!-- CONTEXT INJECTION                                                  -->
+  <!-- ================================================================ -->
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\prompt-architect-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\AGENTS.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_harness_block_3f91.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_real_cli_paths.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\legacy_cleanup_execution_report.md</file>
+    </target_files>
+    <phase_rules_excerpt>
+      HIGH_RISK: conservative repair, pipeline.py는 MT-1 지정 함수만 변경.
+      Scope Lock: scope_manifest 명시 파일만 변경 가능.
+      Doc-Code Drift 방지: pipeline.py _die() 변경 시 문서 동일 사이클 업데이트.
+      테스트: subprocess 기반 E2E, PIPELINE_STATE_PATH 격리, final_state assertion 필수.
+      Trust-Root 파일(pipeline.py) 변경: MT-1 scope 명시됨.
+    </phase_rules_excerpt>
+    <prev_phase_summary>IMP-20260611-3F91 완료(harness CLI 차단 명확화 + AGENTS.md 경로 수정). 현 파이프라인 IMP-20260611-508F: Phase 1 PM PENDING.</prev_phase_summary>
+  </context_injection>
+
+</step_plan>
