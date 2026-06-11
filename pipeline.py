@@ -18396,8 +18396,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # harness
     p_harness = sub.add_parser("harness", help="Legacy harness diagnostic 기록. 현재 /Task 완료 경로에서는 차단됨")
-    p_harness.add_argument("--score", required=True, type=int, help="Legacy diagnostic percentage only; not a completion score")
-    p_harness.add_argument("--verdict", required=True, choices=["PASS", "FAIL", "pass", "fail"])
+    p_harness.add_argument("--score", required=False, default=None, type=int, help="Legacy diagnostic percentage only; not a completion score (ignored — command always blocked)")
+    p_harness.add_argument("--verdict", required=False, default=None, choices=["PASS", "FAIL", "pass", "fail"])
     p_harness.add_argument("--branch", metavar="BRANCH", default=None,
                            help="브랜치 ID (A-Z 대문자 1글자). 지정 시 브랜치 state 파일 사용.")
     p_harness.add_argument("--test-output-file", default=None,
