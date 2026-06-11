@@ -276,5 +276,18 @@ class TestArchitectEvoType:
                 pass
 
 
+# Standalone aliases for oracle test_set (T-1, T-2) compatibility
+def test_normal_evo_type_pass(tmp_path: Path) -> None:
+    """Oracle T-1: 정상 type(IMP)은 type 차단 없이 architect DONE."""
+    t = TestArchitectEvoType()
+    t.test_valid_imp_type_not_blocked_by_type_check(tmp_path)
+
+
+def test_edge_evo_type_blocked(tmp_path: Path) -> None:
+    """Oracle T-2: 잘못된 type(T)은 BLOCKED + 개선된 오류 메시지."""
+    t = TestArchitectEvoType()
+    t.test_bad_recommended_type_blocked(tmp_path, "T")
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
