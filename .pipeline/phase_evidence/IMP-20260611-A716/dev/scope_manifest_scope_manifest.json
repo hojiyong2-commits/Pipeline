@@ -100,7 +100,8 @@
       "id": "MT-6",
       "files": [
         "tests/e2e/test_pr_body_readiness_a716.py",
-        "tests/conftest.py"
+        "tests/conftest.py",
+        "tests/test_acceptance_request_verification_json.py"
       ],
       "affected_functions": [
         "test_pr_body_readiness_a716 (신규 파일)"
