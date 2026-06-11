@@ -3366,11 +3366,12 @@ def _should_reuse_acceptance_nonce(
     new_pr_head_sha: str,
     new_ci_run_id: str,
     force_new: bool = False,
+    new_pr_body_sha256: Optional[str] = None,
 ) -> "tuple[bool, str]":
-    """기존 acceptance_request를 재사용할지 5-field 비교로 판단.
+    """기존 acceptance_request를 재사용할지 6-field 비교로 판단.
 
     동일 조건(pipeline_id / evidence / evidence_sha256 또는 evidence_url /
-    pr_head_sha / github_ci_run_id)이고 기존 코드가 PENDING 상태이면 재사용.
+    pr_head_sha / github_ci_run_id / pr_body_sha256)이고 기존 코드가 PENDING 상태이면 재사용.
     하나라도 다르거나 force_new=True이면 새 코드 발급.
 
     Args:
@@ -3381,6 +3382,7 @@ def _should_reuse_acceptance_nonce(
         new_pr_head_sha: 현재 PR head commit SHA.
         new_ci_run_id: 현재 GitHub Actions run ID.
         force_new: True이면 조건과 무관하게 항상 새 코드 발급.
+        new_pr_body_sha256: 현재 PR 본문 SHA-256 (없으면 None). IMP-20260611-A716.
     Returns:
         (should_reuse: bool, reason_ko: str) 튜플.
     Raises:
@@ -3406,6 +3408,11 @@ def _should_reuse_acceptance_nonce(
         return False, "PR head SHA가 달라서(새 커밋이 push됨) 새 코드를 발급합니다."
     if str(existing_req.get("github_ci_run_id", "")) != str(new_ci_run_id):
         return False, "GitHub Actions run ID가 달라서 새 코드를 발급합니다."
+    # IMP-20260611-A716: PR 본문 변경 시 재사용 금지 (복구 경로 broken 방지)
+    if new_pr_body_sha256 is not None:
+        existing_body_sha = existing_req.get("pr_body_sha256")
+        if existing_body_sha and existing_body_sha != new_pr_body_sha256:
+            return False, "PR 본문이 변경되어(SHA-256 변경) 새 코드를 발급합니다."
     return True, "PR, 결과물, CI 상태가 모두 같습니다."
 
 
@@ -3420,6 +3427,11 @@ def _write_acceptance_request(
     packet_path: Optional[str] = None,
     packet_sha256: Optional[str] = None,
     github_ci_head_sha: Optional[str] = None,
+    pr_body_sha256: Optional[str] = None,
+    pr_body_readiness: Optional[str] = None,
+    required_sections_present: Optional[bool] = None,
+    temporary_phrases_absent: Optional[bool] = None,
+    validated_at: Optional[str] = None,
 ) -> Dict[str, Any]:
     """acceptance_request.json 작성 후 데이터 dict 반환.
 
@@ -3428,6 +3440,8 @@ def _write_acceptance_request(
     검사(_verify_verification_json_freshness)에서 이 값을 사용한다.
     IMP-20260607-E656 MT-4: packet_path, packet_sha256, github_ci_head_sha 필드 추가.
     gates accept 시 packet 파일 동일성 검증과 CI head SHA 일치 검증에 사용한다.
+    IMP-20260611-A716 MT-4: pr_body_sha256, pr_body_readiness, required_sections_present,
+    temporary_phrases_absent, validated_at 필드 추가. gates accept 시 pr_body_stale 검사에 사용.
 
     Args:
         pipeline_id: 활성 pipeline_id (예: IMP-20260531-BBDB).
@@ -3440,6 +3454,11 @@ def _write_acceptance_request(
         packet_path: human_acceptance_packet.md 경로 (없으면 None).
         packet_sha256: human_acceptance_packet.md SHA-256 (없으면 None).
         github_ci_head_sha: GitHub Actions CI run의 head SHA (없으면 None).
+        pr_body_sha256: request-accept 시점 PR 본문 SHA-256 스냅샷 (없으면 None).
+        pr_body_readiness: "PASS" | "BLOCKED" | None.
+        required_sections_present: 필수 섹션 전부 존재 여부.
+        temporary_phrases_absent: 임시 문구 없음 여부.
+        validated_at: 검증 타임스탬프 (ISO 8601).
     Returns:
         기록된 acceptance_request 데이터 dict (status=PENDING).
     Raises:
@@ -3478,6 +3497,12 @@ def _write_acceptance_request(
         "packet_path": packet_path,
         "packet_sha256": packet_sha256,
         "github_ci_head_sha": github_ci_head_sha,
+        # IMP-20260611-A716 MT-4: PR body snapshot 필드
+        "pr_body_sha256": pr_body_sha256,
+        "pr_body_readiness": pr_body_readiness,
+        "required_sections_present": required_sections_present,
+        "temporary_phrases_absent": temporary_phrases_absent,
+        "validated_at": validated_at,
         "status": "PENDING",
     }
     with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
@@ -3659,6 +3684,11 @@ TEMPORARY_PR_BODY_PATTERNS: List[str] = [
     "빌드 완료 후 업데이트 예정",
     "KittingMapper.exe 빌드 완료 후",
     "빌드 완료 후 업데이트됩니다",
+    # IMP-20260611-A716 MT-1: 누락 패턴 추가
+    "PM Phase 진행 중",
+    "Phase Attestation 대기",
+    "TBD",
+    "TODO",
 ]
 
 # IMP-20260531-BBDB MT-1: User Acceptance Nonce Gate
@@ -4558,6 +4588,70 @@ def _verify_verification_json_freshness(req: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _validate_pr_body_readiness(pr_body: str) -> Dict[str, Any]:
+    """PR 본문의 Draft/섹션/임시문구를 검사하는 SSoT validator.
+
+    IMP-20260611-A716 MT-1: gates request-accept와 gates accept 양쪽에서
+    공통으로 호출하는 단일 검증 함수. 기존 _check_acceptance_readiness의
+    Draft/섹션/임시문구 검사 로직을 추출하여 통합.
+
+    Args:
+        pr_body: PR 본문 전체 텍스트 (빈 문자열이면 PASS 반환 — gh CLI 없는 환경 호환).
+    Returns:
+        {
+            "status": "PASS" | "BLOCKED",
+            "failure_code": str,
+            "blocked_reason": Optional[str],
+            "missing_sections": List[str],
+            "return_phase": str,
+            "allow_accept": bool,
+        }
+    """
+    pass_result: Dict[str, Any] = {
+        "status": "PASS",
+        "failure_code": "",
+        "blocked_reason": None,
+        "missing_sections": [],
+        "return_phase": "build",
+        "allow_accept": True,
+    }
+
+    if not pr_body:
+        # gh CLI 없는 환경 — 검사 생략 (기존 동작 유지)
+        return pass_result
+
+    # --- 1. 필수 섹션 검사 (섹션 누락이 임시 문구보다 우선 탐지) ---
+    missing_sections: List[str] = []
+    for section_spec in PR_REQUIRED_SECTIONS:
+        if isinstance(section_spec, tuple):
+            found = any(s in pr_body for s in section_spec)
+            if not found:
+                missing_sections.append(" 또는 ".join(section_spec))
+        else:
+            if section_spec not in pr_body:
+                missing_sections.append(section_spec)
+
+    if missing_sections:
+        return _acceptance_blocked(
+            "pr_body_incomplete",
+            "PR 본문에 임시 문구가 포함되어 있거나 필수 섹션이 누락되어 있습니다.",
+            missing_sections=missing_sections,
+        )
+
+    # --- 2. 임시 문구 탐지 (섹션이 갖춰진 경우에만 검사) ---
+    temporary_pattern = _find_temporary_pr_body_pattern(pr_body)
+    if temporary_pattern is not None:
+        return _acceptance_blocked(
+            "pr_body_temporary",
+            (
+                f"PR 본문에 임시 문구가 포함되어 있습니다: '{temporary_pattern}'. "
+                "PR 본문을 완성한 뒤 다시 실행하세요."
+            ),
+        )
+
+    return pass_result
+
+
 def _check_acceptance_readiness(
     state: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -4676,36 +4770,10 @@ def _check_acceptance_readiness(
     pr_body: str = (pr_data.get("body") or "").lstrip("﻿")
     pr_url: str = pr_data.get("url") or ""
 
-    # --- 2. 필수 섹션 검사 (섹션 누락이 임시 문구보다 우선 탐지) ---
-    missing_sections: List[str] = []
-    for section_spec in PR_REQUIRED_SECTIONS:
-        if isinstance(section_spec, tuple):
-            # OR 그룹: 안의 항목 중 하나라도 있으면 통과
-            found = any(s in pr_body for s in section_spec)
-            if not found:
-                missing_sections.append(" 또는 ".join(section_spec))
-        else:
-            if section_spec not in pr_body:
-                missing_sections.append(section_spec)
-
-    if missing_sections:
-        return _acceptance_blocked(
-            "pr_body_incomplete",
-            "PR 본문에 임시 문구가 포함되어 있거나 필수 섹션이 누락되어 있습니다.",
-            missing_sections=missing_sections,
-        )
-
-    # --- 3. 임시 문구 탐지 (섹션이 갖춰진 경우에만 검사) ---
-    # 줄 단위 접두 매칭 — 정상 본문의 우연한 단어 언급은 차단하지 않는다.
-    temporary_pattern = _find_temporary_pr_body_pattern(pr_body)
-    if temporary_pattern is not None:
-        return _acceptance_blocked(
-            "pr_body_temporary",
-            (
-                f"PR 본문에 임시 문구가 포함되어 있습니다: '{temporary_pattern}'. "
-                "PR 본문을 완성한 뒤 다시 실행하세요."
-            ),
-        )
+    # --- 2 & 3. 필수 섹션 + 임시 문구 검사 — IMP-20260611-A716 MT-3: _validate_pr_body_readiness 위임 ---
+    body_result = _validate_pr_body_readiness(pr_body)
+    if not body_result.get("allow_accept", True):
+        return body_result
 
     # --- 4. Blocker 2: human acceptance packet readiness 확인 ---
     # 기본: GitHub PR 댓글 검증. fallback: 로컬 파일(테스트 환경 전용).
@@ -14815,14 +14883,19 @@ def _get_latest_ci_run_id() -> Optional[str]:
 def _get_pr_body_text() -> Optional[str]:
     """현재 PR 본문 텍스트를 gh CLI로 조회.
 
+    IMP-20260611-A716 MT-5: PIPELINE_GH_EXECUTABLE 환경변수로 gh 경로를 오버라이드 지원.
+    환경변수 값이 .py 파일이면 [sys.executable, path, ...] 형태로 실행 (테스트 mock 지원).
+    그 외는 [path, ...] 직접 실행.
+
     Returns:
         PR 본문 문자열 또는 None (gh CLI 미설치/PR 없음).
     Raises:
         없음.
     """
+    gh_args_prefix = _build_gh_cmd_prefix()
     try:
         r = subprocess.run(
-            ["gh", "pr", "view", "--json", "body", "--jq", ".body"],
+            gh_args_prefix + ["pr", "view", "--json", "body", "--jq", ".body"],
             capture_output=True, text=True, timeout=10,
             encoding="utf-8", errors="replace",
         )
@@ -14832,6 +14905,25 @@ def _get_pr_body_text() -> Optional[str]:
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
     return None
+
+
+def _build_gh_cmd_prefix() -> List[str]:
+    """gh CLI 호출 명령어 prefix 반환.
+
+    IMP-20260611-A716 MT-5: PIPELINE_GH_EXECUTABLE 환경변수 지원.
+    - 값이 .py 파일: [sys.executable, path] 반환 (Python 스크립트 직접 실행)
+    - 그 외 파일 경로: [path] 반환
+    - 미설정: ["gh"] 반환 (기존 동작)
+
+    Returns:
+        subprocess 명령 prefix 리스트.
+    """
+    gh_override = os.environ.get("PIPELINE_GH_EXECUTABLE")
+    if gh_override:
+        if gh_override.lower().endswith(".py"):
+            return [sys.executable, gh_override]
+        return [gh_override]
+    return ["gh"]
 
 
 def _get_pr_changed_files() -> List[str]:
@@ -15695,15 +15787,25 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     if ac_blocker:
         _die(ac_blocker)
 
-    # stale 문구 차단 (기존 TEMPORARY_PR_BODY_PATTERNS SSoT 사용)
+    # IMP-20260611-A716 MT-2: _validate_pr_body_readiness SSoT — 섹션 + 임시 문구 통합 검사
+    # Bug 1 수정(IMP-20260611-A716): PR body fetch 실패(None) 시 validator skip 금지 — BLOCKED 반환
     pr_body = _get_pr_body_text()
-    if pr_body:
-        stale = _find_temporary_pr_body_pattern(pr_body)
-        if stale:
-            _die(
-                f"[BLOCKED] PR 본문에 stale 문구가 있습니다: '{stale}'\n"
-                "  PR 본문을 최신 상태로 갱신한 후 gates request-accept를 다시 실행하세요."
-            )
+    if pr_body is None:
+        _die(
+            "[BLOCKED] failure_code=pr_body_not_found\n"
+            "  PR 본문을 가져올 수 없습니다. gh CLI가 설치되어 있고 열린 PR이 있는지 확인하세요.\n"
+            "  PR 본문을 완성한 후 gates request-accept를 다시 실행하세요."
+        )
+    body_check = _validate_pr_body_readiness(pr_body)  # type: ignore[arg-type]
+    if not body_check.get("allow_accept", True):
+        failure_code = body_check.get("failure_code", "pr_body_invalid")
+        blocked_reason = body_check.get("blocked_reason", "PR 본문을 완성한 뒤 다시 실행하세요.")
+        missing = body_check.get("missing_sections") or []
+        msg = f"[BLOCKED] failure_code={failure_code}\n  {blocked_reason}"
+        if missing:
+            msg += "\n  누락 섹션: " + ", ".join(missing)
+        msg += "\n  PR 본문을 최신 상태로 갱신한 후 gates request-accept를 다시 실행하세요."
+        _die(msg)
 
     # PR/CI 정보 가져오기 (gh CLI 없으면 빈 문자열)
     pr_url = _get_current_pr_url() or ""
@@ -15724,6 +15826,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     evidence_str = str(evidence)
     is_url = evidence_str.startswith(("http://", "https://"))
     new_evidence_sha256: Optional[str] = None if is_url else _compute_file_sha256(evidence_str)
+    # IMP-20260611-A716: _should_reuse_acceptance_nonce 호출 전 pr_body SHA-256 계산
+    # (pr_body는 line 15785에서 이미 fetch됨)
+    _new_pr_body_sha256: Optional[str] = (
+        hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else None
+    )
 
     existing_req = _load_acceptance_request()
     reuse = False
@@ -15737,6 +15844,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             pr_head_sha,
             ci_run_id,
             force_new=force_new,
+            new_pr_body_sha256=_new_pr_body_sha256,
         )
 
     if reuse and existing_req is not None:
@@ -15776,6 +15884,26 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             ci_head_sha_for_req = _get_ci_run_head_sha(ci_run_id) if ci_run_id else None
         except Exception:
             pass
+        # IMP-20260611-A716 MT-4: PR body snapshot 계산
+        # Bug 2 수정(IMP-20260611-A716): pr_body 없어도 필드는 항상 기록 (None → FAIL, null)
+        import hashlib as _hashlib
+        pr_body_sha256_for_req: Optional[str] = None
+        pr_body_readiness_for_req: Optional[str] = None
+        required_sections_present_for_req: Optional[bool] = None
+        temporary_phrases_absent_for_req: Optional[bool] = None
+        validated_at_for_req: Optional[str] = _now()
+        if pr_body:
+            pr_body_sha256_for_req = _hashlib.sha256(pr_body.encode("utf-8")).hexdigest()
+            body_check_result = _validate_pr_body_readiness(pr_body)
+            pr_body_readiness_for_req = body_check_result.get("status", "PASS")
+            required_sections_present_for_req = len(body_check_result.get("missing_sections") or []) == 0
+            temporary_phrases_absent_for_req = body_check_result.get("failure_code", "") != "pr_body_temporary"
+        else:
+            # pr_body 없음 → FAIL 상태로 명시 기록 (Bug 2 수정)
+            pr_body_sha256_for_req = None
+            pr_body_readiness_for_req = "FAIL"
+            required_sections_present_for_req = False
+            temporary_phrases_absent_for_req = False
         req = _write_acceptance_request(
             pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id,
             verification_json_path=vj_path_for_req,
@@ -15783,6 +15911,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             packet_path=pkt_path_for_req,
             packet_sha256=pkt_sha_for_req,
             github_ci_head_sha=ci_head_sha_for_req,
+            pr_body_sha256=pr_body_sha256_for_req,
+            pr_body_readiness=pr_body_readiness_for_req,
+            required_sections_present=required_sections_present_for_req,
+            temporary_phrases_absent=temporary_phrases_absent_for_req,
+            validated_at=validated_at_for_req,
         )
         nonce = req["nonce"]
 
@@ -17043,6 +17176,50 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     msg_parts.append("  누락 섹션: " + ", ".join(missing))
                 msg_parts.append("  PR 본문과 acceptance packet을 보완한 뒤 다시 실행하세요.")
                 _die("\n".join(msg_parts))
+            # IMP-20260611-A716 MT-5: pr_body_stale 검사
+            # request-accept 시 저장된 pr_body_sha256과 현재 PR 본문 SHA-256 비교.
+            # 불일치 시 request-accept를 재실행해 새 코드를 발급해야 한다.
+            _req_for_stale = _load_acceptance_request()
+            _saved_body_sha = _req_for_stale.get("pr_body_sha256") if _req_for_stale else None
+            if _saved_body_sha:
+                _current_pr_body = _get_pr_body_text()
+                if _current_pr_body:
+                    import hashlib as _hashlib_stale
+                    _current_body_sha = _hashlib_stale.sha256(
+                        _current_pr_body.encode("utf-8")
+                    ).hexdigest()
+                    if _current_body_sha != _saved_body_sha:
+                        _record_failure_packet(
+                            state,
+                            "acceptance",
+                            {},
+                            command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                                     "--evidence", "<result-path>"],
+                            note="PR 본문이 승인 코드 발급 이후 변경되었습니다.",
+                            status="BLOCKED",
+                            phase="build",
+                            failure_code="pr_body_stale",
+                            failure_category="missing_evidence",
+                            summary_ko=(
+                                "PR 본문이 승인 코드 발급 이후 변경되었습니다. "
+                                "gates request-accept를 재실행하여 새 코드를 발급하세요."
+                            ),
+                            expected="request-accept 시점과 동일한 PR 본문",
+                            actual=f"PR 본문 SHA-256 불일치: saved={_saved_body_sha[:8]}... current={_current_body_sha[:8]}...",
+                            exit_code=1,
+                            owner="Dev",
+                            return_phase="build",
+                            required_actions=[
+                                "python pipeline.py gates request-accept --evidence <result-path> 로 새 코드를 재발급하세요.",
+                            ],
+                            retry_allowed=True,
+                        )
+                        _save(state)
+                        _die(
+                            "[ACCEPTANCE GATE BLOCKED] failure_code=pr_body_stale\n"
+                            "  PR 본문이 승인 코드 발급 이후 변경되었습니다.\n"
+                            "  gates request-accept를 재실행하여 새 코드를 발급하세요."
+                        )
             # IMP-20260520-D0BB: Protocol Consistency Guard hard gate.
             # PR body / acceptance packet / 실제 CI run ID / head SHA /
             # changed files 사이의 불일치를 ACCEPT 전에 차단한다.
