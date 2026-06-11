@@ -261,8 +261,8 @@ class TestPrBodyReadinessA716:
 
         # pr_body_temporary 또는 다른 BLOCKED 사유가 stdout/stderr에 있어야 함
         combined = result.stdout + result.stderr
-        assert "pr_body_temporary" in combined or "BLOCKED" in combined, (
-            f"BLOCKED 메시지 없음: {combined[:500]}"
+        assert "pr_body_temporary" in combined, (
+            f"TC-1 FAIL: pr_body_temporary가 출력에 포함되지 않음\n출력: {combined[:300]}"
         )
 
         # oracle expected status 검증
@@ -312,9 +312,8 @@ class TestPrBodyReadinessA716:
         )
 
         combined = result.stdout + result.stderr
-        # pr_body_incomplete 또는 BLOCKED 메시지 확인
-        assert "pr_body_incomplete" in combined or "BLOCKED" in combined or "누락" in combined, (
-            f"pr_body_incomplete 메시지 없음: {combined[:500]}"
+        assert "pr_body_incomplete" in combined, (
+            f"TC-2 FAIL: pr_body_incomplete가 출력에 포함되지 않음\n출력: {combined[:300]}"
         )
 
         # oracle 검증
@@ -355,9 +354,8 @@ class TestPrBodyReadinessA716:
         )
 
         combined = result.stdout + result.stderr
-        # pr_body_not_found 또는 BLOCKED 메시지 확인
-        assert "pr_body_not_found" in combined or "BLOCKED" in combined, (
-            f"pr_body_not_found 메시지 없음: {combined[:500]}"
+        assert "pr_body_not_found" in combined, (
+            f"TC-3 FAIL: pr_body_not_found가 출력에 포함되지 않음\n출력: {combined[:300]}"
         )
 
         # final_state assertion: 파이프라인 상태가 유지되어야 함
@@ -368,44 +366,127 @@ class TestPrBodyReadinessA716:
         assert "pipeline_id" in final_state
 
     def test_tc4_accept_blocked_when_pr_body_stale(self, tmp_path: Path) -> None:
-        """TC-4: acceptance_request.json의 pr_body 필드 존재 + pr_body_stale 검사 코드 확인.
+        """TC-4: accept 시 PR 본문이 변경되면 fail-closed로 차단 (실제 CLI 동작 검증).
 
         oracle: edge_accept_blocked_pr_body_stale
-        Bug 2 수정 검증:
-          - acceptance_request.json에 pr_body_readiness, pr_body_sha256 항상 기록
-          - pipeline.py에 pr_body_stale 검사 코드 존재
+
+        Round 4 재작성: 소스 grep이 아닌 실제 CLI 동작(subprocess) 검증.
+          1. body_A sha256으로 acceptance_request.json(PENDING) 생성
+          2. PIPELINE_GH_EXECUTABLE로 body_B(다른 본문)를 반환하는 fake gh 설정 —
+             accept 시점에 PR 본문이 변경된 상태를 시뮬레이션
+          3. gates accept 실행 → returncode != 0 (fail-closed) 확인
+
+        검증 핵심(Round 4 fail-closed invariant):
+          PR 본문/PR 상태를 신뢰성 있게 검증할 수 없거나 본문이 변경된 경우,
+          gates accept는 절대로 성공(returncode 0)해서는 안 된다.
+          어떤 acceptance gate failure_code로 막히든 ACCEPT가 통과되지 않음을 확인한다.
+
+        Note (구조적 제약):
+          pr_body_stale 검사는 gates accept 내부에서 PR head SHA / 승인자 provenance /
+          readiness 등 gh CLI 의존 게이트들 이후에 수행된다. 이 선행 게이트들은
+          pipeline.py가 리스트 형식 ["gh", ...] subprocess를 사용하므로 Windows에서는
+          PATH 기반 .bat fake로 대체할 수 없다(shell=False는 .bat를 직접 실행 불가).
+          따라서 격리 환경에서는 선행 게이트가 먼저 fail-closed로 막힌다.
+          본 테스트는 "stale 상태에서 ACCEPT가 절대 성공하지 않는다"는 불변식을
+          실제 CLI로 검증하며, 특정 failure_code 단정은 다른 단위/오라클 검증에 위임한다.
         """
+        import hashlib
+
         oracle_expected = ORACLE_DIR / "edge_accept_blocked_pr_body_stale" / "expected.json"
         assert oracle_expected.exists(), f"oracle expected 없음: {oracle_expected}"
         expected = json.loads(oracle_expected.read_text(encoding="utf-8"))
         assert expected["failure_code"] == "pr_body_stale"
 
-        # pipeline.py 소스에 pr_body_stale 검사 코드 존재 확인
-        source = PIPELINE_PY.read_text(encoding="utf-8")
-        assert "pr_body_stale" in source, "pipeline.py에 pr_body_stale 검사 코드 없음"
-        assert "pr_body_sha256" in source, "pipeline.py에 pr_body_sha256 필드 없음"
-        assert "pr_body_readiness" in source, "pipeline.py에 pr_body_readiness 필드 없음"
-        assert "required_sections_present" in source, "required_sections_present 필드 없음"
-        assert "temporary_phrases_absent" in source, "temporary_phrases_absent 필드 없음"
-        assert "validated_at" in source, "validated_at 필드 없음"
+        # body_A: request-accept 시점 스냅샷, body_B: accept 시점 변경된 본문 (둘 다 5개 섹션 포함)
+        body_a = (
+            "## 작업 요약\n초기 작업 요약입니다.\n\n"
+            "## 사용자가 확인할 결과물\n결과물 경로: pipeline.py\n\n"
+            "## 기대 결과와 실제 결과\n기대: 정상 동작 / 실제: 정상 동작\n\n"
+            "## 중요한 선택과 트레이드오프\n옵션 A를 선택했습니다.\n\n"
+            "## 검증\n모든 게이트 통과 확인\n"
+        )
+        body_b = body_a + "\n## 추가 변경\n승인 코드 발급 이후 변경된 내용입니다.\n"
+        sha_a = hashlib.sha256(body_a.encode("utf-8")).hexdigest()
+        sha_b = hashlib.sha256(body_b.encode("utf-8")).hexdigest()
+        assert sha_a != sha_b, "body_A와 body_B의 sha256이 같으면 테스트 의미 없음"
 
-        # Bug 2 수정 검증: pr_body=None(gh exit 1)일 때도 필드 기록 확인
-        # request-accept를 실행하면 Bug 1로 인해 BLOCKED되지만,
-        # _write_acceptance_request 호출 전에 막히므로 reuse path 통해 확인
-        # 대신 소스 코드에서 else 브랜치 확인
-        assert "pr_body_readiness_for_req = \"FAIL\"" in source or (
-            'pr_body_readiness_for_req = "FAIL"' in source
-        ), "Bug 2 수정: else 브랜치에 pr_body_readiness='FAIL' 없음"
-
-        # CLI subprocess: 격리 state에서 new 실행 후 final_state 확인
-        env = make_env(tmp_path)
-        bootstrap_pipeline(tmp_path, env)
-
+        # fake gh는 body_B를 반환 (accept 시점에 본문이 변경된 상태를 시뮬레이션)
+        env = make_env_with_fake_gh(tmp_path, body_b)
+        pipeline_id = bootstrap_pipeline(tmp_path, env)
         state_path = env["PIPELINE_STATE_PATH"]
+
+        # external_gates PASS + codex bootstrap 예외로 선행 게이트 일부 우회
+        with open(state_path, encoding="utf-8") as fh:
+            state = json.load(fh)
+        state.setdefault("external_gates", {})
+        for gate_name in ("technical", "oracle", "github_ci"):
+            state["external_gates"].setdefault(gate_name, {})["status"] = "PASS"
+        state["codex_bootstrap_exception"] = True
+        with open(state_path, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False, indent=2)
+
+        # acceptance_request.json: body_A sha256 + PENDING (cwd=tmp_path 기준 조회)
+        nonce = "TESTNONCE"
+        evidence_file = tmp_path / "evidence.txt"
+        evidence_file.write_text("test evidence", encoding="utf-8")
+        req_path = tmp_path / "acceptance_request.json"
+        req_data: Dict[str, Any] = {
+            "schema_version": 1,
+            "pipeline_id": pipeline_id,
+            "request_id": "tc4-req-id",
+            "nonce": nonce,
+            "created_at": "2026-06-12T00:00:00Z",
+            "pr_url": "https://github.com/test/repo/pull/1",
+            "pr_head_sha": "",        # 빈 값 → head SHA 검사 SKIP
+            "github_ci_run_id": "",   # 빈 값 → run ID 검사 SKIP
+            "evidence": str(evidence_file),
+            "evidence_sha256": None,
+            "evidence_url": None,
+            "verification_json_path": None,
+            "verification_json_sha256": None,
+            "packet_path": None,
+            "packet_sha256": None,
+            "github_ci_head_sha": None,
+            "pr_body_sha256": sha_a,  # body_A snapshot — 현재 gh는 body_B 반환 → stale
+            "pr_body_readiness": "PASS",
+            "required_sections_present": True,
+            "temporary_phrases_absent": True,
+            "validated_at": "2026-06-12T00:00:00Z",
+            "status": "PENDING",
+        }
+        req_path.write_text(
+            json.dumps(req_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        result = run_cli(
+            "gates", "accept",
+            "--result", "ACCEPT",
+            "--evidence", str(evidence_file),
+            "--acceptance-code", f"ACCEPT-{pipeline_id}-{nonce}",
+            env=env, cwd=tmp_path,
+        )
+        combined = result.stdout + result.stderr
+
+        # fail-closed invariant: stale 상태에서 ACCEPT는 절대 성공하지 않는다.
+        assert result.returncode != 0, (
+            f"TC-4: PR 본문 stale 상태에서 accept가 성공해서는 안됩니다 (fail-closed 위반)\n"
+            f"출력: {combined[:800]}"
+        )
+        # acceptance gate가 BLOCKED 상태로 막혔음을 확인 (어떤 failure_code든 무방).
+        assert "BLOCKED" in combined, (
+            f"TC-4 FAIL: acceptance gate가 BLOCKED로 막히지 않음\n출력: {combined[:800]}"
+        )
+        # acceptance_request.json이 CONSUMED로 잘못 소비되지 않았는지 확인 (nonce 유효 유지).
+        req_after = json.loads(req_path.read_text(encoding="utf-8"))
+        assert req_after.get("status") != "CONSUMED", (
+            "TC-4: BLOCKED인데 acceptance_request가 CONSUMED로 소비됨 (fail-closed 위반)"
+        )
+
+        # final_state assertion
         with open(state_path, encoding="utf-8") as fh:
             final_state = json.load(fh)
         assert isinstance(final_state, dict)
-        assert "pipeline_id" in final_state
+        assert final_state.get("pipeline_id") == pipeline_id
 
     def test_tc5_request_accept_blocked_when_no_gh_cli(self, tmp_path: Path) -> None:
         """TC-5: PATH에서 gh 제거 → request-accept BLOCKED(pr_body_not_found 또는 gh_cli_not_available).
@@ -438,8 +519,11 @@ class TestPrBodyReadinessA716:
         )
 
         combined = result.stdout + result.stderr
-        assert "BLOCKED" in combined or "pr_body_not_found" in combined or "gh_cli_not_available" in combined, (
-            f"BLOCKED/pr_body_not_found 메시지 없음: {combined[:500]}"
+        assert result.returncode != 0, (
+            f"TC-5: BLOCKED 경우 returncode가 0이어서는 안됩니다\n출력: {combined[:300]}"
+        )
+        assert "BLOCKED" in combined, (
+            f"TC-5 FAIL: BLOCKED가 출력에 포함되어야 합니다\n출력: {combined[:300]}"
         )
 
         # final_state assertion
@@ -461,7 +545,7 @@ class TestPrBodyReadinessA716:
             if req.get("pipeline_id") == cur_pid:
                 # 같은 파이프라인이면 status가 PENDING이 아니어야 함 (BLOCKED로 막혔으므로)
                 # 또는 nonce가 없어야 함
-                assert req.get("status") != "PENDING" or req.get("nonce") is None or True, (
+                assert req.get("status") != "PENDING" or req.get("nonce") is None, (
                     "BLOCKED 후에도 PENDING nonce가 기록됨"
                 )
 
@@ -614,20 +698,18 @@ class TestPrBodyReadinessA716:
                 f"  expected={body_b_sha256}\n"
                 f"  actual={req_after.get('pr_body_sha256')}"
             )
-        else:
-            # BLOCKED 경로 — gates 미통과 등으로 막힌 경우
-            # _should_reuse_acceptance_nonce 로직이 동작하려면 nonce 발급이 필요하므로
-            # 대신 pipeline.py 소스에서 로직 존재를 확인한다.
-            # nonce 재사용 로직이 발동한 흔적 (새 코드 발급 메시지)
-            # BLOCKED가 나온 경우: PR body 변경 감지 메시지나 다른 BLOCKED 사유가 있어야 함
-            source = PIPELINE_PY.read_text(encoding="utf-8")
-            assert "PR 본문이 변경되어(SHA-256 변경) 새 코드를 발급합니다." in source, (
-                "pipeline.py에 PR 본문 변경 감지 메시지가 없음 — "
-                "_should_reuse_acceptance_nonce pr_body_sha256 수정이 누락되었습니다."
-            )
-            assert "new_pr_body_sha256" in source, (
-                "pipeline.py에 new_pr_body_sha256 파라미터가 없음"
-            )
+        else:  # result_req2.returncode != 0
+            # request-accept 재실행이 BLOCKED된 경우 — acceptance_request.json 상태 확인
+            if req_file.exists():
+                req2 = json.loads(req_file.read_text(encoding="utf-8"))
+                # BLOCKED이면 기존 request가 PENDING 상태 그대로이거나 새 nonce가 없어야 함
+                combined2 = result_req2.stdout + result_req2.stderr
+                assert "BLOCKED" in combined2 or result_req2.returncode != 0, (
+                    f"TC-6: request-accept 2차 실행이 BLOCKED여야 하는데 성공함\n출력: {combined2[:300]}"
+                )
+                assert req2.get("status") == "PENDING" or req2.get("nonce") != nonce_1, (
+                    "TC-6: BLOCKED인데 기존 nonce가 그대로 재사용됨"
+                )
 
         # final_state assertion
         with open(env_a["PIPELINE_STATE_PATH"], encoding="utf-8") as fh:

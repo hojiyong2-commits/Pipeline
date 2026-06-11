@@ -4616,8 +4616,10 @@ def _validate_pr_body_readiness(pr_body: str) -> Dict[str, Any]:
         "allow_accept": True,
     }
 
-    if not pr_body:
-        # gh CLI 없는 환경 — 검사 생략 (기존 동작 유지)
+    if pr_body is None:
+        # gh CLI 없는 환경 — 검사 생략 (기존 동작 유지).
+        # IMP-20260611-A716 Round 4 Bug 1: 빈 문자열("")은 검사를 통과해서는 안 되므로
+        # None일 때만 skip한다. 빈 문자열은 섹션 검사로 진행되어 pr_body_incomplete FAIL.
         return pass_result
 
     # --- 1. 필수 섹션 검사 (섹션 누락이 임시 문구보다 우선 탐지) ---
@@ -15899,11 +15901,16 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             required_sections_present_for_req = len(body_check_result.get("missing_sections") or []) == 0
             temporary_phrases_absent_for_req = body_check_result.get("failure_code", "") != "pr_body_temporary"
         else:
-            # pr_body 없음 → FAIL 상태로 명시 기록 (Bug 2 수정)
-            pr_body_sha256_for_req = None
-            pr_body_readiness_for_req = "FAIL"
-            required_sections_present_for_req = False
-            temporary_phrases_absent_for_req = False
+            # IMP-20260611-A716 Round 4 Bug 2: pr_body가 비어 있으면(falsy) nonce를
+            # 발급하기 전에 fail-closed로 차단한다. 이전 구현은 FAIL 스냅샷을 기록한 뒤
+            # _write_acceptance_request로 진행하여 BLOCKED여야 할 상황에 nonce가 발급되었다.
+            _die(
+                "[BLOCKED] failure_code=pr_body_empty\n"
+                "  actual: PR 본문이 비어 있습니다.\n"
+                "  expected: PR 본문에 필수 섹션이 포함되어야 합니다.\n"
+                "  minimal_rerun: python pipeline.py gates request-accept --evidence <결과물-경로>"
+            )
+            return  # unreachable but satisfies type checker
         req = _write_acceptance_request(
             pipeline_id, evidence_str, pr_url, pr_head_sha, ci_run_id,
             verification_json_path=vj_path_for_req,

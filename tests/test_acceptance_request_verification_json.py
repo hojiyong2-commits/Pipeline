@@ -168,7 +168,7 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
                     force_new_code=False,
                 )
 
-                with patch("pipeline._get_pr_body_text", return_value=""):
+                with patch("pipeline._get_pr_body_text", return_value="작업 요약\n내용\n사용자가 확인할 결과물\n결과물\n기대 결과와 실제 결과\n결과\n중요한 선택과 트레이드오프\n선택\n검증\n검증 완료"):
                     with patch("pipeline._get_current_pr_url", return_value=""):
                         with patch("pipeline._get_current_pr_head_sha", return_value="abc1234"):
                             with patch("pipeline._get_pr_branch_ci_run_id", return_value="123456"):
@@ -213,7 +213,7 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
                     force_new_code=False,
                 )
 
-                with patch("pipeline._get_pr_body_text", return_value=""):
+                with patch("pipeline._get_pr_body_text", return_value="작업 요약\n내용\n사용자가 확인할 결과물\n결과물\n기대 결과와 실제 결과\n결과\n중요한 선택과 트레이드오프\n선택\n검증\n검증 완료"):
                     with patch("pipeline._get_current_pr_url", return_value=""):
                         with patch("pipeline._get_current_pr_head_sha", return_value="abc1234"):
                             with patch("pipeline._get_pr_branch_ci_run_id", return_value="123456"):
