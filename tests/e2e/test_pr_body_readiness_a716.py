@@ -14,14 +14,11 @@
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 # 프로젝트 루트 / pipeline.py 경로
 PIPELINE_PY = Path(__file__).resolve().parent.parent.parent / "pipeline.py"
