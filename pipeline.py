@@ -3366,11 +3366,12 @@ def _should_reuse_acceptance_nonce(
     new_pr_head_sha: str,
     new_ci_run_id: str,
     force_new: bool = False,
+    new_pr_body_sha256: Optional[str] = None,
 ) -> "tuple[bool, str]":
-    """기존 acceptance_request를 재사용할지 5-field 비교로 판단.
+    """기존 acceptance_request를 재사용할지 6-field 비교로 판단.
 
     동일 조건(pipeline_id / evidence / evidence_sha256 또는 evidence_url /
-    pr_head_sha / github_ci_run_id)이고 기존 코드가 PENDING 상태이면 재사용.
+    pr_head_sha / github_ci_run_id / pr_body_sha256)이고 기존 코드가 PENDING 상태이면 재사용.
     하나라도 다르거나 force_new=True이면 새 코드 발급.
 
     Args:
@@ -3381,6 +3382,7 @@ def _should_reuse_acceptance_nonce(
         new_pr_head_sha: 현재 PR head commit SHA.
         new_ci_run_id: 현재 GitHub Actions run ID.
         force_new: True이면 조건과 무관하게 항상 새 코드 발급.
+        new_pr_body_sha256: 현재 PR 본문 SHA-256 (없으면 None). IMP-20260611-A716.
     Returns:
         (should_reuse: bool, reason_ko: str) 튜플.
     Raises:
@@ -3406,6 +3408,11 @@ def _should_reuse_acceptance_nonce(
         return False, "PR head SHA가 달라서(새 커밋이 push됨) 새 코드를 발급합니다."
     if str(existing_req.get("github_ci_run_id", "")) != str(new_ci_run_id):
         return False, "GitHub Actions run ID가 달라서 새 코드를 발급합니다."
+    # IMP-20260611-A716: PR 본문 변경 시 재사용 금지 (복구 경로 broken 방지)
+    if new_pr_body_sha256 is not None:
+        existing_body_sha = existing_req.get("pr_body_sha256")
+        if existing_body_sha and existing_body_sha != new_pr_body_sha256:
+            return False, "PR 본문이 변경되어(SHA-256 변경) 새 코드를 발급합니다."
     return True, "PR, 결과물, CI 상태가 모두 같습니다."
 
 
@@ -15819,6 +15826,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     evidence_str = str(evidence)
     is_url = evidence_str.startswith(("http://", "https://"))
     new_evidence_sha256: Optional[str] = None if is_url else _compute_file_sha256(evidence_str)
+    # IMP-20260611-A716: _should_reuse_acceptance_nonce 호출 전 pr_body SHA-256 계산
+    # (pr_body는 line 15785에서 이미 fetch됨)
+    _new_pr_body_sha256: Optional[str] = (
+        hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else None
+    )
 
     existing_req = _load_acceptance_request()
     reuse = False
@@ -15832,6 +15844,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             pr_head_sha,
             ci_run_id,
             force_new=force_new,
+            new_pr_body_sha256=_new_pr_body_sha256,
         )
 
     if reuse and existing_req is not None:
