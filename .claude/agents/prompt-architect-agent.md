@@ -99,6 +99,11 @@ Set `required=false` for ordinary task failures:
 - user rejects the visible result
 - QA finds a bug inside the implementation
 
+> **[필수 규칙] recommended_pipeline_type은 required=true/false와 무관하게 반드시 IMP여야 합니다.**
+> - `required=false`이더라도 `<recommended_pipeline_type>IMP</recommended_pipeline_type>`을 유지하세요.
+> - FEAT/BUG/TASK/T 등 다른 값은 `pipeline.py architect`에서 즉시 BLOCKED됩니다.
+> - 자동 보정은 없습니다. 잘못된 값은 그대로 BLOCKED 처리됩니다.
+
 ## Producer-Consumer Sync Check
 
 When recommending a protocol IMP, list every producer/consumer file that must change together:

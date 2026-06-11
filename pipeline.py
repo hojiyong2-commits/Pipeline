@@ -1176,7 +1176,20 @@ def _parse_protocol_evolution_decision(report_file: Optional[str]) -> Dict[str, 
     if required and scope.lower() == "none":
         _die("protocol evolution required=true must include a concrete <scope>")
     if recommended_type != "IMP":
-        _die("<recommended_pipeline_type> must be IMP; protocol evolution is always a separate IMP pipeline")
+        _die(
+            "<recommended_pipeline_type> 잘못된 값이 감지됐습니다.\n"
+            f"  actual  : {recommended_type}\n"
+            "  expected: IMP\n"
+            "  Protocol Evolution은 FEAT/BUG/TASK/T가 아니라 항상 별도 IMP 파이프라인입니다.\n"
+            "\n"
+            "복구 예시:\n"
+            "  <protocol_evolution_decision>\n"
+            "    <required>false</required>\n"
+            "    <reason>none</reason>\n"
+            "    <scope>none</scope>\n"
+            "    <recommended_pipeline_type>IMP</recommended_pipeline_type>\n"
+            "  </protocol_evolution_decision>"
+        )
 
     return {
         "required": required,
