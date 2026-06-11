@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260611-3F91</pipeline_id>
+  <agent_run_id>qa-73d29c13156260c9</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <criteria_verification>
+    <criterion id="AC-1" status="PASS">
+      <evidence>python pipeline.py harness -> exit 1 + THREE GATE BLOCKED. E2E test PASSED.</evidence>
+    </criterion>
+    <criterion id="AC-2" status="PASS">
+      <evidence>python pipeline.py harness --score 100 -> exit 1 + THREE GATE BLOCKED. E2E test PASSED.</evidence>
+    </criterion>
+    <criterion id="AC-3" status="PASS">
+      <evidence>cmd_harness 함수 항상 _die([THREE GATE BLOCKED]) 반환 확인.</evidence>
+    </criterion>
+    <criterion id="AC-4" status="DEFERRED">
+      <evidence>_parse_harness_report_et 삭제 위험 — _extract_test_code 호출처 존재. DEFERRED 기록.</evidence>
+    </criterion>
+    <criterion id="AC-5" status="PASS">
+      <evidence>grep .Codex/agents AGENTS.md = 0건. grep .claude/agents AGENTS.md = 20건.</evidence>
+    </criterion>
+    <criterion id="AC-6" status="PASS">
+      <evidence>pm-planner-agent.md, pipeline-manager-agent.md 신규 파일 없음 (DEFERRED).</evidence>
+    </criterion>
+    <criterion id="AC-7" status="PASS">
+      <evidence>legacy_cleanup_execution_report.md 존재. REMOVED/MODIFIED/PRESERVED/DEFERRED 4섹션 확인.</evidence>
+    </criterion>
+    <criterion id="AC-8" status="PASS">
+      <evidence>변경 파일 4개 범위 내: pipeline.py, tests/e2e/test_harness_block_3f91.py, AGENTS.md, legacy_cleanup_execution_report.md.</evidence>
+    </criterion>
+    <criterion id="AC-9" status="DEFERRED">
+      <evidence>Phase 7 외부 게이트 진행 예정.</evidence>
+    </criterion>
+  </criteria_verification>
+  <scope_verification>
+    <files_reviewed>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_harness_block_3f91.py</file>
+      <file>AGENTS.md</file>
+      <file>legacy_cleanup_execution_report.md</file>
+    </files_reviewed>
+    <extra_files_found>none</extra_files_found>
+    <trust_root_violation>false</trust_root_violation>
+  </scope_verification>
+  <test_results>
+    <e2e_tests>2 passed</e2e_tests>
+    <cli_evidence_contract>PASS (0 violations)</cli_evidence_contract>
+    <legacy_test_regression>test_harness_score_blocked PASS (harness still blocked)</legacy_test_regression>
+  </test_results>
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>4 files — within scope_manifest bounds</blast_radius>
+  </micro_task_boundary>
+  <failure_signature>none</failure_signature>
+</qa_report>
