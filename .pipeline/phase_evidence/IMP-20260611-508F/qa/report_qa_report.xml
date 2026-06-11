@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260611-508F</pipeline_id>
+  <qa_run_id>qa-08b8a2d585ce6d38</qa_run_id>
+  <agent_token>tok_H1RuepQmhR2YykPl_rrXKuDMtVejwtA74cbraK-xi1A</agent_token>
+
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, .claude/agents/prompt-architect-agent.md, AGENTS.md, tests/e2e/test_architect_evo_type_508f.py, cleanup_followup_report.md</evidence>
+    <accepted>true — 5개 증거 파일 모두 디스크에 존재 확인. category_tags에 UI 미포함 → dev-agent handover 단독 수락.</accepted>
+  </handover>
+
+  <gate_status_note>
+    [QA GATE 경고] `python pipeline.py check --phase qa`가 exit code 1로 BLOCKED 상태입니다.
+    사유: codex_review_missing_evidence — Codex review `code` stage ACCEPT 미기록 (현재 통과: scope/plan/pr).
+    이는 Dev handover 결함이 아니라 Pipeline Manager의 Codex review 선행 절차 누락입니다.
+    Dev Phase는 DONE 상태이며 5개 증거 파일이 모두 존재합니다. 따라서 본 QA는 실제 산출물에 대한
+    기술 검증을 수행했으나, Pipeline Manager는 `python pipeline.py review codex-run --stage code
+    --review-model GPT-5.5` 를 먼저 기록한 뒤 `pipeline.py qa --result ...`를 기록해야 합니다.
+    Codex code stage 미기록 상태에서는 pipeline.py가 qa 기록을 물리적으로 차단합니다.
+  </gate_status_note>
+
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 없음</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>N-A — 파일 I/O 신규 패턴 없음 (단순 문자열 리터럴 변경)</fs>
+    <pd>PASS — pipeline.py 변경이 _parse_protocol_evolution_decision 단일 함수에 한정 (14줄 삽입/1줄 삭제). 모듈 경계 침범 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. bandit High=0 (신규 High 미도입).</sec>
+    <al>N-A — 알고리즘 로직 변경 없음</al>
+    <build>N-A — meta-task, EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+
+  <criteria_verification>
+    <criterion id="AC-1" status="PASS">pipeline.py:1178-1192 _parse_protocol_evolution_decision의 recommended_type != "IMP" 분기 _die() 메시지가 [PIPELINE ERROR] prefix(_die line 3120), "actual  : {recommended_type}", "expected: IMP", "FEAT/BUG/TASK/T가 아니라 항상 별도 IMP 파이프라인" 한 줄 설명, 복구용 protocol_evolution_decision XML 예시를 모두 포함. _die는 sys.exit(1)로 종료하여 raw Python traceback 미노출.</criterion>
+    <criterion id="AC-2" status="PASS">차단 조건 if recommended_type != "IMP"(line 1178) 불변. T/FEAT E2E 테스트가 exit code != 0 검증 통과. _child_text(decision, "recommended_pipeline_type", "IMP")(line 1168) 기본값 로직 미변경 → 값 누락 시 기존 동작 보존. git diff 확인: 메시지 문자열만 확장, 분기 로직 무변경.</criterion>
+    <criterion id="AC-3" status="PASS">.claude/agents/prompt-architect-agent.md:102-105 Protocol Evolution Decision 섹션 내 blockquote: required=true/false 무관 항상 IMP / required=false도 IMP 유지 / FEAT/BUG/TASK/T 즉시 BLOCKED / 자동 보정 없음 모두 명시.</criterion>
+    <criterion id="AC-4" status="PASS">AGENTS.md:536-539 Phase 9 Protocol Evolution 섹션 내 동일 원칙 blockquote: required=true/false 무관 항상 IMP / required=false 여도 IMP 유지(다른 값 즉시 BLOCKED) / 자동 보정 없음 명시.</criterion>
+    <criterion id="AC-5" status="PASS">tests/e2e/test_architect_evo_type_508f.py: @pytest.mark.parametrize("bad_type", ["T", "FEAT"]) 적용. 각 테스트가 exit code != 0, [PIPELINE ERROR], "actual  : {bad_type}", "expected: IMP", "&lt;recommended_pipeline_type&gt;IMP&lt;/recommended_pipeline_type&gt;" 복구 XML, traceback 부재 검증. subprocess.run 기반 CLI 실행, env["PIPELINE_STATE_PATH"] 격리, read_state로 final_state(architect status != DONE) assertion 포함. pytest 실행 결과 3 passed.</criterion>
+    <criterion id="AC-6" status="PASS">test_valid_imp_type_not_blocked_by_type_check: 정상 IMP는 type 차단 메시지("잘못된 값이 감지됐습니다", "actual  : IMP") 미출력 검증 + satisfy_all_gates state에서 architect phase가 DONE 기록되고 protocol_evolution_decision.recommended_pipeline_type=="IMP" final_state assertion. 통과.</criterion>
+    <criterion id="AC-7" status="PASS">cleanup_followup_report.md 존재. REMOVED/MODIFIED/PRESERVED/DEFERRED 4개 섹션 모두 존재. PRESERVED에 _parse_harness_report_et(line 114), _extract_test_code(line 145), cmd_harness(line 7229) 항목 + call graph 근거 justification 포함. DEFERRED에 tests/oracles/** orphaned oracle, pm-planner-agent.md, pipeline-manager-agent.md 항목 포함. 각 entry에 파일/함수·섹션·경로/라인번호·검색근거/처리/이유 모두 기재.</criterion>
+    <criterion id="AC-9" status="PASS">python pipeline.py harness → [THREE GATE BLOCKED] + exit 1 (직접 exit code 확인). python pipeline.py harness --score 100 → [THREE GATE BLOCKED] + exit 1. 기존 회귀 테스트 tests/e2e/test_harness_block_3f91.py → 2 passed. 기존 harness 차단 동작 무손상.</criterion>
+  </criteria_verification>
+
+  <c3_cross_verification>
+    <scope_files_declared>5</scope_files_declared>
+    <evidence_files_submitted>5</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff origin/main...HEAD: 5개 선언 파일 + tests/oracles/IMP-20260611-508F/** 4개 oracle(input/expected). oracle 파일은 contract 답안지로 Codex review reviewed_files에 등록됨(정상 setup, scope creep 아님). pipeline.py 변경은 _parse_protocol_evolution_decision 단일 함수에 한정(14+/1-).</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>N-A — QA에 전달된 컨텍스트는 AC 목록 기반. PM step_plan 직접 조회 불가. dev handover 증거 파일 기준 검증.</decomposition_audit_present>
+    <declared_functions>1</declared_functions>
+    <actual_modified_functions>1</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — E2E 테스트가 실제 subprocess CLI 실행으로 동작 검증 (3 passed)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 함수 정의가 아닌 실제 CLI 호출 경로(cmd_architect → _parse_protocol_evolution_decision)에서 메시지 출력 및 차단 동작 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <static_checks>
+    <ruff>PASS — All checks passed (pipeline.py, tests/e2e/test_architect_evo_type_508f.py)</ruff>
+    <mypy>PASS — Success: no issues found in 1 source file (pipeline.py --ignore-missing-imports)</mypy>
+    <bandit>PASS — High severity 0 신규 도입 없음 (문자열 리터럴 변경)</bandit>
+  </static_checks>
+
+  <test_results>
+    <test name="test_bad_recommended_type_blocked[T]" status="PASS"/>
+    <test name="test_bad_recommended_type_blocked[FEAT]" status="PASS"/>
+    <test name="test_valid_imp_type_not_blocked_by_type_check" status="PASS"/>
+    <test name="test_harness_block_3f91 (회귀, 2건)" status="PASS"/>
+    <test name="pipeline.py harness exit 1 + THREE GATE BLOCKED" status="PASS"/>
+    <test name="pipeline.py harness --score 100 exit 1 + THREE GATE BLOCKED" status="PASS"/>
+  </test_results>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <improvement_suggestions>
+    [ORACLE GATE 주의 — QA 차단 사유 아님] tests/oracles/IMP-20260611-508F/edge_evo_type_blocked/expected.json의
+    stdout_contains_substrings에 "actual: T" (공백 1개)가 들어있으나, pipeline.py 실제 출력은 "actual  : T" (공백 2개)입니다.
+    oracle runner가 정확한 substring 매칭을 수행하면 이 케이스가 oracle gate에서 불일치로 실패할 수 있습니다.
+    E2E 테스트(AC-5 binding)는 올바른 두 칸 형식 "actual  : {bad_type}"을 사용하므로 통과하지만, Phase 7 oracle gate
+    진입 전 oracle expected.json의 "actual: T"를 "actual  : T"로 정정하거나 substring을 "actual"로 완화하는 것을 권고합니다.
+    이는 Dev handover 결함이 아니라 oracle answer-key 표기 정밀도 문제로, oracle gate(Phase 7) 통과를 위한 사전 정정 권장입니다.
+  </improvement_suggestions>
+</qa_report>
