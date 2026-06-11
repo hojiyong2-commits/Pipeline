@@ -63,6 +63,9 @@ def init_isolated_state(tmp_path: Path) -> Dict[str, str]:
     cmd_harness는 _load_branch_state() 호출 후 _die([THREE GATE BLOCKED])를 실행하므로
     유효한 state가 없으면 '활성 파이프라인 없음' 오류가 먼저 발생한다.
     이를 방지하기 위해 pipeline.py new로 최소 state를 생성한다.
+
+    CLI Evidence Contract (IMP-20260525-6FAC):
+    PIPELINE_STATE_PATH 격리 + final_state assertion 포함.
     """
     state_file = tmp_path / "pipeline_state.json"
     env = {
@@ -78,6 +81,13 @@ def init_isolated_state(tmp_path: Path) -> Dict[str, str]:
         f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
     )
     assert state_file.exists(), "pipeline.py new 후 state 파일이 생성되지 않았습니다."
+
+    # final_state assertion: new 이후 current_phase가 'pm'이어야 함
+    final_state = read_state(state_file)
+    assert final_state.get("current_phase") == "pm", (
+        f"pipeline.py new 후 예상 상태(pm)가 아닙니다: {final_state.get('current_phase')}"
+    )
+    assert final_state.get("pipeline_id"), "pipeline.py new 후 pipeline_id가 없습니다."
     return env
 
 
