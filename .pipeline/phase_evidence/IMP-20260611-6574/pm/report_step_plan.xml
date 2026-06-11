@@ -1,0 +1,157 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260611-6574</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning - Repo-Wide Legacy/Dead-Code Audit (FAST_ANALYSIS)</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FAST_ANALYSIS</category_tags>
+
+  <task_complexity>
+    <execution_profile>FAST_ANALYSIS</execution_profile>
+    <reason>audit-only 작업으로 repo_wide_legacy_audit.md 단일 파일만 생성. 제품 코드 수정 없음. micro-task 1개. P0/P1 질문 0개. 삭제/이동/외부API/인증/빌드/배포 없음.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>0</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>분류 기준 5가지와 감사 범위는 사용자 원문에 완전히 명시됨. 내부 구현 취향(섹션 순서, 마크다운 스타일 등) 질문은 유지보수성 기준으로 PM이 처리함.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업은 repo_wide_legacy_audit.md 보고서 파일 하나만 생성하는 방식으로 진행할까요? (코드 수정 없이 분석 보고서만 만듭니다)</user_facing_question>
+        <evidence>사용자 원문에 "최종 산출물은 repo_wide_legacy_audit.md 하나만 만든다"고 명시됨.</evidence>
+        <why_it_matters>단일 보고서로 집중하면 범위 오염 없이 검토가 쉽고, 향후 삭제/수정 작업을 별도 IMP로 진행할 때 이 보고서가 기준이 됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1 하나로 진행 - repo_wide_legacy_audit.md만 생성</label>
+            <benefit>범위가 명확하고, git diff 오염이 없으며, 보고서 내용에만 집중할 수 있습니다.</benefit>
+            <cost>보고서만으로는 실제 삭제가 이뤄지지 않으므로 후속 IMP가 필요합니다.</cost>
+          </option>
+          <option id="B">
+            <label>여러 MT로 분해 - 감사 범위별 분리 보고서 생성</label>
+            <benefit>pipeline.py / agent MD / workflow 별로 세분화할 수 있습니다.</benefit>
+            <cost>사용자 요청은 단일 통합 보고서이므로 불필요한 복잡성이 생깁니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 원문에 "최종 산출물은 repo_wide_legacy_audit.md 하나만 만든다"로 명시됨. 옵션 A로 진행.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    Input: pipeline.py, .claude/agents/*.md, AGENTS.md, .github/workflows/ci.yml, .github/pull_request_template.md, tests/**, tests/oracles/**
+    Output: repo_wide_legacy_audit.md (project root)
+    Validation: file exists + all 5 classification sections present + no product code modified
+  </interface_spec>
+
+  <requirements>
+    1. Audit scope: pipeline.py, .claude/agents/*.md, AGENTS.md, .github/workflows/ci.yml, .github/pull_request_template.md, tests/**, tests/oracles/**, command examples and completion conditions in docs/agent MDs
+    2. .pipeline/**, pipeline_outputs/**, dist/build/cache/temp outputs excluded from analysis scope. Only check for PR diff contamination.
+    3. Current SSoT baseline (post IMP-20260610-8C3B and IMP-20260610-982B): Three-Gate + Option A phase attestation, PM Planner/Manager split, Verification JSON SSoT, Nonce Gate, AC Tracking, module integrate PASS + ac_completeness cache, request-accept acceptance snapshot atomic creation, Technical / Oracle / GitHub CI / Human ACCEPT hard gates
+    4. Legacy patterns to identify: classic harness completion (pipeline.py harness --score ...), numeric final score completion (BUILD+QA sum), manual packet SHA sync, test_results.jsonl-based COMPLETE declaration, single PM agent flow, Phase 6-7 intermediate user confirmation question pattern
+    5. Five classification criteria: DELETE_CANDIDATE_HIGH, DELETE_CANDIDATE_LOW, MODIFY_CANDIDATE, PRESERVE, NEEDS_INVESTIGATION
+    6. Absolute prohibitions: no pipeline.py modification, no .claude/agents/*.md modification, no tests/** deletion, no tests/oracles/** modification, no cleanup_report.md modification, no git diff outside repo_wide_legacy_audit.md
+    7. Required report sections: audit purpose, audit date and current SSoT baseline, audit scope, classification criteria description, 5 classification item lists with file/location/rationale, audit summary and follow-up recommendations
+    8. FAST_ANALYSIS constraints: no product code (.py/.js/.ts/.ps1 etc.) modification, only 1 micro-task allowed
+  </requirements>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>repo_wide_legacy_audit.md is created at project root and contains all 5 sections: DELETE_CANDIDATE_HIGH, DELETE_CANDIDATE_LOW, MODIFY_CANDIDATE, PRESERVE, NEEDS_INVESTIGATION</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>git diff --name-only HEAD does not include pipeline.py, .claude/agents/*.md, .github/workflows/ci.yml or other product code/agent MD/workflow files (only repo_wide_legacy_audit.md and IMP-20260611-6574 oracle files are changed)</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>DELETE_CANDIDATE_HIGH section contains at least 1 item. At minimum one of: classic harness completion path, numeric final score completion, or pipeline.py harness --score pattern must be identified.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>Each item in the report includes: filename, location (line number or section name), and rationale for legacy classification relative to current SSoT baseline.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <decomposition_audit>
+    <total_functions_identified>0</total_functions_identified>
+    <micro_task_count>1</micro_task_count>
+    <grep_executions>8</grep_executions>
+    <split_decision>audit-only work. Output is single repo_wide_legacy_audit.md file. Meets FAST_ANALYSIS profile conditions (1 micro-task, no product code modification). Single MT-1 without splitting.</split_decision>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>N/A (new file creation: repo_wide_legacy_audit.md)</affected_function>
+      <target_files>
+        <file>repo_wide_legacy_audit.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>harness --score|classic mode|numeric.*score|score.*completion|test_results\.jsonl</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Analyze entire repo and generate repo_wide_legacy_audit.md report classifying legacy/dead-code candidates under 5 categories based on current SSoT baseline. No actual files modified.</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 - matches existing repo environment</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.defaultInterpreterPath=3.10, typeCheckingMode=basic</vscode>
+  </env_specs>
+
+  <forbidden>No pipeline.py modification | No .claude/agents/*.md modification | No .github/workflows/ci.yml modification | No tests/** deletion | No tests/oracles/** modification of existing files | No CLAUDE.md modification | No cleanup_report.md modification | No git diff outside repo_wide_legacy_audit.md | No new product code file creation | FAST_ANALYSIS violation: no implementation beyond single MT-1</forbidden>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\pm-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\test-harness-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\dev-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\qa-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\AGENTS.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.github\workflows\ci.yml</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.github\pull_request_template.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\deadcode_cleanup_report.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\cleanup_report.md</file>
+    </target_files>
+    <phase_rules_excerpt>FAST_ANALYSIS: no product code modification, 1 micro-task. Output is repo_wide_legacy_audit.md only. If git diff contains .py/.md(agent MD)/.yml modifications, stop immediately and revert. dev-agent must perform scope_lock_check before outputting handover.</phase_rules_excerpt>
+    <prev_phase_summary>PM planning complete. Contract frozen (hash: 8216dac6). MT-1: create repo_wide_legacy_audit.md. Oracles: tests/oracles/IMP-20260611-6574/ (normal + edge, 2 cases). Current SSoT: Three-Gate + PM Planner/Manager split + Verification JSON SSoT + Nonce Gate + AC Tracking.</prev_phase_summary>
+  </context_injection>
+
+  <build_decision>
+    <required>false</required>
+    <skip_reason>meta-task</skip_reason>
+    <note>FAST_ANALYSIS profile. repo_wide_legacy_audit.md is an MD file and not subject to EXE build. Pipeline Manager records: build --exe N/A --skip-reason meta-task.</note>
+  </build_decision>
+
+</step_plan>
