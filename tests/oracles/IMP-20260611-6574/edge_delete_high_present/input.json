@@ -1,0 +1,12 @@
+{
+  "check": "보고서에 DELETE_CANDIDATE_HIGH 항목이 1개 이상 존재하는지 확인 (현재 SSoT 기준 전환 후 반드시 일부 레거시 항목 식별됨)",
+  "target_file": "repo_wide_legacy_audit.md",
+  "expected_behavior": "Three-Gate 이전의 classic harness completion 경로, numeric final score completion 경로, 숫자 점수 기반 완료 문구 등은 반드시 DELETE_CANDIDATE_HIGH 또는 MODIFY_CANDIDATE로 분류되어야 한다",
+  "known_legacy_patterns": [
+    "pipeline.py harness --score",
+    "numeric final score",
+    "classic mode",
+    "test_results.jsonl 기반 COMPLETE",
+    "BUILD+QA 합산 점수"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "verdict": "PASS",
+  "checks": {
+    "delete_candidate_high_count_ge_1": true,
+    "legacy_harness_score_path_identified": true,
+    "numeric_final_score_path_identified": true,
+    "classic_mode_identified": true
+  },
+  "minimum_delete_high_count": 1,
+  "description": "엣지 케이스: DELETE_CANDIDATE_HIGH 분류 항목이 최소 1개 이상 존재해야 함. Three-Gate 도입 이전의 classic harness completion, numeric final score, pipeline.py harness --score 경로 등 최소 1개의 레거시 패턴이 고위험 삭제 후보로 식별되어야 정상적인 감사 보고서임",
+  "note": "감사 보고서가 DELETE_CANDIDATE_HIGH를 0개로 보고하면 감사 범위가 불완전하거나 현재 SSoT 기준이 제대로 반영되지 않은 것"
+}
