@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260611-3F91</pipeline_id>
+  <agent_run_id>dev-e926913165efa68b</agent_run_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_harness_block_3f91.py</file>
+      <file>AGENTS.md</file>
+      <file>legacy_cleanup_execution_report.md</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline.build_parser (MT-1)</target_function>
+    <target_function>pipeline.cmd_harness (MT-1)</target_function>
+    <target_function>TestHarnessThreeGateBlock.test_harness_no_args_blocked (MT-2)</target_function>
+    <target_function>TestHarnessThreeGateBlock.test_harness_with_score_arg_blocked (MT-2)</target_function>
+    <target_function>AGENTS.md 에이전트 테이블 및 경로 참조 (MT-3)</target_function>
+    <target_function>legacy_cleanup_execution_report.md new file (MT-4)</target_function>
+    <blast_radius>4 files, 2 functions modified (pipeline.py), 2 new test functions, 20 string replacements (AGENTS.md), 1 new file</blast_radius>
+    <side_effects>none outside scope</side_effects>
+  </impact_analysis>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_harness_block_3f91.py</file>
+    <file>AGENTS.md</file>
+    <file>legacy_cleanup_execution_report.md</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <module_gates>
+    <mt id="MT-1" status="PASS">pipeline.py harness argparse fix</mt>
+    <mt id="MT-2" status="PASS">E2E tests (2 passed)</mt>
+    <mt id="MT-3" status="PASS">AGENTS.md path correction (20 occurrences)</mt>
+    <mt id="MT-4" status="PASS">legacy_cleanup_execution_report.md created</mt>
+  </module_gates>
+  <integration_gate status="PASS">integration_report.xml</integration_gate>
+  <status>READY_FOR_QA</status>
+</handover>
