@@ -4,7 +4,7 @@
   "exit_code": 1,
   "stdout_contains_substrings": [
     "[PIPELINE ERROR]",
-    "actual: T",
+    "actual  : T",
     "expected: IMP",
     "IMP</recommended_pipeline_type>"
   ],
