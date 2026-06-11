@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scope_declaration>
+  <files_to_create>tests/e2e/test_architect_evo_type_508f.py, cleanup_followup_report.md</files_to_create>
+  <files_to_modify>pipeline.py (_parse_protocol_evolution_decision _die 메시지), .claude/agents/prompt-architect-agent.md (Protocol Evolution Decision 섹션), AGENTS.md (Phase 9 섹션)</files_to_modify>
+  <files_to_delete>없음</files_to_delete>
+  <out_of_scope>차단 조건/기본값 로직 변경, 코드/oracle 삭제, 새 agent MD 파일 생성</out_of_scope>
+</scope_declaration>
+
+<impact_analysis>
+  <micro_task_id>MT-1</micro_task_id>
+  <target_function>pipeline._parse_protocol_evolution_decision</target_function>
+  <upstream_callers>
+    <caller location="pipeline.py:7351">cmd_architect — _parse_protocol_evolution_decision(report_file) 호출. 반환 dict/시그니처 불변이므로 영향 없음.</caller>
+  </upstream_callers>
+  <downstream_dependencies>
+    <dep>pipeline._die</dep>
+    <dep>pipeline._child_text</dep>
+  </downstream_dependencies>
+  <state_mutations>
+    <mutation>none — 순수 파싱/검증 함수. 메시지 변경은 stderr 출력 텍스트만 영향.</mutation>
+  </state_mutations>
+  <risk_assessment>
+    <signature_change>NO — _die 인자 문자열 내용만 변경</signature_change>
+    <breaking_change>NO — 차단 조건/exit code/반환 dict 불변</breaking_change>
+    <test_coverage>NEW_TEST_ADDED — tests/e2e/test_architect_evo_type_508f.py</test_coverage>
+    <rollback_strategy>git checkout pipeline.py 또는 _die 인자를 원래 한 줄 메시지로 복원</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<impact_analysis>
+  <micro_task_id>MT-2</micro_task_id>
+  <target_function>prompt-architect-agent.md Protocol Evolution Decision section</target_function>
+  <upstream_callers><caller location="none">none — MD 문서</caller></upstream_callers>
+  <downstream_dependencies><dep>none</dep></downstream_dependencies>
+  <state_mutations><mutation>none — 문서 텍스트 추가</mutation></state_mutations>
+  <risk_assessment>
+    <signature_change>NO</signature_change>
+    <breaking_change>NO — 기존 텍스트 보존</breaking_change>
+    <test_coverage>NONE — 문서</test_coverage>
+    <rollback_strategy>git checkout 복원</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<impact_analysis>
+  <micro_task_id>MT-3</micro_task_id>
+  <target_function>AGENTS.md Phase 9 section</target_function>
+  <upstream_callers><caller location="none">none — MD 문서</caller></upstream_callers>
+  <downstream_dependencies><dep>none</dep></downstream_dependencies>
+  <state_mutations><mutation>none — 문서 텍스트 추가</mutation></state_mutations>
+  <risk_assessment>
+    <signature_change>NO</signature_change>
+    <breaking_change>NO — 기존 텍스트 보존</breaking_change>
+    <test_coverage>NONE — 문서</test_coverage>
+    <rollback_strategy>git checkout 복원</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<impact_analysis>
+  <micro_task_id>MT-4</micro_task_id>
+  <target_function>TestArchitectEvoType (신규 테스트 클래스)</target_function>
+  <upstream_callers><caller location="none">none — pytest 수집 신규 테스트</caller></upstream_callers>
+  <downstream_dependencies>
+    <dep>subprocess (pipeline.py architect CLI)</dep>
+    <dep>pipeline.py new (격리 state 생성)</dep>
+  </downstream_dependencies>
+  <state_mutations><mutation>tmp_path/pipeline_state.json (PIPELINE_STATE_PATH 격리) — write. 공유 pipeline_history archive는 테스트 cleanup으로 제거.</mutation></state_mutations>
+  <risk_assessment>
+    <signature_change>NO</signature_change>
+    <breaking_change>NO — 신규 파일, 기존 테스트 무수정</breaking_change>
+    <test_coverage>NEW_TEST_ADDED</test_coverage>
+    <rollback_strategy>rm tests/e2e/test_architect_evo_type_508f.py</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<impact_analysis>
+  <micro_task_id>MT-5</micro_task_id>
+  <target_function>cleanup_followup_report.md (신규 분석 산출물)</target_function>
+  <upstream_callers><caller location="none">none — 신규 분석 문서</caller></upstream_callers>
+  <downstream_dependencies><dep>none</dep></downstream_dependencies>
+  <state_mutations><mutation>none — 신규 .md 파일 생성</mutation></state_mutations>
+  <risk_assessment>
+    <signature_change>NO</signature_change>
+    <breaking_change>NO — 신규 파일</breaking_change>
+    <test_coverage>NONE — 문서</test_coverage>
+    <rollback_strategy>rm cleanup_followup_report.md</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<handover>
+  <from>dev-agent</from>
+  <pipeline_id>IMP-20260611-508F</pipeline_id>
+  <phase>dev</phase>
+  <summary>
+    Protocol Evolution recommended_pipeline_type 오류 메시지 개선 + 문서 동기화 + 회귀 테스트 + 3F91 DEFERRED 재audit 보고서.
+    5개 micro-task(MT-1~MT-5) 모두 module design/dev/qa PASS + integration PASS.
+  </summary>
+  <files>
+    <file role="modified">pipeline.py — _parse_protocol_evolution_decision()의 recommended_type != IMP 분기 _die() 메시지를 actual/expected/복구 XML 포함 다중 줄로 확장 (MT-1)</file>
+    <file role="modified">.claude/agents/prompt-architect-agent.md — Protocol Evolution Decision 섹션에 recommended_pipeline_type=IMP 필수 규칙 추가 (MT-2)</file>
+    <file role="modified">AGENTS.md — Phase 9 섹션에 recommended_pipeline_type=IMP 규칙 추가 (MT-3)</file>
+    <file role="created">tests/e2e/test_architect_evo_type_508f.py — TestArchitectEvoType 회귀 테스트 (MT-4)</file>
+    <file role="created">cleanup_followup_report.md — 3F91 DEFERRED 재audit 보고서 (MT-5)</file>
+  </files>
+  <dependencies>없음 — 신규 외부 라이브러리 추가 없음 (pytest는 기존 사용)</dependencies>
+  <entry_point>해당 없음 (라이브러리/CLI 내부 변경 + 문서 + 테스트)</entry_point>
+  <env_vars>테스트: PIPELINE_STATE_PATH (격리용), PYTHONIOENCODING=utf-8</env_vars>
+  <known_constraints>
+    pipeline.py 변경은 차단 조건/시그니처/기본값 로직 불변 — 오류 메시지 텍스트만 풍부해짐.
+    cleanup_followup_report.md는 audit 전용 (코드/oracle 미삭제). 3F91 DEFERRED 4개 항목 모두 보류 유지.
+  </known_constraints>
+  <evidence>
+    <execution>python -m py_compile pipeline.py tests/e2e/test_architect_evo_type_508f.py → OK</execution>
+    <execution>python -c "import pipeline" → OK</execution>
+    <execution>python -m pytest tests/e2e/test_architect_evo_type_508f.py tests/e2e/test_harness_block_3f91.py -q → 5 passed</execution>
+    <execution>python -m pytest tests/e2e/test_real_cli_paths.py -q → 19 passed (회귀 없음)</execution>
+    <manual>_parse_protocol_evolution_decision(report with type=T/FEAT) → [PIPELINE ERROR] actual/expected IMP/복구 XML/exit 1/traceback 없음 확인</manual>
+  </evidence>
+  <module_gate_summary>
+    MT-1 PASS, MT-2 PASS, MT-3 PASS, MT-4 PASS, MT-5 PASS, integration PASS
+  </module_gate_summary>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, .claude/agents/prompt-architect-agent.md, AGENTS.md, tests/e2e/test_architect_evo_type_508f.py, cleanup_followup_report.md</git_diff_files>
+    <manifest_files>pipeline.py, .claude/agents/prompt-architect-agent.md, AGENTS.md, tests/e2e/test_architect_evo_type_508f.py, cleanup_followup_report.md</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false (모두 본 HIGH_RISK Protocol Evolution IMP의 공식 target_files)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
