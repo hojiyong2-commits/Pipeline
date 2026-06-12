@@ -3411,8 +3411,17 @@ def _should_reuse_acceptance_nonce(
     # IMP-20260611-A716: PR 본문 변경 시 재사용 금지 (복구 경로 broken 방지)
     if new_pr_body_sha256 is not None:
         existing_body_sha = existing_req.get("pr_body_sha256")
-        if existing_body_sha and existing_body_sha != new_pr_body_sha256:
+        if not existing_body_sha:
+            # 기존 acceptance_request에 pr_body_sha256 없음 (구 포맷) → 검증 불가 → 새 코드 발급
+            return False, "기존 승인 요청에 PR 본문 SHA가 없어 새 코드를 발급합니다."
+        if existing_body_sha != new_pr_body_sha256:
             return False, "PR 본문이 변경되어(SHA-256 변경) 새 코드를 발급합니다."
+        if existing_req.get("pr_body_readiness") != "PASS":
+            return False, "기존 PR 본문 readiness 스냅샷이 PASS가 아니어서 새 코드를 발급합니다."
+        if existing_req.get("required_sections_present") is not True:
+            return False, "기존 PR 본문 필수 섹션 스냅샷이 불완전하여 새 코드를 발급합니다."
+        if existing_req.get("temporary_phrases_absent") is not True:
+            return False, "기존 PR 본문 임시 문구 스냅샷이 불완전하여 새 코드를 발급합니다."
     return True, "PR, 결과물, CI 상태가 모두 같습니다."
 
 
@@ -16981,6 +16990,56 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 "gates request-accept 재실행 필요"
             )
 
+        # IMP-20260611-A716 MT-5: pr_body_stale 조기 검사
+        # verification_json 검사 직후, provenance/readiness 검사 전에 수행한다.
+        # PR 본문이 이미 stale이면 provenance 등 다른 게이트보다 먼저 알려야 사용자가
+        # 올바른 조치(request-accept 재실행)를 취할 수 있다.
+        _req_for_stale_early = _req  # 이미 로드된 acceptance_request 재사용
+        _saved_body_sha_early = _req_for_stale_early.get("pr_body_sha256") if _req_for_stale_early else None
+        if _saved_body_sha_early:
+            _current_pr_body_early = _get_pr_body_text()
+            if _current_pr_body_early:
+                import hashlib as _hashlib_stale_early
+                _current_body_sha_early = _hashlib_stale_early.sha256(
+                    _current_pr_body_early.encode("utf-8")
+                ).hexdigest()
+                if _current_body_sha_early != _saved_body_sha_early:
+                    _record_failure_packet(
+                        state,
+                        "acceptance",
+                        {},
+                        command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                                 "--evidence", "<result-path>"],
+                        note="PR 본문이 승인 코드 발급 이후 변경되었습니다.",
+                        status="BLOCKED",
+                        phase="build",
+                        failure_code="pr_body_stale",
+                        failure_category="missing_evidence",
+                        summary_ko=(
+                            "PR 본문이 승인 코드 발급 이후 변경되었습니다. "
+                            "gates request-accept를 재실행하여 새 코드를 발급하세요."
+                        ),
+                        expected="request-accept 시점과 동일한 PR 본문",
+                        actual=(
+                            f"PR 본문 SHA-256 불일치: "
+                            f"saved={_saved_body_sha_early[:8]}... "
+                            f"current={_current_body_sha_early[:8]}..."
+                        ),
+                        exit_code=1,
+                        owner="Dev",
+                        return_phase="build",
+                        required_actions=[
+                            "python pipeline.py gates request-accept --evidence <result-path> 로 새 코드를 재발급하세요.",
+                        ],
+                        retry_allowed=True,
+                    )
+                    _save(state)
+                    _die(
+                        "[ACCEPTANCE GATE BLOCKED] failure_code=pr_body_stale\n"
+                        "  PR 본문이 승인 코드 발급 이후 변경되었습니다.\n"
+                        "  gates request-accept를 재실행하여 새 코드를 발급하세요."
+                    )
+
         # IMP-20260607-E656 MT-5: packet_sha256 일치 검증
         # acceptance_request.json에 packet_sha256이 있으면 현재 .md 파일과 비교
         _stored_pkt_sha = str(_req.get("packet_sha256", "") or "")
@@ -17183,50 +17242,6 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     msg_parts.append("  누락 섹션: " + ", ".join(missing))
                 msg_parts.append("  PR 본문과 acceptance packet을 보완한 뒤 다시 실행하세요.")
                 _die("\n".join(msg_parts))
-            # IMP-20260611-A716 MT-5: pr_body_stale 검사
-            # request-accept 시 저장된 pr_body_sha256과 현재 PR 본문 SHA-256 비교.
-            # 불일치 시 request-accept를 재실행해 새 코드를 발급해야 한다.
-            _req_for_stale = _load_acceptance_request()
-            _saved_body_sha = _req_for_stale.get("pr_body_sha256") if _req_for_stale else None
-            if _saved_body_sha:
-                _current_pr_body = _get_pr_body_text()
-                if _current_pr_body:
-                    import hashlib as _hashlib_stale
-                    _current_body_sha = _hashlib_stale.sha256(
-                        _current_pr_body.encode("utf-8")
-                    ).hexdigest()
-                    if _current_body_sha != _saved_body_sha:
-                        _record_failure_packet(
-                            state,
-                            "acceptance",
-                            {},
-                            command=[sys.executable, "pipeline.py", "gates", "request-accept",
-                                     "--evidence", "<result-path>"],
-                            note="PR 본문이 승인 코드 발급 이후 변경되었습니다.",
-                            status="BLOCKED",
-                            phase="build",
-                            failure_code="pr_body_stale",
-                            failure_category="missing_evidence",
-                            summary_ko=(
-                                "PR 본문이 승인 코드 발급 이후 변경되었습니다. "
-                                "gates request-accept를 재실행하여 새 코드를 발급하세요."
-                            ),
-                            expected="request-accept 시점과 동일한 PR 본문",
-                            actual=f"PR 본문 SHA-256 불일치: saved={_saved_body_sha[:8]}... current={_current_body_sha[:8]}...",
-                            exit_code=1,
-                            owner="Dev",
-                            return_phase="build",
-                            required_actions=[
-                                "python pipeline.py gates request-accept --evidence <result-path> 로 새 코드를 재발급하세요.",
-                            ],
-                            retry_allowed=True,
-                        )
-                        _save(state)
-                        _die(
-                            "[ACCEPTANCE GATE BLOCKED] failure_code=pr_body_stale\n"
-                            "  PR 본문이 승인 코드 발급 이후 변경되었습니다.\n"
-                            "  gates request-accept를 재실행하여 새 코드를 발급하세요."
-                        )
             # IMP-20260520-D0BB: Protocol Consistency Guard hard gate.
             # PR body / acceptance packet / 실제 CI run ID / head SHA /
             # changed files 사이의 불일치를 ACCEPT 전에 차단한다.

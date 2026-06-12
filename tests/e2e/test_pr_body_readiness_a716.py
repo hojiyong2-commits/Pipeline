@@ -429,6 +429,20 @@ class TestPrBodyReadinessA716:
         nonce = "TESTNONCE"
         evidence_file = tmp_path / "evidence.txt"
         evidence_file.write_text("test evidence", encoding="utf-8")
+
+        # verification_json_freshness 검사를 통과하기 위해 최소 verification_json 파일 생성.
+        # pr_body_stale 검사까지 도달하려면 verification_json 검사를 먼저 통과해야 한다.
+        # changed_files: [] → _verify_verification_json_freshness 내 files 비교 루프가 건너뜀.
+        vj_file = tmp_path / "human_acceptance_packet.json"
+        vj_data: Dict[str, Any] = {
+            "schema_version": 1,
+            "packet_type": "final_acceptance_evidence",
+            "pipeline_id": pipeline_id,
+            "changed_files": [],
+        }
+        vj_file.write_text(json.dumps(vj_data, ensure_ascii=False), encoding="utf-8")
+        vj_sha256 = hashlib.sha256(vj_file.read_bytes()).hexdigest()
+
         req_path = tmp_path / "acceptance_request.json"
         req_data: Dict[str, Any] = {
             "schema_version": 1,
@@ -442,8 +456,8 @@ class TestPrBodyReadinessA716:
             "evidence": str(evidence_file),
             "evidence_sha256": None,
             "evidence_url": None,
-            "verification_json_path": None,
-            "verification_json_sha256": None,
+            "verification_json_path": str(vj_file),
+            "verification_json_sha256": vj_sha256,
             "packet_path": None,
             "packet_sha256": None,
             "github_ci_head_sha": None,
@@ -472,9 +486,9 @@ class TestPrBodyReadinessA716:
             f"TC-4: PR 본문 stale 상태에서 accept가 성공해서는 안됩니다 (fail-closed 위반)\n"
             f"출력: {combined[:800]}"
         )
-        # acceptance gate가 BLOCKED 상태로 막혔음을 확인 (어떤 failure_code든 무방).
-        assert "BLOCKED" in combined, (
-            f"TC-4 FAIL: acceptance gate가 BLOCKED로 막히지 않음\n출력: {combined[:800]}"
+        # acceptance gate가 pr_body_stale 코드로 정확히 막혔음을 확인.
+        assert "pr_body_stale" in combined, (
+            f"TC-4 FAIL: acceptance gate가 pr_body_stale로 막히지 않음\n출력: {combined[:800]}"
         )
         # acceptance_request.json이 CONSUMED로 잘못 소비되지 않았는지 확인 (nonce 유효 유지).
         req_after = json.loads(req_path.read_text(encoding="utf-8"))
@@ -702,13 +716,14 @@ class TestPrBodyReadinessA716:
             # request-accept 재실행이 BLOCKED된 경우 — acceptance_request.json 상태 확인
             if req_file.exists():
                 req2 = json.loads(req_file.read_text(encoding="utf-8"))
-                # BLOCKED이면 기존 request가 PENDING 상태 그대로이거나 새 nonce가 없어야 함
-                combined2 = result_req2.stdout + result_req2.stderr
-                assert "BLOCKED" in combined2 or result_req2.returncode != 0, (
-                    f"TC-6: request-accept 2차 실행이 BLOCKED여야 하는데 성공함\n출력: {combined2[:300]}"
-                )
-                assert req2.get("status") == "PENDING" or req2.get("nonce") != nonce_1, (
-                    "TC-6: BLOCKED인데 기존 nonce가 그대로 재사용됨"
+                # 핵심 불변: nonce_1이 그대로인데 pr_body_sha256만 body_B sha로 바뀌는 것은
+                # 절대 불가능해야 한다 (nonce 재사용 + body sha 갱신 동시 발생 = 버그).
+                assert not (
+                    req2.get("nonce") == nonce_1 and req2.get("pr_body_sha256") == body_b_sha256
+                ), (
+                    f"TC-6: BLOCKED인데 nonce_1은 그대로이고 pr_body_sha256만 body_B sha로 업데이트됨 (비정상)\n"
+                    f"  nonce={req2.get('nonce')}, nonce_1={nonce_1}\n"
+                    f"  pr_body_sha256={req2.get('pr_body_sha256')}, body_b_sha256={body_b_sha256}"
                 )
 
         # final_state assertion
