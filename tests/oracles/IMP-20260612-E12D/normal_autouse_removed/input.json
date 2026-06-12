@@ -1,5 +1,5 @@
 {
-  "description": "conftest.py fixture autouse=True 제거 전후 상태 확인",
-  "fixture_name": "_default_fake_gh_for_pr_body",
-  "action": "remove_autouse_true"
+  "description": "conftest.py _default_fake_gh_for_pr_body fixture is not autouse",
+  "autouse": false,
+  "pipeline_gh_executable_auto_set": false
 }

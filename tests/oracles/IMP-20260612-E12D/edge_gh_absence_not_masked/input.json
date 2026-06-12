@@ -1,6 +1,5 @@
 {
-  "description": "fake gh fixture 미적용 테스트에서 gh 부재 시 BLOCKED 응답 확인",
-  "fixture_applied": false,
-  "gh_available": false,
-  "action": "run_gate_requiring_gh"
+  "description": "without fake gh fixture, gh-absent tests receive pr_body_not_found BLOCKED",
+  "failure_code": "pr_body_not_found",
+  "masked_by_autouse": false
 }
