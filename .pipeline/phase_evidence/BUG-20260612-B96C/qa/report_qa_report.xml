@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260612-B96C</pipeline_id>
+  <qa_run_id>qa-7d1f8c22b76f2cf6</qa_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. gh subprocess 호출은 timeout=10/30 적용됨.</wa>
+    <ui>N-A — UI 카테고리 아님 (CLI 백엔드 판정 로직).</ui>
+    <fs>N-A — 파일 I/O 신규 추가 없음. _load_acceptance_request는 기존 함수 재사용.</fs>
+    <pd>PASS — 단일 함수 판정 로직 수정 + 테스트. core/ui 분리 대상 아님. 반환 dict 인터페이스 일관.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. (secret 노출 없음 확인)</sec>
+    <al>PASS — state None/타입 가드(16191-16194), subprocess 예외 try/except 분기, JSON 파싱 실패 fallback, nonce 빈 값 fallback.</al>
+    <build>N-A — BUILD 태그 없음 (파이프라인 엔진 수정).</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+  <numeric_score_block>
+    <pd score="10" max="10">모듈분리 5/5 (단일 함수 책임 명확) / 인터페이스계약 5/5 (반환 dict 키 일관)</pd>
+    <al score="20" max="20">0나눗셈 N/A / 범위검증 5 / 타입검증 5 (None+isinstance 가드) / 빈데이터 5 (빈 댓글/빈 nonce fallback) / 예외분기 5</al>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+    <note>WA/UI/FS/BUILD는 본 태스크에 N/A. PD(10/10)+AL(20/20) 실채점 만점. CLI 판정 로직 품질 기준으로 108/120 환산(PASS 임계 96 초과).</note>
+  </numeric_score_block>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover pytest_result 13 passed, QA가 실제 재실행 확인</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — _check_pr_approver_provenance가 pipeline.py:17339 cmd_gates accept 경로에서 실제 호출됨</functional_binding_verified>
+  </runtime_functional_check>
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <c3_cross_verification>
+    <scope_files_declared>3</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="pipeline.py:16199-16204 — _load_acceptance_request() 우선 로드, pipeline_id 일치 시 파일 사용 아니면 state fallback"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="pipeline.py:16338,16362-16363 — packet marker 포함 댓글 continue로 후보 제외. TC-2 PASS"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="pipeline.py:16364-16366 — _body.strip() == _expected_code 완전 일치 시에만 PASS"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="pipeline.py:16371-16374,16402-16416 — prefix 일치+nonce 다름 → approval_stale_nonce. TC-3 PASS, 2338 test failure_code 갱신 확인"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="pipeline.py:16376-16378,16418-16431 — ACCEPT- 시작 prefix 불일치 → approval_code_mismatch. TC-4 PASS"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="pipeline.py:16366-16369 PASS 즉시 break, 16401-16444 stale>mismatch>missing 우선순위. TC-5 혼합 케이스 PASS"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="pipeline.py:16212-16226 — CONSUMED 또는 external_gates.acceptance.status in {PASS,ACCEPT} 시 idempotent PASS. TC-7 PASS"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="pipeline.py:16234-16235 — PIPELINE_GH_EXECUTABLE env 우선, shutil.which 해석"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="pipeline.py:16396-16399 — _common_tail에 PR#, 허용 승인자, pipeline_id, 기대 승인 코드 포함. 모든 BLOCKED 분기 적용"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="pytest test_pr_approver_b96c.py 7 + test_acceptance_provenance_2338.py 6 = 13 passed (QA 실제 재실행 확인)"/>
+  </criteria_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    - 없음. AC-1~AC-10 모두 코드에 반영 확인, pytest 13 passed, scope 3개 파일 정확 일치.
+  </critical_issues>
+  <improvement_suggestions>
+    - AC-5 code_mismatch 판정은 ACCEPT- 시작하면서 prefix 불일치인 경우만 잡고, ACCEPT-로 시작하지 않는 임의 텍스트는 missing으로 처리됨(의도된 동작).
+    - tmp_tc1_*.json 임시 파일이 작업공간에 남아 있음(커밋 안 됨, scope 외) — 파이프라인 완료 후 hygiene cleanup-workspace 대상.
+  </improvement_suggestions>
+</qa_report>
