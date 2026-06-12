@@ -1,40 +1,77 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-12T10:12:48Z",
-  "pipeline_id": "IMP-20260612-CE06",
-  "phase": "build",
+  "generated_at": "2026-06-12T22:01:49Z",
+  "pipeline_id": "BUG-20260612-B96C",
+  "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "19e29886fd5c513817bf794fb0e6f084496d3988",
+  "commit_hint": "89a1c01bee729bda599afd48903a29c6a2e4bc8c",
   "state": {
-    "current_phase": "harness",
-    "phase_completed_at": "2026-06-12T10:12:36Z",
-    "report_file": null,
-    "evidence": "N/A"
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-12T21:58:23Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,tests/test_pr_approver_b96c.py,tests/test_acceptance_provenance_2338.py"
   },
   "agent_run": {
-    "run_id": "build-913a91d46d3e7071",
-    "phase": "build",
-    "agent_id": "build-agent",
+    "run_id": "dev-529302d23b184fa6",
+    "phase": "dev",
+    "agent_id": "dev-agent",
     "status": "COMPLETED",
-    "output_file": "build_report.xml",
-    "output_sha256": "fc8ebd951ae4f36d8e008de2c9ca4b9c21e65fa0bd0bf49a97060b0f5fedebed",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260612-CE06/build/agent_receipt_build-913a91d46d3e7071.json",
-    "receipt_sha256": "c9d0794470e6e6a994beb4add21d4f903117d21a187479a73dd632e9aa168460",
-    "used_by_phase": "build",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260612-CE06\\build\\build-913a91d46d3e7071.json"
+    "output_file": "dev_handover.xml",
+    "output_sha256": "6669ec8ca97c8ecabbdc2cd056c742e624b2d4e8e019f83572372725fcc813dd",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260612-B96C/dev/agent_receipt_dev-529302d23b184fa6.json",
+    "receipt_sha256": "61128935d30f49d4dc22ad12f7867943f425af4f963369f4aca66866c847906b",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260612-B96C\\dev\\dev-529302d23b184fa6.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260612-CE06\\build\\build-913a91d46d3e7071.json",
-      "path": ".pipeline/phase_evidence/IMP-20260612-CE06/build/agent_receipt_build-913a91d46d3e7071.json",
-      "sha256": "c9d0794470e6e6a994beb4add21d4f903117d21a187479a73dd632e9aa168460",
-      "size_bytes": 508,
+      "source": ".pipeline\\agent_receipts\\BUG-20260612-B96C\\dev\\dev-529302d23b184fa6.json",
+      "path": ".pipeline/phase_evidence/BUG-20260612-B96C/dev/agent_receipt_dev-529302d23b184fa6.json",
+      "sha256": "61128935d30f49d4dc22ad12f7867943f425af4f963369f4aca66866c847906b",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260612-B96C/dev/report_dev_handover.xml",
+      "sha256": "6669ec8ca97c8ecabbdc2cd056c742e624b2d4e8e019f83572372725fcc813dd",
+      "size_bytes": 3076,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260612-B96C/dev/scope_manifest_scope_manifest.json",
+      "sha256": "80f5670626f9e7cfb9139654fffb046290795857f8074a494695eb8fb9a88a29",
+      "size_bytes": 2070,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "96bc1019c84e7f991653503e050780049749a7b7481f2746051496c93a77a24c",
+      "size_bytes": 1003698
+    },
+    {
+      "path": "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+      "sha256": "c9b6ffe0b89e19f9d82cbf3a9c0cde10549806f26a168b8876966d3c9a519808",
+      "size_bytes": 28916
+    },
+    {
+      "path": "tests/test_pr_approver_b96c.py",
+      "sha256": "fb6976f7651c5f81e1c4f5379ab8224da3a83141459c68c56fa221793bf82cc8",
+      "size_bytes": 15028
+    },
+    {
+      "path": "tests/test_acceptance_provenance_2338.py",
+      "sha256": "d3fe69d89b0db9a9f24c51095f54f88b583db23a520359b68281e7b3ccf59eb1",
+      "size_bytes": 13129
+    }
+  ],
   "local_only_files": []
 }

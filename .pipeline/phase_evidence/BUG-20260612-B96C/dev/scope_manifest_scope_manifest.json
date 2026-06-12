@@ -1,0 +1,51 @@
+{
+  "pipeline_id": "BUG-20260612-B96C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline._check_pr_approver_provenance"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "pipeline.py: _collect_issued_nonces() 헬퍼 추가 - acceptance_request.json에서 과거 발급 nonce 수집",
+            "pipeline.py: _check_pr_approver_provenance() AC-4 수정 - truncated nonce는 approval_code_mismatch, 발급 이력 nonce는 approval_stale_nonce 반환"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+        "tests/test_pr_approver_b96c.py",
+        "tests/test_acceptance_provenance_2338.py"
+      ],
+      "affected_functions": [
+        "tests.test_pr_approver_b96c.test_stale_nonce_only_fail"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-4", "AC-10"],
+          "changed_files": [
+            "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+            "tests/test_pr_approver_b96c.py",
+            "tests/test_acceptance_provenance_2338.py"
+          ],
+          "implementation_evidence": [
+            "test_request_accept_nonce_reuse_aef0.py: test_truncated_nonce_is_code_mismatch 추가 - 7자리 nonce는 approval_code_mismatch 반환 확인",
+            "test_request_accept_nonce_reuse_aef0.py: test_stale_nonce_exact_match 추가 - 발급 이력의 nonce는 approval_stale_nonce 반환 확인",
+            "test_pr_approver_b96c.py: TC-3 test_stale_nonce_only_fail에 previous_nonces 추가로 stale 판정 기반 제공",
+            "test_acceptance_provenance_2338.py: test_wrong_nonce_blocked failure_code 기대값 approval_code_mismatch로 수정"
+          ]
+        }
+      ]
+    }
+  ]
+}
