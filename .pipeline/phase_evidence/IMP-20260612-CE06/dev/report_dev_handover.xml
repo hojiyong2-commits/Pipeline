@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260612-CE06</pipeline_id>
+  <run_id>dev-121eede0c508f200</run_id>
+  <scope_declaration>
+    <files_to_modify>pipeline.py</files_to_modify>
+    <files_to_create>tests/e2e/test_evidence_deployable_ce06.py</files_to_create>
+    <files_to_delete>없음</files_to_delete>
+  </scope_declaration>
+  <impact_analysis>
+    <target_functions>
+      <function>_is_deployable_evidence (신규)</function>
+      <function>_cmd_gates_request_accept</function>
+    </target_functions>
+    <state_mutations>none - pure helper + early-exit block</state_mutations>
+  </impact_analysis>
+  <changed_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_evidence_deployable_ce06.py</file>
+  </changed_files>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_evidence_deployable_ce06.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_evidence_deployable_ce06.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file path="pipeline.py">_is_deployable_evidence() 신규, _cmd_gates_request_accept() evidence_not_deployable 차단 삽입</file>
+    <file path="tests/e2e/test_evidence_deployable_ce06.py">TC-1~TC-7 신규, pytest 7 passed</file>
+  </evidence>
+  <pytest_result>pytest tests/e2e/test_evidence_deployable_ce06.py: 7 passed; AEF0 regression 6 passed</pytest_result>
+  <self_check>
+    <syntax>PASS</syntax>
+    <logic>PASS</logic>
+    <security>PASS</security>
+  </self_check>
+  <handover_to>qa-agent</handover_to>
+</handover>
