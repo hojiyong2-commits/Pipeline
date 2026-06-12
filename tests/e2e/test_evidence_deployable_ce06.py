@@ -1,6 +1,6 @@
 """IMP-20260612-CE06: gates request-accept evidence deployability E2E 테스트.
 
-TC-1 ~ TC-7 — PIPELINE_STATE_PATH 격리 + 실제 CLI subprocess 호출 + final_state assertion.
+TC-1 ~ TC-9 — PIPELINE_STATE_PATH 격리 + 실제 CLI subprocess 호출 + final_state assertion.
 
 검증 대상:
   request-accept 단계에서 내부 파이프라인 산출물(qa_report.xml 등)을 evidence로
@@ -15,6 +15,8 @@ TC-1 ~ TC-7 — PIPELINE_STATE_PATH 격리 + 실제 CLI subprocess 호출 + fina
   TC-5 (edge):   https URL → BLOCKED 없음
   TC-6 (error):  acceptance_request.json → BLOCKED
   TC-7 (error):  pipeline_contracts/IMP-xxx/ 경로 → BLOCKED
+  TC-8 (error):  .pipeline/ 절대 경로 → BLOCKED (AC-2)
+  TC-9 (error):  outputs add 등록된 qa_report.xml → BLOCKED (AC-5/AC-9)
 
 격리 전략:
   - PIPELINE_STATE_PATH 환경 변수로 state 파일을 tmp_path 안에 격리
@@ -396,6 +398,80 @@ def test_tc7_pipeline_contracts_blocked(tmp_path: Path) -> None:
 
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", rel_evidence],
+        state_path,
+        cwd=tmp_path,
+        extra_env=_fake_gh_env(tmp_path),
+    )
+    _assert_blocked_not_deployable(result, req_path)
+    # final_state: BLOCKED이므로 acceptance_request.json 미생성 확인
+    final_state = {} if not req_path.exists() else json.loads(req_path.read_text(encoding="utf-8"))
+    assert not final_state, f"BLOCKED인데 acceptance_request.json 생성됨: {final_state}"
+
+
+# ─── TC-8: .pipeline/ 경로 직접 차단 (AC-2) ────────────────────────────────────
+
+
+def test_tc8_pipeline_dir_blocked(tmp_path: Path) -> None:
+    """TC-8 (error): .pipeline/ 경로를 evidence로 사용하면 evidence_not_deployable로 BLOCKED된다.
+
+    격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
+    절대 경로로 전달되더라도 경로 중간의 `/.pipeline/` 세그먼트를 내부 산출물로 감지한다.
+    """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
+    state_path = tmp_path / "pipeline_state.json"
+    req_path = tmp_path / "acceptance_request.json"
+
+    _write_state(state_path, DUMMY_PIPELINE_ID)
+
+    # .pipeline/ 아래 파일 생성
+    pipeline_dir = tmp_path / ".pipeline" / "phase_evidence"
+    pipeline_dir.mkdir(parents=True)
+    evidence_path = pipeline_dir / "something.json"
+    evidence_path.write_text("{}", encoding="utf-8")
+
+    result = _run_pipeline(
+        ["gates", "request-accept", "--evidence", str(evidence_path)],
+        state_path,
+        cwd=tmp_path,
+        extra_env=_fake_gh_env(tmp_path),
+    )
+    _assert_blocked_not_deployable(result, req_path)
+    # final_state: BLOCKED이므로 acceptance_request.json 미생성 확인
+    final_state = {} if not req_path.exists() else json.loads(req_path.read_text(encoding="utf-8"))
+    assert not final_state, f"BLOCKED인데 acceptance_request.json 생성됨: {final_state}"
+
+
+# ─── TC-9: outputs add 후에도 내부 산출물 차단 (AC-5, AC-9) ──────────────────────
+
+
+def test_tc9_outputs_add_no_bypass(tmp_path: Path) -> None:
+    """TC-9 (error): outputs add로 등록된 qa_report.xml도 request-accept 단계에서 BLOCKED된다.
+
+    격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
+    내부 산출물은 outputs add로 등록하더라도 evidence로 사용 시 차단되어야 한다.
+    """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
+    state_path = tmp_path / "pipeline_state.json"
+    req_path = tmp_path / "acceptance_request.json"
+
+    _write_state(state_path, DUMMY_PIPELINE_ID)
+
+    # qa_report.xml 생성
+    qa_report = tmp_path / "qa_report.xml"
+    qa_report.write_text("<qa_report></qa_report>", encoding="utf-8")
+
+    # outputs add로 등록 (이 자체는 성공할 것임)
+    _run_pipeline(
+        ["outputs", "add", "--kind", "report", "--path", "qa_report.xml", "--label", "test"],
+        state_path,
+        cwd=tmp_path,
+    )
+
+    # 등록 후에도 request-accept에서 차단되어야 함
+    result = _run_pipeline(
+        ["gates", "request-accept", "--evidence", str(qa_report)],
         state_path,
         cwd=tmp_path,
         extra_env=_fake_gh_env(tmp_path),
