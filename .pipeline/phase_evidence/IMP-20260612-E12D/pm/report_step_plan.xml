@@ -1,0 +1,175 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260612-E12D</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>[FS]</category_tags>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>변경 파일이 tests/conftest.py 1개 + E2E 테스트 파일 5개로 복수이며, 각 파일 그룹의 변경은 독립 검증이 필요합니다. 제품 코드(pipeline.py) 수정은 없거나 최소화합니다.</reason>
+    <uncertainty>
+      <p0_questions>1</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>7</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>120</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>fixture 이름 변경 여부 등 내부 구현 취향 질문은 유지보수성 우선으로 PM이 결정합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>전역 autouse fake gh를 제거하는 방식으로 어떤 방법을 선택할까요?</user_facing_question>
+        <evidence>현재 conftest.py의 autouse=True fixture가 모든 테스트에 자동으로 PIPELINE_GH_EXECUTABLE을 설정합니다.</evidence>
+        <why_it_matters>방법에 따라 수정해야 하는 파일 수와 각 테스트의 명시성이 달라집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>전면 제거 + 각 테스트 파일에 명시적 fixture 추가</label>
+            <benefit>AC-1, AC-2, AC-8 완전 충족. 테스트 파일을 읽으면 어떤 함수가 fake gh를 쓰는지 즉시 파악 가능.</benefit>
+            <cost>수정 파일이 5~6개로 늘어납니다.</cost>
+          </option>
+          <option id="B">
+            <label>루트 conftest autouse 제거 + e2e 전용 conftest 신규 생성</label>
+            <benefit>루트 conftest.py 변경이 최소화됩니다.</benefit>
+            <cost>e2e 범위에서도 autouse가 숨겨져 있어 AC-2가 부분 충족에 그칩니다.</cost>
+          </option>
+        </options>
+        <user_answer>Option A -- 사용자 원문 AC-1, AC-2, 권장 구현 방향 2항에서 명시적으로 선택됨.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+  <requirements>
+    1. tests/conftest.py의 _default_fake_gh_for_pr_body fixture에서 autouse=True를 제거한다.
+    2. test_pr_body_readiness_a716.py는 자체 helper 보유로 변경 불필요.
+    3. 5개 파일에서 request-accept 성공 테스트에 명시적 fixture 파라미터 추가.
+    4. test_user_acceptance_nonce_bbdb.py 및 test_request_accept_snapshot_8c3b.py의 make_env는 PATH 제한 -- 대부분 fixture 추가 불필요.
+    5. AC-8 검증: tests/test_conftest_no_autouse_e12d.py 신규 파일에서 fixture autouse=False 확인 테스트 추가.
+    6. oracle 파일 2개 생성.
+    7. IMP-20260611-A716 동작(TC-1~TC-6) 유지 필수.
+    8. pipeline.py 수정 금지.
+  </requirements>
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_default_fake_gh_for_pr_body (autouse=True 제거)</affected_function>
+      <target_files>
+        <file>tests/conftest.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>autouse=True</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>conftest.py의 _default_fake_gh_for_pr_body fixture에서 autouse=True를 제거하여 전역 자동 적용을 차단한다.</change_summary>
+      <line_estimate>5</line_estimate>
+      <covers_ac>AC-1, AC-8</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>각 E2E 테스트 파일의 request-accept 의존 테스트 함수들</affected_function>
+      <target_files>
+        <file>tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+        <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+        <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+        <file>tests/e2e/test_final_packet_2e3d.py</file>
+        <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>test_request_accept_nonce_reuse_aef0.py -- os.environ.copy() 사용, autouse 의존 여부 Dev 확인 필요.</site>
+        <site>test_final_packet_2e3d.py -- os.environ.copy() 사용, PR body 조회 TC에 fixture 추가.</site>
+        <site>test_ci_run_id_filter_4ac2.py -- PATH fake bins 사용, fake gh py 경로 필요 TC 확인.</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>PIPELINE_GH_EXECUTABLE</pattern>
+        <match_count>18</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>autouse 제거 후 request-accept 성공이 필요한 테스트 함수들에 _default_fake_gh_for_pr_body fixture 파라미터를 명시적으로 추가한다.</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-2, AC-3, AC-4, AC-5, AC-6</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>신규 테스트 파일 -- conftest autouse 비적용 검증</affected_function>
+      <target_files>
+        <file>tests/test_conftest_no_autouse_e12d.py</file>
+        <file>tests/oracles/IMP-20260612-E12D/normal_autouse_removed/expected.json</file>
+        <file>tests/oracles/IMP-20260612-E12D/edge_gh_absence_not_masked/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>IMP-20260612-E12D</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pytest fixture 메타데이터로 _default_fake_gh_for_pr_body가 autouse=False임을 assert하는 테스트 + oracle 파일 2개 생성.</change_summary>
+      <line_estimate>55</line_estimate>
+      <covers_ac>AC-7, AC-8</covers_ac>
+    </micro_task>
+  </micro_tasks>
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>tests/conftest.py의 _default_fake_gh_for_pr_body fixture에 autouse=True가 없다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>fake gh가 필요한 테스트 함수들은 fixture 이름을 파라미터로 명시하거나 자체 helper를 통해 PIPELINE_GH_EXECUTABLE을 설정한다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>gh CLI 부재/실패를 검증하는 테스트(TC-5 등)가 PIPELINE_GH_EXECUTABLE 미설정 상태에서 실제로 gh 부재 경로를 탄다.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>IMP-20260611-A716 관련 E2E 테스트(TC-1~TC-6)가 모두 통과하며, 각 TC의 failure_code가 정확히 검증된다.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>tests/test_acceptance_request_verification_json.py의 기존 테스트가 autouse 제거 후에도 모두 통과한다.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>변경 범위는 tests/ 하위 파일로 한정된다. pipeline.py는 수정하지 않는다.</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>GitHub CI에서 전체 테스트가 PASS한다.</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>tests/test_conftest_no_autouse_e12d.py 또는 conftest.py 내 주석에서 _default_fake_gh_for_pr_body fixture가 autouse=False임을 명시적으로 확인할 수 있다.</text>
+    </criterion>
+  </acceptance_criteria>
+  <forbidden>
+    <item>pipeline.py 수정 (테스트 훅 결함 외 금지)</item>
+    <item>새 gate, 새 phase, 새 approval step 추가</item>
+    <item>IMP-20260611-A716에서 확정된 동작(TC-1~TC-6 failure_code) 변경</item>
+    <item>BLOCKED이면 OK broad assertion으로 failure_code 검증 우회</item>
+    <item>소스 문자열 grep만으로 동작 검증 주장</item>
+    <item>test_pr_body_readiness_a716.py의 자체 helper 제거 또는 변경</item>
+  </forbidden>
+  <decomposition_audit>
+    <total_functions_identified>8</total_functions_identified>
+    <micro_task_count>3</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <split_decision>변경 파일 7개(tests/conftest.py + E2E 테스트 5개 + 신규 테스트 파일)이므로 STANDARD 경로. MT-1(conftest autouse 제거), MT-2(E2E 명시적 fixture opt-in), MT-3(AC-8 검증 테스트+oracle) 3개로 분할.</split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+</step_plan>

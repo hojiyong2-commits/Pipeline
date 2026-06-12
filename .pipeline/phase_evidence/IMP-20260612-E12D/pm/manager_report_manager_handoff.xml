@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <pipeline_id>IMP-20260612-E12D</pipeline_id>
+  <manager_run_id>pipeline_manager-e7a88e787c83ddac</manager_run_id>
+  <planner_run_id>pm_planner-7e4cbe7e77695236</planner_run_id>
+  <status>PM_COMPLETE_DEV_PENDING</status>
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING" />
+    <mt id="MT-2" status="PENDING" />
+    <mt id="MT-3" status="PENDING" />
+  </micro_tasks>
+  <design_decision_dq1>Option A 선택 — autouse=True 전면 제거 후 필요한 테스트에만 명시적 fixture opt-in</design_decision_dq1>
+  <contract_status>FROZEN</contract_status>
+  <oracle_registered>
+    <oracle id="O001" case_kind="normal" />
+    <oracle id="O002" case_kind="edge" />
+  </oracle_registered>
+  <step_plan_sha256>84b30a9404f1afa34eb2d4625592bf32d12f4b85b7236a36ed1fd32ce3e6781b</step_plan_sha256>
+  <next_phase>dev</next_phase>
+  <phase_summary>
+    <phase name="pm" status="COMPLETE" />
+    <phase name="dev" status="PENDING" />
+    <phase name="qa" status="PENDING" />
+    <phase name="sec" status="PENDING" />
+    <phase name="build" status="PENDING" />
+  </phase_summary>
+</manager_handoff>

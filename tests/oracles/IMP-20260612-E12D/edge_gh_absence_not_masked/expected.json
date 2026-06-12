@@ -1,0 +1,5 @@
+{
+  "description": "without fake gh fixture, gh-absent tests receive pr_body_not_found BLOCKED",
+  "failure_code": "pr_body_not_found",
+  "masked_by_autouse": false
+}
