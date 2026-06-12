@@ -181,7 +181,9 @@ def test_tc1_deployable_evidence_allowed(tmp_path: Path) -> None:
     """TC-1 (normal): 배포 가능한 결과물(output.xlsx)은 BLOCKED되지 않고 nonce가 발급된다.
 
     격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
     """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
     evidence_path = tmp_path / "output.xlsx"
@@ -206,10 +208,11 @@ def test_tc1_deployable_evidence_allowed(tmp_path: Path) -> None:
     assert req_path.exists(), (
         f"nonce 발급 실패: acceptance_request.json 미생성\n{combined}"
     )
-    final_req = json.loads(req_path.read_text(encoding="utf-8"))
-    assert final_req.get("nonce"), f"nonce 필드 누락: {final_req}"
-    assert final_req.get("status") == "PENDING", (
-        f"status가 PENDING이 아님: {final_req.get('status')}"
+    # final_state: acceptance_request.json에 nonce와 status 확인
+    final_state = json.loads(req_path.read_text(encoding="utf-8"))
+    assert final_state.get("nonce"), f"nonce 필드 누락: {final_state}"
+    assert final_state.get("status") == "PENDING", (
+        f"status가 PENDING이 아님: {final_state.get('status')}"
     )
 
 
@@ -220,7 +223,9 @@ def test_tc2_qa_report_blocked(tmp_path: Path) -> None:
     """TC-2 (error): qa_report.xml은 내부 산출물 → evidence_not_deployable BLOCKED.
 
     격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
     """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
     evidence_path = tmp_path / "qa_report.xml"
@@ -235,6 +240,9 @@ def test_tc2_qa_report_blocked(tmp_path: Path) -> None:
         extra_env=_fake_gh_env(tmp_path),
     )
     _assert_blocked_not_deployable(result, req_path)
+    # final_state: BLOCKED이므로 acceptance_request.json 미생성 확인
+    final_state = {} if not req_path.exists() else json.loads(req_path.read_text(encoding="utf-8"))
+    assert not final_state, f"BLOCKED인데 acceptance_request.json 생성됨: {final_state}"
 
 
 # ─── TC-3: build_report.xml → BLOCKED ─────────────────────────────────────────
@@ -244,7 +252,9 @@ def test_tc3_build_report_blocked(tmp_path: Path) -> None:
     """TC-3 (error): build_report.xml은 내부 산출물 → BLOCKED.
 
     격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
     """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
     evidence_path = tmp_path / "build_report.xml"
@@ -259,6 +269,9 @@ def test_tc3_build_report_blocked(tmp_path: Path) -> None:
         extra_env=_fake_gh_env(tmp_path),
     )
     _assert_blocked_not_deployable(result, req_path)
+    # final_state: BLOCKED이므로 acceptance_request.json 미생성 확인
+    final_state = {} if not req_path.exists() else json.loads(req_path.read_text(encoding="utf-8"))
+    assert not final_state, f"BLOCKED인데 acceptance_request.json 생성됨: {final_state}"
 
 
 # ─── TC-4: human_acceptance_packet.md → BLOCKED ───────────────────────────────
@@ -268,7 +281,9 @@ def test_tc4_acceptance_packet_blocked(tmp_path: Path) -> None:
     """TC-4 (error): human_acceptance_packet.md은 내부 산출물 → BLOCKED.
 
     격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
     """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
     evidence_path = tmp_path / "human_acceptance_packet.md"
@@ -283,6 +298,9 @@ def test_tc4_acceptance_packet_blocked(tmp_path: Path) -> None:
         extra_env=_fake_gh_env(tmp_path),
     )
     _assert_blocked_not_deployable(result, req_path)
+    # final_state: BLOCKED이므로 acceptance_request.json 미생성 확인
+    final_state = {} if not req_path.exists() else json.loads(req_path.read_text(encoding="utf-8"))
+    assert not final_state, f"BLOCKED인데 acceptance_request.json 생성됨: {final_state}"
 
 
 # ─── TC-5: https URL → BLOCKED 없음 ───────────────────────────────────────────
@@ -292,8 +310,9 @@ def test_tc5_url_evidence_allowed(tmp_path: Path) -> None:
     """TC-5 (edge): https URL은 항상 배포 가능 → evidence_not_deployable 차단 없음.
 
     격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
-    URL evidence는 파일 SHA 계산이 생략되며, nonce가 발급된다.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
     """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
 
@@ -314,8 +333,9 @@ def test_tc5_url_evidence_allowed(tmp_path: Path) -> None:
     assert req_path.exists(), (
         f"URL evidence로 nonce 발급 실패\n{combined}"
     )
-    final_req = json.loads(req_path.read_text(encoding="utf-8"))
-    assert final_req.get("nonce"), f"nonce 필드 누락: {final_req}"
+    # final_state: acceptance_request.json에 nonce 확인
+    final_state = json.loads(req_path.read_text(encoding="utf-8"))
+    assert final_state.get("nonce"), f"nonce 필드 누락: {final_state}"
 
 
 # ─── TC-6: acceptance_request.json → BLOCKED ──────────────────────────────────
@@ -325,9 +345,11 @@ def test_tc6_acceptance_request_blocked(tmp_path: Path) -> None:
     """TC-6 (error): acceptance_request.json은 내부 산출물 → BLOCKED.
 
     격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
     evidence 파일명을 다른 이름으로 두면 격리된 req_path와 충돌하지 않으므로,
     내부 산출물 판정 대상 파일은 별도 하위 폴더에 둔다.
     """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
     evidence_dir = tmp_path / "evid"
@@ -344,6 +366,9 @@ def test_tc6_acceptance_request_blocked(tmp_path: Path) -> None:
         extra_env=_fake_gh_env(tmp_path),
     )
     _assert_blocked_not_deployable(result, req_path)
+    # final_state: BLOCKED이므로 acceptance_request.json 미생성 확인
+    final_state = {} if not req_path.exists() else json.loads(req_path.read_text(encoding="utf-8"))
+    assert not final_state, f"BLOCKED인데 acceptance_request.json 생성됨: {final_state}"
 
 
 # ─── TC-7: pipeline_contracts/ 경로 → BLOCKED ─────────────────────────────────
@@ -353,9 +378,11 @@ def test_tc7_pipeline_contracts_blocked(tmp_path: Path) -> None:
     """TC-7 (error): pipeline_contracts/ 디렉터리 경로는 내부 산출물 → BLOCKED.
 
     격리: PIPELINE_STATE_PATH로 state를 tmp_path에 격리.
+    CLI Evidence Contract: PIPELINE_STATE_PATH isolation + final_state assertion.
     _is_internal_artifact는 상대 경로의 디렉터리 접두사로 판정하므로,
     cwd 기준 상대 경로 'pipeline_contracts/IMP-20260612-CE06/foo.txt'를 evidence로 전달한다.
     """
+    # PIPELINE_STATE_PATH isolation via _run_pipeline helper
     state_path = tmp_path / "pipeline_state.json"
     req_path = tmp_path / "acceptance_request.json"
     contract_dir = tmp_path / "pipeline_contracts" / DUMMY_PIPELINE_ID
@@ -374,3 +401,6 @@ def test_tc7_pipeline_contracts_blocked(tmp_path: Path) -> None:
         extra_env=_fake_gh_env(tmp_path),
     )
     _assert_blocked_not_deployable(result, req_path)
+    # final_state: BLOCKED이므로 acceptance_request.json 미생성 확인
+    final_state = {} if not req_path.exists() else json.loads(req_path.read_text(encoding="utf-8"))
+    assert not final_state, f"BLOCKED인데 acceptance_request.json 생성됨: {final_state}"
