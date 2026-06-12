@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-12T06:22:58Z",
+  "pipeline_id": "IMP-20260612-E12D",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "7ca2e10a89cd5b3cbbeed51a2ccf197a4159c472",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-12T06:08:43Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "tests/conftest.py,tests/e2e/test_user_acceptance_nonce_bbdb.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,tests/e2e/test_request_accept_snapshot_8c3b.py,tests/e2e/test_final_packet_2e3d.py,tests/e2e/test_ci_run_id_filter_4ac2.py,tests/test_conftest_no_autouse_e12d.py,tests/oracles/IMP-20260612-E12D/edge_gh_absence_not_masked/expected.json,tests/oracles/IMP-20260612-E12D/normal_autouse_removed/expected.json"
+  },
+  "agent_run": {
+    "run_id": "dev-9cca388520023088",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "c361442b987e2bf7a49f8da2d7982046965bbdfc0c8788fcb09e89a2704a7cd0",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260612-E12D/dev/agent_receipt_dev-9cca388520023088.json",
+    "receipt_sha256": "41a90187bf6ab637f3e99ea31f1002875a1a0191fb6064545c4d1e4e56989134",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260612-E12D\\dev\\dev-9cca388520023088.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260612-E12D\\dev\\dev-9cca388520023088.json",
+      "path": ".pipeline/phase_evidence/IMP-20260612-E12D/dev/agent_receipt_dev-9cca388520023088.json",
+      "sha256": "41a90187bf6ab637f3e99ea31f1002875a1a0191fb6064545c4d1e4e56989134",
+      "size_bytes": 502,
+      "requires_force_add": false
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260612-E12D/dev/report_dev_handover.xml",
+      "sha256": "c361442b987e2bf7a49f8da2d7982046965bbdfc0c8788fcb09e89a2704a7cd0",
+      "size_bytes": 5000,
+      "requires_force_add": false
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260612-E12D/dev/scope_manifest_scope_manifest.json",
+      "sha256": "d8a6f3eae360e0c1b1e764ec247c76e6db1e80fdf1931655338e65a4b5e886c1",
+      "size_bytes": 3122,
+      "requires_force_add": false
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "tests/conftest.py",
+      "sha256": "cd0c85ea971a9b6e14caf2b8ee00977e266216130d2479d85e20de9efe65af69",
+      "size_bytes": 5108
+    },
+    {
+      "path": "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+      "sha256": "f39d3f469fb4c1b0568583bce518dac418d2841959e4c9bb7ec557fd2c8a5506",
+      "size_bytes": 42954
+    },
+    {
+      "path": "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+      "sha256": "c4472aa5b13350c3c158d336793658cf0d8f9a5d61b7956901e4e42e1a9605c6",
+      "size_bytes": 21227
+    },
+    {
+      "path": "tests/e2e/test_request_accept_snapshot_8c3b.py",
+      "sha256": "313b55db118c91e766d4b8b6b7a0bb82599c545a49fcdfe3a64ceec09922ce7c",
+      "size_bytes": 29855
+    },
+    {
+      "path": "tests/e2e/test_final_packet_2e3d.py",
+      "sha256": "37ca34bfb2c44d55bcdcd94693628ca4b2ec7fc25f5bd544d748a0b6f1772a97",
+      "size_bytes": 41488
+    },
+    {
+      "path": "tests/e2e/test_ci_run_id_filter_4ac2.py",
+      "sha256": "52ef10fa5e35c757ddc7f23ecd3a5500ef5f6d2a5ddc71607420c9062c215b58",
+      "size_bytes": 24129
+    },
+    {
+      "path": "tests/test_conftest_no_autouse_e12d.py",
+      "sha256": "db0a3544b4aab6d152bc3db1dd56fedc432fa184e379bc702ffdcdd876db2ed6",
+      "size_bytes": 2611
+    },
+    {
+      "path": "tests/oracles/IMP-20260612-E12D/edge_gh_absence_not_masked/expected.json",
+      "sha256": "dbe13ecc76e96ad198672da213f47589aa4ad88d386351c0cb876bca2aec5311",
+      "size_bytes": 167
+    },
+    {
+      "path": "tests/oracles/IMP-20260612-E12D/normal_autouse_removed/expected.json",
+      "sha256": "21d01f9022f485a73d76d19d994cf3f3f4e6de68c6941c0ddf641b81cb950271",
+      "size_bytes": 151
+    }
+  ],
+  "local_only_files": []
+}
