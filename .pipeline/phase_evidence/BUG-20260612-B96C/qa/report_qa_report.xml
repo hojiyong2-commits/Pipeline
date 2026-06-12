@@ -1,27 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <qa_report>
   <pipeline_id>BUG-20260612-B96C</pipeline_id>
-  <qa_run_id>qa-7d1f8c22b76f2cf6</qa_run_id>
+  <qa_run_id>qa-44b70b7fee737a11</qa_run_id>
+  <round>2</round>
   <verdict>PASS</verdict>
-  <numeric_score>108</numeric_score>
   <category_check>
-    <wa>N-A — 네트워크/API 카테고리 아님. gh subprocess 호출은 timeout=10/30 적용됨.</wa>
-    <ui>N-A — UI 카테고리 아님 (CLI 백엔드 판정 로직).</ui>
-    <fs>N-A — 파일 I/O 신규 추가 없음. _load_acceptance_request는 기존 함수 재사용.</fs>
-    <pd>PASS — 단일 함수 판정 로직 수정 + 테스트. core/ui 분리 대상 아님. 반환 dict 인터페이스 일관.</pd>
-    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. (secret 노출 없음 확인)</sec>
-    <al>PASS — state None/타입 가드(16191-16194), subprocess 예외 try/except 분기, JSON 파싱 실패 fallback, nonce 빈 값 fallback.</al>
-    <build>N-A — BUILD 태그 없음 (파이프라인 엔진 수정).</build>
-    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+    <wa>N-A — 신규 네트워크 호출 코드 없음. gh CLI 호출은 기존 코드이며 본 변경은 nonce 분류 판정 로직.</wa>
+    <ui>N-A — UI 카테고리 아님. CLI gate 함수 + 테스트 파일 변경.</ui>
+    <fs>N-A — 신규 파일 쓰기 로직 없음. _collect_issued_nonces는 읽기 전용(json.load, utf-8 인코딩, OSError/JSONDecodeError 방어).</fs>
+    <pd>PASS — gate 판정 로직을 _collect_issued_nonces 헬퍼로 분리. 반환 dict 스키마 일관(status/failure_code/message/approver/comment_id). God class 아님.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — _collect_issued_nonces에 isinstance 타입 가드(pipeline_id str, acceptance_req dict), None 방어(TypeError), 빈 nonce 제외, OSError/JSONDecodeError 방어, 빈 댓글 목록 처리. 분류 루프 인덱스 안전.</al>
+    <build>N-A — BUILD 태그 없음.</build>
+    <vsce>N-A — VSCE 태그 없음.</vsce>
   </category_check>
-  <numeric_score_block>
-    <pd score="10" max="10">모듈분리 5/5 (단일 함수 책임 명확) / 인터페이스계약 5/5 (반환 dict 키 일관)</pd>
-    <al score="20" max="20">0나눗셈 N/A / 범위검증 5 / 타입검증 5 (None+isinstance 가드) / 빈데이터 5 (빈 댓글/빈 nonce fallback) / 예외분기 5</al>
-    <total score="108" max="120"/>
-    <percentage>90.0</percentage>
-    <numeric_verdict>PASS</numeric_verdict>
-    <note>WA/UI/FS/BUILD는 본 태스크에 N/A. PD(10/10)+AL(20/20) 실채점 만점. CLI 판정 로직 품질 기준으로 108/120 환산(PASS 임계 96 초과).</note>
-  </numeric_score_block>
+  <numeric_score>120</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 신규 네트워크 호출 코드 없음 (점수 산정 제외)</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 아님 (점수 산정 제외)</ui>
+    <fs score="0" max="20">N/A — 신규 파일 쓰기 로직 없음 (점수 산정 제외)</fs>
+    <pd score="10" max="10">모듈분리 5/5(헬퍼 함수 분리, 단일 책임) / 인터페이스계약 5/5(반환 dict 스키마 일관, 명확한 타입 힌트 set[str], Dict[str, Any])</pd>
+    <al score="20" max="20">0나눗셈 5/5(해당 연산 없음, 만점 처리) / 범위검증 5/5(prefix 길이 슬라이싱 안전) / 타입검증 5/5(isinstance·None TypeError 가드) / 빈데이터 5/5(빈 nonce 제외·빈 댓글 처리·OSError 방어)</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음 (점수 산정 제외)</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="30" max="30"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 채점 대상(PD 10 + AL 20) 만점 30/30. 환산 100%(≥80%). CLI numeric-score는 120점 만점 기준으로 120 기록.</numeric_verdict>
+  </numeric_score_detail>
   <compliance_checklist>
     <wa>
       <timeout_tuple>N-A</timeout_tuple>
@@ -40,19 +45,19 @@
     </fs>
   </compliance_checklist>
   <runtime_functional_check>
-    <execution_check_present>PASS — dev handover pytest_result 13 passed, QA가 실제 재실행 확인</execution_check_present>
-    <execution_check_verdict>PASS</execution_check_verdict>
-    <vsce_build_evidence>N-A</vsce_build_evidence>
-    <functional_binding_verified>PASS — _check_pr_approver_provenance가 pipeline.py:17339 cmd_gates accept 경로에서 실제 호출됨</functional_binding_verified>
+    <execution_check_present>PASS — dev handover pytest_result 21 PASS + self_check syntax/logic/security PASS</execution_check_present>
+    <execution_check_verdict>PASS — QA 직접 재현: pytest 21 passed in 3.53s</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _collect_issued_nonces가 pipeline.py:16442에서 실제 호출됨(정의만 아님). _check_pr_approver_provenance는 cmd_gates에서 호출.</functional_binding_verified>
   </runtime_functional_check>
   <visual_reference_check>
-    <reference_required>NO</reference_required>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 미명시</reference_required>
     <reference_applied_tag>N-A</reference_applied_tag>
     <verdict>N-A</verdict>
   </visual_reference_check>
   <micro_task_boundary>
-    <decomposition_audit_present>PASS</decomposition_audit_present>
-    <grep_evidence_present>PASS</grep_evidence_present>
+    <decomposition_audit_present>PASS — step_plan에 decomposition_audit 블록 존재(SPLIT_REQUIRED)</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1/MT-2 각각 grep_evidence executed=true</grep_evidence_present>
     <declared_functions>2</declared_functions>
     <actual_modified_functions>2</actual_modified_functions>
     <out_of_scope_modifications>
@@ -61,28 +66,29 @@
     <verdict>WITHIN_SCOPE</verdict>
   </micro_task_boundary>
   <c3_cross_verification>
-    <scope_files_declared>3</scope_files_declared>
-    <evidence_files_submitted>3</evidence_files_submitted>
+    <scope_files_declared>4</scope_files_declared>
+    <evidence_files_submitted>4</evidence_files_submitted>
     <files_in_evidence_not_in_scope>
       <file>없음</file>
     </files_in_evidence_not_in_scope>
     <files_in_scope_not_in_evidence>
       <file>없음</file>
     </files_in_scope_not_in_evidence>
-    <grep_verified>YES</grep_verified>
+    <grep_verified>YES — git diff origin/main...HEAD 4개 파일이 scope_manifest와 정확히 일치. pipeline.py 변경 함수는 _collect_issued_nonces + _check_pr_approver_provenance 2개로 한정.</grep_verified>
     <verdict>PASS</verdict>
   </c3_cross_verification>
+  <dead_code>
+    <symbol>pipeline._collect_issued_nonces</symbol>
+    <defined_at>pipeline.py:16171</defined_at>
+    <call_sites>1</call_sites>
+    <verdict>KEEP_REASON — pipeline.py:16442에서 _check_pr_approver_provenance가 호출</verdict>
+  </dead_code>
   <criteria_verification>
-    <criterion ac_id="AC-1" status="PASS" evidence="pipeline.py:16199-16204 — _load_acceptance_request() 우선 로드, pipeline_id 일치 시 파일 사용 아니면 state fallback"/>
-    <criterion ac_id="AC-2" status="PASS" evidence="pipeline.py:16338,16362-16363 — packet marker 포함 댓글 continue로 후보 제외. TC-2 PASS"/>
-    <criterion ac_id="AC-3" status="PASS" evidence="pipeline.py:16364-16366 — _body.strip() == _expected_code 완전 일치 시에만 PASS"/>
-    <criterion ac_id="AC-4" status="PASS" evidence="pipeline.py:16371-16374,16402-16416 — prefix 일치+nonce 다름 → approval_stale_nonce. TC-3 PASS, 2338 test failure_code 갱신 확인"/>
-    <criterion ac_id="AC-5" status="PASS" evidence="pipeline.py:16376-16378,16418-16431 — ACCEPT- 시작 prefix 불일치 → approval_code_mismatch. TC-4 PASS"/>
-    <criterion ac_id="AC-6" status="PASS" evidence="pipeline.py:16366-16369 PASS 즉시 break, 16401-16444 stale>mismatch>missing 우선순위. TC-5 혼합 케이스 PASS"/>
-    <criterion ac_id="AC-7" status="PASS" evidence="pipeline.py:16212-16226 — CONSUMED 또는 external_gates.acceptance.status in {PASS,ACCEPT} 시 idempotent PASS. TC-7 PASS"/>
-    <criterion ac_id="AC-8" status="PASS" evidence="pipeline.py:16234-16235 — PIPELINE_GH_EXECUTABLE env 우선, shutil.which 해석"/>
-    <criterion ac_id="AC-9" status="PASS" evidence="pipeline.py:16396-16399 — _common_tail에 PR#, 허용 승인자, pipeline_id, 기대 승인 코드 포함. 모든 BLOCKED 분기 적용"/>
-    <criterion ac_id="AC-10" status="PASS" evidence="pytest test_pr_approver_b96c.py 7 + test_acceptance_provenance_2338.py 6 = 13 passed (QA 실제 재실행 확인)"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="발급 이력(_collect_issued_nonces)에 정확히 일치하는 nonce만 approval_stale_nonce로 판정. pipeline.py:16472-16482 prefix 추출 후 _issued_nonces 정확 비교. test_stale_nonce_exact_match(previous_nonces 보존 시 stale) PASS."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="prefix는 같으나 발급 이력에 없는 truncated/오타 nonce는 approval_code_mismatch. pipeline.py:16483-16490. test_truncated_nonce_is_code_mismatch(7자리 truncated→code_mismatch) PASS — 이전 stale_nonce 오분류 버그 회귀 차단."/>
+    <criterion ac_id="AC-6" status="PASS" evidence="판정 우선순위 PASS(즉시 break) > stale_nonce > code_mismatch > missing. pipeline.py:16466-16490, 16514-16545. test_mixed_comments_exact_match_wins_pass PASS."/>
+    <criterion ac_id="AC-9" status="PASS" evidence="모든 BLOCKED 메시지에 PR번호/허용 승인자/pipeline_id/기대 코드 포함(_common_tail). test_stale_nonce_exact_match에서 PR번호·승인자·pipeline_id assert."/>
+    <criterion ac_id="AC-10" status="PASS" evidence="TC-1~TC-7(b96c) + 신규 2개(aef0) + 갱신 2338 포함 21개 테스트 pytest PASS 재현 확인."/>
   </criteria_verification>
   <dead_code_findings>0</dead_code_findings>
   <duplication_findings>0</duplication_findings>
@@ -91,10 +97,10 @@
   <failure_signature>N-A</failure_signature>
   <repeat_indicator>N-A</repeat_indicator>
   <critical_issues>
-    - 없음. AC-1~AC-10 모두 코드에 반영 확인, pytest 13 passed, scope 3개 파일 정확 일치.
+    - 없음. 모든 검증 항목 PASS.
   </critical_issues>
   <improvement_suggestions>
-    - AC-5 code_mismatch 판정은 ACCEPT- 시작하면서 prefix 불일치인 경우만 잡고, ACCEPT-로 시작하지 않는 임의 텍스트는 missing으로 처리됨(의도된 동작).
-    - tmp_tc1_*.json 임시 파일이 작업공간에 남아 있음(커밋 안 됨, scope 외) — 파이프라인 완료 후 hygiene cleanup-workspace 대상.
+    - PM step_plan risk_flags에 pipeline_protocol=true, core_parser_logic=true가 설정되었으나 execution_profile=STANDARD입니다. Trust-Root(pipeline.py) 수정이 target_files에 명시되어 예외 조건은 충족하나, 향후 동종 작업 시 HIGH_RISK 프로필 적용을 권고합니다. (FAIL 아님)
+    - _collect_issued_nonces의 출처 3(contract dir glob)은 현재 테스트가 출처 1/2(acceptance_req nonce, previous_nonces) 위주로 커버합니다. 파일 기반 발급 이력 수집 경로에 대한 회귀 테스트 추가를 권고합니다. (개선 제안)
   </improvement_suggestions>
 </qa_report>
