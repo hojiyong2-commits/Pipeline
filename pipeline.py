@@ -15264,12 +15264,20 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
             if ac_ver is not None:
                 for crit in ac_ver.findall("ac"):
                     if crit.get("id") == ac_id:
-                        status = crit.get("status", "?")
+                        status = crit.get("status", "")
+                        # IMP-20260612-CE06: status가 속성에 없으면 자식 <status> 요소에서 읽기
+                        if not status:
+                            st_elem = crit.find("status")
+                            status = (st_elem.text or "PASS").strip() if st_elem is not None else "?"
                         ver_elem = crit.find("verification")
                         ver_text = (ver_elem.text or "").strip() if ver_elem is not None else ""
                         if not ver_text:
                             desc_elem = crit.find("description")
                             ver_text = (desc_elem.text or "").strip() if desc_elem is not None else ""
+                        # IMP-20260612-CE06: <verification>/<description>이 없으면 자식 <evidence> 요소에서 읽기
+                        if not ver_text:
+                            evidence_elem = crit.find("evidence")
+                            ver_text = (evidence_elem.text or "").strip() if evidence_elem is not None else ""
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
 
