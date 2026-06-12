@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-12T13:47:19Z",
+  "generated_at": "2026-06-12T22:21:32Z",
   "pipeline_id": "BUG-20260612-B96C",
   "phase": "build",
   "phase_status": "DONE",
-  "commit_hint": "25b55decb4c229e1ba97adbb8d495b84d52c13a6",
+  "commit_hint": "34079e935e1aa7fd1e3a8d3774c5d6f5a4a94f4f",
   "state": {
     "current_phase": "harness",
-    "phase_completed_at": "2026-06-12T13:47:14Z",
+    "phase_completed_at": "2026-06-12T22:18:17Z",
     "report_file": null,
     "evidence": "N/A"
   },
   "agent_run": {
-    "run_id": "build-df41e34f5c2d090d",
+    "run_id": "build-e70e0bb2f321051c",
     "phase": "build",
     "agent_id": "build-agent",
     "status": "COMPLETED",
     "output_file": "build_report.xml",
     "output_sha256": "50722c7e402150b996acee0e679116362a8dedf9383b06d0a8f18d3e6a9ddd7f",
-    "receipt_path": ".pipeline/phase_evidence/BUG-20260612-B96C/build/agent_receipt_build-df41e34f5c2d090d.json",
-    "receipt_sha256": "0ed3939e760dd66e48c3b4019b0e9f871686312df76f81568aee0f8281ecdc04",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260612-B96C/build/agent_receipt_build-e70e0bb2f321051c.json",
+    "receipt_sha256": "c7807b643ef4e6d4545dede3f11dfcb2720a87a4ab833671231a2b5f61684307",
     "used_by_phase": "build",
-    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260612-B96C\\build\\build-df41e34f5c2d090d.json"
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260612-B96C\\build\\build-e70e0bb2f321051c.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\BUG-20260612-B96C\\build\\build-df41e34f5c2d090d.json",
-      "path": ".pipeline/phase_evidence/BUG-20260612-B96C/build/agent_receipt_build-df41e34f5c2d090d.json",
-      "sha256": "0ed3939e760dd66e48c3b4019b0e9f871686312df76f81568aee0f8281ecdc04",
+      "source": ".pipeline\\agent_receipts\\BUG-20260612-B96C\\build\\build-e70e0bb2f321051c.json",
+      "path": ".pipeline/phase_evidence/BUG-20260612-B96C/build/agent_receipt_build-e70e0bb2f321051c.json",
+      "sha256": "c7807b643ef4e6d4545dede3f11dfcb2720a87a4ab833671231a2b5f61684307",
       "size_bytes": 508,
       "requires_force_add": true
     }
