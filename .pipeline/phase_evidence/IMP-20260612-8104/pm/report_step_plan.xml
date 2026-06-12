@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260612-8104</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Phase - Codex Review 완전 제거</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>IMP, FS, PD</category_tags>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py(파이프라인 엔진), AGENTS.md, agent MD, CLAUDE.md 등 trust-root 파일을 직접 수정하는 프로토콜 변경 작업입니다. Codex Review gate 전체 제거가 동작 중인 gate 체인에 영향을 미치므로 HIGH_RISK로 분류합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>8</expected_changed_files>
+      <expected_changed_functions>25</expected_changed_functions>
+      <expected_changed_lines>500</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>내부 함수 삭제 순서, 상수명 정리 방식, 인라인 주석 스타일 등 P2 수준 질문은 묻지 않습니다. 삭제 대상이 이미 명시되어 있으므로 구현 세부사항은 Dev가 결정합니다.</filter_summary>
+
+    <claude_md_scope_note>
+      CLAUDE.md의 "Codex Review Gate (IMP-20260516-A627)" 섹션도 이번 IMP의 수정 대상입니다.
+      CLAUDE.md는 원칙적으로 별도 Protocol Evolution IMP 경로가 필요하지만,
+      사용자가 이 IMP에서 함께 처리하도록 명시적으로 요청했으므로 MT-2에 포함합니다.
+    </claude_md_scope_note>
+
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-2">
+        <user_facing_question>CLAUDE.md의 Codex Review Gate 섹션을 이번 IMP에서 함께 수정할까요, 아니면 별도 Protocol Evolution IMP로 분리할까요?</user_facing_question>
+        <evidence>사용자 요청에 AGENTS.md, agent MD 수정이 명시되어 있으며, CLAUDE.md도 동일한 Codex Review 참조를 포함합니다.</evidence>
+        <why_it_matters>CLAUDE.md는 신뢰 루트 파일로 별도 IMP 경로가 프로토콜 원칙이지만, 분리하면 두 파이프라인 사이에 일시적 불일치가 발생합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>이번 IMP에서 CLAUDE.md도 함께 수정</label>
+            <benefit>일관성 유지, 불일치 기간 없음, 사용자 요청과 일치</benefit>
+            <cost>trust-root 파일 동시 수정으로 리스크 증가</cost>
+          </option>
+          <option id="B">
+            <label>별도 Protocol Evolution IMP로 분리</label>
+            <benefit>프로토콜 순수성 유지, 리스크 격리</benefit>
+            <cost>두 IMP 완료 전까지 CLAUDE.md와 AGENTS.md가 불일치</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 이번 IMP에서 CLAUDE.md도 함께 처리하도록 명시적으로 요청 — 옵션 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline.py (현재 코드), AGENTS.md, .claude/agents/pm-agent.md, .claude/agents/qa-agent.md, CLAUDE.md
+    - Output: Codex Review 코드/상수/CLI/게이트 제거된 pipeline.py, 업데이트된 문서 파일들, 회귀 테스트 파일
+    - Validation: check --phase dev/qa가 codex_review_result.json 없이 PASS, gates technical/accept가 Codex PR stage 없이 PASS
+  </interface_spec>
+
+  <requirements>
+    MT-1 (pipeline.py Codex Review 제거):
+    - 삭제 함수: _check_codex_review_gate(), _check_codex_pr_gate_for_technical(), _validate_codex_review_schema(), _validate_codex_coverage_checks(), _get_codex_status_for_ac(), _save_codex_attempt_log(), _codex_run_via_openai_api(), _codex_run_via_codex_cli(), cmd_review(), cmd_review_codex_run(), cmd_review_codex_record()
+    - 삭제 상수: CODEX_REQUIRED_REVIEW_MODEL, CODEX_REQUIRED_MODEL_ID, CODEX_REQUIRED_MODEL, CODEX_REQUIRED_FIELDS, CODEX_VALID_STAGES, CODEX_VALID_RESULTS, CODEX_FAILURE_CODES, CODEX_ATTEMPT_BUDGET_TOTAL, CODEX_ATTEMPT_BUDGET_PER_STAGE, CODEX_COVERAGE_CHECK_FIELDS, CODEX_DEFAULT_FORBIDDEN_PATTERNS, CODEX_DEEP_REVIEW_TRIGGERS
+    - cmd_check()에서 Codex Review gate 호출 제거 (skip_codex_gate 분기 포함, --codex-review-waiver 옵션 제거)
+    - _external_gate_blockers()에서 Codex PR gate 호출 제거
+    - HYGIENE_ARCHIVE_PATTERNS에서 codex_review_result*.json, codex_run_raw*.json 제거
+    - WORKSPACE_INTERNAL_PATTERNS에서 codex_review_result.json, codex_run_raw.json 제거
+    - state['codex_bootstrap_exception'], state['codex_attempt_log'], state['codex_review_gates'] 참조 제거
+    - [Codex 검토용] → [검증용 메타데이터] 교체 (report final-packet 코드, line ~10585)
+    - [Codex 검토용] 호환 파서 유지 (기존 packet 파일 읽기 시 두 라벨 모두 인식)
+    - review 서브파서에서 codex / codex-run / codex-record / status 서브커맨드 제거
+    - 유지: codex_relay_pairing_url secret pattern, cmd_codex() 함수, .codex/ 경로 참조
+
+    MT-2 (문서 수정):
+    - AGENTS.md: Codex Review Gate 섹션 전체 제거, trust chain 수정 ("Codex technical review(GPT-5.5)" 제거)
+    - .claude/agents/pm-agent.md: Codex Review Gate 섹션 제거, design_confirmation Codex ACCEPT 의무 제거
+    - .claude/agents/qa-agent.md: coverage_checks 7개 필드 Codex 의존성 제거 문구 수정
+    - CLAUDE.md: Codex Review Gate 섹션 제거, trust chain 수정
+
+    MT-3 (회귀 테스트):
+    - tests/test_codex_removal_8104.py 신규 작성 (AC-1~AC-14 커버)
+    - tests/test_codex_review.py의 삭제된 기능 테스트에 pytest.mark.skip 추가
+    - Real CLI Path E2E 패턴으로 PIPELINE_STATE_PATH 격리 사용
+  </requirements>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>codex_review_result.json 파일이 없어도 python pipeline.py check --phase dev가 exit 0으로 통과한다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>stale codex_review_result.json이 있어도 python pipeline.py check --phase qa가 exit 0으로 통과한다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py gates technical이 Codex PR stage 부재 때문에 FAIL을 반환하지 않는다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>python pipeline.py gates accept가 Codex PR stage 부재 때문에 실패하지 않는다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>--codex-review-waiver legacy-bootstrap 옵션이 CLI에서 제거되어 unrecognized argument 오류가 발생한다</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py review codex-run, codex-record, status 서브커맨드가 active CLI에 존재하지 않는다</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>codex_review_result.json의 존재 여부나 stale 여부가 파이프라인 COMPLETE 가능성에 영향을 주지 않는다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>report final-packet 및 PR body 생성 결과에 "Codex Review PASS" 문구가 포함되지 않는다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>report final-packet 출력에서 [Codex 검토용] 라벨이 [검증용 메타데이터]로 교체되며, 기존 packet 파일 호환 파서는 두 라벨 모두 인식한다</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>Technical/Oracle/GitHub CI/User Acceptance gate 중 하나라도 FAIL이면 COMPLETE가 불가능하다 (기존 동작 유지)</text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true">
+      <text>기본 경로 failure packet에 codex_review_missing_evidence, codex_pr_gate_missing 등 Codex failure code가 포함되지 않는다</text>
+    </criterion>
+    <criterion id="AC-12" must_verify="true" source="user" user_visible="true">
+      <text>AGENTS.md 및 agent MD의 trust chain이 실제 pipeline.py 구현과 일치한다</text>
+    </criterion>
+    <criterion id="AC-13" must_verify="true" source="user" user_visible="true">
+      <text>codex_relay_pairing_url secret scan 패턴, GPT advisory 기능, CE06/B96C 기능이 그대로 유지된다</text>
+    </criterion>
+    <criterion id="AC-14" must_verify="true" source="user" user_visible="true">
+      <text>삭제/보존 inventory 보고서(tests/test_codex_removal_8104.py 내 주석 또는 docstring)가 작성된다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_check_codex_review_gate, _check_codex_pr_gate_for_technical, _validate_codex_review_schema, _validate_codex_coverage_checks, _get_codex_status_for_ac, _save_codex_attempt_log, _codex_run_via_openai_api, _codex_run_via_codex_cli, cmd_review, cmd_review_codex_run, cmd_review_codex_record, cmd_check (codex gate 호출 부분 제거), _external_gate_blockers (codex 참조 제거)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_check() line ~6378: skip_codex_gate 분기 및 _check_codex_review_gate 호출</site>
+        <site>cmd_gates() line ~6329: _check_codex_pr_gate_for_technical 호출</site>
+        <site>_external_gate_blockers(): codex 관련 블록</site>
+        <site>_build_request_accept_packet() line ~10585: [Codex 검토용] 라벨</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex|CODEX|Codex</pattern>
+        <match_count>452</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py에서 Codex Review 관련 함수 11개, 상수 12개, CLI 서브커맨드 4개, gate 호출 제거 및 metadata label 교체</change_summary>
+      <line_estimate>500</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-13</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>Codex Review Gate 섹션 (AGENTS.md), Codex Review Gate 섹션 (pm-agent.md), coverage_checks Codex 문구 (qa-agent.md), Codex Review Gate 섹션 (CLAUDE.md)</affected_function>
+      <target_files>
+        <file>AGENTS.md</file>
+        <file>.claude/agents/pm-agent.md</file>
+        <file>.claude/agents/qa-agent.md</file>
+        <file>CLAUDE.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex|CODEX|Codex</pattern>
+        <match_count>32</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>4개 trust-root 문서에서 Codex Review Gate 섹션 제거, trust chain 수정</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-5, AC-8, AC-9, AC-12, AC-13</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>신규 테스트 모듈, test_codex_review.py skip 처리</affected_function>
+      <target_files>
+        <file>tests/test_codex_removal_8104.py</file>
+        <file>tests/test_codex_review.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex|CODEX|Codex</pattern>
+        <match_count>38</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>AC-1~AC-14 커버하는 회귀 테스트 신규 작성, test_codex_review.py 삭제된 기능 skip 처리</change_summary>
+      <line_estimate>150</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12, AC-13, AC-14</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 pipeline.py 호환 버전 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.defaultInterpreterPath: python3.10, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <forbidden>
+    CE06 evidence deployability(_deploy_accepted_outputs) 기능 변경 금지.
+    B96C approval provenance 기능 변경 금지.
+    GPT advisory(ENABLE_GPT_ADVISORY, advisory 서브커맨드) 리팩터링 금지.
+    codex_relay_pairing_url secret pattern 제거 금지.
+    Technical/Oracle/GitHub CI/User Acceptance gate 약화 금지.
+    cmd_codex() 함수 제거 금지(Codex CLI 호환 유지).
+    일반 dead code 전체 정리 금지(Codex 관련만 제거).
+    tests/oracles/ 파일 변경 금지(answer-key mutation).
+    .github/workflows/** 변경 금지(별도 IMP 필요).
+  </forbidden>
+
+  <!-- handover_template: dev-agent → qa-agent 인계 (dev_handover.xml 파일로 실제 인계) -->
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\AGENTS.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\pm-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\agents\qa-agent.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\CLAUDE.md</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_codex_review.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      HIGH_RISK 파이프라인: conservative repair 필수.
+      Trust-root 파일(CLAUDE.md, AGENTS.md, agent MD, pipeline.py) 수정 포함 — CODEOWNERS 검토 필요.
+      Scope Lock: MT-N별 scope_manifest_MT-N.json 제출 필수.
+      module design -&gt; module dev -&gt; module qa PASS 순서 준수.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Phase 완료 — contract frozen, oracle 2개 등록(normal+edge), step_plan.xml 작성 완료</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<decomposition_audit>
+  <total_functions_identified>13</total_functions_identified>
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>5</grep_executions>
+  <split_decision>
+    pipeline.py 수정(MT-1), 문서 수정(MT-2), 회귀 테스트(MT-3)으로 분리.
+    MT-1은 약 500줄 변경이지만 단일 파일 내 단일 관심사(Codex 제거)이므로 1개 MT 유지.
+    MT-2와 MT-3은 각각 독립 산출물(문서, 테스트)로 별도 MT.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
