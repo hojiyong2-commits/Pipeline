@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260612-B96C</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Planning</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>WA, FS</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py의 핵심 gate 함수(_check_pr_approver_provenance) 수정과 7개 케이스 E2E 테스트 신규 작성을 포함하며, 2개 파일 · 2개 함수 단위 변경입니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>120</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      내부 변수명, 오류 메시지 문구 형식, 코드 스타일 등의 P2 수준 취향 질문은 묻지 않고
+      유지보수성 우선 원칙과 기존 코딩 패턴으로 처리합니다.
+      요구사항 AC-1~AC-10이 충분히 구체적으로 명시되어 있어 P0/P1 기술 분기 질문이 없습니다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          MT-1(판정 로직 수정)과 MT-2(E2E 테스트) 두 모듈로 나눠 진행해도 될까요?
+          pipeline.py 수정과 테스트 파일 신규 작성은 독립적으로 검증 가능한 두 단계입니다.
+        </user_facing_question>
+        <evidence>
+          _check_pr_approver_provenance 함수(pipeline.py 16162행)와 신규 E2E 테스트 파일이
+          서로 다른 파일에 위치하여 독립 검증이 가능합니다.
+        </evidence>
+        <why_it_matters>
+          모듈 단위 분리로 판정 로직 수정이 먼저 검증된 뒤 E2E 테스트가 작성되어
+          회귀 테스트의 신뢰도가 높아집니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>MT-1(판정 로직) → MT-2(E2E 테스트) 순서로 진행</label>
+            <benefit>각 단계를 독립 검증할 수 있고 실패 시 원인 추적이 명확합니다.</benefit>
+            <cost>MT-2 작성 전 MT-1 QA를 기다려야 합니다.</cost>
+          </option>
+          <option id="B">
+            <label>단일 MT로 한꺼번에 구현</label>
+            <benefit>작업 컨텍스트 전환이 없습니다.</benefit>
+            <cost>실패 시 어느 파트가 문제인지 특정하기 어렵습니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청에서 수정 범위를 명시적으로 두 파트(판정 로직 + E2E 테스트)로 구분했으므로 추천안 A로 진행합니다.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline_state.json (acceptance_request 포함), GitHub PR 댓글 목록(gh CLI)
+    - Output: _check_pr_approver_provenance() 반환 dict (status, failure_code, message, approver, comment_id)
+    - Validation: T001~T007 회귀 케이스 전부 PASS, T008 E2E 전체 PASS
+  </interface_spec>
+
+  <requirements>
+    - AC-1: 최신 nonce와 정확히 일치하는 승인 코드를 허용 승인자가 PR 댓글에 남긴 경우 PASS
+    - AC-2: "pipeline-human-acceptance-packet" 태그가 있는 댓글 안의 코드는 승인으로 인정하지 않음
+    - AC-3: 독립 댓글 기준 매칭: 앞뒤 공백/CRLF 허용, 본문 중간 포함/packet 댓글/다른 pipeline_id/다른 nonce/허용 승인자 아닌 작성자 차단
+    - AC-4: 이전 nonce 댓글 → approval_stale_nonce 오류 코드 + 한국어 안내
+    - AC-5: 오타/부분 코드 → approval_code_mismatch 오류 코드 + 한국어 안내
+    - AC-6: 판정 우선순위: 최신 정확 PASS > stale nonce 안내 > mismatch 안내 > missing 안내
+    - AC-7: acceptance_request CONSUMED 또는 external_gates.acceptance PASS/ACCEPT이면 재댓글 요구 없이 "이미 승인 처리됨" 출력
+    - AC-8: gh pr view --json comments 응답에서 author.login, body, id 필드 파싱. PIPELINE_GH_EXECUTABLE 환경 변수 사용
+    - AC-9: 실패 메시지에 PR 번호, 허용 승인자, pipeline_id, stale/mismatch/missing 상태, packet 댓글 설명 포함
+    - AC-10: 회귀 테스트 7가지 필수 케이스(TC-1~TC-7): 정확 PASS, packet 댓글 FAIL, stale nonce FAIL, 오타 FAIL, 혼합 PASS, 다른 작성자 FAIL, CONSUMED idempotency
+    - 현재 구현 문제: _check_pr_approver_provenance()에서 packet 댓글 필터링 없음, stale nonce 구분 코드 없음(pr_approver_missing으로 통합됨), 판정 우선순위 로직 없음, CONSUMED 상태 조기 PASS 처리 없음
+    - 수정 후 packet 댓글 판별: body에 "pipeline-human-acceptance-packet" 포함 여부로 필터
+    - 수정 후 stale nonce 판별: 댓글 body가 "ACCEPT-{pipeline_id}-" prefix로 시작하되 nonce가 다른 경우 stale nonce로 구분
+    - 수정 후 mismatch 판별: 댓글 body가 "ACCEPT-" prefix로 시작하되 전체가 일치하지 않는 경우
+    - PIPELINE_GH_EXECUTABLE 환경 변수: shutil.which("gh") 대신 os.environ.get("PIPELINE_GH_EXECUTABLE") 우선 사용
+  </requirements>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>최신 nonce와 정확히 일치하는 승인 코드를 허용 승인자(hojiyong2-commits)가 PR 댓글에 독립 줄로 남긴 경우 _check_pr_approver_provenance() 반환값의 status가 "PASS"이고 approver 필드에 "hojiyong2-commits"가 포함된다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>댓글 body에 "pipeline-human-acceptance-packet" 문자열이 포함된 경우 해당 댓글은 승인으로 인정하지 않으며 failure_code가 "pr_approver_missing" 또는 신규 코드로 BLOCKED 반환된다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>댓글 앞뒤 공백/CRLF가 있어도 exact match로 처리되고, 본문 중간에 포함된 코드/다른 pipeline_id/다른 nonce/비허용 작성자 댓글은 모두 BLOCKED 반환된다.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>이전 nonce("ACCEPT-{pid}-{old_nonce}" 형식)를 허용 승인자가 댓글에 남긴 경우 failure_code가 "approval_stale_nonce"이고 한국어 안내 메시지가 포함된다.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>오타/부분 코드("ACCEPT-{pid}-{nonce}_EXTRA" 등)를 남긴 경우 failure_code가 "approval_code_mismatch"이고 한국어 안내 메시지가 포함된다.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>stale nonce 댓글과 최신 nonce 댓글이 동시에 있을 때 최신 정확한 코드를 우선 인식하여 PASS를 반환한다 (판정 우선순위: 최신 정확 PASS > stale > mismatch > missing).</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>acceptance_request.json의 status가 "CONSUMED"이거나 state의 external_gates.acceptance.status가 "PASS" 또는 "ACCEPT"이면 PR 댓글 재확인 없이 "이미 승인 처리됨" 메시지를 출력하고 gates accept 흐름이 계속된다.</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>gh pr view --json comments 응답 파싱 시 author.login, body, id 필드를 사용하며, PIPELINE_GH_EXECUTABLE 환경 변수가 설정되어 있으면 해당 경로의 실행 파일을 gh 대신 사용한다.</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>BLOCKED 반환 메시지에 PR 번호, 허용 승인자 계정명, pipeline_id, 현재 상태(stale/mismatch/missing), packet 댓글 주의사항이 한국어로 포함된다.</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>신규 E2E 테스트 파일에 TC-1(정확 PASS), TC-2(packet 댓글 FAIL), TC-3(stale nonce FAIL), TC-4(오타 FAIL), TC-5(혼합 PASS), TC-6(다른 작성자 FAIL), TC-7(CONSUMED idempotency) 7개 케이스가 모두 포함되어 pytest 실행 시 PASS한다.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._check_pr_approver_provenance</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates (line 17248: _prov_result = _check_pr_approver_provenance(state))</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_pr_approver_provenance</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _check_pr_approver_provenance() 내부에
+        (1) CONSUMED/PASS 조기 반환 (AC-7),
+        (2) PIPELINE_GH_EXECUTABLE 환경변수 우선 사용 (AC-8),
+        (3) packet 댓글 필터링 로직 추가 (AC-2),
+        (4) approval_stale_nonce / approval_code_mismatch 신규 failure_code 추가 (AC-4, AC-5),
+        (5) 판정 우선순위 루프 재설계 (AC-6),
+        (6) 개선된 한국어 오류 메시지 (AC-9)를 구현한다.
+      </change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>tests.test_pr_approver_b96c.test_exact_match_pass (신규 파일)</affected_function>
+      <target_files>
+        <file>tests/test_pr_approver_b96c.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pr_approver_b96c</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        TC-1~TC-7 7가지 케이스를 포함하는 신규 단위 테스트 파일을 작성한다.
+        기존 tests/test_acceptance_provenance_2338.py 패턴을 참조하여
+        subprocess mock 및 _load_acceptance_request mock을 사용한다.
+      </change_summary>
+      <line_estimate>200</line_estimate>
+      <covers_ac>AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 파이프라인 Python 버전 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>
+      pylance provider, typeCheckingMode=basic,
+      Python 3.10 인터프리터 경로 사용
+    </vscode>
+  </env_specs>
+
+  <forbidden>
+    - 새 gate/phase 추가 금지
+    - PR 댓글 검증 로직 제거 금지
+    - IMP-20260611-A716/IMP-20260612-E12D/IMP-20260612-CE06 기존 기능 재수정 금지
+    - tests/oracles/ 아래 기존 oracle 파일 수정 금지
+    - pipeline_state.json 전역 파일 직접 수정 금지 (PIPELINE_STATE_PATH 격리 사용)
+    - _check_pr_approver_provenance 외 다른 gate 함수 수정 금지
+    - Trust-Root 파일(CLAUDE.md, .github/workflows/, tests/) 무단 수정 금지
+  </forbidden>
+
+  <decomposition_audit>
+    <total_functions_identified>2</total_functions_identified>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>5</grep_executions>
+    <split_decision>
+      pipeline.py 수정(MT-1)과 신규 테스트 파일(MT-2)이 서로 다른 파일에 위치하고
+      독립적으로 검증 가능하므로 2개 micro_task로 분할합니다.
+    </split_decision>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+  </decomposition_audit>
+
+  <handover_template>
+    <template_from>dev-agent</template_from>
+    <template_to>qa-agent</template_to>
+    <template_pipeline_id>BUG-20260612-B96C</template_pipeline_id>
+    <template_evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_pr_approver_b96c.py</file>
+      <file>scope_manifest.json</file>
+      <file>dev_handover.xml</file>
+    </template_evidence>
+    <template_status>READY_FOR_QA</template_status>
+  </handover_template>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_acceptance_provenance_2338.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\e2e\test_request_accept_nonce_reuse_aef0.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Three-Gate + Option A + Incremental Module Gate 필수.
+      MT-1 module qa PASS 후 MT-2 진입.
+      MT-2 완료 후 module integrate PASS → done --phase dev.
+      Dev는 scope_manifest.json 제출 및 scope_lock_check verdict=PASS 확인 필수.
+    </phase_rules_excerpt>
+    <prev_phase_summary>
+      PM 계획 완료. _check_pr_approver_provenance() (pipeline.py:16162)가
+      packet 댓글 필터링/stale nonce 구분/판정 우선순위/CONSUMED 조기 반환이 없어
+      이미 댓글을 달았는데도 재입력을 요구하는 UX 버그가 발생함.
+    </prev_phase_summary>
+  </context_injection>
+</step_plan>

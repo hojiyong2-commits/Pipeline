@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260612-B96C</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-267e3f95c66a14e0</planner_run_id>
+  <manager_run_id>pipeline_manager-d220156e88da588e</manager_run_id>
+  <step_plan_sha256>c9f13df148f634e79b0b20f0db240100216029031d61c3772a17a8df1a4a12f1</step_plan_sha256>
+  <step_plan_confirmed>true</step_plan_confirmed>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <user_response>NO_ASKUSER_REQUIRED</user_response>
+  <micro_tasks>
+    <mt id="MT-1">pipeline.py _check_pr_approver_provenance() 판정 로직 수정</mt>
+    <mt id="MT-2">신규 E2E 테스트 tests/e2e/test_request_accept_nonce_reuse_aef0.py 업데이트 또는 신규 테스트 파일</mt>
+  </micro_tasks>
+  <next_phase>dev</next_phase>
+</manager_handoff>
