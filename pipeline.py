@@ -16159,6 +16159,91 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
 # IMP-20260606-D9F4 MT-1: User Acceptance Provenance Gate
 # ---------------------------------------------------------------------------
 
+# [Purpose]: PR 댓글의 승인 코드를 stale_nonce(과거 발급) vs code_mismatch(오타/잘못된 코드)로
+#            정확히 분류하기 위해, 해당 파이프라인에서 실제로 발급된 적 있는 nonce 집합을 수집한다.
+# [Assumptions]: acceptance_request.json 의 nonce 필드와 (있다면) 이전 nonce 보존 목록,
+#                pipeline_contracts/<pipeline_id>/acceptance_request*.json 파일들이 발급 이력의 SSoT.
+# [Vulnerability & Risks]: 과거 발급 nonce 가 어디에도 보존되지 않으면(이력 미기록) 집합이 비어
+#                stale 댓글이 code_mismatch 로 분류될 수 있다. 그러나 "현재/직전 코드와 정확히
+#                일치하는 nonce"는 acceptance_request.json 에 항상 남아 정상 분류된다.
+# [Improvement]: request-accept 시 새 nonce 발급마다 previous_nonces 배열에 직전 nonce 를 append 하여
+#                전체 발급 이력을 영구 보존하면 stale 판정 정확도를 더 높일 수 있다.
+def _collect_issued_nonces(
+    pipeline_id: str,
+    acceptance_req: Dict[str, Any],
+) -> "set[str]":
+    """해당 파이프라인에서 실제로 발급된 적 있는 nonce 문자열 집합을 수집한다.
+
+    stale_nonce(과거 발급) vs code_mismatch(발급된 적 없는 오타/잘못된 코드) 분류에 사용한다.
+
+    수집 출처:
+      1. acceptance_req["nonce"] — 현재(또는 직전) 발급 코드의 nonce.
+      2. acceptance_req["previous_nonces"] / ["issued_nonces"] — 보존된 과거 nonce 목록(있으면).
+      3. pipeline_contracts/<pipeline_id>/acceptance_request*.json 파일들의 nonce 필드.
+
+    Args:
+        pipeline_id: 활성 pipeline_id (빈 문자열이면 contract dir 스캔 생략).
+        acceptance_req: 현재 acceptance_request 데이터 dict (None 불가).
+
+    Returns:
+        발급 이력에 존재하는 nonce 문자열 집합 (빈 nonce 는 제외).
+
+    Raises:
+        TypeError: acceptance_req 가 None 이거나 dict 가 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if acceptance_req is None:
+        raise TypeError("acceptance_req must not be None")
+    if not isinstance(acceptance_req, dict):
+        raise TypeError(
+            f"acceptance_req must be dict, got {type(acceptance_req).__name__}"
+        )
+
+    issued: "set[str]" = set()
+
+    def _add(value: Any) -> None:
+        """nonce 후보를 정규화하여 추가 (str 이고 비어 있지 않은 경우만)."""
+        if isinstance(value, str) and value:
+            issued.add(value)
+
+    # 출처 1: 현재 acceptance_request 의 nonce.
+    _add(acceptance_req.get("nonce"))
+
+    # 출처 2: 보존된 과거 nonce 목록 (있으면). list/tuple 만 허용.
+    for _key in ("previous_nonces", "issued_nonces", "nonce_history"):
+        _hist = acceptance_req.get(_key)
+        if isinstance(_hist, (list, tuple)):
+            for _item in _hist:
+                _add(_item)
+
+    # 출처 3: pipeline_contracts/<pipeline_id>/acceptance_request*.json 파일들.
+    if pipeline_id:
+        try:
+            _contract_dir = BASE_DIR / "pipeline_contracts" / pipeline_id
+            if _contract_dir.is_dir():
+                for _ar_file in sorted(_contract_dir.glob("acceptance_request*.json")):
+                    try:
+                        with open(_ar_file, encoding="utf-8") as _fh:
+                            _data = json.load(_fh)
+                    except (OSError, json.JSONDecodeError):
+                        continue
+                    if isinstance(_data, dict):
+                        _add(_data.get("nonce"))
+                        for _key in ("previous_nonces", "issued_nonces", "nonce_history"):
+                            _hist = _data.get(_key)
+                            if isinstance(_hist, (list, tuple)):
+                                for _item in _hist:
+                                    _add(_item)
+        except (OSError, TypeError):
+            # 디렉토리 접근 실패는 치명적이지 않음 — 수집된 집합으로 진행.
+            pass
+
+    return issued
+
+
 def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     """GitHub PR 댓글에서 허용 승인자의 승인 코드를 검증합니다.
 
@@ -16185,7 +16270,13 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     import json as _json
     import subprocess as _subprocess
     import shutil as _shutil
+    import os as _os
     from datetime import datetime as _datetime, timezone as _timezone
+
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
 
     pipeline_id: str = str(state.get("pipeline_id", "") or "")
     allowed_approver: str = PIPELINE_ALLOWED_APPROVER
@@ -16199,11 +16290,34 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     nonce: str = str(acceptance_req.get("nonce", "") or "")
     accept_code: str = f"ACCEPT-{pipeline_id}-{nonce}" if (pipeline_id and nonce) else f"ACCEPT-{pipeline_id}-<nonce>"
 
+    # BUG-20260612-B96C AC-7: CONSUMED idempotency.
+    # 이미 승인 처리된 파이프라인은 PR 댓글 재확인을 요구하지 않고 즉시 PASS 반환한다.
+    # (1) acceptance_request.json 의 status 가 CONSUMED 인 경우
+    # (2) state.external_gates.acceptance.status 가 PASS/ACCEPT 인 경우
+    _ar_status: str = str(acceptance_req.get("status", "") or "").upper()
+    _gate_acceptance = (state.get("external_gates") or {}).get("acceptance") or {}
+    _gate_acc_status: str = str(_gate_acceptance.get("status", "") or "").upper()
+    if _ar_status == "CONSUMED" or _gate_acc_status in {"PASS", "ACCEPT"}:
+        return {
+            "status": "PASS",
+            "failure_code": "",
+            "message": "이미 승인 처리됨 (CONSUMED idempotency) — PR 댓글 재확인 생략.",
+            "approver": None,
+            "comment_id": None,
+            "pr_number": None,
+            "checked_at": _datetime.now(_timezone.utc).isoformat(),
+            "provenance": True,
+            "idempotent": True,
+        }
+
     # 1. gh CLI 설치 확인
+    # BUG-20260612-B96C AC-8: gh 바이너리 경로를 PIPELINE_GH_EXECUTABLE 환경변수로 우선 지정.
+    # 환경변수가 절대 경로/실행 파일명이면 그대로 사용하고, "gh" 단순 이름이면 shutil.which로 해석한다.
     # shutil.which로 찾은 경로를 명시적으로 사용 (Windows에서 .bat 래퍼가 PATH에 있을 때
     # subprocess.run(["gh", ...])는 실제 gh.exe를 찾지만 shutil.which는 .bat를 반환하므로
     # 명시적 경로를 사용해야 테스트 모킹이 올바르게 동작한다.)
-    _gh_path: Optional[str] = _shutil.which("gh")
+    _gh_env: str = str(_os.environ.get("PIPELINE_GH_EXECUTABLE", "gh") or "gh")
+    _gh_path: Optional[str] = _shutil.which(_gh_env)
     if not _gh_path:
         return {
             "status": "BLOCKED",
@@ -16300,8 +16414,40 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     # 5. 허용 승인자의 승인 코드 댓글 확인
+    # BUG-20260612-B96C AC-2~AC-6: 판정 우선순위 PASS > stale_nonce > code_mismatch > missing.
+    #   - AC-2: <!-- pipeline-human-acceptance-packet --> 가 포함된 packet 댓글은 후보에서 완전 제외.
+    #   - AC-3: comment_body.strip() == accept_code 완전 일치만 PASS (본문 중간 포함은 불인정).
+    #   - AC-4: 같은 pipeline_id prefix 이고, nonce 부분이 "실제로 발급된 적 있는 nonce"와
+    #           정확히 일치하는 경우에만 → approval_stale_nonce.
+    #   - AC-5: pipeline_id prefix 는 맞지만 발급된 적 없는 nonce(오타/글자 부족 등),
+    #           또는 잘못된 prefix → approval_code_mismatch.
+    #   - AC-6: PASS 후보가 하나라도 있으면 다른 실패 댓글과 무관하게 PASS.
+    #
+    # BUG-20260612-B96C 재작업(REJECT 수정): 기존 구현은 `_stripped.startswith(_accept_prefix)`
+    # 만으로 stale_nonce 를 판정하여, 같은 prefix 로 시작하지만 어떤 발급 nonce 와도 일치하지
+    # 않는 잘못된 코드(예: 마지막 글자가 빠진 truncated nonce `ACCEPT-<pid>-HO2PSR7`)까지
+    # stale_nonce 로 오분류했다. 올바른 분류는 code_mismatch 이다.
+    #   - stale_nonce: acceptance_request history 에 실제로 발급된 nonce 와 *정확히* 일치.
+    #   - code_mismatch: prefix 는 같지만 어떤 과거/현재 발급 nonce 와도 *정확히* 일치하지 않음.
+    _PACKET_MARKER: str = "<!-- pipeline-human-acceptance-packet -->"
+    # 비교 기준 코드: nonce가 없으면 ACCEPT-<pipeline_id> 형식을 fallback으로 사용.
+    _expected_code: str = accept_code if nonce else ("ACCEPT-" + pipeline_id)
+    # stale nonce 탐지용 prefix (같은 pipeline_id, 다른 nonce 판별).
+    _accept_prefix: str = f"ACCEPT-{pipeline_id}-" if pipeline_id else "ACCEPT-"
+
+    # 과거/현재 발급된 nonce 집합 수집 — stale_nonce vs code_mismatch 정확 분류용.
+    # 출처 (1) 현재 acceptance_request 의 nonce 필드 (현재 코드의 nonce).
+    #      (2) acceptance_request 에 보존된 이전 nonce 목록 필드(previous_nonces/issued_nonces).
+    #      (3) pipeline_contracts/<pipeline_id>/ 하위 acceptance_request*.json 파일들의 nonce.
+    _issued_nonces: "set[str]" = _collect_issued_nonces(pipeline_id, acceptance_req)
+
     _found_approver: Optional[str] = None
     _found_comment_id: Optional[str] = None
+    _stale_nonce_hit: bool = False
+    _code_mismatch_hit: bool = False
+    _stale_observed: str = ""
+    _mismatch_observed: str = ""
+
     for _comment in _comments:
         _author: str = (
             _comment.get("author", {}).get("login", "")
@@ -16310,46 +16456,103 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         )
         _body: str = str(_comment.get("body", "") or "")
         _cid: str = str(_comment.get("id", "") or "")
-        if _author == allowed_approver:
-            # IMP-20260606-D9F4 REJECT fix: 댓글 본문이 승인 코드와 정확히 일치해야 PASS.
-            # "포함" 검사(accept_code in _body)는 pipeline이 자동 생성한 최종 확인 안내 댓글도
-            # 승인으로 오인할 수 있으므로, strip 후 exact match로 변경.
-            if accept_code and _body.strip() == accept_code:
-                _found_approver = _author
-                _found_comment_id = _cid
-                break
-            elif not accept_code and _body.strip() == ("ACCEPT-" + pipeline_id):
-                _found_approver = _author
-                _found_comment_id = _cid
-                break
+        if _author != allowed_approver:
+            continue
+        # AC-2: pipeline 자동 생성 packet 댓글은 승인 후보에서 완전 제외.
+        if _PACKET_MARKER in _body:
+            continue
+        _stripped: str = _body.strip()
+        # AC-3 + AC-6: 완전 일치 → 즉시 PASS (다른 실패 댓글보다 우선).
+        if _expected_code and _stripped == _expected_code:
+            _found_approver = _author
+            _found_comment_id = _cid
+            break
+        # AC-4: 같은 pipeline_id prefix 이고, 댓글의 nonce 부분이 실제 발급된 nonce 와
+        #       정확히 일치하는 경우에만 stale_nonce.
+        if (
+            pipeline_id
+            and _stripped.startswith(_accept_prefix)
+            and _stripped != _expected_code
+        ):
+            # prefix 뒤 nonce 부분을 추출하여 발급된 nonce 집합과 정확히 비교.
+            _comment_nonce: str = _stripped[len(_accept_prefix):]
+            if _comment_nonce in _issued_nonces:
+                _stale_nonce_hit = True
+                _stale_observed = _stripped
+                continue
+            # 발급된 적 없는 nonce(오타/글자 부족 등) → code_mismatch.
+            _code_mismatch_hit = True
+            _mismatch_observed = _stripped
+            continue
+        # AC-5: ACCEPT- 로 시작하는 다른 코드(오타/잘못된 prefix) → code_mismatch.
+        if _stripped.startswith("ACCEPT-") and _stripped != _expected_code:
+            _code_mismatch_hit = True
+            _mismatch_observed = _stripped
 
-    if _found_approver is None:
-        _approver_hint = f" (확인 대상: {allowed_approver})" if allowed_approver else ""
+    if _found_approver is not None:
+        # 6. PASS
+        _checked_at = _datetime.now(_timezone.utc).isoformat()
+        return {
+            "status": "PASS",
+            "failure_code": "",
+            "message": f"Provenance PASS — approver={_found_approver} PR=#{pr_number}",
+            "approver": _found_approver,
+            "comment_id": _found_comment_id,
+            "pr_number": pr_number,
+            "checked_at": _checked_at,
+            "provenance": True,
+        }
+
+    # AC-9: 모든 FAIL/BLOCKED 응답에 PR 번호, 허용 승인자, pipeline_id, 구체적 실패 이유 포함.
+    _checked_at = _datetime.now(_timezone.utc).isoformat()
+    _common_tail: str = (
+        f"PR #{pr_number} / 허용 승인자: {allowed_approver} / 파이프라인: {pipeline_id} / "
+        f"기대 승인 코드: {_expected_code}"
+    )
+
+    # AC-6 우선순위: stale_nonce > code_mismatch > missing.
+    if _stale_nonce_hit:
         return {
             "status": "BLOCKED",
-            "failure_code": "pr_approver_missing",
+            "failure_code": "approval_stale_nonce",
             "message": (
-                f"[PIPELINE ERROR] PR #{pr_number}에서 허용 승인자{_approver_hint}의 "
-                f"승인 코드 댓글을 찾을 수 없습니다 (pr_approver_missing). "
-                f"GitHub PR에 허용 승인자({allowed_approver})가 승인 코드를 남겨야 합니다. "
-                f"승인 코드 형식: {accept_code}"
+                f"[PIPELINE ERROR] 이전 nonce로 만들어진 승인 코드가 댓글에 있습니다 (approval_stale_nonce). "
+                f"발견된 코드: {_stale_observed} — 이 코드는 더 이상 유효하지 않습니다. "
+                f"gates request-accept를 다시 실행해 최신 승인 코드를 발급받은 뒤, "
+                f"허용 승인자가 새 코드를 댓글로 남겨야 합니다. {_common_tail}"
             ),
             "approver": None,
             "comment_id": None,
-            "checked_at": _datetime.now(_timezone.utc).isoformat(),
+            "pr_number": pr_number,
+            "checked_at": _checked_at,
         }
 
-    # 6. PASS
-    _checked_at = _datetime.now(_timezone.utc).isoformat()
+    if _code_mismatch_hit:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "approval_code_mismatch",
+            "message": (
+                f"[PIPELINE ERROR] 댓글의 승인 코드가 현재 파이프라인의 코드와 일치하지 않습니다 (approval_code_mismatch). "
+                f"발견된 코드: {_mismatch_observed} — 오타이거나 잘못된 형식입니다. "
+                f"허용 승인자가 정확한 승인 코드를 댓글로 남겨야 합니다. {_common_tail}"
+            ),
+            "approver": None,
+            "comment_id": None,
+            "pr_number": pr_number,
+            "checked_at": _checked_at,
+        }
+
     return {
-        "status": "PASS",
-        "failure_code": "",
-        "message": f"Provenance PASS — approver={_found_approver} PR=#{pr_number}",
-        "approver": _found_approver,
-        "comment_id": _found_comment_id,
+        "status": "BLOCKED",
+        "failure_code": "pr_approver_missing",
+        "message": (
+            f"[PIPELINE ERROR] 허용 승인자의 승인 코드 댓글을 찾을 수 없습니다 (pr_approver_missing). "
+            f"GitHub PR에 허용 승인자가 승인 코드를 독립 댓글로 남겨야 합니다. {_common_tail}"
+        ),
+        "approver": None,
+        "comment_id": None,
         "pr_number": pr_number,
         "checked_at": _checked_at,
-        "provenance": True,
     }
 
 
