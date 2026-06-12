@@ -1,0 +1,7 @@
+{
+  "scenario": "gates request-accept with temporary phrase in PR body",
+  "command": "gates request-accept",
+  "pr_body_contains": "PM Phase 진행 중",
+  "pr_body_has_required_sections": false,
+  "expected_outcome": "BLOCKED"
+}

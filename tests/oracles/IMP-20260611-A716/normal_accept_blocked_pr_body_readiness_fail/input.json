@@ -1,0 +1,7 @@
+{
+  "scenario": "gates accept with incomplete PR body (missing required sections)",
+  "command": "gates accept",
+  "result": "ACCEPT",
+  "pr_body_missing_sections": ["사용자가 확인할 결과물", "검증"],
+  "expected_outcome": "BLOCKED"
+}

@@ -1,0 +1,6 @@
+{
+  "status": "BLOCKED",
+  "failure_code": "pr_body_incomplete",
+  "blocked": true,
+  "message_contains": "pr_body_incomplete"
+}
