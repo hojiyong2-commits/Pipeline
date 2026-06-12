@@ -261,6 +261,19 @@ def _write_harness_state(state_path: Path, pipeline_id: str) -> None:
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+# IMP-20260612-E12D MT-2: conftest의 autouse fake gh fixture 제거에 따라,
+# request-accept의 PR body readiness 검사(IMP-20260611-A716 Bug 1)를 통과하려면
+# PATH 기반 fake gh가 `gh pr view --json body --jq .body`에도 완전한 PR body를
+# 반환해야 한다. 기존 run ID 브랜치 필터 동작(run list --branch)은 그대로 보존한다.
+_FAKE_GH_PR_BODY_4AC2 = (
+    "## 작업 요약\n자동 테스트 픽스처 PR body\n\n"
+    "## 사용자가 확인할 결과물\n결과물 경로: N/A (테스트)\n\n"
+    "## 기대 결과와 실제 결과\n기대: 성공 / 실제: 성공\n\n"
+    "## 중요한 선택과 트레이드오프\nN/A (테스트 픽스처)\n\n"
+    "## 검증\n모든 게이트 PASS\n"
+)
+
+
 def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]:
     """Real CLI Path E2E용 fake git/gh 바이너리 생성 및 PATH 환경 반환.
 
@@ -269,9 +282,13 @@ def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]
     shutil.which는 PATH 순서를 올바르게 따르므로 tmp_path/bin/ 앞에 추가하면
     fake git.cmd / fake gh.cmd가 우선 선택된다.
 
+    IMP-20260612-E12D MT-2: fake gh가 `pr view --json body --jq .body`에
+    완전한 PR body를 반환하도록 보강한다(autouse fake gh fixture 제거 대응).
+    run list --branch 기반 run ID 필터 동작은 그대로 유지한다.
+
     Args:
         tmp_path: pytest tmp_path 픽스처
-        stale_mode: True이면 gh가 항상 22222222 반환 (stale 시나리오)
+        stale_mode: True이면 gh run list가 항상 22222222 반환 (stale 시나리오)
 
     Returns:
         {"PATH": "<bin_dir>;<original_PATH>"} 형태의 env dict
@@ -286,25 +303,67 @@ def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]
         '@echo off\npython "%~dp0fake_git.py" %*\nexit /b %errorlevel%\n',
         encoding="utf-8",
     )
-    if stale_mode:
-        (bin_dir / "fake_gh.py").write_text(
-            "import sys\nprint('22222222')\nsys.exit(0)\n",
-            encoding="utf-8",
-        )
-    else:
-        (bin_dir / "fake_gh.py").write_text(
-            "import sys\nargs = sys.argv[1:]\n"
-            "print('11111111' if '--branch' in args else '99999999')\n"
-            "sys.exit(0)\n",
-            encoding="utf-8",
-        )
+    body_json = json.dumps(_FAKE_GH_PR_BODY_4AC2)
+    # run list run ID: stale_mode이면 항상 22222222, 아니면 --branch면 11111111 / 무분기면 99999999
+    run_id_expr = (
+        "'22222222'"
+        if stale_mode
+        else "('11111111' if '--branch' in args else '99999999')"
+    )
+    fake_gh_src = (
+        "import sys, io, json\n"
+        'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
+        f"BODY = {body_json}\n"
+        "args = sys.argv[1:]\n"
+        # run ID 브랜치 필터 (핵심 검증 대상): gh run list --branch <b> --json databaseId --jq .[0].databaseId
+        # 이 호출은 --jq .[0].databaseId를 포함하므로 PR body 분기보다 먼저 처리해야 한다.
+        'if "run" in args and "list" in args:\n'
+        f"    print({run_id_expr}); sys.exit(0)\n"
+        # PR body 조회: gh pr view --json body --jq .body
+        'if "--jq" in args:\n'
+        '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
+        '    if jq == ".body":\n'
+        '        sys.stdout.write(BODY)\n'
+        '        if not BODY.endswith("\\n"):\n'
+        '            sys.stdout.write("\\n")\n'
+        "        sys.exit(0)\n"
+        '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
+        '        print("[]"); sys.exit(0)\n'
+        '    elif ".headSha" in jq or ".databaseId" in jq:\n'
+        '        print(""); sys.exit(0)\n'
+        # 기타 pr/run list 형태는 빈 배열
+        'if "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        # 그 외 pr view 등 — 빈 PR 메타데이터 반환
+        "print(json.dumps({\n"
+        '    "body": BODY, "number": 1,\n'
+        '    "headRefOid": "",\n'
+        '    "isDraft": False, "state": "OPEN", "files": [],\n'
+        '    "url": "https://github.com/test/repo/pull/1",\n'
+        "}))\n"
+        "sys.exit(0)\n"
+    )
+    (bin_dir / "fake_gh.py").write_text(fake_gh_src, encoding="utf-8")
     (bin_dir / "gh.cmd").write_text(
         '@echo off\npython "%~dp0fake_gh.py" %*\nexit /b %errorlevel%\n',
         encoding="utf-8",
     )
+
+    # IMP-20260612-E12D MT-2: _get_pr_body_text()는 _build_gh_cmd_prefix()를 거쳐
+    # 기본적으로 bare ["gh"]를 호출한다. Windows에서 bare ["gh"]는 PATHEXT 우선순위(.EXE > .CMD)
+    # 때문에 실제 gh.exe를 선택해 fake gh.cmd를 가리지 못한다. (run ID 필터는 shutil.which를 쓰므로
+    # 영향 없음.) 따라서 PR body 조회만 PIPELINE_GH_EXECUTABLE(Python fake gh)로 라우팅하여
+    # 완전한 PR body를 반환시킨다. run list 호출은 여전히 PATH 기반 gh.cmd가 처리하므로
+    # 브랜치 필터(11111111 vs 99999999/22222222) 검증 의도가 그대로 유지된다.
+    pr_body_gh = bin_dir / "pr_body_gh.py"
+    pr_body_gh.write_text(fake_gh_src, encoding="utf-8")
+
     original_path = os.environ.get("PATH", "")
     new_path = str(bin_dir) + os.pathsep + original_path
-    return {"PATH": new_path}
+    return {
+        "PATH": new_path,
+        "PIPELINE_GH_EXECUTABLE": str(pr_body_gh),
+    }
 
 
 def _run_cli(

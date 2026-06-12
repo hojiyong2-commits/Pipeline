@@ -172,6 +172,90 @@ def load_final_state(env: Dict[str, str]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# IMP-20260612-E12D MT-2: PR body를 반환하는 fake gh (PIPELINE_GH_EXECUTABLE)
+# conftest의 autouse fake gh fixture가 제거되어, request-accept 성공을 기대하는
+# 테스트(TC-1)는 완전한 PR body를 반환하는 fake gh를 명시적으로 주입해야 한다.
+# PATH 기반 gh.cmd(make_fake_gh)는 `gh pr view --json body --jq .body`에 PR body를
+# 반환하지 못하므로, Python 스크립트 기반 fake gh를 PIPELINE_GH_EXECUTABLE로 전달한다.
+# ---------------------------------------------------------------------------
+
+_FAKE_GH_PR_BODY_BBDB = (
+    "## 작업 요약\n자동 테스트 픽스처 PR body\n\n"
+    "## 사용자가 확인할 결과물\n결과물 경로: N/A (테스트)\n\n"
+    "## 기대 결과와 실제 결과\n기대: 성공 / 실제: 성공\n\n"
+    "## 중요한 선택과 트레이드오프\nN/A (테스트 픽스처)\n\n"
+    "## 검증\n모든 게이트 PASS\n"
+)
+
+
+def write_fake_gh_pr_body_script(tmp_path: Path) -> Path:
+    """완전한 PR body를 반환하는 Python 기반 fake gh 스크립트를 생성하여 경로 반환.
+
+    headSha/databaseId는 빈 문자열, run/pr list는 빈 배열을 반환하여
+    gh CLI 없는 환경(pr_head_sha=''/ci_run_id='')을 시뮬레이션한다.
+
+    Args:
+        tmp_path: pytest tmp_path fixture.
+    Returns:
+        생성된 fake gh .py 스크립트 절대 경로.
+    Raises:
+        TypeError: tmp_path가 None.
+    """
+    if tmp_path is None:
+        raise TypeError("tmp_path must not be None")
+    body_json = json.dumps(_FAKE_GH_PR_BODY_BBDB)
+    script = tmp_path / "fake_gh_bbdb.py"
+    script.write_text(
+        "import sys, io, json\n"
+        'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
+        f"BODY = {body_json}\n"
+        "args = sys.argv[1:]\n"
+        'if "--jq" in args:\n'
+        '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
+        '    if jq == ".body":\n'
+        '        sys.stdout.write(BODY)\n'
+        '        if not BODY.endswith("\\n"):\n'
+        '            sys.stdout.write("\\n")\n'
+        "        sys.exit(0)\n"
+        '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
+        '        print("[]"); sys.exit(0)\n'
+        '    elif ".headSha" in jq or ".databaseId" in jq:\n'
+        '        print(""); sys.exit(0)\n'
+        'if "run" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        'if "run" in args and "view" in args:\n'
+        "    print(json.dumps({})); sys.exit(0)\n"
+        'if "pr" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        "print(json.dumps({\n"
+        '    "body": BODY, "number": 1,\n'
+        '    "headRefOid": "abc123def456abc123def456abc123def456abc1",\n'
+        '    "isDraft": False, "state": "OPEN", "files": [],\n'
+        '    "url": "https://github.com/test/repo/pull/1",\n'
+        "}))\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    return script
+
+
+def make_env_with_pr_body_gh(tmp_path: Path) -> Dict[str, str]:
+    """make_env에 완전한 PR body를 반환하는 fake gh(PIPELINE_GH_EXECUTABLE)를 추가한 환경.
+
+    request-accept 성공을 기대하는 테스트용. (IMP-20260612-E12D MT-2)
+
+    Args:
+        tmp_path: pytest tmp_path fixture.
+    Returns:
+        fake gh가 주입된 환경 변수 dict.
+    """
+    env = make_env(tmp_path)
+    env["PIPELINE_GH_EXECUTABLE"] = str(write_fake_gh_pr_body_script(tmp_path))
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
+# ---------------------------------------------------------------------------
 # Tests (14 cases — TC-1 ~ TC-14)
 # ---------------------------------------------------------------------------
 
@@ -179,7 +263,9 @@ def load_final_state(env: Dict[str, str]) -> Dict[str, Any]:
 def test_tc1_request_accept_creates_json(tmp_path):
     """gates request-accept 실행 시 acceptance_request.json이 PENDING 상태로 생성된다."""
     # CLI Evidence Contract: isolation marker PIPELINE_STATE_PATH (via make_env helper)
-    env = make_env(tmp_path)
+    # IMP-20260612-E12D MT-2: conftest autouse fake gh 제거에 따라, request-accept 성공을
+    # 기대하는 이 테스트는 완전한 PR body를 반환하는 fake gh를 명시적으로 주입한다.
+    env = make_env_with_pr_body_gh(tmp_path)
     assert "PIPELINE_STATE_PATH" in env, "isolation env not set"
     pipeline_id = bootstrap_pipeline(tmp_path, env)
     evidence_file = tmp_path / "result.txt"

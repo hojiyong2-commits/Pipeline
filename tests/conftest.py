@@ -7,8 +7,14 @@ ic_part_src: order_mapper, automation import용
 
 IMP-20260611-A716 MT-5: PIPELINE_GH_EXECUTABLE fixture.
 PR body readiness 검사(Bug 1 수정)로 인해 gh CLI 없는 환경에서 request-accept가 BLOCKED됨.
-기존 테스트들은 gh CLI 없는 환경에서도 request-accept가 성공하길 기대하므로,
-autouse fixture로 완전한 PR body를 반환하는 fake gh를 설정한다.
+완전한 PR body를 반환하는 fake gh를 설정하여 request-accept가 성공하도록 돕는다.
+
+IMP-20260612-E12D MT-1: 이 fixture는 더 이상 autouse가 아니다.
+과거에는 autouse=True로 모든 테스트에 PIPELINE_GH_EXECUTABLE을 자동 주입했으나,
+이로 인해 gh 부재/제한 환경을 전제로 한 테스트(PATH 제한 등)에서 fake gh가
+의도치 않게 동작하여 gh 부재 상황이 가려지는 문제가 있었다.
+이제 fake gh가 실제로 필요한 테스트만 _default_fake_gh_for_pr_body를 명시적으로
+인자로 받아 opt-in한다.
 """
 import json
 import os
@@ -32,9 +38,12 @@ if str(_IC_PART_SRC) not in sys.path:
 # ---------------------------------------------------------------------------
 # IMP-20260611-A716 MT-5: fake gh fixture
 # Bug 1 수정(request-accept에서 PR body None → BLOCKED) 으로 인한 회귀를 방지.
-# 기존 테스트들이 request-accept 성공을 기대할 때 PR body를 제공하기 위해
+# 테스트가 request-accept 성공을 기대할 때 PR body를 제공하기 위해
 # PIPELINE_GH_EXECUTABLE로 완전한 PR body를 반환하는 fake gh_spy.py를 설정한다.
 # 단, PIPELINE_GH_EXECUTABLE이 이미 설정되어 있으면 override하지 않는다.
+#
+# IMP-20260612-E12D MT-1: autouse=True를 제거하여 opt-in fixture로 전환.
+# fake gh가 필요한 테스트만 이 fixture를 명시적으로 인자로 받는다.
 # ---------------------------------------------------------------------------
 
 _COMPLETE_PR_BODY = (
@@ -103,12 +112,15 @@ sys.exit(0)
 '''
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _default_fake_gh_for_pr_body(monkeypatch, tmp_path):
-    """IMP-20260611-A716 MT-5: 모든 테스트에 완전한 PR body를 반환하는 fake gh를 설정.
+    """IMP-20260611-A716 MT-5 / IMP-20260612-E12D MT-1: 완전한 PR body를 반환하는 fake gh를 설정.
+
+    IMP-20260612-E12D MT-1: autouse=True를 제거했다. 이 fixture를 명시적으로 인자로
+    받는 테스트에만 PIPELINE_GH_EXECUTABLE이 주입된다.
 
     PIPELINE_GH_EXECUTABLE이 이미 설정된 경우(테스트가 직접 mock을 지정한 경우) override 안 함.
-    테스트가 pr_body_not_found BLOCKED를 기대하면 PIPELINE_GH_EXECUTABLE을 None으로 unset할 것.
+    테스트가 pr_body_not_found BLOCKED를 기대하면 이 fixture를 사용하지 않으면 된다.
     """
     if os.environ.get("PIPELINE_GH_EXECUTABLE"):
         # 이미 설정되어 있으면 skip (테스트가 직접 fake gh를 지정한 경우)

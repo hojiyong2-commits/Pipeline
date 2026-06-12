@@ -39,6 +39,86 @@ def _sha256_of(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+# IMP-20260612-E12D MT-2: conftest의 autouse fake gh fixture가 제거되어
+# request-accept의 PR body readiness 검사를 통과하려면 fake gh를 명시적으로 주입해야 한다.
+# 본 파일의 TC-R1~TC-R6은 모두 request-accept 성공(새 nonce 발급 또는 재사용)을 기대하므로
+# 완전한 PR body를 반환하는 fake gh 스크립트를 PIPELINE_GH_EXECUTABLE로 전달한다.
+# 단, 기존 테스트 의도(gh CLI 없는 환경 → pr_head_sha/ci_run_id 빈 문자열)를 유지하기 위해
+# fake gh는 headSha/databaseId에 빈 문자열을, run/pr list에 빈 배열을 반환한다.
+
+_AEF0_FAKE_GH_PR_BODY = (
+    "## 작업 요약\n자동 테스트 픽스처 PR body\n\n"
+    "## 사용자가 확인할 결과물\n결과물 경로: N/A (테스트)\n\n"
+    "## 기대 결과와 실제 결과\n기대: 성공 / 실제: 성공\n\n"
+    "## 중요한 선택과 트레이드오프\nN/A (테스트 픽스처)\n\n"
+    "## 검증\n모든 게이트 PASS\n"
+)
+
+
+def _write_fake_gh_script(tmp_path: Path) -> Path:
+    """완전한 PR body를 반환하는 fake gh 스크립트를 tmp_path에 생성하여 경로 반환.
+
+    headSha/databaseId는 빈 문자열, run/pr list는 빈 배열을 반환하여
+    gh CLI 없는 환경(pr_head_sha=""/ci_run_id="")을 시뮬레이션한다.
+    """
+    body_json = json.dumps(_AEF0_FAKE_GH_PR_BODY)
+    script = tmp_path / "fake_gh_aef0.py"
+    script.write_text(
+        "import sys, io, json\n"
+        'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
+        f"BODY = {body_json}\n"
+        "args = sys.argv[1:]\n"
+        'if "--jq" in args:\n'
+        '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
+        '    if jq == ".body":\n'
+        '        sys.stdout.write(BODY)\n'
+        '        if not BODY.endswith("\\n"):\n'
+        '            sys.stdout.write("\\n")\n'
+        "        sys.exit(0)\n"
+        '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
+        '        print("[]"); sys.exit(0)\n'
+        '    elif ".headSha" in jq or ".databaseId" in jq:\n'
+        '        print(""); sys.exit(0)\n'
+        'if "run" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        'if "run" in args and "view" in args:\n'
+        "    print(json.dumps({})); sys.exit(0)\n"
+        'if "pr" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        "print(json.dumps({\n"
+        '    "body": BODY, "number": 1,\n'
+        '    "headRefOid": "abc123def456abc123def456abc123def456abc1",\n'
+        '    "isDraft": False, "state": "OPEN", "files": [],\n'
+        '    "url": "https://github.com/test/repo/pull/1",\n'
+        "}))\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    return script
+
+
+def _fake_gh_env(tmp_path: Path) -> Dict[str, str]:
+    """PIPELINE_GH_EXECUTABLE로 fake gh(PR body)를 가리키고, PATH를 제한하는 extra_env dict.
+
+    IMP-20260612-E12D MT-2: TC-R1~TC-R6은 "gh CLI 없는 환경(pr_head_sha=''/ci_run_id='')"을
+    전제로 한다. 그러나 _get_current_pr_head_sha()/_get_pr_branch_ci_run_id()는
+    bare ["gh"] 또는 shutil.which("gh")를 사용하므로, 실제 gh가 설치되고 열린 PR이 있으면
+    실제 head SHA/run ID를 반환해 재사용 판단이 깨진다.
+    이를 막기 위해 PATH를 tmp_path로 제한하여 실제 gh 탐색을 무력화한다.
+    PR body 조회만 PIPELINE_GH_EXECUTABLE(Python fake gh)로 라우팅되며, 이는 sys.executable
+    절대 경로로 실행되므로 PATH 제한과 무관하게 동작한다.
+
+    Args:
+        tmp_path: pytest tmp_path fixture.
+    Returns:
+        extra_env dict (PIPELINE_GH_EXECUTABLE + 제한된 PATH).
+    """
+    return {
+        "PIPELINE_GH_EXECUTABLE": str(_write_fake_gh_script(tmp_path)),
+        "PATH": str(tmp_path),
+    }
+
+
 def _run_pipeline(
     args: list,
     state_path: Path,
@@ -91,6 +171,16 @@ def _write_state(state_path: Path, pipeline_id: str) -> None:
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+# IMP-20260612-E12D MT-2: IMP-20260611-A716 도입 후 _should_reuse_acceptance_nonce는
+# 기존 요청에 PR 본문 스냅샷 필드(pr_body_sha256/pr_body_readiness/required_sections_present/
+# temporary_phrases_absent)가 없으면 재사용을 거부한다. fake gh가 완전한 PR body를 반환하므로
+# (new_pr_body_sha256 != None) 재사용을 기대하는 TC-R1은 fake gh PR body와 동일한 스냅샷을
+# 기존 요청에 미리 기록해야 한다. 이 SHA는 _AEF0_FAKE_GH_PR_BODY와 정확히 일치해야 한다.
+_AEF0_FAKE_GH_PR_BODY_SHA256 = hashlib.sha256(
+    _AEF0_FAKE_GH_PR_BODY.encode("utf-8")
+).hexdigest()
+
+
 def _write_acceptance_request(
     req_path: Path,
     *,
@@ -102,7 +192,11 @@ def _write_acceptance_request(
     ci_run_id: str = "99999999",
     status: str = "PENDING",
 ) -> None:
-    """acceptance_request.json 초기 상태를 직접 기록 (기존 코드가 있는 상황 시뮬레이션)."""
+    """acceptance_request.json 초기 상태를 직접 기록 (기존 코드가 있는 상황 시뮬레이션).
+
+    PR 본문 스냅샷 필드를 fake gh PR body 기준으로 채워, IMP-20260611-A716의
+    재사용 거부 조건(PR 본문 SHA 없음/불일치)을 회피한다.
+    """
     data: Dict[str, Any] = {
         "schema_version": 1,
         "pipeline_id": pipeline_id,
@@ -116,6 +210,11 @@ def _write_acceptance_request(
         "evidence_sha256": evidence_sha256,
         "evidence_url": None,
         "status": status,
+        # IMP-20260611-A716 PR 본문 스냅샷 (fake gh PR body 기준)
+        "pr_body_sha256": _AEF0_FAKE_GH_PR_BODY_SHA256,
+        "pr_body_readiness": "PASS",
+        "required_sections_present": True,
+        "temporary_phrases_absent": True,
     }
     req_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -161,6 +260,7 @@ def test_nonce_reused_on_same_conditions(tmp_path: Path) -> None:
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
         cwd=tmp_path,
+        extra_env=_fake_gh_env(tmp_path),
     )
 
     # 프로세스가 정상 종료되어야 함
@@ -213,6 +313,7 @@ def test_force_new_code_always_new_nonce(tmp_path: Path) -> None:
         ["gates", "request-accept", "--evidence", str(evidence_path), "--force-new-code"],
         state_path,
         cwd=tmp_path,
+        extra_env=_fake_gh_env(tmp_path),
     )
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
@@ -260,6 +361,7 @@ def test_new_nonce_when_evidence_sha_changed(tmp_path: Path) -> None:
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
         cwd=tmp_path,
+        extra_env=_fake_gh_env(tmp_path),
     )
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
@@ -307,6 +409,7 @@ def test_new_nonce_when_pr_sha_changed(tmp_path: Path) -> None:
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
         cwd=tmp_path,
+        extra_env=_fake_gh_env(tmp_path),
     )
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
@@ -354,6 +457,7 @@ def test_new_nonce_when_ci_run_changed(tmp_path: Path) -> None:
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
         cwd=tmp_path,
+        extra_env=_fake_gh_env(tmp_path),
     )
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
@@ -397,6 +501,7 @@ def test_new_nonce_when_status_not_pending(tmp_path: Path) -> None:
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
         cwd=tmp_path,
+        extra_env=_fake_gh_env(tmp_path),
     )
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"

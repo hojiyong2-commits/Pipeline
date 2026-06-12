@@ -1,0 +1,5 @@
+{
+  "description": "conftest.py _default_fake_gh_for_pr_body fixture is not autouse",
+  "autouse": false,
+  "pipeline_gh_executable_auto_set": false
+}
