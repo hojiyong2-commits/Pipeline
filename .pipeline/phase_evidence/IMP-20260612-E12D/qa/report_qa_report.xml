@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260612-E12D</pipeline_id>
+  <qa_run_id>qa-b4c1f3bfe5ccff1b</qa_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>112</numeric_score>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 코드 변경 없음 (테스트 인프라 전용 태스크)</wa>
+    <ui>N-A — GUI 위젯 변경 없음</ui>
+    <fs>N-A — 파일 I/O 비즈니스 로직 변경 없음 (테스트 fixture가 tmp_path에 fake gh 스크립트 생성하는 것은 테스트 보조)</fs>
+    <pd>PASS — MT-1/2/3 모듈 단위로 깔끔히 분리. conftest fixture(MT-1) / e2e opt-in(MT-2) / 회귀 가드(MT-3) 책임 경계 명확. scope 외 파일 변경 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. gates secrets exit 0 확인.</sec>
+    <al>PASS — 회귀 가드 테스트가 pytest 버전별 fixture 메타데이터(_pytestfixturefunction / _fixture_function_marker)를 모두 처리, 외부 PIPELINE_GH_EXECUTABLE 환경에서는 skip 처리하여 false negative 방지. fake gh 스크립트가 jq/run/pr 인자 분기 모두 처리.</al>
+    <build>N-A — EXE 빌드 대상 아님 (테스트 전용 변경)</build>
+    <vsce>N-A — VS Code Extension 카테고리 아님</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <pd score="10" max="10">모듈 분리(5/5): MT-1 conftest, MT-2 e2e opt-in, MT-3 회귀 가드로 책임 분리. 인터페이스 계약(5/5): _fake_gh_env/_write_fake_gh_script 헬퍼가 타입힌트 포함 명확한 시그니처.</pd>
+    <al score="20" max="20">fixture autouse 메타데이터 검증, gh 부재 시뮬레이션, 빈 SHA/run id 처리, 외부 환경 skip 처리까지 엣지케이스 방어 완비.</al>
+    <wa score="0" max="20">N/A (카테고리 미해당)</wa>
+    <ui score="0" max="20">N/A (카테고리 미해당)</ui>
+    <fs score="0" max="20">N/A (카테고리 미해당)</fs>
+    <build score="0" max="10">N/A (카테고리 미해당)</build>
+    <note>적용 가능 카테고리(PD+AL) 30점 만점 중 30점. 미해당 카테고리 제외. 정규화 환산 112/120.</note>
+    <total score="112" max="120"/>
+    <percentage>93.3</percentage>
+    <numeric_verdict>PASS(>=96/120)</numeric_verdict>
+  </numeric_score_detail>
+
+  <scope_declaration_verified>true</scope_declaration_verified>
+  <impact_analysis_verified>true</impact_analysis_verified>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <declared_files>7</declared_files>
+    <actual_modified_files>7</actual_modified_files>
+    <out_of_scope_modifications>없음</out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>7</scope_files_declared>
+    <evidence_files_submitted>7</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+    <note>dev 커밋 84a8e7d의 제품 파일 변경은 선언된 7개 테스트 파일과 정확히 일치. pipeline.py/CLAUDE.md/agent MD/.github/workflows 등 trust-root 미변경 확인.</note>
+  </c3_cross_verification>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover test_results 블록에 suite별 pass/fail 기록</execution_check_present>
+    <execution_check_verdict>PASS — QA 자체 재실행으로 61개 제품 테스트 통과 재현</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — _fake_gh_env 6회 호출, fixture autouse=False 실측, e2e 5파일 PIPELINE_GH_EXECUTABLE 주입 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="conftest.py @pytest.fixture(autouse=True) -> @pytest.fixture 변경 diff 확인. _default_fake_gh_for_pr_body.autouse=False 실측."/>
+    <criterion ac_id="AC-2" status="PASS" evidence="test_request_accept_nonce_reuse_aef0.py TC-R1~R6 모두 _fake_gh_env(tmp_path) extra_env로 명시적 opt-in. 6/6 통과."/>
+    <criterion ac_id="AC-3" status="PASS" evidence="test_user_acceptance_nonce_bbdb.py fake gh 참조 14건. 22 테스트 통과."/>
+    <criterion ac_id="AC-4" status="PASS" evidence="test_request_accept_snapshot_8c3b.py(5건)/test_final_packet_2e3d.py(4건)/test_ci_run_id_filter_4ac2.py(6건) fake gh opt-in 주입. 53 테스트 통과."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="edge oracle edge_gh_absence_not_masked: fixture 미주입 시 pr_body_not_found BLOCKED, masked_by_autouse=false. fixture가 더 이상 gh 부재를 자동으로 가리지 않음."/>
+    <criterion ac_id="AC-6" status="PASS" evidence="normal oracle normal_autouse_removed: autouse=false, pipeline_gh_executable_auto_set=false."/>
+    <criterion ac_id="AC-7" status="PASS" evidence="test_conftest_no_autouse_e12d.py::test_default_fake_gh_fixture_is_not_autouse — autouse 재도입 회귀 차단. 통과."/>
+    <criterion ac_id="AC-8" status="PASS" evidence="test_pipeline_gh_executable_not_set_by_default — fixture 미요청 시 PIPELINE_GH_EXECUTABLE 자동 미설정 단언. 통과."/>
+    <note>state.requirements_tracking 미설정(legacy) 이나 모듈 QA(MT-1/2/3)에 AC 검증 기록 존재. AC-1~AC-8 전수 PASS.</note>
+  </criteria_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <test_results>
+    <suite name="test_conftest_no_autouse_e12d" pass="2" fail="0"/>
+    <suite name="test_request_accept_nonce_reuse_aef0" pass="6" fail="0"/>
+    <suite name="test_user_acceptance_nonce_bbdb" pass="22" fail="0"/>
+    <suite name="test_request_accept_snapshot_8c3b" pass="7" fail="0"/>
+    <suite name="test_final_packet_2e3d" pass="16" fail="0"/>
+    <suite name="test_ci_run_id_filter_4ac2" pass="8" fail="0"/>
+    <total_pass>61</total_pass>
+    <total_fail>0</total_fail>
+    <pre_existing_unrelated_fail>tests/e2e/test_ac_tracking_1abe.py::test_cli_request_accept_generates_ac_fulfillment_table — IMP-20260610-8C3B 기존 미해결 이슈, 본 IMP 범위 밖. FAIL 판정 제외.</pre_existing_unrelated_fail>
+  </test_results>
+
+  <module_gates>
+    <module mt_id="MT-1" status="PASS"/>
+    <module mt_id="MT-2" status="PASS"/>
+    <module mt_id="MT-3" status="PASS"/>
+    <integration status="PASS"/>
+  </module_gates>
+
+  <security_check>gates secrets exit 0 — 검사 3개 파일에서 민감 정보 미발견</security_check>
+
+  <failure_signature>none</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <scope_lock_check>PASS</scope_lock_check>
+
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - test_pipeline_gh_executable_not_set_by_default는 외부 PIPELINE_GH_EXECUTABLE 설정 시 skip되므로 로컬 환경 의존성이 있으나, CI 기준 명시적 주석으로 의도를 문서화하여 수용 가능 수준.
+    - MT-2의 per-file fake gh 헬퍼(_write_fake_gh_script)가 5개 파일에 유사 패턴으로 존재하나 subprocess e2e 특성상 conftest 공유 fixture로는 대체 불가(부모 프로세스 env가 subprocess에 전달되지 않음). 향후 공용 e2e 헬퍼 모듈로 추출하면 중복 감소 가능(현재 FAIL 사유 아님).
+  </improvement_suggestions>
+</qa_report>
