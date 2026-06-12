@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260612-B96C</pipeline_id>
+  <scope_declaration>
+    <files_to_modify>pipeline.py, tests/test_acceptance_provenance_2338.py</files_to_modify>
+    <files_to_create>tests/test_pr_approver_b96c.py</files_to_create>
+    <files_to_delete>없음</files_to_delete>
+  </scope_declaration>
+  <impact_analysis>
+    <target_functions>
+      <function>pipeline._check_pr_approver_provenance (수정)</function>
+      <function>tests.test_pr_approver_b96c.test_exact_match_pass (신규)</function>
+    </target_functions>
+    <state_mutations>none - 판정 로직 + 테스트 추가</state_mutations>
+  </impact_analysis>
+  <changed_files>
+    <file>pipeline.py</file>
+    <file>tests/test_pr_approver_b96c.py</file>
+    <file>tests/test_acceptance_provenance_2338.py</file>
+  </changed_files>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_acceptance_provenance_2338.py, tests/test_pr_approver_b96c.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_pr_approver_b96c.py, tests/test_acceptance_provenance_2338.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file path="pipeline.py">_check_pr_approver_provenance() AC-1~AC-9 전체 반영</file>
+    <file path="tests/test_pr_approver_b96c.py">TC-1~TC-7 신규, pytest 7 passed</file>
+    <file path="tests/test_acceptance_provenance_2338.py">test_wrong_nonce_blocked failure_code 갱신, 6 passed</file>
+  </evidence>
+  <pytest_result>pytest tests/test_pr_approver_b96c.py tests/test_acceptance_provenance_2338.py: 13 passed</pytest_result>
+  <self_check>
+    <syntax>PASS</syntax>
+    <logic>PASS</logic>
+    <security>PASS - secret 없음</security>
+  </self_check>
+  <status>READY_FOR_QA</status>
+</handover>

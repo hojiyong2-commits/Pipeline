@@ -1,0 +1,15 @@
+{
+  "pipeline_id": "BUG-20260612-B96C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._check_pr_approver_provenance"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["tests/test_pr_approver_b96c.py", "tests/test_acceptance_provenance_2338.py"],
+      "affected_functions": ["tests.test_pr_approver_b96c.test_exact_match_pass (신규 파일)"]
+    }
+  ]
+}
