@@ -2481,8 +2481,15 @@ def _is_internal_artifact(path: str) -> bool:
     basename = normalized.split("/")[-1] if "/" in normalized else normalized
 
     # 디렉터리 접두사 검사
+    # IMP-20260612-CE06 MT-1: 상대 경로 접두사뿐 아니라 절대 경로에 포함된
+    # `/.pipeline/` 같은 디렉터리 세그먼트도 내부 산출물로 감지한다.
+    # (request-accept/accept 단계에서 절대 경로 evidence가 전달될 때 누락 방지)
     for dir_prefix in WORKSPACE_INTERNAL_DIR_PREFIXES:
-        if normalized.startswith(dir_prefix) or normalized == dir_prefix.rstrip("/"):
+        seg = dir_prefix.rstrip("/")
+        if normalized.startswith(dir_prefix) or normalized == seg:
+            return True
+        # `/.pipeline/` 처럼 경로 중간에 디렉터리 세그먼트로 등장하는 경우도 차단
+        if seg and f"/{seg}/" in normalized:
             return True
 
     # 확장자 검사 (IMP-20260602-1ABE: .spec 등 workspace 전용 확장자)
@@ -2502,6 +2509,40 @@ def _is_internal_artifact(path: str) -> bool:
                 return True
 
     return False
+
+
+# [Purpose]: request-accept evidence가 최종 사용자에게 배포 가능한 결과물인지 판정한다.
+#   내부 파이프라인 산출물(qa_report.xml 등)로 승인 코드(nonce)가 발급되는 것을
+#   request-accept 단계에서 사전 차단하기 위한 공통 헬퍼. (IMP-20260612-CE06 MT-1)
+# [Assumptions]: _is_internal_artifact()가 WORKSPACE_INTERNAL_PATTERNS SSoT를 통해
+#   내부 산출물을 정확히 식별한다. http(s) URL은 외부 사용자 결과물로 간주한다.
+# [Vulnerability & Risks]: path가 None 또는 빈 문자열이면 배포 불가(False)로 처리한다.
+#   _is_internal_artifact()의 패턴 목록이 누락되면 내부 산출물이 통과할 수 있으나,
+#   그 위험은 SSoT 패턴 관리 책임이며 이 함수는 위임만 한다.
+# [Improvement]: 향후 evidence MIME/확장자 화이트리스트를 추가하면 더 엄격히
+#   사용자 결과물(.xlsx/.png/.exe 등)만 허용하도록 확장할 수 있다.
+def _is_deployable_evidence(path: str) -> bool:
+    """Request-accept evidence가 배포 가능한 사용자 결과물인지 판정.
+
+    Args:
+        path: evidence 경로 또는 URL.
+
+    Returns:
+        True이면 사용자에게 보여줄 수 있는 결과물(배포 가능):
+        - HTTP/HTTPS URL은 항상 배포 가능
+        - 내부 파이프라인 산출물은 배포 불가
+        - 그 외는 배포 가능
+        path가 None 또는 빈 문자열이면 False.
+    """
+    if not path:
+        return False
+    # URL은 항상 deployable
+    if path.startswith(("http://", "https://")):
+        return True
+    # 내부 파이프라인 산출물이면 배포 불가
+    if _is_internal_artifact(path):
+        return False
+    return True
 
 
 # ─── Secret Patterns SSoT (IMP-20260529-D8BA MT-1) ───────────────────────────
@@ -5070,6 +5111,18 @@ def _deploy_accepted_outputs(
     deploy_dir = deploy_root / pid
     # IMP-20260528-3898 MT-3 / IMP-20260529-D8BA MT-1: 내부/민감 산출물 필터 — 3-tuple
     artifacts, blocked_internal, blocked_secret = _deployment_artifacts(state, evidence)
+    # IMP-20260612-CE06 MT-1: 배포 직전 _is_deployable_evidence SSoT로 최종 방어.
+    # _deployment_artifacts가 이미 내부 산출물을 제외하지만, 동일 SSoT 헬퍼로
+    # 한 번 더 검증하여 내부 산출물이 배포 경로로 새는 것을 차단한다.
+    _deployable_artifacts: List[Path] = []
+    for _art in artifacts:
+        if _is_deployable_evidence(str(_art)):
+            _deployable_artifacts.append(_art)
+        else:
+            _name = _art.name
+            if _name and _name not in blocked_internal:
+                blocked_internal.append(_name)
+    artifacts = _deployable_artifacts
     external_urls = list((evidence_validation or {}).get("urls") or [])
     if not artifacts and not external_urls:
         _die(
@@ -8825,6 +8878,11 @@ def cmd_contract(args: argparse.Namespace) -> None:
                 "; ".join(storage_blockers)
                 + f". Move user-provided oracle files to {ORACLE_STORAGE_ROOT_REL.as_posix()}/{pid}/{name}/ and retry."
             )
+        # IMP-20260612-CE06 MT-1: --ac-ids 파싱 (콤마 구분 → 리스트). 미지정 시 빈 리스트.
+        _raw_ac_ids = getattr(args, "ac_ids", None)
+        oracle_ac_ids: List[str] = []
+        if _raw_ac_ids:
+            oracle_ac_ids = [tok.strip() for tok in str(_raw_ac_ids).split(",") if tok.strip()]
         entries.append({
             "name": name,
             "description": args.description or "",
@@ -8834,13 +8892,18 @@ def cmd_contract(args: argparse.Namespace) -> None:
             "expected_path": _display_path(expected_path),
             "input_sha256": _sha256_file(input_path),
             "expected_sha256": _sha256_file(expected_path),
+            # IMP-20260612-CE06 MT-1: 오라클 케이스 ↔ AC 연동 (Oracle AC gate 통과용)
+            "ac_ids": oracle_ac_ids,
             "added_at": _now(),
         })
         manifest["updated_at"] = _now()
         _write_json(paths["oracle_manifest"], manifest)
         print(GREEN(f"\n[ORACLE ADDED] {name}"))
         print(f"  input:    {_display_path(input_path)}")
-        print(f"  expected: {_display_path(expected_path)}\n")
+        print(f"  expected: {_display_path(expected_path)}")
+        if oracle_ac_ids:
+            print(f"  ac_ids:   {', '.join(oracle_ac_ids)}")
+        print()
         return
 
     if action == "audit":
@@ -15201,12 +15264,20 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
             if ac_ver is not None:
                 for crit in ac_ver.findall("ac"):
                     if crit.get("id") == ac_id:
-                        status = crit.get("status", "?")
+                        status = crit.get("status", "")
+                        # IMP-20260612-CE06: status가 속성에 없으면 자식 <status> 요소에서 읽기
+                        if not status:
+                            st_elem = crit.find("status")
+                            status = (st_elem.text or "PASS").strip() if st_elem is not None else "?"
                         ver_elem = crit.find("verification")
                         ver_text = (ver_elem.text or "").strip() if ver_elem is not None else ""
                         if not ver_text:
                             desc_elem = crit.find("description")
                             ver_text = (desc_elem.text or "").strip() if desc_elem is not None else ""
+                        # IMP-20260612-CE06: <verification>/<description>이 없으면 자식 <evidence> 요소에서 읽기
+                        if not ver_text:
+                            evidence_elem = crit.find("evidence")
+                            ver_text = (evidence_elem.text or "").strip() if evidence_elem is not None else ""
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
 
@@ -15792,6 +15863,20 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     evidence = getattr(args, "evidence", None)
     if evidence is None or not str(evidence).strip():
         _die("[BLOCKED] --evidence는 필수입니다 (결과물 경로 또는 URL).")
+
+    # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
+    # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다
+    # (기존 BLOCKED 메시지와 동일한 텍스트 임베드 패턴).
+    if not _is_deployable_evidence(str(evidence)):
+        _die(
+            "[BLOCKED] failure_code=evidence_not_deployable\n"
+            f"  actual: {Path(str(evidence)).name}은(는) 파이프라인 내부 산출물입니다.\n"
+            "  expected: 최종 사용자가 확인할 수 있는 결과물 경로\n"
+            "  (예: output.xlsx, dist/app.exe, screenshots/result.png)\n"
+            "  사용 불가 예시: qa_report.xml, build_report.xml,\n"
+            "  human_acceptance_packet.md, acceptance_request.json,\n"
+            "  pipeline_contracts/, .pipeline/"
+        )
 
     # IMP-20260606-D9F4: AC table 사전 검증 (PENDING 항목 있으면 차단)
     ac_blocker = _validate_ac_table_before_request_accept(state)
@@ -17229,6 +17314,36 @@ def cmd_gates(args: argparse.Namespace) -> None:
         deployment: Optional[Dict[str, Any]] = None
         evidence_validation: Optional[Dict[str, Any]] = None
         if accept_decision == "ACCEPT":
+            # IMP-20260612-CE06 MT-1: request-accept와 동일한 _is_deployable_evidence SSoT를
+            # accept 단계에서도 적용한다. 내부 파이프라인 산출물(qa_report.xml 등)을
+            # evidence로 ACCEPT하려 하면 배포 전에 evidence_not_deployable으로 차단한다.
+            _accept_evidence = str(getattr(args, "evidence", "") or "")
+            if not _is_deployable_evidence(_accept_evidence):
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", "<result-path>"],
+                    note=f"evidence not deployable for accept: {_accept_evidence}",
+                    status="BLOCKED", phase="harness",
+                    failure_code="evidence_not_deployable",
+                    failure_category="missing_evidence",
+                    summary_ko="ACCEPT evidence가 파이프라인 내부 산출물입니다.",
+                    expected="최종 사용자가 확인할 수 있는 결과물 경로 또는 URL",
+                    actual=Path(_accept_evidence).name if _accept_evidence else "(빈 값)",
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=[
+                        "내부 산출물(qa_report.xml, build_report.xml 등) 대신 실제 사용자 결과물 경로를 사용하세요.",
+                        "python pipeline.py gates request-accept --evidence <결과물-경로> 를 다시 실행하세요.",
+                    ],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die(
+                    "[BLOCKED] failure_code=evidence_not_deployable\n"
+                    f"  actual: {Path(_accept_evidence).name if _accept_evidence else '(빈 값)'}은(는) 파이프라인 내부 산출물입니다.\n"
+                    "  expected: 최종 사용자가 확인할 수 있는 결과물 경로 또는 URL\n"
+                    "  (예: output.xlsx, dist/app.exe, screenshots/result.png)"
+                )
             prereq = []
             for gate_name in ("technical", "oracle", "github_ci"):
                 gate = state["external_gates"].get(gate_name, {})
@@ -18729,6 +18844,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_contract_oracle.add_argument("--expected", required=True, help="Expected output file for the sample")
     p_contract_oracle.add_argument("--case-kind", default="normal", choices=["normal", "edge", "exception", "error"])
     p_contract_oracle.add_argument("--description", default=None)
+    # IMP-20260612-CE06 MT-1: 오라클 케이스를 AC와 연동 (requirements_tracking.enabled=true 필수)
+    p_contract_oracle.add_argument(
+        "--ac-ids", dest="ac_ids", default=None,
+        help="이 오라클 케이스가 검증하는 AC id (콤마 구분, 예: AC-1,AC-2). "
+             "requirements_tracking.enabled=true 파이프라인에서 Oracle AC gate 통과에 필요합니다.",
+    )
     p_contract_oracle.add_argument("--force", action="store_true", default=False)
 
     p_contract_audit = csub.add_parser("audit", help="Rule-based Contract v3/three_gate audit before freeze")
