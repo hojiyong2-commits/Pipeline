@@ -151,7 +151,12 @@ def test_allowed_approver_correct_code() -> None:
 
 
 def test_wrong_nonce_blocked() -> None:
-    """T002 (case=error) — 댓글에 잘못된 nonce가 들어있으면 BLOCKED 및 실패 메시지에 기대 코드 포함."""
+    """T002 (case=error) — 댓글에 잘못된 nonce가 들어있으면 BLOCKED 및 실패 메시지에 기대 코드 포함.
+
+    BUG-20260612-B96C 재작업(REJECT 수정): WRONGNONCE 는 발급 이력에 존재하지 않는 임의 코드이므로
+    approval_stale_nonce 가 아니라 approval_code_mismatch 로 분류되는 것이 올바르다.
+    stale_nonce 는 "실제로 발급된 적 있는 nonce 와 정확히 일치"하는 경우에만 성립한다.
+    """
     state: Dict[str, Any] = {
         "pipeline_id": "TEST-001",
         "acceptance_request": {"nonce": "RIGHTNONCE"},
@@ -173,8 +178,8 @@ def test_wrong_nonce_blocked() -> None:
          patch("subprocess.run", side_effect=_build_subprocess_side_effect("42", comments)):
         result = _check_pr_approver_provenance(state)
     assert result["status"] == "BLOCKED"
-    # BUG-20260612-B96C AC-4: 동일 pipeline_id + 다른 nonce → approval_stale_nonce 로 변경됨
-    assert result.get("failure_code") == "approval_stale_nonce"
+    # BUG-20260612-B96C 재작업: 발급 이력에 없는 nonce(오타/잘못된 코드) → approval_code_mismatch.
+    assert result.get("failure_code") == "approval_code_mismatch"
     assert "ACCEPT-TEST-001-RIGHTNONCE" in result.get("message", ""), \
         "실패 메시지에 실제 기대 코드가 표시되어야 함"
 

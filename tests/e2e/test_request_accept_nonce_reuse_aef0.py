@@ -517,3 +517,165 @@ def test_new_nonce_when_status_not_pending(tmp_path: Path) -> None:
     assert final_req["status"] == "PENDING", (
         f"새 요청의 status가 PENDING이 아님: {final_req['status']}"
     )
+
+
+# ─── BUG-20260612-B96C 재작업: stale_nonce vs code_mismatch 정확 분류 ──────────────
+#
+# REJECT 사유: _check_pr_approver_provenance()가 같은 ACCEPT-{pipeline_id}- prefix 로
+# 시작하지만 nonce 부분이 어떤 발급 nonce 와도 일치하지 않는 잘못된 코드(예: 마지막 글자가
+# 빠진 7자리 nonce)를 approval_stale_nonce 로 오분류했다. 올바른 분류는 approval_code_mismatch.
+#   - stale_nonce: acceptance_request 발급 이력에 실제로 존재하는 nonce 와 정확히 일치.
+#   - code_mismatch: prefix 는 같지만 어떤 발급 nonce 와도 정확히 일치하지 않음(오타/글자 부족).
+#
+# 본 두 TC 는 _check_pr_approver_provenance()를 직접 import 하여 subprocess.run/shutil.which/
+# _load_acceptance_request 를 mock 한 상태로 호출한다(test_pr_approver_b96c.py 패턴 재사용).
+
+import importlib  # noqa: E402
+from typing import List  # noqa: E402
+from unittest.mock import MagicMock, patch  # noqa: E402
+
+# pipeline.py 를 직접 import 하기 위해 프로젝트 루트를 sys.path 에 추가.
+_PROJECT_ROOT = str(Path(__file__).resolve().parents[2])
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+_PIPELINE_MOD = importlib.import_module("pipeline")
+_check_pr_approver_provenance = _PIPELINE_MOD._check_pr_approver_provenance
+_ALLOWED_APPROVER = _PIPELINE_MOD.PIPELINE_ALLOWED_APPROVER
+
+# stale/mismatch 분류 테스트용 가상 pipeline_id 와 nonce.
+# 실제 nonce 는 8자리(_issue_acceptance_nonce 가 base32 8자 생성)이며,
+# truncated 코드는 마지막 1글자가 빠진 7자리이다.
+_B96C_PIPELINE_ID = "BUG-20260612-B96C"
+_B96C_REAL_NONCE = "HO2PSR7V"           # 8자리 — 실제 발급된 nonce
+_B96C_TRUNCATED_NONCE = "HO2PSR7"        # 7자리 — 마지막 글자 누락(오타)
+_B96C_VALID_CODE = f"ACCEPT-{_B96C_PIPELINE_ID}-{_B96C_REAL_NONCE}"
+_B96C_TRUNCATED_CODE = f"ACCEPT-{_B96C_PIPELINE_ID}-{_B96C_TRUNCATED_NONCE}"
+
+
+def _b96c_subprocess_side_effect(
+    pr_number: str,
+    comments: List[Dict[str, Any]],
+    head_branch: str = "main",
+) -> Any:
+    """_check_pr_approver_provenance 내부 subprocess.run 호출을 흉내내는 side_effect.
+
+    호출 순서: git rev-parse → gh pr list → gh pr view.
+    test_pr_approver_b96c.py 의 _build_subprocess_side_effect 패턴을 그대로 따른다.
+    """
+    def _make_run(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
+        m = MagicMock()
+        m.returncode = returncode
+        m.stdout = stdout
+        m.stderr = stderr
+        return m
+
+    def _side(*args: Any, **_kwargs: Any) -> MagicMock:
+        argv = args[0] if args else []
+        if isinstance(argv, list) and argv[:2] == ["git", "rev-parse"]:
+            return _make_run(returncode=0, stdout=head_branch + "\n")
+        if isinstance(argv, list) and len(argv) >= 3 and argv[1:3] == ["pr", "list"]:
+            payload = json.dumps([{"number": int(pr_number), "headRefName": head_branch}])
+            return _make_run(returncode=0, stdout=payload)
+        if isinstance(argv, list) and len(argv) >= 3 and argv[1:3] == ["pr", "view"]:
+            payload = json.dumps({"comments": comments})
+            return _make_run(returncode=0, stdout=payload)
+        return _make_run(returncode=1, stdout="", stderr="unexpected subprocess call")
+
+    return _side
+
+
+def _run_b96c_provenance(
+    state: Dict[str, Any],
+    file_req: Optional[Dict[str, Any]],
+    comments: List[Dict[str, Any]],
+    pr_number: str = "42",
+) -> Dict[str, Any]:
+    """mock 컨텍스트 안에서 _check_pr_approver_provenance 를 실행한다.
+
+    PIPELINE_GH_EXECUTABLE(AC-8) 환경변수를 통해 fake gh 경로가 shutil.which 로 해석되는
+    경로를 검증하기 위해 shutil.which 를 mock 한다(실제 gh 미설치 환경에서도 동작).
+    """
+    with patch.dict(os.environ, {"PIPELINE_GH_EXECUTABLE": "gh"}), \
+         patch.object(_PIPELINE_MOD, "_load_acceptance_request", return_value=file_req), \
+         patch("shutil.which", return_value="C:\\fake\\gh.exe"), \
+         patch("subprocess.run", side_effect=_b96c_subprocess_side_effect(pr_number, comments)):
+        return _check_pr_approver_provenance(state)
+
+
+def test_truncated_nonce_is_code_mismatch() -> None:
+    """TC 추가 1 (case=error) — 마지막 글자 1개 누락(7자리) → approval_code_mismatch (NOT stale_nonce).
+
+    발급된 실제 nonce 는 8자리(HO2PSR7V)이고, 댓글의 코드는 7자리(HO2PSR7)로 truncated 되었다.
+    이 코드는 어떤 발급 nonce 와도 정확히 일치하지 않으므로 approval_code_mismatch 여야 한다.
+    이전 버그에서는 prefix 만 같으면 approval_stale_nonce 로 오분류되었다.
+    """
+    state: Dict[str, Any] = {
+        "pipeline_id": _B96C_PIPELINE_ID,
+        "acceptance_request": {"nonce": _B96C_REAL_NONCE},
+    }
+    # 발급 이력: 실제 nonce 만 존재(8자리). truncated 7자리는 이력에 없음.
+    file_req: Dict[str, Any] = {
+        "pipeline_id": _B96C_PIPELINE_ID,
+        "nonce": _B96C_REAL_NONCE,
+        "request_id": "req-b96c",
+    }
+    comments = [
+        {
+            "author": {"login": _ALLOWED_APPROVER},
+            "body": _B96C_TRUNCATED_CODE,  # ACCEPT-...-HO2PSR7 (7자리)
+            "id": "C-trunc",
+        }
+    ]
+    result = _run_b96c_provenance(state, file_req, comments)
+
+    # final_state: 반환 dict 의 분류가 code_mismatch 여야 함.
+    assert result["status"] == "BLOCKED", (
+        f"truncated nonce 댓글은 BLOCKED여야 함: {result.get('message')}"
+    )
+    assert result.get("failure_code") == "approval_code_mismatch", (
+        "발급된 적 없는 7자리 truncated nonce 는 approval_code_mismatch 여야 함 "
+        f"(approval_stale_nonce 오분류 금지): {result.get('failure_code')}"
+    )
+    # AC-9: 실패 메시지에 PR 번호 / 허용 승인자 / pipeline_id 포함 확인.
+    _msg = result.get("message", "")
+    assert "42" in _msg and _ALLOWED_APPROVER in _msg and _B96C_PIPELINE_ID in _msg, (
+        f"실패 메시지에 PR번호/승인자/pipeline_id 가 모두 포함되어야 함: {_msg}"
+    )
+
+
+def test_stale_nonce_exact_match() -> None:
+    """TC 추가 2 (case=edge) — 발급 이력에 존재하는 과거 nonce → approval_stale_nonce.
+
+    과거에 발급됐던 nonce(OLDNONCE1, 발급 이력 previous_nonces 에 보존)가 댓글에 있으면
+    approval_stale_nonce 로 분류되어야 한다. 현재 유효 nonce 와는 다르므로 PASS 가 아니다.
+    """
+    _old_issued_nonce = "OLDNONCE1"
+    state: Dict[str, Any] = {
+        "pipeline_id": _B96C_PIPELINE_ID,
+        "acceptance_request": {"nonce": _B96C_REAL_NONCE},
+    }
+    # 발급 이력: 현재 nonce + 과거 발급 nonce(OLDNONCE1) 보존.
+    file_req: Dict[str, Any] = {
+        "pipeline_id": _B96C_PIPELINE_ID,
+        "nonce": _B96C_REAL_NONCE,
+        "request_id": "req-b96c",
+        "previous_nonces": [_old_issued_nonce],
+    }
+    comments = [
+        {
+            "author": {"login": _ALLOWED_APPROVER},
+            "body": f"ACCEPT-{_B96C_PIPELINE_ID}-{_old_issued_nonce}",  # 과거 발급 nonce
+            "id": "C-stale",
+        }
+    ]
+    result = _run_b96c_provenance(state, file_req, comments)
+
+    # final_state: 반환 dict 의 분류가 stale_nonce 여야 함.
+    assert result["status"] == "BLOCKED", (
+        f"과거 발급 nonce 댓글은 BLOCKED여야 함: {result.get('message')}"
+    )
+    assert result.get("failure_code") == "approval_stale_nonce", (
+        "발급 이력에 존재하는 과거 nonce 는 approval_stale_nonce 여야 함: "
+        f"{result.get('failure_code')}"
+    )

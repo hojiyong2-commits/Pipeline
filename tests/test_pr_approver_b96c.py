@@ -204,9 +204,15 @@ def test_packet_comment_only_fail() -> None:
 # ----------------------------------------------------------------------------
 
 def test_stale_nonce_only_fail() -> None:
-    """TC-3 (case=error) — 같은 pipeline_id prefix + 다른 nonce → approval_stale_nonce."""
+    """TC-3 (case=error) — 같은 pipeline_id prefix + 실제 발급된 적 있는 다른 nonce → approval_stale_nonce.
+
+    BUG-20260612-B96C 재작업(REJECT 수정): stale_nonce 는 "발급 이력에 실제로 존재하는 nonce 와
+    정확히 일치"하는 경우에만 성립한다. 따라서 OLDNONCE 를 발급 이력(previous_nonces)에 포함시킨다.
+    이력에 없는 임의 nonce 는 code_mismatch 로 분류되므로(별도 TC-4 참조) 본 TC 는 발급 이력을 명시한다.
+    """
     state = _base_state()
-    file_req = _base_file_req()
+    # OLDNONCE 를 과거 발급 nonce 로 보존 → 같은 prefix + OLDNONCE 댓글은 stale 로 분류.
+    file_req = _base_file_req(previous_nonces=["OLDNONCE"])
     comments = [
         {
             "author": {"login": PIPELINE_ALLOWED_APPROVER},
@@ -218,7 +224,7 @@ def test_stale_nonce_only_fail() -> None:
     assert result["status"] == "BLOCKED", \
         f"이전 nonce 댓글은 BLOCKED여야 함: {result.get('message')}"
     assert result.get("failure_code") == "approval_stale_nonce", \
-        f"같은 pipeline_id + 다른 nonce 는 approval_stale_nonce 여야 함: {result.get('failure_code')}"
+        f"같은 pipeline_id + 실제 발급된 다른 nonce 는 approval_stale_nonce 여야 함: {result.get('failure_code')}"
 
 
 # ----------------------------------------------------------------------------
