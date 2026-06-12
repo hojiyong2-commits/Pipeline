@@ -21,7 +21,8 @@ def test_default_fake_gh_fixture_is_not_autouse() -> None:
     # pytest 버전에 따라 fixture 메타데이터 보관 위치가 다르다:
     #   - pytest < 8: 함수에 _pytestfixturefunction(FixtureFunctionMarker) 속성
     #   - pytest >= 8/9: FixtureFunctionDefinition 객체의 _fixture_function_marker 속성
-    from tests import conftest as conftest_module
+    import importlib
+    conftest_module = importlib.import_module("conftest")
     fixture_func = conftest_module._default_fake_gh_for_pr_body
 
     marker = getattr(fixture_func, "_pytestfixturefunction", None)
@@ -32,8 +33,8 @@ def test_default_fake_gh_fixture_is_not_autouse() -> None:
         "pytest.fixture 데코레이터 적용 여부 확인"
     )
     assert getattr(marker, "autouse", None) is False, (
-        f"_default_fake_gh_for_pr_body.autouse가 True입니다. "
-        f"IMP-20260612-E12D MT-1 수정이 적용되지 않았습니다."
+        "_default_fake_gh_for_pr_body.autouse가 True입니다. "
+        "IMP-20260612-E12D MT-1 수정이 적용되지 않았습니다."
     )
 
 
