@@ -79,8 +79,81 @@ def run_cli(
     )
 
 
+# IMP-20260612-E12D MT-2: conftest의 autouse fake gh fixture가 제거되어
+# request-accept의 PR body readiness 검사(IMP-20260611-A716 Bug 1)를 통과하려면
+# fake gh를 명시적으로 PIPELINE_GH_EXECUTABLE로 주입해야 한다.
+# request-accept 성공을 기대하는 TC(TC-1/TC-1b/TC-2/TC-3/TC-5)는 완전한 PR body가 필요하고,
+# AC incomplete로 BLOCKED를 기대하는 TC(TC-4/TC-4b)는 PR body 검사 이전 단계에서 차단되므로
+# 동일 fake gh가 주입돼도 결과에 영향이 없다(AC 검사가 PR body 검사보다 먼저 수행됨).
+# fake gh는 headSha/databaseId에 빈 문자열을, run/pr list에 빈 배열을 반환하여
+# 기존 "gh CLI 없는 환경(pr_head_sha=''/ci_run_id='')" 전제를 그대로 유지한다.
+
+_FAKE_GH_PR_BODY_8C3B = (
+    "## 작업 요약\n자동 테스트 픽스처 PR body\n\n"
+    "## 사용자가 확인할 결과물\n결과물 경로: N/A (테스트)\n\n"
+    "## 기대 결과와 실제 결과\n기대: 성공 / 실제: 성공\n\n"
+    "## 중요한 선택과 트레이드오프\nN/A (테스트 픽스처)\n\n"
+    "## 검증\n모든 게이트 PASS\n"
+)
+
+
+def _write_fake_gh_script(tmp_path: Path) -> Path:
+    """완전한 PR body를 반환하는 fake gh 스크립트를 tmp_path에 생성하여 경로 반환.
+
+    headSha/databaseId는 빈 문자열, run/pr list는 빈 배열을 반환하여
+    gh CLI 없는 환경(pr_head_sha=''/ci_run_id='')을 시뮬레이션한다.
+
+    Args:
+        tmp_path: pytest tmp_path fixture.
+    Returns:
+        생성된 fake gh .py 스크립트 절대 경로.
+    Raises:
+        TypeError: tmp_path가 None.
+    """
+    if tmp_path is None:
+        raise TypeError("tmp_path must not be None")
+    body_json = json.dumps(_FAKE_GH_PR_BODY_8C3B)
+    script = tmp_path / "fake_gh_8c3b.py"
+    script.write_text(
+        "import sys, io, json\n"
+        'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
+        f"BODY = {body_json}\n"
+        "args = sys.argv[1:]\n"
+        'if "--jq" in args:\n'
+        '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
+        '    if jq == ".body":\n'
+        '        sys.stdout.write(BODY)\n'
+        '        if not BODY.endswith("\\n"):\n'
+        '            sys.stdout.write("\\n")\n'
+        "        sys.exit(0)\n"
+        '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
+        '        print("[]"); sys.exit(0)\n'
+        '    elif ".headSha" in jq or ".databaseId" in jq:\n'
+        '        print(""); sys.exit(0)\n'
+        'if "run" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        'if "run" in args and "view" in args:\n'
+        "    print(json.dumps({})); sys.exit(0)\n"
+        'if "pr" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        "print(json.dumps({\n"
+        '    "body": BODY, "number": 1,\n'
+        '    "headRefOid": "abc123def456abc123def456abc123def456abc1",\n'
+        '    "isDraft": False, "state": "OPEN", "files": [],\n'
+        '    "url": "https://github.com/test/repo/pull/1",\n'
+        "}))\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    return script
+
+
 def make_env(tmp_path: Path) -> Dict[str, str]:
-    """PIPELINE_STATE_PATH 격리 환경변수 + gh CLI 무력화 (PATH에서 제거).
+    """PIPELINE_STATE_PATH 격리 환경변수 + gh CLI 무력화 (PATH에서 제거) + fake gh 주입.
+
+    IMP-20260612-E12D MT-2: conftest autouse fixture 제거에 따라 fake gh를
+    PIPELINE_GH_EXECUTABLE로 명시적으로 주입한다. PATH는 여전히 tmp_path로 제한하여
+    PATH 기반 gh 탐색은 무력화하되, PR body 조회는 fake gh 스크립트로 처리한다.
 
     Args:
         tmp_path: pytest tmp_path fixture.
@@ -95,8 +168,12 @@ def make_env(tmp_path: Path) -> Dict[str, str]:
     env = dict(os.environ)
     env["PIPELINE_STATE_PATH"] = str(state_file)
     env["PIPELINE_NO_DASHBOARD"] = "1"
-    # gh CLI를 못 찾도록 PATH를 tmp_path로 제한
+    # gh CLI를 못 찾도록 PATH를 tmp_path로 제한 (PATH 기반 gh 탐색 무력화)
     env["PATH"] = str(tmp_path)
+    # IMP-20260612-E12D MT-2: PR body readiness 검사 통과를 위해 fake gh 주입
+    env["PIPELINE_GH_EXECUTABLE"] = str(_write_fake_gh_script(tmp_path))
+    # Windows cp949 인코딩 문제 방지
+    env["PYTHONIOENCODING"] = "utf-8"
     return env
 
 

@@ -136,7 +136,19 @@ def _make_active_state(
         },
         "event_log": [],
         "agent_runs": {},
-        "module_gates": {"enabled": True, "modules": {}, "integration": {"status": "PENDING"}},
+        # IMP-20260612-E12D MT-2: request-accept의 AC 사전 검증(_validate_ac_table_before_request_accept)은
+        # requirements_tracking.enabled=True일 때 module_gates.integration.status == "PASS" 와
+        # ac_completeness 캐시(complete)를 요구한다. 이 fixture는 PM/Dev/QA/Build PASS 상태를
+        # 시뮬레이션하므로 integration도 PASS + ac_completeness complete로 설정하여
+        # request-accept가 AC 단계에서 차단되지 않도록 한다.
+        "module_gates": {"enabled": True, "modules": {}, "integration": {"status": "PASS"}},
+        "ac_completeness": {
+            "cached_at": "2026-06-03T00:00:00Z",
+            "total": len(structured_ac),
+            "pending_count": 0,
+            "pending_ids": [],
+            "complete": True,
+        },
         "atomic_plan": {"micro_tasks": [], "structured_acceptance_criteria": structured_ac},
         "phase_attestations": {
             "enabled": True,
@@ -205,14 +217,84 @@ def _write_packet_with_stale_ci_run(packet_path: Path, fake_run: str = "99999999
     packet_path.write_text(content, encoding="utf-8")
 
 
+# IMP-20260612-E12D MT-2: conftest의 autouse fake gh fixture 제거에 따라,
+# request-accept 성공을 기대하는 테스트(6/9/10/11)와 gh 부재 graceful skip을 검증하는
+# 테스트(7/8)에 완전한 PR body를 반환하는 fake gh를 명시적으로 주입한다.
+# fake gh는 PIPELINE_GH_EXECUTABLE로 전달되며 sys.executable로 실행되므로 PATH="" 환경에서도
+# 동작한다. headSha/databaseId는 빈 문자열, run/pr list는 빈 배열을 반환하여
+# 기존 "gh CLI 없는 환경(pr_head_sha=''/ci_run_id='')" 전제를 그대로 유지한다.
+
+_FAKE_GH_PR_BODY_2E3D = (
+    "## 작업 요약\n자동 테스트 픽스처 PR body\n\n"
+    "## 사용자가 확인할 결과물\n결과물 경로: N/A (테스트)\n\n"
+    "## 기대 결과와 실제 결과\n기대: 성공 / 실제: 성공\n\n"
+    "## 중요한 선택과 트레이드오프\nN/A (테스트 픽스처)\n\n"
+    "## 검증\n모든 게이트 PASS\n"
+)
+
+
+def _write_fake_gh_script(tmp_path: Path) -> Path:
+    """완전한 PR body를 반환하는 fake gh .py 스크립트를 생성하여 경로 반환.
+
+    headSha/databaseId는 빈 문자열, run/pr list는 빈 배열을 반환하여
+    gh CLI 없는 환경(pr_head_sha=''/ci_run_id='')을 시뮬레이션한다.
+
+    Args:
+        tmp_path: pytest tmp_path fixture.
+    Returns:
+        생성된 fake gh .py 스크립트 절대 경로.
+    Raises:
+        TypeError: tmp_path가 None.
+    """
+    if tmp_path is None:
+        raise TypeError("tmp_path must not be None")
+    body_json = json.dumps(_FAKE_GH_PR_BODY_2E3D)
+    script = tmp_path / "fake_gh_2e3d.py"
+    script.write_text(
+        "import sys, io, json\n"
+        'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
+        f"BODY = {body_json}\n"
+        "args = sys.argv[1:]\n"
+        'if "--jq" in args:\n'
+        '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
+        '    if jq == ".body":\n'
+        '        sys.stdout.write(BODY)\n'
+        '        if not BODY.endswith("\\n"):\n'
+        '            sys.stdout.write("\\n")\n'
+        "        sys.exit(0)\n"
+        '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
+        '        print("[]"); sys.exit(0)\n'
+        '    elif ".headSha" in jq or ".databaseId" in jq:\n'
+        '        print(""); sys.exit(0)\n'
+        'if "run" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        'if "run" in args and "view" in args:\n'
+        "    print(json.dumps({})); sys.exit(0)\n"
+        'if "pr" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        "print(json.dumps({\n"
+        '    "body": BODY, "number": 1,\n'
+        '    "headRefOid": "abc123def456abc123def456abc123def456abc1",\n'
+        '    "isDraft": False, "state": "OPEN", "files": [],\n'
+        '    "url": "https://github.com/test/repo/pull/1",\n'
+        "}))\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    return script
+
+
 @pytest.fixture
 def isolated_env(tmp_path: Path) -> Dict[str, str]:
-    """PIPELINE_STATE_PATH로 격리된 활성 state + cwd 환경."""
+    """PIPELINE_STATE_PATH로 격리된 활성 state + cwd 환경 + fake gh(PR body) 주입."""
     state_path = tmp_path / "pipeline_state.json"
     _make_active_state(state_path)
     env = os.environ.copy()
     env["PIPELINE_STATE_PATH"] = str(state_path)
     env["PIPELINE_NO_DASHBOARD"] = "1"
+    # IMP-20260612-E12D MT-2: PR body readiness 검사 통과를 위해 fake gh 주입
+    env["PIPELINE_GH_EXECUTABLE"] = str(_write_fake_gh_script(tmp_path))
+    env["PYTHONIOENCODING"] = "utf-8"
     return env
 
 

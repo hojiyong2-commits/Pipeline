@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module_qa_report>
+  <mt_id>MT-2</mt_id>
+  <pipeline_id>IMP-20260612-E12D</pipeline_id>
+  <verdict>PASS</verdict>
+  <scope_verification>
+    <git_diff_within_manifest>true</git_diff_within_manifest>
+    <files>tests/e2e/test_user_acceptance_nonce_bbdb.py, tests/e2e/test_request_accept_nonce_reuse_aef0.py, tests/e2e/test_request_accept_snapshot_8c3b.py, tests/e2e/test_final_packet_2e3d.py, tests/e2e/test_ci_run_id_filter_4ac2.py</files>
+    <trust_root_violation>false</trust_root_violation>
+  </scope_verification>
+  <verification_evidence>
+    <test_run>python -m pytest tests/e2e/test_request_accept_nonce_reuse_aef0.py tests/e2e/test_request_accept_snapshot_8c3b.py tests/e2e/test_user_acceptance_nonce_bbdb.py tests/e2e/test_final_packet_2e3d.py tests/e2e/test_ci_run_id_filter_4ac2.py -q → 59 passed, 0 failed</test_run>
+    <regression>python -m pytest tests/e2e/ -q → 211 passed (1 pre-existing FAIL: test_ac_tracking_1abe::test_cli_request_accept_generates_ac_fulfillment_table — module integrate AC blocker, MT-2 범위 밖이며 HEAD conftest로도 동일 실패 확인됨)</regression>
+    <scope_lock>git diff --name-only HEAD = MT-2 manifest 5개 파일과 정확히 일치, Trust-Root 변경 없음</scope_lock>
+  </verification_evidence>
+  <test_evidence>
+    <suite name="test_request_accept_nonce_reuse_aef0" pass="6" fail="0" />
+    <suite name="test_request_accept_snapshot_8c3b" pass="7" fail="0" />
+    <suite name="test_user_acceptance_nonce_bbdb" pass="22" fail="0" />
+    <suite name="test_final_packet_2e3d" pass="16" fail="0" />
+    <suite name="test_ci_run_id_filter_4ac2" pass="8" fail="0" />
+    <total_pass>59</total_pass>
+    <total_fail>0</total_fail>
+  </test_evidence>
+  <verification_notes>
+    <note>conftest autouse fake gh fixture 제거 후, request-accept 성공을 기대하는 테스트에만 명시적 fake gh를 opt-in 주입하여 통과하도록 수정됨을 확인.</note>
+    <note>BLOCKED를 기대하는 테스트(bbdb TC-2~TC-18, 8c3b TC-4/TC-4b, 2e3d test 12)는 fake gh 주입과 무관하게 기존 차단 동작을 유지함을 확인.</note>
+    <note>test_ci_run_id_filter_4ac2: run list 브랜치 필터(shutil.which 경로)는 PR body fake gh(PIPELINE_GH_EXECUTABLE)와 독립적으로 11111111/99999999/22222222 분기를 유지함을 확인.</note>
+    <note>test_request_accept_nonce_reuse_aef0 TC-R1: PR body 스냅샷 4필드 추가로 IMP-20260611-A716 재사용 거부 조건을 회피하여 nonce 재사용이 복원됨을 확인.</note>
+  </verification_notes>
+  <status>MT-2-QA-PASS</status>
+</module_qa_report>
