@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <pipeline_id>IMP-20260612-CE06</pipeline_id>
+  <manager_run_id>pipeline_manager-f16742ff2b7a9d12</manager_run_id>
+  <planner_run_id>pm_planner-aad9703370eda622</planner_run_id>
+  <step_plan_sha256>495b8de53bab742798478349c3d27600c38d31236ecbc1b3ab2ef0499c551516</step_plan_sha256>
+  <next_phase>dev</next_phase>
+  <status>PM_COMPLETE_DEV_PENDING</status>
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING" />
+    <mt id="MT-2" status="PENDING" />
+    <mt id="MT-3" status="PENDING" />
+  </micro_tasks>
+  <contract_status>FROZEN</contract_status>
+  <oracle_registered>
+    <oracle id="O001" case_kind="normal" />
+    <oracle id="O002" case_kind="edge" />
+    <oracle id="O003" case_kind="error" />
+  </oracle_registered>
+  <phase_gate>Phase 1 PM Planning 완료. Dev 진입 준비됨.</phase_gate>
+  <notes>
+    evidence deployability 판정 일관화 작업.
+    MT-1: _is_deployable_evidence() 헬퍼 추가 (pipeline.py)
+    MT-2: _cmd_gates_request_accept() 내부에 deployable 사전 검증 삽입 (pipeline.py)
+    MT-3: E2E 회귀 테스트 신규 생성 (tests/e2e/test_evidence_deployable_ce06.py)
+  </notes>
+</manager_handoff>
