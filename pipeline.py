@@ -2504,6 +2504,40 @@ def _is_internal_artifact(path: str) -> bool:
     return False
 
 
+# [Purpose]: request-accept evidence가 최종 사용자에게 배포 가능한 결과물인지 판정한다.
+#   내부 파이프라인 산출물(qa_report.xml 등)로 승인 코드(nonce)가 발급되는 것을
+#   request-accept 단계에서 사전 차단하기 위한 공통 헬퍼. (IMP-20260612-CE06 MT-1)
+# [Assumptions]: _is_internal_artifact()가 WORKSPACE_INTERNAL_PATTERNS SSoT를 통해
+#   내부 산출물을 정확히 식별한다. http(s) URL은 외부 사용자 결과물로 간주한다.
+# [Vulnerability & Risks]: path가 None 또는 빈 문자열이면 배포 불가(False)로 처리한다.
+#   _is_internal_artifact()의 패턴 목록이 누락되면 내부 산출물이 통과할 수 있으나,
+#   그 위험은 SSoT 패턴 관리 책임이며 이 함수는 위임만 한다.
+# [Improvement]: 향후 evidence MIME/확장자 화이트리스트를 추가하면 더 엄격히
+#   사용자 결과물(.xlsx/.png/.exe 등)만 허용하도록 확장할 수 있다.
+def _is_deployable_evidence(path: str) -> bool:
+    """Request-accept evidence가 배포 가능한 사용자 결과물인지 판정.
+
+    Args:
+        path: evidence 경로 또는 URL.
+
+    Returns:
+        True이면 사용자에게 보여줄 수 있는 결과물(배포 가능):
+        - HTTP/HTTPS URL은 항상 배포 가능
+        - 내부 파이프라인 산출물은 배포 불가
+        - 그 외는 배포 가능
+        path가 None 또는 빈 문자열이면 False.
+    """
+    if not path:
+        return False
+    # URL은 항상 deployable
+    if path.startswith(("http://", "https://")):
+        return True
+    # 내부 파이프라인 산출물이면 배포 불가
+    if _is_internal_artifact(path):
+        return False
+    return True
+
+
 # ─── Secret Patterns SSoT (IMP-20260529-D8BA MT-1) ───────────────────────────
 # [Purpose]: 민감 정보(API key/token/private key 등) 탐지 패턴을 단일 출처(SSoT)로
 #   관리한다. gates secrets 명령, 배포 필터(_deployment_artifacts), 외부 리뷰
@@ -15792,6 +15826,20 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     evidence = getattr(args, "evidence", None)
     if evidence is None or not str(evidence).strip():
         _die("[BLOCKED] --evidence는 필수입니다 (결과물 경로 또는 URL).")
+
+    # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
+    # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다
+    # (기존 BLOCKED 메시지와 동일한 텍스트 임베드 패턴).
+    if not _is_deployable_evidence(str(evidence)):
+        _die(
+            "[BLOCKED] failure_code=evidence_not_deployable\n"
+            f"  actual: {Path(str(evidence)).name}은(는) 파이프라인 내부 산출물입니다.\n"
+            "  expected: 최종 사용자가 확인할 수 있는 결과물 경로\n"
+            "  (예: output.xlsx, dist/app.exe, screenshots/result.png)\n"
+            "  사용 불가 예시: qa_report.xml, build_report.xml,\n"
+            "  human_acceptance_packet.md, acceptance_request.json,\n"
+            "  pipeline_contracts/, .pipeline/"
+        )
 
     # IMP-20260606-D9F4: AC table 사전 검증 (PENDING 항목 있으면 차단)
     ac_blocker = _validate_ac_table_before_request_accept(state)
