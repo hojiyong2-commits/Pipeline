@@ -15971,6 +15971,41 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         print(f"  [FINAL PACKET 자동 생성] {snapshot_result['packet_path']}")
         if snapshot_result["pr_body_updated"]:
             print("  [PR 본문 자동 업데이트] PIPELINE_FINAL_PACKET 블록 교체 완료")
+            # IMP-20260611-A716: PR 본문 업데이트 후 SHA가 바뀌므로 acceptance_request.json 재기록.
+            # request-accept 내에서 packet 자동 생성이 PR 본문을 변경하면, 기록된 pr_body_sha256
+            # 이 stale해져 gates accept 시 pr_body_stale로 차단된다. 이를 방지하기 위해
+            # 업데이트 이후 현재 PR 본문 SHA와 packet SHA를 acceptance_request.json에 다시 기록한다.
+            try:
+                _updated_pr_body = _get_pr_body_text()
+                if _updated_pr_body:
+                    import hashlib as _hs_post
+                    _updated_body_sha = _hs_post.sha256(_updated_pr_body.encode("utf-8")).hexdigest()
+                    _req_path_post = BASE_DIR / "acceptance_request.json"
+                    if _req_path_post.exists():
+                        _req_post = json.loads(_req_path_post.read_text(encoding="utf-8", errors="replace"))
+                        _req_post["pr_body_sha256"] = _updated_body_sha
+                        # packet SHA도 재기록 (packet 내용이 nonce 포함 후 변경됨)
+                        _pkt_p_post = snapshot_result.get("packet_path")
+                        if _pkt_p_post:
+                            try:
+                                _req_post["packet_sha256"] = _sha256_file(Path(_pkt_p_post))
+                                _req_post["packet_path"] = str(_pkt_p_post)
+                            except (OSError, TypeError):
+                                pass
+                        _json_p_post = snapshot_result.get("json_path")
+                        if _json_p_post:
+                            try:
+                                _req_post["verification_json_sha256"] = _sha256_file(Path(_json_p_post))
+                                _req_post["verification_json_path"] = str(_json_p_post)
+                            except (OSError, TypeError):
+                                pass
+                        _req_path_post.write_text(
+                            json.dumps(_req_post, ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
+                        print("  [PR 본문 SHA 재기록] pr_body_sha256 업데이트 완료")
+            except (OSError, json.JSONDecodeError):
+                pass  # SHA 재기록 실패해도 계속 진행
         else:
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
         # IMP-20260610-8C3B MT-1: post-materialization SHA 검증
