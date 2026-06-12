@@ -3,39 +3,52 @@
   <from>dev-agent</from>
   <to>qa-agent</to>
   <pipeline_id>BUG-20260612-B96C</pipeline_id>
+  <round>2</round>
   <scope_declaration>
-    <files_to_modify>pipeline.py, tests/test_acceptance_provenance_2338.py</files_to_modify>
-    <files_to_create>tests/test_pr_approver_b96c.py</files_to_create>
+    <files_to_modify>pipeline.py, tests/test_acceptance_provenance_2338.py, tests/e2e/test_request_accept_nonce_reuse_aef0.py</files_to_modify>
+    <files_to_modify>tests/test_pr_approver_b96c.py</files_to_modify>
     <files_to_delete>없음</files_to_delete>
   </scope_declaration>
   <impact_analysis>
     <target_functions>
-      <function>pipeline._check_pr_approver_provenance (수정)</function>
-      <function>tests.test_pr_approver_b96c.test_exact_match_pass (신규)</function>
+      <function>pipeline._check_pr_approver_provenance (stale_nonce 판정 수정)</function>
+      <function>pipeline._collect_issued_nonces (신규 헬퍼)</function>
+      <function>tests.test_pr_approver_b96c.test_stale_nonce_only_fail (갱신)</function>
+      <function>tests.test_acceptance_provenance_2338.test_wrong_nonce_blocked (갱신)</function>
+      <function>tests.e2e.test_request_accept_nonce_reuse_aef0.test_truncated_nonce_is_code_mismatch (신규)</function>
+      <function>tests.e2e.test_request_accept_nonce_reuse_aef0.test_stale_nonce_exact_match (신규)</function>
     </target_functions>
     <state_mutations>none - 판정 로직 + 테스트 추가</state_mutations>
+    <risk_assessment>
+      <data_loss>none</data_loss>
+      <breaking_change>none - 반환 dict 스키마 동일</breaking_change>
+      <performance>none</performance>
+      <security>none - pure read function</security>
+    </risk_assessment>
   </impact_analysis>
   <changed_files>
     <file>pipeline.py</file>
+    <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
     <file>tests/test_pr_approver_b96c.py</file>
     <file>tests/test_acceptance_provenance_2338.py</file>
   </changed_files>
   <scope_lock_check>
-    <git_diff_files>pipeline.py, tests/test_acceptance_provenance_2338.py, tests/test_pr_approver_b96c.py</git_diff_files>
-    <manifest_files>pipeline.py, tests/test_pr_approver_b96c.py, tests/test_acceptance_provenance_2338.py</manifest_files>
+    <git_diff_files>pipeline.py, tests/e2e/test_request_accept_nonce_reuse_aef0.py, tests/test_pr_approver_b96c.py, tests/test_acceptance_provenance_2338.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_request_accept_nonce_reuse_aef0.py, tests/test_pr_approver_b96c.py, tests/test_acceptance_provenance_2338.py</manifest_files>
     <extra_files>없음</extra_files>
     <trust_root_violation>false</trust_root_violation>
     <verdict>PASS</verdict>
   </scope_lock_check>
   <evidence>
-    <file path="pipeline.py">_check_pr_approver_provenance() AC-1~AC-9 전체 반영</file>
-    <file path="tests/test_pr_approver_b96c.py">TC-1~TC-7 신규, pytest 7 passed</file>
-    <file path="tests/test_acceptance_provenance_2338.py">test_wrong_nonce_blocked failure_code 갱신, 6 passed</file>
+    <file path="pipeline.py">_collect_issued_nonces() 신규 추가, _check_pr_approver_provenance() AC-4 stale_nonce 판정 수정</file>
+    <file path="tests/e2e/test_request_accept_nonce_reuse_aef0.py">신규 TC 2개 추가: test_truncated_nonce_is_code_mismatch, test_stale_nonce_exact_match</file>
+    <file path="tests/test_pr_approver_b96c.py">TC-3 previous_nonces 추가, 7 passed</file>
+    <file path="tests/test_acceptance_provenance_2338.py">test_wrong_nonce_blocked approval_code_mismatch로 수정, 6 passed</file>
   </evidence>
-  <pytest_result>pytest tests/test_pr_approver_b96c.py tests/test_acceptance_provenance_2338.py: 13 passed</pytest_result>
+  <pytest_result>pytest 21 tests PASS (aef0 8 + b96c 7 + 2338 6)</pytest_result>
   <self_check>
     <syntax>PASS</syntax>
-    <logic>PASS</logic>
+    <logic>PASS - stale vs mismatch 분류 정확성 확인</logic>
     <security>PASS - secret 없음</security>
   </self_check>
   <status>READY_FOR_QA</status>
