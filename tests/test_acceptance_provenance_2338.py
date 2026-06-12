@@ -173,7 +173,8 @@ def test_wrong_nonce_blocked() -> None:
          patch("subprocess.run", side_effect=_build_subprocess_side_effect("42", comments)):
         result = _check_pr_approver_provenance(state)
     assert result["status"] == "BLOCKED"
-    assert result.get("failure_code") == "pr_approver_missing"
+    # BUG-20260612-B96C AC-4: 동일 pipeline_id + 다른 nonce → approval_stale_nonce 로 변경됨
+    assert result.get("failure_code") == "approval_stale_nonce"
     assert "ACCEPT-TEST-001-RIGHTNONCE" in result.get("message", ""), \
         "실패 메시지에 실제 기대 코드가 표시되어야 함"
 
