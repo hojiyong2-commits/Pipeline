@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-12T06:18:10Z",
+  "generated_at": "2026-06-12T06:22:58Z",
   "pipeline_id": "IMP-20260612-E12D",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "12c77a45d27b58d533d7d24d67211b41b5e677c4",
+  "commit_hint": "7ca2e10a89cd5b3cbbeed51a2ccf197a4159c472",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-06-12T06:08:43Z",
