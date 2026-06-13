@@ -1,0 +1,7 @@
+{
+  "registered": true,
+  "active": true,
+  "md_exists": true,
+  "phase_id": "pm_planner",
+  "expected_receipt_id": "pm-planner-agent"
+}

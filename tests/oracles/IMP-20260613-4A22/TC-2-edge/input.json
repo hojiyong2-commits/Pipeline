@@ -1,0 +1,5 @@
+{
+  "test": "pm_agent_is_compat_not_active",
+  "md_path": ".claude/agents/pm-agent.md",
+  "phase_id": "pm"
+}
