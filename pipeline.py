@@ -3700,6 +3700,182 @@ def _validate_evidence_provenance(
     return result
 
 
+# IMP-20260613-82ED 5th REJECT: oracle_manifest ↔ evidence_inventory 전체 대조 (fail-closed)
+# [Purpose]: oracle_manifest.json의 모든 input/expected 경로가 evidence_inventory.json에
+#            등록되어 있는지 _validate_evidence_provenance() 호출 전에 사전 대조한다.
+#            inventory가 비었거나 oracle 항목이 inventory에서 누락된 경우를 BLOCKED 처리하여
+#            "manifest에는 oracle이 있으나 inventory에는 일부만 등록된" 우회 경로를 차단한다.
+# [Assumptions]: oracle_manifest는 {"oracles": [{"input_path","expected_path",...}]} list 구조,
+#                evidence_inventory는 [{"pipeline_id","path",...}] flat list 구조(SSoT).
+#                oracle_manifest의 상대 경로는 BASE_DIR 기준으로 정규화한다(_oracle_manifest_status와 동일).
+# [Vulnerability & Risks]: 경로 정규화가 OS/심볼릭링크 차이로 실패하면 basename fallback으로
+#                완화하나, 동일 basename(input.json 등)이 여러 케이스에 존재하면 느슨한 매칭이 될 수 있어
+#                절대 경로 우선 비교 → 절대 경로 미스 시에만 basename 보조 매칭을 사용한다.
+# [Improvement]: oracle_manifest에 inventory entry id를 직접 링크하면 경로 정규화 의존을 제거할 수 있다.
+def _check_oracle_manifest_vs_inventory(state: Dict[str, Any]) -> Dict[str, Any]:
+    """oracle_manifest의 모든 input/expected 경로가 evidence_inventory에 등록됐는지 전체 대조한다.
+
+    fail-closed 규칙:
+      - oracle_manifest 없음 -> PASS(검사 불필요, checked=0)
+      - oracle_manifest 파싱 실패 -> BLOCKED(oracle_manifest_parse_error)
+      - oracle 항목 0개 -> PASS(checked=0)
+      - oracle 항목은 있으나 inventory 파일 없음 -> BLOCKED(evidence_inventory_missing)
+      - inventory 파싱 실패 -> BLOCKED(evidence_inventory_parse_error)
+      - inventory entries 0개인데 oracle 항목 존재 -> BLOCKED(evidence_inventory_empty)
+      - oracle 경로가 inventory에 없음 -> BLOCKED(oracle_not_in_evidence_inventory)
+
+    Args:
+        state: pipeline_id를 포함한 pipeline state dict(최소 {"pipeline_id": ...}).
+    Returns:
+        Dict: {"status": "PASS"|"BLOCKED", ...}. BLOCKED 시 failure_code/message/blockers 포함.
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+    if not pipeline_id:
+        # pipeline_id가 없으면 evidence inventory 자체를 찾을 수 없으므로 fail-closed.
+        return {
+            "status": "BLOCKED",
+            "failure_code": "evidence_inventory_missing",
+            "message": "state에 pipeline_id가 없어 oracle_manifest/evidence_inventory를 대조할 수 없습니다.",
+            "blockers": [],
+        }
+
+    paths = _contract_paths(pipeline_id)
+    oracle_manifest_path = paths["oracle_manifest"]
+    inventory_path = paths["evidence_inventory"]
+
+    # oracle_manifest가 없으면 대조 불필요(legacy/non-oracle 작업).
+    if not oracle_manifest_path.exists():
+        return {"status": "PASS", "checked": 0}
+
+    try:
+        oracle_manifest = json.loads(oracle_manifest_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "oracle_manifest_parse_error",
+            "message": f"oracle_manifest.json 파싱에 실패했습니다: {exc}",
+            "blockers": [],
+        }
+
+    oracles = oracle_manifest.get("oracles", []) if isinstance(oracle_manifest, dict) else []
+    if not isinstance(oracles, list) or not oracles:
+        # oracle 항목이 없으면 대조 대상 없음.
+        return {"status": "PASS", "checked": 0}
+
+    # oracle 항목이 있으면 inventory는 필수.
+    if not inventory_path.exists():
+        return {
+            "status": "BLOCKED",
+            "failure_code": "evidence_inventory_missing",
+            "message": (
+                f"oracle_manifest에 {len(oracles)}개 항목이 있지만 evidence_inventory.json이 없습니다."
+            ),
+            "blockers": [],
+        }
+
+    try:
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "evidence_inventory_parse_error",
+            "message": f"evidence_inventory.json 파싱에 실패했습니다: {exc}",
+            "blockers": [],
+        }
+
+    if not isinstance(inventory, list):
+        return {
+            "status": "BLOCKED",
+            "failure_code": "evidence_inventory_parse_error",
+            "message": "evidence_inventory.json 루트가 list가 아닙니다.",
+            "blockers": [],
+        }
+
+    # 현재 pipeline_id 항목만 대조 대상 (다른 pid 항목은 무시).
+    entries = [
+        e for e in inventory
+        if isinstance(e, dict) and str(e.get("pipeline_id", "")) == pipeline_id
+    ]
+
+    # inventory가 (현재 pid 기준) 비어 있는데 oracle 항목이 있으면 BLOCKED.
+    if len(entries) == 0:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "evidence_inventory_empty",
+            "message": (
+                f"oracle_manifest에 {len(oracles)}개 항목이 있지만 "
+                f"evidence_inventory.json에 현재 파이프라인({pipeline_id}) 항목이 없습니다."
+            ),
+            "blockers": [],
+        }
+
+    def _norm_abs(raw_path: str) -> str:
+        """경로를 절대 경로 문자열로 정규화한다(_oracle_manifest_status와 동일 규칙)."""
+        p = Path(raw_path)
+        if not p.is_absolute():
+            p = BASE_DIR / p
+        try:
+            return str(p.resolve())
+        except (OSError, ValueError):
+            return str(p)
+
+    # inventory의 절대 경로 set과 basename set 구성.
+    inventory_abs = set()
+    inventory_basenames = set()
+    for e in entries:
+        raw = str(e.get("path", "") or "")
+        if not raw:
+            continue
+        inventory_abs.add(_norm_abs(raw))
+        inventory_basenames.add(Path(raw).name)
+
+    blockers: List[Dict[str, str]] = []
+    checked = 0
+    for oracle in oracles:
+        if not isinstance(oracle, dict):
+            continue
+        input_path = str(oracle.get("input_path", "") or oracle.get("input", "") or "")
+        expected_path = str(oracle.get("expected_path", "") or oracle.get("expected", "") or "")
+        for raw_path in (input_path, expected_path):
+            if not raw_path:
+                continue
+            checked += 1
+            abs_path = _norm_abs(raw_path)
+            if abs_path in inventory_abs:
+                continue
+            # 절대 경로 미스 시 basename 보조 매칭(경로 표기 차이 완화).
+            basename = Path(raw_path).name
+            if basename in inventory_basenames:
+                continue
+            blockers.append({
+                "failure_code": "oracle_not_in_evidence_inventory",
+                "oracle_path": raw_path,
+                "message": (
+                    f"oracle_manifest 항목이 evidence_inventory에 등록되어 있지 않습니다: {raw_path}"
+                ),
+            })
+
+    if blockers:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "oracle_not_in_evidence_inventory",
+            "message": (
+                f"oracle_manifest의 {len(blockers)}개 경로가 evidence_inventory에 없습니다. "
+                "모든 oracle input/expected를 `contract add-oracle`로 등록한 뒤 다시 실행하세요."
+            ),
+            "blockers": blockers,
+        }
+
+    return {"status": "PASS", "checked": checked}
+
+
 def _contract_init_command(pid: str) -> str:
     return f"python pipeline.py contract init --pipeline-id {pid}"
 
@@ -14501,6 +14677,19 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     if ac_blocker:
         _die(ac_blocker)
 
+    # IMP-20260613-82ED 5th REJECT: oracle_manifest ↔ evidence_inventory 전체 대조 (fail-closed).
+    # provenance 개별 검증 전에 manifest의 모든 oracle 경로가 inventory에 등록됐는지 대조한다.
+    _manifest_check = _check_oracle_manifest_vs_inventory(state)
+    if _manifest_check.get("status") == "BLOCKED":
+        _mc_code = str(_manifest_check.get("failure_code", "oracle_not_in_evidence_inventory"))
+        _mc_msg = str(_manifest_check.get("message", "oracle_manifest와 evidence_inventory 불일치"))
+        _die(
+            f"[BLOCKED] failure_code={_mc_code}\n"
+            f"  {_mc_msg}\n"
+            "  누락된 oracle 입력/기대 파일을 `python pipeline.py contract add-oracle ...` 로 "
+            "evidence_inventory에 등록한 뒤 다시 실행하세요."
+        )
+
     # IMP-20260613-82ED MT-1 AC-4/AC-3/AC-5: oracle 증거 출처 검증 (fail-closed).
     # oracle_manifest에 oracle 항목이 있으면 inventory 부재와 관계없이 provenance 검증.
     # inventory 부재 시 _validate_evidence_provenance가 evidence_inventory_missing BLOCKED를 반환.
@@ -15519,6 +15708,57 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _save(state)
             print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
             _die(f"[ORACLE QUALITY FAIL] {failures_str}")
+
+        # IMP-20260613-82ED 5th REJECT: oracle_manifest ↔ evidence_inventory 전체 대조.
+        # provenance 개별 검증 전에, oracle_manifest의 모든 input/expected가 inventory에
+        # 등록되어 있는지 사전 대조한다(fail-closed). 누락 시 BLOCKED.
+        _manifest_check = _check_oracle_manifest_vs_inventory(state)
+        if _manifest_check.get("status") == "BLOCKED":
+            _mc_code = str(_manifest_check.get("failure_code", "oracle_not_in_evidence_inventory"))
+            _mc_msg = str(_manifest_check.get("message", "oracle_manifest와 evidence_inventory 불일치"))
+            _mc_blockers = _manifest_check.get("blockers", [])
+            report = {
+                "schema_version": 1,
+                "generated_at": _now(),
+                "pipeline_id": pid,
+                "status": "BLOCKED",
+                "failure_code": _mc_code,
+                "message": _mc_msg,
+                "blockers": _mc_blockers,
+            }
+            _write_json(paths["oracle_result"], report)
+            _set_external_gate(
+                state,
+                "oracle",
+                "FAIL",
+                evidence="oracle_manifest_inventory_mismatch",
+                report_file=str(paths["oracle_result"]),
+            )
+            packet = _record_failure_packet(
+                state,
+                "oracle",
+                report,
+                command=[sys.executable, "pipeline.py", "gates", "oracle"],
+                note="oracle_manifest 항목이 evidence_inventory에 모두 등록되지 않았습니다.",
+                status="BLOCKED",
+                phase="dev",
+                failure_code=_mc_code,
+                failure_category="missing_evidence",
+                summary_ko="오라클 매니페스트와 증거 인벤토리 불일치 — 일부 oracle이 등록되지 않았습니다.",
+                expected="oracle_manifest의 모든 input/expected가 evidence_inventory.json에 등록",
+                actual=_mc_msg,
+                exit_code=1,
+                owner="Dev",
+                return_phase="dev",
+                required_actions=[
+                    "누락된 oracle 입력/기대 파일을 `python pipeline.py contract add-oracle ...` 로 등록하세요.",
+                    "모든 oracle 항목이 evidence_inventory.json에 등록된 뒤 oracle gate를 다시 실행하세요.",
+                ],
+            )
+            _log_event(state, f"oracle gate BLOCKED (manifest vs inventory: {_mc_code})")
+            _save(state)
+            print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
+            _die(f"[ORACLE MANIFEST/INVENTORY MISMATCH] {_mc_msg}")
 
         # IMP-20260613-82ED MT-1 AC-2/AC-3/AC-5/AC-10: evidence provenance 검증.
         # oracle_manifest에 oracle 항목이 있으면 inventory 파일 존재 여부에 관계없이

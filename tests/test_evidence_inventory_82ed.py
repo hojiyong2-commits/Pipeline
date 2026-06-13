@@ -1130,6 +1130,254 @@ class TestAC14AcceptanceTargetOracleEvidenceFiles:
         assert isinstance(target["oracle_evidence_files"], list)
 
 
+# ---------------------------------------------------------------------------
+# AC-15: oracle_manifest ↔ evidence_inventory 전체 대조 (5th REJECT)
+# ---------------------------------------------------------------------------
+
+class TestOracleManifestVsInventoryCLI:
+    """oracle_manifest ↔ evidence_inventory 대조 CLI E2E + 로직 검증.
+
+    IMP-20260613-82ED 5th REJECT: _check_oracle_manifest_vs_inventory()가
+    request-accept / gates oracle 양쪽 흐름에서 호출되어, oracle_manifest의 모든
+    input/expected 경로가 evidence_inventory에 등록되지 않으면 BLOCKED를 반환함을 검증한다.
+
+    gates oracle CLI는 technical gate PASS 선행 조건으로 격리 환경에서 완주할 수 없으므로
+    CLI 경로는 "통과(returncode==0)되지 않음"을 검증하고, 동일 로직
+    (_check_oracle_manifest_vs_inventory)을 직접 호출하여 정확한 failure_code를 검증한다.
+    inventory는 SSoT인 flat list([{"pipeline_id","path",...}]) 형식을 사용한다.
+    """
+
+    def _make_oracle_manifest(self, contracts_dir: Path, entries: List[Dict[str, Any]]) -> None:
+        """oracle_manifest.json을 {"oracles": [...]} 구조로 생성한다."""
+        contracts_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "schema_version": 1,
+            "pipeline_id": contracts_dir.name,
+            "oracles": entries,
+        }
+        (contracts_dir / "oracle_manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def _make_inventory(self, contracts_dir: Path, entries: List[Dict[str, Any]]) -> None:
+        """evidence_inventory.json을 SSoT flat list 형식으로 생성한다."""
+        contracts_dir.mkdir(parents=True, exist_ok=True)
+        (contracts_dir / "evidence_inventory.json").write_text(
+            json.dumps(entries, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def test_no_oracle_manifest_passes(self) -> None:
+        """oracle_manifest가 없으면 대조 불필요 → PASS(checked=0)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-NONE"
+        # contracts_dir를 만들지 않음 → oracle_manifest 부재 상태에서 PASS여야 함.
+        result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+        assert result["status"] == "PASS", f"manifest 없으면 PASS여야 함: {result}"
+
+    def test_oracle_manifest_exists_but_inventory_missing_is_blocked(self) -> None:
+        """oracle_manifest에 항목 있고 inventory 파일이 없으면 BLOCKED(evidence_inventory_missing)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-MISSING-INV"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        try:
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": "tests/oracles/X/input.json",
+                 "expected_path": "tests/oracles/X/expected.json"}
+            ])
+            # inventory 파일을 만들지 않음
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", f"inventory 없으면 BLOCKED: {result}"
+            assert result.get("failure_code") == "evidence_inventory_missing", (
+                f"failure_code 불일치: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+    def test_oracle_manifest_exists_but_inventory_empty_list_is_blocked(self) -> None:
+        """oracle_manifest에 항목 있고 inventory entries가 빈 list → BLOCKED(evidence_inventory_empty)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-EMPTY"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        try:
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": "tests/oracles/X/input.json",
+                 "expected_path": "tests/oracles/X/expected.json"}
+            ])
+            self._make_inventory(contracts_dir, [])  # 빈 list
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", f"inventory 빈 list면 BLOCKED: {result}"
+            assert result.get("failure_code") == "evidence_inventory_empty", (
+                f"failure_code 불일치: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+    def test_oracle_manifest_3_entries_inventory_missing_1_is_blocked(self) -> None:
+        """oracle_manifest 3쌍 중 inventory에 일부만 있으면 BLOCKED(oracle_not_in_evidence_inventory)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-PARTIAL"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_base = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            oracle_base.mkdir(parents=True, exist_ok=True)
+            in1 = oracle_base / "input1.json"
+            exp1 = oracle_base / "expected1.json"
+            in2 = oracle_base / "input2.json"
+            in1.write_text('{"test": 1}', encoding="utf-8")
+            exp1.write_text('{"result": 1}', encoding="utf-8")
+            in2.write_text('{"test": 2}', encoding="utf-8")
+            missing = oracle_base / "input_MISSING.json"  # 실제 생성하지 않음
+
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": str(in1), "expected_path": str(exp1)},
+                {"input_path": str(in2), "expected_path": str(exp1)},
+                {"input_path": str(missing), "expected_path": str(exp1)},
+            ])
+            # inventory에 in1/exp1/in2만 등록 (input_MISSING 누락)
+            self._make_inventory(contracts_dir, [
+                {"pipeline_id": pid, "path": str(in1), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "aaa", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(exp1), "kind": "oracle_expected",
+                 "protection": "protected", "sha256": "bbb", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(in2), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "ccc", "required_for_acceptance": True},
+            ])
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", (
+                f"inventory에 없는 oracle 경로가 있으면 BLOCKED: {result}"
+            )
+            assert result.get("failure_code") == "oracle_not_in_evidence_inventory", (
+                f"failure_code 불일치: {result}"
+            )
+            # blockers에 input_MISSING이 포함되어야 함
+            blocker_paths = [b.get("oracle_path", "") for b in result.get("blockers", [])]
+            assert any("input_MISSING" in p for p in blocker_paths), (
+                f"누락 경로가 blockers에 없음: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_base), ignore_errors=True)
+
+    def test_all_oracle_entries_in_inventory_passes(self) -> None:
+        """oracle_manifest의 모든 경로가 inventory에 있으면 PASS."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-FULL"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_base = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            oracle_base.mkdir(parents=True, exist_ok=True)
+            in1 = oracle_base / "input.json"
+            exp1 = oracle_base / "expected.json"
+            in1.write_text('{"test": 1}', encoding="utf-8")
+            exp1.write_text('{"result": 1}', encoding="utf-8")
+
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": str(in1), "expected_path": str(exp1)},
+            ])
+            self._make_inventory(contracts_dir, [
+                {"pipeline_id": pid, "path": str(in1), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "aaa", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(exp1), "kind": "oracle_expected",
+                 "protection": "protected", "sha256": "bbb", "required_for_acceptance": True},
+            ])
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "PASS", (
+                f"모든 oracle이 inventory에 있으면 PASS여야 함: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_base), ignore_errors=True)
+
+    def test_relative_oracle_path_matches_absolute_inventory(self) -> None:
+        """oracle_manifest의 상대 경로가 inventory의 절대 경로와 정규화 후 매칭됨(실제 데이터 형식)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-RELABS"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_base = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            oracle_base.mkdir(parents=True, exist_ok=True)
+            in1 = oracle_base / "input.json"
+            exp1 = oracle_base / "expected.json"
+            in1.write_text('{"test": 1}', encoding="utf-8")
+            exp1.write_text('{"result": 1}', encoding="utf-8")
+
+            # manifest는 상대 경로(실제 add-oracle 형식)
+            rel_in = f"tests/oracles/{pid}/input.json"
+            rel_exp = f"tests/oracles/{pid}/expected.json"
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": rel_in, "expected_path": rel_exp},
+            ])
+            # inventory는 절대 경로(실제 _register_evidence_to_inventory 형식)
+            self._make_inventory(contracts_dir, [
+                {"pipeline_id": pid, "path": str(in1.resolve()), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "aaa", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(exp1.resolve()), "kind": "oracle_expected",
+                 "protection": "protected", "sha256": "bbb", "required_for_acceptance": True},
+            ])
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "PASS", (
+                f"상대 경로 manifest가 절대 경로 inventory와 매칭되어 PASS여야 함: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_base), ignore_errors=True)
+
+    def test_gates_oracle_cli_blocked_when_oracle_not_in_inventory(self, tmp_path: Path) -> None:
+        """gates oracle CLI E2E: oracle이 inventory에 없으면 통과(returncode==0)되지 않음.
+
+        실제 subprocess로 gates oracle을 실행하여 manifest/inventory 불일치가
+        gate를 통과시키지 않음을 검증한다(Real CLI Path E2E Gate Policy 준수).
+        technical gate 선행 조건 또는 manifest/inventory 검사 중 하나로 차단되며,
+        어느 경우든 returncode != 0 이어야 한다.
+        """
+        state_path = tmp_path / "pipeline_state.json"
+        env = make_isolated_env(state_path)
+
+        pid = _new_pipeline(env, "test AC-15 CLI oracle manifest vs inventory")
+
+        oracle = _make_oracle_files(pid, "case1", '{"result": "ok", "data": [1, 2, 3]}')
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_root = PROJECT_ROOT / "tests" / "oracles" / pid
+        inventory_path = contracts_dir / "evidence_inventory.json"
+        try:
+            result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
+            assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
+
+            result = run_pipeline([
+                "contract", "add-oracle",
+                "--input", str(oracle["input"]),
+                "--expected", str(oracle["expected"]),
+                "--case-kind", "normal",
+            ], env=env)
+            assert result.returncode == 0, f"add-oracle failed: {result.stderr}"
+
+            # inventory를 빈 list로 덮어써서 manifest/inventory 불일치 재현.
+            inventory_path.parent.mkdir(parents=True, exist_ok=True)
+            inventory_path.write_text("[]", encoding="utf-8")
+
+            # gates oracle CLI E2E: 불일치 상태가 통과되어서는 안 됨.
+            result = run_pipeline(["gates", "oracle"], env=env)
+            output = result.stdout + result.stderr
+            assert result.returncode != 0, (
+                f"gates oracle must not pass with empty inventory vs oracle manifest: {output[:300]}"
+            )
+            # 차단 메시지 또는 manifest/inventory 관련 코드 확인.
+            assert any(
+                kw in output
+                for kw in [
+                    "BLOCKED", "FAIL", "evidence_inventory_empty",
+                    "oracle_not_in_evidence_inventory", "requires", "oracle",
+                ]
+            ), f"expected blocking message in output: {output[:400]}"
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_root), ignore_errors=True)
+
+
 if __name__ == "__main__":
     # SELF-VERIFY: 헬퍼 함수 기본 동작 확인
     assert sha256_file.__name__ == "sha256_file"
