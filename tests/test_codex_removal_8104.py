@@ -160,7 +160,7 @@ class TestCodexRemoval(unittest.TestCase):
         review 서브커맨드 자체가 argparse에서 제거되었으므로
         "invalid choice: 'review'" 오류가 출력되어야 한다.
         """
-        proc = _run(["review", "codex-run", "--stage", "code"])
+        proc = _run(["review", "codex-run", "--stage", "code"])  # CLI_EVIDENCE_ALLOW_READ_ONLY: review 서브커맨드 제거 확인 — 오류 출력만, 상태 변경 없음
         self.assertNotEqual(
             proc.returncode, 0,
             f"review codex-run은 제거되어 실패해야 함. rc={proc.returncode}",
@@ -183,7 +183,7 @@ class TestCodexRemoval(unittest.TestCase):
         review codex-record는 codex review gate 기록 명령으로 제거됨.
         """
         proc = _run(
-            ["review", "codex-record", "--stage", "code", "--result", "ACCEPT"]
+            ["review", "codex-record", "--stage", "code", "--result", "ACCEPT"]  # CLI_EVIDENCE_ALLOW_READ_ONLY: review codex-record 제거 확인 — 오류 출력만, 상태 변경 없음
         )
         self.assertNotEqual(
             proc.returncode, 0,
@@ -298,7 +298,7 @@ class TestCodexRemoval(unittest.TestCase):
         advisory(GPT 자문)는 codex review gate와 별개의 기능이므로
         제거 대상이 아니며 정상 동작해야 한다.
         """
-        proc = _run(["advisory", "status"])
+        proc = _run(["advisory", "status"])  # CLI_EVIDENCE_ALLOW_READ_ONLY: advisory status는 상태 조회만 수행, 파이프라인 상태 변경 없음
         combined = (proc.stdout or "") + (proc.stderr or "")
         self.assertNotIn(
             "invalid choice", combined,
