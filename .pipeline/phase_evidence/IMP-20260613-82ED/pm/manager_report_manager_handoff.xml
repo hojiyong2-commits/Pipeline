@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260613-82ED</pipeline_id>
+  <manager_run_id>pipeline_manager-32d452dac3d9a6a0</manager_run_id>
+  <planner_run_id>pm_planner-2398d427e35f3481</planner_run_id>
+  <from>pipeline-manager-agent</from>
+  <status>HANDOFF_READY</status>
+  <step_plan_sha256>89955e25bf2e7f369cb174e0cf602370e38647de78ee2e31cf86643e82f97d22</step_plan_sha256>
+  <step_plan_validated>true</step_plan_validated>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <modules>
+    <module id="MT-1">pipeline.py Evidence Inventory SSoT 핵심 함수</module>
+    <module id="MT-2">tests/test_evidence_inventory_82ed.py B96C 회귀 테스트</module>
+    <module id="MT-3">pipeline.py 4개 gate 관계 문서화</module>
+  </modules>
+</manager_handoff>
