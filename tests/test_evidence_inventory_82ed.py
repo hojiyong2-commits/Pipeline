@@ -1601,6 +1601,10 @@ class TestRequestAcceptCLISubprocessBlocked:
         try:
             result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
             assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
 
             result = run_pipeline([
                 "contract", "add-oracle",
@@ -1616,6 +1620,10 @@ class TestRequestAcceptCLISubprocessBlocked:
             inv_path.write_text("{CORRUPT[[", encoding="utf-8")
 
             # subprocess CLI: corrupt inventory → non-zero 반환 확인
+            final_state = json.loads(  # re-read after corruption
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
             result = run_pipeline(
                 ["gates", "request-accept", "--evidence", str(evidence_file)],
                 env=env,
