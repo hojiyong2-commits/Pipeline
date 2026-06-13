@@ -325,6 +325,14 @@ class TestCodexRemoval(unittest.TestCase):
                 "advisory_mode" in combined or "not_run" in combined or "skipped" in combined,
                 f"advisory status 출력에 모드 정보가 없음: {combined[:400]}",
             )
+            # final_state assertion: advisory status는 read-only 조회이므로
+            # current_phase가 변경되면 안 된다 (harness 유지).
+            self.assertTrue(state_path.exists(), "격리 state 파일이 유지되어야 함")
+            final_state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                final_state.get("current_phase"), "harness",
+                "advisory status는 read-only이므로 current_phase가 변경되면 안 됨",
+            )
 
 
 if __name__ == "__main__":
