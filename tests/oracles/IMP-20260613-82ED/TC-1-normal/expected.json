@@ -1,0 +1,11 @@
+{
+  "status": "registered",
+  "inventory_entry": {
+    "kind": "oracle_input",
+    "sha256_present": true,
+    "source": "contract add-oracle",
+    "registered_at_present": true,
+    "required_for_acceptance": true,
+    "protection": "protected"
+  }
+}

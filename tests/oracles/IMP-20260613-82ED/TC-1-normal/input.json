@@ -1,0 +1,7 @@
+{
+  "action": "register_evidence",
+  "pipeline_id": "IMP-20260613-82ED",
+  "kind": "oracle_input",
+  "path": "tests/oracles/IMP-20260613-82ED/TC-1-normal/input.json",
+  "source": "contract add-oracle"
+}

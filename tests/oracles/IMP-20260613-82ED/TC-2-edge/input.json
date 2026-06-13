@@ -1,0 +1,6 @@
+{
+  "action": "gates_oracle_without_manifest",
+  "pipeline_id": "IMP-20260613-82ED",
+  "oracle_manifest_missing": true,
+  "expected_behavior": "BLOCKED with oracle_manifest_blocked failure_code"
+}
