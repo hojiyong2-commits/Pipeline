@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260612-8104</pipeline_id>
+  <round>2</round>
+  <category_check>
+    <wa>N-A — 네트워크 호출 카테고리 아님 (프로토콜/엔진 제거 작업)</wa>
+    <ui>N-A — UI 태그 없음</ui>
+    <fs>PASS — pipeline.py 파일 I/O는 기존 atomic/encoding 패턴 유지, 신규 위반 없음</fs>
+    <pd>PASS — MT-1(pipeline.py)/MT-2(docs)/MT-3(tests) 관심사 분리, 인터페이스 계약 준수</pd>
+    <sec>N-A — Phase 5 security-agent 전담. codex_relay_pairing_url secret 패턴 보존 확인</sec>
+    <al>PASS — 삭제 중심 작업, 기존 예외 처리 경로 손상 없음</al>
+    <build>N-A — BUILD 태그 없음 (meta-task)</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+
+  <step0_handover_check>
+    <dev_handover_present>PASS — dev_handover.xml, from=dev-agent</dev_handover_present>
+    <ui_handover_required>NO — category_tags에 UI 없음</ui_handover_required>
+    <evidence_files_specific>PASS — 11개 실제 파일명 명시 + 제출 확인</evidence_files_specific>
+    <anti_gaming_read>PASS — step_plan에 anti_gaming_read=true 존재</anti_gaming_read>
+    <judgment_calls>N-A — judgment_calls 블록 없음</judgment_calls>
+  </step0_handover_check>
+
+  <round1_regression_fix_verification>
+    <test_clarification_gate>PASS — --codex-review-waiver / legacy-bootstrap grep 0건</test_clarification_gate>
+    <test_real_cli_paths>PASS — --codex-review-waiver / legacy-bootstrap grep 0건</test_real_cli_paths>
+    <scope_manifest_mt3_updated>PASS — MT-3 files에 test_clarification_gate.py, test_real_cli_paths.py 포함</scope_manifest_mt3_updated>
+  </round1_regression_fix_verification>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — 실제 pytest/CLI 실행으로 확인</execution_check_present>
+    <execution_check_verdict>PASS — test_codex_removal_8104(10) + clarification_gate 모두 통과</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — review 서브커맨드 실제 제거됨(invalid choice), waiver 옵션 unrecognized argument 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <ac_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="check --phase qa gate exit 0; test_codex_removal_8104 통과"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="stale codex_review_result.json 무관, check 통과 (테스트 커버)"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="gates technical에서 Codex PR stage 호출 제거, _check_codex_pr_gate_for_technical 부재"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="gates accept 경로에 Codex 의존 제거 (테스트 커버)"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="check --phase dev --codex-review-waiver legacy-bootstrap → unrecognized arguments 오류 실측"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="review 서브커맨드 invalid choice; review codex-run/codex-record/status 제거 실측"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="codex_review_result.json 존재/stale 여부가 COMPLETE에 무영향 (테스트 커버)"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="final-packet/PR body에 'Codex Review PASS' 문구 없음 (test_verification_json_codex_evidence 통과)"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="'검증용 메타데이터' 라벨 8건 존재 + 'Codex 검토용' 호환 파서 4건 유지"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="Technical/Oracle/GitHub CI/Acceptance gate FAIL 시 COMPLETE 불가 동작 유지 (gate 약화 없음)"/>
+    <criterion ac_id="AC-11" status="PASS" evidence="codex failure code 제거, 기본 경로 failure packet에 미포함 (테스트 커버)"/>
+    <criterion ac_id="AC-12" status="PASS" evidence="AGENTS.md/CLAUDE.md/pm-agent.md/qa-agent.md 'Codex Review Gate' 섹션 0건, 'Codex technical review' 트러스트체인 문자열 0건"/>
+    <criterion ac_id="AC-13" status="PASS" evidence="ENABLE_GPT_ADVISORY 16건 보존, codex_relay_pairing_url 패턴 보존, cmd_codex/_deploy_accepted_outputs/_is_deployable_evidence/_check_pr_approver_provenance/_collect_issued_nonces 보존"/>
+    <criterion ac_id="AC-14" status="PASS" evidence="test_codex_removal_8104.py 삭제/보존 inventory 문서화 + 10개 테스트 통과"/>
+  </ac_verification>
+
+  <c3_cross_verification>
+    <scope_files_declared>11</scope_files_declared>
+    <evidence_files_submitted>11</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <note>git diff에 .pipeline/phase_attestation_request.json 포함되나 .gitignore 대상 transient phase evidence로 scope 위반 아님 (git check-ignore rc=0)</note>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1/2/3 모두 executed=true</grep_evidence_present>
+    <declared_functions>21</declared_functions>
+    <actual_modified_functions>21</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <test_execution_summary>
+    <test_codex_removal_8104>10 passed</test_codex_removal_8104>
+    <test_clarification_gate>포함 통과 (총 10 passed)</test_clarification_gate>
+    <e2e_real_cli_paths>2 passed (dev_blocked_without / budget_blocked)</e2e_real_cli_paths>
+    <test_codex_review_record_verification>34 passed, 5 skipped (삭제 기능 의도적 skip)</test_codex_review_record_verification>
+    <pipeline_py_parse>OK</pipeline_py_parse>
+  </test_execution_summary>
+
+  <numeric_score>112</numeric_score>
+  <numeric_score_breakdown>
+    <wa score="0" max="0">N/A</wa>
+    <ui score="0" max="0">N/A</ui>
+    <fs score="20" max="20">기존 안전 패턴 유지, 위반 없음</fs>
+    <pd score="10" max="10">모듈 분리 5/5, 인터페이스 계약 5/5</pd>
+    <al score="20" max="20">예외 경로 손상 없음</al>
+    <build score="0" max="0">N/A</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="112" max="120"/>
+    <percentage>93.3</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+  </numeric_score_breakdown>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <summary>Round 1 회귀(--codex-review-waiver 호출자 미수정) 완전 해소. test_clarification_gate.py + test_real_cli_paths.py에서 waiver/legacy-bootstrap 인수 grep 0건 확인. Codex Review 코드 11개 함수+helper 제거, review 서브커맨드 및 waiver CLI 옵션 실측 제거(invalid choice / unrecognized argument). 보존 항목(cmd_codex, codex_relay_pairing_url, GPT advisory, CE06/B96C 함수, _build 검증용 메타데이터 호환 파서) 전부 유지. 4개 trust-root 문서 Codex Review Gate 섹션 0건. AC-1~AC-14 모두 PASS. 테스트 10+2+34 통과, 5 skip(의도적). 범위 외 변경 없음(transient phase evidence 제외). 최종 [PASS].</summary>
+</qa_report>
