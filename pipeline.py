@@ -14353,12 +14353,18 @@ def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str
 def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[str]:
     """AC 충족표에 PENDING 항목이 있으면 차단 메시지 반환. 정상이면 None.
 
-    IMP-20260613-4A22 Round 3:
-    - integration.status 확인을 AC 결과와 무관하게 항상 먼저 수행한다.
-    - AC 전부 PASS라도 integration이 PASS가 아니면 차단한다.
-    - structured AC가 없으면(None) 검사 생략 (legacy/무AC 파이프라인).
+    IMP-20260613-4A22 Round 4:
+    - structured AC(requirements_tracking.enabled=true)가 있는 파이프라인에서만 integration.status를 확인한다.
+    - legacy/무AC 파이프라인(structured AC 없음)은 기존처럼 즉시 None 반환 (backward-compat 복원).
+    - structured AC가 있는 경우 integration.status 확인을 AC 결과보다 먼저 수행한다.
     """
-    # 1. integration gate 항상 먼저 확인 (AC 결과와 독립)
+    # 1. Live rebuild 먼저 — structured AC 유무를 판별하여 legacy short-circuit 복원
+    #    stale 캐시나 requirements_tracking.enabled 플래그에 의존하지 않음
+    ac_table_live = _build_ac_fulfillment_table(state)
+    if ac_table_live is None:
+        return None  # structured AC 없음 — legacy/무AC 파이프라인은 integration 검사도 생략
+
+    # 2. structured AC가 있는 파이프라인에서만 integration gate 확인 (AC 결과와 독립)
     integration_status = (
         state.get("module_gates", {})
         .get("integration", {})
@@ -14370,11 +14376,6 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
             f"  현재 상태: {integration_status or 'PENDING'}\n"
             "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
         )
-
-    # 2. Live rebuild — stale ac_completeness 캐시나 requirements_tracking.enabled 플래그에 의존하지 않음
-    ac_table_live = _build_ac_fulfillment_table(state)
-    if ac_table_live is None:
-        return None  # structured AC 없음 — legacy/무AC 파이프라인은 검사 생략
 
     pending_live = [e["ac_id"] for e in ac_table_live if e.get("result") != "PASS"]
     if not pending_live:

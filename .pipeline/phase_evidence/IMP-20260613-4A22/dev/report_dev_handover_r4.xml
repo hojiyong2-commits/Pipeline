@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <pipeline_id>IMP-20260613-4A22</pipeline_id>
+  <phase>dev</phase>
+  <run_id>dev-03a9c782b1133437</run_id>
+  <token>tok_KHeyNrD98WPFrcvbGII25JCR6_3ngTWZ-cCiTk84_fE</token>
+  <changes>
+    <file>pipeline.py</file>
+  </changes>
+  <report_file>dev_handover_r4.xml</report_file>
+  <summary>
+    Round 4 — _validate_ac_table_before_request_accept legacy backward-compat 복원.
+    Round 3에서 integration.status 확인을 항상 먼저 수행하여 legacy/무AC 파이프라인까지
+    차단되던 회귀를 수정. _build_ac_fulfillment_table(state) is None 체크를 함수 시작으로
+    이동하여, structured AC가 없는 legacy 파이프라인은 integration 검사 없이 즉시 None 반환.
+    structured AC가 있는 파이프라인에서만 integration gate를 AC 결과보다 먼저 확인하는
+    Round 3 요구사항은 유지.
+  </summary>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>pipeline._validate_ac_table_before_request_accept</target_function>
+    <signature_change>NO</signature_change>
+    <state_mutations>none — pure function (state 읽기 전용)</state_mutations>
+  </impact_analysis>
+  <evidence>
+    Round 4 — legacy 호환성 수정, E2E 회귀 복구.
+    검증: python -m py_compile pipeline.py PASS.
+    tests/e2e/test_request_accept_snapshot_8c3b.py 7/7 PASS
+    (TC-1, TC-1b, TC-2, TC-3, TC-4, TC-4b, TC-5 — Round 3에서 FAIL이던 TC-1/2/3/5 모두 복구).
+    사전 존재 실패(test_request_accept_sst_2044.py 8건, test_ac_tracking_1abe.py 임포트 오류)는
+    git stash 베이스라인에서 동일하게 발생하는 pre-existing 결함이며 본 수정과 무관
+    (missing oracle fixture input.json / 존재하지 않는 CODEX_COVERAGE_CHECK_FIELDS 심볼 임포트).
+  </evidence>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py</git_diff_files>
+    <manifest_files>pipeline.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
