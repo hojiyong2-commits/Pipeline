@@ -1,0 +1,72 @@
+﻿{
+  "pipeline_id": "IMP-20260613-82ED",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_contract_paths",
+        "_register_evidence_to_inventory",
+        "_validate_evidence_provenance",
+        "_cmd_contract(add-oracle)",
+        "_cmd_gates(oracle)",
+        "_cmd_gates_request_accept",
+        "_cmd_gates_accept_handler",
+        "_build_verification_json",
+        "_cmd_report_final_packet"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1","AC-2","AC-3","AC-4","AC-5","AC-6","AC-7","AC-8","AC-9","AC-10","AC-11"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "AC-1: _contract_paths()에 evidence_inventory 키 추가. contract add-oracle 핸들러에서 oracle 등록 후 _register_evidence_to_inventory() 호출.",
+            "AC-2: gates oracle에서 inventory 존재/파싱/oracle 등록 여부 확인 후 _validate_evidence_provenance() 호출.",
+            "AC-3: _validate_evidence_provenance()가 git ls-files로 tracked 여부 확인, untracked이면 BLOCKED(protected_evidence_untracked).",
+            "AC-4: tracked + PR 포함이면 PASS, request-accept에서 nonce 발급.",
+            "AC-5: PR changed files에 oracle 없고 main에도 없으면 BLOCKED(oracle_evidence_not_in_pr).",
+            "AC-6: 다른 pipeline_id 항목은 검사 대상 제외 (pid 필터).",
+            "AC-7: gh/git CLI 실패 시 fail-closed BLOCKED.",
+            "AC-8: *_dump.txt 등 cleanup-only는 WARNING만 (BLOCKED 아님).",
+            "AC-9: final packet에 evidence_integrity 섹션 추가.",
+            "AC-10: inventory 파싱 실패 시 BLOCKED(evidence_inventory_parse_error).",
+            "AC-11: 기존 4개 외부 게이트 회귀 없음."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["tests/test_evidence_inventory_82ed.py"],
+      "affected_functions": ["test_evidence_inventory_82ed (전체 신규 파일)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1","AC-2","AC-3","AC-4","AC-5","AC-6","AC-7","AC-8","AC-9","AC-10","AC-11"],
+          "changed_files": ["tests/test_evidence_inventory_82ed.py"],
+          "implementation_evidence": [
+            "11개 테스트가 AC-1~AC-11 전 항목을 커버.",
+            "Real CLI Path 패턴 (subprocess.run), PIPELINE_STATE_PATH 격리, final_state assertion 모두 포함."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.py 모듈 docstring (게이트 관계 문서화)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [],
+          "covers_iqr": ["IQR-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "4개 게이트(Oracle Quality Gate, preflight-pr-impl, Evidence Inventory Gate, hygiene cleanup-workspace) 책임 경계 문서화."
+          ]
+        }
+      ]
+    }
+  ]
+}
