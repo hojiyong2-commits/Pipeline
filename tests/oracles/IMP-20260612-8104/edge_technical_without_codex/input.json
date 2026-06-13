@@ -1,0 +1,10 @@
+﻿{
+  "pipeline_state": {
+    "pipeline_id": "IMP-20260612-8104",
+    "current_phase": "external_gates",
+    "build_done": true,
+    "codex_pr_stage_result": null,
+    "codex_review_result_present": false
+  },
+  "command": "gates technical"
+}

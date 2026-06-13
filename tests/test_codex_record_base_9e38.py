@@ -25,6 +25,14 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import pytest
+
+# IMP-20260612-8104: Codex Review Gate 제거로 인해 review codex-record
+# 서브커맨드가 pipeline.py에서 삭제되었습니다. 이 파일의 모든 테스트는
+# `python pipeline.py review codex-record ...` CLI 경로를 검증하므로
+# 더 이상 유효하지 않습니다. 모듈 단위로 skip 처리합니다.
+pytestmark = pytest.mark.skip(reason="IMP-20260612-8104: Codex Review Gate 제거됨")
+
 # ---------------------------------------------------------------------------
 # 경로 설정
 # ---------------------------------------------------------------------------

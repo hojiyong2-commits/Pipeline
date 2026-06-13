@@ -1,0 +1,187 @@
+{
+  "preconditions": {
+    "state_file": {
+      "pipeline_id": "IMP-20260612-8104-TEST",
+      "pipeline_type": "IMP",
+      "current_phase": "qa",
+      "created_at": "2026-06-12T00:00:00Z",
+      "description": "Oracle isolation fixture: dev complete state",
+      "phases": {
+        "pm": {
+          "status": "DONE",
+          "completed_at": "2026-06-12T00:01:00Z"
+        },
+        "dev": {
+          "status": "DONE",
+          "completed_at": "2026-06-12T00:02:00Z"
+        },
+        "qa": {
+          "status": "PENDING",
+          "started_at": "2026-06-13T01:58:22Z"
+        }
+      },
+      "scope_declared": true,
+      "contract_v2": {
+        "enabled": true,
+        "contract_frozen": true,
+        "test_set_frozen": true
+      },
+      "agent_receipts_enabled": true,
+      "agent_runs": {},
+      "phase_attestations": {
+        "enabled": true,
+        "mode": "github_actions_per_phase",
+        "required_phases": [
+          "pm",
+          "dev",
+          "qa",
+          "build"
+        ],
+        "phases": {
+          "pm": {
+            "status": "PASS",
+            "completed_at": "2026-06-12T00:01:00Z",
+            "phase": "pm",
+            "run_id": "99999001",
+            "commit_sha": "aaa0001",
+            "evidence": "github_actions_phase_run:99999001",
+            "report_file": null,
+            "notes": []
+          },
+          "dev": {
+            "status": "PASS",
+            "completed_at": "2026-06-12T00:02:00Z",
+            "phase": "dev",
+            "run_id": "99999002",
+            "commit_sha": "aaa0002",
+            "evidence": "github_actions_phase_run:99999002",
+            "report_file": null,
+            "notes": []
+          },
+          "qa": {
+            "status": "PENDING",
+            "completed_at": null,
+            "phase": "qa",
+            "run_id": null,
+            "commit_sha": null,
+            "evidence": null,
+            "report_file": null,
+            "notes": []
+          },
+          "build": {
+            "status": "PENDING",
+            "completed_at": null,
+            "phase": "build",
+            "run_id": null,
+            "commit_sha": null,
+            "evidence": null,
+            "report_file": null,
+            "notes": []
+          }
+        }
+      },
+      "terminal_state": null,
+      "harness_fail_count": 0,
+      "protocol_evolution_decision": null,
+      "execution_profile": {
+        "mode": "STANDARD",
+        "status": "ACTIVE",
+        "reason": "",
+        "max_micro_tasks": null,
+        "product_code_write_allowed": true,
+        "phase_ci_mode": "per_phase",
+        "repair_mode": "standard",
+        "risk_review_required": false,
+        "risk_categories": [],
+        "declared_at": null,
+        "escalated_at": null,
+        "escalation_reason": null
+      },
+      "outputs": {
+        "items": []
+      },
+      "failure_packets": [],
+      "external_gates": {
+        "enabled": true,
+        "mode": "three_gate",
+        "technical": {
+          "status": "PENDING",
+          "started_at": null,
+          "completed_at": null,
+          "evidence": null,
+          "report_file": null,
+          "notes": []
+        },
+        "oracle": {
+          "status": "PENDING",
+          "started_at": null,
+          "completed_at": null,
+          "evidence": null,
+          "report_file": null,
+          "notes": []
+        },
+        "acceptance": {
+          "status": "PENDING",
+          "started_at": null,
+          "completed_at": null,
+          "evidence": null,
+          "report_file": null,
+          "notes": []
+        },
+        "github_ci": {
+          "status": "PENDING",
+          "started_at": null,
+          "completed_at": null,
+          "evidence": null,
+          "report_file": null,
+          "notes": []
+        }
+      },
+      "module_gates": {
+        "enabled": true,
+        "mode": "incremental_module_gate",
+        "sequence": [],
+        "modules": {},
+        "integration": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        }
+      },
+      "pipeline_started_at": "2026-06-12T00:00:00Z",
+      "pipeline_completed_at": null,
+      "acceptance_requested_at": null,
+      "acceptance_recorded_at": null,
+      "total_elapsed_seconds": null,
+      "oracle_quality": {},
+      "phase_timings": {},
+      "gate_timings": {},
+      "agent_timings": {},
+      "github_actions_timings": {
+        "WAITING_FOR_TRIGGER": 0,
+        "QUEUED": 0,
+        "IN_PROGRESS": 0,
+        "COMPLETED": 0,
+        "TIMEOUT": 0
+      },
+      "failure_summary": {},
+      "attempt_budget": {
+        "config": {
+          "dev_max_attempts": 3,
+          "qa_max_attempts": 3,
+          "gate_max_attempts": 5,
+          "repeat_failure_code_threshold": 3
+        },
+        "attempts": {
+          "dev": [],
+          "qa": [],
+          "gate": []
+        },
+        "blocked_phases": {}
+      },
+      "updated_at": "2026-06-13T01:58:22Z"
+    }
+  }
+}

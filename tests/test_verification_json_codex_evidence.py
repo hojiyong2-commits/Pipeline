@@ -211,8 +211,15 @@ class TestBuildVerificationJson15Fields(unittest.TestCase):
 class TestBuildFinalPacketContent(unittest.TestCase):
     """MT-2: _build_final_packet_content 검증 -- [Codex 검토용] 블록 + 독립 줄 승인 코드."""
 
+    @unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨 — [Codex 검토용] 블록명이 변경되어 더 이상 유효하지 않음")
     def test_normal_codex_review_block_present(self) -> None:
-        """[Codex 검토용] 블록이 최상단에 있다 (normal)."""
+        """[Codex 검토용] 블록이 최상단에 있다 (normal).
+
+        IMP-20260612-8104: Codex Review Gate 제거로 _build_final_packet_content의
+        최상단 블록명이 '[Codex 검토용]'에서 변경되었으므로 이 테스트는 skip.
+        (블록 자체의 필수 필드 검증은 test_normal_codex_block_has_required_fields가
+        계속 수행하므로 패킷 내용 회귀는 여전히 보호됨)
+        """
         evidence = _make_evidence()
         content = _build_final_packet_content(evidence)
         self.assertIn("[Codex 검토용]", content)
