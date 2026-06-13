@@ -14219,9 +14219,13 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     if ac_blocker:
         _die(ac_blocker)
 
-    # IMP-20260613-82ED MT-1 AC-4/AC-3/AC-5: oracle 증거 출처 검증 (inventory 존재 시)
+    # IMP-20260613-82ED MT-1 AC-4/AC-3/AC-5: oracle 증거 출처 검증 (fail-closed).
+    # oracle_manifest에 oracle 항목이 있으면 inventory 부재와 관계없이 provenance 검증.
+    # inventory 부재 시 _validate_evidence_provenance가 evidence_inventory_missing BLOCKED를 반환.
     _ei_paths = _contract_paths(pipeline_id)
-    if _ei_paths["evidence_inventory"].exists():
+    _req_oracle_entries, _ = _oracle_manifest_status(_ei_paths)
+    _req_has_oracles = bool(_req_oracle_entries)
+    if _ei_paths["evidence_inventory"].exists() or _req_has_oracles:
         _prov_result = _validate_evidence_provenance(state, phase="request-accept")
         for _w in _prov_result.get("orphan_oracle_warnings", []):
             print(YELLOW(f"  WARN: {_w}"))
@@ -15217,10 +15221,13 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _die(f"[ORACLE QUALITY FAIL] {failures_str}")
 
         # IMP-20260613-82ED MT-1 AC-2/AC-3/AC-5/AC-10: evidence provenance 검증.
-        # inventory 파일이 존재할 때만 enforce하여 legacy 파이프라인(AC-11) 회귀를 방지한다.
-        # (provenance가 사용하는 inventory-missing/parse-error 판정은 inventory 파일 존재 시 의미가 있다.)
+        # oracle_manifest에 oracle 항목이 있으면 inventory 파일 존재 여부에 관계없이
+        # provenance 검증을 수행한다(fail-closed). inventory 부재 시 _validate_evidence_provenance가
+        # evidence_inventory_missing BLOCKED를 반환한다.
+        # legacy 파이프라인(oracle_entries가 비어 있는 경우)은 inventory 없이 통과한다.
         inventory_path = paths["evidence_inventory"]
-        if inventory_path.exists():
+        _oracle_has_entries = bool(oracle_entries)
+        if inventory_path.exists() or _oracle_has_entries:
             prov_result = _validate_evidence_provenance(state, phase="oracle")
             for _w in prov_result.get("orphan_oracle_warnings", []):
                 print(YELLOW(f"  WARN: {_w}"))
