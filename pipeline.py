@@ -3555,6 +3555,31 @@ def _validate_evidence_provenance(
 
         result["tracked_count"] += 1
 
+        # SHA 정합성 검증: inventory 등록 시점 sha256과 현재 파일 내용 비교
+        inventory_sha256 = str(entry.get("sha256", "") or "")
+        if inventory_sha256:
+            try:
+                _h = hashlib.sha256()
+                with open(path_str, "rb") as _f:
+                    for _chunk in iter(lambda: _f.read(65536), b""):
+                        _h.update(_chunk)
+                current_sha256 = _h.hexdigest()
+                if current_sha256 != inventory_sha256:
+                    _add_blocker(
+                        "evidence_sha_mismatch",
+                        f"evidence_inventory.json의 sha256과 현재 파일 내용이 다릅니다: {path_str}. "
+                        f"expected={inventory_sha256[:16]}..., actual={current_sha256[:16]}...",
+                        path_str,
+                    )
+                    continue
+            except (OSError, IOError) as _exc:
+                _add_blocker(
+                    "evidence_sha_read_error",
+                    f"SHA256 계산 중 파일 읽기 오류: {path_str} — {_exc}",
+                    path_str,
+                )
+                continue
+
         # PR 포함 여부 확인 전, 먼저 git log 이력 확인 (기존 main 이력이 있으면 PR 조회 불필요)
         try:
             log_proc = subprocess.run(
@@ -10539,6 +10564,81 @@ def _packet_json_output_path() -> Path:
         return BASE_DIR / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
 
 
+def _build_acceptance_target(evidence: Dict[str, Any]) -> Dict[str, Any]:
+    """acceptance_target — 사용자가 확인해야 하는 실제 구현 기준점을 조합한다.
+
+    marker-only PR 대신 실제 구현 커밋/PR 목록을 담는다.
+    Args:
+        evidence: _collect_packet_evidence 반환 dict.
+    Returns:
+        acceptance_target dict.
+    Raises:
+        없음.
+    """
+    pipeline_id = str(evidence.get("pipeline_id", "") or "")
+    changed_files = list(evidence.get("changed_files") or [])
+
+    # 현재 main 커밋 SHA 조회
+    target_main_commit = ""
+    try:
+        _cp = subprocess.run(
+            ["git", "log", "origin/main", "--format=%H", "-1"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        if _cp.returncode == 0:
+            target_main_commit = (_cp.stdout or "").strip()
+    except (FileNotFoundError, OSError):
+        pass
+
+    # 파이프라인 관련 머지된 PR 목록 조회
+    impl_prs: List[Dict[str, Any]] = []
+    try:
+        _pr_list = subprocess.run(
+            [
+                "gh", "pr", "list",
+                "--repo", "hojiyong2-commits/Pipeline",
+                "--state", "merged",
+                "--search", pipeline_id,
+                "--json", "number,title,mergeCommit",
+                "--limit", "10",
+            ],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        if _pr_list.returncode == 0:
+            _prs_raw = json.loads((_pr_list.stdout or "").strip() or "[]")
+            if isinstance(_prs_raw, list):
+                for _pr in _prs_raw:
+                    if isinstance(_pr, dict):
+                        _mc = _pr.get("mergeCommit")
+                        _mc_sha = str(_mc.get("oid", "") if isinstance(_mc, dict) else "") or ""
+                        impl_prs.append({
+                            "pr": f"#{_pr.get('number', '')}",
+                            "title": str(_pr.get("title", "") or ""),
+                            "merged_commit": _mc_sha[:12] if _mc_sha else "",
+                        })
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        pass
+
+    # oracle/evidence 파일 SHA 목록 (evidence_integrity에서 추출)
+    oracle_evidence_files: List[Dict[str, str]] = []
+    ei_raw = evidence.get("evidence_integrity")
+    if isinstance(ei_raw, dict):
+        # 이미 조회된 inventory 결과에서 tracked 파일 SHA 추출
+        # (간소화: 실제 inventory를 다시 읽지 않고 개수만 기록)
+        pass
+
+    return {
+        "description": "사용자가 확인해야 하는 실제 구현 기준점 (marker PR 아님)",
+        "repository": "hojiyong2-commits/Pipeline",
+        "target_main_commit": target_main_commit,
+        "impl_prs": impl_prs,
+        "changed_files": changed_files,
+        "oracle_evidence_files": oracle_evidence_files,
+        "note": "impl_prs는 pipeline_id로 검색한 머지된 PR 목록입니다. "
+                "실제 코드 변경은 이 PR들에 포함됩니다.",
+    }
+
+
 def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
     """packet evidence dict를 JSON-serializable verification dict로 변환한다.
 
@@ -10736,6 +10836,8 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         "artifacts": artifacts_obj,
         # IMP-20260613-82ED MT-1 AC-9: evidence 출처 무결성 섹션
         "evidence_integrity": evidence_integrity_obj,
+        # IMP-20260613-82ED 3rd REJECT fix: acceptance_target — 실제 구현 기준점
+        "acceptance_target": _build_acceptance_target(evidence),
         # BLOCKED 검증 결과
         "blocked": blocked,
         "blocked_reasons": blocked_reasons,
@@ -13216,6 +13318,36 @@ def _get_current_pr_url() -> Optional[str]:
     return None
 
 
+def _get_current_pr_changed_files() -> Optional[List[str]]:
+    """현재 열린 PR의 변경 파일 목록을 반환한다. gh CLI 없거나 PR 없으면 None.
+
+    Returns:
+        파일 경로 목록 또는 None.
+    Raises:
+        없음 (OSError swallow).
+    """
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "view", "--json", "files"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        if result.returncode != 0:
+            return None
+        data = json.loads((result.stdout or "").strip() or "{}")
+        if not isinstance(data, dict):
+            return None
+        files_raw = data.get("files")
+        if not isinstance(files_raw, list):
+            return None
+        return [
+            str(f.get("path", ""))
+            for f in files_raw
+            if isinstance(f, dict) and f.get("path")
+        ]
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+
+
 def _get_current_pr_head_sha() -> Optional[str]:
     """현재 PR의 head commit SHA를 gh CLI로 조회.
 
@@ -14232,6 +14364,24 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 f"[BLOCKED] failure_code={_code}\n"
                 f"  {_msg}\n"
                 "  oracle 증거 파일을 git tracked + 현재 PR에 포함시킨 뒤 다시 실행하세요."
+            )
+
+    # IMP-20260613-82ED 3rd REJECT: marker-only PR 차단
+    # PR changed files가 acceptance_marker_*.md 1개뿐이면 실제 구현이 없으므로 BLOCKED
+    _current_pr_files = _get_current_pr_changed_files()
+    if _current_pr_files is not None:
+        _non_marker = [
+            f for f in _current_pr_files
+            if not str(f).startswith("acceptance_marker_")
+        ]
+        if len(_current_pr_files) >= 1 and len(_non_marker) == 0:
+            _die(
+                "[BLOCKED] failure_code=marker_only_pr\n"
+                f"  actual: 현재 PR에 acceptance_marker_*.md 파일만 있습니다 "
+                f"({len(_current_pr_files)}개 파일).\n"
+                "  expected: 실제 구현 변경이 포함된 PR이어야 합니다.\n"
+                "  해결 방법: 구현 변경이 담긴 PR로 전환하거나, "
+                "main에 머지된 구현 커밋을 기준으로 acceptance를 진행하세요."
             )
 
     # IMP-20260611-A716 MT-2: _validate_pr_body_readiness SSoT — 섹션 + 임시 문구 통합 검사

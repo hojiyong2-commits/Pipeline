@@ -899,6 +899,60 @@ class TestAC6CLICorruptInventoryBlocksOracleCLI:
             shutil.rmtree(str(oracle_root), ignore_errors=True)
 
 
+# ---------------------------------------------------------------------------
+# AC-12: SHA 불일치 → evidence_sha_mismatch BLOCKED
+# ---------------------------------------------------------------------------
+
+class TestAC12ShaMismatchBlocked:
+    """AC-12: evidence_inventory.json의 sha256과 실제 파일이 다르면 evidence_sha_mismatch BLOCKED."""
+
+    def test_sha_mismatch_causes_blocked(self, tmp_path: Path) -> None:
+        """inventory에 등록된 sha256과 실제 파일 내용이 다르면 BLOCKED(evidence_sha_mismatch).
+
+        이 테스트는 _validate_evidence_provenance의 SHA 정합성 검증을 직접 검증한다.
+        git tracked 파일처럼 보이도록 PROJECT_ROOT 내에 실제로 git tracked된 파일을 사용하고,
+        inventory에 다른 sha256을 기록하여 불일치를 만든다.
+        """
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED-TESTAC12"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        inventory_path = contracts_dir / "evidence_inventory.json"
+        inventory_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 실제 git tracked 파일 사용 (pipeline.py는 확실히 tracked됨)
+        tracked_file = PROJECT_ROOT / "pipeline.py"
+        assert tracked_file.exists(), "pipeline.py must exist"
+
+        # 잘못된 sha256 (실제와 다른 더미값)
+        wrong_sha256 = "a" * 64
+
+        entry = {
+            "pipeline_id": pid,
+            "path": str(tracked_file),
+            "kind": "oracle_input",
+            "sha256": wrong_sha256,
+            "size": tracked_file.stat().st_size,
+            "source_command": "contract add-oracle",
+            "registered_at": "2026-06-13T00:00:00Z",
+            "required_for_acceptance": True,
+            "protection": "protected",
+        }
+        inventory_path.write_text(json.dumps([entry]), encoding="utf-8")
+
+        try:
+            result = pl._validate_evidence_provenance({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", (
+                f"SHA mismatch must yield BLOCKED, got: {result}"
+            )
+            codes = [str(b.get("failure_code", "")) for b in result.get("blockers", [])]
+            assert "evidence_sha_mismatch" in codes, (
+                f"SHA mismatch should report evidence_sha_mismatch, got: {codes}, result={result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+
 if __name__ == "__main__":
     # SELF-VERIFY: 헬퍼 함수 기본 동작 확인
     assert sha256_file.__name__ == "sha256_file"
