@@ -60,7 +60,9 @@ STATE_CHANGING_SUBCOMMANDS: frozenset[str] = frozenset(
         "advisory",
         "acceptance",
         "outputs",
-        "review",
+        # IMP-20260612-8104: 'review' 서브커맨드는 Codex Review Gate 제거로 삭제됨.
+        # 삭제 후 이 서브커맨드를 테스트하는 코드는 argparse 오류를 확인하는 read-only 검증이므로
+        # STATE_CHANGING_SUBCOMMANDS에서 제외한다.
         "agent",
         "patch",
         "cluster",

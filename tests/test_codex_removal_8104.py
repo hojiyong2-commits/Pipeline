@@ -297,17 +297,34 @@ class TestCodexRemoval(unittest.TestCase):
 
         advisory(GPT 자문)는 codex review gate와 별개의 기능이므로
         제거 대상이 아니며 정상 동작해야 한다.
+
+        advisory 서브커맨드는 상태 변경 CLI이므로 PIPELINE_STATE_PATH 격리 사용.
         """
-        proc = _run(["advisory", "status"])  # CLI_EVIDENCE_ALLOW_READ_ONLY: advisory status는 상태 조회만 수행, 파이프라인 상태 변경 없음
-        combined = (proc.stdout or "") + (proc.stderr or "")
-        self.assertNotIn(
-            "invalid choice", combined,
-            f"advisory 서브커맨드가 제거되면 안 됨. 출력: {combined[:400]}",
-        )
-        self.assertEqual(
-            proc.returncode, 0,
-            f"advisory status는 exit 0이어야 함. rc={proc.returncode}, 출력: {combined[:400]}",
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "advisory_status_state.json"
+            state = _make_minimal_dev_state()
+            # advisory status 실행을 위해 harness 단계로 진행된 상태
+            state["current_phase"] = "harness"
+            state["phases"]["dev"]["status"] = "DONE"
+            state["phases"]["qa"]["status"] = "DONE"
+            state["phases"]["sec"]["status"] = "DONE"
+            state["phases"]["build"]["status"] = "DONE"
+            _write_state(state_path, state)
+            proc = _run(["advisory", "status"], state_path=state_path)
+            combined = (proc.stdout or "") + (proc.stderr or "")
+            self.assertNotIn(
+                "invalid choice", combined,
+                f"advisory 서브커맨드가 제거되면 안 됨. 출력: {combined[:400]}",
+            )
+            self.assertEqual(
+                proc.returncode, 0,
+                f"advisory status는 exit 0이어야 함. rc={proc.returncode}, 출력: {combined[:400]}",
+            )
+            # evidence assertion: advisory_mode 필드가 응답에 포함되는지 확인
+            self.assertTrue(
+                "advisory_mode" in combined or "not_run" in combined or "skipped" in combined,
+                f"advisory status 출력에 모드 정보가 없음: {combined[:400]}",
+            )
 
 
 if __name__ == "__main__":
