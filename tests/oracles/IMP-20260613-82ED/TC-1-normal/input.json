@@ -1,7 +1,11 @@
 {
-  "action": "register_evidence",
-  "pipeline_id": "IMP-20260613-82ED",
-  "kind": "oracle_input",
-  "path": "tests/oracles/IMP-20260613-82ED/TC-1-normal/input.json",
-  "source": "contract add-oracle"
+  "status": "registered",
+  "inventory_entry": {
+    "kind": "oracle_input",
+    "sha256_present": true,
+    "source": "contract add-oracle",
+    "registered_at_present": true,
+    "required_for_acceptance": true,
+    "protection": "protected"
+  }
 }
