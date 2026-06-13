@@ -3966,6 +3966,7 @@ def _write_json_value(path: Path, data: Any) -> None:
     Raises:
         OSError: 파일 쓰기 실패 시.
     """
+    import time as _time  # noqa: PLC0415
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path: Optional[Path] = None
     try:
@@ -3978,7 +3979,19 @@ def _write_json_value(path: Path, data: Any) -> None:
             payload = (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
             tmp.write(payload)
             tmp_path = Path(tmp.name)
-        os.replace(str(tmp_path), str(path))
+        # Windows WinError 5(Access Denied): antivirus가 .tmp를 잠시 잠글 수 있음 — 최대 3회 재시도
+        _last_exc: Optional[BaseException] = None
+        for _attempt in range(3):
+            try:
+                os.replace(str(tmp_path), str(path))
+                _last_exc = None
+                break
+            except PermissionError as _exc:
+                _last_exc = _exc
+                if _attempt < 2:
+                    _time.sleep(0.15)
+        if _last_exc is not None:
+            raise _last_exc
     except Exception:
         if tmp_path is not None and tmp_path.exists():
             tmp_path.unlink(missing_ok=True)
@@ -14504,6 +14517,35 @@ def _materialize_acceptance_snapshot(
     evidence_payload = _collect_packet_evidence(
         state, acceptance_request=acceptance_request, base_ref="origin/main"
     )
+    # IMP-20260613-82ED Round 7: evidence_integrity 섹션 채우기
+    # (_cmd_report_final_packet와 동일 로직 — gates request-accept 덮어쓰기 경로도 포함)
+    _ei_pid_ra = str(state.get("pipeline_id", "") or "")
+    _ei_integrity_ra: Dict[str, Any] = {
+        "status": "NOT_CHECKED",
+        "protected_evidence_count": 0,
+        "tracked_count": 0,
+        "pr_included_count": 0,
+        "untracked_protected": [],
+        "orphan_oracle_warnings": [],
+        "cleanup_only_artifacts": [],
+        "blockers": [],
+    }
+    if _ei_pid_ra and _contract_paths(_ei_pid_ra)["evidence_inventory"].exists():
+        try:
+            _ei_prov_ra = _validate_evidence_provenance(state, phase="request-accept-packet")
+            _ei_integrity_ra = {
+                "status": _ei_prov_ra.get("status", "NOT_CHECKED"),
+                "protected_evidence_count": _ei_prov_ra.get("protected_evidence_count", 0),
+                "tracked_count": _ei_prov_ra.get("tracked_count", 0),
+                "pr_included_count": _ei_prov_ra.get("pr_included_count", 0),
+                "untracked_protected": _ei_prov_ra.get("untracked_protected", []),
+                "orphan_oracle_warnings": _ei_prov_ra.get("orphan_oracle_warnings", []),
+                "cleanup_only_artifacts": _ei_prov_ra.get("cleanup_only_artifacts", []),
+                "blockers": _ei_prov_ra.get("blockers", []),
+            }
+        except Exception:
+            pass
+    evidence_payload["evidence_integrity"] = _ei_integrity_ra
     content = _build_final_packet_content(evidence_payload)
     verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
 
