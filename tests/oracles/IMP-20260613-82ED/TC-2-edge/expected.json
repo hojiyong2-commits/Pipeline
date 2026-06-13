@@ -1,0 +1,6 @@
+{
+  "status": "BLOCKED",
+  "failure_code": "oracle_manifest_blocked",
+  "failure_category": "missing_evidence",
+  "gate": "oracle"
+}
