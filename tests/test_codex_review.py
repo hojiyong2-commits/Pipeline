@@ -22,6 +22,18 @@ from typing import Any, Dict, List, Optional, Tuple
 from unittest import mock
 import unittest
 
+import pytest
+
+# IMP-20260612-8104: Codex Review Gate 제거로 인해 이 테스트 모듈 전체가
+# 더 이상 유효하지 않습니다. pipeline.py에서 review 서브커맨드와
+# _check_codex_review_gate / _validate_codex_review_schema /
+# cmd_review_codex_record / cmd_review_codex_run /
+# _check_codex_pr_gate_for_technical 등이 모두 제거되었으므로,
+# 이 파일의 모든 TestCase를 모듈 단위로 skip 처리합니다.
+# (pytest 실행 경로에서 모듈 전체 skip — 13개 TestCase 클래스 모두 적용)
+_CODEX_REMOVED_SKIP_REASON = "IMP-20260612-8104: Codex Review Gate 제거됨"
+pytestmark = pytest.mark.skip(reason=_CODEX_REMOVED_SKIP_REASON)
+
 # ---- 프로젝트 루트 경로 주입 ----------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -56,6 +68,7 @@ def _make_valid_record(**overrides: Any) -> Dict[str, Any]:
 # 1. TestSchemaValidator — _validate_codex_review_schema 단위 테스트 (6개)
 # ===========================================================================
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestSchemaValidator(unittest.TestCase):
     """_validate_codex_review_schema 순수 함수 직접 검증."""
 
@@ -125,6 +138,7 @@ class TestSchemaValidator(unittest.TestCase):
 # 2. TestReviewCodexStages — cmd_review codex 분기 동작 (4개)
 # ===========================================================================
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestReviewCodexStages(unittest.TestCase):
     """cmd_review codex 분기: stage 기록, scope 계산, history 누적.
 
@@ -264,6 +278,7 @@ class TestReviewCodexStages(unittest.TestCase):
 # 3. TestCodexRecord — cmd_review_codex_record 검증 (5개)
 # ===========================================================================
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestCodexRecord(unittest.TestCase):
     """codex-record CLI: 4중 검증 동작 확인."""
 
@@ -477,6 +492,7 @@ class TestCodexRecord(unittest.TestCase):
 # 4. TestGateCheck — _check_codex_review_gate 게이트 동작 (5개)
 # ===========================================================================
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestGateCheck(unittest.TestCase):
     """_check_codex_review_gate 직접 호출 테스트."""
 
@@ -598,6 +614,7 @@ class TestGateCheck(unittest.TestCase):
 # 5. TestRCARegressionPR60 — tc05~tc08 PR #60 RCA 회귀 방지 테스트 (4개)
 # ===========================================================================
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestRCARegressionPR60(unittest.TestCase):
     """PR #60 RCA 회귀 방지: hard gate 우회 시도 패턴 차단 확인."""
 
@@ -707,6 +724,7 @@ class TestRCARegressionPR60(unittest.TestCase):
 # 6. TestSchemaEdgeCases — schema 경계 케이스 (4개)
 # ===========================================================================
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestSchemaEdgeCases(unittest.TestCase):
     """_validate_codex_review_schema 경계 케이스."""
 
@@ -744,6 +762,7 @@ class TestSchemaEdgeCases(unittest.TestCase):
 # 7. TestPR64Defects — PR #64 REJECT 6개 결함 회귀 테스트 (tc01~tc15)
 # ===========================================================================
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestPR64Defects(unittest.TestCase):
     """PR #64 REJECT 6개 결함(D1~D6) 수정 검증 및 tc01~tc15 회귀 테스트."""
 
@@ -1117,6 +1136,7 @@ class TestPR64Defects(unittest.TestCase):
 # 8. TestCodexRunCommand — review codex-run CLI 동작 (IMP-20260516-00DE MT-2)
 # ===========================================================================
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestCodexRunCommand(unittest.TestCase):
     """review codex-run 서브커맨드 동작 검증.
 
@@ -1603,6 +1623,7 @@ class TestCodexRunCommand(unittest.TestCase):
 # ===========================================================================
 
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestProviderOpenAIApi(unittest.TestCase):
     """openai-api provider 경로 검증 (15개).
 
@@ -1855,6 +1876,7 @@ class TestProviderOpenAIApi(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
 
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestProviderCodexCli(unittest.TestCase):
     """codex-cli provider 경로 검증 (6개).
 
@@ -2067,6 +2089,7 @@ class TestProviderCodexCli(unittest.TestCase):
             )
 
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestHardGateExtended(unittest.TestCase):
     """_check_codex_review_gate 확장 검증 (6개).
 
@@ -2190,6 +2213,7 @@ class TestHardGateExtended(unittest.TestCase):
                              "None 값은 false와 다르게 처리되어야 함")
 
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestAttemptBudget(unittest.TestCase):
     """attempt budget 초과 시 exit 1 검증 (3개)."""
 
@@ -2256,6 +2280,7 @@ class TestAttemptBudget(unittest.TestCase):
         self.assertIn("SETUP_REQUIRED", stderr_out)
 
 
+@unittest.skip("IMP-20260612-8104: Codex Review Gate 제거됨")
 class TestCodexDoctorExtended(unittest.TestCase):
     """cmd_codex doctor --json 출력에 14개 provider_diagnostics 필드 포함 검증 (1개)."""
 

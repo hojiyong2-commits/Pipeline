@@ -591,14 +591,13 @@ QA는 `requirements_tracking.enabled=true`인 새 파이프라인에서 `qa_repo
 ### QA 검증 의무
 
 1. `state.structured_acceptance_criteria`의 모든 `must_verify=true` AC에 대해 status=PASS 입증
-2. `coverage_checks` 7개 필드 모두 PASS 확인 (codex_review_result.json 기준)
-3. dry-run으로 실제 동작 AC를 대체하지 않음 (no_dry_run_substitution 위반 시 FAIL)
-4. 실제 diff의 구체값이 AC의 값과 일치하는지 확인 (diff_values_match_ac)
+2. dry-run으로 실제 동작 AC를 대체하지 않음 (no_dry_run_substitution 위반 시 FAIL)
+3. 실제 diff의 구체값이 AC의 값과 일치하는지 확인 (diff_values_match_ac)
 
 ### 회귀 케이스 차단
 
-- 회귀 1: 사용자 AC가 "월요일 09:00"인데 diff가 "SUN/02:00" → coverage_checks.diff_values_match_ac=false → QA 차단
-- 회귀 2: 사용자 AC가 "실제 파일 이동"인데 테스트가 dry-run만 검증 → coverage_checks.no_dry_run_substitution=false → QA 차단
+- 회귀 1: 사용자 AC가 "월요일 09:00"인데 diff가 "SUN/02:00" → diff_values_match_ac=false → QA 차단
+- 회귀 2: 사용자 AC가 "실제 파일 이동"인데 테스트가 dry-run만 검증 → no_dry_run_substitution=false → QA 차단
 
 ### PR Packet SSoT 규칙 (IMP-20260603-2E3D)
 

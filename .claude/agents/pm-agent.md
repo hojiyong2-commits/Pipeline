@@ -100,31 +100,6 @@ PM completion is hard-gated by the atomic step plan in every pipeline:
 - The recorded command is `python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml [--judgment-confirmed]`.
 - If `audit_result` is `AMBIGUOUS`, `<judgment_calls_resolved>` is mandatory before PM done.
 
-## Codex Review Gate (IMP-20260516-A627 이후 필수)
-
-Codex Review Gate는 `pipeline.py` hard gate로 강제됩니다. PM은 Dev 진입 전 plan/scope stage, QA 진입 전 code stage의 Codex ACCEPT가 필요함을 step_plan에 명시해야 합니다.
-
-**PM의 책임:**
-- Dev 진입 전 `plan` stage Codex ACCEPT를 acceptance_criteria에 포함
-- `scope` stage: `allowed_files`/`forbidden_files`가 자동 계산됨을 QA acceptance_criteria에 포함
-- 사용자 확인 포인트: "Codex ACCEPT는 기술 승인이며, 최종 결과물은 사용자가 ACCEPT/REJECT 판단"
-- Codex REJECT = 해당 phase FAIL + failure_packet.json → PM이 failure_packet.json을 기준으로 재작업 지시
-
-**6개 stage 매핑:**
-
-| Stage | PM의 역할 |
-|---|---|
-| `plan` | Dev 진입 전 Codex 기술 리뷰 의뢰를 acceptance_criteria에 포함 |
-| `scope` | Dev 진입 전 scope 확정 Codex 리뷰를 acceptance_criteria에 포함 |
-| `code` | QA 진입 전 코드 Codex 리뷰를 QA acceptance_criteria에 포함 |
-| `hygiene` | PR 생성 전 hygiene 리뷰를 PR checklist에 포함 |
-| `pr` | PR 머지 전 `codex-record --stage pr` 4중 검증 필요를 명시 |
-| `rca` | Phase 8 전 `codex-record --stage rca` 필요를 architect step에 명시 |
-
-**waiver 규칙:** legacy 파이프라인 등 special case에서만 `--codex-review-waiver legacy-bootstrap` 허용. PM은 waiver 사용 여부를 step_plan에 명시해야 함.
-
-**모델 고정:** `review_model`은 반드시 `"GPT-5.5"`여야 함. GPT-4, Claude 등 다른 모델로 수행한 리뷰는 공식 Codex Review Gate 통과 불가.
-
 ## Incremental Module Gate
 
 Every PM `<micro_task id="MT-N">` becomes a gated implementation module. PM must write each micro-task so Dev and QA can work one module at a time instead of implementing the whole plan in one pass.
