@@ -1,7 +1,6 @@
 # tests/test_agent_registry_4a22.py
 """IMP-20260613-4A22: Agent Registry SSoT drift 감지 테스트."""
 import re
-import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -58,7 +57,7 @@ class TestAC2ActiveAgentMdFilesExist:
             full = PROJECT_ROOT / path
             if not full.exists():
                 missing.append(f"{name}: {path}")
-        assert not missing, f"AGENTS.md에 등록됐으나 파일 없음:\n" + "\n".join(missing)
+        assert not missing, "AGENTS.md에 등록됐으나 파일 없음:\n" + "\n".join(missing)
 
 
 class TestAC3AgentsMdVsPhaseAgentIds:
