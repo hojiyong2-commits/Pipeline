@@ -14286,19 +14286,22 @@ def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str
 def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[str]:
     """AC 충족표에 PENDING 항목이 있으면 차단 메시지 반환. 정상이면 None.
 
-    IMP-20260606-D9F4: legacy 파이프라인(requirements_tracking.enabled=false)은
-    검사 생략. AC table이 비어있어도 검사 생략.
-    BUG-20260609-2044 MT-1/MT-2: verification 없음(검증 없음)과 impl_evidence 없음(미완료)을
-    별도 메시지로 구분하여 BLOCKED 처리.
-    IMP-20260610-8C3B MT-2: state["ac_completeness"] 캐시가 있으면 캐시를 우선 사용하여
-    _build_ac_fulfillment_table 재실행 비용을 제거한다.
-    IMP-20260610-8C3B AC-4 (3차 REJECT 수정): module_gates.integration.status == "PASS"를
-    ac_completeness 캐시 확인보다 먼저 검증하여 stale 캐시 우회를 방지한다.
+    IMP-20260613-4A22 Round 2: requirements_tracking.enabled 또는 stale ac_completeness
+    캐시에 의존하지 않고, 항상 _build_ac_fulfillment_table을 live로 재실행한다.
+    structured_acceptance_criteria가 없으면(None 반환) 검사 생략(legacy/무AC 파이프라인).
+    structured AC가 1개라도 있으면 모두 PASS여야 nonce를 발급한다.
     """
-    if not state.get("requirements_tracking", {}).get("enabled"):
-        return None  # legacy 파이프라인은 검사 생략
+    # Live rebuild — do not trust stale ac_completeness cache or enabled flag
+    ac_table_live = _build_ac_fulfillment_table(state)
+    if ac_table_live is None:
+        # structured_acceptance_criteria 없음 — legacy 또는 무AC 파이프라인은 검사 생략
+        return None
 
-    # AC-4: module_gates.integration.status == "PASS" 확인 (캐시보다 먼저)
+    pending_live = [e["ac_id"] for e in ac_table_live if e.get("result") != "PASS"]
+    if not pending_live:
+        return None  # 모든 AC PASS
+
+    # module integration gate 상태도 함께 안내 (UX)
     integration_status = (
         state.get("module_gates", {})
         .get("integration", {})
@@ -14311,23 +14314,10 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
             "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
         )
 
-    # AC-4: ac_completeness 캐시 확인 (integration PASS 후에만 의미 있음)
-    ac_completeness = state.get("ac_completeness")
-    if not isinstance(ac_completeness, dict):
-        return (
-            "[PIPELINE ERROR] ac_completeness 캐시가 없습니다.\n"
-            "  module integrate PASS가 완료되어야 request-accept를 실행할 수 있습니다.\n"
-            "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
-        )
-
-    pending_ids = ac_completeness.get("pending_ids") or []
-    if not pending_ids:
-        return None  # 캐시에 PENDING 없음 — 검사 통과
-
-    # 캐시에 PENDING 항목이 있으면 차단
-    detail = f"  - 미완료 항목 (캐시 기준): {', '.join(str(p) for p in pending_ids)}"
+    total = len(ac_table_live)
+    detail = f"  - 미완료 항목 ({len(pending_live)}/{total}): {', '.join(str(p) for p in pending_live)}"
     return (
-        f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다.\n"
+        f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다 (live 검사).\n"
         f"{detail}\n"
         "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
     )

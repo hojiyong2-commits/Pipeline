@@ -83,6 +83,40 @@ class TestAC3AgentsMdVsPhaseAgentIds:
         pl = _load_pipeline_module()
         assert pl.PHASE_AGENT_IDS.get("build") == "build-agent"
 
+    def test_agents_md_active_ids_in_phase_agent_ids_or_md_files(self):
+        """AGENTS.md active 표의 모든 agent md_path가 PHASE_AGENT_IDS 값이나 .claude/agents/ 파일로 추적된다."""
+        active = _active_agents_from_agents_md()
+        pl = _load_pipeline_module()
+        registered_ids = set(pl.PHASE_AGENT_IDS.values())
+        md_files = {p.stem for p in AGENTS_DIR.glob("*.md")}
+        missing = []
+        for name, path in active.items():
+            stem = Path(path).stem  # e.g. "pm-planner-agent"
+            if stem not in registered_ids and stem not in md_files:
+                missing.append(f"{name} → {path}")
+        assert not missing, (
+            "AGENTS.md active agent가 PHASE_AGENT_IDS에도 .claude/agents/에도 없음:\n"
+            + "\n".join(missing)
+        )
+
+    def test_phase_agent_ids_active_in_agents_md(self):
+        """PHASE_AGENT_IDS의 active execution entry가 AGENTS.md active 표에도 등록되어 있다."""
+        pl = _load_pipeline_module()
+        active = _active_agents_from_agents_md()
+        active_stems = {Path(p).stem for p in active.values()}
+        # active execution phases: pm-agent(legacy "pm" entry)는 제외
+        active_phases = {"pm_planner", "pipeline_manager", "dev", "qa", "build"}
+        missing = []
+        for phase, agent_id in pl.PHASE_AGENT_IDS.items():
+            if phase not in active_phases:
+                continue
+            if agent_id not in active_stems:
+                missing.append(f"phase={phase}: {agent_id}")
+        assert not missing, (
+            "PHASE_AGENT_IDS active agent가 AGENTS.md active 표에 없음:\n"
+            + "\n".join(missing)
+        )
+
 
 class TestAC4ReceiptIdConsistency:
     """AC-4: phase receipt expected id가 registry와 불일치하면 실패."""
@@ -162,8 +196,12 @@ class TestAC8AdvisoryNotHardGate:
         if os.environ.get("ENABLE_GPT_ADVISORY_REQUIRED") == "1":
             import pytest
             pytest.skip("ENABLE_GPT_ADVISORY_REQUIRED=1 환경에서는 스킵")
-        # advisory는 optional이어야 함
-        assert hasattr(pl, "_advisory_status") or True  # 함수 존재 여부만 확인 (선택적)
+        # ENABLE_GPT_ADVISORY_REQUIRED 미설정 시 _openai_advisory_required()가 False여야 함
+        assert not pl._openai_advisory_required(), (
+            "_openai_advisory_required()가 True 반환 — "
+            "ENABLE_GPT_ADVISORY_REQUIRED 환경 변수가 설정되어 있지 않은데 True를 반환하면 "
+            "advisory가 hard gate로 동작하므로 AC-8 위반"
+        )
 
 
 class TestAC9EvidenceIntegrityNoRegression:
