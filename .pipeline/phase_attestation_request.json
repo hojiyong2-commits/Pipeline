@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-12T10:12:48Z",
+  "generated_at": "2026-06-13T01:40:00Z",
   "pipeline_id": "IMP-20260612-CE06",
-  "phase": "build",
-  "phase_status": "DONE",
+  "phase": "qa",
+  "phase_status": "PASS",
   "commit_hint": "19e29886fd5c513817bf794fb0e6f084496d3988",
   "state": {
-    "current_phase": "harness",
+    "current_phase": "sec",
     "phase_completed_at": "2026-06-12T10:12:36Z",
-    "report_file": null,
+    "report_file": "qa_report.xml",
     "evidence": "N/A"
   },
   "agent_run": {
