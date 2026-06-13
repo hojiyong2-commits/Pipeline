@@ -58,6 +58,7 @@
 """
 
 import argparse
+import fnmatch
 import json
 import logging
 import sys
@@ -3261,6 +3262,7 @@ def _contract_paths(pipeline_id: str) -> Dict[str, Path]:
         "result": root / "acceptance_result.json",
         "oracle_manifest": root / "oracle_manifest.json",
         "contract_audit": root / "contract_audit.json",
+        "evidence_inventory": root / "evidence_inventory.json",
         "gates_root": root / "gates",
         "technical_result": root / "gates" / "technical_result.json",
         "oracle_result": root / "gates" / "oracle_result.json",
@@ -3272,6 +3274,332 @@ def _contract_paths(pipeline_id: str) -> Dict[str, Path]:
         "advisory_root": root / "advisory",
         "advisory_resolutions": root / "advisory" / "resolutions.json",
     }
+
+
+# IMP-20260613-82ED MT-1: Evidence Inventory / Provenance Gate 헬퍼
+# [Purpose]: oracle 증거 파일(input/expected)을 evidence_inventory.json(SSoT, list 형식)에
+#            등록하고, 등록된 protected 증거가 git tracked + 현재 PR에 포함되도록 강제하여
+#            로컬에만 존재하는 untracked 증거로 외부 게이트를 통과시키는 우회 경로를 차단한다.
+# [Assumptions]: BASE_DIR가 git 작업 트리 루트이며, gh/git CLI가 설치/인증되어 있다.
+#                inventory는 pipeline_contracts/<pid>/evidence_inventory.json 에 list로 누적된다.
+# [Vulnerability & Risks]: gh/git CLI 부재 시 fail-closed로 BLOCKED 처리하므로 오탐 가능.
+#                inventory JSON이 손상되면 BLOCKED로 처리하여 게이트 통과를 막는다(의도적).
+# [Improvement]: PR diff를 한 번만 조회하여 캐시하면 다수 evidence 검증 시 gh 호출을 줄인다.
+
+
+def _is_cleanup_only_artifact(file_name: str) -> bool:
+    """파일명이 HYGIENE_ARCHIVE_PATTERNS(cleanup-only) 글로브에 매칭되는지 확인한다.
+
+    Args:
+        file_name: 검사할 파일 이름(경로 제외). None 금지.
+    Returns:
+        cleanup-only 패턴에 매칭되면 True.
+    Raises:
+        TypeError: file_name이 None이거나 str이 아닌 경우.
+    """
+    if file_name is None:
+        raise TypeError("file_name must not be None")
+    if not isinstance(file_name, str):
+        raise TypeError(f"file_name must be str, got {type(file_name).__name__}")
+    for pattern in HYGIENE_ARCHIVE_PATTERNS:
+        if fnmatch.fnmatch(file_name, pattern):
+            return True
+    return False
+
+
+def _register_evidence_to_inventory(
+    pipeline_id: str,
+    evidence_path: "Path",
+    kind: str,
+    source_command: str = "contract add-oracle",
+    required_for_acceptance: bool = True,
+    protection: str = "protected",
+) -> None:
+    """증거 파일을 pipeline별 evidence inventory(list)에 등록한다(동일 경로는 덮어쓰기).
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID.
+        evidence_path: 등록할 증거 파일 경로(Path).
+        kind: 증거 종류 문자열(예: "oracle_input", "oracle_expected").
+        source_command: 증거를 등록한 명령(추적용).
+        required_for_acceptance: 승인 게이트에 필수인지 여부.
+        protection: 보호 등급("protected" 등).
+    Returns:
+        없음. evidence_inventory.json(list) 파일을 갱신한다.
+    Raises:
+        TypeError: pipeline_id/evidence_path/kind가 None이거나 타입이 잘못된 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if evidence_path is None:
+        raise TypeError("evidence_path must not be None")
+    if not isinstance(evidence_path, Path):
+        raise TypeError(f"evidence_path must be Path, got {type(evidence_path).__name__}")
+    if kind is None:
+        raise TypeError("kind must not be None")
+    if not isinstance(kind, str):
+        raise TypeError(f"kind must be str, got {type(kind).__name__}")
+
+    inventory_path = _contract_paths(pipeline_id)["evidence_inventory"]
+    # inventory는 list 형식 — 파일 없거나 손상 시 빈 리스트로 초기화
+    inventory: List[Dict[str, Any]] = []
+    if inventory_path.exists():
+        try:
+            loaded = json.loads(inventory_path.read_text(encoding="utf-8-sig"))
+            if isinstance(loaded, list):
+                inventory = [e for e in loaded if isinstance(e, dict)]
+        except (OSError, json.JSONDecodeError):
+            inventory = []
+
+    key = str(evidence_path)
+    # sha256/size 계산 (파일이 존재할 때만)
+    sha256_val = ""
+    size_val = 0
+    try:
+        if evidence_path.exists():
+            sha256_val = _sha256_file(evidence_path)
+            size_val = evidence_path.stat().st_size
+    except OSError:
+        sha256_val = ""
+        size_val = 0
+
+    entry = {
+        "pipeline_id": pipeline_id,
+        "path": key,
+        "kind": kind,
+        "sha256": sha256_val,
+        "size": size_val,
+        "source_command": source_command,
+        "registered_at": _now(),
+        "required_for_acceptance": bool(required_for_acceptance),
+        "protection": protection,
+    }
+    # 동일 경로 항목 제거 후 추가(dedupe)
+    inventory = [e for e in inventory if str(e.get("path", "")) != key]
+    inventory.append(entry)
+    _write_json_value(inventory_path, inventory)
+
+
+def _validate_evidence_provenance(
+    state: Dict[str, Any],
+    phase: str = "oracle",
+) -> Dict[str, Any]:
+    """등록된 oracle 증거가 git tracked + 현재 PR에 포함되는지 검증한다(fail-closed).
+
+    Args:
+        state: pipeline_id를 포함한 pipeline state dict(최소 {"pipeline_id": ...}).
+        phase: 호출 단계 문자열("oracle" | "request-accept" 등, 진단용).
+    Returns:
+        Dict: status/phase/blockers/protected_evidence_count/tracked_count/
+              pr_included_count/untracked_protected/orphan_oracle_warnings/
+              cleanup_only_artifacts 필드를 포함.
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+
+    result: Dict[str, Any] = {
+        "status": "PASS",
+        "phase": phase,
+        "blockers": [],
+        "protected_evidence_count": 0,
+        "tracked_count": 0,
+        "pr_included_count": 0,
+        "untracked_protected": [],
+        "orphan_oracle_warnings": [],
+        "cleanup_only_artifacts": [],
+    }
+
+    def _add_blocker(failure_code: str, message: str, item: str = "") -> None:
+        result["status"] = "BLOCKED"
+        result["blockers"].append({
+            "failure_code": failure_code,
+            "message": message,
+            "path": item,
+        })
+
+    if not pipeline_id:
+        _add_blocker(
+            "evidence_inventory_missing",
+            "state에 pipeline_id가 없어 evidence inventory를 확인할 수 없습니다.",
+        )
+        return result
+
+    inventory_path = _contract_paths(pipeline_id)["evidence_inventory"]
+
+    # AC-2: inventory 파일 없음 -> BLOCKED(evidence_inventory_missing)
+    if not inventory_path.exists():
+        _add_blocker(
+            "evidence_inventory_missing",
+            f"evidence_inventory.json이 존재하지 않습니다({pipeline_id}). "
+            "`python pipeline.py contract add-oracle ...` 로 oracle 증거를 먼저 등록하세요.",
+        )
+        return result
+
+    # AC-10: inventory 파싱 실패 -> BLOCKED(evidence_inventory_parse_error)
+    try:
+        loaded = json.loads(inventory_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        _add_blocker(
+            "evidence_inventory_parse_error",
+            f"evidence_inventory.json 파싱에 실패했습니다: {exc}",
+        )
+        return result
+    if not isinstance(loaded, list):
+        _add_blocker(
+            "evidence_inventory_parse_error",
+            "evidence_inventory.json 루트가 list가 아닙니다.",
+        )
+        return result
+
+    # AC-6: 현재 pipeline_id 항목만 검사 (다른 pid는 건너뜀)
+    entries = [
+        e for e in loaded
+        if isinstance(e, dict) and str(e.get("pipeline_id", "")) == pipeline_id
+    ]
+
+    # PR changed files 1회 조회 (fail-closed) — protected 비-cleanup 증거가 있을 때만 필요
+    pr_changed_paths: set = set()
+    pr_lookup_failed_code = ""
+    pr_lookup_failed_msg = ""
+    need_pr = any(
+        isinstance(e, dict)
+        and str(e.get("protection", "")) == "protected"
+        and not _is_cleanup_only_artifact(Path(str(e.get("path", ""))).name)
+        for e in entries
+    )
+    if need_pr:
+        try:
+            pr_proc = subprocess.run(
+                ["gh", "pr", "view", "--json", "files"],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+            )
+        except (FileNotFoundError, OSError):
+            pr_lookup_failed_code = "gh_cli_failed"
+            pr_lookup_failed_msg = (
+                "GitHub CLI(gh)를 실행할 수 없어 PR 변경 파일을 확인할 수 없습니다(fail-closed)."
+            )
+        else:
+            if pr_proc.returncode != 0:
+                pr_lookup_failed_code = "gh_cli_failed"
+                pr_lookup_failed_msg = (
+                    "gh pr view 명령이 실패하여 PR 변경 파일을 확인할 수 없습니다(fail-closed): "
+                    + (pr_proc.stderr or "").strip()[:200]
+                )
+            else:
+                try:
+                    pr_data = json.loads((pr_proc.stdout or "").strip() or "{}")
+                except (json.JSONDecodeError, ValueError):
+                    pr_lookup_failed_code = "gh_cli_failed"
+                    pr_lookup_failed_msg = (
+                        "gh pr view 가 반환한 PR 메타데이터(JSON)를 해석하지 못했습니다(fail-closed)."
+                    )
+                else:
+                    pr_files_raw = pr_data.get("files") if isinstance(pr_data, dict) else None
+                    if isinstance(pr_files_raw, list):
+                        for fentry in pr_files_raw:
+                            if isinstance(fentry, dict) and fentry.get("path"):
+                                pr_changed_paths.add(
+                                    str(fentry["path"]).replace("\\", "/").lstrip("./")
+                                )
+
+    for entry in entries:
+        path_str = str(entry.get("path", ""))
+        if not path_str:
+            continue
+        path_obj = Path(path_str)
+        name = path_obj.name
+        protection = str(entry.get("protection", ""))
+
+        # AC-8: cleanup-only 파일은 차단하지 않고 분류만 한다.
+        if _is_cleanup_only_artifact(name):
+            result["cleanup_only_artifacts"].append(path_str)
+            continue
+
+        # protected 증거만 tracked/PR 검증 대상
+        if protection != "protected":
+            continue
+        result["protected_evidence_count"] += 1
+
+        # AC-3/AC-7: git ls-files 로 tracked 여부 확인 (fail-closed)
+        try:
+            ls_proc = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", path_str],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+            )
+        except (FileNotFoundError, OSError):
+            _add_blocker(
+                "git_execution_failed",
+                f"git CLI를 실행할 수 없어 {path_str} 의 tracked 여부를 확인할 수 없습니다(fail-closed).",
+                path_str,
+            )
+            result["untracked_protected"].append(path_str)
+            continue
+        if ls_proc.returncode != 0:
+            # untracked protected 증거 -> BLOCKED
+            _add_blocker(
+                "protected_evidence_untracked",
+                f"protected oracle 증거가 git에 추적되지 않습니다(untracked): {path_str}. "
+                "해당 파일을 git add/commit 하여 추적 대상으로 만든 뒤 다시 실행하세요.",
+                path_str,
+            )
+            result["untracked_protected"].append(path_str)
+            continue
+
+        result["tracked_count"] += 1
+
+        # PR 포함 여부 확인 (PR 조회 실패 시 fail-closed)
+        if pr_lookup_failed_code:
+            _add_blocker(pr_lookup_failed_code, pr_lookup_failed_msg, path_str)
+            continue
+
+        norm_candidates = {
+            path_str.replace("\\", "/").lstrip("./"),
+            _display_path(path_obj).replace("\\", "/").lstrip("./"),
+        }
+        try:
+            rel_to_base = path_obj.resolve().relative_to(BASE_DIR.resolve()).as_posix()
+            norm_candidates.add(rel_to_base)
+        except (ValueError, OSError):
+            pass
+
+        if norm_candidates & pr_changed_paths:
+            result["pr_included_count"] += 1
+            continue
+
+        # PR 미포함 -> main 이력 확인 (이전부터 존재하던 파일은 허용)
+        try:
+            log_proc = subprocess.run(
+                ["git", "log", "--oneline", "-1", "--", path_str],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+            )
+        except (FileNotFoundError, OSError):
+            _add_blocker(
+                "git_execution_failed",
+                f"git log 를 실행할 수 없어 {path_str} 의 이력을 확인할 수 없습니다(fail-closed).",
+                path_str,
+            )
+            continue
+        if log_proc.returncode == 0 and bool((log_proc.stdout or "").strip()):
+            result["pr_included_count"] += 1  # 기존 이력 존재 -> 허용
+            continue
+
+        # AC-5: PR에도 없고 이력도 없음
+        _add_blocker(
+            "oracle_evidence_not_in_pr",
+            f"oracle 증거 파일이 현재 PR 변경 목록에도 없고 기존 이력도 없습니다: {path_str}. "
+            "해당 oracle 파일을 PR에 포함시킨 뒤 다시 실행하세요.",
+            path_str,
+        )
+
+    return result
 
 
 def _contract_init_command(pid: str) -> str:
@@ -3312,6 +3640,36 @@ def _load_contract_bundle(
 
 
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            delete=False,
+            suffix=".tmp",
+        ) as tmp:
+            payload = (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+            tmp.write(payload)
+            tmp_path = Path(tmp.name)
+        os.replace(str(tmp_path), str(path))
+    except Exception:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _write_json_value(path: Path, data: Any) -> None:
+    """list/dict 등 임의 JSON 직렬화 가능 값을 원자적으로 기록한다(_write_json의 list 허용 변형).
+
+    Args:
+        path: 저장 경로.
+        data: JSON 직렬화 가능한 값(list/dict 등).
+    Returns:
+        없음.
+    Raises:
+        OSError: 파일 쓰기 실패 시.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path: Optional[Path] = None
     try:
@@ -8356,6 +8714,9 @@ def cmd_contract(args: argparse.Namespace) -> None:
         })
         manifest["updated_at"] = _now()
         _write_json(paths["oracle_manifest"], manifest)
+        # IMP-20260613-82ED MT-1 AC-1: oracle 등록 후 evidence inventory에 입력/기댓값 파일 등록
+        _register_evidence_to_inventory(pid, input_path, "oracle_input")
+        _register_evidence_to_inventory(pid, expected_path, "oracle_expected")
         print(GREEN(f"\n[ORACLE ADDED] {name}"))
         print(f"  input:    {_display_path(input_path)}")
         print(f"  expected: {_display_path(expected_path)}")
@@ -10335,6 +10696,32 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         )
     blocked = len(blocked_reasons) > 0
 
+    # IMP-20260613-82ED MT-1 AC-9: evidence_integrity 섹션
+    # _validate_evidence_provenance 결과 shape를 그대로 노출(없으면 안전한 기본값).
+    _ei_raw = evidence.get("evidence_integrity")
+    if isinstance(_ei_raw, dict):
+        evidence_integrity_obj: Dict[str, Any] = {
+            "status": str(_ei_raw.get("status", "NOT_CHECKED") or "NOT_CHECKED"),
+            "protected_evidence_count": int(_ei_raw.get("protected_evidence_count", 0) or 0),
+            "tracked_count": int(_ei_raw.get("tracked_count", 0) or 0),
+            "pr_included_count": int(_ei_raw.get("pr_included_count", 0) or 0),
+            "untracked_protected": list(_ei_raw.get("untracked_protected", []) or []),
+            "orphan_oracle_warnings": list(_ei_raw.get("orphan_oracle_warnings", []) or []),
+            "cleanup_only_artifacts": list(_ei_raw.get("cleanup_only_artifacts", []) or []),
+            "blockers": list(_ei_raw.get("blockers", []) or []),
+        }
+    else:
+        evidence_integrity_obj = {
+            "status": "NOT_CHECKED",
+            "protected_evidence_count": 0,
+            "tracked_count": 0,
+            "pr_included_count": 0,
+            "untracked_protected": [],
+            "orphan_oracle_warnings": [],
+            "cleanup_only_artifacts": [],
+            "blockers": [],
+        }
+
     return {
         # 15개 필수 필드 (IMP-20260607-E656 MT-1)
         "schema_version": 1,
@@ -10352,6 +10739,8 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         "warnings": list(evidence.get("warnings") or []),
         "acceptance": acceptance_obj,
         "artifacts": artifacts_obj,
+        # IMP-20260613-82ED MT-1 AC-9: evidence 출처 무결성 섹션
+        "evidence_integrity": evidence_integrity_obj,
         # BLOCKED 검증 결과
         "blocked": blocked,
         "blocked_reasons": blocked_reasons,
@@ -10541,6 +10930,37 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
     evidence = _collect_packet_evidence(
         state, acceptance_request=acceptance_request, base_ref=base_ref
     )
+
+    # IMP-20260613-82ED MT-1 AC-9: evidence_integrity 섹션 채우기 (provenance 결과 그대로)
+    _ei_pid = str(state.get("pipeline_id", "") or "")
+    _ei_integrity: Dict[str, Any] = {
+        "status": "NOT_CHECKED",
+        "protected_evidence_count": 0,
+        "tracked_count": 0,
+        "pr_included_count": 0,
+        "untracked_protected": [],
+        "orphan_oracle_warnings": [],
+        "cleanup_only_artifacts": [],
+        "blockers": [],
+    }
+    if _ei_pid and _contract_paths(_ei_pid)["evidence_inventory"].exists():
+        try:
+            _ei_prov = _validate_evidence_provenance(state, phase="report-final-packet")
+            # report final-packet은 진단/표시용이므로 결과를 그대로 노출한다(packet 생성은 막지 않음).
+            _ei_integrity = {
+                "status": _ei_prov.get("status", "NOT_CHECKED"),
+                "protected_evidence_count": _ei_prov.get("protected_evidence_count", 0),
+                "tracked_count": _ei_prov.get("tracked_count", 0),
+                "pr_included_count": _ei_prov.get("pr_included_count", 0),
+                "untracked_protected": _ei_prov.get("untracked_protected", []),
+                "orphan_oracle_warnings": _ei_prov.get("orphan_oracle_warnings", []),
+                "cleanup_only_artifacts": _ei_prov.get("cleanup_only_artifacts", []),
+                "blockers": _ei_prov.get("blockers", []),
+            }
+        except Exception:
+            pass
+    evidence["evidence_integrity"] = _ei_integrity
+
     content = _build_final_packet_content(evidence)
     out_path = _write_human_acceptance_packet(content)
 
@@ -13799,6 +14219,22 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     if ac_blocker:
         _die(ac_blocker)
 
+    # IMP-20260613-82ED MT-1 AC-4/AC-3/AC-5: oracle 증거 출처 검증 (inventory 존재 시)
+    _ei_paths = _contract_paths(pipeline_id)
+    if _ei_paths["evidence_inventory"].exists():
+        _prov_result = _validate_evidence_provenance(state, phase="request-accept")
+        for _w in _prov_result.get("orphan_oracle_warnings", []):
+            print(YELLOW(f"  WARN: {_w}"))
+        if _prov_result.get("status") == "BLOCKED":
+            _blockers = _prov_result.get("blockers", [])
+            _code = str(_blockers[0].get("failure_code")) if _blockers else "evidence_provenance_blocked"
+            _msg = "; ".join(str(b.get("message", "")) for b in _blockers) or "evidence provenance BLOCKED"
+            _die(
+                f"[BLOCKED] failure_code={_code}\n"
+                f"  {_msg}\n"
+                "  oracle 증거 파일을 git tracked + 현재 PR에 포함시킨 뒤 다시 실행하세요."
+            )
+
     # IMP-20260611-A716 MT-2: _validate_pr_body_readiness SSoT — 섹션 + 임시 문구 통합 검사
     # Bug 1 수정(IMP-20260611-A716): PR body fetch 실패(None) 시 validator skip 금지 — BLOCKED 반환
     pr_body = _get_pr_body_text()
@@ -14779,6 +15215,60 @@ def cmd_gates(args: argparse.Namespace) -> None:
             _save(state)
             print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
             _die(f"[ORACLE QUALITY FAIL] {failures_str}")
+
+        # IMP-20260613-82ED MT-1 AC-2/AC-3/AC-5/AC-10: evidence provenance 검증.
+        # inventory 파일이 존재할 때만 enforce하여 legacy 파이프라인(AC-11) 회귀를 방지한다.
+        # (provenance가 사용하는 inventory-missing/parse-error 판정은 inventory 파일 존재 시 의미가 있다.)
+        inventory_path = paths["evidence_inventory"]
+        if inventory_path.exists():
+            prov_result = _validate_evidence_provenance(state, phase="oracle")
+            for _w in prov_result.get("orphan_oracle_warnings", []):
+                print(YELLOW(f"  WARN: {_w}"))
+            if prov_result.get("status") == "BLOCKED":
+                _blockers = prov_result.get("blockers", [])
+                _msg = "; ".join(str(b.get("message", "")) for b in _blockers) or "evidence provenance BLOCKED"
+                _codes = ", ".join(str(b.get("failure_code", "")) for b in _blockers)
+                report = {
+                    "schema_version": 1,
+                    "generated_at": _now(),
+                    "pipeline_id": pid,
+                    "status": "BLOCKED",
+                    "blockers": _blockers,
+                    "untracked_protected": prov_result.get("untracked_protected", []),
+                }
+                _write_json(paths["oracle_result"], report)
+                _set_external_gate(
+                    state,
+                    "oracle",
+                    "FAIL",
+                    evidence="oracle_evidence_provenance_blocked",
+                    report_file=str(paths["oracle_result"]),
+                )
+                packet = _record_failure_packet(
+                    state,
+                    "oracle",
+                    report,
+                    command=[sys.executable, "pipeline.py", "gates", "oracle"],
+                    note="Oracle evidence provenance BLOCKED: oracle 증거 파일이 untracked이거나 PR에 포함되지 않았습니다.",
+                    status="BLOCKED",
+                    phase="dev",
+                    failure_code=(str(_blockers[0].get("failure_code")) if _blockers else "evidence_provenance_blocked"),
+                    failure_category="missing_evidence",
+                    summary_ko="오라클 증거 출처 검증 BLOCKED — 추적되지 않거나 PR에 없는 증거 파일.",
+                    expected="oracle 입력/기대 파일이 git tracked + 현재 PR 변경 목록에 포함",
+                    actual=_msg,
+                    exit_code=1,
+                    owner="Dev",
+                    return_phase="dev",
+                    required_actions=[
+                        "oracle 입력/기대 파일을 git add/commit 하여 추적 대상으로 만드세요.",
+                        "해당 oracle 파일을 현재 PR에 포함시킨 뒤 oracle gate를 다시 실행하세요.",
+                    ],
+                )
+                _log_event(state, f"oracle gate BLOCKED (provenance: {_codes})")
+                _save(state)
+                print(YELLOW(f"  failure packet: {packet['gate']} attempt {packet['attempt']}"))
+                _die(f"[ORACLE EVIDENCE PROVENANCE BLOCKED] {_msg}")
 
         from core.acceptance import run_acceptance
 
