@@ -1,0 +1,21 @@
+﻿<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>IMP-20260613-4A22</pipeline_id>
+  <status>ready</status>
+  <phase>pipeline_manager</phase>
+  <planner_run_id>pm_planner-30f2aec3ebf7e29d</planner_run_id>
+  <manager_run_id>pipeline_manager-1e6e7ae995e01621</manager_run_id>
+  <step_plan_sha256>33032943f0f53db7f92b2883b86cea7acd269893bc5ea0610a3940367597d8c7</step_plan_sha256>
+  <step_plan_ref>step_plan.xml</step_plan_ref>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <execution_profile>STANDARD</execution_profile>
+  <build_target>N/A (meta-task)</build_target>
+  <micro_tasks>
+    <mt id="MT-1">pm-planner-agent.md 신규 생성</mt>
+    <mt id="MT-2">Agent registry drift 감지 테스트 추가</mt>
+    <mt id="MT-3">AGENTS.md 정합성 + audit report 작성</mt>
+  </micro_tasks>
+  <handoff_ready>true</handoff_ready>
+</manager_handoff>
