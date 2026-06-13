@@ -311,7 +311,7 @@ class TestAC2bOracleManifestWithoutInventoryIsBlocked:
         이 테스트는 oracle 항목이 있으면 inventory 존재 여부와 관계없이 provenance가
         evidence_inventory_missing으로 BLOCKED됨을 검증한다(fail-closed 강화).
         """
-        pid = f"IMP-20260613-82ED-TESTAC2B"
+        pid = "IMP-20260613-82ED-TESTAC2B"
         contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
         inventory_path = contracts_dir / "evidence_inventory.json"
         oracle_root = PROJECT_ROOT / "tests" / "oracles" / pid
