@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260612-8104</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>AGENTS.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>CLAUDE.md</file>
+    <file>tests/test_codex_removal_8104.py</file>
+    <file>tests/test_codex_review.py</file>
+    <file>tests/test_codex_record_base_9e38.py</file>
+    <file>tests/test_verification_json_codex_evidence.py</file>
+    <file>tests/test_clarification_gate.py</file>
+    <file>tests/e2e/test_real_cli_paths.py</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>AGENTS.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>CLAUDE.md</file>
+      <file>tests/test_codex_removal_8104.py</file>
+      <file>tests/test_codex_review.py</file>
+      <file>tests/test_codex_record_base_9e38.py</file>
+      <file>tests/test_verification_json_codex_evidence.py</file>
+      <file>tests/test_clarification_gate.py</file>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>_check_codex_review_gate,cmd_review,cmd_review_codex_run,cmd_review_codex_record,_validate_codex_review_schema,_validate_codex_coverage_checks,_get_codex_status_for_ac,_save_codex_attempt_log,_codex_run_via_openai_api,_codex_run_via_codex_cli,_check_codex_pr_gate_for_technical,cmd_check,_external_gate_blockers,cmd_gates,_build_final_packet_content,_build_ac_fulfillment_table,cmd_codex,_collect_git_diff_meta,_compute_scope_files,_check_deep_review_required,_redact_secrets</target_function>
+    <affected_files>pipeline.py</affected_files>
+    <call_sites_verified>true</call_sites_verified>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py,AGENTS.md,.claude/agents/pm-agent.md,.claude/agents/qa-agent.md,CLAUDE.md,tests/test_codex_removal_8104.py,tests/test_codex_review.py,tests/test_codex_record_base_9e38.py,tests/test_verification_json_codex_evidence.py,tests/test_clarification_gate.py,tests/e2e/test_real_cli_paths.py</git_diff_files>
+    <manifest_files>pipeline.py,AGENTS.md,.claude/agents/pm-agent.md,.claude/agents/qa-agent.md,CLAUDE.md,tests/test_codex_removal_8104.py,tests/test_codex_review.py,tests/test_codex_record_base_9e38.py,tests/test_verification_json_codex_evidence.py,tests/test_clarification_gate.py,tests/e2e/test_real_cli_paths.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <mt_summary>
+    <mt id="MT-1">pipeline.py Codex Review 코드 완전 제거 — 11개 함수+4개 helper 삭제, 12개 상수 삭제, CLI 서브커맨드 제거</mt>
+    <mt id="MT-2">문서 trust chain 정리 (AGENTS.md, pm-agent.md, qa-agent.md, CLAUDE.md) — Codex Review 섹션 제거</mt>
+    <mt id="MT-3">회귀 테스트 작성 및 기존 테스트 수정 — test_codex_removal_8104.py 신규, test_clarification_gate.py + test_real_cli_paths.py waiver 옵션 제거</mt>
+  </mt_summary>
+</handover>
