@@ -196,3 +196,18 @@ class TestAC9EvidenceIntegrityNoRegression:
         pl = _load_pipeline_module()
         assert pl.PHASE_AGENT_IDS.get("pm_planner") == "pm-planner-agent"
         assert pl.PHASE_AGENT_IDS.get("pipeline_manager") == "pipeline-manager-agent"
+
+
+# oracle TC-1/TC-2 standalone 함수 (test_set.json command_check 직접 실행용)
+def test_pm_planner_agent_registered_active():
+    """oracle TC-1 대응: pm-planner-agent.md가 active agent로 등록되어 실존한다."""
+    md = AGENTS_DIR / "pm-planner-agent.md"
+    assert md.exists(), f"pm-planner-agent.md 없음: {md}"
+
+
+def test_pm_agent_is_compat_not_active():
+    """oracle TC-2 대응: pm-agent.md가 compat 문서로 구분되어 active execution에서 제외된다."""
+    pl = _load_pipeline_module()
+    assert pl.PHASE_AGENT_IDS.get("pm") == "pm-agent"  # legacy entry
+    assert pl.PHASE_AGENT_IDS.get("pm_planner") == "pm-planner-agent"  # active
+    assert pl.PHASE_AGENT_IDS.get("pipeline_manager") == "pipeline-manager-agent"  # active
