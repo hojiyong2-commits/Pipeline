@@ -279,6 +279,62 @@ class TestAC7FrontmatterNameField:
         )
 
 
+class TestCommandDocStalePhrases:
+    """command 문서(task.md, agents.md)의 stale 문구 회귀 테스트."""
+
+    COMMANDS_DIR = PROJECT_ROOT / ".claude" / "commands"
+
+    def _read_command(self, filename):
+        path = self.COMMANDS_DIR / filename
+        assert path.exists(), f"{filename} 없음"
+        return path.read_text(encoding="utf-8")
+
+    # task.md: Codex hard gate 문구 제거 확인
+    def test_task_md_no_codex_hard_gate_mandatory_file(self):
+        """task.md에서 codex_review_result.json 필수 문구가 제거되어야 한다."""
+        text = self._read_command("task.md")
+        assert "codex_review_result.json이 있어야 한다" not in text, (
+            "task.md에 Codex hard gate 문구 잔존 — IMP-20260612-8104 이후 manual diagnostic으로 변경됨"
+        )
+
+    def test_task_md_no_codex_hard_gate_block_phrase(self):
+        """task.md에서 Dev/QA 자동 차단 문구가 제거되어야 한다."""
+        text = self._read_command("task.md")
+        assert "파일 없으면 `python pipeline.py check --phase dev` 또는 `check --phase qa`가 자동으로 차단된다" not in text, (
+            "task.md에 Codex 자동 차단 문구 잔존 — hard gate 해제됨"
+        )
+
+    def test_task_md_no_codex_run_mandatory_command(self):
+        """task.md에서 codex-run 필수 실행 명령이 제거되어야 한다."""
+        text = self._read_command("task.md")
+        assert "review codex-run --stage plan --review-model GPT-5.5" not in text, (
+            "task.md에 Codex hard gate 실행 명령 잔존"
+        )
+
+    # agents.md: pm-agent 단일-agent PM 섹션 제거 확인
+    def test_agents_md_no_single_pm_agent_header(self):
+        """agents.md의 PM 섹션 헤더가 pm-agent 단일 구조가 아니어야 한다."""
+        text = self._read_command("agents.md")
+        # "## [PM] — pm-agent" 형태의 단독 헤더 없어야 함
+        # pm-planner-agent나 pipeline-manager-agent를 함께 포함하면 OK
+        pattern = r'^## \[PM\] — pm-agent\s*$'
+        match = re.search(pattern, text, re.MULTILINE)
+        assert match is None, (
+            "agents.md의 PM 섹션 헤더가 여전히 'pm-agent' 단독 구조 — "
+            "pm-planner-agent / pipeline-manager-agent 분리 구조로 업데이트 필요"
+        )
+
+    def test_agents_md_pm_section_has_planner_manager_split(self):
+        """agents.md의 PM 섹션에 pm-planner-agent와 pipeline-manager-agent 참조가 있어야 한다."""
+        text = self._read_command("agents.md")
+        assert "pm-planner-agent" in text, (
+            "agents.md에 pm-planner-agent 참조 없음 — PM 분리 구조 미반영"
+        )
+        assert "pipeline-manager-agent" in text, (
+            "agents.md에 pipeline-manager-agent 참조 없음 — PM 분리 구조 미반영"
+        )
+
+
 # oracle TC-1/TC-2 standalone 함수 (test_set.json command_check 직접 실행용)
 def test_pm_planner_agent_registered_active():
     """oracle TC-1 대응: pm-planner-agent.md가 active agent로 등록되어 실존한다."""

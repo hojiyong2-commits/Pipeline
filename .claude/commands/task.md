@@ -69,23 +69,14 @@ PM phase CI가 PASS되기 전에는 Dev로 넘어가지 않는다.
 
 PM `done`은 `pipeline.py` hard gate다. `step_plan.xml`에 `<design_confirmation>`이 없거나, 질문이 추상적이거나, 장점/단점/추천안/사용자 답변이 빠지면 Dev로 넘어갈 수 없다.
 
-## Codex Review Gate (IMP-20260516-A627 이후 필수)
+## Codex Review / GPT Advisory (수동 진단용 — IMP-20260612-8104 이후 hard gate 해제)
 
-Dev/QA 진입 전 `codex_review_result.json`이 있어야 한다. 파일 없으면 `python pipeline.py check --phase dev` 또는 `check --phase qa`가 자동으로 차단된다.
+Codex Review와 GPT advisory는 **manual red-team diagnostic**으로 전환되었습니다. Dev/QA 진입을 자동 차단하지 않습니다.
 
-- Codex ACCEPT는 기술 승인(technical approval). 사용자는 마지막에 결과물만 최종 확인(ACCEPT/REJECT)
-- 6개 stage: `plan` → `scope` → `code` → `hygiene` → `pr` → `rca`
-- Dev 진입 전: `plan` 또는 `scope` ACCEPT 필요 / QA 진입 전: `code` ACCEPT 필요
-- `review_model`은 반드시 `"GPT-5.5"` — 다른 모델은 허용되지 않음
-- Codex REJECT = 해당 phase FAIL + failure_packet.json 생성(owner/return_phase 포함)
-- legacy pipeline waiver: `python pipeline.py check --phase dev --codex-review-waiver legacy-bootstrap`
-
-```powershell
-# Dev 진입 전 Codex plan review 실행
-python pipeline.py review codex-run --stage plan --review-model GPT-5.5 --reviewer [ID]
-# 확인
-python pipeline.py check --phase dev
-```
+- `codex_review_result.json` 없어도 `python pipeline.py check --phase dev`/`check --phase qa`가 차단되지 않습니다.
+- 수동 실행 (선택): `python pipeline.py advisory gpt-code` / `advisory gpt-contract` (`ENABLE_GPT_ADVISORY=1` 환경 변수 필요)
+- CRITICAL 발견이 COMPLETE를 막으려면 `ENABLE_GPT_ADVISORY_REQUIRED=1` 필요 (기본값: off — 자동 차단 없음)
+- `--codex-review-waiver` 인자는 더 이상 필요하지 않습니다 — hard gate가 해제되었습니다.
 
 ## Phase 2 — Dev With Module Gates
 
