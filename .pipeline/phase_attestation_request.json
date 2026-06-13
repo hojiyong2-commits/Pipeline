@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-13T04:30:21Z",
+  "pipeline_id": "IMP-20260613-82ED",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "7bd7bd2f217639cf9be7c41cb42f9882314634ca",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-13T04:12:00Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/test_evidence_inventory_82ed.py"
+  },
+  "agent_run": {
+    "run_id": "dev-7e9e03942b52fa20",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "450940cce19c5cc52d19e090f4d5c0e62193a041ab29d5801a4b72728d0beb04",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260613-82ED/dev/agent_receipt_dev-7e9e03942b52fa20.json",
+    "receipt_sha256": "90a50b78bef80c9ebd46fab6929d38a86f3fcdb761c611033e39a40d618f2c11",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260613-82ED\\dev\\dev-7e9e03942b52fa20.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260613-82ED\\dev\\dev-7e9e03942b52fa20.json",
+      "path": ".pipeline/phase_evidence/IMP-20260613-82ED/dev/agent_receipt_dev-7e9e03942b52fa20.json",
+      "sha256": "90a50b78bef80c9ebd46fab6929d38a86f3fcdb761c611033e39a40d618f2c11",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260613-82ED/dev/report_dev_handover.xml",
+      "sha256": "450940cce19c5cc52d19e090f4d5c0e62193a041ab29d5801a4b72728d0beb04",
+      "size_bytes": 3002,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260613-82ED/dev/scope_manifest_scope_manifest.json",
+      "sha256": "b56905256fec6864e9ea4ce47644a76939865ddf6b9b68f04e8fcce428156e6d",
+      "size_bytes": 3120,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "6e6ad743421057170b45ad576743fdec8380d026fd7db2f420098991d9fa7b70",
+      "size_bytes": 921924
+    },
+    {
+      "path": "tests/test_evidence_inventory_82ed.py",
+      "sha256": "fed1244de6acdcd3c6be981f2f09908b787ce607241e565a3cdef240bc844499",
+      "size_bytes": 32153
+    }
+  ],
+  "local_only_files": []
+}
