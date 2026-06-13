@@ -10735,6 +10735,19 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     lines.append(f"requirements_summary: {req_summary}")
     lines.append(f"oracle_summary: {oracle_summary_str}")
     lines.append(f"known_failures: {known_failures_str}")
+    # IMP-20260613-82ED Round 7: evidence_integrity 요약을 메타데이터 블록에 추가
+    _ei = evidence.get("evidence_integrity") or {}
+    _ei_status = str(_ei.get("status", "NOT_CHECKED") or "NOT_CHECKED")
+    _ei_protected = int(_ei.get("protected_evidence_count", 0) or 0)
+    _ei_tracked = int(_ei.get("tracked_count", 0) or 0)
+    _ei_pr = int(_ei.get("pr_included_count", 0) or 0)
+    _ei_untracked = len(_ei.get("untracked_protected") or [])
+    lines.append(
+        f"evidence_integrity: {_ei_status} "
+        f"(protected:{_ei_protected}, tracked:{_ei_tracked}, pr_included:{_ei_pr}"
+        + (f", untracked:{_ei_untracked}" if _ei_untracked > 0 else "")
+        + ")"
+    )
     lines.append(f"verification_json: {HUMAN_ACCEPTANCE_PACKET_JSON_FILE}")
     lines.append("")
 
