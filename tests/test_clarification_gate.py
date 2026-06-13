@@ -50,7 +50,7 @@ def run_check(
     extra_args: Optional[list] = None,
     env: Optional[Dict[str, str]] = None,
 ) -> subprocess.CompletedProcess:
-    """`python pipeline.py check --phase dev --codex-review-waiver legacy-bootstrap` 실행.
+    """`python pipeline.py check --phase dev` 실행.
 
     Args:
         extra_args: 추가 CLI 인자.
@@ -62,8 +62,6 @@ def run_check(
         "check",
         "--phase",
         "dev",
-        "--codex-review-waiver",
-        "legacy-bootstrap",
     ]
     if extra_args:
         cmd.extend(extra_args)

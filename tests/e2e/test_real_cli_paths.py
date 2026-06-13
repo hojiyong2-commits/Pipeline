@@ -377,7 +377,7 @@ def test_done_pm_advances_phase(tmp_path: Path) -> None:
     env = make_env(state_file)
 
     result = run_cli(
-        ["check", "--phase", "dev", "--codex-review-waiver", "legacy-bootstrap"],
+        ["check", "--phase", "dev"],
         env=env,
     )
 
@@ -604,7 +604,7 @@ def test_dev_blocked_without_clarification_criteria(tmp_path: Path) -> None:
     env = make_env(state_file)
 
     result = run_cli(
-        ["check", "--phase", "dev", "--codex-review-waiver", "legacy-bootstrap"],
+        ["check", "--phase", "dev"],
         env=env,
     )
 
@@ -846,8 +846,7 @@ def test_budget_blocked_check_dev_e2e(tmp_path: Path) -> None:
 
     env = make_env(state_file)
     result = subprocess.run(
-        [sys.executable, str(PIPELINE_PY), "check", "--phase", "dev",
-         "--codex-review-waiver", "legacy-bootstrap"],
+        [sys.executable, str(PIPELINE_PY), "check", "--phase", "dev"],
         capture_output=True, text=True, env=env, encoding="utf-8"
     )
     assert result.returncode != 0, "budget 초과 시 비-0 exit 필요"
