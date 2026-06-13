@@ -143,9 +143,11 @@ def _new_pipeline(env: Dict[str, str], desc: str) -> str:
     """
     result = run_pipeline(["new", "--type", "IMP", "--desc", desc], env=env)
     assert result.returncode == 0, f"new failed: {result.stderr}"
+    # 격리된 PIPELINE_STATE_PATH state 파일을 읽어 실제 상태 효과를 검증한다.
     state_path = Path(env["PIPELINE_STATE_PATH"])
-    state = json.loads(state_path.read_text(encoding="utf-8"))
-    return str(state["pipeline_id"])
+    final_state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert final_state.get("pipeline_id"), f"new did not record pipeline_id: {final_state}"
+    return str(final_state["pipeline_id"])
 
 
 def _make_oracle_files(pid: str, case_id: str, expected_content: str) -> Dict[str, Path]:
@@ -197,6 +199,11 @@ class TestAC1AddOracleRegistersEvidence:
         try:
             result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
             assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            # 격리된 PIPELINE_STATE_PATH state 파일을 읽어 contract init 상태 효과를 검증한다.
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid, f"state pipeline_id mismatch: {final_state}"
 
             result = run_pipeline([
                 "contract", "add-oracle",
@@ -247,6 +254,11 @@ class TestAC2GatesOracleBlockedWithoutInventory:
         try:
             result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
             assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            # 격리된 PIPELINE_STATE_PATH state 파일을 읽어 contract init 상태 효과를 검증한다.
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid, f"state pipeline_id mismatch: {final_state}"
 
             result = run_pipeline([
                 "contract", "add-oracle",
@@ -314,6 +326,11 @@ class TestAC3RequestAcceptBlockedUntrackedEvidence:
 
             result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
             assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            # 격리된 PIPELINE_STATE_PATH state 파일을 읽어 contract init 상태 효과를 검증한다.
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid, f"state pipeline_id mismatch: {final_state}"
 
             result = run_pipeline([
                 "contract", "add-oracle",
@@ -530,6 +547,11 @@ class TestAC10CorruptInventoryIsBlocked:
         try:
             result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
             assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            # 격리된 PIPELINE_STATE_PATH state 파일을 읽어 contract init 상태 효과를 검증한다.
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid, f"state pipeline_id mismatch: {final_state}"
 
             result = run_pipeline([
                 "contract", "add-oracle",
