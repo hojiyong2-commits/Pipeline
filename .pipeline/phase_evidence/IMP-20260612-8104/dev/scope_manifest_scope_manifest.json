@@ -1,0 +1,40 @@
+﻿{
+  "pipeline_id": "IMP-20260612-8104",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_check_codex_review_gate", "_check_codex_pr_gate_for_technical", "_validate_codex_review_schema",
+        "_validate_codex_coverage_checks", "_get_codex_status_for_ac", "_save_codex_attempt_log",
+        "_codex_run_via_openai_api", "_codex_run_via_codex_cli", "cmd_review", "cmd_review_codex_run",
+        "cmd_review_codex_record", "cmd_check", "_external_gate_blockers", "cmd_gates",
+        "_build_final_packet_content", "_build_ac_fulfillment_table", "cmd_codex",
+        "_collect_git_diff_meta", "_compute_scope_files", "_check_deep_review_required", "_redact_secrets"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["AGENTS.md", ".claude/agents/pm-agent.md", ".claude/agents/qa-agent.md", "CLAUDE.md"],
+      "affected_functions": [
+        "Codex Review Gate section", "trust_chain_description", "phase_gate_table", "completion_criteria"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/test_codex_removal_8104.py",
+        "tests/test_codex_review.py",
+        "tests/test_codex_record_base_9e38.py",
+        "tests/test_verification_json_codex_evidence.py"
+      ],
+      "affected_functions": [
+        "TestCodexRemoval", "TestCodexRemoval.test_review_subcommand_removed",
+        "TestCodexRemoval.test_review_codex_record_removed", "TestCodexRemoval.test_codex_waiver_option_removed",
+        "TestCodexRemoval.test_check_phase_dev_no_codex_output", "TestCodexRemoval.test_cmd_codex_doctor_preserved",
+        "TestCodexRemoval.test_gpt_advisory_preserved", "test_codex_review.pytestmark",
+        "test_codex_record_base_9e38.pytestmark", "TestBuildFinalPacketContent.test_normal_codex_review_block_present"
+      ]
+    }
+  ]
+}
