@@ -236,6 +236,49 @@ class TestAC9EvidenceIntegrityNoRegression:
         assert pl.PHASE_AGENT_IDS.get("pipeline_manager") == "pipeline-manager-agent"
 
 
+class TestAC7FrontmatterNameField:
+    """AC-7 추가: active agent md 파일에 name 필드가 있어야 한다 (런타임 등록 필수)."""
+
+    def _get_frontmatter(self, md_path):
+        """frontmatter YAML 블록 반환 (없으면 None)."""
+        text = md_path.read_text(encoding="utf-8")
+        if not text.startswith("---"):
+            return None
+        parts = text.split("---", 2)
+        return parts[1] if len(parts) >= 3 else None
+
+    def test_pipeline_manager_agent_has_name_field(self):
+        """pipeline-manager-agent.md frontmatter에 name: pipeline-manager-agent가 있어야 한다."""
+        md = AGENTS_DIR / "pipeline-manager-agent.md"
+        assert md.exists(), "pipeline-manager-agent.md 없음"
+        fm = self._get_frontmatter(md)
+        assert fm is not None, "pipeline-manager-agent.md에 frontmatter 없음"
+        assert "name: pipeline-manager-agent" in fm, (
+            "pipeline-manager-agent.md frontmatter에 'name: pipeline-manager-agent' 없음 — "
+            "런타임에서 pm-agent로 fallback됩니다"
+        )
+
+    def test_pm_planner_agent_has_name_field(self):
+        """pm-planner-agent.md frontmatter에 name: pm-planner-agent가 있어야 한다."""
+        md = AGENTS_DIR / "pm-planner-agent.md"
+        assert md.exists(), "pm-planner-agent.md 없음"
+        fm = self._get_frontmatter(md)
+        assert fm is not None, "pm-planner-agent.md에 frontmatter 없음"
+        assert "name: pm-planner-agent" in fm, (
+            "pm-planner-agent.md frontmatter에 'name: pm-planner-agent' 없음"
+        )
+
+    def test_pm_agent_has_name_field(self):
+        """pm-agent.md frontmatter에 name: pm-agent가 있어야 한다 (compat 문서도 name 필수)."""
+        md = AGENTS_DIR / "pm-agent.md"
+        assert md.exists(), "pm-agent.md 없음"
+        fm = self._get_frontmatter(md)
+        assert fm is not None, "pm-agent.md에 frontmatter 없음"
+        assert "name: pm-agent" in fm, (
+            "pm-agent.md frontmatter에 'name: pm-agent' 없음"
+        )
+
+
 # oracle TC-1/TC-2 standalone 함수 (test_set.json command_check 직접 실행용)
 def test_pm_planner_agent_registered_active():
     """oracle TC-1 대응: pm-planner-agent.md가 active agent로 등록되어 실존한다."""

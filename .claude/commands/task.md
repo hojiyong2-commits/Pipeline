@@ -6,7 +6,7 @@
 
 0. 사용자에게 보이는 세션 언어는 항상 쉬운 한국어다. 진행 업데이트, 도구 설명, Bash/PowerShell 설명, 최종 보고, 승인/거절 질문은 한국어로 쓴다. `Bash`, `GitHub Actions`, 명령어, commit SHA, `ACCEPT/REJECT` 같은 식별자는 그대로 둘 수 있지만 바로 옆에 한국어 설명을 붙인다.
 1. 오케스트레이터는 제품 코드나 산출물 파일을 직접 수정하지 않는다.
-2. 오케스트레이터가 직접 spawn하는 agent는 `pm-agent`뿐이다.
+2. 오케스트레이터가 직접 spawn하는 agent는 `pm-planner-agent`와 `pipeline-manager-agent`뿐이다.
 3. PM은 계획과 위임만 한다. PM이 Dev/QA/Build/Harness/Architect 산출물을 흉내 내면 프로토콜 위반이다.
 4. `pipeline.py harness --score ...`는 완료 경로가 아니다. Three-Gate에서는 차단된다.
 5. 최종 COMPLETE는 PM/Dev/QA/Build phase attestation, Technical, Oracle, GitHub CI, User Acceptance가 모두 PASS되어야 가능하다.
@@ -20,7 +20,7 @@ python pipeline.py new --type FEAT --desc "[사용자 요청 요약]"
 python pipeline.py status
 ```
 
-그 다음 `pm-agent`를 `mode: pipeline_manager_round1`로 호출한다. PM prompt에는 반드시 다음을 포함한다:
+그 다음 `pm-planner-agent`를 호출하여 step_plan을 받고, 이후 `pipeline-manager-agent`에 인수한다. PM prompt에는 반드시 다음을 포함한다:
 
 - pipeline_id
 - 사용자 원문 요청
@@ -49,10 +49,15 @@ python pipeline.py contract freeze
 PM 완료 기록:
 
 ```powershell
-python pipeline.py agent start --phase pm
-# 출력된 token은 pm-agent에게만 전달
-python pipeline.py agent finish --run-id <pm_run_id> --token <token> --output-file step_plan.xml
-python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>
+python pipeline.py agent start --phase pm_planner
+# 출력된 token은 pm-planner-agent에게만 전달
+python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml
+
+python pipeline.py agent start --phase pipeline_manager
+# 출력된 token은 pipeline-manager-agent에게만 전달
+python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
+
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
 python pipeline.py gates prepare-phase --phase pm
 git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add pm phase attestation request"

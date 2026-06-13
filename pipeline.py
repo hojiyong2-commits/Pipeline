@@ -14295,18 +14295,24 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                             verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
 
             # Format 4: <ac_verification><criterion id="AC-X" status="PASS"><check>...</check></criterion>
+            # Format 4b: <ac_verification><criterion ac_id="AC-X"><verification>...</verification></criterion>
             # module_qa report에서 생성된 <criterion> 태그 직접 파싱
             if ac_ver is not None:
                 for crit in ac_ver.findall("criterion"):
-                    if crit.get("id") == ac_id:
-                        status = crit.get("status", "?")
+                    # id 또는 ac_id 속성으로 매칭
+                    crit_id = crit.get("id") or crit.get("ac_id")
+                    if crit_id == ac_id:
+                        status = crit.get("status", "PASS")
                         check_elem = crit.find("check")
                         evidence_elem = crit.find("evidence")
+                        ver_elem = crit.find("verification")
                         ver_text = ""
                         if check_elem is not None and check_elem.text:
                             ver_text = check_elem.text.strip()[:150]
                         elif evidence_elem is not None and evidence_elem.text:
                             ver_text = evidence_elem.text.strip()[:150]
+                        elif ver_elem is not None and ver_elem.text:
+                            ver_text = ver_elem.text.strip()[:150]
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text}")
 

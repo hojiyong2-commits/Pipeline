@@ -23,7 +23,7 @@
 
 `/Task` and all pipeline work must use Three-Gate + Option A phase attestation + Incremental Module Gate. Classic completion, Harness numeric scoring, and BUILD+QA final scoring are forbidden. They cannot mark COMPLETE and cannot replace Technical, Oracle, GitHub CI, User Acceptance, phase attestations, or module gates.
 
-The orchestrator may directly spawn only `pm-agent`. PM plans and delegates; each PM `MT-N` must pass `module design -> module dev -> module qa`; all modules must pass `module integrate`; PM/Dev/QA/Build must pass GitHub Actions phase attestation; the final user sees result links/attachments and answers 승인(ACCEPT) or 거절(REJECT).
+The orchestrator may directly spawn only `pm-planner-agent` and `pipeline-manager-agent`. PM plans and delegates; each PM `MT-N` must pass `module design -> module dev -> module qa`; all modules must pass `module integrate`; PM/Dev/QA/Build must pass GitHub Actions phase attestation; the final user sees result links/attachments and answers 승인(ACCEPT) or 거절(REJECT).
 
 ## [PM] — pm-agent
 

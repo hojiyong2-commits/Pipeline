@@ -625,6 +625,24 @@ AGENT_ROSTER: List[Dict[str, Any]] = [
         "phase_keys": ["pm"],
     },
     {
+        "id": "pm-planner-agent",
+        "name": "PM Planner",
+        "role": "Planning",
+        "color": "#F59E0B",  # amber
+        "department": "Meta",
+        "desk": {"x": 4, "y": 3},
+        "phase_keys": ["pm_planner"],
+    },
+    {
+        "id": "pipeline-manager-agent",
+        "name": "Pipeline Manager",
+        "role": "Pipeline Coordination",
+        "color": "#FBBF24",  # yellow
+        "department": "Meta",
+        "desk": {"x": 6, "y": 3},
+        "phase_keys": ["pipeline_manager"],
+    },
+    {
         "id": "dev-agent",
         "name": "Dev",
         "role": "Implementation",
