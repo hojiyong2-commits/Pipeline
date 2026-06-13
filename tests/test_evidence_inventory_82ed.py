@@ -899,6 +899,892 @@ class TestAC6CLICorruptInventoryBlocksOracleCLI:
             shutil.rmtree(str(oracle_root), ignore_errors=True)
 
 
+# ---------------------------------------------------------------------------
+# AC-12: SHA 불일치 → evidence_sha_mismatch BLOCKED
+# ---------------------------------------------------------------------------
+
+class TestAC12ShaMismatchBlocked:
+    """AC-12: evidence_inventory.json의 sha256과 실제 파일이 다르면 evidence_sha_mismatch BLOCKED."""
+
+    def test_sha_mismatch_causes_blocked(self, tmp_path: Path) -> None:
+        """inventory에 등록된 sha256과 실제 파일 내용이 다르면 BLOCKED(evidence_sha_mismatch).
+
+        이 테스트는 _validate_evidence_provenance의 SHA 정합성 검증을 직접 검증한다.
+        git tracked 파일처럼 보이도록 PROJECT_ROOT 내에 실제로 git tracked된 파일을 사용하고,
+        inventory에 다른 sha256을 기록하여 불일치를 만든다.
+        """
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED-TESTAC12"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        inventory_path = contracts_dir / "evidence_inventory.json"
+        inventory_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 실제 git tracked 파일 사용 (pipeline.py는 확실히 tracked됨)
+        tracked_file = PROJECT_ROOT / "pipeline.py"
+        assert tracked_file.exists(), "pipeline.py must exist"
+
+        # 잘못된 sha256 (실제와 다른 더미값)
+        wrong_sha256 = "a" * 64
+
+        entry = {
+            "pipeline_id": pid,
+            "path": str(tracked_file),
+            "kind": "oracle_input",
+            "sha256": wrong_sha256,
+            "size": tracked_file.stat().st_size,
+            "source_command": "contract add-oracle",
+            "registered_at": "2026-06-13T00:00:00Z",
+            "required_for_acceptance": True,
+            "protection": "protected",
+        }
+        inventory_path.write_text(json.dumps([entry]), encoding="utf-8")
+
+        try:
+            result = pl._validate_evidence_provenance({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", (
+                f"SHA mismatch must yield BLOCKED, got: {result}"
+            )
+            codes = [str(b.get("failure_code", "")) for b in result.get("blockers", [])]
+            assert "evidence_sha_mismatch" in codes, (
+                f"SHA mismatch should report evidence_sha_mismatch, got: {codes}, result={result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# AC-13: dirty tracked evidence (working tree가 기준 커밋과 다름) → BLOCKED
+# ---------------------------------------------------------------------------
+
+class TestAC13DirtyTrackedEvidenceBlocked:
+    """AC-13: 로컬/inventory sha256은 일치하지만 기준 커밋과 working tree가 다르면 BLOCKED.
+
+    실제 git tracked 파일(working tree가 수정된 상태)을 사용하여
+    _validate_evidence_provenance가 dirty_tracked_evidence(또는 evidence_sha_mismatch)로
+    차단함을 검증한다. byte-SHA가 아닌 git diff 기반 정합성 판정이 동작함을 확인한다.
+    """
+
+    def test_dirty_working_tree_is_blocked(self, tmp_path: Path) -> None:
+        """tracked 파일을 working tree에서 수정하면 provenance가 BLOCKED를 반환함."""
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED-TESTAC13"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        inventory_path = contracts_dir / "evidence_inventory.json"
+        inventory_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 실제 git tracked 파일을 임시로 수정하여 dirty 상태를 만든다.
+        # CHANGELOG/README보다 안전하게, 테스트가 끝나면 git checkout으로 원복한다.
+        target_rel = "tests/oracles/IMP-20260613-82ED/TC-1-normal/input.json"
+        target_file = PROJECT_ROOT / target_rel
+        if not target_file.exists():
+            pytest.skip(f"target tracked oracle file not present: {target_rel}")
+        # tracked 여부 확인 (없으면 skip)
+        ls = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", target_rel],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=str(PROJECT_ROOT), timeout=30,
+        )
+        if ls.returncode != 0:
+            pytest.skip(f"target file not git-tracked: {target_rel}")
+
+        original_bytes = target_file.read_bytes()
+        try:
+            # working tree를 수정 (commit하지 않음) → dirty 상태
+            with open(target_file, "ab") as fh:
+                fh.write(b"\n// AC-13 dirty marker\n")
+
+            # inventory에는 "수정된 현재 파일"의 sha256을 기록 → step b(local==inventory) 통과,
+            # 그러나 기준 커밋(HEAD)과는 working tree가 다르므로 dirty로 차단되어야 함.
+            current_sha = sha256_file(target_file)
+            entry = {
+                "pipeline_id": pid,
+                "path": str(target_file),
+                "kind": "oracle_input",
+                "sha256": current_sha,
+                "size": target_file.stat().st_size,
+                "source_command": "contract add-oracle",
+                "registered_at": "2026-06-13T00:00:00Z",
+                "required_for_acceptance": True,
+                "protection": "protected",
+            }
+            inventory_path.write_text(json.dumps([entry]), encoding="utf-8")
+
+            result = pl._validate_evidence_provenance({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", (
+                f"dirty working tree must yield BLOCKED, got: {result}"
+            )
+            codes = [str(b.get("failure_code", "")) for b in result.get("blockers", [])]
+            # dirty_tracked_evidence 가 핵심. (gh/git 미설치 환경에서는 git_execution_failed 허용)
+            assert any(
+                c in ("dirty_tracked_evidence", "git_execution_failed")
+                for c in codes
+            ), f"expected dirty_tracked_evidence blocker, got: {codes}, result={result}"
+        finally:
+            # working tree 원복 (git checkout이 가장 확실)
+            subprocess.run(
+                ["git", "checkout", "--", target_rel],
+                capture_output=True, text=True, encoding="utf-8",
+                cwd=str(PROJECT_ROOT), timeout=30,
+            )
+            # checkout이 실패한 경우를 대비해 원본 바이트로도 복원
+            if target_file.read_bytes() != original_bytes:
+                target_file.write_bytes(original_bytes)
+                subprocess.run(
+                    ["git", "checkout", "--", target_rel],
+                    capture_output=True, text=True, encoding="utf-8",
+                    cwd=str(PROJECT_ROOT), timeout=30,
+                )
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+    def test_clean_tracked_evidence_is_not_dirty(self) -> None:
+        """working tree가 clean한 tracked oracle 파일은 dirty_tracked_evidence로 차단되지 않음.
+
+        Windows autocrlf/BOM 환경에서 byte-SHA 비교가 clean 파일을 dirty로 오판하지 않음을
+        회귀 검증한다(실제 IMP-20260613-82ED oracle 파일 사용).
+        """
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED"
+        inventory_path = PROJECT_ROOT / "pipeline_contracts" / pid / "evidence_inventory.json"
+        if not inventory_path.exists():
+            pytest.skip(f"live inventory not present for {pid}")
+
+        result = pl._validate_evidence_provenance({"pipeline_id": pid})
+        codes = [str(b.get("failure_code", "")) for b in result.get("blockers", [])]
+        # 핵심 단언: clean한 파일이 dirty_tracked_evidence로 오판되면 안 됨.
+        assert "dirty_tracked_evidence" not in codes, (
+            f"clean tracked evidence must not be flagged dirty (CRLF/BOM 오판 방지): {result}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC-14: acceptance_target.oracle_evidence_files 가 채워짐 (CLI E2E)
+# ---------------------------------------------------------------------------
+
+class TestAC14AcceptanceTargetOracleEvidenceFiles:
+    """AC-14: final packet의 acceptance_target.oracle_evidence_files가 inventory 기반으로 채워짐."""
+
+    def test_build_acceptance_target_populates_oracle_evidence_files(self) -> None:
+        """_build_acceptance_target이 protected inventory 항목으로 oracle_evidence_files를 채움.
+
+        실제 IMP-20260613-82ED inventory(4개 protected oracle)를 사용하여
+        oracle_evidence_files가 비어있지 않고 필수 키(path/kind/inventory_sha256/status)를
+        포함함을 검증한다.
+        """
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED"
+        inventory_path = PROJECT_ROOT / "pipeline_contracts" / pid / "evidence_inventory.json"
+        if not inventory_path.exists():
+            pytest.skip(f"live inventory not present for {pid}")
+
+        evidence: Dict[str, Any] = {
+            "pipeline_id": pid,
+            "changed_files": [],
+            "pr_head_sha": "",  # 비우면 함수가 HEAD로 폴백
+        }
+        target = pl._build_acceptance_target(evidence)
+        assert "oracle_evidence_files" in target, (
+            f"acceptance_target must contain oracle_evidence_files: {list(target.keys())}"
+        )
+        oef = target["oracle_evidence_files"]
+        assert isinstance(oef, list), "oracle_evidence_files must be a list"
+        # live inventory에는 4개의 protected oracle 항목이 있으므로 비어있으면 안 됨.
+        assert len(oef) >= 1, (
+            f"oracle_evidence_files must not be empty when protected oracle entries exist: {target}"
+        )
+        for item in oef:
+            for key in ("path", "kind", "inventory_sha256", "status"):
+                assert key in item, f"oracle_evidence_files entry missing key {key}: {item}"
+        # target_commit / target_main_commit 메타데이터 노출 확인
+        assert "target_commit" in target, "acceptance_target must expose target_commit (PR head SHA 기준)"
+
+    def test_final_packet_json_has_acceptance_target_oracle_evidence_files(self) -> None:
+        """report final-packet 실행 후 human_acceptance_packet.json의
+        acceptance_target.oracle_evidence_files 구조를 검증한다 (CLI E2E).
+
+        전역 state를 변경하지 않도록 격리하지 않고 report final-packet은 read-only 성격이지만,
+        활성 파이프라인이 없으면 graceful skip 한다.
+        """
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "pipeline.py"), "report", "final-packet"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            cwd=str(PROJECT_ROOT), timeout=120,
+        )
+        packet_json = PROJECT_ROOT / "human_acceptance_packet.json"
+        if result.returncode != 0 or not packet_json.exists():
+            pytest.skip(
+                f"report final-packet did not produce JSON (활성 파이프라인 없음 등): "
+                f"rc={result.returncode}"
+            )
+        data = json.loads(packet_json.read_text(encoding="utf-8"))
+        assert "acceptance_target" in data, (
+            f"verification json must contain acceptance_target, keys={list(data.keys())}"
+        )
+        target = data["acceptance_target"]
+        assert "oracle_evidence_files" in target, (
+            f"acceptance_target must contain oracle_evidence_files: {list(target.keys())}"
+        )
+        assert isinstance(target["oracle_evidence_files"], list)
+
+
+# ---------------------------------------------------------------------------
+# AC-15: oracle_manifest ↔ evidence_inventory 전체 대조 (5th REJECT)
+# ---------------------------------------------------------------------------
+
+class TestOracleManifestVsInventoryCLI:
+    """oracle_manifest ↔ evidence_inventory 대조 CLI E2E + 로직 검증.
+
+    IMP-20260613-82ED 5th REJECT: _check_oracle_manifest_vs_inventory()가
+    request-accept / gates oracle 양쪽 흐름에서 호출되어, oracle_manifest의 모든
+    input/expected 경로가 evidence_inventory에 등록되지 않으면 BLOCKED를 반환함을 검증한다.
+
+    gates oracle CLI는 technical gate PASS 선행 조건으로 격리 환경에서 완주할 수 없으므로
+    CLI 경로는 "통과(returncode==0)되지 않음"을 검증하고, 동일 로직
+    (_check_oracle_manifest_vs_inventory)을 직접 호출하여 정확한 failure_code를 검증한다.
+    inventory는 SSoT인 flat list([{"pipeline_id","path",...}]) 형식을 사용한다.
+    """
+
+    def _make_oracle_manifest(self, contracts_dir: Path, entries: List[Dict[str, Any]]) -> None:
+        """oracle_manifest.json을 {"oracles": [...]} 구조로 생성한다."""
+        contracts_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "schema_version": 1,
+            "pipeline_id": contracts_dir.name,
+            "oracles": entries,
+        }
+        (contracts_dir / "oracle_manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def _make_inventory(self, contracts_dir: Path, entries: List[Dict[str, Any]]) -> None:
+        """evidence_inventory.json을 SSoT flat list 형식으로 생성한다."""
+        contracts_dir.mkdir(parents=True, exist_ok=True)
+        (contracts_dir / "evidence_inventory.json").write_text(
+            json.dumps(entries, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def test_no_oracle_manifest_passes(self) -> None:
+        """oracle_manifest가 없으면 대조 불필요 → PASS(checked=0)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-NONE"
+        # contracts_dir를 만들지 않음 → oracle_manifest 부재 상태에서 PASS여야 함.
+        result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+        assert result["status"] == "PASS", f"manifest 없으면 PASS여야 함: {result}"
+
+    def test_oracle_manifest_exists_but_inventory_missing_is_blocked(self) -> None:
+        """oracle_manifest에 항목 있고 inventory 파일이 없으면 BLOCKED(evidence_inventory_missing)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-MISSING-INV"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        try:
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": "tests/oracles/X/input.json",
+                 "expected_path": "tests/oracles/X/expected.json"}
+            ])
+            # inventory 파일을 만들지 않음
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", f"inventory 없으면 BLOCKED: {result}"
+            assert result.get("failure_code") == "evidence_inventory_missing", (
+                f"failure_code 불일치: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+    def test_oracle_manifest_exists_but_inventory_empty_list_is_blocked(self) -> None:
+        """oracle_manifest에 항목 있고 inventory entries가 빈 list → BLOCKED(evidence_inventory_empty)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-EMPTY"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        try:
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": "tests/oracles/X/input.json",
+                 "expected_path": "tests/oracles/X/expected.json"}
+            ])
+            self._make_inventory(contracts_dir, [])  # 빈 list
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", f"inventory 빈 list면 BLOCKED: {result}"
+            assert result.get("failure_code") == "evidence_inventory_empty", (
+                f"failure_code 불일치: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+    def test_oracle_manifest_3_entries_inventory_missing_1_is_blocked(self) -> None:
+        """oracle_manifest 3쌍 중 inventory에 일부만 있으면 BLOCKED(oracle_not_in_evidence_inventory)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-PARTIAL"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_base = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            oracle_base.mkdir(parents=True, exist_ok=True)
+            in1 = oracle_base / "input1.json"
+            exp1 = oracle_base / "expected1.json"
+            in2 = oracle_base / "input2.json"
+            in1.write_text('{"test": 1}', encoding="utf-8")
+            exp1.write_text('{"result": 1}', encoding="utf-8")
+            in2.write_text('{"test": 2}', encoding="utf-8")
+            missing = oracle_base / "input_MISSING.json"  # 실제 생성하지 않음
+
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": str(in1), "expected_path": str(exp1)},
+                {"input_path": str(in2), "expected_path": str(exp1)},
+                {"input_path": str(missing), "expected_path": str(exp1)},
+            ])
+            # inventory에 in1/exp1/in2만 등록 (input_MISSING 누락)
+            self._make_inventory(contracts_dir, [
+                {"pipeline_id": pid, "path": str(in1), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "aaa", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(exp1), "kind": "oracle_expected",
+                 "protection": "protected", "sha256": "bbb", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(in2), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "ccc", "required_for_acceptance": True},
+            ])
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", (
+                f"inventory에 없는 oracle 경로가 있으면 BLOCKED: {result}"
+            )
+            assert result.get("failure_code") == "oracle_not_in_evidence_inventory", (
+                f"failure_code 불일치: {result}"
+            )
+            # blockers에 input_MISSING이 포함되어야 함
+            blocker_paths = [b.get("oracle_path", "") for b in result.get("blockers", [])]
+            assert any("input_MISSING" in p for p in blocker_paths), (
+                f"누락 경로가 blockers에 없음: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_base), ignore_errors=True)
+
+    def test_all_oracle_entries_in_inventory_passes(self) -> None:
+        """oracle_manifest의 모든 경로가 inventory에 있으면 PASS."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-FULL"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_base = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            oracle_base.mkdir(parents=True, exist_ok=True)
+            in1 = oracle_base / "input.json"
+            exp1 = oracle_base / "expected.json"
+            in1.write_text('{"test": 1}', encoding="utf-8")
+            exp1.write_text('{"result": 1}', encoding="utf-8")
+
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": str(in1), "expected_path": str(exp1)},
+            ])
+            self._make_inventory(contracts_dir, [
+                {"pipeline_id": pid, "path": str(in1), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "aaa", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(exp1), "kind": "oracle_expected",
+                 "protection": "protected", "sha256": "bbb", "required_for_acceptance": True},
+            ])
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "PASS", (
+                f"모든 oracle이 inventory에 있으면 PASS여야 함: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_base), ignore_errors=True)
+
+    def test_relative_oracle_path_matches_absolute_inventory(self) -> None:
+        """oracle_manifest의 상대 경로가 inventory의 절대 경로와 정규화 후 매칭됨(실제 데이터 형식)."""
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-RELABS"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_base = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            oracle_base.mkdir(parents=True, exist_ok=True)
+            in1 = oracle_base / "input.json"
+            exp1 = oracle_base / "expected.json"
+            in1.write_text('{"test": 1}', encoding="utf-8")
+            exp1.write_text('{"result": 1}', encoding="utf-8")
+
+            # manifest는 상대 경로(실제 add-oracle 형식)
+            rel_in = f"tests/oracles/{pid}/input.json"
+            rel_exp = f"tests/oracles/{pid}/expected.json"
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": rel_in, "expected_path": rel_exp},
+            ])
+            # inventory는 절대 경로(실제 _register_evidence_to_inventory 형식)
+            self._make_inventory(contracts_dir, [
+                {"pipeline_id": pid, "path": str(in1.resolve()), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "aaa", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(exp1.resolve()), "kind": "oracle_expected",
+                 "protection": "protected", "sha256": "bbb", "required_for_acceptance": True},
+            ])
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            assert result["status"] == "PASS", (
+                f"상대 경로 manifest가 절대 경로 inventory와 매칭되어 PASS여야 함: {result}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_base), ignore_errors=True)
+
+    def test_same_basename_different_dirs_blocks_missing_entry(self) -> None:
+        """basename fallback 제거 후: 같은 basename 다른 디렉터리 oracle이 누락되면 BLOCKED.
+
+        IMP-20260613-82ED Round 7 지적: basename fallback이 있으면 TC-1/input.json만
+        inventory에 있어도 TC-2/input.json(같은 basename)도 통과됐다.
+        basename fallback 제거 후에는 TC-2/input.json이 inventory에 없으면 BLOCKED여야 한다.
+
+        케이스:
+          manifest: TC-1/input.json, TC-1/expected.json, TC-2/input.json, TC-2/expected.json
+          inventory: TC-1/input.json, TC-1/expected.json만 등록
+          기대: oracle_not_in_evidence_inventory BLOCKED (TC-2 경로 2개 누락)
+        """
+        pl = load_pipeline_module()
+        pid = "IMP-20260613-82ED-TESTAC15-SAMENAME"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_base = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            tc1 = oracle_base / "TC-1"
+            tc2 = oracle_base / "TC-2"
+            tc1.mkdir(parents=True, exist_ok=True)
+            tc2.mkdir(parents=True, exist_ok=True)
+            # TC-1: input.json, expected.json
+            tc1_in = tc1 / "input.json"
+            tc1_exp = tc1 / "expected.json"
+            tc1_in.write_text('{"case": 1}', encoding="utf-8")
+            tc1_exp.write_text('{"result": 1}', encoding="utf-8")
+            # TC-2: 같은 basename — input.json, expected.json
+            tc2_in = tc2 / "input.json"
+            tc2_exp = tc2 / "expected.json"
+            tc2_in.write_text('{"case": 2}', encoding="utf-8")
+            tc2_exp.write_text('{"result": 2}', encoding="utf-8")
+
+            self._make_oracle_manifest(contracts_dir, [
+                {"input_path": str(tc1_in), "expected_path": str(tc1_exp)},
+                {"input_path": str(tc2_in), "expected_path": str(tc2_exp)},
+            ])
+            # inventory: TC-1만 등록, TC-2 누락
+            self._make_inventory(contracts_dir, [
+                {"pipeline_id": pid, "path": str(tc1_in.resolve()), "kind": "oracle_input",
+                 "protection": "protected", "sha256": "aaa", "required_for_acceptance": True},
+                {"pipeline_id": pid, "path": str(tc1_exp.resolve()), "kind": "oracle_expected",
+                 "protection": "protected", "sha256": "bbb", "required_for_acceptance": True},
+            ])
+            result = pl._check_oracle_manifest_vs_inventory({"pipeline_id": pid})
+            # basename fallback 없이 절대 경로 비교 → TC-2 경로들이 inventory에 없어 BLOCKED
+            assert result["status"] == "BLOCKED", (
+                f"TC-2/input.json과 TC-2/expected.json이 inventory에 없으면 BLOCKED여야 함: {result}"
+            )
+            assert result.get("failure_code") == "oracle_not_in_evidence_inventory", (
+                f"failure_code 불일치: {result}"
+            )
+            blocker_paths = [b.get("oracle_path", "") for b in result.get("blockers", [])]
+            assert any("TC-2" in p for p in blocker_paths), (
+                f"TC-2 경로가 blockers에 없음: {blocker_paths}"
+            )
+            # TC-1은 inventory에 있으므로 blockers에 없어야 함
+            assert not any("TC-1" in p for p in blocker_paths), (
+                f"TC-1은 inventory에 있는데 blockers에 포함됨: {blocker_paths}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_base), ignore_errors=True)
+
+    def test_gates_oracle_cli_blocked_when_oracle_not_in_inventory(self, tmp_path: Path) -> None:
+        """gates oracle CLI E2E: oracle이 inventory에 없으면 통과(returncode==0)되지 않음.
+
+        실제 subprocess로 gates oracle을 실행하여 manifest/inventory 불일치가
+        gate를 통과시키지 않음을 검증한다(Real CLI Path E2E Gate Policy 준수).
+        technical gate 선행 조건 또는 manifest/inventory 검사 중 하나로 차단되며,
+        어느 경우든 returncode != 0 이어야 한다.
+        """
+        state_path = tmp_path / "pipeline_state.json"
+        env = make_isolated_env(state_path)
+
+        pid = _new_pipeline(env, "test AC-15 CLI oracle manifest vs inventory")
+
+        oracle = _make_oracle_files(pid, "case1", '{"result": "ok", "data": [1, 2, 3]}')
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_root = PROJECT_ROOT / "tests" / "oracles" / pid
+        inventory_path = contracts_dir / "evidence_inventory.json"
+        try:
+            result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
+            assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
+
+            result = run_pipeline([
+                "contract", "add-oracle",
+                "--input", str(oracle["input"]),
+                "--expected", str(oracle["expected"]),
+                "--case-kind", "normal",
+            ], env=env)
+            assert result.returncode == 0, f"add-oracle failed: {result.stderr}"
+
+            # inventory를 빈 list로 덮어써서 manifest/inventory 불일치 재현.
+            inventory_path.parent.mkdir(parents=True, exist_ok=True)
+            inventory_path.write_text("[]", encoding="utf-8")
+
+            # gates oracle CLI E2E: 불일치 상태가 통과되어서는 안 됨.
+            result = run_pipeline(["gates", "oracle"], env=env)
+            output = result.stdout + result.stderr
+            assert result.returncode != 0, (
+                f"gates oracle must not pass with empty inventory vs oracle manifest: {output[:300]}"
+            )
+            # 차단 메시지 또는 manifest/inventory 관련 코드 확인.
+            assert any(
+                kw in output
+                for kw in [
+                    "BLOCKED", "FAIL", "evidence_inventory_empty",
+                    "oracle_not_in_evidence_inventory", "requires", "oracle",
+                ]
+            ), f"expected blocking message in output: {output[:400]}"
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_root), ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# AC-16: target_blob_sha256 가 acceptance_target.oracle_evidence_files에 포함됨
+# ---------------------------------------------------------------------------
+
+class TestBlobSHAInAcceptanceTarget:
+    """AC-16: _build_acceptance_target의 oracle_evidence_files에 target_blob_sha256 필드가 있음."""
+
+    def test_acceptance_target_has_target_blob_sha256_field(self) -> None:
+        """live inventory가 있을 때 oracle_evidence_files 항목에 target_blob_sha256 필드가 있음.
+
+        IMP-20260613-82ED 6th REJECT: acceptance_target.oracle_evidence_files에
+        inventory_sha256과 target_blob_sha256(git show 기반 blob SHA)를 명시하여
+        stale/tampered evidence 차단이 투명하게 보임을 검증한다.
+        """
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED"
+        inventory_path = PROJECT_ROOT / "pipeline_contracts" / pid / "evidence_inventory.json"
+        if not inventory_path.exists():
+            pytest.skip(f"live inventory not present for {pid}")
+
+        evidence: Dict[str, Any] = {
+            "pipeline_id": pid,
+            "changed_files": [],
+            "pr_head_sha": "",
+        }
+        target = pl._build_acceptance_target(evidence)
+
+        assert "oracle_evidence_files" in target, (
+            f"acceptance_target must contain oracle_evidence_files: {list(target.keys())}"
+        )
+        oef = target["oracle_evidence_files"]
+        assert isinstance(oef, list), "oracle_evidence_files must be a list"
+        if len(oef) == 0:
+            pytest.skip("no protected oracle entries in live inventory — cannot verify blob SHA fields")
+        for item in oef:
+            assert "target_blob_sha256" in item, (
+                f"oracle_evidence_files entry must have target_blob_sha256 field: {item}"
+            )
+            assert "sha_match" in item, (
+                f"oracle_evidence_files entry must have sha_match field: {item}"
+            )
+            assert "inventory_sha256" in item, (
+                f"oracle_evidence_files entry must have inventory_sha256 field: {item}"
+            )
+
+    def test_acceptance_target_has_acceptance_pr_field(self) -> None:
+        """_build_acceptance_target이 acceptance_pr 필드를 반환함 (현재 오픈 PR SSoT).
+
+        IMP-20260613-82ED 6th REJECT: impl_prs(이미 머지된 이력)와 분리하여
+        acceptance_pr(현재 승인 대상 PR)을 명시하도록 수정됨을 검증한다.
+        """
+        pl = load_pipeline_module()
+
+        evidence: Dict[str, Any] = {
+            "pipeline_id": "IMP-TEST-DUMMY",
+            "changed_files": [],
+            "pr_head_sha": "",
+        }
+        target = pl._build_acceptance_target(evidence)
+        assert "acceptance_pr" in target, (
+            f"acceptance_target must contain acceptance_pr key, got keys: {list(target.keys())}"
+        )
+        assert "impl_prs_note" in target, (
+            "impl_prs_note must clarify that impl_prs is history, not acceptance target"
+        )
+
+    def test_blob_sha_mismatch_causes_provenance_blocked(self) -> None:
+        """inventory_sha256이 실제 파일 SHA256과 다르면 evidence_sha_mismatch BLOCKED.
+
+        defense-in-depth blob SHA 검증: inventory entry의 sha256을 의도적으로
+        잘못된 값(wrong_sha256)으로 기록하면 _validate_evidence_provenance가
+        evidence_sha_mismatch(step b) 또는 evidence_blob_sha_mismatch(step d2)로
+        BLOCKED를 반환함을 검증한다.
+        """
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED-TESTAC16-BLOBSHA"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        inventory_path = contracts_dir / "evidence_inventory.json"
+        inventory_path.parent.mkdir(parents=True, exist_ok=True)
+
+        tracked_file = PROJECT_ROOT / "pipeline.py"
+        assert tracked_file.exists(), "pipeline.py must exist and be tracked"
+
+        wrong_sha256 = "b" * 64
+
+        entry = {
+            "pipeline_id": pid,
+            "path": str(tracked_file),
+            "kind": "oracle_input",
+            "sha256": wrong_sha256,
+            "size": tracked_file.stat().st_size,
+            "source_command": "contract add-oracle",
+            "registered_at": "2026-06-13T00:00:00Z",
+            "required_for_acceptance": True,
+            "protection": "protected",
+        }
+        inventory_path.write_text(json.dumps([entry]), encoding="utf-8")
+
+        try:
+            result = pl._validate_evidence_provenance({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", (
+                f"Wrong sha256 in inventory must yield BLOCKED: {result}"
+            )
+            codes = [str(b.get("failure_code", "")) for b in result.get("blockers", [])]
+            # step b(local≠inventory) 또는 step d2(blob≠inventory) 중 하나로 차단돼야 함
+            assert any(
+                c in ("evidence_sha_mismatch", "evidence_blob_sha_mismatch")
+                for c in codes
+            ), f"expected sha mismatch blocker, got: {codes}, result={result}"
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# AC-17: gates request-accept subprocess CLI E2E — untracked oracle → non-zero
+# ---------------------------------------------------------------------------
+
+class TestRequestAcceptCLISubprocessBlocked:
+    """AC-17: gates request-accept CLI subprocess가 untracked oracle 존재 시 BLOCKED 반환 (E2E).
+
+    IMP-20260613-82ED 6th REJECT: request-accept BLOCKED 요구사항을 실제 subprocess CLI 경로로
+    검증한다. 격리 환경에서 gates request-accept가 untracked oracle로 인해 returncode!=0이고
+    BLOCKED 메시지가 포함됨을 확인한다.
+
+    Note: gates request-accept는 technical/oracle/github-ci/AC-table 등 선행 조건이 있어
+    격리 환경에서 모든 조건을 충족하기 어렵다. 이 테스트는 어떤 선행 조건이 차단되더라도
+    gates request-accept가 PASS(returncode=0)를 반환하지 않음을 검증한다.
+    즉, untracked oracle이 있는 상태에서 request-accept가 절대 승인 코드를 발급하지 않음을
+    CLI subprocess 경로로 보장한다.
+    """
+
+    def test_request_accept_subprocess_blocked_untracked_oracle(self, tmp_path: Path) -> None:
+        """gates request-accept CLI가 untracked oracle 존재 시 non-zero + BLOCKED 반환 (subprocess E2E).
+
+        실제 CLI 경로: python pipeline.py gates request-accept --evidence <path>
+        기대 결과: returncode != 0, stdout/stderr에 "BLOCKED" 포함
+        """
+        state_path = tmp_path / "pipeline_state.json"
+        env = make_isolated_env(state_path)
+
+        pid = _new_pipeline(env, "test AC-17 request-accept subprocess BLOCKED")
+
+        # oracle 파일 생성 (tests/oracles/<pid>/ 아래 → git untracked 상태)
+        oracle_dir = PROJECT_ROOT / "tests" / "oracles" / pid / "case1"
+        oracle_dir.mkdir(parents=True, exist_ok=True)
+        oracle_input = oracle_dir / "input.json"
+        oracle_expected = oracle_dir / "expected.json"
+        oracle_input.write_text('{"key": "value"}', encoding="utf-8")
+        oracle_expected.write_text('{"result": "ok", "data": [1, 2]}', encoding="utf-8")
+
+        # deployable evidence 파일 생성
+        evidence_file = tmp_path / "test_result.md"
+        evidence_file.write_text("# Test Result\n\nThis is a test deliverable.", encoding="utf-8")
+
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_root = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            # contract init + add-oracle → evidence_inventory.json 자동 생성
+            result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
+            assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
+
+            result = run_pipeline([
+                "contract", "add-oracle",
+                "--input", str(oracle_input),
+                "--expected", str(oracle_expected),
+                "--case-kind", "normal",
+            ], env=env)
+            assert result.returncode == 0, f"add-oracle failed: {result.stderr}"
+
+            # oracle 파일은 git untracked 상태
+            # gates request-accept subprocess CLI E2E: NEVER should return 0
+            result = run_pipeline(
+                ["gates", "request-accept", "--evidence", str(evidence_file)],
+                env=env,
+                timeout=90,
+            )
+
+            # 핵심 단언: untracked oracle이 있으면 gates request-accept는 절대 PASS하지 않음
+            assert result.returncode != 0, (
+                "gates request-accept MUST NOT return 0 when oracle evidence is untracked. "
+                f"stdout={result.stdout[:300]} stderr={result.stderr[:300]}"
+            )
+            # BLOCKED 메시지가 어딘가에 있어야 함 (어떤 선행 조건이든 차단되면 BLOCKED 출력)
+            combined = result.stdout + result.stderr
+            assert "BLOCKED" in combined or "FAIL" in combined or "Error" in combined, (
+                f"expected BLOCKED/FAIL/Error in output when request-accept is denied: "
+                f"{combined[:400]}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_root), ignore_errors=True)
+
+    def test_request_accept_subprocess_blocked_corrupt_inventory(self, tmp_path: Path) -> None:
+        """gates request-accept CLI subprocess가 corrupt inventory로 non-zero 반환 (subprocess E2E).
+
+        corrupt evidence_inventory.json이 있으면 request-accept가 BLOCKED됨을 CLI subprocess로 검증.
+        """
+        state_path = tmp_path / "pipeline_state.json"
+        env = make_isolated_env(state_path)
+
+        pid = _new_pipeline(env, "test AC-17b request-accept corrupt inventory")
+
+        oracle_dir = PROJECT_ROOT / "tests" / "oracles" / pid / "case1"
+        oracle_dir.mkdir(parents=True, exist_ok=True)
+        oracle_input = oracle_dir / "input.json"
+        oracle_expected = oracle_dir / "expected.json"
+        oracle_input.write_text('{"key": "value"}', encoding="utf-8")
+        oracle_expected.write_text('{"result": "ok"}', encoding="utf-8")
+
+        evidence_file = tmp_path / "test_result.md"
+        evidence_file.write_text("# Test Result\n\nDeliverable.", encoding="utf-8")
+
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_root = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
+            assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
+
+            result = run_pipeline([
+                "contract", "add-oracle",
+                "--input", str(oracle_input),
+                "--expected", str(oracle_expected),
+                "--case-kind", "normal",
+            ], env=env)
+            assert result.returncode == 0, f"add-oracle failed: {result.stderr}"
+
+            # inventory를 corrupt JSON으로 덮어씌움
+            inv_path = contracts_dir / "evidence_inventory.json"
+            inv_path.parent.mkdir(parents=True, exist_ok=True)
+            inv_path.write_text("{CORRUPT[[", encoding="utf-8")
+
+            # subprocess CLI: corrupt inventory → non-zero 반환 확인
+            final_state = json.loads(  # re-read after corruption
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
+            result = run_pipeline(
+                ["gates", "request-accept", "--evidence", str(evidence_file)],
+                env=env,
+                timeout=90,
+            )
+            assert result.returncode != 0, (
+                "gates request-accept MUST NOT return 0 with corrupt inventory. "
+                f"stdout={result.stdout[:300]} stderr={result.stderr[:300]}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_root), ignore_errors=True)
+
+    def test_request_accept_subprocess_blocked_inventory_mismatch_with_failure_code(
+        self, tmp_path: Path
+    ) -> None:
+        """gates request-accept CLI가 oracle_manifest/inventory mismatch를 직접 차단함 검증.
+
+        IMP-20260613-82ED Round 7 지적: AC-17 테스트가 returncode != 0만 확인했고
+        선행 조건(technical/oracle/github-ci) 중 하나로 막혀도 통과됐다.
+        이 테스트는 oracle_manifest에 inventory에 없는 oracle entry가 있을 때
+        출력에 oracle_not_in_evidence_inventory 또는 evidence_inventory_empty가
+        명시적으로 포함됨을 확인한다.
+
+        단계:
+          1. contract init + add-oracle → oracle_manifest + inventory 자동 생성
+          2. inventory를 빈 list([])로 교체하여 oracle_manifest만 존재하는 불일치 상태 재현
+          3. gates request-accept 실행
+          4. 출력에 oracle_not_in_evidence_inventory 또는 evidence_inventory_empty 포함 확인
+        """
+        state_path = tmp_path / "pipeline_state.json"
+        env = make_isolated_env(state_path)
+
+        pid = _new_pipeline(env, "test AC-17c request-accept inventory mismatch failure_code")
+
+        oracle_dir = PROJECT_ROOT / "tests" / "oracles" / pid / "case1"
+        oracle_dir.mkdir(parents=True, exist_ok=True)
+        oracle_input = oracle_dir / "input.json"
+        oracle_expected = oracle_dir / "expected.json"
+        oracle_input.write_text('{"key": "mismatch_test"}', encoding="utf-8")
+        oracle_expected.write_text('{"result": "mismatch_ok"}', encoding="utf-8")
+
+        evidence_file = tmp_path / "test_result_mismatch.md"
+        evidence_file.write_text("# Test Result\n\nDeliverable for mismatch test.", encoding="utf-8")
+
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        oracle_root = PROJECT_ROOT / "tests" / "oracles" / pid
+        try:
+            result = run_pipeline(["contract", "init", "--pipeline-id", pid], env=env)
+            assert result.returncode == 0, f"contract init failed: {result.stderr}"
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
+
+            result = run_pipeline([
+                "contract", "add-oracle",
+                "--input", str(oracle_input),
+                "--expected", str(oracle_expected),
+                "--case-kind", "normal",
+            ], env=env)
+            assert result.returncode == 0, f"add-oracle failed: {result.stderr}"
+
+            # inventory를 빈 list로 교체: oracle_manifest가 있지만 inventory에 등록 없음
+            inv_path = contracts_dir / "evidence_inventory.json"
+            inv_path.parent.mkdir(parents=True, exist_ok=True)
+            inv_path.write_text("[]", encoding="utf-8")
+
+            # 상태 재확인
+            final_state = json.loads(
+                Path(env["PIPELINE_STATE_PATH"]).read_text(encoding="utf-8")
+            )
+            assert final_state.get("pipeline_id") == pid
+
+            # subprocess CLI: oracle_manifest/inventory mismatch → non-zero + failure_code 포함
+            result = run_pipeline(
+                ["gates", "request-accept", "--evidence", str(evidence_file)],
+                env=env,
+                timeout=90,
+            )
+            assert result.returncode != 0, (
+                "gates request-accept MUST NOT return 0 with inventory mismatch. "
+                f"stdout={result.stdout[:300]} stderr={result.stderr[:300]}"
+            )
+            combined = result.stdout + result.stderr
+            assert (
+                "oracle_not_in_evidence_inventory" in combined
+                or "evidence_inventory_empty" in combined
+            ), (
+                "출력에 oracle_not_in_evidence_inventory 또는 evidence_inventory_empty가 "
+                "포함되어야 합니다. oracle_manifest/inventory mismatch가 gates request-accept를 "
+                f"직접 차단함을 확인하는 테스트입니다.\n출력: {combined[:600]}"
+            )
+        finally:
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+            shutil.rmtree(str(oracle_root), ignore_errors=True)
+
+
 if __name__ == "__main__":
     # SELF-VERIFY: 헬퍼 함수 기본 동작 확인
     assert sha256_file.__name__ == "sha256_file"
