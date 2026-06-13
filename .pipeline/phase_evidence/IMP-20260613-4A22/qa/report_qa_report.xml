@@ -1,0 +1,36 @@
+<qa_report>
+  <pipeline_id>IMP-20260613-4A22</pipeline_id>
+  <phase>qa</phase>
+  <agent_id>qa-agent</agent_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <verification>
+    <mt1>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <frontmatter>model: claude-opus-4-5, name: pm-planner-agent PASS</frontmatter>
+      <phase_id>pm_planner PASS</phase_id>
+      <model_tier>Opus PASS</model_tier>
+      <role_boundary>planning-only, no handover at top level PASS</role_boundary>
+    </mt1>
+    <mt2>
+      <file>tests/test_agent_registry_4a22.py</file>
+      <test_count>26 PASS</test_count>
+      <oracle_tc1>test_pm_planner_agent_registered_active PASS</oracle_tc1>
+      <oracle_tc2>test_pm_agent_is_compat_not_active PASS</oracle_tc2>
+      <all_tests_pass>26 passed in 0.16s PASS</all_tests_pass>
+    </mt2>
+    <mt3>
+      <file>agent_registry_audit_report.md</file>
+      <sections>MODIFIED, PRESERVED, DEPRECATED_OR_COMPAT, DEFERRED - all 4 present PASS</sections>
+    </mt3>
+    <scope_lock>No files outside scope_manifest; trust_root_violation=false PASS</scope_lock>
+    <frozen_functions>_validate_evidence_provenance, _register_evidence_to_inventory, _check_oracle_manifest_vs_inventory, _auto_generate_final_packet_and_update_pr - all preserved PASS</frozen_functions>
+    <advisory_gate>GPT advisory remains manual diagnostic, not hard gate PASS</advisory_gate>
+    <phase_agent_ids>PHASE_AGENT_IDS unchanged PASS</phase_agent_ids>
+  </verification>
+  <micro_task_boundary>
+    <verdict>PASS</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <failure_signature>none</failure_signature>
+</qa_report>
