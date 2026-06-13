@@ -20,7 +20,7 @@
     "output_file": "build_report.xml",
     "output_sha256": "fc8ebd951ae4f36d8e008de2c9ca4b9c21e65fa0bd0bf49a97060b0f5fedebed",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260612-CE06/build/agent_receipt_build-913a91d46d3e7071.json",
-    "receipt_sha256": "c9d0794470e6e6a994beb4add21d4f903117d21a187479a73dd632e9aa168460",
+    "receipt_sha256": "2cab25d66e10f878850c9b8835a9604af54f49332074471a646737786d7363f9",
     "used_by_phase": "build",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260612-CE06\\build\\build-913a91d46d3e7071.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260612-CE06\\build\\build-913a91d46d3e7071.json",
       "path": ".pipeline/phase_evidence/IMP-20260612-CE06/build/agent_receipt_build-913a91d46d3e7071.json",
-      "sha256": "c9d0794470e6e6a994beb4add21d4f903117d21a187479a73dd632e9aa168460",
+      "sha256": "2cab25d66e10f878850c9b8835a9604af54f49332074471a646737786d7363f9",
       "size_bytes": 508,
       "requires_force_add": true
     }
