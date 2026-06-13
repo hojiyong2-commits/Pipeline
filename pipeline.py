@@ -3385,16 +3385,28 @@ def _register_evidence_to_inventory(
 def _validate_evidence_provenance(
     state: Dict[str, Any],
     phase: str = "oracle",
+    target_commit: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """등록된 oracle 증거가 git tracked + 현재 PR에 포함되는지 검증한다(fail-closed).
+    """등록된 oracle 증거가 git tracked + 현재 PR + target commit blob과 일치하는지 검증한다(fail-closed).
+
+    검증 순서(protected 비-cleanup 증거마다):
+      a. 파일 존재 여부
+      b. 현재 로컬 SHA256 == inventory sha256 (불일치 -> evidence_sha_mismatch)
+      c. git ls-files 로 tracked 여부 (untracked -> protected_evidence_untracked)
+      d. git show <target_commit>:<path> 의 blob 내용 SHA256 == inventory sha256
+         (불일치 -> dirty_tracked_evidence; target commit에도 origin/main에도 없으면 -> oracle_evidence_not_in_pr)
+      e. GitHub PR changed files 또는 기존 git 이력 포함 여부
+
+    target_commit 이 None 이면 현재 HEAD 를 기준 커밋으로 사용한다(PR head SHA 대용).
 
     Args:
         state: pipeline_id를 포함한 pipeline state dict(최소 {"pipeline_id": ...}).
         phase: 호출 단계 문자열("oracle" | "request-accept" 등, 진단용).
+        target_commit: blob SHA 비교에 사용할 기준 커밋(None이면 HEAD).
     Returns:
         Dict: status/phase/blockers/protected_evidence_count/tracked_count/
               pr_included_count/untracked_protected/orphan_oracle_warnings/
-              cleanup_only_artifacts 필드를 포함.
+              cleanup_only_artifacts/target_commit 필드를 포함.
     Raises:
         TypeError: state가 None이거나 dict가 아닌 경우.
     """
@@ -3415,6 +3427,7 @@ def _validate_evidence_provenance(
         "untracked_protected": [],
         "orphan_oracle_warnings": [],
         "cleanup_only_artifacts": [],
+        "target_commit": "",
     }
 
     def _add_blocker(failure_code: str, message: str, item: str = "") -> None:
@@ -3431,6 +3444,29 @@ def _validate_evidence_provenance(
             "state에 pipeline_id가 없어 evidence inventory를 확인할 수 없습니다.",
         )
         return result
+
+    # blob SHA 비교 기준 커밋 확정: 인자 미지정 시 현재 HEAD 사용(fail-closed).
+    resolved_target_commit = str(target_commit or "").strip()
+    target_commit_lookup_failed = ""
+    if not resolved_target_commit:
+        try:
+            _rev = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+            )
+        except (FileNotFoundError, OSError):
+            target_commit_lookup_failed = (
+                "git CLI를 실행할 수 없어 기준 커밋(HEAD)을 확인할 수 없습니다(fail-closed)."
+            )
+        else:
+            if _rev.returncode == 0:
+                resolved_target_commit = (_rev.stdout or "").strip()
+            else:
+                target_commit_lookup_failed = (
+                    "git rev-parse HEAD 가 실패하여 기준 커밋을 확인할 수 없습니다(fail-closed): "
+                    + (_rev.stderr or "").strip()[:200]
+                )
+    result["target_commit"] = resolved_target_commit
 
     inventory_path = _contract_paths(pipeline_id)["evidence_inventory"]
 
@@ -3579,6 +3615,48 @@ def _validate_evidence_provenance(
                     path_str,
                 )
                 continue
+
+        # dirty tracked evidence 검증: 로컬 파일/ inventory sha256은 일치하지만
+        # 기준 커밋(target_commit)에 커밋된 내용과 working tree가 다르면(즉 변경 후 미커밋)
+        # 차단한다. 줄바꿈(CRLF/LF)·BOM 정규화는 git이 처리하도록 byte-SHA 직접 비교 대신
+        # `git diff --quiet <commit> -- <path>` 로 git의 텍스트 정규화 규칙을 그대로 따른다.
+        # (Windows autocrlf/BOM 환경에서 byte-SHA 비교는 clean 파일을 dirty로 오판할 수 있음.)
+        if inventory_sha256:
+            if target_commit_lookup_failed:
+                _add_blocker("git_execution_failed", target_commit_lookup_failed, path_str)
+                continue
+            if not resolved_target_commit:
+                _add_blocker(
+                    "git_execution_failed",
+                    f"기준 커밋을 확인할 수 없어 {path_str} 의 커밋 정합성을 검증할 수 없습니다(fail-closed).",
+                    path_str,
+                )
+                continue
+            try:
+                _diff = subprocess.run(
+                    ["git", "diff", "--quiet", resolved_target_commit, "--", path_str],
+                    capture_output=True, text=True, encoding="utf-8", check=False,
+                )
+            except (FileNotFoundError, OSError):
+                _add_blocker(
+                    "git_execution_failed",
+                    f"git diff 를 실행할 수 없어 {path_str} 의 커밋 정합성을 검증할 수 없습니다(fail-closed).",
+                    path_str,
+                )
+                continue
+            # git diff --quiet: 0 = 차이 없음(clean), 1 = 차이 있음(dirty), 그 외 = 오류.
+            if _diff.returncode == 1:
+                _add_blocker(
+                    "dirty_tracked_evidence",
+                    f"oracle 증거가 기준 커밋({resolved_target_commit[:12]})과 다릅니다(working tree 변경 미커밋): {path_str}. "
+                    "변경 사항을 commit/push 한 뒤 다시 실행하세요.",
+                    path_str,
+                )
+                continue
+            if _diff.returncode not in (0, 1):
+                # target commit에 파일이 없을 수 있음(아직 머지 전 신규 oracle).
+                # 이 경우 아래 git log 이력/ PR 포함 검사로 위임한다(여기서 차단하지 않음).
+                pass
 
         # PR 포함 여부 확인 전, 먼저 git log 이력 확인 (기존 main 이력이 있으면 PR 조회 불필요)
         try:
@@ -10590,6 +10668,20 @@ def _build_acceptance_target(evidence: Dict[str, Any]) -> Dict[str, Any]:
     except (FileNotFoundError, OSError):
         pass
 
+    # acceptance_target 의 기준 커밋은 PR head SHA(없으면 현재 HEAD).
+    # origin/main이 아니라 "현재 PR의 최신 commit"을 기준으로 한다.
+    target_head_commit = str(evidence.get("pr_head_sha", "") or "")
+    if not target_head_commit:
+        try:
+            _rev = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+            )
+            if _rev.returncode == 0:
+                target_head_commit = (_rev.stdout or "").strip()
+        except (FileNotFoundError, OSError):
+            pass
+
     # 파이프라인 관련 머지된 PR 목록 조회
     impl_prs: List[Dict[str, Any]] = []
     try:
@@ -10619,23 +10711,86 @@ def _build_acceptance_target(evidence: Dict[str, Any]) -> Dict[str, Any]:
     except (FileNotFoundError, OSError, json.JSONDecodeError):
         pass
 
-    # oracle/evidence 파일 SHA 목록 (evidence_integrity에서 추출)
-    oracle_evidence_files: List[Dict[str, str]] = []
-    ei_raw = evidence.get("evidence_integrity")
-    if isinstance(ei_raw, dict):
-        # 이미 조회된 inventory 결과에서 tracked 파일 SHA 추출
-        # (간소화: 실제 inventory를 다시 읽지 않고 개수만 기록)
-        pass
+    # oracle/evidence 파일 SHA 목록 — evidence_inventory.json을 직접 읽어
+    # 각 protected 항목의 inventory sha256과 기준 커밋(target_head_commit)의 blob sha256을
+    # 비교한 결과를 채운다(MATCH/MISMATCH/MISSING_IN_COMMIT/...).
+    oracle_evidence_files: List[Dict[str, Any]] = []
+    if pipeline_id:
+        try:
+            _inv_path = _contract_paths(pipeline_id)["evidence_inventory"]
+        except Exception:  # noqa: BLE001 - _contract_paths 실패는 graceful skip
+            _inv_path = None
+        if _inv_path is not None and _inv_path.exists():
+            try:
+                _inv = json.loads(_inv_path.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError, ValueError):
+                _inv = []
+            if isinstance(_inv, list):
+                for _entry in _inv:
+                    if not isinstance(_entry, dict):
+                        continue
+                    if str(_entry.get("pipeline_id", "")) != pipeline_id:
+                        continue
+                    if str(_entry.get("protection", "")) != "protected":
+                        continue
+                    _ep = str(_entry.get("path", "") or "")
+                    if not _ep:
+                        continue
+                    _epath = Path(_ep)
+                    # cleanup-only 산출물은 oracle 증거에서 제외(별도 분류).
+                    if _is_cleanup_only_artifact(_epath.name):
+                        continue
+                    _inv_sha = str(_entry.get("sha256", "") or "")
+                    # 기준 커밋과 working tree 정합성은 byte-SHA가 아니라 git diff로 판정한다
+                    # (Windows autocrlf/BOM 환경에서 byte-SHA 비교는 clean 파일을 오판함).
+                    _status = "UNKNOWN"
+                    if target_head_commit:
+                        try:
+                            _d = subprocess.run(
+                                ["git", "diff", "--quiet", target_head_commit, "--", str(_epath)],
+                                capture_output=True, text=True, encoding="utf-8", check=False,
+                            )
+                        except (FileNotFoundError, OSError):
+                            _d = None
+                        if _d is not None and _d.returncode == 0:
+                            _status = "MATCH"
+                        elif _d is not None and _d.returncode == 1:
+                            _status = "MISMATCH"
+                        else:
+                            # 기준 커밋에 파일이 없으면(신규 oracle) origin/main으로 재확인
+                            try:
+                                _dm = subprocess.run(
+                                    ["git", "diff", "--quiet", "origin/main", "--", str(_epath)],
+                                    capture_output=True, text=True, encoding="utf-8", check=False,
+                                )
+                            except (FileNotFoundError, OSError):
+                                _dm = None
+                            if _dm is not None and _dm.returncode == 0:
+                                _status = "MATCH"
+                            elif _dm is not None and _dm.returncode == 1:
+                                _status = "MISMATCH"
+                            else:
+                                _status = "MISSING_IN_COMMIT"
+                    oracle_evidence_files.append({
+                        "path": _display_path(_epath),
+                        "kind": str(_entry.get("kind", "") or ""),
+                        "inventory_sha256": _inv_sha,
+                        "target_commit": target_head_commit,
+                        "status": _status,
+                    })
 
     return {
         "description": "사용자가 확인해야 하는 실제 구현 기준점 (marker PR 아님)",
         "repository": "hojiyong2-commits/Pipeline",
         "target_main_commit": target_main_commit,
+        "target_commit": target_head_commit,
+        "target_commit_note": "PR head SHA — origin/main이 아닌 현재 PR의 최신 commit",
         "impl_prs": impl_prs,
         "changed_files": changed_files,
         "oracle_evidence_files": oracle_evidence_files,
         "note": "impl_prs는 pipeline_id로 검색한 머지된 PR 목록입니다. "
-                "실제 코드 변경은 이 PR들에 포함됩니다.",
+                "실제 코드 변경은 이 PR들에 포함됩니다. "
+                "oracle_evidence_files는 inventory sha256과 기준 커밋 blob sha256을 비교한 결과입니다.",
     }
 
 

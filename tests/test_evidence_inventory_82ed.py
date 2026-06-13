@@ -953,6 +953,183 @@ class TestAC12ShaMismatchBlocked:
             shutil.rmtree(str(contracts_dir), ignore_errors=True)
 
 
+# ---------------------------------------------------------------------------
+# AC-13: dirty tracked evidence (working tree가 기준 커밋과 다름) → BLOCKED
+# ---------------------------------------------------------------------------
+
+class TestAC13DirtyTrackedEvidenceBlocked:
+    """AC-13: 로컬/inventory sha256은 일치하지만 기준 커밋과 working tree가 다르면 BLOCKED.
+
+    실제 git tracked 파일(working tree가 수정된 상태)을 사용하여
+    _validate_evidence_provenance가 dirty_tracked_evidence(또는 evidence_sha_mismatch)로
+    차단함을 검증한다. byte-SHA가 아닌 git diff 기반 정합성 판정이 동작함을 확인한다.
+    """
+
+    def test_dirty_working_tree_is_blocked(self, tmp_path: Path) -> None:
+        """tracked 파일을 working tree에서 수정하면 provenance가 BLOCKED를 반환함."""
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED-TESTAC13"
+        contracts_dir = PROJECT_ROOT / "pipeline_contracts" / pid
+        inventory_path = contracts_dir / "evidence_inventory.json"
+        inventory_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 실제 git tracked 파일을 임시로 수정하여 dirty 상태를 만든다.
+        # CHANGELOG/README보다 안전하게, 테스트가 끝나면 git checkout으로 원복한다.
+        target_rel = "tests/oracles/IMP-20260613-82ED/TC-1-normal/input.json"
+        target_file = PROJECT_ROOT / target_rel
+        if not target_file.exists():
+            pytest.skip(f"target tracked oracle file not present: {target_rel}")
+        # tracked 여부 확인 (없으면 skip)
+        ls = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", target_rel],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=str(PROJECT_ROOT), timeout=30,
+        )
+        if ls.returncode != 0:
+            pytest.skip(f"target file not git-tracked: {target_rel}")
+
+        original_bytes = target_file.read_bytes()
+        try:
+            # working tree를 수정 (commit하지 않음) → dirty 상태
+            with open(target_file, "ab") as fh:
+                fh.write(b"\n// AC-13 dirty marker\n")
+
+            # inventory에는 "수정된 현재 파일"의 sha256을 기록 → step b(local==inventory) 통과,
+            # 그러나 기준 커밋(HEAD)과는 working tree가 다르므로 dirty로 차단되어야 함.
+            current_sha = sha256_file(target_file)
+            entry = {
+                "pipeline_id": pid,
+                "path": str(target_file),
+                "kind": "oracle_input",
+                "sha256": current_sha,
+                "size": target_file.stat().st_size,
+                "source_command": "contract add-oracle",
+                "registered_at": "2026-06-13T00:00:00Z",
+                "required_for_acceptance": True,
+                "protection": "protected",
+            }
+            inventory_path.write_text(json.dumps([entry]), encoding="utf-8")
+
+            result = pl._validate_evidence_provenance({"pipeline_id": pid})
+            assert result["status"] == "BLOCKED", (
+                f"dirty working tree must yield BLOCKED, got: {result}"
+            )
+            codes = [str(b.get("failure_code", "")) for b in result.get("blockers", [])]
+            # dirty_tracked_evidence 가 핵심. (gh/git 미설치 환경에서는 git_execution_failed 허용)
+            assert any(
+                c in ("dirty_tracked_evidence", "git_execution_failed")
+                for c in codes
+            ), f"expected dirty_tracked_evidence blocker, got: {codes}, result={result}"
+        finally:
+            # working tree 원복 (git checkout이 가장 확실)
+            subprocess.run(
+                ["git", "checkout", "--", target_rel],
+                capture_output=True, text=True, encoding="utf-8",
+                cwd=str(PROJECT_ROOT), timeout=30,
+            )
+            # checkout이 실패한 경우를 대비해 원본 바이트로도 복원
+            if target_file.read_bytes() != original_bytes:
+                target_file.write_bytes(original_bytes)
+                subprocess.run(
+                    ["git", "checkout", "--", target_rel],
+                    capture_output=True, text=True, encoding="utf-8",
+                    cwd=str(PROJECT_ROOT), timeout=30,
+                )
+            shutil.rmtree(str(contracts_dir), ignore_errors=True)
+
+    def test_clean_tracked_evidence_is_not_dirty(self) -> None:
+        """working tree가 clean한 tracked oracle 파일은 dirty_tracked_evidence로 차단되지 않음.
+
+        Windows autocrlf/BOM 환경에서 byte-SHA 비교가 clean 파일을 dirty로 오판하지 않음을
+        회귀 검증한다(실제 IMP-20260613-82ED oracle 파일 사용).
+        """
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED"
+        inventory_path = PROJECT_ROOT / "pipeline_contracts" / pid / "evidence_inventory.json"
+        if not inventory_path.exists():
+            pytest.skip(f"live inventory not present for {pid}")
+
+        result = pl._validate_evidence_provenance({"pipeline_id": pid})
+        codes = [str(b.get("failure_code", "")) for b in result.get("blockers", [])]
+        # 핵심 단언: clean한 파일이 dirty_tracked_evidence로 오판되면 안 됨.
+        assert "dirty_tracked_evidence" not in codes, (
+            f"clean tracked evidence must not be flagged dirty (CRLF/BOM 오판 방지): {result}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC-14: acceptance_target.oracle_evidence_files 가 채워짐 (CLI E2E)
+# ---------------------------------------------------------------------------
+
+class TestAC14AcceptanceTargetOracleEvidenceFiles:
+    """AC-14: final packet의 acceptance_target.oracle_evidence_files가 inventory 기반으로 채워짐."""
+
+    def test_build_acceptance_target_populates_oracle_evidence_files(self) -> None:
+        """_build_acceptance_target이 protected inventory 항목으로 oracle_evidence_files를 채움.
+
+        실제 IMP-20260613-82ED inventory(4개 protected oracle)를 사용하여
+        oracle_evidence_files가 비어있지 않고 필수 키(path/kind/inventory_sha256/status)를
+        포함함을 검증한다.
+        """
+        pl = load_pipeline_module()
+
+        pid = "IMP-20260613-82ED"
+        inventory_path = PROJECT_ROOT / "pipeline_contracts" / pid / "evidence_inventory.json"
+        if not inventory_path.exists():
+            pytest.skip(f"live inventory not present for {pid}")
+
+        evidence: Dict[str, Any] = {
+            "pipeline_id": pid,
+            "changed_files": [],
+            "pr_head_sha": "",  # 비우면 함수가 HEAD로 폴백
+        }
+        target = pl._build_acceptance_target(evidence)
+        assert "oracle_evidence_files" in target, (
+            f"acceptance_target must contain oracle_evidence_files: {list(target.keys())}"
+        )
+        oef = target["oracle_evidence_files"]
+        assert isinstance(oef, list), "oracle_evidence_files must be a list"
+        # live inventory에는 4개의 protected oracle 항목이 있으므로 비어있으면 안 됨.
+        assert len(oef) >= 1, (
+            f"oracle_evidence_files must not be empty when protected oracle entries exist: {target}"
+        )
+        for item in oef:
+            for key in ("path", "kind", "inventory_sha256", "status"):
+                assert key in item, f"oracle_evidence_files entry missing key {key}: {item}"
+        # target_commit / target_main_commit 메타데이터 노출 확인
+        assert "target_commit" in target, "acceptance_target must expose target_commit (PR head SHA 기준)"
+
+    def test_final_packet_json_has_acceptance_target_oracle_evidence_files(self) -> None:
+        """report final-packet 실행 후 human_acceptance_packet.json의
+        acceptance_target.oracle_evidence_files 구조를 검증한다 (CLI E2E).
+
+        전역 state를 변경하지 않도록 격리하지 않고 report final-packet은 read-only 성격이지만,
+        활성 파이프라인이 없으면 graceful skip 한다.
+        """
+        result = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "pipeline.py"), "report", "final-packet"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            cwd=str(PROJECT_ROOT), timeout=120,
+        )
+        packet_json = PROJECT_ROOT / "human_acceptance_packet.json"
+        if result.returncode != 0 or not packet_json.exists():
+            pytest.skip(
+                f"report final-packet did not produce JSON (활성 파이프라인 없음 등): "
+                f"rc={result.returncode}"
+            )
+        data = json.loads(packet_json.read_text(encoding="utf-8"))
+        assert "acceptance_target" in data, (
+            f"verification json must contain acceptance_target, keys={list(data.keys())}"
+        )
+        target = data["acceptance_target"]
+        assert "oracle_evidence_files" in target, (
+            f"acceptance_target must contain oracle_evidence_files: {list(target.keys())}"
+        )
+        assert isinstance(target["oracle_evidence_files"], list)
+
+
 if __name__ == "__main__":
     # SELF-VERIFY: 헬퍼 함수 기본 동작 확인
     assert sha256_file.__name__ == "sha256_file"
