@@ -3555,7 +3555,19 @@ def _validate_evidence_provenance(
 
         result["tracked_count"] += 1
 
-        # PR 포함 여부 확인 (PR 조회 실패 시 fail-closed)
+        # PR 포함 여부 확인 전, 먼저 git log 이력 확인 (기존 main 이력이 있으면 PR 조회 불필요)
+        try:
+            log_proc = subprocess.run(
+                ["git", "log", "--oneline", "-1", "--", path_str],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+            )
+        except (FileNotFoundError, OSError):
+            log_proc = None
+        if log_proc is not None and log_proc.returncode == 0 and bool((log_proc.stdout or "").strip()):
+            result["pr_included_count"] += 1  # 기존 main 이력 존재 -> 허용 (PR 조회 불필요)
+            continue
+
+        # PR 조회 실패 시 fail-closed (단, 기존 이력 파일은 위에서 이미 허용됨)
         if pr_lookup_failed_code:
             _add_blocker(pr_lookup_failed_code, pr_lookup_failed_msg, path_str)
             continue
@@ -3572,23 +3584,6 @@ def _validate_evidence_provenance(
 
         if norm_candidates & pr_changed_paths:
             result["pr_included_count"] += 1
-            continue
-
-        # PR 미포함 -> main 이력 확인 (이전부터 존재하던 파일은 허용)
-        try:
-            log_proc = subprocess.run(
-                ["git", "log", "--oneline", "-1", "--", path_str],
-                capture_output=True, text=True, encoding="utf-8", check=False,
-            )
-        except (FileNotFoundError, OSError):
-            _add_blocker(
-                "git_execution_failed",
-                f"git log 를 실행할 수 없어 {path_str} 의 이력을 확인할 수 없습니다(fail-closed).",
-                path_str,
-            )
-            continue
-        if log_proc.returncode == 0 and bool((log_proc.stdout or "").strip()):
-            result["pr_included_count"] += 1  # 기존 이력 존재 -> 허용
             continue
 
         # AC-5: PR에도 없고 이력도 없음
