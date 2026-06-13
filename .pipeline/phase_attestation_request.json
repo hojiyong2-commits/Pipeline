@@ -2,7 +2,7 @@
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
   "generated_at": "2026-06-13T01:40:00Z",
-  "pipeline_id": "IMP-20260612-CE06",
+  "pipeline_id": "IMP-20260612-8104",
   "phase": "qa",
   "phase_status": "PASS",
   "commit_hint": "19e29886fd5c513817bf794fb0e6f084496d3988",
@@ -22,7 +22,8 @@
     "receipt_path": ".pipeline/phase_evidence/IMP-20260612-CE06/build/agent_receipt_build-913a91d46d3e7071.json",
     "receipt_sha256": "2cab25d66e10f878850c9b8835a9604af54f49332074471a646737786d7363f9",
     "used_by_phase": "build",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260612-CE06\\build\\build-913a91d46d3e7071.json"
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260612-CE06\\build\\build-913a91d46d3e7071.json",
+    "pipeline_id": "IMP-20260612-8104"
   },
   "manager_run": null,
   "copied_evidence": [
