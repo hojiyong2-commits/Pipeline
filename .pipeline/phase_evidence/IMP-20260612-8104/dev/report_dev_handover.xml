@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260612-8104</pipeline_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>AGENTS.md</file>
+    <file>.claude/agents/pm-agent.md</file>
+    <file>.claude/agents/qa-agent.md</file>
+    <file>CLAUDE.md</file>
+    <file>tests/test_codex_removal_8104.py</file>
+    <file>tests/test_codex_review.py</file>
+    <file>tests/test_codex_record_base_9e38.py</file>
+    <file>tests/test_verification_json_codex_evidence.py</file>
+  </evidence>
+  <status>READY_FOR_QA</status>
+  <module_summary>
+    <module id="MT-1">pipeline.py Codex Review 코드 제거 — PASS</module>
+    <module id="MT-2">문서 trust chain 정리 — PASS</module>
+    <module id="MT-3">회귀 테스트 작성 — PASS</module>
+    <integration>PASS</integration>
+  </module_summary>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>AGENTS.md</file>
+      <file>.claude/agents/pm-agent.md</file>
+      <file>.claude/agents/qa-agent.md</file>
+      <file>CLAUDE.md</file>
+      <file>tests/test_codex_removal_8104.py</file>
+      <file>tests/test_codex_review.py</file>
+      <file>tests/test_codex_record_base_9e38.py</file>
+      <file>tests/test_verification_json_codex_evidence.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_check_codex_review_gate 등 21개 함수 제거 (MT-1), 문서 섹션 제거 (MT-2), 테스트 작성/skip (MT-3)</target_function>
+    <blast_radius>pipeline.py 단독 코드 변경, trust-root 문서 4개 업데이트, 테스트 4개 추가/수정</blast_radius>
+  </impact_analysis>
+</handover>
