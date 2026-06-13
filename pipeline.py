@@ -9426,6 +9426,73 @@ def _check_module_qa_ac_verification(
         }
 
 
+def _cmd_pm_reparse_ac(args: argparse.Namespace) -> int:
+    """pm re-parse-ac: step_plan.xml에서 AC를 재파싱하여 pipeline_state.json 갱신.
+
+    IMP-20260613-4A22 Round 3: step_plan.xml의 <acceptance_criteria>를 다시 파싱하여
+    state의 structured_acceptance_criteria를 갱신한다. AC 텍스트 인코딩 손상 복구용.
+    기존 헬퍼(_read_text_fallback / _extract_xml_element / _parse_structured_ac /
+    _load / _save)만 재사용한다.
+
+    Args:
+        args: argparse Namespace. args.step_plan에 step_plan XML 경로.
+    Returns:
+        0=성공, 1=실패.
+    """
+    step_plan_path = Path(getattr(args, "step_plan", "step_plan.xml") or "step_plan.xml")
+
+    # 1. step_plan.xml 읽기 (4-encoding fallback)
+    try:
+        text = _read_text_fallback(step_plan_path)
+    except OSError:
+        print(f"[PIPELINE ERROR] {step_plan_path} 파일을 읽을 수 없습니다.")
+        return 1
+
+    # 2. step_plan XML element 추출
+    step_plan_element = _extract_xml_element(text, "step_plan")
+    if step_plan_element is None:
+        print(f"[PIPELINE ERROR] {step_plan_path}에서 <step_plan> 요소를 찾을 수 없습니다.")
+        return 1
+
+    # 3. structured AC 파싱
+    parsed_acs = _parse_structured_ac(step_plan_element)
+    if not parsed_acs:
+        print(f"[PIPELINE ERROR] {step_plan_path}에서 <acceptance_criteria> 또는 AC 항목을 찾을 수 없습니다.")
+        return 1
+
+    # 4. state 갱신
+    state = _load()
+    if state is None:
+        print("[PIPELINE ERROR] 활성 파이프라인이 없습니다. pipeline_state.json을 찾을 수 없습니다.")
+        return 1
+    if not isinstance(state.get("atomic_plan"), dict):
+        state["atomic_plan"] = {}
+    state["atomic_plan"]["structured_acceptance_criteria"] = parsed_acs
+    state["structured_acceptance_criteria"] = parsed_acs
+    if not isinstance(state.get("requirements_tracking"), dict):
+        state["requirements_tracking"] = {}
+    state["requirements_tracking"]["enabled"] = True
+    _save(state)
+
+    print(f"[PM RE-PARSE-AC] {len(parsed_acs)}개 AC를 {step_plan_path}에서 재파싱하여 state 갱신 완료.")
+    return 0
+
+
+def cmd_pm(args: argparse.Namespace) -> None:
+    """pm 서브커맨드 dispatcher.
+
+    Args:
+        args: argparse Namespace. args.pm_action에 하위 액션 이름.
+    """
+    action = getattr(args, "pm_action", None)
+    if action == "re-parse-ac":
+        rc = _cmd_pm_reparse_ac(args)
+        if rc != 0:
+            sys.exit(rc)
+        return
+    _die(f"[PIPELINE ERROR] 알 수 없는 pm 액션: {action!r}", exit_code=2)
+
+
 def cmd_module(args: argparse.Namespace) -> None:
     """Incremental module gate for PM micro_tasks."""
     action = args.module_action
@@ -14286,22 +14353,12 @@ def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str
 def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[str]:
     """AC 충족표에 PENDING 항목이 있으면 차단 메시지 반환. 정상이면 None.
 
-    IMP-20260613-4A22 Round 2: requirements_tracking.enabled 또는 stale ac_completeness
-    캐시에 의존하지 않고, 항상 _build_ac_fulfillment_table을 live로 재실행한다.
-    structured_acceptance_criteria가 없으면(None 반환) 검사 생략(legacy/무AC 파이프라인).
-    structured AC가 1개라도 있으면 모두 PASS여야 nonce를 발급한다.
+    IMP-20260613-4A22 Round 3:
+    - integration.status 확인을 AC 결과와 무관하게 항상 먼저 수행한다.
+    - AC 전부 PASS라도 integration이 PASS가 아니면 차단한다.
+    - structured AC가 없으면(None) 검사 생략 (legacy/무AC 파이프라인).
     """
-    # Live rebuild — do not trust stale ac_completeness cache or enabled flag
-    ac_table_live = _build_ac_fulfillment_table(state)
-    if ac_table_live is None:
-        # structured_acceptance_criteria 없음 — legacy 또는 무AC 파이프라인은 검사 생략
-        return None
-
-    pending_live = [e["ac_id"] for e in ac_table_live if e.get("result") != "PASS"]
-    if not pending_live:
-        return None  # 모든 AC PASS
-
-    # module integration gate 상태도 함께 안내 (UX)
+    # 1. integration gate 항상 먼저 확인 (AC 결과와 독립)
     integration_status = (
         state.get("module_gates", {})
         .get("integration", {})
@@ -14313,6 +14370,15 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
             f"  현재 상태: {integration_status or 'PENDING'}\n"
             "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
         )
+
+    # 2. Live rebuild — stale ac_completeness 캐시나 requirements_tracking.enabled 플래그에 의존하지 않음
+    ac_table_live = _build_ac_fulfillment_table(state)
+    if ac_table_live is None:
+        return None  # structured AC 없음 — legacy/무AC 파이프라인은 검사 생략
+
+    pending_live = [e["ac_id"] for e in ac_table_live if e.get("result") != "PASS"]
+    if not pending_live:
+        return None  # 모든 AC PASS
 
     total = len(ac_table_live)
     detail = f"  - 미완료 항목 ({len(pending_live)}/{total}): {', '.join(str(p) for p in pending_live)}"
@@ -17923,6 +17989,13 @@ def build_parser() -> argparse.ArgumentParser:
                                   help="Backward-compatible no-op. Acceptance diagnostics are automatic; final user decision is gates accept.")
 
     # incremental module gates
+    # pm utilities (re-parse-ac)
+    p_pm = sub.add_parser("pm", help="PM utility actions")
+    pmsub = p_pm.add_subparsers(dest="pm_action", required=True)
+    p_pm_reparse = pmsub.add_parser("re-parse-ac", help="step_plan.xml에서 AC를 재파싱하여 state 갱신")
+    p_pm_reparse.add_argument("--step-plan", dest="step_plan", default="step_plan.xml",
+                              help="step_plan XML 파일 경로")
+
     p_module = sub.add_parser("module", help="Incremental Dev/QA gates for each PM micro_task")
     msub = p_module.add_subparsers(dest="module_action", required=True)
     p_module_design = msub.add_parser("design", help="Record detailed design for one micro_task")
@@ -21252,6 +21325,7 @@ COMMAND_MAP = {
     "budget":               cmd_budget,
     "golden":               cmd_golden,
     "hygiene":              cmd_hygiene,
+    "pm":                   cmd_pm,
 }
 
 

@@ -58,3 +58,13 @@
 2. **drift 감지 테스트 26개**: 세 소스(pipeline.py PHASE_AGENT_IDS, AGENTS.md 에이전트 표, .claude/agents/*.md 파일)의 정합성을 자동으로 검증. 향후 에이전트 추가/제거/이름 변경 시 테스트 실패로 즉시 감지됨.
 
 pipeline.py PHASE_AGENT_IDS 및 evidence integrity 로직은 변경 없이 보존되었으며, GPT advisory는 manual diagnostic 상태를 유지합니다.
+
+## SCOPE NOTE: PR 내 IMP-20260612-CE06 파일 삭제 설명
+
+이 PR 차이(diff)에 `.pipeline/phase_evidence/IMP-20260612-CE06/**` 9개 파일의 삭제가 포함되어 있습니다.
+
+**이유**: `main` 브랜치에 IMP-20260612-CE06 파이프라인의 phase attestation 증거 파일 9개가 `.pipeline/phase_evidence/IMP-20260612-CE06/` 경로에 잔류하고 있었습니다. 이 파일들은 CE06 파이프라인 완료 후 phase-attestation 브랜치가 main에 머지될 때 포함된 것으로, CLAUDE.md 정책("`phase_evidence/**`는 main에서 무시되어야 함")에 따라 main에 있어서는 안 됩니다.
+
+4A22 impl 브랜치는 이 파일들을 포함하지 않으므로, 이 PR 머지 시 main에서 해당 파일들이 삭제됩니다. 이는 CLAUDE.md `.gitignore` 정책에 따른 의도된 정리(cleanup)이며 4A22 기능 변경과는 무관합니다.
+
+**영향**: IMP-20260612-CE06 파이프라인은 이미 완료되었으므로 이 파일 삭제는 운영에 영향을 주지 않습니다.
