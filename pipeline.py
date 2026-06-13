@@ -3658,6 +3658,32 @@ def _validate_evidence_provenance(
                 # 이 경우 아래 git log 이력/ PR 포함 검사로 위임한다(여기서 차단하지 않음).
                 pass
 
+            # Step d2: explicit blob SHA cross-check (defense-in-depth — stale/tampered evidence 차단)
+            # git diff --quiet이 0(clean)일 때 target commit의 blob SHA256을 직접 계산하여
+            # inventory sha256과 명시적으로 대조한다. step b(local==inventory) + step d(working
+            # tree==commit)가 모두 통과했을 때 동일 결론이 나야 하는 three-way consistency check이다.
+            if _diff.returncode == 0 and inventory_sha256:
+                try:
+                    _rel_p = path_obj.resolve().relative_to(BASE_DIR.resolve()).as_posix()
+                    _bproc = subprocess.run(
+                        ["git", "show", f"{resolved_target_commit}:{_rel_p}"],
+                        capture_output=True, check=False,
+                    )
+                    if _bproc.returncode == 0 and _bproc.stdout:
+                        _blob_sha = hashlib.sha256(_bproc.stdout).hexdigest()
+                        if _blob_sha != inventory_sha256:
+                            _add_blocker(
+                                "evidence_blob_sha_mismatch",
+                                f"target commit({resolved_target_commit[:12]})의 blob SHA256이 "
+                                f"inventory sha256과 다릅니다(stale/tampered evidence): {path_str}. "
+                                f"expected={inventory_sha256[:16]}..., "
+                                f"blob_actual={_blob_sha[:16]}...",
+                                path_str,
+                            )
+                            continue
+                except (ValueError, OSError, FileNotFoundError):
+                    pass  # rel_path 변환 또는 git show 실패 → graceful (git diff가 이미 커버)
+
         # PR 포함 여부 확인 전, 먼저 git log 이력 확인 (기존 main 이력이 있으면 PR 조회 불필요)
         try:
             log_proc = subprocess.run(
@@ -10858,7 +10884,33 @@ def _build_acceptance_target(evidence: Dict[str, Any]) -> Dict[str, Any]:
         except (FileNotFoundError, OSError):
             pass
 
-    # 파이프라인 관련 머지된 PR 목록 조회
+    # 현재 오픈된 PR 정보 (User Acceptance의 실제 승인 대상)
+    # — impl_prs(이미 머지된 이력 PR)과 구분하여 명확히 표시한다.
+    acceptance_pr: Dict[str, Any] = {}
+    try:
+        _curr_pr = subprocess.run(
+            ["gh", "pr", "view", "--json", "number,headRefOid,title,files"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+        if _curr_pr.returncode == 0:
+            _curr_data = json.loads((_curr_pr.stdout or "").strip() or "{}")
+            if isinstance(_curr_data, dict):
+                acceptance_pr = {
+                    "number": f"#{_curr_data.get('number', '')}",
+                    "head_sha": str(_curr_data.get("headRefOid", "") or ""),
+                    "title": str(_curr_data.get("title", "") or ""),
+                    "changed_files": [
+                        str(f.get("path", ""))
+                        for f in (_curr_data.get("files") or [])
+                        if isinstance(f, dict) and f.get("path")
+                    ],
+                    "note": "이 PR이 User Acceptance 승인 대상입니다. "
+                            "changed_files 목록이 사용자가 최종 확인하는 변경 범위입니다.",
+                }
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        pass
+
+    # 파이프라인 관련 머지된 PR 이력 조회 (참고용 — acceptance 대상 아님)
     impl_prs: List[Dict[str, Any]] = []
     try:
         _pr_list = subprocess.run(
@@ -10890,6 +10942,7 @@ def _build_acceptance_target(evidence: Dict[str, Any]) -> Dict[str, Any]:
     # oracle/evidence 파일 SHA 목록 — evidence_inventory.json을 직접 읽어
     # 각 protected 항목의 inventory sha256과 기준 커밋(target_head_commit)의 blob sha256을
     # 비교한 결과를 채운다(MATCH/MISMATCH/MISSING_IN_COMMIT/...).
+    # target_blob_sha256: git show <commit>:<rel_path> 실행 후 sha256(blob_bytes) 계산.
     oracle_evidence_files: List[Dict[str, Any]] = []
     if pipeline_id:
         try:
@@ -10917,56 +10970,85 @@ def _build_acceptance_target(evidence: Dict[str, Any]) -> Dict[str, Any]:
                     if _is_cleanup_only_artifact(_epath.name):
                         continue
                     _inv_sha = str(_entry.get("sha256", "") or "")
-                    # 기준 커밋과 working tree 정합성은 byte-SHA가 아니라 git diff로 판정한다
-                    # (Windows autocrlf/BOM 환경에서 byte-SHA 비교는 clean 파일을 오판함).
+                    # git diff 기반 status (CRLF/BOM 정규화 문제로 byte-SHA 대신 git diff 사용)
                     _status = "UNKNOWN"
+                    # target_blob_sha256: git show <commit>:<rel_path> → sha256(bytes)
+                    # inventory sha256과 명시적으로 대조하여 stale/tampered evidence를 투명하게 표시.
+                    _target_blob_sha256 = ""
+                    _blob_match: Optional[bool] = None
                     if target_head_commit:
                         try:
-                            _d = subprocess.run(
-                                ["git", "diff", "--quiet", target_head_commit, "--", str(_epath)],
-                                capture_output=True, text=True, encoding="utf-8", check=False,
+                            _rel_ep = _epath.resolve().relative_to(BASE_DIR.resolve()).as_posix()
+                            _bproc = subprocess.run(
+                                ["git", "show", f"{target_head_commit}:{_rel_ep}"],
+                                capture_output=True, check=False,
                             )
-                        except (FileNotFoundError, OSError):
-                            _d = None
-                        if _d is not None and _d.returncode == 0:
-                            _status = "MATCH"
-                        elif _d is not None and _d.returncode == 1:
-                            _status = "MISMATCH"
+                            if _bproc.returncode == 0 and _bproc.stdout:
+                                _target_blob_sha256 = hashlib.sha256(_bproc.stdout).hexdigest()
+                                _blob_match = (_target_blob_sha256 == _inv_sha) if _inv_sha else None
+                        except (ValueError, OSError, FileNotFoundError):
+                            pass
+                        if _target_blob_sha256:
+                            # blob SHA 비교 결과로 status 결정
+                            _status = "MATCH" if _blob_match else "MISMATCH"
                         else:
-                            # 기준 커밋에 파일이 없으면(신규 oracle) origin/main으로 재확인
+                            # blob 조회 실패 시 git diff --quiet fallback
                             try:
-                                _dm = subprocess.run(
-                                    ["git", "diff", "--quiet", "origin/main", "--", str(_epath)],
+                                _d = subprocess.run(
+                                    ["git", "diff", "--quiet", target_head_commit, "--", str(_epath)],
                                     capture_output=True, text=True, encoding="utf-8", check=False,
                                 )
                             except (FileNotFoundError, OSError):
-                                _dm = None
-                            if _dm is not None and _dm.returncode == 0:
+                                _d = None
+                            if _d is not None and _d.returncode == 0:
                                 _status = "MATCH"
-                            elif _dm is not None and _dm.returncode == 1:
+                            elif _d is not None and _d.returncode == 1:
                                 _status = "MISMATCH"
                             else:
-                                _status = "MISSING_IN_COMMIT"
+                                # 기준 커밋에 파일이 없으면(신규 oracle) origin/main으로 재확인
+                                try:
+                                    _dm = subprocess.run(
+                                        ["git", "diff", "--quiet", "origin/main", "--", str(_epath)],
+                                        capture_output=True, text=True, encoding="utf-8", check=False,
+                                    )
+                                except (FileNotFoundError, OSError):
+                                    _dm = None
+                                if _dm is not None and _dm.returncode == 0:
+                                    _status = "MATCH"
+                                elif _dm is not None and _dm.returncode == 1:
+                                    _status = "MISMATCH"
+                                else:
+                                    _status = "MISSING_IN_COMMIT"
                     oracle_evidence_files.append({
                         "path": _display_path(_epath),
                         "kind": str(_entry.get("kind", "") or ""),
                         "inventory_sha256": _inv_sha,
+                        "target_blob_sha256": _target_blob_sha256,
                         "target_commit": target_head_commit,
+                        "sha_match": _blob_match,
                         "status": _status,
                     })
 
     return {
         "description": "사용자가 확인해야 하는 실제 구현 기준점 (marker PR 아님)",
         "repository": "hojiyong2-commits/Pipeline",
+        "acceptance_pr": acceptance_pr,
+        "acceptance_pr_note": (
+            "acceptance_pr은 현재 User Acceptance 승인 대상인 오픈 PR입니다. "
+            "impl_prs(이력)와 구분하세요."
+        ),
         "target_main_commit": target_main_commit,
         "target_commit": target_head_commit,
         "target_commit_note": "PR head SHA — origin/main이 아닌 현재 PR의 최신 commit",
         "impl_prs": impl_prs,
+        "impl_prs_note": "pipeline_id로 검색한 이미 머지된 PR 이력입니다. 승인 대상은 acceptance_pr을 확인하세요.",
         "changed_files": changed_files,
         "oracle_evidence_files": oracle_evidence_files,
-        "note": "impl_prs는 pipeline_id로 검색한 머지된 PR 목록입니다. "
-                "실제 코드 변경은 이 PR들에 포함됩니다. "
-                "oracle_evidence_files는 inventory sha256과 기준 커밋 blob sha256을 비교한 결과입니다.",
+        "oracle_evidence_note": (
+            "oracle_evidence_files의 target_blob_sha256은 target_commit에서 "
+            "git show로 추출한 blob SHA256입니다. "
+            "inventory_sha256과 일치하면 sha_match=true, status=MATCH로 표시됩니다."
+        ),
     }
 
 
