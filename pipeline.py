@@ -3736,8 +3736,9 @@ def _validate_evidence_provenance(
 #                oracle_manifest의 상대 경로는 BASE_DIR 기준으로 정규화한다(_oracle_manifest_status와 동일).
 # [Vulnerability & Risks]: 경로 정규화가 OS/심볼릭링크 차이로 실패하면 basename fallback으로
 #                완화하나, 동일 basename(input.json 등)이 여러 케이스에 존재하면 느슨한 매칭이 될 수 있어
-#                절대 경로 우선 비교 → 절대 경로 미스 시에만 basename 보조 매칭을 사용한다.
-# [Improvement]: oracle_manifest에 inventory entry id를 직접 링크하면 경로 정규화 의존을 제거할 수 있다.
+# 경로 비교는 resolved absolute path만 사용한다.
+# basename fallback을 제거한 이유: 여러 oracle case가 같은 basename(input.json, expected.json)을
+# 사용하므로 fallback이 누락 경로를 통과시키는 우회 경로가 된다(IMP-20260613-82ED Round 7 지적).
 def _check_oracle_manifest_vs_inventory(state: Dict[str, Any]) -> Dict[str, Any]:
     """oracle_manifest의 모든 input/expected 경로가 evidence_inventory에 등록됐는지 전체 대조한다.
 
@@ -3852,15 +3853,13 @@ def _check_oracle_manifest_vs_inventory(state: Dict[str, Any]) -> Dict[str, Any]
         except (OSError, ValueError):
             return str(p)
 
-    # inventory의 절대 경로 set과 basename set 구성.
+    # inventory의 resolved 절대 경로 set 구성 (basename 보조 매칭 제거 — 우회 위험).
     inventory_abs = set()
-    inventory_basenames = set()
     for e in entries:
         raw = str(e.get("path", "") or "")
         if not raw:
             continue
         inventory_abs.add(_norm_abs(raw))
-        inventory_basenames.add(Path(raw).name)
 
     blockers: List[Dict[str, str]] = []
     checked = 0
@@ -3876,10 +3875,7 @@ def _check_oracle_manifest_vs_inventory(state: Dict[str, Any]) -> Dict[str, Any]
             abs_path = _norm_abs(raw_path)
             if abs_path in inventory_abs:
                 continue
-            # 절대 경로 미스 시 basename 보조 매칭(경로 표기 차이 완화).
-            basename = Path(raw_path).name
-            if basename in inventory_basenames:
-                continue
+            # 절대 경로 미스 = 미등록 oracle → fail-closed BLOCKED (basename fallback 없음).
             blockers.append({
                 "failure_code": "oracle_not_in_evidence_inventory",
                 "oracle_path": raw_path,
