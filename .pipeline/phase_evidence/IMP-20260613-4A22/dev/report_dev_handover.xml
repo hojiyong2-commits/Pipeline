@@ -1,4 +1,4 @@
-﻿<handover>
+<handover>
   <from>dev-agent</from>
   <to>qa-agent</to>
   <pipeline_id>IMP-20260613-4A22</pipeline_id>
