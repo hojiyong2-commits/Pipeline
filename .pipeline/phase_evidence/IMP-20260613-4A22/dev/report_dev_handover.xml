@@ -1,0 +1,39 @@
+﻿<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260613-4A22</pipeline_id>
+  <phase>dev</phase>
+  <status>COMPLETE</status>
+  <implemented_files>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>tests/test_agent_registry_4a22.py</file>
+    <file>agent_registry_audit_report.md</file>
+  </implemented_files>
+  <scope_declaration>
+    <files_to_modify>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <file>tests/test_agent_registry_4a22.py</file>
+      <file>agent_registry_audit_report.md</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>MT-1: .claude/agents/pm-planner-agent.md (신규 파일, 함수 아님)</target_function>
+    <target_function>MT-2: tests/test_agent_registry_4a22.py (신규 테스트 함수들)</target_function>
+    <target_function>MT-3: AGENTS.md / pipeline.py 정합성 + agent_registry_audit_report.md (문서)</target_function>
+  </impact_analysis>
+  <self_check>
+    <tests_pass>26 drift detection tests PASS</tests_pass>
+    <regression>test_pm_split.py, test_doc_cli_contract.py 회귀 없음</regression>
+    <scope_lock>선언 파일 외 변경 없음; trust-root violation false</scope_lock>
+    <overall>PASS</overall>
+  </self_check>
+  <evidence>
+    <file>.claude/agents/pm-planner-agent.md</file>
+    <file>tests/test_agent_registry_4a22.py</file>
+    <file>agent_registry_audit_report.md</file>
+    <file>module_qa_MT-1.xml</file>
+    <file>module_qa_MT-2.xml</file>
+    <file>module_qa_MT-3.xml</file>
+    <file>integration_report.xml</file>
+  </evidence>
+</handover>

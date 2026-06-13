@@ -1,0 +1,20 @@
+﻿{
+  "pipeline_id": "IMP-20260613-4A22",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [".claude/agents/pm-planner-agent.md"],
+      "affected_functions": [".claude/agents/pm-planner-agent.md (신규 파일", "함수 아님)"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["tests/test_agent_registry_4a22.py"],
+      "affected_functions": ["tests/test_agent_registry_4a22.py (신규 테스트 함수들)"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["agent_registry_audit_report.md"],
+      "affected_functions": ["AGENTS.md / pipeline.py 정합성 + agent_registry_audit_report.md (문서)"]
+    }
+  ]
+}
