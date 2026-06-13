@@ -1,0 +1,10 @@
+﻿{
+  "pipeline_state": {
+    "pipeline_id": "IMP-20260612-8104",
+    "current_phase": "dev",
+    "pm_done": true,
+    "dev_done": true,
+    "codex_review_result_present": false
+  },
+  "command": "check --phase qa"
+}

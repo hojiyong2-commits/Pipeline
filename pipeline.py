@@ -10567,6 +10567,8 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
     print(f"  CI run: {ci_run_id}")
     print(f"  변경 파일: {n_files}개")
     print(f"  승인 코드: {code_label}")
+    # IMP-20260612-8104 MT-1: 검증용 메타데이터 블록이 packet에 포함됨을 stdout에 표시
+    print("  packet 내용: 검증용 메타데이터 포함 (PR head SHA / CI run ID / changed files)")
     print(
         "  다음 단계: python pipeline.py report update-pr-body 후 "
         "gates request-accept --evidence <결과물>\n"
