@@ -51,42 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "0f958b247c12502509da4e806e6b400b272afb08695d272019064f59dbfc6cc6",
-      "size_bytes": 975040
-    },
-    {
-      "path": "tests/e2e/test_post_accept_finalization_d278.py",
-      "sha256": "19841ed6beb387c81da819a630c026e5304c7296b169665da87eab1198dd12f5",
-      "size_bytes": 9216
-    },
-    {
-      "path": ".claude/agents/pipeline-manager-agent.md",
-      "sha256": "be9ab58902ff44148d85ca27551a918ee9c2489fe889df9a80bff062fcc3f2f1",
-      "size_bytes": 7426
-    },
-    {
-      "path": "tests/oracles/IMP-20260614-D278/TC-1-normal/input.json",
-      "sha256": "081049e2c9dee2e0a8d69de93750da2614dae9255e72ee420f4ba050114a0c7b",
-      "size_bytes": 70
-    },
-    {
-      "path": "tests/oracles/IMP-20260614-D278/TC-1-normal/expected.json",
-      "sha256": "9bed52de196dbf5344115e636eae43fabbc3cb1760b31c960bfb627010af8d6c",
-      "size_bytes": 41
-    },
-    {
-      "path": "tests/oracles/IMP-20260614-D278/TC-2-edge/input.json",
-      "sha256": "a60f3aa895cafaea19e7c27ff39607a0504aba7b37b7bd4abc179e2b900ddae7",
-      "size_bytes": 100
-    },
-    {
-      "path": "tests/oracles/IMP-20260614-D278/TC-2-edge/expected.json",
-      "sha256": "cc6e0e6420c5ed654243914e1bd07a3b4bf52f46d06b7618fe91020e9f87934f",
-      "size_bytes": 42
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
