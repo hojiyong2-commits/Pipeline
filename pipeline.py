@@ -11213,6 +11213,10 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         reject_example = f"REJECT-{pipeline_id}-{accept_nonce}: 이유"
         accept_request_id = str(acceptance_request.get("request_id", "") or "")
         accept_status = str(acceptance_request.get("status", "PENDING") or "PENDING")
+    # acceptance_request.json이 PENDING이면 gates.acceptance를 PENDING으로 표시
+    # (이전 REJECT로 pipeline state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
+    if accept_status == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
+        gate_status["acceptance"] = "PENDING"
 
     # 새 구조화 객체
     pr_obj: Dict[str, Any] = {
