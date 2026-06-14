@@ -51,22 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
-      "size_bytes": 1038611
-    },
-    {
-      "path": "tests/e2e/test_acceptance_template_sst_509f.py",
-      "sha256": "cac472d37f0e7d6988064b004ec314d2edec7529877ce1dd0c9a9d0211ae6db3",
-      "size_bytes": 10018
-    },
-    {
-      "path": ".claude/agents/pipeline-manager-agent.md",
-      "sha256": "cfb4c17190a5c4a0e67f3e2c698ada1200d381b96591863e2346a0208f0cef16",
-      "size_bytes": 11765
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
