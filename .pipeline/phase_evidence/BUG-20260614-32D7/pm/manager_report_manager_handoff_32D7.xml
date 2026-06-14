@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff_report>
+<manager_handoff>
+  <pipeline_id>BUG-20260614-32D7</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-3791c7625fd43e5e</manager_run_id>
+  <planner_run_id>pm_planner-73f3d8bf575f0827</planner_run_id>
+  <step_plan_sha256>a6335ffe231998d7d6e15a3948b5b4eda0ec5656d4377fb79f7afa088681dc24</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>PM_COMPLETE</status>
+
+  <roadmap>
+    <phase name="PM">완료 — contract frozen, oracle 등록, PR 생성</phase>
+    <phase name="Dev">MT-1 through MT-5 순차 구현</phase>
+    <phase name="QA">TC-1 through TC-8 전수 검증, B32A/D278/2821 회귀 확인</phase>
+    <phase name="SEC">skip — 외부 API/DB 없음</phase>
+    <phase name="Build">N/A — meta-task</phase>
+    <phase name="External Gates">technical, oracle, github-ci, acceptance</phase>
+    <phase name="Architect">RCA 분석</phase>
+  </roadmap>
+
+  <clarification_record>
+    <all_p0_resolved>true</all_p0_resolved>
+    <user_confirmed_design>true</user_confirmed_design>
+    <design_decision>옵션 A: pipeline-final-check-packet 전용 marker 추가 (사용자 명시)</design_decision>
+  </clarification_record>
+</manager_handoff>
+</manager_handoff_report>
