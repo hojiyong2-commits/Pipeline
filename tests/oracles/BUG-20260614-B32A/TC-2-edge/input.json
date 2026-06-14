@@ -1,0 +1,18 @@
+{
+  "description": "fake packet evidence with workspace_hygiene WARN",
+  "packet_evidence": {
+    "evidence_integrity": {
+      "status": "PASS",
+      "protected_count": 2,
+      "tracked_count": 2,
+      "pr_included_count": 2
+    },
+    "workspace_hygiene": {
+      "status": "WARN",
+      "blocking_items": [],
+      "cleanup_only_items": ["build_report.xml", "oracle_result_dump.txt"]
+    }
+  },
+  "expected_pending_comment_workspace_hygiene": "WARN (blocking:0, cleanup_only:2)",
+  "expected_not_present_in_pending_comment": ["NOT_CHECKED"]
+}

@@ -1,0 +1,18 @@
+{
+  "description": "fake packet evidence with evidence_integrity PASS",
+  "packet_evidence": {
+    "evidence_integrity": {
+      "status": "PASS",
+      "protected_count": 4,
+      "tracked_count": 4,
+      "pr_included_count": 4
+    },
+    "workspace_hygiene": {
+      "status": "OK",
+      "blocking_items": [],
+      "cleanup_only_items": []
+    }
+  },
+  "expected_pending_comment_evidence_integrity": "PASS (protected:4, tracked:4, pr_included:4)",
+  "expected_not_present_in_pending_comment": ["NOT_CHECKED"]
+}
