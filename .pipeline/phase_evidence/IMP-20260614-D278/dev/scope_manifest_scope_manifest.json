@@ -1,0 +1,96 @@
+{
+  "pipeline_id": "IMP-20260614-D278",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_resolve_acceptance_display_state (신규)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_resolve_acceptance_display_state SSoT helper 신규 추가 — PENDING/ACCEPTED/REJECTED 표시 상태 계산, oracle TC-1/TC-2 대조 PASS."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_build_verification_json", "_build_final_packet_content"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "두 builder의 acceptance 표시 상태 계산을 _resolve_acceptance_display_state 호출로 교체, verification_json.acceptance.display_status + packet 메타데이터 acceptance_display 라인 추가."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_cmd_gates_accept (accept action 블록)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-2"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_finalize_post_accept fail-closed 7단계 신규 helper + _cmd_gates_accept ACCEPT 케이스에서 consume 직후/gate PASS 직전 호출, 실패 시 BLOCKED로 gate PASS 차단, gh/PR 없음 graceful skip."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_consume_acceptance_request"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_consume_acceptance_request에 accepted_at/accepted_by/consumed_nonce 필드 + keyword-only accepted_by 파라미터 추가, provenance approver 전달."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["tests/e2e/test_post_accept_finalization_d278.py", "tests/oracles/IMP-20260614-D278/TC-1-normal/input.json", "tests/oracles/IMP-20260614-D278/TC-1-normal/expected.json", "tests/oracles/IMP-20260614-D278/TC-2-edge/input.json", "tests/oracles/IMP-20260614-D278/TC-2-edge/expected.json"],
+      "affected_functions": ["TestPostAcceptFinalizationD278 (신규 테스트 클래스)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-4"],
+          "changed_files": ["tests/e2e/test_post_accept_finalization_d278.py"],
+          "implementation_evidence": [
+            "15개 E2E/단위 테스트 신규 — helper 도메인 검증, consume 신규 필드 파일 기록 검증, PIPELINE_STATE_PATH 격리 status CLI final_state assertion. 15 passed."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [".claude/agents/pipeline-manager-agent.md"],
+      "affected_functions": ["pipeline-manager-agent.md 문서 섹션"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "covers_iqr": ["IQR-1"],
+          "implemented_ac": [],
+          "changed_files": [".claude/agents/pipeline-manager-agent.md"],
+          "implementation_evidence": [
+            "User Acceptance 표시 상태값 정의 섹션 추가 — 표시/gate 상태 레이어 구분 + fail-closed 9단계 문서화."
+          ]
+        }
+      ]
+    }
+  ]
+}
