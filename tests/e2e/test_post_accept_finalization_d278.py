@@ -127,17 +127,98 @@ class TestPostAcceptFinalizationD278(unittest.TestCase):
         self.assertEqual(_resolve_acceptance_display_state(None), "PENDING")
 
     def test_pr_comment_update_fail_blocks_pass(self):
-        """TC-7: helper는 REJECT consumed_result에 REJECTED를 반환 (일관성 확인)."""
-        from pipeline import _resolve_acceptance_display_state
-        req_rejected = {"status": "ACCEPTED", "consumed_result": "REJECT"}
-        self.assertEqual(_resolve_acceptance_display_state(req_rejected), "REJECTED")
+        """TC-7: PR comment update 실패 시 _finalize_post_accept는 BLOCKED를 반환한다."""
+        import tempfile
+        from unittest.mock import patch
+        from pathlib import Path as _Path
+        from pipeline import _finalize_post_accept
+
+        acceptance_request = {
+            "status": "CONSUMED",
+            "consumed_result": "ACCEPT",
+            "nonce": "TESTNONCE7",
+            "pipeline_id": "TEST-D278",
+            "request_id": "RID-7",
+            "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/589",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = {"pipeline_id": "TEST-D278", "current_phase": "architect"}
+            json_file = os.path.join(tmp, "packet.json")
+            with open(json_file, "w", encoding="utf-8") as f:
+                json.dump({"acceptance": {"display_status": "ACCEPTED"}}, f)
+
+            with patch("pipeline._materialize_acceptance_snapshot",
+                       return_value={"pr_body_updated": True}), \
+                 patch("pipeline._packet_json_output_path",
+                       return_value=_Path(json_file)), \
+                 patch("pipeline._resolve_acceptance_display_state",
+                       return_value="ACCEPTED"), \
+                 patch("pipeline.shutil.which", return_value="/usr/bin/gh"), \
+                 patch("pipeline._get_pr_body_text",
+                       return_value="<!-- PIPELINE_FINAL_PACKET_START -->ACCEPTED"
+                                    "<!-- PIPELINE_FINAL_PACKET_END -->"), \
+                 patch("pipeline._consistency_extract_packet_block",
+                       return_value="ACCEPTED block"), \
+                 patch("pipeline._update_github_acceptance_comment",
+                       return_value={"success": False, "error": "gh 실패 시뮬레이션"}):
+                result = _finalize_post_accept(
+                    state, acceptance_request,
+                    "https://github.com/test/pr/1",
+                )
+
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(result["failure_code"], "comment_update_failed")
 
     def test_pr_recheck_not_accepted_blocks(self):
-        """TC-8: PENDING은 ACCEPTED가 아니다 (재조회 검증 토대)."""
-        from pipeline import _resolve_acceptance_display_state
-        req = {"status": "PENDING"}
-        display = _resolve_acceptance_display_state(req)
-        self.assertNotEqual(display, "ACCEPTED")
+        """TC-8: PR comment 재조회 결과 active approval 안내가 남아 있으면 BLOCKED."""
+        import tempfile
+        from unittest.mock import patch
+        from pathlib import Path as _Path
+        from pipeline import _finalize_post_accept
+
+        acceptance_request = {
+            "status": "CONSUMED",
+            "consumed_result": "ACCEPT",
+            "nonce": "TESTNONCE8",
+            "pipeline_id": "TEST-D278",
+            "request_id": "RID-8",
+            "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/589",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = {"pipeline_id": "TEST-D278", "current_phase": "architect"}
+            json_file = os.path.join(tmp, "packet.json")
+            with open(json_file, "w", encoding="utf-8") as f:
+                json.dump({"acceptance": {"display_status": "ACCEPTED"}}, f)
+
+            stale_comment = (
+                "<!-- pipeline-human-acceptance-packet -->\n"
+                "아래 코드를 입력하세요\nACCEPT-TEST-D278-TESTNONCE8"
+            )
+            with patch("pipeline._materialize_acceptance_snapshot",
+                       return_value={"pr_body_updated": True}), \
+                 patch("pipeline._packet_json_output_path",
+                       return_value=_Path(json_file)), \
+                 patch("pipeline._resolve_acceptance_display_state",
+                       return_value="ACCEPTED"), \
+                 patch("pipeline.shutil.which", return_value="/usr/bin/gh"), \
+                 patch("pipeline._get_pr_body_text",
+                       return_value="<!-- PIPELINE_FINAL_PACKET_START -->ACCEPTED"
+                                    "<!-- PIPELINE_FINAL_PACKET_END -->"), \
+                 patch("pipeline._consistency_extract_packet_block",
+                       return_value="ACCEPTED block"), \
+                 patch("pipeline._update_github_acceptance_comment",
+                       return_value={"success": True}), \
+                 patch("pipeline._get_pr_comment_acceptance_body",
+                       return_value=stale_comment):
+                result = _finalize_post_accept(
+                    state, acceptance_request,
+                    "https://github.com/test/pr/1",
+                )
+
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(result["failure_code"], "active_approval_still_present")
 
     def test_new_request_accept_after_fail_is_pending(self):
         """TC-9: 이전 FAIL 있어도 새 request-accept는 PENDING."""

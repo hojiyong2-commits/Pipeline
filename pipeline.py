@@ -14085,69 +14085,51 @@ def _get_pr_changed_files() -> List[str]:
     return []
 
 
-def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> None:
-    """GitHub PR에 최종 확인 안내 댓글을 생성하거나 최신 내용으로 갱신.
+def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dict[str, Any]:
+    """ACCEPT 성공 후 GitHub PR에 "사용자 승인 완료" 댓글로 교체한다.
+
+    [Purpose]: REJECT-IMP-20260614-D278 지적 #2 — ACCEPT 성공 후에도 active approval
+      안내 댓글(승인 코드 입력 안내)이 PR에 남아 후속 혼동을 유발하던 문제 해결.
+      기존 acceptance-packet 태그 댓글을 모두 삭제하고 ACCEPTED 완료 댓글로 교체한다.
+    [Assumptions]: req는 CONSUMED/ACCEPT 상태의 acceptance_request. gh CLI는 선택적.
+    [Vulnerability & Risks]: gh CLI 실패 시 success=False 반환 — 호출자(_finalize_post_accept)는
+      이를 fail-closed로 처리하여 gate BLOCKED를 반환해야 한다 (지적 #1).
+    [Improvement]: 댓글 ID를 반환하여 호출자가 직접 재조회하도록 확장 가능.
 
     기존 acceptance-packet 태그(<!-- pipeline-human-acceptance-packet -->)
-    가 있는 댓글이 있으면 PATCH로 갱신, 없으면 신규 생성.
+    가 있는 댓글을 모두 삭제한 뒤, ACCEPTED 완료 댓글을 신규 생성한다.
 
     Args:
-        req: acceptance_request dict (pipeline_id, nonce, request_id, pr_url, github_ci_run_id 포함).
+        req: acceptance_request dict (pipeline_id, request_id, pr_url, accepted_by, accepted_at 포함).
         evidence: 결과물 경로 또는 URL.
+    Returns:
+        dict {"success": True} — 댓글 교체 성공,
+              {"success": False, "error": str} — 실패 (gh 실패/타입 오류 등).
     Raises:
-        없음 (모든 외부 호출 실패는 swallow).
+        없음 — 모든 실패는 success=False 결과 dict로 반환.
     """
     if req is None:
-        return
+        return {"success": False, "error": "req must not be None"}
     if not isinstance(req, dict):
-        return
+        return {"success": False, "error": f"req must be dict, got {type(req).__name__}"}
     pipeline_id = str(req.get("pipeline_id", ""))
-    nonce = str(req.get("nonce", ""))
     request_id = str(req.get("request_id", ""))
     pr_url = str(req.get("pr_url", "") or "")
-    ci_run_id = str(req.get("github_ci_run_id", "") or "")
+    accepted_by = str(req.get("accepted_by", "") or "unknown")
+    accepted_at = str(req.get("accepted_at", "") or "") or _now()
 
-    accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
-    reject_code = f"REJECT-{pipeline_id}-{nonce}"
-
-    ci_link = ""
-    if ci_run_id:
-        ci_link = f"https://github.com/hojiyong2-commits/Pipeline/actions/runs/{ci_run_id}"
-
-    # PR 변경 파일 목록 (IMP-20260531-BBDB: 정확한 파일 수 표시로 stale "3개" 문제 해결)
-    changed_files = _get_pr_changed_files()
-    files_section = ""
-    if changed_files:
-        files_list = "\n".join(f"- {f}" for f in sorted(changed_files))
-        files_section = f"\n### 변경된 파일 ({len(changed_files)}개)\n{files_list}\n"
-
+    # ACCEPTED 완료 댓글 (active approval 안내 문구 없음 — 승인 코드/PENDING 미포함)
     comment_body = f"""<!-- pipeline-human-acceptance-packet -->
-## 최종 확인 안내
+<!-- pipeline-human-acceptance-packet-accepted -->
+## ✅ 사용자 승인 완료
 
-이 댓글은 사용자 최종 승인/거절 판단에 사용됩니다.
-**아래 확인 코드를 통해서만 승인이 가능합니다.**
+ACCEPTED by {accepted_by} at {accepted_at}
 
-판단 정보 상태: **판단 가능**
-
-### 확인할 결과물
-결과물: {evidence}
+파이프라인: {pipeline_id}
 PR: {pr_url}
-GitHub Actions: {ci_link}
-승인 요청 ID: {request_id}
-{files_section}
-### 승인 방법
-결과물을 확인하신 후 아래 코드를 **정확히** 입력하세요.
+요청 ID: {request_id}
 
-[승인 코드]
-
-{accept_code}
-
-[거절 예시]
-
-{reject_code}: 거절 이유
-
-주의: 이 코드는 일회용입니다. PR에 새 커밋이 push되면 새 코드가 필요합니다.
-재발급: python pipeline.py gates request-accept --evidence <결과물>
+이 작업은 사용자 승인(ACCEPTED)이 완료되었습니다. 추가 입력이 필요하지 않습니다.
 """
 
     try:
@@ -14166,6 +14148,8 @@ GitHub Actions: {ci_link}
             )
             if r_num.returncode == 0:
                 pr_number = r_num.stdout.strip()
+            else:
+                return {"success": False, "error": f"PR 번호 조회 실패: {r_num.stderr.strip()}"}
 
         # 기존 acceptance-packet 댓글 전부 삭제 (Python 파싱 — jq 의존 없음)
         if pr_number:
@@ -14196,14 +14180,67 @@ GitHub Actions: {ci_link}
                         encoding="utf-8", errors="replace",
                     )
 
-        # 새 댓글 생성
-        subprocess.run(
+        # 새 ACCEPTED 완료 댓글 생성
+        r_create = subprocess.run(
             ["gh", "pr", "comment", "--body", comment_body],
-            capture_output=True, timeout=15,
+            capture_output=True, text=True, timeout=15,
             encoding="utf-8", errors="replace",
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        return  # gh CLI 실패는 silent — 콘솔 발급 코드는 항상 표시됨
+        if r_create.returncode != 0:
+            return {"success": False, "error": f"완료 댓글 생성 실패: {r_create.stderr.strip()}"}
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        return {"success": False, "error": str(exc)}
+
+    return {"success": True}
+
+
+def _get_pr_comment_acceptance_body() -> Optional[str]:
+    """현재 PR에서 acceptance-packet 태그 댓글의 body를 gh CLI로 조회한다.
+
+    [Purpose]: REJECT-IMP-20260614-D278 지적 #3 — _finalize_post_accept 단계 7에서
+      PR comment를 재조회하여 active approval 안내 문구가 남아있지 않은지 검증하기 위함.
+    [Assumptions]: gh CLI 선택적. PR 없거나 태그 댓글 없으면 None.
+    [Vulnerability & Risks]: gh CLI 실패/타임아웃 시 None 반환 — 호출자는 None을 검증 skip으로 처리.
+    [Improvement]: 여러 태그 댓글이 있을 경우 가장 최신 댓글만 반환하도록 정렬 가능.
+
+    Returns:
+        acceptance-packet 태그 댓글의 body 문자열 (가장 마지막 매칭),
+        또는 None (gh CLI 미설치 / PR 없음 / 태그 댓글 없음 / 조회 실패).
+    Raises:
+        없음.
+    """
+    tag = "pipeline-human-acceptance-packet"
+    try:
+        # PR 번호 조회
+        r_num = subprocess.run(
+            ["gh", "pr", "view", "--json", "number", "--jq", ".number"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r_num.returncode != 0:
+            return None
+        pr_number = r_num.stdout.strip()
+        if not pr_number:
+            return None
+
+        r_comments = subprocess.run(
+            ["gh", "api",
+             f"repos/hojiyong2-commits/Pipeline/issues/{pr_number}/comments",
+             "--paginate"],
+            capture_output=True, text=True, timeout=30,
+            encoding="utf-8", errors="replace",
+        )
+        if r_comments.returncode != 0 or not r_comments.stdout.strip():
+            return None
+        all_comments = json.loads(r_comments.stdout.strip())
+        matched: Optional[str] = None
+        for c in all_comments:
+            if isinstance(c, dict) and tag in str(c.get("body", "")):
+                matched = str(c.get("body", ""))
+        return matched
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError,
+            json.JSONDecodeError, ValueError, TypeError):
+        return None
 
 
 # ─── IMP-20260531-BBDB MT-2: gates request-accept 서브커맨드 ───────────────────
@@ -15013,12 +15050,20 @@ def _finalize_post_accept(
             "pr_body_updated": False,
         }
 
-    # 단계 6: PR comment 완료 상태 갱신 (best-effort, 실패해도 swallow).
-    pr_comment_updated = True
-    try:
-        _update_github_acceptance_comment(acceptance_request, evidence)
-    except Exception:
-        pr_comment_updated = False
+    # 단계 6: PR comment 완료 상태 갱신 (fail-closed — 실패 시 BLOCKED).
+    # REJECT-IMP-20260614-D278 지적 #1: 이전에는 실패를 swallow하고 PASS를 반환했으나,
+    # 반환값(success)을 확인하여 실패 시 gate를 BLOCKED 처리한다.
+    comment_result = _update_github_acceptance_comment(acceptance_request, evidence)
+    if not comment_result.get("success"):
+        return {
+            "status": "BLOCKED",
+            "failure_code": "comment_update_failed",
+            "blocked_reason": (
+                f"PR comment 갱신 실패: {comment_result.get('error', 'unknown')}"
+            ),
+            "gh_skipped": False,
+            "pr_body_updated": True,
+        }
 
     # 단계 7: PR body 재조회 후 packet 블록 내 ACCEPTED 표시 검증.
     rechecked_body = _get_pr_body_text() or ""
@@ -15035,13 +15080,35 @@ def _finalize_post_accept(
             "pr_body_updated": True,
         }
 
+    # 단계 7b: PR comment 재조회 — active approval 안내 문구가 남아있지 않은지 검증.
+    # REJECT-IMP-20260614-D278 지적 #3: PR body의 ACCEPTED만 확인하면 PR comment에 남은
+    # "승인 코드 입력" 안내(PENDING/ACCEPT-{pid}- 코드 등)를 놓친다. comment를 재조회한다.
+    active_approval_patterns = ["PENDING", "아래 코드를 입력하세요", "승인 대기"]
+    finalize_pipeline_id = str(acceptance_request.get("pipeline_id", "") or "")
+    if finalize_pipeline_id:
+        active_approval_patterns.append(f"ACCEPT-{finalize_pipeline_id}-")
+
+    rechecked_comment = _get_pr_comment_acceptance_body()
+    if rechecked_comment is not None:
+        for pattern in active_approval_patterns:
+            if pattern in rechecked_comment:
+                return {
+                    "status": "BLOCKED",
+                    "failure_code": "active_approval_still_present",
+                    "blocked_reason": (
+                        f"PR comment에 active approval 문구가 남아 있습니다: '{pattern}'"
+                    ),
+                    "gh_skipped": False,
+                    "pr_body_updated": True,
+                }
+
     return {
         "status": "PASS",
         "failure_code": "",
         "blocked_reason": None,
         "gh_skipped": False,
         "pr_body_updated": True,
-        "pr_comment_updated": pr_comment_updated,
+        "pr_comment_updated": True,
     }
 
 
