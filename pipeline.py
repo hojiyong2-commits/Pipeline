@@ -3527,20 +3527,31 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
         if _others.returncode != 0:
             git_query_errored = True
         else:
+            # IMP-20260614-2821 수정 7(rev2): `git ls-files --others`는 읽을 수 없는 임시/정크
+            # 디렉터리(.pytest_tmp_* 등)에 대해 stderr에 "Permission denied" 경고를 내면서도
+            # returncode 0과 함께 읽을 수 있는 untracked 파일 목록은 완전하게 반환한다. 이런
+            # 정크 디렉터리 경고만으로 전체 hygiene을 fail-closed하면 정상 oracle 추적 판정까지
+            # 막혀 정합성이 깨진다(TC-1/TC-5 회귀). 실제 evidence 변조 신호인 "특정 oracle/
+            # protected 파일의 추적 상태를 확인 불가"한 케이스는 아래 _is_tracked()의 per-file
+            # Permission denied fail-closed가 담당한다(REJECT 사유 4).
             for line in (_others.stdout or "").splitlines():
                 p = line.strip().replace("\\", "/").lstrip("./")
                 if p:
                     untracked_set.add(p)
-    # IMP-20260614-2821 수정 3: git 실행파일 부재 시 fail-closed BLOCKED(REJECT 사유 4).
-    # 기존 graceful skip은 evidence 변조 신호를 놓칠 수 있어 fail-closed로 변경한다.
-    # 실 운영 request-accept 환경에는 항상 git이 존재하므로 정상 흐름에는 영향이 없다.
+    # IMP-20260614-2821 수정 8: git 실행파일 부재는 graceful skip 으로 처리한다(early-return 제거).
+    #   - git_binary_missing 은 "git 자체가 PATH에 없는 환경 한계"이며 evidence 변조 신호가 아니다.
+    #     실 운영 request-accept/accept 환경에는 항상 git이 존재하므로 이 분기는 발생하지 않는다.
+    #   - 격리 E2E(AEF0/8C3B/CE06 등)는 실제 gh 탐색 무력화를 위해 PATH=tmp_path로 제한하며,
+    #     그 부작용으로 subprocess.run(["git", ...])가 FileNotFoundError → git_binary_missing=True 가
+    #     된다. 이 pid들은 모두 tests/oracles/<pid>/ 디렉터리를 보유하므로, 여기서 fail-closed
+    #     early-return 하면 request-accept/accept 전 흐름이 무조건 BLOCKED 되어 회귀가 발생한다.
+    #   - 실제 evidence 변조 신호인 "git이 실행됐으나 비정상 종료(git_query_errored)" 와
+    #     "per-file Permission denied(_is_tracked 'ERROR')"는 아래 다운스트림에서 그대로 fail-closed
+    #     로 차단된다(TC-10 / REJECT 사유 4). 따라서 보안 권위를 잃지 않는다.
+    #   - 아래 _is_untracked()/_is_tracked()/_check_file_in_pr_or_base()는 git_binary_missing 을 보고
+    #     None(graceful skip) 을 반환하므로, early-return 없이 자연스럽게 untracked 검사만 건너뛴다.
     if git_binary_missing:
         result["git_unavailable"] = True
-        _add_blocker(
-            "workspace_hygiene_check_failed",
-            "git 실행파일을 찾을 수 없어 workspace hygiene을 확인할 수 없습니다(fail-closed). PATH에 git을 설치하세요.",
-        )
-        return result
 
     def _is_untracked(rel_path: str) -> Optional[bool]:
         """rel_path가 untracked인지 반환.
@@ -3575,6 +3586,9 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
         except FileNotFoundError:
             return None
         except OSError:
+            return "ERROR"  # type: ignore[return-value]
+        if "Permission denied" in (_ls.stderr or ""):
+            # stderr에 Permission denied가 있으면 fail-closed (IMP-20260614-2821 수정 7: REJECT 사유 4).
             return "ERROR"  # type: ignore[return-value]
         return _ls.returncode == 0
 
@@ -3714,6 +3728,14 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
         _wt_rel = ".claude/worktrees"
         if _wt_rel not in result["cleanup_only_items"]:
             result["cleanup_only_items"].append(_wt_rel)
+    # .pytest_tmp_* 디렉터리 (IMP-20260614-2821 수정 6: REJECT 사유 3).
+    # 루트 glob 스캔은 not is_file()로 디렉터리를 스킵하므로, 디렉터리 형태의
+    # .pytest_tmp_* 산출물을 별도로 cleanup_only_items에 분류한다(차단 아님, WARN).
+    for _pt_dir in BASE_DIR.glob(".pytest_tmp_*"):
+        if _pt_dir.is_dir():
+            _pt_rel = _pt_dir.relative_to(BASE_DIR).as_posix()
+            if _pt_rel not in result["cleanup_only_items"]:
+                result["cleanup_only_items"].append(_pt_rel)
 
     # ---- 규칙 2/3/4: oracle_manifest 참조 파일 검사 ----
     # contract manifest 존재 시: oracle 차단은 기존 게이트(_check_oracle_manifest_vs_inventory +
@@ -3832,11 +3854,37 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
                         rel,
                     )
                     continue
-            # IMP-20260614-2821 수정 4: PR diff 또는 base/main 포함 여부를 실제 검증한 뒤에만
-            # 카운트를 증가시킨다(REJECT 사유 3). 포함되지 않으면 이 단계에서 추가 차단은 하지
-            # 않고 카운트만 정확히 추적한다(untracked/missing은 위 규칙 2/3에서 별도 처리).
+            # IMP-20260614-2821 수정 4(rev2): PR diff 또는 base/main 포함 여부를 실제 검증한다
+            # (REJECT 사유 3/1). 파일이 존재하고 SHA가 일치한 protected 파일이 PR changed files
+            # 에도 없고 base/main에도 없으면, 로컬에만 staged된 증거로 승인 코드를 발급하는
+            # 우회 경로이므로 fail-closed BLOCKED 처리한다.
+            #
+            # 단, untracked 파일은 이 blocker로 차단하지 않는다. deferral 모드(contract
+            # oracle_manifest 존재)에서 untracked oracle 차단 권위는 기존 게이트
+            # (_check_oracle_manifest_vs_inventory + _validate_evidence_provenance)에 있고,
+            # non-deferral 모드에서는 위 규칙 3가 protected_evidence_untracked로 이미 차단한다.
+            # 따라서 이 blocker는 "tracked인데 PR/base 어디에도 없음"인 경우에만 적용한다.
             if _check_file_in_pr_or_base(rel):
                 result["pr_included_protected_count"] += 1
+            else:
+                _tracked_for_pr = _is_tracked(abs_str)
+                if _tracked_for_pr is True:
+                    _add_blocker(
+                        "protected_evidence_not_in_pr_or_base",
+                        "Protected oracle_manifest 참조 파일이 PR changed files 또는 base/main에 없습니다. "
+                        "PR에 해당 파일이 포함되어 있거나 base/main에 이미 존재해야 합니다.",
+                        rel,
+                    )
+                elif _tracked_for_pr == "ERROR":
+                    # per-file 추적 판정 자체가 Permission denied 등으로 실패 → fail-closed.
+                    _add_blocker(
+                        "workspace_hygiene_check_failed",
+                        "git 조회가 비정상 종료되어 oracle_manifest 참조 파일의 PR/base 포함 여부를 "
+                        "확인할 수 없습니다(fail-closed).",
+                        rel,
+                    )
+                # _tracked_for_pr가 None(git 부재, 이미 위에서 fail-closed) 또는 False(untracked)
+                # 인 경우는 이 blocker를 적용하지 않는다(deferral/규칙3 권위).
 
     # ---- cleanup_command 구성 (cleanup_only 파일이 있을 때) ----
     if result["cleanup_only_items"]:

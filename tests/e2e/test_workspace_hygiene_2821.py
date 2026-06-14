@@ -414,13 +414,25 @@ def test_tc6_state_workspace_hygiene_fields(tmp_path):
     assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
-# TC-6b (IMP-20260614-2821 수정 5): git 실행파일 FileNotFoundError → fail-closed BLOCKED.
-def test_tc6b_git_missing_fail_closed(oracle_fixture, tmp_path):
-    """git 실행파일이 없으면(FileNotFoundError 시뮬레이션)
-    _check_workspace_hygiene이 fail-closed로 BLOCKED를 반환한다."""
+# TC-6b (IMP-20260614-2821 수정 8): git 실행파일 FileNotFoundError → graceful skip(BLOCKED 아님).
+def test_tc6b_git_missing_graceful_skip(oracle_fixture, tmp_path):
+    """git 실행파일이 없으면(FileNotFoundError 시뮬레이션) _check_workspace_hygiene은
+    fail-closed BLOCKED 대신 graceful skip 으로 처리한다.
+
+    근거(IMP-20260614-2821 수정 8): git_binary_missing 은 "git이 PATH에 없는 환경 한계"이며
+    evidence 변조 신호가 아니다. 격리 E2E(AEF0/8C3B/CE06)는 실제 gh 탐색 무력화를 위해
+    PATH=tmp_path 로 제한하고, 그 부작용으로 git_binary_missing=True 가 된다. 이 pid들은 모두
+    tests/oracles/<pid>/ 디렉터리를 보유하므로 git 부재를 fail-closed 하면 request-accept/accept
+    전 흐름이 무조건 BLOCKED 되어 26건 회귀가 발생한다. 따라서 git 부재는 untracked 검사를
+    건너뛰고(graceful skip), 실제 변조 신호인 git_query_errored(returncode!=0, TC-10)와
+    per-file Permission denied(REJECT 사유 4)만 fail-closed 로 차단한다.
+
+    검증: git 부재 + untracked oracle 이 있어도 status != BLOCKED 이고
+    workspace_hygiene_check_failed / untracked_oracle_evidence blocker 가 없어야 한다.
+    """
     fx = oracle_fixture
     env = make_env(tmp_path)
-    # untracked oracle 생성.
+    # untracked oracle 생성(그러나 git 부재로 untracked 검사가 건너뛰어진다).
     fx.add_oracle_file("TC-6b/input.json", '{"x": 1}')
 
     script = tmp_path / "git_missing_probe.py"
@@ -452,9 +464,13 @@ def test_tc6b_git_missing_fail_closed(oracle_fixture, tmp_path):
             payload = json.loads(line[len("HYGIENE_JSON="):])
             break
     assert payload is not None, cp.stdout[:400]
-    assert payload.get("status") == "BLOCKED", payload
+    # graceful skip: git 부재로 BLOCKED 되지 않아야 한다(OK 또는 cleanup_only WARN 허용).
+    assert payload.get("status") != "BLOCKED", payload
     blocking = " ".join(str(b) for b in (payload.get("blocking_items") or []))
-    assert "workspace_hygiene_check_failed" in blocking, payload
+    assert "workspace_hygiene_check_failed" not in blocking, payload
+    assert "untracked_oracle_evidence" not in blocking, payload
+    # git 부재 신호는 결과에 git_unavailable=True 로 기록된다.
+    assert payload.get("git_unavailable") is True, payload
 
 
 # TC-7: cleanup_only_items 목록에 build_report.xml 포함 확인
@@ -622,12 +638,10 @@ def test_tc11_sha_mismatch_blocks(oracle_fixture, tmp_path):
     assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
-# TC-11b (IMP-20260614-2821 수정 5): gh pr view 실패 시 pr_included_protected_count=0.
-def test_tc11b_gh_fail_pr_count_zero(oracle_fixture, tmp_path):
-    """gh CLI가 없거나 실패하고 base/main에도 없는 tracked 파일은
-    _check_workspace_hygiene의 pr_included_protected_count가 증가하지 않아야 한다.
-
-    base/main 조회를 강제로 실패시키고 gh도 실패시켜 '포함 증거 없음' 상태를 만든다."""
+# TC-11b (IMP-20260614-2821 수정 5 rev2): gh pr view 실패 + base/main 없음 → BLOCKED.
+def test_tc11b_gh_fail_pr_not_in_pr_or_base_blocked(oracle_fixture, tmp_path):
+    """gh CLI가 없거나 실패하고 base/main에도 없는 tracked protected 파일은
+    _check_workspace_hygiene에서 protected_evidence_not_in_pr_or_base BLOCKED가 되어야 한다."""
     fx = oracle_fixture
     env = make_env(tmp_path)
     bootstrap_state(env, fx.pid)
@@ -635,7 +649,7 @@ def test_tc11b_gh_fail_pr_count_zero(oracle_fixture, tmp_path):
     fx.write_oracle_manifest([
         {"input_path": tracked_rel, "expected_path": tracked_rel, "case_kind": "normal"}
     ])
-    # inventory sha256은 올바르게 설정 (SHA mismatch는 이 테스트와 무관).
+    # inventory sha256은 올바르게 설정
     import hashlib
     actual_sha = hashlib.sha256((BASE_DIR / tracked_rel).read_bytes()).hexdigest()
     abs_tracked = str((BASE_DIR / tracked_rel).resolve())
@@ -651,7 +665,6 @@ def test_tc11b_gh_fail_pr_count_zero(oracle_fixture, tmp_path):
 
     script = tmp_path / "gh_fail_probe.py"
     # gh는 실패시키고, git show origin/main:<path> 도 실패시켜 base/main 미존재 상태를 만든다.
-    # (git ls-files --error-unmatch 는 정상 통과시켜 tracked로 판정되도록 유지).
     script.write_text(
         "import json\n"
         "import sys\n"
@@ -685,7 +698,11 @@ def test_tc11b_gh_fail_pr_count_zero(oracle_fixture, tmp_path):
             payload = json.loads(line[len("HYGIENE_JSON="):])
             break
     assert payload is not None, cp.stdout[:400]
-    # gh 실패 + base/main 미존재 → pr_included_protected_count는 0이어야 함.
+    # gh 실패 + base/main 미존재 → BLOCKED (protected_evidence_not_in_pr_or_base)
+    assert payload.get("status") == "BLOCKED", payload
+    blocking = " ".join(str(b) for b in (payload.get("blocking_items") or []))
+    assert "protected_evidence_not_in_pr_or_base" in blocking, payload
+    # pr_included_protected_count는 0이어야 함 (BLOCKED가 됐으므로 카운트 증가 없음)
     assert payload.get("pr_included_protected_count", -1) == 0, payload
 
 
