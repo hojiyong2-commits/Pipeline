@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>IMP-20260614-D278</pipeline_id>
+  <status>ready</status>
+  <phase>pipeline_manager</phase>
+  <planner_run_id>pm_planner-eb646716fd892ad2</planner_run_id>
+  <step_plan_sha256>7e5520345ff5efccffea54924a702221624672ba8ed62b1846b6d1f668a73377</step_plan_sha256>
+  <manager_run_id>pipeline_manager-4554a3bca04da73b</manager_run_id>
+  <step_plan_ref>step_plan.xml</step_plan_ref>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <execution_profile>STANDARD</execution_profile>
+  <build_target>N/A (meta-task)</build_target>
+  <micro_tasks>
+    <mt id="MT-1">_resolve_acceptance_display_state 신규 helper 함수 (pipeline.py)</mt>
+    <mt id="MT-2">_build_verification_json, _build_final_packet_content helper 호출로 교체 (pipeline.py)</mt>
+    <mt id="MT-3">_cmd_gates_accept post-accept finalization 9단계 추가 (pipeline.py)</mt>
+    <mt id="MT-4">_consume_acceptance_request accepted_at/accepted_by/consumed_nonce 필드 추가 (pipeline.py)</mt>
+    <mt id="MT-5">tests/e2e/test_post_accept_finalization_d278.py 12개 E2E 테스트 신규 생성</mt>
+    <mt id="MT-6">.claude/agents/pipeline-manager-agent.md User Acceptance 상태값 역할 문서화 추가</mt>
+  </micro_tasks>
+  <security>sec --skip (외부 네트워크/DB 없음)</security>
+  <handoff_ready>true</handoff_ready>
+</manager_handoff>
