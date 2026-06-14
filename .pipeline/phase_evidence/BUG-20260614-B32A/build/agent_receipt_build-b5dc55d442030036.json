@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260614-B32A",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-b5dc55d442030036",
+  "status": "COMPLETED",
+  "started_at": "2026-06-14T13:51:50Z",
+  "completed_at": "2026-06-14T13:52:11Z",
+  "output_file": "build_report_B32A.xml",
+  "output_sha256": "d87145a463cf6561f1459521b1ab739bff2cb2f5bde83b836a459e56a8eb1c88",
+  "evidence_files": [],
+  "commit_sha": "53126eac6b90202485a115af9a35d9e3d735bab6"
+}
