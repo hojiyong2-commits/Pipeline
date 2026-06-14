@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260614-2821</pipeline_id>
+  <round>4</round>
+  <agent_run_id>qa-52af5df3f41ac656</agent_run_id>
+
+  <handover_check>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_workspace_hygiene_2821.py, .claude/agents/pipeline-manager-agent.md</evidence>
+    <ui_tag>없음 — UI 카테고리 미포함. dev-agent 단독 handover 수락(규칙 충족).</ui_tag>
+    <scope_lock_check>PASS — extra_files 없음, trust_root_violation false(scope 명시된 pipeline.py/tests/agent md는 본 IMP scope 내 허용)</scope_lock_check>
+    <handover_verdict>ACCEPTED</handover_verdict>
+  </handover_check>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님</wa>
+    <ui>N-A — UI 카테고리 아님</ui>
+    <fs>N-A — 파일시스템 직접 I/O 카테고리 아님(git/glob 보조 사용만)</fs>
+    <pd>PASS — _check_workspace_hygiene/_is_tracked/_is_untracked/_check_file_in_pr_or_base 책임 분리 양호, God class 없음</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — git 3-상태(binary_missing=graceful skip / query_errored=fail-closed / Permission denied=fail-closed) 분기가 정상 격리 환경과 evidence 변조 신호를 정확히 구분. Round 3 회귀(AL:170f8af6) 근본 해소: git-binary-missing early-return 제거 → 다운스트림 None graceful skip. 0나눗셈 N/A, 빈데이터/타입 방어 양호, bare except 없음(FileNotFoundError/OSError/JSONDecodeError 분기 명시).</al>
+    <build>N-A — BUILD 태그 없음(meta-task)</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+
+  <numeric_score>110</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — 카테고리 미해당</fs>
+    <pd score="9" max="10">모듈분리 5/5, 인터페이스계약 4/5(TypedDict 미사용, dict 반환이나 docstring으로 필드 명세 보강)</pd>
+    <al score="20" max="20">git 3-상태 분기 정확, fail-closed 보안 권위 유지하며 graceful skip로 회귀 해소, 빈/타입/예외 방어 완비</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="110" max="120"/>
+    <percentage>91.7</percentage>
+    <numeric_verdict>PASS (>=96/120)</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover evidence에 pytest 16 passed + 회귀 24 passed 기록, QA가 직접 재실행 확인</execution_check_present>
+    <execution_check_verdict>PASS — 16 passed(2821) + 24 passed(AEF0/8C3B/CE06) QA 직접 재실행 확인</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 신규 graceful-skip 분기가 _check_workspace_hygiene 다운스트림 _is_untracked/_is_tracked/_check_file_in_pr_or_base에 실제 바인딩되어 동작. Round 3에서 깨졌던 26개 acceptance-flow E2E 호출 경로가 정상 복원됨(실제 실행 확인).</functional_binding_verified>
+  </runtime_functional_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan_2821.xml에 decomposition_audit 블록 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-6 모두 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>4</declared_functions>
+    <actual_modified_functions>4</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>none</modification>
+    </out_of_scope_modifications>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>3</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git status --short 결과 M 파일 3개(pipeline.py, tests/e2e/test_workspace_hygiene_2821.py, .claude/agents/pipeline-manager-agent.md)가 scope/evidence와 정확히 일치. tests/oracles/IMP-20260614-2821/** 는 보호 evidence(answer key)로 정당.</grep_verified>
+    <c3_verdict>PASS</c3_verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <regression_verification>
+    <round3_regression_signature>AL:170f8af6 — git-binary-missing fail-closed early-return으로 acceptance-flow E2E 26개 회귀</round3_regression_signature>
+    <round4_required_tests>
+      <suite name="tests/e2e/test_workspace_hygiene_2821.py">16 passed (TC-1~TC-12 + TC-5b/6b/11b/12b)</suite>
+      <suite name="acceptance-flow regression (AEF0 + 8C3B + CE06)">24 passed</suite>
+    </round4_required_tests>
+    <root_cause_fix>
+      pipeline.py:3541-3554 — git_binary_missing 시 early-return(무조건 BLOCKED) 제거,
+      result["git_unavailable"]=True 만 설정. 다운스트림 _is_untracked/_is_tracked/
+      _check_file_in_pr_or_base가 None(graceful skip) 반환 → untracked 검사만 건너뜀.
+      git_query_errored(returncode!=0)와 per-file Permission denied("ERROR")는 fail-closed 유지 → 보안 권위 손실 없음.
+    </root_cause_fix>
+    <residual_failure>
+      tests/e2e/test_hygiene_0df5.py::test_T3_secret_block 1건 FAIL 잔존하나, 이는 본 변경과 무관한
+      PRE-EXISTING 누락 oracle fixture(tests/oracles/IMP-20260601-0DF5/case_edge_secret_block/input.json
+      — 디스크/git/origin/main 모두 부재). baseline pipeline.py로도 동일 AssertionError로 FAIL 확인(QA가 stash로 직접 교차검증).
+      Round 3에서는 이 테스트가 workspace_hygiene_check_failed BLOCKED로 깨졌으나, Round 4에서는
+      hygiene 게이트를 통과하고 순수 fixture-missing AssertionError로 변경됨 → 회귀가 실제 해소되었음을 역으로 입증.
+    </residual_failure>
+  </regression_verification>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+  <critical_issues>
+    없음 — Round 3 회귀(AL:170f8af6)가 graceful-skip 수정으로 근본 해소됨. 필수 테스트 16+24 전부 PASS,
+    fail-closed 보안 권위 유지, scope/boundary 위반 없음.
+  </critical_issues>
+  <improvement_suggestions>
+    - (부가 지적, FAIL 사유 아님) 본 파이프라인의 기록 PM 산출물 step_plan_2821.xml에는 &lt;anti_gaming_read&gt; 태그가
+      명시되어 있지 않습니다(canonical step_plan.xml에는 존재). decomposition_audit 게이트는 충족하므로 통과 처리하되,
+      차기 PM 발행 시 step_plan_&lt;pid&gt;.xml에도 동일 태그를 포함하면 PM 산출물 정합성이 향상됩니다. (Round 3과 동일 판단 유지)
+    - step_plan_2821.xml의 judgment_calls(JC-1/JC-2)는 decomposition_audit 내부에 &lt;resolution&gt; 인라인 형식으로 해소되어 있습니다.
+      별도 &lt;judgment_calls_resolved&gt; 블록 형식으로 분리하면 검증 추적성이 더 명확해집니다.
+    - 신규 fail-closed 성격 게이트 도입 시 dev handover 증거에 자체 모듈 테스트뿐 아니라 전체 acceptance-flow 회귀 결과를 항상 포함할 것
+      (Round 4에서는 회귀 24 passed가 handover에 포함되어 개선됨).
+  </improvement_suggestions>
+</qa_report>
