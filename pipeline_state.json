@@ -4,13 +4,13 @@
   "type": "IMP",
   "description": "User Acceptance 안내 템플릿 SSoT 정합성 정리 — _build_acceptance_display_model 단일 데이터 모델, pending/accepted renderer 분리, stale 숫자 문구 제거, D278/2821 보안 동작 유지",
   "created_at": "2026-06-14T09:47:43Z",
-  "updated_at": "2026-06-14T10:52:38Z",
+  "updated_at": "2026-06-14T11:42:00Z",
   "pipeline_started_at": "2026-06-14T09:47:43Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "qa",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -31,43 +31,48 @@
     "dev": {
       "status": "DONE",
       "started_at": "2026-06-14T10:40:19Z",
-      "completed_at": "2026-06-14T10:52:38Z",
+      "completed_at": "2026-06-14T11:22:10Z",
       "evidence": "pipeline.py,tests/e2e/test_acceptance_template_sst_509f.py,.claude/agents/pipeline-manager-agent.md",
       "notes": [],
       "report_file": "dev_handover.xml",
       "agent_id": "dev-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260614-509F_phase_dev.json",
-      "agent_run_id": "dev-3c1c5b67cc87f947"
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260614-509F_phase_dev.1.json",
+      "agent_run_id": "dev-c90255baa6f02d40"
     },
     "qa": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
+      "status": "PASS",
+      "started_at": "2026-06-14T11:25:14Z",
+      "completed_at": "2026-06-14T11:34:33Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "qa_report_509f.xml",
+      "agent_id": "qa-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260614-509F_phase_qa.1.json",
+      "fail_history": [],
+      "agent_run_id": "qa-ac462a7547bdba65",
+      "numeric_score": 110
     },
     "sec": {
-      "status": "PENDING",
+      "status": "SKIP",
       "started_at": null,
-      "completed_at": null,
-      "evidence": null,
+      "completed_at": "2026-06-14T11:38:08Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260614-509F_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "started_at": "2026-06-14T11:38:16Z",
+      "completed_at": "2026-06-14T11:38:44Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260614-509F_phase_build.json",
+      "skip_reason": "meta-task",
+      "agent_run_id": "build-1db53db558d39aeb"
     },
     "harness": {
       "status": "PENDING",
@@ -258,6 +263,78 @@
     {
       "ts": "2026-06-14T10:52:38Z",
       "msg": "dev DONE | evidence: pipeline.py,tests/e2e/test_acceptance_template_sst_509f.py,.claude/agents/pipeline-manager-agent.md"
+    },
+    {
+      "ts": "2026-06-14T11:19:58Z",
+      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-c90255baa6f02d40"
+    },
+    {
+      "ts": "2026-06-14T11:20:07Z",
+      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-c90255baa6f02d40"
+    },
+    {
+      "ts": "2026-06-14T11:22:10Z",
+      "msg": "dev DONE | evidence: pipeline.py,tests/e2e/test_acceptance_template_sst_509f.py,.claude/agents/pipeline-manager-agent.md"
+    },
+    {
+      "ts": "2026-06-14T11:22:14Z",
+      "msg": "phase attestation request prepared: dev"
+    },
+    {
+      "ts": "2026-06-14T11:25:08Z",
+      "msg": "github phase-ci dev PASS run_id=27497261939 commit=baf75597fb07"
+    },
+    {
+      "ts": "2026-06-14T11:25:15Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-ad8881b6f6859657"
+    },
+    {
+      "ts": "2026-06-14T11:33:21Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-ad8881b6f6859657"
+    },
+    {
+      "ts": "2026-06-14T11:34:24Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-ac462a7547bdba65"
+    },
+    {
+      "ts": "2026-06-14T11:34:29Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-ac462a7547bdba65"
+    },
+    {
+      "ts": "2026-06-14T11:34:33Z",
+      "msg": "qa PASS numeric=110"
+    },
+    {
+      "ts": "2026-06-14T11:34:42Z",
+      "msg": "phase attestation request prepared: qa"
+    },
+    {
+      "ts": "2026-06-14T11:38:04Z",
+      "msg": "github phase-ci qa PASS run_id=27497560163 commit=9e916038d04c"
+    },
+    {
+      "ts": "2026-06-14T11:38:08Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-06-14T11:38:20Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-1db53db558d39aeb"
+    },
+    {
+      "ts": "2026-06-14T11:38:38Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-1db53db558d39aeb"
+    },
+    {
+      "ts": "2026-06-14T11:38:44Z",
+      "msg": "build DONE exe=N/A skip_reason=meta-task"
+    },
+    {
+      "ts": "2026-06-14T11:38:49Z",
+      "msg": "phase attestation request prepared: build"
+    },
+    {
+      "ts": "2026-06-14T11:42:00Z",
+      "msg": "github phase-ci build PASS run_id=27497649605 commit=520a50709771"
     }
   ],
   "terminal_state": null,
@@ -322,6 +399,86 @@
       "used_at": "2026-06-14T10:52:38Z",
       "commit_sha": "e9fe64cef9ee64eb453dd771936967ae4ed4c3e2",
       "notes": ""
+    },
+    "dev-c90255baa6f02d40": {
+      "schema_version": 1,
+      "run_id": "dev-c90255baa6f02d40",
+      "pipeline_id": "IMP-20260614-509F",
+      "phase": "dev",
+      "agent_id": "dev-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-14T11:19:58Z",
+      "completed_at": "2026-06-14T11:20:07Z",
+      "token_hash": "7014a515cc3f3a1c77be0f0548fba9e6a75f7a06ccd28727251699079066fcb2",
+      "output_file": "dev_handover.xml",
+      "output_sha256": "3301eb14dde109265137da43cbc3d998804b77cd41bc20a92cd208a896541071",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260614-509F\\dev\\dev-c90255baa6f02d40.json",
+      "receipt_sha256": "ccaca3686192fcdd0ae862b80b765d90b42092f28c7665ab629f47c806034ab5",
+      "used_by_phase": "dev",
+      "used_at": "2026-06-14T11:22:14Z",
+      "commit_sha": "4bc8236ee3784653d7d08aa8280ca464386a3a15",
+      "notes": ""
+    },
+    "qa-ad8881b6f6859657": {
+      "schema_version": 1,
+      "run_id": "qa-ad8881b6f6859657",
+      "pipeline_id": "IMP-20260614-509F",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-14T11:25:15Z",
+      "completed_at": "2026-06-14T11:33:21Z",
+      "token_hash": "7c91bf139a8f306797f56fa60d171336975d1c9614e036171ef50a1c161abea4",
+      "output_file": "qa_report_509f.xml",
+      "output_sha256": "da44bf5f7fb0b1887cfc2345fae9020c79c40df565ebbf7ee543a63f48cc27d6",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260614-509F\\qa\\qa-ad8881b6f6859657.json",
+      "receipt_sha256": "b3a5ae7a919e771f226eb92183ba8fd21301862daee76abe45d07703a1c29ce2",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "4bc8236ee3784653d7d08aa8280ca464386a3a15",
+      "notes": ""
+    },
+    "qa-ac462a7547bdba65": {
+      "schema_version": 1,
+      "run_id": "qa-ac462a7547bdba65",
+      "pipeline_id": "IMP-20260614-509F",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-14T11:34:24Z",
+      "completed_at": "2026-06-14T11:34:29Z",
+      "token_hash": "50580b8356ed1df59859ab091a9fa974b620170cd6bed112ae50d8414ce751cc",
+      "output_file": "qa_report_509f.xml",
+      "output_sha256": "ed5edac89f0bd3a45ed779991e899f9f84391d6e85e851ea4b20ff477c1b81b0",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260614-509F\\qa\\qa-ac462a7547bdba65.json",
+      "receipt_sha256": "11658b556696de8c15a3dd08af71bda17d81fd1b66d8e400aa67d9b494fb9365",
+      "used_by_phase": "qa",
+      "used_at": "2026-06-14T11:34:42Z",
+      "commit_sha": "4bc8236ee3784653d7d08aa8280ca464386a3a15",
+      "notes": ""
+    },
+    "build-1db53db558d39aeb": {
+      "schema_version": 1,
+      "run_id": "build-1db53db558d39aeb",
+      "pipeline_id": "IMP-20260614-509F",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-14T11:38:20Z",
+      "completed_at": "2026-06-14T11:38:38Z",
+      "token_hash": "ded6dcbafda5f4152e3a8750b6048d8fe33bdf87bb941ad77f291c18f166099d",
+      "output_file": "build_report_509f.xml",
+      "output_sha256": "972bba702eeaf1f3e2a0830f801a6bb2fd094f9d2618a92d2050cf8196b4df9d",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260614-509F\\build\\build-1db53db558d39aeb.json",
+      "receipt_sha256": "4d45fd26b508952674b26124b41cb61f6567d5e023fcba1e0ddb8e061d64bb76",
+      "used_by_phase": "build",
+      "used_at": "2026-06-14T11:38:49Z",
+      "commit_sha": "4bc8236ee3784653d7d08aa8280ca464386a3a15",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -382,34 +539,37 @@
         "artifact": "pipeline-phase-attestation"
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-14T11:25:08Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27497261939",
+        "commit_sha": "baf75597fb07545031ce6a4c7dbaee9898374850",
+        "evidence": "github_actions_phase_run:27497261939",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260614-509F\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-14T11:38:04Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27497560163",
+        "commit_sha": "9e916038d04cae51982024bea5419fe6d3a864f4",
+        "evidence": "github_actions_phase_run:27497560163",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260614-509F\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-14T11:42:00Z",
         "phase": "build",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27497649605",
+        "commit_sha": "520a5070977102b9ee99480d6317146f9d7004c8",
+        "evidence": "github_actions_phase_run:27497649605",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260614-509F\\gates\\phase_ci\\build_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       }
     }
   },
@@ -489,8 +649,8 @@
           "files": [
             {
               "path": "pipeline.py",
-              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
-              "size_bytes": 1038611
+              "sha256": "70cf09661d8aab23d76db11dbf155ee9b156f47cc9161a38dbbf31b527defd2c",
+              "size_bytes": 1038550
             }
           ]
         }
@@ -556,8 +716,8 @@
           "files": [
             {
               "path": "pipeline.py",
-              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
-              "size_bytes": 1038611
+              "sha256": "70cf09661d8aab23d76db11dbf155ee9b156f47cc9161a38dbbf31b527defd2c",
+              "size_bytes": 1038550
             }
           ]
         }
@@ -623,8 +783,8 @@
           "files": [
             {
               "path": "pipeline.py",
-              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
-              "size_bytes": 1038611
+              "sha256": "70cf09661d8aab23d76db11dbf155ee9b156f47cc9161a38dbbf31b527defd2c",
+              "size_bytes": 1038550
             }
           ]
         }
@@ -691,8 +851,8 @@
           "files": [
             {
               "path": "pipeline.py",
-              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
-              "size_bytes": 1038611
+              "sha256": "70cf09661d8aab23d76db11dbf155ee9b156f47cc9161a38dbbf31b527defd2c",
+              "size_bytes": 1038550
             }
           ]
         }
@@ -757,8 +917,8 @@
           "files": [
             {
               "path": "pipeline.py",
-              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
-              "size_bytes": 1038611
+              "sha256": "70cf09661d8aab23d76db11dbf155ee9b156f47cc9161a38dbbf31b527defd2c",
+              "size_bytes": 1038550
             }
           ]
         }
@@ -14288,6 +14448,33 @@
       "run_id": "27496177680",
       "commit_sha": "716424ee8615532439b408ded68fd2a0f2c27b62",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-14T11:25:08Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "dev",
+      "run_id": "27497261939",
+      "commit_sha": "baf75597fb07545031ce6a4c7dbaee9898374850",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-14T11:38:04Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "27497560163",
+      "commit_sha": "9e916038d04cae51982024bea5419fe6d3a864f4",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-14T11:42:00Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "build",
+      "run_id": "27497649605",
+      "commit_sha": "520a5070977102b9ee99480d6317146f9d7004c8",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "ac_completeness": {
@@ -14309,7 +14496,7 @@
   },
   "dev_handover": {
     "report_file": "dev_handover.xml",
-    "validated_at": "2026-06-14T10:52:03Z",
+    "validated_at": "2026-06-14T11:21:42Z",
     "producer": "dev-agent"
   },
   "dev_gate_flags": {
@@ -14317,7 +14504,7 @@
   },
   "atomic_scope": {
     "manifest_file": "scope_manifest.json",
-    "validated_at": "2026-06-14T10:52:38Z",
+    "validated_at": "2026-06-14T11:22:10Z",
     "micro_task_ids": [
       "MT-1",
       "MT-2",
@@ -14484,12 +14671,21 @@
         ".claude/agents/pipeline-manager-agent.md",
         "pipeline.py"
       ],
-      "deleted": [],
+      "deleted": [
+        "qa_report_r4.xml",
+        "qa_report_r5.xml"
+      ],
       "changed": [
         ".claude/agents/pipeline-manager-agent.md",
         "pipeline.py",
         "tests/e2e/test_acceptance_template_sst_509f.py"
       ]
     }
+  },
+  "qa_report_validation": {
+    "report_file": "qa_report_509f.xml",
+    "validated_at": "2026-06-14T11:34:33Z",
+    "numeric_score": 110,
+    "verdict": "PASS"
   }
 }
