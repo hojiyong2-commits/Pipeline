@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260614-B32A",
+  "phase": "qa",
+  "agent_id": "qa-agent",
+  "run_id": "qa-924de7d11066765d",
+  "status": "COMPLETED",
+  "started_at": "2026-06-14T13:31:21Z",
+  "completed_at": "2026-06-14T13:38:36Z",
+  "output_file": "qa_report_B32A.xml",
+  "output_sha256": "01a26c48322023c6ef85e41fd70ddb7f95d9b5e86eaba5bedcdf054a6de1e8f2",
+  "evidence_files": [],
+  "commit_sha": "53126eac6b90202485a115af9a35d9e3d735bab6",
+  "receipt_sha256": "468f14f467b30547c3097dd400e8391097716dd00c81b46733b3278d4df620bb"
+}
