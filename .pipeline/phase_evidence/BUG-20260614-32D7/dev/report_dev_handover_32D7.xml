@@ -1,0 +1,113 @@
+<handover>
+  <pipeline_id>BUG-20260614-32D7</pipeline_id>
+  <phase>dev</phase>
+  <summary>
+    GitHub PR의 3종 acceptance 댓글(CI 최종 확인 안내 / pending 승인 요청 / accepted 완료)이
+    공통 marker만 공유하여 서로를 덮어쓰거나 오인하던 회귀를 marker 레벨 분리로 수정.
+    final-check 전용 marker(pipeline-final-check-packet)를 도입하고, SSoT 헬퍼
+    (_is_pending_or_accepted_acceptance_comment / _is_final_check_only_comment)로 4개 호출 지점을 통일.
+    공통 marker(pipeline-human-acceptance-packet)는 기존 코드 호환성을 위해 유지.
+  </summary>
+  <scope_declaration>
+    <files_to_modify>
+      <file>.github/workflows/ci.yml</file>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_marker_separation_32d7.py</file>
+    </files_to_modify>
+    <rationale>MT-1~MT-5 scope에 따른 수정. MT-1: ci.yml marker 분리, MT-2/3/4: pipeline.py 댓글 선택 로직, MT-5: 신규 테스트</rationale>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_post_github_pending_acceptance_comment, _update_github_acceptance_comment, _check_acceptance_packet_via_github, _get_pr_comment_acceptance_body, ci_final_check_comment_step</target_function>
+    <changed_files>
+      <file>.github/workflows/ci.yml</file>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_marker_separation_32d7.py</file>
+    </changed_files>
+    <side_effects>marker 분리로 CI 최종 확인 안내 댓글이 pending/accepted 댓글을 덮어쓰지 않음. 기존 공통 marker는 하위 호환성 유지.</side_effects>
+    <regression_risk>LOW - 기존 로직 제거 없이 필터링 강화만 수행. 기존 회귀 49개 PASS 확인.</regression_risk>
+  </impact_analysis>
+  <evidence>
+    <changed_files>
+      <file>.github/workflows/ci.yml</file>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_marker_separation_32d7.py</file>
+    </changed_files>
+    <verification>
+      <check>python -m py_compile pipeline.py tests/e2e/test_marker_separation_32d7.py → OK</check>
+      <check>python -c "import pipeline" → OK</check>
+      <check>yaml.safe_load(.github/workflows/ci.yml) → YAML OK</check>
+      <check>python -m pytest tests/e2e/test_marker_separation_32d7.py -q → 8 passed</check>
+      <check>관련 기존 회귀 49 passed (509F/pending_comment/acceptance_packet/finalization/post_accept) — 회귀 없음</check>
+    </verification>
+  </evidence>
+  <mt_summary>
+    <mt id="MT-1" status="MODULE_GATE_PASS">ci.yml: packet 본문에 final-check marker 추가 + 'PR에 최종 확인 안내 남기기' step 댓글 선택을 final-check AND not pending/accepted로 변경</mt>
+    <mt id="MT-2" status="MODULE_GATE_PASS">_post_github_pending_acceptance_comment: 삭제 필터를 pending/accepted 한정으로 변경(final-check 보존) + readiness 줄 '판단 정보 상태: 판단 가능' 보장</mt>
+    <mt id="MT-3" status="CODE_DONE_GATE_BLOCKED">_update_github_acceptance_comment: 삭제 필터를 pending/accepted 한정으로 변경(final-check 보존)</mt>
+    <mt id="MT-4" status="CODE_DONE_GATE_BLOCKED">_check_acceptance_packet_via_github / _get_pr_comment_acceptance_body: pending 우선 -> legacy -> final-check-only 제외 선택</mt>
+    <mt id="MT-5" status="CODE_DONE_GATE_BLOCKED">tests/e2e/test_marker_separation_32d7.py 신규 8 TC — 전부 PASS</mt>
+  </mt_summary>
+  <module_gate_blocker>
+    <type>INCREMENTAL_MODULE_GATE_CHECKPOINT_DEADLOCK</type>
+    <detail>
+      MT-2, MT-3, MT-4가 모두 PM 계획상 pipeline.py 단일 파일을 대상으로 한다.
+      Incremental Module Gate는 module QA PASS 시점에 대상 파일 전체 해시를 checkpoint로 저장하고,
+      이후 module design/dev/qa 진입 시 _validate_module_checkpoints로 live 파일 해시와 비교한다.
+      MT-2가 QA PASS(checkpoint=pipeline.py@c2495a0)된 뒤 MT-3이 같은 pipeline.py를 편집하면
+      해시가 바뀌어 'MT-2 checkpoint changed after PASS: pipeline.py'로 MT-3 module dev가 차단된다.
+      MT-2 QA를 재기록하여 checkpoint를 최신 해시로 갱신하려 하면 'later module MT-3 already advanced'
+      가드(DESIGN_DONE)에 막혀 재기록도 불가능하다 — 순환 deadlock.
+    </detail>
+    <root_cause>
+      Incremental Module Gate의 full-file checkpoint는 1파일=1MT 전제로 설계되어 있고,
+      PM이 MT-2/MT-3/MT-4를 동일 pipeline.py에 배정한 구조와 충돌한다.
+      pipeline.py에 module checkpoint reset/refresh CLI가 없다.
+    </root_cause>
+    <code_status>
+      모든 코드(MT-1~MT-5)는 구현 완료 + 실행 검증 PASS. pipeline.py의 MT-2/3/4 편집은 전부 최종 상태로 파일에 반영되어 있음.
+      막힌 것은 코드가 아니라 module 게이트의 순차 기록(checkpoint)뿐임.
+    </code_status>
+    <safe_remediation_options>
+      <option id="A" recommended="true">
+        Pipeline Manager가 동일 pipeline.py 대상 MT(MT-2/3/4)의 checkpoint를 현재(최종) pipeline.py 해시로 일괄 갱신.
+        모든 편집이 PM 계획·scope_manifest·handover에 선언되어 있어 silent change가 아님.
+        준비된 산출물: module_design/handover/scope_manifest/module_qa (MT-3/4/5) + integration_report_32D7.xml.
+      </option>
+      <option id="B">
+        별도 IMP로 Incremental Module Gate를 same-file 다중 MT에 대응하도록 개선(예: MT별 diff 기반 checkpoint
+        또는 동일 파일 MT 그룹 단위 checkpoint). 이는 pipeline.py(Trust-Root) 변경이므로 본 파이프라인 범위 밖.
+      </option>
+    </safe_remediation_options>
+    <prepared_module_artifacts>
+      module_design_MT-3_32D7.xml(기록완료), module_handover_MT-3_32D7.xml, scope_manifest_MT-3_32D7.json, module_qa_MT-3_32D7.xml,
+      module_design_MT-4_32D7.xml, module_handover_MT-4_32D7.xml, scope_manifest_MT-4_32D7.json, module_qa_MT-4_32D7.xml,
+      module_design_MT-5_32D7.xml, module_handover_MT-5_32D7.xml, scope_manifest_MT-5_32D7.json, module_qa_MT-5_32D7.xml,
+      integration_report_32D7.xml, scope_manifest_32D7.json(전체)
+    </prepared_module_artifacts>
+  </module_gate_blocker>
+  <scope_lock_check>
+    <git_diff_files>.github/workflows/ci.yml, pipeline.py, tests/e2e/test_marker_separation_32d7.py</git_diff_files>
+    <manifest_files>.github/workflows/ci.yml, pipeline.py, tests/e2e/test_marker_separation_32d7.py</manifest_files>
+    <extra_files>없음 (pipeline_state.json은 pipeline.py 명령이 기록하는 엔진 상태 파일 — 소스 변경 아님)</extra_files>
+    <trust_root_violation>false — ci.yml/pipeline.py/tests 모두 PM target_files에 포함된 HIGH_RISK 대상</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <self_check>
+    <python_version_syntax>PASS — Python 3.12, 기존 typing 패턴 유지</python_version_syntax>
+    <type_hinting>PASS — 신규 헬퍼 (body: str) -> bool, 테스트 -> None</type_hinting>
+    <error_handling>PASS — None/비문자열 안전 처리, 기존 except 보존</error_handling>
+    <path_safety>N-A — 경로 입력 처리 없음(댓글 marker 로직)</path_safety>
+    <security>PASS — 하드코딩 secret 없음, dummy 토큰은 테스트 fixture에서 EXAMPLE/abc123 형태</security>
+    <docstring>PASS — 신규 함수/헬퍼/테스트 모두 docstring + 자기반성 헤더</docstring>
+    <execution_check>PASS — py_compile + import + yaml + pytest 8 passed + 회귀 49 passed</execution_check>
+    <impact_analysis_check>PASS — MT-1~MT-4 impact_analysis 출력, state_mutations 명시, risk_assessment 4필드 채움</impact_analysis_check>
+    <frozen_codebase_check>PASS — scope 외 미수정, 무관 리팩토링 0건, OAR 0회, Pre/Post 스냅샷, Side-Effect Audit(시그니처 불변), Multi-location(marker SSoT 통일)</frozen_codebase_check>
+  </self_check>
+  <post_fix_diff>
+    <function name="_post_github_pending_acceptance_comment">삭제 필터: tag in body → _is_pending_or_accepted_acceptance_comment(body); comment_body에 readiness 줄 보장. 시그니처/호출자 불변.</function>
+    <function name="_update_github_acceptance_comment">삭제 필터: tag in body → _is_pending_or_accepted_acceptance_comment(body). 시그니처/호출자 불변.</function>
+    <function name="_check_acceptance_packet_via_github">댓글 선택: 마지막 공통 marker → pending 우선/legacy fallback/final-check-only 제외. 반환 타입/호출자 불변.</function>
+    <function name="_get_pr_comment_acceptance_body">동일 우선순위 선택 적용. 반환 타입/호출자 불변.</function>
+    <new>_is_pending_or_accepted_acceptance_comment, _is_final_check_only_comment, marker SSoT 상수 3종 추가. ci.yml final-check marker + 댓글 선택 필터.</new>
+  </post_fix_diff>
+</handover>
