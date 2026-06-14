@@ -41,6 +41,7 @@ def make_env(tmp_path: Path, extra: Optional[Dict[str, str]] = None) -> Dict[str
     """
     env = os.environ.copy()
     env["PIPELINE_STATE_PATH"] = str(tmp_path / "pipeline_state.json")
+    env["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
     if extra:
         env.update(extra)
     return env

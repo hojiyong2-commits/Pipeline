@@ -116,6 +116,7 @@ def _fake_gh_env(tmp_path: Path) -> Dict[str, str]:
     return {
         "PIPELINE_GH_EXECUTABLE": str(_write_fake_gh_script(tmp_path)),
         "PATH": str(tmp_path),
+        "PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING": "1",
     }
 
 

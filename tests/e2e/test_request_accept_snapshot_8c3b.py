@@ -174,6 +174,7 @@ def make_env(tmp_path: Path) -> Dict[str, str]:
     env["PIPELINE_GH_EXECUTABLE"] = str(_write_fake_gh_script(tmp_path))
     # Windows cp949 인코딩 문제 방지
     env["PYTHONIOENCODING"] = "utf-8"
+    env["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
     return env
 
 

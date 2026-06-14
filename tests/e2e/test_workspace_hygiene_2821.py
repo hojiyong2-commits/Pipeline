@@ -415,23 +415,24 @@ def test_tc6_state_workspace_hygiene_fields(tmp_path):
 
 
 # TC-6b (IMP-20260614-2821 수정 8): git 실행파일 FileNotFoundError → graceful skip(BLOCKED 아님).
-def test_tc6b_git_missing_graceful_skip(oracle_fixture, tmp_path):
-    """git 실행파일이 없으면(FileNotFoundError 시뮬레이션) _check_workspace_hygiene은
-    fail-closed BLOCKED 대신 graceful skip 으로 처리한다.
+def test_tc6b_git_missing_graceful_skip_with_override(oracle_fixture, tmp_path):
+    """PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 override 시: git 실행파일이 없어도
+    (FileNotFoundError 시뮬레이션) _check_workspace_hygiene은 fail-closed BLOCKED 대신
+    graceful skip 으로 처리한다.
 
-    근거(IMP-20260614-2821 수정 8): git_binary_missing 은 "git이 PATH에 없는 환경 한계"이며
-    evidence 변조 신호가 아니다. 격리 E2E(AEF0/8C3B/CE06)는 실제 gh 탐색 무력화를 위해
-    PATH=tmp_path 로 제한하고, 그 부작용으로 git_binary_missing=True 가 된다. 이 pid들은 모두
-    tests/oracles/<pid>/ 디렉터리를 보유하므로 git 부재를 fail-closed 하면 request-accept/accept
-    전 흐름이 무조건 BLOCKED 되어 26건 회귀가 발생한다. 따라서 git 부재는 untracked 검사를
-    건너뛰고(graceful skip), 실제 변조 신호인 git_query_errored(returncode!=0, TC-10)와
-    per-file Permission denied(REJECT 사유 4)만 fail-closed 로 차단한다.
+    근거(IMP-20260614-2821 REJECT 재작업): 기본(production) 동작은 fail-closed BLOCKED 이다.
+    git 없이는 untracked 여부·PR/base 포함 여부를 판정할 수 없기 때문이다. 다만 격리 E2E
+    (AEF0/8C3B/CE06)는 실제 gh 탐색 무력화를 위해 PATH=tmp_path 로 제한하고, 그 부작용으로
+    git_binary_missing=True 가 된다. 이 pid들은 모두 tests/oracles/<pid>/ 디렉터리를 보유하므로
+    git 부재를 fail-closed 하면 26건 회귀가 발생한다. 따라서 테스트 환경에서만
+    PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 로 graceful skip 을 허용한다.
 
-    검증: git 부재 + untracked oracle 이 있어도 status != BLOCKED 이고
+    검증: override env + git 부재 + untracked oracle 이 있어도 status != BLOCKED 이고
     workspace_hygiene_check_failed / untracked_oracle_evidence blocker 가 없어야 한다.
     """
     fx = oracle_fixture
     env = make_env(tmp_path)
+    env["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
     # untracked oracle 생성(그러나 git 부재로 untracked 검사가 건너뛰어진다).
     fx.add_oracle_file("TC-6b/input.json", '{"x": 1}')
 
@@ -471,6 +472,54 @@ def test_tc6b_git_missing_graceful_skip(oracle_fixture, tmp_path):
     assert "untracked_oracle_evidence" not in blocking, payload
     # git 부재 신호는 결과에 git_unavailable=True 로 기록된다.
     assert payload.get("git_unavailable") is True, payload
+
+
+def test_tc6b_git_missing_fail_closed(oracle_fixture, tmp_path):
+    """기본(production) 동작: git binary 없으면 BLOCKED — fail-closed.
+
+    PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING 미설정 시
+    _check_workspace_hygiene가 workspace_hygiene_check_failed BLOCKED를 반환해야 한다.
+    """
+    fx = oracle_fixture
+    env = make_env(tmp_path)
+    env.pop("PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING", None)  # 환경변수 제거 (production 모드)
+
+    script = tmp_path / "git_missing_fail_closed_probe.py"
+    script.write_text(
+        "import json\n"
+        "import sys\n"
+        "import os\n"
+        f"sys.path.insert(0, {str(BASE_DIR)!r})\n"
+        "import subprocess\n"
+        "import pipeline as P\n"
+        "_orig = subprocess.run\n"
+        "def _fake(args, *a, **k):\n"
+        "    if isinstance(args, (list, tuple)) and args and str(args[0]) == 'git':\n"
+        "        raise FileNotFoundError('git not found')\n"
+        "    return _orig(args, *a, **k)\n"
+        "P.subprocess.run = _fake\n"
+        # 환경변수에서도 명시적으로 제거
+        "os.environ.pop('PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING', None)\n"
+        f"r = P._check_workspace_hygiene({{'pipeline_id': {fx.pid!r}}})\n"
+        "print('HYGIENE_JSON=' + json.dumps(r))\n",
+        encoding="utf-8",
+    )
+    cp = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(BASE_DIR), env=env, timeout=60,
+    )
+    assert cp.returncode == 0, cp.stdout + cp.stderr
+    payload = None
+    for line in (cp.stdout or "").splitlines():
+        if line.startswith("HYGIENE_JSON="):
+            payload = json.loads(line[len("HYGIENE_JSON="):])
+            break
+    assert payload is not None, cp.stdout[:400]
+    # fail-closed: git 부재 시 BLOCKED 되어야 한다.
+    assert payload.get("status") == "BLOCKED", payload
+    blocking = " ".join(str(b) for b in (payload.get("blocking_items") or []))
+    assert "workspace_hygiene_check_failed" in blocking, payload
 
 
 # TC-7: cleanup_only_items 목록에 build_report.xml 포함 확인

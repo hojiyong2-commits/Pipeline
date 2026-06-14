@@ -108,8 +108,7 @@ AC 검증이 모두 통과해도 PR 본문이 완성되지 않으면 `gates requ
 - contract `oracle_manifest.json`이 존재하면 untracked 차단(규칙 1/3)은 기존
   `_check_oracle_manifest_vs_inventory` + `_validate_evidence_provenance` 게이트에 위임됩니다.
 - 파일 missing(규칙 2)과 inventory SHA mismatch(규칙 4)는 deferral과 무관하게 항상 차단합니다.
-- git 실행파일 자체가 없는 환경에서는 graceful skip(차단하지 않음)입니다. git이 실행됐으나
-  오류를 반환하면 fail-closed로 차단합니다.
+- git 실행파일 자체가 없는 환경: 기본(production)은 `workspace_hygiene_check_failed` BLOCKED — git 없이 protected 파일 판정 불가. 테스트 환경 override: `PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1` 설정 시에만 graceful skip 허용. git이 실행됐으나 오류를 반환하면 fail-closed로 차단합니다.
 - per-file git 추적 상태 확인 시 `Permission denied` 오류가 발생하면 해당 파일에 대해
   fail-closed(BLOCKED)로 차단합니다. (`failure_code=workspace_hygiene_check_failed`)
 

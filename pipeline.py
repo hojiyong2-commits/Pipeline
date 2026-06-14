@@ -3551,7 +3551,23 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
     #   - 아래 _is_untracked()/_is_tracked()/_check_file_in_pr_or_base()는 git_binary_missing 을 보고
     #     None(graceful skip) 을 반환하므로, early-return 없이 자연스럽게 untracked 검사만 건너뛴다.
     if git_binary_missing:
-        result["git_unavailable"] = True
+        # IMP-20260614-2821 REJECT 재작업: git 부재 시 기본(production) 동작을 fail-closed로 변경.
+        #   git 없이는 untracked 여부·PR/base 포함 여부를 판정할 수 없으므로, graceful skip은
+        #   승인 코드가 무방비로 발급될 위험을 만든다(REJECT 사유). 따라서 기본은 BLOCKED.
+        #   격리 E2E처럼 PATH=tmp_path로 git이 의도적으로 제거된 테스트 환경에서만
+        #   PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 override로 graceful skip을 허용한다.
+        allow_git_missing = os.environ.get("PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING") == "1"
+        if not allow_git_missing:
+            _add_blocker(
+                "workspace_hygiene_check_failed",
+                "git executable not found — cannot determine protected file tracking status "
+                "(set PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 to allow in test environments)",
+            )
+            return result
+        else:
+            # 테스트 환경 override: git 없을 때 graceful skip
+            result["git_unavailable"] = True
+            return result
 
     def _is_untracked(rel_path: str) -> Optional[bool]:
         """rel_path가 untracked인지 반환.

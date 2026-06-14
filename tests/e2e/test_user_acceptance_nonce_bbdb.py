@@ -83,6 +83,7 @@ def make_env(tmp_path: Path) -> Dict[str, str]:
     env["PIPELINE_NO_DASHBOARD"] = "1"
     # Windows에서 gh CLI를 가짜로 invalid path로 대체하여 호출 실패 유도
     env["PATH"] = str(tmp_path)  # 빈 경로 — gh CLI 못 찾음
+    env["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
     return env
 
 
