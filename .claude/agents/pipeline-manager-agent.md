@@ -135,6 +135,36 @@ python pipeline.py gates request-accept --evidence <결과물-경로>
 python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>
 ```
 
+## User Acceptance 표시 상태값 정의
+
+`acceptance_request.json`의 `status` 및 `external_gates.acceptance.status`는 서로 다른 레이어에서 관리됩니다.
+
+### 표시 상태 (acceptance_request.json)
+- **PENDING**: `gates request-accept` 직후, 사용자 확인 대기 중
+- **ACCEPTED**: `gates accept --result ACCEPT` 성공 후, 사용자가 승인 완료
+- **REJECTED**: `gates accept --result REJECT` 후, 사용자가 거절
+
+표시 상태는 `_resolve_acceptance_display_state` SSoT helper(`pipeline.py`)가 단일 계산합니다.
+`acceptance_request`가 None이거나 비정상 값이면 안전 fallback으로 PENDING을 반환합니다.
+
+### Gate 통과 상태 (external_gates.acceptance.status)
+- **PASS**: acceptance gate 최종 통과 — ACCEPT 처리 모든 단계 성공 후 마지막에 기록
+- 이 두 상태값을 혼용하지 말 것. 표시 상태는 PENDING/ACCEPTED/REJECTED, gate 상태는 PASS만 사용.
+
+### ACCEPT 처리 순서 (fail-closed)
+1. nonce/provenance/pr_body_stale/CI head 검증
+2. post-accept packet 재생성 (JSON/MD)
+3. JSON 파싱 재검증
+4. MD/JSON acceptance 상태 일치 검증
+5. PR body final packet 블록 교체
+6. PR comment 갱신
+7. PR body/comment 재조회 후 ACCEPTED 확인
+8. acceptance_request ACCEPTED(CONSUMED) 갱신
+9. **마지막에** external_gates.acceptance.status=PASS 기록
+
+단계 2~7 중 어느 하나라도 실패하면 gate PASS를 기록하지 않고 failure packet 작성 후 BLOCKED로 종료합니다.
+단, gh CLI 없음 / PR 없음인 경우 단계 5~7은 graceful skip하되 gate PASS는 허용합니다.
+
 ## Circuit Breaker
 
 QA가 동일 `failure_signature`로 2회 연속 FAIL → dev 3회 spawn 금지 → Phase 8(Architect) 즉시 이관.
