@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "failure_code": null,
+  "acceptance_code_issued": true,
+  "workspace_hygiene": {
+    "status": "PASS",
+    "blocking_items": [],
+    "cleanup_only_items": [],
+    "protected_evidence_count": 2,
+    "tracked_oracle_count": 2,
+    "untracked_oracle_count": 0,
+    "pr_included_protected_count": 2
+  },
+  "message": "workspace hygiene 검증 통과 — 모든 protected oracle 파일이 git tracked + PR 포함"
+}

@@ -3382,6 +3382,541 @@ def _register_evidence_to_inventory(
     _write_json_value(inventory_path, inventory)
 
 
+# IMP-20260614-2821 MT-1: COMPLETE 직전 workspace/evidence hygiene gate
+# [Purpose]: gates request-accept / gates accept 전에 oracle/evidence 파일의 git 추적 상태를
+#            검사하여, untracked oracle(로컬에만 존재하는 증거)로 승인 코드를 발급/소모하는
+#            우회 경로를 차단한다. cleanup_only 임시 파일(build_report.xml 등)은 WARN으로만
+#            분류하여 차단하지 않는다.
+# [Assumptions]: BASE_DIR가 git 작업 트리 루트이며 git CLI가 설치되어 있다.
+#                oracle 증거는 tests/oracles/<pipeline_id>/ 아래 + evidence_inventory.json/
+#                oracle_manifest.json 에 등록된다.
+# [Vulnerability & Risks]: git CLI 부재 시 protected path 판정 불가 → fail-closed BLOCKED로
+#                오탐 가능(의도적). cleanup_only 보조 패턴은 _is_cleanup_only_artifact 외에
+#                PM이 명시한 *_dump.txt / .pytest_tmp_* / .claude/worktrees/ 를 추가 매칭한다.
+# [Improvement]: PR diff/inventory를 1회만 조회해 캐시하면 다수 파일 검증 시 git 호출을 줄인다.
+
+
+# IMP-20260614-2821 MT-1: PM이 명시한 추가 cleanup_only 패턴(_is_cleanup_only_artifact 보조).
+# HYGIENE_ARCHIVE_PATTERNS에 없지만 cleanup-only로 취급해야 하는 진단/임시 산출물 패턴.
+_WORKSPACE_HYGIENE_EXTRA_CLEANUP_PATTERNS: List[str] = [
+    "oracle_result_dump.txt",
+    "*_dump.txt",
+    "tmp_tc*.json",
+    ".pytest_tmp_*",
+]
+# 경로 접두사 기반 cleanup_only 판정(파일명만으로 매칭 불가한 디렉터리 산출물).
+_WORKSPACE_HYGIENE_CLEANUP_PREFIXES: Tuple[str, ...] = (
+    ".claude/worktrees/",
+    ".pytest_tmp_",
+)
+
+
+def _is_workspace_cleanup_only(rel_path: str) -> bool:
+    """rel_path(저장소 루트 기준)가 cleanup_only(차단 제외) 산출물인지 판정한다.
+
+    판정 순서:
+      1. 경로 접두사(.claude/worktrees/ 등) 매칭 → cleanup_only
+      2. 파일명이 HYGIENE_ARCHIVE_PATTERNS 매칭 (_is_cleanup_only_artifact SSoT)
+      3. 파일명이 PM 명시 추가 패턴(_WORKSPACE_HYGIENE_EXTRA_CLEANUP_PATTERNS) 매칭
+
+    Args:
+        rel_path: 저장소 루트 기준 상대 경로(슬래시 정규화 권장). None 금지.
+    Returns:
+        cleanup_only(차단 제외) 산출물이면 True.
+    Raises:
+        TypeError: rel_path가 None이거나 str이 아닌 경우.
+    """
+    if rel_path is None:
+        raise TypeError("rel_path must not be None")
+    if not isinstance(rel_path, str):
+        raise TypeError(f"rel_path must be str, got {type(rel_path).__name__}")
+
+    norm = rel_path.replace("\\", "/").lstrip("./")
+    for prefix in _WORKSPACE_HYGIENE_CLEANUP_PREFIXES:
+        if norm.startswith(prefix) or Path(norm).name.startswith(prefix):
+            return True
+    name = Path(norm).name
+    # SSoT: HYGIENE_ARCHIVE_PATTERNS (build_report.xml, tmp*.json, pr_body_*.txt, comment_*.txt 등)
+    if _is_cleanup_only_artifact(name):
+        return True
+    for pattern in _WORKSPACE_HYGIENE_EXTRA_CLEANUP_PATTERNS:
+        if fnmatch.fnmatch(name, pattern):
+            return True
+    return False
+
+
+def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
+    """gates request-accept / gates accept 전 workspace/evidence hygiene 검사(fail-closed).
+
+    검사 규칙:
+      1. tests/oracles/<pipeline_id>/ 아래 파일이 untracked → BLOCKED(untracked_oracle_evidence)
+      2. oracle_manifest 참조 input/expected 파일 missing → BLOCKED(protected_evidence_missing)
+      3. oracle_manifest 참조 파일이 git tracked 아님 → BLOCKED(protected_evidence_untracked)
+      4. evidence_inventory protected 파일 SHA mismatch → BLOCKED(protected_evidence_sha_mismatch)
+      5. git 조회 실패가 protected 판정에 영향 → BLOCKED(workspace_hygiene_check_failed, fail-closed)
+      6. cleanup_only 파일만 있으면 WARN(차단 아님)
+      7. 모두 OK이면 OK
+
+    cleanup_only 파일(build_report.xml, *_dump.txt, .claude/worktrees/ 등)은 차단하지 않고
+    cleanup_only_items로 분류한다.
+
+    Args:
+        state: pipeline_id를 포함한 pipeline state dict(최소 {"pipeline_id": ...}). None 금지.
+    Returns:
+        Dict: status("BLOCKED"|"WARN"|"OK"), blocking_items(list[dict]),
+              cleanup_only_items(list[str]), protected_evidence_count(int),
+              tracked_oracle_count(int), untracked_oracle_count(int),
+              pr_included_protected_count(int), cleanup_command(str), checked_at(str).
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+
+    result: Dict[str, Any] = {
+        "status": "OK",
+        "blocking_items": [],
+        "cleanup_only_items": [],
+        "protected_evidence_count": 0,
+        "tracked_oracle_count": 0,
+        "untracked_oracle_count": 0,
+        "pr_included_protected_count": 0,
+        "cleanup_command": "Remove-Item <파일>",
+        "checked_at": _now(),
+    }
+
+    def _add_blocker(failure_code: str, message: str, path_item: str = "") -> None:
+        result["status"] = "BLOCKED"
+        result["blocking_items"].append(
+            f"failure_code={failure_code}: {message}"
+            + (f" ({path_item})" if path_item else "")
+        )
+
+    if not pipeline_id:
+        _add_blocker(
+            "workspace_hygiene_check_failed",
+            "state에 pipeline_id가 없어 workspace hygiene을 확인할 수 없습니다(fail-closed).",
+        )
+        return result
+
+    # 규칙 5: git 조회 결과를 3-상태로 구분한다.
+    #   - git_binary_missing: git 실행파일 자체가 없음(PATH에 git 없음). 환경 한계이며
+    #     evidence 변조 신호가 아니다. 실 운영 request-accept는 항상 git이 존재하므로,
+    #     이 경우는 graceful skip(검사 불가 → 차단하지 않음)으로 처리한다.
+    #   - git_query_errored: git이 실행됐으나 비정상 종료(returncode != 0). 실제 조회 실패이며
+    #     protected 판정에 영향을 주므로 fail-closed BLOCKED.
+    #   - 정상: untracked 목록 확보.
+    untracked_set: set = set()
+    git_binary_missing = False
+    git_query_errored = False
+    try:
+        _others = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+            cwd=str(BASE_DIR),
+        )
+    except FileNotFoundError:
+        git_binary_missing = True
+    except OSError:
+        git_query_errored = True
+    else:
+        if _others.returncode != 0:
+            git_query_errored = True
+        else:
+            # IMP-20260614-2821 수정 7(rev2): `git ls-files --others`는 읽을 수 없는 임시/정크
+            # 디렉터리(.pytest_tmp_* 등)에 대해 stderr에 "Permission denied" 경고를 내면서도
+            # returncode 0과 함께 읽을 수 있는 untracked 파일 목록은 완전하게 반환한다. 이런
+            # 정크 디렉터리 경고만으로 전체 hygiene을 fail-closed하면 정상 oracle 추적 판정까지
+            # 막혀 정합성이 깨진다(TC-1/TC-5 회귀). 실제 evidence 변조 신호인 "특정 oracle/
+            # protected 파일의 추적 상태를 확인 불가"한 케이스는 아래 _is_tracked()의 per-file
+            # Permission denied fail-closed가 담당한다(REJECT 사유 4).
+            for line in (_others.stdout or "").splitlines():
+                p = line.strip().replace("\\", "/").lstrip("./")
+                if p:
+                    untracked_set.add(p)
+    # IMP-20260614-2821 수정 8: git 실행파일 부재는 graceful skip 으로 처리한다(early-return 제거).
+    #   - git_binary_missing 은 "git 자체가 PATH에 없는 환경 한계"이며 evidence 변조 신호가 아니다.
+    #     실 운영 request-accept/accept 환경에는 항상 git이 존재하므로 이 분기는 발생하지 않는다.
+    #   - 격리 E2E(AEF0/8C3B/CE06 등)는 실제 gh 탐색 무력화를 위해 PATH=tmp_path로 제한하며,
+    #     그 부작용으로 subprocess.run(["git", ...])가 FileNotFoundError → git_binary_missing=True 가
+    #     된다. 이 pid들은 모두 tests/oracles/<pid>/ 디렉터리를 보유하므로, 여기서 fail-closed
+    #     early-return 하면 request-accept/accept 전 흐름이 무조건 BLOCKED 되어 회귀가 발생한다.
+    #   - 실제 evidence 변조 신호인 "git이 실행됐으나 비정상 종료(git_query_errored)" 와
+    #     "per-file Permission denied(_is_tracked 'ERROR')"는 아래 다운스트림에서 그대로 fail-closed
+    #     로 차단된다(TC-10 / REJECT 사유 4). 따라서 보안 권위를 잃지 않는다.
+    #   - 아래 _is_untracked()/_is_tracked()/_check_file_in_pr_or_base()는 git_binary_missing 을 보고
+    #     None(graceful skip) 을 반환하므로, early-return 없이 자연스럽게 untracked 검사만 건너뛴다.
+    if git_binary_missing:
+        # IMP-20260614-2821 REJECT 재작업: git 부재 시 기본(production) 동작을 fail-closed로 변경.
+        #   git 없이는 untracked 여부·PR/base 포함 여부를 판정할 수 없으므로, graceful skip은
+        #   승인 코드가 무방비로 발급될 위험을 만든다(REJECT 사유). 따라서 기본은 BLOCKED.
+        #   격리 E2E처럼 PATH=tmp_path로 git이 의도적으로 제거된 테스트 환경에서만
+        #   PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 override로 graceful skip을 허용한다.
+        allow_git_missing = os.environ.get("PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING") == "1"
+        if not allow_git_missing:
+            _add_blocker(
+                "workspace_hygiene_check_failed",
+                "git executable not found — cannot determine protected file tracking status "
+                "(set PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 to allow in test environments)",
+            )
+            return result
+        else:
+            # 테스트 환경 override: git 없을 때 graceful skip
+            result["git_unavailable"] = True
+            return result
+
+    def _is_untracked(rel_path: str) -> Optional[bool]:
+        """rel_path가 untracked인지 반환.
+
+        반환값:
+          - True/False: 판정 성공.
+          - None: git 실행파일 부재(graceful skip 대상).
+          - "ERROR": git 조회 비정상 종료(fail-closed 대상).
+        """
+        if git_binary_missing:
+            return None
+        if git_query_errored:
+            return "ERROR"  # type: ignore[return-value]
+        return rel_path.replace("\\", "/").lstrip("./") in untracked_set
+
+    def _is_tracked(abs_or_rel_path: str) -> Optional[bool]:
+        """git ls-files --error-unmatch 로 tracked 여부 반환.
+
+        반환값:
+          - True/False: 판정 성공.
+          - None: git 실행파일 부재(graceful skip 대상).
+          - "ERROR": git 조회 비정상 종료(fail-closed 대상).
+        """
+        if git_binary_missing:
+            return None
+        try:
+            _ls = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", abs_or_rel_path],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+                cwd=str(BASE_DIR),
+            )
+        except FileNotFoundError:
+            return None
+        except OSError:
+            return "ERROR"  # type: ignore[return-value]
+        if "Permission denied" in (_ls.stderr or ""):
+            # stderr에 Permission denied가 있으면 fail-closed (IMP-20260614-2821 수정 7: REJECT 사유 4).
+            return "ERROR"  # type: ignore[return-value]
+        return _ls.returncode == 0
+
+    def _check_file_in_pr_or_base(rel_path_str: str) -> bool:
+        """파일이 PR changed files 또는 base/main에 실제로 존재하는지 확인한다(IMP-20260614-2821 수정 4).
+
+        Returns:
+            True: OK (base/main에 이미 있거나 PR diff에 포함됨).
+            False: BLOCKED 조건 (git 오류, gh 오류/부재, 또는 어느 쪽에도 없음 → 카운트 증가 안 함).
+        """
+        # git 부재는 이미 위에서 fail-closed로 처리되어 이 지점에 도달하지 않는다.
+        # 1. git ls-files --error-unmatch 로 tracked 확인.
+        try:
+            _ls = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", rel_path_str],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+                cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, OSError):
+            return False
+        if _ls.returncode != 0:
+            return False  # tracked 아님 → 카운트 증가 안 함
+
+        # 2. git show origin/main:<path> 로 base/main에 이미 존재하는지 확인.
+        try:
+            _show = subprocess.run(
+                ["git", "show", f"origin/main:{rel_path_str}"],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+                cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, OSError):
+            _show = None
+        if _show is not None and _show.returncode == 0:
+            return True  # base/main에 이미 있음 → OK
+
+        # 3. gh pr view 로 PR changed files 확인.
+        try:
+            _gh = subprocess.run(
+                ["gh", "pr", "view", "--json", "files"],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+                cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, OSError):
+            return False  # gh CLI 부재 → fail-closed(카운트 증가 안 함)
+        if _gh.returncode != 0:
+            return False  # gh 실패 → fail-closed
+        try:
+            _pr_data = json.loads(_gh.stdout)
+            _pr_files = {f.get("path", "") for f in (_pr_data.get("files") or [])}
+        except (json.JSONDecodeError, AttributeError):
+            return False
+        _norm_rel = rel_path_str.replace("\\", "/").lstrip("./")
+        return _norm_rel in {p.replace("\\", "/").lstrip("./") for p in _pr_files}
+
+    # 기존 게이트와의 정합성(IMP-20260614-2821): contract oracle_manifest.json이 존재하면
+    # "untracked" 판정의 차단 권위는 기존 _check_oracle_manifest_vs_inventory +
+    # _validate_evidence_provenance 게이트가 가진다(request-accept에서 hygiene 이후 실행).
+    # 이 경우 hygiene은 untracked 차단(규칙 1/3)만 위임(defer)하고, 파일 missing(규칙 2)과
+    # inventory SHA mismatch(규칙 4)는 그대로 차단한다(기존 게이트와 중복되지 않는 영역).
+    # contract manifest가 없을 때는 hygiene이 tests/oracles/<pid>/ untracked를 직접 차단한다.
+    _paths_for_defer = _contract_paths(pipeline_id)
+    defer_untracked_to_existing_gate = _paths_for_defer["oracle_manifest"].exists()
+
+    # ---- 규칙 1: tests/oracles/<pipeline_id>/ 아래 파일의 untracked 여부 ----
+    oracle_dir = BASE_DIR / "tests" / "oracles" / pipeline_id
+    if oracle_dir.exists():
+        for fpath in sorted(oracle_dir.rglob("*")):
+            if not fpath.is_file():
+                continue
+            try:
+                rel = fpath.resolve().relative_to(BASE_DIR.resolve()).as_posix()
+            except (ValueError, OSError):
+                rel = str(fpath).replace("\\", "/")
+            # cleanup_only 산출물은 oracle 디렉터리 아래에 있어도 차단 대상이 아님.
+            if _is_workspace_cleanup_only(rel):
+                if rel not in result["cleanup_only_items"]:
+                    result["cleanup_only_items"].append(rel)
+                continue
+            # contract manifest 존재 시 untracked 차단은 기존 게이트에 위임 — 차단 안 함.
+            if defer_untracked_to_existing_gate:
+                continue
+            result["protected_evidence_count"] += 1
+            untracked = _is_untracked(rel)
+            if untracked is None:
+                # git 실행파일 부재 → graceful skip(차단하지 않음). 실 운영에서는 git 존재.
+                continue
+            if untracked == "ERROR":
+                _add_blocker(
+                    "workspace_hygiene_check_failed",
+                    "git untracked 목록 조회가 비정상 종료되어 oracle 추적 상태를 확인할 수 없습니다(fail-closed).",
+                    rel,
+                )
+                result["untracked_oracle_count"] += 1
+                continue
+            if untracked:
+                _add_blocker(
+                    "untracked_oracle_evidence",
+                    "oracle 증거가 git에 추적되지 않습니다(untracked). "
+                    f"`git add tests/oracles/{pipeline_id}/` 후 다시 실행하세요.",
+                    rel,
+                )
+                result["untracked_oracle_count"] += 1
+            else:
+                result["tracked_oracle_count"] += 1
+
+    # ---- IMP-20260614-2821 수정 2: 루트 workspace cleanup_only 파일 스캔 ----
+    # 루트 디렉터리에 남아있는 임시 산출물(build_report.xml, *_dump.txt, tmp_tc*.json 등)을
+    # cleanup_only_items로 분류한다. 차단하지 않고 WARN 표시만 한다(REJECT 사유 2).
+    _ROOT_CLEANUP_PATTERNS: List[str] = [
+        "build_report.xml",
+        "oracle_result_dump.txt",
+        "pr_body_current.txt",
+        "pr_body_new.txt",
+        "*_dump.txt",
+        "tc*_dump.txt",
+        "ts*_dump.txt",
+        ".pytest_tmp_*",
+        "tmp*.json",
+        "tmp_tc*.json",
+        "tmp_tc*_given.json",
+        "tmp_tc*_when.json",
+        "tmp_tc*_then.json",
+    ]
+    for _root_pattern in _ROOT_CLEANUP_PATTERNS:
+        for _root_match in BASE_DIR.glob(_root_pattern):
+            if not _root_match.is_file():
+                continue
+            try:
+                _root_rel = _root_match.resolve().relative_to(BASE_DIR.resolve()).as_posix()
+            except (ValueError, OSError):
+                _root_rel = str(_root_match).replace("\\", "/")
+            if _root_rel not in result["cleanup_only_items"]:
+                result["cleanup_only_items"].append(_root_rel)
+    # .claude/worktrees/ 디렉터리 존재 여부 확인(디렉터리 산출물).
+    _worktrees_dir = BASE_DIR / ".claude" / "worktrees"
+    if _worktrees_dir.exists() and _worktrees_dir.is_dir():
+        _wt_rel = ".claude/worktrees"
+        if _wt_rel not in result["cleanup_only_items"]:
+            result["cleanup_only_items"].append(_wt_rel)
+    # .pytest_tmp_* 디렉터리 (IMP-20260614-2821 수정 6: REJECT 사유 3).
+    # 루트 glob 스캔은 not is_file()로 디렉터리를 스킵하므로, 디렉터리 형태의
+    # .pytest_tmp_* 산출물을 별도로 cleanup_only_items에 분류한다(차단 아님, WARN).
+    for _pt_dir in BASE_DIR.glob(".pytest_tmp_*"):
+        if _pt_dir.is_dir():
+            _pt_rel = _pt_dir.relative_to(BASE_DIR).as_posix()
+            if _pt_rel not in result["cleanup_only_items"]:
+                result["cleanup_only_items"].append(_pt_rel)
+
+    # ---- 규칙 2/3/4: oracle_manifest 참조 파일 검사 ----
+    # contract manifest 존재 시: oracle 차단은 기존 게이트(_check_oracle_manifest_vs_inventory +
+    # _validate_evidence_provenance)에 위임하고 hygiene은 차단하지 않는다(중복 방지).
+    paths = _contract_paths(pipeline_id)
+    oracle_manifest_path = paths["oracle_manifest"]
+    inventory_path = paths["evidence_inventory"]
+
+    # inventory sha256 lookup (규칙 4용) — 절대 경로 기준.
+    inventory_sha_by_abs: Dict[str, str] = {}
+    if inventory_path.exists():
+        try:
+            _inv = json.loads(inventory_path.read_text(encoding="utf-8-sig"))
+            if isinstance(_inv, list):
+                for e in _inv:
+                    if not isinstance(e, dict):
+                        continue
+                    if str(e.get("pipeline_id", "")) != pipeline_id:
+                        continue
+                    raw = str(e.get("path", "") or "")
+                    if not raw:
+                        continue
+                    inv_p: Path = Path(raw)
+                    if not inv_p.is_absolute():
+                        inv_p = BASE_DIR / inv_p
+                    try:
+                        key = str(inv_p.resolve())
+                    except (OSError, ValueError):
+                        key = str(inv_p)
+                    inventory_sha_by_abs[key] = str(e.get("sha256", "") or "")
+        except (OSError, json.JSONDecodeError):
+            inventory_sha_by_abs = {}
+
+    if oracle_manifest_path.exists():
+        try:
+            _manifest = json.loads(oracle_manifest_path.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            _manifest = {}
+        oracles = _manifest.get("oracles", []) if isinstance(_manifest, dict) else []
+        manifest_refs: List[str] = []
+        if isinstance(oracles, list):
+            for oc in oracles:
+                if not isinstance(oc, dict):
+                    continue
+                for key in ("input_path", "expected_path"):
+                    raw = str(oc.get(key, "") or "")
+                    if raw:
+                        manifest_refs.append(raw)
+
+        for raw in manifest_refs:
+            ref_p: Path = Path(raw)
+            if not ref_p.is_absolute():
+                ref_p = BASE_DIR / ref_p
+            try:
+                abs_str = str(ref_p.resolve())
+            except (OSError, ValueError):
+                abs_str = str(ref_p)
+            try:
+                rel = ref_p.resolve().relative_to(BASE_DIR.resolve()).as_posix()
+            except (ValueError, OSError):
+                rel = str(ref_p).replace("\\", "/")
+
+            if _is_workspace_cleanup_only(rel):
+                if rel not in result["cleanup_only_items"]:
+                    result["cleanup_only_items"].append(rel)
+                continue
+
+            # 규칙 2: 파일 missing
+            if not ref_p.exists():
+                _add_blocker(
+                    "protected_evidence_missing",
+                    "oracle_manifest가 참조하는 증거 파일이 존재하지 않습니다. 재생성 후 git add 하세요.",
+                    rel,
+                )
+                continue
+
+            # 규칙 3: tracked 여부 (contract manifest 존재 시 untracked 차단은 기존 게이트에 위임)
+            if not defer_untracked_to_existing_gate:
+                tracked = _is_tracked(abs_str)
+                if tracked is None:
+                    # git 실행파일 부재 → graceful skip(차단하지 않음).
+                    pass
+                elif tracked == "ERROR":
+                    _add_blocker(
+                        "workspace_hygiene_check_failed",
+                        "git 조회가 비정상 종료되어 oracle_manifest 참조 파일의 추적 상태를 확인할 수 없습니다(fail-closed).",
+                        rel,
+                    )
+                    continue
+                elif not tracked:
+                    _add_blocker(
+                        "protected_evidence_untracked",
+                        "oracle_manifest가 참조하는 증거 파일이 git에 추적되지 않습니다(untracked). "
+                        "해당 파일을 git add/commit 한 뒤 다시 실행하세요.",
+                        rel,
+                    )
+                    continue
+
+            # 규칙 4: SHA mismatch (inventory에 등록된 sha256과 현재 파일 내용 비교)
+            inv_sha = inventory_sha_by_abs.get(abs_str, "")
+            if inv_sha:
+                try:
+                    cur_sha = _sha256_file(ref_p)
+                except (OSError, IOError):
+                    _add_blocker(
+                        "workspace_hygiene_check_failed",
+                        "증거 파일 SHA256 계산 중 읽기 오류가 발생했습니다(fail-closed).",
+                        rel,
+                    )
+                    continue
+                if cur_sha != inv_sha:
+                    _add_blocker(
+                        "protected_evidence_sha_mismatch",
+                        "evidence_inventory의 sha256과 현재 파일 내용이 다릅니다. "
+                        f"expected={inv_sha[:16]}..., actual={cur_sha[:16]}...",
+                        rel,
+                    )
+                    continue
+            # IMP-20260614-2821 수정 4(rev2): PR diff 또는 base/main 포함 여부를 실제 검증한다
+            # (REJECT 사유 3/1). 파일이 존재하고 SHA가 일치한 protected 파일이 PR changed files
+            # 에도 없고 base/main에도 없으면, 로컬에만 staged된 증거로 승인 코드를 발급하는
+            # 우회 경로이므로 fail-closed BLOCKED 처리한다.
+            #
+            # 단, untracked 파일은 이 blocker로 차단하지 않는다. deferral 모드(contract
+            # oracle_manifest 존재)에서 untracked oracle 차단 권위는 기존 게이트
+            # (_check_oracle_manifest_vs_inventory + _validate_evidence_provenance)에 있고,
+            # non-deferral 모드에서는 위 규칙 3가 protected_evidence_untracked로 이미 차단한다.
+            # 따라서 이 blocker는 "tracked인데 PR/base 어디에도 없음"인 경우에만 적용한다.
+            if _check_file_in_pr_or_base(rel):
+                result["pr_included_protected_count"] += 1
+            else:
+                _tracked_for_pr = _is_tracked(abs_str)
+                if _tracked_for_pr is True:
+                    _add_blocker(
+                        "protected_evidence_not_in_pr_or_base",
+                        "Protected oracle_manifest 참조 파일이 PR changed files 또는 base/main에 없습니다. "
+                        "PR에 해당 파일이 포함되어 있거나 base/main에 이미 존재해야 합니다.",
+                        rel,
+                    )
+                elif _tracked_for_pr == "ERROR":
+                    # per-file 추적 판정 자체가 Permission denied 등으로 실패 → fail-closed.
+                    _add_blocker(
+                        "workspace_hygiene_check_failed",
+                        "git 조회가 비정상 종료되어 oracle_manifest 참조 파일의 PR/base 포함 여부를 "
+                        "확인할 수 없습니다(fail-closed).",
+                        rel,
+                    )
+                # _tracked_for_pr가 None(git 부재, 이미 위에서 fail-closed) 또는 False(untracked)
+                # 인 경우는 이 blocker를 적용하지 않는다(deferral/규칙3 권위).
+
+    # ---- cleanup_command 구성 (cleanup_only 파일이 있을 때) ----
+    if result["cleanup_only_items"]:
+        _items = result["cleanup_only_items"]
+        result["cleanup_command"] = (
+            "Remove-Item " + " ".join(f'"{i}"' for i in _items[:5])
+            + (" ..." if len(_items) > 5 else "")
+        )
+
+    # ---- 최종 status 확정: BLOCKED 우선, 아니면 cleanup_only 있으면 WARN, 아니면 OK ----
+    if result["status"] != "BLOCKED":
+        result["status"] = "WARN" if result["cleanup_only_items"] else "OK"
+
+    return result
+
+
 def _validate_evidence_provenance(
     state: Dict[str, Any],
     phase: str = "oracle",
@@ -7879,6 +8414,18 @@ def cmd_status(args: argparse.Namespace) -> None:
     except Exception as exc:
         print(DIM(f"    [External Gate 출력 오류: {exc}]"))
 
+    # IMP-20260614-2821 MT-4: workspace hygiene cleanup_only 안내 표시.
+    try:
+        hygiene = state.get("workspace_hygiene")
+        if isinstance(hygiene, dict) and hygiene.get("cleanup_only_items"):
+            print()
+            print(YELLOW("  [CLEANUP 안내] 삭제 가능한 임시 파일:"))
+            for item in hygiene.get("cleanup_only_items", [])[:5]:
+                print(f"    - {item}")
+            print(f"  정리 명령: {hygiene.get('cleanup_command', 'Remove-Item <파일>')} ")
+    except Exception as exc:
+        print(DIM(f"    [Cleanup 안내 표시 오류: {exc}]"))
+
     try:
         outputs = _ensure_output_registry(state)
         if outputs.get("items"):
@@ -10881,6 +11428,15 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
         + (f", untracked:{_ei_untracked}" if _ei_untracked > 0 else "")
         + ")"
     )
+    # IMP-20260614-2821 MT-4: workspace hygiene 요약을 메타데이터 블록에 추가.
+    _wh = evidence.get("workspace_hygiene") or {}
+    _wh_status = str(_wh.get("status", "NOT_CHECKED") or "NOT_CHECKED")
+    _wh_blocking = len(_wh.get("blocking_items") or [])
+    _wh_cleanup = len(_wh.get("cleanup_only_items") or [])
+    lines.append(
+        f"workspace_hygiene: {_wh_status} "
+        f"(blocking:{_wh_blocking}, cleanup_only:{_wh_cleanup})"
+    )
     lines.append(f"verification_json: {HUMAN_ACCEPTANCE_PACKET_JSON_FILE}")
     lines.append("")
 
@@ -11415,6 +11971,8 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         "artifacts": artifacts_obj,
         # IMP-20260613-82ED MT-1 AC-9: evidence 출처 무결성 섹션
         "evidence_integrity": evidence_integrity_obj,
+        # IMP-20260614-2821 MT-4: workspace/evidence hygiene 검사 결과(SSoT)
+        "workspace_hygiene": dict(evidence.get("workspace_hygiene") or {}),
         # IMP-20260613-82ED 3rd REJECT fix: acceptance_target — 실제 구현 기준점
         "acceptance_target": _build_acceptance_target(evidence),
         # BLOCKED 검증 결과
@@ -11636,6 +12194,9 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
         except Exception:
             pass
     evidence["evidence_integrity"] = _ei_integrity
+
+    # IMP-20260614-2821 MT-4: workspace_hygiene를 packet evidence에 전달(SSoT는 state).
+    evidence["workspace_hygiene"] = state.get("workspace_hygiene") or {}
 
     content = _build_final_packet_content(evidence)
     out_path = _write_human_acceptance_packet(content)
@@ -14841,6 +15402,10 @@ def _materialize_acceptance_snapshot(
         except Exception:
             pass
     evidence_payload["evidence_integrity"] = _ei_integrity_ra
+    # IMP-20260614-2821 수정 1: workspace_hygiene을 state에서 evidence_payload로 주입.
+    # 이 주입이 없으면 request-accept 후 생성되는 packet의 workspace_hygiene 섹션이
+    # 실제 결과 대신 NOT_CHECKED로 표시된다(REJECT 사유 1).
+    evidence_payload["workspace_hygiene"] = state.get("workspace_hygiene") or {}
     content = _build_final_packet_content(evidence_payload)
     verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
 
@@ -15268,6 +15833,25 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     evidence = getattr(args, "evidence", None)
     if evidence is None or not str(evidence).strip():
         _die("[BLOCKED] --evidence는 필수입니다 (결과물 경로 또는 URL).")
+
+    # IMP-20260614-2821 MT-2: workspace hygiene preflight (nonce 발급 전).
+    # untracked oracle 증거 등 BLOCKED 항목이 있으면 승인 코드를 발급하지 않는다.
+    # cleanup_only 파일은 WARN으로만 표시한다.
+    hygiene = _check_workspace_hygiene(state)
+    state["workspace_hygiene"] = hygiene
+    _save(state)
+    if hygiene.get("status") == "BLOCKED":
+        blocking = hygiene.get("blocking_items", [])
+        _die(
+            "[WORKSPACE HYGIENE GATE] " + "; ".join(str(b) for b in blocking),
+            exit_code=1,
+        )
+    if hygiene.get("status") == "WARN":
+        cleanup_items = hygiene.get("cleanup_only_items", [])
+        print(YELLOW(
+            "[WORKSPACE HYGIENE WARN] cleanup_only 파일 발견: "
+            + ", ".join(str(c) for c in cleanup_items[:5])
+        ))
 
     # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
     # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다
@@ -17027,6 +17611,20 @@ def cmd_gates(args: argparse.Namespace) -> None:
         deployment: Optional[Dict[str, Any]] = None
         evidence_validation: Optional[Dict[str, Any]] = None
         if accept_decision == "ACCEPT":
+            # IMP-20260614-2821 MT-3: nonce consume 전 hygiene preflight 재실행.
+            # request-accept 이후 oracle 증거가 untracked로 바뀌는 등 변동을 차단한다.
+            # BLOCKED 시 _consume_acceptance_request(아래) 도달 전에 _die로 종료하므로
+            # acceptance_request는 CONSUMED 되지 않는다(nonce 소모 취소).
+            hygiene = _check_workspace_hygiene(state)
+            state["workspace_hygiene"] = hygiene
+            _save(state)
+            if hygiene.get("status") == "BLOCKED":
+                blocking = hygiene.get("blocking_items", [])
+                _die(
+                    "[WORKSPACE HYGIENE GATE] accept 단계 차단 — nonce 소모 취소: "
+                    + "; ".join(str(b) for b in blocking),
+                    exit_code=1,
+                )
             # IMP-20260612-CE06 MT-1: request-accept와 동일한 _is_deployable_evidence SSoT를
             # accept 단계에서도 적용한다. 내부 파이프라인 산출물(qa_report.xml 등)을
             # evidence로 ACCEPT하려 하면 배포 전에 evidence_not_deployable으로 차단한다.

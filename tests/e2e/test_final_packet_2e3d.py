@@ -295,6 +295,7 @@ def isolated_env(tmp_path: Path) -> Dict[str, str]:
     # IMP-20260612-E12D MT-2: PR body readiness 검사 통과를 위해 fake gh 주입
     env["PIPELINE_GH_EXECUTABLE"] = str(_write_fake_gh_script(tmp_path))
     env["PYTHONIOENCODING"] = "utf-8"
+    env["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
     return env
 
 
@@ -714,7 +715,12 @@ def test_13_final_packet_shows_pass_gate_status(tmp_path: Path) -> None:
         },
     }
     state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-    env = {**os.environ, "PIPELINE_STATE_PATH": str(state_file), "PIPELINE_NO_DASHBOARD": "1"}
+    env = {
+        **os.environ,
+        "PIPELINE_STATE_PATH": str(state_file),
+        "PIPELINE_NO_DASHBOARD": "1",
+        "PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING": "1",
+    }
     result = subprocess.run(
         [sys.executable, str(PIPELINE_PY), "report", "final-packet"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
