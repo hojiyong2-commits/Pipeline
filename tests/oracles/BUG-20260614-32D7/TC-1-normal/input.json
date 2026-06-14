@@ -1,0 +1,9 @@
+{
+  "description": "fake comment list with final-check, pending, accepted — CI update selects only final-check",
+  "comments": [
+    {"id": 1001, "body": "<!-- pipeline-final-check-packet -->\n<!-- pipeline-human-acceptance-packet -->\n판단 정보 상태: 판단 가능\n최종 확인 안내 내용"},
+    {"id": 1002, "body": "<!-- pipeline-human-acceptance-packet -->\n<!-- pipeline-human-acceptance-packet-pending -->\n판단 정보 상태: 판단 가능\n승인 코드를 입력해 주세요"},
+    {"id": 1003, "body": "<!-- pipeline-human-acceptance-packet -->\n<!-- pipeline-human-acceptance-packet-accepted -->\n승인 완료됐습니다"}
+  ],
+  "operation": "ci_update_final_check"
+}
