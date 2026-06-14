@@ -216,3 +216,30 @@ python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance
 ## Circuit Breaker
 
 QA가 동일 `failure_signature`로 2회 연속 FAIL → dev 3회 spawn 금지 → Phase 8(Architect) 즉시 이관.
+
+## User Acceptance 안내 템플릿 SSoT 원칙 (IMP-20260614-509F)
+
+`_build_acceptance_display_model(state, evidence)` 함수가 단일 데이터 모델을 생성하고,
+5개 renderer가 이 모델을 공유합니다.
+
+### 렌더러 분리 원칙
+- `_render_pending_acceptance_comment`: pending 댓글 전용 (ACCEPTED/승인 완료/배포 완료/완료됐습니다 금지)
+- `_render_accepted_completion_comment`: accepted 댓글 전용 (pending marker 금지)
+- `_render_pr_body_final_packet`: PR body final packet 전용
+- `_render_acceptance_packet_md`: MD 파일 전용
+- `_build_acceptance_packet_json`(`_build_verification_json`): JSON 전용
+
+### pending 댓글 필수 마커
+```
+<!-- pipeline-human-acceptance-packet -->
+<!-- pipeline-human-acceptance-packet-pending -->
+```
+
+### accepted 댓글 필수 마커
+```
+<!-- pipeline-human-acceptance-packet-accepted -->
+```
+
+### 하드코딩 숫자 금지
+템플릿 코드에서 "12개 테스트", "14개 AC" 같은 하드코딩 숫자 문구는 금지입니다.
+`requirements_summary`의 SSoT 계산값을 사용합니다.

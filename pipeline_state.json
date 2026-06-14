@@ -4,13 +4,13 @@
   "type": "IMP",
   "description": "User Acceptance 안내 템플릿 SSoT 정합성 정리 — _build_acceptance_display_model 단일 데이터 모델, pending/accepted renderer 분리, stale 숫자 문구 제거, D278/2821 보안 동작 유지",
   "created_at": "2026-06-14T09:47:43Z",
-  "updated_at": "2026-06-14T10:07:55Z",
+  "updated_at": "2026-06-14T10:52:38Z",
   "pipeline_started_at": "2026-06-14T09:47:43Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "dev",
+  "current_phase": "qa",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -29,14 +29,15 @@
       "agent_run_id": "pm_planner-1ce6f1e6b49f597d"
     },
     "dev": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "started_at": "2026-06-14T10:40:19Z",
+      "completed_at": "2026-06-14T10:52:38Z",
+      "evidence": "pipeline.py,tests/e2e/test_acceptance_template_sst_509f.py,.claude/agents/pipeline-manager-agent.md",
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "dev_handover.xml",
+      "agent_id": "dev-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260614-509F_phase_dev.json",
+      "agent_run_id": "dev-3c1c5b67cc87f947"
     },
     "qa": {
       "status": "PENDING",
@@ -129,6 +130,134 @@
     {
       "ts": "2026-06-14T10:07:09Z",
       "msg": "pm DONE | evidence: None"
+    },
+    {
+      "ts": "2026-06-14T10:40:14Z",
+      "msg": "github phase-ci pm PASS run_id=27496177680 commit=716424ee8615"
+    },
+    {
+      "ts": "2026-06-14T10:41:25Z",
+      "msg": "module design PASS MT-1"
+    },
+    {
+      "ts": "2026-06-14T10:42:32Z",
+      "msg": "module dev DONE MT-1"
+    },
+    {
+      "ts": "2026-06-14T10:45:27Z",
+      "msg": "module QA PASS MT-1"
+    },
+    {
+      "ts": "2026-06-14T10:45:32Z",
+      "msg": "module design PASS MT-2"
+    },
+    {
+      "ts": "2026-06-14T10:45:36Z",
+      "msg": "module dev DONE MT-2"
+    },
+    {
+      "ts": "2026-06-14T10:46:23Z",
+      "msg": "module QA PASS MT-2"
+    },
+    {
+      "ts": "2026-06-14T10:46:36Z",
+      "msg": "module design PASS MT-3"
+    },
+    {
+      "ts": "2026-06-14T10:46:36Z",
+      "msg": "module dev DONE MT-3"
+    },
+    {
+      "ts": "2026-06-14T10:47:00Z",
+      "msg": "module QA PASS MT-3"
+    },
+    {
+      "ts": "2026-06-14T10:47:26Z",
+      "msg": "module design PASS MT-4"
+    },
+    {
+      "ts": "2026-06-14T10:47:27Z",
+      "msg": "module dev DONE MT-4"
+    },
+    {
+      "ts": "2026-06-14T10:47:28Z",
+      "msg": "module QA PASS MT-4"
+    },
+    {
+      "ts": "2026-06-14T10:47:47Z",
+      "msg": "module design PASS MT-5"
+    },
+    {
+      "ts": "2026-06-14T10:47:47Z",
+      "msg": "module dev DONE MT-5"
+    },
+    {
+      "ts": "2026-06-14T10:47:48Z",
+      "msg": "module QA PASS MT-5"
+    },
+    {
+      "ts": "2026-06-14T10:48:07Z",
+      "msg": "module design PASS MT-6"
+    },
+    {
+      "ts": "2026-06-14T10:48:23Z",
+      "msg": "module dev DONE MT-6"
+    },
+    {
+      "ts": "2026-06-14T10:48:28Z",
+      "msg": "module QA PASS MT-6"
+    },
+    {
+      "ts": "2026-06-14T10:48:51Z",
+      "msg": "module design PASS MT-7"
+    },
+    {
+      "ts": "2026-06-14T10:48:51Z",
+      "msg": "module dev DONE MT-7"
+    },
+    {
+      "ts": "2026-06-14T10:48:52Z",
+      "msg": "module QA PASS MT-7"
+    },
+    {
+      "ts": "2026-06-14T10:49:18Z",
+      "msg": "module design PASS MT-8"
+    },
+    {
+      "ts": "2026-06-14T10:49:18Z",
+      "msg": "module dev DONE MT-8"
+    },
+    {
+      "ts": "2026-06-14T10:49:19Z",
+      "msg": "module QA PASS MT-8"
+    },
+    {
+      "ts": "2026-06-14T10:49:39Z",
+      "msg": "module design PASS MT-9"
+    },
+    {
+      "ts": "2026-06-14T10:49:40Z",
+      "msg": "module dev DONE MT-9"
+    },
+    {
+      "ts": "2026-06-14T10:49:40Z",
+      "msg": "module QA PASS MT-9"
+    },
+    {
+      "ts": "2026-06-14T10:50:04Z",
+      "msg": "module integration PASS"
+    },
+    {
+      "ts": "2026-06-14T10:50:22Z",
+      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-3c1c5b67cc87f947"
+    },
+    {
+      "ts": "2026-06-14T10:50:46Z",
+      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-3c1c5b67cc87f947"
+    },
+    {
+      "ts": "2026-06-14T10:52:38Z",
+      "msg": "dev DONE | evidence: pipeline.py,tests/e2e/test_acceptance_template_sst_509f.py,.claude/agents/pipeline-manager-agent.md"
     }
   ],
   "terminal_state": null,
@@ -172,6 +301,26 @@
       "used_by_phase": "pm_manager",
       "used_at": "2026-06-14T10:07:02Z",
       "commit_sha": "3f4a179307f967764ffac96e7d855184264b7e12",
+      "notes": ""
+    },
+    "dev-3c1c5b67cc87f947": {
+      "schema_version": 1,
+      "run_id": "dev-3c1c5b67cc87f947",
+      "pipeline_id": "IMP-20260614-509F",
+      "phase": "dev",
+      "agent_id": "dev-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-14T10:50:22Z",
+      "completed_at": "2026-06-14T10:50:46Z",
+      "token_hash": "6a6dc515afc294e866cfa86e92b868fcd7738f0998b1d1071f35cc43528f4127",
+      "output_file": "dev_handover.xml",
+      "output_sha256": "913fc8f8f435a261294c53492d9ba3e9ec1de64c8cbcca9e891c422779d826d4",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260614-509F\\dev\\dev-3c1c5b67cc87f947.json",
+      "receipt_sha256": "16fcc987388f0dae711839ab619d0d4f63d3ccc65dc9e5aa182837388ef9c0d4",
+      "used_by_phase": "dev",
+      "used_at": "2026-06-14T10:52:38Z",
+      "commit_sha": "e9fe64cef9ee64eb453dd771936967ae4ed4c3e2",
       "notes": ""
     }
   },
@@ -222,14 +371,15 @@
     ],
     "phases": {
       "pm": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-14T10:40:14Z",
         "phase": "pm",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27496177680",
+        "commit_sha": "716424ee8615532439b408ded68fd2a0f2c27b62",
+        "evidence": "github_actions_phase_run:27496177680",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260614-509F\\gates\\phase_ci\\pm_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "dev": {
         "status": "PENDING",
@@ -280,288 +430,622 @@
     "modules": {
       "MT-1": {
         "id": "MT-1",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 1,
         "target_files": [
           "pipeline.py"
         ],
         "affected_function": "_build_acceptance_display_model (신규)",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:41:25Z",
+          "report_file": "module_design_MT-1.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:42:32Z",
+          "report_file": "module_handover_MT-1.xml",
+          "evidence": "pipeline.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-1.json",
+            "validated_at": "2026-06-14T10:42:32Z",
+            "micro_task_id": "MT-1",
+            "files": [
+              "pipeline.py"
+            ],
+            "affected_functions": [
+              "_build_acceptance_display_model (신규)"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-1",
+                "implemented_ac": [
+                  "AC-1"
+                ],
+                "changed_files": [
+                  "pipeline.py"
+                ],
+                "implementation_evidence": [
+                  "_build_acceptance_display_model(state, evidence) 신규 함수 추가 — 13개 키 반환(pipeline_id, pr_url, github_actions_url, ci_run_id, evidence_path, gates, acceptance_display, requirements_summary, evidence_integrity_summary, workspace_hygiene_summary, approval_code, reject_example, user_checklist)",
+                  "requirements_summary는 _build_ac_fulfillment_table 결과에서 result 기준 계산(하드코딩 숫자 없음)",
+                  "acceptance_display는 _resolve_acceptance_display_state SSoT helper 재사용"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:45:27Z",
+          "report_file": "module_qa_MT-1.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:45:27Z",
+          "files": [
+            {
+              "path": "pipeline.py",
+              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
+              "size_bytes": 1038611
+            }
+          ]
+        }
       },
       "MT-2": {
         "id": "MT-2",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 2,
         "target_files": [
           "pipeline.py"
         ],
         "affected_function": "_render_pending_acceptance_comment (신규), _post_github_pending_acceptance_comment (리팩터링)",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:45:32Z",
+          "report_file": "module_design_MT-2.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:45:36Z",
+          "report_file": "module_handover_MT-2.xml",
+          "evidence": "pipeline.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-2.json",
+            "validated_at": "2026-06-14T10:45:36Z",
+            "micro_task_id": "MT-2",
+            "files": [
+              "pipeline.py"
+            ],
+            "affected_functions": [
+              "_post_github_pending_acceptance_comment (리팩터링)",
+              "_render_pending_acceptance_comment (신규)"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-2",
+                "implemented_ac": [
+                  "AC-2"
+                ],
+                "changed_files": [
+                  "pipeline.py"
+                ],
+                "implementation_evidence": [
+                  "_render_pending_acceptance_comment(display_model) 신규 — pending 마커 2종 포함, 완료 문구(ACCEPTED/승인 완료/배포 완료/완료됐습니다) 미포함",
+                  "_post_github_pending_acceptance_comment가 renderer 호출하도록 리팩터링 + pending 마커 불변식 검사 추가"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:46:23Z",
+          "report_file": "module_qa_MT-2.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:46:23Z",
+          "files": [
+            {
+              "path": "pipeline.py",
+              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
+              "size_bytes": 1038611
+            }
+          ]
+        }
       },
       "MT-3": {
         "id": "MT-3",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 3,
         "target_files": [
           "pipeline.py"
         ],
         "affected_function": "_render_accepted_completion_comment (신규), _update_github_acceptance_comment (리팩터링)",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:46:36Z",
+          "report_file": "module_design_MT-3.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:46:36Z",
+          "report_file": "module_handover_MT-3.xml",
+          "evidence": "pipeline.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-3.json",
+            "validated_at": "2026-06-14T10:46:36Z",
+            "micro_task_id": "MT-3",
+            "files": [
+              "pipeline.py"
+            ],
+            "affected_functions": [
+              "_render_accepted_completion_comment (신규)",
+              "_update_github_acceptance_comment (리팩터링)"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-3",
+                "implemented_ac": [
+                  "AC-3"
+                ],
+                "changed_files": [
+                  "pipeline.py"
+                ],
+                "implementation_evidence": [
+                  "_render_accepted_completion_comment(display_model) 신규 — accepted 마커 포함, pending 마커/승인 코드 입력 안내 미포함",
+                  "_update_github_acceptance_comment가 renderer 호출하도록 리팩터링"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:47:00Z",
+          "report_file": "module_qa_MT-3.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:47:00Z",
+          "files": [
+            {
+              "path": "pipeline.py",
+              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
+              "size_bytes": 1038611
+            }
+          ]
+        }
       },
       "MT-4": {
         "id": "MT-4",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 4,
         "target_files": [
           "pipeline.py"
         ],
         "affected_function": "_render_pr_body_final_packet (신규), _build_final_packet_content (리팩터링)",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:47:26Z",
+          "report_file": "module_design_MT-4.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:47:27Z",
+          "report_file": "module_handover_MT-4.xml",
+          "evidence": "pipeline.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-4.json",
+            "validated_at": "2026-06-14T10:47:27Z",
+            "micro_task_id": "MT-4",
+            "files": [
+              "pipeline.py"
+            ],
+            "affected_functions": [
+              "_build_final_packet_content (리팩터링)",
+              "_render_pr_body_final_packet (신규)"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-4",
+                "implemented_ac": [
+                  "AC-4"
+                ],
+                "changed_files": [
+                  "pipeline.py"
+                ],
+                "implementation_evidence": [
+                  "_render_pr_body_final_packet(display_model) 신규 — 하드코딩 숫자 제거, requirements_summary 실제 계산값 사용, acceptance_display 표시",
+                  "_display_model_from_evidence(evidence) 어댑터 신규 — gh 재조회 없이 evidence SSoT 값으로 display model 구성",
+                  "_build_final_packet_content가 [최종 확인 안내] 섹션을 renderer로 위임"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:47:28Z",
+          "report_file": "module_qa_MT-4.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:47:28Z",
+          "files": [
+            {
+              "path": "pipeline.py",
+              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
+              "size_bytes": 1038611
+            }
+          ]
+        }
       },
       "MT-5": {
         "id": "MT-5",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 5,
         "target_files": [
           "pipeline.py"
         ],
         "affected_function": "_build_verification_json (리팩터링)",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:47:47Z",
+          "report_file": "module_design_MT-5.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:47:47Z",
+          "report_file": "module_handover_MT-5.xml",
+          "evidence": "pipeline.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-5.json",
+            "validated_at": "2026-06-14T10:47:47Z",
+            "micro_task_id": "MT-5",
+            "files": [
+              "pipeline.py"
+            ],
+            "affected_functions": [
+              "_build_verification_json (리팩터링)"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-5",
+                "implemented_ac": [
+                  "AC-5"
+                ],
+                "changed_files": [
+                  "pipeline.py"
+                ],
+                "implementation_evidence": [
+                  "_build_verification_json이 _display_model_from_evidence로 requirements_summary/acceptance_display를 재사용 — MD/PR body/JSON SSoT 일치",
+                  "requirements_summary 필드 추가, 15개 필수 필드(IMP-20260605-58BF) 유지"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:47:48Z",
+          "report_file": "module_qa_MT-5.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:47:48Z",
+          "files": [
+            {
+              "path": "pipeline.py",
+              "sha256": "ba40a6de2262e7bb0b40685c56569d5430c820eaf6ccb548705a4d8fc7b5640c",
+              "size_bytes": 1038611
+            }
+          ]
+        }
       },
       "MT-6": {
         "id": "MT-6",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 6,
         "target_files": [
           "tests/e2e/test_acceptance_template_sst_509f.py"
         ],
         "affected_function": "test_tc1_display_model_fields, test_tc2_pending_comment_no_accepted_phrases",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:48:07Z",
+          "report_file": "module_design_MT-6.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:48:23Z",
+          "report_file": "module_handover_MT-6.xml",
+          "evidence": "tests/e2e/test_acceptance_template_sst_509f.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-6.json",
+            "validated_at": "2026-06-14T10:48:23Z",
+            "micro_task_id": "MT-6",
+            "files": [
+              "tests/e2e/test_acceptance_template_sst_509f.py"
+            ],
+            "affected_functions": [
+              "test_tc1_display_model_fields",
+              "test_tc2_pending_comment_no_accepted_phrases"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-6",
+                "implemented_ac": [
+                  "AC-6"
+                ],
+                "changed_files": [
+                  "tests/e2e/test_acceptance_template_sst_509f.py"
+                ],
+                "implementation_evidence": [
+                  "TC-1 test_tc1_display_model_fields, TC-2 test_tc2_pending_comment_no_accepted_phrases, TC-3 test_tc3_accepted_comment_no_pending_marker 작성"
+                ],
+                "covers_iqr": [
+                  "IQR-1"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:48:28Z",
+          "report_file": "module_qa_MT-6.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:48:28Z",
+          "files": [
+            {
+              "path": "tests/e2e/test_acceptance_template_sst_509f.py",
+              "sha256": "cac472d37f0e7d6988064b004ec314d2edec7529877ce1dd0c9a9d0211ae6db3",
+              "size_bytes": 10018
+            }
+          ]
+        }
       },
       "MT-7": {
         "id": "MT-7",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 7,
         "target_files": [
           "tests/e2e/test_acceptance_template_sst_509f.py"
         ],
         "affected_function": "test_tc3_accepted_comment_no_pending_marker, test_tc4_pr_body_md_state_consistency, test_tc5_requirements_summary_consistency, test_tc7_no_hardcoded_test_counts",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:48:51Z",
+          "report_file": "module_design_MT-7.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:48:51Z",
+          "report_file": "module_handover_MT-7.xml",
+          "evidence": "tests/e2e/test_acceptance_template_sst_509f.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-7.json",
+            "validated_at": "2026-06-14T10:48:51Z",
+            "micro_task_id": "MT-7",
+            "files": [
+              "tests/e2e/test_acceptance_template_sst_509f.py"
+            ],
+            "affected_functions": [
+              "test_tc3_accepted_comment_no_pending_marker",
+              "test_tc4_pr_body_md_state_consistency",
+              "test_tc5_requirements_summary_consistency",
+              "test_tc7_no_hardcoded_test_counts"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-7",
+                "implemented_ac": [
+                  "AC-7"
+                ],
+                "changed_files": [
+                  "tests/e2e/test_acceptance_template_sst_509f.py"
+                ],
+                "implementation_evidence": [
+                  "TC-4 test_tc4_pr_body_md_state_consistency, TC-5 test_tc5_requirements_summary_consistency 작성"
+                ],
+                "covers_iqr": [
+                  "IQR-1"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:48:52Z",
+          "report_file": "module_qa_MT-7.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:48:52Z",
+          "files": [
+            {
+              "path": "tests/e2e/test_acceptance_template_sst_509f.py",
+              "sha256": "cac472d37f0e7d6988064b004ec314d2edec7529877ce1dd0c9a9d0211ae6db3",
+              "size_bytes": 10018
+            }
+          ]
+        }
       },
       "MT-8": {
         "id": "MT-8",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 8,
         "target_files": [
           "tests/e2e/test_acceptance_template_sst_509f.py"
         ],
         "affected_function": "test_tc6_evidence_workspace_hygiene_summary, test_tc8_workspace_hygiene_reflected, test_tc_renderer_separation",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:49:18Z",
+          "report_file": "module_design_MT-8.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:49:18Z",
+          "report_file": "module_handover_MT-8.xml",
+          "evidence": "tests/e2e/test_acceptance_template_sst_509f.py",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-8.json",
+            "validated_at": "2026-06-14T10:49:18Z",
+            "micro_task_id": "MT-8",
+            "files": [
+              "tests/e2e/test_acceptance_template_sst_509f.py"
+            ],
+            "affected_functions": [
+              "test_tc6_evidence_workspace_hygiene_summary",
+              "test_tc8_workspace_hygiene_reflected",
+              "test_tc_renderer_separation"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-8",
+                "implemented_ac": [
+                  "AC-8"
+                ],
+                "changed_files": [
+                  "tests/e2e/test_acceptance_template_sst_509f.py"
+                ],
+                "implementation_evidence": [
+                  "TC-6 test_tc6_evidence_workspace_hygiene_summary, TC-7 test_tc7_no_hardcoded_test_counts, TC-8 test_tc8_workspace_hygiene_reflected, test_tc_renderer_separation 작성"
+                ],
+                "covers_iqr": [
+                  "IQR-1"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:49:19Z",
+          "report_file": "module_qa_MT-8.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:49:19Z",
+          "files": [
+            {
+              "path": "tests/e2e/test_acceptance_template_sst_509f.py",
+              "sha256": "cac472d37f0e7d6988064b004ec314d2edec7529877ce1dd0c9a9d0211ae6db3",
+              "size_bytes": 10018
+            }
+          ]
+        }
       },
       "MT-9": {
         "id": "MT-9",
-        "status": "PENDING",
+        "status": "PASS",
         "order": 9,
         "target_files": [
           ".claude/agents/pipeline-manager-agent.md"
         ],
         "affected_function": "none (문서 전용)",
         "design": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:49:39Z",
+          "report_file": "module_design_MT-9.xml",
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
-          "evidence": null,
-          "notes": []
+          "status": "DONE",
+          "completed_at": "2026-06-14T10:49:40Z",
+          "report_file": "module_handover_MT-9.xml",
+          "evidence": ".claude/agents/pipeline-manager-agent.md",
+          "notes": [],
+          "scope": {
+            "manifest_file": "scope_manifest_MT-9.json",
+            "validated_at": "2026-06-14T10:49:40Z",
+            "micro_task_id": "MT-9",
+            "files": [
+              ".claude/agents/pipeline-manager-agent.md"
+            ],
+            "affected_functions": [
+              "none (문서 전용)"
+            ],
+            "implemented_tasks": [
+              {
+                "mt_id": "MT-9",
+                "implemented_ac": [
+                  "AC-9"
+                ],
+                "changed_files": [
+                  ".claude/agents/pipeline-manager-agent.md"
+                ],
+                "implementation_evidence": [
+                  "User Acceptance 안내 템플릿 SSoT 원칙 섹션 추가 — 렌더러 5종 분리 원칙, pending/accepted 필수 마커, 하드코딩 숫자 금지 명시"
+                ],
+                "covers_iqr": [
+                  "IQR-1"
+                ]
+              }
+            ]
+          }
         },
         "qa": {
-          "status": "PENDING",
-          "completed_at": null,
-          "report_file": null,
+          "status": "PASS",
+          "completed_at": "2026-06-14T10:49:40Z",
+          "report_file": "module_qa_MT-9.xml",
           "evidence": null,
           "notes": []
         },
-        "checkpoint": null
+        "checkpoint": {
+          "created_at": "2026-06-14T10:49:40Z",
+          "files": [
+            {
+              "path": ".claude/agents/pipeline-manager-agent.md",
+              "sha256": "cfb4c17190a5c4a0e67f3e2c698ada1200d381b96591863e2346a0208f0cef16",
+              "size_bytes": 11765
+            }
+          ]
+        }
       }
     },
     "integration": {
-      "status": "PENDING",
-      "completed_at": null,
-      "report_file": null,
+      "status": "PASS",
+      "completed_at": "2026-06-14T10:50:04Z",
+      "report_file": "integration_report.xml",
       "evidence": null,
       "notes": []
     }
@@ -13794,5 +14278,218 @@
   ],
   "requirements_tracking": {
     "enabled": true
+  },
+  "trusted_phase_runs": [
+    {
+      "recorded_at": "2026-06-14T10:40:14Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "pm",
+      "run_id": "27496177680",
+      "commit_sha": "716424ee8615532439b408ded68fd2a0f2c27b62",
+      "artifact": "pipeline-phase-attestation"
+    }
+  ],
+  "ac_completeness": {
+    "cached_at": "2026-06-14T10:50:04Z",
+    "total": 9,
+    "pending_count": 9,
+    "pending_ids": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "AC-4",
+      "AC-5",
+      "AC-6",
+      "AC-7",
+      "AC-8",
+      "AC-9"
+    ],
+    "complete": false
+  },
+  "dev_handover": {
+    "report_file": "dev_handover.xml",
+    "validated_at": "2026-06-14T10:52:03Z",
+    "producer": "dev-agent"
+  },
+  "dev_gate_flags": {
+    "scope_declared": true
+  },
+  "atomic_scope": {
+    "manifest_file": "scope_manifest.json",
+    "validated_at": "2026-06-14T10:52:38Z",
+    "micro_task_ids": [
+      "MT-1",
+      "MT-2",
+      "MT-3",
+      "MT-4",
+      "MT-5",
+      "MT-6",
+      "MT-7",
+      "MT-8",
+      "MT-9"
+    ],
+    "files": [
+      ".claude/agents/pipeline-manager-agent.md",
+      "pipeline.py",
+      "tests/e2e/test_acceptance_template_sst_509f.py"
+    ],
+    "affected_functions": [
+      "_build_acceptance_display_model (신규)",
+      "_build_final_packet_content (리팩터링)",
+      "_build_verification_json (리팩터링)",
+      "_post_github_pending_acceptance_comment (리팩터링)",
+      "_render_accepted_completion_comment (신규)",
+      "_render_pending_acceptance_comment (신규)",
+      "_render_pr_body_final_packet (신규)",
+      "_update_github_acceptance_comment (리팩터링)",
+      "none (문서 전용)",
+      "test_tc1_display_model_fields",
+      "test_tc2_pending_comment_no_accepted_phrases",
+      "test_tc3_accepted_comment_no_pending_marker",
+      "test_tc4_pr_body_md_state_consistency",
+      "test_tc5_requirements_summary_consistency",
+      "test_tc6_evidence_workspace_hygiene_summary",
+      "test_tc7_no_hardcoded_test_counts",
+      "test_tc8_workspace_hygiene_reflected",
+      "test_tc_renderer_separation"
+    ],
+    "implemented_tasks": [
+      {
+        "mt_id": "MT-1",
+        "implemented_ac": [
+          "AC-1"
+        ],
+        "changed_files": [
+          "pipeline.py"
+        ],
+        "implementation_evidence": [
+          "_build_acceptance_display_model(state, evidence) 신규 — 13개 키 SSoT 데이터 모델 반환, requirements_summary는 _build_ac_fulfillment_table 결과 계산, acceptance_display는 _resolve_acceptance_display_state 재사용"
+        ]
+      },
+      {
+        "mt_id": "MT-2",
+        "implemented_ac": [
+          "AC-2"
+        ],
+        "changed_files": [
+          "pipeline.py"
+        ],
+        "implementation_evidence": [
+          "_render_pending_acceptance_comment(display_model) 신규 + _post_github_pending_acceptance_comment 리팩터링 — pending 마커 포함, 완료 문구 미포함, 불변식 검사"
+        ]
+      },
+      {
+        "mt_id": "MT-3",
+        "implemented_ac": [
+          "AC-3"
+        ],
+        "changed_files": [
+          "pipeline.py"
+        ],
+        "implementation_evidence": [
+          "_render_accepted_completion_comment(display_model) 신규 + _update_github_acceptance_comment 리팩터링 — accepted 마커 포함, pending 마커/승인 코드 입력 안내 미포함"
+        ]
+      },
+      {
+        "mt_id": "MT-4",
+        "implemented_ac": [
+          "AC-4"
+        ],
+        "changed_files": [
+          "pipeline.py"
+        ],
+        "implementation_evidence": [
+          "_render_pr_body_final_packet(display_model) + _display_model_from_evidence(evidence) 신규, _build_final_packet_content가 사용자 표시 섹션 위임 — 하드코딩 숫자 제거, requirements_summary 실제값, acceptance_display 표시"
+        ]
+      },
+      {
+        "mt_id": "MT-5",
+        "implemented_ac": [
+          "AC-5"
+        ],
+        "changed_files": [
+          "pipeline.py"
+        ],
+        "implementation_evidence": [
+          "_build_verification_json이 _display_model_from_evidence로 requirements_summary/acceptance_display 재사용 — MD/PR body/JSON SSoT 일치, requirements_summary 필드 추가, 15개 필수 필드 유지"
+        ]
+      },
+      {
+        "mt_id": "MT-6",
+        "implemented_ac": [
+          "AC-6"
+        ],
+        "changed_files": [
+          "tests/e2e/test_acceptance_template_sst_509f.py"
+        ],
+        "implementation_evidence": [
+          "TC-1/TC-2/TC-3 작성"
+        ],
+        "covers_iqr": [
+          "IQR-1"
+        ]
+      },
+      {
+        "mt_id": "MT-7",
+        "implemented_ac": [
+          "AC-7"
+        ],
+        "changed_files": [
+          "tests/e2e/test_acceptance_template_sst_509f.py"
+        ],
+        "implementation_evidence": [
+          "TC-4/TC-5 작성"
+        ],
+        "covers_iqr": [
+          "IQR-1"
+        ]
+      },
+      {
+        "mt_id": "MT-8",
+        "implemented_ac": [
+          "AC-8"
+        ],
+        "changed_files": [
+          "tests/e2e/test_acceptance_template_sst_509f.py"
+        ],
+        "implementation_evidence": [
+          "TC-6/TC-7/TC-8/test_tc_renderer_separation 작성, 9개 PASS"
+        ],
+        "covers_iqr": [
+          "IQR-1"
+        ]
+      },
+      {
+        "mt_id": "MT-9",
+        "implemented_ac": [
+          "AC-9"
+        ],
+        "changed_files": [
+          ".claude/agents/pipeline-manager-agent.md"
+        ],
+        "implementation_evidence": [
+          "User Acceptance 안내 템플릿 SSoT 원칙 섹션 추가"
+        ],
+        "covers_iqr": [
+          "IQR-1"
+        ]
+      }
+    ],
+    "actual_diff": {
+      "added": [
+        "tests/e2e/test_acceptance_template_sst_509f.py"
+      ],
+      "modified": [
+        ".claude/agents/pipeline-manager-agent.md",
+        "pipeline.py"
+      ],
+      "deleted": [],
+      "changed": [
+        ".claude/agents/pipeline-manager-agent.md",
+        "pipeline.py",
+        "tests/e2e/test_acceptance_template_sst_509f.py"
+      ]
+    }
   }
 }
