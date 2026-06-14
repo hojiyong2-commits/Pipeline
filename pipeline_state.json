@@ -4,13 +4,13 @@
   "type": "BUG",
   "description": "User Acceptance 댓글 marker ownership 분리 — CI 최종 확인 안내/pending/accepted 댓글이 공통 marker로 인해 서로 덮어쓰는 UX 루프 수정",
   "created_at": "2026-06-14T21:02:50Z",
-  "updated_at": "2026-06-14T22:07:19Z",
+  "updated_at": "2026-06-14T23:08:03Z",
   "pipeline_started_at": "2026-06-14T21:02:50Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "qa",
+  "current_phase": "sec",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -40,14 +40,16 @@
       "agent_run_id": "dev-b1c11225a80cfb4a"
     },
     "qa": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
+      "status": "PASS",
+      "started_at": "2026-06-14T22:49:03Z",
+      "completed_at": "2026-06-14T23:07:58Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "qa_report2_32D7.xml",
+      "agent_id": "qa-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260614-32D7_phase_qa.json",
+      "agent_run_id": "qa-0ac038806b118f43",
+      "numeric_score": 110
     },
     "sec": {
       "status": "PENDING",
@@ -210,6 +212,30 @@
     {
       "ts": "2026-06-14T22:07:19Z",
       "msg": "dev DONE | evidence: .github/workflows/ci.yml,pipeline.py,tests/e2e/test_marker_separation_32d7.py"
+    },
+    {
+      "ts": "2026-06-14T22:48:59Z",
+      "msg": "github phase-ci dev PASS run_id=27514461491 commit=7383b804d906"
+    },
+    {
+      "ts": "2026-06-14T22:49:09Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-7d57186492a1014f"
+    },
+    {
+      "ts": "2026-06-14T22:54:11Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-7d57186492a1014f"
+    },
+    {
+      "ts": "2026-06-14T22:58:57Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-0ac038806b118f43"
+    },
+    {
+      "ts": "2026-06-14T23:02:35Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-0ac038806b118f43"
+    },
+    {
+      "ts": "2026-06-14T23:07:58Z",
+      "msg": "qa PASS numeric=110"
     }
   ],
   "terminal_state": null,
@@ -273,6 +299,46 @@
       "used_at": "2026-06-14T22:07:19Z",
       "commit_sha": "490ec45abe8e55be288de1073bbef725b80bd51f",
       "notes": ""
+    },
+    "qa-7d57186492a1014f": {
+      "schema_version": 1,
+      "run_id": "qa-7d57186492a1014f",
+      "pipeline_id": "BUG-20260614-32D7",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-14T22:49:09Z",
+      "completed_at": "2026-06-14T22:54:11Z",
+      "token_hash": "a3e8b2cd25c8c1adc2b06fe21f1712ca1a6c03a5eec985b51d59a466cbfa3e91",
+      "output_file": "qa_report_32D7.xml",
+      "output_sha256": "ff84981b5ecda8a7d0d4d28cc1c000fe9ce7d6e2ab37bd6a5b2357bfc4c5a938",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\qa\\qa-7d57186492a1014f.json",
+      "receipt_sha256": "4c62b0a545a49e901472aeb11385948f7f17e2b92c68fd4205fafa0ca184ef71",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "43de61a2671741db747551e47f781b2035fc4a51",
+      "notes": ""
+    },
+    "qa-0ac038806b118f43": {
+      "schema_version": 1,
+      "run_id": "qa-0ac038806b118f43",
+      "pipeline_id": "BUG-20260614-32D7",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-14T22:58:57Z",
+      "completed_at": "2026-06-14T23:02:35Z",
+      "token_hash": "fff9969046137cf6cc90e2853f224b29a7939e74107e98451feacb5452a997b6",
+      "output_file": "qa_report2_32D7.xml",
+      "output_sha256": "71ceef7071db92ed6586bf6e8c642eb11393f586745156cf23d6bd9287eadaa8",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\qa\\qa-0ac038806b118f43.json",
+      "receipt_sha256": "f95a9f8832953f3a0f252a354c117e18bc2b081648e0793f254f425cac3e1afc",
+      "used_by_phase": "qa",
+      "used_at": "2026-06-14T23:07:58Z",
+      "commit_sha": "43de61a2671741db747551e47f781b2035fc4a51",
+      "notes": ""
     }
   },
   "external_gates": {
@@ -333,14 +399,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-14T22:48:59Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27514461491",
+        "commit_sha": "7383b804d9062d5b9ef94dc44d24580c21ae9746",
+        "evidence": "github_actions_phase_run:27514461491",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "qa": {
         "status": "PENDING",
@@ -776,6 +843,22 @@
       "owner": "PM",
       "return_phase": "pm",
       "attempt_count": 2,
+      "escalation_reason": null
+    },
+    {
+      "gate": "check_sec",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\check_sec_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\check_sec_attempt_1.json",
+      "recorded_at": "2026-06-14T23:08:03Z",
+      "repair_owner": "Pipeline Manager repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "gate_blocked_sec",
+      "failure_category": "missing_evidence",
+      "owner": "Pipeline Manager",
+      "return_phase": "dev",
+      "attempt_count": 1,
       "escalation_reason": null
     }
   ],
@@ -13937,6 +14020,15 @@
       "run_id": "27512567035",
       "commit_sha": "6b86a700a09f606351ca5fba1c0e6d59a9388214",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-14T22:48:59Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "dev",
+      "run_id": "27514461491",
+      "commit_sha": "7383b804d9062d5b9ef94dc44d24580c21ae9746",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "structured_acceptance_criteria": [
@@ -14173,5 +14265,11 @@
         "tests/e2e/test_marker_separation_32d7.py"
       ]
     }
+  },
+  "qa_report_validation": {
+    "report_file": "qa_report2_32D7.xml",
+    "validated_at": "2026-06-14T23:07:58Z",
+    "numeric_score": 110,
+    "verdict": "PASS"
   }
 }

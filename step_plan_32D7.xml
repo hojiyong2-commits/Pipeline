@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260614-32D7</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 2개 함수 + ci.yml 1개 step의 marker 분리 로직 변경이 필요하며, 기존 회귀 테스트(B32A/509F/D278/2821/aef0)와 호환성을 유지해야 합니다. 변경 범위가 3개 파일, 4개 함수이므로 STANDARD 프로필 적용.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>4</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>5</micro_task_count>
+    <module_count>3</module_count>
+    <function_count>5</function_count>
+    <line_estimate_total>225</line_estimate_total>
+    <grep_executions>5</grep_executions>
+    <ambiguous_boundaries>false</ambiguous_boundaries>
+    <notes>
+      변경 대상 함수들의 실제 위치와 match count를 Grep으로 확인 완료:
+      - _post_github_pending_acceptance_comment: line 15103 (1 match)
+      - _update_github_acceptance_comment: line 15310 (1 match)
+      - ci.yml "최종 확인 안내 남기기" step: line 590-615 (1 match)
+      - _check_acceptance_packet_via_github: line 5085 (1 match)
+      - test_marker_separation_32d7.py: 신규 파일 (0 match, 신규 생성)
+      3개 파일, 5개 함수 변경으로 SPLIT_REQUIRED 적용.
+    </notes>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>marker 상수명, 함수 리팩터링 범위, 테스트 파일명 등 P2 내부 구현 취향 질문은 유지보수성 기준으로 처리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>CI 최종 확인 안내 / pending 승인 요청 / accepted 완료 댓글의 marker를 분리하는 방식으로 구현해도 될까요?</user_facing_question>
+        <evidence>현재 ci.yml line 608과 pipeline.py line 15229, 15388에서 공통 marker `pipeline-human-acceptance-packet`를 기준으로 댓글을 찾아 PATCH/DELETE하고 있어, pending/accepted 댓글이 CI 최종 확인 안내로 덮어써지거나 삭제될 수 있습니다.</evidence>
+        <why_it_matters>marker 분리 없이는 CI가 pending/accepted 댓글을 오인하여 덮어쓰는 근본 원인을 해결할 수 없습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>CI 최종 확인 안내는 final-check 전용 marker 사용, pending/accepted는 기존 marker에 상태 marker 추가 유지</label>
+            <benefit>각 댓글 역할이 marker 레벨에서 분리되어 오인 방지. 기존 pending/accepted 분리 로직(509F/B32A) 호환.</benefit>
+            <cost>ci.yml과 pipeline.py 양쪽 수정 필요. 기존 회귀 테스트 oracle 일부 조정 필요.</cost>
+          </option>
+          <option id="B">
+            <label>모든 댓글에 공통 marker 유지, 상태 marker로만 구분</label>
+            <benefit>ci.yml 변경 최소화.</benefit>
+            <cost>CI가 상태 marker를 파싱해야 하며, 기존 PowerShell 스크립트 복잡도 증가. 오인 경로 여전히 존재.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 명시 요청: marker 분리 방식(옵션 A)으로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    AC-1~AC-10에 명시된 10개 acceptance criteria를 만족시키며,
+    기존 B32A/509F/D278/2821/aef0 회귀 테스트를 모두 PASS 유지.
+    새 gate 추가 없이 marker ownership 분리만으로 해결.
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>ci.yml "최종 확인 안내 남기기" step의 PowerShell 스크립트 (line 590-615)</affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>pipeline-human-acceptance-packet</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>CI 최종 확인 안내 생성(line 356)은 `pipeline-final-check-packet` 전용 marker 사용. 기존 댓글 탐색(line 608)은 `pipeline-final-check-packet` marker만 찾되, pending/accepted marker 포함 댓글은 제외.</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline._post_github_pending_acceptance_comment (line 15103-15257)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py line 16626</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_post_github_pending_acceptance_comment</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>기존 acceptance-packet 댓글 삭제 시(line 15217-15244) `pipeline-final-check-packet` 전용 marker만 있는 댓글은 삭제하지 않음. pending/accepted 상태 marker 포함 댓글만 삭제하여 CI 최종 확인 안내 댓글 보존.</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-3, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._update_github_acceptance_comment (line 15310-15416)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py line 16282</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_update_github_acceptance_comment</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>기존 acceptance-packet 댓글 삭제 시(line 15376-15403) `pipeline-final-check-packet` 전용 marker만 있는 댓글은 삭제하지 않음. accepted 완료 댓글에 pending marker 및 승인 코드 입력 안내 없음 확인 로직 유지.</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-4, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>pipeline._check_acceptance_packet_via_github (line 5085-5220) 및 _get_pr_comment_acceptance_body (line 15419-15465)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py line 6092</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_acceptance_packet_via_github|_get_pr_comment_acceptance_body</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>acceptance packet 조회 시 pending marker 댓글 우선 선택. final-check 전용 marker만 있는 댓글은 approval packet으로 오인하지 않음. legacy 공통 marker fallback은 pending/accepted/final-check marker 없을 때만 사용.</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-7, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>신규 테스트: tests/e2e/test_marker_separation_32d7.py</affected_function>
+      <target_files>
+        <file>tests/e2e/test_marker_separation_32d7.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_marker_separation_32d7</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TC-1~TC-8 테스트 구현: fake comments 목록으로 marker 분리 로직 검증. 기존 B32A/509F/D278/2821 테스트와 별도 파일.</change_summary>
+      <line_estimate>150</line_estimate>
+      <covers_ac>AC-9, AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>GitHub Actions 최종 확인 안내 업데이트가 pending 승인 댓글(`pipeline-human-acceptance-packet-pending` marker 포함)을 PATCH하지 않는다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>GitHub Actions 최종 확인 안내 업데이트가 accepted 완료 댓글(`pipeline-human-acceptance-packet-accepted` marker 포함)을 PATCH하지 않는다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>request-accept 재실행 시 CI 최종 확인 안내 댓글(`pipeline-final-check-packet` marker만 포함)을 삭제하지 않는다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>accept 성공 후 accepted 댓글에 pending marker(`pipeline-human-acceptance-packet-pending`)와 승인 코드 입력 안내(`아래 승인 코드를 입력`, `승인 코드를 입력해 주세요`)가 없다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>accept 성공 후 GitHub Actions가 다시 실행되어도 accepted 댓글이 pending/최종 확인 안내로 덮어써지지 않는다 (accepted marker 있는 댓글은 CI가 PATCH 대상에서 제외)</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>pending 댓글에는 `판단 정보 상태: 판단 가능` 또는 readiness 표시가 포함된다 (기존 509F 로직 유지)</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>gates accept는 CI 최종 확인 안내 댓글(`pipeline-final-check-packet` marker만 포함)을 pending approval packet으로 오인하지 않는다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>B32A 회귀 방지 — pending 댓글의 evidence_integrity/workspace_hygiene 값이 PR body PIPELINE_FINAL_PACKET과 동일하다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>nonce/provenance/request-accept/accept 기존 회귀 테스트(tests/e2e/test_request_accept_nonce_reuse_aef0.py, test_pending_comment_sst_b32a.py, test_acceptance_template_sst_509f.py) 모두 PASS</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>D278 post-accept fail-closed(tests/e2e/test_post_accept_finalization_d278.py) 및 2821 workspace_hygiene fail-closed(tests/e2e/test_workspace_hygiene_2821.py) 기존 회귀 테스트 모두 PASS</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.12 — ci.yml에서 사용 중인 버전과 동일</python_version>
+
+  <forbidden>
+    - 새 gate 추가 금지
+    - COMPLETE 조건 완화 금지
+    - nonce 생성/검증/consume 로직 변경 금지
+    - request-accept / accept 보안 조건 완화 금지
+    - PR body readiness 검증 완화 금지
+    - D278 post-accept fail-closed 흐름 변경 금지
+    - 2821 workspace_hygiene fail-closed 흐름 변경 금지
+    - B32A의 evidence_integrity/workspace_hygiene SSoT 정합성 유지
+    - pending/accepted marker 분리 규칙 유지 (509F 로직 보존)
+    - accepted comment를 장문으로 만들지 말 것
+    - 테스트를 맞추기 위한 graceful skip 금지
+    - 하드코딩된 테스트 개수/AC 개수 문구 추가 금지
+  </forbidden>
+
+  <anti_gaming_read>true</anti_gaming_read>
+
+</step_plan>
