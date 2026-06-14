@@ -11301,16 +11301,32 @@ def _collect_packet_evidence(
 #   줄이도록 확장 가능.
 # ---------------------------------------------------------------------------
 def _build_acceptance_display_model(
-    state: Dict[str, Any], evidence: Optional[str] = None
+    state: Dict[str, Any],
+    evidence: Optional[str] = None,
+    packet_evidence: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """User Acceptance 안내 표면들이 공유하는 단일 표시 데이터 모델을 조립한다.
 
     pending 댓글 / accepted 댓글 / PR body final packet / MD / JSON renderer가
     모두 이 모델을 입력으로 받아 동일한 SSoT 계산값을 표시한다. 하드코딩 숫자 금지.
 
+    [Purpose]: BUG-20260614-B32A MT-1 — pending 댓글이 evidence_integrity/
+      workspace_hygiene를 state에서만 읽어 NOT_CHECKED fallback을 표시하던 회귀 수정.
+      request-accept 시점에 계산된 packet evidence를 직접 받아 SSoT 값으로 표시한다.
+    [Assumptions]: packet_evidence가 주어지면 그 안의 evidence_integrity/
+      workspace_hygiene 키가 request-accept 시점 계산값을 담고 있다.
+    [Vulnerability & Risks]: packet_evidence가 None이면 기존대로 state에서 읽는다
+      (하위 호환). packet_evidence의 두 키가 비어 있으면 state fallback이 아니라
+      packet_evidence 기준의 NOT_CHECKED가 표시된다 — 호출부가 채워 넣어야 한다.
+    [Improvement]: evidence_integrity/workspace_hygiene 요약 계산을 별도 헬퍼로
+      추출하여 _build_final_packet_display_model와 중복을 제거할 수 있다.
+
     Args:
         state: 활성 pipeline_state dict. None 금지.
         evidence: 결과물 경로/URL 문자열(선택). None이면 evidence_path는 None.
+        packet_evidence: request-accept 시점에 조립된 packet evidence dict(선택).
+            None이 아니면 evidence_integrity_summary/workspace_hygiene_summary를
+            state 대신 이 dict에서 직접 계산한다. None이면 기존대로 state에서 읽는다.
     Returns:
         dict with keys: pipeline_id, pr_url, github_actions_url, ci_run_id,
             evidence_path, gates(technical/oracle/github_ci/acceptance),
@@ -11319,7 +11335,8 @@ def _build_acceptance_display_model(
             workspace_hygiene_summary(status/blocking_items/cleanup_only_items),
             approval_code(str|None), reject_example(str), user_checklist(list[str]).
     Raises:
-        TypeError: state가 None이거나 dict가 아닌 경우.
+        TypeError: state가 None이거나 dict가 아닌 경우, packet_evidence가
+            dict도 None도 아닌 경우.
     """
     if state is None:
         raise TypeError("state must not be None")
@@ -11327,6 +11344,10 @@ def _build_acceptance_display_model(
         raise TypeError(f"state must be dict, got {type(state).__name__}")
     if evidence is not None and not isinstance(evidence, str):
         raise TypeError(f"evidence must be str or None, got {type(evidence).__name__}")
+    if packet_evidence is not None and not isinstance(packet_evidence, dict):
+        raise TypeError(
+            f"packet_evidence must be dict or None, got {type(packet_evidence).__name__}"
+        )
 
     pipeline_id = str(state.get("pipeline_id", "") or "")
 
@@ -11397,8 +11418,18 @@ def _build_acceptance_display_model(
         "failed": req_failed,
     }
 
-    # evidence_integrity_summary — state의 evidence 무결성 결과에서 파생(문자열).
-    _ei = state.get("evidence_integrity") or {}
+    # evidence_integrity_summary / workspace_hygiene_summary 의 SSoT 출처 선택:
+    # BUG-20260614-B32A MT-1 — packet_evidence가 주어지면 request-accept 시점에
+    # 계산된 packet evidence에서 직접 읽는다(pending 댓글의 NOT_CHECKED fallback 회귀
+    # 수정). packet_evidence가 None이면 기존대로 state에서 읽어 하위 호환을 보존한다.
+    _ei_source: Dict[str, Any] = state
+    _wh_source: Dict[str, Any] = state
+    if packet_evidence is not None:
+        _ei_source = packet_evidence
+        _wh_source = packet_evidence
+
+    # evidence_integrity_summary — 선택된 SSoT 출처의 evidence 무결성 결과에서 파생(문자열).
+    _ei = _ei_source.get("evidence_integrity") or {}
     if not isinstance(_ei, dict):
         _ei = {}
     _ei_status = str(_ei.get("status", "NOT_CHECKED") or "NOT_CHECKED")
@@ -11410,8 +11441,8 @@ def _build_acceptance_display_model(
         f"tracked:{_ei_tracked}, pr_included:{_ei_pr})"
     )
 
-    # workspace_hygiene_summary — state SSoT에서 status/blocking/cleanup 추출.
-    _wh = state.get("workspace_hygiene") or {}
+    # workspace_hygiene_summary — 선택된 SSoT 출처에서 status/blocking/cleanup 추출.
+    _wh = _wh_source.get("workspace_hygiene") or {}
     if not isinstance(_wh, dict):
         _wh = {}
     workspace_hygiene_summary = {
@@ -15100,7 +15131,53 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
     if not _state.get("pipeline_id") and pipeline_id:
         _state = dict(_state)
         _state["pipeline_id"] = pipeline_id
-    display_model = _build_acceptance_display_model(_state, evidence)
+    # BUG-20260614-B32A MT-1: evidence_integrity/workspace_hygiene는 request-accept
+    # 시점에 계산된 packet evidence에 있으므로, state만 읽으면 pending 댓글에
+    # NOT_CHECKED fallback이 표시된다. packet evidence를 조립하여 display model에
+    # 직접 전달한다(request-accept 경로의 evidence_payload 조립과 동일한 SSoT 계산).
+    _packet_evidence: Optional[Dict[str, Any]] = None
+    try:
+        _packet_evidence = _collect_packet_evidence(
+            _state, acceptance_request=req, base_ref="origin/main"
+        )
+        # evidence_integrity 채우기 (request-accept 경로와 동일 로직).
+        _pe_pid = str(_state.get("pipeline_id", "") or "")
+        _pe_integrity: Dict[str, Any] = {
+            "status": "NOT_CHECKED",
+            "protected_evidence_count": 0,
+            "tracked_count": 0,
+            "pr_included_count": 0,
+            "untracked_protected": [],
+            "orphan_oracle_warnings": [],
+            "cleanup_only_artifacts": [],
+            "blockers": [],
+        }
+        if _pe_pid and _contract_paths(_pe_pid)["evidence_inventory"].exists():
+            try:
+                _pe_prov = _validate_evidence_provenance(
+                    _state, phase="pending-comment-packet"
+                )
+                _pe_integrity = {
+                    "status": _pe_prov.get("status", "NOT_CHECKED"),
+                    "protected_evidence_count": _pe_prov.get("protected_evidence_count", 0),
+                    "tracked_count": _pe_prov.get("tracked_count", 0),
+                    "pr_included_count": _pe_prov.get("pr_included_count", 0),
+                    "untracked_protected": _pe_prov.get("untracked_protected", []),
+                    "orphan_oracle_warnings": _pe_prov.get("orphan_oracle_warnings", []),
+                    "cleanup_only_artifacts": _pe_prov.get("cleanup_only_artifacts", []),
+                    "blockers": _pe_prov.get("blockers", []),
+                }
+            except Exception:
+                pass
+        _packet_evidence["evidence_integrity"] = _pe_integrity
+        # workspace_hygiene SSoT는 state (IMP-20260614-2821과 동일).
+        _packet_evidence["workspace_hygiene"] = _state.get("workspace_hygiene") or {}
+    except Exception:
+        # packet evidence 조립 실패는 non-fatal — state fallback으로 display model 생성.
+        _packet_evidence = None
+    display_model = _build_acceptance_display_model(
+        _state, evidence, packet_evidence=_packet_evidence
+    )
     # req가 가진 nonce/PR을 display model에 반영(state보다 우선) — request-accept 직후 정합성.
     _req_nonce = str(req.get("nonce", "") or "")
     if _req_nonce:
