@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260614-B32A",
+  "phase": "pm_planner",
+  "agent_id": "pm-planner-agent",
+  "run_id": "pm_planner-7afa4d70b8a85c43",
+  "status": "COMPLETED",
+  "started_at": "2026-06-14T12:18:21Z",
+  "completed_at": "2026-06-14T12:25:24Z",
+  "output_file": "step_plan_B32A.xml",
+  "output_sha256": "f72c38aab3dafacd600d45a6ead6115c5f4e6e0dc0d872f36275e757f402bd95",
+  "evidence_files": [],
+  "commit_sha": "209512d7e5d614e0dda0bff194ca5dc4d37918ce"
+}
