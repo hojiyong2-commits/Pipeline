@@ -1,0 +1,49 @@
+{
+  "description": "TC-2: oracle_manifest 참조 파일이 git tracked이고 PR/base 조건을 만족하면 PASS",
+  "scenario": "tracked_oracle_and_pr_included_pass",
+  "setup": {
+    "pipeline_id": "IMP-20260614-TC02",
+    "oracle_files": [
+      {
+        "path": "tests/oracles/IMP-20260614-TC02/case1/input.json",
+        "tracked": true,
+        "in_pr_changed_files": true,
+        "content": "{\"test\": \"input\"}"
+      },
+      {
+        "path": "tests/oracles/IMP-20260614-TC02/case1/expected.json",
+        "tracked": true,
+        "in_pr_changed_files": true,
+        "content": "{\"test\": \"expected\"}"
+      }
+    ],
+    "evidence_inventory": [
+      {
+        "pipeline_id": "IMP-20260614-TC02",
+        "path": "tests/oracles/IMP-20260614-TC02/case1/input.json",
+        "protection": "protected",
+        "sha256": "computed_from_content"
+      },
+      {
+        "pipeline_id": "IMP-20260614-TC02",
+        "path": "tests/oracles/IMP-20260614-TC02/case1/expected.json",
+        "protection": "protected",
+        "sha256": "computed_from_content"
+      }
+    ],
+    "oracle_manifest": {
+      "oracles": [
+        {
+          "input_path": "tests/oracles/IMP-20260614-TC02/case1/input.json",
+          "expected_path": "tests/oracles/IMP-20260614-TC02/case1/expected.json",
+          "case_kind": "normal"
+        }
+      ]
+    },
+    "pr_body": "## 작업 요약\n테스트 작업\n## 사용자가 확인할 결과물\n결과물\n## 기대 결과와 실제 결과\n동일\n## 중요한 선택과 트레이드오프\n없음\n## 검증\nOK",
+    "evidence": "output.xlsx"
+  },
+  "action": "gates request-accept --evidence output.xlsx",
+  "expected_exit_code": 0,
+  "expected_acceptance_code_issued": true
+}

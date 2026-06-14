@@ -83,6 +83,49 @@ AC 검증이 모두 통과해도 PR 본문이 완성되지 않으면 `gates requ
 | `temporary_phrases_absent` | 임시 문구 없음 여부 (bool) |
 | `validated_at` | 검증 타임스탬프 (ISO 8601) |
 
+## Workspace/Evidence Hygiene Gate 절차 (IMP-20260614-2821)
+
+`gates request-accept`와 `gates accept` 실행 전 자동으로 workspace hygiene 검사를 수행합니다.
+이 검사는 oracle 증거 파일의 git 추적 상태를 점검하여, 로컬에만 존재하는 untracked oracle로
+승인 코드를 발급/소모하는 우회 경로를 차단합니다.
+
+### 차단 조건 (BLOCKED)
+- `tests/oracles/<pipeline_id>/` 아래 파일이 untracked: `failure_code=untracked_oracle_evidence`
+- oracle_manifest 참조 파일 missing: `failure_code=protected_evidence_missing`
+- oracle_manifest 참조 파일 untracked: `failure_code=protected_evidence_untracked`
+- evidence_inventory protected 파일 SHA mismatch: `failure_code=protected_evidence_sha_mismatch`
+- git 조회 비정상 종료: `failure_code=workspace_hygiene_check_failed` (fail-closed)
+
+### 경고만 표시 (WARN, 차단 아님)
+- `build_report.xml`, `oracle_result_dump.txt`(및 `*_dump.txt`), `pr_body_*.txt`, `comment_*.txt`,
+  `tmp*.json`/`tmp_tc*.json`, `.claude/worktrees/`, `.pytest_tmp_*` 등 cleanup_only 임시 파일
+
+### 기존 게이트와의 정합성 (deferral)
+- contract `oracle_manifest.json`이 존재하면 untracked 차단(규칙 1/3)은 기존
+  `_check_oracle_manifest_vs_inventory` + `_validate_evidence_provenance` 게이트에 위임됩니다.
+- 파일 missing(규칙 2)과 inventory SHA mismatch(규칙 4)는 deferral과 무관하게 항상 차단합니다.
+- git 실행파일 자체가 없는 환경에서는 graceful skip(차단하지 않음)이며, git이 실행됐으나
+  오류를 반환하면 fail-closed로 차단합니다.
+
+### 복구 절차
+BLOCKED 발생 시:
+1. oracle 파일이 untracked이면: `git add tests/oracles/<pipeline_id>/`
+2. evidence 파일이 missing이면: 해당 파일 재생성 후 `git add`
+3. SHA mismatch이면: 파일 내용 검증 후 재commit (또는 inventory sha256 재등록)
+4. `gates request-accept --evidence <경로>` 재실행
+
+### state["workspace_hygiene"] 필드 (SSoT)
+검사 결과는 `state["workspace_hygiene"]`에 저장되고, `report final-packet` 및
+`human_acceptance_packet.json`(verification_json)에도 반영됩니다:
+- `status`: "BLOCKED" | "WARN" | "OK"
+- `blocking_items`: 차단 사유 목록
+- `cleanup_only_items`: 정리 가능 파일 목록
+- `cleanup_command`: PowerShell 정리 명령
+- `checked_at`: 검사 시간
+
+`python pipeline.py status` 출력 하단에 cleanup_only 파일이 있으면 `[CLEANUP 안내]` 블록과
+정리 명령이 표시됩니다.
+
 ## Phase 순서 관리
 
 | Phase | 진입 게이트 | 완료 기록 |

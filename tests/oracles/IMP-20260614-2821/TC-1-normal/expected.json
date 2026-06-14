@@ -1,0 +1,26 @@
+{
+  "status": "BLOCKED",
+  "failure_code": "untracked_oracle_evidence",
+  "acceptance_code_issued": false,
+  "workspace_hygiene": {
+    "status": "BLOCKED",
+    "blocking_items": [
+      {
+        "path": "tests/oracles/IMP-20260614-TC01/case1/input.json",
+        "failure_code": "untracked_oracle_evidence",
+        "message": "tests/oracles/<pipeline_id>/ 아래 파일이 git에 추적되지 않습니다"
+      },
+      {
+        "path": "tests/oracles/IMP-20260614-TC01/case1/expected.json",
+        "failure_code": "untracked_oracle_evidence",
+        "message": "tests/oracles/<pipeline_id>/ 아래 파일이 git에 추적되지 않습니다"
+      }
+    ],
+    "cleanup_only_items": [],
+    "protected_evidence_count": 2,
+    "tracked_oracle_count": 0,
+    "untracked_oracle_count": 2,
+    "pr_included_protected_count": 0
+  },
+  "message": "protected oracle 증거가 git에 추적되지 않습니다. 해당 파일을 git add/commit 하여 추적 대상으로 만든 뒤 다시 실행하세요."
+}

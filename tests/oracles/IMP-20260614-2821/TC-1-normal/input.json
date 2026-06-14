@@ -1,0 +1,38 @@
+{
+  "description": "TC-1: tests/oracles/<pipeline_id>/... untracked 파일이면 request-accept BLOCKED, 승인 코드 미출력",
+  "scenario": "untracked_oracle_evidence_blocked",
+  "setup": {
+    "pipeline_id": "IMP-20260614-TC01",
+    "oracle_files": [
+      {
+        "path": "tests/oracles/IMP-20260614-TC01/case1/input.json",
+        "tracked": false,
+        "content": "{\"test\": \"input\"}"
+      },
+      {
+        "path": "tests/oracles/IMP-20260614-TC01/case1/expected.json",
+        "tracked": false,
+        "content": "{\"test\": \"expected\"}"
+      }
+    ],
+    "evidence_inventory": [
+      {
+        "pipeline_id": "IMP-20260614-TC01",
+        "path": "tests/oracles/IMP-20260614-TC01/case1/input.json",
+        "protection": "protected",
+        "sha256": "abc123..."
+      },
+      {
+        "pipeline_id": "IMP-20260614-TC01",
+        "path": "tests/oracles/IMP-20260614-TC01/case1/expected.json",
+        "protection": "protected",
+        "sha256": "def456..."
+      }
+    ],
+    "pr_body": "## 작업 요약\n테스트 작업\n## 사용자가 확인할 결과물\n결과물\n## 기대 결과와 실제 결과\n동일\n## 중요한 선택과 트레이드오프\n없음\n## 검증\nOK",
+    "evidence": "output.xlsx"
+  },
+  "action": "gates request-accept --evidence output.xlsx",
+  "expected_exit_code": 1,
+  "expected_failure_code": "untracked_oracle_evidence"
+}
