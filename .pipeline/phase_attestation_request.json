@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-14T22:08:08Z",
+  "pipeline_id": "BUG-20260614-32D7",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "43de61a2671741db747551e47f781b2035fc4a51",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-14T22:07:19Z",
+    "report_file": "dev_handover_32D7.xml",
+    "evidence": ".github/workflows/ci.yml,pipeline.py,tests/e2e/test_marker_separation_32d7.py"
+  },
+  "agent_run": {
+    "run_id": "dev-b1c11225a80cfb4a",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_32D7.xml",
+    "output_sha256": "ae82c91ca4d953bff99972a666f89395304bc41b378b2f0491f21eada23bc1d9",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260614-32D7/dev/agent_receipt_dev-b1c11225a80cfb4a.json",
+    "receipt_sha256": "e1a96e4d5d9ec8bf6543548471676a811b0ec2ed96313317f21bdd9065bc9d31",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\dev\\dev-b1c11225a80cfb4a.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\dev\\dev-b1c11225a80cfb4a.json",
+      "path": ".pipeline/phase_evidence/BUG-20260614-32D7/dev/agent_receipt_dev-b1c11225a80cfb4a.json",
+      "sha256": "e1a96e4d5d9ec8bf6543548471676a811b0ec2ed96313317f21bdd9065bc9d31",
+      "size_bytes": 591,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_32D7.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260614-32D7/dev/report_dev_handover_32D7.xml",
+      "sha256": "ae82c91ca4d953bff99972a666f89395304bc41b378b2f0491f21eada23bc1d9",
+      "size_bytes": 8818,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_32D7.json",
+      "path": ".pipeline/phase_evidence/BUG-20260614-32D7/dev/scope_manifest_scope_manifest_32D7.json",
+      "sha256": "f75c8421a68297cb0869ac55d86ec06419da290710f67e63be63b10b1c10a6e9",
+      "size_bytes": 2941,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "153687347f288e347687440eabea802869f75de77fe43fb5d8750d7954c61642",
+      "size_bytes": 29316
+    },
+    {
+      "path": "pipeline.py",
+      "sha256": "02476d7985662f8a9ae7ab8d57a2fbf3a8a2008ab5a8148e6753a2cda73004ac",
+      "size_bytes": 1049114
+    },
+    {
+      "path": "tests/e2e/test_marker_separation_32d7.py",
+      "sha256": "cf8fa60955d58f7a245325b1d06d14d57e47a55f14108291c34c343ff21fb712",
+      "size_bytes": 12849
+    }
+  ],
+  "local_only_files": []
+}
