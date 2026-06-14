@@ -10712,9 +10712,16 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     ci_run_id = str(evidence.get("ci_run_id", "") or "")
     actions_url = str(evidence.get("actions_url", "") or "")
     changed_files = list(evidence.get("changed_files") or [])
-    gate_status = evidence.get("gate_status") or {}
+    gate_status = dict(evidence.get("gate_status") or {})
     ac_table = evidence.get("ac_fulfillment_table")
     acceptance_request = evidence.get("acceptance_request")
+
+    # acceptance_request.json이 PENDING이면 gate_status.acceptance를 PENDING으로 표시
+    # (이전 REJECT로 pipeline_state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
+    # _build_verification_json()와 동일 로직 — 두 함수가 같은 상태를 보여야 함
+    _ar_pending = acceptance_request if isinstance(acceptance_request, dict) else {}
+    if _ar_pending.get("status") == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
+        gate_status["acceptance"] = "PENDING"
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
     # ci_head_sha: github_actions.head_sha (acceptance_request 또는 JSON 파일에서)
