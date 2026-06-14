@@ -3642,13 +3642,13 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
                     raw = str(e.get("path", "") or "")
                     if not raw:
                         continue
-                    p = Path(raw)
-                    if not p.is_absolute():
-                        p = BASE_DIR / p
+                    inv_p: Path = Path(raw)
+                    if not inv_p.is_absolute():
+                        inv_p = BASE_DIR / inv_p
                     try:
-                        key = str(p.resolve())
+                        key = str(inv_p.resolve())
                     except (OSError, ValueError):
-                        key = str(p)
+                        key = str(inv_p)
                     inventory_sha_by_abs[key] = str(e.get("sha256", "") or "")
         except (OSError, json.JSONDecodeError):
             inventory_sha_by_abs = {}
@@ -3670,17 +3670,17 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
                         manifest_refs.append(raw)
 
         for raw in manifest_refs:
-            p = Path(raw)
-            if not p.is_absolute():
-                p = BASE_DIR / p
+            ref_p: Path = Path(raw)
+            if not ref_p.is_absolute():
+                ref_p = BASE_DIR / ref_p
             try:
-                abs_str = str(p.resolve())
+                abs_str = str(ref_p.resolve())
             except (OSError, ValueError):
-                abs_str = str(p)
+                abs_str = str(ref_p)
             try:
-                rel = p.resolve().relative_to(BASE_DIR.resolve()).as_posix()
+                rel = ref_p.resolve().relative_to(BASE_DIR.resolve()).as_posix()
             except (ValueError, OSError):
-                rel = str(p).replace("\\", "/")
+                rel = str(ref_p).replace("\\", "/")
 
             if _is_workspace_cleanup_only(rel):
                 if rel not in result["cleanup_only_items"]:
@@ -3688,7 +3688,7 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
                 continue
 
             # 규칙 2: 파일 missing
-            if not p.exists():
+            if not ref_p.exists():
                 _add_blocker(
                     "protected_evidence_missing",
                     "oracle_manifest가 참조하는 증거 파일이 존재하지 않습니다. 재생성 후 git add 하세요.",
@@ -3722,7 +3722,7 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
             inv_sha = inventory_sha_by_abs.get(abs_str, "")
             if inv_sha:
                 try:
-                    cur_sha = _sha256_file(p)
+                    cur_sha = _sha256_file(ref_p)
                 except (OSError, IOError):
                     _add_blocker(
                         "workspace_hygiene_check_failed",
