@@ -14085,6 +14085,111 @@ def _get_pr_changed_files() -> List[str]:
     return []
 
 
+def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dict[str, Any]:
+    """gates request-accept 경로 전용 — PENDING 승인 코드 안내 댓글을 PR에 게시한다.
+
+    [Purpose]: IMP-20260614-D278 REJECT — request-accept 경로에서 ACCEPTED 완료 댓글이
+      잘못 게시되던 회귀 수정. 이 함수는 PENDING 상태 전용이며 ACCEPTED 마커를 포함하지 않는다.
+    [Assumptions]: req는 PENDING 상태의 acceptance_request. gh CLI는 선택적.
+    [Vulnerability & Risks]: gh CLI 실패 시 success=False 반환 — 호출자는 이를 무시하고
+      코드 발급을 계속한다 (PENDING 댓글 실패는 non-fatal).
+
+    기존 acceptance-packet 태그 댓글을 삭제한 뒤 PENDING 승인 코드 안내 댓글을 생성한다.
+    댓글에는 ACCEPTED, 승인 완료, accepted_by 등의 완료 마커를 포함하지 않는다.
+
+    Args:
+        req: acceptance_request dict (pipeline_id, request_id, pr_url, nonce 포함).
+        evidence: 결과물 경로 또는 URL.
+    Returns:
+        dict {"success": True} 또는 {"success": False, "error": str}.
+    """
+    if req is None:
+        return {"success": False, "error": "req must not be None"}
+    if not isinstance(req, dict):
+        return {"success": False, "error": f"req must be dict, got {type(req).__name__}"}
+    pipeline_id = str(req.get("pipeline_id", ""))
+    request_id = str(req.get("request_id", ""))
+    nonce = str(req.get("nonce", ""))
+    pr_url = str(req.get("pr_url", "") or "")
+    accept_code = f"ACCEPT-{pipeline_id}-{nonce}" if nonce else "(승인 코드 준비 중)"
+
+    # PENDING 안내 댓글 — ACCEPTED/승인 완료/accepted_by 마커 없음
+    comment_body = f"""<!-- pipeline-human-acceptance-packet -->
+<!-- pipeline-human-acceptance-packet-pending -->
+## 사용자 최종 확인 요청
+
+파이프라인: {pipeline_id}
+요청 ID: {request_id}
+결과물: {evidence}
+
+아래 승인 코드를 이 PR 댓글에 한 줄로 입력해 주세요:
+
+{accept_code}
+
+코드 외 다른 내용을 입력하면 승인이 거부됩니다.
+"""
+
+    try:
+        pr_number = ""
+        if pr_url:
+            import re as _re
+            m = _re.search(r"/pull/(\d+)", pr_url)
+            if m:
+                pr_number = m.group(1)
+        if not pr_number:
+            r_num = subprocess.run(
+                ["gh", "pr", "view", "--json", "number", "--jq", ".number"],
+                capture_output=True, text=True, timeout=10,
+                encoding="utf-8", errors="replace",
+            )
+            if r_num.returncode == 0:
+                pr_number = r_num.stdout.strip()
+            else:
+                return {"success": False, "error": f"PR 번호 조회 실패: {r_num.stderr.strip()}"}
+
+        # 기존 acceptance-packet 댓글 전부 삭제
+        if pr_number:
+            r_comments = subprocess.run(
+                ["gh", "api",
+                 f"repos/hojiyong2-commits/Pipeline/issues/{pr_number}/comments",
+                 "--paginate"],
+                capture_output=True, text=True, timeout=30,
+                encoding="utf-8", errors="replace",
+            )
+            if r_comments.returncode == 0 and r_comments.stdout.strip():
+                try:
+                    all_comments = json.loads(r_comments.stdout.strip())
+                    tag = "pipeline-human-acceptance-packet"
+                    old_ids = [
+                        str(c["id"])
+                        for c in all_comments
+                        if isinstance(c, dict) and tag in str(c.get("body", ""))
+                    ]
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    old_ids = []
+                for old_id in old_ids:
+                    subprocess.run(
+                        ["gh", "api",
+                         f"repos/hojiyong2-commits/Pipeline/issues/comments/{old_id}",
+                         "-X", "DELETE"],
+                        capture_output=True, timeout=10,
+                        encoding="utf-8", errors="replace",
+                    )
+
+        # 새 PENDING 안내 댓글 생성
+        r_create = subprocess.run(
+            ["gh", "pr", "comment", "--body", comment_body],
+            capture_output=True, text=True, timeout=15,
+            encoding="utf-8", errors="replace",
+        )
+        if r_create.returncode != 0:
+            return {"success": False, "error": f"PENDING 안내 댓글 생성 실패: {r_create.stderr.strip()}"}
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        return {"success": False, "error": str(exc)}
+
+    return {"success": True}
+
+
 def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dict[str, Any]:
     """ACCEPT 성공 후 GitHub PR에 "사용자 승인 완료" 댓글로 교체한다.
 
@@ -15374,9 +15479,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
     reject_code = f"REJECT-{pipeline_id}-{nonce}"
 
-    # GitHub 최종 확인 댓글 생성/갱신 (gh CLI 없으면 건너뜀)
+    # GitHub PENDING 안내 댓글 생성 (gh CLI 없으면 건너뜀) — request-accept 전용
+    # REJECT-IMP-20260614-D278: ACCEPTED 완료 댓글 전용 함수는 accept 경로(_finalize_post_accept)
+    # 에서만 호출한다. request-accept 경로에서는 반드시 PENDING 안내 댓글 전용 함수를 사용해야 한다.
     try:
-        _update_github_acceptance_comment(req, evidence_str)
+        _post_github_pending_acceptance_comment(req, evidence_str)
     except Exception:
         pass  # GitHub 댓글 실패해도 코드 발급은 계속
 

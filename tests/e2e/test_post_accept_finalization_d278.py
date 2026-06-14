@@ -271,5 +271,76 @@ class TestPostAcceptFinalizationD278(unittest.TestCase):
             self.assertEqual(result.returncode, 0)
 
 
+# TC-9: request-accept 직후 PR comment에 ACCEPTED/승인완료 마커 없음 검증
+# (REJECT-IMP-20260614-D278 — _post_github_pending_acceptance_comment 분리 후 회귀 방지)
+class TestRequestAcceptPendingCommentRegression(unittest.TestCase):
+    """request-accept 경로가 PENDING 안내 댓글을 사용하는지 회귀 검증."""
+
+    def test_pending_comment_function_exists(self):
+        """_post_github_pending_acceptance_comment 함수가 pipeline.py에 존재해야 한다."""
+        import pipeline as _pl
+        self.assertTrue(
+            hasattr(_pl, "_post_github_pending_acceptance_comment"),
+            "_post_github_pending_acceptance_comment 함수가 없습니다. "
+            "REJECT-IMP-20260614-D278 수정이 반영되지 않았습니다.",
+        )
+
+    def test_pending_comment_body_has_no_accepted_marker(self):
+        """_post_github_pending_acceptance_comment가 생성하는 댓글에 ACCEPTED 마커가 없어야 한다."""
+        import inspect
+        import pipeline as _pl
+        # gh CLI 없는 환경에서도 댓글 body 검증 가능하도록 소스코드 수준에서 검증한다.
+        src = inspect.getsource(_pl._post_github_pending_acceptance_comment)
+        forbidden_markers = [
+            "ACCEPTED by",
+            "사용자 승인 완료",
+            "✅ 사용자 승인 완료",
+            "pipeline-human-acceptance-packet-accepted",
+        ]
+        for marker in forbidden_markers:
+            self.assertNotIn(
+                marker, src,
+                f"_post_github_pending_acceptance_comment 소스에 완료 마커 '{marker}'가 "
+                "포함되어 있습니다. request-accept 경로에서 ACCEPTED 댓글이 생성될 수 있습니다.",
+            )
+        # PENDING 마커가 소스에 있어야 한다
+        self.assertIn(
+            "pipeline-human-acceptance-packet-pending", src,
+            "_post_github_pending_acceptance_comment 소스에 PENDING 태그가 없습니다.",
+        )
+
+    def test_accepted_comment_function_has_accepted_marker(self):
+        """_update_github_acceptance_comment(ACCEPTED 전용)는 ACCEPTED 마커를 포함해야 한다."""
+        import inspect
+        import pipeline as _pl
+        src = inspect.getsource(_pl._update_github_acceptance_comment)
+        self.assertTrue(
+            "ACCEPTED" in src or "사용자 승인 완료" in src,
+            "_update_github_acceptance_comment가 ACCEPTED 마커를 포함하지 않습니다.",
+        )
+
+    def test_request_accept_path_calls_pending_function_not_accepted(self):
+        """gates request-accept 경로가 _post_github_pending_acceptance_comment를 호출하고
+        _update_github_acceptance_comment를 직접 호출하지 않아야 한다."""
+        import inspect
+        import pipeline as _pl
+        full_src = inspect.getsource(_pl)
+        found_pending_call = "_post_github_pending_acceptance_comment" in full_src
+        found_accepted_call_in_request_accept = False
+        if hasattr(_pl, "_cmd_gates_request_accept"):
+            ra_src = inspect.getsource(_pl._cmd_gates_request_accept)
+            if "_update_github_acceptance_comment" in ra_src:
+                found_accepted_call_in_request_accept = True
+        self.assertTrue(
+            found_pending_call,
+            "_post_github_pending_acceptance_comment가 pipeline.py에 정의되지 않았습니다.",
+        )
+        self.assertFalse(
+            found_accepted_call_in_request_accept,
+            "_cmd_gates_request_accept에서 _update_github_acceptance_comment를 직접 호출합니다. "
+            "request-accept 경로는 _post_github_pending_acceptance_comment만 사용해야 합니다.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
