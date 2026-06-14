@@ -4244,14 +4244,62 @@ def _load_acceptance_request() -> Optional[Dict[str, Any]]:
         return None
 
 
-def _consume_acceptance_request(req: Dict[str, Any], result: str) -> None:
-    """acceptance_request.json 상태를 CONSUMED로 갱신하여 재기록.
+# [Purpose]: acceptance 표시 상태(display_status)를 단일 SSoT helper로 계산하여
+#            _build_verification_json / _build_final_packet_content / accept finalization이
+#            동일한 표시 상태를 산출하도록 보장한다 (IMP-20260614-D278 MT-1).
+# [Assumptions]: 표시 상태(PENDING/ACCEPTED/REJECTED)와 gate 통과 상태(PASS)는 별개 레이어이며,
+#                acceptance_request dict는 status / consumed_result 필드를 가질 수 있다.
+# [Vulnerability & Risks]: acceptance_request가 None/비dict/필드 누락이면 안전 fallback인 PENDING.
+#                          consumed_result가 ACCEPT/REJECT가 아닌 비정상 값이면 PENDING으로 처리.
+# [Improvement]: 향후 상태 종류가 늘어나면 status->display 매핑 테이블로 분리 가능.
+def _resolve_acceptance_display_state(
+    acceptance_request: Optional[Dict[str, Any]],
+) -> str:
+    """acceptance_request 딕셔너리로부터 표시 상태를 계산하는 SSoT helper.
+
+    표시 상태(display_status)는 PENDING/ACCEPTED/REJECTED 세 가지이며,
+    gate 통과 상태(external_gates.acceptance.status=PASS)와는 별개 레이어다.
+
+    Args:
+        acceptance_request: acceptance_request.json 로드 결과 (None 허용).
+    Returns:
+        "PENDING"  — acceptance_request가 None/비dict이거나 status가 PENDING인 경우,
+                     또는 status가 ACCEPTED/CONSUMED인데 consumed_result가 비정상인 경우 (안전 fallback).
+        "ACCEPTED" — status가 ACCEPTED 또는 CONSUMED이고 consumed_result가 ACCEPT인 경우.
+        "REJECTED" — status가 ACCEPTED 또는 CONSUMED이고 consumed_result가 REJECT인 경우.
+    Raises:
+        없음 — 비정상 입력은 모두 PENDING으로 안전 처리.
+    """
+    if not acceptance_request or not isinstance(acceptance_request, dict):
+        return "PENDING"
+    status = str(acceptance_request.get("status") or "").upper()
+    if status in {"ACCEPTED", "CONSUMED"}:
+        result = str(acceptance_request.get("consumed_result") or "").upper()
+        if result == "ACCEPT":
+            return "ACCEPTED"
+        elif result == "REJECT":
+            return "REJECTED"
+    return "PENDING"
+
+
+def _consume_acceptance_request(
+    req: Dict[str, Any],
+    result: str,
+    *,
+    accepted_by: Optional[str] = None,
+) -> None:
+    """acceptance_request.json 상태를 ACCEPTED(CONSUMED)로 갱신하여 재기록.
+
+    IMP-20260614-D278 MT-4: accepted_at / accepted_by / consumed_nonce 필드를 추가하여
+    승인 provenance를 acceptance_request.json에 함께 기록한다. 기존 status="CONSUMED"와
+    consumed_at/consumed_result 필드는 하위 호환을 위해 그대로 유지한다.
 
     Args:
         req: 기존 acceptance_request dict.
         result: ACCEPT 또는 REJECT.
+        accepted_by: 승인자 식별자 (provenance_check.approver에서 전달, 기본값 None).
     Raises:
-        TypeError: req 또는 result가 None.
+        TypeError: req 또는 result가 None, 또는 타입 불일치.
         ValueError: result가 ACCEPT/REJECT 외 값.
     """
     if req is None:
@@ -4264,9 +4312,14 @@ def _consume_acceptance_request(req: Dict[str, Any], result: str) -> None:
         raise TypeError(f"result must be str, got {type(result).__name__}")
     if result not in {"ACCEPT", "REJECT"}:
         raise ValueError(f"result must be ACCEPT or REJECT, got {result!r}")
+    # 표시 상태 레이어: 하위 호환을 위해 status="CONSUMED" 유지.
+    # _resolve_acceptance_display_state는 CONSUMED+consumed_result로 ACCEPTED/REJECTED를 계산한다.
     req["status"] = "CONSUMED"
     req["consumed_at"] = _now()
     req["consumed_result"] = result
+    req["accepted_at"] = _now()  # 신규 필드 (IMP-20260614-D278 MT-4)
+    req["accepted_by"] = accepted_by or ""  # 신규 필드 (provenance_check.approver)
+    req["consumed_nonce"] = str(req.get("nonce", "") or "")  # 신규 필드
     with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
         json.dump(req, fh, ensure_ascii=False, indent=2)
 
@@ -10718,9 +10771,12 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
 
     # acceptance_request.json이 PENDING이면 gate_status.acceptance를 PENDING으로 표시
     # (이전 REJECT로 pipeline_state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
-    # _build_verification_json()와 동일 로직 — 두 함수가 같은 상태를 보여야 함
-    _ar_pending = acceptance_request if isinstance(acceptance_request, dict) else {}
-    if _ar_pending.get("status") == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
+    # IMP-20260614-D278 MT-2: _build_verification_json()와 동일하게
+    # _resolve_acceptance_display_state SSoT helper로 표시 상태를 계산한다.
+    _acceptance_display_status = _resolve_acceptance_display_state(
+        acceptance_request if isinstance(acceptance_request, dict) else None
+    )
+    if _acceptance_display_status == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
@@ -10806,6 +10862,9 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     lines.append(f"oracle: {gate_status.get('oracle', 'PENDING')}")
     lines.append(f"github_ci: {gate_status.get('github_ci', 'PENDING')}")
     lines.append(f"acceptance: {gate_status.get('acceptance', 'PENDING')}")
+    # IMP-20260614-D278 MT-2/MT-3: 표시 상태(PENDING/ACCEPTED/REJECTED)를 메타데이터에 명시.
+    # post-accept finalization 재조회 검증이 PR 블록의 ACCEPTED 표시를 확인하는 SSoT 라인.
+    lines.append(f"acceptance_display: {_acceptance_display_status}")
     lines.append(f"requirements_summary: {req_summary}")
     lines.append(f"oracle_summary: {oracle_summary_str}")
     lines.append(f"known_failures: {known_failures_str}")
@@ -11220,9 +11279,14 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         reject_example = f"REJECT-{pipeline_id}-{accept_nonce}: 이유"
         accept_request_id = str(acceptance_request.get("request_id", "") or "")
         accept_status = str(acceptance_request.get("status", "PENDING") or "PENDING")
+    # IMP-20260614-D278 MT-2: 표시 상태는 _resolve_acceptance_display_state SSoT helper로 계산.
+    # (status="CONSUMED" raw 값 대신 PENDING/ACCEPTED/REJECTED 정규화 값을 사용)
+    acceptance_display_status = _resolve_acceptance_display_state(
+        acceptance_request if isinstance(acceptance_request, dict) else None
+    )
     # acceptance_request.json이 PENDING이면 gates.acceptance를 PENDING으로 표시
     # (이전 REJECT로 pipeline state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
-    if accept_status == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
+    if acceptance_display_status == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
     # 새 구조화 객체
@@ -11279,6 +11343,8 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         "nonce": accept_nonce,
         "request_id": accept_request_id,
         "status": accept_status,
+        # IMP-20260614-D278 MT-2: 정규화된 표시 상태 (PENDING/ACCEPTED/REJECTED)
+        "display_status": acceptance_display_status,
     }
 
     # BLOCKED 검증 규칙
@@ -14813,6 +14879,172 @@ def _auto_generate_final_packet_and_update_pr(
     }
 
 
+# [Purpose]: gates accept(ACCEPT) 처리에서 nonce/provenance 검증 통과 후,
+#            external_gates.acceptance.status=PASS 기록 직전에 fail-closed로
+#            post-accept packet 재생성 → PR 갱신 → 재조회 검증을 수행한다 (IMP-20260614-D278 MT-3).
+# [Assumptions]: 이 함수 호출 전에 _consume_acceptance_request로 acceptance_request.json이
+#                ACCEPTED(CONSUMED)로 갱신되어 있어야 한다(packet이 ACCEPTED를 반영하도록).
+# [Vulnerability & Risks]: gh CLI 없음 / PR 없음은 graceful skip(gate PASS 허용)으로 처리하므로,
+#                          오프라인 환경에서는 PR 재조회 검증이 생략된다. packet 재생성 또는 상태
+#                          불일치 같은 로컬 검증 실패는 항상 BLOCKED(gate PASS 금지)로 처리한다.
+# [Improvement]: PR 댓글 갱신 실패와 PR 본문 갱신 실패를 별도 failure_code로 더 세분화 가능.
+def _finalize_post_accept(
+    state: Dict[str, Any],
+    acceptance_request: Dict[str, Any],
+    evidence: str,
+) -> Dict[str, Any]:
+    """ACCEPT 처리의 post-accept finalization을 fail-closed로 수행한다.
+
+    호출 시점: nonce/provenance/pr_body_stale/CI head 검증 통과 + _consume_acceptance_request
+    완료 직후, external_gates.acceptance.status=PASS 기록 직전.
+
+    수행 단계 (fail-closed):
+      2. post-accept packet JSON/MD 재생성 (_materialize_acceptance_snapshot)
+      3. JSON 파싱 재검증 (json.loads)
+      4. MD/JSON acceptance 표시 상태 일치 검증 (둘 다 ACCEPTED인지)
+      5. PR body final packet 블록 교체 (snapshot 단계에서 수행됨)
+      6. PR comment 완료 상태 갱신
+      7. PR body/comment 재조회 후 ACCEPTED 표시 검증
+    gh CLI 없음 / PR 없음 → 단계 5~7 skip하되 gate PASS는 허용 (graceful skip).
+
+    Args:
+        state: 활성 pipeline_state dict.
+        acceptance_request: ACCEPTED(CONSUMED)로 갱신된 acceptance_request dict.
+        evidence: ACCEPT evidence 경로 또는 URL.
+    Returns:
+        dict {"status": "PASS"|"BLOCKED", "failure_code": str, "blocked_reason": Optional[str],
+              "gh_skipped": bool, "pr_body_updated": bool}.
+    Raises:
+        없음 — 모든 실패는 BLOCKED 결과 dict로 반환.
+    """
+    if acceptance_request is None or not isinstance(acceptance_request, dict):
+        return {
+            "status": "BLOCKED",
+            "failure_code": "post_accept_request_invalid",
+            "blocked_reason": "acceptance_request가 유효한 dict가 아닙니다.",
+            "gh_skipped": False,
+            "pr_body_updated": False,
+        }
+
+    # 단계 2: post-accept packet(md+json) 재생성. acceptance_request는 이미 CONSUMED/ACCEPT 상태이므로
+    # 재생성된 packet의 표시 상태는 ACCEPTED여야 한다.
+    try:
+        snapshot = _materialize_acceptance_snapshot(state, acceptance_request)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "post_accept_packet_regen_failed",
+            "blocked_reason": f"post-accept packet 재생성 실패: {exc}",
+            "gh_skipped": False,
+            "pr_body_updated": False,
+        }
+
+    # 단계 3: 재생성된 JSON 파싱 재검증
+    json_path = _packet_json_output_path()
+    if not json_path.exists():
+        return {
+            "status": "BLOCKED",
+            "failure_code": "post_accept_json_missing",
+            "blocked_reason": "post-accept verification_json 파일이 생성되지 않았습니다.",
+            "gh_skipped": False,
+            "pr_body_updated": bool(snapshot.get("pr_body_updated")),
+        }
+    try:
+        vj = json.loads(json_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "post_accept_json_parse_failed",
+            "blocked_reason": f"post-accept verification_json 파싱 실패: {exc}",
+            "gh_skipped": False,
+            "pr_body_updated": bool(snapshot.get("pr_body_updated")),
+        }
+
+    # 단계 4: MD/JSON acceptance 표시 상태 일치 검증 (둘 다 ACCEPTED인지).
+    # JSON 측: acceptance.display_status. MD 측: acceptance_request 기준 표시 상태.
+    json_display = ""
+    if isinstance(vj.get("acceptance"), dict):
+        json_display = str(vj["acceptance"].get("display_status") or "").upper()
+    md_display = _resolve_acceptance_display_state(acceptance_request)
+    if json_display != "ACCEPTED" or md_display != "ACCEPTED":
+        return {
+            "status": "BLOCKED",
+            "failure_code": "post_accept_status_mismatch",
+            "blocked_reason": (
+                "post-accept 표시 상태가 ACCEPTED로 일치하지 않습니다. "
+                f"json={json_display or '(없음)'} md={md_display}"
+            ),
+            "gh_skipped": False,
+            "pr_body_updated": bool(snapshot.get("pr_body_updated")),
+        }
+
+    # 단계 5~7: gh CLI / PR 존재 여부에 따른 PR 갱신 + 재조회 검증.
+    if not shutil.which("gh"):
+        # gh 없음 → PR 갱신/재조회 skip, gate PASS 허용 (graceful skip).
+        return {
+            "status": "PASS",
+            "failure_code": "",
+            "blocked_reason": None,
+            "gh_skipped": True,
+            "pr_body_updated": False,
+        }
+
+    current_pr_body = _get_pr_body_text()
+    if current_pr_body is None:
+        # PR 없음 → graceful skip.
+        return {
+            "status": "PASS",
+            "failure_code": "",
+            "blocked_reason": None,
+            "gh_skipped": True,
+            "pr_body_updated": bool(snapshot.get("pr_body_updated")),
+        }
+
+    # 단계 5: PR body packet 블록 교체는 _materialize_acceptance_snapshot이 수행함.
+    # PR이 존재하는데 본문 갱신이 실패했으면 BLOCKED (gate PASS 금지).
+    if not snapshot.get("pr_body_updated"):
+        return {
+            "status": "BLOCKED",
+            "failure_code": "post_accept_pr_body_update_failed",
+            "blocked_reason": (
+                "PR이 존재하지만 PR 본문의 PIPELINE_FINAL_PACKET 블록 갱신에 실패했습니다."
+            ),
+            "gh_skipped": False,
+            "pr_body_updated": False,
+        }
+
+    # 단계 6: PR comment 완료 상태 갱신 (best-effort, 실패해도 swallow).
+    pr_comment_updated = True
+    try:
+        _update_github_acceptance_comment(acceptance_request, evidence)
+    except Exception:
+        pr_comment_updated = False
+
+    # 단계 7: PR body 재조회 후 packet 블록 내 ACCEPTED 표시 검증.
+    rechecked_body = _get_pr_body_text() or ""
+    rechecked_block = _consistency_extract_packet_block(rechecked_body)
+    if not rechecked_block or "ACCEPTED" not in rechecked_block.upper():
+        return {
+            "status": "BLOCKED",
+            "failure_code": "post_accept_pr_recheck_not_accepted",
+            "blocked_reason": (
+                "PR 본문 재조회 결과 PIPELINE_FINAL_PACKET 블록에서 ACCEPTED 표시를 "
+                "확인하지 못했습니다."
+            ),
+            "gh_skipped": False,
+            "pr_body_updated": True,
+        }
+
+    return {
+        "status": "PASS",
+        "failure_code": "",
+        "blocked_reason": None,
+        "gh_skipped": False,
+        "pr_body_updated": True,
+        "pr_comment_updated": pr_comment_updated,
+    }
+
+
 def _get_ci_run_head_sha(run_id: str) -> Optional[str]:
     """GitHub Actions run ID에 해당하는 head SHA를 조회한다.
 
@@ -16779,8 +17011,58 @@ def cmd_gates(args: argparse.Namespace) -> None:
         # Issue 5: 모든 blocker 검증 통과 후 CONSUMED 처리 (D4/prereq/readiness/consistency 이후)
         # 위 _req is None 분기에서 _die 종료 보장 — None 가능성 없음
         assert _req is not None  # nosec B101
-        _consume_acceptance_request(_req, accept_decision)
+        # IMP-20260614-D278 MT-4: provenance_check.approver를 accepted_by로 전달.
+        _accept_approver: Optional[str] = None
+        _prov_state = state.get("acceptance")
+        if isinstance(_prov_state, dict):
+            _prov_check = _prov_state.get("provenance_check")
+            if isinstance(_prov_check, dict):
+                _accept_approver = _prov_check.get("approver")
+        _consume_acceptance_request(_req, accept_decision, accepted_by=_accept_approver)
         _log_event(state, f"acceptance code consumed: request_id={_req.get('request_id')} result={accept_decision}")
+
+        # IMP-20260614-D278 MT-3: ACCEPT는 post-accept finalization(fail-closed)을 거친다.
+        # nonce/provenance 검증 통과 + acceptance_request CONSUMED 갱신 직후, gate PASS 기록
+        # 직전에 packet 재생성 → PR 갱신 → 재조회 검증을 수행한다. 어느 단계라도 실패하면
+        # gate PASS를 기록하지 않고 failure packet 작성 후 BLOCKED로 종료한다.
+        if accept_decision == "ACCEPT":
+            # 최신 acceptance_request(CONSUMED 상태)를 디스크에서 다시 읽어 사용.
+            _final_req = _load_acceptance_request() or _req
+            _finalize_result = _finalize_post_accept(state, _final_req, str(args.evidence or ""))
+            if _finalize_result.get("status") != "PASS":
+                _final_failure_code = str(
+                    _finalize_result.get("failure_code") or "post_accept_finalization_failed"
+                )
+                _final_reason = str(
+                    _finalize_result.get("blocked_reason")
+                    or "post-accept finalization 실패 — gate PASS를 기록하지 않습니다."
+                )
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", "<result-path>"],
+                    note=_final_reason,
+                    status="BLOCKED", phase="harness",
+                    failure_code=_final_failure_code,
+                    failure_category="missing_evidence",
+                    summary_ko=_final_reason,
+                    expected="post-accept packet 재생성 + PR 갱신 + 재조회 ACCEPTED 확인 모두 성공",
+                    actual=_final_failure_code,
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=[
+                        "PR이 열려 있고 gh CLI 인증이 유효한지 확인하세요.",
+                        "python pipeline.py gates request-accept --evidence <결과물-경로> 로 새 코드를 발급받으세요.",
+                        "사용자가 코드를 입력하면 pipeline.py gates accept를 다시 실행하세요.",
+                    ],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die(
+                    f"[POST-ACCEPT FINALIZATION BLOCKED] {_final_reason} "
+                    f"({_final_failure_code})\n"
+                    "  gate PASS가 기록되지 않았습니다. 보완 후 다시 시도하세요."
+                )
+
         gate_status = "PASS" if accept_decision == "ACCEPT" else "FAIL"
         report = {
             "schema_version": 1,
