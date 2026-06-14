@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-14T02:15:02Z",
+  "generated_at": "2026-06-14T03:32:41Z",
   "pipeline_id": "IMP-20260614-D278",
   "phase": "build",
   "phase_status": "DONE",
-  "commit_hint": "705f10cfbb892824a198def1e70579438d13826e",
+  "commit_hint": "d31b6df5f4d2706b620217e64efee570123a7a99",
   "state": {
     "current_phase": "harness",
-    "phase_completed_at": "2026-06-14T02:14:50Z",
+    "phase_completed_at": "2026-06-14T03:28:58Z",
     "report_file": null,
     "evidence": "N/A"
   },
   "agent_run": {
-    "run_id": "build-2e1778e0a883959c",
+    "run_id": "build-bbd5e135e6e97ec8",
     "phase": "build",
     "agent_id": "build-agent",
     "status": "COMPLETED",
     "output_file": "build_report.xml",
     "output_sha256": "abf37fcd189955a28621baf32d67431fa17256feceec2972084adbbdeaee20fe",
-    "receipt_path": ".pipeline/phase_evidence/IMP-20260614-D278/build/agent_receipt_build-2e1778e0a883959c.json",
-    "receipt_sha256": "09652f53b123d9551c8b6efe3663d9023e6eb0da93d8effbb42c7bbf901ab257",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260614-D278/build/agent_receipt_build-bbd5e135e6e97ec8.json",
+    "receipt_sha256": "4a93a224c7ecf77fe91157eb25694556f2103948091708fa8f3c9b945d0d4af2",
     "used_by_phase": "build",
-    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260614-D278\\build\\build-2e1778e0a883959c.json"
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260614-D278\\build\\build-bbd5e135e6e97ec8.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\IMP-20260614-D278\\build\\build-2e1778e0a883959c.json",
-      "path": ".pipeline/phase_evidence/IMP-20260614-D278/build/agent_receipt_build-2e1778e0a883959c.json",
-      "sha256": "09652f53b123d9551c8b6efe3663d9023e6eb0da93d8effbb42c7bbf901ab257",
+      "source": ".pipeline\\agent_receipts\\IMP-20260614-D278\\build\\build-bbd5e135e6e97ec8.json",
+      "path": ".pipeline/phase_evidence/IMP-20260614-D278/build/agent_receipt_build-bbd5e135e6e97ec8.json",
+      "sha256": "4a93a224c7ecf77fe91157eb25694556f2103948091708fa8f3c9b945d0d4af2",
       "size_bytes": 508,
       "requires_force_add": true
     }
