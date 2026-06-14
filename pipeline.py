@@ -11467,7 +11467,6 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     pr_url = str(evidence.get("pr_url", "") or "")
     pr_head_sha = str(evidence.get("pr_head_sha", "") or "")
     ci_run_id = str(evidence.get("ci_run_id", "") or "")
-    actions_url = str(evidence.get("actions_url", "") or "")
     changed_files = list(evidence.get("changed_files") or [])
     gate_status = dict(evidence.get("gate_status") or {})
     ac_table = evidence.get("ac_fulfillment_table")
