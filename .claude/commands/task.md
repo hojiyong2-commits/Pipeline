@@ -6,7 +6,7 @@
 
 0. 사용자에게 보이는 세션 언어는 항상 쉬운 한국어다. 진행 업데이트, 도구 설명, Bash/PowerShell 설명, 최종 보고, 승인/거절 질문은 한국어로 쓴다. `Bash`, `GitHub Actions`, 명령어, commit SHA, `ACCEPT/REJECT` 같은 식별자는 그대로 둘 수 있지만 바로 옆에 한국어 설명을 붙인다.
 1. 오케스트레이터는 제품 코드나 산출물 파일을 직접 수정하지 않는다.
-2. 오케스트레이터가 직접 spawn하는 agent는 `pm-agent`뿐이다.
+2. 오케스트레이터가 직접 spawn하는 agent는 `pm-planner-agent`와 `pipeline-manager-agent`뿐이다.
 3. PM은 계획과 위임만 한다. PM이 Dev/QA/Build/Harness/Architect 산출물을 흉내 내면 프로토콜 위반이다.
 4. `pipeline.py harness --score ...`는 완료 경로가 아니다. Three-Gate에서는 차단된다.
 5. 최종 COMPLETE는 PM/Dev/QA/Build phase attestation, Technical, Oracle, GitHub CI, User Acceptance가 모두 PASS되어야 가능하다.
@@ -20,7 +20,7 @@ python pipeline.py new --type FEAT --desc "[사용자 요청 요약]"
 python pipeline.py status
 ```
 
-그 다음 `pm-agent`를 `mode: pipeline_manager_round1`로 호출한다. PM prompt에는 반드시 다음을 포함한다:
+그 다음 `pm-planner-agent`를 호출하여 step_plan을 받고, 이후 `pipeline-manager-agent`에 인수한다. PM prompt에는 반드시 다음을 포함한다:
 
 - pipeline_id
 - 사용자 원문 요청
@@ -49,10 +49,15 @@ python pipeline.py contract freeze
 PM 완료 기록:
 
 ```powershell
-python pipeline.py agent start --phase pm
-# 출력된 token은 pm-agent에게만 전달
-python pipeline.py agent finish --run-id <pm_run_id> --token <token> --output-file step_plan.xml
-python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --agent-run-id <pm_run_id>
+python pipeline.py agent start --phase pm_planner
+# 출력된 token은 pm-planner-agent에게만 전달
+python pipeline.py agent finish --run-id <planner_run_id> --token <token> --output-file step_plan.xml
+
+python pipeline.py agent start --phase pipeline_manager
+# 출력된 token은 pipeline-manager-agent에게만 전달
+python pipeline.py agent finish --run-id <manager_run_id> --token <token> --output-file manager_handoff.xml
+
+python pipeline.py done --phase pm --report-file step_plan.xml --decomp --clarification --roadmap --planner-run-id <planner_run_id> --manager-run-id <manager_run_id> --manager-report manager_handoff.xml
 python pipeline.py gates prepare-phase --phase pm
 git add -f .pipeline/phase_attestation_request.json .pipeline/phase_evidence
 git commit -m "Add pm phase attestation request"
@@ -64,23 +69,14 @@ PM phase CI가 PASS되기 전에는 Dev로 넘어가지 않는다.
 
 PM `done`은 `pipeline.py` hard gate다. `step_plan.xml`에 `<design_confirmation>`이 없거나, 질문이 추상적이거나, 장점/단점/추천안/사용자 답변이 빠지면 Dev로 넘어갈 수 없다.
 
-## Codex Review Gate (IMP-20260516-A627 이후 필수)
+## Codex Review / GPT Advisory (수동 진단용 — IMP-20260612-8104 이후 hard gate 해제)
 
-Dev/QA 진입 전 `codex_review_result.json`이 있어야 한다. 파일 없으면 `python pipeline.py check --phase dev` 또는 `check --phase qa`가 자동으로 차단된다.
+Codex Review와 GPT advisory는 **manual red-team diagnostic**으로 전환되었습니다. Dev/QA 진입을 자동 차단하지 않습니다.
 
-- Codex ACCEPT는 기술 승인(technical approval). 사용자는 마지막에 결과물만 최종 확인(ACCEPT/REJECT)
-- 6개 stage: `plan` → `scope` → `code` → `hygiene` → `pr` → `rca`
-- Dev 진입 전: `plan` 또는 `scope` ACCEPT 필요 / QA 진입 전: `code` ACCEPT 필요
-- `review_model`은 반드시 `"GPT-5.5"` — 다른 모델은 허용되지 않음
-- Codex REJECT = 해당 phase FAIL + failure_packet.json 생성(owner/return_phase 포함)
-- legacy pipeline waiver: `python pipeline.py check --phase dev --codex-review-waiver legacy-bootstrap`
-
-```powershell
-# Dev 진입 전 Codex plan review 실행
-python pipeline.py review codex-run --stage plan --review-model GPT-5.5 --reviewer [ID]
-# 확인
-python pipeline.py check --phase dev
-```
+- `codex_review_result.json` 없어도 `python pipeline.py check --phase dev`/`check --phase qa`가 차단되지 않습니다.
+- 수동 실행 (선택): `python pipeline.py advisory gpt-code` / `advisory gpt-contract` (`ENABLE_GPT_ADVISORY=1` 환경 변수 필요)
+- CRITICAL 발견이 COMPLETE를 막으려면 `ENABLE_GPT_ADVISORY_REQUIRED=1` 필요 (기본값: off — 자동 차단 없음)
+- `--codex-review-waiver` 인자는 더 이상 필요하지 않습니다 — hard gate가 해제되었습니다.
 
 ## Phase 2 — Dev With Module Gates
 

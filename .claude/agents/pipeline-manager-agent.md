@@ -1,4 +1,5 @@
 ---
+name: pipeline-manager-agent
 model: claude-sonnet-4-6
 description: Pipeline Manager Agent — phase 순서 관리, agent 호출, pipeline.py 기록, GitHub attestation 관리
 ---

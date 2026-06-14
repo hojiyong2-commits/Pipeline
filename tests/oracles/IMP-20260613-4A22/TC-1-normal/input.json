@@ -1,0 +1,5 @@
+{
+  "test": "pm_planner_agent_in_registry",
+  "md_path": ".claude/agents/pm-planner-agent.md",
+  "phase_id": "pm_planner"
+}

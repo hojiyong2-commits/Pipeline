@@ -317,14 +317,22 @@ def test_tc1_request_accept_issues_nonce_and_records_shas(tmp_path):
             assert key in req, f"oracle 필수 key '{key}' 누락"
 
 
-# TC-1b (normal): requirements_tracking.enabled=True + ac_completeness 캐시 완료 상태에서
+# TC-1b (normal): requirements_tracking.enabled=True + AC 충족(구현 근거 + QA 검증) 상태에서
 # gates request-accept가 성공하고 nonce가 발급됨을 확인 (결함 D 커버리지 보완)
 def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
-    """TC-1b: requirements_tracking.enabled=True + ac_completeness 캐시가 complete=True인 경우
+    """TC-1b: requirements_tracking.enabled=True + structured AC가 live 검사에서 모두 PASS인 경우
     gates request-accept가 성공(exit 0)하고 acceptance_request.json에 nonce가 기록됨을 확인.
 
+    IMP-20260613-4A22 Round 3: Round 2에서 _validate_ac_table_before_request_accept가
+    ac_completeness 캐시/enabled 플래그를 신뢰하지 않고 항상 _build_ac_fulfillment_table을
+    live로 재조립하도록 바뀌었다. 따라서 캐시만 complete=True로 두는 것으로는 더 이상 통과하지
+    못한다. live 검사가 PASS 하려면 각 AC에 (1) 구현 근거(scope.implemented_tasks의
+    implementation_evidence)와 (2) QA 검증(module qa report XML의 ac_verification)이 모두
+    기록되어 있어야 한다. 본 테스트는 이 두 근거를 실제 state/파일로 제공하여 live 검사 PASS →
+    nonce 발급 경로를 검증한다.
+
     TC-1/TC-2의 bootstrap_pipeline_legacy가 requirements_tracking.enabled=False로 우회하므로
-    실제 ac_completeness 캐시 경로를 검증하지 못하는 결함 D를 보완한다.
+    실제 AC 충족 경로를 검증하지 못하는 결함 D를 보완한다.
 
     oracle: tests/oracles/IMP-20260610-8C3B/normal_snapshot_fresh/
     CLI Evidence Contract: PIPELINE_STATE_PATH 격리 + final_state assertion.
@@ -362,7 +370,7 @@ def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
         "complete": True,
     }
 
-    # structured_acceptance_criteria에 충족된 AC 항목 추가
+    # structured_acceptance_criteria에 AC-1 항목 추가
     state["structured_acceptance_criteria"] = [
         {
             "id": "AC-1",
@@ -372,6 +380,50 @@ def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
             "user_visible": True,
         }
     ]
+
+    # IMP-20260613-4A22 Round 3: live AC 검사 PASS를 위해 AC-1에 대한
+    # (1) 구현 근거와 (2) QA 검증을 실제 state/파일로 제공한다.
+    # _get_qa_verification_for_ac는 module qa report XML 파일을 파싱하므로
+    # ac_verification 블록이 담긴 XML을 tmp_path에 작성하고 경로를 연결한다.
+    qa_report = tmp_path / "module_qa_MT-1.xml"
+    qa_report.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<module_qa_report>\n"
+        "  <mt_id>MT-1</mt_id>\n"
+        "  <verdict>PASS</verdict>\n"
+        "  <ac_verification>\n"
+        '    <ac id="AC-1" status="PASS">\n'
+        "      <verification>snapshot이 tempfile+os.replace로 원자적으로 기록됨을 확인</verification>\n"
+        "    </ac>\n"
+        "  </ac_verification>\n"
+        "</module_qa_report>\n",
+        encoding="utf-8",
+    )
+    state["module_gates"]["modules"] = {
+        "MT-1": {
+            "dev": {
+                "status": "DONE",
+                "scope": {
+                    "files": ["pipeline.py"],
+                    "implemented_tasks": [
+                        {
+                            "mt_id": "MT-1",
+                            "implemented_ac": ["AC-1"],
+                            "changed_files": ["pipeline.py"],
+                            "implementation_evidence": [
+                                "_materialize_acceptance_snapshot가 tempfile+os.replace로 "
+                                "snapshot을 원자적으로 기록"
+                            ],
+                        }
+                    ],
+                },
+            },
+            "qa": {
+                "status": "PASS",
+                "report_file": str(qa_report),
+            },
+        }
+    }
 
     with open(state_file, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
@@ -646,6 +698,21 @@ def test_tc4b_integration_not_pass_with_cache_blocked(tmp_path):
     # module_gates.integration.status = FAIL (또는 PENDING) — PASS가 아님
     state.setdefault("module_gates", {})
     state["module_gates"]["integration"] = {"status": "FAIL"}
+
+    # IMP-20260613-4A22 Round 3: Round 2에서 _validate_ac_table_before_request_accept가
+    # ac_completeness 캐시/enabled 플래그에 의존하지 않고 항상 live로 AC 충족표를 재조립하도록
+    # 변경되었다. live 검사가 동작하려면 structured_acceptance_criteria가 실제로 존재해야 한다.
+    # 구현 근거/QA 검증이 없는 pending AC를 두어 live 검사가 PENDING을 감지하게 한다.
+    # PENDING AC + integration FAIL → "module integrate가 PASS 상태가 아닙니다" 메시지로 차단된다.
+    state["structured_acceptance_criteria"] = [
+        {
+            "id": "AC-1",
+            "text": "snapshot materialization이 원자적으로 완료된다",
+            "must_verify": True,
+            "source": "user",
+            "user_visible": True,
+        }
+    ]
 
     with open(state_file, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)

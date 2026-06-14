@@ -9426,6 +9426,73 @@ def _check_module_qa_ac_verification(
         }
 
 
+def _cmd_pm_reparse_ac(args: argparse.Namespace) -> int:
+    """pm re-parse-ac: step_plan.xml에서 AC를 재파싱하여 pipeline_state.json 갱신.
+
+    IMP-20260613-4A22 Round 3: step_plan.xml의 <acceptance_criteria>를 다시 파싱하여
+    state의 structured_acceptance_criteria를 갱신한다. AC 텍스트 인코딩 손상 복구용.
+    기존 헬퍼(_read_text_fallback / _extract_xml_element / _parse_structured_ac /
+    _load / _save)만 재사용한다.
+
+    Args:
+        args: argparse Namespace. args.step_plan에 step_plan XML 경로.
+    Returns:
+        0=성공, 1=실패.
+    """
+    step_plan_path = Path(getattr(args, "step_plan", "step_plan.xml") or "step_plan.xml")
+
+    # 1. step_plan.xml 읽기 (4-encoding fallback)
+    try:
+        text = _read_text_fallback(step_plan_path)
+    except OSError:
+        print(f"[PIPELINE ERROR] {step_plan_path} 파일을 읽을 수 없습니다.")
+        return 1
+
+    # 2. step_plan XML element 추출
+    step_plan_element = _extract_xml_element(text, "step_plan")
+    if step_plan_element is None:
+        print(f"[PIPELINE ERROR] {step_plan_path}에서 <step_plan> 요소를 찾을 수 없습니다.")
+        return 1
+
+    # 3. structured AC 파싱
+    parsed_acs = _parse_structured_ac(step_plan_element)
+    if not parsed_acs:
+        print(f"[PIPELINE ERROR] {step_plan_path}에서 <acceptance_criteria> 또는 AC 항목을 찾을 수 없습니다.")
+        return 1
+
+    # 4. state 갱신
+    state = _load()
+    if state is None:
+        print("[PIPELINE ERROR] 활성 파이프라인이 없습니다. pipeline_state.json을 찾을 수 없습니다.")
+        return 1
+    if not isinstance(state.get("atomic_plan"), dict):
+        state["atomic_plan"] = {}
+    state["atomic_plan"]["structured_acceptance_criteria"] = parsed_acs
+    state["structured_acceptance_criteria"] = parsed_acs
+    if not isinstance(state.get("requirements_tracking"), dict):
+        state["requirements_tracking"] = {}
+    state["requirements_tracking"]["enabled"] = True
+    _save(state)
+
+    print(f"[PM RE-PARSE-AC] {len(parsed_acs)}개 AC를 {step_plan_path}에서 재파싱하여 state 갱신 완료.")
+    return 0
+
+
+def cmd_pm(args: argparse.Namespace) -> None:
+    """pm 서브커맨드 dispatcher.
+
+    Args:
+        args: argparse Namespace. args.pm_action에 하위 액션 이름.
+    """
+    action = getattr(args, "pm_action", None)
+    if action == "re-parse-ac":
+        rc = _cmd_pm_reparse_ac(args)
+        if rc != 0:
+            sys.exit(rc)
+        return
+    _die(f"[PIPELINE ERROR] 알 수 없는 pm 액션: {action!r}", exit_code=2)
+
+
 def cmd_module(args: argparse.Namespace) -> None:
     """Incremental module gate for PM micro_tasks."""
     action = args.module_action
@@ -10645,9 +10712,16 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     ci_run_id = str(evidence.get("ci_run_id", "") or "")
     actions_url = str(evidence.get("actions_url", "") or "")
     changed_files = list(evidence.get("changed_files") or [])
-    gate_status = evidence.get("gate_status") or {}
+    gate_status = dict(evidence.get("gate_status") or {})
     ac_table = evidence.get("ac_fulfillment_table")
     acceptance_request = evidence.get("acceptance_request")
+
+    # acceptance_request.json이 PENDING이면 gate_status.acceptance를 PENDING으로 표시
+    # (이전 REJECT로 pipeline_state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
+    # _build_verification_json()와 동일 로직 — 두 함수가 같은 상태를 보여야 함
+    _ar_pending = acceptance_request if isinstance(acceptance_request, dict) else {}
+    if _ar_pending.get("status") == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
+        gate_status["acceptance"] = "PENDING"
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
     # ci_head_sha: github_actions.head_sha (acceptance_request 또는 JSON 파일에서)
@@ -11146,6 +11220,10 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         reject_example = f"REJECT-{pipeline_id}-{accept_nonce}: 이유"
         accept_request_id = str(acceptance_request.get("request_id", "") or "")
         accept_status = str(acceptance_request.get("status", "PENDING") or "PENDING")
+    # acceptance_request.json이 PENDING이면 gates.acceptance를 PENDING으로 표시
+    # (이전 REJECT로 pipeline state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
+    if accept_status == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
+        gate_status["acceptance"] = "PENDING"
 
     # 새 구조화 객체
     pr_obj: Dict[str, Any] = {
@@ -14228,18 +14306,24 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                             verifications.append(f"{mt_id}: {status} — {ver_text[:150]}")
 
             # Format 4: <ac_verification><criterion id="AC-X" status="PASS"><check>...</check></criterion>
+            # Format 4b: <ac_verification><criterion ac_id="AC-X"><verification>...</verification></criterion>
             # module_qa report에서 생성된 <criterion> 태그 직접 파싱
             if ac_ver is not None:
                 for crit in ac_ver.findall("criterion"):
-                    if crit.get("id") == ac_id:
-                        status = crit.get("status", "?")
+                    # id 또는 ac_id 속성으로 매칭
+                    crit_id = crit.get("id") or crit.get("ac_id")
+                    if crit_id == ac_id:
+                        status = crit.get("status", "PASS")
                         check_elem = crit.find("check")
                         evidence_elem = crit.find("evidence")
+                        ver_elem = crit.find("verification")
                         ver_text = ""
                         if check_elem is not None and check_elem.text:
                             ver_text = check_elem.text.strip()[:150]
                         elif evidence_elem is not None and evidence_elem.text:
                             ver_text = evidence_elem.text.strip()[:150]
+                        elif ver_elem is not None and ver_elem.text:
+                            ver_text = ver_elem.text.strip()[:150]
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text}")
 
@@ -14286,19 +14370,18 @@ def _build_ac_fulfillment_table(state: Dict[str, Any]) -> Optional[List[Dict[str
 def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[str]:
     """AC 충족표에 PENDING 항목이 있으면 차단 메시지 반환. 정상이면 None.
 
-    IMP-20260606-D9F4: legacy 파이프라인(requirements_tracking.enabled=false)은
-    검사 생략. AC table이 비어있어도 검사 생략.
-    BUG-20260609-2044 MT-1/MT-2: verification 없음(검증 없음)과 impl_evidence 없음(미완료)을
-    별도 메시지로 구분하여 BLOCKED 처리.
-    IMP-20260610-8C3B MT-2: state["ac_completeness"] 캐시가 있으면 캐시를 우선 사용하여
-    _build_ac_fulfillment_table 재실행 비용을 제거한다.
-    IMP-20260610-8C3B AC-4 (3차 REJECT 수정): module_gates.integration.status == "PASS"를
-    ac_completeness 캐시 확인보다 먼저 검증하여 stale 캐시 우회를 방지한다.
+    IMP-20260613-4A22 Round 4:
+    - structured AC(requirements_tracking.enabled=true)가 있는 파이프라인에서만 integration.status를 확인한다.
+    - legacy/무AC 파이프라인(structured AC 없음)은 기존처럼 즉시 None 반환 (backward-compat 복원).
+    - structured AC가 있는 경우 integration.status 확인을 AC 결과보다 먼저 수행한다.
     """
-    if not state.get("requirements_tracking", {}).get("enabled"):
-        return None  # legacy 파이프라인은 검사 생략
+    # 1. Live rebuild 먼저 — structured AC 유무를 판별하여 legacy short-circuit 복원
+    #    stale 캐시나 requirements_tracking.enabled 플래그에 의존하지 않음
+    ac_table_live = _build_ac_fulfillment_table(state)
+    if ac_table_live is None:
+        return None  # structured AC 없음 — legacy/무AC 파이프라인은 integration 검사도 생략
 
-    # AC-4: module_gates.integration.status == "PASS" 확인 (캐시보다 먼저)
+    # 2. structured AC가 있는 파이프라인에서만 integration gate 확인 (AC 결과와 독립)
     integration_status = (
         state.get("module_gates", {})
         .get("integration", {})
@@ -14311,23 +14394,14 @@ def _validate_ac_table_before_request_accept(state: Dict[str, Any]) -> Optional[
             "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
         )
 
-    # AC-4: ac_completeness 캐시 확인 (integration PASS 후에만 의미 있음)
-    ac_completeness = state.get("ac_completeness")
-    if not isinstance(ac_completeness, dict):
-        return (
-            "[PIPELINE ERROR] ac_completeness 캐시가 없습니다.\n"
-            "  module integrate PASS가 완료되어야 request-accept를 실행할 수 있습니다.\n"
-            "  python pipeline.py module integrate --result PASS --report-file integration_report.xml"
-        )
+    pending_live = [e["ac_id"] for e in ac_table_live if e.get("result") != "PASS"]
+    if not pending_live:
+        return None  # 모든 AC PASS
 
-    pending_ids = ac_completeness.get("pending_ids") or []
-    if not pending_ids:
-        return None  # 캐시에 PENDING 없음 — 검사 통과
-
-    # 캐시에 PENDING 항목이 있으면 차단
-    detail = f"  - 미완료 항목 (캐시 기준): {', '.join(str(p) for p in pending_ids)}"
+    total = len(ac_table_live)
+    detail = f"  - 미완료 항목 ({len(pending_live)}/{total}): {', '.join(str(p) for p in pending_live)}"
     return (
-        f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다.\n"
+        f"[PIPELINE ERROR] 요구사항 충족표에 미완료 항목이 있습니다 (live 검사).\n"
         f"{detail}\n"
         "구현 근거와 검증 결과가 모두 기록된 후 gates request-accept를 실행하세요."
     )
@@ -17933,6 +18007,13 @@ def build_parser() -> argparse.ArgumentParser:
                                   help="Backward-compatible no-op. Acceptance diagnostics are automatic; final user decision is gates accept.")
 
     # incremental module gates
+    # pm utilities (re-parse-ac)
+    p_pm = sub.add_parser("pm", help="PM utility actions")
+    pmsub = p_pm.add_subparsers(dest="pm_action", required=True)
+    p_pm_reparse = pmsub.add_parser("re-parse-ac", help="step_plan.xml에서 AC를 재파싱하여 state 갱신")
+    p_pm_reparse.add_argument("--step-plan", dest="step_plan", default="step_plan.xml",
+                              help="step_plan XML 파일 경로")
+
     p_module = sub.add_parser("module", help="Incremental Dev/QA gates for each PM micro_task")
     msub = p_module.add_subparsers(dest="module_action", required=True)
     p_module_design = msub.add_parser("design", help="Record detailed design for one micro_task")
@@ -21262,6 +21343,7 @@ COMMAND_MAP = {
     "budget":               cmd_budget,
     "golden":               cmd_golden,
     "hygiene":              cmd_hygiene,
+    "pm":                   cmd_pm,
 }
 
 
