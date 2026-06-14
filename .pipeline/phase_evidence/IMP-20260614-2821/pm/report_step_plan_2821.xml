@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <audit_date>2026-06-14</audit_date>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>6</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <modules_identified>6</modules_identified>
+  <clarification_triggers_checked>
+    <trigger name="unspecified_input_format">N/A — 입력은 pipeline_state/evidence_inventory/oracle_manifest JSON</trigger>
+    <trigger name="unclear_output_form">CLEAR — 출력 형식: state["workspace_hygiene"], final packet, status</trigger>
+    <trigger name="multiple_viable_tech_choices">CLEAR — 기존 _validate_evidence_provenance 확장, 신규 함수 추가</trigger>
+    <trigger name="unspecified_edge_case">CLEAR — permission denied, git 실패, gh CLI 없음 모두 fail-closed</trigger>
+    <trigger name="unspecified_blast_radius">CLEAR — pipeline.py, pipeline-manager-agent.md, AGENTS.md, tests/e2e/</trigger>
+    <trigger name="visual_reference_missing">N/A — 시각적 결과물 없음</trigger>
+    <trigger name="log_result_analysis">N/A — 로그 분석 아님</trigger>
+  </clarification_triggers_checked>
+  <judgment_calls>
+    <call id="JC-1">
+      <question>cleanup_only 파일 목록을 어디에 정의할 것인가?</question>
+      <resolution>기존 _is_cleanup_only_artifact() SSoT 함수를 확장하고, WORKSPACE_HYGIENE_CLEANUP_PATTERNS SSoT 상수를 추가한다.</resolution>
+    </call>
+    <call id="JC-2">
+      <question>workspace_hygiene 검사 시점은 언제인가?</question>
+      <resolution>요청대로 gates request-accept 직전(preflight)과 gates accept nonce consume 직전(preflight)에 실행한다. post-accept에서는 sanity recheck만.</resolution>
+    </call>
+  </judgment_calls>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260614-2821</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 핵심 gate 로직 변경 + 12개 E2E 테스트 + 문서 업데이트. 다수 파일, 다수 함수, 100줄+ 변경 예상.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>4</expected_changed_files>
+      <expected_changed_functions>6</expected_changed_functions>
+      <expected_changed_lines>450</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 취향 질문(변수명, 코드 스타일)은 묻지 않고 유지보수성 기준으로 정리했습니다. 사용자가 오케스트레이터 프롬프트에서 모든 설계를 명시하였으므로 추가 clarification은 불필요합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>workspace hygiene 검사 함수를 기존 _validate_evidence_provenance 확장 vs 별도 _check_workspace_hygiene 함수로 분리할까요?</user_facing_question>
+        <evidence>오케스트레이터 프롬프트에서 evidence_integrity와 workspace_hygiene 역할 분리를 명시함</evidence>
+        <why_it_matters>기존 함수와 새 함수 책임 분리가 명확해야 유지보수와 테스트가 쉽습니다</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>별도 _check_workspace_hygiene 함수 신설</label>
+            <benefit>책임 분리 명확, 테스트 용이, 기존 함수 복잡도 유지</benefit>
+            <cost>새 함수 추가로 코드량 증가</cost>
+          </option>
+          <option id="B">
+            <label>기존 _validate_evidence_provenance 확장</label>
+            <benefit>코드 중복을 최소화하여 신규 파일 추가 없이 확장 가능</benefit>
+            <cost>함수가 너무 커지고 책임이 혼재됨</cost>
+          </option>
+        </options>
+        <user_answer>오케스트레이터 프롬프트에서 "evidence_integrity와 역할을 분리해줘"라고 명시하였으므로 옵션 A(별도 함수 분리)로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">COMPLETE 직전 workspace/evidence hygiene gate를 근본 개선</requirement>
+    <requirement id="REQ-2">tests/oracles/pipeline_id/** untracked 파일이면 BLOCKED</requirement>
+    <requirement id="REQ-3">oracle_manifest 참조 파일 missing/untracked/SHA mismatch면 BLOCKED</requirement>
+    <requirement id="REQ-4">evidence_inventory protected 파일 missing/untracked/SHA mismatch면 BLOCKED</requirement>
+    <requirement id="REQ-5">cleanup_only 파일은 BLOCKED 아님, WARN으로 분류</requirement>
+    <requirement id="REQ-6">state["workspace_hygiene"] SSoT로 저장</requirement>
+    <requirement id="REQ-7">final packet JSON/MD/PR body에 workspace_hygiene 섹션 포함</requirement>
+    <requirement id="REQ-8">pipeline.py status에 cleanup_only warning 표시</requirement>
+    <requirement id="REQ-9">gates request-accept 직전 preflight, gates accept nonce consume 직전 preflight 실행</requirement>
+    <requirement id="REQ-10">12개 E2E 테스트 구현 (subprocess 기반 Real CLI)</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._check_workspace_hygiene</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_workspace_hygiene</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>새 함수 _check_workspace_hygiene 구현 — tests/oracles/pipeline_id/** untracked 탐지, protected evidence git/PR 검증, cleanup_only 분류</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline._cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_request_accept</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>gates request-accept 핸들러에 _check_workspace_hygiene preflight 통합, BLOCKED 시 승인 코드 발급 금지</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-7, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._cmd_gates_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>gates accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>gates.*accept.*--result</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>gates accept 핸들러에 nonce consume 전 _check_workspace_hygiene preflight 재실행, BLOCKED 시 acceptance_request CONSUMED 금지</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>pipeline._build_verification_json, pipeline._build_final_packet_content, pipeline.cmd_status</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_build_verification_json</site>
+        <site>_build_final_packet_content</site>
+        <site>cmd_status</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _build_verification_json|def _build_final_packet_content|def cmd_status</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>state["workspace_hygiene"] SSoT 저장 + final packet JSON/MD에 workspace_hygiene 섹션 추가 + status 출력에 cleanup_only warning 표시</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-10, AC-11, AC-12</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>test_workspace_hygiene_2821</affected_function>
+      <target_files>
+        <file>tests/e2e/test_workspace_hygiene_2821.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_workspace_hygiene_2821</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>12개 E2E 테스트 구현 — TC-1~TC-12 subprocess 기반 Real CLI 검증, PIPELINE_STATE_PATH 격리</change_summary>
+      <line_estimate>350</line_estimate>
+      <covers_ac>AC-13</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>none</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>workspace.*hygiene|evidence.*hygiene</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline-manager-agent.md에 COMPLETE 전 workspace/evidence hygiene gate 절차 추가</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-14</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>tests/oracles/pipeline_id/** 아래 파일이 untracked이면 gates request-accept가 BLOCKED를 반환하고 failure_code=untracked_oracle_evidence를 출력한다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>oracle_manifest 참조 input/expected 파일이 missing이면 failure_code=protected_evidence_missing으로 BLOCKED</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>oracle_manifest 참조 input/expected 파일이 git tracked가 아니면 failure_code=protected_evidence_untracked으로 BLOCKED</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>evidence_inventory에서 protected로 분류된 파일 SHA mismatch면 failure_code=protected_evidence_sha_mismatch로 BLOCKED</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>git status/git ls-files 조회 실패가 protected path 판정에 영향을 주면 failure_code=workspace_hygiene_check_failed로 BLOCKED (fail-closed)</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>permission denied가 protected path 판정에 영향을 주면 BLOCKED (fail-closed)</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 직전에 preflight hygiene 검사를 실행하고, protected oracle/evidence 문제가 있으면 승인 코드가 발급되지 않는다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>build_report.xml, oracle_result_dump.txt, pr_body_*.txt, *_dump.txt, .claude/worktrees/, .pytest_tmp_* 등 cleanup_only 파일만 있으면 BLOCKED 아님, WARN으로 분류된다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>gates accept에서 nonce consume/post-accept finalization 전에 다시 hygiene preflight를 실행하고, 여기서 막히면 acceptance_request를 CONSUMED로 바꾸지 않는다</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>workspace hygiene 결과가 state["workspace_hygiene"]에 저장되고 status/blocking_items/cleanup_only_items/protected_evidence_count/tracked_oracle_count/untracked_oracle_count/pr_included_protected_count/cleanup_command/checked_at 필드를 포함한다</text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true">
+      <text>human_acceptance_packet.json과 human_acceptance_packet.md에 workspace_hygiene 섹션이 포함된다</text>
+    </criterion>
+    <criterion id="AC-12" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py status 출력에 cleanup_only warning과 삭제 가능 목록 + PowerShell 정리 명령 예시가 표시된다</text>
+    </criterion>
+    <criterion id="AC-13" must_verify="true" source="user" user_visible="true">
+      <text>tests/e2e/test_workspace_hygiene_2821.py에 TC-1~TC-12 12개 E2E 테스트가 구현되고 모두 PASS한다</text>
+    </criterion>
+    <criterion id="AC-14" must_verify="true" source="user" user_visible="true">
+      <text>pipeline-manager-agent.md에 COMPLETE 전 workspace/evidence hygiene gate 절차가 문서화된다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 프로젝트 기준 Python 버전</python_version>
+  <forbidden>
+    <item>자동 git add 금지</item>
+    <item>cleanup_only 자동 삭제 금지</item>
+    <item>oracle/evidence 누락을 warning으로 완화 금지</item>
+    <item>D278 Post-Accept Finalization SSoT 완화 금지</item>
+    <item>Fast Path, Oracle Gate, Evidence Inventory Gate 완화 금지</item>
+  </forbidden>
+  <handover_spec>
+    <producer>dev-agent</producer>
+    <consumer>qa-agent</consumer>
+    <expected_status>READY_FOR_QA</expected_status>
+    <files>pipeline.py, tests/e2e/test_workspace_hygiene_2821.py, .claude/agents/pipeline-manager-agent.md</files>
+  </handover_spec>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
