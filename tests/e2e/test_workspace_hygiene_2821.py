@@ -213,6 +213,7 @@ def test_tc1_untracked_oracle_blocks_request_accept(oracle_fixture, tmp_path):
     BLOCKED되고 failure_code=untracked_oracle_evidence가 출력된다."""
     fx = oracle_fixture
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     bootstrap_state(env, fx.pid)
     fx.add_oracle_file("TC-1/input.json", '{"x": 1}')
 
@@ -228,6 +229,7 @@ def test_tc1_untracked_oracle_blocks_request_accept(oracle_fixture, tmp_path):
     wh = final_state.get("workspace_hygiene") or {}
     assert wh.get("status") == "BLOCKED", wh
     assert wh.get("untracked_oracle_count", 0) >= 1, wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
 # TC-2: tracked oracle, no issues → hygiene OK (state 저장 확인)
@@ -235,6 +237,7 @@ def test_tc2_tracked_oracle_hygiene_ok(tmp_path):
     """실제 저장소에 이미 tracked 상태인 oracle 파일을 사용하는 파이프라인은
     hygiene OK가 되어야 한다. (이 저장소의 기존 tracked oracle을 가진 pid 사용)"""
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     # oracle dir이 없고 oracle_manifest도 없는 합성 pid → 검사 대상 없음 → OK
     pid = synthetic_pid()
     bootstrap_state(env, pid)
@@ -251,6 +254,7 @@ def test_tc2_tracked_oracle_hygiene_ok(tmp_path):
     wh = final_state.get("workspace_hygiene") or {}
     assert wh.get("status") in ("OK", "WARN"), wh
     assert wh.get("untracked_oracle_count", 0) == 0, wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
 # TC-3: cleanup_only 파일만 → WARN (BLOCKED 아님)
@@ -259,6 +263,7 @@ def test_tc3_cleanup_only_warn_not_blocked(oracle_fixture, tmp_path):
     BLOCKED는 아니어야 한다."""
     fx = oracle_fixture
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     bootstrap_state(env, fx.pid)
     # cleanup_only 패턴(build_report.xml)은 oracle dir 아래에 있어도 차단 안 됨.
     fx.add_oracle_file("build_report.xml", "<build_report/>")
@@ -274,6 +279,7 @@ def test_tc3_cleanup_only_warn_not_blocked(oracle_fixture, tmp_path):
     assert wh.get("status") == "WARN", wh
     cleanup_items = wh.get("cleanup_only_items") or []
     assert any("build_report.xml" in str(c) for c in cleanup_items), wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
 # TC-4: oracle_manifest 참조 파일 missing → BLOCKED (protected_evidence_missing).
@@ -283,6 +289,7 @@ def test_tc4_manifest_ref_missing_blocks(oracle_fixture, tmp_path):
     BLOCKED되고 failure_code=protected_evidence_missing이 출력된다."""
     fx = oracle_fixture
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     bootstrap_state(env, fx.pid)
     missing_rel = f"tests/oracles/{fx.pid}/TC-X/input.json"
     fx.write_oracle_manifest([
@@ -300,6 +307,7 @@ def test_tc4_manifest_ref_missing_blocks(oracle_fixture, tmp_path):
     final_state = load_final_state(env)
     wh = final_state.get("workspace_hygiene") or {}
     assert wh.get("status") == "BLOCKED", wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
 # TC-5: deferral 검증 — contract manifest 존재 시 hygiene은 oracle untracked를 차단하지 않고
@@ -309,6 +317,7 @@ def test_tc5_defers_to_existing_gate_when_manifest_present(oracle_fixture, tmp_p
     않고(WORKSPACE HYGIENE GATE 미출력) 기존 게이트가 request-accept를 차단한다."""
     fx = oracle_fixture
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     bootstrap_state(env, fx.pid)
     ref_rel = f"tests/oracles/{fx.pid}/TC-Y/expected.json"
     fx.add_oracle_file("TC-Y/expected.json", '{"ok": true}')
@@ -336,6 +345,7 @@ def test_tc5_defers_to_existing_gate_when_manifest_present(oracle_fixture, tmp_p
     wh = final_state.get("workspace_hygiene") or {}
     # deferral 시 hygiene 자체는 BLOCKED를 만들지 않는다(차단은 기존 게이트 소관).
     assert wh.get("status") in ("OK", "WARN"), wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
 # TC-6: state["workspace_hygiene"] 필드 저장 확인
@@ -343,6 +353,7 @@ def test_tc6_state_workspace_hygiene_fields(tmp_path):
     """request-accept 후 state["workspace_hygiene"]에 status / blocking_items /
     cleanup_only_items 필드가 저장된다."""
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     pid = synthetic_pid()
     bootstrap_state(env, pid)
 
@@ -356,6 +367,7 @@ def test_tc6_state_workspace_hygiene_fields(tmp_path):
     assert "blocking_items" in wh, wh
     assert "cleanup_only_items" in wh, wh
     assert "checked_at" in wh, wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
 # TC-7: cleanup_only_items 목록에 build_report.xml 포함 확인
@@ -363,6 +375,7 @@ def test_tc7_cleanup_only_includes_build_report(oracle_fixture, tmp_path):
     """oracle dir에 build_report.xml이 있으면 cleanup_only_items에 포함된다."""
     fx = oracle_fixture
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     bootstrap_state(env, fx.pid)
     fx.add_oracle_file("build_report.xml", "<r/>")
     fx.add_oracle_file("oracle_result_dump.txt", "dump")
@@ -375,6 +388,7 @@ def test_tc7_cleanup_only_includes_build_report(oracle_fixture, tmp_path):
     items = [str(c) for c in (wh.get("cleanup_only_items") or [])]
     assert any("build_report.xml" in c for c in items), wh
     assert any("oracle_result_dump.txt" in c for c in items), wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
 # TC-8: accept 단계 nonce consume 전 hygiene 재실행 (BLOCKED → consume 안 됨)
@@ -383,6 +397,7 @@ def test_tc8_accept_stage_hygiene_blocks_before_consume(oracle_fixture, tmp_path
     acceptance_request가 CONSUMED 되지 않는다."""
     fx = oracle_fixture
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     bootstrap_state(env, fx.pid)
     fx.add_oracle_file("TC-8/input.json", '{"x": 1}')
 
@@ -406,6 +421,9 @@ def test_tc8_accept_stage_hygiene_blocks_before_consume(oracle_fixture, tmp_path
         # 다른 파이프라인의 잔존 파일일 수 있으므로 pid가 일치할 때만 검증.
         if str(req.get("pipeline_id", "")) == fx.pid:
             assert req.get("status") != "CONSUMED", req
+    final_state = load_final_state(env)
+    assert state_path, "PIPELINE_STATE_PATH must be set"
+    assert isinstance(final_state, dict), "final_state must be a dict"
 
 
 # TC-9: pipeline.py status에 cleanup_only warning 표시 확인
@@ -486,6 +504,7 @@ def test_tc11_sha_mismatch_blocks(oracle_fixture, tmp_path):
     참조 대상으로 사용하고, inventory에는 일부러 틀린 sha256을 기록한다."""
     fx = oracle_fixture
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     bootstrap_state(env, fx.pid)
     # tracked 파일(CLAUDE.md)을 oracle 참조로 사용 — git에 이미 tracked.
     tracked_rel = "CLAUDE.md"
@@ -513,6 +532,7 @@ def test_tc11_sha_mismatch_blocks(oracle_fixture, tmp_path):
     final_state = load_final_state(env)
     wh = final_state.get("workspace_hygiene") or {}
     assert wh.get("status") == "BLOCKED", wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
 # TC-12: 정상 케이스 (oracle 없음, no issues) → hygiene OK, status 정상 출력
@@ -520,6 +540,7 @@ def test_tc12_clean_case_hygiene_ok_status_normal(tmp_path):
     """oracle/cleanup 파일이 없는 깨끗한 합성 파이프라인은 hygiene OK가 되고,
     status 출력에 CLEANUP 안내가 나타나지 않는다."""
     env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     pid = synthetic_pid()
     bootstrap_state(env, pid)
 
@@ -531,6 +552,7 @@ def test_tc12_clean_case_hygiene_ok_status_normal(tmp_path):
     assert wh.get("status") == "OK", wh
     assert not (wh.get("cleanup_only_items") or []), wh
     assert not (wh.get("blocking_items") or []), wh
+    assert state_path, "PIPELINE_STATE_PATH must be set"
 
     r = run_cli(["status"], env=env)
     assert r.returncode == 0, r.stdout + r.stderr
