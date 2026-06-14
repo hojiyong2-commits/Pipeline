@@ -1,0 +1,12 @@
+{
+  "case_id": "TC-1-normal",
+  "forbidden_phrases_absent": true,
+  "forbidden_phrases": ["ACCEPTED", "승인 완료", "배포 완료", "완료됐습니다"],
+  "required_markers_present": true,
+  "required_markers": [
+    "<!-- pipeline-human-acceptance-packet -->",
+    "<!-- pipeline-human-acceptance-packet-pending -->"
+  ],
+  "expected_state": "PENDING",
+  "verdict": "PASS"
+}

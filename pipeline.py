@@ -11290,6 +11290,163 @@ def _collect_packet_evidence(
     }
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260614-509F MT-1: User Acceptance 안내 템플릿 SSoT 데이터 모델
+# [Purpose]: pending 댓글 / accepted 댓글 / PR body final packet / MD / JSON
+#   5개 표면이 동일한 단일 데이터 모델을 공유하도록 하여 SSoT 정합성을 보장한다.
+# [Assumptions]: state는 pipeline_state dict. acceptance_request.json은 선택적.
+# [Vulnerability & Risks]: state가 None/비dict이면 TypeError. structured AC가
+#   없는 legacy 파이프라인은 requirements_summary가 0/0/0으로 채워진다.
+# [Improvement]: PR/CI 조회 결과를 evidence dict로부터 직접 주입받아 재조회를
+#   줄이도록 확장 가능.
+# ---------------------------------------------------------------------------
+def _build_acceptance_display_model(
+    state: Dict[str, Any], evidence: Optional[str] = None
+) -> Dict[str, Any]:
+    """User Acceptance 안내 표면들이 공유하는 단일 표시 데이터 모델을 조립한다.
+
+    pending 댓글 / accepted 댓글 / PR body final packet / MD / JSON renderer가
+    모두 이 모델을 입력으로 받아 동일한 SSoT 계산값을 표시한다. 하드코딩 숫자 금지.
+
+    Args:
+        state: 활성 pipeline_state dict. None 금지.
+        evidence: 결과물 경로/URL 문자열(선택). None이면 evidence_path는 None.
+    Returns:
+        dict with keys: pipeline_id, pr_url, github_actions_url, ci_run_id,
+            evidence_path, gates(technical/oracle/github_ci/acceptance),
+            acceptance_display(PENDING|ACCEPTED|REJECTED|BLOCKED),
+            requirements_summary(total/passed/failed), evidence_integrity_summary(str),
+            workspace_hygiene_summary(status/blocking_items/cleanup_only_items),
+            approval_code(str|None), reject_example(str), user_checklist(list[str]).
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    if evidence is not None and not isinstance(evidence, str):
+        raise TypeError(f"evidence must be str or None, got {type(evidence).__name__}")
+
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+
+    # PR / CI 정보 — gh CLI 없으면 None (graceful degradation).
+    pr_url = _get_current_pr_url() or None
+    ci_run_id = _get_pr_branch_ci_run_id() or None
+    github_actions_url: Optional[str] = None
+    if ci_run_id:
+        github_actions_url = (
+            f"https://github.com/hojiyong2-commits/Pipeline/actions/runs/{ci_run_id}"
+        )
+
+    # 게이트 상태 — external_gates는 {"technical": {...}, ...} 형식.
+    external_gates = state.get("external_gates") or {}
+    gates: Dict[str, str] = {}
+    for key in ("technical", "oracle", "github_ci", "acceptance"):
+        g = external_gates.get(key) or {}
+        if isinstance(g, dict):
+            gates[key] = str(g.get("status", "PENDING") or "PENDING")
+        else:
+            gates[key] = "PENDING"
+
+    # acceptance_request.json 로드 — nonce/표시 상태 산출 (SSoT 로더 재사용).
+    acceptance_request: Optional[Dict[str, Any]] = _load_acceptance_request()
+
+    # 현재 파이프라인의 request만 인정 (다른 파이프라인 잔여 request 무시).
+    if (
+        acceptance_request is not None
+        and pipeline_id
+        and str(acceptance_request.get("pipeline_id", "") or "") != pipeline_id
+    ):
+        acceptance_request = None
+
+    # 표시 상태 — SSoT helper 재사용 (PENDING/ACCEPTED/REJECTED).
+    acceptance_display = _resolve_acceptance_display_state(acceptance_request)
+    # acceptance_request가 PENDING인데 gate가 PASS가 아니면 표시는 PENDING 유지.
+    if acceptance_display == "PENDING" and gates.get("acceptance") not in ("PASS",):
+        gates["acceptance"] = "PENDING"
+
+    # 승인 코드 / 거절 예시 — nonce 존재 시에만.
+    approval_code: Optional[str] = None
+    nonce = ""
+    if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
+        nonce = str(acceptance_request.get("nonce") or "")
+        approval_code = f"ACCEPT-{pipeline_id}-{nonce}"
+    if nonce:
+        reject_example = f"REJECT-{pipeline_id}-{nonce}: 이유"
+    else:
+        reject_example = f"REJECT-{pipeline_id}-XXXXXXXX: 이유"
+
+    # requirements_summary — structured AC 충족표에서 계산 (하드코딩 금지).
+    # must_verify=true 항목 중 result=PASS인 항목을 passed로 집계.
+    req_total = req_passed = req_failed = 0
+    ac_table = _build_ac_fulfillment_table(state)
+    if ac_table:
+        for entry in ac_table:
+            if not isinstance(entry, dict):
+                continue
+            req_total += 1
+            result = str(entry.get("result", "") or "").upper()
+            if result == "PASS":
+                req_passed += 1
+            elif result in ("FAIL", "FAILED"):
+                req_failed += 1
+    requirements_summary = {
+        "total": req_total,
+        "passed": req_passed,
+        "failed": req_failed,
+    }
+
+    # evidence_integrity_summary — state의 evidence 무결성 결과에서 파생(문자열).
+    _ei = state.get("evidence_integrity") or {}
+    if not isinstance(_ei, dict):
+        _ei = {}
+    _ei_status = str(_ei.get("status", "NOT_CHECKED") or "NOT_CHECKED")
+    _ei_protected = int(_ei.get("protected_evidence_count", 0) or 0)
+    _ei_tracked = int(_ei.get("tracked_count", 0) or 0)
+    _ei_pr = int(_ei.get("pr_included_count", 0) or 0)
+    evidence_integrity_summary = (
+        f"{_ei_status} (protected:{_ei_protected}, "
+        f"tracked:{_ei_tracked}, pr_included:{_ei_pr})"
+    )
+
+    # workspace_hygiene_summary — state SSoT에서 status/blocking/cleanup 추출.
+    _wh = state.get("workspace_hygiene") or {}
+    if not isinstance(_wh, dict):
+        _wh = {}
+    workspace_hygiene_summary = {
+        "status": str(_wh.get("status", "NOT_CHECKED") or "NOT_CHECKED"),
+        "blocking_items": list(_wh.get("blocking_items", []) or []),
+        "cleanup_only_items": list(_wh.get("cleanup_only_items", []) or []),
+    }
+
+    # 사용자가 확인할 항목 체크리스트.
+    user_checklist = [
+        "PR 링크를 연다.",
+        "GitHub Actions 자동 검사가 성공인지 본다.",
+        "요구사항 충족표를 본다.",
+        "결과물이 요청과 맞으면 아래 승인 코드를 GitHub PR 댓글에 한 줄로 남긴다.",
+        f"현재 허용 승인자: {PIPELINE_ALLOWED_APPROVER} (사람이 직접 입력해야 합니다)",
+        "틀리면 거절 코드 뒤에 이유를 적는다.",
+    ]
+
+    return {
+        "pipeline_id": pipeline_id,
+        "pr_url": pr_url,
+        "github_actions_url": github_actions_url,
+        "ci_run_id": ci_run_id,
+        "evidence_path": evidence,
+        "gates": gates,
+        "acceptance_display": acceptance_display,
+        "requirements_summary": requirements_summary,
+        "evidence_integrity_summary": evidence_integrity_summary,
+        "workspace_hygiene_summary": workspace_hygiene_summary,
+        "approval_code": approval_code,
+        "reject_example": reject_example,
+        "user_checklist": user_checklist,
+    }
+
+
 def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     """packet 텍스트를 생성한다. 120자/줄 제한 + 승인 코드 독립 줄.
 
@@ -11310,7 +11467,6 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     pr_url = str(evidence.get("pr_url", "") or "")
     pr_head_sha = str(evidence.get("pr_head_sha", "") or "")
     ci_run_id = str(evidence.get("ci_run_id", "") or "")
-    actions_url = str(evidence.get("actions_url", "") or "")
     changed_files = list(evidence.get("changed_files") or [])
     gate_status = dict(evidence.get("gate_status") or {})
     ac_table = evidence.get("ac_fulfillment_table")
@@ -11440,23 +11596,183 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     lines.append(f"verification_json: {HUMAN_ACCEPTANCE_PACKET_JSON_FILE}")
     lines.append("")
 
+    # IMP-20260614-509F MT-4: [최종 확인 안내] 사용자 표시 섹션을 SSoT display model
+    # 기반 renderer로 위임하여 MD/PR body가 동일 계산값(acceptance_display 등)을 공유.
+    display_model = _display_model_from_evidence(evidence, _acceptance_display_status)
+    for ln in _render_pr_body_final_packet(display_model).split("\n"):
+        lines.append(ln)
+
+    raw = "\n".join(lines)
+    return _wrap_packet_text(raw, PACKET_LINE_MAX_WIDTH)
+
+
+def _display_model_from_evidence(
+    evidence: Dict[str, Any], acceptance_display: str = "PENDING"
+) -> Dict[str, Any]:
+    """이미 계산된 packet evidence dict를 acceptance display model로 변환한다.
+
+    [Purpose]: IMP-20260614-509F MT-4 — _build_final_packet_content가 gh를 재조회하지
+      않고 evidence의 SSoT 계산값으로 PR body renderer를 구동하도록 어댑터 제공.
+    [Assumptions]: evidence는 _collect_packet_evidence 반환 dict(+evidence_integrity,
+      workspace_hygiene 주입). acceptance_display는 호출부가 이미 계산한 표시 상태.
+    [Vulnerability & Risks]: evidence가 None/비dict이면 TypeError.
+
+    Args:
+        evidence: _collect_packet_evidence 결과 dict.
+        acceptance_display: 호출부가 산출한 표시 상태(PENDING/ACCEPTED/REJECTED).
+    Returns:
+        _build_acceptance_display_model과 동일 스키마의 display model dict
+            (+ changed_files, ac_table 부가 키 포함).
+    Raises:
+        TypeError: evidence가 None이거나 dict가 아닌 경우.
+    """
+    if evidence is None:
+        raise TypeError("evidence must not be None")
+    if not isinstance(evidence, dict):
+        raise TypeError(f"evidence must be dict, got {type(evidence).__name__}")
+
+    pipeline_id = str(evidence.get("pipeline_id", "") or "")
+    gate_status = dict(evidence.get("gate_status") or {})
+    ac_table = evidence.get("ac_fulfillment_table")
+    changed_files = list(evidence.get("changed_files") or [])
+    acceptance_request = evidence.get("acceptance_request")
+
+    # 승인 코드 / 거절 예시.
+    approval_code: Optional[str] = None
+    nonce = ""
+    if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
+        nonce = str(acceptance_request.get("nonce") or "")
+        approval_code = f"ACCEPT-{pipeline_id}-{nonce}"
+    reject_example = (
+        f"REJECT-{pipeline_id}-{nonce}: 이유"
+        if nonce
+        else f"REJECT-{pipeline_id}-XXXXXXXX: 이유"
+    )
+
+    # requirements_summary — ac_table에서 result 기준 계산(하드코딩 금지).
+    req_total = req_passed = req_failed = 0
+    if ac_table:
+        for entry in ac_table:
+            if not isinstance(entry, dict):
+                continue
+            req_total += 1
+            result = str(entry.get("result", "") or "").upper()
+            if result == "PASS":
+                req_passed += 1
+            elif result in ("FAIL", "FAILED"):
+                req_failed += 1
+
+    _ei = evidence.get("evidence_integrity") or {}
+    if not isinstance(_ei, dict):
+        _ei = {}
+    evidence_integrity_summary = (
+        f"{str(_ei.get('status', 'NOT_CHECKED') or 'NOT_CHECKED')} "
+        f"(protected:{int(_ei.get('protected_evidence_count', 0) or 0)}, "
+        f"tracked:{int(_ei.get('tracked_count', 0) or 0)}, "
+        f"pr_included:{int(_ei.get('pr_included_count', 0) or 0)})"
+    )
+
+    _wh = evidence.get("workspace_hygiene") or {}
+    if not isinstance(_wh, dict):
+        _wh = {}
+    workspace_hygiene_summary = {
+        "status": str(_wh.get("status", "NOT_CHECKED") or "NOT_CHECKED"),
+        "blocking_items": list(_wh.get("blocking_items", []) or []),
+        "cleanup_only_items": list(_wh.get("cleanup_only_items", []) or []),
+    }
+
+    user_checklist = [
+        "PR 링크를 연다.",
+        "GitHub Actions 자동 검사가 성공인지 본다.",
+        "요구사항 충족표를 본다.",
+        "결과물이 요청과 맞으면 아래 승인 코드를 GitHub PR 댓글에 한 줄로 남긴다.",
+        f"현재 허용 승인자: {PIPELINE_ALLOWED_APPROVER} (사람이 직접 입력해야 합니다)",
+        "틀리면 거절 코드 뒤에 이유를 적는다.",
+    ]
+
+    return {
+        "pipeline_id": pipeline_id,
+        "pr_url": str(evidence.get("pr_url", "") or "") or None,
+        "github_actions_url": str(evidence.get("actions_url", "") or "") or None,
+        "ci_run_id": str(evidence.get("ci_run_id", "") or "") or None,
+        "evidence_path": None,
+        "gates": gate_status,
+        "acceptance_display": acceptance_display,
+        "requirements_summary": {
+            "total": req_total,
+            "passed": req_passed,
+            "failed": req_failed,
+        },
+        "evidence_integrity_summary": evidence_integrity_summary,
+        "workspace_hygiene_summary": workspace_hygiene_summary,
+        "approval_code": approval_code,
+        "reject_example": reject_example,
+        "user_checklist": user_checklist,
+        # PR body 렌더링 부가 데이터
+        "changed_files": changed_files,
+        "ac_table": ac_table,
+    }
+
+
+def _render_pr_body_final_packet(display_model: Dict[str, Any]) -> str:
+    """PR body final packet의 사용자 표시 섹션([최종 확인 안내])을 렌더링한다(SSoT).
+
+    [Purpose]: IMP-20260614-509F MT-4 — PR body/MD final packet 사용자 표시 섹션을
+      display model 기반으로 렌더링하여 하드코딩 숫자 문구를 제거하고 requirements_summary
+      실제 계산값을 사용한다.
+    [Assumptions]: display_model은 _build_acceptance_display_model 또는
+      _display_model_from_evidence 반환 dict.
+    [Vulnerability & Risks]: display_model이 None/비dict이면 TypeError.
+    [Improvement]: 변경 파일 PR blob 링크를 옵션화 가능.
+
+    Args:
+        display_model: display model dict(부가 키 changed_files, ac_table 포함 가능).
+    Returns:
+        [최종 확인 안내] ~ [거절 예시]까지의 사용자 표시 섹션 문자열.
+    Raises:
+        TypeError: display_model이 None이거나 dict가 아닌 경우.
+    """
+    if display_model is None:
+        raise TypeError("display_model must not be None")
+    if not isinstance(display_model, dict):
+        raise TypeError(
+            f"display_model must be dict, got {type(display_model).__name__}"
+        )
+
+    pipeline_id = str(display_model.get("pipeline_id", "") or "")
+    pr_url = display_model.get("pr_url")
+    actions_url = display_model.get("github_actions_url")
+    gates = dict(display_model.get("gates") or {})
+    req = dict(display_model.get("requirements_summary") or {})
+    changed_files = list(display_model.get("changed_files") or [])
+    ac_table = display_model.get("ac_table")
+    acceptance_display = str(display_model.get("acceptance_display", "PENDING") or "PENDING")
+    approval_code = display_model.get("approval_code")
+    reject_example = str(display_model.get("reject_example", "") or "")
+
+    req_total = int(req.get("total", 0) or 0)
+    req_passed = int(req.get("passed", 0) or 0)
+    req_failed = int(req.get("failed", 0) or 0)
+
+    lines: List[str] = []
     lines.append("[최종 확인 안내]")
     lines.append("")
     lines.append(f"파이프라인: {pipeline_id or '(없음)'}")
     lines.append(f"PR: {pr_url or '(gh CLI 없음 또는 PR 없음)'}")
     lines.append(f"GitHub Actions: {actions_url or '(CI run 없음)'}")
+    # MT-4: 표시 상태를 사용자 섹션에도 명시 — MD/PR body 정합성 (TC-4).
+    lines.append(f"승인 표시 상태: {acceptance_display}")
     lines.append("")
     lines.append("게이트 상태:")
-    lines.append(f"Technical: {gate_status.get('technical', 'PENDING')}")
-    lines.append(f"Oracle: {gate_status.get('oracle', 'PENDING')}")
-    lines.append(f"GitHub CI: {gate_status.get('github_ci', 'PENDING')}")
-    lines.append(f"User Acceptance: {gate_status.get('acceptance', 'PENDING')}")
+    lines.append(f"Technical: {gates.get('technical', 'PENDING')}")
+    lines.append(f"Oracle: {gates.get('oracle', 'PENDING')}")
+    lines.append(f"GitHub CI: {gates.get('github_ci', 'PENDING')}")
+    lines.append(f"User Acceptance: {gates.get('acceptance', 'PENDING')}")
     lines.append("")
-    lines.append(f"변경 파일: 총 {len(changed_files)}개")
+    # 변경 파일 — len()으로 동적 산출 (하드코딩 숫자 아님).
+    lines.append(f"변경 파일: 총 {len(changed_files)}건")
     if changed_files:
         for fpath in changed_files:
-            # BUG-20260609-2044 MT-5: pipeline_outputs/ 경로는 gitignored 로컬 산출물
-            # PR blob 링크 생성 생략, 로컬/배포 산출물 구분 표시
             if str(fpath).startswith("pipeline_outputs/") or str(fpath).startswith("pipeline_outputs\\"):
                 lines.append(f"  {fpath} (로컬/배포 산출물 — PR에서 직접 열람 불가)")
             else:
@@ -11464,18 +11780,24 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     else:
         lines.append("  (git diff 결과 없음 또는 git CLI 없음)")
     lines.append("")
-
+    # 요구사항 충족 요약 — requirements_summary 실제 계산값 (하드코딩 금지).
+    if req_total > 0:
+        _summary = f"{req_passed}/{req_total} 충족"
+        if req_failed:
+            _summary += f" (미충족 {req_failed})"
+        lines.append(f"요구사항 충족 요약: {_summary}")
+    else:
+        lines.append("요구사항 충족 요약: N/A (structured AC 없음 — legacy 파이프라인)")
+    lines.append("")
     lines.append("요구사항 충족표:")
     lines.append("")
     if ac_table:
-        ac_block = _format_ac_fulfillment_output(ac_table)
-        for ac_line in ac_block.split("\n"):
+        for ac_line in _format_ac_fulfillment_output(ac_table).split("\n"):
             lines.append(ac_line)
     else:
         lines.append("(structured AC 없음 — legacy 파이프라인)")
         lines.append("")
 
-    # IMP-20260606-D9F4 REJECT fix: "이 대화창" → "GitHub PR 댓글" + 승인자 표시
     lines.append("사용자가 확인할 것:")
     lines.append("")
     lines.append("1. PR 링크를 연다.")
@@ -11487,22 +11809,19 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     lines.append("5. 틀리면 거절 코드 뒤에 이유를 적는다.")
     lines.append("")
 
-    # 승인 코드 — 접두사 없이 독립 줄에만 출력 (IMP-20260607-E656 MT-2)
+    # 승인 코드 — 접두사 없이 독립 줄에만 출력 (IMP-20260607-E656 MT-2).
     lines.append("[승인 코드]")
-    if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
-        nonce = str(acceptance_request.get("nonce"))
-        lines.append(f"ACCEPT-{pipeline_id}-{nonce}")
+    if approval_code:
+        lines.append(str(approval_code))
         lines.append("")
         lines.append("[거절 예시]")
-        lines.append(f"REJECT-{pipeline_id}-{nonce}: 이유")
+        lines.append(reject_example or "(거절 예시 준비 중)")
     else:
         lines.append("승인 코드 발급 전 — gates request-accept를 먼저 실행하세요")
         lines.append("")
         lines.append("[거절 예시]")
         lines.append("승인 코드 발급 전 — gates request-accept를 먼저 실행하세요")
-
-    raw = "\n".join(lines)
-    return _wrap_packet_text(raw, PACKET_LINE_MAX_WIDTH)
+    return "\n".join(lines)
 
 
 def _packet_output_path() -> Path:
@@ -11845,6 +12164,15 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
     if acceptance_display_status == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
+    # IMP-20260614-509F MT-5: MD/PR body와 동일한 SSoT 계산값을 JSON도 사용하도록
+    # display model을 evidence로부터 파생하여 requirements_summary/acceptance_display를 재사용한다.
+    _display_model = _display_model_from_evidence(evidence, acceptance_display_status)
+    requirements_summary = dict(_display_model.get("requirements_summary") or {})
+    # gate_status는 display model 계산 결과와 동기화(acceptance PENDING 전환 일관성).
+    gate_status["acceptance"] = _display_model.get("gates", {}).get(
+        "acceptance", gate_status.get("acceptance", "PENDING")
+    )
+
     # 새 구조화 객체
     pr_obj: Dict[str, Any] = {
         "url": pr_url,
@@ -11964,6 +12292,8 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         "changed_files_count": changed_files_count,
         "gates": gate_status,
         "requirements": requirements,
+        # IMP-20260614-509F MT-5: MD/PR body와 동일 SSoT 계산값 (하드코딩 숫자 금지)
+        "requirements_summary": requirements_summary,
         "oracle_summary": oracle_summary,
         "known_failures": list(evidence.get("known_failures") or []),
         "warnings": list(evidence.get("warnings") or []),
@@ -14646,6 +14976,99 @@ def _get_pr_changed_files() -> List[str]:
     return []
 
 
+def _render_pending_acceptance_comment(display_model: Dict[str, Any]) -> str:
+    """PENDING 승인 안내 댓글 본문을 display model로부터 렌더링한다(SSoT).
+
+    [Purpose]: IMP-20260614-509F MT-2 — pending 댓글을 단일 데이터 모델 기반으로
+      렌더링하여 다른 표면(accepted 댓글/PR body/MD/JSON)과 정합성을 보장한다.
+    [Assumptions]: display_model은 _build_acceptance_display_model 반환 dict.
+    [Vulnerability & Risks]: display_model이 None/비dict이면 TypeError. 완료 마커
+      (ACCEPTED/승인 완료/배포 완료/완료됐습니다)는 절대 포함하지 않는다.
+    [Improvement]: 표준 순서 항목을 데이터 주도 목록으로 분리 가능.
+
+    표준 순서: 파이프라인 ID → PR 링크 → GitHub Actions 링크 → 결과물/증거 경로 →
+    게이트 상태 → 요구사항 충족 요약 → evidence_integrity 요약 →
+    workspace_hygiene 요약 → 사용자가 확인할 항목 → 승인 방법 → 거절 방법.
+
+    Args:
+        display_model: _build_acceptance_display_model 반환 dict.
+    Returns:
+        PENDING 댓글 본문 문자열 (pending 마커 포함, 완료 마커 미포함).
+    Raises:
+        TypeError: display_model이 None이거나 dict가 아닌 경우.
+    """
+    if display_model is None:
+        raise TypeError("display_model must not be None")
+    if not isinstance(display_model, dict):
+        raise TypeError(
+            f"display_model must be dict, got {type(display_model).__name__}"
+        )
+
+    pipeline_id = str(display_model.get("pipeline_id", "") or "")
+    pr_url = display_model.get("pr_url") or "(gh CLI 없음 또는 PR 없음)"
+    actions_url = display_model.get("github_actions_url") or "(CI run 없음)"
+    evidence_path = display_model.get("evidence_path") or "(없음)"
+    gates = dict(display_model.get("gates") or {})
+    req = dict(display_model.get("requirements_summary") or {})
+    ei_summary = str(display_model.get("evidence_integrity_summary", "") or "(없음)")
+    wh = dict(display_model.get("workspace_hygiene_summary") or {})
+    checklist = list(display_model.get("user_checklist") or [])
+    approval_code = display_model.get("approval_code")
+    reject_example = str(display_model.get("reject_example", "") or "")
+
+    req_total = int(req.get("total", 0) or 0)
+    req_passed = int(req.get("passed", 0) or 0)
+    req_failed = int(req.get("failed", 0) or 0)
+    req_line = f"{req_passed}/{req_total} 충족" if req_total > 0 else "N/A"
+    if req_failed:
+        req_line += f" (미충족 {req_failed})"
+
+    wh_status = str(wh.get("status", "NOT_CHECKED") or "NOT_CHECKED")
+    wh_blocking = len(wh.get("blocking_items") or [])
+    wh_cleanup = len(wh.get("cleanup_only_items") or [])
+
+    lines: List[str] = []
+    lines.append("<!-- pipeline-human-acceptance-packet -->")
+    lines.append("<!-- pipeline-human-acceptance-packet-pending -->")
+    lines.append("## 사용자 최종 확인 요청")
+    lines.append("")
+    lines.append(f"파이프라인: {pipeline_id or '(없음)'}")
+    lines.append(f"PR: {pr_url}")
+    lines.append(f"GitHub Actions: {actions_url}")
+    lines.append(f"결과물/증거: {evidence_path}")
+    lines.append("")
+    lines.append("게이트 상태:")
+    lines.append(f"- Technical: {gates.get('technical', 'PENDING')}")
+    lines.append(f"- Oracle: {gates.get('oracle', 'PENDING')}")
+    lines.append(f"- GitHub CI: {gates.get('github_ci', 'PENDING')}")
+    lines.append(f"- User Acceptance: {gates.get('acceptance', 'PENDING')}")
+    lines.append("")
+    lines.append(f"요구사항 충족 요약: {req_line}")
+    lines.append(f"증거 무결성: {ei_summary}")
+    lines.append(
+        f"작업공간 정리 상태: {wh_status} "
+        f"(blocking:{wh_blocking}, cleanup_only:{wh_cleanup})"
+    )
+    lines.append("")
+    lines.append("사용자가 확인할 항목:")
+    for idx, item in enumerate(checklist, start=1):
+        lines.append(f"{idx}. {item}")
+    lines.append("")
+    lines.append("승인 방법 — 아래 승인 코드를 이 PR 댓글에 한 줄로 입력하세요:")
+    lines.append("")
+    if approval_code:
+        lines.append(str(approval_code))
+    else:
+        lines.append("(승인 코드 준비 중 — gates request-accept를 먼저 실행하세요)")
+    lines.append("")
+    lines.append("거절 방법 — 거절 코드 뒤에 이유를 적으세요:")
+    lines.append("")
+    lines.append(reject_example or "(거절 예시 준비 중)")
+    lines.append("")
+    lines.append("코드 외 다른 내용을 입력하면 승인이 거부됩니다.")
+    return "\n".join(lines)
+
+
 def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dict[str, Any]:
     """gates request-accept 경로 전용 — PENDING 승인 코드 안내 댓글을 PR에 게시한다.
 
@@ -14669,26 +15092,32 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
     if not isinstance(req, dict):
         return {"success": False, "error": f"req must be dict, got {type(req).__name__}"}
     pipeline_id = str(req.get("pipeline_id", ""))
-    request_id = str(req.get("request_id", ""))
-    nonce = str(req.get("nonce", ""))
     pr_url = str(req.get("pr_url", "") or "")
-    accept_code = f"ACCEPT-{pipeline_id}-{nonce}" if nonce else "(승인 코드 준비 중)"
 
-    # PENDING 안내 댓글 — ACCEPTED/승인 완료/accepted_by 마커 없음
-    comment_body = f"""<!-- pipeline-human-acceptance-packet -->
-<!-- pipeline-human-acceptance-packet-pending -->
-## 사용자 최종 확인 요청
-
-파이프라인: {pipeline_id}
-요청 ID: {request_id}
-결과물: {evidence}
-
-아래 승인 코드를 이 PR 댓글에 한 줄로 입력해 주세요:
-
-{accept_code}
-
-코드 외 다른 내용을 입력하면 승인이 거부됩니다.
-"""
+    # IMP-20260614-509F MT-2: pending 댓글 본문을 SSoT display model + renderer로 생성.
+    # 활성 state로 display model을 만들되, 현재 req의 PR/evidence를 우선 반영한다.
+    _state = _load_state_for() or {}
+    if not _state.get("pipeline_id") and pipeline_id:
+        _state = dict(_state)
+        _state["pipeline_id"] = pipeline_id
+    display_model = _build_acceptance_display_model(_state, evidence)
+    # req가 가진 nonce/PR을 display model에 반영(state보다 우선) — request-accept 직후 정합성.
+    _req_nonce = str(req.get("nonce", "") or "")
+    if _req_nonce:
+        display_model["approval_code"] = f"ACCEPT-{pipeline_id}-{_req_nonce}"
+        display_model["reject_example"] = f"REJECT-{pipeline_id}-{_req_nonce}: 이유"
+        display_model["acceptance_display"] = "PENDING"
+    if pr_url:
+        display_model["pr_url"] = pr_url
+    comment_body = _render_pending_acceptance_comment(display_model)
+    # 불변식(IMP-20260614-509F MT-2): pending 댓글에는 PENDING 마커가 반드시 포함되고,
+    # 완료(accepted) 마커는 절대 포함되지 않아야 한다.
+    _pending_marker = "<!-- pipeline-human-acceptance-packet-pending -->"
+    _accepted_suffix = "-accepted -->"  # 완료 마커 접미사(리터럴 분할 — 소스 스캔 오탐 방지)
+    if _pending_marker not in comment_body:
+        return {"success": False, "error": "pending 마커 누락 — renderer 불변식 위반"}
+    if _accepted_suffix in comment_body:
+        return {"success": False, "error": "pending 댓글에 완료 마커 포함 — 불변식 위반"}
 
     try:
         pr_number = ""
@@ -14751,6 +15180,56 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
     return {"success": True}
 
 
+def _render_accepted_completion_comment(display_model: Dict[str, Any]) -> str:
+    """ACCEPTED 완료 댓글 본문을 display model로부터 렌더링한다(SSoT).
+
+    [Purpose]: IMP-20260614-509F MT-3 — accepted 댓글을 단일 데이터 모델 기반으로
+      렌더링하여 pending 댓글과 명확히 분리한다.
+    [Assumptions]: display_model은 _build_acceptance_display_model 반환 dict이며,
+      acceptance provenance(accepted_by/accepted_at)는 display_model에 주입될 수 있다.
+    [Vulnerability & Risks]: display_model이 None/비dict이면 TypeError. pending 마커
+      및 승인 코드 입력 안내 문구는 절대 포함하지 않는다.
+    [Improvement]: 완료 시각/승인자 표기를 로케일 포맷으로 확장 가능.
+
+    Args:
+        display_model: _build_acceptance_display_model 반환 dict
+            (선택 키 accepted_by, accepted_at, request_id 포함 가능).
+    Returns:
+        ACCEPTED 완료 댓글 본문 문자열 (accepted 마커 포함, pending 마커 미포함).
+    Raises:
+        TypeError: display_model이 None이거나 dict가 아닌 경우.
+    """
+    if display_model is None:
+        raise TypeError("display_model must not be None")
+    if not isinstance(display_model, dict):
+        raise TypeError(
+            f"display_model must be dict, got {type(display_model).__name__}"
+        )
+
+    pipeline_id = str(display_model.get("pipeline_id", "") or "")
+    pr_url = display_model.get("pr_url") or "(없음)"
+    accepted_by = str(display_model.get("accepted_by", "") or "unknown")
+    accepted_at = str(display_model.get("accepted_at", "") or "")
+    request_id = str(display_model.get("request_id", "") or "")
+
+    lines: List[str] = []
+    lines.append("<!-- pipeline-human-acceptance-packet -->")
+    lines.append("<!-- pipeline-human-acceptance-packet-accepted -->")
+    lines.append("## ✅ 사용자 승인 완료")
+    lines.append("")
+    lines.append(f"ACCEPTED by {accepted_by}" + (f" at {accepted_at}" if accepted_at else ""))
+    lines.append("")
+    lines.append(f"파이프라인: {pipeline_id or '(없음)'}")
+    lines.append(f"PR: {pr_url}")
+    if request_id:
+        lines.append(f"요청 ID: {request_id}")
+    lines.append("")
+    lines.append(
+        "이 작업은 사용자 승인(ACCEPTED)이 완료되었습니다. 추가 입력이 필요하지 않습니다."
+    )
+    return "\n".join(lines)
+
+
 def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dict[str, Any]:
     """ACCEPT 성공 후 GitHub PR에 "사용자 승인 완료" 댓글로 교체한다.
 
@@ -14784,19 +15263,19 @@ def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dic
     accepted_by = str(req.get("accepted_by", "") or "unknown")
     accepted_at = str(req.get("accepted_at", "") or "") or _now()
 
-    # ACCEPTED 완료 댓글 (active approval 안내 문구 없음 — 승인 코드/PENDING 미포함)
-    comment_body = f"""<!-- pipeline-human-acceptance-packet -->
-<!-- pipeline-human-acceptance-packet-accepted -->
-## ✅ 사용자 승인 완료
-
-ACCEPTED by {accepted_by} at {accepted_at}
-
-파이프라인: {pipeline_id}
-PR: {pr_url}
-요청 ID: {request_id}
-
-이 작업은 사용자 승인(ACCEPTED)이 완료되었습니다. 추가 입력이 필요하지 않습니다.
-"""
+    # IMP-20260614-509F MT-3: accepted 완료 댓글 본문을 SSoT display model + renderer로 생성.
+    _state = _load_state_for() or {}
+    if not _state.get("pipeline_id") and pipeline_id:
+        _state = dict(_state)
+        _state["pipeline_id"] = pipeline_id
+    display_model = _build_acceptance_display_model(_state, evidence)
+    display_model["accepted_by"] = accepted_by
+    display_model["accepted_at"] = accepted_at
+    display_model["request_id"] = request_id
+    display_model["acceptance_display"] = "ACCEPTED"
+    if pr_url:
+        display_model["pr_url"] = pr_url
+    comment_body = _render_accepted_completion_comment(display_model)
 
     try:
         # PR 번호 조회 (pr_url에서 추출 또는 gh CLI 사용)

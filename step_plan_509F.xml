@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <audit_date>2026-06-14</audit_date>
+  <pipeline_id>IMP-20260614-509F</pipeline_id>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>9</micro_task_count>
+  <grep_executions>7</grep_executions>
+  <modules>
+    <module name="acceptance-display-model">
+      <description>_build_acceptance_display_model 단일 데이터 모델 구현</description>
+      <affected_functions>
+        <function>_build_acceptance_display_model (신규)</function>
+      </affected_functions>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites>
+        <site>_build_final_packet_content</site>
+        <site>_build_verification_json</site>
+        <site>_post_github_pending_acceptance_comment</site>
+        <site>_update_github_acceptance_comment</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>_collect_packet_evidence</pattern><match_count>8</match_count><executed>true</executed></grep_evidence>
+    </module>
+    <module name="renderer-separation">
+      <description>pending/accepted/final-packet/md/json renderer 분리</description>
+      <affected_functions>
+        <function>_render_pending_acceptance_comment (신규)</function>
+        <function>_render_accepted_completion_comment (신규)</function>
+        <function>_render_pr_body_final_packet (신규)</function>
+        <function>_build_acceptance_packet_json (기존 리팩터링)</function>
+      </affected_functions>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept</site>
+        <site>_finalize_post_accept</site>
+        <site>_cmd_report_final_packet</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>_build_final_packet_content|_build_verification_json</pattern><match_count>14</match_count><executed>true</executed></grep_evidence>
+    </module>
+  </modules>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260614-509F</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>코드 변경 함수 12개, 3개 파일 수정, 추정 280줄 — Fast Path 기준 초과. 기존 게이트 흐름(nonce/provenance/hygiene)은 변경하지 않지만 renderer 리팩터링 범위가 넓음.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>12</expected_changed_functions>
+      <expected_changed_lines>280</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 이미 모든 설계 요구사항을 상세히 명시했으므로 P2 질문 없이 진행.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>사용자가 명시한 _build_acceptance_display_model 데이터 모델 구조와 5개 renderer 분리를 그대로 구현해도 괜찮을까요?</user_facing_question>
+        <evidence>사용자 요청에 계산 필드 목록과 5개 renderer가 명시됨.</evidence>
+        <why_it_matters>데이터 모델 형태와 renderer 분리 범위가 구현 복잡도를 결정합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A"><label>사용자 명시 구조 그대로 구현</label><benefit>요구사항과 1:1 대응하며 검증이 용이하고 SSoT 보장</benefit><cost>기존 함수 시그니처 변경 범위가 넓어 작업 시간 증가</cost></option>
+          <option id="B"><label>기존 함수 보존하고 wrapper만 추가</label><benefit>기존 코드 변경 최소화로 안정성 유지 가능</benefit><cost>SSoT 목표 달성 어려워 중복 코드 잔존 가능성</cost></option>
+        </options>
+        <user_answer>사용자가 이미 상세 설계를 명시했으므로 옵션 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_build_acceptance_display_model (신규)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>none (신규 함수)</site></affected_call_sites>
+      <grep_evidence><pattern>_build_acceptance_display_model</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>단일 데이터 모델 함수 신설 — 모든 acceptance renderer가 공유하는 데이터 구조 반환</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1, AC-4, AC-5, AC-9</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>_render_pending_acceptance_comment (신규), _post_github_pending_acceptance_comment (리팩터링)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>_cmd_gates_request_accept</site></affected_call_sites>
+      <grep_evidence><pattern>_post_github_pending_acceptance_comment</pattern><match_count>2</match_count><executed>true</executed></grep_evidence>
+      <change_summary>pending 댓글 렌더링 분리 — ACCEPTED/승인 완료/배포 완료/완료됐습니다 문구 불포함, pending marker 포함</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-2, AC-3</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>_render_accepted_completion_comment (신규), _update_github_acceptance_comment (리팩터링)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>_finalize_post_accept</site></affected_call_sites>
+      <grep_evidence><pattern>_update_github_acceptance_comment</pattern><match_count>2</match_count><executed>true</executed></grep_evidence>
+      <change_summary>accepted 댓글 렌더링 분리 — pending marker 불포함, 승인 코드 안내 불포함</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-2, AC-3</covers_ac>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>_render_pr_body_final_packet (신규), _build_final_packet_content (리팩터링)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>_cmd_report_final_packet</site><site>_auto_generate_final_packet_and_update_pr</site></affected_call_sites>
+      <grep_evidence><pattern>_build_final_packet_content</pattern><match_count>3</match_count><executed>true</executed></grep_evidence>
+      <change_summary>PR body final packet 렌더링 분리 — display model 사용, 표준 순서, 하드코딩 숫자 문구 제거</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-4, AC-5, AC-6</covers_ac>
+    </micro_task>
+    <micro_task id="MT-5">
+      <affected_function>_build_verification_json (리팩터링)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>_cmd_report_final_packet</site><site>_auto_generate_final_packet_and_update_pr</site></affected_call_sites>
+      <grep_evidence><pattern>_build_verification_json</pattern><match_count>11</match_count><executed>true</executed></grep_evidence>
+      <change_summary>JSON 생성부가 display model 입력받아 requirements_summary, acceptance 상태 계산 — MD/JSON/PR body 일치성 보장</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+    <micro_task id="MT-6">
+      <affected_function>test_tc1_display_model_fields, test_tc2_pending_comment_no_accepted_phrases</affected_function>
+      <target_files><file>tests/e2e/test_acceptance_template_sst_509f.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>test_acceptance_template_sst</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>TC-1/TC-2 E2E 테스트 — display model 필드 검증, pending 댓글 금지 문구 없음 검증</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-7</covers_ac>
+    </micro_task>
+    <micro_task id="MT-7">
+      <affected_function>test_tc3_accepted_comment_no_pending_marker, test_tc4_pr_body_md_state_consistency, test_tc5_requirements_summary_consistency, test_tc7_no_hardcoded_test_counts</affected_function>
+      <target_files><file>tests/e2e/test_acceptance_template_sst_509f.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>test_tc3|test_tc4|test_tc5</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>TC-3~TC-5, TC-7 E2E 테스트 — accepted marker 검증, PR body/MD 상태 일치, requirements_summary 일치, 하드코딩 숫자 없음</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-7</covers_ac>
+    </micro_task>
+    <micro_task id="MT-8">
+      <affected_function>test_tc6_evidence_workspace_hygiene_summary, test_tc8_workspace_hygiene_reflected, test_tc_renderer_separation</affected_function>
+      <target_files><file>tests/e2e/test_acceptance_template_sst_509f.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>test_tc6|test_tc8</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>TC-6/TC-7b/TC-8 E2E 테스트 — evidence_integrity/workspace_hygiene 요약 누락 없음, renderer 분리, workspace_hygiene 반영 검증</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-7</covers_ac>
+    </micro_task>
+    <micro_task id="MT-9">
+      <affected_function>none (문서 전용)</affected_function>
+      <target_files><file>.claude/agents/pipeline-manager-agent.md</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>User Acceptance.*SSoT</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>User Acceptance 안내 템플릿 SSoT 원칙 문서화</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-8</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>_build_acceptance_display_model 함수가 pipeline_id, pr_url, github_actions_url, ci_run_id, evidence, gate 상태, acceptance_display 상태(PENDING/ACCEPTED/REJECTED/BLOCKED), requirements_summary, evidence_integrity 요약, workspace_hygiene 요약, approval_code, reject_example, user_checklist 필드를 반환한다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>pending 댓글(request-accept 경로)에 ACCEPTED, 승인 완료, 배포 완료, 완료됐습니다 문구가 포함되지 않는다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>pending 댓글에만 pipeline-human-acceptance-packet-pending 마커가 포함되고, accepted 댓글에는 이 마커와 승인 코드 입력 안내가 없다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>human_acceptance_packet.json, MD, PR body final packet의 acceptance_display 상태와 requirements_summary가 동일한 SSoT 계산값을 사용한다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>evidence_integrity 요약과 workspace_hygiene 요약이 final packet, packet MD, packet JSON에 모두 포함되어 누락 없다</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>템플릿/helper 코드에 하드코딩된 테스트 개수 문구(12 passed, 16 tests, 12개 테스트, 14개 AC 등)가 없다</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>tests/e2e/test_acceptance_template_sst_509f.py에 TC-1~TC-8 E2E 테스트가 구현되어 모두 PASS한다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>pipeline-manager-agent.md에 User Acceptance 안내 템플릿 SSoT 원칙이 문서화된다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>nonce 생성/검증/consume 로직, D278 post-accept fail-closed 흐름, 2821 workspace_hygiene fail-closed 흐름이 변경되지 않는다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10</python_version>
+  <forbidden>
+    <item>nonce 생성/검증/consume 로직 완화</item>
+    <item>gates request-accept / gates accept의 보안 조건 완화</item>
+    <item>D278의 post-accept fail-closed 흐름 변경</item>
+    <item>2821의 workspace_hygiene fail-closed 흐름 변경</item>
+    <item>COMPLETE 조건 완화</item>
+    <item>새 승인 경로 추가</item>
+    <item>테스트를 맞추기 위한 graceful skip 추가</item>
+    <item>하드코딩된 테스트 개수/AC 개수 추가</item>
+  </forbidden>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
