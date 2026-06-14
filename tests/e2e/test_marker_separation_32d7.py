@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 
@@ -103,7 +103,7 @@ def test_tc2_request_accept_preserves_final_check(monkeypatch: pytest.MonkeyPatc
     delete_ids = [
         c["id"]
         for c in comments
-        if pipeline._is_pending_or_accepted_acceptance_comment(c["body"])
+        if pipeline._is_pending_or_accepted_acceptance_comment(str(c["body"]))
     ]
     assert 10 not in delete_ids, "final-check-only 댓글(id=10)은 삭제 대상에서 제외되어야 함"
     assert 11 in delete_ids and 12 in delete_ids, "pending/accepted 댓글은 삭제 대상"
