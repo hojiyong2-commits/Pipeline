@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <pipeline_id>IMP-20260614-2821</pipeline_id>
+  <agent_run_id>dev-20232b4fd44419ea</agent_run_id>
+  <phase>dev</phase>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_workspace_hygiene_2821.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_check_workspace_hygiene</target_function>
+    <target_function>_is_tracked</target_function>
+    <target_function>test_tc6b_git_missing_graceful_skip</target_function>
+    <target_function>test_tc11b_gh_fail_pr_not_in_pr_or_base_blocked</target_function>
+    <upstream_callers>
+      <caller>cmd_gates (request-accept, accept)</caller>
+    </upstream_callers>
+    <state_mutations>
+      <mutation>result dict: blocking_items에 protected_evidence_not_in_pr_or_base 추가 가능</mutation>
+      <mutation>result dict: cleanup_only_items에 .pytest_tmp_* 디렉터리 추가</mutation>
+      <mutation>result dict: git_unavailable 필드 (git 부재 시, graceful skip)</mutation>
+    </state_mutations>
+  </impact_analysis>
+  <round>4</round>
+  <summary>
+    REJECT 5가지 + QA FAIL 회귀 수정 완료:
+    (1) _check_file_in_pr_or_base False 시 tracked protected 파일에 한해 protected_evidence_not_in_pr_or_base BLOCKED 연결
+    (2) TC-11b를 BLOCKED 검증으로 강화, TC-6b를 graceful_skip 검증으로 정정
+    (3) .pytest_tmp_* 디렉터리를 cleanup_only_items로 스캔
+    (4) _is_tracked per-file Permission denied fail-closed
+    (5) git_binary_missing: graceful skip (early-return 제거) - 회귀 수정
+    (6) pipeline-manager-agent.md 문서 코드와 일치하도록 갱신
+  </summary>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_workspace_hygiene_2821.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <test_result>python -m pytest tests/e2e/test_workspace_hygiene_2821.py → 16 passed</test_result>
+    <regression_test>acceptance flow 24개 (AEF0/8C3B/CE06) → 24 passed</regression_test>
+  </evidence>
+  <scope_lock_check>
+    <git_diff_files>.claude/agents/pipeline-manager-agent.md, pipeline.py, tests/e2e/test_workspace_hygiene_2821.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_workspace_hygiene_2821.py, .claude/agents/pipeline-manager-agent.md</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
