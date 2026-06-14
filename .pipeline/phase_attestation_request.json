@@ -20,7 +20,7 @@
                       "output_file":  "dev_handover_32D7.xml",
                       "output_sha256":  "ae82c91ca4d953bff99972a666f89395304bc41b378b2f0491f21eada23bc1d9",
                       "receipt_path":  ".pipeline/phase_evidence/BUG-20260614-32D7/dev/agent_receipt_dev-b1c11225a80cfb4a.json",
-                      "receipt_sha256":  "e1a96e4d5d9ec8bf6543548471676a811b0ec2ed96313317f21bdd9065bc9d31",
+                      "receipt_sha256":  "1e40a756e3e2f1b04851ed9ee58966a4856554b26cb04c336db7999615ef66b9",
                       "used_by_phase":  "dev",
                       "receipt_source_path":  ".pipeline\\agent_receipts\\BUG-20260614-32D7\\dev\\dev-b1c11225a80cfb4a.json"
                   },
@@ -30,8 +30,8 @@
                                 "label":  "agent_receipt",
                                 "source":  ".pipeline\\agent_receipts\\BUG-20260614-32D7\\dev\\dev-b1c11225a80cfb4a.json",
                                 "path":  ".pipeline/phase_evidence/BUG-20260614-32D7/dev/agent_receipt_dev-b1c11225a80cfb4a.json",
-                                "sha256":  "e1a96e4d5d9ec8bf6543548471676a811b0ec2ed96313317f21bdd9065bc9d31",
-                                "size_bytes":  591,
+                                "sha256":  "1e40a756e3e2f1b04851ed9ee58966a4856554b26cb04c336db7999615ef66b9",
+                                "size_bytes":  571,
                                 "requires_force_add":  true
                             },
                             {
