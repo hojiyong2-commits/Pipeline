@@ -5028,6 +5028,63 @@ _PR_URL_REPO_PATTERN = re.compile(
     r"github\.com/([^/]+/[^/]+)/pull/(\d+)"
 )
 
+# BUG-20260614-32D7: acceptance 댓글 marker 분리 상수 (SSoT — Rule D1 중복 방지).
+# 공통 marker만 공유하던 3종 댓글(CI 최종 확인 안내 / pending 승인 요청 / accepted 완료)을
+# marker 레벨에서 구분한다.
+#  - 공통 marker: 모든 acceptance 관련 댓글에 존재 (기존 코드 호환성 유지)
+#  - final-check marker: CI가 만드는 "최종 확인 안내" 댓글 전용
+#  - pending marker: gates request-accept가 만드는 PENDING 승인 요청 댓글 전용
+#  - accepted marker: gates accept 성공 후 만드는 ACCEPTED 완료 댓글 전용
+_ACCEPTANCE_PACKET_FINAL_CHECK_MARKER = "pipeline-final-check-packet"
+_ACCEPTANCE_PACKET_PENDING_MARKER = "pipeline-human-acceptance-packet-pending"
+_ACCEPTANCE_PACKET_ACCEPTED_MARKER = "pipeline-human-acceptance-packet-accepted"
+
+
+def _is_pending_or_accepted_acceptance_comment(body: str) -> bool:
+    """댓글 본문이 pending 승인 요청 또는 accepted 완료 댓글인지 판정한다.
+
+    [Purpose]: BUG-20260614-32D7 — pending/accepted 댓글 교체 시 CI 최종 확인 안내
+      (final-check marker만 있는) 댓글을 잘못 삭제하지 않도록 삭제 대상을 한정한다.
+    [Assumptions]: body는 GitHub 댓글 본문 문자열. None/비문자열은 False로 안전 처리.
+    [Vulnerability & Risks]: marker 문자열이 변경되면 판정이 깨진다 — 상수 SSoT로 관리.
+    [Improvement]: 향후 marker가 늘어나면 집합 기반으로 확장 가능.
+
+    Args:
+        body: 검사할 댓글 본문 문자열.
+    Returns:
+        pending 또는 accepted marker가 본문에 있으면 True, 아니면 False.
+    """
+    if not body or not isinstance(body, str):
+        return False  # None/빈 문자열/비문자열은 삭제 대상 아님 (안전 측 default)
+    return (
+        _ACCEPTANCE_PACKET_PENDING_MARKER in body
+        or _ACCEPTANCE_PACKET_ACCEPTED_MARKER in body
+    )
+
+
+def _is_final_check_only_comment(body: str) -> bool:
+    """댓글이 CI 최종 확인 안내(final-check marker만)이고 pending/accepted가 아닌지 판정한다.
+
+    [Purpose]: BUG-20260614-32D7 MT-4 — acceptance packet 조회 시 final-check 전용
+      댓글을 승인 댓글로 오인하지 않도록 제외한다.
+    [Assumptions]: body는 GitHub 댓글 본문 문자열. None/비문자열은 False.
+    [Vulnerability & Risks]: marker 문자열 변경 시 판정 깨짐 — 상수 SSoT로 관리.
+    [Improvement]: 향후 다른 비승인 댓글 유형도 동일 패턴으로 확장 가능.
+
+    Args:
+        body: 검사할 댓글 본문 문자열.
+    Returns:
+        final-check marker가 있고 pending/accepted marker가 없으면 True, 아니면 False.
+    """
+    if not body or not isinstance(body, str):
+        return False
+    if _ACCEPTANCE_PACKET_FINAL_CHECK_MARKER not in body:
+        return False
+    return not (
+        _ACCEPTANCE_PACKET_PENDING_MARKER in body
+        or _ACCEPTANCE_PACKET_ACCEPTED_MARKER in body
+    )
+
 
 def _find_temporary_pr_body_pattern(pr_body: str) -> Optional[str]:
     """PR 본문에 임시(placeholder) 문구가 줄 단위로 존재하면 그 패턴을 반환한다.
@@ -5180,12 +5237,26 @@ def _check_acceptance_packet_via_github(pr_url: str) -> Dict[str, Any]:
 
     # acceptance packet 태그 댓글 탐색
     packet_comment_body: Optional[str] = None
+    # BUG-20260614-32D7 MT-4: 댓글 선택 우선순위를 명확히 한다.
+    #  (1) pending marker(pipeline-human-acceptance-packet-pending) 댓글을 최우선 선택
+    #  (2) pending이 없으면 공통 marker만 있는 댓글(legacy 호환)을 선택
+    #  (3) final-check marker만 있고 pending/accepted가 없는 CI 최종 확인 안내 댓글은
+    #      승인 packet으로 오인하지 않도록 항상 제외한다.
+    pending_comment_body: Optional[str] = None
+    legacy_comment_body: Optional[str] = None
     for comment in comments:
         if not isinstance(comment, dict):
             continue
         body = comment.get("body") or ""
-        if _ACCEPTANCE_PACKET_COMMENT_TAG in body:
-            packet_comment_body = body  # 마지막(최신) 태그 댓글을 사용
+        if _ACCEPTANCE_PACKET_COMMENT_TAG not in body:
+            continue
+        if _is_final_check_only_comment(body):
+            continue  # CI 최종 확인 안내 전용 댓글 — approval packet 아님
+        if _ACCEPTANCE_PACKET_PENDING_MARKER in body:
+            pending_comment_body = body  # 최신 pending 댓글 우선
+        else:
+            legacy_comment_body = body  # 공통 marker만 있는 legacy 댓글 (fallback)
+    packet_comment_body = pending_comment_body or legacy_comment_body
 
     if packet_comment_body is None:
         return _acceptance_blocked(
@@ -15187,6 +15258,21 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
     if pr_url:
         display_model["pr_url"] = pr_url
     comment_body = _render_pending_acceptance_comment(display_model)
+    # BUG-20260614-32D7 MT-2: gates accept readiness 검사(_check_acceptance_packet_via_github)는
+    # pending 댓글 본문에 "판단 정보 상태: 판단 가능" 줄이 있어야 PASS로 판정한다. renderer가
+    # 이 줄을 포함하지 않으면 pending 댓글이 'insufficient'로 차단되므로, 누락 시 pending 마커
+    # 직후에 readiness 줄을 보장한다(이미 있으면 중복 추가하지 않는다).
+    _readiness_line = f"판단 정보 상태: {_ACCEPTANCE_PACKET_SUFFICIENT_MARKER}"
+    if not _ACCEPTANCE_PACKET_INSUFFICIENT_PATTERN.search(comment_body) and (
+        _readiness_line not in comment_body
+    ):
+        _pending_tag = "<!-- pipeline-human-acceptance-packet-pending -->"
+        if _pending_tag in comment_body:
+            comment_body = comment_body.replace(
+                _pending_tag, f"{_pending_tag}\n{_readiness_line}", 1
+            )
+        else:
+            comment_body = f"{_readiness_line}\n{comment_body}"
     # 불변식(IMP-20260614-509F MT-2): pending 댓글에는 PENDING 마커가 반드시 포함되고,
     # 완료(accepted) 마커는 절대 포함되지 않아야 한다.
     _pending_marker = "<!-- pipeline-human-acceptance-packet-pending -->"
@@ -15226,11 +15312,14 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
             if r_comments.returncode == 0 and r_comments.stdout.strip():
                 try:
                     all_comments = json.loads(r_comments.stdout.strip())
-                    tag = "pipeline-human-acceptance-packet"
+                    # BUG-20260614-32D7 MT-2: 삭제 대상을 pending/accepted 승인 댓글로 한정한다.
+                    # final-check marker(pipeline-final-check-packet)만 있고 pending/accepted
+                    # marker가 없는 CI 최종 확인 안내 댓글은 삭제하지 않는다(공통 marker만으로 삭제 금지).
                     old_ids = [
                         str(c["id"])
                         for c in all_comments
-                        if isinstance(c, dict) and tag in str(c.get("body", ""))
+                        if isinstance(c, dict)
+                        and _is_pending_or_accepted_acceptance_comment(str(c.get("body", "")))
                     ]
                 except (json.JSONDecodeError, ValueError, TypeError):
                     old_ids = []
@@ -15373,7 +15462,9 @@ def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dic
             else:
                 return {"success": False, "error": f"PR 번호 조회 실패: {r_num.stderr.strip()}"}
 
-        # 기존 acceptance-packet 댓글 전부 삭제 (Python 파싱 — jq 의존 없음)
+        # 기존 pending/accepted 승인 댓글만 삭제 (Python 파싱 — jq 의존 없음)
+        # BUG-20260614-32D7 MT-3: final-check marker(pipeline-final-check-packet)만 있고
+        # pending/accepted marker가 없는 CI 최종 확인 안내 댓글은 삭제하지 않는다.
         if pr_number:
             r_comments = subprocess.run(
                 ["gh", "api",
@@ -15385,11 +15476,11 @@ def _update_github_acceptance_comment(req: Dict[str, Any], evidence: str) -> Dic
             if r_comments.returncode == 0 and r_comments.stdout.strip():
                 try:
                     all_comments = json.loads(r_comments.stdout.strip())
-                    tag = "pipeline-human-acceptance-packet"
                     old_ids = [
                         str(c["id"])
                         for c in all_comments
-                        if isinstance(c, dict) and tag in str(c.get("body", ""))
+                        if isinstance(c, dict)
+                        and _is_pending_or_accepted_acceptance_comment(str(c.get("body", "")))
                     ]
                 except (json.JSONDecodeError, ValueError, TypeError):
                     old_ids = []
@@ -15455,11 +15546,23 @@ def _get_pr_comment_acceptance_body() -> Optional[str]:
         if r_comments.returncode != 0 or not r_comments.stdout.strip():
             return None
         all_comments = json.loads(r_comments.stdout.strip())
-        matched: Optional[str] = None
+        # BUG-20260614-32D7 MT-4: pending marker 댓글 우선, 없으면 공통 marker(legacy).
+        # final-check marker만 있는 CI 최종 확인 안내 댓글은 approval packet이 아니므로 제외한다.
+        pending_match: Optional[str] = None
+        legacy_match: Optional[str] = None
         for c in all_comments:
-            if isinstance(c, dict) and tag in str(c.get("body", "")):
-                matched = str(c.get("body", ""))
-        return matched
+            if not isinstance(c, dict):
+                continue
+            body = str(c.get("body", ""))
+            if tag not in body:
+                continue
+            if _is_final_check_only_comment(body):
+                continue
+            if _ACCEPTANCE_PACKET_PENDING_MARKER in body:
+                pending_match = body
+            else:
+                legacy_match = body
+        return pending_match or legacy_match
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError,
             json.JSONDecodeError, ValueError, TypeError):
         return None

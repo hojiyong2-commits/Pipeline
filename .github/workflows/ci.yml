@@ -352,8 +352,12 @@ jobs:
             $metricsOutput = "(파이프라인 상태 파일이 없어 메트릭을 확인할 수 없습니다.)"
           }
 
+          # BUG-20260614-32D7 MT-1: 공통 marker 외에 final-check 전용 marker를 추가하여
+          # CI 최종 확인 안내 댓글을 pending/accepted 승인 댓글과 marker 레벨에서 분리한다.
+          # 공통 marker(pipeline-human-acceptance-packet)는 기존 코드 호환성을 위해 유지한다.
           $packet = @"
           <!-- pipeline-human-acceptance-packet -->
+          <!-- pipeline-final-check-packet -->
           ## 최종 확인 안내
 
           이 댓글은 마지막 승인/거절 판단용입니다. 코드를 읽지 말고, **아래 결과 요약과 실제 결과물**이 요청과 맞는지만 확인하세요.
@@ -605,7 +609,14 @@ jobs:
           $body = Get-Content -Path human_acceptance_packet.md -Raw
           $commentsUri = "$env:GITHUB_API_URL/repos/$repo/issues/$prNumber/comments"
           $comments = Invoke-RestMethod -Method Get -Uri $commentsUri -Headers $headers
-          $existing = $comments | Where-Object { $_.body -like "*<!-- pipeline-human-acceptance-packet -->*" } | Select-Object -First 1
+          # BUG-20260614-32D7 MT-1: CI 최종 확인 안내는 final-check marker 댓글만 PATCH 대상으로 선택한다.
+          # pending(pipeline-human-acceptance-packet-pending) 또는 accepted(pipeline-human-acceptance-packet-accepted)
+          # marker가 있는 댓글은 승인 요청/완료 댓글이므로 절대 덮어쓰지 않는다.
+          $existing = $comments | Where-Object {
+            ($_.body -like "*<!-- pipeline-final-check-packet -->*") -and
+            ($_.body -notlike "*pipeline-human-acceptance-packet-pending*") -and
+            ($_.body -notlike "*pipeline-human-acceptance-packet-accepted*")
+          } | Select-Object -First 1
           $payload = @{ body = $body } | ConvertTo-Json -Depth 4
           if ($null -ne $existing) {
             $commentUri = "$env:GITHUB_API_URL/repos/$repo/issues/comments/$($existing.id)"
