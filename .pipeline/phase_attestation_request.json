@@ -20,7 +20,7 @@
     "output_file": "qa_report_B32A.xml",
     "output_sha256": "01a26c48322023c6ef85e41fd70ddb7f95d9b5e86eaba5bedcdf054a6de1e8f2",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260614-B32A/qa/agent_receipt_qa-924de7d11066765d.json",
-    "receipt_sha256": "50e3cae97b066b7f7794cdc730583b0c9e51e74115be33c2821d7227b13500e8",
+    "receipt_sha256": "b8e44bf9e44bed2b441dcb5d1b784bfc44fedf16d7a61470fab876d182f37a7e",
     "used_by_phase": "qa",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260614-B32A\\qa\\qa-924de7d11066765d.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260614-B32A\\qa\\qa-924de7d11066765d.json",
       "path": ".pipeline/phase_evidence/BUG-20260614-B32A/qa/agent_receipt_qa-924de7d11066765d.json",
-      "sha256": "50e3cae97b066b7f7794cdc730583b0c9e51e74115be33c2821d7227b13500e8",
+      "sha256": "b8e44bf9e44bed2b441dcb5d1b784bfc44fedf16d7a61470fab876d182f37a7e",
       "size_bytes": 603,
       "requires_force_add": true
     },
