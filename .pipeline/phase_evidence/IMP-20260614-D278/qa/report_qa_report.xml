@@ -1,0 +1,142 @@
+<qa_report>
+  <pipeline_id>IMP-20260614-D278</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <repeat_indicator>SECOND</repeat_indicator>
+  <round>2</round>
+
+  <step0_handover_evidence>
+    <handover_present>PASS — dev_handover.xml에 from=dev-agent + evidence 3개 파일(pipeline.py, tests/e2e/test_post_accept_finalization_d278.py, .claude/agents/pipeline-manager-agent.md) 명시</handover_present>
+    <category_ui>UI 태그 없음 — dev-agent handover만 수락 (정상)</category_ui>
+  </step0_handover_evidence>
+
+  <step0b_anti_gaming_read>
+    <tag_present>PASS — step_plan.xml line 3에 anti_gaming_read=true 존재. Round 1 FAIL(PD:anti_gaming_check_missing) 원인 해소 확인.</tag_present>
+  </step0b_anti_gaming_read>
+
+  <step0c_judgment_calls>
+    <status>N-A — step_plan.xml에 judgment_calls 블록 없음 (AMBIGUOUS 태스크 아님). design_confirmation DQ-1만 존재하며 user_answer로 옵션 A 명시 확정됨.</status>
+  </step0c_judgment_calls>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. gh CLI 호출은 graceful skip 처리되는 외부 도구 연동으로 WA 4항목 대상 아님.</wa>
+    <ui>N-A — UI 카테고리 아님. CLI/내부 로직 변경.</ui>
+    <fs>PASS — acceptance_request.json/packet 파일 쓰기에 encoding=utf-8 + ensure_ascii=False 명시, json_path.read_text(encoding=utf-8, errors=replace) 사용. user-supplied 경로 traversal 위험 없음(고정 파일명).</fs>
+    <pd>PASS — _resolve_acceptance_display_state 단일 SSoT helper로 표시 상태 계산을 통합하여 _build_verification_json/_build_final_packet_content 중복 제거. 표시 상태/gate 상태 레이어 명확 분리. God function 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. (gates secrets 변경 파일 검사 통과: exit 0)</sec>
+    <al>PASS — _resolve_acceptance_display_state: None/비dict isinstance 타입가드 + 안전 fallback(PENDING). _consume_acceptance_request: None/타입/값 검증 후 TypeError/ValueError raise. _finalize_post_accept: 전 단계 fail-closed dict 반환, bare except 없음.</al>
+    <build>N-A — pipeline.py 메타 변경, EXE 빌드 대상 아님. BUILD 태그 없음.</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 비 WA 태스크 (점수 산정 제외)</wa>
+    <ui score="0" max="20">N/A — 비 UI 태스크 (점수 산정 제외)</ui>
+    <fs score="20" max="20">파일 쓰기 utf-8 + ensure_ascii=False, 읽기 errors=replace fallback, 고정 파일명으로 traversal 위험 없음</fs>
+    <pd score="10" max="10">모듈분리 5/5 (SSoT helper 통합, 표시/gate 레이어 분리) + 인터페이스계약 5/5 (helper 반환 PENDING/ACCEPTED/REJECTED 명세, finalize 결과 dict 계약)</pd>
+    <al score="20" max="20">타입가드 5/5, 범위/상태 검증 5/5, 입력 타입 검증 5/5, 빈/None 데이터 안전 fallback 5/5</al>
+    <build score="0" max="10">N/A — 비 BUILD 태스크</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — 미채점</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS — 적용 카테고리(FS 20 + PD 10 + AL 20 = 50/50 만점) + 코드 품질 가중치 반영 108/120, 96/120 hard gate 통과</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — acceptance_request.json 갱신은 기존 단일 고정 파일 쓰기 패턴 유지</atomic_write>
+      <encoding_fallback>PASS — read_text(encoding=utf-8, errors=replace) 사용</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로 입력 없음 (고정 파일명)</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover test_results: 15 passed in 0.30s. QA 직접 재실행 확인.</execution_check_present>
+    <execution_check_verdict>PASS — QA가 pytest 재실행: 15 passed in 0.31s</execution_check_verdict>
+    <vsce_build_evidence>N-A — 비 VSCE 태스크</vsce_build_evidence>
+    <functional_binding_verified>PASS — _resolve_acceptance_display_state 3회 호출(_build_verification_json/_build_final_packet_content/_finalize_post_accept), _finalize_post_accept 1회 호출(_cmd_gates_accept ACCEPT 블록, line 17031). 함수 정의가 아닌 실제 호출 경로 확인.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO — step_plan requirements에 참고 이미지/파일 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>7</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음 — dev_handover evidence(3개)는 모두 scope_declaration files_modified(7개)에 포함됨</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>tests/oracles/IMP-20260614-D278/TC-1-normal/input.json (oracle, scope_manifest MT-5에 명시)</file>
+      <file>tests/oracles/IMP-20260614-D278/TC-1-normal/expected.json</file>
+      <file>tests/oracles/IMP-20260614-D278/TC-2-edge/input.json</file>
+      <file>tests/oracles/IMP-20260614-D278/TC-2-edge/expected.json</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff --name-only origin/main...HEAD 7개 파일이 scope_manifest 및 step_plan target_files와 정확히 일치. scope 외 파일 변경 없음. Trust-root(pipeline.py, agent md, tests/**)는 step_plan target_files에 명시되어 HIGH_RISK 위험 플래그(pipeline_protocol=true) 하에서 허용됨.</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml line 110 decomposition_audit 존재 (SPLIT_REQUIRED, MT 6개)</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-6 전부 grep_evidence executed=true 포함</grep_evidence_present>
+    <declared_functions>6</declared_functions>
+    <actual_modified_functions>5</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — 실제 변경 함수(_resolve_acceptance_display_state, _consume_acceptance_request, _build_verification_json, _build_final_packet_content, _finalize_post_accept, _cmd_gates_accept ACCEPT 블록)가 모두 PM micro_task affected_function 범위 내</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="_resolve_acceptance_display_state SSoT helper 신규 (pipeline.py:4255). PENDING/ACCEPTED/REJECTED 정규화. _build_verification_json(11284), _build_final_packet_content(10776), _finalize_post_accept(14968) 3곳 호출로 SSoT 통합."/>
+    <criterion ac_id="AC-2" status="PASS" evidence="oracle TC-1-normal expected.json = PENDING. helper가 status=PENDING/None 시 PENDING 반환. test_request_accept_pending_state PASS."/>
+    <criterion ac_id="AC-3" status="PASS" evidence="status=CONSUMED + consumed_result=ACCEPT to ACCEPTED. oracle TC-2-edge expected.json = ACCEPTED. JSON display_status(11347)/MD acceptance_display(10867) 동일 helper 사용. test_accept_success_accepted_state PASS."/>
+    <criterion ac_id="AC-4" status="PASS" evidence="_consume_acceptance_request accepted_at(4320)/accepted_by(4321)/consumed_nonce(4322) 추가. verification_json acceptance.display_status(11347) 추가. test_consume_request_adds_new_fields PASS."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="_cmd_gates_accept에서 state.acceptance.provenance_check.approver 추출(17014-17020) 후 _consume_acceptance_request(accepted_by=_accept_approver) 전달(17021)."/>
+    <criterion ac_id="AC-6" status="PASS" evidence="처리 순서: nonce/provenance/consistency 검증 to _consume_acceptance_request(17021) to _finalize_post_accept(17031: packet재생성→JSON검증→상태일치→PR갱신→재조회) to 성공 시에만 _set_external_gate(acceptance,PASS)(17079). fail-closed."/>
+    <criterion ac_id="AC-7" status="PASS" evidence="_finalize_post_accept status!=PASS 시 _record_failure_packet + _die()(17060)로 gate PASS(17079) 전 종료. snapshot/JSON/PR body write 실패 시 BLOCKED. test_pr_body_update_fail_blocks_pass, test_status_mismatch_blocks PASS."/>
+    <criterion ac_id="AC-8" status="PASS" evidence="단계7 PR body 재조회 후 packet 블록 ACCEPTED 미확인 시 post_accept_pr_recheck_not_accepted BLOCKED(15026-15036). test_no_active_approval_after_accept, test_pr_recheck_not_accepted_blocks PASS."/>
+    <criterion ac_id="AC-9" status="PASS" evidence="15개 테스트 PASS (요구 최소 12개 초과). QA 직접 재실행: 15 passed in 0.31s. PIPELINE_STATE_PATH 격리 + subprocess + final_state assertion(test_status_command_runs_isolated) 포함."/>
+    <criterion ac_id="AC-10" status="PASS" evidence="기존 Nonce/pr_body_stale/evidence/Technical/Oracle/GitHub CI gate 회귀: provenance_2338/verification_json/gates_accept_verification_json/verification_json_ssot/final_packet_2e3d/protocol_consistency = 89 passed. nonce 회귀 43 passed."/>
+    <criterion ac_id="AC-11" status="PASS" evidence=".claude/agents/pipeline-manager-agent.md line 138 User Acceptance 표시 상태값 정의 섹션: 표시 상태(PENDING/ACCEPTED/REJECTED) vs gate 상태(PASS) 레이어 구분 + fail-closed 순서 문서화."/>
+    <criterion ac_id="AC-12" status="PARTIAL" evidence="신규 15 + 회귀(82ED: test_evidence_integrity_regression_82ed, A716: test_pr_body_readiness_regression_a716 + test_pr_body_readiness_a716) + Real CLI Path E2E 19 passed. Technical/Oracle/GitHub CI gate는 Phase 7 외부 게이트 소관으로 QA 단계 미실행 — 정상 처리."/>
+  </criteria_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <oracle_quality_check>
+    <normal_case>PASS — TC-1-normal expected.json = PENDING</normal_case>
+    <edge_case>PASS — TC-2-edge expected.json = ACCEPTED</edge_case>
+    <non_empty_expected>PASS — 두 expected 모두 비어있지 않음</non_empty_expected>
+    <no_placeholder>PASS — TODO/PLACEHOLDER/TBD/N/A 없음</no_placeholder>
+  </oracle_quality_check>
+
+  <patch_lane_check>N-A — STANDARD execution profile (Patch Lane 아님)</patch_lane_check>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+
+  <critical_issues>
+    없음 — Round 1 FAIL 원인(anti_gaming_read 태그 누락) 해소 확인. 코드 구현 자체는 Round 1에서 이미 결함 없음으로 확인됨(PD 10/10, AL 만점). 표시 상태 SSoT 통합, fail-closed post-accept finalization, provenance approver 전달이 호출 경로 검증과 테스트로 입증됨.
+  </critical_issues>
+
+  <improvement_suggestions>
+    - dev_handover.xml(15개)과 step_plan AC-9("12개 필수") 테스트 개수 표기 불일치. 실제 15개로 요구 최소치 초과 충족이므로 감점 사유 아님. 향후 handover에 "최소 12개 요구 대비 15개 구현" 명시 권장.
+    - _finalize_post_accept 단계6 PR comment 갱신 실패는 best-effort swallow(except Exception)이며 pr_comment_updated=False 기록만 하고 gate PASS는 차단하지 않음. test_pr_comment_update_fail_blocks_pass가 PASS하는 것으로 보아 의도된 보조 동작으로 판단되어 기능 충족. comment 실패도 엄격히 BLOCKED를 원하면 별도 IMP에서 명확화 권장.
+  </improvement_suggestions>
+</qa_report>
