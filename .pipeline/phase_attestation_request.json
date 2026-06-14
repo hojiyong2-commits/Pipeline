@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-14T09:24:39Z",
+  "generated_at": "2026-06-14T09:28:44Z",
   "pipeline_id": "IMP-20260614-2821",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "49d8dd7e2f29f014806c466d562c275d39c414fa",
+  "commit_hint": "648b83b66ae42cf5613e66a3663c000a4fcb90ed",
   "state": {
     "current_phase": "harness",
     "phase_completed_at": "2026-06-14T09:05:54Z",
@@ -46,8 +46,8 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/IMP-20260614-2821/dev/scope_manifest_scope_manifest.json",
-      "sha256": "544cadfbdde4e84a78bdef072e03acbca1e975eaa4b836ed5199c1de8a8fc473",
-      "size_bytes": 7335,
+      "sha256": "2a80a91fec804505e4c67e550e0d221288a6f2d50c41932961162dc03a232a60",
+      "size_bytes": 7149,
       "requires_force_add": false
     }
   ],
