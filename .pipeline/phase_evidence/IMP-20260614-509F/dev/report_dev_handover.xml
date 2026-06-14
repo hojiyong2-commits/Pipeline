@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <pipeline_id>IMP-20260614-509F</pipeline_id>
+  <agent_run_id>dev-3c1c5b67cc87f947</agent_run_id>
+  <phase>dev</phase>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_acceptance_template_sst_509f.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_build_acceptance_display_model</target_function>
+    <target_function>_display_model_from_evidence</target_function>
+    <target_function>_render_pending_acceptance_comment</target_function>
+    <target_function>_render_accepted_completion_comment</target_function>
+    <target_function>_render_pr_body_final_packet</target_function>
+    <target_function>_build_verification_json</target_function>
+    <target_function>_build_final_packet_content</target_function>
+    <upstream_callers>
+      <caller>_post_github_pending_acceptance_comment</caller>
+      <caller>_update_github_acceptance_comment</caller>
+      <caller>_cmd_gates_request_accept</caller>
+    </upstream_callers>
+    <state_mutations>
+      <mutation>없음 (renderer 분리만, state 구조 변경 없음)</mutation>
+    </state_mutations>
+  </impact_analysis>
+  <summary>
+    MT-1~MT-9 구현 완료:
+    - _build_acceptance_display_model(state, evidence) 신규 — 13개 키 반환, SSoT 단일 데이터 모델
+    - _render_pending_acceptance_comment 신규 — pending 마커 2종 포함, 완료 문구 미포함
+    - _render_accepted_completion_comment 신규 — accepted 마커 포함, pending 마커/승인코드 안내 미포함
+    - _render_pr_body_final_packet 신규 — 하드코딩 숫자 제거, requirements_summary 동적 계산
+    - _build_verification_json 리팩터링 — _display_model_from_evidence 재사용, SSoT 일치
+    - _build_final_packet_content 리팩터링 — renderer 위임
+    - tests/e2e/test_acceptance_template_sst_509f.py 9개 테스트 신규 — 9/9 PASS
+    - .claude/agents/pipeline-manager-agent.md SSoT 원칙 문서화
+  </summary>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_acceptance_template_sst_509f.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <test_result>python -m pytest tests/e2e/test_acceptance_template_sst_509f.py → 9 passed (6.97s)</test_result>
+  </evidence>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_acceptance_template_sst_509f.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_acceptance_template_sst_509f.py, .claude/agents/pipeline-manager-agent.md</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
