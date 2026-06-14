@@ -3531,8 +3531,16 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
                 p = line.strip().replace("\\", "/").lstrip("./")
                 if p:
                     untracked_set.add(p)
+    # IMP-20260614-2821 수정 3: git 실행파일 부재 시 fail-closed BLOCKED(REJECT 사유 4).
+    # 기존 graceful skip은 evidence 변조 신호를 놓칠 수 있어 fail-closed로 변경한다.
+    # 실 운영 request-accept 환경에는 항상 git이 존재하므로 정상 흐름에는 영향이 없다.
     if git_binary_missing:
         result["git_unavailable"] = True
+        _add_blocker(
+            "workspace_hygiene_check_failed",
+            "git 실행파일을 찾을 수 없어 workspace hygiene을 확인할 수 없습니다(fail-closed). PATH에 git을 설치하세요.",
+        )
+        return result
 
     def _is_untracked(rel_path: str) -> Optional[bool]:
         """rel_path가 untracked인지 반환.
@@ -3569,6 +3577,57 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
         except OSError:
             return "ERROR"  # type: ignore[return-value]
         return _ls.returncode == 0
+
+    def _check_file_in_pr_or_base(rel_path_str: str) -> bool:
+        """파일이 PR changed files 또는 base/main에 실제로 존재하는지 확인한다(IMP-20260614-2821 수정 4).
+
+        Returns:
+            True: OK (base/main에 이미 있거나 PR diff에 포함됨).
+            False: BLOCKED 조건 (git 오류, gh 오류/부재, 또는 어느 쪽에도 없음 → 카운트 증가 안 함).
+        """
+        # git 부재는 이미 위에서 fail-closed로 처리되어 이 지점에 도달하지 않는다.
+        # 1. git ls-files --error-unmatch 로 tracked 확인.
+        try:
+            _ls = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", rel_path_str],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+                cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, OSError):
+            return False
+        if _ls.returncode != 0:
+            return False  # tracked 아님 → 카운트 증가 안 함
+
+        # 2. git show origin/main:<path> 로 base/main에 이미 존재하는지 확인.
+        try:
+            _show = subprocess.run(
+                ["git", "show", f"origin/main:{rel_path_str}"],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+                cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, OSError):
+            _show = None
+        if _show is not None and _show.returncode == 0:
+            return True  # base/main에 이미 있음 → OK
+
+        # 3. gh pr view 로 PR changed files 확인.
+        try:
+            _gh = subprocess.run(
+                ["gh", "pr", "view", "--json", "files"],
+                capture_output=True, text=True, encoding="utf-8", check=False,
+                cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, OSError):
+            return False  # gh CLI 부재 → fail-closed(카운트 증가 안 함)
+        if _gh.returncode != 0:
+            return False  # gh 실패 → fail-closed
+        try:
+            _pr_data = json.loads(_gh.stdout)
+            _pr_files = {f.get("path", "") for f in (_pr_data.get("files") or [])}
+        except (json.JSONDecodeError, AttributeError):
+            return False
+        _norm_rel = rel_path_str.replace("\\", "/").lstrip("./")
+        return _norm_rel in {p.replace("\\", "/").lstrip("./") for p in _pr_files}
 
     # 기존 게이트와의 정합성(IMP-20260614-2821): contract oracle_manifest.json이 존재하면
     # "untracked" 판정의 차단 권위는 기존 _check_oracle_manifest_vs_inventory +
@@ -3620,6 +3679,41 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
                 result["untracked_oracle_count"] += 1
             else:
                 result["tracked_oracle_count"] += 1
+
+    # ---- IMP-20260614-2821 수정 2: 루트 workspace cleanup_only 파일 스캔 ----
+    # 루트 디렉터리에 남아있는 임시 산출물(build_report.xml, *_dump.txt, tmp_tc*.json 등)을
+    # cleanup_only_items로 분류한다. 차단하지 않고 WARN 표시만 한다(REJECT 사유 2).
+    _ROOT_CLEANUP_PATTERNS: List[str] = [
+        "build_report.xml",
+        "oracle_result_dump.txt",
+        "pr_body_current.txt",
+        "pr_body_new.txt",
+        "*_dump.txt",
+        "tc*_dump.txt",
+        "ts*_dump.txt",
+        ".pytest_tmp_*",
+        "tmp*.json",
+        "tmp_tc*.json",
+        "tmp_tc*_given.json",
+        "tmp_tc*_when.json",
+        "tmp_tc*_then.json",
+    ]
+    for _root_pattern in _ROOT_CLEANUP_PATTERNS:
+        for _root_match in BASE_DIR.glob(_root_pattern):
+            if not _root_match.is_file():
+                continue
+            try:
+                _root_rel = _root_match.resolve().relative_to(BASE_DIR.resolve()).as_posix()
+            except (ValueError, OSError):
+                _root_rel = str(_root_match).replace("\\", "/")
+            if _root_rel not in result["cleanup_only_items"]:
+                result["cleanup_only_items"].append(_root_rel)
+    # .claude/worktrees/ 디렉터리 존재 여부 확인(디렉터리 산출물).
+    _worktrees_dir = BASE_DIR / ".claude" / "worktrees"
+    if _worktrees_dir.exists() and _worktrees_dir.is_dir():
+        _wt_rel = ".claude/worktrees"
+        if _wt_rel not in result["cleanup_only_items"]:
+            result["cleanup_only_items"].append(_wt_rel)
 
     # ---- 규칙 2/3/4: oracle_manifest 참조 파일 검사 ----
     # contract manifest 존재 시: oracle 차단은 기존 게이트(_check_oracle_manifest_vs_inventory +
@@ -3738,7 +3832,11 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
                         rel,
                     )
                     continue
-            result["pr_included_protected_count"] += 1
+            # IMP-20260614-2821 수정 4: PR diff 또는 base/main 포함 여부를 실제 검증한 뒤에만
+            # 카운트를 증가시킨다(REJECT 사유 3). 포함되지 않으면 이 단계에서 추가 차단은 하지
+            # 않고 카운트만 정확히 추적한다(untracked/missing은 위 규칙 2/3에서 별도 처리).
+            if _check_file_in_pr_or_base(rel):
+                result["pr_included_protected_count"] += 1
 
     # ---- cleanup_command 구성 (cleanup_only 파일이 있을 때) ----
     if result["cleanup_only_items"]:
@@ -15240,6 +15338,10 @@ def _materialize_acceptance_snapshot(
         except Exception:
             pass
     evidence_payload["evidence_integrity"] = _ei_integrity_ra
+    # IMP-20260614-2821 수정 1: workspace_hygiene을 state에서 evidence_payload로 주입.
+    # 이 주입이 없으면 request-accept 후 생성되는 packet의 workspace_hygiene 섹션이
+    # 실제 결과 대신 NOT_CHECKED로 표시된다(REJECT 사유 1).
+    evidence_payload["workspace_hygiene"] = state.get("workspace_hygiene") or {}
     content = _build_final_packet_content(evidence_payload)
     verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
 

@@ -348,6 +348,50 @@ def test_tc5_defers_to_existing_gate_when_manifest_present(oracle_fixture, tmp_p
     assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
+# TC-5b (IMP-20260614-2821 수정 5): 루트 workspace cleanup_only 파일 → WARN (BLOCKED 아님).
+def test_tc5b_root_workspace_cleanup_only_warn(tmp_path):
+    """루트 워크스페이스에 build_report.xml, *_dump.txt 파일이 있으면
+    request-accept가 BLOCKED되지 않고 workspace_hygiene.status=WARN이 된다."""
+    env = make_env(tmp_path)
+    state_path = env["PIPELINE_STATE_PATH"]
+    pid = synthetic_pid()
+    bootstrap_state(env, pid)
+
+    # 루트에 cleanup_only 파일 임시 생성 (이미 있으면 건드리지 않고 생성한 것만 정리).
+    root_build_report = BASE_DIR / "build_report.xml"
+    root_dump = BASE_DIR / "tc1_dump.txt"
+    created_files = []
+    try:
+        if not root_build_report.exists():
+            root_build_report.write_text("<build_report/>", encoding="utf-8")
+            created_files.append(root_build_report)
+        if not root_dump.exists():
+            root_dump.write_text("dump content", encoding="utf-8")
+            created_files.append(root_dump)
+
+        ev = write_evidence_file(tmp_path)
+        r = run_cli(["gates", "request-accept", "--evidence", str(ev)], env=env)
+
+        combined = r.stdout + r.stderr
+        # WORKSPACE HYGIENE GATE로 BLOCKED되면 안 됨 (cleanup_only는 WARN).
+        assert "WORKSPACE HYGIENE GATE" not in combined or "cleanup_only" in combined.lower(), combined[:600]
+
+        final_state = load_final_state(env)
+        wh = final_state.get("workspace_hygiene") or {}
+        # cleanup_only 파일이 있으면 WARN (BLOCKED 아님).
+        assert wh.get("status") in ("WARN", "OK"), wh
+        assert wh.get("status") != "BLOCKED", wh
+        items = [str(c) for c in (wh.get("cleanup_only_items") or [])]
+        assert any("build_report.xml" in c for c in items), wh
+        assert state_path, "PIPELINE_STATE_PATH must be set"
+    finally:
+        for f in created_files:
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+
 # TC-6: state["workspace_hygiene"] 필드 저장 확인
 def test_tc6_state_workspace_hygiene_fields(tmp_path):
     """request-accept 후 state["workspace_hygiene"]에 status / blocking_items /
@@ -368,6 +412,49 @@ def test_tc6_state_workspace_hygiene_fields(tmp_path):
     assert "cleanup_only_items" in wh, wh
     assert "checked_at" in wh, wh
     assert state_path, "PIPELINE_STATE_PATH must be set"
+
+
+# TC-6b (IMP-20260614-2821 수정 5): git 실행파일 FileNotFoundError → fail-closed BLOCKED.
+def test_tc6b_git_missing_fail_closed(oracle_fixture, tmp_path):
+    """git 실행파일이 없으면(FileNotFoundError 시뮬레이션)
+    _check_workspace_hygiene이 fail-closed로 BLOCKED를 반환한다."""
+    fx = oracle_fixture
+    env = make_env(tmp_path)
+    # untracked oracle 생성.
+    fx.add_oracle_file("TC-6b/input.json", '{"x": 1}')
+
+    script = tmp_path / "git_missing_probe.py"
+    script.write_text(
+        "import json\n"
+        "import sys\n"
+        f"sys.path.insert(0, {str(BASE_DIR)!r})\n"
+        "import subprocess\n"
+        "import pipeline as P\n"
+        "_orig = subprocess.run\n"
+        "def _fake(args, *a, **k):\n"
+        "    if isinstance(args, (list, tuple)) and args and str(args[0]) == 'git':\n"
+        "        raise FileNotFoundError('git not found')\n"
+        "    return _orig(args, *a, **k)\n"
+        "P.subprocess.run = _fake\n"
+        f"r = P._check_workspace_hygiene({{'pipeline_id': {fx.pid!r}}})\n"
+        "print('HYGIENE_JSON=' + json.dumps(r, ensure_ascii=True))\n",
+        encoding="utf-8",
+    )
+    cp = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(BASE_DIR), env=env, timeout=60,
+    )
+    assert cp.returncode == 0, cp.stdout + cp.stderr
+    payload = None
+    for line in (cp.stdout or "").splitlines():
+        if line.startswith("HYGIENE_JSON="):
+            payload = json.loads(line[len("HYGIENE_JSON="):])
+            break
+    assert payload is not None, cp.stdout[:400]
+    assert payload.get("status") == "BLOCKED", payload
+    blocking = " ".join(str(b) for b in (payload.get("blocking_items") or []))
+    assert "workspace_hygiene_check_failed" in blocking, payload
 
 
 # TC-7: cleanup_only_items 목록에 build_report.xml 포함 확인
@@ -535,10 +622,82 @@ def test_tc11_sha_mismatch_blocks(oracle_fixture, tmp_path):
     assert state_path, "PIPELINE_STATE_PATH must be set"
 
 
-# TC-12: 정상 케이스 (oracle 없음, no issues) → hygiene OK, status 정상 출력
+# TC-11b (IMP-20260614-2821 수정 5): gh pr view 실패 시 pr_included_protected_count=0.
+def test_tc11b_gh_fail_pr_count_zero(oracle_fixture, tmp_path):
+    """gh CLI가 없거나 실패하고 base/main에도 없는 tracked 파일은
+    _check_workspace_hygiene의 pr_included_protected_count가 증가하지 않아야 한다.
+
+    base/main 조회를 강제로 실패시키고 gh도 실패시켜 '포함 증거 없음' 상태를 만든다."""
+    fx = oracle_fixture
+    env = make_env(tmp_path)
+    bootstrap_state(env, fx.pid)
+    tracked_rel = "CLAUDE.md"
+    fx.write_oracle_manifest([
+        {"input_path": tracked_rel, "expected_path": tracked_rel, "case_kind": "normal"}
+    ])
+    # inventory sha256은 올바르게 설정 (SHA mismatch는 이 테스트와 무관).
+    import hashlib
+    actual_sha = hashlib.sha256((BASE_DIR / tracked_rel).read_bytes()).hexdigest()
+    abs_tracked = str((BASE_DIR / tracked_rel).resolve())
+    fx.write_inventory([
+        {
+            "pipeline_id": fx.pid,
+            "path": abs_tracked,
+            "kind": "oracle_input",
+            "sha256": actual_sha,
+            "protection": "protected",
+        }
+    ])
+
+    script = tmp_path / "gh_fail_probe.py"
+    # gh는 실패시키고, git show origin/main:<path> 도 실패시켜 base/main 미존재 상태를 만든다.
+    # (git ls-files --error-unmatch 는 정상 통과시켜 tracked로 판정되도록 유지).
+    script.write_text(
+        "import json\n"
+        "import sys\n"
+        f"sys.path.insert(0, {str(BASE_DIR)!r})\n"
+        "import subprocess\n"
+        "import pipeline as P\n"
+        "_orig = subprocess.run\n"
+        "def _fake(args, *a, **k):\n"
+        "    if isinstance(args, (list, tuple)) and args:\n"
+        "        a0 = str(args[0])\n"
+        "        if a0 == 'gh':\n"
+        "            return subprocess.CompletedProcess(args, 1, '', 'gh not found')\n"
+        "        if a0 == 'git' and len(args) >= 2 and str(args[1]) == 'show':\n"
+        "            return subprocess.CompletedProcess(args, 128, '', 'no such ref')\n"
+        "    return _orig(args, *a, **k)\n"
+        "P.subprocess.run = _fake\n"
+        f"state = {{'pipeline_id': {fx.pid!r}}}\n"
+        "r = P._check_workspace_hygiene(state)\n"
+        "print('HYGIENE_JSON=' + json.dumps(r, ensure_ascii=True))\n",
+        encoding="utf-8",
+    )
+    cp = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(BASE_DIR), env=env, timeout=60,
+    )
+    assert cp.returncode == 0, cp.stdout + cp.stderr
+    payload = None
+    for line in (cp.stdout or "").splitlines():
+        if line.startswith("HYGIENE_JSON="):
+            payload = json.loads(line[len("HYGIENE_JSON="):])
+            break
+    assert payload is not None, cp.stdout[:400]
+    # gh 실패 + base/main 미존재 → pr_included_protected_count는 0이어야 함.
+    assert payload.get("pr_included_protected_count", -1) == 0, payload
+
+
+# TC-12: 정상 케이스 (해당 파이프라인 scope에 oracle/blocker 없음) → hygiene 비차단.
 def test_tc12_clean_case_hygiene_ok_status_normal(tmp_path):
-    """oracle/cleanup 파일이 없는 깨끗한 합성 파이프라인은 hygiene OK가 되고,
-    status 출력에 CLEANUP 안내가 나타나지 않는다."""
+    """oracle/blocker가 없는 깨끗한 합성 파이프라인은 hygiene이 BLOCKED가 아니다.
+
+    IMP-20260614-2821 수정 2로 루트 워크스페이스 cleanup_only 스캔이 추가되어,
+    실제 저장소 루트에 build_report.xml 등 임시 산출물이 남아 있으면 전역 status가
+    WARN이 될 수 있다(이는 의도된 동작). 따라서 본 케이스의 핵심 불변식은
+    '해당 파이프라인 scope에 BLOCKED 항목이 없다(blocking_items 비어 있음)'이며,
+    전역 status는 OK 또는 WARN을 허용한다."""
     env = make_env(tmp_path)
     state_path = env["PIPELINE_STATE_PATH"]  # PIPELINE_STATE_PATH isolation 확인
     pid = synthetic_pid()
@@ -549,12 +708,64 @@ def test_tc12_clean_case_hygiene_ok_status_normal(tmp_path):
 
     final_state = load_final_state(env)
     wh = final_state.get("workspace_hygiene") or {}
-    assert wh.get("status") == "OK", wh
-    assert not (wh.get("cleanup_only_items") or []), wh
+    # 핵심 불변식: BLOCKED가 아니고 blocking_items가 비어 있어야 한다.
+    assert wh.get("status") in ("OK", "WARN"), wh
+    assert wh.get("status") != "BLOCKED", wh
     assert not (wh.get("blocking_items") or []), wh
     assert state_path, "PIPELINE_STATE_PATH must be set"
 
+    # status 출력은 정상 종료해야 한다(루트 cleanup 안내는 환경에 따라 표시될 수 있음).
     r = run_cli(["status"], env=env)
     assert r.returncode == 0, r.stdout + r.stderr
-    combined = r.stdout + r.stderr
-    assert "CLEANUP 안내" not in combined, combined[:800]
+
+
+# TC-12b (IMP-20260614-2821 수정 5): base/main에 이미 존재하는 파일 → pr_included_protected_count 증가.
+def test_tc12b_base_main_file_counted(oracle_fixture, tmp_path):
+    """oracle_manifest가 참조하는 파일이 base/main(origin/main)에 이미 존재하면
+    _check_workspace_hygiene에서 pr_included_protected_count >= 1이어야 한다."""
+    fx = oracle_fixture
+    env = make_env(tmp_path)
+    bootstrap_state(env, fx.pid)
+    # CLAUDE.md는 base/main에 이미 존재하는 tracked 파일.
+    tracked_rel = "CLAUDE.md"
+    fx.write_oracle_manifest([
+        {"input_path": tracked_rel, "expected_path": tracked_rel, "case_kind": "normal"}
+    ])
+    import hashlib
+    actual_sha = hashlib.sha256((BASE_DIR / tracked_rel).read_bytes()).hexdigest()
+    abs_tracked = str((BASE_DIR / tracked_rel).resolve())
+    fx.write_inventory([
+        {
+            "pipeline_id": fx.pid,
+            "path": abs_tracked,
+            "kind": "oracle_input",
+            "sha256": actual_sha,
+            "protection": "protected",
+        }
+    ])
+
+    script = tmp_path / "base_main_probe.py"
+    script.write_text(
+        "import json\n"
+        "import sys\n"
+        f"sys.path.insert(0, {str(BASE_DIR)!r})\n"
+        "import pipeline as P\n"
+        f"state = {{'pipeline_id': {fx.pid!r}}}\n"
+        "r = P._check_workspace_hygiene(state)\n"
+        "print('HYGIENE_JSON=' + json.dumps(r, ensure_ascii=True))\n",
+        encoding="utf-8",
+    )
+    cp = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=str(BASE_DIR), env=env, timeout=60,
+    )
+    assert cp.returncode == 0, cp.stdout + cp.stderr
+    payload = None
+    for line in (cp.stdout or "").splitlines():
+        if line.startswith("HYGIENE_JSON="):
+            payload = json.loads(line[len("HYGIENE_JSON="):])
+            break
+    assert payload is not None, cp.stdout[:400]
+    # base/main에 존재하는 파일이므로 pr_included_protected_count >= 1.
+    assert payload.get("pr_included_protected_count", 0) >= 1, payload
