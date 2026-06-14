@@ -1,60 +1,56 @@
-﻿{
-    "schema_version":  1,
-    "request_type":  "pipeline-phase-attestation-request-v1",
-    "generated_at":  "2026-06-14T13:14:11Z",
-    "pipeline_id":  "BUG-20260614-B32A",
-    "phase":  "dev",
-    "phase_status":  "DONE",
-    "commit_hint":  "53126eac6b90202485a115af9a35d9e3d735bab6",
-    "state":  {
-                  "current_phase":  "qa",
-                  "phase_completed_at":  "2026-06-14T13:13:51Z",
-                  "report_file":  "dev_handover.xml",
-                  "evidence":  "pipeline.py,tests/e2e/test_pending_comment_sst_b32a.py"
-              },
-    "agent_run":  {
-                      "run_id":  "dev-e2c4038fcfd1f9a0",
-                      "phase":  "dev",
-                      "agent_id":  "dev-agent",
-                      "status":  "COMPLETED",
-                      "output_file":  "dev_handover.xml",
-                      "output_sha256":  "726f9f63fb91ed7287d18ad4088e76edf261fc7f33e79e8c3cf22d3561fe91c7",
-                      "receipt_path":  ".pipeline/phase_evidence/BUG-20260614-B32A/dev/agent_receipt_dev-e2c4038fcfd1f9a0.json",
-                      "receipt_sha256":  "5810d23f7f1c6ef731019020378790b39796b4d43b035472685aa537958c3f6e",
-                      "used_by_phase":  "dev",
-                      "receipt_source_path":  ".pipeline\\agent_receipts\\BUG-20260614-B32A\\dev\\dev-e2c4038fcfd1f9a0.json"
-                  },
-    "manager_run":  null,
-    "copied_evidence":  [
-                            {
-                                "label":  "agent_receipt",
-                                "source":  ".pipeline\\agent_receipts\\BUG-20260614-B32A\\dev\\dev-e2c4038fcfd1f9a0.json",
-                                "path":  ".pipeline/phase_evidence/BUG-20260614-B32A/dev/agent_receipt_dev-e2c4038fcfd1f9a0.json",
-                                "sha256":  "5810d23f7f1c6ef731019020378790b39796b4d43b035472685aa537958c3f6e",
-                                "size_bytes":  502,
-                                "requires_force_add":  true
-                            },
-                            {
-                                "label":  "report",
-                                "source":  "dev_handover.xml",
-                                "path":  ".pipeline/phase_evidence/BUG-20260614-B32A/dev/report_dev_handover.xml",
-                                "sha256":  "726f9f63fb91ed7287d18ad4088e76edf261fc7f33e79e8c3cf22d3561fe91c7",
-                                "size_bytes":  2335,
-                                "requires_force_add":  true
-                            },
-                            {
-                                "label":  "scope_manifest",
-                                "source":  "scope_manifest_B32A.json",
-                                "path":  ".pipeline/phase_evidence/BUG-20260614-B32A/dev/scope_manifest_scope_manifest_B32A.json",
-                                "sha256":  "275f4e795f6ee8d2f17fdfa20299454d3c56f5ce73332606fc165c7b51ce8428",
-                                "size_bytes":  1100,
-                                "requires_force_add":  true
-                            }
-                        ],
-    "workspace_file_checks":  [
-
-                              ],
-    "local_only_files":  [
-
-                         ]
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-14T13:14:11Z",
+  "pipeline_id": "BUG-20260614-B32A",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "53126eac6b90202485a115af9a35d9e3d735bab6",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-14T13:13:51Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_pending_comment_sst_b32a.py"
+  },
+  "agent_run": {
+    "run_id": "dev-e2c4038fcfd1f9a0",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "726f9f63fb91ed7287d18ad4088e76edf261fc7f33e79e8c3cf22d3561fe91c7",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260614-B32A/dev/agent_receipt_dev-e2c4038fcfd1f9a0.json",
+    "receipt_sha256": "5810d23f7f1c6ef731019020378790b39796b4d43b035472685aa537958c3f6e",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260614-B32A\\dev\\dev-e2c4038fcfd1f9a0.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260614-B32A\\dev\\dev-e2c4038fcfd1f9a0.json",
+      "path": ".pipeline/phase_evidence/BUG-20260614-B32A/dev/agent_receipt_dev-e2c4038fcfd1f9a0.json",
+      "sha256": "5810d23f7f1c6ef731019020378790b39796b4d43b035472685aa537958c3f6e",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260614-B32A/dev/report_dev_handover.xml",
+      "sha256": "726f9f63fb91ed7287d18ad4088e76edf261fc7f33e79e8c3cf22d3561fe91c7",
+      "size_bytes": 2335,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_B32A.json",
+      "path": ".pipeline/phase_evidence/BUG-20260614-B32A/dev/scope_manifest_scope_manifest_B32A.json",
+      "sha256": "275f4e795f6ee8d2f17fdfa20299454d3c56f5ce73332606fc165c7b51ce8428",
+      "size_bytes": 1100,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": []
 }
