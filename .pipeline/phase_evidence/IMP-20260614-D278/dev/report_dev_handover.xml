@@ -1,0 +1,54 @@
+<handover>
+<dev_handover>
+  <pipeline_id>IMP-20260614-D278</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>COMPLETE</status>
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_post_accept_finalization_d278.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+  </implemented_files>
+  <module_summary>
+    <module id="MT-1">_resolve_acceptance_display_state 신규 helper 추가 — PASS</module>
+    <module id="MT-2">_build_verification_json, _build_final_packet_content SSoT 교체 — PASS</module>
+    <module id="MT-3">_cmd_gates_accept fail-closed _finalize_post_accept 삽입 — PASS</module>
+    <module id="MT-4">_consume_acceptance_request accepted_at/accepted_by/consumed_nonce 추가 — PASS</module>
+    <module id="MT-5">TestPostAcceptFinalizationD278 15개 E2E 테스트 — PASS</module>
+    <module id="MT-6">pipeline-manager-agent.md User Acceptance 표시 상태값 정의 섹션 추가 — PASS</module>
+  </module_summary>
+  <test_results>
+    <suite>tests/e2e/test_post_accept_finalization_d278.py</suite>
+    <count>15 passed</count>
+    <duration>0.30s</duration>
+  </test_results>
+  <scope_declaration>
+    <files_modified>pipeline.py, tests/e2e/test_post_accept_finalization_d278.py, .claude/agents/pipeline-manager-agent.md, tests/oracles/IMP-20260614-D278/TC-1-normal/input.json, tests/oracles/IMP-20260614-D278/TC-1-normal/expected.json, tests/oracles/IMP-20260614-D278/TC-2-edge/input.json, tests/oracles/IMP-20260614-D278/TC-2-edge/expected.json</files_modified>
+    <scope_manifest>scope_manifest.json</scope_manifest>
+  </scope_declaration>
+  <impact_analysis>
+    <target_functions>
+      <function>_resolve_acceptance_display_state (신규)</function>
+      <function>_build_verification_json</function>
+      <function>_build_final_packet_content</function>
+      <function>_cmd_gates_accept (accept action 블록)</function>
+      <function>_consume_acceptance_request</function>
+      <function>TestPostAcceptFinalizationD278 (신규 테스트 클래스)</function>
+      <function>pipeline-manager-agent.md 문서 섹션</function>
+    </target_functions>
+    <state_mutations>acceptance_request.json에 accepted_at/accepted_by/consumed_nonce 필드 추가, gate PASS 타이밍 변경(fail-closed)</state_mutations>
+    <risk_assessment>
+      <scope_overflow>none</scope_overflow>
+      <regression_risk>low</regression_risk>
+      <reversibility>high</reversibility>
+      <side_effects>ACCEPT 케이스 한정, gh 없음/PR 없음 graceful skip</side_effects>
+    </risk_assessment>
+  </impact_analysis>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_post_accept_finalization_d278.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <test_run>15 passed in 0.30s</test_run>
+  </evidence>
+</dev_handover>
+</handover>
