@@ -4,7 +4,7 @@
   "type": "IMP",
   "description": "실사용 전 end-to-end dry run — docs/pipeline_dry_run_20260615.md 문서 1개 추가로 전체 파이프라인 흐름 검증",
   "created_at": "2026-06-15T09:28:25Z",
-  "updated_at": "2026-06-15T11:01:21Z",
+  "updated_at": "2026-06-15T11:05:40Z",
   "pipeline_started_at": "2026-06-15T09:28:25Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
@@ -214,6 +214,38 @@
     {
       "ts": "2026-06-15T11:01:21Z",
       "msg": "github phase-ci build PASS run_id=27541605820 commit=58d3b816bd6d"
+    },
+    {
+      "ts": "2026-06-15T11:01:57Z",
+      "msg": "technical gate PASS"
+    },
+    {
+      "ts": "2026-06-15T11:02:04Z",
+      "msg": "oracle gate FAIL (manifest blockers)"
+    },
+    {
+      "ts": "2026-06-15T11:02:41Z",
+      "msg": "three_gate mode enabled (mandatory)"
+    },
+    {
+      "ts": "2026-06-15T11:02:41Z",
+      "msg": "GitHub phase attestations enabled (mandatory)"
+    },
+    {
+      "ts": "2026-06-15T11:02:41Z",
+      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84"
+    },
+    {
+      "ts": "2026-06-15T11:05:12Z",
+      "msg": "technical gate PASS"
+    },
+    {
+      "ts": "2026-06-15T11:05:15Z",
+      "msg": "oracle quality gate FAIL"
+    },
+    {
+      "ts": "2026-06-15T11:05:40Z",
+      "msg": "oracle gate BLOCKED (provenance: protected_evidence_untracked, protected_evidence_untracked, protected_evidence_untracked, protected_evidence_untracked)"
     }
   ],
   "terminal_state": null,
@@ -324,19 +356,19 @@
     "enabled": true,
     "mode": "three_gate",
     "technical": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "PASS",
+      "started_at": "2026-06-15T11:05:11Z",
+      "completed_at": "2026-06-15T11:05:12Z",
+      "evidence": "deterministic_tool_gate",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\technical_result.json",
       "notes": []
     },
     "oracle": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "FAIL",
+      "started_at": "2026-06-15T11:05:15Z",
+      "completed_at": "2026-06-15T11:05:40Z",
+      "evidence": "oracle_evidence_provenance_blocked",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\oracle_result.json",
       "notes": []
     },
     "acceptance": {
@@ -585,6 +617,54 @@
       "return_phase": "dev",
       "attempt_count": 1,
       "escalation_reason": null
+    },
+    {
+      "gate": "oracle",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\oracle_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\oracle_attempt_1.json",
+      "recorded_at": "2026-06-15T11:02:04Z",
+      "repair_owner": "PM/oracle path repair or Dev behavior repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "oracle_manifest_blocked",
+      "failure_category": "missing_evidence",
+      "owner": "PM",
+      "return_phase": "pm",
+      "attempt_count": 1,
+      "escalation_reason": null
+    },
+    {
+      "gate": "oracle",
+      "attempt": 2,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\oracle_attempt_2.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\oracle_attempt_2.json",
+      "recorded_at": "2026-06-15T11:05:15Z",
+      "repair_owner": "PM/oracle path repair or Dev behavior repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "oracle_quality_fail",
+      "failure_category": "unknown",
+      "owner": "PM",
+      "return_phase": "pm",
+      "attempt_count": 1,
+      "escalation_reason": null
+    },
+    {
+      "gate": "oracle",
+      "attempt": 3,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\oracle_attempt_3.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\oracle_attempt_3.json",
+      "recorded_at": "2026-06-15T11:05:40Z",
+      "repair_owner": "PM/oracle path repair or Dev behavior repair",
+      "schema_version": 2,
+      "status": "BLOCKED",
+      "failure_code": "protected_evidence_untracked",
+      "failure_category": "missing_evidence",
+      "owner": "Dev",
+      "return_phase": "dev",
+      "attempt_count": 1,
+      "escalation_reason": null
     }
   ],
   "protocol_evolution_decision": null,
@@ -613,7 +693,16 @@
     },
     "blocked_phases": {}
   },
-  "oracle_quality": {},
+  "oracle_quality": {
+    "status": "PASS",
+    "failures": [],
+    "case_summary": {
+      "normal": 1,
+      "edge": 1,
+      "error": 0,
+      "regression": 0
+    }
+  },
   "pm_analysis_gate": {
     "decomp": true,
     "clarification": true,
@@ -13721,5 +13810,12 @@
     "validated_at": "2026-06-15T10:51:45Z",
     "numeric_score": 110,
     "verdict": "PASS"
+  },
+  "contract_v2": {
+    "enabled": true,
+    "frozen": false,
+    "status": "draft",
+    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\task_contract.json",
+    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\test_set.json"
   }
 }

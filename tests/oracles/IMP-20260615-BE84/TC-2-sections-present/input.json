@@ -1,0 +1,11 @@
+{
+  "check": "sections_present",
+  "path": "docs/pipeline_dry_run_20260615.md",
+  "required_sections": [
+    "Trust Chain",
+    "ACCEPT",
+    "배포",
+    "재발",
+    "체크리스트"
+  ]
+}

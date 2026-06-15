@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "IMP-20260615-BE84",
+  "created_at": "2026-06-15T11:02:41Z",
+  "updated_at": "2026-06-15T11:03:43Z",
+  "status": "draft",
+  "frozen": false,
+  "tests": [
+    {
+      "id": "TC-3",
+      "module": "M-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 10,
+      "given": {},
+      "when": {
+        "command": ["python", "-c", "import os; assert os.path.exists('docs/pipeline_dry_run_20260615.md'), 'File missing'"]
+      },
+      "then": {
+        "returncode": 0
+      }
+    },
+    {
+      "id": "TC-4",
+      "module": "M-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 5,
+      "given": {},
+      "when": {
+        "command": ["python", "-c", "content=open('docs/pipeline_dry_run_20260615.md',encoding='utf-8').read(); assert '## 1.' in content or 'trust' in content.lower(), '5 sections missing'"]
+      },
+      "then": {
+        "returncode": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "result": "ALL_SECTIONS_PRESENT",
+  "missing_sections": [],
+  "sections_found": ["Trust Chain", "ACCEPT", "배포", "재발", "체크리스트"]
+}

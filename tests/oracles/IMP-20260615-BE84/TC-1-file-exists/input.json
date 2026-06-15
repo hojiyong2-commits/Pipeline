@@ -1,0 +1,4 @@
+{
+  "check": "file_exists",
+  "path": "docs/pipeline_dry_run_20260615.md"
+}
