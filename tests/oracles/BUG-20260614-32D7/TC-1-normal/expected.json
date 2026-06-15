@@ -1,0 +1,7 @@
+{
+  "selected_comment_id": 1001,
+  "patched_comment_ids": [1001],
+  "skipped_comment_ids": [1002, 1003],
+  "pending_comment_untouched": true,
+  "accepted_comment_untouched": true
+}

@@ -1,0 +1,8 @@
+{
+  "description": "gates accept packet lookup with final-check and pending comments",
+  "comments": [
+    {"id": 2001, "body": "<!-- pipeline-final-check-packet -->\n<!-- pipeline-human-acceptance-packet -->\n최종 확인 안내"},
+    {"id": 2002, "body": "<!-- pipeline-human-acceptance-packet -->\n<!-- pipeline-human-acceptance-packet-pending -->\n판단 정보 상태: 판단 가능\nACCEPT-BUG-20260614-32D7-TESTNONCE"}
+  ],
+  "operation": "gates_accept_packet_lookup"
+}
