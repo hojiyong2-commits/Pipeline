@@ -51,12 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "dev_handover_BE84.xml",
-      "sha256": "2a93aadeabfa071dd28a2cc043967b1d8a253b4a0689ea47d7fe1a2756d5050b",
-      "size_bytes": 3909
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
