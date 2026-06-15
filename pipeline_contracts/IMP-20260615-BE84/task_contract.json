@@ -3,9 +3,9 @@
   "pipeline_id": "IMP-20260615-BE84",
   "pipeline_type": "IMP",
   "created_at": "2026-06-15T11:02:41Z",
-  "updated_at": "2026-06-15T11:03:12Z",
-  "status": "draft",
-  "frozen": false,
+  "updated_at": "2026-06-15T11:06:31Z",
+  "status": "frozen",
+  "frozen": true,
   "goal": "실사용 전 end-to-end dry run — docs/pipeline_dry_run_20260615.md 문서 1개 추가로 전체 파이프라인 흐름 검증",
   "task_profile": {
     "domain": "general",
@@ -47,5 +47,8 @@
     "min_normal_tests_per_module": 1,
     "min_edge_cases_total": 1,
     "allow_p1_defaults": true
-  }
+  },
+  "frozen_at": "2026-06-15T11:06:31Z",
+  "contract_hash": "d43fd0e65f346e99fe06f366a18ac168417868c9a67a6daaddee016ca1ef4293",
+  "test_set_hash": "8b1332c56f68fddfca63cf7d90e68ee755a60a780b5886cdf232fb13e54eefe2"
 }

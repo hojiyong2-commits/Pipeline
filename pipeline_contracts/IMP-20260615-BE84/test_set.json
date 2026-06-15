@@ -2,9 +2,9 @@
   "schema_version": 1,
   "pipeline_id": "IMP-20260615-BE84",
   "created_at": "2026-06-15T11:02:41Z",
-  "updated_at": "2026-06-15T11:03:43Z",
-  "status": "draft",
-  "frozen": false,
+  "updated_at": "2026-06-15T11:06:31Z",
+  "status": "frozen",
+  "frozen": true,
   "tests": [
     {
       "id": "TC-3",
@@ -15,7 +15,11 @@
       "points": 10,
       "given": {},
       "when": {
-        "command": ["python", "-c", "import os; assert os.path.exists('docs/pipeline_dry_run_20260615.md'), 'File missing'"]
+        "command": [
+          "python",
+          "-c",
+          "import os; assert os.path.exists('docs/pipeline_dry_run_20260615.md'), 'File missing'"
+        ]
       },
       "then": {
         "returncode": 0
@@ -30,11 +34,18 @@
       "points": 5,
       "given": {},
       "when": {
-        "command": ["python", "-c", "content=open('docs/pipeline_dry_run_20260615.md',encoding='utf-8').read(); assert '## 1.' in content or 'trust' in content.lower(), '5 sections missing'"]
+        "command": [
+          "python",
+          "-c",
+          "content=open('docs/pipeline_dry_run_20260615.md',encoding='utf-8').read(); assert '## 1.' in content or 'trust' in content.lower(), '5 sections missing'"
+        ]
       },
       "then": {
         "returncode": 0
       }
     }
-  ]
+  ],
+  "frozen_at": "2026-06-15T11:06:31Z",
+  "test_set_hash": "8b1332c56f68fddfca63cf7d90e68ee755a60a780b5886cdf232fb13e54eefe2",
+  "contract_hash": "d43fd0e65f346e99fe06f366a18ac168417868c9a67a6daaddee016ca1ef4293"
 }
