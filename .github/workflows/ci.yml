@@ -505,11 +505,15 @@ jobs:
           "@
           Set-Content -Path human_acceptance_packet.md -Value $packet -Encoding UTF8
 
-          # BUG-20260615-A35C MT-3: packet freshness가 FAIL이면 stale packet/PR body가 정상
-          # 최종 확인 자료로 노출되지 않도록 step을 실패시킨다(fail-closed, continue-on-error:false).
-          # "정보 부족" 안내는 위 packet에 이미 기록되어 사용자가 원인을 볼 수 있다.
+          # BUG-20260615-A35C MT-3: stale packet을 정상 fallback으로 사용하지 않는다 (DEFECT-B fail-closed).
+          # packet.json이 없는 경우(request-accept 실행 전)는 "정보 부족"으로 표시하고 step을 성공시킨다.
+          # packet.json이 있는데 stale인 경우(head SHA 불일치 등)만 fail-closed로 step을 실패시킨다.
           if (-not $packetIsFresh) {
-            throw "최종 확인 자료(human_acceptance_packet.json) 검증 실패: $packetStaleReason. stale packet/PR body를 fallback으로 사용하지 않습니다."
+            if ($packetStaleReason -eq "packet file not found") {
+              Write-Host "human_acceptance_packet.json 없음 — gates request-accept 실행 전입니다. 정보 부족으로 표시됩니다."
+            } else {
+              throw "최종 확인 자료(human_acceptance_packet.json) 검증 실패: $packetStaleReason. stale packet/PR body를 fallback으로 사용하지 않습니다."
+            }
           }
 
       - name: 단계 증명 파일 만들기
