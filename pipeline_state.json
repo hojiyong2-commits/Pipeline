@@ -4,13 +4,13 @@
   "type": "IMP",
   "description": "실사용 전 end-to-end dry run — docs/pipeline_dry_run_20260615.md 문서 1개 추가로 전체 파이프라인 흐름 검증",
   "created_at": "2026-06-15T09:28:25Z",
-  "updated_at": "2026-06-15T10:30:02Z",
+  "updated_at": "2026-06-15T10:51:45Z",
   "pipeline_started_at": "2026-06-15T09:28:25Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "qa",
+  "current_phase": "sec",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -36,18 +36,20 @@
       "notes": [],
       "report_file": "dev_handover_BE84.xml",
       "agent_id": "dev-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260615-BE84_phase_dev.json",
+      "snapshot_path": null,
       "agent_run_id": "dev-ccd7e85993f507e8"
     },
     "qa": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
+      "status": "PASS",
+      "started_at": "2026-06-15T10:46:42Z",
+      "completed_at": "2026-06-15T10:51:45Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "qa_report_BE84.xml",
+      "agent_id": "qa-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260615-BE84_phase_qa.json",
+      "agent_run_id": "qa-34795703b0b28b05",
+      "numeric_score": 110
     },
     "sec": {
       "status": "PENDING",
@@ -154,6 +156,26 @@
     {
       "ts": "2026-06-15T10:30:02Z",
       "msg": "dev DONE | evidence: docs/pipeline_dry_run_20260615.md,dev_handover_BE84.xml"
+    },
+    {
+      "ts": "2026-06-15T10:35:03Z",
+      "msg": "phase attestation request prepared: dev"
+    },
+    {
+      "ts": "2026-06-15T10:46:28Z",
+      "msg": "github phase-ci dev PASS run_id=27540810165 commit=d669abd0f2d4"
+    },
+    {
+      "ts": "2026-06-15T10:46:45Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-34795703b0b28b05"
+    },
+    {
+      "ts": "2026-06-15T10:48:01Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-34795703b0b28b05"
+    },
+    {
+      "ts": "2026-06-15T10:51:45Z",
+      "msg": "qa PASS numeric=110"
     }
   ],
   "terminal_state": null,
@@ -213,10 +235,30 @@
       "output_sha256": "2a93aadeabfa071dd28a2cc043967b1d8a253b4a0689ea47d7fe1a2756d5050b",
       "evidence_files": [],
       "receipt_path": ".pipeline\\agent_receipts\\IMP-20260615-BE84\\dev\\dev-ccd7e85993f507e8.json",
-      "receipt_sha256": "53e315a7a8e7a42fa9ac464939f419beb85966896bacb3ca52cdfede9366de92",
+      "receipt_sha256": "6d9889e82d34a15bb05628e6b50bec20302298befd52750962f5c4486512fc9b",
       "used_by_phase": "dev",
-      "used_at": "2026-06-15T10:30:02Z",
+      "used_at": "2026-06-15T10:35:03Z",
       "commit_sha": "dec29bf772577448987cfbbdaabcd484c3c81b23",
+      "notes": ""
+    },
+    "qa-34795703b0b28b05": {
+      "schema_version": 1,
+      "run_id": "qa-34795703b0b28b05",
+      "pipeline_id": "IMP-20260615-BE84",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-15T10:46:45Z",
+      "completed_at": "2026-06-15T10:48:01Z",
+      "token_hash": "ca59d113aba3d74fdb8645ca2247fc166bdd994b0d5f823ee8198f16a4c698a0",
+      "output_file": "qa_report_BE84.xml",
+      "output_sha256": "efeefda1569e58c89d302fbe71213e72a7c45cd04782bfa52e4f581cff57f0cf",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260615-BE84\\qa\\qa-34795703b0b28b05.json",
+      "receipt_sha256": "036a89e24cdb14de5d3a985012ebdf7338ee51cc73a99f7c8f4f967d7e1e7427",
+      "used_by_phase": "qa",
+      "used_at": "2026-06-15T10:51:45Z",
+      "commit_sha": "5af682fc87372225fe6a387ce505baae34997c03",
       "notes": ""
     }
   },
@@ -278,14 +320,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-15T10:46:28Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27540810165",
+        "commit_sha": "d669abd0f2d42617870c1ddbfd70ae7c25369597",
+        "evidence": "github_actions_phase_run:27540810165",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "qa": {
         "status": "PENDING",
@@ -13460,6 +13503,15 @@
       "run_id": "27539038084",
       "commit_sha": "83788b884a99f483f34375659eceacd5fe8defc5",
       "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-15T10:46:28Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "dev",
+      "run_id": "27540810165",
+      "commit_sha": "d669abd0f2d42617870c1ddbfd70ae7c25369597",
+      "artifact": "pipeline-phase-attestation"
     }
   ],
   "structured_acceptance_criteria": [
@@ -13560,5 +13612,11 @@
         "docs/pipeline_dry_run_20260615.md"
       ]
     }
+  },
+  "qa_report_validation": {
+    "report_file": "qa_report_BE84.xml",
+    "validated_at": "2026-06-15T10:51:45Z",
+    "numeric_score": 110,
+    "verdict": "PASS"
   }
 }
