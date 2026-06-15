@@ -4,7 +4,7 @@
   "type": "IMP",
   "description": "실사용 전 end-to-end dry run — docs/pipeline_dry_run_20260615.md 문서 1개 추가로 전체 파이프라인 흐름 검증",
   "created_at": "2026-06-15T09:28:25Z",
-  "updated_at": "2026-06-15T10:58:09Z",
+  "updated_at": "2026-06-15T11:01:21Z",
   "pipeline_started_at": "2026-06-15T09:28:25Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
@@ -202,6 +202,18 @@
     {
       "ts": "2026-06-15T10:58:09Z",
       "msg": "build DONE exe=N/A skip_reason=docs-only"
+    },
+    {
+      "ts": "2026-06-15T10:58:24Z",
+      "msg": "phase attestation request prepared: build"
+    },
+    {
+      "ts": "2026-06-15T11:01:11Z",
+      "msg": "github phase-ci build FAIL run_id=27541605820 commit=58d3b81b5c1d"
+    },
+    {
+      "ts": "2026-06-15T11:01:21Z",
+      "msg": "github phase-ci build PASS run_id=27541605820 commit=58d3b816bd6d"
     }
   ],
   "terminal_state": null,
@@ -303,7 +315,7 @@
       "receipt_path": ".pipeline\\agent_receipts\\IMP-20260615-BE84\\build\\build-ce0bc080753861e9.json",
       "receipt_sha256": "6600e08f2ea63b6fb6051f732c88130ada7a808b5a70fbeb6b9f5f9d4d7392f4",
       "used_by_phase": "build",
-      "used_at": "2026-06-15T10:58:09Z",
+      "used_at": "2026-06-15T10:58:24Z",
       "commit_sha": "350af025d19cd2ad9f0dde3c8f08eb41ea2ec1c2",
       "notes": ""
     }
@@ -388,14 +400,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "build": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-15T11:01:21Z",
         "phase": "build",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27541605820",
+        "commit_sha": "58d3b816bd6dfac11c80f9ea5247ca6a5978bea4",
+        "evidence": "github_actions_phase_run:27541605820",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\phase_ci\\build_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       }
     }
   },
@@ -13583,6 +13596,24 @@
       "phase": "qa",
       "run_id": "27541310526",
       "commit_sha": "f6ee167962493e2fd8b03a6a811b51d4cf78dde8",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-15T11:01:11Z",
+      "status": "FAIL",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "build",
+      "run_id": "27541605820",
+      "commit_sha": "58d3b81b5c1dd5cf4bc0b2d85742efba4e2e2069",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-15T11:01:21Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "build",
+      "run_id": "27541605820",
+      "commit_sha": "58d3b816bd6dfac11c80f9ea5247ca6a5978bea4",
       "artifact": "pipeline-phase-attestation"
     }
   ],
