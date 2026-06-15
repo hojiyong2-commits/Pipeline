@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260615-BE84</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-272bdcfa868c6a39</planner_run_id>
+  <manager_run_id>pipeline_manager-1aa165065fe0c0e9</manager_run_id>
+  <step_plan_sha256>abab607f449ff2caec038d8fc4bf7db9849dd1401baecb6db1227815193be878</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY</status>
+  <step_plan_file>step_plan_BE84.xml</step_plan_file>
+  <execution_profile>FAST_DOC</execution_profile>
+  <micro_tasks>
+    <mt id="MT-1" target="docs/pipeline_dry_run_20260615.md" type="doc_create" />
+  </micro_tasks>
+  <build_target>N/A</build_target>
+  <build_skip_reason>docs-only</build_skip_reason>
+  <oracle_waiver>non-runnable docs/analysis</oracle_waiver>
+</manager_handoff>
