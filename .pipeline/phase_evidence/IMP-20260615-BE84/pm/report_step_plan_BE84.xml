@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<decomposition_audit>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+  <micro_task_count>1</micro_task_count>
+  <grep_executions>1</grep_executions>
+  <rationale>문서 1개(docs/pipeline_dry_run_20260615.md) 신규 생성 작업. 변경 파일 1개, 변경 함수 없음. FAST_DOC 프로필 조건 충족. MT-1 단일 태스크로 충분.</rationale>
+</decomposition_audit>
+<step_plan>
+  <pipeline_id>IMP-20260615-BE84</pipeline_id>
+  <task_complexity>
+    <execution_profile>FAST_DOC</execution_profile>
+    <reason>문서 1개(docs/pipeline_dry_run_20260615.md) 추가만 수행하며 제품 코드를 수정하지 않습니다. micro-task 1개, P0 질문 0개, 위험 요소 없음.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>0</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자 요청이 이미 문서 파일명, 포함 내용, 금지 사항, skip-reason을 명시했으므로 P0/P1 질문이 없습니다. 문서 스타일이나 섹션 순서 같은 P2 내부 취향 질문은 묻지 않고 유지보수성 기준으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>문서 작업을 단일 태스크(MT-1)로 처리할까요, 아니면 섹션별로 나눌까요?</user_facing_question>
+        <evidence>사용자 요청에 파일 경로(docs/pipeline_dry_run_20260615.md), 포함 섹션 5개, 금지 사항 7개, 실행 프로필(FAST_DOC)이 모두 명시됨. 변경 파일 1개, 실행 가능한 코드 없음.</evidence>
+        <why_it_matters>모듈 분할 여부가 파이프라인 게이트 수와 검증 복잡도를 결정합니다. FAST_DOC 프로필에서는 단일 MT가 적합합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>단일 MT-1로 처리 (FAST_DOC 권장)</label>
+            <benefit>파이프라인 게이트가 최소화되고 FAST_DOC 프로필 조건을 충족합니다</benefit>
+            <cost>섹션별 독립 검증이 없으므로 문서 일부 누락 시 전체를 재작업해야 합니다</cost>
+          </option>
+          <option id="B">
+            <label>섹션별 다중 MT로 분리 (STANDARD 경로)</label>
+            <benefit>각 섹션을 독립적으로 검증할 수 있어 부분 재작업이 가능합니다</benefit>
+            <cost>게이트 수가 늘어나고 FAST_DOC 프로필 조건을 초과하여 STANDARD 경로로 에스컬레이션됩니다</cost>
+          </option>
+        </options>
+        <user_answer>A — 단일 MT-1로 처리 (NO_ASKUSER_REQUIRED, 사용자가 이미 FAST_DOC 프로필을 명시함)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    사용자 요청: 실사용 전 end-to-end dry run 검증을 위한 문서 1개 작성
+    - 현재 파이프라인 trust chain 요약
+    - 사용자가 ACCEPT 전에 확인해야 하는 항목
+    - ACCEPT 후 배포 산출물이 남는 위치
+    - 최근 닫힌 주요 재발 문제 요약 (post-accept finalization, workspace/evidence hygiene, comment marker, agent registry, Codex Review 제거)
+    - 실사용 전 체크리스트
+    금지: pipeline.py, agent MD, CLAUDE.md, workflow 수정
+    범위: docs/pipeline_dry_run_20260615.md 1개만
+    Build: N/A, skip-reason "docs-only"
+    Oracle: non-runnable docs 예외 경로
+  </requirements>
+
+  <oracle_design>
+    <allow_no_oracle>true</allow_no_oracle>
+    <waiver_reason>문서 전용 산출물(docs/pipeline_dry_run_20260615.md)은 자동 실행 가능한 코드가 아니므로 input/expected oracle을 구성할 수 없습니다. --allow-no-oracle 경로로 docs/analysis 예외를 적용합니다.</waiver_reason>
+    <acceptance_checks>
+      <check id="OC-1">docs/pipeline_dry_run_20260615.md 파일이 존재하며 빈 파일이 아님</check>
+      <check id="OC-2">문서에 trust chain 요약 섹션 포함</check>
+      <check id="OC-3">문서에 ACCEPT 전 확인 항목 섹션 포함</check>
+      <check id="OC-4">문서에 배포 위치 섹션 포함</check>
+      <check id="OC-5">문서에 주요 재발 문제 요약 섹션 포함</check>
+      <check id="OC-6">문서에 실사용 전 체크리스트 섹션 포함</check>
+    </acceptance_checks>
+  </oracle_design>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>none</affected_function>
+      <target_files>
+        <file>docs/pipeline_dry_run_20260615.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>docs/pipeline_dry_run_20260615</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>실사용 전 파이프라인 dry run 검증 문서 작성 - trust chain, ACCEPT 전 확인 항목, 배포 위치, 주요 재발 문제 요약, 체크리스트 포함</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>docs/pipeline_dry_run_20260615.md 파일이 docs/ 디렉토리에 생성된다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>문서에 5개 필수 섹션이 포함된다: (1) trust chain 요약, (2) ACCEPT 전 확인 항목, (3) 배포 위치, (4) 주요 재발 문제 요약 (post-accept finalization SSoT, workspace/evidence hygiene gate, comment marker 분리, agent registry 정합성, Codex Review 제거), (5) 실사용 전 체크리스트</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py, .claude/agents/*.md, CLAUDE.md, .github/workflows/*.yml 파일이 수정되지 않는다 (git diff --name-only로 확인 시 해당 파일 없음)</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>Build phase가 skip-reason "docs-only"로 기록되며 EXE 빌드 없이 통과한다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 - 현재 파이프라인 환경 기준, 문서 작업이므로 실행 버전 무관</python_version>
+  <forbidden>pipeline.py 수정, agent MD 수정, CLAUDE.md 수정, workflow 수정, gate/nonce/marker/hygiene 로직 수정, dry run 중 결함 발견 시 즉시 수정, 자동 ACCEPT</forbidden>
+  <dev_to_qa_template>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <status>READY_FOR_QA</status>
+    <evidence>docs/pipeline_dry_run_20260615.md</evidence>
+  </dev_to_qa_template>
+</step_plan>
