@@ -190,8 +190,8 @@ jobs:
             return @{ Status = "PASS"; Reason = "" }
           }
 
-          # packet freshness 검증 실행. run_id는 CI 시점마다 달라 packet 생성 시점의 run_id와
-          # 항상 일치하지는 않으므로 head SHA 일치를 우선 신뢰 기준으로 사용한다.
+          # packet freshness 검증 실행. DEFECT-B: run_id 불일치 시 fallback 없이 fail-closed.
+          # Validate-PacketFreshness가 FAIL을 반환하면 즉시 stale로 처리한다.
           $packetJsonPath = "human_acceptance_packet.json"
           $packetFresh = Validate-PacketFreshness -PacketPath $packetJsonPath -ExpectedHeadSha $headSha -ExpectedRunId $currentRunId
           $packetStaleReason = ""
@@ -199,21 +199,7 @@ jobs:
           if ($packetFresh.Status -eq "PASS") {
             $packetIsFresh = $true
           } else {
-            # head SHA만 일치하면 run_id 불일치는 허용(packet은 직전 CI run에서 생성될 수 있음).
-            if (Test-Path $packetJsonPath) {
-              try {
-                $pj = Get-Content $packetJsonPath -Raw | ConvertFrom-Json
-                if (([string]$pj.pr.head_sha) -eq $headSha) {
-                  $packetIsFresh = $true
-                } else {
-                  $packetStaleReason = "head SHA mismatch"
-                }
-              } catch {
-                $packetStaleReason = "JSON parse failure"
-              }
-            } else {
-              $packetStaleReason = "packet file not found"
-            }
+            $packetStaleReason = $packetFresh.Reason
           }
           $headers = @{
             Authorization = "Bearer $env:GITHUB_TOKEN"
