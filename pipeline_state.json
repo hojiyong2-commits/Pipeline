@@ -1,77 +1,72 @@
 {
   "version": "1.2.0",
-  "pipeline_id": "BUG-20260614-32D7",
+  "pipeline_id": "BUG-20260615-A35C",
   "type": "BUG",
-  "description": "User Acceptance 댓글 marker ownership 분리 — CI 최종 확인 안내/pending/accepted 댓글이 공통 marker로 인해 서로 덮어쓰는 UX 루프 수정",
-  "created_at": "2026-06-14T21:02:50Z",
-  "updated_at": "2026-06-14T23:17:32Z",
-  "pipeline_started_at": "2026-06-14T21:02:50Z",
+  "description": "User Acceptance 표시 SSoT 불일치(DEFECT-A) 및 CI final-check stale packet 재사용(DEFECT-B) 근본 수정",
+  "created_at": "2026-06-15T12:17:06Z",
+  "updated_at": "2026-06-15T12:31:42Z",
+  "pipeline_started_at": "2026-06-15T12:17:06Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "harness",
+  "current_phase": "dev",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
     "pm": {
       "status": "DONE",
-      "started_at": "2026-06-14T21:02:50Z",
-      "completed_at": "2026-06-14T21:32:49Z",
+      "started_at": "2026-06-15T12:17:06Z",
+      "completed_at": "2026-06-15T12:29:56Z",
       "evidence": null,
       "notes": [],
-      "report_file": "step_plan_32D7.xml",
+      "report_file": "step_plan_A35C.xml",
       "agent_id": "pm-planner-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260614-32D7_phase_pm.1.json",
-      "manager_run_id": "pipeline_manager-3791c7625fd43e5e",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260615-A35C_phase_pm.json",
+      "manager_run_id": "pipeline_manager-82794918dd8b371a",
       "manager_agent_id": "pipeline-manager-agent",
-      "manager_report_file": "manager_handoff_32D7.xml",
-      "agent_run_id": "pm_planner-73f3d8bf575f0827"
+      "manager_report_file": "manager_handoff_A35C.xml",
+      "agent_run_id": "pm_planner-3b9918802a0b523a"
     },
     "dev": {
-      "status": "DONE",
-      "started_at": "2026-06-14T21:36:19Z",
-      "completed_at": "2026-06-14T22:07:19Z",
-      "evidence": ".github/workflows/ci.yml,pipeline.py,tests/e2e/test_marker_separation_32d7.py",
-      "notes": [],
-      "report_file": "dev_handover_32D7.xml",
-      "agent_id": "dev-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260614-32D7_phase_dev.json",
-      "agent_run_id": "dev-b1c11225a80cfb4a"
-    },
-    "qa": {
-      "status": "PASS",
-      "started_at": "2026-06-14T22:49:03Z",
-      "completed_at": "2026-06-14T23:07:58Z",
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
       "evidence": null,
-      "notes": [],
-      "report_file": "qa_report2_32D7.xml",
-      "agent_id": "qa-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260614-32D7_phase_qa.json",
-      "agent_run_id": "qa-0ac038806b118f43",
-      "numeric_score": 110
-    },
-    "sec": {
-      "status": "SKIP",
-      "started_at": "2026-06-14T23:14:07Z",
-      "completed_at": "2026-06-14T23:14:12Z",
-      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260614-32D7_phase_sec.json"
+      "snapshot_path": null
     },
-    "build": {
-      "status": "DONE",
-      "started_at": "2026-06-14T23:14:15Z",
-      "completed_at": "2026-06-14T23:15:58Z",
-      "evidence": "N/A",
+    "qa": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
       "notes": [],
       "report_file": null,
-      "agent_id": "build-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260614-32D7_phase_build.json",
-      "skip_reason": "meta-task",
-      "agent_run_id": "build-829ce51a3238b97a"
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "sec": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
+    },
+    "build": {
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": [],
+      "report_file": null,
+      "agent_id": null,
+      "snapshot_path": null
     },
     "harness": {
       "status": "PENDING",
@@ -96,298 +91,71 @@
   },
   "event_log": [
     {
-      "ts": "2026-06-14T21:02:50Z",
-      "msg": "파이프라인 생성: BUG-20260614-32D7"
+      "ts": "2026-06-15T12:17:06Z",
+      "msg": "파이프라인 생성: BUG-20260615-A35C"
     },
     {
-      "ts": "2026-06-14T21:02:54Z",
-      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-73f3d8bf575f0827"
+      "ts": "2026-06-15T12:17:10Z",
+      "msg": "agent run started phase=pm_planner agent=pm-planner-agent run_id=pm_planner-3b9918802a0b523a"
     },
     {
-      "ts": "2026-06-14T21:08:15Z",
-      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-73f3d8bf575f0827"
+      "ts": "2026-06-15T12:21:34Z",
+      "msg": "agent run completed phase=pm_planner agent=pm-planner-agent run_id=pm_planner-3b9918802a0b523a"
     },
     {
-      "ts": "2026-06-14T21:08:28Z",
-      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-3791c7625fd43e5e"
+      "ts": "2026-06-15T12:21:39Z",
+      "msg": "agent run started phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-82794918dd8b371a"
     },
     {
-      "ts": "2026-06-14T21:10:59Z",
-      "msg": "three_gate mode enabled (mandatory)"
+      "ts": "2026-06-15T12:23:28Z",
+      "msg": "agent run completed phase=pipeline_manager agent=pipeline-manager-agent run_id=pipeline_manager-82794918dd8b371a"
     },
     {
-      "ts": "2026-06-14T21:10:59Z",
-      "msg": "GitHub phase attestations enabled (mandatory)"
-    },
-    {
-      "ts": "2026-06-14T21:10:59Z",
-      "msg": "contract_v2 initialized: C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7"
-    },
-    {
-      "ts": "2026-06-14T21:13:28Z",
-      "msg": "contract_v2 frozen: 328867cac95a"
-    },
-    {
-      "ts": "2026-06-14T21:32:49Z",
+      "ts": "2026-06-15T12:29:56Z",
       "msg": "pm DONE | evidence: None"
-    },
-    {
-      "ts": "2026-06-14T21:33:26Z",
-      "msg": "github phase-ci pm FAIL run_id=27512567035 commit=490ec45abe8e"
-    },
-    {
-      "ts": "2026-06-14T21:34:44Z",
-      "msg": "github phase-ci pm PASS run_id=27512567035 commit=6b86a700a09f"
-    },
-    {
-      "ts": "2026-06-14T21:36:23Z",
-      "msg": "agent run started phase=dev agent=dev-agent run_id=dev-b1c11225a80cfb4a"
-    },
-    {
-      "ts": "2026-06-14T21:38:52Z",
-      "msg": "module design PASS MT-1"
-    },
-    {
-      "ts": "2026-06-14T21:41:20Z",
-      "msg": "module dev DONE MT-1"
-    },
-    {
-      "ts": "2026-06-14T21:41:49Z",
-      "msg": "module QA PASS MT-1"
-    },
-    {
-      "ts": "2026-06-14T21:42:17Z",
-      "msg": "module design PASS MT-2"
-    },
-    {
-      "ts": "2026-06-14T21:43:49Z",
-      "msg": "module dev DONE MT-2"
-    },
-    {
-      "ts": "2026-06-14T21:44:25Z",
-      "msg": "module QA PASS MT-2"
-    },
-    {
-      "ts": "2026-06-14T21:44:59Z",
-      "msg": "module design PASS MT-3"
-    },
-    {
-      "ts": "2026-06-14T21:56:18Z",
-      "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-b1c11225a80cfb4a"
-    },
-    {
-      "ts": "2026-06-14T21:59:09Z",
-      "msg": "module dev DONE MT-3"
-    },
-    {
-      "ts": "2026-06-14T21:59:16Z",
-      "msg": "module QA PASS MT-3"
-    },
-    {
-      "ts": "2026-06-14T21:59:44Z",
-      "msg": "module design PASS MT-4"
-    },
-    {
-      "ts": "2026-06-14T22:00:58Z",
-      "msg": "module dev DONE MT-4"
-    },
-    {
-      "ts": "2026-06-14T22:01:05Z",
-      "msg": "module QA PASS MT-4"
-    },
-    {
-      "ts": "2026-06-14T22:01:09Z",
-      "msg": "module design PASS MT-5"
-    },
-    {
-      "ts": "2026-06-14T22:01:51Z",
-      "msg": "module dev DONE MT-5"
-    },
-    {
-      "ts": "2026-06-14T22:01:58Z",
-      "msg": "module QA PASS MT-5"
-    },
-    {
-      "ts": "2026-06-14T22:02:05Z",
-      "msg": "module integration PASS"
-    },
-    {
-      "ts": "2026-06-14T22:07:19Z",
-      "msg": "dev DONE | evidence: .github/workflows/ci.yml,pipeline.py,tests/e2e/test_marker_separation_32d7.py"
-    },
-    {
-      "ts": "2026-06-14T22:48:59Z",
-      "msg": "github phase-ci dev PASS run_id=27514461491 commit=7383b804d906"
-    },
-    {
-      "ts": "2026-06-14T22:49:09Z",
-      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-7d57186492a1014f"
-    },
-    {
-      "ts": "2026-06-14T22:54:11Z",
-      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-7d57186492a1014f"
-    },
-    {
-      "ts": "2026-06-14T22:58:57Z",
-      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-0ac038806b118f43"
-    },
-    {
-      "ts": "2026-06-14T23:02:35Z",
-      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-0ac038806b118f43"
-    },
-    {
-      "ts": "2026-06-14T23:07:58Z",
-      "msg": "qa PASS numeric=110"
-    },
-    {
-      "ts": "2026-06-14T23:14:05Z",
-      "msg": "github phase-ci qa PASS run_id=27515092838 commit=4fd51653602a"
-    },
-    {
-      "ts": "2026-06-14T23:14:12Z",
-      "msg": "sec SKIP risk=N/A"
-    },
-    {
-      "ts": "2026-06-14T23:14:19Z",
-      "msg": "agent run started phase=build agent=build-agent run_id=build-829ce51a3238b97a"
-    },
-    {
-      "ts": "2026-06-14T23:15:55Z",
-      "msg": "agent run completed phase=build agent=build-agent run_id=build-829ce51a3238b97a"
-    },
-    {
-      "ts": "2026-06-14T23:15:58Z",
-      "msg": "build DONE exe=N/A skip_reason=meta-task"
-    },
-    {
-      "ts": "2026-06-14T23:16:06Z",
-      "msg": "phase attestation request prepared: build"
-    },
-    {
-      "ts": "2026-06-14T23:17:32Z",
-      "msg": "phase attestation request prepared: build"
     }
   ],
   "terminal_state": null,
   "harness_fail_count": 0,
   "agent_runs": {
-    "pm_planner-73f3d8bf575f0827": {
+    "pm_planner-3b9918802a0b523a": {
       "schema_version": 1,
-      "run_id": "pm_planner-73f3d8bf575f0827",
-      "pipeline_id": "BUG-20260614-32D7",
+      "run_id": "pm_planner-3b9918802a0b523a",
+      "pipeline_id": "BUG-20260615-A35C",
       "phase": "pm_planner",
       "agent_id": "pm-planner-agent",
       "status": "COMPLETED",
-      "started_at": "2026-06-14T21:02:54Z",
-      "completed_at": "2026-06-14T21:08:15Z",
-      "token_hash": "e86b18d1a86dd08aaae67bea5ed4b278c679f4cab914b4a88b6343ceecc4fbcf",
-      "output_file": "step_plan_32D7.xml",
-      "output_sha256": "a6335ffe231998d7d6e15a3948b5b4eda0ec5656d4377fb79f7afa088681dc24",
+      "started_at": "2026-06-15T12:17:10Z",
+      "completed_at": "2026-06-15T12:21:34Z",
+      "token_hash": "288e3eb4b14daa39b17cee6e60b7b65f8c3f38300b6229bafaed7865e1ccd395",
+      "output_file": "step_plan_A35C.xml",
+      "output_sha256": "62de2a2724c6f44d0c18f2af933191c69602a0ae2a18abff3ff4f6d35901e79d",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\pm_planner\\pm_planner-73f3d8bf575f0827.json",
-      "receipt_sha256": "a3acf8c26268faef6cbd43caa547ecc36a8ab005a6270df5f9d21a8fb1f90a89",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260615-A35C\\pm_planner\\pm_planner-3b9918802a0b523a.json",
+      "receipt_sha256": "e6712f56cd59b4e24beb33ecde544f51bccb8ca17b12a86e753c066d4440e9f4",
       "used_by_phase": "pm",
-      "used_at": "2026-06-14T21:32:41Z",
-      "commit_sha": "dec29bf772577448987cfbbdaabcd484c3c81b23",
+      "used_at": "2026-06-15T12:29:48Z",
+      "commit_sha": "75a61e352afb07696fa0fa51d3af0e859d58fe94",
       "notes": ""
     },
-    "pipeline_manager-3791c7625fd43e5e": {
+    "pipeline_manager-82794918dd8b371a": {
       "schema_version": 1,
-      "run_id": "pipeline_manager-3791c7625fd43e5e",
-      "pipeline_id": "BUG-20260614-32D7",
+      "run_id": "pipeline_manager-82794918dd8b371a",
+      "pipeline_id": "BUG-20260615-A35C",
       "phase": "pipeline_manager",
       "agent_id": "pipeline-manager-agent",
       "status": "COMPLETED",
-      "started_at": "2026-06-14T21:08:28Z",
-      "completed_at": "2026-06-14T21:14:43Z",
-      "token_hash": "61cc64386a462386778b338575cc5958b77dde6e9f976ab19f89b617991e165f",
-      "output_file": "manager_handoff_32D7.xml",
-      "output_sha256": "df1e4fed00a92adf528837136a51ede118f1ec63a3c347720250492bec92a49f",
+      "started_at": "2026-06-15T12:21:39Z",
+      "completed_at": "2026-06-15T12:23:28Z",
+      "token_hash": "d001cabe9d329a412e12ed17fa8850117af2390b51384b442daf460e2b337507",
+      "output_file": "manager_handoff_A35C.xml",
+      "output_sha256": "924df603fa1a384b6e7ae6bbe55dcbabb45f19955d059bddc89bea892cae0fb2",
       "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\pipeline_manager\\pipeline_manager-3791c7625fd43e5e.json",
-      "receipt_sha256": "61d2a0a60112ac4706838d522768bc8c5c40f28b74b9f54d8408f1b6e4831fef",
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260615-A35C\\pipeline_manager\\pipeline_manager-82794918dd8b371a.json",
+      "receipt_sha256": "67b41473994eb012de53afb3ae3ba2028e41b7ac215bac441d76bfbb744e2733",
       "used_by_phase": "pm_manager",
-      "used_at": "2026-06-14T21:32:41Z",
-      "commit_sha": "dec29bf772577448987cfbbdaabcd484c3c81b23"
-    },
-    "dev-b1c11225a80cfb4a": {
-      "schema_version": 1,
-      "run_id": "dev-b1c11225a80cfb4a",
-      "pipeline_id": "BUG-20260614-32D7",
-      "phase": "dev",
-      "agent_id": "dev-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-06-14T21:36:23Z",
-      "completed_at": "2026-06-14T21:56:18Z",
-      "token_hash": "beca55efc32d5139d73eb8b085007ad858ceae3d4a166c4fd2afcd2a50d645b3",
-      "output_file": "dev_handover_32D7.xml",
-      "output_sha256": "ae82c91ca4d953bff99972a666f89395304bc41b378b2f0491f21eada23bc1d9",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\dev\\dev-b1c11225a80cfb4a.json",
-      "receipt_sha256": "e1a96e4d5d9ec8bf6543548471676a811b0ec2ed96313317f21bdd9065bc9d31",
-      "used_by_phase": "dev",
-      "used_at": "2026-06-14T22:07:19Z",
-      "commit_sha": "490ec45abe8e55be288de1073bbef725b80bd51f",
-      "notes": ""
-    },
-    "qa-7d57186492a1014f": {
-      "schema_version": 1,
-      "run_id": "qa-7d57186492a1014f",
-      "pipeline_id": "BUG-20260614-32D7",
-      "phase": "qa",
-      "agent_id": "qa-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-06-14T22:49:09Z",
-      "completed_at": "2026-06-14T22:54:11Z",
-      "token_hash": "a3e8b2cd25c8c1adc2b06fe21f1712ca1a6c03a5eec985b51d59a466cbfa3e91",
-      "output_file": "qa_report_32D7.xml",
-      "output_sha256": "ff84981b5ecda8a7d0d4d28cc1c000fe9ce7d6e2ab37bd6a5b2357bfc4c5a938",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\qa\\qa-7d57186492a1014f.json",
-      "receipt_sha256": "4c62b0a545a49e901472aeb11385948f7f17e2b92c68fd4205fafa0ca184ef71",
-      "used_by_phase": null,
-      "used_at": null,
-      "commit_sha": "43de61a2671741db747551e47f781b2035fc4a51",
-      "notes": ""
-    },
-    "qa-0ac038806b118f43": {
-      "schema_version": 1,
-      "run_id": "qa-0ac038806b118f43",
-      "pipeline_id": "BUG-20260614-32D7",
-      "phase": "qa",
-      "agent_id": "qa-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-06-14T22:58:57Z",
-      "completed_at": "2026-06-14T23:02:35Z",
-      "token_hash": "fff9969046137cf6cc90e2853f224b29a7939e74107e98451feacb5452a997b6",
-      "output_file": "qa_report2_32D7.xml",
-      "output_sha256": "71ceef7071db92ed6586bf6e8c642eb11393f586745156cf23d6bd9287eadaa8",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\qa\\qa-0ac038806b118f43.json",
-      "receipt_sha256": "f95a9f8832953f3a0f252a354c117e18bc2b081648e0793f254f425cac3e1afc",
-      "used_by_phase": "qa",
-      "used_at": "2026-06-14T23:07:58Z",
-      "commit_sha": "43de61a2671741db747551e47f781b2035fc4a51",
-      "notes": ""
-    },
-    "build-829ce51a3238b97a": {
-      "schema_version": 1,
-      "run_id": "build-829ce51a3238b97a",
-      "pipeline_id": "BUG-20260614-32D7",
-      "phase": "build",
-      "agent_id": "build-agent",
-      "status": "COMPLETED",
-      "started_at": "2026-06-14T23:14:19Z",
-      "completed_at": "2026-06-14T23:15:55Z",
-      "token_hash": "c785a4618d9e2192616601a9df607ba8fe1b03442c206f125603bee1b62be6e4",
-      "output_file": "dist\\build_report.xml",
-      "output_sha256": "b4ebae0d97741c29cbcac39c3ae654416dcdbc1d4244e4e6eb2a99e2c1e9b29d",
-      "evidence_files": [],
-      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260614-32D7\\build\\build-829ce51a3238b97a.json",
-      "receipt_sha256": "13be9b7eeff84d725c6d772cc83e72cc58dd6c8006386f4424209df9a46626ce",
-      "used_by_phase": "build",
-      "used_at": "2026-06-14T23:17:32Z",
-      "commit_sha": "0e4cef0273309594b8d3e8183d9409bb72ecaa57",
+      "used_at": "2026-06-15T12:29:48Z",
+      "commit_sha": "75a61e352afb07696fa0fa51d3af0e859d58fe94",
       "notes": ""
     }
   },
@@ -438,37 +206,34 @@
     ],
     "phases": {
       "pm": {
-        "status": "PASS",
-        "completed_at": "2026-06-14T21:34:44Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "pm",
-        "run_id": "27512567035",
-        "commit_sha": "6b86a700a09f606351ca5fba1c0e6d59a9388214",
-        "evidence": "github_actions_phase_run:27512567035",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\gates\\phase_ci\\pm_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "dev": {
-        "status": "PASS",
-        "completed_at": "2026-06-14T22:48:59Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "dev",
-        "run_id": "27514461491",
-        "commit_sha": "7383b804d9062d5b9ef94dc44d24580c21ae9746",
-        "evidence": "github_actions_phase_run:27514461491",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\gates\\phase_ci\\dev_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "qa": {
-        "status": "PASS",
-        "completed_at": "2026-06-14T23:14:05Z",
+        "status": "PENDING",
+        "completed_at": null,
         "phase": "qa",
-        "run_id": "27515092838",
-        "commit_sha": "4fd51653602affea9747065d900adb58e228d5e7",
-        "evidence": "github_actions_phase_run:27515092838",
-        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\gates\\phase_ci\\qa_result.json",
-        "notes": [],
-        "artifact": "pipeline-phase-attestation"
+        "run_id": null,
+        "commit_sha": null,
+        "evidence": null,
+        "report_file": null,
+        "notes": []
       },
       "build": {
         "status": "PENDING",
@@ -490,337 +255,210 @@
       "MT-2",
       "MT-3",
       "MT-4",
-      "MT-5"
+      "MT-5",
+      "MT-6"
     ],
     "modules": {
       "MT-1": {
         "id": "MT-1",
-        "status": "PASS",
+        "status": "PENDING",
         "order": 1,
         "target_files": [
-          ".github/workflows/ci.yml"
+          "pipeline.py"
         ],
-        "affected_function": "ci.yml \"최종 확인 안내 남기기\" step의 PowerShell 스크립트 (line 590-615)",
+        "affected_function": "pipeline._resolve_acceptance_display_state (확장)",
         "design": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T21:38:52Z",
-          "report_file": "module_design_MT-1_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "DONE",
-          "completed_at": "2026-06-14T21:41:20Z",
-          "report_file": "module_handover_MT-1_32D7.xml",
-          "evidence": ".github/workflows/ci.yml",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-1_32D7.json",
-            "validated_at": "2026-06-14T21:41:20Z",
-            "micro_task_id": "MT-1",
-            "files": [
-              ".github/workflows/ci.yml"
-            ],
-            "affected_functions": [
-              "ci.yml \"최종 확인 안내 남기기\" step의 PowerShell 스크립트 (line 590-615)"
-            ],
-            "implemented_tasks": [
-              {
-                "mt_id": "MT-1",
-                "implemented_ac": [
-                  "AC-1",
-                  "AC-2",
-                  "AC-5"
-                ],
-                "changed_files": [
-                  ".github/workflows/ci.yml"
-                ],
-                "implementation_evidence": [
-                  "packet here-string(이전 line 356)에 <!-- pipeline-final-check-packet --> marker를 공통 marker 다음 줄에 추가",
-                  "'PR에 최종 확인 안내 남기기' step(이전 line 608)의 $existing 선택 조건을 final-check marker 포함 AND pipeline-human-acceptance-packet-pending/accepted 미포함으로 변경"
-                ]
-              }
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T21:41:49Z",
-          "report_file": "module_qa_MT-1_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
-        "checkpoint": {
-          "created_at": "2026-06-14T21:41:49Z",
-          "files": [
-            {
-              "path": ".github/workflows/ci.yml",
-              "sha256": "153687347f288e347687440eabea802869f75de77fe43fb5d8750d7954c61642",
-              "size_bytes": 29316
-            }
-          ]
-        }
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
       },
       "MT-2": {
         "id": "MT-2",
-        "status": "PASS",
+        "status": "PENDING",
         "order": 2,
         "target_files": [
           "pipeline.py"
         ],
-        "affected_function": "pipeline._post_github_pending_acceptance_comment (line 15103-15257)",
+        "affected_function": "pipeline._build_final_packet_content, pipeline._display_model_from_evidence",
         "design": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T21:42:17Z",
-          "report_file": "module_design_MT-2_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "DONE",
-          "completed_at": "2026-06-14T21:43:49Z",
-          "report_file": "module_handover_MT-2_32D7.xml",
-          "evidence": "pipeline.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-2_32D7.json",
-            "validated_at": "2026-06-14T21:43:49Z",
-            "micro_task_id": "MT-2",
-            "files": [
-              "pipeline.py"
-            ],
-            "affected_functions": [
-              "pipeline._post_github_pending_acceptance_comment (line 15103-15257)"
-            ],
-            "implemented_tasks": [
-              {
-                "mt_id": "MT-2",
-                "implemented_ac": [
-                  "AC-2",
-                  "AC-4"
-                ],
-                "changed_files": [
-                  "pipeline.py"
-                ],
-                "implementation_evidence": [
-                  "_post_github_pending_acceptance_comment 삭제 루프를 _is_pending_or_accepted_acceptance_comment() 기반으로 변경 — final-check-only 댓글 보존",
-                  "comment_body에 '판단 정보 상태: 판단 가능' readiness 줄 보장(누락 시 pending marker 직후 삽입)",
-                  "marker 분리 SSoT 상수 + _is_pending_or_accepted_acceptance_comment/_is_final_check_only_comment 헬퍼 추가"
-                ]
-              }
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T21:44:25Z",
-          "report_file": "module_qa_MT-2_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
-        "checkpoint": {
-          "created_at": "2026-06-14T21:44:25Z",
-          "files": [
-            {
-              "path": "pipeline.py",
-              "sha256": "02476d7985662f8a9ae7ab8d57a2fbf3a8a2008ab5a8148e6753a2cda73004ac",
-              "size_bytes": 1049114
-            }
-          ]
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
         },
-        "checkpoint_sha256": "02476d7985662f8a9ae7ab8d57a2fbf3a8a2008ab5a8148e6753a2cda73004ac",
-        "checkpoint_files": {
-          "pipeline.py": "02476d7985662f8a9ae7ab8d57a2fbf3a8a2008ab5a8148e6753a2cda73004ac"
-        }
+        "checkpoint": null
       },
       "MT-3": {
         "id": "MT-3",
-        "status": "PASS",
+        "status": "PENDING",
         "order": 3,
         "target_files": [
-          "pipeline.py"
+          ".github/workflows/ci.yml"
         ],
-        "affected_function": "pipeline._update_github_acceptance_comment (line 15310-15416)",
+        "affected_function": "ci.yml \"최종 확인 안내 만들기\" step",
         "design": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T21:44:59Z",
-          "report_file": "module_design_MT-3_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "DONE",
-          "completed_at": "2026-06-14T21:59:09Z",
-          "report_file": "module_handover_MT-3_32D7.xml",
-          "evidence": "pipeline.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-3_32D7.json",
-            "validated_at": "2026-06-14T21:59:09Z",
-            "micro_task_id": "MT-3",
-            "files": [
-              "pipeline.py"
-            ],
-            "affected_functions": [
-              "pipeline._update_github_acceptance_comment (line 15310-15416)"
-            ],
-            "implemented_tasks": [
-              {
-                "implemented_ac": [
-                  "AC-4",
-                  "AC-5"
-                ],
-                "mt_id": "MT-3",
-                "implementation_evidence": "_update_github_acceptance_comment 함수에서 기존 댓글 삭제 시 _is_pending_or_accepted_acceptance_comment() 헬퍼로 필터링하여 final-check marker만 있는 CI 최종 확인 안내 댓글을 삭제하지 않도록 수정"
-              }
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T21:59:16Z",
-          "report_file": "module_qa_MT-3_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
-        "checkpoint": {
-          "created_at": "2026-06-14T21:59:16Z",
-          "files": [
-            {
-              "path": "pipeline.py",
-              "sha256": "02476d7985662f8a9ae7ab8d57a2fbf3a8a2008ab5a8148e6753a2cda73004ac",
-              "size_bytes": 1049114
-            }
-          ]
-        }
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
       },
       "MT-4": {
         "id": "MT-4",
-        "status": "PASS",
+        "status": "PENDING",
         "order": 4,
         "target_files": [
-          "pipeline.py"
+          ".github/workflows/ci.yml"
         ],
-        "affected_function": "pipeline._check_acceptance_packet_via_github (line 5085-5220) 및 _get_pr_comment_acceptance_body (line 15419-15465)",
+        "affected_function": "ci.yml PowerShell functions",
         "design": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T21:59:44Z",
-          "report_file": "module_design_MT-4_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "DONE",
-          "completed_at": "2026-06-14T22:00:58Z",
-          "report_file": "module_handover_MT-4_32D7.xml",
-          "evidence": "pipeline.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-4_32D7.json",
-            "validated_at": "2026-06-14T22:00:58Z",
-            "micro_task_id": "MT-4",
-            "files": [
-              "pipeline.py"
-            ],
-            "affected_functions": [
-              "pipeline._check_acceptance_packet_via_github (line 5085-5220) 및 _get_pr_comment_acceptance_body (line 15419-15465)"
-            ],
-            "implemented_tasks": [
-              {
-                "mt_id": "MT-4",
-                "implemented_ac": [
-                  "AC-7",
-                  "AC-8"
-                ],
-                "implementation_evidence": "_check_acceptance_packet_via_github와 _get_pr_comment_acceptance_body 함수에서 댓글 선택 우선순위를 pending marker 우선으로 변경하고 final-check-only 댓글은 제외"
-              }
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T22:01:05Z",
-          "report_file": "module_qa_MT-4_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
-        "checkpoint": {
-          "created_at": "2026-06-14T22:01:05Z",
-          "files": [
-            {
-              "path": "pipeline.py",
-              "sha256": "02476d7985662f8a9ae7ab8d57a2fbf3a8a2008ab5a8148e6753a2cda73004ac",
-              "size_bytes": 1049114
-            }
-          ]
-        }
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
       },
       "MT-5": {
         "id": "MT-5",
-        "status": "PASS",
+        "status": "PENDING",
         "order": 5,
         "target_files": [
-          "tests/e2e/test_marker_separation_32d7.py"
+          "tests/e2e/test_acceptance_display_ssot_a35c.py"
         ],
-        "affected_function": "신규 테스트: tests/e2e/test_marker_separation_32d7.py",
+        "affected_function": "신규 테스트 파일",
         "design": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T22:01:09Z",
-          "report_file": "module_design_MT-5_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
         "dev": {
-          "status": "DONE",
-          "completed_at": "2026-06-14T22:01:51Z",
-          "report_file": "module_handover_MT-5_32D7.xml",
-          "evidence": "tests/e2e/test_marker_separation_32d7.py",
-          "notes": [],
-          "scope": {
-            "manifest_file": "scope_manifest_MT-5_32D7.json",
-            "validated_at": "2026-06-14T22:01:51Z",
-            "micro_task_id": "MT-5",
-            "files": [
-              "tests/e2e/test_marker_separation_32d7.py"
-            ],
-            "affected_functions": [
-              "신규 테스트: tests/e2e/test_marker_separation_32d7.py"
-            ],
-            "implemented_tasks": [
-              {
-                "mt_id": "MT-5",
-                "implemented_ac": [
-                  "AC-9",
-                  "AC-10"
-                ],
-                "implementation_evidence": "TC-1~TC-8 테스트 8개 구현 완료, 모두 PASS"
-              }
-            ]
-          }
-        },
-        "qa": {
-          "status": "PASS",
-          "completed_at": "2026-06-14T22:01:58Z",
-          "report_file": "module_qa_MT-5_32D7.xml",
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
           "evidence": null,
           "notes": []
         },
-        "checkpoint": {
-          "created_at": "2026-06-14T22:01:58Z",
-          "files": [
-            {
-              "path": "tests/e2e/test_marker_separation_32d7.py",
-              "sha256": "cf8fa60955d58f7a245325b1d06d14d57e47a55f14108291c34c343ff21fb712",
-              "size_bytes": 12849
-            }
-          ]
-        }
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
+      },
+      "MT-6": {
+        "id": "MT-6",
+        "status": "PENDING",
+        "order": 6,
+        "target_files": [
+          "tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json",
+          "tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json",
+          "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json",
+          "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json",
+          "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json",
+          "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json",
+          "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json",
+          "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json",
+          "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json",
+          "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json"
+        ],
+        "affected_function": "오라클 JSON 파일",
+        "design": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "dev": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "qa": {
+          "status": "PENDING",
+          "completed_at": null,
+          "report_file": null,
+          "evidence": null,
+          "notes": []
+        },
+        "checkpoint": null
       }
     },
     "integration": {
-      "status": "PASS",
-      "completed_at": "2026-06-14T22:02:05Z",
-      "report_file": "integration_report_32D7.xml",
+      "status": "PENDING",
+      "completed_at": null,
+      "report_file": null,
       "evidence": null,
       "notes": []
     }
@@ -828,14 +466,14 @@
   "execution_profile": {
     "mode": "STANDARD",
     "status": "ACTIVE",
-    "reason": "pipeline.py 2개 함수 + ci.yml 1개 step의 marker 분리 로직 변경이 필요하며, 기존 회귀 테스트(B32A/509F/D278/2821/aef0)와 호환성을 유지해야 합니다. 변경 범위가 3개 파일, 4개 함수이므로 STANDARD 프로필 적용.",
+    "reason": "pipeline.py의 acceptance 표시 상태 SSoT 로직과 ci.yml final-check 생성 로직 모두 수정 필요.\n      변경 파일 3개(pipeline.py, ci.yml, 신규 테스트 파일) + 오라클 5개 케이스 + TC 11개.\n      trust-root 파일(pipeline.py, ci.yml) 변경이므로 FAST Path 불가.",
     "max_micro_tasks": null,
     "product_code_write_allowed": true,
     "phase_ci_mode": "per_phase",
     "repair_mode": "standard",
     "risk_review_required": false,
     "risk_categories": [],
-    "declared_at": "2026-06-14T21:32:41Z",
+    "declared_at": "2026-06-15T12:29:48Z",
     "escalated_at": null,
     "escalation_reason": null,
     "uncertainty": {
@@ -845,8 +483,8 @@
     },
     "blast_radius": {
       "expected_changed_files": 3,
-      "expected_changed_functions": 4,
-      "expected_changed_lines": 80
+      "expected_changed_functions": 8,
+      "expected_changed_lines": 350
     },
     "risk_flags": {
       "data_deletion": false,
@@ -855,7 +493,7 @@
       "auth_or_secret": false,
       "pipeline_protocol": true,
       "build_or_deploy": false,
-      "core_parser_logic": false,
+      "core_parser_logic": true,
       "database_or_migration": false,
       "new_dependency": false
     }
@@ -867,9 +505,9 @@
     {
       "gate": "technical",
       "attempt": 1,
-      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\technical_attempt_1.json",
-      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\technical_attempt_1.json",
-      "recorded_at": "2026-06-14T21:34:49Z",
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\failures\\technical_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\failures\\technical_attempt_1.json",
+      "recorded_at": "2026-06-15T12:30:37Z",
       "repair_owner": "Dev repair",
       "schema_version": 2,
       "status": "BLOCKED",
@@ -883,9 +521,9 @@
     {
       "gate": "technical",
       "attempt": 2,
-      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\technical_attempt_2.json",
-      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\technical_attempt_2.json",
-      "recorded_at": "2026-06-14T21:35:35Z",
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\failures\\technical_attempt_2.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\failures\\technical_attempt_2.json",
+      "recorded_at": "2026-06-15T12:31:10Z",
       "repair_owner": "Dev repair",
       "schema_version": 2,
       "status": "BLOCKED",
@@ -897,35 +535,19 @@
       "escalation_reason": null
     },
     {
-      "gate": "check_sec",
+      "gate": "check_dev",
       "attempt": 1,
-      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\check_sec_attempt_1.json",
-      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\check_sec_attempt_1.json",
-      "recorded_at": "2026-06-14T23:08:03Z",
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\failures\\check_dev_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\failures\\check_dev_attempt_1.json",
+      "recorded_at": "2026-06-15T12:31:42Z",
       "repair_owner": "Pipeline Manager repair",
       "schema_version": 2,
       "status": "FAIL",
-      "failure_code": "gate_blocked_sec",
+      "failure_code": "gate_blocked_dev",
       "failure_category": "missing_evidence",
       "owner": "Pipeline Manager",
-      "return_phase": "dev",
+      "return_phase": "pm",
       "attempt_count": 1,
-      "escalation_reason": null
-    },
-    {
-      "gate": "check_sec",
-      "attempt": 2,
-      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\check_sec_attempt_2.json",
-      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\failures\\check_sec_attempt_2.json",
-      "recorded_at": "2026-06-14T23:13:55Z",
-      "repair_owner": "Pipeline Manager repair",
-      "schema_version": 2,
-      "status": "FAIL",
-      "failure_code": "gate_blocked_sec",
-      "failure_category": "missing_evidence",
-      "owner": "Pipeline Manager",
-      "return_phase": "dev",
-      "attempt_count": 2,
       "escalation_reason": null
     }
   ],
@@ -956,16 +578,6 @@
     "blocked_phases": {}
   },
   "oracle_quality": {},
-  "contract_v2": {
-    "enabled": true,
-    "frozen": true,
-    "status": "frozen",
-    "contract_hash": "328867cac95ae12bd15a954f01d794e4a8f326d8a515880978a52d073eb20506",
-    "test_set_hash": "efc9b1da80f34f837d6b70e0220058cadd0fb6a7dce926650fbdedaa67194d24",
-    "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\task_contract.json",
-    "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\test_set.json",
-    "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260614-32D7\\acceptance_summary.md"
-  },
   "pm_analysis_gate": {
     "decomp": true,
     "clarification": true,
@@ -974,99 +586,136 @@
   },
   "pm_clarification_gate": {
     "clarification_needed": false,
-    "assumptions": "P0 P1 질문 없음, 사용자가 marker 분리 방식 확인함",
+    "assumptions": "없음",
     "acceptance_criteria_source": "user",
     "acceptance_criteria": [
-      "AC-1: CI 최종 확인 안내 업데이트가 pending 승인 댓글을 PATCH하지 않는다",
-      "AC-2: CI 최종 확인 안내 업데이트가 accepted 완료 댓글을 PATCH하지 않는다",
-      "AC-3: request-accept 재실행 시 CI 최종 확인 안내 댓글을 삭제하지 않는다",
-      "AC-4: accept 성공 후 accepted 댓글에 pending marker와 승인 코드 입력 안내가 없다",
-      "AC-5: accept 성공 후 CI 재실행 시 accepted 댓글이 덮어써지지 않는다",
-      "AC-6: pending 댓글에 판단 정보 상태 readiness 표시가 포함된다",
-      "AC-7: gates accept는 CI 최종 확인 안내 댓글을 pending approval packet으로 오인하지 않는다",
-      "AC-8: B32A 회귀 방지 — pending 댓글의 evidence_integrity/workspace_hygiene 값이 PR body PIPELINE_FINAL_PACKET과 동일하다",
-      "AC-9: 기존 회귀 테스트 모두 PASS",
-      "AC-10: D278/2821 기존 회귀 테스트 모두 PASS"
+      "AC-1:FAIL+PENDING시 report final-packet에서 acceptance 표시 PENDING",
+      "AC-2:MD/JSON acceptance_display 모두 PENDING",
+      "AC-3:REJECT후 새 request 이전 코드 없음",
+      "AC-4:pending comment 현재 승인 코드 있음",
+      "AC-5:accepted comment ACCEPTED 상태 있음",
+      "AC-6:CI final-check JSON 파싱 실패시 정보부족",
+      "AC-7:packet head_sha불일치시 정보부족",
+      "AC-8:final-check 댓글 승인코드 미포함",
+      "AC-9:marker 독립성",
+      "AC-10:D278 회귀방지",
+      "AC-11:2821 회귀방지"
     ],
-    "recorded_at": "2026-06-14T21:32:41Z"
+    "recorded_at": "2026-06-15T12:29:48Z"
   },
   "atomic_plan": {
-    "report_file": "step_plan_32D7.xml",
-    "validated_at": "2026-06-14T21:32:41Z",
+    "report_file": "step_plan_A35C.xml",
+    "validated_at": "2026-06-15T12:29:48Z",
     "audit_result": "SPLIT_REQUIRED",
-    "micro_task_count": 5,
+    "micro_task_count": 6,
     "micro_tasks": [
       {
         "id": "MT-1",
-        "affected_function": "ci.yml \"최종 확인 안내 남기기\" step의 PowerShell 스크립트 (line 590-615)",
+        "affected_function": "pipeline._resolve_acceptance_display_state (확장)",
         "target_files": [
-          ".github/workflows/ci.yml"
+          "pipeline.py"
         ],
-        "change_summary": "CI 최종 확인 안내 생성(line 356)은 `pipeline-final-check-packet` 전용 marker 사용. 기존 댓글 탐색(line 608)은 `pipeline-final-check-packet` marker만 찾되, pending/accepted marker 포함 댓글은 제외.",
+        "change_summary": "_get_effective_acceptance_display_state 신규 함수 추가: active acceptance_request.json의\n        status=PENDING을 state[\"external_gates\"][\"acceptance\"][\"status\"]보다 우선하여 표시 상태 결정.\n        기존 _resolve_acceptance_display_state는 acceptance_request dict만 보지만, 새 함수는\n        state와 acceptance_request를 모두 받아 \"effective display state\"를 계산.",
         "covers_ac": [
           "AC-1",
           "AC-2",
-          "AC-5"
+          "AC-3"
         ],
         "covers_iqr": []
       },
       {
         "id": "MT-2",
-        "affected_function": "pipeline._post_github_pending_acceptance_comment (line 15103-15257)",
+        "affected_function": "pipeline._build_final_packet_content, pipeline._display_model_from_evidence",
         "target_files": [
           "pipeline.py"
         ],
-        "change_summary": "기존 acceptance-packet 댓글 삭제 시(line 15217-15244) `pipeline-final-check-packet` 전용 marker만 있는 댓글은 삭제하지 않음. pending/accepted 상태 marker 포함 댓글만 삭제하여 CI 최종 확인 안내 댓글 보존.",
+        "change_summary": "_build_final_packet_content와 _display_model_from_evidence가 gates dict를 구성할 때\n        MT-1의 _get_effective_acceptance_display_state를 호출하여 gate_status[\"acceptance\"]를\n        effective display state로 덮어쓰도록 수정. 메타데이터 블록의 acceptance와 게이트 상태 표의\n        User Acceptance가 동일 SSoT에서 산출되도록 보장.",
         "covers_ac": [
-          "AC-3",
-          "AC-6"
+          "AC-1",
+          "AC-2",
+          "AC-4"
         ],
         "covers_iqr": []
       },
       {
         "id": "MT-3",
-        "affected_function": "pipeline._update_github_acceptance_comment (line 15310-15416)",
+        "affected_function": "ci.yml \"최종 확인 안내 만들기\" step",
         "target_files": [
-          "pipeline.py"
+          ".github/workflows/ci.yml"
         ],
-        "change_summary": "기존 acceptance-packet 댓글 삭제 시(line 15376-15403) `pipeline-final-check-packet` 전용 marker만 있는 댓글은 삭제하지 않음. accepted 완료 댓글에 pending marker 및 승인 코드 입력 안내 없음 확인 로직 유지.",
+        "change_summary": "1. human_acceptance_packet.json 파싱 시도. 실패 시 또는 JSON의 pr.head_sha/github_actions.run_id가\n           현재 PR head SHA/run ID와 다르면 \"판단 정보 상태: 정보 부족\" 표시 + 승인 코드 미포함.\n        2. final-check 댓글에 [승인 코드] 섹션 완전 제거. \"승인/거절은 별도 사용자 최종 확인 요청 댓글 참조\" 안내만.\n        3. stale PR body PIPELINE_FINAL_PACKET 블록을 fallback 소스로 사용하지 않음.",
         "covers_ac": [
-          "AC-4",
-          "AC-5"
-        ],
-        "covers_iqr": []
-      },
-      {
-        "id": "MT-4",
-        "affected_function": "pipeline._check_acceptance_packet_via_github (line 5085-5220) 및 _get_pr_comment_acceptance_body (line 15419-15465)",
-        "target_files": [
-          "pipeline.py"
-        ],
-        "change_summary": "acceptance packet 조회 시 pending marker 댓글 우선 선택. final-check 전용 marker만 있는 댓글은 approval packet으로 오인하지 않음. legacy 공통 marker fallback은 pending/accepted/final-check marker 없을 때만 사용.",
-        "covers_ac": [
+          "AC-5",
+          "AC-6",
           "AC-7",
           "AC-8"
         ],
         "covers_iqr": []
       },
       {
-        "id": "MT-5",
-        "affected_function": "신규 테스트: tests/e2e/test_marker_separation_32d7.py",
+        "id": "MT-4",
+        "affected_function": "ci.yml PowerShell functions",
         "target_files": [
-          "tests/e2e/test_marker_separation_32d7.py"
+          ".github/workflows/ci.yml"
         ],
-        "change_summary": "TC-1~TC-8 테스트 구현: fake comments 목록으로 marker 분리 로직 검증. 기존 B32A/509F/D278/2821 테스트와 별도 파일.",
+        "change_summary": "Validate-PacketFreshness PowerShell 함수 추가: human_acceptance_packet.json의\n        pr.head_sha와 github_actions.run_id를 검증하여 stale 여부를 PASS/FAIL로 반환.\n        FAIL 시 $decisionReadiness를 \"정보 부족 (stale packet)\"으로 설정하고\n        $decisionAdvice에 \"packet을 재생성하세요\" 안내 추가.",
         "covers_ac": [
+          "AC-6",
+          "AC-7"
+        ],
+        "covers_iqr": []
+      },
+      {
+        "id": "MT-5",
+        "affected_function": "신규 테스트 파일",
+        "target_files": [
+          "tests/e2e/test_acceptance_display_ssot_a35c.py"
+        ],
+        "change_summary": "TC-1~TC-11 총 11개 테스트 함수 구현:\n        - TC-1: metadata + 게이트 상태 표 모두 PENDING 검증\n        - TC-2: MD/JSON acceptance_display 일치 검증\n        - TC-3: REJECT 후 새 request-accept 시 이전 승인 코드 미포함 검증\n        - TC-4: pending comment에 현재 승인 코드 있고 ACCEPTED 없음 검증\n        - TC-5: accepted comment에 ACCEPTED 있고 pending marker 없음 검증\n        - TC-6: JSON 파싱 실패 시 stale packet 미사용 검증\n        - TC-7: head_sha/run_id 불일치 시 정보 부족 검증\n        - TC-8: final-check에 승인 코드 미포함 검증\n        - TC-9: marker 독립성 검증\n        - TC-10: D278 회귀 검증\n        - TC-11: 2821 회귀 검증",
+        "covers_ac": [
+          "AC-1",
+          "AC-2",
+          "AC-3",
+          "AC-4",
+          "AC-5",
+          "AC-6",
+          "AC-7",
+          "AC-8",
           "AC-9",
-          "AC-10"
+          "AC-10",
+          "AC-11"
+        ],
+        "covers_iqr": []
+      },
+      {
+        "id": "MT-6",
+        "affected_function": "오라클 JSON 파일",
+        "target_files": [
+          "tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json",
+          "tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json",
+          "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json",
+          "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json",
+          "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json",
+          "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json",
+          "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json",
+          "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json",
+          "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json",
+          "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json"
+        ],
+        "change_summary": "5개 오라클 케이스 생성:\n        1. normal_pending_display: FAIL+PENDING 상태에서 effective display가 PENDING\n        2. edge_reject_then_new_request: REJECT 후 새 request의 effective display가 PENDING\n        3. edge_stale_packet_blocked: stale packet 시 readiness가 \"정보 부족\"\n        4. edge_final_check_no_code: final-check 댓글에 승인 코드 미포함 검증\n        5. error_json_parse_fail: JSON 파싱 실패 시 graceful 처리 검증",
+        "covers_ac": [
+          "AC-1",
+          "AC-3",
+          "AC-6",
+          "AC-8"
         ],
         "covers_iqr": []
       }
     ],
     "design_confirmation": {
-      "validated_at": "2026-06-14T21:32:41Z",
+      "validated_at": "2026-06-15T12:29:48Z",
       "maintenance_priority": "maintainability_first",
-      "filter_summary": "marker 상수명, 함수 리팩터링 범위, 테스트 파일명 등 P2 내부 구현 취향 질문은 유지보수성 기준으로 처리했습니다.",
+      "filter_summary": "P2 수준 질문(변수명, 코드 스타일, 테스트 파일명 세부 등)은 유지보수성 원칙으로 처리했습니다.\n      사용자 요청에서 수정 대상 파일, 금지 사항, 테스트 케이스가 모두 명시되어 추가 P0/P1 질문이 없습니다.",
       "question_count": 1,
       "questions": [
         {
@@ -1076,21 +725,21 @@
           "mt_id": "MT-1",
           "recommended_option": "A",
           "option_count": 2,
-          "user_answer": "사용자 명시 요청: marker 분리 방식(옵션 A)으로 진행"
+          "user_answer": "사전 분석 결과 — 추천안 A로 진행"
         }
       ]
     },
     "execution_profile": {
       "mode": "STANDARD",
       "status": "ACTIVE",
-      "reason": "pipeline.py 2개 함수 + ci.yml 1개 step의 marker 분리 로직 변경이 필요하며, 기존 회귀 테스트(B32A/509F/D278/2821/aef0)와 호환성을 유지해야 합니다. 변경 범위가 3개 파일, 4개 함수이므로 STANDARD 프로필 적용.",
+      "reason": "pipeline.py의 acceptance 표시 상태 SSoT 로직과 ci.yml final-check 생성 로직 모두 수정 필요.\n      변경 파일 3개(pipeline.py, ci.yml, 신규 테스트 파일) + 오라클 5개 케이스 + TC 11개.\n      trust-root 파일(pipeline.py, ci.yml) 변경이므로 FAST Path 불가.",
       "max_micro_tasks": null,
       "product_code_write_allowed": true,
       "phase_ci_mode": "per_phase",
       "repair_mode": "standard",
       "risk_review_required": false,
       "risk_categories": [],
-      "declared_at": "2026-06-14T21:32:41Z",
+      "declared_at": "2026-06-15T12:29:48Z",
       "escalated_at": null,
       "escalation_reason": null,
       "uncertainty": {
@@ -1100,8 +749,8 @@
       },
       "blast_radius": {
         "expected_changed_files": 3,
-        "expected_changed_functions": 4,
-        "expected_changed_lines": 80
+        "expected_changed_functions": 8,
+        "expected_changed_lines": 350
       },
       "risk_flags": {
         "data_deletion": false,
@@ -1110,13 +759,13 @@
         "auth_or_secret": false,
         "pipeline_protocol": true,
         "build_or_deploy": false,
-        "core_parser_logic": false,
+        "core_parser_logic": true,
         "database_or_migration": false,
         "new_dependency": false
       }
     },
     "project_snapshot": {
-      "created_at": "2026-06-14T21:32:49Z",
+      "created_at": "2026-06-15T12:29:56Z",
       "files": {
         ".bandit": {
           "sha256": "a53310dac1148f6599b486e3e63e0418872f961869bca21af860569f119c2b12",
@@ -1150,6 +799,10 @@
           "sha256": "6f619fe7abd83db6974d661fbdca23405af78b105c12875f83a453fceb9c134b",
           "size": 1466
         },
+        "architect_report_32D7.xml": {
+          "sha256": "58205462ce58881881b3c855bba972cfd81bba5800e6274854fe41e1fff8dc39",
+          "size": 12450
+        },
         "architect_report_B32A.xml": {
           "sha256": "6505a6c1c9ce2123a196b057ab5678f106b45be039ff5dd46e6d6f922139551e",
           "size": 2133
@@ -1165,6 +818,10 @@
         "build_report_B32A.xml": {
           "sha256": "d87145a463cf6561f1459521b1ab739bff2cb2f5bde83b836a459e56a8eb1c88",
           "size": 1325
+        },
+        "build_report_BE84.xml": {
+          "sha256": "5c29f91efb3b531491a019c3e54992b9b8dd1f2b6a027cfd9e7720d9fc3a8a52",
+          "size": 5429
         },
         "CLAUDE.md": {
           "sha256": "db3628c7b908ae8fa1eb96277fddba3c67775dcdee245996a58ba8bf548f060b",
@@ -1185,6 +842,14 @@
         "deadcode_cleanup_report.md": {
           "sha256": "2bf441d147448457b8e9e8002e52cbddd50d9a22d301b022a1a1bc67ee5dc221",
           "size": 5090
+        },
+        "dev_handover_32D7.xml": {
+          "sha256": "ae82c91ca4d953bff99972a666f89395304bc41b378b2f0491f21eada23bc1d9",
+          "size": 8818
+        },
+        "dev_handover_BE84.xml": {
+          "sha256": "2a93aadeabfa071dd28a2cc043967b1d8a253b4a0689ea47d7fe1a2756d5050b",
+          "size": 3909
         },
         "EmailMonitor.spec": {
           "sha256": "73da6172ed5be16764b7ee834424b0848fa525690b62940af8338fccc6c69c48",
@@ -1230,6 +895,10 @@
           "sha256": "d417bc1977e12cc90e35ad2bb69c95bc7a6ef3279e9e70e1fa6a4823ad81af36",
           "size": 1046
         },
+        "integration_report_32D7.xml": {
+          "sha256": "81147ad0b1fb24a85f18b57bfc939b8be83487fa72910976e979dc4b7edbf15e",
+          "size": 1366
+        },
         "integration_report_r3.xml": {
           "sha256": "4927319c4771181847fbf46249a715f177315800946a58eb1f6239a827bb9c12",
           "size": 562
@@ -1258,17 +927,25 @@
           "sha256": "4921981c59cd32899ea3961fcabb09d2271d8ce96503399c9a07e87979bc76b4",
           "size": 1906
         },
+        "manager_handoff_A35C.xml": {
+          "sha256": "924df603fa1a384b6e7ae6bbe55dcbabb45f19955d059bddc89bea892cae0fb2",
+          "size": 1263
+        },
         "manager_handoff_B32A.xml": {
           "sha256": "cc459e1147c7978ec466c43f3ba2b109147e455fe07686cbe3ab5d221f8ec182",
           "size": 1394
+        },
+        "manager_handoff_BE84.xml": {
+          "sha256": "8a28d9ac3591d11253c1a048175500b0e401f486c4bc54f17ec55f19f06d3333",
+          "size": 936
         },
         "oracle_result_dump.txt": {
           "sha256": "8ac8ca4e51844065ce21bac733a53d2e95602c57b38dc0b9cffdf8b944cd4784",
           "size": 28260
         },
         "pipeline.py": {
-          "sha256": "0c57c287a91a05a2aae113c0f73be324ab9551fd842fc9e339253889e452dd0f",
-          "size": 1043145
+          "sha256": "02476d7985662f8a9ae7ab8d57a2fbf3a8a2008ab5a8148e6753a2cda73004ac",
+          "size": 1049114
         },
         "pr_body_075a.md": {
           "sha256": "2e7e43572fa45270872e802b4d2562d25f96fc30ff8a3c50981756b003f30e81",
@@ -1306,6 +983,18 @@
           "sha256": "153ff5e9be2e417120fc89fea8d3da806203c2e1f9e145d0c5607761a9c9b8b6",
           "size": 762
         },
+        "qa_report2_32D7.xml": {
+          "sha256": "71ceef7071db92ed6586bf6e8c642eb11393f586745156cf23d6bd9287eadaa8",
+          "size": 8570
+        },
+        "qa_report2_32D7.xml.bak": {
+          "sha256": "71ceef7071db92ed6586bf6e8c642eb11393f586745156cf23d6bd9287eadaa8",
+          "size": 8570
+        },
+        "qa_report_32D7.xml": {
+          "sha256": "ff84981b5ecda8a7d0d4d28cc1c000fe9ce7d6e2ab37bd6a5b2357bfc4c5a938",
+          "size": 8470
+        },
         "qa_report_509f.xml": {
           "sha256": "ed5edac89f0bd3a45ed779991e899f9f84391d6e85e851ea4b20ff477c1b81b0",
           "size": 10160
@@ -1313,6 +1002,10 @@
         "qa_report_B32A.xml": {
           "sha256": "01a26c48322023c6ef85e41fd70ddb7f95d9b5e86eaba5bedcdf054a6de1e8f2",
           "size": 9239
+        },
+        "qa_report_BE84.xml": {
+          "sha256": "efeefda1569e58c89d302fbe71213e72a7c45cd04782bfa52e4f581cff57f0cf",
+          "size": 4993
         },
         "README.md": {
           "sha256": "5103e5a0eea1b5a9d5e0e81daa4222aab89cc56ebdd6151af6c24d9cfd86156a",
@@ -1359,16 +1052,28 @@
           "size": 15021
         },
         "step_plan_32D7.xml": {
-          "sha256": "a6335ffe231998d7d6e15a3948b5b4eda0ec5656d4377fb79f7afa088681dc24",
-          "size": 12858
+          "sha256": "3a48081b39ca46bd7bcefc2fcf3c98a4a20cea0c7f6be1e1f9a861f6e028f68a",
+          "size": 12902
+        },
+        "step_plan_32D7.xml.bak": {
+          "sha256": "3a48081b39ca46bd7bcefc2fcf3c98a4a20cea0c7f6be1e1f9a861f6e028f68a",
+          "size": 12902
         },
         "step_plan_509F.xml": {
           "sha256": "1beb86a103a7ca959e5f6ec5d42173a0b36aa63a8fe29ad5ef84b7e0890af86c",
           "size": 14368
         },
+        "step_plan_A35C.xml": {
+          "sha256": "62de2a2724c6f44d0c18f2af933191c69602a0ae2a18abff3ff4f6d35901e79d",
+          "size": 20864
+        },
         "step_plan_B32A.xml": {
           "sha256": "f72c38aab3dafacd600d45a6ead6115c5f4e6e0dc0d872f36275e757f402bd95",
           "size": 10541
+        },
+        "step_plan_BE84.xml": {
+          "sha256": "abab607f449ff2caec038d8fc4bf7db9849dd1401baecb6db1227815193be878",
+          "size": 7953
         },
         "tc6_dump.txt": {
           "sha256": "170a85fb034c994dbbabf15994758de2a28f7efb4661eb823f36569d59b14414",
@@ -1517,6 +1222,10 @@
         "core/__init__.py": {
           "sha256": "b651807eed530fb19791e35e448235ae40afe2999886e83ab42c8c22b7f296a3",
           "size": 56
+        },
+        "docs/pipeline_dry_run_20260615.md": {
+          "sha256": "55c95e86b9ddd47001220dc62349c820e8f19eb8f7a1dc624b280371bcf29c76",
+          "size": 6752
         },
         "docs/RELEASE_NOTES_IMP-20260531-BBDB.md": {
           "sha256": "c5b4ef214815e36e375e4bb2ad9453f50355acfd2e7acea07b6b88685045b43e",
@@ -2031,8 +1740,8 @@
           "size": 7895
         },
         ".github/workflows/ci.yml": {
-          "sha256": "c3552aebf98d6a533c05f1a7e8b5bd0375f84062c2705e9b404d7214249ede25",
-          "size": 28410
+          "sha256": "153687347f288e347687440eabea802869f75de77fe43fb5d8750d7954c61642",
+          "size": 29316
         },
         "agent-office-ext/out/extension.js": {
           "sha256": "cd797eb15a5488a2a3c7ea11e0eec28c431997c4f0968847a58d5c9da2d86887",
@@ -2309,6 +2018,10 @@
         "tests/e2e/test_hygiene_0df5.py": {
           "sha256": "34822cba87107471fa497fdaa087a4340757ac9ef2900f8b4fb6e044b1ecab09",
           "size": 13473
+        },
+        "tests/e2e/test_marker_separation_32d7.py": {
+          "sha256": "d0da61a3b475585cade1f2cd9c37d120b092e9ccfe71c7bca3fd726fd7511728",
+          "size": 12844
         },
         "tests/e2e/test_metrics_cli_paths_82e3.py": {
           "sha256": "5968fbe414d4b12b8f85f80731dc40b5c2de2c209246880cd05311a010a04b58",
@@ -3941,6 +3654,22 @@
         "tests/oracles/IMP-20260614-D278/TC-2-edge/input.json": {
           "sha256": "a60f3aa895cafaea19e7c27ff39607a0504aba7b37b7bd4abc179e2b900ddae7",
           "size": 100
+        },
+        "tests/oracles/IMP-20260615-BE84/TC-1-file-exists/expected.json": {
+          "sha256": "1276dab40c85a740b3aff3ce45f60583e2408e72b1dde8106196860ba8fb228d",
+          "size": 72
+        },
+        "tests/oracles/IMP-20260615-BE84/TC-1-file-exists/input.json": {
+          "sha256": "cd8c217088dea59bc4ca1a5ebda7525e0f375a5a9539d46310419d328f60bbf0",
+          "size": 76
+        },
+        "tests/oracles/IMP-20260615-BE84/TC-2-sections-present/expected.json": {
+          "sha256": "2dcaa06fa17f787a2f80e4f08a43c1b7bc1da4673fc0b9bd54b87246899434fc",
+          "size": 151
+        },
+        "tests/oracles/IMP-20260615-BE84/TC-2-sections-present/input.json": {
+          "sha256": "6326be080c09dba88410fb8becd3f2aeebbfd0e2fc19f373b7deee66910b01d1",
+          "size": 194
         },
         "vscode-agent-office/media/agent-office-map.png": {
           "sha256": "df2815202fa9a686e216e4ece15fcbbee8867f53d64c8dd4babbbbbc11ea7ade",
@@ -13913,66 +13642,6 @@
         "_tmp_pipeline_backup/phase_evidence/IMP-20260609-C4F8/qa/report_qa_report.xml": {
           "sha256": "67d085f5a6580fe7e02a57d786b20cf4fc3eb6478999b2e06a35ac8920ed872e",
           "size": 4726
-        },
-        "dev_handover_32D7.xml": {
-          "sha256": "ae82c91ca4d953bff99972a666f89395304bc41b378b2f0491f21eada23bc1d9",
-          "size": 8818
-        },
-        "integration_report_32D7.xml": {
-          "sha256": "81147ad0b1fb24a85f18b57bfc939b8be83487fa72910976e979dc4b7edbf15e",
-          "size": 1366
-        },
-        "scope_manifest_32D7.json": {
-          "sha256": "f75c8421a68297cb0869ac55d86ec06419da290710f67e63be63b10b1c10a6e9",
-          "size": 2941
-        },
-        "scope_manifest_MT-3_32D7.json": {
-          "sha256": "84edcf163f47e4081c887d01c6a0c9164f3ca13db1e5d5b86d8fb8bc412f121e",
-          "size": 1524
-        },
-        "scope_manifest_MT-4_32D7.json": {
-          "sha256": "526f572826fc9d19edb36ee9af36629a4e04170f43e4262940f514aa6886f8b7",
-          "size": 727
-        },
-        "scope_manifest_MT-5_32D7.json": {
-          "sha256": "9d1875cdf17b79c745257fb485ff050f0d6a8eb33e16cd859042349152f08378",
-          "size": 562
-        },
-        "module_design_MT-3_32D7.xml": {
-          "sha256": "c4a8784ee47afc638068a9ad5855c9e7d9f508cdd516875b8ebe4e16ab877c73",
-          "size": 869
-        },
-        "module_design_MT-4_32D7.xml": {
-          "sha256": "5c8356638fb423c08d1db7c28a83a9cb229bd57b3ced73cd09e1fbf2dc079801",
-          "size": 917
-        },
-        "module_design_MT-5_32D7.xml": {
-          "sha256": "4baa877a99182ab424a417496987af9357fb7bee24ba86e5d9ff88dfdecca489",
-          "size": 963
-        },
-        "module_handover_MT-3_32D7.xml": {
-          "sha256": "da73e60525f4ba7e1f42795bfc34f1040ecadca1e1766001329433651a40c0d0",
-          "size": 2439
-        },
-        "module_handover_MT-4_32D7.xml": {
-          "sha256": "3b17d580329c1e7895c15813f8a415f0bbb5320d1dbd268b8c7fdd59c33d8c57",
-          "size": 2049
-        },
-        "module_handover_MT-5_32D7.xml": {
-          "sha256": "3e191d08ad3dc19d8ba75d45ddfd3cb1f15e2dcfe5dfbbd0c86fb5f0d81a803d",
-          "size": 1648
-        },
-        "module_qa_MT-3_32D7.xml": {
-          "sha256": "e247dac391a3251acac459176da633fc25a7a9c00d38353074f598aacd8598b4",
-          "size": 1060
-        },
-        "module_qa_MT-4_32D7.xml": {
-          "sha256": "b1b0cb5fed755108220be77588d07218c7e3425f68661409af6ff7461f83ece1",
-          "size": 982
-        },
-        "module_qa_MT-5_32D7.xml": {
-          "sha256": "a7c0f8ab7bbce696b0ada20c7aee2fa5fa477cc146cba7337ac3f3218e6a056d",
-          "size": 776
         }
       },
       "skipped": []
@@ -13980,7 +13649,7 @@
     "structured_acceptance_criteria": [
       {
         "ac_id": "AC-1",
-        "requirement": "AC-1: CI 최종 확인 안내 업데이트가 pending 승인 댓글을 PATCH하지 않는다",
+        "requirement": "state[\"external_gates\"][\"acceptance\"][\"status\"]=\"FAIL\" + active acceptance_request.status=\"PENDING\" 일 때\n        report final-packet 결과에서 메타데이터 블록의 acceptance와 게이트 상태 표의 User Acceptance가\n        모두 PENDING으로 표시된다. (TC-1 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -13988,7 +13657,7 @@
       },
       {
         "ac_id": "AC-2",
-        "requirement": "AC-2: CI 최종 확인 안내 업데이트가 accepted 완료 댓글을 PATCH하지 않는다",
+        "requirement": "FAIL+PENDING 상태에서 human_acceptance_packet.md와 human_acceptance_packet.json의\n        acceptance_display가 모두 PENDING이다. (TC-2 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -13996,7 +13665,7 @@
       },
       {
         "ac_id": "AC-3",
-        "requirement": "AC-3: request-accept 재실행 시 CI 최종 확인 안내 댓글을 삭제하지 않는다",
+        "requirement": "REJECT 후 새 request-accept 발급 시 이전 승인 코드가 final packet, pending comment,\n        final-check comment 어디에도 없다. (TC-3 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -14004,7 +13673,7 @@
       },
       {
         "ac_id": "AC-4",
-        "requirement": "AC-4: accept 성공 후 accepted 댓글에 pending marker와 승인 코드 입력 안내가 없다",
+        "requirement": "pending acceptance comment에 현재 승인 코드가 있고, ACCEPTED/승인완료/배포완료 문구가 없다. (TC-4 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -14012,7 +13681,7 @@
       },
       {
         "ac_id": "AC-5",
-        "requirement": "AC-5: accept 성공 후 CI 재실행 시 accepted 댓글이 덮어써지지 않는다",
+        "requirement": "accepted completion comment에 ACCEPTED 상태가 있고, pending marker/승인 코드 입력 안내가 없다. (TC-5 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -14020,7 +13689,7 @@
       },
       {
         "ac_id": "AC-6",
-        "requirement": "AC-6: pending 댓글에 판단 정보 상태 readiness 표시가 포함된다",
+        "requirement": "CI final-check 생성에서 human_acceptance_packet.json 파싱 실패 시 stale PR body packet을\n        판단 가능 댓글로 재사용하지 않고 \"정보 부족\"으로 표시한다. (TC-6 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -14028,7 +13697,7 @@
       },
       {
         "ac_id": "AC-7",
-        "requirement": "AC-7: gates accept는 CI 최종 확인 안내 댓글을 pending approval packet으로 오인하지 않는다",
+        "requirement": "CI final-check 생성에서 packet head_sha != PR head 또는 packet ci_run_id 불일치 시\n        \"정보 부족 (stale packet)\" 상태로 표시한다. (TC-7 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -14036,7 +13705,7 @@
       },
       {
         "ac_id": "AC-8",
-        "requirement": "AC-8: B32A 회귀 방지 — pending 댓글의 evidence_integrity/workspace_hygiene 값이 PR body PIPELINE_FINAL_PACKET과 동일하다",
+        "requirement": "final-check 댓글에 pending 승인 코드를 직접 포함하지 않으며, \"승인/거절은 별도 사용자 최종 확인 요청\n        댓글을 참조\"라는 안내만 표시한다. (TC-8 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -14044,7 +13713,7 @@
       },
       {
         "ac_id": "AC-9",
-        "requirement": "AC-9: 기존 회귀 테스트 모두 PASS",
+        "requirement": "pending/final-check/accepted comment의 marker가 서로 독립이며 교차 오염되지 않는다. (TC-9 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -14052,7 +13721,15 @@
       },
       {
         "ac_id": "AC-10",
-        "requirement": "AC-10: D278/2821 기존 회귀 테스트 모두 PASS",
+        "requirement": "D278 회귀 방지: accept 완료 후 accepted 댓글이 pending으로 되돌아가지 않는다. (TC-10 검증)",
+        "must_verify": true,
+        "source": "user",
+        "user_visible": true,
+        "expected_evidence": ""
+      },
+      {
+        "ac_id": "AC-11",
+        "requirement": "2821 회귀 방지: workspace_hygiene BLOCKED/WARN/OK 요약이 display model에 반영되며,\n        fail-closed 로직 자체는 변경되지 않는다. (TC-11 검증)",
         "must_verify": true,
         "source": "user",
         "user_visible": true,
@@ -14061,291 +13738,12 @@
     ]
   },
   "pm_manager_handoff": {
-    "validated_at": "2026-06-14T21:32:49Z",
-    "report_file": "manager_handoff_32D7.xml",
-    "step_plan_sha256": "a6335ffe231998d7d6e15a3948b5b4eda0ec5656d4377fb79f7afa088681dc24",
-    "planner_run_id": "pm_planner-73f3d8bf575f0827",
+    "validated_at": "2026-06-15T12:29:56Z",
+    "report_file": "manager_handoff_A35C.xml",
+    "step_plan_sha256": "62de2a2724c6f44d0c18f2af933191c69602a0ae2a18abff3ff4f6d35901e79d",
+    "planner_run_id": "pm_planner-3b9918802a0b523a",
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
-  },
-  "trusted_phase_runs": [
-    {
-      "recorded_at": "2026-06-14T21:33:26Z",
-      "status": "FAIL",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "pm",
-      "run_id": "27512567035",
-      "commit_sha": "490ec45abe8e55be288de1073bbef725b80bd51f",
-      "artifact": "pipeline-phase-attestation"
-    },
-    {
-      "recorded_at": "2026-06-14T21:34:44Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "pm",
-      "run_id": "27512567035",
-      "commit_sha": "6b86a700a09f606351ca5fba1c0e6d59a9388214",
-      "artifact": "pipeline-phase-attestation"
-    },
-    {
-      "recorded_at": "2026-06-14T22:48:59Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "dev",
-      "run_id": "27514461491",
-      "commit_sha": "7383b804d9062d5b9ef94dc44d24580c21ae9746",
-      "artifact": "pipeline-phase-attestation"
-    },
-    {
-      "recorded_at": "2026-06-14T23:14:05Z",
-      "status": "PASS",
-      "repo": "hojiyong2-commits/Pipeline",
-      "phase": "qa",
-      "run_id": "27515092838",
-      "commit_sha": "4fd51653602affea9747065d900adb58e228d5e7",
-      "artifact": "pipeline-phase-attestation"
-    }
-  ],
-  "structured_acceptance_criteria": [
-    {
-      "ac_id": "AC-1",
-      "requirement": "AC-1: CI 최종 확인 안내 업데이트가 pending 승인 댓글을 PATCH하지 않는다",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-2",
-      "requirement": "AC-2: CI 최종 확인 안내 업데이트가 accepted 완료 댓글을 PATCH하지 않는다",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-3",
-      "requirement": "AC-3: request-accept 재실행 시 CI 최종 확인 안내 댓글을 삭제하지 않는다",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-4",
-      "requirement": "AC-4: accept 성공 후 accepted 댓글에 pending marker와 승인 코드 입력 안내가 없다",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-5",
-      "requirement": "AC-5: accept 성공 후 CI 재실행 시 accepted 댓글이 덮어써지지 않는다",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-6",
-      "requirement": "AC-6: pending 댓글에 판단 정보 상태 readiness 표시가 포함된다",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-7",
-      "requirement": "AC-7: gates accept는 CI 최종 확인 안내 댓글을 pending approval packet으로 오인하지 않는다",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-8",
-      "requirement": "AC-8: B32A 회귀 방지 — pending 댓글의 evidence_integrity/workspace_hygiene 값이 PR body PIPELINE_FINAL_PACKET과 동일하다",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-9",
-      "requirement": "AC-9: 기존 회귀 테스트 모두 PASS",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    },
-    {
-      "ac_id": "AC-10",
-      "requirement": "AC-10: D278/2821 기존 회귀 테스트 모두 PASS",
-      "must_verify": true,
-      "source": "user",
-      "user_visible": true,
-      "expected_evidence": ""
-    }
-  ],
-  "requirements_tracking": {
-    "enabled": true,
-    "schema_version": 1,
-    "recorded_at": "2026-06-14T21:32:49Z"
-  },
-  "ac_completeness": {
-    "cached_at": "2026-06-14T22:02:05Z",
-    "total": 10,
-    "pending_count": 10,
-    "pending_ids": [
-      "AC-1",
-      "AC-2",
-      "AC-3",
-      "AC-4",
-      "AC-5",
-      "AC-6",
-      "AC-7",
-      "AC-8",
-      "AC-9",
-      "AC-10"
-    ],
-    "complete": false
-  },
-  "dev_handover": {
-    "report_file": "dev_handover_32D7.xml",
-    "validated_at": "2026-06-14T22:07:12Z",
-    "producer": "dev-agent"
-  },
-  "dev_gate_flags": {
-    "scope_declared": true
-  },
-  "atomic_scope": {
-    "manifest_file": "scope_manifest_32D7.json",
-    "validated_at": "2026-06-14T22:07:19Z",
-    "micro_task_ids": [
-      "MT-1",
-      "MT-2",
-      "MT-3",
-      "MT-4",
-      "MT-5"
-    ],
-    "files": [
-      ".github/workflows/ci.yml",
-      "pipeline.py",
-      "tests/e2e/test_marker_separation_32d7.py"
-    ],
-    "affected_functions": [
-      "ci.yml \"최종 확인 안내 남기기\" step의 PowerShell 스크립트 (line 590-615)",
-      "pipeline._check_acceptance_packet_via_github (line 5085-5220) 및 _get_pr_comment_acceptance_body (line 15419-15465)",
-      "pipeline._post_github_pending_acceptance_comment (line 15103-15257)",
-      "pipeline._update_github_acceptance_comment (line 15310-15416)",
-      "신규 테스트: tests/e2e/test_marker_separation_32d7.py"
-    ],
-    "implemented_tasks": [
-      {
-        "mt_id": "MT-1",
-        "implemented_ac": [
-          "AC-1",
-          "AC-2",
-          "AC-5"
-        ],
-        "changed_files": [
-          ".github/workflows/ci.yml"
-        ],
-        "implementation_evidence": [
-          "packet here-string에 <!-- pipeline-final-check-packet --> marker 추가",
-          "PR 댓글 PATCH 선택을 final-check marker 포함 AND pending/accepted 미포함으로 변경"
-        ]
-      },
-      {
-        "mt_id": "MT-2",
-        "implemented_ac": [
-          "AC-3",
-          "AC-6"
-        ],
-        "changed_files": [
-          "pipeline.py"
-        ],
-        "implementation_evidence": [
-          "삭제 대상 댓글 필터를 final-check-only(공통+final-check marker만, pending/accepted 미포함) 제외로 변경",
-          "pending 댓글 본문에 '판단 정보 상태: 판단 가능' readiness 줄 보장"
-        ]
-      },
-      {
-        "mt_id": "MT-3",
-        "implemented_ac": [
-          "AC-4",
-          "AC-5"
-        ],
-        "changed_files": [
-          "pipeline.py"
-        ],
-        "implementation_evidence": [
-          "ACCEPTED 댓글 교체 시 final-check-only 댓글은 삭제 대상에서 제외"
-        ]
-      },
-      {
-        "mt_id": "MT-4",
-        "implemented_ac": [
-          "AC-7",
-          "AC-8"
-        ],
-        "changed_files": [
-          "pipeline.py"
-        ],
-        "implementation_evidence": [
-          "댓글 선택 우선순위: pending marker 우선 -> 공통 marker(legacy) -> final-check-only 제외 도입"
-        ]
-      },
-      {
-        "mt_id": "MT-5",
-        "implemented_ac": [
-          "AC-9",
-          "AC-10"
-        ],
-        "changed_files": [
-          "tests/e2e/test_marker_separation_32d7.py"
-        ],
-        "implementation_evidence": [
-          "8개 marker 분리 테스트(TC-1~TC-8) 신규 작성, TC-7/TC-8은 B32A/D278/2821 회귀 subprocess 실행"
-        ]
-      }
-    ],
-    "actual_diff": {
-      "added": [
-        "tests/e2e/test_marker_separation_32d7.py"
-      ],
-      "modified": [
-        ".github/workflows/ci.yml",
-        "pipeline.py"
-      ],
-      "deleted": [
-        "module_design_MT-3_32D7.xml",
-        "module_design_MT-4_32D7.xml",
-        "module_design_MT-5_32D7.xml",
-        "module_handover_MT-3_32D7.xml",
-        "module_handover_MT-4_32D7.xml",
-        "module_handover_MT-5_32D7.xml",
-        "module_qa_MT-3_32D7.xml",
-        "module_qa_MT-4_32D7.xml",
-        "module_qa_MT-5_32D7.xml",
-        "scope_manifest_32D7.json",
-        "scope_manifest_MT-3_32D7.json",
-        "scope_manifest_MT-4_32D7.json",
-        "scope_manifest_MT-5_32D7.json"
-      ],
-      "changed": [
-        ".github/workflows/ci.yml",
-        "pipeline.py",
-        "tests/e2e/test_marker_separation_32d7.py"
-      ]
-    }
-  },
-  "qa_report_validation": {
-    "report_file": "qa_report2_32D7.xml",
-    "validated_at": "2026-06-14T23:07:58Z",
-    "numeric_score": 110,
-    "verdict": "PASS"
   }
 }
