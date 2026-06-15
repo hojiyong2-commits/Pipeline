@@ -1,0 +1,612 @@
+{
+  "schema_version": 1,
+  "packet_type": "final_acceptance_evidence",
+  "pipeline_id": "BUG-20260615-A35C",
+  "generated_at": "2026-06-15T14:10:29Z",
+  "pr": {
+    "url": "https://github.com/hojiyong2-commits/Pipeline/pull/630",
+    "number": "630",
+    "head_sha": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+    "base_branch": "main",
+    "head_branch": ""
+  },
+  "github_actions": {
+    "run_id": "27552007542",
+    "run_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/27552007542",
+    "status": "",
+    "head_sha": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5"
+  },
+  "changed_files": [
+    ".github/workflows/ci.yml",
+    "manager_handoff_A35C.xml",
+    "pipeline.py",
+    "pipeline_state.json",
+    "step_plan_A35C.xml",
+    "tests/e2e/test_acceptance_display_ssot_a35c.py",
+    "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json",
+    "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json",
+    "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json",
+    "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json",
+    "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json",
+    "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json",
+    "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json",
+    "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json",
+    "tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json",
+    "tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json"
+  ],
+  "changed_files_count": 16,
+  "gates": {
+    "technical": "PENDING",
+    "oracle": "PENDING",
+    "github_ci": "PENDING",
+    "acceptance": "PENDING"
+  },
+  "requirements": [
+    {
+      "ac_id": "AC-1",
+      "summary": "state[\"external_gates\"][\"acceptance\"][\"status\"]=\"FAIL\" + active acceptance_request.status=\"PENDING\" 일 때\n        report final-packet 결과에서 메타데이터 블록의 acceptance와 게이트 상태 표의 User Acceptance가\n        모두 PENDING으로 표시된다. (TC-1 검증)",
+      "linked_mt": [
+        "MT-1",
+        "MT-2",
+        "MT-5",
+        "MT-6"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-2",
+      "summary": "FAIL+PENDING 상태에서 human_acceptance_packet.md와 human_acceptance_packet.json의\n        acceptance_display가 모두 PENDING이다. (TC-2 검증)",
+      "linked_mt": [
+        "MT-1",
+        "MT-2",
+        "MT-5"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-3",
+      "summary": "REJECT 후 새 request-accept 발급 시 이전 승인 코드가 final packet, pending comment,\n        final-check comment 어디에도 없다. (TC-3 검증)",
+      "linked_mt": [
+        "MT-1",
+        "MT-5",
+        "MT-6"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-4",
+      "summary": "pending acceptance comment에 현재 승인 코드가 있고, ACCEPTED/승인완료/배포완료 문구가 없다. (TC-4 검증)",
+      "linked_mt": [
+        "MT-2",
+        "MT-5"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-5",
+      "summary": "accepted completion comment에 ACCEPTED 상태가 있고, pending marker/승인 코드 입력 안내가 없다. (TC-5 검증)",
+      "linked_mt": [
+        "MT-3",
+        "MT-5"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-6",
+      "summary": "CI final-check 생성에서 human_acceptance_packet.json 파싱 실패 시 stale PR body packet을\n        판단 가능 댓글로 재사용하지 않고 \"정보 부족\"으로 표시한다. (TC-6 검증)",
+      "linked_mt": [
+        "MT-3",
+        "MT-4",
+        "MT-5",
+        "MT-6"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-7",
+      "summary": "CI final-check 생성에서 packet head_sha != PR head 또는 packet ci_run_id 불일치 시\n        \"정보 부족 (stale packet)\" 상태로 표시한다. (TC-7 검증)",
+      "linked_mt": [
+        "MT-3",
+        "MT-4",
+        "MT-5"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-8",
+      "summary": "final-check 댓글에 pending 승인 코드를 직접 포함하지 않으며, \"승인/거절은 별도 사용자 최종 확인 요청\n        댓글을 참조\"라는 안내만 표시한다. (TC-8 검증)",
+      "linked_mt": [
+        "MT-3",
+        "MT-5",
+        "MT-6"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-9",
+      "summary": "pending/final-check/accepted comment의 marker가 서로 독립이며 교차 오염되지 않는다. (TC-9 검증)",
+      "linked_mt": [
+        "MT-5"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-10",
+      "summary": "D278 회귀 방지: accept 완료 후 accepted 댓글이 pending으로 되돌아가지 않는다. (TC-10 검증)",
+      "linked_mt": [
+        "MT-5"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-11",
+      "summary": "2821 회귀 방지: workspace_hygiene BLOCKED/WARN/OK 요약이 display model에 반영되며,\n        fail-closed 로직 자체는 변경되지 않는다. (TC-11 검증)",
+      "linked_mt": [
+        "MT-5"
+      ],
+      "status": "PENDING",
+      "evidence": []
+    }
+  ],
+  "requirements_summary": {
+    "total": 11,
+    "passed": 0,
+    "failed": 0
+  },
+  "oracle_summary": {
+    "status": "PENDING",
+    "case_count": 0,
+    "passed_count": 0,
+    "failed_count": 0
+  },
+  "known_failures": [],
+  "warnings": [],
+  "acceptance": {
+    "code": "ACCEPT-BUG-20260615-A35C-ABCDEFGH",
+    "reject_example": "REJECT-BUG-20260615-A35C-ABCDEFGH: 이유",
+    "nonce": "ABCDEFGH",
+    "request_id": "",
+    "status": "PENDING",
+    "display_status": "PENDING"
+  },
+  "artifacts": {
+    "human_packet_md": "human_acceptance_packet.md",
+    "verification_json": "human_acceptance_packet.json",
+    "cleanup_manifest": null
+  },
+  "evidence_integrity": {
+    "status": "PASS",
+    "protected_evidence_count": 10,
+    "tracked_count": 10,
+    "pr_included_count": 10,
+    "untracked_protected": [],
+    "orphan_oracle_warnings": [],
+    "cleanup_only_artifacts": [],
+    "blockers": []
+  },
+  "workspace_hygiene": {},
+  "acceptance_target": {
+    "description": "사용자가 확인해야 하는 실제 구현 기준점 (marker PR 아님)",
+    "repository": "hojiyong2-commits/Pipeline",
+    "acceptance_pr": {
+      "number": "#630",
+      "head_sha": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+      "title": "[BUG-20260615-A35C] User Acceptance 표시 SSoT 불일치 및 CI stale packet 재사용 근본 수정",
+      "changed_files": [
+        ".github/workflows/ci.yml",
+        "manager_handoff_A35C.xml",
+        "pipeline.py",
+        "pipeline_state.json",
+        "step_plan_A35C.xml",
+        "tests/e2e/test_acceptance_display_ssot_a35c.py",
+        "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json",
+        "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json",
+        "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json",
+        "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json",
+        "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json",
+        "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json",
+        "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json",
+        "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json",
+        "tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json",
+        "tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json"
+      ],
+      "note": "이 PR이 User Acceptance 승인 대상입니다. changed_files 목록이 사용자가 최종 확인하는 변경 범위입니다."
+    },
+    "acceptance_pr_note": "acceptance_pr은 현재 User Acceptance 승인 대상인 오픈 PR입니다. impl_prs(이력)와 구분하세요.",
+    "target_main_commit": "fbc2b9abc3208d255017ca5931b1d4d830dac788",
+    "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+    "target_commit_note": "PR head SHA — origin/main이 아닌 현재 PR의 최신 commit",
+    "impl_prs": [],
+    "impl_prs_note": "pipeline_id로 검색한 이미 머지된 PR 이력입니다. 승인 대상은 acceptance_pr을 확인하세요.",
+    "changed_files": [
+      ".github/workflows/ci.yml",
+      "manager_handoff_A35C.xml",
+      "pipeline.py",
+      "pipeline_state.json",
+      "step_plan_A35C.xml",
+      "tests/e2e/test_acceptance_display_ssot_a35c.py",
+      "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json",
+      "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json",
+      "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json",
+      "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json",
+      "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json",
+      "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json",
+      "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json",
+      "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json",
+      "tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json",
+      "tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json"
+    ],
+    "oracle_evidence_files": [
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\normal_pending_display\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "0f5f02adb8c4701e09129d91d84e15cb7645f1f9bc421a8fe8461f432b0b79d8",
+        "target_blob_sha256": "0f5f02adb8c4701e09129d91d84e15cb7645f1f9bc421a8fe8461f432b0b79d8",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\normal_pending_display\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "a53b5dc3e3cb9fb323b84085ca9032873ccf76448cdf209f78cc70d343c99ffc",
+        "target_blob_sha256": "a53b5dc3e3cb9fb323b84085ca9032873ccf76448cdf209f78cc70d343c99ffc",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\edge_reject_then_new_request\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "73f53985d6584b15339154f462996a72f9f36b2681f8b01f3af6aad80145dbb2",
+        "target_blob_sha256": "73f53985d6584b15339154f462996a72f9f36b2681f8b01f3af6aad80145dbb2",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\edge_reject_then_new_request\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "af5bd4edf1220ed614e439945cb737a8f55d89700024da54c08a329bfd1e768c",
+        "target_blob_sha256": "af5bd4edf1220ed614e439945cb737a8f55d89700024da54c08a329bfd1e768c",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\edge_stale_packet_blocked\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "a693465ced90dfd3f2aad142ee9afd6f9cea783b696764de1e52b6305e024733",
+        "target_blob_sha256": "a693465ced90dfd3f2aad142ee9afd6f9cea783b696764de1e52b6305e024733",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\edge_stale_packet_blocked\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "e3a9cd3c692fe91e8f231f427982831cf2f87e535952f85e477fb4b792b42e39",
+        "target_blob_sha256": "e3a9cd3c692fe91e8f231f427982831cf2f87e535952f85e477fb4b792b42e39",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\edge_final_check_no_code\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "2a8b23d9009588fe7f41334cb36cc0f79c82107a845b1b25f6e4398034332481",
+        "target_blob_sha256": "2a8b23d9009588fe7f41334cb36cc0f79c82107a845b1b25f6e4398034332481",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\edge_final_check_no_code\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "d5b41a948649d253b7fa3056f59fbb1b7e4593ae7654b2197c2a9906c0befb33",
+        "target_blob_sha256": "d5b41a948649d253b7fa3056f59fbb1b7e4593ae7654b2197c2a9906c0befb33",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\error_json_parse_fail\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "a185560c07225148c2410974b2abdf3c9f69d1117a15f57640e64649dd324dca",
+        "target_blob_sha256": "a185560c07225148c2410974b2abdf3c9f69d1117a15f57640e64649dd324dca",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260615-A35C\\error_json_parse_fail\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "9520d2b6d5cf5b648df161adcd161df0a00724e9f3ba1b752b60eb2331381a3b",
+        "target_blob_sha256": "9520d2b6d5cf5b648df161adcd161df0a00724e9f3ba1b752b60eb2331381a3b",
+        "target_commit": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+        "sha_match": true,
+        "status": "MATCH"
+      }
+    ],
+    "oracle_evidence_note": "oracle_evidence_files의 target_blob_sha256은 target_commit에서 git show로 추출한 blob SHA256입니다. inventory_sha256과 일치하면 sha_match=true, status=MATCH로 표시됩니다."
+  },
+  "blocked": false,
+  "blocked_reasons": [],
+  "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/630",
+  "pr_number": "630",
+  "pr_head_sha": "2af6f0ce9f5ce83bb208d3ce2b33559316717ca5",
+  "ci_run_id": "27552007542",
+  "actions_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/27552007542",
+  "gate_status": {
+    "technical": "PENDING",
+    "oracle": "PENDING",
+    "github_ci": "PENDING",
+    "acceptance": "PENDING"
+  },
+  "structured_ac": [],
+  "ac_fulfillment_table": [
+    {
+      "ac_id": "AC-1",
+      "requirement": "state[\"external_gates\"][\"acceptance\"][\"status\"]=\"FAIL\" + active acceptance_request.status=\"PENDING\" 일 때\n        report final-packet 결과에서 메타데이터 블록의 acceptance와 게이트 상태 표의 User Acceptance가\n        모두 PENDING으로 표시된다. (TC-1 검증)",
+      "linked_mt": [
+        "MT-1",
+        "MT-2",
+        "MT-5",
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-1: _get_effective_acceptance_display_state(state) 신규 함수 추가 (pipeline.py ~line 4820): _load_acceptance_request()로 현재 파이프라인 소속 request를 로드하여 status가 PENDING/ACCEPTED/CONSUMED/REJECTED면 _resolve_acceptance_display_state 정규화 값을 우선 반환, 없으면 state['external_gates']['acceptance']['status']로 fallback (DEFECT-A 수정, AC-1)",
+        "MT-1: 다른 파이프라인 소속 request(pipeline_id 불일치)는 무시하고 state gate status로 fallback — request_pid != pid 분기 (AC-3)",
+        "MT-1: 기존 _resolve_acceptance_display_state는 미변경 보존 (request dict 기반 표시 상태 계산 SSoT 유지, AC-2 기반)",
+        "MT-2: _collect_packet_evidence가 _get_effective_acceptance_display_state(state)로 effective 표시 상태를 계산하여 evidence['acceptance_display_effective']에 주입 — 모든 packet consumer가 동일 SSoT 공유 (AC-1, AC-4)",
+        "MT-2: _build_final_packet_content: 메타데이터 블록 acceptance_display를 evidence['acceptance_display_effective'] 우선 사용, PENDING/REJECTED 시 gate_status['acceptance']=PENDING 동기화 (AC-1, AC-2)",
+        "MT-2: _display_model_from_evidence: acceptance_display가 PENDING/REJECTED이고 gate가 PASS가 아니면 gates['acceptance']=PENDING으로 동기화하여 사용자 표시 섹션 User Acceptance가 메타데이터와 일치 (AC-1, AC-2)",
+        "MT-2: _build_acceptance_display_model: _resolve_acceptance_display_state 직접 호출을 _get_effective_acceptance_display_state(state)로 교체 (AC-1, AC-2)",
+        "MT-2: _build_verification_json: acceptance_display_status를 evidence['acceptance_display_effective'] 우선 사용 + JSON gates.acceptance를 display model과 동기화 (AC-2, AC-4)",
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed",
+        "MT-6: 이미 생성된 5개 oracle 케이스(normal_pending_display, edge_reject_then_new_request, edge_stale_packet_blocked, edge_final_check_no_code, error_json_parse_fail)의 input/expected.json 내용 검토 완료 — 수정 불필요",
+        "MT-6: normal_pending_display: effective_display=PENDING/metadata_acceptance=PENDING/gate_table_acceptance=PENDING — TC-1 동작과 일치 확인 (AC-1)",
+        "MT-6: edge_stale_packet_blocked: readiness=정보 부족/stale_reason=head SHA mismatch/fallback_to_pr_body=false — TC-7 동작과 일치 (AC-6)",
+        "MT-6: error_json_parse_fail: readiness=정보 부족/fallback_to_stale_pr_body=false/continues_without_crash=true — TC-6 동작과 일치 (AC-6, AC-8); edge_reject_then_new_request: old_nonce_present_in_display=false — TC-3 일치 (AC-3)"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-2",
+      "requirement": "FAIL+PENDING 상태에서 human_acceptance_packet.md와 human_acceptance_packet.json의\n        acceptance_display가 모두 PENDING이다. (TC-2 검증)",
+      "linked_mt": [
+        "MT-1",
+        "MT-2",
+        "MT-5"
+      ],
+      "implementation_evidence": [
+        "MT-1: _get_effective_acceptance_display_state(state) 신규 함수 추가 (pipeline.py ~line 4820): _load_acceptance_request()로 현재 파이프라인 소속 request를 로드하여 status가 PENDING/ACCEPTED/CONSUMED/REJECTED면 _resolve_acceptance_display_state 정규화 값을 우선 반환, 없으면 state['external_gates']['acceptance']['status']로 fallback (DEFECT-A 수정, AC-1)",
+        "MT-1: 다른 파이프라인 소속 request(pipeline_id 불일치)는 무시하고 state gate status로 fallback — request_pid != pid 분기 (AC-3)",
+        "MT-1: 기존 _resolve_acceptance_display_state는 미변경 보존 (request dict 기반 표시 상태 계산 SSoT 유지, AC-2 기반)",
+        "MT-2: _collect_packet_evidence가 _get_effective_acceptance_display_state(state)로 effective 표시 상태를 계산하여 evidence['acceptance_display_effective']에 주입 — 모든 packet consumer가 동일 SSoT 공유 (AC-1, AC-4)",
+        "MT-2: _build_final_packet_content: 메타데이터 블록 acceptance_display를 evidence['acceptance_display_effective'] 우선 사용, PENDING/REJECTED 시 gate_status['acceptance']=PENDING 동기화 (AC-1, AC-2)",
+        "MT-2: _display_model_from_evidence: acceptance_display가 PENDING/REJECTED이고 gate가 PASS가 아니면 gates['acceptance']=PENDING으로 동기화하여 사용자 표시 섹션 User Acceptance가 메타데이터와 일치 (AC-1, AC-2)",
+        "MT-2: _build_acceptance_display_model: _resolve_acceptance_display_state 직접 호출을 _get_effective_acceptance_display_state(state)로 교체 (AC-1, AC-2)",
+        "MT-2: _build_verification_json: acceptance_display_status를 evidence['acceptance_display_effective'] 우선 사용 + JSON gates.acceptance를 display model과 동기화 (AC-2, AC-4)",
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-3",
+      "requirement": "REJECT 후 새 request-accept 발급 시 이전 승인 코드가 final packet, pending comment,\n        final-check comment 어디에도 없다. (TC-3 검증)",
+      "linked_mt": [
+        "MT-1",
+        "MT-5",
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-1: _get_effective_acceptance_display_state(state) 신규 함수 추가 (pipeline.py ~line 4820): _load_acceptance_request()로 현재 파이프라인 소속 request를 로드하여 status가 PENDING/ACCEPTED/CONSUMED/REJECTED면 _resolve_acceptance_display_state 정규화 값을 우선 반환, 없으면 state['external_gates']['acceptance']['status']로 fallback (DEFECT-A 수정, AC-1)",
+        "MT-1: 다른 파이프라인 소속 request(pipeline_id 불일치)는 무시하고 state gate status로 fallback — request_pid != pid 분기 (AC-3)",
+        "MT-1: 기존 _resolve_acceptance_display_state는 미변경 보존 (request dict 기반 표시 상태 계산 SSoT 유지, AC-2 기반)",
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed",
+        "MT-6: 이미 생성된 5개 oracle 케이스(normal_pending_display, edge_reject_then_new_request, edge_stale_packet_blocked, edge_final_check_no_code, error_json_parse_fail)의 input/expected.json 내용 검토 완료 — 수정 불필요",
+        "MT-6: normal_pending_display: effective_display=PENDING/metadata_acceptance=PENDING/gate_table_acceptance=PENDING — TC-1 동작과 일치 확인 (AC-1)",
+        "MT-6: edge_stale_packet_blocked: readiness=정보 부족/stale_reason=head SHA mismatch/fallback_to_pr_body=false — TC-7 동작과 일치 (AC-6)",
+        "MT-6: error_json_parse_fail: readiness=정보 부족/fallback_to_stale_pr_body=false/continues_without_crash=true — TC-6 동작과 일치 (AC-6, AC-8); edge_reject_then_new_request: old_nonce_present_in_display=false — TC-3 일치 (AC-3)"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-4",
+      "requirement": "pending acceptance comment에 현재 승인 코드가 있고, ACCEPTED/승인완료/배포완료 문구가 없다. (TC-4 검증)",
+      "linked_mt": [
+        "MT-2",
+        "MT-5"
+      ],
+      "implementation_evidence": [
+        "MT-2: _collect_packet_evidence가 _get_effective_acceptance_display_state(state)로 effective 표시 상태를 계산하여 evidence['acceptance_display_effective']에 주입 — 모든 packet consumer가 동일 SSoT 공유 (AC-1, AC-4)",
+        "MT-2: _build_final_packet_content: 메타데이터 블록 acceptance_display를 evidence['acceptance_display_effective'] 우선 사용, PENDING/REJECTED 시 gate_status['acceptance']=PENDING 동기화 (AC-1, AC-2)",
+        "MT-2: _display_model_from_evidence: acceptance_display가 PENDING/REJECTED이고 gate가 PASS가 아니면 gates['acceptance']=PENDING으로 동기화하여 사용자 표시 섹션 User Acceptance가 메타데이터와 일치 (AC-1, AC-2)",
+        "MT-2: _build_acceptance_display_model: _resolve_acceptance_display_state 직접 호출을 _get_effective_acceptance_display_state(state)로 교체 (AC-1, AC-2)",
+        "MT-2: _build_verification_json: acceptance_display_status를 evidence['acceptance_display_effective'] 우선 사용 + JSON gates.acceptance를 display model과 동기화 (AC-2, AC-4)",
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-5",
+      "requirement": "accepted completion comment에 ACCEPTED 상태가 있고, pending marker/승인 코드 입력 안내가 없다. (TC-5 검증)",
+      "linked_mt": [
+        "MT-3",
+        "MT-5"
+      ],
+      "implementation_evidence": [
+        "MT-3: 최종 확인 안내 만들기 step의 continue-on-error를 true→false로 변경 (fail-closed, AC-5)",
+        "MT-3: human_acceptance_packet.json freshness 검증 실패 시 decisionReadiness='정보 부족' 강제 + step 끝에서 throw로 step 실패 (stale PR body fallback 금지, AC-6, AC-7)",
+        "MT-3: final-check 댓글에 승인 코드를 싣지 않으며, '승인/거절은 사용자 최종 확인 요청 댓글(pipeline-human-acceptance-packet-pending)을 확인해 주세요' 안내 라인 추가 (AC-8)",
+        "MT-3: stale PR body의 PIPELINE_FINAL_PACKET 블록을 fallback 소스로 사용하지 않음 — packetIsFresh=false면 정보 부족 처리 (AC-6)",
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-6",
+      "requirement": "CI final-check 생성에서 human_acceptance_packet.json 파싱 실패 시 stale PR body packet을\n        판단 가능 댓글로 재사용하지 않고 \"정보 부족\"으로 표시한다. (TC-6 검증)",
+      "linked_mt": [
+        "MT-3",
+        "MT-4",
+        "MT-5",
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-3: 최종 확인 안내 만들기 step의 continue-on-error를 true→false로 변경 (fail-closed, AC-5)",
+        "MT-3: human_acceptance_packet.json freshness 검증 실패 시 decisionReadiness='정보 부족' 강제 + step 끝에서 throw로 step 실패 (stale PR body fallback 금지, AC-6, AC-7)",
+        "MT-3: final-check 댓글에 승인 코드를 싣지 않으며, '승인/거절은 사용자 최종 확인 요청 댓글(pipeline-human-acceptance-packet-pending)을 확인해 주세요' 안내 라인 추가 (AC-8)",
+        "MT-3: stale PR body의 PIPELINE_FINAL_PACKET 블록을 fallback 소스로 사용하지 않음 — packetIsFresh=false면 정보 부족 처리 (AC-6)",
+        "MT-4: Validate-PacketFreshness PowerShell helper 신규 추가: 파일 부재→FAIL 'packet file not found', JSON 파싱 실패→FAIL 'JSON parse failure', head SHA 불일치→FAIL 'head SHA mismatch', run_id 불일치→FAIL 'run_id mismatch', 모두 통과→PASS (AC-6, AC-7)",
+        "MT-4: helper 결과를 packetIsFresh 변수에 반영하여 head SHA 일치를 우선 신뢰 기준으로 사용 (run_id는 직전 CI run 생성분 허용)",
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed",
+        "MT-6: 이미 생성된 5개 oracle 케이스(normal_pending_display, edge_reject_then_new_request, edge_stale_packet_blocked, edge_final_check_no_code, error_json_parse_fail)의 input/expected.json 내용 검토 완료 — 수정 불필요",
+        "MT-6: normal_pending_display: effective_display=PENDING/metadata_acceptance=PENDING/gate_table_acceptance=PENDING — TC-1 동작과 일치 확인 (AC-1)",
+        "MT-6: edge_stale_packet_blocked: readiness=정보 부족/stale_reason=head SHA mismatch/fallback_to_pr_body=false — TC-7 동작과 일치 (AC-6)",
+        "MT-6: error_json_parse_fail: readiness=정보 부족/fallback_to_stale_pr_body=false/continues_without_crash=true — TC-6 동작과 일치 (AC-6, AC-8); edge_reject_then_new_request: old_nonce_present_in_display=false — TC-3 일치 (AC-3)"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-7",
+      "requirement": "CI final-check 생성에서 packet head_sha != PR head 또는 packet ci_run_id 불일치 시\n        \"정보 부족 (stale packet)\" 상태로 표시한다. (TC-7 검증)",
+      "linked_mt": [
+        "MT-3",
+        "MT-4",
+        "MT-5"
+      ],
+      "implementation_evidence": [
+        "MT-3: 최종 확인 안내 만들기 step의 continue-on-error를 true→false로 변경 (fail-closed, AC-5)",
+        "MT-3: human_acceptance_packet.json freshness 검증 실패 시 decisionReadiness='정보 부족' 강제 + step 끝에서 throw로 step 실패 (stale PR body fallback 금지, AC-6, AC-7)",
+        "MT-3: final-check 댓글에 승인 코드를 싣지 않으며, '승인/거절은 사용자 최종 확인 요청 댓글(pipeline-human-acceptance-packet-pending)을 확인해 주세요' 안내 라인 추가 (AC-8)",
+        "MT-3: stale PR body의 PIPELINE_FINAL_PACKET 블록을 fallback 소스로 사용하지 않음 — packetIsFresh=false면 정보 부족 처리 (AC-6)",
+        "MT-4: Validate-PacketFreshness PowerShell helper 신규 추가: 파일 부재→FAIL 'packet file not found', JSON 파싱 실패→FAIL 'JSON parse failure', head SHA 불일치→FAIL 'head SHA mismatch', run_id 불일치→FAIL 'run_id mismatch', 모두 통과→PASS (AC-6, AC-7)",
+        "MT-4: helper 결과를 packetIsFresh 변수에 반영하여 head SHA 일치를 우선 신뢰 기준으로 사용 (run_id는 직전 CI run 생성분 허용)",
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-8",
+      "requirement": "final-check 댓글에 pending 승인 코드를 직접 포함하지 않으며, \"승인/거절은 별도 사용자 최종 확인 요청\n        댓글을 참조\"라는 안내만 표시한다. (TC-8 검증)",
+      "linked_mt": [
+        "MT-3",
+        "MT-5",
+        "MT-6"
+      ],
+      "implementation_evidence": [
+        "MT-3: 최종 확인 안내 만들기 step의 continue-on-error를 true→false로 변경 (fail-closed, AC-5)",
+        "MT-3: human_acceptance_packet.json freshness 검증 실패 시 decisionReadiness='정보 부족' 강제 + step 끝에서 throw로 step 실패 (stale PR body fallback 금지, AC-6, AC-7)",
+        "MT-3: final-check 댓글에 승인 코드를 싣지 않으며, '승인/거절은 사용자 최종 확인 요청 댓글(pipeline-human-acceptance-packet-pending)을 확인해 주세요' 안내 라인 추가 (AC-8)",
+        "MT-3: stale PR body의 PIPELINE_FINAL_PACKET 블록을 fallback 소스로 사용하지 않음 — packetIsFresh=false면 정보 부족 처리 (AC-6)",
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed",
+        "MT-6: 이미 생성된 5개 oracle 케이스(normal_pending_display, edge_reject_then_new_request, edge_stale_packet_blocked, edge_final_check_no_code, error_json_parse_fail)의 input/expected.json 내용 검토 완료 — 수정 불필요",
+        "MT-6: normal_pending_display: effective_display=PENDING/metadata_acceptance=PENDING/gate_table_acceptance=PENDING — TC-1 동작과 일치 확인 (AC-1)",
+        "MT-6: edge_stale_packet_blocked: readiness=정보 부족/stale_reason=head SHA mismatch/fallback_to_pr_body=false — TC-7 동작과 일치 (AC-6)",
+        "MT-6: error_json_parse_fail: readiness=정보 부족/fallback_to_stale_pr_body=false/continues_without_crash=true — TC-6 동작과 일치 (AC-6, AC-8); edge_reject_then_new_request: old_nonce_present_in_display=false — TC-3 일치 (AC-3)"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-9",
+      "requirement": "pending/final-check/accepted comment의 marker가 서로 독립이며 교차 오염되지 않는다. (TC-9 검증)",
+      "linked_mt": [
+        "MT-5"
+      ],
+      "implementation_evidence": [
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-10",
+      "requirement": "D278 회귀 방지: accept 완료 후 accepted 댓글이 pending으로 되돌아가지 않는다. (TC-10 검증)",
+      "linked_mt": [
+        "MT-5"
+      ],
+      "implementation_evidence": [
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-11",
+      "requirement": "2821 회귀 방지: workspace_hygiene BLOCKED/WARN/OK 요약이 display model에 반영되며,\n        fail-closed 로직 자체는 변경되지 않는다. (TC-11 검증)",
+      "linked_mt": [
+        "MT-5"
+      ],
+      "implementation_evidence": [
+        "MT-5: 신규 E2E 테스트 11개(TC-1~TC-11) 작성, PIPELINE_STATE_PATH 격리 + subprocess 실제 CLI(report final-packet) 실행 + 파일/final_state assertion (Real CLI Path E2E 정책 준수)",
+        "MT-5: TC-1 FAIL gate+PENDING request→PENDING(AC-1), TC-2 MD/JSON display 일치(AC-2), TC-3 REJECT 후 이전 nonce 미노출(AC-3), TC-4 pending에 현재 코드/ACCEPTED 없음(AC-4), TC-5 CONSUMED+ACCEPT→ACCEPTED",
+        "MT-5: TC-6 JSON 파싱 실패 stale 미사용(AC-6, ci.yml 정적), TC-7 head_sha/run_id 불일치 정보 부족(AC-7), TC-8 final-check 승인 코드 미포함+pending 안내(AC-8), TC-9 marker 독립성(AC-9, 32D7 회귀)",
+        "MT-5: TC-10 D278 nonce-reuse 회귀(AC-10), TC-11 2821 workspace_hygiene 회귀(AC-11) — 모두 11 passed"
+      ],
+      "verification": [],
+      "result": "PENDING",
+      "user_visible": true
+    }
+  ],
+  "acceptance_code": "ACCEPT-BUG-20260615-A35C-ABCDEFGH"
+}
