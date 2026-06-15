@@ -4,13 +4,13 @@
   "type": "IMP",
   "description": "실사용 전 end-to-end dry run — docs/pipeline_dry_run_20260615.md 문서 1개 추가로 전체 파이프라인 흐름 검증",
   "created_at": "2026-06-15T09:28:25Z",
-  "updated_at": "2026-06-15T10:51:45Z",
+  "updated_at": "2026-06-15T10:58:09Z",
   "pipeline_started_at": "2026-06-15T09:28:25Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "sec",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -52,24 +52,26 @@
       "numeric_score": 110
     },
     "sec": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
+      "status": "SKIP",
+      "started_at": "2026-06-15T10:55:54Z",
+      "completed_at": "2026-06-15T10:55:57Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260615-BE84_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "started_at": "2026-06-15T10:56:06Z",
+      "completed_at": "2026-06-15T10:58:09Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260615-BE84_phase_build.json",
+      "skip_reason": "docs-only",
+      "agent_run_id": "build-ce0bc080753861e9"
     },
     "harness": {
       "status": "PENDING",
@@ -176,6 +178,30 @@
     {
       "ts": "2026-06-15T10:51:45Z",
       "msg": "qa PASS numeric=110"
+    },
+    {
+      "ts": "2026-06-15T10:52:21Z",
+      "msg": "phase attestation request prepared: qa"
+    },
+    {
+      "ts": "2026-06-15T10:55:49Z",
+      "msg": "github phase-ci qa PASS run_id=27541310526 commit=f6ee16796249"
+    },
+    {
+      "ts": "2026-06-15T10:55:57Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-06-15T10:56:10Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-ce0bc080753861e9"
+    },
+    {
+      "ts": "2026-06-15T10:56:55Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-ce0bc080753861e9"
+    },
+    {
+      "ts": "2026-06-15T10:58:09Z",
+      "msg": "build DONE exe=N/A skip_reason=docs-only"
     }
   ],
   "terminal_state": null,
@@ -257,8 +283,28 @@
       "receipt_path": ".pipeline\\agent_receipts\\IMP-20260615-BE84\\qa\\qa-34795703b0b28b05.json",
       "receipt_sha256": "036a89e24cdb14de5d3a985012ebdf7338ee51cc73a99f7c8f4f967d7e1e7427",
       "used_by_phase": "qa",
-      "used_at": "2026-06-15T10:51:45Z",
+      "used_at": "2026-06-15T10:52:21Z",
       "commit_sha": "5af682fc87372225fe6a387ce505baae34997c03",
+      "notes": ""
+    },
+    "build-ce0bc080753861e9": {
+      "schema_version": 1,
+      "run_id": "build-ce0bc080753861e9",
+      "pipeline_id": "IMP-20260615-BE84",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-15T10:56:10Z",
+      "completed_at": "2026-06-15T10:56:55Z",
+      "token_hash": "3f1afd7b8ec40a629ca94629e032484156ee2970f84ba5adc00356aebb5cbd46",
+      "output_file": "build_report_BE84.xml",
+      "output_sha256": "5c29f91efb3b531491a019c3e54992b9b8dd1f2b6a027cfd9e7720d9fc3a8a52",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\IMP-20260615-BE84\\build\\build-ce0bc080753861e9.json",
+      "receipt_sha256": "6600e08f2ea63b6fb6051f732c88130ada7a808b5a70fbeb6b9f5f9d4d7392f4",
+      "used_by_phase": "build",
+      "used_at": "2026-06-15T10:58:09Z",
+      "commit_sha": "350af025d19cd2ad9f0dde3c8f08eb41ea2ec1c2",
       "notes": ""
     }
   },
@@ -331,14 +377,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-15T10:55:49Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27541310526",
+        "commit_sha": "f6ee167962493e2fd8b03a6a811b51d4cf78dde8",
+        "evidence": "github_actions_phase_run:27541310526",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
         "status": "PENDING",
@@ -508,6 +555,22 @@
       "owner": "PM",
       "return_phase": "pm",
       "attempt_count": 2,
+      "escalation_reason": null
+    },
+    {
+      "gate": "check_sec",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\check_sec_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\check_sec_attempt_1.json",
+      "recorded_at": "2026-06-15T10:52:18Z",
+      "repair_owner": "Pipeline Manager repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "gate_blocked_sec",
+      "failure_category": "missing_evidence",
+      "owner": "Pipeline Manager",
+      "return_phase": "dev",
+      "attempt_count": 1,
       "escalation_reason": null
     }
   ],
@@ -13511,6 +13574,15 @@
       "phase": "dev",
       "run_id": "27540810165",
       "commit_sha": "d669abd0f2d42617870c1ddbfd70ae7c25369597",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-15T10:55:49Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "27541310526",
+      "commit_sha": "f6ee167962493e2fd8b03a6a811b51d4cf78dde8",
       "artifact": "pipeline-phase-attestation"
     }
   ],
