@@ -4,10 +4,10 @@
   "type": "IMP",
   "description": "실사용 전 end-to-end dry run — docs/pipeline_dry_run_20260615.md 문서 1개 추가로 전체 파이프라인 흐름 검증",
   "created_at": "2026-06-15T09:28:25Z",
-  "updated_at": "2026-06-15T11:06:43Z",
+  "updated_at": "2026-06-15T11:57:54Z",
   "pipeline_started_at": "2026-06-15T09:28:25Z",
   "pipeline_completed_at": null,
-  "acceptance_requested_at": null,
+  "acceptance_requested_at": "2026-06-15T11:57:54Z",
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
   "current_phase": "architect",
@@ -76,12 +76,12 @@
     "harness": {
       "status": "FAIL",
       "started_at": null,
-      "completed_at": "2026-06-15T11:06:08Z",
-      "evidence": "oracle_gate_failed",
+      "completed_at": "2026-06-15T11:57:54Z",
+      "evidence": "three_gate_user_acceptance",
       "notes": [],
-      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\oracle_result.json",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\user_validation.json",
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\IMP-20260615-BE84_phase_harness.json"
     },
     "architect": {
       "status": "PENDING",
@@ -266,6 +266,22 @@
     {
       "ts": "2026-06-15T11:06:37Z",
       "msg": "oracle gate PASS"
+    },
+    {
+      "ts": "2026-06-15T11:25:15Z",
+      "msg": "github verify-run PASS run_id=27541605820 commit=58d3b816bd6d"
+    },
+    {
+      "ts": "2026-06-15T11:26:06Z",
+      "msg": "acceptance request 신규 발급: request_id=16075372 nonce=6YOXS7YA"
+    },
+    {
+      "ts": "2026-06-15T11:57:54Z",
+      "msg": "acceptance code consumed: request_id=16075372 result=REJECT"
+    },
+    {
+      "ts": "2026-06-15T11:57:54Z",
+      "msg": "user acceptance gate FAIL"
     }
   ],
   "terminal_state": null,
@@ -392,19 +408,19 @@
       "notes": []
     },
     "acceptance": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "status": "FAIL",
+      "started_at": "2026-06-15T11:57:52Z",
+      "completed_at": "2026-06-15T11:57:54Z",
+      "evidence": "docs/pipeline_dry_run_20260615.md",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\user_validation.json",
       "notes": []
     },
     "github_ci": {
-      "status": "PENDING",
+      "status": "PASS",
       "started_at": "2026-06-15T11:06:43Z",
-      "completed_at": null,
-      "evidence": null,
-      "report_file": null,
+      "completed_at": "2026-06-15T11:25:15Z",
+      "evidence": "github_actions_run:27541605820",
+      "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\gates\\github_ci_result.json",
       "notes": []
     }
   },
@@ -697,6 +713,22 @@
       "status": "FAIL",
       "failure_code": "oracle_acceptance_fail",
       "failure_category": "oracle_failed",
+      "owner": "Dev",
+      "return_phase": "dev",
+      "attempt_count": 1,
+      "escalation_reason": null
+    },
+    {
+      "gate": "acceptance",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\acceptance_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\failures\\acceptance_attempt_1.json",
+      "recorded_at": "2026-06-15T11:57:54Z",
+      "repair_owner": "PM clarification or Dev result repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "user_acceptance_rejected",
+      "failure_category": "user_acceptance_rejected",
       "owner": "Dev",
       "return_phase": "dev",
       "attempt_count": 1,
@@ -13856,5 +13888,34 @@
     "contract_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\task_contract.json",
     "test_set_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\test_set.json",
     "summary_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\IMP-20260615-BE84\\acceptance_summary.md"
+  },
+  "trusted_github_runs": [
+    {
+      "recorded_at": "2026-06-15T11:25:15Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "run_id": "27541605820",
+      "commit_sha": "58d3b816bd6dfac11c80f9ea5247ca6a5978bea4",
+      "artifact": "pipeline-attestation"
+    }
+  ],
+  "workspace_hygiene": {
+    "status": "WARN",
+    "blocking_items": [],
+    "cleanup_only_items": [
+      "oracle_result_dump.txt",
+      "tc6_dump.txt",
+      "ts_dump.txt",
+      ".claude/worktrees",
+      ".pytest_tmp_b96c_b",
+      ".pytest_tmp_b96c_full_a",
+      ".pytest_tmp_b96c_full_b"
+    ],
+    "protected_evidence_count": 0,
+    "tracked_oracle_count": 0,
+    "untracked_oracle_count": 0,
+    "pr_included_protected_count": 4,
+    "cleanup_command": "Remove-Item \"oracle_result_dump.txt\" \"tc6_dump.txt\" \"ts_dump.txt\" \".claude/worktrees\" \".pytest_tmp_b96c_b\" ...",
+    "checked_at": "2026-06-15T11:25:40Z"
   }
 }
