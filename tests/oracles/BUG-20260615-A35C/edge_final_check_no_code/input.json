@@ -1,0 +1,6 @@
+{
+  "scenario": "DEFECT-B: CI final-check 댓글에 승인 코드가 포함되지 않아야 함",
+  "approval_code": "ACCEPT-BUG-20260615-A35C-TESTNONCE",
+  "acceptance_request_status": "PENDING",
+  "acceptance_request_nonce": "TESTNONCE"
+}

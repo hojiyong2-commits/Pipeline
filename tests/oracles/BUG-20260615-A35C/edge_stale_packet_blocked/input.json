@@ -1,0 +1,7 @@
+{
+  "scenario": "DEFECT-B: packet head_sha와 현재 PR head가 다를 때 정보 부족으로 처리",
+  "packet_head_sha": "aaa111bbb222",
+  "pr_head_sha": "ccc333ddd444",
+  "packet_run_id": "12345",
+  "current_run_id": "67890"
+}

@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260615-A35C</pipeline_id>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>
+      pipeline.py의 acceptance 표시 상태 SSoT 로직과 ci.yml final-check 생성 로직 모두 수정 필요.
+      변경 파일 3개(pipeline.py, ci.yml, 신규 테스트 파일) + 오라클 5개 케이스 + TC 11개.
+      trust-root 파일(pipeline.py, ci.yml) 변경이므로 FAST Path 불가.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>350</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <anti_gaming_read>true</anti_gaming_read>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      P2 수준 질문(변수명, 코드 스타일, 테스트 파일명 세부 등)은 유지보수성 원칙으로 처리했습니다.
+      사용자 요청에서 수정 대상 파일, 금지 사항, 테스트 케이스가 모두 명시되어 추가 P0/P1 질문이 없습니다.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          DEFECT-A(acceptance 표시 SSoT)와 DEFECT-B(CI stale packet)를 6개 micro-task로 나눠 진행합니다.
+          MT-1~MT-2는 pipeline.py SSoT 수정, MT-3~MT-4는 ci.yml fail-closed, MT-5~MT-6은 테스트/오라클입니다.
+          이 분해 방식으로 진행해도 될까요?
+        </user_facing_question>
+        <evidence>
+          사용자 요청에서 "DEFECT-A"와 "DEFECT-B"가 명확히 분리되어 있고, TC-1~TC-11로 검증 범위도 정의됨.
+          pipeline.py 변경(SSoT helper)과 ci.yml 변경(fail-closed)이 독립적으로 테스트 가능.
+        </evidence>
+        <why_it_matters>
+          모듈별 QA gate를 통과해야 다음 MT로 진행 가능. 분해가 잘못되면 회귀 테스트 커버리지 누락.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>6개 MT 분해 (SSoT 2개 + CI 2개 + 테스트/오라클 2개)</label>
+            <benefit>각 결함을 독립적으로 검증 가능, Incremental Module Gate에 최적화</benefit>
+            <cost>MT 수가 많아 전체 소요 시간 증가</cost>
+          </option>
+          <option id="B">
+            <label>3개 MT 분해 (DEFECT-A + DEFECT-B + 테스트 통합)</label>
+            <benefit>MT 수 감소로 빠른 진행</benefit>
+            <cost>pipeline.py와 ci.yml 변경이 한 MT에 묶여 회귀 추적 어려움</cost>
+          </option>
+        </options>
+        <user_answer>사전 분석 결과 — 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    BUG-20260615-A35C: User Acceptance 표시 SSoT 불일치와 CI final-check stale packet 문제 수정.
+
+    DEFECT-A 요구사항:
+    - active acceptance_request.json이 PENDING이면 모든 user-facing 표시가 PENDING이어야 함
+    - state["external_gates"]["acceptance"]["status"]=FAIL이 남아 있어도 새 PENDING request가 우선
+    - 단일 display model이 PR body, MD packet, JSON packet, pending comment, accepted comment,
+      CI final-check comment의 acceptance 표시에 공유되어야 함
+
+    DEFECT-B 요구사항:
+    - CI final-check 댓글은 승인 코드를 소유하지 않음 (pending comment에만 표시)
+    - human_acceptance_packet.json 파싱 실패 또는 head SHA/run ID 불일치 시 판단 불가로 처리
+    - stale PR body PIPELINE_FINAL_PACKET을 판단 가능 댓글로 재사용 금지
+
+    금지 사항:
+    - nonce 생성/검증/consume 보안 로직 완화 금지
+    - gates request-accept / gates accept 조건 완화 금지
+    - D278 post-accept fail-closed 로직 완화 금지
+    - 2821 workspace_hygiene fail-closed 로직 완화 금지
+    - 32D7 marker 분리 원칙 훼손 금지
+  </requirements>
+
+  <decomposition_audit>
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>6</grep_executions>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <all_tasks_atomic>true</all_tasks_atomic>
+    <all_tasks_have_covers_ac>true</all_tasks_have_covers_ac>
+    <grep_evidence_present>true</grep_evidence_present>
+    <call_sites_checked>true</call_sites_checked>
+    <judgment_calls_resolved>true</judgment_calls_resolved>
+    <ambiguity_status>CLEAR</ambiguity_status>
+    <notes>
+      6개 micro-task는 각각 독립적으로 테스트 가능. MT-1,2는 pipeline.py SSoT 헬퍼,
+      MT-3,4는 ci.yml fail-closed, MT-5는 TC-1~11 회귀 테스트, MT-6은 오라클 파일.
+      모든 MT에 covers_ac 필드 있음. 사용자 요청에서 DEFECT-A/B 분리 명확.
+      변경 파일 3개(pipeline.py, ci.yml, test 파일) + oracle 10개 파일 = SPLIT_REQUIRED.
+    </notes>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <title>DEFECT-A: _get_effective_acceptance_display_state SSoT 도입</title>
+      <affected_function>pipeline._resolve_acceptance_display_state (확장)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._build_acceptance_display_model</site>
+        <site>pipeline._build_final_packet_content</site>
+        <site>pipeline._build_verification_json</site>
+        <site>pipeline._display_model_from_evidence</site>
+        <site>pipeline._render_pr_body_final_packet</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_resolve_acceptance_display_state</pattern>
+        <match_count>21</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _get_effective_acceptance_display_state 신규 함수 추가: active acceptance_request.json의
+        status=PENDING을 state["external_gates"]["acceptance"]["status"]보다 우선하여 표시 상태 결정.
+        기존 _resolve_acceptance_display_state는 acceptance_request dict만 보지만, 새 함수는
+        state와 acceptance_request를 모두 받아 "effective display state"를 계산.
+      </change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <title>DEFECT-A: display model 렌더러들이 effective display state 사용하도록 통합</title>
+      <affected_function>pipeline._build_final_packet_content, pipeline._display_model_from_evidence</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_report_final_packet</site>
+        <site>pipeline._cmd_gates_request_accept</site>
+        <site>pipeline._render_pending_acceptance_comment</site>
+        <site>pipeline._render_accepted_completion_comment</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_build_final_packet_content|_display_model_from_evidence</pattern>
+        <match_count>15</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        _build_final_packet_content와 _display_model_from_evidence가 gates dict를 구성할 때
+        MT-1의 _get_effective_acceptance_display_state를 호출하여 gate_status["acceptance"]를
+        effective display state로 덮어쓰도록 수정. 메타데이터 블록의 acceptance와 게이트 상태 표의
+        User Acceptance가 동일 SSoT에서 산출되도록 보장.
+      </change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <title>DEFECT-B: CI final-check 생성에서 승인 코드 제거 및 fail-closed 도입</title>
+      <affected_function>ci.yml "최종 확인 안내 만들기" step</affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>최종 확인 안내 만들기</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        1. human_acceptance_packet.json 파싱 시도. 실패 시 또는 JSON의 pr.head_sha/github_actions.run_id가
+           현재 PR head SHA/run ID와 다르면 "판단 정보 상태: 정보 부족" 표시 + 승인 코드 미포함.
+        2. final-check 댓글에 [승인 코드] 섹션 완전 제거. "승인/거절은 별도 사용자 최종 확인 요청 댓글 참조" 안내만.
+        3. stale PR body PIPELINE_FINAL_PACKET 블록을 fallback 소스로 사용하지 않음.
+      </change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-5, AC-6, AC-7, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <title>DEFECT-B: final-check 댓글 validation helper 및 readiness 분류 강화</title>
+      <affected_function>ci.yml PowerShell functions</affected_function>
+      <target_files>
+        <file>.github/workflows/ci.yml</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>decisionReadiness</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        Validate-PacketFreshness PowerShell 함수 추가: human_acceptance_packet.json의
+        pr.head_sha와 github_actions.run_id를 검증하여 stale 여부를 PASS/FAIL로 반환.
+        FAIL 시 $decisionReadiness를 "정보 부족 (stale packet)"으로 설정하고
+        $decisionAdvice에 "packet을 재생성하세요" 안내 추가.
+      </change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-6, AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <title>TC-1~TC-11 회귀 테스트 구현</title>
+      <affected_function>신규 테스트 파일</affected_function>
+      <target_files>
+        <file>tests/e2e/test_acceptance_display_ssot_a35c.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_acceptance_display</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        TC-1~TC-11 총 11개 테스트 함수 구현:
+        - TC-1: metadata + 게이트 상태 표 모두 PENDING 검증
+        - TC-2: MD/JSON acceptance_display 일치 검증
+        - TC-3: REJECT 후 새 request-accept 시 이전 승인 코드 미포함 검증
+        - TC-4: pending comment에 현재 승인 코드 있고 ACCEPTED 없음 검증
+        - TC-5: accepted comment에 ACCEPTED 있고 pending marker 없음 검증
+        - TC-6: JSON 파싱 실패 시 stale packet 미사용 검증
+        - TC-7: head_sha/run_id 불일치 시 정보 부족 검증
+        - TC-8: final-check에 승인 코드 미포함 검증
+        - TC-9: marker 독립성 검증
+        - TC-10: D278 회귀 검증
+        - TC-11: 2821 회귀 검증
+      </change_summary>
+      <line_estimate>250</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <title>오라클 파일 생성 (normal 1개 + edge/error 4개)</title>
+      <affected_function>오라클 JSON 파일</affected_function>
+      <target_files>
+        <file>tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json</file>
+        <file>tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>BUG-20260615-A35C</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        5개 오라클 케이스 생성:
+        1. normal_pending_display: FAIL+PENDING 상태에서 effective display가 PENDING
+        2. edge_reject_then_new_request: REJECT 후 새 request의 effective display가 PENDING
+        3. edge_stale_packet_blocked: stale packet 시 readiness가 "정보 부족"
+        4. edge_final_check_no_code: final-check 댓글에 승인 코드 미포함 검증
+        5. error_json_parse_fail: JSON 파싱 실패 시 graceful 처리 검증
+      </change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-1, AC-3, AC-6, AC-8</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>
+        state["external_gates"]["acceptance"]["status"]="FAIL" + active acceptance_request.status="PENDING" 일 때
+        report final-packet 결과에서 메타데이터 블록의 acceptance와 게이트 상태 표의 User Acceptance가
+        모두 PENDING으로 표시된다. (TC-1 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>
+        FAIL+PENDING 상태에서 human_acceptance_packet.md와 human_acceptance_packet.json의
+        acceptance_display가 모두 PENDING이다. (TC-2 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>
+        REJECT 후 새 request-accept 발급 시 이전 승인 코드가 final packet, pending comment,
+        final-check comment 어디에도 없다. (TC-3 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>
+        pending acceptance comment에 현재 승인 코드가 있고, ACCEPTED/승인완료/배포완료 문구가 없다. (TC-4 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>
+        accepted completion comment에 ACCEPTED 상태가 있고, pending marker/승인 코드 입력 안내가 없다. (TC-5 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>
+        CI final-check 생성에서 human_acceptance_packet.json 파싱 실패 시 stale PR body packet을
+        판단 가능 댓글로 재사용하지 않고 "정보 부족"으로 표시한다. (TC-6 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>
+        CI final-check 생성에서 packet head_sha != PR head 또는 packet ci_run_id 불일치 시
+        "정보 부족 (stale packet)" 상태로 표시한다. (TC-7 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>
+        final-check 댓글에 pending 승인 코드를 직접 포함하지 않으며, "승인/거절은 별도 사용자 최종 확인 요청
+        댓글을 참조"라는 안내만 표시한다. (TC-8 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>
+        pending/final-check/accepted comment의 marker가 서로 독립이며 교차 오염되지 않는다. (TC-9 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>
+        D278 회귀 방지: accept 완료 후 accepted 댓글이 pending으로 되돌아가지 않는다. (TC-10 검증)
+      </text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true">
+      <text>
+        2821 회귀 방지: workspace_hygiene BLOCKED/WARN/OK 요약이 display model에 반영되며,
+        fail-closed 로직 자체는 변경되지 않는다. (TC-11 검증)
+      </text>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_design>
+    <oracle_root>tests/oracles/BUG-20260615-A35C</oracle_root>
+    <cases>
+      <case id="normal_pending_display" kind="normal">
+        <description>
+          FAIL gate + PENDING request 시나리오. effective display state가 PENDING인지 검증.
+        </description>
+        <input>input.json: state["external_gates"]["acceptance"]["status"]="FAIL", acceptance_request["status"]="PENDING"</input>
+        <expected>expected.json: effective_display="PENDING", metadata_acceptance="PENDING", gate_table_acceptance="PENDING"</expected>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="edge_reject_then_new_request" kind="edge">
+        <description>
+          REJECT 후 새 request-accept 발급 시나리오. 이전 승인 코드가 어디에도 없어야 함.
+        </description>
+        <input>input.json: previous_nonce="OLD123", new_nonce="NEW456", acceptance_request["status"]="PENDING"</input>
+        <expected>expected.json: old_nonce_present=false, new_nonce_present=true, effective_display="PENDING"</expected>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="edge_stale_packet_blocked" kind="edge">
+        <description>
+          packet head_sha != PR head 시나리오. readiness가 "정보 부족"이어야 함.
+        </description>
+        <input>input.json: packet_head_sha="aaa111", pr_head_sha="bbb222"</input>
+        <expected>expected.json: readiness="정보 부족", stale_reason="head SHA mismatch"</expected>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="edge_final_check_no_code" kind="edge">
+        <description>
+          final-check 댓글에 승인 코드가 포함되지 않아야 함.
+        </description>
+        <input>input.json: approval_code="ACCEPT-BUG-20260615-A35C-XYZ123"</input>
+        <expected>expected.json: final_check_contains_code=false, guidance_message_present=true</expected>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="error_json_parse_fail" kind="error">
+        <description>
+          human_acceptance_packet.json 파싱 실패 시 graceful 처리.
+        </description>
+        <input>input.json: packet_content="invalid json {"</input>
+        <expected>expected.json: readiness="정보 부족", fallback_to_stale_pr=false</expected>
+        <expected_source>user_provided</expected_source>
+      </case>
+    </cases>
+  </oracle_design>
+
+  <python_version>3.9 또는 3.10 — 기존 프로젝트 설정 유지</python_version>
+
+  <forbidden>
+    - nonce 생성/검증/consume 보안 로직 완화 금지
+    - gates request-accept / gates accept 조건 완화 금지
+    - D278 post-accept fail-closed 로직 완화 금지
+    - 2821 workspace_hygiene fail-closed 로직 완화 금지
+    - 32D7 marker 분리 원칙 훼손 금지
+    - stale PR body PIPELINE_FINAL_PACKET을 정상 fallback으로 사용 금지
+    - final-check 댓글에 이전 또는 stale 승인 코드 노출 금지
+    - 테스트 통과를 위해 graceful skip 추가 금지
+    - dry run PR #624를 억지로 COMPLETE 처리 금지
+  </forbidden>
+
+</step_plan>

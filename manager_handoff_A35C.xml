@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260615-A35C</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <run_id>pipeline_manager-82794918dd8b371a</run_id>
+  <step_plan_sha256>36556bd0d77e2bf52a0f64b9afbff4f2d088bdf430150c662347744dc5c4bf9c</step_plan_sha256>
+  <planner_run_id>pm_planner-3b9918802a0b523a</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>ready</status>
+  <phase_sequence>
+    <phase id="1" name="PM" status="recording"/>
+    <phase id="2" name="Dev" status="pending"/>
+    <phase id="4" name="QA" status="pending"/>
+    <phase id="5" name="SEC" status="pending"/>
+    <phase id="6" name="Build" status="pending"/>
+    <phase id="7" name="External Gates" status="pending"/>
+    <phase id="8" name="Architect" status="pending"/>
+  </phase_sequence>
+  <notes>
+    DEFECT-A: _get_effective_acceptance_display_state SSoT helper 도입
+    DEFECT-B: CI final-check stale packet fallback 제거 및 fail-closed 변경
+    수정 대상: pipeline.py, .github/workflows/ci.yml, tests/e2e/test_acceptance_display_ssot_a35c.py, tests/oracles/BUG-20260615-A35C/
+  </notes>
+</manager_handoff>

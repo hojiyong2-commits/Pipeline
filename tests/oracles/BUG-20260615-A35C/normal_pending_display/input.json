@@ -1,0 +1,7 @@
+{
+  "scenario": "DEFECT-A: external_gates.acceptance.status=FAIL이지만 active acceptance_request.status=PENDING인 경우",
+  "state_external_gates_acceptance_status": "FAIL",
+  "acceptance_request_status": "PENDING",
+  "acceptance_request_nonce": "TESTNONCE123",
+  "acceptance_request_pipeline_id": "BUG-20260615-A35C"
+}
