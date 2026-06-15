@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-15T10:35:03Z",
+  "pipeline_id": "IMP-20260615-BE84",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "fbc2b9abc3208d255017ca5931b1d4d830dac788",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-15T10:30:02Z",
+    "report_file": "dev_handover_BE84.xml",
+    "evidence": "docs/pipeline_dry_run_20260615.md,dev_handover_BE84.xml"
+  },
+  "agent_run": {
+    "run_id": "dev-ccd7e85993f507e8",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_BE84.xml",
+    "output_sha256": "2a93aadeabfa071dd28a2cc043967b1d8a253b4a0689ea47d7fe1a2756d5050b",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260615-BE84/dev/agent_receipt_dev-ccd7e85993f507e8.json",
+    "receipt_sha256": "53e315a7a8e7a42fa9ac464939f419beb85966896bacb3ca52cdfede9366de92",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260615-BE84\\dev\\dev-ccd7e85993f507e8.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260615-BE84\\dev\\dev-ccd7e85993f507e8.json",
+      "path": ".pipeline/phase_evidence/IMP-20260615-BE84/dev/agent_receipt_dev-ccd7e85993f507e8.json",
+      "sha256": "53e315a7a8e7a42fa9ac464939f419beb85966896bacb3ca52cdfede9366de92",
+      "size_bytes": 520,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_BE84.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260615-BE84/dev/report_dev_handover_BE84.xml",
+      "sha256": "2a93aadeabfa071dd28a2cc043967b1d8a253b4a0689ea47d7fe1a2756d5050b",
+      "size_bytes": 3909,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_BE84.json",
+      "path": ".pipeline/phase_evidence/IMP-20260615-BE84/dev/scope_manifest_scope_manifest_BE84.json",
+      "sha256": "b8365959b18e2d93ba6ad6c88cf63b3c758f1817cf714e6753974e260491fd07",
+      "size_bytes": 1450,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "dev_handover_BE84.xml",
+      "sha256": "2a93aadeabfa071dd28a2cc043967b1d8a253b4a0689ea47d7fe1a2756d5050b",
+      "size_bytes": 3909
+    }
+  ],
+  "local_only_files": []
+}

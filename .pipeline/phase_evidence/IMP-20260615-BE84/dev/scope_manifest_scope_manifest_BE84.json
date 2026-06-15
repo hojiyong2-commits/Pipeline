@@ -1,0 +1,23 @@
+{
+  "pipeline_id": "IMP-20260615-BE84",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["docs/pipeline_dry_run_20260615.md", "dev_handover_BE84.xml"],
+      "affected_functions": ["none"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4"],
+          "changed_files": ["docs/pipeline_dry_run_20260615.md"],
+          "implementation_evidence": [
+            "docs/pipeline_dry_run_20260615.md 파일을 docs/ 디렉토리에 신규 생성 (AC-1 충족)",
+            "문서에 5개 필수 섹션 작성: (1) trust chain 요약 — local pipeline.py→agent receipts→GitHub Actions→CODEOWNERS→human ACCEPT 사슬 + Phase 1~8 표 + Option A/Three-Gate/Incremental Module Gate, (2) ACCEPT 전 확인 항목 5단계, (3) 배포 위치 G:\\내 드라이브\\터미널\\<pipeline_id> + deployment_manifest.json, (4) 최근 재발 문제 4개 항목(BUG-20260614-B32A, IMP-20260614-2821, BUG-20260614-32D7, IMP-20260612-8104), (5) 실사용 전 체크리스트 6개 항목 (AC-2 충족)",
+            "pipeline.py, .claude/agents/*.md, CLAUDE.md, .github/workflows/*.yml 미수정 — staged 변경 파일은 docs/pipeline_dry_run_20260615.md 단일 파일 (AC-3 충족)",
+            "docs-only 작업으로 EXE 빌드 대상 없음 — Build phase skip-reason \"docs-only\" 기록 가능 상태 (AC-4 충족 기반)"
+          ]
+        }
+      ]
+    }
+  ]
+}
