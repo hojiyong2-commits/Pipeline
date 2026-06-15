@@ -1,0 +1,6 @@
+{
+  "effective_display": "PENDING",
+  "metadata_acceptance": "PENDING",
+  "gate_table_acceptance": "PENDING",
+  "description": "active PENDING request가 있으면 external_gates.acceptance.status=FAIL이어도 모든 user-facing 표시가 PENDING이어야 한다"
+}

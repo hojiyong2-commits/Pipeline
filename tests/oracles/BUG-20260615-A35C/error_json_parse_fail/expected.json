@@ -1,0 +1,6 @@
+{
+  "readiness": "정보 부족",
+  "fallback_to_stale_pr_body": false,
+  "continues_without_crash": true,
+  "description": "human_acceptance_packet.json 파싱 실패 시 크래시 없이 정보 부족으로 처리하고 stale PR body fallback을 사용하지 않아야 함"
+}

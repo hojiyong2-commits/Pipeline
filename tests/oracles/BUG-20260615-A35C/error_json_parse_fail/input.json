@@ -1,0 +1,5 @@
+{
+  "scenario": "DEFECT-B: human_acceptance_packet.json 파싱 실패 시 graceful 처리",
+  "packet_content": "invalid json {this is not valid JSON",
+  "packet_file_exists": true
+}

@@ -4817,6 +4817,59 @@ def _resolve_acceptance_display_state(
     return "PENDING"
 
 
+# [Purpose]: BUG-20260615-A35C MT-1 — DEFECT-A 수정. user-facing acceptance 표시 상태를
+#            단일 SSoT로 계산한다. acceptance_request.json(현재 파이프라인 소속)이 active 상태면
+#            그 상태를 우선하고, 없을 때만 state["external_gates"]["acceptance"]["status"]로
+#            fallback한다. 이로써 gate가 FAIL이어도 active PENDING request가 있으면 PENDING으로
+#            표시되어 메타데이터/게이트표/MD/JSON이 동일 SSoT 값을 공유한다.
+# [Assumptions]: state는 pipeline_state dict이며 pipeline_id / external_gates 키를 가질 수 있다.
+#                acceptance_request.json은 _load_acceptance_request()로 로드되며 None 가능.
+# [Vulnerability & Risks]: acceptance_request가 다른 파이프라인 소속이면 무시하고 state fallback.
+#                          request status가 비정상 값이면 _resolve_acceptance_display_state가
+#                          안전 fallback(PENDING)을 반환한다.
+# [Improvement]: state fallback 값도 display 정규화 테이블을 거치도록 확장 가능.
+def _get_effective_acceptance_display_state(state: Dict[str, Any]) -> str:
+    """acceptance_request.json과 state를 조합하여 user-facing acceptance 표시 상태를 반환한다.
+
+    DEFECT-A(BUG-20260615-A35C): state["external_gates"]["acceptance"]["status"]가 FAIL이어도
+    현재 파이프라인의 active acceptance_request.json이 PENDING이면 표시는 PENDING이어야 한다.
+
+    우선순위:
+      1. acceptance_request.json 존재 + 현재 파이프라인 소속 + 정규화 표시 상태가
+         PENDING/ACCEPTED/REJECTED 중 하나 → 그 표시 상태 반환.
+      2. 그렇지 않으면 state["external_gates"]["acceptance"]["status"] fallback (없으면 PENDING).
+
+    Args:
+        state: 활성 pipeline_state dict. None 금지.
+    Returns:
+        "PENDING" | "ACCEPTED" | "REJECTED" | (fallback 시 state gate status 문자열).
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    pid = str(state.get("pipeline_id") or "")
+    req = _load_acceptance_request()
+    if isinstance(req, dict):
+        # 현재 파이프라인 소속 request만 인정 (다른 파이프라인 잔여 request 무시).
+        req_pid = str(req.get("pipeline_id", "") or "")
+        if not pid or not req_pid or req_pid == pid:
+            display = _resolve_acceptance_display_state(req)
+            req_status = str(req.get("status", "") or "").upper()
+            # active request(PENDING/ACCEPTED/CONSUMED/REJECTED)면 정규화 표시 상태를 우선.
+            if req_status in {"PENDING", "ACCEPTED", "CONSUMED", "REJECTED"}:
+                return display
+    # fallback: state의 acceptance gate status.
+    external_gates = state.get("external_gates") or {}
+    acceptance_gate = external_gates.get("acceptance") or {}
+    if isinstance(acceptance_gate, dict):
+        return str(acceptance_gate.get("status") or "PENDING")
+    return "PENDING"
+
+
 def _consume_acceptance_request(
     req: Dict[str, Any],
     result: str,
@@ -11300,6 +11353,13 @@ def _collect_packet_evidence(
         else:
             gate_status[key] = "PENDING"
 
+    # BUG-20260615-A35C MT-2: effective acceptance 표시 상태를 state SSoT helper로 계산하여
+    # 모든 packet consumer(_build_final_packet_content / _build_verification_json /
+    # _display_model_from_evidence)가 동일 값을 공유하도록 evidence에 주입한다.
+    # state(external_gates)와 acceptance_request.json을 조합하므로 gate=FAIL이어도
+    # active PENDING request가 있으면 PENDING이 된다(DEFECT-A).
+    acceptance_display_effective = _get_effective_acceptance_display_state(state)
+
     structured_ac = state.get("structured_acceptance_criteria") or []
     ac_table = _build_ac_fulfillment_table(state)
 
@@ -11355,6 +11415,8 @@ def _collect_packet_evidence(
         "structured_ac": structured_ac,
         "ac_fulfillment_table": ac_table,
         "acceptance_request": acceptance_request,
+        # BUG-20260615-A35C MT-2: SSoT effective 표시 상태 (PENDING/ACCEPTED/REJECTED).
+        "acceptance_display_effective": acceptance_display_effective,
         "oracle_summary": oracle_summary_for_evidence,
         "known_failures": known_failures_for_evidence,
         "generated_at": _now(),
@@ -11452,10 +11514,12 @@ def _build_acceptance_display_model(
     ):
         acceptance_request = None
 
-    # 표시 상태 — SSoT helper 재사용 (PENDING/ACCEPTED/REJECTED).
-    acceptance_display = _resolve_acceptance_display_state(acceptance_request)
-    # acceptance_request가 PENDING인데 gate가 PASS가 아니면 표시는 PENDING 유지.
-    if acceptance_display == "PENDING" and gates.get("acceptance") not in ("PASS",):
+    # 표시 상태 — BUG-20260615-A35C MT-2: effective SSoT helper로 계산.
+    # state(external_gates)와 acceptance_request.json을 조합하여 gate=FAIL이어도
+    # active PENDING request가 있으면 PENDING으로 표시한다(DEFECT-A).
+    acceptance_display = _get_effective_acceptance_display_state(state)
+    # acceptance_request가 PENDING/REJECTED인데 gate가 PASS가 아니면 표시는 display와 동기화.
+    if acceptance_display in ("PENDING", "REJECTED") and gates.get("acceptance") not in ("PASS",):
         gates["acceptance"] = "PENDING"
 
     # 승인 코드 / 거절 예시 — nonce 존재 시에만.
@@ -11576,12 +11640,18 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
 
     # acceptance_request.json이 PENDING이면 gate_status.acceptance를 PENDING으로 표시
     # (이전 REJECT로 pipeline_state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
-    # IMP-20260614-D278 MT-2: _build_verification_json()와 동일하게
-    # _resolve_acceptance_display_state SSoT helper로 표시 상태를 계산한다.
-    _acceptance_display_status = _resolve_acceptance_display_state(
-        acceptance_request if isinstance(acceptance_request, dict) else None
-    )
-    if _acceptance_display_status == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
+    # BUG-20260615-A35C MT-2: _collect_packet_evidence가 주입한 effective SSoT 표시 상태를
+    # 우선 사용하여 메타데이터 블록(acceptance)과 게이트표(User Acceptance)가 동일 SSoT를 공유한다.
+    # evidence에 키가 없으면(레거시 호출) _resolve_acceptance_display_state로 fallback.
+    if "acceptance_display_effective" in evidence:
+        _acceptance_display_status = str(
+            evidence.get("acceptance_display_effective") or "PENDING"
+        )
+    else:
+        _acceptance_display_status = _resolve_acceptance_display_state(
+            acceptance_request if isinstance(acceptance_request, dict) else None
+        )
+    if _acceptance_display_status in ("PENDING", "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
@@ -11738,6 +11808,14 @@ def _display_model_from_evidence(
     ac_table = evidence.get("ac_fulfillment_table")
     changed_files = list(evidence.get("changed_files") or [])
     acceptance_request = evidence.get("acceptance_request")
+
+    # BUG-20260615-A35C MT-2: 게이트표(User Acceptance)도 effective 표시 상태와 동기화한다.
+    # acceptance_display가 PENDING/REJECTED이고 게이트가 PASS가 아니면 PENDING으로 표시하여
+    # 메타데이터 블록(acceptance)과 사용자 표시 섹션(User Acceptance)이 동일 SSoT 값을 공유한다.
+    if str(acceptance_display).upper() in ("PENDING", "REJECTED") and gate_status.get(
+        "acceptance"
+    ) not in ("PASS",):
+        gate_status["acceptance"] = "PENDING"
 
     # 승인 코드 / 거절 예시.
     approval_code: Optional[str] = None
@@ -12256,14 +12334,20 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         reject_example = f"REJECT-{pipeline_id}-{accept_nonce}: 이유"
         accept_request_id = str(acceptance_request.get("request_id", "") or "")
         accept_status = str(acceptance_request.get("status", "PENDING") or "PENDING")
-    # IMP-20260614-D278 MT-2: 표시 상태는 _resolve_acceptance_display_state SSoT helper로 계산.
+    # BUG-20260615-A35C MT-2: 표시 상태는 _collect_packet_evidence가 주입한 effective SSoT 값을
+    # 우선 사용한다. evidence에 키가 없으면(레거시 호출) _resolve_acceptance_display_state로 fallback.
     # (status="CONSUMED" raw 값 대신 PENDING/ACCEPTED/REJECTED 정규화 값을 사용)
-    acceptance_display_status = _resolve_acceptance_display_state(
-        acceptance_request if isinstance(acceptance_request, dict) else None
-    )
-    # acceptance_request.json이 PENDING이면 gates.acceptance를 PENDING으로 표시
+    if "acceptance_display_effective" in evidence:
+        acceptance_display_status = str(
+            evidence.get("acceptance_display_effective") or "PENDING"
+        )
+    else:
+        acceptance_display_status = _resolve_acceptance_display_state(
+            acceptance_request if isinstance(acceptance_request, dict) else None
+        )
+    # acceptance_request.json이 PENDING/REJECTED이면 gates.acceptance를 PENDING으로 표시
     # (이전 REJECT로 pipeline state에 FAIL이 남아있어도 새 request 발급 시 PENDING으로 전환)
-    if acceptance_display_status == "PENDING" and gate_status.get("acceptance") not in ("PASS",):
+    if acceptance_display_status in ("PENDING", "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
     # IMP-20260614-509F MT-5: MD/PR body와 동일한 SSoT 계산값을 JSON도 사용하도록

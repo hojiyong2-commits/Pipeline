@@ -1,0 +1,6 @@
+{
+  "old_nonce_present_in_display": false,
+  "new_nonce_present_in_pending_comment": true,
+  "effective_display": "PENDING",
+  "description": "REJECT 후 새 request 발급 시 이전 승인 코드가 final packet/pending comment/final-check comment에 없어야 함"
+}

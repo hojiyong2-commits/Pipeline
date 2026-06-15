@@ -1,0 +1,6 @@
+{
+  "readiness": "정보 부족",
+  "stale_reason": "head SHA mismatch",
+  "fallback_to_pr_body": false,
+  "description": "packet head_sha != PR head 또는 run_id 불일치 시 정보 부족으로 표시하고 stale PR body를 fallback으로 사용하지 않아야 함"
+}

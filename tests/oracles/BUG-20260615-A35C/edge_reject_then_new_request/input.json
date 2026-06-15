@@ -1,0 +1,9 @@
+{
+  "scenario": "REJECT 후 새 request-accept 발급 시 이전 승인 코드가 없어야 함",
+  "previous_nonce": "OLD123NONCE",
+  "previous_status": "REJECTED",
+  "new_nonce": "NEW456NONCE",
+  "new_status": "PENDING",
+  "acceptance_request_status": "PENDING",
+  "acceptance_request_nonce": "NEW456NONCE"
+}
