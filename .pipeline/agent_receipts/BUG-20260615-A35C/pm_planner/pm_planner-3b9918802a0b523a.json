@@ -9,7 +9,7 @@
   "started_at": "2026-06-15T12:17:10Z",
   "completed_at": "2026-06-15T12:21:34Z",
   "output_file": "step_plan_A35C.xml",
-  "output_sha256": "62de2a2724c6f44d0c18f2af933191c69602a0ae2a18abff3ff4f6d35901e79d",
+  "output_sha256": "36556bd0d77e2bf52a0f64b9afbff4f2d088bdf430150c662347744dc5c4bf9c",
   "evidence_files": [],
   "commit_sha": "75a61e352afb07696fa0fa51d3af0e859d58fe94"
 }

@@ -3,7 +3,7 @@
   <pipeline_id>BUG-20260615-A35C</pipeline_id>
   <from>pipeline-manager-agent</from>
   <run_id>pipeline_manager-82794918dd8b371a</run_id>
-  <step_plan_sha256>62de2a2724c6f44d0c18f2af933191c69602a0ae2a18abff3ff4f6d35901e79d</step_plan_sha256>
+  <step_plan_sha256>36556bd0d77e2bf52a0f64b9afbff4f2d088bdf430150c662347744dc5c4bf9c</step_plan_sha256>
   <planner_run_id>pm_planner-3b9918802a0b523a</planner_run_id>
   <accepted_for_execution>true</accepted_for_execution>
   <will_not_modify_step_plan>true</will_not_modify_step_plan>

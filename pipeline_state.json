@@ -4,13 +4,13 @@
   "type": "BUG",
   "description": "User Acceptance 표시 SSoT 불일치(DEFECT-A) 및 CI final-check stale packet 재사용(DEFECT-B) 근본 수정",
   "created_at": "2026-06-15T12:17:06Z",
-  "updated_at": "2026-06-15T13:21:24Z",
+  "updated_at": "2026-06-15T13:50:09Z",
   "pipeline_started_at": "2026-06-15T12:17:06Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "qa",
+  "current_phase": "sec",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -40,14 +40,16 @@
       "agent_run_id": "dev-4af1ad6341ee99e5"
     },
     "qa": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
+      "status": "PASS",
+      "started_at": "2026-06-15T13:28:27Z",
+      "completed_at": "2026-06-15T13:50:00Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "report_file": "qa_report_A35C_r2.xml",
+      "agent_id": "qa-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260615-A35C_phase_qa.json",
+      "agent_run_id": "qa-b4d447208d7062f9",
+      "numeric_score": 113
     },
     "sec": {
       "status": "PENDING",
@@ -210,6 +212,30 @@
     {
       "ts": "2026-06-15T13:21:24Z",
       "msg": "dev DONE | evidence: pipeline.py,.github/workflows/ci.yml,tests/e2e/test_acceptance_display_ssot_a35c.py,tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json,tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json,tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json,tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json,tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json,tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json,tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json,tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json,tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json,tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json"
+    },
+    {
+      "ts": "2026-06-15T13:28:21Z",
+      "msg": "github phase-ci dev PASS run_id=27549502917 commit=482675240e04"
+    },
+    {
+      "ts": "2026-06-15T13:28:32Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-bbdfd1bc12c38856"
+    },
+    {
+      "ts": "2026-06-15T13:37:48Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-bbdfd1bc12c38856"
+    },
+    {
+      "ts": "2026-06-15T13:41:05Z",
+      "msg": "agent run started phase=qa agent=qa-agent run_id=qa-b4d447208d7062f9"
+    },
+    {
+      "ts": "2026-06-15T13:44:03Z",
+      "msg": "agent run completed phase=qa agent=qa-agent run_id=qa-b4d447208d7062f9"
+    },
+    {
+      "ts": "2026-06-15T13:50:00Z",
+      "msg": "qa PASS numeric=113"
     }
   ],
   "terminal_state": null,
@@ -226,10 +252,10 @@
       "completed_at": "2026-06-15T12:21:34Z",
       "token_hash": "288e3eb4b14daa39b17cee6e60b7b65f8c3f38300b6229bafaed7865e1ccd395",
       "output_file": "step_plan_A35C.xml",
-      "output_sha256": "62de2a2724c6f44d0c18f2af933191c69602a0ae2a18abff3ff4f6d35901e79d",
+      "output_sha256": "36556bd0d77e2bf52a0f64b9afbff4f2d088bdf430150c662347744dc5c4bf9c",
       "evidence_files": [],
       "receipt_path": ".pipeline\\agent_receipts\\BUG-20260615-A35C\\pm_planner\\pm_planner-3b9918802a0b523a.json",
-      "receipt_sha256": "e6712f56cd59b4e24beb33ecde544f51bccb8ca17b12a86e753c066d4440e9f4",
+      "receipt_sha256": "044dd82fb2a16ce07d8d2ba6fa63a41106ab583280580d17d1888d5aefcb7419",
       "used_by_phase": "pm",
       "used_at": "2026-06-15T12:29:48Z",
       "commit_sha": "75a61e352afb07696fa0fa51d3af0e859d58fe94",
@@ -246,10 +272,10 @@
       "completed_at": "2026-06-15T12:23:28Z",
       "token_hash": "d001cabe9d329a412e12ed17fa8850117af2390b51384b442daf460e2b337507",
       "output_file": "manager_handoff_A35C.xml",
-      "output_sha256": "924df603fa1a384b6e7ae6bbe55dcbabb45f19955d059bddc89bea892cae0fb2",
+      "output_sha256": "04c52cc15ea27097272abfccaee7f313a29e6d36c7d915e20b837952c52f6af6",
       "evidence_files": [],
       "receipt_path": ".pipeline\\agent_receipts\\BUG-20260615-A35C\\pipeline_manager\\pipeline_manager-82794918dd8b371a.json",
-      "receipt_sha256": "67b41473994eb012de53afb3ae3ba2028e41b7ac215bac441d76bfbb744e2733",
+      "receipt_sha256": "c0cf94c1cb2c0402ece4d063d41541e4c03ae701ee9968f36c1d605f4aaabd77",
       "used_by_phase": "pm_manager",
       "used_at": "2026-06-15T12:29:48Z",
       "commit_sha": "75a61e352afb07696fa0fa51d3af0e859d58fe94",
@@ -273,6 +299,46 @@
       "used_by_phase": "dev",
       "used_at": "2026-06-15T13:21:24Z",
       "commit_sha": "604b275d717ccb588bdf8effcd1e8980968dccf2",
+      "notes": ""
+    },
+    "qa-bbdfd1bc12c38856": {
+      "schema_version": 1,
+      "run_id": "qa-bbdfd1bc12c38856",
+      "pipeline_id": "BUG-20260615-A35C",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-15T13:28:32Z",
+      "completed_at": "2026-06-15T13:37:48Z",
+      "token_hash": "4fc7194988b922c4dc3b8a84fb16820e7ffad303a047a3471c108a3e0384a138",
+      "output_file": "qa_report_A35C.xml",
+      "output_sha256": "03a8e54ab3b75ee6582cbd739048c141f8be54d53b16ecd716b02cdf5fe3760c",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260615-A35C\\qa\\qa-bbdfd1bc12c38856.json",
+      "receipt_sha256": "fb56cec19387dfa4dd6568b1be162bf9d287abf03c7a73fdf1ce5df53b939d9b",
+      "used_by_phase": null,
+      "used_at": null,
+      "commit_sha": "62c6e371e14b99dceaa50706e54bdbf5806fa3db",
+      "notes": ""
+    },
+    "qa-b4d447208d7062f9": {
+      "schema_version": 1,
+      "run_id": "qa-b4d447208d7062f9",
+      "pipeline_id": "BUG-20260615-A35C",
+      "phase": "qa",
+      "agent_id": "qa-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-15T13:41:05Z",
+      "completed_at": "2026-06-15T13:44:03Z",
+      "token_hash": "8db923a8c6e3b6ab6cd7541542c0734d5924eff56ef541f2f8378e84a1142884",
+      "output_file": "qa_report_A35C_r2.xml",
+      "output_sha256": "6e3f88ef2dadc4d964fa022dc9f661af688cfc0e41ff231212b5d0dcb364d632",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260615-A35C\\qa\\qa-b4d447208d7062f9.json",
+      "receipt_sha256": "21eebc4409f2584928885d984835a5a7ab3b1f914a0a8b2db58011648d835f36",
+      "used_by_phase": "qa",
+      "used_at": "2026-06-15T13:50:00Z",
+      "commit_sha": "62c6e371e14b99dceaa50706e54bdbf5806fa3db",
       "notes": ""
     }
   },
@@ -334,14 +400,15 @@
         "artifact": "pipeline-phase-attestation"
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-15T13:28:21Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27549502917",
+        "commit_sha": "482675240e040e7dabb4194ac355cb1016406685",
+        "evidence": "github_actions_phase_run:27549502917",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\gates\\phase_ci\\dev_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "qa": {
         "status": "PENDING",
@@ -959,6 +1026,22 @@
       "failure_category": "missing_evidence",
       "owner": "Pipeline Manager",
       "return_phase": "pm",
+      "attempt_count": 1,
+      "escalation_reason": null
+    },
+    {
+      "gate": "check_sec",
+      "attempt": 1,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\failures\\check_sec_attempt_1.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260615-A35C\\failures\\check_sec_attempt_1.json",
+      "recorded_at": "2026-06-15T13:50:09Z",
+      "repair_owner": "Pipeline Manager repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "gate_blocked_sec",
+      "failure_category": "missing_evidence",
+      "owner": "Pipeline Manager",
+      "return_phase": "dev",
       "attempt_count": 1,
       "escalation_reason": null
     }
@@ -14152,7 +14235,7 @@
   "pm_manager_handoff": {
     "validated_at": "2026-06-15T12:29:56Z",
     "report_file": "manager_handoff_A35C.xml",
-    "step_plan_sha256": "62de2a2724c6f44d0c18f2af933191c69602a0ae2a18abff3ff4f6d35901e79d",
+    "step_plan_sha256": "36556bd0d77e2bf52a0f64b9afbff4f2d088bdf430150c662347744dc5c4bf9c",
     "planner_run_id": "pm_planner-3b9918802a0b523a",
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
@@ -14166,6 +14249,15 @@
       "phase": "pm",
       "run_id": "27546505009",
       "commit_sha": "55f469dbb60a64175b9f40fd47ce7580f8ed38dd",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-15T13:28:21Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "dev",
+      "run_id": "27549502917",
+      "commit_sha": "482675240e040e7dabb4194ac355cb1016406685",
       "artifact": "pipeline-phase-attestation"
     }
   ],
@@ -14378,5 +14470,11 @@
         "tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json"
       ]
     }
+  },
+  "qa_report_validation": {
+    "report_file": "qa_report_A35C_r2.xml",
+    "validated_at": "2026-06-15T13:50:00Z",
+    "numeric_score": 113,
+    "verdict": "PASS"
   }
 }

@@ -32,6 +32,7 @@
   </task_complexity>
 
   <design_confirmation>
+    <anti_gaming_read>true</anti_gaming_read>
     <module_split_presented>true</module_split_presented>
     <module_split_user_confirmed>true</module_split_user_confirmed>
     <maintenance_priority>maintainability_first</maintenance_priority>
