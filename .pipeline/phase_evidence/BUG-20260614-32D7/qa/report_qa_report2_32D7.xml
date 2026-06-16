@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260614-32D7</pipeline_id>
+  <round>2</round>
+  <category_check>
+    <wa>N-A — 네트워크 호출 카테고리 아님. gh API 호출은 기존 로직이며 본 변경은 댓글 marker 필터링.</wa>
+    <ui>N-A — GUI 위젯 없음.</ui>
+    <fs>N-A — 파일 입출력 변경 없음. 댓글 본문 marker 판정 로직.</fs>
+    <pd>PASS — marker SSoT 상수 3종 + 헬퍼 2종으로 4개 호출 지점 통일. core/ui 분리 N-A(단일 엔진 모듈). 인터페이스 계약: 헬퍼 (body: str) -> bool 타입 힌팅 일관.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — None/비문자열 안전 처리(_is_pending_or_accepted_acceptance_comment, _is_final_check_only_comment), json.loads except 분기 보존, 빈 댓글 목록 처리.</al>
+    <build>N-A — pipeline.py/ci.yml 변경, EXE 빌드 대상 아님(meta-task).</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+  <numeric_score>110</numeric_score>
+  <verdict>PASS</verdict>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — WA 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — FS 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5(marker SSoT 통일, 호출 지점 4곳 헬퍼화)/인터페이스계약 5(헬퍼 타입 힌팅 일관, dict/str 안전 처리)</pd>
+    <al score="20" max="20">0나눗셈 N-A / 범위검증 5(빈 댓글 목록) / 타입검증 5(isinstance dict, isinstance str) / 빈데이터 5(None/빈 문자열 default False) / except 5(json.JSONDecodeError/ValueError/TypeError 분기 보존)</al>
+    <build score="0" max="10">N/A — 빌드 대상 아님</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="30" max="30"/>
+    <normalized_total score="110" max="120">적용 카테고리(PD+AL) 만점(30/30) + SSoT 상수화/테스트 충족 가산(TC-1~TC-8 PASS, 회귀 59개 PASS, secrets gate PASS)</normalized_total>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 적용 카테고리(PD 10/10, AL 20/20) 만점. 정규화 점수 110/120으로 96/120 임계값 상회.</numeric_verdict>
+  </numeric_score_detail>
+  <result>[PASS]</result>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover self_check에 execution_check=PASS (py_compile + import + yaml + pytest 8 + 회귀 49)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 신규 헬퍼가 4개 실제 호출 지점(5253, 15322, 15483, 15559)에 바인딩 확인. ci.yml Where-Object 필터에 final-check marker 조건 실제 적용 확인(line 615-619).</functional_binding_verified>
+  </runtime_functional_check>
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan에 decomposition_audit 블록 존재(SPLIT_REQUIRED, 5 MT)</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-5 모두 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>5</declared_functions>
+    <actual_modified_functions>5</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — 모든 diff hunk가 선언된 함수(_check_acceptance_packet_via_github, _post_github_pending_acceptance_comment, _update_github_acceptance_comment, _get_pr_comment_acceptance_body, ci.yml final-check step) 범위 내</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <c3_cross_verification>
+    <scope_files_declared>3</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="TC-1/TC-3: CI Where-Object 필터(ci.yml line 615-619)가 pending marker 포함 댓글 제외. ci_select(pending_body)=False 검증."/>
+    <criterion ac_id="AC-2" status="PASS" evidence="TC-3: ci_select(accepted_body)=False. ci.yml line 618에서 accepted marker 제외 조건 확인."/>
+    <criterion ac_id="AC-3" status="PASS" evidence="TC-2: _is_pending_or_accepted_acceptance_comment(final_check_body)=False → 삭제 대상 제외. pipeline.py line 15322 호출 지점 확인."/>
+    <criterion ac_id="AC-4" status="PASS" evidence="TC-6: _render_accepted_completion_comment 결과에 pending marker 없음 + '승인 코드를 입력' 문구 없음."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="TC-3: accepted 댓글이 CI PATCH 대상 아님 + final-check 삭제 제외. line 15483(_update) 호출 확인."/>
+    <criterion ac_id="AC-6" status="PASS" evidence="TC-5: pending 본문에 '판단 정보 상태: 판단 가능' readiness 줄 보장(pipeline.py line 15261-15275 idempotent 삽입)."/>
+    <criterion ac_id="AC-7" status="PASS" evidence="TC-4: final-check 전용 댓글만 있을 때 _check_acceptance_packet_via_github가 BLOCKED(acceptance_packet_missing) 반환. line 5253 _is_final_check_only_comment continue 확인."/>
+    <criterion ac_id="AC-8" status="PASS" evidence="TC-7: B32A 회귀 PASS — evidence_integrity/workspace_hygiene SSoT 정합 유지."/>
+    <criterion ac_id="AC-9" status="PASS" evidence="aef0/B32A/509F 회귀 59개 PASS (실제 pytest 실행)."/>
+    <criterion ac_id="AC-10" status="PASS" evidence="TC-8 + 회귀: D278 post-accept fail-closed, 2821 workspace_hygiene fail-closed 모두 PASS."/>
+  </criteria_verification>
+  <test_execution_evidence>
+    <marker_separation_tests>tests/e2e/test_marker_separation_32d7.py — 8 passed in 34.49s (TC-1~TC-8)</marker_separation_tests>
+    <regression_tests>test_pending_comment_sst_b32a + test_acceptance_template_sst_509f + test_post_accept_finalization_d278 + test_workspace_hygiene_2821 + test_request_accept_nonce_reuse_aef0 — 59 passed in 40.86s</regression_tests>
+    <secrets_gate>gates secrets --files "pipeline.py,.github/workflows/ci.yml,tests/e2e/test_marker_separation_32d7.py" → exit 0 (통과)</secrets_gate>
+  </test_execution_evidence>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음 — 모든 자동 FAIL 트리거 미해당. marker 분리 로직이 ci.yml(PowerShell Where-Object)과 pipeline.py(4개 호출 지점) 양쪽에서 SSoT 상수 기반으로 일관되게 적용됨. 기존 로직 제거 없이 필터 강화만 수행하여 회귀 위험 LOW.
+  </critical_issues>
+  <improvement_suggestions>
+    - (비차단) ci.yml의 marker 필터 조건은 PowerShell 문자열 리터럴로 하드코딩되어 있어 pipeline.py SSoT 상수와 drift 가능성이 있음. 향후 marker 변경 시 ci.yml line 615-618도 함께 갱신해야 함. test_tc1의 ci_select 동형 재현이 이 drift를 부분적으로 검출함.
+    - (비차단) Trust-Root 파일(pipeline.py, ci.yml) 변경이므로 GitHub CI phase attestation에서 실제 PR 환경 동작을 재확인 권장.
+  </improvement_suggestions>
+</qa_report>

@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-16T11:51:47Z",
+  "pipeline_id": "BUG-20260616-8011",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "630a4741569cad0c62bd46043772f1e32db11e8b",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-16T11:50:24Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,.claude/agents/pipeline-manager-agent.md,tests/test_pr_approver_b96c.py,tests/e2e/test_auto_accept_guard_8011.py,tests/oracles/BUG-20260616-8011/normal_manual_accept/input.json,tests/oracles/BUG-20260616-8011/normal_manual_accept/expected.json,tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/input.json,tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/expected.json"
+  },
+  "agent_run": {
+    "run_id": "dev-b69b2198f8918197",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "1cca321905e201a7c3e8bb2f4ae51ecd767446dcc1560f34a56e81cedd8b0379",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260616-8011/dev/agent_receipt_dev-b69b2198f8918197.json",
+    "receipt_sha256": "e3b58abbd51e12970db74788762a52c82e7eb8bf4069c11b676b623a4fbc706f",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260616-8011\\dev\\dev-b69b2198f8918197.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260616-8011\\dev\\dev-b69b2198f8918197.json",
+      "path": ".pipeline/phase_evidence/BUG-20260616-8011/dev/agent_receipt_dev-b69b2198f8918197.json",
+      "sha256": "e3b58abbd51e12970db74788762a52c82e7eb8bf4069c11b676b623a4fbc706f",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260616-8011/dev/report_dev_handover.xml",
+      "sha256": "1cca321905e201a7c3e8bb2f4ae51ecd767446dcc1560f34a56e81cedd8b0379",
+      "size_bytes": 7331,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260616-8011/dev/scope_manifest_scope_manifest.json",
+      "sha256": "06d1b78f347cce99fb840962075ea160fa6f09138a2da6bcc61acd3558824c08",
+      "size_bytes": 4946,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "9f6db1287fb8d62a05ddb4129e9ac6c3141a5e8e92d89d613b7352b442ac9588",
+      "size_bytes": 1061980
+    },
+    {
+      "path": ".claude/agents/pipeline-manager-agent.md",
+      "sha256": "ca2250bf57a02796d52972918be23278a7c942fbc19272c12918836084fec6c2",
+      "size_bytes": 13988
+    },
+    {
+      "path": "tests/test_pr_approver_b96c.py",
+      "sha256": "c3ec86597d0a1c138ef9955b23674f7ab3a0a3e70328d37eafccd984c90a91c2",
+      "size_bytes": 17210
+    },
+    {
+      "path": "tests/e2e/test_auto_accept_guard_8011.py",
+      "sha256": "eeaafdbe378c673ffb8d0bb90e6ecd12b09837cd8e5e4ca908f238b36932ab08",
+      "size_bytes": 24653
+    },
+    {
+      "path": "tests/oracles/BUG-20260616-8011/normal_manual_accept/input.json",
+      "sha256": "91b12fb0b552ae2c0600820577ab76033fabff534cdb66a36dfdf89f81a95a4d",
+      "size_bytes": 626
+    },
+    {
+      "path": "tests/oracles/BUG-20260616-8011/normal_manual_accept/expected.json",
+      "sha256": "048793462822f09497cd00c696d7b2989bd47e7d83f47c55f49fef2809b1b8c4",
+      "size_bytes": 326
+    },
+    {
+      "path": "tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/input.json",
+      "sha256": "b9c63c403724c4cb4c59cc44a0710b3f251ebc85def87a89b97d7c44385e6f52",
+      "size_bytes": 840
+    },
+    {
+      "path": "tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/expected.json",
+      "sha256": "23dd938d04c7f2dd95c566bcf412a98dfb93869abfdb464d732f9a2278e86ab9",
+      "size_bytes": 967
+    }
+  ],
+  "local_only_files": []
+}
