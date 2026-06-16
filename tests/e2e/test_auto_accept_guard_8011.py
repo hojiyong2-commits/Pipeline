@@ -28,7 +28,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 PIPELINE_PY = str(Path(__file__).resolve().parents[2] / "pipeline.py")
 
