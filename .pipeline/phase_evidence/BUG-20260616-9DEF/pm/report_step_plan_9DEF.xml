@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>6</micro_task_count>
+  <grep_executions>8</grep_executions>
+  <judgment_calls_resolved>true</judgment_calls_resolved>
+  <notes>사용자가 REJECT 사유와 해결 방향(로컬 브라우저 클릭 승인 채널)을 명시. Python 표준 라이브러리 http.server 사용. P0/P1 질문 없음.</notes>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260616-9DEF</pipeline_id>
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>auth_or_secret=true (승인 토큰 생성), pipeline_protocol=true (gates 흐름 변경). 파이프라인 승인 보안 경계를 수정하므로 conservative repair + per-phase CI 필수.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>4</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>350</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>true</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 REJECT 사유에서 "로컬 브라우저 클릭 승인 채널 추가" 방향을 명시했으므로 추가 질문 없이 진행합니다. 포트 번호, HTML 스타일 등 P2 취향 질문은 유지보수성 기준으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>로컬 브라우저 클릭 승인 채널을 선택하시겠습니까? 기존 PR 댓글 마커 차단만으로는 agent가 마커 없는 독립 댓글로 코드를 게시할 수 있으므로, 브라우저 기반 추가 확인이 필요합니다.</user_facing_question>
+        <evidence>BUG-20260616-8011 REJECT 사유 — PR 댓글 기반 agent vs 사람 구분 불가</evidence>
+        <why_it_matters>에이전트가 자동으로 브라우저를 열어 클릭하지 않는 한 이 채널을 통과할 수 없습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>로컬 HTTP 서버 + 브라우저 클릭 승인</label>
+            <benefit>에이전트가 PR 댓글로 우회하는 경로를 차단. Python 표준 라이브러리만 사용.</benefit>
+            <cost>사용자가 브라우저에서 URL을 열어야 하는 추가 단계. 기술적으로 에이전트가 subprocess로 HTTP 요청 가능.</cost>
+          </option>
+          <option id="B">
+            <label>현행 유지 (PR 댓글 마커 차단만)</label>
+            <benefit>추가 구현 없이 현재 상태를 유지할 수 있으며 변경 위험이 없습니다</benefit>
+            <cost>같은 GitHub 토큰 환경에서 agent vs 사람 구분 불가 — 마커 없는 독립 PR 댓글로 승인 코드 게시 우회 가능</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 방향을 명시했으므로 A로 진행 (user_response: NO_ASKUSER_REQUIRED)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._run_browser_approval_server</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_gates_request_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_run_browser_approval_server</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>로컬 HTTP 서버 (http.server 기반) 구현 — 승인 페이지 렌더링 + 승인 클릭 처리 + browser_approval_token 생성</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline._cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_request_accept\|_write_acceptance_request</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>nonce 발급 후 _run_browser_approval_server 호출 + PIPELINE_BROWSER_APPROVAL_SKIP 환경변수 처리 + browser_click_confirmed/browser_approval_token/browser_approval_skip 필드 acceptance_request.json에 기록</change_summary>
+      <line_estimate>55</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline.cmd_gates (action == "accept" 분기)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>if action == .accept.:</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>acceptance_request.json의 browser_click_confirmed 필드 검증 + 미확인 시 failure_code=browser_approval_required로 BLOCKED</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-3, AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>문서 업데이트</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>자동 ACCEPT 금지</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>브라우저 승인 흐름 문서화 + 기술적 한계(에이전트가 subprocess로 HTTP 요청 가능) 명시</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-6, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>test_browser_approval_9def (신규 E2E 테스트)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_browser_approval_9def.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_browser_approval_9def</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TC-1~TC-6 E2E 테스트 — 정상 브라우저 승인(SKIP 환경변수), 브라우저 승인 없이 accept 차단, 환경변수 우회, 기존 회귀 검증</change_summary>
+      <line_estimate>180</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>Oracle 파일 작성</affected_function>
+      <target_files>
+        <file>tests/oracles/BUG-20260616-9DEF/normal_browser_approve/input.json</file>
+        <file>tests/oracles/BUG-20260616-9DEF/normal_browser_approve/expected.json</file>
+        <file>tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval/input.json</file>
+        <file>tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval/expected.json</file>
+        <file>tests/oracles/BUG-20260616-9DEF/edge_skip_env_var/input.json</file>
+        <file>tests/oracles/BUG-20260616-9DEF/edge_skip_env_var/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>BUG-20260616-9DEF</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>normal_browser_approve (정상 승인), edge_no_browser_approval (브라우저 승인 없이 accept 시도 → BLOCKED), edge_skip_env_var (환경변수 우회) oracle 파일</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-3, AC-5, AC-7</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 실행 시 localhost:PORT/approve?session=[token] 형태의 URL이 콘솔에 출력되고, 로컬 HTTP 서버가 시작되어 브라우저 승인 대기 상태가 된다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>사용자가 브라우저에서 URL을 열어 "승인" 버튼을 클릭하면 acceptance_request.json에 browser_click_confirmed=true, browser_click_at=[ISO8601], browser_approval_token=[hash] 필드가 기록된다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>gates accept는 acceptance_request.json에 browser_click_confirmed=true가 없으면 failure_code=browser_approval_required로 BLOCKED된다 (exit code 1).</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>브라우저 승인 없이 gates accept --acceptance-code [code]만 실행하면 BLOCKED된다 — 기존 packet 마커 댓글 차단 로직과 함께 이중 방어.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>테스트 환경에서는 PIPELINE_BROWSER_APPROVAL_SKIP=1 환경 변수로 브라우저 승인을 우회할 수 있고, 우회 시 acceptance_request.json에 browser_approval_skip=true가 기록된다.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>기존 정상 수동 ACCEPT 흐름이 브라우저 승인 포함 버전으로 업데이트된다: request-accept → 브라우저 URL 열기 → 승인 버튼 클릭 → gates accept.</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>기존 nonce/D278/2821/AEF0 회귀 테스트 케이스가 모두 PASS 유지된다.</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>기술적 한계(에이전트가 subprocess로 HTTP 요청 가능, 완전 분리 불가)가 pipeline-manager-agent.md의 "자동 ACCEPT 금지" 섹션과 pipeline.py 코드 주석에 명시된다.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_design>
+    <oracle_case id="OC-1" case_kind="normal">
+      <path>tests/oracles/BUG-20260616-9DEF/normal_browser_approve</path>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case id="OC-2" case_kind="edge">
+      <path>tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval</path>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+    <oracle_case id="OC-3" case_kind="edge">
+      <path>tests/oracles/BUG-20260616-9DEF/edge_skip_env_var</path>
+      <expected_source>user_provided</expected_source>
+    </oracle_case>
+  </oracle_design>
+
+  <python_version>3.9 — 기존 pipeline.py 호환성 유지</python_version>
+
+  <forbidden>
+    <item>nonce 생성/검증/consume 보안 로직 완화</item>
+    <item>gates request-accept / gates accept 기존 보안 조건 완화</item>
+    <item>D278 post-accept fail-closed 로직 완화</item>
+    <item>2821 workspace_hygiene fail-closed 로직 완화</item>
+    <item>테스트 통과를 위한 graceful skip 추가</item>
+    <item>하드코딩된 테스트 개수 문구 추가</item>
+    <item>기존 packet 마커 댓글 차단 로직 제거</item>
+  </forbidden>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
