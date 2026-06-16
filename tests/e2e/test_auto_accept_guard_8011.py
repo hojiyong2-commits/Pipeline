@@ -371,6 +371,7 @@ def test_tc2_no_request_blocked(tmp_path: Path) -> None:
     evidence_path = tmp_path / "evidence.txt"
     evidence_path.write_text("no request evidence", encoding="utf-8")
     # acceptance_request.json을 작성하지 않음 → missing.
+    env["PIPELINE_STATE_PATH"] = str(tmp_path / "pipeline_state.json")
 
     result = _run_cli(
         ["gates", "accept", "--result", "ACCEPT",
