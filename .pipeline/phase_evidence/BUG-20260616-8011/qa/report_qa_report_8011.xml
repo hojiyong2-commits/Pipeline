@@ -1,0 +1,129 @@
+<qa_report>
+  <pipeline_id>BUG-20260616-8011</pipeline_id>
+  <category_check>
+    <wa>N-A — 네트워크 호출 카테고리 아님 (gh CLI는 기존 subprocess 패턴, 본 변경 범위 밖)</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>N-A — 파일 I/O는 기존 acceptance_request.json write 패턴 유지, 신규 FS 로직 없음</fs>
+    <pd>PASS — core 로직(pipeline.py) 분리 유지, 신규 helper/상수 모듈 경계 준수, God class 없음</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — _consume_acceptance_request 강타입 검증(TypeError/ValueError/isinstance), None 가드, bare except 없음</al>
+    <build>N-A — BUILD 태그 없음 (pipeline.py 코어 수정, EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+  <numeric_score>120</numeric_score>
+  <numeric_score_breakdown>
+    <wa score="0" max="20">N/A — WA 카테고리 아님</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 아님</ui>
+    <fs score="0" max="20">N/A — FS 카테고리 아님</fs>
+    <pd score="10" max="10">모듈분리 5/5 (core/ui 분리 유지, pipeline.py 코어 로직에 UI import 없음), 인터페이스계약 5/5 (Dict[str,Any] 반환 계약 명확, keyword-only kwarg 하위호환)</pd>
+    <al score="20" max="20">0나눗셈 N/A(해당없음 만점), 범위검증 5/5(int() 캐스팅+or 0 fallback), 입력타입검증 5/5(isinstance dict/str 가드 + ValueError), 빈데이터처리 5/5(or "" / or None fallback 전반), 추가 5/5(None 명시 가드 raise TypeError)</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="120" max="120"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 적용 카테고리 30/30(100%)를 120 척도로 환산하여 120점. N/A 카테고리(WA/UI/FS/Build/SEC)는 개별 score 0 유지. 120 만점 기준 96 이상 충족</numeric_verdict>
+  </numeric_score_breakdown>
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover &lt;evidence&gt;&lt;execution&gt; 에 pytest 결과 명시(6 passed, 8 passed, 보안 회귀 통과)</execution_check_present>
+    <execution_check_verdict>PASS — QA가 직접 재실행하여 E2E 6/6, b96c 8/8, 보안회귀 72/72 확인</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _check_pr_approver_provenance 가 cmd_gates accept 경로(line 18382)에서 실제 호출되고, protocol_violation_auto_accept 가 failure_category=protocol_violation 으로 분기됨(line 18389) 확인</functional_binding_verified>
+  </runtime_functional_check>
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan_8011.xml &lt;decomposition_audit&gt; 존재, micro_task_count=4, verdict=PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-4 모두 &lt;grep_evidence&gt;&lt;executed&gt;true&lt;/executed&gt; 포함</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <c3_cross_verification>
+    <scope_files_declared>8</scope_files_declared>
+    <evidence_files_submitted>8</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS — git diff origin/main...HEAD 변경 파일(pipeline.py, pipeline-manager-agent.md, test_auto_accept_guard_8011.py, test_pr_approver_b96c.py, oracle 4종)이 모두 PM target_files 범위 내. dev가 우려한 ic_part_src/* 잔여는 PR diff에 없음(Pipeline Manager 제외 처리 확인)</verdict>
+  </c3_cross_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <ac_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="cmd_gates accept 경로에서 _check_pr_approver_provenance 가 protocol_violation_auto_accept 반환 시 BLOCKED 처리(pipeline.py:18382-18429). TC-1 subprocess CLI 실행 결과 exit!=0 + protocol_violation_auto_accept 메시지 확인."/>
+    <criterion ac_id="AC-2" status="PASS" evidence="_PACKET_MARKER_FRAGMENTS(base/-pending/-accepted) 포함 댓글은 승인 후보에서 continue로 제외(pipeline.py:17286-17290), 코드 인용 시 _auto_accept_quote_hit→BLOCKED. TC-1/TC-5 검증."/>
+    <criterion ac_id="AC-3" status="PASS" evidence="독립 승인 댓글(packet 마커 없는 정확 일치)이 없으면 protocol_violation_auto_accept 또는 pr_approver_missing 으로 BLOCKED. accept 경로가 provenance BLOCKED 시 gate PASS 미기록(fail-closed). TC-2(missing_acceptance_request) 검증."/>
+    <criterion ac_id="AC-4" status="PASS" evidence="_is_auto_accept 분기에서 failure_category=protocol_violation failure packet 기록 + state.acceptance.auto_accept_attempts 누적(pipeline.py:18392-18428). TC-5에서 failure_packet failure_code/auto_accept_attempts 확인."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="tests/e2e/test_auto_accept_guard_8011.py TC-1~TC-6 모두 PASS(6/6). agent auto-consumes 시나리오(TC-1 packet 마커 코드 인용) 포함."/>
+    <criterion ac_id="AC-6" status="PASS" evidence="정상 독립 댓글 정확 일치는 _found_approver 우선 PASS+break(pipeline.py:17293-17296, 17319). TC-3/TC-6 오탐 0 negative assertion. b96c 회귀 8/8 PASS(기존 정상 provenance 흐름 유지)."/>
+  </ac_verification>
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="protocol_violation_auto_accept BLOCKED 반환 + TC-1 subprocess CLI exit!=0 확인"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="packet 마커 댓글 승인 후보 제외 + 코드 인용 차단, TC-1/TC-5"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="사용자 직접 승인 없으면 BLOCKED, fail-closed gate 미기록, TC-2"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="failure_category=protocol_violation failure packet + auto_accept_attempts, TC-5"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="test_auto_accept_guard_8011.py TC-1~TC-6 6/6 PASS"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="정상 provenance 우선 PASS+break, 오탐 0, b96c 8/8 회귀 PASS"/>
+  </criteria_verification>
+  <security_regression_check>
+    <d278 status="PASS">test_post_accept_finalization_d278.py 통과 (보안 회귀 72개 묶음 일부)</d278>
+    <hygiene_2821 status="PASS">test_workspace_hygiene_2821.py 통과</hygiene_2821>
+    <nonce_bbdb status="PASS">test_user_acceptance_nonce_bbdb.py 통과</nonce_bbdb>
+    <provenance_2338 status="PASS">test_acceptance_provenance_2338.py 통과</provenance_2338>
+    <nonce_reuse_aef0 status="PASS">test_request_accept_nonce_reuse_aef0.py 통과</nonce_reuse_aef0>
+    <total>72 passed</total>
+    <security_relaxation>NONE — nonce 생성/검증/consume, request-accept/accept 조건, fail-closed 순서 모두 미완화. graceful skip 미추가. _consume_acceptance_request 강타입 검증 유지. secret 원문 미포함.</security_relaxation>
+  </security_regression_check>
+  <test_results>
+    <suite name="tests/e2e/test_auto_accept_guard_8011.py" passed="6" failed="0"/>
+    <suite name="tests/test_pr_approver_b96c.py" passed="8" failed="0"/>
+    <suite name="security_regression(D278/2821/BBDB/2338/AEF0)" passed="72" failed="0"/>
+    <py_compile>OK</py_compile>
+    <ruff_pipeline_py>All checks passed</ruff_pipeline_py>
+  </test_results>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음
+  </critical_issues>
+  <improvement_suggestions>
+    1. [minor/non-blocking] tests/e2e/test_auto_accept_guard_8011.py:31 — `from typing import Any, Dict, List, Optional` 중 Optional 미사용 (ruff F401). pipeline.py 본체는 ruff 통과이며 테스트 파일 한정 lint 경고로 PASS를 막지 않으나, Phase 7 Technical gate(ruff 전체 스캔)에서 노이즈가 될 수 있으므로 제거 권장.
+    2. [참고] step_plan_8011.xml에 QA 명세상의 &lt;anti_gaming_read&gt; 태그가 명시되어 있지 않음. 단, 이 태그는 pipeline.py PM done hard gate가 아니라 codex doctor skill 토큰 진단 항목이며, PM phase가 정상 DONE + GitHub phase-ci PASS(run_id=27617465505)로 게이트를 통과했으므로 본 작업 품질에는 영향 없음. 향후 step_plan 템플릿에 태그 포함 권장.
+  </improvement_suggestions>
+</qa_report>
