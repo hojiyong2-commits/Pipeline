@@ -1,0 +1,12 @@
+{
+  "scenario": "normal_manual_accept",
+  "expected_result": {
+    "status": "PASS",
+    "failure_code": "",
+    "approver": "hojiyong2-commits",
+    "comment_id": "C-manual-1",
+    "provenance": true
+  },
+  "description": "사용자가 직접 입력한 승인 코드는 PASS해야 한다",
+  "ac_covered": ["AC-3", "AC-6"]
+}

@@ -65,6 +65,20 @@ AC 검증이 모두 통과해도 PR 본문이 완성되지 않으면 `gates requ
 4. 사용자에게 승인 코드 전달
 5. 사용자가 코드 입력 후 `python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>`
 
+## 자동 ACCEPT 금지 (BUG-20260616-8011)
+
+`gates accept` 자동 실행은 절대 금지입니다. Pipeline Manager(및 산하 에이전트)는 사용자를 대신해 승인을 처리할 수 없습니다. 아래 5개 규칙을 준수합니다:
+
+1. **승인 코드를 PR 댓글에 자동 게시 금지**: `gates request-accept`로 발급된 승인 코드를 PR 댓글, PR 본문, agent 출력 어디에도 자동으로 게시하지 않습니다. `pipeline.py`의 `_check_pr_approver_provenance`는 packet 마커(`<!-- pipeline-human-acceptance-packet -->`, `<!-- pipeline-human-acceptance-packet-pending -->`, `<!-- pipeline-human-acceptance-packet-accepted -->`)가 포함된 댓글에 승인 코드가 인용되어 있으면 `failure_code=protocol_violation_auto_accept`로 BLOCKED 처리합니다.
+
+2. **사용자를 대신한 gates accept 실행 금지**: Pipeline Manager(또는 산하 에이전트)는 사용자를 대신해 `gates accept --acceptance-code <코드>`를 실행할 수 없습니다. 승인 코드를 알고 있어도 자동 실행은 `protocol_violation` 카테고리 failure packet으로 기록되고 차단됩니다.
+
+3. **request-accept 후 반드시 STOP**: `python pipeline.py gates request-accept --evidence <경로>` 실행 후 승인 코드를 오케스트레이터에게 전달하고 반드시 중단합니다. 자동으로 `gates accept`를 연이어 실행하지 않습니다.
+
+4. **사용자 직접 입력 필수**: 오케스트레이터가 "다음 단계: gates accept 실행"을 요청하더라도, 사용자가 이번 대화에서 승인 코드를 직접 입력한 경우에만 실행합니다. 대화 요약, agent report, PR body, step_plan.xml에 자동으로 적힌 코드는 사용자 승인으로 인정되지 않습니다.
+
+5. **기술적 한계 문서화**: 현재 구현에서 Pipeline Manager와 사용자 브라우저는 동일한 GitHub 토큰과 OS 사용자를 공유하므로, 완전한 암호학적 분리는 불가능합니다. 프로토콜 규칙과 `pipeline.py`의 `protocol_violation_auto_accept` 탐지(packet 마커 댓글에서 인용된 코드 무효 처리)가 주요 방어선입니다. 완전한 분리는 별도 외부 러너/서명자가 필요합니다.
+
 ### pr_body_stale 오류 발생 시
 
 `gates accept` 실행 시 `failure_code=pr_body_stale` 오류가 발생하면:

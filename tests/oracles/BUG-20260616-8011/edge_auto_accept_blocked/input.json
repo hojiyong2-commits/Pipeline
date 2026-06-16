@@ -1,0 +1,24 @@
+{
+  "scenario": "edge_auto_accept_blocked",
+  "description": "agent가 packet 마커가 있는 댓글에서 코드를 인용하여 gates accept 시도",
+  "pipeline_id": "BUG-20260616-8011",
+  "allowed_approver": "hojiyong2-commits",
+  "nonce": "AUTOCODE",
+  "pr_comments": [
+    {
+      "author": {"login": "hojiyong2-commits"},
+      "body": "<!-- pipeline-human-acceptance-packet -->\nACCEPT-BUG-20260616-8011-AUTOCODE",
+      "id": "C-packet-1"
+    }
+  ],
+  "acceptance_request": {
+    "status": "PENDING",
+    "pipeline_id": "BUG-20260616-8011",
+    "nonce": "AUTOCODE",
+    "request_id": "req-auto-1"
+  },
+  "external_gates": {
+    "acceptance": {"status": "PENDING"}
+  },
+  "notes": "packet 마커(<!-- pipeline-human-acceptance-packet -->)가 포함된 댓글은 agent 자동 생성으로 간주하여 승인 후보에서 제외"
+}

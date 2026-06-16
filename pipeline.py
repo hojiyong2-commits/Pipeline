@@ -4870,11 +4870,22 @@ def _get_effective_acceptance_display_state(state: Dict[str, Any]) -> str:
     return "PENDING"
 
 
+# [Purpose]: acceptance_request.json 을 ACCEPTED(CONSUMED)로 갱신하면서 승인 provenance
+#            감사 필드(누가/어떤 출처로/어느 댓글에서 승인했는지)를 함께 기록한다.
+#            BUG-20260616-8011: agent 자동 ACCEPT 사고 추적을 위해 user_acceptance_source /
+#            source_comment_id 감사 필드를 추가한다.
+# [Assumptions]: 호출 전에 provenance/nonce 검증이 모두 통과한 상태이며, accepted_by 는
+#                실제 GitHub PR 댓글 작성자(허용 승인자)이다.
+# [Vulnerability & Risks]: 같은 OS user / GitHub 토큰을 공유하면 감사 필드만으로 완전한
+#                          암호학적 분리는 불가능하다. 감사 필드는 사후 추적용 증거이다.
+# [Improvement]: 외부 서명자/별도 러너로 승인 출처를 서명하면 위 한계를 해소할 수 있다.
 def _consume_acceptance_request(
     req: Dict[str, Any],
     result: str,
     *,
     accepted_by: Optional[str] = None,
+    user_acceptance_source: Optional[str] = None,
+    source_comment_id: Optional[str] = None,
 ) -> None:
     """acceptance_request.json 상태를 ACCEPTED(CONSUMED)로 갱신하여 재기록.
 
@@ -4882,10 +4893,16 @@ def _consume_acceptance_request(
     승인 provenance를 acceptance_request.json에 함께 기록한다. 기존 status="CONSUMED"와
     consumed_at/consumed_result 필드는 하위 호환을 위해 그대로 유지한다.
 
+    BUG-20260616-8011 MT-1: user_acceptance_source(승인 출처 종류) / source_comment_id
+    (승인 코드를 남긴 PR 댓글 id) 감사 필드를 추가하여, agent 자동 ACCEPT 시도를
+    사후에 추적할 수 있게 한다.
+
     Args:
         req: 기존 acceptance_request dict.
         result: ACCEPT 또는 REJECT.
         accepted_by: 승인자 식별자 (provenance_check.approver에서 전달, 기본값 None).
+        user_acceptance_source: 승인 출처 종류 (예: "pr_comment"). 기본값 None.
+        source_comment_id: 승인 코드를 남긴 PR 댓글 id (provenance_check.comment_id). 기본값 None.
     Raises:
         TypeError: req 또는 result가 None, 또는 타입 불일치.
         ValueError: result가 ACCEPT/REJECT 외 값.
@@ -4908,6 +4925,9 @@ def _consume_acceptance_request(
     req["accepted_at"] = _now()  # 신규 필드 (IMP-20260614-D278 MT-4)
     req["accepted_by"] = accepted_by or ""  # 신규 필드 (provenance_check.approver)
     req["consumed_nonce"] = str(req.get("nonce", "") or "")  # 신규 필드
+    # 신규 감사 필드 (BUG-20260616-8011 MT-1): 승인 출처 추적용.
+    req["user_acceptance_source"] = user_acceptance_source or "pr_comment"
+    req["source_comment_id"] = source_comment_id or ""
     with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
         json.dump(req, fh, ensure_ascii=False, indent=2)
 
@@ -17215,6 +17235,16 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     #   - stale_nonce: acceptance_request history 에 실제로 발급된 nonce 와 *정확히* 일치.
     #   - code_mismatch: prefix 는 같지만 어떤 과거/현재 발급 nonce 와도 *정확히* 일치하지 않음.
     _PACKET_MARKER: str = "<!-- pipeline-human-acceptance-packet -->"
+    # BUG-20260616-8011 MT-1: packet 계열 마커 전체 집합.
+    # base 마커뿐 아니라 -pending / -accepted 마커가 포함된 댓글도 pipeline 자동 생성
+    # packet 으로 간주하여, 그 안에 인용된 승인 코드를 "사용자 직접 승인"으로 오인하지 않는다.
+    _PACKET_MARKER_FRAGMENTS: "tuple[str, ...]" = (
+        _PACKET_MARKER,
+        f"<!-- {_ACCEPTANCE_PACKET_PENDING_MARKER} -->",
+        f"<!-- {_ACCEPTANCE_PACKET_ACCEPTED_MARKER} -->",
+        _ACCEPTANCE_PACKET_PENDING_MARKER,
+        _ACCEPTANCE_PACKET_ACCEPTED_MARKER,
+    )
     # 비교 기준 코드: nonce가 없으면 ACCEPT-<pipeline_id> 형식을 fallback으로 사용.
     _expected_code: str = accept_code if nonce else ("ACCEPT-" + pipeline_id)
     # stale nonce 탐지용 prefix (같은 pipeline_id, 다른 nonce 판별).
@@ -17232,6 +17262,11 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     _code_mismatch_hit: bool = False
     _stale_observed: str = ""
     _mismatch_observed: str = ""
+    # BUG-20260616-8011 MT-1: packet 마커 댓글 안에 기대 승인 코드가 인용된 경우 추적.
+    # agent 가 pipeline 이 자동 생성한 packet(승인 코드 포함) 본문을 그대로 재게시하거나,
+    # packet 댓글 자체를 승인으로 처리하려는 자동 ACCEPT 시도를 감지하기 위함.
+    _auto_accept_quote_hit: bool = False
+    _auto_accept_comment_id: str = ""
 
     for _comment in _comments:
         _author: str = (
@@ -17244,7 +17279,14 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         if _author != allowed_approver:
             continue
         # AC-2: pipeline 자동 생성 packet 댓글은 승인 후보에서 완전 제외.
-        if _PACKET_MARKER in _body:
+        # BUG-20260616-8011 MT-1: packet 계열 마커(base/-pending/-accepted)가 포함된 댓글은
+        # 모두 pipeline 자동 생성 packet 으로 간주한다. 그런데 그 안에 기대 승인 코드가
+        # 인용되어 있으면 → agent 가 packet 본문을 재게시했거나 packet 댓글을 승인으로
+        # 처리하려는 자동 ACCEPT 시도이므로 protocol_violation_auto_accept 로 차단한다.
+        if any(_frag in _body for _frag in _PACKET_MARKER_FRAGMENTS):
+            if _expected_code and _expected_code in _body:
+                _auto_accept_quote_hit = True
+                _auto_accept_comment_id = _cid
             continue
         _stripped: str = _body.strip()
         # AC-3 + AC-6: 완전 일치 → 즉시 PASS (다른 실패 댓글보다 우선).
@@ -17294,6 +17336,30 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         f"PR #{pr_number} / 허용 승인자: {allowed_approver} / 파이프라인: {pipeline_id} / "
         f"기대 승인 코드: {_expected_code}"
     )
+
+    # BUG-20260616-8011 MT-1: 자동 ACCEPT 시도 차단 (protocol_violation_auto_accept).
+    # 독립된 사용자 승인 댓글(packet 마커 없는 정확 일치)이 하나도 없는 상태에서,
+    # pipeline 자동 생성 packet(승인 코드 포함) 본문이 인용/재게시된 경우 → 사용자 직접
+    # 승인이 아니라 agent 의 자동 ACCEPT 시도로 판정한다. stale_nonce/code_mismatch/missing
+    # 보다 높은 우선순위로 차단하여, 자동 시도를 명확히 드러낸다.
+    if _auto_accept_quote_hit:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "protocol_violation_auto_accept",
+            "message": (
+                "[PIPELINE ERROR] 자동 ACCEPT 시도가 감지되었습니다 (protocol_violation_auto_accept). "
+                "pipeline 이 자동 생성한 승인 안내(packet) 댓글에 포함된 승인 코드는 "
+                "사용자 직접 승인으로 인정되지 않습니다. 허용 승인자가 packet 과 분리된 "
+                "독립 댓글로 승인 코드를 직접 남겨야 합니다. "
+                f"{_common_tail}"
+            ),
+            "approver": None,
+            "comment_id": _auto_accept_comment_id or None,
+            "pr_number": pr_number,
+            "checked_at": _checked_at,
+            "provenance": False,
+            "auto_accept_attempt": True,
+        }
 
     # AC-6 우선순위: stale_nonce > code_mismatch > missing.
     if _stale_nonce_hit:
@@ -18317,6 +18383,49 @@ def cmd_gates(args: argparse.Namespace) -> None:
             if _prov_result["status"] == "BLOCKED":
                 _prov_failure_code = str(_prov_result.get("failure_code") or "pr_approver_fetch_failed")
                 _prov_message = str(_prov_result.get("message") or "pr_approver_fetch_failed")
+                # BUG-20260616-8011 MT-1: 자동 ACCEPT 시도는 protocol_violation 카테고리로
+                # 분류하고, final packet 에 "프로토콜 위반"으로 표시되도록 별도 메시지를 쓴다.
+                _is_auto_accept = (
+                    _prov_failure_code == "protocol_violation_auto_accept"
+                    or bool(_prov_result.get("auto_accept_attempt"))
+                )
+                if _is_auto_accept:
+                    _prov_failure_category = "protocol_violation"
+                    _prov_summary_ko = (
+                        "[프로토콜 위반] 자동 ACCEPT 시도가 감지되었습니다. "
+                        "pipeline 이 자동 생성한 승인 안내(packet) 댓글의 승인 코드는 "
+                        "사용자 직접 승인으로 인정되지 않습니다. "
+                        f"허용 승인자({PIPELINE_ALLOWED_APPROVER})가 packet 과 분리된 독립 댓글로 "
+                        "승인 코드를 직접 남겨야 합니다."
+                    )
+                    _prov_required_actions = [
+                        "사용자가 결과물을 직접 확인한 뒤, packet 과 분리된 독립 댓글로 승인 코드를 남겨야 합니다.",
+                        "agent 가 승인 코드를 PR 댓글에 자동 게시하거나 packet 본문을 재게시하지 마세요.",
+                        "사용자 직접 승인 후 pipeline.py gates accept 를 다시 실행하세요.",
+                    ]
+                else:
+                    _prov_failure_category = "missing_evidence"
+                    _prov_summary_ko = (
+                        "GitHub PR 댓글에서 허용 승인자의 승인 코드를 찾을 수 없습니다. "
+                        f"허용 승인자({PIPELINE_ALLOWED_APPROVER})가 PR에 승인 코드 댓글을 남겨야 합니다."
+                    )
+                    _prov_required_actions = [
+                        f"GitHub PR에서 {PIPELINE_ALLOWED_APPROVER} 계정으로 승인 코드 댓글을 남기세요.",
+                        "댓글 형식: ACCEPT-<pipeline_id>-<nonce>",
+                        "댓글 작성 후 pipeline.py gates accept를 다시 실행하세요.",
+                    ]
+                # 감사: 자동 ACCEPT 시도 횟수를 state 에 누적 기록.
+                if _is_auto_accept:
+                    _acc_audit = state.setdefault("acceptance", {})
+                    _acc_audit["auto_accept_attempts"] = int(
+                        _acc_audit.get("auto_accept_attempts", 0) or 0
+                    ) + 1
+                    _acc_audit["last_auto_accept_attempt"] = {
+                        "failure_code": _prov_failure_code,
+                        "comment_id": _prov_result.get("comment_id"),
+                        "pr_number": _prov_result.get("pr_number"),
+                        "checked_at": _prov_result.get("checked_at"),
+                    }
                 _record_failure_packet(
                     state, "acceptance", {},
                     command=[sys.executable, "pipeline.py", "gates", "accept",
@@ -18325,19 +18434,12 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     note=_prov_message,
                     status="BLOCKED", phase="harness",
                     failure_code=_prov_failure_code,
-                    failure_category="missing_evidence",
-                    summary_ko=(
-                        "GitHub PR 댓글에서 허용 승인자의 승인 코드를 찾을 수 없습니다. "
-                        f"허용 승인자({PIPELINE_ALLOWED_APPROVER})가 PR에 승인 코드 댓글을 남겨야 합니다."
-                    ),
+                    failure_category=_prov_failure_category,
+                    summary_ko=_prov_summary_ko,
                     expected=f"PR 댓글: approver={PIPELINE_ALLOWED_APPROVER} body contains ACCEPT-{pid}-<nonce>",
                     actual=_prov_failure_code,
                     exit_code=1, owner="Pipeline Manager", return_phase="build",
-                    required_actions=[
-                        f"GitHub PR에서 {PIPELINE_ALLOWED_APPROVER} 계정으로 승인 코드 댓글을 남기세요.",
-                        "댓글 형식: ACCEPT-<pipeline_id>-<nonce>",
-                        "댓글 작성 후 pipeline.py gates accept를 다시 실행하세요.",
-                    ],
+                    required_actions=_prov_required_actions,
                     retry_allowed=True,
                 )
                 _save(state)
@@ -18527,13 +18629,23 @@ def cmd_gates(args: argparse.Namespace) -> None:
         # 위 _req is None 분기에서 _die 종료 보장 — None 가능성 없음
         assert _req is not None  # nosec B101
         # IMP-20260614-D278 MT-4: provenance_check.approver를 accepted_by로 전달.
+        # BUG-20260616-8011 MT-1: provenance_check.comment_id를 source_comment_id로,
+        # 승인 출처를 user_acceptance_source="pr_comment"로 함께 감사 기록한다.
         _accept_approver: Optional[str] = None
+        _accept_comment_id: Optional[str] = None
         _prov_state = state.get("acceptance")
         if isinstance(_prov_state, dict):
             _prov_check = _prov_state.get("provenance_check")
             if isinstance(_prov_check, dict):
                 _accept_approver = _prov_check.get("approver")
-        _consume_acceptance_request(_req, accept_decision, accepted_by=_accept_approver)
+                _accept_comment_id = _prov_check.get("comment_id")
+        _consume_acceptance_request(
+            _req,
+            accept_decision,
+            accepted_by=_accept_approver,
+            user_acceptance_source="pr_comment",
+            source_comment_id=_accept_comment_id,
+        )
         _log_event(state, f"acceptance code consumed: request_id={_req.get('request_id')} result={accept_decision}")
 
         # IMP-20260614-D278 MT-3: ACCEPT는 post-accept finalization(fail-closed)을 거친다.

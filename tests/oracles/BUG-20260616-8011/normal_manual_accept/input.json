@@ -1,0 +1,23 @@
+{
+  "scenario": "normal_manual_accept",
+  "description": "사용자가 직접 PR 댓글에 승인 코드를 남기고 gates accept 실행",
+  "pipeline_id": "BUG-20260616-8011",
+  "allowed_approver": "hojiyong2-commits",
+  "nonce": "MANUALOK",
+  "pr_comments": [
+    {
+      "author": {"login": "hojiyong2-commits"},
+      "body": "ACCEPT-BUG-20260616-8011-MANUALOK",
+      "id": "C-manual-1"
+    }
+  ],
+  "acceptance_request": {
+    "status": "PENDING",
+    "pipeline_id": "BUG-20260616-8011",
+    "nonce": "MANUALOK",
+    "request_id": "req-manual-1"
+  },
+  "external_gates": {
+    "acceptance": {"status": "PENDING"}
+  }
+}

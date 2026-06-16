@@ -181,7 +181,14 @@ def test_exact_match_pass() -> None:
 # ----------------------------------------------------------------------------
 
 def test_packet_comment_only_fail() -> None:
-    """TC-2 (case=exception) — packet marker 댓글은 후보에서 제외되어 승인 댓글 없음 → BLOCKED."""
+    """TC-2 (case=exception) — packet marker 댓글에 승인 코드가 인용된 경우 → BLOCKED (자동 ACCEPT 차단).
+
+    BUG-20260616-8011 보안 강화: packet 마커 댓글은 승인 후보에서 제외되지만, 그 안에
+    기대 승인 코드(_VALID_CODE)가 인용되어 있으면 agent 가 packet 본문을 재게시했거나
+    packet 댓글을 승인으로 처리하려는 자동 ACCEPT 시도로 판정한다. 따라서 단순
+    pr_approver_missing 이 아니라 protocol_violation_auto_accept 로 정밀하게 차단한다.
+    BLOCKED 상태는 동일하게 유지되며, 이는 보안 완화가 아니라 강화이다.
+    """
     state = _base_state()
     file_req = _base_file_req()
     comments = [
@@ -194,9 +201,38 @@ def test_packet_comment_only_fail() -> None:
     result = _run_provenance(state, file_req, comments)
     assert result["status"] == "BLOCKED", \
         f"packet 댓글만 있으면 승인 후보가 없어 BLOCKED여야 함: {result.get('message')}"
-    # packet 댓글이 완전히 필터링되어 어떤 실패 후보도 잡히지 않음 → pr_approver_missing.
-    assert result.get("failure_code") in ("pr_approver_missing", ""), \
-        f"packet 댓글 필터링 후 승인 코드 누락이어야 함: {result.get('failure_code')}"
+    # 보안 강화 후: packet 마커 댓글에 승인 코드가 인용되면 자동 ACCEPT 시도로 간주하여
+    # protocol_violation_auto_accept 로 차단한다. 코드 인용이 전혀 없는 경우에는
+    # pr_approver_missing 으로 남는다. 두 경우 모두 허용 (보안 완화 없이 확장).
+    assert result.get("failure_code") in (
+        "protocol_violation_auto_accept",
+        "pr_approver_missing",
+        "",
+    ), f"packet 댓글 필터링 후 protocol_violation_auto_accept 또는 코드 누락이어야 함: {result.get('failure_code')}"
+
+
+def test_packet_comment_without_code_missing() -> None:
+    """TC-2b (case=exception) — packet 마커 댓글에 승인 코드가 인용되지 않은 경우 → pr_approver_missing.
+
+    BUG-20260616-8011: 코드 인용이 없는 순수 packet 안내 댓글은 자동 ACCEPT 시도가 아니므로
+    protocol_violation_auto_accept 가 아니라 기존대로 승인 후보 없음(pr_approver_missing)으로 남는다.
+    이 케이스가 보안 강화 후에도 기존 동작을 유지함을 고정하여, 강화가 정상 흐름을 깨지 않음을 보장한다.
+    """
+    state = _base_state()
+    file_req = _base_file_req()
+    comments = [
+        {
+            "author": {"login": PIPELINE_ALLOWED_APPROVER},
+            # packet 마커는 있으나 승인 코드(_VALID_CODE)는 인용되지 않음.
+            "body": f"{_PACKET_MARKER}\n## 최종 확인 안내\n결과물을 확인해 주세요.",
+            "id": "C2b",
+        }
+    ]
+    result = _run_provenance(state, file_req, comments)
+    assert result["status"] == "BLOCKED", \
+        f"코드 인용 없는 packet 댓글만 있으면 BLOCKED여야 함: {result.get('message')}"
+    assert result.get("failure_code") == "pr_approver_missing", \
+        f"코드 인용 없는 packet 댓글은 pr_approver_missing 이어야 함(자동 ACCEPT 아님): {result.get('failure_code')}"
 
 
 # ----------------------------------------------------------------------------
