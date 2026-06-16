@@ -1,0 +1,115 @@
+{
+  "pipeline_id": "BUG-20260616-9DEF",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._run_browser_approval_server"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_run_browser_approval_server 신규: http.server.HTTPServer 기반 일회용 localhost 승인 서버, socket.bind(('',0)) 빈 포트 자동 선택",
+            "approval_url=http://localhost:{PORT}/approve?session={token}, browser_approval_token=sha256(nonce+session_token+click_at), 300초 fail-closed, PIPELINE_BROWSER_APPROVAL_SKIP=1 우회"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._cmd_gates_request_accept"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1", "AC-2", "AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_cmd_gates_request_accept: nonce 발급 직후 session_token 생성 + _run_browser_approval_server 호출 + approval_url 콘솔 출력",
+            "acceptance_request.json에 browser_click_confirmed/browser_click_at/browser_approval_token/browser_approval_skip 기록(materialize 전 disk write); _write_acceptance_request browser kwarg 추가; fail-closed browser_approval_required"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.cmd_gates (action == \"accept\" 분기)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-3", "AC-4"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "cmd_gates accept 분기: browser_click_confirmed != True AND browser_approval_skip != True 이면 failure_code=browser_approval_required BLOCKED(exit 1)",
+            "User Acceptance Provenance Gate 이후 최종 방어선으로 적용 — 8011 packet 마커 차단 + provenance + 브라우저 클릭 이중 방어"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [".claude/agents/pipeline-manager-agent.md"],
+      "affected_functions": ["문서 업데이트"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-6", "AC-8"],
+          "changed_files": [".claude/agents/pipeline-manager-agent.md"],
+          "implementation_evidence": [
+            "로컬 브라우저 클릭 승인 채널 섹션 추가: request-accept→브라우저 URL→승인 클릭→gates accept 흐름 문서화 (AC-6)",
+            "PIPELINE_BROWSER_APPROVAL_SKIP=1 설명 + 기술적 한계(에이전트 subprocess HTTP 가능, 완전 분리는 외부 러너/서명자 필요) 명시 + browser 필드 표 (AC-8)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["tests/e2e/test_browser_approval_9def.py"],
+      "affected_functions": ["test_browser_approval_9def (신규 E2E 테스트)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-7"],
+          "changed_files": ["tests/e2e/test_browser_approval_9def.py"],
+          "implementation_evidence": [
+            "신규 E2E 6 TC(TC-1~TC-6) — subprocess 실제 CLI + PIPELINE_STATE_PATH 격리 + final_state assertion (Real CLI Path E2E)",
+            "TC-1 SKIP 정상 흐름, TC-2/TC-5 browser_approval_required BLOCKED+nonce 미소모, TC-3 SKIP 우회, TC-4 nonce 재사용 체인 회귀, TC-6 workspace_hygiene 회귀 — 6 passed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/oracles/BUG-20260616-9DEF/normal_browser_approve/input.json",
+        "tests/oracles/BUG-20260616-9DEF/normal_browser_approve/expected.json",
+        "tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval/input.json",
+        "tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval/expected.json",
+        "tests/oracles/BUG-20260616-9DEF/edge_skip_env_var/input.json",
+        "tests/oracles/BUG-20260616-9DEF/edge_skip_env_var/expected.json"
+      ],
+      "affected_functions": ["Oracle 파일 작성"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-3", "AC-5", "AC-7"],
+          "changed_files": [
+            "tests/oracles/BUG-20260616-9DEF/normal_browser_approve/input.json",
+            "tests/oracles/BUG-20260616-9DEF/normal_browser_approve/expected.json",
+            "tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval/input.json",
+            "tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval/expected.json",
+            "tests/oracles/BUG-20260616-9DEF/edge_skip_env_var/input.json",
+            "tests/oracles/BUG-20260616-9DEF/edge_skip_env_var/expected.json"
+          ],
+          "implementation_evidence": [
+            "OC-1 normal_browser_approve(SKIP request-accept), OC-2 edge_no_browser_approval(browser_approval_required BLOCKED), OC-3 edge_skip_env_var(SKIP 우회)",
+            "normal 1 + edge 2, expected 구체값(placeholder/빈 JSON 없음), MT-5 E2E 실측과 일치"
+          ]
+        }
+      ]
+    }
+  ]
+}

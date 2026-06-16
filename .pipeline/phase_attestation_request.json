@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-16T15:12:03Z",
+  "pipeline_id": "BUG-20260616-9DEF",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "9c4eea815f61d1a65d6dc9d76bf173fab32c572f",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-16T15:10:58Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,.claude/agents/pipeline-manager-agent.md,tests/e2e/test_browser_approval_9def.py,tests/oracles/BUG-20260616-9DEF/normal_browser_approve/input.json,tests/oracles/BUG-20260616-9DEF/normal_browser_approve/expected.json,tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval/input.json,tests/oracles/BUG-20260616-9DEF/edge_no_browser_approval/expected.json,tests/oracles/BUG-20260616-9DEF/edge_skip_env_var/input.json,tests/oracles/BUG-20260616-9DEF/edge_skip_env_var/expected.json"
+  },
+  "agent_run": {
+    "run_id": "dev-8dbf57ba00c91a1a",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "cb6c5e3374f5182bde02433bba6a9e9ca4075745c44a90da1d383606808b0369",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260616-9DEF/dev/agent_receipt_dev-8dbf57ba00c91a1a.json",
+    "receipt_sha256": "a27296d41615a9a8b5c5a38973e6e58f9c3a9c67d300e15eefb63f2d8b50757d",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260616-9DEF\\dev\\dev-8dbf57ba00c91a1a.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260616-9DEF\\dev\\dev-8dbf57ba00c91a1a.json",
+      "path": ".pipeline/phase_evidence/BUG-20260616-9DEF/dev/agent_receipt_dev-8dbf57ba00c91a1a.json",
+      "sha256": "a27296d41615a9a8b5c5a38973e6e58f9c3a9c67d300e15eefb63f2d8b50757d",
+      "size_bytes": 501,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260616-9DEF/dev/report_dev_handover.xml",
+      "sha256": "cb6c5e3374f5182bde02433bba6a9e9ca4075745c44a90da1d383606808b0369",
+      "size_bytes": 9334,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260616-9DEF/dev/scope_manifest_scope_manifest.json",
+      "sha256": "b9eac10ba4112a7230f1cca71d5b6f9857efa555daa56ad996e7173fed7c6760",
+      "size_bytes": 5376,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "2e7bb04e6ff1422dfe97f8b45b0633f4279ba7fd334d0291d9bffff986d5d98a",
+      "size_bytes": 1054456
+    },
+    {
+      "path": ".claude/agents/pipeline-manager-agent.md",
+      "sha256": "cfb4c17190a5c4a0e67f3e2c698ada1200d381b96591863e2346a0208f0cef16",
+      "size_bytes": 11765
+    }
+  ],
+  "local_only_files": []
+}
