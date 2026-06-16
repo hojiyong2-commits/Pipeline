@@ -1,0 +1,14 @@
+{
+  "scenario": "edge_auto_accept_blocked",
+  "expected_result": {
+    "status": "BLOCKED",
+    "failure_code": "protocol_violation_auto_accept",
+    "approver": null,
+    "comment_id": "C-packet-1",
+    "provenance": false,
+    "auto_accept_attempt": true
+  },
+  "description": "packet 마커 댓글에 인용된 승인 코드는 자동 ACCEPT 시도로 판정되어 protocol_violation_auto_accept로 BLOCKED된다 (AC-1, AC-2, AC-4 충족)",
+  "ac_covered": ["AC-1", "AC-2", "AC-4"],
+  "notes": "BUG-20260616-8011 MT-1 보안 강화: packet 마커(_PACKET_MARKER_FRAGMENTS)가 포함된 댓글은 승인 후보에서 제외되며, 그 안에 기대 승인 코드가 인용되어 있으면 agent의 자동 ACCEPT 시도(packet 본문 재게시)로 간주하여 protocol_violation_auto_accept로 차단한다. 코드 인용이 없는 순수 packet 댓글만 있으면 pr_approver_missing으로 남는다. BLOCKED 상태는 동일하며 보안 강화 방향이다."
+}

@@ -1,0 +1,5 @@
+{
+  "scenario": "browser_click_confirmed=false 상태에서 gates accept 시도",
+  "acceptance_request": {"browser_click_confirmed": false, "browser_approval_skip": false, "status": "PENDING"},
+  "command": "gates accept"
+}

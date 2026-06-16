@@ -1,0 +1,6 @@
+{
+  "scenario": "PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수로 브라우저 승인 우회",
+  "env": {"PIPELINE_BROWSER_APPROVAL_SKIP": "1"},
+  "command": "gates request-accept",
+  "expected_field": "browser_approval_skip"
+}

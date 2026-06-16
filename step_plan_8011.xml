@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260616-8011</pipeline_id>
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>인증/trust chain 핵심 로직 수정 — User Acceptance gate의 자동 우회 방지</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>4</expected_changed_functions>
+      <expected_changed_lines>180</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>true</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 구현 취향 질문(변수명, 코드 스타일)은 유지보수성 우선 원칙으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>사용자가 명시한 설계 제약(감사 필드 추가, agent MD 금지 문구, 기술적 한계 문서화)을 그대로 따라 구현해도 될까요?</user_facing_question>
+        <evidence>사용자가 AC 1~6, 수정 대상 파일, 설계 제약을 모두 명시함. 기술적 한계(같은 GitHub 토큰/OS user 공유 시 완전 분리 불가)도 사용자가 인지하고 문서화 요청함.</evidence>
+        <why_it_matters>프로토콜 위반 방지는 trust chain의 핵심이며, 잘못된 구현은 자동 ACCEPT 우회를 허용할 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>사용자 명시 설계대로 구현</label>
+            <benefit>요청된 AC 1~6을 모두 충족하며, 기술적 한계 문서화로 프로세스 억제 기반 방어를 명시합니다.</benefit>
+            <cost>완전한 암호학적 분리는 불가능하나, 사용자가 이미 이 한계를 인지하고 있습니다.</cost>
+          </option>
+          <option id="B">
+            <label>외부 서명 인프라 추가 도입</label>
+            <benefit>완전한 암호학적 분리 가능</benefit>
+            <cost>별도 인프라/키 관리 필요, 현재 요청 범위 초과</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 명시한 설계 제약을 따라 구현 (추천안 A로 진행)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">Pipeline Manager/agent가 승인 코드를 자동으로 소비하거나 PR 댓글로 게시하지 못하게 한다.</requirement>
+    <requirement id="REQ-2">gates accept는 "사용자가 직접 입력한 승인 이벤트"가 확인될 때만 통과해야 한다.</requirement>
+    <requirement id="REQ-3">request-accept가 발급한 코드가 agent transcript, PR body, final packet, 자동 댓글에 존재한다는 사실만으로는 accept 실행 근거가 될 수 없다.</requirement>
+    <requirement id="REQ-4">자동 ACCEPT가 발생하면 COMPLETE가 아니라 BLOCKED/PROTOCOL_VIOLATION으로 남긴다.</requirement>
+    <requirement id="REQ-5">프로토콜 위반 기록은 final packet과 architect report에 명확히 남긴다.</requirement>
+    <requirement id="REQ-6">기존 정상 수동 ACCEPT 흐름은 유지된다.</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <title>pipeline.py: 자동 ACCEPT 감지 및 감사 필드 기록</title>
+      <affected_function>pipeline._check_pr_approver_provenance</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates (action == "accept" 경로)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_pr_approver_provenance|accepted_by|acceptance_request</pattern>
+        <match_count>70</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        1. _consume_acceptance_request()에 user_acceptance_source, source_comment_id 필드 추가
+        2. acceptance_request.json에 감사 필드(accepted_by, user_acceptance_source, source_comment_id, accepted_at) 기록
+        3. agent가 packet 마커(<!-- pipeline-human-acceptance-packet -->)가 있는 댓글에서 코드를 인용한 경우 PROTOCOL_VIOLATION 반환
+        4. failure_code=protocol_violation_auto_accept 정의 및 failure packet 생성
+      </change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <title>pipeline-manager-agent.md: 자동 ACCEPT 금지 조항 추가</title>
+      <affected_function>N/A (문서)</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>gates accept|승인 코드|request-accept</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        1. "자동 ACCEPT 금지 (BUG-20260616-8011)" 섹션 추가
+        2. 승인 코드를 PR 댓글에 자동으로 게시하지 않는다
+        3. 사용자를 대신해 gates accept를 실행하지 않는다
+        4. request-accept 실행 후 승인 코드를 오케스트레이터에게 전달하고 반드시 STOP한다
+        5. 오케스트레이터가 "다음 단계: gates accept" 요청 시, 사용자가 직접 코드를 입력한 경우에만 실행한다
+        6. 기술적 한계 문서화 (같은 GitHub 토큰/OS user 공유 시 완전 분리 불가)
+      </change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <title>E2E 테스트: agent auto-consumes acceptance code 시나리오</title>
+      <affected_function>N/A (테스트)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_auto_accept_guard_8011.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_.*accept</pattern>
+        <match_count>15</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        1. TC-1: agent가 request-accept 발급 후 자동으로 acceptance code를 PR 댓글에 게시하는 시나리오 → gates accept가 BLOCKED 또는 PROTOCOL_VIOLATION 반환
+        2. TC-2: agent transcript/final packet/PR body에 승인 코드가 있어도 사용자 직접 입력 없으면 accept FAIL
+        3. TC-3: 정상 수동 ACCEPT 흐름 (사용자가 올바른 코드를 입력) → PASS 유지
+        4. TC-4: 기존 nonce/D278/2821 회귀 없음 확인
+        5. TC-5: PROTOCOL_VIOLATION failure packet 생성 확인
+        6. TC-6: 기존 정상 provenance PASS 흐름 회귀 없음
+      </change_summary>
+      <line_estimate>200</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <title>Oracle 파일 생성</title>
+      <affected_function>N/A (테스트 데이터)</affected_function>
+      <target_files>
+        <file>tests/oracles/BUG-20260616-8011/normal_manual_accept/input.json</file>
+        <file>tests/oracles/BUG-20260616-8011/normal_manual_accept/expected.json</file>
+        <file>tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/input.json</file>
+        <file>tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>tests/oracles</pattern>
+        <match_count>100</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        1. normal_manual_accept: 사용자가 직접 코드 입력 → PASS
+        2. edge_auto_accept_blocked: agent가 자동으로 코드 소비 시도 → BLOCKED/PROTOCOL_VIOLATION
+      </change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-5, AC-6</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>Pipeline Manager가 승인 코드를 알고 있어도 자동으로 gates accept를 실행할 수 없거나, 실행 시 PROTOCOL_VIOLATION으로 BLOCKED된다.</text>
+      <expected_evidence>gates accept 실행 시 agent 자동 실행 감지 → failure_code=protocol_violation_auto_accept 반환</expected_evidence>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>PR 댓글에 agent가 승인 코드를 게시한 경우 accept가 PASS되지 않는다. (packet 마커가 있는 댓글에서 인용된 코드는 무효)</text>
+      <expected_evidence>_check_pr_approver_provenance가 packet 마커 포함 댓글을 승인 후보에서 제외</expected_evidence>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>사용자 직접 승인 이벤트가 없으면 PR merge/deploy가 불가능하다. (provenance check BLOCKED)</text>
+      <expected_evidence>pr_approver_missing 또는 protocol_violation_auto_accept로 차단</expected_evidence>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>자동 ACCEPT 시도는 final packet에 "프로토콜 위반"으로 표시된다.</text>
+      <expected_evidence>failure_packet.json에 failure_code=protocol_violation_auto_accept 기록</expected_evidence>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>회귀 테스트에 "agent auto-consumes acceptance code" 시나리오가 포함된다.</text>
+      <expected_evidence>tests/e2e/test_auto_accept_guard_8011.py의 TC-1~TC-6 PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>기존 정상 수동 ACCEPT 흐름은 유지된다.</text>
+      <expected_evidence>TC-3, TC-6에서 정상 provenance PASS 검증</expected_evidence>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_design>
+    <oracle id="ORACLE-1" case_kind="normal">
+      <name>normal_manual_accept</name>
+      <description>사용자가 직접 PR 댓글에 승인 코드를 남기고 gates accept 실행 → PASS</description>
+      <input_path>tests/oracles/BUG-20260616-8011/normal_manual_accept/input.json</input_path>
+      <expected_path>tests/oracles/BUG-20260616-8011/normal_manual_accept/expected.json</expected_path>
+      <expected_source>user_provided</expected_source>
+    </oracle>
+    <oracle id="ORACLE-2" case_kind="edge">
+      <name>edge_auto_accept_blocked</name>
+      <description>agent가 packet 마커가 있는 댓글에서 코드를 인용하여 gates accept 시도 → BLOCKED</description>
+      <input_path>tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/input.json</input_path>
+      <expected_path>tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/expected.json</expected_path>
+      <expected_source>user_provided</expected_source>
+    </oracle>
+  </oracle_design>
+
+  <technical_constraints>
+    <constraint id="TC-1">같은 GitHub 토큰/OS user로 agent와 사용자가 모두 작업하면 완전한 암호학적 분리는 불가능하다. 이 한계를 pipeline-manager-agent.md에 명시한다.</constraint>
+    <constraint id="TC-2">프로세스 수준 억제(agent 행동 지침 금지)가 현재 가능한 최선이다.</constraint>
+    <constraint id="TC-3">기존 테스트(D278, 2821, AEF0) 회귀 없음을 TC-4, TC-6에서 확인한다.</constraint>
+  </technical_constraints>
+
+  <decomposition_audit>
+    <micro_task_count>4</micro_task_count>
+    <grep_executions>4</grep_executions>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <all_tasks_have_covers_ac>true</all_tasks_have_covers_ac>
+    <all_tasks_have_target_files>true</all_tasks_have_target_files>
+    <all_tasks_have_grep_evidence>true</all_tasks_have_grep_evidence>
+    <abstract_ac_detected>false</abstract_ac_detected>
+    <trust_root_files_in_scope>true</trust_root_files_in_scope>
+    <trust_root_files_listed>
+      <file>pipeline.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>tests/e2e/test_auto_accept_guard_8011.py</file>
+    </trust_root_files_listed>
+    <execution_profile_verified>HIGH_RISK (auth_or_secret=true, pipeline_protocol=true)</execution_profile_verified>
+    <verdict>PASS</verdict>
+  </decomposition_audit>
+
+  <python_version>3.9 — 기존 pipeline.py 호환성 유지</python_version>
+  <forbidden>
+    1. 기존 정상 provenance PASS 흐름을 깨뜨리는 수정 금지
+    2. acceptance_request.json 스키마의 기존 필수 필드 제거 금지
+    3. 다른 파이프라인(IMP-20260612-E12D 등)의 테스트 파일 수정 금지
+  </forbidden>
+
+</step_plan>

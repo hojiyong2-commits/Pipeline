@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260616-8011</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <generated_at>2026-06-16T10:50:00Z</generated_at>
+  <step_plan_sha256>155688410b7eb04de93c7c77d2a73609a2f2aafc00939846a3d06445454c5d99</step_plan_sha256>
+  <planner_run_id>pm_planner-f3348d7f1d297c25</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+
+  <execution_summary>
+    <micro_task_count>4</micro_task_count>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>tests/e2e/test_auto_accept_guard_8011.py</file>
+      <file>tests/oracles/BUG-20260616-8011/normal_manual_accept/input.json</file>
+      <file>tests/oracles/BUG-20260616-8011/normal_manual_accept/expected.json</file>
+      <file>tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/input.json</file>
+      <file>tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/expected.json</file>
+    </target_files>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <sec_scope>no network/DB/auth calls, sec skip applies</sec_scope>
+    <build_scope>meta-task, build N/A applies</build_scope>
+  </execution_summary>
+
+  <forbidden_in_this_pipeline>
+    <item>gates accept 자동 실행 금지</item>
+    <item>nonce/provenance 보안 로직 완화 금지</item>
+    <item>D278 post-accept fail-closed 로직 완화 금지</item>
+    <item>2821 workspace_hygiene fail-closed 로직 완화 금지</item>
+    <item>32D7 marker 분리 원칙 훼손 금지</item>
+  </forbidden_in_this_pipeline>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</manager_handoff>
