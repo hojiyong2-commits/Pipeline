@@ -438,6 +438,9 @@ def test_tc2_no_browser_click_accept_blocked(tmp_path: Path) -> None:
         f"browser_approval_required 차단 누락\nstdout={r.stdout}\nstderr={r.stderr}"
     )
 
+    # PIPELINE_STATE_PATH 격리 확인 (CLI Evidence Contract 요건)
+    assert env.get("PIPELINE_STATE_PATH"), "PIPELINE_STATE_PATH 격리 미적용"
+
     # final_state: failure_packet 또는 state에 browser_approval_required 기록 확인
     found = False
     fp_path = tmp_path / "failure_packet.json"
@@ -493,6 +496,11 @@ def test_tc3_skip_env_var_records_skip_flag(tmp_path: Path) -> None:
     assert req.get("browser_click_confirmed") is True, (
         f"SKIP 경로 browser_click_confirmed != true: {req.get('browser_click_confirmed')}"
     )
+
+    # PIPELINE_STATE_PATH 격리 확인 + final_state assertion (CLI Evidence Contract 요건)
+    assert env.get("PIPELINE_STATE_PATH"), "PIPELINE_STATE_PATH 격리 미적용"
+    final_state = _load_final_state(env)
+    assert "pipeline_id" in final_state, "state 파일 격리 실패 (pipeline_id 누락)"
 
 
 # ─── TC-4: 기존 nonce 재사용 방지 회귀 (AEF0) ──────────────────────────────────────────
@@ -648,6 +656,11 @@ def test_tc5_missing_browser_field_blocked(tmp_path: Path) -> None:
     assert req.get("status") == "PENDING", (
         f"BLOCKED인데 status 변경됨: {req.get('status')}"
     )
+
+    # PIPELINE_STATE_PATH 격리 확인 + final_state assertion (CLI Evidence Contract 요건)
+    assert env.get("PIPELINE_STATE_PATH"), "PIPELINE_STATE_PATH 격리 미적용"
+    final_state = _load_final_state(env)
+    assert "pipeline_id" in final_state, "state 파일 격리 실패 (pipeline_id 누락)"
 
 
 # ─── TC-6: 기존 D278/2821 회귀 — workspace_hygiene 기능 동작 확인 ─────────────────────
