@@ -470,7 +470,7 @@ def test_tc3_skip_env_var_records_skip_flag(tmp_path: Path) -> None:
     """
     env = _gh_env(tmp_path)
     env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
-    pid = _bootstrap(tmp_path, env)
+    _bootstrap(tmp_path, env)
     evidence_path = tmp_path / "evidence.txt"
     evidence_path.write_text("skip env evidence", encoding="utf-8")
 
