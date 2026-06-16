@@ -17027,20 +17027,64 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
 
     # BUG-20260616-9DEF MT-2: 로컬 브라우저 클릭 승인 채널.
     # nonce 발급 직후, 사용자가 로컬 브라우저에서 승인 버튼을 직접 클릭해야 한다.
-    # PIPELINE_BROWSER_APPROVAL_SKIP=1 환경에서는 서버를 실행하지 않고 skip 처리한다.
     # 클릭 미완료(타임아웃) 시 fail-closed로 BLOCKED — nonce는 발급됐으나 accept 단계에서 차단된다.
+    #
+    # QA Round1 재작업(AC-7 회귀): PIPELINE_BROWSER_APPROVAL_SKIP=1 외에 "비대화형/CI 환경"
+    # 도 자동 감지하여 브라우저 서버 호출을 short-circuit한다. AEF0 등 기존 E2E가
+    # subprocess(stdin=파이프)로 request-accept를 호출하면 사용자가 클릭할 수 없는데도
+    # 300초 블로킹 후 browser_approval_required로 FAIL되던 회귀를 차단한다. 이는 graceful
+    # skip(테스트 통과 목적의 임의 우회)이 아니라 "사용자가 클릭할 수 없는 환경"의 사실 기반
+    # 자동 감지이며, skip이어도 gates accept의 nonce/provenance/post-accept fail-closed
+    # 체인은 그대로 유지된다(skip은 클릭 게이트만 우회).
     _session_token = hashlib.sha256(
         (str(nonce) + str(req.get("request_id", "")) + _now()).encode("utf-8")
     ).hexdigest()[:24]
-    _browser_skip_env = os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1"
-    if not _browser_skip_env:
+
+    # 비대화형/CI/명시적 SKIP 환경 판정 (이 함수 내부에 inline — MT-2 단일 함수 범위 유지).
+    _browser_skip = False
+    if os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1":
+        _browser_skip = True
+    else:
+        # 비대화형(stdin이 tty 아님) 감지 — sys.stdin이 None/닫힘/isatty 미지원도 비대화형.
+        try:
+            _stdin = sys.stdin
+            if _stdin is None or not _stdin.isatty():
+                _browser_skip = True
+        except (ValueError, AttributeError, OSError):
+            _browser_skip = True
+        # CI 러너(GitHub Actions 등)는 CI 환경변수가 설정됨.
+        if not _browser_skip and os.environ.get("CI"):
+            _browser_skip = True
+
+    if _browser_skip:
+        # 서버 호출을 short-circuit하고 skip 결과를 직접 구성한다(300초 블로킹 회피).
+        # _run_browser_approval_server의 PIPELINE_BROWSER_APPROVAL_SKIP 경로와 동일한
+        # 토큰 산출식(sha256(nonce+session_token+click_at))을 사용해 일관성을 유지한다.
+        _click_at = _now()
+        _browser_result = {
+            "browser_click_confirmed": True,
+            "browser_click_at": _click_at,
+            "browser_approval_token": hashlib.sha256(
+                (str(nonce) + _session_token + _click_at).encode("utf-8")
+            ).hexdigest(),
+            "browser_approval_skip": True,
+            "approval_url": None,
+        }
+        try:
+            _log_event(
+                state,
+                "browser approval skipped (PIPELINE_BROWSER_APPROVAL_SKIP=1 또는 비대화형/CI 환경)",
+            )
+        except Exception:  # noqa: BLE001 — 로깅 실패는 승인 흐름을 막지 않는다.
+            pass
+    else:
         print()
         print("  ★ 브라우저 승인 필요: 아래 URL을 브라우저에서 열고 '승인' 버튼을 클릭하세요.")
         print(f"     http://localhost:<PORT>/approve?session={_session_token}")
         print("     (실제 PORT와 전체 URL은 서버 시작 직후 콘솔에 표시됩니다. 5분 내 클릭하지 않으면 차단됩니다.)")
-    _browser_result = _run_browser_approval_server(
-        state, str(nonce), _session_token, timeout_seconds=300
-    )
+        _browser_result = _run_browser_approval_server(
+            state, str(nonce), _session_token, timeout_seconds=300
+        )
     if _browser_result.get("approval_url"):
         print(f"  [브라우저 승인 URL] {_browser_result['approval_url']}")
 

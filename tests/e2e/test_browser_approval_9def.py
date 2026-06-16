@@ -500,68 +500,110 @@ def test_tc3_skip_env_var_records_skip_flag(tmp_path: Path) -> None:
 
 def test_tc4_nonce_reuse_chain_intact(tmp_path: Path) -> None:
     """TC-4 (regression): nonce 재사용 방지 보안 체인이 브라우저 승인 채널 추가 후에도
-    그대로 동작하는지 확인한다.
+    실제 CLI 경로(subprocess gates request-accept)에서 그대로 동작하는지 확인한다.
 
-    AEF0 E2E 전체를 nested pytest로 재실행하면 본 저장소 규모에서 subprocess 다중 실행 +
-    workspace hygiene git 스캔으로 수 분이 소요되어 비결정적 타임아웃이 발생한다. 따라서
-    nonce 재사용 결정 함수(_should_reuse_acceptance_nonce)의 핵심 분기를 in-process로
-    검증하여 보안 체인(force_new / status!=PENDING / pipeline_id / evidence / SHA / pr_body
-    불일치 시 재사용 거부, 모두 동일 시 재사용)이 훼손되지 않았음을 회귀 표본으로 확인한다.
-    AEF0 파일은 별도로 전체 E2E 커버리지를 유지한다.
+    Real CLI Path E2E 정책 준수: in-process 함수 호출이 아니라 subprocess 기반 실제
+    `gates request-accept` CLI 흐름을 PIPELINE_STATE_PATH 격리 + cwd=tmp_path로 실행하고,
+    final_state(acceptance_request.json)의 nonce 변화를 assert한다. 브라우저 승인 서버는
+    subprocess stdin이 비대화형(파이프)이므로 _is_browser_approval_skip()으로 자동 우회되어
+    300초 블로킹 없이 결정론적으로 완료된다(AC-7 회귀 차단 검증).
+
+    (1) 동일 5-field 조건 + 일치 PR 본문 스냅샷 → 기존 nonce 재사용.
+    (2) status=CONSUMED 기존 코드 → 새 nonce 발급(재사용 거부).
+    두 분기를 실제 CLI로 검증하여 nonce 재사용 방지 보안 체인이 훼손되지 않았음을 확인한다.
+    AEF0 파일은 별도로 5-field 전체 분기 E2E 커버리지를 유지한다.
     """
-    root = str(Path(__file__).resolve().parents[2])
-    if root not in sys.path:
-        sys.path.insert(0, root)
-    import pipeline as _p  # type: ignore
-
     body_sha = _sha256_of(_COMPLETE_PR_BODY)
-    base_req: Dict[str, Any] = {
-        "status": "PENDING",
-        "pipeline_id": "BUG-20260616-9DEF",
-        "evidence": "evidence.txt",
-        "evidence_sha256": "abc123",
+
+    # ─── (1) 동일 조건 → nonce 재사용 ───
+    # 브라우저 승인 게이트는 본 TC의 관심사(nonce 재사용)와 직교한다. 비대화형 stdin
+    # 자동 감지는 플랫폼(Windows)에 따라 비결정적이므로 PIPELINE_BROWSER_APPROVAL_SKIP=1로
+    # 브라우저 서버 300초 블로킹만 결정론적으로 우회한다. nonce 재사용/거부 assertion은
+    # 그대로 전부 enforce되어 보안 체인 회귀를 실제 CLI 경로에서 검증한다.
+    env = _gh_env(tmp_path)
+    env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
+    pid = _bootstrap(tmp_path, env)
+    evidence_path = tmp_path / "evidence.txt"
+    evidence_path.write_text("nonce reuse evidence", encoding="utf-8")
+    evidence_sha = _sha256_of("nonce reuse evidence")
+
+    # 기존 acceptance_request.json: PENDING + fake gh PR body 스냅샷과 일치하게 기록.
+    # fake gh는 headSha/databaseId를 빈 문자열로 반환하므로 pr_head_sha/ci_run_id="".
+    reuse_req: Dict[str, Any] = {
+        "schema_version": 1,
+        "pipeline_id": pid,
+        "request_id": "tc4reuse",
+        "nonce": _DUMMY_NONCE,
+        "created_at": "2026-06-16T00:00:00Z",
+        "pr_url": "",
+        "pr_head_sha": "",
+        "github_ci_run_id": "",
+        "evidence": str(evidence_path),
+        "evidence_sha256": evidence_sha,
         "evidence_url": None,
-        "pr_head_sha": "sha1",
-        "github_ci_run_id": "100",
+        "status": "PENDING",
         "pr_body_sha256": body_sha,
         "pr_body_readiness": "PASS",
         "required_sections_present": True,
         "temporary_phrases_absent": True,
     }
-
-    # (1) 모든 조건 동일 → 재사용 True (보안 체인 정상)
-    reuse, _ = _p._should_reuse_acceptance_nonce(
-        dict(base_req), "BUG-20260616-9DEF", "evidence.txt", "abc123",
-        "sha1", "100", force_new=False, new_pr_body_sha256=body_sha,
+    (tmp_path / "acceptance_request.json").write_text(
+        json.dumps(reuse_req, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    assert reuse is True, "동일 조건인데 재사용이 거부됨 (회귀)"
 
-    # (2) force_new=True → 재사용 거부
-    reuse2, _ = _p._should_reuse_acceptance_nonce(
-        dict(base_req), "BUG-20260616-9DEF", "evidence.txt", "abc123",
-        "sha1", "100", force_new=True, new_pr_body_sha256=body_sha,
+    r1 = _run_cli(
+        ["gates", "request-accept", "--evidence", str(evidence_path)],
+        env=env,
+        cwd=tmp_path,
     )
-    assert reuse2 is False, "force_new인데 재사용됨 (보안 체인 훼손)"
-
-    # (3) evidence SHA 변경 → 재사용 거부 (변조 방지 체인)
-    reuse3, _ = _p._should_reuse_acceptance_nonce(
-        dict(base_req), "BUG-20260616-9DEF", "evidence.txt", "DIFFERENT",
-        "sha1", "100", force_new=False, new_pr_body_sha256=body_sha,
+    assert r1.returncode == 0, (
+        f"동일 조건 request-accept 실패\nstdout={r1.stdout}\nstderr={r1.stderr}"
     )
-    assert reuse3 is False, "evidence SHA 변경인데 재사용됨 (보안 체인 훼손)"
-
-    # (4) status != PENDING (이미 소모) → 재사용 거부
-    consumed = dict(base_req)
-    consumed["status"] = "CONSUMED"
-    reuse4, _ = _p._should_reuse_acceptance_nonce(
-        consumed, "BUG-20260616-9DEF", "evidence.txt", "abc123",
-        "sha1", "100", force_new=False, new_pr_body_sha256=body_sha,
+    # final_state: nonce가 그대로 재사용되어야 함 (보안 체인 정상 — 변조 없는 동일 조건).
+    final_req1 = _read_acceptance_request(tmp_path)
+    assert final_req1.get("nonce") == _DUMMY_NONCE, (
+        f"동일 조건인데 nonce가 변경됨 (재사용 실패/회귀): {final_req1.get('nonce')}"
     )
-    assert reuse4 is False, "CONSUMED 상태인데 재사용됨 (nonce 재사용 방지 훼손)"
+    assert final_req1.get("status") == "PENDING", (
+        f"재사용인데 status 변경됨: {final_req1.get('status')}"
+    )
 
-    # final_state(함수 계약) 보존 확인: 함수가 존재하고 (bool, str) 튜플을 반환
-    assert callable(getattr(_p, "_should_reuse_acceptance_nonce", None)), (
-        "_should_reuse_acceptance_nonce 함수가 제거됨 (회귀)"
+    # ─── (2) status=CONSUMED 기존 코드 → 새 nonce 발급 (재사용 거부) ───
+    env2 = _gh_env(tmp_path)
+    env2["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"  # 브라우저 게이트 우회(직교) — 위 (1) 주석 참조
+    pid2 = _bootstrap(tmp_path, env2)
+    evidence_path2 = tmp_path / "evidence2.txt"
+    evidence_path2.write_text("consumed evidence", encoding="utf-8")
+    evidence_sha2 = _sha256_of("consumed evidence")
+    consumed_req = dict(reuse_req)
+    consumed_req.update(
+        {
+            "pipeline_id": pid2,
+            "request_id": "tc4consumed",
+            "evidence": str(evidence_path2),
+            "evidence_sha256": evidence_sha2,
+            "status": "CONSUMED",  # 이미 소모된 코드 — 재사용 금지되어야 함
+        }
+    )
+    (tmp_path / "acceptance_request.json").write_text(
+        json.dumps(consumed_req, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    r2 = _run_cli(
+        ["gates", "request-accept", "--evidence", str(evidence_path2)],
+        env=env2,
+        cwd=tmp_path,
+    )
+    assert r2.returncode == 0, (
+        f"CONSUMED 후 request-accept 실패\nstdout={r2.stdout}\nstderr={r2.stderr}"
+    )
+    # final_state: CONSUMED 상태였으므로 새 nonce가 발급되어야 함 (nonce 재사용 방지 정상).
+    final_req2 = _read_acceptance_request(tmp_path)
+    assert final_req2.get("nonce") != _DUMMY_NONCE, (
+        f"CONSUMED 상태인데 nonce 재사용됨 (재사용 방지 체인 훼손): {final_req2.get('nonce')}"
+    )
+    assert final_req2.get("status") == "PENDING", (
+        f"새 요청 status가 PENDING이 아님: {final_req2.get('status')}"
     )
 
 
@@ -613,31 +655,44 @@ def test_tc5_missing_browser_field_blocked(tmp_path: Path) -> None:
 
 def test_tc6_workspace_hygiene_still_works(tmp_path: Path) -> None:
     """TC-6 (regression): 기존 IMP-20260614-2821 workspace_hygiene fail-closed 기능이
-    여전히 정상 동작하는지 확인한다.
+    브라우저 승인 채널 추가 후에도 실제 CLI 경로에서 그대로 동작하는지 확인한다.
 
-    _check_workspace_hygiene를 직접 호출하여 결과 dict의 status 키가 정상 산출되는지
-    (BLOCKED/WARN/OK 중 하나) 확인한다. 브라우저 승인 채널 추가가 hygiene 게이트를
-    훼손하지 않았음을 검증한다.
+    Real CLI Path E2E 정책 준수: in-process _check_workspace_hygiene 직접 호출이 아니라
+    subprocess 기반 실제 `gates request-accept` CLI 흐름을 PIPELINE_STATE_PATH 격리 +
+    cwd=tmp_path로 실행한다. request-accept는 nonce 발급 전 workspace_hygiene preflight를
+    실행하고 그 결과를 pipeline_state.json(state["workspace_hygiene"])에 기록하므로,
+    final_state에 hygiene 게이트 결과가 정상 산출되었는지 assert하여 게이트가 우회/제거되지
+    않았음을 검증한다. PIPELINE_BROWSER_APPROVAL_SKIP=1로 브라우저 게이트는 우회한다.
     """
-    root = str(Path(__file__).resolve().parents[2])
-    if root not in sys.path:
-        sys.path.insert(0, root)
-    import pipeline as _p  # type: ignore
+    env = _gh_env(tmp_path)
+    env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
+    # _base_env가 PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1을 이미 설정 → git 부재
+    # 환경에서도 결정론적으로 hygiene status를 산출한다.
+    pid = _bootstrap(tmp_path, env)
+    evidence_path = tmp_path / "evidence.txt"
+    evidence_path.write_text("hygiene regression evidence", encoding="utf-8")
 
-    # git 부재 허용 override를 켜서 결정론적으로 status를 산출.
-    os.environ["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
-    state: Dict[str, Any] = {
-        "pipeline_id": "BUG-20260616-9DEF",
-        "event_log": [],
-        "contract": {},
-    }
-    result = _p._check_workspace_hygiene(state)
-    assert isinstance(result, dict), f"_check_workspace_hygiene 반환이 dict가 아님: {type(result)}"
-    assert "status" in result, f"hygiene 결과에 status 누락: {result}"
-    assert result["status"] in {"BLOCKED", "WARN", "OK", "PASS"}, (
-        f"hygiene status 비정상 값: {result['status']}"
+    r = _run_cli(
+        ["gates", "request-accept", "--evidence", str(evidence_path)],
+        env=env,
+        cwd=tmp_path,
     )
-    # 함수가 존재하고 호출 가능함을 확인 (기능 미제거 회귀)
-    assert callable(getattr(_p, "_check_workspace_hygiene", None)), (
-        "_check_workspace_hygiene 함수가 제거됨 (D278/2821 회귀)"
+    assert r.returncode == 0, (
+        f"request-accept 실패 (hygiene preflight 차단 가능)\nstdout={r.stdout}\nstderr={r.stderr}"
+    )
+
+    # final_state: pipeline_state.json에 workspace_hygiene 결과가 기록되어야 함.
+    final_state = _load_final_state(env)
+    hygiene = final_state.get("workspace_hygiene")
+    assert isinstance(hygiene, dict), (
+        f"final_state에 workspace_hygiene dict 누락 (게이트 우회/제거 회귀): {hygiene!r}"
+    )
+    assert "status" in hygiene, f"workspace_hygiene 결과에 status 누락: {hygiene}"
+    assert hygiene["status"] in {"BLOCKED", "WARN", "OK", "PASS"}, (
+        f"workspace_hygiene status 비정상 값 (D278/2821 회귀): {hygiene['status']}"
+    )
+    # acceptance_request.json도 정상 발급되어 hygiene preflight PASS 이후 흐름이 이어졌는지 확인.
+    req = _read_acceptance_request(tmp_path)
+    assert req.get("pipeline_id") == pid, (
+        f"acceptance_request pipeline_id 불일치: {req.get('pipeline_id')} != {pid}"
     )
