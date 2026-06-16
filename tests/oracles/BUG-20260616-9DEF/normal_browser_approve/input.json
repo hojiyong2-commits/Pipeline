@@ -1,0 +1,5 @@
+{
+  "scenario": "PIPELINE_BROWSER_APPROVAL_SKIP=1로 request-accept 실행",
+  "env": {"PIPELINE_BROWSER_APPROVAL_SKIP": "1"},
+  "command": "gates request-accept"
+}

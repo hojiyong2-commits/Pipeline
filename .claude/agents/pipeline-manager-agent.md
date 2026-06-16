@@ -79,6 +79,32 @@ AC 검증이 모두 통과해도 PR 본문이 완성되지 않으면 `gates requ
 
 5. **기술적 한계 문서화**: 현재 구현에서 Pipeline Manager와 사용자 브라우저는 동일한 GitHub 토큰과 OS 사용자를 공유하므로, 완전한 암호학적 분리는 불가능합니다. 프로토콜 규칙과 `pipeline.py`의 `protocol_violation_auto_accept` 탐지(packet 마커 댓글에서 인용된 코드 무효 처리)가 주요 방어선입니다. 완전한 분리는 별도 외부 러너/서명자가 필요합니다.
 
+### 로컬 브라우저 클릭 승인 채널 (BUG-20260616-9DEF)
+
+BUG-20260616-8011의 packet 마커 댓글 차단에 더해, `gates request-accept`는 사용자가 **로컬 브라우저에서 승인 버튼을 직접 클릭**해야 승인 요청을 완료하도록 일회용 HTTP 승인 채널을 추가합니다 (Python 표준 라이브러리 `http.server` 사용).
+
+**승인 흐름:**
+
+1. `python pipeline.py gates request-accept --evidence <결과물-경로>` 실행 시, nonce 발급 직후 로컬 HTTP 서버가 빈 포트(자동 선택)에서 시작되고 콘솔에 승인 URL이 표시됩니다:
+   ```
+   http://localhost:<PORT>/approve?session=<token>
+   ```
+2. **사용자**가 이 URL을 브라우저에서 직접 열고 "승인" 버튼을 클릭해야 합니다. 클릭 시 `acceptance_request.json`에 다음 필드가 기록됩니다:
+   - `browser_click_confirmed`: `true` (클릭 완료)
+   - `browser_click_at`: ISO8601 클릭 시각
+   - `browser_approval_token`: `sha256(nonce + session_token + click_timestamp)`
+3. 클릭 완료 후 콘솔에 승인 코드가 정상 표시됩니다.
+4. 이후 `gates accept`는 `acceptance_request.json`의 `browser_click_confirmed=true`(또는 `browser_approval_skip=true`)가 없으면 `failure_code=browser_approval_required`로 BLOCKED(exit 1)됩니다.
+5. 클릭 없이 5분(300초)이 경과하면 `request-accept`가 `browser_approval_required`로 BLOCKED됩니다(fail-closed).
+
+**`PIPELINE_BROWSER_APPROVAL_SKIP=1` 환경변수:**
+- 테스트/CI 환경에서만 사용합니다. 설정 시 HTTP 서버를 실행하지 않고 즉시 우회하며, `acceptance_request.json`에 `browser_approval_skip=true`가 기록됩니다.
+- 실제 사용자 승인 환경에서는 절대 설정하지 않습니다.
+
+**기술적 한계 (재확인):**
+- 에이전트는 동일 OS 사용자로 실행되므로 `subprocess`(Python `requests`/`urllib`)로 localhost HTTP 요청을 보낼 수 있습니다. 따라서 이 채널은 자동 ACCEPT 우회를 **한 단계 더 어렵게** 만드는 방어선이지, 완전한 차단은 아닙니다.
+- 완전한 분리(에이전트가 클릭을 위조할 수 없는 보장)를 위해서는 별도 외부 러너/서명자 또는 OS 사용자 분리, 클릭 시 OS 사용자 인증 추가가 필요합니다.
+
 ### pr_body_stale 오류 발생 시
 
 `gates accept` 실행 시 `failure_code=pr_body_stale` 오류가 발생하면:
@@ -96,6 +122,15 @@ AC 검증이 모두 통과해도 PR 본문이 완성되지 않으면 `gates requ
 | `required_sections_present` | 필수 섹션 전부 존재 여부 (bool) |
 | `temporary_phrases_absent` | 임시 문구 없음 여부 (bool) |
 | `validated_at` | 검증 타임스탬프 (ISO 8601) |
+
+### acceptance_request.json에 저장되는 브라우저 승인 필드 (BUG-20260616-9DEF)
+
+| 필드 | 설명 |
+|---|---|
+| `browser_click_confirmed` | 로컬 브라우저 승인 클릭 완료 여부 (bool) |
+| `browser_click_at` | 브라우저 클릭 시각 (ISO 8601) 또는 null |
+| `browser_approval_token` | `sha256(nonce + session_token + click_timestamp)` 또는 null |
+| `browser_approval_skip` | `PIPELINE_BROWSER_APPROVAL_SKIP=1` 우회 여부 (bool) |
 
 ## Workspace/Evidence Hygiene Gate 절차 (IMP-20260614-2821)
 

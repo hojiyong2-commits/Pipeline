@@ -4683,6 +4683,10 @@ def _write_acceptance_request(
     required_sections_present: Optional[bool] = None,
     temporary_phrases_absent: Optional[bool] = None,
     validated_at: Optional[str] = None,
+    browser_click_confirmed: bool = False,
+    browser_click_at: Optional[str] = None,
+    browser_approval_token: Optional[str] = None,
+    browser_approval_skip: bool = False,
 ) -> Dict[str, Any]:
     """acceptance_request.json 작성 후 데이터 dict 반환.
 
@@ -4710,6 +4714,10 @@ def _write_acceptance_request(
         required_sections_present: 필수 섹션 전부 존재 여부.
         temporary_phrases_absent: 임시 문구 없음 여부.
         validated_at: 검증 타임스탬프 (ISO 8601).
+        browser_click_confirmed: 로컬 브라우저 승인 클릭 완료 여부 (BUG-20260616-9DEF MT-2).
+        browser_click_at: 브라우저 클릭 시각 (ISO 8601) 또는 None.
+        browser_approval_token: sha256(nonce+session_token+click_at) 또는 None.
+        browser_approval_skip: PIPELINE_BROWSER_APPROVAL_SKIP=1 우회 여부.
     Returns:
         기록된 acceptance_request 데이터 dict (status=PENDING).
     Raises:
@@ -4754,6 +4762,11 @@ def _write_acceptance_request(
         "required_sections_present": required_sections_present,
         "temporary_phrases_absent": temporary_phrases_absent,
         "validated_at": validated_at,
+        # BUG-20260616-9DEF MT-2: 브라우저 클릭 승인 채널 필드
+        "browser_click_confirmed": bool(browser_click_confirmed),
+        "browser_click_at": browser_click_at,
+        "browser_approval_token": browser_approval_token,
+        "browser_approval_skip": bool(browser_approval_skip),
         "status": "PENDING",
     }
     with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
@@ -16577,6 +16590,192 @@ def _get_ci_run_head_sha(run_id: str) -> Optional[str]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# BUG-20260616-9DEF MT-1: 로컬 브라우저 클릭 승인 채널
+# ---------------------------------------------------------------------------
+
+# [Purpose]: BUG-20260616-8011 REJECT 후속 — 사용자가 로컬 브라우저에서 승인 버튼을
+#            직접 클릭해야 acceptance request가 완료되도록 하는 일회용 HTTP 승인 채널.
+#            agent가 packet 댓글을 재게시하는 자동 ACCEPT 우회를 한 단계 더 차단한다.
+# [Assumptions]: Python 표준 라이브러리 http.server 사용 가능. localhost 바인딩 가능.
+#                PIPELINE_BROWSER_APPROVAL_SKIP=1 환경에서는 서버를 실행하지 않는다(CI/테스트).
+# [Vulnerability & Risks]: 동일 OS 사용자로 실행되는 한 agent도 subprocess로 HTTP GET을
+#                          보낼 수 있어 완전한 분리는 아니다(외부 러너/서명자 필요). 토큰은
+#                          session_token 일치 확인으로 임의 클릭을 차단하나, localhost 접근
+#                          가능한 프로세스에는 약하다. 타임아웃 초과 시 fail-closed(confirmed=false).
+# [Improvement]: 별도 외부 서명자 프로세스 또는 OS 사용자 분리, 클릭 시 사용자 인증(OS 비밀번호)
+#                추가로 강화 가능.
+def _run_browser_approval_server(
+    state: Dict[str, Any],
+    nonce: str,
+    session_token: str,
+    timeout_seconds: int = 300,
+) -> Dict[str, Any]:
+    """로컬 브라우저 클릭 승인을 위한 일회용 HTTP 서버를 실행한다.
+
+    사용자가 콘솔에 표시된 URL을 브라우저로 열고 승인 버튼을 클릭하면
+    browser_click_confirmed=True와 browser_approval_token(sha256)을 반환한다.
+    PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수가 설정되면 서버를 실행하지 않고
+    즉시 skip 처리한다(CI/자동 테스트 안전).
+
+    Args:
+        state: 활성 pipeline_state (로깅용).
+        nonce: 발급된 acceptance nonce (토큰 계산에 사용).
+        session_token: 이 승인 세션의 고유 토큰 (URL 쿼리로 검증).
+        timeout_seconds: 클릭 대기 상한 (기본 300초). 초과 시 confirmed=False.
+    Returns:
+        {"browser_click_confirmed": bool, "browser_click_at": Optional[str],
+         "browser_approval_token": Optional[str], "browser_approval_skip": bool,
+         "approval_url": Optional[str]}
+    Raises:
+        TypeError: nonce 또는 session_token이 None인 경우.
+        ValueError: timeout_seconds가 0 이하인 경우.
+    """
+    if nonce is None:
+        raise TypeError("nonce must not be None")
+    if session_token is None:
+        raise TypeError("session_token must not be None")
+    if not isinstance(nonce, str):
+        raise TypeError(f"nonce must be str, got {type(nonce).__name__}")
+    if not isinstance(session_token, str):
+        raise TypeError(f"session_token must be str, got {type(session_token).__name__}")
+    if not isinstance(timeout_seconds, int):
+        raise TypeError(
+            f"timeout_seconds must be int, got {type(timeout_seconds).__name__}"
+        )
+    if timeout_seconds <= 0:
+        # negative/zero not allowed: 클릭 대기 시간은 양수여야 함 (즉시 타임아웃 방지).
+        raise ValueError(f"timeout_seconds must be > 0, got {timeout_seconds}")
+
+    result: Dict[str, Any] = {
+        "browser_click_confirmed": False,
+        "browser_click_at": None,
+        "browser_approval_token": None,
+        "browser_approval_skip": False,
+        "approval_url": None,
+    }
+
+    # PIPELINE_BROWSER_APPROVAL_SKIP=1 → 서버 미실행, skip 처리.
+    if os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1":
+        click_at = _now()
+        token = hashlib.sha256(
+            (nonce + session_token + click_at).encode("utf-8")
+        ).hexdigest()
+        result["browser_click_confirmed"] = True
+        result["browser_approval_skip"] = True
+        result["browser_click_at"] = click_at
+        result["browser_approval_token"] = token
+        try:
+            _log_event(state, "browser approval skipped via PIPELINE_BROWSER_APPROVAL_SKIP=1")
+        except Exception:  # noqa: BLE001 — 로깅 실패는 승인 흐름을 막지 않는다.
+            pass
+        return result
+
+    # 표준 라이브러리 lazy import (Python 3.9 호환).
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    # 빈 포트 자동 선택.
+    _probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        _probe.bind(("", 0))
+        port = _probe.getsockname()[1]
+    finally:
+        _probe.close()
+
+    approval_url = f"http://localhost:{port}/approve?session={session_token}"
+    result["approval_url"] = approval_url
+
+    # 공유 상태 (핸들러 → 메인 스레드).
+    _shared: Dict[str, Any] = {"clicked": False, "click_at": None, "token": None}
+    _done = threading.Event()
+    _expected_session = session_token
+    _nonce_local = nonce
+
+    class _ApprovalHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 — http.server 규약
+            parsed = urllib.parse.urlparse(self.path)
+            if parsed.path != "/approve":
+                self.send_response(404)
+                self.end_headers()
+                return
+            query = urllib.parse.parse_qs(parsed.query)
+            session_vals = query.get("session", [])
+            if not session_vals or session_vals[0] != _expected_session:
+                self.send_response(403)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write("승인 세션 토큰이 일치하지 않습니다.".encode("utf-8"))
+                return
+            click_at = _now()
+            token = hashlib.sha256(
+                (_nonce_local + _expected_session + click_at).encode("utf-8")
+            ).hexdigest()
+            _shared["clicked"] = True
+            _shared["click_at"] = click_at
+            _shared["token"] = token
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            page = (
+                "<html><head><meta charset='utf-8'></head><body>"
+                "<h2>승인 완료</h2>"
+                "<p>이 창을 닫고 콘솔로 돌아가세요. 승인 코드가 표시됩니다.</p>"
+                "</body></html>"
+            )
+            self.wfile.write(page.encode("utf-8"))
+            _done.set()
+
+        def log_message(self, *args: Any) -> None:  # noqa: D401 — 콘솔 소음 억제
+            return
+
+    httpd = HTTPServer(("localhost", port), _ApprovalHandler)
+    httpd.timeout = 1  # handle_request 폴링 간격(초).
+
+    def _serve() -> None:
+        deadline = _time_monotonic() + float(timeout_seconds)
+        while not _done.is_set() and _time_monotonic() < deadline:
+            httpd.handle_request()
+
+    try:
+        _log_event(state, f"browser approval server started on port {port}")
+    except Exception:  # noqa: BLE001
+        pass
+
+    server_thread = threading.Thread(target=_serve, daemon=True)
+    server_thread.start()
+    _done.wait(timeout=float(timeout_seconds))
+    try:
+        httpd.server_close()
+    except Exception:  # noqa: BLE001
+        pass
+
+    if _shared["clicked"]:
+        result["browser_click_confirmed"] = True
+        result["browser_click_at"] = _shared["click_at"]
+        result["browser_approval_token"] = _shared["token"]
+        try:
+            _log_event(state, "browser approval click confirmed")
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        # 타임아웃 — fail-closed: confirmed=False 유지.
+        try:
+            _log_event(
+                state,
+                f"browser approval timed out after {timeout_seconds}s (no click)",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    return result
+
+
+def _time_monotonic() -> float:
+    """time.monotonic() 래퍼 (테스트 monkeypatch 지점 분리용)."""
+    import time as _time_mod
+    return _time_mod.monotonic()
+
+
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
     """gates request-accept 핸들러: stale 검증 + nonce 발급 + packet 자동 생성 + PR 본문 자동 업데이트.
 
@@ -16825,6 +17024,64 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
 
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
     reject_code = f"REJECT-{pipeline_id}-{nonce}"
+
+    # BUG-20260616-9DEF MT-2: 로컬 브라우저 클릭 승인 채널.
+    # nonce 발급 직후, 사용자가 로컬 브라우저에서 승인 버튼을 직접 클릭해야 한다.
+    # PIPELINE_BROWSER_APPROVAL_SKIP=1 환경에서는 서버를 실행하지 않고 skip 처리한다.
+    # 클릭 미완료(타임아웃) 시 fail-closed로 BLOCKED — nonce는 발급됐으나 accept 단계에서 차단된다.
+    _session_token = hashlib.sha256(
+        (str(nonce) + str(req.get("request_id", "")) + _now()).encode("utf-8")
+    ).hexdigest()[:24]
+    _browser_skip_env = os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1"
+    if not _browser_skip_env:
+        print()
+        print("  ★ 브라우저 승인 필요: 아래 URL을 브라우저에서 열고 '승인' 버튼을 클릭하세요.")
+        print(f"     http://localhost:<PORT>/approve?session={_session_token}")
+        print("     (실제 PORT와 전체 URL은 서버 시작 직후 콘솔에 표시됩니다. 5분 내 클릭하지 않으면 차단됩니다.)")
+    _browser_result = _run_browser_approval_server(
+        state, str(nonce), _session_token, timeout_seconds=300
+    )
+    if _browser_result.get("approval_url"):
+        print(f"  [브라우저 승인 URL] {_browser_result['approval_url']}")
+
+    # acceptance_request.json에 브라우저 승인 필드 기록 (디스크 + req dict 동기화).
+    # _write_acceptance_request와 동일한 ACCEPTANCE_REQUEST_FILE(상대 경로, cwd)을 사용한다.
+    try:
+        _req_path_browser = Path(ACCEPTANCE_REQUEST_FILE)
+        if _req_path_browser.exists():
+            _req_browser = json.loads(
+                _req_path_browser.read_text(encoding="utf-8", errors="replace")
+            )
+            _req_browser["browser_click_confirmed"] = bool(
+                _browser_result.get("browser_click_confirmed", False)
+            )
+            _req_browser["browser_click_at"] = _browser_result.get("browser_click_at")
+            _req_browser["browser_approval_token"] = _browser_result.get(
+                "browser_approval_token"
+            )
+            _req_browser["browser_approval_skip"] = bool(
+                _browser_result.get("browser_approval_skip", False)
+            )
+            _req_path_browser.write_text(
+                json.dumps(_req_browser, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            req = _req_browser
+    except (OSError, json.JSONDecodeError) as _exc:
+        print(YELLOW(f"  [브라우저 승인] acceptance_request.json 기록 실패: {_exc}"))
+
+    # fail-closed: skip이 아닌데 클릭이 확인되지 않으면(타임아웃 등) 차단.
+    if not _browser_result.get("browser_approval_skip", False) and not _browser_result.get(
+        "browser_click_confirmed", False
+    ):
+        _die(
+            "[BLOCKED] failure_code=browser_approval_required\n"
+            "  actual: 로컬 브라우저 승인 버튼 클릭이 확인되지 않았습니다(타임아웃).\n"
+            "  expected: 표시된 URL을 브라우저로 열고 '승인' 버튼을 5분 내에 클릭해야 합니다.\n"
+            "  PIPELINE_BROWSER_APPROVAL_SKIP=1 은 테스트/CI 환경에서만 사용하세요.\n"
+            "  minimal_rerun: python pipeline.py gates request-accept --evidence <결과물-경로>",
+            exit_code=1,
+        )
 
     # GitHub PENDING 안내 댓글 생성 (gh CLI 없으면 건너뜀) — request-accept 전용
     # REJECT-IMP-20260614-D278: ACCEPTED 완료 댓글 전용 함수는 accept 경로(_finalize_post_accept)
@@ -18453,6 +18710,48 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 "checked_at": _prov_result.get("checked_at"),
             }
             _save(state)
+
+        # BUG-20260616-9DEF MT-3: 로컬 브라우저 클릭 승인 검증 (provenance 게이트 이후, 최종 방어선).
+        # acceptance_request.json의 browser_click_confirmed가 True가 아니고
+        # browser_approval_skip도 True가 아니면 browser_approval_required로 BLOCKED.
+        # 기존 packet 마커 댓글 차단(8011, provenance)이 먼저 평가된 뒤, 브라우저 클릭이
+        # 최종 추가 방어선으로 적용된다(이중 방어).
+        if accept_decision == "ACCEPT":
+            _browser_confirmed = _req.get("browser_click_confirmed") is True
+            _browser_skipped = _req.get("browser_approval_skip") is True
+            if not _browser_confirmed and not _browser_skipped:
+                _record_failure_packet(
+                    state, "acceptance", {},
+                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
+                             "--evidence", str(getattr(args, "evidence", "<result-path>") or "")],
+                    note="browser_click_confirmed != True and browser_approval_skip != True",
+                    status="BLOCKED", phase="harness",
+                    failure_code="browser_approval_required",
+                    failure_category="missing_evidence",
+                    summary_ko=(
+                        "로컬 브라우저 승인 클릭이 확인되지 않았습니다. "
+                        "gates request-accept 실행 시 표시된 URL을 브라우저로 열고 '승인' 버튼을 "
+                        "직접 클릭해야 합니다."
+                    ),
+                    expected="acceptance_request.json: browser_click_confirmed=true (또는 browser_approval_skip=true)",
+                    actual=(
+                        f"browser_click_confirmed={_req.get('browser_click_confirmed')!r}, "
+                        f"browser_approval_skip={_req.get('browser_approval_skip')!r}"
+                    ),
+                    exit_code=1, owner="Pipeline Manager", return_phase="build",
+                    required_actions=[
+                        "python pipeline.py gates request-accept 를 실행하고 표시된 URL을 브라우저로 연 뒤 '승인' 버튼을 클릭하세요.",
+                        "테스트/CI 환경에서는 PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수를 사용하세요.",
+                    ],
+                    retry_allowed=True,
+                )
+                _save(state)
+                _die(
+                    "[BLOCKED] failure_code=browser_approval_required\n"
+                    "  로컬 브라우저 승인 클릭이 확인되지 않았습니다.\n"
+                    "  gates request-accept 후 표시된 URL을 브라우저로 열고 '승인' 버튼을 클릭하세요."
+                )
+
         deployment: Optional[Dict[str, Any]] = None
         evidence_validation: Optional[Dict[str, Any]] = None
         if accept_decision == "ACCEPT":
