@@ -26,8 +26,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 try:
-    from watchdog.observers import Observer
-    from watchdog.events import FileSystemEventHandler, FileCreatedEvent
+    from watchdog.observers.polling import PollingObserver
+    from watchdog.events import (
+        FileSystemEventHandler,
+        FileCreatedEvent,
+        FileModifiedEvent,
+        FileMovedEvent,
+    )
 except ImportError as _e:
     raise ImportError(
         "watchdog is not installed. Run: pip install watchdog"
@@ -116,6 +121,7 @@ _DATETIME_STR_PATTERN: re.Pattern = re.compile(
     r"^(\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}"
 )
 _WIN_INVALID_CHARS: re.Pattern = re.compile(r'[<>:"/\\|?*]')
+_VOYAGE_SUFFIX_PATTERN: re.Pattern = re.compile(r"_(?:\d+(?:st|nd|rd|th))$")
 
 
 def _sanitize_name_component(s: str) -> str:
@@ -140,6 +146,15 @@ def _sanitize_name_component(s: str) -> str:
         s = m.group(1)
     s = _WIN_INVALID_CHARS.sub("", s)
     return s.strip(" .")
+
+
+def strip_voyage_suffix(order_no: str) -> str:
+    """Remove IC-Part voyage suffix from an order number for CORB folder names."""
+    if order_no is None:
+        raise TypeError("order_no must not be None")
+    if not isinstance(order_no, str):
+        raise TypeError(f"order_no must be str, got {type(order_no).__name__}")
+    return _VOYAGE_SUFFIX_PATTERN.sub("", order_no.strip())
 
 
 def build_corb_path(corb_base: str, project_id: str, po_no: str, order_no: str) -> str:
@@ -185,7 +200,7 @@ def build_corb_path(corb_base: str, project_id: str, po_no: str, order_no: str) 
 
     safe_project_id = _sanitize_name_component(project_id)
     safe_po_no = _sanitize_name_component(po_no)
-    safe_order_no = _sanitize_name_component(order_no)
+    safe_order_no = _sanitize_name_component(strip_voyage_suffix(order_no))
 
     # Join only non-empty parts to avoid leading/trailing spaces
     _parts = [x for x in [safe_project_id, safe_po_no, safe_order_no] if x]
@@ -226,7 +241,12 @@ def copy_files_to_corb(src_folder: Path, corb_path: Path) -> List[str]:
     if not src_folder.exists():
         raise FileNotFoundError(f"Source folder not found: {src_folder}")
 
+    corb_already_exists = corb_path.exists()
     os.makedirs(str(corb_path), exist_ok=True)
+    if corb_already_exists:
+        logger.info("Reusing existing CORB folder: %s", corb_path)
+    else:
+        logger.info("Created CORB folder: %s", corb_path)
     copied: List[str] = []
 
     for src_file in src_folder.iterdir():
@@ -322,13 +342,13 @@ def process_event(
         corb_base,
         first.project_id or "",
         first.po_no or "",
-        first.order_no or "",
+        first.base_order_no or first.order_no or "",
     )
     _log(f"  IC={ic_value}, CORB 경로: {corb_folder_path}")
 
     for g in groups:
         g.folder_date = folder_date
-        if contract_amount is not None:
+        if contract_amount is not None and not getattr(g, "has_net_amount", False):
             g.contract_amount = contract_amount
         if incoterm is not None:
             g.incoterm = incoterm
@@ -358,7 +378,7 @@ def process_event(
 # ---------------------------------------------------------------------------
 
 class _CustomerOrderHandler(FileSystemEventHandler):
-    """Watchdog event handler: triggers on CustomerOrderLines*.xlsx creation."""
+    """Watchdog handler for CustomerOrderLines .xlsx/.csv files in Output subfolders."""
 
     def __init__(
         self,
@@ -373,16 +393,75 @@ class _CustomerOrderHandler(FileSystemEventHandler):
         self._log_callback = log_callback
         self._debounce_seconds = debounce_seconds
         self._timers: Dict[str, threading.Timer] = {}
+        self._watch_root: Optional[Path] = None
+        self._processed_signatures: set = set()
         self._lock = threading.Lock()
         self._ic_part_lock = threading.Lock()
 
-    def on_created(self, event: FileCreatedEvent) -> None:
-        if event.is_directory:
-            return
-        src_path = Path(event.src_path)
-        if not (src_path.name.startswith("CustomerOrderLines") and src_path.suffix.lower() == ".xlsx") or src_path.name.startswith("~$"):
-            return
-        key = str(src_path)
+    def prime_existing_files(self, watch_dir: str) -> None:
+        """Record the watch root. Existing files are not ignored."""
+        self._watch_root = Path(watch_dir).resolve()
+
+    def _emit(self, msg: str) -> None:
+        logger.info(msg)
+        if self._log_callback is not None:
+            try:
+                self._log_callback(msg)
+            except Exception:
+                pass
+
+    def _is_customer_order_lines(self, path: Path) -> bool:
+        if path.name.startswith("~$"):
+            return False
+        if not path.name.startswith("CustomerOrderLines"):
+            return False
+        return path.suffix.lower() in {".xlsx", ".csv"}
+
+    def _is_under_watch_subfolder(self, path: Path) -> bool:
+        if self._watch_root is None:
+            return True
+        try:
+            rel = path.resolve().relative_to(self._watch_root)
+        except ValueError:
+            return False
+        return len(rel.parts) >= 2
+
+    def _signature(self, path: Path) -> Optional[tuple]:
+        try:
+            stat = path.stat()
+            return (str(path.resolve()).lower(), stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            return None
+
+    def _wait_until_stable(self, path: Path, attempts: int = 5, delay: float = 0.4) -> Optional[tuple]:
+        last_sig: Optional[tuple] = None
+        for _ in range(attempts):
+            sig = self._signature(path)
+            if sig is not None and sig == last_sig:
+                return sig
+            last_sig = sig
+            time.sleep(delay)
+        return last_sig
+
+    def schedule_existing_files(self, watch_dir: str) -> int:
+        """Schedule existing CustomerOrderLines files under Output child folders."""
+        root = Path(watch_dir)
+        scheduled = 0
+        for pattern in ("CustomerOrderLines*.xlsx", "CustomerOrderLines*.csv"):
+            for path in root.rglob(pattern):
+                if path.is_file() and self._schedule(path, reason="initial-scan"):
+                    scheduled += 1
+        if scheduled:
+            self._emit(f"[감시 초기 스캔] 하위폴더 기존 CustomerOrderLines 파일 {scheduled}개 처리 예약")
+        return scheduled
+
+    def _schedule(self, src_path: Path, reason: str = "event") -> bool:
+        if not self._is_customer_order_lines(src_path):
+            return False
+        if not self._is_under_watch_subfolder(src_path):
+            self._emit(f"[감시 무시] Output 루트 파일은 처리하지 않습니다: {src_path.name}")
+            return False
+        key = str(src_path.resolve()).lower()
         with self._lock:
             if key in self._timers:
                 self._timers[key].cancel()
@@ -390,22 +469,41 @@ class _CustomerOrderHandler(FileSystemEventHandler):
             timer.daemon = True
             self._timers[key] = timer
             timer.start()
+        self._emit(f"[감시 감지] {reason}: {src_path}")
+        return True
+
+    def on_created(self, event: FileCreatedEvent) -> None:
+        if event.is_directory:
+            return
+        self._schedule(Path(event.src_path), reason="created")
+
+    def on_modified(self, event: FileModifiedEvent) -> None:
+        if event.is_directory:
+            return
+        self._schedule(Path(event.src_path), reason="modified")
+
+    def on_moved(self, event: FileMovedEvent) -> None:
+        if event.is_directory:
+            return
+        self._schedule(Path(event.dest_path), reason="moved")
 
     def _handle(self, src_path: Path) -> None:
         with self._lock:
-            self._timers.pop(str(src_path), None)
+            self._timers.pop(str(src_path.resolve()).lower(), None)
 
         # Resolve the actual file to process after debounce delay.
         # The original file may have been moved or deleted by the time the timer fires.
         if src_path.exists():
             resolved_path = src_path
         else:
-            # Search the same folder for any surviving CustomerOrderLines*.xlsx.
+            # Search the same folder for any surviving CustomerOrderLines file.
             # Exclude Excel/Word lock files (names starting with "~$").
-            candidates: List[Path] = [
-                p for p in src_path.parent.glob("CustomerOrderLines*.xlsx")
-                if not p.name.startswith("~$")
-            ]
+            candidates: List[Path] = []
+            for pattern in ("CustomerOrderLines*.xlsx", "CustomerOrderLines*.csv"):
+                candidates.extend(
+                    p for p in src_path.parent.glob(pattern)
+                    if not p.name.startswith("~$")
+                )
             if candidates:
                 resolved_path = max(candidates, key=lambda p: p.stat().st_mtime)
                 logger.info(
@@ -419,6 +517,20 @@ class _CustomerOrderHandler(FileSystemEventHandler):
                     src_path.name,
                 )
                 return
+
+        if not self._is_customer_order_lines(resolved_path):
+            return
+        if not self._is_under_watch_subfolder(resolved_path):
+            self._emit(f"[감시 무시] Output 루트 파일은 처리하지 않습니다: {resolved_path.name}")
+            return
+
+        signature = self._wait_until_stable(resolved_path)
+        if signature is not None:
+            with self._lock:
+                if signature in self._processed_signatures:
+                    self._emit(f"[감시 중복 무시] 이미 처리한 파일입니다: {resolved_path.name}")
+                    return
+                self._processed_signatures.add(signature)
 
         def _run() -> None:
             with self._ic_part_lock:
@@ -444,7 +556,7 @@ class _CustomerOrderHandler(FileSystemEventHandler):
 
 
 class FolderWatcher:
-    """Watches a directory for new CustomerOrderLines*.xlsx files."""
+    """Watches Output child folders for CustomerOrderLines .xlsx/.csv files."""
 
     def __init__(
         self,
@@ -478,14 +590,16 @@ class FolderWatcher:
             corb_base_map=corb_base_map,
             log_callback=log_callback,
         )
-        self._observer: Optional[Observer] = None
+        self._observer: Optional[Any] = None
 
     def start(self) -> None:
         if self._observer is not None and self._observer.is_alive():
             return
-        self._observer = Observer()
+        self._handler.prime_existing_files(self._watch_dir)
+        self._observer = PollingObserver(timeout=1.0)
         self._observer.schedule(self._handler, self._watch_dir, recursive=True)
         self._observer.start()
+        self._handler.schedule_existing_files(self._watch_dir)
         logger.info("FolderWatcher started: %s", self._watch_dir)
 
     def stop(self) -> None:
