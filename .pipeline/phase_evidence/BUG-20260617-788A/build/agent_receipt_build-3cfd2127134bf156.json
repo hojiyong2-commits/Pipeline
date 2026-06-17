@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260617-788A",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-3cfd2127134bf156",
+  "status": "COMPLETED",
+  "started_at": "2026-06-17T11:18:15Z",
+  "completed_at": "2026-06-17T11:18:32Z",
+  "output_file": "build_report.xml",
+  "output_sha256": "4dab03aad28dde180cceb286abd7d6f4adc2f435e2c337fbd90ff824fb8c728b",
+  "evidence_files": [],
+  "commit_sha": "6154d7ffcf0907d55d8e107f96afad7fcf843414"
+}
