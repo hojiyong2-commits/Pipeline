@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260615-A35C",
+  "phase": "pipeline_manager",
+  "agent_id": "pipeline-manager-agent",
+  "run_id": "pipeline_manager-82794918dd8b371a",
+  "status": "COMPLETED",
+  "started_at": "2026-06-15T12:21:39Z",
+  "completed_at": "2026-06-15T12:23:28Z",
+  "output_file": "manager_handoff_A35C.xml",
+  "output_sha256": "924df603fa1a384b6e7ae6bbe55dcbabb45f19955d059bddc89bea892cae0fb2",
+  "evidence_files": [],
+  "commit_sha": "75a61e352afb07696fa0fa51d3af0e859d58fe94"
+}

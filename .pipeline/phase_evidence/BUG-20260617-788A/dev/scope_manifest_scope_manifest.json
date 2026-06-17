@@ -1,0 +1,51 @@
+{
+  "pipeline_id": "BUG-20260617-788A",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2"],
+          "implementation_evidence": "_browser_skip 판정에서 비대화형/CI 자동 감지 else 블록 제거. PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수만으로 우회를 허용하는 단일 표현식으로 교체."
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+        "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+        "tests/e2e/test_post_accept_finalization_d278.py",
+        "tests/e2e/test_workspace_hygiene_2821.py",
+        "tests/e2e/test_request_accept_snapshot_8c3b.py",
+        "tests/e2e/test_pr_body_readiness_a716.py",
+        "tests/e2e/test_final_packet_2e3d.py",
+        "tests/e2e/test_evidence_deployable_ce06.py",
+        "tests/e2e/test_ci_run_id_filter_4ac2.py",
+        "tests/e2e/test_ac_tracking_1abe.py"
+      ],
+      "affected_functions": [
+        "make_env",
+        "_fake_gh_env",
+        "isolated_env",
+        "_run_pipeline_cli",
+        "_run_pipeline",
+        "_setup_fake_bins"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-3", "AC-4"],
+          "implementation_evidence": "request-accept를 subprocess로 호출하는 10개 E2E 테스트 파일의 환경변수 dict에 PIPELINE_BROWSER_APPROVAL_SKIP=1 추가."
+        }
+      ]
+    }
+  ]
+}
