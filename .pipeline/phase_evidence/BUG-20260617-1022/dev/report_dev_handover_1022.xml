@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>BUG-20260617-1022</pipeline_id>
+  <phase>dev</phase>
+  <agent>dev-agent</agent>
+  <run_id>dev-787e6f873ab27bcf</run_id>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_browser_approval_ux_1022.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_functions>
+      <function>_cmd_gates_request_accept</function>
+      <function>_build_codex_verification_bundle</function>
+      <function>_resolve_browser_approval_timeout</function>
+      <function>_ApprovalHandler.do_GET</function>
+      <function>_ApprovalHandler.do_POST</function>
+      <function>_verify_browser_click_freshness</function>
+      <function>_run_browser_approval_server</function>
+      <function>BROWSER_APPROVAL_TIMEOUT_SECONDS</function>
+    </target_functions>
+    <unchanged_functions>기존 gates accept 검증 로직, _build_verification_json, _write_acceptance_request 외 모든 함수</unchanged_functions>
+  </impact_analysis>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_browser_approval_ux_1022.py</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <mt_completion>
+    <mt id="MT-1" status="DONE"/>
+    <mt id="MT-2" status="DONE"/>
+    <mt id="MT-3" status="DONE"/>
+    <mt id="MT-4" status="DONE"/>
+    <mt id="MT-5" status="DONE"/>
+    <mt id="MT-6" status="DONE"/>
+    <mt id="MT-7" status="DONE"/>
+    <mt id="MT-8" status="DONE"/>
+  </mt_completion>
+  <test_results>tests/e2e/test_browser_approval_ux_1022.py — 5 passed</test_results>
+</handover>
