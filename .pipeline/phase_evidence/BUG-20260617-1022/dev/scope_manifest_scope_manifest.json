@@ -1,0 +1,13 @@
+{
+  "pipeline_id": "BUG-20260617-1022",
+  "micro_tasks": [
+    {"id": "MT-1", "files": ["pipeline.py"], "affected_functions": ["_cmd_gates_request_accept (console output)"]},
+    {"id": "MT-2", "files": ["pipeline.py"], "affected_functions": ["_build_codex_verification_bundle (신규)"]},
+    {"id": "MT-3", "files": ["pipeline.py"], "affected_functions": ["_cmd_gates_request_accept (bundle 콘솔 출력)"]},
+    {"id": "MT-4", "files": ["pipeline.py"], "affected_functions": ["_ApprovalHandler.do_GET (HTML 페이지)"]},
+    {"id": "MT-5", "files": ["pipeline.py"], "affected_functions": ["_verify_browser_click_freshness (신규)"]},
+    {"id": "MT-6", "files": ["pipeline.py"], "affected_functions": ["_ApprovalHandler.do_POST (신규)"]},
+    {"id": "MT-7", "files": ["pipeline.py"], "affected_functions": ["BROWSER_APPROVAL_TIMEOUT_SECONDS 상수 + 호출부"]},
+    {"id": "MT-8", "files": ["tests/e2e/test_browser_approval_ux_1022.py"], "affected_functions": ["테스트 오라클 + E2E 테스트"]}
+  ]
+}
