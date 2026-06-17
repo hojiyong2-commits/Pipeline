@@ -22,6 +22,9 @@ def _run_pipeline(
     e = os.environ.copy()
     e["PIPELINE_STATE_PATH"] = state_path
     e["PYTHONIOENCODING"] = "utf-8"  # 한국어 stdout cp949 디코드 오류 방지
+    # BUG-20260617-788A: request-accept가 비대화형/CI 자동 감지 제거로 인해 브라우저
+    # HTTP 서버를 실제로 띄워 300초 대기하지 않도록 E2E에서 브라우저 승인 우회.
+    e["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
     if env:
         e.update(env)
     return subprocess.run(

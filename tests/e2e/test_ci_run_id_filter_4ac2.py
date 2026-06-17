@@ -363,6 +363,9 @@ def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]
     return {
         "PATH": new_path,
         "PIPELINE_GH_EXECUTABLE": str(pr_body_gh),
+        # BUG-20260617-788A: request-accept가 비대화형/CI 자동 감지 제거로 인해 브라우저
+        # HTTP 서버를 실제로 띄워 300초 대기하지 않도록 E2E에서 브라우저 승인 우회.
+        "PIPELINE_BROWSER_APPROVAL_SKIP": "1",
     }
 
 

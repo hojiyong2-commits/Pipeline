@@ -2248,7 +2248,14 @@ PIPELINE_PY = REPO_ROOT / "pipeline.py"
 
 def _run_pipeline_cli(*args: str, state_path: Path, env_extra: dict | None = None):
     """pipeline.py를 subprocess로 실행. (CompletedProcess, final_state_dict) 반환."""
-    env = {**os.environ, "PIPELINE_STATE_PATH": str(state_path), "PYTHONIOENCODING": "utf-8"}
+    env = {
+        **os.environ,
+        "PIPELINE_STATE_PATH": str(state_path),
+        "PYTHONIOENCODING": "utf-8",
+        # BUG-20260617-788A: request-accept가 비대화형/CI 자동 감지 제거로 인해 브라우저
+        # HTTP 서버를 실제로 띄워 300초 대기하지 않도록 E2E에서 브라우저 승인 우회.
+        "PIPELINE_BROWSER_APPROVAL_SKIP": "1",
+    }
     if env_extra:
         env.update(env_extra)
     result = subprocess.run(
