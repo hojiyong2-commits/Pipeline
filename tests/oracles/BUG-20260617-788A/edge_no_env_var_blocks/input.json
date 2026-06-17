@@ -1,0 +1,6 @@
+{
+  "scenario": "PIPELINE_BROWSER_APPROVAL_SKIP 환경변수 미설정 시 비대화형 환경에서도 우회 없음",
+  "env": {},
+  "expected_browser_approval_skip": false,
+  "description": "BUG-20260617-788A 수정으로 비대화형/CI 자동 감지 else 블록이 제거됨. 환경변수가 없으면 _browser_skip=False."
+}

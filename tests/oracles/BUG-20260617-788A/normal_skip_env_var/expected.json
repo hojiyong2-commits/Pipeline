@@ -1,0 +1,6 @@
+{
+  "result": "PASS",
+  "browser_approval_skip": true,
+  "browser_click_confirmed": false,
+  "description": "PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수가 설정된 경우, 브라우저 서버를 띄우지 않고 즉시 우회 처리된다."
+}

@@ -296,6 +296,9 @@ def isolated_env(tmp_path: Path) -> Dict[str, str]:
     env["PIPELINE_GH_EXECUTABLE"] = str(_write_fake_gh_script(tmp_path))
     env["PYTHONIOENCODING"] = "utf-8"
     env["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
+    # BUG-20260617-788A: request-accept가 비대화형/CI 자동 감지 제거로 인해 브라우저
+    # HTTP 서버를 실제로 띄워 300초 대기하지 않도록 E2E에서 브라우저 승인 우회.
+    env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
     return env
 
 

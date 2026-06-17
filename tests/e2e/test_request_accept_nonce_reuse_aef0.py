@@ -117,6 +117,8 @@ def _fake_gh_env(tmp_path: Path) -> Dict[str, str]:
         "PIPELINE_GH_EXECUTABLE": str(_write_fake_gh_script(tmp_path)),
         "PATH": str(tmp_path),
         "PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING": "1",
+        # BUG-20260617-788A: 비대화형 자동 우회 제거 후 테스트 환경에서 브라우저 서버 없이 실행
+        "PIPELINE_BROWSER_APPROVAL_SKIP": "1",
     }
 
 

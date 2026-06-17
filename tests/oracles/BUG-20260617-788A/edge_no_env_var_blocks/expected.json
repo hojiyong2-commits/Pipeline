@@ -1,0 +1,5 @@
+{
+  "result": "BLOCKED",
+  "browser_approval_skip": false,
+  "description": "환경변수가 없으면 _browser_skip=False. 브라우저 서버가 기동되거나 browser_approval_required로 BLOCKED 처리된다."
+}

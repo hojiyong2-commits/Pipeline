@@ -1,0 +1,8 @@
+{
+  "scenario": "PIPELINE_BROWSER_APPROVAL_SKIP=1 설정 시 브라우저 서버 없이 즉시 우회",
+  "env": {
+    "PIPELINE_BROWSER_APPROVAL_SKIP": "1"
+  },
+  "expected_browser_approval_skip": true,
+  "expected_browser_click_confirmed": false
+}
