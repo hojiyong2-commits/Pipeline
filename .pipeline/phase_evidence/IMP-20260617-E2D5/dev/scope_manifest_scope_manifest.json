@@ -1,0 +1,18 @@
+{
+  "pipeline_id": "IMP-20260617-E2D5",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["docs/pipeline_real_dry_run_20260617.md"],
+      "affected_functions": ["N/A (문서 파일 신규 작성)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"],
+          "changed_files": ["docs/pipeline_real_dry_run_20260617.md"],
+          "implementation_evidence": "docs/pipeline_real_dry_run_20260617.md 신규 생성 완료, 5개 섹션 포함"
+        }
+      ]
+    }
+  ]
+}
