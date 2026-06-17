@@ -1,0 +1,89 @@
+<handover>
+  <pipeline_id>BUG-20260617-788A</pipeline_id>
+  <phase>dev</phase>
+  <summary>
+    BUG-20260617-788A: BUG-20260616-9DEF(브라우저 클릭 승인 채널) REJECT 후속.
+    REJECT 사유: stdin이 TTY가 아니거나 CI 환경이면 자동으로 browser_approval_skip=true가 설정되어
+    브라우저 클릭 승인을 우회할 수 있었음.
+
+    MT-1: pipeline.py의 _cmd_gates_request_accept 함수에서 비대화형/CI 자동 감지 else 블록 제거.
+    PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수만으로 우회를 허용하는 단일 표현식으로 교체.
+
+    MT-2: request-accept를 subprocess로 호출하는 10개 E2E 테스트 파일에
+    PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수 추가. 기존 테스트들이 MT-1 변경 이후에도
+    CI/비대화형 환경에서 정상 동작하도록 보정.
+
+    MT-1, MT-2 module design/dev/qa PASS, integration PASS.
+  </summary>
+  <scope_declaration>
+    <files_to_modify>
+      pipeline.py (MT-1),
+      tests/e2e/test_request_accept_nonce_reuse_aef0.py (MT-2),
+      tests/e2e/test_user_acceptance_nonce_bbdb.py (MT-2),
+      tests/e2e/test_post_accept_finalization_d278.py (MT-2),
+      tests/e2e/test_workspace_hygiene_2821.py (MT-2),
+      tests/e2e/test_request_accept_snapshot_8c3b.py (MT-2),
+      tests/e2e/test_pr_body_readiness_a716.py (MT-2),
+      tests/e2e/test_final_packet_2e3d.py (MT-2),
+      tests/e2e/test_evidence_deployable_ce06.py (MT-2),
+      tests/e2e/test_ci_run_id_filter_4ac2.py (MT-2),
+      tests/e2e/test_ac_tracking_1abe.py (MT-2)
+    </files_to_modify>
+    <files_to_create>없음</files_to_create>
+    <files_to_delete>없음</files_to_delete>
+  </scope_declaration>
+  <impact_analysis>
+    <micro_task_id>MT-1, MT-2</micro_task_id>
+    <target_function>pipeline._cmd_gates_request_accept (MT-1); 각 테스트 파일의 make_env/_fake_gh_env/isolated_env/_run_pipeline_cli/_run_pipeline/_setup_fake_bins (MT-2)</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:cmd_gates(action=='request-accept')">_cmd_gates_request_accept(args, state)</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_run_browser_approval_server (MT-1 변경 후 항상 호출됨, PIPELINE_BROWSER_APPROVAL_SKIP=1 없으면)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>acceptance_request.json — browser_approval_skip 필드가 이제 환경변수 명시적 설정 시에만 true가 됨</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <breaking_change>NO — 기존 동작에서 자동 우회만 제거. PIPELINE_BROWSER_APPROVAL_SKIP=1 명시 시 동일하게 통과.</breaking_change>
+      <security_impact>IMPROVED — 비대화형/CI 환경에서 에이전트가 자동으로 browser_approval_skip=true를 설정하는 경로를 제거하여 보안 강화.</security_impact>
+    </risk_assessment>
+  </impact_analysis>
+  <evidence>
+    <files>
+      <file mt="MT-1">pipeline.py</file>
+      <file mt="MT-2">tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+      <file mt="MT-2">tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+      <file mt="MT-2">tests/e2e/test_post_accept_finalization_d278.py</file>
+      <file mt="MT-2">tests/e2e/test_workspace_hygiene_2821.py</file>
+      <file mt="MT-2">tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+      <file mt="MT-2">tests/e2e/test_pr_body_readiness_a716.py</file>
+      <file mt="MT-2">tests/e2e/test_final_packet_2e3d.py</file>
+      <file mt="MT-2">tests/e2e/test_evidence_deployable_ce06.py</file>
+      <file mt="MT-2">tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+      <file mt="MT-2">tests/e2e/test_ac_tracking_1abe.py</file>
+    </files>
+    <execution>
+      py_compile pipeline.py OK; import pipeline OK;
+      pytest (118 테스트, 9개 E2E 파일) -> PASS;
+      보안 로직(nonce/D278/2821/8011) 무변경 확인
+    </execution>
+  </evidence>
+  <security_constraints_honored>
+    nonce 생성/검증/consume 미완화, gates request-accept/accept 조건 미완화,
+    D278 post-accept fail-closed 미완화, 2821 workspace_hygiene fail-closed 미완화,
+    8011 packet 마커 댓글 차단(protocol_violation_auto_accept) 미제거 — 보안만 강화.
+  </security_constraints_honored>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_request_accept_nonce_reuse_aef0.py, tests/e2e/test_user_acceptance_nonce_bbdb.py, tests/e2e/test_post_accept_finalization_d278.py, tests/e2e/test_workspace_hygiene_2821.py, tests/e2e/test_request_accept_snapshot_8c3b.py, tests/e2e/test_pr_body_readiness_a716.py, tests/e2e/test_final_packet_2e3d.py, tests/e2e/test_evidence_deployable_ce06.py, tests/e2e/test_ci_run_id_filter_4ac2.py, tests/e2e/test_ac_tracking_1abe.py</git_diff_files>
+    <extra_files>ic_part_src/automation.py, ic_part_src/order_mapper.py, tests/test_automation.py, tests/test_order_mapper.py — 788A 무관 사전 dirty 상태, PR staging에서 제외 필요</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <module_gates>
+    <module mt_id="MT-1" design="PASS" dev="PASS" qa="PASS"/>
+    <module mt_id="MT-2" design="PASS" dev="PASS" qa="PASS"/>
+    <integration>PASS</integration>
+  </module_gates>
+  <next>QA phase — qa-agent가 7개 카테고리 검증 + AC criteria_verification 수행</next>
+</handover>
