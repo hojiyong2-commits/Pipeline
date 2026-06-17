@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-17T13:46:29Z",
+  "pipeline_id": "IMP-20260617-E2D5",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "be6733ccb22b0926fdaec9bc1ccdc2890bf0f5ad",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-17T13:45:55Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "docs/pipeline_real_dry_run_20260617.md"
+  },
+  "agent_run": {
+    "run_id": "dev-8490ee834b550f0f",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "30b3b857214f2a28afa41c85a434f11383be800c75628fc67cb21c34767814a0",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260617-E2D5/dev/agent_receipt_dev-8490ee834b550f0f.json",
+    "receipt_sha256": "c0466121ffd28aafc9d3e03f47c314deb4189c86bbd9d9858c7d16dead0c6563",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260617-E2D5\\dev\\dev-8490ee834b550f0f.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260617-E2D5\\dev\\dev-8490ee834b550f0f.json",
+      "path": ".pipeline/phase_evidence/IMP-20260617-E2D5/dev/agent_receipt_dev-8490ee834b550f0f.json",
+      "sha256": "c0466121ffd28aafc9d3e03f47c314deb4189c86bbd9d9858c7d16dead0c6563",
+      "size_bytes": 501,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260617-E2D5/dev/report_dev_handover.xml",
+      "sha256": "30b3b857214f2a28afa41c85a434f11383be800c75628fc67cb21c34767814a0",
+      "size_bytes": 2166,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260617-E2D5/dev/scope_manifest_scope_manifest.json",
+      "sha256": "8999ffd9d9265000efb321446e2d475e462e81387b914af1ece7f26d2ed2712a",
+      "size_bytes": 567,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": []
+}
