@@ -19,12 +19,13 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Dict, List
 
+import pytest
+
 # pipeline.py를 import 가능하게
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from pipeline import (  # noqa: E402
     ABSTRACT_AC_PATTERNS,
-    CODEX_COVERAGE_CHECK_FIELDS,
     _parse_structured_ac,
     _validate_structured_ac_block,
     _check_module_qa_ac_verification,
@@ -32,10 +33,19 @@ from pipeline import (  # noqa: E402
     _get_mt_covers_iqr,
     _validate_implemented_tasks,
     _audit_oracle_quality,
-    _validate_codex_coverage_checks,
     _build_ac_fulfillment_table,
     _format_ac_fulfillment_output,
 )
+
+# BUG-20260617-788A: CODEX_COVERAGE_CHECK_FIELDS/_validate_codex_coverage_checks는
+# IMP-20260612-8104에서 pipeline.py에서 제거됨. 관련 테스트는 skip 처리.
+try:
+    from pipeline import CODEX_COVERAGE_CHECK_FIELDS, _validate_codex_coverage_checks  # type: ignore[attr-defined]
+    _CODEX_COVERAGE_AVAILABLE = True
+except ImportError:
+    CODEX_COVERAGE_CHECK_FIELDS = {}  # type: ignore[assignment]
+    _validate_codex_coverage_checks = None  # type: ignore[assignment]
+    _CODEX_COVERAGE_AVAILABLE = False
 
 
 def _step_plan_with_ac(criteria: List[Dict[str, Any]]) -> Any:
@@ -465,24 +475,37 @@ def test_oracle_valid_ac_ids_passes():
 
 # ---------------------------------------------------------------------------
 # AC-7: Codex Review coverage_checks hard gate (회귀 케이스 포함)
+# BUG-20260617-788A: CODEX_COVERAGE_CHECK_FIELDS/_validate_codex_coverage_checks는
+# IMP-20260612-8104에서 pipeline.py에서 제거됨. 관련 테스트는 skip 처리.
 # ---------------------------------------------------------------------------
 
+_CODEX_SKIP = pytest.mark.skipif(
+    not _CODEX_COVERAGE_AVAILABLE,
+    reason="CODEX_COVERAGE_CHECK_FIELDS/_validate_codex_coverage_checks removed from pipeline.py (IMP-20260612-8104)"
+)
+
+
 def _all_true_coverage():
+    if not _CODEX_COVERAGE_AVAILABLE:
+        return {}
     return {f: True for f in CODEX_COVERAGE_CHECK_FIELDS}
 
 
+@_CODEX_SKIP
 def test_codex_legacy_review_without_coverage_checks_passes():
     """coverage_checks 키 자체 없음 → legacy로 PASS."""
     r = _validate_codex_coverage_checks({"result": "ACCEPT"})
     assert r["valid"]
 
 
+@_CODEX_SKIP
 def test_codex_all_coverage_true_passes():
     """7개 필드 모두 true → PASS."""
     r = _validate_codex_coverage_checks({"coverage_checks": _all_true_coverage()})
     assert r["valid"]
 
 
+@_CODEX_SKIP
 def test_codex_coverage_all_ac_reviewed_false_blocks():
     """all_ac_reviewed=false → FAIL."""
     ck = _all_true_coverage()
@@ -492,6 +515,7 @@ def test_codex_coverage_all_ac_reviewed_false_blocks():
     assert any("all_ac_reviewed" in e for e in r["errors"])
 
 
+@_CODEX_SKIP
 def test_codex_coverage_diff_values_false_blocks():
     """diff_values_match_ac=false → FAIL (회귀 1)."""
     ck = _all_true_coverage()
@@ -501,6 +525,7 @@ def test_codex_coverage_diff_values_false_blocks():
     assert any("diff_values_match_ac" in e for e in r["errors"])
 
 
+@_CODEX_SKIP
 def test_codex_coverage_tests_assert_false_blocks():
     """tests_assert_core_values=false → FAIL."""
     ck = _all_true_coverage()
@@ -510,6 +535,7 @@ def test_codex_coverage_tests_assert_false_blocks():
     assert any("tests_assert_core_values" in e for e in r["errors"])
 
 
+@_CODEX_SKIP
 def test_codex_coverage_no_dry_run_false_blocks():
     """no_dry_run_substitution=false → FAIL (회귀 2)."""
     ck = _all_true_coverage()
@@ -519,6 +545,7 @@ def test_codex_coverage_no_dry_run_false_blocks():
     assert any("no_dry_run_substitution" in e for e in r["errors"])
 
 
+@_CODEX_SKIP
 def test_codex_coverage_no_stale_sha_false_blocks():
     """no_stale_sha=false → FAIL."""
     ck = _all_true_coverage()
@@ -527,6 +554,7 @@ def test_codex_coverage_no_stale_sha_false_blocks():
     assert not r["valid"]
 
 
+@_CODEX_SKIP
 def test_codex_coverage_no_stale_ci_false_blocks():
     """no_stale_ci_run=false → FAIL."""
     ck = _all_true_coverage()
@@ -535,6 +563,7 @@ def test_codex_coverage_no_stale_ci_false_blocks():
     assert not r["valid"]
 
 
+@_CODEX_SKIP
 def test_codex_coverage_user_facing_korean_false_blocks():
     """user_facing_korean_ok=false → FAIL."""
     ck = _all_true_coverage()
@@ -543,6 +572,7 @@ def test_codex_coverage_user_facing_korean_false_blocks():
     assert not r["valid"]
 
 
+@_CODEX_SKIP
 def test_codex_coverage_missing_field_blocks():
     """필수 필드 누락 → FAIL."""
     ck = _all_true_coverage()
@@ -552,6 +582,7 @@ def test_codex_coverage_missing_field_blocks():
     assert any("no_dry_run_substitution" in e and "누락" in e for e in r["errors"])
 
 
+@_CODEX_SKIP
 def test_codex_coverage_check_fields_count():
     """CODEX_COVERAGE_CHECK_FIELDS는 정확히 7개."""
     assert len(CODEX_COVERAGE_CHECK_FIELDS) == 7
