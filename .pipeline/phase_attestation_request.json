@@ -20,7 +20,7 @@
     "output_file": "step_plan_788A.xml",
     "output_sha256": "564e197c7b2cd672ed4ed0cba6f36c46b2daf62c60c6a552c192ea354d259366",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260617-788A/pm/agent_receipt_pm_planner-f70c3c439ef6550f.json",
-    "receipt_sha256": "c301695f337347ac4f2fdaf4bf327ed7a4223ee3b8a5b7dabc31229f02529ccb",
+    "receipt_sha256": "90bf67d36f056299e41258166f60850a27bbbb9928ab4cc2b3ee2d8a89b6ee25",
     "used_by_phase": "pm",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260617-788A\\pm_planner\\pm_planner-f70c3c439ef6550f.json"
   },
@@ -41,7 +41,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260617-788A\\pm_planner\\pm_planner-f70c3c439ef6550f.json",
       "path": ".pipeline/phase_evidence/BUG-20260617-788A/pm/agent_receipt_pm_planner-f70c3c439ef6550f.json",
-      "sha256": "c301695f337347ac4f2fdaf4bf327ed7a4223ee3b8a5b7dabc31229f02529ccb",
+      "sha256": "90bf67d36f056299e41258166f60850a27bbbb9928ab4cc2b3ee2d8a89b6ee25",
       "size_bytes": 538,
       "requires_force_add": true
     },
