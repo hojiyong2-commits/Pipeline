@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- BUG-20260617-788A: 브라우저 승인 우회 조건 강화 — 명시적 환경변수만 허용 -->
+
+<decomposition_audit>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <decomposition_method>function_level</decomposition_method>
+  <micro_task_count>2</micro_task_count>
+  <grep_executions>2</grep_executions>
+  <justification>
+    BUG-20260616-9DEF REJECT 사유: request-accept가 비대화형/CI 환경에서 자동으로
+    browser_approval_skip=true를 기록하여 브라우저 클릭 승인을 우회함. 이는 자동 ACCEPT
+    근본 차단 목표와 충돌함. 수정 범위는 pipeline.py의 단일 함수 내 else 블록 제거(MT-1)와
+    영향받는 E2E 테스트 파일들의 환경변수 명시 추가(MT-2)로 분리됨.
+    파일 변경 대상이 pipeline.py(제품 코드)와 tests/(테스트 코드)로 구분되어 SPLIT_REQUIRED.
+  </justification>
+  <judgment_calls>없음 — 사용자가 REJECT 사유에서 수정 방향을 명확히 지시함</judgment_calls>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260617-788A</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>
+      auth_or_secret=true: 브라우저 클릭 승인은 사용자 인증 채널임.
+      pipeline_protocol=true: pipeline.py의 보안 게이트 로직 수정.
+      core_parser_logic=false: 파서가 아님.
+      9DEF의 보안 목표(자동 ACCEPT 근본 차단)를 강화하는 수정이므로 HIGH_RISK 유지.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>15</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>80</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>true</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      사용자가 REJECT 사유에서 수정 방향을 명확히 지시했으므로 추가 질문 없이 진행.
+      P2 수준의 내부 구현 질문(변수명, 코드 스타일 등)은 유지보수성 기준으로 자동 처리.
+    </filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          비대화형/CI 환경 자동 감지 코드를 제거하고, PIPELINE_BROWSER_APPROVAL_SKIP=1
+          환경변수만으로 브라우저 승인을 우회하도록 수정합니다. 이로 인해 E2E 테스트들은
+          명시적으로 해당 환경변수를 설정해야 합니다. 진행해도 될까요?
+        </user_facing_question>
+        <evidence>
+          BUG-20260616-9DEF REJECT 사유: "우회는 명시적 테스트 환경에서만 허용되어야 하며,
+          일반 pipeline 실행에서는 비대화형/CI라고 해서 browser_approval_skip을 자동 기록하면 안 됩니다."
+        </evidence>
+        <why_it_matters>
+          자동 ACCEPT 근본 차단이라는 9DEF의 핵심 보안 목표를 달성하기 위해 필수적인 수정입니다.
+          비대화형 환경 자동 감지가 있으면 Claude/Codex/자동 에이전트가 브라우저 클릭 없이
+          승인을 우회할 수 있습니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>else 블록 전체 제거 (권장)</label>
+            <benefit>명시적 환경변수만 허용하여 자동 ACCEPT 근본 차단 목표 달성</benefit>
+            <cost>테스트 파일들에 PIPELINE_BROWSER_APPROVAL_SKIP=1 추가 필요</cost>
+          </option>
+          <option id="B">
+            <label>CI 환경 감지만 제거, 비대화형 감지 유지</label>
+            <benefit>일부 테스트 수정 불필요</benefit>
+            <cost>비대화형 stdin 우회가 남아 자동 에이전트 우회 가능성 존재</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 REJECT 사유에서 "명시적 테스트 환경에서만 허용"을 지시 — 옵션 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">
+      PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수만으로 브라우저 승인 우회 허용.
+      비대화형/CI 환경 자동 감지 로직 제거.
+    </requirement>
+    <requirement id="REQ-2">
+      영향받는 E2E 테스트에 PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수 명시.
+    </requirement>
+    <requirement id="REQ-3">
+      기존 nonce/D278/2821/8011 보안 로직 무변경 유지.
+    </requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>gates request-accept 내 _browser_skip 판정 로직</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_run_browser_approval_server (동일 함수 내 참조)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_browser_skip</pattern>
+        <match_count>9</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        라인 17049-17062의 else 블록 전체 제거. `_browser_skip = os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1"` 한 줄만 유지.
+      </change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>request-accept 호출 테스트 헬퍼/fixture</affected_function>
+      <target_files>
+        <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+        <file>tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+        <file>tests/e2e/test_post_accept_finalization_d278.py</file>
+        <file>tests/e2e/test_workspace_hygiene_2821.py</file>
+        <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+        <file>tests/e2e/test_pr_body_readiness_a716.py</file>
+        <file>tests/e2e/test_final_packet_2e3d.py</file>
+        <file>tests/e2e/test_evidence_deployable_ce06.py</file>
+        <file>tests/e2e/test_marker_separation_32d7.py</file>
+        <file>tests/e2e/test_pending_comment_sst_b32a.py</file>
+        <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+        <file>tests/e2e/test_ac_tracking_1abe.py</file>
+        <file>tests/e2e/test_auto_accept_guard_8011.py</file>
+        <file>tests/conftest.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>각 테스트 파일의 _run_cli / _run_pipeline / run_cli 헬퍼</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>request-accept.*--evidence</pattern>
+        <match_count>35</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        request-accept를 subprocess로 호출하는 테스트에 PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수 추가.
+        conftest.py에 공통 헬퍼가 있으면 거기에 추가, 아니면 각 테스트 파일의 환경변수 dict에 추가.
+      </change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-3, AC-4</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>
+        PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수가 없는 상태에서 request-accept 실행 시
+        브라우저 HTTP 서버가 시작되고 사용자 클릭을 대기한다 (비대화형 환경에서도 자동 우회 없음).
+      </text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>
+        PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수가 설정된 상태에서 request-accept 실행 시
+        브라우저 서버를 띄우지 않고 즉시 browser_approval_skip=true로 기록된다.
+      </text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>
+        모든 E2E 테스트가 pytest로 PASS한다. request-accept를 호출하는 테스트는
+        PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수를 명시적으로 설정해야 한다.
+      </text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>
+        기존 nonce 재사용 방지(AEF0), D278 post-accept fail-closed, 2821 workspace_hygiene,
+        8011 auto_accept_guard 로직이 회귀 없이 동작한다 (해당 테스트 전부 PASS).
+      </text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 기존 pipeline.py 및 테스트 환경과 동일</python_version>
+
+  <forbidden>
+    <item>nonce 생성/검증/consume 보안 로직 완화 금지</item>
+    <item>gates request-accept / gates accept 기존 보안 조건 완화 금지</item>
+    <item>D278 post-accept fail-closed 로직 완화 금지</item>
+    <item>2821 workspace_hygiene fail-closed 로직 완화 금지</item>
+    <item>기존 packet 마커 댓글 차단 로직 제거 금지 (8011에서 추가된 것 보존)</item>
+    <item>테스트 통과를 위한 graceful skip 추가 금지</item>
+    <item>하드코딩된 테스트 개수 문구 추가 금지</item>
+    <item>pipeline_state.json, manager_handoff_*.xml, step_plan_*.xml 등 실행 산출물을 PR diff에 포함 금지</item>
+  </forbidden>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
