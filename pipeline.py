@@ -16678,11 +16678,11 @@ def _build_codex_verification_bundle(state: Dict[str, Any]) -> str:
     pipeline_id = str(
         req.get("pipeline_id") or packet.get("pipeline_id") or state.get("pipeline_id") or ""
     )
-    pr_url = str(pr_info.get("url") or req.get("pr_url") or "")
-    pr_number = pr_info.get("number")
-    run_url = str(gha_info.get("run_url") or "")
-    run_id = str(gha_info.get("run_id") or req.get("ci_run_id") or "")
-    head_sha = str(pr_info.get("head_sha") or req.get("head_sha") or "")
+    pr_url = str(pr_info.get("url") or req.get("pr_url") or "")  # type: ignore[union-attr]
+    pr_number = pr_info.get("number")  # type: ignore[union-attr]
+    run_url = str(gha_info.get("run_url") or "")  # type: ignore[union-attr]
+    run_id = str(gha_info.get("run_id") or req.get("ci_run_id") or "")  # type: ignore[union-attr]
+    head_sha = str(pr_info.get("head_sha") or req.get("head_sha") or "")  # type: ignore[union-attr]
 
     changed_files = packet.get("changed_files")
     if not isinstance(changed_files, list):
@@ -16692,7 +16692,7 @@ def _build_codex_verification_bundle(state: Dict[str, Any]) -> str:
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}" if pipeline_id and nonce else ""
 
     def _gate(key: str) -> str:
-        val = gates_info.get(key)
+        val = gates_info.get(key)  # type: ignore[union-attr]
         if isinstance(val, dict):
             return str(val.get("status") or "UNKNOWN")
         if val is None:
@@ -17409,7 +17409,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         # 실제 URL은 _run_browser_approval_server가 반환한 approval_url로만 출력한다.
         print()
         print(
-            f"  ★ 브라우저 승인 필요: 아래 표시되는 URL을 브라우저에서 열고 '승인' 버튼을 클릭하세요."
+            "  ★ 브라우저 승인 필요: 아래 표시되는 URL을 브라우저에서 열고 '승인' 버튼을 클릭하세요."
         )
         print(f"  [브라우저 승인 대기 중... (최대 {_browser_timeout}초)]")
         _browser_result = _run_browser_approval_server(
