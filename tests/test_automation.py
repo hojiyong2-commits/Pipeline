@@ -18,11 +18,9 @@ import automation
 from automation import (
     parse_folder_name,
     _sanitize_name_component,
-    strip_voyage_suffix,
     build_corb_path,
     copy_files_to_corb,
     FolderWatcher,
-    _CustomerOrderHandler,
 )
 
 
@@ -86,12 +84,6 @@ class TestBuildCorbPath:
         corb = build_corb_path("C:/CORB", "B1234", "PO999", "X100050542")
         assert corb.endswith("B1234 PO999 X100050542"), \
             f"build_corb_path mismatch: {corb!r}"
-
-    def test_voyage_suffix_removed_from_folder_name(self) -> None:
-        corb = build_corb_path("C:/CORB", "B1234", "PO999", "X100050542_2nd")
-        assert corb.endswith("B1234 PO999 X100050542"), \
-            f"voyage suffix must not appear in CORB folder: {corb!r}"
-        assert strip_voyage_suffix("X100050542_3rd") == "X100050542"
 
     def test_datetime_order_no_sanitized(self) -> None:
         corb = build_corb_path("C:/CORB", "B1234", "PO999", "2026-06-02 00:00:00")
@@ -174,59 +166,6 @@ class TestCopyFilesToCorb:
         finally:
             shutil.rmtree(str(tmp_src))
             shutil.rmtree(str(tmp_dst))
-
-
-class TestOutputFolderWatcherPolicy:
-    """Output root is watched recursively, but only child-folder CSV/XLSX triggers work."""
-
-    def test_existing_nested_csv_is_scheduled_but_root_csv_is_ignored(self, tmp_path: Path) -> None:
-        root = tmp_path / "Output"
-        nested = root / "(ACT) 314 - 294,000 - 2026-04-16 - EXW"
-        nested.mkdir(parents=True)
-        root_csv = root / "CustomerOrderLines root.csv"
-        nested_csv = nested / "CustomerOrderLines nested.csv"
-        root_csv.write_text("Order No\nX1\n", encoding="utf-8")
-        nested_csv.write_text("Order No\nX2\n", encoding="utf-8")
-
-        handler = _CustomerOrderHandler(
-            ic_part_template=str(tmp_path / "IC-Part.xlsx"),
-            corb_base_map={"SoCal": str(tmp_path / "CORB")},
-            log_callback=None,
-            debounce_seconds=60,
-        )
-        handler.prime_existing_files(str(root))
-
-        assert handler._is_customer_order_lines(root_csv)
-        assert not handler._is_under_watch_subfolder(root_csv)
-        assert handler._is_under_watch_subfolder(nested_csv)
-
-        assert handler._schedule(root_csv, reason="test-root") is False
-        scheduled = handler.schedule_existing_files(str(root))
-        try:
-            assert scheduled == 1
-            assert len(handler._timers) == 1
-        finally:
-            for timer in list(handler._timers.values()):
-                timer.cancel()
-
-
-class TestCopyFilesToExistingCorb:
-    """Existing CORB folders are reused safely."""
-
-    def test_existing_corb_preserves_unrelated_files_and_replaces_same_name(self, tmp_path: Path) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "corb"
-        src.mkdir()
-        dst.mkdir()
-        (src / "CustomerOrderLines.csv").write_text("new", encoding="utf-8")
-        (dst / "CustomerOrderLines.csv").write_text("old", encoding="utf-8")
-        (dst / "keep.txt").write_text("keep", encoding="utf-8")
-
-        copied = copy_files_to_corb(src, dst)
-
-        assert "CustomerOrderLines.csv" in copied
-        assert (dst / "CustomerOrderLines.csv").read_text(encoding="utf-8") == "new"
-        assert (dst / "keep.txt").read_text(encoding="utf-8") == "keep"
 
 
 print("ASSERTION PASSED")

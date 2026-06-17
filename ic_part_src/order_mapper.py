@@ -10,7 +10,6 @@ injection (preserves named ranges, formulas, and drawings).
 Python 3.9 compatible.
 """
 
-import csv
 import logging
 import os
 import re
@@ -19,7 +18,6 @@ import zipfile
 from collections import Counter, defaultdict
 from datetime import date, datetime
 from datetime import date as _date
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 
@@ -310,27 +308,6 @@ def _cell_col(cell_ref: str) -> str:
     return m.group(1).upper() if m else ''
 
 
-def _refresh_dimension_ref(xml_str: str) -> str:
-    """Refresh worksheet <dimension ref="..."> after appending rows."""
-    max_row = 1
-    max_col = 1
-    for m in re.finditer(r'<c\s+r="([A-Za-z]+)(\d+)"', xml_str):
-        max_col = max(max_col, _col_index(m.group(1)))
-        max_row = max(max_row, int(m.group(2)))
-    for m in re.finditer(r'<row\b[^>]*\br="(\d+)"', xml_str):
-        max_row = max(max_row, int(m.group(1)))
-    new_dimension = f'<dimension ref="A1:{_col_letter(max_col)}{max_row}"/>'
-    if re.search(r'<dimension\b[^>]*/>', xml_str):
-        return re.sub(r'<dimension\b[^>]*/>', new_dimension, xml_str, count=1)
-    if re.search(r'<dimension\b[^>]*>.*?</dimension>', xml_str, re.DOTALL):
-        return re.sub(r'<dimension\b[^>]*>.*?</dimension>', new_dimension, xml_str, count=1, flags=re.DOTALL)
-    worksheet_open = re.search(r'<worksheet\b[^>]*>', xml_str)
-    if worksheet_open:
-        pos = worksheet_open.end()
-        return xml_str[:pos] + new_dimension + xml_str[pos:]
-    return xml_str
-
-
 def _insert_cell_into_row(xml_str: str, cell_ref: str, new_cell_xml: str) -> str:
     """Insert new_cell_xml into the correct column-sorted position within the row.
 
@@ -442,94 +419,12 @@ def _parse_shared_formulas(xml_str: str) -> Dict[int, Tuple[int, str]]:
         if not formula or 't="shared"' not in attrs:
             continue
         si_m = re.search(r'\bsi="(\d+)"', attrs)
-        # Handle both range refs (P5:P26) and single-cell shared masters (P215).
-        ref_m = re.search(r'\bref="\$?[A-Za-z]+\$?(\d+)(?::|")', attrs)
+        # Handle both plain (V113) and absolute ($V$113) ref notation
+        ref_m = re.search(r'\bref="\$?[A-Za-z]+\$?(\d+):', attrs)
         if si_m and ref_m:
             shared[int(si_m.group(1))] = (int(ref_m.group(1)), formula)
 
     return shared
-
-
-def _cell_ref_to_coords(cell_ref: str) -> Optional[Tuple[int, int]]:
-    """Return (col_idx, row_idx) for an A1-style cell ref."""
-    m = re.match(r'^\$?([A-Za-z]+)\$?(\d+)$', cell_ref.strip())
-    if not m:
-        return None
-    return _col_index(m.group(1)), int(m.group(2))
-
-
-def _shared_ref_contains_cell(ref_attr: str, cell_ref: str) -> bool:
-    """Return whether a shared formula ref/range contains cell_ref."""
-    parts = [p.strip() for p in ref_attr.split(":", 1)]
-    start = _cell_ref_to_coords(parts[0])
-    end = _cell_ref_to_coords(parts[-1])
-    cell = _cell_ref_to_coords(cell_ref)
-    if start is None or end is None or cell is None:
-        return False
-    min_col, max_col = sorted((start[0], end[0]))
-    min_row, max_row = sorted((start[1], end[1]))
-    return min_col <= cell[0] <= max_col and min_row <= cell[1] <= max_row
-
-
-def _normalize_orphan_shared_formula_masters(xml_str: str) -> str:
-    """Convert shared formula masters whose ref does not cover the cell to inline formulas."""
-    def _fix_cell(match: re.Match) -> str:
-        cell_xml = match.group(0)
-        cell_ref = match.group(1)
-        row_m = re.search(r'\d+$', cell_ref)
-        if not row_m:
-            return cell_xml
-        target_row = int(row_m.group(0))
-        f_m = re.search(r'<f\b([^>]*)>(.*?)</f>', cell_xml, re.DOTALL)
-        if not f_m:
-            return cell_xml
-        attrs, formula = f_m.group(1), f_m.group(2).strip()
-        if 't="shared"' not in attrs or not formula:
-            return cell_xml
-        ref_m = re.search(r'\bref="([^"]+)"', attrs)
-        if not ref_m:
-            return cell_xml
-        ref_attr = ref_m.group(1)
-        if _shared_ref_contains_cell(ref_attr, cell_ref):
-            return cell_xml
-        base_row_m = re.search(r'\$?[A-Za-z]+\$?(\d+)', ref_attr)
-        if not base_row_m:
-            return cell_xml
-        base_row = int(base_row_m.group(1))
-        adjusted = re.sub(
-            r'(\$?[A-Za-z]+\$?)' + str(base_row) + r'\b',
-            lambda lm: lm.group(1) + str(target_row),
-            formula,
-        )
-        fixed = cell_xml[:f_m.start()] + f'<f>{adjusted}</f>' + cell_xml[f_m.end():]
-        return re.sub(r'<v>.*?</v>', '', fixed, flags=re.DOTALL)
-
-    return re.sub(
-        r'<c\b[^>]*\br="([A-Za-z]+\d+)"[^>]*>.*?</c>',
-        _fix_cell,
-        xml_str,
-        flags=re.DOTALL,
-    )
-
-
-def _drop_calc_chain(all_zip_data: Dict[str, bytes]) -> None:
-    """Remove stale calcChain parts after direct worksheet XML edits."""
-    all_zip_data.pop("xl/calcChain.xml", None)
-    rels_key = "xl/_rels/workbook.xml.rels"
-    if rels_key in all_zip_data:
-        rels = all_zip_data[rels_key].decode("utf-8")
-        rels = re.sub(r'<Relationship\b[^>]*Type="[^"]*/calcChain"[^>]*/>', '', rels)
-        all_zip_data[rels_key] = rels.encode("utf-8")
-    types_key = "[Content_Types].xml"
-    if types_key in all_zip_data:
-        content_types = all_zip_data[types_key].decode("utf-8")
-        content_types = re.sub(r'<Override\b[^>]*PartName="/xl/calcChain\.xml"[^>]*/>', '', content_types)
-        all_zip_data[types_key] = content_types.encode("utf-8")
-
-
-def _cell_has_persisted_value(cell_body: str) -> bool:
-    """Return whether a cell body contains a real saved user value."""
-    return bool(re.search(r'<v[\s>]|<is[\s>]', cell_body or ""))
 
 
 def _clone_row_xml(
@@ -1019,9 +914,6 @@ class OrderGroup:
     def __init__(self) -> None:
         """Initialise all fields to None/empty."""
         self.order_no: Optional[str] = None
-        self.base_order_no: Optional[str] = None
-        self.voyage_index: Optional[int] = None
-        self.voyage_count: int = 1
         self.delivery_date: Optional[date] = None
         self.po_no: Optional[str] = None
         self.customer_name: Optional[str] = None
@@ -1031,8 +923,6 @@ class OrderGroup:
         self.contract_amount: Optional[str] = None
         self.corb_path: Optional[str] = None
         self.line_nos: List[int] = []
-        self.net_amount_total: Decimal = Decimal("0")
-        self.has_net_amount: bool = False
 
     def add_line(
         self,
@@ -1043,7 +933,6 @@ class OrderGroup:
         col_customer_name: Optional[int] = None,
         col_project_id: Optional[int] = None,
         col_po_no: Optional[int] = None,
-        col_net_amount: Optional[int] = None,
     ) -> None:
         """Ingest one CustomerOrderLines row into this group.
 
@@ -1073,15 +962,13 @@ class OrderGroup:
         eff_customer_name: int = col_customer_name if col_customer_name is not None else COL_CUSTOMER_NAME
         eff_project_id: int = col_project_id if col_project_id is not None else COL_PROJECT_ID
         eff_po_no: int = col_po_no if col_po_no is not None else COL_ORDER_REF_1
-        eff_net_amount: Optional[int] = col_net_amount
 
         def _get(idx: int) -> Any:
             return row[idx] if idx < len(row) else None
 
         if self.order_no is None:
             raw_order = _get(eff_order_no)
-            self.base_order_no = str(raw_order).strip() if raw_order is not None else None
-            self.order_no = self.base_order_no
+            self.order_no = str(raw_order).strip() if raw_order is not None else None
 
             self.delivery_date = normalise_date(_get(eff_delivery_date))
 
@@ -1097,13 +984,6 @@ class OrderGroup:
 
             raw_proj = _get(eff_project_id)
             self.project_id = str(raw_proj).strip() if raw_proj is not None else None
-
-        if eff_net_amount is not None:
-            amount = _parse_amount(_get(eff_net_amount))
-            if amount is not None:
-                self.net_amount_total += amount
-                self.has_net_amount = True
-                self.contract_amount = _format_amount(self.net_amount_total)
 
         raw_line = _get(eff_line_no)
         if raw_line is not None:
@@ -1141,34 +1021,6 @@ class OrderGroup:
                     parts.append(str(n))
 
         return "#" + ",".join(parts)
-
-
-def _parse_amount(value: Any) -> Optional[Decimal]:
-    """Parse a CustomerOrderLines amount value."""
-    if value is None:
-        return None
-    if isinstance(value, Decimal):
-        return value
-    if isinstance(value, (int, float)):
-        return Decimal(str(value))
-    text = str(value).strip()
-    if not text:
-        return None
-    text = text.replace(",", "")
-    if text.startswith("(") and text.endswith(")"):
-        text = "-" + text[1:-1]
-    try:
-        return Decimal(text)
-    except InvalidOperation:
-        logger.warning("Cannot parse Net Amount value: %r", value)
-        return None
-
-
-def _format_amount(value: Decimal) -> str:
-    """Format a Decimal for IC-Part Contract Amount text cells."""
-    if value == value.to_integral_value():
-        return f"{int(value):,}"
-    return f"{value.quantize(Decimal('0.01')):,}"
 
 
 # ---------------------------------------------------------------------------
@@ -1210,24 +1062,6 @@ _HEADER_MAP: Dict[str, str] = {
     # Contract amount variants
     "contract amount": "contract_amount",
     "contract value": "contract_amount",
-    # Net amount variants from CustomerOrderLines CSV exports
-    "net amount": "net_amount",
-    "net amount/curr": "net_amount",
-    "net amt/base": "net_amount",
-    "net amount/base": "net_amount",
-    "net amt": "net_amount",
-    "netamount": "net_amount",
-}
-
-_HEADER_PRIORITY: Dict[str, Dict[str, int]] = {
-    "net_amount": {
-        "net amount/curr": 110,
-        "net amount": 100,
-        "netamount": 100,
-        "net amt": 80,
-        "net amt/base": 60,
-        "net amount/base": 60,
-    }
 }
 
 
@@ -1253,17 +1087,14 @@ def _detect_columns_from_header(header_row: Tuple[Any, ...]) -> Dict[str, int]:
         raise TypeError("header_row must not be None")
 
     detected: Dict[str, int] = {}
-    detected_priority: Dict[str, int] = {}
     for col_idx, cell in enumerate(header_row):
         if cell is None:
             continue
         key = str(cell).strip().lower()
         if key in _HEADER_MAP:
             field = _HEADER_MAP[key]
-            priority = _HEADER_PRIORITY.get(field, {}).get(key, 0)
-            if field not in detected or priority > detected_priority.get(field, 0):
+            if field not in detected:
                 detected[field] = col_idx
-                detected_priority[field] = priority
     return detected
 
 
@@ -1338,34 +1169,6 @@ def _auto_detect_key_columns(
 # Step 1: Read CustomerOrderLines
 # ---------------------------------------------------------------------------
 
-def _read_customer_order_rows(source_path: Path) -> List[Tuple[Any, ...]]:
-    """Read CustomerOrderLines rows from .xlsx or .csv."""
-    suffix = source_path.suffix.lower()
-    if suffix == ".csv":
-        last_error: Optional[Exception] = None
-        for encoding in ("utf-8-sig", "cp949", "utf-8"):
-            try:
-                with source_path.open("r", encoding=encoding, newline="") as handle:
-                    return [tuple(row) for row in csv.reader(handle)]
-            except UnicodeDecodeError as exc:
-                last_error = exc
-                continue
-        raise RuntimeError(f"Cannot decode CSV '{source_path}': {last_error}")
-
-    try:
-        wb = openpyxl.load_workbook(str(source_path), read_only=True, data_only=True)
-    except Exception as exc:
-        raise RuntimeError(f"Cannot open workbook '{source_path}': {exc}") from exc
-
-    try:
-        sheet_name = wb.sheetnames[0]
-        ws = wb[sheet_name]
-        logger.info("Reading sheet: %s", sheet_name)
-        return [row for row in ws.iter_rows(values_only=True)]
-    finally:
-        wb.close()
-
-
 def read_customer_order_lines(source_path: Path) -> List[OrderGroup]:
     """Read source_path Excel and return a list of OrderGroup objects.
 
@@ -1391,7 +1194,18 @@ def read_customer_order_lines(source_path: Path) -> List[OrderGroup]:
         raise FileNotFoundError(f"CustomerOrderLines file not found: '{source_path}'")
 
     logger.info("Opening CustomerOrderLines: %s", source_path)
-    all_rows: List[Tuple[Any, ...]] = _read_customer_order_rows(source_path)
+    try:
+        wb = openpyxl.load_workbook(str(source_path), read_only=True, data_only=True)
+    except Exception as exc:
+        raise RuntimeError(f"Cannot open workbook '{source_path}': {exc}") from exc
+
+    try:
+        sheet_name = wb.sheetnames[0]
+        ws = wb[sheet_name]
+        logger.info("Reading sheet: %s", sheet_name)
+        all_rows: List[Tuple[Any, ...]] = [row for row in ws.iter_rows(values_only=True)]
+    finally:
+        wb.close()
 
     header_row: Tuple[Any, ...] = all_rows[0] if all_rows else ()
     header_desc = ", ".join(
@@ -1404,13 +1218,9 @@ def read_customer_order_lines(source_path: Path) -> List[OrderGroup]:
     if header_detected:
         logger.info("Header-detected columns: %s", header_detected)
 
-    # Prefer explicit headers for CSV/XLSX exports; fall back to value-pattern detection.
+    # Auto-detect order_no and delivery_date from data values
     data_preview: List[Tuple[Any, ...]] = [row for row in all_rows[1:6] if row]
     detected_order_no_col, detected_delivery_date_col = _auto_detect_key_columns(data_preview)
-    if "order_no" in header_detected:
-        detected_order_no_col = header_detected["order_no"]
-    if "delivery_date" in header_detected:
-        detected_delivery_date_col = header_detected["delivery_date"]
 
     groups: DefaultDict[GroupKey, OrderGroup] = defaultdict(OrderGroup)
     row_count: int = 0
@@ -1429,8 +1239,7 @@ def read_customer_order_lines(source_path: Path) -> List[OrderGroup]:
         if raw_order_no is None or raw_date is None:
             continue
 
-        norm_date = normalise_date(raw_date)
-        key: GroupKey = (str(raw_order_no).strip(), norm_date)
+        key: GroupKey = (str(raw_order_no).strip(), raw_date)
         groups[key].add_line(
             row_tuple,
             col_order_no=detected_order_no_col,
@@ -1439,7 +1248,6 @@ def read_customer_order_lines(source_path: Path) -> List[OrderGroup]:
             col_customer_name=header_detected.get("customer_name"),
             col_project_id=header_detected.get("project_id"),
             col_po_no=header_detected.get("po_no"),
-            col_net_amount=header_detected.get("net_amount"),
         )
         row_count += 1
 
@@ -1459,7 +1267,7 @@ def read_customer_order_lines(source_path: Path) -> List[OrderGroup]:
 # ---------------------------------------------------------------------------
 
 def apply_sub_order_suffixes(groups: List[OrderGroup]) -> None:
-    """Append _1st/_2nd/... suffix to order_no when same base order has voyages."""
+    """Append -2/-3/... suffix to order_no when same base order appears multiple times."""
     if groups is None:
         raise TypeError("groups must not be None")
     if not isinstance(groups, list):
@@ -1467,28 +1275,17 @@ def apply_sub_order_suffixes(groups: List[OrderGroup]) -> None:
 
     counts: Dict[str, int] = {}
     for group in groups:
-        base = group.base_order_no or group.order_no or ""
-        group.base_order_no = base
+        base = group.order_no if group.order_no is not None else ""
         counts[base] = counts.get(base, 0) + 1
 
     occurrence: Dict[str, int] = {}
     for group in groups:
-        base = group.base_order_no or group.order_no or ""
-        group.voyage_count = counts.get(base, 1)
+        base = group.order_no if group.order_no is not None else ""
         if counts[base] > 1:
-            occ = occurrence.get(base, 0) + 1
-            group.voyage_index = occ
-            group.order_no = f"{base}_{_ordinal_suffix(occ)}"
-            occurrence[base] = occ
-
-
-def _ordinal_suffix(value: int) -> str:
-    """Return English ordinal suffix used by IC-Part voyage notation."""
-    if 10 <= value % 100 <= 20:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
-    return f"{value}{suffix}"
+            occ = occurrence.get(base, 0)
+            if occ > 0:
+                group.order_no = f"{base}-{occ + 1}"
+            occurrence[base] = occ + 1
 
 
 # ---------------------------------------------------------------------------
@@ -1583,7 +1380,7 @@ def write_ic_part_zip(
         for m in _l_cell_pattern.finditer(sheet1_str)
         if m.group(2) is not None                      # open/close branch only (branch 2)
         and int(m.group(2)) >= ICPART_DATA_START_ROW
-        and _cell_has_persisted_value(m.group(3) or '')
+        and re.search(r'<v[\s>]', m.group(3) or '')
     ]
     _last_written_row = max(_l_filled, default=ICPART_DATA_START_ROW - 1)
     _actual_start_row = max(_last_written_row + 1, ICPART_DATA_START_ROW)
@@ -1644,7 +1441,7 @@ def write_ic_part_zip(
 
     # Count how many groups (delivery-date buckets) share each order_no.
     # Used below to decide whether to write Line No or leave it blank.
-    order_date_count: Counter = Counter((g.base_order_no or g.order_no) for g in groups)
+    order_date_count: Counter = Counter(g.order_no for g in groups)
 
     for i, group in enumerate(groups):
         # Duplicate Project ID check — only against IDs already in the template,
@@ -1704,8 +1501,7 @@ def write_ic_part_zip(
 
         # Write Line No only when this order_no has 2+ delivery-date groups;
         # a single-group order leaves the O column empty.
-        line_no_key = group.base_order_no or group.order_no
-        line_no_val: str = group.format_line_nos() if order_date_count[line_no_key] > 1 else ""
+        line_no_val: str = group.format_line_nos() if order_date_count[group.order_no] > 1 else ""
 
         # FEAT-20260530-86AA (MT-3): 동적 칼럼 인덱스 사용 (폴백: ICPART_COL_*)
         text_cols: List[Tuple[int, Optional[str]]] = [
@@ -1770,9 +1566,6 @@ def write_ic_part_zip(
     elif _sheet2_key not in all_zip_data:
         logger.warning("sheet2.xml not in template ZIP — IC-Distribution A2 not updated")
 
-    sheet1_str = _normalize_orphan_shared_formula_masters(sheet1_str)
-    sheet1_str = _refresh_dimension_ref(sheet1_str)
-    _drop_calc_chain(all_zip_data)
     sheet1_bytes_new: bytes = sheet1_str.encode("utf-8")
 
     import tempfile as _tempfile
@@ -1890,7 +1683,7 @@ def run(
     for _g in groups:
         if folder_date is not None:
             _g.folder_date = folder_date
-        if contract_amount is not None and not _g.has_net_amount:
+        if contract_amount is not None:
             _g.contract_amount = contract_amount
         if incoterm is not None:
             _g.incoterm = incoterm
@@ -1898,7 +1691,7 @@ def run(
             _g.corb_path = corb_path
 
     written, skipped = write_ic_part_zip(groups, template_path, output_path)
-    print(f"[order_mapper] DONE - written={written} skipped={skipped} output={output_path}")
+    print(f"[order_mapper] DONE — written={written} skipped={skipped} output={output_path}")
     logger.info("=== order_mapper DONE === written=%d skipped=%d", written, skipped)
 
 
@@ -1975,9 +1768,9 @@ if __name__ == "__main__":
         og_c.order_no = "X100050542"
         og_c.delivery_date = _date(2026, 7, 1)
         apply_sub_order_suffixes([og_a, og_b, og_c])
-        assert og_a.order_no == "X100050542_1st"
-        assert og_b.order_no == "X100050542_2nd"
-        assert og_c.order_no == "X100050542_3rd"
+        assert og_a.order_no == "X100050542"
+        assert og_b.order_no == "X100050542-2"
+        assert og_c.order_no == "X100050542-3"
 
         # _inject_text_cell: self-closing empty cell
         _test_xml = (

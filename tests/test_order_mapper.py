@@ -29,11 +29,6 @@ from order_mapper import (
     _inject_date_cell,
     _detect_columns_from_header,
     _auto_detect_key_columns,
-    read_customer_order_lines,
-    _parse_shared_formulas,
-    _normalize_orphan_shared_formula_masters,
-    _drop_calc_chain,
-    _cell_has_persisted_value,
     ICPART_COL_FOLDER_DATE,
     ICPART_COL_CONTRACT_AMOUNT,
     ICPART_COL_CORB_PATH,
@@ -187,10 +182,9 @@ class TestApplySubOrderSuffixes:
 
         apply_sub_order_suffixes([og_a, og_b, og_c])
 
-        assert og_a.order_no == "X100050542_1st"
-        assert og_b.order_no == "X100050542_2nd"
-        assert og_c.order_no == "X100050542_3rd"
-        assert og_a.base_order_no == "X100050542"
+        assert og_a.order_no == "X100050542"
+        assert og_b.order_no == "X100050542-2"
+        assert og_c.order_no == "X100050542-3"
 
     def test_unique_orders_unchanged(self) -> None:
         og_x = OrderGroup()
@@ -454,78 +448,6 @@ class TestWinError5RetryConstants:
         src_text = src_path.read_text(encoding="utf-8")
         assert "raise  # non-WinError-5 OSError" in src_text, \
             "비-WinError-5 즉시 re-raise 없음"
-
-
-class TestCsvVoyageAndAmount:
-    """CSV exports must map voyages, line numbers, and Net Amount/Curr correctly."""
-
-    def test_csv_groups_by_delivery_date_and_sums_net_amount(self, tmp_path: Path) -> None:
-        csv_path = tmp_path / "CustomerOrderLines sample.csv"
-        csv_path.write_text(
-            "\n".join(
-                [
-                    "Project ID,Order No,Order Ref 1,Wanted Delivery Date,Line No,Customer Name,Net Amount/Curr",
-                    "B614KR,X100050542,PO-1,2026-06-02,1,IMI Critical Engineering LLC,1000",
-                    "B614KR,X100050542,PO-1,2026-06-02,2,IMI Critical Engineering LLC,2000",
-                    "B614KR,X100050542,PO-1,2026-06-25,3,IMI Critical Engineering LLC,3000",
-                ]
-            ),
-            encoding="utf-8",
-        )
-
-        groups = read_customer_order_lines(csv_path)
-        apply_sub_order_suffixes(groups)
-
-        assert [g.order_no for g in groups] == ["X100050542_1st", "X100050542_2nd"]
-        assert [g.base_order_no for g in groups] == ["X100050542", "X100050542"]
-        assert [g.format_line_nos() for g in groups] == ["#1,2", "#3"]
-        assert [g.contract_amount for g in groups] == ["3,000", "3,000"]
-        assert all(g.has_net_amount for g in groups)
-
-    def test_net_amount_curr_header_wins_over_base_amount(self) -> None:
-        detected = _detect_columns_from_header(
-            ("Order No", "Net Amt/Base", "Line No", "Net Amount/Curr")
-        )
-        assert detected["net_amount"] == 3
-
-
-class TestSharedFormulaRepair:
-    """Direct XML writes must not leave Excel repair warnings behind."""
-
-    def test_single_cell_shared_formula_master_is_parsed(self) -> None:
-        xml = '<worksheet><sheetData><row r="215"><c r="P215"><f t="shared" ref="P215" si="20">O215-7</f></c></row></sheetData></worksheet>'
-        assert _parse_shared_formulas(xml) == {20: (215, "O215-7")}
-
-    def test_orphan_shared_formula_master_becomes_inline_formula(self) -> None:
-        xml = (
-            '<worksheet><sheetData>'
-            '<row r="216"><c r="P216"><f t="shared" ref="P215" si="20">O215-7</f><v>0</v></c></row>'
-            '</sheetData></worksheet>'
-        )
-        fixed = _normalize_orphan_shared_formula_masters(xml)
-        assert '<f>O216-7</f>' in fixed
-        assert 't="shared"' not in fixed
-        assert "<v>0</v>" not in fixed
-
-    def test_drop_calc_chain_removes_part_relationship_and_content_type(self) -> None:
-        data = {
-            "xl/calcChain.xml": b"<calcChain/>",
-            "xl/_rels/workbook.xml.rels": b'<Relationships><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/></Relationships>',
-            "[Content_Types].xml": b'<Types><Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/></Types>',
-        }
-        _drop_calc_chain(data)
-        assert "xl/calcChain.xml" not in data
-        assert b"calcChain" not in data["xl/_rels/workbook.xml.rels"]
-        assert b"calcChain" not in data["[Content_Types].xml"]
-
-
-class TestAccumulationRowDetection:
-    """Accumulation must treat inlineStr cells as occupied rows."""
-
-    def test_inline_string_counts_as_persisted_value(self) -> None:
-        assert _cell_has_persisted_value('<is><t>PO-614</t></is>')
-        assert _cell_has_persisted_value('<v>123</v>')
-        assert not _cell_has_persisted_value('<f>O216-7</f>')
 
 
 print("ASSERTION PASSED")
