@@ -17028,14 +17028,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # BUG-20260616-9DEF MT-2: 로컬 브라우저 클릭 승인 채널.
     # nonce 발급 직후, 사용자가 로컬 브라우저에서 승인 버튼을 직접 클릭해야 한다.
     # 클릭 미완료(타임아웃) 시 fail-closed로 BLOCKED — nonce는 발급됐으나 accept 단계에서 차단된다.
-    #
-    # QA Round1 재작업(AC-7 회귀): PIPELINE_BROWSER_APPROVAL_SKIP=1 외에 "비대화형/CI 환경"
-    # 도 자동 감지하여 브라우저 서버 호출을 short-circuit한다. AEF0 등 기존 E2E가
-    # subprocess(stdin=파이프)로 request-accept를 호출하면 사용자가 클릭할 수 없는데도
-    # 300초 블로킹 후 browser_approval_required로 FAIL되던 회귀를 차단한다. 이는 graceful
-    # skip(테스트 통과 목적의 임의 우회)이 아니라 "사용자가 클릭할 수 없는 환경"의 사실 기반
-    # 자동 감지이며, skip이어도 gates accept의 nonce/provenance/post-accept fail-closed
-    # 체인은 그대로 유지된다(skip은 클릭 게이트만 우회).
     _session_token = hashlib.sha256(
         (str(nonce) + str(req.get("request_id", "")) + _now()).encode("utf-8")
     ).hexdigest()[:24]
@@ -17061,7 +17053,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         try:
             _log_event(
                 state,
-                "browser approval skipped (PIPELINE_BROWSER_APPROVAL_SKIP=1 또는 비대화형/CI 환경)",
+                "browser approval skipped (PIPELINE_BROWSER_APPROVAL_SKIP=1)",
             )
         except Exception:  # noqa: BLE001 — 로깅 실패는 승인 흐름을 막지 않는다.
             pass
