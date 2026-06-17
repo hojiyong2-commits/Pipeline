@@ -1,0 +1,14 @@
+{
+  "case": "edge_freshness_fail_stale_sha",
+  "description": "_verify_browser_click_freshness: packet_sha256 불일치 — 클릭 시점에 packet 파일이 변경된 상태",
+  "acceptance_request": {
+    "status": "PENDING",
+    "nonce": "test-nonce-abc123",
+    "pipeline_id": "BUG-20260617-1022",
+    "packet_sha256": "STALE_SHA_DOES_NOT_MATCH_ACTUAL_PACKET",
+    "pr_body_sha256": ""
+  },
+  "packet_exists": true,
+  "packet_sha256_matches": false,
+  "session_token": "test-session-xyz"
+}

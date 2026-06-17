@@ -1,0 +1,5 @@
+{
+  "browser_click_confirmed": false,
+  "freshness_blocked": true,
+  "freshness_reason": "packet_sha256 불일치 (freshness fail)"
+}
