@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260617-1022</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>52fa19b578d8a401645baea39ece3fcfe0858b48bfdd9ee1f56268534da3dcbb</step_plan_sha256>
+  <planner_run_id>pm_planner-e8619f0cffd6ff56</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <summary>BUG-20260617-1022 브라우저 승인 채널 UX 개선. 8개 MT: MT-1 placeholder URL 제거, MT-2 _build_codex_verification_bundle 신규, MT-3 bundle 콘솔 출력, MT-4 HTML 페이지 bundle+복사버튼, MT-5 _verify_browser_click_freshness 신규, MT-6 do_POST 핸들러, MT-7 BROWSER_APPROVAL_TIMEOUT_SECONDS 상수, MT-8 오라클+E2E 테스트. SSoT 보존 필수.</summary>
+</manager_handoff>

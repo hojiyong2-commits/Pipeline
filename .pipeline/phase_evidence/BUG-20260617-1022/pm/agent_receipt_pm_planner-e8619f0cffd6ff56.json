@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260617-1022",
+  "phase": "pm_planner",
+  "agent_id": "pm-planner-agent",
+  "run_id": "pm_planner-e8619f0cffd6ff56",
+  "status": "COMPLETED",
+  "started_at": "2026-06-17T22:10:28Z",
+  "completed_at": "2026-06-17T22:15:59Z",
+  "output_file": "step_plan_1022.xml",
+  "output_sha256": "52fa19b578d8a401645baea39ece3fcfe0858b48bfdd9ee1f56268534da3dcbb",
+  "evidence_files": [],
+  "commit_sha": "4568e3be9f0168043a7de4333f2c2e38fef29e34"
+}

@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>8</micro_task_count>
+  <grep_executions>7</grep_executions>
+  <module_count>1</module_count>
+  <function_count>8</function_count>
+  <file_count>2</file_count>
+  <estimated_lines>250</estimated_lines>
+  <judgment_calls_resolved>
+    <call id="JC-1"><question>freshness 재검증 위치</question><decision>클릭 핸들러 내부 (/approve POST)</decision><reason>단일 /approve 엔드포인트에서 세션 검증 + freshness 검증을 함께 수행하면 원자적 처리 가능.</reason></call>
+    <call id="JC-2"><question>Codex 검증 bundle 형식</question><decision>텍스트 (복사 편의)</decision><reason>사용자가 Codex에게 복사+붙여넣기하는 시나리오.</reason></call>
+    <call id="JC-3"><question>timeout 기본값 상수화</question><decision>BROWSER_APPROVAL_TIMEOUT_SECONDS = 900</decision><reason>300→900초 변경 + 환경변수 오버라이드.</reason></call>
+  </judgment_calls_resolved>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260617-1022</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>단일 파일(pipeline.py) 수정이지만 8개 함수 변경/추가, 250줄 이상 변경 예상. 기존 SHA 검증 구조를 보존하면서 UX 레이어를 추가.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>250</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 10개 요구사항을 모두 명시. P0/P1 질문 없음. 내부 구현 세부사항은 유지보수성 우선으로 결정.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>브라우저 승인 채널 UX를 기존 SSoT(acceptance_request.json, human_acceptance_packet.json/md) 읽기 전용 레이어로 개선합니다. 8개 micro-task로 분해하여 구현합니다. 진행해도 될까요?</user_facing_question>
+        <evidence>사용자가 10개 요구사항을 명시하고 SSoT 보존 원칙을 강조함.</evidence>
+        <why_it_matters>기존 SHA 검증 구조를 유지하면서 UX를 개선해야 하므로 읽기 전용 레이어 방식이 필수.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>읽기 전용 UX 레이어 추가 (권장)</label>
+            <benefit>기존 SHA/nonce 구조 무변경, UX만 개선</benefit>
+            <cost>HTML 페이지와 freshness 검증 로직 추가 구현 필요</cost>
+          </option>
+          <option id="B">
+            <label>기존 구조 일부 변경</label>
+            <benefit>acceptance_request.json 직접 수정으로 구현 코드 분량 감소 가능</benefit>
+            <cost>기존 packet_sha256, pr_body_sha256 등 SSoT 검증 구조 훼손 위험이 있음</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 SSoT 보존을 명시 요구 — 옵션 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="R-1">placeholder URL 제거 — 실제 포트 URL(127.0.0.1)만 표시</requirement>
+    <requirement id="R-2">브라우저 대기 전 Codex 검증 bundle 콘솔 출력</requirement>
+    <requirement id="R-3">승인 페이지 HTML에 bundle + Codex 복사 영역</requirement>
+    <requirement id="R-4">승인 버튼 클릭 시 freshness 재검증</requirement>
+    <requirement id="R-5">freshness 실패 시 클릭 BLOCKED</requirement>
+    <requirement id="R-6">클릭 성공 시 클릭 필드만 원자적 기록</requirement>
+    <requirement id="R-7">대기 시간 기본값 900초 + 환경변수 오버라이드</requirement>
+    <requirement id="R-8">PIPELINE_BROWSER_APPROVAL_SKIP=1 테스트 전용 유지</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_cmd_gates_request_accept (console output)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>http://localhost:&lt;PORT&gt;</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>placeholder URL 출력 제거. 실제 URL은 _run_browser_approval_server 반환 후에만 출력.</change_summary>
+      <line_estimate>10</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_build_codex_verification_bundle (신규)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept</site>
+        <site>_ApprovalHandler.do_GET</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>def _build_verification_json</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>acceptance_request.json, human_acceptance_packet.json 읽기 전용으로 PR/Actions/SHA/결과물 정보 조합하는 bundle 생성 함수 신규 작성.</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-2, AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>_cmd_gates_request_accept (bundle 콘솔 출력)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>_run_browser_approval_server</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>브라우저 대기 전 _build_codex_verification_bundle 호출하여 콘솔에 출력.</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>_ApprovalHandler.do_GET (HTML 페이지)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>class _ApprovalHandler</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>승인 페이지에 bundle 표시 + 복사 버튼 + 승인 버튼 추가. 승인 버튼은 POST /approve?session=TOKEN 호출.</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>_verify_browser_click_freshness (신규)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>_ApprovalHandler.do_POST</site></affected_call_sites>
+      <grep_evidence><pattern>def _write_acceptance_request</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>클릭 시점 freshness 재검증: packet_sha256, pr_body_sha256, head_sha, ci_run_id, nonce, status==PENDING 검증. BLOCKED 시 오류 반환.</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-4, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>_ApprovalHandler.do_POST (신규)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>def do_GET</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>POST /approve 핸들러: freshness 검증 후 성공 시 클릭 필드만 원자적 기록. BLOCKED 시 미기록.</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-4, AC-5, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-7">
+      <affected_function>BROWSER_APPROVAL_TIMEOUT_SECONDS 상수 + 호출부</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites>
+        <site>_run_browser_approval_server (default param)</site>
+        <site>_cmd_gates_request_accept (call site)</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>timeout_seconds.*=.*300</pattern><match_count>2</match_count><executed>true</executed></grep_evidence>
+      <change_summary>BROWSER_APPROVAL_TIMEOUT_SECONDS = 900 SSoT 상수 추가. PIPELINE_BROWSER_APPROVAL_TIMEOUT 환경변수 오버라이드 지원.</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-8">
+      <affected_function>테스트 오라클 + E2E 테스트</affected_function>
+      <target_files>
+        <file>tests/oracles/BUG-20260617-1022/normal_freshness_pass/input.json</file>
+        <file>tests/oracles/BUG-20260617-1022/normal_freshness_pass/expected.json</file>
+        <file>tests/oracles/BUG-20260617-1022/edge_freshness_fail_stale_sha/input.json</file>
+        <file>tests/oracles/BUG-20260617-1022/edge_freshness_fail_stale_sha/expected.json</file>
+        <file>tests/e2e/test_browser_approval_ux_1022.py</file>
+      </target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>test_browser_approval</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>오라클 2케이스 + E2E 테스트. 788A 회귀 검증 포함.</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-8</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>placeholder URL(&lt;PORT&gt;) 출력이 제거되고, 실제 포트 URL(예: http://127.0.0.1:54321/approve?session=...) 만 표시된다.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>브라우저 대기 전 콘솔에 Codex 검증 bundle(PR/Actions/결과물/SHA/CI/검증 프롬프트)이 출력된다.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>승인 페이지에 bundle + 클립보드 복사 버튼 + 승인 버튼이 표시된다.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>승인 버튼 클릭 시 packet_sha256/pr_body_sha256/head_sha/ci_run_id/nonce/PENDING 재검증이 수행된다.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>freshness 실패 시 클릭 BLOCKED, acceptance_request.json 클릭 필드 미기록.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>클릭 성공 시 browser_click_confirmed/browser_click_at/browser_approval_token만 기록. 기존 SHA/nonce 덮어쓰기 금지.</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>대기 시간 기본값 900초, PIPELINE_BROWSER_APPROVAL_TIMEOUT 환경변수 오버라이드 가능, 콘솔에 시간 명시.</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>PIPELINE_BROWSER_APPROVAL_SKIP=1 테스트 전용 유지. 788A/D278/2821/32D7 회귀 없음. 신규 E2E 테스트 PASS.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.9</python_version>
+
+  <forbidden>
+    <item>acceptance_request.json 기존 필드(packet_sha256, pr_body_sha256, nonce, head_sha, ci_run_id) 구조 변경 금지</item>
+    <item>human_acceptance_packet.json/md 생성/검증 로직 변경 금지</item>
+    <item>gates accept 기존 검증 로직 변경 금지</item>
+    <item>PR body PIPELINE_FINAL_PACKET 블록 구조 변경 금지</item>
+  </forbidden>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
