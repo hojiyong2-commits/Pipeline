@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260617-E2D5</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>FAST_DOC</execution_profile>
+    <reason>문서 파일(docs/pipeline_real_dry_run_20260617.md)만 신규 작성하며, 제품 코드(pipeline.py, agent MD, workflow 등)를 일절 수정하지 않습니다. micro-task 1개로 완료되는 단순 문서 작업입니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>1</expected_changed_files>
+      <expected_changed_functions>0</expected_changed_functions>
+      <expected_changed_lines>60</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <confirmation_method>사용자가 요청 내용에서 작업 범위를 명시적으로 지정함 (docs/pipeline_real_dry_run_20260617.md 신규 작성, 5개 섹션, 금지 사항 명시). NO_ASKUSER_REQUIRED.</confirmation_method>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 취향 질문(섹션 순서, 문서 스타일 등)은 묻지 않고 사용자가 명시한 5개 섹션 구조를 그대로 따릅니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>dry run 보고서를 1개 문서 파일로 작성할까요, 아니면 섹션별로 여러 파일로 나눌까요?</user_facing_question>
+        <evidence>docs/pipeline_real_dry_run_20260617.md 1개 파일에 5개 섹션을 모두 포함하는 방식 vs. 섹션별 별도 파일로 분리하는 방식</evidence>
+        <why_it_matters>파일 수가 늘어나면 PR diff가 복잡해지고 사용자가 확인해야 할 링크가 늘어납니다. 이번 dry run의 목적(단일 결과물 검증)에 적합한 구조를 확인합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>단일 파일 (docs/pipeline_real_dry_run_20260617.md)</label>
+            <benefit>PR diff 단순, 사용자 확인 쉬움, dry run 목적에 최적</benefit>
+            <cost>파일이 길어질 경우 가독성 다소 저하</cost>
+          </option>
+          <option id="B">
+            <label>섹션별 별도 파일 분리</label>
+            <benefit>섹션별 독립 편집 용이</benefit>
+            <cost>PR diff 복잡, 사용자 확인 경로 분산, 불필요하게 복잡</cost>
+          </option>
+        </options>
+        <user_answer>A — 사용자가 단일 파일(docs/pipeline_real_dry_run_20260617.md)로 작성하도록 명시적으로 지정함. NO_ASKUSER_REQUIRED.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1" priority="P0">docs/pipeline_real_dry_run_20260617.md 파일을 새로 만들고 5개 섹션(목적, 현재 trust chain 요약, 이번 dry run에서 실제로 통과한 단계, 사용자 ACCEPT 전 확인 항목, 실사용 전 남은 주의사항)을 모두 포함한다.</requirement>
+    <requirement id="REQ-2" priority="P0">pipeline.py, agent MD, workflow 파일, CLAUDE.md를 수정하지 않는다.</requirement>
+    <requirement id="REQ-3" priority="P0">파이프라인 결함 발견 시 같은 PR에서 고치지 않고 별도 BUG 후보로 보고하고 dry run을 중단한다.</requirement>
+    <requirement id="REQ-4" priority="P1">실제 사용자 ACCEPT 경로에서 PIPELINE_BROWSER_APPROVAL_SKIP=1을 사용하지 않는다.</requirement>
+    <requirement id="REQ-5" priority="P1">결과물을 Output Registry에 등록한다.</requirement>
+  </requirements>
+
+  <decomposition_audit>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+    <micro_task_count>1</micro_task_count>
+    <grep_executions>1</grep_executions>
+    <rationale>변경 파일 1개(docs/pipeline_real_dry_run_20260617.md 신규 작성), 변경 함수 0개. FAST_DOC 프로필 조건 충족. micro-task 1개로 충분.</rationale>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>N/A (문서 파일 신규 작성)</affected_function>
+      <target_files>
+        <file>docs/pipeline_real_dry_run_20260617.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>docs/pipeline_real_dry_run</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+        <note>신규 파일이므로 기존 참조 없음 확인</note>
+      </grep_evidence>
+      <change_summary>docs/pipeline_real_dry_run_20260617.md 신규 작성 — 5개 필수 섹션 포함 한국어 문서</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>docs/pipeline_real_dry_run_20260617.md 파일이 생성되고 5개 섹션(목적, 현재 trust chain 요약, 이번 dry run에서 실제로 통과한 단계, 사용자 ACCEPT 전 확인 항목, 실사용 전 남은 주의사항)이 모두 존재한다.</text>
+      <expected_evidence>PR diff에서 docs/pipeline_real_dry_run_20260617.md 파일 추가 확인 + 5개 섹션 헤더 존재</expected_evidence>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>PR diff에 pipeline_state.json, manager_handoff_*.xml, step_plan_*.xml 등 실행 산출물이 포함되지 않는다 — 실제 변경 파일은 docs/pipeline_real_dry_run_20260617.md 1개만 존재.</text>
+      <expected_evidence>git diff --name-only 결과에 docs/pipeline_real_dry_run_20260617.md만 표시</expected_evidence>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>Technical/Oracle/GitHub CI gate가 모두 PASS된다.</text>
+      <expected_evidence>pipeline.py gates technical/oracle/github-ci 명령 결과 PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>request-accept 후 acceptance 상태가 PENDING으로 유지되며 사용자 직접 입력 전 gates accept가 실행되지 않는다.</text>
+      <expected_evidence>acceptance_request.json 생성 확인 + 사용자 코드 입력 대기 상태</expected_evidence>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>BUG-20260617-788A 이후 비대화형/CI 자동 우회 없이 브라우저 승인 서버가 시작된다 — acceptance_request.json에 browser_approval_skip=false 또는 browser_click_confirmed=true인지 확인.</text>
+      <expected_evidence>acceptance_request.json의 browser_approval_skip 또는 browser_click_confirmed 필드 확인</expected_evidence>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_design>
+    <waive_oracle>true</waive_oracle>
+    <waive_reason>docs-only 작업이므로 --allow-no-oracle 사용. 파이프라인 출력 oracle이 아닌 문서 파일 존재 + 5개 섹션 포함 여부가 acceptance criteria로 검증된다.</waive_reason>
+    <alternative_verification>
+      <method>PR diff에서 docs/pipeline_real_dry_run_20260617.md 파일 추가 확인</method>
+      <method>문서 내 5개 섹션 헤더(## 목적, ## 현재 trust chain 요약, ## 이번 dry run에서 실제로 통과한 단계, ## 사용자 ACCEPT 전 확인 항목, ## 실사용 전 남은 주의사항) 존재 확인</method>
+      <method>git diff --name-only 결과에 trust-root 파일(pipeline.py, CLAUDE.md, agent MD, workflow) 없음 확인</method>
+    </alternative_verification>
+  </oracle_design>
+
+  <python_version>3.10 — 기존 프로젝트 환경 유지</python_version>
+
+  <forbidden>
+    <item>pipeline.py 수정 금지</item>
+    <item>CLAUDE.md 수정 금지</item>
+    <item>.claude/agents/*.md 수정 금지</item>
+    <item>.claude/commands/*.md 수정 금지</item>
+    <item>.github/workflows/*.yml 수정 금지</item>
+    <item>신규 기능 추가 금지</item>
+    <item>파이프라인 개선 작업 금지</item>
+    <item>dry run 중 발견한 파이프라인 결함을 같은 PR에서 수정 금지 — 별도 BUG 후보로 보고</item>
+    <item>사용자 입력 없이 gates accept 실행 금지</item>
+    <item>실제 사용자 ACCEPT 경로에서 PIPELINE_BROWSER_APPROVAL_SKIP=1 사용 금지</item>
+  </forbidden>
+
+</step_plan>
