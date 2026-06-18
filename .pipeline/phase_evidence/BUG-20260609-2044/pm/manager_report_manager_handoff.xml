@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>BUG-20260609-2044</pipeline_id>
+  <phase>pipeline_manager</phase>
+  <run_id>pipeline_manager-58df4955db9f8c9b</run_id>
+  <planner_run_id>pm_planner-ac5ff46a5007a663</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <status>READY_FOR_DEV</status>
+  <step_plan_sha256>5f12a6fcbad7c2848c84868405b919d3b80ce3698ae385479cba4e6fd013442a</step_plan_sha256>
+  <contract_frozen>true</contract_frozen>
+  <contract_hash>7d4ef32ed2d544cddf9c861090f261c75e4cc0efe583cb53720cedc483f3b8bd</contract_hash>
+  <oracle_count>5</oracle_count>
+  <next_phase>dev</next_phase>
+  <summary>BUG-20260609-2044 PM 설계 완료. 6개 micro-task(MT-1~MT-6), oracle 5개(normal 1 + edge 2 + error 1 + exception 1), 계약 동결 완료. Dev 진입 준비됨.</summary>
+</manager_handoff>
