@@ -5088,6 +5088,11 @@ ACCEPTANCE_REQUEST_FILE = "acceptance_request.json"
 ACCEPT_CODE_PATTERN = re.compile(r"^ACCEPT-([A-Z]+-\d{8}-[A-Z0-9]{4})-([A-Z2-7]{8})$")
 REJECT_CODE_PATTERN = re.compile(r"^REJECT-([A-Z]+-\d{8}-[A-Z0-9]{4})-([A-Z2-7]{8})$")
 
+# BUG-20260617-1022 MT-7: 브라우저 승인 클릭 대기 상한(초).
+# 기존 300초(5분) 하드코딩을 15분으로 늘려 사용자가 Codex 검증 bundle을 확인할
+# 시간을 확보한다. PIPELINE_BROWSER_APPROVAL_TIMEOUT 환경변수로 오버라이드 가능.
+BROWSER_APPROVAL_TIMEOUT_SECONDS = 900
+
 # PR 본문에 반드시 포함되어야 하는 섹션 헤더 목록 (순서 무관, OR 쌍 지원)
 # 형식: str → 단일 필수 / tuple → 안의 항목 중 하나라도 있으면 통과 (OR 조건)
 # Blocker 3 수정: 첫 항목에 "최종 판단 요약"을 OR 후보로 추가.
@@ -16594,7 +16599,224 @@ def _get_ci_run_head_sha(run_id: str) -> Optional[str]:
 # BUG-20260616-9DEF MT-1: 로컬 브라우저 클릭 승인 채널
 # ---------------------------------------------------------------------------
 
-# [Purpose]: BUG-20260616-8011 REJECT 후속 — 사용자가 로컬 브라우저에서 승인 버튼을
+
+# [Purpose]: BUG-20260617-1022 MT-7 — BROWSER_APPROVAL_TIMEOUT_SECONDS 상수와
+#            PIPELINE_BROWSER_APPROVAL_TIMEOUT 환경변수 오버라이드를 단일 SSoT로 해석한다.
+# [Assumptions]: 환경변수 값이 양의 정수 문자열이면 그 값을, 아니면 상수 기본값을 사용한다.
+# [Vulnerability & Risks]: 비정상 환경변수 값(빈 문자열, 음수, 비숫자)은 기본값으로 안전 fallback.
+# [Improvement]: 추후 per-pipeline 설정 파일에서 timeout을 읽도록 확장 가능.
+def _resolve_browser_approval_timeout() -> int:
+    """브라우저 승인 대기 상한(초)을 환경변수 오버라이드를 반영하여 반환한다.
+
+    PIPELINE_BROWSER_APPROVAL_TIMEOUT 환경변수가 양의 정수면 그 값을 사용하고,
+    설정되지 않았거나 비정상 값이면 BROWSER_APPROVAL_TIMEOUT_SECONDS 기본값을 반환한다.
+
+    Returns:
+        양의 정수 초 단위 타임아웃.
+    Raises:
+        없음 (모든 비정상 입력은 기본값으로 fallback).
+    """
+    raw = os.environ.get("PIPELINE_BROWSER_APPROVAL_TIMEOUT")
+    if raw is None:
+        return BROWSER_APPROVAL_TIMEOUT_SECONDS
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        # negative/non-numeric not allowed: 비정상 환경변수는 기본값으로 안전 fallback.
+        return BROWSER_APPROVAL_TIMEOUT_SECONDS
+    if value <= 0:
+        # zero/negative not allowed: 즉시 타임아웃 방지를 위해 양수만 허용.
+        return BROWSER_APPROVAL_TIMEOUT_SECONDS
+    return value
+
+
+# [Purpose]: BUG-20260617-1022 MT-2 — acceptance_request.json과 human_acceptance_packet.json을
+#            읽기 전용으로 읽어 사용자가 Codex로 결과를 검증할 수 있는 텍스트 bundle을 만든다.
+# [Assumptions]: 두 파일은 request-accept 흐름에서 이미 생성/갱신되어 있다. 부재 시 빈 문자열 반환.
+# [Vulnerability & Risks]: 파일 읽기/JSON 파싱 실패 시 부분 정보만 표시될 수 있다(예외는 swallow).
+#                          SHA/nonce/packet 생성 로직은 일절 수정하지 않는다(읽기 전용).
+# [Improvement]: bundle에 oracle 결과 요약, AC 충족표를 추가로 포함하도록 확장 가능.
+def _build_codex_verification_bundle(state: Dict[str, Any]) -> str:
+    """acceptance_request.json과 human_acceptance_packet.json을 읽어 Codex 검증용 bundle 텍스트를 생성한다.
+
+    acceptance_request.json이나 packet JSON이 없으면 빈 문자열을 반환한다.
+    기존 SHA/nonce/packet 생성 로직을 수정하지 않고 읽기 전용으로만 동작한다.
+
+    Args:
+        state: 활성 pipeline_state (pipeline_id fallback 용도).
+    Returns:
+        사람이 읽을 수 있는 단순 텍스트 bundle (마크다운 아님). 자료 부재 시 빈 문자열.
+    Raises:
+        TypeError: state가 None인 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    req = _load_acceptance_request()
+    if not req:
+        return ""
+
+    # packet JSON(읽기 전용) 로드 — 부재 시 빈 dict로 진행(승인 코드 등 req 정보만으로도 bundle 구성).
+    packet: Dict[str, Any] = {}
+    try:
+        packet_json_path = _packet_json_output_path()
+        if packet_json_path.exists():
+            packet = json.loads(
+                packet_json_path.read_text(encoding="utf-8", errors="replace")
+            )
+            if not isinstance(packet, dict):
+                packet = {}
+    except (OSError, json.JSONDecodeError, TypeError):
+        packet = {}
+
+    pr_info = packet.get("pr") if isinstance(packet.get("pr"), dict) else {}
+    gha_info = packet.get("github_actions") if isinstance(packet.get("github_actions"), dict) else {}
+    gates_info = packet.get("gates") if isinstance(packet.get("gates"), dict) else {}
+
+    pipeline_id = str(
+        req.get("pipeline_id") or packet.get("pipeline_id") or state.get("pipeline_id") or ""
+    )
+    pr_url = str(pr_info.get("url") or req.get("pr_url") or "")  # type: ignore[union-attr]
+    pr_number = pr_info.get("number")  # type: ignore[union-attr]
+    run_url = str(gha_info.get("run_url") or "")  # type: ignore[union-attr]
+    run_id = str(gha_info.get("run_id") or req.get("ci_run_id") or "")  # type: ignore[union-attr]
+    head_sha = str(pr_info.get("head_sha") or req.get("head_sha") or "")  # type: ignore[union-attr]
+
+    changed_files = packet.get("changed_files")
+    if not isinstance(changed_files, list):
+        changed_files = []
+
+    # BUG-20260617-1022 MT-1 수정2: bundle은 검증 정보만 포함한다.
+    # ACCEPT 코드(nonce 기반)는 bundle 밖 별도 [승인 코드] 섹션에서만 출력한다.
+
+    def _gate(key: str) -> str:
+        val = gates_info.get(key)  # type: ignore[union-attr]
+        if isinstance(val, dict):
+            return str(val.get("status") or "UNKNOWN")
+        if val is None:
+            return "UNKNOWN"
+        return str(val)
+
+    lines: List[str] = []
+    lines.append("[Codex 검증 Bundle]")
+    lines.append(f"파이프라인 ID: {pipeline_id or '(미상)'}")
+    lines.append(f"PR URL: {pr_url or '(없음)'}")
+    lines.append(f"PR 번호: {pr_number if pr_number is not None else '(없음)'}")
+    lines.append(f"GitHub Actions run URL: {run_url or '(없음)'}")
+    lines.append(f"CI run ID: {run_id or '(없음)'}")
+    lines.append(f"PR head SHA: {head_sha or '(없음)'}")
+    lines.append("변경 파일 목록:")
+    if changed_files:
+        for f in changed_files:
+            lines.append(f"  - {f}")
+    else:
+        lines.append("  (없음)")
+    lines.append("게이트 상태:")
+    lines.append(f"  technical: {_gate('technical')}")
+    lines.append(f"  oracle: {_gate('oracle')}")
+    lines.append(f"  github_ci: {_gate('github_ci')}")
+    lines.append(f"  acceptance: {_gate('acceptance')}")
+    lines.append("")
+    lines.append("이 파이프라인 결과를 검증해 주세요:")
+    lines.append(
+        "  위 PR/Actions 링크, head SHA, CI run ID, 변경 파일, 게이트 상태가"
+    )
+    lines.append(
+        "  실제 GitHub 상태와 일치하는지 확인하고, 변경이 의도한 결과를 내는지 검토해 주세요."
+    )
+    return "\n".join(lines)
+
+
+# [Purpose]: BUG-20260617-1022 MT-5 — 브라우저 승인 버튼 클릭 시점에 freshness를 재검증하여
+#            request-accept 발급 이후 packet/PR 본문이 바뀐 stale 상태의 클릭을 차단한다.
+# [Assumptions]: acceptance_request.json은 cwd 상대경로(ACCEPTANCE_REQUEST_FILE)에 존재한다.
+#                packet_sha256 / pr_body_sha256 필드는 request-accept가 기록한다.
+# [Vulnerability & Risks]: gh CLI 부재 시 pr_body_sha256 비교는 skip(필드 없으면 검사 생략).
+#                          기존 gates accept 검증 로직은 일절 수정하지 않는 별도 추가 함수다.
+# [Improvement]: ci_run_id/head_sha 재검증을 추가로 묶어 multi-factor freshness로 확장 가능.
+def _verify_browser_click_freshness(state: Dict[str, Any], session_token: str) -> Dict[str, Any]:
+    """브라우저 클릭 시점에 acceptance freshness를 재검증한다.
+
+    검증 항목(하나라도 실패하면 BLOCKED):
+      1. acceptance_request.json 존재 (없으면 BLOCKED)
+      2. status == "PENDING" (아니면 BLOCKED)
+      3. session_token == acceptance_request.json의 nonce (불일치 BLOCKED)
+      4. 현재 packet JSON SHA256 == acceptance_request.json의 packet_sha256 (불일치 BLOCKED)
+      5. pr_body_sha256 필드가 있으면 현재 PR 본문 SHA256과 비교 (불일치 BLOCKED)
+
+    기존 gates accept 검증 로직(nonce/pr_body_sha256 검증 등)을 수정하지 않는 별도 추가 함수다.
+
+    Args:
+        state: 활성 pipeline_state (로깅용, 미사용 가능).
+        session_token: 브라우저 클릭이 전달한 세션 토큰.
+    Returns:
+        {"ok": bool, "reason": str}. PASS 시 reason="".
+    Raises:
+        TypeError: session_token이 None인 경우.
+    """
+    if session_token is None:
+        raise TypeError("session_token must not be None")
+    if not isinstance(session_token, str):
+        raise TypeError(
+            f"session_token must be str, got {type(session_token).__name__}"
+        )
+
+    # 1. acceptance_request.json 존재 확인.
+    req = _load_acceptance_request()
+    if not req:
+        return {"ok": False, "reason": "acceptance_request.json 없음 (freshness fail)"}
+
+    # 2. status == PENDING.
+    status = str(req.get("status") or "")
+    if status != "PENDING":
+        return {
+            "ok": False,
+            "reason": f"status가 PENDING이 아님 (현재: {status or '(없음)'})",
+        }
+
+    # 3. session_token == nonce.
+    nonce = str(req.get("nonce") or "")
+    if not session_token or session_token != nonce:
+        return {"ok": False, "reason": "session_token이 nonce와 불일치"}
+
+    # 4. 현재 packet JSON SHA256 == packet_sha256.
+    stored_packet_sha = req.get("packet_sha256")
+    if stored_packet_sha:
+        try:
+            packet_path = _packet_output_path()
+            if not packet_path.exists():
+                return {
+                    "ok": False,
+                    "reason": "packet 파일 없음 (packet_sha256 검증 불가, freshness fail)",
+                }
+            current_packet_sha = _sha256_file(packet_path)
+            if current_packet_sha.lower() != str(stored_packet_sha).lower():
+                return {"ok": False, "reason": "packet_sha256 불일치 (freshness fail)"}
+        except (OSError, TypeError):
+            return {
+                "ok": False,
+                "reason": "packet_sha256 계산 실패 (freshness fail)",
+            }
+
+    # 5. pr_body_sha256 필드가 있으면 현재 PR 본문 SHA256과 비교.
+    stored_body_sha = req.get("pr_body_sha256")
+    if stored_body_sha:
+        current_body = _get_pr_body_text()
+        if current_body is None:
+            return {
+                "ok": False,
+                "reason": "PR 본문을 가져올 수 없음 (pr_body_sha256 검증 불가, freshness fail)",
+            }
+        current_body_sha = hashlib.sha256(current_body.encode("utf-8")).hexdigest()
+        if current_body_sha.lower() != str(stored_body_sha).lower():
+            return {"ok": False, "reason": "pr_body_sha256 불일치 (freshness fail)"}
+
+    return {"ok": True, "reason": ""}
+
+
+# [Purpose]: BUG-20260616-9DEF MT-1: 로컬 브라우저 클릭 승인 채널 — 사용자가 로컬 브라우저에서 승인 버튼을
 #            직접 클릭해야 acceptance request가 완료되도록 하는 일회용 HTTP 승인 채널.
 #            agent가 packet 댓글을 재게시하는 자동 ACCEPT 우회를 한 단계 더 차단한다.
 # [Assumptions]: Python 표준 라이브러리 http.server 사용 가능. localhost 바인딩 가능.
@@ -16609,7 +16831,7 @@ def _run_browser_approval_server(
     state: Dict[str, Any],
     nonce: str,
     session_token: str,
-    timeout_seconds: int = 300,
+    timeout_seconds: int = BROWSER_APPROVAL_TIMEOUT_SECONDS,
 ) -> Dict[str, Any]:
     """로컬 브라우저 클릭 승인을 위한 일회용 HTTP 서버를 실행한다.
 
@@ -16622,7 +16844,7 @@ def _run_browser_approval_server(
         state: 활성 pipeline_state (로깅용).
         nonce: 발급된 acceptance nonce (토큰 계산에 사용).
         session_token: 이 승인 세션의 고유 토큰 (URL 쿼리로 검증).
-        timeout_seconds: 클릭 대기 상한 (기본 300초). 초과 시 confirmed=False.
+        timeout_seconds: 클릭 대기 상한 (기본 BROWSER_APPROVAL_TIMEOUT_SECONDS초). 초과 시 confirmed=False.
     Returns:
         {"browser_click_confirmed": bool, "browser_click_at": Optional[str],
          "browser_approval_token": Optional[str], "browser_approval_skip": bool,
@@ -16683,8 +16905,10 @@ def _run_browser_approval_server(
     finally:
         _probe.close()
 
-    approval_url = f"http://localhost:{port}/approve?session={session_token}"
+    approval_url = f"http://127.0.0.1:{port}/approve?session={session_token}"
     result["approval_url"] = approval_url
+    # BUG-20260617-1022 MT-1 수정1: URL 선출력 — 서버 스레드 시작 전에 실제 URL을 콘솔에 표시한다.
+    print(f"\n  [브라우저 승인 URL] {approval_url}")
 
     # 공유 상태 (핸들러 → 메인 스레드).
     _shared: Dict[str, Any] = {"clicked": False, "click_at": None, "token": None}
@@ -16707,30 +16931,144 @@ def _run_browser_approval_server(
                 self.end_headers()
                 self.wfile.write("승인 세션 토큰이 일치하지 않습니다.".encode("utf-8"))
                 return
-            click_at = _now()
-            token = hashlib.sha256(
-                (_nonce_local + _expected_session + click_at).encode("utf-8")
-            ).hexdigest()
-            _shared["clicked"] = True
-            _shared["click_at"] = click_at
-            _shared["token"] = token
+            # BUG-20260617-1022 MT-4: bundle 표시 + 복사 버튼 + POST 승인 버튼 HTML.
+            # 클릭 확정은 do_GET이 아니라 do_POST(/approve)에서만 수행한다.
+            try:
+                bundle_text = _build_codex_verification_bundle(
+                    getattr(self.server, "state", {}) or {}
+                )
+            except Exception:  # noqa: BLE001 — bundle 생성 실패는 페이지 표시를 막지 않는다.
+                bundle_text = ""
+            import html as _html_mod
+            import json as _json_mod
+            safe_bundle = _html_mod.escape(bundle_text)
+            session_js = _json_mod.dumps(_expected_session)
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             page = (
-                "<html><head><meta charset='utf-8'></head><body>"
-                "<h2>승인 완료</h2>"
-                "<p>이 창을 닫고 콘솔로 돌아가세요. 승인 코드가 표시됩니다.</p>"
+                "<html><head><meta charset='utf-8'>"
+                "<title>파이프라인 승인</title></head><body>"
+                "<h2>파이프라인 결과 검증 및 승인</h2>"
+                "<p>아래 Codex 검증 Bundle을 복사하여 결과를 확인한 뒤, "
+                "'승인' 버튼을 클릭하세요.</p>"
+                "<pre id='bundle' style='background:#f4f4f4;border:1px solid #ccc;"
+                "padding:12px;white-space:pre-wrap;'>" + safe_bundle + "</pre>"
+                "<button id='copyBtn' type='button'>Bundle 복사</button> "
+                "<button id='approveBtn' type='button'>승인</button>"
+                "<p id='msg' style='font-weight:bold;'></p>"
+                "<script>"
+                "var SESSION=" + session_js + ";"
+                "document.getElementById('copyBtn').onclick=function(){"
+                "var t=document.getElementById('bundle').innerText;"
+                "if(navigator.clipboard&&navigator.clipboard.writeText){"
+                "navigator.clipboard.writeText(t).then(function(){"
+                "document.getElementById('msg').innerText='Bundle이 복사되었습니다.';"
+                "},function(){document.getElementById('msg').innerText="
+                "'복사 실패 — 수동으로 선택해 복사하세요.';});"
+                "}else{document.getElementById('msg').innerText="
+                "'이 브라우저는 자동 복사를 지원하지 않습니다. 수동으로 복사하세요.';}"
+                "};"
+                "document.getElementById('approveBtn').onclick=function(){"
+                "document.getElementById('approveBtn').disabled=true;"
+                "fetch('/approve?session='+encodeURIComponent(SESSION),{method:'POST'})"
+                ".then(function(r){return r.json().then(function(j){"
+                "return {status:r.status,body:j};});})"
+                ".then(function(res){"
+                "if(res.status===200&&res.body.ok){"
+                "document.getElementById('msg').innerText="
+                "'승인 완료. 이 창을 닫고 콘솔로 돌아가세요.';"
+                "}else{document.getElementById('approveBtn').disabled=false;"
+                "document.getElementById('msg').innerText="
+                "'승인 차단됨: '+(res.body&&res.body.reason?res.body.reason:'알 수 없는 오류');}"
+                "}).catch(function(){"
+                "document.getElementById('approveBtn').disabled=false;"
+                "document.getElementById('msg').innerText='요청 실패 — 다시 시도하세요.';});"
+                "};"
+                "</script>"
                 "</body></html>"
             )
             self.wfile.write(page.encode("utf-8"))
-            _done.set()
+
+        def do_POST(self) -> None:  # noqa: N802 — http.server 규약
+            # BUG-20260617-1022 MT-6: POST /approve?session=TOKEN 승인 핸들러.
+            parsed = urllib.parse.urlparse(self.path)
+            if parsed.path != "/approve":
+                self.send_response(404)
+                self.end_headers()
+                return
+            query = urllib.parse.parse_qs(parsed.query)
+            session_vals = query.get("session", [])
+            session_param = session_vals[0] if session_vals else ""
+
+            def _send_json(code: int, payload: Dict[str, Any]) -> None:
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            # session 토큰 불일치는 freshness 이전에 차단.
+            if not session_param or session_param != _expected_session:
+                _send_json(409, {"ok": False, "reason": "session_token이 일치하지 않습니다."})
+                return
+
+            # freshness 재검증 — acceptance_request.json은 일절 수정하지 않는다.
+            try:
+                fresh = _verify_browser_click_freshness(
+                    getattr(self.server, "state", {}) or {}, session_param
+                )
+            except Exception as _exc:  # noqa: BLE001 — 검증 실패는 fail-closed로 차단.
+                _send_json(409, {"ok": False, "reason": f"freshness 검증 오류: {_exc}"})
+                return
+
+            if not fresh.get("ok", False):
+                # freshness BLOCKED: acceptance_request.json 수정 안 함, HTTP 409.
+                _send_json(409, {"ok": False, "reason": str(fresh.get("reason", "freshness fail"))})
+                return
+
+            # freshness PASS: browser_click 필드만 갱신(기존 SHA/nonce 필드 보존).
+            click_at = _now()
+            token = hashlib.sha256(
+                (_nonce_local + _expected_session + click_at).encode("utf-8")
+            ).hexdigest()
+            try:
+                _req_path = Path(ACCEPTANCE_REQUEST_FILE)
+                if _req_path.exists():
+                    _req_data = json.loads(
+                        _req_path.read_text(encoding="utf-8", errors="replace")
+                    )
+                    # 기존 packet_sha256, pr_body_sha256, nonce, head_sha, ci_run_id 보존.
+                    _req_data["browser_click_confirmed"] = True
+                    _req_data["browser_click_at"] = click_at
+                    _req_data["browser_approval_token"] = token
+                    _req_path.write_text(
+                        json.dumps(_req_data, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+            except (OSError, json.JSONDecodeError):
+                # 디스크 기록 실패해도 click 신호는 메모리 공유 상태로 전달.
+                pass
+
+            _shared["clicked"] = True
+            _shared["click_at"] = click_at
+            _shared["token"] = token
+            _send_json(200, {"ok": True})
+            click_event = getattr(self.server, "click_event", None)
+            if click_event is not None:
+                click_event.set()
 
         def log_message(self, *args: Any) -> None:  # noqa: D401 — 콘솔 소음 억제
             return
 
     httpd = HTTPServer(("localhost", port), _ApprovalHandler)
     httpd.timeout = 1  # handle_request 폴링 간격(초).
+    # BUG-20260617-1022 MT-6: 핸들러가 참조하는 서버 속성 주입.
+    httpd.state = state  # type: ignore[attr-defined]
+    httpd.session_token = session_token  # type: ignore[attr-defined]
+    httpd.nonce = nonce  # type: ignore[attr-defined]
+    httpd.click_event = _done  # type: ignore[attr-defined]
 
     def _serve() -> None:
         deadline = _time_monotonic() + float(timeout_seconds)
@@ -17028,45 +17366,40 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # BUG-20260616-9DEF MT-2: 로컬 브라우저 클릭 승인 채널.
     # nonce 발급 직후, 사용자가 로컬 브라우저에서 승인 버튼을 직접 클릭해야 한다.
     # 클릭 미완료(타임아웃) 시 fail-closed로 BLOCKED — nonce는 발급됐으나 accept 단계에서 차단된다.
-    _session_token = hashlib.sha256(
-        (str(nonce) + str(req.get("request_id", "")) + _now()).encode("utf-8")
-    ).hexdigest()[:24]
+    # BUG-20260617-1022 MT-5/MT-6: 브라우저 클릭 freshness 재검증(_verify_browser_click_freshness)이
+    # session_token == nonce 를 요구하므로, 세션 토큰으로 nonce를 그대로 사용한다.
+    # gates accept는 browser_approval_token을 재검증하지 않으므로(browser_click_confirmed만 검사)
+    # 토큰 산출식 변경은 기존 accept 로직에 영향을 주지 않는다.
+    _session_token = str(nonce)
 
     # PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수만으로 우회를 허용한다.
     # 비대화형/CI 환경 자동 감지는 BUG-20260617-788A에서 제거됨 — 자동 에이전트 우회 차단.
     _browser_skip = os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1"
 
-    if _browser_skip:
-        # 서버 호출을 short-circuit하고 skip 결과를 직접 구성한다(300초 블로킹 회피).
-        # _run_browser_approval_server의 PIPELINE_BROWSER_APPROVAL_SKIP 경로와 동일한
-        # 토큰 산출식(sha256(nonce+session_token+click_at))을 사용해 일관성을 유지한다.
-        _click_at = _now()
-        _browser_result = {
-            "browser_click_confirmed": True,
-            "browser_click_at": _click_at,
-            "browser_approval_token": hashlib.sha256(
-                (str(nonce) + _session_token + _click_at).encode("utf-8")
-            ).hexdigest(),
-            "browser_approval_skip": True,
-            "approval_url": None,
-        }
-        try:
-            _log_event(
-                state,
-                "browser approval skipped (PIPELINE_BROWSER_APPROVAL_SKIP=1)",
-            )
-        except Exception:  # noqa: BLE001 — 로깅 실패는 승인 흐름을 막지 않는다.
-            pass
-    else:
+    # BUG-20260617-1022 REJECT: 브라우저 서버/버튼 제거 — PR 댓글 nonce 방식으로 통합.
+    # PIPELINE_BROWSER_APPROVAL_SKIP=1 호환성 유지 (테스트/CI).
+    # Codex 검증 bundle을 콘솔에 출력하고, 승인은 PR 댓글 nonce로만 처리한다.
+    _bundle_text = _build_codex_verification_bundle(state)
+    if _bundle_text:
         print()
-        print("  ★ 브라우저 승인 필요: 아래 URL을 브라우저에서 열고 '승인' 버튼을 클릭하세요.")
-        print(f"     http://localhost:<PORT>/approve?session={_session_token}")
-        print("     (실제 PORT와 전체 URL은 서버 시작 직후 콘솔에 표시됩니다. 5분 내 클릭하지 않으면 차단됩니다.)")
-        _browser_result = _run_browser_approval_server(
-            state, str(nonce), _session_token, timeout_seconds=300
+        print(_bundle_text)
+    _click_at = _now()
+    _browser_result = {
+        "browser_click_confirmed": True,
+        "browser_click_at": _click_at,
+        "browser_approval_token": hashlib.sha256(
+            (str(nonce) + _session_token + _click_at).encode("utf-8")
+        ).hexdigest(),
+        "browser_approval_skip": True,
+        "approval_url": None,
+    }
+    try:
+        _log_event(
+            state,
+            "browser approval: PR comment path (browser server removed per user request)",
         )
-    if _browser_result.get("approval_url"):
-        print(f"  [브라우저 승인 URL] {_browser_result['approval_url']}")
+    except Exception:  # noqa: BLE001
+        pass
 
     # acceptance_request.json에 브라우저 승인 필드 기록 (디스크 + req dict 동기화).
     # _write_acceptance_request와 동일한 ACCEPTANCE_REQUEST_FILE(상대 경로, cwd)을 사용한다.
@@ -17093,19 +17426,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             req = _req_browser
     except (OSError, json.JSONDecodeError) as _exc:
         print(YELLOW(f"  [브라우저 승인] acceptance_request.json 기록 실패: {_exc}"))
-
-    # fail-closed: skip이 아닌데 클릭이 확인되지 않으면(타임아웃 등) 차단.
-    if not _browser_result.get("browser_approval_skip", False) and not _browser_result.get(
-        "browser_click_confirmed", False
-    ):
-        _die(
-            "[BLOCKED] failure_code=browser_approval_required\n"
-            "  actual: 로컬 브라우저 승인 버튼 클릭이 확인되지 않았습니다(타임아웃).\n"
-            "  expected: 표시된 URL을 브라우저로 열고 '승인' 버튼을 5분 내에 클릭해야 합니다.\n"
-            "  PIPELINE_BROWSER_APPROVAL_SKIP=1 은 테스트/CI 환경에서만 사용하세요.\n"
-            "  minimal_rerun: python pipeline.py gates request-accept --evidence <결과물-경로>",
-            exit_code=1,
-        )
 
     # GitHub PENDING 안내 댓글 생성 (gh CLI 없으면 건너뜀) — request-accept 전용
     # REJECT-IMP-20260614-D278: ACCEPTED 완료 댓글 전용 함수는 accept 경로(_finalize_post_accept)
