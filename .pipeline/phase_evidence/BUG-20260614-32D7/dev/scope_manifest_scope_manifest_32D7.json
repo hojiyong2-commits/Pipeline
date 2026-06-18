@@ -1,0 +1,82 @@
+{
+  "pipeline_id": "BUG-20260614-32D7",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [".github/workflows/ci.yml"],
+      "affected_functions": ["ci.yml \"최종 확인 안내 남기기\" step의 PowerShell 스크립트 (line 590-615)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-5"],
+          "changed_files": [".github/workflows/ci.yml"],
+          "implementation_evidence": [
+            "packet here-string에 <!-- pipeline-final-check-packet --> marker 추가",
+            "PR 댓글 PATCH 선택을 final-check marker 포함 AND pending/accepted 미포함으로 변경"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._post_github_pending_acceptance_comment (line 15103-15257)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-3", "AC-6"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "삭제 대상 댓글 필터를 final-check-only(공통+final-check marker만, pending/accepted 미포함) 제외로 변경",
+            "pending 댓글 본문에 '판단 정보 상태: 판단 가능' readiness 줄 보장"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._update_github_acceptance_comment (line 15310-15416)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-4", "AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "ACCEPTED 댓글 교체 시 final-check-only 댓글은 삭제 대상에서 제외"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._check_acceptance_packet_via_github (line 5085-5220) 및 _get_pr_comment_acceptance_body (line 15419-15465)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-7", "AC-8"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "댓글 선택 우선순위: pending marker 우선 -> 공통 marker(legacy) -> final-check-only 제외 도입"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["tests/e2e/test_marker_separation_32d7.py"],
+      "affected_functions": ["신규 테스트: tests/e2e/test_marker_separation_32d7.py"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-9", "AC-10"],
+          "changed_files": ["tests/e2e/test_marker_separation_32d7.py"],
+          "implementation_evidence": [
+            "8개 marker 분리 테스트(TC-1~TC-8) 신규 작성, TC-7/TC-8은 B32A/D278/2821 회귀 subprocess 실행"
+          ]
+        }
+      ]
+    }
+  ]
+}
