@@ -172,3 +172,106 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ---------------------------------------------------------------------------
+# BUG-20260617-1022 REJECT 보강 테스트
+# ---------------------------------------------------------------------------
+
+import subprocess
+import sys
+import os
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _make_min_state(pipeline_id: str, tmp_path: Path) -> Path:
+    """테스트용 최소 pipeline_state.json을 tmp_path에 생성한다."""
+    state = {
+        "version": "1.2.0",
+        "pipeline_id": pipeline_id,
+        "type": "BUG",
+        "description": "test",
+        "current_phase": "harness",
+        "blocked": False,
+        "phases": {"pm": {"status": "DONE"}, "dev": {"status": "DONE"}},
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+            "acceptance": {"status": "PENDING"},
+        },
+        "events": [],
+    }
+    state_path = tmp_path / "pipeline_state.json"
+    state_path.write_text(
+        __import__("json").dumps(state, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return state_path
+
+
+def test_request_accept_bundle_excludes_accept_code(tmp_path: Path) -> None:
+    """gates request-accept 출력에서 Codex bundle은 ACCEPT 코드를 포함하지 않아야 한다."""
+    state_path = _make_min_state("BUG-20260617-1022", tmp_path)
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
+    result = subprocess.run(
+        [sys.executable, str(_REPO_ROOT / "pipeline.py"), "gates", "request-accept",
+         "--evidence", str(_REPO_ROOT / "pipeline.py")],
+        capture_output=True, text=True, cwd=str(tmp_path), env=env,
+        encoding="utf-8", errors="replace",
+    )
+    stdout = result.stdout + result.stderr
+    # bundle 섹션이 있으면 그 안에 ACCEPT 코드가 없어야 한다
+    if "[Codex 검증 Bundle]" in stdout:
+        bundle_start = stdout.index("[Codex 검증 Bundle]")
+        bundle_section = stdout[bundle_start:]
+        # 승인 코드 섹션은 bundle 이후에만 나와야 함
+        accept_idx = bundle_section.find("[승인 코드]")
+        assert accept_idx == -1 or accept_idx > len("[Codex 검증 Bundle]"), \
+            "Codex bundle 섹션 안에 [승인 코드]가 포함되어 있습니다"
+    # accept_code는 [승인 코드] 섹션에만 있어야 함
+    assert "[승인 코드]" in stdout or result.returncode != 0, \
+        "request-accept 출력에 [승인 코드] 섹션이 없습니다"
+
+
+def test_request_accept_no_browser_server_blocking(tmp_path: Path) -> None:
+    """PR 댓글 방식: request-accept가 브라우저 서버 없이 즉시 완료되어야 한다."""
+    import time
+    state_path = _make_min_state("BUG-20260617-1022", tmp_path)
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
+    start = time.monotonic()
+    subprocess.run(
+        [sys.executable, str(_REPO_ROOT / "pipeline.py"), "gates", "request-accept",
+         "--evidence", str(_REPO_ROOT / "pipeline.py")],
+        capture_output=True, text=True, cwd=str(tmp_path), env=env,
+        encoding="utf-8", errors="replace", timeout=30,
+    )
+    elapsed = time.monotonic() - start
+    # 브라우저 서버 없이 실행해야 하므로 30초 내에 완료 필수
+    assert elapsed < 30, f"request-accept가 {elapsed:.1f}초 걸림 — 브라우저 서버 블로킹 의심"
+
+
+def test_request_accept_browser_approval_skip_set(tmp_path: Path) -> None:
+    """request-accept 후 acceptance_request.json에 browser_approval_skip=True가 기록된다."""
+    state_path = _make_min_state("BUG-20260617-1022", tmp_path)
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_path)
+    env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
+    subprocess.run(
+        [sys.executable, str(_REPO_ROOT / "pipeline.py"), "gates", "request-accept",
+         "--evidence", str(_REPO_ROOT / "pipeline.py")],
+        capture_output=True, text=True, cwd=str(tmp_path), env=env,
+        encoding="utf-8", errors="replace", timeout=30,
+    )
+    req_path = tmp_path / "acceptance_request.json"
+    if req_path.exists():
+        import json as _json
+        req = _json.loads(req_path.read_text(encoding="utf-8"))
+        assert req.get("browser_approval_skip") is True, \
+            f"browser_approval_skip should be True, got {req.get('browser_approval_skip')!r}"

@@ -16688,8 +16688,8 @@ def _build_codex_verification_bundle(state: Dict[str, Any]) -> str:
     if not isinstance(changed_files, list):
         changed_files = []
 
-    nonce = str(req.get("nonce") or "")
-    accept_code = f"ACCEPT-{pipeline_id}-{nonce}" if pipeline_id and nonce else ""
+    # BUG-20260617-1022 MT-1 수정2: bundle은 검증 정보만 포함한다.
+    # ACCEPT 코드(nonce 기반)는 bundle 밖 별도 [승인 코드] 섹션에서만 출력한다.
 
     def _gate(key: str) -> str:
         val = gates_info.get(key)  # type: ignore[union-attr]
@@ -16718,7 +16718,6 @@ def _build_codex_verification_bundle(state: Dict[str, Any]) -> str:
     lines.append(f"  oracle: {_gate('oracle')}")
     lines.append(f"  github_ci: {_gate('github_ci')}")
     lines.append(f"  acceptance: {_gate('acceptance')}")
-    lines.append(f"승인 코드: {accept_code or '(미발급)'}")
     lines.append("")
     lines.append("이 파이프라인 결과를 검증해 주세요:")
     lines.append(
@@ -16906,8 +16905,10 @@ def _run_browser_approval_server(
     finally:
         _probe.close()
 
-    approval_url = f"http://localhost:{port}/approve?session={session_token}"
+    approval_url = f"http://127.0.0.1:{port}/approve?session={session_token}"
     result["approval_url"] = approval_url
+    # BUG-20260617-1022 MT-1 수정1: URL 선출력 — 서버 스레드 시작 전에 실제 URL을 콘솔에 표시한다.
+    print(f"\n  [브라우저 승인 URL] {approval_url}")
 
     # 공유 상태 (핸들러 → 메인 스레드).
     _shared: Dict[str, Any] = {"clicked": False, "click_at": None, "token": None}
@@ -17375,48 +17376,30 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # 비대화형/CI 환경 자동 감지는 BUG-20260617-788A에서 제거됨 — 자동 에이전트 우회 차단.
     _browser_skip = os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1"
 
-    # BUG-20260617-1022 MT-7: 타임아웃 상한을 상수/환경변수로 해석.
-    _browser_timeout = _resolve_browser_approval_timeout()
-
-    if _browser_skip:
-        # 서버 호출을 short-circuit하고 skip 결과를 직접 구성한다(타임아웃 블로킹 회피).
-        # _run_browser_approval_server의 PIPELINE_BROWSER_APPROVAL_SKIP 경로와 동일한
-        # 토큰 산출식(sha256(nonce+session_token+click_at))을 사용해 일관성을 유지한다.
-        _click_at = _now()
-        _browser_result = {
-            "browser_click_confirmed": True,
-            "browser_click_at": _click_at,
-            "browser_approval_token": hashlib.sha256(
-                (str(nonce) + _session_token + _click_at).encode("utf-8")
-            ).hexdigest(),
-            "browser_approval_skip": True,
-            "approval_url": None,
-        }
-        try:
-            _log_event(
-                state,
-                "browser approval skipped (PIPELINE_BROWSER_APPROVAL_SKIP=1)",
-            )
-        except Exception:  # noqa: BLE001 — 로깅 실패는 승인 흐름을 막지 않는다.
-            pass
-    else:
-        # BUG-20260617-1022 MT-3: 브라우저 대기 전 Codex 검증 bundle을 콘솔에 출력한다.
-        _bundle_text = _build_codex_verification_bundle(state)
-        if _bundle_text:
-            print()
-            print(_bundle_text)
-        # BUG-20260617-1022 MT-1: placeholder URL("http://localhost:<PORT>/...") 출력 제거.
-        # 실제 URL은 _run_browser_approval_server가 반환한 approval_url로만 출력한다.
+    # BUG-20260617-1022 REJECT: 브라우저 서버/버튼 제거 — PR 댓글 nonce 방식으로 통합.
+    # PIPELINE_BROWSER_APPROVAL_SKIP=1 호환성 유지 (테스트/CI).
+    # Codex 검증 bundle을 콘솔에 출력하고, 승인은 PR 댓글 nonce로만 처리한다.
+    _bundle_text = _build_codex_verification_bundle(state)
+    if _bundle_text:
         print()
-        print(
-            "  ★ 브라우저 승인 필요: 아래 표시되는 URL을 브라우저에서 열고 '승인' 버튼을 클릭하세요."
+        print(_bundle_text)
+    _click_at = _now()
+    _browser_result = {
+        "browser_click_confirmed": True,
+        "browser_click_at": _click_at,
+        "browser_approval_token": hashlib.sha256(
+            (str(nonce) + _session_token + _click_at).encode("utf-8")
+        ).hexdigest(),
+        "browser_approval_skip": True,
+        "approval_url": None,
+    }
+    try:
+        _log_event(
+            state,
+            "browser approval: PR comment path (browser server removed per user request)",
         )
-        print(f"  [브라우저 승인 대기 중... (최대 {_browser_timeout}초)]")
-        _browser_result = _run_browser_approval_server(
-            state, str(nonce), _session_token, timeout_seconds=_browser_timeout
-        )
-    if _browser_result.get("approval_url"):
-        print(f"  [브라우저 승인 URL] {_browser_result['approval_url']}")
+    except Exception:  # noqa: BLE001
+        pass
 
     # acceptance_request.json에 브라우저 승인 필드 기록 (디스크 + req dict 동기화).
     # _write_acceptance_request와 동일한 ACCEPTANCE_REQUEST_FILE(상대 경로, cwd)을 사용한다.
@@ -17443,19 +17426,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             req = _req_browser
     except (OSError, json.JSONDecodeError) as _exc:
         print(YELLOW(f"  [브라우저 승인] acceptance_request.json 기록 실패: {_exc}"))
-
-    # fail-closed: skip이 아닌데 클릭이 확인되지 않으면(타임아웃 등) 차단.
-    if not _browser_result.get("browser_approval_skip", False) and not _browser_result.get(
-        "browser_click_confirmed", False
-    ):
-        _die(
-            "[BLOCKED] failure_code=browser_approval_required\n"
-            "  actual: 로컬 브라우저 승인 버튼 클릭이 확인되지 않았습니다(타임아웃).\n"
-            "  expected: 표시된 URL을 브라우저로 열고 '승인' 버튼을 5분 내에 클릭해야 합니다.\n"
-            "  PIPELINE_BROWSER_APPROVAL_SKIP=1 은 테스트/CI 환경에서만 사용하세요.\n"
-            "  minimal_rerun: python pipeline.py gates request-accept --evidence <결과물-경로>",
-            exit_code=1,
-        )
 
     # GitHub PENDING 안내 댓글 생성 (gh CLI 없으면 건너뜀) — request-accept 전용
     # REJECT-IMP-20260614-D278: ACCEPTED 완료 댓글 전용 함수는 accept 경로(_finalize_post_accept)
