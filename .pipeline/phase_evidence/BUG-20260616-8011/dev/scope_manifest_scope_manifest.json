@@ -1,0 +1,94 @@
+{
+  "pipeline_id": "BUG-20260616-8011",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._check_pr_approver_provenance", "pipeline._consume_acceptance_request"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-4"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_check_pr_approver_provenance: packet 계열 마커(base/-pending/-accepted)를 포함한 댓글에 기대 승인 코드가 인용되면 protocol_violation_auto_accept BLOCKED 반환 (_PACKET_MARKER_FRAGMENTS, _auto_accept_quote_hit 신규)",
+            "cmd_gates accept: protocol_violation_auto_accept 시 failure_category=protocol_violation 으로 failure packet 기록 + state.acceptance.auto_accept_attempts 누적",
+            "_consume_acceptance_request: user_acceptance_source/source_comment_id 감사 필드 추가, accept 경로에서 provenance_check.comment_id 전달"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [".claude/agents/pipeline-manager-agent.md"],
+      "affected_functions": ["N/A (문서)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3"],
+          "changed_files": [".claude/agents/pipeline-manager-agent.md"],
+          "implementation_evidence": [
+            "'## 자동 ACCEPT 금지 (BUG-20260616-8011)' 섹션 신규 추가 — 'AC 10/10 PASS' 섹션 직후 삽입",
+            "규칙 1: 승인 코드 PR 댓글 자동 게시 금지 + protocol_violation_auto_accept 탐지 명시 (AC-2)",
+            "규칙 2/3/4: 사용자 대신 gates accept 실행 금지, request-accept 후 STOP, 사용자 직접 입력 필수 (AC-1, AC-3)",
+            "규칙 5: 동일 GitHub 토큰/OS 사용자 공유로 인한 기술적 한계 문서화"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/e2e/test_auto_accept_guard_8011.py",
+        "tests/test_pr_approver_b96c.py"
+      ],
+      "affected_functions": ["N/A (테스트)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6"],
+          "changed_files": [
+            "tests/e2e/test_auto_accept_guard_8011.py",
+            "tests/test_pr_approver_b96c.py"
+          ],
+          "implementation_evidence": [
+            "test_auto_accept_guard_8011.py 신규: TC-1 packet 마커 댓글 코드 인용 -> gates accept BLOCKED + protocol_violation_auto_accept (AC-1, AC-2)",
+            "TC-2 acceptance_request.json 없음 -> missing_acceptance_request (AC-3 nonce 체인)",
+            "TC-3 분리된 독립 댓글 정확 코드 -> provenance 미차단(오탐 0) (AC-6)",
+            "TC-4 b96c provenance 회귀 subprocess 통과 (AC-5)",
+            "TC-5 자동 ACCEPT 차단 시 failure_packet failure_category=protocol_violation/auto_accept_attempts 기록 (AC-4)",
+            "TC-6 packet 안내+독립 정확 코드 혼합 -> 자동 ACCEPT 오탐 0 (AC-6)",
+            "test_pr_approver_b96c.py 수정: test_packet_comment_only_fail 단언을 protocol_violation_auto_accept 허용으로 확장(보안 완화 없음) + test_packet_comment_without_code_missing 신규(코드 인용 없는 packet=pr_approver_missing 유지)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "tests/oracles/BUG-20260616-8011/normal_manual_accept/input.json",
+        "tests/oracles/BUG-20260616-8011/normal_manual_accept/expected.json",
+        "tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/input.json",
+        "tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/expected.json"
+      ],
+      "affected_functions": ["N/A (테스트 데이터)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-5", "AC-6"],
+          "changed_files": [
+            "tests/oracles/BUG-20260616-8011/normal_manual_accept/input.json",
+            "tests/oracles/BUG-20260616-8011/normal_manual_accept/expected.json",
+            "tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/input.json",
+            "tests/oracles/BUG-20260616-8011/edge_auto_accept_blocked/expected.json"
+          ],
+          "implementation_evidence": [
+            "normal_manual_accept(case=normal): 허용 승인자 분리 독립 댓글 정확 코드 -> _check_pr_approver_provenance PASS, 실측 5개 필드 일치 (AC-6)",
+            "edge_auto_accept_blocked(case=edge): packet 마커 댓글 코드 인용 -> protocol_violation_auto_accept BLOCKED, expected.json failure_code를 실제 동작으로 정정, 실측 6개 필드 일치 (AC-5)",
+            "두 oracle 모두 _check_pr_approver_provenance 실제 반환값과 전체 필드 대조하여 MATCH 확인"
+          ]
+        }
+      ]
+    }
+  ]
+}
