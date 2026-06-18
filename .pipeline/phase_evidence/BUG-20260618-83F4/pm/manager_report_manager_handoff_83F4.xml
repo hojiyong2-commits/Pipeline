@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260618-83F4</pipeline_id>
+  <manager_run_id>pipeline_manager-51adeb073888cfe0</manager_run_id>
+  <planner_run_id>pm_planner-107d10a56f3c16fd</planner_run_id>
+  <from>pipeline-manager-agent</from>
+  <status>PM_COMPLETE</status>
+  <step_plan_sha256>d299898b456507bb351923ccd3d2344e51a0cbcfa0a9056de5c48ab0effea556</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+
+  <summary>
+    브라우저 승인 채널(http.server 기반 _run_browser_approval_server)을 완전 제거하고,
+    gates accept를 GitHub PR 댓글 provenance 검증(작성자 + 타임스탬프 검증) 방식으로 교체합니다.
+    nonce는 비노출로 유지하고 ACCEPT-{pipeline_id} 형식 코드만 사용자에게 표시합니다.
+  </summary>
+
+  <execution_profile>STANDARD</execution_profile>
+
+  <micro_tasks_plan>
+    <mt id="MT-1" file="pipeline.py" function="_run_browser_approval_server">
+      _run_browser_approval_server 함수(약 165줄) 및 _time_monotonic 래퍼 완전 제거
+    </mt>
+    <mt id="MT-2" file="pipeline.py" function="_write_acceptance_request">
+      함수 서명에서 browser_click_confirmed, browser_click_at, browser_approval_token, browser_approval_skip 매개변수 4개 제거
+    </mt>
+    <mt id="MT-3" file="pipeline.py" function="_cmd_gates_request_accept">
+      브라우저 관련 로직 블록 제거 + nonce 비노출 출력 + PR 댓글 안내 추가
+    </mt>
+    <mt id="MT-4" file="pipeline.py" function="_check_pr_approver_provenance">
+      타임스탬프 검증(댓글 시각 > acceptance_request.created_at) 추가, failure_code pr_comment_too_old 신설
+    </mt>
+    <mt id="MT-5" file="pipeline.py" function="gates_accept">
+      browser_click_confirmed 검증 블록(BUG-20260616-9DEF MT-3) 완전 제거
+    </mt>
+    <mt id="MT-6" file="tests/e2e/test_pr_comment_approval_83f4.py" function="신규">
+      PR 댓글 provenance E2E 테스트 5케이스 + Oracle 3케이스 작성
+    </mt>
+  </micro_tasks_plan>
+
+  <oracle_plan>
+    <oracle_case id="OC-1" case_kind="normal"
+      path="tests/oracles/BUG-20260618-83F4/normal_pr_comment_approval/"
+      expected_source="user_provided"/>
+    <oracle_case id="OC-2" case_kind="edge"
+      path="tests/oracles/BUG-20260618-83F4/edge_pr_comment_wrong_author/"
+      expected_source="user_provided"/>
+    <oracle_case id="OC-3" case_kind="edge"
+      path="tests/oracles/BUG-20260618-83F4/edge_pr_comment_too_old/"
+      expected_source="user_provided"/>
+  </oracle_plan>
+
+  <forbidden_items>
+    <item>nonce 생성/검증/consume 보안 로직 완화</item>
+    <item>gates request-accept / gates accept 기존 보안 조건 완화</item>
+    <item>D278 post-accept fail-closed 로직 완화</item>
+    <item>2821 workspace_hygiene fail-closed 로직 완화</item>
+    <item>8011 packet 마커 댓글 차단 로직 제거</item>
+    <item>테스트 통과를 위한 graceful skip 추가</item>
+    <item>pipeline_state.json, manager_handoff_*.xml, step_plan_*.xml 실행 산출물 PR diff 포함</item>
+    <item>PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수를 실제 승인 경로에서 사용</item>
+  </forbidden_items>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+
+  <covered_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_pr_comment_approval_83f4.py</file>
+    <file>tests/oracles/BUG-20260618-83F4/normal_pr_comment_approval/input.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/normal_pr_comment_approval/expected.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_wrong_author/input.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_wrong_author/expected.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_too_old/input.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_too_old/expected.json</file>
+  </covered_files>
+  <all_ac_covered>true</all_ac_covered>
+  <ac_coverage>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10</ac_coverage>
+</manager_handoff>
