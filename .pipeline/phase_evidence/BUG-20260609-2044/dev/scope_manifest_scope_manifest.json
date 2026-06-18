@@ -1,0 +1,59 @@
+{
+  "pipeline_id": "BUG-20260609-2044",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._get_qa_verification_for_ac"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._validate_ac_table_before_request_accept"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_request_accept"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._build_verification_json"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._build_final_packet_content"
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/test_request_accept_sst_2044.py"
+      ],
+      "affected_functions": [
+        "tests.test_request_accept_sst_2044 (신규)"
+      ]
+    }
+  ]
+}
