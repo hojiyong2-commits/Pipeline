@@ -1,0 +1,107 @@
+{
+  "pipeline_id": "BUG-20260618-83F4",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._run_browser_approval_server"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_run_browser_approval_server 함수 정의 전체 삭제 (HTTPServer 기반 로컬 승인 채널)",
+            "_time_monotonic 래퍼 함수 삭제 (server 함수 전용 private helper, 타 호출자 0건)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._write_acceptance_request"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-2"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_write_acceptance_request 서명에서 browser_click_confirmed/browser_click_at/browser_approval_token/browser_approval_skip 매개변수 4개 제거",
+            "acceptance_request.json data dict에서 browser_* 4개 필드 기록 제거"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._cmd_gates_request_accept"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-3", "AC-7"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_session_token 생성 코드 제거",
+            "_browser_skip 변수 및 분기 코드 제거",
+            "_run_browser_approval_server 호출 블록 제거",
+            "browser_* 필드 acceptance_request.json 기록 블록 제거",
+            "fail-closed browser_approval_required 차단 블록 제거",
+            "PR 댓글 승인 안내 출력 추가 (ACCEPT-{pipeline_id} 형식, nonce 비노출)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._check_pr_approver_provenance"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-4", "AC-8"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "댓글 created_at > acceptance_request created_at 타임스탬프 검증 추가",
+            "댓글 시각이 request 생성 이전이면 failure_code=pr_comment_too_old 반환",
+            "ACCEPT-{pipeline_id} (nonce 미포함) 본문도 정확 일치 PASS 후보로 인정"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline.gates_accept (코드 블록)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "gates accept browser_click_confirmed/browser_approval_skip 검증 블록 전체 제거",
+            "browser_approval_required failure_code 차단 코드 제거"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": ["tests/e2e/test_pr_comment_approval_83f4.py"],
+      "affected_functions": ["test_pr_comment_approval_83f4 (신규)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-9", "AC-10"],
+          "changed_files": ["tests/e2e/test_pr_comment_approval_83f4.py"],
+          "implementation_evidence": [
+            "test_pr_comment_approval_83f4.py 신규 작성 — _check_pr_approver_provenance gh subprocess 모킹",
+            "5개 테스트 케이스: normal/wrong_author/too_old/missing_request/no_matching_comment",
+            "3개 frozen oracle (normal/wrong_author/too_old) 입출력 대조"
+          ]
+        }
+      ]
+    }
+  ]
+}
