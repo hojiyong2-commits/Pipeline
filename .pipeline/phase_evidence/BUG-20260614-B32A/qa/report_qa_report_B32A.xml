@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260614-B32A</pipeline_id>
+  <verdict>PASS</verdict>
+
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_pending_comment_sst_b32a.py</evidence>
+    <accepted>YES — UI 태그 없음(STANDARD), dev-agent handover만 필요. evidence 파일 모두 실제 제출 확인.</accepted>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. gh CLI 호출은 기존 graceful degradation 로직 그대로 유지.</wa>
+    <ui>N-A — UI 카테고리 아님.</ui>
+    <fs>N-A — 파일 시스템 카테고리 아님. 변경은 메모리 내 dict 조립.</fs>
+    <pd>PASS — packet_evidence=None 파라미터로 SSoT 출처 분기, 인라인 dict 구조가 report-final-packet 경로와 동일(정합성 보장). 타입 가드 추가.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. gates secrets exit 0 확인됨.</sec>
+    <al>PASS — packet_evidence dict/None 타입 가드, isinstance 검증, _ei/_wh None 방어(or {}), try-except non-fatal fallback.</al>
+    <build>N-A — BUILD 태그 없음.</build>
+    <vsce>N-A — VSCE 태그 없음.</vsce>
+  </category_check>
+
+  <numeric_score>115</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5(state/packet 출처 분기 깔끔, SSoT 단일 함수 책임 유지) / 인터페이스계약 5(Optional[Dict] 타입힌트 + 타입가드 + docstring Args/Raises 갱신)</pd>
+    <al score="20" max="20">타입검증 5(packet_evidence dict 가드) / 범위검증 5(or {} None 방어) / 0나눗셈 N/A→만점처리 / 빈데이터 5(빈 packet 시 packet 기준 NOT_CHECKED, 의도된 동작) + 예외 fail-safe 5</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="115" max="120"/>
+    <percentage>95.8</percentage>
+    <numeric_verdict>PASS(115/120 >= 96/120)</numeric_verdict>
+  </numeric_score_detail>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="pending comment 경로(line 15157, phase=pending-comment-packet)가 PR body 경로(line 12543, phase=report-final-packet)와 동일한 _validate_evidence_provenance() 호출 + 동일 8-key dict 구조를 사용. TC-1 PASS — packet 기준 evidence_integrity_summary가 'OK (protected:3, tracked:4, pr_included:3)'로 표시, NOT_CHECKED 없음."/>
+    <criterion ac_id="AC-2" status="PASS" evidence="pending comment workspace_hygiene가 line 15174 state.get('workspace_hygiene')로 채워짐 — PR body 경로 line 12560과 동일 원천. TC-2 PASS — packet WARN status 반영, cleanup_only_items 일치."/>
+    <criterion ac_id="AC-3" status="PASS" evidence="human_acceptance_packet.json은 _build_verification_json이 _collect_packet_evidence 결과를 사용 — pending comment와 동일 _validate_evidence_provenance/state.get 원천. 정적 코드 경로 일치 확인."/>
+    <criterion ac_id="AC-4" status="PASS" evidence="human_acceptance_packet.md는 _build_final_packet_content(evidence)로 생성되며 evidence는 line 12557/12560에서 동일 원천 파생. pending comment와 SSoT 동일."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="TC-1 PASS — packet_evidence 제공 시 NOT_CHECKED fallback 미발생. TC-3 PASS — packet 미제공 시에만 state 기준 NOT_CHECKED(의도된 하위 호환)."/>
+    <criterion ac_id="AC-6" status="PASS" evidence="TC-4 PASS — _render_accepted_completion_comment 출력에 pending 마커 없음, accepted 마커만 존재. marker 분리 규칙 미변경."/>
+    <criterion ac_id="AC-7" status="PASS" evidence="TC-5 PASS — _render_pending_acceptance_comment 출력에 ACCEPTED/승인 완료/배포 완료/완료됐습니다 없음, pending 마커만 존재."/>
+    <criterion ac_id="AC-8" status="PASS" evidence="test_request_accept_nonce_reuse_aef0.py 포함 회귀 36개 PASS 직접 실행 확인. nonce 생성/검증/consume 로직 git diff에 변경 없음."/>
+    <criterion ac_id="AC-9" status="PASS" evidence="test_post_accept_finalization_d278.py 19 PASS, test_workspace_hygiene_2821.py 17 PASS 직접 실행 확인. D278/2821 fail-closed 흐름 git diff 변경 없음."/>
+    <criterion ac_id="AC-10" status="PASS" evidence="신규 테스트 파일 grep — 하드코딩된 테스트 개수/AC 개수 문구 없음(매칭 0건). dict 카운트값은 fake fixture 데이터로 하드코딩 문구 아님."/>
+  </criteria_verification>
+
+  <forbidden_verification>
+    <check name="no_new_gates">PASS — git diff에 새 gate 추가 없음, 기존 함수 signature 확장만.</check>
+    <check name="nonce_logic_unchanged">PASS — nonce 생성/검증/consume 코드 변경 없음(diff 무관 영역).</check>
+    <check name="d278_unchanged">PASS — post-accept fail-closed 흐름 변경 없음, 회귀 19 PASS.</check>
+    <check name="2821_unchanged">PASS — workspace_hygiene fail-closed 흐름 변경 없음, 회귀 17 PASS. SSoT는 여전히 state.get('workspace_hygiene').</check>
+    <check name="marker_separation_unchanged">PASS — pending/accepted marker 분리 TC-4/TC-5로 검증.</check>
+    <check name="no_hardcoded_counts">PASS — 하드코딩 개수 문구 없음.</check>
+  </forbidden_verification>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover regression_tests 34 passed + 본 QA가 6+36+17 직접 재실행.</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님.</vsce_build_evidence>
+    <functional_binding_verified>PASS — _build_acceptance_display_model의 packet_evidence 파라미터가 실제 호출부(line 15179)에서 _post_github_pending_acceptance_comment를 통해 전달됨. 정의-only 아님.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1 match_count=20, MT-2 match_count=0, executed=true.</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <result>[PASS]</result>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — 모든 AC PASS, 회귀 59개(6 신규 + 36 + 17) 전부 PASS, SSoT 정합성 코드 경로로 입증, 금지 사항 위반 없음.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. (감점 아님) _post_github_pending_acceptance_comment의 evidence_integrity 조립 블록(line 15143-15174)이 report-final-packet 경로(line 12529-12560)와 ~20줄 인라인 복제됨. dev docstring [Improvement]에도 명시됨 — 공통 헬퍼(_build_packet_integrity_section 등) 추출로 향후 3-way drift 위험 제거 권장. 동일 함수 정의 중복(C-2)은 아니므로 FAIL 아님.
+    2. (프로토콜 drift, 코드 무관) step_plan_B32A.xml에 IMP-20260507-FC80이 요구하는 &lt;anti_gaming_read&gt; 태그가 없음. 단, 최근 step_plan(2821, 509F)에도 동일하게 없어 이 프로젝트 PM-planner의 일관된 미발행 패턴 — producer(pm-planner-agent)와 consumer(qa Step 0-B) 간 drift. 코드 품질과 무관하며 별도 Protocol Evolution IMP 검토 대상.
+    3. (감점 아님) TC-6은 nonce 회귀 테스트 파일의 존재만 단언(약한 검증). 단, 본 QA가 aef0 회귀를 직접 실행해 PASS 확인했으므로 AC-8 충족에는 영향 없음.
+  </improvement_suggestions>
+</qa_report>
