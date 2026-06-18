@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260609-119C</pipeline_id>
+  <agent_run_id>qa-80e40a102f684c86</agent_run_id>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+
+  <scope_verification>
+    <declared_files>pipeline.py, deadcode_cleanup_report.md</declared_files>
+    <actual_diff_files>pipeline.py, deadcode_cleanup_report.md (new)</actual_diff_files>
+    <scope_exceeded>false</scope_exceeded>
+    <trust_root_modified>false</trust_root_modified>
+    <micro_task_boundary>WITHIN_SCOPE</micro_task_boundary>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </scope_verification>
+
+  <impact_analysis_verification>
+    <target_function>cmd_harness</target_function>
+    <change_type>docstring_and_message_text_only</change_type>
+    <function_signature_changed>false</function_signature_changed>
+    <control_flow_changed>false</control_flow_changed>
+    <lines_changed>40</lines_changed>
+    <verification>PASS</verification>
+  </impact_analysis_verification>
+
+  <criteria_verification>
+    <criterion id="AC-1" verified="true">pipeline.py 6개 SSoT 인용 보강 확인. 6개 위치 모두 B섹션 diff와 일치.</criterion>
+    <criterion id="AC-2" verified="true">deadcode_cleanup_report.md 작성 및 pipeline outputs 등록 확인. A/B/C/D/테스트/위험 섹션 포함.</criterion>
+    <criterion id="AC-3" verified="true">harness --score BLOCKED: returncode=1, THREE GATE BLOCKED 포함 확인.</criterion>
+    <criterion id="AC-4" verified="true">--user-confirmed 단독 BLOCKED: returncode=1, acceptance_code_required 포함 확인. 22개 E2E 테스트 PASS.</criterion>
+    <criterion id="AC-5" verified="true">CLI 직접 실행으로 BLOCKED 동작 확인 완료.</criterion>
+    <criterion id="AC-6" verified="true">git diff = pipeline.py + deadcode_cleanup_report.md만. CLAUDE.md/agent MD/tests 미수정 확인.</criterion>
+  </criteria_verification>
+
+  <regression_results>
+    <test id="T-1" result="PASS">harness --score BLOCKED: returncode=1, THREE GATE BLOCKED 포함</test>
+    <test id="T-2" result="PASS">--user-confirmed 단독 BLOCKED: returncode=1, acceptance_code_required 포함</test>
+    <test id="T-3" result="PASS">import pipeline: 구문 오류 없음</test>
+    <test id="T-4" result="PASS">tests/e2e/test_user_acceptance_nonce_bbdb.py: 22 passed</test>
+  </regression_results>
+
+  <quality_checks>
+    <check name="function_signature_unchanged">PASS</check>
+    <check name="control_flow_unchanged">PASS</check>
+    <check name="ssot_citations_added">PASS — 6개 위치 모두 확인</check>
+    <check name="new_file_complete">PASS — A/B/C/D/테스트/위험 섹션 포함</check>
+    <check name="codex_review_code_stage">PASS — stage=code ACCEPT</check>
+    <check name="coverage_checks_7fields">PASS — 7개 필드 모두 true</check>
+    <check name="scope_clean">PASS</check>
+  </quality_checks>
+
+  <handover>
+    <from>qa-agent</from>
+    <to>pipeline-manager</to>
+    <pipeline_id>IMP-20260609-119C</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>deadcode_cleanup_report.md</file>
+      <file>qa_report.xml</file>
+    </evidence>
+    <status>READY_FOR_SEC</status>
+  </handover>
+</qa_report>
