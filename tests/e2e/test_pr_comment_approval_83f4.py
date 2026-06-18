@@ -17,8 +17,6 @@ import sys
 import types
 from pathlib import Path
 
-import pytest
-
 PROJ_ROOT = Path(__file__).parent.parent.parent
 ORACLE_DIR = PROJ_ROOT / "tests" / "oracles" / "BUG-20260618-83F4"
 sys.path.insert(0, str(PROJ_ROOT))
