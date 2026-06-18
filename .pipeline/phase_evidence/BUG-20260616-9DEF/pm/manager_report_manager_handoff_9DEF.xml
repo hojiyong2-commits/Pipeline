@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260616-9DEF</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-9be25a85aea28b2c</manager_run_id>
+  <planner_run_id>pm_planner-d20c7ce08c48f16d</planner_run_id>
+  <step_plan_sha256>382d2d67fec876bb0997d199bf928ac8d7b4b293000a01a092e76e5d9a636855</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <handoff_at>2026-06-16T13:35:00Z</handoff_at>
+  <task_summary>BUG-20260616-8011 packet 마커 차단 이후 남은 취약점 해결 — 로컬 브라우저 클릭 승인 채널 추가. gates request-accept 시 localhost HTTP 서버를 실행하여 사용자가 브라우저에서 직접 승인 버튼 클릭 필요.</task_summary>
+  <execution_profile>HIGH_RISK</execution_profile>
+  <phase_plan>
+    <phase name="Dev">dev-agent spawn, MT-1~MT-6 순차 실행, scope lock 검증</phase>
+    <phase name="QA">qa-agent spawn, TC-1~TC-6 검증, 회귀 테스트 확인</phase>
+    <phase name="SEC">sec --skip 외부 네트워크 없음</phase>
+    <phase name="Build">build --exe N/A --skip-reason meta-task</phase>
+    <phase name="External Gates">technical, oracle, github-ci, request-accept, STOP</phase>
+  </phase_plan>
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</manager_handoff>
