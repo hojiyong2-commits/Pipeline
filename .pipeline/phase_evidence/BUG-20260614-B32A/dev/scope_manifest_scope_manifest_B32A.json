@@ -1,0 +1,29 @@
+{
+  "pipeline_id": "BUG-20260614-B32A",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_build_acceptance_display_model", "_post_github_pending_acceptance_comment"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"],
+          "implementation_evidence": "pipeline.py: _build_acceptance_display_model에 packet_evidence=None 파라미터 추가, evidence_integrity/workspace_hygiene SSoT 분기 추가; _post_github_pending_acceptance_comment에서 packet evidence 로드 및 전달"
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["tests/e2e/test_pending_comment_sst_b32a.py"],
+      "affected_functions": ["test_tc1~test_tc6 (신규)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-6", "AC-7", "AC-8", "AC-9", "AC-10"],
+          "implementation_evidence": "tests/e2e/test_pending_comment_sst_b32a.py: TC-1~TC-6 E2E 테스트 신규 구현, 6개 PASS"
+        }
+      ]
+    }
+  ]
+}
