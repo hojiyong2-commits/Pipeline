@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260614-B32A</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-d10e9f6744ef12cb</manager_run_id>
+  <planner_run_id>pm_planner-7afa4d70b8a85c43</planner_run_id>
+  <step_plan_sha256>f72c38aab3dafacd600d45a6ead6115c5f4e6e0dc0d872f36275e757f402bd95</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>IN_PROGRESS</status>
+  <phases_completed></phases_completed>
+  <summary>PM phase 관리 완료 - contract 초기화, oracle 파일 생성, impl 브랜치 생성, PR 생성 완료. Dev phase 진행 예정.</summary>
+  <pr_url>https://github.com/hojiyong2-commits/Pipeline/pull/602</pr_url>
+  <impl_branch>impl/BUG-20260614-B32A</impl_branch>
+  <decomposition>
+    <mt id="MT-1">
+      <file>pipeline.py</file>
+      <function>_build_acceptance_display_model, _post_github_pending_acceptance_comment</function>
+      <change>packet_evidence 파라미터 추가하여 evidence_integrity/workspace_hygiene SSoT 보장</change>
+    </mt>
+    <mt id="MT-2">
+      <file>tests/e2e/test_pending_comment_sst_b32a.py</file>
+      <function>신규 파일</function>
+      <change>TC-1~TC-6 E2E 테스트 작성</change>
+    </mt>
+  </decomposition>
+</manager_handoff>

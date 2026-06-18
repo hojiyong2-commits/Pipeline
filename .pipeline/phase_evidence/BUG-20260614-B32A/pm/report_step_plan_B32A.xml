@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260614-B32A</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 핵심 함수 signature 변경 + E2E 테스트 신규 작성으로 단순 패치보다 범위가 넓음</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>60</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 수정 방향과 AC 10개를 이미 명시했으므로 P2 내부 취향 질문(변수명, 코드 스타일 등)은 묻지 않고 유지보수성 기준으로 정리했습니다. 수정 범위도 pipeline.py 2개 함수 + 테스트 1파일로 명확합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>pending 댓글 생성 시 packet evidence를 어떻게 전달할까요?</user_facing_question>
+        <evidence>_post_github_pending_acceptance_comment는 현재 _load_state_for()로 state를 가져오고, _build_acceptance_display_model(state, evidence)를 호출합니다. 그러나 evidence_integrity/workspace_hygiene은 state가 아닌 packet evidence에서 실시간 계산되어야 SSoT가 맞습니다.</evidence>
+        <why_it_matters>PR body와 pending 댓글의 evidence_integrity/workspace_hygiene 값이 불일치하면 사용자가 혼란스러워집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>_build_acceptance_display_model에 packet_evidence 파라미터 추가</label>
+            <benefit>단일 함수에서 SSoT 계산 책임 유지, 호출부가 packet_evidence를 넘기면 state fallback 없이 직접 사용</benefit>
+            <cost>signature 변경으로 기존 호출부 검토 필요</cost>
+          </option>
+          <option id="B">
+            <label>_post_github_pending_acceptance_comment에서 state를 직접 갱신</label>
+            <benefit>기존 signature 유지</benefit>
+            <cost>state 갱신 책임이 분산되어 SSoT 위반 가능성, 다른 표면과 정합성 보장 어려움</cost>
+          </option>
+        </options>
+        <user_answer>사용자가 수정 방향 "request-accept 경로에서 pending comment 생성 시 packet evidence를 넘겨 _build_acceptance_display_model이 SSoT 값을 계산하도록 수정"을 명시했으므로 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <decomposition_audit>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <judgment_calls_resolved>true</judgment_calls_resolved>
+    <notes>변경 함수 2개(MT-1), 신규 파일 1개(MT-2). PM step_plan에 실제 Grep 증거 및 call_site 목록 포함. 사용자가 수정 방향(옵션 A)을 명시하여 DQ-1 해소됨.</notes>
+  </decomposition_audit>
+
+  <requirements>
+    <requirement id="REQ-1">request-accept 후 pending PR 댓글의 evidence_integrity/workspace_hygiene 요약이 PR body PIPELINE_FINAL_PACKET 값과 동일해야 함</requirement>
+    <requirement id="REQ-2">packet evidence가 있으면 state-only fallback(NOT_CHECKED)으로 퇴행하지 않음</requirement>
+    <requirement id="REQ-3">accepted comment에 pending marker/승인 코드 입력 안내 없음, pending comment에 ACCEPTED/승인 완료/배포 완료/완료됐습니다 없음</requirement>
+    <requirement id="REQ-4">기존 nonce/provenance/D278/2821 회귀 테스트 모두 PASS</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_build_acceptance_display_model, _post_github_pending_acceptance_comment</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_post_github_pending_acceptance_comment (line 16549)</site>
+        <site>_build_acceptance_display_model (line 15103)</site>
+        <site>_build_acceptance_display_model (line 15271)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_build_acceptance_display_model</pattern>
+        <match_count>20</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_build_acceptance_display_model에 packet_evidence 파라미터 추가, _post_github_pending_acceptance_comment가 packet evidence를 넘겨 SSoT 정합성 확보</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>test_tc1~test_tc6 (신규)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_pending_comment_sst_b32a.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pending_comment_sst_b32a</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TC-1~TC-6 E2E 테스트 신규 구현 (fake packet evidence로 SSoT 검증, marker 분리 회귀, 기존 회귀 PASS 확인)</change_summary>
+      <line_estimate>150</line_estimate>
+      <covers_ac>AC-6, AC-7, AC-8, AC-9, AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>request-accept 후 pending PR 댓글의 evidence_integrity 요약이 PR body PIPELINE_FINAL_PACKET 블록의 evidence_integrity 값과 정확히 동일하다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>request-accept 후 pending PR 댓글의 workspace_hygiene 요약이 PR body PIPELINE_FINAL_PACKET 블록의 workspace_hygiene 값과 정확히 동일하다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>human_acceptance_packet.json의 evidence_integrity/workspace_hygiene 값이 PR body/pending 댓글과 동일한 packet evidence 원천에서 파생된다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>human_acceptance_packet.md의 evidence_integrity/workspace_hygiene 값이 PR body/pending 댓글과 동일한 packet evidence 원천에서 파생된다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>pending comment가 evidence_integrity NOT_CHECKED fallback으로 퇴행하지 않는다 (실제 packet evidence가 NOT_CHECKED인 경우 제외)</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>accepted comment에 pending marker(pipeline-human-acceptance-packet-pending)와 승인 코드 입력 안내 문구가 없다</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>pending comment에 ACCEPTED/승인 완료/배포 완료/완료됐습니다 완료 마커가 없다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>nonce/provenance/request-accept/accept 기존 회귀 테스트(test_request_accept_nonce_reuse_aef0.py 등)가 모두 PASS한다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>D278 post-accept fail-closed/2821 workspace_hygiene fail-closed 기존 회귀 테스트(test_post_accept_finalization_d278.py, test_workspace_hygiene_2821.py)가 모두 PASS한다</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>하드코딩된 테스트 개수/AC 개수 문구가 새로 추가되지 않는다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 기존 pipeline.py와 동일</python_version>
+  <forbidden>
+    - 새 gate 추가 금지
+    - COMPLETE 조건 완화 금지
+    - nonce 생성/검증/consume 로직 변경 금지
+    - request-accept/accept 보안 조건 완화 금지
+    - D278 post-accept fail-closed 흐름 변경 금지
+    - 2821 workspace_hygiene fail-closed 흐름 변경 금지
+    - pending/accepted marker 분리 규칙 변경 금지
+    - accepted comment를 장문으로 만들지 말 것
+    - 테스트를 맞추기 위한 graceful skip 금지
+    - 하드코딩된 테스트 개수/AC 개수 문구 추가 금지
+  </forbidden>
+
+  <oracle_design>
+    <case id="TC-1-normal" kind="normal" expected_source="user_provided">
+      <description>fake packet evidence로 PR body/pending comment/MD/JSON의 evidence_integrity 요약이 동일한지 검증</description>
+      <input_path>tests/oracles/BUG-20260614-B32A/TC-1-normal/input.json</input_path>
+      <expected_path>tests/oracles/BUG-20260614-B32A/TC-1-normal/expected.json</expected_path>
+    </case>
+    <case id="TC-2-edge" kind="edge" expected_source="user_provided">
+      <description>fake packet evidence로 PR body/pending comment/MD/JSON의 workspace_hygiene 요약이 동일한지 검증</description>
+      <input_path>tests/oracles/BUG-20260614-B32A/TC-2-edge/input.json</input_path>
+      <expected_path>tests/oracles/BUG-20260614-B32A/TC-2-edge/expected.json</expected_path>
+    </case>
+  </oracle_design>
+</step_plan>
