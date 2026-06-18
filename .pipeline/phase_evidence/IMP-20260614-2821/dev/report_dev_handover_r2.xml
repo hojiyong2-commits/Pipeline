@@ -1,0 +1,117 @@
+<handover>
+  <pipeline_id>IMP-20260614-2821</pipeline_id>
+  <agent_run_id>dev-16a8c88224018da1</agent_run_id>
+  <agent_token>tok_jQAqURumt7pegPzHf1hLZ3P6iLpdioJJeItHE5T4T4s</agent_token>
+  <phase>dev</phase>
+  <status>DONE</status>
+  <reject_fix_summary>
+    git_binary_missing 시 _check_workspace_hygiene 기본 동작을 graceful skip → fail-closed BLOCKED로
+    변경. PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 설정 시에만 테스트 환경 override로
+    graceful skip 허용. git 없는 환경에서 untracked·PR/base 포함 여부 판정 불가 상태로 승인 코드가
+    발급되는 위험(REJECT 사유)을 차단함.
+  </reject_fix_summary>
+  <changed_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_workspace_hygiene_2821.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+    <file>tests/e2e/test_evidence_deployable_ce06.py</file>
+    <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+    <file>tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+    <file>tests/e2e/test_final_packet_2e3d.py</file>
+    <file>tests/e2e/test_pr_body_readiness_a716.py</file>
+  </changed_files>
+  <change_detail>
+    <item file="pipeline.py">
+      _check_workspace_hygiene: git_binary_missing 분기를 fail-closed로 변경.
+      PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING != "1" 이면 workspace_hygiene_check_failed
+      BLOCKED return, "1" 이면 git_unavailable=True 기록 후 graceful skip.
+    </item>
+    <item file="tests/e2e/test_workspace_hygiene_2821.py">
+      기존 test_tc6b_git_missing_graceful_skip → test_tc6b_git_missing_graceful_skip_with_override
+      로 rename + override env 추가. 신규 test_tc6b_git_missing_fail_closed 추가(production 기본
+      BLOCKED 검증). 17개 테스트 전체 PASS.
+    </item>
+    <item file=".claude/agents/pipeline-manager-agent.md">
+      Workspace/Evidence Hygiene Gate 절차의 git 부재 graceful skip 문구를 fail-closed 기본 +
+      override 문구로 교체.
+    </item>
+    <item file="tests/e2e/test_request_accept_nonce_reuse_aef0.py">
+      _fake_gh_env: PATH=tmp_path로 git 제거되는 부작용 보호 위해 override env 추가.
+    </item>
+    <item file="tests/e2e/test_evidence_deployable_ce06.py">
+      _fake_gh_env: override env 추가 (동일 사유).
+    </item>
+    <item file="tests/e2e/test_request_accept_snapshot_8c3b.py">
+      make_env: override env 추가 (동일 사유).
+    </item>
+    <item file="tests/e2e/test_user_acceptance_nonce_bbdb.py">
+      make_env: override env 추가 (동일 사유).
+    </item>
+    <item file="tests/e2e/test_final_packet_2e3d.py">
+      PATH="" 로 git/gh 부재를 검증하는 stale SHA/run ID 테스트 2건에 override env 추가.
+    </item>
+    <item file="tests/e2e/test_pr_body_readiness_a716.py">
+      TC-5(gh CLI 부재 BLOCKED 검증): PATH에 git 부재로 hygiene이 먼저 BLOCKED되어 의도된
+      gh/pr-body BLOCKED 경로를 가리는 문제 해결 위해 override env 추가.
+    </item>
+  </change_detail>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_workspace_hygiene_2821.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+      <file>tests/e2e/test_evidence_deployable_ce06.py</file>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+      <file>tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+      <file>tests/e2e/test_final_packet_2e3d.py</file>
+      <file>tests/e2e/test_pr_body_readiness_a716.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline._check_workspace_hygiene</target_function>
+    <change_type>behavior_change</change_type>
+    <state_mutations>
+      git_binary_missing=True 시 기존: result["git_unavailable"]=True 만 기록 후 계속 진행 (graceful skip).
+      변경 후: PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING != "1" 이면 _add_blocker("workspace_hygiene_check_failed", ...) 후 return (BLOCKED).
+      PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING == "1" 이면 result["git_unavailable"]=True 기록 후 return (graceful skip — 테스트 환경 override 전용).
+    </state_mutations>
+    <side_effects>
+      _check_workspace_hygiene를 호출하는 gates request-accept / gates accept preflight가 git binary 없는 production 환경에서 BLOCKED를 반환하게 됨.
+      기존 E2E 테스트 6종 (aef0/ce06/8c3b/bbdb/2e3d/a716)이 PATH를 tmp_path로 제한해 git FileNotFoundError를 유발했는데, 이들에 PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 override를 주입하여 기존 통과 흐름 유지.
+    </side_effects>
+    <risk_assessment>
+      security: 보안 강화 (git 없는 환경에서의 우회 차단).
+      regression: TC-1~TC-12 + TC-5b + TC-11b + TC-6b(override) + TC-6b(fail-closed) 17개 PASS 확인.
+      blast_radius: _check_workspace_hygiene 분기 1곳 + 관련 테스트 env 6곳.
+      rollback: PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 설정으로 즉시 graceful skip 복원 가능.
+    </risk_assessment>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_workspace_hygiene_2821.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_request_accept_nonce_reuse_aef0.py, tests/e2e/test_evidence_deployable_ce06.py, tests/e2e/test_request_accept_snapshot_8c3b.py, tests/e2e/test_user_acceptance_nonce_bbdb.py, tests/e2e/test_final_packet_2e3d.py, tests/e2e/test_pr_body_readiness_a716.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_workspace_hygiene_2821.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_request_accept_nonce_reuse_aef0.py, tests/e2e/test_evidence_deployable_ce06.py, tests/e2e/test_request_accept_snapshot_8c3b.py, tests/e2e/test_user_acceptance_nonce_bbdb.py, tests/e2e/test_final_packet_2e3d.py, tests/e2e/test_pr_body_readiness_a716.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <scope_amendment_reason>
+      REJECT 작업 본문이 명시한 지시("다른 E2E 테스트 파일에서 git 없는 환경 테스트 확인 …
+      해당 테스트의 env에 PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1을 추가")에 따라,
+      PATH를 tmp_path/빈값으로 제한해 git FileNotFoundError를 유발하는 E2E 테스트 5종(aef0/
+      ce06/8c3b/bbdb/2e3d/a716)에 override env를 추가함. 모두 tests/e2e/** Trust-Root 이나
+      현 REJECT 파이프라인이 hygiene gate 동작을 변경하는 작업이며 본문 지시에 포함된 범위임.
+    </scope_amendment_reason>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <pytest_result>
+    test_workspace_hygiene_2821.py: 17 passed (신규 fail-closed/override 테스트 포함).
+    전체 tests/e2e: 200 passed, 2 deselected(pre-existing 결함 — 내 변경과 무관).
+  </pytest_result>
+  <pre_existing_failures>
+    <failure>tests/e2e/test_ac_tracking_1abe.py — ImportError: CODEX_COVERAGE_CHECK_FIELDS (pipeline.py에 존재한 적 없는 심볼). pipeline.py stash로 제외해도 동일 import error. 본 REJECT 변경과 무관.</failure>
+    <failure>tests/e2e/test_hygiene_0df5.py::test_T3_secret_block — tests/oracles/IMP-20260601-0DF5/case_edge_secret_block/input.json oracle 파일 미존재(untracked). pipeline 호출 전 assert oracle_input.exists()에서 실패. git/hygiene과 무관.</failure>
+  </pre_existing_failures>
+  <evidence>
+    <report_file>dev_handover_r2.xml</report_file>
+    <test_command>python -m pytest tests/e2e/test_workspace_hygiene_2821.py -v</test_command>
+  </evidence>
+</handover>

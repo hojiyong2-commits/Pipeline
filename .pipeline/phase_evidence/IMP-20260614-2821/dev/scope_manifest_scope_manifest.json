@@ -1,0 +1,187 @@
+{
+  "pipeline_id": "IMP-20260614-2821",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_workspace_hygiene_2821.py",
+        ".claude/agents/pipeline-manager-agent.md",
+        "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+        "tests/e2e/test_evidence_deployable_ce06.py",
+        "tests/e2e/test_request_accept_snapshot_8c3b.py",
+        "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+        "tests/e2e/test_final_packet_2e3d.py",
+        "tests/e2e/test_pr_body_readiness_a716.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_workspace_hygiene"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-5",
+            "AC-6"
+          ],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_workspace_hygiene_2821.py",
+            ".claude/agents/pipeline-manager-agent.md",
+            "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+            "tests/e2e/test_evidence_deployable_ce06.py",
+            "tests/e2e/test_request_accept_snapshot_8c3b.py",
+            "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+            "tests/e2e/test_final_packet_2e3d.py",
+            "tests/e2e/test_pr_body_readiness_a716.py"
+          ],
+          "implementation_evidence": [
+            "REJECT 재작업: _check_workspace_hygiene의 git_binary_missing 처리를 graceful skip → fail-closed BLOCKED로 변경. PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING != '1' 이면 _add_blocker('workspace_hygiene_check_failed', ...) 후 return(BLOCKED); '1' 이면 result['git_unavailable']=True 후 graceful skip return. git 없이 untracked·PR/base 포함 여부 판정 불가 상태로 승인 코드가 발급되는 위험 차단.",
+            "test_workspace_hygiene_2821.py: test_tc6b_git_missing_graceful_skip → test_tc6b_git_missing_graceful_skip_with_override 로 rename + override env 추가, 신규 test_tc6b_git_missing_fail_closed(production 기본 BLOCKED) 추가. 17개 PASS.",
+            "pipeline-manager-agent.md: Hygiene Gate 절차의 git 부재 graceful skip 문구를 'fail-closed 기본 + PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 override' 문구로 교체.",
+            "PATH 제한으로 git FileNotFoundError를 유발하던 격리 E2E 6파일(aef0/ce06/8c3b/bbdb/2e3d/a716)에 PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 override env 주입하여 기존 graceful 통과 흐름 보존."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_request_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [
+            "AC-7",
+            "AC-8"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_cmd_gates_request_accept 맨 앞(nonce 발급 전)에 hygiene preflight 추가: BLOCKED 시 [WORKSPACE HYGIENE GATE] _die, WARN 시 YELLOW 경고 출력, state['workspace_hygiene']=hygiene + _save."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [
+            "AC-9"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "cmd_gates의 accept action 블록 내 'if accept_decision == ACCEPT:' 시작부에 nonce consume(_consume_acceptance_request) 이전 hygiene preflight 재실행 추가. BLOCKED 시 _die로 nonce 소모 취소. (PM step_plan affected_function: pipeline._cmd_gates_accept — 실제 accept 로직은 cmd_gates 내부에 위치)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._build_verification_json",
+        "pipeline._build_final_packet_content",
+        "pipeline.cmd_status"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [
+            "AC-10",
+            "AC-11",
+            "AC-12"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_build_verification_json: 'workspace_hygiene': dict(evidence.get('workspace_hygiene') or {}) 섹션 추가. _build_final_packet_content: 검증용 메타데이터 블록에 workspace_hygiene 요약 라인 추가. cmd_status: External Gate 섹션 뒤에 [CLEANUP 안내] 블록 추가. report final-packet 빌더(cmd_report_final_packet)에 evidence['workspace_hygiene']=state.get('workspace_hygiene') 전달."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "tests/e2e/test_workspace_hygiene_2821.py",
+        "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+        "tests/e2e/test_evidence_deployable_ce06.py",
+        "tests/e2e/test_request_accept_snapshot_8c3b.py",
+        "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+        "tests/e2e/test_final_packet_2e3d.py",
+        "tests/e2e/test_pr_body_readiness_a716.py"
+      ],
+      "affected_functions": [
+        "test_workspace_hygiene_2821"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-13"
+          ],
+          "changed_files": [
+            "tests/e2e/test_workspace_hygiene_2821.py",
+            "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+            "tests/e2e/test_evidence_deployable_ce06.py",
+            "tests/e2e/test_request_accept_snapshot_8c3b.py",
+            "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+            "tests/e2e/test_final_packet_2e3d.py",
+            "tests/e2e/test_pr_body_readiness_a716.py"
+          ],
+          "implementation_evidence": [
+            "TC-1~TC-12 Real CLI Path E2E 12개. PIPELINE_STATE_PATH 격리 + final_state assertion + subprocess 기반. TC-1/4/10/11 BLOCKED, TC-3/7 cleanup WARN, TC-5 deferral, TC-6 state 필드, TC-8 accept-stage consume 취소, TC-9 status 안내, TC-12 정상."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": [
+        "none"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "covers_iqr": [
+            "IQR-1"
+          ],
+          "implemented_ac": [
+            "AC-14"
+          ],
+          "changed_files": [
+            ".claude/agents/pipeline-manager-agent.md"
+          ],
+          "implementation_evidence": [
+            "Workspace/Evidence Hygiene Gate 절차 섹션 추가: 차단 조건, WARN 조건, deferral 정합성, 복구 절차, state['workspace_hygiene'] 필드 설명."
+          ]
+        }
+      ]
+    }
+  ]
+}
