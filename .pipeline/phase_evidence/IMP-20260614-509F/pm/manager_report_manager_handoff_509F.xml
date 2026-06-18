@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260614-509F</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-1ce6f1e6b49f597d</planner_run_id>
+  <step_plan_sha256>1beb86a103a7ca959e5f6ec5d42173a0b36aa63a8fe29ad5ef84b7e0890af86c</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <handoff_date>2026-06-14</handoff_date>
+  <phase>pm</phase>
+  <status>READY_FOR_DEV</status>
+  <next_phase>dev</next_phase>
+
+  <design_confirmation_summary>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <p0_questions_asked>0</p0_questions_asked>
+    <p1_questions_asked>0</p1_questions_asked>
+    <user_response>사용자가 이미 상세 설계를 명시했으므로 옵션 A(명시 구조 그대로 구현)로 진행</user_response>
+  </design_confirmation_summary>
+
+  <micro_tasks_summary>
+    <total>9</total>
+    <mt_list>MT-1, MT-2, MT-3, MT-4, MT-5, MT-6, MT-7, MT-8, MT-9</mt_list>
+    <all_covered_by_ac>true</all_covered_by_ac>
+  </micro_tasks_summary>
+
+  <contract_status>
+    <initialized>true</initialized>
+    <audited>true</audited>
+    <frozen>true</frozen>
+    <oracle_count>2</oracle_count>
+    <test_count>10</test_count>
+  </contract_status>
+
+  <target_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_acceptance_template_sst_509f.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+  </target_files>
+
+  <roadmap>
+    <step order="1">MT-1~MT-5: pipeline.py 구현 (display model 신설 및 renderer 분리)</step>
+    <step order="2">MT-6~MT-8: E2E 테스트 구현</step>
+    <step order="3">MT-9: pipeline-manager-agent.md 문서화</step>
+  </roadmap>
+</manager_handoff>
