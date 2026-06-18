@@ -1,0 +1,143 @@
+{
+  "pipeline_id": "IMP-20260611-A716",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_validate_pr_body_readiness (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3"
+          ],
+          "implementation_evidence": "_validate_pr_body_readiness 신규 함수 — PR body 검증 SSoT (draft/incomplete/temporary/packet 순서 검사)"
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [
+            "AC-3",
+            "AC-4"
+          ],
+          "implementation_evidence": "_cmd_gates_request_accept에 _validate_pr_body_readiness 호출 — 임시 문구 BLOCKED"
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_check_acceptance_readiness"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [
+            "AC-5",
+            "AC-6"
+          ],
+          "implementation_evidence": "_check_acceptance_readiness 리팩터링 — _validate_pr_body_readiness 위임으로 SSoT 통합"
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_write_acceptance_request"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [
+            "AC-7"
+          ],
+          "implementation_evidence": "_write_acceptance_request에 pr_body_sha256 등 5개 필드 추가"
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py",
+        "tests/conftest.py"
+      ],
+      "affected_functions": [
+        "gates accept ACCEPT 처리 흐름"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-7"
+          ],
+          "implementation_evidence": "PIPELINE_GH_EXECUTABLE 지원(_build_gh_cmd_prefix 신규), conftest autouse fixture로 기존 테스트 회귀 방지, Windows UTF-8 인코딩 수정"
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/e2e/test_pr_body_readiness_a716.py",
+        "tests/conftest.py"
+      ],
+      "affected_functions": [
+        "test_pr_body_readiness_a716 (신규 파일)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-7"
+          ],
+          "implementation_evidence": "E2E 테스트 5개 — PIPELINE_STATE_PATH 격리 + subprocess + final_state assertion; conftest autouse fixture로 기존 테스트 회귀 방지"
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": [
+        "pipeline-manager-agent.md (신규 생성)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": [],
+          "covers_iqr": "IQR-DOC-1",
+          "implementation_evidence": ".claude/agents/pipeline-manager-agent.md 신규 생성 — PR body readiness 게이트 절차 문서화"
+        }
+      ]
+    }
+  ],
+  "requirements_tracking": {
+    "enabled": true
+  }
+}
