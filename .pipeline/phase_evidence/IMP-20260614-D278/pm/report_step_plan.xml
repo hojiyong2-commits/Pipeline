@@ -1,0 +1,115 @@
+﻿<step_plan>
+  <pipeline_id>IMP-20260614-D278</pipeline_id>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 핵심 acceptance gate 로직 수정, 신규 helper 추가, 12개 E2E 테스트 구현</reason>
+    <uncertainty><p0_questions>0</p0_questions><p1_questions>0</p1_questions><output_format_clear>true</output_format_clear></uncertainty>
+    <blast_radius><expected_changed_files>3</expected_changed_files><expected_changed_functions>8</expected_changed_functions><expected_changed_lines>350</expected_changed_lines></blast_radius>
+    <risk_flags><pipeline_protocol>true</pipeline_protocol><data_deletion>false</data_deletion><file_move>false</file_move><external_api>false</external_api><auth_or_secret>false</auth_or_secret><build_or_deploy>false</build_or_deploy><core_parser_logic>false</core_parser_logic><database_or_migration>false</database_or_migration><new_dependency>false</new_dependency></risk_flags>
+  </task_complexity>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 상태값 표준과 fail-closed 순서를 명확히 명시했으므로 P2 내부 취향 질문 없이 유지보수성 기준으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1">
+        <category>module_split</category>
+        <user_facing_question>acceptance 표시 상태를 단일 helper로 통합하고 ACCEPT 후 packet/PR을 갱신하는 방식으로 진행해도 될까요?</user_facing_question>
+        <evidence>현재 _build_verification_json과 _build_final_packet_content가 acceptance 표시 상태를 각자 계산하여 PENDING/ACCEPTED 불일치가 발생한다. ACCEPT 후에도 PENDING이 남는 버그의 근본 원인.</evidence>
+        <why_it_matters>단일 helper로 통합하면 SSoT를 보장하여 상태 불일치를 원천 차단하고 fail-closed 순서를 보장할 수 있다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>_resolve_acceptance_display_state helper 신규 생성, ACCEPT 후 post-finalization 단계 추가</label>
+            <benefit>SSoT 보장으로 상태 불일치를 원천 차단하고 fail-closed 순서를 엄격히 보장한다</benefit>
+            <cost>신규 helper 함수 추가 및 기존 두 함수 수정 필요, 테스트 범위 확대 요구</cost>
+          </option>
+          <option id="B">
+            <label>기존 각 함수 내부에서 상태 동기화 로직을 중복 유지</label>
+            <benefit>기존 코드 변경 최소화로 회귀 위험이 상대적으로 낮다</benefit>
+            <cost>SSoT 위반이 지속되어 향후 상태 불일치가 재발할 가능성이 높다</cost>
+          </option>
+        </options>
+        <user_answer>사용자 명시 요청 — 옵션 A 단일 helper 통합 방식으로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true"><text>acceptance 표시 상태 계산을 _resolve_acceptance_display_state 단일 helper로 통합한다.</text></criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true"><text>request-accept 직후 JSON/MD/PR body가 모두 PENDING이다.</text></criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true"><text>accept 성공 후 JSON/MD/PR body/comment가 모두 ACCEPTED로 갱신된다.</text></criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true"><text>ACCEPT 후 최종 packet에 acceptance_display_status/accepted_at/accepted_by/consumed_nonce 필드가 기록된다.</text></criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true"><text>accepted_by는 GitHub 승인 댓글 작성자(provenance_check.approver)에서 가져온다.</text></criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true"><text>ACCEPT 처리 순서가 fail-closed다 (nonce 검증 → packet 생성 → 검증 → PR 갱신 → 재조회 → gate PASS 기록).</text></criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true"><text>PR body/comment/JSON/MD write 실패 시 acceptance gate PASS를 기록하지 않는다.</text></criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true"><text>ACCEPT 후 active approval 안내가 PR body/comment에 남아 있으면 실패로 간주한다.</text></criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true"><text>12개 필수 E2E 테스트가 모두 PASS한다.</text></criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true"><text>기존 Nonce Gate/pr_body_stale/evidence_inventory/Technical/Oracle/GitHub CI gate 동작이 변경되지 않는다.</text></criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true"><text>pipeline-manager-agent.md에 User Acceptance 상태값 역할이 명시된다.</text></criterion>
+    <criterion id="AC-12" must_verify="true" source="user" user_visible="true"><text>Technical/Oracle/GitHub CI PASS, 신규 테스트 12개 PASS, 기존 4A22/82ED/A716 회귀 테스트 PASS.</text></criterion>
+  </acceptance_criteria>
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_resolve_acceptance_display_state (신규)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>_build_verification_json</site><site>_build_final_packet_content</site></affected_call_sites>
+      <grep_evidence><pattern>_build_verification_json</pattern><match_count>5</match_count><executed>true</executed></grep_evidence>
+      <change_summary>acceptance 표시 상태 계산을 단일 helper로 통합</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>_build_verification_json, _build_final_packet_content</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>_cmd_report_final_packet</site><site>_cmd_gates_request_accept</site></affected_call_sites>
+      <grep_evidence><pattern>_build_final_packet_content</pattern><match_count>3</match_count><executed>true</executed></grep_evidence>
+      <change_summary>두 함수에서 acceptance 상태 계산을 _resolve_acceptance_display_state 호출로 교체</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-1,AC-2</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>_cmd_gates_accept (accept action 블록)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>_consume_acceptance_request</pattern><match_count>2</match_count><executed>true</executed></grep_evidence>
+      <change_summary>ACCEPT 후 post-accept finalization 단계 추가: packet 재생성, PR 갱신, 재조회 검증, gate PASS는 마지막에 기록</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-3,AC-4,AC-5,AC-6,AC-7,AC-8</covers_ac>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>_consume_acceptance_request</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>cmd_gates_accept</site></affected_call_sites>
+      <grep_evidence><pattern>def _consume_acceptance_request</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>ACCEPT 시 accepted_at, accepted_by, consumed_nonce 필드 추가</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-4,AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-5">
+      <affected_function>TestPostAcceptFinalizationD278 (신규 테스트 클래스)</affected_function>
+      <target_files><file>tests/e2e/test_post_accept_finalization_d278.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>test_post_accept_finalization</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>12개 E2E 테스트 구현</change_summary>
+      <line_estimate>400</line_estimate>
+      <covers_ac>AC-9,AC-10,AC-11,AC-12</covers_ac>
+    </micro_task>
+    <micro_task id="MT-6">
+      <affected_function>pipeline-manager-agent.md 문서 섹션</affected_function>
+      <target_files><file>.claude/agents/pipeline-manager-agent.md</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>PENDING.*ACCEPTED</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>User Acceptance 상태값 역할 문서화 추가</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-11</covers_ac>
+    </micro_task>
+  </micro_tasks>
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>6</grep_executions>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+  </decomposition_audit>
+</step_plan>
