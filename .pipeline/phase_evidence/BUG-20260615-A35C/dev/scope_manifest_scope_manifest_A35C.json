@@ -1,0 +1,114 @@
+{
+  "pipeline_id": "BUG-20260615-A35C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline._resolve_acceptance_display_state (확장)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_get_effective_acceptance_display_state(state) 신규 함수 추가: 현재 파이프라인 소속 active acceptance_request를 우선하고 없으면 state external_gates.acceptance.status로 fallback (DEFECT-A 수정, AC-1, AC-3)",
+            "기존 _resolve_acceptance_display_state 미변경 보존 (AC-2 기반)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline._build_final_packet_content",
+        "pipeline._display_model_from_evidence"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1", "AC-2", "AC-4"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_collect_packet_evidence가 effective 표시 상태를 evidence에 주입, 4개 renderer가 동일 SSoT 사용하여 메타데이터 acceptance/게이트표 User Acceptance/JSON display_status 일치 (AC-1, AC-2, AC-4)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [".github/workflows/ci.yml"],
+      "affected_functions": [
+        "ci.yml \"최종 확인 안내 만들기\" step"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-5", "AC-6", "AC-7", "AC-8"],
+          "changed_files": [".github/workflows/ci.yml"],
+          "implementation_evidence": [
+            "continue-on-error true→false fail-closed, freshness 실패 시 정보 부족+throw, 승인 코드 미포함+pending 댓글 안내, stale PR body fallback 금지 (AC-5~AC-8)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [".github/workflows/ci.yml"],
+      "affected_functions": ["ci.yml PowerShell functions"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-6", "AC-7"],
+          "changed_files": [".github/workflows/ci.yml"],
+          "implementation_evidence": [
+            "Validate-PacketFreshness helper 추가: 파일 부재/JSON 파싱 실패/head SHA 불일치/run_id 불일치 시 FAIL 반환 (AC-6, AC-7)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["tests/e2e/test_acceptance_display_ssot_a35c.py"],
+      "affected_functions": ["신규 테스트 파일"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10", "AC-11"],
+          "changed_files": ["tests/e2e/test_acceptance_display_ssot_a35c.py"],
+          "implementation_evidence": [
+            "TC-1~TC-11 신규 E2E 테스트, PIPELINE_STATE_PATH 격리 + subprocess CLI 실행 + 파일 assertion, 11 passed (AC-1~AC-11)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json",
+        "tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json",
+        "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json",
+        "tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json",
+        "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json",
+        "tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json",
+        "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json",
+        "tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json",
+        "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json",
+        "tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json"
+      ],
+      "affected_functions": ["오라클 JSON 파일"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-1", "AC-3", "AC-6", "AC-8"],
+          "changed_files": [],
+          "implementation_evidence": [
+            "이미 생성된 5개 oracle 케이스 input/expected.json 검토 완료 — TC 동작과 일치 확인, 수정 불필요 (AC-1, AC-3, AC-6, AC-8)"
+          ]
+        }
+      ]
+    }
+  ]
+}

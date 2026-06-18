@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-15T13:25:38Z",
+  "pipeline_id": "BUG-20260615-A35C",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "fbc2b9abc3208d255017ca5931b1d4d830dac788",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-15T13:21:24Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,.github/workflows/ci.yml,tests/e2e/test_acceptance_display_ssot_a35c.py,tests/oracles/BUG-20260615-A35C/normal_pending_display/input.json,tests/oracles/BUG-20260615-A35C/normal_pending_display/expected.json,tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/input.json,tests/oracles/BUG-20260615-A35C/edge_reject_then_new_request/expected.json,tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/input.json,tests/oracles/BUG-20260615-A35C/edge_stale_packet_blocked/expected.json,tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/input.json,tests/oracles/BUG-20260615-A35C/edge_final_check_no_code/expected.json,tests/oracles/BUG-20260615-A35C/error_json_parse_fail/input.json,tests/oracles/BUG-20260615-A35C/error_json_parse_fail/expected.json"
+  },
+  "agent_run": {
+    "run_id": "dev-4af1ad6341ee99e5",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "211319ffb0b9e4ca7fec74de11cd4de84ed16c1015e9e7a2c2db67a451d81705",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260615-A35C/dev/agent_receipt_dev-4af1ad6341ee99e5.json",
+    "receipt_sha256": "5752f1ed0031ad40d1acb4adbc898ebadb074fec4c85ad797f795f14ad5881fa",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260615-A35C\\dev\\dev-4af1ad6341ee99e5.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260615-A35C\\dev\\dev-4af1ad6341ee99e5.json",
+      "path": ".pipeline/phase_evidence/BUG-20260615-A35C/dev/agent_receipt_dev-4af1ad6341ee99e5.json",
+      "sha256": "5752f1ed0031ad40d1acb4adbc898ebadb074fec4c85ad797f795f14ad5881fa",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260615-A35C/dev/report_dev_handover.xml",
+      "sha256": "211319ffb0b9e4ca7fec74de11cd4de84ed16c1015e9e7a2c2db67a451d81705",
+      "size_bytes": 3604,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_A35C.json",
+      "path": ".pipeline/phase_evidence/BUG-20260615-A35C/dev/scope_manifest_scope_manifest_A35C.json",
+      "sha256": "042ace3525255f4f18068c7686ccf8a0c7fba7da3dc099791bafd1977019ff27",
+      "size_bytes": 4547,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "02476d7985662f8a9ae7ab8d57a2fbf3a8a2008ab5a8148e6753a2cda73004ac",
+      "size_bytes": 1049114
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "153687347f288e347687440eabea802869f75de77fe43fb5d8750d7954c61642",
+      "size_bytes": 29316
+    }
+  ],
+  "local_only_files": []
+}
