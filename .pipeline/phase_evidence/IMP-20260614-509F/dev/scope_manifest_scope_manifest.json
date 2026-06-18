@@ -1,0 +1,145 @@
+{
+  "pipeline_id": "IMP-20260614-509F",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_build_acceptance_display_model (신규)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_build_acceptance_display_model(state, evidence) 신규 — 13개 키 SSoT 데이터 모델 반환, requirements_summary는 _build_ac_fulfillment_table 결과 계산, acceptance_display는 _resolve_acceptance_display_state 재사용"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_render_pending_acceptance_comment (신규)",
+        "_post_github_pending_acceptance_comment (리팩터링)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-2"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_render_pending_acceptance_comment(display_model) 신규 + _post_github_pending_acceptance_comment 리팩터링 — pending 마커 포함, 완료 문구 미포함, 불변식 검사"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_render_accepted_completion_comment (신규)",
+        "_update_github_acceptance_comment (리팩터링)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_render_accepted_completion_comment(display_model) 신규 + _update_github_acceptance_comment 리팩터링 — accepted 마커 포함, pending 마커/승인 코드 입력 안내 미포함"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_render_pr_body_final_packet (신규)",
+        "_build_final_packet_content (리팩터링)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-4"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_render_pr_body_final_packet(display_model) + _display_model_from_evidence(evidence) 신규, _build_final_packet_content가 사용자 표시 섹션 위임 — 하드코딩 숫자 제거, requirements_summary 실제값, acceptance_display 표시"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_build_verification_json (리팩터링)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_build_verification_json이 _display_model_from_evidence로 requirements_summary/acceptance_display 재사용 — MD/PR body/JSON SSoT 일치, requirements_summary 필드 추가, 15개 필수 필드 유지"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": ["tests/e2e/test_acceptance_template_sst_509f.py"],
+      "affected_functions": ["test_tc1_display_model_fields", "test_tc2_pending_comment_no_accepted_phrases"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-6"],
+          "changed_files": ["tests/e2e/test_acceptance_template_sst_509f.py"],
+          "implementation_evidence": ["TC-1/TC-2/TC-3 작성"],
+          "covers_iqr": ["IQR-1"]
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": ["tests/e2e/test_acceptance_template_sst_509f.py"],
+      "affected_functions": ["test_tc3_accepted_comment_no_pending_marker", "test_tc4_pr_body_md_state_consistency", "test_tc5_requirements_summary_consistency", "test_tc7_no_hardcoded_test_counts"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": ["AC-7"],
+          "changed_files": ["tests/e2e/test_acceptance_template_sst_509f.py"],
+          "implementation_evidence": ["TC-4/TC-5 작성"],
+          "covers_iqr": ["IQR-1"]
+        }
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": ["tests/e2e/test_acceptance_template_sst_509f.py"],
+      "affected_functions": ["test_tc6_evidence_workspace_hygiene_summary", "test_tc8_workspace_hygiene_reflected", "test_tc_renderer_separation"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8",
+          "implemented_ac": ["AC-8"],
+          "changed_files": ["tests/e2e/test_acceptance_template_sst_509f.py"],
+          "implementation_evidence": ["TC-6/TC-7/TC-8/test_tc_renderer_separation 작성, 9개 PASS"],
+          "covers_iqr": ["IQR-1"]
+        }
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [".claude/agents/pipeline-manager-agent.md"],
+      "affected_functions": ["none (문서 전용)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-9",
+          "implemented_ac": ["AC-9"],
+          "changed_files": [".claude/agents/pipeline-manager-agent.md"],
+          "implementation_evidence": ["User Acceptance 안내 템플릿 SSoT 원칙 섹션 추가"],
+          "covers_iqr": ["IQR-1"]
+        }
+      ]
+    }
+  ]
+}
