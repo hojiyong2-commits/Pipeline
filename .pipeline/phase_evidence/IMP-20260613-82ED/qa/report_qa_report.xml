@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260613-82ED</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>112</numeric_score>
+
+  <handover_evidence_check>
+    <from>dev-agent</from>
+    <evidence_files>pipeline.py, tests/test_evidence_inventory_82ed.py, scope_manifest_MT-1..3.json, module_handover_MT-1..3.xml, integration_report.xml</evidence_files>
+    <result>PASS — dev-agent handover 존재, 구체적 파일명 명시, 실제 파일 제출 확인</result>
+  </handover_evidence_check>
+
+  <step0_pm_checks>
+    <anti_gaming_read>PASS — step_plan.xml line 4 &lt;anti_gaming_read&gt;true&lt;/anti_gaming_read&gt; 존재</anti_gaming_read>
+    <decomposition_audit>PASS — line 267~278 존재, audit_result=SPLIT_REQUIRED</decomposition_audit>
+    <grep_evidence>PASS — MT-1/MT-2/MT-3 모두 &lt;executed&gt;true&lt;/executed&gt; 포함</grep_evidence>
+    <judgment_calls>N-A — step_plan에 &lt;judgment_calls&gt; 블록 없음</judgment_calls>
+    <qa_gate_check>PASS — python pipeline.py check --phase qa exit 0</qa_gate_check>
+  </step0_pm_checks>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님 (gh/git subprocess는 도구 호출, 외부 HTTP API 아님)</wa>
+    <ui>N-A — UI 카테고리 아님</ui>
+    <fs>PASS — evidence_inventory.json 읽기 시 utf-8-sig, _write_json_value 사용, _contract_paths 경로 SSoT</fs>
+    <pd>PASS — 신규 함수 2개 명확히 분리, dict 반환 인터페이스 계약 일관</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — TypeError 타입가드(None/타입검증), OSError/JSONDecodeError 분기, fail-closed BLOCKED, 빈 inventory/빈 pipeline_id 방어</al>
+    <build>N-A — BUILD 태그 없음 (meta-task, EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <fs score="20" max="20">utf-8-sig 인코딩, _contract_paths SSoT 경로, _write_json_value 안전 쓰기</fs>
+    <pd score="10" max="10">모듈분리 5/인터페이스계약 5 — 신규 함수 독립, dict 반환 계약 명확</pd>
+    <al score="20" max="20">None가드/타입가드/예외분기/fail-closed/빈데이터 방어 전부 충족</al>
+    <regression score="20" max="20">11개 pytest + 69개 인접 게이트 회귀 PASS, ruff clean, py_compile OK</regression>
+    <ac_coverage score="22" max="22">AC-1~AC-11 전 항목 검증 및 functional binding 확인</ac_coverage>
+    <documentation score="10" max="10">MT-3 게이트 관계 문서화 (IQR-1)</documentation>
+    <wa score="N/A">네트워크 API 카테고리 아님</wa>
+    <ui score="N/A">UI 카테고리 아님</ui>
+    <build score="N/A">BUILD 태그 없음</build>
+    <total score="112" max="120"/>
+    <percentage>93.3</percentage>
+    <numeric_verdict>PASS (112/120 &gt;= 96)</numeric_verdict>
+  </numeric_score_detail>
+
+  <modules_verified>
+    <module id="MT-1" status="PASS">pipeline.py Evidence Inventory SSoT — _register_evidence_to_inventory(3310), _validate_evidence_provenance(3385) 신규 구현. 4개 call site 모두 functional binding 확인: add-oracle(8718-8719), gates oracle(15224, BLOCKED 시 _die exit 1), request-accept(14225, BLOCKED 시 _die), report final-packet(10948). 타입가드/fail-closed 완비.</module>
+    <module id="MT-2" status="PASS">tests/test_evidence_inventory_82ed.py — 11개 테스트 전부 PASS. PIPELINE_STATE_PATH 격리 + final_state assertion(상태변경 CLI), read-only 게이트는 returncode!=0 + 직접 로직 검증. AC-1~AC-11 커버.</module>
+    <module id="MT-3" status="PASS">pipeline.py 게이트 관계 문서화 (IQR-1) — 4개 게이트 책임 경계 명시. covers_iqr 사용 적절.</module>
+  </modules_verified>
+
+  <ac_verification>
+    <ac id="AC-1" status="PASS">contract add-oracle가 evidence_inventory.json에 8개 필드 entry 등록. TestAC1 PASS, 호출 8718-8719 확인.</ac>
+    <ac id="AC-2" status="PASS">inventory 없으면 gates oracle BLOCKED(evidence_inventory_missing). TestAC2 PASS, gate 15227 BLOCKED 처리 확인.</ac>
+    <ac id="AC-3" status="PASS">untracked oracle이면 request-accept BLOCKED(protected_evidence_untracked). TestAC3 PASS, git ls-files fail-closed 3545-3554.</ac>
+    <ac id="AC-4" status="PASS">tracked + PR 포함 시 PASS, nonce 발급. provenance PASS 경로(3556-3575) + request-accept 14228 통과 흐름 확인.</ac>
+    <ac id="AC-5" status="PASS">PR/이력 미포함 시 oracle_evidence_not_in_pr BLOCKED. 구현 3595-3600 확인.</ac>
+    <ac id="AC-6" status="PASS">현재 pipeline_id 항목만 검사(pid 필터 3462-3466). TestAC7/AC8 격리 검증.</ac>
+    <ac id="AC-7" status="PASS">git/gh CLI 실패 시 fail-closed BLOCKED(gh_cli_failed/git_execution_failed). TestAC7 PASS.</ac>
+    <ac id="AC-8" status="PASS">cleanup-only(*_dump.txt 등)는 BLOCKED 아닌 cleanup_only_artifacts 분류. TestAC8 PASS, _is_cleanup_only_artifact SSoT(HYGIENE_ARCHIVE_PATTERNS) 사용.</ac>
+    <ac id="AC-9" status="PASS">final packet evidence_integrity 7개 필드. TestAC9 PASS, _build_verification_json 10699-10743.</ac>
+    <ac id="AC-10" status="PASS">inventory 파싱 실패 시 BLOCKED(evidence_inventory_parse_error). TestAC10 PASS. (참고: PM step_plan 텍스트는 evidence_inventory_missing으로 기술했으나, 구현/테스트는 더 정확한 evidence_inventory_parse_error로 구분 — AC 의도(파싱 실패=BLOCKED) 충족, 기능 결함 아님)</ac>
+    <ac id="AC-11" status="PASS">기존 4개 외부 게이트 회귀 없음. py_compile OK, import OK, 신규 함수 존재 확인, 69개 인접 게이트 테스트 PASS.</ac>
+  </ac_verification>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — commit 06c4317에 pipeline.py(+490) + tests/test_evidence_inventory_82ed.py(+698) 두 파일만 변경. git show --stat 확인.</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>9</declared_functions>
+    <actual_modified_functions>9</actual_modified_functions>
+    <out_of_scope_modifications>없음</out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — integration_report.xml + 11개 pytest 실행 증거</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 함수 정의가 아닌 실제 호출 경로(add-oracle/gates oracle/request-accept/final-packet) 4곳 확인, gate BLOCKED 시 _die exit 1 동작 검증</functional_binding_verified>
+  </runtime_functional_check>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <test_results>
+    tests/test_evidence_inventory_82ed.py: 11 passed in 14.66s (AC-1,2,3,7,8,9,10 각 1개 + AC-11 4개).
+    회귀: tests/test_protocol_consistency.py + tests/test_acceptance_readiness_e979.py: 69 passed.
+    py_compile pipeline.py: OK. ruff check pipeline.py + 테스트: All checks passed.
+  </test_results>
+
+  <summary>
+    Evidence Inventory SSoT 도입 검증 완료. 신규 함수 2개(_register_evidence_to_inventory, _validate_evidence_provenance)가 타입가드/fail-closed/예외분기를 완비하고, 4개 게이트(contract add-oracle / gates oracle / gates request-accept / report final-packet)에 functional binding으로 배선되어 BLOCKED 시 실제 exit 1 차단 동작 확인. AC-1~AC-11 전 항목 PASS. 11개 pytest + 69개 인접 게이트 회귀 PASS. scope는 pipeline.py + tests/test_evidence_inventory_82ed.py 두 파일로 정확히 일치(commit 06c4317), Trust-Root 위반 없음, dead code/중복 0건. numeric_score 112/120 (>=96). 최종 PASS.
+  </summary>
+</qa_report>
