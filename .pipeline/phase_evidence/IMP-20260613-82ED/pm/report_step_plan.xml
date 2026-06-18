@@ -1,0 +1,278 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260613-82ED</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+  <current_step>Step 1: PM Phase - Evidence Inventory SSoT 도입</current_step>
+  <tier>2</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>FS, PD</category_tags>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py에 Evidence Inventory SSoT 신규 도입. 3개 MT, 핵심 함수 신규 작성, 테스트 파일 신규 작성, 문서화 포함. Fast Path 대상 아님.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>12</expected_changed_functions>
+      <expected_changed_lines>500</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>Evidence Inventory 스키마 필드명, JSON 직렬화 포맷, 함수 내부 변수명 같은 P2 세부 사항은 묻지 않고 유지보수성 기준으로 PM이 결정했습니다. 파일 경로와 protection 분류 기준은 사용자 요청 원문에 명시되어 있어 clarification 불필요합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>이번 작업은 pipeline.py 수정(MT-1), 테스트 작성(MT-2), 문서화(MT-3) 3단계로 나눠 진행해도 될까요?</user_facing_question>
+        <evidence>사용자 원문에 세 가지 산출물이 명시되어 있습니다: pipeline.py 핵심 함수, 회귀 테스트 파일, 게이트 관계 문서화.</evidence>
+        <why_it_matters>MT별로 gate를 통과해야 다음 MT로 이어지므로, 분리가 잘못되면 전체 검증이 지연됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>3개 MT로 분리 진행 (MT-1 pipeline.py, MT-2 테스트, MT-3 문서화)</label>
+            <benefit>각 단계를 독립적으로 검증하여 오류 추적이 쉽습니다.</benefit>
+            <cost>MT가 여럿이어서 gate 기록 횟수가 늘어납니다.</cost>
+          </option>
+          <option id="B">
+            <label>MT-1과 MT-2를 묶어 2개 MT로 진행</label>
+            <benefit>gate 기록 횟수가 줄어듭니다.</benefit>
+            <cost>코드와 테스트를 한꺼번에 구현해 검증이 어렵습니다.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청 원문에 3가지 산출물이 명시되어 추천안 A로 진행합니다.</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <interface_spec>
+    - Input: pipeline.py (현재 파일), tests/oracles/IMP-20260613-82ED/ (oracle 파일)
+    - Output: pipeline.py (수정), tests/test_evidence_inventory_82ed.py (신규), pipeline.py docstring (수정)
+    - Validation: contract audit PASS, gates oracle PASS, request-accept provenance 검증 통과
+  </interface_spec>
+
+  <requirements>
+    [MT-1] pipeline.py Evidence Inventory SSoT 핵심 함수
+
+    1. Evidence Inventory 스키마 및 경로
+       - 파일: pipeline_contracts/{pipeline_id}/evidence_inventory.json
+       - _contract_paths()에 evidence_inventory 키 추가
+       - 스키마: pipeline_id, path, kind(oracle_input|oracle_expected|acceptance_evidence|registered_output|phase_evidence), sha256, size, source_command, registered_at, required_for_acceptance(bool), protection(protected|temporary|cleanup_only)
+
+    2. _register_evidence_to_inventory 신규 함수
+       - contract add-oracle 핸들러 내부에서 input/expected 각각 자동 호출
+
+    3. _validate_evidence_provenance(state, phase) 신규 함수
+       - evidence_inventory.json 파싱 실패 -> BLOCKED (evidence_inventory_missing)
+       - git ls-files tracked 여부 확인
+       - git diff origin/main...HEAD branch diff 포함 여부
+       - GitHub PR changed files 포함 여부 (gh CLI)
+       - PR head SHA와 local HEAD 일치 여부
+       - git/gh 조회 실패 -> BLOCKED (fail closed)
+       - protection=protected + git untracked -> BLOCKED (protected_evidence_untracked)
+       - oracle 파일 PR diff에 없음 -> BLOCKED (oracle_evidence_not_in_pr)
+       - 다른 pipeline_id untracked oracle -> WARNING (BLOCKED 아님)
+       - protection=cleanup_only + untracked -> WARNING (BLOCKED 아님)
+
+    4. gates oracle 핸들러 확장
+       - oracle_manifest entry가 evidence_inventory에 없으면 BLOCKED (oracle_not_in_evidence_inventory)
+       - _validate_evidence_provenance(state, oracle) 호출
+
+    5. gates request-accept 핸들러 확장
+       - nonce 발급 직전 _validate_evidence_provenance(state, request-accept) 호출
+
+    6. gates accept 핸들러 확장
+       - _validate_evidence_provenance(state, accept) 재검증
+
+    7. _build_verification_json 확장
+       - evidence_integrity 섹션 추가
+
+    8. report final-packet 핸들러 확장
+       - 최종 packet에 evidence_integrity 섹션 포함
+
+    [MT-2] tests/test_evidence_inventory_82ed.py 신규 작성
+
+    1. 임시 git repo 기반 isolated fixture
+    2. B96C 회귀 테스트
+    3. AC-1~AC-11 전체 커버
+    4. PIPELINE_STATE_PATH 격리 사용
+
+    [MT-3] pipeline.py docstring 게이트 관계 문서화
+
+    1. Oracle Quality Gate / preflight-pr-impl / hygiene cleanup-workspace / Evidence Inventory Gate 책임 구분 명시
+  </requirements>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>contract add-oracle 실행 시 pipeline_contracts/{pipeline_id}/evidence_inventory.json에 oracle input/expected entry가 자동 등록되며 8개 필드(path/kind/sha256/size/source_command/registered_at/required_for_acceptance/protection) 포함</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>gates oracle 실행 시 oracle_manifest + evidence_inventory 대조, inventory에 없는 oracle entry가 있으면 BLOCKED (failure_code: oracle_not_in_evidence_inventory)</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>oracle 파일 존재하지만 git untracked이면 gates request-accept가 BLOCKED (failure_code: protected_evidence_untracked), nonce 미발급 (B96C 회귀 방지)</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>git add 후 oracle tracked 상태가 되면 gates request-accept가 PASS되고 승인 코드 발급</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>GitHub PR changed files에 oracle 파일 없으면 gates request-accept가 BLOCKED (failure_code: oracle_evidence_not_in_pr)</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>다른 pipeline_id의 untracked oracle은 current pipeline COMPLETE를 막지 않고 warning만 출력 (단, current evidence_inventory 참조 시 BLOCKED)</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>git/gh CLI 조회 실패 시 BLOCKED 반환 (PASS 금지, fail closed)</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>*_dump.txt 같은 cleanup_only 파일은 BLOCKED가 아니라 cleanup warning 출력</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>final packet에 evidence_integrity 섹션 포함 (status/protected_evidence_count/tracked_count/pr_included_count/untracked[]/orphan_oracle_warnings[]/cleanup_only[] 7개 필드)</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>evidence_inventory.json 파싱 실패 시 BLOCKED (failure_code: evidence_inventory_missing)</text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true">
+      <text>기존 Technical/Oracle Quality/GitHub CI/User Acceptance gate 기능 회귀 없음</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_contract_paths, _register_evidence_to_inventory, _validate_evidence_provenance, _cmd_contract(add-oracle), _cmd_gates(oracle), _cmd_gates_request_accept, _cmd_gates_accept_handler, _build_verification_json, _cmd_report_final_packet</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_contract (action==add-oracle) — _register_evidence_to_inventory 신규 호출</site>
+        <site>_cmd_gates (action==oracle) — _validate_evidence_provenance 신규 호출</site>
+        <site>_cmd_gates_request_accept — _validate_evidence_provenance 신규 호출</site>
+        <site>_build_verification_json — evidence_integrity 섹션 추가</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _contract_paths|def _cmd_gates_request_accept|def _build_verification_json|action == add-oracle|action == oracle</pattern>
+        <match_count>9</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py Evidence Inventory SSoT 도입: 신규 함수 2개, 기존 gate 핸들러 및 packet 함수 확장</change_summary>
+      <line_estimate>350</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>test_evidence_inventory_82ed (전체 신규 파일)</affected_function>
+      <target_files>
+        <file>tests/test_evidence_inventory_82ed.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_evidence_inventory_82ed</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>B96C 회귀 테스트 포함 임시 git repo 기반 E2E 테스트 파일 신규 작성</change_summary>
+      <line_estimate>300</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline.py 모듈 docstring (게이트 관계 문서화)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Oracle Quality Gate|preflight-pr-impl|Evidence Inventory Gate</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>4개 gate 관계 문서화 — Oracle Quality Gate / preflight-pr-impl / hygiene cleanup-workspace / Evidence Inventory Gate 책임 구분 명시</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_iqr>IQR-1</covers_iqr>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 pipeline.py와 동일 버전 유지</python_version>
+  <env_specs>
+    <python>3.10</python>
+    <vscode>python.defaultInterpreterPath: python3.10, typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <forbidden>
+    tests/oracles/**를 cleanup_only로 분류 금지.
+    protected evidence 자동 삭제 금지.
+    GitHub PR changed files 확인 없이 local diff만으로 PASS 금지.
+    git/gh 조회 실패를 PASS로 취급 금지.
+    atomic_plan.project_snapshot.files를 evidence SSoT로 사용 금지.
+    PM이 dev/qa/build/harness 산출물을 직접 작성하거나 흉내 내는 것 금지.
+    Trust-Root 파일(CLAUDE.md/.github/workflows/tests/conftest.py) 수정 금지 (이 파이프라인 scope 아님).
+  </forbidden>
+
+  <handover_spec>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260613-82ED</pipeline_id>
+    <evidence>
+      <file>pipeline.py</file>
+      <file>tests/test_evidence_inventory_82ed.py</file>
+      <file>scope_manifest.json</file>
+      <file>dev_handover.xml</file>
+    </evidence>
+    <status>READY_FOR_QA</status>
+  </handover_spec>
+
+  <context_injection>
+    <target_files>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_evidence_inventory_82ed.py</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260613-82ED\task_contract.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline_contracts\IMP-20260613-82ED\oracle_manifest.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260613-82ED\normal_tracked_evidence\expected.json</file>
+      <file>C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\oracles\IMP-20260613-82ED\edge_untracked_evidence\expected.json</file>
+    </target_files>
+    <phase_rules_excerpt>
+      Incremental Module Gate: MT-1 module design/dev/qa PASS 후 MT-2 진행.
+      scope_manifest_MT-N.json 제출 필수.
+      scope_lock_check verdict=PASS 없는 handover 기록 거부.
+      oracle 파일은 tests/oracles/{pipeline_id}/ 아래에만 저장.
+    </phase_rules_excerpt>
+    <prev_phase_summary>PM Planning 완료 — contract frozen, oracle 2개 등록(normal 1 + edge 1), test_set 13개 테스트, contract_audit PASS</prev_phase_summary>
+  </context_injection>
+
+</step_plan>
+
+<decomposition_audit>
+  <total_functions_identified>9</total_functions_identified>
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>
+    MT-1: pipeline.py 핵심 함수 9개 (신규 2개 + 기존 확장 7개) — 단일 파일이지만 변경 규모가 크므로 독립 MT로 분리.
+    MT-2: 테스트 파일 신규 작성 — 코드와 독립적으로 검증 가능.
+    MT-3: 문서화 — 코드 변경 없는 텍스트 전용, covers_iqr 사용.
+    변경 파일 3개, 함수 12개, 예상 700라인 이상 — STANDARD 프로파일, 3개 MT로 분할.
+  </split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+</decomposition_audit>
