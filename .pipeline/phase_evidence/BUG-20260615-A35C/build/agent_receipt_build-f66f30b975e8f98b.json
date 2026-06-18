@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260615-A35C",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-f66f30b975e8f98b",
+  "status": "COMPLETED",
+  "started_at": "2026-06-15T13:59:04Z",
+  "completed_at": "2026-06-15T13:59:08Z",
+  "output_file": "build_report_A35C.xml",
+  "output_sha256": "341108bf319c6d596c868a12c84c46c5bd17eeefe7b9349fb8013f9353c7325c",
+  "evidence_files": [],
+  "commit_sha": "fbc2b9abc3208d255017ca5931b1d4d830dac788"
+}
