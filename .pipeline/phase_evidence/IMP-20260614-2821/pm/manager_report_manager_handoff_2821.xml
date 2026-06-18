@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260614-2821</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <status>ready</status>
+  <step_plan_sha256>9a54b57b8d21b4bc4e835d444df19edfe6b989868ac4454f3fb7a5340ef09137</step_plan_sha256>
+  <planner_run_id>pm_planner-0ce2ffaca263c4dc</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <created_at>2026-06-14</created_at>
+  <description>COMPLETE 직전 workspace/evidence hygiene gate 근본 개선 — oracle/evidence untracked 시 request-accept BLOCKED, cleanup_only warning 분리, SSoT state 저장</description>
+  <phase_plan>
+    <phase id="1" name="PM" status="PENDING">PM done 기록 후 phase attestation 실행</phase>
+    <phase id="2" name="Dev" status="PENDING">MT-1~MT-6 순차 module gate 방식으로 dev-agent 호출</phase>
+    <phase id="4" name="QA" status="PENDING">qa-agent로 12개 E2E 테스트 포함 전수 검증</phase>
+    <phase id="5" name="SEC" status="PENDING">외부 API/DB 없음 → sec --skip</phase>
+    <phase id="6" name="Build" status="PENDING">pipeline.py 수정 → N/A, --skip-reason meta-task</phase>
+    <phase id="7" name="External Gates" status="PENDING">technical → oracle → github-ci → request-accept → accept</phase>
+    <phase id="8" name="Architect" status="PENDING">prompt-architect-agent RCA</phase>
+  </phase_plan>
+  <micro_tasks_summary>
+    <mt id="MT-1">_check_workspace_hygiene 신규 함수 구현 (pipeline.py)</mt>
+    <mt id="MT-2">_cmd_gates_request_accept hygiene preflight 통합 (pipeline.py)</mt>
+    <mt id="MT-3">_cmd_gates_accept nonce consume 전 preflight 통합 (pipeline.py)</mt>
+    <mt id="MT-4">state["workspace_hygiene"] SSoT + final packet + status 표시 (pipeline.py)</mt>
+    <mt id="MT-5">12개 E2E 테스트 (tests/e2e/test_workspace_hygiene_2821.py)</mt>
+    <mt id="MT-6">pipeline-manager-agent.md 문서 업데이트</mt>
+  </micro_tasks_summary>
+</manager_handoff>
