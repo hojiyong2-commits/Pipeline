@@ -308,10 +308,15 @@ def test_tc1_request_accept_issues_nonce_and_records_shas(tmp_path):
     assert len(pkt_sha) == 64, f"packet_sha256 형식 불일치: {pkt_sha}"
 
     # 5. stdout에 승인 코드 포함 확인
-    accept_code = f"ACCEPT-{pid}-{nonce}"
+    # BUG-20260619-F41F MT-3: 콘솔 출력 승인 코드에서 nonce 제거 — ACCEPT-<pipeline_id> 형식.
+    accept_code = f"ACCEPT-{pid}"
     assert accept_code in r.stdout, (
         f"stdout에 승인 코드 없음. expected: {accept_code}\n"
         f"stdout: {r.stdout[:500]}"
+    )
+    # nonce는 콘솔에 노출되지 않아야 한다 (내부 acceptance_request.json에만 보존).
+    assert f"ACCEPT-{pid}-{nonce}" not in r.stdout, (
+        "콘솔 출력에 nonce 포함 승인 코드가 노출되면 안 됨 (MT-3)"
     )
 
     # oracle 참조 (expected.json 구조 검증)
@@ -461,10 +466,14 @@ def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
     assert len(pkt_sha) == 64, f"packet_sha256 형식 불일치: {pkt_sha}"
 
     # 4. stdout에 승인 코드 포함 확인
-    accept_code = f"ACCEPT-{pid}-{nonce}"
+    # BUG-20260619-F41F MT-3: 콘솔 출력 승인 코드에서 nonce 제거 — ACCEPT-<pipeline_id> 형식.
+    accept_code = f"ACCEPT-{pid}"
     assert accept_code in r.stdout, (
         f"stdout에 승인 코드 없음. expected: {accept_code}\n"
         f"stdout: {r.stdout[:500]}"
+    )
+    assert f"ACCEPT-{pid}-{nonce}" not in r.stdout, (
+        "콘솔 출력에 nonce 포함 승인 코드가 노출되면 안 됨 (MT-3)"
     )
 
 

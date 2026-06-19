@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -356,7 +355,12 @@ def test_final_packet_includes_accept_code_when_request_exists(
     isolated_env: Dict[str, str],
     isolated_cwd: Path,
 ) -> None:
-    """acceptance_request.json이 있으면 packet에 ACCEPT-... 코드가 포함된다."""
+    """acceptance_request.json이 있으면 packet에 ACCEPT-... 코드가 포함된다.
+
+    BUG-20260619-F41F MT-3: 외부 표시(packet)의 승인 코드에서 nonce를 제거한다.
+    packet에는 nonce 없는 ACCEPT-<pipeline_id> 형식만 포함되어야 하고, 8자리 nonce
+    문자열(ABCD1234)은 승인 코드 줄에 노출되지 않아야 한다.
+    """
     req_path = isolated_cwd / "acceptance_request.json"
     req_data = {
         "schema_version": 1,
@@ -376,8 +380,12 @@ def test_final_packet_includes_accept_code_when_request_exists(
     result = _run_cli(["report", "final-packet"], env=isolated_env, cwd=isolated_cwd)
     assert result.returncode == 0
     text = _packet_path_in(isolated_cwd).read_text(encoding="utf-8")
-    assert "ACCEPT-IMP-20260603-TEST-ABCD1234" in text
-    assert "REJECT-IMP-20260603-TEST-ABCD1234" in text
+    # MT-3: nonce 없는 ACCEPT-<pipeline_id> 형식만 포함.
+    assert "ACCEPT-IMP-20260603-TEST" in text
+    assert "REJECT-IMP-20260603-TEST" in text
+    # nonce(8자리)는 승인 코드 줄에 노출되지 않아야 한다.
+    assert "ACCEPT-IMP-20260603-TEST-ABCD1234" not in text
+    assert "REJECT-IMP-20260603-TEST-ABCD1234" not in text
 
 
 # ─── 4) 모든 줄 120자 이하 ─────────────────────────────────────────────────────
@@ -414,7 +422,11 @@ def test_final_packet_accept_code_on_separate_line(
     isolated_env: Dict[str, str],
     isolated_cwd: Path,
 ) -> None:
-    """ACCEPT 코드가 자기 자신만 있는 독립 줄로 출력된다."""
+    """ACCEPT 코드가 자기 자신만 있는 독립 줄로 출력된다.
+
+    BUG-20260619-F41F MT-3: 승인 코드는 nonce 없는 ACCEPT-<pipeline_id> 형식으로,
+    여전히 정확히 1개의 독립 줄로 출력되어야 한다.
+    """
     req_path = isolated_cwd / "acceptance_request.json"
     req_data = {
         "schema_version": 1,
@@ -435,11 +447,14 @@ def test_final_packet_accept_code_on_separate_line(
     assert result.returncode == 0
     text = _packet_path_in(isolated_cwd).read_text(encoding="utf-8")
     lines = text.split("\n")
-    accept_lines = [ln for ln in lines if ln.strip() == "ACCEPT-IMP-20260603-TEST-WXYZ7890"]
+    # MT-3: nonce 없는 ACCEPT-<pipeline_id> 형식의 독립 줄.
+    accept_lines = [ln for ln in lines if ln.strip() == "ACCEPT-IMP-20260603-TEST"]
     assert len(accept_lines) == 1, (
         "승인 코드가 정확히 1개의 독립 줄로 출력되어야 함. "
         f"발견된 라인: {accept_lines}"
     )
+    # nonce는 노출되지 않아야 한다.
+    assert "WXYZ7890" not in text
 
 
 # ─── 6) final packet 없어도 request-accept 진행 + 자동 packet 생성 ──────────────
@@ -605,12 +620,17 @@ def test_request_accept_auto_generates_packet_with_code(
     isolated_env: Dict[str, str],
     isolated_cwd: Path,
 ) -> None:
-    """request-accept 실행 후 packet이 ACCEPT-... 코드를 포함한다."""
+    """request-accept 실행 후 packet이 ACCEPT-... 코드를 포함한다.
+
+    BUG-20260619-F41F MT-3: packet의 승인 코드에서 nonce를 제거한다. packet에는 nonce
+    없는 ACCEPT-<pipeline_id> 형식만 포함되고, 실제 nonce는 acceptance_request.json에만
+    보존되어야 한다 (외부 노출 차단 + 내부 검증값 보존).
+    """
     # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
     state_path = isolated_env["PIPELINE_STATE_PATH"]
     assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
     # created_files: acceptance_request.json, human_acceptance_packet.md
-    # final_state: acceptance_request.json에 nonce + ACCEPT 코드가 기록됨
+    # final_state: acceptance_request.json에 nonce가 기록되고, packet에는 nonce 미노출
     evidence = isolated_cwd / "auto_packet_evidence.txt"
     evidence.write_text("body", encoding="utf-8")
     result = _run_cli(
@@ -619,11 +639,17 @@ def test_request_accept_auto_generates_packet_with_code(
     )
     assert result.returncode == 0
     packet_text = _packet_path_in(isolated_cwd).read_text(encoding="utf-8")
-    m = re.search(r"ACCEPT-IMP-20260603-TEST-([A-Z0-9]+)", packet_text)
-    assert m, f"packet에 ACCEPT-... 코드가 없음. 내용: {packet_text[:500]}"
-    # 동일 nonce가 acceptance_request.json에도 기록됨
+    # MT-3: nonce 없는 ACCEPT-<pipeline_id> 형식이 packet에 포함.
+    assert "ACCEPT-IMP-20260603-TEST" in packet_text, (
+        f"packet에 ACCEPT-<pipeline_id> 코드가 없음. 내용: {packet_text[:500]}"
+    )
+    # 실제 nonce는 acceptance_request.json에만 보존되고 packet에는 노출되지 않아야 한다.
     req = json.loads((isolated_cwd / "acceptance_request.json").read_text(encoding="utf-8"))
-    assert m.group(1) == req["nonce"]
+    _nonce = str(req["nonce"])
+    assert _nonce, "acceptance_request.json에 nonce가 보존되어야 함"
+    assert f"ACCEPT-IMP-20260603-TEST-{_nonce}" not in packet_text, (
+        "packet에 nonce 포함 승인 코드가 노출되면 안 됨 (MT-3)"
+    )
 
 
 # ─── 12) --user-confirmed 단독 차단 (기존 Nonce Gate 보존) ─────────────────────

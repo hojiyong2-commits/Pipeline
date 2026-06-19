@@ -257,8 +257,10 @@ def test_tc3_reject_then_new_request_no_old_nonce(tmp_path: Path) -> None:
     # 이전 nonce는 어디에도 없어야 한다.
     assert old_nonce not in md, md
     assert old_nonce not in json.dumps(vj), vj
-    # 새 nonce 기반 승인 코드는 노출되어야 한다.
-    assert f"ACCEPT-{PID}-{new_nonce}" in md, md
+    # BUG-20260619-F41F MT-3: 승인 코드는 nonce 없는 ACCEPT-<pipeline_id> 형식만 노출되고,
+    # 새 nonce(8자리)도 packet에 노출되지 않아야 한다 (외부 노출 차단).
+    assert f"ACCEPT-{PID}" in md, md
+    assert new_nonce not in md, md
     assert _md_field(md, "acceptance_display") == "PENDING"
 
 
@@ -277,7 +279,9 @@ def test_tc4_pending_has_current_code_no_accepted(tmp_path: Path) -> None:
     assert proc.returncode == 0, f"stdout={proc.stdout}\nstderr={proc.stderr}"
 
     md = _read_md(tmp_path)
-    assert f"ACCEPT-{PID}-{nonce}" in md, md
+    # BUG-20260619-F41F MT-3: nonce 없는 ACCEPT-<pipeline_id> 형식만 노출.
+    assert f"ACCEPT-{PID}" in md, md
+    assert nonce not in md, md
     # 표시 상태는 PENDING이며 ACCEPTED로 표시되면 안 된다.
     assert _md_field(md, "acceptance_display") == "PENDING", md
     assert _md_field(md, "acceptance") == "PENDING", md
@@ -443,8 +447,9 @@ def test_tc10_d278_nonce_reuse_regression(tmp_path: Path) -> None:
     assert proc.returncode == 0, f"stdout={proc.stdout}\nstderr={proc.stderr}"
 
     md = _read_md(tmp_path)
-    # 새 nonce 기반 코드만 노출, 게이트표는 PENDING.
-    assert f"ACCEPT-{PID}-REUSE777" in md, md
+    # BUG-20260619-F41F MT-3: nonce 없는 ACCEPT-<pipeline_id> 형식만 노출, 게이트표는 PENDING.
+    assert f"ACCEPT-{PID}" in md, md
+    assert "REUSE777" not in md, md
     assert "User Acceptance: PENDING" in md, md
     # D278 검증 함수가 pipeline.py에 보존되어 있어야 한다(정적 확인).
     pipeline_src = Path(PIPELINE_PY).read_text(encoding="utf-8")
