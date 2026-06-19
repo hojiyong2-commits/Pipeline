@@ -1,0 +1,5 @@
+{
+  "ok": false,
+  "approver": "",
+  "failure_code": "pr_approver_missing"
+}
