@@ -4,13 +4,13 @@
   "type": "BUG",
   "description": "PR 댓글 provenance 검증 3건 수정: createdAt/created_at 양방향 지원 + 누락/파싱실패 fail-closed, 테스트 createdAt 필드 커버리지 추가, human_acceptance_packet/pending PR 댓글에서 nonce 제거",
   "created_at": "2026-06-19T11:31:32Z",
-  "updated_at": "2026-06-19T13:21:03Z",
+  "updated_at": "2026-06-19T13:25:02Z",
   "pipeline_started_at": "2026-06-19T11:31:32Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "dev",
+  "current_phase": "qa",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -29,15 +29,15 @@
       "agent_run_id": "pm_planner-f37553bce3ab7d29"
     },
     "dev": {
-      "status": "PENDING",
+      "status": "DONE",
       "started_at": "2026-06-19T11:55:49Z",
-      "completed_at": "2026-06-19T12:48:52Z",
-      "evidence": "pipeline.py,tests/e2e/test_pr_comment_approval_83f4.py",
+      "completed_at": "2026-06-19T13:25:02Z",
+      "evidence": "pipeline.py,tests/e2e/test_pr_comment_approval_83f4.py,tests/test_pr_approver_b96c.py",
       "notes": [],
-      "report_file": "dev_handover_F41F.xml",
+      "report_file": "dev_handover2_F41F.xml",
       "agent_id": "dev-agent",
-      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260619-F41F_phase_dev.json",
-      "agent_run_id": "dev-f0823c1d4ed1104f"
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260619-F41F_phase_dev.1.json",
+      "agent_run_id": "dev-14e2c231cb9e3f61"
     },
     "qa": {
       "status": "FAIL",
@@ -240,6 +240,10 @@
     {
       "ts": "2026-06-19T13:21:03Z",
       "msg": "agent run completed phase=dev agent=dev-agent run_id=dev-14e2c231cb9e3f61"
+    },
+    {
+      "ts": "2026-06-19T13:25:02Z",
+      "msg": "dev DONE | evidence: pipeline.py,tests/e2e/test_pr_comment_approval_83f4.py,tests/test_pr_approver_b96c.py"
     }
   ],
   "terminal_state": null,
@@ -400,8 +404,8 @@
       "evidence_files": [],
       "receipt_path": ".pipeline\\agent_receipts\\BUG-20260619-F41F\\dev\\dev-14e2c231cb9e3f61.json",
       "receipt_sha256": "df7861a444c33abf2ee4fcf6ab39bd4d4cd983986a486947677ca556bb07ce20",
-      "used_by_phase": null,
-      "used_at": null,
+      "used_by_phase": "dev",
+      "used_at": "2026-06-19T13:25:02Z",
       "commit_sha": "cd325e5c41367e42186a6e0cd7623b5d41aad074",
       "notes": ""
     }
@@ -962,7 +966,8 @@
         "id": "MT-1",
         "affected_function": "pipeline._check_pr_approver_provenance",
         "target_files": [
-          "pipeline.py"
+          "pipeline.py",
+          "tests/test_pr_approver_b96c.py"
         ],
         "change_summary": "_check_pr_approver_provenance 함수에 timestamp 파싱 로직 추가: (1) comment.get(\"created_at\") or comment.get(\"createdAt\")로 양방향 지원, (2) timestamp 누락 시 해당 댓글 skip (fail-closed), (3) timestamp 파싱 실패 시 해당 댓글 skip (fail-closed), (4) acceptance_request.created_at 이전 댓글은 pr_comment_too_old로 차단.",
         "covers_ac": [
@@ -1055,7 +1060,7 @@
       }
     },
     "project_snapshot": {
-      "created_at": "2026-06-19T12:46:29Z",
+      "created_at": "2026-06-19T13:24:30Z",
       "files": {
         ".bandit": {
           "sha256": "a53310dac1148f6599b486e3e63e0418872f961869bca21af860569f119c2b12",
@@ -1160,6 +1165,10 @@
         "debug_ac3.py": {
           "sha256": "76d3fbc86957f321fce15490e4fa977c7f401c2c511c5149440a4d0c2c38fc5a",
           "size": 903
+        },
+        "dev_handover2_F41F.xml": {
+          "sha256": "a5f281298935bba6884cfc80a8adfc9ef5aac354e24d19c6b555c13e6048f0c3",
+          "size": 3674
         },
         "dev_handover_F41F.xml": {
           "sha256": "35c9ec2330c4f8511557b958afd397864e548888d5dea7f14457df8ac6754b48",
@@ -1361,6 +1370,10 @@
           "sha256": "153ff5e9be2e417120fc89fea8d3da806203c2e1f9e145d0c5607761a9c9b8b6",
           "size": 762
         },
+        "qa_report2_32D7.xml": {
+          "sha256": "71ceef7071db92ed6586bf6e8c642eb11393f586745156cf23d6bd9287eadaa8",
+          "size": 8570
+        },
         "qa_report2_32D7.xml.bak": {
           "sha256": "71ceef7071db92ed6586bf6e8c642eb11393f586745156cf23d6bd9287eadaa8",
           "size": 8570
@@ -1368,6 +1381,10 @@
         "qa_report_83F4.xml": {
           "sha256": "07c378989bf597cb5c05dd9c2537bf7aa20ca6fe37f880144118075463bf7eb7",
           "size": 7818
+        },
+        "qa_report_F41F.xml": {
+          "sha256": "da32f877a15cc985879894fb6d6955d40d537336d6012989ebbe437b7b3aacbf",
+          "size": 9856
         },
         "README.md": {
           "sha256": "5103e5a0eea1b5a9d5e0e81daa4222aab89cc56ebdd6151af6c24d9cfd86156a",
@@ -1466,8 +1483,8 @@
           "size": 9381
         },
         "step_plan_F41F.xml": {
-          "sha256": "c421053d6919246e7404a737378b757988720c74ca6378fa90c5a126be707120",
-          "size": 14619
+          "sha256": "aa63b69bbe65b433f9e9ceda8ec88c5bf1c20681827fdda11209c638e8bd4f85",
+          "size": 14716
         },
         "tc6_dump.txt": {
           "sha256": "170a85fb034c994dbbabf15994758de2a28f7efb4661eb823f36569d59b14414",
@@ -1958,8 +1975,8 @@
           "size": 37323
         },
         "tests/test_pr_approver_b96c.py": {
-          "sha256": "ddd0455e37b593e7b9cfed11e467fb27a1a7b65a5a5d9da2c28e3a234d1d688b",
-          "size": 15713
+          "sha256": "ebaaa023cf66b0b79d702fe7d313ab36aa07aa5cb8a18225473e0b06eb872ad8",
+          "size": 15840
         },
         "tests/test_pr_hygiene.py": {
           "sha256": "4689a2c04df2c156a91fc0d9c1c0f65fbcdec14df1a0b33c8b4158f1aa6d6605",
@@ -14419,8 +14436,8 @@
     "complete": true
   },
   "dev_handover": {
-    "report_file": "dev_handover_F41F.xml",
-    "validated_at": "2026-06-19T12:48:29Z",
+    "report_file": "dev_handover2_F41F.xml",
+    "validated_at": "2026-06-19T13:24:35Z",
     "producer": "dev-agent"
   },
   "dev_gate_flags": {
@@ -14428,7 +14445,7 @@
   },
   "atomic_scope": {
     "manifest_file": "scope_manifest.json",
-    "validated_at": "2026-06-19T12:48:52Z",
+    "validated_at": "2026-06-19T13:25:02Z",
     "micro_task_ids": [
       "MT-1",
       "MT-2",
@@ -14436,7 +14453,8 @@
     ],
     "files": [
       "pipeline.py",
-      "tests/e2e/test_pr_comment_approval_83f4.py"
+      "tests/e2e/test_pr_comment_approval_83f4.py",
+      "tests/test_pr_approver_b96c.py"
     ],
     "affected_functions": [
       "pipeline._build_final_packet_content",
