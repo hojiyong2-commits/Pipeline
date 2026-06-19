@@ -1,0 +1,77 @@
+{
+  "pipeline_id": "BUG-20260619-F41F",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_pr_approver_provenance"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_check_pr_approver_provenance: created_at/createdAt 양방향 timestamp 읽기 (AC-1)",
+            "_check_pr_approver_provenance: timestamp 누락 시 continue skip — fail-closed (AC-2)",
+            "_check_pr_approver_provenance: timestamp 파싱 실패 시 continue skip — fail-closed (AC-3)",
+            "_check_pr_approver_provenance: 발급 시각 이전 댓글 pr_comment_too_old 분기 추가",
+            "_check_pr_approver_provenance: _accepted_codes로 nonce-less ACCEPT-<pid> exact-match PASS"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "tests/e2e/test_pr_comment_approval_83f4.py"
+      ],
+      "affected_functions": [
+        "test_pr_comment_approval_83f4 (보강)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-4", "AC-5", "AC-6", "AC-7"],
+          "changed_files": ["tests/e2e/test_pr_comment_approval_83f4.py"],
+          "implementation_evidence": [
+            "test_createdAt_field_only: createdAt-only PASS (AC-4)",
+            "test_timestamp_missing_fail_closed: 누락 댓글만 → pr_approver_missing (AC-6)",
+            "test_timestamp_parse_error_fail_closed: 파싱실패 댓글만 → pr_approver_missing (AC-6)",
+            "test_edge_pr_comment_too_old: 과거 댓글 pr_comment_too_old (AC-7)",
+            "Oracle 4케이스 함수 직접 검증 통과 (AC-5)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._build_verification_json",
+        "pipeline._build_final_packet_content",
+        "pipeline._post_pending_approval_comment"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-8", "AC-9", "AC-10"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_build_verification_json: acceptance.code nonce 제거, acceptance.nonce 내부 필드 보존 (AC-9)",
+            "_build_acceptance_display_model: PR body approval_code nonce 제거 (AC-8)",
+            "_display_model_from_evidence: packet md approval_code nonce 제거 (AC-8)",
+            "_post_github_pending_acceptance_comment: pending PR 댓글 approval_code nonce 제거",
+            "_cmd_gates_request_accept: 콘솔 accept_code/reject_code nonce 제거, acceptance_request.json nonce 보존 (AC-10)",
+            "gates accept --acceptance-code 내부 nonce 대조 로직 미변경 (PM forbidden 준수)"
+          ]
+        }
+      ]
+    }
+  ]
+}
