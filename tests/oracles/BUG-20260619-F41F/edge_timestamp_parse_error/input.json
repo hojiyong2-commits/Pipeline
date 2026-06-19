@@ -1,0 +1,16 @@
+{
+  "acceptance_request": {
+    "pipeline_id": "BUG-20260619-F41F",
+    "status": "PENDING",
+    "nonce": "TESTNONC",
+    "created_at": "2026-06-19T10:00:00Z",
+    "pr_number": 100
+  },
+  "pr_comments": [
+    {
+      "author": "hojiyong2-commits",
+      "body": "ACCEPT-BUG-20260619-F41F",
+      "created_at": "invalid-date-format"
+    }
+  ]
+}

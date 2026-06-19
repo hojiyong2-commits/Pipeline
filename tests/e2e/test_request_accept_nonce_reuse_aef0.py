@@ -581,7 +581,15 @@ def _b96c_subprocess_side_effect(
             payload = json.dumps([{"number": int(pr_number), "headRefName": head_branch}])
             return _make_run(returncode=0, stdout=payload)
         if isinstance(argv, list) and len(argv) >= 3 and argv[1:3] == ["pr", "view"]:
-            payload = json.dumps({"comments": comments})
+            # BUG-20260619-F41F MT-1 side-effect: provenance가 댓글 timestamp를
+            # fail-closed로 요구하므로, 실제 gh가 항상 반환하는 created_at을 누락 댓글에 주입.
+            _enriched = []
+            for _c in comments:
+                _cc = dict(_c)
+                if not _cc.get("created_at") and not _cc.get("createdAt"):
+                    _cc["created_at"] = "2026-06-12T10:00:00Z"
+                _enriched.append(_cc)
+            payload = json.dumps({"comments": _enriched})
             return _make_run(returncode=0, stdout=payload)
         return _make_run(returncode=1, stdout="", stderr="unexpected subprocess call")
 

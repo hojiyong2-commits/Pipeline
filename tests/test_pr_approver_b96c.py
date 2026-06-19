@@ -103,7 +103,17 @@ def _build_subprocess_side_effect(pr_number: str, comments: List[Dict[str, Any]]
             return _make_gh_run(returncode=0, stdout=payload)
         # gh pr view
         if isinstance(argv, list) and len(argv) >= 3 and argv[1:3] == ["pr", "view"]:
-            payload = json.dumps({"comments": comments})
+            # BUG-20260619-F41F MT-1 side-effect: _check_pr_approver_provenance 가 댓글
+            # timestamp(created_at/createdAt)를 fail-closed 로 요구하므로, 실제 gh CLI 가
+            # 항상 반환하는 created_at 을 누락 댓글에 기본 주입한다. (b96c 케이스는 코드
+            # 매칭 로직 검증이 목적이며 timestamp 누락 검증은 F41F 오라클에서 별도 수행)
+            _enriched = []
+            for _c in comments:
+                _cc = dict(_c)
+                if not _cc.get("created_at") and not _cc.get("createdAt"):
+                    _cc["created_at"] = "2026-06-12T10:00:00Z"
+                _enriched.append(_cc)
+            payload = json.dumps({"comments": _enriched})
             return _make_gh_run(returncode=0, stdout=payload)
         # 알 수 없는 호출 — 실패로 처리
         return _make_gh_run(returncode=1, stdout="", stderr="unexpected subprocess call")
@@ -194,9 +204,10 @@ def test_packet_comment_only_fail() -> None:
     result = _run_provenance(state, file_req, comments)
     assert result["status"] == "BLOCKED", \
         f"packet 댓글만 있으면 승인 후보가 없어 BLOCKED여야 함: {result.get('message')}"
-    # packet 댓글이 완전히 필터링되어 어떤 실패 후보도 잡히지 않음 → pr_approver_missing.
-    assert result.get("failure_code") in ("pr_approver_missing", ""), \
-        f"packet 댓글 필터링 후 승인 코드 누락이어야 함: {result.get('failure_code')}"
+    # packet 댓글에 _VALID_CODE 가 인용되어 있으면 BUG-20260616-8011 보호로
+    # protocol_violation_auto_accept 가 반환된다. 모두 BLOCKED 이며 사용자 직접 승인 없이는 통과 불가.
+    assert result.get("failure_code") in ("pr_approver_missing", "", "protocol_violation_auto_accept"), \
+        f"packet 댓글은 승인 불가 failure_code여야 함: {result.get('failure_code')}"
 
 
 # ----------------------------------------------------------------------------

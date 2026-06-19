@@ -11556,15 +11556,12 @@ def _build_acceptance_display_model(
         gates["acceptance"] = "PENDING"
 
     # 승인 코드 / 거절 예시 — nonce 존재 시에만.
+    # BUG-20260619-F41F MT-3: 사용자 표시(PR body 승인 코드)에서 nonce 제거.
+    # 승인 코드는 nonce 발급 시에만 노출하되, 코드 자체는 nonce 없는 형식으로 표시한다.
     approval_code: Optional[str] = None
-    nonce = ""
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
-        nonce = str(acceptance_request.get("nonce") or "")
-        approval_code = f"ACCEPT-{pipeline_id}-{nonce}"
-    if nonce:
-        reject_example = f"REJECT-{pipeline_id}-{nonce}: 이유"
-    else:
-        reject_example = f"REJECT-{pipeline_id}-XXXXXXXX: 이유"
+        approval_code = f"ACCEPT-{pipeline_id}"
+    reject_example = f"REJECT-{pipeline_id}: 이유"
 
     # requirements_summary — structured AC 충족표에서 계산 (하드코딩 금지).
     # must_verify=true 항목 중 result=PASS인 항목을 passed로 집계.
@@ -11851,16 +11848,12 @@ def _display_model_from_evidence(
         gate_status["acceptance"] = "PENDING"
 
     # 승인 코드 / 거절 예시.
+    # BUG-20260619-F41F MT-3: packet(human_acceptance_packet.md) 승인 코드에서 nonce 제거.
+    # nonce 가 발급된 경우에만 승인 코드를 노출하되, 코드 자체는 nonce 없는 형식으로 표시한다.
     approval_code: Optional[str] = None
-    nonce = ""
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
-        nonce = str(acceptance_request.get("nonce") or "")
-        approval_code = f"ACCEPT-{pipeline_id}-{nonce}"
-    reject_example = (
-        f"REJECT-{pipeline_id}-{nonce}: 이유"
-        if nonce
-        else f"REJECT-{pipeline_id}-XXXXXXXX: 이유"
-    )
+        approval_code = f"ACCEPT-{pipeline_id}"
+    reject_example = f"REJECT-{pipeline_id}: 이유"
 
     # requirements_summary — ac_table에서 result 기준 계산(하드코딩 금지).
     req_total = req_passed = req_failed = 0
@@ -12363,8 +12356,11 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
     accept_status = "PENDING"
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
         accept_nonce = str(acceptance_request["nonce"])
-        acceptance_code = f"ACCEPT-{pipeline_id}-{accept_nonce}"
-        reject_example = f"REJECT-{pipeline_id}-{accept_nonce}: 이유"
+        # BUG-20260619-F41F MT-3: 외부 표시(verification_json acceptance.code)에서 nonce 제거.
+        # 사용자/agent가 읽는 코드는 ACCEPT-<pipeline_id> 형식만 노출한다. nonce 는
+        # acceptance_request.json 및 acceptance.nonce 내부 필드에만 보존되어 검증에 쓰인다.
+        acceptance_code = f"ACCEPT-{pipeline_id}"
+        reject_example = f"REJECT-{pipeline_id}: 이유"
         accept_request_id = str(acceptance_request.get("request_id", "") or "")
         accept_status = str(acceptance_request.get("status", "PENDING") or "PENDING")
     # BUG-20260615-A35C MT-2: 표시 상태는 _collect_packet_evidence가 주입한 effective SSoT 값을
@@ -15367,10 +15363,14 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
         _state, evidence, packet_evidence=_packet_evidence
     )
     # req가 가진 nonce/PR을 display model에 반영(state보다 우선) — request-accept 직후 정합성.
+    # BUG-20260619-F41F MT-3: GitHub PR pending 댓글에 nonce 외부 노출 제거.
+    # pending 댓글은 누구나(그리고 agent도) 읽을 수 있으므로 승인 코드에서 nonce를 제거하여
+    # ACCEPT-<pipeline_id> 형식만 게시한다. 실제 nonce는 acceptance_request.json에 보존되어
+    # gates accept --acceptance-code 검증에만 사용된다(사용자가 직접 입력).
     _req_nonce = str(req.get("nonce", "") or "")
     if _req_nonce:
-        display_model["approval_code"] = f"ACCEPT-{pipeline_id}-{_req_nonce}"
-        display_model["reject_example"] = f"REJECT-{pipeline_id}-{_req_nonce}: 이유"
+        display_model["approval_code"] = f"ACCEPT-{pipeline_id}"
+        display_model["reject_example"] = f"REJECT-{pipeline_id}: 이유"
         display_model["acceptance_display"] = "PENDING"
     if pr_url:
         display_model["pr_url"] = pr_url
@@ -17022,8 +17022,12 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         )
         nonce = req["nonce"]
 
-    accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
-    reject_code = f"REJECT-{pipeline_id}-{nonce}"
+    # BUG-20260619-F41F MT-3: 콘솔 출력 승인 코드에서 nonce 제거.
+    # request-accept 콘솔 출력은 agent가 읽을 수 있으므로 ACCEPT-<pipeline_id> 형식만 표시한다.
+    # 실제 nonce는 acceptance_request.json(및 아래 _session_token 산출)에 보존되어,
+    # gates accept --acceptance-code 검증과 브라우저 승인 토큰 산출에만 사용된다.
+    accept_code = f"ACCEPT-{pipeline_id}"
+    reject_code = f"REJECT-{pipeline_id}"
 
     # BUG-20260616-9DEF MT-2: 로컬 브라우저 클릭 승인 채널.
     # nonce 발급 직후, 사용자가 로컬 브라우저에서 승인 버튼을 직접 클릭해야 한다.
@@ -17528,6 +17532,16 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     )
     # 비교 기준 코드: nonce가 없으면 ACCEPT-<pipeline_id> 형식을 fallback으로 사용.
     _expected_code: str = accept_code if nonce else ("ACCEPT-" + pipeline_id)
+    # BUG-20260619-F41F MT-1/MT-3: 게시/표시되는 승인 코드는 nonce 없는 ACCEPT-<pipeline_id>
+    # 형식이다(MT-3). 따라서 provenance 검증도 nonce 없는 형식을 PASS 후보로 받아들여야 한다.
+    # 동시에 과거 호환(BUG-20260612-B96C)으로 nonce 포함 정확 코드도 계속 PASS 후보로 유지한다.
+    # _accepted_codes: 댓글 본문이 정확히 일치하면 PASS 처리할 코드 집합.
+    _nonceless_code: str = ("ACCEPT-" + pipeline_id) if pipeline_id else ""
+    _accepted_codes: "set[str]" = set()
+    if _expected_code:
+        _accepted_codes.add(_expected_code)
+    if _nonceless_code:
+        _accepted_codes.add(_nonceless_code)
     # stale nonce 탐지용 prefix (같은 pipeline_id, 다른 nonce 판별).
     _accept_prefix: str = f"ACCEPT-{pipeline_id}-" if pipeline_id else "ACCEPT-"
 
@@ -17537,8 +17551,23 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     #      (3) pipeline_contracts/<pipeline_id>/ 하위 acceptance_request*.json 파일들의 nonce.
     _issued_nonces: "set[str]" = _collect_issued_nonces(pipeline_id, acceptance_req)
 
+    # BUG-20260619-F41F MT-1: 승인 요청 발급 시각(acceptance_request.created_at)을 파싱.
+    # 이 시각 이전에 작성된 댓글은 현재 발급된 승인 코드와 무관한 과거 댓글이므로
+    # 승인 후보에서 제외(pr_comment_too_old)한다. created_at 이 없거나 파싱 불가하면
+    # too_old 판정을 건너뛴다(과거 댓글 차단을 강제하지 않음 — 단, timestamp 자체 누락
+    # 댓글은 위 fail-closed 로직으로 별도 차단된다).
+    _req_created_str: str = str(acceptance_req.get("created_at") or acceptance_req.get("createdAt") or "")
+    _req_created_dt = None
+    if _req_created_str:
+        try:
+            _req_created_dt = _parse_iso8601_z(_req_created_str)
+        except (ValueError, TypeError):
+            _req_created_dt = None
+
     _found_approver: Optional[str] = None
     _found_comment_id: Optional[str] = None
+    _too_old_hit: bool = False
+    _too_old_observed: str = ""
     _stale_nonce_hit: bool = False
     _code_mismatch_hit: bool = False
     _stale_observed: str = ""
@@ -17559,6 +17588,29 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         _cid: str = str(_comment.get("id", "") or "")
         if _author != allowed_approver:
             continue
+        # BUG-20260619-F41F MT-1: 댓글 timestamp 검증 (fail-closed).
+        #   - GitHub gh CLI는 환경/쿼리에 따라 created_at(REST) 또는 createdAt(GraphQL) 키를
+        #     사용하므로 양쪽을 모두 지원한다.
+        #   - timestamp 가 누락되었거나 파싱 불가하면 해당 댓글을 신뢰할 수 없으므로 승인
+        #     후보에서 제외(skip)한다. fail-open(타임스탬프 없이도 승인 인정) 금지.
+        #     누락/파싱실패 댓글만 존재하면 결과적으로 pr_approver_missing 으로 차단된다.
+        _comment_time_str: str = str(
+            _comment.get("created_at") or _comment.get("createdAt") or ""
+        )
+        if not _comment_time_str:
+            # timestamp 누락 → fail-closed: 이 댓글 skip.
+            continue
+        try:
+            _comment_dt = _parse_iso8601_z(_comment_time_str)
+        except (ValueError, TypeError):
+            # 파싱 실패 → fail-closed: 이 댓글 skip.
+            continue
+        # BUG-20260619-F41F MT-1: 승인 요청 발급(created_at) 이전 댓글은 과거 댓글로
+        # 차단(pr_comment_too_old). 발급 시각을 알 수 없으면(파싱 불가) 차단하지 않는다.
+        if _req_created_dt is not None and _comment_dt < _req_created_dt:
+            _too_old_hit = True
+            _too_old_observed = _body.strip()
+            continue
         # AC-2: pipeline 자동 생성 packet 댓글은 승인 후보에서 완전 제외.
         # BUG-20260616-8011 MT-1: packet 계열 마커(base/-pending/-accepted)가 포함된 댓글은
         # 모두 pipeline 자동 생성 packet 으로 간주한다. 그런데 그 안에 기대 승인 코드가
@@ -17571,7 +17623,9 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
             continue
         _stripped: str = _body.strip()
         # AC-3 + AC-6: 완전 일치 → 즉시 PASS (다른 실패 댓글보다 우선).
-        if _expected_code and _stripped == _expected_code:
+        # BUG-20260619-F41F MT-1: nonce 없는 ACCEPT-<pipeline_id> 또는 (과거 호환) nonce 포함
+        # 정확 코드 중 하나와 완전 일치하면 PASS.
+        if _stripped in _accepted_codes:
             _found_approver = _author
             _found_comment_id = _cid
             break
@@ -17580,7 +17634,7 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         if (
             pipeline_id
             and _stripped.startswith(_accept_prefix)
-            and _stripped != _expected_code
+            and _stripped not in _accepted_codes
         ):
             # prefix 뒤 nonce 부분을 추출하여 발급된 nonce 집합과 정확히 비교.
             _comment_nonce: str = _stripped[len(_accept_prefix):]
@@ -17593,7 +17647,7 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
             _mismatch_observed = _stripped
             continue
         # AC-5: ACCEPT- 로 시작하는 다른 코드(오타/잘못된 prefix) → code_mismatch.
-        if _stripped.startswith("ACCEPT-") and _stripped != _expected_code:
+        if _stripped.startswith("ACCEPT-") and _stripped not in _accepted_codes:
             _code_mismatch_hit = True
             _mismatch_observed = _stripped
 
@@ -17667,6 +17721,24 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
                 f"[PIPELINE ERROR] 댓글의 승인 코드가 현재 파이프라인의 코드와 일치하지 않습니다 (approval_code_mismatch). "
                 f"발견된 코드: {_mismatch_observed} — 오타이거나 잘못된 형식입니다. "
                 f"허용 승인자가 정확한 승인 코드를 댓글로 남겨야 합니다. {_common_tail}"
+            ),
+            "approver": None,
+            "comment_id": None,
+            "pr_number": pr_number,
+            "checked_at": _checked_at,
+        }
+
+    # BUG-20260619-F41F MT-1: 발급 시각 이전(과거) 댓글만 존재 → pr_comment_too_old.
+    # 우선순위: auto_accept > stale_nonce > code_mismatch > too_old > missing.
+    if _too_old_hit:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_comment_too_old",
+            "message": (
+                f"[PIPELINE ERROR] 승인 코드 발급 시각 이전에 작성된 과거 댓글입니다 (pr_comment_too_old). "
+                f"발견된 코드: {_too_old_observed} — 이 댓글은 현재 발급된 승인 코드보다 과거입니다. "
+                f"gates request-accept로 발급받은 최신 승인 코드를 허용 승인자가 새 댓글로 남겨야 합니다. "
+                f"{_common_tail}"
             ),
             "approver": None,
             "comment_id": None,

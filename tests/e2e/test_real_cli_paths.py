@@ -1473,6 +1473,9 @@ class TestProvenance:
                 "author": {"login": "hojiyong2-commits"},
                 "body": accept_code,  # exact match — 코드만 한 줄
                 "id": "c99",
+                # BUG-20260619-F41F MT-1: provenance가 댓글 timestamp를 fail-closed로
+                # 요구하므로, 발급 시각(2026-06-06T12:00:00Z) 이후의 created_at을 부여한다.
+                "created_at": "2026-06-06T13:00:00Z",
             }
         ]}
 
@@ -1559,6 +1562,8 @@ class TestProvenance:
                 "author": {"login": "testapprover"},
                 "body": accept_code,
                 "id": "c100",
+                # BUG-20260619-F41F MT-1: provenance fail-closed timestamp 요건 충족.
+                "created_at": "2026-06-06T13:00:00Z",
             }
         ]}
 
