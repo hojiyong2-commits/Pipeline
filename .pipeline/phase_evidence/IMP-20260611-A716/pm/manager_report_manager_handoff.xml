@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260611-A716</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <run_id>pipeline_manager-a620237658cbd187</run_id>
+  <planner_run_id>pm_planner-35a5662df7bf549f</planner_run_id>
+  <status>READY</status>
+  <step_plan_received>true</step_plan_received>
+  <step_plan_sha256>9bfa21bdd3bd599ba3d01b9f0229d0165ccd9b7082097b60ddd389ecdc9fb962</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <contract_frozen>true</contract_frozen>
+  <oracle_files_verified>true</oracle_files_verified>
+  <micro_tasks_count>7</micro_tasks_count>
+  <execution_profile>HIGH_RISK</execution_profile>
+  <next_phase>dev</next_phase>
+</manager_handoff>
