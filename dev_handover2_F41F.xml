@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260619-F41F</pipeline_id>
+  <agent>dev-agent</agent>
+  <run_id>dev-14e2c231cb9e3f61</run_id>
+  <phase>dev</phase>
+  <status>COMPLETE</status>
+  <scope_declaration>
+    <files_modified>
+      <file>tests/test_pr_approver_b96c.py</file>
+    </files_modified>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>test_pr_approver_b96c.test_packet_comment_only_fail</target_function>
+    <change_type>bugfix</change_type>
+    <description>Round 1 _run_provenance 헬퍼 created_at 주입으로 인해 TC-2 단언이 stale해진 것을 수정. packet 댓글+VALID_CODE -> protocol_violation_auto_accept 반환을 허용하도록 failure_code 집합 확장. 두 분기 모두 BLOCKED이며 TC-2의 의도(packet 댓글만으로는 승인 불가)는 그대로 검증됨.</description>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>tests/test_pr_approver_b96c.py</git_diff_files>
+    <manifest_files>tests/test_pr_approver_b96c.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <implemented_files>
+    <file>tests/test_pr_approver_b96c.py</file>
+  </implemented_files>
+  <self_check>
+    <scope_lock_verified>true</scope_lock_verified>
+    <trust_root_violation>false</trust_root_violation>
+    <extra_files>없음</extra_files>
+    <verdict>PASS</verdict>
+  </self_check>
+  <test_results>
+============================= test session starts =============================
+platform win32 -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0
+collected 18 items
+
+tests/test_pr_approver_b96c.py::test_exact_match_pass PASSED             [  5%]
+tests/test_pr_approver_b96c.py::test_packet_comment_only_fail PASSED     [ 11%]
+tests/test_pr_approver_b96c.py::test_stale_nonce_only_fail PASSED        [ 16%]
+tests/test_pr_approver_b96c.py::test_code_mismatch_only_fail PASSED      [ 22%]
+tests/test_pr_approver_b96c.py::test_mixed_comments_exact_match_wins_pass PASSED [ 27%]
+tests/test_pr_approver_b96c.py::test_wrong_author_correct_code_fail PASSED [ 33%]
+tests/test_pr_approver_b96c.py::test_consumed_state_idempotent_pass PASSED [ 38%]
+tests/test_acceptance_provenance_2338.py::test_state_empty_json_fresh_nonce_pass PASSED [ 44%]
+tests/test_acceptance_provenance_2338.py::test_state_stale_nonce_file_fresh PASSED [ 50%]
+tests/test_acceptance_provenance_2338.py::test_allowed_approver_correct_code PASSED [ 55%]
+tests/test_acceptance_provenance_2338.py::test_wrong_nonce_blocked PASSED [ 61%]
+tests/test_acceptance_provenance_2338.py::test_wrong_approver_evidence_blocked PASSED [ 66%]
+tests/test_acceptance_provenance_2338.py::test_packet_sha256_matches_after_generation PASSED [ 72%]
+tests/e2e/test_pr_comment_approval_83f4.py::test_createdAt_field_only PASSED [ 77%]
+tests/e2e/test_pr_comment_approval_83f4.py::test_timestamp_missing_fail_closed PASSED [ 83%]
+tests/e2e/test_pr_comment_approval_83f4.py::test_timestamp_parse_error_fail_closed PASSED [ 88%]
+tests/e2e/test_pr_comment_approval_83f4.py::test_edge_pr_comment_too_old PASSED [ 94%]
+tests/e2e/test_pr_comment_approval_83f4.py::test_created_at_rest_field_pass PASSED [100%]
+
+============================= 18 passed in 0.32s ==============================
+  </test_results>
+  <handover>
+    <to>qa-agent</to>
+    <status>ready</status>
+    <notes>단일 단언 수정. 전체 회귀 18 GREEN. git diff 소스 변경은 tests/test_pr_approver_b96c.py 단일 파일이며, pipeline_state.json은 pipeline.py 게이트 실행으로 갱신된 상태 파일(소스 산출물 아님).</notes>
+  </handover>
+</dev_handover>

@@ -204,9 +204,10 @@ def test_packet_comment_only_fail() -> None:
     result = _run_provenance(state, file_req, comments)
     assert result["status"] == "BLOCKED", \
         f"packet 댓글만 있으면 승인 후보가 없어 BLOCKED여야 함: {result.get('message')}"
-    # packet 댓글이 완전히 필터링되어 어떤 실패 후보도 잡히지 않음 → pr_approver_missing.
-    assert result.get("failure_code") in ("pr_approver_missing", ""), \
-        f"packet 댓글 필터링 후 승인 코드 누락이어야 함: {result.get('failure_code')}"
+    # packet 댓글에 _VALID_CODE 가 인용되어 있으면 BUG-20260616-8011 보호로
+    # protocol_violation_auto_accept 가 반환된다. 모두 BLOCKED 이며 사용자 직접 승인 없이는 통과 불가.
+    assert result.get("failure_code") in ("pr_approver_missing", "", "protocol_violation_auto_accept"), \
+        f"packet 댓글은 승인 불가 failure_code여야 함: {result.get('failure_code')}"
 
 
 # ----------------------------------------------------------------------------

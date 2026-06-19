@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260619-F41F</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>BUG-20260618-83F4 REJECT 사유 3가지 수정. timestamp 파싱 양방향화 + fail-closed, 테스트 보강, pending 댓글/패킷에서 nonce 제거.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>5</expected_changed_functions>
+      <expected_changed_lines>150</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>true</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자가 3가지 수정 범위를 명시함. P0/P1 ambiguity 없음. createdAt/created_at 양방향 지원, fail-closed 처리, nonce 외부 노출 제거가 명확함.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="">
+        <user_facing_question>timestamp 파싱 수정, 테스트 보강, nonce 제거를 3개 MT로 분리하는 방식이 맞는지 확인해 주실 수 있을까요?</user_facing_question>
+        <evidence>수정 1은 _check_pr_approver_provenance 함수 내 timestamp 파싱 로직(현재 미구현), 수정 2는 테스트 파일 신규 추가, 수정 3은 _build_verification_json/_build_final_packet_content/PR 댓글 생성 함수들에서 nonce 제거 — 각각 독립적 함수 단위로 분리 가능합니다.</evidence>
+        <why_it_matters>각 수정이 독립적이므로 MT별 QA 검증이 명확합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>3개 MT 분리 (수정 범위별)</label>
+            <benefit>각 MT가 단일 수정 범위라 QA 검증이 명확하고 실패 원인 추적이 쉽습니다.</benefit>
+            <cost>MT 개수가 많아 pipeline.py 기록 절차가 다소 번거롭습니다.</cost>
+          </option>
+          <option id="B">
+            <label>1개 MT로 통합</label>
+            <benefit>pipeline.py 기록 절차 횟수가 줄어듭니다.</benefit>
+            <cost>MT 범위가 너무 커서 수정별 진행 상황 추적이 불가능합니다.</cost>
+          </option>
+        </options>
+        <user_answer>A — 3개 MT 분리 방식으로 진행 (사용자 요구사항에 명시됨)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">_check_pr_approver_provenance에서 comment.get("created_at") or comment.get("createdAt")로 양방향 지원</requirement>
+    <requirement id="REQ-2">timestamp 누락 또는 파싱 실패 시 fail-closed (해당 댓글 skip, 승인 후보에서 제외)</requirement>
+    <requirement id="REQ-3">E2E 테스트에 createdAt 필드만 있는 케이스 추가 (GraphQL 응답 시뮬레이션)</requirement>
+    <requirement id="REQ-4">E2E 테스트에 timestamp 필드 누락 시 fail-closed 케이스 추가</requirement>
+    <requirement id="REQ-5">E2E 테스트에 timestamp 파싱 실패(비정상 형식) 시 fail-closed 케이스 추가</requirement>
+    <requirement id="REQ-6">human_acceptance_packet.md의 [승인 코드] 섹션에서 nonce 제거 (ACCEPT-{pipeline_id} 형식만 표시)</requirement>
+    <requirement id="REQ-7">human_acceptance_packet.json의 acceptance.code 필드에서 nonce 제거</requirement>
+    <requirement id="REQ-8">PR 댓글(pending 안내)에서 nonce 포함 전체 코드 노출 제거</requirement>
+    <requirement id="REQ-9">acceptance_request.json에는 nonce 내부 보관 유지 (외부 비노출만 처리)</requirement>
+    <requirement id="REQ-10">Oracle 추가: edge_createdAt_field (GraphQL 필드명 케이스)</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._check_pr_approver_provenance</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.gates_accept (line ~18663)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_pr_approver_provenance</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_check_pr_approver_provenance 함수에 timestamp 파싱 로직 추가: (1) comment.get("created_at") or comment.get("createdAt")로 양방향 지원, (2) timestamp 누락 시 해당 댓글 skip (fail-closed), (3) timestamp 파싱 실패 시 해당 댓글 skip (fail-closed), (4) acceptance_request.created_at 이전 댓글은 pr_comment_too_old로 차단.</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>test_pr_comment_approval_83f4 (보강)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_pr_comment_approval_83f4.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pr_comment_approval_83f4</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>E2E 테스트 신규 작성/보강: (1) test_createdAt_field_only — GraphQL 응답(createdAt 필드만) 케이스 PASS, (2) test_timestamp_missing_fail_closed — timestamp 필드 누락 시 해당 댓글 skip 후 pr_approver_missing BLOCKED, (3) test_timestamp_parse_error_fail_closed — 비정상 timestamp 형식 시 해당 댓글 skip 후 pr_approver_missing BLOCKED. Oracle 파일 추가: edge_createdAt_field.</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-4, AC-5, AC-6, AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._build_verification_json, pipeline._build_final_packet_content, pipeline._post_pending_approval_comment</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_report_final_packet (line ~12706)</site>
+        <site>pipeline._cmd_gates_request_accept (line ~17025)</site>
+        <site>pipeline._post_pending_approval_comment (line ~15292)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>ACCEPT-.*pipeline_id.*nonce</pattern>
+        <match_count>7</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pending PR 댓글/패킷에서 nonce 제거: (1) _build_verification_json의 acceptance.code 필드 — ACCEPT-{pipeline_id} 형식으로 변경, (2) _build_final_packet_content의 [승인 코드] 섹션 — ACCEPT-{pipeline_id} 형식으로 변경, (3) _post_pending_approval_comment의 approval_code — ACCEPT-{pipeline_id} 형식으로 변경, (4) 콘솔 출력(request-accept)의 accept_code — ACCEPT-{pipeline_id} 형식으로 변경. 내부 nonce 검증 로직은 그대로 유지.</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-8, AC-9, AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>_check_pr_approver_provenance가 comment.get("created_at") or comment.get("createdAt")로 양방향 timestamp를 읽는다.</text>
+      <expected_evidence>코드에 양방향 읽기 로직 존재, grep 결과 확인</expected_evidence>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>timestamp 필드 누락 시 해당 댓글은 승인 후보에서 제외되고 다음 댓글로 continue한다 (fail-closed).</text>
+      <expected_evidence>test_timestamp_missing_fail_closed 테스트 PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>timestamp 파싱 실패(비정상 형식) 시 해당 댓글은 승인 후보에서 제외되고 다음 댓글로 continue한다 (fail-closed).</text>
+      <expected_evidence>test_timestamp_parse_error_fail_closed 테스트 PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>GitHub GraphQL 응답(createdAt 필드만 존재, created_at 없음) 케이스에서 정상 승인된다.</text>
+      <expected_evidence>test_createdAt_field_only 테스트 PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>Oracle edge_createdAt_field가 생성되었다: input에 createdAt 필드만 있고 created_at 없음, expected에 ok=true.</text>
+      <expected_evidence>tests/oracles/BUG-20260619-F41F/edge_createdAt_field/ 폴더에 input.json, expected.json 존재</expected_evidence>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>timestamp 누락/파싱 실패 댓글 외에 유효한 승인 댓글이 없으면 pr_approver_missing BLOCKED가 반환된다.</text>
+      <expected_evidence>테스트에서 timestamp 불량 댓글만 있을 때 pr_approver_missing 확인</expected_evidence>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>기존 edge_pr_comment_too_old oracle 테스트가 여전히 PASS한다 (회귀 없음).</text>
+      <expected_evidence>pytest tests/e2e/test_pr_comment_approval_83f4.py::test_edge_pr_comment_too_old PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>human_acceptance_packet.md의 [승인 코드] 섹션에 nonce가 포함되지 않는다 (ACCEPT-{pipeline_id} 형식만).</text>
+      <expected_evidence>report final-packet 실행 후 packet 파일에 8자리 nonce 문자열 미포함</expected_evidence>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>human_acceptance_packet.json의 acceptance.code 필드에 nonce가 포함되지 않는다.</text>
+      <expected_evidence>JSON 파일 확인, nonce 8자리 문자열 미포함</expected_evidence>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 콘솔 출력의 승인 코드에 nonce가 포함되지 않는다. 내부 acceptance_request.json에는 nonce가 보존된다.</text>
+      <expected_evidence>콘솔 출력에 ACCEPT-{pipeline_id} 형식만 표시, acceptance_request.json의 nonce 필드는 8자 존재</expected_evidence>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 기존 pipeline.py와 동일</python_version>
+
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>3</micro_task_count>
+    <grep_executions>3</grep_executions>
+    <notes>
+      REJECT 사유 3가지에 대응하는 3개 MT로 분리. MT-1은 timestamp 파싱 양방향 + fail-closed, MT-2는 테스트 보강, MT-3은 nonce 외부 노출 제거.
+      모든 MT에 grep_evidence 포함. MT-2는 신규 파일/케이스이므로 match_count=0 정상.
+    </notes>
+  </decomposition_audit>
+
+  <forbidden>
+    <item>nonce 생성/검증/consume 보안 로직 완화</item>
+    <item>D278/2821/8011 기존 보안 로직 완화</item>
+    <item>테스트 통과를 위한 graceful skip 추가</item>
+    <item>pipeline_state.json, step_plan_*.xml, manager_handoff_*.xml PR diff 포함</item>
+    <item>fail-closed 대신 fail-open 처리</item>
+  </forbidden>
+
+  <dev_handover_template>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <status>READY_FOR_QA</status>
+    <expected_evidence_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_pr_comment_approval_83f4.py</file>
+      <file>tests/oracles/BUG-20260619-F41F/edge_createdAt_field/input.json</file>
+      <file>tests/oracles/BUG-20260619-F41F/edge_createdAt_field/expected.json</file>
+    </expected_evidence_files>
+  </dev_handover_template>
+
+  <oracle_design>
+    <oracle_case id="OC-1" case_kind="edge">
+      <name>edge_createdAt_field</name>
+      <path>tests/oracles/BUG-20260619-F41F/edge_createdAt_field/</path>
+      <input_description>GitHub GraphQL 방식 댓글 (createdAt 필드만 존재, created_at 없음), 허용 승인자, 요청 이후 시각</input_description>
+      <expected_source>user_provided</expected_source>
+      <expected_outcome>provenance_check.status=PASS, ok=true, failure_code=""</expected_outcome>
+    </oracle_case>
+    <oracle_case id="OC-2" case_kind="edge">
+      <name>edge_timestamp_missing</name>
+      <path>tests/oracles/BUG-20260619-F41F/edge_timestamp_missing/</path>
+      <input_description>created_at/createdAt 둘 다 없는 댓글만 존재, 허용 승인자</input_description>
+      <expected_source>user_provided</expected_source>
+      <expected_outcome>provenance_check.status=BLOCKED, failure_code=pr_approver_missing (fail-closed로 해당 댓글 skip 후 missing)</expected_outcome>
+    </oracle_case>
+    <oracle_case id="OC-3" case_kind="edge">
+      <name>edge_timestamp_parse_error</name>
+      <path>tests/oracles/BUG-20260619-F41F/edge_timestamp_parse_error/</path>
+      <input_description>timestamp가 "invalid-date-format" 같은 파싱 불가 문자열인 댓글만 존재, 허용 승인자</input_description>
+      <expected_source>user_provided</expected_source>
+      <expected_outcome>provenance_check.status=BLOCKED, failure_code=pr_approver_missing (fail-closed로 해당 댓글 skip 후 missing)</expected_outcome>
+    </oracle_case>
+  </oracle_design>
+</step_plan>
