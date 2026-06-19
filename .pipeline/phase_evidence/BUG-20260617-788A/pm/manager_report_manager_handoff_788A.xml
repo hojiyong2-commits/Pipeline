@@ -1,0 +1,10 @@
+<manager_handoff>
+  <pipeline_id>BUG-20260617-788A</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-f70c3c439ef6550f</planner_run_id>
+  <step_plan_sha256>564e197c7b2cd672ed4ed0cba6f36c46b2daf62c60c6a552c192ea354d259366</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <notes>BUG-20260617-788A: browser approval skip 자동 우회 제거. MT-1(pipeline.py 수정) + MT-2(E2E 테스트 환경변수 추가) 2개 모듈로 구성. PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수만 허용.</notes>
+</manager_handoff>
