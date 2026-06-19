@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260609-C4F8</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-2f8b968859d9cca4</planner_run_id>
+  <manager_run_id>pipeline_manager-1958d94967733e31</manager_run_id>
+  <step_plan_sha256>a8a6c6d39e62c21372753063216a9103761a24df8b3ff4d1b0216da41f578486</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <status>ready</status>
+  <anti_gaming_read>true</anti_gaming_read>
+  <generated_at>2026-06-09T09:55:00Z</generated_at>
+  <pm_phase_status>IN_PROGRESS</pm_phase_status>
+
+  <task_summary>
+    request-accept 재사용(reuse=True) 경로에서 verification_json_sha256 동기화 수정:
+    - MT-1: pipeline.py — _sync_acceptance_request_with_packet helper에 verification_json_path: Optional[Path] = None 파라미터 추가 + reuse=True 경로에서 JSON SHA/path 동기화
+    - MT-2: tests/test_acceptance_provenance_c4f8.py — 신규 테스트 파일 5개 테스트 + oracle 2케이스
+  </task_summary>
+
+  <micro_tasks>
+    <mt id="MT-1" status="PENDING" target="pipeline.py">
+      <name>_sync_acceptance_request_with_packet에 verification_json_path 파라미터 추가 + 호출부에서 json_path 계산하여 전달</name>
+    </mt>
+    <mt id="MT-2" status="PENDING" target="tests/test_acceptance_provenance_c4f8.py">
+      <name>reuse=True/False 경로의 verification_json_sha256 동기화 및 external change BLOCKED 테스트 5개</name>
+    </mt>
+  </micro_tasks>
+
+  <next_phase>dev</next_phase>
+  <user_response>NO_ASKUSER_REQUIRED</user_response>
+
+  <notes>
+    변경 파일: pipeline.py, tests/test_acceptance_provenance_c4f8.py, oracle 4개 파일
+    신뢰 루트 파일 변경 없음 (CLAUDE.md/agent MD/.github/workflows 수정 금지).
+    E2E 요건: subprocess 기반, PIPELINE_STATE_PATH 격리, final_state assertion.
+    기존 _verify_verification_json_freshness 로직 자체는 변경하지 않음.
+    최소 변경 원칙: helper 시그니처에 Optional 파라미터 추가 + 호출부 1줄 수정.
+  </notes>
+</manager_handoff>
