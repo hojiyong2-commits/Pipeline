@@ -1,0 +1,200 @@
+<decomposition_audit>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>3</micro_task_count>
+  <grep_executions>3</grep_executions>
+  <affected_modules>
+    <module name="Input">버그 보고서 — 사용자 REJECT 원인, 실행 산출물 suffix 변형 누락</module>
+    <module name="Transform">.gitignore 와일드카드 강화 + pipeline.py PR diff 내부 산출물 BLOCKING</module>
+    <module name="Output">PR diff에 실행 산출물 없음 — gates request-accept 전 hard gate</module>
+    <module name="Environment">git CLI, gh CLI, 기존 _is_internal_artifact() SSoT</module>
+  </affected_modules>
+  <triggers_fired>
+    <trigger name="blast_radius_check" fired="true">
+      .gitignore 5줄 + pipeline.py ~80줄 + 테스트 파일 신규 — 총 3 파일
+    </trigger>
+    <trigger name="call_site_analysis" fired="true">
+      _is_internal_artifact() 및 _cmd_gates_preflight_pr_impl 기존 로직 확장
+    </trigger>
+  </triggers_fired>
+  <grep_evidence>
+    <pattern>_is_internal_artifact</pattern>
+    <match_count>35</match_count>
+    <executed>true</executed>
+  </grep_evidence>
+  <module_count>3</module_count>
+  <decomposition_method>기능 단위 분리: .gitignore 패턴 → pipeline.py 검사 로직 → E2E 테스트</decomposition_method>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260619-8AC8</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>
+      3개 파일(gitignore + pipeline.py + 테스트) 수정, 신규 E2E 검사 로직 추가.
+      Trust-root 파일(pipeline.py) 변경 포함하나 기존 SSoT 확장이므로 HIGH_RISK 미만.
+    </reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>4</expected_changed_files>
+      <expected_changed_functions>3</expected_changed_functions>
+      <expected_changed_lines>100</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>
+      사용자가 이미 방향을 확정함: "실행 산출물을 PR diff에서 제거하고, preflight/workspace hygiene이 이를 BLOCKED로 잡도록 정리".
+      변수명/코드 스타일 등 P2 질문은 묻지 않고 유지보수성 기준으로 처리.
+    </filter_summary>
+    <decision_questions>
+      <question id="Q1" priority="P1" category="module_split">
+        <user_facing_question>이번 버그 수정을 .gitignore 와일드카드 강화(MT-1), pipeline.py PR diff BLOCKING(MT-2), E2E 테스트(MT-3) 세 모듈로 분리하는 방식으로 진행할까요?</user_facing_question>
+        <evidence>BUG-20260619-F41F에서 step_plan_F41F.xml 등 실행 산출물이 PR diff에 포함되어 REJECT된 실제 사례 확인됨</evidence>
+        <why_it_matters>두 방어 레이어(.gitignore + pipeline.py 검사)를 함께 구현해야 미래에도 동일 문제가 재발하지 않습니다</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>세 모듈로 분리 (.gitignore + pipeline.py + E2E 테스트)</label>
+            <benefit>각 방어 레이어를 독립적으로 검증할 수 있고, 테스트가 명확히 분리됩니다</benefit>
+            <cost>모듈 게이트 3번 통과해야 하므로 절차가 약간 복잡합니다</cost>
+          </option>
+          <option id="B">
+            <label>단일 모듈로 합치기 (모든 변경 한 번에)</label>
+            <benefit>모듈 게이트를 한 번만 통과하므로 파이프라인 진행이 빠릅니다</benefit>
+            <cost>테스트 범위와 구현 범위가 섞여 회귀 원인 파악이 어렵습니다</cost>
+          </option>
+        </options>
+        <user_answer>A — 세 모듈로 분리하여 각 방어 레이어를 독립 검증</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    BUG-20260619-F41F REJECT 근본 원인 해결:
+    1. .gitignore에 suffix 변형 패턴 와일드카드 추가
+    2. pipeline.py에 PR diff 실행 산출물 BLOCKING 검사 추가
+    3. gates request-accept 전 hard gate로 차단
+    4. E2E 테스트 + Oracle로 회귀 방지
+  </requirements>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>step_plan_*.xml, dev_handover*.xml, qa_report*.xml, manager_handoff*.xml, integration_report*.xml 패턴이 .gitignore에 와일드카드로 등록되어 git add 시 자동 무시됨</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 실행 시 PR diff에 실행 산출물(step_plan_F41F.xml 등)이 포함되면 exit 1 BLOCKED 반환 + failure_code=execution_artifact_in_pr_diff</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>git CLI 없는 환경에서 gates request-accept 시 fail-closed BLOCKED 반환 (git_unavailable) — graceful skip 금지</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>E2E 테스트 4개 케이스(normal_clean_diff, edge_step_plan_in_diff, edge_pipeline_state_in_diff, error_git_unavailable) 모두 PASS</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>N/A — 설정 파일</affected_function>
+      <target_files>
+        <file>.gitignore</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>step_plan\.xml|dev_handover\.xml|qa_report\.xml</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>.gitignore 5줄을 와일드카드 패턴으로 교체 (step_plan.xml → step_plan*.xml 등)</change_summary>
+      <line_estimate>5</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_check_pr_diff_artifact_pollution (신규), _cmd_gates_request_accept (수정)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept 내 hygiene 검사 직후</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_request_accept</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        1. PR_DIFF_ARTIFACT_PATTERNS SSoT 상수 추가 (fnmatch 패턴 목록)
+        2. _check_pr_diff_artifact_pollution() 신규 함수: git diff origin/main...HEAD --name-only 결과를 패턴 매칭하여 실행 산출물 감지
+        3. _cmd_gates_request_accept에서 hygiene 검사 직후 _check_pr_diff_artifact_pollution 호출, 감지 시 BLOCKED
+        4. git CLI 없으면 fail-closed BLOCKED (git_unavailable)
+      </change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-2, AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>N/A — 신규 테스트 파일</affected_function>
+      <target_files>
+        <file>tests/e2e/test_pr_diff_artifact_8ac8.py</file>
+        <file>tests/oracles/BUG-20260619-8AC8/normal_clean_diff/given.json</file>
+        <file>tests/oracles/BUG-20260619-8AC8/normal_clean_diff/expected.json</file>
+        <file>tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/given.json</file>
+        <file>tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/expected.json</file>
+        <file>tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/given.json</file>
+        <file>tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/expected.json</file>
+        <file>tests/oracles/BUG-20260619-8AC8/error_git_unavailable/given.json</file>
+        <file>tests/oracles/BUG-20260619-8AC8/error_git_unavailable/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pr_diff_artifact</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>
+        E2E 테스트 신규 생성:
+        - test_normal_clean_diff: 실행 산출물 없는 PR diff → OK
+        - test_edge_step_plan_in_diff: step_plan_F41F.xml PR diff 포함 → BLOCKED
+        - test_edge_pipeline_state_in_diff: pipeline_state.json PR diff 포함 → BLOCKED
+        - test_error_git_unavailable: git 없는 환경 → fail-closed BLOCKED
+        + Oracle 파일 8개 (4 케이스 × given/expected)
+      </change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 기존 pipeline.py와 동일</python_version>
+  <forbidden>
+    - 기존 workspace hygiene fail-closed 로직 완화 금지
+    - PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 override 제거 금지
+    - gates request-accept / gates accept 기존 보안 조건 완화 금지
+    - 테스트 통과를 위한 graceful skip 추가 금지
+    - pipeline_state.json, manager_handoff_*.xml 등 실행 산출물 PR diff 포함 금지
+  </forbidden>
+</step_plan>
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
