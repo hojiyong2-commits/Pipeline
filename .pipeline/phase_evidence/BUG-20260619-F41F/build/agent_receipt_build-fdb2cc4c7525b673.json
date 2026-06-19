@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260619-F41F",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-fdb2cc4c7525b673",
+  "status": "COMPLETED",
+  "started_at": "2026-06-19T13:42:15Z",
+  "completed_at": "2026-06-19T13:42:39Z",
+  "output_file": "build_report_F41F.xml",
+  "output_sha256": "9c61c7cd74fb3d2c7f57d0d1c17a6d373afb740c91fa384df2afefddb01739cd",
+  "evidence_files": [],
+  "commit_sha": "0bc17946a49599ed530a1d44f25cdc8a82b5a5aa"
+}
