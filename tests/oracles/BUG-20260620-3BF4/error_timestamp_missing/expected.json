@@ -1,0 +1,7 @@
+{
+  "scenario": "error_timestamp_missing",
+  "result": "BLOCKED",
+  "failure_code": "pr_comment_timestamp_missing",
+  "gate_status": "BLOCKED",
+  "description": "댓글에 timestamp 필드가 없으면 fail-closed BLOCKED — pr_comment_timestamp_missing"
+}

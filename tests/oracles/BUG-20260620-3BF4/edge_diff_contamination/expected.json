@@ -1,0 +1,8 @@
+{
+  "scenario": "edge_diff_contamination",
+  "result": "BLOCKED",
+  "failure_code": "pr_diff_contaminated",
+  "gate_status": "BLOCKED",
+  "contaminating_file": "pipeline_state.json",
+  "description": "PR diff에 pipeline_state.json 같은 실행 산출물이 포함된 경우 request-accept가 BLOCKED 반환"
+}

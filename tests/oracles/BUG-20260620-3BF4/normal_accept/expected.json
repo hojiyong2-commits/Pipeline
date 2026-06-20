@@ -1,0 +1,9 @@
+{
+  "scenario": "normal_accept",
+  "result": "PASS",
+  "gate_status": "PASS",
+  "accepted_by": "hojiyong2-commits",
+  "source_comment_body": "ACCEPT-BUG-20260620-3BF4",
+  "browser_fields_absent": true,
+  "description": "허용 승인자가 올바른 형식의 댓글을 남겨 gates accept가 PASS되어야 한다"
+}

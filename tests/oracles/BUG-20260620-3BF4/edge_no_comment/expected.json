@@ -1,0 +1,7 @@
+{
+  "scenario": "edge_no_comment",
+  "result": "BLOCKED",
+  "failure_code": "pr_approver_missing",
+  "gate_status": "BLOCKED",
+  "description": "PR에 승인 댓글이 없으면 BLOCKED 반환 — pr_approver_missing"
+}
