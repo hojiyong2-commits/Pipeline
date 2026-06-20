@@ -11547,15 +11547,19 @@ def _build_acceptance_display_model(
         gates["acceptance"] = "PENDING"
 
     # 승인 코드 / 거절 예시 — nonce 존재 시에만.
+    # BUG-20260620-3BF4 Round 2: PR 댓글에 사용자가 게시하는 표시 코드는 nonce 없는
+    # ACCEPT-{pipeline_id} 형식으로 통일한다(consumer _check_pr_approver_provenance 와 일치).
+    # nonce 자체는 acceptance_request.json 내부 SSoT 로 보존하여 gates accept CLI nonce 검증에
+    # 계속 사용된다. 여기서는 사용자에게 보이는 표시 코드에서만 nonce 를 제거한다.
     approval_code: Optional[str] = None
     nonce = ""
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
         nonce = str(acceptance_request.get("nonce") or "")
-        approval_code = f"ACCEPT-{pipeline_id}-{nonce}"
-    if nonce:
-        reject_example = f"REJECT-{pipeline_id}-{nonce}: 이유"
+        approval_code = f"ACCEPT-{pipeline_id}"
+    if pipeline_id:
+        reject_example = f"REJECT-{pipeline_id}: 이유"
     else:
-        reject_example = f"REJECT-{pipeline_id}-XXXXXXXX: 이유"
+        reject_example = "REJECT-<pipeline_id>: 이유"
 
     # requirements_summary — structured AC 충족표에서 계산 (하드코딩 금지).
     # must_verify=true 항목 중 result=PASS인 항목을 passed로 집계.
@@ -11842,15 +11846,18 @@ def _display_model_from_evidence(
         gate_status["acceptance"] = "PENDING"
 
     # 승인 코드 / 거절 예시.
+    # BUG-20260620-3BF4 Round 2: PR 댓글 표시 코드는 nonce 없는 ACCEPT-{pipeline_id} 형식.
+    # (consumer _check_pr_approver_provenance 와 producer 형식 일치 강제). nonce 는
+    # acceptance_request.json 내부 SSoT 로만 보존된다.
     approval_code: Optional[str] = None
     nonce = ""
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
         nonce = str(acceptance_request.get("nonce") or "")
-        approval_code = f"ACCEPT-{pipeline_id}-{nonce}"
+        approval_code = f"ACCEPT-{pipeline_id}"
     reject_example = (
-        f"REJECT-{pipeline_id}-{nonce}: 이유"
-        if nonce
-        else f"REJECT-{pipeline_id}-XXXXXXXX: 이유"
+        f"REJECT-{pipeline_id}: 이유"
+        if pipeline_id
+        else "REJECT-<pipeline_id>: 이유"
     )
 
     # requirements_summary — ac_table에서 result 기준 계산(하드코딩 금지).
@@ -12354,8 +12361,11 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
     accept_status = "PENDING"
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
         accept_nonce = str(acceptance_request["nonce"])
-        acceptance_code = f"ACCEPT-{pipeline_id}-{accept_nonce}"
-        reject_example = f"REJECT-{pipeline_id}-{accept_nonce}: 이유"
+        # BUG-20260620-3BF4 Round 2: human_acceptance_packet.json 의 표시 코드(acceptance.code)는
+        # PR 댓글 형식과 동일하게 nonce 없는 ACCEPT-{pipeline_id} 로 통일한다. nonce 는 아래
+        # acceptance_obj["nonce"] (accept_nonce) 로 별도 보존되어 내부 SSoT 검증에 사용된다.
+        acceptance_code = f"ACCEPT-{pipeline_id}"
+        reject_example = f"REJECT-{pipeline_id}: 이유"
         accept_request_id = str(acceptance_request.get("request_id", "") or "")
         accept_status = str(acceptance_request.get("status", "PENDING") or "PENDING")
     # BUG-20260615-A35C MT-2: 표시 상태는 _collect_packet_evidence가 주입한 effective SSoT 값을
@@ -15358,10 +15368,14 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
         _state, evidence, packet_evidence=_packet_evidence
     )
     # req가 가진 nonce/PR을 display model에 반영(state보다 우선) — request-accept 직후 정합성.
+    # BUG-20260620-3BF4 Round 2: PR PENDING 안내 댓글에 표시하는 승인/거절 코드는 nonce 없는
+    # ACCEPT-{pipeline_id} / REJECT-{pipeline_id} 형식으로 통일한다. 사용자가 이 댓글을 그대로
+    # 복사해 PR 댓글에 게시하면 consumer _check_pr_approver_provenance(ACCEPT-{pipeline_id} 기대)
+    # 와 형식이 일치한다. nonce 는 acceptance_request.json 에 보존되어 gates accept CLI 에서만 사용.
     _req_nonce = str(req.get("nonce", "") or "")
     if _req_nonce:
-        display_model["approval_code"] = f"ACCEPT-{pipeline_id}-{_req_nonce}"
-        display_model["reject_example"] = f"REJECT-{pipeline_id}-{_req_nonce}: 이유"
+        display_model["approval_code"] = f"ACCEPT-{pipeline_id}"
+        display_model["reject_example"] = f"REJECT-{pipeline_id}: 이유"
         display_model["acceptance_display"] = "PENDING"
     if pr_url:
         display_model["pr_url"] = pr_url
