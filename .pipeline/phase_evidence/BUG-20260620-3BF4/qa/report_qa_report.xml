@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260620-3BF4</pipeline_id>
+  <agent_run_id>qa-ff68ce0fd96e1ea2</agent_run_id>
+  <round>2</round>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_pr_comment_accept_3bf4.py, tests/e2e/test_request_accept_nonce_reuse_aef0.py, .claude/agents/pipeline-manager-agent.md</evidence>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 이 BUG는 네트워크 호출 신규/변경 없음. PR 승인 코드 형식 정합성 수정.</wa>
+    <ui>N-A — GUI 위젯 변경 없음.</ui>
+    <fs>PASS — acceptance_request.json / human_acceptance_packet.json 쓰기는 기존 _write_json(원자적) 사용, 변경 없음.</fs>
+    <pd>PASS — producer(_build_acceptance_display_model, _display_model_from_evidence, _build_verification_json, _post_github_pending_acceptance_comment) 4개와 consumer(_check_pr_approver_provenance) 간 승인 코드 형식 round-trip 일치. nonce는 acceptance_request.json 내부 SSoT로 분리 보존.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. (본 BUG의 보안 제약은 별도 security_check 블록에서 확인.)</sec>
+    <al>PASS — nonce 부재/타임스탬프 부재/댓글 부재 등 경계 케이스가 BLOCKED fail-closed로 방어됨 (오라클 edge/error 케이스로 검증).</al>
+    <build>N-A — meta-task(trust-root pipeline.py 수정). EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+
+  <numeric_score>112</numeric_score>
+  <numeric_score_breakdown>
+    <fs score="20" max="20">원자적 쓰기 기존 _write_json 사용 유지</fs>
+    <pd score="10" max="10">모듈 분리 5/5 (producer/consumer 명확 분리), 인터페이스 계약 5/5 (display_model dict 계약 유지, nonce SSoT 분리)</pd>
+    <al score="20" max="20">0나눗셈 N-A, 범위검증/타입검증/빈데이터 모두 fail-closed</al>
+    <build>N-A — meta-task 미채점</build>
+    <wa>N-A</wa>
+    <ui>N-A</ui>
+    <regression_quality score="62" max="70">16/16 + 8/8 회귀 테스트 PASS, TC-15/TC-16이 round-trip 형식 양방향 강제(CLI nonce 유지 AND PR 댓글 nonce 제거)</regression_quality>
+    <note>적용 카테고리(FS/PD/AL) + 회귀/오라클 품질 기준 환산 총점 112/120. 96/120 hard gate 통과.</note>
+  </numeric_score_breakdown>
+
+  <criteria_verification>
+    <criterion ac_id="AC-3" status="PASS" evidence="round-trip 검증 완료. consumer _check_pr_approver_provenance: _expected_code = accept_code = ACCEPT-{pipeline_id} (pipeline.py:17125,17279). producer 4개 모두 nonce 없는 ACCEPT-{pipeline_id} 표시: _build_acceptance_display_model(11558), _display_model_from_evidence(11856), _build_verification_json(12367), _post_github_pending_acceptance_comment(15377). nonce는 acceptance_request.json(4737) / human_acceptance_packet.json acceptance.nonce(12447)에 SSoT로 분리 보존."/>
+    <criterion ac_id="AC-1" status="PASS" evidence="_run_browser_approval_server grep 0건 (Round 1 PASS 유지)."/>
+    <criterion ac_id="AC-2" status="PASS" evidence="PIPELINE_BROWSER_APPROVAL_SKIP / browser_click_confirmed / _time_monotonic grep 0건."/>
+    <criterion ac_id="AC-4" status="PASS" evidence="pr_comment_timestamp_missing fail-closed 코드 존재 (TC-05 PASS), error_timestamp_missing 오라클로 검증."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="자동 생성 packet 마커 댓글 제외 로직 존재 (TC-06 PASS)."/>
+    <criterion ac_id="AC-6" status="PASS" evidence="nonce reuse 회귀 8/8 PASS (test_request_accept_nonce_reuse_aef0.py). gates accept CLI는 accept_code = ACCEPT-{pipeline_id}-{nonce} (16847) 형식으로 nonce 검증 유지."/>
+    <criterion ac_id="AC-10" status="PASS" evidence="자동 ACCEPT 시도는 protocol_violation_auto_accept(17437)로 차단됨. gates accept 자동 실행/ACCEPT 댓글 자동 게시/acceptance-code 추측 코드 없음."/>
+    <criterion ac_id="TC-15" status="PASS" evidence="4개 producer 함수 본문에 nonce-dash 표시 코드(ACCEPT-{pipeline_id}-{...}) 부재 확인."/>
+    <criterion ac_id="TC-16" status="PASS" evidence="nonce 없는 표시 코드 존재 + nonce 포함 표시 코드 부재 + CLI 경로 nonce 형식(accept_code) 유지 양방향 검증."/>
+  </criteria_verification>
+
+  <security_check>
+    <browser_approval_skip status="PASS">PIPELINE_BROWSER_APPROVAL_SKIP=1 사용 0건</browser_approval_skip>
+    <auto_accept_comment status="PASS">에이전트의 GitHub ACCEPT 댓글 자동 게시 코드 없음. protocol_violation_auto_accept로 자동 ACCEPT 시도 능동 차단(17437).</auto_accept_comment>
+    <auto_gates_accept status="PASS">gates accept 자동 실행 코드 없음. CLI는 --acceptance-code 필수 유지.</auto_gates_accept>
+    <acceptance_code_generation status="PASS">acceptance-code 추측/생성 코드 없음. nonce는 _issue_acceptance_nonce(4729)로만 발급되어 acceptance_request.json에 보존.</acceptance_code_generation>
+    <secrets_gate status="PASS">gates secrets exit 0 — 변경 파일 2개에서 민감 정보 미발견.</secrets_gate>
+  </security_check>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — pytest 16/16 + 8/8 실제 실행 증거, py_compile exit 0</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — consumer _check_pr_approver_provenance가 _expected_code(17279)를 실제 댓글 비교(17341,17350)에 사용하는 호출 경로 확인. 함수 정의가 아닌 실제 바인딩 검증.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>pipeline.py, tests/e2e/test_pr_comment_accept_3bf4.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_request_accept_nonce_reuse_aef0.py</scope_files_declared>
+    <evidence_files_submitted>동일 4개 파일 + oracle 8개 파일</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음 (oracle 파일은 BUG 전용 신규 tests/oracles/BUG-20260620-3BF4/** — Three-Gate oracle 요건)</file>
+    </files_in_evidence_not_in_scope>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <declared_functions>4 producers + 1 consumer</declared_functions>
+    <actual_modified_functions>동일 — _build_acceptance_display_model, _display_model_from_evidence, _build_verification_json, _post_github_pending_acceptance_comment (consumer는 형식 일치 확인용)</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <boundary_verdict>IN_SCOPE</boundary_verdict>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <oracle_quality>
+    <normal_case_count>1</normal_case_count>
+    <edge_error_case_count>3</edge_error_case_count>
+    <empty_expected>none</empty_expected>
+    <placeholder>none</placeholder>
+    <verdict>PASS</verdict>
+  </oracle_quality>
+
+  <result>[PASS]</result>
+  <verdict>PASS</verdict>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - Round 2 수정은 producer/consumer 형식을 정확히 round-trip 일치시켰으며 TC-15/TC-16이 양방향(CLI nonce 유지 + PR 댓글 nonce 제거)을 강제하므로 Round 1 회귀(PD:06466d15)는 재발 불가.
+    - 향후 개선: TC-16의 정적 substring 검사를 AST 기반으로 강화하면 주석/문자열 내 우연 토큰 오탐을 더 줄일 수 있음 (테스트 docstring에 이미 명시됨).
+  </improvement_suggestions>
+</qa_report>
