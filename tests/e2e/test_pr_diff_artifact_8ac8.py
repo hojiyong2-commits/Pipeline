@@ -38,6 +38,7 @@ CASE_IDS: List[str] = [
     "edge_step_plan_in_diff",
     "edge_pipeline_state_in_diff",
     "error_git_unavailable",
+    "edge_git_diff_nonzero_exit",
 ]
 
 
@@ -100,8 +101,9 @@ def _run_check(pipeline_mod, given: Dict[str, Any]) -> Dict[str, Any]:
         # git CLI 부재 시뮬레이션: shutil.which가 None 반환 -> fail-closed BLOCKED
         with mock.patch.object(pipeline_mod.shutil, "which", return_value=None):
             return pipeline_mod._check_pr_diff_artifact_pollution()
+    git_returncode = given.get("git_returncode", 0)
     diff_files = given.get("diff_files") or []
-    fake_completed = mock.Mock(returncode=0, stdout="\n".join(diff_files))
+    fake_completed = mock.Mock(returncode=git_returncode, stdout="\n".join(diff_files))
     with mock.patch.object(pipeline_mod.shutil, "which", return_value="git"), \
             mock.patch.object(pipeline_mod.subprocess, "run", return_value=fake_completed):
         return pipeline_mod._check_pr_diff_artifact_pollution()
@@ -140,6 +142,37 @@ def test_pr_diff_artifact_pollution(pipeline_mod, case_id: str):
             f"[{case_id}] blocking_files mismatch: got {result.get('blocking_files')}, "
             f"expected {expected.get('blocking_files')}"
         )
+
+
+def test_edge_git_diff_nonzero_exit(pipeline_mod):
+    """git 존재하나 diff returncode!=0 + override 환경변수 없음 -> fail-closed BLOCKED.
+
+    PIPELINE_ARTIFACT_CHECK_ALLOW_GIT_DIFF_FAIL를 명시적으로 제거하여 production 기본
+    동작(git_diff_failed BLOCKED)을 검증한다. shutil.which는 git 경로를 반환하고,
+    subprocess.run mock은 returncode=1, stdout=""를 반환한다.
+    """
+    given = _read_json(ORACLE_DIR / "edge_git_diff_nonzero_exit" / "given.json")
+    expected = _read_json(ORACLE_DIR / "edge_git_diff_nonzero_exit" / "expected.json")
+
+    fake_completed = mock.Mock(returncode=given.get("git_returncode", 1), stdout="")
+    # override 환경변수가 설정되어 있지 않은 상태(production 기본)를 강제한다.
+    with mock.patch.dict(pipeline_mod.os.environ, {}, clear=False), \
+            mock.patch.object(pipeline_mod.shutil, "which", return_value="/usr/bin/git"), \
+            mock.patch.object(pipeline_mod.subprocess, "run", return_value=fake_completed):
+        pipeline_mod.os.environ.pop("PIPELINE_ARTIFACT_CHECK_ALLOW_GIT_DIFF_FAIL", None)
+        result = pipeline_mod._check_pr_diff_artifact_pollution()
+
+    assert result.get("status") == expected.get("status"), (
+        f"status mismatch: got {result.get('status')}, expected {expected.get('status')}"
+    )
+    assert result.get("failure_code") == expected.get("failure_code"), (
+        f"failure_code mismatch: got {result.get('failure_code')}, "
+        f"expected {expected.get('failure_code')}"
+    )
+    assert result.get("blocking_files") == expected.get("blocking_files"), (
+        f"blocking_files mismatch: got {result.get('blocking_files')}, "
+        f"expected {expected.get('blocking_files')}"
+    )
 
 
 def test_patterns_constant_present(pipeline_mod):

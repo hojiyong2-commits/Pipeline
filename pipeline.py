@@ -11400,10 +11400,13 @@ def _check_pr_diff_artifact_pollution() -> Dict[str, Any]:
         # git 바이너리 자체 실행 불가 → fail-closed BLOCKED (AC-3).
         return {"status": "BLOCKED", "failure_code": "git_unavailable", "blocking_files": []}
     if completed.returncode != 0:
-        # origin/main ref 없음(테스트 격리 git repo), shallow clone 등 diff 조회 불가 환경은
-        # 검사를 생략하고 OK로 통과시킨다. git 바이너리 자체 부재는 위 except/if not git_path에서
-        # 이미 fail-closed BLOCKED로 처리되므로 여기서는 보안 회귀가 발생하지 않는다.
-        return {"status": "OK", "blocking_files": []}
+        # git 바이너리는 존재하나 diff 조회 실패(origin/main ref 없음, shallow clone 등).
+        # 기본(production)에서는 fail-closed BLOCKED(보안 회귀 방지).
+        # PIPELINE_ARTIFACT_CHECK_ALLOW_GIT_DIFF_FAIL=1 격리 테스트 환경에서만 생략(OK).
+        allow_diff_fail = os.environ.get("PIPELINE_ARTIFACT_CHECK_ALLOW_GIT_DIFF_FAIL") == "1"
+        if allow_diff_fail:
+            return {"status": "OK", "blocking_files": []}
+        return {"status": "BLOCKED", "failure_code": "git_diff_failed", "blocking_files": []}
     diff_files = [ln.strip() for ln in completed.stdout.splitlines() if ln.strip()]
     blocking_files: List[str] = []
     for rel_path in diff_files:
