@@ -1,0 +1,7 @@
+{
+  "case_id": "edge_pipeline_state_in_diff",
+  "case_kind": "edge",
+  "description": "pipeline_state.json이 PR diff에 포함된 경우",
+  "diff_files": ["pipeline.py", "pipeline_state.json"],
+  "git_available": true
+}

@@ -1,0 +1,7 @@
+{
+  "case_id": "normal_clean_diff",
+  "case_kind": "normal",
+  "description": "PR diff에 실행 산출물 없는 경우",
+  "diff_files": ["pipeline.py", "tests/e2e/test_pr_diff_artifact_8ac8.py"],
+  "git_available": true
+}

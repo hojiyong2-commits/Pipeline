@@ -2389,6 +2389,25 @@ WORKSPACE_INTERNAL_DIR_PREFIXES: List[str] = [
     "pipeline_outputs/",         # pipeline outputs 디렉터리 (배포 전 임시 보관)
 ]
 
+# BUG-20260619-8AC8 MT-2: gates request-accept 전 PR diff 오염 검사용 fnmatch glob 패턴 SSoT.
+# 실행 산출물(step_plan_F41F.xml 등 변형 파일명 포함)이 PR diff에 포함되어 사용자
+# REJECT가 발생하는 문제를 방지하기 위한 hard gate 패턴 목록.
+PR_DIFF_ARTIFACT_PATTERNS: List[str] = [
+    "step_plan*.xml",
+    "dev_handover*.xml",
+    "qa_report*.xml",
+    "integration_report*.xml",
+    "manager_handoff*.xml",
+    "pipeline_state*.json",
+    "module_design_MT-*.xml",
+    "module_handover_MT-*.xml",
+    "module_qa_MT-*.xml",
+    "build_report*.xml",
+    "oracle_result_dump*.txt",
+    "acceptance_result*.json",
+    "tmp_tc*.json",
+]
+
 # ---------------------------------------------------------------------------
 # IMP-20260601-0DF5 MT-1: Hygiene Scan/Archive — SSoT 상수
 # ---------------------------------------------------------------------------
@@ -11323,6 +11342,62 @@ def _get_git_diff_files(base: str = "origin/main") -> List[str]:
     return []
 
 
+# [Purpose]: gates request-accept 전 PR diff에 실행 산출물이 섞여 들어가 사용자
+#   REJECT가 발생하는 문제(BUG-20260619-8AC8)를 nonce 발급 이전에 hard gate로 차단한다.
+# [Assumptions]: git CLI가 설치되어 있고 origin/main fetch가 가능하다. PR_DIFF_ARTIFACT_PATTERNS
+#   SSoT 상수가 검사 대상 글로브 패턴을 모두 담고 있다.
+# [Vulnerability & Risks]: git CLI 부재/실패 시 PR diff를 알 수 없으므로 fail-closed로
+#   git_unavailable BLOCKED를 반환한다(통과시키지 않음). 디렉터리 경로의 basename만 비교하므로
+#   동일 basename을 가진 정상 소스 파일이 패턴과 충돌할 위험이 있으나, 패턴은 실행 산출물
+#   전용 명명 규칙(MT-*, *_F41F.xml 등)에 한정하여 충돌 가능성을 최소화한다.
+# [Improvement]: 향후 WORKSPACE_INTERNAL_PATTERNS와 통합하여 단일 SSoT로 관리하고,
+#   디렉터리 접두사 패턴도 포함하도록 확장할 수 있다.
+def _check_pr_diff_artifact_pollution() -> Dict[str, Any]:
+    """gates request-accept 전 PR diff에 실행 산출물이 포함됐는지 검사한다(fail-closed).
+
+    git diff origin/main...HEAD --name-only로 PR diff 파일 목록을 조회하고, 각 파일의
+    basename을 fnmatch.fnmatch로 PR_DIFF_ARTIFACT_PATTERNS와 대조한다.
+
+    Returns:
+        다음 중 하나의 dict:
+          - git CLI 부재/실패: {"status": "BLOCKED", "failure_code": "git_unavailable",
+            "blocking_files": []}
+          - 매칭 파일 존재: {"status": "BLOCKED",
+            "failure_code": "execution_artifact_in_pr_diff", "blocking_files": [...]}
+          - 매칭 없음: {"status": "OK", "blocking_files": []}
+    Raises:
+        없음. 모든 예외는 git_unavailable BLOCKED로 흡수한다(fail-closed).
+    """
+    git_path = shutil.which("git")
+    if not git_path:
+        return {"status": "BLOCKED", "failure_code": "git_unavailable", "blocking_files": []}
+    try:
+        completed = subprocess.run(
+            [git_path, "diff", "origin/main...HEAD", "--name-only"],
+            capture_output=True, text=True, timeout=15,
+            encoding="utf-8", errors="replace",
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return {"status": "BLOCKED", "failure_code": "git_unavailable", "blocking_files": []}
+    if completed.returncode != 0:
+        return {"status": "BLOCKED", "failure_code": "git_unavailable", "blocking_files": []}
+    diff_files = [ln.strip() for ln in completed.stdout.splitlines() if ln.strip()]
+    blocking_files: List[str] = []
+    for rel_path in diff_files:
+        basename = Path(rel_path).name
+        for pattern in PR_DIFF_ARTIFACT_PATTERNS:
+            if fnmatch.fnmatch(basename, pattern):
+                blocking_files.append(rel_path)
+                break
+    if blocking_files:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "execution_artifact_in_pr_diff",
+            "blocking_files": blocking_files,
+        }
+    return {"status": "OK", "blocking_files": []}
+
+
 def _get_pr_number_from_url(pr_url: str) -> Optional[str]:
     """PR URL에서 PR 번호를 추출한다.
 
@@ -16814,6 +16889,30 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             "[WORKSPACE HYGIENE WARN] cleanup_only 파일 발견: "
             + ", ".join(str(c) for c in cleanup_items[:5])
         ))
+
+    # BUG-20260619-8AC8 MT-2: PR diff 오염 검사 (nonce 발급 전, fail-closed).
+    # 실행 산출물(step_plan_F41F.xml 등)이 PR diff에 포함되면 사용자 REJECT 원인이 되므로
+    # 승인 코드를 발급하지 않고 차단한다.
+    artifact_check = _check_pr_diff_artifact_pollution()
+    if artifact_check.get("status") == "BLOCKED":
+        _ac_code = str(artifact_check.get("failure_code", "execution_artifact_in_pr_diff"))
+        _ac_files = artifact_check.get("blocking_files", [])
+        if _ac_code == "git_unavailable":
+            _die(
+                "[BLOCKED] failure_code=git_unavailable\n"
+                "  PR diff를 확인할 수 없습니다 (git CLI 부재 또는 git diff 실패).\n"
+                "  git이 설치되어 있고 origin/main을 fetch할 수 있는지 확인한 뒤 다시 실행하세요.",
+                exit_code=1,
+            )
+        _die(
+            "[BLOCKED] failure_code=execution_artifact_in_pr_diff\n"
+            "  PR diff에 파이프라인 실행 산출물이 포함되어 있습니다:\n"
+            + "\n".join(f"    - {f}" for f in _ac_files)
+            + "\n  expected: 실제 제품 코드 변경 파일만 PR에 포함되어야 합니다.\n"
+            "  해결 방법: 위 파일을 git rm --cached로 PR에서 제거(.gitignore로 추적 제외)한 뒤\n"
+            "  gates request-accept를 다시 실행하세요.",
+            exit_code=1,
+        )
 
     # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
     # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다

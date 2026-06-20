@@ -1,0 +1,5 @@
+{
+  "status": "BLOCKED",
+  "failure_code": "execution_artifact_in_pr_diff",
+  "blocking_files": ["pipeline_state.json"]
+}

@@ -63,16 +63,16 @@ harness_output*.xml
 harness_test_*.py
 harness_skip_prior100.xml
 architect_report.xml
-step_plan.xml
-dev_handover.xml
-qa_report.xml
+step_plan*.xml
+dev_handover*.xml
+qa_report*.xml
 scope_manifest.json
 scope_manifest_*.json
 module_design_*.xml
 module_dev_*.xml
 module_qa_*.xml
 module_handover_*.xml
-integration_report.xml
+integration_report*.xml
 
 # Local archives and packaged binaries
 _cleanup_archive/
@@ -100,7 +100,7 @@ acceptance_comment.json
 acceptance_packet.md
 restore_*.py
 test_artifacts/
-manager_handoff.xml
+manager_handoff*.xml
 preflight_report.json
 failure_packet.json
 pipeline_outputs/

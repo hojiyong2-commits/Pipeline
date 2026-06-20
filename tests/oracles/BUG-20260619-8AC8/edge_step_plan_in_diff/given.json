@@ -1,0 +1,7 @@
+{
+  "case_id": "edge_step_plan_in_diff",
+  "case_kind": "edge",
+  "description": "step_plan_F41F.xml이 PR diff에 포함된 경우",
+  "diff_files": ["pipeline.py", "step_plan_F41F.xml"],
+  "git_available": true
+}

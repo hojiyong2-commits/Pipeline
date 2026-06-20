@@ -1,0 +1,7 @@
+{
+  "case_id": "error_git_unavailable",
+  "case_kind": "error",
+  "description": "git CLI 없는 환경에서 fail-closed BLOCKED",
+  "diff_files": [],
+  "git_available": false
+}
