@@ -183,6 +183,30 @@ python pipeline.py gates request-accept --evidence <결과물-경로>
 python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>
 ```
 
+## PR 댓글 기반 User Acceptance 승인 (BUG-20260620-3BF4)
+
+User Acceptance는 **GitHub PR 댓글**로 처리합니다. 별도의 로컬 브라우저 승인 서버를 띄우지
+않으며, `localhost` 승인 페이지 또는 브라우저 창을 여는 절차는 더 이상 사용하지 않습니다.
+
+### 승인 절차
+
+1. `gates request-accept --evidence <결과물-경로>` 실행 → 일회용 승인 코드
+   `ACCEPT-{pipeline_id}` (예: `ACCEPT-BUG-20260620-3BF4-<nonce>`)가 발급됩니다.
+2. **사용자가 직접** GitHub PR에 위 승인 코드를 **단독 댓글**로 게시하면 승인됩니다.
+   (예: `ACCEPT-BUG-20260620-3BF4-XXXXXXXX` 한 줄만 작성)
+3. Pipeline Manager가 사용자가 입력/게시한 코드로
+   `gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>`
+   를 실행합니다.
+
+### 주의 사항 (절대 준수)
+
+- **Claude/Codex가 대신 댓글을 쓰면 안 됩니다.** 반드시 실제 사용자가 직접 PR에 승인 댓글을
+  작성해야 합니다. 에이전트가 승인 코드를 추측하거나 대신 게시하는 것은 금지됩니다.
+- 파이프라인이 자동으로 생성한 안내 댓글(`<!-- pipeline-human-acceptance-packet -->` 마커 포함)은
+  승인 댓글로 인정되지 않으며, `gates accept`는 이러한 자동 생성 댓글을 승인 판정에서 제외합니다.
+- 세션 요약의 "다음 단계: gates accept 실행"은 사용자 승인이 아닙니다. 사용자가 **이번 대화에서**
+  직접 승인 코드를 게시/입력한 경우에만 `gates accept`를 실행합니다.
+
 ## User Acceptance 표시 상태값 정의
 
 `acceptance_request.json`의 `status` 및 `external_gates.acceptance.status`는 서로 다른 레이어에서 관리됩니다.
