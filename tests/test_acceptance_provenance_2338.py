@@ -84,12 +84,16 @@ def test_state_empty_json_fresh_nonce_pass() -> None:
         "pipeline_id": "TEST-001",
         "nonce": "TESTNONCE",
         "request_id": "req-001",
+        # BUG-20260620-3BF4 MT-2: replay 방어용 request 발급 시각.
+        "created_at": "2026-06-20T12:00:00Z",
     }
     comments = [
         {
             "author": {"login": PIPELINE_ALLOWED_APPROVER},
-            "body": "ACCEPT-TEST-001-TESTNONCE",
+            # BUG-20260620-3BF4 MT-2: PR 댓글 승인 코드는 nonce 없는 ACCEPT-{pipeline_id}.
+            "body": "ACCEPT-TEST-001",
             "id": "C1",
+            "createdAt": "2026-06-20T13:00:00Z",
         }
     ]
     with patch.object(pipeline_mod, "_load_acceptance_request", return_value=file_req), \
@@ -112,12 +116,15 @@ def test_state_stale_nonce_file_fresh() -> None:
         "pipeline_id": "TEST-001",
         "nonce": "FRESH_NONCE",
         "request_id": "new-req",
+        "created_at": "2026-06-20T12:00:00Z",
     }
     comments = [
         {
             "author": {"login": PIPELINE_ALLOWED_APPROVER},
-            "body": "ACCEPT-TEST-001-FRESH_NONCE",
+            # nonce 없는 ACCEPT-{pipeline_id} (파일 기준 최신 request 로 PASS).
+            "body": "ACCEPT-TEST-001",
             "id": "C2",
+            "createdAt": "2026-06-20T13:00:00Z",
         }
     ]
     with patch.object(pipeline_mod, "_load_acceptance_request", return_value=file_req), \
@@ -132,13 +139,19 @@ def test_allowed_approver_correct_code() -> None:
     """case=normal — 파일이 없으면 state fallback 으로 동작 (state nonce 기반 PASS)."""
     state: Dict[str, Any] = {
         "pipeline_id": "PIPE-001",
-        "acceptance_request": {"nonce": "CORRNONCE"},
+        # 파일 없을 때 state fallback — created_at 도 state acceptance_request 에 보존.
+        "acceptance_request": {
+            "nonce": "CORRNONCE",
+            "created_at": "2026-06-20T12:00:00Z",
+        },
     }
     comments = [
         {
             "author": {"login": PIPELINE_ALLOWED_APPROVER},
-            "body": "ACCEPT-PIPE-001-CORRNONCE",
+            # nonce 없는 ACCEPT-{pipeline_id} (state fallback 으로 PASS).
+            "body": "ACCEPT-PIPE-001",
             "id": "C3",
+            "createdAt": "2026-06-20T13:00:00Z",
         }
     ]
     # 파일은 없으므로 None 반환 (state fallback 검증)
@@ -180,8 +193,9 @@ def test_wrong_nonce_blocked() -> None:
     assert result["status"] == "BLOCKED"
     # BUG-20260612-B96C 재작업: 발급 이력에 없는 nonce(오타/잘못된 코드) → approval_code_mismatch.
     assert result.get("failure_code") == "approval_code_mismatch"
-    assert "ACCEPT-TEST-001-RIGHTNONCE" in result.get("message", ""), \
-        "실패 메시지에 실제 기대 코드가 표시되어야 함"
+    # BUG-20260620-3BF4 MT-2: 기대 승인 코드는 nonce 없는 ACCEPT-{pipeline_id} 형식으로 표시된다.
+    assert "ACCEPT-TEST-001" in result.get("message", ""), \
+        "실패 메시지에 실제 기대 코드(nonce 없는 형식)가 표시되어야 함"
 
 
 def test_wrong_approver_evidence_blocked() -> None:

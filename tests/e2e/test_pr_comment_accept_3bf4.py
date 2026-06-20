@@ -30,17 +30,34 @@ TC-15: Round 2 — 4개 producer 함수의 PR 댓글 표시 코드에 nonce-dash
        (ACCEPT-{pipeline_id}-{nonce}) 부재 확인 (producer/consumer 형식 일치 강제)
 TC-16: Round 2 — TC-04 오탐 방지. nonce 없는 ACCEPT-{pipeline_id} 표시 코드 존재 +
        nonce 포함 표시 코드 부재를 round-trip(producer/consumer) 형식으로 검증
+
+BUG-20260620-3BF4 REJECT 수정 추가 케이스 (행동 검증):
+TC-17: 정확히 한 줄 검증 — 승인 코드 뒤에 추가 줄이 있으면 PASS 후보 불인정 → BLOCKED
+TC-18: replay 방어 — 댓글 createdAt이 acceptance_request.created_at 이전이면 BLOCKED
+TC-19: 정상 케이스 — 정확히 한 줄 + createdAt이 request 이후 → PASS (회귀 보호)
+TC-20: acceptance_request.created_at 누락 시 fail-closed → BLOCKED
 """
 
+import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any, Dict, List
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_PY = REPO_ROOT / "pipeline.py"
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+import pipeline as pipeline_mod  # type: ignore  # noqa: E402
+
+_check_pr_approver_provenance = pipeline_mod._check_pr_approver_provenance
+PIPELINE_ALLOWED_APPROVER = pipeline_mod.PIPELINE_ALLOWED_APPROVER
 
 
 def test_tc01_browser_approval_server_absent() -> None:
@@ -287,6 +304,203 @@ def test_tc16_nonce_free_display_present_and_nonce_form_absent() -> None:
     assert 'accept_code = f"ACCEPT-{pipeline_id}-{nonce}"' in src, (
         "FAIL: gates accept CLI용 nonce 포함 코드(accept_code)가 제거됨 — CLI nonce 검증이 깨짐"
     )
+
+
+# ----------------------------------------------------------------------------
+# BUG-20260620-3BF4 REJECT 수정 — 행동 검증(_check_pr_approver_provenance mock 호출)
+# test_pr_approver_b96c.py 의 subprocess.run / shutil.which mock 패턴을 재사용한다.
+# ----------------------------------------------------------------------------
+
+_3BF4_PIPELINE_ID = "BUG-20260620-3BF4"
+# 사용자가 PR 댓글에 게시하는 nonce 없는 승인 코드.
+_3BF4_VALID_CODE = f"ACCEPT-{_3BF4_PIPELINE_ID}"
+# acceptance_request.created_at 기준 시각 (UTC, _now() 형식과 동일하게 Z 접미사).
+_3BF4_REQUEST_CREATED_AT = "2026-06-20T12:00:00Z"
+# request 이후 댓글 시각(승인 유효).
+_3BF4_COMMENT_AFTER = "2026-06-20T13:00:00Z"
+# request 이전 댓글 시각(replay 공격).
+_3BF4_COMMENT_BEFORE = "2026-06-20T11:00:00Z"
+
+
+def _make_run(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
+    """subprocess.run 반환값을 흉내내는 MagicMock.
+
+    Args:
+        returncode: 모의 프로세스 반환 코드 (0=성공).
+        stdout: 모의 표준 출력.
+        stderr: 모의 표준 에러.
+    Returns:
+        returncode/stdout/stderr 속성을 가진 MagicMock.
+    Raises:
+        TypeError: returncode 가 None 이거나 int 가 아닌 경우.
+    """
+    if returncode is None:
+        raise TypeError("returncode must not be None")
+    if not isinstance(returncode, int):
+        raise TypeError(f"returncode must be int, got {type(returncode).__name__}")
+    m = MagicMock()
+    m.returncode = returncode
+    m.stdout = stdout
+    m.stderr = stderr
+    return m
+
+
+def _build_side_effect(pr_number: str, comments: List[Dict[str, Any]],
+                       head_branch: str = "impl/BUG-20260620-3BF4") -> Any:
+    """_check_pr_approver_provenance 내부 subprocess.run 호출 흉내 side_effect.
+
+    호출 순서: git rev-parse → gh pr list → gh pr view.
+
+    Args:
+        pr_number: 모의 PR 번호.
+        comments: PR 댓글 목록 (author/body/id/createdAt 키).
+        head_branch: 모의 현재 브랜치명.
+    Returns:
+        subprocess.run 의 side_effect 로 사용할 콜러블.
+    Raises:
+        TypeError: pr_number 가 None 이거나 comments 가 None/리스트가 아닌 경우.
+    """
+    if pr_number is None:
+        raise TypeError("pr_number must not be None")
+    if comments is None:
+        raise TypeError("comments must not be None")
+    if not isinstance(comments, list):
+        raise TypeError(f"comments must be list, got {type(comments).__name__}")
+
+    def _side(*args: Any, **_kwargs: Any) -> MagicMock:
+        argv = args[0] if args else []
+        if isinstance(argv, list) and argv[:2] == ["git", "rev-parse"]:
+            return _make_run(returncode=0, stdout=head_branch + "\n")
+        if isinstance(argv, list) and len(argv) >= 3 and argv[1:3] == ["pr", "list"]:
+            payload = json.dumps([{"number": int(pr_number), "headRefName": head_branch}])
+            return _make_run(returncode=0, stdout=payload)
+        if isinstance(argv, list) and len(argv) >= 3 and argv[1:3] == ["pr", "view"]:
+            payload = json.dumps({"comments": comments})
+            return _make_run(returncode=0, stdout=payload)
+        return _make_run(returncode=1, stdout="", stderr="unexpected subprocess call")
+    return _side
+
+
+def _run_provenance_3bf4(file_req: Dict[str, Any], comments: List[Dict[str, Any]],
+                         pr_number: str = "99") -> Dict[str, Any]:
+    """mock 컨텍스트 안에서 _check_pr_approver_provenance 호출.
+
+    Args:
+        file_req: _load_acceptance_request 가 반환할 acceptance_request dict.
+        comments: 모의 PR 댓글 목록.
+        pr_number: 모의 PR 번호.
+    Returns:
+        _check_pr_approver_provenance 의 반환 dict.
+    Raises:
+        TypeError: file_req 가 None 이거나 dict 가 아닌 경우.
+    """
+    if file_req is None:
+        raise TypeError("file_req must not be None")
+    if not isinstance(file_req, dict):
+        raise TypeError(f"file_req must be dict, got {type(file_req).__name__}")
+    state: Dict[str, Any] = {
+        "pipeline_id": _3BF4_PIPELINE_ID,
+        "acceptance_request": {"nonce": file_req.get("nonce", "")},
+    }
+    with patch.object(pipeline_mod, "_load_acceptance_request", return_value=file_req), \
+         patch("shutil.which", return_value="C:\\fake\\gh.exe"), \
+         patch("subprocess.run", side_effect=_build_side_effect(pr_number, comments)):
+        return _check_pr_approver_provenance(state)
+
+
+def _base_file_req_3bf4(**overrides: Any) -> Dict[str, Any]:
+    """기본 acceptance_request.json 내용 (created_at 포함). overrides 로 치환 가능."""
+    base: Dict[str, Any] = {
+        "pipeline_id": _3BF4_PIPELINE_ID,
+        "nonce": "NONCE3BF4",
+        "request_id": "req-3bf4",
+        "created_at": _3BF4_REQUEST_CREATED_AT,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_tc17_exact_one_line_extra_content_blocked() -> None:
+    """TC-17 (case=exception) — 승인 코드 뒤에 추가 줄이 있으면 PASS 불인정 → BLOCKED.
+
+    "코드 외 다른 내용 금지 / 정확히 한 줄" 요구. 전체 본문 strip 완전 일치가 아니면
+    승인 후보로 보지 않는다. 본문이 ACCEPT- 로 시작하지만 정확히 일치하지 않으므로
+    approval_code_mismatch 로 차단된다(핵심: PASS가 아니라 BLOCKED).
+    """
+    file_req = _base_file_req_3bf4()
+    comments = [
+        {
+            "author": {"login": PIPELINE_ALLOWED_APPROVER},
+            "body": f"{_3BF4_VALID_CODE}\n추가 내용입니다",
+            "id": "C17",
+            "createdAt": _3BF4_COMMENT_AFTER,
+        }
+    ]
+    result = _run_provenance_3bf4(file_req, comments)
+    assert result["status"] == "BLOCKED", \
+        f"승인 코드 뒤 추가 줄이 있으면 BLOCKED여야 함: {result.get('message')}"
+    assert result.get("status") != "PASS", \
+        "정확히 한 줄 아닌 댓글이 PASS 처리되면 안 됨"
+    assert result.get("failure_code") in (
+        "pr_approver_missing", "approval_code_mismatch", ""
+    ), (
+        "정확히 한 줄 아님 → 승인 후보 불인정(approval_code_mismatch 또는 "
+        f"pr_approver_missing): {result.get('failure_code')}"
+    )
+
+
+def test_tc18_replay_before_request_created_at_blocked() -> None:
+    """TC-18 (case=error) — 댓글 createdAt이 request.created_at 이전이면 replay 차단 → BLOCKED."""
+    file_req = _base_file_req_3bf4()
+    comments = [
+        {
+            "author": {"login": PIPELINE_ALLOWED_APPROVER},
+            "body": _3BF4_VALID_CODE,
+            "id": "C18",
+            "createdAt": _3BF4_COMMENT_BEFORE,  # request 생성 이전 → replay
+        }
+    ]
+    result = _run_provenance_3bf4(file_req, comments)
+    assert result["status"] == "BLOCKED", \
+        f"request 생성 이전 댓글은 replay로 BLOCKED여야 함: {result.get('message')}"
+    assert result.get("failure_code") == "pr_comment_timestamp_missing", \
+        f"replay 차단은 pr_comment_timestamp_missing(fail-closed)여야 함: {result.get('failure_code')}"
+
+
+def test_tc19_exact_one_line_after_request_pass() -> None:
+    """TC-19 (case=normal) — 정확히 한 줄 + createdAt이 request 이후 → PASS (회귀 보호)."""
+    file_req = _base_file_req_3bf4()
+    comments = [
+        {
+            "author": {"login": PIPELINE_ALLOWED_APPROVER},
+            "body": _3BF4_VALID_CODE,
+            "id": "C19",
+            "createdAt": _3BF4_COMMENT_AFTER,
+        }
+    ]
+    result = _run_provenance_3bf4(file_req, comments)
+    assert result["status"] == "PASS", \
+        f"정확한 한 줄 + request 이후 댓글은 PASS여야 함: {result.get('message')}"
+    assert result.get("approver") == PIPELINE_ALLOWED_APPROVER
+    assert result.get("comment_id") == "C19"
+
+
+def test_tc20_missing_request_created_at_fail_closed() -> None:
+    """TC-20 (case=exception) — acceptance_request.created_at 누락 시 fail-closed BLOCKED."""
+    file_req = _base_file_req_3bf4(created_at="")  # created_at 비움
+    comments = [
+        {
+            "author": {"login": PIPELINE_ALLOWED_APPROVER},
+            "body": _3BF4_VALID_CODE,
+            "id": "C20",
+            "createdAt": _3BF4_COMMENT_AFTER,
+        }
+    ]
+    result = _run_provenance_3bf4(file_req, comments)
+    assert result["status"] == "BLOCKED", \
+        f"request.created_at 누락 시 fail-closed BLOCKED여야 함: {result.get('message')}"
+    assert result.get("failure_code") == "pr_comment_timestamp_missing", \
+        f"created_at 누락은 pr_comment_timestamp_missing(fail-closed)여야 함: {result.get('failure_code')}"
 
 
 if __name__ == "__main__":

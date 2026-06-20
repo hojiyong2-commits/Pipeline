@@ -34,12 +34,18 @@ import pipeline as pipeline_mod  # type: ignore  # noqa: E402
 _check_pr_approver_provenance = pipeline_mod._check_pr_approver_provenance
 PIPELINE_ALLOWED_APPROVER = pipeline_mod.PIPELINE_ALLOWED_APPROVER
 
-# 본 테스트 전체에서 사용하는 가상 pipeline_id / nonce.
-# 승인 코드 형식: ACCEPT-<pipeline_id>-<nonce>
+# 본 테스트 전체에서 사용하는 가상 pipeline_id.
+# BUG-20260620-3BF4 MT-2: 사용자가 PR 댓글로 게시하는 승인 코드 형식은 nonce 없는
+# ACCEPT-<pipeline_id> 이다. nonce 는 acceptance_request.json 내부 SSoT 검증용으로만 보존된다.
 _PIPELINE_ID = "B96C-001"
+# 내부 SSoT nonce (PR 댓글 코드에는 포함되지 않음; stale_nonce 발급 이력 비교용으로 보존).
 _VALID_NONCE = "VALIDNONCE"
-_VALID_CODE = f"ACCEPT-{_PIPELINE_ID}-{_VALID_NONCE}"
+# PASS 후보 댓글이 게시하는 nonce 없는 승인 코드.
+_VALID_CODE = f"ACCEPT-{_PIPELINE_ID}"
 _PACKET_MARKER = "<!-- pipeline-human-acceptance-packet -->"
+# replay 방어용 타임스탬프: 댓글 작성 시각(createdAt)은 request 생성 시각(created_at) 이후여야 PASS.
+_REQUEST_CREATED_AT = "2026-06-20T12:00:00Z"
+_COMMENT_CREATED_AT = "2026-06-20T13:00:00Z"
 
 
 def _make_gh_run(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
@@ -143,11 +149,16 @@ def _base_state() -> Dict[str, Any]:
 
 
 def _base_file_req(**overrides: Any) -> Dict[str, Any]:
-    """기본 acceptance_request.json 내용 — overrides 로 일부 필드 치환 가능."""
+    """기본 acceptance_request.json 내용 — overrides 로 일부 필드 치환 가능.
+
+    BUG-20260620-3BF4 MT-2: replay 방어를 위해 created_at(request 발급 시각)을 포함한다.
+    PASS 후보 댓글의 createdAt 은 이 시각 이후여야 한다.
+    """
     base = {
         "pipeline_id": _PIPELINE_ID,
         "nonce": _VALID_NONCE,
         "request_id": "req-001",
+        "created_at": _REQUEST_CREATED_AT,
     }
     base.update(overrides)
     return base
@@ -166,6 +177,7 @@ def test_exact_match_pass() -> None:
             "author": {"login": PIPELINE_ALLOWED_APPROVER},
             "body": _VALID_CODE,
             "id": "C1",
+            "createdAt": _COMMENT_CREATED_AT,
         }
     ]
     result = _run_provenance(state, file_req, comments)
@@ -181,14 +193,22 @@ def test_exact_match_pass() -> None:
 # ----------------------------------------------------------------------------
 
 def test_packet_comment_only_fail() -> None:
-    """TC-2 (case=exception) — packet marker 댓글은 후보에서 제외되어 승인 댓글 없음 → BLOCKED."""
+    """TC-2 (case=exception) — packet marker 댓글은 후보에서 제외되어 승인 댓글 없음 → BLOCKED.
+
+    BUG-20260620-3BF4 MT-2: packet 본문이 현재 기대 승인 코드(ACCEPT-{pipeline_id})를
+    그대로 인용하면 protocol_violation_auto_accept 로 차단되므로(BUG-20260616-8011),
+    본 TC 는 packet 이 현재 코드를 인용하지 않는(과거 안내 문구만 있는) 상황을 고정한다.
+    이 경우 packet 댓글은 완전히 필터링되어 승인 후보가 없으므로 pr_approver_missing 이 된다.
+    """
     state = _base_state()
     file_req = _base_file_req()
     comments = [
         {
             "author": {"login": PIPELINE_ALLOWED_APPROVER},
-            "body": f"{_PACKET_MARKER}\n## 최종 확인 안내\n승인 코드: {_VALID_CODE}",
+            # 현재 기대 코드를 인용하지 않는 packet 안내 댓글 (자동 ACCEPT 시도 아님).
+            "body": f"{_PACKET_MARKER}\n## 최종 확인 안내\n승인 코드를 별도 댓글로 남겨주세요.",
             "id": "C2",
+            "createdAt": _COMMENT_CREATED_AT,
         }
     ]
     result = _run_provenance(state, file_req, comments)
@@ -271,8 +291,9 @@ def test_mixed_comments_exact_match_wins_pass() -> None:
         },
         {
             "author": {"login": PIPELINE_ALLOWED_APPROVER},
-            "body": _VALID_CODE,  # exact match
+            "body": _VALID_CODE,  # exact match (nonce 없는 ACCEPT-{pipeline_id})
             "id": "C5c",
+            "createdAt": _COMMENT_CREATED_AT,
         },
     ]
     result = _run_provenance(state, file_req, comments)

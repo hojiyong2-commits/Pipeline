@@ -15870,6 +15870,9 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                             ver_text = evidence_elem.text.strip()[:150]
                         elif ver_elem is not None and ver_elem.text:
                             ver_text = ver_elem.text.strip()[:150]
+                        elif crit.text and crit.text.strip():
+                            # Format 4c: 자식 요소 없이 criterion 직접 텍스트
+                            ver_text = crit.text.strip()[:150]
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text}")
 
@@ -17337,17 +17340,42 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
                 _auto_accept_comment_id = _cid
             continue
         _stripped: str = _body.strip()
-        # BUG-20260620-3BF4 MT-2: 댓글 본문이 정확히 ACCEPT-{pipeline_id} 이거나, 해당 코드가
-        # 댓글의 첫 번째 줄(trim 후)인 경우 승인 후보로 본다.
-        _first_line: str = _stripped.split("\n", 1)[0].strip() if _stripped else ""
-        _is_exact_candidate: bool = bool(_expected_code) and (
-            _stripped == _expected_code or _first_line == _expected_code
-        )
+        # BUG-20260620-3BF4 REJECT fix: 정확히 한 줄 — strip 후 완전 일치만 허용.
+        # "코드 외 다른 내용 금지 / 정확히 한 줄" 요구에 따라 첫 줄 일치가 아니라
+        # 전체 본문 strip 완전 일치만 승인 후보로 인정한다.
+        _is_exact_candidate: bool = bool(_expected_code) and _stripped == _expected_code
         # AC-3 + AC-6: ACCEPT-{pipeline_id} 일치 → 승인 후보.
         if _is_exact_candidate:
             # timestamp fail-closed: created_at/createdAt 없으면 PASS 처리하지 않고
             # pr_comment_timestamp_missing BLOCKED 후보로 기록한다.
-            if not _comment_timestamp(_comment):
+            _ts_str: str = _comment_timestamp(_comment)
+            if not _ts_str:
+                _timestamp_missing_hit = True
+                _timestamp_missing_cid = _cid
+                continue
+            # BUG-20260620-3BF4 REJECT fix: replay 방어 — request_created_at 이후 댓글만 허용.
+            # acceptance_request.json의 created_at 로드 후 댓글 타임스탬프와 비교.
+            # 파싱 실패 시 fail-closed BLOCKED.
+            try:
+                _request_created_at_str: str = str(
+                    acceptance_req.get("created_at", "") or ""
+                )
+                if not _request_created_at_str:
+                    # acceptance_request.created_at 없으면 fail-closed
+                    _timestamp_missing_hit = True
+                    _timestamp_missing_cid = _cid
+                    continue
+                _request_dt = _datetime.fromisoformat(
+                    _request_created_at_str.replace("Z", "+00:00")
+                )
+                _comment_dt = _datetime.fromisoformat(_ts_str.replace("Z", "+00:00"))
+                if _comment_dt <= _request_dt:
+                    # request 생성 이전 또는 동시 댓글 — replay 공격 차단
+                    _timestamp_missing_hit = True
+                    _timestamp_missing_cid = _cid
+                    continue
+            except (ValueError, TypeError):
+                # 파싱 실패 시 fail-closed
                 _timestamp_missing_hit = True
                 _timestamp_missing_cid = _cid
                 continue
