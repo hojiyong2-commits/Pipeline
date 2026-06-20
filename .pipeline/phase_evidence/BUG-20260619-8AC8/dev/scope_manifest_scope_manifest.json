@@ -1,0 +1,103 @@
+{
+  "pipeline_id": "BUG-20260619-8AC8",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [".gitignore"],
+      "affected_functions": ["N/A — 설정 파일"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": [".gitignore"],
+          "implementation_evidence": [
+            ".gitignore의 step_plan.xml/dev_handover.xml/qa_report.xml/integration_report.xml/manager_handoff.xml 5개 고정 파일명을 step_plan*.xml 등 suffix 와일드카드 패턴으로 교체하여 변형 파일명 git ignore 적용"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_check_pr_diff_artifact_pollution (신규)", "_cmd_gates_request_accept (수정)"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-2", "AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "PR_DIFF_ARTIFACT_PATTERNS SSoT 상수 추가 (13개 fnmatch glob 패턴)",
+            "_check_pr_diff_artifact_pollution() 신규 함수 추가 — git diff origin/main...HEAD --name-only 조회 후 fnmatch 매칭, git 바이너리 부재 시 git_unavailable BLOCKED(fail-closed, AC-3)",
+            "_cmd_gates_request_accept에서 hygiene 검사 직후 nonce 발급 전 _check_pr_diff_artifact_pollution 호출하여 BLOCKED 시 exit 1",
+            "[QA REWORK r2] _check_pr_diff_artifact_pollution returncode!=0 분기를 BLOCKED git_unavailable에서 OK로 변경 (origin/main ref 없는 격리 git repo/shallow clone 검사 생략) — test_request_accept_nonce_reuse_aef0.py 6개 회귀 해소",
+            "[QA REWORK r2] if not git_path 분기에 PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING=1 override 추가 (IMP-20260614-2821 _check_workspace_hygiene SSoT 패턴 재사용). 기본 production fail-closed BLOCKED 유지로 AC-3 보존"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "tests/e2e/test_pr_diff_artifact_8ac8.py",
+        "tests/oracles/BUG-20260619-8AC8/normal_clean_diff/given.json",
+        "tests/oracles/BUG-20260619-8AC8/normal_clean_diff/expected.json",
+        "tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/given.json",
+        "tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/expected.json",
+        "tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/given.json",
+        "tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/expected.json",
+        "tests/oracles/BUG-20260619-8AC8/error_git_unavailable/given.json",
+        "tests/oracles/BUG-20260619-8AC8/error_git_unavailable/expected.json"
+      ],
+      "affected_functions": ["N/A — 신규 테스트 파일"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-4"],
+          "changed_files": [
+            "tests/e2e/test_pr_diff_artifact_8ac8.py",
+            "tests/oracles/BUG-20260619-8AC8/normal_clean_diff/given.json",
+            "tests/oracles/BUG-20260619-8AC8/normal_clean_diff/expected.json",
+            "tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/given.json",
+            "tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/expected.json",
+            "tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/given.json",
+            "tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/expected.json",
+            "tests/oracles/BUG-20260619-8AC8/error_git_unavailable/given.json",
+            "tests/oracles/BUG-20260619-8AC8/error_git_unavailable/expected.json"
+          ],
+          "implementation_evidence": [
+            "tests/e2e/test_pr_diff_artifact_8ac8.py 신규 작성 — importlib pipeline 로드, shutil.which/subprocess.run mock으로 diff_files 주입, parametrize 4 케이스 oracle 비교 + 상수 검증",
+            "4개 oracle 케이스 given.json+expected.json 작성 (user_provided)",
+            "pytest 실행 결과 5 passed 확인"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py",
+        "tests/e2e/test_pr_diff_artifact_8ac8.py",
+        "tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/given.json",
+        "tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/expected.json"
+      ],
+      "affected_functions": ["_check_pr_diff_artifact_pollution"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-3"],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_pr_diff_artifact_8ac8.py",
+            "tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/given.json",
+            "tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/expected.json"
+          ],
+          "implementation_evidence": [
+            "pipeline.py: _check_pr_diff_artifact_pollution returncode != 0 시 fail-open(OK)에서 fail-closed(BLOCKED, git_diff_failed)로 수정. PIPELINE_ARTIFACT_CHECK_ALLOW_GIT_DIFF_FAIL=1 환경변수로 테스트 격리 허용.",
+            "edge oracle 추가: tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/given.json + expected.json",
+            "E2E 테스트 추가: test_edge_git_diff_nonzero_exit. pytest 7 passed."
+          ]
+        }
+      ]
+    }
+  ]
+}
