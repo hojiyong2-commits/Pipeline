@@ -43,6 +43,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [],
+  "workspace_file_checks": null,
   "local_only_files": []
 }
