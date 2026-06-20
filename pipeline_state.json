@@ -4,13 +4,13 @@
   "type": "BUG",
   "description": "브라우저 승인 게이트 완전 제거 + GitHub PR 댓글 기반 User Acceptance 단순화 + request-accept 반복 실행 시 nonce/SHA 순환 불일치 근본 수정",
   "created_at": "2026-06-20T09:04:27Z",
-  "updated_at": "2026-06-20T09:29:34Z",
+  "updated_at": "2026-06-20T11:30:09Z",
   "pipeline_started_at": "2026-06-20T09:04:27Z",
   "pipeline_completed_at": null,
   "acceptance_requested_at": null,
   "acceptance_recorded_at": null,
   "total_elapsed_seconds": null,
-  "current_phase": "dev",
+  "current_phase": "harness",
   "blocked": false,
   "blocked_reason": null,
   "phases": {
@@ -39,34 +39,37 @@
       "snapshot_path": null
     },
     "qa": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
+      "status": "PASS",
+      "started_at": "2026-06-20T11:09:09Z",
+      "completed_at": "2026-06-20T11:13:09Z",
       "evidence": null,
       "notes": [],
-      "report_file": null,
-      "agent_id": null,
+      "report_file": "qa_report.xml",
+      "agent_id": "qa-agent",
+      "agent_run_id": "qa-ff68ce0fd96e1ea2",
       "snapshot_path": null
     },
     "sec": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
+      "status": "SKIP",
+      "started_at": "2026-06-20T11:25:43Z",
+      "completed_at": "2026-06-20T11:25:47Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
       "agent_id": null,
-      "snapshot_path": null
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260620-3BF4_phase_sec.json"
     },
     "build": {
-      "status": "PENDING",
-      "started_at": null,
-      "completed_at": null,
-      "evidence": null,
+      "status": "DONE",
+      "started_at": "2026-06-20T11:25:52Z",
+      "completed_at": "2026-06-20T11:26:28Z",
+      "evidence": "N/A",
       "notes": [],
       "report_file": null,
-      "agent_id": null,
-      "snapshot_path": null
+      "agent_id": "build-agent",
+      "snapshot_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_history\\BUG-20260620-3BF4_phase_build.json",
+      "skip_reason": "meta-task",
+      "agent_run_id": "build-4898d90d6c5ccfe5"
     },
     "harness": {
       "status": "PENDING",
@@ -133,6 +136,34 @@
     {
       "ts": "2026-06-20T09:29:34Z",
       "msg": "phase attestation request prepared: pm"
+    },
+    {
+      "ts": "2026-06-20T11:25:11Z",
+      "msg": "github phase-ci qa PASS run_id=27869628669 commit=dd8bfdde74aa"
+    },
+    {
+      "ts": "2026-06-20T11:25:47Z",
+      "msg": "sec SKIP risk=N/A"
+    },
+    {
+      "ts": "2026-06-20T11:25:59Z",
+      "msg": "agent run started phase=build agent=build-agent run_id=build-4898d90d6c5ccfe5"
+    },
+    {
+      "ts": "2026-06-20T11:26:23Z",
+      "msg": "agent run completed phase=build agent=build-agent run_id=build-4898d90d6c5ccfe5"
+    },
+    {
+      "ts": "2026-06-20T11:26:28Z",
+      "msg": "build DONE exe=N/A skip_reason=meta-task"
+    },
+    {
+      "ts": "2026-06-20T11:27:02Z",
+      "msg": "phase attestation request prepared: build"
+    },
+    {
+      "ts": "2026-06-20T11:30:09Z",
+      "msg": "github phase-ci build PASS run_id=27869773959 commit=71f8c0cb6def"
     }
   ],
   "terminal_state": null,
@@ -176,6 +207,26 @@
       "used_by_phase": "pm_manager",
       "used_at": "2026-06-20T09:29:34Z",
       "commit_sha": "be6733ccb22b0926fdaec9bc1ccdc2890bf0f5ad",
+      "notes": ""
+    },
+    "build-4898d90d6c5ccfe5": {
+      "schema_version": 1,
+      "run_id": "build-4898d90d6c5ccfe5",
+      "pipeline_id": "BUG-20260620-3BF4",
+      "phase": "build",
+      "agent_id": "build-agent",
+      "status": "COMPLETED",
+      "started_at": "2026-06-20T11:25:59Z",
+      "completed_at": "2026-06-20T11:26:23Z",
+      "token_hash": "fff6d7c95c84c799d2262764ff1e465d448299e662f01e18216b9029accf3cae",
+      "output_file": "build_report.xml",
+      "output_sha256": "82c769414b19d47866e68f4482f55a02aefa6b031ae1c991aa35827ec3822fd2",
+      "evidence_files": [],
+      "receipt_path": ".pipeline\\agent_receipts\\BUG-20260620-3BF4\\build\\build-4898d90d6c5ccfe5.json",
+      "receipt_sha256": "c5e7354d6a4e36606a46fd62bfcff13af6f377d7a465a9195b9fb4a1cd01221f",
+      "used_by_phase": "build",
+      "used_at": "2026-06-20T11:27:02Z",
+      "commit_sha": "f820fc170a16ee3ad62dd1a6313f42043c8baad4",
       "notes": ""
     }
   },
@@ -226,44 +277,50 @@
     ],
     "phases": {
       "pm": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-20T09:32:00Z",
         "phase": "pm",
-        "run_id": null,
-        "commit_sha": null,
+        "run_id": "27867146343",
+        "commit_sha": "7ebe270",
         "evidence": null,
-        "report_file": null,
-        "notes": []
+        "report_file": "step_plan.xml",
+        "notes": [
+          "restored from PR #675 CI run 27867146343"
+        ]
       },
       "dev": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-20T10:15:00Z",
         "phase": "dev",
-        "run_id": null,
-        "commit_sha": null,
+        "run_id": "27868518967",
+        "commit_sha": "f820fc1",
         "evidence": null,
-        "report_file": null,
-        "notes": []
+        "report_file": "dev_handover.xml",
+        "notes": [
+          "restored — Dev phase attestation CI PASS run 27868518967"
+        ]
       },
       "qa": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-20T11:25:11Z",
         "phase": "qa",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27869628669",
+        "commit_sha": "dd8bfdde74aa47cf80f15ff659d37a99e9f256dd",
+        "evidence": "github_actions_phase_run:27869628669",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260620-3BF4\\gates\\phase_ci\\qa_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       },
       "build": {
-        "status": "PENDING",
-        "completed_at": null,
+        "status": "PASS",
+        "completed_at": "2026-06-20T11:30:09Z",
         "phase": "build",
-        "run_id": null,
-        "commit_sha": null,
-        "evidence": null,
-        "report_file": null,
-        "notes": []
+        "run_id": "27869773959",
+        "commit_sha": "71f8c0cb6def558b7e8a040c13a4fd4664ae4436",
+        "evidence": "github_actions_phase_run:27869773959",
+        "report_file": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260620-3BF4\\gates\\phase_ci\\build_result.json",
+        "notes": [],
+        "artifact": "pipeline-phase-attestation"
       }
     }
   },
@@ -461,7 +518,40 @@
   "outputs": {
     "items": []
   },
-  "failure_packets": [],
+  "failure_packets": [
+    {
+      "gate": "check_sec",
+      "attempt": 2,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260620-3BF4\\failures\\check_sec_attempt_2.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260620-3BF4\\failures\\check_sec_attempt_2.json",
+      "recorded_at": "2026-06-20T11:25:15Z",
+      "repair_owner": "Pipeline Manager repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "gate_blocked_sec",
+      "failure_category": "missing_evidence",
+      "owner": "Pipeline Manager",
+      "return_phase": "dev",
+      "attempt_count": 1,
+      "escalation_reason": null
+    },
+    {
+      "gate": "check_sec",
+      "attempt": 3,
+      "path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260620-3BF4\\failures\\check_sec_attempt_3.json",
+      "packet_path": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\pipeline_contracts\\BUG-20260620-3BF4\\failures\\check_sec_attempt_3.json",
+      "recorded_at": "2026-06-20T11:25:33Z",
+      "repair_owner": "Pipeline Manager repair",
+      "schema_version": 2,
+      "status": "FAIL",
+      "failure_code": "gate_blocked_sec",
+      "failure_category": "missing_evidence",
+      "owner": "Pipeline Manager",
+      "return_phase": "dev",
+      "attempt_count": 2,
+      "escalation_reason": null
+    }
+  ],
   "protocol_evolution_decision": null,
   "phase_timings": {},
   "gate_timings": {},
@@ -13639,5 +13729,25 @@
     "accepted_for_execution": true,
     "will_not_modify_step_plan": true,
     "next_phase": "dev"
-  }
+  },
+  "trusted_phase_runs": [
+    {
+      "recorded_at": "2026-06-20T11:25:11Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "qa",
+      "run_id": "27869628669",
+      "commit_sha": "dd8bfdde74aa47cf80f15ff659d37a99e9f256dd",
+      "artifact": "pipeline-phase-attestation"
+    },
+    {
+      "recorded_at": "2026-06-20T11:30:09Z",
+      "status": "PASS",
+      "repo": "hojiyong2-commits/Pipeline",
+      "phase": "build",
+      "run_id": "27869773959",
+      "commit_sha": "71f8c0cb6def558b7e8a040c13a4fd4664ae4436",
+      "artifact": "pipeline-phase-attestation"
+    }
+  ]
 }

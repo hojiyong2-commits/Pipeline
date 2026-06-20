@@ -11552,9 +11552,7 @@ def _build_acceptance_display_model(
     # nonce 자체는 acceptance_request.json 내부 SSoT 로 보존하여 gates accept CLI nonce 검증에
     # 계속 사용된다. 여기서는 사용자에게 보이는 표시 코드에서만 nonce 를 제거한다.
     approval_code: Optional[str] = None
-    nonce = ""
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
-        nonce = str(acceptance_request.get("nonce") or "")
         approval_code = f"ACCEPT-{pipeline_id}"
     if pipeline_id:
         reject_example = f"REJECT-{pipeline_id}: 이유"
@@ -11850,9 +11848,7 @@ def _display_model_from_evidence(
     # (consumer _check_pr_approver_provenance 와 producer 형식 일치 강제). nonce 는
     # acceptance_request.json 내부 SSoT 로만 보존된다.
     approval_code: Optional[str] = None
-    nonce = ""
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
-        nonce = str(acceptance_request.get("nonce") or "")
         approval_code = f"ACCEPT-{pipeline_id}"
     reject_example = (
         f"REJECT-{pipeline_id}: 이유"
@@ -16845,7 +16841,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # (--acceptance-code ACCEPT-{pipeline_id}-{nonce}). nonce는 acceptance_request.json에
     # 계속 저장되어 내부 SSoT 검증에 사용된다.
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
-    reject_code = f"REJECT-{pipeline_id}-{nonce}"
     # BUG-20260620-3BF4 MT-2: 사용자가 GitHub PR 댓글에 게시하는 승인 코드는 nonce 없는
     # 단순 형식 ACCEPT-{pipeline_id} 로 표시한다. (PR 댓글 승인 방식 단순화.)
     pr_comment_accept_code = f"ACCEPT-{pipeline_id}"
@@ -17121,7 +17116,6 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     # BUG-20260620-3BF4 MT-2: PR 댓글 승인 코드 형식을 ACCEPT-{pipeline_id}로 단순화.
     # nonce는 acceptance_request.json 내부 SSoT 검증용으로만 보존하고, 사용자가 PR 댓글로
     # 게시하는 승인 코드에서는 제거한다. 따라서 댓글 비교 기준은 nonce 없는 ACCEPT-{pipeline_id}.
-    nonce: str = str(acceptance_req.get("nonce", "") or "")  # 보존: 내부 검증/로그용
     accept_code: str = f"ACCEPT-{pipeline_id}" if pipeline_id else "ACCEPT-<pipeline_id>"
 
     # BUG-20260612-B96C AC-7: CONSUMED idempotency.
