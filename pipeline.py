@@ -4683,10 +4683,6 @@ def _write_acceptance_request(
     required_sections_present: Optional[bool] = None,
     temporary_phrases_absent: Optional[bool] = None,
     validated_at: Optional[str] = None,
-    browser_click_confirmed: bool = False,
-    browser_click_at: Optional[str] = None,
-    browser_approval_token: Optional[str] = None,
-    browser_approval_skip: bool = False,
 ) -> Dict[str, Any]:
     """acceptance_request.json 작성 후 데이터 dict 반환.
 
@@ -4714,10 +4710,6 @@ def _write_acceptance_request(
         required_sections_present: 필수 섹션 전부 존재 여부.
         temporary_phrases_absent: 임시 문구 없음 여부.
         validated_at: 검증 타임스탬프 (ISO 8601).
-        browser_click_confirmed: 로컬 브라우저 승인 클릭 완료 여부 (BUG-20260616-9DEF MT-2).
-        browser_click_at: 브라우저 클릭 시각 (ISO 8601) 또는 None.
-        browser_approval_token: sha256(nonce+session_token+click_at) 또는 None.
-        browser_approval_skip: PIPELINE_BROWSER_APPROVAL_SKIP=1 우회 여부.
     Returns:
         기록된 acceptance_request 데이터 dict (status=PENDING).
     Raises:
@@ -4762,15 +4754,14 @@ def _write_acceptance_request(
         "required_sections_present": required_sections_present,
         "temporary_phrases_absent": temporary_phrases_absent,
         "validated_at": validated_at,
-        # BUG-20260616-9DEF MT-2: 브라우저 클릭 승인 채널 필드
-        "browser_click_confirmed": bool(browser_click_confirmed),
-        "browser_click_at": browser_click_at,
-        "browser_approval_token": browser_approval_token,
-        "browser_approval_skip": bool(browser_approval_skip),
         "status": "PENDING",
     }
-    with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
+    # IMP-20260620-3BF4 MT-3: 원자적 쓰기(tempfile + os.replace)로 partial write 방지.
+    # pr_body_sha256 / packet_sha256 / verification_json_sha256 를 포함한 전체 dict가
+    # 단일 os.replace 로 동시 커밋되어 부분 기록(partial write) 상태를 차단한다.
+    # _write_json 은 상대경로(ACCEPTANCE_REQUEST_FILE)를 cwd 기준으로 해석하므로
+    # 기존 테스트의 cwd 격리(PIPELINE_STATE_PATH + cwd=tmp_path)와 호환된다.
+    _write_json(Path(ACCEPTANCE_REQUEST_FILE), data)
     return data
 
 
@@ -11556,15 +11547,17 @@ def _build_acceptance_display_model(
         gates["acceptance"] = "PENDING"
 
     # 승인 코드 / 거절 예시 — nonce 존재 시에만.
+    # BUG-20260620-3BF4 Round 2: PR 댓글에 사용자가 게시하는 표시 코드는 nonce 없는
+    # ACCEPT-{pipeline_id} 형식으로 통일한다(consumer _check_pr_approver_provenance 와 일치).
+    # nonce 자체는 acceptance_request.json 내부 SSoT 로 보존하여 gates accept CLI nonce 검증에
+    # 계속 사용된다. 여기서는 사용자에게 보이는 표시 코드에서만 nonce 를 제거한다.
     approval_code: Optional[str] = None
-    nonce = ""
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
-        nonce = str(acceptance_request.get("nonce") or "")
-        approval_code = f"ACCEPT-{pipeline_id}-{nonce}"
-    if nonce:
-        reject_example = f"REJECT-{pipeline_id}-{nonce}: 이유"
+        approval_code = f"ACCEPT-{pipeline_id}"
+    if pipeline_id:
+        reject_example = f"REJECT-{pipeline_id}: 이유"
     else:
-        reject_example = f"REJECT-{pipeline_id}-XXXXXXXX: 이유"
+        reject_example = "REJECT-<pipeline_id>: 이유"
 
     # requirements_summary — structured AC 충족표에서 계산 (하드코딩 금지).
     # must_verify=true 항목 중 result=PASS인 항목을 passed로 집계.
@@ -11851,15 +11844,16 @@ def _display_model_from_evidence(
         gate_status["acceptance"] = "PENDING"
 
     # 승인 코드 / 거절 예시.
+    # BUG-20260620-3BF4 Round 2: PR 댓글 표시 코드는 nonce 없는 ACCEPT-{pipeline_id} 형식.
+    # (consumer _check_pr_approver_provenance 와 producer 형식 일치 강제). nonce 는
+    # acceptance_request.json 내부 SSoT 로만 보존된다.
     approval_code: Optional[str] = None
-    nonce = ""
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
-        nonce = str(acceptance_request.get("nonce") or "")
-        approval_code = f"ACCEPT-{pipeline_id}-{nonce}"
+        approval_code = f"ACCEPT-{pipeline_id}"
     reject_example = (
-        f"REJECT-{pipeline_id}-{nonce}: 이유"
-        if nonce
-        else f"REJECT-{pipeline_id}-XXXXXXXX: 이유"
+        f"REJECT-{pipeline_id}: 이유"
+        if pipeline_id
+        else "REJECT-<pipeline_id>: 이유"
     )
 
     # requirements_summary — ac_table에서 result 기준 계산(하드코딩 금지).
@@ -12363,8 +12357,11 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
     accept_status = "PENDING"
     if isinstance(acceptance_request, dict) and acceptance_request.get("nonce"):
         accept_nonce = str(acceptance_request["nonce"])
-        acceptance_code = f"ACCEPT-{pipeline_id}-{accept_nonce}"
-        reject_example = f"REJECT-{pipeline_id}-{accept_nonce}: 이유"
+        # BUG-20260620-3BF4 Round 2: human_acceptance_packet.json 의 표시 코드(acceptance.code)는
+        # PR 댓글 형식과 동일하게 nonce 없는 ACCEPT-{pipeline_id} 로 통일한다. nonce 는 아래
+        # acceptance_obj["nonce"] (accept_nonce) 로 별도 보존되어 내부 SSoT 검증에 사용된다.
+        acceptance_code = f"ACCEPT-{pipeline_id}"
+        reject_example = f"REJECT-{pipeline_id}: 이유"
         accept_request_id = str(acceptance_request.get("request_id", "") or "")
         accept_status = str(acceptance_request.get("status", "PENDING") or "PENDING")
     # BUG-20260615-A35C MT-2: 표시 상태는 _collect_packet_evidence가 주입한 effective SSoT 값을
@@ -15367,10 +15364,14 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
         _state, evidence, packet_evidence=_packet_evidence
     )
     # req가 가진 nonce/PR을 display model에 반영(state보다 우선) — request-accept 직후 정합성.
+    # BUG-20260620-3BF4 Round 2: PR PENDING 안내 댓글에 표시하는 승인/거절 코드는 nonce 없는
+    # ACCEPT-{pipeline_id} / REJECT-{pipeline_id} 형식으로 통일한다. 사용자가 이 댓글을 그대로
+    # 복사해 PR 댓글에 게시하면 consumer _check_pr_approver_provenance(ACCEPT-{pipeline_id} 기대)
+    # 와 형식이 일치한다. nonce 는 acceptance_request.json 에 보존되어 gates accept CLI 에서만 사용.
     _req_nonce = str(req.get("nonce", "") or "")
     if _req_nonce:
-        display_model["approval_code"] = f"ACCEPT-{pipeline_id}-{_req_nonce}"
-        display_model["reject_example"] = f"REJECT-{pipeline_id}-{_req_nonce}: 이유"
+        display_model["approval_code"] = f"ACCEPT-{pipeline_id}"
+        display_model["reject_example"] = f"REJECT-{pipeline_id}: 이유"
         display_model["acceptance_display"] = "PENDING"
     if pr_url:
         display_model["pr_url"] = pr_url
@@ -15869,6 +15870,9 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                             ver_text = evidence_elem.text.strip()[:150]
                         elif ver_elem is not None and ver_elem.text:
                             ver_text = ver_elem.text.strip()[:150]
+                        elif crit.text and crit.text.strip():
+                            # Format 4c: 자식 요소 없이 criterion 직접 텍스트
+                            ver_text = crit.text.strip()[:150]
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text}")
 
@@ -16590,192 +16594,6 @@ def _get_ci_run_head_sha(run_id: str) -> Optional[str]:
     return None
 
 
-# ---------------------------------------------------------------------------
-# BUG-20260616-9DEF MT-1: 로컬 브라우저 클릭 승인 채널
-# ---------------------------------------------------------------------------
-
-# [Purpose]: BUG-20260616-8011 REJECT 후속 — 사용자가 로컬 브라우저에서 승인 버튼을
-#            직접 클릭해야 acceptance request가 완료되도록 하는 일회용 HTTP 승인 채널.
-#            agent가 packet 댓글을 재게시하는 자동 ACCEPT 우회를 한 단계 더 차단한다.
-# [Assumptions]: Python 표준 라이브러리 http.server 사용 가능. localhost 바인딩 가능.
-#                PIPELINE_BROWSER_APPROVAL_SKIP=1 환경에서는 서버를 실행하지 않는다(CI/테스트).
-# [Vulnerability & Risks]: 동일 OS 사용자로 실행되는 한 agent도 subprocess로 HTTP GET을
-#                          보낼 수 있어 완전한 분리는 아니다(외부 러너/서명자 필요). 토큰은
-#                          session_token 일치 확인으로 임의 클릭을 차단하나, localhost 접근
-#                          가능한 프로세스에는 약하다. 타임아웃 초과 시 fail-closed(confirmed=false).
-# [Improvement]: 별도 외부 서명자 프로세스 또는 OS 사용자 분리, 클릭 시 사용자 인증(OS 비밀번호)
-#                추가로 강화 가능.
-def _run_browser_approval_server(
-    state: Dict[str, Any],
-    nonce: str,
-    session_token: str,
-    timeout_seconds: int = 300,
-) -> Dict[str, Any]:
-    """로컬 브라우저 클릭 승인을 위한 일회용 HTTP 서버를 실행한다.
-
-    사용자가 콘솔에 표시된 URL을 브라우저로 열고 승인 버튼을 클릭하면
-    browser_click_confirmed=True와 browser_approval_token(sha256)을 반환한다.
-    PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수가 설정되면 서버를 실행하지 않고
-    즉시 skip 처리한다(CI/자동 테스트 안전).
-
-    Args:
-        state: 활성 pipeline_state (로깅용).
-        nonce: 발급된 acceptance nonce (토큰 계산에 사용).
-        session_token: 이 승인 세션의 고유 토큰 (URL 쿼리로 검증).
-        timeout_seconds: 클릭 대기 상한 (기본 300초). 초과 시 confirmed=False.
-    Returns:
-        {"browser_click_confirmed": bool, "browser_click_at": Optional[str],
-         "browser_approval_token": Optional[str], "browser_approval_skip": bool,
-         "approval_url": Optional[str]}
-    Raises:
-        TypeError: nonce 또는 session_token이 None인 경우.
-        ValueError: timeout_seconds가 0 이하인 경우.
-    """
-    if nonce is None:
-        raise TypeError("nonce must not be None")
-    if session_token is None:
-        raise TypeError("session_token must not be None")
-    if not isinstance(nonce, str):
-        raise TypeError(f"nonce must be str, got {type(nonce).__name__}")
-    if not isinstance(session_token, str):
-        raise TypeError(f"session_token must be str, got {type(session_token).__name__}")
-    if not isinstance(timeout_seconds, int):
-        raise TypeError(
-            f"timeout_seconds must be int, got {type(timeout_seconds).__name__}"
-        )
-    if timeout_seconds <= 0:
-        # negative/zero not allowed: 클릭 대기 시간은 양수여야 함 (즉시 타임아웃 방지).
-        raise ValueError(f"timeout_seconds must be > 0, got {timeout_seconds}")
-
-    result: Dict[str, Any] = {
-        "browser_click_confirmed": False,
-        "browser_click_at": None,
-        "browser_approval_token": None,
-        "browser_approval_skip": False,
-        "approval_url": None,
-    }
-
-    # PIPELINE_BROWSER_APPROVAL_SKIP=1 → 서버 미실행, skip 처리.
-    if os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1":
-        click_at = _now()
-        token = hashlib.sha256(
-            (nonce + session_token + click_at).encode("utf-8")
-        ).hexdigest()
-        result["browser_click_confirmed"] = True
-        result["browser_approval_skip"] = True
-        result["browser_click_at"] = click_at
-        result["browser_approval_token"] = token
-        try:
-            _log_event(state, "browser approval skipped via PIPELINE_BROWSER_APPROVAL_SKIP=1")
-        except Exception:  # noqa: BLE001 — 로깅 실패는 승인 흐름을 막지 않는다.
-            pass
-        return result
-
-    # 표준 라이브러리 lazy import (Python 3.9 호환).
-    import threading
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-
-    # 빈 포트 자동 선택.
-    _probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        _probe.bind(("", 0))
-        port = _probe.getsockname()[1]
-    finally:
-        _probe.close()
-
-    approval_url = f"http://localhost:{port}/approve?session={session_token}"
-    result["approval_url"] = approval_url
-
-    # 공유 상태 (핸들러 → 메인 스레드).
-    _shared: Dict[str, Any] = {"clicked": False, "click_at": None, "token": None}
-    _done = threading.Event()
-    _expected_session = session_token
-    _nonce_local = nonce
-
-    class _ApprovalHandler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 — http.server 규약
-            parsed = urllib.parse.urlparse(self.path)
-            if parsed.path != "/approve":
-                self.send_response(404)
-                self.end_headers()
-                return
-            query = urllib.parse.parse_qs(parsed.query)
-            session_vals = query.get("session", [])
-            if not session_vals or session_vals[0] != _expected_session:
-                self.send_response(403)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write("승인 세션 토큰이 일치하지 않습니다.".encode("utf-8"))
-                return
-            click_at = _now()
-            token = hashlib.sha256(
-                (_nonce_local + _expected_session + click_at).encode("utf-8")
-            ).hexdigest()
-            _shared["clicked"] = True
-            _shared["click_at"] = click_at
-            _shared["token"] = token
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            page = (
-                "<html><head><meta charset='utf-8'></head><body>"
-                "<h2>승인 완료</h2>"
-                "<p>이 창을 닫고 콘솔로 돌아가세요. 승인 코드가 표시됩니다.</p>"
-                "</body></html>"
-            )
-            self.wfile.write(page.encode("utf-8"))
-            _done.set()
-
-        def log_message(self, *args: Any) -> None:  # noqa: D401 — 콘솔 소음 억제
-            return
-
-    httpd = HTTPServer(("localhost", port), _ApprovalHandler)
-    httpd.timeout = 1  # handle_request 폴링 간격(초).
-
-    def _serve() -> None:
-        deadline = _time_monotonic() + float(timeout_seconds)
-        while not _done.is_set() and _time_monotonic() < deadline:
-            httpd.handle_request()
-
-    try:
-        _log_event(state, f"browser approval server started on port {port}")
-    except Exception:  # noqa: BLE001
-        pass
-
-    server_thread = threading.Thread(target=_serve, daemon=True)
-    server_thread.start()
-    _done.wait(timeout=float(timeout_seconds))
-    try:
-        httpd.server_close()
-    except Exception:  # noqa: BLE001
-        pass
-
-    if _shared["clicked"]:
-        result["browser_click_confirmed"] = True
-        result["browser_click_at"] = _shared["click_at"]
-        result["browser_approval_token"] = _shared["token"]
-        try:
-            _log_event(state, "browser approval click confirmed")
-        except Exception:  # noqa: BLE001
-            pass
-    else:
-        # 타임아웃 — fail-closed: confirmed=False 유지.
-        try:
-            _log_event(
-                state,
-                f"browser approval timed out after {timeout_seconds}s (no click)",
-            )
-        except Exception:  # noqa: BLE001
-            pass
-    return result
-
-
-def _time_monotonic() -> float:
-    """time.monotonic() 래퍼 (테스트 monkeypatch 지점 분리용)."""
-    import time as _time_mod
-    return _time_mod.monotonic()
-
-
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
     """gates request-accept 핸들러: stale 검증 + nonce 발급 + packet 자동 생성 + PR 본문 자동 업데이트.
 
@@ -17022,90 +16840,14 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         )
         nonce = req["nonce"]
 
+    # BUG-20260620-3BF4 MT-2: gates accept CLI 흐름은 기존대로 nonce 포함 형식을 유지한다
+    # (--acceptance-code ACCEPT-{pipeline_id}-{nonce}). nonce는 acceptance_request.json에
+    # 계속 저장되어 내부 SSoT 검증에 사용된다.
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
-    reject_code = f"REJECT-{pipeline_id}-{nonce}"
-
-    # BUG-20260616-9DEF MT-2: 로컬 브라우저 클릭 승인 채널.
-    # nonce 발급 직후, 사용자가 로컬 브라우저에서 승인 버튼을 직접 클릭해야 한다.
-    # 클릭 미완료(타임아웃) 시 fail-closed로 BLOCKED — nonce는 발급됐으나 accept 단계에서 차단된다.
-    _session_token = hashlib.sha256(
-        (str(nonce) + str(req.get("request_id", "")) + _now()).encode("utf-8")
-    ).hexdigest()[:24]
-
-    # PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수만으로 우회를 허용한다.
-    # 비대화형/CI 환경 자동 감지는 BUG-20260617-788A에서 제거됨 — 자동 에이전트 우회 차단.
-    _browser_skip = os.environ.get("PIPELINE_BROWSER_APPROVAL_SKIP") == "1"
-
-    if _browser_skip:
-        # 서버 호출을 short-circuit하고 skip 결과를 직접 구성한다(300초 블로킹 회피).
-        # _run_browser_approval_server의 PIPELINE_BROWSER_APPROVAL_SKIP 경로와 동일한
-        # 토큰 산출식(sha256(nonce+session_token+click_at))을 사용해 일관성을 유지한다.
-        _click_at = _now()
-        _browser_result = {
-            "browser_click_confirmed": True,
-            "browser_click_at": _click_at,
-            "browser_approval_token": hashlib.sha256(
-                (str(nonce) + _session_token + _click_at).encode("utf-8")
-            ).hexdigest(),
-            "browser_approval_skip": True,
-            "approval_url": None,
-        }
-        try:
-            _log_event(
-                state,
-                "browser approval skipped (PIPELINE_BROWSER_APPROVAL_SKIP=1)",
-            )
-        except Exception:  # noqa: BLE001 — 로깅 실패는 승인 흐름을 막지 않는다.
-            pass
-    else:
-        print()
-        print("  ★ 브라우저 승인 필요: 아래 URL을 브라우저에서 열고 '승인' 버튼을 클릭하세요.")
-        print(f"     http://localhost:<PORT>/approve?session={_session_token}")
-        print("     (실제 PORT와 전체 URL은 서버 시작 직후 콘솔에 표시됩니다. 5분 내 클릭하지 않으면 차단됩니다.)")
-        _browser_result = _run_browser_approval_server(
-            state, str(nonce), _session_token, timeout_seconds=300
-        )
-    if _browser_result.get("approval_url"):
-        print(f"  [브라우저 승인 URL] {_browser_result['approval_url']}")
-
-    # acceptance_request.json에 브라우저 승인 필드 기록 (디스크 + req dict 동기화).
-    # _write_acceptance_request와 동일한 ACCEPTANCE_REQUEST_FILE(상대 경로, cwd)을 사용한다.
-    try:
-        _req_path_browser = Path(ACCEPTANCE_REQUEST_FILE)
-        if _req_path_browser.exists():
-            _req_browser = json.loads(
-                _req_path_browser.read_text(encoding="utf-8", errors="replace")
-            )
-            _req_browser["browser_click_confirmed"] = bool(
-                _browser_result.get("browser_click_confirmed", False)
-            )
-            _req_browser["browser_click_at"] = _browser_result.get("browser_click_at")
-            _req_browser["browser_approval_token"] = _browser_result.get(
-                "browser_approval_token"
-            )
-            _req_browser["browser_approval_skip"] = bool(
-                _browser_result.get("browser_approval_skip", False)
-            )
-            _req_path_browser.write_text(
-                json.dumps(_req_browser, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            req = _req_browser
-    except (OSError, json.JSONDecodeError) as _exc:
-        print(YELLOW(f"  [브라우저 승인] acceptance_request.json 기록 실패: {_exc}"))
-
-    # fail-closed: skip이 아닌데 클릭이 확인되지 않으면(타임아웃 등) 차단.
-    if not _browser_result.get("browser_approval_skip", False) and not _browser_result.get(
-        "browser_click_confirmed", False
-    ):
-        _die(
-            "[BLOCKED] failure_code=browser_approval_required\n"
-            "  actual: 로컬 브라우저 승인 버튼 클릭이 확인되지 않았습니다(타임아웃).\n"
-            "  expected: 표시된 URL을 브라우저로 열고 '승인' 버튼을 5분 내에 클릭해야 합니다.\n"
-            "  PIPELINE_BROWSER_APPROVAL_SKIP=1 은 테스트/CI 환경에서만 사용하세요.\n"
-            "  minimal_rerun: python pipeline.py gates request-accept --evidence <결과물-경로>",
-            exit_code=1,
-        )
+    # BUG-20260620-3BF4 MT-2: 사용자가 GitHub PR 댓글에 게시하는 승인 코드는 nonce 없는
+    # 단순 형식 ACCEPT-{pipeline_id} 로 표시한다. (PR 댓글 승인 방식 단순화.)
+    pr_comment_accept_code = f"ACCEPT-{pipeline_id}"
+    pr_comment_reject_code = f"REJECT-{pipeline_id}"
 
     # GitHub PENDING 안내 댓글 생성 (gh CLI 없으면 건너뜀) — request-accept 전용
     # REJECT-IMP-20260614-D278: ACCEPTED 완료 댓글 전용 함수는 accept 경로(_finalize_post_accept)
@@ -17222,17 +16964,18 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         print(f"    1. 위 PR 링크({pr_url})를 엽니다.")
     else:
         print("    1. PR 링크를 엽니다 (github.com에서 해당 PR을 찾으세요).")
-    print("    2. 댓글 입력창에 아래 코드를 정확히 한 줄로 입력합니다.")
+    print("    2. 댓글 입력창에 아래 [승인 코드]를 정확히 한 줄(단독)로 입력합니다.")
     print("    3. 코드 외에 다른 내용을 입력하면 승인이 거부됩니다.")
     print("    4. 댓글을 게시한 뒤, 아래 명령을 실행합니다:")
     print(f"       python pipeline.py gates accept --result ACCEPT --evidence {evidence} --acceptance-code {accept_code}")
     print()
-    print("  [승인 코드]")
+    # BUG-20260620-3BF4 MT-2: 사용자가 PR 댓글에 게시하는 승인 코드는 nonce 없는 단순 형식.
+    print("  [승인 코드] — GitHub PR에 단독 댓글로 아래 코드를 게시하세요.")
     print()
-    print(f"  {accept_code}")
+    print(f"  {pr_comment_accept_code}")
     print()
     print("  [거절 예시]")
-    print(f"  {reject_code}: 거절 이유")
+    print(f"  {pr_comment_reject_code}: 거절 이유")
     print("=" * 62)
     print()
     print(f"  승인 요청 ID: {req['request_id']}  (acceptance_request.json 저장됨)")
@@ -17373,8 +17116,10 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         if (_ar_from_file is not None and _ar_from_file.get("pipeline_id") == pipeline_id)
         else (state.get("acceptance_request") or {})
     )
-    nonce: str = str(acceptance_req.get("nonce", "") or "")
-    accept_code: str = f"ACCEPT-{pipeline_id}-{nonce}" if (pipeline_id and nonce) else f"ACCEPT-{pipeline_id}-<nonce>"
+    # BUG-20260620-3BF4 MT-2: PR 댓글 승인 코드 형식을 ACCEPT-{pipeline_id}로 단순화.
+    # nonce는 acceptance_request.json 내부 SSoT 검증용으로만 보존하고, 사용자가 PR 댓글로
+    # 게시하는 승인 코드에서는 제거한다. 따라서 댓글 비교 기준은 nonce 없는 ACCEPT-{pipeline_id}.
+    accept_code: str = f"ACCEPT-{pipeline_id}" if pipeline_id else "ACCEPT-<pipeline_id>"
 
     # BUG-20260612-B96C AC-7: CONSUMED idempotency.
     # 이미 승인 처리된 파이프라인은 PR 댓글 재확인을 요구하지 않고 즉시 PASS 반환한다.
@@ -17526,9 +17271,10 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         _ACCEPTANCE_PACKET_PENDING_MARKER,
         _ACCEPTANCE_PACKET_ACCEPTED_MARKER,
     )
-    # 비교 기준 코드: nonce가 없으면 ACCEPT-<pipeline_id> 형식을 fallback으로 사용.
-    _expected_code: str = accept_code if nonce else ("ACCEPT-" + pipeline_id)
-    # stale nonce 탐지용 prefix (같은 pipeline_id, 다른 nonce 판별).
+    # BUG-20260620-3BF4 MT-2: 비교 기준 코드는 nonce 없는 ACCEPT-{pipeline_id}.
+    # (사용자는 PR 댓글에 ACCEPT-{pipeline_id} 단독으로 게시한다.)
+    _expected_code: str = accept_code if pipeline_id else "ACCEPT-<pipeline_id>"
+    # nonce 포함 prefix (구 형식 ACCEPT-{pipeline_id}-{nonce} 댓글을 stale/mismatch로 분류).
     _accept_prefix: str = f"ACCEPT-{pipeline_id}-" if pipeline_id else "ACCEPT-"
 
     # 과거/현재 발급된 nonce 집합 수집 — stale_nonce vs code_mismatch 정확 분류용.
@@ -17548,6 +17294,30 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
     # packet 댓글 자체를 승인으로 처리하려는 자동 ACCEPT 시도를 감지하기 위함.
     _auto_accept_quote_hit: bool = False
     _auto_accept_comment_id: str = ""
+    # BUG-20260620-3BF4 MT-2: PR 댓글 timestamp fail-closed 추적.
+    # 승인 후보 댓글(packet 마커 없는, ACCEPT-{pipeline_id} 일치/유사 댓글)에 created_at /
+    # createdAt 타임스탬프가 없으면 fail-closed로 pr_comment_timestamp_missing BLOCKED.
+    _timestamp_missing_hit: bool = False
+    _timestamp_missing_cid: str = ""
+
+    def _comment_timestamp(_c: Dict[str, Any]) -> str:
+        """댓글 dict에서 created_at 또는 createdAt 타임스탬프를 추출한다.
+
+        Args:
+            _c: gh PR 댓글 dict.
+        Returns:
+            타임스탬프 문자열 (없으면 빈 문자열).
+        Raises:
+            TypeError: _c가 dict가 아닌 경우.
+        """
+        if _c is None:
+            raise TypeError("comment must not be None")
+        if not isinstance(_c, dict):
+            raise TypeError(f"comment must be dict, got {type(_c).__name__}")
+        _ts = _c.get("created_at")
+        if _ts is None:
+            _ts = _c.get("createdAt")
+        return str(_ts or "")  # allowed: gh JSON 타임스탬프는 문자열; 부재 시 "" 반환
 
     for _comment in _comments:
         _author: str = (
@@ -17570,13 +17340,51 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
                 _auto_accept_comment_id = _cid
             continue
         _stripped: str = _body.strip()
-        # AC-3 + AC-6: 완전 일치 → 즉시 PASS (다른 실패 댓글보다 우선).
-        if _expected_code and _stripped == _expected_code:
+        # BUG-20260620-3BF4 REJECT fix: 정확히 한 줄 — strip 후 완전 일치만 허용.
+        # "코드 외 다른 내용 금지 / 정확히 한 줄" 요구에 따라 첫 줄 일치가 아니라
+        # 전체 본문 strip 완전 일치만 승인 후보로 인정한다.
+        _is_exact_candidate: bool = bool(_expected_code) and _stripped == _expected_code
+        # AC-3 + AC-6: ACCEPT-{pipeline_id} 일치 → 승인 후보.
+        if _is_exact_candidate:
+            # timestamp fail-closed: created_at/createdAt 없으면 PASS 처리하지 않고
+            # pr_comment_timestamp_missing BLOCKED 후보로 기록한다.
+            _ts_str: str = _comment_timestamp(_comment)
+            if not _ts_str:
+                _timestamp_missing_hit = True
+                _timestamp_missing_cid = _cid
+                continue
+            # BUG-20260620-3BF4 REJECT fix: replay 방어 — request_created_at 이후 댓글만 허용.
+            # acceptance_request.json의 created_at 로드 후 댓글 타임스탬프와 비교.
+            # 파싱 실패 시 fail-closed BLOCKED.
+            try:
+                _request_created_at_str: str = str(
+                    acceptance_req.get("created_at", "") or ""
+                )
+                if not _request_created_at_str:
+                    # acceptance_request.created_at 없으면 fail-closed
+                    _timestamp_missing_hit = True
+                    _timestamp_missing_cid = _cid
+                    continue
+                _request_dt = _datetime.fromisoformat(
+                    _request_created_at_str.replace("Z", "+00:00")
+                )
+                _comment_dt = _datetime.fromisoformat(_ts_str.replace("Z", "+00:00"))
+                if _comment_dt <= _request_dt:
+                    # request 생성 이전 또는 동시 댓글 — replay 공격 차단
+                    _timestamp_missing_hit = True
+                    _timestamp_missing_cid = _cid
+                    continue
+            except (ValueError, TypeError):
+                # 파싱 실패 시 fail-closed
+                _timestamp_missing_hit = True
+                _timestamp_missing_cid = _cid
+                continue
             _found_approver = _author
             _found_comment_id = _cid
             break
-        # AC-4: 같은 pipeline_id prefix 이고, 댓글의 nonce 부분이 실제 발급된 nonce 와
-        #       정확히 일치하는 경우에만 stale_nonce.
+        # AC-4 (구 형식 호환): 같은 pipeline_id prefix 의 nonce 포함 댓글
+        #       (ACCEPT-{pipeline_id}-{nonce}) 은 더 이상 유효한 형식이 아니다.
+        #       nonce 부분이 실제 발급된 nonce 와 일치하면 stale_nonce, 아니면 code_mismatch.
         if (
             pipeline_id
             and _stripped.startswith(_accept_prefix)
@@ -17617,6 +17425,28 @@ def _check_pr_approver_provenance(state: Dict[str, Any]) -> Dict[str, Any]:
         f"PR #{pr_number} / 허용 승인자: {allowed_approver} / 파이프라인: {pipeline_id} / "
         f"기대 승인 코드: {_expected_code}"
     )
+
+    # BUG-20260620-3BF4 MT-2: timestamp fail-closed.
+    # ACCEPT-{pipeline_id} 형식의 승인 후보 댓글이 있었으나 created_at/createdAt 타임스탬프가
+    # 없으면, 승인 댓글의 진위/시점을 확인할 수 없으므로 PASS 처리하지 않고 BLOCKED 한다.
+    # (gh 응답 변형/위조 댓글 주입 방어 — fail-closed.) auto_accept/stale/mismatch보다
+    # 우선하여 차단한다.
+    if _timestamp_missing_hit:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "pr_comment_timestamp_missing",
+            "message": (
+                "[PIPELINE ERROR] 승인 코드 댓글에 작성 시각(created_at)이 없습니다 "
+                "(pr_comment_timestamp_missing). 댓글의 진위/시점을 확인할 수 없어 "
+                "승인을 거부합니다(fail-closed). 허용 승인자가 GitHub PR에 승인 코드를 "
+                f"직접 댓글로 다시 남겨야 합니다. {_common_tail}"
+            ),
+            "approver": None,
+            "comment_id": _timestamp_missing_cid or None,
+            "pr_number": pr_number,
+            "checked_at": _checked_at,
+            "provenance": False,
+        }
 
     # BUG-20260616-8011 MT-1: 자동 ACCEPT 시도 차단 (protocol_violation_auto_accept).
     # 독립된 사용자 승인 댓글(packet 마커 없는 정확 일치)이 하나도 없는 상태에서,
@@ -18734,47 +18564,6 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 "checked_at": _prov_result.get("checked_at"),
             }
             _save(state)
-
-        # BUG-20260616-9DEF MT-3: 로컬 브라우저 클릭 승인 검증 (provenance 게이트 이후, 최종 방어선).
-        # acceptance_request.json의 browser_click_confirmed가 True가 아니고
-        # browser_approval_skip도 True가 아니면 browser_approval_required로 BLOCKED.
-        # 기존 packet 마커 댓글 차단(8011, provenance)이 먼저 평가된 뒤, 브라우저 클릭이
-        # 최종 추가 방어선으로 적용된다(이중 방어).
-        if accept_decision == "ACCEPT":
-            _browser_confirmed = _req.get("browser_click_confirmed") is True
-            _browser_skipped = _req.get("browser_approval_skip") is True
-            if not _browser_confirmed and not _browser_skipped:
-                _record_failure_packet(
-                    state, "acceptance", {},
-                    command=[sys.executable, "pipeline.py", "gates", "request-accept",
-                             "--evidence", str(getattr(args, "evidence", "<result-path>") or "")],
-                    note="browser_click_confirmed != True and browser_approval_skip != True",
-                    status="BLOCKED", phase="harness",
-                    failure_code="browser_approval_required",
-                    failure_category="missing_evidence",
-                    summary_ko=(
-                        "로컬 브라우저 승인 클릭이 확인되지 않았습니다. "
-                        "gates request-accept 실행 시 표시된 URL을 브라우저로 열고 '승인' 버튼을 "
-                        "직접 클릭해야 합니다."
-                    ),
-                    expected="acceptance_request.json: browser_click_confirmed=true (또는 browser_approval_skip=true)",
-                    actual=(
-                        f"browser_click_confirmed={_req.get('browser_click_confirmed')!r}, "
-                        f"browser_approval_skip={_req.get('browser_approval_skip')!r}"
-                    ),
-                    exit_code=1, owner="Pipeline Manager", return_phase="build",
-                    required_actions=[
-                        "python pipeline.py gates request-accept 를 실행하고 표시된 URL을 브라우저로 연 뒤 '승인' 버튼을 클릭하세요.",
-                        "테스트/CI 환경에서는 PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수를 사용하세요.",
-                    ],
-                    retry_allowed=True,
-                )
-                _save(state)
-                _die(
-                    "[BLOCKED] failure_code=browser_approval_required\n"
-                    "  로컬 브라우저 승인 클릭이 확인되지 않았습니다.\n"
-                    "  gates request-accept 후 표시된 URL을 브라우저로 열고 '승인' 버튼을 클릭하세요."
-                )
 
         deployment: Optional[Dict[str, Any]] = None
         evidence_validation: Optional[Dict[str, Any]] = None

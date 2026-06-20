@@ -62,8 +62,9 @@ AC 검증이 모두 통과해도 PR 본문이 완성되지 않으면 `gates requ
 1. PR 본문의 모든 임시 문구 제거
 2. 5개 필수 섹션 작성 완료
 3. `python pipeline.py gates request-accept --evidence <경로>`
-4. 사용자에게 승인 코드 전달
-5. 사용자가 코드 입력 후 `python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>`
+4. 사용자에게 PR 댓글용 승인 코드 `ACCEPT-<pid>` 전달 (nonce 없음)
+5. 사용자가 PR 댓글에 `ACCEPT-<pid>`를 게시한 뒤, Pipeline Manager가 `acceptance_request.json`의
+   nonce를 채워 `python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>` 실행 (CLI nonce 검증용)
 
 ### pr_body_stale 오류 발생 시
 
@@ -179,9 +180,35 @@ python pipeline.py gates technical
 python pipeline.py gates oracle
 python pipeline.py gates github-ci --repo hojiyong2-commits/Pipeline
 python pipeline.py gates request-accept --evidence <결과물-경로>
-# 사용자가 승인 코드 입력 후:
+# 사용자가 PR 댓글에 ACCEPT-<pid> (nonce 없음) 게시 후:
+# (아래 CLI는 acceptance_request.json의 nonce를 채운 ACCEPT-<pid>-<nonce> 형식 — CLI 검증 전용)
 python pipeline.py gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>
 ```
+
+## PR 댓글 기반 User Acceptance 승인 (BUG-20260620-3BF4)
+
+User Acceptance는 **GitHub PR 댓글**로 처리합니다. 별도의 로컬 브라우저 승인 서버를 띄우지
+않으며, `localhost` 승인 페이지 또는 브라우저 창을 여는 절차는 더 이상 사용하지 않습니다.
+
+### 승인 절차
+
+1. `gates request-accept --evidence <결과물-경로>` 실행 → PR 댓글용 승인 코드
+   `ACCEPT-{pipeline_id}` (예: `ACCEPT-BUG-20260620-3BF4`)가 발급됩니다. nonce는
+   `acceptance_request.json` 내부에만 보존되며 PR 댓글 코드에는 포함되지 않습니다.
+2. **사용자가 직접** GitHub PR에 위 승인 코드를 **단독 댓글**로 게시하면 승인됩니다.
+   (예: `ACCEPT-BUG-20260620-3BF4` 한 줄만 작성)
+3. Pipeline Manager가 `acceptance_request.json`의 nonce를 채워
+   `gates accept --result ACCEPT --evidence <경로> --acceptance-code ACCEPT-<pid>-<nonce>`
+   를 실행합니다. (CLI nonce 검증용 — 사용자가 PR에 적는 코드와는 별개입니다.)
+
+### 주의 사항 (절대 준수)
+
+- **Claude/Codex가 대신 댓글을 쓰면 안 됩니다.** 반드시 실제 사용자가 직접 PR에 승인 댓글을
+  작성해야 합니다. 에이전트가 승인 코드를 추측하거나 대신 게시하는 것은 금지됩니다.
+- 파이프라인이 자동으로 생성한 안내 댓글(`<!-- pipeline-human-acceptance-packet -->` 마커 포함)은
+  승인 댓글로 인정되지 않으며, `gates accept`는 이러한 자동 생성 댓글을 승인 판정에서 제외합니다.
+- 세션 요약의 "다음 단계: gates accept 실행"은 사용자 승인이 아닙니다. 사용자가 **이번 대화에서**
+  직접 승인 코드를 게시/입력한 경우에만 `gates accept`를 실행합니다.
 
 ## User Acceptance 표시 상태값 정의
 
