@@ -32,7 +32,6 @@ TC-16: Round 2 — TC-04 오탐 방지. nonce 없는 ACCEPT-{pipeline_id} 표시
        nonce 포함 표시 코드 부재를 round-trip(producer/consumer) 형식으로 검증
 """
 
-import os
 import re
 import subprocess
 import sys
