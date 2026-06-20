@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-20T03:25:57Z",
+  "pipeline_id": "BUG-20260619-8AC8",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "a1aa460fec2d636a7a36b72fd3440b602c87d6d4",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-20T03:14:30Z",
+    "report_file": "dev_handover.xml",
+    "evidence": ".gitignore,pipeline.py,tests/e2e/test_pr_diff_artifact_8ac8.py,tests/oracles/BUG-20260619-8AC8/normal_clean_diff/given.json,tests/oracles/BUG-20260619-8AC8/normal_clean_diff/expected.json,tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/given.json,tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/expected.json,tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/given.json,tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/expected.json,tests/oracles/BUG-20260619-8AC8/error_git_unavailable/given.json,tests/oracles/BUG-20260619-8AC8/error_git_unavailable/expected.json,tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/given.json,tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/expected.json"
+  },
+  "agent_run": {
+    "run_id": "dev-9eae7909a2390514",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "c72a180aa388864b346b0c6a81583b6bc36cbe3139fe51e338b3fe9f4b95ba15",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260619-8AC8/dev/agent_receipt_dev-9eae7909a2390514.json",
+    "receipt_sha256": "dec0d0a48389433594b1b13f530a9e5e311c9386ee0c1c88f93771a2bbc950e9",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260619-8AC8\\dev\\dev-9eae7909a2390514.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260619-8AC8\\dev\\dev-9eae7909a2390514.json",
+      "path": ".pipeline/phase_evidence/BUG-20260619-8AC8/dev/agent_receipt_dev-9eae7909a2390514.json",
+      "sha256": "dec0d0a48389433594b1b13f530a9e5e311c9386ee0c1c88f93771a2bbc950e9",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260619-8AC8/dev/report_dev_handover.xml",
+      "sha256": "c72a180aa388864b346b0c6a81583b6bc36cbe3139fe51e338b3fe9f4b95ba15",
+      "size_bytes": 4621,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260619-8AC8/dev/scope_manifest_scope_manifest.json",
+      "sha256": "61a9b6dd47be03205b52dbbbeef72e5456fdb89138aa3c22b4c3f211e5a90095",
+      "size_bytes": 5363,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": ".gitignore",
+      "sha256": "c5545ce2c2831b12dd2f897dd9b75c151b29f3c7dfe87325407e3af1ebbba87b",
+      "size_bytes": 2201
+    },
+    {
+      "path": "pipeline.py",
+      "sha256": "776a960b7ef8825518ff95cafd4e51503c6bc6d80ec8cfa48387a682b03a14cc",
+      "size_bytes": 1085800
+    },
+    {
+      "path": "tests/e2e/test_pr_diff_artifact_8ac8.py",
+      "sha256": "9a5c1e2830f8c7b49be92cf038f37b66ea96677d7b744bc266a6c9696d33e839",
+      "size_bytes": 9125
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/normal_clean_diff/given.json",
+      "sha256": "3db2d7937339edc76097186a406275277a07b87611476b595ff0dda8f9eb1f89",
+      "size_bytes": 225
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/normal_clean_diff/expected.json",
+      "sha256": "c80f7fd5bc200c4e8083c472e0b977173ce94b4c0223b2f1b123c011c0fafab4",
+      "size_bytes": 45
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/given.json",
+      "sha256": "60b63634acf4c42e2695634fd813cc7e217650d0a1a84cf3ad6a1ac1033e52d7",
+      "size_bytes": 215
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/expected.json",
+      "sha256": "e135e33f627a71d9febe58652128c29f2621c2687fae3cc7a0c52b02e7a0c512",
+      "size_bytes": 121
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/given.json",
+      "sha256": "3bd8e2a930a70e6b06024c1b0985c6128535a34c49203fdffb5f2774da5e4233",
+      "size_bytes": 222
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/expected.json",
+      "sha256": "d380401e8477dd41f78c6f1d449526c04644937a6bce84a894fd9165e7ccb662",
+      "size_bytes": 122
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/error_git_unavailable/given.json",
+      "sha256": "0c5863c168ac246e4be123d55dd42d34222eed8f0a0ee7ebdd94e82fccc9ef00",
+      "size_bytes": 179
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/error_git_unavailable/expected.json",
+      "sha256": "4bab88988eea740a91913ccd1e7bbfe8406e1a484fcfa19f548a05c8f913aa84",
+      "size_bytes": 63
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/given.json",
+      "sha256": "f261af7a9b28f07d234dc62c42c2ffec9fd5b91e495a84a3648588af8e2b1dcf",
+      "size_bytes": 63
+    },
+    {
+      "path": "tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/expected.json",
+      "sha256": "17b649cc921c68bde8824ab5e088d4f617e390cab73abf2a6eb4022792c72057",
+      "size_bytes": 79
+    }
+  ],
+  "local_only_files": []
+}

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260619-8AC8</pipeline_id>
+  <agent_run_id>dev-80340ad8f62db37b</agent_run_id>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>.gitignore</file>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_pr_diff_artifact_8ac8.py</file>
+      <file>tests/oracles/BUG-20260619-8AC8/normal_clean_diff/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/normal_clean_diff/expected.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/expected.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/expected.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/error_git_unavailable/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/error_git_unavailable/expected.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/expected.json</file>
+    </files_to_modify>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_functions>
+      <function>_check_pr_diff_artifact_pollution (pipeline.py)</function>
+    </target_functions>
+    <change_summary>MT-1: .gitignore 와일드카드 패턴 강화. MT-2: _check_pr_diff_artifact_pollution 신규 추가 + _cmd_gates_request_accept 연동. MT-3: E2E 테스트 4케이스 + oracle 8개. MT-4: returncode != 0 시 fail-open→fail-closed 수정 + edge oracle + E2E 테스트 추가.</change_summary>
+    <affected_call_sites>
+      <site>_cmd_gates_request_accept (pipeline.py) — _check_pr_diff_artifact_pollution 호출</site>
+    </affected_call_sites>
+    <state_mutations>none — 구현 함수는 pure function (상태 변경 없음)</state_mutations>
+  </impact_analysis>
+
+  <implementation_results>
+    <mt id="MT-1">
+      <status>PASS</status>
+      <files>.gitignore</files>
+      <summary>.gitignore 와일드카드 패턴 추가 (step_plan*.xml, module_*.xml, manager_*.xml, oracle_result*.txt 등)</summary>
+    </mt>
+    <mt id="MT-2">
+      <status>PASS</status>
+      <files>pipeline.py</files>
+      <summary>_check_pr_diff_artifact_pollution 신규 함수: git diff origin/main...HEAD 결과를 fnmatch로 검사, 실행 산출물 감지 시 BLOCKED. git 없으면 fail-closed BLOCKED(git_unavailable).</summary>
+    </mt>
+    <mt id="MT-3">
+      <status>PASS</status>
+      <files>tests/e2e/test_pr_diff_artifact_8ac8.py, tests/oracles/BUG-20260619-8AC8/*/given.json, tests/oracles/BUG-20260619-8AC8/*/expected.json</files>
+      <summary>E2E 테스트 4케이스 + oracle 8개. pytest 5 passed.</summary>
+    </mt>
+    <mt id="MT-4">
+      <status>PASS</status>
+      <files>pipeline.py, tests/e2e/test_pr_diff_artifact_8ac8.py, tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/given.json, tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/expected.json</files>
+      <summary>returncode != 0 fail-open→fail-closed 수정. PIPELINE_ARTIFACT_CHECK_ALLOW_GIT_DIFF_FAIL=1 격리용 환경변수. edge oracle + test_edge_git_diff_nonzero_exit 추가. pytest 7 passed.</summary>
+    </mt>
+  </implementation_results>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <evidence>
+      <file>.gitignore</file>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_pr_diff_artifact_8ac8.py</file>
+      <file>tests/oracles/BUG-20260619-8AC8/normal_clean_diff/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/normal_clean_diff/expected.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_step_plan_in_diff/expected.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_pipeline_state_in_diff/expected.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/error_git_unavailable/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/error_git_unavailable/expected.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/given.json</file>
+      <file>tests/oracles/BUG-20260619-8AC8/edge_git_diff_nonzero_exit/expected.json</file>
+    </evidence>
+    <qa_entry_condition>MT-1~MT-4 모두 module QA PASS. pytest tests/e2e/test_pr_diff_artifact_8ac8.py 7 passed 확인 후 QA 진입.</qa_entry_condition>
+  </handover>
+</dev_handover>
