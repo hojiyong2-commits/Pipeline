@@ -38,7 +38,7 @@
       "label": "report",
       "source": "dev_handover.xml",
       "path": ".pipeline/phase_evidence/BUG-20260620-3BF4/dev/report_dev_handover.xml",
-      "sha256": "18dd9ff46bd7cc4aea9b8cb44881ea05e0d2df053a70a1d43d8e3706ccce9033",
+      "sha256": "f891ad83cdc8257ba7a5c26aa1364435802ad945f9319789ef78f529574c10b4",
       "size_bytes": 2959,
       "requires_force_add": true
     },
@@ -46,32 +46,11 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/BUG-20260620-3BF4/dev/scope_manifest_scope_manifest.json",
-      "sha256": "89a01f004eee89c0ce473670faa98927417e142a2290955341ce4280300c5b4e",
+      "sha256": "2ad07fa30fed978e360a68ebba930dfd1e26cc91c7d589728fd564da899b11f1",
       "size_bytes": 1058,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "dba7b1d6cc4c4fd47f6d3a84914936e182fa20183d95bb8830c0bac08cd87fd1",
-      "size_bytes": 1066741
-    },
-    {
-      "path": "tests/e2e/test_pr_comment_accept_3bf4.py",
-      "sha256": "149628896fd4ae70b53e1bc6b9a97addb078297717b410cec9110c5899eb802c",
-      "size_bytes": 7983
-    },
-    {
-      "path": "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
-      "sha256": "56a2df95d2937fa04d7b4d66675c37598453da8a50fe2192a7d5451892ea4806",
-      "size_bytes": 28977
-    },
-    {
-      "path": ".claude/agents/pipeline-manager-agent.md",
-      "sha256": "de5f411e93965017bc587a13de5d39af650472da4aad94a462efcd92d286a4ac",
-      "size_bytes": 13373
-    }
-  ],
+  "workspace_file_checks": null,
   "local_only_files": []
 }
