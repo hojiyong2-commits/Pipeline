@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260619-8AC8</pipeline_id>
+  <agent_run_id>qa-5aaa4d7ccfd30b1e</agent_run_id>
+
+  <handover_verification>
+    <from>dev-agent</from>
+    <evidence_present>PASS — dev_handover.xml에 dev-agent→qa-agent 인계 + 13개 구체 파일명 명시</evidence_present>
+    <anti_gaming_read>PASS — step_plan_8AC8.xml에 anti_gaming_read=true</anti_gaming_read>
+    <judgment_calls_resolved>N-A — judgment_calls 블록 없음 (decision_questions만 존재, user_answer 기재됨)</judgment_calls_resolved>
+    <decomposition_audit_present>PASS — step_plan_8AC8.xml에 decomposition_audit 블록 존재 (SPLIT_REQUIRED, grep_executions=3)</decomposition_audit_present>
+  </handover_verification>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님 (내부 git diff subprocess 호출은 WA 대상 외)</wa>
+    <ui>N-A — UI 카테고리 아님</ui>
+    <fs>N-A — 파일 쓰기/읽기 신규 로직 없음 (테스트 _read_json은 utf-8/cp949/latin-1 fallback 구현으로 양호)</fs>
+    <pd>PASS — 신규 함수는 pure function, 단일 SSoT 상수(PR_DIFF_ARTIFACT_PATTERNS), 모듈 분리 양호. TypedDict 미사용이나 Dict[str,Any] 명시적 반환 계약</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. (참고: gates secrets exit 0)</sec>
+    <al>PASS — git 바이너리 부재/예외(OSError/TimeoutExpired/FileNotFoundError)/returncode!=0 전부 방어, fail-closed. 빈 diff_files 처리, isinstance 타입 가드(테스트)</al>
+    <build>N-A — BUILD 태그 없음 (meta-task, EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+
+  <numeric_score>108</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5 (core 검사 함수 분리, UI import 없음) / 인터페이스계약 5/5 (Dict[str,Any] 명시 반환, SSoT 상수)</pd>
+    <al score="20" max="20">0나눗셈 N/A·범위검증 5/5·타입검증 5/5·빈데이터 5/5·예외분기 5/5 (git_unavailable/git_diff_failed/execution_artifact 3분기 fail-closed)</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — 미채점</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS — 해당 카테고리(PD 10 + AL 20 = 30/30) 만점. 정규화 환산 120점 기준 108 (96 이상 충족)</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 신규 함수/테스트 함수 전부 타입 힌팅 (-> Dict[str, Any] 등)</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 신규 파일 쓰기 로직 없음</atomic_write>
+      <encoding_fallback>PASS — 테스트 _read_json utf-8/cp949/latin-1 fallback</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover에 pytest 7 passed 증거, QA 자체 재실행으로 7 passed 확인</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _check_pr_diff_artifact_pollution이 _cmd_gates_request_accept(line 16922)에서 실제 호출되고 BLOCKED 시 exit 1 처리됨 (정의만이 아닌 실제 바인딩 확인)</functional_binding_verified>
+  </runtime_functional_check>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 미명시</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <visual_verdict>N-A</visual_verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-3 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>1</declared_functions>
+    <actual_modified_functions>1</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>none</modification>
+    </out_of_scope_modifications>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>13</scope_files_declared>
+    <evidence_files_submitted>13</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff origin/main...HEAD --name-only 13개 파일 전부 scope_manifest와 일치</grep_verified>
+    <c3_verdict>PASS</c3_verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS">
+      <verification>.gitignore 라인 66-103에 step_plan*.xml / dev_handover*.xml / qa_report*.xml / integration_report*.xml / manager_handoff*.xml 와일드카드 패턴 등록 확인. suffix 변형 파일명(step_plan_F41F.xml 등)이 git add 시 자동 무시됨.</verification>
+    </criterion>
+    <criterion ac_id="AC-2" status="PASS">
+      <verification>_check_pr_diff_artifact_pollution()가 git diff origin/main...HEAD --name-only 결과를 PR_DIFF_ARTIFACT_PATTERNS(13개 fnmatch glob)와 대조하여 실행 산출물 감지 시 BLOCKED(failure_code=execution_artifact_in_pr_diff) 반환. _cmd_gates_request_accept line 16922에서 nonce 발급 전 호출, exit 1 차단. oracle edge_step_plan_in_diff/edge_pipeline_state_in_diff PASS.</verification>
+    </criterion>
+    <criterion ac_id="AC-3" status="PASS">
+      <verification>핵심 이슈. git 바이너리 부재 시(line 11392) 및 git diff returncode!=0 시(line 11409, MT-4 수정) 모두 fail-closed BLOCKED 반환(git_unavailable / git_diff_failed). graceful skip은 PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING / PIPELINE_ARTIFACT_CHECK_ALLOW_GIT_DIFF_FAIL=1 격리 테스트 환경에서만 허용, production 기본은 차단. oracle error_git_unavailable(git_unavailable) + edge_git_diff_nonzero_exit(git_diff_failed) 둘 다 PASS.</verification>
+    </criterion>
+    <criterion ac_id="AC-4" status="PASS">
+      <verification>tests/e2e/test_pr_diff_artifact_8ac8.py QA 자체 재실행 결과 7 passed (parametrize 5케이스 + test_edge_git_diff_nonzero_exit + test_patterns_constant_present). normal/edge_step_plan/edge_pipeline_state/error_git_unavailable 4개 필수 케이스 + MT-4 edge_git_diff_nonzero_exit 모두 PASS. oracle given/expected 비교 방식, 실제 pipeline 모듈 import, git subprocess만 mock(격리 필요).</verification>
+    </criterion>
+  </criteria_verification>
+
+  <regression_check>
+    <test_request_accept_nonce_reuse_aef0>PASS — 8 passed (MT-2 r2 rework가 해소 목표한 회귀)</test_request_accept_nonce_reuse_aef0>
+    <ruff>PASS — pipeline.py + 테스트 파일 All checks passed</ruff>
+    <gates_secrets>PASS — 변경 3개 파일 민감정보 0건</gates_secrets>
+  </regression_check>
+
+  <result>[PASS]</result>
+  <verdict>PASS</verdict>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — 모든 AC PASS, 자동 FAIL 트리거 없음.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. [pipeline.py:11374-11375] _check_pr_diff_artifact_pollution docstring의 returncode!=0 반환 설명이 "OK(검사 생략)"로 남아 있어 실제 코드(line 11402-11409, fail-closed git_diff_failed BLOCKED)와 drift. MT-4 수정 시 docstring 동기화 누락 — 기능 영향 없으나 향후 정리 권장.
+    2. [pipeline.py:16926-16941] 호출부 메시지 분기가 git_unavailable과 execution_artifact_in_pr_diff만 명시 처리하고, 신규 git_diff_failed 코드는 execution_artifact 메시지("PR diff에 실행 산출물이 포함")로 폴백되어 사용자에게 다소 오해 소지. exit 1 BLOCKED 동작 자체는 정상이므로 비차단 개선 포인트.
+  </improvement_suggestions>
+</qa_report>
