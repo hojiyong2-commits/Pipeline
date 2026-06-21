@@ -138,7 +138,10 @@ def synthetic_pid() -> str:
 
 def test_active_pointer_created(isolated_repo: Path) -> None:
     """AC-1: pipeline.py new → .pipeline/active_run.json 생성."""
-    res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "rt store e2e"])
+    # isolated_repo 격리: PIPELINE_STATE_PATH 비설정으로 runtime store 검증
+    env = _base_env()
+    env.pop("PIPELINE_STATE_PATH", None)  # runtime store 경로 격리 (pointer 경유)
+    res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "rt store e2e"], env=env)
     assert res.returncode == 0, f"new 실패: {res.stderr}"
 
     pointer = _pointer_path(isolated_repo)
@@ -152,7 +155,9 @@ def test_active_pointer_created(isolated_repo: Path) -> None:
 
 def test_runtime_state_created(isolated_repo: Path) -> None:
     """AC-2: .pipeline/runs/<id>/state.json 생성 + 핵심 필드 포함."""
-    res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "rt store e2e"])
+    env = _base_env()
+    env.pop("PIPELINE_STATE_PATH", None)  # runtime store 경로 격리 (pointer 경유)
+    res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "rt store e2e"], env=env)
     assert res.returncode == 0, f"new 실패: {res.stderr}"
 
     states = _runtime_state_files(isolated_repo)
@@ -173,7 +178,9 @@ def test_new_does_not_modify_tracked_state(isolated_repo: Path) -> None:
     legacy = isolated_repo / "pipeline_state.json"
     assert not legacy.exists(), "사전 조건: legacy 파일 없어야 함"
 
-    res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "rt store e2e"])
+    env = _base_env()
+    env.pop("PIPELINE_STATE_PATH", None)  # runtime store 경로 격리 (pointer 경유)
+    res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "rt store e2e"], env=env)
     assert res.returncode == 0, f"new 실패: {res.stderr}"
 
     # final_state assertion: legacy 파일은 여전히 미생성, runtime store만 존재
@@ -184,7 +191,9 @@ def test_new_does_not_modify_tracked_state(isolated_repo: Path) -> None:
 
 def test_status_reads_runtime_state(isolated_repo: Path) -> None:
     """AC-4: status가 active pointer 경유 runtime state를 읽는다."""
-    new_res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "status read e2e"])
+    env = _base_env()
+    env.pop("PIPELINE_STATE_PATH", None)  # runtime store 경로 격리 (pointer 경유)
+    new_res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "status read e2e"], env=env)
     assert new_res.returncode == 0, f"new 실패: {new_res.stderr}"
     state = _load_json(_runtime_state_files(isolated_repo)[0])
     pid = state["pipeline_id"]
@@ -307,12 +316,14 @@ def test_complete_does_not_modify_tracked(isolated_repo: Path) -> None:
     대표 흐름(new 후 새 new로 기존 아카이브)에서 legacy 파일이 절대 생성되지 않음을 검증한다.
     """
     legacy = isolated_repo / "pipeline_state.json"
-    r1 = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "first"])
+    env = _base_env()
+    env.pop("PIPELINE_STATE_PATH", None)  # runtime store 경로 격리 (pointer 경유)
+    r1 = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "first"], env=env)
     assert r1.returncode == 0, f"first new 실패: {r1.stderr}"
     assert not legacy.exists(), "첫 new가 legacy 생성 (AC-9 위반)"
 
     # 두 번째 new — 기존 파이프라인 아카이브 + 새 runtime state write 발생
-    r2 = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "second"])
+    r2 = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "second"], env=env)
     assert r2.returncode == 0, f"second new 실패: {r2.stderr}"
     # final_state assertion: 반복 write 후에도 legacy 미생성, runtime store만 갱신
     assert not legacy.exists(), "반복 state write가 legacy pipeline_state.json을 생성 (AC-9 위반)"
@@ -327,7 +338,9 @@ def test_pr_diff_hygiene(isolated_repo: Path) -> None:
     .pipeline/** 는 .gitignore 대상이므로, new가 생성하는 모든 active state 산출물이
     .pipeline/ 디렉토리 하위에만 위치하고 저장소 루트에 tracked 파일을 만들지 않음을 검증한다.
     """
-    res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "pr hygiene e2e"])
+    env = _base_env()
+    env.pop("PIPELINE_STATE_PATH", None)  # runtime store 경로 격리 (pointer 경유)
+    res = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "pr hygiene e2e"], env=env)
     assert res.returncode == 0, f"new 실패: {res.stderr}"
 
     # final_state assertion: 루트에 pipeline_state.json 없음 + active 산출물은 .pipeline/ 하위
