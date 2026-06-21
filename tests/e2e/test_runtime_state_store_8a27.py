@@ -382,5 +382,121 @@ def test_regression_existing_tests() -> None:
     )
 
 
+def test_reset_does_not_touch_legacy_state(isolated_repo: Path) -> None:
+    """AC-12: pipeline.py reset 후 legacy pipeline_state.json 절대 미삭제/미수정.
+
+    IMP-20260621-8A27 REJECT 원인(STATE_FILE.unlink()로 pipeline_state.json 삭제)에 대한
+    회귀 방지 테스트. reset은 Runtime State Store(.pipeline/active_run.json + runs/<id>/state.json)만
+    정리하고, legacy pipeline_state.json은 절대 건드리지 않아야 한다.
+    """
+    env = _base_env()
+    env.pop("PIPELINE_STATE_PATH", None)  # runtime store 경로 격리 (pointer 경유)
+
+    # 1. 파이프라인 생성
+    r1 = run_cli_in(isolated_repo, ["new", "--type", "IMP", "--desc", "reset hygiene e2e"], env=env)
+    assert r1.returncode == 0, f"new 실패: {r1.stderr}"
+
+    # 2. 사전 조건: legacy는 없어야 함 (runtime store만 존재)
+    legacy = isolated_repo / "pipeline_state.json"
+    assert not legacy.exists(), "사전 조건: new 후 legacy 파일 없어야 함"
+    pointer = _pointer_path(isolated_repo)
+    assert pointer.exists(), "사전 조건: pointer 존재해야 함"
+    states_before = _runtime_state_files(isolated_repo)
+    assert len(states_before) == 1, "사전 조건: runtime state 1개 존재해야 함"
+
+    # 3. 임의로 legacy 파일을 미리 배치 (추후 reset이 건드리지 않는지 확인용)
+    fake_pid = synthetic_pid()
+    legacy.write_text(
+        json.dumps(
+            {
+                "pipeline_id": fake_pid,
+                "current_phase": "pm",
+                "phases": {},
+                "event_log": [],
+                "requirements_tracking": {"enabled": False},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    legacy_mtime_before = legacy.stat().st_mtime
+
+    # 4. reset 실행
+    r_reset = run_cli_in(isolated_repo, ["reset"], env=env)
+    assert r_reset.returncode == 0, f"reset 실패: {r_reset.stderr}"
+    assert "[RESET]" in r_reset.stdout or "보관 후 초기화" in r_reset.stdout, (
+        f"reset 완료 메시지 미출력:\n{r_reset.stdout}"
+    )
+
+    # 5. final_state assertion: legacy 파일은 mtime/내용 변경 없이 그대로
+    assert legacy.exists(), "reset이 legacy pipeline_state.json을 삭제함 (AC-12 위반)"
+    legacy_mtime_after = legacy.stat().st_mtime
+    assert legacy_mtime_before == legacy_mtime_after, (
+        "reset이 legacy pipeline_state.json을 수정함 (AC-12 위반)"
+    )
+    legacy_content = _load_json(legacy)
+    assert legacy_content.get("pipeline_id") == fake_pid, (
+        "reset이 legacy pipeline_state.json 내용을 변경함 (AC-12 위반)"
+    )
+
+    # 6. Runtime State Store가 실제로 정리됐는지 확인
+    assert not pointer.exists(), "reset 후 active_run.json이 남아 있음 (Runtime Store 미정리)"
+
+
+def test_reset_env_path_cleans_isolated_state(tmp_path: Path) -> None:
+    """AC-13: PIPELINE_STATE_PATH 환경변수 설정 시 reset은 해당 파일만 삭제.
+
+    PIPELINE_STATE_PATH가 설정된 환경(테스트 격리)에서 reset이 격리 state 파일만 삭제하고
+    실제 legacy pipeline_state.json을 건드리지 않음을 검증한다.
+    """
+    # isolated state 파일 생성
+    isolated_state = tmp_path / "test_state.json"
+    fake_pid = synthetic_pid()
+    isolated_state.write_text(
+        json.dumps(
+            {
+                "pipeline_id": fake_pid,
+                "current_phase": "pm",
+                "phases": {},
+                "event_log": [],
+                "requirements_tracking": {"enabled": False},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    env = _base_env()
+    env["PIPELINE_STATE_PATH"] = str(isolated_state)
+
+    # pipeline.py가 있는 실제 repo cwd에서 실행 (격리 복사본 불필요, env path가 우선)
+    actual_pipeline_dir = PIPELINE_PY.parent
+    res = subprocess.run(
+        [sys.executable, str(PIPELINE_PY), "reset"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+        env=env,
+        cwd=str(actual_pipeline_dir),
+    )
+    assert res.returncode == 0, f"reset 실패: {res.stderr}"
+
+    # final_state assertion: 격리 state 파일만 삭제됨
+    assert not isolated_state.exists(), (
+        "PIPELINE_STATE_PATH reset이 격리 state 파일을 삭제하지 않음 (AC-13 위반)"
+    )
+
+    # 실제 legacy 파일은 건드리지 않음
+    actual_legacy = actual_pipeline_dir / "pipeline_state.json"
+    if actual_legacy.exists():
+        # 존재한다면 내용이 유효한 JSON이어야 함 (reset이 오염시켰다면 손상될 것)
+        try:
+            _load_json(actual_legacy)
+        except Exception as exc:
+            pytest.fail(f"reset이 실제 pipeline_state.json을 오염시킴: {exc}")
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

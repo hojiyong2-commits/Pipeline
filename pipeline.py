@@ -19668,7 +19668,21 @@ def cmd_reset(args: argparse.Namespace) -> None:
         pid     = state.get("pipeline_id", "unknown")
         archive = HISTORY_DIR / f"{pid}_RESET_{_now().replace(':', '-')}.json"
         archive.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-        STATE_FILE.unlink()
+        # Runtime State Store만 정리한다. legacy pipeline_state.json은 절대 건드리지 않는다.
+        env_path = os.environ.get("PIPELINE_STATE_PATH")
+        if env_path:
+            # PIPELINE_STATE_PATH 환경변수가 설정된 경우: 해당 경로(테스트 격리 파일 등)만 삭제
+            _sp = Path(env_path)
+            if _sp.exists():
+                _sp.unlink()
+        else:
+            # 일반 실행: Runtime State Store(.pipeline/active_run.json + runs/<pid>/state.json)만 삭제
+            pointer = _active_run_pointer_path()
+            if pointer.exists():
+                pointer.unlink()
+            runtime_state = _state_path_for_pipeline_id(pid) if pid != "unknown" else None
+            if runtime_state and runtime_state.exists():
+                runtime_state.unlink()
         print(YELLOW(f"\n  [RESET] 이전 상태 → {archive.name} 보관 후 초기화\n"))
     else:
         print(YELLOW("\n  초기화할 파이프라인 없음\n"))
