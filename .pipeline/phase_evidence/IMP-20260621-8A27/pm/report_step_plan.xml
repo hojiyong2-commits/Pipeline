@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260621-8A27</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py는 신뢰 루트 파일이며, state 저장 경로 변경은 모든 CLI 명령의 기반 동작에 영향을 줌. 변경 범위는 state path resolution으로 제한되나, 회귀 위험이 높음.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>180</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 구현 취향 질문(helper 함수명, 에러 메시지 문구 스타일 등)은 유지보수성 기준으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>branch-aware state (_load_state_for(branch))는 어떻게 처리할까요?</user_facing_question>
+        <evidence>현재 토너먼트 모드는 pipeline_state_{short}-{branch}.json 형태로 브랜치별 state를 분리 저장합니다. 새 runtime store(.pipeline/runs/)와 별개 경로입니다.</evidence>
+        <why_it_matters>토너먼트 기능 호환성과 migration 복잡도에 영향을 줍니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>branch state 기존 구조 유지</label>
+            <benefit>토너먼트 기능 즉시 호환, migration 범위 최소화</benefit>
+            <cost>두 가지 state 저장 패턴 공존</cost>
+          </option>
+          <option id="B">
+            <label>branch state도 .pipeline/runs/로 이동</label>
+            <benefit>state 저장 패턴 통일</benefit>
+            <cost>토너먼트 기능 회귀 테스트 필요, migration 복잡도 증가</cost>
+          </option>
+        </options>
+        <user_answer>사용자 원문 요청에 "branch-aware state 호환 유지" 명시 — 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <decomposition_audit>
+    <module_name>Runtime State Store Migration</module_name>
+    <audit_date>2026-06-21</audit_date>
+    <decomposition_method>기능 단위 분할 (state path resolution 중심)</decomposition_method>
+    <module_breakdown>
+      <module id="M-1" name="State Path Resolution Helpers">
+        <scope>pipeline.py 내 5개 helper 함수 추가</scope>
+        <affected_files>pipeline.py</affected_files>
+        <estimated_lines>60</estimated_lines>
+      </module>
+      <module id="M-2" name="Core Load/Save Migration">
+        <scope>_load() / _save() 함수가 새 runtime store 경로 사용하도록 수정</scope>
+        <affected_files>pipeline.py</affected_files>
+        <estimated_lines>40</estimated_lines>
+      </module>
+      <module id="M-3" name="cmd_new Active Pointer">
+        <scope>cmd_new()에서 .pipeline/active_run.json 생성 로직 추가</scope>
+        <affected_files>pipeline.py</affected_files>
+        <estimated_lines>25</estimated_lines>
+      </module>
+      <module id="M-4" name="Error Handling &amp; Fallback">
+        <scope>active pointer 손상/누락 시 [PIPELINE ERROR] + 복구 안내</scope>
+        <affected_files>pipeline.py</affected_files>
+        <estimated_lines>30</estimated_lines>
+      </module>
+      <module id="M-5" name="E2E Tests">
+        <scope>11개 필수 테스트 케이스</scope>
+        <affected_files>tests/e2e/test_runtime_state_store_8a27.py</affected_files>
+        <estimated_lines>400</estimated_lines>
+      </module>
+      <module id="M-6" name="Documentation">
+        <scope>pipeline-manager-agent.md 갱신</scope>
+        <affected_files>.claude/agents/pipeline-manager-agent.md</affected_files>
+        <estimated_lines>20</estimated_lines>
+      </module>
+    </module_breakdown>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>5</grep_executions>
+    <grep_evidence_summary>
+      _load/_save 호출: 72+ 위치 (pipeline.py);
+      STATE_FILE 참조: 30+ 위치;
+      PIPELINE_STATE_PATH 테스트 사용: 20+ 파일;
+      .pipeline/ gitignore: 라인 44 확인;
+      def _default_runtime/def _active_run_pointer/def _state_path_for/def _resolve_state: match_count=0
+    </grep_evidence_summary>
+  </decomposition_audit>
+
+  <requirements>
+    <requirement id="R-1" source="user">tracked pipeline_state.json을 active write target에서 제외</requirement>
+    <requirement id="R-2" source="user">.pipeline/active_run.json (active pointer) + .pipeline/runs/&lt;pipeline_id&gt;/state.json (실제 state) 구조 사용</requirement>
+    <requirement id="R-3" source="user">PIPELINE_STATE_PATH 환경변수 있으면 최우선 사용 (기존 동작 유지)</requirement>
+    <requirement id="R-4" source="user">legacy pipeline_state.json 삭제/수정 금지, read-only fallback만</requirement>
+    <requirement id="R-5" source="user">active pointer 손상 시 [PIPELINE ERROR] + 복구 안내</requirement>
+    <requirement id="R-6" source="user">atomic write (temp + os.replace)</requirement>
+    <requirement id="R-7" source="user">기존 회귀 테스트 5개 PASS 유지</requirement>
+    <requirement id="R-8" source="user">PR diff hygiene: runtime state 파일 PR diff 포함 BLOCKED</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_default_runtime_state_dir, _active_run_pointer_path, _state_path_for_pipeline_id, _resolve_state_path_for_read, _resolve_state_path_for_write</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 helper 함수)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _default_runtime|def _active_run_pointer|def _state_path_for|def _resolve_state</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>5개 state path resolution helper 함수 추가 — .pipeline/runs/ 경로 계산 및 읽기/쓰기 경로 결정 로직</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-2, AC-3, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_load, _save</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_new</site>
+        <site>cmd_check</site>
+        <site>cmd_status</site>
+        <site>cmd_done (70+ 위치)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_load\(\)|_save\(</pattern>
+        <match_count>72</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_load()/_save() 내부에서 MT-1 helper 사용하도록 수정 — PIPELINE_STATE_PATH 우선, 그 다음 active pointer 기반 runtime store, legacy fallback 순서</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-1, AC-4, AC-5, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>cmd_new</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>main CLI parser</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_new</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cmd_new()에서 .pipeline/active_run.json 생성 및 .pipeline/runs/&lt;pipeline_id&gt;/ 디렉터리 초기화 로직 추가</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-2, AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>_resolve_state_path_for_read, _load</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_status</site>
+        <site>_load_branch_state</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_status|_load_branch_state</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>active pointer 손상(invalid JSON), state 파일 누락, pipeline_id 불일치 시 [PIPELINE ERROR] + 구체적 복구 안내 메시지 출력</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-7, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>test_new_does_not_modify_tracked_state, test_active_pointer_created, test_runtime_state_created, test_status_reads_runtime_state, test_env_path_priority, test_legacy_fallback, test_pointer_corruption, test_pointer_missing_state, test_complete_does_not_modify_tracked, test_pr_diff_hygiene, test_regression_existing_tests</affected_function>
+      <target_files>
+        <file>tests/e2e/test_runtime_state_store_8a27.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 테스트 파일)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_runtime_state_store</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>11개 필수 테스트 케이스 구현 — tracked state 미수정 검증, active pointer/runtime state 생성 검증, PIPELINE_STATE_PATH 우선순위, legacy fallback, 에러 핸들링, 회귀 테스트 호환성</change_summary>
+      <line_estimate>400</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>Runtime State Store 문서 섹션</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (문서 파일)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Runtime State Store|active_run\.json</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Runtime State Store 운영 규칙 문서화 — active pointer 경로, runtime state 경로, legacy 파일 취급, PR diff 금지 규칙</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py new 실행 후 tracked pipeline_state.json 파일이 수정되지 않음 — git diff --name-only -- pipeline_state.json 결과가 비어야 함</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py new 후 .pipeline/active_run.json 파일이 생성되고, 내용의 pipeline_id가 새로 생성된 파이프라인 ID와 일치</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>.pipeline/runs/&lt;pipeline_id&gt;/state.json 파일이 생성되고, pipeline_id/current_phase/created_at 등 핵심 필드가 포함</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py status가 active pointer를 따라 runtime state를 읽어 정상적으로 파이프라인 상태를 출력</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>PIPELINE_STATE_PATH 환경변수 설정 시 해당 경로를 최우선 사용하고, .pipeline/active_run.json을 사용하지 않음</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>active pointer 없고 legacy pipeline_state.json만 있을 때, status 명령이 legacy 파일을 읽어 정상 출력 (read-only fallback)</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>active pointer가 invalid JSON일 때 [PIPELINE ERROR] 메시지와 함께 복구 방법(rm .pipeline/active_run.json 또는 pipeline.py new) 출력</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>active pointer는 존재하나 참조하는 state.json이 없을 때 [PIPELINE ERROR] 메시지와 함께 복구 방법 출력</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>파이프라인 COMPLETE 후에도 tracked pipeline_state.json 파일이 수정되지 않음</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>PR diff hygiene: pipeline_state.json 수정/삭제 diff는 기존대로 BLOCKED, .pipeline/runs/** diff도 BLOCKED 처리</text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true">
+      <text>기존 회귀 테스트 5개(test_pr_comment_accept_3bf4, test_request_accept_nonce_reuse_aef0, test_acceptance_provenance_2338, test_pr_approver_b96c, test_workspace_hygiene_2821) 모두 PASS</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10</python_version>
+
+  <forbidden>
+    <item>pipeline_state.json 파일 삭제 또는 git rm --cached 금지</item>
+    <item>브라우저 승인 게이트 복구 금지</item>
+    <item>acceptance 보안 모델 변경 금지</item>
+    <item>scratch workspace 격리(.pytest_tmp_*, .claude/worktrees/) 이번 IMP에서 금지</item>
+    <item>pipeline.py 전체 리팩터링 금지 — state path resolution 중심의 좁은 변경만</item>
+  </forbidden>
+</step_plan>
