@@ -20,7 +20,7 @@
     "output_file": "step_plan.xml",
     "output_sha256": "7e1cebda8b7ff22c53d04bc2ac14bb6140cd3c96669a023a91fbe53304c87de3",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260621-8A27/pm/agent_receipt_pm_planner-9313b2cca734c928.json",
-    "receipt_sha256": "10c99583aef6c87637f13148fc97d0430931b2f17ed021962065b2f0c77d29dd",
+    "receipt_sha256": "c515be1a3a030d5e389a5bdaadf9de3ee433c93105b5a1e0ac1aff59980f3112",
     "used_by_phase": "pm",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260621-8A27\\pm_planner\\pm_planner-9313b2cca734c928.json"
   },
@@ -32,7 +32,7 @@
     "output_file": "manager_handoff.xml",
     "output_sha256": "bf718744a5c6e8f6c7e710801946d26e0eab1e0a66f5a96eed78691c5ec08678",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260621-8A27/pm/manager_receipt_pipeline_manager-b0ee7cbe877c4c97.json",
-    "receipt_sha256": "6dc09b645ae098304926e709e789e0da81d0dbbf440d599deba108d1fa73528b",
+    "receipt_sha256": "a4a7ac948ad485442cc68e39d97755f82cd68f3a6095aa4d17f775c51c891f28",
     "used_by_phase": "pm_manager",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260621-8A27\\pipeline_manager\\pipeline_manager-b0ee7cbe877c4c97.json"
   },
@@ -41,7 +41,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260621-8A27\\pm_planner\\pm_planner-9313b2cca734c928.json",
       "path": ".pipeline/phase_evidence/IMP-20260621-8A27/pm/agent_receipt_pm_planner-9313b2cca734c928.json",
-      "sha256": "10c99583aef6c87637f13148fc97d0430931b2f17ed021962065b2f0c77d29dd",
+      "sha256": "c515be1a3a030d5e389a5bdaadf9de3ee433c93105b5a1e0ac1aff59980f3112",
       "size_bytes": 599,
       "requires_force_add": true
     },
@@ -49,7 +49,7 @@
       "label": "manager_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260621-8A27\\pipeline_manager\\pipeline_manager-b0ee7cbe877c4c97.json",
       "path": ".pipeline/phase_evidence/IMP-20260621-8A27/pm/manager_receipt_pipeline_manager-b0ee7cbe877c4c97.json",
-      "sha256": "6dc09b645ae098304926e709e789e0da81d0dbbf440d599deba108d1fa73528b",
+      "sha256": "a4a7ac948ad485442cc68e39d97755f82cd68f3a6095aa4d17f775c51c891f28",
       "size_bytes": 623,
       "requires_force_add": true
     },
