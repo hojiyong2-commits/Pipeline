@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-21T15:37:23Z",
+  "pipeline_id": "IMP-20260621-8A27",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "f8a661a69a541bb073b41b04efed14190f1c6175",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-21T15:24:17Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_runtime_state_store_8a27.py,.claude/agents/pipeline-manager-agent.md"
+  },
+  "agent_run": {
+    "run_id": "dev-d8944ed6a78e36ed",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "4eab644d28572231fa37ed782c32a464b60d1a338eafd3796acc2fcf3d371f9a",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260621-8A27/dev/agent_receipt_dev-d8944ed6a78e36ed.json",
+    "receipt_sha256": "c6eaeaf6a754e0033e58db712c0e393968490d85bfb8a386b336dbf7c6a3d20d",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260621-8A27\\dev\\dev-d8944ed6a78e36ed.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260621-8A27\\dev\\dev-d8944ed6a78e36ed.json",
+      "path": ".pipeline/phase_evidence/IMP-20260621-8A27/dev/agent_receipt_dev-d8944ed6a78e36ed.json",
+      "sha256": "c6eaeaf6a754e0033e58db712c0e393968490d85bfb8a386b336dbf7c6a3d20d",
+      "size_bytes": 1026,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260621-8A27/dev/report_dev_handover.xml",
+      "sha256": "4eab644d28572231fa37ed782c32a464b60d1a338eafd3796acc2fcf3d371f9a",
+      "size_bytes": 10409,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260621-8A27/dev/scope_manifest_scope_manifest.json",
+      "sha256": "bcc7c37852eb10a961645d7b5f476678fed201acf57f384e7fbb012043da6b3c",
+      "size_bytes": 4523,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "2032e1386862dbbfd13bbf28d1d8ee0f50d89e7ca9c6f6c805b7054a9afd7574",
+      "size_bytes": 1069377
+    },
+    {
+      "path": ".claude/agents/pipeline-manager-agent.md",
+      "sha256": "0d31d546d110cc908accb3493979575b86d95e023b6e78cd963ae73f0c1ba779",
+      "size_bytes": 13866
+    }
+  ],
+  "local_only_files": []
+}
