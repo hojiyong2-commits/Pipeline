@@ -1,0 +1,12 @@
+{
+  "case_id": "edge_legacy_fallback",
+  "case_kind": "edge",
+  "description": "active_run.json pointer가 없고 legacy pipeline_state.json만 있는 환경에서 status가 legacy 파일에서 읽어야 한다",
+  "scenario": "no_active_pointer",
+  "setup": {
+    "active_run_pointer_exists": false,
+    "legacy_pipeline_state_exists": true,
+    "legacy_pipeline_state_has_active_pipeline": true
+  },
+  "action": "cmd_status"
+}

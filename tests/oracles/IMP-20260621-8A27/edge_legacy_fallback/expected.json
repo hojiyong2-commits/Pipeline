@@ -1,0 +1,17 @@
+{
+  "case_id": "edge_legacy_fallback",
+  "case_kind": "edge",
+  "expected_outcomes": {
+    "status_output": {
+      "must_show_pipeline_id": true,
+      "reads_from_legacy": true,
+      "no_error": true
+    },
+    "pipeline_state_json": {
+      "file": "pipeline_state.json",
+      "must_be_unmodified": true,
+      "must_not_be_written": true
+    }
+  },
+  "pass_criteria": "active pointer가 없을 때 status 명령이 legacy pipeline_state.json에서 읽기 전용으로 파이프라인 상태를 출력하고 pipeline_state.json을 수정하지 않아야 한다"
+}

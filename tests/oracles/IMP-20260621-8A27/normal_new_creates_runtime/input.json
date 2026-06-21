@@ -1,0 +1,13 @@
+{
+  "case_id": "normal_new_creates_runtime",
+  "case_kind": "normal",
+  "description": "pipeline.py new 명령 실행 시 runtime state store가 생성되어야 한다",
+  "action": "cmd_new",
+  "pipeline_type": "IMP",
+  "pipeline_desc": "Runtime State Store test pipeline",
+  "expected_side_effects": {
+    "active_run_pointer_created": true,
+    "runtime_state_created": true,
+    "pipeline_state_json_unmodified": true
+  }
+}
