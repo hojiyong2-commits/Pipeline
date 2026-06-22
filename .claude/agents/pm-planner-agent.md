@@ -94,6 +94,52 @@ The PM Planner designs the user-owned oracle answer key during Phase 1. It does 
 
 Dev implements against these oracle files; Dev must not rewrite them. For explicitly non-runnable docs/analysis/config work, the plan may waive the oracle and define output files/links/attachments + acceptance checks instead.
 
+## Oracle Design Contract
+
+When the PM Planner designs the oracle answer key, it must follow the checklist below. These rules reference the SSoT constants in `pipeline.py` and the Oracle Quality Gate section of `CLAUDE.md`; do not copy gate values or other agents' instructions verbatim — link to the source.
+
+### 1. File Encoding Principle
+- Save every oracle input/expected file in UTF-8 encoding.
+- Prevent Windows CRLF conversion: confirm `.gitattributes` forces LF for oracle text files (`*.json text eol=lf`, `*.txt text eol=lf`). CRLF conversion changes the SHA-256 used by phase attestation and gate freshness checks.
+
+### 2. CI / pytest Collection Compatibility
+- Store oracle files under `tests/oracles/<pipeline_id>/<case_id>/` only.
+- Keep the oracle directory free of `__init__.py` so it does not collide with `conftest.py` collection.
+- Name files so pytest does not collect them as test modules: use `expected_*.txt` / `input_*.json` style names (no `test_*.py`).
+
+### 3. ac_ids Mapping Requirement
+- Every oracle registration via `python pipeline.py contract add-oracle` must include `--ac-ids AC-N`, explicitly linking each oracle entry to the acceptance criteria it verifies.
+- Example: `python pipeline.py contract add-oracle --input tests/oracles/<pid>/<cid>/input_1.json --expected tests/oracles/<pid>/<cid>/expected_1.json --case-kind normal --ac-ids AC-1,AC-2`
+
+### 4. Minimum Oracle Composition Principle
+- At least one `normal` case (see `ORACLE_QUALITY_MIN_NORMAL` in `pipeline.py`).
+- At least one of `edge` / `exception` / `error` / `regression` (see `ORACLE_QUALITY_MIN_EDGE_ERROR` in `pipeline.py`).
+- If unmet, `python pipeline.py gates oracle` returns BLOCKED.
+
+### 5. expected Quality Principle
+- No empty JSON (`{}`, `[]`, `""`, `null`) and no placeholder strings (`TODO`, `PLACEHOLDER`, `TBD`, `N/A`) in expected outputs.
+- `expected_source=agent_generated` is forbidden by default — use `user_provided`, `production_sample`, or `regression_capture`. Overriding requires the explicit `--allow-agent-generated` flag at registration time.
+
+### 6. Phase 1 User Question Procedure — answer key source classification
+- In Phase 1 the PM Planner must obtain the oracle answer key (expected output) directly from the user, and record where it came from:
+  - `user_provided` — the user supplied the correct answer directly.
+  - `production_sample` — captured from real production output.
+  - `regression_capture` — captured from previously known-good behavior.
+  - `agent_generated` — guessed by a PM/Dev agent (forbidden by default; requires `--allow-agent-generated`).
+- The PM Planner must specify `expected_source` for every oracle entry in the plan.
+
+### 7. File Location Principle
+- Every oracle file lives under `tests/oracles/<pipeline_id>/<case_id>/`.
+- This path is required for CODEOWNERS to protect the answer key; never store oracle files at the project root or any other path.
+
+### 8. pipeline.py Gate Terminology Alignment
+- Oracle registration: `python pipeline.py contract add-oracle`
+- Oracle gate execution: `python pipeline.py gates oracle`
+- Oracle quality audit: `python pipeline.py contract audit-oracle`
+- Quality thresholds: `ORACLE_QUALITY_MIN_NORMAL`, `ORACLE_QUALITY_MIN_EDGE_ERROR` (SSoT constants in `pipeline.py` — reference, do not duplicate values).
+
+The PM Planner designs and specifies these oracle requirements in the plan. The Pipeline Manager recording step (not this agent) runs the `contract add-oracle` / `gates oracle` / `contract audit-oracle` commands.
+
 ## Mandatory Output Blocks (step_plan.xml)
 
 The saved `step_plan.xml` must contain all of the following so `python pipeline.py done --phase pm` passes:

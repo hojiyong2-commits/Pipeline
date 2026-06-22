@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-22T14:09:54Z",
+  "pipeline_id": "IMP-20260622-6976",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "859ec91bfd21ce6f087c97adc481df1f3db89b9b",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-22T14:09:31Z",
+    "report_file": "dev_handover.xml",
+    "evidence": ".claude/agents/pm-planner-agent.md,tests/test_pm_planner_oracle_contract_6976.py"
+  },
+  "agent_run": {
+    "run_id": "dev-2dd48527144140e1",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "3c1fd594b8ca08af66a95a73d29716f42cea03cdb305a122f7592e692c9a74a5",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260622-6976/dev/agent_receipt_dev-2dd48527144140e1.json",
+    "receipt_sha256": "4e12bc963ead191746dd14cf056354687c3eb8f6535738957d605f1a85ea9334",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260622-6976\\dev\\dev-2dd48527144140e1.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260622-6976\\dev\\dev-2dd48527144140e1.json",
+      "path": ".pipeline/phase_evidence/IMP-20260622-6976/dev/agent_receipt_dev-2dd48527144140e1.json",
+      "sha256": "4e12bc963ead191746dd14cf056354687c3eb8f6535738957d605f1a85ea9334",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260622-6976/dev/report_dev_handover.xml",
+      "sha256": "3c1fd594b8ca08af66a95a73d29716f42cea03cdb305a122f7592e692c9a74a5",
+      "size_bytes": 2155,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260622-6976/dev/scope_manifest_scope_manifest.json",
+      "sha256": "f63daa0b3df4da6ead6ab9fae5868532d70bf93f92a547183207633518d5441e",
+      "size_bytes": 1213,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": ".claude/agents/pm-planner-agent.md",
+      "sha256": "49cc3778d6740ab911dae0147fd0f5b2c7e42db24c8af56d3922d746f1ef5b6f",
+      "size_bytes": 16762
+    },
+    {
+      "path": "tests/test_pm_planner_oracle_contract_6976.py",
+      "sha256": "a4d82663a4334ed60810d42c0cceceef1bcd12bd46b60452f1d2065f3d15adec",
+      "size_bytes": 6424
+    }
+  ],
+  "local_only_files": []
+}
