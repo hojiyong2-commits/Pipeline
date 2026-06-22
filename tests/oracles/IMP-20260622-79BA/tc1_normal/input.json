@@ -1,0 +1,9 @@
+{
+  "case_id": "tc1_normal",
+  "description": "scratch helper가 .pipeline/runs/<id>/scratch/ 경로를 반환하는 정상 케이스",
+  "pipeline_id": "IMP-TEST-001",
+  "operation": "get_scratch_dir",
+  "params": {
+    "pipeline_id": "IMP-TEST-001"
+  }
+}

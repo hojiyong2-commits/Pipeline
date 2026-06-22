@@ -1,0 +1,9 @@
+{
+  "case_id": "tc1_normal",
+  "result": {
+    "scratch_dir_suffix": ".pipeline/runs/IMP-TEST-001/scratch",
+    "is_under_pipeline_runs": true,
+    "not_in_repo_root": true
+  },
+  "verdict": "PASS"
+}

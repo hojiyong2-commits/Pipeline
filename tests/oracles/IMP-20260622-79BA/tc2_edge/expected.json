@@ -1,0 +1,10 @@
+{
+  "case_id": "tc2_edge",
+  "result": {
+    "classification": "BLOCKED",
+    "failure_code": "workspace_hygiene_check_failed",
+    "reason": "Permission denied 오류 발생 시 fail-closed로 차단",
+    "cleanup_only_override": false
+  },
+  "verdict": "PASS"
+}
