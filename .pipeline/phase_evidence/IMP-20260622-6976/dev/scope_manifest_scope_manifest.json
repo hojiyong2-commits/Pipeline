@@ -1,0 +1,35 @@
+{
+  "pipeline_id": "IMP-20260622-6976",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [".claude/agents/pm-planner-agent.md"],
+      "affected_functions": ["pm-planner-agent.md oracle 설계 섹션"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-11", "AC-12"],
+          "changed_files": [".claude/agents/pm-planner-agent.md"],
+          "implementation_evidence": [
+            "Oracle Design Contract 섹션 46줄 추가 — 8개 원칙으로 AC-1~AC-9 커버, 80줄 이내 SSoT 준수(AC-12)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["tests/test_pm_planner_oracle_contract_6976.py"],
+      "affected_functions": ["tests/test_pm_planner_oracle_contract_6976.py"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-10"],
+          "changed_files": ["tests/test_pm_planner_oracle_contract_6976.py"],
+          "implementation_evidence": [
+            "10개 pytest 회귀 테스트 생성 — AC-1~AC-9, AC-12 내용 검증, 10 passed in 0.05s"
+          ]
+        }
+      ]
+    }
+  ]
+}
