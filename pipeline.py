@@ -2692,9 +2692,14 @@ DIM    = lambda t: _c(t, "2")
 # ── Branch / Tournament state helpers ───────────────────────────────────────
 
 def _state_path(branch: Optional[str] = None) -> Path:
-    """Return state file path. branch=None means the main pipeline state."""
+    """Return state file path. branch=None means the main pipeline state.
+
+    IMP-20260621-8A27: branch=None인 경우, 활성 runtime store 경로가 있으면 그것을
+    반환하고(쓰기 일관성), 없으면 legacy STATE_FILE을 반환한다(read fallback).
+    """
     if branch is None:
-        return STATE_FILE
+        read_path = _resolve_state_path_for_read()
+        return read_path if read_path is not None else STATE_FILE
     state = _load_state_for(None)
     pid = state.get("pipeline_id", "UNKNOWN")
     short = pid[-4:] if len(pid) >= 4 else pid
@@ -2702,9 +2707,23 @@ def _state_path(branch: Optional[str] = None) -> Path:
 
 
 def _load_state_for(branch: Optional[str] = None) -> dict:
-    """브랜치별 state 파일 로드. branch=None 이면 메인 STATE_FILE 로드."""
+    """브랜치별 state 파일 로드. branch=None 이면 메인 runtime store 로드.
+
+    IMP-20260621-8A27: branch=None(메인) 경우 _resolve_state_path_for_read()로
+    runtime store(.pipeline/runs/<id>/state.json) 또는 legacy fallback을 사용한다.
+    이렇게 해야 cmd_done/cmd_check 등 branch helper를 쓰는 명령도 runtime store와
+    일관되게 동작하며 legacy pipeline_state.json에 split-brain write가 발생하지 않는다.
+    """
     if branch is None:
-        path = STATE_FILE
+        read_path = _resolve_state_path_for_read()
+        if read_path is None or not read_path.exists():
+            return {}
+        for enc in ("utf-8", "cp949", "latin-1"):
+            try:
+                return json.loads(read_path.read_text(encoding=enc))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+        raise SystemExit(3)
     else:
         # branch 경우: 이미 계산된 경로를 직접 산출 (재귀 없이)
         # 메인 state 에서 pipeline_id 를 읽어 short suffix 계산
@@ -2731,9 +2750,18 @@ def _load_state_for(branch: Optional[str] = None) -> dict:
 
 
 def _save_state_for(state: dict, branch: Optional[str] = None) -> None:
-    """브랜치별 state 파일 원자적 저장. branch=None 이면 메인 STATE_FILE 저장."""
+    """브랜치별 state 파일 원자적 저장. branch=None 이면 메인 runtime store 저장.
+
+    IMP-20260621-8A27: branch=None(메인) 경우 _resolve_state_path_for_write()로
+    runtime store(.pipeline/runs/<id>/state.json)에 저장한다. legacy pipeline_state.json은
+    절대 write 대상이 되지 않으며, runtime store 디렉토리는 없으면 생성한다.
+    """
     if branch is None:
-        path = STATE_FILE
+        pid = state.get("pipeline_id")
+        if not pid:
+            raise TypeError("state must contain a non-empty 'pipeline_id'")
+        path = _resolve_state_path_for_write(pid)
+        path.parent.mkdir(parents=True, exist_ok=True)
     else:
         pid = state.get("parent_pipeline_id") or state.get("pipeline_id", "UNKNOWN")
         short = pid[-4:] if len(pid) >= 4 else pid
@@ -3124,29 +3152,177 @@ def _ensure_v210_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     return state
 
 
+# ── Runtime State Store (IMP-20260621-8A27) ──────────────────────────────────
+# [Purpose]: pipeline_state.json이 git-tracked 파일이라 파이프라인 실행마다 working
+#   tree가 dirty 상태가 되는 문제를 해결. active state를 gitignored runtime store
+#   (.pipeline/runs/<pipeline_id>/state.json)로 옮기고, legacy pipeline_state.json은
+#   read-only fallback 전용으로만 유지한다.
+# [Assumptions]: BASE_DIR가 모듈 로드 시점에 결정되어 있고, PIPELINE_STATE_PATH가
+#   설정되면 항상 최우선이다. .pipeline 디렉토리는 gitignore 대상이다.
+# [Vulnerability & Risks]: active_run.json pointer가 손상되면 read 경로를 결정할 수
+#   없으므로 _die로 명확히 차단한다. pointer는 있으나 state 파일이 없는 경우도
+#   _resolve_state_path_for_read에서 _die로 처리한다(MT-4).
+# [Improvement]: 다중 동시 파이프라인 지원 시 pointer를 stack 구조로 확장 가능.
+
+
+def _default_runtime_state_dir() -> Path:
+    """Return the runtime state root directory (.pipeline/runs).
+
+    Returns:
+        Path: BASE_DIR / ".pipeline" / "runs" (이 함수는 디렉토리를 생성하지 않음).
+    """
+    return BASE_DIR / ".pipeline" / "runs"
+
+
+def _active_run_pointer_path() -> Path:
+    """Return the active-run pointer path (.pipeline/active_run.json).
+
+    Returns:
+        Path: BASE_DIR / ".pipeline" / "active_run.json".
+    """
+    return BASE_DIR / ".pipeline" / "active_run.json"
+
+
+def _state_path_for_pipeline_id(pipeline_id: str) -> Path:
+    """Return the runtime state.json path for a given pipeline id.
+
+    Args:
+        pipeline_id: 파이프라인 ID 문자열 (예: "IMP-20260621-8A27").
+    Returns:
+        Path: .pipeline/runs/<pipeline_id>/state.json.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    if len(pipeline_id) == 0:
+        raise ValueError("pipeline_id must not be empty")
+    return _default_runtime_state_dir() / pipeline_id / "state.json"
+
+
+def _resolve_state_path_for_read() -> Optional[Path]:
+    """Resolve the state file path for reading.
+
+    우선순위:
+        1. PIPELINE_STATE_PATH 환경변수 (기존 동작 유지, 최우선).
+        2. .pipeline/active_run.json pointer의 pipeline_id →
+           .pipeline/runs/<id>/state.json.
+        3. legacy pipeline_state.json (read-only fallback).
+
+    Returns:
+        Optional[Path]: 해석된 state 경로. active state가 없으면 None.
+    Raises:
+        SystemExit: active_run.json이 손상되어 파싱할 수 없거나(MT-4),
+            pointer는 존재하나 state 파일이 없는 경우(MT-4) _die로 차단.
+    """
+    env_path = os.environ.get("PIPELINE_STATE_PATH")
+    if env_path:
+        return Path(env_path)
+
+    pointer = _active_run_pointer_path()
+    if pointer.exists():
+        try:
+            data = json.loads(pointer.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            _die(
+                "active_run.json 파싱 실패: "
+                f"{exc}\n"
+                "복구 방법: .pipeline/active_run.json 을 삭제하거나 올바른 JSON으로 "
+                "수정하세요. 삭제하면 legacy pipeline_state.json fallback을 사용합니다."
+            )
+        pid = data.get("pipeline_id") if isinstance(data, dict) else None
+        if pid:
+            state_path = _state_path_for_pipeline_id(pid)
+            if not state_path.exists():
+                _die(
+                    "active_run.json 은 존재하지만 runtime state 파일이 없습니다: "
+                    f"{state_path}\n"
+                    "복구 방법: .pipeline/active_run.json 을 삭제하면 legacy "
+                    "pipeline_state.json fallback을 사용합니다."
+                )
+            return state_path
+
+    # legacy fallback: read-only (절대 write 대상이 되지 않음)
+    legacy = BASE_DIR / "pipeline_state.json"
+    if legacy.exists():
+        return legacy
+    return None
+
+
+def _resolve_state_path_for_write(pipeline_id: str) -> Path:
+    """Resolve the state file path for writing.
+
+    우선순위:
+        1. PIPELINE_STATE_PATH 환경변수 (기존 동작 유지, 최우선).
+        2. .pipeline/runs/<pipeline_id>/state.json.
+
+    legacy pipeline_state.json은 절대 write 대상이 되지 않는다.
+
+    Args:
+        pipeline_id: 쓰기 대상 파이프라인 ID 문자열.
+    Returns:
+        Path: 쓰기 대상 state 경로.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    env_path = os.environ.get("PIPELINE_STATE_PATH")
+    if env_path:
+        return Path(env_path)
+    return _state_path_for_pipeline_id(pipeline_id)
+
+
 def _load() -> Optional[Dict[str, Any]]:
-    if not STATE_FILE.exists():
+    state_path = _resolve_state_path_for_read()
+    if state_path is None or not state_path.exists():
         return None
     try:
-        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        state = json.loads(state_path.read_text(encoding="utf-8"))
         # v2.10 backward compatibility: 구버전 state 파일 자동 마이그레이션
         return _ensure_v210_fields(state)
     except (json.JSONDecodeError, OSError) as e:
-        _die(f"pipeline_state.json 읽기 실패: {e}")
+        _die(f"state 파일 읽기 실패 ({state_path}): {e}")
 
 
 def _save(state: Dict[str, Any]) -> None:
-    """Atomically write master state file (tempfile → os.replace)."""
+    """Atomically write the runtime state file (tempfile → os.replace).
+
+    IMP-20260621-8A27: 쓰기 경로는 _resolve_state_path_for_write()로 결정한다.
+    legacy pipeline_state.json은 절대 write 대상이 되지 않으며, runtime store
+    디렉토리(.pipeline/runs/<id>/)는 없으면 생성한다 (copy-forward 효과).
+
+    Args:
+        state: 저장할 파이프라인 state dict. state["pipeline_id"]가 쓰기 경로 결정에 사용됨.
+    Raises:
+        TypeError: state가 dict가 아니거나 pipeline_id가 누락된 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    pipeline_id = state.get("pipeline_id")
+    if not pipeline_id:
+        raise TypeError("state must contain a non-empty 'pipeline_id'")
+
     state["updated_at"] = _now()
+    target = _resolve_state_path_for_write(pipeline_id)
+    # runtime store 디렉토리가 없으면 생성 (legacy 파일은 건드리지 않음)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
     tmp_path: Optional[Path] = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=STATE_FILE.parent,
+            mode="w", encoding="utf-8", dir=target.parent,
             delete=False, suffix=".tmp"
         ) as tmp:
             json.dump(state, tmp, ensure_ascii=False, indent=2)
             tmp_path = Path(tmp.name)
-        os.replace(str(tmp_path), str(STATE_FILE))
+        os.replace(str(tmp_path), str(target))
     except Exception:
         if tmp_path is not None and tmp_path.exists():
             tmp_path.unlink(missing_ok=True)
@@ -7229,23 +7405,51 @@ def _ensure_dashboard_running(open_browser: bool = True) -> None:
 
 def cmd_new(args: argparse.Namespace) -> None:
     """새 파이프라인 시작."""
-    if STATE_FILE.exists():
-        existing = _load()
-        if existing:
-            pid = existing.get("pipeline_id", "?")
-            # Archive existing
-            HISTORY_DIR.mkdir(exist_ok=True)
-            archive = HISTORY_DIR / f"{pid}_{existing.get('updated_at', 'old').replace(':', '-')}.json"
-            archive.write_text(
-                json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            print(DIM(f"이전 파이프라인 [{pid}] → {archive.name} 보관"))
+    # IMP-20260621-8A27: active state는 runtime store에 있을 수 있으므로
+    # STATE_FILE.exists() 대신 _load()로 기존 파이프라인을 해석한다.
+    existing = _load()
+    if existing:
+        pid = existing.get("pipeline_id", "?")
+        # Archive existing
+        HISTORY_DIR.mkdir(exist_ok=True)
+        archive = HISTORY_DIR / f"{pid}_{existing.get('updated_at', 'old').replace(':', '-')}.json"
+        archive.write_text(
+            json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(DIM(f"이전 파이프라인 [{pid}] → {archive.name} 보관"))
 
     pipeline_type = args.type.upper()
     pipeline_id   = _generate_id(pipeline_type)
     state = _new_state(pipeline_id, pipeline_type, args.desc)
     _log_event(state, f"파이프라인 생성: {pipeline_id}")
     _save(state)
+
+    # IMP-20260621-8A27: active-run pointer를 생성하여 후속 명령이 runtime
+    # store(.pipeline/runs/<id>/state.json)를 찾을 수 있게 한다.
+    # PIPELINE_STATE_PATH가 설정된 경우(테스트 격리 등)에는 pointer를 만들지
+    # 않는다 — env override가 항상 최우선이므로 pointer가 불필요하고, 격리된
+    # 테스트가 실제 .pipeline/active_run.json을 오염시키지 않도록 한다.
+    if not os.environ.get("PIPELINE_STATE_PATH"):
+        pointer_path = _active_run_pointer_path()
+        pointer_path.parent.mkdir(parents=True, exist_ok=True)
+        pointer_payload = {
+            "pipeline_id": pipeline_id,
+            "created_at": _now(),
+            "state_path": str(_state_path_for_pipeline_id(pipeline_id)),
+        }
+        _tmp_ptr: Optional[Path] = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=pointer_path.parent,
+                delete=False, suffix=".tmp"
+            ) as _ptr:
+                json.dump(pointer_payload, _ptr, ensure_ascii=False, indent=2)
+                _tmp_ptr = Path(_ptr.name)
+            os.replace(str(_tmp_ptr), str(pointer_path))
+        except Exception:
+            if _tmp_ptr is not None and _tmp_ptr.exists():
+                _tmp_ptr.unlink(missing_ok=True)
+            raise
 
     print()
     print(BOLD(GREEN("  파이프라인 생성 완료")))
@@ -19464,7 +19668,21 @@ def cmd_reset(args: argparse.Namespace) -> None:
         pid     = state.get("pipeline_id", "unknown")
         archive = HISTORY_DIR / f"{pid}_RESET_{_now().replace(':', '-')}.json"
         archive.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-        STATE_FILE.unlink()
+        # Runtime State Store만 정리한다. legacy pipeline_state.json은 절대 건드리지 않는다.
+        env_path = os.environ.get("PIPELINE_STATE_PATH")
+        if env_path:
+            # PIPELINE_STATE_PATH 환경변수가 설정된 경우: 해당 경로(테스트 격리 파일 등)만 삭제
+            _sp = Path(env_path)
+            if _sp.exists():
+                _sp.unlink()
+        else:
+            # 일반 실행: Runtime State Store(.pipeline/active_run.json + runs/<pid>/state.json)만 삭제
+            pointer = _active_run_pointer_path()
+            if pointer.exists():
+                pointer.unlink()
+            runtime_state = _state_path_for_pipeline_id(pid) if pid != "unknown" else None
+            if runtime_state and runtime_state.exists():
+                runtime_state.unlink()
         print(YELLOW(f"\n  [RESET] 이전 상태 → {archive.name} 보관 후 초기화\n"))
     else:
         print(YELLOW("\n  초기화할 파이프라인 없음\n"))

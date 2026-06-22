@@ -1,0 +1,22 @@
+{
+  "case_id": "normal_new_creates_runtime",
+  "case_kind": "normal",
+  "expected_outcomes": {
+    "active_run_pointer": {
+      "file": ".pipeline/active_run.json",
+      "must_exist": true,
+      "must_contain_field": "pipeline_id"
+    },
+    "runtime_state": {
+      "file_pattern": ".pipeline/runs/<pipeline_id>/state.json",
+      "must_exist": true,
+      "must_contain_fields": ["pipeline_id", "description", "current_phase", "created_at"]
+    },
+    "pipeline_state_json": {
+      "file": "pipeline_state.json",
+      "must_be_unmodified": true,
+      "git_diff_must_be_empty": true
+    }
+  },
+  "pass_criteria": "pipeline.py new 실행 후 .pipeline/active_run.json과 .pipeline/runs/<pid>/state.json이 생성되고 pipeline_state.json은 git diff가 없어야 한다"
+}
