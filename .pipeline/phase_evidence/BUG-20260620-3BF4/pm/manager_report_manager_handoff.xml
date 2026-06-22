@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>BUG-20260620-3BF4</pipeline_id>
+  <manager_run_id>pipeline_manager-ad6f464ece6c7f37</manager_run_id>
+  <planner_run_id>pm_planner-e6f2c7bdc09d1651</planner_run_id>
+  <step_plan_sha256>4c77243819b0945e5d6ae13be4efc6077cc5c0285eeae2d9dcbd1ad4212a0ca3</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <phase>pm</phase>
+  <status>READY_FOR_DEV</status>
+  <contract_summary>
+    <modules>4</modules>
+    <tests>7</tests>
+    <oracles>4</oracles>
+    <contract_frozen>true</contract_frozen>
+    <contract_hash>d92011f6d78a2bde576e4cb28966476c2f1c9f41b87b7a7e7015232a8fa5f443</contract_hash>
+  </contract_summary>
+  <micro_task_plan>
+    <micro_task id="MT-1">
+      <title>브라우저 승인 게이트 완전 제거</title>
+      <target_file>pipeline.py</target_file>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <title>PR 댓글 승인 방식 단순화 및 nonce 표시 제거</title>
+      <target_file>pipeline.py</target_file>
+      <covers_ac>AC-3, AC-4, AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <title>request-accept 반복 실행 안정화 및 원자적 동기화</title>
+      <target_file>pipeline.py</target_file>
+      <covers_ac>AC-6</covers_ac>
+    </micro_task>
+    <micro_task id="MT-4">
+      <title>테스트 추가 및 문서 갱신</title>
+      <covers_ac>AC-7, AC-8, AC-9, AC-10</covers_ac>
+    </micro_task>
+  </micro_task_plan>
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</manager_handoff>
