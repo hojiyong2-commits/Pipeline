@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260622-79BA</pipeline_id>
+  <agent_run_id>qa-e82debedbed8cfb9</agent_run_id>
+  <round>2</round>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+
+  <handover_verification>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/conftest.py, scratch_hygiene_audit.md, tests/e2e/test_scratch_hygiene_79ba.py, tests/oracles/IMP-20260622-79BA/{tc1_normal,tc2_edge}/{input,expected}.json</evidence>
+    <ui_required>false (category_tags에 UI 없음 — dev-agent handover 단독 수락)</ui_required>
+    <verdict>PASS — 8개 scope 파일 모두 실제 제출됨</verdict>
+  </handover_verification>
+
+  <step0b_anti_gaming>
+    <anti_gaming_read_tag>PRESENT — step_plan.xml:290 anti_gaming_read=true</anti_gaming_read_tag>
+    <verdict>PASS — Round 1 FAIL 원인(PD:anti_gaming_check_missing) 해소됨</verdict>
+  </step0b_anti_gaming>
+
+  <step0c_judgment_calls>
+    <verdict>N-A — step_plan에 judgment_calls 블록 없음(AMBIGUOUS 태스크 아님). decision_questions는 design_confirmation 내 정상 처리됨</verdict>
+  </step0c_judgment_calls>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 없음. category_tags에 WA 미포함</wa>
+    <ui>N-A — GUI 위젯 없음. category_tags에 UI 미포함</ui>
+    <fs>PASS — pathlib(Path) 사용, scratch 경로 .pipeline/runs/&lt;id&gt;/ 하위로 격리(traversal 방지), _scratch_root에 pipeline_id 검증. _check_workspace_hygiene는 git tracked 기반 fail-closed</fs>
+    <pd>PASS — 6개 scratch helper + hygiene 함수 단일 책임 분리, 중복 정의 0건. core 로직에 UI import 없음</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점</sec>
+    <al>PASS — isinstance 타입가드(pipeline_id/filename/rel_path/state), None 방어, 빈 문자열 ValueError, 빈 리스트 처리, Permission denied fail-closed/best-effort 분기</al>
+    <build>N-A — meta-task(파이프라인 내부 hygiene), EXE 빌드 대상 아님</build>
+    <vsce>N-A — category_tags에 VSCE 미포함</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <wa score="N/A" max="20">네트워크 호출 없음 — 채점 제외</wa>
+    <ui score="N/A" max="20">GUI 없음 — 채점 제외</ui>
+    <fs score="20" max="20">pathlib 사용, traversal 방지(.pipeline/runs 하위 격리), 원자적 쓰기(_write_json_atomic 재사용), 경로/입력 검증</fs>
+    <pd score="10" max="10">모듈 분리(6 helper 단일책임, 중복 0), 인터페이스 계약(Dict 반환 타입 명시, full type hints)</pd>
+    <al score="20" max="20">타입가드(isinstance), None/범위 검증, 입력 타입 검증, 빈 데이터 처리(빈 list/빈 str 분기)</al>
+    <build score="N/A" max="10">meta-task — 채점 제외</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS(108/120 이상 96)</numeric_verdict>
+    <note>적용 카테고리(FS 20 + PD 10 + AL 20 = 50/50 만점) + helper 6종 docstring/Raises 명세 우수성 반영하여 108점 부여. WA/UI/BUILD는 본 태스크 미해당</note>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 모든 신규 함수 시그니처 타입힌팅(pipeline_id: str 반환 Path 등)</type_hinting_all>
+      <widget_naming>N-A — GUI 위젯 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — 신규 파일 쓰기 없음, 기존 _write_json_atomic 경로 보존</atomic_write>
+      <encoding_fallback>N-A — 신규 파일 읽기는 git tracked 기반, JSON은 utf-8 명시</encoding_fallback>
+      <traversal_wired>PASS — scratch 경로 .pipeline/runs/&lt;id&gt;/scratch 하위 고정</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover evidence에 py_compile PASS + 23개 E2E + 17개 회귀 PASS 명시</execution_check_present>
+    <execution_check_verdict>PASS — QA 재실행: 23개 E2E PASS, workspace_hygiene_2821+nonce_reuse_aef0 회귀 25개 PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — hygiene cleanup CLI argparse 등록 확인(--apply/--json), cmd_hygiene_cleanup 디스패치(23728), _build_workspace_hygiene_summary가 verification_json에 연결(12978)</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>8</scope_files_declared>
+    <evidence_files_submitted>8</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff origin/main...HEAD --name-only가 정확히 8개 scope 파일과 일치. tc*_given.json 등 untracked는 E2E 실행 scratch(미커밋, cleanup 대상)이며 PR diff 미포함</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml decomposition_audit SPLIT_REQUIRED, 8 MT</decomposition_audit_present>
+    <grep_evidence_present>PASS — 각 MT grep_evidence executed=true 포함</grep_evidence_present>
+    <declared_functions>15</declared_functions>
+    <actual_modified_functions>12 (handover impact_analysis target_function 목록과 일치, scope 내)</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <oracle_quality_check>
+    <normal_case>PASS — tc1_normal (scratch_dir_suffix .pipeline/runs/.../scratch)</normal_case>
+    <edge_case>PASS — tc2_edge (Permission denied fail-closed BLOCKED)</edge_case>
+    <expected_non_empty>PASS — 두 expected.json 모두 구체적 result 값 보유</expected_non_empty>
+    <no_placeholder>PASS — TODO/PLACEHOLDER/TBD 없음</no_placeholder>
+    <verdict>PASS</verdict>
+  </oracle_quality_check>
+
+  <secrets_check>
+    <gates_secrets_exit>0 — 검사 파일 4개에서 민감 정보 미발견</gates_secrets_exit>
+    <verdict>PASS</verdict>
+  </secrets_check>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="6개 scratch helper가 _default_runtime_state_dir()/pipeline_id/scratch 반환. tc1_normal: is_under_pipeline_runs=true, not_in_repo_root=true 검증"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="scratch_hygiene_audit.md 생산자 전수조사 + pipeline.py 주석(3712~) helper 사용 안내. MT-2/MT-3 module QA PASS"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="_is_workspace_cleanup_only가 HYGIENE_ARCHIVE_PATTERNS/EXTRA 패턴+접두사로 build_report.xml/_dump.txt/tmp_*.json/.claude/worktrees 분류. lstrip 버그 수정으로 dotfile 접두사 정상화"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="_check_workspace_hygiene 규칙 5 fail-closed(git_query_errored→BLOCKED), per-file Permission denied fail-closed. conftest _cleanup_pytest_tmp_dirs로 세션종료 시 .pytest_tmp_* 정리. tc2_edge oracle 검증"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="hygiene cleanup CLI --apply 미지정 시 dry-run 기본(--help 확인), --apply 시 cleanup_only만 삭제. E2E 테스트 커버"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="cleanup이 _is_workspace_cleanup_only=true만 대상. protected evidence(step_plan/qa_report)와 tests/oracles는 cleanup_only 미분류로 제외"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="_build_workspace_hygiene_summary(12702)가 scratch_root/cleanup_only_count/blocking_count/cleanup_command 반환, _build_verification_json(12978)에 workspace_hygiene_summary로 연결"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="_check_workspace_hygiene가 .pipeline/runs/** PR diff 포함 시 BLOCKED 규칙 구현. workspace_hygiene_2821 회귀 PASS"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="forbidden에 pipeline_state.json 삭제/수정 금지 명시, dev handover에 미수정 확인. Runtime State Store 구조 보존"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="request_accept_nonce_reuse_aef0 회귀 PASS, User Acceptance/nonce/SHA 동기화 미변경. 신규 함수 추가만(breaking_change=NO)"/>
+    <criterion ac_id="AC-11" status="PASS" evidence="23개 신규 E2E PASS + workspace_hygiene_2821/nonce_reuse_aef0 회귀 25개 PASS. py_compile PASS"/>
+  </criteria_verification>
+
+  <patch_lane_check>N-A — HIGH_RISK 프로필, 표준 Incremental Module Gate(8 MT) 사용. Patch Lane 아님</patch_lane_check>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — Round 1 FAIL 원인(anti_gaming_read 태그 누락)이 step_plan.xml:290에서 해소됨. 구현 코드는 변경 없이 모든 게이트 통과.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. _build_workspace_hygiene_summary의 permission_denied_count가 현재 항상 0(주석 향후 확장)으로 하드코딩됨 — AC-4의 Permission denied 카운트를 실제 집계로 연결하면 final packet 요약 정확도 향상(감점 아님, AC-7은 count 표시 요건만 충족하면 PASS).
+    2. tc*_given/when/then.json 등 untracked scratch 잔재가 repo root에 다수 누적 — 본 태스크의 hygiene cleanup CLI(--apply)로 정리 가능하며, 이는 오히려 본 기능의 필요성을 입증.
+  </improvement_suggestions>
+</qa_report>
