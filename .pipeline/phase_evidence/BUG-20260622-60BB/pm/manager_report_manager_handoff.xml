@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260622-60BB</pipeline_id>
+  <manager_run_id>pipeline_manager-26147d988bcd76ab</manager_run_id>
+  <planner_run_id>pm_planner-7005dd9131df773f</planner_run_id>
+  <status>READY</status>
+  <execution_profile>HIGH_RISK</execution_profile>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>cacced2a4a7e7b41993ae7d0687973b243aa1321ea2dd0f1bd3cc8198fe632bf</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <task_summary>gates oracle --allow-no-oracle 경로에서 oracle_quality PASS가 기록되지 않아 Architect phase가 차단되는 버그 수정</task_summary>
+  <phase_sequence>
+    <phase name="PM" status="completed">Contract 초기화 및 PM phase 완료</phase>
+    <phase name="Dev MT-1" status="pending">pipeline.py oracle_quality waiver PASS 기록 로직 추가</phase>
+    <phase name="Dev MT-2" status="pending">회귀 테스트 파일 생성</phase>
+    <phase name="QA" status="pending">수정 검증 및 테스트 PASS 확인</phase>
+    <phase name="SEC" status="pending">외부 네트워크 없음 → skip</phase>
+    <phase name="Build" status="pending">EXE 불필요 → N/A (meta-task)</phase>
+    <phase name="External Gates" status="pending">Technical / Oracle(waiver) / GitHub CI / User Acceptance</phase>
+    <phase name="Architect" status="pending">RCA 및 protocol evolution 여부 결정</phase>
+  </phase_sequence>
+  <contract>
+    <status>FROZEN</status>
+    <contract_hash>9d7b37acb4fbe27b40a66c754dbd748262fc3d63fe343db7c131eda0053297ce</contract_hash>
+    <test_set_hash>3dbe9267ec66f367c231ecafb0a49d1a4228b9802c97a6127cebb43e0b78c898</test_set_hash>
+  </contract>
+  <build_target>N/A</build_target>
+  <build_skip_reason>meta-task</build_skip_reason>
+  <security_check>skip</security_check>
+</manager_handoff>
