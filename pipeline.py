@@ -3174,6 +3174,134 @@ def _default_runtime_state_dir() -> Path:
     return BASE_DIR / ".pipeline" / "runs"
 
 
+# ── Scratch Hygiene v1 (IMP-20260622-79BA MT-1) ─────────────────────────────
+# [Purpose]: 파이프라인이 repo root에 임시 산출물(tmp_*.json, *_dump.txt 등)을
+#   흘려 working tree를 오염시키는 문제를 막기 위해, 파이프라인별 격리 scratch
+#   디렉터리(.pipeline/runs/<id>/scratch/)를 제공한다. 이 위치는 .pipeline/ 하위라
+#   gitignore 대상이며 Runtime State Store와 동일한 격리 모델을 따른다.
+# [Assumptions]: pipeline_id는 비어있지 않은 str. .pipeline 디렉토리는 gitignore 대상.
+#   BASE_DIR는 모듈 로드 시점에 결정되어 있다.
+# [Vulnerability & Risks]: None/빈 pipeline_id가 들어오면 잘못된 경로(.pipeline/runs/)에
+#   파일이 생성될 수 있으므로 입력 검증으로 차단한다. _cleanup_scratch는 ignore_errors로
+#   Permission denied를 best-effort 처리하므로 일부 파일이 남을 수 있다(보안 영향 없음).
+# [Improvement]: scratch 용량 상한/만료 정책을 추가해 장기 미사용 scratch를 자동 정리 가능.
+
+
+def _scratch_root(pipeline_id: str) -> Path:
+    """파이프라인별 scratch 루트 경로(.pipeline/runs/<id>/scratch/)를 반환한다.
+
+    Args:
+        pipeline_id: 파이프라인 ID 문자열 (예: "IMP-20260622-79BA"). None 금지.
+    Returns:
+        Path: .pipeline/runs/<pipeline_id>/scratch (디렉터리를 생성하지 않음).
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    if len(pipeline_id) == 0:
+        raise ValueError("pipeline_id must not be empty")
+    return _default_runtime_state_dir() / pipeline_id / "scratch"
+
+
+def _scratch_path(pipeline_id: str, *parts: str) -> Path:
+    """scratch 루트 아래 임의 깊이의 경로를 만들고 부모 디렉터리를 자동 생성한다.
+
+    Args:
+        pipeline_id: 파이프라인 ID 문자열. None 금지.
+        *parts: scratch 루트 기준 하위 경로 조각들(예: "oracle", "tc1.json").
+    Returns:
+        Path: scratch 루트 아래 결합된 경로(부모 디렉터리는 생성됨, 파일은 미생성).
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    root = _scratch_root(pipeline_id)
+    path = root.joinpath(*parts)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _cleanup_scratch(pipeline_id: str) -> None:
+    """파이프라인 scratch 디렉터리 전체를 삭제한다(파이프라인 종료 시 호출).
+
+    Permission denied 등 삭제 실패는 best-effort로 무시한다(ignore_errors=True).
+
+    Args:
+        pipeline_id: 파이프라인 ID 문자열. None 금지.
+    Returns:
+        None.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    import shutil
+    root = _scratch_root(pipeline_id)
+    if root.exists():
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _scratch_file(pipeline_id: str, filename: str) -> Path:
+    """scratch 루트 바로 아래의 파일 경로를 반환하고 루트 디렉터리를 자동 생성한다.
+
+    Args:
+        pipeline_id: 파이프라인 ID 문자열. None 금지.
+        filename: scratch 루트 아래 파일명(예: "tmp_tc1.json"). None 금지.
+    Returns:
+        Path: scratch 루트 / filename (루트 디렉터리는 생성됨, 파일은 미생성).
+    Raises:
+        TypeError: pipeline_id 또는 filename이 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id 또는 filename이 빈 문자열인 경우.
+    """
+    if filename is None:
+        raise TypeError("filename must not be None")
+    if not isinstance(filename, str):
+        raise TypeError(
+            f"filename must be str, got {type(filename).__name__}"
+        )
+    if len(filename) == 0:
+        raise ValueError("filename must not be empty")
+    root = _scratch_root(pipeline_id)
+    root.mkdir(parents=True, exist_ok=True)
+    return root / filename
+
+
+def _list_scratch_files(pipeline_id: str) -> List[Path]:
+    """scratch 루트 아래의 모든 파일 경로 목록을 반환한다.
+
+    Args:
+        pipeline_id: 파이프라인 ID 문자열. None 금지.
+    Returns:
+        List[Path]: scratch 루트가 없으면 빈 리스트. 있으면 하위 모든 파일.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    root = _scratch_root(pipeline_id)
+    if not root.exists():
+        return []
+    return [p for p in root.rglob("*") if p.is_file()]
+
+
+def _scratch_exists(pipeline_id: str) -> bool:
+    """scratch 루트 디렉터리의 존재 여부를 반환한다.
+
+    Args:
+        pipeline_id: 파이프라인 ID 문자열. None 금지.
+    Returns:
+        bool: scratch 루트가 존재하면 True.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    return _scratch_root(pipeline_id).exists()
+
+
 def _active_run_pointer_path() -> Path:
     """Return the active-run pointer path (.pipeline/active_run.json).
 
@@ -3574,6 +3702,16 @@ def _register_evidence_to_inventory(
 
 # IMP-20260614-2821 MT-1: PM이 명시한 추가 cleanup_only 패턴(_is_cleanup_only_artifact 보조).
 # HYGIENE_ARCHIVE_PATTERNS에 없지만 cleanup-only로 취급해야 하는 진단/임시 산출물 패턴.
+#
+# IMP-20260622-79BA MT-3 (Scratch Redirect 정책 SSoT):
+#   아래 패턴들(oracle_result_dump.txt, *_dump.txt, tmp_tc*.json 등)은 과거 repo root에
+#   흘러 working tree를 오염시키던 진단/임시 dump다. scratch_hygiene_audit.md 전수 조사 결과
+#   pipeline.py 프로덕션 코드에는 이들을 repo root에 직접 쓰는 내부 생산자가 없으며(잔재는
+#   QA/oracle 수동 dump 및 테스트 fixture 산출물), 따라서 기존 함수 본문을 바꾸지 않는다
+#   (Frozen Codebase). 향후 임시/진단 dump가 필요한 내부 생산자는 repo root 대신 반드시
+#   _scratch_file(pipeline_id, name) / _scratch_path(pipeline_id, *parts) 를 사용해
+#   .pipeline/runs/<id>/scratch/ 격리 경로에 써야 한다. 이 목록은 이미 흘러나온 잔재를
+#   cleanup_only(차단 제외, 정리 대상)로 분류하기 위한 안전망이다.
 _WORKSPACE_HYGIENE_EXTRA_CLEANUP_PATTERNS: List[str] = [
     "oracle_result_dump.txt",
     "*_dump.txt",
@@ -3607,7 +3745,12 @@ def _is_workspace_cleanup_only(rel_path: str) -> bool:
     if not isinstance(rel_path, str):
         raise TypeError(f"rel_path must be str, got {type(rel_path).__name__}")
 
-    norm = rel_path.replace("\\", "/").lstrip("./")
+    # IMP-20260622-79BA MT-5: lstrip("./")는 선행 점(.)까지 제거해 dotfile 접두사
+    #   (.pytest_tmp_*, .claude/worktrees/)를 깨뜨렸다(.pytest_tmp_abc/x → pytest_tmp_abc/x).
+    #   선행 "./"만 정확히 제거하도록 교체하여 dot 디렉터리 접두사 분류를 정상화한다.
+    norm = rel_path.replace("\\", "/")
+    while norm.startswith("./"):
+        norm = norm[2:]
     for prefix in _WORKSPACE_HYGIENE_CLEANUP_PREFIXES:
         if norm.startswith(prefix) or Path(norm).name.startswith(prefix):
             return True
@@ -4077,6 +4220,50 @@ def _check_workspace_hygiene(state: Dict[str, Any]) -> Dict[str, Any]:
                     )
                 # _tracked_for_pr가 None(git 부재, 이미 위에서 fail-closed) 또는 False(untracked)
                 # 인 경우는 이 blocker를 적용하지 않는다(deferral/규칙3 권위).
+
+    # ---- 규칙 7 (IMP-20260622-79BA MT-5): PR diff에 runtime state 누출 차단 ----
+    # .pipeline/runs/** 는 gitignore 대상 runtime state store다. 이 경로가 PR changed
+    # files에 포함되면 runtime state(state.json/scratch)가 PR로 누출된 것이므로 BLOCKED.
+    # pipeline_state.json 은 protected(상태 파일)라 PR diff에 포함되면 안 되므로 함께 차단한다.
+    # gh CLI 부재/실패는 graceful skip(검사 불가 → 차단하지 않음). 실 운영에는 gh가 존재한다.
+    result["pr_runtime_state_leak"] = []
+    try:
+        _gh_pr = subprocess.run(
+            ["gh", "pr", "view", "--json", "files"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+            cwd=str(BASE_DIR),
+        )
+    except (FileNotFoundError, OSError):
+        _gh_pr = None  # gh 부재 → graceful skip
+    if _gh_pr is not None and _gh_pr.returncode == 0:
+        try:
+            _pr_payload = json.loads(_gh_pr.stdout)
+            _pr_paths = [
+                str(f.get("path", "") or "").replace("\\", "/").lstrip("./")
+                for f in (_pr_payload.get("files") or [])
+            ]
+        except (json.JSONDecodeError, AttributeError):
+            _pr_paths = []
+        for _pp in _pr_paths:
+            if not _pp:
+                continue
+            if _pp.startswith(".pipeline/runs/"):
+                result["pr_runtime_state_leak"].append(_pp)
+                _add_blocker(
+                    "runtime_state_in_pr",
+                    "Runtime state store(.pipeline/runs/**)가 PR changed files에 포함되어 있습니다. "
+                    "이 경로는 gitignore 대상이어야 하며 PR에 포함되면 안 됩니다. "
+                    "`git rm --cached`로 추적 해제 후 .gitignore를 확인하세요.",
+                    _pp,
+                )
+            elif _pp == "pipeline_state.json":
+                result["pr_runtime_state_leak"].append(_pp)
+                _add_blocker(
+                    "pipeline_state_in_pr",
+                    "pipeline_state.json(protected 상태 파일)이 PR changed files에 포함되어 있습니다. "
+                    "이 파일은 PR diff/packet에 포함되면 안 됩니다(삭제/수정 금지 — 추적만 해제).",
+                    _pp,
+                )
 
     # ---- cleanup_command 구성 (cleanup_only 파일이 있을 때) ----
     if result["cleanup_only_items"]:
@@ -12086,10 +12273,14 @@ def _display_model_from_evidence(
     _wh = evidence.get("workspace_hygiene") or {}
     if not isinstance(_wh, dict):
         _wh = {}
+    # IMP-20260622-79BA MT-7: PR body/MD renderer가 읽는 count 필드를 함께 노출.
     workspace_hygiene_summary = {
         "status": str(_wh.get("status", "NOT_CHECKED") or "NOT_CHECKED"),
         "blocking_items": list(_wh.get("blocking_items", []) or []),
         "cleanup_only_items": list(_wh.get("cleanup_only_items", []) or []),
+        "blocking_count": len(_wh.get("blocking_items", []) or []),
+        "cleanup_only_count": len(_wh.get("cleanup_only_items", []) or []),
+        "runtime_state_leak_count": len(_wh.get("pr_runtime_state_leak", []) or []),
     }
 
     user_checklist = [
@@ -12199,6 +12390,21 @@ def _render_pr_body_final_packet(display_model: Dict[str, Any]) -> str:
         lines.append(f"요구사항 충족 요약: {_summary}")
     else:
         lines.append("요구사항 충족 요약: N/A (structured AC 없음 — legacy 파이프라인)")
+    lines.append("")
+    # IMP-20260622-79BA MT-7: 작업공간 정리(scratch hygiene) 요약.
+    _wh_sum = dict(display_model.get("workspace_hygiene_summary") or {})
+    _wh_status = str(_wh_sum.get("status", "NOT_CHECKED") or "NOT_CHECKED")
+    _wh_block = int(_wh_sum.get("blocking_count", 0) or 0)
+    _wh_clean = int(_wh_sum.get("cleanup_only_count", 0) or 0)
+    _wh_leak = int(_wh_sum.get("runtime_state_leak_count", 0) or 0)
+    _wh_line = (
+        f"작업공간 정리 상태: {_wh_status} "
+        f"(blocking:{_wh_block}, cleanup_only:{_wh_clean}"
+    )
+    if _wh_leak:
+        _wh_line += f", runtime_state_leak:{_wh_leak}"
+    _wh_line += ")"
+    lines.append(_wh_line)
     lines.append("")
     lines.append("요구사항 충족표:")
     lines.append("")
@@ -12493,6 +12699,51 @@ def _build_acceptance_target(evidence: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _build_workspace_hygiene_summary(
+    workspace_hygiene: Dict[str, Any], pipeline_id: str
+) -> Dict[str, Any]:
+    """workspace_hygiene 검사 결과에서 사용자 표시용 scratch hygiene 요약을 파생한다.
+
+    IMP-20260622-79BA MT-7: final packet(JSON/PR body/MD)에 노출할 요약 섹션.
+
+    Args:
+        workspace_hygiene: _check_workspace_hygiene 반환 dict(없으면 빈 dict). None 금지.
+        pipeline_id: 현재 파이프라인 ID 문자열(scratch_root 경로 산출용). None 금지.
+    Returns:
+        Dict: {"status": str, "scratch_root": str or None, "cleanup_only_count": int,
+               "blocking_count": int, "permission_denied_count": int,
+               "runtime_state_leak_count": int, "cleanup_command": str}.
+    Raises:
+        TypeError: workspace_hygiene 또는 pipeline_id가 None이거나 타입이 틀린 경우.
+    """
+    if workspace_hygiene is None:
+        raise TypeError("workspace_hygiene must not be None")
+    if not isinstance(workspace_hygiene, dict):
+        raise TypeError(
+            f"workspace_hygiene must be dict, got {type(workspace_hygiene).__name__}"
+        )
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+
+    scratch_root: Optional[str] = None
+    if pipeline_id:  # 빈 pipeline_id면 scratch_root는 None (잘못된 경로 생성 방지)
+        scratch_root = str(_scratch_root(pipeline_id))
+
+    return {
+        "status": str(workspace_hygiene.get("status", "NOT_CHECKED") or "NOT_CHECKED"),
+        "scratch_root": scratch_root,
+        "cleanup_only_count": len(workspace_hygiene.get("cleanup_only_items") or []),
+        "blocking_count": len(workspace_hygiene.get("blocking_items") or []),
+        "permission_denied_count": 0,  # 향후 확장(현재 0)
+        "runtime_state_leak_count": len(workspace_hygiene.get("pr_runtime_state_leak") or []),
+        "cleanup_command": str(workspace_hygiene.get("cleanup_command", "") or ""),
+    }
+
+
 def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
     """packet evidence dict를 JSON-serializable verification dict로 변환한다.
 
@@ -12723,6 +12974,10 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         "evidence_integrity": evidence_integrity_obj,
         # IMP-20260614-2821 MT-4: workspace/evidence hygiene 검사 결과(SSoT)
         "workspace_hygiene": dict(evidence.get("workspace_hygiene") or {}),
+        # IMP-20260622-79BA MT-7: scratch hygiene 요약(사용자 표시/패킷용 파생 요약)
+        "workspace_hygiene_summary": _build_workspace_hygiene_summary(
+            evidence.get("workspace_hygiene") or {}, pipeline_id
+        ),
         # IMP-20260613-82ED 3rd REJECT fix: acceptance_target — 실제 구현 기준점
         "acceptance_target": _build_acceptance_target(evidence),
         # BLOCKED 검증 결과
@@ -20683,6 +20938,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="파이프라인 완료 후 자동 정리 모드 (terminal_state=COMPLETE 검증 포함)",
     )
 
+    # IMP-20260622-79BA MT-6: hygiene cleanup 서브파서 (cleanup_only 산출물 정리)
+    p_hy_clean = hygiene_sub.add_parser(
+        "cleanup",
+        help="repo root의 cleanup_only 임시 산출물 정리 (기본 dry-run, --apply로 실제 삭제)",
+    )
+    p_hy_clean.add_argument(
+        "--apply", dest="apply", action="store_true", default=False,
+        help="실제로 cleanup_only 파일을 삭제 (미지정 시 dry-run)",
+    )
+    p_hy_clean.add_argument(
+        "--json", dest="json", action="store_true", default=False,
+        help="JSON 형식으로 출력",
+    )
+
     return parser
 
 
@@ -23305,8 +23574,139 @@ def cmd_hygiene_cleanup_workspace(args: "argparse.Namespace") -> None:
     print()
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260622-79BA MT-6: hygiene cleanup — cleanup_only 산출물 정리
+# ---------------------------------------------------------------------------
+# [Purpose]: repo root에 흘러나온 cleanup_only 진단/임시 산출물(tmp_*.json, *_dump.txt,
+#   build_report.xml, .pytest_tmp_*, .claude/worktrees/ 등)을 사용자가 한 명령으로
+#   안전하게 정리한다. 기본은 dry-run이며 --apply 시에만 실제 삭제한다.
+# [Assumptions]: BASE_DIR가 repo root. _check_workspace_hygiene 결과의 cleanup_only_items가
+#   분류 SSoT다. protected 파일(pipeline_state.json, tests/oracles/ 등)은 절대 후보가 아니다.
+# [Vulnerability & Risks]: 삭제 대상 판정 오류 시 의도치 않은 파일 손실 위험 →
+#   _check_workspace_hygiene + _is_workspace_cleanup_only SSoT만 신뢰하고, protected/blocking
+#   파일은 후보에서 제외한다. 삭제 실패는 best-effort(에러 기록 후 계속).
+# [Improvement]: --older-than 연동으로 최근 산출물 보존 옵션 추가 가능.
+
+
+def _build_cleanup_manifest(apply: bool) -> Dict[str, Any]:
+    """cleanup_only 산출물 정리 후보 목록과 (apply 시) 삭제 결과를 manifest로 구성한다.
+
+    Args:
+        apply: True이면 실제 삭제 수행, False이면 dry-run(후보만 산출).
+    Returns:
+        Dict: {"mode": "apply"|"dry-run", "pipeline_id": str, "candidates": list[str],
+               "removed": list[str], "errors": list[dict], "protected_skipped": list[str],
+               "candidate_count": int, "removed_count": int}.
+    Raises:
+        TypeError: apply가 bool이 아닌 경우.
+    """
+    if not isinstance(apply, bool):
+        raise TypeError(f"apply must be bool, got {type(apply).__name__}")
+
+    state = _load_state() or {}
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+
+    # SSoT: _check_workspace_hygiene가 분류한 cleanup_only_items를 신뢰한다.
+    # state에 pipeline_id가 없으면 hygiene이 fail-closed BLOCKED를 반환하므로,
+    # 그 경우엔 직접 root 패턴 스캔으로 cleanup_only 후보를 수집한다.
+    candidates: List[str] = []
+    if pipeline_id:
+        hygiene = _check_workspace_hygiene(dict(state))
+        candidates = list(hygiene.get("cleanup_only_items", []) or [])
+    else:
+        # pipeline_id 없음(비활성 파이프라인): root 패턴만 직접 스캔.
+        _ROOT_PATTERNS: List[str] = [
+            "build_report.xml", "oracle_result_dump.txt",
+            "pr_body_*.txt", "pr_body_*.json",
+            "*_dump.txt", "tmp*.json",
+        ]
+        for _pat in _ROOT_PATTERNS:
+            for _m in BASE_DIR.glob(_pat):
+                if _m.is_file():
+                    _rel = _m.name
+                    if _rel not in candidates:
+                        candidates.append(_rel)
+        for _ptdir in BASE_DIR.glob(".pytest_tmp_*"):
+            _rel = _ptdir.name
+            if _rel not in candidates:
+                candidates.append(_rel)
+        _wt = BASE_DIR / ".claude" / "worktrees"
+        if _wt.exists() and _wt.is_dir():
+            _rel = ".claude/worktrees"
+            if _rel not in candidates:
+                candidates.append(_rel)
+
+    removed: List[str] = []
+    errors: List[Dict[str, str]] = []
+    protected_skipped: List[str] = []
+
+    for rel in candidates:
+        # 이중 안전망: protected/blocking 파일은 절대 삭제하지 않는다.
+        if not _is_workspace_cleanup_only(rel):
+            # cleanup_only가 아닌 항목이 후보에 섞이면(이상 케이스) protected로 간주, 건너뜀.
+            protected_skipped.append(rel)
+            continue
+        target = BASE_DIR / rel
+        if apply:
+            try:
+                if target.is_dir():
+                    import shutil
+                    shutil.rmtree(target, ignore_errors=False)
+                elif target.exists():
+                    target.unlink()
+                else:
+                    continue  # 이미 없음
+                removed.append(rel)
+            except (OSError, PermissionError) as exc:
+                errors.append({"path": rel, "error": str(exc)})
+
+    return {
+        "mode": "apply" if apply else "dry-run",
+        "pipeline_id": pipeline_id,
+        "candidates": candidates,
+        "candidate_count": len(candidates),
+        "removed": removed,
+        "removed_count": len(removed),
+        "errors": errors,
+        "protected_skipped": protected_skipped,
+    }
+
+
+def cmd_hygiene_cleanup(args: "argparse.Namespace") -> None:
+    """hygiene cleanup — repo root의 cleanup_only 임시 산출물 정리.
+
+    기본은 dry-run(후보만 표시). --apply 지정 시 실제 삭제한다.
+    protected evidence(oracle, step_plan, pipeline_state.json 등)는 절대 삭제하지 않는다.
+
+    IMP-20260622-79BA MT-6
+    """
+    apply: bool = getattr(args, "apply", False)
+    json_output: bool = getattr(args, "json", False)
+
+    manifest = _build_cleanup_manifest(apply)
+
+    if json_output:
+        print(json.dumps(manifest, ensure_ascii=False, indent=2))
+        return
+
+    if apply:
+        print("[HYGIENE CLEANUP] cleanup_only 산출물 삭제")
+        print(f"  후보: {manifest['candidate_count']}개  삭제: {manifest['removed_count']}개")
+        for r in manifest["removed"]:
+            print(f"  [삭제] {r}")
+        for e in manifest["errors"]:
+            print(f"  [오류] {e['path']}  error={e['error']}")
+    else:
+        print("[HYGIENE CLEANUP] dry-run — 실제 삭제 없음 (--apply로 실제 삭제)")
+        print(f"  후보: {manifest['candidate_count']}개")
+        for c in manifest["candidates"]:
+            print(f"  [후보] {c}")
+    if manifest["protected_skipped"]:
+        print(f"  [보호] {len(manifest['protected_skipped'])}개 protected 항목 제외")
+
+
 def cmd_hygiene(args: "argparse.Namespace") -> None:
-    """hygiene scan | archive | schedule | cleanup-workspace — 임시 산출물 정리 CLI.
+    """hygiene scan | archive | schedule | cleanup-workspace | cleanup — 임시 산출물 정리 CLI.
 
     scan: 후보 목록만 표시 (파일 이동 없음)
     archive: 후보를 Google Drive 찌꺼기 폴더로 이동
@@ -23324,8 +23724,10 @@ def cmd_hygiene(args: "argparse.Namespace") -> None:
         cmd_hygiene_schedule(args)
     elif sub == "cleanup-workspace":
         cmd_hygiene_cleanup_workspace(args)
+    elif sub == "cleanup":
+        cmd_hygiene_cleanup(args)
     else:
-        _die("[HYGIENE ERROR] 알 수 없는 hygiene 서브명령. scan|archive|schedule|cleanup-workspace 중 선택하세요.")
+        _die("[HYGIENE ERROR] 알 수 없는 hygiene 서브명령. scan|archive|schedule|cleanup-workspace|cleanup 중 선택하세요.")
 
 
 # ---------------------------------------------------------------------------
