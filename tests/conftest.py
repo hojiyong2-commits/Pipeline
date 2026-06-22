@@ -137,3 +137,61 @@ def _default_fake_gh_for_pr_body(monkeypatch, tmp_path):
     # PIPELINE_GH_EXECUTABLE 설정
     monkeypatch.setenv("PIPELINE_GH_EXECUTABLE", str(spy_path))
     yield
+
+
+# ---------------------------------------------------------------------------
+# IMP-20260622-79BA MT-4: .pytest_tmp_* 디렉터리 정리 (Permission denied 처리 포함)
+# Scratch Hygiene v1 — repo root에 남는 Permission denied 임시 디렉터리를
+# 세션 종료 시 best-effort로 정리한다. Windows read-only 파일은 chmod 후 재시도한다.
+# 실패는 fail-closed가 아닌 best-effort(무시) — 테스트 결과에 영향을 주지 않는다.
+# ---------------------------------------------------------------------------
+
+import shutil
+import stat
+
+
+def _cleanup_pytest_tmp_dirs(base_dir: Path) -> None:
+    """repo root의 .pytest_tmp_* 디렉터리를 정리한다(Permission denied 처리 포함).
+
+    Args:
+        base_dir: 정리 대상 repo 루트 경로.
+    Returns:
+        None. 삭제 실패는 best-effort로 무시한다.
+    """
+    if base_dir is None:
+        return  # None 입력 방어 — 정리 대상 없음
+    for item in base_dir.glob(".pytest_tmp_*"):
+        if item.is_dir():
+            try:
+                def _handle_error(func, path, exc_info):
+                    # Windows read-only 파일: 쓰기 권한 부여 후 재시도. 그래도 실패하면 무시.
+                    try:
+                        os.chmod(path, stat.S_IWRITE)
+                        func(path)
+                    except Exception:
+                        pass  # best-effort — Permission denied 잔재는 무시
+                shutil.rmtree(item, onerror=_handle_error)
+            except Exception:
+                pass  # best-effort — 정리 실패는 테스트 결과에 영향 없음
+
+
+@pytest.fixture(autouse=False)
+def cleanup_pytest_tmp():
+    """opt-in: 테스트 후 repo root의 .pytest_tmp_* 디렉터리를 정리한다.
+
+    autouse=False — 정리가 필요한 테스트만 명시적으로 인자로 받는다.
+    """
+    yield
+    _cleanup_pytest_tmp_dirs(Path(__file__).resolve().parent.parent)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """전체 pytest 세션 종료 후 repo root의 .pytest_tmp_* 디렉터리를 정리한다.
+
+    Args:
+        session: pytest Session 객체.
+        exitstatus: pytest 종료 상태 코드.
+    Returns:
+        None. best-effort 정리.
+    """
+    _cleanup_pytest_tmp_dirs(Path(__file__).resolve().parent.parent)

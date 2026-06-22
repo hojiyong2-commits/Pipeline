@@ -1,0 +1,10 @@
+{
+  "case_id": "tc2_edge",
+  "description": "Permission denied 파일이 있을 때 hygiene이 BLOCKED(fail-closed)로 처리하는 엣지 케이스",
+  "operation": "workspace_hygiene_classify",
+  "params": {
+    "file_path": "tmp_tc1_given.json",
+    "git_status": "permission_denied",
+    "is_cleanup_only_pattern": true
+  }
+}
