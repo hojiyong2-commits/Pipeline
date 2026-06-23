@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "BUG-20260622-60BB",
+  "created_at": "2026-06-22T22:33:00Z",
+  "updated_at": "2026-06-23T00:16:32Z",
+  "status": "frozen",
+  "frozen": true,
+  "tests": [
+    {
+      "id": "TC-1",
+      "module": "MOD-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "normal",
+      "points": 30,
+      "given": {
+        "state": "no_oracle_entries_allow_no_oracle_true"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "tests/e2e/test_oracle_quality_waiver_60bb.py::test_allow_no_oracle_waiver_records_oracle_quality_pass",
+          "-v"
+        ]
+      },
+      "then": {
+        "exit_code": 0,
+        "stdout_contains": "PASSED"
+      }
+    },
+    {
+      "id": "TC-2",
+      "module": "MOD-1",
+      "type": "command_check",
+      "priority": "P0",
+      "case_kind": "error",
+      "points": 20,
+      "given": {
+        "state": "no_oracle_entries_no_flag"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "tests/e2e/test_oracle_quality_waiver_60bb.py::test_no_oracle_without_waiver_flag_stays_blocked",
+          "-v"
+        ]
+      },
+      "then": {
+        "exit_code": 0,
+        "stdout_contains": "PASSED"
+      }
+    },
+    {
+      "id": "TC-3",
+      "module": "MOD-1",
+      "type": "command_check",
+      "priority": "P1",
+      "case_kind": "edge",
+      "points": 20,
+      "given": {
+        "state": "normal_oracle_entry_exists"
+      },
+      "when": {
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "tests/e2e/test_oracle_quality_waiver_60bb.py::test_technical_gate_required_before_oracle",
+          "-v"
+        ]
+      },
+      "then": {
+        "exit_code": 0,
+        "stdout_contains": "PASSED"
+      }
+    }
+  ],
+  "frozen_at": "2026-06-23T00:16:32Z",
+  "test_set_hash": "1b32f00c1acd7d4de24e1bf08bb79037d5b6d0522081b2dcbdaed6dff6d13e64",
+  "contract_hash": "9d7b37acb4fbe27b40a66c754dbd748262fc3d63fe343db7c131eda0053297ce"
+}
