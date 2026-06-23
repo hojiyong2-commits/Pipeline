@@ -449,3 +449,154 @@ def test_hygiene_ready_next(tmp_path):
     res_blk = json.loads(proc_blk.stdout)
     assert res_blk["ready_for_next_task"] is False
     assert str(missing) in res_blk["missing_protected"]
+
+
+# ---------------------------------------------------------------------------
+# TC-E2E-11: cleanup 예외 시 BLOCKED 기록 (Round 2 F4)
+# ---------------------------------------------------------------------------
+
+def test_cleanup_exception_records_blocked(tmp_path):
+    """TC-E2E-11: _run_post_complete_cleanup 예외 발생 시 state에 BLOCKED 기록 (F4)."""
+    state_file = tmp_path / "state.json"
+    env = make_env(state_file)
+
+    # cmd_architect의 finalizer 예외 처리 로직과 동일한 BLOCKED 기록을 검증한다.
+    script = _make_state_script(state_file) + (
+        "import pipeline\n"
+        "def fake_cleanup(state, args=None):\n"
+        "    raise RuntimeError('simulated cleanup error')\n"
+        "pipeline._run_post_complete_cleanup = fake_cleanup\n"
+        "try:\n"
+        "    pipeline._run_post_complete_cleanup(state, None)\n"
+        "except RuntimeError as e:\n"
+        "    state['post_complete_cleanup'] = {\n"
+        "        'status': 'BLOCKED',\n"
+        "        'error': str(e),\n"
+        "        'ready_for_next_task': False,\n"
+        "        'removed': [],\n"
+        "        'deferred': [],\n"
+        "        'missing_protected': [],\n"
+        "        'unknown_files': [],\n"
+        "        'workspace_readiness': 'BLOCKED',\n"
+        "        'cleanup_at': pipeline._now(),\n"
+        "    }\n"
+        "pipeline._save(state)\n"
+        "print('DONE')\n"
+    )
+    proc = run_helper(script, env)
+    assert proc.returncode == 0, proc.stderr
+
+    final_state = read_state(state_file)
+    pcc = final_state["post_complete_cleanup"]
+    assert pcc["status"] == "BLOCKED"
+    assert pcc["ready_for_next_task"] is False
+    assert pcc["workspace_readiness"] == "BLOCKED"
+    assert "error" in pcc
+    assert "simulated cleanup error" in pcc["error"]
+
+
+# ---------------------------------------------------------------------------
+# TC-E2E-12: scratch/root 임시 파일 보고 (Round 2 F2)
+# ---------------------------------------------------------------------------
+
+def test_root_tmp_files_reported(tmp_path):
+    """TC-E2E-12: 매니페스트에 없는 scratch/root 임시 파일이 보고됨 (F2).
+
+    scratch 파일은 cleanup_only로 자동 처리(removed)되고, workspace root의 매니페스트
+    없는 임시 파일은 unknown_files로 보고(보존)된다.
+    """
+    state_file = tmp_path / "state.json"
+    env = make_env(state_file)
+
+    # workspace root(=state 파일 부모, tmp_path)에 매니페스트 없는 임시 파일을 둔다.
+    root_tmp = tmp_path / "tmp_tc99_root.json"
+    root_tmp.write_text('{"test": true}', encoding="utf-8")
+
+    script = _make_state_script(state_file) + (
+        "# scratch root에 매니페스트 없는 임시 파일 생성 → cleanup_only 자동 처리 검증\n"
+        "scratch_root = pipeline._scratch_root(state['pipeline_id'])\n"
+        "scratch_root.mkdir(parents=True, exist_ok=True)\n"
+        "(scratch_root / 'tmp_tc99_scratch.json').write_text('{}', encoding='utf-8')\n"
+        "summary = pipeline._run_post_complete_cleanup(state, None)\n"
+        "pipeline._save(state)\n"
+        "print(json.dumps(summary))\n"
+    )
+    proc = run_helper(script, env)
+    assert proc.returncode == 0, proc.stderr
+
+    result = json.loads(proc.stdout)
+    # scratch 파일은 removed 또는 deferred(권한 오류 시)에 포함되어야 함.
+    scratch_in_removed = any("tmp_tc99_scratch" in p for p in result.get("removed", []))
+    scratch_in_deferred = any("tmp_tc99_scratch" in p for p in result.get("deferred", []))
+    assert scratch_in_removed or scratch_in_deferred, (
+        f"scratch file not processed: {result}"
+    )
+
+    # root tmp 파일은 unknown_files로 보고(보존)되어야 함 + 실제 파일은 삭제 금지.
+    root_in_unknown = any("tmp_tc99_root" in p for p in result.get("unknown_files", []))
+    assert root_in_unknown, f"root tmp file not reported as unknown: {result}"
+    assert root_tmp.exists(), "unknown 파일이 삭제됨 (보존 위반)"
+
+    # unknown_files가 있으면 status=WARN + workspace_readiness=WARN.
+    assert result["status"] == "WARN"
+    assert result["workspace_readiness"] == "WARN"
+    assert "unknown_files_note" in result
+
+    # final_state assertion.
+    final_state = read_state(state_file)
+    assert final_state["post_complete_cleanup"]["workspace_readiness"] == "WARN"
+
+
+# ---------------------------------------------------------------------------
+# TC-E2E-13: post_complete_cleanup이 verification_json에 포함됨 (Round 2 F3)
+# ---------------------------------------------------------------------------
+
+def test_post_complete_cleanup_in_verification_json(tmp_path):
+    """TC-E2E-13: post_complete_cleanup 요약이 verification JSON에 포함 (F3)."""
+    state_file = tmp_path / "state.json"
+    env = make_env(state_file)
+
+    script = _make_state_script(state_file) + (
+        "state['post_complete_cleanup'] = {\n"
+        "    'status': 'OK',\n"
+        "    'workspace_readiness': 'OK',\n"
+        "    'ready_for_next_task': True,\n"
+        "    'removed': ['a.json', 'b.json'],\n"
+        "    'deferred': [],\n"
+        "    'missing_protected': [],\n"
+        "    'unknown_files': [],\n"
+        "    'cleanup_at': '2026-01-01T00:00:00Z',\n"
+        "}\n"
+        "pipeline._save(state)\n"
+        "# _build_verification_json은 evidence(또는 state) dict에서 post_complete_cleanup을 읽는다.\n"
+        "try:\n"
+        "    vj = pipeline._build_verification_json(state, None)\n"
+        "    print(json.dumps(vj))\n"
+        "except Exception as e:\n"
+        "    print(json.dumps({'error': str(e)}))\n"
+    )
+    proc = run_helper(script, env)
+    assert proc.returncode == 0, proc.stderr
+
+    result = json.loads(proc.stdout)
+    assert "error" not in result, f"_build_verification_json raised: {result.get('error')}"
+    pcc = result.get("post_complete_cleanup")
+    assert pcc is not None, "verification JSON에 post_complete_cleanup 누락"
+    assert pcc.get("workspace_readiness") == "OK"
+    assert pcc.get("removed_count") == 2
+    assert pcc.get("ready_for_next_task") is True
+
+    # 직접 헬퍼 단위 검증.
+    helper_script = _make_state_script(state_file) + (
+        "summary = pipeline._build_post_complete_cleanup_summary(\n"
+        "    {'status': 'WARN', 'removed': ['x'], 'deferred': ['y', 'z'],\n"
+        "     'unknown_files': ['u'], 'ready_for_next_task': True})\n"
+        "print(json.dumps(summary))\n"
+    )
+    hp = run_helper(helper_script, env)
+    assert hp.returncode == 0, hp.stderr
+    hsum = json.loads(hp.stdout)
+    assert hsum["workspace_readiness"] == "WARN"
+    assert hsum["removed_count"] == 1
+    assert hsum["deferred_count"] == 2
+    assert hsum["unknown_count"] == 1

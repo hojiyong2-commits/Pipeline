@@ -299,15 +299,17 @@ def _build_command_check_env(
     tmp_dir: str | None = None
 
     isolation = given.get("isolation")
-    # IMP-20260623-7EAA: given.cleanup_status=BLOCKED → 자동 격리 state로 사전 조건 설정
-    # test_set.json이 frozen이라 isolation 필드를 추가할 수 없는 경우를 위한 fallback.
+    # IMP-20260623-7EAA Round 2: given.cleanup_status=BLOCKED → 자동 격리 state로 사전 조건 설정.
+    # test_set.json이 frozen이라 isolation 필드를 추가할 수 없는 oracle TC 를 위한 범용 fallback.
+    # pipeline type 은 given 에서 읽어 IMP 전용 하드코딩을 제거한다(범용화). 미지정 시 기본 IMP.
     cleanup_status = given.get("cleanup_status")
     if cleanup_status == "BLOCKED" and isolation is None:
+        pipeline_type = given.get("pipeline_type", "IMP")  # 범용 — given에서 type 읽기 허용
         # post_complete_cleanup.status=BLOCKED인 격리 state 생성
         state_content: dict[str, Any] = {
             "version": "1.2.0",
             "pipeline_id": "ORACLE-TC-SETUP",
-            "type": "IMP",
+            "type": pipeline_type,
             "description": "oracle TC precondition: cleanup BLOCKED",
             "created_at": "2026-01-01T00:00:00Z",
             "updated_at": "2026-01-01T00:00:00Z",
