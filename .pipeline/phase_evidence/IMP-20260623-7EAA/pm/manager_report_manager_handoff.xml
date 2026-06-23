@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260623-7EAA</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-71fe390fe4c8ffea</manager_run_id>
+  <planner_run_id>pm_planner-2c693533b546191b</planner_run_id>
+  <step_plan_sha256>dfc0dad2403b02e53f637f44f7464d32448bbe98a32f523beb2432715c3f0db5</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <handoff_timestamp>2026-06-23T09:45:00Z</handoff_timestamp>
+
+  <execution_summary>
+    <contract_initialized>true</contract_initialized>
+    <contract_frozen>true</contract_frozen>
+    <oracle_registered>5 케이스 (TC-1~TC-5, normal 1개 + edge 4개)</oracle_registered>
+    <modules_registered>6 (MT-1~MT-6)</modules_registered>
+    <acceptance_criteria_count>10</acceptance_criteria_count>
+  </execution_summary>
+
+  <phase_plan>
+    <phase id="2" name="Dev">
+      <modules>MT-1, MT-2, MT-3, MT-4, MT-5, MT-6 (순차)</modules>
+      <target_files>pipeline.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</target_files>
+      <build_target>N/A (meta-task)</build_target>
+    </phase>
+    <phase id="4" name="QA">
+      <scope>10개 AC 검증, E2E 테스트 10개 PASS 확인</scope>
+    </phase>
+    <phase id="5" name="SEC">
+      <action>sec --skip (외부 네트워크/DB 없음)</action>
+    </phase>
+    <phase id="6" name="Build">
+      <action>build --exe N/A --skip-reason meta-task</action>
+    </phase>
+    <phase id="7" name="External Gates">
+      <gates>technical, oracle, github-ci, request-accept, accept</gates>
+    </phase>
+    <phase id="8" name="Architect">
+      <action>architect --report-file architect_report.xml</action>
+    </phase>
+  </phase_plan>
+
+  <risk_notes>
+    <note>pipeline.py는 trust-root 파일이므로 기존 gate 보안 로직 완화 절대 금지</note>
+    <note>cleanup_only 외 파일 삭제 금지</note>
+    <note>glob 기반 무차별 삭제 금지</note>
+    <note>git reset/clean/checkout 명령 금지</note>
+  </risk_notes>
+</manager_handoff>
