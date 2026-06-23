@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260623-7EAA</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <agent_run_id>dev-d83ec49cc3c8faaa</agent_run_id>
+  <scope_declaration>
+    <files_to_create>
+      <file>tests/e2e/test_final_workspace_cleanup_7eaa.py</file>
+    </files_to_create>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>_scratch_root/_state_path_for_pipeline_id/_resolve_state_path_for_write/_save/_check_workspace_hygiene/_external_gate_blockers Grep — 기존 runtime store 격리 패턴 및 gate 함수 확인</searched>
+      <decision>EXTEND — 기존 runtime store 격리 모델을 재사용하여 workspace_artifacts.json을 co-locate, gate 함수는 변경 없이 검증만</decision>
+    </reuse_search>
+    <out_of_scope>전체 architect COMPLETE 경로의 gh-mock e2e 자동 구동, 실제 PR 배포</out_of_scope>
+  </scope_declaration>
+  <impact_analysis>
+    <affected_functions>
+      <function>_register_workspace_artifact (신규)</function>
+      <function>_load_workspace_artifacts (신규)</function>
+      <function>_save_workspace_artifacts (신규)</function>
+      <function>_workspace_artifacts_path (신규 헬퍼)</function>
+      <function>_run_post_complete_cleanup (신규)</function>
+      <function>cmd_architect (COMPLETE 경로 호출 추가)</function>
+      <function>cmd_status (workspace readiness 표시 블록 추가)</function>
+      <function>cmd_new (BLOCKED 차단 가드 추가)</function>
+      <function>cmd_hygiene_final_cleanup (신규)</function>
+      <function>cmd_hygiene_ready_next (신규)</function>
+      <function>cmd_hygiene (final-cleanup/ready-next 분기 추가)</function>
+      <function>build_parser (hygiene final-cleanup/ready-next 서브파서 추가)</function>
+    </affected_functions>
+    <state_mutations>
+      <mutation>state["post_complete_cleanup"] — write (cleanup finalizer 결과)</mutation>
+      <mutation>workspace_artifacts.json (.pipeline/runs/&lt;id&gt;/) — write (artifact 등록)</mutation>
+      <mutation>cleanup_policy=cleanup_only 등록 파일 — delete (COMPLETE/final-cleanup --apply 시)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 기존 함수 시그니처 변경 없음(호출 추가/블록 추가만)</signature_change>
+      <breaking_change>NO — 기존 gate 로직 미변경, legacy pipeline_state.json 미오염</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — tests/e2e/test_final_workspace_cleanup_7eaa.py 10개</test_coverage>
+      <rollback_strategy>git checkout HEAD -- pipeline.py 및 신규 테스트 파일 삭제로 즉시 복구</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <self_check>
+    <python_version_syntax>PASS — typing 모듈/Optional 사용, 3.9+ 호환</python_version_syntax>
+    <type_hinting>PASS — 신규 함수 파라미터+리턴 타입 명시</type_hinting>
+    <error_handling>PASS — 원자적 쓰기, 4-encoding fallback, PermissionError/OSError → deferred</error_handling>
+    <path_safety>PASS — _resolve_state_path_for_write로 격리, legacy 미오염</path_safety>
+    <security>PASS — 기존 gate 보안 로직 완화 없음(git diff 검증), glob 무차별 삭제 금지</security>
+    <al_edge_cases>PASS — None/isinstance/빈 문자열 가드, cleanup_policy unknown 강등</al_edge_cases>
+    <pd_policy>PASS — missing_protected → BLOCKED(보정 없음), 등록 파일만 삭제</pd_policy>
+    <docstring>PASS — 신규 함수 docstring + 모듈 자기반성 헤더</docstring>
+    <execution_check>PASS — py_compile OK, import OK, pytest 9 passed/1 skipped(Windows)</execution_check>
+    <impact_analysis_check>PASS — 6개 MT impact_analysis 출력, state_mutations 명시, risk_assessment 4필드</impact_analysis_check>
+  </self_check>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</manifest_files>
+    <extra_files>없음 (본 작업이 변경한 파일 기준). 단, 세션 시작 전부터 dirty였던 무관 파일 FEAT-20260426-332E/*, tests/test_packing_detail_oracle_4cd8.py가 working tree에 존재하나 본 dev-agent가 수정하지 않았으며 PR 스테이징 대상에서 제외 필요 — Pipeline Manager 확인 요망</extra_files>
+    <trust_root_violation>false (pipeline.py는 PM target_files에 포함된 HIGH_RISK 대상, tests/ 신규 파일도 PM 계획에 포함)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_final_workspace_cleanup_7eaa.py</file>
+    <file>module_qa_MT-1.xml</file>
+    <file>module_qa_MT-2.xml</file>
+    <file>module_qa_MT-3.xml</file>
+    <file>module_qa_MT-4.xml</file>
+    <file>module_qa_MT-5.xml</file>
+    <file>module_qa_MT-6.xml</file>
+    <file>integration_report.xml</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+</handover>
