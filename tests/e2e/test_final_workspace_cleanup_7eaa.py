@@ -335,8 +335,12 @@ def test_status_shows_workspace_readiness(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_new_blocked_when_cleanup_blocked(tmp_path):
-    """TC-E2E-8: post_complete_cleanup.status=BLOCKED이면 new 차단 (AC-8)."""
+    """TC-E2E-8: post_complete_cleanup.status=BLOCKED이면 new 차단 (AC-8).
+
+    CLI Evidence Contract: PIPELINE_STATE_PATH 격리(make_env) + final_state assertion.
+    """
     state_file = tmp_path / "state.json"
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     env = make_env(state_file)
 
     missing_path = tmp_path / "missing_protected.json"
@@ -350,8 +354,8 @@ def test_new_blocked_when_cleanup_blocked(tmp_path):
     assert setup.returncode == 0, setup.stderr
 
     # final_state assertion: BLOCKED 기록 확인.
-    pre_state = read_state(state_file)
-    assert pre_state["post_complete_cleanup"]["status"] == "BLOCKED"
+    final_state = read_state(state_file)
+    assert final_state["post_complete_cleanup"]["status"] == "BLOCKED"
 
     # new 실행 시 차단되어야 함 (exit 1).
     proc = run_cli(["new", "--type", "IMP", "--desc", "should be blocked"], env)
@@ -360,8 +364,8 @@ def test_new_blocked_when_cleanup_blocked(tmp_path):
     assert "BLOCKED" in combined or "final-cleanup" in combined
 
     # final_state: 차단되었으므로 pipeline_id가 새로 바뀌지 않아야 함.
-    post_state = read_state(state_file)
-    assert post_state["pipeline_id"] == PIPELINE_ID
+    final_state = read_state(state_file)
+    assert final_state["pipeline_id"] == PIPELINE_ID
 
 
 # ---------------------------------------------------------------------------
