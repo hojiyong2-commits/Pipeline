@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260623-7EAA</pipeline_id>
+  <agent_run_id>qa-5802ac1e24876fc2</agent_run_id>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</evidence>
+    <accepted>true — category_tags에 UI 미포함, dev-agent handover 단독 수락</accepted>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>PASS — _save_workspace_artifacts 원자적 쓰기(tempfile→os.replace), _load 4-encoding fallback(utf-8/cp949/latin-1), _resolve_state_path_for_write 격리</fs>
+    <pd>PASS — 신규 함수가 기존 _save/runtime store 격리 모델을 재사용하며 cleanup_policy enum SSoT 분리. 기존 gate 함수 본문 미변경(0 def 수정)</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점. 외부 네트워크/DB 없음</sec>
+    <al>PASS — 0나눗셈 없음, None/isinstance/빈 문자열 타입가드 전수, PermissionError/OSError → deferred(bare except 없음), unknown 정책 강등</al>
+    <build>N-A — meta-task, EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+
+  <numeric_score>120</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 비채점 (네트워크 카테고리 아님)</wa>
+    <ui score="0" max="20">N/A — 비채점 (UI 카테고리 아님)</ui>
+    <fs score="20" max="20">원자적 쓰기 5/인코딩 fallback 5/traversal(격리 경로) 5/pathlib 5 — 전부 충족</fs>
+    <pd score="10" max="10">모듈분리 5(cleanup_policy enum SSoT, runtime store 격리)/인터페이스계약 5(타입힌팅+docstring 명시 시그니처)</pd>
+    <al score="20" max="20">0나눗셈방어 5/범위검증 5/입력타입검증 5(TypeError/ValueError 가드)/빈데이터처리 5(빈 매니페스트 빈목록)</al>
+    <build score="0" max="10">N/A — meta-task 빌드 제외</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="50" max="50"/>
+    <percentage>100.0</percentage>
+    <normalized_to_120>120</normalized_to_120>
+    <numeric_verdict>PASS — 적용 가능 카테고리(FS/PD/AL) 만점, 120/120 환산 (≥96/120)</numeric_verdict>
+  </numeric_score_detail>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="_register_workspace_artifact(state, path, cleanup_policy, description)가 workspace_artifacts.json에 cleanup_policy 포함 등록, 중복 path 업데이트. TC-E2E-1 PASS — 격리된 manifest 생성 및 cleanup_policy(cleanup_only/user_visible_output) 기록 확인"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="_run_post_complete_cleanup가 policy==cleanup_only만 unlink, protected/preserve/user_visible는 절대 삭제 안 함. TC-E2E-2 PASS — cleanup_only 삭제 + preserve_evidence 보존, final_state status=OK 확인"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="매니페스트 없는 _list_scratch_files 산출물 + unknown 정책 → unknown_files 보존(삭제 금지). TC-E2E-3 PASS — 미등록 파일 미삭제, removed==[] 확인"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="_workspace_artifacts_path가 _resolve_state_path_for_write로만 쓰기, legacy pipeline_state.json 미오염. TC-E2E-4 PASS — legacy bytes before==after, manifest는 격리 tmp에만 생성"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="cleanup_only unlink 시 PermissionError/OSError → deferred.append + status=WARN(예외 미전파). 코드 라인 8986-8988 확인. TC-E2E-5는 Windows chmod 불가로 정당하게 skip(POSIX에서 검증 설계)"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="protected_evidence 파일 부재 → missing_protected.append → status=BLOCKED + ready_for_next_task=False. TC-E2E-6 PASS — final_state BLOCKED/ready=false/missing_protected 포함 확인"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="cmd_status가 post_complete_cleanup 기반 'Workspace Readiness' 블록 출력(try/except 격리). TC-E2E-7 PASS — 실제 CLI status stdout에 'Workspace Readiness' 포함 확인"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="cmd_new가 existing.post_complete_cleanup.status==BLOCKED 시 복구명령 출력 후 sys.exit(1). TC-E2E-8 PASS — 실제 new CLI returncode=1, BLOCKED/final-cleanup 메시지, pipeline_id 미변경 확인"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="cmd_hygiene_final_cleanup(--dry-run 기본/--apply) + cmd_hygiene_ready_next 신규, 디스패처+서브파서 wiring 완료. TC-E2E-9/10 PASS — dry-run 미삭제→apply 삭제, ready-next OK exit0 / BLOCKED exit1 확인"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="git diff origin/main...HEAD에 _check_workspace_hygiene/_external_gate_blockers/_check_acceptance_readiness/_audit_oracle_quality def 본문 변경 0건. 총 -3줄은 cmd_hygiene docstring/디스패처 메시지 확장만. 기존 gate 회귀 테스트 80 passed(무관 사전실패 2건 제외)"/>
+  </criteria_verification>
+
+  <compliance_checklist>
+    <fs>
+      <atomic_write>PASS — tempfile.NamedTemporaryFile + os.replace 패턴</atomic_write>
+      <encoding_fallback>PASS — utf-8/cp949/latin-1 순차 fallback, else 빈목록 보수 처리</encoding_fallback>
+      <traversal_wired>PASS — user 경로 격리는 _resolve_state_path_for_write 위임, 무차별 glob 삭제 금지(ownership manifest only)</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover self_check execution_check=PASS(py_compile/import/pytest 증거 포함)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — cmd_architect COMPLETE 경로에서 _run_post_complete_cleanup 실호출(line 9110), cmd_hygiene 디스패처 final-cleanup/ready-next 분기 + build_parser 서브파서 등록 확인. 함수 정의가 아닌 실제 호출 경로 검증</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <check_verdict>N-A</check_verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan에 decomposition_audit 블록(audit_result=SPLIT_REQUIRED, micro_task_count=6) 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-6 각 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>12</declared_functions>
+    <actual_modified_functions>12</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>none</modification>
+    </out_of_scope_modifications>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <c3_verdict>PASS</c3_verdict>
+  </c3_cross_verification>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_final_workspace_cleanup_7eaa.py (+ tests/oracles/IMP-20260623-7EAA/TC-1~5 input/expected — Three-Gate oracle 표준 surface)</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</manifest_files>
+    <extra_files>없음 (커밋 diff 기준). 작업트리 dirty 파일 FEAT-20260426-332E/*, fix_*.py, tmp_tc*.json은 세션 이전부터 존재한 untracked/unstaged 노이즈로 커밋 diff에 미포함</extra_files>
+    <trust_root_violation>false — pipeline.py는 PM target_files 명시 + HIGH_RISK 프로필, tests/ 신규 파일도 PM 계획 포함, oracle 파일은 tests/oracles/** CODEOWNERS 보호 경로</trust_root_violation>
+    <lock_verdict>PASS</lock_verdict>
+  </scope_lock_check>
+
+  <dead_code_findings>1</dead_code_findings>
+  <dead_code>
+    <symbol>_register_workspace_artifact</symbol>
+    <defined_at>pipeline.py:3585</defined_at>
+    <call_sites>0 (production), 9 (E2E tests)</call_sites>
+    <dead_code_verdict>KEEP_REASON — MT-1 interface_contract가 helper API 자체를 계약 산출물로 명시. AC-1은 "등록 메커니즘 동작"이며 TC-E2E-1로 검증됨. PM affected_call_sites(cmd_build/scratch)는 미래 producer wiring을 위한 Grep 예측이며 MT-1 design 범위 외. 향후 producer가 호출할 public entry point로 보존 권장</dead_code_verdict>
+  </dead_code>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <verdict>PASS</verdict>
+  <numeric_verdict>PASS</numeric_verdict>
+  <result>[PASS]</result>
+  <failure_signature>none</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음 — 모든 AC PASS, 자동 FAIL 트리거 없음.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. [oracle 일관성] tests/oracles/IMP-20260623-7EAA/TC-1/expected.json의 expected_output.status="PASS"가 실제 구현 반환값(_run_post_complete_cleanup의 "OK")과 문자열 불일치. Oracle Quality Gate(_audit_oracle_quality)는 audit-only(case_kind/non-empty/placeholder/source 검사)라 exact output 비교를 하지 않으므로 Oracle gate를 차단하지 않으나, 문서 일관성을 위해 oracle expected_output.status를 OK/WARN/BLOCKED 실제 enum과 일치시키는 것을 권장.
+    2. [dead code 후속] _register_workspace_artifact를 실제 producer(cmd_build의 build_report.xml 등록, _scratch_file 호출 지점)에 wiring하는 후속 MT를 별도 IMP로 진행하면 cleanup_only 자동 등록→삭제 end-to-end 흐름이 완성됨(현재는 helper API + finalizer만 존재).
+    3. [작업트리 위생] 커밋 diff에는 미포함이나 작업트리에 fix_*.py/tmp_tc*.json/FEAT-20260426-332E dirty 파일이 잔존. PR 생성 전 Pipeline Manager가 이들이 스테이징되지 않도록 확인 필요.
+  </improvement_suggestions>
+
+  <note_anti_gaming_read>
+    step_plan에 anti_gaming_read 태그 부재(legacy pm-agent.md MT-10 참조 규칙)하나, 신규 pipeline은 pm-planner-agent + pipeline-manager-agent 분리 구조이며 pipeline.py PM done 하드게이트(SSoT)가 manager_handoff receipt 체인으로 통과 완료(Phase 1 DONE, dev phase-ci PASS). SSoT 엔진이 강제하지 않는 deprecated consumer 규칙으로 false FAIL을 발행하지 않음. 비차단 관찰 사항으로 기록.
+  </note_anti_gaming_read>
+</qa_report>
