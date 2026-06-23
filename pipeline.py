@@ -18170,6 +18170,16 @@ def cmd_gates(args: argparse.Namespace) -> None:
                     "oracle_blockers": oracle_blockers,
                 }
                 _write_json(paths["oracle_result"], report)
+                # BUG-20260622-60BB MT-1: allow_no_oracle waiver PASS 경로에서
+                # state["oracle_quality"]를 기록하지 않으면 _external_gate_blockers()가
+                # oracle_quality.status != "PASS" 조건으로 Architect phase를 차단한다.
+                state["oracle_quality"] = {
+                    "status": "PASS",
+                    "waived": True,
+                    "allow_no_oracle": True,
+                    "reason": "no-oracle waiver: allow_no_oracle=True, no oracle entries present",
+                    "checked_at": _now(),
+                }
                 _set_external_gate(
                     state,
                     "oracle",

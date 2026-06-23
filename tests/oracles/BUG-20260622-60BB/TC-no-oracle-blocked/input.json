@@ -1,0 +1,13 @@
+{
+  "scenario": "no_oracle_blocked",
+  "description": "oracle 없음 + allow_no_oracle=False 조건에서 gates oracle이 BLOCKED를 반환해야 한다",
+  "preconditions": {
+    "oracle_entries": [],
+    "allow_no_oracle": false,
+    "technical_gate": "PASS"
+  },
+  "action": "python pipeline.py gates oracle",
+  "expected_outcome": "BLOCKED",
+  "expected_state_field": "oracle_quality",
+  "expected_state_value": "PENDING or not PASS"
+}

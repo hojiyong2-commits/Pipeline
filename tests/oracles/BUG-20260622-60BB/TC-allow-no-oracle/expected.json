@@ -1,0 +1,9 @@
+{
+  "exit_code": 0,
+  "oracle_quality_status": "PASS",
+  "oracle_quality_waived": true,
+  "oracle_quality_allow_no_oracle": true,
+  "oracle_quality_reason_nonempty": true,
+  "oracle_quality_checked_at_nonempty": true,
+  "external_gates_oracle_status": "PASS"
+}
