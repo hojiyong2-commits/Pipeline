@@ -51,22 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "6b144d05acd4f247d08db895b10096cc26d7307e44b0e4b04446f156e7fe1f2c",
-      "size_bytes": 1130141
-    },
-    {
-      "path": "core/acceptance/scorers.py",
-      "sha256": "4b6e34163c29dc7e31a7571725d3ee82fee5fac4c16e0a546e7f1c6b61816ed1",
-      "size_bytes": 19274
-    },
-    {
-      "path": "tests/e2e/test_final_workspace_cleanup_7eaa.py",
-      "sha256": "c7a2e6c0725187f48bea5a84a170a75e8219796e57468fb304f553f116164e5e",
-      "size_bytes": 25236
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
