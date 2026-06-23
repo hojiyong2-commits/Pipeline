@@ -1,0 +1,16 @@
+{
+  "scenario": "allow_no_oracle_waiver_pass",
+  "description": "oracle 없음 + allow_no_oracle=True 조건에서 gates oracle이 PASS를 반환하고 state.oracle_quality를 기록해야 한다",
+  "preconditions": {
+    "oracle_entries": [],
+    "allow_no_oracle": true,
+    "technical_gate": "PASS"
+  },
+  "action": "python pipeline.py gates oracle",
+  "expected_state_field": "oracle_quality",
+  "expected_state_value": {
+    "status": "PASS",
+    "waived": true,
+    "allow_no_oracle": true
+  }
+}
