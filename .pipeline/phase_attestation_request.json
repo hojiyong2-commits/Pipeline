@@ -20,7 +20,7 @@
     "output_file": "dev_handover_r2.xml",
     "output_sha256": "5d9832f753db2fe1b4eb426fb17f74ac74d60a753d8a4e2ffc63a51f72c9506e",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260623-7EAA/dev/agent_receipt_dev-b5401e87588df875.json",
-    "receipt_sha256": "4f8ff69b0e0084fb37e653490528b6b37f70cf033b9b8aa3896d507955ba2b3e",
+    "receipt_sha256": "5c106cd2376c33efb0a244b17e558d8a57586808af608811012379615c291a0a",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260623-7EAA\\dev\\dev-b5401e87588df875.json"
   },
