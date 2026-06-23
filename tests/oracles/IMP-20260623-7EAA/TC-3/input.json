@@ -1,0 +1,12 @@
+{
+  "case_id": "TC-3",
+  "case_kind": "edge",
+  "description": "protected_evidence 파일이 누락된 경우 → BLOCKED",
+  "setup": {
+    "pipeline_state": "COMPLETE",
+    "workspace_artifacts": [
+      {"path": "tests/oracles/IMP-20260623-7EAA/TC-1/expected.json", "kind": "oracle", "cleanup_policy": "protected_evidence", "file_exists": false}
+    ]
+  },
+  "action": "architect completes pipeline → cleanup checks protected evidence"
+}

@@ -1,0 +1,14 @@
+{
+  "case_id": "TC-2",
+  "expected_output": {
+    "status": "WARN",
+    "deferred_count": 1,
+    "ready_for_next_task": true
+  },
+  "assertions": [
+    "post_complete_cleanup.status == WARN",
+    "len(post_complete_cleanup.deferred) == 1",
+    "post_complete_cleanup.ready_for_next_task == true",
+    "no exception raised (graceful degradation)"
+  ]
+}

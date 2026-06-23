@@ -1,0 +1,14 @@
+{
+  "case_id": "TC-5",
+  "expected_output": {
+    "exit_code": 1,
+    "blocked": true,
+    "error_contains": "workspace cleanup BLOCKED",
+    "recovery_command_shown": true
+  },
+  "assertions": [
+    "exit code is 1",
+    "error message contains workspace cleanup BLOCKED or equivalent",
+    "recovery command (hygiene final-cleanup --apply) is shown"
+  ]
+}

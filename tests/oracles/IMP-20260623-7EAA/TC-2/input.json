@@ -1,0 +1,12 @@
+{
+  "case_id": "TC-2",
+  "case_kind": "edge",
+  "description": "Permission denied 파일 1개 → deferred + WARN",
+  "setup": {
+    "pipeline_state": "COMPLETE",
+    "workspace_artifacts": [
+      {"path": "tmp_locked.txt", "kind": "temp", "cleanup_policy": "cleanup_only", "simulated_permission": "denied"}
+    ]
+  },
+  "action": "architect completes pipeline → cleanup tries to delete locked file"
+}

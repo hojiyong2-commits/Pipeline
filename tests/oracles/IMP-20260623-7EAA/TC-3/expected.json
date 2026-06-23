@@ -1,0 +1,12 @@
+{
+  "case_id": "TC-3",
+  "expected_output": {
+    "status": "BLOCKED",
+    "ready_for_next_task": false
+  },
+  "assertions": [
+    "post_complete_cleanup.status == BLOCKED",
+    "post_complete_cleanup.ready_for_next_task == false",
+    "blocking reason mentions protected_evidence missing"
+  ]
+}
