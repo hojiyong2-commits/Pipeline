@@ -600,3 +600,111 @@ def test_post_complete_cleanup_in_verification_json(tmp_path):
     assert hsum["removed_count"] == 1
     assert hsum["deferred_count"] == 2
     assert hsum["unknown_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# TC-E2E-14: state["workspace_hygiene"]["cleanup_only_items"] 기반 정리 (Round 3 REJECT fix)
+# ---------------------------------------------------------------------------
+
+def test_hygiene_cleanup_only_items_deleted(tmp_path):
+    """TC-E2E-14: state[workspace_hygiene][cleanup_only_items]의 .pytest_tmp_* 디렉터리가 실제 삭제됨 (Round 3).
+
+    재현상 설명:
+    - .pytest_tmp_abc 디렉터리가 cleanup_only_items에 있어도
+      _run_post_complete_cleanup은 이를 무시하여 디렉터리가 남아있었음.
+    - 이 테스트는 해당 경로가 삭제됨을 검증한다.
+    """
+    state_file = tmp_path / "state.json"
+    env = make_env(state_file)
+
+    # .pytest_tmp_* 디렉터리 생성 (실제 cleanup_only 대상).
+    pytest_tmp_dir = tmp_path / ".pytest_tmp_abc"
+    pytest_tmp_dir.mkdir()
+    (pytest_tmp_dir / "some_artifact.txt").write_text("test", encoding="utf-8")
+
+    script = _make_state_script(state_file) + (
+        "# workspace_hygiene.cleanup_only_items에 .pytest_tmp_* 디렉터리 설정\n"
+        "state['workspace_hygiene'] = {{\n"
+        "    'status': 'WARN',\n"
+        "    'blocking_items': [],\n"
+        "    'cleanup_only_items': [r'{d}'],\n"
+        "    'checked_at': '2026-01-01T00:00:00Z',\n"
+        "}}\n"
+        "summary = pipeline._run_post_complete_cleanup(state, None)\n"
+        "pipeline._save(state)\n"
+        "print(json.dumps(summary))\n"
+    ).format(d=str(pytest_tmp_dir))
+
+    proc = run_helper(script, env)
+    assert proc.returncode == 0, proc.stderr
+
+    result = json.loads(proc.stdout)
+
+    # 핵심 검증: .pytest_tmp_abc 디렉터리가 실제로 삭제됨.
+    assert not pytest_tmp_dir.exists(), (
+        f".pytest_tmp_abc 디렉터리가 삭제되지 않음 — cleanup_only_items SSoT 미적용 버그 재현: {result}"
+    )
+
+    # removed 배열에 해당 경로가 포함됨.
+    assert any("pytest_tmp_abc" in p for p in result.get("removed", [])), (
+        f"removed 배열에 .pytest_tmp_abc 경로가 없음: {result}"
+    )
+
+    # status는 OK 또는 WARN (절대 거짓 양성 차단).
+    assert result["status"] in ("OK", "WARN"), (
+        f"status가 OK/WARN이 아님: {result['status']}"
+    )
+
+    # final_state assertion.
+    final_state = read_state(state_file)
+    pcc = final_state["post_complete_cleanup"]
+    assert any("pytest_tmp_abc" in p for p in pcc.get("removed", [])), (
+        f"final_state removed에 .pytest_tmp_abc 없음: {pcc}"
+    )
+
+
+def test_hygiene_cleanup_only_items_permission_denied_deferred(tmp_path):
+    """TC-E2E-15: cleanup_only_items 항목 삭제 시 Permission denied → deferred (Round 3).
+
+    Windows에서는 chmod 기반 Permission denied 재현 불가하므로 skip.
+    """
+    if sys.platform.startswith("win"):
+        pytest.skip("Windows에서는 chmod 기반 Permission denied 재현 불가")
+
+    state_file = tmp_path / "state.json"
+    env = make_env(state_file)
+
+    locked_dir = tmp_path / ".pytest_tmp_locked"
+    locked_dir.mkdir()
+    inner = locked_dir / "inner.txt"
+    inner.write_text("locked", encoding="utf-8")
+
+    script = _make_state_script(state_file) + (
+        "import os, stat\n"
+        "os.chmod(r'{d}', stat.S_IREAD | stat.S_IEXEC)\n"
+        "state['workspace_hygiene'] = {{\n"
+        "    'status': 'WARN',\n"
+        "    'blocking_items': [],\n"
+        "    'cleanup_only_items': [r'{d}'],\n"
+        "    'checked_at': '2026-01-01T00:00:00Z',\n"
+        "}}\n"
+        "summary = pipeline._run_post_complete_cleanup(state, None)\n"
+        "pipeline._save(state)\n"
+        "os.chmod(r'{d}', stat.S_IRWXU)\n"
+        "print(json.dumps(summary))\n"
+    ).format(d=str(locked_dir))
+
+    proc = run_helper(script, env)
+    assert proc.returncode == 0, proc.stderr
+
+    result = json.loads(proc.stdout)
+
+    # Permission denied → deferred 배열에 기록.
+    assert any("pytest_tmp_locked" in p for p in result.get("deferred", [])), (
+        f"deferred에 locked 경로 없음: {result}"
+    )
+    # 디렉터리는 그대로 남아있음.
+    assert locked_dir.exists(), "Permission denied인데 디렉터리가 삭제됨"
+    # status = WARN (ready_for_next_task=True).
+    assert result["status"] == "WARN"
+    assert result.get("ready_for_next_task") is True

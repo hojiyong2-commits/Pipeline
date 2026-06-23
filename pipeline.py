@@ -9011,6 +9011,62 @@ def _run_post_complete_cleanup(
             # unknown 정책: 삭제 금지, review_required로 표시.
             unknown_files.append(raw_path)
 
+    # IMP-20260623-7EAA Round 3 (REJECT 재작업): workspace_hygiene.cleanup_only_items를
+    # SSoT 입력으로 받아 파일/디렉터리를 cleanup_only 정책에 맞게 삭제한다.
+    # state["workspace_hygiene"]["cleanup_only_items"]는 _check_workspace_hygiene이 채운 목록으로,
+    # .pytest_tmp_* 디렉터리, .claude/worktrees/, build_report.xml 등을 포함한다. 이 목록을 읽지
+    # 않으면 .pytest_tmp_* 디렉터리 등이 정리되지 않는 버그(Round 2 REJECT)가 발생한다.
+    hygiene = state.get("workspace_hygiene", {}) or {}
+    hygiene_cleanup_items = list(hygiene.get("cleanup_only_items", []) or [])
+    # 허용 루트: 운영에서는 BASE_DIR, 격리 테스트(PIPELINE_STATE_PATH)에서는 state 파일 부모.
+    # 둘 중 하나의 하위 경로일 때만 삭제를 허용한다(traversal/오삭제 방어).
+    _allowed_roots: List[Path] = [BASE_DIR.resolve()]
+    try:
+        _ws_root = _workspace_artifacts_path(state).parent.resolve()
+        if _ws_root not in _allowed_roots:
+            _allowed_roots.append(_ws_root)
+    except (TypeError, ValueError, OSError):
+        pass
+    for _hitem in hygiene_cleanup_items:
+        if not isinstance(_hitem, str) or not _hitem:
+            continue
+        # 절대 경로 또는 상대 경로 모두 처리.
+        _hpath = Path(_hitem)
+        if not _hpath.is_absolute():
+            _hpath = BASE_DIR / _hitem
+        _hnorm = str(_hpath).replace("\\", "/")
+        if _hnorm in registered_paths:
+            continue  # 이미 manifest/scratch 에서 처리됨 — 중복 방지.
+        registered_paths.add(_hnorm)
+        # Safety: 허용 루트(BASE_DIR 또는 격리 workspace root) 바깥 경로는 절대 삭제하지 않는다.
+        _within_allowed = False
+        try:
+            _hresolved = _hpath.resolve()
+            for _root in _allowed_roots:
+                try:
+                    _hresolved.relative_to(_root)
+                    _within_allowed = True
+                    break
+                except ValueError:
+                    continue
+        except OSError:
+            _within_allowed = False
+        if not _within_allowed:
+            # 허용 루트 외부 경로 — 절대 삭제 금지, 보류 처리.
+            deferred.append(str(_hpath))
+            continue
+        try:
+            if _hpath.is_dir():
+                shutil.rmtree(str(_hpath))
+                removed.append(str(_hpath))
+            elif _hpath.exists():
+                _hpath.unlink()
+                removed.append(str(_hpath))
+            # 존재하지 않으면 이미 정리됨 — 조용히 skip.
+        except (PermissionError, OSError):
+            # Permission denied / OS 오류 → 삭제 보류(WARN), 데이터는 보존.
+            deferred.append(str(_hpath))
+
     # IMP-20260623-7EAA Round 2 (F2): scratch 파일은 pipeline-owned temporary file 이므로
     # registered 아니어도 cleanup_only 로 자동 처리(삭제)하여 실사용 정리를 보장한다.
     try:
