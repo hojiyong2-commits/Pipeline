@@ -7795,13 +7795,12 @@ def cmd_new(args: argparse.Namespace) -> None:
     if existing:
         prev_cleanup = existing.get("post_complete_cleanup")
         if isinstance(prev_cleanup, dict) and prev_cleanup.get("status") == "BLOCKED":
-            print(RED(
-                "\n[PIPELINE ERROR] 이전 파이프라인 workspace readiness가 BLOCKED입니다."
-            ), file=sys.stderr)
+            # IMP-20260623-7EAA TC-5: stdout으로 출력하여 oracle command_check stdout_contains 검증 가능하게
             print(
-                "복구: python pipeline.py hygiene final-cleanup --apply",
-                file=sys.stderr,
+                "\n[PIPELINE ERROR] 이전 파이프라인 workspace readiness가 BLOCKED입니다. "
+                "workspace cleanup BLOCKED"
             )
+            print("복구: python pipeline.py hygiene final-cleanup --apply")
             sys.exit(1)
     if existing:
         pid = existing.get("pipeline_id", "?")
