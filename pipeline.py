@@ -16673,6 +16673,12 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                         elif crit.text and crit.text.strip():
                             # Format 4c: 자식 요소 없이 criterion 직접 텍스트
                             ver_text = crit.text.strip()[:150]
+                        # Format 4d: evidence/check가 자식 요소 없이 속성으로만 있는 경우
+                        # <criterion ac_id="AC-1" status="PASS" evidence="..."/>
+                        if not ver_text:
+                            attr_evidence = crit.get("evidence") or crit.get("check")
+                            if attr_evidence:
+                                ver_text = str(attr_evidence).strip()[:150]
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text}")
 
