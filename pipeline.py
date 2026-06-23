@@ -24163,7 +24163,8 @@ def cmd_hygiene_final_cleanup(args: "argparse.Namespace") -> None:
     # post_complete_cleanup 상태를 갱신하여 BLOCKED 복구 흐름과 연동.
     cleanup_state = state.get("post_complete_cleanup")
     if isinstance(cleanup_state, dict):
-        prior_removed = cleanup_state.get("removed") if isinstance(cleanup_state.get("removed"), list) else []
+        _prior = cleanup_state.get("removed")
+        prior_removed: list = _prior if isinstance(_prior, list) else []
         cleanup_state["removed"] = prior_removed + removed
         cleanup_state["deferred"] = deferred
         # missing_protected가 비어 있어야 BLOCKED 해제 가능.
