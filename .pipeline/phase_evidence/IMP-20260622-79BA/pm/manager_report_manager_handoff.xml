@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>IMP-20260622-79BA</pipeline_id>
+  <manager_run_id>pipeline_manager-100c29f1a6ca00b9</manager_run_id>
+  <planner_run_id>pm_planner-4fbb07b39fb52365</planner_run_id>
+  <step_plan_sha256>bb95f1cdbd898406678658deac420c28da91d3b8fe8e22fdd294492c78ceb8b1</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <phase>pm</phase>
+  <status>READY_FOR_DEV</status>
+
+  <task_summary>
+    Scratch Hygiene v1 — repo root 임시 산출물 오염 방지와 안전 cleanup 도입.
+    .pytest_tmp_*, .claude/worktrees/, *_dump.txt, tmp_*.json, build_report.xml을
+    scratch 경로로 리다이렉트하고 hygiene 분류/cleanup 명령 추가.
+  </task_summary>
+
+  <execution_profile>HIGH_RISK</execution_profile>
+
+  <contract_summary>
+    <modules>8</modules>
+    <tests>9</tests>
+    <oracles>2</oracles>
+    <oracle_normal>1</oracle_normal>
+    <oracle_edge>1</oracle_edge>
+    <contract_frozen>true</contract_frozen>
+    <contract_hash>9c8509ed5cb1a26676690fca25836a12e7679d4dfdcb64186bedec1282493445</contract_hash>
+    <test_set_hash>3a7c4314854623703cfe17648f696ce0649d764cfd7307745181b7f036c1a57c</test_set_hash>
+  </contract_summary>
+
+  <micro_task_plan>
+    <micro_task id="MT-1">
+      <title>scratch helper 6개 함수 신규 추가</title>
+      <target_file>pipeline.py</target_file>
+      <affected_functions>_get_scratch_dir,_scratch_path,_cleanup_scratch,_scratch_file,_list_scratch_files,_scratch_exists</affected_functions>
+      <covers_ac>AC-1</covers_ac>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <title>생산자 audit 보고서 작성</title>
+      <target_file>scratch_hygiene_audit.md</target_file>
+      <affected_functions>none</affected_functions>
+      <covers_iqr>IQR-1</covers_iqr>
+      <line_estimate>50</line_estimate>
+    </micro_task>
+    <micro_task id="MT-3">
+      <title>내부 생산자 scratch 리다이렉트</title>
+      <target_file>pipeline.py</target_file>
+      <affected_functions>_run_acceptance_tests,_write_tmp_files,_write_oracle_result_dump,_write_build_report</affected_functions>
+      <covers_ac>AC-2</covers_ac>
+      <line_estimate>40</line_estimate>
+    </micro_task>
+    <micro_task id="MT-4">
+      <title>Permission denied 테스트 개선</title>
+      <target_file>tests/conftest.py</target_file>
+      <affected_functions>cleanup_temp_dirs,pytest_sessionfinish</affected_functions>
+      <covers_ac>AC-4</covers_ac>
+      <line_estimate>20</line_estimate>
+    </micro_task>
+    <micro_task id="MT-5">
+      <title>workspace hygiene 분류 강화</title>
+      <target_file>pipeline.py</target_file>
+      <affected_functions>_classify_workspace_item,_run_workspace_hygiene_check,_get_hygiene_cleanup_items</affected_functions>
+      <covers_ac>AC-3,AC-6,AC-8,AC-9</covers_ac>
+      <line_estimate>100</line_estimate>
+    </micro_task>
+    <micro_task id="MT-6">
+      <title>hygiene cleanup CLI 추가</title>
+      <target_file>pipeline.py</target_file>
+      <affected_functions>_cmd_hygiene_cleanup,_build_cleanup_manifest</affected_functions>
+      <covers_ac>AC-5</covers_ac>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+    <micro_task id="MT-7">
+      <title>final packet hygiene 요약 추가</title>
+      <target_file>pipeline.py</target_file>
+      <affected_functions>_build_verification_json,_render_pr_body_final_packet,_render_acceptance_packet_md</affected_functions>
+      <covers_ac>AC-7</covers_ac>
+      <line_estimate>50</line_estimate>
+    </micro_task>
+    <micro_task id="MT-8">
+      <title>15개 E2E 테스트 + oracle</title>
+      <target_file>tests/e2e/test_scratch_hygiene_79ba.py</target_file>
+      <affected_functions>15개 테스트 함수</affected_functions>
+      <covers_ac>AC-11</covers_ac>
+      <line_estimate>400</line_estimate>
+    </micro_task>
+  </micro_task_plan>
+
+  <security_constraints>
+    <constraint>pipeline_state.json 삭제/수정/git rm --cached 절대 금지</constraint>
+    <constraint>브라우저 승인 게이트 복구 금지</constraint>
+    <constraint>User Acceptance 보안 모델 변경 금지 (nonce/SHA 동기화 유지)</constraint>
+    <constraint>gates accept 자동 실행 절대 금지</constraint>
+    <constraint>.pipeline/runs/** PR diff 포함 금지 확인</constraint>
+  </security_constraints>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</manager_handoff>

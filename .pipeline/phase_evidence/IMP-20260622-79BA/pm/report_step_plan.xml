@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260622-79BA</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py 신뢰 루트 파일 수정 + 내부 경로 구조 변경. 단, scratch helper는 신규 함수이고 기존 Runtime State Store를 건드리지 않으므로 회귀 위험은 낮음.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>15</expected_changed_functions>
+      <expected_changed_lines>600</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 수준 질문(scratch 디렉토리 이름 선호, 상수명 스타일 등)은 유지보수성 우선 원칙으로 처리하고 사용자에게 묻지 않았습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>
+          아래 8개 micro-task로 나누어 진행합니다.
+          MT-1: scratch root helper 6개 함수 추가
+          MT-2: 생산자 audit (scratch_hygiene_audit.md)
+          MT-3: 확인된 내부 생산자 scratch 리다이렉트
+          MT-4: Permission denied 테스트 개선 (해당 테스트 없음 확인 → 방어 코드만)
+          MT-5: workspace hygiene 분류 강화
+          MT-6: cleanup 명령 추가
+          MT-7: final packet hygiene 요약 추가
+          MT-8: E2E 테스트 15개 + oracle
+          이 분할로 진행해도 될까요?
+        </user_facing_question>
+        <evidence>
+          사용자 요청에 6개 helper, audit, redirect, permission denied fix, hygiene 분류, cleanup 명령, final packet 개선, 15개 테스트가 명시됨.
+          pipeline.py Grep 분석 결과: 현재 .pytest_tmp_*를 생성하는 테스트가 tests/ 아래 없음.
+          기존 _default_runtime_state_dir, _WORKSPACE_HYGIENE_EXTRA_CLEANUP_PATTERNS SSoT 존재 확인.
+        </evidence>
+        <why_it_matters>
+          Runtime State Store 구조(.pipeline/runs/&lt;id&gt;/state.json)를 건드리지 않으면서
+          scratch 경로를 추가하고 cleanup 명령을 도입해야 하므로 순서가 중요합니다.
+        </why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>위 8개 micro-task 순차 진행</label>
+            <benefit>기존 Runtime State Store 독립 유지, 회귀 테스트 용이</benefit>
+            <cost>MT 수가 많아 gate 절차 반복</cost>
+          </option>
+          <option id="B">
+            <label>scratch + cleanup을 한 번에 병합</label>
+            <benefit>gate 절차 수가 줄어 전체 파이프라인 소요 시간 단축 가능</benefit>
+            <cost>변경 범위 커지고 회귀 원인 추적 어려움</cost>
+          </option>
+        </options>
+        <user_answer>사전 분석 결과 — 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>8</micro_task_count>
+    <grep_executions>5</grep_executions>
+    <ambiguity_triggers_fired>0</ambiguity_triggers_fired>
+    <clarification_requests_issued>0</clarification_requests_issued>
+    <rationale>사용자 요청에 scratch 경로 구조, 분류 규칙, CLI 동작, 15개 테스트 케이스가 모두 명시됨. 기존 Runtime State Store 구조를 그대로 재사용하므로 기술 분기점이 없음. 변경 파일 3개, 변경 함수 15개로 SPLIT_REQUIRED.</rationale>
+    <grep_evidence_summary>
+      _default_runtime_state_dir: match_count=2;
+      tmp_tc|_dump\.txt|build_report\.xml|\.claude/worktrees: match_count=38;
+      def _scratch_root|def _scratch_tmp_dir|def _scratch_pytest_dir: match_count=0;
+      _check_workspace_hygiene: match_count=4;
+      def cmd_hygiene: match_count=3
+    </grep_evidence_summary>
+  </decomposition_audit>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_scratch_root, _scratch_tmp_dir, _scratch_pytest_dir, _scratch_dump_dir, _scratch_worktree_dir, _ensure_scratch_dirs</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 helper 함수)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _scratch_root|def _scratch_tmp|def _ensure_scratch</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>6개 scratch helper 함수 추가 — _default_runtime_state_dir 인접 위치에 배치</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>N/A (분석 작업)</affected_function>
+      <target_files>
+        <file>scratch_hygiene_audit.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>tmp_tc|_dump\.txt|build_report\.xml|\.claude/worktrees</pattern>
+        <match_count>38</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pipeline.py 코드에서 repo root에 임시 파일을 생성하는 지점 분석 후 audit 보고서 작성</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>내부 tmp 생성 지점 (MT-2 분석 결과에 따라 결정)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_write_json_atomic (tempfile 사용 지점)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>NamedTemporaryFile|tempfile\.|tmp_tc</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>MT-2 분석 결과에 따라 내부 생산자를 scratch 경로로 리다이렉트 — CLI 명시 경로는 존중</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>conftest cleanup fixture (신규 또는 확인만)</affected_function>
+      <target_files>
+        <file>tests/conftest.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>\.pytest_tmp|PermissionError</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>repo root에 Permission denied 디렉토리를 남기는 테스트가 없음 확인 — 필요 시 conftest에 cleanup fixture 추가</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>_check_workspace_hygiene, _is_workspace_cleanup_only</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_gates_request_accept</site>
+        <site>cmd_gates_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_workspace_hygiene</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>cleanup_only vs cleanup_required vs blocking 분류 강화, Permission denied fail-closed 추가, .pipeline/runs/** PR diff 포함 시 BLOCKED</change_summary>
+      <line_estimate>100</line_estimate>
+      <covers_ac>AC-3, AC-4, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>cmd_hygiene_cleanup (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 서브커맨드)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_hygiene</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>hygiene cleanup (dry-run 기본) / hygiene cleanup --apply CLI 추가 — cleanup_only만 삭제, protected 보호</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-5, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-7">
+      <affected_function>_build_verification_json, _build_packet_content</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_report_final_packet</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_build_verification_json</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>workspace_hygiene 섹션 추가 (scratch_root, cleanup_only count, blocking count, permission_denied count, cleanup 명령 안내)</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-8">
+      <affected_function>N/A (테스트 작성)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_scratch_hygiene_79ba.py</file>
+        <file>tests/oracles/IMP-20260622-79BA/tc1_normal/input.json</file>
+        <file>tests/oracles/IMP-20260622-79BA/tc1_normal/expected.json</file>
+        <file>tests/oracles/IMP-20260622-79BA/tc2_edge/input.json</file>
+        <file>tests/oracles/IMP-20260622-79BA/tc2_edge/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_scratch_hygiene</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>15개 E2E 테스트 케이스 + oracle 파일 (normal 1개 + edge 1개 이상) — 회귀 테스트 확인 포함</change_summary>
+      <line_estimate>400</line_estimate>
+      <covers_ac>AC-9, AC-10, AC-11</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>내부 scratch root가 파이프라인별로 .pipeline/runs/&lt;pipeline_id&gt;/scratch/ 아래 생성된다 — 6개 helper 함수가 repo root가 아닌 scratch 경로를 반환한다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>확인된 내부 임시/dump 생산자는 repo root 대신 scratch를 사용한다 — scratch_hygiene_audit.md에 리다이렉트 대상이 명시되고 pipeline.py에 반영된다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>root 임시 산출물(build_report.xml, *_dump.txt, tmp_*.json, .claude/worktrees/)은 workspace hygiene에서 cleanup_only 또는 cleanup_required로 정확히 분류된다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>Permission denied 경로는 무시되지 않고 BLOCKED/fail-closed 처리된다 — 테스트 종료 후 repo root에 Permission denied 디렉토리가 남지 않는다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>cleanup 명령은 dry-run 기본이고 --apply 시 cleanup_only만 삭제한다 — 삭제 전/후 목록이 출력된다</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>protected evidence(step_plan.xml, qa_report.xml 등)와 tests/oracles는 cleanup 대상에서 제외된다</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>final packet에 workspace_hygiene 세부 요약(scratch_root, cleanup_only count, blocking count, cleanup 명령 안내)이 표시된다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>.pipeline/runs/** 또는 scratch 파일이 PR diff에 포함되면 BLOCKED된다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>pipeline_state.json은 PR diff와 final packet changed_files에 포함되지 않는다</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>기존 Runtime State Store/User Acceptance/nonce/SHA 동기화는 유지된다</text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="true">
+      <text>신규 15개 테스트와 회귀 테스트(workspace_hygiene_2821, pr_comment_accept_3bf4, request_accept_nonce_reuse_aef0, acceptance_provenance_2338, pr_approver_b96c), Technical/Oracle/GitHub CI가 PASS한다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10</python_version>
+
+  <forbidden>
+    <item>Runtime State Store 구조 건드리지 않음: .pipeline/active_run.json, .pipeline/runs/&lt;id&gt;/state.json, PIPELINE_STATE_PATH, legacy pipeline_state.json read-only fallback 모두 유지</item>
+    <item>pipeline_state.json 삭제/수정/git rm --cached 금지</item>
+    <item>User Acceptance, nonce, SHA 동기화, PR 댓글 승인 방식 변경 금지</item>
+    <item>명시 evidence/report 파일 이동 금지: step_plan.xml, manager_handoff.xml, dev_handover.xml, qa_report.xml, human_acceptance_packet.md/json, tests/oracles/**, deployment 산출물</item>
+    <item>root 전체를 무차별 삭제하는 cleanup 금지 — cleanup_only로 분류된 경로만 삭제</item>
+  </forbidden>
+</step_plan>
