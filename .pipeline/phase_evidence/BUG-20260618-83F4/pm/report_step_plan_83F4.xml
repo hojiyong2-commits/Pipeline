@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260618-83F4</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>브라우저 승인 서버 제거, gates accept 검증 로직 변경, 테스트 신규 작성 — 복수 함수 수정 + 신규 oracle 추가</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>5</expected_changed_functions>
+      <expected_changed_lines>280</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>true</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자 요구사항이 명확하여 P0/P1 ambiguity 없음. 브라우저 승인 코드 제거 범위와 새 PR 댓글 provenance 검증 방식이 orchestrator prompt에 명시됨.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="">
+        <user_facing_question>브라우저 승인 코드 제거와 PR 댓글 provenance 검증을 6개 MT로 분리하는 방식이 맞는지 확인해 주실 수 있을까요?</user_facing_question>
+        <evidence>pipeline.py의 _run_browser_approval_server(165줄), _write_acceptance_request 서명, _cmd_gates_request_accept 출력 로직, _check_pr_approver_provenance 검증, gates accept 브라우저 블록, 신규 E2E 테스트 — 각각 독립적인 함수 단위로 분리 가능합니다.</evidence>
+        <why_it_matters>MT가 너무 크면 한 번에 너무 많은 코드가 바뀌어 QA 검증이 어렵고, 너무 작으면 오버헤드가 증가합니다. 함수 단위 분리가 유지보수성에 가장 유리합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>6개 MT 분리 (함수 단위)</label>
+            <benefit>각 MT가 단일 함수 범위라 QA 검증이 명확하고 실패 원인 추적이 쉽습니다.</benefit>
+            <cost>MT 개수가 많아 pipeline.py 기록 절차가 다소 번거롭습니다.</cost>
+          </option>
+          <option id="B">
+            <label>2개 MT로 통합 (브라우저 제거 + 테스트)</label>
+            <benefit>pipeline.py 기록 절차 횟수가 줄어들어 Pipeline Manager 작업이 단순해집니다.</benefit>
+            <cost>MT 범위가 너무 커서 함수별 진행 상황 추적이 불가능하고, 범위 초과 실수 위험이 높습니다.</cost>
+          </option>
+        </options>
+        <user_answer>A — 6개 MT 분리 방식으로 진행 (사용자 요구사항에 명시됨)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">_run_browser_approval_server 함수 완전 제거 (정의부 160줄 + http.server 의존성)</requirement>
+    <requirement id="REQ-2">_verify_browser_click_freshness 함수 제거 (1022에서 추가된 것 — 확인 결과 pipeline.py에 없음, step_plan_1022.xml에만 언급)</requirement>
+    <requirement id="REQ-3">BROWSER_APPROVAL_TIMEOUT_SECONDS 상수 및 _resolve_browser_approval_timeout 함수 제거 (확인 결과 pipeline.py에 없음, step_plan_1022.xml에만 언급)</requirement>
+    <requirement id="REQ-4">_cmd_gates_request_accept에서 browser_click_confirmed, browser_approval_skip, browser_approval_token 자동 기록 제거</requirement>
+    <requirement id="REQ-5">request-accept 출력: nonce 숨기고 ACCEPT-{pipeline_id} 형식만 표시 + PR 댓글 안내 추가</requirement>
+    <requirement id="REQ-6">gates accept: GitHub API로 PR 댓글 작성자(허용 승인자) + 댓글 타임스탬프(> request 생성 시각) 검증 (provenance 중심)</requirement>
+    <requirement id="REQ-7">gates accept: browser_click_confirmed 검증 블록 완전 제거</requirement>
+    <requirement id="REQ-8">회귀 테스트: 기존 브라우저 승인 oracle 교체 + 새 PR 댓글 provenance 테스트 추가</requirement>
+    <requirement id="REQ-9">pipeline_state.json, manager_handoff_*.xml, step_plan_*.xml 등 실행 산출물 PR diff 포함 금지</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._run_browser_approval_server</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_gates_request_accept (line 17065)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_run_browser_approval_server</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_run_browser_approval_server 함수 정의 (line 16608-16770) 완전 제거. _time_monotonic 래퍼 함수도 함께 제거 (line 16773-16776).</change_summary>
+      <line_estimate>165</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline._write_acceptance_request</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_gates_request_accept (line 17010)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>browser_click_confirmed.*=.*False|browser_approval_skip.*=.*False</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_write_acceptance_request 함수 서명에서 browser_click_confirmed, browser_click_at, browser_approval_token, browser_approval_skip 매개변수 4개 제거. 함수 본문에서 해당 필드 기록 코드 제거.</change_summary>
+      <line_estimate>20</line_estimate>
+      <covers_ac>AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline._cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_browser_result|_session_token|browser_approval</pattern>
+        <match_count>25</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_cmd_gates_request_accept에서: (1) _session_token 생성 제거, (2) _browser_skip 분기 제거, (3) _run_browser_approval_server 호출 제거, (4) browser_* 필드 acceptance_request.json 기록 제거, (5) fail-closed browser_approval_required 블록 제거, (6) 새 출력: nonce 숨기고 ACCEPT-{pipeline_id} 표시 + PR 댓글 안내 추가</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-4, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>pipeline._check_pr_approver_provenance</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.gates_accept (line 18663)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_pr_approver_provenance</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_check_pr_approver_provenance에 타임스탬프 검증 추가: 댓글 작성 시각 > acceptance_request.created_at. 새 failure_code: pr_comment_too_old. nonce 노출 없이 ACCEPT-{pipeline_id} 패턴만 검증 (nonce 부분은 내부에서 대조).</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-6, AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>pipeline.gates_accept (코드 블록)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>browser_click_confirmed.*is True|browser_approval_skip.*is True</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>gates accept에서 BUG-20260616-9DEF MT-3 브라우저 검증 블록(line 18738-18777) 완전 제거. browser_approval_required failure_code 관련 코드 제거.</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>test_pr_comment_approval_83f4 (신규)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_pr_comment_approval_83f4.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pr_comment_approval</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PR 댓글 provenance 검증 E2E 테스트 신규 작성. 테스트 케이스: (1) normal_pr_comment_approval — 허용 승인자가 올바른 코드로 댓글 → PASS, (2) edge_pr_comment_wrong_author — 다른 사용자가 댓글 → pr_approver_missing BLOCKED, (3) edge_pr_comment_too_old — 댓글 시각이 request 생성 이전 → pr_comment_too_old BLOCKED. Oracle 파일 작성.</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-9, AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>_run_browser_approval_server 함수가 pipeline.py에서 완전히 제거되었다 (grep 결과 0건).</text>
+      <expected_evidence>grep _run_browser_approval_server pipeline.py 결과 0건</expected_evidence>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>_time_monotonic 래퍼 함수가 pipeline.py에서 제거되었다.</text>
+      <expected_evidence>grep _time_monotonic pipeline.py 결과 0건</expected_evidence>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>_write_acceptance_request 함수 서명에서 browser_click_confirmed, browser_click_at, browser_approval_token, browser_approval_skip 매개변수가 제거되었다.</text>
+      <expected_evidence>함수 서명에 browser_ prefix 매개변수 없음</expected_evidence>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 실행 시 acceptance_request.json에 browser_click_confirmed, browser_approval_skip, browser_approval_token 필드가 기록되지 않는다.</text>
+      <expected_evidence>테스트 실행 후 acceptance_request.json에 browser_ prefix 필드 없음</expected_evidence>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 출력에 nonce가 노출되지 않고 ACCEPT-{pipeline_id} 형식만 표시된다. PR 댓글 안내가 추가되었다.</text>
+      <expected_evidence>콘솔 출력에 ACCEPT-BUG-20260618-83F4 형식, nonce 8자리 미포함, "PR 댓글 승인 안내" 문구 포함</expected_evidence>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>gates accept는 PR 댓글 작성자가 허용 승인자(hojiyong2-commits)인지 검증한다. 다른 사용자의 댓글은 pr_approver_missing으로 차단된다.</text>
+      <expected_evidence>edge_pr_comment_wrong_author oracle 테스트 PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>gates accept는 PR 댓글 작성 시각이 acceptance_request.created_at 이후인지 검증한다. 이전 댓글은 pr_comment_too_old로 차단된다.</text>
+      <expected_evidence>edge_pr_comment_too_old oracle 테스트 PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>gates accept에서 browser_click_confirmed 검증 블록(BUG-20260616-9DEF MT-3)이 완전히 제거되었다. browser_approval_required failure_code가 발생하지 않는다.</text>
+      <expected_evidence>grep browser_approval_required pipeline.py 결과 0건</expected_evidence>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>normal_pr_comment_approval oracle 테스트가 PASS한다: 허용 승인자가 ACCEPT-{pipeline_id} 댓글을 남기면 gates accept가 성공한다.</text>
+      <expected_evidence>pytest tests/e2e/test_pr_comment_approval_83f4.py::test_normal_pr_comment_approval PASS</expected_evidence>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>기존 브라우저 승인 관련 테스트(788A oracle 등)가 새 구조에 맞게 정리되거나 제거되었다.</text>
+      <expected_evidence>pytest 전체 테스트 PASS, 브라우저 승인 관련 실패 없음</expected_evidence>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 기존 pipeline.py와 동일</python_version>
+
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>6</grep_executions>
+    <notes>
+      6개 함수/파일 수정 범위 — 함수별 MT로 분리. 브라우저 서버 제거(MT-1~3), provenance 강화(MT-4~5), 테스트(MT-6).
+      모든 MT에 grep_evidence 포함. MT-6은 신규 파일이므로 match_count=0 정상.
+    </notes>
+  </decomposition_audit>
+
+  <forbidden>
+    <item>nonce 생성/검증/consume 보안 로직 완화</item>
+    <item>gates request-accept / gates accept 기존 보안 조건 완화</item>
+    <item>D278 post-accept fail-closed 로직 완화</item>
+    <item>2821 workspace_hygiene fail-closed 로직 완화</item>
+    <item>8011 packet 마커 댓글 차단 로직 제거</item>
+    <item>테스트 통과를 위한 graceful skip 추가</item>
+    <item>pipeline_state.json, manager_handoff_*.xml, step_plan_*.xml 등 실행 산출물 PR diff 포함</item>
+    <item>PIPELINE_BROWSER_APPROVAL_SKIP=1 환경변수를 실제 승인 경로에서 사용 (E2E 테스트 내부에서만 허용)</item>
+  </forbidden>
+
+  <dev_handover_template>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <status>READY_FOR_QA</status>
+    <expected_evidence_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_pr_comment_approval_83f4.py</file>
+      <file>tests/oracles/BUG-20260618-83F4/normal_pr_comment_approval/input.json</file>
+      <file>tests/oracles/BUG-20260618-83F4/normal_pr_comment_approval/expected.json</file>
+      <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_wrong_author/input.json</file>
+      <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_wrong_author/expected.json</file>
+      <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_too_old/input.json</file>
+      <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_too_old/expected.json</file>
+    </expected_evidence_files>
+  </dev_handover_template>
+
+  <oracle_design>
+    <oracle_case id="OC-1" case_kind="normal">
+      <name>normal_pr_comment_approval</name>
+      <path>tests/oracles/BUG-20260618-83F4/normal_pr_comment_approval/</path>
+      <input_description>허용 승인자(hojiyong2-commits)가 ACCEPT-BUG-20260618-83F4 댓글을 PR에 남긴 상황</input_description>
+      <expected_source>user_provided</expected_source>
+      <expected_outcome>gates accept PASS, provenance_check.status=PASS, approver=hojiyong2-commits</expected_outcome>
+    </oracle_case>
+    <oracle_case id="OC-2" case_kind="edge">
+      <name>edge_pr_comment_wrong_author</name>
+      <path>tests/oracles/BUG-20260618-83F4/edge_pr_comment_wrong_author/</path>
+      <input_description>다른 사용자(other-user)가 ACCEPT-BUG-20260618-83F4 댓글을 PR에 남긴 상황</input_description>
+      <expected_source>user_provided</expected_source>
+      <expected_outcome>gates accept BLOCKED, failure_code=pr_approver_missing</expected_outcome>
+    </oracle_case>
+    <oracle_case id="OC-3" case_kind="edge">
+      <name>edge_pr_comment_too_old</name>
+      <path>tests/oracles/BUG-20260618-83F4/edge_pr_comment_too_old/</path>
+      <input_description>허용 승인자가 댓글을 남겼으나 댓글 시각이 acceptance_request.created_at 이전인 상황</input_description>
+      <expected_source>user_provided</expected_source>
+      <expected_outcome>gates accept BLOCKED, failure_code=pr_comment_too_old</expected_outcome>
+    </oracle_case>
+  </oracle_design>
+</step_plan>
