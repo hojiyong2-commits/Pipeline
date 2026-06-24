@@ -185,6 +185,24 @@ python pipeline.py gates phase-ci --phase <phase> --repo hojiyong2-commits/Pipel
 **주의:** phase-attestation 브랜치는 반드시 main을 기반으로 생성해야 합니다.
 impl 브랜치를 기반으로 하면 구현 파일들이 diff에 포함되어 preflight-pr CI가 실패합니다.
 
+## User Acceptance 최소 고정 양식 (IMP-20260624-069A)
+
+`gates request-accept` 실행 시 사용자에게 전달되는 승인 요청문은 아래 4요소 고정 양식만 출력합니다.
+추가 설명, 게이트 상태, 체크리스트, 안내 문구는 포함하지 않습니다.
+
+```
+사용자 승인 요청
+
+PR: <PR 링크>
+
+승인 코드:
+<ACCEPT-{pipeline_id}>
+
+CODEX 검토 필요
+```
+
+PR URL이 없는 경우 `PR: (PR 링크 없음)` 으로 표시합니다.
+
 ## External Gate 순서 (Phase 7)
 
 ```powershell

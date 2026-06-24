@@ -16204,18 +16204,18 @@ def _get_pr_changed_files() -> List[str]:
 
 
 def _render_pending_acceptance_comment(display_model: Dict[str, Any]) -> str:
-    """PENDING 승인 안내 댓글 본문을 display model로부터 렌더링한다(SSoT).
+    """PENDING 승인 안내 댓글 본문을 display model로부터 최소 고정 양식으로 렌더링한다(SSoT).
 
-    [Purpose]: IMP-20260614-509F MT-2 — pending 댓글을 단일 데이터 모델 기반으로
-      렌더링하여 다른 표면(accepted 댓글/PR body/MD/JSON)과 정합성을 보장한다.
-    [Assumptions]: display_model은 _build_acceptance_display_model 반환 dict.
+    [Purpose]: IMP-20260624-069A MT-2 — pending 댓글을 4요소(사용자 승인 요청 / PR /
+      승인 코드 / CODEX 검토 필요) 최소 고정 양식으로 통일한다.
+    [Assumptions]: display_model은 _build_acceptance_display_model 반환 dict이며
+      approval_code 및 pr_url 필드가 호출부에서 채워진다.
     [Vulnerability & Risks]: display_model이 None/비dict이면 TypeError. 완료 마커
-      (ACCEPTED/승인 완료/배포 완료/완료됐습니다)는 절대 포함하지 않는다.
-    [Improvement]: 표준 순서 항목을 데이터 주도 목록으로 분리 가능.
+      (ACCEPTED/승인 완료/배포 완료)는 절대 포함하지 않으며 pending HTML 마커는 반드시 유지한다.
+    [Improvement]: 양식 문자열을 모듈 상수 템플릿으로 분리 가능.
 
-    표준 순서: 파이프라인 ID → PR 링크 → GitHub Actions 링크 → 결과물/증거 경로 →
-    게이트 상태 → 요구사항 충족 요약 → evidence_integrity 요약 →
-    workspace_hygiene 요약 → 사용자가 확인할 항목 → 승인 방법 → 거절 방법.
+    고정 순서: 사용자 승인 요청 → PR 링크 → 승인 코드 → CODEX 검토 필요 →
+    pending HTML 마커.
 
     Args:
         display_model: _build_acceptance_display_model 반환 dict.
@@ -16231,68 +16231,26 @@ def _render_pending_acceptance_comment(display_model: Dict[str, Any]) -> str:
             f"display_model must be dict, got {type(display_model).__name__}"
         )
 
+    # IMP-20260624-069A MT-2: PR pending 댓글도 최소 4요소 고정 양식으로 통일.
     pipeline_id = str(display_model.get("pipeline_id", "") or "")
-    pr_url = display_model.get("pr_url") or "(gh CLI 없음 또는 PR 없음)"
-    actions_url = display_model.get("github_actions_url") or "(CI run 없음)"
-    evidence_path = display_model.get("evidence_path") or "(없음)"
-    gates = dict(display_model.get("gates") or {})
-    req = dict(display_model.get("requirements_summary") or {})
-    ei_summary = str(display_model.get("evidence_integrity_summary", "") or "(없음)")
-    wh = dict(display_model.get("workspace_hygiene_summary") or {})
-    checklist = list(display_model.get("user_checklist") or [])
-    approval_code = display_model.get("approval_code")
-    reject_example = str(display_model.get("reject_example", "") or "")
-
-    req_total = int(req.get("total", 0) or 0)
-    req_passed = int(req.get("passed", 0) or 0)
-    req_failed = int(req.get("failed", 0) or 0)
-    req_line = f"{req_passed}/{req_total} 충족" if req_total > 0 else "N/A"
-    if req_failed:
-        req_line += f" (미충족 {req_failed})"
-
-    wh_status = str(wh.get("status", "NOT_CHECKED") or "NOT_CHECKED")
-    wh_blocking = len(wh.get("blocking_items") or [])
-    wh_cleanup = len(wh.get("cleanup_only_items") or [])
+    pr_url = str(display_model.get("pr_url", "") or "")
+    approval_code = display_model.get("approval_code") or f"ACCEPT-{pipeline_id}"
 
     lines: List[str] = []
+    lines.append("사용자 승인 요청")
+    lines.append("")
+    if pr_url:
+        lines.append(f"PR: {pr_url}")
+    else:
+        lines.append("PR: (PR 링크 없음)")
+    lines.append("")
+    lines.append("승인 코드:")
+    lines.append(str(approval_code))
+    lines.append("")
+    lines.append("CODEX 검토 필요")
+    lines.append("")
     lines.append("<!-- pipeline-human-acceptance-packet -->")
     lines.append("<!-- pipeline-human-acceptance-packet-pending -->")
-    lines.append("## 사용자 최종 확인 요청")
-    lines.append("")
-    lines.append(f"파이프라인: {pipeline_id or '(없음)'}")
-    lines.append(f"PR: {pr_url}")
-    lines.append(f"GitHub Actions: {actions_url}")
-    lines.append(f"결과물/증거: {evidence_path}")
-    lines.append("")
-    lines.append("게이트 상태:")
-    lines.append(f"- Technical: {gates.get('technical', 'PENDING')}")
-    lines.append(f"- Oracle: {gates.get('oracle', 'PENDING')}")
-    lines.append(f"- GitHub CI: {gates.get('github_ci', 'PENDING')}")
-    lines.append(f"- User Acceptance: {gates.get('acceptance', 'PENDING')}")
-    lines.append("")
-    lines.append(f"요구사항 충족 요약: {req_line}")
-    lines.append(f"증거 무결성: {ei_summary}")
-    lines.append(
-        f"작업공간 정리 상태: {wh_status} "
-        f"(blocking:{wh_blocking}, cleanup_only:{wh_cleanup})"
-    )
-    lines.append("")
-    lines.append("사용자가 확인할 항목:")
-    for idx, item in enumerate(checklist, start=1):
-        lines.append(f"{idx}. {item}")
-    lines.append("")
-    lines.append("승인 방법 — 아래 승인 코드를 이 PR 댓글에 한 줄로 입력하세요:")
-    lines.append("")
-    if approval_code:
-        lines.append(str(approval_code))
-    else:
-        lines.append("(승인 코드 준비 중 — gates request-accept를 먼저 실행하세요)")
-    lines.append("")
-    lines.append("거절 방법 — 거절 코드 뒤에 이유를 적으세요:")
-    lines.append("")
-    lines.append(reject_example or "(거절 예시 준비 중)")
-    lines.append("")
-    lines.append("코드 외 다른 내용을 입력하면 승인이 거부됩니다.")
     return "\n".join(lines)
 
 
@@ -17953,48 +17911,19 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             "  gates request-accept를 다시 실행하세요."
         )
 
+    # IMP-20260624-069A MT-1: User Acceptance 최종 승인 요청문을 최소 고정 양식으로 통일.
     print()
-    print("=" * 62)
-    print("  사용자 최종 확인 요청")
-    print("=" * 62)
+    print("사용자 승인 요청")
+    print()
     if pr_url:
-        print(f"  PR: {pr_url}")
-    if ci_run_id:
-        print(f"  GitHub Actions: https://github.com/hojiyong2-commits/Pipeline/actions/runs/{ci_run_id}")
-    print(f"  결과물: {evidence}")
-    print()
-
-    # IMP-20260602-1ABE MT-4: AC 충족표 출력 (PR/CI 정보 다음, 승인 코드 직전)
-    if ac_table:
-        print()
-        print(_format_ac_fulfillment_output(ac_table))
-
-    # IMP-20260606-D9F4 REJECT fix: 최종 안내를 "이 대화창" 대신 "GitHub PR 댓글" 명시로 변경.
-    # 현재 허용 승인자도 명확히 표시.
-    print(f"  현재 허용 승인자: {PIPELINE_ALLOWED_APPROVER}")
-    print()
-    print("  ★ 승인 방법: GitHub PR 댓글에 아래 코드를 한 줄로 남겨 주세요.")
-    print("    Claude/Codex가 대신 입력할 수 없습니다. 반드시 사람이 직접 입력해야 합니다.")
-    print()
-    print("  GitHub PR 댓글 작성 방법:")
-    if pr_url:
-        print(f"    1. 위 PR 링크({pr_url})를 엽니다.")
+        print(f"PR: {pr_url}")
     else:
-        print("    1. PR 링크를 엽니다 (github.com에서 해당 PR을 찾으세요).")
-    print("    2. 댓글 입력창에 아래 [승인 코드]를 정확히 한 줄(단독)로 입력합니다.")
-    print("    3. 코드 외에 다른 내용을 입력하면 승인이 거부됩니다.")
-    print("    4. 댓글을 게시한 뒤, 아래 명령을 실행합니다:")
-    print(f"       python pipeline.py gates accept --result ACCEPT --evidence {evidence} --acceptance-code {accept_code}")
+        print("PR: (PR 링크 없음)")
     print()
-    # BUG-20260620-3BF4 MT-2: 사용자가 PR 댓글에 게시하는 승인 코드는 nonce 없는 단순 형식.
-    print("  [승인 코드] — GitHub PR에 단독 댓글로 아래 코드를 게시하세요.")
+    print("승인 코드:")
+    print(f"{pr_comment_accept_code}")
     print()
-    print(f"  {pr_comment_accept_code}")
-    print()
-    print("  [거절 예시]")
-    print(f"  {pr_comment_reject_code}: 거절 이유")
-    print("=" * 62)
-    print()
+    print("CODEX 검토 필요")
     print(f"  승인 요청 ID: {req['request_id']}  (acceptance_request.json 저장됨)")
     reused_label = "재사용" if reuse else "신규 발급"
     _log_event(state, f"acceptance request {reused_label}: request_id={req['request_id']} nonce={nonce}")
