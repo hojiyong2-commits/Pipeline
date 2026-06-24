@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260619-F41F</pipeline_id>
+  <agent>dev-agent</agent>
+  <run_id>dev-f0823c1d4ed1104f</run_id>
+  <phase>dev</phase>
+  <status>COMPLETE</status>
+
+  <scope_declaration>
+    <files_modified>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_pr_comment_approval_83f4.py</file>
+      <file>tests/test_pr_approver_b96c.py</file>
+      <file>tests/test_acceptance_provenance_2338.py</file>
+      <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+      <file>tests/e2e/test_real_cli_paths.py</file>
+      <file>tests/e2e/test_final_packet_2e3d.py</file>
+      <file>tests/e2e/test_acceptance_display_ssot_a35c.py</file>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+    </files_modified>
+  </scope_declaration>
+
+  <impact_analysis>
+    <target_function>pipeline._check_pr_approver_provenance, pipeline._build_verification_json, pipeline._build_acceptance_display_model, pipeline._display_model_from_evidence, pipeline._post_github_pending_acceptance_comment, pipeline._cmd_gates_request_accept</target_function>
+    <change_type>bugfix</change_type>
+    <description>
+      MT-1: _check_pr_approver_provenance — createdAt/created_at 양방향 읽기, timestamp 누락/파싱실패 fail-closed, _accepted_codes로 nonce-less PASS
+      MT-2: tests/e2e/test_pr_comment_approval_83f4.py — 5개 E2E 테스트 신규 추가, oracle 4케이스 검증
+      MT-3: 외부 표시(packet, PR 댓글, 콘솔)에서 nonce 제거, 내부 nonce 검증 보존
+    </description>
+    <side_effects>
+      <effect>기존 테스트 7개(b96c, 2338, aef0, real_cli_paths, final_packet_2e3d, acceptance_display_ssot_a35c, request_accept_snapshot_8c3b) — mock comment created_at 주입 및 nonce-less assert 업데이트</effect>
+    </side_effects>
+  </impact_analysis>
+
+  <module_summary>
+    <module id="MT-1" status="PASS">
+      <change>pipeline._check_pr_approver_provenance: createdAt/created_at 양방향 timestamp 읽기, timestamp 누락/파싱실패 fail-closed, _accepted_codes 집합으로 nonce-less PASS</change>
+    </module>
+    <module id="MT-2" status="PASS">
+      <change>tests/e2e/test_pr_comment_approval_83f4.py: 5개 E2E 테스트 신규 추가, oracle 4케이스 직접 검증</change>
+    </module>
+    <module id="MT-3" status="PASS">
+      <change>pipeline.py: _build_verification_json, _build_acceptance_display_model, _display_model_from_evidence, _post_github_pending_acceptance_comment, _cmd_gates_request_accept — 외부 표시 nonce 제거</change>
+    </module>
+  </module_summary>
+
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_pr_comment_approval_83f4.py</file>
+    <file>tests/test_pr_approver_b96c.py</file>
+    <file>tests/test_acceptance_provenance_2338.py</file>
+    <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+    <file>tests/e2e/test_real_cli_paths.py</file>
+    <file>tests/e2e/test_final_packet_2e3d.py</file>
+    <file>tests/e2e/test_acceptance_display_ssot_a35c.py</file>
+    <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+  </evidence>
+
+  <handover>
+    <to>qa-agent</to>
+    <status>ready</status>
+    <notes>MT-1, MT-2, MT-3 모두 module QA PASS. integration PASS. QA는 전체 파일 검증 후 qa_report 작성 바람.</notes>
+  </handover>
+</dev_handover>

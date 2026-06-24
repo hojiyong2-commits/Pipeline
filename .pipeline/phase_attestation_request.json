@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-19T13:04:20Z",
+  "pipeline_id": "BUG-20260619-F41F",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "05e69d64bc1bc0d50b7a2584a9cee6959da062d8",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-19T12:48:52Z",
+    "report_file": "dev_handover_F41F.xml",
+    "evidence": "pipeline.py,tests/e2e/test_pr_comment_approval_83f4.py"
+  },
+  "agent_run": {
+    "run_id": "dev-f0823c1d4ed1104f",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_F41F.xml",
+    "output_sha256": "35c9ec2330c4f8511557b958afd397864e548888d5dea7f14457df8ac6754b48",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260619-F41F/dev/agent_receipt_dev-f0823c1d4ed1104f.json",
+    "receipt_sha256": "8dd44b669973996d035074295b550722297f3c4347686fec8f0619504bda3f97",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260619-F41F\\dev\\dev-f0823c1d4ed1104f.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260619-F41F\\dev\\dev-f0823c1d4ed1104f.json",
+      "path": ".pipeline/phase_evidence/BUG-20260619-F41F/dev/agent_receipt_dev-f0823c1d4ed1104f.json",
+      "sha256": "8dd44b669973996d035074295b550722297f3c4347686fec8f0619504bda3f97",
+      "size_bytes": 506,
+      "requires_force_add": false
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_F41F.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260619-F41F/dev/report_dev_handover_F41F.xml",
+      "sha256": "35c9ec2330c4f8511557b958afd397864e548888d5dea7f14457df8ac6754b48",
+      "size_bytes": 3358,
+      "requires_force_add": false
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260619-F41F/dev/scope_manifest_scope_manifest.json",
+      "sha256": "9d22d8b49688e60403c17cc185d5cb63b6b748bec1e8d391b06de86c39441d12",
+      "size_bytes": 3024,
+      "requires_force_add": false
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "2a788a358856422d9fcfc523f70ef3656ad0dd4a60add058fdce229518dce48e",
+      "size_bytes": 1078247
+    }
+  ],
+  "local_only_files": []
+}
