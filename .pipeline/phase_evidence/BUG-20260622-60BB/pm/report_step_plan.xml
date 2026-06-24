@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260622-60BB</pipeline_id>
+  <pipeline_type>BUG</pipeline_type>
+  <description>no-oracle waiver PASS 시 oracle_quality가 PENDING으로 남아 Architect가 차단되는 버그 수정</description>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py는 trust-root 파일입니다. 게이트 로직 수정은 전체 파이프라인 무결성에 영향을 줍니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>1</expected_changed_functions>
+      <expected_changed_lines>50</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <audit_result>SINGLE_TASK_OK</audit_result>
+    <reason>단일 함수 내 단일 경로 수정(gates oracle action handler 18156-18185번 줄)으로 충분히 격리됨. 테스트 파일 추가로 검증.</reason>
+    <micro_task_count>2</micro_task_count>
+    <estimated_total_lines>50</estimated_total_lines>
+    <judgment_calls_needed>false</judgment_calls_needed>
+    <grep_executions>4</grep_executions>
+    <affected_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_oracle_quality_waiver_60bb.py</file>
+    </affected_files>
+    <decomposition_rationale>MT-1은 pipeline.py의 allow_no_oracle waiver PASS 경로에서 oracle_quality 상태를 기록하고, MT-2는 해당 수정의 회귀 테스트를 추가합니다.</decomposition_rationale>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자 요청에 버그 위치, 수정 방향, 필수 필드가 구체적으로 명시되어 있어 P2 질문 없이 진행합니다.</filter_summary>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>사용자 요청에 구체적 버그 위치(pipeline.py 18156-18185번 줄 allow_no_oracle waiver 경로)와 수정 방향(oracle_quality PASS 기록)이 명시되어 있어 P2 질문 없이 진행합니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>allow_no_oracle waiver PASS 경로에서 oracle_quality를 기록할 때 어떤 필드를 포함해야 하나요?</user_facing_question>
+        <evidence>사용자 요청에 필수 필드가 명시됨: status=PASS, waived=true, allow_no_oracle=true, reason/summary, checked_at</evidence>
+        <why_it_matters>_external_gate_blockers()가 oracle_quality.status == "PASS"를 확인하므로 status 필드는 필수입니다. waived 필드로 일반 PASS와 waiver PASS를 구분해야 향후 진단이 쉽습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>사용자 명시 필드 전체 포함 (status, waived, allow_no_oracle, reason, checked_at)</label>
+            <benefit>진단 가능성 최대화, 향후 waiver 추적 용이</benefit>
+            <cost>5줄 추가 코드 작성 필요 (상태 딕셔너리 구성 및 타임스탬프 기록)</cost>
+          </option>
+          <option id="B">
+            <label>status=PASS만 포함</label>
+            <benefit>변경 코드 1줄로 최소화, 파이프라인 레이어 영향 최소</benefit>
+            <cost>waiver 여부 구분 불가, 사용자가 명시한 waived/allow_no_oracle 필드 누락, oracle_quality 상태 디버깅 시 waiver 원인 파악 불가</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청에 필수 포함 필드가 명시되어 있음 — 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">allow_no_oracle waiver PASS 경로에서 state["oracle_quality"]를 PASS waiver로 기록</requirement>
+    <requirement id="REQ-2">oracle_quality 기록 필드: status=PASS, waived=true, allow_no_oracle=true, reason/summary, checked_at</requirement>
+    <requirement id="REQ-3">_external_gate_blockers()가 no-oracle waiver PASS를 정상 PASS로 인식</requirement>
+    <requirement id="REQ-4">일반 oracle entry가 있는 경우 기존 _audit_oracle_quality() 결과 유지</requirement>
+    <requirement id="REQ-5">기존 차단 조건(normal case 부족, edge case 부족, placeholder expected, agent_generated) 완화 금지</requirement>
+    <requirement id="REQ-6">회귀 테스트 추가</requirement>
+  </requirements>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>allow_no_oracle waiver PASS 경로에서 state["oracle_quality"]가 {"status": "PASS", "waived": true, "allow_no_oracle": true, ...} 형태로 기록된다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>oracle_quality 기록에 reason/summary와 checked_at 타임스탬프가 포함된다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>_external_gate_blockers()가 no-oracle waiver PASS 상태에서 oracle_quality blocker를 생성하지 않는다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>--allow-no-oracle 없이 oracle이 없으면 여전히 BLOCKED 처리된다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>일반 oracle entry가 있는 경우 기존 _audit_oracle_quality() 결과가 그대로 사용된다</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>malformed/weak oracle은 waiver PASS로 오염되지 않는다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>gates oracle action handler (pipeline.py 18156-18185)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_external_gate_blockers() — oracle_quality 상태 확인 (10428-10434)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>allow_no_oracle</pattern>
+        <match_count>9</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>allow_no_oracle waiver PASS 경로(18172-18182)에서 _set_external_gate 호출 전에 state["oracle_quality"]를 waiver PASS로 기록</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-1,AC-2,AC-3</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>신규 테스트 함수들</affected_function>
+      <target_files>
+        <file>tests/e2e/test_oracle_quality_waiver_60bb.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_oracle_quality_waiver</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>no-oracle waiver 시나리오 E2E 회귀 테스트 추가 (5개 케이스: waiver PASS 기록, blocker 미생성, 일반 oracle 유지, waiver 없이 oracle 없음 차단, malformed 오염 방지)</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-4,AC-5,AC-6</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <python_version>3.10 — 프로젝트 표준</python_version>
+
+  <forbidden>
+    <item>Oracle Quality Gate 기준 완화</item>
+    <item>--allow-no-oracle 허용 범위 확대</item>
+    <item>User Acceptance/nonce/runtime state store/scratch hygiene 변경</item>
+    <item>IMP-20260622-6976 state 수동 편집</item>
+    <item>PR에 pipeline_state.json, .pipeline/runs/**, step_plan*.xml, manager_handoff*.xml, *_dump.txt, tmp_*.json, build_report*.xml, KittingMapper 관련 파일 포함</item>
+  </forbidden>
+
+  <roadmap>
+    <phase name="PM" status="in-progress">Contract 초기화 및 PM phase attestation</phase>
+    <phase name="Dev MT-1" status="pending">pipeline.py oracle_quality waiver PASS 기록 로직 추가</phase>
+    <phase name="Dev MT-2" status="pending">회귀 테스트 파일 생성</phase>
+    <phase name="QA" status="pending">수정 검증 및 테스트 PASS 확인</phase>
+    <phase name="SEC" status="pending">외부 네트워크 없음 → skip</phase>
+    <phase name="Build" status="pending">EXE 불필요 → N/A (meta-task)</phase>
+    <phase name="External Gates" status="pending">Technical / Oracle(waiver) / GitHub CI / User Acceptance</phase>
+    <phase name="Architect" status="pending">RCA 및 protocol evolution 여부 결정</phase>
+  </roadmap>
+
+  <handover_template_info>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_oracle_quality_waiver_60bb.py</file>
+    </files>
+  </handover_template_info>
+</step_plan>
