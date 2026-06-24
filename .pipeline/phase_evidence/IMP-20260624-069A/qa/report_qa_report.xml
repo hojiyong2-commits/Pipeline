@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260624-069A</pipeline_id>
+  <round>2</round>
+  <handover_check>
+    <from>dev-agent</from>
+    <evidence_present>PASS — dev_handover.xml에 scope_declaration, impact_analysis, evidence(changed_files) 포함</evidence_present>
+    <ui_handover_required>NO — category_tags에 UI 미포함, dev-agent 단독 수행 태스크</ui_handover_required>
+  </handover_check>
+  <step0b_anti_gaming_read>PASS — step_plan.xml L34 &lt;anti_gaming_read&gt;true&lt;/anti_gaming_read&gt; 존재. Round 1 FAIL 원인(PD:anti_gaming_check_missing) 해소됨.</step0b_anti_gaming_read>
+  <step0c_judgment_calls>N-A — step_plan에 &lt;judgment_calls&gt; 블록 없음 (AMBIGUOUS 태스크 아님)</step0c_judgment_calls>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님</wa>
+    <ui>N-A — GUI 위젯 카테고리 아님</ui>
+    <fs>N-A — 파일 I/O 카테고리 아님</fs>
+    <pd>PASS — MT 단위 모듈 분리 명확(MT-1 CLI 출력 / MT-2 PR 댓글 렌더 / MT-3 문서 / MT-4 테스트). display_model dict 인터페이스 계약 유지.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — _render_pending_acceptance_comment None 입력 시 TypeError 방어(TC-6), pr_url 빈 값 fallback 처리. 빈 데이터/타입 방어 확인.</al>
+    <build>N-A — BUILD 카테고리 아님 (meta-task: pipeline.py + agent MD + test)</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+
+  <numeric_score_breakdown>
+    <wa score="0" max="20">N/A — 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5(MT별 책임 분리 명확) + 인터페이스계약 5/5(display_model dict 시그니처 유지, 호출부 파손 없음)</pd>
+    <al score="20" max="20">입력타입검증 5/5(None TypeError), 빈데이터 5/5(pr_url fallback). 해당 항목 만점.</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="110" max="120"/>
+    <percentage>91.7</percentage>
+    <numeric_verdict>PASS(≥96/120)</numeric_verdict>
+  </numeric_score_breakdown>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover self_check/execution_check = PASS (py_compile OK, import OK, 신규 테스트 6 passed, 직접 렌더러 13 passed)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — QA가 직접 _render_pending_acceptance_comment 실행하여 4요소+마커2종 출력 확인. _cmd_gates_request_accept print 블록도 코드 리뷰로 4요소 출력(L17912~) 확인. 실제 호출 경로(L17924 pr_comment_accept_code 출력) 검증.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <check_verdict>N-A</check_verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan L36~46 &lt;decomposition_audit&gt; 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~4 모두 &lt;grep_evidence&gt;&lt;executed&gt;true&lt;/executed&gt; 포함</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>none</modification>
+    </out_of_scope_modifications>
+    <check_verdict>WITHIN_SCOPE</check_verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>4</scope_files_declared>
+    <evidence_files_submitted>4</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음 — pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_request_format_069a.py, tests/e2e/test_request_accept_snapshot_8c3b.py 모두 PM step_plan micro_tasks target_files에 명시(MT-1이 8c3b 포함). 오라클 파일(tests/oracles/IMP-20260624-069A/**)은 Contract v2 정상 산출물.</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <check_verdict>PASS</check_verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <ac_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="pipeline.py _cmd_gates_request_accept L17912~ print 블록이 '사용자 승인 요청' 헤더 / 'PR: {pr_url}' / '승인 코드:' + pr_comment_accept_code(ACCEPT-{pipeline_id}, nonce 없음) / 'CODEX 검토 필요' 4요소만 출력. git diff로 기존 verbose 양식(게이트상태/체크리스트/안내문구) 전면 삭제 확인."/>
+    <criterion ac_id="AC-2" status="PASS" evidence="_render_pending_acceptance_comment 실제 실행 결과: '사용자 승인 요청 / PR: ... / 승인 코드: ACCEPT-... / CODEX 검토 필요 + pending HTML 마커 2종'. 4요소 + 마커만 반환 확인."/>
+    <criterion ac_id="AC-3" status="PASS" evidence=".claude/agents/pipeline-manager-agent.md에 'User Acceptance 최소 고정 양식 (IMP-20260624-069A)' 섹션 추가. 4요소 양식 코드블록 + PR 없음 fallback 명시."/>
+    <criterion ac_id="AC-4" status="PASS" evidence="tests/test_acceptance_request_format_069a.py 6개 테스트(4요소 순서/PR fallback/금지문구/마커/accepted마커부재/None TypeError) 전부 PASS. 형식 준수 진성 검증(부정 단언 포함)."/>
+    <criterion ac_id="AC-5" status="PASS" evidence="accept_code(nonce form, L17821)와 ac_table(L17836)은 함수 내 여전히 정의·사용됨(acceptance_request.json 직렬화 + req_data 적재). nonce/SHA 동기화, packet 생성, _render_pr_body_final_packet 로직 미수정(forbidden 준수)."/>
+  </ac_verification>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="CLI 4요소 양식 코드 리뷰 + nonce-free 코드(L17824/L17924) 확인"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="_render_pending_acceptance_comment 런타임 실행으로 4요소+마커2종 확인"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="pipeline-manager-agent.md 최소 양식 섹션 추가 확인"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="6개 회귀 테스트 PASS"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="기존 nonce/packet/forbidden 로직 보존 확인"/>
+  </criteria_verification>
+
+  <patch_lane_check>N-A — HIGH_RISK 실행 프로필(trust-root pipeline.py + agent MD 수정), Full Lane 적용</patch_lane_check>
+
+  <numeric_score>110</numeric_score>
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    - 없음. Round 1 FAIL 원인이었던 anti_gaming_read 태그가 step_plan.xml L34에 추가되어 Step 0-B gate 통과. AC-1~AC-5 모두 PASS. 관련 테스트 13건(8c3b 7 + 069a 6) 전부 PASS. dev-agent가 flag했던 trust_root_test_conflict(8c3b TC-1/TC-1b nonce 단언)는 PM step_plan MT-1 scope에 8c3b 포함 후 nonce-free 양식으로 갱신되어 해소됨.
+  </critical_issues>
+  <improvement_suggestions>
+    - test_acceptance_request_format_069a.py가 CLI stdout(_cmd_gates_request_accept)를 직접 subprocess로 검증하지 않고 공유 렌더러만 검증하나, CLI stdout 경로는 8c3b E2E(test_tc1) subprocess 테스트가 nonce-free 코드 출력을 검증하므로 양 표면 모두 커버됨.
+    - dev handover가 언급한 baseline 사전 실패 16건(test_request_accept_sst_2044.py 오라클 input.json 부재 등)은 본 파이프라인과 무관하나, Phase 7 Technical/Oracle gate 진행 전 별도 정리 권장.
+  </improvement_suggestions>
+</qa_report>
