@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260623-7EAA</pipeline_id>
+  <mt_id>MT-2, MT-6 (Round 3 재작업)</mt_id>
+  <agent>dev-agent</agent>
+  <rework_round>3</rework_round>
+  <rework_reason>User Round 2 REJECT: _run_post_complete_cleanup이 state["workspace_hygiene"]["cleanup_only_items"]를 SSoT 입력으로 읽지 않아 .pytest_tmp_* 디렉터리 미정리 버그 수정</rework_reason>
+  <files_changed>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_final_workspace_cleanup_7eaa.py</file>
+  </files_changed>
+  <evidence>
+    pipeline.py: _run_post_complete_cleanup 함수에 state["workspace_hygiene"]["cleanup_only_items"] SSoT 입력 처리 블록 추가.
+    manifest 루프 직후, scratch 처리 이전에 삽입. 디렉터리는 shutil.rmtree, 파일은 unlink,
+    허용 루트(BASE_DIR 또는 격리 workspace root) 외부 경로 및 PermissionError/OSError는 deferred,
+    중복 경로는 registered_paths로 skip.
+    tests/e2e/test_final_workspace_cleanup_7eaa.py: TC-E2E-14(cleanup_only_items .pytest_tmp_* 실제 삭제 검증), TC-E2E-15(Permission denied deferred, Windows skip) 추가.
+    pytest 결과: 13 passed, 2 skipped.
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_final_workspace_cleanup_7eaa.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <impact_analysis>
+    <target_function>_run_post_complete_cleanup</target_function>
+    <target_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_final_workspace_cleanup_7eaa.py</file>
+    </target_files>
+    <change_description>
+      _run_post_complete_cleanup에 state["workspace_hygiene"]["cleanup_only_items"] SSoT 처리 블록 추가.
+      기존 manifest 기반 처리는 무손상. TC-E2E-14, TC-E2E-15 E2E 테스트 추가.
+    </change_description>
+    <state_mutations>
+      state["post_complete_cleanup"]["removed"] — hygiene cleanup_only_items 경로 추가
+      state["post_complete_cleanup"]["deferred"] — 삭제 실패 경로
+    </state_mutations>
+    <risk_assessment>
+      <data_loss_risk>LOW — cleanup_only_items는 hygiene gate가 이미 임시 산출물로 분류한 경로만</data_loss_risk>
+      <regression_risk>LOW — 기존 manifest 기반 처리 무손상, TC-E2E-1~13 PASS 유지</regression_risk>
+      <scope_overflow_risk>LOW — allowed_roots(BASE_DIR/workspace root) 외부 경로는 deferred 처리</scope_overflow_risk>
+      <test_coverage>PASS — TC-E2E-14 신규 추가, 13 passed 2 skipped</test_coverage>
+    </risk_assessment>
+  </impact_analysis>
+  <qa_ready>true</qa_ready>
+</handover>
