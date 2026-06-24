@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260622-60BB</pipeline_id>
+  <phase>dev</phase>
+  <agent_id>dev-agent</agent_id>
+  <run_id>dev-c27444c9a381edef</run_id>
+  <status>COMPLETE</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+    <files_to_create>
+      <file>tests/e2e/test_oracle_quality_waiver_60bb.py</file>
+    </files_to_create>
+    <files_to_delete>없음</files_to_delete>
+    <out_of_scope>다른 .py 파일, agent MD, CLAUDE.md 수정</out_of_scope>
+  </scope_declaration>
+
+  <implemented_files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_oracle_quality_waiver_60bb.py</file>
+  </implemented_files>
+
+  <impact_analysis>
+    <pipeline_id>BUG-20260622-60BB</pipeline_id>
+    <target_function>cmd_gates (oracle action, allow_no_oracle waiver PASS branch)</target_function>
+    <change_type>버그 수정 + E2E 회귀 테스트 추가</change_type>
+    <blast_radius>pipeline.py 단일 분기 (allow_no_oracle=True + oracle entries 없음 조건), 신규 테스트 파일</blast_radius>
+    <state_mutations>state["oracle_quality"] = {"status": "PASS", "waived": True, ...} — waiver 경로에서만 발생</state_mutations>
+    <risk_assessment>LOW — 기존 oracle entry 있는 경우 코드 경로 변경 없음</risk_assessment>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_oracle_quality_waiver_60bb.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_oracle_quality_waiver_60bb.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <modules_completed>
+    <module id="MT-1" status="PASS">pipeline.py oracle waiver PASS 경로에 state["oracle_quality"] 기록 추가 — Architect 차단 버그 수정</module>
+    <module id="MT-2" status="PASS">tests/e2e/test_oracle_quality_waiver_60bb.py E2E 회귀 테스트 5개 (5 passed in 1.67s)</module>
+  </modules_completed>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260622-60BB</pipeline_id>
+    <files_modified>
+      <file>pipeline.py</file>
+    </files_modified>
+    <files_created>
+      <file>tests/e2e/test_oracle_quality_waiver_60bb.py</file>
+    </files_created>
+    <evidence>MT-1: pipeline.py allow_no_oracle waiver PASS 경로에 state["oracle_quality"] 기록 추가. MT-2: E2E 테스트 5개 PASS 확인 (pytest 1.67s).</evidence>
+  </handover>
+</dev_handover>
