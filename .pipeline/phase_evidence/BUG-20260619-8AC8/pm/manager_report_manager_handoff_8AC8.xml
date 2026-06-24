@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260619-8AC8</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <planner_run_id>pm_planner-2d2e8c7a321ee874</planner_run_id>
+  <step_plan_sha256>81a5bba889570943bdfef660c906578265a736d92820732e4b2d1bdbb6cc2e56</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <handoff_at>2026-06-20T00:10:00Z</handoff_at>
+
+  <task_summary>
+    이전 파이프라인 BUG-20260619-F41F의 REJECT 원인 분석 결과,
+    PR diff에 pipeline_state.json, step_plan_F41F.xml 등 실행 산출물이 포함된 것이 문제였습니다.
+    근본 원인: .gitignore에 base name만 있고 suffix 변형 패턴(예: step_plan_F41F.xml)이 누락됨.
+    이를 해결하기 위해 두 가지 방어 레이어를 추가합니다:
+    1. .gitignore 와일드카드 강화 (MT-1)
+    2. pipeline.py PR diff 실행 산출물 BLOCKING (MT-2)
+    3. E2E 테스트 및 Oracle (MT-3)
+  </task_summary>
+
+  <pipeline_phase_plan>
+    <phase id="1" name="PM" status="COMPLETING" />
+    <phase id="2" name="Dev" status="PENDING" />
+    <phase id="4" name="QA" status="PENDING" />
+    <phase id="5" name="Security" status="SKIP" reason="외부 네트워크/DB 없음" />
+    <phase id="6" name="Build" status="N/A" reason="meta-task" />
+    <phase id="7" name="External Gates" status="PENDING" />
+    <phase id="8" name="Architect" status="PENDING" />
+  </pipeline_phase_plan>
+</manager_handoff>
