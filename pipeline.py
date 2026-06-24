@@ -17818,11 +17818,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # BUG-20260620-3BF4 MT-2: gates accept CLI 흐름은 기존대로 nonce 포함 형식을 유지한다
     # (--acceptance-code ACCEPT-{pipeline_id}-{nonce}). nonce는 acceptance_request.json에
     # 계속 저장되어 내부 SSoT 검증에 사용된다.
-    accept_code = f"ACCEPT-{pipeline_id}-{nonce}"
+    accept_code = f"ACCEPT-{pipeline_id}-{nonce}"  # noqa: F841  내부 SSoT 기록용 (CLI: --acceptance-code 형식)
     # BUG-20260620-3BF4 MT-2: 사용자가 GitHub PR 댓글에 게시하는 승인 코드는 nonce 없는
     # 단순 형식 ACCEPT-{pipeline_id} 로 표시한다. (PR 댓글 승인 방식 단순화.)
     pr_comment_accept_code = f"ACCEPT-{pipeline_id}"
-    pr_comment_reject_code = f"REJECT-{pipeline_id}"
+    pr_comment_reject_code = f"REJECT-{pipeline_id}"  # noqa: F841  reject 경로용 (미래 확장)
 
     # GitHub PENDING 안내 댓글 생성 (gh CLI 없으면 건너뜀) — request-accept 전용
     # REJECT-IMP-20260614-D278: ACCEPTED 완료 댓글 전용 함수는 accept 경로(_finalize_post_accept)
