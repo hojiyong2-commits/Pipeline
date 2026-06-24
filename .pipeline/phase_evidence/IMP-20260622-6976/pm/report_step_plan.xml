@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260622-6976</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <description>PM Planner Oracle Design Contract 보강 — pm-planner-agent.md oracle 설계 체크리스트 강화 (UTF-8, CI 호환성, AC 매핑, 품질 원칙, 출처 구분) + 문서 회귀 테스트 추가</description>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>trust-root 파일(.claude/agents/pm-planner-agent.md) 수정 — 에이전트 정의 파일은 프로토콜 신뢰 루트에 해당합니다.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>0</expected_changed_functions>
+      <expected_changed_lines>120</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>2</micro_task_count>
+    <grep_executions>2</grep_executions>
+    <total_micro_tasks>2</total_micro_tasks>
+    <affected_files>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <file>tests/test_pm_planner_oracle_contract_6976.py</file>
+    </affected_files>
+    <decomposition_rationale>MT-1은 pm-planner-agent.md에 Oracle Design Contract 섹션을 추가하고, MT-2는 해당 섹션의 존재를 검증하는 회귀 테스트를 추가합니다. 두 태스크는 순서 의존성이 있으므로 직렬 실행합니다.</decomposition_rationale>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>섹션 내부 헤딩 수준, 구체적 문구 스타일 등 P2 수준 선택지는 유지보수성 우선 원칙으로 처리</filter_summary>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>섹션 내부 헤딩 수준, 구체적 문구 표현 방식 등 P2 수준의 스타일 선택지는 유지보수성 우선 원칙으로 처리하고 사용자에게 묻지 않았습니다.</filter_summary>
+    <maintenance_priority>유지보수성 우선 — 구체적이고 명확한 원칙 문서화를 짧은 구현 편의보다 우선합니다.</maintenance_priority>
+    <decision_questions>
+      <question id="Q-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>Oracle Design Contract 섹션을 pm-planner-agent.md에 직접 추가할까요, 아니면 별도 파일로 분리할까요?</user_facing_question>
+        <evidence>pm-planner-agent.md는 현재 oracle 설계 체크리스트 섹션이 없어서 PM 에이전트가 oracle 품질 원칙을 참조하기 어렵습니다.</evidence>
+        <why_it_matters>별도 파일로 분리하면 참조가 복잡해지고, 인라인으로 추가하면 PM 에이전트가 즉시 참조할 수 있어 유지보수가 용이합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>pm-planner-agent.md에 직접 추가</label>
+            <benefit>PM 에이전트가 단일 파일에서 모든 지침을 참조 가능, 유지보수가 단순합니다.</benefit>
+            <cost>파일 길이가 늘어날 수 있으나 80줄 추가로 허용 범위 내입니다.</cost>
+          </option>
+          <option id="B">
+            <label>별도 oracle-contract.md 파일로 분리</label>
+            <benefit>관심사 분리로 파일 크기 제한에 유리합니다.</benefit>
+            <cost>PM 에이전트가 두 파일을 참조해야 하므로 컨텍스트 토큰이 증가합니다.</cost>
+          </option>
+        </options>
+        <user_answer>A — pm-planner-agent.md에 직접 추가 (사용자 태스크 명세에 따라 자동 진행)</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>pm-planner-agent.md에 Oracle Design Contract 섹션이 존재한다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>UTF-8 인코딩 원칙 문구가 명시되어 있다 (oracle 파일은 UTF-8 인코딩 필수)</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>CI/pytest 수집 호환성이 명시되어 있다 (tests/ 하위 배치, conftest.py 호환)</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>ac_ids 매핑 요구가 명시되어 있다 (oracle entry마다 ac_ids 필드 필수)</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>최소 oracle 구성 원칙이 명시되어 있다 (normal 1개 + edge/exception/error 1개)</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>expected 품질 원칙이 명시되어 있다 (빈 JSON 금지, placeholder 금지, agent_generated 기본 금지)</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>Phase 1 사용자 질문 절차와 answer key 출처 구분이 명시되어 있다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>파일 위치 원칙이 명시되어 있다 (tests/oracles/&lt;pipeline_id&gt;/ 하위 필수)</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py 게이트 용어와 일치하는 표현이 사용되었다 (gates oracle, contract add-oracle 등)</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>tests/test_pm_planner_oracle_contract_6976.py 회귀 테스트가 pytest로 PASS된다</text>
+    </criterion>
+    <criterion id="AC-11" must_verify="true" source="user" user_visible="false">
+      <text>PR diff에 금지 파일(pipeline.py, CLAUDE.md, ci.yml 등)이 포함되지 않는다</text>
+    </criterion>
+    <criterion id="AC-12" must_verify="true" source="user" user_visible="false">
+      <text>SSoT 참조 구조 유지 — AGENTS.md나 pipeline-manager-agent.md에 oracle 규칙 장문 복붙 없음</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pm-planner-agent.md oracle 설계 섹션</affected_function>
+      <target_files>
+        <file>.claude/agents/pm-planner-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>Oracle Design Contract|oracle.*ac_ids|tests/oracles</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-11, AC-12</covers_ac>
+      <change_summary>pm-planner-agent.md에 Oracle Design Contract 섹션 추가 (UTF-8, CI 호환성, ac_ids, 최소 구성, expected 품질, 출처 구분, 파일 위치, 용어)</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>tests/test_pm_planner_oracle_contract_6976.py</affected_function>
+      <target_files>
+        <file>tests/test_pm_planner_oracle_contract_6976.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_pm_planner_oracle_contract_6976</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <covers_ac>AC-10</covers_ac>
+      <change_summary>pm-planner-agent.md oracle 섹션 존재 검증 회귀 테스트 추가 — AC-1~AC-9 각 원칙 문구 존재 확인</change_summary>
+      <line_estimate>40</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <roadmap>
+    <phase name="PM" status="in-progress">Contract 초기화 및 PM phase attestation</phase>
+    <phase name="Dev MT-1" status="pending">pm-planner-agent.md Oracle Design Contract 섹션 추가</phase>
+    <phase name="Dev MT-2" status="pending">회귀 테스트 파일 생성</phase>
+    <phase name="QA" status="pending">문서 품질 및 테스트 PASS 검증</phase>
+    <phase name="SEC" status="pending">외부 네트워크 없음 → skip</phase>
+    <phase name="Build" status="pending">EXE 불필요 → N/A (meta-task)</phase>
+    <phase name="External Gates" status="pending">Technical / Oracle(waiver) / GitHub CI / User Acceptance</phase>
+    <phase name="Architect" status="pending">RCA 및 protocol evolution 여부 결정</phase>
+  </roadmap>
+</step_plan>

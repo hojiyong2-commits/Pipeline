@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260622-6976</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <phase>pm</phase>
+  <status>ready_for_dev</status>
+
+  <planner_run_id>pm_planner-b15d03a66c943780</planner_run_id>
+  <manager_run_id>pipeline_manager-53b0502a2d7b4e79</manager_run_id>
+  <step_plan_sha256>e782234d878ca9f78b5cc3ed6bf61aeed00cf1202b19345731fd27e3d0a8a169</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+
+  <contract_status>
+    <frozen>true</frozen>
+    <contract_hash>7637cc9d64a8c3e892fa98d3629a4e12895f454530199e657936e91dcd0306f8</contract_hash>
+    <test_set_hash>bb394e695b04fe24912a2562192f7fa0f6c48fcaa5616f743e464ef6fb1f312e</test_set_hash>
+    <oracle_waiver>true</oracle_waiver>
+    <oracle_waiver_reason>md-only meta-task: pm-planner-agent.md 문서 수정으로 런타임 oracle 불필요</oracle_waiver_reason>
+  </contract_status>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <target_file>.claude/agents/pm-planner-agent.md</target_file>
+      <description>Oracle Design Contract 섹션 추가 — UTF-8, CI 호환성, ac_ids, 최소 구성, expected 품질, 출처 구분, 파일 위치, 용어</description>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-11, AC-12</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <target_file>tests/test_pm_planner_oracle_contract_6976.py</target_file>
+      <description>oracle 섹션 존재 및 원칙 문구 검증 회귀 테스트</description>
+      <covers_ac>AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <build_target>
+    <required>false</required>
+    <skip_reason>meta-task</skip_reason>
+  </build_target>
+
+  <security_scope>
+    <required>false</required>
+    <reason>외부 네트워크 또는 DB 접근 없음</reason>
+  </security_scope>
+
+  <next_phase>dev</next_phase>
+  <notes>PM phase attestation 완료 후 impl/IMP-20260622-6976 브랜치에서 Dev 진행</notes>
+</manager_handoff>
