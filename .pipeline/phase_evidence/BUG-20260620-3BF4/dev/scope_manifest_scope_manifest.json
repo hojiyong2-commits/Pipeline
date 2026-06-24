@@ -1,0 +1,43 @@
+﻿{
+  "pipeline_id": "BUG-20260620-3BF4",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_run_browser_approval_server",
+        "_write_acceptance_request",
+        "_cmd_gates_request_accept",
+        "gates accept handler"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_check_pr_approver_provenance",
+        "_issue_acceptance_nonce",
+        "_should_reuse_acceptance_nonce",
+        "_cmd_gates_request_accept"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_should_reuse_acceptance_nonce",
+        "_cmd_gates_request_accept",
+        "_atomic_write_acceptance_request"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "tests/e2e/test_pr_comment_accept_3bf4.py",
+        "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": ["none"]
+    }
+  ]
+}
