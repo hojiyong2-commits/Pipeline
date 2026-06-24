@@ -307,10 +307,10 @@ def test_tc1_request_accept_issues_nonce_and_records_shas(tmp_path):
     assert pkt_sha, "packet_sha256 미기록"
     assert len(pkt_sha) == 64, f"packet_sha256 형식 불일치: {pkt_sha}"
 
-    # 5. stdout에 승인 코드 포함 확인
-    accept_code = f"ACCEPT-{pid}-{nonce}"
-    assert accept_code in r.stdout, (
-        f"stdout에 승인 코드 없음. expected: {accept_code}\n"
+    # 5. stdout에 승인 코드 포함 확인 (IMP-20260624-069A: 최소 양식 — nonce 없는 단순 형식)
+    pr_comment_code = f"ACCEPT-{pid}"
+    assert pr_comment_code in r.stdout, (
+        f"stdout에 승인 코드 없음. expected: {pr_comment_code}\n"
         f"stdout: {r.stdout[:500]}"
     )
 
@@ -460,10 +460,10 @@ def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
     assert pkt_sha, "packet_sha256 미기록 — ac_completeness 캐시 경로 미검증"
     assert len(pkt_sha) == 64, f"packet_sha256 형식 불일치: {pkt_sha}"
 
-    # 4. stdout에 승인 코드 포함 확인
-    accept_code = f"ACCEPT-{pid}-{nonce}"
-    assert accept_code in r.stdout, (
-        f"stdout에 승인 코드 없음. expected: {accept_code}\n"
+    # 4. stdout에 승인 코드 포함 확인 (IMP-20260624-069A: 최소 양식 — nonce 없는 단순 형식)
+    pr_comment_code = f"ACCEPT-{pid}"
+    assert pr_comment_code in r.stdout, (
+        f"stdout에 승인 코드 없음. expected: {pr_comment_code}\n"
         f"stdout: {r.stdout[:500]}"
     )
 
