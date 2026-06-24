@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<step_plan>
+  <pipeline_id>IMP-20260623-7EAA</pipeline_id>
+  <pipeline_type>IMP</pipeline_type>
+  <description>파이프라인 COMPLETE 후 자동 워크스페이스 정리 구현 — ownership manifest 기반 cleanup finalizer, workspace readiness 표시, hygiene cleanup/ready-next 명령 추가</description>
+  <created_at>2026-06-23T09:27:14Z</created_at>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py (trust-root 파일) 수정 및 파일 삭제 로직 포함. HIGH_RISK 적용 필수.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>12</expected_changed_functions>
+      <expected_changed_lines>660</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>true</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <decomposition_audit>
+    <audit_timestamp>2026-06-23T09:27:14Z</audit_timestamp>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>6</grep_executions>
+    <total_micro_tasks>6</total_micro_tasks>
+    <trust_root_files_involved>pipeline.py</trust_root_files_involved>
+    <deletion_logic_present>true</deletion_logic_present>
+    <deletion_guard_mechanism>ownership manifest + cleanup_policy enum (cleanup_only만 삭제 허용)</deletion_guard_mechanism>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명/코드 스타일 등 P2 수준 질문은 유지보수성 우선 원칙으로 처리</filter_summary>
+  </decomposition_audit>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명, 함수 내부 코드 스타일 등 P2 수준의 구현 취향 질문은 유지보수성 우선 원칙으로 PM이 직접 결정. cleanup_policy enum 값 명명과 상태 필드 구조는 유지보수성 기준으로 선택.</filter_summary>
+    <maintenance_priority>유지보수성 우선 (maintainability_first) — glob 기반 무차별 삭제 대신 ownership manifest 기반 선택으로 미래 확장성과 감사 가능성 확보</maintenance_priority>
+    <decision_questions>
+      <question id="Q-1" priority="P0" category="module_split">
+        <user_facing_question>cleanup finalizer를 자동 실행(COMPLETE 시 자동)으로만 할까요, 아니면 수동 명령도 함께 제공할까요? 어떤 방식이 더 편하실까요?</user_facing_question>
+        <why_it_matters>자동 실행만 있으면 사용자가 원치 않는 시점에 파일이 삭제될 수 있습니다. 수동 명령도 있으면 dry-run으로 먼저 확인 후 적용 가능합니다.</why_it_matters>
+        <evidence>step_plan의 MT-2(자동)와 MT-4(수동)를 분리하는 이유: 자동은 COMPLETE 시 cleanup_only 파일만 삭제하고, 수동은 사용자가 hygiene final-cleanup --dry-run으로 먼저 확인 가능.</evidence>
+        <options>
+          <option id="A">
+            <label>자동만 (MT-2만 구현)</label>
+            <benefit>구현이 단순하고 사용자가 별도 명령을 외울 필요가 없습니다.</benefit>
+            <cost>dry-run 없이 자동 삭제되므로 사용자가 삭제 전 목록을 확인할 수 없습니다.</cost>
+          </option>
+          <option id="B">
+            <label>자동과 수동 모두 제공</label>
+            <benefit>COMPLETE 후 자동 정리와 dry-run 미리보기를 모두 사용할 수 있어서 실수로 중요한 파일이 삭제되는 위험이 줄어듭니다.</benefit>
+            <cost>구현 모듈이 하나 더 추가되지만 각 모듈이 독립적이라서 기존 기능에 영향이 없습니다.</cost>
+          </option>
+        </options>
+        <recommended_option>B</recommended_option>
+        <user_answer>step_plan 그대로 진행 — 자동과 수동 모두 구현</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>workspace_artifacts.json에 임시 파일이 cleanup_policy 포함하여 등록된다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>COMPLETE 후 cleanup_only 정책 파일만 자동 삭제되고, protected_evidence/user_visible_output은 삭제되지 않는다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>매니페스트에 없는 unknown/user 파일은 삭제하지 않고 preserved/review_required로 표시한다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="false">
+      <text>COMPLETE 후 tracked pipeline_state.json에 수정 상태가 없다 (runtime store만 사용)</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>Permission denied 파일 삭제 시 예외 없이 deferred 배열에 기록되고 WARN 상태로 처리된다</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>protected_evidence 파일 누락 시 cleanup이 BLOCKED되고 ready_for_next_task=false가 된다</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py status 및 final packet에 workspace readiness 상태가 표시된다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>workspace readiness가 BLOCKED인 경우 pipeline.py new 명령이 차단되고 복구 명령이 표시된다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>hygiene final-cleanup --dry-run, --apply, ready-next 명령이 모두 동작한다</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="false">
+      <text>기존 gate 함수(workspace hygiene, oracle, acceptance)의 보안 로직이 완화되지 않는다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <name>Artifact Ownership Registry 헬퍼</name>
+      <affected_function>_register_workspace_artifact, _load_workspace_artifacts, _save_workspace_artifacts</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_build (build_report.xml 등록)</site>
+        <site>_scratch_file 호출 지점들</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_scratch_file\|build_report</pattern>
+        <match_count>15</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>workspace_artifacts.json에 임시 파일을 cleanup_policy와 함께 등록/로드/저장하는 헬퍼 함수 3개 추가</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <name>Post-Complete Cleanup Finalizer</name>
+      <affected_function>_run_post_complete_cleanup, cmd_architect (호출 추가)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_architect COMPLETE 경로</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>cmd_architect\|terminal_state.*COMPLETE</pattern>
+        <match_count>8</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>COMPLETE 시 cleanup_only만 삭제, protected/unknown 보존, 결과를 state["post_complete_cleanup"]에 기록</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-2, AC-3, AC-5, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <name>Ready-for-Next-Task Status 및 New 차단</name>
+      <affected_function>cmd_status, cmd_new</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_status 출력 섹션</site>
+        <site>cmd_new 진입 검증 섹션</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_new\|def cmd_status</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>status에 workspace readiness 표시, new에서 cleanup_status=BLOCKED 시 차단 + 복구 명령 출력</change_summary>
+      <line_estimate>70</line_estimate>
+      <covers_ac>AC-7, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <name>Manual Hygiene CLI</name>
+      <affected_function>cmd_hygiene (final-cleanup, ready-next 서브커맨드 추가)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>cmd_hygiene 라우팅 분기</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def cmd_hygiene\|hygiene.*subparser</pattern>
+        <match_count>3</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>hygiene final-cleanup --dry-run/--apply 및 hygiene ready-next 서브커맨드 2개 추가</change_summary>
+      <line_estimate>100</line_estimate>
+      <covers_ac>AC-9</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <name>Tracked State 정합성 검증</name>
+      <affected_function>_save 함수, 기존 gate 함수들 보안 로직 검증</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_save 함수</site>
+        <site>_external_gate_blockers</site>
+        <site>_check_workspace_hygiene</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _save\|pipeline_state\.json.*write</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>runtime store(.pipeline/runs/)만 사용하고 legacy pipeline_state.json 수정 경로 없음을 확인 및 기존 gate 보안 로직 완화 없음 검증</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-4, AC-10</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <name>E2E 테스트</name>
+      <affected_function>test_final_workspace_cleanup_7eaa.py (신규)</affected_function>
+      <target_files>
+        <file>tests/e2e/test_final_workspace_cleanup_7eaa.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_final_workspace_cleanup</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PIPELINE_STATE_PATH 격리 + subprocess 기반 Real CLI Path E2E 테스트 10개 (AC 1~10 각각)</change_summary>
+      <line_estimate>250</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <build_target>
+    <type>N/A</type>
+    <skip_reason>meta-task</skip_reason>
+    <rationale>pipeline.py 및 테스트 파일 수정만 포함. EXE 빌드 대상 아님.</rationale>
+  </build_target>
+
+  <security_check>
+    <required>false</required>
+    <reason>외부 네트워크/DB 접근 없음. SEC skip 처리 예정.</reason>
+  </security_check>
+
+  <pr_diff_forbidden_files>
+    <file>pipeline_state.json</file>
+    <file>.pipeline/runs/**</file>
+    <file>step_plan*.xml</file>
+    <file>manager_handoff*.xml</file>
+    <file>*_dump.txt</file>
+    <file>tmp_*.json</file>
+    <file>build_report*.xml</file>
+  </pr_diff_forbidden_files>
+</step_plan>
