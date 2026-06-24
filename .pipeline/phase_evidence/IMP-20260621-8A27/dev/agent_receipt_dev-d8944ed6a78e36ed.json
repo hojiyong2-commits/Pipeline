@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260621-8A27",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-d8944ed6a78e36ed",
+  "status": "COMPLETED",
+  "started_at": "2026-06-21T15:23:57Z",
+  "completed_at": "2026-06-21T15:24:04Z",
+  "output_file": "dev_handover.xml",
+  "output_sha256": "4eab644d28572231fa37ed782c32a464b60d1a338eafd3796acc2fcf3d371f9a",
+  "evidence_files": [
+    {
+      "path": "pipeline.py",
+      "sha256": "bd7223dd40d32f255c4c6d8d1e65d531a97fd2ecfe9fc1d6ec7138a501165e13",
+      "size_bytes": 1077082
+    },
+    {
+      "path": "tests\\e2e\\test_runtime_state_store_8a27.py",
+      "sha256": "153afc95b56071ff575b35c0abf7742eddee4476f437714e7f55d09e7ac56d20",
+      "size_bytes": 16716
+    },
+    {
+      "path": ".claude\\agents\\pipeline-manager-agent.md",
+      "sha256": "f22bbbfa5e6ca9aa9e566b93546be1b1b45570850f18c6cee3246c382eef3ce2",
+      "size_bytes": 15160
+    }
+  ],
+  "commit_sha": "d1d8e696464361099c9ce1aeeb211afedcac95de"
+}

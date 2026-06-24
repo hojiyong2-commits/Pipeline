@@ -1,0 +1,105 @@
+{
+  "pipeline_id": "IMP-20260621-8A27",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_default_runtime_state_dir", "_active_run_pointer_path",
+        "_state_path_for_pipeline_id", "_resolve_state_path_for_read",
+        "_resolve_state_path_for_write"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-2", "AC-3", "AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "5개 runtime state store helper 신규 추가: _default_runtime_state_dir()=BASE_DIR/.pipeline/runs, _active_run_pointer_path()=.pipeline/active_run.json, _state_path_for_pipeline_id(pid)=runs/<pid>/state.json(타입가드), _resolve_state_path_for_read()(env>pointer>legacy), _resolve_state_path_for_write(pid)(env>runs/<id>, legacy 제외)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_load", "_save"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1", "AC-4", "AC-5", "AC-6"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_load()을 _resolve_state_path_for_read() 사용으로 교체. _save()을 _resolve_state_path_for_write(state['pipeline_id']) + target.parent.mkdir(parents=True)로 교체. state pipeline_id 타입가드 추가. legacy write 제외."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["cmd_new"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-2", "AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "cmd_new(): STATE_FILE.exists() 대신 _load() 기반 기존 파이프라인 해석. _save 직후 active_run.json pointer {pipeline_id, created_at, state_path}를 tempfile→os.replace로 원자적 생성. PIPELINE_STATE_PATH 설정 시 pointer skip."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_resolve_state_path_for_read", "_load"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-7", "AC-8"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_resolve_state_path_for_read에 손상 pointer(JSONDecodeError/OSError)→_die([PIPELINE ERROR]+복구안내), pointer 유효+state 부재→_die([PIPELINE ERROR]+복구안내) 추가. _load 읽기 실패 시 경로 포함 _die."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["tests/e2e/test_runtime_state_store_8a27.py"],
+      "affected_functions": [
+        "test_active_pointer_created", "test_runtime_state_created",
+        "test_new_does_not_modify_tracked_state", "test_status_reads_runtime_state",
+        "test_env_path_priority", "test_legacy_fallback", "test_pointer_corruption",
+        "test_pointer_missing_state", "test_complete_does_not_modify_tracked",
+        "test_pr_diff_hygiene", "test_regression_existing_tests"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-1","AC-2","AC-3","AC-4","AC-5","AC-6","AC-7","AC-8","AC-9","AC-10","AC-11"],
+          "changed_files": ["tests/e2e/test_runtime_state_store_8a27.py"],
+          "implementation_evidence": [
+            "11개 E2E 테스트 신규. 격리 복사본(BASE_DIR 격리)으로 runtime store 동작 검증, PIPELINE_STATE_PATH로 env override 검증. pytest 11 passed. 5개 회귀 58 passed. 모든 테스트 final_state assertion + subprocess 실제 CLI."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [".claude/agents/pipeline-manager-agent.md"],
+      "affected_functions": ["Runtime State Store 문서 섹션"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-10"],
+          "changed_files": [".claude/agents/pipeline-manager-agent.md"],
+          "implementation_evidence": [
+            "pipeline-manager-agent.md 역할 섹션 직후 'Runtime State Store (IMP-20260621-8A27)' 섹션 추가. pointer+runs 구조, PIPELINE_STATE_PATH 최우선, legacy read fallback, [PIPELINE ERROR] 복구 안내, .pipeline/** gitignore로 PR diff 제외(AC-10) 문서화."
+          ]
+        }
+      ]
+    }
+  ]
+}

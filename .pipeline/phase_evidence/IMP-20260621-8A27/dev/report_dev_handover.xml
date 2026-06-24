@@ -1,0 +1,194 @@
+<handover>
+  <pipeline_id>IMP-20260621-8A27</pipeline_id>
+  <dev_run_id>dev-3a9f30b8f9ac1874</dev_run_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_runtime_state_store_8a27.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_create>tests/e2e/test_runtime_state_store_8a27.py</files_to_create>
+    <files_to_modify>pipeline.py, .claude/agents/pipeline-manager-agent.md</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>Grep "runtime_state|active_run|_atomic_write_json|_safe_resolve" → 0건 (신규). Grep "STATE_FILE|_load|_save|cmd_new" → 기존 master-state 함수 식별.</searched>
+      <decision>NEW — 5개 runtime store helper 신규. _load/_save/cmd_new는 EXTEND(내부 path resolution만 교체).</decision>
+    </reuse_search>
+    <out_of_scope>pipeline_state.json 삭제/git rm/수정(Non-goal), gates accept 자동 실행, 브라우저 승인, pipeline.py 전체 리팩터링, STATE_FILE 직접참조 diagnostic/reset 경로(legacy fallback 유지)</out_of_scope>
+  </scope_declaration>
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>pipeline._default_runtime_state_dir, _active_run_pointer_path, _state_path_for_pipeline_id, _resolve_state_path_for_read, _resolve_state_path_for_write</target_function>
+    <upstream_callers>
+      <caller location="none">신규 함수 — MT-2(_load/_save), MT-3(cmd_new)에서만 호출</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>os.environ.get</dep>
+      <dep>pathlib.Path</dep>
+      <dep>json.loads</dep>
+      <dep>pipeline._die</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — 순수 경로 계산 + 읽기 전용 (디스크 write 없음)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 신규 함수</signature_change>
+      <breaking_change>NO — 호출자 없는 신규</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — MT-5 E2E</test_coverage>
+      <rollback_strategy>신규 5개 블록 삭제로 복구</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <impact_analysis>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>pipeline._load, pipeline._save</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py (91 sites)">기존 _load()/_save() 호출자 전체 — 시그니처 불변이라 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_resolve_state_path_for_read</dep>
+      <dep>_resolve_state_path_for_write</dep>
+      <dep>tempfile.NamedTemporaryFile</dep>
+      <dep>os.replace</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>.pipeline/runs/&lt;id&gt;/state.json — write (원자적). legacy pipeline_state.json은 미수정.</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — _load()/_save(state) 시그니처 불변</signature_change>
+      <breaking_change>NO — _save에 pipeline_id 필수 추가했으나 모든 state가 pipeline_id 포함</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — MT-5 + 5개 회귀</test_coverage>
+      <rollback_strategy>내부 path resolution을 STATE_FILE로 환원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <impact_analysis>
+    <micro_task_id>MT-3</micro_task_id>
+    <target_function>pipeline.cmd_new</target_function>
+    <upstream_callers>
+      <caller location="argparse dispatch">cmd_new는 'new' 서브커맨드 핸들러 — 외부 호출자 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_load</dep>
+      <dep>_save</dep>
+      <dep>_active_run_pointer_path</dep>
+      <dep>_state_path_for_pipeline_id</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>.pipeline/active_run.json — write (원자적 pointer 생성)</mutation>
+      <mutation>.pipeline/runs/&lt;id&gt;/state.json — write (via _save)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 기존 STATE_FILE.exists() 대신 _load() 사용(동등 결과)</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — MT-5 E2E (subprocess)</test_coverage>
+      <rollback_strategy>pointer 생성 블록 삭제 + _load()→STATE_FILE.exists() 환원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <impact_analysis>
+    <micro_task_id>MT-4</micro_task_id>
+    <target_function>pipeline._resolve_state_path_for_read, pipeline._load</target_function>
+    <upstream_callers>
+      <caller location="none">MT-1에서 추가된 함수의 에러 핸들링 강화 — 신규 호출자 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>pipeline._die</dep>
+      <dep>json.loads</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — 에러 시 _die(exit 1)만, 디스크 write 없음</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 에러 케이스에만 _die 추가</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — MT-5 test_pointer_corruption/test_pointer_missing_state</test_coverage>
+      <rollback_strategy>에러 분기 _die 제거</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <impact_analysis>
+    <micro_task_id>MT-5</micro_task_id>
+    <target_function>tests/e2e/test_runtime_state_store_8a27.py (11 test fns)</target_function>
+    <upstream_callers>
+      <caller location="pytest">테스트 파일 — 호출자 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>subprocess.run</dep>
+      <dep>shutil.copy</dep>
+      <dep>pipeline.py CLI</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>tmp_path 격리 디렉토리만 (실제 저장소 미오염)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 신규 테스트 파일</signature_change>
+      <breaking_change>NO</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — 11 passed</test_coverage>
+      <rollback_strategy>테스트 파일 삭제</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <impact_analysis>
+    <micro_task_id>MT-6</micro_task_id>
+    <target_function>.claude/agents/pipeline-manager-agent.md (Runtime State Store 섹션)</target_function>
+    <upstream_callers>
+      <caller location="none">문서 — 코드 호출자 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>none</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — 문서 전용</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 문서 추가</breaking_change>
+      <test_coverage>EXISTING — git check-ignore 검증</test_coverage>
+      <rollback_strategy>섹션 삭제</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <dev_output>
+    <files>
+      pipeline.py — runtime state store 5개 helper 추가 + _load/_save path resolution + cmd_new pointer 생성 (MT-1~MT-4)
+      tests/e2e/test_runtime_state_store_8a27.py — 11개 E2E 테스트 신규 (MT-5)
+      .claude/agents/pipeline-manager-agent.md — Runtime State Store 섹션 추가 (MT-6)
+    </files>
+    <reference_applied>N/A</reference_applied>
+    <dependencies>표준 라이브러리만 (os, json, tempfile, pathlib). 신규 외부 의존성 없음.</dependencies>
+    <entry_point>python pipeline.py new/status/check (기존 진입점, 동작 동일)</entry_point>
+    <env_vars>PIPELINE_STATE_PATH (선택, 최우선 — 기존 동작 유지)</env_vars>
+    <known_constraints>
+      pipeline_state.json은 read-only legacy fallback 전용. 기존 tracked-but-gitignored 상태는
+      Non-goal에 의해 본 파이프라인에서 정리하지 않음(git rm --cached 금지). 향후 별도 작업 대상.
+      현재 활성 파이프라인(IMP-20260621-8A27)은 migration으로 .pipeline/active_run.json pointer +
+      runtime store로 이전됨. STATE_FILE 직접참조 3곳(diagnostic/reset)은 legacy fallback로 의도적 유지.
+    </known_constraints>
+  </dev_output>
+  <self_check>
+    <execution_check>PASS — py_compile OK, import OK, pytest 11 passed, 회귀 58 passed</execution_check>
+    <fs_traversal_wiring>N/A — 사용자 입력 파생 파일 경로 신규 처리 없음 (state 경로는 BASE_DIR 상대 시스템 경로)</fs_traversal_wiring>
+    <al_edge_cases>PASS — _state_path_for_pipeline_id, _save 타입가드</al_edge_cases>
+  </self_check>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/e2e/test_runtime_state_store_8a27.py(신규), pipeline_state.json(상속 dirty)</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_runtime_state_store_8a27.py, .claude/agents/pipeline-manager-agent.md</manifest_files>
+    <extra_files>pipeline_state.json — PM phase 상속 dirty, Non-goal에 의해 수정 금지, gitignore(line41)로 PR 미포함, 브랜치 커밋 미포함</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <module_gate_results>
+    <mt id="MT-1" result="PASS"/>
+    <mt id="MT-2" result="PASS"/>
+    <mt id="MT-3" result="PASS"/>
+    <mt id="MT-4" result="PASS"/>
+    <mt id="MT-5" result="PASS"/>
+    <mt id="MT-6" result="PASS"/>
+    <integration result="PASS"/>
+  </module_gate_results>
+  <regression_tests>
+    <test file="tests/e2e/test_pr_comment_accept_3bf4.py" result="PASS"/>
+    <test file="tests/e2e/test_request_accept_nonce_reuse_aef0.py" result="PASS"/>
+    <test file="tests/test_acceptance_provenance_2338.py" result="PASS"/>
+    <test file="tests/test_pr_approver_b96c.py" result="PASS"/>
+    <test file="tests/e2e/test_workspace_hygiene_2821.py" result="PASS"/>
+  </regression_tests>
+  <pre_existing_failures>
+    <note>test_real_cli_paths::test_gates_accept_provenance_approver_present, test_hygiene_0df5(2건)은 git stash로 baseline 검증 결과 변경 전에도 동일 실패하는 환경 의존(mock gh / 누락 oracle fixture) pre-existing 실패로, 본 변경과 무관함.</note>
+  </pre_existing_failures>
+</handover>
