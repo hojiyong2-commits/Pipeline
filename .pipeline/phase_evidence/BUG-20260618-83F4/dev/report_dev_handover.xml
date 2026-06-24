@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>BUG-20260618-83F4</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <agent_run_id>dev-cd9e5099b06f7835</agent_run_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_pr_comment_approval_83f4.py</file>
+    <file>tests/oracles/BUG-20260618-83F4/normal_pr_comment_approval/input.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/normal_pr_comment_approval/expected.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_wrong_author/input.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_wrong_author/expected.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_too_old/input.json</file>
+    <file>tests/oracles/BUG-20260618-83F4/edge_pr_comment_too_old/expected.json</file>
+  </evidence>
+  <changes_summary>
+    MT-1: _run_browser_approval_server 및 _time_monotonic 함수 완전 제거
+    MT-2: _write_acceptance_request 서명에서 browser_* 매개변수 4개 + docstring + dict 필드 제거
+    MT-3: _cmd_gates_request_accept 브라우저 로직 제거 + PR 댓글 안내(ACCEPT-{pipeline_id}, nonce 비노출) 출력 추가
+    MT-4: _check_pr_approver_provenance 타임스탬프 검증 추가(pr_comment_too_old) + nonce 없는 ACCEPT-{pipeline_id} 코드 인정
+    MT-5: gates accept browser_click_confirmed/browser_approval_skip 검증 블록 제거
+    MT-6: tests/e2e/test_pr_comment_approval_83f4.py 신규 작성 (5 TC, 3 frozen oracle)
+  </changes_summary>
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS — nonce 비노출, provenance 게이트로 승인 검증 일원화, secrets 게이트 통과</security>
+    <execution_check>PASS — py_compile + import + pytest(test_pr_comment_approval_83f4.py 5 passed, 회귀 38 passed)</execution_check>
+    <impact_analysis_check>PASS — 6개 MT 모두 impact_analysis + scope_lock + ac_verification 포함</impact_analysis_check>
+    <overall>PASS</overall>
+  </self_check>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py (M), tests/e2e/test_pr_comment_approval_83f4.py (신규), tests/oracles/BUG-20260618-83F4/** (PM 생성 oracle, 신규)</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_pr_comment_approval_83f4.py, tests/oracles/BUG-20260618-83F4/**</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false — pipeline.py, tests/** 는 본 파이프라인 PM target_files에 포함된 HIGH_RISK 대상</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <scope_declaration>
+    <files_to_create>tests/e2e/test_pr_comment_approval_83f4.py</files_to_create>
+    <files_to_modify>pipeline.py</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>grep "_run_browser_approval_server|_time_monotonic|browser_click_confirmed|browser_approval_required|_check_pr_approver_provenance|_write_acceptance_request"</searched>
+      <decision>EXTEND — 기존 _check_pr_approver_provenance에 타임스탬프 검증 추가, 나머지는 브라우저 채널 제거</decision>
+    </reuse_search>
+    <out_of_scope>dashboard _ensure_dashboard_running(open_browser=...) 파라미터는 승인 채널과 무관하여 미변경</out_of_scope>
+  </scope_declaration>
+  <impact_analysis>
+    <micro_task id="MT-1">
+      <target_function>pipeline._run_browser_approval_server</target_function>
+      <state_mutations>none — 함수 정의 삭제 (전용 helper _time_monotonic 동반 삭제)</state_mutations>
+      <risk_assessment>
+        <signature_change>YES — 함수 제거</signature_change>
+        <breaking_change>NO — 호출부는 MT-3에서 동반 제거</breaking_change>
+        <test_coverage>EXISTING</test_coverage>
+        <rollback_strategy>git revert로 함수 복원</rollback_strategy>
+      </risk_assessment>
+    </micro_task>
+    <micro_task id="MT-2">
+      <target_function>pipeline._write_acceptance_request</target_function>
+      <state_mutations>acceptance_request.json — browser_* 4개 필드 기록 제거</state_mutations>
+      <risk_assessment>
+        <signature_change>YES — browser_* 매개변수 4개 제거</signature_change>
+        <breaking_change>NO — 호출부(MT-3)에서 browser_* 인자 전달 제거로 호환</breaking_change>
+        <test_coverage>EXISTING — test_request_accept_nonce_reuse_aef0.py</test_coverage>
+        <rollback_strategy>git revert</rollback_strategy>
+      </risk_assessment>
+    </micro_task>
+    <micro_task id="MT-3">
+      <target_function>pipeline._cmd_gates_request_accept</target_function>
+      <state_mutations>acceptance_request.json — browser_* 기록 제거. 콘솔에 nonce 비노출 안내 출력.</state_mutations>
+      <risk_assessment>
+        <signature_change>NO</signature_change>
+        <breaking_change>NO</breaking_change>
+        <test_coverage>EXISTING — nonce reuse E2E 8건</test_coverage>
+        <rollback_strategy>git revert</rollback_strategy>
+      </risk_assessment>
+    </micro_task>
+    <micro_task id="MT-4">
+      <target_function>pipeline._check_pr_approver_provenance</target_function>
+      <state_mutations>none — 순수 검증 함수 (반환 dict만 변경)</state_mutations>
+      <risk_assessment>
+        <signature_change>NO</signature_change>
+        <breaking_change>NO — 기존 분기 보존, too_old + nonce-less 코드 분기 추가</breaking_change>
+        <test_coverage>NEW_TEST_ADDED — test_pr_comment_approval_83f4.py</test_coverage>
+        <rollback_strategy>git revert</rollback_strategy>
+      </risk_assessment>
+    </micro_task>
+    <micro_task id="MT-5">
+      <target_function>pipeline.gates_accept (코드 블록)</target_function>
+      <state_mutations>none — 브라우저 검증 블록 제거</state_mutations>
+      <risk_assessment>
+        <signature_change>NO</signature_change>
+        <breaking_change>NO — provenance 게이트가 상위에서 승인 검증 유지</breaking_change>
+        <test_coverage>EXISTING — test_real_cli_paths.py</test_coverage>
+        <rollback_strategy>git revert</rollback_strategy>
+      </risk_assessment>
+    </micro_task>
+    <micro_task id="MT-6">
+      <target_function>test_pr_comment_approval_83f4 (신규)</target_function>
+      <state_mutations>none — 테스트 전용 (tmp_path/monkeypatch 격리)</state_mutations>
+      <risk_assessment>
+        <signature_change>NO</signature_change>
+        <breaking_change>NO</breaking_change>
+        <test_coverage>NEW_TEST_ADDED</test_coverage>
+        <rollback_strategy>파일 삭제</rollback_strategy>
+      </risk_assessment>
+    </micro_task>
+  </impact_analysis>
+  <module_gates>
+    <mt id="MT-1" qa="PASS"/>
+    <mt id="MT-2" qa="PASS"/>
+    <mt id="MT-3" qa="PASS"/>
+    <mt id="MT-4" qa="PASS"/>
+    <mt id="MT-5" qa="PASS"/>
+    <mt id="MT-6" qa="PASS"/>
+    <integration verdict="PASS"/>
+  </module_gates>
+  <preexisting_failures>
+    tests/test_pr_approver_b96c.py::test_packet_comment_only_fail 및 tests/test_request_accept_sst_2044.py 일부는 본 변경 전 baseline에서도 동일하게 실패하는 사전 결함(8011 protocol_violation_auto_accept stale 테스트 / 누락 oracle BUG-20260609-2044)으로 본 파이프라인 scope 외.
+  </preexisting_failures>
+</handover>
