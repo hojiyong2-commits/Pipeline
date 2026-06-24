@@ -1,0 +1,57 @@
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260624-069A</pipeline_id>
+  <dev_run_id>dev-6c9bd2c27042d296</dev_run_id>
+  <status>READY_FOR_QA</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>tests/test_acceptance_request_format_069a.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_functions>
+      <function>_cmd_gates_request_accept (stdout print 블록 — MT-1)</function>
+      <function>_render_pending_acceptance_comment (반환 문자열 + docstring — MT-2)</function>
+    </target_functions>
+    <new_files>tests/test_acceptance_request_format_069a.py</new_files>
+    <state_mutations>none — print/문자열 반환만 변경, _log_event/_save 로직 미변경</state_mutations>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_request_format_069a.py (untracked), scope_manifest.json</git_diff_files>
+    <manifest_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_request_format_069a.py</manifest_files>
+    <extra_files>없음 (FEAT-20260426-332E/* 및 tests/test_packing_detail_oracle_4cd8.py 변경은 세션 시작 전부터 존재한 사전 dirty 파일이며 본 파이프라인과 무관)</extra_files>
+    <trust_root_violation>false (tests/test_acceptance_request_format_069a.py는 신규 회귀 테스트로 PM step_plan MT-4 target_files에 명시됨)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <implementation_notes>
+    <note>MT-2 어댑테이션: PM step_plan은 _render_pending_acceptance_comment 시그니처를 (req, evidence, *args, **kwargs)로 제안했으나, 실제 코드베이스 함수는 단일 display_model: Dict[str, Any]를 받고 호출부(L16347)도 display_model을 전달한다. 호출부 파손을 막기 위해 기존 display_model 시그니처를 유지하고 반환 문자열만 4요소 최소 양식(사용자 승인 요청 / PR / 승인 코드 / CODEX 검토 필요 + pending HTML 마커 2종)으로 교체했다. 호출부가 채우는 approval_code(ACCEPT-{pipeline_id})와 pr_url을 사용한다.</note>
+    <note>MT-4 어댑테이션: PM step_plan 테스트의 로더가 존재하지 않는 importlib.util.load_from_spec 및 (req, evidence) 호출 형태를 사용했다. 실제 module_from_spec과 단일 display_model dict 시그니처에 맞춰 동등 의도(4요소 순서/PR fallback/금지문구/마커)를 검증하도록 작성했고 None 입력 TypeError 케이스(TC-6)를 추가했다. pytest 6 passed.</note>
+    <note>두 HTML 마커(pipeline-human-acceptance-packet / -pending)는 반환 문자열 끝에 유지된다. 호출부 readiness-line 주입 로직(_pending_tag replace)은 마커가 유지되므로 정상 동작한다.</note>
+    <note>제약 준수: _render_pr_body_final_packet, human_acceptance_packet.md/.json 생성, nonce/SHA 동기화, gates accept provenance/replay/stale 검증 로직은 일절 수정하지 않았다.</note>
+  </implementation_notes>
+  <qa_attention_required>
+    <issue category="trust_root_test_conflict">
+      <description>MT-1 최소 양식이 stdout에서 nonce 포함 코드(ACCEPT-{pid}-{nonce}, 변수 accept_code)를 제거하고 nonce 없는 코드(ACCEPT-{pid}, 변수 pr_comment_accept_code)만 출력하도록 PM step_plan이 명시했다. 이로 인해 기존 Trust-Root 테스트 2건이 baseline에서는 PASS였으나 본 변경 후 FAIL한다: tests/e2e/test_request_accept_snapshot_8c3b.py::test_tc1_request_accept_issues_nonce_and_records_shas, tests/e2e/test_request_accept_snapshot_8c3b.py::test_tc1b_request_accept_with_ac_completeness_cache. 두 테스트는 'assert accept_code in r.stdout'(nonce 포함 코드가 stdout에 있어야 함)을 검증하므로 최소 양식 요구사항과 직접 충돌한다.</description>
+      <constraint_observed>tests/** 는 Trust-Root이며 본 파이프라인 scope_manifest에 포함되지 않아 dev-agent가 임의 수정하지 않았다. 해결에는 PM step_plan 갱신(test_request_accept_snapshot_8c3b.py를 scope에 포함하여 nonce 단언을 minimal-format에 맞게 조정)이 필요하다.</constraint_observed>
+      <recommendation>QA/Pipeline Manager가 PM에게 test_request_accept_snapshot_8c3b.py TC-1/TC-1b의 stdout nonce 단언 갱신을 별도 MT로 요청할지 결정 필요.</recommendation>
+    </issue>
+    <preexisting_failures>본 변경과 무관하게 baseline에서 이미 FAIL하는 acceptance 관련 테스트 16건이 존재한다(예: tests/test_request_accept_sst_2044.py 오라클 input.json 부재 FileNotFoundError, tests/test_verification_json_*.py nonce 접미사 단언 등). 이들은 본 파이프라인 변경 전후 모두 FAIL이며 본 작업의 산물이 아니다.</preexisting_failures>
+  </qa_attention_required>
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <docstring>PASS</docstring>
+    <execution_check>PASS — py_compile OK, import OK, 신규 테스트 6 passed, 직접 렌더러 테스트(b32a)+tc7 포함 13 passed</execution_check>
+    <impact_analysis_check>PASS</impact_analysis_check>
+    <frozen_codebase_check>PASS</frozen_codebase_check>
+  </self_check>
+  <evidence>
+    <changed_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_request_format_069a.py, tests/e2e/test_request_accept_snapshot_8c3b.py</changed_files>
+    <test_command>python -m pytest tests/test_acceptance_request_format_069a.py -x -q</test_command>
+    <test_result>6 passed</test_result>
+  </evidence>
+</handover>
