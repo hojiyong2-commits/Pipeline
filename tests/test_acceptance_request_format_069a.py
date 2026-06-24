@@ -206,6 +206,7 @@ class TestRealCliRequestAcceptFormat:
 
     def test_tc1_stdout_contains_4_elements(self, tmp_path):
         """TC-1 (normal): 실제 CLI stdout이 최소 양식 4요소를 순서대로 포함한다."""
+        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); post-state asserted via load_acceptance_request() checking pipeline_id and nonce
         env = make_env(tmp_path)
         pid = bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
@@ -251,6 +252,7 @@ class TestRealCliRequestAcceptFormat:
         REJECT 사유 1 회귀 방지: "승인 요청 ID: ..." print문이 제거되어
         "CODEX 검토 필요" 이후 어떤 비어있지 않은 줄도 없어야 한다.
         """
+        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); stdout assertion verifies gate output format
         env = make_env(tmp_path)
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
@@ -280,6 +282,7 @@ class TestRealCliRequestAcceptFormat:
 
         REJECT 사유 1 직접 회귀 검증 — 제거된 print문 문구 부재 확인.
         """
+        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); regression: verifies removed print statement absent from stdout
         env = make_env(tmp_path)
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
@@ -301,6 +304,7 @@ class TestRealCliRequestAcceptFormat:
 
     def test_tc4_pr_url_present_in_pr_line(self, tmp_path):
         """TC-4 (edge): "PR:" 줄에 PR URL 또는 "(PR 링크 없음)" fallback이 포함된다."""
+        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); edge: verifies PR URL or fallback text in stdout
         env = make_env(tmp_path)
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
@@ -324,6 +328,7 @@ class TestRealCliRequestAcceptFormat:
 
     def test_tc5_approval_code_present(self, tmp_path):
         """TC-5 (normal): "승인 코드:" 다음 줄에 ACCEPT-{pipeline_id} 형식 코드가 출력된다."""
+        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); normal: verifies ACCEPT-{pid} code present in stdout
         env = make_env(tmp_path)
         pid = bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
