@@ -1,0 +1,9 @@
+{
+  "pipeline_id": "IMP-20260624-069A",
+  "micro_tasks": [
+    {"id": "MT-1", "files": ["pipeline.py", "tests/e2e/test_request_accept_snapshot_8c3b.py"], "affected_functions": ["_cmd_gates_request_accept"]},
+    {"id": "MT-2", "files": ["pipeline.py"], "affected_functions": ["_render_pending_acceptance_comment"]},
+    {"id": "MT-3", "files": [".claude/agents/pipeline-manager-agent.md"], "affected_functions": ["none"]},
+    {"id": "MT-4", "files": ["tests/test_acceptance_request_format_069a.py"], "affected_functions": ["none"]}
+  ]
+}
