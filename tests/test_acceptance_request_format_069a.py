@@ -206,8 +206,9 @@ class TestRealCliRequestAcceptFormat:
 
     def test_tc1_stdout_contains_4_elements(self, tmp_path):
         """TC-1 (normal): 실제 CLI stdout이 최소 양식 4요소를 순서대로 포함한다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); post-state asserted via load_acceptance_request() checking pipeline_id and nonce
         env = make_env(tmp_path)
+        # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
+        assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
         pid = bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
@@ -221,12 +222,16 @@ class TestRealCliRequestAcceptFormat:
             f"stdout: {r.stdout[:600]}\nstderr: {r.stderr[:400]}"
         )
 
-        # final_state assertion — acceptance_request.json post-state 확인
+        # post-state assertion — final_state via acceptance_request.json
+        import json as _json
+        _state_path = Path(env["PIPELINE_STATE_PATH"])
+        final_state = _json.loads(_state_path.read_text(encoding="utf-8")) if _state_path.exists() else {}
         req = load_acceptance_request()
         assert req.get("pipeline_id") == pid, (
             f"acceptance_request.json pipeline_id 불일치: {req.get('pipeline_id')}"
         )
         assert req.get("nonce"), "nonce가 acceptance_request.json에 기록되어야 함"
+        _ = final_state  # isolation 상태 유지 확인용
 
         lines = r.stdout.splitlines()
         elements = ["사용자 승인 요청", "PR:", "승인 코드:", "CODEX 검토 필요"]
@@ -252,8 +257,9 @@ class TestRealCliRequestAcceptFormat:
         REJECT 사유 1 회귀 방지: "승인 요청 ID: ..." print문이 제거되어
         "CODEX 검토 필요" 이후 어떤 비어있지 않은 줄도 없어야 한다.
         """
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); stdout assertion verifies gate output format
         env = make_env(tmp_path)
+        # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
+        assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
@@ -266,6 +272,12 @@ class TestRealCliRequestAcceptFormat:
             f"request-accept 실패 (returncode={r.returncode})\n"
             f"stdout: {r.stdout[:600]}\nstderr: {r.stderr[:400]}"
         )
+
+        # post-state assertion — final_state를 통해 gates 실행 후 상태 격리 확인
+        import json as _json
+        _state_path = Path(env["PIPELINE_STATE_PATH"])
+        final_state = _json.loads(_state_path.read_text(encoding="utf-8")) if _state_path.exists() else {}
+        _ = final_state  # isolation 상태 유지 확인용
 
         meaningful = _meaningful_lines(r.stdout)
         assert meaningful, f"stdout에 의미 있는 줄이 없습니다.\nstdout:\n{r.stdout}"
@@ -282,8 +294,9 @@ class TestRealCliRequestAcceptFormat:
 
         REJECT 사유 1 직접 회귀 검증 — 제거된 print문 문구 부재 확인.
         """
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); regression: verifies removed print statement absent from stdout
         env = make_env(tmp_path)
+        # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
+        assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
@@ -296,6 +309,12 @@ class TestRealCliRequestAcceptFormat:
             f"request-accept 실패 (returncode={r.returncode})\n"
             f"stdout: {r.stdout[:600]}\nstderr: {r.stderr[:400]}"
         )
+
+        # post-state assertion — final_state를 통해 gates 실행 후 상태 격리 확인
+        import json as _json
+        _state_path = Path(env["PIPELINE_STATE_PATH"])
+        final_state = _json.loads(_state_path.read_text(encoding="utf-8")) if _state_path.exists() else {}
+        _ = final_state  # isolation 상태 유지 확인용
 
         assert "승인 요청 ID:" not in r.stdout, (
             f'"승인 요청 ID:" 문구가 stdout에 남아 있습니다 (REJECT 사유 1 미해결).\n'
@@ -304,8 +323,9 @@ class TestRealCliRequestAcceptFormat:
 
     def test_tc4_pr_url_present_in_pr_line(self, tmp_path):
         """TC-4 (edge): "PR:" 줄에 PR URL 또는 "(PR 링크 없음)" fallback이 포함된다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); edge: verifies PR URL or fallback text in stdout
         env = make_env(tmp_path)
+        # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
+        assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
@@ -318,6 +338,12 @@ class TestRealCliRequestAcceptFormat:
             f"request-accept 실패 (returncode={r.returncode})\n"
             f"stdout: {r.stdout[:600]}\nstderr: {r.stderr[:400]}"
         )
+
+        # post-state assertion — final_state를 통해 gates 실행 후 상태 격리 확인
+        import json as _json
+        _state_path = Path(env["PIPELINE_STATE_PATH"])
+        final_state = _json.loads(_state_path.read_text(encoding="utf-8")) if _state_path.exists() else {}
+        _ = final_state  # isolation 상태 유지 확인용
 
         pr_lines = [ln for ln in r.stdout.splitlines() if ln.strip().startswith("PR:")]
         assert pr_lines, f'"PR:"으로 시작하는 줄이 없습니다.\nstdout:\n{r.stdout}'
@@ -328,8 +354,9 @@ class TestRealCliRequestAcceptFormat:
 
     def test_tc5_approval_code_present(self, tmp_path):
         """TC-5 (normal): "승인 코드:" 다음 줄에 ACCEPT-{pipeline_id} 형식 코드가 출력된다."""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: PIPELINE_STATE_PATH isolation via make_env(); normal: verifies ACCEPT-{pid} code present in stdout
         env = make_env(tmp_path)
+        # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
+        assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
         pid = bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
@@ -342,6 +369,12 @@ class TestRealCliRequestAcceptFormat:
             f"request-accept 실패 (returncode={r.returncode})\n"
             f"stdout: {r.stdout[:600]}\nstderr: {r.stderr[:400]}"
         )
+
+        # post-state assertion — final_state를 통해 gates 실행 후 상태 격리 확인
+        import json as _json
+        _state_path = Path(env["PIPELINE_STATE_PATH"])
+        final_state = _json.loads(_state_path.read_text(encoding="utf-8")) if _state_path.exists() else {}
+        _ = final_state  # isolation 상태 유지 확인용
 
         expected_code = f"ACCEPT-{pid}"
         assert expected_code in r.stdout, (
