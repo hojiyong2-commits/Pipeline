@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build_report>
+  <pipeline_id>BUG-20260622-60BB</pipeline_id>
+  <phase>build</phase>
+  <result>N/A</result>
+  <skip_reason>meta-task</skip_reason>
+
+  <section_1_command>
+    <command>N/A — meta-task (pipeline.py 수정 + E2E 테스트 추가)</command>
+    <reason>EXE 빌드 대상 없음. pipeline.py는 직접 Python으로 실행됩니다.</reason>
+  </section_1_command>
+
+  <section_2_output>
+    <exe_path>N/A</exe_path>
+    <size>N/A</size>
+    <result>BUILD_SKIPPED</result>
+  </section_2_output>
+
+  <section_3_verification>
+    <check name="scope_change_verified">PASS — pipeline.py 수정 및 E2E 테스트 파일 확인</check>
+    <check name="e2e_tests">PASS — pytest tests/e2e/test_oracle_quality_waiver_60bb.py: 5 passed</check>
+  </section_3_verification>
+
+  <section_4_artifacts>
+    <artifact>pipeline.py (수정됨 — oracle waiver PASS 경로에 oracle_quality 기록 추가)</artifact>
+    <artifact>tests/e2e/test_oracle_quality_waiver_60bb.py (신규 — E2E 회귀 테스트 5개)</artifact>
+  </section_4_artifacts>
+
+  <section_5_notes>
+    <note>BUG-20260622-60BB: EXE 빌드 불필요. meta-task로 skip 처리.</note>
+  </section_5_notes>
+
+  <section_6_qa_mapping>
+    <qa_verdict>PASS (114/120)</qa_verdict>
+    <mt_coverage>MT-1 PASS, MT-2 PASS</mt_coverage>
+  </section_6_qa_mapping>
+</build_report>
