@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>BUG-20260619-F41F</pipeline_id>
+  <manager_run_id>pipeline_manager-cbf39eeb16d92755</manager_run_id>
+  <planner_run_id>pm_planner-f37553bce3ab7d29</planner_run_id>
+  <step_plan_sha256>c421053d6919246e7404a737378b757988720c74ca6378fa90c5a126be707120</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>ready</status>
+
+  <execution_plan>
+    <phase name="PM" status="ready">
+      <action>done --phase pm 기록 후 phase attestation</action>
+    </phase>
+    <phase name="Dev" status="pending">
+      <action>contract init → oracle 등록 → dev agent spawn (MT-1, MT-2, MT-3 순서)</action>
+    </phase>
+    <phase name="QA" status="pending">
+      <action>qa agent spawn → PASS 후 phase attestation</action>
+    </phase>
+    <phase name="SEC" status="pending">
+      <action>sec --skip (외부 네트워크/DB 접근 없음)</action>
+    </phase>
+    <phase name="Build" status="pending">
+      <action>build --exe N/A --skip-reason meta-task → phase attestation</action>
+    </phase>
+    <phase name="External Gates" status="pending">
+      <action>technical → oracle → github-ci → request-accept → accept</action>
+    </phase>
+    <phase name="Architect" status="pending">
+      <action>prompt-architect-agent spawn → architect 기록</action>
+    </phase>
+  </execution_plan>
+
+  <scope>
+    <primary_file>pipeline.py</primary_file>
+    <test_file>tests/e2e/test_pr_comment_approval_83f4.py</test_file>
+    <oracle_dir>tests/oracles/BUG-20260619-F41F/</oracle_dir>
+    <trust_root_changes>true</trust_root_changes>
+    <trust_root_note>pipeline.py는 trust-root 파일이나 이 파이프라인의 명시적 대상임</trust_root_note>
+  </scope>
+
+  <pipeline_manager_handoff>ready</pipeline_manager_handoff>
+</manager_handoff>
