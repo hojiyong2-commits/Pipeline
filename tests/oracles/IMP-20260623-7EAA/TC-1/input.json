@@ -1,0 +1,14 @@
+{
+  "case_id": "TC-1",
+  "case_kind": "normal",
+  "description": "COMPLETE 후 cleanup_only 파일 3개가 자동 삭제됨",
+  "setup": {
+    "pipeline_state": "COMPLETE",
+    "workspace_artifacts": [
+      {"path": "tmp_build_log.txt", "kind": "log", "cleanup_policy": "cleanup_only"},
+      {"path": "tmp_output.json", "kind": "temp", "cleanup_policy": "cleanup_only"},
+      {"path": "build_report.xml", "kind": "report", "cleanup_policy": "cleanup_only"}
+    ]
+  },
+  "action": "architect completes pipeline → _run_post_complete_cleanup called"
+}

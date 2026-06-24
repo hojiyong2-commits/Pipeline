@@ -3457,6 +3457,201 @@ def _save(state: Dict[str, Any]) -> None:
         raise
 
 
+# ── Workspace Artifact Ownership Registry (IMP-20260623-7EAA MT-1) ───────────
+# [Purpose]: 파이프라인이 working tree에 만든 산출물 각각에 cleanup_policy를 부여하여,
+#   COMPLETE 시점에 "삭제해도 되는 파일"과 "보존/보호해야 하는 evidence"를 명확히
+#   구분한다. 이로써 glob 기반 무차별 삭제 없이, 등록된 cleanup_only 파일만 안전하게
+#   정리할 수 있다 (AC-1~AC-3).
+# [Assumptions]: state["pipeline_id"]는 비어있지 않은 str. workspace_artifacts.json은
+#   state 파일과 같은 디렉토리(.pipeline/runs/<id>/ 또는 PIPELINE_STATE_PATH 부모)에
+#   co-locate되어 테스트 격리 모델을 따른다. legacy pipeline_state.json은 절대 쓰지 않는다.
+# [Vulnerability & Risks]: None/빈 pipeline_id가 들어오면 잘못된 경로에 파일을 만들 수
+#   있으므로 입력 검증으로 차단한다. cleanup_policy 미지정/오타는 'unknown'으로 강등되어
+#   삭제 대상에서 제외되므로(보수적), 잘못 등록되어도 데이터 손실은 발생하지 않는다.
+# [Improvement]: artifact마다 sha256을 기록해 변조 감지/중복 제거를 강화할 수 있다.
+
+# cleanup_policy enum (SSoT). 매니페스트에 없는 파일은 _CLEANUP_POLICY_UNKNOWN으로 취급.
+_CLEANUP_POLICY_CLEANUP_ONLY = "cleanup_only"
+_CLEANUP_POLICY_PRESERVE_EVIDENCE = "preserve_evidence"
+_CLEANUP_POLICY_PROTECTED_EVIDENCE = "protected_evidence"
+_CLEANUP_POLICY_USER_VISIBLE_OUTPUT = "user_visible_output"
+_CLEANUP_POLICY_UNKNOWN = "unknown"
+_VALID_CLEANUP_POLICIES = (
+    _CLEANUP_POLICY_CLEANUP_ONLY,
+    _CLEANUP_POLICY_PRESERVE_EVIDENCE,
+    _CLEANUP_POLICY_PROTECTED_EVIDENCE,
+    _CLEANUP_POLICY_USER_VISIBLE_OUTPUT,
+    _CLEANUP_POLICY_UNKNOWN,
+)
+
+
+def _workspace_artifacts_path(state: Dict[str, Any]) -> Path:
+    """workspace_artifacts.json 경로를 반환한다 (state 파일과 동일 디렉토리에 co-locate).
+
+    PIPELINE_STATE_PATH가 설정된 경우(테스트 격리) state 파일 부모 디렉토리에,
+    그렇지 않으면 .pipeline/runs/<pipeline_id>/ 아래에 둔다. legacy pipeline_state.json은
+    절대 쓰기 대상이 되지 않는다.
+
+    Args:
+        state: 현재 파이프라인 state dict. state["pipeline_id"]가 경로 결정에 사용됨.
+    Returns:
+        Path: workspace_artifacts.json 경로 (디렉토리를 생성하지 않음).
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+        ValueError: pipeline_id가 비어 있는 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    pipeline_id = state.get("pipeline_id")
+    if not pipeline_id or not isinstance(pipeline_id, str):
+        raise ValueError("state must contain a non-empty str 'pipeline_id'")
+    state_path = _resolve_state_path_for_write(pipeline_id)
+    return state_path.parent / "workspace_artifacts.json"
+
+
+def _load_workspace_artifacts(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """state["pipeline_id"] 기반으로 workspace_artifacts.json을 로드한다.
+
+    파일이 없거나 손상된 경우 빈 목록을 반환한다 (best-effort, 4-encoding fallback).
+
+    Args:
+        state: 현재 파이프라인 state dict.
+    Returns:
+        List[Dict[str, Any]]: 등록된 artifact 레코드 목록. 없으면 빈 목록.
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+        ValueError: pipeline_id가 비어 있는 경우.
+    """
+    path = _workspace_artifacts_path(state)
+    if not path.exists():
+        return []
+    for enc in ("utf-8", "cp949", "latin-1"):
+        try:
+            data = json.loads(path.read_text(encoding=enc))
+            break
+        except (UnicodeDecodeError, LookupError, json.JSONDecodeError):
+            continue
+    else:
+        # 어떤 인코딩으로도 파싱 불가: 손상된 매니페스트는 빈 목록으로 보수 처리.
+        return []
+    if isinstance(data, dict):
+        items = data.get("artifacts")
+        return items if isinstance(items, list) else []
+    if isinstance(data, list):
+        return data
+    return []
+
+
+def _save_workspace_artifacts(state: Dict[str, Any], artifacts: List[Dict[str, Any]]) -> None:
+    """workspace_artifacts.json을 원자적으로 저장한다 (tempfile → os.replace).
+
+    Args:
+        state: 현재 파이프라인 state dict. pipeline_id가 쓰기 경로 결정에 사용됨.
+        artifacts: 저장할 artifact 레코드 목록.
+    Returns:
+        None.
+    Raises:
+        TypeError: state가 None/dict가 아니거나 artifacts가 None/list가 아닌 경우.
+        ValueError: pipeline_id가 비어 있는 경우.
+    """
+    if artifacts is None:
+        raise TypeError("artifacts must not be None")
+    if not isinstance(artifacts, list):
+        raise TypeError(f"artifacts must be list, got {type(artifacts).__name__}")
+    path = _workspace_artifacts_path(state)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "pipeline_id": state.get("pipeline_id"),
+        "updated_at": _now(),
+        "artifacts": artifacts,
+    }
+    tmp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            delete=False, suffix=".tmp"
+        ) as tmp:
+            json.dump(payload, tmp, ensure_ascii=False, indent=2)
+            tmp_path = Path(tmp.name)
+        os.replace(str(tmp_path), str(path))
+    except Exception:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _register_workspace_artifact(
+    state: Dict[str, Any],
+    path: str,
+    cleanup_policy: str,
+    description: str = "",
+) -> None:
+    """path와 cleanup_policy를 workspace_artifacts.json에 등록한다.
+
+    동일 path가 이미 등록되어 있으면 cleanup_policy/description을 업데이트한다(중복 방지).
+    cleanup_policy가 유효 enum이 아니면 'unknown'으로 강등하여 삭제 대상에서 제외한다.
+
+    Args:
+        state: 현재 파이프라인 state dict.
+        path: 등록할 산출물 경로 문자열.
+        cleanup_policy: cleanup_only|preserve_evidence|protected_evidence|
+            user_visible_output|unknown 중 하나.
+        description: 산출물 설명 (선택).
+    Returns:
+        None.
+    Raises:
+        TypeError: state/path/cleanup_policy/description가 None이거나 타입이 잘못된 경우.
+        ValueError: path가 빈 문자열인 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    if path is None:
+        raise TypeError("path must not be None")
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    if len(path) == 0:
+        raise ValueError("path must not be empty")
+    if cleanup_policy is None:
+        raise TypeError("cleanup_policy must not be None")
+    if not isinstance(cleanup_policy, str):
+        raise TypeError(
+            f"cleanup_policy must be str, got {type(cleanup_policy).__name__}"
+        )
+    if description is None:
+        raise TypeError("description must not be None")
+    if not isinstance(description, str):
+        raise TypeError(
+            f"description must be str, got {type(description).__name__}"
+        )
+    # 유효하지 않은 정책은 보수적으로 unknown 강등 (삭제 대상에서 제외).
+    policy = cleanup_policy if cleanup_policy in _VALID_CLEANUP_POLICIES else _CLEANUP_POLICY_UNKNOWN
+
+    artifacts = _load_workspace_artifacts(state)
+    norm_path = str(path).replace("\\", "/")
+    updated = False
+    for record in artifacts:
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("path", "")).replace("\\", "/") == norm_path:
+            record["cleanup_policy"] = policy
+            record["description"] = description
+            record["registered_at"] = _now()
+            updated = True
+            break
+    if not updated:
+        artifacts.append({
+            "path": path,
+            "cleanup_policy": policy,
+            "description": description,
+            "registered_at": _now(),
+        })
+    _save_workspace_artifacts(state, artifacts)
+
+
 def _log_event(state: Dict[str, Any], message: str) -> None:
     state["event_log"].append({"ts": _now(), "msg": message})
 
@@ -7595,6 +7790,18 @@ def cmd_new(args: argparse.Namespace) -> None:
     # IMP-20260621-8A27: active state는 runtime store에 있을 수 있으므로
     # STATE_FILE.exists() 대신 _load()로 기존 파이프라인을 해석한다.
     existing = _load()
+    # IMP-20260623-7EAA MT-3: 이전 파이프라인 workspace readiness가 BLOCKED이면
+    # 새 파이프라인 시작을 차단한다 (누락된 protected evidence 복구 강제).
+    if existing:
+        prev_cleanup = existing.get("post_complete_cleanup")
+        if isinstance(prev_cleanup, dict) and prev_cleanup.get("status") == "BLOCKED":
+            # IMP-20260623-7EAA TC-5: stdout으로 출력하여 oracle command_check stdout_contains 검증 가능하게
+            print(
+                "\n[PIPELINE ERROR] 이전 파이프라인 workspace readiness가 BLOCKED입니다. "
+                "workspace cleanup BLOCKED"
+            )
+            print("복구: python pipeline.py hygiene final-cleanup --apply")
+            sys.exit(1)
     if existing:
         pid = existing.get("pipeline_id", "?")
         # Archive existing
@@ -8538,6 +8745,18 @@ def cmd_build(args: argparse.Namespace) -> None:
             print(RED("  XML comment(<!-- -->)로 감싼 섹션은 유효하지 않습니다.\n"))
             sys.exit(1)
         print(GREEN("  [BUILD REPORT GATE] 6-Section Report 검증 통과 (XML comment bypass 차단 완료)"))
+        # IMP-20260623-7EAA Round 2 (F1): build_report.xml을 pipeline-owned artifact로
+        # cleanup_only 등록 → COMPLETE 후 _run_post_complete_cleanup이 자동 삭제 대상으로 인식.
+        try:
+            _register_workspace_artifact(
+                state,
+                str(build_report_file),
+                _CLEANUP_POLICY_CLEANUP_ONLY,
+                "build phase report — cleanup_only",
+            )
+        except (TypeError, ValueError, OSError):
+            # 등록 실패가 build 기록을 막지 않는다 (best-effort).
+            pass
     else:
         # MT-2 (IMP-20260507-49F7): whitelist 방식으로 교체.
         # 조건: len >= 5 AND reason.lower() in whitelist (AND 논리, OR 아님).
@@ -8729,6 +8948,193 @@ def _inject_phase_attestation_facts(report_path: str, state: Dict[str, Any]) -> 
         pass  # 주입 실패는 architect 진행을 막지 않음
 
 
+def _run_post_complete_cleanup(
+    state: Dict[str, Any],
+    args: "Optional[argparse.Namespace]" = None,
+) -> Dict[str, Any]:
+    """COMPLETE 직후 ownership manifest 기반으로 workspace 정리를 수행한다.
+
+    cleanup_policy=cleanup_only 인 등록 파일만 삭제를 시도한다. glob 무차별 삭제는
+    절대 하지 않으며, 매니페스트에 없는 실제 파일은 unknown으로 보존한다. protected_evidence
+    파일이 누락되면 status=BLOCKED + ready_for_next_task=False로 차단한다 (AC-6).
+
+    Args:
+        state: 현재 파이프라인 state dict (COMPLETE 기록 직후 호출).
+        args: argparse Namespace (현재 미사용, 시그니처 호환용).
+    Returns:
+        Dict[str, Any]: post_complete_cleanup 요약. state["post_complete_cleanup"]에도 기록됨.
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    artifacts = _load_workspace_artifacts(state)
+
+    removed: List[str] = []
+    deferred: List[str] = []
+    missing_protected: List[str] = []
+    unknown_files: List[str] = []
+    registered_paths: set = set()
+
+    for record in artifacts:
+        if not isinstance(record, dict):
+            continue
+        raw_path = record.get("path")
+        if not isinstance(raw_path, str) or not raw_path:
+            continue
+        policy = str(record.get("cleanup_policy", _CLEANUP_POLICY_UNKNOWN))
+        registered_paths.add(str(raw_path).replace("\\", "/"))
+        artifact_path = Path(raw_path)
+
+        if policy == _CLEANUP_POLICY_CLEANUP_ONLY:
+            try:
+                if artifact_path.exists():
+                    artifact_path.unlink()
+                removed.append(raw_path)
+            except (PermissionError, OSError):
+                # Permission denied / OS 오류 → 즉시 삭제 보류(WARN), 데이터는 보존.
+                deferred.append(raw_path)
+        elif policy == _CLEANUP_POLICY_PROTECTED_EVIDENCE:
+            if not artifact_path.exists():
+                missing_protected.append(raw_path)
+            # 존재하면 보존 (손대지 않음)
+        elif policy in (
+            _CLEANUP_POLICY_PRESERVE_EVIDENCE,
+            _CLEANUP_POLICY_USER_VISIBLE_OUTPUT,
+        ):
+            # 보존 정책: 절대 삭제하지 않음.
+            pass
+        else:
+            # unknown 정책: 삭제 금지, review_required로 표시.
+            unknown_files.append(raw_path)
+
+    # IMP-20260623-7EAA Round 3 (REJECT 재작업): workspace_hygiene.cleanup_only_items를
+    # SSoT 입력으로 받아 파일/디렉터리를 cleanup_only 정책에 맞게 삭제한다.
+    # state["workspace_hygiene"]["cleanup_only_items"]는 _check_workspace_hygiene이 채운 목록으로,
+    # .pytest_tmp_* 디렉터리, .claude/worktrees/, build_report.xml 등을 포함한다. 이 목록을 읽지
+    # 않으면 .pytest_tmp_* 디렉터리 등이 정리되지 않는 버그(Round 2 REJECT)가 발생한다.
+    hygiene = state.get("workspace_hygiene", {}) or {}
+    hygiene_cleanup_items = list(hygiene.get("cleanup_only_items", []) or [])
+    # 허용 루트: 운영에서는 BASE_DIR, 격리 테스트(PIPELINE_STATE_PATH)에서는 state 파일 부모.
+    # 둘 중 하나의 하위 경로일 때만 삭제를 허용한다(traversal/오삭제 방어).
+    _allowed_roots: List[Path] = [BASE_DIR.resolve()]
+    try:
+        _ws_root = _workspace_artifacts_path(state).parent.resolve()
+        if _ws_root not in _allowed_roots:
+            _allowed_roots.append(_ws_root)
+    except (TypeError, ValueError, OSError):
+        pass
+    for _hitem in hygiene_cleanup_items:
+        if not isinstance(_hitem, str) or not _hitem:
+            continue
+        # 절대 경로 또는 상대 경로 모두 처리.
+        _hpath = Path(_hitem)
+        if not _hpath.is_absolute():
+            _hpath = BASE_DIR / _hitem
+        _hnorm = str(_hpath).replace("\\", "/")
+        if _hnorm in registered_paths:
+            continue  # 이미 manifest/scratch 에서 처리됨 — 중복 방지.
+        registered_paths.add(_hnorm)
+        # Safety: 허용 루트(BASE_DIR 또는 격리 workspace root) 바깥 경로는 절대 삭제하지 않는다.
+        _within_allowed = False
+        try:
+            _hresolved = _hpath.resolve()
+            for _root in _allowed_roots:
+                try:
+                    _hresolved.relative_to(_root)
+                    _within_allowed = True
+                    break
+                except ValueError:
+                    continue
+        except OSError:
+            _within_allowed = False
+        if not _within_allowed:
+            # 허용 루트 외부 경로 — 절대 삭제 금지, 보류 처리.
+            deferred.append(str(_hpath))
+            continue
+        try:
+            if _hpath.is_dir():
+                shutil.rmtree(str(_hpath))
+                removed.append(str(_hpath))
+            elif _hpath.exists():
+                _hpath.unlink()
+                removed.append(str(_hpath))
+            # 존재하지 않으면 이미 정리됨 — 조용히 skip.
+        except (PermissionError, OSError):
+            # Permission denied / OS 오류 → 삭제 보류(WARN), 데이터는 보존.
+            deferred.append(str(_hpath))
+
+    # IMP-20260623-7EAA Round 2 (F2): scratch 파일은 pipeline-owned temporary file 이므로
+    # registered 아니어도 cleanup_only 로 자동 처리(삭제)하여 실사용 정리를 보장한다.
+    try:
+        scratch_files = _list_scratch_files(str(state.get("pipeline_id", "")))
+        for f in scratch_files:
+            norm = str(f).replace("\\", "/")
+            if norm in registered_paths:
+                continue
+            try:
+                if f.exists():
+                    f.unlink()
+                removed.append(str(f))
+            except (PermissionError, OSError):
+                # 삭제 보류(WARN) — 데이터는 보존.
+                deferred.append(str(f))
+            registered_paths.add(norm)  # 이중 처리 방지
+    except (TypeError, ValueError, OSError):
+        # pipeline_id 부재/권한 오류는 scratch 정리를 막지 않는다.
+        pass
+
+    # IMP-20260623-7EAA Round 2 (F2): workspace root(=state 파일 부모) 디렉터리의 임시 파일을
+    # 스캔하여 매니페스트에 없는 파일을 unknown 으로 보고한다(삭제하지 않음, review_required).
+    # 격리 테스트(PIPELINE_STATE_PATH=tmp)에서는 tmp_path 만 스캔하므로 BASE_DIR 의 실제
+    # root 임시 파일을 잘못 보고하지 않는다(테스트 격리 보존).
+    _ROOT_TMP_PATTERNS = ["tmp_*.json", "*_dump.txt", "build_report*.xml", "tmp_tc*.py"]
+    try:
+        _workspace_root = _workspace_artifacts_path(state).parent
+        for pattern in _ROOT_TMP_PATTERNS:
+            for f in _workspace_root.glob(pattern):
+                norm = str(f).replace("\\", "/")
+                if norm not in registered_paths:
+                    unknown_files.append(str(f))
+                    registered_paths.add(norm)
+    except (OSError, TypeError, ValueError):
+        # workspace root 결정 실패/권한 오류는 unknown 수집을 막지 않는다.
+        pass
+
+    if missing_protected:
+        status = "BLOCKED"
+        ready = False
+    elif deferred or unknown_files:
+        # 매니페스트 없는 root 임시 파일이 있으면 OK 가 아니라 WARN(review_required)으로 보고.
+        status = "WARN"
+        ready = True
+    else:
+        status = "OK"
+        ready = True
+
+    summary: Dict[str, Any] = {
+        "status": status,
+        "ready_for_next_task": ready,
+        "removed": removed,
+        "deferred": deferred,
+        "missing_protected": missing_protected,
+        "unknown_files": unknown_files,
+        # F2: status 와 동일 값을 명시적 workspace_readiness 로도 노출(packet/final-packet 표시용).
+        "workspace_readiness": "OK" if status == "OK" else ("WARN" if status == "WARN" else "BLOCKED"),
+        "cleanup_at": _now(),
+    }
+    if unknown_files:
+        summary["unknown_files_note"] = (
+            "매니페스트에 없는 파일은 삭제하지 않고 review_required로 보고합니다. "
+            "사용자 작업물로 보존됩니다."
+        )
+    state["post_complete_cleanup"] = summary
+    return summary
+
+
 def cmd_architect(args: argparse.Namespace) -> None:
     """Architect RCA 완료 기록."""
     branch: Optional[str] = getattr(args, "branch", None)
@@ -8799,6 +9205,32 @@ def cmd_architect(args: argparse.Namespace) -> None:
         # COMPLETE is a Phase 8 transition; protocol evolution is a separate IMP follow-up.
         state["terminal_state"] = "COMPLETE"
         _log_event(state, "architect DONE -pipeline complete (terminal_state=COMPLETE)")
+
+        # IMP-20260623-7EAA MT-2: COMPLETE 직후 ownership manifest 기반 workspace 정리.
+        try:
+            _cleanup_summary = _run_post_complete_cleanup(state, args)
+            _log_event(
+                state,
+                "post-complete cleanup: status="
+                f"{_cleanup_summary.get('status')} removed={len(_cleanup_summary.get('removed', []))} "
+                f"deferred={len(_cleanup_summary.get('deferred', []))} "
+                f"missing_protected={len(_cleanup_summary.get('missing_protected', []))}",
+            )
+        except Exception as _exc:  # cleanup 실패가 COMPLETE를 막지 않음, 단 상태를 BLOCKED로 기록
+            # IMP-20260623-7EAA Round 2 (F4): cleanup finalizer 예외를 조용히 삼키지 않고
+            # post_complete_cleanup=BLOCKED 로 기록하여 status/final-packet에서 가시화한다.
+            state["post_complete_cleanup"] = {
+                "status": "BLOCKED",
+                "error": str(_exc),
+                "ready_for_next_task": False,
+                "removed": [],
+                "deferred": [],
+                "missing_protected": [],
+                "unknown_files": [],
+                "workspace_readiness": "BLOCKED",
+                "cleanup_at": _now(),
+            }
+            _log_event(state, f"post-complete cleanup BLOCKED (예외): {_exc}")
 
         # Archive completed pipeline
         HISTORY_DIR.mkdir(exist_ok=True)
@@ -8964,6 +9396,30 @@ def cmd_status(args: argparse.Namespace) -> None:
             print(f"  정리 명령: {hygiene.get('cleanup_command', 'Remove-Item <파일>')} ")
     except Exception as exc:
         print(DIM(f"    [Cleanup 안내 표시 오류: {exc}]"))
+
+    # IMP-20260623-7EAA MT-3: post-complete workspace readiness 표시.
+    try:
+        cleanup = state.get("post_complete_cleanup")
+        if isinstance(cleanup, dict) and cleanup.get("status"):
+            cstatus = str(cleanup.get("status"))
+            ccolor = GREEN if cstatus == "OK" else RED if cstatus == "BLOCKED" else YELLOW
+            print()
+            print(f"  Workspace Readiness: {ccolor(cstatus)}")
+            print(
+                "    상세: removed "
+                f"{len(cleanup.get('removed', []))}, deferred "
+                f"{len(cleanup.get('deferred', []))}, missing_protected "
+                f"{len(cleanup.get('missing_protected', []))}"
+            )
+            if cstatus == "BLOCKED":
+                for mp in cleanup.get("missing_protected", [])[:5]:
+                    print(RED(f"    누락 보호 파일: {mp}"))
+                print(
+                    "    복구 명령: "
+                    + YELLOW("python pipeline.py hygiene final-cleanup --apply")
+                )
+    except Exception as exc:
+        print(DIM(f"    [Workspace readiness 표시 오류: {exc}]"))
 
     try:
         outputs = _ensure_output_registry(state)
@@ -11834,6 +12290,9 @@ def _collect_packet_evidence(
         "acceptance_display_effective": acceptance_display_effective,
         "oracle_summary": oracle_summary_for_evidence,
         "known_failures": known_failures_for_evidence,
+        # IMP-20260623-7EAA Round 2 (F3): COMPLETE 후 workspace 정리 요약을 packet evidence에
+        # 주입하여 final-packet(MD/PR body) 및 verification JSON이 동일 SSoT를 표시하도록 한다.
+        "post_complete_cleanup": dict(state.get("post_complete_cleanup") or {}),
         "generated_at": _now(),
     }
 
@@ -12003,6 +12462,22 @@ def _build_acceptance_display_model(
         "cleanup_only_items": list(_wh.get("cleanup_only_items", []) or []),
     }
 
+    # IMP-20260623-7EAA Round 2 (F3): post_complete_cleanup 요약을 display model에 노출.
+    # 이 함수는 state SSoT에서 직접 읽는다(packet_evidence 미주입 케이스 포함).
+    _pcc_src = packet_evidence if packet_evidence is not None else state
+    _pcc = _pcc_src.get("post_complete_cleanup") or {}
+    if not isinstance(_pcc, dict):
+        _pcc = {}
+    post_complete_cleanup_summary = {
+        "workspace_readiness": str(
+            _pcc.get("workspace_readiness", _pcc.get("status", "unknown")) or "unknown"
+        ),
+        "ready_for_next_task": _pcc.get("ready_for_next_task", None),
+        "removed_count": len(_pcc.get("removed", []) or []),
+        "deferred_count": len(_pcc.get("deferred", []) or []),
+        "unknown_count": len(_pcc.get("unknown_files", []) or []),
+    }
+
     # 사용자가 확인할 항목 체크리스트.
     user_checklist = [
         "PR 링크를 연다.",
@@ -12024,6 +12499,7 @@ def _build_acceptance_display_model(
         "requirements_summary": requirements_summary,
         "evidence_integrity_summary": evidence_integrity_summary,
         "workspace_hygiene_summary": workspace_hygiene_summary,
+        "post_complete_cleanup_summary": post_complete_cleanup_summary,
         "approval_code": approval_code,
         "reject_example": reject_example,
         "user_checklist": user_checklist,
@@ -12283,6 +12759,21 @@ def _display_model_from_evidence(
         "runtime_state_leak_count": len(_wh.get("pr_runtime_state_leak", []) or []),
     }
 
+    # IMP-20260623-7EAA Round 2 (F3): post_complete_cleanup 요약을 display model에 노출하여
+    # MD/PR body renderer가 워크스페이스 정리 결과를 사용자에게 표시하도록 한다.
+    _pcc = evidence.get("post_complete_cleanup") or {}
+    if not isinstance(_pcc, dict):
+        _pcc = {}
+    post_complete_cleanup_summary = {
+        "workspace_readiness": str(
+            _pcc.get("workspace_readiness", _pcc.get("status", "unknown")) or "unknown"
+        ),
+        "ready_for_next_task": _pcc.get("ready_for_next_task", None),
+        "removed_count": len(_pcc.get("removed", []) or []),
+        "deferred_count": len(_pcc.get("deferred", []) or []),
+        "unknown_count": len(_pcc.get("unknown_files", []) or []),
+    }
+
     user_checklist = [
         "PR 링크를 연다.",
         "GitHub Actions 자동 검사가 성공인지 본다.",
@@ -12307,6 +12798,8 @@ def _display_model_from_evidence(
         },
         "evidence_integrity_summary": evidence_integrity_summary,
         "workspace_hygiene_summary": workspace_hygiene_summary,
+        # IMP-20260623-7EAA Round 2 (F3): COMPLETE 후 workspace 정리 요약 (display 노출).
+        "post_complete_cleanup_summary": post_complete_cleanup_summary,
         "approval_code": approval_code,
         "reject_example": reject_example,
         "user_checklist": user_checklist,
@@ -12405,6 +12898,21 @@ def _render_pr_body_final_packet(display_model: Dict[str, Any]) -> str:
         _wh_line += f", runtime_state_leak:{_wh_leak}"
     _wh_line += ")"
     lines.append(_wh_line)
+    lines.append("")
+    # IMP-20260623-7EAA Round 2 (F3): COMPLETE 후 workspace 정리 요약 섹션.
+    _pcc_sum = dict(display_model.get("post_complete_cleanup_summary") or {})
+    _pcc_readiness = str(_pcc_sum.get("workspace_readiness", "unknown") or "unknown")
+    _pcc_ready_next = _pcc_sum.get("ready_for_next_task", None)
+    _pcc_removed = int(_pcc_sum.get("removed_count", 0) or 0)
+    _pcc_deferred = int(_pcc_sum.get("deferred_count", 0) or 0)
+    _pcc_unknown = int(_pcc_sum.get("unknown_count", 0) or 0)
+    lines.append("워크스페이스 정리 요약:")
+    lines.append(f"Workspace Readiness: {_pcc_readiness}")
+    if _pcc_ready_next is not None:
+        lines.append(f"다음 작업 준비: {'예' if _pcc_ready_next else '아니오'}")
+    lines.append(f"삭제 완료: {_pcc_removed}개 파일")
+    lines.append(f"보류(deferred): {_pcc_deferred}개 파일")
+    lines.append(f"Unknown(보존): {_pcc_unknown}개 파일")
     lines.append("")
     lines.append("요구사항 충족표:")
     lines.append("")
@@ -12699,6 +13207,38 @@ def _build_acceptance_target(evidence: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _build_post_complete_cleanup_summary(
+    post_complete_cleanup: Dict[str, Any],
+) -> Dict[str, Any]:
+    """post_complete_cleanup state dict에서 packet/verification 표시용 요약을 파생한다.
+
+    [Purpose]: IMP-20260623-7EAA Round 2 (F3) — COMPLETE 후 워크스페이스 정리 결과를
+      human_acceptance_packet.json / final-packet 에 일관된 5개 필드로 노출한다.
+    [Assumptions]: post_complete_cleanup 은 _run_post_complete_cleanup 이 기록한 dict
+      (status/workspace_readiness/removed/deferred/unknown_files/ready_for_next_task).
+    [Vulnerability & Risks]: None/비dict 입력은 안전한 unknown/0 요약으로 강등한다.
+    [Improvement]: missing_protected/error 도 별도 필드로 노출 가능.
+
+    Args:
+        post_complete_cleanup: state["post_complete_cleanup"] dict (또는 빈 dict).
+    Returns:
+        {workspace_readiness, ready_for_next_task, removed_count,
+         deferred_count, unknown_count}.
+    Raises:
+        없음 (비정상 입력은 안전한 기본값으로 처리).
+    """
+    pcc = post_complete_cleanup if isinstance(post_complete_cleanup, dict) else {}
+    return {
+        "workspace_readiness": str(
+            pcc.get("workspace_readiness", pcc.get("status", "unknown")) or "unknown"
+        ),
+        "ready_for_next_task": pcc.get("ready_for_next_task", None),
+        "removed_count": len(pcc.get("removed", []) or []),
+        "deferred_count": len(pcc.get("deferred", []) or []),
+        "unknown_count": len(pcc.get("unknown_files", []) or []),
+    }
+
+
 def _build_workspace_hygiene_summary(
     workspace_hygiene: Dict[str, Any], pipeline_id: str
 ) -> Dict[str, Any]:
@@ -12744,8 +13284,15 @@ def _build_workspace_hygiene_summary(
     }
 
 
-def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
+def _build_verification_json(
+    evidence: Dict[str, Any],
+    _unused: Optional[Any] = None,
+) -> Dict[str, Any]:
     """packet evidence dict를 JSON-serializable verification dict로 변환한다.
+
+    IMP-20260623-7EAA Round 2 (F3): 선택적 2번째 인자는 하위 호환 시그니처용으로만
+    유지되며 사용되지 않는다. evidence(또는 state) dict에서 post_complete_cleanup을 읽어
+    verification JSON에 정리 요약을 포함한다.
 
     Verification JSON은 _check_protocol_consistency 검사 D/F의 공식 소스로,
     PR 본문 텍스트 파싱 대신 이 구조화 데이터를 사용한다.
@@ -12977,6 +13524,11 @@ def _build_verification_json(evidence: Dict[str, Any]) -> Dict[str, Any]:
         # IMP-20260622-79BA MT-7: scratch hygiene 요약(사용자 표시/패킷용 파생 요약)
         "workspace_hygiene_summary": _build_workspace_hygiene_summary(
             evidence.get("workspace_hygiene") or {}, pipeline_id
+        ),
+        # IMP-20260623-7EAA Round 2 (F3): COMPLETE 후 workspace 정리 요약을 verification JSON에
+        # 포함하여 사용자가 final-packet에서 정리 결과를 확인할 수 있도록 한다.
+        "post_complete_cleanup": _build_post_complete_cleanup_summary(
+            evidence.get("post_complete_cleanup") or {}
         ),
         # IMP-20260613-82ED 3rd REJECT fix: acceptance_target — 실제 구현 기준점
         "acceptance_target": _build_acceptance_target(evidence),
@@ -16332,6 +16884,12 @@ def _get_qa_verification_for_ac(state: Dict[str, Any], ac_id: str) -> List[str]:
                         elif crit.text and crit.text.strip():
                             # Format 4c: 자식 요소 없이 criterion 직접 텍스트
                             ver_text = crit.text.strip()[:150]
+                        # Format 4d: evidence/check가 자식 요소 없이 속성으로만 있는 경우
+                        # <criterion ac_id="AC-1" status="PASS" evidence="..."/>
+                        if not ver_text:
+                            attr_evidence = crit.get("evidence") or crit.get("check")
+                            if attr_evidence:
+                                ver_text = str(attr_evidence).strip()[:150]
                         if ver_text:
                             verifications.append(f"{mt_id}: {status} — {ver_text}")
 
@@ -20962,6 +21520,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="JSON 형식으로 출력",
     )
 
+    # IMP-20260623-7EAA MT-4: final-cleanup / ready-next 서브파서
+    p_hy_final = hygiene_sub.add_parser(
+        "final-cleanup",
+        help="ownership manifest 기반 cleanup_only 산출물 수동 정리 (기본 dry-run, --apply로 실제 삭제)",
+    )
+    p_hy_final.add_argument(
+        "--apply", dest="apply", action="store_true", default=False,
+        help="실제로 cleanup_only 파일을 삭제 (미지정 시 dry-run)",
+    )
+    p_hy_final.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", default=False,
+        help="실제 삭제 없이 cleanup_only 후보만 미리 확인 (기본 동작)",
+    )
+    p_hy_final.add_argument(
+        "--json", dest="json", action="store_true", default=False,
+        help="JSON 형식으로 출력",
+    )
+
+    p_hy_ready = hygiene_sub.add_parser(
+        "ready-next",
+        help="post-complete workspace readiness 상태 조회 (BLOCKED이면 exit 1)",
+    )
+    p_hy_ready.add_argument(
+        "--json", dest="json", action="store_true", default=False,
+        help="JSON 형식으로 출력",
+    )
+
     return parser
 
 
@@ -23715,15 +24300,231 @@ def cmd_hygiene_cleanup(args: "argparse.Namespace") -> None:
         print(f"  [보호] {len(manifest['protected_skipped'])}개 protected 항목 제외")
 
 
+def cmd_hygiene_final_cleanup(args: "argparse.Namespace") -> None:
+    """hygiene final-cleanup — ownership manifest 기반 cleanup_only 산출물 수동 정리.
+
+    --dry-run(기본): cleanup_only 목록만 출력, 실제 삭제 없음.
+    --apply: cleanup_only 파일 실제 삭제 (Permission denied → deferred WARN).
+    protected_evidence / user_visible_output / preserve_evidence / unknown은 절대 삭제하지 않는다.
+
+    IMP-20260623-7EAA MT-4
+    """
+    apply: bool = getattr(args, "apply", False)
+    dry_run: bool = getattr(args, "dry_run", False)
+    json_output: bool = getattr(args, "json", False)
+    # --dry-run과 --apply가 모두 없으면 안전하게 dry-run으로 동작.
+    if not apply:
+        dry_run = True
+
+    state = _load()
+    if state is None:
+        result = {
+            "status": "OK", "removed": [], "deferred": [], "dry_run": True,
+            "note": "활성 파이프라인 없음",
+        }
+        if json_output:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print("[HYGIENE FINAL-CLEANUP] 활성 파이프라인 없음 — 정리 대상 없음")
+        return
+
+    # IMP-20260623-7EAA Round 4 (REJECT 재작업): 자동 finalizer(_run_post_complete_cleanup)와
+    # 수동 final-cleanup이 동일한 cleanup SSoT를 사용하도록 두 소스를 합집합으로 처리한다.
+    # Round 3에서는 _run_post_complete_cleanup만 workspace_hygiene.cleanup_only_items를 읽도록
+    # 고쳐졌으나, 수동 final-cleanup은 여전히 ownership manifest만 읽어 .pytest_tmp_* 디렉터리를
+    # 정리하지 못하는 버그가 있었다(removed=[] 반환).
+    #
+    # 소스 1: workspace_artifacts.json (ownership manifest).
+    artifacts = _load_workspace_artifacts(state)
+    _from_manifest: List[str] = [
+        str(r.get("path"))
+        for r in artifacts
+        if isinstance(r, dict)
+        and str(r.get("cleanup_policy", "")) == _CLEANUP_POLICY_CLEANUP_ONLY
+        and isinstance(r.get("path"), str)
+        and r.get("path")
+    ]
+
+    # 소스 2: workspace_hygiene.cleanup_only_items (SSoT — _run_post_complete_cleanup와 동일 소스).
+    # .pytest_tmp_* 디렉터리, .claude/worktrees/, build_report.xml 등이 포함된다.
+    # state에 workspace_hygiene 키가 없으면 빈 목록으로 처리한다.
+    _hygiene = state.get("workspace_hygiene") or {}
+    _from_hygiene: List[str] = [
+        str(p) for p in (_hygiene.get("cleanup_only_items", []) or [])
+        if isinstance(p, str) and p
+    ]
+
+    # 두 소스 합집합 (중복 제거, 순서 유지).
+    _seen: set = set()
+    cleanup_only: List[str] = []
+    for _p in _from_manifest + _from_hygiene:
+        if _p not in _seen:
+            _seen.add(_p)
+            cleanup_only.append(_p)
+
+    removed: List[str] = []
+    deferred: List[str] = []
+
+    # 허용 루트: _run_post_complete_cleanup과 동일한 traversal/오삭제 방어.
+    # 운영에서는 BASE_DIR, 격리 테스트(PIPELINE_STATE_PATH)에서는 state 파일 부모.
+    _allowed_roots: List[Path] = [BASE_DIR.resolve()]
+    try:
+        _ws_root = _workspace_artifacts_path(state).parent.resolve()
+        if _ws_root not in _allowed_roots:
+            _allowed_roots.append(_ws_root)
+    except (TypeError, ValueError, OSError):
+        pass
+
+    def _within_allowed_root(p: Path) -> bool:
+        """경로 p가 허용 루트 중 하나의 하위 경로인지 확인(오삭제 방어)."""
+        try:
+            _resolved = p.resolve()
+        except OSError:
+            return False
+        for _root in _allowed_roots:
+            try:
+                _resolved.relative_to(_root)
+                return True
+            except ValueError:
+                continue
+        return False
+
+    if dry_run:
+        result = {
+            "status": "OK",
+            "removed": [],
+            "deferred": [],
+            "dry_run": True,
+            "candidates": cleanup_only,
+        }
+        if json_output:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print("[HYGIENE FINAL-CLEANUP] dry-run — 실제 삭제 없음 (--apply로 실제 삭제)")
+            print(f"  cleanup_only 후보: {len(cleanup_only)}개")
+            for c in cleanup_only:
+                print(f"  [후보] {c}")
+        return
+
+    # --apply: 실제 삭제 수행. _run_post_complete_cleanup과 동일하게 디렉터리는 shutil.rmtree로,
+    # 파일은 unlink로 처리하고, 허용 루트 외부 경로는 절대 삭제하지 않는다(보류).
+    for path_str in cleanup_only:
+        artifact_path = Path(path_str)
+        if not _within_allowed_root(artifact_path):
+            # 허용 루트 외부 경로 — 절대 삭제 금지, 보류 처리.
+            deferred.append(path_str)
+            continue
+        try:
+            if artifact_path.is_dir():
+                shutil.rmtree(str(artifact_path))
+                removed.append(path_str)
+            elif artifact_path.exists():
+                artifact_path.unlink()
+                removed.append(path_str)
+            # 존재하지 않으면 이미 정리됨 — 조용히 skip (removed에는 추가하지 않음).
+        except (PermissionError, OSError):
+            deferred.append(path_str)
+
+    status = "WARN" if deferred else "OK"
+    result = {
+        "status": status,
+        "removed": removed,
+        "deferred": deferred,
+        "dry_run": False,
+    }
+
+    # post_complete_cleanup 상태를 갱신하여 BLOCKED 복구 흐름과 연동.
+    cleanup_state = state.get("post_complete_cleanup")
+    if isinstance(cleanup_state, dict):
+        _prior = cleanup_state.get("removed")
+        prior_removed: list = _prior if isinstance(_prior, list) else []
+        cleanup_state["removed"] = prior_removed + removed
+        cleanup_state["deferred"] = deferred
+        # missing_protected가 비어 있어야 BLOCKED 해제 가능.
+        if not cleanup_state.get("missing_protected"):
+            cleanup_state["status"] = status
+            cleanup_state["ready_for_next_task"] = True
+        cleanup_state["cleanup_at"] = _now()
+        state["post_complete_cleanup"] = cleanup_state
+        _log_event(state, f"hygiene final-cleanup --apply: removed={len(removed)} deferred={len(deferred)}")
+        _save(state)
+
+    if json_output:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print("[HYGIENE FINAL-CLEANUP] cleanup_only 산출물 삭제")
+        print(f"  삭제: {len(removed)}개  보류(deferred): {len(deferred)}개")
+        for r in removed:
+            print(f"  [삭제] {r}")
+        for d in deferred:
+            print(f"  [보류] {d}")
+
+
+def cmd_hygiene_ready_next(args: "argparse.Namespace") -> None:
+    """hygiene ready-next — post-complete workspace readiness 상태를 출력한다.
+
+    BLOCKED이면 missing_protected 목록 + 복구 명령을 출력하고 exit 1로 종료한다.
+    OK/WARN이면 ready_for_next_task: true를 출력하고 exit 0으로 종료한다.
+
+    IMP-20260623-7EAA MT-4
+    """
+    json_output: bool = getattr(args, "json", False)
+    state = _load()
+    if state is None:
+        result = {"status": "OK", "ready_for_next_task": True, "note": "활성 파이프라인 없음"}
+        if json_output:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print("[HYGIENE READY-NEXT] 활성 파이프라인 없음 — ready_for_next_task: true")
+        return
+
+    cleanup = state.get("post_complete_cleanup")
+    if not isinstance(cleanup, dict) or not cleanup.get("status"):
+        result = {"status": "OK", "ready_for_next_task": True, "note": "정리 미수행(아직 COMPLETE 아님)"}
+        if json_output:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print("[HYGIENE READY-NEXT] 정리 미수행 — ready_for_next_task: true")
+        return
+
+    status = str(cleanup.get("status"))
+    ready = bool(cleanup.get("ready_for_next_task", False))
+    missing = cleanup.get("missing_protected", []) or []
+    result = {
+        "status": status,
+        "ready_for_next_task": ready,
+        "missing_protected": missing,
+        "removed": cleanup.get("removed", []),
+        "deferred": cleanup.get("deferred", []),
+    }
+
+    if json_output:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"[HYGIENE READY-NEXT] status={status}")
+        if status == "BLOCKED":
+            print("  ready_for_next_task: false")
+            for mp in missing:
+                print(f"  누락 보호 파일: {mp}")
+            print("  복구 명령: python pipeline.py hygiene final-cleanup --apply")
+        else:
+            print(f"  ready_for_next_task: {str(ready).lower()}")
+
+    if status == "BLOCKED":
+        sys.exit(1)
+
+
 def cmd_hygiene(args: "argparse.Namespace") -> None:
-    """hygiene scan | archive | schedule | cleanup-workspace | cleanup — 임시 산출물 정리 CLI.
+    """hygiene scan | archive | schedule | cleanup-workspace | cleanup | final-cleanup | ready-next.
 
     scan: 후보 목록만 표시 (파일 이동 없음)
     archive: 후보를 Google Drive 찌꺼기 폴더로 이동
     schedule: Windows 작업 스케줄러 등록/상태 확인
     cleanup-workspace: 파이프라인 완료 후 untracked 임시 파일 정리 (IMP-20260605-58BF MT-5)
+    final-cleanup: ownership manifest 기반 cleanup_only 산출물 수동 정리 (IMP-20260623-7EAA MT-4)
+    ready-next: post-complete workspace readiness 상태 조회 (IMP-20260623-7EAA MT-4)
 
-    IMP-20260601-0DF5 MT-1/MT-2 / IMP-20260605-58BF MT-5
+    IMP-20260601-0DF5 MT-1/MT-2 / IMP-20260605-58BF MT-5 / IMP-20260623-7EAA MT-4
     """
     sub = getattr(args, "hygiene_sub", None)
     if sub == "scan":
@@ -23736,8 +24537,12 @@ def cmd_hygiene(args: "argparse.Namespace") -> None:
         cmd_hygiene_cleanup_workspace(args)
     elif sub == "cleanup":
         cmd_hygiene_cleanup(args)
+    elif sub == "final-cleanup":
+        cmd_hygiene_final_cleanup(args)
+    elif sub == "ready-next":
+        cmd_hygiene_ready_next(args)
     else:
-        _die("[HYGIENE ERROR] 알 수 없는 hygiene 서브명령. scan|archive|schedule|cleanup-workspace|cleanup 중 선택하세요.")
+        _die("[HYGIENE ERROR] 알 수 없는 hygiene 서브명령. scan|archive|schedule|cleanup-workspace|cleanup|final-cleanup|ready-next 중 선택하세요.")
 
 
 # ---------------------------------------------------------------------------

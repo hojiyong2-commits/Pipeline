@@ -1,0 +1,13 @@
+{
+  "case_id": "TC-5",
+  "case_kind": "edge",
+  "description": "이전 파이프라인 cleanup이 BLOCKED인 상태에서 새 파이프라인 시작 시도",
+  "setup": {
+    "previous_pipeline": {
+      "id": "IMP-20260622-XXXX",
+      "terminal_state": "COMPLETE",
+      "post_complete_cleanup": {"status": "BLOCKED", "ready_for_next_task": false}
+    }
+  },
+  "action": "run: python pipeline.py new --type IMP --desc 'new task'"
+}

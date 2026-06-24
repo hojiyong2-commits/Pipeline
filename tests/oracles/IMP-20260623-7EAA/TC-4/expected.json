@@ -1,0 +1,14 @@
+{
+  "case_id": "TC-4",
+  "expected_output": {
+    "status": "WARN",
+    "unknown_count": 2,
+    "unknown_files_deleted": false
+  },
+  "assertions": [
+    "post_complete_cleanup.unknown list is non-empty",
+    "unknown files are NOT deleted",
+    "status is WARN (not BLOCKED) for unknown user files",
+    "message indicates user files preserved"
+  ]
+}

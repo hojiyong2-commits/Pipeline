@@ -1,0 +1,11 @@
+{
+  "case_id": "TC-4",
+  "case_kind": "edge",
+  "description": "매니페스트에 없는 unknown 사용자 파일이 존재하는 경우",
+  "setup": {
+    "pipeline_state": "COMPLETE",
+    "workspace_artifacts": [],
+    "extra_files_in_workspace": ["user_notes.txt", "my_analysis.xlsx"]
+  },
+  "action": "architect completes pipeline → cleanup encounters unregistered files"
+}

@@ -1,0 +1,16 @@
+{
+  "case_id": "TC-1",
+  "expected_output": {
+    "status": "PASS",
+    "removed_count": 3,
+    "preserved_count": 0,
+    "deferred_count": 0,
+    "unknown_count": 0,
+    "ready_for_next_task": true
+  },
+  "assertions": [
+    "post_complete_cleanup.status == PASS",
+    "len(post_complete_cleanup.removed) == 3",
+    "post_complete_cleanup.ready_for_next_task == true"
+  ]
+}
