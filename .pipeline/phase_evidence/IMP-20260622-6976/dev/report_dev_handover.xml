@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260622-6976</pipeline_id>
+  <agent_id>dev-agent</agent_id>
+  <run_id>dev-2dd48527144140e1</run_id>
+  <phase>dev</phase>
+  <status>COMPLETE</status>
+
+  <scope_declaration>
+    <files_to_modify>
+      <file>.claude/agents/pm-planner-agent.md</file>
+    </files_to_modify>
+    <files_to_create>
+      <file>tests/test_pm_planner_oracle_contract_6976.py</file>
+    </files_to_create>
+    <files_to_delete>없음</files_to_delete>
+    <out_of_scope>pipeline.py, CLAUDE.md, 다른 agent MD, tests/oracles/ 파일 수정</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <pipeline_id>IMP-20260622-6976</pipeline_id>
+    <target_function>pm-planner-agent.md oracle 설계 계약 섹션</target_function>
+    <change_type>섹션 추가(문서 전용) + 회귀 테스트 신규 생성</change_type>
+    <blast_radius>대상 파일 2개에만 국한, 런타임 코드 무변경</blast_radius>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>.claude/agents/pm-planner-agent.md, tests/test_pm_planner_oracle_contract_6976.py</git_diff_files>
+    <manifest_files>.claude/agents/pm-planner-agent.md, tests/test_pm_planner_oracle_contract_6976.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <modules_completed>
+    <module id="MT-1" status="PASS">pm-planner-agent.md Oracle Design Contract 섹션 추가 (46줄, AC-1~AC-9 커버)</module>
+    <module id="MT-2" status="PASS">tests/test_pm_planner_oracle_contract_6976.py 10개 회귀 테스트 (AC-10 커버, 10 passed in 0.05s)</module>
+  </modules_completed>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260622-6976</pipeline_id>
+    <files_modified>
+      <file>.claude/agents/pm-planner-agent.md</file>
+      <file>tests/test_pm_planner_oracle_contract_6976.py</file>
+    </files_modified>
+    <evidence>Oracle Design Contract 섹션 46줄이 pm-planner-agent.md에 추가됨. 회귀 테스트 10개 PASS 확인.</evidence>
+  </handover>
+</dev_handover>
