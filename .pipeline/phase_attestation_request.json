@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-23T13:54:48Z",
+  "pipeline_id": "IMP-20260623-7EAA",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "e4c1f27acaceed63c23a876c7b05c728880e9415",
+  "state": {
+    "current_phase": "sec",
+    "phase_completed_at": "2026-06-23T13:23:45Z",
+    "report_file": "dev_handover_r2.xml",
+    "evidence": "pipeline.py,core/acceptance/scorers.py,tests/e2e/test_final_workspace_cleanup_7eaa.py"
+  },
+  "agent_run": {
+    "run_id": "dev-b5401e87588df875",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_r2.xml",
+    "output_sha256": "5d9832f753db2fe1b4eb426fb17f74ac74d60a753d8a4e2ffc63a51f72c9506e",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260623-7EAA/dev/agent_receipt_dev-b5401e87588df875.json",
+    "receipt_sha256": "5c106cd2376c33efb0a244b17e558d8a57586808af608811012379615c291a0a",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260623-7EAA\\dev\\dev-b5401e87588df875.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260623-7EAA\\dev\\dev-b5401e87588df875.json",
+      "path": ".pipeline/phase_evidence/IMP-20260623-7EAA/dev/agent_receipt_dev-b5401e87588df875.json",
+      "sha256": "5c106cd2376c33efb0a244b17e558d8a57586808af608811012379615c291a0a",
+      "size_bytes": 504,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_r2.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260623-7EAA/dev/report_dev_handover_r2.xml",
+      "sha256": "5d9832f753db2fe1b4eb426fb17f74ac74d60a753d8a4e2ffc63a51f72c9506e",
+      "size_bytes": 4856,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_MT-1.json",
+      "path": ".pipeline/phase_evidence/IMP-20260623-7EAA/dev/scope_manifest_scope_manifest_MT-1.json",
+      "sha256": "1822874eea327f446b44012d5bbd2a5b24b62e65cda956733873e65465d27f02",
+      "size_bytes": 4070,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": []
+}

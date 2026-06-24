@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+<dev_handover>
+  <pipeline_id>IMP-20260623-7EAA</pipeline_id>
+  <round>2</round>
+  <reject_reason>_register_workspace_artifact가 실제 artifact 생성 지점에서 미호출 + post_complete_cleanup 요약 미표시 + cleanup 예외 조용히 삼킴 + scorers IMP 전용 fallback</reject_reason>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>core/acceptance/scorers.py</file>
+      <file>tests/e2e/test_final_workspace_cleanup_7eaa.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>cmd_build</target_function>
+    <target_function>_run_post_complete_cleanup</target_function>
+    <target_function>cmd_architect</target_function>
+    <target_function>_collect_packet_evidence</target_function>
+    <target_function>_build_acceptance_display_model</target_function>
+    <target_function>_display_model_from_evidence</target_function>
+    <target_function>_render_pr_body_final_packet</target_function>
+    <target_function>_build_verification_json</target_function>
+    <target_function>_build_post_complete_cleanup_summary</target_function>
+  </impact_analysis>
+  <fixes_implemented>
+    <fix id="F1">cmd_build: build_report.xml 6-section 검증 통과 직후 _register_workspace_artifact(state, build_report_file, 'cleanup_only', 'build phase report — cleanup_only') 배선. COMPLETE 후 자동 삭제 대상으로 인식됨.</fix>
+    <fix id="F2">_run_post_complete_cleanup: (1) scratch 파일을 cleanup_only로 자동 삭제(removed)/권한오류 시 deferred. (2) workspace root(state 파일 부모 디렉터리)의 ROOT_TMP_PATTERNS(tmp_*.json, *_dump.txt, build_report*.xml, tmp_tc*.py) 스캔 → 매니페스트 없는 파일은 삭제하지 않고 unknown_files로 보고. (3) unknown_files 존재 시 status/workspace_readiness=WARN + unknown_files_note(사용자 작업물 보존 안내). PIPELINE_STATE_PATH 격리 시 tmp_path만 스캔하므로 BASE_DIR 실제 파일 오탐 없음(테스트 격리 보존).</fix>
+    <fix id="F3">post_complete_cleanup 요약을 final packet에 표시: _collect_packet_evidence가 evidence에 post_complete_cleanup 주입 → _build_acceptance_display_model/_display_model_from_evidence가 post_complete_cleanup_summary 파생 → _render_pr_body_final_packet에 '워크스페이스 정리 요약' 섹션(Workspace Readiness/삭제/보류/Unknown) 추가 → _build_verification_json(human_acceptance_packet.json)에 post_complete_cleanup 필드 추가. _build_post_complete_cleanup_summary 헬퍼 신규 추가. _build_verification_json은 선택적 2번째 인자 수용(하위/상위 호환).</fix>
+    <fix id="F4">cmd_architect: cleanup finalizer 예외를 조용히 삼키지 않고 state['post_complete_cleanup']={status:BLOCKED, workspace_readiness:BLOCKED, ready_for_next_task:False, error:...}로 기록 + _log_event BLOCKED 로깅. COMPLETE는 막지 않음.</fix>
+    <fix id="F5">core/acceptance/scorers.py: cleanup_status=BLOCKED fallback의 'type':'IMP' 하드코딩을 given.get('pipeline_type','IMP')로 범용화. IMP 외 파이프라인 타입도 oracle TC precondition으로 사용 가능.</fix>
+  </fixes_implemented>
+  <execution_check>
+    <py_compile>PASS — pipeline.py, core/acceptance/scorers.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</py_compile>
+    <import>PASS — import pipeline; import core.acceptance.scorers</import>
+    <pytest>PASS — tests/e2e/test_final_workspace_cleanup_7eaa.py 12 passed, 1 skipped (Windows chmod skip). 신규 TC-E2E-11/12/13 포함.</pytest>
+    <regression>기존 packet 관련 e2e 회귀 실패(test_final_packet_2e3d 3건, test_acceptance_display_ssot_a35c 3건)는 base branch 동일 재현 — 본 변경과 무관한 사전 존재 nonce/gh 환경 이슈. 본 변경 추가 실패 0건.</regression>
+  </execution_check>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, core/acceptance/scorers.py, tests/e2e/test_final_workspace_cleanup_7eaa.py (의도 변경) + FEAT-20260426-332E/*, tests/test_packing_detail_oracle_4cd8.py (사전 존재 working-tree 변경 — 본 작업 범위 외, 커밋 제외)</git_diff_files>
+    <manifest_files>pipeline.py, core/acceptance/scorers.py, tests/e2e/test_final_workspace_cleanup_7eaa.py</manifest_files>
+    <extra_files>없음 (커밋 대상은 scope_manifest 3개 파일만; FEAT/oracle test는 사전 존재 변경으로 커밋 제외)</extra_files>
+    <trust_root_violation>false (tests/e2e/test_final_workspace_cleanup_7eaa.py는 PM target_files 포함 — IMP scope 내)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>core/acceptance/scorers.py</file>
+    <file>tests/e2e/test_final_workspace_cleanup_7eaa.py</file>
+  </evidence>
+</dev_handover>
+</handover>

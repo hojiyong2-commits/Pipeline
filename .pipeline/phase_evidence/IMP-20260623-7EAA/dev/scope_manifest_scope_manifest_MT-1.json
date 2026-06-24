@@ -1,0 +1,123 @@
+{
+  "pipeline_id": "IMP-20260623-7EAA",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_load_workspace_artifacts",
+        "_register_workspace_artifact",
+        "_save_workspace_artifacts"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "Round 2 F1: cmd_build에서 build_report.xml cleanup_only 등록 추가. _register_workspace_artifact/_load_workspace_artifacts/_save_workspace_artifacts 함수는 Round 1에서 이미 구현됨."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_run_post_complete_cleanup",
+        "cmd_architect"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-2", "AC-3", "AC-5", "AC-6"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "Round 2 F2: _run_post_complete_cleanup에 scratch 파일 자동 cleanup + root 임시 파일 unknown 보고 + unknown_files 존재 시 WARN 상태 + unknown_files_note 추가. F4: cmd_architect cleanup 예외를 BLOCKED state로 기록."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "cmd_new",
+        "cmd_status"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-7", "AC-8"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "cmd_status workspace readiness 표시, cmd_new cleanup BLOCKED 시 차단 — Round 1에서 구현됨. Round 2 변경 없음."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "cmd_hygiene"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-9"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "hygiene final-cleanup/ready-next CLI — Round 1에서 구현됨. Round 2 변경 없음."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "_save"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-4", "AC-10"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_save 함수 legacy pipeline_state.json 미수정 확인 — Round 1에서 검증됨. Round 2 변경 없음."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py",
+        "core/acceptance/scorers.py",
+        "tests/e2e/test_final_workspace_cleanup_7eaa.py"
+      ],
+      "affected_functions": [
+        "cmd_build",
+        "_run_post_complete_cleanup",
+        "cmd_architect",
+        "_collect_packet_evidence",
+        "_build_acceptance_display_model",
+        "_render_pr_body_final_packet",
+        "_build_verification_json",
+        "_build_post_complete_cleanup_summary",
+        "run_pipeline_cmd"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10"],
+          "changed_files": ["pipeline.py", "core/acceptance/scorers.py", "tests/e2e/test_final_workspace_cleanup_7eaa.py"],
+          "implementation_evidence": [
+            "Round 2 REJECT 재작업 F1~F5 5건 반영: cmd_build build_report.xml cleanup_only 등록, _run_post_complete_cleanup scratch+root 임시파일 unknown 보고, cmd_architect 예외 BLOCKED 기록, final-packet post_complete_cleanup 요약 표시, scorers.py IMP fallback 범용화. TC-E2E-11/12/13 신규 테스트 추가. 테스트 12 PASS, 1 SKIP(Windows chmod)."
+          ]
+        }
+      ]
+    }
+  ]
+}
