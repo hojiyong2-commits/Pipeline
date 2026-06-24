@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260622-79BA</pipeline_id>
+  <agent_id>dev-agent</agent_id>
+  <run_id>dev-b344540ae903c542</run_id>
+  <phase>dev</phase>
+  <status>COMPLETE</status>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/conftest.py</file>
+      <file>scratch_hygiene_audit.md</file>
+      <file>tests/e2e/test_scratch_hygiene_79ba.py</file>
+      <file>tests/oracles/IMP-20260622-79BA/tc1_normal/input.json</file>
+      <file>tests/oracles/IMP-20260622-79BA/tc1_normal/expected.json</file>
+      <file>tests/oracles/IMP-20260622-79BA/tc2_edge/input.json</file>
+      <file>tests/oracles/IMP-20260622-79BA/tc2_edge/expected.json</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_scratch_root, _scratch_path, _cleanup_scratch, _scratch_file, _list_scratch_files, _scratch_exists, _check_workspace_hygiene, _is_workspace_cleanup_only, cmd_hygiene_cleanup, _build_cleanup_manifest, _build_verification_json, _build_workspace_hygiene_summary</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py hygiene cleanup CLI">cmd_hygiene_cleanup 신규</caller>
+      <caller location="pipeline.py gates request-accept/accept">_check_workspace_hygiene 규칙 7 추가</caller>
+      <caller location="tests/conftest.py">pytest_sessionfinish hook 신규</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>pathlib.Path, shutil, subprocess, json</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>hygiene cleanup --apply 시만 파일 삭제 (dry-run 기본은 읽기 전용)</mutation>
+      <mutation>pytest 세션 종료 시 .pytest_tmp_* best-effort 삭제</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 기존 함수 시그니처 불변, 신규 함수 추가</signature_change>
+      <breaking_change>NO — 신규 추가만, 기존 동작 보존</breaking_change>
+      <test_coverage>23개 신규 E2E 테스트 + 기존 17개 hygiene 회귀 PASS</test_coverage>
+      <rollback_strategy>신규 함수 블록 제거로 즉시 복구 가능</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <modules_completed>
+    <module id="MT-1" status="PASS">6개 scratch helper 함수 pipeline.py에 추가</module>
+    <module id="MT-2" status="PASS">scratch_hygiene_audit.md 생성</module>
+    <module id="MT-3" status="PASS">_WORKSPACE_HYGIENE_EXTRA_CLEANUP_PATTERNS 정책 주석 추가</module>
+    <module id="MT-4" status="PASS">tests/conftest.py cleanup 함수/fixture/hook 추가</module>
+    <module id="MT-5" status="PASS">_check_workspace_hygiene 규칙 7 + _is_workspace_cleanup_only 버그 수정</module>
+    <module id="MT-6" status="PASS">hygiene cleanup CLI 서브커맨드 추가</module>
+    <module id="MT-7" status="PASS">_build_workspace_hygiene_summary + verification json/PR body 요약</module>
+    <module id="MT-8" status="PASS">23개 E2E 테스트 + oracle 2케이스</module>
+  </modules_completed>
+  <evidence>
+    모든 8개 MT module QA PASS. module integrate PASS.
+    pipeline.py, tests/conftest.py 수정. scratch_hygiene_audit.md, tests/e2e/test_scratch_hygiene_79ba.py,
+    tests/oracles/IMP-20260622-79BA/{tc1_normal,tc2_edge} 신규 생성.
+    py_compile PASS. 기존 hygiene 17개 회귀 PASS. 23개 E2E 신규 테스트 작성.
+    보안 제약 준수: pipeline_state.json 미수정/미삭제. User Acceptance 보안 모델 유지. Runtime State Store 구조 유지.
+  </evidence>
+  <handover>Dev 완료 — 모든 8개 MT module QA PASS, module integrate PASS. qa-agent 인계.</handover>
+</dev_handover>
