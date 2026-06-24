@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260624-069A</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-013638ab97c29be9</manager_run_id>
+  <planner_run_id>pm_planner-f35e9cb907736149</planner_run_id>
+  <step_plan_sha256>51e2a2074c192b714bdc1abe69096c5eba3385459f636f5d3eeeb71a00056225</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY</status>
+  <pipeline_manager_plan>
+    <phase_sequence>PM → Dev (MT-1→MT-4 순차) → QA → SEC(skip) → Build(N/A) → Phase 7 게이트 → Architect</phase_sequence>
+    <circuit_breaker>동일 failure_signature 2회 연속 FAIL 시 Phase 8 즉시 이관</circuit_breaker>
+    <scope_lock>각 module dev 기록 전 git diff --name-only로 scope 검증 필수</scope_lock>
+  </pipeline_manager_plan>
+</manager_handoff>
