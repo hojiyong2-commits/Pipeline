@@ -24328,8 +24328,15 @@ def cmd_hygiene_final_cleanup(args: "argparse.Namespace") -> None:
             print("[HYGIENE FINAL-CLEANUP] 활성 파이프라인 없음 — 정리 대상 없음")
         return
 
+    # IMP-20260623-7EAA Round 4 (REJECT 재작업): 자동 finalizer(_run_post_complete_cleanup)와
+    # 수동 final-cleanup이 동일한 cleanup SSoT를 사용하도록 두 소스를 합집합으로 처리한다.
+    # Round 3에서는 _run_post_complete_cleanup만 workspace_hygiene.cleanup_only_items를 읽도록
+    # 고쳐졌으나, 수동 final-cleanup은 여전히 ownership manifest만 읽어 .pytest_tmp_* 디렉터리를
+    # 정리하지 못하는 버그가 있었다(removed=[] 반환).
+    #
+    # 소스 1: workspace_artifacts.json (ownership manifest).
     artifacts = _load_workspace_artifacts(state)
-    cleanup_only = [
+    _from_manifest: List[str] = [
         str(r.get("path"))
         for r in artifacts
         if isinstance(r, dict)
@@ -24338,8 +24345,49 @@ def cmd_hygiene_final_cleanup(args: "argparse.Namespace") -> None:
         and r.get("path")
     ]
 
+    # 소스 2: workspace_hygiene.cleanup_only_items (SSoT — _run_post_complete_cleanup와 동일 소스).
+    # .pytest_tmp_* 디렉터리, .claude/worktrees/, build_report.xml 등이 포함된다.
+    # state에 workspace_hygiene 키가 없으면 빈 목록으로 처리한다.
+    _hygiene = state.get("workspace_hygiene") or {}
+    _from_hygiene: List[str] = [
+        str(p) for p in (_hygiene.get("cleanup_only_items", []) or [])
+        if isinstance(p, str) and p
+    ]
+
+    # 두 소스 합집합 (중복 제거, 순서 유지).
+    _seen: set = set()
+    cleanup_only: List[str] = []
+    for _p in _from_manifest + _from_hygiene:
+        if _p not in _seen:
+            _seen.add(_p)
+            cleanup_only.append(_p)
+
     removed: List[str] = []
     deferred: List[str] = []
+
+    # 허용 루트: _run_post_complete_cleanup과 동일한 traversal/오삭제 방어.
+    # 운영에서는 BASE_DIR, 격리 테스트(PIPELINE_STATE_PATH)에서는 state 파일 부모.
+    _allowed_roots: List[Path] = [BASE_DIR.resolve()]
+    try:
+        _ws_root = _workspace_artifacts_path(state).parent.resolve()
+        if _ws_root not in _allowed_roots:
+            _allowed_roots.append(_ws_root)
+    except (TypeError, ValueError, OSError):
+        pass
+
+    def _within_allowed_root(p: Path) -> bool:
+        """경로 p가 허용 루트 중 하나의 하위 경로인지 확인(오삭제 방어)."""
+        try:
+            _resolved = p.resolve()
+        except OSError:
+            return False
+        for _root in _allowed_roots:
+            try:
+                _resolved.relative_to(_root)
+                return True
+            except ValueError:
+                continue
+        return False
 
     if dry_run:
         result = {
@@ -24358,13 +24406,22 @@ def cmd_hygiene_final_cleanup(args: "argparse.Namespace") -> None:
                 print(f"  [후보] {c}")
         return
 
-    # --apply: 실제 삭제 수행.
+    # --apply: 실제 삭제 수행. _run_post_complete_cleanup과 동일하게 디렉터리는 shutil.rmtree로,
+    # 파일은 unlink로 처리하고, 허용 루트 외부 경로는 절대 삭제하지 않는다(보류).
     for path_str in cleanup_only:
         artifact_path = Path(path_str)
+        if not _within_allowed_root(artifact_path):
+            # 허용 루트 외부 경로 — 절대 삭제 금지, 보류 처리.
+            deferred.append(path_str)
+            continue
         try:
-            if artifact_path.exists():
+            if artifact_path.is_dir():
+                shutil.rmtree(str(artifact_path))
+                removed.append(path_str)
+            elif artifact_path.exists():
                 artifact_path.unlink()
-            removed.append(path_str)
+                removed.append(path_str)
+            # 존재하지 않으면 이미 정리됨 — 조용히 skip (removed에는 추가하지 않음).
         except (PermissionError, OSError):
             deferred.append(path_str)
 

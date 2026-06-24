@@ -708,3 +708,143 @@ def test_hygiene_cleanup_only_items_permission_denied_deferred(tmp_path):
     # status = WARN (ready_for_next_task=True).
     assert result["status"] == "WARN"
     assert result.get("ready_for_next_task") is True
+
+
+# ---------------------------------------------------------------------------
+# TC-E2E-16/17/18: 수동 final-cleanup / ready-next도 같은 cleanup SSoT 사용 (Round 4 REJECT fix)
+# ---------------------------------------------------------------------------
+
+def _hygiene_state_script(state_file: Path, pytest_tmp_dir: Path) -> str:
+    """workspace_hygiene.cleanup_only_items에 .pytest_tmp_* 디렉터리를 등록하는 helper 스크립트."""
+    return _make_state_script(state_file) + (
+        "state['workspace_hygiene'] = {{\n"
+        "    'status': 'WARN',\n"
+        "    'blocking_items': [],\n"
+        "    'cleanup_only_items': [r'{d}'],\n"
+        "    'checked_at': '2026-01-01T00:00:00Z',\n"
+        "}}\n"
+        "pipeline._save(state)\n"
+        "print('DONE')\n"
+    ).format(d=str(pytest_tmp_dir))
+
+
+def test_hygiene_final_cleanup_dry_run_with_hygiene_items(tmp_path):
+    """TC-E2E-16: hygiene final-cleanup --dry-run은 cleanup_only_items를 candidates에 포함하되 삭제 안 함.
+
+    Round 4 재현: 수동 final-cleanup이 workspace_hygiene.cleanup_only_items를 읽지 않아
+    .pytest_tmp_* 디렉터리가 candidates에 누락되던 버그를 검증한다(dry-run 경로).
+    """
+    state_file = tmp_path / "state.json"
+    env = make_env(state_file)
+
+    pytest_tmp_dir = tmp_path / ".pytest_tmp_tc16"
+    pytest_tmp_dir.mkdir()
+
+    proc = run_helper(_hygiene_state_script(state_file, pytest_tmp_dir), env)
+    assert proc.returncode == 0, proc.stderr
+
+    result = run_cli(["hygiene", "final-cleanup", "--dry-run", "--json"], env)
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+
+    # dry-run이므로 실제 삭제 없음.
+    assert data["dry_run"] is True
+    assert data["removed"] == []
+    # candidates에 pytest_tmp_tc16 포함 (소스: workspace_hygiene.cleanup_only_items).
+    assert any("pytest_tmp_tc16" in str(c) for c in data.get("candidates", [])), (
+        f"candidates에 pytest_tmp_tc16 없음 — cleanup SSoT 미적용: {data}"
+    )
+    # 디렉터리는 그대로 존재.
+    assert pytest_tmp_dir.exists(), "dry-run인데 디렉터리가 삭제됨"
+
+
+def test_hygiene_final_cleanup_apply_with_hygiene_items(tmp_path):
+    """TC-E2E-17: hygiene final-cleanup --apply는 workspace_hygiene.cleanup_only_items의 .pytest_tmp_* 실제 삭제.
+
+    Round 4 핵심 재현: 자동 finalizer와 동일한 SSoT를 사용하여 디렉터리(shutil.rmtree)까지
+    실제로 삭제됨을 검증한다(--apply 경로).
+    """
+    state_file = tmp_path / "state.json"
+    env = make_env(state_file)
+
+    pytest_tmp_dir = tmp_path / ".pytest_tmp_tc17"
+    pytest_tmp_dir.mkdir()
+    (pytest_tmp_dir / "data.txt").write_text("tmp data", encoding="utf-8")
+
+    proc = run_helper(_hygiene_state_script(state_file, pytest_tmp_dir), env)
+    assert proc.returncode == 0, proc.stderr
+
+    result = run_cli(["hygiene", "final-cleanup", "--apply", "--json"], env)
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+
+    # --apply이므로 dry_run=False.
+    assert data.get("dry_run") is False
+    # removed 배열에 pytest_tmp_tc17 포함.
+    assert any("pytest_tmp_tc17" in str(r) for r in data.get("removed", [])), (
+        f"removed에 pytest_tmp_tc17 없음 — 수동 final-cleanup SSoT 미적용 버그 재현: {data}"
+    )
+    # 디렉터리가 실제 삭제됨.
+    assert not pytest_tmp_dir.exists(), f"--apply 후에도 디렉터리가 남아있음: {pytest_tmp_dir}"
+
+    # final_state assertion: post_complete_cleanup.removed에 반영.
+    final_state = read_state(state_file)
+    pcc = final_state.get("post_complete_cleanup")
+    if isinstance(pcc, dict):
+        assert any("pytest_tmp_tc17" in str(r) for r in pcc.get("removed", [])), (
+            f"final_state removed에 pytest_tmp_tc17 없음: {pcc}"
+        )
+
+
+def test_hygiene_ready_next_with_pending_cleanup(tmp_path):
+    """TC-E2E-18: hygiene ready-next — post_complete_cleanup이 WARN이면 그 상태가 그대로 보고된다.
+
+    cleanup_only_items가 남아있는 정리 미완료(WARN) 상황에서 ready-next가 WARN을
+    반영하는지 검증한다.
+    """
+    state_file = tmp_path / "state.json"
+    env = make_env(state_file)
+
+    pytest_tmp_dir = tmp_path / ".pytest_tmp_tc18"
+    pytest_tmp_dir.mkdir()
+
+    # post_complete_cleanup=WARN + workspace_hygiene에 cleanup_only_items 있는 상태.
+    script = _make_state_script(state_file) + (
+        "state['post_complete_cleanup'] = {{\n"
+        "    'status': 'WARN',\n"
+        "    'ready_for_next_task': True,\n"
+        "    'removed': [],\n"
+        "    'deferred': [],\n"
+        "    'missing_protected': [],\n"
+        "    'unknown_files': [],\n"
+        "    'workspace_readiness': 'WARN',\n"
+        "}}\n"
+        "state['workspace_hygiene'] = {{\n"
+        "    'status': 'WARN',\n"
+        "    'blocking_items': [],\n"
+        "    'cleanup_only_items': [r'{d}'],\n"
+        "    'checked_at': '2026-01-01T00:00:00Z',\n"
+        "}}\n"
+        "pipeline._save(state)\n"
+        "print('DONE')\n"
+    ).format(d=str(pytest_tmp_dir))
+
+    proc = run_helper(script, env)
+    assert proc.returncode == 0, proc.stderr
+
+    result = run_cli(["hygiene", "ready-next", "--json"], env)
+    # WARN은 exit 0이어야 함 (BLOCKED만 exit 1).
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+
+    # cleanup 미완료(WARN) 상태가 ready-next에 반영되어야 함.
+    cleanup_only_count = data.get("cleanup_only_count", 0)
+    workspace_hygiene_status = data.get("workspace_hygiene_status", "")
+    pending_cleanup = data.get("pending_cleanup", False)
+    status = data.get("status", "")
+    assert (
+        cleanup_only_count > 0
+        or workspace_hygiene_status == "WARN"
+        or pending_cleanup is True
+        or status == "WARN"
+    ), f"ready-next에서 cleanup 미완료(WARN) 미반영: {data}"
