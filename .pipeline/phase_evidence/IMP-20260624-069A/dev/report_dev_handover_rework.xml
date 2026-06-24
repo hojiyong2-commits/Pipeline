@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260624-069A</pipeline_id>
+  <agent_run_id>dev-692a93eee281a1a3</agent_run_id>
+  <phase>dev</phase>
+  <rework>true</rework>
+  <rework_reason>사용자 REJECT 3가지 사유 수정</rework_reason>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_acceptance_request_format_069a.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <mt_id>MT-1</mt_id>
+    <target_function>_cmd_gates_request_accept</target_function>
+    <change_type>print_removal_and_variable_cleanup</change_type>
+    <state_mutations>stdout 출력 1줄 제거, 미사용 변수 2개 제거</state_mutations>
+    <risk_assessment>
+      <scope_creep>low — 2줄 삭제만</scope_creep>
+      <regression_risk>low — _log_event, _save, pr_comment_accept_code 모두 보존</regression_risk>
+      <side_effects>none — 출력 포맷 정리만</side_effects>
+      <test_coverage>E2E 테스트 test_tc2_codex_is_last_meaningful_line, test_tc3_no_request_id_print_after_codex로 검증</test_coverage>
+    </risk_assessment>
+    <mt_id_4>MT-4</mt_id_4>
+    <target_function_4>TestRealCliRequestAcceptFormat</target_function_4>
+    <change_type_4>test_rewrite_to_e2e_subprocess</change_type_4>
+  </impact_analysis>
+  <modified_files>
+    <file>pipeline.py</file>
+    <file>tests/test_acceptance_request_format_069a.py</file>
+  </modified_files>
+  <changes>
+    <change mt_id="MT-1">
+      <description>REJECT 사유 1: print("승인 요청 ID: ...") 제거 — CODEX 검토 필요가 stdout 마지막 줄</description>
+      <description>REJECT 사유 3: accept_code, pr_comment_reject_code 미사용 변수 + noqa 주석 제거</description>
+    </change>
+    <change mt_id="MT-4">
+      <description>REJECT 사유 2: _render 직접 호출 → subprocess 실제 CLI E2E 테스트로 교체 (PIPELINE_STATE_PATH 격리)</description>
+    </change>
+  </changes>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_acceptance_request_format_069a.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_acceptance_request_format_069a.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <item>pipeline.py: 미사용 변수 accept_code, pr_comment_reject_code 제거 완료</item>
+    <item>pipeline.py: "승인 요청 ID: ..." print문 제거, _log_event/_save 보존</item>
+    <item>tests/test_acceptance_request_format_069a.py: subprocess E2E 테스트 6개 PASS</item>
+  </evidence>
+</handover>
