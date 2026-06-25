@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260625-AD69</pipeline_id>
+  <run_id>dev-ec0dd12553098310</run_id>
+  <summary>
+    QA FAIL 수정: ruff F401(미사용 import) 해소. tests/test_acceptance_comment_reuse_ad69.py
+    28번째 줄의 typing import에서 미사용 심볼 Any를 제거. 1줄 surgical edit.
+  </summary>
+
+  <scope_declaration>
+    <files_to_modify>tests/test_acceptance_comment_reuse_ad69.py</files_to_modify>
+    <scope_manifest>scope_manifest.json</scope_manifest>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-4</micro_task_id>
+    <target_function>test_acceptance_comment_reuse_ad69</target_function>
+    <upstream_callers>
+      <caller location="none">none — module-level import statement, no function callers</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>typing.List</dep>
+      <dep>typing.Optional</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — pure import statement edit, no runtime state change</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — import line only, no function signatures touched</signature_change>
+      <breaking_change>NO — Any is unused (Grep verified: only occurrence was the import); List/Optional retained</breaking_change>
+      <test_coverage>EXISTING — 10 tests validate runtime behavior, all PASS</test_coverage>
+      <rollback_strategy>git checkout tests/test_acceptance_comment_reuse_ad69.py 으로 1줄 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>tests/test_acceptance_comment_reuse_ad69.py</git_diff_files>
+    <manifest_files>tests/test_acceptance_comment_reuse_ad69.py (MT-4)</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <handover>
+    <implemented_files>
+      <file>tests/test_acceptance_comment_reuse_ad69.py</file>
+    </implemented_files>
+    <change_detail>line 28: from typing import Any, List, Optional -> from typing import List, Optional (미사용 Any 제거)</change_detail>
+    <evidence>
+      <ruff>python -m ruff check tests/test_acceptance_comment_reuse_ad69.py pipeline.py -- All checks passed, exit 0</ruff>
+      <pytest>python -m pytest tests/test_acceptance_comment_reuse_ad69.py -v -- 10 passed in 0.08s, exit 0</pytest>
+      <git_diff>단일 파일 1줄 변경 확인</git_diff>
+    </evidence>
+    <verdict>PASS</verdict>
+  </handover>
+</dev_handover>
