@@ -85,36 +85,6 @@ def _read_text_with_fallback(path: Path) -> str:
     )
 
 
-def _safe_resolve(user_path: str, allowed_root: Path) -> Path:
-    """allowed_root 하위로 제한된 안전한 경로 해석 (traversal 방어).
-
-    Args:
-        user_path: 해석할 상대/절대 경로 문자열.
-        allowed_root: 허용 루트 디렉토리.
-    Returns:
-        allowed_root 하위로 검증된 절대 Path.
-    Raises:
-        TypeError: 입력이 None이거나 타입이 잘못된 경우.
-        ValueError: 경로가 allowed_root를 벗어나는 경우.
-    """
-    if user_path is None:
-        raise TypeError("user_path must not be None")
-    if not isinstance(user_path, (str, Path)):
-        raise TypeError(
-            f"user_path must be str or Path, got {type(user_path).__name__}"
-        )
-    if allowed_root is None:
-        raise TypeError("allowed_root must not be None")
-    resolved = (allowed_root / user_path).resolve()
-    try:
-        resolved.relative_to(allowed_root.resolve())
-    except ValueError:
-        raise ValueError(
-            f"Path traversal detected: '{user_path}' escapes allowed root '{allowed_root}'"
-        )
-    return resolved
-
-
 def _atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
     """원자적 JSON 쓰기 (tempfile → os.replace).
 
