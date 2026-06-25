@@ -1,0 +1,68 @@
+{
+  "pipeline_id": "IMP-20260625-CD3C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [".claude/hooks/codex_user_acceptance_review.py"],
+      "affected_functions": ["codex_user_acceptance_review.parse_acceptance_block"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8"],
+          "changed_files": [".claude/hooks/codex_user_acceptance_review.py"],
+          "implementation_evidence": [
+            "parse_acceptance_block: 5요소(사용자 승인 요청 / PR: / 승인 코드: / ACCEPT- / 마지막 의미 줄 CODEX 검토 필요) 검증, _strip_code_fences_and_quotes로 인용/코드블록 예시 무시 (AC-1, AC-2, AC-3)",
+            "check_dedupe + _record_dedupe: pr_url|accept_code|head_sha 키 중복 방지, SHA 변경 시 재검토 허용 (AC-4, AC-5)",
+            "process_verdict: REJECT는 사유만 출력, APPROVE_TO_USER는 안내문+코드만 출력, post_pr_comment/run_gates_accept 모두 False (AC-6, AC-7)",
+            "소스에 gh pr comment 게시/gates accept 실행 경로 없음 — docstring/금지 프롬프트 텍스트만 존재 (AC-8)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [".claude/hooks/codex-user-acceptance-review.ps1"],
+      "affected_functions": ["codex-user-acceptance-review.ps1.main"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1"],
+          "changed_files": [".claude/hooks/codex-user-acceptance-review.ps1"],
+          "implementation_evidence": [
+            "param([string]$TranscriptPath)로 transcript 수신, Join-Path으로 helper 경로 계산, python helper 호출 후 exit $LASTEXITCODE 전파 (AC-1 트리거 경로 연결)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [".claude/settings.json"],
+      "affected_functions": ["settings.json.hooks"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-1"],
+          "changed_files": [".claude/settings.json"],
+          "implementation_evidence": [
+            "hooks.Stop[0] command가 codex-user-acceptance-review.ps1을 $CLAUDE_HOOK_TRANSCRIPT_PATH와 함께 호출, 기존 permissions 13개 + skipDangerousModePermissionPrompt 보존 (AC-1)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": ["tests/test_codex_review_hook_cd3c.py"],
+      "affected_functions": ["test_codex_review_hook_cd3c.TestParser"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-9"],
+          "changed_files": ["tests/test_codex_review_hook_cd3c.py"],
+          "implementation_evidence": [
+            "Parser(4)/Dedupe(3)/Verdict(3)/Safety(2) + oracle 정합(1) 총 13개 테스트, pytest 13 passed. Safety가 subprocess gh pr comment ACCEPT 게시 및 subprocess gates accept 실행 패턴 부재 검증 (AC-9)"
+          ]
+        }
+      ]
+    }
+  ]
+}
