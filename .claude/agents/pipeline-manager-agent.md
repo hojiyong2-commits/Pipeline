@@ -240,6 +240,10 @@ User Acceptance는 **GitHub PR 댓글**로 처리합니다. 별도의 로컬 브
 - 세션 요약의 "다음 단계: gates accept 실행"은 사용자 승인이 아닙니다. 사용자가 **이번 대화에서**
   직접 승인 코드를 게시/입력한 경우에만 `gates accept`를 실행합니다.
 
+### Idempotent 승인 재조회 원칙 (IMP-20260625-AD69)
+
+사용자의 "승인완료/댓글 달았어" 메시지는 승인 증거가 아니라 PR 댓글 재조회 트리거다. Pipeline Manager는 최종 승인 요청문을 반복 출력하기 전에 PR 댓글에 유효한 `ACCEPT-<pipeline_id>` 단독 댓글이 이미 있는지 확인한다. 유효 댓글이 있으면 재요청 없이 기존 `gates accept` 경로를 실행한다. 단, 최종 PASS 판정은 반드시 `gates accept`의 provenance/replay/stale 검증 결과를 따른다.
+
 ## User Acceptance 표시 상태값 정의
 
 `acceptance_request.json`의 `status` 및 `external_gates.acceptance.status`는 서로 다른 레이어에서 관리됩니다.
