@@ -17686,8 +17686,8 @@ def _find_existing_valid_acceptance_comment(
         if not isinstance(_comment, dict):
             continue
         # gh api(REST)는 user.login, gh pr view(GraphQL)는 author.login 형식.
-        _user = _comment.get("user") if isinstance(_comment.get("user"), dict) else {}
-        _author_obj = _comment.get("author") if isinstance(_comment.get("author"), dict) else {}
+        _user: dict = _u if isinstance(_u := _comment.get("user"), dict) else {}
+        _author_obj: dict = _a if isinstance(_a := _comment.get("author"), dict) else {}
         _author: str = str(
             _user.get("login", "")
             or _author_obj.get("login", "")
