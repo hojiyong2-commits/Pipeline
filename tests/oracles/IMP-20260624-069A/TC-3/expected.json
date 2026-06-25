@@ -1,0 +1,9 @@
+{
+  "forbidden_strings": [
+    "확인할 항목",
+    "구현 요약",
+    "GitHub Actions",
+    "테스트",
+    "댓글 게시 후 알려주세요"
+  ]
+}
