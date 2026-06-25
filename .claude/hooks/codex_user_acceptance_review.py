@@ -711,8 +711,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument(
         "--transcript",
+        nargs="?",
         default=os.environ.get("CLAUDE_HOOK_TRANSCRIPT_PATH", ""),
-        help="transcript 파일 경로 (JSONL 또는 텍스트)",
+        help="transcript 파일 경로 (JSONL 또는 텍스트). 생략 가능.",
     )
     args = parser.parse_args(argv)
 

@@ -9,5 +9,14 @@ param([string]$TranscriptPath = "")
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $helperPath = Join-Path $scriptDir "codex_user_acceptance_review.py"
 
-python $helperPath --transcript $TranscriptPath
+# 파라미터가 비어 있으면 환경 변수에서 읽기
+if ($TranscriptPath -eq "") {
+    $TranscriptPath = $env:CLAUDE_HOOK_TRANSCRIPT_PATH
+}
+
+if ($TranscriptPath -ne "" -and $TranscriptPath -ne $null) {
+    python $helperPath --transcript $TranscriptPath
+} else {
+    python $helperPath
+}
 exit $LASTEXITCODE
