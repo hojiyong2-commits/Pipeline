@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-25T13:27:16Z",
+  "pipeline_id": "IMP-20260625-CD3C",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "abb9f9b8950729105c2c695cd496acbe85f8d290",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-25T13:26:59Z",
+    "report_file": "dev_handover.xml",
+    "evidence": ".claude/hooks/codex_user_acceptance_review.py,.claude/hooks/codex-user-acceptance-review.ps1,.claude/settings.json,tests/test_codex_review_hook_cd3c.py"
+  },
+  "agent_run": {
+    "run_id": "dev-21222d25b2fef232",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "78c9810ba36556aa6dd55decf5138f067ea57f654a2b5349d1548891058b2386",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260625-CD3C/dev/agent_receipt_dev-21222d25b2fef232.json",
+    "receipt_sha256": "fde116d91f9cf5f0027101be092ead9c027701354373e8652c0d769d46b66c86",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260625-CD3C\\dev\\dev-21222d25b2fef232.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260625-CD3C\\dev\\dev-21222d25b2fef232.json",
+      "path": ".pipeline/phase_evidence/IMP-20260625-CD3C/dev/agent_receipt_dev-21222d25b2fef232.json",
+      "sha256": "fde116d91f9cf5f0027101be092ead9c027701354373e8652c0d769d46b66c86",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260625-CD3C/dev/report_dev_handover.xml",
+      "sha256": "78c9810ba36556aa6dd55decf5138f067ea57f654a2b5349d1548891058b2386",
+      "size_bytes": 4628,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260625-CD3C/dev/scope_manifest_scope_manifest.json",
+      "sha256": "3ac70c5278cfa84ae99ad8ffa10fb497ea64df27d496f5ea3d53b59317cfdec7",
+      "size_bytes": 3032,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": ".claude/settings.json",
+      "sha256": "00a5bfaed9310e482b53e6c25fd683003fce1c5790f62b79b7bf7aceac799143",
+      "size_bytes": 367
+    }
+  ],
+  "local_only_files": []
+}
