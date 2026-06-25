@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260625-AD69</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-187126db081e4f15</manager_run_id>
+  <planner_run_id>pm_planner-6ca16c8902e66679</planner_run_id>
+  <step_plan_sha256>fc568246f19facc25ef7681c0a13604b8725e03e7754853e7ff71bf0fe7a6b1e</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY</status>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 취향 질문(helper 함수 이름 스타일, 로그 메시지 형식)은 묻지 않고 유지보수성 기준으로 정리</filter_summary>
+  </design_confirmation>
+  <pipeline_manager_plan>
+    <phase_sequence>PM → Dev (MT-1→MT-4 순차) → QA → SEC(gh CLI 외부 API 포함) → Build(N/A meta-task) → Phase 7 게이트 → Architect</phase_sequence>
+    <execution_profile>HIGH_RISK — trust-root 파일(pipeline.py, agent MD) 수정 포함</execution_profile>
+    <circuit_breaker>동일 failure_signature 2회 연속 FAIL 시 Phase 8 즉시 이관</circuit_breaker>
+    <scope_lock>각 module dev 기록 전 git diff --name-only로 scope 검증 필수</scope_lock>
+    <key_constraints>
+      <constraint>gates accept 자동 실행 절대 금지</constraint>
+      <constraint>nonce/provenance/stale 검증 완화 금지</constraint>
+      <constraint>기존 _check_pr_approver_provenance 삭제 금지</constraint>
+    </key_constraints>
+  </pipeline_manager_plan>
+  <micro_tasks>
+    <mt id="MT-1" file="pipeline.py" function="_find_existing_valid_acceptance_comment" covers_ac="AC-1,AC-2"/>
+    <mt id="MT-2" file="pipeline.py" function="_cmd_gates_request_accept" covers_ac="AC-1,AC-3"/>
+    <mt id="MT-3" file=".claude/agents/pipeline-manager-agent.md" function="principle_addition" covers_ac="AC-4"/>
+    <mt id="MT-4" file="tests/test_acceptance_comment_reuse_ad69.py" function="test_suite_8_cases" covers_ac="AC-1,AC-2,AC-3,AC-4,AC-5"/>
+  </micro_tasks>
+</manager_handoff>

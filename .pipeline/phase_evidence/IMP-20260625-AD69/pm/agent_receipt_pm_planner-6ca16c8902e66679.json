@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "IMP-20260625-AD69",
+  "phase": "pm_planner",
+  "agent_id": "pm-planner-agent",
+  "run_id": "pm_planner-6ca16c8902e66679",
+  "status": "COMPLETED",
+  "started_at": "2026-06-25T22:23:59Z",
+  "completed_at": "2026-06-25T22:30:46Z",
+  "output_file": "step_plan.xml",
+  "output_sha256": "fc568246f19facc25ef7681c0a13604b8725e03e7754853e7ff71bf0fe7a6b1e",
+  "evidence_files": [],
+  "commit_sha": "b00d798dd47fba2cfef9bbfaeeb820645239e6fe"
+}
