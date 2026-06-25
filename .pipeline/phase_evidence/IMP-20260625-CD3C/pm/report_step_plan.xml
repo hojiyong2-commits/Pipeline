@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <total_functions_identified>6</total_functions_identified>
+  <micro_task_count>4</micro_task_count>
+  <grep_executions>5</grep_executions>
+  <split_decision>신규 파일 3개 생성 + settings.json hook 등록이므로 파일 단위로 MT를 분할합니다. Python helper가 핵심 로직을 담당하고 PowerShell hook은 thin wrapper입니다.</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260625-CD3C</pipeline_id>
+  <anti_gaming_read>true</anti_gaming_read>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>신규 파일 3개 생성 + settings.json 수정 + 테스트 파일 1개. 함수 6개 이상, hook + helper 통합 검증 필요. Fast Path 기준 초과.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>4</expected_changed_files>
+      <expected_changed_functions>6</expected_changed_functions>
+      <expected_changed_lines>350</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>true</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>false</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>PowerShell vs Python 로직 분배 비율, 로그 형식, 변수명 등 내부 구현 취향 질문은 묻지 않고 유지보수성(hook 얇게 + Python helper 두텁게) 원칙으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>Codex 검토 hook을 PowerShell 진입점 + Python helper로 분리해서 만들까요?</user_facing_question>
+        <evidence>사용자 요청에 "Hook은 얇게 만든다" + "Python helper를 추가한다"가 명시되어 있습니다. PR 수집, Codex 호출, dedupe 로직을 Python에 두면 테스트와 유지보수가 쉬워집니다.</evidence>
+        <why_it_matters>PowerShell에 모든 로직을 넣으면 pytest로 검증이 어렵고, 디버깅 시 환경 의존성이 높아집니다. Python helper 분리 시 단위 테스트와 mock이 가능합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>PowerShell hook(얇음) + Python helper(두텁게)</label>
+            <benefit>pytest로 Python helper 단위 테스트 가능, 로직 변경 시 hook 수정 불필요</benefit>
+            <cost>파일이 2개로 나뉘어 진입점 파악에 한 단계 추가</cost>
+          </option>
+          <option id="B">
+            <label>PowerShell hook에 모든 로직 포함</label>
+            <benefit>파일이 1개로 진입점이 단순하고 추가 설정이 없음</benefit>
+            <cost>pytest 검증 불가, 디버깅 어려움, Pester 설치 필요</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청에서 이미 "Hook은 얇게 만든다 / Python helper를 추가한다"로 방향이 명시되었으므로 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <current_step>Step 1: Codex 자동 검토 보조 기능 추가</current_step>
+  <tier>1</tier>
+  <target_agent>Dev</target_agent>
+  <model_tier>Opus</model_tier>
+  <category_tags>[PD, FS]</category_tags>
+
+  <interface_spec>
+    - Input: Claude Code transcript (마지막 assistant 출력 블록)
+    - Input: PR URL, 승인 코드, PR head SHA
+    - Output: Codex verdict (APPROVE_TO_USER 또는 REJECT - 사유)
+    - Output: 사용자 안내 메시지 (stdout)
+    - State: .pipeline/codex_review_state.json (dedupe용)
+    - Log: .pipeline/codex_review_audit.log (감사 기록)
+  </interface_spec>
+
+  <requirements>
+    <requirement id="REQ-1">PowerShell hook (.claude/hooks/codex-user-acceptance-review.ps1)은 thin wrapper로 Python helper를 호출하고 결과를 출력한다</requirement>
+    <requirement id="REQ-2">Python helper (.claude/hooks/codex_user_acceptance_review.py)는 transcript tail 파싱, 승인 요청 블록 추출, PR URL/승인코드 추출, PR head SHA 조회, dedupe 검사, PR review packet 생성, Codex CLI 호출, verdict 형식 검증, audit log 기록, 최종 출력 생성을 담당한다</requirement>
+    <requirement id="REQ-3">트리거 조건: "사용자 승인 요청" + "PR: https://github.com/.../pull/N" + "승인 코드:" + "ACCEPT-pipeline_id" + 마지막 의미 있는 줄이 "CODEX 검토 필요" 모두 같은 블록에 있어야 함</requirement>
+    <requirement id="REQ-4">오작동 방지: 사용자 프롬프트 안의 예시 블록, 문서/테스트 파일 내용, 과거 transcript의 오래된 블록에는 반응하지 않음</requirement>
+    <requirement id="REQ-5">Dedupe: 같은 "PR URL + 승인 코드 + PR head SHA" 조합은 한 번만 검토. 상태 파일: .pipeline/codex_review_state.json (gitignored)</requirement>
+    <requirement id="REQ-6">Codex verdict 형식: "APPROVE_TO_USER" 또는 "REJECT - 구체적 사유" 정확히 둘 중 하나만 허용. 그 외 형식 위반 시 자동화 중단</requirement>
+    <requirement id="REQ-7">REJECT 처리: 문장을 한 글자도 바꾸지 않고 출력, PR 댓글에 쓰지 않음, ACCEPT 코드 게시 안 함, 같은 PR에서 자동 REJECT 전달 최대 3회, 3회 초과 시 사용자 개입 요청</requirement>
+    <requirement id="REQ-8">APPROVE 처리: PR 댓글 쓰지 않음, gates accept 실행 안 함, 승인완료 자동 입력 안 함. "Codex 검토 통과. PR 댓글에 아래 코드를 직접 한 줄로 입력해 주세요." + 승인 코드만 출력</requirement>
+    <requirement id="REQ-9">실패 처리 (모두 fail-closed): gh 없음, codex 없음, PR 정보 조회 실패, CI 상태 확인 실패, Codex 응답 형식 위반 시 모두 중단</requirement>
+    <requirement id="REQ-10">감사 로그: .pipeline/codex_review_audit.log에 timestamp, PR URL, PR head SHA, 승인 코드, Codex verdict 원문, 처리 결과, dedupe skip 여부, format violation 여부, gh/codex 실행 실패 여부 기록</requirement>
+    <requirement id="REQ-11">절대 금지: Codex/hook/Claude가 ACCEPT 코드를 PR 댓글에 대신 게시 금지, hook이 pipeline.py gates accept 실행 금지, hook이 승인완료를 Claude Code에 자동 입력 금지</requirement>
+    <requirement id="REQ-12">기존 User Acceptance provenance/replay/stale/nonce 검증 약화 금지 (pipeline.py는 수정하지 않음)</requirement>
+    <requirement id="REQ-13">더미 코드 금지: TODO/placeholder/dummy/temporary 코드 금지</requirement>
+    <requirement id="REQ-14">settings.json에 hook 등록 (Stop 트리거로 assistant 최종 출력 감지)</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>codex_user_acceptance_review.parse_acceptance_block</affected_function>
+      <affected_function>codex_user_acceptance_review.extract_pr_url_and_code</affected_function>
+      <affected_function>codex_user_acceptance_review.check_dedupe</affected_function>
+      <affected_function>codex_user_acceptance_review.build_review_packet</affected_function>
+      <affected_function>codex_user_acceptance_review.call_codex_cli</affected_function>
+      <affected_function>codex_user_acceptance_review.process_verdict</affected_function>
+      <target_files>
+        <file>.claude/hooks/codex_user_acceptance_review.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex_user_acceptance_review</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Python helper 신규 생성: transcript 파싱, dedupe, Codex 호출, verdict 처리, audit 로그</change_summary>
+      <line_estimate>250</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>codex-user-acceptance-review.ps1.main</affected_function>
+      <target_files>
+        <file>.claude/hooks/codex-user-acceptance-review.ps1</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex-user-acceptance-review\.ps1</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>PowerShell hook 신규 생성: thin wrapper로 Python helper 호출, stdout 전달</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>settings.json.hooks</affected_function>
+      <target_files>
+        <file>.claude/settings.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>"hooks"</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>settings.json에 hook 등록 (Stop 트리거로 assistant 최종 출력 감지)</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>test_codex_review_hook_cd3c.TestParser</affected_function>
+      <affected_function>test_codex_review_hook_cd3c.TestDedupe</affected_function>
+      <affected_function>test_codex_review_hook_cd3c.TestVerdict</affected_function>
+      <affected_function>test_codex_review_hook_cd3c.TestSafety</affected_function>
+      <target_files>
+        <file>tests/test_codex_review_hook_cd3c.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_codex_review_hook</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>회귀 테스트 신규 생성: Parser, Dedupe, Verdict, Safety 4개 테스트 그룹</change_summary>
+      <line_estimate>180</line_estimate>
+      <covers_ac>AC-9</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>Claude Code의 assistant 최종 출력에 "사용자 승인 요청" + "PR:" + "승인 코드:" + "ACCEPT-" + "CODEX 검토 필요"(마지막 의미 있는 줄) 5요소가 모두 같은 블록에 있을 때만 Codex 검토가 트리거된다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>"CODEX 검토 필요" 문자열만 단독으로 있으면 트리거되지 않는다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>사용자 프롬프트 안의 예시 블록(인용 또는 코드블록 내부)에는 반응하지 않는다</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>같은 "PR URL + 승인 코드 + PR head SHA" 조합은 한 번만 검토되고 중복 실행되지 않는다</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>PR head SHA가 바뀌면 같은 PR URL + 승인 코드여도 재검토가 허용된다</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>Codex verdict가 "REJECT - 사유"이면 해당 문장을 그대로 출력하고 PR 댓글에 쓰지 않으며 ACCEPT 코드를 게시하지 않는다</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>Codex verdict가 "APPROVE_TO_USER"이면 "Codex 검토 통과. PR 댓글에 아래 코드를 직접 한 줄로 입력해 주세요." + 승인 코드만 출력하고, PR 댓글에 대신 게시하거나 gates accept를 실행하지 않는다</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>hook/helper 코드에 gh pr comment로 ACCEPT 코드를 게시하는 경로가 없고, pipeline.py gates accept를 실행하는 경로도 없다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>tests/test_codex_review_hook_cd3c.py의 Parser/Dedupe/Verdict/Safety 4개 테스트 그룹이 모두 PASS한다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 기존 프로젝트 Python 버전 유지</python_version>
+
+  <env_specs>
+    <python>3.10</python>
+    <vscode>typeCheckingMode: basic</vscode>
+  </env_specs>
+
+  <forbidden>
+    - pipeline.py 수정 금지 (기존 User Acceptance 검증 로직 약화 금지)
+    - CLAUDE.md 수정 금지
+    - agent MD 파일 수정 금지
+    - gh pr comment로 ACCEPT 코드 게시 금지
+    - pipeline.py gates accept 호출 금지
+    - TODO/placeholder/dummy/temporary 코드 금지
+  </forbidden>
+
+  <context_injection>
+    <target_files>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\.claude\settings.json</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\pipeline.py</file>
+      <file>c:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra\tests\test_acceptance_request_format_069a.py</file>
+    </target_files>
+    <phase_rules_excerpt>
+      IMP-20260624-069A 이후 gates request-accept는 4요소 최소 고정 양식(사용자 승인 요청/PR/승인 코드/CODEX 검토 필요)을 출력한다.
+      이 블록이 Claude Code의 마지막 assistant 출력에 나타나면 Codex 자동 검토를 트리거한다.
+      Codex는 검토만 수행하고, 최종 승인 코드 입력은 사용자가 직접 PR 댓글에 해야 한다.
+    </phase_rules_excerpt>
+    <prev_phase_summary>신규 기능 추가 — 선행 phase 없음</prev_phase_summary>
+  </context_injection>
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>

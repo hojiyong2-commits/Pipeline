@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260625-CD3C</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-fc4a4b5732ad0b13</manager_run_id>
+  <planner_run_id>pm_planner-d60fbfc7ac564382</planner_run_id>
+  <step_plan_sha256>3a91349e888ac49a065aad879419f7225e324ccc530db4c7a4ce5ec1bf2a6f5a</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY</status>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+  </design_confirmation>
+  <pipeline_manager_plan>
+    <phase_sequence>PM → Dev (MT-1→MT-4 순차) → QA → SEC(external_api=true, security-agent 호출) → Build(N/A meta-task) → Phase 7 게이트 → Architect</phase_sequence>
+    <circuit_breaker>동일 failure_signature 2회 연속 FAIL 시 Phase 8 즉시 이관</circuit_breaker>
+    <scope_lock>각 module dev 기록 전 git diff --name-only로 scope 검증 필수</scope_lock>
+  </pipeline_manager_plan>
+</manager_handoff>
