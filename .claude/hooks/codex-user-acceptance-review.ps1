@@ -1,21 +1,11 @@
-# [Purpose]: Claude Code Stop hook의 PowerShell 진입점. Python helper
-#   codex_user_acceptance_review.py를 호출하고 transcript 경로를 전달하는 thin wrapper.
-# [Assumptions]: python이 PATH에 있고, 같은 디렉토리에 codex_user_acceptance_review.py가 존재한다.
-# [Vulnerability & Risks]: python 미설치 시 호출이 실패한다 — helper가 fail-closed로 처리하며,
-#   wrapper는 helper 종료 코드를 그대로 전파하므로 추가 위험은 없다.
-# [Improvement]: 시간이 더 있다면 python 실행기 후보(py, python3)를 순차 탐색할 것이다.
-param([string]$TranscriptPath = "")
-
+# Claude Code Stop hook 진입점. CLAUDE_HOOK_TRANSCRIPT_PATH 환경변수에서
+# transcript 경로를 읽어 Python helper에 전달하는 thin wrapper.
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $helperPath = Join-Path $scriptDir "codex_user_acceptance_review.py"
+$transcriptPath = $env:CLAUDE_HOOK_TRANSCRIPT_PATH
 
-# 파라미터가 비어 있으면 환경 변수에서 읽기
-if ($TranscriptPath -eq "") {
-    $TranscriptPath = $env:CLAUDE_HOOK_TRANSCRIPT_PATH
-}
-
-if ($TranscriptPath -ne "" -and $TranscriptPath -ne $null) {
-    python $helperPath --transcript $TranscriptPath
+if ($transcriptPath -and (Test-Path $transcriptPath)) {
+    python $helperPath --transcript $transcriptPath
 } else {
     python $helperPath
 }
