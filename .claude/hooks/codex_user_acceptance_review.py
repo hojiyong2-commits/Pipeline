@@ -863,42 +863,4 @@ def _reset_reject_count(state_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    # --- 자기검증 블록 (Self-Verification Protocol) ---
-    if len(sys.argv) == 1:
-        # 인자 없이 직접 실행 시 self-test 수행
-        _normal = (
-            "사용자 승인 요청\n\n"
-            "PR: https://github.com/hojiyong2-commits/Pipeline/pull/702\n\n"
-            "승인 코드:\nACCEPT-IMP-20260625-CD3C\n\nCODEX 검토 필요"
-        )
-        _b = parse_acceptance_block(_normal)
-        assert _b is not None, "정상 블록 미감지"
-        assert _b["pr_url"].endswith("/pull/702"), "PR URL 추출 실패"
-        assert _b["accept_code"] == "ACCEPT-IMP-20260625-CD3C", "승인 코드 추출 실패"
-
-        _edge = "다음 단계로 진행합니다.\n\nCODEX 검토 필요"
-        assert parse_acceptance_block(_edge) is None, "5요소 미충족인데 감지됨"
-
-        # 인용/코드블록 예시 무시
-        _quoted = (
-            "> 사용자 승인 요청\n> PR: https://github.com/a/b/pull/1\n"
-            "> 승인 코드:\n> ACCEPT-X\n> CODEX 검토 필요"
-        )
-        assert parse_acceptance_block(_quoted) is None, "인용 예시가 감지됨"
-
-        _ap = process_verdict("APPROVE_TO_USER", "ACCEPT-X", "u", 0)
-        assert _ap["decision"] == "APPROVE_TO_USER"
-        assert _ap["post_pr_comment"] is False and _ap["run_gates_accept"] is False
-
-        _rj = process_verdict("REJECT - 사유", "ACCEPT-X", "u", 0)
-        assert _rj["decision"] == "REJECT"
-
-        try:
-            process_verdict("MAYBE", "ACCEPT-X", "u", 0)
-            assert False, "형식 위반 예외 미발생"
-        except ValueError:
-            pass
-
-        print("[SELF-VERIFY] OK")
-        sys.exit(0)
     sys.exit(main())

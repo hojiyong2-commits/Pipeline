@@ -13,6 +13,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -198,6 +200,41 @@ class TestSafety:
         assert cli_exec.search(src) is None, (
             "pipeline.py gates accept 실행 명령이 발견되었습니다 (AC-8 위반)"
         )
+
+
+HELPER_PATH = _HELPER_PATH
+
+
+class TestNoTranscriptSilentExit:
+    """transcript 없이 실행하면 stdout 없이 exit 0 (REJECT 수정 회귀 테스트)."""
+
+    def test_no_transcript_arg_exits_silently(self):
+        """--transcript 없이 실행하면 stdout 출력 없이 exit 0."""
+        result = subprocess.run(
+            [sys.executable, str(HELPER_PATH)],
+            capture_output=True, text=True
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
+
+    def test_empty_transcript_exits_silently(self):
+        """--transcript 값이 없으면(nargs=?) exit 0."""
+        result = subprocess.run(
+            [sys.executable, str(HELPER_PATH), "--transcript"],
+            capture_output=True, text=True
+        )
+        # nargs='?' 이면 None이 되므로 조용히 종료
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
+
+    def test_nonexistent_transcript_exits_silently(self):
+        """존재하지 않는 transcript 경로 → 조용히 exit 0."""
+        result = subprocess.run(
+            [sys.executable, str(HELPER_PATH), "--transcript", "/nonexistent/path.jsonl"],
+            capture_output=True, text=True
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
 
 
 def test_oracle_cases_align():
