@@ -1,0 +1,98 @@
+<qa_report>
+  <pipeline_id>IMP-20260625-CD3C</pipeline_id>
+  <round>2</round>
+  <category_check>
+    <wa>N-A — gh/codex subprocess 호출은 모두 fail-closed(RuntimeError, exit 1) 처리. WA 4항목 정식 대상 아님(외부 HTTP API 직접 호출 없음).</wa>
+    <ui>N-A — GUI 위젯 없음(CLI hook helper).</ui>
+    <fs>PASS — 원자적 쓰기(tempfile+os.replace, _atomic_write_json), 4-encoding fallback(utf-8/utf-8-sig/cp949/latin-1), pathlib 일관 사용. _safe_resolve dead code 제거 완료(Round 1 FAIL 해소).</fs>
+    <pd>PASS — parser/dedupe/verdict/io 함수 책임 분리, Dict[str,Any] 반환 계약 + 전 함수 타입힌팅. God class 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — 전 public 함수 isinstance 타입가드, reject_count 음수 차단, 빈 문자열/빈 리스트 분기, bare except 0건.</al>
+    <build>N-A — EXE 빌드 대상 아님(hook helper meta-task).</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+  <numeric_score>108</numeric_score>
+  <verdict>PASS</verdict>
+  <score_detail>
+    <wa score="0" max="20">N/A — WA 정식 대상 아님(외부 HTTP API 직접 호출 없음, subprocess fail-closed)</wa>
+    <ui score="0" max="20">N/A — GUI 없음</ui>
+    <fs score="20" max="20">atomic write 5 / encoding fallback 5 / pathlib 5 / traversal(dead code 제거, 입력경로 직접수신 없음, pathlib 일관) 5</fs>
+    <pd score="10" max="10">모듈분리 5 / 인터페이스계약 5</pd>
+    <al score="20" max="20">범위검증 5 / 타입가드 5 / 빈데이터 5 / 입력타입검증 5</al>
+    <build score="0" max="10">N/A — EXE 빌드 대상 아님</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS(>=96/120)</numeric_verdict>
+  </score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — _atomic_write_json: tempfile.mkstemp + os.replace (line 103-109)</atomic_write>
+      <encoding_fallback>PASS — _ENCODINGS=(utf-8,utf-8-sig,cp949,latin-1), _read_text_with_fallback (line 58,78-85)</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 파일경로 직접 수신 없음. dead _safe_resolve 제거(Round 1 FAIL 해소). transcript/state 경로는 hook 환경변수 통제.</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover verification 블록에 py_compile/import/ruff/pytest/self_verify 결과 포함</execution_check_present>
+    <execution_check_verdict>PASS — pytest 13 passed, self_verify [SELF-VERIFY] OK, ruff All checks passed</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — settings.json Stop hook이 codex-user-acceptance-review.ps1 등록 → ps1이 python helper 호출(thin wrapper) 실제 결선 확인</functional_binding_verified>
+  </runtime_functional_check>
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <c3_cross_verification>
+    <scope_files_declared>4</scope_files_declared>
+    <evidence_files_submitted>1</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>.claude/hooks/codex-user-acceptance-review.ps1 (이전 round 작성, r2 미변경)</file>
+      <file>.claude/settings.json (이전 round 작성, r2 미변경)</file>
+      <file>tests/test_codex_review_hook_cd3c.py (이전 round 작성, r2 미변경)</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>1</declared_functions>
+    <actual_modified_functions>1</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>none</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <dead_code>
+    <symbol>codex_user_acceptance_review._safe_resolve</symbol>
+    <defined_at>제거됨 (Grep 0 matches)</defined_at>
+    <call_sites>0</call_sites>
+    <verdict>REMOVE — Round 1 FAIL 사유였던 dead code가 r2에서 제거 완료. Grep 0 matches 확인.</verdict>
+  </dead_code>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    - 없음. Round 1 FAIL 사유(_safe_resolve dead code)가 .claude/hooks/codex_user_acceptance_review.py에서 완전히 제거됨(Grep 0 matches). 기존 기능(parser/dedupe/verdict/safety) 회귀 테스트 13개 전부 PASS. Safety 검증: gh pr comment 실제 실행 경로 없음, gates accept 실행 경로 없음(매치는 모두 주석/프롬프트 금지문구/False 플래그). settings.json Stop hook 정상 등록.
+  </critical_issues>
+  <improvement_suggestions>
+    - handover의 module_gate_deadlock: 코드 검증은 완결되었으나 module checkpoint가 PASS 시점 SHA와 달라 정상 CLI로 dev done 재기록이 막힘. Pipeline Manager가 module gate 상태 복구 절차를 결정해야 함(코드 품질 이슈 아님, 파이프라인 상태 관리 이슈).
+  </improvement_suggestions>
+</qa_report>
