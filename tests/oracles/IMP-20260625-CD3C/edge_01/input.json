@@ -1,0 +1,6 @@
+{
+  "case_kind": "edge",
+  "description": "CODEX 검토 필요만 있는 transcript — 5요소 미충족이므로 트리거되지 않아야 함",
+  "transcript_tail": "다음 단계로 진행합니다.\n\nCODEX 검토 필요",
+  "pr_head_sha_mock": null
+}
