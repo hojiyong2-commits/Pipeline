@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <scope_declaration>
+    <files_to_create>
+      <file>.claude/hooks/codex_user_acceptance_review.py</file>
+      <file>.claude/hooks/codex-user-acceptance-review.ps1</file>
+      <file>tests/test_codex_review_hook_cd3c.py</file>
+    </files_to_create>
+    <files_to_modify>.claude/settings.json — hooks 키 추가 (기존 permissions/skipDangerousModePermissionPrompt 보존)</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>Grep codex_user_acceptance_review / test_codex_review_hook / .claude/hooks — 0 match, 기존 hook helper 없음</searched>
+      <decision>NEW — Codex 검토 보조 hook 신규 기능, 재사용 가능 유사 모듈 없음</decision>
+    </reuse_search>
+    <out_of_scope>pipeline.py / CLAUDE.md / agent MD 수정, gates accept 실행, PR 댓글 게시</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-1, MT-2, MT-3, MT-4</micro_task_id>
+    <target_function>codex_user_acceptance_review.parse_acceptance_block (+ extract_pr_url_and_code, check_dedupe, build_review_packet, call_codex_cli, process_verdict); codex-user-acceptance-review.ps1.main; settings.json.hooks; test_codex_review_hook_cd3c.{TestParser, TestDedupe, TestVerdict, TestSafety}</target_function>
+    <upstream_callers>
+      <caller location="none">전부 신규 파일. settings.json Stop hook이 wrapper를, wrapper가 helper를 호출하는 신규 체인. Grep match_count=0.</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>subprocess (gh CLI, codex CLI)</dep>
+      <dep>json, pathlib, re, datetime, argparse, tempfile</dep>
+      <dep>pytest, importlib (테스트)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>.pipeline/codex_review_state.json — write (dedupe + reject_count)</mutation>
+      <mutation>.pipeline/codex_review_audit.log — append (accept_code 마스킹)</mutation>
+      <mutation>.claude/settings.json — write (hooks 키 추가)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 전부 신규 파일, 기존 시그니처 미변경</signature_change>
+      <breaking_change>NO — 기존 코드 미참조, settings.json 기존 키 보존</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — tests/test_codex_review_hook_cd3c.py 13 passed</test_coverage>
+      <rollback_strategy>3개 신규 파일 삭제 + settings.json hooks 키 제거로 완전 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <status>COMPLETE</status>
+    <files>
+      <file role="신규 Python helper (핵심 로직)">.claude/hooks/codex_user_acceptance_review.py</file>
+      <file role="신규 PowerShell thin wrapper">.claude/hooks/codex-user-acceptance-review.ps1</file>
+      <file role="수정 — Stop hook 등록">.claude/settings.json</file>
+      <file role="신규 회귀 테스트">tests/test_codex_review_hook_cd3c.py</file>
+    </files>
+    <dependencies>표준 라이브러리만 사용 (subprocess/json/pathlib/re/datetime/argparse/tempfile). 런타임에 gh CLI, codex CLI 필요 (미존재 시 fail-closed). 테스트는 pytest.</dependencies>
+    <entry_point>.claude/settings.json Stop hook → powershell -File .claude/hooks/codex-user-acceptance-review.ps1 → python .claude/hooks/codex_user_acceptance_review.py --transcript $CLAUDE_HOOK_TRANSCRIPT_PATH</entry_point>
+    <env_vars>CLAUDE_HOOK_TRANSCRIPT_PATH (Claude Code가 transcript 경로 주입). 선택: PIPELINE_STATE_PATH (state/audit 디렉토리 격리).</env_vars>
+    <known_constraints>
+      gh/codex CLI 부재 시 fail-closed(exit 1). audit log accept_code 앞 8자 + **** 마스킹.
+      어떤 경우에도 PR 댓글 게시/ACCEPT 코드 게시/gates accept 실행/merge·deploy 미수행
+      (사용자에게 결과만 출력하여 직접 승인 유도).
+    </known_constraints>
+    <reference_applied>N/A</reference_applied>
+    <evidence>
+      <file>.claude/hooks/codex_user_acceptance_review.py</file>
+      <file>.claude/hooks/codex-user-acceptance-review.ps1</file>
+      <file>.claude/settings.json</file>
+      <file>tests/test_codex_review_hook_cd3c.py</file>
+      <test_result>pytest tests/test_codex_review_hook_cd3c.py: 13 passed</test_result>
+      <py_compile>helper py_compile OK</py_compile>
+      <powershell_parse>wrapper ParseFile OK</powershell_parse>
+      <settings_valid>settings.json json.load 성공, permissions 13개 보존</settings_valid>
+      <oracle>normal_01/edge_01 parse 일치, settings_01 hook 등록 일치</oracle>
+      <module_gates>MT-1~MT-4 module QA PASS, integration PASS</module_gates>
+    </evidence>
+  </handover>
+
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS</error_handling>
+    <path_safety>PASS</path_safety>
+    <security>PASS</security>
+    <al_edge_cases>PASS</al_edge_cases>
+    <pd_policy>PASS</pd_policy>
+    <fs_encoding_fallback>PASS</fs_encoding_fallback>
+    <docstring>PASS</docstring>
+    <execution_check>PASS — py_compile/import/pytest 13 passed/oracle 일치</execution_check>
+    <frozen_codebase_check>PASS</frozen_codebase_check>
+    <impact_analysis_check>PASS</impact_analysis_check>
+    <reference_check>N-A</reference_check>
+  </self_check>
+
+  <scope_lock_check>
+    <git_diff_files>.claude/settings.json (M), .claude/hooks/codex_user_acceptance_review.py (신규), .claude/hooks/codex-user-acceptance-review.ps1 (신규), tests/test_codex_review_hook_cd3c.py (신규)</git_diff_files>
+    <manifest_files>.claude/hooks/codex_user_acceptance_review.py, .claude/hooks/codex-user-acceptance-review.ps1, .claude/settings.json, tests/test_codex_review_hook_cd3c.py</manifest_files>
+    <extra_files>없음 (FEAT-20260426-332E 변경은 본 파이프라인 이전부터 존재하던 별도 파이프라인 산출물 — 본 작업 범위 외)</extra_files>
+    <trust_root_violation>false — tests/** 는 Trust-Root이나 PM target_files에 명시된 파일. settings.json은 Trust-Root 목록에 없음.</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</dev_handover>
