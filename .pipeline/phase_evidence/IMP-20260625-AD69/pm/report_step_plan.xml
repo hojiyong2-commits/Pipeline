@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <total_functions_identified>3</total_functions_identified>
+  <micro_task_count>4</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <split_decision>trust-root 파일(pipeline.py, agent MD) 수정이므로 HIGH_RISK 프로필 사용. pipeline.py에 helper 추가(MT-1) + 기존 함수 수정(MT-2), agent MD 원칙 추가(MT-3), 테스트 파일 신규(MT-4)로 분할합니다.</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260625-AD69</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py(파이프라인 엔진)와 pipeline-manager-agent.md(에이전트 정의) 모두 trust-root 파일이므로 HIGH_RISK 프로필 사용</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>3</expected_changed_files>
+      <expected_changed_functions>2</expected_changed_functions>
+      <expected_changed_lines>120</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 취향 질문(helper 함수 이름 스타일, 로그 메시지 형식)은 묻지 않고 유지보수성 기준으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>기존 PR 댓글 재조회 로직을 _cmd_gates_request_accept 함수 내부에 인라인으로 구현할까요, 별도 helper 함수로 분리할까요?</user_facing_question>
+        <evidence>현재 _cmd_gates_request_accept는 이미 300줄 이상의 복잡한 함수입니다. 댓글 재조회 로직을 인라인으로 추가하면 더 복잡해집니다.</evidence>
+        <why_it_matters>유지보수성과 테스트 용이성에 직접 영향을 미칩니다. 별도 helper는 단위 테스트가 쉽고, 다른 곳에서 재사용할 수 있습니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>별도 helper 함수로 분리 (_find_existing_valid_acceptance_comment)</label>
+            <benefit>단위 테스트 용이, 코드 재사용 가능, 단일 책임 원칙 준수</benefit>
+            <cost>함수 호출 오버헤드 (무시할 수 있음)</cost>
+          </option>
+          <option id="B">
+            <label>_cmd_gates_request_accept 내부에 인라인 구현</label>
+            <benefit>한 곳에서 전체 흐름 확인 가능</benefit>
+            <cost>함수 복잡도 증가, 테스트 어려움, 재사용 불가</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청에서 명시적으로 helper 함수 분리를 요구했으므로 추천안 A로 진행</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">기존 유효 PR 승인 댓글이 있으면 재사용하여 중복 승인 요청 없이 gates accept 경로 진행</requirement>
+    <requirement id="REQ-2">채팅 메시지("승인완료", "댓글 달았어")는 PR 댓글 재조회 트리거로만 사용, 승인 증거로 인정 안 함</requirement>
+    <requirement id="REQ-3">기존 보안 검증 유지: 허용 승인자, 댓글 본문 완전 일치, created_at >= request created_at, replay/stale/packet_sha256/provenance 검증</requirement>
+    <requirement id="REQ-4">gates accept 우회 금지 — 최종 PASS는 반드시 gates accept가 결정</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._find_existing_valid_acceptance_comment</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline._cmd_gates_request_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_cmd_gates_request_accept</pattern>
+        <match_count>4</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_find_existing_valid_acceptance_comment helper 함수 신규 추가 — PR URL/번호, pipeline_id, acceptance_request 메타데이터를 입력받아 유효 댓글 정보(comment_id, author, created_at) 또는 None 반환. 기존 _check_pr_approver_provenance의 검증 로직(허용 승인자, 본문 완전 일치, timestamp 비교, packet 마커 제외)을 재사용.</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline._cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.cmd_gates (action == "request-accept")</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_request_accept</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>_cmd_gates_request_accept 흐름 개선 — 최종 승인 요청문 출력 직전에 _find_existing_valid_acceptance_comment 호출. 유효 댓글 있으면 "기존 PR 승인 댓글 확인됨" 로그 + 즉시 gates accept 경로 진행. 유효 댓글 없을 때만 최소 고정 양식 출력.</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-1, AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline-manager-agent principle</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>User Acceptance</pattern>
+        <match_count>12</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>Pipeline Manager Agent 문서에 원칙 추가: "사용자의 '승인완료/댓글 달았어' 메시지는 승인 증거가 아니라 PR 댓글 재조회 트리거다. Pipeline Manager는 최종 승인 요청문을 반복 출력하기 전에 PR 댓글에 유효한 ACCEPT-{pipeline_id} 단독 댓글이 이미 있는지 확인한다. 유효 댓글이 있으면 재요청 없이 기존 gates accept 경로를 실행한다."</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>test_acceptance_comment_reuse_ad69</affected_function>
+      <target_files>
+        <file>tests/test_acceptance_comment_reuse_ad69.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_acceptance_comment_reuse</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>회귀 테스트 파일 신규 추가 — 8개 테스트 케이스: TC-1(유효 댓글 → gates accept 경로), TC-2(채팅만, PR 댓글 없음 → 재출력), TC-3(created_at 이전 → replay 불인정), TC-4(여러 줄 댓글 → 불인정), TC-5(packet 댓글 내 코드 → 불인정), TC-6(stale SHA → BLOCKED), TC-7(provenance 검증 유지), TC-8(중복 출력 없음)</change_summary>
+      <line_estimate>150</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>유효한 PR 승인 댓글(ACCEPT-{pipeline_id} 단독, 허용 승인자, created_at >= request.created_at)이 이미 있으면 중복 승인 요청문 없이 gates accept 경로 진행</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>채팅 메시지("승인완료", "댓글 달았어")는 PR 댓글 재조회 트리거로만 처리되고 승인 증거로 인정되지 않음</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>기존 보안 검증(허용 승인자 일치, 댓글 본문 완전 일치, timestamp 비교, replay/stale/provenance 검증)이 깨지지 않음</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>pipeline-manager-agent.md에 PR 댓글 재조회 트리거 원칙이 문서화됨</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>tests/test_acceptance_comment_reuse_ad69.py에 8개 테스트 케이스가 추가되고 모두 PASS</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <python_version>3.10 — 기존 pipeline.py와 일관성 유지</python_version>
+
+  <forbidden>
+    <item>승인 코드 PR 댓글 자동 게시 금지</item>
+    <item>gates accept 우회 금지</item>
+    <item>nonce/provenance/stale 검증 완화 금지</item>
+    <item>TODO/placeholder/dummy 코드 금지</item>
+    <item>기존 _check_pr_approver_provenance 함수 삭제 금지 — 재사용만</item>
+  </forbidden>
+
+</step_plan>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
