@@ -20,7 +20,7 @@
     "output_file": "qa_report_r2.xml",
     "output_sha256": "0aa053a2a00c754a9a01da77b2952c697b26889c44167255b6a6ba4a29bb1fe1",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260625-AD69/qa/agent_receipt_qa-8767db008e96c773.json",
-    "receipt_sha256": "77f3be32faa3fe0ab892a025da1602f53e222fa95aa8def90b5901762b9e5eec",
+    "receipt_sha256": "c6ceae5a2f269451e7a04090711aaadec6ca04a1848dbe673334115654cb1c6b",
     "used_by_phase": "qa",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260625-AD69\\qa\\qa-8767db008e96c773.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260625-AD69\\qa\\qa-8767db008e96c773.json",
       "path": ".pipeline/phase_evidence/IMP-20260625-AD69/qa/agent_receipt_qa-8767db008e96c773.json",
-      "sha256": "77f3be32faa3fe0ab892a025da1602f53e222fa95aa8def90b5901762b9e5eec",
+      "sha256": "c6ceae5a2f269451e7a04090711aaadec6ca04a1848dbe673334115654cb1c6b",
       "size_bytes": 512,
       "requires_force_add": true
     },
