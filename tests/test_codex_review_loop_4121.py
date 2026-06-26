@@ -191,18 +191,33 @@ def test_approve_saves_state(tmp_path):
 # 7. APPROVED stale: head SHA가 다르면 gate BLOCKED
 # ---------------------------------------------------------------------------
 def test_approve_stale_different_head_sha(tmp_path, monkeypatch):
-    """APPROVED 상태에서 head SHA가 바뀌면 _check_codex_review_gate가 BLOCKED."""
+    """APPROVED 상태에서 head SHA가 바뀌면 _check_codex_review_gate가 BLOCKED.
+
+    5개 필수 필드를 모두 채우되 pr_head_sha만 OLDSHA로 두어, 필드 누락이 아니라
+    SHA 불일치로 BLOCKED됨을 확인한다.
+    """
     monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
     loop_path = tmp_path / ".pipeline" / "codex_review_loop_state.json"
     loop_path.parent.mkdir(parents=True, exist_ok=True)
     loop_path.write_text(
         json.dumps(
-            {"status": "APPROVED", "pr_head_sha": "OLDSHA", "packet_sha256": "pkt"}
+            {
+                "status": "APPROVED",
+                "pipeline_id": _PIPELINE_ID,
+                "pr_head_sha": "OLDSHA",
+                "packet_sha256": "pkt1",
+                "pr_body_sha256": "body1",
+                "accept_code": f"ACCEPT-{_PIPELINE_ID}",
+            }
         ),
         encoding="utf-8",
     )
     monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: "NEWSHA")
-    monkeypatch.setattr(pipeline, "_load_acceptance_request", lambda: None)
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"packet_sha256": "pkt1", "pr_body_sha256": "body1"},
+    )
     result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
     assert result["status"] == "BLOCKED"
     assert result["failure_code"] == "codex_review_stale"
@@ -223,19 +238,196 @@ def test_check_gate_no_file_blocked(tmp_path, monkeypatch):
 # 9. APPROVED + SHA 일치 시 gate PASS
 # ---------------------------------------------------------------------------
 def test_check_gate_approved_pass(tmp_path, monkeypatch):
-    """APPROVED이고 SHA/packet 일치 시 _check_codex_review_gate가 PASS."""
+    """APPROVED이고 5개 필수 필드 + SHA/packet 일치 시 _check_codex_review_gate가 PASS."""
     monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
     loop_path = tmp_path / ".pipeline" / "codex_review_loop_state.json"
     loop_path.parent.mkdir(parents=True, exist_ok=True)
     loop_path.write_text(
         json.dumps(
-            {"status": "APPROVED", "pr_head_sha": "SHA1", "packet_sha256": "pkt1"}
+            {
+                "status": "APPROVED",
+                "pipeline_id": _PIPELINE_ID,
+                "pr_head_sha": "SHA1",
+                "packet_sha256": "pkt1",
+                "pr_body_sha256": "body1",
+                "accept_code": f"ACCEPT-{_PIPELINE_ID}",
+            }
         ),
         encoding="utf-8",
     )
     monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: "SHA1")
     monkeypatch.setattr(
-        pipeline, "_load_acceptance_request", lambda: {"packet_sha256": "pkt1"}
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"packet_sha256": "pkt1", "pr_body_sha256": "body1"},
+    )
+    result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
+    assert result["status"] == "PASS"
+
+
+def _approved_loop_state(**overrides) -> dict:
+    """5개 필수 필드를 모두 채운 APPROVED loop_state fixture (override 가능)."""
+    base = {
+        "status": "APPROVED",
+        "pipeline_id": _PIPELINE_ID,
+        "pr_head_sha": "SHA1",
+        "packet_sha256": "pkt1",
+        "pr_body_sha256": "body1",
+        "accept_code": f"ACCEPT-{_PIPELINE_ID}",
+    }
+    base.update(overrides)
+    return base
+
+
+def _write_loop_state(tmp_path, state: dict):
+    """loop_state를 .pipeline/codex_review_loop_state.json에 기록한다."""
+    loop_path = tmp_path / ".pipeline" / "codex_review_loop_state.json"
+    loop_path.parent.mkdir(parents=True, exist_ok=True)
+    loop_path.write_text(json.dumps(state), encoding="utf-8")
+    return loop_path
+
+
+# ---------------------------------------------------------------------------
+# 9-b. fail-closed 강화 (2차 REJECT 재작업): pipeline_id 불일치 BLOCKED
+# ---------------------------------------------------------------------------
+def test_check_gate_pipeline_id_mismatch_blocked(tmp_path, monkeypatch):
+    """loop_state의 pipeline_id가 현재 파이프라인과 다르면 BLOCKED."""
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
+    _write_loop_state(tmp_path, _approved_loop_state(pipeline_id="IMP-99999999-AAAA"))
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: "SHA1")
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"packet_sha256": "pkt1", "pr_body_sha256": "body1"},
+    )
+    result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "codex_review_stale"
+
+
+# ---------------------------------------------------------------------------
+# 9-c. packet_sha256 불일치 BLOCKED
+# ---------------------------------------------------------------------------
+def test_check_gate_packet_sha_mismatch_blocked(tmp_path, monkeypatch):
+    """acceptance_request.json의 packet_sha256이 loop_state와 다르면 BLOCKED."""
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
+    _write_loop_state(tmp_path, _approved_loop_state(packet_sha256="pkt1"))
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: "SHA1")
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"packet_sha256": "DIFFERENT_PKT", "pr_body_sha256": "body1"},
+    )
+    result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "codex_review_stale"
+
+
+# ---------------------------------------------------------------------------
+# 9-d. pr_body_sha256 불일치 BLOCKED
+# ---------------------------------------------------------------------------
+def test_check_gate_pr_body_sha_mismatch_blocked(tmp_path, monkeypatch):
+    """acceptance_request.json의 pr_body_sha256이 loop_state와 다르면 BLOCKED."""
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
+    _write_loop_state(tmp_path, _approved_loop_state(pr_body_sha256="body1"))
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: "SHA1")
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"packet_sha256": "pkt1", "pr_body_sha256": "DIFFERENT_BODY"},
+    )
+    result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "codex_review_stale"
+
+
+# ---------------------------------------------------------------------------
+# 9-e. 필수 필드 누락 시 BLOCKED (fail-closed)
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "missing_field",
+    ["pipeline_id", "pr_head_sha", "packet_sha256", "pr_body_sha256", "accept_code"],
+)
+def test_check_gate_missing_field_blocked(tmp_path, monkeypatch, missing_field):
+    """5개 필수 필드 중 하나라도 빈 값이면 비교 SKIP 없이 즉시 BLOCKED."""
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
+    # 해당 필드를 빈 문자열로 만들어 누락 상황을 재현
+    _write_loop_state(tmp_path, _approved_loop_state(**{missing_field: ""}))
+    # gh CLI / acceptance_request는 정상이지만 필드 누락이 우선 차단되어야 함
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: "SHA1")
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"packet_sha256": "pkt1", "pr_body_sha256": "body1"},
+    )
+    result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "codex_review_stale"
+    assert missing_field in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# 9-f. gh CLI로 head SHA를 못 얻으면 BLOCKED (fail-closed)
+# ---------------------------------------------------------------------------
+def test_check_gate_gh_cli_unavailable_blocked(tmp_path, monkeypatch):
+    """gh CLI 없음/실패로 current head SHA가 None이면 SKIP이 아니라 BLOCKED."""
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
+    _write_loop_state(tmp_path, _approved_loop_state())
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: None)
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"packet_sha256": "pkt1", "pr_body_sha256": "body1"},
+    )
+    result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "codex_review_stale"
+
+
+# ---------------------------------------------------------------------------
+# 9-g. acceptance_request.json이 없으면 BLOCKED (fail-closed)
+# ---------------------------------------------------------------------------
+def test_check_gate_acceptance_request_none_blocked(tmp_path, monkeypatch):
+    """acceptance_request.json이 None이면 SKIP이 아니라 BLOCKED."""
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
+    _write_loop_state(tmp_path, _approved_loop_state())
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: "SHA1")
+    monkeypatch.setattr(pipeline, "_load_acceptance_request", lambda: None)
+    result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
+    assert result["status"] == "BLOCKED"
+    assert result["failure_code"] == "codex_review_stale"
+
+
+# ---------------------------------------------------------------------------
+# 9-h. E2E: APPROVE_TO_USER → _record_state → _check_codex_review_gate PASS
+# ---------------------------------------------------------------------------
+def test_approve_to_check_gate_e2e(tmp_path, monkeypatch):
+    """APPROVE_TO_USER → _record_state → _check_codex_review_gate PASS E2E (5개 필드 모두)."""
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(tmp_path / "pipeline_state.json"))
+    loop_path = tmp_path / ".pipeline" / "codex_review_loop_state.json"
+    loop_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 1단계: APPROVE 시 기록되는 5개 필드 시뮬레이션 (_record_state 직접 호출)
+    cx._record_state(
+        loop_path,
+        {
+            "pipeline_id": _PIPELINE_ID,
+            "status": "APPROVED",
+            "pr_head_sha": "HEADSHA1",
+            "pr_body_sha256": "BODYSHA1",
+            "packet_sha256": "PKTSHA1",
+            "review_packet_sha256": "REVIEWPKT1",
+            "accept_code": f"ACCEPT-{_PIPELINE_ID}",
+            "approved_at": cx._now_iso(),
+        },
+    )
+
+    # 2단계: _check_codex_review_gate가 PASS하는지 확인
+    monkeypatch.setattr(pipeline, "_get_current_pr_head_sha", lambda: "HEADSHA1")
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"packet_sha256": "PKTSHA1", "pr_body_sha256": "BODYSHA1"},
     )
     result = pipeline._check_codex_review_gate(_PIPELINE_ID, {})
     assert result["status"] == "PASS"

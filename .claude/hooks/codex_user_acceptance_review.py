@@ -734,15 +734,18 @@ def _human_acceptance_packet_sha256(review_packet: Dict[str, Any]) -> str:
     비교한다. 따라서 APPROVE 시 review packet JSON dict가 아니라 동일 기준인
     human_acceptance_packet.md 파일 SHA를 packet_sha256으로 기록해야 한다.
 
-    파일이 없으면 review packet JSON dict의 SHA로 fallback하여 빈 문자열 SHA로 인한
-    오탐 BLOCKED를 피한다.
+    2차 REJECT 재작업(IMP-20260626-4121): 파일이 없으면 JSON dict SHA로 fallback하던
+    fail-soft 동작을 제거한다. fallback이 있으면 _check_codex_review_gate의 packet_sha256
+    비교가 무력화되므로, 파일이 반드시 존재해야 하며 없거나 읽기 실패 시 RuntimeError로
+    fail-closed 처리한다.
 
     Args:
-        review_packet: build_review_packet 반환 dict (파일 미존재 시 fallback용).
+        review_packet: build_review_packet 반환 dict (타입 가드용으로만 사용).
     Returns:
-        human_acceptance_packet.md 파일 SHA-256, 또는 파일 미존재 시 review packet SHA-256.
+        human_acceptance_packet.md 파일 내용의 SHA-256.
     Raises:
         TypeError: review_packet이 None이거나 dict가 아닌 경우.
+        RuntimeError: human_acceptance_packet.md 파일이 없거나 읽기 실패 시 (fail-closed).
     """
     if review_packet is None:
         raise TypeError("review_packet must not be None")
@@ -754,12 +757,14 @@ def _human_acceptance_packet_sha256(review_packet: Dict[str, Any]) -> str:
     if packet_path.exists():
         try:
             return _sha256_text(_read_text_with_fallback(packet_path))
-        except (OSError, UnicodeDecodeError):
-            # 읽기 실패 시 fallback (fail-soft: gate가 stale 비교를 SKIP하도록)
-            pass
-    # 파일 미존재/읽기 실패 — review packet JSON dict SHA로 fallback
-    return _sha256_text(
-        json.dumps(review_packet, ensure_ascii=False, sort_keys=True)
+        except (OSError, UnicodeDecodeError) as e:
+            raise RuntimeError(
+                f"human_acceptance_packet.md 읽기 실패 (fail-closed): {e}"
+            ) from e
+    # fallback 제거 — 파일 없으면 RuntimeError (fail-closed)
+    raise RuntimeError(
+        "human_acceptance_packet.md 파일이 없습니다. "
+        "pipeline.py report final-packet을 먼저 실행하세요 (fail-closed)."
     )
 
 
@@ -885,7 +890,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     # packet_sha256: human_acceptance_packet.md 파일 SHA (gate 비교 기준 SSoT). 결함 1 수정:
     # _check_codex_review_gate()가 acceptance_request.json["packet_sha256"]과 비교하므로
     # 동일 기준(human_acceptance_packet.md 파일 SHA)으로 산출해야 stale 오탐을 방지한다.
-    packet_sha256 = _human_acceptance_packet_sha256(packet)
+    # 2차 REJECT 재작업: 파일 미존재 시 RuntimeError(fail-closed)이므로 여기서 처리한다.
+    try:
+        packet_sha256 = _human_acceptance_packet_sha256(packet)
+    except RuntimeError as e:
+        print(
+            f"[CODEX REVIEW] acceptance packet SHA 계산 실패 (fail-closed): {e}",
+            file=sys.stderr,
+        )
+        return 1
 
     # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 같은 APPROVE 출력만.
     if _check_stale(loop_state, head_sha, packet_sha256):
