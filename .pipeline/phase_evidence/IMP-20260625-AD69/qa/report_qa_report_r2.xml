@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260625-AD69</pipeline_id>
+  <agent_run_id>qa-8767db008e96c773</agent_run_id>
+  <rework_round>2</rework_round>
+  <scope>MT-2 재작업 — _cmd_gates_request_accept idempotent acceptance 수정</scope>
+
+  <handover_verification>
+    <from>dev-agent</from>
+    <evidence>dev_handover_r2.xml, pipeline.py</evidence>
+    <ui_handover_required>false (category_tags에 UI 없음)</ui_handover_required>
+    <result>PASS — dev-agent handover 단독 수락 (비-UI 태스크)</result>
+  </handover_verification>
+
+  <category_check>
+    <wa>N-A — 네트워크 호출 카테고리 아님 (helper의 gh API 호출은 subprocess+timeout=30 처리)</wa>
+    <ui>N-A — GUI 위젯 없음 (pipeline CLI 내부 코드)</ui>
+    <fs>N-A — 파일 쓰기/인코딩 fallback 대상 아님 (acceptance_request.json은 기존 경로 재사용)</fs>
+    <pd>PASS — helper 함수 분리(_find_existing_valid_acceptance_comment)로 단일 책임 분리, dict 반환 인터페이스 계약 명확</pd>
+    <sec>N-A — Phase 5 security-agent 전담 (이미 PASS, risk LOW). 단 gates accept 우회 없음을 추가 확인함</sec>
+    <al>PASS — None 입력 TypeError 방어 + isinstance 타입 가드 3종 + JSON fallback + 빈 데이터 처리 완비</al>
+    <build>N-A — EXE 빌드 대상 아님 (meta-task, Phase 6 N/A 기록됨)</build>
+    <vsce>N-A — category_tags에 VSCE 없음</vsce>
+  </category_check>
+
+  <numeric_score>108</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — WA 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — FS 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5 (helper 분리, _check_pr_approver_provenance 보존) + 인터페이스계약 5/5 (Optional[dict] 명시적 반환 타입, 3-필드 dict 계약)</pd>
+    <al score="20" max="20">0나눗셈 N/A 만점 / 범위검증 5 (PR URL regex 추출) / 입력타입검증 5 (None+isinstance 3종) / 빈데이터 5 (빈 pr_url/pipeline_id None 반환, JSON fallback)</al>
+    <build score="0" max="10">N/A — BUILD 카테고리 미해당</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS — 해당 카테고리(PD 10/10 + AL 20/20) 전부 만점, threshold 96/120(80%) 환산 시 90% 충족</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>PASS — json.loads를 try/except (ValueError, JSONDecodeError)로 감싸고 None fallback</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — _find_existing_valid_acceptance_comment 시그니처 전체 타입 힌팅(pr_url: str 등 + Optional[dict] 반환)</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A — subprocess encoding="utf-8" 명시</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover_r2.xml qa_evidence에 pytest 실행 결과 포함 (13 PASS/2 사전실패)</execution_check_present>
+    <execution_check_verdict>PASS — QA가 직접 재실행하여 13 passed, 2 failed 재현</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — _find_existing_valid_acceptance_comment가 _cmd_gates_request_accept 내부 line 17907에서 실제 호출됨(정의만 아님). 호출 위치 pr_url 결정 직후/nonce 재발급 전 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>1 (scope_manifest_MT-2_r2.json: pipeline.py)</scope_files_declared>
+    <evidence_files_submitted>1 (dev_handover_r2.xml changed_files: pipeline.py)</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff HEAD -- pipeline.py 가 _cmd_gates_request_accept 한 함수 내부로 한정됨 확인. _check_pr_approver_provenance 0회 변경 확인. PR scope(origin/main...HEAD)는 정확히 4개 MT 파일</grep_verified>
+    <note>FEAT-20260426-332E/* 및 tests/test_packing_detail_oracle_4cd8.py 워킹트리 변경은 무관한 다른 파이프라인의 미커밋 잔여물로 PR(origin/main...HEAD) scope에 포함되지 않음 — dev scope_lock_check 설명과 일치</note>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml에 decomposition_audit 블록 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-4 각 micro_task에 grep_evidence executed=true 존재</grep_evidence_present>
+    <declared_functions>1 (_cmd_gates_request_accept)</declared_functions>
+    <actual_modified_functions>1 (_cmd_gates_request_accept) — MT-1의 helper는 직전 라운드 추가분, 이번 r2는 호출부만 수정</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <dead_code>
+    <symbol>pipeline._find_existing_valid_acceptance_comment</symbol>
+    <defined_at>pipeline.py:17586</defined_at>
+    <call_sites>1 (pipeline.py:17907, _cmd_gates_request_accept 내부) + 테스트 참조</call_sites>
+    <verdict>KEEP_REASON — 실제 호출 경로 존재, dead code 아님</verdict>
+  </dead_code>
+
+  <duplication_check>
+    <result>PASS — 이전 라운드의 안내문-only 댓글 확인 블록(packet 생성 후)이 완전 제거되어 helper 호출이 단 1곳. 중복 확인 로직 없음</result>
+  </duplication_check>
+
+  <ac_coverage>
+    <note>state에 requirements_tracking 미존재(legacy 모드) — criteria_verification hard gate 미적용. 참고용 충족 현황만 기록</note>
+    <criterion ac_id="AC-1" status="PASS" evidence="유효 PR 댓글 발견 시 helper가 dict 반환, gates accept subprocess 재호출로 중복 요청문 없이 진행 (diff line 17897-17932)"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="채팅 메시지는 코드 진입점이 아님 — 오직 PR 댓글(body.strip()==ACCEPT-{pid}, 허용 승인자, created_at>request)만 트리거"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="subprocess가 실제 gates accept 호출 — provenance/replay/stale/pr_body_sha256/packet_sha256 검증 전부 유지. 새 nonce 생성 없이 기존 nonce 재사용. _check_pr_approver_provenance 0회 변경"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="pipeline-manager-agent.md MT-3 (직전 라운드 반영). 이번 r2는 MT-2 코드만 재작업"/>
+    <criterion ac_id="AC-5" status="PARTIAL" evidence="13/15 PASS. 2개(test_tc7_provenance_function_preserved, test_provenance_preserved)는 clean HEAD(012cd3f)에서도 동일 FAIL — _check_pr_approver_provenance 반환값 기대치 stale, MT-2 변경과 무인과 확인"/>
+  </ac_coverage>
+
+  <secrets_gate>
+    <command>python pipeline.py gates secrets --files "pipeline.py"</command>
+    <result>PASS (exit 0) — 민감 정보 미발견</result>
+  </secrets_gate>
+
+  <test_execution>
+    <command>python -m pytest tests/test_acceptance_comment_reuse_ad69.py -v</command>
+    <result>13 passed, 2 failed</result>
+    <failing_tests_analysis>2개 FAIL(test_tc7_provenance_function_preserved, test_provenance_preserved)은 git stash로 pipeline.py를 clean HEAD(012cd3f)로 되돌린 상태에서도 동일하게 FAIL 재현됨. 두 테스트 모두 MT-2가 건드리지 않은 _check_pr_approver_provenance 함수의 반환값(shutil.which=None 시 BLOCKED 기대 vs 실제 PASS)에 대한 stale assertion. MT-2 변경(diff 0회 참조)과 인과 없음 — pre-existing 환경/기대치 문제로 확정</failing_tests_analysis>
+  </test_execution>
+
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음 — MT-2 재작업은 설계대로 정확히 구현됨. 호출 위치 이동(pr_url 직후, nonce/packet 전), 안내문-only 미완료 경로 제거, 기존 nonce로 gates accept subprocess 재호출(보안 검증 우회 없음) 모두 확인.
+  </critical_issues>
+  <improvement_suggestions>
+    - (비차단) tests/test_acceptance_comment_reuse_ad69.py의 test_tc7_provenance_function_preserved / test_provenance_preserved 2개는 _check_pr_approver_provenance의 현재 동작(gh 부재 시 PASS 반환)과 어긋나는 stale 기대치를 가지고 있음. MT-2 scope 외이지만, 향후 별도 라운드에서 테스트 기대치를 실제 함수 동작에 맞춰 보정하거나 함수 동작 자체를 재검토 권장.
+    - (비차단) 새 idempotent 블록에서 subprocess.run 결과를 sys.exit(rc)로 전파하는 것은 적절하나, gates accept가 BLOCKED(비0 종료)일 때 사용자에게 "자동 실행했으나 차단됨" 맥락이 stdout에 충분히 드러나는지 운영 중 모니터링 권장.
+  </improvement_suggestions>
+</qa_report>
