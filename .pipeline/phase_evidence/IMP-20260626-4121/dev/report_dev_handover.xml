@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260626-4121</pipeline_id>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>COMPLETE</status>
+  <scope_declaration>
+    <files_to_create>tests/test_codex_review_loop_4121.py, tests/oracles/IMP-20260626-4121/TC-REJECT-NORMAL/, tests/oracles/IMP-20260626-4121/TC-DEDUPE-EDGE/</files_to_create>
+    <files_to_modify>.claude/hooks/codex_user_acceptance_review.py, pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_codex_review_hook_cd3c.py, tests/e2e/test_real_cli_paths.py</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <scope_amendment_reason>
+      [Side-Effect Audit] MT-1 hook API 교체로 tests/test_codex_review_hook_cd3c.py 회귀 테스트 5개 영향,
+      MT-2 _check_codex_review_gate 추가로 tests/e2e/test_real_cli_paths.py provenance ACCEPT 테스트 2개 영향.
+      두 파일은 PM atomic_plan MT-4 target_files에 없었으나 Pipeline Manager가 명시적으로 MT-4 scope 추가를 승인함
+      (신규 기능 아닌 기존 테스트 적응, 보안 약화 없음). 제품 코드 소비자 0건.
+    </scope_amendment_reason>
+    <out_of_scope>acceptance_request.json 읽기/수정(요구사항상 금지), 기존 provenance/nonce gate 로직 약화 금지</out_of_scope>
+  </scope_declaration>
+  <implemented_files>
+    <file role="MT-1 — Codex Review Loop hook 재작성">.claude/hooks/codex_user_acceptance_review.py</file>
+    <file role="MT-2 — _check_codex_review_gate + gates accept 배선">pipeline.py</file>
+    <file role="MT-3 — Codex Review Loop 원칙 섹션">.claude/agents/pipeline-manager-agent.md</file>
+    <file role="MT-4 — 16개 단위 테스트">tests/test_codex_review_loop_4121.py</file>
+    <file role="MT-4 — 회귀 테스트 신규 API 갱신">tests/test_codex_review_hook_cd3c.py</file>
+    <file role="MT-4 — provenance E2E codex 픽스처 추가">tests/e2e/test_real_cli_paths.py</file>
+    <file role="MT-4 — oracle (normal/edge)">tests/oracles/IMP-20260626-4121/TC-REJECT-NORMAL/, tests/oracles/IMP-20260626-4121/TC-DEDUPE-EDGE/</file>
+  </implemented_files>
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>codex_user_acceptance_review.process_verdict / _record_state / _check_stale / main</target_function>
+    <state_mutations>
+      <mutation>.pipeline/codex_review_loop_state.json — write</mutation>
+      <mutation>stdout/stderr — write</mutation>
+    </state_mutations>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>pipeline._check_codex_review_gate (new) / pipeline._cmd_gates_accept (wiring)</target_function>
+    <state_mutations>
+      <mutation>none — _check_codex_review_gate는 read-only (loop state + acceptance_request 로드 후 비교만)</mutation>
+    </state_mutations>
+    <micro_task_id>MT-3</micro_task_id>
+    <target_function>N/A (문서 수정 — pipeline-manager-agent.md 섹션 추가)</target_function>
+    <state_mutations>
+      <mutation>none — 문서 텍스트 추가</mutation>
+    </state_mutations>
+    <micro_task_id>MT-4</micro_task_id>
+    <target_function>test_* (신규/갱신 테스트 함수들)</target_function>
+    <state_mutations>
+      <mutation>none — 테스트는 tmp_path/PIPELINE_STATE_PATH 격리, 제품 코드 변경 없음</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>YES — MT-1 process_verdict 시그니처 교체, MT-2 _check_codex_review_gate 신규</signature_change>
+      <breaking_change>YES — MT-1 hook API 교체로 기존 cd3c 회귀 테스트 5개 영향 (신규 API로 갱신 완료); MT-2 gate 추가로 provenance E2E 2개 영향 (codex 픽스처 추가 완료). 제품 코드 소비자 0건</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — 16 신규 + 16 cd3c 갱신 + 2 provenance 복구</test_coverage>
+      <rollback_strategy>git checkout으로 6개 파일 원복</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <module_gates>
+    <mt id="MT-1" design="PASS" dev="PASS" qa="PASS"/>
+    <mt id="MT-2" design="PASS" dev="PASS" qa="PASS"/>
+    <mt id="MT-3" design="PASS" dev="PASS" qa="PASS"/>
+    <mt id="MT-4" design="PASS" dev="PASS" qa="PASS"/>
+    <integration>PASS</integration>
+  </module_gates>
+  <self_check>
+    <python_version_syntax>PASS — Python 3.10</python_version_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS — hook fail-closed(exit 1), gate fail-closed(BLOCKED)</error_handling>
+    <security>PASS — nonce 미노출, PR 댓글/gates accept 자동 실행 경로 없음, acceptance_request.json 코드 미참조, provenance assertion 약화 없음</security>
+    <fs_encoding_fallback>PASS — _read_text_with_fallback 4-encoding</fs_encoding_fallback>
+    <execution_check>PASS — py_compile(hook/pipeline/3 test files) OK; loop 16 PASS, cd3c 16 PASS, provenance gh_missing/no_approver_comment 2 PASS</execution_check>
+    <al_edge_cases>PASS — None TypeError/isinstance/reject_count 음수 ValueError(보정 금지)</al_edge_cases>
+    <impact_analysis_check>PASS — MT별 impact_analysis 출력, state_mutations 명시</impact_analysis_check>
+  </self_check>
+  <evidence>
+    <item>tests/test_codex_review_loop_4121.py — 16 passed</item>
+    <item>tests/test_codex_review_hook_cd3c.py — 16 passed (신규 API로 갱신)</item>
+    <item>tests/e2e/test_real_cli_paths.py::TestProvenance gh_missing/no_approver_comment — PASS (codex 픽스처 추가)</item>
+    <item>_check_codex_review_gate 함수 검증: no-file BLOCKED(codex_review_not_approved), APPROVED+SHA일치 PASS, stale-head BLOCKED(codex_review_stale), REJECTED BLOCKED</item>
+    <item>회귀 전수 검증(git stash diff): 내 변경이 새로 유발한 실패 0건</item>
+  </evidence>
+  <scope_lock_check>
+    <git_diff_files>.claude/hooks/codex_user_acceptance_review.py, pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_codex_review_loop_4121.py(신규), tests/test_codex_review_hook_cd3c.py, tests/e2e/test_real_cli_paths.py, tests/oracles/IMP-20260626-4121/(신규)</git_diff_files>
+    <manifest_files>scope_manifest.json 4개 MT, 6개 코드/테스트 파일 + oracle</manifest_files>
+    <extra_files>없음 (Pipeline Manager 승인으로 cd3c + real_cli_paths.py를 MT-4 scope에 추가). 그 외 dirty 파일(FEAT-20260426-332E/*, pipeline_state.json, test_packing_detail_oracle_4cd8.py)은 작업 시작 전부터 dirty — 본 변경 아님</extra_files>
+    <trust_root_violation>false — 변경한 Trust-Root(pipeline.py/agent md/tests)는 모두 현재 HIGH_RISK IMP target_files 범위 내(Pipeline Manager 승인 포함)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>

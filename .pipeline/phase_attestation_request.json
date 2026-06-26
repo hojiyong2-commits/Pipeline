@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-26T14:54:14Z",
+  "pipeline_id": "IMP-20260626-4121",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "d40fb63e96aeb4431e6a8e635c06fec26a92215f",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-26T14:48:17Z",
+    "report_file": "dev_handover.xml",
+    "evidence": ".claude/hooks/codex_user_acceptance_review.py,pipeline.py,.claude/agents/pipeline-manager-agent.md,tests/test_codex_review_loop_4121.py,tests/test_codex_review_hook_cd3c.py,tests/e2e/test_real_cli_paths.py,tests/oracles/IMP-20260626-4121/TC-REJECT-NORMAL/input.txt,tests/oracles/IMP-20260626-4121/TC-REJECT-NORMAL/expected.json,tests/oracles/IMP-20260626-4121/TC-DEDUPE-EDGE/input.txt,tests/oracles/IMP-20260626-4121/TC-DEDUPE-EDGE/expected.json"
+  },
+  "agent_run": {
+    "run_id": "dev-a1178252cd82072c",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "c4b665eb2f5d2a57b48e5c28796cf808acad8b74bd453eee9f328397d06d028d",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260626-4121/dev/agent_receipt_dev-a1178252cd82072c.json",
+    "receipt_sha256": "05e4e2ec420e08d61c3e846a65c1d2128cb228fc222f0c7697c26143ab284a59",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260626-4121\\dev\\dev-a1178252cd82072c.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260626-4121\\dev\\dev-a1178252cd82072c.json",
+      "path": ".pipeline/phase_evidence/IMP-20260626-4121/dev/agent_receipt_dev-a1178252cd82072c.json",
+      "sha256": "05e4e2ec420e08d61c3e846a65c1d2128cb228fc222f0c7697c26143ab284a59",
+      "size_bytes": 581,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260626-4121/dev/report_dev_handover.xml",
+      "sha256": "c4b665eb2f5d2a57b48e5c28796cf808acad8b74bd453eee9f328397d06d028d",
+      "size_bytes": 6749,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260626-4121/dev/scope_manifest_scope_manifest.json",
+      "sha256": "f8a30764b30e49fce7b84f049b30fe0655a2048aca0e1675cc6650ce2a84924a",
+      "size_bytes": 4176,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": ".claude/hooks/codex_user_acceptance_review.py",
+      "sha256": "fe3f736e91738fcfa39f98fecc3eb8fe5cf5aad0b41dbbe4e80274444466123c",
+      "size_bytes": 35716
+    },
+    {
+      "path": "pipeline.py",
+      "sha256": "3389eb9c2ad36d05ce2fec767f242f292c5d0745d8900fee15d85096ff21d073",
+      "size_bytes": 1147213
+    },
+    {
+      "path": ".claude/agents/pipeline-manager-agent.md",
+      "sha256": "9ebafa2107aa78c24bc62104f71496dfee52b2bd5acb5ebd53e40c8f828d8170",
+      "size_bytes": 16964
+    },
+    {
+      "path": "tests/test_codex_review_loop_4121.py",
+      "sha256": "a4dd1373126b99497d97054126fe051ea6348f465eb5a5830ebdeb8580495971",
+      "size_bytes": 14414
+    },
+    {
+      "path": "tests/test_codex_review_hook_cd3c.py",
+      "sha256": "1996b0bd4911206947773d7586fdf614996a11c8c8c9b68e122e2fecdffa2471",
+      "size_bytes": 11474
+    },
+    {
+      "path": "tests/e2e/test_real_cli_paths.py",
+      "sha256": "33038729c9dcdefdc447edb102845f7695ad7e4d0e24f604d3dbe5f1dc51362b",
+      "size_bytes": 68169
+    },
+    {
+      "path": "tests/oracles/IMP-20260626-4121/TC-REJECT-NORMAL/input.txt",
+      "sha256": "376ba50abd469cd216462907fc0b2fc4f4abfd7dcec4a8f865ad53364c54fce5",
+      "size_bytes": 114
+    },
+    {
+      "path": "tests/oracles/IMP-20260626-4121/TC-REJECT-NORMAL/expected.json",
+      "sha256": "54afdcd3b7bda42c21506b320c3d9ba9d9764f384d2aa52ed3e012a3acb60442",
+      "size_bytes": 611
+    },
+    {
+      "path": "tests/oracles/IMP-20260626-4121/TC-DEDUPE-EDGE/input.txt",
+      "sha256": "ac357aad50b74567594e2449b392389c9f465232743c295dc374fe73b35b12d4",
+      "size_bytes": 73
+    },
+    {
+      "path": "tests/oracles/IMP-20260626-4121/TC-DEDUPE-EDGE/expected.json",
+      "sha256": "8440062c544e482a76e94795a8246425ff891b62846874e0356ff6133ec58d1a",
+      "size_bytes": 538
+    }
+  ],
+  "local_only_files": []
+}
