@@ -1,0 +1,13 @@
+{
+  "case_kind": "normal",
+  "description": "Codex REJECT verdict 처리 — 원문 그대로 출력, prefix/suffix 없음, exit code 2",
+  "verdict_input": "REJECT - PR 본문에 변경 파일 설명이 누락되었습니다. core/foo.py 변경 사유를 추가하세요.",
+  "pipeline_id": "IMP-20260626-4121",
+  "reject_count": 1,
+  "exit_code": 2,
+  "decision": "REJECT",
+  "stdout_contains_reject_reason": true,
+  "no_prefix": true,
+  "output_equals_verdict": true,
+  "expected_output": "REJECT - PR 본문에 변경 파일 설명이 누락되었습니다. core/foo.py 변경 사유를 추가하세요."
+}

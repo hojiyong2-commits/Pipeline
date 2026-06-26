@@ -87,62 +87,84 @@ class TestParser:
 
 
 class TestDedupe:
-    """check_dedupe 중복 방지 동작 검증."""
+    """신규 hook의 중복 REJECT 방지 동작 검증 (IMP-20260626-4121 API 갱신).
 
-    def test_first_review_not_duplicate(self, tmp_path):
-        """state 파일이 없으면(첫 검토) 중복 아님(False)."""
-        state_path = tmp_path / "codex_review_state.json"
+    구 check_dedupe/_record_dedupe는 제거되었고, 신규 hook은 _is_duplicate_reject로
+    (pipeline_id, pr_head_sha, packet_sha256, last_reject_reason) 조합을 비교한다.
+    """
+
+    def test_first_review_not_duplicate(self):
+        """state가 비어(첫 검토) REJECTED 기록이 없으면 중복 아님(False)."""
+        empty_state = {}
         assert (
-            cx.check_dedupe("https://x/pull/1", "ACCEPT-A", "sha1", state_path)
+            cx._is_duplicate_reject(
+                empty_state, "IMP-X", "sha1", "pkt1", "REJECT - 사유"
+            )
             is False
         )
 
-    def test_same_sha_is_duplicate(self, tmp_path):
-        """같은 (pr_url, accept_code, head_sha) 조합은 중복(True)."""
-        state_path = tmp_path / "codex_review_state.json"
-        cx._record_dedupe("https://x/pull/1", "ACCEPT-A", "sha1", state_path)
+    def test_same_sha_is_duplicate(self):
+        """같은 (pipeline_id, head_sha, packet_sha256, reason) 조합은 중복(True)."""
+        state = {
+            "status": "REJECTED",
+            "pipeline_id": "IMP-X",
+            "pr_head_sha": "sha1",
+            "packet_sha256": "pkt1",
+            "last_reject_reason": "REJECT - 사유",
+        }
         assert (
-            cx.check_dedupe("https://x/pull/1", "ACCEPT-A", "sha1", state_path)
+            cx._is_duplicate_reject(state, "IMP-X", "sha1", "pkt1", "REJECT - 사유")
             is True
         )
 
-    def test_different_sha_not_duplicate(self, tmp_path):
-        """SHA가 다르면 같은 PR/코드여도 중복 아님(재검토 허용, AC-5)."""
-        state_path = tmp_path / "codex_review_state.json"
-        cx._record_dedupe("https://x/pull/1", "ACCEPT-A", "sha1", state_path)
+    def test_different_sha_not_duplicate(self):
+        """head SHA가 다르면 같은 reason이어도 중복 아님(재검토 허용)."""
+        state = {
+            "status": "REJECTED",
+            "pipeline_id": "IMP-X",
+            "pr_head_sha": "sha1",
+            "packet_sha256": "pkt1",
+            "last_reject_reason": "REJECT - 사유",
+        }
         assert (
-            cx.check_dedupe("https://x/pull/1", "ACCEPT-A", "sha2", state_path)
+            cx._is_duplicate_reject(state, "IMP-X", "sha2", "pkt1", "REJECT - 사유")
             is False
         )
 
 
 class TestVerdict:
-    """process_verdict 형식 검증 및 출력 검증."""
+    """process_verdict 형식 검증 및 출력 검증 (IMP-20260626-4121 API 갱신).
+
+    신규 시그니처: process_verdict(verdict, pipeline_id, pr_url, reject_count)
+    반환: {decision, output, exit_code, reject_reason}.
+    decision은 APPROVE/REJECT/REJECT_HALT, 구 message/post_pr_comment/run_gates_accept 키는 제거됨.
+    """
 
     def test_approve_to_user_output(self):
-        """APPROVE_TO_USER는 안내문 + 승인 코드를 출력하고 게시/accept 안 함."""
+        """APPROVE_TO_USER 입력 시 decision=APPROVE, ACCEPT-pipeline_id 출력, exit 0."""
         out = cx.process_verdict(
-            "APPROVE_TO_USER", "ACCEPT-IMP-X", "https://x/pull/1", 0
+            "APPROVE_TO_USER", "IMP-X", "https://x/pull/1", 0
         )
-        assert out["decision"] == "APPROVE_TO_USER"
-        assert "ACCEPT-IMP-X" in out["message"]
-        assert out["post_pr_comment"] is False
-        assert out["run_gates_accept"] is False
+        assert out["decision"] == "APPROVE"
+        assert "ACCEPT-IMP-X" in out["output"]
+        assert out["exit_code"] == 0
+        # 신규 hook은 PR 댓글 게시/gates accept 자동 실행 키를 두지 않는다 (부재로 안전 보장)
+        assert "post_pr_comment" not in out
+        assert "run_gates_accept" not in out
 
     def test_reject_output(self):
-        """REJECT - 사유는 사유를 그대로 출력하고 게시/accept 안 함 (AC-6)."""
+        """REJECT - 사유는 원문 그대로 output에 담고 exit 2 (재주입)."""
         out = cx.process_verdict(
-            "REJECT - CI 실패", "ACCEPT-IMP-X", "https://x/pull/1", 0
+            "REJECT - CI 실패", "IMP-X", "https://x/pull/1", 1
         )
         assert out["decision"] == "REJECT"
-        assert "CI 실패" in out["message"]
-        assert out["post_pr_comment"] is False
-        assert out["run_gates_accept"] is False
+        assert out["output"] == "REJECT - CI 실패"  # 원문 그대로 (prefix 없음)
+        assert out["exit_code"] == 2
 
     def test_invalid_verdict_raises(self):
         """APPROVE_TO_USER/REJECT 형식이 아니면 ValueError (fail-closed)."""
         with pytest.raises(ValueError):
-            cx.process_verdict("MAYBE", "ACCEPT-IMP-X", "https://x/pull/1", 0)
+            cx.process_verdict("MAYBE", "IMP-X", "https://x/pull/1", 0)
 
 
 class TestSafety:

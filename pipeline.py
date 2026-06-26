@@ -6664,6 +6664,126 @@ def _validate_pr_body_readiness(pr_body: str) -> Dict[str, Any]:
     return pass_result
 
 
+# IMP-20260626-4121: Codex Review Loop gate.
+# [Purpose]: gates accept --result ACCEPT 실행 전, .pipeline/codex_review_loop_state.json의
+#   Codex 검토 결과가 APPROVED이고 현재 PR head SHA / packet_sha256과 일치하는지 검증한다.
+#   Codex hook(.claude/hooks/codex_user_acceptance_review.py)이 기록한 상태를 신뢰 루트로 사용한다.
+# [Assumptions]: hook은 APPROVE 시 status=APPROVED, pr_head_sha, packet_sha256을 기록한다.
+#   acceptance_request.json의 packet_sha256은 _check_acceptance_readiness/nonce 검증과 동일 SSoT다.
+# [Vulnerability & Risks]: 파일 없음/파싱 오류/상태 불일치는 모두 fail-closed BLOCKED로 처리한다.
+#   gh CLI 미설치로 현재 PR head SHA를 얻지 못하면 SHA 비교는 건너뛰되, APPROVED 상태 자체는 요구한다.
+# [Improvement]: 향후 packet_sha256 산출을 hook과 pipeline.py가 공유하는 SSoT helper로 통합 가능.
+def _codex_review_loop_state_path() -> Path:
+    """codex_review_loop_state.json 경로를 반환 (PIPELINE_STATE_PATH 격리 지원).
+
+    Returns:
+        .pipeline/codex_review_loop_state.json 절대 경로.
+    """
+    env_state = os.environ.get("PIPELINE_STATE_PATH")
+    if env_state:
+        return Path(env_state).resolve().parent / ".pipeline" / "codex_review_loop_state.json"
+    return PIPELINE_CI_DIR / "codex_review_loop_state.json"
+
+
+def _check_codex_review_gate(
+    pipeline_id: str, state: Dict[str, Any]
+) -> Dict[str, Any]:
+    """gates accept --result ACCEPT 전 Codex Review Loop 승인 여부를 검증 (fail-closed).
+
+    .pipeline/codex_review_loop_state.json을 로드하여 다음을 검사한다:
+      - 파일 없음/파싱 오류 → codex_review_not_approved BLOCKED (fail-closed)
+      - status != APPROVED → codex_review_not_approved BLOCKED
+      - APPROVED이지만 pr_head_sha가 현재 PR head SHA와 다름 → codex_review_stale BLOCKED
+      - APPROVED이지만 packet_sha256이 acceptance_request.json packet_sha256과 다름 → codex_review_stale BLOCKED
+      - 모두 일치 → PASS
+
+    기존 provenance/replay/nonce 검증을 대체하지 않으며, 그 이전 선검사로만 동작한다.
+
+    Args:
+        pipeline_id: 현재 활성 파이프라인 ID.
+        state: pipeline_state dict (현재 미사용이나 인터페이스 일관성 위해 수신).
+    Returns:
+        {"status": "PASS"} 또는
+        {"status": "BLOCKED", "failure_code": str, "message": str}.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str가 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+
+    loop_path = _codex_review_loop_state_path()
+    if not loop_path.exists():
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_not_approved",
+            "message": (
+                "Codex 검토가 아직 APPROVE되지 않았습니다. "
+                "gates request-accept를 먼저 실행하세요."
+            ),
+        }
+
+    try:
+        with open(loop_path, encoding="utf-8") as fh:
+            loop_state = json.load(fh)
+        if not isinstance(loop_state, dict):
+            raise ValueError("codex_review_loop_state.json is not an object")
+    except (OSError, json.JSONDecodeError, ValueError):
+        # fail-closed: 로드/파싱 실패는 미승인으로 간주
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_not_approved",
+            "message": (
+                "codex_review_loop_state.json 로드/파싱에 실패했습니다 (fail-closed). "
+                "gates request-accept를 다시 실행하세요."
+            ),
+        }
+
+    if str(loop_state.get("status", "")) != "APPROVED":
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_not_approved",
+            "message": (
+                "Codex 검토가 아직 APPROVE되지 않았습니다. "
+                "gates request-accept를 먼저 실행하세요."
+            ),
+        }
+
+    # APPROVED — head SHA 일치 검증 (gh CLI 사용 가능한 경우)
+    current_head_sha = _get_current_pr_head_sha()
+    recorded_head_sha = str(loop_state.get("pr_head_sha", "") or "")
+    if current_head_sha:
+        if recorded_head_sha.lower() != str(current_head_sha).lower():
+            return {
+                "status": "BLOCKED",
+                "failure_code": "codex_review_stale",
+                "message": (
+                    "Codex APPROVED 상태의 pr_head_sha가 현재 PR head SHA와 다릅니다. "
+                    "PR에 새 커밋이 push되었습니다. gates request-accept를 다시 실행하세요."
+                ),
+            }
+
+    # APPROVED — packet_sha256 일치 검증 (acceptance_request.json 기준)
+    _req = _load_acceptance_request()
+    if _req is not None:
+        req_packet_sha = str(_req.get("packet_sha256", "") or "")
+        recorded_packet_sha = str(loop_state.get("packet_sha256", "") or "")
+        if req_packet_sha and recorded_packet_sha and req_packet_sha != recorded_packet_sha:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "codex_review_stale",
+                "message": (
+                    "Codex APPROVED 상태의 packet_sha256이 현재 acceptance_request.json과 "
+                    "다릅니다. packet이 갱신되었습니다. gates request-accept를 다시 실행하세요."
+                ),
+            }
+
+    return {"status": "PASS"}
+
+
 def _check_acceptance_readiness(
     state: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -19159,6 +19279,16 @@ def cmd_gates(args: argparse.Namespace) -> None:
         accept_decision: str = str(args.result).upper()
         if accept_decision not in {"ACCEPT", "REJECT"}:
             _die("[USER ACCEPTANCE BLOCKED] --result는 ACCEPT 또는 REJECT만 허용됩니다.")
+
+        # IMP-20260626-4121: Codex Review Loop gate — ACCEPT는 Codex APPROVED 기록이 있어야 통과.
+        # 기존 provenance/replay/stale/nonce 검증을 약화하지 않고 그 이전에 fail-closed로 선검사한다.
+        if accept_decision == "ACCEPT":
+            _cr_result = _check_codex_review_gate(pid, state)
+            if _cr_result.get("status") == "BLOCKED":
+                _die(
+                    f"[BLOCKED] failure_code={_cr_result['failure_code']}\n"
+                    f"  {_cr_result['message']}"
+                )
 
         # IMP-20260531-BBDB MT-3: acceptance_request.json 로드 + nonce/SHA/run_id 검증
         _req = _load_acceptance_request()

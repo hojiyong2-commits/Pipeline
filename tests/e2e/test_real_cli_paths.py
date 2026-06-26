@@ -1296,6 +1296,30 @@ def _write_acceptance_request(tmp_path: Path, nonce: str, evidence_path: Path) -
     req_file.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _write_codex_review_approved(tmp_path: Path) -> None:
+    """codex_review_loop_state.json을 APPROVED 상태로 tmp_path/.pipeline에 생성.
+
+    IMP-20260626-4121: gates accept --result ACCEPT는 _check_codex_review_gate에서
+    Codex 검토 APPROVED 기록을 요구한다. provenance E2E 테스트는 provenance 로직
+    자체를 검증하므로, codex gate를 통과하도록 APPROVED 픽스처를 미리 기록한다.
+    PIPELINE_STATE_PATH(=tmp_path/pipeline_state.json) 기준 .pipeline 디렉토리에 저장된다.
+    packet_sha256은 비워 두어(acceptance_request.json에도 packet_sha256 없음) 비교를 스킵한다.
+    """
+    loop_dir = tmp_path / ".pipeline"
+    loop_dir.mkdir(parents=True, exist_ok=True)
+    (loop_dir / "codex_review_loop_state.json").write_text(
+        json.dumps({
+            "pipeline_id": "IMP-20260606-D9F4",
+            "status": "APPROVED",
+            "pr_head_sha": "",
+            "packet_sha256": "",
+            "accept_code": "ACCEPT-IMP-20260606-D9F4",
+            "approved_at": "2026-06-06T12:00:00Z",
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 class TestProvenance:
     """IMP-20260606-D9F4 MT-2: User Acceptance Provenance Gate E2E 테스트.
 
@@ -1321,6 +1345,8 @@ class TestProvenance:
 
         # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
         _write_acceptance_request(tmp_path, nonce, evidence_file)
+        # IMP-20260626-4121: ACCEPT는 Codex 검토 APPROVED 기록을 요구하므로 픽스처 선기록
+        _write_codex_review_approved(tmp_path)
 
         # PATH에서 gh 제거 (sys.executable 경로는 유지)
         original_path = os.environ.get("PATH", "")
@@ -1385,6 +1411,8 @@ class TestProvenance:
 
         # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
         _write_acceptance_request(tmp_path, nonce, evidence_file)
+        # IMP-20260626-4121: ACCEPT는 Codex 검토 APPROVED 기록을 요구하므로 픽스처 선기록
+        _write_codex_review_approved(tmp_path)
 
         # 모의 gh 스크립트: PR 있지만 댓글에 승인자(hojiyong2-commits) 없음
         mock_bin_dir = tmp_path / "mock_bin"
@@ -1461,6 +1489,8 @@ class TestProvenance:
 
         # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
         _write_acceptance_request(tmp_path, nonce, evidence_file)
+        # IMP-20260626-4121: ACCEPT는 Codex 검토 APPROVED 기록을 요구하므로 픽스처 선기록
+        _write_codex_review_approved(tmp_path)
 
         # 모의 gh 스크립트: hojiyong2-commits가 승인 코드를 정확히 한 줄로 댓글 작성
         # IMP-20260606-D9F4 REJECT fix: 기본 승인자가 hojiyong2-commits으로 변경됨
@@ -1548,6 +1578,8 @@ class TestProvenance:
 
         # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
         _write_acceptance_request(tmp_path, nonce, evidence_file)
+        # IMP-20260626-4121: ACCEPT는 Codex 검토 APPROVED 기록을 요구하므로 픽스처 선기록
+        _write_codex_review_approved(tmp_path)
 
         # 모의 gh 스크립트: testapprover가 승인 코드 댓글 작성
         mock_bin_dir = tmp_path / "mock_bin"
