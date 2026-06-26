@@ -17569,6 +17569,154 @@ def _get_ci_run_head_sha(run_id: str) -> Optional[str]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260625-AD69 MT-1: User Acceptance idempotent 지원
+# ---------------------------------------------------------------------------
+
+# [Purpose]: gates request-accept 재실행 시, 이미 유효한 PR 승인 댓글이 존재하면
+#            중복 승인 요청문을 다시 출력하지 않고 기존 gates accept 경로를 안내하기 위해,
+#            PR 댓글 목록에서 "유효한 ACCEPT-{pipeline_id} 단독 댓글"을 탐색한다.
+# [Assumptions]: gh CLI가 설치/인증되어 있고, PR URL에 /pull/<번호> 형식이 포함된다.
+#                request_created_at은 acceptance_request.json의 created_at (ISO 8601 UTC).
+# [Vulnerability & Risks]: gh api 응답 형식 변경 시 author/created_at 추출이 실패할 수 있다.
+#                replay 방어를 위해 created_at > request_created_at(strict) 비교를 사용하므로,
+#                정확히 동일 시각 댓글은 재사용 대상에서 제외된다(보수적 fail-closed).
+# [Improvement]: 댓글 페이지네이션(>30개)을 gh api --paginate로 확장하면 대형 PR에서도 누락 없이
+#                탐색할 수 있다. 현재는 단일 페이지 응답만 처리한다.
+def _find_existing_valid_acceptance_comment(
+    pr_url: str,
+    pipeline_id: str,
+    request_created_at: str,
+) -> Optional[dict]:
+    """PR 댓글에서 유효한 기존 승인 댓글(ACCEPT-{pipeline_id} 단독)을 탐색한다.
+
+    gates request-accept idempotent 지원용. 이미 사용자가 유효한 승인 댓글을 남겼다면
+    중복 승인 요청을 재출력하지 않고 기존 gates accept 경로로 안내하기 위해 사용한다.
+
+    유효 댓글 판정 조건 (3가지 모두 충족):
+      1. body.strip() == f"ACCEPT-{pipeline_id}" (완전 일치 — packet/멀티라인 자동 제외)
+      2. created_at > request_created_at (ISO 8601 lexicographic, replay 방어 strict)
+      3. 작성자가 허용 승인자(PIPELINE_ALLOWED_APPROVER)와 일치
+
+    Args:
+        pr_url: 현재 PR URL (예: https://github.com/owner/repo/pull/999). 빈 값이면 None 반환.
+        pipeline_id: 활성 pipeline_id (빈 값이면 None 반환).
+        request_created_at: acceptance_request.json의 created_at (ISO 8601 UTC).
+
+    Returns:
+        유효 댓글 발견 시 {"comment_id", "author", "created_at"} dict.
+        gh CLI 없음 / PR URL 파싱 실패 / 유효 댓글 없음 시 None.
+
+    Raises:
+        TypeError: pr_url / pipeline_id / request_created_at이 None이거나 str이 아닌 경우.
+    """
+    import json as _json
+    import subprocess as _subprocess
+    import shutil as _shutil
+    import os as _os
+    import re as _re
+
+    # AL: None 입력 방어 + isinstance 타입 가드 (외부 입력 사용 전).
+    if pr_url is None:
+        raise TypeError("pr_url must not be None")
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if request_created_at is None:
+        raise TypeError("request_created_at must not be None")
+    if not isinstance(pr_url, str):
+        raise TypeError(f"pr_url must be str, got {type(pr_url).__name__}")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if not isinstance(request_created_at, str):
+        raise TypeError(
+            f"request_created_at must be str, got {type(request_created_at).__name__}"
+        )
+
+    # 빈 값 가드: pr_url 또는 pipeline_id가 비면 탐색 불가 → None.
+    if not pr_url.strip() or not pipeline_id.strip():
+        return None
+
+    # 1. PR URL에서 owner/repo/번호 추출.
+    _m = _re.search(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
+    if _m is None:
+        # owner/repo가 없는 단축 URL(/pull/<n>)도 허용 — 번호만 추출.
+        _num_only = _re.search(r"/pull/(\d+)", pr_url)
+        if _num_only is None:
+            return None
+        _owner = ""
+        _repo = ""
+        _pr_number = _num_only.group(1)
+    else:
+        _owner = _m.group(1)
+        _repo = _m.group(2)
+        _pr_number = _m.group(3)
+
+    # 2. gh CLI 경로 해석 (PIPELINE_GH_EXECUTABLE 우선, _check_pr_approver_provenance와 일치).
+    _gh_env: str = str(_os.environ.get("PIPELINE_GH_EXECUTABLE", "gh") or "gh")
+    _gh_path: Optional[str] = _shutil.which(_gh_env)
+    if not _gh_path:
+        return None
+
+    # 3. PR 댓글 목록 조회 (gh api repos/{owner}/{repo}/issues/{pr}/comments).
+    if _owner and _repo:
+        _api_path = f"repos/{_owner}/{_repo}/issues/{_pr_number}/comments"
+    else:
+        # owner/repo 미확보 시 현재 저장소 컨텍스트 기준 상대 경로 사용.
+        _api_path = f"repos/{{owner}}/{{repo}}/issues/{_pr_number}/comments"
+    try:
+        _result = _subprocess.run(
+            [_gh_path, "api", _api_path],
+            capture_output=True, text=True, encoding="utf-8", timeout=30,
+        )
+    except (_subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if _result.returncode != 0 or not _result.stdout.strip():
+        return None
+    try:
+        _comments = _json.loads(_result.stdout)
+    except (ValueError, _json.JSONDecodeError):
+        return None
+    if not isinstance(_comments, list):
+        return None
+
+    # 4. 허용 승인자 + 완전 일치 + replay 방어 검사.
+    _allowed_approver: str = PIPELINE_ALLOWED_APPROVER
+    _expected_code: str = f"ACCEPT-{pipeline_id}"
+    for _comment in _comments:
+        if not isinstance(_comment, dict):
+            continue
+        # gh api(REST)는 user.login, gh pr view(GraphQL)는 author.login 형식.
+        _user: dict = _u if isinstance(_u := _comment.get("user"), dict) else {}
+        _author_obj: dict = _a if isinstance(_a := _comment.get("author"), dict) else {}
+        _author: str = str(
+            _user.get("login", "")
+            or _author_obj.get("login", "")
+            or _comment.get("login", "")
+            or ""
+        )
+        if _author != _allowed_approver:
+            continue
+        _body: str = str(_comment.get("body", "") or "")
+        # 조건 1: body.strip() 완전 일치 (멀티라인/packet 인용 자동 제외).
+        if _body.strip() != _expected_code:
+            continue
+        # 조건 2: created_at > request_created_at (replay 방어, strict).
+        _created_at: str = str(
+            _comment.get("created_at") or _comment.get("createdAt") or ""
+        )
+        if not _created_at:
+            continue
+        if not (_created_at > request_created_at):
+            continue
+        # 3가지 모두 충족 → 유효 댓글.
+        return {
+            "comment_id": str(_comment.get("id", "") or ""),
+            "author": _author,
+            "created_at": _created_at,
+        }
+    return None
+
+
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
     """gates request-accept 핸들러: stale 검증 + nonce 발급 + packet 자동 생성 + PR 본문 자동 업데이트.
 
@@ -17737,6 +17885,51 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             force_new=force_new,
             new_pr_body_sha256=_new_pr_body_sha256,
         )
+
+    # IMP-20260625-AD69 MT-2 (재작업): 기존 유효 PR 승인 댓글 자동 처리 (idempotent acceptance).
+    # 확인 위치를 pr_url 결정 직후 / nonce 재발급·packet 생성 전으로 이동한다.
+    # 이미 재사용 가능한 PENDING acceptance_request가 있고 사용자가 유효한
+    # ACCEPT-{pipeline_id} 단독 댓글을 남겼다면, 안내문만 출력하고 종료하지 않고
+    # gates accept 코드 경로를 subprocess로 재호출하여 acceptance를 실제로 완료한다.
+    # subprocess 재호출은 provenance/replay/stale/pr_body_sha256/packet_sha256 등
+    # gates accept의 모든 검증을 그대로 실행하므로 보안 검증을 우회하지 않는다.
+    # 새 nonce를 생성하지 않고 기존 acceptance_request.json의 nonce를 사용한다.
+    if (
+        reuse
+        and existing_req is not None
+        and pr_url
+        and str(existing_req.get("status", "")).upper() == "PENDING"
+        and str(existing_req.get("pipeline_id", "")) == pipeline_id
+        and str(existing_req.get("nonce", "") or "")
+    ):
+        _existing_nonce = str(existing_req.get("nonce", "") or "")
+        _existing_created_at = str(existing_req.get("created_at", "") or "")
+        _existing_comment = _find_existing_valid_acceptance_comment(
+            pr_url, pipeline_id, _existing_created_at
+        )
+        if _existing_comment is not None:
+            print()
+            print(
+                f"[기존 PR 승인 댓글 확인됨] comment_id={_existing_comment['comment_id']}, "
+                f"작성자={_existing_comment['author']}, 시각={_existing_comment['created_at']}"
+            )
+            print("유효한 승인 댓글을 확인했습니다 — gates accept를 자동 실행합니다.")
+            _log_event(
+                state,
+                f"acceptance request idempotent auto-accept: existing comment "
+                f"{_existing_comment['comment_id']} 확인 — gates accept 자동 실행",
+            )
+            _save(state)
+            _accept_code = f"ACCEPT-{pipeline_id}-{_existing_nonce}"
+            _accept_cmd = [
+                sys.executable, str(Path(__file__).resolve()),
+                "gates", "accept",
+                "--result", "ACCEPT",
+                "--evidence", evidence_str,
+                "--acceptance-code", _accept_code,
+            ]
+            _accept_result = subprocess.run(_accept_cmd)
+            sys.exit(_accept_result.returncode)
 
     if reuse and existing_req is not None:
         # 기존 코드 재사용: acceptance_request.json 유지, 표시만 업데이트
