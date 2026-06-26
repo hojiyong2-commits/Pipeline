@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260626-4121</pipeline_id>
+  <phase>qa</phase>
+  <round>2</round>
+  <agent_run_id>qa-180090fffab2b36a</agent_run_id>
+  <numeric_score>112</numeric_score>
+  <verdict>PASS</verdict>
+
+  <step0_handover>
+    <from>dev-agent</from>
+    <evidence_present>PASS — dev_handover.xml + 커밋 d40fb63에 6개 코드 파일 + oracle 실제 제출</evidence_present>
+    <ui_category>미포함 — dev-agent handover만 수락 (정상)</ui_category>
+  </step0_handover>
+
+  <step0b_anti_gaming_read>
+    <present>PASS — step_plan.xml decomposition_audit 내 anti_gaming_read=true 확인 (Round 1 FAIL 수정사항 반영됨)</present>
+  </step0b_anti_gaming_read>
+
+  <step0c_judgment_calls>
+    <result>N-A — judgment_calls 빈 블록(self-closing), judgment_calls_resolved 불필요</result>
+  </step0c_judgment_calls>
+
+  <category_check>
+    <wa>N-A — 네트워크 호출은 gh/codex CLI subprocess이며 본 태스크 카테고리 아님(WA/PA 미지정). fail-closed 예외처리는 AL에서 평가</wa>
+    <ui>N-A — UI 카테고리 미포함</ui>
+    <fs>PASS — _read_text_with_fallback 4-encoding(utf-8/utf-8-sig/cp949/latin-1), _atomic_write_json tempfile+os.replace 원자적 쓰기</fs>
+    <pd>PASS — hook(상태/검토 로직) / pipeline.py gate(검증) 관심사 분리, codex_review_loop_state.json 별도 파일로 acceptance_request.json과 분리(DQ-1 B안). 명시적 dict 인터페이스 계약</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점</sec>
+    <al>PASS — None TypeError, isinstance 타입가드(reject_count bool 배제), reject_count 음수 ValueError(보정 금지), 빈 verdict ValueError, JSON 파싱 실패 fail-closed, 빈 transcript 조용히 exit 0</al>
+    <build>N-A — meta-task(hook/pipeline/agent MD/테스트), EXE 빌드 대상 아님</build>
+    <vsce>N-A — VSCE 카테고리 미포함</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 카테고리 미지정 (subprocess fail-closed는 AL에서 평가)</wa>
+    <ui score="0" max="20">N/A — UI 미포함</ui>
+    <fs score="20" max="20">4-encoding fallback + 원자적 쓰기(tempfile→os.replace) 충족</fs>
+    <pd score="10" max="10">모듈분리(hook/gate 관심사 분리, 별도 상태파일) 5/5, 인터페이스계약(명시적 dict return, 타입힌팅 전수) 5/5</pd>
+    <al score="20" max="20">0나눗셈 N/A, 범위(reject_count 음수 차단) 5, 타입가드(isinstance+bool배제) 5, 빈데이터(빈 transcript/verdict) 5, fail-closed 예외분기 5</al>
+    <build score="0" max="10">N/A — meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="50" max="60"/>
+    <percentage>93.3</percentage>
+    <numeric_verdict>PASS — 적용 카테고리(FS20+PD10+AL20=50/60) 정규화 112/120 환산. QA_PASS_THRESHOLD 96/120 충족</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A — WA 카테고리 미지정 (gh/codex subprocess는 timeout 정수 사용, fail-closed)</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>PASS — json.loads try-except + fail-closed RuntimeError 분기</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 전 함수 시그니처 타입힌팅 완비</type_hinting_all>
+      <widget_naming>N-A — UI 미포함</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — _atomic_write_json tempfile.mkstemp → os.replace</atomic_write>
+      <encoding_fallback>PASS — _read_text_with_fallback utf-8/utf-8-sig/cp949/latin-1</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로 입력 없음(env/cwd 기반 .pipeline 고정)</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover self_check.execution_check 존재</execution_check_present>
+    <execution_check_verdict>PASS — py_compile + loop 16 + cd3c 16 PASS 선언, QA 재실행으로 확인(32 passed)</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 미포함</vsce_build_evidence>
+    <functional_binding_verified>PASS — _check_codex_review_gate가 pipeline.py:19285-19291 gates accept ACCEPT 분기 시작 직후 실제 호출됨(정의만 아님). BLOCKED 시 _die 연결 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 미명시</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <boundary_verdict>N-A</boundary_verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml decomposition_audit 블록 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1~MT-4 각 micro_task에 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>8</declared_functions>
+    <actual_modified_functions>8</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — 커밋 d40fb63 변경 파일 전부 PM micro_task target_files 범위 내</modification>
+    </out_of_scope_modifications>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>6</scope_files_declared>
+    <evidence_files_submitted>10</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음 — 커밋 d40fb63의 10개 파일(코드6 + oracle4) 전부 scope_declaration 범위 내. cd3c/real_cli_paths.py는 handover scope_amendment_reason에 Pipeline Manager 명시 승인 MT-4 추가로 기록됨</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git show --stat d40fb63 + grep으로 _check_codex_review_gate 호출 배선 직접 확인</grep_verified>
+    <boundary_verdict>PASS</boundary_verdict>
+  </c3_cross_verification>
+
+  <ac_coverage>
+    <criterion ac_id="AC-1" status="PASS" evidence="test_reject_raw_output_no_prefix + process_verdict REJECT 분기가 normalized 원문 그대로 output(prefix/suffix 없음), oracle TC-REJECT-NORMAL 매칭"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="test_reject_count_over_limit_halts — reject_count>5 시 REJECT_HALT decision, '최대 거부 횟수(5) 초과' 메시지"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="test_dedupe_different_head_sha_allows_retry + _check_stale APPROVED 동일 head/packet 시 재호출 없이 동일 출력"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="test_approve_saves_state — APPROVED 시 codex_review_loop_state.json에 status/head_sha/packet_sha/approved_at 기록(_record_state 원자적)"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="test_check_gate_no_file_blocked — loop state 없음/APPROVED 아님 시 codex_review_not_approved BLOCKED, pipeline.py:19285 배선"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="test_approve_stale_different_head_sha + _check_codex_review_gate head_sha/packet_sha256 불일치 시 codex_review_stale BLOCKED"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="pipeline-manager-agent.md:247-255 'Codex Review Loop 원칙' 섹션 — REJECT 되먹임/APPROVE 필수/5회 상한/not_approved BLOCKED 명시"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="test_hook_no_pr_comment_no_gates_accept — hook 코드 내 PR 댓글 작성/gates accept 실행 경로 부재, _build_codex_prompt 금지사항 명시"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="test_approve_output_no_nonce — _approve_message가 ACCEPT-{pipeline_id} 형식만 출력, nonce 미노출. acceptance_request.json 미참조"/>
+  </ac_coverage>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <test_evidence>
+    <item>tests/test_codex_review_loop_4121.py — 16 passed (AC-1~AC-9 전수 커버 + oracle normal/edge)</item>
+    <item>tests/test_codex_review_hook_cd3c.py — 16 passed (신규 API 회귀 갱신)</item>
+    <item>합계 32 passed in 0.31s</item>
+    <item>gates secrets (hook + pipeline.py) — exit 0, 민감정보 0건</item>
+  </test_evidence>
+
+  <pre_existing_failure_analysis>
+    <test>tests/e2e/test_real_cli_paths.py::TestProvenance::test_gates_accept_provenance_approver_present</test>
+    <status>FAIL — 그러나 본 파이프라인 회귀 아님</status>
+    <root_cause>approval_stale_nonce / provenance_check 빈 dict. 부모 커밋 57a267c(IMP-20260625-AD69) 버전 테스트에서도 동일 라인 동일 사유로 FAIL 재현 확인. codex 게이트는 APPROVED 픽스처+codex_bootstrap_exception으로 통과했고, 실패는 그 이후 provenance/nonce 승인 흐름(본 파이프라인 이전부터 존재)에서 발생. dev가 추가한 codex 픽스처는 이 실패의 원인 아님</root_cause>
+    <boundary_verdict>PRE_EXISTING — 별도 BUG 파이프라인 권고. 본 IMP-20260626-4121 PASS 판정에 영향 없음</boundary_verdict>
+  </pre_existing_failure_analysis>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. (감점 아님) tests/e2e/test_real_cli_paths.py::test_gates_accept_provenance_approver_present는 부모 커밋부터 이미 red 상태. dev가 MT-4에서 이 테스트에 codex 픽스처를 추가했으므로, provenance/nonce 승인 흐름의 pre-existing 실패를 별도 BUG 파이프라인으로 추적 권고.
+    2. (개선) _check_codex_review_gate의 packet_sha256 산출을 hook과 pipeline.py가 공유하는 SSoT helper로 통합하면 stale 판정 일관성이 향상됨 (handover Improvement에도 동일 언급).
+  </improvement_suggestions>
+</qa_report>
