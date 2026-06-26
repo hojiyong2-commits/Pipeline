@@ -349,16 +349,16 @@ def _is_duplicate_reject(
             raise TypeError(f"{name} must not be None")
     if not isinstance(state, dict):
         raise TypeError(f"state must be dict, got {type(state).__name__}")
-    for name, val in (
+    for sname, sval in (
         ("pipeline_id", pipeline_id),
         ("pr_head_sha", pr_head_sha),
         ("packet_sha256", packet_sha256),
         ("reject_reason", reject_reason),
     ):
-        if val is None:
-            raise TypeError(f"{name} must not be None")
-        if not isinstance(val, str):
-            raise TypeError(f"{name} must be str, got {type(val).__name__}")
+        if sval is None:
+            raise TypeError(f"{sname} must not be None")
+        if not isinstance(sval, str):
+            raise TypeError(f"{sname} must be str, got {type(sval).__name__}")
     if state.get("status") != "REJECTED":
         return False
     return (
