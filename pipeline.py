@@ -6752,6 +6752,19 @@ def _check_codex_review_gate(
             ),
         }
 
+    # APPROVED — pipeline_id 일치 검증 (다른 파이프라인의 승인 상태 재사용 차단)
+    recorded_pipeline_id = str(loop_state.get("pipeline_id", "") or "")
+    if recorded_pipeline_id and recorded_pipeline_id != pipeline_id:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_stale",
+            "message": (
+                "Codex APPROVED 상태의 pipeline_id가 현재 파이프라인과 다릅니다. "
+                "이전 파이프라인의 승인 상태가 남아 있습니다. "
+                "현재 파이프라인에서 gates request-accept를 다시 실행하세요."
+            ),
+        }
+
     # APPROVED — head SHA 일치 검증 (gh CLI 사용 가능한 경우)
     current_head_sha = _get_current_pr_head_sha()
     recorded_head_sha = str(loop_state.get("pr_head_sha", "") or "")
@@ -6766,7 +6779,7 @@ def _check_codex_review_gate(
                 ),
             }
 
-    # APPROVED — packet_sha256 일치 검증 (acceptance_request.json 기준)
+    # APPROVED — packet_sha256 / pr_body_sha256 일치 검증 (acceptance_request.json 기준)
     _req = _load_acceptance_request()
     if _req is not None:
         req_packet_sha = str(_req.get("packet_sha256", "") or "")
@@ -6778,6 +6791,19 @@ def _check_codex_review_gate(
                 "message": (
                     "Codex APPROVED 상태의 packet_sha256이 현재 acceptance_request.json과 "
                     "다릅니다. packet이 갱신되었습니다. gates request-accept를 다시 실행하세요."
+                ),
+            }
+
+        # pr_body_sha256 일치 검증: 두 값이 모두 존재할 때만 비교 (하나라도 비면 SKIP).
+        req_body_sha = str(_req.get("pr_body_sha256", "") or "")
+        recorded_body_sha = str(loop_state.get("pr_body_sha256", "") or "")
+        if req_body_sha and recorded_body_sha and req_body_sha != recorded_body_sha:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "codex_review_stale",
+                "message": (
+                    "Codex APPROVED 상태의 pr_body_sha256이 현재 acceptance_request.json과 "
+                    "다릅니다. PR 본문이 갱신되었습니다. gates request-accept를 다시 실행하세요."
                 ),
             }
 

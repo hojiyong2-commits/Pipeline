@@ -87,6 +87,21 @@ def test_reject_exit_code_2():
     assert out["exit_code"] == 2
 
 
+def test_reject_channel_stdout_exit2():
+    """REJECT 재주입 채널: output은 원문 그대로(prefix/suffix 없음) + exit_code=2.
+
+    Stop hook은 이 output을 print(stdout) + sys.exit(2)로 그대로 재주입한다.
+    """
+    out = cx.process_verdict(
+        "REJECT - 결함있음", _PIPELINE_ID, _PR_URL, reject_count=1
+    )
+    assert out["exit_code"] == 2
+    assert out["decision"] == "REJECT"
+    # output이 그대로 "REJECT - 결함있음" — prefix/suffix/번역/요약 없음
+    assert out["output"] == "REJECT - 결함있음"
+    assert out["reject_reason"] == "REJECT - 결함있음"
+
+
 # ---------------------------------------------------------------------------
 # 4. 중복 주입 차단 (같은 head/packet/reason)
 # ---------------------------------------------------------------------------

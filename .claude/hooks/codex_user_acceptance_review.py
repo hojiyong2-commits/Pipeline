@@ -711,6 +711,58 @@ def process_verdict(
     )
 
 
+def _project_root() -> Path:
+    """프로젝트 루트 디렉토리 경로를 반환.
+
+    PIPELINE_STATE_PATH 환경 변수가 있으면 그 부모를(= .pipeline의 부모와 동일 레벨),
+    없으면 cwd를 프로젝트 루트로 사용한다. human_acceptance_packet.md는 이 루트에 위치한다.
+
+    Returns:
+        프로젝트 루트 절대 경로.
+    """
+    env_state = os.environ.get("PIPELINE_STATE_PATH")
+    if env_state:
+        return Path(env_state).resolve().parent
+    return Path.cwd().resolve()
+
+
+def _human_acceptance_packet_sha256(review_packet: Dict[str, Any]) -> str:
+    """human_acceptance_packet.md 파일 내용의 SHA-256을 반환 (gate 비교 기준 SSoT).
+
+    pipeline.py _check_codex_review_gate()는 loop_state["packet_sha256"]을
+    acceptance_request.json["packet_sha256"](= human_acceptance_packet.md 파일 SHA)과
+    비교한다. 따라서 APPROVE 시 review packet JSON dict가 아니라 동일 기준인
+    human_acceptance_packet.md 파일 SHA를 packet_sha256으로 기록해야 한다.
+
+    파일이 없으면 review packet JSON dict의 SHA로 fallback하여 빈 문자열 SHA로 인한
+    오탐 BLOCKED를 피한다.
+
+    Args:
+        review_packet: build_review_packet 반환 dict (파일 미존재 시 fallback용).
+    Returns:
+        human_acceptance_packet.md 파일 SHA-256, 또는 파일 미존재 시 review packet SHA-256.
+    Raises:
+        TypeError: review_packet이 None이거나 dict가 아닌 경우.
+    """
+    if review_packet is None:
+        raise TypeError("review_packet must not be None")
+    if not isinstance(review_packet, dict):
+        raise TypeError(
+            f"review_packet must be dict, got {type(review_packet).__name__}"
+        )
+    packet_path = _project_root() / "human_acceptance_packet.md"
+    if packet_path.exists():
+        try:
+            return _sha256_text(_read_text_with_fallback(packet_path))
+        except (OSError, UnicodeDecodeError):
+            # 읽기 실패 시 fallback (fail-soft: gate가 stale 비교를 SKIP하도록)
+            pass
+    # 파일 미존재/읽기 실패 — review packet JSON dict SHA로 fallback
+    return _sha256_text(
+        json.dumps(review_packet, ensure_ascii=False, sort_keys=True)
+    )
+
+
 def _project_pipeline_dir() -> Path:
     """프로젝트 루트의 .pipeline 디렉토리 경로를 반환.
 
@@ -719,10 +771,7 @@ def _project_pipeline_dir() -> Path:
     Returns:
         .pipeline 디렉토리 절대 경로.
     """
-    env_state = os.environ.get("PIPELINE_STATE_PATH")
-    if env_state:
-        return Path(env_state).resolve().parent / ".pipeline"
-    return (Path.cwd() / ".pipeline").resolve()
+    return _project_root() / ".pipeline"
 
 
 def _get_pr_head_sha(pr_url: str) -> str:
@@ -829,7 +878,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
-    packet_sha256 = _sha256_text(json.dumps(packet, ensure_ascii=False, sort_keys=True))
+    # review_packet_sha256: gh로 수집한 review packet JSON dict의 SHA (검토 내용 변경 추적용).
+    review_packet_sha256 = _sha256_text(
+        json.dumps(packet, ensure_ascii=False, sort_keys=True)
+    )
+    # packet_sha256: human_acceptance_packet.md 파일 SHA (gate 비교 기준 SSoT). 결함 1 수정:
+    # _check_codex_review_gate()가 acceptance_request.json["packet_sha256"]과 비교하므로
+    # 동일 기준(human_acceptance_packet.md 파일 SHA)으로 산출해야 stale 오탐을 방지한다.
+    packet_sha256 = _human_acceptance_packet_sha256(packet)
 
     # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 같은 APPROVE 출력만.
     if _check_stale(loop_state, head_sha, packet_sha256):
@@ -879,6 +935,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "status": "REJECTED",
                 "pr_head_sha": head_sha,
                 "packet_sha256": packet_sha256,
+                "review_packet_sha256": review_packet_sha256,
                 "last_reject_reason": outcome["reject_reason"],
                 "reject_count": reject_count,
                 "last_checked_at": _now_iso(),
@@ -893,6 +950,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "pr_head_sha": head_sha,
                 "pr_body_sha256": _sha256_text(str(packet.get("body", ""))),
                 "packet_sha256": packet_sha256,
+                "review_packet_sha256": review_packet_sha256,
                 "accept_code": f"ACCEPT-{pipeline_id}",
                 "approved_at": _now_iso(),
             },
