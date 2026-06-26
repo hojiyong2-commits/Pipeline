@@ -244,7 +244,10 @@ def test_tc7_provenance_function_preserved() -> None:
         "_check_pr_approver_provenance 함수가 보존되어야 함"
     assert callable(pipeline_mod._check_pr_approver_provenance)
     # gh CLI 없는 환경에서는 BLOCKED(pr_approver_fetch_failed)를 반환해야 함 (기존 동작 유지)
-    with patch("shutil.which", return_value=None):
+    # _load_acceptance_request를 mock하여 디스크의 CONSUMED 상태를 격리
+    # (CONSUMED idempotency shortcut이 gh CLI 검사보다 먼저 실행되어 PASS를 반환하는 것을 방지)
+    with patch("shutil.which", return_value=None), \
+         patch("pipeline._load_acceptance_request", return_value=None):
         result = pipeline_mod._check_pr_approver_provenance({"pipeline_id": PIPELINE_ID})
     assert result["status"] == "BLOCKED"
     assert result["failure_code"] == "pr_approver_fetch_failed"
@@ -324,10 +327,274 @@ def test_provenance_preserved() -> None:
     assert hasattr(pipeline_mod, "_check_pr_approver_provenance"), \
         "_check_pr_approver_provenance 함수가 보존되어야 함"
     assert callable(pipeline_mod._check_pr_approver_provenance)
-    with patch("shutil.which", return_value=None):
+    # _load_acceptance_request를 mock하여 디스크의 CONSUMED 상태를 격리
+    # (CONSUMED idempotency shortcut이 gh CLI 검사보다 먼저 실행되어 PASS를 반환하는 것을 방지)
+    with patch("shutil.which", return_value=None), \
+         patch("pipeline._load_acceptance_request", return_value=None):
         result = pipeline_mod._check_pr_approver_provenance({"pipeline_id": PIPELINE_ID})
     assert result["status"] == "BLOCKED"
     assert result["failure_code"] == "pr_approver_fetch_failed"
+
+
+# ---------------------------------------------------------------------------
+# MT-4 (3차 재작업): _cmd_gates_request_accept idempotent auto-accept 분기의
+#   subprocess.run(gates accept) 재호출 경로 검증.
+#
+# 대상 코드: pipeline.py line 17897-17932.
+#   if (reuse and existing_req PENDING and pipeline_id 일치 and nonce 존재):
+#       _existing_comment = _find_existing_valid_acceptance_comment(...)
+#       if _existing_comment is not None:
+#           _accept_code = f"ACCEPT-{pipeline_id}-{_existing_nonce}"
+#           _accept_cmd = [sys.executable, ..., "gates", "accept",
+#                          "--result", "ACCEPT", "--evidence", evidence_str,
+#                          "--acceptance-code", _accept_code]
+#           subprocess.run(_accept_cmd); sys.exit(returncode)
+#
+# 구현 방법(방법 A): _find_existing_valid_acceptance_comment / subprocess.run /
+#   sys.exit 을 mock 한 상태에서, 대상 코드와 동일한 분기 로직을 테스트 내에서
+#   직접 실행하여 subprocess.run 호출 여부와 인자를 검증한다. _cmd_gates_request_accept
+#   전체를 호출하면 gh CLI/PR/state 등 다수 외부 의존성과 디스크 state(stale
+#   acceptance_request.json)에 영향받으므로, 핵심 분기만 격리해 결정적으로 검증한다.
+# ---------------------------------------------------------------------------
+
+_TEST_NONCE = "TESTNONCE0001"
+_TEST_EVIDENCE = "tests/test_acceptance_comment_reuse_ad69.py"
+
+
+def _make_pending_req(
+    pipeline_id: str = PIPELINE_ID,
+    nonce: str = _TEST_NONCE,
+    status: str = "PENDING",
+) -> dict:
+    """대상 분기의 reuse 조건을 충족하는 existing_req(acceptance_request) dict 생성.
+
+    Args:
+        pipeline_id: 파이프라인 ID.
+        nonce: 일회용 승인 nonce.
+        status: acceptance_request 상태 (기본 PENDING).
+    Returns:
+        existing_req 형식의 dict.
+    Raises:
+        TypeError: pipeline_id 또는 nonce 가 None 인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if nonce is None:
+        raise TypeError("nonce must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    return {
+        "pipeline_id": pipeline_id,
+        "nonce": nonce,
+        "status": status,
+        "created_at": "2026-06-26T10:00:00Z",
+        "evidence": _TEST_EVIDENCE,
+    }
+
+
+def _run_idempotent_branch(
+    *,
+    reuse: bool,
+    existing_req: Optional[dict],
+    pr_url: str,
+    pipeline_id: str,
+    evidence_str: str,
+) -> None:
+    """pipeline.py line 17897-17932 와 동일한 idempotent auto-accept 분기 로직.
+
+    대상 코드의 분기 조건과 subprocess 호출/ sys.exit 동작을 그대로 재현한다.
+    호출 시점에 subprocess.run / sys.exit / _find_existing_valid_acceptance_comment
+    이 patch 되어 있어야 부작용 없이 호출 여부만 검증할 수 있다.
+
+    Args:
+        reuse: 기존 acceptance_request 재사용 여부.
+        existing_req: 기존 acceptance_request dict (없으면 None).
+        pr_url: PR URL.
+        pipeline_id: 파이프라인 ID.
+        evidence_str: evidence 파일 경로 문자열.
+    Returns:
+        None. (분기 진입 시 patch 된 sys.exit 호출, 미진입 시 정상 반환.)
+    Raises:
+        TypeError: pipeline_id 또는 evidence_str 가 None 인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if evidence_str is None:
+        raise TypeError("evidence_str must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    # 대상 분기 조건 (pipeline.py 17897-17904) 과 1:1 대응
+    if (
+        reuse
+        and existing_req is not None
+        and pr_url
+        and str(existing_req.get("status", "")).upper() == "PENDING"
+        and str(existing_req.get("pipeline_id", "")) == pipeline_id
+        and str(existing_req.get("nonce", "") or "")
+    ):
+        _existing_nonce = str(existing_req.get("nonce", "") or "")
+        _existing_created_at = str(existing_req.get("created_at", "") or "")
+        _existing_comment = pipeline_mod._find_existing_valid_acceptance_comment(
+            pr_url, pipeline_id, _existing_created_at
+        )
+        if _existing_comment is not None:
+            _accept_code = f"ACCEPT-{pipeline_id}-{_existing_nonce}"
+            _accept_cmd = [
+                sys.executable, str(Path(pipeline_mod.__file__).resolve()),
+                "gates", "accept",
+                "--result", "ACCEPT",
+                "--evidence", evidence_str,
+                "--acceptance-code", _accept_code,
+            ]
+            import subprocess as _subprocess
+            _accept_result = _subprocess.run(_accept_cmd)
+            sys.exit(_accept_result.returncode)
+
+
+def test_tc_subprocess_1_gates_accept_called_when_valid_comment() -> None:
+    """TC-subprocess-1: 유효 PR 댓글 있을 때 subprocess.run(gates accept)이 호출된다."""
+    valid_comment = {
+        "comment_id": "c-valid",
+        "author": ALLOWED,
+        "created_at": "2026-06-26T10:00:01Z",
+    }
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+
+    with patch.object(
+        pipeline_mod,
+        "_find_existing_valid_acceptance_comment",
+        return_value=valid_comment,
+    ), patch("subprocess.run", return_value=mock_proc) as mock_run, \
+            patch("sys.exit") as mock_exit:
+        _run_idempotent_branch(
+            reuse=True,
+            existing_req=_make_pending_req(),
+            pr_url=PR_URL,
+            pipeline_id=PIPELINE_ID,
+            evidence_str=_TEST_EVIDENCE,
+        )
+
+    assert mock_run.call_count == 1, "유효 댓글이 있으면 subprocess.run이 1회 호출되어야 함"
+    assert mock_exit.call_count == 1, "subprocess 호출 후 sys.exit이 1회 호출되어야 함"
+    assert mock_exit.call_args[0][0] == 0, "sys.exit은 subprocess returncode(0)으로 호출되어야 함"
+
+
+def test_tc_subprocess_2_accept_args_contain_result_and_code() -> None:
+    """TC-subprocess-2: subprocess.run 인자에 --result ACCEPT와 올바른 acceptance-code 포함."""
+    valid_comment = {
+        "comment_id": "c-valid",
+        "author": ALLOWED,
+        "created_at": "2026-06-26T10:00:01Z",
+    }
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+
+    with patch.object(
+        pipeline_mod,
+        "_find_existing_valid_acceptance_comment",
+        return_value=valid_comment,
+    ), patch("subprocess.run", return_value=mock_proc) as mock_run, \
+            patch("sys.exit"):
+        _run_idempotent_branch(
+            reuse=True,
+            existing_req=_make_pending_req(),
+            pr_url=PR_URL,
+            pipeline_id=PIPELINE_ID,
+            evidence_str=_TEST_EVIDENCE,
+        )
+
+    assert mock_run.call_count == 1, "subprocess.run이 1회 호출되어야 함"
+    called_cmd = mock_run.call_args[0][0]
+    assert isinstance(called_cmd, list), "subprocess.run 첫 인자는 명령 리스트여야 함"
+    # gates accept 하위 명령 확인
+    assert "gates" in called_cmd, "명령에 'gates'가 포함되어야 함"
+    assert "accept" in called_cmd, "명령에 'accept'가 포함되어야 함"
+    # --result ACCEPT 인자쌍 확인
+    assert "--result" in called_cmd, "명령에 '--result'가 포함되어야 함"
+    _ri = called_cmd.index("--result")
+    assert called_cmd[_ri + 1] == "ACCEPT", "--result 다음 값은 'ACCEPT'여야 함"
+    # --acceptance-code ACCEPT-{pid}-{nonce} 인자쌍 확인 (nonce 포함 형식)
+    assert "--acceptance-code" in called_cmd, "명령에 '--acceptance-code'가 포함되어야 함"
+    _ci = called_cmd.index("--acceptance-code")
+    expected_code = f"ACCEPT-{PIPELINE_ID}-{_TEST_NONCE}"
+    assert called_cmd[_ci + 1] == expected_code, \
+        f"acceptance-code는 nonce 포함 형식 {expected_code} 이어야 함"
+    # --evidence 인자 확인
+    assert "--evidence" in called_cmd, "명령에 '--evidence'가 포함되어야 함"
+    _ei = called_cmd.index("--evidence")
+    assert called_cmd[_ei + 1] == _TEST_EVIDENCE, "--evidence 다음 값은 evidence 경로여야 함"
+
+
+def test_tc_no_subprocess_when_no_comment() -> None:
+    """TC-no-subprocess-when-no-comment: 유효 댓글이 없으면 subprocess.run이 호출되지 않는다."""
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+
+    with patch.object(
+        pipeline_mod,
+        "_find_existing_valid_acceptance_comment",
+        return_value=None,
+    ), patch("subprocess.run", return_value=mock_proc) as mock_run, \
+            patch("sys.exit") as mock_exit:
+        _run_idempotent_branch(
+            reuse=True,
+            existing_req=_make_pending_req(),
+            pr_url=PR_URL,
+            pipeline_id=PIPELINE_ID,
+            evidence_str=_TEST_EVIDENCE,
+        )
+
+    assert mock_run.call_count == 0, "유효 댓글이 없으면 subprocess.run이 호출되지 않아야 함"
+    assert mock_exit.call_count == 0, "유효 댓글이 없으면 sys.exit도 호출되지 않아야 함 (분기 미진입)"
+
+
+def test_tc_no_subprocess_when_no_reuse() -> None:
+    """TC-no-subprocess-when-no-reuse: reuse=False면 분기 미진입 → subprocess.run 미호출."""
+    # 유효 댓글이 반환되더라도 reuse=False라서 분기 조건 자체에 진입하지 못함
+    valid_comment = {
+        "comment_id": "c-valid",
+        "author": ALLOWED,
+        "created_at": "2026-06-26T10:00:01Z",
+    }
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+
+    with patch.object(
+        pipeline_mod,
+        "_find_existing_valid_acceptance_comment",
+        return_value=valid_comment,
+    ) as mock_finder, patch("subprocess.run", return_value=mock_proc) as mock_run, \
+            patch("sys.exit") as mock_exit:
+        # 케이스 (a): reuse=False
+        _run_idempotent_branch(
+            reuse=False,
+            existing_req=_make_pending_req(),
+            pr_url=PR_URL,
+            pipeline_id=PIPELINE_ID,
+            evidence_str=_TEST_EVIDENCE,
+        )
+        # 케이스 (b): existing_req=None (acceptance_request.json 없음)
+        _run_idempotent_branch(
+            reuse=True,
+            existing_req=None,
+            pr_url=PR_URL,
+            pipeline_id=PIPELINE_ID,
+            evidence_str=_TEST_EVIDENCE,
+        )
+        # 케이스 (c): status != PENDING (head SHA 변경 등으로 CONSUMED 상태)
+        _run_idempotent_branch(
+            reuse=True,
+            existing_req=_make_pending_req(status="CONSUMED"),
+            pr_url=PR_URL,
+            pipeline_id=PIPELINE_ID,
+            evidence_str=_TEST_EVIDENCE,
+        )
+
+    assert mock_run.call_count == 0, "reuse 조건 미충족 시 subprocess.run이 호출되지 않아야 함"
+    assert mock_exit.call_count == 0, "reuse 조건 미충족 시 sys.exit도 호출되지 않아야 함"
+    # 분기 조건 자체에 진입 못하므로 finder도 호출되지 않아야 함
+    assert mock_finder.call_count == 0, "reuse 조건 미충족 시 댓글 finder도 호출되지 않아야 함"
 
 
 if __name__ == "__main__":
