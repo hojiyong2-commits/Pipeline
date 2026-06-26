@@ -1,0 +1,70 @@
+{
+  "pipeline_id": "IMP-20260625-AD69",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._find_existing_valid_acceptance_comment"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": ["pipeline.py: _find_existing_valid_acceptance_comment helper 신규 추가"]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py", "architect_report_reject_r2.xml", "dev_handover_r2.xml", "qa_report_v2.xml", "qa_report_v3.xml", "security_audit.xml"],
+      "affected_functions": ["pipeline._cmd_gates_request_accept"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3"],
+          "changed_files": ["pipeline.py", "architect_report_reject_r2.xml", "dev_handover_r2.xml", "qa_report_v2.xml", "qa_report_v3.xml", "security_audit.xml"],
+          "implementation_evidence": [
+            "pipeline.py: _cmd_gates_request_accept — 유효 댓글 확인 위치를 pr_url 결정 직후(packet 생성 전)로 이동",
+            "pipeline.py: _cmd_gates_request_accept — 유효 댓글 발견 시 gates accept subprocess 재호출로 acceptance 자동 완료 (안내문-only 경로 제거)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [".claude/agents/pipeline-manager-agent.md"],
+      "affected_functions": ["pipeline-manager-agent principle"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-4"],
+          "changed_files": [".claude/agents/pipeline-manager-agent.md"],
+          "implementation_evidence": ["pipeline-manager-agent.md: Idempotent 승인 재조회 원칙 추가"]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "tests/test_acceptance_comment_reuse_ad69.py",
+        "tests/oracles/IMP-20260625-AD69/comment_created_before_request/expected.json",
+        "tests/oracles/IMP-20260625-AD69/multiline_comment_invalid/expected.json",
+        "tests/oracles/IMP-20260625-AD69/valid_comment_exists/expected.json"
+      ],
+      "affected_functions": ["test_acceptance_comment_reuse_ad69"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-5"],
+          "changed_files": [
+            "tests/test_acceptance_comment_reuse_ad69.py",
+            "tests/oracles/IMP-20260625-AD69/comment_created_before_request/expected.json",
+            "tests/oracles/IMP-20260625-AD69/multiline_comment_invalid/expected.json",
+            "tests/oracles/IMP-20260625-AD69/valid_comment_exists/expected.json"
+          ],
+          "implementation_evidence": ["tests/test_acceptance_comment_reuse_ad69.py: 8 케이스 10 함수, pytest 10 passed; oracle expected.json 3개 수정 (command_check PASS 위해)"]
+        }
+      ]
+    }
+  ]
+}
