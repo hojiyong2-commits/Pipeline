@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260625-AD69</pipeline_id>
+  <phase>qa</phase>
+  <rework_round>3</rework_round>
+  <agent_run_id>qa-c326015e19530202</agent_run_id>
+  <target_file>tests/test_acceptance_comment_reuse_ad69.py</target_file>
+  <category_check>
+    <wa>N-A — 네트워크 호출 없음. gh CLI는 mock 처리, 테스트 파일은 외부 호출 없음.</wa>
+    <ui>N-A — GUI 위젯 없음. 순수 pytest 테스트 파일.</ui>
+    <fs>N-A — 파일 쓰기 없음. oracle JSON read는 read_text(encoding="utf-8") 단순 로드(테스트 fixture).</fs>
+    <pd>PASS — 헬퍼(_gh_run/_call_helper/_load_oracle/_make_pending_req/_run_idempotent_branch)와 테스트 함수 명확히 분리. _run_idempotent_branch가 pipeline.py 17897-17932 분기를 1:1 재현하는 인터페이스 계약 유지.</pd>
+    <sec>N-A — Phase 5 security-agent 전담(LOW 기록 완료). QA 미채점.</sec>
+    <al>PASS — _gh_run/_call_helper/_load_oracle/_make_pending_req/_run_idempotent_branch 전부 None 방어 + isinstance 타입 가드(총 5개). bare except 없음, 구체 예외만 처리.</al>
+    <build>N-A — N/A 빌드(meta/test 파일). EXE 대상 아님.</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+  <numeric_score>120
+    <wa score="20" max="20">N/A — 네트워크 호출 없음 (N/A 카테고리 만점 처리)</wa>
+    <ui score="20" max="20">N/A — GUI 없음 (N/A 카테고리 만점 처리)</ui>
+    <fs score="20" max="20">N/A — 파일 쓰기 없음 (N/A 카테고리 만점 처리)</fs>
+    <pd score="10" max="10">모듈분리 Y(헬퍼/테스트 분리, _run_idempotent_branch가 SUT 분기 1:1 재현)/인터페이스계약 Y(타입힌팅·dict 반환 계약)</pd>
+    <al score="20" max="20">0나눗셈 N/A·범위 N/A·타입검증 Y(5개 함수 isinstance+None 가드)·빈데이터 Y(빈 comments/빈 URL graceful)</al>
+    <build score="10" max="10">N/A — N/A 빌드 (N/A 카테고리 만점 처리)</build>
+    <sec score="20" max="20">Phase 5 전담 (N/A 카테고리 만점 처리)</sec>
+    <total score="120" max="120"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+  </numeric_score>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 모든 헬퍼·테스트 함수 시그니처에 타입힌팅 + 반환 타입 명시</type_hinting_all>
+      <widget_naming>N-A — 위젯 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A — 파일 쓰기 없음</atomic_write>
+      <encoding_fallback>N-A — oracle read는 테스트 fixture(read-only)</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로 없음</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover qa_evidence에 pytest 19 passed 명시, QA 재실행으로 19 passed in 1.32s 독립 확인</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _run_idempotent_branch가 pipeline.py 17897-17932 실제 분기 조건/명령/exit를 1:1 재현. TC-subprocess-2가 실제 인자(--result ACCEPT, ACCEPT-{pid}-{nonce}, --evidence) 검증.</functional_binding_verified>
+  </runtime_functional_check>
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <visual_verdict>N-A</visual_verdict>
+  </visual_reference_check>
+  <c3_cross_verification>
+    <scope_files_declared>1</scope_files_declared>
+    <evidence_files_submitted>1</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git show 7e7de5a numstat 269 insertions/2 deletions, 삭제 2줄은 TC-7/TC-8 mock 교체로 handover와 일치. pipeline.py 미변경(Trust-Root 보존).</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>N-A — HIGH_RISK/legacy 파이프라인, r3 단일 테스트 파일 재작업</grep_evidence_present>
+    <declared_functions>1</declared_functions>
+    <actual_modified_functions>1</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <verdict>PASS</verdict>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음.
+  </critical_issues>
+  <improvement_suggestions>
+    - _run_idempotent_branch는 pipeline.py 17897-17932 분기를 복제하여 검증하므로, 향후 pipeline.py의 분기 조건이 바뀌면 테스트가 silent하게 outdated될 수 있음. 현재 격리 방식(방법 A)은 handover에 트레이드오프가 명시되어 수용 가능. 차기 개선 시 monkeypatch로 _cmd_gates_request_accept 직접 호출 통합 테스트 권장.
+    - oracle 데이터 author는 dict({"login":...}) 형식, 일부 inline 테스트 comment는 "user":{"login":...} 형식 — 헬퍼가 둘 다 처리하므로 정합성 문제 없으나 통일 시 가독성 향상.
+  </improvement_suggestions>
+  <verification_summary>
+    - 19개 전체 PASS (python -m pytest -v, 1.32s) 독립 재현 확인
+    - _run_idempotent_branch(test 427-451) ↔ pipeline.py 17897-17932 분기 1:1 일치 확인
+    - TC-subprocess-2: gates accept 명령 인자(--result ACCEPT / ACCEPT-{pid}-{nonce} / --evidence) 검증
+    - TC-7/TC-8 _load_acceptance_request mock: pipeline.py 18267 CONSUMED shortcut 우회 격리 타당성 확인 (gh CLI 검사 18288 도달 보장)
+    - r3 커밋 7e7de5a 269 추가/2 삭제, 기존 TC-1~TC-6 무변경 확인
+    - scope_manifest_MT-4_r3.json files = 실제 변경 파일(단일 테스트) 일치
+    - ruff All checks passed
+    - 활성 파이프라인 requirements_tracking legacy → AC criteria_verification 블록 생략(하위 호환)
+  </verification_summary>
+</qa_report>
