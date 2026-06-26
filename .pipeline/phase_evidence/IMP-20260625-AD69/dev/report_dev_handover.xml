@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_handover>
+  <pipeline_id>IMP-20260625-AD69</pipeline_id>
+  <agent_run_id>dev-fd4a60b56f432e46</agent_run_id>
+  <from>dev-agent</from>
+  <to>pipeline-manager-agent</to>
+  <status>COMPLETE</status>
+  <handover>
+    <implemented_files>
+      <file>pipeline.py</file>
+      <file>.claude/agents/pipeline-manager-agent.md</file>
+      <file>tests/test_acceptance_comment_reuse_ad69.py</file>
+    </implemented_files>
+    <scope_declaration>
+      <files_to_modify>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_comment_reuse_ad69.py</files_to_modify>
+      <scope_manifest>scope_manifest.json</scope_manifest>
+    </scope_declaration>
+    <impact_analysis>
+      <target_function>pipeline._find_existing_valid_acceptance_comment, pipeline._cmd_gates_request_accept, pipeline-manager-agent principle, test_acceptance_comment_reuse_ad69</target_function>
+      <state_mutations>없음 — idempotent 분기는 안내 출력만, 상태 변경 없음. MD 문서 변경만. 테스트 파일 신규 추가만.</state_mutations>
+      <risk_assessment>
+        <scope_overflow>none</scope_overflow>
+        <regression_risk>low — backward compatible, 기존 gates accept 시그니처 유지</regression_risk>
+        <reversibility>high</reversibility>
+        <side_effects>none</side_effects>
+      </risk_assessment>
+    </impact_analysis>
+    <module_gates>
+      <module id="MT-1" verdict="PASS">pipeline._find_existing_valid_acceptance_comment 신규 helper</module>
+      <module id="MT-2" verdict="PASS">pipeline._cmd_gates_request_accept idempotent 분기</module>
+      <module id="MT-3" verdict="PASS">pipeline-manager-agent.md Idempotent 원칙 추가</module>
+      <module id="MT-4" verdict="PASS">tests/test_acceptance_comment_reuse_ad69.py 10 passed</module>
+      <integration verdict="PASS">모든 모듈 통합 완료</integration>
+    </module_gates>
+    <evidence>
+      <pytest>tests/test_acceptance_comment_reuse_ad69.py — 10 passed in 0.07s</pytest>
+      <scope_lock>PASS — 모든 변경 파일이 scope_manifest 범위 내</scope_lock>
+      <backward_compat>PASS — 기존 gates accept/request-accept 시그니처 유지</backward_compat>
+    </evidence>
+    <quality_summary>
+      <security>PASS — gates accept 자동 실행 경로 없음, 최종 PASS는 반드시 gates accept 검증 경로를 따름</security>
+      <nonce_provenance>PASS — 기존 nonce/provenance/stale 검증 완화 없음</nonce_provenance>
+    </quality_summary>
+    <scope_lock_check>
+      <git_diff_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_comment_reuse_ad69.py</git_diff_files>
+      <manifest_files>pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_comment_reuse_ad69.py</manifest_files>
+      <extra_files>없음</extra_files>
+      <trust_root_violation>false</trust_root_violation>
+      <verdict>PASS</verdict>
+    </scope_lock_check>
+  </handover>
+</dev_handover>
