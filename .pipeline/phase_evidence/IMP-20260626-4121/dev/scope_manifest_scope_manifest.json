@@ -1,0 +1,124 @@
+{
+  "pipeline_id": "IMP-20260626-4121",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        ".claude/hooks/codex_user_acceptance_review.py"
+      ],
+      "affected_functions": [
+        "codex_user_acceptance_review.process_verdict",
+        "codex_user_acceptance_review._record_state",
+        "codex_user_acceptance_review._check_stale",
+        "codex_user_acceptance_review.main"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-8",
+            "AC-9"
+          ],
+          "changed_files": [
+            ".claude/hooks/codex_user_acceptance_review.py"
+          ],
+          "implementation_evidence": [
+            "process_verdict REJECT 원문 exit2 / _record_state codex_review_loop_state.json / _is_duplicate_reject 중복차단 / _check_stale APPROVED 재트리거 방지 / reject_count>5 REJECT_HALT / _approve_message nonce 미노출"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_codex_review_gate",
+        "pipeline._cmd_gates_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [
+            "AC-5",
+            "AC-6"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_check_codex_review_gate: no-file/REJECTED → codex_review_not_approved BLOCKED, head/packet 불일치 → codex_review_stale BLOCKED, 일치 → PASS (fail-closed) / cmd_gates accept ACCEPT 분기 선검사 배선 / 기존 provenance·nonce 검증 무손상"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": [
+        "N/A (문서 수정)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [
+            "AC-7"
+          ],
+          "changed_files": [
+            ".claude/agents/pipeline-manager-agent.md"
+          ],
+          "implementation_evidence": [
+            "pipeline-manager-agent.md에 '## Codex Review Loop 원칙 (IMP-20260626-4121)' 섹션 신규 추가 — REJECT 되먹임/APPROVE != User Acceptance/REJECT 5회 초과 자동 중단/status=APPROVED 없이 gates accept 시 codex_review_not_approved BLOCKED"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "tests/test_codex_review_loop_4121.py",
+        "tests/test_codex_review_hook_cd3c.py",
+        "tests/e2e/test_real_cli_paths.py",
+        "tests/oracles/IMP-20260626-4121/TC-REJECT-NORMAL/input.txt",
+        "tests/oracles/IMP-20260626-4121/TC-REJECT-NORMAL/expected.json",
+        "tests/oracles/IMP-20260626-4121/TC-DEDUPE-EDGE/input.txt",
+        "tests/oracles/IMP-20260626-4121/TC-DEDUPE-EDGE/expected.json"
+      ],
+      "affected_functions": [
+        "test_* (신규 테스트 함수들)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-5",
+            "AC-6",
+            "AC-8",
+            "AC-9"
+          ],
+          "changed_files": [
+            "tests/test_codex_review_loop_4121.py",
+            "tests/test_codex_review_hook_cd3c.py",
+            "tests/e2e/test_real_cli_paths.py"
+          ],
+          "implementation_evidence": [
+            "tests/test_codex_review_loop_4121.py 신규 16개 테스트 전부 PASS + oracle 2케이스(normal/edge)",
+            "tests/test_codex_review_hook_cd3c.py 신규 API로 갱신 16/16 PASS (Pipeline Manager 승인)",
+            "tests/e2e/test_real_cli_paths.py provenance ACCEPT 테스트에 codex APPROVED 픽스처 추가, assertion 약화 없음 (Pipeline Manager 승인)"
+          ]
+        }
+      ]
+    }
+  ]
+}
