@@ -17886,6 +17886,51 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             new_pr_body_sha256=_new_pr_body_sha256,
         )
 
+    # IMP-20260625-AD69 MT-2 (재작업): 기존 유효 PR 승인 댓글 자동 처리 (idempotent acceptance).
+    # 확인 위치를 pr_url 결정 직후 / nonce 재발급·packet 생성 전으로 이동한다.
+    # 이미 재사용 가능한 PENDING acceptance_request가 있고 사용자가 유효한
+    # ACCEPT-{pipeline_id} 단독 댓글을 남겼다면, 안내문만 출력하고 종료하지 않고
+    # gates accept 코드 경로를 subprocess로 재호출하여 acceptance를 실제로 완료한다.
+    # subprocess 재호출은 provenance/replay/stale/pr_body_sha256/packet_sha256 등
+    # gates accept의 모든 검증을 그대로 실행하므로 보안 검증을 우회하지 않는다.
+    # 새 nonce를 생성하지 않고 기존 acceptance_request.json의 nonce를 사용한다.
+    if (
+        reuse
+        and existing_req is not None
+        and pr_url
+        and str(existing_req.get("status", "")).upper() == "PENDING"
+        and str(existing_req.get("pipeline_id", "")) == pipeline_id
+        and str(existing_req.get("nonce", "") or "")
+    ):
+        _existing_nonce = str(existing_req.get("nonce", "") or "")
+        _existing_created_at = str(existing_req.get("created_at", "") or "")
+        _existing_comment = _find_existing_valid_acceptance_comment(
+            pr_url, pipeline_id, _existing_created_at
+        )
+        if _existing_comment is not None:
+            print()
+            print(
+                f"[기존 PR 승인 댓글 확인됨] comment_id={_existing_comment['comment_id']}, "
+                f"작성자={_existing_comment['author']}, 시각={_existing_comment['created_at']}"
+            )
+            print("유효한 승인 댓글을 확인했습니다 — gates accept를 자동 실행합니다.")
+            _log_event(
+                state,
+                f"acceptance request idempotent auto-accept: existing comment "
+                f"{_existing_comment['comment_id']} 확인 — gates accept 자동 실행",
+            )
+            _save(state)
+            _accept_code = f"ACCEPT-{pipeline_id}-{_existing_nonce}"
+            _accept_cmd = [
+                sys.executable, str(Path(__file__).resolve()),
+                "gates", "accept",
+                "--result", "ACCEPT",
+                "--evidence", evidence_str,
+                "--acceptance-code", _accept_code,
+            ]
+            _accept_result = subprocess.run(_accept_cmd)
+            sys.exit(_accept_result.returncode)
+
     if reuse and existing_req is not None:
         # 기존 코드 재사용: acceptance_request.json 유지, 표시만 업데이트
         req = existing_req
@@ -18056,35 +18101,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             f"  오류: {exc}\n"
             "  gates request-accept를 다시 실행하세요."
         )
-
-    # IMP-20260625-AD69 MT-2: 기존 유효 PR 승인 댓글 확인 (idempotent acceptance 지원).
-    # 사용자가 이미 유효한 ACCEPT-{pipeline_id} 단독 댓글을 남겼다면, 중복 승인 요청문을
-    # 재출력하지 않고 기존 gates accept 경로를 안내한 뒤 최소 고정 양식 출력을 생략한다.
-    # 최종 PASS 판정은 gates accept의 provenance/replay/stale 검증을 따른다.
-    _request_created_at = str(req.get("created_at", "") or "")
-    _existing_comment = (
-        _find_existing_valid_acceptance_comment(pr_url, pipeline_id, _request_created_at)
-        if pr_url else None
-    )
-    if _existing_comment is not None:
-        print()
-        print(
-            f"[기존 PR 승인 댓글 확인됨] comment_id={_existing_comment['comment_id']}, "
-            f"작성자={_existing_comment['author']}, 시각={_existing_comment['created_at']}"
-        )
-        print("기존 승인 댓글이 확인되었습니다. 다음 명령으로 gates accept를 실행하세요:")
-        print(
-            f"  python pipeline.py gates accept --result ACCEPT --evidence <증거파일> "
-            f"--acceptance-code ACCEPT-{pipeline_id}-<nonce>"
-        )
-        print("(nonce는 acceptance_request.json에서 확인 가능)")
-        _log_event(
-            state,
-            f"acceptance request idempotent reuse: existing comment "
-            f"{_existing_comment['comment_id']} 확인 — 중복 승인 요청 생략",
-        )
-        _save(state)
-        return  # 최소 고정 양식 출력 SKIP
 
     # IMP-20260624-069A MT-1: User Acceptance 최종 승인 요청문을 최소 고정 양식으로 통일.
     print()
