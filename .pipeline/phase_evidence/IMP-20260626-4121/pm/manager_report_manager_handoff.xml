@@ -2,9 +2,9 @@
 <manager_handoff>
   <pipeline_id>IMP-20260626-4121</pipeline_id>
   <from>pipeline-manager-agent</from>
-  <manager_run_id>pipeline_manager-18dc550aa6b6e008</manager_run_id>
-  <planner_run_id>pm_planner-1f9d325fa4fa5f9f</planner_run_id>
-  <step_plan_sha256>8229faf4b8efb6403b9417c4871bf015e44aafa549d9199c100979319d5827d5</step_plan_sha256>
+  <manager_run_id>pipeline_manager-67f97da7490de965</manager_run_id>
+  <planner_run_id>pm_planner-7479895ed9a51c0e</planner_run_id>
+  <step_plan_sha256>4bd9dc14f9d5fc82ce692e7a994da0834540940fff975009c552a60d9280f5b2</step_plan_sha256>
   <accepted_for_execution>true</accepted_for_execution>
   <will_not_modify_step_plan>true</will_not_modify_step_plan>
   <next_phase>dev</next_phase>

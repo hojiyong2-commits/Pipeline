@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <decomposition_audit>
-  <total_functions_identified>6</total_functions_identified>
+  <total_functions_identified>8</total_functions_identified>
   <micro_task_count>4</micro_task_count>
   <grep_executions>5</grep_executions>
   <split_decision>trust-root 파일(pipeline.py, agent MD) 수정이므로 HIGH_RISK 프로필 사용. hook 파일 수정(MT-1) + pipeline.py gate 추가(MT-2) + agent MD 원칙 추가(MT-3) + 테스트 파일 신규(MT-4)로 분할합니다.</split_decision>
   <audit_result>SPLIT_REQUIRED</audit_result>
+  <judgment_calls />
 </decomposition_audit>
 
 <step_plan>
@@ -20,8 +21,8 @@
     </uncertainty>
     <blast_radius>
       <expected_changed_files>4</expected_changed_files>
-      <expected_changed_functions>6</expected_changed_functions>
-      <expected_changed_lines>250</expected_changed_lines>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>350</expected_changed_lines>
     </blast_radius>
     <risk_flags>
       <data_deletion>false</data_deletion>
@@ -45,19 +46,19 @@
     <decision_questions>
       <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
         <user_facing_question>Codex Review Loop 상태 저장 위치를 어디로 할까요? (A) acceptance_request.json 내부에 codex_review 필드 추가 (B) 별도 .pipeline/codex_review_loop_state.json 파일</user_facing_question>
-        <evidence>기존 acceptance_request.json에 pr_head_sha, nonce, evidence_sha256 등 stale 검증 필드가 이미 있음</evidence>
-        <why_it_matters>단일 파일 관리로 stale 검증 통합 vs 별도 파일로 관심사 분리</why_it_matters>
-        <recommended_option>A</recommended_option>
+        <evidence>기존 acceptance_request.json에 pr_head_sha, nonce, evidence_sha256 등 stale 검증 필드가 이미 있음. 그러나 별도 파일을 사용하면 hook과 pipeline.py가 독립적으로 상태를 관리할 수 있습니다.</evidence>
+        <why_it_matters>상태 저장 위치는 유지보수성과 디버깅 용이성에 직접 영향을 미칩니다. 별도 파일을 사용하면 Codex Review 로직만 독립적으로 테스트하고 수정할 수 있으며, 기존 acceptance_request.json 스키마의 복잡도 증가를 방지할 수 있습니다.</why_it_matters>
+        <recommended_option>B</recommended_option>
         <options>
-          <option id="A"><label>acceptance_request.json 내부 codex_review 필드</label><benefit>단일 파일 관리, 기존 stale 검증과 자연스럽게 통합</benefit><cost>acceptance_request.json 스키마 확장</cost></option>
-          <option id="B"><label>별도 .pipeline/codex_review_loop_state.json</label><benefit>관심사 분리, hook 독립 관리</benefit><cost>두 파일 간 동기화 필요, stale 검증 로직 중복</cost></option>
+          <option id="A"><label>acceptance_request.json 내부 codex_review 필드</label><benefit>단일 파일 관리, 기존 stale 검증과 자연스럽게 통합</benefit><cost>acceptance_request.json 스키마 확장, 기존 검증 로직과 결합도 증가</cost></option>
+          <option id="B"><label>별도 .pipeline/codex_review_loop_state.json</label><benefit>관심사 분리로 hook과 pipeline.py가 독립적으로 상태 관리, 테스트 용이</benefit><cost>두 파일 간 동기화 필요, 상태 파일이 하나 더 추가됨</cost></option>
         </options>
-        <user_answer>A — acceptance_request.json에 codex_review 필드 추가 (단일 파일 관리, 기존 stale 검증과 통합)</user_answer>
+        <user_answer>B — 별도 .pipeline/codex_review_loop_state.json 파일 사용 (관심사 분리, PR 설명과 step 요구사항에서 이미 명시됨)</user_answer>
       </question>
       <question id="DQ-2" priority="P1" category="module_split" mt_id="MT-2">
         <user_facing_question>REJECT 최대 횟수를 몇 회로 설정할까요? (A) 기존 3회 유지 (B) 요청대로 5회로 상향</user_facing_question>
         <evidence>요청서에서 5회 초과 시 루프 중단 명시</evidence>
-        <why_it_matters>REJECT 한도가 낮으면 충분한 수정 기회 없이 루프가 조기 종료됩니다. 사용자 요구사항(5회)을 반영하여 재작업 기회를 충분히 확보합니다.</why_it_matters>
+        <why_it_matters>REJECT 한도가 낮으면 충분한 수정 기회 없이 루프가 조기 종료됩니다. 사용자 요구사항(5회)을 반영하여 재작업 기회를 충분히 확보하면서도, 무한 루프를 방지하는 균형점을 찾아야 합니다.</why_it_matters>
         <recommended_option>B</recommended_option>
         <options>
           <option id="A"><label>3회 유지</label><benefit>기존 코드 변경을 최소화하여 안정성 유지</benefit><cost>사용자 요구사항(5회) 미반영, 재작업 기회 제한</cost></option>
@@ -70,19 +71,19 @@
 
   <requirements>
     <requirement id="REQ-1">Codex REJECT 원문을 그대로 Claude Code에 되먹이기 (prefix/suffix/번역/요약 금지)</requirement>
-    <requirement id="REQ-2">Codex APPROVE_TO_USER 시 codex_review.status=APPROVED 상태 저장</requirement>
+    <requirement id="REQ-2">Codex APPROVE_TO_USER 시 codex_review_loop_state.json에 status=APPROVED 상태 저장</requirement>
     <requirement id="REQ-3">REJECT 5회 초과 시 루프 중단 + 사용자 개입 필요 보고</requirement>
     <requirement id="REQ-4">같은 head SHA + packet SHA + REJECT 사유 반복 시 중복 주입 차단</requirement>
     <requirement id="REQ-5">Codex APPROVE 전 gates accept 차단 (codex_review_not_approved)</requirement>
     <requirement id="REQ-6">APPROVED stale 시 gates accept 차단 (codex_review_stale)</requirement>
-    <requirement id="REQ-7">hook이 PR 댓글 작성 금지, gates accept 실행 금지</requirement>
-    <requirement id="REQ-8">사용자 표시 승인 코드에 nonce 없음 (ACCEPT-{pipeline_id} 형식)</requirement>
-    <requirement id="REQ-9">기존 provenance/replay/stale 검증 약화 금지</requirement>
+    <requirement id="REQ-7">pipeline-manager-agent.md에 Codex Review Loop 원칙 섹션 추가</requirement>
+    <requirement id="REQ-8">hook이 PR 댓글 작성 금지, gates accept 실행 금지</requirement>
+    <requirement id="REQ-9">사용자 표시 승인 코드에 nonce 없음 (ACCEPT-{pipeline_id} 형식)</requirement>
   </requirements>
 
   <micro_tasks>
     <micro_task id="MT-1">
-      <affected_function>codex_user_acceptance_review.process_verdict, codex_user_acceptance_review._record_dedupe, codex_user_acceptance_review.main</affected_function>
+      <affected_function>codex_user_acceptance_review.process_verdict, codex_user_acceptance_review._record_state, codex_user_acceptance_review._check_stale, codex_user_acceptance_review.main</affected_function>
       <target_files>
         <file>.claude/hooks/codex_user_acceptance_review.py</file>
       </target_files>
@@ -90,33 +91,33 @@
         <site>codex_user_acceptance_review.main</site>
       </affected_call_sites>
       <grep_evidence>
-        <pattern>def process_verdict|_MAX_REJECT</pattern>
-        <match_count>4</match_count>
+        <pattern>def process_verdict|_MAX_REJECT|_record_dedupe</pattern>
+        <match_count>6</match_count>
         <executed>true</executed>
       </grep_evidence>
-      <change_summary>_MAX_REJECT를 5로 변경, APPROVE 시 acceptance_request.json에 codex_review 상태 저장 로직 추가, REJECT 원문 그대로 출력 보장, 중복 주입 차단 로직 강화 (head SHA + packet SHA + REJECT 사유 조합 기반)</change_summary>
-      <line_estimate>80</line_estimate>
-      <covers_ac>AC-1, AC-2, AC-3, AC-4</covers_ac>
+      <change_summary>_MAX_REJECT를 5로 변경, APPROVE 시 별도 codex_review_loop_state.json에 상태 저장 로직 추가, REJECT 원문 그대로 출력 보장, 중복 주입 차단 로직 강화 (head SHA + packet SHA + REJECT 사유 조합 기반)</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-8, AC-9</covers_ac>
     </micro_task>
     <micro_task id="MT-2">
-      <affected_function>pipeline.py gates accept 블록 (라인 19138 부근)</affected_function>
+      <affected_function>pipeline._check_codex_review_gate, pipeline._cmd_gates_accept</affected_function>
       <target_files>
         <file>pipeline.py</file>
       </target_files>
       <affected_call_sites>
-        <site>pipeline.py:19138 (if action == "accept")</site>
+        <site>cmd_gates (gates accept 분기)</site>
       </affected_call_sites>
       <grep_evidence>
-        <pattern>action == "accept"</pattern>
-        <match_count>1</match_count>
+        <pattern>def cmd_gates|action == "accept"</pattern>
+        <match_count>2</match_count>
         <executed>true</executed>
       </grep_evidence>
-      <change_summary>gates accept 시작 직후 codex_review 검증 추가 — acceptance_request.json에서 codex_review.status 확인, APPROVED가 아니면 codex_review_not_approved BLOCKED, APPROVED의 pr_head_sha/pr_body_sha256/packet_sha256가 stale면 codex_review_stale BLOCKED</change_summary>
-      <line_estimate>60</line_estimate>
+      <change_summary>_check_codex_review_gate 함수 신규 작성, gates accept 시작 직후 codex_review_loop_state.json 검증 추가 — APPROVED가 아니면 codex_review_not_approved BLOCKED, APPROVED의 head_sha/packet_sha가 stale면 codex_review_stale BLOCKED</change_summary>
+      <line_estimate>80</line_estimate>
       <covers_ac>AC-5, AC-6</covers_ac>
     </micro_task>
     <micro_task id="MT-3">
-      <affected_function>pipeline-manager-agent.md 섹션 추가</affected_function>
+      <affected_function>N/A (문서 수정)</affected_function>
       <target_files>
         <file>.claude/agents/pipeline-manager-agent.md</file>
       </target_files>
@@ -124,16 +125,16 @@
         <site>none</site>
       </affected_call_sites>
       <grep_evidence>
-        <pattern>CODEX 검토 필요</pattern>
-        <match_count>1</match_count>
+        <pattern>Codex Review Loop</pattern>
+        <match_count>0</match_count>
         <executed>true</executed>
       </grep_evidence>
-      <change_summary>Codex Review Loop 원칙 섹션 추가 — REJECT는 재작업 피드백으로 원문 그대로 사용, APPROVE 전 사용자 승인 요청 금지, Codex APPROVE는 User Acceptance가 아니며 최종 ACCEPT는 사용자가 PR 댓글에 직접 입력해야 함</change_summary>
-      <line_estimate>30</line_estimate>
+      <change_summary>Codex Review Loop 원칙 섹션 추가 — REJECT는 재작업 피드백으로 원문 그대로 사용, APPROVE 전 사용자 승인 요청 금지, Codex APPROVE는 User Acceptance가 아니며 최종 ACCEPT는 사용자가 PR 댓글에 직접 입력해야 함, 5회 상한 설명</change_summary>
+      <line_estimate>40</line_estimate>
       <covers_ac>AC-7</covers_ac>
     </micro_task>
     <micro_task id="MT-4">
-      <affected_function>tests/test_codex_review_loop_4121.py 신규</affected_function>
+      <affected_function>test_* (신규 테스트 함수들)</affected_function>
       <target_files>
         <file>tests/test_codex_review_loop_4121.py</file>
       </target_files>
@@ -145,8 +146,8 @@
         <match_count>0</match_count>
         <executed>true</executed>
       </grep_evidence>
-      <change_summary>최소 12개 테스트 — REJECT 원문 피드백, 중복 주입 차단, APPROVE 상태 저장, head SHA/packet SHA 변경 시 재검토 허용, stale 검증, PR 댓글 미작성, gates accept 미실행, nonce 미노출, 기존 provenance/replay/stale 유지</change_summary>
-      <line_estimate>80</line_estimate>
+      <change_summary>최소 12개 테스트 — REJECT 원문 피드백, 중복 주입 차단, APPROVE 상태 저장, head SHA/packet SHA 변경 시 재검토 허용, stale 검증, PR 댓글 미작성, gates accept 미실행, nonce 미노출</change_summary>
+      <line_estimate>110</line_estimate>
       <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-8, AC-9</covers_ac>
     </micro_task>
   </micro_tasks>
@@ -156,30 +157,54 @@
       <text>Codex REJECT 응답이 원문 그대로 Claude Code에 되먹여진다 (prefix/suffix/번역/요약 없음). 예: "REJECT - PR 본문에 AC-3 검증 증거가 누락" 원문이 그대로 주입됨</text>
     </criterion>
     <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
-      <text>Codex APPROVE_TO_USER 시 acceptance_request.json에 codex_review 블록이 저장된다: required=true, status=APPROVED, pr_head_sha, pr_body_sha256, packet_sha256, approved_at 타임스탬프</text>
+      <text>Codex APPROVE_TO_USER 시 .pipeline/codex_review_loop_state.json에 status=APPROVED, head_sha, packet_sha, approved_at 타임스탬프가 저장된다</text>
     </criterion>
     <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
-      <text>REJECT 5회 초과 시 루프가 중단되고 "6회 연속 반려... 사용자 개입이 필요합니다" 메시지가 출력된다</text>
+      <text>REJECT 5회 초과 시 루프가 중단되고 "6회 연속 반려... 사용자 개입이 필요합니다" 메시지가 출력된다 (needs_user_intervention=true)</text>
     </criterion>
     <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
-      <text>같은 head SHA + packet SHA + REJECT 사유 조합이 반복되면 중복 주입이 차단된다 (dedupe)</text>
+      <text>같은 head SHA + packet SHA + REJECT 사유 조합이 반복되면 중복 주입이 차단된다 (이미 검토됨 메시지 출력)</text>
     </criterion>
     <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
-      <text>Codex APPROVE 전 gates accept 실행 시 failure_code=codex_review_not_approved로 BLOCKED된다</text>
+      <text>codex_review_loop_state.json에 status=APPROVED가 없으면 gates accept 실행 시 failure_code=codex_review_not_approved로 BLOCKED된다</text>
     </criterion>
     <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
-      <text>APPROVED 상태의 pr_head_sha/pr_body_sha256/packet_sha256가 현재 값과 다르면 failure_code=codex_review_stale로 BLOCKED된다</text>
+      <text>APPROVED 상태의 head_sha 또는 packet_sha가 현재 값과 다르면 failure_code=codex_review_stale로 BLOCKED된다</text>
     </criterion>
     <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
-      <text>pipeline-manager-agent.md에 "Codex Review Loop" 원칙 섹션이 추가되어 있다</text>
+      <text>pipeline-manager-agent.md에 "Codex Review Loop" 원칙 섹션이 추가되어 있다 — REJECT 되먹임, APPROVE 필수, stale 검사, 5회 상한 설명 포함</text>
     </criterion>
     <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
-      <text>hook이 PR 댓글을 작성하지 않고 (post_pr_comment: False), pipeline.py gates accept를 실행하지 않는다 (run_gates_accept: False)</text>
+      <text>hook이 PR 댓글을 작성하지 않고 (post_pr_comment=false), pipeline.py gates accept를 실행하지 않는다 (run_gates_accept=false)</text>
     </criterion>
     <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
-      <text>사용자 표시 승인 코드는 ACCEPT-{pipeline_id} 형식이며 nonce가 노출되지 않는다</text>
+      <text>사용자 표시 승인 코드는 ACCEPT-{pipeline_id} 형식이며 nonce가 노출되지 않는다 (CLI 내부 검증용 nonce는 acceptance_request.json에만 보존)</text>
     </criterion>
   </acceptance_criteria>
+
+  <oracle_design>
+    <oracle_directory>tests/oracles/IMP-20260626-4121/</oracle_directory>
+    <cases>
+      <case id="normal_reject" kind="normal">
+        <input_file>tests/oracles/IMP-20260626-4121/normal_reject/input.json</input_file>
+        <expected_file>tests/oracles/IMP-20260626-4121/normal_reject/expected.json</expected_file>
+        <description>REJECT 응답이 원문 그대로 출력되는 정상 케이스</description>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="edge_approve" kind="edge">
+        <input_file>tests/oracles/IMP-20260626-4121/edge_approve/input.json</input_file>
+        <expected_file>tests/oracles/IMP-20260626-4121/edge_approve/expected.json</expected_file>
+        <description>APPROVE 시 상태 파일에 APPROVED가 저장되는 케이스</description>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="error_reject_limit" kind="error">
+        <input_file>tests/oracles/IMP-20260626-4121/error_reject_limit/input.json</input_file>
+        <expected_file>tests/oracles/IMP-20260626-4121/error_reject_limit/expected.json</expected_file>
+        <description>REJECT 5회 초과 시 사용자 개입 필요 메시지가 출력되는 케이스</description>
+        <expected_source>user_provided</expected_source>
+      </case>
+    </cases>
+  </oracle_design>
 
   <python_version>3.10 — 기존 프로젝트 Python 버전 유지</python_version>
 
@@ -188,21 +213,7 @@
     <item>hook에서 PR 댓글 작성</item>
     <item>hook에서 gates accept 실행</item>
     <item>사용자 표시 승인 코드에 nonce 포함</item>
+    <item>acceptance_request.json 스키마에 codex_review 필드 추가 (별도 파일 사용)</item>
     <item>TODO/placeholder/dummy 코드</item>
   </forbidden>
-
-  <dev_handover_notes>
-    <from>dev-agent</from>
-    <to>qa-agent</to>
-    <expected_status>READY_FOR_QA</expected_status>
-    <files>
-      <file>.claude/hooks/codex_user_acceptance_review.py</file>
-      <file>pipeline.py</file>
-      <file>.claude/agents/pipeline-manager-agent.md</file>
-      <file>tests/test_codex_review_loop_4121.py</file>
-    </files>
-    <evidence>MT-1~MT-4 구현 완료, pytest 통과</evidence>
-  </dev_handover_notes>
 </step_plan>
-
-<pipeline_manager_handoff>ready</pipeline_manager_handoff>
