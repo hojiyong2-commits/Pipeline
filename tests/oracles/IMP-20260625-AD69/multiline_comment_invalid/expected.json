@@ -1,0 +1,8 @@
+{
+  "description": "여러 줄 댓글 → strip 후 완전 일치 아님 → 불인정, 재사용 false",
+  "reuse_detected": false,
+  "gates_accept_path_taken": false,
+  "duplicate_request_shown": true,
+  "valid_comment": null,
+  "reason": "comment body is not exact match after strip (multiline/extra text)"
+}

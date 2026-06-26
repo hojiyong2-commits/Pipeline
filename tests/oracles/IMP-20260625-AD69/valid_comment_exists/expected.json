@@ -1,0 +1,11 @@
+{
+  "description": "유효 댓글 있음 → 재사용 detected, 중복 승인 요청 출력 없음, gates accept 경로 taken",
+  "reuse_detected": true,
+  "gates_accept_path_taken": true,
+  "duplicate_request_shown": false,
+  "valid_comment": {
+    "comment_id": "comment-001",
+    "author": "hojiyong2-commits",
+    "created_at": "2026-06-25T10:05:00Z"
+  }
+}

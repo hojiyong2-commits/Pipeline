@@ -1,0 +1,22 @@
+{
+  "description": "PR 댓글의 created_at이 acceptance_request.created_at 이전인 경우 — replay 공격 차단, 재사용 불가",
+  "pipeline_id": "IMP-20260625-AD69",
+  "acceptance_request": {
+    "pipeline_id": "IMP-20260625-AD69",
+    "request_id": "req-test-002",
+    "nonce": "TEST5678",
+    "status": "PENDING",
+    "created_at": "2026-06-25T12:00:00Z",
+    "evidence": "output.xlsx",
+    "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/999"
+  },
+  "pr_comments": [
+    {
+      "id": "comment-old",
+      "author": {"login": "hojiyong2-commits"},
+      "body": "ACCEPT-IMP-20260625-AD69",
+      "created_at": "2026-06-25T10:00:00Z"
+    }
+  ],
+  "allowed_approver": "hojiyong2-commits"
+}
