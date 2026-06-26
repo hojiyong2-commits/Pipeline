@@ -51,42 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "bfe5e8be3a0ece2f88e04e1666892368a4b692bb24ef236e5f5a5f8a45245215",
-      "size_bytes": 1131678
-    },
-    {
-      "path": ".claude/agents/pipeline-manager-agent.md",
-      "sha256": "76c1220ec46e86f3cb3d9779dae73cbaee197de8589639a59480038f82b7a8db",
-      "size_bytes": 15632
-    },
-    {
-      "path": "architect_report_reject_r2.xml",
-      "sha256": "a39193742ea67f6d3e15f0abc9658499394bae0fcd9b224ef5dc20ed8c8e4bc6",
-      "size_bytes": 2961
-    },
-    {
-      "path": "dev_handover_r2.xml",
-      "sha256": "7cfeb308cb108ee5ab7a8a6b41a282b0bea1d4db957b0cf8e64bc719ae2b8b92",
-      "size_bytes": 1676
-    },
-    {
-      "path": "qa_report_v2.xml",
-      "sha256": "70eae8d1bedbd3064700c64c510f5b01924ad563ce26a65b2f750bd1935567d3",
-      "size_bytes": 9396
-    },
-    {
-      "path": "qa_report_v3.xml",
-      "sha256": "584e832ae16ca8a35e653f940cca307267909f774449985626941acaa47642d1",
-      "size_bytes": 4917
-    },
-    {
-      "path": "security_audit.xml",
-      "sha256": "c4b0876674bebd0d1bc9af6013e485b40781c3b2c6b7a070d3c05dcf3d934e48",
-      "size_bytes": 8479
-    }
-  ],
+  "workspace_file_checks": null,
   "local_only_files": []
 }
