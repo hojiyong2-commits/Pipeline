@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260626-4121</pipeline_id>
+  <from>pipeline-manager-agent</from>
+  <manager_run_id>pipeline_manager-18dc550aa6b6e008</manager_run_id>
+  <planner_run_id>pm_planner-1f9d325fa4fa5f9f</planner_run_id>
+  <step_plan_sha256>8229faf4b8efb6403b9417c4871bf015e44aafa549d9199c100979319d5827d5</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+  <status>READY</status>
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 취향 질문(변수명, 함수명 스타일 등)은 묻지 않고 유지보수성 기준으로 처리했습니다.</filter_summary>
+  </design_confirmation>
+  <pipeline_manager_plan>
+    <phase_sequence>PM → Dev (MT-1~MT-4 순차) → QA → SEC(gh CLI 외부 API 포함) → Build(N/A meta-task) → Phase 7 외부 게이트 → Architect</phase_sequence>
+    <execution_profile>HIGH_RISK — trust-root 파일(pipeline.py, agent MD) 수정 포함</execution_profile>
+    <circuit_breaker>동일 failure_signature 2회 연속 FAIL → Phase 8 즉시 이관</circuit_breaker>
+    <scope_lock>각 module dev 기록 직전 git diff --name-only로 scope 검증 수행</scope_lock>
+    <key_constraints>
+      <constraint>gates accept 자동 실행 금지</constraint>
+      <constraint>nonce/provenance/stale 검증 강화 필수</constraint>
+      <constraint>기존 _check_pr_approver_provenance 등 검증 약화 금지</constraint>
+    </key_constraints>
+  </pipeline_manager_plan>
+  <micro_tasks>
+    <mt id="MT-1" file=".claude/hooks/codex_user_acceptance_review.py" function="process_verdict,_record_dedupe,main" covers_ac="AC-1,AC-2,AC-3,AC-4"/>
+    <mt id="MT-2" file="pipeline.py" function="_cmd_gates_accept,_check_codex_review_gate" covers_ac="AC-5,AC-6"/>
+    <mt id="MT-3" file=".claude/agents/pipeline-manager-agent.md" function="principle_addition" covers_ac="AC-7"/>
+    <mt id="MT-4" file="tests/test_codex_review_loop_4121.py" function="test_suite_12plus_cases" covers_ac="AC-1,AC-2,AC-3,AC-4,AC-5,AC-6,AC-8,AC-9"/>
+  </micro_tasks>
+</manager_handoff>
