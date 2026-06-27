@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260627-B221</pipeline_id>
+  <agent_run_id>qa-5223581a9b9bb503</agent_run_id>
+  <category_check>
+    <wa>N-A — 네트워크 호출(call_codex_cli/gh)은 subprocess 기반이며 본 BUG 범위는 fail-closed 상태 기록 보장. timeout=300s 적용, FileNotFoundError/TimeoutExpired/non-zero returncode 각각 분기 처리됨.</wa>
+    <ui>N-A — UI 위젯 없음 (hook 스크립트)</ui>
+    <fs>PASS — codex_review_loop_state.json은 _atomic_write_json(원자적 쓰기) 사용. 경로는 _project_pipeline_dir()로 산출(하드코딩 아님). 인코딩 fallback은 _read_text_with_fallback 사용.</fs>
+    <pd>PASS — 신규 헬퍼(_record_failed_state/_check_stale_processing/_write_hook_log) 단일 책임 분리. 시그니처 변경 없음. God class/UI import 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA 미채점. (보안 제약 별도 검증은 security_constraint_check 참조)</sec>
+    <al>PASS — _check_stale_processing: None 타입가드(TypeError), timeout_seconds&lt;=0(ValueError), started_at 누락/파싱불가 fail-safe(False), Z-suffix ISO 파싱. bare except 없음.</al>
+    <build>N-A — meta-task(hook 스크립트), EXE 빌드 대상 아님</build>
+    <vsce>N-A — category_tags에 VSCE 없음</vsce>
+  </category_check>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A — requests 호출 아님(subprocess.run timeout=300 단일 정수, CLI 호출 적합)</timeout_tuple>
+      <retry_3x>N-A — fail-closed 설계상 재시도 금지(보안 게이트)</retry_3x>
+      <error_branches_4>PASS — FileNotFoundError / TimeoutExpired / non-zero returncode / 호출부 RuntimeError·TypeError·ValueError 분기</error_branches_4>
+      <json_fallback>PASS — _get_pr_head_sha의 json.loads는 try/except JSONDecodeError로 fail-closed</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — 신규/수정 함수 전부 타입힌팅</type_hinting_all>
+      <widget_naming>N-A — UI 위젯 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — _record_state -> _atomic_write_json</atomic_write>
+      <encoding_fallback>PASS — _read_text_with_fallback 사용(기존 로직)</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로 없음(_project_pipeline_dir 고정)</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover evidence에 pytest 11 passed 기재</execution_check_present>
+    <execution_check_verdict>PASS — QA 재실행 결과 11 passed in 0.19s</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — _record_failed_state는 main() 5개 fail-closed 경로(pr_head_sha_failed/build_review_packet_failed/packet_sha256_failed/codex_call_failed/invalid_verdict)에서 실제 호출됨. PROCESSING 마커는 main() line 1002에서 started_at 기록.</functional_binding_verified>
+  </runtime_functional_check>
+  <security_constraint_check>
+    <acceptance_request_untouched>PASS — acceptance_request.json은 주석/docstring에만 등장(line 8,74,835,1039), 읽기/쓰기 코드 없음. 상태파일은 codex_review_loop_state.json 단독 사용.</acceptance_request_untouched>
+    <gates_accept_not_triggered>PASS — gates accept 실행 subprocess 없음. APPROVE 경로는 _approve_message 출력 + status=APPROVED 기록만 수행.</gates_accept_not_triggered>
+    <nonce_not_exposed>PASS — _approve_message는 ACCEPT-&lt;pipeline_id&gt; 형식만 출력, nonce 미노출. Codex 프롬프트에도 ACCEPT 코드 게시 금지 명시.</nonce_not_exposed>
+    <pr_comment_not_posted>PASS — gh pr comment 호출 없음</pr_comment_not_posted>
+    <codex_approve_not_auto_accept>PASS — Codex APPROVE_TO_USER는 loop_state APPROVED 기록 + 안내 메시지 출력만. User Acceptance(gates accept)는 별도 nonce 흐름 유지.</codex_approve_not_auto_accept>
+    <terminal_state_bypass>PASS — main() 외부 exit 경로 추가 없음. __main__은 sys.exit(main()) 단일 경로. 모든 fail-closed는 _record_failed_state 후 return 1.</terminal_state_bypass>
+  </security_constraint_check>
+  <c3_cross_verification>
+    <scope_files_declared>6</scope_files_declared>
+    <evidence_files_submitted>6</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — pipeline.py done --phase pm 통과(atomic_plan 6 micro_tasks 기록, audit_result=SPLIT_REQUIRED, current_phase가 pm 이후로 전이됨)</decomposition_audit_present>
+    <grep_evidence_present>PASS — PM 엔진 검증 통과(step_plan XML 기준; state에는 파싱된 files/affected_function만 저장)</grep_evidence_present>
+    <declared_functions>5</declared_functions>
+    <actual_modified_functions>5</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — diff hunk 전부 _record_state후행/_check_stale후행/call_codex_cli/_now_iso후행/main 범위 내</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <dead_code>
+    <symbol>codex_user_acceptance_review._check_stale_processing</symbol>
+    <defined_at>.claude/hooks/codex_user_acceptance_review.py:443</defined_at>
+    <call_sites>0 (production), 7 (unit tests)</call_sites>
+    <verdict>KEEP_REASON — PM step_plan MT-3가 명시적으로 정의한 PROCESSING stuck 감지 진단 헬퍼. 기존 _check_stale/_is_duplicate_reject와 동일한 상태 predicate 패턴. main()이 started_at 마커를 기록하여 데이터 계약 완비, pipeline.py(line 6668+ codex_review_loop_state 소비자)에서 향후 호출 가능. 완전 단위 테스트됨. 우발적 dead code 아님.</verdict>
+  </dead_code>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <numeric_score>120
+    <wa score="20" max="20">subprocess fail-closed 4분기 + json fallback 완비. requests 미사용 카테고리 특성상 timeout 단일정수/재시도금지는 보안 설계 의도로 적합. 견고성 만점.</wa>
+    <ui score="0" max="0">N/A — UI 없음</ui>
+    <fs score="20" max="20">원자적 쓰기 + 인코딩 fallback + 고정 경로(traversal N/A) 충족</fs>
+    <pd score="10" max="10">모듈분리 5(단일책임 헬퍼 3개) / 인터페이스계약 5(타입힌팅 전수, 시그니처 불변)</pd>
+    <al score="20" max="20">0/음수 timeout ValueError, None TypeError, started_at fail-safe, 타입가드 전수. bare except 없음.</al>
+    <build score="0" max="0">N/A — meta-task</build>
+    <sec score="0" max="0">Phase 5 전담 — 미채점 (보안 제약은 security_constraint_check 전수 PASS)</sec>
+    <total score="70" max="70"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+  </numeric_score>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음
+  </critical_issues>
+  <improvement_suggestions>
+    - _check_stale_processing은 현재 진단용으로만 정의됨. 향후 main() 진입 시 기존 PROCESSING stuck 상태를 능동 복구(예: 10분 초과 시 FAILED 재기록)하는 호출을 추가하면 자가 치유가 완성됨. (본 BUG 범위 밖, 별도 IMP 권장)
+  </improvement_suggestions>
+</qa_report>
