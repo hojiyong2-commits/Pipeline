@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-27T23:34:21Z",
+  "pipeline_id": "BUG-20260627-C81C",
+  "phase": "build",
+  "phase_status": "DONE",
+  "commit_hint": "c580c65f0ffd5afd8d1c4663dc9bd70c62a3f69a",
+  "state": {
+    "current_phase": "harness",
+    "phase_completed_at": "2026-06-27T23:34:18Z",
+    "report_file": null,
+    "evidence": "N/A"
+  },
+  "agent_run": {
+    "run_id": "build-e15da7d4c086ea84",
+    "phase": "build",
+    "agent_id": "build-agent",
+    "status": "COMPLETED",
+    "output_file": "build_report_C81C.xml",
+    "output_sha256": "8c6b8cbf2ed549ddb9778cc3620c653b243c61b57846b0c66166681954a6484d",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260627-C81C/build/agent_receipt_build-e15da7d4c086ea84.json",
+    "receipt_sha256": "b568c3632e7b187c84dbe8e18646c190bce4102b319d52bcc36fa69a80a6c0eb",
+    "used_by_phase": "build",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260627-C81C\\build\\build-e15da7d4c086ea84.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260627-C81C\\build\\build-e15da7d4c086ea84.json",
+      "path": ".pipeline/phase_evidence/BUG-20260627-C81C/build/agent_receipt_build-e15da7d4c086ea84.json",
+      "sha256": "b568c3632e7b187c84dbe8e18646c190bce4102b319d52bcc36fa69a80a6c0eb",
+      "size_bytes": 513,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [],
+  "local_only_files": []
+}
