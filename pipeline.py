@@ -6859,7 +6859,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             text=True,
             encoding="utf-8",
             timeout=300,
-            shell=(sys.platform == "win32"),
+            shell=(sys.platform == "win32"),  # nosec B602
         )
     except FileNotFoundError:
         _die(

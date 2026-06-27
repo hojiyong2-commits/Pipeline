@@ -1403,7 +1403,7 @@ def _write_codex_review_approved(
             "schema_version": 1,
             "pipeline_id": pipeline_id,
             "status": "APPROVED",
-            "pr_url": f"https://github.com/example/repo/pull/1",
+            "pr_url": "https://github.com/example/repo/pull/1",
             "pr_head_sha": pr_head_sha,
             "packet_sha256": packet_sha256,
             "pr_body_sha256": pr_body_sha256,

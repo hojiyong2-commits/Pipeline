@@ -96,7 +96,7 @@ def write_min_state(state_file: Path, pipeline_id: str) -> None:
         state_file: state.json 경로.
         pipeline_id: 파이프라인 ID.
     """
-    state = {
+    state: dict = {
         "version": "1.2.0",
         "pipeline_id": pipeline_id,
         "type": "IMP",
