@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dev_report>
+  <scope_declaration>
+    <files_to_create>tests/test_codex_review_loop_B221.py; tests/oracles/BUG-20260627-B221/normal_approve/input.json; tests/oracles/BUG-20260627-B221/normal_approve/expected.json; tests/oracles/BUG-20260627-B221/edge_codex_timeout/input.json; tests/oracles/BUG-20260627-B221/edge_codex_timeout/expected.json</files_to_create>
+    <files_to_modify>.claude/hooks/codex_user_acceptance_review.py (call_codex_cli, main, _write_hook_log/_record_failed_state/_check_stale_processing 신규)</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>Grep call_codex_cli(1 caller main); _check_stale_processing(0건 신규); _write_hook_log(0건 신규)</searched>
+      <decision>EXTEND — 기존 hook 함수 수정 + 신규 헬퍼 추가</decision>
+    </reuse_search>
+    <out_of_scope>pipeline.py _check_codex_review_gate(읽기만, 호환 확인), worktree/pipeline_outputs 복사본</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-1,MT-2,MT-3</micro_task_id>
+    <target_function>codex_user_acceptance_review.call_codex_cli; .main; ._check_stale_processing</target_function>
+    <upstream_callers>
+      <caller location="codex_user_acceptance_review.py:main">call_codex_cli 호출(1곳, try/except 호환)</caller>
+      <caller location="__main__">sys.exit(main())</caller>
+      <caller location="tests/test_codex_review_loop_B221.py">main, _check_stale_processing 호출(신규 테스트)</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>subprocess.run</dep>
+      <dep>_record_state / _now_iso / _write_hook_log</dep>
+      <dep>datetime.fromisoformat</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>.pipeline/codex_review_loop_state.json — PROCESSING 진입 시 write, fail-closed 경로마다 FAILED write, APPROVED/REJECTED 기존 유지</mutation>
+      <mutation>stderr — best-effort 로깅 (메인 로직 영향 없음)</mutation>
+      <mutation>_check_stale_processing — none (pure function)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 모든 기존 함수 시그니처 불변</signature_change>
+      <breaking_change>NO — exit code 보존(1/0/2), APPROVED 5필드(pr_body_sha256 포함) 기록 유지로 _check_codex_review_gate 통과 보존</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — tests/test_codex_review_loop_B221.py 11 tests</test_coverage>
+      <rollback_strategy>git checkout .claude/hooks/codex_user_acceptance_review.py</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>.claude/hooks/codex_user_acceptance_review.py; tests/test_codex_review_loop_B221.py; tests/oracles/BUG-20260627-B221/**</git_diff_files>
+    <manifest_files>.claude/hooks/codex_user_acceptance_review.py; tests/test_codex_review_loop_B221.py; 4 oracle JSON</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260627-B221</pipeline_id>
+    <phase>dev</phase>
+    <status>DONE</status>
+    <files_changed>
+      <file>.claude/hooks/codex_user_acceptance_review.py</file>
+      <file>tests/test_codex_review_loop_B221.py</file>
+      <file>tests/oracles/BUG-20260627-B221/normal_approve/input.json</file>
+      <file>tests/oracles/BUG-20260627-B221/normal_approve/expected.json</file>
+      <file>tests/oracles/BUG-20260627-B221/edge_codex_timeout/input.json</file>
+      <file>tests/oracles/BUG-20260627-B221/edge_codex_timeout/expected.json</file>
+    </files_changed>
+    <evidence>
+      <file>dev_handover.xml</file>
+      <file>integration_report.xml</file>
+      <detail>py_compile OK; import OK; pytest tests/test_codex_review_loop_B221.py 11 passed; gates secrets PASS; 모든 MT module gate PASS + integration PASS</detail>
+    </evidence>
+  </handover>
+</dev_report>
