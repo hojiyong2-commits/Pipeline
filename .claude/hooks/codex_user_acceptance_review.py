@@ -1075,9 +1075,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=os.environ.get("CLAUDE_HOOK_TRANSCRIPT_PATH", ""),
         help="transcript 파일 경로 (JSONL 또는 텍스트). 생략 가능.",
     )
+    parser.add_argument(
+        "--stdin-json",
+        nargs="?",
+        default="",
+        help="PS1 래퍼가 전달하는 stdin JSON 문자열 (Claude Code Stop hook 데이터).",
+    )
     args = parser.parse_args(argv)
 
     transcript_path = (args.transcript or "").strip()
+    stdin_json_str = (getattr(args, "stdin_json", None) or "").strip()
+
+    # --stdin-json에서 transcript_path 추출 시도 (transcript 인자가 없을 때 fallback)
+    if not transcript_path and stdin_json_str:
+        try:
+            stdin_data = json.loads(stdin_json_str)
+            fallback = stdin_data.get("transcript_path", "")
+            if fallback and Path(fallback).exists():
+                transcript_path = str(fallback)
+        except (json.JSONDecodeError, TypeError, OSError):
+            pass
+
     if not transcript_path:
         # transcript 없음 — pipeline_id 폴백으로 FAILED 기록 시도
         _fallback_record_no_transcript("transcript_path_empty")

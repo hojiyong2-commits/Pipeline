@@ -415,3 +415,20 @@ class TestHotfix4:
         src = _read_text(_HOOK_PATH)
         pattern = _re.compile(r"except\s+Exception\s*(?:as\s+\w+)?\s*:\s*\n\s*pass\b")
         assert pattern.search(src) is None, "hook에 except Exception: pass 패턴 잔존"
+
+
+def test_ps1_reads_stdin_not_env_var():
+    """PS1 래퍼가 환경변수 대신 stdin JSON으로 transcript_path를 읽는지 검증."""
+    import re as _re
+    ps1_path = Path(__file__).parent.parent / ".claude" / "hooks" / "codex-user-acceptance-review.ps1"
+    assert ps1_path.exists(), f"PS1 파일 없음: {ps1_path}"
+    src = ps1_path.read_text(encoding="utf-8")
+    # 환경변수 CLAUDE_HOOK_TRANSCRIPT_PATH 읽기가 없어야 함
+    assert "CLAUDE_HOOK_TRANSCRIPT_PATH" not in src, \
+        "PS1이 여전히 CLAUDE_HOOK_TRANSCRIPT_PATH 환경변수를 읽습니다"
+    # stdin 읽기가 있어야 함
+    assert "$input" in src or "stdin" in src.lower(), \
+        "PS1이 stdin을 읽지 않습니다"
+    # transcript_path 추출이 있어야 함
+    assert "transcript_path" in src, \
+        "PS1이 transcript_path를 추출하지 않습니다"
