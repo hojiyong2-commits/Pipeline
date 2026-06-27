@@ -455,16 +455,22 @@ def _is_duplicate_reject(
 
 
 def _check_stale(
-    state: Dict[str, Any], pr_head_sha: str, packet_sha256: str
+    state: Dict[str, Any],
+    pr_head_sha: str,
+    packet_sha256: str,
+    pipeline_id: str = "",
 ) -> bool:
-    """기존 APPROVED 상태가 현재 head/packet과 같아 재호출 불필요인지 판정.
+    """기존 APPROVED 상태가 현재 head/packet/pipeline_id와 같아 재호출 불필요인지 판정.
 
     동일 (pr_head_sha, packet_sha256)로 이미 APPROVED면 True (재트리거 방지).
+    pipeline_id가 주어지면 pipeline_id 일치까지 확인하여, 다른 파이프라인의
+    APPROVED 상태를 stale로 오판하는 것을 차단한다.
 
     Args:
         state: 로드된 loop state dict.
         pr_head_sha: 현재 PR head 커밋 SHA.
         packet_sha256: 현재 packet SHA-256.
+        pipeline_id: 현재 파이프라인 ID (빈 문자열이면 비교 생략 — 하위 호환).
     Returns:
         같은 APPROVED 상태가 유효(stale 아님)하면 True, 아니면 False.
     Raises:
@@ -477,12 +483,16 @@ def _check_stale(
     for name, val in (
         ("pr_head_sha", pr_head_sha),
         ("packet_sha256", packet_sha256),
+        ("pipeline_id", pipeline_id),
     ):
         if val is None:
             raise TypeError(f"{name} must not be None")
         if not isinstance(val, str):
             raise TypeError(f"{name} must be str, got {type(val).__name__}")
     if state.get("status") != "APPROVED":
+        return False
+    # pipeline_id가 주어진 경우 불일치하면 stale 아님 (다른 파이프라인의 APPROVED)
+    if pipeline_id and str(state.get("pipeline_id", "")) != pipeline_id:
         return False
     return (
         str(state.get("pr_head_sha", "")) == pr_head_sha
@@ -936,6 +946,120 @@ def _record_failed_state(
         pass  # 기록 실패는 hook 실패의 이유가 되지 않음
 
 
+def _read_pipeline_id_from_env() -> Optional[str]:
+    """acceptance_request.json 또는 active pipeline state에서 pipeline_id를 읽는다.
+
+    transcript 없이 hook이 실행될 때 FAILED 상태를 기록하기 위한 폴백용.
+
+    우선순위:
+    1. .pipeline/acceptance_request.json의 pipeline_id 필드
+    2. PIPELINE_STATE_PATH 환경변수가 가리키는 state.json의 pipeline_id
+    3. .pipeline/active_run.json -> runs/<id>/state.json의 pipeline_id
+    4. legacy pipeline_state.json의 active_pipeline_id
+
+    Returns:
+        pipeline_id 문자열 또는 None (읽기 실패 시).
+    """
+    try:
+        pipeline_dir = _project_pipeline_dir()
+
+        # 1. acceptance_request.json
+        accept_req = pipeline_dir / "acceptance_request.json"
+        if accept_req.exists():
+            raw = _read_text_with_fallback(accept_req)
+            data = json.loads(raw)
+            pid = data.get("pipeline_id")
+            if pid and isinstance(pid, str):
+                return pid
+
+        # 2. PIPELINE_STATE_PATH 환경변수
+        env_state = os.environ.get("PIPELINE_STATE_PATH")
+        if env_state:
+            sp = Path(env_state)
+            if sp.exists():
+                raw = _read_text_with_fallback(sp)
+                data = json.loads(raw)
+                pid = data.get("pipeline_id")
+                if pid and isinstance(pid, str):
+                    return pid
+
+        # 3. active_run.json -> runs/<id>/state.json
+        active_ptr = pipeline_dir / "active_run.json"
+        if active_ptr.exists():
+            raw = _read_text_with_fallback(active_ptr)
+            ptr = json.loads(raw)
+            state_path_str = ptr.get("state_path")
+            if state_path_str:
+                sp = Path(state_path_str)
+                if sp.exists():
+                    raw = _read_text_with_fallback(sp)
+                    data = json.loads(raw)
+                    pid = data.get("pipeline_id")
+                    if pid and isinstance(pid, str):
+                        return pid
+
+        # 4. legacy pipeline_state.json
+        legacy = _project_root() / "pipeline_state.json"
+        if legacy.exists():
+            raw = _read_text_with_fallback(legacy)
+            data = json.loads(raw)
+            pid = data.get("pipeline_id") or data.get("active_pipeline_id")
+            if pid and isinstance(pid, str):
+                return pid
+    except Exception:
+        pass
+    return None
+
+
+def _fallback_record_no_transcript(failure_code: str) -> None:
+    """transcript 없을 때 pipeline_id 폴백으로 FAILED 상태를 기록한다.
+
+    pipeline_id를 읽을 수 없으면 조용히 무시한다.
+
+    Args:
+        failure_code: 기록할 실패 코드.
+    """
+    try:
+        pipeline_id = _read_pipeline_id_from_env()
+        if not pipeline_id:
+            return
+        pipeline_dir = _project_pipeline_dir()
+        state_path = pipeline_dir / _LOOP_STATE_FILENAME
+
+        # 기존 상태가 현재 pipeline_id와 다를 때만 FAILED 기록
+        # (같은 pipeline_id로 이미 APPROVED/REJECTED/FAILED이면 덮어쓰지 않음)
+        existing = _load_loop_state(state_path)
+        if existing.get("pipeline_id") == pipeline_id:
+            # 이미 현재 pipeline_id로 기록된 상태가 있으면 덮어쓰지 않음
+            return
+
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": failure_code,
+                "message": (
+                    f"hook이 transcript 없이 실행됨 ({failure_code}). "
+                    "5요소 승인 요청 블록을 감지할 수 없습니다."
+                ),
+                "failed_at": _now_iso(),
+            },
+        )
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "started_at": _now_iso(),
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": failure_code,
+                "message": "transcript 없음",
+            },
+        )
+    except Exception:
+        pass  # 폴백 기록 실패는 조용히 무시
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """hook 진입점. transcript에서 승인 블록 탐지 후 Codex 검토를 수행.
 
@@ -960,12 +1084,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     transcript_path = (args.transcript or "").strip()
     if not transcript_path:
-        # transcript 없음 — 조용히 종료 (정상)
+        # transcript 없음 — pipeline_id 폴백으로 FAILED 기록 시도
+        _fallback_record_no_transcript("transcript_path_empty")
         return 0
 
     tpath = Path(transcript_path)
     if not tpath.exists():
-        # transcript 파일 없음 — 조용히 종료 (정상)
+        # transcript 파일 없음 — pipeline_id 폴백으로 FAILED 기록 시도
+        _fallback_record_no_transcript("transcript_file_missing")
         return 0
 
     try:
@@ -985,6 +1111,31 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     pipeline_dir = _project_pipeline_dir()
     state_path = pipeline_dir / _LOOP_STATE_FILENAME
+
+    # PROCESSING 기록 전에 직전 상태를 먼저 읽는다 (중복 PROCESSING 판정 및
+    # stale APPROVED 판정에는 이번 hook이 쓰기 전의 상태가 필요하기 때문이다).
+    prior_state = _load_loop_state(state_path)
+    prior_status = prior_state.get("status", "")
+    prior_pid = prior_state.get("pipeline_id", "")
+
+    # 같은 pipeline_id로 이미 PROCESSING 중이면 중복 실행 차단 (재호출 방지).
+    if prior_status == "PROCESSING" and prior_pid == pipeline_id:
+        return 0
+
+    # 5요소 감지 즉시 pipeline_id 기준으로 PROCESSING 상태 기록 (관찰성). 이전
+    # 파이프라인의 APPROVED/REJECTED 상태가 남아있더라도 현재 pipeline_id로 덮어쓴다.
+    try:
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "PROCESSING",
+                "pr_url": pr_url,
+                "started_at": _now_iso(),
+            },
+        )
+    except Exception:
+        pass  # 기록 실패는 조용히 무시
 
     # hook 진입 즉시 관찰 가능한 RUNNING 로그를 남긴다 (fail-closed 종료도 추적 가능).
     _write_hook_log(
@@ -1016,7 +1167,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
-    loop_state = _load_loop_state(state_path)
+    # PROCESSING으로 덮어쓰기 전의 직전 상태를 사용한다 (reject_count, 기존
+    # APPROVED/REJECTED 이력이 PROCESSING 기록으로 사라지지 않도록 prior_state 재사용).
+    loop_state = prior_state
 
     # packet 수집은 codex 호출과 SHA 산출 양쪽에 필요. 단, APPROVED 재트리거 방지
     # 판정에는 기존 packet_sha256과 비교가 필요하므로 packet을 먼저 수집한다.
@@ -1068,8 +1221,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
-    # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 같은 APPROVE 출력만.
-    if _check_stale(loop_state, head_sha, packet_sha256):
+    # 이미 같은 head/packet/pipeline_id로 APPROVED면 Codex CLI 재호출 없이 같은
+    # APPROVE 출력만. pipeline_id를 함께 전달하여 다른 파이프라인의 APPROVED를
+    # stale로 오판하지 않도록 한다.
+    if _check_stale(loop_state, head_sha, packet_sha256, pipeline_id):
         print(_render_approve(pipeline_id, pr_url))
         return 0
 
