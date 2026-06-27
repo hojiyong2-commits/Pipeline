@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260627-C81C",
+  "phase": "dev",
+  "agent_id": "dev-agent",
+  "run_id": "dev-d99fb4850a770fa7",
+  "status": "COMPLETED",
+  "started_at": "2026-06-27T22:46:00Z",
+  "completed_at": "2026-06-27T23:05:23Z",
+  "output_file": "dev_handover.xml",
+  "output_sha256": "4be00bafa1e9a9dc029144105fd7357c916d9e0c74b0385b70f843b06234ae41",
+  "evidence_files": [],
+  "commit_sha": "9acf3c661135a3d10fba590f2ebffb2057765435"
+}
