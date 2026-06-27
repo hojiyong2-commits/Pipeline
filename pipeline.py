@@ -18330,6 +18330,33 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     _spec.loader.exec_module(_renderer_mod)
     _render_pr = pr_url if pr_url else "(PR 링크 없음)"
     _render_mode = "user_final" if getattr(args, "no_codex_review", False) else "codex_review_required"
+
+    # IMP-20260627-3907 hotfix-7: machine-readable 모드 — JSON만 stdout 출력.
+    # Pipeline Manager가 codex_review_required_message 필드 값만 사용자에게 1회 전달하도록,
+    # 사람이 읽는 텍스트 출력 없이 JSON 1줄만 내보내고 early return 한다.
+    if getattr(args, "machine_readable", False):
+        result = {
+            "status": "success",
+            "pipeline_id": pipeline_id,
+            "pr_url": pr_url or "",
+            "accept_code": f"ACCEPT-{pipeline_id}",
+            "codex_review_required_message": _renderer_mod.render_user_acceptance_request(
+                mode="codex_review_required", pr_url=_render_pr, pipeline_id=pipeline_id
+            ),
+            "user_final_message": _renderer_mod.render_user_acceptance_request(
+                mode="user_final", pr_url=_render_pr, pipeline_id=pipeline_id
+            ),
+        }
+        print(json.dumps(result, ensure_ascii=False))
+        reused_label = "재사용" if reuse else "신규 발급"
+        _log_event(
+            state,
+            f"acceptance request {reused_label} (machine-readable): "
+            f"request_id={req['request_id']} nonce={nonce}",
+        )
+        _save(state)
+        return
+
     print()
     print(
         _renderer_mod.render_user_acceptance_request(
@@ -21487,6 +21514,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="기존 코드가 PENDING이고 조건이 같아도 새 코드를 강제 발급합니다.",
+    )
+    # IMP-20260627-3907 hotfix-7: --machine-readable — JSON 단독 출력 (Pipeline Manager 전용)
+    p_gate_req.add_argument(
+        "--machine-readable",
+        dest="machine_readable",
+        action="store_true",
+        default=False,
+        help="JSON 형식으로만 출력 (사람이 읽는 텍스트 출력 없음). Pipeline Manager 전용.",
     )
 
     p_gate_accept = gsub.add_parser("accept", help="Record user behavior acceptance")

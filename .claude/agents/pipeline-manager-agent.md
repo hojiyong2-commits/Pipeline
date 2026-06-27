@@ -218,6 +218,20 @@ PR URL이 없는 경우 `PR: (PR 링크 없음)` 으로 표시합니다.
 - 승인 요청문의 어떤 줄(헤더/PR 링크/승인 코드/CODEX 검토 필요)도 손으로 수정·추가·삭제하지
   않습니다. 양식 변경이 필요하면 `.claude/acceptance_renderer.py`를 수정하는 별도 IMP를 진행합니다.
 
+### `gates request-accept` 출력 규칙 (IMP-20260627-3907)
+
+`gates request-accept` 실행 시 반드시 `--machine-readable` 플래그를 사용합니다:
+
+```powershell
+python pipeline.py gates request-accept --evidence <경로> --machine-readable
+```
+
+JSON 결과에서 `codex_review_required_message` 필드 값만 사용자에게 정확히 **1회** 출력합니다.
+아래 행동은 금지됩니다:
+- "request-accept가 성공했습니다" 같은 설명 문구 추가
+- "renderer A형 출력을 그대로 전달합니다" 같은 안내 문구 추가
+- 같은 응답에 `사용자 승인 요청` 문구 2회 이상 포함
+
 ## External Gate 순서 (Phase 7)
 
 ```powershell

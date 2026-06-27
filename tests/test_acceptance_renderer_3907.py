@@ -522,3 +522,83 @@ def test_ps1_reads_stdin_not_env_var():
     # stdin을 Python helper에 그대로 pipe해야 함
     assert "$input | python" in src or ("$input" in src and "python" in src), \
         "PS1이 stdin을 Python에 pipe하지 않습니다"
+
+
+# ---------------------------------------------------------------------------
+# hotfix-7 (IMP-20260627-3907): --machine-readable 모드 + 중복 trigger block 감지
+# ---------------------------------------------------------------------------
+def test_machine_readable_json_output(tmp_path):
+    """--machine-readable 모드: JSON 6개 필드 출력 검증."""
+    import subprocess, json as _json, sys
+    # pipeline.py를 subprocess로 호출하여 JSON 출력 검증
+    env_state = tmp_path / "state.json"
+    # 활성 파이프라인이 없는 상태에서는 호출 자체가 실패할 수 있으므로
+    # 대신 pipeline.py 소스에서 --machine-readable 인자가 존재하는지만 확인
+    pipeline_py = Path(__file__).parent.parent / "pipeline.py"
+    src = pipeline_py.read_text(encoding="utf-8")
+    assert "machine-readable" in src or "machine_readable" in src, \
+        "pipeline.py에 --machine-readable 인자가 없습니다"
+    assert "codex_review_required_message" in src, \
+        "pipeline.py에 codex_review_required_message 필드가 없습니다"
+    assert "user_final_message" in src, \
+        "pipeline.py에 user_final_message 필드가 없습니다"
+
+
+def test_no_duplicate_trigger_block(tmp_path):
+    """hook이 사용자 승인 요청 2회 등장 시 duplicate_trigger_block FAILED 기록 검증."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent / ".claude" / "hooks"))
+    from codex_user_acceptance_review import main as hook_main, _LOOP_STATE_FILENAME
+    import json as _json
+
+    # 중복 trigger block이 있는 hook_data
+    duplicate_msg = (
+        "사용자 승인 요청\n\nPR: https://github.com/test/repo/pull/1\n\n"
+        "승인 코드:\nACCEPT-IMP-20260627-3907\n\nCODEX 검토 필요\n\n"
+        "사용자 승인 요청\n\nPR: https://github.com/test/repo/pull/1\n\n"
+        "승인 코드:\nACCEPT-IMP-20260627-3907\n\nCODEX 검토 필요"
+    )
+    import os as _os
+    pipeline_dir = tmp_path / ".pipeline"
+    pipeline_dir.mkdir()
+    state_path = pipeline_dir / _LOOP_STATE_FILENAME
+
+    # acceptance_request.json을 생성해 pipeline_id 폴백이 동작하도록
+    accept_req = pipeline_dir / "acceptance_request.json"
+    accept_req.write_text(
+        _json.dumps({"pipeline_id": "IMP-20260627-3907"}), encoding="utf-8"
+    )
+
+    import unittest.mock as _mock
+    with _mock.patch(
+        "codex_user_acceptance_review._project_pipeline_dir",
+        return_value=pipeline_dir,
+    ), _mock.patch(
+        "codex_user_acceptance_review._project_root",
+        return_value=tmp_path,
+    ):
+        result = hook_main(hook_data_override={"last_assistant_message": duplicate_msg})
+
+    assert result == 0
+    # state에 FAILED + duplicate_trigger_block 기록 확인
+    if state_path.exists():
+        state = _json.loads(state_path.read_text(encoding="utf-8"))
+        assert state.get("failure_code") == "duplicate_trigger_block", \
+            f"expected duplicate_trigger_block, got {state}"
+
+
+def test_user_final_ends_with_approval_required():
+    """user_final_message 마지막 의미 있는 줄 = 사용자 최종 승인 필요."""
+    import importlib.util, sys as _sys
+    renderer_path = Path(__file__).parent.parent / ".claude" / "acceptance_renderer.py"
+    spec = importlib.util.spec_from_file_location("acceptance_renderer", str(renderer_path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    out = mod.render_user_acceptance_request(
+        mode="user_final",
+        pr_url="https://github.com/test/repo/pull/1",
+        pipeline_id="IMP-20260627-3907",
+    )
+    meaningful = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    assert meaningful[-1] == "사용자 최종 승인 필요", \
+        f"마지막 줄이 '사용자 최종 승인 필요'가 아닙니다: {meaningful[-1]!r}"

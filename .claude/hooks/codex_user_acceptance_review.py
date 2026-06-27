@@ -1087,6 +1087,33 @@ def main(hook_data_override: Optional[Dict[str, Any]] = None) -> int:
     if not isinstance(last_message, str):
         last_message = ""
 
+    # IMP-20260627-3907 hotfix-7: 중복 trigger block 감지. 같은 메시지에 사용자 승인
+    # 요청이 2회 이상이면 delivery path 설계 결함(중복 안내)이므로 FAILED 기록 후 차단.
+    duplicate_count = last_message.count("사용자 승인 요청")
+    if duplicate_count >= 2:
+        pipeline_id_fallback = _read_pipeline_id_from_env()
+        if pipeline_id_fallback:
+            pipeline_dir_fb = _project_pipeline_dir()
+            state_path_fb = pipeline_dir_fb / _LOOP_STATE_FILENAME
+            _record_failed_state(
+                state_path_fb,
+                pipeline_id_fallback,
+                "duplicate_trigger_block",
+                f"last_assistant_message에 '사용자 승인 요청'이 {duplicate_count}회 감지됨. "
+                "단일 trigger block만 허용합니다.",
+            )
+            _write_hook_log(
+                pipeline_dir_fb,
+                {
+                    "started_at": _now_iso(),
+                    "pipeline_id": pipeline_id_fallback,
+                    "status": "FAILED",
+                    "failure_code": "duplicate_trigger_block",
+                    "message": f"중복 trigger block {duplicate_count}회",
+                },
+            )
+        return 0
+
     block = parse_acceptance_block(last_message)
     if block is None:
         # 5요소 없음 — fallback: pipeline_id로 FAILED 기록 시도 후 종료
