@@ -1,0 +1,94 @@
+<dev_report>
+  <scope_declaration>
+    <files_to_create>
+      .claude/codex_review_contract.md (MT-1),
+      tests/e2e/test_codex_review_gate_3bb6.py (MT-6),
+      tests/oracles/IMP-20260627-3BB6/* (사전 생성, 4 케이스)
+    </files_to_create>
+    <files_to_modify>
+      pipeline.py (MT-1~MT-4: 헬퍼/게이트/서브커맨드/문구),
+      .claude/settings.json (MT-5: hooks 블록 제거)
+    </files_to_modify>
+    <files_to_delete>
+      .claude/hooks/codex_user_acceptance_review.py (MT-5),
+      .claude/hooks/codex-user-acceptance-review.ps1 (MT-5),
+      tests/test_codex_review_loop_4121.py (MT-6)
+    </files_to_delete>
+    <scope_amendment_reason>
+      [Producer-Consumer Sync — PM step_plan 갱신 필요] MT-3 SSoT 전환 + MT-4 문구 교체 + MT-5 hook 삭제로
+      인해 아래 consumer 파일이 깨져 함께 수정/삭제했으나 PM target_files를 초과함:
+      - tests/e2e/test_real_cli_paths.py (수정): 구 codex_review_loop_state.json fixture → codex_review_result.json,
+        구 failure_code codex_review_stale → 신 codex_review_required/stale_codex_review 단언 갱신.
+      - tests/test_acceptance_request_format_069a.py (수정): "CODEX 검토 필요"→"Codex 검토 완료" 단언,
+        codex APPROVED fixture + gh shim + PIPELINE_GH_EXECUTABLE 격리 추가.
+      - tests/test_codex_review_hook_cd3c.py (삭제): 삭제된 hook helper 회귀 테스트(import 불가).
+      - tests/oracles/IMP-20260625-CD3C/* (삭제): 삭제된 hook helper 전용 oracle.
+      - pipeline.py _get_current_pr_head_sha (MT-3 내 부수): PIPELINE_GH_EXECUTABLE 지원 추가(다른 gh 헬퍼와
+        일관성 + codex gate 테스트 격리). Pipeline Manager의 PM step_plan target_files 갱신 요청.
+    </scope_amendment_reason>
+    <out_of_scope>실제 codex CLI 호출 동작(모킹으로 검증), 신규 의존성 추가</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-1~MT-6 (aggregate)</micro_task_id>
+    <target_function>
+      pipeline._load_codex_review_contract, _cmd_gates_codex_review, _parse_codex_verdict,
+      _codex_review_result_path, _check_codex_review_gate, _cmd_gates_request_accept(사전검증),
+      _get_current_pr_head_sha(PIPELINE_GH_EXECUTABLE)
+    </target_function>
+    <upstream_callers>
+      <caller location="cmd_gates">gates codex-review → _cmd_gates_codex_review; gates request-accept → _check_codex_review_gate 사전검증</caller>
+      <caller location="gates accept ACCEPT">_check_codex_review_gate 재확인</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>subprocess(codex CLI, gh CLI)</dep>
+      <dep>hashlib.sha256</dep>
+      <dep>_load_acceptance_request</dep>
+      <dep>_packet_output_path</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>codex_review_result.json — write (gates codex-review)</mutation>
+      <mutation>event_log — append (_log_event)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — _check_codex_review_gate 시그니처 유지(내부 SSoT만 전환)</signature_change>
+      <breaking_change>YES — failure_code 변경(codex_review_stale→stale_codex_review 등), consumer 테스트 동기화 완료</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — tests/e2e/test_codex_review_gate_3bb6.py 5 케이스</test_coverage>
+      <rollback_strategy>git revert; loop_state.json SSoT 복원 + hook/settings 복구</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>IMP-20260627-3BB6</pipeline_id>
+    <summary>
+      Stop hook 기반 Codex Review Loop를 제거하고 명시적 gates codex-review hard gate로 전환 완료.
+      MT-1~MT-6 전 모듈 QA PASS + integration PASS. codex_review_result.json SSoT, loop_state.json 의존 제거,
+      Stop hook 파일/등록 삭제, "Codex 검토 완료" 문구, Real CLI Path E2E 5 케이스.
+    </summary>
+    <files>
+      pipeline.py(수정), .claude/codex_review_contract.md(신규), .claude/settings.json(수정),
+      tests/e2e/test_codex_review_gate_3bb6.py(신규),
+      .claude/hooks/codex_user_acceptance_review.py(삭제), .claude/hooks/codex-user-acceptance-review.ps1(삭제),
+      tests/test_codex_review_loop_4121.py(삭제),
+      [scope amendment] tests/e2e/test_real_cli_paths.py(수정), tests/test_acceptance_request_format_069a.py(수정),
+      tests/test_codex_review_hook_cd3c.py(삭제), tests/oracles/IMP-20260625-CD3C/*(삭제)
+    </files>
+    <evidence>
+      py_compile pipeline.py 통과; import pipeline 성공.
+      pytest tests/e2e/test_codex_review_gate_3bb6.py → 5 passed.
+      pytest tests/e2e/test_real_cli_paths.py → 16 passed, 3 skipped.
+      pytest tests/test_acceptance_request_format_069a.py → 6 passed (clean env: stale 루트 packet 제거 시).
+      pytest tests/test_codex_review.py → 통과.
+      grep "CODEX 검토 필요" pipeline.py → 0건. codex_review_loop 기능 의존 0건(docstring만).
+    </evidence>
+    <known_constraints>
+      - 로컬 환경에 stale human_acceptance_packet.md(untracked, 다른 파이프라인 잔여)가 있으면 069a/일부
+        request-accept 테스트가 FINAL PACKET GATE에서 막힘. clean checkout(CI)에서는 정상 통과.
+      - codex CLI 실제 호출은 모킹으로 검증(E2E는 가짜 codex shim 사용).
+      - tests/e2e/test_ac_tracking_1abe.py의 일부 테스트는 baseline부터 pre-existing 실패(_validate_codex_coverage_checks
+        제거 + 로컬 packet 오염) — 본 IMP 범위 외.
+    </known_constraints>
+  </handover>
+</dev_report>
