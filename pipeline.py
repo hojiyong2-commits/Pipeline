@@ -6831,15 +6831,27 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     pr_url = _get_current_pr_url() or ""
     pr_head_sha = _get_current_pr_head_sha() or ""
 
-    # 2. packet_sha256 (human_acceptance_packet.md).
+    # 2. packet_sha256 (human_acceptance_packet.md) — fail-closed: 파일 없으면 차단.
     packet_path = _packet_output_path()
     packet_sha256 = _compute_file_sha256(str(packet_path)) or ""
+    if not packet_sha256:
+        _die(
+            "[BLOCKED] failure_code=codex_review_packet_missing\n"
+            "  human_acceptance_packet.md가 없거나 SHA 계산에 실패했습니다 (fail-closed).\n"
+            "  python pipeline.py report final-packet 을 먼저 실행하세요."
+        )
 
-    # 3. pr_body_sha256 (PR 본문).
+    # 3. pr_body_sha256 (PR 본문) — fail-closed: PR 본문 취득 실패 시 차단.
     pr_body = _get_pr_body_text() or ""
     pr_body_sha256 = (
         hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else ""
     )
+    if not pr_body_sha256:
+        _die(
+            "[BLOCKED] failure_code=codex_review_pr_body_missing\n"
+            "  PR 본문을 가져올 수 없습니다 (gh CLI 없음/실패, fail-closed).\n"
+            "  gh pr view 가 동작하는지 확인하세요."
+        )
 
     # 4b. 검토 프롬프트 구성 — contract 본문(금지사항/출력형식)을 그대로 포함.
     # contract가 요구하는 정보: PR 제목/본문/변경 파일/diff/CI 상태/패킷을 모두 포함한다.
@@ -7130,16 +7142,39 @@ def _check_codex_review_gate(
         }
 
     # packet_sha256 / pr_body_sha256 일치 검증.
-    # acceptance_request.json이 있으면 그 값을 기준으로 비교하고,
-    # 없으면 codex_review_result.json에 저장된 검토 시점 값을 현재 실제 파일 SHA와 비교한다.
-    # 이로써 Codex APPROVED 이후 PR 본문/패킷이 변경되면 request-accept를 차단한다.
+    # packet_sha256 / pr_body_sha256 일치 검증.
+    # IMP-20260627-3BB6 AC-5 fail-closed: stored SHA가 빈 문자열이면 검토 시점에
+    # packet/PR 본문을 취득하지 못한 것이므로 즉시 BLOCKED (재검토 필요).
     _req = _load_acceptance_request()
     stored_packet_sha = str(review.get("packet_sha256", "") or "")
     stored_body_sha = str(review.get("pr_body_sha256", "") or "")
+
+    # fail-closed: 빈 SHA는 검토 불완전 → stale_codex_review BLOCKED.
+    if not stored_packet_sha:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "stale_codex_review",
+            "message": (
+                "stale 필드: packet_sha256. codex_review_result.json의 packet_sha256이 "
+                "비어 있습니다 (검토 시점에 packet 파일을 취득하지 못했습니다, fail-closed). "
+                "report final-packet 실행 후 gates codex-review 를 다시 실행하세요."
+            ),
+        }
+    if not stored_body_sha:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "stale_codex_review",
+            "message": (
+                "stale 필드: pr_body_sha256. codex_review_result.json의 pr_body_sha256이 "
+                "비어 있습니다 (검토 시점에 PR 본문을 취득하지 못했습니다, fail-closed). "
+                "gh CLI 확인 후 gates codex-review 를 다시 실행하세요."
+            ),
+        }
+
     if _req is not None:
-        # acceptance_request.json 기준
+        # acceptance_request.json 기준 — 양쪽 값 모두 non-empty여야 비교 (fail-closed: 빈 값은 위에서 차단).
         req_packet_sha = str(_req.get("packet_sha256", "") or "")
-        if req_packet_sha and stored_packet_sha and req_packet_sha != stored_packet_sha:
+        if req_packet_sha and req_packet_sha != stored_packet_sha:
             return {
                 "status": "BLOCKED",
                 "failure_code": "stale_codex_review",
@@ -7150,7 +7185,7 @@ def _check_codex_review_gate(
                 ),
             }
         req_body_sha = str(_req.get("pr_body_sha256", "") or "")
-        if req_body_sha and stored_body_sha and req_body_sha != stored_body_sha:
+        if req_body_sha and req_body_sha != stored_body_sha:
             return {
                 "status": "BLOCKED",
                 "failure_code": "stale_codex_review",
@@ -7163,34 +7198,52 @@ def _check_codex_review_gate(
     else:
         # acceptance_request.json 없음 — codex_review_result.json 저장 시점 값과 현재 실제 값 비교.
         # 이로써 Codex APPROVED 이후 request-accept 전에 packet/PR 본문이 변경되는 우회를 차단한다.
-        if stored_packet_sha:
-            packet_path = _packet_output_path()
-            current_packet_sha = _compute_file_sha256(str(packet_path)) or ""
-            if current_packet_sha and stored_packet_sha != current_packet_sha:
-                return {
-                    "status": "BLOCKED",
-                    "failure_code": "stale_codex_review",
-                    "message": (
-                        "stale 필드: packet_sha256. Codex APPROVED 이후 "
-                        "human_acceptance_packet.md가 변경되었습니다. "
-                        "gates codex-review 를 다시 실행하세요."
-                    ),
-                }
-        if stored_body_sha:
-            pr_body = _get_pr_body_text() or ""
-            current_body_sha = (
-                hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else ""
-            )
-            if current_body_sha and stored_body_sha != current_body_sha:
-                return {
-                    "status": "BLOCKED",
-                    "failure_code": "stale_codex_review",
-                    "message": (
-                        "stale 필드: pr_body_sha256. Codex APPROVED 이후 "
-                        "PR 본문이 변경되었습니다. "
-                        "gates codex-review 를 다시 실행하세요."
-                    ),
-                }
+        packet_path = _packet_output_path()
+        current_packet_sha = _compute_file_sha256(str(packet_path)) or ""
+        if not current_packet_sha:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "stale_codex_review",
+                "message": (
+                    "stale 필드: packet_sha256. 현재 human_acceptance_packet.md를 "
+                    "읽을 수 없습니다 (fail-closed). "
+                    "report final-packet 실행 후 gates codex-review 를 다시 실행하세요."
+                ),
+            }
+        if stored_packet_sha != current_packet_sha:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "stale_codex_review",
+                "message": (
+                    "stale 필드: packet_sha256. Codex APPROVED 이후 "
+                    "human_acceptance_packet.md가 변경되었습니다. "
+                    "gates codex-review 를 다시 실행하세요."
+                ),
+            }
+        pr_body = _get_pr_body_text() or ""
+        current_body_sha = (
+            hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else ""
+        )
+        if not current_body_sha:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "stale_codex_review",
+                "message": (
+                    "stale 필드: pr_body_sha256. 현재 PR 본문을 가져올 수 없습니다 "
+                    "(gh CLI 없음/실패, fail-closed). "
+                    "gh pr view 확인 후 gates codex-review 를 다시 실행하세요."
+                ),
+            }
+        if stored_body_sha != current_body_sha:
+            return {
+                "status": "BLOCKED",
+                "failure_code": "stale_codex_review",
+                "message": (
+                    "stale 필드: pr_body_sha256. Codex APPROVED 이후 "
+                    "PR 본문이 변경되었습니다. "
+                    "gates codex-review 를 다시 실행하세요."
+                ),
+            }
 
     return {"status": "PASS"}
 

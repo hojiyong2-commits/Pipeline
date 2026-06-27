@@ -390,5 +390,61 @@ def test_tc5_stale_packet_sha_after_approve(tmp_path: Path) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# TC-6: APPROVED이나 packet_sha256 빈 값 → stale_codex_review BLOCKED (fail-closed)
+# ---------------------------------------------------------------------------
+
+def test_tc6_empty_packet_sha_blocked(tmp_path: Path) -> None:
+    """APPROVED이지만 packet_sha256="" → stale_codex_review BLOCKED (fail-closed).
+
+    AC-5 회귀 검증: _check_codex_review_gate()가 stored packet_sha256이 빈 문자열이면
+    "SHA 불일치로 간주" 하지 않고 fail-closed로 차단한다.
+
+    PIPELINE_STATE_PATH isolation + final_state assertion 포함.
+    """
+    state_file = tmp_path / "state.json"
+    pid = "IMP-20260627-3BB6"
+    write_min_state(state_file, pid)
+    env = make_env(state_file)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
+
+    # APPROVED이지만 packet_sha256=""로 기록된 result.json (빈 SHA fail-closed 검증)
+    result_file = codex_result_path(state_file)
+    result_file.parent.mkdir(parents=True, exist_ok=True)
+    result_file.write_text(json.dumps({
+        "schema_version": 1,
+        "pipeline_id": pid,
+        "status": "APPROVED",
+        "pr_head_sha": "",   # gh CLI 없으므로 current도 비어 일치 → pr_head_sha 검사 통과
+        "pr_body_sha256": "nonempty_body_sha",
+        "packet_sha256": "",  # 빈 문자열 — fail-closed 대상
+        "accept_code": f"ACCEPT-{pid}",
+        "reviewed_at": "2026-06-27T00:00:00Z",
+        "contract_sha256": "z",
+        "verdict": "APPROVE_TO_USER",
+    }, ensure_ascii=False), encoding="utf-8")
+
+    evidence = tmp_path / "result.xlsx"
+    evidence.write_text("dummy output", encoding="utf-8")
+
+    r = run_cli(["gates", "request-accept", "--evidence", str(evidence)], env=env)
+    assert r.returncode != 0, (
+        f"expected non-zero exit (empty packet_sha256 must be blocked), got 0\n"
+        f"stdout={r.stdout}\nstderr={r.stderr}"
+    )
+    combined = r.stdout + r.stderr
+    assert "stale_codex_review" in combined, (
+        f"expected stale_codex_review in output\n{combined}"
+    )
+
+    # final_state: acceptance_request.json이 발급되지 않아야 함
+    req_file = state_file.resolve().parent / "acceptance_request.json"
+    if req_file.exists():
+        final_state = json.loads(req_file.read_text(encoding="utf-8"))
+        assert final_state.get("status") != "PENDING" or final_state.get("pipeline_id") != pid, (
+            "빈 packet_sha256 상태에서 PENDING acceptance_request가 발급되면 안 됨"
+        )
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-x", "-q"]))
