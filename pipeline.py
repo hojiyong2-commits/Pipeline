@@ -6772,23 +6772,27 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         raise TypeError("raw must not be None")
     if not isinstance(raw, str):
         raise TypeError(f"raw must be str, got {type(raw).__name__}")
-    # 첫 비어 있지 않은 줄을 verdict 줄로 사용.
-    verdict_line = ""
+    # 모든 줄을 스캔하여 APPROVE_TO_USER 또는 REJECT - <사유> 패턴을 찾는다.
+    # codex exec가 "SUCCESS: The process with PID ... has been terminated." 등
+    # 시스템 메시지를 stdout에 먼저 출력할 수 있으므로 첫 줄만 보지 않고 전체를 스캔한다.
+    first_nonempty = ""
     for line in raw.splitlines():
-        if line.strip():
-            verdict_line = line.strip()
-            break
-    if verdict_line == "APPROVE_TO_USER":
-        return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
-    # REJECT - <사유> : "REJECT" 다음에 "-" 구분자 + 사유. 원문 그대로 저장.
-    reject_match = re.match(r"^REJECT\s*-\s*(.+)$", verdict_line, re.DOTALL)
-    if reject_match:
-        return {
-            "status": "REJECTED",
-            "verdict": verdict_line,
-            "reject_reason": verdict_line,  # 원문 전체(prefix 포함) 그대로 보존
-        }
-    return {"status": "INVALID", "verdict": verdict_line, "reject_reason": ""}
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not first_nonempty:
+            first_nonempty = stripped
+        if stripped == "APPROVE_TO_USER":
+            return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
+        reject_match = re.match(r"^REJECT\s*-\s*(.+)$", stripped, re.DOTALL)
+        if reject_match:
+            return {
+                "status": "REJECTED",
+                "verdict": stripped,
+                "reject_reason": stripped,  # 원문 전체(prefix 포함) 그대로 보존
+            }
+    # 어느 줄에도 verdict 패턴이 없으면 INVALID.
+    return {"status": "INVALID", "verdict": first_nonempty, "reject_reason": ""}
 
 
 def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> None:
@@ -6851,16 +6855,34 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "REJECT - <구체적 사유>) 중 하나로만 답하세요."
     )
 
-    # 5. codex CLI 호출 (Windows shell=True 필수).
+    # 5. codex CLI 호출.
+    # `codex exec -` 방식으로 stdin pipe를 통해 프롬프트를 전달:
+    #   - 프롬프트에 특수문자/줄바꿈이 있어도 안전 (shell 이스케이프 불필요).
+    #   - codex가 stdin을 closed pipe로 인식하여 "Reading additional input" 대기 없이 진행.
+    #   - Windows에서 `shell=True` + list args 조합의 이스케이프 문제 회피.
+    #   - POSIX에서도 동일한 코드패스 사용 가능.
     try:
-        result = subprocess.run(
-            ["codex", "exec", prompt],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=300,
-            shell=(sys.platform == "win32"),  # nosec B602
-        )
+        if sys.platform == "win32":
+            # Windows: shell=True 필수 (codex.ps1 — PowerShell 스크립트 래퍼).
+            # `-` 인자로 stdin에서 프롬프트를 읽도록 지정.
+            result = subprocess.run(
+                "codex exec -",
+                input=prompt,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=300,
+                shell=True,  # nosec B602
+            )
+        else:
+            result = subprocess.run(
+                ["codex", "exec", "-"],
+                input=prompt,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=300,
+            )
     except FileNotFoundError:
         _die(
             "[BLOCKED] failure_code=codex_cli_not_found\n"
