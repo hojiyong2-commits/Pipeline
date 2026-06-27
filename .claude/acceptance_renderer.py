@@ -31,11 +31,30 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Tuple
 
-# 허용되는 mode 값 (화이트리스트). 그 외는 ValueError.
-_VALID_MODES: Tuple[str, str] = ("codex_review_required", "user_final")
-
 # 인코딩 fallback 순서 (FS.encoding: utf-8 단독 금지)
 _ENCODINGS: Tuple[str, ...] = ("utf-8", "utf-8-sig", "cp949", "latin-1")
+
+# A형 literal 템플릿 (CODEX 검토 필요 포함)
+_CODEX_REVIEW_REQUIRED_TEMPLATE = """\
+사용자 승인 요청
+
+PR: {pr_url}
+
+승인 코드:
+ACCEPT-{pipeline_id}
+
+CODEX 검토 필요"""
+
+# B형 literal 템플릿 (사용자 최종 승인 필요)
+_USER_FINAL_TEMPLATE = """\
+사용자 승인 요청
+
+PR: {pr_url}
+
+승인 코드:
+ACCEPT-{pipeline_id}
+
+사용자 최종 승인 필요"""
 
 
 def render_user_acceptance_request(mode: str, pr_url: str, pipeline_id: str) -> str:
@@ -67,28 +86,18 @@ def render_user_acceptance_request(mode: str, pr_url: str, pipeline_id: str) -> 
     if len(pipeline_id.strip()) == 0:
         raise ValueError("pipeline_id must not be empty")
 
-    # mode 화이트리스트 검증 (fail-closed)
-    if mode not in _VALID_MODES:
-        raise ValueError(
-            f"mode must be one of {_VALID_MODES}, got {mode!r}"
-        )
-
-    lines = [
-        "사용자 승인 요청",
-        "",
-        f"PR: {pr_url}",
-        "",
-        "승인 코드:",
-        f"ACCEPT-{pipeline_id}",
-    ]
     if mode == "codex_review_required":
-        lines.append("")
-        lines.append("CODEX 검토 필요")
-    else:  # user_final (B형): 마지막 줄은 사용자 최종 승인 필요
-        lines.append("")
-        lines.append("사용자 최종 승인 필요")
-
-    return "\n".join(lines)
+        return _CODEX_REVIEW_REQUIRED_TEMPLATE.format(
+            pr_url=pr_url, pipeline_id=pipeline_id
+        )
+    elif mode == "user_final":
+        return _USER_FINAL_TEMPLATE.format(
+            pr_url=pr_url, pipeline_id=pipeline_id
+        )
+    else:
+        raise ValueError(
+            f"알 수 없는 mode: {mode!r}. 허용값: codex_review_required, user_final"
+        )
 
 
 def load_contract(contract_path: str) -> str:

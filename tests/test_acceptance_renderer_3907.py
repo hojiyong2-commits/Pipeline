@@ -620,3 +620,92 @@ def test_pm_result_no_approval_block():
     # (MD 내 예시 코드 블록에 '완료: pipeline_id=' 패턴이 있어야 함)
     assert "완료: pipeline_id=" in agent_md_src, \
         "pipeline-manager-agent.md에 승인 블록 없는 result 예시가 없습니다"
+
+
+# ---------------------------------------------------------------------------
+# IMP-20260627-3907 재작업: exact snapshot 테스트 (literal expected 기반)
+# ---------------------------------------------------------------------------
+
+def test_a_form_exact_snapshot():
+    """A형 출력이 정확한 literal과 일치한다."""
+    expected = (
+        "사용자 승인 요청\n\n"
+        "PR: https://example.com/pull/1\n\n"
+        "승인 코드:\n"
+        "ACCEPT-IMP-TEST\n\n"
+        "CODEX 검토 필요"
+    )
+    result = rn.render_user_acceptance_request(
+        "codex_review_required", "https://example.com/pull/1", "IMP-TEST"
+    )
+    assert result == expected
+
+
+def test_b_form_exact_snapshot():
+    """B형 출력이 정확한 literal과 일치한다."""
+    expected = (
+        "사용자 승인 요청\n\n"
+        "PR: https://example.com/pull/1\n\n"
+        "승인 코드:\n"
+        "ACCEPT-IMP-TEST\n\n"
+        "사용자 최종 승인 필요"
+    )
+    result = rn.render_user_acceptance_request(
+        "user_final", "https://example.com/pull/1", "IMP-TEST"
+    )
+    assert result == expected
+
+
+def test_a_form_last_line():
+    """codex_review_required 마지막 의미있는 줄 = 'CODEX 검토 필요'."""
+    result = rn.render_user_acceptance_request(
+        "codex_review_required", "https://example.com/pull/1", "IMP-TEST"
+    )
+    meaningful = [ln.strip() for ln in result.splitlines() if ln.strip()]
+    assert meaningful[-1] == "CODEX 검토 필요"
+
+
+def test_b_form_last_line():
+    """user_final 마지막 의미있는 줄 = '사용자 최종 승인 필요'."""
+    result = rn.render_user_acceptance_request(
+        "user_final", "https://example.com/pull/1", "IMP-TEST"
+    )
+    meaningful = [ln.strip() for ln in result.splitlines() if ln.strip()]
+    assert meaningful[-1] == "사용자 최종 승인 필요"
+
+
+def test_duplicate_trigger_block_fail(tmp_path):
+    """hook이 '사용자 승인 요청' 2회 포함 메시지 시 duplicate_trigger_block FAILED 기록."""
+    import json as _json
+    import sys as _sys
+    import unittest.mock as _mock
+    import importlib.util as _ilu
+
+    spec = _ilu.spec_from_file_location("hook_dtb_test", str(_HOOK_PATH))
+    cx = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(cx)
+
+    duplicate_msg = (
+        "사용자 승인 요청\n\nPR: https://github.com/test/repo/pull/1\n\n"
+        "승인 코드:\nACCEPT-IMP-20260627-3907\n\nCODEX 검토 필요\n\n"
+        "사용자 승인 요청\n\nPR: https://github.com/test/repo/pull/1\n\n"
+        "승인 코드:\nACCEPT-IMP-20260627-3907\n\nCODEX 검토 필요"
+    )
+    pipeline_dir = tmp_path / ".pipeline"
+    pipeline_dir.mkdir()
+    state_path = pipeline_dir / cx._LOOP_STATE_FILENAME
+
+    accept_req = pipeline_dir / "acceptance_request.json"
+    accept_req.write_text(
+        _json.dumps({"pipeline_id": "IMP-20260627-3907"}), encoding="utf-8"
+    )
+
+    with _mock.patch.object(cx, "_project_pipeline_dir", return_value=pipeline_dir), \
+         _mock.patch.object(cx, "_project_root", return_value=tmp_path):
+        rc = cx.main(hook_data_override={"last_assistant_message": duplicate_msg})
+
+    assert rc == 0
+    assert state_path.exists(), "loop_state.json이 생성되지 않았습니다"
+    state = _json.loads(state_path.read_text(encoding="utf-8"))
+    assert state.get("failure_code") == "duplicate_trigger_block", \
+        f"expected duplicate_trigger_block, got {state.get('failure_code')!r}"
