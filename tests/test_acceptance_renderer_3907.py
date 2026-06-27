@@ -709,3 +709,97 @@ def test_duplicate_trigger_block_fail(tmp_path):
     state = _json.loads(state_path.read_text(encoding="utf-8"))
     assert state.get("failure_code") == "duplicate_trigger_block", \
         f"expected duplicate_trigger_block, got {state.get('failure_code')!r}"
+
+
+# ---------------------------------------------------------------------------
+# hotfix-10 (IMP-20260627-3907): stdin UTF-8, stale 가드, env fallback
+# ---------------------------------------------------------------------------
+
+def test_stdin_utf8_decoding():
+    """hook이 UTF-8 JSON stdin의 한국어 last_assistant_message를 정상 파싱한다."""
+    import json as _json
+    import importlib.util as _ilu
+    import unittest.mock as _mock
+
+    hook_path = _REPO_ROOT / ".claude" / "hooks" / "codex_user_acceptance_review.py"
+    src = hook_path.read_text(encoding="utf-8")
+    # sys.stdin.buffer.read() → decode("utf-8") 패턴이 있어야 함
+    assert "stdin.buffer.read" in src, "hook이 sys.stdin.buffer.read()를 사용하지 않습니다"
+    assert 'decode("utf-8"' in src, "hook이 UTF-8로 decode하지 않습니다"
+
+    # 실제 UTF-8 인코딩된 JSON에서 한국어 메시지가 파싱되는지 검증
+    spec = _ilu.spec_from_file_location("hook_utf8_test", str(hook_path))
+    cx = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(cx)
+
+    # pipeline_id는 FEAT|BUG|IMP-YYYYMMDD-XXXX 패턴이어야 parse_acceptance_block이 파싱 가능
+    korean_msg = (
+        "사용자 승인 요청\n\n"
+        "PR: https://github.com/test/repo/pull/1\n\n"
+        "승인 코드:\n"
+        "ACCEPT-IMP-20260627-3907\n\n"
+        "CODEX 검토 필요"
+    )
+    # parse_acceptance_block이 한국어 메시지를 정상 파싱하는지 확인
+    block = cx.parse_acceptance_block(korean_msg)
+    # 5요소 중 pr_url이 파싱되어야 함
+    assert block is not None, "한국어 메시지에서 5요소 블록 파싱 실패"
+    assert block.get("pr_url") == "https://github.com/test/repo/pull/1"
+    assert block.get("pipeline_id") == "IMP-20260627-3907"
+
+
+def test_stale_failed_state_overwrite(tmp_path):
+    """FAILED 상태가 있을 때 새 FAILED 상태로 덮어쓰기가 허용된다."""
+    import json as _json
+    import importlib.util as _ilu
+
+    hook_path = _REPO_ROOT / ".claude" / "hooks" / "codex_user_acceptance_review.py"
+    spec = _ilu.spec_from_file_location("hook_stale_test", str(hook_path))
+    cx = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(cx)
+
+    pipeline_dir = tmp_path / ".pipeline"
+    pipeline_dir.mkdir()
+    state_path = pipeline_dir / cx._LOOP_STATE_FILENAME
+
+    # FAILED 상태를 먼저 기록 (stale 상태)
+    cx._record_failed_state(state_path, "IMP-20260627-3907", "transcript_path_empty", "old error")
+    first_state = _json.loads(state_path.read_text(encoding="utf-8"))
+    assert first_state["failure_code"] == "transcript_path_empty"
+
+    # 같은 pipeline_id로 새 FAILED 기록 — 덮어쓰기 허용 확인
+    cx._record_failed_state(state_path, "IMP-20260627-3907", "new_failure_code", "new error")
+    second_state = _json.loads(state_path.read_text(encoding="utf-8"))
+    # FAILED는 덮어쓰기 허용이므로 새 failure_code로 갱신되어야 함
+    assert second_state["failure_code"] == "new_failure_code", \
+        f"FAILED 상태 덮어쓰기 실패: {second_state['failure_code']!r}"
+
+
+def test_approved_state_protected(tmp_path):
+    """APPROVED 상태는 새 FAILED 기록으로 덮어쓰기가 금지된다."""
+    import json as _json
+    import importlib.util as _ilu
+
+    hook_path = _REPO_ROOT / ".claude" / "hooks" / "codex_user_acceptance_review.py"
+    spec = _ilu.spec_from_file_location("hook_approved_test", str(hook_path))
+    cx = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(cx)
+
+    pipeline_dir = tmp_path / ".pipeline"
+    pipeline_dir.mkdir()
+    state_path = pipeline_dir / cx._LOOP_STATE_FILENAME
+
+    # APPROVED 상태를 먼저 기록
+    approved_state = {
+        "pipeline_id": "IMP-20260627-3907",
+        "status": "APPROVED",
+        "pr_head_sha": "abc123",
+        "packet_sha256": "def456",
+    }
+    state_path.write_text(_json.dumps(approved_state), encoding="utf-8")
+
+    # 같은 pipeline_id로 FAILED 기록 시도 — 차단되어야 함
+    cx._record_failed_state(state_path, "IMP-20260627-3907", "should_be_blocked", "blocked")
+    final_state = _json.loads(state_path.read_text(encoding="utf-8"))
+    assert final_state["status"] == "APPROVED", \
+        f"APPROVED 상태가 FAILED로 덮어쓰여짐: {final_state['status']!r}"

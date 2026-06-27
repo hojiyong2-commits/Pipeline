@@ -1019,12 +1019,13 @@ def _fallback_record_no_transcript(failure_code: str) -> None:
         pipeline_dir = _project_pipeline_dir()
         state_path = pipeline_dir / _LOOP_STATE_FILENAME
 
-        # 기존 상태가 현재 pipeline_id와 다를 때만 FAILED 기록
-        # (같은 pipeline_id로 이미 APPROVED/REJECTED/FAILED이면 덮어쓰지 않음)
+        # 기존 상태가 현재 pipeline_id이고 APPROVED/REJECTED이면 덮어쓰지 않음
+        # FAILED/PROCESSING/STALE_PROCESSING은 덮어쓰기 허용 (stale 영구화 방지)
         existing = _load_loop_state(state_path)
         if existing.get("pipeline_id") == pipeline_id:
-            # 이미 현재 pipeline_id로 기록된 상태가 있으면 덮어쓰지 않음
-            return
+            protected_statuses = {"APPROVED", "REJECTED"}
+            if existing.get("status") in protected_statuses:
+                return  # APPROVED/REJECTED만 보호
 
         _record_state(
             state_path,
@@ -1077,9 +1078,11 @@ def main(hook_data_override: Optional[Dict[str, Any]] = None) -> int:
         hook_data = hook_data_override
     else:
         try:
-            raw = sys.stdin.read()
+            raw_bytes = sys.stdin.buffer.read()
+            raw = raw_bytes.decode("utf-8", errors="replace")
             hook_data = json.loads(raw) if raw.strip() else {}
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError, ValueError) as e:
+            sys.stderr.write(f"[hook] stdin 읽기/파싱 실패: {e}\n")
             hook_data = {}
 
     # last_assistant_message에서 직접 5요소 패턴 감지
@@ -1091,7 +1094,11 @@ def main(hook_data_override: Optional[Dict[str, Any]] = None) -> int:
     # 요청이 2회 이상이면 delivery path 설계 결함(중복 안내)이므로 FAILED 기록 후 차단.
     duplicate_count = last_message.count("사용자 승인 요청")
     if duplicate_count >= 2:
-        pipeline_id_fallback = _read_pipeline_id_from_env()
+        # message 안의 ACCEPT- 코드에서 pipeline_id 직접 파싱 (env fallback보다 우선)
+        accept_match = _ACCEPT_CODE_RE.search(last_message)
+        pipeline_id_fallback = (
+            _extract_pipeline_id(accept_match.group(0)) if accept_match else None
+        ) or _read_pipeline_id_from_env()
         if pipeline_id_fallback:
             pipeline_dir_fb = _project_pipeline_dir()
             state_path_fb = pipeline_dir_fb / _LOOP_STATE_FILENAME
