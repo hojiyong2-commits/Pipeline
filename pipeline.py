@@ -13169,19 +13169,24 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
         gate_status["acceptance"] = "PENDING"
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
-    # ci_head_sha: github_actions.head_sha (acceptance_request 또는 JSON 파일에서)
+    # ci_head_sha: 우선순위 순서로 취득:
+    # 1. acceptance_request.json의 github_ci_head_sha (request-accept 기록 시점)
+    # 2. gh CLI로 현재 CI run의 head SHA 직접 조회 (stale JSON 순환 참조 방지)
+    # 3. PR head SHA fallback (CI run과 같은 커밋이면 동일)
     ci_head_sha = ""
     if isinstance(acceptance_request, dict):
         ci_head_sha = str(acceptance_request.get("github_ci_head_sha", "") or "")
-    if not ci_head_sha:
-        # human_acceptance_packet.json에서 읽기 시도
+    if not ci_head_sha and ci_run_id:
+        # gh CLI로 직접 조회 (human_acceptance_packet.json 순환 참조 방지)
         try:
-            _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
-            if _vj_path.exists():
-                _vj = json.loads(_vj_path.read_text(encoding="utf-8", errors="replace"))
-                ci_head_sha = str(_vj.get("github_actions", {}).get("head_sha", "") or "")
-        except (OSError, json.JSONDecodeError):
+            _ci_sha_result = _get_ci_run_head_sha(ci_run_id)
+            if _ci_sha_result:
+                ci_head_sha = str(_ci_sha_result)
+        except Exception:  # nosec B110
             pass
+    if not ci_head_sha:
+        # pr_head_sha fallback (동일 커밋인 경우 충분)
+        ci_head_sha = pr_head_sha
 
     # verification_json_sha256: human_acceptance_packet.json SHA-256
     vj_sha256 = ""
