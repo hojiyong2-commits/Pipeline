@@ -6755,12 +6755,31 @@ def _codex_review_result_path() -> Path:
     return PIPELINE_CI_DIR / "codex_review_result.json"
 
 
+# Codex CLI 런타임이 stdout에 출력하는 알려진 시스템 메시지 패턴.
+# AI 모델 출력과 구별하기 위해 이 패턴으로 시작하는 줄은 verdict 평가에서 제외한다.
+# 계약은 "AI 출력 첫 줄"을 말하며 Codex CLI 런타임 메시지는 해당하지 않는다.
+_CODEX_CLI_SYSTEM_PREFIXES = (
+    "SUCCESS: ",
+    "WARNING: ",
+    "INFO: ",
+    "ERROR: ",
+    "Codex CLI",
+    "✓",
+    "●",
+    "◎",
+)
+
+
 def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
     """Codex CLI 출력에서 verdict를 파싱한다.
 
     계약(codex_review_contract.md) 규정: "출력 첫 줄은 정확히 APPROVE_TO_USER 또는
-    REJECT - <사유> 형식이어야 한다." 따라서 첫 의미 있는 줄(공백 줄 제외)만 평가하며,
-    그 줄이 올바른 형식이 아니면 INVALID로 처리한다. 후속 줄에 verdict가 있어도 무시.
+    REJECT - <사유> 형식이어야 한다." 따라서 첫 의미 있는 비-시스템 줄만 평가하며,
+    그 줄이 올바른 형식이 아니면 INVALID로 처리한다.
+
+    Codex CLI 런타임 시스템 메시지(_CODEX_CLI_SYSTEM_PREFIXES)는 AI 출력이 아니므로
+    제외한다. AI 출력의 첫 줄(시스템 메시지 제외 후)이 verdict 판정 대상이다.
+    후속 AI 출력 줄에 verdict가 있어도 무시(prefix 우회 방지).
 
     Args:
         raw: codex CLI stdout 텍스트.
@@ -6773,26 +6792,29 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         raise TypeError("raw must not be None")
     if not isinstance(raw, str):
         raise TypeError(f"raw must be str, got {type(raw).__name__}")
-    # 계약 규정: 첫 의미 있는 줄(공백 줄 제외)만 허용한다.
-    # 후속 줄에 verdict가 있어도 INVALID — prefix 출력 우회를 방지한다.
-    first_nonempty = ""
+    # Codex CLI 시스템 메시지를 제외하고 첫 의미 있는 AI 출력 줄을 찾는다.
+    # 후속 줄에 verdict가 있어도 INVALID — AI prefix 출력 우회를 방지한다.
+    first_ai_line = ""
     for line in raw.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        first_nonempty = stripped
-        break  # 첫 의미 있는 줄만 평가
-    if first_nonempty == "APPROVE_TO_USER":
+        # CLI 런타임 시스템 메시지는 건너뜀
+        if any(stripped.startswith(p) for p in _CODEX_CLI_SYSTEM_PREFIXES):
+            continue
+        first_ai_line = stripped
+        break  # 첫 비-시스템 줄만 평가
+    if first_ai_line == "APPROVE_TO_USER":
         return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
-    reject_match = re.match(r"^REJECT\s*-\s*(.+)$", first_nonempty, re.DOTALL)
+    reject_match = re.match(r"^REJECT\s*-\s*(.+)$", first_ai_line, re.DOTALL)
     if reject_match:
         return {
             "status": "REJECTED",
-            "verdict": first_nonempty,
-            "reject_reason": first_nonempty,  # 원문 전체(prefix 포함) 그대로 보존
+            "verdict": first_ai_line,
+            "reject_reason": first_ai_line,  # 원문 전체(prefix 포함) 그대로 보존
         }
-    # 첫 줄이 올바른 형식이 아니면 INVALID.
-    return {"status": "INVALID", "verdict": first_nonempty, "reject_reason": ""}
+    # 첫 AI 출력 줄이 올바른 형식이 아니면 INVALID.
+    return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
 
 
 def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> None:

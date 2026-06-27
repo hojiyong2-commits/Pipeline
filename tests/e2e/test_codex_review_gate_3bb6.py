@@ -596,11 +596,13 @@ def test_tc7_prompt_contains_real_diff(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_tc8_prefix_output_is_invalid(tmp_path: Path) -> None:
-    """codex가 시스템 메시지 + APPROVE_TO_USER 출력 시 INVALID → exit 1.
+    """codex AI가 설명 prefix + APPROVE_TO_USER 출력 시 INVALID → exit 1.
 
     계약 규정: "출력 첫 줄은 정확히 APPROVE_TO_USER 또는 REJECT - <사유>여야 한다."
-    첫 줄이 다른 내용이면 INVALID로 처리해야 한다. 후속 줄에 APPROVE_TO_USER가
-    있어도 통과해서는 안 된다 (prefix 우회 방지).
+    Codex CLI 시스템 메시지(SUCCESS:/WARNING: 등)는 파싱에서 제외하지만,
+    AI 모델이 직접 쓴 설명 prefix + APPROVE_TO_USER 두 번째 줄은 INVALID여야 한다.
+    이 테스트는 AI가 설명문을 먼저 쓰고 APPROVE_TO_USER를 두 번째 줄에 넣는
+    우회 시도를 차단하는지 검증한다.
 
     PIPELINE_STATE_PATH isolation + final_state assertion 포함.
     """
@@ -608,8 +610,9 @@ def test_tc8_prefix_output_is_invalid(tmp_path: Path) -> None:
     pid = "IMP-20260627-3BB6"
     write_min_state(state_file, pid)
     shim = tmp_path / "shim"
-    # 첫 줄이 시스템 메시지, 두 번째 줄이 APPROVE_TO_USER — INVALID여야 함
-    prefix_verdict = "SUCCESS: The process has been initialized.\nAPPROVE_TO_USER"
+    # AI 모델이 직접 쓴 prefix (시스템 메시지 패턴이 아님) + APPROVE_TO_USER
+    # → 첫 AI 출력 줄이 설명문 → INVALID
+    prefix_verdict = "이 PR은 모든 요건을 충족합니다.\nAPPROVE_TO_USER"
     make_fake_codex(shim, prefix_verdict)
     env = make_env(state_file, extra_path=shim)
     assert env["PIPELINE_STATE_PATH"] == str(state_file)
