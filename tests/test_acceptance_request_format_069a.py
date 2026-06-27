@@ -206,6 +206,11 @@ def write_codex_review_approved(tmp_path: Path, pid: str) -> None:
     codex_review_result.json을 APPROVED 상태로 격리된 .pipeline 디렉토리에 생성한다.
 
     pr_head_sha는 fake gh가 반환하는 headRefOid와 일치시켜 stale_codex_review를 방지한다.
+    pr_body_sha256은 fake gh가 반환하는 PR body의 실제 SHA256으로 설정한다.
+    packet_sha256은 tmp_path/human_acceptance_packet.md의 SHA256으로 설정한다.
+    테스트는 cwd=tmp_path로 실행하므로 _packet_output_path()가 이 파일을 가리킨다.
+
+    IMP-20260627-3BB6 AC-5 fail-closed: 빈 SHA는 BLOCKED이므로 non-empty SHA 필수.
 
     Args:
         tmp_path: pytest tmp_path fixture (PIPELINE_STATE_PATH 부모).
@@ -213,8 +218,26 @@ def write_codex_review_approved(tmp_path: Path, pid: str) -> None:
     Raises:
         TypeError: 인자가 None인 경우.
     """
+    import hashlib as _hashlib
     if tmp_path is None or pid is None:
         raise TypeError("tmp_path/pid must not be None")
+    # pr_body_sha256: fake gh PR body의 실제 SHA256
+    pr_body_sha256 = _hashlib.sha256(_FAKE_GH_PR_BODY.encode("utf-8")).hexdigest()
+    # packet_sha256: tmp_path/human_acceptance_packet.md의 SHA256
+    # 테스트가 cwd=tmp_path로 실행되므로 _packet_output_path()가 이 파일을 가리킨다.
+    # fake packet에 pr_head_sha를 fake gh의 headRefOid와 일치하도록 기록한다.
+    _fake_sha = "abc123def456abc123def456abc123def456abc1"
+    _fake_packet_content = (
+        "[검증용 메타데이터]\n"
+        f"pipeline_id: {pid}\n"
+        f"pr_head_sha: {_fake_sha}\n"
+        "ci_run_id: test\n"
+    )
+    _packet_file = tmp_path / "human_acceptance_packet.md"
+    # newline="" 지정으로 Windows CRLF 변환 방지 — _compute_file_sha256("rb")와 SHA 일치.
+    _packet_bytes = _fake_packet_content.encode("utf-8")
+    _packet_file.write_bytes(_packet_bytes)
+    packet_sha256 = _hashlib.sha256(_packet_bytes).hexdigest()
     pipeline_dir = tmp_path / ".pipeline"
     pipeline_dir.mkdir(parents=True, exist_ok=True)
     (pipeline_dir / "codex_review_result.json").write_text(
@@ -223,9 +246,9 @@ def write_codex_review_approved(tmp_path: Path, pid: str) -> None:
             "pipeline_id": pid,
             "status": "APPROVED",
             "pr_url": "https://github.com/test/repo/pull/1",
-            "pr_head_sha": "abc123def456abc123def456abc123def456abc1",
-            "pr_body_sha256": "",
-            "packet_sha256": "",
+            "pr_head_sha": _fake_sha,
+            "pr_body_sha256": pr_body_sha256,
+            "packet_sha256": packet_sha256,
             "accept_code": f"ACCEPT-{pid}",
             "reviewed_at": "2026-06-27T12:00:00Z",
             "contract_sha256": "deadbeef" * 8,
@@ -235,9 +258,15 @@ def write_codex_review_approved(tmp_path: Path, pid: str) -> None:
     )
 
 
-def load_acceptance_request() -> Dict[str, object]:
-    """acceptance_request.json 로드 (없으면 빈 dict). BASE_DIR(프로젝트 루트)에 생성됨."""
-    req_file = PIPELINE_PY.parent / "acceptance_request.json"
+def load_acceptance_request(base_dir: Optional[Path] = None) -> Dict[str, object]:
+    """acceptance_request.json 로드 (없으면 빈 dict).
+
+    Args:
+        base_dir: 검색 디렉토리. None이면 PIPELINE_PY.parent(프로젝트 루트) 사용.
+                  cwd=tmp_path로 CLI를 실행한 경우 tmp_path를 전달해야 한다.
+    """
+    search_dir = base_dir if base_dir is not None else PIPELINE_PY.parent
+    req_file = search_dir / "acceptance_request.json"
     if not req_file.exists():
         return {}
     with open(req_file, encoding="utf-8") as f:
@@ -269,6 +298,7 @@ class TestRealCliRequestAcceptFormat:
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
+            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -280,7 +310,8 @@ class TestRealCliRequestAcceptFormat:
         import json as _json
         _state_path = Path(env["PIPELINE_STATE_PATH"])
         final_state = _json.loads(_state_path.read_text(encoding="utf-8")) if _state_path.exists() else {}
-        req = load_acceptance_request()
+        # cwd=tmp_path로 실행했으므로 acceptance_request.json은 tmp_path에 생성됨
+        req = load_acceptance_request(base_dir=tmp_path)
         assert req.get("pipeline_id") == pid, (
             f"acceptance_request.json pipeline_id 불일치: {req.get('pipeline_id')}"
         )
@@ -321,6 +352,7 @@ class TestRealCliRequestAcceptFormat:
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
+            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -359,6 +391,7 @@ class TestRealCliRequestAcceptFormat:
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
+            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -389,6 +422,7 @@ class TestRealCliRequestAcceptFormat:
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
+            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -421,6 +455,7 @@ class TestRealCliRequestAcceptFormat:
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
+            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
