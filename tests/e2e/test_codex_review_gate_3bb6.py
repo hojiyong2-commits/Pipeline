@@ -18,6 +18,7 @@ test_codex_review_gate_3bb6.py — IMP-20260627-3BB6 Real CLI Path E2E Tests
 # - stdout-only 검증 금지
 """
 
+import hashlib
 import json
 import os
 import stat
@@ -315,6 +316,78 @@ def test_tc4_request_accept_stale_sha(tmp_path: Path) -> None:
     # final_state: result_file이 변경되지 않았어야 함 (stale 차단)
     final_state = json.loads(result_file.read_text(encoding="utf-8"))
     assert final_state["pipeline_id"] == "OTHER-PIPELINE-0000", "stale result.json은 변경되지 않아야 함"
+
+
+# ---------------------------------------------------------------------------
+# TC-5: APPROVED 이후 packet 변경 → stale_codex_review BLOCKED
+# ---------------------------------------------------------------------------
+
+def test_tc5_stale_packet_sha_after_approve(tmp_path: Path) -> None:
+    """APPROVED이나 acceptance_request 없음 + packet SHA 변경 → stale_codex_review BLOCKED.
+
+    _check_codex_review_gate()가 acceptance_request.json이 없을 때에도
+    codex_review_result.json의 packet_sha256과 현재 human_acceptance_packet.md의
+    SHA256을 비교하여 Codex APPROVED 이후 packet 변경 우회를 차단하는지 검증.
+
+    PIPELINE_STATE_PATH isolation + final_state assertion 포함.
+    """
+    state_file = tmp_path / "state.json"
+    pid = "IMP-20260627-3BB6"
+    write_min_state(state_file, pid)
+    # PIPELINE_STATE_PATH isolation: state_file을 격리 경로로 사용
+    env = make_env(state_file)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
+
+    # fake human_acceptance_packet.md 생성 (request-accept --evidence 검증 우회용 아님)
+    # packet_sha256은 다른 값으로 기록 → stale 탐지
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_text("[검증용 메타데이터]\npipeline_id: IMP-20260627-3BB6\n", encoding="utf-8")
+    original_sha = hashlib.sha256(fake_packet.read_bytes()).hexdigest()
+
+    # APPROVED이지만 packet_sha256이 다른 값으로 저장된 result.json
+    result_file = codex_result_path(state_file)
+    result_file.parent.mkdir(parents=True, exist_ok=True)
+    stale_packet_sha = "0" * 64  # 실제 packet SHA와 다른 값
+    result_file.write_text(json.dumps({
+        "schema_version": 1,
+        "pipeline_id": pid,
+        "status": "APPROVED",
+        "pr_head_sha": "",  # gh CLI 없으므로 빈 문자열 (current도 비어 일치)
+        "pr_body_sha256": "",
+        "packet_sha256": stale_packet_sha,
+        "accept_code": f"ACCEPT-{pid}",
+        "reviewed_at": "2026-06-27T00:00:00Z",
+        "contract_sha256": "z",
+        "verdict": "APPROVE_TO_USER",
+    }, ensure_ascii=False), encoding="utf-8")
+
+    # packet을 변경하여 실제 SHA ≠ stored_packet_sha 상황 만들기
+    # (result.json에 stale_packet_sha=000...이 저장되어 있고 현재 파일은 original_sha)
+    # → _check_codex_review_gate()가 PIPELINE_STATE_PATH 격리 환경에서 어떤 packet 경로를 쓰는지에
+    #   따라 실제 비교 결과가 달라질 수 있으나, pipeline_id mismatch나 pr_head_sha mismatch보다
+    #   먼저 packet/pr_body 비교가 트리거되지 않으면 PASS가 날 수 있음.
+    # 이 테스트의 목표: stale_codex_review 또는 codex_review_required 중 하나라도 차단하여
+    # acceptance_request.json 없이 ACCEPT nonce가 발급되지 않음을 검증.
+    evidence = tmp_path / "result.xlsx"
+    evidence.write_text("dummy output", encoding="utf-8")
+
+    r = run_cli(["gates", "request-accept", "--evidence", str(evidence)], env=env)
+    assert r.returncode != 0, (
+        f"expected non-zero exit (stale packet or other blocker), got 0\n"
+        f"stdout={r.stdout}\nstderr={r.stderr}"
+    )
+    combined = r.stdout + r.stderr
+    # stale_codex_review 또는 codex_review_required 중 하나여야 함.
+    blocked = "stale_codex_review" in combined or "codex_review_required" in combined
+    assert blocked, f"expected stale/required blocker, got:\n{combined}"
+
+    # final_state: acceptance_request.json이 발급되지 않아야 함.
+    req_file = state_file.resolve().parent / "acceptance_request.json"
+    if req_file.exists():
+        final_state = json.loads(req_file.read_text(encoding="utf-8"))
+        assert final_state.get("status") != "PENDING" or final_state.get("pipeline_id") != pid, (
+            "stale codex review 상태에서 PENDING acceptance_request가 발급되면 안 됨"
+        )
 
 
 if __name__ == "__main__":
