@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>IMP-20260627-3BB6</pipeline_id>
+  <manager_run_id>pipeline_manager-0f10dd204f627c95</manager_run_id>
+  <planner_run_id>pm_planner-3c5ce2baec293143</planner_run_id>
+  <step_plan_sha256>dddd0cf6c11e783676557eea42ac62b4d04c56ba88a230048e2cfdd3f5e7d97c</step_plan_sha256>
+  <status>EXECUTING</status>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <phase_sequence>pm → dev(MT-1~6) → qa → sec_skip → build_na → external_gates → architect</phase_sequence>
+  <askuser_block>NONE</askuser_block>
+  <user_response>DQ-1=A, DQ-2=A, oracle 기대값 사용자 제공 완료</user_response>
+  <design_decisions>
+    <decision>codex_review_contract.md 신규 생성 (A안)</decision>
+    <decision>request-accept + accept 모두 codex_review_result.json SSoT로 통일 (A안)</decision>
+    <decision>acceptance_renderer.py 소스 없음 → pipeline.py 인라인 교체</decision>
+  </design_decisions>
+<execution_profile>STANDARD</execution_profile>
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>pipeline.py 핵심 게이트 로직 변경, Stop hook 삭제, 신규 테스트 파일 생성 — 다파일, 다함수 변경으로 STANDARD 프로필 적용</reason>
+    <blast_radius>
+      <expected_changed_files>8</expected_changed_files>
+      <expected_changed_functions>12</expected_changed_functions>
+      <expected_changed_lines>300</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <pipeline_protocol>true</pipeline_protocol>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+</manager_handoff>
