@@ -232,6 +232,19 @@ JSON 결과에서 `codex_review_required_message` 필드 값만 사용자에게 
 - "renderer A형 출력을 그대로 전달합니다" 같은 안내 문구 추가
 - 같은 응답에 `사용자 승인 요청` 문구 2회 이상 포함
 
+### request-accept 완료 후 오케스트레이터 중계 규칙 (IMP-20260627-3907)
+
+`gates request-accept --machine-readable` 실행 후 오케스트레이터에게 결과를 반환할 때:
+
+- **result에 `사용자 승인 요청` 블록을 포함하지 않습니다.** 승인 블록은 오케스트레이터가 JSON 필드에서 읽어 1회만 출력합니다.
+- result에는 다음 정보만 포함합니다: `pipeline_id`, `status`, `pr_url`, `accept_code` (JSON 필드명 기준)
+- 오케스트레이터가 `codex_review_required_message` 필드를 받아 승인 블록을 **단독 1회** 출력합니다.
+- "request-accept가 성공했습니다", "renderer A형 출력을 그대로 전달합니다" 같은 설명 문구 금지.
+- Pipeline Manager result 예시 (승인 블록 없음):
+  ```
+  완료: pipeline_id=IMP-20260627-3907, pr_url=https://github.com/hojiyong2-commits/Pipeline/pull/752, accept_code=ACCEPT-IMP-20260627-3907
+  ```
+
 ## External Gate 순서 (Phase 7)
 
 ```powershell

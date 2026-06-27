@@ -602,3 +602,21 @@ def test_user_final_ends_with_approval_required():
     meaningful = [ln.strip() for ln in out.splitlines() if ln.strip()]
     assert meaningful[-1] == "사용자 최종 승인 필요", \
         f"마지막 줄이 '사용자 최종 승인 필요'가 아닙니다: {meaningful[-1]!r}"
+
+
+def test_pm_result_no_approval_block():
+    """Pipeline Manager가 오케스트레이터에게 반환하는 결과에 '사용자 승인 요청' 블록이 없어야 한다.
+
+    integration 시나리오: PM result에 승인 블록이 포함되면 오케스트레이터가 그것을 그대로 출력해
+    사용자 화면에 2회 표시되는 이중 출력 문제 (REJECT 7차 근본 원인).
+    pipeline-manager-agent.md의 규칙 적용 여부를 정적 검사로 검증한다.
+    """
+    agent_md_src = _AGENT_MD_PATH.read_text(encoding="utf-8")
+    # 규칙이 agent MD에 존재해야 함
+    assert "사용자 승인 요청" in agent_md_src and "블록을 포함하지 않습니다" in agent_md_src, \
+        "pipeline-manager-agent.md에 오케스트레이터 중계 규칙이 없습니다"
+    # result 예시에 승인 블록이 없어야 함 — 'codex_review_required_message' 필드 전달은 허용
+    # '사용자 승인 요청' 블록이 PM result 예시 문구로 사용되면 안 됨
+    # (MD 내 예시 코드 블록에 '완료: pipeline_id=' 패턴이 있어야 함)
+    assert "완료: pipeline_id=" in agent_md_src, \
+        "pipeline-manager-agent.md에 승인 블록 없는 result 예시가 없습니다"
