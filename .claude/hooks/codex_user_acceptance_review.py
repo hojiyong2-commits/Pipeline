@@ -1004,13 +1004,14 @@ def _read_pipeline_id_from_env() -> Optional[str]:
     return None
 
 
-def _fallback_record_no_transcript(failure_code: str) -> None:
+def _fallback_record_no_transcript(failure_code: str, checked_text: str = "") -> None:
     """last_assistant_message에 5요소 블록이 없을 때 pipeline_id 폴백으로 FAILED 기록.
 
     pipeline_id를 읽을 수 없으면 조용히 무시한다. (함수명은 하위 호환을 위해 유지)
 
     Args:
         failure_code: 기록할 실패 코드.
+        checked_text: 5요소 감지 대상 텍스트. 디버그 로그에 앞 200자/길이를 남긴다.
     """
     try:
         pipeline_id = _read_pipeline_id_from_env()
@@ -1048,10 +1049,71 @@ def _fallback_record_no_transcript(failure_code: str) -> None:
                 "status": "FAILED",
                 "failure_code": failure_code,
                 "message": "5요소 블록 없음",
+                "checked_text_first200": (checked_text or "")[:200],
+                "checked_text_len": len(checked_text or ""),
             },
         )
     except Exception as e:
         print(f"[CODEX REVIEW] fallback 기록 실패 (무시): {e}", file=sys.stderr)
+
+
+def _extract_assistant_tail(hook_data: Dict[str, Any]) -> str:
+    """stdin JSON의 last_assistant_message를 반환한다. 비어있으면 transcript_path에서 마지막 assistant 텍스트를 추출한다.
+
+    Args:
+        hook_data: stdin에서 읽은 hook JSON dict.
+    Returns:
+        최대 4000자의 assistant 텍스트. 없으면 빈 문자열.
+    """
+    # 1. last_assistant_message 우선
+    msg = hook_data.get("last_assistant_message", "") or ""
+    if msg.strip():
+        return msg
+
+    # 2. transcript_path 폴백
+    transcript_path_str = hook_data.get("transcript_path") or ""
+    if not transcript_path_str:
+        return ""
+    try:
+        transcript_path = Path(transcript_path_str)
+        if not transcript_path.exists():
+            return ""
+        last_text = ""
+        for line_bytes in transcript_path.read_bytes().splitlines():
+            try:
+                line = line_bytes.decode("utf-8-sig", errors="replace").strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                # Claude Code transcript 형식: {"type":"assistant","message":{"role":"assistant","content":[...]}}
+                # 또는 표준 API 형식: {"role":"assistant","content":[...]}
+                role = (
+                    entry.get("role")
+                    or (entry.get("message") or {}).get("role")
+                    or ""
+                )
+                if role != "assistant":
+                    continue
+                content = (
+                    entry.get("content")
+                    or (entry.get("message") or {}).get("content")
+                    or ""
+                )
+                if isinstance(content, str):
+                    last_text = content
+                elif isinstance(content, list):
+                    texts = [
+                        block.get("text", "")
+                        for block in content
+                        if isinstance(block, dict) and block.get("type") == "text"
+                    ]
+                    if texts:
+                        last_text = "\n".join(texts)
+            except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
+                continue
+        return last_text[-4000:] if last_text else ""
+    except Exception:
+        return ""
 
 
 def main(hook_data_override: Optional[Dict[str, Any]] = None) -> int:
@@ -1079,14 +1141,14 @@ def main(hook_data_override: Optional[Dict[str, Any]] = None) -> int:
     else:
         try:
             raw_bytes = sys.stdin.buffer.read()
-            raw = raw_bytes.decode("utf-8", errors="replace")
+            raw = raw_bytes.decode("utf-8-sig", errors="replace")
             hook_data = json.loads(raw) if raw.strip() else {}
         except (json.JSONDecodeError, OSError, UnicodeDecodeError, ValueError) as e:
             sys.stderr.write(f"[hook] stdin 읽기/파싱 실패: {e}\n")
             hook_data = {}
 
-    # last_assistant_message에서 직접 5요소 패턴 감지
-    last_message = hook_data.get("last_assistant_message", "") or ""
+    # last_assistant_message에서 직접 5요소 패턴 감지 (비어있으면 transcript 폴백)
+    last_message = _extract_assistant_tail(hook_data)
     if not isinstance(last_message, str):
         last_message = ""
 
@@ -1124,7 +1186,7 @@ def main(hook_data_override: Optional[Dict[str, Any]] = None) -> int:
     block = parse_acceptance_block(last_message)
     if block is None:
         # 5요소 없음 — fallback: pipeline_id로 FAILED 기록 시도 후 종료
-        _fallback_record_no_transcript("no_five_element_block")
+        _fallback_record_no_transcript("no_five_element_block", last_message)
         return 0
 
     pr_url = block["pr_url"]

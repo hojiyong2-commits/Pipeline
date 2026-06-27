@@ -447,6 +447,39 @@ class TestHookStdinInput:
         # 5요소가 감지되어 해당 pipeline_id로 상태가 기록되었는지 확인
         assert data["pipeline_id"] == "IMP-20260627-3907"
 
+    def test_stdin_bom_handling(self):
+        """PowerShell 파이프 시 UTF-8 BOM이 있어도 hook이 정상 파싱하는지 검증."""
+        import subprocess as _subprocess
+        import json as json_mod
+        hook_path = Path(__file__).parent.parent / ".claude/hooks/codex_user_acceptance_review.py"
+
+        good_msg = (
+            "사용자 승인 요청\n\nPR: https://github.com/test/pull/1\n\n"
+            "승인 코드:\nACCEPT-IMP-20260627-3907\n\nCODEX 검토 필요"
+        )
+        hook_data = {
+            "hook_event_name": "Stop",
+            "last_assistant_message": good_msg,
+            "stop_hook_active": False,
+        }
+        # BOM prefix 추가 (PowerShell 파이프 시뮬레이션)
+        json_str = json_mod.dumps(hook_data, ensure_ascii=False)
+        bom_bytes = b"\xef\xbb\xbf" + json_str.encode("utf-8")
+
+        result = _subprocess.run(
+            ["python", str(hook_path)],
+            input=bom_bytes,
+            capture_output=True,
+            timeout=10,
+        )
+        # json.loads 실패 시 "Unexpected UTF-8 BOM" stderr가 있어야 하는데,
+        # 수정 후에는 BOM이 제거되어 정상 파싱 → stderr에 해당 메시지 없어야 함
+        assert b"Unexpected UTF-8 BOM" not in result.stderr, (
+            f"BOM 처리 실패: {result.stderr.decode('utf-8', errors='replace')}"
+        )
+        # exit code 0 또는 2 (REJECT 시) — BOM 때문에 exit 1이 나오면 안 됨
+        assert result.returncode != 1, f"hook BOM 오류로 exit 1: {result.stderr.decode('utf-8', errors='replace')}"
+
 
 class TestHotfix4:
     """hotfix-4 (IMP-20260627-3907): B형 마지막 줄, except pass 제거, stale 판정."""
@@ -723,9 +756,9 @@ def test_stdin_utf8_decoding():
 
     hook_path = _REPO_ROOT / ".claude" / "hooks" / "codex_user_acceptance_review.py"
     src = hook_path.read_text(encoding="utf-8")
-    # sys.stdin.buffer.read() → decode("utf-8") 패턴이 있어야 함
+    # sys.stdin.buffer.read() → decode("utf-8-sig") 패턴이 있어야 함 (BOM 제거)
     assert "stdin.buffer.read" in src, "hook이 sys.stdin.buffer.read()를 사용하지 않습니다"
-    assert 'decode("utf-8"' in src, "hook이 UTF-8로 decode하지 않습니다"
+    assert 'decode("utf-8-sig"' in src, "hook이 UTF-8(BOM 제거)로 decode하지 않습니다"
 
     # 실제 UTF-8 인코딩된 JSON에서 한국어 메시지가 파싱되는지 검증
     spec = _ilu.spec_from_file_location("hook_utf8_test", str(hook_path))
