@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <task_id>IMP-20260627-3BB6</task_id>
+  <total_functions_identified>6</total_functions_identified>
+  <micro_task_count>6</micro_task_count>
+  <grep_executions>6</grep_executions>
+  <split_decision>trust-root pipeline.py + settings.json 수정, hook 파일 삭제, 신규 gates codex-review 추가. HIGH_RISK 프로필 필수.</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+  <anti_gaming_read>true</anti_gaming_read>
+  <judgment_calls>DQ-1=A(codex_review_contract.md 신규), DQ-2=A(result.json SSoT로 통일), acceptance_renderer.py 없음→pipeline.py 인라인 교체</judgment_calls>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260627-3BB6</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py(파이프라인 엔진) + .claude/settings.json + hook 파일 삭제 포함. 인증/승인 핵심 경로 변경. Fast Path 불가.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>8</expected_changed_files>
+      <expected_changed_functions>6</expected_changed_functions>
+      <expected_changed_lines>420</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>true</data_deletion>
+      <file_move>false</file_move>
+      <external_api>true</external_api>
+      <auth_or_secret>true</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>변수명, 로그 포맷 등 P2 내부 취향 질문 제외. P0 충돌 2건(계약서 파일 위치, 기존 게이트 전환 범위)만 사용자에게 확인.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="MT-1">
+        <user_facing_question>Codex 검토 계약서(codex_review_contract.md) 위치를 어디에 둘까요?</user_facing_question>
+        <evidence>현재 코드베이스에 codex_review_contract.md 파일 없음.</evidence>
+        <why_it_matters>검토 기준의 보관 위치가 fail-closed 동작과 보호 가능 여부를 결정합니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A"><label>.claude/codex_review_contract.md 신규 생성</label><benefit>파일로 고정·보호, fail-closed</benefit><cost>파일 1개 추가됨 — .claude/ 디렉토리에 codex_review_contract.md 신규 파일 생성으로 저장소 파일 수 1개 증가</cost></option>
+          <option id="B"><label>pipeline.py 상수 인라인</label><benefit>별도 파일 추가 없이 pipeline.py 상수로만 관리되므로 저장소 구조 변경 없음</benefit><cost>기준이 코드에 묻혀 별도 보호가 어렵고, CODEOWNERS로 독립 보호 불가</cost></option>
+        </options>
+        <user_answer>A — .claude/codex_review_contract.md 신규 생성, 없거나 파싱/해시 산출 실패 시 fail-closed BLOCKED</user_answer>
+      </question>
+      <question id="DQ-2" priority="P0" category="module_split" mt_id="MT-3">
+        <user_facing_question>기존 _check_codex_review_gate를 어떻게 전환할까요?</user_facing_question>
+        <evidence>기존 게이트는 codex_review_loop_state.json 읽고 gates accept에만 연결.</evidence>
+        <why_it_matters>통일하지 않으면 hook 삭제 후 gates accept 영구 차단.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A"><label>request-accept(주 차단) + accept(재확인) 모두 codex_review_result.json SSoT 통일</label><benefit>단일 SSoT로 일관된 동작 보장, 향후 gate 추가 시에도 단일 파일만 참조</benefit><cost>pipeline.py의 _cmd_gates_request_accept와 gates accept ACCEPT 분기 두 곳을 수정해야 하므로 변경 범위가 늘어남</cost></option>
+          <option id="B"><label>request-accept에만 추가, accept는 그대로</label><benefit>request-accept에만 codex_review 검사를 추가하면 수정 함수가 1개로 줄어듦</benefit><cost>채택 불가 — hook 삭제 후 accept 단계에서 loop_state.json을 읽는 기존 코드가 영구 차단을 일으킴</cost></option>
+        </options>
+        <user_answer>A — codex_review_result.json SSoT로 통일, request-accept 주 차단 + accept 재확인</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <req id="R1">codex_review_contract.md 신규 생성 — 검토 금지사항(파일수정/PR댓글/코드게시/gates accept실행/merge·deploy 금지) + APPROVE_TO_USER|REJECT 출력 형식 명시. gates codex-review가 이 파일을 읽고 없거나 해시 산출 실패 시 fail-closed BLOCKED.</req>
+    <req id="R2">pipeline.py::_cmd_gates_codex_review 신규: codex CLI(Windows shell=True) 호출, APPROVE_TO_USER→status=APPROVED exit 0, REJECT→status=REJECTED exit 1, 그 외→status=FAILED. codex_review_result.json에 pipeline_id, pr_url, pr_head_sha, pr_body_sha256, packet_sha256, accept_code, reviewed_at, contract_sha256 기록.</req>
+    <req id="R3">_check_codex_review_gate: codex_review_result.json SSoT 기반으로 재작성. request-accept에서 사전 차단(없음→codex_review_required, status!=APPROVED→codex_review_not_approved, SHA 불일치→stale_codex_review + stale 필드명 + 복구 안내), accept에서 동일 SSoT 재확인. loop_state.json 의존 완전 제거.</req>
+    <req id="R4">pipeline.py 라인 16460(PR pending 댓글) + 18327(콘솔 출력)의 "CODEX 검토 필요" → "Codex 검토 완료"로 교체. APPROVED 검증 통과 경로에서만 출력.</req>
+    <req id="R5">.claude/hooks/codex_user_acceptance_review.py, codex-user-acceptance-review.ps1, __pycache__ 삭제. .claude/settings.json Stop hook 등록 제거.</req>
+    <req id="R6">신규 Real CLI Path E2E 테스트(tests/e2e/test_codex_review_gate_3bb6.py) + 구 test_codex_review_loop_*.py + BUG-20260627-B221 oracle 삭제.</req>
+    <req id="보안">자동 PR 댓글 게시 금지, 자동 gates accept 금지, Codex APPROVE → User Acceptance 자동 승격 금지, nonce 노출 금지, 자동 ACCEPT 금지.</req>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline.py::_load_codex_review_contract (신규) + .claude/codex_review_contract.md (신규)</affected_function>
+      <target_files>
+        <file>.claude/codex_review_contract.md</file>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites><site>pipeline.py::_cmd_gates_codex_review (MT-2에서 호출)</site></affected_call_sites>
+      <grep_evidence><pattern>codex_review_contract</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>Codex 검토 계약서 파일 신규 생성 + pipeline.py에 로드 헬퍼(없거나 해시 산출 실패 시 fail-closed BLOCKED) 추가.</change_summary>
+      <line_estimate>65</line_estimate>
+      <covers_ac>AC-1, AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>pipeline.py::_cmd_gates_codex_review (신규)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::_cmd_gates (action 디스패치 블록)</site>
+        <site>pipeline.py::argparse gates subparser</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>if action == "request-accept"</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>gates codex-review 서브커맨드: PR 정보 수집 → contract 읽기 → codex CLI 호출(shell=True) → verdict 파싱 → codex_review_result.json(8개 필드) 기록. APPROVE=exit 0, REJECT=exit 1.</change_summary>
+      <line_estimate>145</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>pipeline.py::_check_codex_review_gate (SSoT 전환) + _cmd_gates_request_accept (사전 검증 추가)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::_cmd_gates_request_accept (nonce 발급 전)</site>
+        <site>pipeline.py 라인 19376 gates accept ACCEPT 분기 (재확인)</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>_check_codex_review_gate|codex_review_loop_state</pattern><match_count>14</match_count><executed>true</executed></grep_evidence>
+      <change_summary>게이트를 codex_review_result.json SSoT 기반으로 전환. request-accept에서 없음/미APPROVED/stale SHA 차단 + 복구 안내. accept에서 동일 SSoT 재확인. loop_state.json 의존 제거.</change_summary>
+      <line_estimate>115</line_estimate>
+      <covers_ac>AC-3, AC-4, AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>pipeline.py 라인 16460 + 18327 문구 교체</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>pipeline.py::_render_pending_acceptance_comment</site>
+        <site>pipeline.py::_cmd_gates_request_accept 콘솔 출력</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>CODEX 검토 필요</pattern><match_count>3</match_count><executed>true</executed></grep_evidence>
+      <change_summary>"CODEX 검토 필요" → "Codex 검토 완료" 교체(2개 출력 지점). APPROVED 경로에서만 노출.</change_summary>
+      <line_estimate>10</line_estimate>
+      <covers_ac>AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>Stop hook 파일 삭제 + .claude/settings.json 수정</affected_function>
+      <target_files>
+        <file>.claude/settings.json</file>
+        <file>.claude/hooks/codex_user_acceptance_review.py</file>
+        <file>.claude/hooks/codex-user-acceptance-review.ps1</file>
+      </target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>codex-user-acceptance-review.ps1</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>git rm으로 hook Python/PS1 파일 삭제, settings.json의 Stop hook 등록 블록 제거.</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-7, AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>tests/e2e/test_codex_review_gate_3bb6.py (신규) + 구 테스트/oracle 삭제</affected_function>
+      <target_files>
+        <file>tests/e2e/test_codex_review_gate_3bb6.py</file>
+        <file>tests/test_codex_review_loop_B221.py</file>
+        <file>tests/test_codex_review_loop_4121.py</file>
+        <file>tests/oracles/BUG-20260627-B221/normal_approve/input.json</file>
+        <file>tests/oracles/BUG-20260627-B221/normal_approve/expected.json</file>
+        <file>tests/oracles/BUG-20260627-B221/edge_codex_timeout/input.json</file>
+        <file>tests/oracles/BUG-20260627-B221/edge_codex_timeout/expected.json</file>
+      </target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>test_codex_review_loop</pattern><match_count>2</match_count><executed>true</executed></grep_evidence>
+      <change_summary>Real CLI Path E2E 테스트 신규(PIPELINE_STATE_PATH 격리 + subprocess + final_state assertion). 구 hook 전용 테스트 + B221 oracle git rm.</change_summary>
+      <line_estimate>200</line_estimate>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>gates codex-review 실행 시 Codex APPROVE_TO_USER → codex_review_result.json status=APPROVED, pipeline_id/pr_url/pr_head_sha/pr_body_sha256/packet_sha256/accept_code/reviewed_at/contract_sha256 8개 필드 기록, exit 0.</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>Codex REJECT 시 status=REJECTED, reject_reason 원문 저장, exit 1. 사용자 최종 승인 요청 출력 없음.</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>codex_review_result.json 없는 상태에서 gates request-accept → failure_code=codex_review_required BLOCKED, exit non-zero, 승인 코드 미발급.</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>status=APPROVED이나 pr_head_sha/pr_body_sha256/packet_sha256 중 하나라도 현재와 불일치 시 failure_code=stale_codex_review BLOCKED, stale 필드명 메시지 포함, 복구 안내 포함.</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>3개 SHA 모두 일치하고 status=APPROVED일 때만 request-accept가 nonce 발급 후 진행.</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>최종 승인 요청 출력(콘솔 + PR pending 댓글) 마지막 문구 = "Codex 검토 완료". APPROVED 경로에서만 출력. "CODEX 검토 필요" 더 이상 없음.</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>.claude/hooks/codex_user_acceptance_review.py + codex-user-acceptance-review.ps1 저장소에서 삭제됨.</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>.claude/settings.json Stop hook(codex-user-acceptance-review.ps1) 등록 제거됨.</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_design>
+    <oracle_root>tests/oracles/IMP-20260627-3BB6/</oracle_root>
+    <case id="normal_approve" kind="normal" expected_source="user_provided">
+      <input>tests/oracles/IMP-20260627-3BB6/normal_approve/input.json</input>
+      <expected>tests/oracles/IMP-20260627-3BB6/normal_approve/expected.json</expected>
+      <expected_content>
+        status=APPROVED, exit_code=0, 8개 필드(pipeline_id/pr_url/pr_head_sha/pr_body_sha256/packet_sha256/accept_code/reviewed_at/contract_sha256) 존재.
+        이후 동일 SHA 기준 request-accept는 BLOCKED 아님.
+      </expected_content>
+    </case>
+    <case id="edge_codex_reject" kind="edge" expected_source="user_provided">
+      <input>tests/oracles/IMP-20260627-3BB6/edge_codex_reject/input.json</input>
+      <expected>tests/oracles/IMP-20260627-3BB6/edge_codex_reject/expected.json</expected>
+      <expected_content>
+        status=REJECTED, exit_code=1, reject_reason=원문. request-accept failure_code=codex_review_rejected BLOCKED. 승인 요청 출력 없음.
+      </expected_content>
+    </case>
+    <case id="exception_missing_review" kind="exception" expected_source="user_provided">
+      <input>tests/oracles/IMP-20260627-3BB6/exception_missing_review/input.json</input>
+      <expected>tests/oracles/IMP-20260627-3BB6/exception_missing_review/expected.json</expected>
+      <expected_content>
+        codex_review_result.json 부재 상태. request-accept failure_code=codex_review_required BLOCKED. exit non-zero. 승인 코드 미발급. 메시지: Codex Review 먼저 필요.
+      </expected_content>
+    </case>
+    <case id="edge_stale_sha" kind="regression" expected_source="user_provided">
+      <input>tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json</input>
+      <expected>tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json</expected>
+      <expected_content>
+        status=APPROVED 이나 pr_head_sha 불일치. failure_code=stale_codex_review BLOCKED. exit non-zero. stale 필드명 메시지 포함. gates codex-review 재실행 안내.
+      </expected_content>
+    </case>
+  </oracle_design>
+
+  <python_version>3.10</python_version>
+
+  <forbidden>
+    <item>target_files 외 파일 수정 금지 (Scope Lock 강제)</item>
+    <item>hook이 PR 댓글 자동 게시 금지</item>
+    <item>gates accept 자동 실행 금지</item>
+    <item>Codex APPROVE → User Acceptance 자동 승격 금지</item>
+    <item>nonce 로그/출력/result.json 노출 금지</item>
+    <item>자동 ACCEPT 금지</item>
+    <item>codex_review_result.json에 acceptance nonce 또는 실제 secret 기록 금지</item>
+  </forbidden>
+</step_plan>
