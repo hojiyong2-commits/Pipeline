@@ -631,6 +631,7 @@ def call_codex_cli(prompt: str) -> str:
             text=True,
             encoding="utf-8",
             timeout=300,
+            shell=(sys.platform == "win32"),
         )
     except FileNotFoundError as e:
         raise RuntimeError("codex CLI not found — fail-closed") from e
