@@ -1,0 +1,88 @@
+{
+  "pipeline_id": "BUG-20260627-C81C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._cmd_gates_codex_review"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_cmd_gates_codex_review의 git diff 조회 블록에서 '(diff 조회 실패)' placeholder 대체 제거, FileNotFoundError/TimeoutExpired/OSError/returncode!=0를 failure_code=codex_review_diff_unavailable fail-closed BLOCKED 처리."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._cmd_gates_request_accept"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-3"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_cmd_gates_request_accept 후처리에서 codex_review_result.json의 packet_sha256/pr_body_sha256 재기록 블록 2곳(pr_body 변경/미변경 경로)과 except/pass 예외 삼킴 제거. SHA 변경 시 다음 검증이 stale_codex_review로 차단하도록 둠."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._check_codex_review_gate"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-5"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": [
+            "_check_codex_review_gate에서 pr_head_sha/pr_body_sha256/packet_sha256를 각각 독립 검증. acceptance_request.json 유무와 무관하게 stored SHA를 현재 실제 packet/PR 본문 SHA와 항상 비교(2-a/2-b). req 빈 SHA fail-open 우회 제거."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [".claude/codex_review_contract.md"],
+      "affected_functions": ["N/A"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-4"],
+          "changed_files": [".claude/codex_review_contract.md"],
+          "implementation_evidence": [
+            ".claude/codex_review_contract.md를 11개 검토 항목으로 전체 재작성. _load_codex_review_contract() status=PASS, contract_sha256 64자."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json",
+        "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json"
+      ],
+      "affected_functions": ["test_codex_review_gate_3bb6.TC5/TC7/edge_stale_sha"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-2", "AC-5"],
+          "changed_files": [
+            "tests/e2e/test_codex_review_gate_3bb6.py",
+            "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json",
+            "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json"
+          ],
+          "implementation_evidence": [
+            "TC-5: stale packet SHA를 정확히 stale_codex_review로만 차단(codex_review_required 제거). TC-7: 'diff --git'/변경 파일명 포함 + placeholder 미포함 검증. edge_stale_sha 오라클: pipeline_id 일치 + 3개 SHA 독립 stale 검증 명시."
+          ]
+        }
+      ]
+    }
+  ]
+}
