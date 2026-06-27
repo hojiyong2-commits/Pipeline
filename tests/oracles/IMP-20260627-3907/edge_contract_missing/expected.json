@@ -1,0 +1,4 @@
+{
+  "raises": "RuntimeError",
+  "message_contains": "contract"
+}

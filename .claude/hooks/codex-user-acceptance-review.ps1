@@ -1,12 +1,20 @@
-# Claude Code Stop hook 진입점. CLAUDE_HOOK_TRANSCRIPT_PATH 환경변수에서
-# transcript 경로를 읽어 Python helper에 전달하는 thin wrapper.
+# Claude Code Stop hook 진입점.
+# Claude Code는 hook 데이터를 stdin JSON으로 전달합니다.
+# {"hook_event_name":"Stop","last_assistant_message":"...","stop_hook_active":false}
+# raw bytes passthrough: PowerShell string 변환 없이 stdin을 Python helper에게 직접 전달합니다.
+# (IMP-20260627-3907: $input|python 파이프는 Korean 등 non-ASCII를 ?로 변환하므로 교체)
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $helperPath = Join-Path $scriptDir "codex_user_acceptance_review.py"
-$transcriptPath = $env:CLAUDE_HOOK_TRANSCRIPT_PATH
-
-if ($transcriptPath -and (Test-Path $transcriptPath)) {
-    python $helperPath --transcript $transcriptPath
-} else {
-    python $helperPath
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = (Get-Command python).Source
+$psi.Arguments = "`"$helperPath`""
+$psi.UseShellExecute = $false
+$psi.RedirectStandardInput = $true
+$p = [System.Diagnostics.Process]::Start($psi)
+try {
+    [System.Console]::OpenStandardInput().CopyTo($p.StandardInput.BaseStream)
+} finally {
+    $p.StandardInput.Close()
 }
-exit $LASTEXITCODE
+$p.WaitForExit()
+exit $p.ExitCode

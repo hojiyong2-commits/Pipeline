@@ -6,18 +6,19 @@
 #   코드만 출력한다. 이 helper는 절대로 PR 댓글을 쓰거나 nonce를 노출하거나 gates accept를
 #   실행하지 않는다. 모든 루프 상태는 .pipeline/codex_review_loop_state.json에만 저장하며,
 #   acceptance_request.json은 읽거나 수정하지 않는다.
-# [Assumptions]: gh CLI와 codex CLI가 PATH에 존재하고 인증되어 있다. transcript는
-#   --transcript 인자(JSONL 또는 텍스트)로 전달되며, 마지막 assistant 메시지에 승인 블록이 있다.
+# [Assumptions]: gh CLI와 codex CLI가 PATH에 존재하고 인증되어 있다. Claude Code Stop hook은
+#   hook 데이터를 stdin JSON으로 전달하며, 그 안의 last_assistant_message 필드에 승인 블록이
+#   있다. transcript 파일 경로 파싱은 더 이상 필요 없다.
 #   .pipeline/ 디렉토리는 프로젝트 루트 하위에 쓰기 가능하다.
 # [Vulnerability & Risks]: gh/codex 응답 형식이 예고 없이 바뀌면 파싱이 깨질 수 있다.
-#   이를 위해 모든 외부 호출은 fail-closed(예외 시 exit 1)로 처리한다. transcript 파싱은
-#   인용/코드블록 내부 예시를 무시하여 사용자 프롬프트 오탐을 방지한다. 형식이 모호한
+#   이를 위해 모든 외부 호출은 fail-closed(예외 시 exit 1)로 처리한다. last_assistant_message
+#   파싱은 인용/코드블록 내부 예시를 무시하여 사용자 프롬프트 오탐을 방지한다. 형식이 모호한
 #   verdict는 ValueError로 차단한다. REJECT 원문은 prefix/suffix/번역/요약 없이 그대로 출력한다.
 # [Improvement]: 시간이 더 있다면 Codex 응답을 구조화 JSON 스키마로 강제하고,
 #   gh GraphQL로 단일 호출 packet 조회, 그리고 검토 결과 캐시 TTL을 추가할 것이다.
 """Codex 사용자 승인 검토 보조 hook helper (Codex Review Loop, IMP-20260626-4121).
 
-이 모듈은 Claude Code의 Stop hook에서 호출된다. assistant 최종 출력에
+이 모듈은 Claude Code의 Stop hook에서 호출된다. stdin JSON의 last_assistant_message에
 "사용자 승인 요청" 블록(5요소)이 있으면 Codex CLI로 PR을 한 번 더 검토한다.
 
 - REJECT - <사유>: 원문을 그대로 stdout에 출력하고 exit 2로 재주입한다.
@@ -34,8 +35,8 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -66,8 +67,6 @@ _MARKER_CODE_LABEL = "승인 코드:"
 _MARKER_ACCEPT_PREFIX = "ACCEPT-"
 _MARKER_CODEX_REQUIRED = "CODEX 검토 필요"
 
-# transcript tail에서 검사할 마지막 assistant 메시지 수
-_TAIL_MESSAGES = 5
 # REJECT 누적 횟수 상한 — 초과(즉 6번째)부터 루프 자동 중단
 _MAX_REJECT = 5
 
@@ -75,6 +74,85 @@ _MAX_REJECT = 5
 _LOOP_STATE_FILENAME = "codex_review_loop_state.json"
 
 _ENCODINGS = ("utf-8", "utf-8-sig", "cp949", "latin-1")
+
+# IMP-20260627-3907: 승인 요청문 renderer + Codex Review Contract 단일 SSoT 경로.
+# pipeline.py 전체 import는 side effect를 유발하므로, renderer는 importlib로
+# .claude/acceptance_renderer.py를 직접 로드한다. contract도 동일 디렉토리에 위치.
+_RENDERER_FILENAME = "acceptance_renderer.py"
+_CONTRACT_FILENAME = "codex_review_contract.md"
+
+
+def _load_renderer() -> Any:
+    """.claude/acceptance_renderer.py를 importlib로 로드하여 모듈을 반환한다.
+
+    pipeline.py 전체를 import하면 side effect가 발생하므로, renderer만 단독 로드한다.
+
+    Returns:
+        로드된 acceptance_renderer 모듈 객체.
+    Raises:
+        RuntimeError: renderer 파일이 없거나 로드 실패 시 (fail-closed).
+    """
+    renderer_path = Path(__file__).parent.parent / _RENDERER_FILENAME
+    if not renderer_path.exists():
+        raise RuntimeError(
+            f"acceptance_renderer를 로드할 수 없습니다: {renderer_path}"
+        )
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "acceptance_renderer", str(renderer_path)
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError(
+                f"acceptance_renderer spec 생성 실패: {renderer_path}"
+            )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except (OSError, ImportError, SyntaxError) as e:
+        raise RuntimeError(
+            f"acceptance_renderer 로드 실패 (fail-closed): {e}"
+        ) from e
+
+
+def _contract_path() -> Path:
+    """Codex Review Contract(.claude/codex_review_contract.md) 절대 경로를 반환한다.
+
+    Returns:
+        contract 파일 경로 (hook 파일과 같은 .claude 디렉토리 하위).
+    """
+    return Path(__file__).parent.parent / _CONTRACT_FILENAME
+
+
+def _render_approve(pipeline_id: str, pr_url: Optional[str]) -> str:
+    """APPROVE 시 사용자에게 출력할 메시지를 renderer B형으로 구성.
+
+    renderer.render_user_acceptance_request(mode='user_final', ...)을 단일 SSoT로
+    사용한다. nonce를 노출하지 않고 ACCEPT-<pipeline_id> 형식만 출력한다.
+
+    Args:
+        pipeline_id: 파이프라인 ID.
+        pr_url: PR 링크 (없으면 None → '(PR 링크 없음)').
+    Returns:
+        APPROVE 사용자 출력 메시지 (renderer B형).
+    Raises:
+        TypeError: pipeline_id가 None이거나 str가 아닌 경우.
+        RuntimeError: renderer 로드 실패 시 (fail-closed).
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    if pr_url is not None and not isinstance(pr_url, str):
+        raise TypeError(
+            f"pr_url must be str or None, got {type(pr_url).__name__}"
+        )
+    pr_line = pr_url if (pr_url and pr_url.strip()) else "(PR 링크 없음)"
+    renderer = _load_renderer()
+    return renderer.render_user_acceptance_request(
+        mode="user_final", pr_url=pr_line, pipeline_id=pipeline_id
+    )
 
 
 def _read_text_with_fallback(path: Path) -> str:
@@ -370,16 +448,22 @@ def _is_duplicate_reject(
 
 
 def _check_stale(
-    state: Dict[str, Any], pr_head_sha: str, packet_sha256: str
+    state: Dict[str, Any],
+    pr_head_sha: str,
+    packet_sha256: str,
+    pipeline_id: str = "",
 ) -> bool:
-    """기존 APPROVED 상태가 현재 head/packet과 같아 재호출 불필요인지 판정.
+    """기존 APPROVED 상태가 현재 head/packet/pipeline_id와 같아 재호출 불필요인지 판정.
 
     동일 (pr_head_sha, packet_sha256)로 이미 APPROVED면 True (재트리거 방지).
+    pipeline_id가 주어지면 pipeline_id 일치까지 확인하여, 다른 파이프라인의
+    APPROVED 상태를 stale로 오판하는 것을 차단한다.
 
     Args:
         state: 로드된 loop state dict.
         pr_head_sha: 현재 PR head 커밋 SHA.
         packet_sha256: 현재 packet SHA-256.
+        pipeline_id: 현재 파이프라인 ID (빈 문자열이면 비교 생략 — 하위 호환).
     Returns:
         같은 APPROVED 상태가 유효(stale 아님)하면 True, 아니면 False.
     Raises:
@@ -392,12 +476,16 @@ def _check_stale(
     for name, val in (
         ("pr_head_sha", pr_head_sha),
         ("packet_sha256", packet_sha256),
+        ("pipeline_id", pipeline_id),
     ):
         if val is None:
             raise TypeError(f"{name} must not be None")
         if not isinstance(val, str):
             raise TypeError(f"{name} must be str, got {type(val).__name__}")
     if state.get("status") != "APPROVED":
+        return False
+    # pipeline_id가 주어진 경우 불일치하면 stale 아님 (다른 파이프라인의 APPROVED)
+    if pipeline_id and str(state.get("pipeline_id", "")) != pipeline_id:
         return False
     return (
         str(state.get("pr_head_sha", "")) == pr_head_sha
@@ -543,6 +631,7 @@ def call_codex_cli(prompt: str) -> str:
             text=True,
             encoding="utf-8",
             timeout=300,
+            shell=(sys.platform == "win32"),
         )
     except FileNotFoundError as e:
         raise RuntimeError("codex CLI not found — fail-closed") from e
@@ -556,25 +645,42 @@ def call_codex_cli(prompt: str) -> str:
 
 
 def _build_codex_prompt(packet: Dict[str, Any]) -> str:
-    """검토 packet으로부터 Codex 프롬프트를 구성 (금지 사항 명시).
+    """검토 packet으로부터 Codex 프롬프트를 구성 (Codex Review Contract 삽입).
+
+    IMP-20260627-3907: Codex Review Contract(.claude/codex_review_contract.md)를
+    renderer.load_contract로 로드하여 프롬프트 상단에 삽입한다. contract 로드 실패 시
+    RuntimeError를 전파하여(fail-closed) contract 없이 검토가 진행되는 것을 막는다.
 
     Args:
         packet: build_review_packet 반환 dict.
     Returns:
-        Codex 검토 프롬프트 문자열.
+        Codex 검토 프롬프트 문자열 (contract 11개 항목 포함).
     Raises:
         TypeError: packet이 None이거나 dict가 아닌 경우.
+        RuntimeError: contract 로드 실패 시 (fail-closed).
     """
     if packet is None:
         raise TypeError("packet must not be None")
     if not isinstance(packet, dict):
         raise TypeError(f"packet must be dict, got {type(packet).__name__}")
+
+    # Codex Review Contract 로드 (fail-closed: 실패 시 RuntimeError 전파).
+    # renderer.load_contract는 파일 부재/읽기 실패 시 RuntimeError를 발생시킨다.
+    renderer = _load_renderer()
+    contract_text = renderer.load_contract(str(_contract_path()))
+
     files_txt = "\n".join(f"  - {p}" for p in packet.get("changed_files", []))
     ci_txt = "\n".join(
         f"  - {c['name']}: {c['conclusion']}" for c in packet.get("ci_status", [])
     )
     return (
         "당신은 사용자 ACCEPT 직전의 마지막 검토자입니다. 아래 PR을 검토하세요.\n\n"
+        "아래 Codex Review Contract(검토 계약)의 11개 항목을 모두 강제 준수하여 검토하세요. "
+        "하나라도 위반이 발견되면 'REJECT - <근본 원인>'으로 반려하고, 모든 항목이 충족될 "
+        "때에만 'APPROVE_TO_USER'를 출력하세요.\n\n"
+        "===== Codex Review Contract 시작 =====\n"
+        f"{contract_text}\n"
+        "===== Codex Review Contract 끝 =====\n\n"
         "엄격한 금지 사항 (절대 준수):\n"
         "  1. 파일을 수정하지 마세요.\n"
         "  2. PR 댓글을 작성하지 마세요.\n"
@@ -590,36 +696,6 @@ def _build_codex_prompt(packet: Dict[str, Any]) -> str:
         f"CI 상태:\n{ci_txt}\n\n"
         f"본문 발췌:\n{packet.get('body', '')[:2000]}\n\n"
         f"Diff 발췌:\n{packet.get('diff_excerpt', '')}\n"
-    )
-
-
-def _approve_message(pipeline_id: str, pr_url: Optional[str]) -> str:
-    """APPROVE 시 사용자에게 출력할 메시지를 구성.
-
-    nonce를 절대 노출하지 않고 ACCEPT-<pipeline_id> 형식만 출력한다.
-    'CODEX 검토 필요' 마커를 추가하지 않는다 (재트리거 방지).
-
-    Args:
-        pipeline_id: 파이프라인 ID.
-        pr_url: PR 링크 (없으면 None).
-    Returns:
-        APPROVE 사용자 출력 메시지.
-    Raises:
-        TypeError: pipeline_id가 None이거나 str가 아닌 경우.
-    """
-    if pipeline_id is None:
-        raise TypeError("pipeline_id must not be None")
-    if not isinstance(pipeline_id, str):
-        raise TypeError(
-            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
-        )
-    pr_line = pr_url if pr_url else "(PR 링크 없음)"
-    return (
-        "Codex 검토 통과\n\n"
-        "사용자 승인 요청\n\n"
-        f"PR: {pr_line}\n\n"
-        "승인 코드:\n"
-        f"ACCEPT-{pipeline_id}"
     )
 
 
@@ -680,7 +756,7 @@ def process_verdict(
     if _APPROVE_RE.match(normalized):
         return {
             "decision": "APPROVE",
-            "output": _approve_message(pipeline_id, pr_url),
+            "output": _render_approve(pipeline_id, pr_url),
             "exit_code": 0,
             "reject_reason": None,
         }
@@ -810,48 +886,308 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    """hook 진입점. transcript에서 승인 블록 탐지 후 Codex 검토를 수행.
+def _write_hook_log(pipeline_dir: Path, entry: Dict[str, Any]) -> None:
+    """hook 실행 로그를 .pipeline/codex_review_loop_hook_log.json에 JSONL 형식으로 추가.
+
+    파일이 있으면 기존 내용에 append, 없으면 새로 생성한다. 파일명은 `.json`이지만
+    내용은 한 줄에 하나의 JSON 객체가 쌓이는 JSONL 형식이다.
 
     Args:
-        argv: 명령행 인자 (테스트용 주입 가능). None이면 sys.argv 사용.
+        pipeline_dir: .pipeline 디렉토리 경로.
+        entry: 기록할 로그 dict (started_at/pipeline_id/status/failure_code/message 등).
+    """
+    try:
+        log_path = Path(pipeline_dir) / "codex_review_loop_hook_log.json"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(log_path), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"[CODEX REVIEW] hook_log 기록 실패 (무시): {e}", file=sys.stderr)
+
+
+def _record_failed_state(
+    state_path: Path, pipeline_id: str, failure_code: str, message: str
+) -> None:
+    """loop_state에 FAILED 상태를 기록한다. 쓰기 실패는 조용히 무시.
+
+    이미 같은 pipeline_id로 APPROVED인 상태는 FAILED로 덮어쓰지 않는다.
+
+    Args:
+        state_path: codex_review_loop_state.json 경로.
+        pipeline_id: 현재 파이프라인 ID.
+        failure_code: 실패 분류 코드.
+        message: 실패 상세 메시지.
+    """
+    try:
+        existing = _load_loop_state(state_path)
+        # 기존 APPROVED 상태를 덮어쓰지 않음 — APPROVED이면 FAILED 미기록
+        if (
+            existing.get("status") == "APPROVED"
+            and existing.get("pipeline_id") == pipeline_id
+        ):
+            return
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": failure_code,
+                "message": message,
+                "failed_at": _now_iso(),
+            },
+        )
+    except Exception as e:
+        print(f"[CODEX REVIEW] failed_state 기록 실패 (무시): {e}", file=sys.stderr)
+
+
+def _read_pipeline_id_from_env() -> Optional[str]:
+    """acceptance_request.json 또는 active pipeline state에서 pipeline_id를 읽는다.
+
+    transcript 없이 hook이 실행될 때 FAILED 상태를 기록하기 위한 폴백용.
+
+    우선순위:
+    1. .pipeline/acceptance_request.json의 pipeline_id 필드
+    2. PIPELINE_STATE_PATH 환경변수가 가리키는 state.json의 pipeline_id
+    3. .pipeline/active_run.json -> runs/<id>/state.json의 pipeline_id
+    4. legacy pipeline_state.json의 active_pipeline_id
+
+    Returns:
+        pipeline_id 문자열 또는 None (읽기 실패 시).
+    """
+    try:
+        pipeline_dir = _project_pipeline_dir()
+
+        # 1. acceptance_request.json
+        accept_req = pipeline_dir / "acceptance_request.json"
+        if accept_req.exists():
+            raw = _read_text_with_fallback(accept_req)
+            data = json.loads(raw)
+            pid = data.get("pipeline_id")
+            if pid and isinstance(pid, str):
+                return pid
+
+        # 2. PIPELINE_STATE_PATH 환경변수
+        env_state = os.environ.get("PIPELINE_STATE_PATH")
+        if env_state:
+            sp = Path(env_state)
+            if sp.exists():
+                raw = _read_text_with_fallback(sp)
+                data = json.loads(raw)
+                pid = data.get("pipeline_id")
+                if pid and isinstance(pid, str):
+                    return pid
+
+        # 3. active_run.json -> runs/<id>/state.json
+        active_ptr = pipeline_dir / "active_run.json"
+        if active_ptr.exists():
+            raw = _read_text_with_fallback(active_ptr)
+            ptr = json.loads(raw)
+            state_path_str = ptr.get("state_path")
+            if state_path_str:
+                sp = Path(state_path_str)
+                if sp.exists():
+                    raw = _read_text_with_fallback(sp)
+                    data = json.loads(raw)
+                    pid = data.get("pipeline_id")
+                    if pid and isinstance(pid, str):
+                        return pid
+
+        # 4. legacy pipeline_state.json
+        legacy = _project_root() / "pipeline_state.json"
+        if legacy.exists():
+            raw = _read_text_with_fallback(legacy)
+            data = json.loads(raw)
+            pid = data.get("pipeline_id") or data.get("active_pipeline_id")
+            if pid and isinstance(pid, str):
+                return pid
+    except Exception as e:
+        print(f"[CODEX REVIEW] pipeline_id 조회 실패 (무시): {e}", file=sys.stderr)
+    return None
+
+
+def _fallback_record_no_transcript(failure_code: str, checked_text: str = "") -> None:
+    """last_assistant_message에 5요소 블록이 없을 때 pipeline_id 폴백으로 FAILED 기록.
+
+    pipeline_id를 읽을 수 없으면 조용히 무시한다. (함수명은 하위 호환을 위해 유지)
+
+    Args:
+        failure_code: 기록할 실패 코드.
+        checked_text: 5요소 감지 대상 텍스트. 디버그 로그에 앞 200자/길이를 남긴다.
+    """
+    try:
+        pipeline_id = _read_pipeline_id_from_env()
+        if not pipeline_id:
+            return
+        pipeline_dir = _project_pipeline_dir()
+        state_path = pipeline_dir / _LOOP_STATE_FILENAME
+
+        # 기존 상태가 현재 pipeline_id이고 APPROVED/REJECTED이면 덮어쓰지 않음
+        # FAILED/PROCESSING/STALE_PROCESSING은 덮어쓰기 허용 (stale 영구화 방지)
+        existing = _load_loop_state(state_path)
+        if existing.get("pipeline_id") == pipeline_id:
+            protected_statuses = {"APPROVED", "REJECTED"}
+            if existing.get("status") in protected_statuses:
+                return  # APPROVED/REJECTED만 보호
+
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": failure_code,
+                "message": (
+                    f"hook 입력에 5요소 승인 요청 블록이 없음 ({failure_code}). "
+                    "last_assistant_message에서 5요소를 감지할 수 없습니다."
+                ),
+                "failed_at": _now_iso(),
+            },
+        )
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "started_at": _now_iso(),
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": failure_code,
+                "message": "5요소 블록 없음",
+                "checked_text_first200": (checked_text or "")[:200],
+                "checked_text_len": len(checked_text or ""),
+            },
+        )
+    except Exception as e:
+        print(f"[CODEX REVIEW] fallback 기록 실패 (무시): {e}", file=sys.stderr)
+
+
+def _extract_assistant_tail(hook_data: Dict[str, Any]) -> str:
+    """stdin JSON의 last_assistant_message를 반환한다. 비어있으면 transcript_path에서 마지막 assistant 텍스트를 추출한다.
+
+    Args:
+        hook_data: stdin에서 읽은 hook JSON dict.
+    Returns:
+        최대 4000자의 assistant 텍스트. 없으면 빈 문자열.
+    """
+    # 1. last_assistant_message 우선
+    msg = hook_data.get("last_assistant_message", "") or ""
+    if msg.strip():
+        return msg
+
+    # 2. transcript_path 폴백
+    transcript_path_str = hook_data.get("transcript_path") or ""
+    if not transcript_path_str:
+        return ""
+    try:
+        transcript_path = Path(transcript_path_str)
+        if not transcript_path.exists():
+            return ""
+        last_text = ""
+        for line_bytes in transcript_path.read_bytes().splitlines():
+            try:
+                line = line_bytes.decode("utf-8-sig", errors="replace").strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                # Claude Code transcript 형식: {"type":"assistant","message":{"role":"assistant","content":[...]}}
+                # 또는 표준 API 형식: {"role":"assistant","content":[...]}
+                role = (
+                    entry.get("role")
+                    or (entry.get("message") or {}).get("role")
+                    or ""
+                )
+                if role != "assistant":
+                    continue
+                content = (
+                    entry.get("content")
+                    or (entry.get("message") or {}).get("content")
+                    or ""
+                )
+                if isinstance(content, str):
+                    last_text = content
+                elif isinstance(content, list):
+                    texts = [
+                        block.get("text", "")
+                        for block in content
+                        if isinstance(block, dict) and block.get("type") == "text"
+                    ]
+                    if texts:
+                        last_text = "\n".join(texts)
+            except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
+                continue
+        return last_text[-4000:] if last_text else ""
+    except Exception:
+        return ""
+
+
+def main(hook_data_override: Optional[Dict[str, Any]] = None) -> int:
+    """hook 진입점. stdin JSON의 last_assistant_message에서 승인 블록 탐지 후 Codex 검토.
+
+    Claude Code Stop hook은 hook 데이터를 stdin JSON으로 전달하며, 그 안의
+    last_assistant_message 필드에 마지막 assistant 메시지가 들어 있다. transcript 파일
+    경로를 파싱할 필요 없이 이 필드를 바로 5요소 패턴 감지에 사용한다.
+
+    Args:
+        hook_data_override: 테스트용 hook_data 주입. None이면 stdin에서 읽음.
     Returns:
         프로세스 종료 코드.
         - 0: 블록 없음/중복 차단/APPROVE/REJECT 상한 중단 (정상)
         - 2: REJECT 재주입 (Stop hook 재주입)
         - 1: fail-closed 오류
     """
-    parser = argparse.ArgumentParser(
-        description="Codex 사용자 승인 검토 보조 hook (Codex Review Loop)"
-    )
-    parser.add_argument(
-        "--transcript",
-        nargs="?",
-        default=os.environ.get("CLAUDE_HOOK_TRANSCRIPT_PATH", ""),
-        help="transcript 파일 경로 (JSONL 또는 텍스트). 생략 가능.",
-    )
-    args = parser.parse_args(argv)
+    if hook_data_override is not None:
+        if not isinstance(hook_data_override, dict):
+            raise TypeError(
+                "hook_data_override must be dict, got "
+                f"{type(hook_data_override).__name__}"
+            )
+        hook_data = hook_data_override
+    else:
+        try:
+            raw_bytes = sys.stdin.buffer.read()
+            raw = raw_bytes.decode("utf-8-sig", errors="replace")
+            hook_data = json.loads(raw) if raw.strip() else {}
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError, ValueError) as e:
+            sys.stderr.write(f"[hook] stdin 읽기/파싱 실패: {e}\n")
+            hook_data = {}
 
-    transcript_path = (args.transcript or "").strip()
-    if not transcript_path:
-        # transcript 없음 — 조용히 종료 (정상)
+    # last_assistant_message에서 직접 5요소 패턴 감지 (비어있으면 transcript 폴백)
+    last_message = _extract_assistant_tail(hook_data)
+    if not isinstance(last_message, str):
+        last_message = ""
+
+    # IMP-20260627-3907 hotfix-7: 중복 trigger block 감지. 같은 메시지에 사용자 승인
+    # 요청이 2회 이상이면 delivery path 설계 결함(중복 안내)이므로 FAILED 기록 후 차단.
+    duplicate_count = last_message.count("사용자 승인 요청")
+    if duplicate_count >= 2:
+        # message 안의 ACCEPT- 코드에서 pipeline_id 직접 파싱 (env fallback보다 우선)
+        accept_match = _ACCEPT_CODE_RE.search(last_message)
+        pipeline_id_fallback = (
+            _extract_pipeline_id(accept_match.group(0)) if accept_match else None
+        ) or _read_pipeline_id_from_env()
+        if pipeline_id_fallback:
+            pipeline_dir_fb = _project_pipeline_dir()
+            state_path_fb = pipeline_dir_fb / _LOOP_STATE_FILENAME
+            _record_failed_state(
+                state_path_fb,
+                pipeline_id_fallback,
+                "duplicate_trigger_block",
+                f"last_assistant_message에 '사용자 승인 요청'이 {duplicate_count}회 감지됨. "
+                "단일 trigger block만 허용합니다.",
+            )
+            _write_hook_log(
+                pipeline_dir_fb,
+                {
+                    "started_at": _now_iso(),
+                    "pipeline_id": pipeline_id_fallback,
+                    "status": "FAILED",
+                    "failure_code": "duplicate_trigger_block",
+                    "message": f"중복 trigger block {duplicate_count}회",
+                },
+            )
         return 0
 
-    tpath = Path(transcript_path)
-    if not tpath.exists():
-        # transcript 파일 없음 — 조용히 종료 (정상)
-        return 0
-
-    try:
-        transcript_text = _read_text_with_fallback(tpath)
-    except (OSError, UnicodeDecodeError):
-        # 읽기 실패는 조용히 종료 (블록 판정 불가)
-        return 0
-
-    tail = _extract_assistant_tail(transcript_text, _TAIL_MESSAGES)
-    block = parse_acceptance_block(tail)
+    block = parse_acceptance_block(last_message)
     if block is None:
-        # 승인 블록 5요소 미충족 — 조용히 종료 (정상)
+        # 5요소 없음 — fallback: pipeline_id로 FAILED 기록 시도 후 종료
+        _fallback_record_no_transcript("no_five_element_block", last_message)
         return 0
 
     pr_url = block["pr_url"]
@@ -860,23 +1196,113 @@ def main(argv: Optional[List[str]] = None) -> int:
     pipeline_dir = _project_pipeline_dir()
     state_path = pipeline_dir / _LOOP_STATE_FILENAME
 
+    # hook 진입 즉시 RUNNING 로그 (5요소 감지 직후 관찰성 확보)
+    _write_hook_log(
+        pipeline_dir,
+        {
+            "started_at": _now_iso(),
+            "pipeline_id": pipeline_id,
+            "status": "RUNNING",
+        },
+    )
+
+    # PROCESSING 기록 전에 직전 상태를 먼저 읽는다 (중복 PROCESSING 판정 및
+    # stale APPROVED 판정에는 이번 hook이 쓰기 전의 상태가 필요하기 때문이다).
+    prior_state = _load_loop_state(state_path)
+    prior_status = prior_state.get("status", "")
+    prior_pid = prior_state.get("pipeline_id", "")
+
+    # 같은 pipeline_id로 이미 PROCESSING 중이면 중복 실행 방지.
+    # 단, 5분(300초) 이상 지속된 PROCESSING은 STALE_PROCESSING으로 전환 후 재시도 허용.
+    if prior_status == "PROCESSING" and prior_pid == pipeline_id:
+        started_at_str = prior_state.get("started_at", "")
+        stale = False
+        if started_at_str:
+            try:
+                started_at = datetime.fromisoformat(started_at_str)
+                elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+                if elapsed > 300:
+                    stale = True
+            except (ValueError, TypeError):
+                stale = True  # 파싱 실패 시 stale로 처리
+        if not stale:
+            # 5분 미만 PROCESSING: 중복 실행 차단
+            return 0
+        # 5분 초과: STALE_PROCESSING으로 전환 후 재시도 허용
+        try:
+            _record_state(
+                state_path,
+                {
+                    "pipeline_id": pipeline_id,
+                    "status": "STALE_PROCESSING",
+                    "pr_url": pr_url,
+                    "stale_at": _now_iso(),
+                    "original_started_at": started_at_str,
+                },
+            )
+        except Exception as e:
+            print(
+                f"[CODEX REVIEW] STALE_PROCESSING 기록 실패 (무시): {e}",
+                file=sys.stderr,
+            )
+
+    # 5요소 감지 즉시 pipeline_id 기준으로 PROCESSING 상태 기록 (관찰성). 이전
+    # 파이프라인의 APPROVED/REJECTED 상태가 남아있더라도 현재 pipeline_id로 덮어쓴다.
+    try:
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "PROCESSING",
+                "pr_url": pr_url,
+                "started_at": _now_iso(),
+            },
+        )
+    except Exception as e:
+        print(f"[CODEX REVIEW] PROCESSING 기록 실패: {e}", file=sys.stderr)
+        _record_failed_state(state_path, pipeline_id, "processing_record_failed", str(e))
+
     # --- fail-closed 영역 시작 ---
     try:
         head_sha = _get_pr_head_sha(pr_url)
     except RuntimeError as e:
+        _record_failed_state(state_path, pipeline_id, "pr_head_sha_failed", str(e))
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "pr_head_sha_failed",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] PR head SHA 조회 실패 (fail-closed): {e}",
             file=sys.stderr,
         )
         return 1
 
-    loop_state = _load_loop_state(state_path)
+    # PROCESSING으로 덮어쓰기 전의 직전 상태를 사용한다 (reject_count, 기존
+    # APPROVED/REJECTED 이력이 PROCESSING 기록으로 사라지지 않도록 prior_state 재사용).
+    loop_state = prior_state
 
     # packet 수집은 codex 호출과 SHA 산출 양쪽에 필요. 단, APPROVED 재트리거 방지
     # 판정에는 기존 packet_sha256과 비교가 필요하므로 packet을 먼저 수집한다.
     try:
         packet = build_review_packet(pr_url, block["accept_code"], head_sha)
     except (RuntimeError, TypeError, ValueError) as e:
+        _record_failed_state(
+            state_path, pipeline_id, "packet_collection_failed", str(e)
+        )
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "packet_collection_failed",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] PR packet 수집 실패 (fail-closed): {e}",
             file=sys.stderr,
@@ -894,21 +1320,43 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         packet_sha256 = _human_acceptance_packet_sha256(packet)
     except RuntimeError as e:
+        _record_failed_state(state_path, pipeline_id, "packet_sha256_failed", str(e))
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "packet_sha256_failed",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] acceptance packet SHA 계산 실패 (fail-closed): {e}",
             file=sys.stderr,
         )
         return 1
 
-    # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 같은 APPROVE 출력만.
-    if _check_stale(loop_state, head_sha, packet_sha256):
-        print(_approve_message(pipeline_id, pr_url))
+    # 이미 같은 head/packet/pipeline_id로 APPROVED면 Codex CLI 재호출 없이 같은
+    # APPROVE 출력만. pipeline_id를 함께 전달하여 다른 파이프라인의 APPROVED를
+    # stale로 오판하지 않도록 한다.
+    if _check_stale(loop_state, head_sha, packet_sha256, pipeline_id):
+        print(_render_approve(pipeline_id, pr_url))
         return 0
 
     try:
         prompt = _build_codex_prompt(packet)
         verdict = call_codex_cli(prompt)
     except (RuntimeError, TypeError, ValueError) as e:
+        _record_failed_state(state_path, pipeline_id, "codex_call_failed", str(e))
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "codex_call_failed",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] Codex 호출 실패 (fail-closed): {e}", file=sys.stderr
         )
@@ -933,6 +1381,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         outcome = process_verdict(verdict, pipeline_id, pr_url, reject_count)
     except (TypeError, ValueError) as e:
+        _record_failed_state(
+            state_path, pipeline_id, "verdict_format_invalid", str(e)
+        )
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "verdict_format_invalid",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] Codex 응답 형식 위반 (fail-closed): {e}",
             file=sys.stderr,
@@ -972,63 +1432,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     # REJECT 원문은 prefix/suffix 없이 그대로, APPROVE는 안내 메시지 출력
     print(outcome["output"])
     return int(outcome["exit_code"])
-
-
-def _extract_assistant_tail(transcript_text: str, n_messages: int) -> str:
-    """transcript에서 마지막 assistant 메시지 N개의 텍스트를 결합.
-
-    transcript가 JSONL(한 줄당 {"role","content"}) 형식이면 assistant 메시지만
-    추출하고, 일반 텍스트면 마지막 N*40줄을 tail로 사용한다.
-
-    Args:
-        transcript_text: transcript 전체 텍스트.
-        n_messages: 추출할 마지막 assistant 메시지 수.
-    Returns:
-        결합된 assistant tail 텍스트.
-    Raises:
-        TypeError: transcript_text가 None이거나 str가 아닌 경우.
-        ValueError: n_messages가 0 이하인 경우.
-    """
-    if transcript_text is None:
-        raise TypeError("transcript_text must not be None")
-    if not isinstance(transcript_text, str):
-        raise TypeError(
-            f"transcript_text must be str, got {type(transcript_text).__name__}"
-        )
-    if n_messages <= 0:
-        raise ValueError(f"n_messages must be > 0, got {n_messages}")
-
-    assistant_msgs: List[str] = []
-    is_jsonl = False
-    for line in transcript_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(obj, dict) and obj.get("role") == "assistant":
-            is_jsonl = True
-            content = obj.get("content", "")
-            if isinstance(content, list):
-                # content가 블록 리스트인 경우 text만 모음
-                text_parts = [
-                    b.get("text", "")
-                    for b in content
-                    if isinstance(b, dict) and b.get("type") == "text"
-                ]
-                content = "\n".join(text_parts)
-            if isinstance(content, str):
-                assistant_msgs.append(content)
-
-    if is_jsonl and assistant_msgs:
-        return "\n".join(assistant_msgs[-n_messages:])
-
-    # JSONL이 아니면 일반 텍스트의 tail 라인 사용
-    lines = transcript_text.splitlines()
-    tail = lines[-(n_messages * 40):]
-    return "\n".join(tail)
 
 
 if __name__ == "__main__":
