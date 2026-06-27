@@ -354,6 +354,100 @@ class TestHookFailedStateRecording:
         assert data["status"] == "APPROVED"  # 덮어쓰지 않음
 
 
+class TestHookStdinInput:
+    """hook이 stdin JSON의 last_assistant_message에서 5요소를 읽는지 검증."""
+
+    def _load_hook(self):
+        import importlib.util as _ilu
+
+        spec = _ilu.spec_from_file_location("hook_stdin_test", str(_HOOK_PATH))
+        cx = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(cx)
+        return cx
+
+    def test_main_no_five_element_block_returns_zero(self, tmp_path):
+        """last_assistant_message에 5요소가 없으면 main이 0을 반환한다."""
+        import os
+        import unittest.mock as mock
+
+        cx = self._load_hook()
+        with mock.patch.dict(
+            os.environ, {"PIPELINE_STATE_PATH": str(tmp_path / "state.json")}
+        ):
+            rc = cx.main(
+                hook_data_override={
+                    "hook_event_name": "Stop",
+                    "last_assistant_message": "그냥 일반적인 응답입니다.",
+                    "stop_hook_active": False,
+                }
+            )
+        assert rc == 0
+
+    def test_main_empty_override_returns_zero(self, tmp_path):
+        """빈 hook_data_override(메시지 없음)도 5요소 없음으로 0을 반환한다."""
+        import os
+        import unittest.mock as mock
+
+        cx = self._load_hook()
+        with mock.patch.dict(
+            os.environ, {"PIPELINE_STATE_PATH": str(tmp_path / "state.json")}
+        ):
+            rc = cx.main(hook_data_override={})
+        assert rc == 0
+
+    def test_main_override_must_be_dict(self):
+        """hook_data_override가 dict가 아니면 TypeError."""
+        cx = self._load_hook()
+        with pytest.raises(TypeError):
+            cx.main(hook_data_override="not a dict")
+
+    def test_main_detects_five_element_block(self, tmp_path):
+        """5요소 블록이 있으면 parse_acceptance_block가 호출되어 검토 흐름으로 진입한다.
+
+        gh CLI 미설치 환경에서는 head_sha 조회 실패로 fail-closed(exit 1)되거나
+        PROCESSING 상태가 기록되므로, 5요소 블록이 감지되었음을 상태 파일로 확인한다.
+        """
+        import json
+        import os
+        import unittest.mock as mock
+
+        cx = self._load_hook()
+        last_message = "\n".join(
+            [
+                "사용자 승인 요청",
+                "",
+                "PR: https://github.com/owner/repo/pull/999",
+                "",
+                "승인 코드:",
+                "ACCEPT-IMP-20260627-3907",
+                "",
+                "CODEX 검토 필요",
+            ]
+        )
+        state_path = tmp_path / "state.json"
+        with mock.patch.dict(
+            os.environ, {"PIPELINE_STATE_PATH": str(state_path)}
+        ):
+            # head_sha 조회를 강제 실패시켜 결정론적으로 fail-closed 경로 확인
+            with mock.patch.object(
+                cx, "_get_pr_head_sha", side_effect=RuntimeError("gh 없음")
+            ):
+                rc = cx.main(
+                    hook_data_override={
+                        "hook_event_name": "Stop",
+                        "last_assistant_message": last_message,
+                        "stop_hook_active": False,
+                    }
+                )
+        # 5요소 감지 후 head_sha 실패 → fail-closed exit 1
+        assert rc == 1
+        loop_state = tmp_path / ".pipeline" / "codex_review_loop_state.json"
+        assert loop_state.exists()
+        data = json.loads(loop_state.read_text(encoding="utf-8"))
+        # 5요소가 감지되어 해당 pipeline_id로 상태가 기록되었는지 확인
+        assert data["pipeline_id"] == "IMP-20260627-3907"
+
+
 class TestHotfix4:
     """hotfix-4 (IMP-20260627-3907): B형 마지막 줄, except pass 제거, stale 판정."""
 
@@ -418,17 +512,13 @@ class TestHotfix4:
 
 
 def test_ps1_reads_stdin_not_env_var():
-    """PS1 래퍼가 환경변수 대신 stdin JSON으로 transcript_path를 읽는지 검증."""
-    import re as _re
+    """PS1 래퍼가 환경변수 대신 stdin JSON을 Python에 pipe하는지 검증."""
     ps1_path = Path(__file__).parent.parent / ".claude" / "hooks" / "codex-user-acceptance-review.ps1"
     assert ps1_path.exists(), f"PS1 파일 없음: {ps1_path}"
     src = ps1_path.read_text(encoding="utf-8")
     # 환경변수 CLAUDE_HOOK_TRANSCRIPT_PATH 읽기가 없어야 함
     assert "CLAUDE_HOOK_TRANSCRIPT_PATH" not in src, \
         "PS1이 여전히 CLAUDE_HOOK_TRANSCRIPT_PATH 환경변수를 읽습니다"
-    # stdin 읽기가 있어야 함
-    assert "$input" in src or "stdin" in src.lower(), \
-        "PS1이 stdin을 읽지 않습니다"
-    # transcript_path 추출이 있어야 함
-    assert "transcript_path" in src, \
-        "PS1이 transcript_path를 추출하지 않습니다"
+    # stdin을 Python helper에 그대로 pipe해야 함
+    assert "$input | python" in src or ("$input" in src and "python" in src), \
+        "PS1이 stdin을 Python에 pipe하지 않습니다"

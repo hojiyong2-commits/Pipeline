@@ -6,18 +6,19 @@
 #   코드만 출력한다. 이 helper는 절대로 PR 댓글을 쓰거나 nonce를 노출하거나 gates accept를
 #   실행하지 않는다. 모든 루프 상태는 .pipeline/codex_review_loop_state.json에만 저장하며,
 #   acceptance_request.json은 읽거나 수정하지 않는다.
-# [Assumptions]: gh CLI와 codex CLI가 PATH에 존재하고 인증되어 있다. transcript는
-#   --transcript 인자(JSONL 또는 텍스트)로 전달되며, 마지막 assistant 메시지에 승인 블록이 있다.
+# [Assumptions]: gh CLI와 codex CLI가 PATH에 존재하고 인증되어 있다. Claude Code Stop hook은
+#   hook 데이터를 stdin JSON으로 전달하며, 그 안의 last_assistant_message 필드에 승인 블록이
+#   있다. transcript 파일 경로 파싱은 더 이상 필요 없다.
 #   .pipeline/ 디렉토리는 프로젝트 루트 하위에 쓰기 가능하다.
 # [Vulnerability & Risks]: gh/codex 응답 형식이 예고 없이 바뀌면 파싱이 깨질 수 있다.
-#   이를 위해 모든 외부 호출은 fail-closed(예외 시 exit 1)로 처리한다. transcript 파싱은
-#   인용/코드블록 내부 예시를 무시하여 사용자 프롬프트 오탐을 방지한다. 형식이 모호한
+#   이를 위해 모든 외부 호출은 fail-closed(예외 시 exit 1)로 처리한다. last_assistant_message
+#   파싱은 인용/코드블록 내부 예시를 무시하여 사용자 프롬프트 오탐을 방지한다. 형식이 모호한
 #   verdict는 ValueError로 차단한다. REJECT 원문은 prefix/suffix/번역/요약 없이 그대로 출력한다.
 # [Improvement]: 시간이 더 있다면 Codex 응답을 구조화 JSON 스키마로 강제하고,
 #   gh GraphQL로 단일 호출 packet 조회, 그리고 검토 결과 캐시 TTL을 추가할 것이다.
 """Codex 사용자 승인 검토 보조 hook helper (Codex Review Loop, IMP-20260626-4121).
 
-이 모듈은 Claude Code의 Stop hook에서 호출된다. assistant 최종 출력에
+이 모듈은 Claude Code의 Stop hook에서 호출된다. stdin JSON의 last_assistant_message에
 "사용자 승인 요청" 블록(5요소)이 있으면 Codex CLI로 PR을 한 번 더 검토한다.
 
 - REJECT - <사유>: 원문을 그대로 stdout에 출력하고 exit 2로 재주입한다.
@@ -34,7 +35,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import importlib.util
 import json
@@ -67,8 +67,6 @@ _MARKER_CODE_LABEL = "승인 코드:"
 _MARKER_ACCEPT_PREFIX = "ACCEPT-"
 _MARKER_CODEX_REQUIRED = "CODEX 검토 필요"
 
-# transcript tail에서 검사할 마지막 assistant 메시지 수
-_TAIL_MESSAGES = 5
 # REJECT 누적 횟수 상한 — 초과(즉 6번째)부터 루프 자동 중단
 _MAX_REJECT = 5
 
@@ -1007,9 +1005,9 @@ def _read_pipeline_id_from_env() -> Optional[str]:
 
 
 def _fallback_record_no_transcript(failure_code: str) -> None:
-    """transcript 없을 때 pipeline_id 폴백으로 FAILED 상태를 기록한다.
+    """last_assistant_message에 5요소 블록이 없을 때 pipeline_id 폴백으로 FAILED 기록.
 
-    pipeline_id를 읽을 수 없으면 조용히 무시한다.
+    pipeline_id를 읽을 수 없으면 조용히 무시한다. (함수명은 하위 호환을 위해 유지)
 
     Args:
         failure_code: 기록할 실패 코드.
@@ -1035,8 +1033,8 @@ def _fallback_record_no_transcript(failure_code: str) -> None:
                 "status": "FAILED",
                 "failure_code": failure_code,
                 "message": (
-                    f"hook이 transcript 없이 실행됨 ({failure_code}). "
-                    "5요소 승인 요청 블록을 감지할 수 없습니다."
+                    f"hook 입력에 5요소 승인 요청 블록이 없음 ({failure_code}). "
+                    "last_assistant_message에서 5요소를 감지할 수 없습니다."
                 ),
                 "failed_at": _now_iso(),
             },
@@ -1048,75 +1046,51 @@ def _fallback_record_no_transcript(failure_code: str) -> None:
                 "pipeline_id": pipeline_id,
                 "status": "FAILED",
                 "failure_code": failure_code,
-                "message": "transcript 없음",
+                "message": "5요소 블록 없음",
             },
         )
     except Exception as e:
         print(f"[CODEX REVIEW] fallback 기록 실패 (무시): {e}", file=sys.stderr)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    """hook 진입점. transcript에서 승인 블록 탐지 후 Codex 검토를 수행.
+def main(hook_data_override: Optional[Dict[str, Any]] = None) -> int:
+    """hook 진입점. stdin JSON의 last_assistant_message에서 승인 블록 탐지 후 Codex 검토.
+
+    Claude Code Stop hook은 hook 데이터를 stdin JSON으로 전달하며, 그 안의
+    last_assistant_message 필드에 마지막 assistant 메시지가 들어 있다. transcript 파일
+    경로를 파싱할 필요 없이 이 필드를 바로 5요소 패턴 감지에 사용한다.
 
     Args:
-        argv: 명령행 인자 (테스트용 주입 가능). None이면 sys.argv 사용.
+        hook_data_override: 테스트용 hook_data 주입. None이면 stdin에서 읽음.
     Returns:
         프로세스 종료 코드.
         - 0: 블록 없음/중복 차단/APPROVE/REJECT 상한 중단 (정상)
         - 2: REJECT 재주입 (Stop hook 재주입)
         - 1: fail-closed 오류
     """
-    parser = argparse.ArgumentParser(
-        description="Codex 사용자 승인 검토 보조 hook (Codex Review Loop)"
-    )
-    parser.add_argument(
-        "--transcript",
-        nargs="?",
-        default=os.environ.get("CLAUDE_HOOK_TRANSCRIPT_PATH", ""),
-        help="transcript 파일 경로 (JSONL 또는 텍스트). 생략 가능.",
-    )
-    parser.add_argument(
-        "--stdin-json",
-        nargs="?",
-        default="",
-        help="PS1 래퍼가 전달하는 stdin JSON 문자열 (Claude Code Stop hook 데이터).",
-    )
-    args = parser.parse_args(argv)
-
-    transcript_path = (args.transcript or "").strip()
-    stdin_json_str = (getattr(args, "stdin_json", None) or "").strip()
-
-    # --stdin-json에서 transcript_path 추출 시도 (transcript 인자가 없을 때 fallback)
-    if not transcript_path and stdin_json_str:
+    if hook_data_override is not None:
+        if not isinstance(hook_data_override, dict):
+            raise TypeError(
+                "hook_data_override must be dict, got "
+                f"{type(hook_data_override).__name__}"
+            )
+        hook_data = hook_data_override
+    else:
         try:
-            stdin_data = json.loads(stdin_json_str)
-            fallback = stdin_data.get("transcript_path", "")
-            if fallback and Path(fallback).exists():
-                transcript_path = str(fallback)
-        except (json.JSONDecodeError, TypeError, OSError):
-            pass
+            raw = sys.stdin.read()
+            hook_data = json.loads(raw) if raw.strip() else {}
+        except (json.JSONDecodeError, OSError):
+            hook_data = {}
 
-    if not transcript_path:
-        # transcript 없음 — pipeline_id 폴백으로 FAILED 기록 시도
-        _fallback_record_no_transcript("transcript_path_empty")
-        return 0
+    # last_assistant_message에서 직접 5요소 패턴 감지
+    last_message = hook_data.get("last_assistant_message", "") or ""
+    if not isinstance(last_message, str):
+        last_message = ""
 
-    tpath = Path(transcript_path)
-    if not tpath.exists():
-        # transcript 파일 없음 — pipeline_id 폴백으로 FAILED 기록 시도
-        _fallback_record_no_transcript("transcript_file_missing")
-        return 0
-
-    try:
-        transcript_text = _read_text_with_fallback(tpath)
-    except (OSError, UnicodeDecodeError):
-        # 읽기 실패는 조용히 종료 (블록 판정 불가)
-        return 0
-
-    tail = _extract_assistant_tail(transcript_text, _TAIL_MESSAGES)
-    block = parse_acceptance_block(tail)
+    block = parse_acceptance_block(last_message)
     if block is None:
-        # 승인 블록 5요소 미충족 — 조용히 종료 (정상)
+        # 5요소 없음 — fallback: pipeline_id로 FAILED 기록 시도 후 종료
+        _fallback_record_no_transcript("no_five_element_block")
         return 0
 
     pr_url = block["pr_url"]
@@ -1124,6 +1098,16 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     pipeline_dir = _project_pipeline_dir()
     state_path = pipeline_dir / _LOOP_STATE_FILENAME
+
+    # hook 진입 즉시 RUNNING 로그 (5요소 감지 직후 관찰성 확보)
+    _write_hook_log(
+        pipeline_dir,
+        {
+            "started_at": _now_iso(),
+            "pipeline_id": pipeline_id,
+            "status": "RUNNING",
+        },
+    )
 
     # PROCESSING 기록 전에 직전 상태를 먼저 읽는다 (중복 PROCESSING 판정 및
     # stale APPROVED 판정에는 이번 hook이 쓰기 전의 상태가 필요하기 때문이다).
@@ -1180,16 +1164,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     except Exception as e:
         print(f"[CODEX REVIEW] PROCESSING 기록 실패: {e}", file=sys.stderr)
         _record_failed_state(state_path, pipeline_id, "processing_record_failed", str(e))
-
-    # hook 진입 즉시 관찰 가능한 RUNNING 로그를 남긴다 (fail-closed 종료도 추적 가능).
-    _write_hook_log(
-        pipeline_dir,
-        {
-            "started_at": _now_iso(),
-            "pipeline_id": pipeline_id,
-            "status": "RUNNING",
-        },
-    )
 
     # --- fail-closed 영역 시작 ---
     try:
@@ -1361,63 +1335,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     # REJECT 원문은 prefix/suffix 없이 그대로, APPROVE는 안내 메시지 출력
     print(outcome["output"])
     return int(outcome["exit_code"])
-
-
-def _extract_assistant_tail(transcript_text: str, n_messages: int) -> str:
-    """transcript에서 마지막 assistant 메시지 N개의 텍스트를 결합.
-
-    transcript가 JSONL(한 줄당 {"role","content"}) 형식이면 assistant 메시지만
-    추출하고, 일반 텍스트면 마지막 N*40줄을 tail로 사용한다.
-
-    Args:
-        transcript_text: transcript 전체 텍스트.
-        n_messages: 추출할 마지막 assistant 메시지 수.
-    Returns:
-        결합된 assistant tail 텍스트.
-    Raises:
-        TypeError: transcript_text가 None이거나 str가 아닌 경우.
-        ValueError: n_messages가 0 이하인 경우.
-    """
-    if transcript_text is None:
-        raise TypeError("transcript_text must not be None")
-    if not isinstance(transcript_text, str):
-        raise TypeError(
-            f"transcript_text must be str, got {type(transcript_text).__name__}"
-        )
-    if n_messages <= 0:
-        raise ValueError(f"n_messages must be > 0, got {n_messages}")
-
-    assistant_msgs: List[str] = []
-    is_jsonl = False
-    for line in transcript_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(obj, dict) and obj.get("role") == "assistant":
-            is_jsonl = True
-            content = obj.get("content", "")
-            if isinstance(content, list):
-                # content가 블록 리스트인 경우 text만 모음
-                text_parts = [
-                    b.get("text", "")
-                    for b in content
-                    if isinstance(b, dict) and b.get("type") == "text"
-                ]
-                content = "\n".join(text_parts)
-            if isinstance(content, str):
-                assistant_msgs.append(content)
-
-    if is_jsonl and assistant_msgs:
-        return "\n".join(assistant_msgs[-n_messages:])
-
-    # JSONL이 아니면 일반 텍스트의 tail 라인 사용
-    lines = transcript_text.splitlines()
-    tail = lines[-(n_messages * 40):]
-    return "\n".join(tail)
 
 
 if __name__ == "__main__":
