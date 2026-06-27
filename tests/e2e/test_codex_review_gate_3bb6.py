@@ -166,10 +166,18 @@ def _load_oracle(case: str, name: str) -> Dict[str, Any]:
 
 
 def test_oracle_files_present() -> None:
-    """4개 oracle 케이스 input/expected 파일이 존재하고 핵심 필드를 가진다."""
-    for case in ("normal_approve", "edge_codex_reject", "exception_missing_review", "edge_stale_sha"):
+    """4개 oracle 케이스 input/expected 파일이 존재하고 핵심 필드를 가진다.
+
+    normal_approve/expected.json은 .claude/settings.json 내용 검증용이므로
+    exit_code 필드 대신 settings 관련 필드를 검증한다.
+    """
+    for case in ("edge_codex_reject", "exception_missing_review", "edge_stale_sha"):
         exp = _load_oracle(case, "expected.json")
         assert "exit_code" in exp, f"{case} expected.json must declare exit_code"
+    # normal_approve/expected.json: settings.json hooks 제거 검증용
+    settings_exp = _load_oracle("normal_approve", "expected.json")
+    assert "stopHooks" not in settings_exp, "normal_approve expected.json은 stopHooks가 없어야 함"
+    assert "hooks" not in settings_exp, "normal_approve expected.json은 hooks 키가 없어야 함"
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +191,9 @@ def test_tc1_codex_review_approved(tmp_path: Path) -> None:
     write_min_state(state_file, pid)
     shim = tmp_path / "shim"
     make_fake_codex(shim, "APPROVE_TO_USER")
+    # PIPELINE_STATE_PATH isolation: state_file을 격리 경로로 사용
     env = make_env(state_file, extra_path=shim)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
 
     r = run_cli(["gates", "codex-review"], env=env)
     assert r.returncode == 0, f"expected exit 0, got {r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
@@ -191,18 +201,18 @@ def test_tc1_codex_review_approved(tmp_path: Path) -> None:
     # final_state: codex_review_result.json
     result_file = codex_result_path(state_file)
     assert result_file.exists(), "codex_review_result.json must be written"
-    rec = json.loads(result_file.read_text(encoding="utf-8"))
-    assert rec["status"] == "APPROVED"
-    assert rec["verdict"] == "APPROVE_TO_USER"
+    final_state = json.loads(result_file.read_text(encoding="utf-8"))
+    assert final_state["status"] == "APPROVED"
+    assert final_state["verdict"] == "APPROVE_TO_USER"
     for field in (
         "schema_version", "pipeline_id", "status", "pr_url", "pr_head_sha",
         "pr_body_sha256", "packet_sha256", "accept_code", "reviewed_at", "contract_sha256",
     ):
-        assert field in rec, f"result.json missing field {field}"
-    assert rec["pipeline_id"] == pid
-    assert rec["schema_version"] == 1
+        assert field in final_state, f"result.json missing field {field}"
+    assert final_state["pipeline_id"] == pid
+    assert final_state["schema_version"] == 1
     # 보안: 실제 nonce가 노출되지 않아야 함 (accept_code는 공개 prefix만).
-    assert rec["accept_code"] == f"ACCEPT-{pid}"
+    assert final_state["accept_code"] == f"ACCEPT-{pid}"
 
 
 # ---------------------------------------------------------------------------
@@ -217,17 +227,19 @@ def test_tc2_codex_review_rejected(tmp_path: Path) -> None:
     shim = tmp_path / "shim"
     reason = "REJECT - PR 본문에 AC-3 충족 증거가 없습니다."
     make_fake_codex(shim, reason)
+    # PIPELINE_STATE_PATH isolation: state_file을 격리 경로로 사용
     env = make_env(state_file, extra_path=shim)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
 
     r = run_cli(["gates", "codex-review"], env=env)
     assert r.returncode == 1, f"expected exit 1, got {r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
 
     result_file = codex_result_path(state_file)
     assert result_file.exists(), "codex_review_result.json must be written on REJECT"
-    rec = json.loads(result_file.read_text(encoding="utf-8"))
-    assert rec["status"] == "REJECTED"
+    final_state = json.loads(result_file.read_text(encoding="utf-8"))
+    assert final_state["status"] == "REJECTED"
     # reject_reason 원문 그대로 (prefix 포함) 보존.
-    assert rec["reject_reason"] == reason
+    assert final_state["reject_reason"] == reason
     # 사용자 승인 요청문이 출력되지 않아야 함.
     assert "승인 코드" not in r.stdout
 
@@ -241,7 +253,9 @@ def test_tc3_request_accept_missing_review(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
     pid = "IMP-20260627-3BB6"
     write_min_state(state_file, pid)
+    # PIPELINE_STATE_PATH isolation: state_file을 격리 경로로 사용
     env = make_env(state_file)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
 
     evidence = tmp_path / "result.xlsx"
     evidence.write_text("dummy output", encoding="utf-8")
@@ -254,8 +268,8 @@ def test_tc3_request_accept_missing_review(tmp_path: Path) -> None:
     # final_state: 승인 코드(acceptance_request.json)가 발급되지 않아야 함.
     req_file = state_file.resolve().parent / "acceptance_request.json"
     if req_file.exists():
-        req = json.loads(req_file.read_text(encoding="utf-8"))
-        assert req.get("status") != "PENDING" or req.get("pipeline_id") != pid, (
+        final_state = json.loads(req_file.read_text(encoding="utf-8"))
+        assert final_state.get("status") != "PENDING" or final_state.get("pipeline_id") != pid, (
             "codex review 없이 PENDING acceptance_request가 발급되면 안 됨"
         )
 
@@ -269,7 +283,9 @@ def test_tc4_request_accept_stale_sha(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
     pid = "IMP-20260627-3BB6"
     write_min_state(state_file, pid)
+    # PIPELINE_STATE_PATH isolation: state_file을 격리 경로로 사용
     env = make_env(state_file)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
 
     # APPROVED이지만 다른 pipeline_id로 기록된 result.json → stale 판정.
     result_file = codex_result_path(state_file)
@@ -296,6 +312,9 @@ def test_tc4_request_accept_stale_sha(tmp_path: Path) -> None:
     assert "stale_codex_review" in combined, f"expected stale_codex_review\n{combined}"
     # stale 필드명(pipeline_id 등)이 메시지에 포함되어야 함.
     assert "stale 필드" in combined, f"expected stale 필드명 in message\n{combined}"
+    # final_state: result_file이 변경되지 않았어야 함 (stale 차단)
+    final_state = json.loads(result_file.read_text(encoding="utf-8"))
+    assert final_state["pipeline_id"] == "OTHER-PIPELINE-0000", "stale result.json은 변경되지 않아야 함"
 
 
 if __name__ == "__main__":
