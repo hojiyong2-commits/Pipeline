@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <task_id>BUG-20260627-C81C</task_id>
+  <total_functions_identified>5</total_functions_identified>
+  <micro_task_count>5</micro_task_count>
+  <grep_executions>5</grep_executions>
+  <split_decision>pipeline.py 함수 3개 수정(MT-1/MT-2/MT-3) + .claude/codex_review_contract.md 재작성(MT-4) + 테스트/오라클 강화(MT-5). HIGH_RISK 프로필 필수.</split_decision>
+  <audit_result>SINGLE_TASK_OK</audit_result>
+  <anti_gaming_read>true</anti_gaming_read>
+  <judgment_calls>DQ-1=A(oracle 교체), DQ-2=A(SHA 독립 검증 순서)</judgment_calls>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260627-C81C</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py(신뢰 루트) + tests/**(오라클 파일) 수정. 보안 로직(nonce/SHA 검증) 변경 포함. Fast Path 불가.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>5</expected_changed_files>
+      <expected_changed_functions>3</expected_changed_functions>
+      <expected_changed_lines>120</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>true</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 수준 내부 변수명, 코드 스타일 등 취향 질문은 유지보수성 우선 원칙으로 PM이 처리. 5개 버그 모두 P0 우선순위.</filter_summary>
+    <maintenance_priority>유지보수성 우선 — 빠른 수정보다 명확한 코드 구조와 검증 가능성을 우선합니다.</maintenance_priority>
+    <decision_questions>
+      <question id="DQ-1" priority="P0" category="module_split" mt_id="">
+        <user_facing_question>5개 버그를 각각 독립된 MT로 분리할까요, 아니면 pipeline.py 수정 3개를 하나로 묶을까요? 어떤 방식을 선택하시겠습니까?</user_facing_question>
+        <evidence>MT-1/MT-2/MT-3은 모두 pipeline.py의 서로 다른 함수를 수정합니다. 분리하면 각 검증이 명확하고, 묶으면 한 번에 처리 가능합니다.</evidence>
+        <why_it_matters>모듈을 분리하면 어느 수정이 어느 버그를 해결했는지 추적이 쉬워 유지보수성이 높아집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>각 버그를 독립 MT로 분리 (MT-1~MT-5)</label>
+            <benefit>각 수정의 검증이 명확하고 회귀 추적이 용이합니다.</benefit>
+            <cost>MT별 gate 기록이 5회 필요합니다.</cost>
+          </option>
+          <option id="B">
+            <label>pipeline.py 수정 3개를 MT-1로 묶기</label>
+            <benefit>처리 속도가 빠릅니다.</benefit>
+            <cost>어느 수정이 어느 버그를 해결했는지 추적이 어렵습니다.</cost>
+          </option>
+        </options>
+        <user_answer>A — 각 버그를 독립 MT로 분리</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>git diff 조회 실패 시 failure_code=codex_review_diff_unavailable로 BLOCKED (fail-closed)</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>TC-7 검증: Codex 프롬프트에 diff --git 또는 실제 변경 파일명이 포함되는지 확인</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>request-accept에서 codex_review_result.json의 packet_sha256/pr_body_sha256 재기록 코드 제거</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>codex_review_contract.md에 11개 항목 모두 존재</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>_check_codex_review_gate: pr_head_sha/pr_body_sha256/packet_sha256 각각 독립 stale 검증</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <name>diff fail-closed</name>
+      <affected_function>pipeline._cmd_gates_codex_review</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_cmd_gates_codex_review</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>git diff 조회 실패 시 "(diff 조회 실패)" 대체 제거, failure_code=codex_review_diff_unavailable BLOCKED 처리</change_summary>
+      <line_estimate>10</line_estimate>
+      <covers_ac>AC-1</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <name>request-accept SHA 재기록 제거</name>
+      <affected_function>pipeline._cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_cmd_gates_request_accept</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>packet_sha256/pr_body_sha256 재기록 블록(2개 경로) 제거 + except/pass 예외 삼킴 제거</change_summary>
+      <line_estimate>25</line_estimate>
+      <covers_ac>AC-3</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <name>stale 독립 검증</name>
+      <affected_function>pipeline._check_codex_review_gate</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_codex_review_gate</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>pr_head_sha/pr_body_sha256/packet_sha256 각각 독립 stale 검증, pipeline_id 불일치 우회 차단</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-5</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <name>codex_review_contract.md 11항목</name>
+      <affected_function>N/A</affected_function>
+      <target_files>
+        <file>.claude/codex_review_contract.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex_review_contract</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>11개 항목으로 전체 재작성 (자동ACCEPT금지, nonce노출금지, REJECT구체화, fail-open금지, SHA동기화, 회귀금지 등)</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <name>TC-5/TC-7/edge_stale_sha 강화</name>
+      <affected_function>test_codex_review_gate_3bb6.TC5/TC7/edge_stale_sha</affected_function>
+      <target_files>
+        <file>tests/e2e/test_codex_review_gate_3bb6.py</file>
+        <file>tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json</file>
+        <file>tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_codex_review_gate_3bb6</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>TC-5(stale_codex_review만 허용), TC-7(diff --git 포함 검증), edge_stale_sha(pr_head_sha/pr_body_sha256/packet_sha256 각 불일치) 강화</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-2,AC-5</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <roadmap>
+    <order>MT-1 → MT-3 → MT-2 → MT-4 → MT-5</order>
+    <note>보안 핵심(MT-1/MT-3) 먼저, SHA 갱신 제거(MT-2), 문서(MT-4), 테스트(MT-5) 순으로 진행</note>
+  </roadmap>
+</step_plan>
