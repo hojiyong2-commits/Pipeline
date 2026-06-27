@@ -562,9 +562,8 @@ def test_ps1_reads_stdin_not_env_var():
 # ---------------------------------------------------------------------------
 def test_machine_readable_json_output(tmp_path):
     """--machine-readable 모드: JSON 6개 필드 출력 검증."""
-    import subprocess, json as _json, sys
-    # pipeline.py를 subprocess로 호출하여 JSON 출력 검증
-    env_state = tmp_path / "state.json"
+    # pipeline.py를 subprocess로 호출하여 JSON 출력 검증 (현재는 소스 검사만)
+    env_state = tmp_path / "state.json"  # noqa: F841
     # 활성 파이프라인이 없는 상태에서는 호출 자체가 실패할 수 있으므로
     # 대신 pipeline.py 소스에서 --machine-readable 인자가 존재하는지만 확인
     pipeline_py = Path(__file__).parent.parent / "pipeline.py"
@@ -591,7 +590,6 @@ def test_no_duplicate_trigger_block(tmp_path):
         "사용자 승인 요청\n\nPR: https://github.com/test/repo/pull/1\n\n"
         "승인 코드:\nACCEPT-IMP-20260627-3907\n\nCODEX 검토 필요"
     )
-    import os as _os
     pipeline_dir = tmp_path / ".pipeline"
     pipeline_dir.mkdir()
     state_path = pipeline_dir / _LOOP_STATE_FILENAME
@@ -622,7 +620,7 @@ def test_no_duplicate_trigger_block(tmp_path):
 
 def test_user_final_ends_with_approval_required():
     """user_final_message 마지막 의미 있는 줄 = 사용자 최종 승인 필요."""
-    import importlib.util, sys as _sys
+    import importlib.util
     renderer_path = Path(__file__).parent.parent / ".claude" / "acceptance_renderer.py"
     spec = importlib.util.spec_from_file_location("acceptance_renderer", str(renderer_path))
     mod = importlib.util.module_from_spec(spec)
@@ -710,7 +708,6 @@ def test_b_form_last_line():
 def test_duplicate_trigger_block_fail(tmp_path):
     """hook이 '사용자 승인 요청' 2회 포함 메시지 시 duplicate_trigger_block FAILED 기록."""
     import json as _json
-    import sys as _sys
     import unittest.mock as _mock
     import importlib.util as _ilu
 
@@ -750,9 +747,7 @@ def test_duplicate_trigger_block_fail(tmp_path):
 
 def test_stdin_utf8_decoding():
     """hook이 UTF-8 JSON stdin의 한국어 last_assistant_message를 정상 파싱한다."""
-    import json as _json
     import importlib.util as _ilu
-    import unittest.mock as _mock
 
     hook_path = _REPO_ROOT / ".claude" / "hooks" / "codex_user_acceptance_review.py"
     src = hook_path.read_text(encoding="utf-8")
