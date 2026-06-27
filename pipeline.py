@@ -6842,15 +6842,63 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     )
 
     # 4b. 검토 프롬프트 구성 — contract 본문(금지사항/출력형식)을 그대로 포함.
-    files_txt = "\n".join(f"  - {p}" for p in (_get_current_pr_changed_files() or []))
+    # contract가 요구하는 정보: PR 제목/본문/변경 파일/diff/CI 상태/패킷을 모두 포함한다.
+    changed_files = _get_current_pr_changed_files() or []
+    files_txt = "\n".join(f"  - {p}" for p in changed_files)
+    # git diff (origin/main...HEAD, 최대 4000자)
+    diff_txt = ""
+    try:
+        _diff_result = subprocess.run(
+            ["git", "diff", "origin/main...HEAD", "--stat"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+            cwd=str(BASE_DIR),
+        )
+        diff_txt = (_diff_result.stdout or "")[:2000]
+    except Exception:  # nosec B110
+        diff_txt = "(diff 조회 실패)"
+    # CI 상태 정보
+    github_ci_state = state.get("external_gates", {}).get("github_ci", {})
+    ci_run_id = github_ci_state.get("evidence", "")
+    ci_status = github_ci_state.get("status", "UNKNOWN")
+    # human_acceptance_packet.md 전체 (최대 4000자)
+    packet_text = ""
+    try:
+        _packet_path = _packet_output_path()
+        if _packet_path.exists():
+            packet_text = _packet_path.read_text(encoding="utf-8", errors="replace")[:4000]
+    except Exception:  # nosec B110
+        packet_text = "(패킷 읽기 실패)"
+    # PR 제목
+    pr_title = ""
+    try:
+        _title_res = subprocess.run(
+            ["gh", "pr", "view", "--json", "title", "-q", ".title"],
+            capture_output=True, text=True, encoding="utf-8", timeout=15, cwd=str(BASE_DIR),
+        )
+        pr_title = (_title_res.stdout or "").strip()
+    except Exception:  # nosec B110
+        pass
     prompt = (
         f"{contract_text}\n\n"
         "=== 검토 대상 PR ===\n"
+        f"PR 제목: {pr_title}\n"
         f"PR URL: {pr_url}\n"
-        f"PR head SHA: {pr_head_sha}\n"
-        f"변경 파일:\n{files_txt}\n\n"
-        "본문 발췌:\n"
-        f"{pr_body[:3000]}\n\n"
+        f"PR head SHA: {pr_head_sha}\n\n"
+        "== 변경 파일 목록 ==\n"
+        f"{files_txt}\n\n"
+        "== Git Diff (--stat) ==\n"
+        f"{diff_txt}\n\n"
+        "== CI 상태 ==\n"
+        f"  github_ci: {ci_status} ({ci_run_id})\n"
+        f"  oracle: {state.get('external_gates', {}).get('oracle', {}).get('status', 'UNKNOWN')}\n"
+        f"  technical: {state.get('external_gates', {}).get('technical', {}).get('status', 'UNKNOWN')}\n\n"
+        "== 최종 확인 패킷 (human_acceptance_packet.md) ==\n"
+        f"{packet_text}\n\n"
+        "== PR 본문 (최대 5000자) ==\n"
+        f"{pr_body[:5000]}\n\n"
         "위 계약(contract)의 금지 사항을 준수하고, 출력 형식(APPROVE_TO_USER 또는 "
         "REJECT - <구체적 사유>) 중 하나로만 답하세요."
     )
