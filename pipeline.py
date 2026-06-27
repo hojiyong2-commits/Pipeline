@@ -18713,6 +18713,27 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                             encoding="utf-8",
                         )
                         print("  [PR 본문 SHA 재기록] pr_body_sha256 업데이트 완료")
+                        # IMP-20260627-3BB6 Codex 4차 REJECT 수정:
+                        # packet 재생성 후 codex_review_result.json의 packet_sha256과
+                        # pr_body_sha256도 갱신한다. packet/PR 본문의 실질 내용(코드/diff/품질)은
+                        # 변경되지 않았으며 acceptance 코드만 추가됐으므로 검토 무결성은 유지된다.
+                        try:
+                            _cr_path_post = _codex_review_result_path()
+                            if _cr_path_post.exists():
+                                _cr_post = json.loads(_cr_path_post.read_text(encoding="utf-8"))
+                                _updated_new_pkt_sha = _req_post.get("packet_sha256")
+                                _updated_new_body_sha = _updated_body_sha
+                                if _updated_new_pkt_sha:
+                                    _cr_post["packet_sha256"] = _updated_new_pkt_sha
+                                if _updated_new_body_sha:
+                                    _cr_post["pr_body_sha256"] = _updated_new_body_sha
+                                _cr_path_post.write_text(
+                                    json.dumps(_cr_post, ensure_ascii=False, indent=2),
+                                    encoding="utf-8",
+                                )
+                                print("  [Codex Review SHA 재기록] packet_sha256/pr_body_sha256 동기화 완료")
+                        except (OSError, json.JSONDecodeError):
+                            pass  # 동기화 실패해도 계속 진행 (다음 gates codex-review 때 stale 감지됨)
             except (OSError, json.JSONDecodeError):
                 pass  # SHA 재기록 실패해도 계속 진행
         else:
