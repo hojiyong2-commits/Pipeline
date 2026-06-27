@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260627-3907</pipeline_id>
+  <from>qa-agent</from>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>dev_handover.xml, scope_manifest.json, .claude/acceptance_renderer.py, .claude/codex_review_contract.md, .claude/hooks/codex_user_acceptance_review.py, pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_renderer_3907.py + oracle 6개</evidence>
+    <accepted>YES — dev-agent handover, 구체적 파일명 명시, 실제 제출 확인</accepted>
+  </handover>
+  <category_check>
+    <wa>N-A — 네트워크 호출 없음</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>PASS — load_contract 4-encoding fallback(utf-8/utf-8-sig/cp949/latin-1), Path 사용, 하드코딩 경로 없음(__file__ 기준)</fs>
+    <pd>PASS — renderer 단일 SSoT 모듈 분리, mode 화이트리스트 인터페이스 계약, 운영 코드 중복 정의 제거</pd>
+    <sec>N-A — Phase 5 security-agent 전담. secrets gate exit 0 확인</sec>
+    <al>PASS — None/isinstance 타입가드, mode 화이트리스트 ValueError, 빈 문자열 방어, encoding fallback</al>
+    <build>N-A — meta-task (EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+  <numeric_score>108</numeric_score>
+  <score_details>
+    <wa score="0" max="20">N/A — 네트워크 미사용</wa>
+    <ui score="0" max="20">N/A — GUI 미사용</ui>
+    <fs score="20" max="20">pathlib(5)/4-encoding fallback(5)/경로안전(5)/read-only(5)</fs>
+    <pd score="10" max="10">모듈분리 5(renderer 단일 SSoT)/인터페이스계약 5(mode 화이트리스트+타입힌트)</pd>
+    <al score="20" max="20">타입검증(5)/빈데이터(5)/화이트리스트범위(5)/None방어(5)</al>
+    <build score="0" max="10">N/A — meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="50" max="50"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 적용 카테고리 50/50 만점, 환산 100% (96/120 임계 초과)</numeric_verdict>
+  </score_details>
+  <test_results>
+    <new_tests>tests/test_acceptance_renderer_3907.py — 10 passed (test_a_form_snapshot, test_b_form_snapshot, test_contract_missing_fail_closed, test_contract_11_items, test_single_renderer_source, test_pr_url_pipeline_id_normalization, test_invalid_mode_raises, test_hook_approve_uses_renderer_b, test_pipeline_request_accept_uses_renderer_a, test_agent_md_rule)</new_tests>
+    <regression>tests/test_codex_review_loop_4121.py — 28 passed (회귀 없음)</regression>
+    <total>38 passed</total>
+    <compile>py_compile OK (acceptance_renderer.py, hook, pipeline.py)</compile>
+  </test_results>
+  <quality_checks>
+    <check id="1" name="A형 CODEX 검토 필요 포함">PASS — render_user_acceptance_request mode='codex_review_required' 마지막 줄 'CODEX 검토 필요' 포함 (acceptance_renderer.py:84-86, oracle normal_A_form 일치)</check>
+    <check id="2" name="B형 CODEX 검토 필요 미포함">PASS — mode='user_final' 'CODEX 검토 필요' 미포함 (oracle normal_B_form 일치)</check>
+    <check id="3" name="load_contract fail-closed RuntimeError">PASS — 파일 부재 시 RuntimeError 전파 (acceptance_renderer.py:113-116), OSError도 RuntimeError로 변환</check>
+    <check id="4" name="pipeline.py renderer 직접 호출">PASS — _cmd_gates_request_accept가 importlib로 renderer 로드 후 render_user_acceptance_request 호출, 직접 문자열 조합 없음 (pipeline.py:18322-18338)</check>
+    <check id="5" name="hook importlib spec_from_file_location 단독 로드">PASS — _load_renderer가 spec_from_file_location으로 renderer 단독 로드 (hook:103-104), _render_approve가 B형 위임, _approve_message 제거 확인(dead ref 0)</check>
+    <check id="6" name="contract 11개 항목">PASS — codex_review_contract.md ## 섹션 정확히 11개</check>
+    <check id="7" name="agent MD renderer 단일 SSoT 규칙">PASS — pipeline-manager-agent.md:206-219 직접 작성/재구성 금지 규칙, 'CODEX 검토 필요' 직접 작성 금지 명시</check>
+  </quality_checks>
+  <c3_cross_verification>
+    <scope_files_declared>12 (6 src/doc + 6 oracle)</scope_files_declared>
+    <evidence_files_submitted>12</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — pipeline.py/hook renderer 호출 Grep 확인, FEAT-20260426-332E/* 및 test_packing_detail_oracle_4cd8.py는 본 파이프라인 이전 dirty(handover/git status 일치)</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover self_check execution_check=PASS</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — renderer 정의뿐 아니라 pipeline.py/hook 실제 호출 경로 Grep 확인, 38 pytest 실행 검증</functional_binding_verified>
+  </runtime_functional_check>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>6 MT</declared_functions>
+    <actual_modified_functions>6 MT 일치</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <oracle_quality>
+    <normal_cases>2 (normal_A_form, normal_B_form)</normal_cases>
+    <edge_cases>1 (edge_contract_missing)</edge_cases>
+    <expected_non_empty>PASS — expected.txt/expected.json 비어있지 않음</expected_non_empty>
+    <placeholder>없음</placeholder>
+  </oracle_quality>
+  <result>[PASS]</result>
+  <verdict>PASS</verdict>
+  <numeric_score>108</numeric_score>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>renderer 양식을 향후 dataclass/템플릿 분리, mode를 Enum 강제하면 유지보수성 추가 향상. 현재 구현으로도 SSoT 통일 목표 충족.</improvement_suggestions>
+</qa_report>
