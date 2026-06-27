@@ -1,6 +1,6 @@
 {
-  "scenario": "normal_approve",
-  "transcript_block": "사용자 승인 요청\n\nPR: https://github.com/hojiyong2-commits/Pipeline/pull/999\n\n승인 코드:\nACCEPT-BUG-20260627-B221\n\nCODEX 검토 필요",
-  "mocked_codex_verdict": "APPROVE_TO_USER",
-  "mocked_pr_head_sha": "abc123def456"
+  "pipeline_id": "BUG-20260627-B221",
+  "status": "APPROVED",
+  "pr_head_sha": "abc123def456",
+  "accept_code": "ACCEPT-BUG-20260627-B221"
 }

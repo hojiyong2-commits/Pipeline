@@ -1,6 +1,5 @@
 {
-  "scenario": "edge_codex_timeout",
-  "transcript_block": "사용자 승인 요청\n\nPR: https://github.com/hojiyong2-commits/Pipeline/pull/999\n\n승인 코드:\nACCEPT-BUG-20260627-B221\n\nCODEX 검토 필요",
-  "mocked_codex_side_effect": "TimeoutExpired",
-  "mocked_pr_head_sha": "abc123def456"
+  "pipeline_id": "BUG-20260627-B221",
+  "status": "FAILED",
+  "failure_code": "codex_call_failed"
 }

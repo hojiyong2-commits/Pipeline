@@ -1,5 +1,5 @@
 {
-  "expected_loop_state_status": "FAILED",
-  "exit_code": 1,
+  "pipeline_id": "BUG-20260627-B221",
+  "status": "FAILED",
   "failure_code": "codex_call_failed"
 }

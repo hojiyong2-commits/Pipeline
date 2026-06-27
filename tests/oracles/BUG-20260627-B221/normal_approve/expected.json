@@ -1,5 +1,6 @@
 {
-  "expected_loop_state_status": "APPROVED",
-  "exit_code": 0,
-  "stdout_contains": ["사용자 승인 요청", "ACCEPT-BUG-20260627-B221"]
+  "pipeline_id": "BUG-20260627-B221",
+  "status": "APPROVED",
+  "pr_head_sha": "abc123def456",
+  "accept_code": "ACCEPT-BUG-20260627-B221"
 }
