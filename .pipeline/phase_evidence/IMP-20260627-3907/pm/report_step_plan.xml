@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<decomposition_audit>
+  <total_functions_identified>5</total_functions_identified>
+  <micro_task_count>6</micro_task_count>
+  <grep_executions>4</grep_executions>
+  <split_decision>trust-root 파일(pipeline.py, hook, agent MD) 수정이므로 HIGH_RISK 프로필 사용. renderer 모듈 신규(MT-1) + contract 문서 신규(MT-2) + hook 수정(MT-3) + pipeline.py 수정(MT-4) + agent MD 강화(MT-5) + 테스트 신규(MT-6)로 분할합니다.</split_decision>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <anti_gaming_read>true</anti_gaming_read>
+  <judgment_calls />
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>IMP-20260627-3907</pipeline_id>
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>Trust-root 파일 수정 포함 — pipeline.py, .claude/hooks/codex_user_acceptance_review.py, .claude/agents/pipeline-manager-agent.md</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>6</expected_changed_files>
+      <expected_changed_functions>5</expected_changed_functions>
+      <expected_changed_lines>230</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 취향 질문(함수명, 테스트 파일 위치)은 묻지 않고 유지보수성 기준으로 정리했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>renderer 모듈을 어디에 두시겠습니까? 추천안 A(.claude/acceptance_renderer.py)로 진행해도 될까요?</user_facing_question>
+        <evidence>hook(.claude/hooks/)과 contract(.claude/)가 같은 디렉토리 계열이므로 관련 파일 집중 효과. pipeline.py에서는 importlib로 로드 가능.</evidence>
+        <why_it_matters>import 경로가 깔끔해야 중복 renderer 방지 효과가 확실합니다. hook/pipeline.py 양쪽에서 동일 함수를 사용해야 SSoT가 보장됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A"><label>.claude/acceptance_renderer.py</label><benefit>hook 상대 import 가능, .claude 아래 관련 파일 집중</benefit><cost>pipeline.py에서 importlib 동적 로드 필요</cost></option>
+          <option id="B"><label>acceptance_renderer.py (repo root)</label><benefit>pipeline.py 직접 import</benefit><cost>hook sys.path 조작, repo root 파일 증가</cost></option>
+        </options>
+        <user_answer>A: .claude/acceptance_renderer.py</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">승인 요청문 renderer를 side-effect 없는 단일 모듈로 분리</requirement>
+    <requirement id="REQ-2">Codex Review Contract SSoT를 .claude/codex_review_contract.md로 추가</requirement>
+    <requirement id="REQ-3">hook이 contract를 반드시 로드하고 prompt에 포함 (fail-closed)</requirement>
+    <requirement id="REQ-4">pipeline.py gates request-accept 출력을 renderer로 위임</requirement>
+    <requirement id="REQ-5">hook APPROVE 출력을 renderer로 위임</requirement>
+    <requirement id="REQ-6">Pipeline Manager가 승인 요청문을 임의 재작성하지 않도록 MD 강화</requirement>
+    <requirement id="REQ-7">기존 gates accept 보안 검증 유지 (packet_sha256, nonce, pr_body_sha256 등)</requirement>
+    <requirement id="REQ-8">회귀 테스트 A-F 모두 PASS</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>render_user_acceptance_request</affected_function>
+      <target_files>
+        <file>.claude/acceptance_renderer.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 파일)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>render_user_acceptance_request</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 renderer 모듈 생성 — A형(codex_review_required)/B형(user_final) 렌더링 함수 + load_contract helper</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1, AC-2</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>codex_review_contract.md</affected_function>
+      <target_files>
+        <file>.claude/codex_review_contract.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 문서)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>codex_review_contract</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 Codex Review Contract SSoT 문서 — 11개 항목 명시</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-3</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>_build_codex_prompt, main</affected_function>
+      <target_files>
+        <file>.claude/hooks/codex_user_acceptance_review.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>main (hook 진입점)</site>
+        <site>_approve_message (renderer로 대체)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_build_codex_prompt</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>hook이 contract 로드하여 prompt에 포함 + APPROVE 출력을 renderer B형으로 위임 + _approve_message 제거</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-4, AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>_cmd_gates_request_accept</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept 내부 print 문</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>사용자 승인 요청</pattern>
+        <match_count>5</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>gates request-accept 승인 요청문 출력을 renderer A형으로 위임</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-6</covers_ac>
+    </micro_task>
+    <micro_task id="MT-5">
+      <affected_function>pipeline-manager-agent.md 규칙 추가</affected_function>
+      <target_files>
+        <file>.claude/agents/pipeline-manager-agent.md</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (문서)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>최소 고정 양식</pattern>
+        <match_count>2</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>승인 요청문은 renderer 출력만 전달, CODEX 검토 필요 직접 작성 금지 규칙 추가</change_summary>
+      <line_estimate>15</line_estimate>
+      <covers_ac>AC-7</covers_ac>
+    </micro_task>
+    <micro_task id="MT-6">
+      <affected_function>test_acceptance_renderer_3907.py 신규</affected_function>
+      <target_files>
+        <file>tests/test_acceptance_renderer_3907.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none (신규 테스트)</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_acceptance_renderer</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>회귀 테스트 A-F: A형/B형 snapshot, contract 누락 fail-closed, 11항목 포함 검증, 운영 중복 검사</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-8</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>render_user_acceptance_request(mode="codex_review_required") 호출 시 정확히 "사용자 승인 요청\n\nPR: [PR]\n\n승인 코드:\nACCEPT-[id]\n\nCODEX 검토 필요" 형식 반환</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>render_user_acceptance_request(mode="user_final") 호출 시 "CODEX 검토 필요" 없이 "사용자 승인 요청\n\nPR: [PR]\n\n승인 코드:\nACCEPT-[id]" 형식 반환</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>.claude/codex_review_contract.md에 11개 항목 명시: 자동 ACCEPT 금지, nonce 노출 금지, REJECT 근본원인 포함, fail-open/best-effort PASS/except pass 금지, SHA 동기화 약화 금지, state/scratch PR diff 포함 금지, dummy/TODO/placeholder 금지, 근본 개선 되돌리기 금지, 원인 제거 확인, APPROVE_TO_USER 조건부 출력</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>hook _build_codex_prompt가 codex_review_contract.md 전문을 prompt에 포함하고, contract 파일 없거나 읽기 실패 시 RuntimeError(fail-closed) 발생</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>hook APPROVE 출력(_approve_message 대체)이 renderer B형을 사용하여 "CODEX 검토 필요" 없이 출력</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>pipeline.py gates request-accept 출력이 renderer A형을 사용하여 "CODEX 검토 필요" 포함 최소 고정 양식만 출력</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>pipeline-manager-agent.md에 "승인 요청문은 renderer 출력만 전달", "CODEX 검토 필요 직접 작성 금지" 규칙 명시</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>tests/test_acceptance_renderer_3907.py 회귀 테스트 최소 6개(A-F) 모두 PASS: A) A형 snapshot, B) B형 snapshot, C) contract 누락 fail-closed, D) contract 11항목 포함 검증, E) 운영 코드 renderer 단일성 검사, F) PR/pipeline_id 정규화 후 exact match</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_design>
+    <case case_id="normal_A_form" case_kind="normal" expected_source="user_provided">
+      <input_file>tests/oracles/IMP-20260627-3907/normal_A_form/input.json</input_file>
+      <expected_file>tests/oracles/IMP-20260627-3907/normal_A_form/expected.txt</expected_file>
+      <description>A형 렌더링 — PR URL과 pipeline_id를 주고 정확한 5줄 형식 반환 검증</description>
+    </case>
+    <case case_id="normal_B_form" case_kind="normal" expected_source="user_provided">
+      <input_file>tests/oracles/IMP-20260627-3907/normal_B_form/input.json</input_file>
+      <expected_file>tests/oracles/IMP-20260627-3907/normal_B_form/expected.txt</expected_file>
+      <description>B형 렌더링 — CODEX 검토 필요 없는 4줄 형식 반환 검증</description>
+    </case>
+    <case case_id="edge_contract_missing" case_kind="edge" expected_source="user_provided">
+      <input_file>tests/oracles/IMP-20260627-3907/edge_contract_missing/input.json</input_file>
+      <expected_file>tests/oracles/IMP-20260627-3907/edge_contract_missing/expected.json</expected_file>
+      <description>contract 파일 없을 때 load_contract가 RuntimeError 발생하는지 검증</description>
+    </case>
+  </oracle_design>
+
+  <python_version>3.10 — 기존 pipeline.py/hook이 3.10 기반</python_version>
+  <forbidden>기존 gates accept 보안 검증(packet_sha256, nonce, pr_body_sha256, verification_json_freshness) 약화 금지. pipeline_state.json 직접 수정 금지. acceptance_request.json 구조 변경 금지.</forbidden>
+  <handover_example>
+    <dev_handover><from>dev-agent</from><to>qa-agent</to><status>READY_FOR_QA</status></dev_handover>
+  </handover_example>
+</step_plan>
