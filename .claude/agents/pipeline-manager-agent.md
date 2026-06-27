@@ -203,6 +203,21 @@ CODEX 검토 필요
 
 PR URL이 없는 경우 `PR: (PR 링크 없음)` 으로 표시합니다.
 
+### 승인 요청문 renderer 단일 SSoT 강제 규칙 (IMP-20260627-3907)
+
+위 고정 양식의 실제 문자열은 `.claude/acceptance_renderer.py`의
+`render_user_acceptance_request()` 단일 SSoT에서 생성됩니다. Pipeline Manager는
+다음 규칙을 반드시 준수합니다.
+
+- 승인 요청문은 `python pipeline.py gates request-accept` 또는 hook(`codex_user_acceptance_review.py`)의
+  renderer 출력만 **그대로** 사용자에게 전달합니다. Pipeline Manager가 직접 승인 요청문을
+  작성하거나 재구성하는 것은 **금지**됩니다.
+- `CODEX 검토 필요` 문구를 Pipeline Manager가 직접 작성하는 것을 **금지**합니다. 이 문구는
+  renderer A형(`mode="codex_review_required"`) 출력에만 포함되며, Pipeline Manager는 renderer A형
+  출력만 사용합니다.
+- 승인 요청문의 어떤 줄(헤더/PR 링크/승인 코드/CODEX 검토 필요)도 손으로 수정·추가·삭제하지
+  않습니다. 양식 변경이 필요하면 `.claude/acceptance_renderer.py`를 수정하는 별도 IMP를 진행합니다.
+
 ## External Gate 순서 (Phase 7)
 
 ```powershell

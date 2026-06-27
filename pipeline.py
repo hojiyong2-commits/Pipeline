@@ -18313,18 +18313,29 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         )
 
     # IMP-20260624-069A MT-1: User Acceptance 최종 승인 요청문을 최소 고정 양식으로 통일.
+    # IMP-20260627-3907 MT-4: 승인 요청문을 .claude/acceptance_renderer.py 단일 SSoT로 위임.
+    #   pipeline.py 전체 import는 side effect가 없으나, hook과 동일하게 renderer는 importlib로
+    #   단독 로드하여 두 운영 경로가 같은 양식을 공유하도록 한다.
+    #   기본은 A형(codex_review_required, 'CODEX 검토 필요' 포함). --no-codex-review가 주어지면
+    #   B형(user_final). pr_comment_accept_code(ACCEPT-{pipeline_id})와 renderer가 구성하는
+    #   ACCEPT-{pipeline_id}가 동일하므로 기존 5줄 고정 양식과 출력이 정확히 일치한다.
+    _renderer_path = Path(__file__).resolve().parent / ".claude" / "acceptance_renderer.py"
+    _spec = importlib.util.spec_from_file_location("acceptance_renderer", str(_renderer_path))
+    if _spec is None or _spec.loader is None:
+        _die(
+            "[PIPELINE ERROR] acceptance_renderer 로드 실패 — 승인 요청문을 구성할 수 없습니다.\n"
+            f"  경로: {_renderer_path}"
+        )
+    _renderer_mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_renderer_mod)
+    _render_pr = pr_url if pr_url else "(PR 링크 없음)"
+    _render_mode = "user_final" if getattr(args, "no_codex_review", False) else "codex_review_required"
     print()
-    print("사용자 승인 요청")
-    print()
-    if pr_url:
-        print(f"PR: {pr_url}")
-    else:
-        print("PR: (PR 링크 없음)")
-    print()
-    print("승인 코드:")
-    print(f"{pr_comment_accept_code}")
-    print()
-    print("CODEX 검토 필요")
+    print(
+        _renderer_mod.render_user_acceptance_request(
+            mode=_render_mode, pr_url=_render_pr, pipeline_id=pipeline_id
+        )
+    )
     reused_label = "재사용" if reuse else "신규 발급"
     _log_event(state, f"acceptance request {reused_label}: request_id={req['request_id']} nonce={nonce}")
     _save(state)

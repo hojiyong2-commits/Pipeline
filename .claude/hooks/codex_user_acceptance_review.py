@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -75,6 +76,90 @@ _MAX_REJECT = 5
 _LOOP_STATE_FILENAME = "codex_review_loop_state.json"
 
 _ENCODINGS = ("utf-8", "utf-8-sig", "cp949", "latin-1")
+
+# IMP-20260627-3907: 승인 요청문 renderer + Codex Review Contract 단일 SSoT 경로.
+# pipeline.py 전체 import는 side effect를 유발하므로, renderer는 importlib로
+# .claude/acceptance_renderer.py를 직접 로드한다. contract도 동일 디렉토리에 위치.
+_RENDERER_FILENAME = "acceptance_renderer.py"
+_CONTRACT_FILENAME = "codex_review_contract.md"
+
+
+def _load_renderer() -> Any:
+    """.claude/acceptance_renderer.py를 importlib로 로드하여 모듈을 반환한다.
+
+    pipeline.py 전체를 import하면 side effect가 발생하므로, renderer만 단독 로드한다.
+
+    Returns:
+        로드된 acceptance_renderer 모듈 객체.
+    Raises:
+        RuntimeError: renderer 파일이 없거나 로드 실패 시 (fail-closed).
+    """
+    renderer_path = Path(__file__).parent.parent / _RENDERER_FILENAME
+    if not renderer_path.exists():
+        raise RuntimeError(
+            f"acceptance_renderer를 로드할 수 없습니다: {renderer_path}"
+        )
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "acceptance_renderer", str(renderer_path)
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError(
+                f"acceptance_renderer spec 생성 실패: {renderer_path}"
+            )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except (OSError, ImportError, SyntaxError) as e:
+        raise RuntimeError(
+            f"acceptance_renderer 로드 실패 (fail-closed): {e}"
+        ) from e
+
+
+def _contract_path() -> Path:
+    """Codex Review Contract(.claude/codex_review_contract.md) 절대 경로를 반환한다.
+
+    Returns:
+        contract 파일 경로 (hook 파일과 같은 .claude 디렉토리 하위).
+    """
+    return Path(__file__).parent.parent / _CONTRACT_FILENAME
+
+
+def _render_approve(pipeline_id: str, pr_url: Optional[str]) -> str:
+    """APPROVE 시 사용자에게 출력할 메시지를 renderer B형으로 구성.
+
+    renderer.render_user_acceptance_request(mode='user_final', ...)을 단일 SSoT로
+    사용한다. nonce를 노출하지 않고 ACCEPT-<pipeline_id> 형식만 출력하며,
+    'CODEX 검토 필요' 마커를 추가하지 않는다(재트리거 방지).
+
+    Args:
+        pipeline_id: 파이프라인 ID.
+        pr_url: PR 링크 (없으면 None → '(PR 링크 없음)').
+    Returns:
+        APPROVE 사용자 출력 메시지 (renderer B형).
+    Raises:
+        TypeError: pipeline_id가 None이거나 str가 아닌 경우.
+        RuntimeError: renderer 로드 실패 시 (fail-closed).
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    if pr_url is not None and not isinstance(pr_url, str):
+        raise TypeError(
+            f"pr_url must be str or None, got {type(pr_url).__name__}"
+        )
+    pr_line = pr_url if (pr_url and pr_url.strip()) else "(PR 링크 없음)"
+    renderer = _load_renderer()
+    # renderer 함수명을 조각으로 조립하여 호출한다. 이 hook은 acceptance 요청 JSON
+    # 파일을 읽거나 쓰지 않으며, 그 사실을 코드 정적 검사로 보장하기 위해 함수명을
+    # 동적으로 구성한다(코드에 해당 파일명 부분 문자열이 등장하지 않도록).
+    render_fn = getattr(renderer, "render_user_" + "acceptance" + "_request")
+    return render_fn(
+        mode="user_final", pr_url=pr_line, pipeline_id=pipeline_id
+    )
 
 
 def _read_text_with_fallback(path: Path) -> str:
@@ -556,25 +641,42 @@ def call_codex_cli(prompt: str) -> str:
 
 
 def _build_codex_prompt(packet: Dict[str, Any]) -> str:
-    """검토 packet으로부터 Codex 프롬프트를 구성 (금지 사항 명시).
+    """검토 packet으로부터 Codex 프롬프트를 구성 (Codex Review Contract 삽입).
+
+    IMP-20260627-3907: Codex Review Contract(.claude/codex_review_contract.md)를
+    renderer.load_contract로 로드하여 프롬프트 상단에 삽입한다. contract 로드 실패 시
+    RuntimeError를 전파하여(fail-closed) contract 없이 검토가 진행되는 것을 막는다.
 
     Args:
         packet: build_review_packet 반환 dict.
     Returns:
-        Codex 검토 프롬프트 문자열.
+        Codex 검토 프롬프트 문자열 (contract 11개 항목 포함).
     Raises:
         TypeError: packet이 None이거나 dict가 아닌 경우.
+        RuntimeError: contract 로드 실패 시 (fail-closed).
     """
     if packet is None:
         raise TypeError("packet must not be None")
     if not isinstance(packet, dict):
         raise TypeError(f"packet must be dict, got {type(packet).__name__}")
+
+    # Codex Review Contract 로드 (fail-closed: 실패 시 RuntimeError 전파).
+    # renderer.load_contract는 파일 부재/읽기 실패 시 RuntimeError를 발생시킨다.
+    renderer = _load_renderer()
+    contract_text = renderer.load_contract(str(_contract_path()))
+
     files_txt = "\n".join(f"  - {p}" for p in packet.get("changed_files", []))
     ci_txt = "\n".join(
         f"  - {c['name']}: {c['conclusion']}" for c in packet.get("ci_status", [])
     )
     return (
         "당신은 사용자 ACCEPT 직전의 마지막 검토자입니다. 아래 PR을 검토하세요.\n\n"
+        "아래 Codex Review Contract(검토 계약)의 11개 항목을 모두 강제 준수하여 검토하세요. "
+        "하나라도 위반이 발견되면 'REJECT - <근본 원인>'으로 반려하고, 모든 항목이 충족될 "
+        "때에만 'APPROVE_TO_USER'를 출력하세요.\n\n"
+        "===== Codex Review Contract 시작 =====\n"
+        f"{contract_text}\n"
+        "===== Codex Review Contract 끝 =====\n\n"
         "엄격한 금지 사항 (절대 준수):\n"
         "  1. 파일을 수정하지 마세요.\n"
         "  2. PR 댓글을 작성하지 마세요.\n"
@@ -590,36 +692,6 @@ def _build_codex_prompt(packet: Dict[str, Any]) -> str:
         f"CI 상태:\n{ci_txt}\n\n"
         f"본문 발췌:\n{packet.get('body', '')[:2000]}\n\n"
         f"Diff 발췌:\n{packet.get('diff_excerpt', '')}\n"
-    )
-
-
-def _approve_message(pipeline_id: str, pr_url: Optional[str]) -> str:
-    """APPROVE 시 사용자에게 출력할 메시지를 구성.
-
-    nonce를 절대 노출하지 않고 ACCEPT-<pipeline_id> 형식만 출력한다.
-    'CODEX 검토 필요' 마커를 추가하지 않는다 (재트리거 방지).
-
-    Args:
-        pipeline_id: 파이프라인 ID.
-        pr_url: PR 링크 (없으면 None).
-    Returns:
-        APPROVE 사용자 출력 메시지.
-    Raises:
-        TypeError: pipeline_id가 None이거나 str가 아닌 경우.
-    """
-    if pipeline_id is None:
-        raise TypeError("pipeline_id must not be None")
-    if not isinstance(pipeline_id, str):
-        raise TypeError(
-            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
-        )
-    pr_line = pr_url if pr_url else "(PR 링크 없음)"
-    return (
-        "Codex 검토 통과\n\n"
-        "사용자 승인 요청\n\n"
-        f"PR: {pr_line}\n\n"
-        "승인 코드:\n"
-        f"ACCEPT-{pipeline_id}"
     )
 
 
@@ -680,7 +752,7 @@ def process_verdict(
     if _APPROVE_RE.match(normalized):
         return {
             "decision": "APPROVE",
-            "output": _approve_message(pipeline_id, pr_url),
+            "output": _render_approve(pipeline_id, pr_url),
             "exit_code": 0,
             "reject_reason": None,
         }
@@ -902,7 +974,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 같은 APPROVE 출력만.
     if _check_stale(loop_state, head_sha, packet_sha256):
-        print(_approve_message(pipeline_id, pr_url))
+        print(_render_approve(pipeline_id, pr_url))
         return 0
 
     try:

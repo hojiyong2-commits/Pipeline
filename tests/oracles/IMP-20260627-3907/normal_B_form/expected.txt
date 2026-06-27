@@ -1,0 +1,6 @@
+사용자 승인 요청
+
+PR: https://github.com/hojiyong2-commits/Pipeline/pull/748
+
+승인 코드:
+ACCEPT-IMP-20260627-3907
