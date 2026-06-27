@@ -1122,6 +1122,15 @@ def test_preflight_pr_impl_blocks_pipeline_evidence_on_impl_branch(tmp_path: Pat
 # IMP-20260606-D9F4 MT-2: User Acceptance Provenance Gate E2E 테스트
 # ---------------------------------------------------------------------------
 
+# IMP-20260626-4121: Codex Review Loop gate가 요구하는 5개 필수 필드 중
+# pr_head_sha / packet_sha256 / pr_body_sha256는 codex_review_loop_state.json과
+# acceptance_request.json 양쪽에서 동일한 값으로 일치해야 gate가 PASS된다.
+# fixture 전반에서 공유할 매칭 상수로 정의한다.
+FAKE_HEAD_SHA = "FAKEHEAD123"
+FAKE_PKT_SHA = "FAKEPKT456"  # noqa: S105  # dummy SHA — 실제 secret 아님
+FAKE_BODY_SHA = "FAKEBODY789"  # noqa: S105  # dummy SHA — 실제 secret 아님
+
+
 def _build_provenance_state(
     tmp_dir: Path,
     pipeline_id: str = "IMP-20260606-D9F4",
@@ -1174,12 +1183,19 @@ def _make_mock_gh_script(
     pr_list_data: list,
     comments_data: dict,
     script_name: str = "gh",
+    pr_head_sha: str = FAKE_HEAD_SHA,
 ) -> Path:
     """모의 gh CLI 스크립트 생성 (pr list 및 pr view --json comments 응답 조작).
 
     IMP-20260525-6FAC: subprocess 기반 E2E 테스트 요건에 따라
     실제 gh CLI 대신 임시 스크립트를 PATH에 삽입.
     JSON 데이터는 파일로 저장하고 스크립트에서 읽어와 안정적으로 처리.
+
+    IMP-20260626-4121: _check_codex_review_gate가 호출하는 _get_current_pr_head_sha는
+    `gh pr view --json headRefOid --jq .headRefOid`를 실행한다. --jq 필터가 적용되면
+    gh는 JSON이 아니라 raw 값(SHA 문자열 한 줄)만 출력하므로, mock도 headRefOid +
+    --jq 조합일 때 raw SHA만 출력한다. 이 응답이 codex_review_loop_state.json의
+    pr_head_sha(=pr_head_sha 인자)와 일치해야 Codex gate가 PASS된다.
     """
     # JSON 데이터를 파일로 저장
     pr_list_file = tmp_dir / "_mock_pr_list.json"
@@ -1207,6 +1223,13 @@ elif 'pr' in args and 'view' in args and '--json' in args and 'comments' in args
     with open(r"{comments_file_str}", encoding="utf-8") as _f:
         print(_f.read().strip())
     sys.exit(0)
+elif 'pr' in args and 'view' in args and '--json' in args and 'headRefOid' in args:
+    # IMP-20260626-4121: --jq .headRefOid 필터가 적용되면 gh는 raw SHA 한 줄만 출력.
+    if '--jq' in args:
+        print("{pr_head_sha}")
+    else:
+        print('{{"headRefOid": "{pr_head_sha}"}}')
+    sys.exit(0)
 elif 'pr' in args and 'view' in args and '--json' in args:
     print('{{"headRefName": "impl/IMP-20260606-D9F4"}}')
     sys.exit(0)
@@ -1224,6 +1247,52 @@ else:
         bat_path.write_text(bat_content, encoding="utf-8")
 
     return script_path
+
+
+def _probe_codex_gate_head_sha(
+    cwd: Path, env: Dict[str, str]
+) -> Optional[str]:
+    """Codex gate가 실제로 얻게 될 head SHA를 동일 조건(bare gh + cwd + env)으로 미리 조회.
+
+    IMP-20260626-4121: _check_codex_review_gate는 별도 프로세스(pipeline.py)에서
+    `_get_current_pr_head_sha()`를 호출하고, 이는 PIPELINE_GH_EXECUTABLE을 honor하지 않는
+    bare `subprocess.run(["gh", "pr", "view", "--json", "headRefOid", "--jq", ".headRefOid"])`
+    이다. 이 헬퍼는 pipeline.py 서브프로세스와 정확히 동일한 cwd/env/명령으로 bare gh를
+    실행하여, 서브프로세스가 codex gate에서 얻게 될 head SHA를 그대로 반환한다.
+
+    - 리눅스/POSIX CI: PATH에 주입된 실행 가능 mock gh(shebang + chmod 0o755)를
+      bare gh가 실행 → mock의 headRefOid(=FAKE_HEAD_SHA)를 반환.
+    - Windows: bare gh가 PATH의 .bat mock을 무시하고, cwd(tmp_path)가 git repo가 아니라
+      실제 gh도 PR을 못 찾음 → None 반환 → 테스트는 skip.
+
+    이렇게 "서브프로세스가 실제로 보게 될 값"을 fixture의 pr_head_sha로 사용하면,
+    codex gate head SHA 비교가 결정적으로 일치(PASS)하거나, 불가 시 명시적으로 skip된다.
+
+    Args:
+        cwd: pipeline.py 서브프로세스가 사용할 작업 디렉토리(= tmp_path).
+        env: pipeline.py 서브프로세스에 전달할 환경 변수(주입된 mock PATH 포함).
+    Returns:
+        codex gate가 얻게 될 head SHA 문자열 또는 None(조회 불가).
+    Raises:
+        TypeError: cwd 또는 env가 None인 경우.
+    """
+    if cwd is None:
+        raise TypeError("cwd must not be None")
+    if env is None:
+        raise TypeError("env must not be None")
+    try:
+        r = subprocess.run(
+            ["gh", "pr", "view", "--json", "headRefOid", "--jq", ".headRefOid"],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+            cwd=str(cwd), env=env,
+        )
+        if r.returncode == 0:
+            out = r.stdout.strip()
+            return out if out else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
 
 
 def _run_cli_in_dir(
@@ -1256,12 +1325,25 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _write_acceptance_request(tmp_path: Path, nonce: str, evidence_path: Path) -> None:
+def _write_acceptance_request(
+    tmp_path: Path,
+    nonce: str,
+    evidence_path: Path,
+    packet_sha256: str = FAKE_PKT_SHA,
+    pr_body_sha256: str = FAKE_BODY_SHA,
+    pr_head_sha: str = FAKE_HEAD_SHA,
+) -> None:
     """acceptance_request.json을 tmp_path에 PENDING 상태로 생성.
 
     IMP-20260605-58BF: verification_json_path + sha256 포함 필수
     (없으면 verification_json_missing BLOCKED).
     human_acceptance_packet.json을 tmp_path에 최소 내용으로 생성 후 SHA256 계산.
+
+    IMP-20260626-4121: _check_codex_review_gate는 acceptance_request.json의
+    packet_sha256 / pr_body_sha256이 codex_review_loop_state.json의 동일 필드와
+    일치하는지 검증한다. 두 값이 비거나 불일치하면 codex_review_stale BLOCKED.
+    따라서 두 필드를 _write_codex_review_approved와 동일한 매칭 값으로 채운다.
+    pr_head_sha는 mock gh의 headRefOid 응답과 일치해야 한다.
     """
     pipeline_id = "IMP-20260606-D9F4"
 
@@ -1286,14 +1368,50 @@ def _write_acceptance_request(tmp_path: Path, nonce: str, evidence_path: Path) -
         "acceptance_code": f"ACCEPT-{pipeline_id}-{nonce}",
         "evidence": str(evidence_path),
         "evidence_sha256": None,
-        "pr_head_sha": None,
+        "pr_head_sha": pr_head_sha,
         "github_ci_run_id": None,
+        # IMP-20260626-4121: Codex gate 비교 대상 — loop state와 동일 값이어야 PASS.
+        "packet_sha256": packet_sha256,
+        "pr_body_sha256": pr_body_sha256,
         "verification_json_path": str(vj_path),
         "verification_json_sha256": vj_sha256,
         "created_at": "2026-06-06T12:00:00Z",
     }
     req_file = tmp_path / "acceptance_request.json"
     req_file.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _write_codex_review_approved(
+    tmp_path: Path,
+    pipeline_id: str = "IMP-20260606-D9F4",
+    pr_head_sha: str = FAKE_HEAD_SHA,
+    packet_sha256: str = FAKE_PKT_SHA,
+    pr_body_sha256: str = FAKE_BODY_SHA,
+) -> None:
+    """codex_review_loop_state.json을 APPROVED 상태로 tmp_path/.pipeline에 생성.
+
+    IMP-20260626-4121: gates accept --result ACCEPT는 _check_codex_review_gate에서
+    Codex 검토 APPROVED 기록을 요구한다. 새 fail-closed 검증은 5개 필수 필드
+    (pipeline_id, pr_head_sha, packet_sha256, pr_body_sha256, accept_code)를
+    모두 실제 값으로 요구하며, packet_sha256 / pr_body_sha256은 acceptance_request.json의
+    동일 필드와 일치해야 하고, pr_head_sha는 현재 PR head SHA(mock gh headRefOid 응답)와
+    일치해야 한다. 따라서 빈 값이 아닌 매칭 fixture 값으로 5개 필드를 모두 채운다.
+    PIPELINE_STATE_PATH(=tmp_path/pipeline_state.json) 기준 .pipeline 디렉토리에 저장된다.
+    """
+    loop_dir = tmp_path / ".pipeline"
+    loop_dir.mkdir(parents=True, exist_ok=True)
+    (loop_dir / "codex_review_loop_state.json").write_text(
+        json.dumps({
+            "pipeline_id": pipeline_id,
+            "status": "APPROVED",
+            "pr_head_sha": pr_head_sha,
+            "packet_sha256": packet_sha256,
+            "pr_body_sha256": pr_body_sha256,
+            "accept_code": f"ACCEPT-{pipeline_id}",
+            "approved_at": "2026-06-06T12:00:00Z",
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 class TestProvenance:
@@ -1305,10 +1423,14 @@ class TestProvenance:
     """
 
     def test_gates_accept_provenance_gh_missing(self, tmp_path: Path) -> None:
-        """E2E: gh CLI가 PATH에 없으면 pr_approver_fetch_failed BLOCKED 반환.
+        """E2E: gh CLI가 PATH에 없으면 ACCEPT가 BLOCKED 반환.
 
         Scenario: gh CLI 바이너리가 존재하지 않는 환경에서 gates accept 실행.
-        Expected: returncode=1, stdout에 pr_approver_fetch_failed 포함.
+        Expected: returncode=1, acceptance gate가 PASS 아님.
+        IMP-20260626-4121: Codex Review gate가 provenance보다 먼저 실행되며,
+        gh CLI가 없으면 _get_current_pr_head_sha 실패로 codex_review_stale BLOCKED가
+        반환된다. 구체적 코드는 codex_review_stale 또는 pr_approver_fetch_failed 중
+        하나일 수 있으므로, gh 부재 시 ACCEPT가 차단된다는 사실만 검증한다.
         """
         state_file = tmp_path / "pipeline_state.json"
         evidence_file = tmp_path / "evidence.txt"
@@ -1321,6 +1443,8 @@ class TestProvenance:
 
         # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
         _write_acceptance_request(tmp_path, nonce, evidence_file)
+        # IMP-20260626-4121: ACCEPT는 Codex 검토 APPROVED 기록을 요구하므로 픽스처 선기록
+        _write_codex_review_approved(tmp_path)
 
         # PATH에서 gh 제거 (sys.executable 경로는 유지)
         original_path = os.environ.get("PATH", "")
@@ -1352,10 +1476,13 @@ class TestProvenance:
             f"stdout: {result.stdout[:500]}\nstderr: {result.stderr[:200]}"
         )
 
-        # stdout에 pr_approver_fetch_failed 포함
+        # IMP-20260626-4121: gh 부재 시 Codex gate가 먼저 codex_review_stale로 막거나
+        # provenance가 pr_approver_fetch_failed로 막는다. 둘 중 하나면 정상.
         combined = result.stdout + result.stderr
-        assert "pr_approver_fetch_failed" in combined, (
-            f"Expected 'pr_approver_fetch_failed' in output.\n"
+        assert ("pr_approver_fetch_failed" in combined
+                or "codex_review_stale" in combined), (
+            f"Expected 'pr_approver_fetch_failed' or 'codex_review_stale' in output "
+            f"when gh is missing.\n"
             f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
         )
 
@@ -1379,14 +1506,8 @@ class TestProvenance:
         evidence_file.write_text("test evidence", encoding="utf-8")
         nonce = "TESTNOCE"
 
-        state = _build_provenance_state(tmp_path)
-        state["acceptance_request"]["evidence"] = str(evidence_file)
-        write_state(state_file, state)
-
-        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
-        _write_acceptance_request(tmp_path, nonce, evidence_file)
-
         # 모의 gh 스크립트: PR 있지만 댓글에 승인자(hojiyong2-commits) 없음
+        # mock의 headRefOid 응답은 FAKE_HEAD_SHA로 고정한다.
         mock_bin_dir = tmp_path / "mock_bin"
         mock_bin_dir.mkdir()
 
@@ -1399,11 +1520,42 @@ class TestProvenance:
             mock_bin_dir,
             pr_list_data=pr_list,
             comments_data=comments_data_no_approver,
+            pr_head_sha=FAKE_HEAD_SHA,
         )
 
         env = make_env(state_file)
         env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
         env["PIPELINE_STATE_PATH"] = str(state_file)  # PIPELINE_STATE_PATH 격리 (IMP-20260525-6FAC)
+
+        # IMP-20260626-4121: Codex gate가 provenance보다 먼저 실행되고 별도 프로세스의 bare gh로
+        # head SHA를 검증한다. codex gate를 통과시켜 provenance(pr_approver_missing)까지 도달하려면,
+        # 서브프로세스와 동일한 cwd/env로 미리 probe한 head SHA를 fixture에 사용해야 한다.
+        # 조회 불가(Windows) 시 skip.
+        effective_head_sha = _probe_codex_gate_head_sha(cwd=tmp_path, env=env)
+        if not effective_head_sha:
+            pytest.skip(
+                "Codex gate가 사용할 head SHA를 결정할 수 없습니다 "
+                "(Windows에서 bare gh가 PATH mock(.bat)을 무시하고 cwd가 git repo가 아님). "
+                "subprocess E2E에서 codex gate head SHA 검증을 통과시킬 수 없는 환경입니다."
+            )
+
+        state = _build_provenance_state(tmp_path)
+        state["acceptance_request"]["evidence"] = str(evidence_file)
+        write_state(state_file, state)
+
+        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
+        # IMP-20260626-4121: Codex gate가 비교하는 packet/body/head SHA를 matching 값으로 채움.
+        _write_acceptance_request(
+            tmp_path, nonce, evidence_file,
+            packet_sha256=FAKE_PKT_SHA, pr_body_sha256=FAKE_BODY_SHA,
+            pr_head_sha=effective_head_sha,
+        )
+        # IMP-20260626-4121: ACCEPT는 Codex 검토 APPROVED 기록을 요구하므로 픽스처 선기록
+        _write_codex_review_approved(
+            tmp_path,
+            pr_head_sha=effective_head_sha, packet_sha256=FAKE_PKT_SHA,
+            pr_body_sha256=FAKE_BODY_SHA,
+        )
 
         result = _run_cli_in_dir(
             ["gates", "accept", "--result", "ACCEPT",
@@ -1453,17 +1605,9 @@ class TestProvenance:
         nonce = "TESTNOCE"
         accept_code = f"ACCEPT-IMP-20260606-D9F4-{nonce}"
 
-        state = _build_provenance_state(tmp_path)
-        state["acceptance_request"]["evidence"] = str(evidence_file)
-        # codex_bootstrap_exception으로 codex pr gate 우회
-        state["codex_bootstrap_exception"] = True
-        write_state(state_file, state)
-
-        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
-        _write_acceptance_request(tmp_path, nonce, evidence_file)
-
         # 모의 gh 스크립트: hojiyong2-commits가 승인 코드를 정확히 한 줄로 댓글 작성
         # IMP-20260606-D9F4 REJECT fix: 기본 승인자가 hojiyong2-commits으로 변경됨
+        # mock의 headRefOid 응답은 FAKE_HEAD_SHA로 고정한다.
         mock_bin_dir = tmp_path / "mock_bin"
         mock_bin_dir.mkdir()
 
@@ -1480,11 +1624,44 @@ class TestProvenance:
             mock_bin_dir,
             pr_list_data=pr_list,
             comments_data=comments_data_approver,
+            pr_head_sha=FAKE_HEAD_SHA,
         )
 
         env = make_env(state_file)
         env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
         env["PIPELINE_STATE_PATH"] = str(state_file)  # PIPELINE_STATE_PATH 격리 (IMP-20260525-6FAC)
+
+        # IMP-20260626-4121: Codex gate는 별도 프로세스의 bare gh로 head SHA를 조회한다.
+        # 서브프로세스와 동일한 cwd/env로 미리 probe하여 codex gate가 실제로 보게 될 값을 얻는다.
+        # (POSIX: 실행 가능 mock gh로 FAKE_HEAD_SHA, Windows: 조회 불가 → skip)
+        effective_head_sha = _probe_codex_gate_head_sha(cwd=tmp_path, env=env)
+        if not effective_head_sha:
+            pytest.skip(
+                "Codex gate가 사용할 head SHA를 결정할 수 없습니다 "
+                "(Windows에서 bare gh가 PATH mock(.bat)을 무시하고 cwd가 git repo가 아님). "
+                "subprocess E2E에서 codex gate head SHA 검증을 통과시킬 수 없는 환경입니다."
+            )
+
+        state = _build_provenance_state(tmp_path)
+        state["acceptance_request"]["evidence"] = str(evidence_file)
+        # IMP-20260626-4121: codex_bootstrap_exception 우회는 제거됨 (pipeline.py에서
+        # trust-root 우회 차단). 대신 probe된 head SHA + 5필드 fixture로 Codex gate 정상 통과.
+        write_state(state_file, state)
+
+        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
+        # IMP-20260626-4121: Codex gate가 비교하는 packet/body/head SHA를 matching 값으로 채움.
+        # pr_head_sha는 codex gate가 실제로 얻게 될 head SHA여야 검증을 통과한다.
+        _write_acceptance_request(
+            tmp_path, nonce, evidence_file,
+            packet_sha256=FAKE_PKT_SHA, pr_body_sha256=FAKE_BODY_SHA,
+            pr_head_sha=effective_head_sha,
+        )
+        # IMP-20260626-4121: ACCEPT는 Codex 검토 APPROVED 기록을 요구하므로 픽스처 선기록
+        _write_codex_review_approved(
+            tmp_path,
+            pr_head_sha=effective_head_sha, packet_sha256=FAKE_PKT_SHA,
+            pr_body_sha256=FAKE_BODY_SHA,
+        )
 
         result = _run_cli_in_dir(
             ["gates", "accept", "--result", "ACCEPT",
@@ -1541,15 +1718,8 @@ class TestProvenance:
         nonce = "TESTNOCE"
         accept_code = f"ACCEPT-IMP-20260606-D9F4-{nonce}"
 
-        state = _build_provenance_state(tmp_path)
-        state["acceptance_request"]["evidence"] = str(evidence_file)
-        state["codex_bootstrap_exception"] = True
-        write_state(state_file, state)
-
-        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
-        _write_acceptance_request(tmp_path, nonce, evidence_file)
-
         # 모의 gh 스크립트: testapprover가 승인 코드 댓글 작성
+        # mock의 headRefOid 응답은 FAKE_HEAD_SHA로 고정한다.
         mock_bin_dir = tmp_path / "mock_bin"
         mock_bin_dir.mkdir()
 
@@ -1566,12 +1736,43 @@ class TestProvenance:
             mock_bin_dir,
             pr_list_data=pr_list,
             comments_data=comments_data_testapprover,
+            pr_head_sha=FAKE_HEAD_SHA,
         )
 
         env = make_env(state_file)
         env["PATH"] = str(mock_bin_dir) + os.pathsep + env.get("PATH", "")
         env["PIPELINE_ALLOWED_APPROVER"] = "testapprover"
         env["PIPELINE_STATE_PATH"] = str(state_file)  # PIPELINE_STATE_PATH 격리 (IMP-20260525-6FAC)
+
+        # IMP-20260626-4121: Codex gate가 사용할 head SHA를 서브프로세스와 동일한 cwd/env로 probe.
+        # 조회 불가(Windows) 시 skip.
+        effective_head_sha = _probe_codex_gate_head_sha(cwd=tmp_path, env=env)
+        if not effective_head_sha:
+            pytest.skip(
+                "Codex gate가 사용할 head SHA를 결정할 수 없습니다 "
+                "(Windows에서 bare gh가 PATH mock(.bat)을 무시하고 cwd가 git repo가 아님). "
+                "subprocess E2E에서 codex gate head SHA 검증을 통과시킬 수 없는 환경입니다."
+            )
+
+        state = _build_provenance_state(tmp_path)
+        state["acceptance_request"]["evidence"] = str(evidence_file)
+        # IMP-20260626-4121: codex_bootstrap_exception 우회는 제거됨.
+        # probe된 head SHA + 5필드 fixture로 Codex gate 정상 통과.
+        write_state(state_file, state)
+
+        # acceptance_request.json을 tmp_path에 PENDING으로 생성 (CWD 격리)
+        # IMP-20260626-4121: Codex gate가 비교하는 packet/body/head SHA를 matching 값으로 채움.
+        _write_acceptance_request(
+            tmp_path, nonce, evidence_file,
+            packet_sha256=FAKE_PKT_SHA, pr_body_sha256=FAKE_BODY_SHA,
+            pr_head_sha=effective_head_sha,
+        )
+        # IMP-20260626-4121: ACCEPT는 Codex 검토 APPROVED 기록을 요구하므로 픽스처 선기록
+        _write_codex_review_approved(
+            tmp_path,
+            pr_head_sha=effective_head_sha, packet_sha256=FAKE_PKT_SHA,
+            pr_body_sha256=FAKE_BODY_SHA,
+        )
 
         result = _run_cli_in_dir(
             ["gates", "accept", "--result", "ACCEPT",

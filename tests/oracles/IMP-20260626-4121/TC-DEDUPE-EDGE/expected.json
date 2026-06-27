@@ -1,0 +1,15 @@
+{
+  "case_kind": "edge",
+  "description": "동일 (pipeline_id, pr_head_sha, packet_sha256, reject_reason) 반복 시 중복 주입 차단 — 조용히 exit 0, 재출력 없음",
+  "prior_state": {
+    "status": "REJECTED",
+    "pipeline_id": "IMP-20260626-4121",
+    "pr_head_sha": "abc123",
+    "packet_sha256": "pkt456",
+    "last_reject_reason": "REJECT - 동일 사유 반복: CI가 아직 통과하지 않았습니다."
+  },
+  "repeat_same_combo": true,
+  "exit_code": 0,
+  "action": "dedupe_skip",
+  "is_duplicate_reject": true
+}

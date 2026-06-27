@@ -244,6 +244,16 @@ User Acceptance는 **GitHub PR 댓글**로 처리합니다. 별도의 로컬 브
 
 사용자의 "승인완료/댓글 달았어" 메시지는 승인 증거가 아니라 PR 댓글 재조회 트리거다. Pipeline Manager는 최종 승인 요청문을 반복 출력하기 전에 PR 댓글에 유효한 `ACCEPT-<pipeline_id>` 단독 댓글이 이미 있는지 확인한다. 유효 댓글이 있으면 재요청 없이 기존 `gates accept` 경로를 실행한다. 단, 최종 PASS 판정은 반드시 `gates accept`의 provenance/replay/stale 검증 결과를 따른다.
 
+## Codex Review Loop 원칙 (IMP-20260626-4121)
+
+Codex Review Loop에서 `REJECT - ...`는 외부 검토 피드백이다. Pipeline Manager는 이를 그대로 재작업 입력으로 사용한다. Codex가 APPROVED 상태를 기록하기 전에는 사용자에게 최종 승인을 요구하지 않는다.
+
+중요 원칙:
+- Codex APPROVE는 User Acceptance가 아니며, 최종 ACCEPT는 사용자가 PR 댓글에 직접 입력해야 한다.
+- REJECT 피드백은 prefix/suffix/번역/요약 없이 원문 그대로 재작업 입력으로 전달된다.
+- REJECT 5회 초과 시 루프가 자동 중단되며 사용자 직접 개입이 필요하다.
+- `.pipeline/codex_review_loop_state.json`의 status=APPROVED 없이 `gates accept` 실행 시 codex_review_not_approved로 BLOCKED된다.
+
 ## User Acceptance 표시 상태값 정의
 
 `acceptance_request.json`의 `status` 및 `external_gates.acceptance.status`는 서로 다른 레이어에서 관리됩니다.

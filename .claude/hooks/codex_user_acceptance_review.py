@@ -1,28 +1,41 @@
 #!/usr/bin/env python3
 # [Purpose]: Claude Code Stop hook helper. assistant 최종 출력에서 "사용자 승인 요청"
-#   블록(5요소)을 감지하면 Codex CLI로 PR 검토를 보조 수행한다. 이 helper는 절대로
-#   PR 댓글을 쓰거나 ACCEPT 코드를 게시하거나 gates accept를 실행하지 않는다 — 사용자에게
-#   결과만 출력하여 사용자가 직접 승인하도록 돕는다 (User Acceptance 자동화 금지).
+#   블록(5요소)을 감지하면 Codex CLI로 PR 검토를 보조 수행한다 (IMP-20260626-4121 Codex
+#   Review Loop). REJECT 피드백은 단 한 글자도 바꾸지 않고 stdout에 그대로 출력 후 exit 2로
+#   재주입한다(Stop hook 재주입 방식). APPROVE 시에는 사용자 승인 요청 안내 + ACCEPT-<pipeline_id>
+#   코드만 출력한다. 이 helper는 절대로 PR 댓글을 쓰거나 nonce를 노출하거나 gates accept를
+#   실행하지 않는다. 모든 루프 상태는 .pipeline/codex_review_loop_state.json에만 저장하며,
+#   acceptance_request.json은 읽거나 수정하지 않는다.
 # [Assumptions]: gh CLI와 codex CLI가 PATH에 존재하고 인증되어 있다. transcript는
 #   --transcript 인자(JSONL 또는 텍스트)로 전달되며, 마지막 assistant 메시지에 승인 블록이 있다.
 #   .pipeline/ 디렉토리는 프로젝트 루트 하위에 쓰기 가능하다.
 # [Vulnerability & Risks]: gh/codex 응답 형식이 예고 없이 바뀌면 파싱이 깨질 수 있다.
 #   이를 위해 모든 외부 호출은 fail-closed(예외 시 exit 1)로 처리한다. transcript 파싱은
 #   인용/코드블록 내부 예시를 무시하여 사용자 프롬프트 오탐을 방지한다. 형식이 모호한
-#   verdict는 ValueError로 차단한다.
+#   verdict는 ValueError로 차단한다. REJECT 원문은 prefix/suffix/번역/요약 없이 그대로 출력한다.
 # [Improvement]: 시간이 더 있다면 Codex 응답을 구조화 JSON 스키마로 강제하고,
 #   gh GraphQL로 단일 호출 packet 조회, 그리고 검토 결과 캐시 TTL을 추가할 것이다.
-"""Codex 사용자 승인 검토 보조 hook helper.
+"""Codex 사용자 승인 검토 보조 hook helper (Codex Review Loop, IMP-20260626-4121).
 
 이 모듈은 Claude Code의 Stop hook에서 호출된다. assistant 최종 출력에
-"사용자 승인 요청" 블록(5요소)이 있으면 Codex CLI로 PR을 한 번 더 검토하고,
-그 결과를 사용자에게만 출력한다. 어떤 경우에도 PR 댓글 게시나 gates accept
-실행을 수행하지 않는다.
+"사용자 승인 요청" 블록(5요소)이 있으면 Codex CLI로 PR을 한 번 더 검토한다.
+
+- REJECT - <사유>: 원문을 그대로 stdout에 출력하고 exit 2로 재주입한다.
+  같은 (pipeline_id, pr_head_sha, packet_sha256, reject_reason) 조합 반복 시
+  중복 주입을 차단(조용히 exit 0)하고, reject_count가 상한(5)을 초과하면
+  루프를 자동 중단한다.
+- APPROVE_TO_USER: 사용자 승인 요청 안내 + ACCEPT-<pipeline_id> 코드만 출력하고 exit 0.
+  이미 같은 (pr_head_sha, packet_sha256)로 APPROVED면 Codex CLI를 다시 호출하지 않고
+  같은 APPROVE 출력만 반복한다.
+
+어떤 경우에도 PR 댓글 게시, nonce 노출, gates accept 실행을 수행하지 않는다.
+모든 루프 상태는 .pipeline/codex_review_loop_state.json에만 저장된다.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -40,6 +53,8 @@ _PR_URL_RE = re.compile(
 )
 # ACCEPT 코드: ACCEPT-<pipeline_id>[-<nonce>]
 _ACCEPT_CODE_RE = re.compile(r"ACCEPT-[A-Za-z0-9_\-]+")
+# pipeline_id: FEAT|BUG|IMP-YYYYMMDD-XXXX
+_PIPELINE_ID_RE = re.compile(r"(?:FEAT|BUG|IMP)-\d{8}-[A-Za-z0-9]+")
 # verdict 형식: 정확히 APPROVE_TO_USER 또는 'REJECT - <사유>'
 _APPROVE_RE = re.compile(r"^APPROVE_TO_USER$")
 _REJECT_RE = re.compile(r"^REJECT\s*-\s*.+$", re.DOTALL)
@@ -48,12 +63,16 @@ _REJECT_RE = re.compile(r"^REJECT\s*-\s*.+$", re.DOTALL)
 _MARKER_APPROVAL = "사용자 승인 요청"
 _MARKER_PR = "PR:"
 _MARKER_CODE_LABEL = "승인 코드:"
+_MARKER_ACCEPT_PREFIX = "ACCEPT-"
 _MARKER_CODEX_REQUIRED = "CODEX 검토 필요"
 
 # transcript tail에서 검사할 마지막 assistant 메시지 수
 _TAIL_MESSAGES = 5
-# REJECT 누적 횟수 상한 (초과 시 사용자 개입 요청)
-_MAX_REJECT = 3
+# REJECT 누적 횟수 상한 — 초과(즉 6번째)부터 루프 자동 중단
+_MAX_REJECT = 5
+
+# Codex Review Loop 상태 파일명 (acceptance_request.json과 무관한 별도 파일)
+_LOOP_STATE_FILENAME = "codex_review_loop_state.json"
 
 _ENCODINGS = ("utf-8", "utf-8-sig", "cp949", "latin-1")
 
@@ -155,8 +174,8 @@ def parse_acceptance_block(text: str) -> Optional[Dict[str, Any]]:
     Args:
         text: 검사할 transcript tail 텍스트.
     Returns:
-        5요소 모두 충족 시 {"block": str, "pr_url": str, "accept_code": str},
-        하나라도 미충족 시 None.
+        5요소 모두 충족 시 {"block": str, "pr_url": str, "accept_code": str,
+        "pipeline_id": str}, 하나라도 미충족 시 None.
     Raises:
         TypeError: text가 None이거나 str가 아닌 경우.
     """
@@ -167,10 +186,10 @@ def parse_acceptance_block(text: str) -> Optional[Dict[str, Any]]:
     if len(text) == 0:
         return None
 
-    # 인용/코드블록 예시 제거 (AC-3)
+    # 인용/코드블록 예시 제거
     cleaned = _strip_code_fences_and_quotes(text)
 
-    # 마지막 의미 있는 줄이 "CODEX 검토 필요"여야 함 (AC-1, AC-2)
+    # 마지막 의미 있는 줄이 "CODEX 검토 필요"여야 함
     meaningful = [ln.strip() for ln in cleaned.splitlines() if ln.strip()]
     if not meaningful:
         return None
@@ -184,12 +203,41 @@ def parse_acceptance_block(text: str) -> Optional[Dict[str, Any]]:
         return None
     if _MARKER_CODE_LABEL not in cleaned:
         return None
+    if _MARKER_ACCEPT_PREFIX not in cleaned:
+        return None
 
     pr_url, accept_code = extract_pr_url_and_code(cleaned)
     if pr_url is None or accept_code is None:
         return None
 
-    return {"block": cleaned, "pr_url": pr_url, "accept_code": accept_code}
+    pipeline_id = _extract_pipeline_id(accept_code) or _extract_pipeline_id(cleaned)
+    if pipeline_id is None:
+        return None
+
+    return {
+        "block": cleaned,
+        "pr_url": pr_url,
+        "accept_code": accept_code,
+        "pipeline_id": pipeline_id,
+    }
+
+
+def _extract_pipeline_id(text: str) -> Optional[str]:
+    """문자열에서 pipeline_id(FEAT|BUG|IMP-YYYYMMDD-XXXX)를 추출.
+
+    Args:
+        text: 검색 대상 문자열.
+    Returns:
+        매치된 pipeline_id 또는 None.
+    Raises:
+        TypeError: text가 None이거나 str가 아닌 경우.
+    """
+    if text is None:
+        raise TypeError("text must not be None")
+    if not isinstance(text, str):
+        raise TypeError(f"text must be str, got {type(text).__name__}")
+    m = _PIPELINE_ID_RE.search(text)
+    return m.group(0) if m else None
 
 
 def extract_pr_url_and_code(block: str) -> Tuple[Optional[str], Optional[str]]:
@@ -213,82 +261,148 @@ def extract_pr_url_and_code(block: str) -> Tuple[Optional[str], Optional[str]]:
     return pr_url, accept_code
 
 
-def check_dedupe(
-    pr_url: str, accept_code: str, head_sha: str, state_path: Path
-) -> bool:
-    """(pr_url, accept_code, head_sha) 조합 기반 중복 검토 방지.
-
-    동일 조합이 state 파일에 이미 있으면 True(중복 → 건너뜀).
-    head_sha가 바뀌면 같은 PR/코드여도 False(재검토 허용, AC-5).
+def _sha256_text(text: str) -> str:
+    """텍스트의 SHA-256 16진 다이제스트 (packet_sha256 산출용).
 
     Args:
-        pr_url: PR URL.
-        accept_code: ACCEPT 승인 코드.
-        head_sha: PR head 커밋 SHA.
-        state_path: codex_review_state.json 경로.
+        text: 해시할 문자열.
     Returns:
-        중복(이미 검토됨)이면 True, 신규(검토 필요)면 False.
+        SHA-256 hex 다이제스트.
+    Raises:
+        TypeError: text가 None이거나 str가 아닌 경우.
+    """
+    if text is None:
+        raise TypeError("text must not be None")
+    if not isinstance(text, str):
+        raise TypeError(f"text must be str, got {type(text).__name__}")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _load_loop_state(state_path: Path) -> Dict[str, Any]:
+    """codex_review_loop_state.json 로드. 없거나 파싱 오류 시 빈 dict.
+
+    Args:
+        state_path: codex_review_loop_state.json 경로.
+    Returns:
+        파싱된 dict 또는 {} (파일 없음/JSON 오류).
+    Raises:
+        TypeError: state_path가 None인 경우.
+    """
+    if state_path is None:
+        raise TypeError("state_path must not be None")
+    state_path = Path(state_path)
+    if not state_path.exists():
+        return {}
+    try:
+        raw = _read_text_with_fallback(state_path)
+        loaded = json.loads(raw) if raw.strip() else {}
+        return loaded if isinstance(loaded, dict) else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _record_state(state_path: Path, payload: Dict[str, Any]) -> None:
+    """codex_review_loop_state.json에 루프 상태를 원자적으로 기록.
+
+    Args:
+        state_path: codex_review_loop_state.json 경로.
+        payload: 기록할 상태 dict (status/pipeline_id 등 포함).
+    Raises:
+        TypeError: 인자가 None인 경우.
+    """
+    if state_path is None:
+        raise TypeError("state_path must not be None")
+    if payload is None:
+        raise TypeError("payload must not be None")
+    if not isinstance(payload, dict):
+        raise TypeError(f"payload must be dict, got {type(payload).__name__}")
+    _atomic_write_json(Path(state_path), payload)
+
+
+def _is_duplicate_reject(
+    state: Dict[str, Any],
+    pipeline_id: str,
+    pr_head_sha: str,
+    packet_sha256: str,
+    reject_reason: str,
+) -> bool:
+    """직전 기록과 동일한 REJECT 조합인지 판정 (중복 주입 차단용).
+
+    동일 (pipeline_id, pr_head_sha, packet_sha256, last_reject_reason) 조합이
+    이미 REJECTED 상태로 기록되어 있으면 True.
+
+    Args:
+        state: 로드된 loop state dict.
+        pipeline_id: 파이프라인 ID.
+        pr_head_sha: PR head 커밋 SHA.
+        packet_sha256: packet SHA-256.
+        reject_reason: REJECT 원문 사유.
+    Returns:
+        중복(이미 같은 조합으로 REJECTED)이면 True, 신규면 False.
     Raises:
         TypeError: 인자가 None이거나 타입이 잘못된 경우.
-        ValueError: 문자열 인자가 빈 문자열인 경우.
     """
     for name, val in (
-        ("pr_url", pr_url),
-        ("accept_code", accept_code),
-        ("head_sha", head_sha),
+        ("state", state),
+    ):
+        if val is None:
+            raise TypeError(f"{name} must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    for sname, sval in (
+        ("pipeline_id", pipeline_id),
+        ("pr_head_sha", pr_head_sha),
+        ("packet_sha256", packet_sha256),
+        ("reject_reason", reject_reason),
+    ):
+        if sval is None:
+            raise TypeError(f"{sname} must not be None")
+        if not isinstance(sval, str):
+            raise TypeError(f"{sname} must be str, got {type(sval).__name__}")
+    if state.get("status") != "REJECTED":
+        return False
+    return (
+        str(state.get("pipeline_id", "")) == pipeline_id
+        and str(state.get("pr_head_sha", "")) == pr_head_sha
+        and str(state.get("packet_sha256", "")) == packet_sha256
+        and str(state.get("last_reject_reason", "")) == reject_reason
+    )
+
+
+def _check_stale(
+    state: Dict[str, Any], pr_head_sha: str, packet_sha256: str
+) -> bool:
+    """기존 APPROVED 상태가 현재 head/packet과 같아 재호출 불필요인지 판정.
+
+    동일 (pr_head_sha, packet_sha256)로 이미 APPROVED면 True (재트리거 방지).
+
+    Args:
+        state: 로드된 loop state dict.
+        pr_head_sha: 현재 PR head 커밋 SHA.
+        packet_sha256: 현재 packet SHA-256.
+    Returns:
+        같은 APPROVED 상태가 유효(stale 아님)하면 True, 아니면 False.
+    Raises:
+        TypeError: 인자가 None이거나 타입이 잘못된 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    for name, val in (
+        ("pr_head_sha", pr_head_sha),
+        ("packet_sha256", packet_sha256),
     ):
         if val is None:
             raise TypeError(f"{name} must not be None")
         if not isinstance(val, str):
             raise TypeError(f"{name} must be str, got {type(val).__name__}")
-        if len(val.strip()) == 0:
-            raise ValueError(f"{name} must not be empty")
-    if state_path is None:
-        raise TypeError("state_path must not be None")
-    state_path = Path(state_path)
-
-    key = f"{pr_url}|{accept_code}|{head_sha}"
-    if not state_path.exists():
+    if state.get("status") != "APPROVED":
         return False
-    try:
-        raw = _read_text_with_fallback(state_path)
-        state = json.loads(raw) if raw.strip() else {}
-    except (json.JSONDecodeError, OSError):
-        # 손상된 state는 신규로 취급 (검토 진행). 이후 재기록으로 복구.
-        return False
-    reviewed = state.get("reviewed", [])
-    if not isinstance(reviewed, list):
-        return False
-    return key in reviewed
-
-
-def _record_dedupe(
-    pr_url: str, accept_code: str, head_sha: str, state_path: Path
-) -> None:
-    """검토 완료된 조합을 state 파일에 기록 (원자적 쓰기).
-
-    Args:
-        pr_url: PR URL.
-        accept_code: ACCEPT 승인 코드.
-        head_sha: PR head SHA.
-        state_path: codex_review_state.json 경로.
-    """
-    state_path = Path(state_path)
-    key = f"{pr_url}|{accept_code}|{head_sha}"
-    state: Dict[str, Any] = {"reviewed": []}
-    if state_path.exists():
-        try:
-            raw = _read_text_with_fallback(state_path)
-            loaded = json.loads(raw) if raw.strip() else {}
-            if isinstance(loaded, dict) and isinstance(
-                loaded.get("reviewed"), list
-            ):
-                state = loaded
-        except (json.JSONDecodeError, OSError):
-            state = {"reviewed": []}
-    if key not in state["reviewed"]:
-        state["reviewed"].append(key)
-    _atomic_write_json(state_path, state)
+    return (
+        str(state.get("pr_head_sha", "")) == pr_head_sha
+        and str(state.get("packet_sha256", "")) == packet_sha256
+    )
 
 
 def _run_gh(args: List[str]) -> str:
@@ -299,8 +413,13 @@ def _run_gh(args: List[str]) -> str:
     Returns:
         stdout 텍스트.
     Raises:
+        TypeError: args가 None이거나 list가 아닌 경우.
         RuntimeError: gh 미설치 또는 호출 실패.
     """
+    if args is None:
+        raise TypeError("args must not be None")
+    if not isinstance(args, list):
+        raise TypeError(f"args must be list, got {type(args).__name__}")
     try:
         result = subprocess.run(
             ["gh", *args],
@@ -443,7 +562,13 @@ def _build_codex_prompt(packet: Dict[str, Any]) -> str:
         packet: build_review_packet 반환 dict.
     Returns:
         Codex 검토 프롬프트 문자열.
+    Raises:
+        TypeError: packet이 None이거나 dict가 아닌 경우.
     """
+    if packet is None:
+        raise TypeError("packet must not be None")
+    if not isinstance(packet, dict):
+        raise TypeError(f"packet must be dict, got {type(packet).__name__}")
     files_txt = "\n".join(f"  - {p}" for p in packet.get("changed_files", []))
     ci_txt = "\n".join(
         f"  - {c['name']}: {c['conclusion']}" for c in packet.get("ci_status", [])
@@ -468,26 +593,58 @@ def _build_codex_prompt(packet: Dict[str, Any]) -> str:
     )
 
 
+def _approve_message(pipeline_id: str, pr_url: Optional[str]) -> str:
+    """APPROVE 시 사용자에게 출력할 메시지를 구성.
+
+    nonce를 절대 노출하지 않고 ACCEPT-<pipeline_id> 형식만 출력한다.
+    'CODEX 검토 필요' 마커를 추가하지 않는다 (재트리거 방지).
+
+    Args:
+        pipeline_id: 파이프라인 ID.
+        pr_url: PR 링크 (없으면 None).
+    Returns:
+        APPROVE 사용자 출력 메시지.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str가 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    pr_line = pr_url if pr_url else "(PR 링크 없음)"
+    return (
+        "Codex 검토 통과\n\n"
+        "사용자 승인 요청\n\n"
+        f"PR: {pr_line}\n\n"
+        "승인 코드:\n"
+        f"ACCEPT-{pipeline_id}"
+    )
+
+
 def process_verdict(
-    verdict: str, accept_code: str, pr_url: str, reject_count: int
+    verdict: str,
+    pipeline_id: str,
+    pr_url: Optional[str],
+    reject_count: int,
 ) -> Dict[str, Any]:
-    """Codex verdict 형식을 검증하고 사용자용 출력을 구성.
+    """Codex verdict 형식을 검증하고 처리 결과(decision/output/exit_code)를 구성.
 
     verdict는 정확히 "APPROVE_TO_USER" 또는 "REJECT - <사유>" 형식이어야 한다.
     형식 위반 시 ValueError (fail-closed).
-    REJECT: 사유를 그대로 출력, PR 댓글 작성/ACCEPT 코드 게시 안 함.
-            reject_count가 3회 초과면 사용자 개입 요청 추가.
-    APPROVE_TO_USER: 안내문 + 승인 코드만 출력 (게시/gates accept 안 함).
+    REJECT: 원문 사유를 단 한 글자도 바꾸지 않고 그대로 output에 담아 exit 2.
+            reject_count가 상한(_MAX_REJECT)을 초과하면 루프 중단 안내(exit 0).
+    APPROVE_TO_USER: 안내문 + ACCEPT-<pipeline_id> 코드만 출력 (exit 0).
 
     Args:
         verdict: Codex가 반환한 verdict 텍스트.
-        accept_code: ACCEPT 승인 코드.
-        pr_url: PR URL.
-        reject_count: 현재까지 누적된 REJECT 횟수.
+        pipeline_id: 파이프라인 ID.
+        pr_url: PR 링크 (없으면 None).
+        reject_count: 현재까지 누적된 REJECT 횟수 (이번 REJECT 반영 후 값).
     Returns:
-        {"decision": "APPROVE_TO_USER"|"REJECT", "message": str,
-         "post_pr_comment": False, "run_gates_accept": False,
-         "needs_user_intervention": bool}.
+        {"decision": "APPROVE"|"REJECT"|"REJECT_HALT",
+         "output": str, "exit_code": int, "reject_reason": Optional[str]}.
     Raises:
         TypeError: 인자가 None이거나 타입이 잘못된 경우.
         ValueError: verdict 형식이 위반된 경우, 또는 빈 문자열인 경우.
@@ -496,16 +653,14 @@ def process_verdict(
         raise TypeError("verdict must not be None")
     if not isinstance(verdict, str):
         raise TypeError(f"verdict must be str, got {type(verdict).__name__}")
-    if accept_code is None:
-        raise TypeError("accept_code must not be None")
-    if not isinstance(accept_code, str):
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
         raise TypeError(
-            f"accept_code must be str, got {type(accept_code).__name__}"
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
         )
-    if pr_url is None:
-        raise TypeError("pr_url must not be None")
-    if not isinstance(pr_url, str):
-        raise TypeError(f"pr_url must be str, got {type(pr_url).__name__}")
+    if pr_url is not None and not isinstance(pr_url, str):
+        raise TypeError(f"pr_url must be str or None, got {type(pr_url).__name__}")
     if reject_count is None:
         raise TypeError("reject_count must not be None")
     if not isinstance(reject_count, int) or isinstance(reject_count, bool):
@@ -523,35 +678,31 @@ def process_verdict(
     normalized = verdict.strip()
 
     if _APPROVE_RE.match(normalized):
-        message = (
-            "Codex 검토 통과.\n"
-            "PR 댓글에 아래 코드를 직접 한 줄로 입력해 주세요.\n"
-            f"{accept_code}"
-        )
         return {
-            "decision": "APPROVE_TO_USER",
-            "message": message,
-            "post_pr_comment": False,
-            "run_gates_accept": False,
-            "needs_user_intervention": False,
+            "decision": "APPROVE",
+            "output": _approve_message(pipeline_id, pr_url),
+            "exit_code": 0,
+            "reject_reason": None,
         }
 
     if _REJECT_RE.match(normalized):
-        new_count = reject_count + 1
-        needs_intervention = new_count > _MAX_REJECT
-        message = normalized
-        if needs_intervention:
-            message = (
-                f"{normalized}\n\n"
-                f"Codex 검토가 {new_count}회 연속 반려되었습니다 "
-                f"(상한 {_MAX_REJECT}회 초과). 사용자 개입이 필요합니다."
-            )
+        # reject_count는 이번 REJECT를 반영한 누적값. 상한 초과 시 루프 중단.
+        if reject_count > _MAX_REJECT:
+            return {
+                "decision": "REJECT_HALT",
+                "output": (
+                    "Codex Review Loop 자동 중단: 최대 거부 횟수(5) 초과. "
+                    "사용자 직접 검토 필요."
+                ),
+                "exit_code": 0,
+                "reject_reason": normalized,
+            }
+        # REJECT 원문을 단 한 글자도 바꾸지 않고 그대로 재주입 (exit 2)
         return {
             "decision": "REJECT",
-            "message": message,
-            "post_pr_comment": False,
-            "run_gates_accept": False,
-            "needs_user_intervention": needs_intervention,
+            "output": normalized,
+            "exit_code": 2,
+            "reject_reason": normalized,
         }
 
     raise ValueError(
@@ -560,50 +711,267 @@ def process_verdict(
     )
 
 
-def _mask_accept_code(accept_code: str) -> str:
-    """audit log용 승인 코드 마스킹 (앞 8자 + ****).
+def _project_root() -> Path:
+    """프로젝트 루트 디렉토리 경로를 반환.
 
-    Args:
-        accept_code: 원본 승인 코드.
+    PIPELINE_STATE_PATH 환경 변수가 있으면 그 부모를(= .pipeline의 부모와 동일 레벨),
+    없으면 cwd를 프로젝트 루트로 사용한다. human_acceptance_packet.md는 이 루트에 위치한다.
+
     Returns:
-        앞 8자만 노출하고 나머지는 ****로 가린 문자열.
+        프로젝트 루트 절대 경로.
     """
-    if not isinstance(accept_code, str) or len(accept_code) == 0:
-        return "****"
-    return accept_code[:8] + "****"
+    env_state = os.environ.get("PIPELINE_STATE_PATH")
+    if env_state:
+        return Path(env_state).resolve().parent
+    return Path.cwd().resolve()
 
 
-def _append_audit_log(
-    audit_path: Path,
-    pr_url: str,
-    head_sha: str,
-    accept_code: str,
-    verdict: str,
-    result: str,
-    dedupe_skip: bool,
-) -> None:
-    """audit log에 한 줄 추가 (accept_code 마스킹).
+def _human_acceptance_packet_sha256(review_packet: Dict[str, Any]) -> str:
+    """human_acceptance_packet.md 파일 내용의 SHA-256을 반환 (gate 비교 기준 SSoT).
+
+    pipeline.py _check_codex_review_gate()는 loop_state["packet_sha256"]을
+    acceptance_request.json["packet_sha256"](= human_acceptance_packet.md 파일 SHA)과
+    비교한다. 따라서 APPROVE 시 review packet JSON dict가 아니라 동일 기준인
+    human_acceptance_packet.md 파일 SHA를 packet_sha256으로 기록해야 한다.
+
+    2차 REJECT 재작업(IMP-20260626-4121): 파일이 없으면 JSON dict SHA로 fallback하던
+    fail-soft 동작을 제거한다. fallback이 있으면 _check_codex_review_gate의 packet_sha256
+    비교가 무력화되므로, 파일이 반드시 존재해야 하며 없거나 읽기 실패 시 RuntimeError로
+    fail-closed 처리한다.
 
     Args:
-        audit_path: codex_review_audit.log 경로.
-        pr_url: PR URL.
-        head_sha: PR head SHA.
-        accept_code: 승인 코드 (마스킹되어 기록됨).
-        verdict: Codex verdict 원문 (또는 사유 요약).
-        result: 처리 결과 요약.
-        dedupe_skip: 중복으로 건너뛰었는지 여부.
+        review_packet: build_review_packet 반환 dict (타입 가드용으로만 사용).
+    Returns:
+        human_acceptance_packet.md 파일 내용의 SHA-256.
+    Raises:
+        TypeError: review_packet이 None이거나 dict가 아닌 경우.
+        RuntimeError: human_acceptance_packet.md 파일이 없거나 읽기 실패 시 (fail-closed).
     """
-    audit_path = Path(audit_path)
-    audit_path.parent.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).isoformat()
-    masked = _mask_accept_code(accept_code)
-    safe_verdict = (verdict or "").replace("\n", " ")[:120]
-    line = (
-        f"{ts}\tpr={pr_url}\thead_sha={head_sha}\taccept_code={masked}\t"
-        f"verdict={safe_verdict}\tresult={result}\tdedupe_skip={dedupe_skip}\n"
+    if review_packet is None:
+        raise TypeError("review_packet must not be None")
+    if not isinstance(review_packet, dict):
+        raise TypeError(
+            f"review_packet must be dict, got {type(review_packet).__name__}"
+        )
+    packet_path = _project_root() / "human_acceptance_packet.md"
+    if packet_path.exists():
+        try:
+            return _sha256_text(_read_text_with_fallback(packet_path))
+        except (OSError, UnicodeDecodeError) as e:
+            raise RuntimeError(
+                f"human_acceptance_packet.md 읽기 실패 (fail-closed): {e}"
+            ) from e
+    # fallback 제거 — 파일 없으면 RuntimeError (fail-closed)
+    raise RuntimeError(
+        "human_acceptance_packet.md 파일이 없습니다. "
+        "pipeline.py report final-packet을 먼저 실행하세요 (fail-closed)."
     )
-    with audit_path.open("a", encoding="utf-8") as fh:
-        fh.write(line)
+
+
+def _project_pipeline_dir() -> Path:
+    """프로젝트 루트의 .pipeline 디렉토리 경로를 반환.
+
+    PIPELINE_STATE_PATH 환경 변수가 있으면 그 부모를, 없으면 cwd 기준 .pipeline.
+
+    Returns:
+        .pipeline 디렉토리 절대 경로.
+    """
+    return _project_root() / ".pipeline"
+
+
+def _get_pr_head_sha(pr_url: str) -> str:
+    """gh CLI로 PR head 커밋 SHA를 조회 (fail-closed).
+
+    Args:
+        pr_url: PR URL.
+    Returns:
+        PR head 커밋 SHA.
+    Raises:
+        TypeError: pr_url이 None이거나 str가 아닌 경우.
+        RuntimeError: 조회 실패 (fail-closed).
+    """
+    if pr_url is None:
+        raise TypeError("pr_url must not be None")
+    if not isinstance(pr_url, str):
+        raise TypeError(f"pr_url must be str, got {type(pr_url).__name__}")
+    raw = _run_gh(["pr", "view", pr_url, "--json", "headRefOid"])
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise RuntimeError("gh pr view headRefOid non-JSON — fail-closed") from e
+    sha = data.get("headRefOid", "")
+    if not sha:
+        raise RuntimeError("PR head SHA empty — fail-closed")
+    return str(sha)
+
+
+def _now_iso() -> str:
+    """현재 UTC 시각 ISO8601 문자열."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """hook 진입점. transcript에서 승인 블록 탐지 후 Codex 검토를 수행.
+
+    Args:
+        argv: 명령행 인자 (테스트용 주입 가능). None이면 sys.argv 사용.
+    Returns:
+        프로세스 종료 코드.
+        - 0: 블록 없음/중복 차단/APPROVE/REJECT 상한 중단 (정상)
+        - 2: REJECT 재주입 (Stop hook 재주입)
+        - 1: fail-closed 오류
+    """
+    parser = argparse.ArgumentParser(
+        description="Codex 사용자 승인 검토 보조 hook (Codex Review Loop)"
+    )
+    parser.add_argument(
+        "--transcript",
+        nargs="?",
+        default=os.environ.get("CLAUDE_HOOK_TRANSCRIPT_PATH", ""),
+        help="transcript 파일 경로 (JSONL 또는 텍스트). 생략 가능.",
+    )
+    args = parser.parse_args(argv)
+
+    transcript_path = (args.transcript or "").strip()
+    if not transcript_path:
+        # transcript 없음 — 조용히 종료 (정상)
+        return 0
+
+    tpath = Path(transcript_path)
+    if not tpath.exists():
+        # transcript 파일 없음 — 조용히 종료 (정상)
+        return 0
+
+    try:
+        transcript_text = _read_text_with_fallback(tpath)
+    except (OSError, UnicodeDecodeError):
+        # 읽기 실패는 조용히 종료 (블록 판정 불가)
+        return 0
+
+    tail = _extract_assistant_tail(transcript_text, _TAIL_MESSAGES)
+    block = parse_acceptance_block(tail)
+    if block is None:
+        # 승인 블록 5요소 미충족 — 조용히 종료 (정상)
+        return 0
+
+    pr_url = block["pr_url"]
+    pipeline_id = block["pipeline_id"]
+
+    pipeline_dir = _project_pipeline_dir()
+    state_path = pipeline_dir / _LOOP_STATE_FILENAME
+
+    # --- fail-closed 영역 시작 ---
+    try:
+        head_sha = _get_pr_head_sha(pr_url)
+    except RuntimeError as e:
+        print(
+            f"[CODEX REVIEW] PR head SHA 조회 실패 (fail-closed): {e}",
+            file=sys.stderr,
+        )
+        return 1
+
+    loop_state = _load_loop_state(state_path)
+
+    # packet 수집은 codex 호출과 SHA 산출 양쪽에 필요. 단, APPROVED 재트리거 방지
+    # 판정에는 기존 packet_sha256과 비교가 필요하므로 packet을 먼저 수집한다.
+    try:
+        packet = build_review_packet(pr_url, block["accept_code"], head_sha)
+    except (RuntimeError, TypeError, ValueError) as e:
+        print(
+            f"[CODEX REVIEW] PR packet 수집 실패 (fail-closed): {e}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # review_packet_sha256: gh로 수집한 review packet JSON dict의 SHA (검토 내용 변경 추적용).
+    review_packet_sha256 = _sha256_text(
+        json.dumps(packet, ensure_ascii=False, sort_keys=True)
+    )
+    # packet_sha256: human_acceptance_packet.md 파일 SHA (gate 비교 기준 SSoT). 결함 1 수정:
+    # _check_codex_review_gate()가 acceptance_request.json["packet_sha256"]과 비교하므로
+    # 동일 기준(human_acceptance_packet.md 파일 SHA)으로 산출해야 stale 오탐을 방지한다.
+    # 2차 REJECT 재작업: 파일 미존재 시 RuntimeError(fail-closed)이므로 여기서 처리한다.
+    try:
+        packet_sha256 = _human_acceptance_packet_sha256(packet)
+    except RuntimeError as e:
+        print(
+            f"[CODEX REVIEW] acceptance packet SHA 계산 실패 (fail-closed): {e}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 같은 APPROVE 출력만.
+    if _check_stale(loop_state, head_sha, packet_sha256):
+        print(_approve_message(pipeline_id, pr_url))
+        return 0
+
+    try:
+        prompt = _build_codex_prompt(packet)
+        verdict = call_codex_cli(prompt)
+    except (RuntimeError, TypeError, ValueError) as e:
+        print(
+            f"[CODEX REVIEW] Codex 호출 실패 (fail-closed): {e}", file=sys.stderr
+        )
+        return 1
+
+    # verdict 형식만 먼저 판별하여 REJECT 사유를 확보 (중복 판정에 필요)
+    normalized = verdict.strip()
+    is_reject = bool(_REJECT_RE.match(normalized))
+
+    # REJECT 중복 주입 차단: 같은 pipeline/head/packet/reason 반복이면 조용히 exit 0
+    if is_reject and _is_duplicate_reject(
+        loop_state, pipeline_id, head_sha, packet_sha256, normalized
+    ):
+        return 0
+
+    # 누적 REJECT 횟수 산정 (이번 REJECT 반영)
+    prev_reject_count = loop_state.get("reject_count", 0)
+    if not isinstance(prev_reject_count, int) or isinstance(prev_reject_count, bool):
+        prev_reject_count = 0
+    reject_count = prev_reject_count + 1 if is_reject else prev_reject_count
+
+    try:
+        outcome = process_verdict(verdict, pipeline_id, pr_url, reject_count)
+    except (TypeError, ValueError) as e:
+        print(
+            f"[CODEX REVIEW] Codex 응답 형식 위반 (fail-closed): {e}",
+            file=sys.stderr,
+        )
+        return 1
+
+    decision = outcome["decision"]
+    if decision in ("REJECT", "REJECT_HALT"):
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "REJECTED",
+                "pr_head_sha": head_sha,
+                "packet_sha256": packet_sha256,
+                "review_packet_sha256": review_packet_sha256,
+                "last_reject_reason": outcome["reject_reason"],
+                "reject_count": reject_count,
+                "last_checked_at": _now_iso(),
+            },
+        )
+    else:  # APPROVE
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "APPROVED",
+                "pr_head_sha": head_sha,
+                "pr_body_sha256": _sha256_text(str(packet.get("body", ""))),
+                "packet_sha256": packet_sha256,
+                "review_packet_sha256": review_packet_sha256,
+                "accept_code": f"ACCEPT-{pipeline_id}",
+                "approved_at": _now_iso(),
+            },
+        )
+
+    # REJECT 원문은 prefix/suffix 없이 그대로, APPROVE는 안내 메시지 출력
+    print(outcome["output"])
+    return int(outcome["exit_code"])
 
 
 def _extract_assistant_tail(transcript_text: str, n_messages: int) -> str:
@@ -661,205 +1029,6 @@ def _extract_assistant_tail(transcript_text: str, n_messages: int) -> str:
     lines = transcript_text.splitlines()
     tail = lines[-(n_messages * 40):]
     return "\n".join(tail)
-
-
-def _project_pipeline_dir() -> Path:
-    """프로젝트 루트의 .pipeline 디렉토리 경로를 반환.
-
-    PIPELINE_STATE_PATH 환경 변수가 있으면 그 부모를, 없으면 cwd 기준 .pipeline.
-
-    Returns:
-        .pipeline 디렉토리 절대 경로.
-    """
-    env_state = os.environ.get("PIPELINE_STATE_PATH")
-    if env_state:
-        return Path(env_state).resolve().parent / ".pipeline"
-    return (Path.cwd() / ".pipeline").resolve()
-
-
-def _get_pr_head_sha(pr_url: str) -> str:
-    """gh CLI로 PR head 커밋 SHA를 조회 (fail-closed).
-
-    Args:
-        pr_url: PR URL.
-    Returns:
-        PR head 커밋 SHA.
-    Raises:
-        RuntimeError: 조회 실패 (fail-closed).
-    """
-    raw = _run_gh(["pr", "view", pr_url, "--json", "headRefOid"])
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise RuntimeError("gh pr view headRefOid non-JSON — fail-closed") from e
-    sha = data.get("headRefOid", "")
-    if not sha:
-        raise RuntimeError("PR head SHA empty — fail-closed")
-    return str(sha)
-
-
-def main(argv: Optional[List[str]] = None) -> int:
-    """hook 진입점. transcript에서 승인 블록 탐지 후 Codex 검토를 수행.
-
-    Args:
-        argv: 명령행 인자 (테스트용 주입 가능). None이면 sys.argv 사용.
-    Returns:
-        프로세스 종료 코드. 정상/블록 없음/중복 = 0, fail-closed 오류 = 1.
-    """
-    parser = argparse.ArgumentParser(
-        description="Codex 사용자 승인 검토 보조 hook"
-    )
-    parser.add_argument(
-        "--transcript",
-        nargs="?",
-        default=os.environ.get("CLAUDE_HOOK_TRANSCRIPT_PATH", ""),
-        help="transcript 파일 경로 (JSONL 또는 텍스트). 생략 가능.",
-    )
-    args = parser.parse_args(argv)
-
-    transcript_path = (args.transcript or "").strip()
-    if not transcript_path:
-        # transcript 없음 — 조용히 종료 (정상)
-        return 0
-
-    tpath = Path(transcript_path)
-    if not tpath.exists():
-        # transcript 파일 없음 — 조용히 종료 (정상)
-        return 0
-
-    try:
-        transcript_text = _read_text_with_fallback(tpath)
-    except (OSError, UnicodeDecodeError):
-        # 읽기 실패는 조용히 종료 (블록 판정 불가)
-        return 0
-
-    tail = _extract_assistant_tail(transcript_text, _TAIL_MESSAGES)
-    block = parse_acceptance_block(tail)
-    if block is None:
-        # 승인 블록 없음 — 조용히 종료 (정상)
-        return 0
-
-    pr_url = block["pr_url"]
-    accept_code = block["accept_code"]
-
-    pipeline_dir = _project_pipeline_dir()
-    state_path = pipeline_dir / "codex_review_state.json"
-    audit_path = pipeline_dir / "codex_review_audit.log"
-
-    # --- fail-closed 영역 시작 ---
-    try:
-        head_sha = _get_pr_head_sha(pr_url)
-    except RuntimeError as e:
-        print(f"[CODEX REVIEW] PR head SHA 조회 실패 (fail-closed): {e}", file=sys.stderr)
-        return 1
-
-    try:
-        is_dupe = check_dedupe(pr_url, accept_code, head_sha, state_path)
-    except (TypeError, ValueError) as e:
-        print(f"[CODEX REVIEW] dedupe 검사 실패 (fail-closed): {e}", file=sys.stderr)
-        return 1
-
-    if is_dupe:
-        _append_audit_log(
-            audit_path, pr_url, head_sha, accept_code,
-            verdict="(skipped)", result="dedupe_skip", dedupe_skip=True,
-        )
-        print(
-            "[CODEX REVIEW] 동일 PR/승인코드/SHA 조합은 이미 검토됨 — 건너뜁니다.",
-        )
-        return 0
-
-    try:
-        packet = build_review_packet(pr_url, accept_code, head_sha)
-    except (RuntimeError, TypeError, ValueError) as e:
-        print(f"[CODEX REVIEW] PR packet 수집 실패 (fail-closed): {e}", file=sys.stderr)
-        return 1
-
-    try:
-        prompt = _build_codex_prompt(packet)
-        verdict = call_codex_cli(prompt)
-    except (RuntimeError, TypeError, ValueError) as e:
-        print(f"[CODEX REVIEW] Codex 호출 실패 (fail-closed): {e}", file=sys.stderr)
-        return 1
-
-    # 누적 REJECT 횟수 조회
-    reject_count = _read_reject_count(state_path)
-
-    try:
-        outcome = process_verdict(verdict, accept_code, pr_url, reject_count)
-    except (TypeError, ValueError) as e:
-        print(
-            f"[CODEX REVIEW] Codex 응답 형식 위반 (fail-closed): {e}",
-            file=sys.stderr,
-        )
-        return 1
-
-    # 검토 완료 기록 (dedupe + reject_count 갱신)
-    _record_dedupe(pr_url, accept_code, head_sha, state_path)
-    if outcome["decision"] == "REJECT":
-        _bump_reject_count(state_path)
-    else:
-        _reset_reject_count(state_path)
-
-    _append_audit_log(
-        audit_path, pr_url, head_sha, accept_code,
-        verdict=verdict, result=outcome["decision"], dedupe_skip=False,
-    )
-
-    print(outcome["message"])
-    return 0
-
-
-def _read_reject_count(state_path: Path) -> int:
-    """state 파일에서 누적 REJECT 횟수를 읽는다.
-
-    Args:
-        state_path: codex_review_state.json 경로.
-    Returns:
-        누적 REJECT 횟수 (없으면 0).
-    """
-    state_path = Path(state_path)
-    if not state_path.exists():
-        return 0
-    try:
-        raw = _read_text_with_fallback(state_path)
-        state = json.loads(raw) if raw.strip() else {}
-    except (json.JSONDecodeError, OSError):
-        return 0
-    val = state.get("reject_count", 0)
-    return val if isinstance(val, int) and not isinstance(val, bool) else 0
-
-
-def _mutate_reject_count(state_path: Path, new_value: int) -> None:
-    """state 파일의 reject_count를 갱신 (원자적 쓰기).
-
-    Args:
-        state_path: codex_review_state.json 경로.
-        new_value: 설정할 값 (0 이상).
-    """
-    state_path = Path(state_path)
-    state: Dict[str, Any] = {"reviewed": [], "reject_count": 0}
-    if state_path.exists():
-        try:
-            raw = _read_text_with_fallback(state_path)
-            loaded = json.loads(raw) if raw.strip() else {}
-            if isinstance(loaded, dict):
-                state = loaded
-                state.setdefault("reviewed", [])
-        except (json.JSONDecodeError, OSError):
-            state = {"reviewed": [], "reject_count": 0}
-    state["reject_count"] = max(0, new_value)
-    _atomic_write_json(state_path, state)
-
-
-def _bump_reject_count(state_path: Path) -> None:
-    """누적 REJECT 횟수를 1 증가."""
-    _mutate_reject_count(state_path, _read_reject_count(state_path) + 1)
-
-
-def _reset_reject_count(state_path: Path) -> None:
-    """누적 REJECT 횟수를 0으로 리셋 (APPROVE 시)."""
-    _mutate_reject_count(state_path, 0)
 
 
 if __name__ == "__main__":
