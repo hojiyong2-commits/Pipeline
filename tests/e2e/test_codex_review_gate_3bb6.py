@@ -41,6 +41,7 @@ def run_cli(
     args: List[str],
     env: Optional[Dict[str, str]] = None,
     timeout: int = 60,
+    cwd: Optional[Path] = None,
 ) -> subprocess.CompletedProcess:
     """`python pipeline.py <args>` 실행 후 CompletedProcess 반환.
 
@@ -48,6 +49,7 @@ def run_cli(
         args: pipeline.py에 전달할 인자 리스트.
         env: subprocess 환경 변수.
         timeout: 초 단위 타임아웃.
+        cwd: subprocess 작업 디렉토리 (None이면 기본값 사용).
     Returns:
         CompletedProcess (returncode/stdout/stderr).
     Raises:
@@ -64,11 +66,68 @@ def run_cli(
         errors="replace",
         timeout=timeout,
         env=env,
+        cwd=str(cwd) if cwd is not None else None,
     )
+
+
+_FAKE_GH_PR_BODY_3BB6 = (
+    "## 작업 요약\n자동 테스트 픽스처 PR body\n\n"
+    "## 사용자가 확인할 결과물\n결과물 경로: N/A (테스트)\n\n"
+    "## 기대 결과와 실제 결과\n기대: 성공 / 실제: 성공\n\n"
+    "## 중요한 선택과 트레이드오프\nN/A (테스트 픽스처)\n\n"
+    "## 검증\n모든 게이트 PASS\n"
+)
+
+
+def _write_fake_gh_3bb6(target_dir: Path) -> Path:
+    """fake gh Python 스크립트를 target_dir에 생성하고 경로 반환.
+
+    PR body, headRefOid 등 gates codex-review가 필요로 하는 최소 응답을 반환한다.
+    PIPELINE_GH_EXECUTABLE 환경변수로 주입한다.
+    """
+    body_json = json.dumps(_FAKE_GH_PR_BODY_3BB6)
+    script = target_dir / "fake_gh_3bb6.py"
+    script.write_text(
+        "import sys, io, json\n"
+        'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
+        f"BODY = {body_json}\n"
+        "args = sys.argv[1:]\n"
+        'if "--jq" in args:\n'
+        '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
+        '    if jq == ".body":\n'
+        '        sys.stdout.write(BODY)\n'
+        '        if not BODY.endswith("\\n"): sys.stdout.write("\\n")\n'
+        "        sys.exit(0)\n"
+        '    elif ".headRefOid" in jq:\n'
+        '        print(""); sys.exit(0)\n'
+        '    elif ".title" in jq:\n'
+        '        print("test pr title"); sys.exit(0)\n'
+        '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
+        '        print("[]"); sys.exit(0)\n'
+        '    elif ".headSha" in jq or ".databaseId" in jq:\n'
+        '        print(""); sys.exit(0)\n'
+        'if "run" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        'if "run" in args and "view" in args:\n'
+        "    print(json.dumps({}))\n    sys.exit(0)\n"
+        'if "pr" in args and "list" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        "print(json.dumps({\n"
+        '    "body": BODY, "number": 1,\n'
+        '    "headRefOid": "",\n'
+        '    "isDraft": False, "state": "OPEN", "files": [],\n'
+        '    "url": "https://github.com/test/repo/pull/1",\n'
+        "}))\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    return script
 
 
 def make_env(state_file: Path, extra_path: Optional[Path] = None) -> Dict[str, str]:
     """PIPELINE_STATE_PATH 격리 + (옵션) 가짜 codex shim 디렉토리를 PATH 앞에 주입.
+
+    fake gh를 PIPELINE_GH_EXECUTABLE로 자동 주입하여 PR body 조회를 격리한다.
 
     Args:
         state_file: 격리된 state.json 경로.
@@ -80,10 +139,17 @@ def make_env(state_file: Path, extra_path: Optional[Path] = None) -> Dict[str, s
     """
     if state_file is None:
         raise TypeError("state_file must not be None")
+    # fake gh shim 생성 (PIPELINE_GH_EXECUTABLE로 주입)
+    gh_dir = state_file.parent / "_gh_shim"
+    gh_dir.mkdir(parents=True, exist_ok=True)
+    fake_gh = _write_fake_gh_3bb6(gh_dir)
     env = {
         **os.environ,
         "PIPELINE_STATE_PATH": str(state_file),
         "PIPELINE_NO_DASHBOARD": "1",
+        "PIPELINE_GH_EXECUTABLE": str(fake_gh),
+        "PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING": "1",
+        "PYTHONIOENCODING": "utf-8",
     }
     if extra_path is not None:
         env["PATH"] = str(extra_path) + os.pathsep + env.get("PATH", "")
@@ -208,8 +274,14 @@ def test_tc1_codex_review_approved(tmp_path: Path) -> None:
     # PIPELINE_STATE_PATH isolation: state_file을 격리 경로로 사용
     env = make_env(state_file, extra_path=shim)
     assert env["PIPELINE_STATE_PATH"] == str(state_file)
+    # _packet_output_path()는 os.getcwd()/"human_acceptance_packet.md"이므로
+    # cwd=tmp_path로 실행하고 fake packet을 tmp_path에 생성하여 CI 환경 격리.
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_bytes(
+        "[dummy-packet]\npipeline_id: IMP-20260627-3BB6\npr_head_sha: \n".encode("utf-8")
+    )
 
-    r = run_cli(["gates", "codex-review"], env=env)
+    r = run_cli(["gates", "codex-review"], env=env, cwd=tmp_path)
     assert r.returncode == 0, f"expected exit 0, got {r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
 
     # final_state: codex_review_result.json
@@ -244,8 +316,13 @@ def test_tc2_codex_review_rejected(tmp_path: Path) -> None:
     # PIPELINE_STATE_PATH isolation: state_file을 격리 경로로 사용
     env = make_env(state_file, extra_path=shim)
     assert env["PIPELINE_STATE_PATH"] == str(state_file)
+    # fake packet 생성 (cwd=tmp_path 격리)
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_bytes(
+        "[dummy-packet]\npipeline_id: IMP-20260627-3BB6\npr_head_sha: \n".encode("utf-8")
+    )
 
-    r = run_cli(["gates", "codex-review"], env=env)
+    r = run_cli(["gates", "codex-review"], env=env, cwd=tmp_path)
     assert r.returncode == 1, f"expected exit 1, got {r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
 
     result_file = codex_result_path(state_file)
@@ -384,7 +461,11 @@ def test_tc5_stale_packet_sha_after_approve(tmp_path: Path) -> None:
     evidence = tmp_path / "result.xlsx"
     evidence.write_text("dummy output", encoding="utf-8")
 
-    r = run_cli(["gates", "request-accept", "--evidence", str(evidence)], env=env)
+    r = run_cli(
+        ["gates", "request-accept", "--evidence", str(evidence)],
+        env=env,
+        cwd=tmp_path,
+    )
     assert r.returncode != 0, (
         f"expected non-zero exit (stale packet or other blocker), got 0\n"
         f"stdout={r.stdout}\nstderr={r.stderr}"
@@ -483,8 +564,13 @@ def test_tc7_prompt_contains_real_diff(tmp_path: Path) -> None:
     make_fake_codex(shim, "APPROVE_TO_USER", capture_stdin_to=stdin_capture)
     env = make_env(state_file, extra_path=shim)
     assert env["PIPELINE_STATE_PATH"] == str(state_file)
+    # fake packet 생성 (cwd=tmp_path 격리)
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_bytes(
+        "[dummy-packet]\npipeline_id: IMP-20260627-3BB6\npr_head_sha: \n".encode("utf-8")
+    )
 
-    r = run_cli(["gates", "codex-review"], env=env)
+    r = run_cli(["gates", "codex-review"], env=env, cwd=tmp_path)
     # exit 0 (APPROVED 경로)
     assert r.returncode == 0, (
         f"expected exit 0, got {r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
