@@ -319,6 +319,41 @@ def _record_state(state_path: Path, payload: Dict[str, Any]) -> None:
     _atomic_write_json(Path(state_path), payload)
 
 
+def _record_failed_state(
+    state_path: Path, pipeline_id: str, failure_code: str, error: str
+) -> None:
+    """fail-closed 경로에서 FAILED terminal state를 기록 (best-effort).
+
+    PROCESSING 상태가 영구히 남는 것을 방지하기 위해, main()의 모든 fail-closed
+    return 1 경로에서 호출된다. 상태 기록 자체가 실패하더라도 hook의 exit code를
+    바꾸면 안 되므로 best-effort로 처리한다 (예외를 다시 던지지 않는다).
+
+    Args:
+        state_path: codex_review_loop_state.json 경로.
+        pipeline_id: 파이프라인 ID.
+        failure_code: 실패 분류 코드 (예: codex_call_failed).
+        error: 실패 상세 메시지.
+    Returns:
+        None.
+    """
+    try:
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": failure_code,
+                "error": error,
+                "failed_at": _now_iso(),
+            },
+        )
+    except Exception:
+        # 상태 기록 실패는 무시 — fail-closed exit code(1)는 유지된다.
+        _write_hook_log(
+            "STATE_RECORD_FAILED", f"failure_code={failure_code}"
+        )
+
+
 def _is_duplicate_reject(
     state: Dict[str, Any],
     pipeline_id: str,
@@ -403,6 +438,66 @@ def _check_stale(
         str(state.get("pr_head_sha", "")) == pr_head_sha
         and str(state.get("packet_sha256", "")) == packet_sha256
     )
+
+
+def _check_stale_processing(
+    state: Dict[str, Any], timeout_seconds: int = 600
+) -> bool:
+    """PROCESSING 상태가 timeout_seconds(기본 600초=10분) 이상 지속됐는지 확인.
+
+    main()이 Codex 호출 중 예외/중단으로 PROCESSING 상태에 stuck된 경우를 감지하기
+    위한 진단 헬퍼. started_at 타임스탬프를 현재 UTC와 비교한다.
+
+    Args:
+        state: 로드된 loop state dict.
+        timeout_seconds: 타임아웃 초 (기본 600초).
+    Returns:
+        PROCESSING 상태가 timeout 이상 지속됐으면 True, 아니면 False.
+    Raises:
+        TypeError: 인자가 None이거나 타입이 잘못된 경우.
+        ValueError: timeout_seconds가 0 이하인 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    if timeout_seconds is None:
+        raise TypeError("timeout_seconds must not be None")
+    if not isinstance(timeout_seconds, int) or isinstance(timeout_seconds, bool):
+        raise TypeError(
+            f"timeout_seconds must be int, got {type(timeout_seconds).__name__}"
+        )
+    # timeout_seconds는 양수만 의미 있음 — 0/음수 불허 (보정 금지)
+    if timeout_seconds <= 0:  # negative not allowed: 타임아웃은 양수 초만 유효
+        raise ValueError(
+            f"timeout_seconds must be > 0, got {timeout_seconds}"
+        )
+
+    if state.get("status") != "PROCESSING":
+        return False
+
+    started_raw = state.get("started_at")
+    if not started_raw or not isinstance(started_raw, str):
+        # started_at 누락/비정상 → fail-safe로 False (stale 단정 금지)
+        return False
+
+    try:
+        # ISO8601 파싱. trailing 'Z'는 fromisoformat이 일부 버전에서 미지원이므로
+        # 명시적으로 +00:00으로 치환한다.
+        normalized = started_raw.strip()
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        started = datetime.fromisoformat(normalized)
+    except (ValueError, TypeError):
+        # 파싱 실패 → fail-safe로 False
+        return False
+
+    if started.tzinfo is None:
+        # naive datetime은 UTC로 간주
+        started = started.replace(tzinfo=timezone.utc)
+
+    elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+    return elapsed >= timeout_seconds
 
 
 def _run_gh(args: List[str]) -> str:
@@ -536,6 +631,7 @@ def call_codex_cli(prompt: str) -> str:
         raise TypeError(f"prompt must be str, got {type(prompt).__name__}")
     if len(prompt.strip()) == 0:
         raise ValueError("prompt must not be empty")
+    _write_hook_log("CODEX_CALL_STARTED", f"prompt_len={len(prompt)}")
     try:
         result = subprocess.run(
             ["codex", "exec", prompt],
@@ -545,13 +641,19 @@ def call_codex_cli(prompt: str) -> str:
             timeout=300,
         )
     except FileNotFoundError as e:
+        _write_hook_log("CODEX_CALL_FAILED", "codex CLI not found")
         raise RuntimeError("codex CLI not found — fail-closed") from e
     except subprocess.TimeoutExpired as e:
+        _write_hook_log("CODEX_CALL_FAILED", "codex CLI timed out")
         raise RuntimeError("codex CLI timed out — fail-closed") from e
     if result.returncode != 0:
+        _write_hook_log(
+            "CODEX_CALL_FAILED", f"returncode={result.returncode}"
+        )
         raise RuntimeError(
             f"codex CLI failed ({result.returncode}): {result.stderr.strip()}"
         )
+    _write_hook_log("CODEX_CALL_FINISHED", f"stdout_len={len(result.stdout)}")
     return result.stdout.strip()
 
 
@@ -810,6 +912,32 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _write_hook_log(event: str, detail: str = "") -> None:
+    """hook 이벤트를 stderr에 ISO 타임스탬프와 함께 기록 (best-effort).
+
+    이 로깅은 부가 기능이므로 로깅 실패가 메인 로직(Codex 호출/상태 기록)을
+    절대 방해해서는 안 된다. 전체를 try/except로 감싸 어떤 예외든 조용히 무시한다.
+
+    Args:
+        event: 이벤트 이름 (예: CODEX_CALL_STARTED).
+        detail: 부가 설명 (선택). 기본값은 빈 문자열.
+    Returns:
+        None.
+    """
+    try:
+        # event/detail이 비정상 타입이어도 로깅이 메인 로직을 깨면 안 되므로
+        # 방어적으로 문자열 변환만 수행한다. (best-effort 로깅)
+        ev = str(event) if event is not None else ""  # allowed: 로깅 표시용 안전 변환
+        det = str(detail) if detail else ""  # allowed: 로깅 표시용 안전 변환
+        line = f"[CODEX REVIEW][{_now_iso()}] {ev}"
+        if det:
+            line = f"{line} — {det}"
+        print(line, file=sys.stderr)
+    except Exception:
+        # 로깅 실패는 무시 — 메인 로직에 영향 금지
+        pass
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """hook 진입점. transcript에서 승인 블록 탐지 후 Codex 검토를 수행.
 
@@ -861,6 +989,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     state_path = pipeline_dir / _LOOP_STATE_FILENAME
 
     # --- fail-closed 영역 시작 ---
+    # PROCESSING 마커 기록: 이후 어떤 단계에서 stuck되더라도 _check_stale_processing이
+    # started_at 기준으로 timeout(기본 10분) 초과를 감지할 수 있게 한다. 기록 실패가
+    # 메인 로직을 막으면 안 되므로 best-effort로 처리한다.
+    try:
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "PROCESSING",
+                "pr_url": pr_url,
+                "started_at": _now_iso(),
+            },
+        )
+    except Exception:
+        _write_hook_log("STATE_RECORD_FAILED", "PROCESSING marker")
+
     try:
         head_sha = _get_pr_head_sha(pr_url)
     except RuntimeError as e:
@@ -868,6 +1012,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             f"[CODEX REVIEW] PR head SHA 조회 실패 (fail-closed): {e}",
             file=sys.stderr,
         )
+        _record_failed_state(state_path, pipeline_id, "pr_head_sha_failed", str(e))
         return 1
 
     loop_state = _load_loop_state(state_path)
@@ -880,6 +1025,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(
             f"[CODEX REVIEW] PR packet 수집 실패 (fail-closed): {e}",
             file=sys.stderr,
+        )
+        _record_failed_state(
+            state_path, pipeline_id, "build_review_packet_failed", str(e)
         )
         return 1
 
@@ -898,6 +1046,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             f"[CODEX REVIEW] acceptance packet SHA 계산 실패 (fail-closed): {e}",
             file=sys.stderr,
         )
+        _record_failed_state(
+            state_path, pipeline_id, "packet_sha256_failed", str(e)
+        )
         return 1
 
     # 이미 같은 head/packet으로 APPROVED면 Codex CLI 재호출 없이 같은 APPROVE 출력만.
@@ -911,6 +1062,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     except (RuntimeError, TypeError, ValueError) as e:
         print(
             f"[CODEX REVIEW] Codex 호출 실패 (fail-closed): {e}", file=sys.stderr
+        )
+        _record_failed_state(
+            state_path, pipeline_id, "codex_call_failed", str(e)
         )
         return 1
 
@@ -936,6 +1090,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(
             f"[CODEX REVIEW] Codex 응답 형식 위반 (fail-closed): {e}",
             file=sys.stderr,
+        )
+        _record_failed_state(
+            state_path, pipeline_id, "invalid_verdict", str(e)
         )
         return 1
 

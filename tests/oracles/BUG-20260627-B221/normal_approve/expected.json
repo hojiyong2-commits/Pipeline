@@ -1,0 +1,5 @@
+{
+  "expected_loop_state_status": "APPROVED",
+  "exit_code": 0,
+  "stdout_contains": ["사용자 승인 요청", "ACCEPT-BUG-20260627-B221"]
+}
