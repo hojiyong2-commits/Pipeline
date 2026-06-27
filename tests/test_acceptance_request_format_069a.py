@@ -4,14 +4,14 @@ REJECT 사유 2 수정: 기존 테스트는 _render_pending_acceptance_comment�
 import 호출하여 실제 CLI stdout을 검증하지 못했다. 본 테스트는 subprocess로
 실제 `python pipeline.py gates request-accept --evidence ...` CLI를 실행하고
 그 stdout을 캡처하여 최소 고정 양식 4요소와
-"Codex 검토 완료"가 마지막 의미 있는(비어있지 않은) 줄인지 검증한다.
+"CODEX 검토 필요"가 마지막 의미 있는(비어있지 않은) 줄인지 검증한다.
 
 Real CLI Path E2E Gate Policy (IMP-20260525-6FAC):
   - PIPELINE_STATE_PATH 환경변수로 state 파일 격리 (전역 pipeline_state.json 미수정)
   - subprocess 기반 실제 CLI 실행 (내부 함수 직접 호출 금지)
   - final_state assertion 포함 (acceptance_request.json post-state 검증)
 
-REJECT 사유 1 회귀 방지: "Codex 검토 완료" 이후 어떤 비어있지 않은 줄도
+REJECT 사유 1 회귀 방지: "CODEX 검토 필요" 이후 어떤 비어있지 않은 줄도
 없어야 한다 ("승인 요청 ID: ..." print문 제거 확인).
 """
 import json
@@ -106,8 +106,6 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
         "        sys.exit(0)\n"
         '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
         '        print("[]"); sys.exit(0)\n'
-        '    elif ".headRefOid" in jq:\n'
-        '        print("abc123def456abc123def456abc123def456abc1"); sys.exit(0)\n'
         '    elif ".headSha" in jq or ".databaseId" in jq:\n'
         '        print(""); sys.exit(0)\n'
         'if "run" in args and "list" in args:\n'
@@ -145,25 +143,8 @@ def make_env(tmp_path: Path) -> Dict[str, str]:
     # 전역 pipeline_state.json 미수정 — tmp_path로 격리
     env["PIPELINE_STATE_PATH"] = str(state_file)
     env["PIPELINE_NO_DASHBOARD"] = "1"
-    env["PATH"] = str(tmp_path) + os.pathsep + env.get("PATH", "")
-    fake_gh = _write_fake_gh_script(tmp_path)
-    env["PIPELINE_GH_EXECUTABLE"] = str(fake_gh)
-    # IMP-20260627-3BB6: _get_current_pr_head_sha()는 literal `gh`를 호출하므로
-    # PATH에 fake gh를 호출하는 `gh` shim을 주입하여 head SHA 조회를 격리한다.
-    if sys.platform == "win32":
-        gh_shim = tmp_path / "gh.bat"
-        gh_shim.write_text(
-            f'@echo off\r\n"{sys.executable}" "{fake_gh}" %*\r\n',
-            encoding="utf-8",
-        )
-    else:
-        gh_shim = tmp_path / "gh"
-        gh_shim.write_text(
-            f'#!/bin/sh\n"{sys.executable}" "{fake_gh}" "$@"\n',
-            encoding="utf-8",
-        )
-        import stat as _stat
-        gh_shim.chmod(gh_shim.stat().st_mode | _stat.S_IEXEC | _stat.S_IXGRP | _stat.S_IXOTH)
+    env["PATH"] = str(tmp_path)
+    env["PIPELINE_GH_EXECUTABLE"] = str(_write_fake_gh_script(tmp_path))
     env["PYTHONIOENCODING"] = "utf-8"
     env["PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING"] = "1"
     env["PIPELINE_BROWSER_APPROVAL_SKIP"] = "1"
@@ -201,72 +182,9 @@ def write_evidence_file(tmp_path: Path, content: str = "format 069a evidence") -
     return ev_file
 
 
-def write_codex_review_approved(tmp_path: Path, pid: str) -> None:
-    """IMP-20260627-3BB6: request-accept의 Codex Review 사전 검증을 통과시키기 위해
-    codex_review_result.json을 APPROVED 상태로 격리된 .pipeline 디렉토리에 생성한다.
-
-    pr_head_sha는 fake gh가 반환하는 headRefOid와 일치시켜 stale_codex_review를 방지한다.
-    pr_body_sha256은 fake gh가 반환하는 PR body의 실제 SHA256으로 설정한다.
-    packet_sha256은 tmp_path/human_acceptance_packet.md의 SHA256으로 설정한다.
-    테스트는 cwd=tmp_path로 실행하므로 _packet_output_path()가 이 파일을 가리킨다.
-
-    IMP-20260627-3BB6 AC-5 fail-closed: 빈 SHA는 BLOCKED이므로 non-empty SHA 필수.
-
-    Args:
-        tmp_path: pytest tmp_path fixture (PIPELINE_STATE_PATH 부모).
-        pid: 활성 pipeline_id.
-    Raises:
-        TypeError: 인자가 None인 경우.
-    """
-    import hashlib as _hashlib
-    if tmp_path is None or pid is None:
-        raise TypeError("tmp_path/pid must not be None")
-    # pr_body_sha256: fake gh PR body의 실제 SHA256
-    pr_body_sha256 = _hashlib.sha256(_FAKE_GH_PR_BODY.encode("utf-8")).hexdigest()
-    # packet_sha256: tmp_path/human_acceptance_packet.md의 SHA256
-    # 테스트가 cwd=tmp_path로 실행되므로 _packet_output_path()가 이 파일을 가리킨다.
-    # fake packet에 pr_head_sha를 fake gh의 headRefOid와 일치하도록 기록한다.
-    _fake_sha = "abc123def456abc123def456abc123def456abc1"
-    _fake_packet_content = (
-        "[검증용 메타데이터]\n"
-        f"pipeline_id: {pid}\n"
-        f"pr_head_sha: {_fake_sha}\n"
-        "ci_run_id: test\n"
-    )
-    _packet_file = tmp_path / "human_acceptance_packet.md"
-    # newline="" 지정으로 Windows CRLF 변환 방지 — _compute_file_sha256("rb")와 SHA 일치.
-    _packet_bytes = _fake_packet_content.encode("utf-8")
-    _packet_file.write_bytes(_packet_bytes)
-    packet_sha256 = _hashlib.sha256(_packet_bytes).hexdigest()
-    pipeline_dir = tmp_path / ".pipeline"
-    pipeline_dir.mkdir(parents=True, exist_ok=True)
-    (pipeline_dir / "codex_review_result.json").write_text(
-        json.dumps({
-            "schema_version": 1,
-            "pipeline_id": pid,
-            "status": "APPROVED",
-            "pr_url": "https://github.com/test/repo/pull/1",
-            "pr_head_sha": _fake_sha,
-            "pr_body_sha256": pr_body_sha256,
-            "packet_sha256": packet_sha256,
-            "accept_code": f"ACCEPT-{pid}",
-            "reviewed_at": "2026-06-27T12:00:00Z",
-            "contract_sha256": "deadbeef" * 8,
-            "verdict": "APPROVE_TO_USER",
-        }, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-def load_acceptance_request(base_dir: Optional[Path] = None) -> Dict[str, object]:
-    """acceptance_request.json 로드 (없으면 빈 dict).
-
-    Args:
-        base_dir: 검색 디렉토리. None이면 PIPELINE_PY.parent(프로젝트 루트) 사용.
-                  cwd=tmp_path로 CLI를 실행한 경우 tmp_path를 전달해야 한다.
-    """
-    search_dir = base_dir if base_dir is not None else PIPELINE_PY.parent
-    req_file = search_dir / "acceptance_request.json"
+def load_acceptance_request() -> Dict[str, object]:
+    """acceptance_request.json 로드 (없으면 빈 dict). BASE_DIR(프로젝트 루트)에 생성됨."""
+    req_file = PIPELINE_PY.parent / "acceptance_request.json"
     if not req_file.exists():
         return {}
     with open(req_file, encoding="utf-8") as f:
@@ -292,13 +210,11 @@ class TestRealCliRequestAcceptFormat:
         # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
         assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
         pid = bootstrap_pipeline_legacy(tmp_path, env)
-        write_codex_review_approved(tmp_path, pid)
         ev_file = write_evidence_file(tmp_path)
 
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
-            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -310,8 +226,7 @@ class TestRealCliRequestAcceptFormat:
         import json as _json
         _state_path = Path(env["PIPELINE_STATE_PATH"])
         final_state = _json.loads(_state_path.read_text(encoding="utf-8")) if _state_path.exists() else {}
-        # cwd=tmp_path로 실행했으므로 acceptance_request.json은 tmp_path에 생성됨
-        req = load_acceptance_request(base_dir=tmp_path)
+        req = load_acceptance_request()
         assert req.get("pipeline_id") == pid, (
             f"acceptance_request.json pipeline_id 불일치: {req.get('pipeline_id')}"
         )
@@ -319,7 +234,7 @@ class TestRealCliRequestAcceptFormat:
         _ = final_state  # isolation 상태 유지 확인용
 
         lines = r.stdout.splitlines()
-        elements = ["사용자 승인 요청", "PR:", "승인 코드:", "Codex 검토 완료"]
+        elements = ["사용자 승인 요청", "PR:", "승인 코드:", "CODEX 검토 필요"]
         found_positions = []
         for elem in elements:
             for i, line in enumerate(lines):
@@ -337,22 +252,20 @@ class TestRealCliRequestAcceptFormat:
         )
 
     def test_tc2_codex_is_last_meaningful_line(self, tmp_path):
-        """TC-2 (핵심): "Codex 검토 완료"가 stdout의 마지막 의미 있는 줄이어야 한다.
+        """TC-2 (핵심): "CODEX 검토 필요"가 stdout의 마지막 의미 있는 줄이어야 한다.
 
         REJECT 사유 1 회귀 방지: "승인 요청 ID: ..." print문이 제거되어
-        "Codex 검토 완료" 이후 어떤 비어있지 않은 줄도 없어야 한다.
+        "CODEX 검토 필요" 이후 어떤 비어있지 않은 줄도 없어야 한다.
         """
         env = make_env(tmp_path)
         # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
         assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
-        pid = bootstrap_pipeline_legacy(tmp_path, env)
-        write_codex_review_approved(tmp_path, pid)
+        bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
-            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -370,8 +283,8 @@ class TestRealCliRequestAcceptFormat:
         assert meaningful, f"stdout에 의미 있는 줄이 없습니다.\nstdout:\n{r.stdout}"
 
         last_line = meaningful[-1]
-        assert "Codex 검토 완료" in last_line, (
-            f'"Codex 검토 완료"가 마지막 의미 있는 줄이 아닙니다.\n'
+        assert "CODEX 검토 필요" in last_line, (
+            f'"CODEX 검토 필요"가 마지막 의미 있는 줄이 아닙니다.\n'
             f"마지막 줄: {last_line!r}\n"
             f"전체 의미 있는 줄:\n" + "\n".join(meaningful)
         )
@@ -384,14 +297,12 @@ class TestRealCliRequestAcceptFormat:
         env = make_env(tmp_path)
         # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
         assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
-        pid = bootstrap_pipeline_legacy(tmp_path, env)
-        write_codex_review_approved(tmp_path, pid)
+        bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
-            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -415,14 +326,12 @@ class TestRealCliRequestAcceptFormat:
         env = make_env(tmp_path)
         # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
         assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
-        pid = bootstrap_pipeline_legacy(tmp_path, env)
-        write_codex_review_approved(tmp_path, pid)
+        bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
-            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -449,13 +358,11 @@ class TestRealCliRequestAcceptFormat:
         # PIPELINE_STATE_PATH는 make_env()가 tmp_path로 격리하여 설정함
         assert "PIPELINE_STATE_PATH" in env, "isolation env var must be set"
         pid = bootstrap_pipeline_legacy(tmp_path, env)
-        write_codex_review_approved(tmp_path, pid)
         ev_file = write_evidence_file(tmp_path)
 
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
-            cwd=tmp_path,
         )
 
         assert r.returncode == 0, (
@@ -497,7 +404,7 @@ if __name__ == "__main__":
         assert _r.returncode == 0, f"request-accept 실패: {_r.stdout} {_r.stderr}"
         _meaningful = _meaningful_lines(_r.stdout)
         assert _meaningful, "stdout 의미 있는 줄 없음"
-        assert "Codex 검토 완료" in _meaningful[-1], "Codex 검토 완료가 마지막 줄 아님"
+        assert "CODEX 검토 필요" in _meaningful[-1], "CODEX 검토 필요가 마지막 줄 아님"
         assert "승인 요청 ID:" not in _r.stdout, "승인 요청 ID 문구 잔존"
 
     # None 입력 방어 검증

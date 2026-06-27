@@ -1,7 +1,0 @@
-{
-  "scenario": "exception_missing_review",
-  "description": "codex_review_result.json이 없는 상태에서 request-accept 실행 시 예외 케이스",
-  "pipeline_id": "IMP-20260627-3BB6",
-  "codex_review_result_exists": false,
-  "action": "gates request-accept"
-}

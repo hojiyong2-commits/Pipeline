@@ -1,0 +1,6 @@
+{
+  "case_kind": "normal",
+  "description": "5요소 모두 포함된 승인 요청 블록 — Codex 검토 트리거되어야 함",
+  "transcript_tail": "사용자 승인 요청\n\nPR: https://github.com/hojiyong2-commits/Pipeline/pull/702\n\n승인 코드:\nACCEPT-IMP-20260625-CD3C\n\nCODEX 검토 필요",
+  "pr_head_sha_mock": "abc1234def5678"
+}
