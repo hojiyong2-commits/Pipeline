@@ -1,10 +1,46 @@
 {
   "scenario": "edge_stale_sha",
-  "description": "codex_review_result.json status=APPROVED이나 SHA 값이 현재 PR과 불일치하는 회귀 케이스",
+  "description": "codex_review_result.json status=APPROVED이나 SHA 값이 현재 PR/파일과 불일치하는 회귀 케이스. BUG-20260627-C81C MT-3: pr_head_sha/packet_sha256/pr_body_sha256를 acceptance_request.json 유무와 무관하게 각각 독립 검증하며, 각 필드 불일치는 고유 failure_code로 분리된다.",
   "pipeline_id": "IMP-20260627-3BB6",
   "codex_review_result_exists": true,
   "stored_status": "APPROVED",
-  "stored_pr_head_sha": "oldsha1234",
-  "current_pr_head_sha": "newsha5678",
-  "sha_mismatch_field": "pr_head_sha"
+  "primary_sha_mismatch_field": "pr_head_sha",
+  "cases": [
+    {
+      "case_id": "stale_pr_head_sha",
+      "description": "stored pr_head_sha가 현재 PR head SHA와 다름 (또는 현재 head SHA 취득 불가)",
+      "stored_pr_head_sha": "oldsha1234",
+      "current_pr_head_sha": "newsha5678",
+      "stored_packet_sha256": "aaaa",
+      "current_packet_sha256": "aaaa",
+      "stored_pr_body_sha256": "bbbb",
+      "current_pr_body_sha256": "bbbb",
+      "sha_mismatch_field": "pr_head_sha",
+      "expected_failure_code": "stale_pr_head_sha"
+    },
+    {
+      "case_id": "stale_packet_sha256",
+      "description": "pr_head_sha는 일치하나 stored packet_sha256이 현재 human_acceptance_packet.md 실제 SHA와 다름",
+      "stored_pr_head_sha": "headmatch0001",
+      "current_pr_head_sha": "headmatch0001",
+      "stored_packet_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "current_packet_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "stored_pr_body_sha256": "bbbb",
+      "current_pr_body_sha256": "bbbb",
+      "sha_mismatch_field": "packet_sha256",
+      "expected_failure_code": "stale_packet_sha256"
+    },
+    {
+      "case_id": "stale_pr_body_sha256",
+      "description": "pr_head_sha와 packet_sha256은 일치하나 stored pr_body_sha256이 현재 PR 본문 실제 SHA와 다름",
+      "stored_pr_head_sha": "headmatch0002",
+      "current_pr_head_sha": "headmatch0002",
+      "stored_packet_sha256": "cccc",
+      "current_packet_sha256": "cccc",
+      "stored_pr_body_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "current_pr_body_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "sha_mismatch_field": "pr_body_sha256",
+      "expected_failure_code": "stale_pr_body_sha256"
+    }
+  ]
 }

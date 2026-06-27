@@ -84,13 +84,19 @@ def _write_fake_gh_3bb6(target_dir: Path) -> Path:
 
     PR body, headRefOid 등 gates codex-review가 필요로 하는 최소 응답을 반환한다.
     PIPELINE_GH_EXECUTABLE 환경변수로 주입한다.
+
+    head SHA는 FAKE_GH_HEAD_SHA 환경변수로 제어한다(미설정 시 빈 문자열). 이는
+    BUG-20260627-C81C MT-3의 독립 stale 검증(pr_head_sha vs packet/pr_body)을 격리
+    테스트하기 위함이다. 빈 head SHA는 fail-closed로 stale_pr_head_sha를 먼저 트리거하므로,
+    packet/pr_body SHA 불일치 경로를 단독으로 검증하려면 head SHA를 일치값으로 주입해야 한다.
     """
     body_json = json.dumps(_FAKE_GH_PR_BODY_3BB6)
     script = target_dir / "fake_gh_3bb6.py"
     script.write_text(
-        "import sys, io, json\n"
+        "import sys, io, json, os\n"
         'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
         f"BODY = {body_json}\n"
+        'HEAD_SHA = os.environ.get("FAKE_GH_HEAD_SHA", "")\n'
         "args = sys.argv[1:]\n"
         'if "--jq" in args:\n'
         '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
@@ -99,13 +105,13 @@ def _write_fake_gh_3bb6(target_dir: Path) -> Path:
         '        if not BODY.endswith("\\n"): sys.stdout.write("\\n")\n'
         "        sys.exit(0)\n"
         '    elif ".headRefOid" in jq:\n'
-        '        print(""); sys.exit(0)\n'
+        '        print(HEAD_SHA); sys.exit(0)\n'
         '    elif ".title" in jq:\n'
         '        print("test pr title"); sys.exit(0)\n'
         '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
         '        print("[]"); sys.exit(0)\n'
         '    elif ".headSha" in jq or ".databaseId" in jq:\n'
-        '        print(""); sys.exit(0)\n'
+        '        print(HEAD_SHA); sys.exit(0)\n'
         'if "run" in args and "list" in args:\n'
         '    print("[]"); sys.exit(0)\n'
         'if "run" in args and "view" in args:\n'
@@ -114,7 +120,7 @@ def _write_fake_gh_3bb6(target_dir: Path) -> Path:
         '    print("[]"); sys.exit(0)\n'
         "print(json.dumps({\n"
         '    "body": BODY, "number": 1,\n'
-        '    "headRefOid": "",\n'
+        '    "headRefOid": HEAD_SHA,\n'
         '    "isDraft": False, "state": "OPEN", "files": [],\n'
         '    "url": "https://github.com/test/repo/pull/1",\n'
         "}))\n"
@@ -124,7 +130,11 @@ def _write_fake_gh_3bb6(target_dir: Path) -> Path:
     return script
 
 
-def make_env(state_file: Path, extra_path: Optional[Path] = None) -> Dict[str, str]:
+def make_env(
+    state_file: Path,
+    extra_path: Optional[Path] = None,
+    head_sha: str = "",
+) -> Dict[str, str]:
     """PIPELINE_STATE_PATH 격리 + (옵션) 가짜 codex shim 디렉토리를 PATH 앞에 주입.
 
     fake gh를 PIPELINE_GH_EXECUTABLE로 자동 주입하여 PR body 조회를 격리한다.
@@ -132,6 +142,9 @@ def make_env(state_file: Path, extra_path: Optional[Path] = None) -> Dict[str, s
     Args:
         state_file: 격리된 state.json 경로.
         extra_path: PATH 맨 앞에 추가할 디렉토리 (가짜 codex shim 위치).
+        head_sha: fake gh가 반환할 PR head SHA (FAKE_GH_HEAD_SHA). 빈 문자열이면
+            head SHA 조회가 None이 되어 stale_pr_head_sha가 먼저 트리거된다.
+            packet/pr_body SHA 불일치 경로를 단독 검증하려면 일치하는 head SHA를 주입한다.
     Returns:
         subprocess env dict.
     Raises:
@@ -149,6 +162,7 @@ def make_env(state_file: Path, extra_path: Optional[Path] = None) -> Dict[str, s
         "PIPELINE_NO_DASHBOARD": "1",
         "PIPELINE_GH_EXECUTABLE": str(fake_gh),
         "PIPELINE_WORKSPACE_HYGIENE_ALLOW_GIT_MISSING": "1",
+        "FAKE_GH_HEAD_SHA": str(head_sha),
         "PYTHONIOENCODING": "utf-8",
     }
     if extra_path is not None:
@@ -413,51 +427,48 @@ def test_tc4_request_accept_stale_sha(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_tc5_stale_packet_sha_after_approve(tmp_path: Path) -> None:
-    """APPROVED이나 acceptance_request 없음 + packet SHA 변경 → stale_codex_review BLOCKED.
+    """APPROVED이나 packet SHA 변경 → 정확히 stale_packet_sha256 BLOCKED.
 
-    _check_codex_review_gate()가 acceptance_request.json이 없을 때에도
-    codex_review_result.json의 packet_sha256과 현재 human_acceptance_packet.md의
-    SHA256을 비교하여 Codex APPROVED 이후 packet 변경 우회를 차단하는지 검증.
+    BUG-20260627-C81C MT-3/MT-5 (AC-5): _check_codex_review_gate()가 acceptance_request.json
+    유무와 무관하게 항상 현재 human_acceptance_packet.md의 실제 SHA256과 stored packet_sha256을
+    독립 비교하여, Codex APPROVED 이후 packet 변경 우회를 차단하는지 검증한다.
+
+    head SHA를 일치값으로 주입하여 pr_head_sha 검사를 통과시키고, packet SHA 불일치 경로를
+    단독으로 트리거한다. 결과는 정확히 stale_packet_sha256이어야 한다 (느슨한 fallback 금지).
 
     PIPELINE_STATE_PATH isolation + final_state assertion 포함.
     """
     state_file = tmp_path / "state.json"
     pid = "IMP-20260627-3BB6"
     write_min_state(state_file, pid)
-    # PIPELINE_STATE_PATH isolation: state_file을 격리 경로로 사용
-    env = make_env(state_file)
+    matching_head = "headsha_match_0001"
+    # head SHA를 stored와 일치하도록 주입 → pr_head_sha 검사 통과 → packet 검사 단독 트리거
+    env = make_env(state_file, head_sha=matching_head)
     assert env["PIPELINE_STATE_PATH"] == str(state_file)
 
-    # fake human_acceptance_packet.md 생성 (request-accept --evidence 검증 우회용 아님)
-    # packet_sha256은 다른 값으로 기록 → stale 탐지
+    # 현재 packet 파일 — 실제 SHA가 stored packet_sha256과 다르도록 한다.
     fake_packet = tmp_path / "human_acceptance_packet.md"
     fake_packet.write_text("[검증용 메타데이터]\npipeline_id: IMP-20260627-3BB6\n", encoding="utf-8")
-    original_sha = hashlib.sha256(fake_packet.read_bytes()).hexdigest()
+    real_packet_sha = hashlib.sha256(fake_packet.read_bytes()).hexdigest()
 
-    # APPROVED이지만 packet_sha256이 다른 값으로 저장된 result.json
+    # APPROVED이지만 packet_sha256이 실제 파일과 다른 값으로 저장된 result.json.
     result_file = codex_result_path(state_file)
     result_file.parent.mkdir(parents=True, exist_ok=True)
     stale_packet_sha = "0" * 64  # 실제 packet SHA와 다른 값
+    assert stale_packet_sha != real_packet_sha
     result_file.write_text(json.dumps({
         "schema_version": 1,
         "pipeline_id": pid,
         "status": "APPROVED",
-        "pr_head_sha": "",  # gh CLI 없으므로 빈 문자열 (current도 비어 일치)
-        "pr_body_sha256": "",
-        "packet_sha256": stale_packet_sha,
+        "pr_head_sha": matching_head,       # 현재 head와 일치 → pr_head_sha 검사 통과
+        "pr_body_sha256": "nonempty_body_sha",  # 빈 값 fail-closed 회피 → packet 검사 우선 트리거
+        "packet_sha256": stale_packet_sha,  # 현재 packet 실제 SHA와 불일치
         "accept_code": f"ACCEPT-{pid}",
         "reviewed_at": "2026-06-27T00:00:00Z",
         "contract_sha256": "z",
         "verdict": "APPROVE_TO_USER",
     }, ensure_ascii=False), encoding="utf-8")
 
-    # packet을 변경하여 실제 SHA ≠ stored_packet_sha 상황 만들기
-    # (result.json에 stale_packet_sha=000...이 저장되어 있고 현재 파일은 original_sha)
-    # → _check_codex_review_gate()가 PIPELINE_STATE_PATH 격리 환경에서 어떤 packet 경로를 쓰는지에
-    #   따라 실제 비교 결과가 달라질 수 있으나, pipeline_id mismatch나 pr_head_sha mismatch보다
-    #   먼저 packet/pr_body 비교가 트리거되지 않으면 PASS가 날 수 있음.
-    # 이 테스트의 목표: stale_codex_review 또는 codex_review_required 중 하나라도 차단하여
-    # acceptance_request.json 없이 ACCEPT nonce가 발급되지 않음을 검증.
     evidence = tmp_path / "result.xlsx"
     evidence.write_text("dummy output", encoding="utf-8")
 
@@ -467,13 +478,17 @@ def test_tc5_stale_packet_sha_after_approve(tmp_path: Path) -> None:
         cwd=tmp_path,
     )
     assert r.returncode != 0, (
-        f"expected non-zero exit (stale packet or other blocker), got 0\n"
+        f"expected non-zero exit (stale packet), got 0\n"
         f"stdout={r.stdout}\nstderr={r.stderr}"
     )
     combined = r.stdout + r.stderr
-    # stale_codex_review 또는 codex_review_required 중 하나여야 함.
-    blocked = "stale_codex_review" in combined or "codex_review_required" in combined
-    assert blocked, f"expected stale/required blocker, got:\n{combined}"
+    # MT-5: 정확히 stale_packet_sha256만 허용 (codex_review_required 등 느슨한 fallback 금지).
+    assert "stale_packet_sha256" in combined, (
+        f"expected exactly stale_packet_sha256, got:\n{combined}"
+    )
+    assert "stale 필드: packet_sha256" in combined, (
+        f"expected stale 필드명 in message:\n{combined}"
+    )
 
     # final_state: acceptance_request.json이 발급되지 않아야 함.
     req_file = state_file.resolve().parent / "acceptance_request.json"
@@ -489,17 +504,21 @@ def test_tc5_stale_packet_sha_after_approve(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_tc6_empty_packet_sha_blocked(tmp_path: Path) -> None:
-    """APPROVED이지만 packet_sha256="" → stale_codex_review BLOCKED (fail-closed).
+    """APPROVED이지만 packet_sha256="" → stale_packet_sha256 BLOCKED (fail-closed).
 
     AC-5 회귀 검증: _check_codex_review_gate()가 stored packet_sha256이 빈 문자열이면
     "SHA 불일치로 간주" 하지 않고 fail-closed로 차단한다.
+
+    BUG-20260627-C81C MT-3: 빈 packet_sha256은 정확히 stale_packet_sha256로 차단된다.
+    head SHA를 일치값으로 주입하여 pr_head_sha 검사를 통과시키고 packet 검사를 단독 트리거한다.
 
     PIPELINE_STATE_PATH isolation + final_state assertion 포함.
     """
     state_file = tmp_path / "state.json"
     pid = "IMP-20260627-3BB6"
     write_min_state(state_file, pid)
-    env = make_env(state_file)
+    matching_head = "headsha_match_0002"
+    env = make_env(state_file, head_sha=matching_head)
     assert env["PIPELINE_STATE_PATH"] == str(state_file)
 
     # APPROVED이지만 packet_sha256=""로 기록된 result.json (빈 SHA fail-closed 검증)
@@ -509,7 +528,7 @@ def test_tc6_empty_packet_sha_blocked(tmp_path: Path) -> None:
         "schema_version": 1,
         "pipeline_id": pid,
         "status": "APPROVED",
-        "pr_head_sha": "",   # gh CLI 없으므로 current도 비어 일치 → pr_head_sha 검사 통과
+        "pr_head_sha": matching_head,  # 현재 head와 일치 → pr_head_sha 검사 통과
         "pr_body_sha256": "nonempty_body_sha",
         "packet_sha256": "",  # 빈 문자열 — fail-closed 대상
         "accept_code": f"ACCEPT-{pid}",
@@ -527,8 +546,8 @@ def test_tc6_empty_packet_sha_blocked(tmp_path: Path) -> None:
         f"stdout={r.stdout}\nstderr={r.stderr}"
     )
     combined = r.stdout + r.stderr
-    assert "stale_codex_review" in combined, (
-        f"expected stale_codex_review in output\n{combined}"
+    assert "stale_packet_sha256" in combined, (
+        f"expected stale_packet_sha256 in output\n{combined}"
     )
 
     # final_state: acceptance_request.json이 발급되지 않아야 함
@@ -550,9 +569,13 @@ def test_tc7_prompt_contains_real_diff(tmp_path: Path) -> None:
     계약 요구사항: "전달된 PR(제목/본문/변경 파일/diff/CI 상태/패킷)을 읽고"
     Codex는 --stat 요약이 아닌 실제 코드 변경 내용을 받아야 한다.
 
+    BUG-20260627-C81C MT-5: 섹션 제목만이 아니라, 프롬프트에 실제 patch 헤더("diff --git")
+    또는 실제 변경 파일명(예: pipeline.py) 중 하나가 포함되는지 검증한다. git diff는 실제
+    레포(BASE_DIR)에서 origin/main...HEAD로 실행되므로, 현재 브랜치 변경이 있으면 patch 헤더가
+    포함된다. (변경이 전혀 없는 경우 diff_txt가 빈 문자열일 수 있으나, 이 PR 브랜치에는
+    실제 변경이 있으므로 헤더가 포함되어야 한다.)
+
     검증 방법: stdin을 파일에 캡처하는 shim을 사용하여 프롬프트 내용을 확인한다.
-    - "Git Diff (실제 변경 내용" 섹션 제목 포함 여부 검사
-    - 또는 "diff --git" 패턴(실제 patch 헤더) 포함 여부 검사
 
     PIPELINE_STATE_PATH isolation + final_state assertion 포함.
     """
@@ -583,12 +606,71 @@ def test_tc7_prompt_contains_real_diff(tmp_path: Path) -> None:
     assert "Git Diff (실제 변경 내용" in captured, (
         f"프롬프트에 실제 diff 섹션 제목이 없습니다. captured:\n{captured[:2000]}"
     )
+    # MT-5: 프롬프트에 실제 patch 헤더(diff --git) 또는 실제 변경 파일명이 포함되어야 한다.
+    has_diff_header = "diff --git" in captured
+    has_changed_file = "pipeline.py" in captured or "codex_review_contract.md" in captured
+    assert has_diff_header or has_changed_file, (
+        "프롬프트에 실제 patch 헤더('diff --git')도 변경 파일명도 없습니다. "
+        f"실제 코드 변경 없이 검토되는 우회 가능성. captured(head):\n{captured[:3000]}"
+    )
+    # placeholder가 프롬프트에 포함되어서는 안 됨 (MT-1 fail-closed로 대체됨).
+    assert "(diff 조회 실패)" not in captured, (
+        "프롬프트에 '(diff 조회 실패)' placeholder가 포함되어서는 안 됩니다 (fail-closed 위반)."
+    )
 
     # final_state: codex_review_result.json status=APPROVED
     result_file = codex_result_path(state_file)
     assert result_file.exists()
     final_state = json.loads(result_file.read_text(encoding="utf-8"))
     assert final_state["status"] == "APPROVED"
+
+
+def test_tc7b_diff_unavailable_fail_closed(tmp_path: Path) -> None:
+    """git CLI를 찾을 수 없으면 codex_review_diff_unavailable로 fail-closed BLOCKED.
+
+    BUG-20260627-C81C MT-1/MT-5 (AC-1): git diff 조회가 실패하면 "(diff 조회 실패)"
+    placeholder로 우회하지 않고 즉시 BLOCKED(failure_code=codex_review_diff_unavailable)
+    되는지 검증한다.
+
+    검증 방법: PATH를 빈 디렉토리로 덮어써서 git 실행 파일을 찾지 못하게 한다
+    (FileNotFoundError → codex_review_diff_unavailable). codex shim도 PATH에 없으므로
+    diff 조회 단계에서 먼저 차단된다. codex shim 유무와 무관하게 diff 단계가 우선이다.
+
+    PIPELINE_STATE_PATH isolation + final_state(미기록) assertion 포함.
+    """
+    state_file = tmp_path / "state.json"
+    pid = "IMP-20260627-3BB6"
+    write_min_state(state_file, pid)
+    # git을 찾지 못하도록 PATH를 빈 디렉토리로 덮어쓴다.
+    empty_dir = tmp_path / "empty_path"
+    empty_dir.mkdir(parents=True, exist_ok=True)
+    env = make_env(state_file)
+    # PATH 전체를 empty_dir로 덮어써서 git/codex 실행 파일 부재 상황 강제.
+    env["PATH"] = str(empty_dir)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
+    # fake packet 생성 (packet 단계는 통과해야 diff 단계에 도달)
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_bytes(
+        "[dummy-packet]\npipeline_id: IMP-20260627-3BB6\npr_head_sha: \n".encode("utf-8")
+    )
+
+    r = run_cli(["gates", "codex-review"], env=env, cwd=tmp_path)
+    assert r.returncode != 0, (
+        f"git 부재 시 exit 1(BLOCKED)이어야 하지만 exit 0\n"
+        f"stdout={r.stdout}\nstderr={r.stderr}"
+    )
+    combined = r.stdout + r.stderr
+    assert "codex_review_diff_unavailable" in combined, (
+        f"expected codex_review_diff_unavailable in output\n{combined}"
+    )
+
+    # final_state: codex_review_result.json이 APPROVED로 기록되면 안 됨.
+    result_file = codex_result_path(state_file)
+    if result_file.exists():
+        final_state = json.loads(result_file.read_text(encoding="utf-8"))
+        assert final_state.get("status") != "APPROVED", (
+            f"diff 조회 실패 상황이 APPROVED로 기록되면 안 됨: {final_state}"
+        )
 
 
 # ---------------------------------------------------------------------------
