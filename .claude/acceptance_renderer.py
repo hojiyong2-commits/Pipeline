@@ -84,6 +84,9 @@ def render_user_acceptance_request(mode: str, pr_url: str, pipeline_id: str) -> 
     if mode == "codex_review_required":
         lines.append("")
         lines.append("CODEX 검토 필요")
+    else:  # user_final (B형): 마지막 줄은 사용자 최종 승인 필요
+        lines.append("")
+        lines.append("사용자 최종 승인 필요")
 
     return "\n".join(lines)
 
@@ -127,41 +130,3 @@ def load_contract(contract_path: str) -> str:
     raise RuntimeError(
         f"Codex Review Contract를 로드할 수 없습니다: {contract_path}"
     )
-
-
-if __name__ == "__main__":
-    # 정상 A형
-    _a = render_user_acceptance_request(
-        "codex_review_required",
-        "https://github.com/x/y/pull/1",
-        "IMP-20260627-3907",
-    )
-    assert "CODEX 검토 필요" in _a, "A형에 CODEX 검토 필요 누락"
-    assert _a.startswith("사용자 승인 요청"), "A형 헤더 불일치"
-    assert "ACCEPT-IMP-20260627-3907" in _a, "A형 승인 코드 불일치"
-    # 정상 B형
-    _b = render_user_acceptance_request(
-        "user_final",
-        "https://github.com/x/y/pull/1",
-        "IMP-20260627-3907",
-    )
-    assert "CODEX 검토 필요" not in _b, "B형에 CODEX 검토 필요 포함됨"
-    # mode 오류
-    try:
-        render_user_acceptance_request("bad", "u", "p")
-        assert False, "잘못된 mode에 예외 미발생"
-    except ValueError:
-        pass
-    # None 방어
-    try:
-        render_user_acceptance_request(None, "u", "p")  # type: ignore[arg-type]
-        assert False, "None mode에 예외 미발생"
-    except TypeError:
-        pass
-    # contract 부재 → RuntimeError
-    try:
-        load_contract("/nonexistent/path/codex_review_contract.md")
-        assert False, "없는 contract에 예외 미발생"
-    except RuntimeError as e:
-        assert "contract" in str(e).lower(), "RuntimeError 메시지에 contract 없음"
-    print("[SELF-VERIFY] acceptance_renderer OK")

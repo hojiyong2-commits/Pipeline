@@ -129,8 +129,7 @@ def _render_approve(pipeline_id: str, pr_url: Optional[str]) -> str:
     """APPROVE 시 사용자에게 출력할 메시지를 renderer B형으로 구성.
 
     renderer.render_user_acceptance_request(mode='user_final', ...)을 단일 SSoT로
-    사용한다. nonce를 노출하지 않고 ACCEPT-<pipeline_id> 형식만 출력하며,
-    'CODEX 검토 필요' 마커를 추가하지 않는다(재트리거 방지).
+    사용한다. nonce를 노출하지 않고 ACCEPT-<pipeline_id> 형식만 출력한다.
 
     Args:
         pipeline_id: 파이프라인 ID.
@@ -153,11 +152,7 @@ def _render_approve(pipeline_id: str, pr_url: Optional[str]) -> str:
         )
     pr_line = pr_url if (pr_url and pr_url.strip()) else "(PR 링크 없음)"
     renderer = _load_renderer()
-    # renderer 함수명을 조각으로 조립하여 호출한다. 이 hook은 acceptance 요청 JSON
-    # 파일을 읽거나 쓰지 않으며, 그 사실을 코드 정적 검사로 보장하기 위해 함수명을
-    # 동적으로 구성한다(코드에 해당 파일명 부분 문자열이 등장하지 않도록).
-    render_fn = getattr(renderer, "render_user_" + "acceptance" + "_request")
-    return render_fn(
+    return renderer.render_user_acceptance_request(
         mode="user_final", pr_url=pr_line, pipeline_id=pipeline_id
     )
 
@@ -907,8 +902,8 @@ def _write_hook_log(pipeline_dir: Path, entry: Dict[str, Any]) -> None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(str(log_path), "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception:
-        pass  # hook_log 기록 실패는 hook 전체를 실패시키지 않음
+    except Exception as e:
+        print(f"[CODEX REVIEW] hook_log 기록 실패 (무시): {e}", file=sys.stderr)
 
 
 def _record_failed_state(
@@ -942,8 +937,8 @@ def _record_failed_state(
                 "failed_at": _now_iso(),
             },
         )
-    except Exception:
-        pass  # 기록 실패는 hook 실패의 이유가 되지 않음
+    except Exception as e:
+        print(f"[CODEX REVIEW] failed_state 기록 실패 (무시): {e}", file=sys.stderr)
 
 
 def _read_pipeline_id_from_env() -> Optional[str]:
@@ -1006,8 +1001,8 @@ def _read_pipeline_id_from_env() -> Optional[str]:
             pid = data.get("pipeline_id") or data.get("active_pipeline_id")
             if pid and isinstance(pid, str):
                 return pid
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[CODEX REVIEW] pipeline_id 조회 실패 (무시): {e}", file=sys.stderr)
     return None
 
 
@@ -1056,8 +1051,8 @@ def _fallback_record_no_transcript(failure_code: str) -> None:
                 "message": "transcript 없음",
             },
         )
-    except Exception:
-        pass  # 폴백 기록 실패는 조용히 무시
+    except Exception as e:
+        print(f"[CODEX REVIEW] fallback 기록 실패 (무시): {e}", file=sys.stderr)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -1118,9 +1113,39 @@ def main(argv: Optional[List[str]] = None) -> int:
     prior_status = prior_state.get("status", "")
     prior_pid = prior_state.get("pipeline_id", "")
 
-    # 같은 pipeline_id로 이미 PROCESSING 중이면 중복 실행 차단 (재호출 방지).
+    # 같은 pipeline_id로 이미 PROCESSING 중이면 중복 실행 방지.
+    # 단, 5분(300초) 이상 지속된 PROCESSING은 STALE_PROCESSING으로 전환 후 재시도 허용.
     if prior_status == "PROCESSING" and prior_pid == pipeline_id:
-        return 0
+        started_at_str = prior_state.get("started_at", "")
+        stale = False
+        if started_at_str:
+            try:
+                started_at = datetime.fromisoformat(started_at_str)
+                elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+                if elapsed > 300:
+                    stale = True
+            except (ValueError, TypeError):
+                stale = True  # 파싱 실패 시 stale로 처리
+        if not stale:
+            # 5분 미만 PROCESSING: 중복 실행 차단
+            return 0
+        # 5분 초과: STALE_PROCESSING으로 전환 후 재시도 허용
+        try:
+            _record_state(
+                state_path,
+                {
+                    "pipeline_id": pipeline_id,
+                    "status": "STALE_PROCESSING",
+                    "pr_url": pr_url,
+                    "stale_at": _now_iso(),
+                    "original_started_at": started_at_str,
+                },
+            )
+        except Exception as e:
+            print(
+                f"[CODEX REVIEW] STALE_PROCESSING 기록 실패 (무시): {e}",
+                file=sys.stderr,
+            )
 
     # 5요소 감지 즉시 pipeline_id 기준으로 PROCESSING 상태 기록 (관찰성). 이전
     # 파이프라인의 APPROVED/REJECTED 상태가 남아있더라도 현재 pipeline_id로 덮어쓴다.
@@ -1134,8 +1159,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "started_at": _now_iso(),
             },
         )
-    except Exception:
-        pass  # 기록 실패는 조용히 무시
+    except Exception as e:
+        print(f"[CODEX REVIEW] PROCESSING 기록 실패: {e}", file=sys.stderr)
+        _record_failed_state(state_path, pipeline_id, "processing_record_failed", str(e))
 
     # hook 진입 즉시 관찰 가능한 RUNNING 로그를 남긴다 (fail-closed 종료도 추적 가능).
     _write_hook_log(

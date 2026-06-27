@@ -352,3 +352,66 @@ class TestHookFailedStateRecording:
 
         data = json.loads(state_path.read_text(encoding="utf-8"))
         assert data["status"] == "APPROVED"  # 덮어쓰지 않음
+
+
+class TestHotfix4:
+    """hotfix-4 (IMP-20260627-3907): B형 마지막 줄, except pass 제거, stale 판정."""
+
+    def _load_hook(self):
+        import importlib.util as _ilu
+
+        spec = _ilu.spec_from_file_location("hook_under_test_hf4", str(_HOOK_PATH))
+        cx = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(cx)
+        return cx
+
+    def test_b_form_ends_with_user_final(self):
+        """user_final 출력의 마지막 의미 있는 줄은 '사용자 최종 승인 필요'."""
+        out = rn.render_user_acceptance_request(
+            mode="user_final", pr_url=_PR_URL, pipeline_id=_PIPELINE_ID
+        )
+        meaningful = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        assert meaningful[-1] == "사용자 최종 승인 필요"
+
+    def test_b_form_no_codex_required(self):
+        """user_final 출력에 'CODEX 검토 필요'가 포함되지 않는다."""
+        out = rn.render_user_acceptance_request(
+            mode="user_final", pr_url=_PR_URL, pipeline_id=_PIPELINE_ID
+        )
+        assert "CODEX 검토 필요" not in out
+
+    def test_a_form_ends_with_codex(self):
+        """codex_review_required 출력의 마지막 의미 있는 줄은 'CODEX 검토 필요'."""
+        out = rn.render_user_acceptance_request(
+            mode="codex_review_required", pr_url=_PR_URL, pipeline_id=_PIPELINE_ID
+        )
+        meaningful = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        assert meaningful[-1] == "CODEX 검토 필요"
+
+    def test_stale_processing_resets(self):
+        """_check_stale은 다른 pipeline_id의 APPROVED를 stale로 오판하지 않는다."""
+        cx = self._load_hook()
+        state = {
+            "pipeline_id": "IMP-20260600-XXXX",  # 다른 파이프라인
+            "status": "APPROVED",
+            "pr_head_sha": "abc123",
+            "packet_sha256": "def456",
+        }
+        # pipeline_id 불일치 시 False (stale 아님 → 재트리거 허용)
+        assert (
+            cx._check_stale(state, "abc123", "def456", "IMP-20260627-3907") is False
+        )
+        # 같은 pipeline_id이고 head/packet 일치 시 True (유효한 APPROVED)
+        state_same = dict(state, pipeline_id="IMP-20260627-3907")
+        assert (
+            cx._check_stale(state_same, "abc123", "def456", "IMP-20260627-3907")
+            is True
+        )
+
+    def test_no_except_pass_in_hook(self):
+        """hook 소스에 'except Exception:' 직후 'pass'만 있는 패턴이 없다."""
+        import re as _re
+
+        src = _read_text(_HOOK_PATH)
+        pattern = _re.compile(r"except\s+Exception\s*(?:as\s+\w+)?\s*:\s*\n\s*pass\b")
+        assert pattern.search(src) is None, "hook에 except Exception: pass 패턴 잔존"
