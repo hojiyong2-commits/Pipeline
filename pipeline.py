@@ -18752,6 +18752,26 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 pass  # SHA 재기록 실패해도 계속 진행
         else:
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
+            # IMP-20260627-3BB6: PR 본문이 갱신되지 않아도 packet이 재생성되어 packet_sha256이
+            # 변경될 수 있으므로 codex_review_result.json의 packet_sha256을 항상 동기화한다.
+            try:
+                _cr_path_else = _codex_review_result_path()
+                if _cr_path_else.exists():
+                    _cr_else = json.loads(_cr_path_else.read_text(encoding="utf-8"))
+                    _pkt_p_else = snapshot_result.get("packet_path")
+                    if _pkt_p_else:
+                        try:
+                            _new_pkt_sha_else = _sha256_file(Path(_pkt_p_else))
+                            _cr_else["packet_sha256"] = _new_pkt_sha_else
+                            _cr_path_else.write_text(
+                                json.dumps(_cr_else, ensure_ascii=False, indent=2),
+                                encoding="utf-8",
+                            )
+                            print("  [Codex Review packet_sha256 재기록] 동기화 완료 (pr_body 미변경 경로)")
+                        except (OSError, TypeError):
+                            pass
+            except (OSError, json.JSONDecodeError):
+                pass
         # IMP-20260610-8C3B MT-1: post-materialization SHA 검증
         verify_err = _verify_acceptance_snapshot(state, snapshot_result.get("sha_manifest", {}))
         if verify_err:
