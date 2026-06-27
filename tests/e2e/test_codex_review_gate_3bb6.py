@@ -591,5 +591,54 @@ def test_tc7_prompt_contains_real_diff(tmp_path: Path) -> None:
     assert final_state["status"] == "APPROVED"
 
 
+# ---------------------------------------------------------------------------
+# TC-8: prefix 출력이 있는 경우 INVALID로 처리 (계약 "첫 줄만" 강제 회귀 테스트)
+# ---------------------------------------------------------------------------
+
+def test_tc8_prefix_output_is_invalid(tmp_path: Path) -> None:
+    """codex가 시스템 메시지 + APPROVE_TO_USER 출력 시 INVALID → exit 1.
+
+    계약 규정: "출력 첫 줄은 정확히 APPROVE_TO_USER 또는 REJECT - <사유>여야 한다."
+    첫 줄이 다른 내용이면 INVALID로 처리해야 한다. 후속 줄에 APPROVE_TO_USER가
+    있어도 통과해서는 안 된다 (prefix 우회 방지).
+
+    PIPELINE_STATE_PATH isolation + final_state assertion 포함.
+    """
+    state_file = tmp_path / "state.json"
+    pid = "IMP-20260627-3BB6"
+    write_min_state(state_file, pid)
+    shim = tmp_path / "shim"
+    # 첫 줄이 시스템 메시지, 두 번째 줄이 APPROVE_TO_USER — INVALID여야 함
+    prefix_verdict = "SUCCESS: The process has been initialized.\nAPPROVE_TO_USER"
+    make_fake_codex(shim, prefix_verdict)
+    env = make_env(state_file, extra_path=shim)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
+    # fake packet 생성 (cwd=tmp_path 격리)
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_bytes(
+        "[dummy-packet]\npipeline_id: IMP-20260627-3BB6\npr_head_sha: \n".encode("utf-8")
+    )
+
+    r = run_cli(["gates", "codex-review"], env=env, cwd=tmp_path)
+    # prefix 출력 → 첫 줄이 APPROVE_TO_USER가 아님 → INVALID → exit 1
+    assert r.returncode != 0, (
+        f"prefix 출력이 있는 경우 exit 1(INVALID)이어야 하지만 exit 0이 반환됨\n"
+        f"stdout={r.stdout}\nstderr={r.stderr}"
+    )
+    combined = r.stdout + r.stderr
+    assert "codex_verdict_invalid" in combined, (
+        f"expected codex_verdict_invalid in output\n{combined}"
+    )
+
+    # final_state: codex_review_result.json이 기록되지 않거나 INVALID 처리
+    result_file = codex_result_path(state_file)
+    if result_file.exists():
+        final_state = json.loads(result_file.read_text(encoding="utf-8"))
+        # INVALID 경로에서는 result.json이 기록되지 않거나 APPROVED가 아니어야 함
+        assert final_state.get("status") != "APPROVED", (
+            f"prefix 우회가 APPROVED로 기록되면 안 됨: {final_state}"
+        )
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-x", "-q"]))

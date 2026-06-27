@@ -6758,8 +6758,9 @@ def _codex_review_result_path() -> Path:
 def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
     """Codex CLI 출력에서 verdict를 파싱한다.
 
-    출력 첫 의미 있는 줄(공백 줄 제외)이 정확히 "APPROVE_TO_USER"이면 APPROVED,
-    "REJECT - <사유>" 형식이면 REJECTED + reject_reason(원문 그대로). 그 외 형식은 INVALID.
+    계약(codex_review_contract.md) 규정: "출력 첫 줄은 정확히 APPROVE_TO_USER 또는
+    REJECT - <사유> 형식이어야 한다." 따라서 첫 의미 있는 줄(공백 줄 제외)만 평가하며,
+    그 줄이 올바른 형식이 아니면 INVALID로 처리한다. 후속 줄에 verdict가 있어도 무시.
 
     Args:
         raw: codex CLI stdout 텍스트.
@@ -6772,26 +6773,25 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         raise TypeError("raw must not be None")
     if not isinstance(raw, str):
         raise TypeError(f"raw must be str, got {type(raw).__name__}")
-    # 모든 줄을 스캔하여 APPROVE_TO_USER 또는 REJECT - <사유> 패턴을 찾는다.
-    # codex exec가 "SUCCESS: The process with PID ... has been terminated." 등
-    # 시스템 메시지를 stdout에 먼저 출력할 수 있으므로 첫 줄만 보지 않고 전체를 스캔한다.
+    # 계약 규정: 첫 의미 있는 줄(공백 줄 제외)만 허용한다.
+    # 후속 줄에 verdict가 있어도 INVALID — prefix 출력 우회를 방지한다.
     first_nonempty = ""
     for line in raw.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        if not first_nonempty:
-            first_nonempty = stripped
-        if stripped == "APPROVE_TO_USER":
-            return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
-        reject_match = re.match(r"^REJECT\s*-\s*(.+)$", stripped, re.DOTALL)
-        if reject_match:
-            return {
-                "status": "REJECTED",
-                "verdict": stripped,
-                "reject_reason": stripped,  # 원문 전체(prefix 포함) 그대로 보존
-            }
-    # 어느 줄에도 verdict 패턴이 없으면 INVALID.
+        first_nonempty = stripped
+        break  # 첫 의미 있는 줄만 평가
+    if first_nonempty == "APPROVE_TO_USER":
+        return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
+    reject_match = re.match(r"^REJECT\s*-\s*(.+)$", first_nonempty, re.DOTALL)
+    if reject_match:
+        return {
+            "status": "REJECTED",
+            "verdict": first_nonempty,
+            "reject_reason": first_nonempty,  # 원문 전체(prefix 포함) 그대로 보존
+        }
+    # 첫 줄이 올바른 형식이 아니면 INVALID.
     return {"status": "INVALID", "verdict": first_nonempty, "reject_reason": ""}
 
 
