@@ -109,15 +109,20 @@ def write_min_state(state_file: Path, pipeline_id: str) -> None:
     state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def make_fake_codex(shim_dir: Path, verdict: str) -> None:
+def make_fake_codex(
+    shim_dir: Path,
+    verdict: str,
+    capture_stdin_to: Optional[Path] = None,
+) -> None:
     """PATH에 주입할 가짜 codex 실행 파일을 생성한다.
 
-    `codex exec <prompt>` 호출 시 stdout으로 verdict를 출력하고 exit 0.
+    `codex exec -` 호출 시 stdin에서 프롬프트를 읽고 stdout으로 verdict를 출력한다.
     Windows에서는 codex.bat, POSIX에서는 codex 셸 스크립트를 생성한다.
 
     Args:
         shim_dir: shim을 둘 디렉토리.
         verdict: codex가 출력할 verdict 문자열 (예: APPROVE_TO_USER).
+        capture_stdin_to: stdin 내용을 저장할 파일 경로 (None이면 저장 안 함).
     Raises:
         TypeError: 인자가 None인 경우.
     """
@@ -128,12 +133,20 @@ def make_fake_codex(shim_dir: Path, verdict: str) -> None:
     # (.bat echo는 cp949 콘솔에서 한글이 깨짐). verdict는 별도 파일에서 읽는다.
     verdict_file = shim_dir / "verdict.txt"
     verdict_file.write_text(verdict, encoding="utf-8")
+    stdin_capture_line = ""
+    if capture_stdin_to is not None:
+        stdin_capture_line = (
+            "stdin_data = sys.stdin.read()\n"
+            f"Path(r'{capture_stdin_to}').write_text(stdin_data, encoding='utf-8')\n"
+        )
     py_shim = shim_dir / "_codex_shim.py"
     py_shim.write_text(
         "import sys, io\n"
         "sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')\n"
+        "sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')\n"
         "from pathlib import Path\n"
-        f"v = Path(r'{verdict_file}').read_text(encoding='utf-8')\n"
+        + stdin_capture_line
+        + f"v = Path(r'{verdict_file}').read_text(encoding='utf-8')\n"
         "print(v)\n",
         encoding="utf-8",
     )
@@ -444,6 +457,52 @@ def test_tc6_empty_packet_sha_blocked(tmp_path: Path) -> None:
         assert final_state.get("status") != "PENDING" or final_state.get("pipeline_id") != pid, (
             "빈 packet_sha256 상태에서 PENDING acceptance_request가 발급되면 안 됨"
         )
+
+
+# ---------------------------------------------------------------------------
+# TC-7: gates codex-review 프롬프트에 실제 diff 내용이 포함되는지 검증
+# ---------------------------------------------------------------------------
+
+def test_tc7_prompt_contains_real_diff(tmp_path: Path) -> None:
+    """gates codex-review가 Codex stdin 프롬프트에 실제 diff 내용(git diff)을 포함하는지 검증.
+
+    계약 요구사항: "전달된 PR(제목/본문/변경 파일/diff/CI 상태/패킷)을 읽고"
+    Codex는 --stat 요약이 아닌 실제 코드 변경 내용을 받아야 한다.
+
+    검증 방법: stdin을 파일에 캡처하는 shim을 사용하여 프롬프트 내용을 확인한다.
+    - "Git Diff (실제 변경 내용" 섹션 제목 포함 여부 검사
+    - 또는 "diff --git" 패턴(실제 patch 헤더) 포함 여부 검사
+
+    PIPELINE_STATE_PATH isolation + final_state assertion 포함.
+    """
+    state_file = tmp_path / "state.json"
+    pid = "IMP-20260627-3BB6"
+    write_min_state(state_file, pid)
+    shim = tmp_path / "shim"
+    stdin_capture = tmp_path / "captured_stdin.txt"
+    make_fake_codex(shim, "APPROVE_TO_USER", capture_stdin_to=stdin_capture)
+    env = make_env(state_file, extra_path=shim)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
+
+    r = run_cli(["gates", "codex-review"], env=env)
+    # exit 0 (APPROVED 경로)
+    assert r.returncode == 0, (
+        f"expected exit 0, got {r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    )
+
+    # 프롬프트 캡처 확인
+    assert stdin_capture.exists(), "stdin capture 파일이 생성되지 않았습니다"
+    captured = stdin_capture.read_text(encoding="utf-8", errors="replace")
+    # 실제 diff 섹션 제목이 포함되어야 함 (--stat 요약 제목이 아닌 실제 diff 제목)
+    assert "Git Diff (실제 변경 내용" in captured, (
+        f"프롬프트에 실제 diff 섹션 제목이 없습니다. captured:\n{captured[:2000]}"
+    )
+
+    # final_state: codex_review_result.json status=APPROVED
+    result_file = codex_result_path(state_file)
+    assert result_file.exists()
+    final_state = json.loads(result_file.read_text(encoding="utf-8"))
+    assert final_state["status"] == "APPROVED"
 
 
 if __name__ == "__main__":

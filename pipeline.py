@@ -6857,18 +6857,24 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # contract가 요구하는 정보: PR 제목/본문/변경 파일/diff/CI 상태/패킷을 모두 포함한다.
     changed_files = _get_current_pr_changed_files() or []
     files_txt = "\n".join(f"  - {p}" for p in changed_files)
-    # git diff (origin/main...HEAD, 최대 4000자)
+    # git diff (origin/main...HEAD) — 실제 patch content 포함 (최대 8000자).
+    # Codex가 "PR diff를 읽고 판단" 하려면 --stat 요약이 아닌 실제 코드 변경 내용이 필요.
     diff_txt = ""
     try:
         _diff_result = subprocess.run(
-            ["git", "diff", "origin/main...HEAD", "--stat"],
+            ["git", "diff", "origin/main...HEAD"],
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=30,
+            errors="replace",
+            timeout=60,
             cwd=str(BASE_DIR),
         )
-        diff_txt = (_diff_result.stdout or "")[:2000]
+        _diff_raw = _diff_result.stdout or ""
+        if len(_diff_raw) > 8000:
+            diff_txt = _diff_raw[:8000] + "\n... (diff 잘림 — 총 " + str(len(_diff_raw)) + "자)"
+        else:
+            diff_txt = _diff_raw
     except Exception:  # nosec B110
         diff_txt = "(diff 조회 실패)"
     # CI 상태 정보
@@ -6901,7 +6907,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         f"PR head SHA: {pr_head_sha}\n\n"
         "== 변경 파일 목록 ==\n"
         f"{files_txt}\n\n"
-        "== Git Diff (--stat) ==\n"
+        "== Git Diff (실제 변경 내용, 최대 8000자) ==\n"
         f"{diff_txt}\n\n"
         "== CI 상태 ==\n"
         f"  github_ci: {ci_status} ({ci_run_id})\n"
