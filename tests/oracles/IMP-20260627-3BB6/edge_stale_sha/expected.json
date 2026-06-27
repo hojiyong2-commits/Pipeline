@@ -1,0 +1,11 @@
+{
+  "scenario": "edge_stale_sha",
+  "description": "APPROVED이나 SHA 불일치 시 failure_code=stale_codex_review BLOCKED, stale 필드명 메시지 포함",
+  "exit_code": 1,
+  "failure_code": "stale_codex_review",
+  "blocked": true,
+  "stale_field_in_message": true,
+  "rerun_instruction_present": true,
+  "accept_code_issued": false,
+  "notes": "gates codex-review 재실행 안내 포함"
+}

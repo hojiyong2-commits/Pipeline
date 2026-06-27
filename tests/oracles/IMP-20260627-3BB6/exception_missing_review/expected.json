@@ -1,0 +1,10 @@
+{
+  "scenario": "exception_missing_review",
+  "description": "codex_review_result.json 없이 request-accept 실행 시 failure_code=codex_review_required BLOCKED",
+  "exit_code": 1,
+  "failure_code": "codex_review_required",
+  "blocked": true,
+  "accept_code_issued": false,
+  "message_contains": "Codex Review",
+  "notes": "gates codex-review를 먼저 실행하라는 안내 포함"
+}

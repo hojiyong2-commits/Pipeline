@@ -1388,27 +1388,29 @@ def _write_codex_review_approved(
     packet_sha256: str = FAKE_PKT_SHA,
     pr_body_sha256: str = FAKE_BODY_SHA,
 ) -> None:
-    """codex_review_loop_state.json을 APPROVED 상태로 tmp_path/.pipeline에 생성.
+    """codex_review_result.json을 APPROVED 상태로 tmp_path/.pipeline에 생성.
 
-    IMP-20260626-4121: gates accept --result ACCEPT는 _check_codex_review_gate에서
-    Codex 검토 APPROVED 기록을 요구한다. 새 fail-closed 검증은 5개 필수 필드
-    (pipeline_id, pr_head_sha, packet_sha256, pr_body_sha256, accept_code)를
-    모두 실제 값으로 요구하며, packet_sha256 / pr_body_sha256은 acceptance_request.json의
-    동일 필드와 일치해야 하고, pr_head_sha는 현재 PR head SHA(mock gh headRefOid 응답)와
-    일치해야 한다. 따라서 빈 값이 아닌 매칭 fixture 값으로 5개 필드를 모두 채운다.
+    IMP-20260627-3BB6: SSoT를 codex_review_loop_state.json → codex_review_result.json로
+    전환했다. gates accept --result ACCEPT / request-accept는 _check_codex_review_gate에서
+    codex_review_result.json의 status=APPROVED + pipeline_id/pr_head_sha 일치를 요구한다.
+    packet_sha256 / pr_body_sha256은 acceptance_request.json이 있으면 동일 필드와 일치해야 한다.
     PIPELINE_STATE_PATH(=tmp_path/pipeline_state.json) 기준 .pipeline 디렉토리에 저장된다.
     """
     loop_dir = tmp_path / ".pipeline"
     loop_dir.mkdir(parents=True, exist_ok=True)
-    (loop_dir / "codex_review_loop_state.json").write_text(
+    (loop_dir / "codex_review_result.json").write_text(
         json.dumps({
+            "schema_version": 1,
             "pipeline_id": pipeline_id,
             "status": "APPROVED",
+            "pr_url": f"https://github.com/example/repo/pull/1",
             "pr_head_sha": pr_head_sha,
             "packet_sha256": packet_sha256,
             "pr_body_sha256": pr_body_sha256,
             "accept_code": f"ACCEPT-{pipeline_id}",
-            "approved_at": "2026-06-06T12:00:00Z",
+            "reviewed_at": "2026-06-27T12:00:00Z",
+            "contract_sha256": "deadbeef" * 8,
+            "verdict": "APPROVE_TO_USER",
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -1476,13 +1478,16 @@ class TestProvenance:
             f"stdout: {result.stdout[:500]}\nstderr: {result.stderr[:200]}"
         )
 
-        # IMP-20260626-4121: gh 부재 시 Codex gate가 먼저 codex_review_stale로 막거나
-        # provenance가 pr_approver_fetch_failed로 막는다. 둘 중 하나면 정상.
+        # IMP-20260627-3BB6: SSoT 전환 후 codex_review_result.json이 없으면 Codex gate가
+        # codex_review_required로 막고(이 테스트는 result.json 미작성), result.json이 있더라도
+        # gh 부재로 head SHA 확인 실패 시 stale_codex_review로 막는다. provenance 경로는
+        # pr_approver_fetch_failed로 막을 수 있다. 셋 중 하나면 정상.
         combined = result.stdout + result.stderr
         assert ("pr_approver_fetch_failed" in combined
-                or "codex_review_stale" in combined), (
-            f"Expected 'pr_approver_fetch_failed' or 'codex_review_stale' in output "
-            f"when gh is missing.\n"
+                or "stale_codex_review" in combined
+                or "codex_review_required" in combined), (
+            f"Expected 'pr_approver_fetch_failed' or 'stale_codex_review' or "
+            f"'codex_review_required' in output when gh is missing.\n"
             f"stdout: {result.stdout[:800]}\nstderr: {result.stderr[:200]}"
         )
 

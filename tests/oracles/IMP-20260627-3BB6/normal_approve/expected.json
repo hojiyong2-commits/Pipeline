@@ -1,0 +1,26 @@
+{
+  "scenario": "normal_approve",
+  "description": "Codex APPROVE_TO_USER 시 gates codex-review exit 0, codex_review_result.json status=APPROVED",
+  "exit_code": 0,
+  "codex_review_result": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260627-3BB6",
+    "status": "APPROVED",
+    "verdict": "APPROVE_TO_USER",
+    "required_fields_present": [
+      "schema_version",
+      "pipeline_id",
+      "status",
+      "pr_url",
+      "pr_head_sha",
+      "pr_body_sha256",
+      "packet_sha256",
+      "accept_code",
+      "reviewed_at",
+      "contract_sha256"
+    ]
+  },
+  "gate_status": "PASS",
+  "request_accept_blocked": false,
+  "notes": "동일 SHA 기준 request-accept는 차단되지 않아야 함"
+}
