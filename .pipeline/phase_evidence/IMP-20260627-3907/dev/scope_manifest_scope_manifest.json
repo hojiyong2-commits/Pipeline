@@ -1,0 +1,164 @@
+{
+  "pipeline_id": "IMP-20260627-3907",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        ".claude/acceptance_renderer.py"
+      ],
+      "affected_functions": [
+        "render_user_acceptance_request"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2"
+          ],
+          "changed_files": [
+            ".claude/acceptance_renderer.py"
+          ],
+          "implementation_evidence": [
+            "render_user_acceptance_request A형/B형 분기 + oracle 일치",
+            "load_contract fail-closed RuntimeError"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        ".claude/codex_review_contract.md"
+      ],
+      "affected_functions": [
+        "codex_review_contract.md"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [
+            "AC-3"
+          ],
+          "changed_files": [
+            ".claude/codex_review_contract.md"
+          ],
+          "implementation_evidence": [
+            "Codex Review Contract 11개 항목 ## 섹션 + 키워드 포함"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        ".claude/hooks/codex_user_acceptance_review.py"
+      ],
+      "affected_functions": [
+        "_build_codex_prompt",
+        "main"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [
+            "AC-4",
+            "AC-5"
+          ],
+          "changed_files": [
+            ".claude/hooks/codex_user_acceptance_review.py"
+          ],
+          "implementation_evidence": [
+            "_build_codex_prompt가 contract 11개 항목 fail-closed 삽입",
+            "APPROVE 출력 renderer B형(_render_approve), _approve_message 제거",
+            "importlib renderer 단독 로드"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [
+            "AC-6"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_cmd_gates_request_accept가 renderer A형(기본)/B형(--no-codex-review) 위임",
+            "A형 출력 기존 5줄 양식 동일",
+            "보안 검증 블록 미변경"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        ".claude/agents/pipeline-manager-agent.md"
+      ],
+      "affected_functions": [
+        "pipeline-manager-agent.md 규칙 추가"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-7"
+          ],
+          "changed_files": [
+            ".claude/agents/pipeline-manager-agent.md"
+          ],
+          "implementation_evidence": [
+            "renderer 단일 SSoT 강제 규칙(직접 작성/재구성 금지, CODEX 검토 필요 직접 작성 금지) 추가"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/test_acceptance_renderer_3907.py",
+        "tests/oracles/IMP-20260627-3907/normal_A_form/input.json",
+        "tests/oracles/IMP-20260627-3907/normal_A_form/expected.txt",
+        "tests/oracles/IMP-20260627-3907/normal_B_form/input.json",
+        "tests/oracles/IMP-20260627-3907/normal_B_form/expected.txt",
+        "tests/oracles/IMP-20260627-3907/edge_contract_missing/input.json",
+        "tests/oracles/IMP-20260627-3907/edge_contract_missing/expected.json"
+      ],
+      "affected_functions": [
+        "test_acceptance_renderer_3907.py 신규"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": [
+            "AC-8"
+          ],
+          "changed_files": [
+            "tests/test_acceptance_renderer_3907.py",
+            "tests/oracles/IMP-20260627-3907/normal_A_form/input.json",
+            "tests/oracles/IMP-20260627-3907/normal_A_form/expected.txt",
+            "tests/oracles/IMP-20260627-3907/normal_B_form/input.json",
+            "tests/oracles/IMP-20260627-3907/normal_B_form/expected.txt",
+            "tests/oracles/IMP-20260627-3907/edge_contract_missing/input.json",
+            "tests/oracles/IMP-20260627-3907/edge_contract_missing/expected.json"
+          ],
+          "implementation_evidence": [
+            "A-F 6개 + 추가 4개 = 10개 테스트 PASS, 기존 4121 28개 회귀 없음(합계 38)",
+            "oracle 6개 파일 생성: normal_A_form/B_form expected, edge_contract_missing expected"
+          ]
+        }
+      ]
+    }
+  ]
+}

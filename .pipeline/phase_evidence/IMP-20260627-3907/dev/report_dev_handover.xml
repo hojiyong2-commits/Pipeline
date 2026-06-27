@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260627-3907</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <changed_files>
+    <file>.claude/acceptance_renderer.py</file>
+    <file>.claude/codex_review_contract.md</file>
+    <file>.claude/hooks/codex_user_acceptance_review.py</file>
+    <file>pipeline.py</file>
+    <file>.claude/agents/pipeline-manager-agent.md</file>
+    <file>tests/test_acceptance_renderer_3907.py</file>
+    <file>tests/oracles/IMP-20260627-3907/normal_A_form/input.json</file>
+    <file>tests/oracles/IMP-20260627-3907/normal_A_form/expected.txt</file>
+    <file>tests/oracles/IMP-20260627-3907/normal_B_form/input.json</file>
+    <file>tests/oracles/IMP-20260627-3907/normal_B_form/expected.txt</file>
+    <file>tests/oracles/IMP-20260627-3907/edge_contract_missing/input.json</file>
+    <file>tests/oracles/IMP-20260627-3907/edge_contract_missing/expected.json</file>
+  </changed_files>
+  <summary>
+    User Acceptance 직전 Codex Review Loop SSoT 정리. 승인 요청문을 .claude/acceptance_renderer.py
+    단일 SSoT로 통일하고, hook과 pipeline.py가 importlib로 renderer를 로드하여 A형/B형을 출력한다.
+    Codex Review Contract(11개 항목)를 추가하여 hook prompt에 fail-closed로 삽입한다.
+    pipeline-manager-agent.md에 renderer 단일 SSoT 강제 규칙을 추가했다.
+  </summary>
+  <scope_declaration>
+    <files_to_create>.claude/acceptance_renderer.py, .claude/codex_review_contract.md, tests/test_acceptance_renderer_3907.py</files_to_create>
+    <files_to_modify>.claude/hooks/codex_user_acceptance_review.py, pipeline.py, .claude/agents/pipeline-manager-agent.md</files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>Grep "spec_from_file_location|acceptance_renderer" pipeline.py — importlib.util는 이미 import됨, renderer 로더는 없음(신규)</searched>
+      <decision>NEW — renderer는 신규 SSoT 모듈. hook/pipeline.py는 EXTEND(기존 함수 내 renderer 위임)</decision>
+    </reuse_search>
+    <out_of_scope>gates accept 보안 검증 로직(packet_sha256/nonce/pr_body_sha256/verification_json_freshness), build_parser argparse(--no-codex-review는 getattr로 처리)</out_of_scope>
+  </scope_declaration>
+  <impact_analysis>
+    <micro_task_id>MT-1~MT-6</micro_task_id>
+    <target_function>render_user_acceptance_request / load_contract / _build_codex_prompt / main / _cmd_gates_request_accept / 신규 테스트 + 문서</target_function>
+    <upstream_callers>
+      <caller location=".claude/hooks/codex_user_acceptance_review.py">process_verdict APPROVE 분기, main stale 분기 → _render_approve → renderer</caller>
+      <caller location="pipeline.py:_cmd_gates_request_accept">request-accept 승인 요청문 출력 → renderer A형</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>acceptance_renderer.render_user_acceptance_request</dep>
+      <dep>acceptance_renderer.load_contract</dep>
+      <dep>.claude/codex_review_contract.md</dep>
+      <dep>importlib.util.spec_from_file_location</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>.pipeline/codex_review_loop_state.json — write (hook, 기존 동작 유지)</mutation>
+      <mutation>acceptance_request.json — write (pipeline.py request-accept, 기존 동작 유지)</mutation>
+      <mutation>stdout/stderr — write (승인 요청문/검토 결과)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 모든 기존 함수 시그니처 불변. _approve_message만 제거(내부 helper, 외부 호출자 없음)</signature_change>
+      <breaking_change>NO — 기존 tests/test_codex_review_loop_4121.py 28개 회귀 없음, 보안 검증 블록 미변경</breaking_change>
+      <test_coverage>EXISTING(4121 28개) + NEW_TEST_ADDED(3907 10개) = 38 passed</test_coverage>
+      <rollback_strategy>git checkout으로 6개 파일 복원 시 기존 동작 회귀(신규 파일은 삭제)</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS</type_hinting>
+    <error_handling>PASS — fail-closed RuntimeError(contract/renderer), 구체적 except</error_handling>
+    <path_safety>PASS — Path 사용, 하드코딩 경로 없음(__file__ 기준 상대)</path_safety>
+    <security>PASS — secrets gate 통과, nonce 미노출, 보안 검증 블록 미변경</security>
+    <al_edge_cases>PASS — None/isinstance/mode 화이트리스트/빈 문자열 방어</al_edge_cases>
+    <fs_encoding_fallback>PASS — load_contract 4-encoding fallback</fs_encoding_fallback>
+    <execution_check>PASS — py_compile(3파일) OK, import OK, pytest 38 passed</execution_check>
+    <impact_analysis_check>PASS — MT-1~6 impact_analysis 출력</impact_analysis_check>
+  </self_check>
+  <evidence>
+    <item>module design/dev/qa PASS: MT-1~MT-6</item>
+    <item>module integrate PASS</item>
+    <item>pytest tests/test_acceptance_renderer_3907.py 10 passed + tests/test_codex_review_loop_4121.py 28 passed = 38 passed</item>
+    <item>gates secrets 통과</item>
+    <item>oracle normal_A_form / normal_B_form / edge_contract_missing 충족</item>
+  </evidence>
+  <scope_lock_check>
+    <git_diff_files>.claude/acceptance_renderer.py, .claude/codex_review_contract.md, .claude/hooks/codex_user_acceptance_review.py, pipeline.py, .claude/agents/pipeline-manager-agent.md, tests/test_acceptance_renderer_3907.py</git_diff_files>
+    <manifest_files>동일 6개 파일 + oracle 6개</manifest_files>
+    <extra_files>없음 (사전 존재하던 FEAT-20260426-332E/* 및 tests/test_packing_detail_oracle_4cd8.py는 본 파이프라인 작업 이전부터 dirty 상태로 본 변경과 무관)</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <trust_root_note>pipeline.py / tests/ / .claude/agents/*.md는 Trust-Root이나 모두 PM target_files에 명시 + HIGH_RISK 프로토콜 IMP이므로 허용</trust_root_note>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
