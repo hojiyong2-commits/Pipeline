@@ -1,0 +1,186 @@
+<dev_report>
+  <scope_declaration>
+    <files_to_create>없음 (모든 산출 XML/JSON은 파이프라인 게이트 입력용)</files_to_create>
+    <files_to_modify>
+      pipeline.py (MT-1: _cmd_gates_codex_review diff 블록;
+      MT-2: _cmd_gates_request_accept codex SHA 재기록 제거;
+      MT-3: _check_codex_review_gate 독립 SHA 검증),
+      .claude/codex_review_contract.md (MT-4: 11개 항목 전체 재작성),
+      tests/e2e/test_codex_review_gate_3bb6.py (MT-5: TC-5/TC-7 강화),
+      tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json (MT-5),
+      tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json (MT-5)
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>_cmd_gates_codex_review(1) / _check_codex_review_gate(1) / _cmd_gates_request_accept(1) 모두 기존 정의 존재</searched>
+      <decision>EXTEND — 기존 함수 수정, 신규 모듈/함수 생성 없음</decision>
+    </reuse_search>
+    <out_of_scope>nonce 생성/검증/consume 로직, gates accept, _parse_codex_verdict, pipeline.py 체크포인트 로직</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>pipeline._cmd_gates_codex_review</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py(args dispatch)">gates codex-review CLI 핸들러 — 호출자 시그니처 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>subprocess.run(git diff)</dep>
+      <dep>_die</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — diff 조회 실패 시 _die(exit 1)로 차단, 상태 변경 없음</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 정상 diff 경로는 동일, 실패 경로만 fail-closed로 강화</breaking_change>
+      <test_coverage>EXISTING — TC-1/TC-7 정상 경로 유지</test_coverage>
+      <rollback_strategy>해당 diff 블록을 이전 except placeholder 패턴으로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>pipeline._cmd_gates_request_accept</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py(args dispatch)">gates request-accept CLI 핸들러 — 호출자 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_auto_generate_final_packet_and_update_pr</dep>
+      <dep>_check_codex_review_gate (사전 검증)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>acceptance_request.json (pr_body_sha256/packet_sha256 재기록 — nonce 무결성용, 유지)</mutation>
+      <mutation>codex_review_result.json 재기록 제거 — 더 이상 mutate하지 않음</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — codex SHA 자동 동기화 제거로 stale 검증이 정상 작동(보안 강화)</breaking_change>
+      <test_coverage>EXISTING — TC-1~TC-9 회귀</test_coverage>
+      <rollback_strategy>제거한 codex_review_result.json 재기록 블록 2곳을 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-3</micro_task_id>
+    <target_function>pipeline._check_codex_review_gate</target_function>
+    <upstream_callers>
+      <caller location="_cmd_gates_request_accept">사전 검증 호출 — 반환 dict 스키마 동일</caller>
+      <caller location="gates accept 경로">동일 dict 스키마 사용 — 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_load_acceptance_request</dep>
+      <dep>_packet_output_path / _compute_file_sha256</dep>
+      <dep>_get_pr_body_text / _get_current_pr_head_sha</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — pure 검증 함수, dict 반환만</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 반환 스키마 동일, fail-open 우회만 제거(보안 강화)</breaking_change>
+      <test_coverage>EXISTING — TC-4/TC-5/TC-6 stale/empty SHA</test_coverage>
+      <rollback_strategy>SHA 검증부를 이전 _req 분기 구조로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-4</micro_task_id>
+    <target_function>N/A (.claude/codex_review_contract.md — MD 전용)</target_function>
+    <upstream_callers>
+      <caller location="_load_codex_review_contract">contract 파일을 SSoT로 읽음 — 파일 형식/존재만 의존</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_cmd_gates_codex_review (contract_text를 Codex 프롬프트에 포함)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — 정적 문서</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — contract_sha256만 변경됨(검토 시점 고정값)</breaking_change>
+      <test_coverage>NEW — _load_codex_review_contract() status=PASS + 11항목 grep</test_coverage>
+      <rollback_strategy>이전 contract.md 내용으로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-5</micro_task_id>
+    <target_function>test_codex_review_gate_3bb6.TC5/TC7/edge_stale_sha</target_function>
+    <upstream_callers>
+      <caller location="pytest">테스트 러너 — 시그니처 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>gates request-accept / gates codex-review (CLI 경로 검증)</dep>
+      <dep>edge_stale_sha oracle (input/expected)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — 격리된 PIPELINE_STATE_PATH tmp_path만 사용</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 테스트 강화(assert 추가), 기존 통과 보존</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-5/TC-7 강화 + oracle 독립 필드</test_coverage>
+      <rollback_strategy>TC-5/TC-7 assert와 oracle json을 이전 버전으로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, .claude/codex_review_contract.md, tests/e2e/test_codex_review_gate_3bb6.py, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json</git_diff_files>
+    <manifest_files>pipeline.py, .claude/codex_review_contract.md, tests/e2e/test_codex_review_gate_3bb6.py, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS — 함수 시그니처 변경 없음</type_hinting>
+    <error_handling>PASS — diff 실패/취득 실패/빈 SHA 모두 fail-closed</error_handling>
+    <path_safety>N/A — 신규 경로 처리 없음</path_safety>
+    <security>PASS — fail-open placeholder/SHA 자동 동기화/req 빈 SHA 우회 제거, nonce 미노출 계약 유지</security>
+    <docstring>PASS — 기존 docstring 유지</docstring>
+    <execution_check>PASS — py_compile OK, import OK, pytest tests/e2e/test_codex_review_gate_3bb6.py 10 passed</execution_check>
+    <impact_analysis_check>PASS — 5개 MT 각각 impact_analysis 출력, state_mutations 명시, risk_assessment 4필드</impact_analysis_check>
+    <frozen_codebase_check>PASS — 각 MT 대상 함수/파일만 변경, 무관 리팩토링 0건, OAR 0회</frozen_codebase_check>
+  </self_check>
+
+  <sync_verification>
+    <grep_pattern>codex_review_result.json packet_sha256/pr_body_sha256 재기록 (request-accept 범위)</grep_pattern>
+    <locations_found>pipeline.py _cmd_gates_request_accept (2곳: pr_body 변경/미변경 경로)</locations_found>
+    <locations_updated>pipeline.py _cmd_gates_request_accept (2곳 모두 제거)</locations_updated>
+    <sync_status>COMPLETE</sync_status>
+  </sync_verification>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260627-C81C</pipeline_id>
+    <summary>
+      IMP-20260627-3BB6 REJECT 후 5개 구현 버그 수정 완료.
+      MT-1: gates codex-review의 git diff 조회 실패를 placeholder 없이 codex_review_diff_unavailable fail-closed BLOCKED.
+      MT-2: request-accept 후처리의 codex_review_result.json packet_sha256/pr_body_sha256 재기록(except/pass) 제거.
+      MT-3: _check_codex_review_gate가 pr_head_sha/pr_body_sha256/packet_sha256를 acceptance_request 유무와 무관하게 각각 독립으로 현재 실제 값과 비교(req 빈 SHA 우회 제거).
+      MT-4: codex_review_contract.md를 11개 항목으로 전체 재작성.
+      MT-5: TC-5(stale_codex_review만 허용), TC-7(diff --git/변경 파일명 + placeholder 미포함), edge_stale_sha 오라클(pipeline_id 일치 + 3개 SHA 독립 검증) 강화.
+    </summary>
+    <evidence>
+      pipeline.py, .claude/codex_review_contract.md, tests/e2e/test_codex_review_gate_3bb6.py,
+      tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json,
+      tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json
+    </evidence>
+    <execution_check>
+      python -m py_compile pipeline.py: PASS
+      python -c "import pipeline": PASS
+      python -c "_load_codex_review_contract() status=PASS, sha 64자": PASS (11항목 grep 확인)
+      pytest tests/e2e/test_codex_review_gate_3bb6.py: 10 passed
+    </execution_check>
+    <module_gate>MT-1~MT-5 module QA PASS + integration PASS</module_gate>
+    <known_constraints>
+      MT-1/2/3가 모두 pipeline.py를 수정하므로, 모듈 체크포인트(full-file SHA) 정합을 위해
+      세 MT의 pipeline.py 변경을 모두 적용한 최종 상태에서 게이트 시퀀스를 진행했습니다.
+      보안 절대 제약(자동 ACCEPT 금지, nonce 미노출, gates accept 자동 실행 금지, nonce 보안 로직 완화 금지,
+      Codex APPROVE를 User Acceptance PASS로 기록 금지)은 모두 보존했습니다.
+    </known_constraints>
+  </handover>
+</dev_report>
