@@ -643,5 +643,53 @@ def test_tc8_prefix_output_is_invalid(tmp_path: Path) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# TC-9: APPROVE_TO_USER 뒤 추가 AI 출력이 있으면 INVALID (계약 "정확히 한 줄" 검증)
+# ---------------------------------------------------------------------------
+
+def test_tc9_approve_with_trailing_output_is_invalid(tmp_path: Path) -> None:
+    """codex AI가 APPROVE_TO_USER 뒤에 추가 줄을 출력하면 INVALID → exit 1.
+
+    계약 규정: "당신의 출력 첫 줄은 정확히 APPROVE_TO_USER 또는 REJECT - <사유>여야 한다."
+    비-시스템 AI 출력이 1줄을 초과하면 INVALID로 처리한다.
+    APPROVE_TO_USER\n이유 설명 패턴의 우회를 방지.
+
+    PIPELINE_STATE_PATH isolation + final_state assertion 포함.
+    """
+    state_file = tmp_path / "state.json"
+    pid = "IMP-20260627-3BB6"
+    write_min_state(state_file, pid)
+    shim = tmp_path / "shim"
+    # APPROVE_TO_USER 뒤에 추가 AI 출력 → INVALID여야 함
+    trailing_verdict = "APPROVE_TO_USER\n이 PR은 모든 요건을 충족합니다."
+    make_fake_codex(shim, trailing_verdict)
+    env = make_env(state_file, extra_path=shim)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
+    # fake packet 생성 (cwd=tmp_path 격리)
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_bytes(
+        "[dummy-packet]\npipeline_id: IMP-20260627-3BB6\npr_head_sha: \n".encode("utf-8")
+    )
+
+    r = run_cli(["gates", "codex-review"], env=env, cwd=tmp_path)
+    # APPROVE_TO_USER 뒤 추가 AI 출력 → INVALID → exit 1
+    assert r.returncode != 0, (
+        f"APPROVE_TO_USER 뒤 추가 출력이 있으면 exit 1(INVALID)이어야 하지만 exit 0 반환\n"
+        f"stdout={r.stdout}\nstderr={r.stderr}"
+    )
+    combined = r.stdout + r.stderr
+    assert "codex_verdict_invalid" in combined, (
+        f"expected codex_verdict_invalid in output\n{combined}"
+    )
+
+    # final_state: APPROVED로 기록되면 안 됨
+    result_file = codex_result_path(state_file)
+    if result_file.exists():
+        final_state = json.loads(result_file.read_text(encoding="utf-8"))
+        assert final_state.get("status") != "APPROVED", (
+            f"APPROVE_TO_USER + 추가 줄이 APPROVED로 기록되면 안 됨: {final_state}"
+        )
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-x", "-q"]))

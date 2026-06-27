@@ -6773,13 +6773,13 @@ _CODEX_CLI_SYSTEM_PREFIXES = (
 def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
     """Codex CLI 출력에서 verdict를 파싱한다.
 
-    계약(codex_review_contract.md) 규정: "출력 첫 줄은 정확히 APPROVE_TO_USER 또는
-    REJECT - <사유> 형식이어야 한다." 따라서 첫 의미 있는 비-시스템 줄만 평가하며,
-    그 줄이 올바른 형식이 아니면 INVALID로 처리한다.
+    계약(codex_review_contract.md) 규정: "당신의 출력 첫 줄은 정확히 다음 두 형식 중
+    하나여야 합니다." 즉 비-시스템 AI 출력은 정확히 1줄이어야 하며, 그 줄이
+    APPROVE_TO_USER 또는 REJECT - <사유> 형식이어야 한다.
 
     Codex CLI 런타임 시스템 메시지(_CODEX_CLI_SYSTEM_PREFIXES)는 AI 출력이 아니므로
-    제외한다. AI 출력의 첫 줄(시스템 메시지 제외 후)이 verdict 판정 대상이다.
-    후속 AI 출력 줄에 verdict가 있어도 무시(prefix 우회 방지).
+    제외한다. 시스템 메시지 제외 후 AI 출력이 1줄을 초과하거나 형식 불일치이면 INVALID.
+    이를 통해 APPROVE_TO_USER 뒤에 설명을 추가하는 방식의 우회를 방지한다.
 
     Args:
         raw: codex CLI stdout 텍스트.
@@ -6792,9 +6792,8 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         raise TypeError("raw must not be None")
     if not isinstance(raw, str):
         raise TypeError(f"raw must be str, got {type(raw).__name__}")
-    # Codex CLI 시스템 메시지를 제외하고 첫 의미 있는 AI 출력 줄을 찾는다.
-    # 후속 줄에 verdict가 있어도 INVALID — AI prefix 출력 우회를 방지한다.
-    first_ai_line = ""
+    # Codex CLI 시스템 메시지를 제외한 모든 비-빈 AI 출력 줄을 수집한다.
+    ai_lines = []
     for line in raw.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -6802,12 +6801,22 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         # CLI 런타임 시스템 메시지는 건너뜀
         if any(stripped.startswith(p) for p in _CODEX_CLI_SYSTEM_PREFIXES):
             continue
-        first_ai_line = stripped
-        break  # 첫 비-시스템 줄만 평가
+        ai_lines.append(stripped)
+    # AI 출력이 없으면 INVALID.
+    if not ai_lines:
+        return {"status": "INVALID", "verdict": "", "reject_reason": ""}
+    # 계약 규정: 비-시스템 AI 출력은 정확히 1줄이어야 한다.
+    # APPROVE_TO_USER 뒤 추가 줄이 있으면 INVALID (contract "한 줄" 위반).
+    # REJECT - <사유>는 멀티라인 사유를 허용하기 위해 ai_lines[0]만으로 형식 검사.
+    first_ai_line = ai_lines[0]
     if first_ai_line == "APPROVE_TO_USER":
+        if len(ai_lines) > 1:
+            # APPROVE_TO_USER 뒤 추가 AI 출력 → INVALID (계약 "정확히 한 줄" 위반)
+            return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
         return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
     reject_match = re.match(r"^REJECT\s*-\s*(.+)$", first_ai_line, re.DOTALL)
     if reject_match:
+        # REJECT는 사유가 여러 줄일 수 있으므로 첫 줄만으로 판정 (사유 원문은 first_ai_line)
         return {
             "status": "REJECTED",
             "verdict": first_ai_line,
