@@ -1,0 +1,40 @@
+{
+  "pipeline_id": "BUG-20260627-B221",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [".claude/hooks/codex_user_acceptance_review.py"],
+      "affected_functions": ["codex_user_acceptance_review.call_codex_cli"]
+    },
+    {
+      "id": "MT-2",
+      "files": [".claude/hooks/codex_user_acceptance_review.py"],
+      "affected_functions": ["codex_user_acceptance_review.main"]
+    },
+    {
+      "id": "MT-3",
+      "files": [".claude/hooks/codex_user_acceptance_review.py"],
+      "affected_functions": ["codex_user_acceptance_review._check_stale_processing (신규)"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["tests/test_codex_review_loop_B221.py"],
+      "affected_functions": ["tests/test_codex_review_loop_B221 — E2E approve flow"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["tests/test_codex_review_loop_B221.py"],
+      "affected_functions": ["tests/test_codex_review_loop_B221 — Codex failure cases"]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/oracles/BUG-20260627-B221/normal_approve/input.json",
+        "tests/oracles/BUG-20260627-B221/normal_approve/expected.json",
+        "tests/oracles/BUG-20260627-B221/edge_codex_timeout/input.json",
+        "tests/oracles/BUG-20260627-B221/edge_codex_timeout/expected.json"
+      ],
+      "affected_functions": ["oracle files"]
+    }
+  ]
+}
