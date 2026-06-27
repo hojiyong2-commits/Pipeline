@@ -225,3 +225,130 @@ def test_agent_md_rule():
     assert "CODEX 검토 필요" in md
     # 승인 요청문을 직접 작성/재구성하지 말라는 규칙 존재
     assert "재구성" in md or "직접 승인 요청문" in md or "직접 작성" in md
+
+
+class TestCodexReviewGate:
+    """pipeline.py _check_codex_review_gate pipeline_id 불일치 BLOCKED 테스트."""
+
+    def test_pipeline_id_mismatch_blocked(self, tmp_path):
+        """loop_state pipeline_id가 현재 pipeline_id와 다르면 codex_review_stale BLOCKED."""
+        import importlib.util
+        import json
+        import os
+        import unittest.mock as mock
+        # _check_codex_review_gate를 직접 호출하기 위해 pipeline.py를 importlib로 로드
+        project_root = Path(__file__).parent.parent
+        pl_path = project_root / "pipeline.py"
+        spec = importlib.util.spec_from_file_location("pipeline_mod", str(pl_path))
+        mod = importlib.util.module_from_spec(spec)
+        # pipeline.py의 state 경로를 tmp_path로 격리
+        with mock.patch.dict(os.environ, {"PIPELINE_STATE_PATH": str(tmp_path / "state.json")}):
+            spec.loader.exec_module(mod)
+            # loop_state 파일을 이전 pipeline_id로 작성
+            pipeline_dir = tmp_path / ".pipeline"
+            pipeline_dir.mkdir(parents=True, exist_ok=True)
+            loop_state = {
+                "pipeline_id": "IMP-20260600-XXXX",  # 이전 파이프라인
+                "status": "APPROVED",
+                "pr_head_sha": "abc123",
+                "packet_sha256": "abc456",
+                "pr_body_sha256": "abc789",
+                "accept_code": "ACCEPT-IMP-20260600-XXXX",
+            }
+            loop_state_path = pipeline_dir / "codex_review_loop_state.json"
+            loop_state_path.write_text(json.dumps(loop_state), encoding="utf-8")
+            # 현재 파이프라인 ID로 검사
+            result = mod._check_codex_review_gate("IMP-20260627-3907", {})
+            assert result["status"] == "BLOCKED"
+            assert result["failure_code"] == "codex_review_stale"
+
+    def test_same_pipeline_id_continues(self, tmp_path):
+        """loop_state pipeline_id가 현재 pipeline_id와 같으면 stale BLOCKED하지 않음 (head_sha 검사까지 진행)."""
+        import importlib.util
+        import json
+        import os
+        import unittest.mock as mock
+        project_root = Path(__file__).parent.parent
+        pl_path = project_root / "pipeline.py"
+        spec = importlib.util.spec_from_file_location("pipeline_mod2", str(pl_path))
+        mod = importlib.util.module_from_spec(spec)
+        with mock.patch.dict(os.environ, {"PIPELINE_STATE_PATH": str(tmp_path / "state.json")}):
+            spec.loader.exec_module(mod)
+            pipeline_dir = tmp_path / ".pipeline"
+            pipeline_dir.mkdir(parents=True, exist_ok=True)
+            loop_state = {
+                "pipeline_id": "IMP-20260627-3907",
+                "status": "APPROVED",
+                "pr_head_sha": "abc123",
+                "packet_sha256": "abc456",
+                "pr_body_sha256": "abc789",
+                "accept_code": "ACCEPT-IMP-20260627-3907",
+            }
+            loop_state_path = pipeline_dir / "codex_review_loop_state.json"
+            loop_state_path.write_text(json.dumps(loop_state), encoding="utf-8")
+            # pipeline_id는 같으므로 stale 차단 없이 head_sha 검사로 진행됨
+            # (gh CLI 없으면 head_sha 검사에서 BLOCKED 발생 — 이는 정상)
+            result = mod._check_codex_review_gate("IMP-20260627-3907", {})
+            # pipeline_id 일치하므로 codex_review_stale이 pipeline_id 불일치가 아닌 다른 이유여야 함
+            if result["status"] == "BLOCKED":
+                assert result["failure_code"] != "codex_review_stale" or "pipeline_id" not in result.get("message", "").lower()
+            # 또는 PASS (gh CLI가 동작하면)
+
+
+class TestHookFailedStateRecording:
+    """hook 실패 시 FAILED 상태가 loop_state.json에 기록되는지 검증."""
+
+    def test_failed_state_recorded_on_codex_call_failure(self, tmp_path):
+        """Codex 호출 실패 시 loop_state.json에 FAILED 상태가 기록된다."""
+        import importlib.util
+        import json
+
+        hook_path = Path(__file__).parent.parent / ".claude" / "hooks" / "codex_user_acceptance_review.py"
+        spec = importlib.util.spec_from_file_location("hook_mod", str(hook_path))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        pipeline_dir = tmp_path / ".pipeline"
+        pipeline_dir.mkdir(parents=True, exist_ok=True)
+        state_path = pipeline_dir / "codex_review_loop_state.json"
+
+        mod._record_failed_state(state_path, "IMP-20260627-3907", "codex_call_failed", "test error")
+
+        assert state_path.exists()
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        assert data["status"] == "FAILED"
+        assert data["pipeline_id"] == "IMP-20260627-3907"
+        assert data["failure_code"] == "codex_call_failed"
+        assert "failed_at" in data
+
+    def test_failed_state_not_overwrite_approved(self, tmp_path):
+        """APPROVED 상태(같은 pipeline_id)는 FAILED로 덮어쓰지 않는다."""
+        import importlib.util
+        import json
+
+        hook_path = Path(__file__).parent.parent / ".claude" / "hooks" / "codex_user_acceptance_review.py"
+        spec = importlib.util.spec_from_file_location("hook_mod2", str(hook_path))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        pipeline_dir = tmp_path / ".pipeline"
+        pipeline_dir.mkdir(parents=True, exist_ok=True)
+        state_path = pipeline_dir / "codex_review_loop_state.json"
+
+        # APPROVED 상태를 먼저 기록
+        existing = {
+            "pipeline_id": "IMP-20260627-3907",
+            "status": "APPROVED",
+            "pr_head_sha": "abc",
+            "packet_sha256": "def",
+            "pr_body_sha256": "ghi",
+            "accept_code": "ACCEPT-IMP-20260627-3907",
+            "approved_at": "2026-06-27T00:00:00Z"
+        }
+        state_path.write_text(json.dumps(existing), encoding="utf-8")
+
+        # FAILED 기록 시도 — APPROVED이므로 덮어쓰면 안 됨
+        mod._record_failed_state(state_path, "IMP-20260627-3907", "codex_call_failed", "test")
+
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        assert data["status"] == "APPROVED"  # 덮어쓰지 않음

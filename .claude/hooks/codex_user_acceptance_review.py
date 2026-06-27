@@ -882,6 +882,60 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _write_hook_log(pipeline_dir: Path, entry: Dict[str, Any]) -> None:
+    """hook 실행 로그를 .pipeline/codex_review_loop_hook_log.json에 JSONL 형식으로 추가.
+
+    파일이 있으면 기존 내용에 append, 없으면 새로 생성한다. 파일명은 `.json`이지만
+    내용은 한 줄에 하나의 JSON 객체가 쌓이는 JSONL 형식이다.
+
+    Args:
+        pipeline_dir: .pipeline 디렉토리 경로.
+        entry: 기록할 로그 dict (started_at/pipeline_id/status/failure_code/message 등).
+    """
+    try:
+        log_path = Path(pipeline_dir) / "codex_review_loop_hook_log.json"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(log_path), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # hook_log 기록 실패는 hook 전체를 실패시키지 않음
+
+
+def _record_failed_state(
+    state_path: Path, pipeline_id: str, failure_code: str, message: str
+) -> None:
+    """loop_state에 FAILED 상태를 기록한다. 쓰기 실패는 조용히 무시.
+
+    이미 같은 pipeline_id로 APPROVED인 상태는 FAILED로 덮어쓰지 않는다.
+
+    Args:
+        state_path: codex_review_loop_state.json 경로.
+        pipeline_id: 현재 파이프라인 ID.
+        failure_code: 실패 분류 코드.
+        message: 실패 상세 메시지.
+    """
+    try:
+        existing = _load_loop_state(state_path)
+        # 기존 APPROVED 상태를 덮어쓰지 않음 — APPROVED이면 FAILED 미기록
+        if (
+            existing.get("status") == "APPROVED"
+            and existing.get("pipeline_id") == pipeline_id
+        ):
+            return
+        _record_state(
+            state_path,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": failure_code,
+                "message": message,
+                "failed_at": _now_iso(),
+            },
+        )
+    except Exception:
+        pass  # 기록 실패는 hook 실패의 이유가 되지 않음
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """hook 진입점. transcript에서 승인 블록 탐지 후 Codex 검토를 수행.
 
@@ -932,10 +986,30 @@ def main(argv: Optional[List[str]] = None) -> int:
     pipeline_dir = _project_pipeline_dir()
     state_path = pipeline_dir / _LOOP_STATE_FILENAME
 
+    # hook 진입 즉시 관찰 가능한 RUNNING 로그를 남긴다 (fail-closed 종료도 추적 가능).
+    _write_hook_log(
+        pipeline_dir,
+        {
+            "started_at": _now_iso(),
+            "pipeline_id": pipeline_id,
+            "status": "RUNNING",
+        },
+    )
+
     # --- fail-closed 영역 시작 ---
     try:
         head_sha = _get_pr_head_sha(pr_url)
     except RuntimeError as e:
+        _record_failed_state(state_path, pipeline_id, "pr_head_sha_failed", str(e))
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "pr_head_sha_failed",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] PR head SHA 조회 실패 (fail-closed): {e}",
             file=sys.stderr,
@@ -949,6 +1023,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         packet = build_review_packet(pr_url, block["accept_code"], head_sha)
     except (RuntimeError, TypeError, ValueError) as e:
+        _record_failed_state(
+            state_path, pipeline_id, "packet_collection_failed", str(e)
+        )
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "packet_collection_failed",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] PR packet 수집 실패 (fail-closed): {e}",
             file=sys.stderr,
@@ -966,6 +1052,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         packet_sha256 = _human_acceptance_packet_sha256(packet)
     except RuntimeError as e:
+        _record_failed_state(state_path, pipeline_id, "packet_sha256_failed", str(e))
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "packet_sha256_failed",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] acceptance packet SHA 계산 실패 (fail-closed): {e}",
             file=sys.stderr,
@@ -981,6 +1077,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         prompt = _build_codex_prompt(packet)
         verdict = call_codex_cli(prompt)
     except (RuntimeError, TypeError, ValueError) as e:
+        _record_failed_state(state_path, pipeline_id, "codex_call_failed", str(e))
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "codex_call_failed",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] Codex 호출 실패 (fail-closed): {e}", file=sys.stderr
         )
@@ -1005,6 +1111,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         outcome = process_verdict(verdict, pipeline_id, pr_url, reject_count)
     except (TypeError, ValueError) as e:
+        _record_failed_state(
+            state_path, pipeline_id, "verdict_format_invalid", str(e)
+        )
+        _write_hook_log(
+            pipeline_dir,
+            {
+                "pipeline_id": pipeline_id,
+                "status": "FAILED",
+                "failure_code": "verdict_format_invalid",
+                "message": str(e),
+            },
+        )
         print(
             f"[CODEX REVIEW] Codex 응답 형식 위반 (fail-closed): {e}",
             file=sys.stderr,
