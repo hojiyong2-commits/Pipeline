@@ -1285,5 +1285,159 @@ def test_tc17_windows_path_normalization() -> None:
     assert _is_codex_critical_file(".gitattributes") is True
 
 
+# ---------------------------------------------------------------------------
+# TC-18: gates codex-review E2E — critical file이 budget 초과로 excluded되면
+#        codex_review_diff_incomplete로 BLOCKED (실제 CLI subprocess 경로)
+# ---------------------------------------------------------------------------
+
+def _write_fake_git_tc18(target_dir: Path) -> None:
+    """TC-18용 fake git shim 생성. --name-only → critical file 반환, per-file diff → 거대 patch.
+
+    `gates codex-review`의 git fallback 경로(`git diff origin/main...HEAD --name-only`)와
+    per-file patch 수집(`git diff origin/main...HEAD -- <file>`)을 가로채어,
+    .claude/settings.json 한 파일이 DIFF_BUDGET(250000자)을 초과하는 patch를 갖도록 한다.
+
+    pipeline.py는 `subprocess.run(["git", "diff", ...])`를 raw list로 호출한다. Windows의
+    CreateProcess는 PATHEXT(.BAT/.CMD)를 따르지 않고 `git`에 `.exe`만 append하여 실제
+    git.exe를 우선 선택하므로, .bat/.cmd 셰임으로는 가로챌 수 없다. 따라서 Windows에서는
+    sys.executable(Python 인터프리터)을 `git.exe`로 복사해 진짜 실행 파일을 만들고,
+    PYTHONPATH로 주입할 sitecustomize.py가 인터프리터 시작 시 sys.executable basename이
+    "git"일 때만 가로채 가짜 출력을 내고 종료한다. (pipeline.py 본체는 basename이 "python"
+    이므로 영향 없음.) POSIX에서는 확장자 문제가 없으므로 bare `git` 셸 스크립트를 둔다.
+
+    Args:
+        target_dir: shim을 둘 디렉토리.
+    Raises:
+        TypeError: target_dir이 None인 경우.
+    """
+    if target_dir is None:
+        raise TypeError("target_dir must not be None")
+    import shutil  # 로컬 import — 기존 import 블록 무수정 유지
+    target_dir.mkdir(parents=True, exist_ok=True)
+    # 251000자짜리 패치 (budget 250000자 초과)
+    big_patch = "+" + "x" * 251000
+    if sys.platform == "win32":
+        # 진짜 git.exe (Python 인터프리터 복사) + sitecustomize 가로채기.
+        fake_git_exe = target_dir / "git.exe"
+        shutil.copy(sys.executable, fake_git_exe)
+        sitecustomize = target_dir / "sitecustomize.py"
+        sitecustomize.write_text(
+            "import sys, os\n"
+            "# git.exe로 호출됐을 때만 가로챈다 (pipeline.py 본체는 python이므로 무시).\n"
+            "if os.path.splitext(os.path.basename(sys.executable))[0].lower() == 'git':\n"
+            "    _args = sys.argv[1:]\n"
+            "    if '--name-only' in _args:\n"
+            "        print('.claude/settings.json')\n"
+            "    elif '--' in _args:\n"
+            f"        print({repr(big_patch)})\n"
+            "    sys.stdout.flush()\n"
+            "    os._exit(0)\n",
+            encoding="utf-8",
+        )
+    else:
+        py_shim = target_dir / "_git_tc18_shim.py"
+        py_shim.write_text(
+            "import sys, io\n"
+            "sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')\n"
+            f"BIG_PATCH = {repr(big_patch)}\n"
+            "args = sys.argv[1:]\n"
+            "# --name-only 모드: 변경 파일 목록 반환\n"
+            "if '--name-only' in args:\n"
+            "    print('.claude/settings.json')\n"
+            "    sys.exit(0)\n"
+            "# per-file diff 모드: -- <file> 형태\n"
+            "if '--' in args:\n"
+            "    print(BIG_PATCH)\n"
+            "    sys.exit(0)\n"
+            "# 그 외: 빈 출력\n"
+            "sys.exit(0)\n",
+            encoding="utf-8",
+        )
+        sh = target_dir / "git"
+        sh.write_text(
+            f'#!/bin/sh\n"{sys.executable}" "{py_shim}" "$@"\n',
+            encoding="utf-8",
+        )
+        sh.chmod(sh.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def test_tc18_critical_file_excluded_e2e_blocked(tmp_path: Path) -> None:
+    """gates codex-review E2E — .claude/settings.json이 budget 초과로 excluded → codex_review_diff_incomplete BLOCKED.
+
+    BUG-20260628-1AAC REJECT-2 회귀 테스트:
+    - TC-16/TC-17은 _is_codex_critical_file() 단위 테스트만 있음.
+    - 이 테스트는 실제 `gates codex-review` CLI subprocess 경로에서
+      critical file(.claude/settings.json)이 excluded_files에 들어갈 때
+      codex_review_diff_incomplete로 BLOCKED되고 codex_review_result.json에
+      APPROVED가 기록되지 않는지 검증한다.
+
+    검증 흐름:
+    1. fake git shim: --name-only → '.claude/settings.json' 반환
+                     per-file diff → 251000자 패치 반환 (DIFF_BUDGET=250000 초과)
+    2. fake gh: changed_files를 지원하지 않으므로 None 반환 → git fallback 트리거
+    3. .claude/settings.json이 DIFF_BUDGET 초과 → excluded_files에 포함
+    4. _is_codex_critical_file('.claude/settings.json') == True → BLOCKED
+    5. assert exit code != 0, codex_review_diff_incomplete in output
+    6. assert codex_review_result.json 없거나 status != APPROVED
+
+    PIPELINE_STATE_PATH isolation + final_state assertion 포함.
+    """
+    state_file = tmp_path / "state.json"
+    pid = "IMP-20260627-3BB6"
+    write_min_state(state_file, pid)
+
+    # fake codex shim (APPROVED verdict — budget 차단이 먼저 발생해야 함)
+    shim_dir = tmp_path / "shim"
+    make_fake_codex(shim_dir, "APPROVE_TO_USER")
+
+    # fake git shim (budget 초과 + critical file 반환)
+    git_shim_dir = tmp_path / "git_shim"
+    git_shim_dir.mkdir(parents=True, exist_ok=True)
+    _write_fake_git_tc18(git_shim_dir)
+
+    # PATH: fake git + fake codex 모두 주입 (fake git을 맨 앞에 두어 literal git 가로채기)
+    combined_path = (
+        str(git_shim_dir)
+        + os.pathsep
+        + str(shim_dir)
+        + os.pathsep
+        + os.environ.get("PATH", "")
+    )
+
+    env = make_env(state_file, extra_path=shim_dir)
+    env["PATH"] = combined_path
+    # Windows: fake git.exe(Python 복사)가 시작 시 sitecustomize.py를 import하도록
+    # PYTHONPATH에 git_shim_dir를 주입한다. pipeline.py 본체는 sys.executable basename이
+    # "python"이므로 sitecustomize 가로채기에 영향받지 않는다. POSIX는 bare git 스크립트로
+    # 동작하므로 PYTHONPATH 주입이 불필요하다.
+    if sys.platform == "win32":
+        env["PYTHONPATH"] = str(git_shim_dir) + os.pathsep + env.get("PYTHONPATH", "")
+
+    # fake packet (packet 검증 통과용)
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_bytes(
+        "[dummy-packet]\npipeline_id: IMP-20260627-3BB6\npr_head_sha: \n".encode("utf-8")
+    )
+
+    r = run_cli(["gates", "codex-review"], env=env, cwd=tmp_path)
+
+    assert r.returncode != 0, (
+        f"critical file이 excluded됐을 때 exit 1(BLOCKED)이어야 하지만 exit 0 반환\n"
+        f"stdout={r.stdout}\nstderr={r.stderr}"
+    )
+    combined_out = r.stdout + r.stderr
+    assert "codex_review_diff_incomplete" in combined_out, (
+        f"expected codex_review_diff_incomplete in output\n{combined_out}"
+    )
+
+    # final_state: codex_review_result.json이 APPROVED로 기록되면 안 됨
+    result_file = codex_result_path(state_file)
+    if result_file.exists():
+        final_state = json.loads(result_file.read_text(encoding="utf-8"))
+        assert final_state.get("status") != "APPROVED", (
+            f"critical file excluded 상황에서 APPROVED로 기록되면 안 됨: {final_state}"
+        )
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-x", "-q"]))

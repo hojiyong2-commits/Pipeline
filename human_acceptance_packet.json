@@ -1,0 +1,373 @@
+{
+  "schema_version": 1,
+  "packet_type": "final_acceptance_evidence",
+  "pipeline_id": "BUG-20260628-1AAC",
+  "generated_at": "2026-06-28T08:08:16Z",
+  "pr": {
+    "url": "https://github.com/hojiyong2-commits/Pipeline/pull/780",
+    "number": "780",
+    "head_sha": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+    "base_branch": "main",
+    "head_branch": ""
+  },
+  "github_actions": {
+    "run_id": "28315085388",
+    "run_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/28315085388",
+    "status": "",
+    "head_sha": "7c86b730e1b051a913266b7cbbe4d115ff370763"
+  },
+  "changed_files": [
+    ".claude/agents/pipeline-manager-agent.md",
+    ".claude/codex_review_contract.md",
+    ".claude/commands/task.md",
+    ".claude/hooks/codex-user-acceptance-review.ps1",
+    ".claude/hooks/codex_user_acceptance_review.py",
+    ".claude/settings.json",
+    "pipeline.py",
+    "pyproject.toml",
+    "tests/e2e/test_codex_review_gate_3bb6.py",
+    "tests/e2e/test_real_cli_paths.py",
+    "tests/oracles/BUG-20260628-9B39/edge_info_prefix_invalid/expected.json",
+    "tests/oracles/BUG-20260628-9B39/edge_info_prefix_invalid/input.json",
+    "tests/oracles/BUG-20260628-9B39/exception_trustroot_excluded_blocked/expected.json",
+    "tests/oracles/BUG-20260628-9B39/exception_trustroot_excluded_blocked/input.json",
+    "tests/oracles/BUG-20260628-9B39/normal_prbody_masked/expected.json",
+    "tests/oracles/BUG-20260628-9B39/normal_prbody_masked/input.json",
+    "tests/oracles/IMP-20260625-CD3C/edge_01/actual.json",
+    "tests/oracles/IMP-20260625-CD3C/edge_01/expected.json",
+    "tests/oracles/IMP-20260625-CD3C/edge_01/input.json",
+    "tests/oracles/IMP-20260625-CD3C/normal_01/actual.json",
+    "tests/oracles/IMP-20260625-CD3C/normal_01/expected.json",
+    "tests/oracles/IMP-20260625-CD3C/normal_01/input.json",
+    "tests/oracles/IMP-20260625-CD3C/settings_01/actual.json",
+    "tests/oracles/IMP-20260625-CD3C/settings_01/expected.json",
+    "tests/oracles/IMP-20260627-3BB6/edge_codex_reject/expected.json",
+    "tests/oracles/IMP-20260627-3BB6/edge_codex_reject/input.json",
+    "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json",
+    "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json",
+    "tests/oracles/IMP-20260627-3BB6/exception_missing_review/expected.json",
+    "tests/oracles/IMP-20260627-3BB6/exception_missing_review/input.json",
+    "tests/oracles/IMP-20260627-3BB6/normal_approve/expected.json",
+    "tests/oracles/IMP-20260627-3BB6/normal_approve/input.json",
+    "tests/test_acceptance_request_format_069a.py",
+    "tests/test_codex_review_hook_cd3c.py",
+    "tests/test_codex_review_loop_4121.py"
+  ],
+  "changed_files_count": 35,
+  "gates": {
+    "technical": "PASS",
+    "oracle": "PASS",
+    "github_ci": "PASS",
+    "acceptance": "PENDING"
+  },
+  "requirements": [
+    {
+      "ac_id": "AC-1",
+      "summary": "_parse_codex_verdict이 INFO:/WARNING: prefix로 시작하는 줄을 first_ai_line으로 처리하여 APPROVE_TO_USER가 이후에 나와도 INVALID를 반환한다",
+      "linked_mt": [
+        "MT-1"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-2",
+      "summary": "_cmd_gates_codex_review가 pr_body를 Codex 프롬프트에 포함하기 전에 ACCEPT-* 패턴을 [ACCEPT코드 마스킹]으로 치환한다",
+      "linked_mt": [
+        "MT-2"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-3",
+      "summary": "CODEX_REVIEW_CRITICAL_FILES SSoT 상수가 정의되고, critical 파일이 excluded_files에 포함되면 codex_review_diff_incomplete로 BLOCKED된다",
+      "linked_mt": [
+        "MT-3"
+      ],
+      "status": "PASS",
+      "evidence": []
+    }
+  ],
+  "requirements_summary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0
+  },
+  "oracle_summary": {
+    "status": "PASS",
+    "case_count": 5,
+    "passed_count": 5,
+    "failed_count": 0
+  },
+  "known_failures": [],
+  "warnings": [],
+  "acceptance": {
+    "code": "ACCEPT-BUG-20260628-1AAC",
+    "reject_example": "REJECT-BUG-20260628-1AAC: 이유",
+    "nonce": "CBALZIMS",
+    "request_id": "54fb98ce",
+    "status": "PENDING",
+    "display_status": "PENDING"
+  },
+  "artifacts": {
+    "human_packet_md": "human_acceptance_packet.md",
+    "verification_json": "human_acceptance_packet.json",
+    "cleanup_manifest": null
+  },
+  "evidence_integrity": {
+    "status": "PASS",
+    "protected_evidence_count": 6,
+    "tracked_count": 6,
+    "pr_included_count": 6,
+    "untracked_protected": [],
+    "orphan_oracle_warnings": [],
+    "cleanup_only_artifacts": [],
+    "blockers": []
+  },
+  "workspace_hygiene": {
+    "status": "WARN",
+    "blocking_items": [],
+    "cleanup_only_items": [
+      "build_report.xml",
+      ".claude/worktrees"
+    ],
+    "protected_evidence_count": 0,
+    "tracked_oracle_count": 0,
+    "untracked_oracle_count": 0,
+    "pr_included_protected_count": 6,
+    "cleanup_command": "Remove-Item \"build_report.xml\" \".claude/worktrees\"",
+    "checked_at": "2026-06-28T07:27:51Z",
+    "pr_runtime_state_leak": []
+  },
+  "workspace_hygiene_summary": {
+    "status": "WARN",
+    "scratch_root": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.pipeline\\runs\\BUG-20260628-1AAC\\scratch",
+    "cleanup_only_count": 2,
+    "blocking_count": 0,
+    "permission_denied_count": 0,
+    "runtime_state_leak_count": 0,
+    "cleanup_command": "Remove-Item \"build_report.xml\" \".claude/worktrees\""
+  },
+  "post_complete_cleanup": {
+    "workspace_readiness": "unknown",
+    "ready_for_next_task": null,
+    "removed_count": 0,
+    "deferred_count": 0,
+    "unknown_count": 0
+  },
+  "acceptance_target": {
+    "description": "사용자가 확인해야 하는 실제 구현 기준점 (marker PR 아님)",
+    "repository": "hojiyong2-commits/Pipeline",
+    "acceptance_pr": {
+      "number": "#780",
+      "head_sha": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+      "title": "[BUG-20260628-1AAC] Codex Review gate 결함 3건 수정",
+      "changed_files": [
+        ".claude/agents/pipeline-manager-agent.md",
+        ".claude/codex_review_contract.md",
+        ".claude/commands/task.md",
+        ".claude/hooks/codex-user-acceptance-review.ps1",
+        ".claude/hooks/codex_user_acceptance_review.py",
+        ".claude/settings.json",
+        "pipeline.py",
+        "pyproject.toml",
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        "tests/e2e/test_real_cli_paths.py",
+        "tests/oracles/BUG-20260628-9B39/edge_info_prefix_invalid/expected.json",
+        "tests/oracles/BUG-20260628-9B39/edge_info_prefix_invalid/input.json",
+        "tests/oracles/BUG-20260628-9B39/exception_trustroot_excluded_blocked/expected.json",
+        "tests/oracles/BUG-20260628-9B39/exception_trustroot_excluded_blocked/input.json",
+        "tests/oracles/BUG-20260628-9B39/normal_prbody_masked/expected.json",
+        "tests/oracles/BUG-20260628-9B39/normal_prbody_masked/input.json",
+        "tests/oracles/IMP-20260625-CD3C/edge_01/actual.json",
+        "tests/oracles/IMP-20260625-CD3C/edge_01/expected.json",
+        "tests/oracles/IMP-20260625-CD3C/edge_01/input.json",
+        "tests/oracles/IMP-20260625-CD3C/normal_01/actual.json",
+        "tests/oracles/IMP-20260625-CD3C/normal_01/expected.json",
+        "tests/oracles/IMP-20260625-CD3C/normal_01/input.json",
+        "tests/oracles/IMP-20260625-CD3C/settings_01/actual.json",
+        "tests/oracles/IMP-20260625-CD3C/settings_01/expected.json",
+        "tests/oracles/IMP-20260627-3BB6/edge_codex_reject/expected.json",
+        "tests/oracles/IMP-20260627-3BB6/edge_codex_reject/input.json",
+        "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json",
+        "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json",
+        "tests/oracles/IMP-20260627-3BB6/exception_missing_review/expected.json",
+        "tests/oracles/IMP-20260627-3BB6/exception_missing_review/input.json",
+        "tests/oracles/IMP-20260627-3BB6/normal_approve/expected.json",
+        "tests/oracles/IMP-20260627-3BB6/normal_approve/input.json",
+        "tests/test_acceptance_request_format_069a.py",
+        "tests/test_codex_review_hook_cd3c.py",
+        "tests/test_codex_review_loop_4121.py"
+      ],
+      "note": "이 PR이 User Acceptance 승인 대상입니다. changed_files 목록이 사용자가 최종 확인하는 변경 범위입니다."
+    },
+    "acceptance_pr_note": "acceptance_pr은 현재 User Acceptance 승인 대상인 오픈 PR입니다. impl_prs(이력)와 구분하세요.",
+    "target_main_commit": "c43e9a5cfb6af500039d2d93736ddeffcdd6b8da",
+    "target_commit": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+    "target_commit_note": "PR head SHA — origin/main이 아닌 현재 PR의 최신 commit",
+    "impl_prs": [],
+    "impl_prs_note": "pipeline_id로 검색한 이미 머지된 PR 이력입니다. 승인 대상은 acceptance_pr을 확인하세요.",
+    "changed_files": [
+      ".claude/agents/pipeline-manager-agent.md",
+      ".claude/codex_review_contract.md",
+      ".claude/commands/task.md",
+      ".claude/hooks/codex-user-acceptance-review.ps1",
+      ".claude/hooks/codex_user_acceptance_review.py",
+      ".claude/settings.json",
+      "pipeline.py",
+      "pyproject.toml",
+      "tests/e2e/test_codex_review_gate_3bb6.py",
+      "tests/e2e/test_real_cli_paths.py",
+      "tests/oracles/BUG-20260628-9B39/edge_info_prefix_invalid/expected.json",
+      "tests/oracles/BUG-20260628-9B39/edge_info_prefix_invalid/input.json",
+      "tests/oracles/BUG-20260628-9B39/exception_trustroot_excluded_blocked/expected.json",
+      "tests/oracles/BUG-20260628-9B39/exception_trustroot_excluded_blocked/input.json",
+      "tests/oracles/BUG-20260628-9B39/normal_prbody_masked/expected.json",
+      "tests/oracles/BUG-20260628-9B39/normal_prbody_masked/input.json",
+      "tests/oracles/IMP-20260625-CD3C/edge_01/actual.json",
+      "tests/oracles/IMP-20260625-CD3C/edge_01/expected.json",
+      "tests/oracles/IMP-20260625-CD3C/edge_01/input.json",
+      "tests/oracles/IMP-20260625-CD3C/normal_01/actual.json",
+      "tests/oracles/IMP-20260625-CD3C/normal_01/expected.json",
+      "tests/oracles/IMP-20260625-CD3C/normal_01/input.json",
+      "tests/oracles/IMP-20260625-CD3C/settings_01/actual.json",
+      "tests/oracles/IMP-20260625-CD3C/settings_01/expected.json",
+      "tests/oracles/IMP-20260627-3BB6/edge_codex_reject/expected.json",
+      "tests/oracles/IMP-20260627-3BB6/edge_codex_reject/input.json",
+      "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json",
+      "tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json",
+      "tests/oracles/IMP-20260627-3BB6/exception_missing_review/expected.json",
+      "tests/oracles/IMP-20260627-3BB6/exception_missing_review/input.json",
+      "tests/oracles/IMP-20260627-3BB6/normal_approve/expected.json",
+      "tests/oracles/IMP-20260627-3BB6/normal_approve/input.json",
+      "tests/test_acceptance_request_format_069a.py",
+      "tests/test_codex_review_hook_cd3c.py",
+      "tests/test_codex_review_loop_4121.py"
+    ],
+    "oracle_evidence_files": [
+      {
+        "path": "tests\\oracles\\BUG-20260628-9B39\\normal_prbody_masked\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "b24b10035a940229a7bc1069eeb8801cf0ee588b4a36943acf17d7f2f91e11c0",
+        "target_blob_sha256": "b24b10035a940229a7bc1069eeb8801cf0ee588b4a36943acf17d7f2f91e11c0",
+        "target_commit": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260628-9B39\\normal_prbody_masked\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "79a3e8d14ce813ad8c26f10866c2aba1926ee47187041df3d8936c93bcb89249",
+        "target_blob_sha256": "79a3e8d14ce813ad8c26f10866c2aba1926ee47187041df3d8936c93bcb89249",
+        "target_commit": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260628-9B39\\edge_info_prefix_invalid\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "5130298de70472c4d4fd825162aa7b2a68ecbe4d3b6fa957892c73dcadba9114",
+        "target_blob_sha256": "5130298de70472c4d4fd825162aa7b2a68ecbe4d3b6fa957892c73dcadba9114",
+        "target_commit": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260628-9B39\\edge_info_prefix_invalid\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "0467fa2eb3be4ea6d493655122c2b3847f96938e88dd30a623347a81eeebf98e",
+        "target_blob_sha256": "0467fa2eb3be4ea6d493655122c2b3847f96938e88dd30a623347a81eeebf98e",
+        "target_commit": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260628-9B39\\exception_trustroot_excluded_blocked\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "f96cb7726b50ddebfb2c71fcd71381b60685b9cca328e456c3750d54ca1cb56f",
+        "target_blob_sha256": "f96cb7726b50ddebfb2c71fcd71381b60685b9cca328e456c3750d54ca1cb56f",
+        "target_commit": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\BUG-20260628-9B39\\exception_trustroot_excluded_blocked\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "f52ba4ad99fdd7313eeb4e5d0436041d029a2e9a8a609a6f1f079f60c579f816",
+        "target_blob_sha256": "f52ba4ad99fdd7313eeb4e5d0436041d029a2e9a8a609a6f1f079f60c579f816",
+        "target_commit": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+        "sha_match": true,
+        "status": "MATCH"
+      }
+    ],
+    "oracle_evidence_note": "oracle_evidence_files의 target_blob_sha256은 target_commit에서 git show로 추출한 blob SHA256입니다. inventory_sha256과 일치하면 sha_match=true, status=MATCH로 표시됩니다."
+  },
+  "blocked": false,
+  "blocked_reasons": [],
+  "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/780",
+  "pr_number": "780",
+  "pr_head_sha": "7c86b730e1b051a913266b7cbbe4d115ff370763",
+  "ci_run_id": "28315085388",
+  "actions_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/28315085388",
+  "gate_status": {
+    "technical": "PASS",
+    "oracle": "PASS",
+    "github_ci": "PASS",
+    "acceptance": "PENDING"
+  },
+  "structured_ac": [],
+  "ac_fulfillment_table": [
+    {
+      "ac_id": "AC-1",
+      "requirement": "_parse_codex_verdict이 INFO:/WARNING: prefix로 시작하는 줄을 first_ai_line으로 처리하여 APPROVE_TO_USER가 이후에 나와도 INVALID를 반환한다",
+      "linked_mt": [
+        "MT-1"
+      ],
+      "implementation_evidence": [
+        "MT-1: _CODEX_CLI_SYSTEM_PREFIXES 튜플에서 \"INFO: \"와 \"WARNING: \" 항목 제거 (pipeline.py:6761) — 이제 INFO:/WARNING: prefix 줄도 AI 출력으로 취급되어 _parse_codex_verdict가 형식 불일치 INVALID 반환",
+        "MT-1: test_tc14_info_prefix_invalid: 'INFO: 문제 없음\\nAPPROVE_TO_USER' 입력 시 gates codex-review exit 1 + codex_verdict_invalid 검증",
+        "MT-1: test_tc14b_info_prefix_unit: _parse_codex_verdict 단위 — INFO:/WARNING: prefix는 INVALID, 순수 APPROVE_TO_USER와 SUCCESS: 시스템 메시지는 APPROVED 회귀 검증"
+      ],
+      "verification": [
+        "MT-1: PASS — git diff 조회 실패(FileNotFoundError/TimeoutExpired/OSError/returncode!=0) 시 _die(codex_review_diff_unavailable) — placeholder '(diff 조회 실패)' 제거 확인"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-2",
+      "requirement": "_cmd_gates_codex_review가 pr_body를 Codex 프롬프트에 포함하기 전에 ACCEPT-* 패턴을 [ACCEPT코드 마스킹]으로 치환한다",
+      "linked_mt": [
+        "MT-2"
+      ],
+      "implementation_evidence": [
+        "MT-2: _cmd_gates_codex_review에서 pr_body[:5000]를 Codex 프롬프트에 삽입하기 전 re.sub(r'ACCEPT-[A-Z]+-\\d{8}-[0-9A-F]{4}', '[ACCEPT코드 마스킹]', ...)로 마스킹한 pr_body_masked 변수를 사용 (pipeline.py 프롬프트 구성부). pr_body_sha256은 마스킹 전 원본에서 계산되어 SHA 검증 무영향.",
+        "MT-2: test_tc15_prbody_accept_code_masked: PR body에 ACCEPT-IMP-...-A1B2 코드를 포함한 fake gh 주입 후 stdin 캡처로 원문 미노출 + '[ACCEPT코드 마스킹]' placeholder 포함 검증"
+      ],
+      "verification": [
+        "MT-2: PASS — pipeline._cmd_gates_codex_review에서 pr_body를 Codex 프롬프트에 포함하기 전 re.sub(ACCEPT-* 패턴, [ACCEPT코드 마스킹]) 치환 로직 구현 확인 — test_tc15_prbody_accept_code_masked P"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-3",
+      "requirement": "CODEX_REVIEW_CRITICAL_FILES SSoT 상수가 정의되고, critical 파일이 excluded_files에 포함되면 codex_review_diff_incomplete로 BLOCKED된다",
+      "linked_mt": [
+        "MT-3"
+      ],
+      "implementation_evidence": [
+        "MT-3: CODEX_REVIEW_CRITICAL_FILES SSoT 상수 신규 정의 (.claude/codex_review_contract.md, .claude/agents/, pipeline.py, CLAUDE.md, .github/workflows/) + _is_codex_critical_file() 판정 헬퍼 추가 (정확 경로/prefix/Windows 구분자 정규화 지원)",
+        "MT-3: _cmd_gates_codex_review에서 included_files 검증 직후 _excluded_critical = [p for p in excluded_files if _is_codex_critical_file(p)] 검사 추가 — trust-root 파일이 budget 초과로 제외되면 failure_code=codex_review_diff_incomplete로 _die(exit 1) BLOCKED",
+        "MT-3: test_tc16_critical_files_ssot_defined / test_tc16_trustroot_excluded_detection / test_tc16_excluded_critical_blocks: SSoT 상수 5개 검증, _is_codex_critical_file 정확/prefix/Windows/타입방어 검증, .claude/codex_review_contract.md가 excluded_critical로 탐지되어 BLOCKED 트리거됨 검증"
+      ],
+      "verification": [
+        "MT-3: PASS — CODEX_REVIEW_CRITICAL_FILES SSoT 상수 정의 확인 + _is_codex_critical_file() 헬퍼 구현 + critical 파일이 excluded_files에 포함 시 codex_review_diff_incomplete로 BLOCKED "
+      ],
+      "result": "PASS",
+      "user_visible": true
+    }
+  ],
+  "acceptance_code": "ACCEPT-BUG-20260628-1AAC"
+}
