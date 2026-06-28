@@ -685,14 +685,36 @@ def _write_gh_stub(stub_dir: Path, head_sha: str = "f52c" + "0" * 36) -> Path:
     """
     stub_dir.mkdir(parents=True, exist_ok=True)
     body_json = json.dumps(_FAKE_GH_PR_BODY_F52C)
+    pipeline_dir_json = json.dumps(PIPELINE_DIR)
+    packet_md_json = json.dumps(str(PIPELINE_ROOT / "human_acceptance_packet.md"))
+    # BUG-20260628-F52C REJECT-3(3차): gh pr edit는 Windows .bat 래퍼를 거치며 multi-line
+    # --body 인자가 잘리므로, edit 인자를 신뢰하지 않는다. 대신 .body 조회 시 pipeline이 디스크에
+    # 기록한 human_acceptance_packet.md를 읽어 _replace_pr_body_packet_block을 적용한 "publish 후
+    # 최종 PR body"를 결정적으로 반환한다. 이는 실제 gh가 publish 후 반환할 body와 동일하다.
+    # packet.md가 아직 없으면(=publish 전, codex-review 단계) 원본 body를 반환한다.
     py = stub_dir / "gh_stub_f52c.py"
     py.write_text(
         "import sys, io, json, os\n"
         'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
-        f"BODY = {body_json}\n"
+        f"sys.path.insert(0, {pipeline_dir_json})\n"
+        f"DEFAULT_BODY = {body_json}\n"
+        f"PACKET_MD = {packet_md_json}\n"
         f"HEAD_SHA = {json.dumps(head_sha)}\n"
+        "def _current_body():\n"
+        "    # publish가 디스크에 기록한 packet.md가 있으면 그 내용으로 FINAL_PACKET 블록을 교체한\n"
+        "    # 'publish 후 최종 body'를 반환한다(실제 gh pr view와 동일). 없으면 원본 body.\n"
+        "    try:\n"
+        '        with open(PACKET_MD, encoding="utf-8") as fh:\n'
+        "            packet = fh.read()\n"
+        "    except OSError:\n"
+        "        return DEFAULT_BODY\n"
+        "    try:\n"
+        "        import pipeline\n"
+        "        return pipeline._replace_pr_body_packet_block(DEFAULT_BODY, packet)\n"
+        "    except Exception:\n"
+        "        return DEFAULT_BODY\n"
         "args = sys.argv[1:]\n"
-        '# pr edit (PR body 갱신) — GH_STUB_FAIL_EDIT=1이면 실패.\n'
+        '# pr edit (PR body 갱신) — GH_STUB_FAIL_EDIT=1이면 실패. 성공 시 no-op(.body가 packet.md 기준).\n'
         'if "pr" in args and "edit" in args:\n'
         '    if os.environ.get("GH_STUB_FAIL_EDIT") == "1":\n'
         '        sys.stderr.write("stub: pr edit forced failure\\n"); sys.exit(1)\n'
@@ -714,8 +736,9 @@ def _write_gh_stub(stub_dir: Path, head_sha: str = "f52c" + "0" * 36) -> Path:
         'if "--jq" in args:\n'
         '    jq = args[args.index("--jq") + 1] if args.index("--jq") + 1 < len(args) else ""\n'
         '    if jq == ".body":\n'
-        '        sys.stdout.write(BODY)\n'
-        '        if not BODY.endswith("\\n"):\n'
+        '        _b = _current_body()\n'
+        '        sys.stdout.write(_b)\n'
+        '        if not _b.endswith("\\n"):\n'
         '            sys.stdout.write("\\n")\n'
         '        sys.exit(0)\n'
         '    if jq == ".headRefOid":\n'
@@ -731,7 +754,7 @@ def _write_gh_stub(stub_dir: Path, head_sha: str = "f52c" + "0" * 36) -> Path:
         '    print(""); sys.exit(0)\n'
         '# pr view --json <fields> (no jq) — 전체 객체 반환.\n'
         "print(json.dumps({\n"
-        '    "body": BODY, "number": 1, "headRefOid": HEAD_SHA,\n'
+        '    "body": _current_body(), "number": 1, "headRefOid": HEAD_SHA,\n'
         '    "isDraft": False, "state": "OPEN", "files": [],\n'
         '    "url": "https://github.com/test/repo/pull/1",\n'
         "}))\n"
@@ -957,14 +980,193 @@ def test_tc_publish_3way_sha_match(gh_publish_env):
     assert (PIPELINE_ROOT / "acceptance_request.json").exists(), (
         "publish 성공인데 acceptance_request.json 미생성"
     )
-    # acceptance_request.json의 pr_body_sha256 == sha256(stub PR body) 일치 확인.
+    # BUG-20260628-F52C REJECT-3(3차): acceptance_request.pr_body_sha256 ==
+    # codex_review_result.pr_body_sha256(= staged 최종 body SHA) 3자 일치 확인.
+    # publish가 PR body의 FINAL_PACKET 블록을 staged 본문으로 교체하므로, 최종 body SHA는
+    # 원본 stub body SHA가 아니라 codex가 기록한 staged 최종 body SHA와 같아야 한다.
     req = json.loads(
         (PIPELINE_ROOT / "acceptance_request.json").read_text(encoding="utf-8")
     )
-    expected_body_sha = _sha256_text(_FAKE_GH_PR_BODY_F52C)
-    assert req.get("pr_body_sha256") == expected_body_sha, (
-        f"acceptance_request pr_body_sha256 불일치: {req.get('pr_body_sha256')} != {expected_body_sha}"
+    cx_path = _codex_review_result_path_for(state_file)
+    cx_data = json.loads(cx_path.read_text(encoding="utf-8"))
+    codex_body_sha = cx_data.get("pr_body_sha256")
+    assert codex_body_sha, "codex_review_result.json에 pr_body_sha256 미기록"
+    assert req.get("pr_body_sha256") == codex_body_sha, (
+        "acceptance_request pr_body_sha256가 codex 기록 staged 최종 body SHA와 불일치: "
+        f"{req.get('pr_body_sha256')} != {codex_body_sha}"
     )
+    # staged 최종 body SHA는 원본 stub body SHA와 달라야 한다(블록 교체로 body가 바뀌므로).
+    assert codex_body_sha != _sha256_text(_FAKE_GH_PR_BODY_F52C), (
+        "staged 최종 body SHA가 원본 body SHA와 동일 — FINAL_PACKET 블록 교체가 반영되지 않음"
+    )
+
+
+# ---------------------------------------------------------------------------
+# BUG-20260628-F52C 3차 REJECT 재작업 — 3자 검증 복원 신규 TC (TC-NEW-1..4)
+#
+# 핵심 요구: codex_review_result.pr_body_sha256 == acceptance_request.pr_body_sha256
+#            == sha256(현재 PR body)의 3자 일치를 강제하고, staged SHA는 "publish 후 최종
+#            PR body"(= 현재 body + FINAL_PACKET 블록 교체) 기준으로 계산한다.
+# ---------------------------------------------------------------------------
+
+
+def test_tc_new_1_accept_blocked_without_codex_pr_body_sha(gh_publish_env):
+    """TC-NEW-1: codex_review_result.json에 pr_body_sha256 누락 시 gates accept BLOCKED.
+
+    request-accept로 정상 publish까지 도달시킨 뒤, codex_review_result.json의 pr_body_sha256만
+    제거하고 gates accept를 실행하면 failure_code=codex_review_stale로 BLOCKED여야 한다.
+    """
+    env, state_file, evidence = gh_publish_env
+    # 1) codex approve + request-accept publish (정상 경로).
+    r_cx = _run_pipeline_env(
+        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
+        env=env,
+    )
+    assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
+    r_ra = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env,
+    )
+    assert r_ra.returncode == 0, (
+        f"request-accept 정상 경로 실패\n{r_ra.stdout}{r_ra.stderr}"
+    )
+    # 2) gates accept의 1차 게이트(_check_codex_review_gate, codex_review_loop_state.json)를
+    #    통과시키기 위해 acceptance_request.json 값과 일치하는 loop_state(APPROVED)를 작성한다.
+    #    그래야 2차 게이트(codex_review_result.json의 pr_body_sha256 검사)에 도달한다.
+    req = json.loads(
+        (PIPELINE_ROOT / "acceptance_request.json").read_text(encoding="utf-8")
+    )
+    nonce = req.get("nonce")
+    loop_dir = state_file.resolve().parent / ".pipeline"
+    loop_dir.mkdir(parents=True, exist_ok=True)
+    (loop_dir / "codex_review_loop_state.json").write_text(
+        json.dumps({
+            "status": "APPROVED",
+            "pipeline_id": PIPELINE_ID,
+            "pr_head_sha": "f52c" + "0" * 36,  # gh stub headRefOid와 일치
+            "packet_sha256": req.get("packet_sha256"),
+            "pr_body_sha256": req.get("pr_body_sha256"),
+            "accept_code": f"ACCEPT-{PIPELINE_ID}",
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    # 3) codex_review_result.json에서 pr_body_sha256 제거 (2차 게이트 fail-closed 유발).
+    cx_path = _codex_review_result_path_for(state_file)
+    data = json.loads(cx_path.read_text(encoding="utf-8"))
+    data["pr_body_sha256"] = ""
+    cx_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # 4) gates accept → codex_review_stale BLOCKED (codex_review_result.json pr_body_sha256 누락).
+    code = f"ACCEPT-{PIPELINE_ID}-{nonce}"
+    r = _run_pipeline_env(
+        "gates", "accept", "--result", "ACCEPT",
+        "--evidence", str(evidence), "--acceptance-code", code,
+        env=env,
+    )
+    combined = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode != 0, f"pr_body_sha256 누락인데 accept 성공\n{combined}"
+    assert "codex_review_stale" in combined, (
+        f"codex_review_stale fail-closed 미발동\n{combined}"
+    )
+
+
+def test_tc_new_2_prepublish_sha_blocks_three_way(gh_publish_env):
+    """TC-NEW-2: publish 전 PR body SHA로 codex 승인 시 publish 후 3자 불일치 → BLOCKED.
+
+    codex_review_result.pr_body_sha256를 "publish 전 현재 PR body SHA"(블록 교체 전)로 변조하면,
+    publish 후 최종 PR body SHA(블록 교체 후)와 달라 _verify_published_pr_body_three_way가 BLOCKED.
+    """
+    env, state_file, evidence = gh_publish_env
+    r_cx = _run_pipeline_env(
+        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
+        env=env,
+    )
+    assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
+    # codex 기록 pr_body_sha256를 "publish 전" 원본 body SHA로 변조 (staged 최종 body SHA가 아님).
+    cx_path = _codex_review_result_path_for(state_file)
+    data = json.loads(cx_path.read_text(encoding="utf-8"))
+    staged_final_sha = data.get("pr_body_sha256")
+    prepublish_sha = _sha256_text(_FAKE_GH_PR_BODY_F52C)  # 블록 교체 전 원본 body SHA
+    assert staged_final_sha != prepublish_sha, (
+        "전제 실패: staged 최종 body SHA가 원본 body SHA와 같음 (블록 교체 미반영)"
+    )
+    data["pr_body_sha256"] = prepublish_sha
+    cx_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # request-accept → publish 후 3자 불일치 BLOCKED (또는 codex snapshot 단계에서 stale 차단).
+    r = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env,
+    )
+    combined = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode != 0, f"publish 전 SHA인데 exit 0\n{combined}"
+    assert "사용자 승인 요청" not in combined, f"BLOCKED인데 승인 요청 노출\n{combined}"
+
+
+def test_tc_new_3_three_way_match_happy_path(gh_publish_env):
+    """TC-NEW-3: 정상 경로 — codex == acceptance_request == sha256(현재 PR body) 3자 일치.
+
+    staged 최종 body SHA를 올바르게 기록(--approve-pending)한 뒤 request-accept를 실행하면
+    publish 후 3자가 모두 일치하여 '사용자 승인 요청'까지 도달하고, 세 SHA가 동일하다.
+    """
+    env, state_file, evidence = gh_publish_env
+    r_cx = _run_pipeline_env(
+        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
+        env=env,
+    )
+    assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
+    r = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env,
+    )
+    combined = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode == 0, f"3자 일치인데 BLOCKED\n{combined}"
+    assert "사용자 승인 요청" in combined, f"승인 요청문 미노출\n{combined}"
+    # 3자 SHA 동일성 확인: codex == acceptance_request == sha256(현재 PR body).
+    cx_path = _codex_review_result_path_for(state_file)
+    cx_data = json.loads(cx_path.read_text(encoding="utf-8"))
+    req = json.loads(
+        (PIPELINE_ROOT / "acceptance_request.json").read_text(encoding="utf-8")
+    )
+    codex_sha = cx_data.get("pr_body_sha256")
+    req_sha = req.get("pr_body_sha256")
+    assert codex_sha and req_sha, "codex/acceptance_request pr_body_sha256 미기록"
+    assert codex_sha == req_sha, (
+        f"codex({codex_sha}) != acceptance_request({req_sha})"
+    )
+
+
+def test_tc_new_4_three_way_helper_uses_codex_value(isolated_pipeline):
+    """TC-NEW-4: _verify_published_pr_body_three_way가 codex 값을 실제로 비교에 사용.
+
+    - codex 값만 다르게 → BLOCKED
+    - acceptance_request(recorded) 값만 다르게 → BLOCKED
+    - 현재 PR body만 다르게 → BLOCKED
+    - 세 값 모두 일치 → PASS
+    - codex result_pr_body_sha256 부재 → codex_review_stale BLOCKED
+    """
+    tmp_path, state_file = isolated_pipeline
+    out = _run_driver(
+        tmp_path, state_file,
+        "import hashlib\n"
+        "body = 'PR BODY 3WAY TEST'\n"
+        "good = hashlib.sha256(body.encode('utf-8')).hexdigest()\n"
+        "bad = 'd'*64\n"
+        "def call(codex_sha, recorded, cur_body):\n"
+        "    cr = {'result_pr_body_sha256': codex_sha} if codex_sha is not None else None\n"
+        "    try:\n"
+        "        pipeline._verify_published_pr_body_three_way(cr, recorded, cur_body)\n"
+        "        return 'PASS'\n"
+        "    except SystemExit:\n"
+        "        return 'BLOCKED'\n"
+        "print('ALLMATCH', call(good, good, body))\n"
+        "print('CODEXBAD', call(bad, good, body))\n"
+        "print('RECORDEDBAD', call(good, bad, body))\n"
+        "print('BODYBAD', call(good, good, 'DIFFERENT BODY'))\n"
+        "print('CODEXMISSING', call(None, good, body))\n"
+        "print('CODEXEMPTY', call('', good, body))\n",
+    )
+    assert "ALLMATCH PASS" in out, f"3자 일치인데 BLOCKED\n{out}"
+    assert "CODEXBAD BLOCKED" in out, f"codex 값만 달라도 통과 — codex 미사용\n{out}"
+    assert "RECORDEDBAD BLOCKED" in out, f"recorded 값만 달라도 통과\n{out}"
+    assert "BODYBAD BLOCKED" in out, f"현재 body만 달라도 통과\n{out}"
+    assert "CODEXMISSING BLOCKED" in out, f"codex 부재인데 통과 (2자 downgrade)\n{out}"
+    assert "CODEXEMPTY BLOCKED" in out, f"codex 빈값인데 통과 (legacy skip)\n{out}"
 
 
 # ---------------------------------------------------------------------------

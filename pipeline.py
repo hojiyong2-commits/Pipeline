@@ -1299,6 +1299,20 @@ def _atomic_snapshot_include_path(path: Path) -> bool:
         return False
     if name.endswith(".pyc") or name.endswith(".tmp"):
         return False
+    # BUG-20260628-F52C: pipeline 관리 아티팩트 파일 제외 (suffix 기반 파일명 변형 포함)
+    # build_report_F52C.xml, dev_handover_r3.xml, integration_report_r3.xml 등
+    if name.startswith("build_report") and name.endswith(".xml"):
+        return False
+    if name.startswith("dev_handover") and name.endswith(".xml"):
+        return False
+    if name.startswith("integration_report") and name.endswith(".xml"):
+        return False
+    if name.startswith("architect_rca") and name.endswith(".xml"):
+        return False
+    if name.startswith("architect_report") and name.endswith(".xml"):
+        return False
+    if name.startswith("qa_report") and name.endswith(".xml"):
+        return False
     return True
 
 
@@ -17546,6 +17560,11 @@ def _materialize_acceptance_snapshot(
             "pr_body_update_failed": False,
             "sha_manifest": sha_manifest,
             "published": False,
+            # BUG-20260628-F52C REJECT-3: staged packet 본문을 반환하여 호출자가
+            # _replace_pr_body_packet_block(current_body, content)로 "publish 후 최종 PR body"
+            # SHA를 결정적으로 계산할 수 있게 한다. (현재 PR body SHA가 아니라 packet 블록이
+            # 교체된 publish 후 body SHA가 codex/acceptance_request/현재 PR body 3자 검증 기준이다.)
+            "packet_content": content,
         }
 
     # Phase 3: 모든 temp를 원자적으로 커밋 (여기서부터는 부분 실패 가능성 낮음)
@@ -17580,6 +17599,8 @@ def _materialize_acceptance_snapshot(
         "pr_body_update_failed": pr_update_failed,
         "sha_manifest": sha_manifest,
         "published": True,
+        # BUG-20260628-F52C REJECT-3: publish 경로도 staged와 동일한 packet 본문을 반환.
+        "packet_content": content,
     }
 
 
@@ -18060,6 +18081,70 @@ def _find_existing_valid_acceptance_comment(
 # BUG-20260628-F52C: staged snapshot → Codex Review → publish 재배치 helpers.
 # ---------------------------------------------------------------------------
 
+# [Purpose]: BUG-20260628-F52C REJECT-3(3차) — Codex가 검토하는 PR body snapshot과 사용자가
+#            승인하는 PR body snapshot이 정확히 동일함을 보장하기 위해, "publish 후 최종 PR body"
+#            (= 현재 PR body의 FINAL_PACKET 블록을 staged packet 본문으로 교체한 결과) SHA를
+#            결정적으로 계산한다. request-accept와 codex-review --approve-pending이 동일한 이 SHA를
+#            계산/기록해야 _verify_published_pr_body_three_way의 3자 일치가 성립한다.
+# [Assumptions]: state는 활성 pipeline_state, staging_candidate는 staging probe 후보 dict로
+#            _materialize_acceptance_snapshot(publish=False)에 그대로 넘길 수 있다(STAGING_PROBE
+#            고정 generated_at 적용). gh CLI가 없거나 PR body를 읽을 수 없으면 None을 반환하여
+#            호출자가 해당 차원 검증을 생략(legacy/gh-less 호환)하도록 한다.
+# [Vulnerability & Risks]: staged 본문 계산 실패(예외)는 None으로 흡수하지 않고 fail-closed로
+#            전파해야 하므로, 호출자(request-accept/codex-review)가 staging 실패를 BLOCKED 처리한다.
+#            여기서는 "PR body 없음"만 None으로 구분한다.
+# [Improvement]: staged 본문을 메모리 캐시하여 codex-review/request-accept 간 재계산 비용을 줄일 수 있다.
+def _get_staged_pr_body_sha(
+    state: Dict[str, Any],
+    staging_candidate: Dict[str, Any],
+) -> Optional[str]:
+    """publish 후 최종 PR body(= 현재 PR body + staged packet 블록 교체) SHA-256을 계산한다.
+
+    현재 PR body SHA가 아니라, _replace_pr_body_packet_block(current_pr_body, staged_content)을
+    적용한 "publish가 실제로 기록하게 될 최종 PR body"의 SHA를 반환한다. 이 값이 codex-review와
+    request-accept가 공유하는 staged PR body SHA이며, publish 직후 현재 PR body SHA와 3자 일치한다.
+
+    Args:
+        state: 활성 pipeline_state dict.
+        staging_candidate: _materialize_acceptance_snapshot(publish=False)에 넘길 staging 후보.
+    Returns:
+        publish 후 최종 PR body의 SHA-256 hex 문자열. gh CLI 없음/PR body 없음이면 None.
+    Raises:
+        TypeError: state가 None/비dict이거나 staging_candidate가 None/비dict인 경우.
+        OSError/ValueError/KeyError: staged 본문 계산 실패 시 (호출자가 fail-closed 처리).
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    if staging_candidate is None:
+        raise TypeError("staging_candidate must not be None")
+    if not isinstance(staging_candidate, dict):
+        raise TypeError(
+            f"staging_candidate must be dict, got {type(staging_candidate).__name__}"
+        )
+
+    # gh CLI가 없으면 PR body를 stage할 수 없으므로 None(차원 생략).
+    if not _gh_available():
+        return None
+    current_body = _get_pr_body_text()
+    if current_body is None:
+        return None
+
+    # staged packet 본문을 계산 (publish=False — temp만 쓰고 정리, 실제 파일/PR 변경 없음).
+    staged = _materialize_acceptance_snapshot(state, staging_candidate, publish=False)
+    staged_content = str(staged.get("packet_content", "") or "")
+    if not staged_content:
+        # 실 경로에서는 _materialize_acceptance_snapshot이 항상 packet_content를 채운다.
+        # packet_content 부재는 staging 산출물을 신뢰할 수 없는 경우(테스트 mock 등)이므로
+        # body 차원 검증을 생략(None)한다. codex/acceptance_request 차원 검증은 그대로 유지된다.
+        return None
+
+    # publish가 실제로 기록할 최종 PR body = 현재 body의 FINAL_PACKET 블록을 staged 본문으로 교체.
+    final_body = _replace_pr_body_packet_block(current_body, staged_content)
+    return hashlib.sha256(final_body.encode("utf-8")).hexdigest()
+
+
 # [Purpose]: BUG-20260628-F52C 재작업 — request-accept 내부에서 staged snapshot 기준으로
 #            Codex Review hard gate를 실행한다. codex_review_loop_state.json은 절대 읽지 않고,
 #            codex_review_result.json(SSoT)만 신뢰 루트로 사용한다. 결과가 APPROVE_TO_USER이고
@@ -18273,6 +18358,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   2) --packet-sha256 명시값.
     #   3) 현재 디스크 packet에서 계산.
     packet_sha = ""
+    # BUG-20260628-F52C REJECT-3(3차): --approve-pending이 stage한 동일한 staging 후보를 보관하여
+    # packet SHA와 "publish 후 최종 PR body" SHA를 같은 후보로 결정적으로 계산한다.
+    _approve_pending_candidate: Optional[Dict[str, Any]] = None
     if bool(getattr(args, "approve_pending", False)):
         try:
             # request-accept의 staging preamble을 동일하게 재현해야 packet SHA가 일치한다.
@@ -18312,6 +18400,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 state, _staging_candidate, publish=False
             )
             packet_sha = str(_staged.get("sha_manifest", {}).get("packet_sha256", "") or "")
+            _approve_pending_candidate = _staging_candidate
         except (OSError, ValueError, KeyError, TypeError):
             packet_sha = ""
         if not packet_sha:
@@ -18335,13 +18424,41 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _die("[BLOCKED] failure_code=codex_packet_sha_failed\n  packet SHA 계산에 실패했습니다.")
 
     # BUG-20260628-F52C REJECT-1/3: Codex 검토 대상의 pr_body_sha256/pr_head_sha를
-    # packet_sha256과 동일 강도로 기록한다. 명시값(--pr-body-sha256)이 없으면 현재 PR 본문에서
-    # 계산하여, request-accept가 stage할 동일 PR 본문 SHA와 일치하도록 한다.
+    # packet_sha256과 동일 강도로 기록한다. 명시값(--pr-body-sha256)이 없으면
+    # "publish 후 최종 PR body"(= 현재 PR body + staged packet 블록 교체) SHA로 계산한다.
+    # 3차 REJECT 수정: 현재 PR body SHA가 아니라 publish 후 최종 body SHA를 기록해야
+    # request-accept publish 직후 현재 PR body SHA와 3자 일치한다.
     pr_body_sha = str(getattr(args, "pr_body_sha256", "") or "").strip()
     if not pr_body_sha:
-        _cur_pr_body = _get_pr_body_text()
-        if _cur_pr_body:
-            pr_body_sha = hashlib.sha256(_cur_pr_body.encode("utf-8")).hexdigest()
+        # --approve-pending이면 그 staging 후보로, 아니면 staging 후보를 새로 구성하여
+        # 동일한 "publish 후 최종 PR body" SHA를 계산한다.
+        _body_candidate = _approve_pending_candidate
+        if _body_candidate is None:
+            _probe_ci_run_id_b = _get_pr_branch_ci_run_id() or ""
+            _probe_ci_head_sha_b: Optional[str] = None
+            if _probe_ci_run_id_b:
+                try:
+                    _probe_ci_head_sha_b = _get_ci_run_head_sha(_probe_ci_run_id_b)
+                except Exception:
+                    _probe_ci_head_sha_b = None
+            _body_candidate = {
+                "schema_version": 1,
+                "pipeline_id": pipeline_id,
+                "request_id": "staging-probe",
+                "nonce": "staging-probe",
+                "evidence": "staging-probe",
+                "status": "PENDING",
+                "github_ci_head_sha": _probe_ci_head_sha_b,
+            }
+            _ac_table_b = _build_ac_fulfillment_table(state)
+            if _ac_table_b is not None:
+                _body_candidate["ac_fulfillment_table"] = _ac_table_b
+        try:
+            _staged_body_sha = _get_staged_pr_body_sha(state, _body_candidate)
+        except (OSError, ValueError, KeyError, TypeError):
+            _staged_body_sha = None
+        if _staged_body_sha:
+            pr_body_sha = _staged_body_sha
     pr_head_sha = _get_current_pr_head_sha() or ""
     reason = str(getattr(args, "reason", "") or "").strip()
 
@@ -18842,14 +18959,19 @@ def _publish_acceptance_request(
     return {"snapshot_result": snapshot_result, "req": published_req}
 
 
-# [Purpose]: BUG-20260628-F52C REJECT-3 — publish 직후 PR body SHA 3자 일치를 강제하는 헬퍼.
+# [Purpose]: BUG-20260628-F52C REJECT-3(3차) — publish 직후 PR body SHA 3자 일치를 강제하는 헬퍼.
 #            codex_review_result.pr_body_sha256 == acceptance_request.pr_body_sha256
-#            == sha256(현재 PR body) 3자가 모두 같아야 승인 요청을 노출한다.
+#            == sha256(현재 PR body) 모두 일치해야 한다.
+#            3차 REJECT 수정: codex가 검토한 PR body snapshot(= publish 후 최종 body SHA)과
+#            사용자가 승인하는 PR body snapshot(= publish 후 현재 body SHA)이 동일함을 보장한다.
+#            codex 기록 pr_body_sha256은 _get_staged_pr_body_sha가 계산한 "publish 후 최종 body"
+#            SHA이므로 publish 직후 현재 PR body SHA와 일치해야 한다(2차에서 잘못 제거한 비교 복원).
 # [Assumptions]: recorded_body_sha는 acceptance_request.json에 방금 기록된 pr_body_sha256이며,
 #            current_pr_body는 publish 직후 다시 읽은 현재 PR body 텍스트다.
-# [Vulnerability & Risks]: codex_review_result의 result_pr_body_sha256가 비어 있으면(gh 없는
-#            환경에서 codex가 본문 SHA를 못 잡은 경우) 3자 검증을 생략한다 — 이 경우 pr_body_updated가
-#            False이므로 애초에 이 헬퍼가 호출되지 않는다(publish 경로에서만 호출).
+#            codex_review_result는 _codex_review_snapshot이 반환한 dict로 result_pr_body_sha256를 갖는다.
+# [Vulnerability & Risks]: codex_review_result가 None이거나 result_pr_body_sha256이 비어 있으면
+#            검토 대상 PR body snapshot을 대조할 수 없으므로 fail-closed BLOCKED(codex_review_stale).
+#            recorded_body_sha가 비어 있으면 publish 단계 결함이므로 BLOCKED.
 # [Improvement]: 3자 비교 결과를 state event_log에 남겨 사후 감사를 강화할 수 있다.
 def _verify_published_pr_body_three_way(
     codex_review_result: Optional[Dict[str, Any]],
@@ -18858,14 +18980,25 @@ def _verify_published_pr_body_three_way(
 ) -> None:
     """publish 직후 PR body SHA 3자 일치를 검증한다 (불일치 시 fail-closed BLOCKED).
 
+    codex_review_result.pr_body_sha256(= result_pr_body_sha256) == acceptance_request.pr_body_sha256
+    == sha256(현재 PR body) 3자 일치를 검증한다. 어떤 쌍이라도 불일치하면 BLOCKED.
+    codex 기록 pr_body_sha256이 없으면(검토 미수행/legacy) codex_review_stale로 BLOCKED한다
+    (2자 검증 downgrade 금지 — 3차 REJECT 핵심 요구).
+
     Args:
-        codex_review_result: _codex_review_snapshot 반환 dict (None이면 검증 생략).
+        codex_review_result: _codex_review_snapshot 반환 dict. result_pr_body_sha256를 포함해야 한다.
         recorded_body_sha: acceptance_request.json에 방금 기록된 pr_body_sha256.
         current_pr_body: publish 직후 다시 읽은 현재 PR body 텍스트.
     Raises:
-        TypeError: recorded_body_sha/current_pr_body가 None이거나 str이 아닌 경우.
-        SystemExit: 3자 SHA가 불일치하면 fail-closed BLOCKED.
+        TypeError: codex_review_result가 None이 아니면서 dict가 아닌 경우, 또는
+            recorded_body_sha/current_pr_body가 None이거나 str이 아닌 경우.
+        SystemExit: 3자 SHA가 불일치하거나 codex 기록 pr_body_sha256이 없으면 fail-closed BLOCKED.
     """
+    if codex_review_result is not None and not isinstance(codex_review_result, dict):
+        raise TypeError(
+            f"codex_review_result must be dict or None, got "
+            f"{type(codex_review_result).__name__}"
+        )
     if recorded_body_sha is None:
         raise TypeError("recorded_body_sha must not be None")
     if not isinstance(recorded_body_sha, str):
@@ -18878,21 +19011,49 @@ def _verify_published_pr_body_three_way(
         raise TypeError(
             f"current_pr_body must be str, got {type(current_pr_body).__name__}"
         )
-    # codex 결과가 없거나 본문 SHA를 못 잡은 경우(gh 없는 환경) — 3자 검증 생략.
-    if codex_review_result is None:
-        return
-    codex_body_sha = str(codex_review_result.get("result_pr_body_sha256", "") or "")
-    if not codex_body_sha:
-        return
+
+    # acceptance_request 기록 SHA가 비어 있으면 publish 단계 결함 → fail-closed BLOCKED.
+    if not recorded_body_sha:
+        _die(
+            "[BLOCKED] failure_code=pr_body_sha_mismatch_post_publish\n"
+            "  acceptance_request.json에 pr_body_sha256이 비어 있습니다 (publish 결함).\n"
+            "  fail-closed — 승인 코드를 출력하지 않습니다. "
+            "gates request-accept를 다시 실행하세요."
+        )
 
     recompute_sha = hashlib.sha256(current_pr_body.encode("utf-8")).hexdigest()
-    if not (codex_body_sha == recorded_body_sha == recompute_sha):
+
+    # 1자: acceptance_request == sha256(현재 PR body).
+    if recorded_body_sha != recompute_sha:
         _die(
-            "[BLOCKED] failure_code=pr_body_sha_three_way_mismatch\n"
-            "  publish 직후 PR 본문 SHA 3자 일치 검증 실패.\n"
-            f"  codex-review:        {codex_body_sha}\n"
+            "[BLOCKED] failure_code=pr_body_sha_mismatch_post_publish\n"
+            "  publish 직후 PR 본문 SHA 일치 검증 실패 (acceptance_request vs 현재 PR body).\n"
             f"  acceptance_request:  {recorded_body_sha}\n"
             f"  현재 PR 본문 재계산:  {recompute_sha}\n"
+            "  fail-closed — 승인 코드를 출력하지 않습니다. "
+            "gates request-accept를 다시 실행하세요."
+        )
+
+    # 2자: codex 기록(result_pr_body_sha256) == acceptance_request == sha256(현재 PR body).
+    # 3차 REJECT 핵심: codex 값 제거/2자 downgrade/legacy skip 금지.
+    # codex_review_result가 없거나 result_pr_body_sha256이 비어 있으면 codex_review_stale BLOCKED.
+    codex_body_sha = ""
+    if isinstance(codex_review_result, dict):
+        codex_body_sha = str(codex_review_result.get("result_pr_body_sha256", "") or "")
+    if not codex_body_sha:
+        _die(
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  Codex 검토 결과에 pr_body_sha256(result_pr_body_sha256)이 없습니다.\n"
+            "  Codex가 검토한 PR body snapshot을 대조할 수 없습니다 (fail-closed).\n"
+            "  gates codex-review를 다시 통과시킨 후 gates request-accept를 재실행하세요."
+        )
+    if codex_body_sha != recompute_sha:
+        _die(
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  publish 직후 PR 본문 SHA 3자 일치 검증 실패 (codex vs 현재 PR body).\n"
+            f"  codex-review:        {codex_body_sha}\n"
+            f"  현재 PR 본문 재계산:  {recompute_sha}\n"
+            "  Codex가 검토한 PR body와 사용자가 승인하는 PR body가 다릅니다.\n"
             "  fail-closed — 승인 코드를 출력하지 않습니다. "
             "gates request-accept를 다시 실행하세요."
         )
@@ -19154,12 +19315,21 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             req_candidate["ac_fulfillment_table"] = ac_table
         staged_result = _materialize_acceptance_snapshot(state, req_candidate, publish=False)
         staged_sha_manifest = staged_result.get("sha_manifest", {})
-        # BUG-20260628-F52C REJECT-1: staged PR 본문 SHA + 현재 PR head SHA를 계산하여
-        # codex 검토 결과와 packet_sha256과 동일 강도로 대조한다. gh 없는 환경에서는 pr_body가
-        # 비거나 pr_head_sha가 ""이므로 None으로 넘겨 해당 차원 검증을 생략한다.
-        staged_pr_body_sha = (
-            hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else None
-        )
+        # BUG-20260628-F52C REJECT-1/3(3차): staged PR 본문 SHA + 현재 PR head SHA를 계산하여
+        # codex 검토 결과와 packet_sha256과 동일 강도로 대조한다.
+        # 3차 REJECT 수정: 현재 PR body SHA가 아니라 "publish 후 최종 PR body"
+        # (= 현재 PR body의 FINAL_PACKET 블록을 staged packet 본문으로 교체한 결과) SHA를 계산한다.
+        # publish는 동일한 req_candidate 본문으로 PR body를 교체하므로, 이 staged SHA가 publish 직후
+        # 현재 PR body SHA와 일치하여 _verify_published_pr_body_three_way의 3자 검증이 성립한다.
+        # gh 없는 환경에서는 _get_staged_pr_body_sha가 None을 반환하여 해당 차원 검증을 생략한다.
+        try:
+            staged_pr_body_sha = _get_staged_pr_body_sha(state, req_candidate)
+        except (OSError, ValueError, KeyError, TypeError) as _spb_exc:
+            _die(
+                "[PIPELINE ERROR] staged PR 본문 SHA 계산 실패 — 승인 코드 발급 차단.\n"
+                f"  오류: {_spb_exc}\n"
+                "  gates request-accept를 다시 실행하세요."
+            )
         current_head_sha = pr_head_sha or None
         print()
         print(f"  [STAGED SNAPSHOT] packet_sha256={staged_sha_manifest.get('packet_sha256')}")
@@ -20313,6 +20483,34 @@ def cmd_gates(args: argparse.Namespace) -> None:
                 _die(
                     f"[BLOCKED] failure_code={_cr_result['failure_code']}\n"
                     f"  {_cr_result['message']}"
+                )
+            # BUG-20260628-F52C REJECT-3(3차): codex_review_result.json(SSoT)의 pr_body_sha256가
+            # 비어 있으면 Codex가 검토한 PR body snapshot을 대조할 수 없으므로 fail-closed BLOCKED.
+            # 2자 검증 downgrade/legacy skip 금지 — codex가 staged 최종 PR body SHA를 기록해야 한다.
+            _cr_result_path = _codex_review_result_path()
+            if not _cr_result_path.exists():
+                _die(
+                    "[BLOCKED] failure_code=codex_review_stale\n"
+                    "  codex_review_result.json(SSoT)이 없습니다. "
+                    "gates codex-review를 다시 통과시킨 후 gates request-accept를 재실행하세요."
+                )
+            try:
+                _cr_data = json.loads(
+                    _cr_result_path.read_text(encoding="utf-8", errors="replace")
+                )
+            except (OSError, json.JSONDecodeError):
+                _die(
+                    "[BLOCKED] failure_code=codex_review_stale\n"
+                    "  codex_review_result.json 로드/파싱에 실패했습니다 (fail-closed)."
+                )
+            if not isinstance(_cr_data, dict) or not str(
+                _cr_data.get("pr_body_sha256", "") or ""
+            ).strip():
+                _die(
+                    "[BLOCKED] failure_code=codex_review_stale\n"
+                    "  codex_review_result.json에 pr_body_sha256이 없거나 비어 있습니다.\n"
+                    "  Codex가 검토한 PR body snapshot을 대조할 수 없습니다 (fail-closed).\n"
+                    "  gates codex-review를 다시 통과시킨 후 gates request-accept를 재실행하세요."
                 )
 
         # IMP-20260531-BBDB MT-3: acceptance_request.json 로드 + nonce/SHA/run_id 검증

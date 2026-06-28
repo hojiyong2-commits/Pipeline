@@ -132,17 +132,37 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
     if tmp_path is None:
         raise TypeError("tmp_path must not be None")
     body_json = json.dumps(_FAKE_GH_PR_BODY_8C3B)
+    pipeline_dir_json = json.dumps(str(PIPELINE_PY.parent))
+    packet_md_json = json.dumps(str(PIPELINE_PY.parent / "human_acceptance_packet.md"))
     script = tmp_path / "fake_gh_8c3b.py"
+    # BUG-20260628-F52C REJECT-3(3차): .body 조회 시 pipeline이 publish 단계에서 디스크에 기록한
+    # human_acceptance_packet.md를 읽어 _replace_pr_body_packet_block을 적용한 "publish 후 최종
+    # PR body"를 반환한다(실제 gh pr view와 동일). packet.md가 없으면(publish 전) 원본 body를 반환.
+    # 이로써 codex가 검토한 staged 최종 body SHA == publish 후 현재 PR body SHA 3자 일치가 성립한다.
     script.write_text(
         "import sys, io, json\n"
         'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
-        f"BODY = {body_json}\n"
+        f"sys.path.insert(0, {pipeline_dir_json})\n"
+        f"DEFAULT_BODY = {body_json}\n"
+        f"PACKET_MD = {packet_md_json}\n"
+        "def _current_body():\n"
+        "    try:\n"
+        '        with open(PACKET_MD, encoding="utf-8") as fh:\n'
+        "            packet = fh.read()\n"
+        "    except OSError:\n"
+        "        return DEFAULT_BODY\n"
+        "    try:\n"
+        "        import pipeline\n"
+        "        return pipeline._replace_pr_body_packet_block(DEFAULT_BODY, packet)\n"
+        "    except Exception:\n"
+        "        return DEFAULT_BODY\n"
         "args = sys.argv[1:]\n"
         'if "--jq" in args:\n'
         '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
         '    if jq == ".body":\n'
-        '        sys.stdout.write(BODY)\n'
-        '        if not BODY.endswith("\\n"):\n'
+        "        _b = _current_body()\n"
+        '        sys.stdout.write(_b)\n'
+        '        if not _b.endswith("\\n"):\n'
         '            sys.stdout.write("\\n")\n'
         "        sys.exit(0)\n"
         '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
@@ -156,7 +176,7 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
         'if "pr" in args and "list" in args:\n'
         '    print("[]"); sys.exit(0)\n'
         "print(json.dumps({\n"
-        '    "body": BODY, "number": 1,\n'
+        '    "body": _current_body(), "number": 1,\n'
         '    "headRefOid": "abc123def456abc123def456abc123def456abc1",\n'
         '    "isDraft": False, "state": "OPEN", "files": [],\n'
         '    "url": "https://github.com/test/repo/pull/1",\n'
