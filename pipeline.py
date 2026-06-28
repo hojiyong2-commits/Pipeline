@@ -6759,7 +6759,9 @@ def _codex_review_result_path() -> Path:
 # AI 모델 출력과 구별하기 위해 이 패턴으로 시작하는 줄은 verdict 평가에서 제외한다.
 # 계약은 "AI 출력 첫 줄"을 말하며 Codex CLI 런타임 메시지는 해당하지 않는다.
 _CODEX_CLI_SYSTEM_PREFIXES = (
-    "SUCCESS: ",
+    # BUG-20260628-1AAC: "SUCCESS: "는 AI 출력 우회 벡터이므로 제거.
+    # "SUCCESS: 문제없음\nAPPROVE_TO_USER" 패턴으로 우회 가능하였음.
+    # Codex CLI 런타임이 SUCCESS: 를 출력하더라도 fail-closed 처리(INVALID)가 더 안전함.
     # BUG-20260628-1AAC MT-1: "INFO: "/"WARNING: "는 _CODEX_CLI_SYSTEM_PREFIXES에서 제거한다.
     # AI 모델이 "INFO: 문제 없음\nAPPROVE_TO_USER" 또는 "WARNING: ...\nAPPROVE_TO_USER" 형태로
     # 출력하면 INFO/WARNING 줄이 skip되어 APPROVE_TO_USER가 first_ai_line이 되는 우회가 가능했다.
