@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <qa_run_id>qa-64b30f5b3d02398e</qa_run_id>
+  <round>2</round>
+  <verdict>PASS</verdict>
+  <numeric_score>100</numeric_score>
+  <micro_task_boundary>WITHIN_SCOPE</micro_task_boundary>
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. 본 작업은 내부 게이트 로직 + 테스트 lint 수정.</wa>
+    <ui>N-A — GUI 위젯 없음. CLI 게이트 로직.</ui>
+    <fs>PASS — _materialize_acceptance_snapshot이 temp 파일(.tmp) 작성 후 os.replace 원자 커밋, 실패 시 temp 정리. pathlib 사용, encoding="utf-8" + errors="replace" fallback.</fs>
+    <pd>PASS — 신규 helper 3개가 단일 책임으로 분리(staging/lock/invariant). 인터페이스 시그니처 명확(Dict/Optional 타입힌팅). God class 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — Round 1 ruff 위반 2건(F841 미사용 변수 result, E741 모호한 변수명 l) 모두 수정. ruff check 0건 확인. pipeline.py 본체는 None/isinstance 타입 가드 완비.</al>
+    <build>N-A — meta-task(파이프라인 게이트 로직), EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VS Code Extension 카테고리 아님.</vsce>
+  </category_check>
+
+  <round2_fix_resolution>
+    <failure_signature_round1>AL:7734b017</failure_signature_round1>
+    <violation_1>
+      <location>tests/e2e/test_codex_snapshot_sync_f52c.py:296</location>
+      <rule>F841 — local variable `result` assigned but never used</rule>
+      <fix>`result = run_pipeline(...)` → `run_pipeline(...)` (반환값 폐기)</fix>
+      <status>RESOLVED</status>
+    </violation_1>
+    <violation_2>
+      <location>tests/e2e/test_codex_snapshot_sync_f52c.py:493</location>
+      <rule>E741 — ambiguous variable name `l`</rule>
+      <fix>dict comprehension 루프 변수 `l` → `line` 으로 교체 (split 호출 2곳 + startswith 조건 포함)</fix>
+      <status>RESOLVED</status>
+    </violation_2>
+  </round2_fix_resolution>
+
+  <verification_evidence>
+    <ruff_check>All checks passed! (위반 0건)</ruff_check>
+    <pytest_result>14 passed in 15.19s (test_codex_snapshot_sync_f52c.py)</pytest_result>
+  </verification_evidence>
+
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — WA 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 미해당</ui>
+    <fs score="20" max="20">원자적 쓰기(os.replace, 5pt) + 인코딩 fallback(errors=replace, 5pt) + pathlib(5pt) + traversal N/A 충족(5pt)</fs>
+    <pd score="10" max="10">모듈분리 5pt(3개 helper 단일 책임 분리) / 인터페이스계약 5pt(Dict/Optional 명시 시그니처)</pd>
+    <al score="20" max="20">pipeline.py 본체 타입 가드 완비 + Round 1 ruff 위반 2건 수정 완료, ruff 0건 확인 → AL 카테고리 만점 복원</al>
+    <build score="0" max="10">N/A — meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="50" max="50"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 적용 카테고리(FS/PD/AL) 전부 PASS, ruff 기술 게이트 통과. CLI numeric-score 0~120 스케일 환산값 100 사용.</numeric_verdict>
+  </numeric_score_detail>
+
+  <result>[PASS]</result>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — temp+.tmp 작성 후 os.replace, 실패 시 unlink 정리</atomic_write>
+      <encoding_fallback>PASS — read_text(encoding="utf-8", errors="replace")</encoding_fallback>
+      <traversal_wired>N-A — 사용자 입력 경로 없음(고정 packet/acceptance_request 경로)</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover evidence에 pytest 14 passed 결과 포함, QA가 재실행하여 14 passed 확인</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 신규 helper 3개 모두 실제 호출 경로 확인</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary_detail>
+    <decomposition_audit_present>PASS — step_plan에 decomposition_audit 블록 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — 6개 micro_task 모두 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>6</declared_functions>
+    <actual_modified_functions>6</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — Round 2 수정은 동일 scope 파일(test_codex_snapshot_sync_f52c.py) 내 lint 위반 2건 교정만, 경계 초과 없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary_detail>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <critical_issues>
+    없음 — Round 1 ruff 위반 2건(F841 line 296, E741 line 493)이 모두 수정되었고, ruff check 0건 및 14개 테스트 전부 통과로 확인됨.
+  </critical_issues>
+
+  <improvement_suggestions>
+    없음 — 전 적용 카테고리 PASS. MT-1~MT-5 구현 로직(staging→Codex→publish 재배치, 3-SHA 불변식, fail-closed Codex 처리)과 E2E 테스트(PIPELINE_STATE_PATH 격리 + final_state assertion + subprocess 실 CLI)가 모두 Real CLI Path E2E Gate Policy를 충족함.
+  </improvement_suggestions>
+</qa_report>
