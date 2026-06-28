@@ -1,1 +1,1 @@
-{"changed_files": [".claude/codex_review_contract.md", "pipeline.py"], "excluded_files": [".claude/codex_review_contract.md"]}
+﻿{"exit_code": 1, "failure_code": "codex_review_diff_incomplete", "blocked": true}
