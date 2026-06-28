@@ -13393,13 +13393,13 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
     # ci_head_sha: 우선순위 순서로 취득:
-    # 1. acceptance_request.json의 github_ci_head_sha (request-accept 기록 시점)
-    # 2. gh CLI로 현재 CI run의 head SHA 직접 조회 (stale JSON 순환 참조 방지)
+    # BUG-20260628-1AAC: acceptance_request.json의 github_ci_head_sha는 stale일 수 있으므로
+    # 우선순위를 변경: gh CLI 최신 CI run 직접 조회 → acceptance_request 보조 → PR head fallback.
+    # 1. gh CLI로 현재 CI run의 head SHA 직접 조회 (stale acceptance_request 우선순위 제거)
+    # 2. acceptance_request.json의 github_ci_head_sha (gh CLI 실패 시 보조)
     # 3. PR head SHA fallback (CI run과 같은 커밋이면 동일)
     ci_head_sha = ""
-    if isinstance(acceptance_request, dict):
-        ci_head_sha = str(acceptance_request.get("github_ci_head_sha", "") or "")
-    if not ci_head_sha and ci_run_id:
+    if ci_run_id:
         # gh CLI로 직접 조회 (human_acceptance_packet.json 순환 참조 방지)
         try:
             _ci_sha_result = _get_ci_run_head_sha(ci_run_id)
