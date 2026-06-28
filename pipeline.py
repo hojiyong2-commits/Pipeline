@@ -6840,9 +6840,10 @@ def _sort_changed_files_by_priority(changed_files: list) -> list:
     2. .claude/codex_review_contract.md
     3. .claude/agents/** 파일들
     4. .claude/commands/** 파일들
-    5. .github/workflows/** 파일들
-    6. tests/e2e/test_codex_review_gate* 파일들
-    7. 나머지 파일들 (원래 순서 유지)
+    5. .claude/hooks/** 파일들
+    6. .github/workflows/** 파일들
+    7. tests/e2e/test_codex_review_gate* 파일들
+    8. 나머지 파일들 (원래 순서 유지)
 
     Args:
         changed_files: PR diff에서 얻은 변경 파일 경로 리스트.
@@ -6872,11 +6873,13 @@ def _sort_changed_files_by_priority(changed_files: list) -> list:
             return 2
         if norm.startswith(".claude/commands/"):
             return 3
-        if norm.startswith(".github/workflows/"):
+        if norm.startswith(".claude/hooks/"):
             return 4
-        if norm.startswith("tests/e2e/test_codex_review_gate"):
+        if norm.startswith(".github/workflows/"):
             return 5
-        return 6
+        if norm.startswith("tests/e2e/test_codex_review_gate"):
+            return 6
+        return 7
 
     # stable sort: 동일 우선순위 그룹 내부는 원래 입력 순서를 유지.
     return sorted(changed_files, key=_priority)
@@ -6977,8 +6980,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # 총 budget (자). AC-1("pipeline.py 변경이 항상 Codex packet에 포함")을 만족하려면
     # 최우선 trust-root 파일(pipeline.py) patch 전체가 들어갈 만큼 충분해야 한다.
     # 본 PR의 pipeline.py patch만 ~52KB이므로 40000으로는 self-block(codex_review_diff_incomplete)이
-    # 발생한다. trust-root 파일 patch를 모두 수용하도록 120000으로 설정한다.
-    DIFF_BUDGET = 120000
+    # 발생한다. trust-root 파일 patch를 모두 수용하도록 200000으로 설정한다.
+    # pipeline.py (~52KB) + hooks (~40KB) + 기타 파일들을 모두 수용하기 위해 상향.
+    DIFF_BUDGET = 200000
     PIPELINE_PY = "pipeline.py"
     sorted_files = _sort_changed_files_by_priority(changed_files)
     included_files: list = []
