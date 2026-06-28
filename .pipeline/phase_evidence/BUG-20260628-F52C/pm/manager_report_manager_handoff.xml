@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <manager_run_id>pipeline_manager-b2b58f74e580b0af</manager_run_id>
+  <planner_run_id>pm_planner-6bc5d0408aff70a0</planner_run_id>
+  <status>READY</status>
+  <from>pipeline-manager-agent</from>
+  <step_plan_sha256>efd7b733e98f35e72ccd746127ad93ea11295249e45b8aaad21acca0a33b7098</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+
+  <design_confirmation>
+    <user_confirmed>true</user_confirmed>
+    <questions_asked>1</questions_asked>
+    <questions_resolved>1</questions_resolved>
+    <low_value_filtered>true</low_value_filtered>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+  </design_confirmation>
+
+  <contract_status>
+    <initialized>true</initialized>
+    <modules_registered>6</modules_registered>
+    <oracles_registered>2</oracles_registered>
+    <tests_registered>13</tests_registered>
+    <audit_result>PASS</audit_result>
+    <frozen>true</frozen>
+    <contract_hash>95722f9a32715655576071acffd27f98454e4675d40c1e5368a16f137c4e8a33</contract_hash>
+  </contract_status>
+
+  <execution_plan>
+    <phase name="PM">완료 — contract frozen, oracle 등록, phase attestation 대기</phase>
+    <phase name="Dev">MT-1~MT-6 순차 구현 (pipeline.py + tests/e2e/test_codex_snapshot_sync_f52c.py)</phase>
+    <phase name="QA">7개 카테고리 검증 후 96점 이상 PASS</phase>
+    <phase name="Build">N/A skip-reason=meta-task</phase>
+    <phase name="ExternalGates">Technical/Oracle/GitHub CI/Codex Review/User Acceptance</phase>
+    <phase name="Architect">RCA 완료</phase>
+  </execution_plan>
+</manager_handoff>
