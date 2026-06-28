@@ -7270,7 +7270,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     _save(state)
 
     if result_status == "APPROVED":
-        print(GREEN("[CODEX REVIEW PASS] Codex 검토 완료 — APPROVE_TO_USER"))
+        print(GREEN("[CODEX REVIEW PASS] Codex 검토 통과 — APPROVE_TO_USER"))
         print(f"  결과 기록: {result_path}")
         print("  다음: 사용자 최종 확인을 위해 gates request-accept를 실행하세요.")
         return
@@ -17047,14 +17047,14 @@ def _render_pending_acceptance_comment(display_model: Dict[str, Any]) -> str:
     """PENDING 승인 안내 댓글 본문을 display model로부터 최소 고정 양식으로 렌더링한다(SSoT).
 
     [Purpose]: IMP-20260624-069A MT-2 — pending 댓글을 4요소(사용자 승인 요청 / PR /
-      승인 코드 / Codex 검토 완료) 최소 고정 양식으로 통일한다.
+      승인 코드 / Codex 검토 통과) 최소 고정 양식으로 통일한다.
     [Assumptions]: display_model은 _build_acceptance_display_model 반환 dict이며
       approval_code 및 pr_url 필드가 호출부에서 채워진다.
     [Vulnerability & Risks]: display_model이 None/비dict이면 TypeError. 완료 마커
       (ACCEPTED/승인 완료/배포 완료)는 절대 포함하지 않으며 pending HTML 마커는 반드시 유지한다.
     [Improvement]: 양식 문자열을 모듈 상수 템플릿으로 분리 가능.
 
-    고정 순서: 사용자 승인 요청 → PR 링크 → 승인 코드 → Codex 검토 완료 →
+    고정 순서: 사용자 승인 요청 → PR 링크 → 승인 코드 → Codex 검토 통과 →
     pending HTML 마커.
 
     Args:
@@ -17087,7 +17087,7 @@ def _render_pending_acceptance_comment(display_model: Dict[str, Any]) -> str:
     lines.append("승인 코드:")
     lines.append(str(approval_code))
     lines.append("")
-    lines.append("Codex 검토 완료")
+    lines.append("Codex 검토 통과")
     lines.append("")
     lines.append("<!-- pipeline-human-acceptance-packet -->")
     lines.append("<!-- pipeline-human-acceptance-packet-pending -->")
@@ -18971,7 +18971,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     print("승인 코드:")
     print(f"{pr_comment_accept_code}")
     print()
-    print("Codex 검토 완료")
+    print("Codex 검토 통과")
     reused_label = "재사용" if reuse else "신규 발급"
     _log_event(state, f"acceptance request {reused_label}: request_id={req['request_id']} nonce={nonce}")
     _save(state)
