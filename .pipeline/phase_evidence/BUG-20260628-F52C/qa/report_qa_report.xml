@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <qa_run_id>qa-f3f314cbd4b5d7e0</qa_run_id>
+  <round>3</round>
+  <handover_evidence>
+    dev-agent handover (run_id=dev-a6f62eca3b698073) 확인. evidence에 pipeline.py + 8개 테스트 파일 명시,
+    실제 파일 제출 확인. UI 카테고리 없음 → dev-agent handover 단독 수락.
+  </handover_evidence>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 카테고리 아님 (파이프라인 프로토콜 코드)</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>PASS — _materialize_acceptance_snapshot의 temp파일+os.replace 원자적 커밋, staging 시 temp 정리, SHA 계산은 temp 기준. utf-8 + errors=replace 읽기</fs>
+    <pd>PASS — 3단계 분리(prepare/codex_review/publish) + fail-closed 인터페이스 계약. 신규 helper 7개 모두 단일 책임. codex_review_result.json SSoT</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — 모든 신규 helper에 None/isinstance 타입 가드. fail-closed REJECT(결과없음/파싱실패/verdict불일치/pid불일치/SHA불일치). bare except 없음. 빈 문자열 SHA 가드</al>
+    <build>N-A — meta-task (EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VS Code Extension 카테고리 아님</vsce>
+  </category_check>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover self_check에 execution_check=PASS (pytest 22/22 F52C)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _cmd_gates_codex_review가 cmd_gates action==codex-review에 wired(19502), --verdict/--approve-pending CLI 등록 확인(22084~). 신규 helper 7개 전부 호출 경로 확인(각 3 refs)</functional_binding_verified>
+  </runtime_functional_check>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — tmp.write_text → os.replace 패턴 (17499~17501). 직접 open('w') 후 write 단독 사용 없음</atomic_write>
+      <encoding_fallback>N-A — 신규 코드는 utf-8 + errors=replace JSON 읽기. 다중 인코딩 텍스트 파일 처리 아님</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로 traversal 위험 신규 코드 없음</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <check_verdict>N-A</check_verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan에 decomposition_audit 블록 존재(SPLIT_REQUIRED, 6 MT)</decomposition_audit_present>
+    <grep_evidence_present>PASS — 각 micro_task에 grep_evidence executed=true 존재</grep_evidence_present>
+    <declared_functions>6</declared_functions>
+    <actual_modified_functions>6</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>none (in-scope MT 함수는 PM 선언과 일치)</modification>
+    </out_of_scope_modifications>
+    <boundary_verdict>WITHIN_SCOPE</boundary_verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>9</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py (AMENDMENT 명시)</file>
+      <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py (AMENDMENT 명시)</file>
+      <file>tests/e2e/test_user_acceptance_nonce_bbdb.py (AMENDMENT 명시)</file>
+      <file>tests/test_acceptance_request_format_069a.py (AMENDMENT 명시)</file>
+      <file>tests/e2e/test_final_packet_2e3d.py (AMENDMENT 명시)</file>
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py (AMENDMENT 명시)</file>
+      <file>tests/test_acceptance_request_verification_json.py (AMENDMENT 명시)</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff --name-only origin/main...HEAD로 실제 변경 = PM scope 2개 + AMENDMENT 7개 + oracle 4개. 미선언 파일 변경 0건. 7개 consumer 변경은 codex 사전승인 1단계 주입만(검증 로직 불변, git diff로 확인)</grep_verified>
+    <c3_verdict>PASS — 모든 evidence-외-scope 파일이 dev scope_amendment_reason에 Producer-Consumer Bundle Patch로 명시됨. 단, PM step_plan target_files 비준 필요 (Pipeline Manager 책임)</c3_verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE — PM scope 2파일 + 문서화된 consumer AMENDMENT 7파일. 미선언 변경 없음</blast_radius>
+
+  <qa_verification_items>
+    <item n="1" verdict="PASS">request-accept 흐름 prepare(staging, 디스크 미기록) → _codex_review_snapshot → publish(Codex APPROVE_TO_USER 이후에만). _die가 publish 전에 차단(18847~18859). TC-A/TC-B PASS</item>
+    <item n="2" verdict="PASS">_codex_review_snapshot이 codex_review_loop_state.json 미참조, codex_review_result.json만 SSoT. NOT_CONFIGURED fallback 제거(18068 주석+코드 확인). loop_state 참조는 legacy gates accept 경로(_check_codex_review_gate)에만 존재. TC-D PASS</item>
+    <item n="3" verdict="PASS">결과없음/REJECT/stale SHA/pid 불일치 전부 _reject() → BLOCKED. TC-E 4개 PASS</item>
+    <item n="4" verdict="PASS">_verify_snapshot_invariant이 staging==published==codex 3-way 강제(codex_review_result 인자, 18370~18380). publish 직후 호출(18876). TC-C PASS</item>
+    <item n="5" verdict="PASS">_check_pending_snapshot_lock이 final-packet(13951)/update-pr-body(14040)에 wired. divergent BLOCKED, 동일 bytes no-op(18289~). TC-F 3개 PASS</item>
+    <item n="6" verdict="PASS">MT-7-AMENDMENT: 7개 테스트 git diff 확인 — codex_approve_pending 1단계 주입만, assert 불변. 검증 로직 약화 없음</item>
+    <item n="7" verdict="PASS">신규 helper 7개 전부 None/isinstance 타입 가드 보유</item>
+    <item n="8" verdict="PASS">ruff All checks passed (9파일). pytest F52C 22/22 PASS</item>
+  </qa_verification_items>
+
+  <preexisting_failures note="F52C 도입 신규 실패 0건 — 아래 4건은 origin/main(c43e9a5)에서도 동일하게 실패하는 기존 결함이며 F52C scope 외">
+    <failure test="test_final_packet_2e3d.py::test_final_packet_includes_accept_code_when_request_exists" cause="BUG-20260620-3BF4 nonce 없는 ACCEPT-{pipeline_id} 렌더링으로 인한 기존 결함. origin/main에서도 FAIL"/>
+    <failure test="test_final_packet_2e3d.py::test_final_packet_accept_code_on_separate_line" cause="동일 — origin/main에서도 FAIL"/>
+    <failure test="test_final_packet_2e3d.py::test_request_accept_auto_generates_packet_with_code" cause="동일 — origin/main에서도 FAIL"/>
+    <failure test="test_ci_run_id_filter_4ac2.py::test_tc_stale_cli_gates_accept_blocks_on_stale_run_id" cause="IMP-20260626-4121(PR#745) Codex Review Loop 게이트 순서로 stale_run_id 전에 codex_review_not_approved 차단. origin/main에서도 FAIL"/>
+    <baseline_comparison>origin/main: 4 failed, 69 passed | F52C branch: 4 failed, 69 passed → 신규 실패 0건</baseline_comparison>
+  </preexisting_failures>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="test_tc1_stale_packet_regression PASS — stale_packet_sha256 재현 케이스 수정 확인"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="test_tc_c_three_way_sha_invariant + _verify_snapshot_invariant 3-way SHA 강제"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="3-way invariant에 codex pr_body_sha 포함, codex_review_result 기록"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="test_tc_a_no_exposure_before_codex + test_tc_b_codex_reject_blocks — REJECT 시 승인코드/댓글/stdout 미출력(_die가 publish 전)"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="test_tc_f_pending_blocks_final_packet — PENDING 중 divergent 변경 BLOCKED"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="test_tc_f_pending_blocks_update_pr_body — update-pr-body BLOCKED"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="test_tc_f_pending_consistent_noop — 동일 bytes no-op 허용"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="test_tc8_staging_sha_stable — 반복 호출 SHA 불변(packet MD가 timestamp 미렌더링)"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="consumer nonce/replay/stale 테스트 유지(8c3b/aef0/bbdb 통과)"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="test_tc_g_state_structure_preserved — state 보존"/>
+  </criteria_verification>
+
+  <numeric_score_detail>
+    <fs score="20" max="20">원자적 os.replace 쓰기, staging temp 정리, SHA temp 기준 계산 모두 만점</fs>
+    <pd score="10" max="10">모듈분리 5(3단계 prepare/codex/publish 완전 분리) / 인터페이스계약 5(codex_review_result.json SSoT + fail-closed 계약)</pd>
+    <al score="20" max="20">0나눗셈 N/A, 범위검증 5, 타입가드 5(전 helper isinstance/None), 빈데이터 5(빈 SHA/결과없음 fail-closed), bare except 0</al>
+    <applied_total score="50" max="50"/>
+    <normalized_120>120</normalized_120>
+    <numeric_verdict>PASS — 적용 카테고리(FS/PD/AL) 만점. 정규화 120/120</numeric_verdict>
+  </numeric_score_detail>
+
+  <result>[PASS] 적용 카테고리 전부 PASS, numeric_verdict=PASS. F52C 신규 실패 0건(4건 실패는 origin/main 기존 결함, scope 외). 3단계 분리 + fail-closed Codex 게이트 + 3-way SHA 불변식 + PENDING lock 정확 구현</result>
+
+  <numeric_score>120</numeric_score>
+  <verdict>PASS</verdict>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <critical_issues>
+    없음.
+  </critical_issues>
+
+  <improvement_suggestions>
+    1. [scope] dev가 7개 consumer 테스트를 Producer-Consumer Bundle Patch로 동기화했으나 PM step_plan target_files에는 미포함. Pipeline Manager는 scope amendment를 PM step_plan에 비준 기록해야 GitHub CI Scope Lock 검증을 통과합니다 (QA 책임 외, 후속 게이트 사항).
+    2. [기존 결함] test_final_packet_2e3d.py 3건 + test_ci_run_id_filter_4ac2.py 1건은 origin/main 기존 결함입니다. F52C scope는 아니나, BUG-20260620-3BF4 nonce 렌더링 / IMP-20260626-4121 Codex 게이트 순서 정합성을 위한 별도 BUG 파이프라인 권장.
+    3. [방어 강화] _publish_acceptance_request publish 부분 실패 시 이미 쓴 acceptance_request.json 롤백 미구현(dev 주석 [Improvement]에 명시). 향후 보강 가능.
+  </improvement_suggestions>
+</qa_report>
