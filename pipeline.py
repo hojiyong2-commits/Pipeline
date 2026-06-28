@@ -7251,8 +7251,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         )
 
     # AI 응답을 파일에서 읽는다. 파일이 없거나 비어있으면 INVALID로 처리.
+    # BUG-20260628-1AAC: .strip() 제거 — raw 첫 줄을 _parse_codex_verdict가 직접 검증해야 한다.
+    # 계약 2번("첫 줄 정확 일치") 준수: strip()으로 선행 공백/빈 줄을 제거하면
+    # "\nAPPROVE_TO_USER" 같은 선행 빈 줄 우회가 가능해진다.
     try:
-        raw_output = Path(_output_path).read_text(encoding="utf-8", errors="replace").strip()
+        raw_output = Path(_output_path).read_text(encoding="utf-8", errors="replace")
     except (OSError, IOError):
         raw_output = ""
     finally:
