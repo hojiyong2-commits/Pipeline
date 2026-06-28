@@ -614,8 +614,18 @@ def test_tc7_prompt_contains_real_diff(tmp_path: Path) -> None:
         f"실제 코드 변경 없이 검토되는 우회 가능성. captured(head):\n{captured[:3000]}"
     )
     # placeholder가 프롬프트에 포함되어서는 안 됨 (MT-1 fail-closed로 대체됨).
-    assert "(diff 조회 실패)" not in captured, (
-        "프롬프트에 '(diff 조회 실패)' placeholder가 포함되어서는 안 됩니다 (fail-closed 위반)."
+    # BUG-20260627-C81C MT-6: MT-6 이후 이 테스트 파일도 Codex packet의 변경 파일로
+    # 포함되므로, 금지 placeholder를 소스에 verbatim으로 두면 본 테스트 자신의 diff가
+    # 프롬프트에 들어와 assertion이 스스로를 검출한다. 런타임 검사 의미는 동일하게 유지하되,
+    # 리터럴(한국어 문자)이 소스에 그대로 남지 않도록 각 문자를 chr()로 조립한다.
+    # 실행 시에는 fail-closed placeholder 문자열이 만들어지지만, 소스 diff에는 한국어
+    # 리터럴이 없어 Codex 프롬프트에서 자기 자신을 검출하지 않는다. 검증 의미:
+    # _cmd_gates_codex_review가 실패 시 이 placeholder를 Codex에 전달하지 않는지 확인.
+    _forbidden_placeholder = (
+        chr(40) + "diff " + chr(51468) + chr(54924) + " " + chr(49892) + chr(54756) + chr(41)
+    )
+    assert _forbidden_placeholder not in captured, (
+        "프롬프트에 diff-조회-실패 placeholder가 포함되어서는 안 됩니다 (fail-closed 위반)."
     )
 
     # final_state: codex_review_result.json status=APPROVED
@@ -628,9 +638,10 @@ def test_tc7_prompt_contains_real_diff(tmp_path: Path) -> None:
 def test_tc7b_diff_unavailable_fail_closed(tmp_path: Path) -> None:
     """git CLI를 찾을 수 없으면 codex_review_diff_unavailable로 fail-closed BLOCKED.
 
-    BUG-20260627-C81C MT-1/MT-5 (AC-1): git diff 조회가 실패하면 "(diff 조회 실패)"
+    BUG-20260627-C81C MT-1/MT-5 (AC-1): git diff 조회가 실패하면 diff-조회-실패
     placeholder로 우회하지 않고 즉시 BLOCKED(failure_code=codex_review_diff_unavailable)
-    되는지 검증한다.
+    되는지 검증한다. (MT-6: 본 파일이 packet에 포함되므로 placeholder 리터럴은 verbatim으로
+    두지 않는다.)
 
     검증 방법: PATH를 빈 디렉토리로 덮어써서 git 실행 파일을 찾지 못하게 한다
     (FileNotFoundError → codex_review_diff_unavailable). codex shim도 PATH에 없으므로
@@ -771,6 +782,82 @@ def test_tc9_approve_with_trailing_output_is_invalid(tmp_path: Path) -> None:
         assert final_state.get("status") != "APPROVED", (
             f"APPROVE_TO_USER + 추가 줄이 APPROVED로 기록되면 안 됨: {final_state}"
         )
+
+
+# ---------------------------------------------------------------------------
+# TC-10~TC-13: BUG-20260627-C81C MT-6 — trust-root 우선 diff 수집 검증
+# (기존 TC-8/TC-9는 prefix/trailing 검증으로 이미 사용 중이므로 TC-10부터 부여)
+# ---------------------------------------------------------------------------
+
+# TC-10: .claude/agents/** diff가 앞부분을 채워도 pipeline.py patch가 우선 정렬
+def test_tc10_pipeline_py_prioritized_over_agents() -> None:
+    """pipeline.py가 .claude/agents 보다 우선 포함된다."""
+    from pipeline import _sort_changed_files_by_priority
+    changed = [
+        ".claude/agents/dev-agent.md",
+        ".claude/agents/qa-agent.md",
+        "pipeline.py",
+        "tests/e2e/test_foo.py",
+    ]
+    result = _sort_changed_files_by_priority(changed)
+    assert result[0] == "pipeline.py", f"pipeline.py should be first, got {result[0]}"
+    agents_idx = [i for i, f in enumerate(result) if f.startswith(".claude/agents/")]
+    pipeline_idx = result.index("pipeline.py")
+    assert all(pipeline_idx < i for i in agents_idx), \
+        f"pipeline.py ({pipeline_idx}) must come before agents {agents_idx}"
+
+
+# TC-11: trust-root 그룹 전체 우선순위 검증
+def test_tc11_full_priority_ordering() -> None:
+    """7개 우선순위 그룹이 규칙 순서대로 정렬된다."""
+    from pipeline import _sort_changed_files_by_priority
+    changed = [
+        "other_file.py",
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        ".github/workflows/ci.yml",
+        ".claude/commands/task.md",
+        ".claude/agents/dev-agent.md",
+        ".claude/codex_review_contract.md",
+        "pipeline.py",
+    ]
+    result = _sort_changed_files_by_priority(changed)
+    assert result == [
+        "pipeline.py",
+        ".claude/codex_review_contract.md",
+        ".claude/agents/dev-agent.md",
+        ".claude/commands/task.md",
+        ".github/workflows/ci.yml",
+        "tests/e2e/test_codex_review_gate_3bb6.py",
+        "other_file.py",
+    ], f"unexpected order: {result}"
+
+
+# TC-12: 동일 우선순위 그룹 내부는 원래 순서(stable) 유지
+def test_tc12_stable_order_within_group() -> None:
+    """동일 그룹(나머지 파일들) 내부는 입력 순서를 유지한다."""
+    from pipeline import _sort_changed_files_by_priority
+    changed = ["zeta.py", "alpha.py", "pipeline.py", "mid.py"]
+    result = _sort_changed_files_by_priority(changed)
+    # pipeline.py가 맨 앞, 나머지는 입력 순서 그대로 (알파벳 정렬 아님)
+    assert result == ["pipeline.py", "zeta.py", "alpha.py", "mid.py"], \
+        f"stable order broken: {result}"
+
+
+# TC-13: edge case — None/비-list/비-str 원소 방어
+def test_tc13_sort_input_validation() -> None:
+    """None/비-list/비-str 원소에 대해 TypeError를 raise한다."""
+    from pipeline import _sort_changed_files_by_priority
+    # None 입력 → TypeError
+    with pytest.raises(TypeError):
+        _sort_changed_files_by_priority(None)
+    # 비-list 입력 → TypeError
+    with pytest.raises(TypeError):
+        _sort_changed_files_by_priority("pipeline.py")
+    # 비-str 원소 → TypeError
+    with pytest.raises(TypeError):
+        _sort_changed_files_by_priority([123, "pipeline.py"])
+    # 빈 리스트 → 빈 리스트 (예외 없음)
+    assert _sort_changed_files_by_priority([]) == []
 
 
 if __name__ == "__main__":

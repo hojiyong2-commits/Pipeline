@@ -6826,6 +6826,62 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
     return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
 
 
+# [Purpose]: Codex review packet에 포함할 changed_files를 trust-root 우선 순서로 정렬하여
+#            pipeline.py 핵심 변경이 diff budget 안에 항상 포함되도록 한다 (BUG-20260627-C81C MT-6).
+# [Assumptions]: changed_files는 PR diff에서 얻은 상대 경로 문자열 리스트. 빈 리스트 허용.
+# [Vulnerability & Risks]: 동일 우선순위 그룹 내부는 원래 순서를 유지하므로 알파벳 정렬이 아님.
+#                          잘못된 타입(None/비-str 원소)은 TypeError로 방어한다.
+# [Improvement]: 우선순위 규칙을 외부 SSoT 상수로 분리하면 정책 변경 시 유지보수가 쉬워진다.
+def _sort_changed_files_by_priority(changed_files: list) -> list:
+    """changed_files를 trust-root 우선 순서로 정렬.
+
+    우선순위:
+    1. pipeline.py
+    2. .claude/codex_review_contract.md
+    3. .claude/agents/** 파일들
+    4. .claude/commands/** 파일들
+    5. .github/workflows/** 파일들
+    6. tests/e2e/test_codex_review_gate* 파일들
+    7. 나머지 파일들 (원래 순서 유지)
+
+    Args:
+        changed_files: PR diff에서 얻은 변경 파일 경로 리스트.
+    Returns:
+        trust-root 우선 순서로 재배열된 새 리스트 (동일 그룹 내 원래 순서 유지).
+    Raises:
+        TypeError: changed_files가 None이거나 list가 아니거나 원소가 str가 아닌 경우.
+    """
+    if changed_files is None:
+        raise TypeError("changed_files must not be None")
+    if not isinstance(changed_files, list):
+        raise TypeError(
+            f"changed_files must be list, got {type(changed_files).__name__}"
+        )
+
+    def _priority(path: str) -> int:
+        if not isinstance(path, str):
+            raise TypeError(
+                f"changed_files element must be str, got {type(path).__name__}"
+            )
+        norm = path.replace("\\", "/")  # allowed: 경로 구분자 정규화 (비교 일관성)
+        if norm == "pipeline.py":
+            return 0
+        if norm == ".claude/codex_review_contract.md":
+            return 1
+        if norm.startswith(".claude/agents/"):
+            return 2
+        if norm.startswith(".claude/commands/"):
+            return 3
+        if norm.startswith(".github/workflows/"):
+            return 4
+        if norm.startswith("tests/e2e/test_codex_review_gate"):
+            return 5
+        return 6
+
+    # stable sort: 동일 우선순위 그룹 내부는 원래 입력 순서를 유지.
+    return sorted(changed_files, key=_priority)
+
+
 def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> None:
     """gates codex-review 핸들러: Codex 검토 hard gate (APPROVE exit 0 / REJECT exit 1).
 
@@ -6887,53 +6943,98 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # 4b. 검토 프롬프트 구성 — contract 본문(금지사항/출력형식)을 그대로 포함.
     # contract가 요구하는 정보: PR 제목/본문/변경 파일/diff/CI 상태/패킷을 모두 포함한다.
     changed_files = _get_current_pr_changed_files() or []
+    # BUG-20260627-C81C MT-6 (AC-1): gh CLI로 PR 변경 파일을 못 얻으면(예: gh 미설치/PR 미존재)
+    # git diff origin/main...HEAD --name-only로 실제 변경 파일을 직접 수집한다 (fail-closed 유지).
+    # per-file git diff와 동일한 BASE_DIR/refspec을 사용하여 diff 소스를 일관되게 유지한다.
+    if not changed_files:
+        try:
+            _names_result = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--name-only"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=30, cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            _die(
+                "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
+                "  git diff --name-only 조회 실패 (fail-closed).\n"
+                "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            )
+        if _names_result.returncode != 0:
+            _die(
+                "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
+                f"  git diff --name-only가 실패했습니다 (returncode={_names_result.returncode}, fail-closed).\n"
+                f"  stderr: {(_names_result.stderr or '')[:300]}\n"
+                "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            )
+        changed_files = [
+            ln.strip() for ln in (_names_result.stdout or "").splitlines() if ln.strip()
+        ]
     files_txt = "\n".join(f"  - {p}" for p in changed_files)
-    # git diff (origin/main...HEAD) — 실제 patch content 포함 (최대 8000자).
-    # Codex가 "PR diff를 읽고 판단" 하려면 --stat 요약이 아닌 실제 코드 변경 내용이 필요.
-    # BUG-20260627-C81C MT-1 (AC-1): git diff 조회 실패 시 placeholder로 우회하지 않고
-    # fail-closed BLOCKED 처리한다. "(diff 조회 실패)" 같은 placeholder를 Codex에 전달하면
-    # 실제 코드 변경 없이 APPROVE를 받을 수 있는 우회 경로가 생기므로 즉시 차단한다.
-    diff_txt = ""
-    try:
-        _diff_result = subprocess.run(
-            ["git", "diff", "origin/main...HEAD"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=60,
-            cwd=str(BASE_DIR),
-        )
-    except FileNotFoundError:
+    # BUG-20260627-C81C MT-6 (AC-1): 파일별 per-file patch 수집 (trust-root 우선).
+    # 전체 diff 8000자 잘라쓰기 대신 trust-root 파일을 우선 포함하여
+    # pipeline.py 변경이 항상 Codex packet에 들어가도록 한다.
+    # MT-1 (AC-1): git diff 조회 실패 시 placeholder로 우회하지 않고 fail-closed BLOCKED 처리.
+    # 총 budget (자). AC-1("pipeline.py 변경이 항상 Codex packet에 포함")을 만족하려면
+    # 최우선 trust-root 파일(pipeline.py) patch 전체가 들어갈 만큼 충분해야 한다.
+    # 본 PR의 pipeline.py patch만 ~52KB이므로 40000으로는 self-block(codex_review_diff_incomplete)이
+    # 발생한다. trust-root 파일 patch를 모두 수용하도록 120000으로 설정한다.
+    DIFF_BUDGET = 120000
+    PIPELINE_PY = "pipeline.py"
+    sorted_files = _sort_changed_files_by_priority(changed_files)
+    included_files: list = []
+    excluded_files: list = []
+    per_file_patches: list = []
+    remaining_budget = DIFF_BUDGET
+
+    for _cf in sorted_files:
+        try:
+            _pf_result = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--", _cf],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=30, cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            _die(
+                "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
+                f"  git diff 조회 실패 ({_cf}) (fail-closed).\n"
+                "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            )
+        if _pf_result.returncode != 0:
+            _die(
+                "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
+                f"  git diff가 실패했습니다 (파일={_cf}, returncode={_pf_result.returncode}, fail-closed).\n"
+                "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            )
+        _patch = (_pf_result.stdout or "").strip()
+        if not _patch:
+            # 변경 없는 파일은 스킵 (changed_files 목록에 있지만 실제 diff 없는 경우)
+            continue
+        if len(_patch) <= remaining_budget:
+            per_file_patches.append(f"### {_cf}\n{_patch}")
+            included_files.append(_cf)
+            remaining_budget -= len(_patch)
+        else:
+            excluded_files.append(_cf)
+
+    # pipeline.py가 changed_files에 있는데 packet에 포함되지 않으면 fail-closed.
+    if PIPELINE_PY in changed_files and PIPELINE_PY not in included_files:
         _die(
-            "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
-            "  git CLI를 찾을 수 없어 PR diff를 조회할 수 없습니다 (fail-closed).\n"
-            "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            "[BLOCKED] failure_code=codex_review_diff_incomplete\n"
+            f"  pipeline.py가 변경 파일에 포함되어 있으나 Codex packet에 넣을 수 없습니다 (fail-closed).\n"
+            f"  현재 diff budget={DIFF_BUDGET}자, pipeline.py patch 크기가 budget을 초과합니다.\n"
+            "  PR을 더 작게 나누거나 pipeline.py를 먼저 commit하세요.\n"
+            "  failure_code=codex_review_diff_incomplete"
         )
-    except subprocess.TimeoutExpired:
+    # 포함된 파일이 하나도 없으면 budget 초과.
+    if not included_files:
         _die(
-            "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
-            "  git diff 조회가 시간 초과되었습니다 (fail-closed, 60초).\n"
-            "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            "[BLOCKED] failure_code=codex_review_diff_too_large\n"
+            f"  diff budget({DIFF_BUDGET}자)이 모든 파일 patch를 담기에 너무 작습니다 (fail-closed).\n"
+            "  PR을 더 작게 나누거나 Codex review packet budget을 확장하세요."
         )
-    except OSError as _diff_exc:
-        _die(
-            "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
-            f"  git diff 조회 중 오류가 발생했습니다 (fail-closed): {_diff_exc}\n"
-            "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
-        )
-    if _diff_result.returncode != 0:
-        _die(
-            "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
-            f"  git diff가 실패했습니다 (returncode={_diff_result.returncode}, fail-closed).\n"
-            f"  stderr: {(_diff_result.stderr or '')[:300]}\n"
-            "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
-        )
-    _diff_raw = _diff_result.stdout or ""
-    if len(_diff_raw) > 8000:
-        diff_txt = _diff_raw[:8000] + "\n... (diff 잘림 — 총 " + str(len(_diff_raw)) + "자)"
-    else:
-        diff_txt = _diff_raw
+    diff_txt = "\n\n".join(per_file_patches)
+    if excluded_files:
+        diff_txt += f"\n\n... (budget 초과로 제외된 파일: {', '.join(excluded_files)})"
     # CI 상태 정보
     github_ci_state = state.get("external_gates", {}).get("github_ci", {})
     ci_run_id = github_ci_state.get("evidence", "")
@@ -6964,7 +7065,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         f"PR head SHA: {pr_head_sha}\n\n"
         "== 변경 파일 목록 ==\n"
         f"{files_txt}\n\n"
-        "== Git Diff (실제 변경 내용, 최대 8000자) ==\n"
+        f"== Git Diff (실제 변경 내용, 파일별 patch, trust-root 우선, budget={DIFF_BUDGET}자) ==\n"
+        f"포함된 파일: {', '.join(included_files)}\n"
+        f"제외된 파일: {', '.join(excluded_files) if excluded_files else '없음'}\n\n"
         f"{diff_txt}\n\n"
         "== CI 상태 ==\n"
         f"  github_ci: {ci_status} ({ci_run_id})\n"
@@ -7049,6 +7152,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "contract_sha256": contract_sha256,
         "verdict": str(parsed["verdict"]),
     }
+    # BUG-20260627-C81C MT-6 (AC-1): Codex packet에 포함/제외된 파일 기록.
+    review_record["included_files"] = included_files
+    review_record["excluded_files"] = excluded_files
     if result_status == "REJECTED":
         review_record["reject_reason"] = str(parsed["reject_reason"])
 
