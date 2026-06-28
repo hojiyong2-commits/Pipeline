@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260627-C81C",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-a1462ed85e343e74",
+  "status": "COMPLETED",
+  "started_at": "2026-06-28T01:17:00Z",
+  "completed_at": "2026-06-28T01:17:18Z",
+  "output_file": "build_report_C81C.xml",
+  "output_sha256": "049256d61994f6636dcd218be97202da5c6333d750c49166c8cb7ead0be76e47",
+  "evidence_files": [],
+  "commit_sha": "df5b3e6e9b8b3e44f3a767ee4c4e76195d264fe3"
+}
