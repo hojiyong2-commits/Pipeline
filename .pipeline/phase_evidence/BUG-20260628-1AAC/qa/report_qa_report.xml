@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>BUG-20260628-1AAC</pipeline_id>
+  <qa_run_id>qa-276ab8ebaadfea53</qa_run_id>
+  <round>1</round>
+  <verdict>PASS</verdict>
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 추가 없음. 기존 subprocess(git/gh/codex) 호출은 본 변경 범위 밖</wa>
+    <ui>N-A — GUI 위젯 변경 없음 (CLI 게이트 로직)</ui>
+    <fs>N-A — 파일 I/O 신규 추가 없음 (기존 packet read는 변경 범위 밖)</fs>
+    <pd>PASS — 모듈 함수 단위 격리(_parse_codex_verdict/_cmd_gates_codex_review), SSoT 상수(CODEX_REVIEW_CRITICAL_FILES) + 헬퍼(_is_codex_critical_file) 분리. 신규 심볼 중복 정의 0건, dead code 0건</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점</sec>
+    <al>PASS — _is_codex_critical_file None/비-str TypeError 방어, 빈 문자열 안전, 빈 excluded_files no-op, pr_body 빈값 슬라이스 안전</al>
+    <build>N-A — BUILD 태그 없음 (meta-task, EXE 빌드 대상 아님)</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+  <numeric_score>108</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 네트워크 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — 파일시스템 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5(함수 단위 격리 + SSoT 상수 분리), 인터페이스계약 5/5(_is_codex_critical_file(path: str) -> bool 명시적 타입, dict 반환 구조 일관)</pd>
+    <al score="20" max="20">0나눗셈 N/A, 범위검증 5/5(슬라이스 안전), 타입검증 5/5(None/비-str TypeError), 빈데이터 5/5(빈 excluded_files/빈 pr_body 방어), 형식방어 5/5(INFO/WARNING/ERROR bypass INVALID)</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="108" max="120"/>
+    <percentage>90.0</percentage>
+    <numeric_verdict>PASS — 적용 카테고리(PD 10/10 + AL 20/20) 만점. 미해당 카테고리 포함 108/120(90%), QA_PASS_THRESHOLD 96/120(80%) 상회</numeric_verdict>
+  </numeric_score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover execution_check에 py_compile/import/ruff/mypy/pytest 21 passed 기재</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — 신규 함수가 정의만이 아니라 실제 호출 경로(_cmd_gates_codex_review 내 excluded_files 검사, _parse_codex_verdict ai_lines 필터)에 바인딩됨. 런타임 직접 실행으로 INFO/WARNING bypass INVALID, critical file 탐지 True 확인</functional_binding_verified>
+  </runtime_functional_check>
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan에 참고 이미지/파일 명시 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — 1AAC 커밋(306dac7, d7a4ab4) diff가 pipeline.py + tests/e2e/test_codex_review_gate_3bb6.py로 한정됨을 git show --stat으로 확인</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan에 decomposition_audit(SPLIT_REQUIRED, micro_task_count=3) 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — MT-1/MT-2/MT-3 각 grep_evidence executed=true</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — _parse_codex_verdict, _cmd_gates_codex_review만 변경. 신규 CODEX_REVIEW_CRITICAL_FILES/_is_codex_critical_file는 MT-3 선언 범위 내</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="런타임 직접 검증: _parse_codex_verdict 'INFO: 제시된 문제 없음' + APPROVE_TO_USER = INVALID, 'WARNING: 경고' + APPROVE_TO_USER = INVALID, 순수 APPROVE_TO_USER = APPROVED 회귀 없음. _CODEX_CLI_SYSTEM_PREFIXES에서 INFO:/WARNING:/ERROR: 제거 확인. TC-14(E2E exit 1)/TC-14b(단위) PASS"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="코드 확인: pr_body_masked(line 7138, regex ACCEPT-[A-Z]+-digit8-hex4 + nonce suffix 포함) + diff_txt_masked(line 7145) 모두 [ACCEPT코드 마스킹] 치환. pr_body_sha256은 마스킹 전 원본(line 6982)에서 계산되어 stale 검증 무영향. TC-15 stdin 캡처로 ACCEPT 원문 미노출 + placeholder 존재 검증 PASS"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="런타임 직접 검증: _is_codex_critical_file '.claude/codex_review_contract.md'=True, '.claude/agents/qa-agent.md'(prefix)=True, 'pipeline.py'=True, Windows 구분자 경로=True, 'README.md'=False. CODEX_REVIEW_CRITICAL_FILES SSoT 5개 정의. excluded_files 내 critical 발견 시 codex_review_diff_incomplete _die(exit 1) BLOCKED(line 7081-7090). TC-16x3 PASS"/>
+  </criteria_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <oracle_quality>
+    <normal_case>PASS — normal_prbody_masked 1개</normal_case>
+    <edge_error_case>PASS — edge_info_prefix_invalid + exception_trustroot_excluded_blocked 2개</edge_error_case>
+    <non_empty_expected>PASS — 모든 expected.json 비어있지 않음</non_empty_expected>
+    <no_placeholder>PASS — TODO/PLACEHOLDER/TBD/N/A 없음</no_placeholder>
+  </oracle_quality>
+  <test_execution>
+    <command>python -m pytest tests/e2e/test_codex_review_gate_3bb6.py -q</command>
+    <result>21 passed</result>
+    <ruff>All checks passed</ruff>
+    <mypy>Success: no issues found in 1 source file</mypy>
+    <py_compile>PASS</py_compile>
+    <import>PASS</import>
+    <secrets_gate>PASS (exit 0) — 검사 파일 2개 민감 정보 0건</secrets_gate>
+    <real_cli_e2e>PASS — subprocess 기반(7건), PIPELINE_STATE_PATH 격리(30건), final_state assertion 포함</real_cli_e2e>
+  </test_execution>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음 — 3개 AC 모두 코드 확인 + 런타임 직접 실행 + E2E 테스트로 검증 완료
+  </critical_issues>
+  <improvement_suggestions>
+    (감점 아님, 참고) MT-2 마스킹 regex와 packet_text 마스킹(line 7115)이 두 곳에서 ACCEPT 패턴을 정의한다. 향후 ACCEPT 코드 형식 변경 시 두 패턴을 모두 갱신해야 하므로 단일 모듈 상수로 통합하면 유지보수성이 개선된다. 본 파이프라인 범위 밖이며 별도 IMP 후보.
+  </improvement_suggestions>
+</qa_report>
