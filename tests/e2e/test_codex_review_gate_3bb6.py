@@ -1002,11 +1002,13 @@ def test_tc15_prbody_accept_code_masked(tmp_path: Path) -> None:
     넣기 전 ACCEPT-* 패턴을 [ACCEPT코드 마스킹]으로 치환하는지 stdin 캡처로 검증한다.
 
     검증 흐름:
-    1. real_accept_code_literal = "ACCEPT-IMP-20260627-3BB6-A1B2"  ← 실제 ACCEPT 코드 형식
-    2. fake gh가 PR body에 real_accept_code_literal이 포함된 텍스트 반환
-    3. gates codex-review 실행 → Codex stdin을 파일로 캡처
-    4. captured에 real_accept_code_literal 원문이 없어야 함 (마스킹됨)
-    5. captured에 "[ACCEPT코드 마스킹]" placeholder가 있어야 함
+    - real_accept_code_literal ("ACCEPT-..." 형식 원문) 과 "[ACCEPT코드 마스킹]" (pipeline.py가 대체하는 placeholder)은
+      서로 다른 두 문자열임 — 혼동 주의
+    - PR body에 원문("ACCEPT-..." 형식)이 삽입됨
+    - fake gh가 해당 PR body를 반환
+    - gates codex-review 실행 → Codex stdin 캡처
+    - captured에서 원문("ACCEPT-...") 미포함 확인 (pipeline.py가 마스킹)
+    - captured에서 placeholder("[ACCEPT코드 마스킹]") 포함 확인
 
     PIPELINE_STATE_PATH isolation + final_state assertion 포함.
     """
@@ -1020,6 +1022,11 @@ def test_tc15_prbody_accept_code_masked(tmp_path: Path) -> None:
     # real_accept_code_literal: 실제 ACCEPT 코드 형식 (ACCEPT-TYPE-DATE-4HEX-4HEX)
     # 이 값이 fake gh PR body에 삽입되고, Codex stdin에서 마스킹 여부를 검증한다
     real_accept_code_literal = "ACCEPT-IMP-20260627-3BB6-A1B2"
+
+    # 두 값이 서로 다름을 명시 (Codex 오독 방지)
+    assert real_accept_code_literal != "[ACCEPT코드 마스킹]", (
+        "real_accept_code_literal은 마스킹 placeholder와 다른 별개의 값입니다"
+    )
 
     # PR body에 real_accept_code_literal을 포함하는 fake gh 주입
     gh_dir = tmp_path / "_gh_shim_accept"
