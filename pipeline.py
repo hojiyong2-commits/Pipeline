@@ -6762,19 +6762,10 @@ _CODEX_CLI_SYSTEM_PREFIXES = (
     # Windows OS가 Codex CLI 서브프로세스 종료 시 stdout에 출력하는 특정 런타임 메시지.
     # 형식: "SUCCESS: The process with PID <N> (child process of PID <M>) has been terminated."
     # 이 패턴은 Codex AI 모델 출력이 아닌 OS 레벨 메시지이므로 verdict 파싱에서 제외한다.
-    # 제네릭 "SUCCESS: " 대신 구체적 패턴만 필터링하여 AI 우회 차단을 유지한다.
-    # BUG-20260628-1AAC: 제네릭 "SUCCESS: " 제거 후 구체적 Windows 프로세스 종료 패턴으로 교체.
+    # BUG-20260628-1AAC: 제네릭 "SUCCESS: "/"Codex CLI"/"✓"/"●"/"◎" 등 광범위 prefix 제거.
+    # 광범위 prefix는 "✓ 문제없음\nAPPROVE_TO_USER" 같은 AI 우회 벡터가 되므로 허용 불가.
+    # 정확히 식별된 OS 런타임 메시지 패턴만 필터링하여 AI 우회 차단을 유지한다.
     "SUCCESS: The process with PID ",
-    # BUG-20260628-1AAC MT-1: "INFO: "/"WARNING: "는 _CODEX_CLI_SYSTEM_PREFIXES에서 제거한다.
-    # AI 모델이 "INFO: 문제 없음\nAPPROVE_TO_USER" 또는 "WARNING: ...\nAPPROVE_TO_USER" 형태로
-    # 출력하면 INFO/WARNING 줄이 skip되어 APPROVE_TO_USER가 first_ai_line이 되는 우회가 가능했다.
-    # 이제 INFO:/WARNING: 줄도 AI 출력으로 취급되어 형식 불일치 → INVALID 처리된다.
-    # "ERROR: "도 동일 사유로 의도적으로 제외 (BUG-20260627-C81C): Codex CLI가
-    # "ERROR: ...\nAPPROVE_TO_USER" 형태로 출력 시 ERROR 줄이 AI 출력 첫 줄이 되어 INVALID.
-    "Codex CLI",
-    "✓",
-    "●",
-    "◎",
 )
 
 
