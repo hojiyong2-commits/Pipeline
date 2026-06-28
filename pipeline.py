@@ -7169,16 +7169,24 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   - POSIX에서도 동일한 코드패스 사용 가능.
     try:
         if sys.platform == "win32":
-            # Windows: shell=True 필수 (codex.ps1 — PowerShell 스크립트 래퍼).
-            # `-` 인자로 stdin에서 프롬프트를 읽도록 지정.
+            # Windows: PowerShell.exe를 직접 호출하여 codex exec -를 실행한다.
+            # shell=True(cmd.exe 경유)를 사용하면 cmd.exe가 서브프로세스 종료 시
+            # "SUCCESS: The process with PID N (child process of PID M) has been terminated."
+            # 메시지를 stdout에 출력하여 AI 응답 파싱을 방해한다 (BUG-20260628-1AAC).
+            # PowerShell.exe -Command "& codex exec -" 방식은 cmd.exe를 우회하므로 이 메시지가 나오지 않는다.
             result = subprocess.run(
-                "codex exec -",
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "& codex exec -",
+                ],
                 input=prompt,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 timeout=300,
-                shell=True,  # nosec B602
             )
         else:
             result = subprocess.run(
