@@ -1,0 +1,128 @@
+<qa_report>
+  <pipeline_id>BUG-20260627-C81C</pipeline_id>
+  <verdict>PASS</verdict>
+  <numeric_score>100</numeric_score>
+
+  <handover_check>
+    <from>dev-agent</from>
+    <evidence_files>pipeline.py, tests/e2e/test_codex_review_gate_3bb6.py, .claude/codex_review_contract.md, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json</evidence_files>
+    <ui_category>미포함 — dev-agent 단독 handover 수락 (UI subphase 불필요)</ui_category>
+    <verdict>PASS — handover 존재, 구체적 파일명 명시, 실제 제출 확인</verdict>
+  </handover_check>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. subprocess git diff는 로컬 프로세스 호출(WA SSoT 4항목 비대상).</wa>
+    <ui>N-A — UI 카테고리 미포함, GUI 위젯 없음</ui>
+    <fs>N-A — 신규 파일 쓰기/경로 처리 없음. codex_review_result.json 기록은 기존 패턴 유지(범위 밖).</fs>
+    <pd>PASS — 모듈 분리: _sort_changed_files_by_priority가 순수 정렬 helper로 분리됨. 인터페이스 계약: list->list 시그니처, docstring 명시, TypeError 계약 정의.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — TC-13에서 None/비-list/비-str 원소 TypeError + 빈 리스트 edge 방어 검증. isinstance 타입가드 + 빈 데이터 처리 구현.</al>
+    <build>N-A — meta-task(N/A 빌드). BUILD 카테고리 태그 없음.</build>
+    <vsce>N-A — VSCE 카테고리 미포함.</vsce>
+  </category_check>
+
+  <numeric_score>
+    <wa score="0" max="20">N/A — 네트워크 카테고리 아님</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 아님</ui>
+    <fs score="0" max="20">N/A — 파일 쓰기/경로 처리 신규 없음</fs>
+    <pd score="10" max="10">모듈분리 5/5(순수 helper 분리) + 인터페이스계약 5/5(list->list, docstring, TypeError 계약)</pd>
+    <al score="20" max="20">타입가드 5/5 + 범위검증 5/5 + 입력타입검증 5/5(isinstance) + 빈데이터 5/5(빈 리스트 처리)</al>
+    <build score="0" max="10">N/A — meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="30" max="30"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS — 적용 가능 카테고리(PD+AL) 만점. CLI numeric-score 100 보고(120 환산 만점, hard gate 96 초과).</numeric_verdict>
+  </numeric_score>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>PASS — _sort_changed_files_by_priority(changed_files: list) -> list, _priority(path: str) -> int 타입힌트 완비</type_hinting_all>
+      <widget_naming>N-A — UI 위젯 없음</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover &lt;execution_check&gt;에 py_compile/import/pytest 15 passed 명시</execution_check_present>
+    <execution_check_verdict>PASS — dev-agent 선언값 PASS, QA 재실행으로 15 passed 확인</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _sort_changed_files_by_priority 정의(6835) + 호출(6983) 확인, dead code 아님. _cmd_gates_codex_review가 실제 CLI dispatch에 바인딩됨.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <c3_cross_verification>
+    <scope_files_declared>5</scope_files_declared>
+    <evidence_files_submitted>5</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — MT-6 커밋(df5b3e6) 변경 파일 = pipeline.py + test_codex_review_gate_3bb6.py 정확히 일치. 누적 브랜치 diff의 타 파일은 이전 MT 커밋(c580c65 Round 2 5파일) 및 이전 파이프라인(CD3C/3BB6 hooks) 산출물로 scope_declaration files_to_modify 내.</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <actual_changed_files>pipeline.py, tests/e2e/test_codex_review_gate_3bb6.py, .claude/codex_review_contract.md, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json</actual_changed_files>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" result="PASS" evidence="git diff 조회 실패 시 placeholder 우회 제거(grep 'diff_txt = \"(diff' = 0). 4개 예외 경로(FileNotFoundError/TimeoutExpired/OSError/returncode!=0)가 codex_review_diff_unavailable fail-closed BLOCKED. TC-7b가 PATH 비움으로 git 부재 강제 → exit 1 + codex_review_diff_unavailable 확인."/>
+    <criterion ac_id="AC-3" result="PASS" evidence="_cmd_gates_request_accept의 codex_review_result.json SHA 재기록 블록 2곳 제거(grep '_cr_post|_cr_else|_updated_new_pkt_sha|_new_pkt_sha_else' = 0). packet/PR 본문 변경 시 stale 검증이 정상 작동."/>
+    <criterion ac_id="AC-4" result="PASS" evidence="codex_review_contract.md 11개 항목 재작성 확인(grep '^[0-9]+\.' = 11). 자동ACCEPT금지(5)/nonce노출금지(6)/PR댓글금지(7)/merge·deploy금지(8)/pipeline.py수정금지(9)/fail-open금지(10)/회귀·SHA stale(11) 포함."/>
+    <criterion ac_id="AC-5" result="PASS" evidence="_check_codex_review_gate가 pr_head_sha/packet_sha256/pr_body_sha256 3개 SHA를 독립 검증. TC-4(pipeline_id stale)/TC-5(packet mismatch->stale_packet_sha256)/TC-6(빈 packet->stale_packet_sha256) PASS. edge_stale_sha oracle 3개 SHA 독립 케이스."/>
+    <criterion ac_id="AC-MT6-1" result="PASS" evidence="_sort_changed_files_by_priority 신규 helper(6835) trust-root 우선 정렬. TC-11 7개 그룹 순서 검증(pipeline.py 0 > contract.md 1 > agents 2 > commands 3 > workflows 4 > test_codex* 5 > 나머지 6) PASS."/>
+    <criterion ac_id="AC-MT6-2" result="PASS" evidence="per-file patch 수집(DIFF_BUDGET=120000) + trust-root 우선 포함으로 전체 8000자 잘라쓰기 교체. pipeline.py patch ~52747자이므로 budget 120000으로 항상 포함됨. TC-7이 diff --git 헤더 또는 변경 파일명 포함 확인."/>
+    <criterion ac_id="AC-MT6-3" result="PASS" evidence="pipeline.py가 changed_files에 있으나 included_files에 없으면 codex_review_diff_incomplete BLOCKED(fail-closed). included_files 빈 경우 codex_review_diff_too_large BLOCKED."/>
+    <criterion ac_id="AC-MT6-4" result="PASS" evidence="review_record에 included_files/excluded_files 필드 추가(라인 7156-7157)."/>
+    <criterion ac_id="AC-MT6-5" result="PASS" evidence="TC-7이 chr() 조합(chr(40)+'diff '+chr(51468)+...)으로 placeholder 리터럴을 소스에서 제거 → 본 테스트 파일이 packet에 포함되어도 self-detect 회귀 없음. TC-10~TC-13 단위 테스트 추가."/>
+  </criteria_verification>
+
+  <test_results>15 passed (test_oracle_files_present, TC-1~TC-13 모두 통과, 19.31s). py_compile pipeline.py OK, test py_compile OK.</test_results>
+
+  <security_check>
+    보안 절대 제약 5항목 보존 확인:
+    1. 자동 ACCEPT 금지 — contract 항목 5 명시, gates accept 자동 실행 코드 없음
+    2. nonce 사용자 노출 금지 — contract 항목 6 명시, codex_review_result.json nonce 미포함
+    3. gates accept 자동실행 금지 — _cmd_gates_codex_review가 verdict 파싱만, accept 미호출
+    4. nonce 보안 로직 완화 금지 — out_of_scope, nonce 생성/검증/consume 미변경
+    5. Codex APPROVE를 User Acceptance PASS로 기록 금지 — APPROVE는 codex_review_result.json status=APPROVED만 기록, User Acceptance gate 별도 유지
+    MT-2 SHA 재기록 제거로 stale 검증 강화(보안 개선). MT-1/MT-6 fail-closed 강화로 검토 우회 차단(보안 개선).
+  </security_check>
+
+  <oracle_quality>
+    edge_stale_sha oracle(input.json/expected.json) 3개 SHA 독립 케이스. normal_approve(normal) + edge_codex_reject/edge_stale_sha(edge) + exception_missing_review(exception) 케이스 존재. expected 비어있지 않음, placeholder 없음.
+  </oracle_quality>
+
+  <result>[PASS] 모든 적용 카테고리 PASS, numeric_verdict=PASS, compliance/runtime/c3/micro_task_boundary 전부 PASS, 15 passed, 보안 5항목 보존, dead code 0, duplication 0, scope 준수.</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    - DIFF_BUDGET=120000은 현재 pipeline.py patch(~52KB)를 수용하나, 향후 pipeline.py 단일 패치가 더 커지면 codex_review_diff_incomplete self-block 가능. 코드 주석에 이미 명시되어 있으며 fail-closed로 안전하게 차단됨(우회 위험 없음).
+    - 범위 밖 사전 실패 11건(test_request_accept_sst_2044.py 등)은 baseline 동일 실패로 본 변경과 무관(regression_note 확인). 별도 IMP에서 처리 권장.
+  </improvement_suggestions>
+</qa_report>
