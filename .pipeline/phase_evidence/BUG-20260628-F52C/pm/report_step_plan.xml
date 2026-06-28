@@ -1,0 +1,176 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<step_plan>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <pipeline_type>BUG</pipeline_type>
+  <description>gates request-accept 내부 packet 재생성으로 stale_packet_sha256 순환 근본 수정 staged snapshot to Codex Review to publish 구조 재설계</description>
+
+  <task_complexity>
+    <execution_profile>STANDARD</execution_profile>
+    <reason>Codex Review와 User Acceptance 간의 snapshot 동기화 버그 수정. 핵심 게이트 로직 변경이며 10개 회귀 테스트 필요.</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>0</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>6</expected_changed_functions>
+      <expected_changed_lines>350</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>false</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>staging 구현 방식(별도 디렉토리 vs temp 파일), helper 함수명 등 P2 내부 취향 질문은 유지보수성 기준으로 직접 결정했습니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-2">
+        <user_facing_question>gates request-accept 내부 흐름을 "staging → Codex Review → publish" 순서로 재배치하는 방식으로 구현할까요?</user_facing_question>
+        <evidence>사용자가 필수 수정 방향 1~8번과 회귀 테스트 TC-1~TC-10을 명시했습니다.</evidence>
+        <why_it_matters>Codex Review가 검토한 snapshot과 사용자가 승인하는 snapshot이 동일해야 stale_packet_sha256 순환이 해결됩니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A"><label>사용자 명시 방향대로 staging to Codex Review to publish 구현</label><benefit>Codex Review가 검토한 snapshot과 사용자가 승인하는 snapshot이 항상 동일하므로 stale_packet_sha256 순환이 근본적으로 해결됩니다</benefit><cost>기존 request-accept 흐름 재구조화 필요</cost></option>
+          <option id="B"><label>Codex Review 후 packet 재생성 금지</label><benefit>코드 변경량이 적어 단기적으로 간단합니다</benefit><cost>packet 자동 생성 기능이 상실되어 사용성이 저하됩니다</cost></option>
+        </options>
+        <user_answer>A 사용자가 필수 수정 방향 명시, NO_ASKUSER_REQUIRED</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <decomposition_audit>
+    <audit_result>SPLIT_REQUIRED</audit_result>
+    <micro_task_count>6</micro_task_count>
+    <grep_executions>6</grep_executions>
+    <all_tasks_atomic>true</all_tasks_atomic>
+    <grep_evidence_present>true</grep_evidence_present>
+    <call_sites_verified>true</call_sites_verified>
+  </decomposition_audit>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>TC-1: 기존 stale_packet_sha256 재현 케이스가 수정 후 PASS</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>TC-2: request-accept 직후 packet SHA 3자 일치 (codex_review_result == acceptance_request == sha256(md 파일))</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>TC-3: request-accept 직후 pr_body SHA 3자 일치</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>TC-4: Codex REJECT 시 승인 코드/댓글/stdout 미출력</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>TC-5: PENDING 중 report final-packet 변경 시도 BLOCKED/INVALIDATED</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>TC-6: PENDING 중 report update-pr-body 변경 시도 BLOCKED/INVALIDATED</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>TC-7: request-accept 재실행 동일 snapshot no-op, 다름 INVALIDATED</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>TC-8: 시간 필드 staging 시점에 한 번만 고정 (반복 호출 SHA 불변)</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>TC-9: 기존 nonce/provenance/replay/stale 검증 유지</text>
+    </criterion>
+    <criterion id="AC-10" must_verify="true" source="user" user_visible="true">
+      <text>TC-10: post-accept는 status/provenance/comment 필드만 변경</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>pipeline._materialize_acceptance_snapshot</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites>
+        <site>_auto_generate_final_packet_and_update_pr</site>
+        <site>_finalize_post_accept</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>def _materialize_acceptance_snapshot</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>publish: bool 파라미터 추가 False면 staging(temp 파일 SHA 계산), True면 os.replace 원자 커밋</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-1,AC-2</covers_ac>
+    </micro_task>
+    <micro_task id="MT-2">
+      <affected_function>pipeline._cmd_gates_request_accept</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>cmd_gates (action == request-accept)</site></affected_call_sites>
+      <grep_evidence><pattern>def _cmd_gates_request_accept</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>순서 재배치: staging to Codex Review 내부 호출 to APPROVED면 publish to 3-SHA 불변식 검증 to stdout</change_summary>
+      <line_estimate>120</line_estimate>
+      <covers_ac>AC-1,AC-2,AC-3,AC-4,AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-3">
+      <affected_function>pipeline._cmd_gates_codex_review</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites>
+        <site>cmd_gates (action == codex-review)</site>
+        <site>_cmd_gates_request_accept (내부 호출)</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>def _cmd_gates_codex_review</pattern><match_count>1</match_count><executed>true</executed></grep_evidence>
+      <change_summary>staged_snapshot_info 파라미터 수신 가능하도록 확장 staged SHA 기준 codex_review_result.json 기록</change_summary>
+      <line_estimate>60</line_estimate>
+      <covers_ac>AC-2,AC-3</covers_ac>
+    </micro_task>
+    <micro_task id="MT-4">
+      <affected_function>pipeline._check_pending_snapshot_lock (신규)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites>
+        <site>_cmd_report_final_packet</site>
+        <site>_cmd_report_update_pr_body</site>
+        <site>_cmd_gates_request_accept</site>
+      </affected_call_sites>
+      <grep_evidence><pattern>_check_pending_snapshot_lock</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>PENDING acceptance_request 동안 packet 변경 차단 helper 신규 구현</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-5,AC-6</covers_ac>
+    </micro_task>
+    <micro_task id="MT-5">
+      <affected_function>pipeline._verify_snapshot_invariant (신규)</affected_function>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_call_sites><site>_cmd_gates_request_accept (publish 직후)</site></affected_call_sites>
+      <grep_evidence><pattern>_verify_snapshot_invariant</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>publish 직후 3-SHA 불변식 검증 helper 신규 구현</change_summary>
+      <line_estimate>30</line_estimate>
+      <covers_ac>AC-4,AC-5</covers_ac>
+    </micro_task>
+    <micro_task id="MT-6">
+      <affected_function>tests/e2e/test_codex_snapshot_sync_f52c.py (신규)</affected_function>
+      <target_files><file>tests/e2e/test_codex_snapshot_sync_f52c.py</file></target_files>
+      <affected_call_sites><site>none</site></affected_call_sites>
+      <grep_evidence><pattern>test_codex_snapshot_sync_f52c</pattern><match_count>0</match_count><executed>true</executed></grep_evidence>
+      <change_summary>TC-1~TC-10 회귀 테스트 전체 구현</change_summary>
+      <line_estimate>300</line_estimate>
+      <covers_ac>AC-1,AC-2,AC-3,AC-4,AC-5,AC-6,AC-7,AC-8,AC-9,AC-10</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <roadmap>
+    <phase name="PM">Contract 초기화, step_plan 완성, oracle 등록</phase>
+    <phase name="Dev MT-1">_materialize_acceptance_snapshot publish 파라미터 확장</phase>
+    <phase name="Dev MT-2">_cmd_gates_request_accept 순서 재배치</phase>
+    <phase name="Dev MT-3">_cmd_gates_codex_review staged_snapshot_info 파라미터 확장</phase>
+    <phase name="Dev MT-4">_check_pending_snapshot_lock helper 신규 구현</phase>
+    <phase name="Dev MT-5">_verify_snapshot_invariant helper 신규 구현</phase>
+    <phase name="Dev MT-6">TC-1~TC-10 회귀 테스트 구현</phase>
+    <phase name="QA">7개 카테고리 검증</phase>
+    <phase name="Build">N/A (meta-task)</phase>
+    <phase name="External Gates">Technical / Oracle / GitHub CI / Codex Review / User Acceptance</phase>
+    <phase name="Architect">RCA</phase>
+  </roadmap>
+</step_plan>

@@ -1,0 +1,9 @@
+﻿{
+    "packet_sha256_in_codex_review":  "must_equal_packet_sha256_in_acceptance_request",
+    "sha_invariant":  "3way_match",
+    "outcome":  "PASS",
+    "acceptance_code_issued":  true,
+    "stale_packet_sha256_error":  false,
+    "pr_comment_posted":  true,
+    "packet_sha256_in_acceptance_request":  "must_equal_actual_file_sha256"
+}

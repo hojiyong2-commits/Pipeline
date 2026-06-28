@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260628-F52C",
+  "phase": "pipeline_manager",
+  "agent_id": "pipeline-manager-agent",
+  "run_id": "pipeline_manager-b2b58f74e580b0af",
+  "status": "COMPLETED",
+  "started_at": "2026-06-28T09:11:27Z",
+  "completed_at": "2026-06-28T09:19:33Z",
+  "output_file": "manager_handoff.xml",
+  "output_sha256": "b451c63bf857464a199b17ac543a867e263cc26ecff9c6378fafe4e88916f61a",
+  "evidence_files": [],
+  "commit_sha": "1c85d3106db5c72f81887fef23060b53e4576f16"
+}
+
