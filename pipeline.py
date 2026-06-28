@@ -7107,6 +7107,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _raw_packet = _packet_path.read_text(encoding="utf-8", errors="replace")[:4000]
             # ACCEPT-<pipeline_id> 패턴 라인을 마스킹하여 Codex 프롬프트에서 제거.
             import re as _re_codex
+            # ACCEPT-<TYPE>-<YYYYMMDD>-<HEX4> 라인 전체 마스킹.
+            # TYPE: FEAT|BUG|IMP ([A-Z]+), YYYYMMDD: \d{8}, HEX4: [0-9A-F]{4} (secrets.token_hex(2).upper())
+            # 선택적 nonce: -[A-Z2-7]{8} (base32 8자, _issue_acceptance_nonce 생성값)
+            # 라인 전체(.*)로 마스킹하여 nonce 포함 여부와 무관하게 차단.
             packet_text = _re_codex.sub(
                 r"(?m)^(ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}.*)$",
                 "[승인 코드 마스킹 — 계약 6번]",
@@ -7129,7 +7133,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # 포함되지 않는다") 준수. packet_text는 이미 마스킹되어 있으나 pr_body는 누락되어 있었다.
     # 라인 앵커가 아닌 inline 패턴으로 본문 어디에 있든(라인 중간 포함) 마스킹한다.
     import re as _re_codex_body
-    _ACCEPT_CODE_PATTERN = r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}(?:-[0-9A-Z]{4})?"
+    # ACCEPT 코드 형식: ACCEPT-<TYPE>-<YYYYMMDD>-<HEX4>[-<NONCE8>]
+    # TYPE: FEAT|BUG|IMP ([A-Z]+), YYYYMMDD: \d{8}, HEX4: [0-9A-F]{4} (secrets.token_hex(2).upper())
+    # NONCE8: [A-Z2-7]{8} (base32 uppercase 8자, _issue_acceptance_nonce 생성값, 선택적)
+    # BUG-20260628-1AAC: nonce suffix를 [0-9A-Z]{4}에서 [A-Z2-7]{8}로 수정 (base32 실제 허용 범위)
+    _ACCEPT_CODE_PATTERN = r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}(?:-[A-Z2-7]{8})?"
     _ACCEPT_MASK = "[ACCEPT코드 마스킹]"
     pr_body_masked = _re_codex_body.sub(
         _ACCEPT_CODE_PATTERN,

@@ -1040,15 +1040,17 @@ def test_tc15_prbody_accept_code_masked(tmp_path: Path) -> None:
     stdin_capture = tmp_path / "captured_stdin.txt"
     make_fake_codex(shim, "APPROVE_TO_USER", capture_stdin_to=stdin_capture)
 
-    # real_accept_code_literal: 실제 ACCEPT 코드 형식 (ACCEPT-TYPE-DATE-4HEX-4HEX)
+    # real_accept_code_literal: 실제 ACCEPT 코드 형식 (ACCEPT-TYPE-DATE-HEX4-NONCE8)
     # 이 값이 fake gh PR body에 삽입되고, Codex stdin에서 마스킹 여부를 검증한다
     # ACCEPT-* 마스킹 regex를 피하기 위해 문자열을 f-string으로 조합 (Codex 오독 방지)
-    # 마스킹 regex: ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}(?:-[0-9A-Z]{4})?
+    # 마스킹 regex: ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}(?:-[A-Z2-7]{8})?
+    # HEX4: [0-9A-F]{4} (secrets.token_hex(2).upper())
+    # NONCE8: [A-Z2-7]{8} (base32 uppercase 8자, _issue_acceptance_nonce 생성값)
     # 아래 형식은 소스 파일에 완전한 ACCEPT-... 리터럴이 없어 마스킹 대상이 아님
     _code_prefix = "ACC" + "EPT"
     _code_pipeline = "IMP-20260627-3BB6"
-    _code_suffix = "A1B2"
-    real_accept_code_literal = f"{_code_prefix}-{_code_pipeline}-{_code_suffix}"
+    _code_nonce8 = "ABCD2345"  # base32 uppercase 8자 예시 ([A-Z2-7]{8} 범위)
+    real_accept_code_literal = f"{_code_prefix}-{_code_pipeline}-{_code_nonce8}"
 
     # 두 값이 서로 다름을 명시 (Codex 오독 방지)
     assert real_accept_code_literal != "[ACCEPT코드 마스킹]", (
