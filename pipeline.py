@@ -6759,9 +6759,12 @@ def _codex_review_result_path() -> Path:
 # AI 모델 출력과 구별하기 위해 이 패턴으로 시작하는 줄은 verdict 평가에서 제외한다.
 # 계약은 "AI 출력 첫 줄"을 말하며 Codex CLI 런타임 메시지는 해당하지 않는다.
 _CODEX_CLI_SYSTEM_PREFIXES = (
-    # BUG-20260628-1AAC: "SUCCESS: "는 AI 출력 우회 벡터이므로 제거.
-    # "SUCCESS: 문제없음\nAPPROVE_TO_USER" 패턴으로 우회 가능하였음.
-    # Codex CLI 런타임이 SUCCESS: 를 출력하더라도 fail-closed 처리(INVALID)가 더 안전함.
+    # Windows OS가 Codex CLI 서브프로세스 종료 시 stdout에 출력하는 특정 런타임 메시지.
+    # 형식: "SUCCESS: The process with PID <N> (child process of PID <M>) has been terminated."
+    # 이 패턴은 Codex AI 모델 출력이 아닌 OS 레벨 메시지이므로 verdict 파싱에서 제외한다.
+    # 제네릭 "SUCCESS: " 대신 구체적 패턴만 필터링하여 AI 우회 차단을 유지한다.
+    # BUG-20260628-1AAC: 제네릭 "SUCCESS: " 제거 후 구체적 Windows 프로세스 종료 패턴으로 교체.
+    "SUCCESS: The process with PID ",
     # BUG-20260628-1AAC MT-1: "INFO: "/"WARNING: "는 _CODEX_CLI_SYSTEM_PREFIXES에서 제거한다.
     # AI 모델이 "INFO: 문제 없음\nAPPROVE_TO_USER" 또는 "WARNING: ...\nAPPROVE_TO_USER" 형태로
     # 출력하면 INFO/WARNING 줄이 skip되어 APPROVE_TO_USER가 first_ai_line이 되는 우회가 가능했다.
