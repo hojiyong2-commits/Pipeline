@@ -1,5 +1,0 @@
-{
-  "hook_registered": true,
-  "hook_trigger": "Stop",
-  "hook_command_contains": "codex-user-acceptance-review.ps1"
-}

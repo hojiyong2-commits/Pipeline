@@ -1,0 +1,43 @@
+{
+  "scenario": "edge_stale_sha",
+  "description": "APPROVED이나 SHA 불일치 시 각 필드별 고유 failure_code로 BLOCKED, stale 필드명 메시지 + 재실행 안내 포함. BUG-20260627-C81C MT-3: pr_head_sha/packet_sha256/pr_body_sha256를 독립 검증.",
+  "exit_code": 1,
+  "blocked": true,
+  "stale_field_in_message": true,
+  "rerun_instruction_present": true,
+  "accept_code_issued": false,
+  "primary_failure_code": "stale_pr_head_sha",
+  "cases": [
+    {
+      "case_id": "stale_pr_head_sha",
+      "exit_code": 1,
+      "failure_code": "stale_pr_head_sha",
+      "blocked": true,
+      "stale_field_name": "pr_head_sha",
+      "stale_field_in_message": true,
+      "rerun_instruction_present": true,
+      "accept_code_issued": false
+    },
+    {
+      "case_id": "stale_packet_sha256",
+      "exit_code": 1,
+      "failure_code": "stale_packet_sha256",
+      "blocked": true,
+      "stale_field_name": "packet_sha256",
+      "stale_field_in_message": true,
+      "rerun_instruction_present": true,
+      "accept_code_issued": false
+    },
+    {
+      "case_id": "stale_pr_body_sha256",
+      "exit_code": 1,
+      "failure_code": "stale_pr_body_sha256",
+      "blocked": true,
+      "stale_field_name": "pr_body_sha256",
+      "stale_field_in_message": true,
+      "rerun_instruction_present": true,
+      "accept_code_issued": false
+    }
+  ],
+  "notes": "gates codex-review 재실행 안내 포함. 각 SHA 필드는 acceptance_request.json 유무와 무관하게 독립 검증된다."
+}

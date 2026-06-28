@@ -198,7 +198,7 @@ PR: <PR 링크>
 승인 코드:
 <ACCEPT-{pipeline_id}>
 
-CODEX 검토 필요
+Codex 검토 완료
 ```
 
 PR URL이 없는 경우 `PR: (PR 링크 없음)` 으로 표시합니다.
@@ -252,7 +252,7 @@ Codex Review Loop에서 `REJECT - ...`는 외부 검토 피드백이다. Pipelin
 - Codex APPROVE는 User Acceptance가 아니며, 최종 ACCEPT는 사용자가 PR 댓글에 직접 입력해야 한다.
 - REJECT 피드백은 prefix/suffix/번역/요약 없이 원문 그대로 재작업 입력으로 전달된다.
 - REJECT 5회 초과 시 루프가 자동 중단되며 사용자 직접 개입이 필요하다.
-- `.pipeline/codex_review_loop_state.json`의 status=APPROVED 없이 `gates accept` 실행 시 codex_review_not_approved로 BLOCKED된다.
+- `.pipeline/codex_review_result.json`의 status=APPROVED 없이 `gates accept` 실행 시 codex_review_not_approved로 BLOCKED된다.
 
 ## User Acceptance 표시 상태값 정의
 
