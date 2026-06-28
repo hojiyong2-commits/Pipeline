@@ -1,37 +1,37 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-28T12:35:37Z",
+  "generated_at": "2026-06-28T23:09:39Z",
   "pipeline_id": "BUG-20260628-F52C",
   "phase": "build",
   "phase_status": "DONE",
-  "commit_hint": "c43e9a5cfb6af500039d2d93736ddeffcdd6b8da",
+  "commit_hint": "19225c0f9d677ea2399e135d6d5ae34c30addcfa",
   "state": {
     "current_phase": "harness",
-    "phase_completed_at": "2026-06-28T12:24:03Z",
+    "phase_completed_at": "2026-06-28T23:07:43Z",
     "report_file": null,
     "evidence": "N/A"
   },
   "agent_run": {
-    "run_id": "build-0f0cc4555a9312b0",
+    "run_id": "build-ae0f387774e67689",
     "phase": "build",
     "agent_id": "build-agent",
     "status": "COMPLETED",
-    "output_file": "build_report_F52C.xml",
-    "output_sha256": "a7829837b21f76d0ff48fe31469b6bcb8af6c825befa313e5a96cb8e5addecee",
-    "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/build/agent_receipt_build-0f0cc4555a9312b0.json",
-    "receipt_sha256": "8c83e0bb412ab019d7ed8c4e1749c28c5e52630c6619be8239745d5011255bb9",
+    "output_file": "build_report_F52C_r3.xml",
+    "output_sha256": "99104e807fc550bf03c50c2508b93354a2e09efc28a3ef8e84473969467ea629",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/build/agent_receipt_build-ae0f387774e67689.json",
+    "receipt_sha256": "f566411d5af9b6ae3ac887a13ba97852eaba8ad8de77b740642fb6c12e684319",
     "used_by_phase": "build",
-    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\build\\build-0f0cc4555a9312b0.json"
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\build\\build-ae0f387774e67689.json"
   },
   "manager_run": null,
   "copied_evidence": [
     {
       "label": "agent_receipt",
-      "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\build\\build-0f0cc4555a9312b0.json",
-      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/build/agent_receipt_build-0f0cc4555a9312b0.json",
-      "sha256": "8c83e0bb412ab019d7ed8c4e1749c28c5e52630c6619be8239745d5011255bb9",
-      "size_bytes": 513,
+      "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\build\\build-ae0f387774e67689.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/build/agent_receipt_build-ae0f387774e67689.json",
+      "sha256": "f566411d5af9b6ae3ac887a13ba97852eaba8ad8de77b740642fb6c12e684319",
+      "size_bytes": 516,
       "requires_force_add": true
     }
   ],

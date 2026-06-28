@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260628-F52C",
+  "phase": "build",
+  "agent_id": "build-agent",
+  "run_id": "build-ae0f387774e67689",
+  "status": "COMPLETED",
+  "started_at": "2026-06-28T23:07:25Z",
+  "completed_at": "2026-06-28T23:07:39Z",
+  "output_file": "build_report_F52C_r3.xml",
+  "output_sha256": "99104e807fc550bf03c50c2508b93354a2e09efc28a3ef8e84473969467ea629",
+  "evidence_files": [],
+  "commit_sha": "80a96162f02ad10bf8dd71869a86f485570b42bd"
+}
