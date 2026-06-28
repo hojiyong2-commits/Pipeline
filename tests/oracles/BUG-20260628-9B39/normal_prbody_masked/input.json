@@ -1,1 +1,7 @@
-﻿{"masked": true, "accept_code_absent": true}
+{
+  "case_id": "normal_prbody_masked",
+  "case_kind": "normal",
+  "scenario": "PR 본문에 ACCEPT-* 형식 승인 코드가 포함된 상태에서 Codex 검토 실행",
+  "pr_body_input": "이 PR은 버그를 수정합니다.\n승인 코드: ACCEPT-BUG-20260628-9B39-EXAMPLE\n자동 검사 통과",
+  "accept_code_in_pr_body_before_masking": true
+}
