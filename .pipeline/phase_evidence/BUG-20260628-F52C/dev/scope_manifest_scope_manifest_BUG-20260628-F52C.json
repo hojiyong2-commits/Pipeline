@@ -1,4 +1,4 @@
-﻿{
+{
   "pipeline_id": "BUG-20260628-F52C",
   "scope_amendment": {
     "reason": "REJECT가 요구한 fail-closed Codex 재설계(결과 없음=BLOCKED, NOT_CONFIGURED 제거)는 request-accept 계약을 '무조건 성공'에서 'Codex APPROVE_TO_USER 이후에만 publish'로 변경합니다. 그 결과 request-accept 성공을 기대하던 기존 consumer E2E 테스트가 깨지며, 동일 사이클 producer-consumer 동기화(CLAUDE.md bundle-patch)가 필요합니다. 아래 test 파일들은 PM <target_files>에 없었으나 계약 변경의 불가피한 consumer 동기화로서 codex-review 사전 승인 단계를 주입했습니다. PM step_plan <target_files>에 추가 비준이 필요합니다.",
