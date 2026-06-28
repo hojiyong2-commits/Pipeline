@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-28T10:16:50Z",
+  "pipeline_id": "BUG-20260628-F52C",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "c43e9a5cfb6af500039d2d93736ddeffcdd6b8da",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-28T10:16:28Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_codex_snapshot_sync_f52c.py"
+  },
+  "agent_run": {
+    "run_id": "dev-b7f03cd4f852806f",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "b837a6800962aa0564843fcad025787850717c94e9d19e7fe1dd670c78667c0a",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-b7f03cd4f852806f.json",
+    "receipt_sha256": "52fb9884c4cfaef6d4fbc88bc602b65c1002f3c2f581199ca2e68d0134e38fc1",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-b7f03cd4f852806f.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-b7f03cd4f852806f.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-b7f03cd4f852806f.json",
+      "sha256": "52fb9884c4cfaef6d4fbc88bc602b65c1002f3c2f581199ca2e68d0134e38fc1",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/report_dev_handover.xml",
+      "sha256": "b837a6800962aa0564843fcad025787850717c94e9d19e7fe1dd670c78667c0a",
+      "size_bytes": 5529,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_BUG-20260628-F52C.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/scope_manifest_scope_manifest_BUG-20260628-F52C.json",
+      "sha256": "5d139002a8d162a71b0ccda424fb7ab26ab2735e7dced454a53cac6e7cd6ee22",
+      "size_bytes": 935,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "09a6aab9e339ae9aff1cb5a15de0a8a9a93db35e12ec6caa013a5e8a05d0f387",
+      "size_bytes": 1168628
+    },
+    {
+      "path": "tests/e2e/test_codex_snapshot_sync_f52c.py",
+      "sha256": "823dbac29826f4608ba07243316980379f6a03af22d1d0a0767e67a490906f14",
+      "size_bytes": 26108
+    }
+  ],
+  "local_only_files": []
+}
