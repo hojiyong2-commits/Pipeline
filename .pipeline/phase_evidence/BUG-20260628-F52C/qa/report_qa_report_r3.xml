@@ -1,0 +1,133 @@
+<qa_report>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <round>3차 수정</round>
+  <numeric_score>120</numeric_score>
+  <verdict>PASS</verdict>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/e2e/test_codex_snapshot_sync_f52c.py, tests/e2e/test_request_accept_snapshot_8c3b.py</evidence>
+    <accepted>YES — category_tags에 UI 미포함, dev-agent handover 단독 수락. dev_handover_r3.xml + scope_manifest_F52C_reject3_fix.json 제출 확인.</accepted>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 네트워크 호출 카테고리 아님 (파이프라인 내부 SHA 검증 로직).</wa>
+    <ui>N-A — UI 카테고리 아님.</ui>
+    <fs>N-A — 본 변경에 신규 단독 인코딩 read/write 없음. 기존 헬퍼(_replace_pr_body_packet_block, errors="replace") 재사용.</fs>
+    <pd>PASS — 인터페이스 계약 명확. 신규/수정 함수 전부 타입 힌팅, fail-closed failure_code(codex_review_stale vs pr_body_sha_mismatch_post_publish)로 오류 분기 구분. God class 없음, while True 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. gates secrets exit 0(변경 3파일 민감정보 0건)은 참고로 확인.</sec>
+    <al>PASS — _get_staged_pr_body_sha/_verify_published_pr_body_three_way: None 입력 TypeError, isinstance 타입 가드, gh 없음/PR body None 명시 분기. bare except 없음.</al>
+    <build>N-A — meta-task (EXE 빌드 대상 아님).</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 점수 합산에서 제외</wa>
+    <ui score="0" max="20">N/A — 점수 합산에서 제외</ui>
+    <fs score="0" max="20">N/A — 점수 합산에서 제외</fs>
+    <pd score="10" max="10">모듈분리 5/5 (단일 pipeline 엔진 함수 확장, core/ui 혼입 없음) + 인터페이스계약 5/5 (전 함수 타입힌팅 + 결정적 dict 계약 + 실패코드 구분)</pd>
+    <al score="20" max="20">0나눗셈 N/A·범위검증 N/A 영역이나 타입가드(isinstance)·None 분기·gh부재 graceful·fail-closed 전부 충족. 신규 함수 입력 검증 만점.</al>
+    <build score="0" max="10">N/A — meta-task</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="30" max="30"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS (적용 카테고리 PD+AL 30/30 = 100%, 환산 120점 만점 기준 hard gate 96 이상 충족)</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — _materialize_acceptance_snapshot publish=True는 os.replace 원자 커밋 (기존 유지)</atomic_write>
+      <encoding_fallback>N-A — 신규 단독 read 없음, errors="replace" 적용</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover self_check.execution_check에 py_compile/import/pytest 결과 명시</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _get_staged_pr_body_sha 2개 호출처(codex-review:18457, request-accept:19326), codex_result가 _publish_acceptance_request(codex_review_result=)로 전달되어 _verify_published_pr_body_three_way 첫 인자로 실제 사용(18923-18924). 함수 정의가 아닌 실제 호출 경로 grep 확인.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml에 decomposition_audit 블록 존재</decomposition_audit_present>
+    <grep_evidence_present>PASS — 각 micro_task grep_evidence.executed=true</grep_evidence_present>
+    <declared_functions>6</declared_functions>
+    <actual_modified_functions>6</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>3</scope_files_declared>
+    <evidence_files_submitted>3</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff --name-only HEAD = {pipeline.py, test_codex_snapshot_sync_f52c.py, test_request_accept_snapshot_8c3b.py}, scope_manifest_F52C_reject3_fix.json files와 정확히 일치</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <verification_evidence>
+    <item id="1" check="_verify_published_pr_body_three_way 3자 검증 복원">
+      PASS — pipeline.py:18976-19059. (a) acceptance_request == sha256(현재 PR body), (b) codex result_pr_body_sha256 == sha256(현재 PR body) 둘 다 검증. codex_review_result가 없거나 result_pr_body_sha256이 비면 failure_code=codex_review_stale로 _die(fail-closed). 2자 downgrade/legacy skip/except 삼킴 없음.
+    </item>
+    <item id="2" check="staged SHA 계산(_get_staged_pr_body_sha)">
+      PASS — pipeline.py:18097-18145. _replace_pr_body_packet_block(현재 PR body, staged packet_content) 적용 후 sha256 반환. gh 없음/PR body None/packet_content 부재 시 None(차원 생략). 현재 PR body SHA가 아닌 publish 후 최종 body SHA.
+    </item>
+    <item id="3" check="codex_review_result.json pr_body_sha256 기록">
+      PASS — pipeline.py:18431-18472. --pr-body-sha256 미지정 시 _get_staged_pr_body_sha로 staged 최종 body SHA 계산하여 codex_review_result.json pr_body_sha256에 기록. --approve-pending이면 동일 staging 후보 재사용.
+    </item>
+    <item id="4" check="gates accept part-D SSoT 블로커">
+      PASS — pipeline.py:20487-20514. codex_review_result.json 부재/파싱실패/pr_body_sha256 빈값 시 모두 failure_code=codex_review_stale로 BLOCKED.
+    </item>
+    <item id="5" check="신규 테스트 TC-NEW-1~4 실행">
+      PASS — TC-NEW-1(codex pr_body_sha 누락 시 accept BLOCKED), TC-NEW-2(publish 전 SHA로 codex 승인 시 3자 불일치 BLOCKED), TC-NEW-3(정상 경로 3자 일치), TC-NEW-4(_verify_published_pr_body_three_way가 codex 값을 실제 비교에 사용 단위검증) 전부 PASS. 전체 test_codex_snapshot_sync_f52c.py 31개 PASS(재실행 결정적).
+    </item>
+    <item id="6" check="기존 회귀 8c3b 7개 TC">
+      PASS — test_request_accept_snapshot_8c3b.py 7/7 PASS.
+    </item>
+    <item id="7" check="광범위 회귀">
+      PASS — test_post_accept_finalization_d278 + test_ac_tracking_2044 + test_protocol_consistency + test_acceptance_request_verification_json 합계 68개 PASS.
+    </item>
+    <item id="8" check="절대 금지 항목 미위반">
+      PASS — (a) _verify_published_pr_body_three_way에서 codex 값 제거 없음(18040-18059 codex 비교 존재), (b) 2자 검증 downgrade 없음, (c) pr_body_sha256 없을 때 PASS 없음(전부 codex_review_stale _die).
+    </item>
+    <item id="9" check="컴파일/import/secrets">
+      PASS — py_compile 3파일 OK, gates secrets exit 0(민감정보 0건).
+    </item>
+  </verification_evidence>
+
+  <flaky_note>
+    전체 suite 첫 실행 시 test_tc_new_3_three_way_match_happy_path 1건이 WinError 5(os.replace 액세스 거부, acceptance_request.json.tmp -> acceptance_request.json)로 실패했으나, 단독 재실행 및 전체 suite 재실행에서 모두 PASS. 원인은 OneDrive 동기화가 공유 repo-root acceptance_request.json을 일시 잠근 환경적 transient(테스트 파일 644행에 문서화됨)이며 제품 로직 결함이 아님. 3자 검증 로직은 결정적으로 동작함을 isolation 실행으로 확인.
+  </flaky_note>
+
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    - 없음.
+  </critical_issues>
+  <improvement_suggestions>
+    - (비차단) gh-publish 테스트 그룹이 실제 repo-root acceptance_request.json을 공유하여 OneDrive 잠금에 의한 transient os.replace WinError 5가 발생할 수 있음. 차기 IMP에서 BASE_DIR를 PIPELINE_STATE_PATH 부모 기준으로 격리하면 full-suite 결정성이 향상됨. 본 BUG 범위 밖.
+  </improvement_suggestions>
+  <numeric_score_cli>30</numeric_score_cli>
+</qa_report>
