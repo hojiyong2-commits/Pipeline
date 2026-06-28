@@ -1,0 +1,8 @@
+{
+  "case_id": "edge_info_prefix_invalid",
+  "case_kind": "edge",
+  "description": "Codex가 INFO: 접두사로 시작하는 줄 뒤에 APPROVE_TO_USER를 출력하면 INVALID 처리",
+  "codex_stdout_lines": ["INFO: 문제 없음", "APPROVE_TO_USER"],
+  "expected_source": "user_provided",
+  "ac_ids": ["AC-1"]
+}

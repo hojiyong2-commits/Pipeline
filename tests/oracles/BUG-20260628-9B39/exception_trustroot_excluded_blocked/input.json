@@ -1,0 +1,9 @@
+{
+  "case_id": "exception_trustroot_excluded_blocked",
+  "case_kind": "exception",
+  "description": ".claude/codex_review_contract.md가 changed_files에 있고 diff budget 초과로 excluded_files에 포함 시 BLOCKED",
+  "changed_files": [".claude/codex_review_contract.md", "pipeline.py"],
+  "excluded_files": [".claude/codex_review_contract.md"],
+  "expected_source": "user_provided",
+  "ac_ids": ["AC-3"]
+}

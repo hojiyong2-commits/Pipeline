@@ -1,0 +1,9 @@
+{
+  "case_id": "normal_prbody_masked",
+  "case_kind": "normal",
+  "description": "pr_body에 ACCEPT-* 코드 포함 시 마스킹 후 Codex 호출, 프롬프트에 원본 코드 미포함",
+  "expected_source": "user_provided",
+  "pr_body_contains_accept_code": true,
+  "pr_body_sample": "이 PR은 BUG를 수정합니다.\n승인 코드: ACCEPT-BUG-20260628-9B39-EXAMPLE\n자동 검사 통과",
+  "ac_ids": ["AC-2"]
+}

@@ -1,0 +1,8 @@
+{
+  "case_id": "edge_info_prefix_invalid",
+  "status": "INVALID",
+  "exit_code": 1,
+  "failure_code": "codex_verdict_invalid",
+  "first_ai_line": "INFO: 문제 없음",
+  "verdict_approved": false
+}

@@ -1,0 +1,7 @@
+{
+  "case_id": "exception_trustroot_excluded_blocked",
+  "exit_code": 1,
+  "failure_code": "codex_review_diff_incomplete",
+  "blocked": true,
+  "reason": ".claude/codex_review_contract.md is a critical trust-root file but was excluded from diff packet"
+}

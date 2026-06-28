@@ -1,0 +1,8 @@
+{
+  "case_id": "normal_prbody_masked",
+  "masking_applied": true,
+  "codex_prompt_contains_accept_code": false,
+  "masked_text_contains": "[ACCEPT코드 마스킹]",
+  "exit_code": 0,
+  "status": "APPROVED"
+}
