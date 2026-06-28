@@ -20,7 +20,7 @@
     "output_file": "dev_handover.xml",
     "output_sha256": "f62c6b6ec13a147a3cc9bd43de2c50da75552465d795b17de0cec4b362103a5f",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-a6f62eca3b698073.json",
-    "receipt_sha256": "43b2b4667555731a51de9f372b8228c36bb85c161d3f527b7287658f40e8574f",
+    "receipt_sha256": "9f0c9a2ecb7b22b4488a10f51ebe8388695d1cb66f28d2789c42c96ce637cdcf",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-a6f62eca3b698073.json"
   },
@@ -30,8 +30,8 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-a6f62eca3b698073.json",
       "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-a6f62eca3b698073.json",
-      "sha256": "43b2b4667555731a51de9f372b8228c36bb85c161d3f527b7287658f40e8574f",
-      "size_bytes": 515,
+      "sha256": "9f0c9a2ecb7b22b4488a10f51ebe8388695d1cb66f28d2789c42c96ce637cdcf",
+      "size_bytes": 501,
       "requires_force_add": true
     },
     {
@@ -46,12 +46,13 @@
       "label": "scope_manifest",
       "source": "scope_manifest_BUG-20260628-F52C.json",
       "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/scope_manifest_scope_manifest_BUG-20260628-F52C.json",
-      "sha256": "248f68d6d7f2364f920003f0efa8369c0889eb3e7e87a3b83225d6afea2f056f",
-      "size_bytes": 8682,
+      "sha256": "383bea9fe3ed49e67c3d45c45ed54e3d578a38b2e18e10468e27146e0ea553a3",
+      "size_bytes": 8464,
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
+  "workspace_file_checks": [],
+  "local_only_files": [
     {
       "path": "pipeline.py",
       "sha256": "3bdb3cdf69f6fb61bcc52afffb3ad5ee492fda842cf4fc2c228073148ff1d2e9",
@@ -122,6 +123,5 @@
       "sha256": "269e04a6a61a0bdb6faf7c053087d83e4d861ec2c1e03094f093886ddc632d75",
       "size_bytes": 292
     }
-  ],
-  "local_only_files": []
+  ]
 }
