@@ -1,0 +1,7 @@
+﻿{
+    "scenario":  "report final-packet called while acceptance_request is PENDING",
+    "acceptance_request_status":  "PENDING",
+    "pipeline_id":  "TEST-PIPELINE-002",
+    "action":  "report_final_packet",
+    "test_case":  "edge_pending_lock_blocked"
+}
