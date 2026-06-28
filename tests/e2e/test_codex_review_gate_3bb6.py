@@ -993,6 +993,13 @@ def test_tc15_prbody_accept_code_masked(tmp_path: Path) -> None:
     않는다") 준수를 위해 _cmd_gates_codex_review가 pr_body[:5000]를 Codex 프롬프트에
     넣기 전 ACCEPT-* 패턴을 [ACCEPT코드 마스킹]으로 치환하는지 stdin 캡처로 검증한다.
 
+    검증 흐름:
+    1. real_accept_code_literal = "ACCEPT-IMP-20260627-3BB6-A1B2"  ← 실제 ACCEPT 코드 형식
+    2. fake gh가 PR body에 real_accept_code_literal이 포함된 텍스트 반환
+    3. gates codex-review 실행 → Codex stdin을 파일로 캡처
+    4. captured에 real_accept_code_literal 원문이 없어야 함 (마스킹됨)
+    5. captured에 "[ACCEPT코드 마스킹]" placeholder가 있어야 함
+
     PIPELINE_STATE_PATH isolation + final_state assertion 포함.
     """
     state_file = tmp_path / "state.json"
@@ -1002,11 +1009,14 @@ def test_tc15_prbody_accept_code_masked(tmp_path: Path) -> None:
     stdin_capture = tmp_path / "captured_stdin.txt"
     make_fake_codex(shim, "APPROVE_TO_USER", capture_stdin_to=stdin_capture)
 
-    accept_code = "ACCEPT-IMP-20260627-3BB6-A1B2"
-    # PR body에 ACCEPT 코드를 포함하는 fake gh 주입
+    # real_accept_code_literal: 실제 ACCEPT 코드 형식 (ACCEPT-TYPE-DATE-4HEX-4HEX)
+    # 이 값이 fake gh PR body에 삽입되고, Codex stdin에서 마스킹 여부를 검증한다
+    real_accept_code_literal = "ACCEPT-IMP-20260627-3BB6-A1B2"
+
+    # PR body에 real_accept_code_literal을 포함하는 fake gh 주입
     gh_dir = tmp_path / "_gh_shim_accept"
     gh_dir.mkdir(parents=True, exist_ok=True)
-    fake_gh = _write_fake_gh_with_accept_code(gh_dir, accept_code)
+    fake_gh = _write_fake_gh_with_accept_code(gh_dir, real_accept_code_literal)
     env = {
         **os.environ,
         "PIPELINE_STATE_PATH": str(state_file),
@@ -1030,12 +1040,16 @@ def test_tc15_prbody_accept_code_masked(tmp_path: Path) -> None:
 
     assert stdin_capture.exists(), "stdin capture 파일이 생성되지 않았습니다"
     captured = stdin_capture.read_text(encoding="utf-8", errors="replace")
-    # ACCEPT 코드 원문이 Codex 프롬프트에 포함되어서는 안 됨 (마스킹됨)
-    assert accept_code not in captured, (
-        f"PR 본문의 승인 코드가 마스킹되지 않고 Codex 프롬프트에 노출됨 (계약 6번 위반)\n"
+
+    # 검증 1: 실제 ACCEPT 코드 원문이 Codex 프롬프트에 포함되어서는 안 됨 (마스킹됨)
+    # fake gh PR body에는 real_accept_code_literal이 있었지만, pipeline.py가 마스킹 처리함
+    assert real_accept_code_literal not in captured, (
+        f"PR 본문의 실제 승인 코드({real_accept_code_literal!r})가 마스킹되지 않고 "
+        f"Codex 프롬프트에 노출됨 (계약 6번 위반)\n"
         f"captured(head):\n{captured[:3000]}"
     )
-    # 마스킹 placeholder가 포함되어야 함
+
+    # 검증 2: 마스킹 placeholder가 포함되어야 함 (원문 대신 placeholder가 전달됨)
     assert "[ACCEPT코드 마스킹]" in captured, (
         f"마스킹 placeholder가 프롬프트에 없습니다.\ncaptured(head):\n{captured[:3000]}"
     )
