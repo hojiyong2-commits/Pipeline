@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <from>pipeline-manager-agent</from>
+  <pipeline_id>BUG-20260628-1AAC</pipeline_id>
+  <manager_run_id>pipeline_manager-77850c283a3340d4</manager_run_id>
+  <pipeline_type>BUG</pipeline_type>
+  <description>Codex Review gate 추가 결함 3건 수정 — INFO/WARNING 우회 차단, pr_body ACCEPT 마스킹, trust-root 일반화</description>
+  <execution_profile>STANDARD</execution_profile>
+
+  <contract_status>
+    <initialized>true</initialized>
+    <oracle_count>3</oracle_count>
+    <oracle_kinds>normal, edge, exception</oracle_kinds>
+    <audit_result>PASS</audit_result>
+    <frozen>true</frozen>
+  </contract_status>
+
+  <phase_plan>
+    <phase id="1" name="PM">완료 — step_plan.xml, contract freeze, oracle 3개 등록</phase>
+    <phase id="2" name="Dev">MT-1 → MT-2 → MT-3 순서 Incremental Module Gate</phase>
+    <phase id="4" name="QA">7개 카테고리 검증</phase>
+    <phase id="5" name="SEC">sec --skip (외부 네트워크/DB 없음)</phase>
+    <phase id="6" name="Build">build --exe N/A --skip-reason meta-task</phase>
+    <phase id="7" name="External Gates">technical / oracle / github-ci / request-accept / accept</phase>
+    <phase id="8" name="Architect">RCA 및 프로토콜 진화 결정</phase>
+  </phase_plan>
+
+  <micro_task_assignments>
+    <assignment mt="MT-1" agent="dev-agent" files="pipeline.py,tests/e2e/test_codex_review_gate_3bb6.py" ac="AC-1"/>
+    <assignment mt="MT-2" agent="dev-agent" files="pipeline.py,tests/e2e/test_codex_review_gate_3bb6.py" ac="AC-2"/>
+    <assignment mt="MT-3" agent="dev-agent" files="pipeline.py,tests/e2e/test_codex_review_gate_3bb6.py" ac="AC-3"/>
+  </micro_task_assignments>
+
+  <security_scope>
+    <has_external_network>false</has_external_network>
+    <has_db_access>false</has_db_access>
+    <sec_action>skip</sec_action>
+  </security_scope>
+
+  <build_scope>
+    <exe_required>false</exe_required>
+    <skip_reason>meta-task</skip_reason>
+  </build_scope>
+
+  <step_plan_sha256>fb8d808af78704e590b26f3c8d0aff5a9583f2f356928dffe91359f3e1691e6e</step_plan_sha256>
+  <planner_run_id>pm_planner-3446c99d4545d6be</planner_run_id>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+
+  <manager_notes>
+    BUG-20260628-1AAC는 BUG-20260627-C81C의 Codex REJECT 피드백 3건을 수정합니다.
+    BUG-20260627-C81C 브랜치의 모든 MT-1~MT-6 변경사항 위에 새 MT-1~MT-3을 구현합니다.
+    현재 브랜치: BUG-20260628-9B39 (BUG-20260627-C81C에서 분기)
+    oracle 파일: tests/oracles/BUG-20260628-9B39/ 아래 3개 케이스
+  </manager_notes>
+</manager_handoff>
