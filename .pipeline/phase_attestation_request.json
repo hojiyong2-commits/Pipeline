@@ -51,17 +51,15 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
+  "workspace_file_checks": [],
+  "local_only_files": [
     {
       "path": "pipeline.py",
-      "sha256": "09a6aab9e339ae9aff1cb5a15de0a8a9a93db35e12ec6caa013a5e8a05d0f387",
-      "size_bytes": 1168628
+      "reason": "in impl branch only, not yet in main"
     },
     {
       "path": "tests/e2e/test_codex_snapshot_sync_f52c.py",
-      "sha256": "823dbac29826f4608ba07243316980379f6a03af22d1d0a0767e67a490906f14",
-      "size_bytes": 26108
+      "reason": "new file in impl branch only, not yet in main"
     }
-  ],
-  "local_only_files": []
+  ]
 }
