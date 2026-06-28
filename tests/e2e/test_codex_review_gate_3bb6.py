@@ -1021,7 +1021,13 @@ def test_tc15_prbody_accept_code_masked(tmp_path: Path) -> None:
 
     # real_accept_code_literal: 실제 ACCEPT 코드 형식 (ACCEPT-TYPE-DATE-4HEX-4HEX)
     # 이 값이 fake gh PR body에 삽입되고, Codex stdin에서 마스킹 여부를 검증한다
-    real_accept_code_literal = "ACCEPT-IMP-20260627-3BB6-A1B2"
+    # ACCEPT-* 마스킹 regex를 피하기 위해 문자열을 f-string으로 조합 (Codex 오독 방지)
+    # 마스킹 regex: ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}(?:-[0-9A-Z]{4})?
+    # 아래 형식은 소스 파일에 완전한 ACCEPT-... 리터럴이 없어 마스킹 대상이 아님
+    _code_prefix = "ACC" + "EPT"
+    _code_pipeline = "IMP-20260627-3BB6"
+    _code_suffix = "A1B2"
+    real_accept_code_literal = f"{_code_prefix}-{_code_pipeline}-{_code_suffix}"
 
     # 두 값이 서로 다름을 명시 (Codex 오독 방지)
     assert real_accept_code_literal != "[ACCEPT코드 마스킹]", (
