@@ -1119,16 +1119,23 @@ def test_tc15_prbody_accept_code_masked(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_tc16_critical_files_ssot_defined() -> None:
-    """CODEX_REVIEW_CRITICAL_FILES SSoT 상수가 5개 trust-root 경로를 포함한다.
+    """CODEX_REVIEW_CRITICAL_FILES SSoT 상수가 11개 trust-root 경로를 포함한다.
 
-    BUG-20260628-1AAC MT-3: 신규 SSoT 상수 정의 검증.
+    BUG-20260628-1AAC MT-3 (사용자 REJECT 재작업): .claude/commands/, .claude/settings.json,
+    .claude/hooks/, AGENTS.md, .gitignore, .gitattributes 추가.
     """
     from pipeline import CODEX_REVIEW_CRITICAL_FILES
     expected = {
-        ".claude/codex_review_contract.md",
-        ".claude/agents/",
         "pipeline.py",
         "CLAUDE.md",
+        "AGENTS.md",
+        ".gitignore",
+        ".gitattributes",
+        ".claude/codex_review_contract.md",
+        ".claude/agents/",
+        ".claude/commands/",
+        ".claude/settings.json",
+        ".claude/hooks/",
         ".github/workflows/",
     }
     assert set(CODEX_REVIEW_CRITICAL_FILES) == expected, (
@@ -1153,6 +1160,18 @@ def test_tc16_trustroot_excluded_detection() -> None:
     assert _is_codex_critical_file(".github/workflows/ci.yml") is True
     # Windows 경로 구분자 정규화
     assert _is_codex_critical_file(".claude\\agents\\qa-agent.md") is True
+    # 신규 추가 항목 검증 (사용자 REJECT 재작업)
+    assert _is_codex_critical_file("AGENTS.md") is True
+    assert _is_codex_critical_file(".gitignore") is True
+    assert _is_codex_critical_file(".gitattributes") is True
+    assert _is_codex_critical_file(".claude/settings.json") is True
+    assert _is_codex_critical_file(".claude/commands/task.md") is True
+    assert _is_codex_critical_file(".claude/hooks/foo.py") is True
+    # Windows 구분자 신규 항목 검증
+    assert _is_codex_critical_file(".claude\\commands\\task.md") is True
+    assert _is_codex_critical_file(".claude\\hooks\\foo.py") is True
+    # .claude/settings.json은 정확 경로이지만 Windows 구분자도 normalize 후 일치
+    assert _is_codex_critical_file(".claude\\settings.json") is True
     # 비-critical 파일은 False
     assert _is_codex_critical_file("tests/e2e/test_foo.py") is False
     assert _is_codex_critical_file("core/module.py") is False
@@ -1193,6 +1212,77 @@ def test_tc16_excluded_critical_blocks(tmp_path: Path) -> None:
     assert [p for p in excluded_safe if _is_codex_critical_file(p)] == [], (
         "비-trust-root 파일만 excluded되면 BLOCKED되지 않아야 함"
     )
+
+
+# ---------------------------------------------------------------------------
+# TC-17: BUG-20260628-1AAC MT-3 재작업 — 신규 추가된 critical 경로들이
+#        excluded_files에 있으면 critical로 탐지되어 BLOCKED 처리됨
+# ---------------------------------------------------------------------------
+
+def test_tc17_new_critical_files_excluded_blocks(tmp_path: Path) -> None:
+    """.claude/settings.json, .claude/commands/task.md이 excluded_files에 있으면 critical 탐지.
+
+    사용자 REJECT 재작업: 신규 추가된 critical 경로들이 excluded_files에 있을 때
+    codex_review_diff_incomplete로 BLOCKED 되는 기반(_excluded_critical 비어있지 않음)을
+    단위 검증한다.
+    """
+    from pipeline import _is_codex_critical_file
+    # .claude/settings.json이 excluded되면 critical로 탐지
+    excluded_settings = [
+        "docs/foo.md",
+        ".claude/settings.json",
+        "README.md",
+    ]
+    critical_found = [p for p in excluded_settings if _is_codex_critical_file(p)]
+    assert critical_found == [".claude/settings.json"], (
+        f".claude/settings.json이 excluded_critical에 탐지되어야 함: {critical_found}"
+    )
+    # .claude/commands/task.md이 excluded되면 critical로 탐지
+    excluded_commands = [
+        "docs/foo.md",
+        ".claude/commands/task.md",
+        "core/module.py",
+    ]
+    critical_found2 = [p for p in excluded_commands if _is_codex_critical_file(p)]
+    assert critical_found2 == [".claude/commands/task.md"], (
+        f".claude/commands/task.md이 excluded_critical에 탐지되어야 함: {critical_found2}"
+    )
+    # .claude/hooks/foo.py이 excluded되면 critical로 탐지
+    excluded_hooks = [
+        "tests/e2e/test_foo.py",
+        ".claude/hooks/pre-commit.py",
+    ]
+    critical_found3 = [p for p in excluded_hooks if _is_codex_critical_file(p)]
+    assert critical_found3 == [".claude/hooks/pre-commit.py"], (
+        f".claude/hooks/pre-commit.py이 excluded_critical에 탐지되어야 함: {critical_found3}"
+    )
+    # AGENTS.md, .gitignore, .gitattributes
+    excluded_root = [
+        "AGENTS.md",
+        ".gitignore",
+        ".gitattributes",
+        "src/main.py",
+    ]
+    critical_found4 = [p for p in excluded_root if _is_codex_critical_file(p)]
+    assert set(critical_found4) == {"AGENTS.md", ".gitignore", ".gitattributes"}, (
+        f"root critical 파일들이 탐지되어야 함: {critical_found4}"
+    )
+    # 비-critical 파일만 있으면 빈 리스트
+    safe_only = ["docs/foo.md", "core/module.py", "README.md"]
+    assert [p for p in safe_only if _is_codex_critical_file(p)] == []
+
+
+def test_tc17_windows_path_normalization() -> None:
+    """Windows 경로 구분자가 정규화되어 새 critical 경로들을 올바르게 판정한다."""
+    from pipeline import _is_codex_critical_file
+    # Windows 구분자 정규화 — prefix 경로
+    assert _is_codex_critical_file(".claude\\commands\\task.md") is True
+    assert _is_codex_critical_file(".claude\\hooks\\pre-commit.py") is True
+    # Windows 구분자 정규화 — 정확 경로
+    assert _is_codex_critical_file(".claude\\settings.json") is True
+    assert _is_codex_critical_file("AGENTS.md") is True  # 구분자 없음, 정확 경로
+    assert _is_codex_critical_file(".gitignore") is True
+    assert _is_codex_critical_file(".gitattributes") is True
 
 
 if __name__ == "__main__":

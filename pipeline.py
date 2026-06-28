@@ -6824,10 +6824,16 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
 # codex_review_diff_incomplete로 BLOCKED 처리하여, 핵심 변경이 검토 없이 통과하는 우회를 차단한다.
 # 정확 경로(예: "pipeline.py")와 prefix 경로(예: ".claude/agents/")를 모두 지원한다.
 CODEX_REVIEW_CRITICAL_FILES = (
-    ".claude/codex_review_contract.md",
-    ".claude/agents/",
     "pipeline.py",
     "CLAUDE.md",
+    "AGENTS.md",
+    ".gitignore",
+    ".gitattributes",
+    ".claude/codex_review_contract.md",
+    ".claude/agents/",
+    ".claude/commands/",
+    ".claude/settings.json",
+    ".claude/hooks/",
     ".github/workflows/",
 )
 
