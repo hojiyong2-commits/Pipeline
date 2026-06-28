@@ -6664,55 +6664,697 @@ def _validate_pr_body_readiness(pr_body: str) -> Dict[str, Any]:
     return pass_result
 
 
-# IMP-20260626-4121: Codex Review Loop gate.
-# [Purpose]: gates accept --result ACCEPT 실행 전, .pipeline/codex_review_loop_state.json의
-#   Codex 검토 결과가 APPROVED이고 현재 PR head SHA / packet_sha256과 일치하는지 검증한다.
-#   Codex hook(.claude/hooks/codex_user_acceptance_review.py)이 기록한 상태를 신뢰 루트로 사용한다.
-# [Assumptions]: hook은 APPROVE 시 status=APPROVED, pr_head_sha, packet_sha256을 기록한다.
-#   acceptance_request.json의 packet_sha256은 _check_acceptance_readiness/nonce 검증과 동일 SSoT다.
-# [Vulnerability & Risks]: 파일 없음/파싱 오류/상태 불일치는 모두 fail-closed BLOCKED로 처리한다.
-#   gh CLI 미설치로 현재 PR head SHA를 얻지 못하면 SHA 비교는 건너뛰되, APPROVED 상태 자체는 요구한다.
-# [Improvement]: 향후 packet_sha256 산출을 hook과 pipeline.py가 공유하는 SSoT helper로 통합 가능.
-def _codex_review_loop_state_path() -> Path:
-    """codex_review_loop_state.json 경로를 반환 (PIPELINE_STATE_PATH 격리 지원).
+# IMP-20260627-3BB6 MT-1: Codex Review gate contract 로더.
+# [Purpose]: gates codex-review가 Codex CLI에 전달할 검토 계약(.claude/codex_review_contract.md)을
+#   SSoT로 로드하고 contract_sha256을 계산한다. 파일 부재/읽기 실패는 fail-closed BLOCKED로 처리하여
+#   검토 우회를 차단한다.
+# [Assumptions]: contract 파일은 BASE_DIR/.claude/codex_review_contract.md 경로에 존재하며 utf-8.
+#   금지 사항(파일수정/PR댓글/코드게시/gates accept/merge·deploy)과 출력 형식(APPROVE_TO_USER /
+#   REJECT - <사유>)을 본문에 명시한다.
+# [Vulnerability & Risks]: 파일이 group-writable이면 contract 위조 가능 (OS 권한 의존).
+#   SHA-256은 무결성 추적용일 뿐 위조 자체를 막지는 못한다.
+# [Improvement]: 향후 contract 서명(HMAC) + 신뢰 루트 SHA 핀 고정으로 위조 차단 가능.
+def _codex_review_contract_path() -> Path:
+    """codex_review_contract.md 경로를 반환 (BASE_DIR/.claude 고정).
 
     Returns:
-        .pipeline/codex_review_loop_state.json 절대 경로.
+        .claude/codex_review_contract.md 절대 경로.
+    """
+    return BASE_DIR / ".claude" / "codex_review_contract.md"
+
+
+def _load_codex_review_contract() -> Dict[str, Any]:
+    """Codex Review gate contract를 로드하고 contract_sha256을 계산 (fail-closed).
+
+    .claude/codex_review_contract.md를 utf-8로 읽어 본문과 SHA-256을 반환한다.
+    파일이 없거나 읽기에 실패하면 status=BLOCKED를 반환하여 gates codex-review가
+    검토 없이 통과하는 우회를 차단한다.
+
+    Returns:
+        {"status": "PASS", "text": str, "contract_sha256": str} 또는
+        {"status": "BLOCKED", "failure_code": str, "message": str}.
+    Raises:
+        없음 (모든 오류를 fail-closed BLOCKED로 변환).
+    """
+    contract_path = _codex_review_contract_path()
+    if not contract_path.exists():
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_contract_missing",
+            "message": (
+                "Codex Review contract(.claude/codex_review_contract.md)가 없습니다 "
+                "(fail-closed). 검토 계약 파일을 복원한 뒤 다시 실행하세요."
+            ),
+        }
+    try:
+        text = contract_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_contract_unreadable",
+            "message": (
+                "Codex Review contract 읽기에 실패했습니다 (fail-closed). "
+                ".claude/codex_review_contract.md 인코딩/권한을 확인하세요."
+            ),
+        }
+    if not text.strip():
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_contract_empty",
+            "message": (
+                "Codex Review contract가 비어 있습니다 (fail-closed). "
+                "검토 금지 사항과 출력 형식을 포함하도록 복원하세요."
+            ),
+        }
+    contract_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return {
+        "status": "PASS",
+        "text": text,
+        "contract_sha256": contract_sha256,
+    }
+
+
+# IMP-20260627-3BB6 MT-2: gates codex-review 서브커맨드.
+# [Purpose]: Stop hook 대신 명시적 hard gate로 Codex 검토를 수행한다. PR 정보 수집 →
+#   contract 로드 → codex CLI 호출 → verdict 파싱 → codex_review_result.json 기록.
+#   APPROVE_TO_USER → status=APPROVED exit 0, "REJECT - ..." → status=REJECTED exit 1.
+# [Assumptions]: codex CLI가 PATH에 있고 `codex exec <prompt>` 형식을 지원한다 (Windows shell=True).
+#   gh CLI로 PR head SHA/URL을 조회할 수 있다 (없으면 빈 문자열).
+# [Vulnerability & Risks]: codex CLI 미설치/타임아웃은 fail-closed BLOCKED(exit 1)로 처리한다.
+#   verdict 형식 위반도 BLOCKED. nonce/secret은 result.json/로그에 절대 기록하지 않는다.
+# [Improvement]: 향후 codex 호출을 격리된 read-only 샌드박스에서 실행하여 금지사항을 강제 가능.
+def _codex_review_result_path() -> Path:
+    """codex_review_result.json 경로를 반환 (PIPELINE_STATE_PATH 격리 지원).
+
+    Returns:
+        .pipeline/codex_review_result.json 절대 경로.
     """
     env_state = os.environ.get("PIPELINE_STATE_PATH")
     if env_state:
-        return Path(env_state).resolve().parent / ".pipeline" / "codex_review_loop_state.json"
-    return PIPELINE_CI_DIR / "codex_review_loop_state.json"
+        return Path(env_state).resolve().parent / ".pipeline" / "codex_review_result.json"
+    return PIPELINE_CI_DIR / "codex_review_result.json"
+
+
+# BUG-20260628-1AAC: Windows OS 런타임 메시지 필터링 완전 제거.
+# 계약 2번("출력 첫 줄은 정확히 APPROVE_TO_USER 또는 REJECT - <사유> 한 줄이어야 한다") 엄격 적용.
+# Windows 런타임 메시지("SUCCESS: The process with PID N...") + APPROVE_TO_USER 조합도 INVALID.
+# fail-closed 원칙: OS 메시지가 섞여도 계약 형식에 맞지 않으면 INVALID 처리.
+# (이전: _CODEX_CLI_SYSTEM_PREFIXES 튜플 / fullmatch 정규식 — 모두 Codex 계약 2번 위반으로 REJECT됨)
+
+
+def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
+    """Codex CLI 출력에서 verdict를 파싱한다.
+
+    계약(codex_review_contract.md) 규정: "당신의 출력 첫 줄은 정확히 다음 두 형식 중
+    하나여야 합니다." 즉 모든 비-빈 출력 줄은 정확히 1줄이어야 하며, 그 줄이
+    APPROVE_TO_USER 또는 REJECT - <사유> 형식이어야 한다.
+
+    BUG-20260628-1AAC: OS 런타임 메시지 필터링 완전 제거. 계약 2번 엄격 적용.
+    계약 형식에 맞지 않는 모든 출력(OS 메시지 포함)은 INVALID 처리한다.
+    이를 통해 어떠한 prefix 우회도 차단하고 fail-closed를 유지한다.
+
+    Args:
+        raw: codex CLI stdout 텍스트.
+    Returns:
+        {"status": "APPROVED"|"REJECTED"|"INVALID", "verdict": str, "reject_reason": str}.
+    Raises:
+        TypeError: raw가 None이거나 str가 아닌 경우.
+    """
+    if raw is None:
+        raise TypeError("raw must not be None")
+    if not isinstance(raw, str):
+        raise TypeError(f"raw must be str, got {type(raw).__name__}")
+    # BUG-20260628-1AAC rework 2차: 계약 2번 "출력 첫 줄 정확 일치"를 raw 첫 줄 기준으로 검증.
+    # 이전 구현은 line.strip() + 빈 줄 skip(continue)으로 선행 공백/빈 줄을 무시했고,
+    # 그 결과 "\n APPROVE_TO_USER" 처럼 선행 공백/빈 줄 뒤의 APPROVE_TO_USER도 승인될 수 있었다.
+    # 첫 번째 raw 줄(첫 "\n" 이전)을 그대로 꺼내 검증한다.
+    # BUG-20260628-1AAC rework 5차: trailing 공백/공백+CR도 "첫 줄 정확 일치" 위반이므로 INVALID.
+    #   - 허용: trailing \r 제거만 (Windows CRLF 개행의 CR 부분 — "\n"으로 split 후 남는 \r).
+    #   - 금지: lstrip()/strip()/rstrip() — 선행·후행 공백 및 trailing space는 모두 정확 일치 위반.
+    #   - 빈 줄 skip 로직 제거: 첫 raw 줄을 그대로 사용한다.
+    raw_lines = raw.split("\n")  # rsplit/splitlines 아님 — 첫 "\n" 이전 첫 원소만 사용
+    first_raw_line = raw_lines[0].rstrip("\r")  # Windows CRLF의 \r만 제거, 공백은 보존하여 INVALID
+    # 첫 raw 줄이 비어 있으면(선행 빈 줄/공백) INVALID — 계약 "첫 줄 정확 일치" 위반.
+    if first_raw_line == "":
+        return {"status": "INVALID", "verdict": "", "reject_reason": ""}
+    # 후속 줄(2번째 이후)에 추가 출력이 있는지 판정용으로 비-빈 줄 존재 여부 확인.
+    # 계약 규정: 유효 verdict 출력은 정확히 1줄이어야 한다.
+    has_extra_output = any(line.strip() for line in raw_lines[1:])
+    # 계약 규정: 비-시스템 AI 출력은 정확히 1줄이어야 한다.
+    # APPROVE_TO_USER 또는 REJECT - <사유> 뒤 추가 줄이 있으면 INVALID (contract "한 줄" 위반).
+    # BUG-20260627-C81C: REJECT도 추가 줄이 있으면 INVALID (Codex review 지적 반영).
+    first_ai_line = first_raw_line
+    if first_ai_line == "APPROVE_TO_USER":
+        if has_extra_output:
+            # APPROVE_TO_USER 뒤 추가 AI 출력 → INVALID (계약 "정확히 한 줄" 위반)
+            return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
+        return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
+    # BUG-20260628-1AAC: 계약 2번 엄격 형식 검증 — "REJECT - <사유>" (공백-하이픈-공백 정확).
+    # \s* 허용은 "REJECT-사유"(공백 없음) 등 형식 위반 출력도 유효 REJECT로 처리하므로 제거.
+    reject_match = re.match(r"^REJECT - (.+)$", first_ai_line, re.DOTALL)
+    if reject_match:
+        if has_extra_output:
+            # REJECT 뒤 추가 AI 출력 → INVALID (계약 "정확히 한 줄" 위반)
+            return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
+        return {
+            "status": "REJECTED",
+            "verdict": first_ai_line,
+            "reject_reason": first_ai_line,  # 원문 전체(prefix 포함) 그대로 보존
+        }
+    # 첫 AI 출력 줄이 올바른 형식이 아니면 INVALID.
+    return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
+
+
+# BUG-20260628-1AAC MT-3: Codex review가 반드시 봐야 하는 trust-root 핵심 파일 SSoT 목록.
+# 이 목록의 파일(또는 prefix 경로 하위 파일)이 budget 초과로 Codex packet에서 제외되면
+# codex_review_diff_incomplete로 BLOCKED 처리하여, 핵심 변경이 검토 없이 통과하는 우회를 차단한다.
+# 정확 경로(예: "pipeline.py")와 prefix 경로(예: ".claude/agents/")를 모두 지원한다.
+CODEX_REVIEW_CRITICAL_FILES = (
+    "pipeline.py",
+    "CLAUDE.md",
+    "AGENTS.md",
+    ".gitignore",
+    ".gitattributes",
+    ".claude/codex_review_contract.md",
+    ".claude/agents/",
+    ".claude/commands/",
+    ".claude/settings.json",
+    ".claude/hooks/",
+    ".github/workflows/",
+)
+
+
+def _is_codex_critical_file(path: str) -> bool:
+    """주어진 경로가 CODEX_REVIEW_CRITICAL_FILES에 해당하는지 판정.
+
+    정확 경로 일치 또는 prefix("/"로 끝나는 항목) 하위 경로 일치를 모두 검사한다.
+    경로 구분자는 "/"로 정규화하여 Windows("\\")와 POSIX를 일관되게 비교한다.
+
+    Args:
+        path: 비교할 변경 파일 경로 문자열.
+    Returns:
+        trust-root 핵심 파일이면 True, 아니면 False.
+    Raises:
+        TypeError: path가 None이거나 str가 아닌 경우.
+    """
+    if path is None:
+        raise TypeError("path must not be None")
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    norm = path.replace("\\", "/")  # allowed: 경로 구분자 정규화 (비교 일관성)
+    for critical in CODEX_REVIEW_CRITICAL_FILES:
+        if critical.endswith("/"):
+            if norm.startswith(critical):
+                return True
+        elif norm == critical:
+            return True
+    return False
+
+
+# [Purpose]: Codex review packet에 포함할 changed_files를 trust-root 우선 순서로 정렬하여
+#            pipeline.py 핵심 변경이 diff budget 안에 항상 포함되도록 한다 (BUG-20260627-C81C MT-6).
+# [Assumptions]: changed_files는 PR diff에서 얻은 상대 경로 문자열 리스트. 빈 리스트 허용.
+# [Vulnerability & Risks]: 동일 우선순위 그룹 내부는 원래 순서를 유지하므로 알파벳 정렬이 아님.
+#                          잘못된 타입(None/비-str 원소)은 TypeError로 방어한다.
+# [Improvement]: 우선순위 규칙을 외부 SSoT 상수로 분리하면 정책 변경 시 유지보수가 쉬워진다.
+def _sort_changed_files_by_priority(changed_files: list) -> list:
+    """changed_files를 trust-root 우선 순서로 정렬.
+
+    우선순위:
+    1. pipeline.py
+    2. .claude/codex_review_contract.md
+    3. .claude/agents/** 파일들
+    4. .claude/commands/** 파일들
+    5. .claude/hooks/** 파일들
+    6. .github/workflows/** 파일들
+    7. tests/e2e/test_codex_review_gate* 파일들
+    8. 나머지 파일들 (원래 순서 유지)
+
+    Args:
+        changed_files: PR diff에서 얻은 변경 파일 경로 리스트.
+    Returns:
+        trust-root 우선 순서로 재배열된 새 리스트 (동일 그룹 내 원래 순서 유지).
+    Raises:
+        TypeError: changed_files가 None이거나 list가 아니거나 원소가 str가 아닌 경우.
+    """
+    if changed_files is None:
+        raise TypeError("changed_files must not be None")
+    if not isinstance(changed_files, list):
+        raise TypeError(
+            f"changed_files must be list, got {type(changed_files).__name__}"
+        )
+
+    def _priority(path: str) -> int:
+        if not isinstance(path, str):
+            raise TypeError(
+                f"changed_files element must be str, got {type(path).__name__}"
+            )
+        norm = path.replace("\\", "/")  # allowed: 경로 구분자 정규화 (비교 일관성)
+        if norm == "pipeline.py":
+            return 0
+        if norm == ".claude/codex_review_contract.md":
+            return 1
+        if norm.startswith(".claude/agents/"):
+            return 2
+        if norm.startswith(".claude/commands/"):
+            return 3
+        if norm.startswith(".claude/hooks/"):
+            return 4
+        if norm.startswith(".github/workflows/"):
+            return 5
+        if norm.startswith("tests/e2e/test_codex_review_gate"):
+            return 6
+        return 7
+
+    # stable sort: 동일 우선순위 그룹 내부는 원래 입력 순서를 유지.
+    return sorted(changed_files, key=_priority)
+
+
+def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> None:
+    """gates codex-review 핸들러: Codex 검토 hard gate (APPROVE exit 0 / REJECT exit 1).
+
+    절차:
+      1. PR 정보 수집 (pr_url, pr_head_sha).
+      2. human_acceptance_packet.md에서 packet_sha256 계산.
+      3. PR 본문에서 pr_body_sha256 계산.
+      4. codex_review_contract.md 로드 → contract_sha256 + 금지사항 프롬프트.
+      5. codex CLI 호출 (Windows shell=True).
+      6. verdict 파싱 → APPROVE/REJECT/INVALID.
+      7. codex_review_result.json 기록 (8개 이상 필드, nonce 미포함).
+
+    Args:
+        args: argparse Namespace.
+        state: 활성 pipeline_state.
+    Raises:
+        SystemExit: contract 부재/codex 실패/verdict 형식 위반/REJECT 시 exit 1.
+    """
+    pipeline_id = str(state.get("pipeline_id", ""))
+    if not pipeline_id:
+        _die("[CODEX REVIEW GATE] pipeline_state.json에 pipeline_id가 없습니다.")
+
+    # 4. contract 로드 (fail-closed) — 먼저 검증하여 우회 차단.
+    contract = _load_codex_review_contract()
+    if contract.get("status") != "PASS":
+        _die(
+            f"[BLOCKED] failure_code={contract.get('failure_code')}\n"
+            f"  {contract.get('message')}"
+        )
+    contract_sha256 = str(contract["contract_sha256"])
+    contract_text = str(contract["text"])
+
+    # 1. PR 정보 수집 (gh CLI 없으면 빈 문자열).
+    pr_url = _get_current_pr_url() or ""
+    pr_head_sha = _get_current_pr_head_sha() or ""
+
+    # 2. packet_sha256 (human_acceptance_packet.md) — fail-closed: 파일 없으면 차단.
+    packet_path = _packet_output_path()
+    packet_sha256 = _compute_file_sha256(str(packet_path)) or ""
+    if not packet_sha256:
+        _die(
+            "[BLOCKED] failure_code=codex_review_packet_missing\n"
+            "  human_acceptance_packet.md가 없거나 SHA 계산에 실패했습니다 (fail-closed).\n"
+            "  python pipeline.py report final-packet 을 먼저 실행하세요."
+        )
+
+    # 3. pr_body_sha256 (PR 본문) — fail-closed: PR 본문 취득 실패 시 차단.
+    pr_body = _get_pr_body_text() or ""
+    pr_body_sha256 = (
+        hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else ""
+    )
+    if not pr_body_sha256:
+        _die(
+            "[BLOCKED] failure_code=codex_review_pr_body_missing\n"
+            "  PR 본문을 가져올 수 없습니다 (gh CLI 없음/실패, fail-closed).\n"
+            "  gh pr view 가 동작하는지 확인하세요."
+        )
+
+    # 4b. 검토 프롬프트 구성 — contract 본문(금지사항/출력형식)을 그대로 포함.
+    # contract가 요구하는 정보: PR 제목/본문/변경 파일/diff/CI 상태/패킷을 모두 포함한다.
+    changed_files = _get_current_pr_changed_files() or []
+    # BUG-20260627-C81C MT-6 (AC-1): gh CLI로 PR 변경 파일을 못 얻으면(예: gh 미설치/PR 미존재)
+    # git diff origin/main...HEAD --name-only로 실제 변경 파일을 직접 수집한다 (fail-closed 유지).
+    # per-file git diff와 동일한 BASE_DIR/refspec을 사용하여 diff 소스를 일관되게 유지한다.
+    if not changed_files:
+        try:
+            _names_result = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--name-only"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=30, cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            _die(
+                "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
+                "  git diff --name-only 조회 실패 (fail-closed).\n"
+                "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            )
+        if _names_result.returncode != 0:
+            _die(
+                "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
+                f"  git diff --name-only가 실패했습니다 (returncode={_names_result.returncode}, fail-closed).\n"
+                f"  stderr: {(_names_result.stderr or '')[:300]}\n"
+                "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            )
+        changed_files = [
+            ln.strip() for ln in (_names_result.stdout or "").splitlines() if ln.strip()
+        ]
+    files_txt = "\n".join(f"  - {p}" for p in changed_files)
+    # BUG-20260627-C81C MT-6 (AC-1): 파일별 per-file patch 수집 (trust-root 우선).
+    # 전체 diff 8000자 잘라쓰기 대신 trust-root 파일을 우선 포함하여
+    # pipeline.py 변경이 항상 Codex packet에 들어가도록 한다.
+    # MT-1 (AC-1): git diff 조회 실패 시 placeholder로 우회하지 않고 fail-closed BLOCKED 처리.
+    # 총 budget (자). AC-1("pipeline.py 변경이 항상 Codex packet에 포함")을 만족하려면
+    # 최우선 trust-root 파일(pipeline.py) patch 전체가 들어갈 만큼 충분해야 한다.
+    # 본 PR의 pipeline.py patch만 ~52KB이므로 40000으로는 self-block(codex_review_diff_incomplete)이
+    # 발생한다. trust-root 파일 patch를 모두 수용하도록 250000으로 설정한다.
+    # pipeline.py (~59KB) + hooks (~40KB) + test_3bb6 (~59KB) + 기타 파일들을 모두 수용하기 위해 상향.
+    DIFF_BUDGET = 250000
+    PIPELINE_PY = "pipeline.py"
+    sorted_files = _sort_changed_files_by_priority(changed_files)
+    included_files: list = []
+    excluded_files: list = []
+    per_file_patches: list = []
+    remaining_budget = DIFF_BUDGET
+
+    for _cf in sorted_files:
+        try:
+            _pf_result = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--", _cf],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=30, cwd=str(BASE_DIR),
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            _die(
+                "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
+                f"  git diff 조회 실패 ({_cf}) (fail-closed).\n"
+                "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            )
+        if _pf_result.returncode != 0:
+            _die(
+                "[BLOCKED] failure_code=codex_review_diff_unavailable\n"
+                f"  git diff가 실패했습니다 (파일={_cf}, returncode={_pf_result.returncode}, fail-closed).\n"
+                "  실제 변경 내용 없이는 Codex 검토를 진행할 수 없습니다."
+            )
+        _patch = (_pf_result.stdout or "").strip()
+        if not _patch:
+            # 변경 없는 파일은 스킵 (changed_files 목록에 있지만 실제 diff 없는 경우)
+            continue
+        if len(_patch) <= remaining_budget:
+            per_file_patches.append(f"### {_cf}\n{_patch}")
+            included_files.append(_cf)
+            remaining_budget -= len(_patch)
+        else:
+            excluded_files.append(_cf)
+
+    # pipeline.py가 changed_files에 있는데 packet에 포함되지 않으면 fail-closed.
+    if PIPELINE_PY in changed_files and PIPELINE_PY not in included_files:
+        _die(
+            "[BLOCKED] failure_code=codex_review_diff_incomplete\n"
+            f"  pipeline.py가 변경 파일에 포함되어 있으나 Codex packet에 넣을 수 없습니다 (fail-closed).\n"
+            f"  현재 diff budget={DIFF_BUDGET}자, pipeline.py patch 크기가 budget을 초과합니다.\n"
+            "  PR을 더 작게 나누거나 pipeline.py를 먼저 commit하세요.\n"
+            "  failure_code=codex_review_diff_incomplete"
+        )
+    # BUG-20260628-1AAC MT-3: trust-root 핵심 파일(CODEX_REVIEW_CRITICAL_FILES)이
+    # budget 초과로 Codex packet에서 제외되면 fail-closed BLOCKED 처리한다.
+    # pipeline.py뿐 아니라 codex_review_contract.md/.claude/agents//CLAUDE.md/.github/workflows/도
+    # 검토 없이 통과하는 우회를 차단한다.
+    _excluded_critical = [p for p in excluded_files if _is_codex_critical_file(p)]
+    if _excluded_critical:
+        _die(
+            "[BLOCKED] failure_code=codex_review_diff_incomplete\n"
+            f"  trust-root 핵심 파일이 budget 초과로 Codex packet에서 제외되었습니다 (fail-closed): "
+            f"{', '.join(_excluded_critical)}\n"
+            f"  현재 diff budget={DIFF_BUDGET}자. 핵심 파일 patch가 budget을 초과합니다.\n"
+            "  PR을 더 작게 나누거나 핵심 파일을 먼저 commit하세요.\n"
+            "  failure_code=codex_review_diff_incomplete"
+        )
+    # 포함된 파일이 하나도 없으면 budget 초과.
+    if not included_files:
+        _die(
+            "[BLOCKED] failure_code=codex_review_diff_too_large\n"
+            f"  diff budget({DIFF_BUDGET}자)이 모든 파일 patch를 담기에 너무 작습니다 (fail-closed).\n"
+            "  PR을 더 작게 나누거나 Codex review packet budget을 확장하세요."
+        )
+    diff_txt = "\n\n".join(per_file_patches)
+    if excluded_files:
+        diff_txt += f"\n\n... (budget 초과로 제외된 파일: {', '.join(excluded_files)})"
+    # CI 상태 정보
+    github_ci_state = state.get("external_gates", {}).get("github_ci", {})
+    ci_run_id = github_ci_state.get("evidence", "")
+    ci_status = github_ci_state.get("status", "UNKNOWN")
+    # human_acceptance_packet.md 전체 (최대 4000자) — 승인 코드 라인 마스킹.
+    # 계약 6번: 승인 코드(ACCEPT-...)는 검토 입력/출력 어디에도 포함되지 않는다.
+    packet_text = ""
+    try:
+        _packet_path = _packet_output_path()
+        if _packet_path.exists():
+            _raw_packet = _packet_path.read_text(encoding="utf-8", errors="replace")[:4000]
+            # ACCEPT-<pipeline_id> 패턴 라인을 마스킹하여 Codex 프롬프트에서 제거.
+            import re as _re_codex
+            # ACCEPT-<TYPE>-<YYYYMMDD>-<HEX4> 라인 전체 마스킹.
+            # TYPE: FEAT|BUG|IMP ([A-Z]+), YYYYMMDD: \d{8}, HEX4: [0-9A-F]{4} (secrets.token_hex(2).upper())
+            # 선택적 nonce: -[A-Z2-7]{8} (base32 8자, _issue_acceptance_nonce 생성값)
+            # 라인 전체(.*)로 마스킹하여 nonce 포함 여부와 무관하게 차단.
+            packet_text = _re_codex.sub(
+                r"(?m)^(ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}.*)$",
+                "[승인 코드 마스킹 — 계약 6번]",
+                _raw_packet,
+            )
+    except Exception:  # nosec B110
+        packet_text = "(패킷 읽기 실패)"
+    # PR 제목
+    pr_title = ""
+    try:
+        _title_res = subprocess.run(
+            ["gh", "pr", "view", "--json", "title", "-q", ".title"],
+            capture_output=True, text=True, encoding="utf-8", timeout=15, cwd=str(BASE_DIR),
+        )
+        pr_title = (_title_res.stdout or "").strip()
+    except Exception:  # nosec B110
+        pass
+    # BUG-20260628-1AAC MT-2: PR 본문에 승인 코드(ACCEPT-...)가 포함되어 있어도 Codex
+    # 프롬프트에는 마스킹하여 전달한다. 계약 6번("승인 코드는 검토 입력/출력 어디에도
+    # 포함되지 않는다") 준수. packet_text는 이미 마스킹되어 있으나 pr_body는 누락되어 있었다.
+    # 라인 앵커가 아닌 inline 패턴으로 본문 어디에 있든(라인 중간 포함) 마스킹한다.
+    import re as _re_codex_body
+    # ACCEPT 코드 형식: ACCEPT-<TYPE>-<YYYYMMDD>-<HEX4>[-<NONCE8>]
+    # TYPE: FEAT|BUG|IMP ([A-Z]+), YYYYMMDD: \d{8}, HEX4: [0-9A-F]{4} (secrets.token_hex(2).upper())
+    # NONCE8: [A-Z2-7]{8} (base32 uppercase 8자, _issue_acceptance_nonce 생성값, 선택적)
+    # BUG-20260628-1AAC: nonce suffix를 [0-9A-Z]{4}에서 [A-Z2-7]{8}로 수정 (base32 실제 허용 범위)
+    _ACCEPT_CODE_PATTERN = r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}(?:-[A-Z2-7]{8})?"
+    _ACCEPT_MASK = "[ACCEPT코드 마스킹]"
+    pr_body_masked = _re_codex_body.sub(
+        _ACCEPT_CODE_PATTERN,
+        _ACCEPT_MASK,
+        pr_body[:5000],
+    )
+    # BUG-20260628-1AAC MT-2 보완: diff 텍스트에도 동일 마스킹 적용
+    # (테스트 파일 등 diff 내에 ACCEPT 코드 리터럴이 포함될 수 있음)
+    diff_txt_masked = _re_codex_body.sub(_ACCEPT_CODE_PATTERN, _ACCEPT_MASK, diff_txt)
+    # BUG-20260628-1AAC rework (Codex REJECT 대응): contract 본문 자체도 마스킹한다.
+    # 계약 6번이 "승인 코드는 검토 입력 어디에도 포함되지 않는다"를 요구하므로, 계약 본문에
+    # 남아 있는 ACCEPT 관련 리터럴(실제 코드 + 설명용 placeholder)을 Codex 입력에서 제거한다.
+    # contract_sha256은 raw 파일 내용(_load_codex_review_contract, hashlib.sha256(text))으로
+    # 계산되므로, 프롬프트용 마스킹은 무결성 SHA에 영향을 주지 않는다.
+    # (1) 실제 코드 형식 ACCEPT-<TYPE>-<YYYYMMDD>-<HEX4>[-<NONCE8>] 마스킹.
+    contract_text_masked = _re_codex_body.sub(
+        _ACCEPT_CODE_PATTERN, _ACCEPT_MASK, contract_text
+    )
+    # (2) 설명용 placeholder 리터럴(예: `ACCEPT-...`, `ACCEPT-IMP-...`) 마스킹.
+    #     실제 코드 패턴과 달리 점(.)·생략부호로 끝나는 비-코드 리터럴도 검토 입력에서 제거한다.
+    #     ACCEPT 다음에 하이픈 + (영문/숫자/점/생략부호) 1자 이상이 이어지는 형태를 포괄한다.
+    _ACCEPT_LITERAL_PATTERN = r"ACCEPT-[A-Za-z0-9.…]+"
+    contract_text_masked = _re_codex_body.sub(
+        _ACCEPT_LITERAL_PATTERN, _ACCEPT_MASK, contract_text_masked
+    )
+    prompt = (
+        f"{contract_text_masked}\n\n"
+        "=== 검토 대상 PR ===\n"
+        f"PR 제목: {pr_title}\n"
+        f"PR URL: {pr_url}\n"
+        f"PR head SHA: {pr_head_sha}\n\n"
+        "== 변경 파일 목록 ==\n"
+        f"{files_txt}\n\n"
+        f"== Git Diff (실제 변경 내용, 파일별 patch, trust-root 우선, budget={DIFF_BUDGET}자) ==\n"
+        f"포함된 파일: {', '.join(included_files)}\n"
+        f"제외된 파일: {', '.join(excluded_files) if excluded_files else '없음'}\n\n"
+        f"{diff_txt_masked}\n\n"
+        "== CI 상태 ==\n"
+        f"  github_ci: {ci_status} ({ci_run_id})\n"
+        f"  oracle: {state.get('external_gates', {}).get('oracle', {}).get('status', 'UNKNOWN')}\n"
+        f"  technical: {state.get('external_gates', {}).get('technical', {}).get('status', 'UNKNOWN')}\n\n"
+        "== 최종 확인 패킷 (human_acceptance_packet.md) ==\n"
+        f"{packet_text}\n\n"
+        "== PR 본문 (최대 5000자) ==\n"
+        f"{pr_body_masked}\n\n"
+        "위 계약(contract)의 금지 사항을 준수하고, 출력 형식(APPROVE_TO_USER 또는 "
+        "REJECT - <구체적 사유>) 중 하나로만 답하세요."
+    )
+
+    # 5. codex CLI 호출.
+    # BUG-20260628-1AAC: `-o <file>` (--output-last-message) 옵션으로 AI 응답을 파일에 저장.
+    # Windows에서 subprocess stdout에는 OS 레벨 런타임 메시지
+    # ("SUCCESS: The process with PID N (child process of PID M) has been terminated.")가
+    # 섞여 AI 응답 파싱을 방해했다. `-o` 옵션을 사용하면 AI 마지막 메시지만 파일에 저장되고
+    # stdout의 OS 메시지와 완전히 분리된다. AI 출력은 파일에서 읽어 파싱한다.
+    #
+    # 프롬프트 전달 방식: stdin pipe(`-`)가 아닌 tempfile + open(stdin=file) 방식.
+    # `cmd /c codex exec -o ... -` + `input=prompt` 조합은 cmd.exe의 stdin 포워딩에
+    # 의존하므로 신뢰성 우려가 있다. 프롬프트를 별도 파일에 저장하고 subprocess stdin에
+    # 파일 디스크립터를 직접 연결하여 cmd.exe stdin 포워딩 없이도 안전하게 전달한다.
+    # Windows: codex.cmd는 shell=True 없이 직접 실행 불가. cmd.exe (EXE)를 통해 실행한다.
+    import tempfile as _tempfile
+    _output_file = _tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", prefix="codex_out_", delete=False, encoding="utf-8"
+    )
+    _output_path = _output_file.name
+    _output_file.close()
+    # 프롬프트를 별도 tempfile에 저장 — stdin 직접 연결용
+    _prompt_file = _tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", prefix="codex_prompt_", delete=False, encoding="utf-8"
+    )
+    _prompt_file.write(prompt)
+    _prompt_file.close()
+    _prompt_path = _prompt_file.name
+    if sys.platform == "win32":
+        _codex_cmd = ["cmd", "/c", "codex", "exec", "-o", _output_path, "-"]
+    else:
+        _codex_cmd = ["codex", "exec", "-o", _output_path, "-"]
+    try:
+        with open(_prompt_path, "r", encoding="utf-8") as _stdin_f:
+            result = subprocess.run(
+                _codex_cmd,
+                stdin=_stdin_f,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=300,
+            )
+    except FileNotFoundError:
+        _die(
+            "[BLOCKED] failure_code=codex_cli_not_found\n"
+            "  codex CLI를 찾을 수 없습니다 (fail-closed). codex가 PATH에 설치되어 있는지 확인하세요."
+        )
+    except subprocess.TimeoutExpired:
+        _die(
+            "[BLOCKED] failure_code=codex_cli_timeout\n"
+            "  codex CLI 호출이 시간 초과되었습니다 (fail-closed, 300초). 다시 실행하세요."
+        )
+    finally:
+        try:
+            os.unlink(_prompt_path)
+        except OSError:
+            pass
+    if result.returncode != 0:
+        _die(
+            "[BLOCKED] failure_code=codex_cli_failed\n"
+            f"  codex CLI가 실패했습니다 (returncode={result.returncode}, fail-closed)."
+        )
+
+    # AI 응답을 파일에서 읽는다. 파일이 없거나 비어있으면 INVALID로 처리.
+    # BUG-20260628-1AAC: .strip() 제거 — raw 첫 줄을 _parse_codex_verdict가 직접 검증해야 한다.
+    # 계약 2번("첫 줄 정확 일치") 준수: strip()으로 선행 공백/빈 줄을 제거하면
+    # "\nAPPROVE_TO_USER" 같은 선행 빈 줄 우회가 가능해진다.
+    try:
+        raw_output = Path(_output_path).read_text(encoding="utf-8", errors="replace")
+    except (OSError, IOError):
+        raw_output = ""
+    finally:
+        try:
+            os.unlink(_output_path)
+        except OSError:
+            pass
+    parsed = _parse_codex_verdict(raw_output)
+    parsed_status = str(parsed["status"])
+
+    if parsed_status == "INVALID":
+        _die(
+            "[BLOCKED] failure_code=codex_verdict_invalid\n"
+            "  Codex 출력이 APPROVE_TO_USER 또는 'REJECT - <사유>' 형식이 아닙니다 (fail-closed).\n"
+            f"  받은 verdict: {parsed.get('verdict', '')[:200]}"
+        )
+
+    # 7. codex_review_result.json 기록 — nonce/secret/accept_code 미포함.
+    # BUG-20260627-C81C MT-7: accept_code 필드 제거 — 계약 6번("승인 코드는 검토 입력/출력
+    # 어디에도 포함되지 않는다") 준수. result.json에 공개 prefix라도 accept_code를 저장하면
+    # Codex CLI가 결과 파일을 읽어 승인 코드를 유추하는 우회 경로가 생긴다.
+    result_status = "APPROVED" if parsed_status == "APPROVED" else "REJECTED"
+    review_record: Dict[str, Any] = {
+        "schema_version": 1,
+        "pipeline_id": pipeline_id,
+        "status": result_status,
+        "pr_url": pr_url,
+        "pr_head_sha": pr_head_sha,
+        "pr_body_sha256": pr_body_sha256,
+        "packet_sha256": packet_sha256,
+        "reviewed_at": _now(),
+        "contract_sha256": contract_sha256,
+        "verdict": str(parsed["verdict"]),
+    }
+    # BUG-20260627-C81C MT-6 (AC-1): Codex packet에 포함/제외된 파일 기록.
+    review_record["included_files"] = included_files
+    review_record["excluded_files"] = excluded_files
+    if result_status == "REJECTED":
+        review_record["reject_reason"] = str(parsed["reject_reason"])
+
+    result_path = _codex_review_result_path()
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = result_path.with_suffix(result_path.suffix + ".tmp")
+    try:
+        tmp.write_text(
+            json.dumps(review_record, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp.replace(result_path)  # 원자적 rename
+    except OSError:
+        if tmp.exists():
+            tmp.unlink()
+        _die(
+            "[BLOCKED] failure_code=codex_review_result_write_failed\n"
+            "  codex_review_result.json 기록에 실패했습니다 (fail-closed)."
+        )
+
+    _log_event(state, f"codex review {result_status}: pr_head_sha={pr_head_sha[:12]}")
+    _save(state)
+
+    if result_status == "APPROVED":
+        print(GREEN("[CODEX REVIEW PASS] Codex 검토 통과 — APPROVE_TO_USER"))
+        print(f"  결과 기록: {result_path}")
+        print("  다음: 사용자 최종 확인을 위해 gates request-accept를 실행하세요.")
+        return
+    # REJECTED — exit 1. REJECT 원문을 그대로 출력 (번역/요약 없음).
+    _die(
+        "[CODEX REVIEW FAIL] failure_code=codex_review_rejected\n"
+        f"  {parsed['reject_reason']}\n"
+        "  위 사유를 보완한 뒤 gates codex-review를 다시 실행하세요.",
+        exit_code=1,
+    )
 
 
 def _check_codex_review_gate(
     pipeline_id: str, state: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """gates accept --result ACCEPT 전 Codex Review Loop 승인 여부를 검증 (fail-closed).
+    """request-accept/accept 전 Codex 검토 결과(codex_review_result.json)를 검증 (fail-closed).
 
-    .pipeline/codex_review_loop_state.json을 로드하여 다음을 검사한다:
-      - 파일 없음/파싱 오류 → codex_review_not_approved BLOCKED (fail-closed)
-      - status != APPROVED → codex_review_not_approved BLOCKED
-      - APPROVED이지만 5개 필수 필드(pipeline_id, pr_head_sha, packet_sha256,
-        pr_body_sha256, accept_code) 중 하나라도 없거나 빔 → codex_review_stale BLOCKED
-      - APPROVED이지만 pipeline_id가 현재 파이프라인과 다름 → codex_review_stale BLOCKED
-      - APPROVED이지만 gh CLI로 head SHA를 못 얻음 → codex_review_stale BLOCKED (fail-closed)
-      - APPROVED이지만 pr_head_sha가 현재 PR head SHA와 다름 → codex_review_stale BLOCKED
-      - acceptance_request.json이 없거나 packet_sha256/pr_body_sha256이 빔
-        → codex_review_stale BLOCKED (fail-closed)
-      - APPROVED이지만 packet_sha256/pr_body_sha256이 acceptance_request.json과 다름
-        → codex_review_stale BLOCKED
-      - 모두 존재하고 일치 → PASS
+    IMP-20260627-3BB6 MT-3: SSoT를 codex_review_loop_state.json → codex_review_result.json로
+    전환한다. gates codex-review가 기록한 결과만을 신뢰 루트로 사용하며, Stop hook 의존을 제거한다.
 
-    2차 REJECT 재작업(IMP-20260626-4121): "값이 있으면 비교, 없으면 SKIP" 구조를
-    제거하고 모든 비교를 fail-closed로 강화한다. APPROVED 파일만 있고 필드가
-    누락된 경우 우회를 차단한다.
-
-    기존 provenance/replay/nonce 검증을 대체하지 않으며, 그 이전 선검사로만 동작한다.
+    검사 순서:
+      - codex_review_result.json 없음/파싱 오류 → codex_review_required BLOCKED
+      - status == REJECTED → codex_review_rejected BLOCKED (reject_reason 포함)
+      - status != APPROVED (그 외) → codex_review_not_approved BLOCKED
+      - APPROVED이지만 pipeline_id 불일치 → stale_codex_review BLOCKED
+      - BUG-20260627-C81C MT-3 (AC-5): pr_head_sha/packet_sha256/pr_body_sha256를
+        acceptance_request.json 유무와 무관하게 항상 현재 실제 파일/PR 상태에서 직접
+        계산하여 stored 값과 독립 비교한다. 각 필드는 고유 failure_code로 분리:
+          pr_head_sha   불일치/취득불가 → stale_pr_head_sha BLOCKED
+          packet_sha256 불일치/빈값/취득불가 → stale_packet_sha256 BLOCKED
+          pr_body_sha256 불일치/빈값/취득불가 → stale_pr_body_sha256 BLOCKED
+      - 모두 일치 → PASS
 
     Args:
         pipeline_id: 현재 활성 파이프라인 ID.
-        state: pipeline_state dict (현재 미사용이나 인터페이스 일관성 위해 수신).
+        state: pipeline_state dict (인터페이스 일관성 위해 수신, 현재 미사용).
     Returns:
         {"status": "PASS"} 또는
         {"status": "BLOCKED", "failure_code": str, "message": str}.
@@ -6726,148 +7368,171 @@ def _check_codex_review_gate(
             f"pipeline_id must be str, got {type(pipeline_id).__name__}"
         )
 
-    loop_path = _codex_review_loop_state_path()
-    if not loop_path.exists():
+    result_path = _codex_review_result_path()
+    if not result_path.exists():
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_not_approved",
+            "failure_code": "codex_review_required",
             "message": (
-                "Codex 검토가 아직 APPROVE되지 않았습니다. "
-                "gates request-accept를 먼저 실행하세요."
+                "Codex Review가 아직 실행되지 않았습니다 (codex_review_result.json 없음). "
+                "python pipeline.py gates codex-review 를 먼저 실행하세요."
             ),
         }
 
     try:
-        with open(loop_path, encoding="utf-8") as fh:
-            loop_state = json.load(fh)
-        if not isinstance(loop_state, dict):
-            raise ValueError("codex_review_loop_state.json is not an object")
+        with open(result_path, encoding="utf-8") as fh:
+            review = json.load(fh)
+        if not isinstance(review, dict):
+            raise ValueError("codex_review_result.json is not an object")
     except (OSError, json.JSONDecodeError, ValueError):
-        # fail-closed: 로드/파싱 실패는 미승인으로 간주
+        # fail-closed: 로드/파싱 실패는 미검토로 간주
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_required",
+            "message": (
+                "codex_review_result.json 로드/파싱에 실패했습니다 (fail-closed). "
+                "gates codex-review 를 다시 실행하세요."
+            ),
+        }
+
+    review_status = str(review.get("status", ""))
+    if review_status == "REJECTED":
+        reject_reason = str(review.get("reject_reason", "") or "(사유 없음)")
+        return {
+            "status": "BLOCKED",
+            "failure_code": "codex_review_rejected",
+            "message": (
+                "Codex 검토가 REJECT되었습니다.\n"
+                f"  사유: {reject_reason}\n"
+                "  사유를 보완한 뒤 gates codex-review 를 다시 실행하세요."
+            ),
+        }
+    if review_status != "APPROVED":
         return {
             "status": "BLOCKED",
             "failure_code": "codex_review_not_approved",
             "message": (
-                "codex_review_loop_state.json 로드/파싱에 실패했습니다 (fail-closed). "
-                "gates request-accept를 다시 실행하세요."
+                f"Codex 검토 결과가 APPROVED가 아닙니다 (status={review_status or '없음'}). "
+                "gates codex-review 를 먼저 실행하세요."
             ),
         }
 
-    if str(loop_state.get("status", "")) != "APPROVED":
+    # APPROVED — pipeline_id 일치 검증 (다른 파이프라인 승인 재사용 차단).
+    if str(review.get("pipeline_id", "")) != pipeline_id:
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_not_approved",
+            "failure_code": "stale_codex_review",
             "message": (
-                "Codex 검토가 아직 APPROVE되지 않았습니다. "
-                "gates request-accept를 먼저 실행하세요."
+                "stale 필드: pipeline_id. Codex APPROVED 결과의 pipeline_id가 현재 "
+                "파이프라인과 다릅니다. 현재 파이프라인에서 gates codex-review 를 다시 실행하세요."
             ),
         }
 
-    # APPROVED — fail-closed 필수 필드 존재 검증 (2차 REJECT 재작업).
-    # "값이 있으면 비교, 없으면 SKIP" 구조의 우회를 차단한다. 아래 5개 필드가
-    # 하나라도 비어 있으면 비교 자체를 SKIP하지 않고 즉시 codex_review_stale BLOCKED.
-    required_fields = [
-        "pipeline_id",
-        "pr_head_sha",
-        "packet_sha256",
-        "pr_body_sha256",
-        "accept_code",
-    ]
-    for field in required_fields:
-        if not str(loop_state.get(field, "") or "").strip():
-            return {
-                "status": "BLOCKED",
-                "failure_code": "codex_review_stale",
-                "message": (
-                    f"Codex APPROVED 상태에 필수 필드 '{field}'가 없거나 "
-                    "비어 있습니다. gates request-accept를 다시 실행하세요."
-                ),
-            }
+    # BUG-20260627-C81C MT-3 (AC-5): pr_head_sha / packet_sha256 / pr_body_sha256를
+    # 각각 독립적으로, 항상 현재 실제 파일/PR 상태에서 직접 계산하여 stored 값과 비교한다.
+    # acceptance_request.json의 유무·내용에 의존하지 않는다 (이전 _req 분기 우회 제거).
+    # 각 필드 불일치는 고유 failure_code로 분리한다:
+    #   pr_head_sha   → stale_pr_head_sha
+    #   packet_sha256 → stale_packet_sha256
+    #   pr_body_sha256 → stale_pr_body_sha256
 
-    # pipeline_id 일치 검증 (다른 파이프라인의 승인 상태 재사용 차단).
-    # 빈 값 체크는 위 required_fields 루프에서 이미 완료.
-    if str(loop_state["pipeline_id"]) != pipeline_id:
-        return {
-            "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
-            "message": (
-                "Codex APPROVED 상태의 pipeline_id가 현재 파이프라인과 다릅니다. "
-                "이전 파이프라인의 승인 상태가 남아 있습니다. "
-                "현재 파이프라인에서 gates request-accept를 다시 실행하세요."
-            ),
-        }
-
-    # head SHA 일치 검증 — gh CLI 실패 시 SKIP이 아니라 fail-closed BLOCKED.
+    # 1) pr_head_sha — gh CLI로 현재 head SHA를 취득하지 못하면 fail-closed BLOCKED.
+    #    (취득 불가는 환경/인프라 실패이므로 일반 stale_codex_review로 차단한다.
+    #     실제 값 불일치만 stale_pr_head_sha로 분리하여 우회 회귀를 명확히 식별한다.)
     current_head_sha = _get_current_pr_head_sha()
     if not current_head_sha:
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
+            "failure_code": "stale_codex_review",
             "message": (
-                "PR head SHA를 확인할 수 없습니다 (gh CLI 없음/실패). "
-                "fail-closed — gates request-accept를 다시 실행하세요."
+                "stale 필드: pr_head_sha. 현재 PR head SHA를 확인할 수 없습니다 "
+                "(gh CLI 없음/실패, fail-closed). gates codex-review 를 다시 실행하세요."
             ),
         }
-    if str(loop_state["pr_head_sha"]).lower() != str(current_head_sha).lower():
+    stored_head_sha = str(review.get("pr_head_sha", "") or "")
+    if stored_head_sha.lower() != str(current_head_sha).lower():
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
+            "failure_code": "stale_pr_head_sha",
             "message": (
-                "Codex APPROVED 상태의 pr_head_sha가 현재 PR head SHA와 다릅니다. "
-                "PR에 새 커밋이 push되었습니다. gates request-accept를 다시 실행하세요."
-            ),
-        }
-
-    # packet_sha256 / pr_body_sha256 일치 검증 — acceptance_request.json 기준.
-    # acceptance_request.json이 없거나 필드가 비면 fail-closed BLOCKED.
-    _req = _load_acceptance_request()
-    if _req is None:
-        return {
-            "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
-            "message": (
-                "acceptance_request.json이 없습니다. "
-                "gates request-accept를 먼저 실행하세요."
+                "stale 필드: pr_head_sha. Codex APPROVED 결과의 pr_head_sha가 현재 PR "
+                "head SHA와 다릅니다. PR에 새 커밋이 push되었습니다. "
+                "gates codex-review 를 다시 실행하세요."
             ),
         }
 
-    req_packet_sha = str(_req.get("packet_sha256", "") or "")
-    if not req_packet_sha:
+    stored_packet_sha = str(review.get("packet_sha256", "") or "")
+    stored_body_sha = str(review.get("pr_body_sha256", "") or "")
+
+    # 2) packet_sha256 — fail-closed: stored 빈 값이면 검토 불완전 → 차단.
+    if not stored_packet_sha:
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
+            "failure_code": "stale_packet_sha256",
             "message": (
-                "acceptance_request.json에 packet_sha256이 없거나 비어 있습니다. "
-                "fail-closed — gates request-accept를 다시 실행하세요."
+                "stale 필드: packet_sha256. codex_review_result.json의 packet_sha256이 "
+                "비어 있습니다 (검토 시점에 packet 파일을 취득하지 못했습니다, fail-closed). "
+                "report final-packet 실행 후 gates codex-review 를 다시 실행하세요."
             ),
         }
-    if req_packet_sha != str(loop_state["packet_sha256"]):
+    # 항상 현재 실제 packet 파일 SHA를 계산하여 독립 비교 (acceptance_request.json 무관).
+    packet_path = _packet_output_path()
+    current_packet_sha = _compute_file_sha256(str(packet_path)) or ""
+    if not current_packet_sha:
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
+            "failure_code": "stale_packet_sha256",
             "message": (
-                "Codex APPROVED 상태의 packet_sha256이 현재 acceptance_request.json과 "
-                "다릅니다. packet이 갱신되었습니다. gates request-accept를 다시 실행하세요."
+                "stale 필드: packet_sha256. 현재 human_acceptance_packet.md를 "
+                "읽을 수 없습니다 (fail-closed). "
+                "report final-packet 실행 후 gates codex-review 를 다시 실행하세요."
+            ),
+        }
+    if stored_packet_sha != current_packet_sha:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "stale_packet_sha256",
+            "message": (
+                "stale 필드: packet_sha256. Codex APPROVED 이후 "
+                "human_acceptance_packet.md가 변경되었습니다. "
+                "gates codex-review 를 다시 실행하세요."
             ),
         }
 
-    req_body_sha = str(_req.get("pr_body_sha256", "") or "")
-    if not req_body_sha:
+    # 3) pr_body_sha256 — fail-closed: stored 빈 값이면 검토 불완전 → 차단.
+    if not stored_body_sha:
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
+            "failure_code": "stale_pr_body_sha256",
             "message": (
-                "acceptance_request.json에 pr_body_sha256이 없거나 비어 있습니다. "
-                "fail-closed — gates request-accept를 다시 실행하세요."
+                "stale 필드: pr_body_sha256. codex_review_result.json의 pr_body_sha256이 "
+                "비어 있습니다 (검토 시점에 PR 본문을 취득하지 못했습니다, fail-closed). "
+                "gh CLI 확인 후 gates codex-review 를 다시 실행하세요."
             ),
         }
-    if req_body_sha != str(loop_state["pr_body_sha256"]):
+    # 항상 현재 실제 PR 본문 SHA를 계산하여 독립 비교 (acceptance_request.json 무관).
+    pr_body = _get_pr_body_text() or ""
+    current_body_sha = (
+        hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else ""
+    )
+    if not current_body_sha:
         return {
             "status": "BLOCKED",
-            "failure_code": "codex_review_stale",
+            "failure_code": "stale_pr_body_sha256",
             "message": (
-                "Codex APPROVED 상태의 pr_body_sha256이 현재 acceptance_request.json과 "
-                "다릅니다. PR 본문이 갱신되었습니다. gates request-accept를 다시 실행하세요."
+                "stale 필드: pr_body_sha256. 현재 PR 본문을 가져올 수 없습니다 "
+                "(gh CLI 없음/실패, fail-closed). "
+                "gh pr view 확인 후 gates codex-review 를 다시 실행하세요."
+            ),
+        }
+    if stored_body_sha != current_body_sha:
+        return {
+            "status": "BLOCKED",
+            "failure_code": "stale_pr_body_sha256",
+            "message": (
+                "stale 필드: pr_body_sha256. Codex APPROVED 이후 "
+                "PR 본문이 변경되었습니다. "
+                "gates codex-review 를 다시 실행하세요."
             ),
         }
 
@@ -12758,19 +13423,24 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
         gate_status["acceptance"] = "PENDING"
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
-    # ci_head_sha: github_actions.head_sha (acceptance_request 또는 JSON 파일에서)
+    # ci_head_sha: 우선순위 순서로 취득:
+    # BUG-20260628-1AAC: acceptance_request.json의 github_ci_head_sha는 stale일 수 있으므로
+    # 우선순위를 변경: gh CLI 최신 CI run 직접 조회 → acceptance_request 보조 → PR head fallback.
+    # 1. gh CLI로 현재 CI run의 head SHA 직접 조회 (stale acceptance_request 우선순위 제거)
+    # 2. acceptance_request.json의 github_ci_head_sha (gh CLI 실패 시 보조)
+    # 3. PR head SHA fallback (CI run과 같은 커밋이면 동일)
     ci_head_sha = ""
-    if isinstance(acceptance_request, dict):
-        ci_head_sha = str(acceptance_request.get("github_ci_head_sha", "") or "")
-    if not ci_head_sha:
-        # human_acceptance_packet.json에서 읽기 시도
+    if ci_run_id:
+        # gh CLI로 직접 조회 (human_acceptance_packet.json 순환 참조 방지)
         try:
-            _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
-            if _vj_path.exists():
-                _vj = json.loads(_vj_path.read_text(encoding="utf-8", errors="replace"))
-                ci_head_sha = str(_vj.get("github_actions", {}).get("head_sha", "") or "")
-        except (OSError, json.JSONDecodeError):
+            _ci_sha_result = _get_ci_run_head_sha(ci_run_id)
+            if _ci_sha_result:
+                ci_head_sha = str(_ci_sha_result)
+        except Exception:  # nosec B110
             pass
+    if not ci_head_sha:
+        # pr_head_sha fallback (동일 커밋인 경우 충분)
+        ci_head_sha = pr_head_sha
 
     # verification_json_sha256: human_acceptance_packet.json SHA-256
     vj_sha256 = ""
@@ -13889,7 +14559,8 @@ def _replace_pr_body_packet_block(pr_body: str, packet_content: str) -> str:
             re.escape(start) + r".*?" + re.escape(end),
             re.DOTALL,
         )
-        return pattern.sub(new_block, pr_body, count=1)
+        # lambda replacement: new_block을 리터럴로 처리 (\d 등 regex 특수문자 오해 방지)
+        return pattern.sub(lambda _m: new_block, pr_body, count=1)
     if pr_body and not pr_body.endswith("\n"):
         pr_body += "\n"
     return pr_body + "\n" + new_block + "\n"
@@ -16258,14 +16929,22 @@ def _get_current_pr_changed_files() -> Optional[List[str]]:
 def _get_current_pr_head_sha() -> Optional[str]:
     """현재 PR의 head commit SHA를 gh CLI로 조회.
 
+    IMP-20260627-3BB6: 다른 gh 헬퍼와 동일하게 PIPELINE_GH_EXECUTABLE 환경변수를
+    우선 사용하여 테스트 격리(fake gh 주입)를 지원한다. 미설정 시 literal `gh`.
+
     Returns:
         head SHA 문자열 또는 None (gh CLI 미설치/오류).
     Raises:
         없음.
     """
+    gh_exe = os.environ.get("PIPELINE_GH_EXECUTABLE", "gh") or "gh"
+    cmd = (
+        [sys.executable, gh_exe] if gh_exe.endswith(".py")
+        else [gh_exe]
+    )
     try:
         r = subprocess.run(
-            ["gh", "pr", "view", "--json", "headRefOid", "--jq", ".headRefOid"],
+            cmd + ["pr", "view", "--json", "headRefOid", "--jq", ".headRefOid"],
             capture_output=True, text=True, timeout=10,
             encoding="utf-8", errors="replace",
         )
@@ -16417,14 +17096,14 @@ def _render_pending_acceptance_comment(display_model: Dict[str, Any]) -> str:
     """PENDING 승인 안내 댓글 본문을 display model로부터 최소 고정 양식으로 렌더링한다(SSoT).
 
     [Purpose]: IMP-20260624-069A MT-2 — pending 댓글을 4요소(사용자 승인 요청 / PR /
-      승인 코드 / CODEX 검토 필요) 최소 고정 양식으로 통일한다.
+      승인 코드 / Codex 검토 통과) 최소 고정 양식으로 통일한다.
     [Assumptions]: display_model은 _build_acceptance_display_model 반환 dict이며
       approval_code 및 pr_url 필드가 호출부에서 채워진다.
     [Vulnerability & Risks]: display_model이 None/비dict이면 TypeError. 완료 마커
       (ACCEPTED/승인 완료/배포 완료)는 절대 포함하지 않으며 pending HTML 마커는 반드시 유지한다.
     [Improvement]: 양식 문자열을 모듈 상수 템플릿으로 분리 가능.
 
-    고정 순서: 사용자 승인 요청 → PR 링크 → 승인 코드 → CODEX 검토 필요 →
+    고정 순서: 사용자 승인 요청 → PR 링크 → 승인 코드 → Codex 검토 통과 →
     pending HTML 마커.
 
     Args:
@@ -16457,7 +17136,7 @@ def _render_pending_acceptance_comment(display_model: Dict[str, Any]) -> str:
     lines.append("승인 코드:")
     lines.append(str(approval_code))
     lines.append("")
-    lines.append("CODEX 검토 필요")
+    lines.append("Codex 검토 통과")
     lines.append("")
     lines.append("<!-- pipeline-human-acceptance-packet -->")
     lines.append("<!-- pipeline-human-acceptance-packet-pending -->")
@@ -17947,6 +18626,16 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     if evidence is None or not str(evidence).strip():
         _die("[BLOCKED] --evidence는 필수입니다 (결과물 경로 또는 URL).")
 
+    # IMP-20260627-3BB6 MT-3: Codex Review gate 사전 검증 (nonce 발급 전, fail-closed).
+    # codex_review_result.json이 없으면 codex_review_required, REJECTED면 codex_review_rejected,
+    # APPROVED이나 SHA/pipeline 불일치면 stale_codex_review로 차단하여 승인 코드를 발급하지 않는다.
+    _cr_pre = _check_codex_review_gate(pipeline_id, state)
+    if _cr_pre.get("status") == "BLOCKED":
+        _die(
+            f"[BLOCKED] failure_code={_cr_pre['failure_code']}\n"
+            f"  {_cr_pre['message']}"
+        )
+
     # IMP-20260614-2821 MT-2: workspace hygiene preflight (nonce 발급 전).
     # untracked oracle 증거 등 BLOCKED 항목이 있으면 승인 코드를 발급하지 않는다.
     # cleanup_only 파일은 WARN으로만 표시한다.
@@ -18293,10 +18982,17 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                             encoding="utf-8",
                         )
                         print("  [PR 본문 SHA 재기록] pr_body_sha256 업데이트 완료")
+                        # BUG-20260627-C81C MT-2 (AC-3): codex_review_result.json의
+                        # packet_sha256/pr_body_sha256를 request-accept에서 재기록하던 블록을 제거한다.
+                        # 재기록은 Codex APPROVED 이후 packet/PR 본문이 바뀌어도 stale 검증을
+                        # 통과시키는 우회 경로였다. 이제 SHA가 바뀌면 _check_codex_review_gate가
+                        # stale_*로 차단하도록 두어 fail-closed 무결성을 유지한다.
             except (OSError, json.JSONDecodeError):
                 pass  # SHA 재기록 실패해도 계속 진행
         else:
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
+            # BUG-20260627-C81C MT-2 (AC-3): pr_body 미변경 경로에서도 codex_review_result.json의
+            # packet_sha256 재기록 블록을 제거한다 (위와 동일한 우회 차단 근거).
         # IMP-20260610-8C3B MT-1: post-materialization SHA 검증
         verify_err = _verify_acceptance_snapshot(state, snapshot_result.get("sha_manifest", {}))
         if verify_err:
@@ -18324,7 +19020,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     print("승인 코드:")
     print(f"{pr_comment_accept_code}")
     print()
-    print("CODEX 검토 필요")
+    print("Codex 검토 통과")
     reused_label = "재사용" if reuse else "신규 발급"
     _log_event(state, f"acceptance request {reused_label}: request_id={req['request_id']} nonce={nonce}")
     _save(state)
@@ -18897,6 +19593,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
         print(GREEN(f"\n[THREE GATE + PHASE ATTESTATION ENABLED] {pid}\n"))
         return
 
+    # IMP-20260627-3BB6 MT-2: gates codex-review — Codex 검토 hard gate
+    if action == "codex-review":
+        _cmd_gates_codex_review(args, state)
+        return
+
     # IMP-20260531-BBDB MT-2: gates request-accept — User Acceptance Nonce 발급
     if action == "request-accept":
         _cmd_gates_request_accept(args, state)
@@ -19370,7 +20071,8 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if accept_decision not in {"ACCEPT", "REJECT"}:
             _die("[USER ACCEPTANCE BLOCKED] --result는 ACCEPT 또는 REJECT만 허용됩니다.")
 
-        # IMP-20260626-4121: Codex Review Loop gate — ACCEPT는 Codex APPROVED 기록이 있어야 통과.
+        # IMP-20260627-3BB6 MT-3: Codex Review gate (SSoT=codex_review_result.json) 재확인.
+        # ACCEPT는 Codex APPROVED 결과가 있고 현재 PR head SHA와 일치해야 통과한다.
         # 기존 provenance/replay/stale/nonce 검증을 약화하지 않고 그 이전에 fail-closed로 선검사한다.
         if accept_decision == "ACCEPT":
             _cr_result = _check_codex_review_gate(pid, state)
@@ -21463,6 +22165,12 @@ def build_parser() -> argparse.ArgumentParser:
     # IMP-20260524-48C4 MT-1: agent_generated expected 허용 옵션
     p_gate_oracle.add_argument("--allow-agent-generated", action="store_true", default=False, dest="allow_agent_generated",
                                help="agent_generated source oracle을 BLOCKED 처리하지 않고 허용한다 (기본 비허용)")
+    # IMP-20260627-3BB6 MT-2: gates codex-review — Codex 검토 hard gate
+    gsub.add_parser(
+        "codex-review",
+        help="Codex 검토 hard gate — PR을 Codex CLI로 검토하여 codex_review_result.json 기록 "
+             "(APPROVE exit 0 / REJECT exit 1)",
+    )
     # IMP-20260531-BBDB MT-2: gates request-accept — 사용자 최종 확인 코드(nonce) 발급
     p_gate_req = gsub.add_parser(
         "request-accept",

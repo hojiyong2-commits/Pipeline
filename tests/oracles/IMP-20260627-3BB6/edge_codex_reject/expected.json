@@ -1,0 +1,18 @@
+{
+  "scenario": "edge_codex_reject",
+  "description": "Codex REJECT 시 gates codex-review exit 1, codex_review_result.json status=REJECTED, request-accept BLOCKED",
+  "exit_code": 1,
+  "codex_review_result": {
+    "schema_version": 1,
+    "pipeline_id": "IMP-20260627-3BB6",
+    "status": "REJECTED",
+    "verdict_prefix": "REJECT",
+    "reject_reason_stored": true,
+    "reject_reason_verbatim": true
+  },
+  "gate_status": "FAIL",
+  "request_accept_failure_code": "codex_review_rejected",
+  "request_accept_blocked": true,
+  "user_accept_prompt_shown": false,
+  "notes": "사용자 최종 승인 요청 출력 없어야 함"
+}

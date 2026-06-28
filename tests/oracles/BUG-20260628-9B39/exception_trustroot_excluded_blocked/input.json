@@ -1,0 +1,7 @@
+{
+  "case_id": "exception_trustroot_excluded_blocked",
+  "case_kind": "exception",
+  "scenario": "diff budget 초과로 CODEX_REVIEW_CRITICAL_FILES 해당 파일이 excluded_files에 포함된 상태",
+  "critical_file_in_changed_files": ".claude/codex_review_contract.md",
+  "critical_file_moved_to_excluded": true
+}
