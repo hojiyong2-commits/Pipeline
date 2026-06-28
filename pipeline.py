@@ -14526,7 +14526,8 @@ def _replace_pr_body_packet_block(pr_body: str, packet_content: str) -> str:
             re.escape(start) + r".*?" + re.escape(end),
             re.DOTALL,
         )
-        return pattern.sub(new_block, pr_body, count=1)
+        # lambda replacement: new_block을 리터럴로 처리 (\d 등 regex 특수문자 오해 방지)
+        return pattern.sub(lambda _m: new_block, pr_body, count=1)
     if pr_body and not pr_body.endswith("\n"):
         pr_body += "\n"
     return pr_body + "\n" + new_block + "\n"
