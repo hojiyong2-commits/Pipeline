@@ -1,0 +1,121 @@
+<handover>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <agent_run_id>dev-2c9a7cd0ba5c31f5</agent_run_id>
+  <agent_token>tok_A0OCWrsafVv3BYeJd3C5qeYRTXp9I1WBNui3z33uIUY</agent_token>
+  <phase>dev</phase>
+  <files_modified>pipeline.py,tests/e2e/test_codex_snapshot_sync_f52c.py,tests/e2e/test_request_accept_snapshot_8c3b.py</files_modified>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_snapshot_sync_f52c.py</file>
+    <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+    <file>scope_manifest_F52C_reject3_fix.json</file>
+  </evidence>
+
+  <scope_declaration>
+    <files_to_create>scope_manifest_F52C_reject3_fix.json (절대경로: c:/Users/hojiy/OneDrive/Desktop/Projects/Really good agents for QA and Orchestra/scope_manifest_F52C_reject3_fix.json)</files_to_create>
+    <files_to_modify>
+      c:/Users/hojiy/OneDrive/Desktop/Projects/Really good agents for QA and Orchestra/pipeline.py (약 18083-18083 신규 헬퍼, 18375-18470 codex-review, 18962-19060 3자 검증, 19305-19320 request-accept, 20475-20500 gates accept, 17542-17585 materialize 반환),
+      c:/Users/hojiy/OneDrive/Desktop/Projects/Really good agents for QA and Orchestra/tests/e2e/test_codex_snapshot_sync_f52c.py (gh stub .body + 신규 TC-NEW-1..4 + tc_publish_3way assertion),
+      c:/Users/hojiy/OneDrive/Desktop/Projects/Really good agents for QA and Orchestra/tests/e2e/test_request_accept_snapshot_8c3b.py (_write_fake_gh_script .body 동기화)
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>Grep "_verify_published_pr_body_three_way|_get_staged_pr_body_sha|_cmd_gates_codex_review|_replace_pr_body_packet_block|pr_body_sha256|_materialize_acceptance_snapshot" → 기존 헬퍼 _replace_pr_body_packet_block / _materialize_acceptance_snapshot 재사용, 신규 staged-final-body SHA 계산만 _get_staged_pr_body_sha로 추출</searched>
+      <decision>EXTEND — 기존 snapshot/3자 검증 함수를 재배선하고, publish 후 최종 PR body SHA 계산 헬퍼만 NEW로 추가</decision>
+    </reuse_search>
+    <scope_amendment_reason>
+      Side-Effect Audit 결과: pipeline.py의 staged PR body SHA 계산을 "현재 PR body" → "publish 후 최종 PR body"로 변경하면서,
+      publish 후 PR body를 반영하지 않던 기존 E2E 테스트의 fake gh stub들이 3자 불일치를 유발합니다.
+      따라서 tests/e2e/test_request_accept_snapshot_8c3b.py의 _write_fake_gh_script(.body 조회)를 실제 gh처럼
+      publish 후 최종 body를 반환하도록 동기화했습니다. 이는 PM 지시서의 직접 대상(pipeline.py, test_codex_snapshot_sync_f52c.py)
+      외 1개 tests 파일이 추가된 것으로, scope_manifest_F52C_reject3_fix.json의 scope_amendment에 기록했습니다.
+      두 tests 파일 모두 본 BUG 파이프라인의 request-accept/codex-review snapshot 검증 영역에 직접 속하며, HIGH_RISK 프로토콜 영역 변경입니다.
+    </scope_amendment_reason>
+    <out_of_scope>codex_review_loop_state.json 기반 _check_codex_review_gate 로직 자체는 변경하지 않음(part D는 codex_review_result.json SSoT 검사 추가로 강화)</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-R3F1 / MT-R3F2</micro_task_id>
+    <target_function>pipeline._get_staged_pr_body_sha, pipeline._cmd_gates_codex_review, pipeline._verify_published_pr_body_three_way, pipeline._cmd_gates_request_accept, pipeline._materialize_acceptance_snapshot, pipeline.cmd_gates(accept)</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:18443">_cmd_gates_codex_review — _get_staged_pr_body_sha로 staged 최종 body SHA 기록</caller>
+      <caller location="pipeline.py:19312">_cmd_gates_request_accept — _get_staged_pr_body_sha로 staged 최종 body SHA 계산</caller>
+      <caller location="pipeline.py:18909">_publish_acceptance_request — _verify_published_pr_body_three_way 호출(3자 검증)</caller>
+      <caller location="pipeline.py:20464">cmd_gates(accept) — _check_codex_review_gate + codex_review_result.json pr_body_sha256 검사</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>pipeline._replace_pr_body_packet_block</dep>
+      <dep>pipeline._materialize_acceptance_snapshot (packet_content 반환)</dep>
+      <dep>pipeline._get_pr_body_text / _gh_available</dep>
+      <dep>hashlib.sha256</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>codex_review_result.json — pr_body_sha256 = staged 최종 body SHA (write, codex-review)</mutation>
+      <mutation>acceptance_request.json — pr_body_sha256 = sha256(publish 후 현재 PR body) (write, publish resync)</mutation>
+      <mutation>_materialize_acceptance_snapshot 반환 dict에 packet_content 키 추가 (pure additive)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — _get_staged_pr_body_sha는 신규 함수, _verify_published_pr_body_three_way 시그니처(3 params) 유지, _materialize 반환은 additive 키만 추가</signature_change>
+      <breaking_change>NO — 기존 호출자 모두 호환(packet_content 키 미사용 호출자 영향 없음). gh 없음/mock 경로는 None 반환으로 graceful</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-NEW-1..4 추가 + tc_publish_3way 강화 + 8c3b fake gh 동기화</test_coverage>
+      <rollback_strategy>git checkout pipeline.py tests/e2e/test_codex_snapshot_sync_f52c.py tests/e2e/test_request_accept_snapshot_8c3b.py 로 3파일 원복</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <root_cause>
+    2차 REJECT 수정에서 _verify_published_pr_body_three_way가 codex_review_result.pr_body_sha256 비교를 제거하고
+    2자(acceptance_request == sha256(현재 PR body))로 downgrade되어 있었습니다. 이 2자 비교는 항상 trivially 성립(둘 다 동일 body에서 파생)하므로,
+    Codex가 검토한 PR body snapshot과 사용자가 승인하는 PR body snapshot이 동일한지를 보장하지 못했습니다.
+    또한 codex-review/request-accept가 staged PR body SHA를 "현재 PR body"(블록 교체 전)로 계산하여, publish가 FINAL_PACKET 블록을
+    교체한 "publish 후 body"(블록 교체 후)와 달라 3자 비교를 복원하면 항상 BLOCKED되는 구조였습니다.
+  </root_cause>
+
+  <fix_summary>
+    (1) staged PR body SHA를 "현재 PR body" → "publish 후 최종 PR body"(= _replace_pr_body_packet_block(현재 body, staged packet 본문)) 기준으로 계산하는 _get_staged_pr_body_sha 헬퍼 추가.
+    (2) codex-review --approve-pending과 request-accept가 모두 동일한 이 SHA를 계산/기록(codex_review_result.json.pr_body_sha256 / acceptance_request.json.pr_body_sha256).
+    (3) _verify_published_pr_body_three_way 3자 검증 복원: codex.result_pr_body_sha256 == acceptance_request.pr_body_sha256 == sha256(publish 후 현재 PR body). codex 값 부재/빈값 시 codex_review_stale BLOCKED(2자 downgrade/legacy skip/except 삼킴 없음).
+    (4) gates accept에 codex_review_result.json(SSoT) pr_body_sha256 부재 시 codex_review_stale BLOCKED 추가(part D 강화).
+  </fix_summary>
+
+  <self_check>
+    <python_version_syntax>PASS — typing Optional/Dict/Any 사용, PEP 585/604 미혼용</python_version_syntax>
+    <type_hinting>PASS — _get_staged_pr_body_sha 포함 모든 신규/수정 함수 파라미터+리턴 타입 명시</type_hinting>
+    <error_handling>PASS — gh/IO 경로 try-except 구체 예외(OSError/json.JSONDecodeError/ValueError/KeyError/TypeError), fail-closed _die</error_handling>
+    <path_safety>PASS — pathlib.Path 사용, 하드코딩 경로 없음(테스트 경로는 PIPELINE_PY.parent 파생)</path_safety>
+    <security>PASS — 하드코딩 키 없음, SHA 입력 sanitize 불필요</security>
+    <al_edge_cases>PASS — _get_staged_pr_body_sha/_verify_published_pr_body_three_way: None 입력 TypeError, isinstance 타입 가드, gh 없음/PR body None 명시 분기</al_edge_cases>
+    <pd_policy>PASS — codex 값 부재/빈값/불일치를 동일 예외 타입으로 통합하지 않고 failure_code(codex_review_stale vs pr_body_sha_mismatch_post_publish)로 구분, while True 없음</pd_policy>
+    <fs_encoding_fallback>PASS/SKIP — 신규 read_text는 errors="replace" 적용 또는 기존 헬퍼 재사용. 본 변경 신규 인코딩 단독 utf-8 read 없음</fs_encoding_fallback>
+    <docstring>PASS — 모든 신규/수정 함수에 docstring + 자기반성 헤더(4 주석)</docstring>
+    <execution_check>PASS —
+      (1) python -m py_compile pipeline.py tests/e2e/test_codex_snapshot_sync_f52c.py tests/e2e/test_request_accept_snapshot_8c3b.py → OK
+      (2) python -c "import pipeline" → IMPORT OK
+      (3) pytest tests/e2e/test_codex_snapshot_sync_f52c.py → 31 passed (TC-NEW-1..4 포함, tc_all_suite_pass 포함)
+          pytest tests/e2e/test_request_accept_snapshot_8c3b.py → 7 passed
+          pytest tests/e2e/test_post_accept_finalization_d278.py tests/test_ac_tracking_2044.py tests/test_protocol_consistency.py tests/test_acceptance_request_verification_json.py → 68 passed
+    </execution_check>
+    <impact_analysis_check>PASS — 모든 MT에 impact_analysis 출력, upstream_callers Grep 확인, state_mutations 나열, risk_assessment 4필드 채움</impact_analysis_check>
+    <frozen_codebase_check>PASS —
+      (1) Frozen: scope_manifest 3파일 외 미수정
+      (2) Minimal: 무관한 리팩토링 0건
+      (3) OAR ≤3회(staging-vs-publish 본문 divergence 근본 원인 진단 후 단일 수정)
+      (4) Pre-Fix/Post-Fix: root_cause/fix_summary 출력
+      (5) Side-Effect Audit: _get_staged_pr_body_sha/_verify_published_pr_body_three_way 호출자 Grep 확인 + 8c3b fake gh 동기화
+      (6) Multi-location Sync: codex-review/request-accept 양쪽 staged-final-body SHA 계산 동기화 완료
+    </frozen_codebase_check>
+  </self_check>
+
+  <regression_note>
+    tests/test_request_accept_sst_2044.py / tests/test_verification_json_codex_evidence.py의 12개 실패는 본 변경 전 baseline(git stash)에서도 동일하게 12개 실패로 재현되는 사전 존재 환경 의존 실패(개발 머신의 실제 열린 PR로 인한 acceptance_display:PENDING / 승인 코드 렌더링 차이)이며 본 변경의 회귀가 아닙니다.
+  </regression_note>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_snapshot_sync_f52c.py, tests/e2e/test_request_accept_snapshot_8c3b.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_snapshot_sync_f52c.py, tests/e2e/test_request_accept_snapshot_8c3b.py</manifest_files>
+    <extra_files>없음 (scope_manifest_F52C_reject3_fix.json에 3파일 모두 등재 — test_request_accept_snapshot_8c3b.py는 scope_amendment로 기록)</extra_files>
+    <trust_root_violation>false (변경된 tests/** 파일은 본 BUG 파이프라인 request-accept snapshot 검증 영역의 공식 대상이며 scope_amendment에 사유 기록. .github/workflows/CLAUDE.md/pipeline.py 외 Trust-Root 무단 변경 없음)</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <output_file>dev_handover_r3.xml</output_file>
+</handover>
