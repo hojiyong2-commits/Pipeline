@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-28T12:07:39Z",
+  "pipeline_id": "BUG-20260628-F52C",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "db486dd38bc9d0e811d6068a2b7c1310317b15f9",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-28T12:07:05Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_codex_snapshot_sync_f52c.py,tests/e2e/test_request_accept_snapshot_8c3b.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,tests/e2e/test_user_acceptance_nonce_bbdb.py,tests/test_acceptance_request_format_069a.py,tests/e2e/test_final_packet_2e3d.py,tests/e2e/test_ci_run_id_filter_4ac2.py,tests/test_acceptance_request_verification_json.py,test_results_F52C.txt,tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/expected.json,tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/input.json,tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/expected.json,tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/input.json"
+  },
+  "agent_run": {
+    "run_id": "dev-a6f62eca3b698073",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "f62c6b6ec13a147a3cc9bd43de2c50da75552465d795b17de0cec4b362103a5f",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-a6f62eca3b698073.json",
+    "receipt_sha256": "43b2b4667555731a51de9f372b8228c36bb85c161d3f527b7287658f40e8574f",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-a6f62eca3b698073.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-a6f62eca3b698073.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-a6f62eca3b698073.json",
+      "sha256": "43b2b4667555731a51de9f372b8228c36bb85c161d3f527b7287658f40e8574f",
+      "size_bytes": 515,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/report_dev_handover.xml",
+      "sha256": "f62c6b6ec13a147a3cc9bd43de2c50da75552465d795b17de0cec4b362103a5f",
+      "size_bytes": 7649,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_BUG-20260628-F52C.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/scope_manifest_scope_manifest_BUG-20260628-F52C.json",
+      "sha256": "248f68d6d7f2364f920003f0efa8369c0889eb3e7e87a3b83225d6afea2f056f",
+      "size_bytes": 8682,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "3bdb3cdf69f6fb61bcc52afffb3ad5ee492fda842cf4fc2c228073148ff1d2e9",
+      "size_bytes": 1183257
+    },
+    {
+      "path": "tests/e2e/test_codex_snapshot_sync_f52c.py",
+      "sha256": "253fad82e65b8e28b33c1ff33a1cedfb77dd7312e857cec65a1b0193aa10ae80",
+      "size_bytes": 28723
+    },
+    {
+      "path": "tests/e2e/test_request_accept_snapshot_8c3b.py",
+      "sha256": "06f2d8bbe9408f7e577687a26c7d1f48756c9ce4375d8c7a761e0eb35fa6a39e",
+      "size_bytes": 34501
+    },
+    {
+      "path": "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+      "sha256": "22802d142f84a3a82a509cfdd7789d955b1ae86ed33bd1b050877b2f84e00074",
+      "size_bytes": 30028
+    },
+    {
+      "path": "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+      "sha256": "809707f3697aceec48acf3a08bec01a4b007ad9fd6f6c5107926d6567e2e92ed",
+      "size_bytes": 43520
+    },
+    {
+      "path": "tests/test_acceptance_request_format_069a.py",
+      "sha256": "27af7e4489d4169f499ccd0dbfc9c36c6177e79649c54825017dbe301f9e1746",
+      "size_bytes": 18140
+    },
+    {
+      "path": "tests/e2e/test_final_packet_2e3d.py",
+      "sha256": "1ba425ef756c2975b640acaab77bf22fa2ddf76f9508a08223b7cfe39d2560fb",
+      "size_bytes": 43249
+    },
+    {
+      "path": "tests/e2e/test_ci_run_id_filter_4ac2.py",
+      "sha256": "f9ab4f08f833d64858e5ac6ed664de79d72d9039fe26454d5765c6fa481f58bf",
+      "size_bytes": 24921
+    },
+    {
+      "path": "tests/test_acceptance_request_verification_json.py",
+      "sha256": "a93eac50f6951666d93d2da513f867a313a93880d01d8ac81e54533c495ec278",
+      "size_bytes": 13235
+    },
+    {
+      "path": "test_results_F52C.txt",
+      "sha256": "a355cb425c6c1a9e57c2b7afe640dbbd421fde2330f04b629a2f276d79bef7d6",
+      "size_bytes": 1811
+    },
+    {
+      "path": "tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/expected.json",
+      "sha256": "f9133f4fdabb0c759ef72400e898a764327ac1d571fa7a42244767ad182c62e1",
+      "size_bytes": 152
+    },
+    {
+      "path": "tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/input.json",
+      "sha256": "2bd427e242408d709b6b7713445163b3dfd537f341eaffb4364110afddf2201d",
+      "size_bytes": 260
+    },
+    {
+      "path": "tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/expected.json",
+      "sha256": "ac2f877ab3821dec671963d01e9f6b86d7918496dd43d664676f1d23bf43675e",
+      "size_bytes": 341
+    },
+    {
+      "path": "tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/input.json",
+      "sha256": "269e04a6a61a0bdb6faf7c053087d83e4d861ec2c1e03094f093886ddc632d75",
+      "size_bytes": 292
+    }
+  ],
+  "local_only_files": []
+}
