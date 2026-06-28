@@ -221,13 +221,23 @@ def make_fake_codex(
         )
     py_shim = shim_dir / "_codex_shim.py"
     py_shim.write_text(
-        "import sys, io\n"
+        "import sys, io, os\n"
         "sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')\n"
         "sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')\n"
         "from pathlib import Path\n"
         + stdin_capture_line
         + f"v = Path(r'{verdict_file}').read_text(encoding='utf-8')\n"
-        "print(v)\n",
+        "# BUG-20260628-1AAC: -o <file> 옵션 지원 — AI 응답을 파일에 저장\n"
+        "args = sys.argv[1:]\n"
+        "output_file = None\n"
+        "if '-o' in args:\n"
+        "    idx = args.index('-o')\n"
+        "    if idx + 1 < len(args):\n"
+        "        output_file = args[idx + 1]\n"
+        "if output_file:\n"
+        "    Path(output_file).write_text(v, encoding='utf-8')\n"
+        "else:\n"
+        "    print(v)\n",
         encoding="utf-8",
     )
     if sys.platform == "win32":

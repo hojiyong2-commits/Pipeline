@@ -7162,41 +7162,34 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     )
 
     # 5. codex CLI 호출.
-    # `codex exec -` 방식으로 stdin pipe를 통해 프롬프트를 전달:
-    #   - 프롬프트에 특수문자/줄바꿈이 있어도 안전 (shell 이스케이프 불필요).
-    #   - codex가 stdin을 closed pipe로 인식하여 "Reading additional input" 대기 없이 진행.
-    #   - Windows에서 `shell=True` + list args 조합의 이스케이프 문제 회피.
-    #   - POSIX에서도 동일한 코드패스 사용 가능.
+    # BUG-20260628-1AAC: `-o <file>` (--output-last-message) 옵션으로 AI 응답을 파일에 저장.
+    # Windows에서 subprocess stdout에는 OS 레벨 런타임 메시지
+    # ("SUCCESS: The process with PID N (child process of PID M) has been terminated.")가
+    # 섞여 AI 응답 파싱을 방해했다. `-o` 옵션을 사용하면 AI 마지막 메시지만 파일에 저장되고
+    # stdout의 OS 메시지와 완전히 분리된다. AI 출력은 파일에서 읽어 파싱한다.
+    # stdin pipe(`-`)로 프롬프트를 전달: 특수문자/줄바꿈이 있어도 안전 (shell 이스케이프 불필요).
+    # Windows: codex.cmd는 shell=True 없이 직접 실행 불가. cmd.exe (EXE)를 통해 실행한다.
+    # cmd.exe가 "SUCCESS: The process with PID..." 메시지를 stdout에 출력하더라도,
+    # AI 응답은 -o 파일에 저장되어 있으므로 stdout 오염과 무관하게 파싱할 수 있다.
+    import tempfile as _tempfile
+    _output_file = _tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", prefix="codex_out_", delete=False, encoding="utf-8"
+    )
+    _output_path = _output_file.name
+    _output_file.close()
+    if sys.platform == "win32":
+        _codex_cmd = ["cmd", "/c", "codex", "exec", "-o", _output_path, "-"]
+    else:
+        _codex_cmd = ["codex", "exec", "-o", _output_path, "-"]
     try:
-        if sys.platform == "win32":
-            # Windows: PowerShell.exe를 직접 호출하여 codex exec -를 실행한다.
-            # shell=True(cmd.exe 경유)를 사용하면 cmd.exe가 서브프로세스 종료 시
-            # "SUCCESS: The process with PID N (child process of PID M) has been terminated."
-            # 메시지를 stdout에 출력하여 AI 응답 파싱을 방해한다 (BUG-20260628-1AAC).
-            # PowerShell.exe -Command "& codex exec -" 방식은 cmd.exe를 우회하므로 이 메시지가 나오지 않는다.
-            result = subprocess.run(
-                [
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    "& codex exec -",
-                ],
-                input=prompt,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=300,
-            )
-        else:
-            result = subprocess.run(
-                ["codex", "exec", "-"],
-                input=prompt,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=300,
-            )
+        result = subprocess.run(
+            _codex_cmd,
+            input=prompt,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=300,
+        )
     except FileNotFoundError:
         _die(
             "[BLOCKED] failure_code=codex_cli_not_found\n"
@@ -7213,7 +7206,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             f"  codex CLI가 실패했습니다 (returncode={result.returncode}, fail-closed)."
         )
 
-    raw_output = result.stdout or ""
+    # AI 응답을 파일에서 읽는다. 파일이 없거나 비어있으면 INVALID로 처리.
+    try:
+        raw_output = Path(_output_path).read_text(encoding="utf-8", errors="replace").strip()
+    except (OSError, IOError):
+        raw_output = ""
+    finally:
+        try:
+            os.unlink(_output_path)
+        except OSError:
+            pass
     parsed = _parse_codex_verdict(raw_output)
     parsed_status = str(parsed["status"])
 
