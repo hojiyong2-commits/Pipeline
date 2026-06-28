@@ -193,16 +193,31 @@ def make_fake_codex(
     shim_dir: Path,
     verdict: str,
     capture_stdin_to: Optional[Path] = None,
+    stdin_seen_marker: Optional[Path] = None,
+    require_stdin: bool = False,
 ) -> None:
     """PATH에 주입할 가짜 codex 실행 파일을 생성한다.
 
     `codex exec -` 호출 시 stdin에서 프롬프트를 읽고 stdout으로 verdict를 출력한다.
     Windows에서는 codex.bat, POSIX에서는 codex 셸 스크립트를 생성한다.
 
+    BUG-20260628-1AAC rework 4차 (Codex REJECT 대응): shim이 **항상** stdin을 끝까지
+    읽도록 변경한다(이전: capture_stdin_to 설정 시에만 읽음). 실제 codex CLI는 stdin으로
+    프롬프트를 받으므로, shim도 동일하게 stdin을 소비해야 `cmd /c codex exec -o <file> -`
+    경로의 프롬프트 전달이 실제로 동작하는지 회귀 검증할 수 있다.
+
+    - 항상 `sys.stdin.buffer.read()`로 raw 바이트를 끝까지 읽는다(파이프 backpressure 방지).
+    - stdin_seen_marker 설정 시: 수신 바이트 길이를 마커 파일에 기록(전달 증거).
+    - require_stdin=True인데 stdin이 0바이트면 verdict를 출력하지 않고 비-0 종료한다.
+      → 프롬프트가 stdin으로 전달되지 않으면 gates codex-review가 INVALID/실패로 차단되어
+        테스트가 회귀를 검출한다 (shim이 통과시키지 않음).
+
     Args:
         shim_dir: shim을 둘 디렉토리.
         verdict: codex가 출력할 verdict 문자열 (예: APPROVE_TO_USER).
-        capture_stdin_to: stdin 내용을 저장할 파일 경로 (None이면 저장 안 함).
+        capture_stdin_to: stdin 디코드 내용을 저장할 파일 경로 (None이면 저장 안 함).
+        stdin_seen_marker: stdin 수신 바이트 길이를 기록할 마커 파일 (None이면 기록 안 함).
+        require_stdin: True이면 stdin 0바이트 시 비-0 종료(프롬프트 미전달 = 실패 강제).
     Raises:
         TypeError: 인자가 None인 경우.
     """
@@ -213,19 +228,35 @@ def make_fake_codex(
     # (.bat echo는 cp949 콘솔에서 한글이 깨짐). verdict는 별도 파일에서 읽는다.
     verdict_file = shim_dir / "verdict.txt"
     verdict_file.write_text(verdict, encoding="utf-8")
-    stdin_capture_line = ""
+    # 항상 stdin을 raw 바이트로 끝까지 읽는다 (실제 codex CLI와 동일한 stdin 소비).
+    capture_line = ""
     if capture_stdin_to is not None:
-        stdin_capture_line = (
-            "stdin_data = sys.stdin.read()\n"
-            f"Path(r'{capture_stdin_to}').write_text(stdin_data, encoding='utf-8')\n"
+        capture_line = (
+            f"Path(r'{capture_stdin_to}').write_text(\n"
+            "    _stdin_bytes.decode('utf-8', errors='replace'), encoding='utf-8')\n"
+        )
+    marker_line = ""
+    if stdin_seen_marker is not None:
+        marker_line = (
+            f"Path(r'{stdin_seen_marker}').write_text(str(len(_stdin_bytes)), encoding='utf-8')\n"
+        )
+    require_line = ""
+    if require_stdin:
+        require_line = (
+            "if len(_stdin_bytes) == 0:\n"
+            "    sys.stderr.write('codex shim: empty stdin (prompt not delivered)\\n')\n"
+            "    sys.exit(3)\n"
         )
     py_shim = shim_dir / "_codex_shim.py"
     py_shim.write_text(
         "import sys, io, os\n"
         "sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')\n"
-        "sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')\n"
         "from pathlib import Path\n"
-        + stdin_capture_line
+        # 항상 stdin을 raw로 끝까지 읽는다. (capture_stdin_to 유무와 무관)
+        "_stdin_bytes = sys.stdin.buffer.read()\n"
+        + capture_line
+        + marker_line
+        + require_line
         + f"v = Path(r'{verdict_file}').read_text(encoding='utf-8')\n"
         "# BUG-20260628-1AAC: -o <file> 옵션 지원 — AI 응답을 파일에 저장\n"
         "args = sys.argv[1:]\n"
@@ -1437,6 +1468,178 @@ def test_tc18_critical_file_excluded_e2e_blocked(tmp_path: Path) -> None:
         assert final_state.get("status") != "APPROVED", (
             f"critical file excluded 상황에서 APPROVED로 기록되면 안 됨: {final_state}"
         )
+
+
+# ---------------------------------------------------------------------------
+# TC-19: BUG-20260628-1AAC rework 4차 (Codex REJECT 대응) —
+#        `cmd /c codex exec -o <file> -` 경로가 프롬프트를 stdin으로 실제 전달하는지
+#        회귀 검증. shim이 stdin을 실제로 읽어 프롬프트 내용을 캡처하고, 전달이 끊기면
+#        gates codex-review가 차단되도록 require_stdin으로 강제한다.
+# ---------------------------------------------------------------------------
+
+def test_tc19_prompt_delivered_via_stdin(tmp_path: Path) -> None:
+    """gates codex-review가 Codex CLI stdin으로 프롬프트 전체를 전달하는지 회귀 검증.
+
+    Codex REJECT (rework 4차) 핵심 지적:
+      - `cmd /c codex exec -o <file> -`에서 `<file>` stdin이 codex에 안정적으로 전달된다는
+        증거가 없고, 기존 shim이 stdin을 읽지 않아 프롬프트 전달 회귀를 검증하지 못한다.
+
+    본 테스트는 다음을 강제하여 그 공백을 메운다:
+      1. shim이 `sys.stdin.buffer.read()`로 stdin을 **실제로 끝까지 읽는다**.
+      2. require_stdin=True: stdin이 0바이트(프롬프트 미전달)면 shim이 verdict를 출력하지
+         않고 exit 3 → gates codex-review가 codex_cli_failed로 차단(exit != 0).
+         즉, 프롬프트가 stdin으로 전달되지 않으면 이 테스트는 FAIL한다(회귀 검출).
+      3. stdin_seen_marker에 기록된 수신 바이트 수가 0보다 크다(전달 증거).
+      4. 캡처한 stdin이 프롬프트의 고정 콘텐츠를 실제로 포함한다:
+         - 계약 본문 마커("=== 검토 대상 PR ===")
+         - diff 섹션 제목("Git Diff (실제 변경 내용")
+         - PR head SHA / 변경 파일 섹션 등 프롬프트 구조 마커
+      5. 캡처한 stdin 길이가 단순 placeholder가 아니라 수천 자 규모(실제 프롬프트)임.
+
+    Windows 실제 경로 증거: 이 테스트는 sys.platform과 무관하게 pipeline.py가 실제로
+    실행하는 동일 경로(Windows: `cmd /c codex exec -o <file> -` + stdin=file,
+    POSIX: `codex exec -o <file> -` + stdin=file)를 subprocess로 그대로 탄다.
+    Windows에서 실행되면 cmd.exe를 통한 codex.bat 호출 + 파일 디스크립터 stdin 포워딩이
+    실제로 동작함을 캡처/마커로 증명한다.
+
+    PIPELINE_STATE_PATH isolation + final_state assertion 포함.
+    """
+    state_file = tmp_path / "state.json"
+    pid = "IMP-20260627-3BB6"
+    write_min_state(state_file, pid)
+    shim = tmp_path / "shim"
+    stdin_capture = tmp_path / "captured_stdin.txt"
+    stdin_marker = tmp_path / "stdin_seen.txt"
+    # require_stdin=True: 프롬프트가 stdin으로 전달되지 않으면 shim이 exit 3 → 게이트 차단.
+    make_fake_codex(
+        shim,
+        "APPROVE_TO_USER",
+        capture_stdin_to=stdin_capture,
+        stdin_seen_marker=stdin_marker,
+        require_stdin=True,
+    )
+    env = make_env(state_file, extra_path=shim)
+    assert env["PIPELINE_STATE_PATH"] == str(state_file)
+    fake_packet = tmp_path / "human_acceptance_packet.md"
+    fake_packet.write_bytes(
+        "[dummy-packet]\npipeline_id: IMP-20260627-3BB6\npr_head_sha: \n".encode("utf-8")
+    )
+
+    r = run_cli(["gates", "codex-review"], env=env, cwd=tmp_path)
+    # 프롬프트가 stdin으로 전달되지 않았다면 shim이 exit 3 → codex_cli_failed → exit != 0.
+    # exit 0은 프롬프트가 실제로 stdin을 통해 codex에 전달되었음을 의미한다.
+    assert r.returncode == 0, (
+        "프롬프트가 stdin으로 codex에 전달되지 않았습니다 "
+        "(shim require_stdin이 exit 3을 반환했거나 게이트가 차단됨).\n"
+        f"returncode={r.returncode}\nstdout={r.stdout}\nstderr={r.stderr}"
+    )
+
+    # 증거 1: shim이 stdin을 실제로 수신했고(마커 기록), 바이트 수가 0보다 크다.
+    assert stdin_marker.exists(), (
+        "stdin_seen 마커가 생성되지 않았습니다 — shim이 stdin을 읽지 못했습니다."
+    )
+    seen_bytes = int(stdin_marker.read_text(encoding="utf-8").strip() or "0")
+    assert seen_bytes > 0, (
+        f"shim이 stdin에서 0바이트를 받았습니다 — 프롬프트가 전달되지 않음 (seen={seen_bytes})."
+    )
+
+    # 증거 2: 캡처한 stdin이 실제 프롬프트 콘텐츠를 포함한다.
+    assert stdin_capture.exists(), "stdin capture 파일이 생성되지 않았습니다."
+    captured = stdin_capture.read_text(encoding="utf-8", errors="replace")
+    assert "=== 검토 대상 PR ===" in captured, (
+        f"프롬프트에 PR 검토 섹션 마커가 없습니다. captured(head):\n{captured[:1500]}"
+    )
+    assert "Git Diff (실제 변경 내용" in captured, (
+        f"프롬프트에 실제 diff 섹션 제목이 없습니다. captured(head):\n{captured[:1500]}"
+    )
+    assert "PR head SHA:" in captured, (
+        f"프롬프트에 PR head SHA 마커가 없습니다. captured(head):\n{captured[:1500]}"
+    )
+    assert "변경 파일 목록" in captured, (
+        f"프롬프트에 변경 파일 목록 섹션이 없습니다. captured(head):\n{captured[:1500]}"
+    )
+
+    # 증거 3: 캡처 길이가 마커 바이트 수와 정합(전달 무결성) + 실제 프롬프트 규모(수천 자).
+    # captured는 디코드 문자열이므로 바이트 수와 정확히 같지 않을 수 있으나(멀티바이트),
+    # 둘 다 0보다 크고 같은 자릿수 규모여야 한다. 최소 1000자 이상이면 placeholder가 아님.
+    assert len(captured) > 1000, (
+        f"캡처한 프롬프트가 너무 짧습니다 (len={len(captured)}). "
+        "실제 프롬프트가 아니라 placeholder/빈 전달일 수 있습니다."
+    )
+
+    # 증거 4 (Windows 경로 명시): Windows에서 실행 중이면 pipeline.py는
+    # `cmd /c codex exec -o <file> -` 경로를 탔다. 그 경로를 통해 위 캡처/마커가
+    # 채워졌으므로 cmd.exe 경유 stdin 포워딩이 실제로 동작했음을 단언한다.
+    if sys.platform == "win32":
+        assert (shim / "codex.bat").exists(), "Windows shim codex.bat이 생성되어야 합니다."
+        assert seen_bytes > 1000, (
+            "Windows `cmd /c codex exec -o <file> -` 경로에서 stdin 바이트가 충분히 "
+            f"전달되지 않았습니다 (seen={seen_bytes}). cmd.exe stdin 포워딩 회귀 가능성."
+        )
+
+    # final_state: codex_review_result.json status=APPROVED (프롬프트 전달 + 정상 검토).
+    result_file = codex_result_path(state_file)
+    assert result_file.exists(), "codex_review_result.json must be written"
+    final_state = json.loads(result_file.read_text(encoding="utf-8"))
+    assert final_state["status"] == "APPROVED"
+
+
+def test_tc19b_missing_stdin_blocks_via_require(tmp_path: Path) -> None:
+    """역회귀 검증: shim require_stdin=True에서 stdin 0바이트면 게이트가 차단된다.
+
+    Codex REJECT (rework 4차) 대응: 프롬프트 전달 회귀를 shim이 실제로 검출하는지 증명하기
+    위해, stdin을 의도적으로 빈 입력(/dev/null 대용 빈 파일)으로 직접 codex shim에 연결하여
+    실행한다. require_stdin=True인 shim은 0바이트 stdin에서 exit 3을 반환해야 한다.
+
+    이 테스트는 `cmd /c codex exec -o <file> -`가 프롬프트를 전달하지 못하는 가상의
+    회귀 상황을 shim 단독으로 재현하여, shim이 "통과시키지 않음(fail-closed)"을 보장한다.
+    즉, TC-19의 exit 0 단언이 의미를 갖도록 대조군을 제공한다.
+
+    PIPELINE_STATE_PATH 불필요(게이트 미실행, shim 직접 호출). 직접 subprocess assertion.
+    """
+    shim = tmp_path / "shim"
+    out_file = tmp_path / "codex_out.txt"
+    marker = tmp_path / "stdin_seen.txt"
+    make_fake_codex(
+        shim,
+        "APPROVE_TO_USER",
+        stdin_seen_marker=marker,
+        require_stdin=True,
+    )
+    # pipeline.py가 실행하는 것과 동일한 명령 형태로 shim을 직접 호출하되,
+    # stdin을 빈 입력으로 연결한다 (프롬프트 미전달 시뮬레이션).
+    if sys.platform == "win32":
+        cmd = ["cmd", "/c", "codex", "exec", "-o", str(out_file), "-"]
+    else:
+        cmd = ["codex", "exec", "-o", str(out_file), "-"]
+    env = {**os.environ, "PATH": str(shim) + os.pathsep + os.environ.get("PATH", "")}
+    empty_input = tmp_path / "empty.txt"
+    empty_input.write_bytes(b"")
+    with open(empty_input, "rb") as _empty:
+        proc = subprocess.run(
+            cmd,
+            stdin=_empty,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            env=env,
+        )
+    # require_stdin=True + 빈 stdin → shim exit 3 (verdict 미출력).
+    assert proc.returncode != 0, (
+        "빈 stdin인데 shim이 성공 종료했습니다 — 프롬프트 미전달 회귀를 검출하지 못함.\n"
+        f"returncode={proc.returncode}\nstdout={proc.stdout}\nstderr={proc.stderr}"
+    )
+    # 마커는 기록되되 0바이트 수신을 나타내야 한다.
+    assert marker.exists(), "stdin_seen 마커가 생성되어야 합니다 (shim이 stdin을 읽음)."
+    assert marker.read_text(encoding="utf-8").strip() == "0", (
+        "빈 stdin이므로 마커 바이트 수는 0이어야 합니다."
+    )
+    # verdict 파일이 기록되지 않아야 한다 (exit 3은 verdict 출력 전).
+    assert not out_file.exists() or out_file.read_text(encoding="utf-8") == "", (
+        "프롬프트 미전달 시 verdict 출력 파일이 채워지면 안 됩니다 (fail-closed)."
+    )
 
 
 if __name__ == "__main__":
