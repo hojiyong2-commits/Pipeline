@@ -13926,6 +13926,12 @@ def _cmd_report_final_packet(args: argparse.Namespace) -> None:
     """
     state = _require_state()
     state = _ensure_v210_fields(state)
+    # BUG-20260628-F52C MT-4: PENDING 승인 요청이 있는 동안 packet 재생성을 차단한다.
+    # PENDING snapshot이 덮어써지면 Codex가 검토한 SHA와 사용자가 받는 SHA가 달라져
+    # stale_packet_sha256 순환이 발생한다.
+    _pending_lock_msg = _check_pending_snapshot_lock(state)
+    if _pending_lock_msg:
+        _die(_pending_lock_msg)
     base_ref = str(getattr(args, "base", "origin/main") or "origin/main")
     acceptance_request = _load_acceptance_request()
     evidence = _collect_packet_evidence(
@@ -14005,6 +14011,16 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
     human_acceptance_packet.md를 읽어 PR 본문의 PIPELINE_FINAL_PACKET 블록을 교체한다.
     블록이 없으면 PR 본문 끝에 추가한다. gh CLI가 없으면 안내 후 graceful skip.
     """
+    # BUG-20260628-F52C MT-4: PENDING 승인 요청이 있는 동안 PR 본문 변경을 차단한다.
+    # PENDING snapshot의 PR 본문이 덮어써지면 stale_packet_sha256 순환이 발생한다.
+    try:
+        _guard_state = _require_state()
+    except SystemExit:
+        _guard_state = {}
+    if _guard_state:
+        _pending_lock_msg = _check_pending_snapshot_lock(_guard_state)
+        if _pending_lock_msg:
+            _die(_pending_lock_msg)
     packet_path = _packet_output_path()
     if not packet_path.exists():
         _die(
@@ -17313,6 +17329,7 @@ def _check_packet_freshness_against_actual(
 def _materialize_acceptance_snapshot(
     state: Dict[str, Any],
     acceptance_request: Dict[str, Any],
+    publish: bool = True,
 ) -> Dict[str, Any]:
     """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
 
@@ -17320,20 +17337,34 @@ def _materialize_acceptance_snapshot(
     모든 temp 파일을 먼저 쓰고 SHA를 계산한 뒤, 마지막에 모두 한꺼번에 os.replace로 커밋.
     _sync_acceptance_request_with_packet 직접 호출 제거 — acceptance_request 동기화를 이 함수 안에서 수행.
 
+    BUG-20260628-F52C MT-1: publish 파라미터 추가로 staging/publish 2단계를 지원한다.
+      - publish=False (staging): temp 파일에 내용을 쓰고 SHA를 계산하되 os.replace 커밋을
+        하지 않는다. Codex Review가 검토할 staged snapshot의 SHA를 sha_manifest로 반환한다.
+        실제 파일(packet/json/acceptance_request) 및 PR 본문은 변경하지 않는다.
+      - publish=True (publish, 기본값): 기존 동작과 동일 — temp 파일을 os.replace로 원자
+        커밋하고 acceptance_request.json/state/PR 본문을 갱신한다.
+    기존 모든 호출은 publish 인자를 생략하므로 publish=True로 동작한다 (backward compatible).
+
     Args:
         state: 활성 pipeline_state dict.
         acceptance_request: 방금 발급/재사용한 acceptance_request dict (nonce 포함).
+        publish: True면 원자 커밋(기존 동작), False면 staging만 수행(커밋 안 함).
     Returns:
         dict with keys:
             "packet_path": str — human_acceptance_packet.md 경로
             "json_path": Optional[str] — human_acceptance_packet.json 경로
-            "pr_body_updated": bool — PR 본문 갱신 여부
-            "sha_manifest": dict — 생성된 파일들의 SHA-256 매니페스트
+            "pr_body_updated": bool — PR 본문 갱신 여부 (publish=False면 항상 False)
+            "sha_manifest": dict — 생성된 파일들의 SHA-256 매니페스트 (staging/publish 동일)
+            "published": bool — 실제 커밋 수행 여부 (publish 값과 동일)
     Raises:
         OSError: temp 파일 쓰기 실패 시
         ValueError: evidence_payload 조립 또는 verification_json 생성 실패 시
         TypeError: 직렬화 불가 객체 포함 시
     """
+    if not isinstance(publish, bool):
+        raise TypeError(
+            f"publish must be bool, got {type(publish).__name__}"
+        )
     # Phase 1: 순수 계산 (I/O 없음) — 실패 시 아무 파일도 안 써짐
     evidence_payload = _collect_packet_evidence(
         state, acceptance_request=acceptance_request, base_ref="origin/main"
@@ -17422,6 +17453,29 @@ def _materialize_acceptance_snapshot(
                     pass
         raise
 
+    sha_manifest: Dict[str, Optional[str]] = {
+        "packet_sha256": pkt_sha,
+        "json_sha256": json_sha,
+    }
+
+    # BUG-20260628-F52C MT-1: staging 모드(publish=False)는 temp 파일에서 SHA만 계산하고
+    # 실제 커밋(os.replace)/state 동기화/PR 본문 갱신을 수행하지 않는다.
+    # Codex Review가 검토할 staged snapshot의 SHA를 반환한 뒤 temp 파일을 정리한다.
+    if not publish:
+        for t in temps:
+            if t.exists():
+                try:
+                    t.unlink()
+                except OSError:
+                    pass
+        return {
+            "packet_path": _display_path(packet_path),
+            "json_path": _display_path(json_out_path),
+            "pr_body_updated": False,
+            "sha_manifest": sha_manifest,
+            "published": False,
+        }
+
     # Phase 3: 모든 temp를 원자적으로 커밋 (여기서부터는 부분 실패 가능성 낮음)
     os.replace(str(tmp_pkt), str(packet_path))
     os.replace(str(tmp_json), str(json_out_path))
@@ -17441,16 +17495,12 @@ def _materialize_acceptance_snapshot(
         new_body = _replace_pr_body_packet_block(current_body, content)
         pr_updated = _gh_edit_pr_body(new_body)
 
-    sha_manifest: Dict[str, Optional[str]] = {
-        "packet_sha256": pkt_sha,
-        "json_sha256": json_sha,
-    }
-
     return {
         "packet_path": _display_path(packet_path),
         "json_path": _display_path(json_out_path),
         "pr_body_updated": pr_updated,
         "sha_manifest": sha_manifest,
+        "published": True,
     }
 
 
@@ -17927,6 +17977,250 @@ def _find_existing_valid_acceptance_comment(
     return None
 
 
+# ---------------------------------------------------------------------------
+# BUG-20260628-F52C: staged snapshot → Codex Review → publish 재배치 helpers.
+# ---------------------------------------------------------------------------
+
+# [Purpose]: gates request-accept 내부에서 Codex Review를 staged snapshot 기준으로 실행하여,
+#            "Codex가 검토한 snapshot"과 "사용자가 받는 snapshot"이 동일함을 보장한다
+#            (stale_packet_sha256 순환 버그 근본 수정).
+# [Assumptions]: staged_sha_manifest는 _materialize_acceptance_snapshot(publish=False)이 반환한
+#                temp-파일 기준 SHA dict이며 "packet_sha256" 키를 포함한다.
+# [Vulnerability & Risks]: codex_review_loop_state.json이 없으면 NOT_CONFIGURED로 처리하므로,
+#                          Codex Review를 강제하지 않는 파이프라인에서는 검토 없이 publish된다.
+#                          이는 이 파이프라인에서 Codex Review가 optional feature이기 때문이며 의도된 동작.
+# [Improvement]: loop_state에 staged SHA 기록 시점을 명시하여 재검토 필요 여부를 더 정교하게 판단 가능.
+def _run_codex_review_internal(
+    pipeline_id: str,
+    staged_sha_manifest: Dict[str, Any],
+    state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """request-accept 내부에서 Codex Review를 실행하고 결과를 반환한다.
+
+    동작:
+      - .pipeline/codex_review_loop_state.json이 없으면 status="NOT_CONFIGURED" 반환
+        (Codex Review가 optional feature이므로 staging 직후 바로 publish하도록 신호).
+      - 파일이 있고 status=APPROVED이면, staged_sha_manifest의 packet_sha256이
+        loop_state의 packet_sha256과 일치하는지 검증한다.
+          - 일치 → status="APPROVED"
+          - 불일치 → status="REJECTED", reason="staged SHA와 Codex Review 기록 SHA 불일치"
+      - 파일이 있고 status!=APPROVED이면 status="REJECTED".
+
+    Args:
+        pipeline_id: 현재 활성 파이프라인 ID.
+        staged_sha_manifest: _materialize_acceptance_snapshot(publish=False)이 반환한 sha_manifest.
+        state: pipeline_state dict (인터페이스 일관성 위해 수신, 현재 비교에는 미사용).
+    Returns:
+        dict {"status": "APPROVED"|"REJECTED"|"NOT_CONFIGURED", "reason": str, "recorded_at": str}.
+    Raises:
+        TypeError: pipeline_id가 None/비str이거나 staged_sha_manifest가 None/비dict인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    if staged_sha_manifest is None:
+        raise TypeError("staged_sha_manifest must not be None")
+    if not isinstance(staged_sha_manifest, dict):
+        raise TypeError(
+            f"staged_sha_manifest must be dict, got {type(staged_sha_manifest).__name__}"
+        )
+
+    loop_path = _codex_review_loop_state_path()
+    if not loop_path.exists():
+        return {
+            "status": "NOT_CONFIGURED",
+            "reason": "codex_review_loop_state.json 없음 — Codex Review 미설정(optional)",
+            "recorded_at": _now(),
+        }
+
+    try:
+        with open(loop_path, encoding="utf-8") as fh:
+            loop_state = json.load(fh)
+        if not isinstance(loop_state, dict):
+            raise ValueError("codex_review_loop_state.json is not an object")
+    except (OSError, json.JSONDecodeError, ValueError):
+        # fail-closed: 파일이 존재하나 로드/파싱 실패는 REJECTED로 처리.
+        return {
+            "status": "REJECTED",
+            "reason": "codex_review_loop_state.json 로드/파싱 실패 (fail-closed)",
+            "recorded_at": _now(),
+        }
+
+    if str(loop_state.get("status", "")) != "APPROVED":
+        return {
+            "status": "REJECTED",
+            "reason": (
+                "Codex 검토 상태가 APPROVED가 아닙니다 "
+                f"(현재: {loop_state.get('status', '(없음)')})"
+            ),
+            "recorded_at": _now(),
+        }
+
+    # APPROVED — staged SHA 일치 검증.
+    staged_pkt_sha = str(staged_sha_manifest.get("packet_sha256", "") or "")
+    recorded_pkt_sha = str(loop_state.get("packet_sha256", "") or "")
+    if not staged_pkt_sha:
+        return {
+            "status": "REJECTED",
+            "reason": "staged_sha_manifest에 packet_sha256이 없습니다.",
+            "recorded_at": _now(),
+        }
+    if not recorded_pkt_sha:
+        return {
+            "status": "REJECTED",
+            "reason": "Codex Review 기록에 packet_sha256이 없습니다.",
+            "recorded_at": _now(),
+        }
+    if staged_pkt_sha != recorded_pkt_sha:
+        return {
+            "status": "REJECTED",
+            "reason": "staged SHA와 Codex Review 기록 SHA 불일치",
+            "recorded_at": _now(),
+        }
+
+    return {
+        "status": "APPROVED",
+        "reason": "staged snapshot SHA가 Codex Review 기록과 일치합니다.",
+        "recorded_at": _now(),
+    }
+
+
+# [Purpose]: PENDING acceptance_request가 있을 때, 디스크 packet이 기록된 packet_sha256과
+#            "이미 다르게(divergent) 변형된" 경우에만 packet/PR body 재변경을 차단하여,
+#            검토·승인 대기 중인 snapshot이 다른 SHA로 덮어써지는 stale_packet_sha256 순환을 막는다.
+# [Assumptions]: acceptance_request.json은 status 필드를 가지며, 정상 발급된 PENDING 요청은
+#                packet_sha256과 packet_path를 함께 기록한다. 결정적 재생성(동일 SHA)은 안전하다.
+# [Vulnerability & Risks]: 기록된 packet_sha256이 없으면(레거시/진단 흐름) lock을 적용하지 않는다.
+#                          이는 packet을 처음 생성하는 정상 흐름(report final-packet)을 깨지 않기 위함이며,
+#                          이 경우 stale 위험은 staging→publish 불변식(_verify_snapshot_invariant)이 별도로 막는다.
+# [Improvement]: 향후 prospective packet SHA를 사전 계산하여 재생성 전에도 divergence를 판정할 수 있다.
+def _check_pending_snapshot_lock(state: Dict[str, Any]) -> Optional[str]:
+    """PENDING snapshot이 divergent하게 덮어써지는 경우에만 packet/PR body 변경을 차단하는 guard.
+
+    차단 조건 (모두 충족 시 BLOCKED):
+      1. acceptance_request.json이 존재하고 status == "PENDING"
+      2. 현재 파이프라인과 pipeline_id가 일치 (다른 파이프라인 잔류 요청은 미적용)
+      3. 기록된 packet_sha256이 존재
+      4. 기록된 packet_path의 실제 파일 SHA가 기록된 packet_sha256과 다름 (divergence 감지)
+
+    위 4조건 중 하나라도 불충족이면 None(통과)을 반환한다. 특히 packet_sha256이 아직
+    기록되지 않았거나(최초 생성 흐름) 디스크 packet SHA가 기록과 일치(결정적 재생성)하면
+    안전한 no-op이므로 통과시킨다 — 기존 report final-packet 진단 흐름을 깨지 않는다.
+
+    Args:
+        state: 활성 pipeline_state dict.
+    Returns:
+        차단 메시지 문자열 (BLOCKED) 또는 None (통과).
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    req = _load_acceptance_request()
+    if req is None or not isinstance(req, dict):
+        return None  # 요청 없음 → 통과
+
+    if str(req.get("status", "") or "").upper() != "PENDING":
+        return None  # PENDING 아님 → 통과
+
+    # pipeline_id 불일치 시 다른 파이프라인의 잔류 요청이므로 lock을 적용하지 않는다.
+    current_pid = str(state.get("pipeline_id", "") or "")
+    req_pid = str(req.get("pipeline_id", "") or "")
+    if current_pid and req_pid and current_pid != req_pid:
+        return None
+
+    recorded_sha = str(req.get("packet_sha256", "") or "")
+    if not recorded_sha:
+        # 기록된 packet SHA 없음 → 최초 생성/레거시 진단 흐름 → 통과.
+        return None
+
+    packet_path_str = str(req.get("packet_path", "") or "")
+    packet_path = Path(packet_path_str) if packet_path_str else _packet_output_path()
+    if not packet_path.exists():
+        # 기록된 packet 파일이 아직 디스크에 없음 → 덮어쓸 대상 없음 → 통과.
+        return None
+
+    try:
+        actual_sha = _sha256_file(packet_path)
+    except (OSError, TypeError):
+        return None  # SHA 계산 실패는 lock 미적용(보수적으로 통과)
+
+    if actual_sha == recorded_sha:
+        # 디스크 packet이 기록과 일치 → 결정적 재생성은 안전한 no-op → 통과.
+        return None
+
+    # divergence 감지: PENDING 요청의 packet이 기록 SHA와 다르게 변형됨 → 차단.
+    return (
+        "[BLOCKED] failure_code=pending_snapshot_lock\n"
+        "  PENDING 승인 요청의 packet이 기록된 SHA와 다릅니다 (divergent overwrite).\n"
+        f"  기록: {recorded_sha}\n"
+        f"  실제: {actual_sha}\n"
+        "  승인 대기 중인 snapshot이 다른 내용으로 덮어써지면 stale_packet_sha256 순환이 발생합니다.\n"
+        "  먼저 gates accept(ACCEPT/REJECT)로 기존 요청을 처리하거나,\n"
+        "  gates request-accept를 다시 실행하여 snapshot을 재발급하세요."
+    )
+
+
+# [Purpose]: staging 단계와 publish 단계의 packet_sha256이 동일함을 검증하여,
+#            Codex가 검토한 내용과 실제 커밋된 내용이 같다는 3-SHA 불변식을 보장한다.
+# [Assumptions]: 두 sha_manifest 모두 "packet_sha256" 키를 가진다. 타임스탬프 차이로 인한
+#                불일치는 packet 내용에 타임스탬프가 staging 시점에 고정되어 있으면 발생하지 않는다.
+# [Vulnerability & Risks]: packet 내용에 publish 시점 타임스탬프가 새로 주입되면 SHA가 달라져
+#                          항상 오류를 반환할 수 있다. 호출자는 staging snapshot의 acceptance_request를
+#                          publish 단계에 그대로 전달해야 동일 SHA를 보장한다.
+# [Improvement]: json_sha256까지 비교하여 verification_json 일관성도 함께 강제 가능.
+def _verify_snapshot_invariant(
+    staged_sha_manifest: Dict[str, Any],
+    published_sha_manifest: Dict[str, Any],
+) -> Optional[str]:
+    """staging과 publish의 packet_sha256이 일치하는지 검증한다.
+
+    타임스탬프(recorded_at 등)가 다른 것은 정상이지만 packet 내용(SHA)은 동일해야 한다.
+
+    Args:
+        staged_sha_manifest: staging(publish=False) 단계가 반환한 sha_manifest.
+        published_sha_manifest: publish(publish=True) 단계가 반환한 sha_manifest.
+    Returns:
+        오류 메시지 (불일치) 또는 None (PASS).
+    Raises:
+        TypeError: 인자가 None이거나 dict가 아닌 경우.
+    """
+    if staged_sha_manifest is None:
+        raise TypeError("staged_sha_manifest must not be None")
+    if not isinstance(staged_sha_manifest, dict):
+        raise TypeError(
+            f"staged_sha_manifest must be dict, got {type(staged_sha_manifest).__name__}"
+        )
+    if published_sha_manifest is None:
+        raise TypeError("published_sha_manifest must not be None")
+    if not isinstance(published_sha_manifest, dict):
+        raise TypeError(
+            f"published_sha_manifest must be dict, got "
+            f"{type(published_sha_manifest).__name__}"
+        )
+
+    staged_pkt = str(staged_sha_manifest.get("packet_sha256", "") or "")
+    published_pkt = str(published_sha_manifest.get("packet_sha256", "") or "")
+    if not staged_pkt:
+        return "[SNAPSHOT INVARIANT] staged sha_manifest에 packet_sha256 없음"
+    if not published_pkt:
+        return "[SNAPSHOT INVARIANT] published sha_manifest에 packet_sha256 없음"
+    if staged_pkt != published_pkt:
+        return (
+            "[SNAPSHOT INVARIANT] staging/publish packet SHA 불일치.\n"
+            f"  staging:   {staged_pkt}\n"
+            f"  published: {published_pkt}\n"
+            "  Codex가 검토한 snapshot과 커밋된 snapshot이 다릅니다."
+        )
+    return None
+
+
 def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -> None:
     """gates request-accept 핸들러: stale 검증 + nonce 발급 + packet 자동 생성 + PR 본문 자동 업데이트.
 
@@ -18249,14 +18543,44 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         except (OSError, json.JSONDecodeError) as exc:
             print(YELLOW(f"  [AC TABLE] acceptance_request.json 저장 실패: {exc}"))
 
-    # IMP-20260610-8C3B MT-1: _auto_generate_final_packet_and_update_pr(→_materialize_acceptance_snapshot)으로
-    # fresh/reuse 통합 materialization. 승인 코드(accept_code) 출력은 snapshot 생성 +
-    # _verify_acceptance_snapshot PASS 이후에만 수행.
+    # BUG-20260628-F52C MT-2: "staged snapshot → Codex Review → publish" 순서로 재배치.
+    # 기존에는 _auto_generate_final_packet_and_update_pr가 항상 즉시 커밋하여,
+    # Codex가 검토한 snapshot과 사용자가 받는 snapshot이 달라질 수 있었다(stale_packet_sha256).
+    # 이제 staging(publish=False)으로 SHA만 계산 → Codex Review(staged SHA 기준) →
+    # APPROVED/NOT_CONFIGURED일 때만 publish(publish=True) → 3-SHA 불변식 검증 순서로 수행한다.
     try:
         # acceptance_request.json을 디스크에서 다시 읽어 최신 ac_fulfillment_table 반영
         latest_req = _load_acceptance_request() or req
-        snapshot_result = _auto_generate_final_packet_and_update_pr(state, latest_req)
+
+        # 단계 1: staging — temp 파일 기준 SHA만 계산하고 커밋하지 않는다.
+        staged_result = _materialize_acceptance_snapshot(state, latest_req, publish=False)
+        staged_sha_manifest = staged_result.get("sha_manifest", {})
         print()
+        print(f"  [STAGED SNAPSHOT] packet_sha256={staged_sha_manifest.get('packet_sha256')}")
+
+        # 단계 2: Codex Review — staged SHA를 기준으로 검토 결과를 받는다.
+        codex_result = _run_codex_review_internal(pipeline_id, staged_sha_manifest, state)
+        codex_status = str(codex_result.get("status", ""))
+        if codex_status == "REJECTED":
+            # Codex REJECTED → 승인 코드 미발급. 안내만 출력하고 종료.
+            print()
+            print("[CODEX REVIEW REJECTED] 승인 코드를 발급하지 않습니다.")
+            print(f"  사유: {codex_result.get('reason', '(없음)')}")
+            print("  Codex Review를 다시 통과시킨 후 gates request-accept를 재실행하세요.")
+            _log_event(
+                state,
+                f"acceptance request blocked by Codex Review: "
+                f"{codex_result.get('reason', '')}",
+            )
+            _save(state)
+            return
+        if codex_status == "NOT_CONFIGURED":
+            print("  [CODEX REVIEW] 미설정(optional) — staging 직후 바로 publish합니다.")
+        else:
+            print("  [CODEX REVIEW APPROVED] staged snapshot 검토 완료 — publish 진행.")
+
+        # 단계 3: publish — staged와 동일 내용을 원자 커밋한다.
+        snapshot_result = _materialize_acceptance_snapshot(state, latest_req, publish=True)
         print(f"  [FINAL PACKET 자동 생성] {snapshot_result['packet_path']}")
         if snapshot_result["pr_body_updated"]:
             print("  [PR 본문 자동 업데이트] PIPELINE_FINAL_PACKET 블록 교체 완료")
@@ -18297,6 +18621,18 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 pass  # SHA 재기록 실패해도 계속 진행
         else:
             print("  [PR 본문 자동 업데이트] gh CLI 없음 또는 갱신 실패 — packet 파일은 보존됨")
+
+        # 단계 4: 3-SHA 불변식 검증 — staging과 publish의 packet SHA가 동일해야 한다.
+        invariant_err = _verify_snapshot_invariant(
+            staged_sha_manifest, snapshot_result.get("sha_manifest", {})
+        )
+        if invariant_err:
+            _die(
+                f"[PIPELINE ERROR] staging/publish snapshot 불변식 위반 — 승인 코드 발급 차단.\n"
+                f"  {invariant_err}\n"
+                "  gates request-accept를 다시 실행하세요."
+            )
+
         # IMP-20260610-8C3B MT-1: post-materialization SHA 검증
         verify_err = _verify_acceptance_snapshot(state, snapshot_result.get("sha_manifest", {}))
         if verify_err:
