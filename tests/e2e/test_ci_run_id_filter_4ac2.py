@@ -413,6 +413,11 @@ def test_tc_cli1_request_accept_stores_branch_run_id(tmp_path: Path) -> None:
 
     fake_env = _setup_fake_bins(tmp_path, stale_mode=False)
 
+    # BUG-20260628-F52C: request-accept는 Codex APPROVE 이후에만 publish하므로 사전 승인.
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        state_path, cwd=tmp_path, extra_env=fake_env,
+    )
     result = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -462,6 +467,11 @@ def test_tc_cli3_branch_filter_not_global_latest(tmp_path: Path) -> None:
     evidence_path.write_text("test evidence", encoding="utf-8")
     fake_env = _setup_fake_bins(tmp_path, stale_mode=False)
 
+    # BUG-20260628-F52C: request-accept는 Codex APPROVE 이후에만 publish하므로 사전 승인.
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        state_path, cwd=tmp_path, extra_env=fake_env,
+    )
     result = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,

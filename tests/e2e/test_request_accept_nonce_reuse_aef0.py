@@ -147,6 +147,20 @@ def _run_pipeline(
     )
 
 
+def _codex_approve(state_path: Path, cwd: Path, extra_env: Optional[Dict[str, str]] = None) -> None:
+    """BUG-20260628-F52C: request-accept 직전 staged snapshot을 APPROVE_TO_USER로 기록.
+
+    request-accept가 "Codex APPROVE 이후에만 publish" 흐름으로 재설계되었으므로,
+    성공을 기대하는 TC는 이 헬퍼로 staged snapshot을 사전 승인해야 한다.
+    """
+    _run_pipeline(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        state_path,
+        cwd=cwd,
+        extra_env=extra_env,
+    )
+
+
 def _write_state(state_path: Path, pipeline_id: str) -> None:
     """최소 pipeline_state.json 작성 (request-accept 실행에 필요한 필드만).
 
@@ -257,6 +271,7 @@ def test_nonce_reused_on_same_conditions(tmp_path: Path) -> None:
         status="PENDING",
     )
 
+    _codex_approve(state_path, cwd=tmp_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -310,6 +325,7 @@ def test_force_new_code_always_new_nonce(tmp_path: Path) -> None:
         status="PENDING",
     )
 
+    _codex_approve(state_path, cwd=tmp_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path), "--force-new-code"],
         state_path,
@@ -358,6 +374,7 @@ def test_new_nonce_when_evidence_sha_changed(tmp_path: Path) -> None:
     # 현재 파일: 내용이 달라져 SHA-256이 다름
     _write_evidence_file(evidence_path, content="new different evidence content")
 
+    _codex_approve(state_path, cwd=tmp_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -406,6 +423,7 @@ def test_new_nonce_when_pr_sha_changed(tmp_path: Path) -> None:
         status="PENDING",
     )
 
+    _codex_approve(state_path, cwd=tmp_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -454,6 +472,7 @@ def test_new_nonce_when_ci_run_changed(tmp_path: Path) -> None:
         status="PENDING",
     )
 
+    _codex_approve(state_path, cwd=tmp_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -498,6 +517,7 @@ def test_new_nonce_when_status_not_pending(tmp_path: Path) -> None:
         status="CONSUMED",  # 이미 소비된 상태
     )
 
+    _codex_approve(state_path, cwd=tmp_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,

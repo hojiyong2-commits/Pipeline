@@ -168,6 +168,13 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
                     force_new_code=False,
                 )
 
+                # BUG-20260628-F52C: request-accept가 prepare→codex_review→publish 흐름으로
+                # 재설계됨. _codex_review_snapshot은 APPROVE로, staging/publish는 결정적
+                # sha_manifest로 모킹한다. verification_json 경로 기록은 prepare 후보 생성 시점에
+                # 일어나므로(_prepare_acceptance_snapshot_candidate) vj_path가 acceptance_request.json에
+                # 기록됨을 확인한다.
+                _sha = "a" * 64
+                _sm = {"packet_sha256": _sha, "json_sha256": "b" * 64}
                 with patch("pipeline._get_pr_body_text", return_value="작업 요약\n내용\n사용자가 확인할 결과물\n결과물\n기대 결과와 실제 결과\n결과\n중요한 선택과 트레이드오프\n선택\n검증\n검증 완료"):
                     with patch("pipeline._get_current_pr_url", return_value=""):
                         with patch("pipeline._get_current_pr_head_sha", return_value="abc1234"):
@@ -176,11 +183,13 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
                                     with patch("pipeline._check_packet_freshness_against_actual", return_value=None):
                                         with patch("pipeline._update_github_acceptance_comment"):
                                             with patch("pipeline._build_ac_fulfillment_table", return_value=None):
-                                                with patch("pipeline._auto_generate_final_packet_and_update_pr",
-                                                           return_value={"packet_path": "p.md", "pr_body_updated": False, "json_path": str(vj_path)}):
-                                                    with patch("pipeline._save"):
-                                                        with patch("pipeline._log_event"):
-                                                            _cmd_gates_request_accept(args, state)
+                                                with patch("pipeline._codex_review_snapshot", return_value={"verdict": "APPROVE_TO_USER", "result_packet_sha256": _sha, "reason": "ok"}):
+                                                    with patch("pipeline._materialize_acceptance_snapshot", return_value={"packet_path": "p.md", "json_path": str(vj_path), "pr_body_updated": False, "sha_manifest": _sm, "published": True}):
+                                                        with patch("pipeline._verify_acceptance_snapshot", return_value=None):
+                                                            with patch("pipeline._post_github_pending_acceptance_comment", return_value={"success": True}):
+                                                                with patch("pipeline._save"):
+                                                                    with patch("pipeline._log_event"):
+                                                                        _cmd_gates_request_accept(args, state)
 
                 loaded = _load_acceptance_request()
                 self.assertIsNotNone(loaded)
@@ -213,6 +222,10 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
                     force_new_code=False,
                 )
 
+                # BUG-20260628-F52C: 재설계된 prepare→codex→publish 흐름에 맞춰 모킹.
+                # vj 파일이 없으므로 후보의 verification_json_path/sha256은 None으로 기록된다.
+                _sha = "a" * 64
+                _sm = {"packet_sha256": _sha, "json_sha256": None}
                 with patch("pipeline._get_pr_body_text", return_value="작업 요약\n내용\n사용자가 확인할 결과물\n결과물\n기대 결과와 실제 결과\n결과\n중요한 선택과 트레이드오프\n선택\n검증\n검증 완료"):
                     with patch("pipeline._get_current_pr_url", return_value=""):
                         with patch("pipeline._get_current_pr_head_sha", return_value="abc1234"):
@@ -221,11 +234,13 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
                                     with patch("pipeline._check_packet_freshness_against_actual", return_value=None):
                                         with patch("pipeline._update_github_acceptance_comment"):
                                             with patch("pipeline._build_ac_fulfillment_table", return_value=None):
-                                                with patch("pipeline._auto_generate_final_packet_and_update_pr",
-                                                           return_value={"packet_path": "p.md", "pr_body_updated": False, "json_path": None}):
-                                                    with patch("pipeline._save"):
-                                                        with patch("pipeline._log_event"):
-                                                            _cmd_gates_request_accept(args, state)
+                                                with patch("pipeline._codex_review_snapshot", return_value={"verdict": "APPROVE_TO_USER", "result_packet_sha256": _sha, "reason": "ok"}):
+                                                    with patch("pipeline._materialize_acceptance_snapshot", return_value={"packet_path": "p.md", "json_path": None, "pr_body_updated": False, "sha_manifest": _sm, "published": True}):
+                                                        with patch("pipeline._verify_acceptance_snapshot", return_value=None):
+                                                            with patch("pipeline._post_github_pending_acceptance_comment", return_value={"success": True}):
+                                                                with patch("pipeline._save"):
+                                                                    with patch("pipeline._log_event"):
+                                                                        _cmd_gates_request_accept(args, state)
 
                 loaded = _load_acceptance_request()
                 self.assertIsNotNone(loaded)

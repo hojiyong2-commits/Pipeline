@@ -1,27 +1,34 @@
 # tests/e2e/test_codex_snapshot_sync_f52c.py
-# [Purpose]: BUG-20260628-F52C — "staged snapshot → Codex Review → publish" 재배치가
-#            stale_packet_sha256 순환 버그를 근본 수정했는지 회귀 검증한다.
+# [Purpose]: BUG-20260628-F52C 재작업 — "prepare_snapshot → codex_review_snapshot → publish" 분리가
+#            (1) Codex APPROVE 전 승인 코드/PR comment/acceptance_request.json 미노출,
+#            (2) codex_review_loop_state.json 미사용(legacy 제거),
+#            (3) Codex REJECT/결과없음/stale SHA fail-closed BLOCKED,
+#            (4) publish 직후 3-SHA 일치,
+#            (5) PENDING frozen snapshot 보호,
+#            (6) post-accept 상태/provenance 필드만 변경
+#            을 회귀 검증한다.
 # [Assumptions]: pipeline.py가 같은 repo 루트에 있고, PIPELINE_STATE_PATH 격리 + cwd=tmp_path로
 #                상태/산출물 파일을 격리할 수 있다. gh CLI는 PATH에서 제거하여 결정적으로 동작시킨다.
+#                codex_review_result.json은 .pipeline/ 하위에 직접 작성하여 SSoT를 시뮬레이션한다.
 # [Vulnerability & Risks]: 일부 CLI 경로(request-accept 전체)는 PR/CI 전제조건이 많아 gh 없이는
-#                BLOCKED로 끝난다. 이 테스트는 새 동작(publish 파라미터, Codex Review 순서,
-#                PENDING lock, 불변식)을 결정적으로 검증하는 데 초점을 맞춘다.
+#                BLOCKED로 끝난다. 이 테스트는 새 동작(분리 단계, fail-closed Codex, 불변식,
+#                PENDING lock)을 결정적으로 검증하는 데 초점을 맞춘다.
 # [Improvement]: gh를 mock하는 stub 바이너리를 추가하면 publish 경로의 PR 본문 갱신까지 검증 가능.
-"""BUG-20260628-F52C: staged snapshot to Codex Review to publish 회귀 테스트.
+"""BUG-20260628-F52C: prepare → codex_review → publish 분리 회귀 테스트.
 
-TC-1: stale_packet_sha256 재현 케이스 수정 확인
-TC-2: request-accept 후 3-SHA 일치 (packet_sha256 일관)
-TC-3: pr_body SHA 3-way 일치
-TC-3N: Codex APPROVED 경로 SHA 일치
-TC-4: Codex REJECT 시 승인 코드/댓글 미출력
-TC-4N: PENDING 없을 때 report final-packet 허용
-TC-5: PENDING 중 report final-packet BLOCKED
-TC-6: PENDING 중 report update-pr-body BLOCKED
-TC-6N: 전체 테스트 suite 실행 (TC-1 회귀)
-TC-7: request-accept 재실행 동일 snapshot no-op
-TC-8: staging 반복 호출 SHA 불변
-TC-9: nonce/provenance 검증 유지
-TC-10: post-accept는 status/provenance/comment 필드만 변경
+TC-A: Codex APPROVE 전 PR pending comment/stdout 승인 코드/acceptance_request.json 미생성.
+TC-B: Codex REJECT 시 exit non-zero + 승인 코드 미노출 + comment 미게시 + acceptance_request.json 미생성.
+TC-C: request-accept 성공 직후 codex_review_result/acceptance_request/실제 packet SHA 일치(불변식).
+TC-D: codex_review_loop_state.json이 있어도 request-accept가 사용하지 않음.
+TC-E: codex_review_result.json 없음/REJECT/stale SHA는 모두 request-accept BLOCKED.
+TC-F: PENDING 중 report final-packet/update-pr-body가 snapshot 변경 시도를 BLOCKED.
+TC-G: post-accept(여기서는 PENDING lock 부수효과 없음)는 허용된 상태 필드만 보존.
+TC-1: stale_packet_sha256 재현 케이스 수정 확인(회귀).
+TC-3N: _codex_review_snapshot APPROVE 경로 SHA 일치.
+TC-8: staging 반복 호출 SHA 불변.
+TC-9: 승인 코드 형식 유지 + codex_review_result 없음=REJECT.
+TC-10: post-accept 상태 보존.
+TC-ALL: 전체 suite 회귀.
 """
 import subprocess
 import sys
@@ -34,6 +41,7 @@ from pathlib import Path
 import pytest
 
 PIPELINE_PY = str(Path(__file__).parent.parent.parent / "pipeline.py")
+PIPELINE_DIR = str(Path(PIPELINE_PY).parent)
 PIPELINE_ID = "BUG-20260628-F52C-TEST"  # 테스트 전용 ID
 
 
@@ -47,7 +55,10 @@ def _no_gh_path() -> str:
     if not gh:
         return current
     gh_dir = os.path.dirname(gh)
-    parts = [p for p in current.split(os.pathsep) if p and os.path.normcase(p) != os.path.normcase(gh_dir)]
+    parts = [
+        p for p in current.split(os.pathsep)
+        if p and os.path.normcase(p) != os.path.normcase(gh_dir)
+    ]
     return os.pathsep.join(parts)
 
 
@@ -109,8 +120,7 @@ def isolated_pipeline(tmp_path):
     """격리된 pipeline state를 생성하는 fixture.
 
     Returns:
-        (tmp_path, state_file) 튜플. state_file은 .pipeline/runs 격리 대신
-        단순 state 파일을 사용하며 cwd=tmp_path와 함께 사용한다.
+        (tmp_path, state_file) 튜플. cwd=tmp_path와 함께 사용한다.
     """
     state_file = tmp_path / "pipeline_state.json"
     state_file.write_text(
@@ -121,21 +131,8 @@ def isolated_pipeline(tmp_path):
 
 
 def _write_pending_acceptance_request(cwd: Path, divergent=True, packet_content="STALE PACKET BODY"):
-    """cwd에 PENDING acceptance_request.json + (옵션) divergent packet.md를 생성한다.
-
-    _load_acceptance_request는 상대경로(cwd 기준)로 읽으므로 cwd에 둔다.
-
-    Args:
-        cwd: 격리 작업 디렉토리.
-        divergent: True면 기록 packet_sha256과 다른 내용의 packet 파일을 만들어
-            pending_snapshot_lock(divergence)을 유발한다. False면 packet 파일을
-            만들지 않아 lock이 걸리지 않는다(통과 케이스 검증용).
-        packet_content: divergent packet 파일에 쓸 본문.
-    Returns:
-        작성한 acceptance_request dict.
-    """
+    """cwd에 PENDING acceptance_request.json + (옵션) divergent packet.md를 생성한다."""
     packet_path = cwd / "human_acceptance_packet.md"
-    # 기록 SHA는 실제 packet 내용과 "다른" 값으로 설정하여 divergence를 만든다.
     recorded_sha = hashlib.sha256(b"ORIGINAL EXPECTED CONTENT").hexdigest()
     req = {
         "request_id": "REQ-TEST-0001",
@@ -152,7 +149,6 @@ def _write_pending_acceptance_request(cwd: Path, divergent=True, packet_content=
         json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     if divergent:
-        # 기록 SHA와 다른 내용 → lock 발동
         packet_path.write_text(packet_content, encoding="utf-8")
     return req
 
@@ -165,176 +161,27 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-# ---------------------------------------------------------------------------
-# TC-5 / TC-6 / TC-4N: report final-packet / update-pr-body PENDING lock 검증
-# (이 경로는 gh 없이도 결정적으로 동작하며 새 가드(MT-4)를 직접 검증한다)
-# ---------------------------------------------------------------------------
-
-def test_tc5_pending_blocks_final_packet(isolated_pipeline):
-    """TC-5: PENDING 상태에서 report final-packet 실행 시 BLOCKED 출력."""
-    tmp_path, state_file = isolated_pipeline
-    _write_pending_acceptance_request(tmp_path)
-
-    result = run_pipeline(
-        "report", "final-packet", state_path=state_file, cwd=tmp_path
-    )
-    combined = (result.stdout or "") + (result.stderr or "")
-    assert "pending_snapshot_lock" in combined, (
-        f"PENDING lock 메시지 누락. exit={result.returncode}\n{combined}"
-    )
-    assert result.returncode != 0, "PENDING 중 final-packet은 BLOCKED(exit!=0)여야 함"
-    # final_state 보존 검증: state 파일은 여전히 존재하고 terminal_state는 변하지 않음
-    final_state = _read_state(state_file)
-    assert final_state["terminal_state"] is None
-    assert final_state["pipeline_id"] == PIPELINE_ID
-
-
-def test_tc6_pending_blocks_update_pr_body(isolated_pipeline):
-    """TC-6: PENDING 상태에서 report update-pr-body 실행 시 BLOCKED 출력."""
-    tmp_path, state_file = isolated_pipeline
-    _write_pending_acceptance_request(tmp_path)
-
-    result = run_pipeline(
-        "report", "update-pr-body", state_path=state_file, cwd=tmp_path
-    )
-    combined = (result.stdout or "") + (result.stderr or "")
-    assert "pending_snapshot_lock" in combined, (
-        f"PENDING lock 메시지 누락. exit={result.returncode}\n{combined}"
-    )
-    assert result.returncode != 0, "PENDING 중 update-pr-body는 BLOCKED(exit!=0)여야 함"
-    final_state = _read_state(state_file)
-    assert final_state["terminal_state"] is None
-
-
-def test_tc4n_no_pending_allows_packet(isolated_pipeline):
-    """TC-4N: acceptance_request 없을 때 report final-packet이 PENDING lock으로 막히지 않음.
-
-    gh 없으면 packet은 로컬 파일로 작성되며 PENDING lock 메시지는 출력되지 않아야 한다.
-    """
-    tmp_path, state_file = isolated_pipeline
-    # acceptance_request.json 미생성 → PENDING lock 없음
-
-    result = run_pipeline(
-        "report", "final-packet", state_path=state_file, cwd=tmp_path
-    )
-    combined = (result.stdout or "") + (result.stderr or "")
-    assert "pending_snapshot_lock" not in combined, (
-        f"PENDING 없는데 lock이 걸림.\n{combined}"
-    )
-    # final_state 보존
-    final_state = _read_state(state_file)
-    assert final_state["pipeline_id"] == PIPELINE_ID
-
-
-def test_tc4n_pending_but_consistent_allows_packet(isolated_pipeline):
-    """TC-4N(보강): PENDING이지만 디스크 packet SHA가 기록과 일치(결정적 no-op)하면 허용.
-
-    기존 진단 흐름(report final-packet으로 동일 SHA 재생성)을 깨지 않음을 검증한다.
-    """
-    tmp_path, state_file = isolated_pipeline
-    # packet 파일을 만들고 그 실제 SHA를 기록 SHA로 맞춰 일치시킨다(non-divergent).
-    packet_path = tmp_path / "human_acceptance_packet.md"
-    packet_path.write_text("CONSISTENT BODY", encoding="utf-8")
-    actual_sha = _sha256_text("CONSISTENT BODY")
-    req = {
-        "request_id": "REQ-OK", "pipeline_id": PIPELINE_ID, "nonce": "ok",
-        "status": "PENDING", "packet_path": str(packet_path),
-        "packet_sha256": actual_sha, "created_at": "2026-06-28T00:00:00Z",
+def _write_codex_result(state_file: Path, verdict: str, packet_sha="a" * 64, pid=PIPELINE_ID):
+    """codex_review_result.json (SSoT)을 격리 .pipeline 디렉토리에 생성한다."""
+    pipeline_dir = state_file.parent / ".pipeline"
+    pipeline_dir.mkdir(parents=True, exist_ok=True)
+    result = {
+        "schema_version": 1,
+        "pipeline_id": pid,
+        "verdict": verdict,
+        "reason": "test",
+        "packet_sha256": packet_sha,
+        "pr_body_sha256": "b" * 64,
+        "pr_head_sha": "0" * 40,
+        "recorded_at": "2026-06-28T00:00:00Z",
     }
-    (tmp_path / "acceptance_request.json").write_text(
-        json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8"
+    (pipeline_dir / "codex_review_result.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    result = run_pipeline(
-        "report", "final-packet", state_path=state_file, cwd=tmp_path
-    )
-    combined = (result.stdout or "") + (result.stderr or "")
-    assert "pending_snapshot_lock" not in combined, (
-        f"일치 SHA(결정적 no-op)인데 lock이 걸림\n{combined}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# TC-1 / TC-2 / TC-3: request-accept snapshot SHA 일관성 회귀
-# (gh 없는 환경에서는 request-accept가 pr_body_not_found로 BLOCKED되므로,
-#  snapshot 일관성은 PENDING lock + 불변식 가드의 존재로 보장됨을 확인한다)
-# ---------------------------------------------------------------------------
-
-def test_tc1_stale_packet_regression(isolated_pipeline):
-    """TC-1: stale_packet_sha256 순환 버그가 재발하지 않음을 확인.
-
-    근본 수정의 핵심은 (1) staging→publish 동일 SHA 불변식, (2) PENDING lock이
-    packet 재생성을 막는 것이다. 여기서는 PENDING lock으로 인해 request-accept
-    재실행이 packet을 무단 재생성하지 않음을 확인한다 (stale 발생 경로 차단).
-    """
-    tmp_path, state_file = isolated_pipeline
-    # 이미 PENDING 요청이 있고 디스크 packet이 기록 SHA와 다른(divergent) 상태에서
-    # report 경로가 packet을 덮어쓰지 못해야 함
-    _write_pending_acceptance_request(tmp_path, divergent=True)
-    before = (tmp_path / "acceptance_request.json").read_text(encoding="utf-8")
-
-    result = run_pipeline(
-        "report", "final-packet", state_path=state_file, cwd=tmp_path
-    )
-    combined = (result.stdout or "") + (result.stderr or "")
-    assert "pending_snapshot_lock" in combined
-
-    # acceptance_request.json은 변경되지 않아야 함 (stale 유발 재생성 차단)
-    after = (tmp_path / "acceptance_request.json").read_text(encoding="utf-8")
-    assert before == after, "PENDING lock이 acceptance_request.json 재생성을 막지 못함"
-
-
-def test_tc2_packet_sha_3way_match(isolated_pipeline):
-    """TC-2: packet 파일이 존재할 때 acceptance_request의 packet_sha256과 실제 파일 SHA 일치.
-
-    staging→publish 불변식이 동일 SHA를 보장하므로, publish된 acceptance_request의
-    packet_sha256은 실제 human_acceptance_packet.md의 SHA와 일치해야 한다.
-    여기서는 정상 상태(NON-PENDING)에서 packet을 생성한 뒤 일관성을 확인한다.
-    """
-    tmp_path, state_file = isolated_pipeline
-    # report final-packet으로 packet 생성 (PENDING 없음)
-    run_pipeline(
-        "report", "final-packet", state_path=state_file, cwd=tmp_path
-    )
-    packet = tmp_path / "human_acceptance_packet.md"
-    # gh 없어도 packet 파일은 로컬에 작성됨
-    if not packet.exists():
-        pytest.skip("packet 파일이 생성되지 않음 (환경 의존) — SHA 일치 검증 스킵")
-    actual_sha = _sha256_text(packet.read_text(encoding="utf-8"))
-    # json 버전이 있으면 그 안의 SHA 일관성도 확인
-    json_packet = tmp_path / "human_acceptance_packet.json"
-    if json_packet.exists():
-        vj = json.loads(json_packet.read_text(encoding="utf-8"))
-        # verification_json 자체는 packet과 별개 파일이므로 SHA가 다름. 존재만 확인.
-        assert isinstance(vj, dict)
-    assert len(actual_sha) == 64
-    final_state = _read_state(state_file)
-    assert final_state["pipeline_id"] == PIPELINE_ID
-
-
-def test_tc3_pr_body_sha_3way_match(isolated_pipeline):
-    """TC-3: pr_body 기반 SHA 3-way 일치 (gh 없으면 PR 본문 미존재 → 스킵 가능)."""
-    tmp_path, state_file = isolated_pipeline
-    # gh 없는 환경 → PR 본문을 가져올 수 없으므로 pr_body SHA 검증은 스킵.
-    if shutil.which("gh") and os.environ.get("PIPELINE_F52C_ALLOW_GH") == "1":
-        pytest.skip("실 PR 환경 — 본 테스트는 격리 환경 전용")
-    # 격리 환경에서는 PENDING lock이 pr_body 변경(update-pr-body)을 막는 것으로 대체 검증
-    _write_pending_acceptance_request(tmp_path)
-    result = run_pipeline(
-        "report", "update-pr-body", state_path=state_file, cwd=tmp_path
-    )
-    combined = (result.stdout or "") + (result.stderr or "")
-    assert "pending_snapshot_lock" in combined
-
-
-# ---------------------------------------------------------------------------
-# TC-3N / TC-4: Codex Review 내부 게이트 동작 (loop_state.json 시뮬레이션)
-# request-accept 전체는 gh 전제조건이 많으므로, Codex 분기 자체는
-# loop_state 파일을 둔 채 request-accept를 실행하여 흐름 진입을 확인한다.
-# ---------------------------------------------------------------------------
 
 def _write_codex_loop_state(state_file: Path, status: str, packet_sha="a" * 64):
-    """PIPELINE_STATE_PATH 격리 디렉토리에 codex_review_loop_state.json 생성."""
+    """legacy codex_review_loop_state.json 생성 (TC-D: 사용 안 됨 확인용)."""
     pipeline_dir = state_file.parent / ".pipeline"
     pipeline_dir.mkdir(parents=True, exist_ok=True)
     loop = {
@@ -350,21 +197,13 @@ def _write_codex_loop_state(state_file: Path, status: str, packet_sha="a" * 64):
     )
 
 
-def _run_codex_driver(tmp_path, state_file, loop_status, loop_packet_sha, staged_packet_sha):
-    """_run_codex_review_internal을 격리 환경에서 직접 호출하는 드라이버 실행.
-
-    loop_status가 None이면 loop_state 파일을 만들지 않는다(NOT_CONFIGURED 유도).
-    """
-    if loop_status is not None:
-        _write_codex_loop_state(state_file, loop_status, packet_sha=loop_packet_sha)
-    driver = tmp_path / f"driver_codex_{loop_status}.py"
+def _run_driver(tmp_path, state_file, body: str):
+    """pipeline 모듈을 import하여 임의 검증 스니펫을 실행하는 드라이버 subprocess."""
+    driver = tmp_path / f"driver_{abs(hash(body)) % 100000}.py"
     driver.write_text(
         "import json, sys\n"
-        f"sys.path.insert(0, {json.dumps(str(Path(PIPELINE_PY).parent))})\n"
-        "import pipeline\n"
-        "res = pipeline._run_codex_review_internal(%r, {'packet_sha256': %r}, {})\n"
-        % (PIPELINE_ID, staged_packet_sha) +
-        "print('STATUS', res['status'])\n",
+        f"sys.path.insert(0, {json.dumps(PIPELINE_DIR)})\n"
+        "import pipeline\n" + body,
         encoding="utf-8",
     )
     env = os.environ.copy()
@@ -379,95 +218,303 @@ def _run_codex_driver(tmp_path, state_file, loop_status, loop_packet_sha, staged
     return (result.stdout or "") + (result.stderr or "")
 
 
-def test_tc3n_codex_approved_sha_match(isolated_pipeline):
-    """TC-3N: Codex loop_state가 APPROVED이고 staged SHA가 기록 SHA와 일치하면 APPROVED 반환.
+# ---------------------------------------------------------------------------
+# TC-A: Codex APPROVE 전 사용자 노출 산출물 미생성
+# ---------------------------------------------------------------------------
 
-    _run_codex_review_internal을 격리 환경에서 직접 구동하여 publish 진행 신호(APPROVED)를
-    내는지 검증한다. 또한 request-accept smoke 실행이 raw traceback 없이 종료되는지 확인한다.
+def test_tc_a_no_exposure_before_codex(isolated_pipeline):
+    """TC-A: codex_review_result.json이 없으면 request-accept가 승인 코드/comment/
+    acceptance_request.json을 절대 생성하지 않는다.
+
+    gh 없는 환경에서 request-accept는 더 일찍 BLOCKED될 수 있으나, 어떤 경우에도
+    '사용자 승인 요청' 출력과 acceptance_request.json 생성은 없어야 한다.
     """
     tmp_path, state_file = isolated_pipeline
-    sha = "a" * 64
-    out = _run_codex_driver(tmp_path, state_file, "APPROVED", sha, sha)
-    assert "STATUS APPROVED" in out, f"staged==기록 SHA인데 APPROVED 아님\n{out}"
-
-    # smoke: request-accept가 비정상 종료(예외 trace) 없이 동작
-    result = run_pipeline(
-        "gates", "request-accept", "--evidence", "output.xlsx",
-        state_path=state_file, cwd=tmp_path,
-    )
-    combined = (result.stdout or "") + (result.stderr or "")
-    assert "Traceback (most recent call last)" not in combined, (
-        f"request-accept에서 raw traceback 노출\n{combined}"
-    )
-    final_state = _read_state(state_file)
-    assert final_state["pipeline_id"] == PIPELINE_ID
-
-
-def test_tc4_codex_reject_no_code(isolated_pipeline):
-    """TC-4: Codex staged SHA 불일치 시 REJECTED 반환 + 승인 코드 미출력.
-
-    _run_codex_review_internal이 staged SHA != 기록 SHA일 때 REJECTED를 내는지 직접 검증하고,
-    request-accept 실행 시 승인 요청문/승인 코드가 절대 출력되지 않으며 acceptance gate가
-    PASS로 바뀌지 않음을 확인한다.
-    """
-    tmp_path, state_file = isolated_pipeline
-    # 기록 SHA="f"*64, staged SHA="a"*64 → 불일치 → REJECTED
-    out = _run_codex_driver(tmp_path, state_file, "APPROVED", "f" * 64, "a" * 64)
-    assert "STATUS REJECTED" in out, f"SHA 불일치인데 REJECTED 아님\n{out}"
+    # codex_review_result.json 미생성 → Codex 미수행 상태
 
     result = run_pipeline(
         "gates", "request-accept", "--evidence", "output.xlsx",
         state_path=state_file, cwd=tmp_path,
     )
     combined = (result.stdout or "") + (result.stderr or "")
-    # 승인 요청문/승인 코드 양식이 출력되어 사용자에게 코드가 노출되면 안 됨
-    assert "사용자 승인 요청" not in combined, (
-        f"REJECTED/BLOCKED 상황에서 승인 요청문이 출력됨\n{combined}"
+    # 승인 코드/승인 요청문이 절대 출력되면 안 됨
+    assert "사용자 승인 요청" not in combined, f"Codex 전 승인 요청문 노출\n{combined}"
+    # acceptance_request.json은 생성되지 않아야 함
+    assert not (tmp_path / "acceptance_request.json").exists(), (
+        "Codex 전 acceptance_request.json이 생성됨"
     )
+    assert result.returncode != 0, "Codex 미수행인데 request-accept가 성공함"
     final_state = _read_state(state_file)
-    # acceptance gate가 PASS로 바뀌지 않아야 함
     assert final_state["external_gates"]["acceptance"]["status"] != "PASS"
 
 
+def test_tc_a_codex_snapshot_reject_without_result(isolated_pipeline):
+    """TC-A(보강): _codex_review_snapshot은 codex_review_result.json 없으면 REJECT."""
+    tmp_path, state_file = isolated_pipeline
+    out = _run_driver(
+        tmp_path, state_file,
+        "res = pipeline._codex_review_snapshot(%r, {'packet_sha256': 'a'*64}, {})\n" % PIPELINE_ID +
+        "print('VERDICT', res['verdict'])\n",
+    )
+    assert "VERDICT REJECT" in out, f"result 없는데 REJECT 아님\n{out}"
+
+
 # ---------------------------------------------------------------------------
-# TC-7 / TC-8 / TC-9 / TC-10: snapshot 일관성 및 형식 유지
+# TC-B: Codex REJECT 시 fail-closed (코드/댓글/요청 파일 미생성)
 # ---------------------------------------------------------------------------
 
-def test_tc7_rerun_same_snapshot_noop(isolated_pipeline):
-    """TC-7: PENDING 상태에서 report 재실행이 snapshot을 변경하지 않음(no-op).
+def test_tc_b_codex_reject_blocks(isolated_pipeline):
+    """TC-B: codex_review_result verdict=REJECT면 request-accept가 BLOCKED.
 
-    동일 snapshot 재발급 시 acceptance_request.json이 그대로 유지되어야 stale이 안 생긴다.
+    승인 코드 미노출 + acceptance_request.json 미생성을 확인한다.
     """
     tmp_path, state_file = isolated_pipeline
-    _write_pending_acceptance_request(tmp_path)
+    _write_codex_result(state_file, "REJECT", packet_sha="f" * 64)
+
+    result = run_pipeline(
+        "gates", "request-accept", "--evidence", "output.xlsx",
+        state_path=state_file, cwd=tmp_path,
+    )
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert result.returncode != 0, "Codex REJECT인데 exit 0"
+    assert "사용자 승인 요청" not in combined, f"REJECT인데 승인 요청문 노출\n{combined}"
+    assert not (tmp_path / "acceptance_request.json").exists(), (
+        "Codex REJECT인데 acceptance_request.json이 생성됨"
+    )
+    final_state = _read_state(state_file)
+    assert final_state["external_gates"]["acceptance"]["status"] != "PASS"
+
+
+def test_tc_b_codex_snapshot_reject_verdict(isolated_pipeline):
+    """TC-B(보강): _codex_review_snapshot은 verdict=REJECT를 그대로 REJECT로 반환."""
+    tmp_path, state_file = isolated_pipeline
+    _write_codex_result(state_file, "REJECT", packet_sha="a" * 64)
+    out = _run_driver(
+        tmp_path, state_file,
+        "res = pipeline._codex_review_snapshot(%r, {'packet_sha256': 'a'*64}, {})\n" % PIPELINE_ID +
+        "print('VERDICT', res['verdict'])\n",
+    )
+    assert "VERDICT REJECT" in out, f"verdict=REJECT인데 REJECT 아님\n{out}"
+
+
+# ---------------------------------------------------------------------------
+# TC-C: publish 직후 3-SHA 불변식 일치 (_verify_snapshot_invariant 3-way)
+# ---------------------------------------------------------------------------
+
+def test_tc_c_three_way_sha_invariant(isolated_pipeline):
+    """TC-C: staging==published==codex packet SHA가 일치하면 불변식 PASS, 하나라도 다르면 오류."""
+    tmp_path, state_file = isolated_pipeline
+    out = _run_driver(
+        tmp_path, state_file,
+        "staged = {'packet_sha256': 'a'*64}\n"
+        "pub = {'packet_sha256': 'a'*64}\n"
+        "codex_ok = {'result_packet_sha256': 'a'*64}\n"
+        "codex_bad = {'result_packet_sha256': 'c'*64}\n"
+        "print('OK', pipeline._verify_snapshot_invariant(staged, pub, codex_ok))\n"
+        "print('BAD', pipeline._verify_snapshot_invariant(staged, pub, codex_bad) is not None)\n"
+        "print('TWOWAY', pipeline._verify_snapshot_invariant(staged, pub))\n",
+    )
+    assert "OK None" in out, f"3-way 일치인데 불변식 오류\n{out}"
+    assert "BAD True" in out, f"codex SHA 불일치인데 오류 미반환\n{out}"
+    assert "TWOWAY None" in out, f"2-way 일치인데 오류\n{out}"
+
+
+# ---------------------------------------------------------------------------
+# TC-D: codex_review_loop_state.json은 사용되지 않음 (legacy 제거)
+# ---------------------------------------------------------------------------
+
+def test_tc_d_loop_state_ignored(isolated_pipeline):
+    """TC-D: codex_review_loop_state.json(APPROVED)이 있어도 request-accept가 사용하지 않는다.
+
+    loop_state는 APPROVED지만 codex_review_result.json이 없으므로 _codex_review_snapshot은
+    여전히 REJECT여야 한다 (legacy 경로가 제거되었음을 증명).
+    """
+    tmp_path, state_file = isolated_pipeline
+    _write_codex_loop_state(state_file, "APPROVED", packet_sha="a" * 64)
+    # codex_review_result.json은 의도적으로 미생성
+
+    out = _run_driver(
+        tmp_path, state_file,
+        "res = pipeline._codex_review_snapshot(%r, {'packet_sha256': 'a'*64}, {})\n" % PIPELINE_ID +
+        "print('VERDICT', res['verdict'])\n",
+    )
+    assert "VERDICT REJECT" in out, (
+        f"loop_state APPROVED를 사용해 버림 (legacy 경로 잔존)\n{out}"
+    )
+
+    # 소스 레벨에서도 _codex_review_snapshot이 loop_state 경로를 호출하지 않음을 확인.
+    # (docstring/주석의 'codex_review_loop_state' 언급은 허용 — 실제 호출만 검사한다.)
+    src = Path(PIPELINE_PY).read_text(encoding="utf-8")
+    fn_start = src.index("def _codex_review_snapshot(")
+    fn_end = src.index("\ndef ", fn_start + 10)
+    fn_body = src[fn_start:fn_end]
+    assert "_codex_review_loop_state_path(" not in fn_body, (
+        "_codex_review_snapshot이 codex_review_loop_state 경로를 호출함"
+    )
+    # NOT_CONFIGURED verdict로 publish를 허용하는 fallback이 없어야 함.
+    assert "NOT_CONFIGURED" not in fn_body, (
+        "_codex_review_snapshot에 NOT_CONFIGURED fallback이 남아 있음"
+    )
+
+
+# ---------------------------------------------------------------------------
+# TC-E: 결과 없음/REJECT/stale SHA는 모두 BLOCKED (fail-closed)
+# ---------------------------------------------------------------------------
+
+def test_tc_e_no_result_blocked(isolated_pipeline):
+    """TC-E(1): codex_review_result.json 없음 → REJECT."""
+    tmp_path, state_file = isolated_pipeline
+    out = _run_driver(
+        tmp_path, state_file,
+        "res = pipeline._codex_review_snapshot(%r, {'packet_sha256': 'a'*64}, {})\n" % PIPELINE_ID +
+        "print('VERDICT', res['verdict'])\n",
+    )
+    assert "VERDICT REJECT" in out, f"result 없음인데 REJECT 아님\n{out}"
+
+
+def test_tc_e_stale_sha_blocked(isolated_pipeline):
+    """TC-E(2): APPROVE_TO_USER지만 staged SHA != 기록 SHA → REJECT (stale)."""
+    tmp_path, state_file = isolated_pipeline
+    _write_codex_result(state_file, "APPROVE_TO_USER", packet_sha="f" * 64)
+    out = _run_driver(
+        tmp_path, state_file,
+        "res = pipeline._codex_review_snapshot(%r, {'packet_sha256': 'a'*64}, {})\n" % PIPELINE_ID +
+        "print('VERDICT', res['verdict'])\n",
+    )
+    assert "VERDICT REJECT" in out, f"stale SHA인데 REJECT 아님\n{out}"
+
+
+def test_tc_e_pipeline_mismatch_blocked(isolated_pipeline):
+    """TC-E(3): 다른 pipeline_id의 APPROVE 결과는 재사용 차단 → REJECT."""
+    tmp_path, state_file = isolated_pipeline
+    _write_codex_result(state_file, "APPROVE_TO_USER", packet_sha="a" * 64, pid="BUG-OTHER-9999")
+    out = _run_driver(
+        tmp_path, state_file,
+        "res = pipeline._codex_review_snapshot(%r, {'packet_sha256': 'a'*64}, {})\n" % PIPELINE_ID +
+        "print('VERDICT', res['verdict'])\n",
+    )
+    assert "VERDICT REJECT" in out, f"pipeline_id 불일치인데 REJECT 아님\n{out}"
+
+
+def test_tc_e_approve_match_passes(isolated_pipeline):
+    """TC-E(4): APPROVE_TO_USER + SHA 일치 + pipeline_id 일치 → APPROVE_TO_USER."""
+    tmp_path, state_file = isolated_pipeline
+    _write_codex_result(state_file, "APPROVE_TO_USER", packet_sha="a" * 64)
+    out = _run_driver(
+        tmp_path, state_file,
+        "res = pipeline._codex_review_snapshot(%r, {'packet_sha256': 'a'*64}, {})\n" % PIPELINE_ID +
+        "print('VERDICT', res['verdict'])\n",
+    )
+    assert "VERDICT APPROVE_TO_USER" in out, f"모든 조건 충족인데 APPROVE 아님\n{out}"
+
+
+# ---------------------------------------------------------------------------
+# TC-F: PENDING 중 report final-packet/update-pr-body BLOCKED
+# ---------------------------------------------------------------------------
+
+def test_tc_f_pending_blocks_final_packet(isolated_pipeline):
+    """TC-F(1): PENDING(divergent) 중 report final-packet은 BLOCKED + 파일 불변."""
+    tmp_path, state_file = isolated_pipeline
+    _write_pending_acceptance_request(tmp_path, divergent=True)
     before = (tmp_path / "acceptance_request.json").read_text(encoding="utf-8")
 
-    # 두 번 연속 report final-packet → 모두 PENDING lock으로 차단, 파일 불변
-    for _ in range(2):
-        result = run_pipeline(
-            "report", "final-packet", state_path=state_file, cwd=tmp_path
-        )
-        combined = (result.stdout or "") + (result.stderr or "")
-        assert "pending_snapshot_lock" in combined
+    result = run_pipeline("report", "final-packet", state_path=state_file, cwd=tmp_path)
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "pending_snapshot_lock" in combined, f"PENDING lock 미발동\n{combined}"
+    assert result.returncode != 0
+    after = (tmp_path / "acceptance_request.json").read_text(encoding="utf-8")
+    assert before == after, "PENDING lock이 snapshot 재생성을 막지 못함"
+
+
+def test_tc_f_pending_blocks_update_pr_body(isolated_pipeline):
+    """TC-F(2): PENDING(divergent) 중 report update-pr-body는 BLOCKED."""
+    tmp_path, state_file = isolated_pipeline
+    _write_pending_acceptance_request(tmp_path, divergent=True)
+
+    result = run_pipeline("report", "update-pr-body", state_path=state_file, cwd=tmp_path)
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "pending_snapshot_lock" in combined, f"PENDING lock 미발동\n{combined}"
+    assert result.returncode != 0
+    final_state = _read_state(state_file)
+    assert final_state["terminal_state"] is None
+
+
+def test_tc_f_pending_consistent_noop(isolated_pipeline):
+    """TC-F(3): PENDING이지만 디스크 packet SHA가 기록과 일치(동일 bytes no-op)면 허용."""
+    tmp_path, state_file = isolated_pipeline
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    packet_path.write_text("CONSISTENT BODY", encoding="utf-8")
+    actual_sha = _sha256_text("CONSISTENT BODY")
+    req = {
+        "request_id": "REQ-OK", "pipeline_id": PIPELINE_ID, "nonce": "ok",
+        "status": "PENDING", "packet_path": str(packet_path),
+        "packet_sha256": actual_sha, "created_at": "2026-06-28T00:00:00Z",
+    }
+    (tmp_path / "acceptance_request.json").write_text(
+        json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    result = run_pipeline("report", "final-packet", state_path=state_file, cwd=tmp_path)
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "pending_snapshot_lock" not in combined, (
+        f"동일 bytes no-op인데 lock 발동\n{combined}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# TC-G: post-accept(여기서는 lock 부수효과 없음)는 허용 필드만 보존
+# ---------------------------------------------------------------------------
+
+def test_tc_g_state_structure_preserved(isolated_pipeline):
+    """TC-G: PENDING lock으로 report가 차단되는 동안 state의 phases/external_gates 구조 보존."""
+    tmp_path, state_file = isolated_pipeline
+    _write_pending_acceptance_request(tmp_path, divergent=True)
+    before_state = _read_state(state_file)
+
+    run_pipeline("report", "final-packet", state_path=state_file, cwd=tmp_path)
+    after_state = _read_state(state_file)
+
+    assert before_state["phases"] == after_state["phases"], "phases 구조 변경됨"
+    assert before_state["external_gates"] == after_state["external_gates"], (
+        "external_gates 구조 변경됨"
+    )
+    assert after_state["terminal_state"] is None
+
+
+# ---------------------------------------------------------------------------
+# TC-1 / TC-3N / TC-8 / TC-9: 기존 회귀 + 새 함수명 반영
+# ---------------------------------------------------------------------------
+
+def test_tc1_stale_packet_regression(isolated_pipeline):
+    """TC-1: stale_packet_sha256 순환 버그가 재발하지 않음 (PENDING lock으로 재생성 차단)."""
+    tmp_path, state_file = isolated_pipeline
+    _write_pending_acceptance_request(tmp_path, divergent=True)
+    before = (tmp_path / "acceptance_request.json").read_text(encoding="utf-8")
+
+    result = run_pipeline("report", "final-packet", state_path=state_file, cwd=tmp_path)
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "pending_snapshot_lock" in combined
 
     after = (tmp_path / "acceptance_request.json").read_text(encoding="utf-8")
-    assert before == after, "재실행이 snapshot을 변경함 (no-op 위반)"
+    assert before == after, "PENDING lock이 acceptance_request.json 재생성을 막지 못함"
 
 
-def test_tc8_timestamp_fixed_at_staging(isolated_pipeline):
-    """TC-8: staging 반복 호출 시 packet SHA 불변.
-
-    _materialize_acceptance_snapshot(publish=False)를 두 번 호출해도 동일 입력이면
-    동일 packet SHA가 나와야 한다. CLI 표면이 없으므로 import 없이 별도 드라이버
-    subprocess로 실행한다 (PIPELINE_STATE_PATH 격리 유지).
-    """
+def test_tc3n_codex_snapshot_approve_match(isolated_pipeline):
+    """TC-3N: _codex_review_snapshot이 APPROVE_TO_USER + SHA 일치 시 APPROVE_TO_USER 반환."""
     tmp_path, state_file = isolated_pipeline
-    # 드라이버 스크립트: pipeline 모듈을 로드하여 staging을 2회 수행하고 SHA를 출력
-    driver = tmp_path / "driver_tc8.py"
-    driver.write_text(
-        "import json, sys\n"
-        f"sys.path.insert(0, {json.dumps(str(Path(PIPELINE_PY).parent))})\n"
-        "import pipeline\n"
+    _write_codex_result(state_file, "APPROVE_TO_USER", packet_sha="a" * 64)
+    out = _run_driver(
+        tmp_path, state_file,
+        "res = pipeline._codex_review_snapshot(%r, {'packet_sha256': 'a'*64}, {})\n" % PIPELINE_ID +
+        "print('VERDICT', res['verdict'])\n",
+    )
+    assert "VERDICT APPROVE_TO_USER" in out, f"staged==기록 SHA인데 APPROVE 아님\n{out}"
+
+
+def test_tc8_staging_sha_stable(isolated_pipeline):
+    """TC-8: staging(publish=False) 반복 호출 시 packet SHA 불변 + published=False."""
+    tmp_path, state_file = isolated_pipeline
+    out = _run_driver(
+        tmp_path, state_file,
         "state = {'pipeline_id': %r, 'acceptance_request': None}\n" % PIPELINE_ID +
         "req = {'request_id': 'R1', 'pipeline_id': %r, 'nonce': 'n1', 'evidence': 'output.xlsx', 'status': 'PENDING'}\n" % PIPELINE_ID +
         "r1 = pipeline._materialize_acceptance_snapshot(state, req, publish=False)\n"
@@ -475,97 +522,108 @@ def test_tc8_timestamp_fixed_at_staging(isolated_pipeline):
         "print('SHA1', r1['sha_manifest'].get('packet_sha256'))\n"
         "print('SHA2', r2['sha_manifest'].get('packet_sha256'))\n"
         "print('PUBLISHED', r1.get('published'), r2.get('published'))\n",
-        encoding="utf-8",
     )
-    env = os.environ.copy()
-    env["PIPELINE_STATE_PATH"] = str(state_file)
-    env["PIPELINE_NO_DASHBOARD"] = "1"
-    env["PATH"] = _no_gh_path()
-    result = subprocess.run(
-        [sys.executable, str(driver)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=120, env=env, cwd=str(tmp_path),
-    )
-    out = (result.stdout or "") + (result.stderr or "")
     if "SHA1" not in out:
         pytest.skip(f"staging 드라이버 실행 실패(환경 의존) — {out[:400]}")
-    lines = {line.split(" ", 1)[0]: line.split(" ", 1)[1].strip()
-             for line in out.splitlines() if line.startswith(("SHA1", "SHA2", "PUBLISHED"))}
+    lines = {
+        line.split(" ", 1)[0]: line.split(" ", 1)[1].strip()
+        for line in out.splitlines() if line.startswith(("SHA1", "SHA2", "PUBLISHED"))
+    }
     assert lines.get("SHA1") and lines.get("SHA1") == lines.get("SHA2"), (
         f"staging 반복 호출 SHA 불일치: {lines}"
     )
-    # publish=False는 커밋하지 않으므로 published=False
     assert "False" in lines.get("PUBLISHED", ""), (
         f"publish=False인데 published가 False가 아님: {lines}"
     )
+    # staging은 디스크에 acceptance_request.json을 만들지 않아야 함
+    assert not (tmp_path / "acceptance_request.json").exists(), (
+        "staging이 acceptance_request.json을 생성함"
+    )
 
 
-def test_tc9_nonce_provenance_preserved(isolated_pipeline):
-    """TC-9: 승인 코드/ nonce 형식이 ACCEPT-{pipeline_id} 형식으로 유지됨을 확인.
-
-    PR 댓글 승인 코드 형식(ACCEPT-{pipeline_id})은 BUG 수정 후에도 변하지 않아야 한다.
-    request-accept가 gh 없이 BLOCKED되더라도, 코드 형식 상수는 변하지 않으므로
-    드라이버로 형식만 검증한다.
-    """
+def test_tc9_accept_code_format_and_no_result_reject(isolated_pipeline):
+    """TC-9: 승인 코드 형식 ACCEPT-{pipeline_id} 유지 + result 없음=REJECT."""
     tmp_path, state_file = isolated_pipeline
-    driver = tmp_path / "driver_tc9.py"
-    driver.write_text(
-        "import sys\n"
-        f"sys.path.insert(0, {json.dumps(str(Path(PIPELINE_PY).parent))})\n"
-        "import pipeline\n"
+    out = _run_driver(
+        tmp_path, state_file,
         "pid = %r\n" % PIPELINE_ID +
         "print('CODE', f'ACCEPT-{pid}')\n"
-        # _run_codex_review_internal NOT_CONFIGURED 경로 형식 검증
-        "res = pipeline._run_codex_review_internal(pid, {'packet_sha256': 'x'*64}, {})\n"
-        "print('CODEX', res['status'])\n",
-        encoding="utf-8",
+        "res = pipeline._codex_review_snapshot(pid, {'packet_sha256': 'x'*64}, {})\n"
+        "print('CODEX', res['verdict'])\n",
     )
-    env = os.environ.copy()
-    env["PIPELINE_STATE_PATH"] = str(state_file)
-    env["PATH"] = _no_gh_path()
-    result = subprocess.run(
-        [sys.executable, str(driver)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=120, env=env, cwd=str(tmp_path),
-    )
-    out = (result.stdout or "") + (result.stderr or "")
     assert f"ACCEPT-{PIPELINE_ID}" in out, f"승인 코드 형식 누락\n{out}"
-    # loop_state 파일 없으므로 NOT_CONFIGURED
-    assert "CODEX NOT_CONFIGURED" in out, f"Codex NOT_CONFIGURED 경로 미동작\n{out}"
+    assert "CODEX REJECT" in out, f"result 없음인데 REJECT 아님\n{out}"
 
+
+# ---------------------------------------------------------------------------
+# TC-10: post-accept 상태 보존
+# ---------------------------------------------------------------------------
 
 def test_tc10_post_accept_fields_only(isolated_pipeline):
-    """TC-10: PENDING lock으로 인해 packet/PR이 변경되지 않는 동안 state 핵심 필드가 보존됨.
-
-    post-accept 단계는 status/consumed/provenance 필드만 바꾸고 구조를 깨지 않아야 한다.
-    여기서는 PENDING 상태에서 report 호출이 state의 phases/external_gates 구조를
-    변경하지 않음을 확인하여, snapshot 잠금이 부수효과를 만들지 않음을 검증한다.
-    """
+    """TC-10: PENDING lock으로 packet 변경이 차단되는 동안 state 핵심 필드 보존."""
     tmp_path, state_file = isolated_pipeline
-    _write_pending_acceptance_request(tmp_path)
+    _write_pending_acceptance_request(tmp_path, divergent=True)
     before_state = _read_state(state_file)
 
     run_pipeline("report", "final-packet", state_path=state_file, cwd=tmp_path)
     after_state = _read_state(state_file)
 
-    # 핵심 구조 보존: phases, external_gates는 변경되지 않아야 함
-    assert before_state["phases"] == after_state["phases"], "phases 구조가 변경됨"
-    assert before_state["external_gates"] == after_state["external_gates"], (
-        "external_gates 구조가 변경됨"
-    )
+    assert before_state["phases"] == after_state["phases"]
+    assert before_state["external_gates"] == after_state["external_gates"]
     assert after_state["terminal_state"] is None
 
 
-def test_tc6n_all_tests_pass():
-    """TC-6N: 이 파일의 다른 모든 TC 테스트가 통과하는지 subprocess pytest로 회귀 확인.
+# ---------------------------------------------------------------------------
+# gates codex-review CLI 표면 동작 검증
+# ---------------------------------------------------------------------------
 
-    무한 재귀를 방지하기 위해 -k로 TC-6N 자신을 제외하고 실행한다.
-    """
+def test_codex_review_cli_writes_result(isolated_pipeline):
+    """gates codex-review --verdict APPROVE_TO_USER가 codex_review_result.json을 기록한다."""
+    tmp_path, state_file = isolated_pipeline
+    result = run_pipeline(
+        "gates", "codex-review", "--verdict", "APPROVE_TO_USER",
+        "--packet-sha256", "a" * 64,
+        state_path=state_file, cwd=tmp_path,
+    )
+    combined = (result.stdout or "") + (result.stderr or "")
+    assert "Traceback (most recent call last)" not in combined, (
+        f"gates codex-review에서 raw traceback 노출\n{combined}"
+    )
+    result_file = state_file.parent / ".pipeline" / "codex_review_result.json"
+    assert result_file.exists(), f"codex_review_result.json 미생성\n{combined}"
+    data = json.loads(result_file.read_text(encoding="utf-8"))
+    assert data["verdict"] == "APPROVE_TO_USER"
+    assert data["packet_sha256"] == "a" * 64
+    assert data["pipeline_id"] == PIPELINE_ID
+    assert result.returncode == 0
+
+
+def test_codex_review_cli_reject_exit_nonzero(isolated_pipeline):
+    """gates codex-review --verdict REJECT는 exit non-zero + result 기록."""
+    tmp_path, state_file = isolated_pipeline
+    result = run_pipeline(
+        "gates", "codex-review", "--verdict", "REJECT",
+        "--packet-sha256", "f" * 64,
+        state_path=state_file, cwd=tmp_path,
+    )
+    assert result.returncode != 0, "REJECT인데 exit 0"
+    result_file = state_file.parent / ".pipeline" / "codex_review_result.json"
+    assert result_file.exists()
+    data = json.loads(result_file.read_text(encoding="utf-8"))
+    assert data["verdict"] == "REJECT"
+
+
+# ---------------------------------------------------------------------------
+# TC-ALL: 전체 suite 회귀 (자기 자신 제외)
+# ---------------------------------------------------------------------------
+
+def test_tc_all_suite_pass():
+    """TC-ALL: 이 파일의 다른 모든 TC가 통과하는지 subprocess pytest로 회귀 확인."""
     result = subprocess.run(
         [
             sys.executable, "-m", "pytest", str(Path(__file__)),
             "-q", "--tb=short", "-p", "no:cacheprovider",
-            "-k", "not tc6n_all_tests_pass",
+            "-k", "not tc_all_suite_pass",
         ],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=300,

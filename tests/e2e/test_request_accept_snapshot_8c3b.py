@@ -79,6 +79,18 @@ def run_cli(
     )
 
 
+# BUG-20260628-F52C: request-accept가 "Codex APPROVE_TO_USER 이후에만 publish" 흐름으로
+# 재설계되었으므로, 성공을 기대하는 TC는 request-accept 직전에 gates codex-review로
+# staged snapshot을 APPROVE해야 한다. --approve-pending이 request-accept가 stage할 packet과
+# 동일한 결정적 SHA를 기록하므로, 그 직후 request-accept가 불변식을 통과한다.
+def codex_approve_pending(env: Dict[str, str]) -> "subprocess.CompletedProcess[str]":
+    """request-accept 직전에 호출 — staged snapshot을 APPROVE_TO_USER로 기록한다."""
+    return run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=env,
+    )
+
+
 # IMP-20260612-E12D MT-2: conftest의 autouse fake gh fixture가 제거되어
 # request-accept의 PR body readiness 검사(IMP-20260611-A716 Bug 1)를 통과하려면
 # fake gh를 명시적으로 PIPELINE_GH_EXECUTABLE로 주입해야 한다.
@@ -281,6 +293,7 @@ def test_tc1_request_accept_issues_nonce_and_records_shas(tmp_path):
 
     ev_file = write_evidence_file(tmp_path)
 
+    codex_approve_pending(env)
     r = run_cli(
         ["gates", "request-accept", "--evidence", str(ev_file)],
         env=env,
@@ -434,6 +447,7 @@ def test_tc1b_request_accept_with_ac_completeness_cache(tmp_path):
 
     ev_file = write_evidence_file(tmp_path, "tc1b ac completeness cache evidence")
 
+    codex_approve_pending(env)
     r = run_cli(
         ["gates", "request-accept", "--evidence", str(ev_file)],
         env=env,
@@ -481,6 +495,7 @@ def test_tc2_reuse_path_updates_packet_sha(tmp_path):
     ev_file = write_evidence_file(tmp_path)
 
     # 첫 번째 실행
+    codex_approve_pending(env)
     r1 = run_cli(
         ["gates", "request-accept", "--evidence", str(ev_file)],
         env=env,
@@ -494,6 +509,7 @@ def test_tc2_reuse_path_updates_packet_sha(tmp_path):
     assert pkt_sha1, "첫 번째 packet_sha256 없음"
 
     # 두 번째 실행 (동일 조건 → reuse)
+    codex_approve_pending(env)
     r2 = run_cli(
         ["gates", "request-accept", "--evidence", str(ev_file)],
         env=env,
@@ -533,6 +549,7 @@ def test_tc3_stale_sha_mismatch_blocks_accept(tmp_path):
 
     # 먼저 request-accept 실행해서 acceptance_request.json 생성
     # PIPELINE_STATE_PATH 격리 적용 — acceptance_request.json 상태 검증으로 post-state 확인
+    codex_approve_pending(env)
     r_req = run_cli(
         ["gates", "request-accept", "--evidence", str(ev_file)],
         env=env,
@@ -755,6 +772,7 @@ def test_tc5_wrong_acceptance_code_blocked(tmp_path):
 
     # request-accept 실행 후 acceptance_request.json 생성
     # PIPELINE_STATE_PATH 격리 적용 — acceptance_request.json 상태 검증으로 post-state 확인
+    codex_approve_pending(env)
     r_req = run_cli(
         ["gates", "request-accept", "--evidence", str(ev_file)],
         env=env,

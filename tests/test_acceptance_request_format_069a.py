@@ -212,6 +212,7 @@ class TestRealCliRequestAcceptFormat:
         pid = bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"], env=env)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -263,6 +264,7 @@ class TestRealCliRequestAcceptFormat:
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"], env=env)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -300,6 +302,7 @@ class TestRealCliRequestAcceptFormat:
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"], env=env)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -329,6 +332,7 @@ class TestRealCliRequestAcceptFormat:
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"], env=env)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -360,6 +364,7 @@ class TestRealCliRequestAcceptFormat:
         pid = bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"], env=env)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -400,6 +405,7 @@ if __name__ == "__main__":
         _env = make_env(_tp)
         _pid = bootstrap_pipeline_legacy(_tp, _env)
         _ev = write_evidence_file(_tp)
+        run_cli(["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"], env=_env)
         _r = run_cli(["gates", "request-accept", "--evidence", str(_ev)], env=_env)
         assert _r.returncode == 0, f"request-accept 실패: {_r.stdout} {_r.stderr}"
         _meaningful = _meaningful_lines(_r.stdout)

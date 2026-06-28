@@ -457,6 +457,11 @@ def test_request_accept_proceeds_without_final_packet(
     assert not packet.exists()
     evidence = isolated_cwd / "dummy_evidence.txt"
     evidence.write_text("evidence body", encoding="utf-8")
+    # BUG-20260628-F52C: request-accept는 Codex APPROVE 이후에만 publish하므로 사전 승인.
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=isolated_env, cwd=isolated_cwd,
+    )
     result = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env=isolated_env, cwd=isolated_cwd,
@@ -491,6 +496,10 @@ def test_request_accept_blocks_on_stale_pr_sha(
     evidence.write_text("e", encoding="utf-8")
     # gh CLI가 없을 가능성을 보장하기 위해 PATH를 비운다 (Windows/Linux 호환)
     monkeypatch.setenv("PATH", "")
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env={**isolated_env, "PATH": ""}, cwd=isolated_cwd,
+    )
     result = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env={**isolated_env, "PATH": ""}, cwd=isolated_cwd,
@@ -528,6 +537,10 @@ def test_request_accept_blocks_on_stale_ci_run_id(
     evidence = isolated_cwd / "dummy.txt"
     evidence.write_text("e", encoding="utf-8")
     monkeypatch.setenv("PATH", "")
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env={**isolated_env, "PATH": ""}, cwd=isolated_cwd,
+    )
     result = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env={**isolated_env, "PATH": ""}, cwd=isolated_cwd,
@@ -551,6 +564,10 @@ def test_request_accept_reuses_nonce_when_conditions_same(
     evidence = isolated_cwd / "evidence_v1.txt"
     evidence.write_text("body v1", encoding="utf-8")
     # 1회차
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=isolated_env, cwd=isolated_cwd,
+    )
     r1 = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env=isolated_env, cwd=isolated_cwd,
@@ -559,6 +576,10 @@ def test_request_accept_reuses_nonce_when_conditions_same(
     req_path = isolated_cwd / "acceptance_request.json"
     nonce1 = json.loads(req_path.read_text(encoding="utf-8"))["nonce"]
     # 2회차 — 동일 조건
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=isolated_env, cwd=isolated_cwd,
+    )
     r2 = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env=isolated_env, cwd=isolated_cwd,
@@ -582,6 +603,10 @@ def test_request_accept_issues_new_nonce_when_conditions_change(
     # final_state: nonce가 변경됨 — evidence SHA 변화 확인
     evidence = isolated_cwd / "evidence_changeable.txt"
     evidence.write_text("body before", encoding="utf-8")
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=isolated_env, cwd=isolated_cwd,
+    )
     r1 = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env=isolated_env, cwd=isolated_cwd,
@@ -591,6 +616,10 @@ def test_request_accept_issues_new_nonce_when_conditions_change(
     nonce1 = json.loads(req_path.read_text(encoding="utf-8"))["nonce"]
     # evidence 내용 변경
     evidence.write_text("body AFTER different", encoding="utf-8")
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=isolated_env, cwd=isolated_cwd,
+    )
     r2 = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env=isolated_env, cwd=isolated_cwd,
@@ -613,6 +642,10 @@ def test_request_accept_auto_generates_packet_with_code(
     # final_state: acceptance_request.json에 nonce + ACCEPT 코드가 기록됨
     evidence = isolated_cwd / "auto_packet_evidence.txt"
     evidence.write_text("body", encoding="utf-8")
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=isolated_env, cwd=isolated_cwd,
+    )
     result = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env=isolated_env, cwd=isolated_cwd,
