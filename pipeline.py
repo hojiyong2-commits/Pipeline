@@ -6808,8 +6808,8 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
     if not ai_lines:
         return {"status": "INVALID", "verdict": "", "reject_reason": ""}
     # 계약 규정: 비-시스템 AI 출력은 정확히 1줄이어야 한다.
-    # APPROVE_TO_USER 뒤 추가 줄이 있으면 INVALID (contract "한 줄" 위반).
-    # REJECT - <사유>는 멀티라인 사유를 허용하기 위해 ai_lines[0]만으로 형식 검사.
+    # APPROVE_TO_USER 또는 REJECT - <사유> 뒤 추가 줄이 있으면 INVALID (contract "한 줄" 위반).
+    # BUG-20260627-C81C: REJECT도 ai_lines > 1이면 INVALID (Codex review 지적 반영).
     first_ai_line = ai_lines[0]
     if first_ai_line == "APPROVE_TO_USER":
         if len(ai_lines) > 1:
@@ -6818,7 +6818,9 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
     reject_match = re.match(r"^REJECT\s*-\s*(.+)$", first_ai_line, re.DOTALL)
     if reject_match:
-        # REJECT는 사유가 여러 줄일 수 있으므로 첫 줄만으로 판정 (사유 원문은 first_ai_line)
+        if len(ai_lines) > 1:
+            # REJECT 뒤 추가 AI 출력 → INVALID (계약 "정확히 한 줄" 위반)
+            return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
         return {
             "status": "REJECTED",
             "verdict": first_ai_line,
