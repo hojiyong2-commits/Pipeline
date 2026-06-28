@@ -6784,22 +6784,27 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         raise TypeError("raw must not be None")
     if not isinstance(raw, str):
         raise TypeError(f"raw must be str, got {type(raw).__name__}")
-    # 모든 비-빈 출력 줄을 수집한다. OS 런타임 메시지 필터링 없음(계약 2번 엄격 적용).
-    ai_lines = []
-    for line in raw.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        ai_lines.append(stripped)
-    # AI 출력이 없으면 INVALID.
-    if not ai_lines:
+    # BUG-20260628-1AAC rework 2차: 계약 2번 "출력 첫 줄 정확 일치"를 raw 첫 줄 기준으로 검증.
+    # 이전 구현은 line.strip() + 빈 줄 skip(continue)으로 선행 공백/빈 줄을 무시했고,
+    # 그 결과 "\n APPROVE_TO_USER" 처럼 선행 공백/빈 줄 뒤의 APPROVE_TO_USER도 승인될 수 있었다.
+    # 첫 번째 raw 줄(첫 "\n" 이전)을 그대로 꺼내 검증한다.
+    #   - rstrip()만 적용: 출력 끝의 trailing newline/space 제거는 일반적 출력 형식이므로 허용.
+    #   - lstrip()/strip() 금지: 선행 공백이 있으면 "첫 줄 정확 일치" 위반 → INVALID.
+    #   - 빈 줄 skip 로직 제거: 첫 raw 줄을 그대로 사용한다.
+    raw_lines = raw.split("\n")  # rsplit/splitlines 아님 — 첫 "\n" 이전 첫 원소만 사용
+    first_raw_line = raw_lines[0].rstrip()  # allowed: trailing 공백/CR 제거만, lstrip 금지
+    # 첫 raw 줄이 비어 있으면(선행 빈 줄/공백) INVALID — 계약 "첫 줄 정확 일치" 위반.
+    if first_raw_line == "":
         return {"status": "INVALID", "verdict": "", "reject_reason": ""}
+    # 후속 줄(2번째 이후)에 추가 출력이 있는지 판정용으로 비-빈 줄 존재 여부 확인.
+    # 계약 규정: 유효 verdict 출력은 정확히 1줄이어야 한다.
+    has_extra_output = any(line.strip() for line in raw_lines[1:])
     # 계약 규정: 비-시스템 AI 출력은 정확히 1줄이어야 한다.
     # APPROVE_TO_USER 또는 REJECT - <사유> 뒤 추가 줄이 있으면 INVALID (contract "한 줄" 위반).
-    # BUG-20260627-C81C: REJECT도 ai_lines > 1이면 INVALID (Codex review 지적 반영).
-    first_ai_line = ai_lines[0]
+    # BUG-20260627-C81C: REJECT도 추가 줄이 있으면 INVALID (Codex review 지적 반영).
+    first_ai_line = first_raw_line
     if first_ai_line == "APPROVE_TO_USER":
-        if len(ai_lines) > 1:
+        if has_extra_output:
             # APPROVE_TO_USER 뒤 추가 AI 출력 → INVALID (계약 "정확히 한 줄" 위반)
             return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
         return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
@@ -6807,7 +6812,7 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
     # \s* 허용은 "REJECT-사유"(공백 없음) 등 형식 위반 출력도 유효 REJECT로 처리하므로 제거.
     reject_match = re.match(r"^REJECT - (.+)$", first_ai_line, re.DOTALL)
     if reject_match:
-        if len(ai_lines) > 1:
+        if has_extra_output:
             # REJECT 뒤 추가 AI 출력 → INVALID (계약 "정확히 한 줄" 위반)
             return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
         return {
