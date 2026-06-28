@@ -1,4 +1,4 @@
-﻿{
+{
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
   "generated_at": "2026-06-28T12:34:33Z",
@@ -20,7 +20,7 @@
     "output_file": "qa_report.xml",
     "output_sha256": "5069abb1c1df7b56c00e5d13704b9ea2900155d20ecb2272998144aadf4696c9",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/qa/agent_receipt_qa-f3f314cbd4b5d7e0.json",
-    "receipt_sha256": "73908e56635cfe196c09ff8e7960687b171047927183f692a7b4844c6f24e80f",
+    "receipt_sha256": "c33f73330586ab7ca6e8e82ab3427e9ace89fdf833cd793f944fce92ded7a281",
     "used_by_phase": "qa",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\qa\\qa-f3f314cbd4b5d7e0.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\qa\\qa-f3f314cbd4b5d7e0.json",
       "path": ".pipeline/phase_evidence/BUG-20260628-F52C/qa/agent_receipt_qa-f3f314cbd4b5d7e0.json",
-      "sha256": "73908e56635cfe196c09ff8e7960687b171047927183f692a7b4844c6f24e80f",
+      "sha256": "c33f73330586ab7ca6e8e82ab3427e9ace89fdf833cd793f944fce92ded7a281",
       "size_bytes": 496,
       "requires_force_add": true
     },
