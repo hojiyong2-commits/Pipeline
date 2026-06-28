@@ -306,13 +306,14 @@ def test_tc1_codex_review_approved(tmp_path: Path) -> None:
     assert final_state["verdict"] == "APPROVE_TO_USER"
     for field in (
         "schema_version", "pipeline_id", "status", "pr_url", "pr_head_sha",
-        "pr_body_sha256", "packet_sha256", "accept_code", "reviewed_at", "contract_sha256",
+        "pr_body_sha256", "packet_sha256", "reviewed_at", "contract_sha256",
     ):
         assert field in final_state, f"result.json missing field {field}"
     assert final_state["pipeline_id"] == pid
     assert final_state["schema_version"] == 1
-    # 보안: 실제 nonce가 노출되지 않아야 함 (accept_code는 공개 prefix만).
-    assert final_state["accept_code"] == f"ACCEPT-{pid}"
+    # BUG-20260627-C81C MT-7: accept_code 필드가 result.json에 포함되지 않아야 함.
+    # 계약 6번("승인 코드는 검토 입력/출력 어디에도 포함되지 않는다") 준수.
+    assert "accept_code" not in final_state, "accept_code must not appear in codex_review_result.json"
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +403,6 @@ def test_tc4_request_accept_stale_sha(tmp_path: Path) -> None:
         "pr_head_sha": "oldsha1234",
         "pr_body_sha256": "x",
         "packet_sha256": "y",
-        "accept_code": "ACCEPT-OTHER-PIPELINE-0000",
         "reviewed_at": "2026-06-27T00:00:00Z",
         "contract_sha256": "z",
         "verdict": "APPROVE_TO_USER",
@@ -463,7 +463,6 @@ def test_tc5_stale_packet_sha_after_approve(tmp_path: Path) -> None:
         "pr_head_sha": matching_head,       # 현재 head와 일치 → pr_head_sha 검사 통과
         "pr_body_sha256": "nonempty_body_sha",  # 빈 값 fail-closed 회피 → packet 검사 우선 트리거
         "packet_sha256": stale_packet_sha,  # 현재 packet 실제 SHA와 불일치
-        "accept_code": f"ACCEPT-{pid}",
         "reviewed_at": "2026-06-27T00:00:00Z",
         "contract_sha256": "z",
         "verdict": "APPROVE_TO_USER",
@@ -531,7 +530,6 @@ def test_tc6_empty_packet_sha_blocked(tmp_path: Path) -> None:
         "pr_head_sha": matching_head,  # 현재 head와 일치 → pr_head_sha 검사 통과
         "pr_body_sha256": "nonempty_body_sha",
         "packet_sha256": "",  # 빈 문자열 — fail-closed 대상
-        "accept_code": f"ACCEPT-{pid}",
         "reviewed_at": "2026-06-27T00:00:00Z",
         "contract_sha256": "z",
         "verdict": "APPROVE_TO_USER",

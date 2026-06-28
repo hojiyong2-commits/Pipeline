@@ -7047,12 +7047,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     github_ci_state = state.get("external_gates", {}).get("github_ci", {})
     ci_run_id = github_ci_state.get("evidence", "")
     ci_status = github_ci_state.get("status", "UNKNOWN")
-    # human_acceptance_packet.md 전체 (최대 4000자)
+    # human_acceptance_packet.md 전체 (최대 4000자) — 승인 코드 라인 마스킹.
+    # 계약 6번: 승인 코드(ACCEPT-...)는 검토 입력/출력 어디에도 포함되지 않는다.
     packet_text = ""
     try:
         _packet_path = _packet_output_path()
         if _packet_path.exists():
-            packet_text = _packet_path.read_text(encoding="utf-8", errors="replace")[:4000]
+            _raw_packet = _packet_path.read_text(encoding="utf-8", errors="replace")[:4000]
+            # ACCEPT-<pipeline_id> 패턴 라인을 마스킹하여 Codex 프롬프트에서 제거.
+            import re as _re_codex
+            packet_text = _re_codex.sub(
+                r"(?m)^(ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}.*)$",
+                "[승인 코드 마스킹 — 계약 6번]",
+                _raw_packet,
+            )
     except Exception:  # nosec B110
         packet_text = "(패킷 읽기 실패)"
     # PR 제목
@@ -7144,9 +7152,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             f"  받은 verdict: {parsed.get('verdict', '')[:200]}"
         )
 
-    # 7. codex_review_result.json 기록 — nonce/secret 미포함.
+    # 7. codex_review_result.json 기록 — nonce/secret/accept_code 미포함.
+    # BUG-20260627-C81C MT-7: accept_code 필드 제거 — 계약 6번("승인 코드는 검토 입력/출력
+    # 어디에도 포함되지 않는다") 준수. result.json에 공개 prefix라도 accept_code를 저장하면
+    # Codex CLI가 결과 파일을 읽어 승인 코드를 유추하는 우회 경로가 생긴다.
     result_status = "APPROVED" if parsed_status == "APPROVED" else "REJECTED"
-    accept_code = f"ACCEPT-{pipeline_id}"  # nonce 미포함 — 공개 prefix만
     review_record: Dict[str, Any] = {
         "schema_version": 1,
         "pipeline_id": pipeline_id,
@@ -7155,7 +7165,6 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "pr_head_sha": pr_head_sha,
         "pr_body_sha256": pr_body_sha256,
         "packet_sha256": packet_sha256,
-        "accept_code": accept_code,
         "reviewed_at": _now(),
         "contract_sha256": contract_sha256,
         "verdict": str(parsed["verdict"]),
