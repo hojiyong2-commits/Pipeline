@@ -7145,8 +7145,24 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # BUG-20260628-1AAC MT-2 보완: diff 텍스트에도 동일 마스킹 적용
     # (테스트 파일 등 diff 내에 ACCEPT 코드 리터럴이 포함될 수 있음)
     diff_txt_masked = _re_codex_body.sub(_ACCEPT_CODE_PATTERN, _ACCEPT_MASK, diff_txt)
+    # BUG-20260628-1AAC rework (Codex REJECT 대응): contract 본문 자체도 마스킹한다.
+    # 계약 6번이 "승인 코드는 검토 입력 어디에도 포함되지 않는다"를 요구하므로, 계약 본문에
+    # 남아 있는 ACCEPT 관련 리터럴(실제 코드 + 설명용 placeholder)을 Codex 입력에서 제거한다.
+    # contract_sha256은 raw 파일 내용(_load_codex_review_contract, hashlib.sha256(text))으로
+    # 계산되므로, 프롬프트용 마스킹은 무결성 SHA에 영향을 주지 않는다.
+    # (1) 실제 코드 형식 ACCEPT-<TYPE>-<YYYYMMDD>-<HEX4>[-<NONCE8>] 마스킹.
+    contract_text_masked = _re_codex_body.sub(
+        _ACCEPT_CODE_PATTERN, _ACCEPT_MASK, contract_text
+    )
+    # (2) 설명용 placeholder 리터럴(예: `ACCEPT-...`, `ACCEPT-IMP-...`) 마스킹.
+    #     실제 코드 패턴과 달리 점(.)·생략부호로 끝나는 비-코드 리터럴도 검토 입력에서 제거한다.
+    #     ACCEPT 다음에 하이픈 + (영문/숫자/점/생략부호) 1자 이상이 이어지는 형태를 포괄한다.
+    _ACCEPT_LITERAL_PATTERN = r"ACCEPT-[A-Za-z0-9.…]+"
+    contract_text_masked = _re_codex_body.sub(
+        _ACCEPT_LITERAL_PATTERN, _ACCEPT_MASK, contract_text_masked
+    )
     prompt = (
-        f"{contract_text}\n\n"
+        f"{contract_text_masked}\n\n"
         "=== 검토 대상 PR ===\n"
         f"PR 제목: {pr_title}\n"
         f"PR URL: {pr_url}\n"
