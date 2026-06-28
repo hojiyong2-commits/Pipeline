@@ -849,10 +849,10 @@ def test_tc13_sort_input_validation() -> None:
     from pipeline import _sort_changed_files_by_priority
     # None 입력 → TypeError
     with pytest.raises(TypeError):
-        _sort_changed_files_by_priority(None)
+        _sort_changed_files_by_priority(None)  # type: ignore[arg-type]
     # 비-list 입력 → TypeError
     with pytest.raises(TypeError):
-        _sort_changed_files_by_priority("pipeline.py")
+        _sort_changed_files_by_priority("pipeline.py")  # type: ignore[arg-type]
     # 비-str 원소 → TypeError
     with pytest.raises(TypeError):
         _sort_changed_files_by_priority([123, "pipeline.py"])
