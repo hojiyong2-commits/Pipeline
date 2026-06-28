@@ -6762,7 +6762,9 @@ _CODEX_CLI_SYSTEM_PREFIXES = (
     "SUCCESS: ",
     "WARNING: ",
     "INFO: ",
-    "ERROR: ",
+    # "ERROR: "는 의도적으로 제외: Codex CLI가 "ERROR: ...\nAPPROVE_TO_USER" 형태로 출력 시
+    # ERROR 줄이 skip되어 APPROVE_TO_USER가 first_ai_line이 되는 취약점 차단 (BUG-20260627-C81C).
+    # ERROR 출력이 있으면 AI 출력 첫 줄이 되어 형식 불일치 → INVALID 처리.
     "Codex CLI",
     "✓",
     "●",
