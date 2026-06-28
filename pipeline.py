@@ -7167,29 +7167,39 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # ("SUCCESS: The process with PID N (child process of PID M) has been terminated.")가
     # 섞여 AI 응답 파싱을 방해했다. `-o` 옵션을 사용하면 AI 마지막 메시지만 파일에 저장되고
     # stdout의 OS 메시지와 완전히 분리된다. AI 출력은 파일에서 읽어 파싱한다.
-    # stdin pipe(`-`)로 프롬프트를 전달: 특수문자/줄바꿈이 있어도 안전 (shell 이스케이프 불필요).
+    #
+    # 프롬프트 전달 방식: stdin pipe(`-`)가 아닌 tempfile + open(stdin=file) 방식.
+    # `cmd /c codex exec -o ... -` + `input=prompt` 조합은 cmd.exe의 stdin 포워딩에
+    # 의존하므로 신뢰성 우려가 있다. 프롬프트를 별도 파일에 저장하고 subprocess stdin에
+    # 파일 디스크립터를 직접 연결하여 cmd.exe stdin 포워딩 없이도 안전하게 전달한다.
     # Windows: codex.cmd는 shell=True 없이 직접 실행 불가. cmd.exe (EXE)를 통해 실행한다.
-    # cmd.exe가 "SUCCESS: The process with PID..." 메시지를 stdout에 출력하더라도,
-    # AI 응답은 -o 파일에 저장되어 있으므로 stdout 오염과 무관하게 파싱할 수 있다.
     import tempfile as _tempfile
     _output_file = _tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", prefix="codex_out_", delete=False, encoding="utf-8"
     )
     _output_path = _output_file.name
     _output_file.close()
+    # 프롬프트를 별도 tempfile에 저장 — stdin 직접 연결용
+    _prompt_file = _tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", prefix="codex_prompt_", delete=False, encoding="utf-8"
+    )
+    _prompt_file.write(prompt)
+    _prompt_file.close()
+    _prompt_path = _prompt_file.name
     if sys.platform == "win32":
         _codex_cmd = ["cmd", "/c", "codex", "exec", "-o", _output_path, "-"]
     else:
         _codex_cmd = ["codex", "exec", "-o", _output_path, "-"]
     try:
-        result = subprocess.run(
-            _codex_cmd,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=300,
-        )
+        with open(_prompt_path, "r", encoding="utf-8") as _stdin_f:
+            result = subprocess.run(
+                _codex_cmd,
+                stdin=_stdin_f,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=300,
+            )
     except FileNotFoundError:
         _die(
             "[BLOCKED] failure_code=codex_cli_not_found\n"
@@ -7200,6 +7210,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "[BLOCKED] failure_code=codex_cli_timeout\n"
             "  codex CLI 호출이 시간 초과되었습니다 (fail-closed, 300초). 다시 실행하세요."
         )
+    finally:
+        try:
+            os.unlink(_prompt_path)
+        except OSError:
+            pass
     if result.returncode != 0:
         _die(
             "[BLOCKED] failure_code=codex_cli_failed\n"
