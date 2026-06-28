@@ -1,0 +1,229 @@
+<dev_report>
+  <round>2</round>
+  <scope_declaration>
+    <files_to_create>없음 (모든 산출 XML/JSON은 파이프라인 게이트 입력용)</files_to_create>
+    <files_to_modify>
+      pipeline.py (MT-1: _cmd_gates_codex_review diff 블록 fail-closed;
+      MT-2: _cmd_gates_request_accept codex_review_result.json SHA 재기록 제거;
+      MT-3: _check_codex_review_gate 독립 SHA 검증),
+      .claude/codex_review_contract.md (MT-4: 11개 항목 전체 재작성),
+      tests/e2e/test_codex_review_gate_3bb6.py (MT-5: TC-5/TC-6/TC-7 강화 + TC-7b 신규),
+      tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json (MT-5),
+      tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json (MT-5)
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>_cmd_gates_codex_review(1) / _check_codex_review_gate(1) / _cmd_gates_request_accept(1) 모두 기존 정의 존재. 헬퍼 _die/_compute_file_sha256/_get_pr_body_text/_get_current_pr_head_sha 재사용.</searched>
+      <decision>EXTEND — 기존 함수 내 결함 라인만 수정, 신규 모듈/함수 생성 없음</decision>
+    </reuse_search>
+    <out_of_scope>nonce 생성/검증/consume 로직, gates accept, _parse_codex_verdict, pipeline.py 체크포인트 로직, 범위 밖 테스트(test_real_cli_paths.py 등)</out_of_scope>
+  </scope_declaration>
+
+  <round2_correction>
+    Round 1은 허위 handover였습니다(git diff 공백, 실제 변경 0). Round 2에서 5개 파일에
+    실제 코드 변경을 적용했습니다. git diff --name-only HEAD = 5개 파일 모두 비공백 diff 확인.
+    git diff --stat: 5 files changed, 349 insertions(+), 213 deletions(-).
+  </round2_correction>
+
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>pipeline._cmd_gates_codex_review</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py(args dispatch)">gates codex-review CLI 핸들러 — 시그니처 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>subprocess.run(git diff)</dep>
+      <dep>_die</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — diff 조회 실패 시 _die(exit 1)로 차단, 상태 변경 없음</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 정상 diff 경로 동일, 실패 경로(FileNotFoundError/TimeoutExpired/OSError/returncode!=0)만 fail-closed BLOCKED로 강화</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-7b(diff 부재 → codex_review_diff_unavailable) 추가, TC-7(placeholder 미포함) 강화</test_coverage>
+      <rollback_strategy>diff 블록을 이전 except placeholder("(diff 조회 실패)") 패턴으로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>pipeline._cmd_gates_request_accept</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py(args dispatch)">gates request-accept CLI 핸들러 — 호출자 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_auto_generate_final_packet_and_update_pr</dep>
+      <dep>_check_codex_review_gate (사전 검증)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>acceptance_request.json (pr_body_sha256/packet_sha256 재기록 — nonce 무결성용, 유지)</mutation>
+      <mutation>codex_review_result.json 재기록 제거 — 더 이상 mutate하지 않음 (2곳 + except/pass 모두 제거)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — codex SHA 자동 동기화 제거로 packet/PR 본문 변경 시 stale 검증이 정상 작동(보안 강화)</breaking_change>
+      <test_coverage>EXISTING — TC-1~TC-9 회귀 + TC-5/TC-6 stale 차단</test_coverage>
+      <rollback_strategy>제거한 codex_review_result.json 재기록 블록 2곳(_cr_post/_cr_else)을 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-3</micro_task_id>
+    <target_function>pipeline._check_codex_review_gate</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:18382 _cmd_gates_request_accept">사전 검증 호출 — 반환 dict['failure_code']를 그대로 출력, 스키마 동일</caller>
+      <caller location="pipeline.py:19828 gates accept 경로">동일 dict 스키마 사용 — 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_packet_output_path / _compute_file_sha256</dep>
+      <dep>_get_pr_body_text / _get_current_pr_head_sha</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — pure 검증 함수, dict 반환만</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — 반환 스키마 동일. _req 분기 우회 제거하고 항상 현재 실제 파일/PR 값과 독립 비교. pipeline_id 불일치와 head SHA 취득불가(인프라 실패)는 기존 stale_codex_review 유지(범위 밖 test_real_cli_paths.py 호환). 실제 값 불일치/빈값만 stale_pr_head_sha/stale_packet_sha256/stale_pr_body_sha256로 분리.</breaking_change>
+      <test_coverage>EXISTING+NEW — TC-4(pipeline_id stale) / TC-5(packet 값 mismatch → stale_packet_sha256) / TC-6(빈 packet → stale_packet_sha256)</test_coverage>
+      <rollback_strategy>SHA 검증부를 이전 _req is not None 분기 구조로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-4</micro_task_id>
+    <target_function>N/A (.claude/codex_review_contract.md — MD 전용)</target_function>
+    <upstream_callers>
+      <caller location="_load_codex_review_contract">contract 파일을 SSoT로 읽음 — 파일 형식/존재만 의존</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_cmd_gates_codex_review (contract_text를 Codex 프롬프트에 포함)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — 정적 문서</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — contract_sha256만 변경됨(검토 시점 고정값). _load_codex_review_contract() status=PASS, sha 64자 확인.</breaking_change>
+      <test_coverage>NEW — _load_codex_review_contract() status=PASS + 11항목 grep(grep "^[0-9]\+\." = 11)</test_coverage>
+      <rollback_strategy>이전 contract.md 내용으로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-5</micro_task_id>
+    <target_function>test_codex_review_gate_3bb6.TC5/TC6/TC7/TC7b/edge_stale_sha</target_function>
+    <upstream_callers>
+      <caller location="pytest">테스트 러너 — 시그니처 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>gates request-accept / gates codex-review (CLI 경로 검증)</dep>
+      <dep>edge_stale_sha oracle (input/expected)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — 격리된 PIPELINE_STATE_PATH tmp_path만 사용</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — _write_fake_gh_3bb6/make_env에 head_sha 파라미터 추가(기본값 "" 하위호환)</signature_change>
+      <breaking_change>NO — 기존 TC 통과 보존, assert 강화 + TC-7b 신규</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-5(정확히 stale_packet_sha256), TC-6(정확히 stale_packet_sha256), TC-7(diff --git/변경 파일명 + placeholder 미포함), TC-7b(codex_review_diff_unavailable), oracle 3개 SHA 독립 케이스</test_coverage>
+      <rollback_strategy>TC-5/6/7 assert와 oracle json, fake gh head_sha 주입을 이전 버전으로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-6</micro_task_id>
+    <target_function>pipeline._cmd_gates_codex_review, pipeline._sort_changed_files_by_priority</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py CLI dispatch">gates codex-review 핸들러 — 호출자 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_get_changed_files_from_git (변경 파일 목록 수집)</dep>
+      <dep>subprocess.run git diff (per-file patch 수집)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>codex_review_result.json에 included_files/excluded_files 필드 추가</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — diff 수집 방식 내부 변경, APPROVE/REJECT 파싱·보안 제약 보존</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-10~TC-13(_sort_changed_files_by_priority 단위 테스트), TC-7 chr() 조합 수정</test_coverage>
+      <rollback_strategy>_sort_changed_files_by_priority 제거, diff 수집을 전체 8000자 잘라쓰기로 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>.claude/codex_review_contract.md, pipeline.py, tests/e2e/test_codex_review_gate_3bb6.py, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json</git_diff_files>
+    <manifest_files>pipeline.py, .claude/codex_review_contract.md, tests/e2e/test_codex_review_gate_3bb6.py, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json, tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false — 변경된 tests/** 와 .claude/codex_review_contract.md 는 모두 PM scope_manifest target_files에 포함됨</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS — 함수 시그니처 변경 없음, make_env head_sha: str 타입힌트 추가</type_hinting>
+    <error_handling>PASS — diff 실패(FileNotFoundError/TimeoutExpired/OSError/returncode!=0)/SHA 취득 실패/빈 SHA 모두 fail-closed</error_handling>
+    <path_safety>N/A — 신규 경로 처리 없음</path_safety>
+    <security>PASS — fail-open placeholder/codex SHA 자동 동기화/req 빈 SHA 우회 모두 제거. 보안 5대 제약(자동 ACCEPT 금지, nonce 미노출, gates accept 자동실행 금지, nonce 로직 완화 금지, Codex APPROVE의 User Acceptance 승격 금지) 보존.</security>
+    <docstring>PASS — _check_codex_review_gate docstring을 독립 SHA 검증 동작에 맞게 갱신</docstring>
+    <execution_check>PASS — py_compile OK(pipeline.py + test), import OK, oracle JSON parse OK, pytest tests/e2e/test_codex_review_gate_3bb6.py = 11 passed</execution_check>
+    <impact_analysis_check>PASS — 5개 MT 각각 impact_analysis 출력, state_mutations 명시, risk_assessment 4필드</impact_analysis_check>
+    <frozen_codebase_check>PASS — 각 MT 대상 함수/파일만 변경, 무관 리팩토링 0건, OAR 1회(head-unobtainable failure_code를 stale_codex_review로 유지하는 범위 보존 수정)</frozen_codebase_check>
+  </self_check>
+
+  <sync_verification>
+    <grep_pattern>codex_review_result.json packet_sha256/pr_body_sha256 재기록 (_cr_post/_cr_else, request-accept 범위)</grep_pattern>
+    <locations_found>pipeline.py _cmd_gates_request_accept (2곳: pr_body 변경/미변경 경로)</locations_found>
+    <locations_updated>pipeline.py _cmd_gates_request_accept (2곳 모두 제거, grep "_cr_post\|_cr_else" = 0)</locations_updated>
+    <sync_status>COMPLETE</sync_status>
+  </sync_verification>
+
+  <ac_grep_evidence>
+    <ac id="AC-1">grep "codex_review_diff_unavailable" pipeline.py → 4건 (라인 6909/6915/6921/6927: FileNotFoundError/TimeoutExpired/OSError/returncode!=0). placeholder "diff_txt = \"(diff 조회 실패)\"" 할당 0건.</ac>
+    <ac id="AC-3">grep "_cr_post\|_cr_else\|_updated_new_pkt_sha\|_new_pkt_sha_else" pipeline.py → 0건 (codex_review_result.json 재기록 블록 2곳 + except/pass 제거 완료).</ac>
+    <ac id="AC-4">grep "^[0-9]\+\." .claude/codex_review_contract.md → 11건. _load_codex_review_contract() status=PASS, contract_sha256 64자.</ac>
+    <ac id="AC-5">_check_codex_review_gate 독립 stale 검증: pipeline.py 라인 7211(stale_pr_head_sha 값불일치), 7226/7239/7249(stale_packet_sha256 빈값/취득불가/불일치), 7261/7276/7286(stale_pr_body_sha256 빈값/취득불가/불일치). acceptance_request.json 유무 무관하게 항상 현재 실제 packet/PR 본문 SHA와 직접 비교. (head SHA 취득불가는 인프라 실패로 stale_codex_review 유지 — 범위 밖 회귀 방지.)</ac>
+  </ac_grep_evidence>
+
+  <regression_note>
+    범위 밖 사전(pre-existing) 실패 11건(test_request_accept_sst_2044.py / test_acceptance_request_verification_json.py / test_evidence_inventory_82ed.py)은 이전 IMP-20260627-3BB6 SSoT 전환으로 인한 기존 실패이며, 본 변경(pipeline.py)을 git stash로 제거한 baseline에서도 동일하게 11건 실패함을 확인했습니다(11 failed in baseline = 11 failed with changes). 본 Round 2 변경은 신규 회귀 0건. test_real_cli_paths.py::test_gates_accept_provenance_gh_missing 은 head SHA 취득불가 케이스를 stale_codex_review로 유지하여 PASS 보존.
+  </regression_note>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260627-C81C</pipeline_id>
+    <round>2</round>
+    <summary>
+      Round 1 허위 handover(실변경 0)를 정정하여, IMP-20260627-3BB6 REJECT의 5개 구현 버그를 실제로 수정했습니다.
+      MT-1 (AC-1): gates codex-review의 git diff 조회 실패를 placeholder 없이 codex_review_diff_unavailable fail-closed BLOCKED 처리(4개 예외 경로).
+      MT-2 (AC-3): request-accept 후처리의 codex_review_result.json packet_sha256/pr_body_sha256 재기록 블록 2곳(except/pass 포함) 제거.
+      MT-3 (AC-5): _check_codex_review_gate가 pr_head_sha/packet_sha256/pr_body_sha256를 acceptance_request 유무와 무관하게 각각 독립으로 현재 실제 값과 비교. 값 불일치/빈값은 고유 failure_code(stale_pr_head_sha/stale_packet_sha256/stale_pr_body_sha256)로 분리. head SHA 취득불가(gh 부재)는 인프라 실패로 stale_codex_review 유지.
+      MT-4 (AC-4): codex_review_contract.md를 11개 항목으로 전체 재작성(목적/출력형식/APPROVE/REJECT/자동ACCEPT금지/nonce노출금지/PR댓글금지/merge·deploy금지/pipeline.py수정금지/fail-open금지/회귀금지).
+      MT-5 (AC-2,AC-5): TC-5/TC-6(정확히 stale_packet_sha256), TC-7(diff --git/변경 파일명 + placeholder 미포함), TC-7b 신규(codex_review_diff_unavailable), edge_stale_sha 오라클(3개 SHA 독립 케이스) 강화.
+      MT-6 (AC-1,AC-MT6-1~5): _sort_changed_files_by_priority 신규 helper 추가 (trust-root 우선, pipeline.py 1순위). _cmd_gates_codex_review의 diff 수집을 전체 8000자 잘라쓰기에서 per-file patch(DIFF_BUDGET=120000) + trust-root 우선으로 교체. pipeline.py 누락 시 codex_review_diff_incomplete BLOCKED, budget 초과 시 codex_review_diff_too_large BLOCKED. TC-10~TC-13 추가, TC-7 chr() 조합으로 self-detect 회귀 차단. 전체 15 passed.
+    </summary>
+    <evidence>
+      pipeline.py, .claude/codex_review_contract.md, tests/e2e/test_codex_review_gate_3bb6.py,
+      tests/oracles/IMP-20260627-3BB6/edge_stale_sha/input.json,
+      tests/oracles/IMP-20260627-3BB6/edge_stale_sha/expected.json
+    </evidence>
+    <execution_check>
+      python -m py_compile pipeline.py tests/e2e/test_codex_review_gate_3bb6.py: PASS
+      python -c "import pipeline": PASS
+      python -c "_load_codex_review_contract() status=PASS, sha 64자": PASS (11항목 grep 확인)
+      oracle input.json/expected.json json.load: PASS
+      pytest tests/e2e/test_codex_review_gate_3bb6.py: 15 passed (MT-6 TC-10~TC-13 추가)
+      git diff --name-only HEAD: 5개 파일 모두 실제 변경 확인
+    </execution_check>
+    <module_gate>MT-1~MT-6 module QA PASS</module_gate>
+    <known_constraints>
+      MT-1/2/3가 모두 pipeline.py를 수정하므로, 모듈 체크포인트(full-file SHA) 정합을 위해
+      세 MT의 pipeline.py 변경을 모두 적용한 최종 상태에서 게이트 시퀀스를 진행합니다.
+      보안 절대 제약(자동 ACCEPT 금지, nonce 미노출, gates accept 자동 실행 금지, nonce 보안 로직 완화 금지,
+      Codex APPROVE를 User Acceptance PASS로 기록 금지)은 모두 보존했습니다.
+      범위 밖 사전 실패 11건은 regression_note 참조(본 변경과 무관, baseline 동일 실패).
+    </known_constraints>
+  </handover>
+</dev_report>
