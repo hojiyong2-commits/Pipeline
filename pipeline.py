@@ -7133,11 +7133,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # 포함되지 않는다") 준수. packet_text는 이미 마스킹되어 있으나 pr_body는 누락되어 있었다.
     # 라인 앵커가 아닌 inline 패턴으로 본문 어디에 있든(라인 중간 포함) 마스킹한다.
     import re as _re_codex_body
+    _ACCEPT_CODE_PATTERN = r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}(?:-[0-9A-Z]{4})?"
+    _ACCEPT_MASK = "[ACCEPT코드 마스킹]"
     pr_body_masked = _re_codex_body.sub(
-        r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}",
-        "[ACCEPT코드 마스킹]",
+        _ACCEPT_CODE_PATTERN,
+        _ACCEPT_MASK,
         pr_body[:5000],
     )
+    # BUG-20260628-1AAC MT-2 보완: diff 텍스트에도 동일 마스킹 적용
+    # (테스트 파일 등 diff 내에 ACCEPT 코드 리터럴이 포함될 수 있음)
+    diff_txt_masked = _re_codex_body.sub(_ACCEPT_CODE_PATTERN, _ACCEPT_MASK, diff_txt)
     prompt = (
         f"{contract_text}\n\n"
         "=== 검토 대상 PR ===\n"
@@ -7149,7 +7154,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         f"== Git Diff (실제 변경 내용, 파일별 patch, trust-root 우선, budget={DIFF_BUDGET}자) ==\n"
         f"포함된 파일: {', '.join(included_files)}\n"
         f"제외된 파일: {', '.join(excluded_files) if excluded_files else '없음'}\n\n"
-        f"{diff_txt}\n\n"
+        f"{diff_txt_masked}\n\n"
         "== CI 상태 ==\n"
         f"  github_ci: {ci_status} ({ci_run_id})\n"
         f"  oracle: {state.get('external_gates', {}).get('oracle', {}).get('status', 'UNKNOWN')}\n"
