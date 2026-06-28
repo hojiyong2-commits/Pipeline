@@ -1,0 +1,7 @@
+{
+  "case_id": "edge_info_prefix_invalid",
+  "case_kind": "edge",
+  "scenario": "Codex CLI stdout의 첫 줄이 INFO: prefix로 시작하고 이후 APPROVE_TO_USER 출력",
+  "codex_raw_stdout": "INFO: 문제 없음\nAPPROVE_TO_USER",
+  "first_line_has_info_prefix": true
+}
