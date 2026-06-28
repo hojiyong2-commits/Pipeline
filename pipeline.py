@@ -7011,9 +7011,9 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # 총 budget (자). AC-1("pipeline.py 변경이 항상 Codex packet에 포함")을 만족하려면
     # 최우선 trust-root 파일(pipeline.py) patch 전체가 들어갈 만큼 충분해야 한다.
     # 본 PR의 pipeline.py patch만 ~52KB이므로 40000으로는 self-block(codex_review_diff_incomplete)이
-    # 발생한다. trust-root 파일 patch를 모두 수용하도록 200000으로 설정한다.
-    # pipeline.py (~52KB) + hooks (~40KB) + 기타 파일들을 모두 수용하기 위해 상향.
-    DIFF_BUDGET = 200000
+    # 발생한다. trust-root 파일 patch를 모두 수용하도록 250000으로 설정한다.
+    # pipeline.py (~59KB) + hooks (~40KB) + test_3bb6 (~59KB) + 기타 파일들을 모두 수용하기 위해 상향.
+    DIFF_BUDGET = 250000
     PIPELINE_PY = "pipeline.py"
     sorted_files = _sort_changed_files_by_priority(changed_files)
     included_files: list = []
