@@ -6760,11 +6760,12 @@ def _codex_review_result_path() -> Path:
 # 계약은 "AI 출력 첫 줄"을 말하며 Codex CLI 런타임 메시지는 해당하지 않는다.
 _CODEX_CLI_SYSTEM_PREFIXES = (
     "SUCCESS: ",
-    "WARNING: ",
-    "INFO: ",
-    # "ERROR: "는 의도적으로 제외: Codex CLI가 "ERROR: ...\nAPPROVE_TO_USER" 형태로 출력 시
-    # ERROR 줄이 skip되어 APPROVE_TO_USER가 first_ai_line이 되는 취약점 차단 (BUG-20260627-C81C).
-    # ERROR 출력이 있으면 AI 출력 첫 줄이 되어 형식 불일치 → INVALID 처리.
+    # BUG-20260628-1AAC MT-1: "INFO: "/"WARNING: "는 _CODEX_CLI_SYSTEM_PREFIXES에서 제거한다.
+    # AI 모델이 "INFO: 문제 없음\nAPPROVE_TO_USER" 또는 "WARNING: ...\nAPPROVE_TO_USER" 형태로
+    # 출력하면 INFO/WARNING 줄이 skip되어 APPROVE_TO_USER가 first_ai_line이 되는 우회가 가능했다.
+    # 이제 INFO:/WARNING: 줄도 AI 출력으로 취급되어 형식 불일치 → INVALID 처리된다.
+    # "ERROR: "도 동일 사유로 의도적으로 제외 (BUG-20260627-C81C): Codex CLI가
+    # "ERROR: ...\nAPPROVE_TO_USER" 형태로 출력 시 ERROR 줄이 AI 출력 첫 줄이 되어 INVALID.
     "Codex CLI",
     "✓",
     "●",
@@ -6828,6 +6829,46 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         }
     # 첫 AI 출력 줄이 올바른 형식이 아니면 INVALID.
     return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
+
+
+# BUG-20260628-1AAC MT-3: Codex review가 반드시 봐야 하는 trust-root 핵심 파일 SSoT 목록.
+# 이 목록의 파일(또는 prefix 경로 하위 파일)이 budget 초과로 Codex packet에서 제외되면
+# codex_review_diff_incomplete로 BLOCKED 처리하여, 핵심 변경이 검토 없이 통과하는 우회를 차단한다.
+# 정확 경로(예: "pipeline.py")와 prefix 경로(예: ".claude/agents/")를 모두 지원한다.
+CODEX_REVIEW_CRITICAL_FILES = (
+    ".claude/codex_review_contract.md",
+    ".claude/agents/",
+    "pipeline.py",
+    "CLAUDE.md",
+    ".github/workflows/",
+)
+
+
+def _is_codex_critical_file(path: str) -> bool:
+    """주어진 경로가 CODEX_REVIEW_CRITICAL_FILES에 해당하는지 판정.
+
+    정확 경로 일치 또는 prefix("/"로 끝나는 항목) 하위 경로 일치를 모두 검사한다.
+    경로 구분자는 "/"로 정규화하여 Windows("\\")와 POSIX를 일관되게 비교한다.
+
+    Args:
+        path: 비교할 변경 파일 경로 문자열.
+    Returns:
+        trust-root 핵심 파일이면 True, 아니면 False.
+    Raises:
+        TypeError: path가 None이거나 str가 아닌 경우.
+    """
+    if path is None:
+        raise TypeError("path must not be None")
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    norm = path.replace("\\", "/")  # allowed: 경로 구분자 정규화 (비교 일관성)
+    for critical in CODEX_REVIEW_CRITICAL_FILES:
+        if critical.endswith("/"):
+            if norm.startswith(critical):
+                return True
+        elif norm == critical:
+            return True
+    return False
 
 
 # [Purpose]: Codex review packet에 포함할 changed_files를 trust-root 우선 순서로 정렬하여
@@ -7033,6 +7074,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "  PR을 더 작게 나누거나 pipeline.py를 먼저 commit하세요.\n"
             "  failure_code=codex_review_diff_incomplete"
         )
+    # BUG-20260628-1AAC MT-3: trust-root 핵심 파일(CODEX_REVIEW_CRITICAL_FILES)이
+    # budget 초과로 Codex packet에서 제외되면 fail-closed BLOCKED 처리한다.
+    # pipeline.py뿐 아니라 codex_review_contract.md/.claude/agents//CLAUDE.md/.github/workflows/도
+    # 검토 없이 통과하는 우회를 차단한다.
+    _excluded_critical = [p for p in excluded_files if _is_codex_critical_file(p)]
+    if _excluded_critical:
+        _die(
+            "[BLOCKED] failure_code=codex_review_diff_incomplete\n"
+            f"  trust-root 핵심 파일이 budget 초과로 Codex packet에서 제외되었습니다 (fail-closed): "
+            f"{', '.join(_excluded_critical)}\n"
+            f"  현재 diff budget={DIFF_BUDGET}자. 핵심 파일 patch가 budget을 초과합니다.\n"
+            "  PR을 더 작게 나누거나 핵심 파일을 먼저 commit하세요.\n"
+            "  failure_code=codex_review_diff_incomplete"
+        )
     # 포함된 파일이 하나도 없으면 budget 초과.
     if not included_files:
         _die(
@@ -7073,6 +7128,16 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         pr_title = (_title_res.stdout or "").strip()
     except Exception:  # nosec B110
         pass
+    # BUG-20260628-1AAC MT-2: PR 본문에 승인 코드(ACCEPT-...)가 포함되어 있어도 Codex
+    # 프롬프트에는 마스킹하여 전달한다. 계약 6번("승인 코드는 검토 입력/출력 어디에도
+    # 포함되지 않는다") 준수. packet_text는 이미 마스킹되어 있으나 pr_body는 누락되어 있었다.
+    # 라인 앵커가 아닌 inline 패턴으로 본문 어디에 있든(라인 중간 포함) 마스킹한다.
+    import re as _re_codex_body
+    pr_body_masked = _re_codex_body.sub(
+        r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}",
+        "[ACCEPT코드 마스킹]",
+        pr_body[:5000],
+    )
     prompt = (
         f"{contract_text}\n\n"
         "=== 검토 대상 PR ===\n"
@@ -7092,7 +7157,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "== 최종 확인 패킷 (human_acceptance_packet.md) ==\n"
         f"{packet_text}\n\n"
         "== PR 본문 (최대 5000자) ==\n"
-        f"{pr_body[:5000]}\n\n"
+        f"{pr_body_masked}\n\n"
         "위 계약(contract)의 금지 사항을 준수하고, 출력 형식(APPROVE_TO_USER 또는 "
         "REJECT - <구체적 사유>) 중 하나로만 답하세요."
     )
