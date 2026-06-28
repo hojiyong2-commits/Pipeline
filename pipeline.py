@@ -6788,11 +6788,12 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
     # 이전 구현은 line.strip() + 빈 줄 skip(continue)으로 선행 공백/빈 줄을 무시했고,
     # 그 결과 "\n APPROVE_TO_USER" 처럼 선행 공백/빈 줄 뒤의 APPROVE_TO_USER도 승인될 수 있었다.
     # 첫 번째 raw 줄(첫 "\n" 이전)을 그대로 꺼내 검증한다.
-    #   - rstrip()만 적용: 출력 끝의 trailing newline/space 제거는 일반적 출력 형식이므로 허용.
-    #   - lstrip()/strip() 금지: 선행 공백이 있으면 "첫 줄 정확 일치" 위반 → INVALID.
+    # BUG-20260628-1AAC rework 5차: trailing 공백/공백+CR도 "첫 줄 정확 일치" 위반이므로 INVALID.
+    #   - 허용: trailing \r 제거만 (Windows CRLF 개행의 CR 부분 — "\n"으로 split 후 남는 \r).
+    #   - 금지: lstrip()/strip()/rstrip() — 선행·후행 공백 및 trailing space는 모두 정확 일치 위반.
     #   - 빈 줄 skip 로직 제거: 첫 raw 줄을 그대로 사용한다.
     raw_lines = raw.split("\n")  # rsplit/splitlines 아님 — 첫 "\n" 이전 첫 원소만 사용
-    first_raw_line = raw_lines[0].rstrip()  # allowed: trailing 공백/CR 제거만, lstrip 금지
+    first_raw_line = raw_lines[0].rstrip("\r")  # Windows CRLF의 \r만 제거, 공백은 보존하여 INVALID
     # 첫 raw 줄이 비어 있으면(선행 빈 줄/공백) INVALID — 계약 "첫 줄 정확 일치" 위반.
     if first_raw_line == "":
         return {"status": "INVALID", "verdict": "", "reject_reason": ""}
