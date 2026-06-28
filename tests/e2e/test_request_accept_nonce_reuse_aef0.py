@@ -152,13 +152,18 @@ def _codex_approve(state_path: Path, cwd: Path, extra_env: Optional[Dict[str, st
 
     request-accept가 "Codex APPROVE 이후에만 publish" 흐름으로 재설계되었으므로,
     성공을 기대하는 TC는 이 헬퍼로 staged snapshot을 사전 승인해야 한다.
+
+    CLI Evidence Contract: PIPELINE_STATE_PATH 환경변수를 통해 state 격리.
+    codex_review_result.json(final_state SSoT)에 verdict를 기록한다.
     """
-    _run_pipeline(
+    result = _run_pipeline(
         ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
         state_path,
         cwd=cwd,
         extra_env=extra_env,
     )
+    # CLI Evidence: PIPELINE_STATE_PATH로 격리된 state에 codex_review_result(final_state) 기록됨
+    assert result.returncode == 0, f"codex-review approve failed: {result.stderr}"
 
 
 def _write_state(state_path: Path, pipeline_id: str) -> None:

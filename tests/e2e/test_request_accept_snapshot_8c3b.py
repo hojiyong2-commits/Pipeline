@@ -84,11 +84,18 @@ def run_cli(
 # staged snapshot을 APPROVE해야 한다. --approve-pending이 request-accept가 stage할 packet과
 # 동일한 결정적 SHA를 기록하므로, 그 직후 request-accept가 불변식을 통과한다.
 def codex_approve_pending(env: Dict[str, str]) -> "subprocess.CompletedProcess[str]":
-    """request-accept 직전에 호출 — staged snapshot을 APPROVE_TO_USER로 기록한다."""
-    return run_cli(
+    """request-accept 직전에 호출 — staged snapshot을 APPROVE_TO_USER로 기록한다.
+
+    CLI Evidence Contract: PIPELINE_STATE_PATH 환경변수를 통해 state 격리.
+    codex_review_result.json(final_state SSoT)에 verdict를 기록한다.
+    """
+    result = run_cli(
         ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
         env=env,
     )
+    # CLI Evidence: PIPELINE_STATE_PATH로 격리된 state에 codex_review_result(final_state) 기록됨
+    assert result.returncode == 0, f"codex-review approve failed: {result.stderr}"
+    return result
 
 
 # IMP-20260612-E12D MT-2: conftest의 autouse fake gh fixture가 제거되어
