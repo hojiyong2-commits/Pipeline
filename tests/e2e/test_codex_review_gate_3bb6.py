@@ -949,6 +949,13 @@ def test_tc14b_info_prefix_unit() -> None:
     assert _parse_codex_verdict(
         "SUCCESS: The process with PID 12345 (child process of PID 67890) has been terminated.\nAPPROVE_TO_USER"
     )["status"] == "INVALID"
+    # BUG-20260628-1AAC: REJECT 형식 엄격 검증 — "REJECT - <사유>" 정확 형식만 허용.
+    # "REJECT-사유"(공백 없는 형식), "REJECT-사유"(공백-하이픈-사유 순서 미준수) → INVALID.
+    assert _parse_codex_verdict("REJECT-이유없음")["status"] == "INVALID"
+    assert _parse_codex_verdict("REJECT -이유")["status"] == "INVALID"
+    assert _parse_codex_verdict("REJECT  - 이유")["status"] == "INVALID"
+    # 올바른 REJECT 형식 → REJECTED
+    assert _parse_codex_verdict("REJECT - 구체적인 사유")["status"] == "REJECTED"
 
 
 # ---------------------------------------------------------------------------

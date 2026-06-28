@@ -6803,7 +6803,9 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
             # APPROVE_TO_USER 뒤 추가 AI 출력 → INVALID (계약 "정확히 한 줄" 위반)
             return {"status": "INVALID", "verdict": first_ai_line, "reject_reason": ""}
         return {"status": "APPROVED", "verdict": "APPROVE_TO_USER", "reject_reason": ""}
-    reject_match = re.match(r"^REJECT\s*-\s*(.+)$", first_ai_line, re.DOTALL)
+    # BUG-20260628-1AAC: 계약 2번 엄격 형식 검증 — "REJECT - <사유>" (공백-하이픈-공백 정확).
+    # \s* 허용은 "REJECT-사유"(공백 없음) 등 형식 위반 출력도 유효 REJECT로 처리하므로 제거.
+    reject_match = re.match(r"^REJECT - (.+)$", first_ai_line, re.DOTALL)
     if reject_match:
         if len(ai_lines) > 1:
             # REJECT 뒤 추가 AI 출력 → INVALID (계약 "정확히 한 줄" 위반)
