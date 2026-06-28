@@ -6755,29 +6755,23 @@ def _codex_review_result_path() -> Path:
     return PIPELINE_CI_DIR / "codex_review_result.json"
 
 
-# Windows OS가 Codex CLI 서브프로세스 종료 시 stdout에 출력하는 특정 런타임 메시지 정규식.
-# 형식: "SUCCESS: The process with PID <숫자> (child process of PID <숫자>) has been terminated."
-# startswith 방식의 prefix 필터링은 AI가 동일 prefix로 시작하는 출력을 만들어 우회할 수 있다.
-# 따라서 전체 라인을 정규식으로 완전 매칭하여 OS 런타임 메시지만 정확히 식별한다.
-# BUG-20260628-1AAC: 광범위 prefix 튜플(_CODEX_CLI_SYSTEM_PREFIXES) 제거 →
-#   fullmatch 정규식으로 교체. AI가 해당 패턴을 정확히 재현하기 어렵고,
-#   실수로 재현해도 이 메시지 단독으로는 APPROVE_TO_USER/REJECT를 포함하지 않아 INVALID 처리.
-_CODEX_WIN_PROCESS_EXIT_RE = re.compile(
-    r"SUCCESS: The process with PID \d+ \(child process of PID \d+\) has been terminated\."
-)
+# BUG-20260628-1AAC: Windows OS 런타임 메시지 필터링 완전 제거.
+# 계약 2번("출력 첫 줄은 정확히 APPROVE_TO_USER 또는 REJECT - <사유> 한 줄이어야 한다") 엄격 적용.
+# Windows 런타임 메시지("SUCCESS: The process with PID N...") + APPROVE_TO_USER 조합도 INVALID.
+# fail-closed 원칙: OS 메시지가 섞여도 계약 형식에 맞지 않으면 INVALID 처리.
+# (이전: _CODEX_CLI_SYSTEM_PREFIXES 튜플 / fullmatch 정규식 — 모두 Codex 계약 2번 위반으로 REJECT됨)
 
 
 def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
     """Codex CLI 출력에서 verdict를 파싱한다.
 
     계약(codex_review_contract.md) 규정: "당신의 출력 첫 줄은 정확히 다음 두 형식 중
-    하나여야 합니다." 즉 비-시스템 AI 출력은 정확히 1줄이어야 하며, 그 줄이
+    하나여야 합니다." 즉 모든 비-빈 출력 줄은 정확히 1줄이어야 하며, 그 줄이
     APPROVE_TO_USER 또는 REJECT - <사유> 형식이어야 한다.
 
-    Windows OS 런타임 메시지(_CODEX_WIN_PROCESS_EXIT_RE)는 AI 출력이 아니므로 제외한다.
-    전체 라인 정규식 fullmatch로만 필터링하여 prefix 우회(AI가 동일 prefix 출력) 차단.
-    시스템 메시지 제외 후 AI 출력이 1줄을 초과하거나 형식 불일치이면 INVALID.
-    이를 통해 APPROVE_TO_USER 뒤에 설명을 추가하는 방식의 우회를 방지한다.
+    BUG-20260628-1AAC: OS 런타임 메시지 필터링 완전 제거. 계약 2번 엄격 적용.
+    계약 형식에 맞지 않는 모든 출력(OS 메시지 포함)은 INVALID 처리한다.
+    이를 통해 어떠한 prefix 우회도 차단하고 fail-closed를 유지한다.
 
     Args:
         raw: codex CLI stdout 텍스트.
@@ -6790,15 +6784,11 @@ def _parse_codex_verdict(raw: str) -> Dict[str, Any]:
         raise TypeError("raw must not be None")
     if not isinstance(raw, str):
         raise TypeError(f"raw must be str, got {type(raw).__name__}")
-    # Windows OS 런타임 메시지를 제외한 모든 비-빈 AI 출력 줄을 수집한다.
-    # fullmatch로 전체 라인을 검사하여 prefix 우회(AI가 동일 prefix로 시작하는 출력 생성)를 차단한다.
+    # 모든 비-빈 출력 줄을 수집한다. OS 런타임 메시지 필터링 없음(계약 2번 엄격 적용).
     ai_lines = []
     for line in raw.splitlines():
         stripped = line.strip()
         if not stripped:
-            continue
-        # Windows OS 런타임 메시지는 fullmatch로만 필터링 (prefix 방식은 AI 우회 벡터)
-        if _CODEX_WIN_PROCESS_EXIT_RE.fullmatch(stripped):
             continue
         ai_lines.append(stripped)
     # AI 출력이 없으면 INVALID.

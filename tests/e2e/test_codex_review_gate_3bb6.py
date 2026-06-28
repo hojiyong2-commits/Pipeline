@@ -912,18 +912,14 @@ def test_tc14b_info_prefix_unit() -> None:
 
     BUG-20260628-1AAC MT-1: WARNING:/INFO: prefix 모두 AI 출력으로 취급되는지 단위로 확인한다.
 
-    MT-1 전후 동작 정리:
-    - INFO:/WARNING:/ERROR: prefix: MT-1 수정 후 AI 출력으로 취급 → INVALID
-      이유: MT-1 수정 전 _CODEX_CLI_SYSTEM_PREFIXES에 포함되어 bypass 가능했음
+    BUG-20260628-1AAC 최종 정리 (계약 2번 엄격 적용):
+    - INFO:/WARNING:/ERROR: prefix: AI 출력으로 취급 → INVALID (bypass 차단)
     - 제네릭 "SUCCESS: " prefix: AI 출력으로 취급 → INVALID (우회 방지)
-      이유: "SUCCESS: 완료\nAPPROVE_TO_USER" 형식으로 우회 가능
-    - "Codex CLI", "checkmark", "bullet" prefix: AI 출력으로 취급 → INVALID (우회 방지)
-      이유: BUG-20260628-1AAC — "checkmark 문제없음\nAPPROVE_TO_USER" 형식으로 우회 가능
-      광범위 prefix 튜플(_CODEX_CLI_SYSTEM_PREFIXES) 제거 → fullmatch 정규식으로 교체
-    - Windows OS 런타임 메시지 fullmatch 패턴만: 시스템 메시지로 필터링 → 다음 줄이 verdict
-      패턴: r"SUCCESS: The process with PID \d+ \(child process of PID \d+\) has been terminated\."
-      이유: Codex CLI 종료 시 Windows OS가 stdout에 출력, AI 출력이 아님
-      fullmatch로 전체 라인을 검사하므로 prefix 우회 불가
+    - "checkmark", "Codex CLI" 등 prefix: AI 출력으로 취급 → INVALID (우회 방지)
+    - Windows OS 런타임 메시지 "SUCCESS: The process with PID N...": AI 출력으로 취급 → INVALID
+      이유: 어떠한 OS/CLI 런타임 메시지도 계약 2번("첫 줄이 정확히 한 형식") 위반 → INVALID
+      OS 런타임 메시지 필터링 완전 제거 — fail-closed 원칙 유지.
+    - 순수 APPROVE_TO_USER: APPROVED (회귀 없음)
     """
     from pipeline import _parse_codex_verdict
     # INFO: prefix → INVALID (MT-1: bypass 차단, AI 출력으로 취급)
@@ -933,22 +929,15 @@ def test_tc14b_info_prefix_unit() -> None:
     # 순수 APPROVE_TO_USER → APPROVED (회귀 없음)
     assert _parse_codex_verdict("APPROVE_TO_USER")["status"] == "APPROVED"
     # 제네릭 "SUCCESS: " prefix: AI 출력으로 취급 → INVALID (우회 방지)
-    # "SUCCESS: 완료\nAPPROVE_TO_USER" 형식은 우회 가능하므로 INVALID 처리.
     assert _parse_codex_verdict("SUCCESS: 완료\nAPPROVE_TO_USER")["status"] == "INVALID"
-    # "checkmark" prefix: AI 출력으로 취급 → INVALID (BUG-20260628-1AAC: 광범위 prefix 우회 차단)
-    # "checkmark 문제없음\nAPPROVE_TO_USER" 형식으로 우회 가능했으므로 prefix 튜플에서 제거.
+    # "checkmark" prefix: AI 출력으로 취급 → INVALID (우회 차단)
     assert _parse_codex_verdict("✓ 문제없음\nAPPROVE_TO_USER")["status"] == "INVALID"
-    # "Codex CLI" prefix: AI 출력으로 취급 → INVALID (광범위 prefix 우회 차단)
+    # "Codex CLI" prefix: AI 출력으로 취급 → INVALID (우회 차단)
     assert _parse_codex_verdict("Codex CLI 검토 완료\nAPPROVE_TO_USER")["status"] == "INVALID"
-    # Windows OS 런타임 메시지 fullmatch + APPROVE_TO_USER → 필터링 후 APPROVED (정상 동작)
-    # fullmatch: r"SUCCESS: The process with PID \d+ \(child process of PID \d+\) has been terminated\."
-    # 전체 라인이 정확히 이 패턴과 일치할 때만 OS 런타임 메시지로 판정하므로 AI 우회 불가.
+    # Windows OS 런타임 메시지 + APPROVE_TO_USER → INVALID (계약 2번 엄격 적용, 필터링 없음)
+    # OS 런타임 메시지 필터링 완전 제거: 계약 형식에 맞지 않는 출력은 모두 INVALID.
     assert _parse_codex_verdict(
         "SUCCESS: The process with PID 12345 (child process of PID 67890) has been terminated.\nAPPROVE_TO_USER"
-    )["status"] == "APPROVED"
-    # prefix만 일치하고 뒤에 추가 텍스트가 있는 경우: fullmatch 불일치 → AI 출력으로 취급 → INVALID
-    assert _parse_codex_verdict(
-        "SUCCESS: The process with PID 12345 (child process of PID 67890) has been terminated. Extra.\nAPPROVE_TO_USER"
     )["status"] == "INVALID"
 
 
