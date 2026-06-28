@@ -1,0 +1,55 @@
+{
+  "pipeline_id": "BUG-20260628-1AAC",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py", "tests/e2e/test_codex_review_gate_3bb6.py"],
+      "affected_functions": ["pipeline._parse_codex_verdict"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1"],
+          "changed_files": ["pipeline.py", "tests/e2e/test_codex_review_gate_3bb6.py"],
+          "implementation_evidence": [
+            "_CODEX_CLI_SYSTEM_PREFIXES 튜플에서 \"INFO: \"와 \"WARNING: \" 항목 제거 — 이제 INFO:/WARNING: prefix 줄도 AI 출력으로 취급되어 _parse_codex_verdict가 형식 불일치 INVALID 반환",
+            "test_tc14_info_prefix_invalid: 'INFO: 문제 없음\\nAPPROVE_TO_USER' 입력 시 gates codex-review exit 1 + codex_verdict_invalid 검증",
+            "test_tc14b_info_prefix_unit: _parse_codex_verdict 단위 — INFO:/WARNING: prefix는 INVALID, 순수 APPROVE_TO_USER와 SUCCESS: 시스템 메시지는 APPROVED 회귀 검증"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py", "tests/e2e/test_codex_review_gate_3bb6.py"],
+      "affected_functions": ["pipeline._cmd_gates_codex_review"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-2"],
+          "changed_files": ["pipeline.py", "tests/e2e/test_codex_review_gate_3bb6.py"],
+          "implementation_evidence": [
+            "_cmd_gates_codex_review에서 pr_body[:5000]를 Codex 프롬프트에 삽입하기 전 re.sub(r'ACCEPT-[A-Z]+-\\d{8}-[0-9A-F]{4}', '[ACCEPT코드 마스킹]', ...)로 마스킹한 pr_body_masked 변수를 사용. pr_body_sha256은 마스킹 전 원본에서 계산되어 SHA 검증 무영향.",
+            "test_tc15_prbody_accept_code_masked: PR body에 ACCEPT-IMP-...-A1B2 코드를 포함한 fake gh 주입 후 stdin 캡처로 원문 미노출 + '[ACCEPT코드 마스킹]' placeholder 포함 검증"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py", "tests/e2e/test_codex_review_gate_3bb6.py"],
+      "affected_functions": ["pipeline._cmd_gates_codex_review"],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-3"],
+          "changed_files": ["pipeline.py", "tests/e2e/test_codex_review_gate_3bb6.py"],
+          "implementation_evidence": [
+            "CODEX_REVIEW_CRITICAL_FILES SSoT 상수 신규 정의 (.claude/codex_review_contract.md, .claude/agents/, pipeline.py, CLAUDE.md, .github/workflows/) + _is_codex_critical_file() 판정 헬퍼 추가 (정확 경로/prefix/Windows 구분자 정규화 지원)",
+            "_cmd_gates_codex_review에서 included_files 검증 직후 _excluded_critical = [p for p in excluded_files if _is_codex_critical_file(p)] 검사 추가 — trust-root 파일이 budget 초과로 제외되면 failure_code=codex_review_diff_incomplete로 _die(exit 1) BLOCKED",
+            "test_tc16_critical_files_ssot_defined / test_tc16_trustroot_excluded_detection / test_tc16_excluded_critical_blocks: SSoT 상수 5개, _is_codex_critical_file 정확/prefix/Windows/타입방어, .claude/codex_review_contract.md가 excluded_critical로 탐지되어 BLOCKED 트리거됨 검증"
+          ]
+        }
+      ]
+    }
+  ]
+}

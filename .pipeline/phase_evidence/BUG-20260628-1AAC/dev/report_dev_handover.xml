@@ -1,0 +1,152 @@
+<dev_report>
+  <round>1</round>
+  <pipeline_id>BUG-20260628-1AAC</pipeline_id>
+  <scope_declaration>
+    <files_to_create>없음 (산출 XML/JSON은 파이프라인 게이트 입력용)</files_to_create>
+    <files_to_modify>
+      pipeline.py (MT-1: _CODEX_CLI_SYSTEM_PREFIXES에서 INFO:/WARNING: 제거;
+      MT-2: _cmd_gates_codex_review pr_body 마스킹;
+      MT-3: CODEX_REVIEW_CRITICAL_FILES 상수 + _is_codex_critical_file 헬퍼 + excluded_files BLOCKED 검사),
+      tests/e2e/test_codex_review_gate_3bb6.py (TC-14/14b, TC-15, TC-16x3 추가)
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <reuse_search>
+      <searched>_CODEX_CLI_SYSTEM_PREFIXES(정의1/docstring1/사용1) / _parse_codex_verdict(정의6775,호출7145) / _cmd_gates_codex_review(정의6892,dispatch19475) / packet_text 마스킹 re.sub(7060) / excluded_files(정의6993,append7025) 모두 기존 존재. CODEX_REVIEW_CRITICAL_FILES = 0 matches (신규).</searched>
+      <decision>EXTEND(상수 항목 제거/excluded 검사) + NEW(CODEX_REVIEW_CRITICAL_FILES 상수, _is_codex_critical_file 헬퍼). packet_text 마스킹 패턴 REUSE.</decision>
+    </reuse_search>
+    <out_of_scope>nonce 생성/검증/consume, gates accept, _check_codex_review_gate(C81C MT-3 완료분), tests/oracles/BUG-20260628-9B39/**(CODEOWNERS 보호 — PM 책임, 아래 known_constraints 참조)</out_of_scope>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-1</micro_task_id>
+    <target_function>pipeline._parse_codex_verdict</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:7145">_cmd_gates_codex_review(raw_output) — 시그니처 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_CODEX_CLI_SYSTEM_PREFIXES (module 상수)</dep>
+      <dep>re.match</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none — pure function. _CODEX_CLI_SYSTEM_PREFIXES 상수 값만 변경(INFO:/WARNING: 제거)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — INFO:/WARNING: prefix 줄이 AI 출력으로 취급되어 우회가 INVALID 처리됨(보안 강화). SUCCESS:/순수 APPROVE_TO_USER 회귀 없음</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-14/TC-14b</test_coverage>
+      <rollback_strategy>상수에 "INFO: ", "WARNING: " 2개 항목 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>pipeline._cmd_gates_codex_review</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:19475">main dispatch — 호출자 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>re.sub (ACCEPT 마스킹)</dep>
+      <dep>_get_pr_body_text</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none 추가 — prompt 지역변수의 pr_body만 마스킹. pr_body_sha256은 마스킹 전 원본에서 계산(불변)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — Codex 프롬프트의 pr_body만 마스킹, SHA 검증/stale 로직 무영향</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-15</test_coverage>
+      <rollback_strategy>pr_body_masked 라인 제거, prompt에 pr_body[:5000] 복원</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <impact_analysis>
+    <micro_task_id>MT-3</micro_task_id>
+    <target_function>pipeline._cmd_gates_codex_review</target_function>
+    <upstream_callers>
+      <caller location="pipeline.py:19475">main dispatch — 호출자 영향 없음</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>CODEX_REVIEW_CRITICAL_FILES (신규 상수)</dep>
+      <dep>_is_codex_critical_file (신규 헬퍼)</dep>
+      <dep>excluded_files (지역 list), _die</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>none 추가 — 신규 BLOCKED 경로는 _die(exit 1)로 종료(결과 미기록)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO</signature_change>
+      <breaking_change>NO — trust-root 파일이 budget 초과로 excluded되면 BLOCKED(보안 강화). DIFF_BUDGET=200000으로 정상 PR에선 미발생</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-16(ssot_defined/trustroot_excluded_detection/excluded_critical_blocks)</test_coverage>
+      <rollback_strategy>CODEX_REVIEW_CRITICAL_FILES/_is_codex_critical_file/_excluded_critical 검사 블록 제거</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_review_gate_3bb6.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_review_gate_3bb6.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false — pipeline.py와 tests/**는 본 HIGH_RISK 파이프라인 PM target_files에 포함됨</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <self_check>
+    <python_version_syntax>PASS</python_version_syntax>
+    <type_hinting>PASS — _is_codex_critical_file(path: str) -> bool, 기존 함수 시그니처 불변</type_hinting>
+    <error_handling>PASS — _is_codex_critical_file None/비-str TypeError, BLOCKED 경로 _die, _parse_codex_verdict raw 방어 유지</error_handling>
+    <path_safety>PASS — 경로 구분자 정규화("\\"→"/") 후 비교</path_safety>
+    <security>PASS — INFO:/WARNING: bypass 차단(MT-1), PR 본문 ACCEPT 코드 마스킹(MT-2,계약6번), trust-root 미검토 통과 차단(MT-3). 보안 절대 제약(자동 ACCEPT 금지, nonce 미노출, gates accept 자동실행 금지, nonce 로직 완화 금지, Codex APPROVE의 User Acceptance 승격 금지) 모두 보존</security>
+    <al_edge_cases>PASS — _is_codex_critical_file None(TypeError)/비-str(TypeError) 방어, 빈 excluded_files no-op, pr_body "" 기본값 슬라이스 안전</al_edge_cases>
+    <pd_policy>PASS — BLOCKED 경로는 구체적 failure_code + 메시지로 _die(exit 1), 보정 없음</pd_policy>
+    <docstring>PASS — _is_codex_critical_file docstring + 모듈 자기반성 주석, 기존 docstring 유지</docstring>
+    <execution_check>PASS — py_compile OK, import OK, ruff/mypy clean, pytest 21 passed</execution_check>
+    <impact_analysis_check>PASS — 3개 MT 각각 impact_analysis 출력, state_mutations 명시, risk_assessment 4필드</impact_analysis_check>
+    <frozen_codebase_check>PASS — 각 MT 대상만 변경, 무관 리팩토링 0건, OAR 0회, Side-Effect Audit: _parse_codex_verdict/_cmd_gates_codex_review 시그니처 불변(호출자 영향 없음)</frozen_codebase_check>
+  </self_check>
+
+  <ac_grep_evidence>
+    <ac id="AC-1">grep '"INFO: "\|"WARNING: "' pipeline.py _CODEX_CLI_SYSTEM_PREFIXES 정의부 → 0건(제거 확인). import pipeline → _CODEX_CLI_SYSTEM_PREFIXES = ('SUCCESS: ', 'Codex CLI', '✓', '●', '◎').</ac>
+    <ac id="AC-2">grep "pr_body_masked" pipeline.py → 2건(정의 + prompt 사용). re.sub(r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}", "[ACCEPT코드 마스킹]", pr_body[:5000]). TC-15 stdin 캡처로 원문 미노출 확인.</ac>
+    <ac id="AC-3">grep "CODEX_REVIEW_CRITICAL_FILES\|_is_codex_critical_file\|_excluded_critical" pipeline.py → 상수 정의 + 헬퍼 정의 + excluded 검사 사용 확인. _is_codex_critical_file('.claude/codex_review_contract.md')=True → codex_review_diff_incomplete BLOCKED.</ac>
+  </ac_grep_evidence>
+
+  <handover>
+    <from>dev-agent</from>
+    <to>qa-agent</to>
+    <pipeline_id>BUG-20260628-1AAC</pipeline_id>
+    <round>1</round>
+    <summary>
+      Codex Review gate 추가 결함 3건을 수정했습니다(BUG-20260627-C81C 위 추가 수정).
+      MT-1 (AC-1): _CODEX_CLI_SYSTEM_PREFIXES에서 "INFO: "/"WARNING: " 제거 — 'INFO: 문제 없음\nAPPROVE_TO_USER' 같은 prefix bypass가 이제 INVALID로 차단됨(_parse_codex_verdict).
+      MT-2 (AC-2): _cmd_gates_codex_review가 pr_body[:5000]를 Codex 프롬프트에 넣기 전 ACCEPT-* 패턴을 [ACCEPT코드 마스킹]으로 치환. 기존 packet_text 마스킹과 동일하게 pr_body도 보호(계약 6번). pr_body_sha256은 마스킹 전 원본 기준이라 stale 검증 무영향.
+      MT-3 (AC-3): CODEX_REVIEW_CRITICAL_FILES SSoT 상수(5개 trust-root 경로) + _is_codex_critical_file 헬퍼 추가. excluded_files에 trust-root 파일이 있으면 codex_review_diff_incomplete로 BLOCKED — pipeline.py뿐 아니라 contract/agents/CLAUDE/workflows도 budget 초과 시 미검토 통과를 차단.
+      테스트: TC-14/TC-14b(INFO 우회 INVALID), TC-15(pr_body ACCEPT 마스킹), TC-16x3(SSoT 상수/판정 헬퍼/excluded BLOCKED). 전체 21 passed.
+    </summary>
+    <evidence>
+      pipeline.py, tests/e2e/test_codex_review_gate_3bb6.py
+    </evidence>
+    <execution_check>
+      python -m py_compile pipeline.py: PASS
+      python -c "import pipeline": PASS
+      ruff check pipeline.py tests/e2e/test_codex_review_gate_3bb6.py: All checks passed
+      mypy pipeline.py: Success: no issues found
+      pytest tests/e2e/test_codex_review_gate_3bb6.py: 21 passed (13 기존 + 8 신규)
+      gates secrets --files pipeline.py,tests/e2e/test_codex_review_gate_3bb6.py: 민감 정보 0건
+      git diff --name-only HEAD: pipeline.py, tests/e2e/test_codex_review_gate_3bb6.py (2개)
+    </execution_check>
+    <module_gate>MT-1~MT-3 module QA 대기</module_gate>
+    <known_constraints>
+      [오라클 파일 블로커 — Pipeline Manager/PM 확인 필요]
+      contract oracle_manifest.json(BUG-20260628-1AAC)에 3개 오라클(O001 normal_prbody_masked,
+      O002 edge_info_prefix_invalid, O003 exception_trustroot_excluded_blocked)이 등록되어 있고
+      각 input/expected의 SHA256이 기록되어 있으나, 해당 파일들(tests/oracles/BUG-20260628-9B39/**)이
+      working tree와 모든 git 브랜치에 존재하지 않습니다. tests/oracles/**는 CODEOWNERS 보호 영역이며
+      answer key는 PM 책임입니다. dev가 임의 내용으로 생성하면 등록된 SHA256과 불일치하여
+      gates oracle이 hash mismatch로 실패합니다(임의 생성은 scope 위반이기도 함).
+      → Pipeline Manager는 PM에게 tests/oracles/BUG-20260628-9B39/{normal_prbody_masked,
+        edge_info_prefix_invalid,exception_trustroot_excluded_blocked}/{input,expected}.json을
+        oracle_manifest의 SHA256과 일치하도록 commit하도록 요청해야 합니다. (본 코드 변경 자체는 완료)
+      [보안 제약 보존] 자동 ACCEPT/nonce 노출/gates accept 자동실행/nonce 로직 완화/Codex APPROVE의
+      User Acceptance 승격은 모두 수정하지 않았습니다.
+    </known_constraints>
+  </handover>
+</dev_report>
