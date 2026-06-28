@@ -911,15 +911,23 @@ def test_tc14b_info_prefix_unit() -> None:
     """단위 검증: _parse_codex_verdict가 'INFO: ...\\nAPPROVE_TO_USER'를 INVALID 처리.
 
     BUG-20260628-1AAC MT-1: WARNING:/INFO: prefix 모두 AI 출력으로 취급되는지 단위로 확인한다.
+
+    MT-1 전후 동작 정리:
+    - INFO:/WARNING:/ERROR: prefix: MT-1 수정 후 AI 출력으로 취급 → INVALID
+      이유: MT-1 수정 전 _CODEX_CLI_SYSTEM_PREFIXES에 포함되어 bypass 가능했음
+    - SUCCESS: prefix: Codex CLI 도구(셸 래퍼)의 종료 상태 메시지 — AI 모델 출력이 아님.
+      CLI 도구가 "SUCCESS: 작업 완료" 형태로 출력하고 이후 AI 응답이 이어짐.
+      런타임 메시지이므로 필터링 후 AI 판정(APPROVE_TO_USER)이 유효하게 처리됨.
     """
     from pipeline import _parse_codex_verdict
-    # INFO: prefix → INVALID
+    # INFO: prefix → INVALID (MT-1: bypass 차단, AI 출력으로 취급)
     assert _parse_codex_verdict("INFO: 문제 없음\nAPPROVE_TO_USER")["status"] == "INVALID"
-    # WARNING: prefix → INVALID
+    # WARNING: prefix → INVALID (MT-1: bypass 차단, AI 출력으로 취급)
     assert _parse_codex_verdict("WARNING: 경고\nAPPROVE_TO_USER")["status"] == "INVALID"
-    # 순수 APPROVE_TO_USER는 여전히 APPROVED
+    # 순수 APPROVE_TO_USER → APPROVED (회귀 없음)
     assert _parse_codex_verdict("APPROVE_TO_USER")["status"] == "APPROVED"
-    # SUCCESS: 시스템 메시지는 여전히 skip되어 APPROVED
+    # SUCCESS: Codex CLI 도구(셸)의 종료 메시지 + AI 판정 APPROVE_TO_USER → APPROVED
+    # AI 모델이 "SUCCESS: ..."를 스스로 출력한 것이 아니라 CLI 런타임이 추가한 것임.
     assert _parse_codex_verdict("SUCCESS: 완료\nAPPROVE_TO_USER")["status"] == "APPROVED"
 
 
