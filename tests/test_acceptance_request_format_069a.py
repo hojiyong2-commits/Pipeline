@@ -249,7 +249,8 @@ def write_codex_review_approved(tmp_path: Path, pid: str) -> None:
             "pr_head_sha": _fake_sha,
             "pr_body_sha256": pr_body_sha256,
             "packet_sha256": packet_sha256,
-            "accept_code": f"ACCEPT-{pid}",
+            # BUG-20260628-1AAC: accept_code 필드 제거 — 계약 6번/MT-7 준수
+            # (codex_review_result.json에 accept_code를 저장하면 계약 6번 위반)
             "reviewed_at": "2026-06-27T12:00:00Z",
             "contract_sha256": "deadbeef" * 8,
             "verdict": "APPROVE_TO_USER",
