@@ -18506,48 +18506,66 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 )
             print(f"  [STAGING FILE 사용] packet_sha256={packet_sha}")
         else:
-            # 경로 B: staging file 없음 → 기존 staging-probe 방식 fallback (3자 불변식 보장 불가).
-            # request-accept를 먼저 실행하여 staging file을 생성하도록 안내한다.
-            print(
-                "  [경고] acceptance_staging.json이 없습니다.\n"
-                "  gates codex-review --approve-pending은 gates request-accept 이후에 실행해야 합니다.\n"
-                "  staging-probe 방식으로 fallback합니다 (3자 불변식 보장 불가)."
-            )
-            try:
-                # request-accept의 staging preamble을 동일하게 재현해야 packet SHA가 일치한다.
-                _hygiene = _check_workspace_hygiene(state)
-                state["workspace_hygiene"] = _hygiene
-                _probe_ci_run_id = _get_pr_branch_ci_run_id() or ""
-                _probe_ci_head_sha: Optional[str] = None
-                if _probe_ci_run_id:
-                    try:
-                        _probe_ci_head_sha = _get_ci_run_head_sha(_probe_ci_run_id)
-                    except Exception:
-                        _probe_ci_head_sha = None
-                _staging_candidate = {
-                    "schema_version": 1,
-                    "pipeline_id": pipeline_id,
-                    "request_id": "staging-probe",
-                    "nonce": "staging-probe",
-                    "evidence": "staging-probe",
-                    "status": "PENDING",
-                    "github_ci_head_sha": _probe_ci_head_sha,
-                }
-                _ac_table = _build_ac_fulfillment_table(state)
-                if _ac_table is not None:
-                    _staging_candidate["ac_fulfillment_table"] = _ac_table
-                _staged = _materialize_acceptance_snapshot(
-                    state, _staging_candidate, publish=False
-                )
-                packet_sha = str(_staged.get("sha_manifest", {}).get("packet_sha256", "") or "")
-                _approve_pending_candidate = _staging_candidate
-            except (OSError, ValueError, KeyError, TypeError):
-                packet_sha = ""
-            if not packet_sha:
+            # 경로 B 제거(BUG-20260628-F52C r7): staging-probe fallback은 frozen_at 없이
+            # generated_at="STAGING_PROBE" 고정으로 packet bytes를 만들었다. 이후 request-accept가
+            # frozen_at=_now()로 NEW staging을 만들면 다른 bytes/SHA가 산출되어 publish 직후
+            # _verify_published_pr_body_three_way가 codex_review_stale로 실패했다.
+            #
+            # 근본 수정: staging file이 없으면 PENDING acceptance_request.json에서 req_candidate를
+            # 복구하여 동일 frozen_at 메커니즘으로 staging을 재생성하고 _save_acceptance_staging으로
+            # 저장한다. request-accept는 동일 조건(evidence/pr_head_sha/ci_run_id)의 staging file을
+            # _staging_conditions_match로 그대로 재사용하므로, codex가 검토한 bytes와 published bytes가
+            # 정확히 일치한다(3자 SHA 불변식). PENDING request가 없으면 결정적으로 재현할 기준이
+            # 없으므로 fail-closed BLOCK한다(staging-probe 재도입 금지).
+            _existing_req = _load_acceptance_request()
+            if (
+                isinstance(_existing_req, dict)
+                and str(_existing_req.get("status", "")).upper() == "PENDING"
+                and str(_existing_req.get("pipeline_id", "") or "") == pipeline_id
+            ):
+                try:
+                    # request-accept의 staging preamble을 동일하게 재현 (hygiene 갱신).
+                    _hygiene = _check_workspace_hygiene(state)
+                    state["workspace_hygiene"] = _hygiene
+                    # PENDING request를 req_candidate로 사용 (nonce/evidence/pr/ci 필드 포함).
+                    _recovered_candidate: Dict[str, Any] = dict(_existing_req)
+                    _ac_table = _build_ac_fulfillment_table(state)
+                    if _ac_table is not None:
+                        _recovered_candidate["ac_fulfillment_table"] = _ac_table
+                    # frozen_at은 staging 시점에 한 번만 생성 — request-accept NEW-staging 경로와 동일.
+                    _recover_frozen_at = _now()
+                    _staged = _materialize_acceptance_snapshot(
+                        state, _recovered_candidate, publish=False,
+                        frozen_at=_recover_frozen_at,
+                    )
+                    _recovered_content = str(_staged.get("packet_content", "") or "")
+                    _recovered_pkt_sha = str(
+                        _staged.get("sha_manifest", {}).get("packet_sha256", "") or ""
+                    )
+                    if _recovered_content and _recovered_pkt_sha:
+                        # codex가 검토한 frozen bytes를 staging file에 보존 → request-accept가 재사용.
+                        _save_acceptance_staging({
+                            "pipeline_id": pipeline_id,
+                            "req_candidate": dict(_recovered_candidate),
+                            "frozen_at": _recover_frozen_at,
+                            "staged_packet_content": _recovered_content,
+                            "staged_packet_sha256": _recovered_pkt_sha,
+                        })
+                        _staged_content_from_file = _recovered_content
+                        packet_sha = _recovered_pkt_sha
+                        _approve_pending_candidate = _recovered_candidate
+                        print(
+                            "  [STAGING FILE 복구] acceptance_request.json(PENDING)에서 "
+                            f"staging 재생성 완료 — packet_sha256={packet_sha}"
+                        )
+                except (OSError, ValueError, KeyError, TypeError):
+                    packet_sha = ""
+            if not _staged_content_from_file:
                 _die(
-                    "[BLOCKED] failure_code=codex_staging_failed\n"
-                    "  --approve-pending staging이 packet SHA를 계산하지 못했습니다.\n"
-                    "  먼저 gates request-accept를 실행하여 staging file을 생성한 후 재시도하세요."
+                    "[BLOCKED] failure_code=staging_file_missing\n"
+                    "  acceptance_staging.json이 없고, 복구할 PENDING acceptance_request.json도 없습니다.\n"
+                    "  먼저 'gates request-accept --evidence <결과물-경로>'를 실행하여 staging을 생성하세요.\n"
+                    "  그 다음 'gates codex-review --approve-pending'을 실행하세요."
                 )
     if not packet_sha:
         packet_sha = str(getattr(args, "packet_sha256", "") or "").strip()

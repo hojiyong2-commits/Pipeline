@@ -78,6 +78,43 @@ def _run_cli(
     )
 
 
+def _codex_then_request_accept(
+    evidence_name: str,
+    env: Dict[str, str],
+    cwd: Path,
+) -> subprocess.CompletedProcess:
+    """BUG-20260628-F52C r7: codex APPROVE + request-accept의 올바른 2-call-with-retry 흐름.
+
+    staging file은 request-accept가 codex 검토 전에 생성한다. 따라서 순서는:
+      1. request-accept (staging file 생성 → codex_review_result.json 부재로 BLOCK, staging 잔존)
+      2. codex-review --approve-pending (잔존 staging file의 frozen bytes로 SHA 기록 — path A)
+      3. request-accept (동일 조건 staging file 재사용 → codex APPROVE → publish)
+    이 흐름은 codex가 검토한 bytes와 published bytes가 정확히 일치(3자 SHA 불변식)함을 보장한다.
+
+    Args:
+        evidence_name: --evidence에 넘길 파일명(또는 URL).
+        env: 환경 변수 dict (PIPELINE_STATE_PATH 포함).
+        cwd: 실행 디렉터리.
+    Returns:
+        마지막 request-accept(publish 단계)의 CompletedProcess.
+    """
+    # 1) staging file 생성 (codex 미수행으로 BLOCK되지만 staging은 잔존한다).
+    _run_cli(
+        ["gates", "request-accept", "--evidence", evidence_name],
+        env=env, cwd=cwd,
+    )
+    # 2) 잔존 staging file의 frozen bytes로 codex SHA 기록 (path A).
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=env, cwd=cwd,
+    )
+    # 3) 동일 staging file 재사용 → codex APPROVE → publish.
+    return _run_cli(
+        ["gates", "request-accept", "--evidence", evidence_name],
+        env=env, cwd=cwd,
+    )
+
+
 def _make_active_state(
     state_path: Path,
     *,
@@ -249,17 +286,36 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
     if tmp_path is None:
         raise TypeError("tmp_path must not be None")
     body_json = json.dumps(_FAKE_GH_PR_BODY_2E3D)
+    # BUG-20260628-F52C r7: stateful fake gh — `pr edit --body`가 실제로 본문을 갱신하고,
+    # 이후 `pr view --json body`가 갱신된 본문을 반환해야 _verify_published_pr_body_three_way의
+    # 3자 SHA 불변식(codex == acceptance_request == 현재 PR body)이 실제로 성립한다.
+    # static body만 반환하면 publish가 edit한 packet 블록이 re-read에 반영되지 않아 항상
+    # codex_review_stale가 발생한다 (fake env 한계). 본문 상태는 sidecar 파일에 보존한다.
+    state_file = tmp_path / "fake_gh_pr_body_state.txt"
+    state_file_repr = json.dumps(str(state_file))
     script = tmp_path / "fake_gh_2e3d.py"
     script.write_text(
-        "import sys, io, json\n"
+        "import sys, io, json, pathlib\n"
         'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
-        f"BODY = {body_json}\n"
+        f"DEFAULT_BODY = {body_json}\n"
+        f"STATE_FILE = pathlib.Path({state_file_repr})\n"
         "args = sys.argv[1:]\n"
+        "def _current_body():\n"
+        "    if STATE_FILE.exists():\n"
+        '        return STATE_FILE.read_text(encoding="utf-8")\n'
+        "    return DEFAULT_BODY\n"
+        # pr edit --body <new>: 갱신된 본문을 sidecar에 보존 (stateful).
+        'if "pr" in args and "edit" in args and "--body" in args:\n'
+        '    bi = args.index("--body")\n'
+        "    new_body = args[bi+1] if bi+1 < len(args) else \"\"\n"
+        '    STATE_FILE.write_text(new_body, encoding="utf-8")\n'
+        "    sys.exit(0)\n"
         'if "--jq" in args:\n'
         '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
         '    if jq == ".body":\n'
-        '        sys.stdout.write(BODY)\n'
-        '        if not BODY.endswith("\\n"):\n'
+        "        body = _current_body()\n"
+        "        sys.stdout.write(body)\n"
+        '        if not body.endswith("\\n"):\n'
         '            sys.stdout.write("\\n")\n'
         "        sys.exit(0)\n"
         '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
@@ -273,7 +329,7 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
         'if "pr" in args and "list" in args:\n'
         '    print("[]"); sys.exit(0)\n'
         "print(json.dumps({\n"
-        '    "body": BODY, "number": 1,\n'
+        '    "body": _current_body(), "number": 1,\n'
         '    "headRefOid": "abc123def456abc123def456abc123def456abc1",\n'
         '    "isDraft": False, "state": "OPEN", "files": [],\n'
         '    "url": "https://github.com/test/repo/pull/1",\n'
@@ -376,8 +432,15 @@ def test_final_packet_includes_accept_code_when_request_exists(
     result = _run_cli(["report", "final-packet"], env=isolated_env, cwd=isolated_cwd)
     assert result.returncode == 0
     text = _packet_path_in(isolated_cwd).read_text(encoding="utf-8")
-    assert "ACCEPT-IMP-20260603-TEST-ABCD1234" in text
-    assert "REJECT-IMP-20260603-TEST-ABCD1234" in text
+    # BUG-20260620-3BF4 SSoT: 사용자 표시 승인 코드는 nonce 없는 ACCEPT-{pipeline_id} 형식.
+    # nonce(ABCD1234)는 acceptance_request.json 내부 SSoT로만 보존되며 packet 표시 코드에는 없다.
+    assert "ACCEPT-IMP-20260603-TEST" in text
+    assert "REJECT-IMP-20260603-TEST" in text
+    # nonce가 사용자 표시 승인 코드 줄에 노출되지 않아야 한다 (display 코드는 nonce-less).
+    assert "ACCEPT-IMP-20260603-TEST-ABCD1234" not in text
+    # nonce는 내부 SSoT(acceptance_request.json)에 그대로 보존되어야 한다.
+    _req_after = json.loads(req_path.read_text(encoding="utf-8"))
+    assert _req_after["nonce"] == "ABCD1234", "nonce는 acceptance_request.json에 보존되어야 함"
 
 
 # ─── 4) 모든 줄 120자 이하 ─────────────────────────────────────────────────────
@@ -435,11 +498,15 @@ def test_final_packet_accept_code_on_separate_line(
     assert result.returncode == 0
     text = _packet_path_in(isolated_cwd).read_text(encoding="utf-8")
     lines = text.split("\n")
-    accept_lines = [ln for ln in lines if ln.strip() == "ACCEPT-IMP-20260603-TEST-WXYZ7890"]
+    # BUG-20260620-3BF4 SSoT: 사용자 표시 승인 코드는 nonce 없는 ACCEPT-{pipeline_id} 형식이며,
+    # 모바일 복사를 위해 정확히 1개의 독립 줄(자기 자신만 있는 줄)로 출력되어야 한다.
+    accept_lines = [ln for ln in lines if ln.strip() == "ACCEPT-IMP-20260603-TEST"]
     assert len(accept_lines) == 1, (
         "승인 코드가 정확히 1개의 독립 줄로 출력되어야 함. "
         f"발견된 라인: {accept_lines}"
     )
+    # nonce(WXYZ7890)는 사용자 표시 승인 코드 줄에 노출되지 않아야 한다.
+    assert "ACCEPT-IMP-20260603-TEST-WXYZ7890" not in text
 
 
 # ─── 6) final packet 없어도 request-accept 진행 + 자동 packet 생성 ──────────────
@@ -457,15 +524,8 @@ def test_request_accept_proceeds_without_final_packet(
     assert not packet.exists()
     evidence = isolated_cwd / "dummy_evidence.txt"
     evidence.write_text("evidence body", encoding="utf-8")
-    # BUG-20260628-F52C: request-accept는 Codex APPROVE 이후에만 publish하므로 사전 승인.
-    _run_cli(
-        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
-        env=isolated_env, cwd=isolated_cwd,
-    )
-    result = _run_cli(
-        ["gates", "request-accept", "--evidence", str(evidence.name)],
-        env=isolated_env, cwd=isolated_cwd,
-    )
+    # BUG-20260628-F52C r7: codex APPROVE는 staging file 생성 후에만 가능 (2-call-with-retry).
+    result = _codex_then_request_accept(str(evidence.name), isolated_env, isolated_cwd)
     assert result.returncode == 0, f"request-accept 차단됨: {result.stderr}\n{result.stdout}"
     assert packet.exists(), "request-accept 후 packet이 자동 생성되지 않음"
     assert "[FINAL PACKET 자동 생성]" in result.stdout
@@ -496,13 +556,9 @@ def test_request_accept_blocks_on_stale_pr_sha(
     evidence.write_text("e", encoding="utf-8")
     # gh CLI가 없을 가능성을 보장하기 위해 PATH를 비운다 (Windows/Linux 호환)
     monkeypatch.setenv("PATH", "")
-    _run_cli(
-        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
-        env={**isolated_env, "PATH": ""}, cwd=isolated_cwd,
-    )
-    result = _run_cli(
-        ["gates", "request-accept", "--evidence", str(evidence.name)],
-        env={**isolated_env, "PATH": ""}, cwd=isolated_cwd,
+    # BUG-20260628-F52C r7: codex APPROVE는 staging file 생성 후에만 가능 (2-call-with-retry).
+    result = _codex_then_request_accept(
+        str(evidence.name), {**isolated_env, "PATH": ""}, isolated_cwd
     )
     # PATH 비움 → gh/git 없음 → actual 빈 문자열 → stale 검사 skip → 통과
     # 단 packet은 자동 재생성되어 fake SHA가 정상 placeholder로 덮어쓰여진다.
@@ -537,13 +593,9 @@ def test_request_accept_blocks_on_stale_ci_run_id(
     evidence = isolated_cwd / "dummy.txt"
     evidence.write_text("e", encoding="utf-8")
     monkeypatch.setenv("PATH", "")
-    _run_cli(
-        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
-        env={**isolated_env, "PATH": ""}, cwd=isolated_cwd,
-    )
-    result = _run_cli(
-        ["gates", "request-accept", "--evidence", str(evidence.name)],
-        env={**isolated_env, "PATH": ""}, cwd=isolated_cwd,
+    # BUG-20260628-F52C r7: codex APPROVE는 staging file 생성 후에만 가능 (2-call-with-retry).
+    result = _codex_then_request_accept(
+        str(evidence.name), {**isolated_env, "PATH": ""}, isolated_cwd
     )
     assert result.returncode == 0, f"gh/git 부재 시 통과해야 함: {result.stderr}"
     new_text = packet.read_text(encoding="utf-8")
@@ -555,7 +607,15 @@ def test_request_accept_reuses_nonce_when_conditions_same(
     isolated_env: Dict[str, str],
     isolated_cwd: Path,
 ) -> None:
-    """동일 evidence/PR/CI 조건에서 request-accept를 두 번 호출하면 같은 nonce."""
+    """동일 evidence/PR/CI 조건에서 request-accept를 재실행하면 같은 nonce를 재사용한다.
+
+    BUG-20260628-F52C r7: nonce 재사용 판정은 6-field 비교(evidence_sha256 / pr_head_sha /
+    github_ci_run_id / pr_body_sha256 등)가 모두 같고 기존 요청이 PENDING일 때 성립한다.
+    publish는 PR 본문에 FINAL_PACKET 블록을 삽입하여 본문 SHA를 바꾸므로, "두 번의 full publish
+    cycle 간 nonce 동일"은 본문 변경으로 인해 성립하지 않는 것이 정상 동작이다. 따라서 본 테스트는
+    '조건이 진정으로 동일한 PENDING 요청'을 먼저 구성한 뒤(현재 PR 본문 SHA와 일치하도록 seed),
+    request-accept가 그 nonce를 재사용함을 검증한다 — 재사용 판정 로직 자체를 격리 검증한다.
+    """
     # PIPELINE_STATE_PATH isolation 확인 — state 격리 필수
     state_path = isolated_env["PIPELINE_STATE_PATH"]
     assert state_path, "PIPELINE_STATE_PATH 격리 미설정"
@@ -563,19 +623,41 @@ def test_request_accept_reuses_nonce_when_conditions_same(
     # final_state: acceptance_request.json의 nonce가 동일 — 재사용 확인
     evidence = isolated_cwd / "evidence_v1.txt"
     evidence.write_text("body v1", encoding="utf-8")
-    # 1회차
+    req_path = isolated_cwd / "acceptance_request.json"
+    # 현재(미publish) PR 본문은 fake gh의 DEFAULT 본문이다 (_get_pr_body_text가 trailing \n 부가).
+    current_pr_body = _FAKE_GH_PR_BODY_2E3D
+    if not current_pr_body.endswith("\n"):
+        current_pr_body_for_sha = current_pr_body + "\n"
+    else:
+        current_pr_body_for_sha = current_pr_body
+    import hashlib as _hl
+    pr_body_sha = _hl.sha256(current_pr_body_for_sha.encode("utf-8")).hexdigest()
+    evidence_sha = _hl.sha256(evidence.read_bytes()).hexdigest()
+    # 조건이 진정으로 동일한 PENDING 요청을 seed (재사용 6-field 비교가 모두 일치하도록).
+    seed_nonce = "SEEDNON1"
+    req_path.write_text(json.dumps({
+        "schema_version": 1,
+        "pipeline_id": "IMP-20260603-TEST",
+        "request_id": "seed1234",
+        "nonce": seed_nonce,
+        "created_at": "2026-06-03T00:00:00Z",
+        "pr_url": "https://github.com/test/repo/pull/1",
+        "pr_head_sha": "",
+        "github_ci_run_id": "",
+        "evidence": str(evidence.name),
+        "evidence_sha256": evidence_sha,
+        "evidence_url": None,
+        "pr_body_sha256": pr_body_sha,
+        "pr_body_readiness": "PASS",
+        "required_sections_present": True,
+        "temporary_phrases_absent": True,
+        "status": "PENDING",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    # 동일 조건 staging도 미리 생성하여 codex APPROVE가 동일 bytes로 기록되게 한다.
     _run_cli(
-        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
-        env=isolated_env, cwd=isolated_cwd,
-    )
-    r1 = _run_cli(
         ["gates", "request-accept", "--evidence", str(evidence.name)],
         env=isolated_env, cwd=isolated_cwd,
     )
-    assert r1.returncode == 0, r1.stderr
-    req_path = isolated_cwd / "acceptance_request.json"
-    nonce1 = json.loads(req_path.read_text(encoding="utf-8"))["nonce"]
-    # 2회차 — 동일 조건
     _run_cli(
         ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
         env=isolated_env, cwd=isolated_cwd,
@@ -586,7 +668,10 @@ def test_request_accept_reuses_nonce_when_conditions_same(
     )
     assert r2.returncode == 0, r2.stderr
     nonce2 = json.loads(req_path.read_text(encoding="utf-8"))["nonce"]
-    assert nonce1 == nonce2, "조건이 같으면 nonce가 재사용되어야 함"
+    assert nonce2 == seed_nonce, (
+        "조건이 같으면 기존 PENDING 요청의 nonce가 재사용되어야 함 "
+        f"(seed={seed_nonce}, got={nonce2})"
+    )
     assert "[재사용]" in r2.stdout
 
 
@@ -603,27 +688,13 @@ def test_request_accept_issues_new_nonce_when_conditions_change(
     # final_state: nonce가 변경됨 — evidence SHA 변화 확인
     evidence = isolated_cwd / "evidence_changeable.txt"
     evidence.write_text("body before", encoding="utf-8")
-    _run_cli(
-        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
-        env=isolated_env, cwd=isolated_cwd,
-    )
-    r1 = _run_cli(
-        ["gates", "request-accept", "--evidence", str(evidence.name)],
-        env=isolated_env, cwd=isolated_cwd,
-    )
+    r1 = _codex_then_request_accept(str(evidence.name), isolated_env, isolated_cwd)
     assert r1.returncode == 0
     req_path = isolated_cwd / "acceptance_request.json"
     nonce1 = json.loads(req_path.read_text(encoding="utf-8"))["nonce"]
     # evidence 내용 변경
     evidence.write_text("body AFTER different", encoding="utf-8")
-    _run_cli(
-        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
-        env=isolated_env, cwd=isolated_cwd,
-    )
-    r2 = _run_cli(
-        ["gates", "request-accept", "--evidence", str(evidence.name)],
-        env=isolated_env, cwd=isolated_cwd,
-    )
+    r2 = _codex_then_request_accept(str(evidence.name), isolated_env, isolated_cwd)
     assert r2.returncode == 0
     nonce2 = json.loads(req_path.read_text(encoding="utf-8"))["nonce"]
     assert nonce1 != nonce2, "evidence 내용이 변경되면 새 nonce가 발급되어야 함"
@@ -642,21 +713,21 @@ def test_request_accept_auto_generates_packet_with_code(
     # final_state: acceptance_request.json에 nonce + ACCEPT 코드가 기록됨
     evidence = isolated_cwd / "auto_packet_evidence.txt"
     evidence.write_text("body", encoding="utf-8")
-    _run_cli(
-        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
-        env=isolated_env, cwd=isolated_cwd,
-    )
-    result = _run_cli(
-        ["gates", "request-accept", "--evidence", str(evidence.name)],
-        env=isolated_env, cwd=isolated_cwd,
-    )
+    result = _codex_then_request_accept(str(evidence.name), isolated_env, isolated_cwd)
     assert result.returncode == 0
     packet_text = _packet_path_in(isolated_cwd).read_text(encoding="utf-8")
-    m = re.search(r"ACCEPT-IMP-20260603-TEST-([A-Z0-9]+)", packet_text)
-    assert m, f"packet에 ACCEPT-... 코드가 없음. 내용: {packet_text[:500]}"
-    # 동일 nonce가 acceptance_request.json에도 기록됨
+    # BUG-20260620-3BF4 SSoT: packet 사용자 표시 승인 코드는 nonce 없는 ACCEPT-{pipeline_id} 형식.
+    assert "ACCEPT-IMP-20260603-TEST" in packet_text, (
+        f"packet에 ACCEPT-... 코드가 없음. 내용: {packet_text[:500]}"
+    )
+    # nonce는 사용자 표시 승인 코드 줄에 노출되지 않아야 한다 (display 코드는 nonce-less).
+    assert not re.search(r"^ACCEPT-IMP-20260603-TEST-[A-Z0-9]+$", packet_text, re.MULTILINE), (
+        "packet 표시 승인 코드 줄에 nonce가 노출되면 안 됨 (display 코드는 nonce-less)"
+    )
+    # nonce는 내부 SSoT(acceptance_request.json)에 그대로 보존되어야 한다 (gates accept용).
     req = json.loads((isolated_cwd / "acceptance_request.json").read_text(encoding="utf-8"))
-    assert m.group(1) == req["nonce"]
+    assert req["nonce"], "acceptance_request.json에 nonce가 보존되어야 함"
+    assert req.get("status") == "PENDING", "publish 후 acceptance_request는 PENDING이어야 함"
 
 
 # ─── 12) --user-confirmed 단독 차단 (기존 Nonce Gate 보존) ─────────────────────

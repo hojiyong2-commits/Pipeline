@@ -896,10 +896,8 @@ def test_tc_reject_pr_body_sha_mismatch(gh_publish_env):
     """
     env, state_file, evidence = gh_publish_env
     # 1) staged snapshot APPROVE 기록 (올바른 packet/body/head SHA).
-    r_cx = _run_pipeline_env(
-        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
-        env=env,
-    )
+    # BUG-20260628-F52C r7: codex-review --approve-pending은 staging file 생성 후에만 가능.
+    _r_stage, r_cx = _stage_and_codex_approve(env, evidence)
     assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
     # 2) pr_body_sha256만 변조 (staged PR 본문 SHA와 불일치하도록).
     cx_path = _codex_review_result_path_for(state_file)
@@ -927,10 +925,8 @@ def test_tc_reject_pr_head_sha_mismatch(gh_publish_env):
     codex result의 pr_head_sha만 변조하면 request-accept가 fail-closed BLOCKED여야 한다.
     """
     env, state_file, evidence = gh_publish_env
-    r_cx = _run_pipeline_env(
-        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
-        env=env,
-    )
+    # BUG-20260628-F52C r7: codex-review --approve-pending은 staging file 생성 후에만 가능.
+    _r_stage, r_cx = _stage_and_codex_approve(env, evidence)
     assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
     cx_path = _codex_review_result_path_for(state_file)
     data = json.loads(cx_path.read_text(encoding="utf-8"))
@@ -1102,10 +1098,8 @@ def test_tc_new_2_prepublish_sha_blocks_three_way(gh_publish_env):
     publish 후 최종 PR body SHA(블록 교체 후)와 달라 _verify_published_pr_body_three_way가 BLOCKED.
     """
     env, state_file, evidence = gh_publish_env
-    r_cx = _run_pipeline_env(
-        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
-        env=env,
-    )
+    # BUG-20260628-F52C r7: codex-review --approve-pending은 staging file 생성 후에만 가능.
+    _r_stage, r_cx = _stage_and_codex_approve(env, evidence)
     assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
     # codex 기록 pr_body_sha256를 "publish 전" 원본 body SHA로 변조 (staged 최종 body SHA가 아님).
     cx_path = _codex_review_result_path_for(state_file)
