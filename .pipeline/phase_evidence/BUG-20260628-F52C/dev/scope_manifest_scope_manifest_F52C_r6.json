@@ -1,0 +1,60 @@
+{
+  "pipeline_id": "BUG-20260628-F52C",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": [
+        "pipeline._materialize_acceptance_snapshot"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._cmd_gates_request_accept"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._cmd_gates_codex_review"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._check_pending_snapshot_lock"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": ["pipeline._verify_snapshot_invariant"]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/e2e/test_codex_snapshot_sync_f52c.py"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_codex_snapshot_sync_f52c.py"
+      ]
+    },
+    {
+      "id": "MT-7-AMENDMENT",
+      "files": [
+        "tests/e2e/test_ci_run_id_filter_4ac2.py",
+        "tests/e2e/test_final_packet_2e3d.py",
+        "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+        "tests/e2e/test_request_accept_snapshot_8c3b.py",
+        "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+        "tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/expected.json",
+        "tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/input.json",
+        "tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/expected.json",
+        "tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/input.json",
+        "tests/test_acceptance_request_format_069a.py",
+        "tests/test_acceptance_request_verification_json.py"
+      ],
+      "affected_functions": [
+        "consumer_test_codex_sync"
+      ]
+    }
+  ]
+}

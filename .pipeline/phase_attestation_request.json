@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-29T12:32:07Z",
+  "pipeline_id": "BUG-20260628-F52C",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "fc43d3e7c324fc0930a0c1a4032e00169cc6c379",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-29T12:32:01Z",
+    "report_file": "dev_handover_r6.xml",
+    "evidence": "pipeline.py,tests/e2e/test_ci_run_id_filter_4ac2.py,tests/e2e/test_codex_snapshot_sync_f52c.py,tests/e2e/test_final_packet_2e3d.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,tests/e2e/test_request_accept_snapshot_8c3b.py,tests/e2e/test_user_acceptance_nonce_bbdb.py,tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/expected.json,tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/input.json,tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/expected.json,tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/input.json,tests/test_acceptance_request_format_069a.py,tests/test_acceptance_request_verification_json.py"
+  },
+  "agent_run": {
+    "run_id": "dev-8440a6f8578d2ebc",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_r6.xml",
+    "output_sha256": "a2f7750dd54617b7bc147aebf607d9f00b97e0be24206a0bc821272cb64897d1",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-8440a6f8578d2ebc.json",
+    "receipt_sha256": "1babd54a672dc01df5d4949909983cd0d0d363a3672665f14274c8df8aa1c22a",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-8440a6f8578d2ebc.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-8440a6f8578d2ebc.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-8440a6f8578d2ebc.json",
+      "sha256": "1babd54a672dc01df5d4949909983cd0d0d363a3672665f14274c8df8aa1c22a",
+      "size_bytes": 505,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_r6.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/report_dev_handover_r6.xml",
+      "sha256": "a2f7750dd54617b7bc147aebf607d9f00b97e0be24206a0bc821272cb64897d1",
+      "size_bytes": 3004,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_F52C_r6.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/scope_manifest_scope_manifest_F52C_r6.json",
+      "sha256": "08da77be653bb87d3fba4f5c4c6c72ec350f0b21f843b14fbf846dec5e0ef6a8",
+      "size_bytes": 1800,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "aec965fecbd951854030769d365f12564e20d77ac97941619d07092b1236e6fc",
+      "size_bytes": 1151188
+    },
+    {
+      "path": "tests/e2e/test_ci_run_id_filter_4ac2.py",
+      "sha256": "8d9b0e74a25ba84d501a96d0f5a6693f9e3bb0a966a620eacf6b7535cf94fdee",
+      "size_bytes": 24393
+    },
+    {
+      "path": "tests/e2e/test_final_packet_2e3d.py",
+      "sha256": "a46ec8a75391604cb6093e8322b48eca537b9a2dd937949ef7b74a923980cd4c",
+      "size_bytes": 41899
+    },
+    {
+      "path": "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+      "sha256": "56a2df95d2937fa04d7b4d66675c37598453da8a50fe2192a7d5451892ea4806",
+      "size_bytes": 28977
+    },
+    {
+      "path": "tests/e2e/test_request_accept_snapshot_8c3b.py",
+      "sha256": "d91bb61f19baf6cd927fb54684f9250fe6948899fd16e567dd6453d10ec9fa6a",
+      "size_bytes": 33594
+    },
+    {
+      "path": "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+      "sha256": "9d246083a1c36160ed389358a049afe39fea5aff2718da6749beb98c29c93f96",
+      "size_bytes": 43273
+    },
+    {
+      "path": "tests/test_acceptance_request_format_069a.py",
+      "sha256": "80efa8a57716d4dba48fb29505dd58b70a9a772eda9b264e316e66daba8785ee",
+      "size_bytes": 17509
+    },
+    {
+      "path": "tests/test_acceptance_request_verification_json.py",
+      "sha256": "a0d22c721d430f8a0c9736769a64a6f1c13acc9837eb444f87890a6860908a52",
+      "size_bytes": 11386
+    }
+  ],
+  "local_only_files": []
+}
