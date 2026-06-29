@@ -1,0 +1,86 @@
+<handover>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <agent_run_id>dev-09a75d919d747b96</agent_run_id>
+  <from_phase>dev-r7</from_phase>
+  <to_phase>qa</to_phase>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_final_packet_2e3d.py</file>
+    <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+    <file>tests/e2e/test_codex_snapshot_sync_f52c.py</file>
+    <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+    <file>tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+  </evidence>
+  <summary>
+    수정 1 (핵심): _cmd_gates_codex_review --approve-pending의 path B(staging-probe fallback) 완전 제거.
+    staging file이 없을 때 generated_at="STAGING_PROBE"로 packet bytes를 만들어 SHA를 계산하던 fallback이
+    이후 request-accept의 frozen_at=_now() staging과 다른 SHA를 산출하여 publish 직후
+    _verify_published_pr_body_three_way가 codex_review_stale로 실패하던 문제를 해소.
+    대체 로직: staging file 부재 시 PENDING acceptance_request.json에서 req_candidate를 복구하여
+    동일 frozen_at 메커니즘으로 staging을 재생성+저장(_save_acceptance_staging) → request-accept가
+    _staging_conditions_match로 동일 bytes를 재사용 → 3자 SHA 불변식 성립. PENDING request도 없으면
+    failure_code=staging_file_missing로 fail-closed BLOCK (staging-probe 재도입 없음).
+
+    수정 2 (회귀): path B 제거로 codex-review --approve-pending이 staging file을 전제하게 되어,
+    이를 직접 호출하던 회귀 테스트들을 2-call-with-retry 흐름(request-accept로 staging 생성 →
+    codex-review path A → request-accept publish)으로 갱신. fake gh를 stateful로 보강하여
+    pr edit --body가 본문을 보존하고 pr view가 갱신본을 반환하도록 함(3자 SHA 불변식 실검증).
+    BUG-20260620-3BF4 SSoT(packet 표시 승인 코드는 nonce-less ACCEPT-{pipeline_id})에 맞춰
+    stale한 nonce-bearing 기대값을 정정(약화 아님 — nonce 내부 보존 검증을 추가로 강화).
+  </summary>
+  <pipeline_change>
+    pipeline.py: 단일 함수 _cmd_gates_codex_review 내부 path B 블록 교체 (1 hunk, +59/-41).
+    함수 시그니처/외부 인터페이스 불변. _verify_published_pr_body_three_way 및
+    _verify_snapshot_invariant는 변경/약화 없음.
+  </pipeline_change>
+  <test_results>
+    전체 briefing 검증 suite 직렬 실행: 109 passed, 0 failed (333s).
+    포함: test_codex_snapshot_sync_f52c.py(36), test_acceptance_request_format_069a.py,
+    test_request_accept_nonce_reuse_aef0.py, test_acceptance_request_verification_json.py,
+    test_final_packet_2e3d.py(16), test_ci_run_id_filter_4ac2.py(8),
+    test_request_accept_snapshot_8c3b.py, test_user_acceptance_nonce_bbdb.py.
+    py_compile + import: 전 파일 PASS. 신규 regression 0건.
+    참고: tests/test_request_accept_sst_2044.py(8) 및 test_pr_body_readiness_a716.py(TC-4) 실패는
+    본 변경 이전(branch HEAD, 내 변경 stash 상태)에도 동일하게 실패하는 pre-existing 실패이며
+    (sst_2044는 oracle input.json 부재 + gates accept codex gate 미시드), path B 제거와 무관함.
+  </test_results>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_ci_run_id_filter_4ac2.py</file>
+      <file>tests/e2e/test_codex_snapshot_sync_f52c.py</file>
+      <file>tests/e2e/test_final_packet_2e3d.py</file>
+      <file>tests/e2e/test_request_accept_snapshot_8c3b.py</file>
+      <file>tests/e2e/test_user_acceptance_nonce_bbdb.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>pipeline._cmd_gates_codex_review</target_function>
+    <change_type>path_removal</change_type>
+    <description>path B (staging-probe fallback) 블록 제거 및 PENDING acceptance_request.json에서 staging 복구 로직으로 교체</description>
+    <affected_callers>
+      <caller>tests/e2e/test_codex_snapshot_sync_f52c.py</caller>
+      <caller>tests/e2e/test_request_accept_snapshot_8c3b.py</caller>
+      <caller>tests/e2e/test_user_acceptance_nonce_bbdb.py</caller>
+      <caller>tests/e2e/test_final_packet_2e3d.py</caller>
+      <caller>tests/e2e/test_ci_run_id_filter_4ac2.py</caller>
+    </affected_callers>
+    <blast_radius>CONTAINED — 단일 함수 내부 변경, 외부 인터페이스 불변</blast_radius>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_ci_run_id_filter_4ac2.py, tests/e2e/test_codex_snapshot_sync_f52c.py, tests/e2e/test_final_packet_2e3d.py, tests/e2e/test_request_accept_snapshot_8c3b.py, tests/e2e/test_user_acceptance_nonce_bbdb.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_final_packet_2e3d.py, tests/e2e/test_ci_run_id_filter_4ac2.py, tests/e2e/test_codex_snapshot_sync_f52c.py, tests/e2e/test_request_accept_snapshot_8c3b.py, tests/e2e/test_user_acceptance_nonce_bbdb.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <scope_amendment_reason>
+      [Side-Effect Audit] 브리핑은 pipeline.py + 2개 테스트(2e3d, 4ac2)를 명시했으나,
+      path B(staging-probe fallback) 제거의 blast radius에는 codex-review --approve-pending을
+      staging file 없이 직접 호출하던 모든 테스트가 포함됨. Grep으로 approve-pending 사용처를
+      전수 조사한 결과 f52c/8c3b/bbdb의 일부 테스트가 path B에 의존하여 staging_file_missing으로
+      깨졌음. 이들은 본 변경 이전에는 통과했으므로(내 regression) 동일 2-call-with-retry 흐름으로
+      함께 갱신함. 모두 동일 codex/acceptance 테스트 surface이며 본 BUG-20260628-F52C(HIGH_RISK)
+      파이프라인의 대상 범위 내. CLAUDE.md/.github/workflows/.claude/agents는 미수정.
+    </scope_amendment_reason>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+</handover>
