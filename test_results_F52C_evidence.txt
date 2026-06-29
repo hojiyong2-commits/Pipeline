@@ -1,0 +1,24 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\hojiy\AppData\Local\Programs\Python\Python312\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\hojiy\OneDrive\Desktop\Projects\Really good agents for QA and Orchestra
+configfile: pyproject.toml
+plugins: anyio-4.13.0
+collecting ... collected 14 items
+
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc5_pending_blocks_final_packet PASSED [  7%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc6_pending_blocks_update_pr_body PASSED [ 14%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc4n_no_pending_allows_packet PASSED [ 21%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc4n_pending_but_consistent_allows_packet PASSED [ 28%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc1_stale_packet_regression PASSED [ 35%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc2_packet_sha_3way_match PASSED [ 42%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc3_pr_body_sha_3way_match PASSED [ 50%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc3n_codex_approved_sha_match PASSED [ 57%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc4_codex_reject_no_code PASSED [ 64%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc7_rerun_same_snapshot_noop PASSED [ 71%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc8_timestamp_fixed_at_staging PASSED [ 78%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc9_nonce_provenance_preserved PASSED [ 85%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc10_post_accept_fields_only PASSED [ 92%]
+tests/e2e/test_codex_snapshot_sync_f52c.py::test_tc6n_all_tests_pass PASSED [100%]
+
+============================= 14 passed in 19.99s =============================
