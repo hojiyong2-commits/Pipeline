@@ -1,0 +1,64 @@
+<handover>
+  <from>dev-agent</from>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <mt_id>MT-8-r8</mt_id>
+  <agent_run_id>dev-694d3c2b8a1ab7d6</agent_run_id>
+  <summary>
+    r7 미해결 codex_review_stale 순환 수정: packet_sha256(로컬 staged, 불변)과
+    pr_body_sha256(GitHub canonical, publish 후 fetch)의 의미를 분리했다. GitHub API가 PR body
+    저장 시 line ending(CRLF→LF)/trailing whitespace를 정규화하여 로컬 candidate SHA와 canonical
+    SHA가 정상적으로 달라지는데, r7은 이 둘을 3자 비교하여 codex_review_stale로 무한 차단되었다.
+    candidate-vs-canonical 비교를 제거하고 canonical 2자 검증 + packet 3자 검증으로 대체했다.
+  </summary>
+
+  <scope_declaration>
+    <files_to_create>없음</files_to_create>
+    <files_to_modify>
+      pipeline.py,
+      tests/e2e/test_codex_snapshot_sync_f52c.py
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+  </scope_declaration>
+
+  <impact_analysis>
+    <micro_task_id>MT-8-r8</micro_task_id>
+    <target_function>pipeline._cmd_gates_codex_review / _cmd_gates_request_accept / _verify_snapshot_invariant / _cmd_gates_accept</target_function>
+    <upstream_callers>
+      <caller>pipeline.py _cmd_gates_request_accept (publish 단계)</caller>
+      <caller>pipeline.py gates accept 핸들러 (packet_sha256 3자 검증)</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>_get_pr_body_text (GitHub canonical body fetch)</dep>
+      <dep>_codex_review_result_path / _load_acceptance_request</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>codex_review_result.json — pr_body_candidate_sha256 + github_canonical_pr_body_sha256 분리</mutation>
+      <mutation>acceptance_request.json — pr_body_sha256(canonical) write</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>YES — _verify_published_pr_body_three_way 제거, _verify_published_canonical_pr_body 신규</signature_change>
+      <breaking_change>NO — schema_version=2 backward compat</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — TC-R8-1..7 신규 7개, 회귀 59 passed</test_coverage>
+    </risk_assessment>
+  </impact_analysis>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_snapshot_sync_f52c.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_snapshot_sync_f52c.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <self_check>
+    <execution_check>PASS — pytest tests/e2e/test_codex_snapshot_sync_f52c.py: 43 passed + 회귀 59 passed</execution_check>
+    <scope_lock>PASS</scope_lock>
+  </self_check>
+
+  <evidence>
+    <changed_file>pipeline.py</changed_file>
+    <changed_file>tests/e2e/test_codex_snapshot_sync_f52c.py</changed_file>
+    <test_result>pytest tests/e2e/test_codex_snapshot_sync_f52c.py -p no:xdist: 43 passed</test_result>
+    <regression>59 passed (회귀 suite)</regression>
+  </evidence>
+</handover>
