@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dev_handover>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <round>r6</round>
+  <from_phase>dev</from_phase>
+  <to_phase>qa</to_phase>
+  <handover>
+    <changed_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_snapshot_sync_f52c.py</file>
+      <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+      <file>tests/test_acceptance_request_format_069a.py</file>
+      <file>tests/test_acceptance_request_verification_json.py</file>
+    </changed_files>
+    <fix_summary>frozen bytes staging approach: acceptance_staging.json에 frozen_at 타임스탬프 및 packet content 저장, codex-review가 동일 bytes 기준으로 SHA 검토, publish는 frozen bytes 재렌더링 없이 그대로 커밋. 3자 SHA 불변식(codex==acceptance_request==current_pr_body) 성립.</fix_summary>
+    <test_results>56 passed, 0 new regressions</test_results>
+    <evidence>
+      <file path="pipeline.py">_materialize_acceptance_snapshot (frozen_at/frozen_packet_content 파라미터 추가), _get_staged_pr_body_sha (staged_packet_content 파라미터 추가), _publish_acceptance_request (frozen_packet_content 파라미터 추가), _cmd_gates_codex_review --approve-pending (acceptance_staging.json 읽기), _cmd_gates_request_accept (staging file 생성/재사용/삭제 + frozen bytes publish), _save_acceptance_staging/_load_acceptance_staging (신규 헬퍼)</file>
+      <file path="tests/e2e/test_codex_snapshot_sync_f52c.py">5개 신규 TC (tc_f52c_1~5) + 기존 TC 2-call 재작업</file>
+      <file path="tests/e2e/test_request_accept_nonce_reuse_aef0.py">2-call 흐름으로 재작업</file>
+      <file path="tests/test_acceptance_request_format_069a.py">2-call 흐름으로 재작업</file>
+      <file path="tests/test_acceptance_request_verification_json.py">producer-consumer sync (packet_content 키 추가)</file>
+    </evidence>
+  </handover>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_snapshot_sync_f52c.py</file>
+      <file>tests/e2e/test_request_accept_nonce_reuse_aef0.py</file>
+      <file>tests/test_acceptance_request_format_069a.py</file>
+      <file>tests/test_acceptance_request_verification_json.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_materialize_acceptance_snapshot, _get_staged_pr_body_sha, _publish_acceptance_request, _cmd_gates_codex_review, _cmd_gates_request_accept, _save_acceptance_staging, _load_acceptance_staging</target_function>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+    <side_effects>acceptance staging 파일(acceptance_staging.json) 생성/삭제. 기존 snapshot SHA 불변성 보장 방식 변경 — frozen bytes 기반으로 전환.</side_effects>
+    <mt_coverage>MT-1 (frozen bytes staging), MT-2 (codex-review 2-call), MT-3 (nonce reuse 2-call), MT-4 (format 069a 2-call), MT-5 (verification json sync)</mt_coverage>
+  </impact_analysis>
+</dev_handover>
