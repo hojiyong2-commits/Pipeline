@@ -1,0 +1,70 @@
+<handover>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <phase>dev</phase>
+  <round>5</round>
+  <agent_run_id>dev-470d001384e5b31d</agent_run_id>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_snapshot_sync_f52c.py</file>
+    <file>scope_manifest_r5.json</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_snapshot_sync_f52c.py</file>
+    </files_to_modify>
+    <mt_id>MT-6</mt_id>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_materialize_acceptance_snapshot, _publish_acceptance_request, _get_staged_pr_body_sha, _verify_published_pr_body_three_way, _cmd_gates_request_accept, _cmd_gates_codex_review</target_function>
+    <change_scope>frozen-bytes staging: staging bytes를 publish 경로에 그대로 전달하여 재렌더링 없이 byte-for-byte 동일 보장</change_scope>
+    <affected_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_snapshot_sync_f52c.py</file>
+    </affected_files>
+    <blast_radius>pipeline.py 내 acceptance staging/publish 함수 6개 수정, 테스트 파일 5개 TC 추가</blast_radius>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/e2e/test_codex_snapshot_sync_f52c.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_snapshot_sync_f52c.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <implementation_summary>
+    5th REJECT 근본 원인 해소: frozen-bytes staging 구현.
+    publish가 staging이 만든 packet/json/PR-body bytes를 재렌더링 없이 그대로 기록하여,
+    Codex가 검토한 staged snapshot과 실제 publish된 PR body가 byte-for-byte 동일함을 보장한다.
+    핵심 변경:
+    (1) _materialize_acceptance_snapshot(publish=True) — frozen_packet_content/frozen_json_content
+        주입 시 재렌더링 금지, staged bytes 그대로 기록. json_content 반환값 추가.
+    (2) _get_staged_pr_body_sha — staged_packet_content 인자로 in-memory staged bytes 사용
+        (디스크 packet.md 잔여물 의존 제거). codex/request-accept가 동일 bytes로 SHA 계산.
+    (3) _publish_acceptance_request — frozen bytes를 받아 _materialize에 전달.
+    (4) _verify_published_pr_body_three_way — codex_body_sha == recorded_body_sha 직접 비교 복원.
+        기존 "codex 존재만 검증, 직접 비교 안 함" 우회를 제거. 불일치 시 codex_review_stale BLOCKED.
+        3자 불변식: codex SHA == acceptance_request SHA == sha256(현재 GitHub PR body).
+    (5) _cmd_gates_request_accept / _cmd_gates_codex_review(--approve-pending) — staged packet_content
+        캡처/전달로 두 subprocess가 동일 in-memory bytes 기준 SHA를 결정적으로 계산.
+    timestamp(generated_at/validated_at/created_at)는 staging 시점 1회만 생성되며 publish가
+    frozen json_content를 그대로 기록하므로 staging/publish 사이 변경되지 않는다.
+  </implementation_summary>
+  <test_results>
+    tests/e2e/test_codex_snapshot_sync_f52c.py: 39 passed (TC-ALL 메타 제외), 5개 신규 TC 추가.
+    신규 TC: frozen packet bytes 재사용, generated_at 불변, codex!=request body SHA BLOCKED,
+    request!=GitHub body SHA BLOCKED, 3자 일치 happy-path.
+    회귀: test_codex_review.py / test_codex_review_loop_4121.py / test_acceptance_request_verification_json.py
+    34 passed. 기존 pre-existing 실패(test_request_accept_sst_2044/verification_json_ssot/069a)는
+    ACCEPT-{pipeline_id} nonce-less 형식 변경에서 비롯된 것으로 MT-6 범위 밖이며, 내 변경 stash 시에도
+    동일하게 실패함을 확인(회귀 아님).
+  </test_results>
+  <qa_instructions>
+    1. tests/e2e/test_codex_snapshot_sync_f52c.py를 -k "not tc_all_suite_pass"로 실행 → 39 PASS 확인.
+    2. test_tc_mt6_* 5개 신규 TC가 3자 byte-for-byte 불변식을 검증하는지 확인.
+    3. test_tc_new_4의 CODEXMISMATCH BLOCKED 단언으로 codex==recorded 직접 비교 복원 확인.
+    4. _verify_published_pr_body_three_way에 codex_body_sha != recorded_body_sha → BLOCKED 코드 존재 확인.
+    5. _materialize_acceptance_snapshot publish 경로에서 frozen bytes 주입 시 재렌더링 미발생 확인.
+    6. test_tc_new_1은 단독 실행 시 PASS(전체 동시 실행 시 root acceptance_request.json OneDrive
+       잠금으로 인한 cross-test 오염은 기존 fixture 한계 — 단독/소그룹 실행으로 검증).
+  </qa_instructions>
+</handover>
