@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-29T14:24:23Z",
+  "generated_at": "2026-06-29T14:31:41Z",
   "pipeline_id": "BUG-20260628-F52C",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "c43e9a5cfb6af500039d2d93736ddeffcdd6b8da",
+  "commit_hint": "69136726f613cec628c7ef572c0174a10a01a3e8",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-06-29T14:24:07Z",
@@ -20,7 +20,7 @@
     "output_file": "dev_handover_r7.xml",
     "output_sha256": "0dc01bdb6d13e1b01877929996a4b974a057582c30affa65ce544ccceb60ba27",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-9373ca0cbcba8ba7.json",
-    "receipt_sha256": "9c9534a103257e544de0ae9bd020f37a0725de981677200ccced2f7d2877a7d6",
+    "receipt_sha256": "5a8ec1142830db0cd7cb97a6a4ac601735422f89995f03b87c80f779aa63062d",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-9373ca0cbcba8ba7.json"
   },
@@ -30,9 +30,9 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-9373ca0cbcba8ba7.json",
       "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-9373ca0cbcba8ba7.json",
-      "sha256": "9c9534a103257e544de0ae9bd020f37a0725de981677200ccced2f7d2877a7d6",
-      "size_bytes": 518,
-      "requires_force_add": true
+      "sha256": "5a8ec1142830db0cd7cb97a6a4ac601735422f89995f03b87c80f779aa63062d",
+      "size_bytes": 504,
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -40,7 +40,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/report_dev_handover_r7.xml",
       "sha256": "0dc01bdb6d13e1b01877929996a4b974a057582c30affa65ce544ccceb60ba27",
       "size_bytes": 5965,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "scope_manifest",
@@ -48,7 +48,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/scope_manifest_scope_manifest_r7.json",
       "sha256": "dbf9c1a567c94faefdedfd6abf7bb5338775b6ebc04b9ba3d82a5b31d5943612",
       "size_bytes": 1752,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [
