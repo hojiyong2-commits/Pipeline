@@ -18510,6 +18510,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             # \r\n으로 변환한 결과)를 해싱하므로, sha256(string)와 다를 수 있다. publish도 동일
             # write_text로 packet md를 쓰므로 staging이 저장한 file-SHA가 published file-SHA와 같다.
             # 따라서 codex packet_sha256 == staging staged_packet_sha256 == published packet_sha256.
+            assert _acceptance_staging is not None  # guarded by _staged_content_from_file truthy check above
             packet_sha = str(
                 _acceptance_staging.get("staged_packet_sha256", "") or ""
             )
@@ -19536,6 +19537,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             if ac_table is not None:
                 req_candidate["ac_fulfillment_table"] = ac_table
             nonce = str(req_candidate.get("nonce", "") or "")
+            assert _existing_staging is not None  # guarded by _staging_conditions_match which includes is not None
             staged_packet_content = _existing_staging["staged_packet_content"]
             staged_sha_manifest = {
                 "packet_sha256": _existing_staging["staged_packet_sha256"],
