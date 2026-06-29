@@ -91,11 +91,6 @@
                                       "path":  "tests/test_acceptance_request_verification_json.py",
                                       "sha256":  "a0d22c721d430f8a0c9736769a64a6f1c13acc9837eb444f87890a6860908a52",
                                       "size_bytes":  11386
-                                  },
-                                  {
-                                      "path":  "test_results_F52C_evidence.txt",
-                                      "sha256":  "e644180d58c397ca354845baf75a9620d0c5b13bbc0cc75ae3c27e8f16dc1216",
-                                      "size_bytes":  1811
                                   }
                               ],
     "local_only_files":  [
