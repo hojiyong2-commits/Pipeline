@@ -1,0 +1,217 @@
+{
+  "pipeline_id": "BUG-20260628-F52C",
+  "scope_amendment": {
+    "reason": "REJECT가 요구한 fail-closed Codex 재설계(결과 없음=BLOCKED, NOT_CONFIGURED 제거)는 request-accept 계약을 '무조건 성공'에서 'Codex APPROVE_TO_USER 이후에만 publish'로 변경합니다. 그 결과 request-accept 성공을 기대하던 기존 consumer E2E 테스트가 깨지며, 동일 사이클 producer-consumer 동기화(CLAUDE.md bundle-patch)가 필요합니다. 아래 test 파일들은 PM <target_files>에 없었으나 계약 변경의 불가피한 consumer 동기화로서 codex-review 사전 승인 단계를 주입했습니다. PM step_plan <target_files>에 추가 비준이 필요합니다.",
+    "trust_root_files_touched": [
+      "tests/e2e/test_request_accept_snapshot_8c3b.py",
+      "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+      "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+      "tests/test_acceptance_request_format_069a.py",
+      "tests/e2e/test_final_packet_2e3d.py",
+      "tests/e2e/test_ci_run_id_filter_4ac2.py",
+      "tests/test_acceptance_request_verification_json.py"
+    ],
+    "change_nature": "각 파일은 request-accept 성공 직전 'gates codex-review --verdict APPROVE_TO_USER --approve-pending' 사전 승인 1단계만 주입(검증 로직 불변). verification_json 단위 테스트는 _codex_review_snapshot/_materialize_acceptance_snapshot 모킹으로 갱신."
+  },
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._materialize_acceptance_snapshot"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_materialize_acceptance_snapshot(publish=False) staging은 temp 파일 SHA만 계산 후 삭제하며 디스크/state/PR body를 변경하지 않음(부수효과 0). publish=True는 os.replace 원자 커밋."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_request_accept",
+        "pipeline._prepare_acceptance_snapshot_candidate",
+        "pipeline._publish_acceptance_request"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-5"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_cmd_gates_request_accept를 prepare_snapshot(_prepare_acceptance_snapshot_candidate: nonce/acceptance_request를 메모리 후보로만 생성, 디스크 미기록) → codex_review_snapshot(_codex_review_snapshot) → publish(_publish_acceptance_request) 3단계로 분리.",
+            "Codex APPROVE_TO_USER가 아니면 _die로 BLOCKED(exit non-zero)하고 pending comment/stdout 승인 코드/acceptance_request.json을 생성하지 않음."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._cmd_gates_codex_review",
+        "pipeline._codex_review_snapshot",
+        "pipeline._codex_review_result_path"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [
+            "AC-2",
+            "AC-3"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "gates codex-review(_cmd_gates_codex_review)가 staged snapshot 검토 verdict를 codex_review_result.json(SSoT, _codex_review_result_path)에 기록. --approve-pending은 request-accept가 stage할 packet과 동일한 결정적 SHA를 staging하여 기록.",
+            "_codex_review_snapshot은 codex_review_loop_state.json을 읽지 않고 codex_review_result.json만 사용. 결과 없음/파싱 실패/verdict!=APPROVE_TO_USER/SHA 불일치/pipeline_id 불일치는 모두 fail-closed REJECT. NOT_CONFIGURED fallback 제거."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._check_pending_snapshot_lock"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [
+            "AC-5",
+            "AC-6"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_check_pending_snapshot_lock이 PENDING acceptance_request의 packet이 기록 SHA와 divergent하게 변형되면 _cmd_report_final_packet/_cmd_report_update_pr_body에서 pending_snapshot_lock BLOCKED. 동일 bytes는 no-op 허용."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "pipeline._verify_snapshot_invariant"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-4",
+            "AC-5"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_verify_snapshot_invariant을 codex_review_result 인자까지 받아 staging==published==codex-review 3-way packet SHA 일치를 publish 직후 강제. 불일치 시 BLOCKED."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "tests/e2e/test_codex_snapshot_sync_f52c.py",
+        "test_results_F52C.txt",
+        "tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/expected.json",
+        "tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/input.json",
+        "tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/expected.json",
+        "tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/input.json"
+      ],
+      "affected_functions": [
+        "tests/e2e/test_codex_snapshot_sync_f52c.py"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": [
+            "AC-1"
+          ],
+          "changed_files": [
+            "pipeline.py",
+            "tests/e2e/test_codex_snapshot_sync_f52c.py"
+          ],
+          "implementation_evidence": [
+            "_materialize_acceptance_snapshot: frozen_packet_content/frozen_json_content 파라미터 추가 — publish=True 시 staging이 생성한 bytes를 재렌더링 없이 그대로 기록(frozen-bytes staging). json_content를 반환값에 추가.",
+            "_publish_acceptance_request: frozen_packet_content/frozen_json_content 파라미터 추가 후 _materialize_acceptance_snapshot(publish=True)로 그대로 전달 — codex가 검토한 staged bytes == publish bytes byte-for-byte 보장.",
+            "_get_staged_pr_body_sha: staged_packet_content 파라미터 추가 — 디스크 packet.md 잔여물 대신 in-memory staged bytes로 '최종 publish 예정 PR body' SHA를 결정적 계산.",
+            "_verify_published_pr_body_three_way: codex_body_sha == recorded_body_sha 직접 비교(3자 불변식) 복원 — 기존 'codex 존재만 검증' 우회 제거. 불일치 시 codex_review_stale BLOCKED.",
+            "_cmd_gates_request_accept: staged packet/json bytes를 캡처하여 _get_staged_pr_body_sha와 _publish_acceptance_request에 전달.",
+            "_cmd_gates_codex_review --approve-pending: _get_staged_pr_body_sha에 staged packet_content 전달하여 request-accept와 동일 in-memory bytes 기준 SHA 계산.",
+            "tests/e2e/test_codex_snapshot_sync_f52c.py: 5개 신규 TC 추가(test_tc_mt6_publish_reuses_frozen_packet_bytes, test_tc_mt6_generated_at_frozen_between_stage_and_publish, test_tc_mt6_codex_vs_request_body_sha_mismatch_blocks, test_tc_mt6_request_vs_github_body_sha_mismatch_blocks, test_tc_mt6_three_way_all_equal_publish_happy_path) + test_tc_new_4에 CODEXMISMATCH BLOCKED 단언 추가."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-7-AMENDMENT",
+      "files": [
+        "tests/e2e/test_request_accept_snapshot_8c3b.py",
+        "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+        "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+        "tests/test_acceptance_request_format_069a.py",
+        "tests/e2e/test_final_packet_2e3d.py",
+        "tests/e2e/test_ci_run_id_filter_4ac2.py",
+        "tests/test_acceptance_request_verification_json.py"
+      ],
+      "affected_functions": [
+        "consumer_test_codex_sync"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7-AMENDMENT",
+          "implemented_ac": [
+            "AC-2"
+          ],
+          "changed_files": [
+            "tests/e2e/test_request_accept_snapshot_8c3b.py",
+            "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+            "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+            "tests/test_acceptance_request_format_069a.py",
+            "tests/e2e/test_final_packet_2e3d.py",
+            "tests/e2e/test_ci_run_id_filter_4ac2.py",
+            "tests/test_acceptance_request_verification_json.py"
+          ],
+          "implementation_evidence": [
+            "request-accept 계약 변경에 따른 consumer 동기화: 성공 기대 E2E에 'gates codex-review --verdict APPROVE_TO_USER --approve-pending' 사전 승인 단계 주입(검증 로직 불변). verification_json 단위 테스트는 _codex_review_snapshot/_materialize_acceptance_snapshot 모킹으로 갱신."
+          ]
+        }
+      ]
+    }
+  ]
+}

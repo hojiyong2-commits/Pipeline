@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-06-29T10:01:12Z",
+  "pipeline_id": "BUG-20260628-F52C",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "c43e9a5cfb6af500039d2d93736ddeffcdd6b8da",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-06-29T10:00:38Z",
+    "report_file": "dev_handover_r5.xml",
+    "evidence": "pipeline.py,tests/e2e/test_codex_snapshot_sync_f52c.py,tests/e2e/test_request_accept_snapshot_8c3b.py,tests/e2e/test_request_accept_nonce_reuse_aef0.py,tests/e2e/test_user_acceptance_nonce_bbdb.py,tests/test_acceptance_request_format_069a.py,tests/e2e/test_final_packet_2e3d.py,tests/e2e/test_ci_run_id_filter_4ac2.py,tests/test_acceptance_request_verification_json.py,test_results_F52C.txt,tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/expected.json,tests/oracles/BUG-20260628-F52C/edge_pending_lock_blocked/input.json,tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/expected.json,tests/oracles/BUG-20260628-F52C/normal_snapshot_sync/input.json"
+  },
+  "agent_run": {
+    "run_id": "dev-470d001384e5b31d",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_r5.xml",
+    "output_sha256": "4996646c8bb2a90ea636a2b0b2c96b7f208b43f659187c7a227c08876ae8ff99",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-470d001384e5b31d.json",
+    "receipt_sha256": "a58c91e0258f0467f15ef87342b8f5974ad3f88309790ce1931373fc611adf72",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-470d001384e5b31d.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260628-F52C\\dev\\dev-470d001384e5b31d.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/agent_receipt_dev-470d001384e5b31d.json",
+      "sha256": "a58c91e0258f0467f15ef87342b8f5974ad3f88309790ce1931373fc611adf72",
+      "size_bytes": 505,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_r5.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/report_dev_handover_r5.xml",
+      "sha256": "4996646c8bb2a90ea636a2b0b2c96b7f208b43f659187c7a227c08876ae8ff99",
+      "size_bytes": 4645,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest_F52C_r5_complete.json",
+      "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/scope_manifest_scope_manifest_F52C_r5_complete.json",
+      "sha256": "cffe9921f820de96bdc33cb87b39b979aedc5bb1359030435aec5d857321eccb",
+      "size_bytes": 9925,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "1a55985e95b025c1dd2354dde5817027e7e736adb55a24b8b8a44cfcb602040a",
+      "size_bytes": 1217125
+    },
+    {
+      "path": "tests/e2e/test_codex_snapshot_sync_f52c.py",
+      "sha256": "a0291ca7a1779073cddb1fc28b2eaacb068022207eb833fa293b43a66a31b059",
+      "size_bytes": 56847
+    },
+    {
+      "path": "tests/e2e/test_request_accept_snapshot_8c3b.py",
+      "sha256": "d91bb61f19baf6cd927fb54684f9250fe6948899fd16e567dd6453d10ec9fa6a",
+      "size_bytes": 33594
+    },
+    {
+      "path": "tests/e2e/test_request_accept_nonce_reuse_aef0.py",
+      "sha256": "56a2df95d2937fa04d7b4d66675c37598453da8a50fe2192a7d5451892ea4806",
+      "size_bytes": 28977
+    },
+    {
+      "path": "tests/e2e/test_user_acceptance_nonce_bbdb.py",
+      "sha256": "9d246083a1c36160ed389358a049afe39fea5aff2718da6749beb98c29c93f96",
+      "size_bytes": 43273
+    },
+    {
+      "path": "tests/test_acceptance_request_format_069a.py",
+      "sha256": "80efa8a57716d4dba48fb29505dd58b70a9a772eda9b264e316e66daba8785ee",
+      "size_bytes": 17509
+    },
+    {
+      "path": "tests/e2e/test_final_packet_2e3d.py",
+      "sha256": "a46ec8a75391604cb6093e8322b48eca537b9a2dd937949ef7b74a923980cd4c",
+      "size_bytes": 41899
+    },
+    {
+      "path": "tests/e2e/test_ci_run_id_filter_4ac2.py",
+      "sha256": "8d9b0e74a25ba84d501a96d0f5a6693f9e3bb0a966a620eacf6b7535cf94fdee",
+      "size_bytes": 24393
+    },
+    {
+      "path": "tests/test_acceptance_request_verification_json.py",
+      "sha256": "a0d22c721d430f8a0c9736769a64a6f1c13acc9837eb444f87890a6860908a52",
+      "size_bytes": 11386
+    },
+    {
+      "path": "test_results_F52C.txt",
+      "sha256": "3e6fb8854fa40bd7d91be96545f5ffe049667166a166a76c4cc424a06e92a28b",
+      "size_bytes": 2596
+    }
+  ],
+  "local_only_files": []
+}
