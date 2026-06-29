@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-06-29T10:29:51Z",
+  "generated_at": "2026-06-29T10:34:10Z",
   "pipeline_id": "BUG-20260628-F52C",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "5e9af12843abb8b7652cfec49d37b0712196f40b",
+  "commit_hint": "8af7b07a17facf3f4f2dc89643be468d455c57b6",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-06-29T10:00:38Z",
@@ -46,8 +46,8 @@
       "label": "scope_manifest",
       "source": "scope_manifest_F52C_r5_complete.json",
       "path": ".pipeline/phase_evidence/BUG-20260628-F52C/dev/scope_manifest_scope_manifest_F52C_r5_complete.json",
-      "sha256": "cffe9921f820de96bdc33cb87b39b979aedc5bb1359030435aec5d857321eccb",
-      "size_bytes": 9925,
+      "sha256": "d43e55fbdcd844160ceb38bd2c07a085c567626fc6714f0e6276d2200fc84b4c",
+      "size_bytes": 9709,
       "requires_force_add": false
     }
   ],
