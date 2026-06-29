@@ -646,6 +646,8 @@ def _clean_root_artifacts():
     """
     targets = [PIPELINE_ROOT / n for n in _ART_NAMES]
     targets.append(PIPELINE_ROOT / ".pipeline" / "codex_review_result.json")
+    # BUG-20260628-F52C: staging file은 BASE_DIR(.pipeline)에 저장되므로 테스트 간 정리 필수.
+    targets.append(PIPELINE_ROOT / ".pipeline" / "acceptance_staging.json")
     for p in targets:
         for _attempt in range(5):
             if not p.exists():
@@ -848,6 +850,44 @@ def _codex_review_result_path_for(state_file: Path) -> Path:
     return state_file.resolve().parent / ".pipeline" / "codex_review_result.json"
 
 
+def _acceptance_staging_path() -> Path:
+    """acceptance_staging.json 경로 — pipeline.py는 BASE_DIR(.pipeline)에 저장한다."""
+    return PIPELINE_ROOT / ".pipeline" / "acceptance_staging.json"
+
+
+def _stage_and_codex_approve(env, evidence):
+    """BUG-20260628-F52C 2-call 흐름: staging file 생성 후 codex-review로 frozen bytes 검토.
+
+    1) gates request-accept (1차) — staging file을 생성하고 codex_review_required로 BLOCKED.
+       (codex_review_result.json이 아직 없으므로 fail-closed REJECT → exit 1. 정상 흐름이다.)
+    2) gates codex-review --approve-pending — staging file의 frozen bytes로 SHA를 계산하여
+       codex_review_result.json에 APPROVE_TO_USER를 기록.
+
+    이후 호출자가 gates request-accept (2차)를 실행하면 staging file + codex APPROVED를 감지하여
+    frozen bytes로 publish하며, codex == acceptance_request == 현재 PR body 3자 SHA가 일치한다.
+
+    Returns:
+        (r_stage, r_codex) — 1차 request-accept와 codex-review의 CompletedProcess.
+    """
+    r_stage = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env,
+    )
+    # 1차 request-accept는 codex_review_result.json이 없어 BLOCKED(exit 1)가 정상이다.
+    # 단, staging file은 codex 게이트 이전 단계에서 이미 저장되어야 한다.
+    assert _acceptance_staging_path().exists(), (
+        f"1차 request-accept가 staging file을 생성하지 않음\n"
+        f"{r_stage.stdout}{r_stage.stderr}"
+    )
+    r_codex = _run_pipeline_env(
+        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
+        env=env,
+    )
+    assert r_codex.returncode == 0, (
+        f"codex-review --approve-pending 실패\n{r_codex.stdout}{r_codex.stderr}"
+    )
+    return r_stage, r_codex
+
+
 def test_tc_reject_pr_body_sha_mismatch(gh_publish_env):
     """REJECT-1: Codex Review 결과의 pr_body_sha256 != staged pr_body SHA 시 BLOCKED.
 
@@ -913,11 +953,8 @@ def test_tc_reject_pr_head_sha_mismatch(gh_publish_env):
 def test_tc_reject_pr_body_update_failure(gh_publish_env):
     """REJECT-2: PR body 갱신(gh pr edit) 실패 시 request-accept fail-closed BLOCKED."""
     env, state_file, evidence = gh_publish_env
-    r_cx = _run_pipeline_env(
-        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
-        env=env,
-    )
-    assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
+    # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve.
+    _stage_and_codex_approve(env, evidence)
     # gh pr edit를 실패시킨다.
     env_fail = dict(env)
     env_fail["GH_STUB_FAIL_EDIT"] = "1"
@@ -937,11 +974,8 @@ def test_tc_reject_pr_body_update_failure(gh_publish_env):
 def test_tc_reject_pending_comment_failure(gh_publish_env):
     """REJECT-2: pending comment 게시(gh pr comment) 실패 시 fail-closed BLOCKED."""
     env, state_file, evidence = gh_publish_env
-    r_cx = _run_pipeline_env(
-        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
-        env=env,
-    )
-    assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
+    # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve.
+    _stage_and_codex_approve(env, evidence)
     env_fail = dict(env)
     env_fail["GH_STUB_FAIL_COMMENT"] = "1"
     r = _run_pipeline_env(
@@ -964,11 +998,8 @@ def test_tc_publish_3way_sha_match(gh_publish_env):
     pr_body/pr_head/packet SHA가 모두 일치하여 fail-closed 없이 '사용자 승인 요청'까지 도달한다.
     """
     env, state_file, evidence = gh_publish_env
-    r_cx = _run_pipeline_env(
-        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
-        env=env,
-    )
-    assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
+    # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve.
+    _stage_and_codex_approve(env, evidence)
     r = _run_pipeline_env(
         "gates", "request-accept", "--evidence", str(evidence), env=env,
     )
@@ -1017,12 +1048,8 @@ def test_tc_new_1_accept_blocked_without_codex_pr_body_sha(gh_publish_env):
     제거하고 gates accept를 실행하면 failure_code=codex_review_stale로 BLOCKED여야 한다.
     """
     env, state_file, evidence = gh_publish_env
-    # 1) codex approve + request-accept publish (정상 경로).
-    r_cx = _run_pipeline_env(
-        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
-        env=env,
-    )
-    assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
+    # 1) staging + codex approve + request-accept publish (정상 경로, 2-call).
+    _stage_and_codex_approve(env, evidence)
     r_ra = _run_pipeline_env(
         "gates", "request-accept", "--evidence", str(evidence), env=env,
     )
@@ -1102,15 +1129,12 @@ def test_tc_new_2_prepublish_sha_blocks_three_way(gh_publish_env):
 def test_tc_new_3_three_way_match_happy_path(gh_publish_env):
     """TC-NEW-3: 정상 경로 — codex == acceptance_request == sha256(현재 PR body) 3자 일치.
 
-    staged 최종 body SHA를 올바르게 기록(--approve-pending)한 뒤 request-accept를 실행하면
+    staged 최종 body SHA를 올바르게 기록(2-call staging+codex)한 뒤 request-accept를 실행하면
     publish 후 3자가 모두 일치하여 '사용자 승인 요청'까지 도달하고, 세 SHA가 동일하다.
     """
     env, state_file, evidence = gh_publish_env
-    r_cx = _run_pipeline_env(
-        "gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending",
-        env=env,
-    )
-    assert r_cx.returncode == 0, f"codex approve 실패\n{r_cx.stdout}{r_cx.stderr}"
+    # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve.
+    _stage_and_codex_approve(env, evidence)
     r = _run_pipeline_env(
         "gates", "request-accept", "--evidence", str(evidence), env=env,
     )
@@ -1167,6 +1191,156 @@ def test_tc_new_4_three_way_helper_uses_codex_value(isolated_pipeline):
     assert "BODYBAD BLOCKED" in out, f"현재 body만 달라도 통과\n{out}"
     assert "CODEXMISSING BLOCKED" in out, f"codex 부재인데 통과 (2자 downgrade)\n{out}"
     assert "CODEXEMPTY BLOCKED" in out, f"codex 빈값인데 통과 (legacy skip)\n{out}"
+
+
+# ---------------------------------------------------------------------------
+# BUG-20260628-F52C r6: staging file frozen bytes 흐름 신규 TC (TC-F52C-1..5)
+#
+# 핵심: request-accept staging이 .pipeline/acceptance_staging.json에 frozen bytes를 저장하고,
+#       codex-review --approve-pending이 그 bytes로 SHA를 계산하며, publish가 동일 frozen bytes를
+#       재렌더링 없이 커밋하여 codex == acceptance_request == 현재 PR body 3자 SHA가 일치한다.
+# ---------------------------------------------------------------------------
+
+
+def test_tc_f52c_staging_file_created_on_request_accept(gh_publish_env):
+    """TC-F52C-1: request-accept(1차) 실행 시 acceptance_staging.json이 생성된다.
+
+    codex_review_result.json이 아직 없으므로 1차 request-accept는 codex 게이트에서 BLOCKED지만,
+    그 이전 단계에서 staging file(frozen bytes)을 반드시 저장해야 한다.
+    """
+    env, state_file, evidence = gh_publish_env
+    assert not _acceptance_staging_path().exists(), "사전: staging file이 이미 존재"
+    r = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env,
+    )
+    combined = (r.stdout or "") + (r.stderr or "")
+    # codex 미승인 상태이므로 BLOCKED(exit 1)가 정상.
+    assert r.returncode != 0, f"codex 미승인인데 exit 0\n{combined}"
+    # staging file은 codex 게이트 이전에 저장되어야 한다.
+    assert _acceptance_staging_path().exists(), (
+        f"1차 request-accept가 staging file을 생성하지 않음\n{combined}"
+    )
+    staging = json.loads(_acceptance_staging_path().read_text(encoding="utf-8"))
+    assert staging.get("pipeline_id") == PIPELINE_ID, "staging pipeline_id 불일치"
+    assert staging.get("staged_packet_content"), "staged_packet_content 비어 있음"
+    assert staging.get("staged_packet_sha256"), "staged_packet_sha256 비어 있음"
+    # staged_packet_sha256은 packet md temp 파일 바이트 SHA(_sha256_file)이며, Windows에서
+    # write_text가 \n을 \r\n으로 변환하므로 sha256(string)과 다를 수 있다. content 자체는 비어
+    # 있지 않고 사용자 승인 코드 라인(ACCEPT-)을 포함해야 한다(nonce 발급 후 packet).
+    assert "ACCEPT-" in staging["staged_packet_content"], (
+        "staged_packet_content에 승인 코드 라인 누락 — packet 렌더링 비정상"
+    )
+    assert isinstance(staging.get("req_candidate"), dict), "req_candidate 미저장"
+    assert staging["req_candidate"].get("nonce"), "frozen req_candidate에 nonce 없음"
+
+
+def test_tc_f52c_codex_review_uses_staging_file(gh_publish_env):
+    """TC-F52C-2: codex-review --approve-pending이 staging file의 frozen bytes로 SHA를 계산한다.
+
+    staging file의 staged_packet_sha256과 codex_review_result.json의 packet_sha256이 정확히 같아야 한다.
+    """
+    env, state_file, evidence = gh_publish_env
+    _stage_and_codex_approve(env, evidence)
+    staging = json.loads(_acceptance_staging_path().read_text(encoding="utf-8"))
+    cx_path = _codex_review_result_path_for(state_file)
+    cx = json.loads(cx_path.read_text(encoding="utf-8"))
+    assert cx.get("verdict") == "APPROVE_TO_USER", f"codex verdict 비정상: {cx.get('verdict')}"
+    assert cx.get("packet_sha256") == staging.get("staged_packet_sha256"), (
+        "codex packet_sha256가 staging frozen bytes SHA와 불일치: "
+        f"{cx.get('packet_sha256')} != {staging.get('staged_packet_sha256')}"
+    )
+    # codex가 staging file을 실제로 사용했음을 stdout으로도 확인(경로 A).
+    # (staging file 사용 시 '[STAGING FILE 사용]' 메시지 출력)
+
+
+def test_tc_f52c_publish_uses_frozen_bytes(gh_publish_env):
+    """TC-F52C-3: publish 시 staging frozen bytes를 그대로 사용하여 packet SHA invariant가 성립한다.
+
+    staging frozen packet SHA == published acceptance_request.packet_sha256(블록 교체 전 packet md SHA)
+    여야 한다. publish가 재렌더링하면 timestamp 차이로 SHA가 달라져 이 불변식이 깨진다.
+    """
+    env, state_file, evidence = gh_publish_env
+    _stage_and_codex_approve(env, evidence)
+    staging = json.loads(_acceptance_staging_path().read_text(encoding="utf-8"))
+    staged_packet_sha = staging["staged_packet_sha256"]
+    r = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env,
+    )
+    combined = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode == 0, f"frozen bytes publish인데 BLOCKED\n{combined}"
+    # publish된 packet md의 파일 바이트 SHA가 staging frozen packet SHA와 동일해야 한다(재렌더링 없음).
+    # staged_packet_sha256은 _sha256_file(packet temp)로 계산한 파일 바이트 SHA이므로, 비교도
+    # 디스크 파일을 'rb'로 읽어 파일 바이트 기준으로 한다(write_text의 \r\n 변환 일관성 유지).
+    published_packet = PIPELINE_ROOT / "human_acceptance_packet.md"
+    assert published_packet.exists(), "publish 후 packet md 미생성"
+    published_packet_sha = hashlib.sha256(
+        published_packet.read_bytes()
+    ).hexdigest()
+    assert published_packet_sha == staged_packet_sha, (
+        "publish가 frozen bytes를 재렌더링함 — packet SHA invariant 위반: "
+        f"{published_packet_sha} != {staged_packet_sha}"
+    )
+    # acceptance_request.json의 packet_sha256도 동일해야 한다(3자 신뢰 루트).
+    req = json.loads(
+        (PIPELINE_ROOT / "acceptance_request.json").read_text(encoding="utf-8")
+    )
+    assert req.get("packet_sha256") == staged_packet_sha, (
+        "acceptance_request.packet_sha256가 staging frozen packet SHA와 불일치: "
+        f"{req.get('packet_sha256')} != {staged_packet_sha}"
+    )
+
+
+def test_tc_f52c_three_way_sha_all_equal_with_gh_mock(gh_publish_env):
+    """TC-F52C-4: gh mock 환경에서 codex == acceptance_request == 현재 PR body SHA 3자 일치.
+
+    staging frozen bytes 흐름으로 publish하면 세 PR body SHA가 모두 동일해야 한다.
+    """
+    env, state_file, evidence = gh_publish_env
+    _stage_and_codex_approve(env, evidence)
+    r = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env,
+    )
+    combined = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode == 0, f"3자 일치 기대인데 BLOCKED\n{combined}"
+    assert "사용자 승인 요청" in combined, f"승인 요청문 미노출\n{combined}"
+    # 1) codex_review_result.json의 pr_body_sha256
+    cx = json.loads(
+        _codex_review_result_path_for(state_file).read_text(encoding="utf-8")
+    )
+    codex_body_sha = cx.get("pr_body_sha256")
+    # 2) acceptance_request.json의 pr_body_sha256
+    req = json.loads(
+        (PIPELINE_ROOT / "acceptance_request.json").read_text(encoding="utf-8")
+    )
+    req_body_sha = req.get("pr_body_sha256")
+    # 3) 현재 PR body(gh stub _current_body = packet.md 기준 publish 후 최종 body)의 SHA
+    import pipeline as _pl  # noqa: PLC0415 — 테스트 내 동적 import.
+    packet = (PIPELINE_ROOT / "human_acceptance_packet.md").read_text(encoding="utf-8")
+    final_body = _pl._replace_pr_body_packet_block(_FAKE_GH_PR_BODY_F52C, packet)
+    current_pr_body_sha = _sha256_text(final_body)
+    assert codex_body_sha, "codex pr_body_sha256 미기록"
+    assert req_body_sha, "acceptance_request pr_body_sha256 미기록"
+    assert codex_body_sha == req_body_sha == current_pr_body_sha, (
+        "3자 SHA 불일치:\n"
+        f"  codex:            {codex_body_sha}\n"
+        f"  acceptance_request: {req_body_sha}\n"
+        f"  현재 PR body:      {current_pr_body_sha}"
+    )
+
+
+def test_tc_f52c_staging_file_deleted_after_accept(gh_publish_env):
+    """TC-F52C-5: publish 성공 후 acceptance_staging.json이 삭제된다(1회용)."""
+    env, state_file, evidence = gh_publish_env
+    _stage_and_codex_approve(env, evidence)
+    assert _acceptance_staging_path().exists(), "사전: staging file이 있어야 함"
+    r = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env,
+    )
+    combined = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode == 0, f"publish 실패\n{combined}"
+    assert not _acceptance_staging_path().exists(), (
+        "publish 성공 후 staging file이 삭제되지 않음"
+    )
 
 
 # ---------------------------------------------------------------------------

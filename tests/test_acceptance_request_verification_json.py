@@ -184,7 +184,8 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
                                         with patch("pipeline._update_github_acceptance_comment"):
                                             with patch("pipeline._build_ac_fulfillment_table", return_value=None):
                                                 with patch("pipeline._codex_review_snapshot", return_value={"verdict": "APPROVE_TO_USER", "result_packet_sha256": _sha, "reason": "ok"}):
-                                                    with patch("pipeline._materialize_acceptance_snapshot", return_value={"packet_path": "p.md", "json_path": str(vj_path), "pr_body_updated": False, "sha_manifest": _sm, "published": True}):
+                                                    # BUG-20260628-F52C: staging은 packet_content(frozen bytes)를 반환해야 한다.
+                                                    with patch("pipeline._materialize_acceptance_snapshot", return_value={"packet_path": "p.md", "json_path": str(vj_path), "pr_body_updated": False, "sha_manifest": _sm, "published": True, "packet_content": "FROZEN PACKET CONTENT"}):
                                                         with patch("pipeline._verify_acceptance_snapshot", return_value=None):
                                                             with patch("pipeline._post_github_pending_acceptance_comment", return_value={"success": True}):
                                                                 with patch("pipeline._save"):
@@ -235,7 +236,8 @@ class TestCmdGatesRequestAcceptRecordsVjPath(unittest.TestCase):
                                         with patch("pipeline._update_github_acceptance_comment"):
                                             with patch("pipeline._build_ac_fulfillment_table", return_value=None):
                                                 with patch("pipeline._codex_review_snapshot", return_value={"verdict": "APPROVE_TO_USER", "result_packet_sha256": _sha, "reason": "ok"}):
-                                                    with patch("pipeline._materialize_acceptance_snapshot", return_value={"packet_path": "p.md", "json_path": None, "pr_body_updated": False, "sha_manifest": _sm, "published": True}):
+                                                    # BUG-20260628-F52C: staging은 packet_content(frozen bytes)를 반환해야 한다.
+                                                    with patch("pipeline._materialize_acceptance_snapshot", return_value={"packet_path": "p.md", "json_path": None, "pr_body_updated": False, "sha_manifest": _sm, "published": True, "packet_content": "FROZEN PACKET CONTENT"}):
                                                         with patch("pipeline._verify_acceptance_snapshot", return_value=None):
                                                             with patch("pipeline._post_github_pending_acceptance_comment", return_value={"success": True}):
                                                                 with patch("pipeline._save"):
