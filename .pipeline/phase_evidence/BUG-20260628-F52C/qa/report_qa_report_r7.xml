@@ -1,0 +1,102 @@
+<qa_report>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <qa_round>r7</qa_round>
+  <verdict>PASS</verdict>
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님 (CLI 엔진 로직 수정)</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>N-A — 파일 쓰기는 기존 _materialize의 os.replace 원자 패턴 그대로 유지, 신규 FS 요구 없음</fs>
+    <pd>PASS — 단일 함수 _cmd_gates_codex_review path B 제거 + _materialize_acceptance_snapshot publish 파라미터화. core 로직 분리 유지, dict 인터페이스 계약 명확</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — publish/frozen_at/frozen_packet_content isinstance 타입 가드, OSError/ValueError/KeyError/TypeError 분기, staging 부재 시 fail-closed BLOCK, 빈 packet_content 방어</al>
+    <build>N-A — BUILD 태그 없음 (pipeline.py 메타 수정)</build>
+    <vsce>N-A — VSCE 카테고리 아님</vsce>
+  </category_check>
+  <numeric_score>114</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5 (단일 함수 격리, 외부 인터페이스 불변) / 인터페이스계약 5/5 (publish:bool 타입검증, frozen dict 계약 명시)</pd>
+    <al score="20" max="20">타입가드 5/5 (isinstance publish/frozen_at/frozen_packet_content) / 범위검증 5/5 (PENDING status+pipeline_id 일치 확인) / 입력타입검증 5/5 (TypeError raise) / 빈데이터 5/5 (empty staged_packet_content fail-closed)</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="114" max="120"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS(≥96/120) — 적용 카테고리(PD 10/10 + AL 20/20 = 30/30) 만점, 120 스케일 환산 보수적 114</numeric_verdict>
+  </numeric_score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — _materialize는 temp write 후 os.replace 3개 원자 커밋, publish=False는 temp unlink로 미커밋 (강화)</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover test_results에 109 passed 명시 + QA 자체 101 passed 재현</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A</vsce_build_evidence>
+    <functional_binding_verified>PASS — _stage_and_codex_approve 헬퍼가 실제 subprocess CLI 2-call 흐름 실행, staging file 존재 assertion으로 파일 효과 검증. 함수 정의가 아닌 실제 호출 경로 확인</functional_binding_verified>
+  </runtime_functional_check>
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — handover impact_analysis 존재, target_function 명시</decomposition_audit_present>
+    <grep_evidence_present>PASS — scope_amendment_reason에 approve-pending Grep 전수조사 기록</grep_evidence_present>
+    <declared_functions>1</declared_functions>
+    <actual_modified_functions>1</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <c3_cross_verification>
+    <scope_files_declared>6</scope_files_declared>
+    <evidence_files_submitted>6</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff ae368844^ ae368844 결과가 정확히 6개 선언 파일과 일치, trust-root 추가 변경 없음 (pipeline.py는 HIGH_RISK 선언 scope 내)</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음. 4개 핵심 수정 모두 검증 완료:
+    1. _cmd_gates_codex_review path B(staging-probe) 완전 제거 — staging 부재 시 PENDING acceptance_request.json에서 동일 frozen_at으로 staging 재생성, 없으면 staging_file_missing fail-closed BLOCK (staging-probe 재도입 없음) 확인.
+    2. _materialize_acceptance_snapshot publish:bool 파라미터 — publish=False는 temp SHA만 계산 후 unlink(미커밋), publish=True는 os.replace 원자 커밋. frozen_at/frozen_packet_content로 3자 SHA 불변식 보장 확인.
+    3. _cmd_gates_request_accept staging→publish 2단계 — _staging_conditions_match로 frozen bytes 재사용, codex APPROVE 이후에만 publish, _verify_snapshot_invariant 3-way 검증 확인.
+    4. accept-path stale 판정 — acceptance_request.json의 published packet_sha256(os.replace로 커밋된 값)만 현재 .md와 비교. staging 임시 SHA 누출 없음 → stale_packet_sha256 오탐 해소 확인.
+    pytest 101 passed / 0 failed (186s). Real CLI E2E + PIPELINE_STATE_PATH 격리 + 파일 효과 assertion. 테스트 약화 없음(negative mutation assertion 유지, 2-call 실 흐름 강화).
+  </critical_issues>
+  <improvement_suggestions>
+    없음 (감점 포인트 미발견). path B 제거로 staging-probe legacy 분기가 사라져 코드 단순화 효과도 확인됨.
+  </improvement_suggestions>
+</qa_report>
