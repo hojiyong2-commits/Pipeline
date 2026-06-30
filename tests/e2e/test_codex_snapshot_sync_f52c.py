@@ -860,22 +860,35 @@ def _codex_review_result_path_for(state_file: Path) -> Path:
 
 
 def _gh_stub_fetch_body(env: dict):
-    """gh stub을 직접 호출하여 현재 PR canonical body를 fetch한다(pipeline._get_pr_body_text와 동일).
+    """gh stub을 직접 호출하여 현재 PR canonical body를 fetch한다 (r11 canonical SSoT 규칙).
 
-    pipeline._get_pr_body_text는 `gh pr view --json body --jq .body`를 호출하고 stdout을 그대로
-    반환한다(끝 개행 포함 여부도 그대로). 동일 인자로 stub을 호출하여 canonical body를 재현한다.
+    BUG-20260628-F52C r11: pipeline._fetch_canonical_pr_body_sha256가 canonical SHA SSoT다.
+    `gh pr view --json body`(jq 없이) JSON parse -> body 필드 -> CRLF->LF 정규화(trailing
+    newline 미추가) 규칙을 동일하게 재현해야 acceptance_request.pr_body_sha256과 일치한다.
     """
     gh_exec = env.get("PIPELINE_GH_EXECUTABLE")
     if not gh_exec:
         return None
     r = subprocess.run(
-        [str(gh_exec), "pr", "view", "--json", "body", "--jq", ".body"],
+        [str(gh_exec), "pr", "view", "--json", "body"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=30, env=env, cwd=str(PIPELINE_ROOT),
     )
     if r.returncode != 0:
         return None
-    return r.stdout if r.stdout else None
+    out = (r.stdout or "").strip()
+    if not out:
+        return None
+    try:
+        data = json.loads(out)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    body = data.get("body")
+    if body is None or not isinstance(body, str):
+        return None
+    return body.replace(chr(13) + chr(10), chr(10))
 
 
 def _acceptance_staging_path() -> Path:
