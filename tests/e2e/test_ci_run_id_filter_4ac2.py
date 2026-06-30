@@ -428,6 +428,9 @@ def _codex_then_request_accept(
       3. request-accept (동일 조건 staging file 재사용 → codex APPROVE → publish)
     이 흐름은 codex가 검토한 bytes와 published bytes가 정확히 일치(3자 SHA 불변식)함을 보장한다.
 
+    격리: 호출자가 PIPELINE_STATE_PATH 환경변수로 격리된 state_path를 주입한다.
+    post-state assertion: 호출자 테스트 함수에서 final_state (acceptance_request.json 등)를 검증한다.
+
     Returns:
         마지막 request-accept(publish 단계)의 CompletedProcess.
     """

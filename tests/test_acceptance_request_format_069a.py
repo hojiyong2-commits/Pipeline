@@ -233,6 +233,9 @@ def stage_and_codex_approve(env: Dict[str, str], evidence: Path) -> None:
 
     1) gates request-accept (1차) — staging file 생성, codex 미승인으로 BLOCKED(정상).
     2) gates codex-review --approve-pending — staging file frozen bytes로 APPROVE_TO_USER 기록.
+
+    격리: 호출자가 PIPELINE_STATE_PATH 환경변수(env dict)로 격리된 state를 주입한다.
+    post-state assertion: 호출자 테스트 함수에서 final_state 및 acceptance_request.json을 검증한다.
     """
     run_cli(["gates", "request-accept", "--evidence", str(evidence)], env=env)
     assert _staging_path().exists(), "1차 request-accept가 staging file을 생성하지 않음"

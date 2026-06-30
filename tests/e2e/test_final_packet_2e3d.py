@@ -93,7 +93,8 @@ def _codex_then_request_accept(
 
     Args:
         evidence_name: --evidence에 넘길 파일명(또는 URL).
-        env: 환경 변수 dict (PIPELINE_STATE_PATH 포함).
+        env: 환경 변수 dict (PIPELINE_STATE_PATH 포함). 호출자가 PIPELINE_STATE_PATH로
+             격리된 state를 주입하며, 호출자 테스트에서 final_state 검증을 수행한다.
         cwd: 실행 디렉터리.
     Returns:
         마지막 request-accept(publish 단계)의 CompletedProcess.
