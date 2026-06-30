@@ -2763,6 +2763,30 @@ def _load_state_for(branch: Optional[str] = None) -> dict:
     raise SystemExit(3)
 
 
+# [Purpose]: Windows에서 OneDrive sync/antivirus가 destination 파일을 잠깐 잠그면
+#            os.replace()가 WinError 5(Access is denied) PermissionError를 즉시 던진다.
+#            acceptance_request.json/packet 등 원자적 커밋 시 이 일시 잠금으로 oracle
+#            테스트(TC-6N)가 타임아웃되는 문제를 재시도로 해소한다.
+# [Assumptions]: src/dst는 동일 볼륨의 경로이며, 잠금은 일시적(수 초 이내 해제)이다.
+# [Vulnerability & Risks]: 잠금이 max_retries*delay(기본 5초)보다 오래 지속되면 마지막
+#            PermissionError를 그대로 raise한다. PermissionError 외 예외는 재시도하지 않는다.
+# [Improvement]: 지수 백오프 또는 파일 핸들 점유 프로세스 진단(handle.exe) 연동.
+def _safe_replace(src: str, dst: str, max_retries: int = 10, delay: float = 0.5) -> None:
+    """os.replace with retry for Windows WinError 5 (OneDrive file lock)."""
+    import time
+    last_err: Optional[Exception] = None
+    for attempt in range(max_retries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError as e:
+            last_err = e
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+    if last_err is not None:
+        raise last_err
+
+
 def _save_state_for(state: dict, branch: Optional[str] = None) -> None:
     """브랜치별 state 파일 원자적 저장. branch=None 이면 메인 runtime store 저장.
 
@@ -17663,9 +17687,11 @@ def _materialize_acceptance_snapshot(
         }
 
     # Phase 3: 모든 temp를 원자적으로 커밋 (여기서부터는 부분 실패 가능성 낮음)
-    os.replace(str(tmp_pkt), str(packet_path))
-    os.replace(str(tmp_json), str(json_out_path))
-    os.replace(str(tmp_req), str(req_path))
+    # BUG-20260628-F52C: OneDrive sync 잠금(WinError 5)으로 os.replace가 즉시
+    # PermissionError를 던져 oracle TC-6N이 타임아웃되던 문제를 _safe_replace 재시도로 해소.
+    _safe_replace(str(tmp_pkt), str(packet_path))
+    _safe_replace(str(tmp_json), str(json_out_path))
+    _safe_replace(str(tmp_req), str(req_path))
 
     # 메모리 state도 동기화
     if isinstance(state.get("acceptance_request"), dict):
