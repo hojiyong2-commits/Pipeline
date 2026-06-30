@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>BUG-20260628-F52C</pipeline_id>
+  <agent>dev-agent</agent>
+  <phase>dev</phase>
+  <mt_id>MT-8-r8</mt_id>
+  <round>r9-safe-replace</round>
+  <summary>pipeline.py에 _safe_replace() 헬퍼 추가 및 acceptance_request.json atomic write os.replace → _safe_replace 교체 (WinError 5 재시도)</summary>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_safe_replace (신규), _materialize_acceptance_snapshot</target_function>
+    <change>os.replace → _safe_replace: WinError 5 최대 10회 재시도, 0.5초 간격</change>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py</git_diff_files>
+    <manifest_files>pipeline.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>pipeline.py</file>
+  </evidence>
+</handover>
