@@ -1608,6 +1608,469 @@ def test_tc_r8_7_pr_body_sha_semantics_not_mixed(gh_publish_env):
 
 
 # ---------------------------------------------------------------------------
+# BUG-20260628-F52C r11: PR body canonical SHA SSoT 신규 TC (TC-C1..C4 + MT-6 보강)
+#
+# 핵심: _fetch_canonical_pr_body_sha256가 `gh pr view --json body`(jq 없이)를 JSON parse하여
+#       body 필드를 LF 정규화 후 인코딩한 canonical SHA를 SSoT로 계산한다. acceptance_request와
+#       codex_review_result.github_canonical_pr_body_sha256가 이 SSoT를 공유하며, request-accept
+#       최종 불변식 검증이 PR body 변경(stale)을 fail-closed로 차단한다.
+# ---------------------------------------------------------------------------
+
+# BUG-20260628-F52C r11: publish 이후 "변경된" PR body — 필수 섹션은 모두 갖추되(=
+# pr_body_incomplete 차단을 피하고) 내용을 다르게 하여 canonical SHA가 달라지게 한다.
+# 이로써 request-accept 재실행 시 readiness 차단보다 뒤에 있는 fail-closed 보호가 발동한다.
+_CHANGED_GH_PR_BODY_F52C_STALE = (
+    "## 작업 요약\nF52C publish 이후 변경된 PR body — stale 유발(필수 섹션 유지)\n\n"
+    "## 사용자가 확인할 결과물\n결과물 경로: output.xlsx (변경됨)\n\n"
+    "## 기대 결과와 실제 결과\n기대: 성공 / 실제: 변경됨\n\n"
+    "## 중요한 선택과 트레이드오프\nN/A (변경된 테스트 픽스처)\n\n"
+    "## 검증\n모든 게이트 PASS (변경됨)\n"
+)
+
+
+def _write_canonical_gh_stub(stub_dir: Path, body: str, head_sha: str = "c11c" + "0" * 36) -> Path:
+    """`gh pr view --json body`(jq 없이)에 고정 body를 반환하는 최소 gh stub을 만든다.
+
+    _fetch_canonical_pr_body_sha256는 `gh pr view [n] --json body`를 호출하고 JSON parse하여
+    body 필드만 사용하므로, 이 stub은 stdout으로 {"body": <고정 body>} JSON 객체를 출력한다.
+    body는 호출자가 지정한 원문(예: CRLF 포함)을 그대로 보존한다.
+
+    Args:
+        stub_dir: stub 파일 디렉토리.
+        body: gh가 반환할 PR body 원문(JSON 직렬화 시 \\r\\n 등 그대로 보존됨).
+        head_sha: headRefOid로 반환할 head SHA.
+    Returns:
+        gh.bat 절대 경로 (PIPELINE_GH_EXECUTABLE로 지정).
+    """
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    body_json = json.dumps(body)
+    py = stub_dir / "gh_stub_canonical.py"
+    py.write_text(
+        "import sys, io, json, os\n"
+        'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
+        f"BODY = {body_json}\n"
+        f"HEAD_SHA = {json.dumps(head_sha)}\n"
+        "args = sys.argv[1:]\n"
+        '# pr edit/comment — no-op 성공.\n'
+        'if "pr" in args and ("edit" in args or "comment" in args):\n'
+        '    print("https://github.com/test/repo/pull/1"); sys.exit(0)\n'
+        'if "api" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
+        'if "run" in args:\n'
+        '    print(""); sys.exit(0)\n'
+        '# pr view --jq <expr>\n'
+        'if "--jq" in args:\n'
+        '    jq = args[args.index("--jq") + 1] if args.index("--jq") + 1 < len(args) else ""\n'
+        '    if jq == ".body":\n'
+        '        sys.stdout.write(BODY)\n'
+        '        if not BODY.endswith("\\n"):\n'
+        '            sys.stdout.write("\\n")\n'
+        '        sys.exit(0)\n'
+        '    if jq == ".headRefOid":\n'
+        '        print(HEAD_SHA); sys.exit(0)\n'
+        '    if jq == ".url":\n'
+        '        print("https://github.com/test/repo/pull/1"); sys.exit(0)\n'
+        '    if jq == ".number":\n'
+        '        print("1"); sys.exit(0)\n'
+        '    print(""); sys.exit(0)\n'
+        '# pr view --json <fields> (no jq) — 전체 객체 반환(body 필드는 원문 그대로).\n'
+        "print(json.dumps({\n"
+        '    "body": BODY, "number": 1, "headRefOid": HEAD_SHA,\n'
+        '    "isDraft": False, "state": "OPEN", "files": [],\n'
+        '    "url": "https://github.com/test/repo/pull/1",\n'
+        "}))\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    bat = stub_dir / "gh.bat"
+    bat.write_text(
+        "@echo off\r\n"
+        f'"{sys.executable}" "{py}" %*\r\n',
+        encoding="utf-8",
+    )
+    return bat
+
+
+def _run_driver_with_gh(tmp_path, state_file, gh_bat: Path, body: str):
+    """_run_driver와 동일하되 PIPELINE_GH_EXECUTABLE에 gh stub을 주입한다."""
+    driver = tmp_path / f"driver_gh_{abs(hash(body)) % 100000}.py"
+    driver.write_text(
+        "import json, sys\n"
+        f"sys.path.insert(0, {json.dumps(PIPELINE_DIR)})\n"
+        "import pipeline\n" + body,
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PIPELINE_STATE_PATH"] = str(state_file)
+    env["PIPELINE_NO_DASHBOARD"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PIPELINE_GH_EXECUTABLE"] = str(gh_bat)
+    env["PATH"] = _no_gh_path() if env.get("PATH") else ""
+    result = subprocess.run(
+        [sys.executable, str(driver)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=120, env=env, cwd=str(tmp_path),
+    )
+    return (result.stdout or "") + (result.stderr or "")
+
+
+# OneDrive가 공유 루트의 .tmp→최종 파일 os.replace를 잠깐 잠그면 발생하는 일시적 오류 마커.
+# 이 마커가 보이면 테스트는 산출물을 정리하고 짧게 대기 후 재시도한다(차단 규칙은 불변).
+_ONEDRIVE_TRANSIENT_MARKERS = (
+    "WinError 5",
+    "WinError 2",
+    "pr_body_resync_failed",
+    "final packet 자동 생성 실패",
+    "human_acceptance_packet.md.tmp",
+)
+
+
+def test_tc_jq_vs_json_parse_diff(isolated_pipeline):
+    """TC-C1: _fetch_canonical_pr_body_sha256가 `--json body`(jq 없이) JSON parse 결과를 사용한다.
+
+    gh stub이 `--json body` → {"body": "canonical body text"}를 반환하면, helper는 body 필드를
+    추출해 sha256("canonical body text")를 계산해야 한다(stdout/jq trailing newline 기반 아님).
+    """
+    tmp_path, state_file = isolated_pipeline
+    canonical_text = "canonical body text"
+    gh_bat = _write_canonical_gh_stub(tmp_path / "ghc1", canonical_text)
+    out = _run_driver_with_gh(
+        tmp_path, state_file, gh_bat,
+        "sha = pipeline._fetch_canonical_pr_body_sha256(1)\n"
+        "print('SHA', sha)\n",
+    )
+    expected = hashlib.sha256(canonical_text.encode("utf-8")).hexdigest()
+    assert f"SHA {expected}" in out, (
+        f"helper가 JSON body 필드 기반 canonical SHA를 계산하지 않음\n"
+        f"expected={expected}\n{out}"
+    )
+
+
+def test_tc_crlf_canonical(isolated_pipeline):
+    """TC-C2: gh stub body가 CRLF를 포함해도 helper가 LF 정규화 후 인코딩하여 SHA를 계산한다.
+
+    canonical SSoT는 CRLF/LF 줄바꿈 차이를 흡수해야 한다(r11 근본 원인 방지). 따라서
+    sha256(body) (CRLF→LF 정규화 후 인코딩) == sha256(LF 버전)이어야 한다.
+    """
+    tmp_path, state_file = isolated_pipeline
+    crlf_body = "line1\r\nline2\r\nline3"
+    lf_body = crlf_body.replace("\r\n", "\n")
+    gh_bat = _write_canonical_gh_stub(tmp_path / "ghc2", crlf_body)
+    out = _run_driver_with_gh(
+        tmp_path, state_file, gh_bat,
+        "sha = pipeline._fetch_canonical_pr_body_sha256(1)\n"
+        "print('SHA', sha)\n",
+    )
+    expected_lf = hashlib.sha256(lf_body.encode("utf-8")).hexdigest()
+    assert f"SHA {expected_lf}" in out, (
+        f"CRLF body의 canonical SHA가 LF 정규화 결과와 불일치\n"
+        f"expected(LF normalized)={expected_lf}\n{out}"
+    )
+
+
+def test_tc_pr_body_stale_after_publish(gh_publish_env):
+    """TC-C3: request-accept publish 후 PR body가 바뀌면 재실행 시 fail-closed로 BLOCKED.
+
+    1) 정상 경로(2-call)로 request-accept publish 성공 → acceptance_request.pr_body_sha256 기록.
+    2) gh stub이 다른 body(필수 섹션 유지)를 반환하도록 교체 후 request-accept 재실행 →
+       재-stage SHA 불일치 또는 최종 canonical 불변식 중 더 앞선 fail-closed 가드가 발동하여
+       승인 코드가 노출되지 않아야 한다.
+    """
+    env, state_file, evidence = gh_publish_env
+    # 1) 정상 publish (3자 일치). OneDrive transient 발생 시 재-stage 후 재시도.
+    r_ok = None
+    for _attempt in range(4):
+        _stage_and_codex_approve(env, evidence)
+        r_ok = _run_pipeline_env(
+            "gates", "request-accept", "--evidence", str(evidence), env=env,
+        )
+        _c = (r_ok.stdout or "") + (r_ok.stderr or "")
+        if r_ok.returncode == 0:
+            break
+        if any(m in _c for m in _ONEDRIVE_TRANSIENT_MARKERS):
+            _clean_root_artifacts()
+            time.sleep(0.4)
+            continue
+        break
+    assert r_ok.returncode == 0, (
+        f"정상 publish 실패\n{r_ok.stdout}{r_ok.stderr}"
+    )
+    assert (PIPELINE_ROOT / "acceptance_request.json").exists(), (
+        "정상 publish인데 acceptance_request.json 미생성"
+    )
+    # 2) gh stub body를 변경한 새 stub으로 교체 → 현재 PR body canonical SHA가 달라진다.
+    #    변경 body는 필수 섹션을 모두 유지하여 pr_body_incomplete 차단을 건너뛰고
+    #    fail-closed stale 가드가 발동하도록 한다.
+    changed_bat = _write_canonical_gh_stub(
+        Path(env["PIPELINE_GH_EXECUTABLE"]).parent.parent / "ghc3_changed",
+        _CHANGED_GH_PR_BODY_F52C_STALE,
+        head_sha="f52c" + "0" * 36,  # head SHA는 동일하게 유지(body만 변경)
+    )
+    env_changed = dict(env)
+    env_changed["PIPELINE_GH_EXECUTABLE"] = str(changed_bat)
+    r_stale = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env_changed,
+    )
+    combined = (r_stale.stdout or "") + (r_stale.stderr or "")
+    assert r_stale.returncode != 0, (
+        f"publish 후 PR body 변경인데 exit 0\n{combined}"
+    )
+    # publish 이후 body 변경은 (재-stage SHA 불일치) 또는 (최종 canonical 불변식) 중 더 앞선
+    # fail-closed 가드로 차단된다. 어느 경로든 stale 계열 보호가 발동하고 승인 코드는 미노출.
+    assert (
+        "pr_body_stale" in combined
+        or "stale" in combined
+        or "codex_review_stale" in combined
+        or "codex_review_not_approved" in combined
+    ), (
+        f"PR body 변경인데 stale 계열 BLOCKED 미발동\n{combined}"
+    )
+    assert "사용자 승인 요청" not in combined, (
+        f"PR body 변경(stale)인데 승인 요청문이 노출됨\n{combined}"
+    )
+
+
+def test_tc_three_way_sha_match(gh_publish_env):
+    """TC-C4: 정상 경로 3자 canonical SHA 일치.
+
+    acceptance_request.pr_body_sha256 ==
+    codex_review_result.github_canonical_pr_body_sha256 ==
+    _fetch_canonical_pr_body_sha256(현재 PR) 가 모두 같아야 한다.
+    """
+    env, state_file, evidence = gh_publish_env
+    # OneDrive transient 발생 시 재-stage 후 재시도(차단 규칙 자체는 불변).
+    r = None
+    for _attempt in range(4):
+        _stage_and_codex_approve(env, evidence)
+        r = _run_pipeline_env(
+            "gates", "request-accept", "--evidence", str(evidence), env=env,
+        )
+        _c = (r.stdout or "") + (r.stderr or "")
+        if r.returncode == 0:
+            break
+        if any(m in _c for m in _ONEDRIVE_TRANSIENT_MARKERS):
+            _clean_root_artifacts()
+            time.sleep(0.4)
+            continue
+        break
+    combined = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode == 0, f"3자 일치 정상 경로 실패\n{combined}"
+    req = json.loads(
+        (PIPELINE_ROOT / "acceptance_request.json").read_text(encoding="utf-8")
+    )
+    cx = json.loads(
+        _codex_review_result_path_for(state_file).read_text(encoding="utf-8")
+    )
+    req_canonical = req.get("pr_body_sha256")
+    codex_canonical = cx.get("github_canonical_pr_body_sha256")
+    assert req_canonical, "acceptance_request.pr_body_sha256 미기록"
+    assert codex_canonical, "codex_review_result.github_canonical_pr_body_sha256 미기록"
+    assert req_canonical == codex_canonical, (
+        "acceptance_request canonical != codex canonical:\n"
+        f"  acceptance_request: {req_canonical}\n"
+        f"  codex canonical:    {codex_canonical}"
+    )
+    # 세 번째 차원: 실제 gh stub에서 fetch한 PR body를 helper와 동일한 canonical 규칙
+    # (`--json body` JSON parse → body 필드 → CRLF→LF 정규화 → sha256)으로 계산하여
+    # acceptance_request/codex canonical과 일치하는지 검증한다.
+    gh_exec = env["PIPELINE_GH_EXECUTABLE"]
+    r_view = subprocess.run(
+        [str(gh_exec), "pr", "view", "1", "--json", "body"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=30, env=env, cwd=str(PIPELINE_ROOT),
+    )
+    assert r_view.returncode == 0, f"gh stub pr view 실패\n{r_view.stderr}"
+    body_field = json.loads(r_view.stdout)["body"]
+    canonical_body = body_field.replace("\r\n", "\n")
+    fetched_sha = hashlib.sha256(canonical_body.encode("utf-8")).hexdigest()
+    assert fetched_sha == req_canonical, (
+        "현재 gh canonical SHA가 acceptance_request canonical과 불일치:\n"
+        f"  fetched: {fetched_sha}\n  request: {req_canonical}"
+    )
+
+
+def test_jq_vs_json_parse_sha_consistency(isolated_pipeline):
+    """MT-6(1): gh --jq 출력과 gh --json body 파싱 결과의 canonical SHA가 같아야 함(mock 기반).
+
+    _fetch_canonical_pr_body_sha256는 `--json body`를 JSON parse하여 body 필드를 LF 정규화 후
+    인코딩한다. gh stub이 --jq .body로는 trailing newline을 덧붙여 stdout을 출력하더라도, helper의
+    canonical SHA는 그 trailing newline에 영향받지 않고 항상 sha256(LF 정규화 body)와 같아야 한다.
+    trailing newline이 있는 경우와 없는 경우 모두 커버한다.
+    """
+    tmp_path, state_file = isolated_pipeline
+    for body in ("canonical body no-newline", "canonical body with newline\n"):
+        gh_bat = _write_canonical_gh_stub(
+            tmp_path / f"ghjq_{abs(hash(body)) % 99999}", body
+        )
+        out = _run_driver_with_gh(
+            tmp_path, state_file, gh_bat,
+            "sha = pipeline._fetch_canonical_pr_body_sha256(1)\n"
+            "print('SHA', sha)\n",
+        )
+        # helper는 JSON body 필드(LF 정규화)를 인코딩한다 — stub의 --jq trailing newline과 무관.
+        expected = hashlib.sha256(
+            body.replace("\r\n", "\n").encode("utf-8")
+        ).hexdigest()
+        assert f"SHA {expected}" in out, (
+            f"--json body 파싱 canonical SHA 불일치 (body={body!r})\n"
+            f"expected={expected}\n{out}"
+        )
+
+
+def test_crlf_unicode_normalization(isolated_pipeline):
+    """MT-6(2): trailing newline/CRLF/Unicode 차이 케이스 — CRLF와 LF body의 canonical SHA 동일.
+
+    body에 \\r\\n이 있는 경우 vs \\n만 있는 경우 두 helper(_sha256/_text)가 모두 LF 정규화를
+    적용하므로, 동일 논리 본문의 canonical SHA가 줄바꿈 형식과 무관하게 같아야 한다(r11 근본 수정).
+    Unicode 문자(한글/이모지 포함)도 utf-8 인코딩으로 동일하게 처리됨을 함께 검증한다.
+    """
+    tmp_path, state_file = isolated_pipeline
+    crlf_body = "한글 라인1\r\n이모지 ✅ 라인2\r\nplain line3"
+    lf_body = crlf_body.replace("\r\n", "\n")
+    expected_lf = hashlib.sha256(lf_body.encode("utf-8")).hexdigest()
+
+    # CRLF body stub → helper canonical SHA == LF body SHA.
+    gh_crlf = _write_canonical_gh_stub(tmp_path / "ghcrlf", crlf_body)
+    out_crlf = _run_driver_with_gh(
+        tmp_path, state_file, gh_crlf,
+        "sha = pipeline._fetch_canonical_pr_body_sha256(1)\n"
+        "txt = pipeline._fetch_canonical_pr_body_text(1)\n"
+        "import hashlib\n"
+        "print('SHA', sha)\n"
+        "print('TEXT_SHA', hashlib.sha256(txt.encode('utf-8')).hexdigest())\n",
+    )
+    assert f"SHA {expected_lf}" in out_crlf, (
+        f"CRLF body의 canonical SHA가 LF 정규화 결과와 불일치\n"
+        f"expected(LF)={expected_lf}\n{out_crlf}"
+    )
+    # _text helper도 동일 LF 정규화하므로 재인코딩 SHA가 _sha256 helper와 같아야 한다(2자 검증 일관성).
+    assert f"TEXT_SHA {expected_lf}" in out_crlf, (
+        f"_fetch_canonical_pr_body_text 재인코딩 SHA가 _sha256 helper와 불일치\n"
+        f"expected(LF)={expected_lf}\n{out_crlf}"
+    )
+
+    # LF body stub → 동일 canonical SHA (CRLF/LF 차이 흡수 확인).
+    gh_lf = _write_canonical_gh_stub(tmp_path / "ghlf", lf_body)
+    out_lf = _run_driver_with_gh(
+        tmp_path, state_file, gh_lf,
+        "sha = pipeline._fetch_canonical_pr_body_sha256(1)\n"
+        "print('SHA', sha)\n",
+    )
+    assert f"SHA {expected_lf}" in out_lf, (
+        f"LF body의 canonical SHA가 기대값과 불일치\n{out_lf}"
+    )
+
+
+def test_request_accept_blocked_when_pr_body_changes_after(gh_publish_env):
+    """MT-6(3): request-accept publish 후 PR body가 바뀌면 재실행 시 fail-closed로 BLOCKED.
+
+    1) 정상 경로(2-call)로 request-accept publish 성공 → acceptance_request.pr_body_sha256 기록.
+    2) gh stub이 다른 body(필수 섹션 유지)를 반환하도록 교체 후 request-accept 재실행 →
+       재-stage SHA 불일치 또는 최종 canonical 불변식 중 더 앞선 fail-closed 가드가 발동해야 한다.
+    """
+    env, state_file, evidence = gh_publish_env
+    # 1) 정상 publish (OneDrive transient 재시도 포함).
+    r_ok = None
+    for _attempt in range(4):
+        _stage_and_codex_approve(env, evidence)
+        r_ok = _run_pipeline_env(
+            "gates", "request-accept", "--evidence", str(evidence), env=env,
+        )
+        _c = (r_ok.stdout or "") + (r_ok.stderr or "")
+        if r_ok.returncode == 0:
+            break
+        if any(m in _c for m in _ONEDRIVE_TRANSIENT_MARKERS):
+            _clean_root_artifacts()
+            time.sleep(0.4)
+            continue
+        break
+    assert r_ok.returncode == 0, f"정상 publish 실패\n{r_ok.stdout}{r_ok.stderr}"
+    assert (PIPELINE_ROOT / "acceptance_request.json").exists(), (
+        "정상 publish인데 acceptance_request.json 미생성"
+    )
+    # 2) PR body를 바꾼 새 stub으로 교체 → 현재 canonical SHA가 달라진다.
+    #    필수 섹션을 모두 유지한 변경 body를 사용해 pr_body_incomplete 차단을 건너뛰고,
+    #    fail-closed stale 가드가 발동하도록 한다.
+    changed_bat = _write_canonical_gh_stub(
+        Path(env["PIPELINE_GH_EXECUTABLE"]).parent.parent / "ghmt6_changed",
+        _CHANGED_GH_PR_BODY_F52C_STALE,
+        head_sha="f52c" + "0" * 36,
+    )
+    env_changed = dict(env)
+    env_changed["PIPELINE_GH_EXECUTABLE"] = str(changed_bat)
+    r_stale = _run_pipeline_env(
+        "gates", "request-accept", "--evidence", str(evidence), env=env_changed,
+    )
+    combined = (r_stale.stdout or "") + (r_stale.stderr or "")
+    assert r_stale.returncode != 0, f"publish 후 PR body 변경인데 exit 0\n{combined}"
+    # publish 이후 body 변경은 (재-stage SHA 불일치) 또는 (최종 canonical 불변식) 중 더 앞선
+    # fail-closed 가드로 차단된다. 어느 경로든 stale 계열 보호가 발동하고 승인 코드는 미노출.
+    assert (
+        "pr_body_stale" in combined
+        or "stale" in combined
+        or "codex_review_stale" in combined
+        or "codex_review_not_approved" in combined
+    ), f"PR body 변경인데 stale 계열 BLOCKED 미발동\n{combined}"
+    assert "사용자 승인 요청" not in combined, (
+        f"PR body 변경(stale)인데 승인 요청문이 노출됨\n{combined}"
+    )
+
+
+def test_three_sha_invariant_on_happy_path(gh_publish_env):
+    """MT-6(4): 정상 경로에서 acceptance_request/codex canonical/현재 GitHub PR body SHA 3자 일치.
+
+    2-call 정상 흐름으로 publish하면 세 canonical SHA가 모두 같아야 한다:
+      acceptance_request.pr_body_sha256
+      == codex_review_result.github_canonical_pr_body_sha256
+      == _fetch_canonical_pr_body_sha256(현재 PR)
+    """
+    env, state_file, evidence = gh_publish_env
+    r = None
+    for _attempt in range(4):
+        _stage_and_codex_approve(env, evidence)
+        r = _run_pipeline_env(
+            "gates", "request-accept", "--evidence", str(evidence), env=env,
+        )
+        _c = (r.stdout or "") + (r.stderr or "")
+        if r.returncode == 0:
+            break
+        if any(m in _c for m in _ONEDRIVE_TRANSIENT_MARKERS):
+            _clean_root_artifacts()
+            time.sleep(0.4)
+            continue
+        break
+    combined = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode == 0, f"3자 일치 정상 경로 실패\n{combined}"
+    req = json.loads(
+        (PIPELINE_ROOT / "acceptance_request.json").read_text(encoding="utf-8")
+    )
+    cx = json.loads(
+        _codex_review_result_path_for(state_file).read_text(encoding="utf-8")
+    )
+    req_canonical = req.get("pr_body_sha256")
+    codex_canonical = cx.get("github_canonical_pr_body_sha256")
+    assert req_canonical and codex_canonical, "canonical SHA 미기록"
+    assert req_canonical == codex_canonical, (
+        f"acceptance_request({req_canonical}) != codex({codex_canonical})"
+    )
+    gh_exec = env["PIPELINE_GH_EXECUTABLE"]
+    r_view = subprocess.run(
+        [str(gh_exec), "pr", "view", "1", "--json", "body"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=30, env=env, cwd=str(PIPELINE_ROOT),
+    )
+    assert r_view.returncode == 0, f"gh stub pr view 실패\n{r_view.stderr}"
+    body_field = json.loads(r_view.stdout)["body"]
+    fetched_sha = hashlib.sha256(
+        body_field.replace("\r\n", "\n").encode("utf-8")
+    ).hexdigest()
+    assert fetched_sha == req_canonical, (
+        f"현재 gh canonical SHA({fetched_sha}) != acceptance_request({req_canonical})"
+    )
+
+
+
+# ---------------------------------------------------------------------------
 # TC-ALL: 전체 suite 회귀 (자기 자신 제외)
 # ---------------------------------------------------------------------------
 
@@ -1629,7 +2092,11 @@ def test_tc_all_suite_pass():
         "and not tc_new_2 "
         "and not tc_new_3 "
         "and not tc_f52c "
-        "and not tc_r8"
+        "and not tc_r8 "
+        "and not tc_pr_body_stale_after_publish "
+        "and not tc_three_way_sha_match "
+        "and not request_accept_blocked_when_pr_body_changes_after "
+        "and not three_sha_invariant_on_happy_path"
     )
     result = subprocess.run(
         [

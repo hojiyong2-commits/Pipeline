@@ -5393,6 +5393,39 @@ def _load_acceptance_request() -> Optional[Dict[str, Any]]:
         return None
 
 
+# [Purpose]: BUG-20260628-F52C r11 MT-5 — 최종 불변식 검증 실패 시 기존 acceptance_request.json을
+#            INVALIDATED 상태로 표시하여, 변조/stale 상태의 nonce가 gates accept에서 재사용되지
+#            못하게 한다(fail-closed). 파일을 삭제하지 않고 status만 바꿔 사후 감사를 남긴다.
+# [Assumptions]: acceptance_request.json이 존재하면 dict이며 status 필드를 가진다(없으면 새로 채움).
+# [Vulnerability & Risks]: 파일 부재/파싱 실패는 no-op(이미 노출 산출물이 없으므로 안전).
+#            쓰기 실패는 swallow하되, 호출자는 어차피 직후 _die로 BLOCKED 처리한다.
+# [Improvement]: invalidation 사유/타임스탬프를 event_log에도 적재하면 추적이 강화된다.
+def _invalidate_acceptance_request(reason: str) -> None:
+    """acceptance_request.json의 status를 INVALIDATED로 표시한다 (최종 불변식 실패 시 fail-closed).
+
+    Args:
+        reason: invalidation 사유 문자열 (감사 기록용).
+    Raises:
+        TypeError: reason이 None이거나 str이 아닌 경우.
+    """
+    if reason is None:
+        raise TypeError("reason must not be None")
+    if not isinstance(reason, str):
+        raise TypeError(f"reason must be str, got {type(reason).__name__}")
+    try:
+        req = _load_acceptance_request()
+        if not isinstance(req, dict):
+            return  # 파일 없음/비dict — 노출 산출물 없음, no-op.
+        req["status"] = "INVALIDATED"
+        req["invalidation_reason"] = reason
+        req["invalidated_at"] = _now()
+        with open(ACCEPTANCE_REQUEST_FILE, "w", encoding="utf-8") as fh:
+            json.dump(req, fh, ensure_ascii=False, indent=2)
+    except (OSError, TypeError, ValueError):
+        # 쓰기 실패는 non-fatal — 호출자가 직후 _die로 BLOCKED 처리한다.
+        pass
+
+
 # [Purpose]: acceptance 표시 상태(display_status)를 단일 SSoT helper로 계산하여
 #            _build_verification_json / _build_final_packet_content / accept finalization이
 #            동일한 표시 상태를 산출하도록 보장한다 (IMP-20260614-D278 MT-1).
@@ -16475,6 +16508,163 @@ def _get_pr_body_text() -> Optional[str]:
     return None
 
 
+# [Purpose]: BUG-20260628-F52C r11 — PR body canonical SHA 계산의 단일 신뢰 루트(SSoT).
+#   r10 REJECT 근본 원인: acceptance_request.pr_body_sha256(canonical 기록)과 승인 직전 GitHub에서
+#   실제로 읽히는 PR body SHA가 달랐다. 그 원인은 canonical SHA를 계산하던 코드가
+#   `gh pr view --json body --jq .body`(stdout) 결과를 그대로 인코딩했기 때문이다. `--jq` 출력은
+#   stdout이며 trailing newline을 덧붙이거나 일부 환경에서 정규화 차이가 생긴다. 따라서 canonical
+#   SHA의 신뢰 루트를 `gh pr view <pr_number> --json body`(jq 없이) → JSON parse → body 필드 →
+#   .encode('utf-8') → sha256 으로 통일한다.
+# [Assumptions]: gh CLI(또는 PIPELINE_GH_EXECUTABLE stub)가 `--json body`를 JSON 객체로 반환한다.
+#   pr_number가 None이면 현재 브랜치 PR을 자동 조회(인자 없는 gh pr view --json body).
+# [Vulnerability & Risks]: gh 부재/PR 없음/JSON 파싱 실패/body 필드 부재는 모두 None(graceful)으로
+#   처리하여 호출자가 fail-closed 분기를 결정한다. --jq/stdout/trailing newline 기반 계산은 절대
+#   하지 않는다(근본 원인 재발 방지).
+# [Improvement]: gh GraphQL로 직접 body를 받아 REST/GraphQL canonical 차이까지 추가 검증 가능.
+def _fetch_canonical_pr_body_sha256(pr_number: Optional[int] = None) -> Optional[str]:
+    """GitHub에서 PR body를 fetch하여 canonical SHA-256을 반환한다(canonical SHA SSoT).
+
+    규칙(BUG-20260628-F52C r11):
+      - `gh pr view [<pr_number>] --json body`(jq 없이) 실행 후 JSON parse하여 body 필드만 추출한다.
+      - --jq 출력, 콘솔 stdout, trailing newline 기반 계산은 절대 하지 않는다.
+      - body 텍스트를 .encode('utf-8') 후 hashlib.sha256().hexdigest()로 계산한다.
+      - 실패(gh 부재/PR 없음/파싱 실패/body 부재) 시 None을 반환한다(graceful).
+
+    Args:
+        pr_number: 대상 PR 번호(정수 또는 정수형 문자열). None이면 현재 브랜치 PR을 자동 조회.
+    Returns:
+        canonical body SHA-256 hex 문자열, 또는 None.
+    Raises:
+        TypeError: pr_number가 None/int/정수형 str이 아닌 경우 (외부 입력 타입 가드).
+    """
+    # AL: None은 허용(현재 PR 자동 조회). 그 외 타입은 int 또는 정수형 str만 허용.
+    if pr_number is not None:
+        if isinstance(pr_number, bool):
+            # bool은 int 서브클래스지만 PR 번호로 부적절 — 명시적 차단.
+            raise TypeError("pr_number must be int or None, got bool")
+        if isinstance(pr_number, str):
+            if not pr_number.strip().isdigit():
+                raise TypeError(
+                    f"pr_number str must be all-digits, got {pr_number!r}"
+                )
+            pr_number = int(pr_number.strip())
+        elif not isinstance(pr_number, int):
+            raise TypeError(
+                f"pr_number must be int, digit-str, or None, got "
+                f"{type(pr_number).__name__}"
+            )
+        if pr_number <= 0:  # negative/zero not allowed: PR 번호는 1 이상.
+            raise TypeError(f"pr_number must be positive, got {pr_number}")
+
+    gh_args_prefix = _build_gh_cmd_prefix()
+    cmd = gh_args_prefix + ["pr", "view"]
+    if pr_number is not None:
+        cmd.append(str(pr_number))
+    cmd += ["--json", "body"]  # jq 없이 JSON 객체를 받아 Python에서 parse한다(SSoT).
+    try:
+        r = subprocess.run(
+            cmd,
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode != 0:
+            return None
+        out = (r.stdout or "").strip()
+        if not out:
+            return None
+        data = json.loads(out)
+        if not isinstance(data, dict):
+            return None
+        body = data.get("body")
+        if body is None or not isinstance(body, str):
+            return None
+        # BUG-20260628-F52C r11: CRLF→LF 정규화로 Windows/Linux/GitHub 저장 형식 차이를 흡수한다.
+        # 동일 논리 본문이 줄바꿈 형식만 다르면(예: gh가 \r\n, GitHub canonical이 \n) SHA가 갈렸다.
+        # acceptance_request와 codex canonical을 동일 정규화 경로로 계산해 3자 일치를 보장한다.
+        body = body.replace("\r\n", "\n")
+        # canonical: JSON으로 parse한 body 필드 원문을 LF 정규화 후 인코딩(trailing newline 미추가).
+        return hashlib.sha256(body.encode("utf-8")).hexdigest()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+
+
+def _fetch_canonical_pr_body_text(pr_number: Optional[int] = None) -> Optional[str]:
+    """GitHub에서 PR body 원문(canonical 텍스트)을 fetch한다 (SHA 계산과 동일 신뢰 루트).
+
+    _fetch_canonical_pr_body_sha256와 동일하게 `gh pr view --json body`(jq 없이)를 JSON parse하여
+    body 필드를 그대로 반환한다. canonical 2자 검증 메시지에 원문이 필요한 경우 사용한다.
+
+    Args:
+        pr_number: 대상 PR 번호. None이면 현재 브랜치 PR.
+    Returns:
+        PR body 원문 문자열 또는 None.
+    Raises:
+        TypeError: pr_number 타입 가드 실패 시 (_fetch_canonical_pr_body_sha256와 동일 규칙).
+    """
+    if pr_number is not None:
+        if isinstance(pr_number, bool):
+            raise TypeError("pr_number must be int or None, got bool")
+        if isinstance(pr_number, str):
+            if not pr_number.strip().isdigit():
+                raise TypeError(f"pr_number str must be all-digits, got {pr_number!r}")
+            pr_number = int(pr_number.strip())
+        elif not isinstance(pr_number, int):
+            raise TypeError(
+                f"pr_number must be int, digit-str, or None, got "
+                f"{type(pr_number).__name__}"
+            )
+        if pr_number <= 0:  # negative/zero not allowed: PR 번호는 1 이상.
+            raise TypeError(f"pr_number must be positive, got {pr_number}")
+
+    gh_args_prefix = _build_gh_cmd_prefix()
+    cmd = gh_args_prefix + ["pr", "view"]
+    if pr_number is not None:
+        cmd.append(str(pr_number))
+    cmd += ["--json", "body"]
+    try:
+        r = subprocess.run(
+            cmd,
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+        if r.returncode != 0:
+            return None
+        out = (r.stdout or "").strip()
+        if not out:
+            return None
+        data = json.loads(out)
+        if not isinstance(data, dict):
+            return None
+        body = data.get("body")
+        if body is None or not isinstance(body, str):
+            return None
+        # BUG-20260628-F52C r11: SHA helper와 동일하게 CRLF→LF 정규화한 canonical 원문을 반환한다.
+        # _verify_published_canonical_pr_body가 이 원문을 다시 인코딩해 SHA를 재계산하므로,
+        # 정규화를 두 helper에서 동일하게 적용해야 SHA helper 결과와 2자 검증이 일치한다.
+        return body.replace("\r\n", "\n")
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+
+
+def _current_pr_number_for_canonical() -> Optional[int]:
+    """현재 브랜치 PR 번호를 정수로 조회한다 (canonical SHA helper 호출용).
+
+    _get_current_pr_url → _get_pr_number_from_url 재사용. 실패 시 None(자동 조회 fallback).
+
+    Returns:
+        PR 번호(int) 또는 None.
+    Raises:
+        없음.
+    """
+    pr_url = _get_current_pr_url()
+    if not pr_url:
+        return None
+    num_str = _get_pr_number_from_url(pr_url)
+    if num_str and num_str.isdigit():
+        return int(num_str)
+    return None
+
+
 def _build_gh_cmd_prefix() -> List[str]:
     """gh CLI 호출 명령어 prefix 반환.
 
@@ -19091,21 +19281,30 @@ def _publish_acceptance_request(
     #    REJECT-2: 이 경로의 실패는 fail-closed BLOCKED (best-effort PASS 금지).
     if snapshot_result.get("pr_body_updated"):
         try:
-            # BUG-20260628-F52C r8 (A안): gh pr edit 직후 GitHub에서 canonical body를 재fetch한다.
-            # GitHub API는 PR body 저장 시 line ending(CRLF→LF)/trailing whitespace를 정규화하므로,
-            # 이 canonical body의 SHA가 acceptance_request.pr_body_sha256의 신뢰 루트(불변식 2)다.
-            _updated_pr_body = _get_pr_body_text()
+            # BUG-20260628-F52C r11: gh pr edit 직후 GitHub에서 canonical body를 재fetch하되,
+            # canonical SHA의 신뢰 루트(SSoT)를 _fetch_canonical_pr_body_sha256/_text로 통일한다.
+            # 이전(r8~r10)에는 _get_pr_body_text()(`--jq .body` stdout, trailing newline 추가 가능)
+            # 결과를 인코딩했는데, 그 stdout SHA가 GitHub가 실제 저장한 canonical body SHA와 달라
+            # acceptance_request.pr_body_sha256 != sha256(현재 GitHub body) REJECT(r10)를 유발했다.
+            # r11: `gh pr view --json body`(jq 없이) → JSON parse → body 필드 SHA 단일 경로만 사용.
+            _pr_num_for_canon = _current_pr_number_for_canonical()
+            _updated_pr_body = _fetch_canonical_pr_body_text(_pr_num_for_canon)
             if not _updated_pr_body:
                 _die(
                     "[BLOCKED] failure_code=pr_body_resync_failed\n"
-                    "  PR 본문 갱신 직후 현재 PR 본문을 다시 읽을 수 없습니다.\n"
+                    "  PR 본문 갱신 직후 현재 PR 본문(canonical)을 다시 읽을 수 없습니다.\n"
                     "  fail-closed — 승인 요청을 노출하지 않습니다. "
                     "gates request-accept를 다시 실행하세요."
                 )
-            # canonical body SHA — GitHub가 정규화한 실제 저장된 body 기준.
-            _updated_body_sha = hashlib.sha256(
-                _updated_pr_body.encode("utf-8")
-            ).hexdigest()
+            # canonical body SHA — _fetch_canonical_pr_body_sha256 SSoT로 계산(동일 fetch 경로).
+            _updated_body_sha = _fetch_canonical_pr_body_sha256(_pr_num_for_canon)
+            if not _updated_body_sha:
+                _die(
+                    "[BLOCKED] failure_code=pr_body_resync_failed\n"
+                    "  PR 본문 갱신 직후 canonical SHA를 계산할 수 없습니다.\n"
+                    "  fail-closed — 승인 요청을 노출하지 않습니다. "
+                    "gates request-accept를 다시 실행하세요."
+                )
             _req_path_post = BASE_DIR / "acceptance_request.json"
             if not _req_path_post.exists():
                 _die(
@@ -19691,6 +19890,79 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             f"  오류: {exc}\n"
             "  gates request-accept를 다시 실행하세요."
         )
+
+    # ── 단계 4.5: 최종 불변식 검증 (MT-5, BUG-20260628-F52C r11) ──
+    # 사용자에게 승인 요청(stdout)을 출력하기 직전, 마지막으로 GitHub에서 current PR body를
+    # canonical SSoT(_fetch_canonical_pr_body_sha256)로 fetch하여 아래 불변식을 검증한다:
+    #     acceptance_request.pr_body_sha256 == sha256(current GitHub PR body canonical text)
+    # 이 검증 이후에는 PR body를 수정하는 코드 경로가 없어야 한다(publish/cleanup 모두 완료).
+    # 검증 실패 시: 기존 acceptance_request를 INVALIDATED 처리하고, 새 request-accept를 요구하는
+    # BLOCKED 응답을 반환한다(승인 코드 미노출, fail-closed).
+    # gh CLI가 없는 환경(canonical fetch 불가)에서는 이 차원 검증을 생략한다(기존 동작 보존).
+    _pr_num_final = _current_pr_number_for_canonical()
+    _final_canonical_sha = _fetch_canonical_pr_body_sha256(_pr_num_final)
+    if _final_canonical_sha is not None:
+        _final_req = _load_acceptance_request()
+        _final_req_body_sha = (
+            str(_final_req.get("pr_body_sha256", "") or "")
+            if isinstance(_final_req, dict) else ""
+        )
+        if not _final_req_body_sha:
+            _invalidate_acceptance_request(
+                "final_invariant_missing_pr_body_sha"
+            )
+            _die(
+                "[BLOCKED] failure_code=pr_body_stale\n"
+                "  최종 불변식 검증: acceptance_request.json에 pr_body_sha256이 비어 있습니다.\n"
+                "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+                "  gates request-accept를 다시 실행하세요."
+            )
+        if _final_req_body_sha != _final_canonical_sha:
+            _invalidate_acceptance_request("final_invariant_pr_body_changed")
+            _die(
+                "[BLOCKED] failure_code=pr_body_stale_final_check\n"
+                "  최종 불변식 검증 실패 — acceptance_request.pr_body_sha256가 현재 GitHub PR\n"
+                "  본문(canonical) SHA와 다릅니다. PR 본문이 발급 직후 변경된 것으로 보입니다.\n"
+                f"  acceptance_request:     {_final_req_body_sha}\n"
+                f"  현재 GitHub canonical:  {_final_canonical_sha}\n"
+                "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+                "  gates request-accept를 다시 실행하세요."
+            )
+
+        # BUG-20260628-F52C r11 (MT 5): codex_review_result.github_canonical_pr_body_sha256도
+        # 동일 canonical 신뢰 루트와 일치하는지 검증한다. acceptance_request와 codex 두 기록이
+        # 같은 canonical SHA를 가리켜야(3자 일치) gates accept의 codex 검증이 일관된다.
+        # codex result가 없거나 canonical 필드가 비어 있으면(구 포맷/미기록) 이 차원은 graceful skip.
+        try:
+            _cx_path_final = _codex_review_result_path()
+            if _cx_path_final.exists():
+                _cx_final = json.loads(
+                    _cx_path_final.read_text(encoding="utf-8", errors="replace")
+                )
+                _cx_canon_sha = (
+                    str(_cx_final.get("github_canonical_pr_body_sha256", "") or "")
+                    if isinstance(_cx_final, dict) else ""
+                )
+                # 빈값(미기록)은 skip — 신규 필드가 없는 구 포맷 결과까지 차단하지 않는다.
+                if _cx_canon_sha and _cx_canon_sha != _final_canonical_sha:
+                    _invalidate_acceptance_request(
+                        "final_invariant_codex_canonical_changed"
+                    )
+                    _die(
+                        "[BLOCKED] failure_code=pr_body_stale_codex_canonical\n"
+                        "  최종 불변식 검증 실패 — codex_review_result.github_canonical_pr_body_sha256가\n"
+                        "  현재 GitHub PR 본문(canonical) SHA와 다릅니다.\n"
+                        f"  codex canonical:        {_cx_canon_sha}\n"
+                        f"  현재 GitHub canonical:  {_final_canonical_sha}\n"
+                        "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+                        "  gates request-accept를 다시 실행하세요."
+                    )
+        except (OSError, json.JSONDecodeError) as _cx_final_exc:
+            # codex result 읽기 실패는 graceful skip(이 차원만 생략) — fail-closed 차단 대상 아님.
+            _log_event(
+                state,
+                f"final invariant codex canonical check skipped: {_cx_final_exc}",
+            )
 
     # ── 단계 5: 사용자 승인 요청 stdout (Codex APPROVE 이후에만 도달) ──
     # IMP-20260624-069A MT-1: User Acceptance 최종 승인 요청문을 최소 고정 양식으로 통일.
