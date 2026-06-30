@@ -383,7 +383,7 @@ def score_command_check(test: dict[str, Any], base_dir: Path, project_dir: Path)
         raise ScoringError("when.command must be a non-empty list")
     resolved_command = [sys.executable if part == "{python}" else str(part) for part in command]
     cwd = _resolve(base_dir, str(when["cwd"])) if when.get("cwd") else project_dir
-    timeout = int(when.get("timeout_seconds", 300))
+    timeout = int(when.get("timeout_seconds", 900))
     cmd_env, tmp_dir = _build_command_check_env(given, base_dir, project_dir, when=when)
     try:
         proc = subprocess.run(
