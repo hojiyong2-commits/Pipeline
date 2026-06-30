@@ -1612,15 +1612,33 @@ def test_tc_r8_7_pr_body_sha_semantics_not_mixed(gh_publish_env):
 # ---------------------------------------------------------------------------
 
 def test_tc_all_suite_pass():
-    """TC-ALL: 이 파일의 다른 모든 TC가 통과하는지 subprocess pytest로 회귀 확인."""
+    """TC-ALL: gh_publish_env 미사용 빠른 TC가 통과하는지 subprocess pytest로 회귀 확인.
+
+    gh_publish_env fixture 의존 테스트는 각 15-20초로 느려 oracle runner 타임아웃을 압박하므로
+    이름 기반 -k 필터로 제외합니다(해당 테스트는 TC-6N에서 직접 실행됨).
+    제외 대상 = gh_publish_env fixture를 쓰는 20개 테스트:
+    tc_reject_*, tc_publish_3way_sha_match, tc_new_1/2/3, tc_f52c_*, tc_r8_*.
+    fixture 인자 이름은 pytest -k가 매치하지 못하고, module-level marker hook은 발동하지
+    않으므로(conftest 전용) 이름 prefix 기반 제외가 가장 안정적입니다.
+    """
+    deselect_k = (
+        "not tc_all_suite_pass "
+        "and not tc_reject "
+        "and not tc_publish_3way "
+        "and not tc_new_1 "
+        "and not tc_new_2 "
+        "and not tc_new_3 "
+        "and not tc_f52c "
+        "and not tc_r8"
+    )
     result = subprocess.run(
         [
             sys.executable, "-m", "pytest", str(Path(__file__)),
             "-q", "--tb=short", "-p", "no:cacheprovider",
-            "-k", "not tc_all_suite_pass",
+            "-k", deselect_k,
         ],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=300,
+        timeout=120,
         env={**os.environ, "PIPELINE_NO_DASHBOARD": "1"},
     )
     out = (result.stdout or "") + (result.stderr or "")
