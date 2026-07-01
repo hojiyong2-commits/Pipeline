@@ -1,0 +1,18 @@
+{
+  "scenario": "cache_hit",
+  "description": "cache key 일치 → Codex CLI 미호출, 캐시된 결과 반환",
+  "contract_sha256": "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+  "review_bundle_sha256": "def456abc123def456abc123def456abc123def456abc123def456abc123def4",
+  "cache_entry": {
+    "cache_key": "abc123def456abc123def456abc123def456abc123def456abc123def456abc1:def456abc123def456abc123def456abc123def456abc123def456abc123def4",
+    "result": "APPROVED",
+    "reviewed_at": "2026-07-01T08:00:00Z",
+    "pr_head_sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+  },
+  "current_pr_head_sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  "preflight_checks": {
+    "raw_accept_code_present": false,
+    "except_pass_present": false,
+    "pr_diff_hygiene_ok": true
+  }
+}

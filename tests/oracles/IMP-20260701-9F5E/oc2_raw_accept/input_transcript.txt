@@ -1,0 +1,13 @@
+scenario: raw_accept_code_detected
+description: preflight이 BLOCKED되어야 하는 상황 — raw ACCEPT 코드가 diff에 노출됨
+
+diff_excerpt:
++  # user confirmed: ACCEPT-IMP-20260701-9F5E-abc12345
++  acceptance_code = "ACCEPT-IMP-20260701-9F5E-abc12345"
+
+preflight_checks:
+  raw_accept_code_present: true
+  code_pattern: "ACCEPT-IMP-\\w+-[a-f0-9]+"
+  location: "pipeline.py line 4521"
+
+expected_behavior: preflight이 raw ACCEPT 코드를 감지하여 BLOCKED 반환

@@ -1,0 +1,10 @@
+{
+  "scenario": "rate_limit_after_two_rejects",
+  "preflight_status": "PASS",
+  "rate_limited": true,
+  "failure_code": "codex_review_rate_limited",
+  "reject_count": 2,
+  "codex_cli_called": false,
+  "exit_code": 1,
+  "blocked_reason": "REJECT 2회 초과 — rate_limited 상태. 사용자 직접 개입 필요"
+}

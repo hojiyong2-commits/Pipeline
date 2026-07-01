@@ -1,0 +1,11 @@
+{
+  "scenario": "cache_hit",
+  "preflight_status": "PASS",
+  "cache_hit": true,
+  "codex_cli_called": false,
+  "sha_reverified": true,
+  "final_status": "APPROVED",
+  "history_appended": true,
+  "exit_code": 0,
+  "cache_source": "local_cache"
+}

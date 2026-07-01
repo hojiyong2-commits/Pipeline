@@ -1,0 +1,12 @@
+{
+  "scenario": "critical_file_changed",
+  "preflight_status": "PASS",
+  "bundle_created": true,
+  "critical_diffs_included": true,
+  "critical_files_in_bundle": ["pipeline.py"],
+  "non_critical_summary_only": true,
+  "non_critical_full_diff_excluded": true,
+  "bundle_fields_required": ["pipeline_id", "review_bundle_sha256", "critical_diffs", "non_critical_summary", "generated_at"],
+  "codex_cli_called": true,
+  "exit_code": 0
+}

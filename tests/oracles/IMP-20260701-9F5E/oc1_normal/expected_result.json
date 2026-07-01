@@ -1,0 +1,14 @@
+{
+  "scenario": "normal_flow",
+  "preflight_status": "PASS",
+  "bundle_created": true,
+  "bundle_fields_required": ["pipeline_id", "review_bundle_sha256", "critical_diffs", "non_critical_summary", "generated_at"],
+  "critical_diffs_included": true,
+  "codex_cli_called": true,
+  "codex_model_detected_field_present": true,
+  "codex_cli_command_field_present": true,
+  "final_status": "APPROVED",
+  "history_appended": true,
+  "cache_saved": true,
+  "exit_code": 0
+}

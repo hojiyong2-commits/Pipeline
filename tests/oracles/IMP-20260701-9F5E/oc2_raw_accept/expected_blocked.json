@@ -1,0 +1,9 @@
+{
+  "scenario": "raw_accept_code_detected",
+  "preflight_status": "BLOCKED",
+  "failure_code": "raw_accept_code_in_diff",
+  "bundle_created": false,
+  "codex_cli_called": false,
+  "exit_code": 1,
+  "blocked_reason": "raw ACCEPT 코드가 diff에 노출됨 — 승인 코드 보안 위반"
+}

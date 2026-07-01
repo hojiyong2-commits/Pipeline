@@ -2589,6 +2589,29 @@ SECRET_FILENAME_PATTERNS: List[str] = [
 ]
 
 
+# IMP-20260701-9F5E MT-3: Codex Review Critical Files SSoT.
+# [Purpose]: Codex Review 비용 최적화 — 어떤 파일이 "critical"(반드시 함수단위 diff를
+#   Codex에게 보여줘야 하는 신뢰 루트/프로토콜/게이트 파일)인지 단일 신뢰 루트로 정의한다.
+#   bundle builder(_build_codex_review_bundle)와 cache 무효화 판정이 이 상수를 공유한다.
+# [Assumptions]: 경로는 repo-root 기준 상대 경로(POSIX 슬래시 정규화 후 비교)로 판정한다.
+# [Vulnerability & Risks]: 새로운 신뢰 루트 파일 유형이 추가되면 이 SSoT를 갱신하지 않는 한
+#   critical 판정에서 누락된다(요약만 포함되어 Codex 검토 깊이가 낮아질 수 있음).
+# [Improvement]: 향후 CODEOWNERS 파싱과 연동하여 자동 critical 판정을 도입할 수 있다.
+CODEX_REVIEW_CRITICAL_FILES: "frozenset[str]" = frozenset([
+    "pipeline.py",
+    "CLAUDE.md",
+    "AGENTS.md",
+])
+CODEX_REVIEW_CRITICAL_PATTERNS: List[str] = [
+    ".claude/agents/",
+    ".claude/commands/",
+    ".claude/settings.json",
+    ".claude/hooks/",
+    ".github/workflows/",
+    "tests/e2e/",
+]
+
+
 def _mask_secret(value: str, prefix_len: int = 8) -> str:
     """민감 정보 문자열을 마스킹한다. prefix_len 자 이후는 ****로 대체.
 
@@ -6792,6 +6815,698 @@ def _codex_review_result_path() -> Path:
     if env_state:
         return Path(env_state).resolve().parent / ".pipeline" / "codex_review_result.json"
     return PIPELINE_CI_DIR / "codex_review_result.json"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IMP-20260701-9F5E: Codex Review 비용 최적화 레이어
+#   MT-1 preflight / MT-2 bundle / MT-3 critical files / MT-5 cache / MT-6 history
+#   기존 F52C 3자 SHA 불변식(_verify_snapshot_invariant / _codex_review_snapshot /
+#   packet_sha256·pr_body_sha256·pr_head_sha)은 절대 삭제/약화하지 않는다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _codex_ci_dir() -> Path:
+    """Codex 비용 최적화 산출물이 저장되는 .pipeline 디렉토리를 반환한다.
+
+    PIPELINE_STATE_PATH 격리를 지원하여 테스트가 전역 .pipeline을 오염시키지 않는다.
+
+    Returns:
+        .pipeline 디렉토리 절대 경로.
+    """
+    env_state = os.environ.get("PIPELINE_STATE_PATH")
+    if env_state:
+        return Path(env_state).resolve().parent / ".pipeline"
+    return PIPELINE_CI_DIR
+
+
+# IMP-20260701-9F5E MT-3: critical 파일 판별 (bundle builder + cache 무효화 공유).
+# [Purpose]: 주어진 파일 경로가 Codex Review critical 대상(함수단위 diff 필수)인지 판별한다.
+# [Assumptions]: path는 repo-root 기준 상대 경로 문자열. Windows 역슬래시는 슬래시로 정규화.
+# [Vulnerability & Risks]: SSoT 상수(CODEX_REVIEW_CRITICAL_FILES/_PATTERNS)에 없는 신규
+#   신뢰 루트는 non-critical로 판정된다.
+# [Improvement]: glob 스타일 패턴 매칭으로 확장 가능.
+def _is_critical_file(path: str) -> bool:
+    """파일이 Codex review critical 대상인지 판별한다.
+
+    Args:
+        path: repo-root 기준 상대 경로 문자열.
+    Returns:
+        critical 파일이면 True, 아니면 False.
+    Raises:
+        TypeError: path가 None이거나 str이 아닌 경우.
+    """
+    if path is None:
+        raise TypeError("path must not be None")
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    normalized = path.strip().replace("\\", "/").lstrip("./")
+    if not normalized:
+        return False
+    # 정확 파일명 매칭 (전체 경로 또는 basename).
+    basename = normalized.rsplit("/", 1)[-1]
+    if normalized in CODEX_REVIEW_CRITICAL_FILES or basename in CODEX_REVIEW_CRITICAL_FILES:
+        return True
+    # prefix 패턴 매칭.
+    for pattern in CODEX_REVIEW_CRITICAL_PATTERNS:
+        norm_pattern = pattern.replace("\\", "/")
+        if norm_pattern.endswith("/"):
+            if normalized.startswith(norm_pattern):
+                return True
+        else:
+            if normalized == norm_pattern or normalized.endswith("/" + norm_pattern):
+                return True
+    return False
+
+
+def _get_git_diff_content(path: str, base: str = "origin/main") -> str:
+    """단일 파일의 함수단위 unified diff를 반환한다.
+
+    git diff base...HEAD -- <path> 결과 텍스트를 그대로 반환한다.
+    외부 도구 부재/오류 시 빈 문자열.
+
+    Args:
+        path: 대상 파일 경로 (repo-root 상대).
+        base: 비교 기준 ref (기본 origin/main).
+    Returns:
+        unified diff 텍스트 (없으면 빈 문자열).
+    Raises:
+        TypeError: path가 None이거나 str이 아닌 경우.
+    """
+    if path is None:
+        raise TypeError("path must not be None")
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    git_path = shutil.which("git") or "git"
+    try:
+        r = subprocess.run(
+            [git_path, "diff", f"{base}...HEAD", "--", path],
+            capture_output=True, text=True, timeout=20,
+            encoding="utf-8", errors="replace", cwd=str(BASE_DIR),
+        )
+        if r.returncode == 0:
+            return r.stdout or ""
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return ""
+
+
+# IMP-20260701-9F5E MT-2: critical 파일들의 함수단위 diff 추출.
+# [Purpose]: changed_files 중 critical 파일에 대해서만 함수단위 diff를 추출하여
+#   Codex 검토 대상 페이로드를 최소화한다.
+# [Assumptions]: git diff가 사용 가능하면 실제 diff, 없으면 빈 문자열로 graceful degradation.
+# [Vulnerability & Risks]: 매우 큰 critical diff는 그대로 포함되어 페이로드가 커질 수 있다.
+# [Improvement]: diff hunk 헤더(@@)만 요약하는 초경량 모드를 옵션으로 추가 가능.
+def _extract_critical_function_diffs(
+    changed_files: List[str], base: str = "origin/main"
+) -> Dict[str, str]:
+    """changed_files에서 critical 파일의 함수 단위 diff를 추출한다.
+
+    Args:
+        changed_files: 변경된 파일 경로 목록.
+        base: git diff 비교 기준 ref.
+    Returns:
+        {critical_file_path: unified_diff_text} 딕셔너리.
+    Raises:
+        TypeError: changed_files가 None이거나 list가 아닌 경우.
+    """
+    if changed_files is None:
+        raise TypeError("changed_files must not be None")
+    if not isinstance(changed_files, list):
+        raise TypeError(
+            f"changed_files must be list, got {type(changed_files).__name__}"
+        )
+    result: Dict[str, str] = {}
+    for f in changed_files:
+        if not isinstance(f, str) or not f.strip():
+            continue
+        if _is_critical_file(f):
+            result[f] = _get_git_diff_content(f, base=base)
+    return result
+
+
+# IMP-20260701-9F5E MT-2: Codex Review Bundle 생성.
+# [Purpose]: Codex CLI에 전달할 최소 리뷰 번들을 생성한다. critical diff는 포함하되
+#   PR body 전체/acceptance packet 전체/oracle JSON 원문/raw ACCEPT 코드는 제외한다.
+# [Assumptions]: state는 dict, pipeline_id는 비어있지 않은 str.
+# [Vulnerability & Risks]: bundle에 raw ACCEPT 코드가 섞이면 승인 코드 조기 노출 위험이
+#   있으므로, 어떤 필드에도 승인 코드를 넣지 않는다(제외 규칙 강제).
+# [Improvement]: non-critical 파일 요약에 라인 수/변경 유형을 추가할 수 있다.
+def _build_codex_review_bundle(
+    state: Dict[str, Any], pipeline_id: str, base: str = "origin/main"
+) -> Dict[str, Any]:
+    """codex_review_bundle.json 을 생성하고 저장한다.
+
+    포함: pipeline_id, PR URL, head SHA, changed files 목록, critical file 함수단위 diff,
+          non-critical 파일 요약.
+    제외: PR body 전체, acceptance packet 전체, oracle JSON 원문, raw ACCEPT 코드.
+
+    Args:
+        state: 활성 pipeline_state dict.
+        pipeline_id: 활성 파이프라인 ID.
+        base: git diff 비교 기준 ref.
+    Returns:
+        생성된 bundle dict (review_bundle_sha256 필드 포함).
+    Raises:
+        TypeError: state가 None/dict가 아니거나 pipeline_id가 None/str이 아닌 경우.
+        ValueError: pipeline_id가 빈 문자열인 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    if not pipeline_id.strip():
+        raise ValueError("pipeline_id must not be empty")
+
+    changed_files = _get_git_diff_files(base=base)
+    critical_diffs = _extract_critical_function_diffs(changed_files, base=base)
+    non_critical = [f for f in changed_files if not _is_critical_file(f)]
+    non_critical_summary = [
+        {"path": f, "critical": False, "note": "요약만 포함 (함수단위 diff 제외)"}
+        for f in non_critical
+    ]
+
+    pr_url = ""
+    pr_meta = state.get("github", {}) if isinstance(state.get("github"), dict) else {}
+    if isinstance(pr_meta, dict):
+        pr_url = str(pr_meta.get("pr_url", "") or "")
+
+    head_sha = _get_current_pr_head_sha() or ""
+
+    bundle: Dict[str, Any] = {
+        "schema_version": 1,
+        "bundle_type": "codex_review_bundle",
+        "pipeline_id": pipeline_id,
+        "generated_at": _now(),
+        "pr_url": pr_url,
+        "pr_head_sha": head_sha,
+        "changed_files": list(changed_files),
+        "changed_files_count": len(changed_files),
+        "critical_file_diffs": critical_diffs,
+        "critical_file_count": len(critical_diffs),
+        "non_critical_files": non_critical_summary,
+        # 명시적으로 제외했음을 감사 가능하도록 기록 (실제 원문은 포함하지 않음).
+        "excluded": [
+            "pr_body_full", "acceptance_packet_full",
+            "oracle_json_raw", "raw_accept_code",
+        ],
+    }
+    # review_bundle_sha256: bundle 본문(자기 자신 SHA 필드 제외)의 SHA256.
+    bundle_for_hash = {k: v for k, v in bundle.items() if k != "review_bundle_sha256"}
+    canonical = json.dumps(bundle_for_hash, ensure_ascii=False, sort_keys=True)
+    bundle["review_bundle_sha256"] = hashlib.sha256(
+        canonical.encode("utf-8")
+    ).hexdigest()
+
+    bundle_path = _codex_ci_dir() / "codex_review_bundle.json"
+    bundle_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(bundle_path, bundle)
+    return bundle
+
+
+# IMP-20260701-9F5E MT-5: Codex Review Cache Layer.
+# [Purpose]: 동일 contract + 동일 review bundle에 대한 반복 Codex 호출을 캐시하여 비용을 줄인다.
+# [Assumptions]: cache key는 contract_sha256 + bundle_sha256로 결정되며, critical 파일이
+#   변경되면 bundle_sha256이 달라져 새 key로 저장된다(자동 무효화).
+# [Vulnerability & Risks]: cache hit 시에도 stale SHA를 그대로 승인에 재사용하면 안 되므로,
+#   호출자는 현재 pr_head_sha로 SHA 필드를 갱신해야 한다(_save_codex_cache가 pr_head_sha 기록).
+# [Improvement]: cache 만료(TTL)를 추가하여 오래된 승인 재사용을 제한할 수 있다.
+def _codex_review_cache_path(pipeline_id: str) -> Path:
+    """cache 파일 경로를 반환한다: .pipeline/codex_review_cache.json
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID (경로 자체에는 포함하지 않으나 인터페이스 일관성 유지).
+    Returns:
+        codex_review_cache.json 절대 경로.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    return _codex_ci_dir() / "codex_review_cache.json"
+
+
+def _compute_cache_key(contract_sha256: str, review_bundle_sha256: str) -> str:
+    """cache key = SHA256(contract_sha256 + ':' + review_bundle_sha256).
+
+    Args:
+        contract_sha256: frozen contract의 SHA256.
+        review_bundle_sha256: review bundle의 SHA256.
+    Returns:
+        64자 hex SHA256 문자열.
+    Raises:
+        TypeError: 인자가 None이거나 str이 아닌 경우.
+        ValueError: 인자가 빈 문자열인 경우.
+    """
+    if contract_sha256 is None:
+        raise TypeError("contract_sha256 must not be None")
+    if not isinstance(contract_sha256, str):
+        raise TypeError(
+            f"contract_sha256 must be str, got {type(contract_sha256).__name__}"
+        )
+    if review_bundle_sha256 is None:
+        raise TypeError("review_bundle_sha256 must not be None")
+    if not isinstance(review_bundle_sha256, str):
+        raise TypeError(
+            f"review_bundle_sha256 must be str, got "
+            f"{type(review_bundle_sha256).__name__}"
+        )
+    if not contract_sha256.strip():
+        raise ValueError("contract_sha256 must not be empty")
+    if not review_bundle_sha256.strip():
+        raise ValueError("review_bundle_sha256 must not be empty")
+    material = f"{contract_sha256}:{review_bundle_sha256}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _load_codex_cache(pipeline_id: str) -> Optional[Dict[str, Any]]:
+    """cache를 로드한다. 파일 없거나 파싱 실패 시 None.
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID.
+    Returns:
+        cache dict 또는 None.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    cache_path = _codex_review_cache_path(pipeline_id)
+    if not cache_path.exists():
+        return None
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _save_codex_cache(
+    pipeline_id: str, cache_key: str, result: str, pr_head_sha: str
+) -> None:
+    """cache를 저장한다. 기존 파일 덮어쓰기 허용 (key 교체).
+
+    critical 파일이 변경되면 bundle_sha256이 달라져 cache_key가 바뀌므로,
+    이 함수로 새 key를 기록하면 이전 cache는 자연히 무효화된다.
+    stale SHA 재사용 방지를 위해 pr_head_sha를 항상 현재 값으로 기록한다.
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID.
+        cache_key: _compute_cache_key로 생성한 key.
+        result: Codex verdict (APPROVE_TO_USER | REJECT).
+        pr_head_sha: 현재 PR head SHA (stale 방지용, 매 저장 시 갱신).
+    Raises:
+        TypeError: 인자가 None이거나 str이 아닌 경우.
+        ValueError: cache_key/result가 빈 문자열인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    if cache_key is None:
+        raise TypeError("cache_key must not be None")
+    if not isinstance(cache_key, str):
+        raise TypeError(f"cache_key must be str, got {type(cache_key).__name__}")
+    if result is None:
+        raise TypeError("result must not be None")
+    if not isinstance(result, str):
+        raise TypeError(f"result must be str, got {type(result).__name__}")
+    if pr_head_sha is not None and not isinstance(pr_head_sha, str):
+        raise TypeError(
+            f"pr_head_sha must be str or None, got {type(pr_head_sha).__name__}"
+        )
+    if not cache_key.strip():
+        raise ValueError("cache_key must not be empty")
+    if not result.strip():
+        raise ValueError("result must not be empty")
+    cache_path = _codex_review_cache_path(pipeline_id)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: Dict[str, Any] = {
+        "schema_version": 1,
+        "pipeline_id": pipeline_id,
+        "cache_key": cache_key,
+        "result": result,
+        # stale SHA 재사용 금지: 저장 시점의 현재 pr_head_sha로 항상 새로 갱신.
+        "pr_head_sha": str(pr_head_sha or ""),
+        "saved_at": _now(),
+    }
+    _write_json(cache_path, payload)
+
+
+# IMP-20260701-9F5E MT-6: Codex Review History & Rate Limiter.
+# [Purpose]: Codex 검토 결과를 append-only history에 남기고, 반복 REJECT를 rate limit한다.
+# [Assumptions]: history는 jsonl(줄당 1 JSON). append-only이며 절대 덮어쓰지 않는다.
+# [Vulnerability & Risks]: 무한 REJECT 재시도로 Codex 비용이 폭증하는 것을 막기 위해
+#   REJECT 2회 이상 시 rate_limited로 차단한다(--force-review로만 우회).
+# [Improvement]: 시간 윈도우 기반 rate limit(예: 1시간 내 N회)로 정교화 가능.
+def _codex_review_history_path(pipeline_id: str) -> Path:
+    """.pipeline/codex_review_history.jsonl 경로를 반환한다.
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID (인터페이스 일관성).
+    Returns:
+        codex_review_history.jsonl 절대 경로.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    return _codex_ci_dir() / "codex_review_history.jsonl"
+
+
+def _append_codex_history(pipeline_id: str, entry: Dict[str, Any]) -> None:
+    """history에 항목을 append한다. append-only — 덮어쓰기 절대 금지.
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID.
+        entry: 기록할 항목 dict (verdict, pr_head_sha 등).
+    Raises:
+        TypeError: pipeline_id/entry가 None이거나 타입이 틀린 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    if entry is None:
+        raise TypeError("entry must not be None")
+    if not isinstance(entry, dict):
+        raise TypeError(f"entry must be dict, got {type(entry).__name__}")
+    history_path = _codex_review_history_path(pipeline_id)
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    record = dict(entry)
+    record.setdefault("pipeline_id", pipeline_id)
+    record.setdefault("appended_at", _now())
+    line = json.dumps(record, ensure_ascii=False)
+    # append-only: "a" 모드 — 기존 내용을 보존하고 뒤에 덧붙인다.
+    with history_path.open("a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
+
+
+def _check_codex_rate_limit(pipeline_id: str) -> Tuple[bool, int]:
+    """현재 pipeline_id의 REJECT 횟수를 확인한다. 2회 이상이면 (True, count).
+
+    Args:
+        pipeline_id: 활성 파이프라인 ID.
+    Returns:
+        (rate_limited, reject_count) 튜플. reject_count >= 2이면 rate_limited=True.
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+    history_path = _codex_review_history_path(pipeline_id)
+    if not history_path.exists():
+        return (False, 0)
+    reject_count = 0
+    try:
+        for raw in history_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            if str(obj.get("pipeline_id", "") or "") != pipeline_id:
+                continue
+            if str(obj.get("verdict", "") or "").upper() == "REJECT":
+                reject_count += 1
+    except OSError:
+        return (False, 0)
+    return (reject_count >= 2, reject_count)
+
+
+# IMP-20260701-9F5E MT-1: gates codex-preflight — deterministic 사전 검사 (Codex CLI 미호출).
+# [Purpose]: Codex Review 실행 전, Codex CLI를 호출하지 않고도 결정적으로 판정 가능한
+#   위험 신호(raw ACCEPT 코드 노출, except:pass, best-effort PASS, SHA 우회, PENDING 중
+#   snapshot 변경 등)를 사전 차단하여 불필요한 Codex 호출 비용과 위험을 줄인다.
+# [Assumptions]: git diff / gh CLI가 있으면 실제 PR diff를 검사, 없으면 graceful degradation.
+#   codex_review_loop_state.json status=NOT_CONFIGURED는 fallback으로 허용한다.
+# [Vulnerability & Risks]: git diff를 얻지 못하면 diff 기반 검사(1,5)는 건너뛴다(경고 없음).
+#   이 경우에도 상태 파일 기반 검사(2,3,4,6)는 수행된다.
+# [Improvement]: diff 기반 검사에 AST 파싱을 도입하여 except:pass 오탐을 줄일 수 있다.
+_RAW_ACCEPT_CODE_RE = re.compile(r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}-[0-9a-f]{8}")
+_EXCEPT_PASS_RE = re.compile(r"except\s*:\s*pass")
+_BEST_EFFORT_RE = re.compile(r"#\s*(?:best-effort|fallback pass)", re.IGNORECASE)
+
+
+def _cmd_gates_codex_preflight(
+    args: argparse.Namespace, state: Dict[str, Any]
+) -> None:
+    """gates codex-preflight 핸들러: deterministic 사전 검사 (Codex CLI 미호출).
+
+    8개 검사 항목을 수행하고 BLOCKED가 하나라도 있으면 exit 1 + [PREFLIGHT BLOCKED],
+    전부 통과하면 exit 0 + [PREFLIGHT PASS]를 출력한다. WARN은 차단하지 않는다.
+
+    Args:
+        args: argparse Namespace.
+        state: 활성 pipeline_state dict.
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+        SystemExit: 검사 실패(BLOCKED) 시 exit 1.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+    blocked, warnings, meta = _run_codex_preflight_checks(args, state)
+
+    # 결과 기록 (진단 산출물 — read-only, pipeline_state.json 미변경).
+    result: Dict[str, Any] = {
+        "schema_version": 1,
+        "gate": "codex-preflight",
+        "pipeline_id": pipeline_id,
+        "status": "BLOCKED" if blocked else "PASS",
+        "blocked": blocked,
+        "warnings": warnings,
+        "loop_status": meta.get("loop_status") or "NOT_CONFIGURED",
+        "changed_files_count": int(meta.get("changed_files_count", 0) or 0),
+        "checked_at": _now(),
+    }
+    result_path = _codex_ci_dir() / "codex_preflight_result.json"
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(result_path, result)
+
+    for w in warnings:
+        print(YELLOW(f"  [PREFLIGHT WARN] {w}"))
+
+    if blocked:
+        print(RED(f"\n[PREFLIGHT BLOCKED] {pipeline_id or '(no pipeline)'}"))
+        for b in blocked:
+            print(RED(f"  - {b}"))
+        print(f"  result: {_display_path(result_path)}\n")
+        sys.exit(1)
+
+    print(GREEN(f"\n[PREFLIGHT PASS] {pipeline_id or '(no pipeline)'}"))
+    print(f"  result: {_display_path(result_path)}\n")
+    sys.exit(0)
+
+
+# IMP-20260701-9F5E MT-1: preflight 8개 검사 로직 (비-종료 버전).
+# [Purpose]: _cmd_gates_codex_preflight(CLI 종료)과 _cmd_gates_codex_review(인라인 재판정)이
+#   동일한 검사 로직을 공유하도록 순수 판정 함수로 분리한다 (Rule D1 중복 방지).
+# [Assumptions]: git diff / gh CLI가 있으면 실제 PR diff, 없으면 graceful degradation.
+# [Vulnerability & Risks]: git diff를 얻지 못하면 diff 기반 검사(1,5,8)는 자동 건너뛴다.
+# [Improvement]: AST 파싱을 도입하여 except:pass 오탐을 줄일 수 있다.
+def _run_codex_preflight_checks(
+    args: argparse.Namespace, state: Dict[str, Any]
+) -> Tuple[List[str], List[str], Dict[str, Any]]:
+    """preflight 8개 deterministic 검사를 수행하고 (blocked, warnings, meta)를 반환한다.
+
+    Codex CLI를 호출하지 않고 결정적으로 판정 가능한 항목만 검사한다.
+
+    Args:
+        args: argparse Namespace (base_ref/files 선택).
+        state: 활성 pipeline_state dict.
+    Returns:
+        (blocked_messages, warning_messages, meta) 튜플.
+        meta는 loop_status/changed_files_count를 포함.
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+
+    pipeline_id = str(state.get("pipeline_id", "") or "")
+    blocked: List[str] = []
+    warnings: List[str] = []
+
+    base_ref = str(getattr(args, "base_ref", None) or "origin/main")
+    explicit_files = getattr(args, "files", None)
+
+    # ── diff 텍스트 수집 (git diff 또는 --files 명시) ──
+    diff_text = ""
+    changed_files: List[str] = []
+    if explicit_files:
+        for raw in str(explicit_files).split(","):
+            f = raw.strip()
+            if not f:
+                continue
+            p = Path(f)
+            if p.exists() and p.is_file():
+                changed_files.append(f)
+                try:
+                    diff_text += p.read_text(encoding="utf-8", errors="replace")
+                    diff_text += "\n"
+                except OSError:
+                    continue
+    else:
+        changed_files = _get_git_diff_files(base=base_ref)
+        git_path = shutil.which("git") or "git"
+        try:
+            r = subprocess.run(
+                [git_path, "diff", f"{base_ref}...HEAD"],
+                capture_output=True, text=True, timeout=30,
+                encoding="utf-8", errors="replace", cwd=str(BASE_DIR),
+            )
+            if r.returncode == 0:
+                diff_text = r.stdout or ""
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            diff_text = ""
+
+    # 검사 1: raw ACCEPT 코드 패턴이 diff에 포함 → BLOCKED.
+    if _RAW_ACCEPT_CODE_RE.search(diff_text):
+        blocked.append(
+            "검사1: PR diff에 raw ACCEPT 코드 패턴이 포함됨 "
+            "(승인 코드 조기 노출 — Codex APPROVE 전 노출 금지)."
+        )
+
+    # 검사 2: codex_review_loop_state.json status=NOT_CONFIGURED → 허용(fallback OK).
+    loop_state_path = _codex_review_loop_state_path()
+    loop_status = ""
+    if loop_state_path.exists():
+        try:
+            loop_obj = json.loads(loop_state_path.read_text(encoding="utf-8-sig"))
+            if isinstance(loop_obj, dict):
+                loop_status = str(loop_obj.get("status", "") or "").upper()
+        except (OSError, json.JSONDecodeError):
+            loop_status = ""
+    # NOT_CONFIGURED는 fallback으로 명시 허용 (BLOCKED 아님).
+
+    # 검사 3: APPROVED 전 pending comment — status=PENDING인데 review가 없으면 BLOCKED.
+    if loop_status == "PENDING":
+        has_review = False
+        if loop_state_path.exists():
+            try:
+                loop_obj = json.loads(
+                    loop_state_path.read_text(encoding="utf-8-sig")
+                )
+                if isinstance(loop_obj, dict):
+                    has_review = bool(
+                        loop_obj.get("review") or loop_obj.get("reviews")
+                    )
+            except (OSError, json.JSONDecodeError):
+                has_review = False
+        if not has_review:
+            blocked.append(
+                "검사3: codex_review_loop_state.json status=PENDING인데 review가 "
+                "없습니다 (APPROVED 전 pending comment 경로)."
+            )
+
+    # 검사 4: SHA 덮어쓰기 우회 — 기존 acceptance_request.json SHA와 현재 PR head SHA 불일치.
+    req = _load_acceptance_request()
+    if isinstance(req, dict):
+        req_pid = str(req.get("pipeline_id", "") or "")
+        # 현재 파이프라인 요청만 검사 (다른 파이프라인 잔류 요청은 제외).
+        if (not pipeline_id) or (not req_pid) or (req_pid == pipeline_id):
+            recorded_head = str(
+                req.get("github_ci_head_sha", "")
+                or req.get("pr_head_sha", "")
+                or ""
+            )
+            if recorded_head:
+                current_head = _get_current_pr_head_sha() or ""
+                if current_head and current_head != recorded_head:
+                    blocked.append(
+                        "검사4: acceptance_request.json에 기록된 SHA와 현재 PR head "
+                        f"SHA가 다릅니다 (SHA 덮어쓰기 우회 의심): 기록={recorded_head[:12]} "
+                        f"실제={current_head[:12]}."
+                    )
+
+    # 검사 5: except:pass 패턴이 diff에 포함 → BLOCKED.
+    if _EXCEPT_PASS_RE.search(diff_text):
+        blocked.append(
+            "검사5: PR diff에 'except: pass' 패턴이 포함됨 (예외 은폐 금지)."
+        )
+
+    # 검사 6: PENDING 중 frozen snapshot 변경 — acceptance PENDING인데 contract_hash 변경.
+    if isinstance(req, dict) and str(req.get("status", "") or "").upper() == "PENDING":
+        recorded_contract = str(req.get("contract_hash", "") or "")
+        if recorded_contract:
+            current_contract = ""
+            try:
+                _cpaths = _contract_paths(pipeline_id) if pipeline_id else None
+                if _cpaths is not None:
+                    _contract_file = _cpaths.get("contract")
+                    if _contract_file is not None and Path(_contract_file).exists():
+                        _cobj = json.loads(
+                            Path(_contract_file).read_text(encoding="utf-8-sig")
+                        )
+                        if isinstance(_cobj, dict):
+                            current_contract = str(
+                                _cobj.get("contract_hash", "") or ""
+                            )
+            except (OSError, json.JSONDecodeError, KeyError, TypeError):
+                current_contract = ""
+            if current_contract and current_contract != recorded_contract:
+                blocked.append(
+                    "검사6: acceptance PENDING 상태에서 contract_hash가 변경됨 "
+                    "(frozen snapshot 변경 우회)."
+                )
+
+    # 검사 7: PR diff hygiene — diff가 100KB 초과면 WARN (BLOCKED 아님).
+    diff_size = len(diff_text.encode("utf-8"))
+    if diff_size > 100 * 1024:
+        warnings.append(
+            f"검사7: PR diff 크기가 큽니다 ({diff_size} bytes > 100KB) — WARN."
+        )
+
+    # 검사 8: 구현 파일에 best-effort PASS 패턴 → BLOCKED.
+    if _BEST_EFFORT_RE.search(diff_text):
+        blocked.append(
+            "검사8: PR diff에 best-effort/fallback pass 패턴 주석이 포함됨 "
+            "(# best-effort / # fallback pass 금지)."
+        )
+
+    meta: Dict[str, Any] = {
+        "loop_status": loop_status or "NOT_CONFIGURED",
+        "changed_files_count": len(changed_files),
+        "diff_size_bytes": diff_size,
+    }
+    return (blocked, warnings, meta)
 
 
 def _check_codex_review_gate(
@@ -18694,6 +19409,45 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             f"  받은 값: {verdict or '(없음)'}"
         )
 
+    # IMP-20260701-9F5E MT-6: rate limit — REJECT 2회 이상이면 차단 (--force-review로만 우회).
+    _force_review = bool(getattr(args, "force_review", False))
+    _rate_limited, _reject_count = _check_codex_rate_limit(pipeline_id)
+    if _rate_limited and not _force_review:
+        _die(
+            "[PIPELINE ERROR] failure_code=codex_rate_limited\n"
+            f"  현재 파이프라인의 Codex REJECT 횟수={_reject_count} (>=2).\n"
+            "  반복 REJECT로 인한 Codex 비용 폭증을 막기 위해 차단합니다.\n"
+            "  --force-review 플래그로만 우회할 수 있습니다."
+        )
+
+    # IMP-20260701-9F5E MT-4: preflight 자동 호출 — BLOCKED이면 여기서 종료된다.
+    # _cmd_gates_codex_preflight는 프로세스를 종료시키므로, codex-review는 비-종료 버전인
+    # _run_codex_preflight_checks로 blocked 목록만 인라인 재판정한다.
+    _preflight_blocked, _preflight_warnings, _preflight_meta = (
+        _run_codex_preflight_checks(args, state)
+    )
+    if _preflight_blocked:
+        print(RED(f"\n[PREFLIGHT BLOCKED] codex-review 중단 — {pipeline_id}"))
+        for _b in _preflight_blocked:
+            print(RED(f"  - {_b}"))
+        _die(
+            "[BLOCKED] failure_code=codex_preflight_blocked\n"
+            "  gates codex-preflight 검사가 실패했습니다. 위 항목을 해결한 후 재실행하세요."
+        )
+
+    # IMP-20260701-9F5E MT-4: --use-bundle — bundle만 Codex CLI에 전달 (전체 diff 직접 전달 금지).
+    _use_bundle = bool(getattr(args, "use_bundle", False))
+    _codex_cli_command = ""
+    _codex_model_detected = "unknown"
+    if _use_bundle:
+        _bundle = _build_codex_review_bundle(state, pipeline_id)
+        _bundle_path = _codex_ci_dir() / "codex_review_bundle.json"
+        # bundle 경로만 CLI 인자로 전달 — 전체 diff를 stdin/인자로 넘기지 않는다.
+        _codex_cli_command = f"codex review --bundle {_display_path(_bundle_path)}"
+        _codex_model_detected = str(
+            os.environ.get("CODEX_MODEL", "") or "unknown"
+        )
+
     # 검토 대상 packet SHA 결정 순서:
     #   1) --approve-pending: request-accept가 stage할 snapshot과 동일한 packet을 staging하여
     #      결정적 packet SHA를 계산한다. 이것이 "Codex가 검토한 snapshot == request-accept가
@@ -18864,15 +19618,55 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "github_canonical_pr_body_sha256": "",
         "pr_body_sha256": pr_body_sha,  # backward compat (= candidate, 절대 canonical 아님)
         "pr_head_sha": pr_head_sha,
+        # IMP-20260701-9F5E MT-4: 실제 실행된 Codex CLI 커맨드 + 감지된 모델명 기록.
+        "codex_cli_command": _codex_cli_command,
+        "codex_model_detected": _codex_model_detected,
         "recorded_at": _now(),
     }
     result_path = _codex_review_result_path()
     result_path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(result_path, result)
 
+    # IMP-20260701-9F5E MT-6: append-only history 기록 (덮어쓰기 금지).
+    _append_codex_history(pipeline_id, {
+        "verdict": verdict,
+        "packet_sha256": packet_sha,
+        "pr_head_sha": pr_head_sha,
+        "used_bundle": _use_bundle,
+        "codex_model_detected": _codex_model_detected,
+    })
+
+    # IMP-20260701-9F5E MT-5: cache 저장 (bundle SHA 기반 key + 현재 pr_head_sha 갱신).
+    if _use_bundle:
+        try:
+            _contract_sha = ""
+            _cpaths = _contract_paths(pipeline_id) if pipeline_id else None
+            if _cpaths is not None:
+                _contract_file = _cpaths.get("contract")
+                if _contract_file is not None and Path(_contract_file).exists():
+                    _cobj = json.loads(
+                        Path(_contract_file).read_text(encoding="utf-8-sig")
+                    )
+                    if isinstance(_cobj, dict):
+                        _contract_sha = str(_cobj.get("contract_hash", "") or "")
+            _bundle_obj = _load_json_file(
+                _codex_ci_dir() / "codex_review_bundle.json"
+            )
+            _bundle_sha = str(_bundle_obj.get("review_bundle_sha256", "") or "")
+            if _contract_sha and _bundle_sha:
+                _ck = _compute_cache_key(_contract_sha, _bundle_sha)
+                _save_codex_cache(pipeline_id, _ck, verdict, pr_head_sha)
+        except (OSError, ValueError, KeyError, TypeError):
+            # cache 저장 실패는 진단 캐시일 뿐이므로 verdict 기록/종료를 막지 않는다.
+            # (F52C 불변식은 codex_review_result.json에 이미 기록되었다.)
+            pass
+
     color = GREEN if verdict == "APPROVE_TO_USER" else RED
     print(color(f"\n[CODEX REVIEW {verdict}] {pipeline_id}"))
     print(f"  packet_sha256: {packet_sha}")
+    if _use_bundle:
+        print(f"  codex_cli_command: {_codex_cli_command}")
+        print(f"  codex_model_detected: {_codex_model_detected}")
     print(f"  result: {_display_path(result_path)}\n")
     _log_event(state, f"codex review recorded: verdict={verdict} packet_sha256={packet_sha[:12]}")
     _save(state)
@@ -20566,6 +21360,11 @@ def cmd_gates(args: argparse.Namespace) -> None:
     # codex_review_result.json(SSoT)에 기록한다. codex_review_loop_state.json은 사용하지 않는다.
     if action == "codex-review":
         _cmd_gates_codex_review(args, state)
+        return
+
+    # IMP-20260701-9F5E MT-1: gates codex-preflight — deterministic 사전 검사 (Codex CLI 미호출).
+    if action == "codex-preflight":
+        _cmd_gates_codex_preflight(args, state)
         return
 
     if action == "status":
@@ -23227,6 +24026,43 @@ def build_parser() -> argparse.ArgumentParser:
             "request-accept가 stage할 snapshot과 동일한 packet을 staging하여 결정적 "
             "packet SHA를 계산해 검토 결과를 기록한다 (검토 대상==publish 대상 보장)."
         ),
+    )
+    # IMP-20260701-9F5E MT-4: --use-bundle / --force-review / --files / --base-ref
+    p_gate_codex.add_argument(
+        "--use-bundle", dest="use_bundle", action="store_true", default=False,
+        help=(
+            "codex_review_bundle.json(최소 리뷰 번들)만 Codex CLI에 전달한다 "
+            "(전체 diff 직접 전달 금지). codex_cli_command/codex_model_detected 필드를 기록."
+        ),
+    )
+    p_gate_codex.add_argument(
+        "--force-review", dest="force_review", action="store_true", default=False,
+        help="REJECT 2회 이상으로 rate limit이 걸려도 강제로 재검토를 진행한다.",
+    )
+    p_gate_codex.add_argument(
+        "--files", default=None,
+        help="preflight 검사에 사용할 파일 목록(콤마 구분). 미지정 시 git diff 사용.",
+    )
+    p_gate_codex.add_argument(
+        "--base-ref", dest="base_ref", default=None,
+        help="preflight/bundle git diff 비교 기준 ref (기본 origin/main).",
+    )
+
+    # IMP-20260701-9F5E MT-1: gates codex-preflight — deterministic 사전 검사 (Codex CLI 미호출)
+    p_gate_preflight = gsub.add_parser(
+        "codex-preflight",
+        help=(
+            "Codex Review 전 deterministic 사전 검사 8종 (raw ACCEPT 코드/except:pass/"
+            "best-effort/SHA 우회/PENDING snapshot 변경 등). Codex CLI 미호출."
+        ),
+    )
+    p_gate_preflight.add_argument(
+        "--files", default=None,
+        help="검사할 파일 목록(콤마 구분). 미지정 시 git diff origin/main...HEAD 사용.",
+    )
+    p_gate_preflight.add_argument(
+        "--base-ref", dest="base_ref", default=None,
+        help="git diff 비교 기준 ref (기본 origin/main).",
     )
 
     p_gate_accept = gsub.add_parser("accept", help="Record user behavior acceptance")
