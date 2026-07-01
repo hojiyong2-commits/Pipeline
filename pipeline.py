@@ -6985,6 +6985,13 @@ def _build_codex_review_bundle(
 
     changed_files = _get_git_diff_files(base=base)
     critical_diffs = _extract_critical_function_diffs(changed_files, base=base)
+    # TC-10 불변식: bundle 직렬화 결과에 raw ACCEPT 코드(nonce)가 노출되면 안 된다.
+    # diff 텍스트(pipeline.py 자체 diff 등)에 포함된 raw ACCEPT 코드를 [REDACTED]로 치환한다.
+    # 모듈 레벨 _RAW_ACCEPT_CODE_RE(라인 7277)를 재사용한다(정규식 재컴파일 금지 — Rule D2).
+    critical_diffs = {
+        f: _RAW_ACCEPT_CODE_RE.sub("[REDACTED]", diff_text)
+        for f, diff_text in critical_diffs.items()
+    }
     non_critical = [f for f in changed_files if not _is_critical_file(f)]
     non_critical_summary = [
         {"path": f, "critical": False, "note": "요약만 포함 (함수단위 diff 제외)"}
