@@ -7350,12 +7350,13 @@ _RAW_ACCEPT_CODE_RE = re.compile(r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}-[0-9a-f]{8}")
 # 검사5/8 정규식은 statement/comment 구조에 앵커하여 pipeline.py 자체 diff의
 # 문자열 리터럴("...'except: pass'...", "(# best-effort ...)")에 self-match되지 않게 한다.
 # except는 라인 시작(선택적 diff '+' + 들여쓰기) 뒤의 실제 구문만 매칭하고,
-# best-effort/fallback pass 주석은 앞에 따옴표/괄호가 없는 실제 주석만 매칭한다.
+# 검사8: # best-effort / # fallback pass 주석 탐지 — 인라인 주석(코드 뒤 공백+#)도 포함,
+# 단 "best-effort 처리하므로" 같은 설명 주석은 뒤에 단어 문자가 오므로 lookahead로 제외한다.
 _EXCEPT_PASS_RE = re.compile(
     r"^\+?[ \t]*except\s*:\s*(?:\r?\n\+?[ \t]*)?pass\b", re.MULTILINE
 )
 _BEST_EFFORT_RE = re.compile(
-    r"^(?:[^\"'\n]*?)(?<![\"'(])#\s*(?:best-effort|fallback pass)",
+    r"(?:^|\s)#\s*(?:best-effort|fallback pass)(?=\s*(?:[:;,()\[\]{}#]|$))",
     re.MULTILINE | re.IGNORECASE,
 )
 
