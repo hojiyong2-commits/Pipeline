@@ -1,14 +1,21 @@
 {
+  "pipeline_id": "IMP-20260701-9F5E",
   "scenario": "normal_flow",
-  "preflight_status": "PASS",
-  "bundle_created": true,
-  "bundle_fields_required": ["pipeline_id", "review_bundle_sha256", "critical_diffs", "non_critical_summary", "generated_at"],
-  "critical_diffs_included": true,
-  "codex_cli_called": true,
-  "codex_model_detected_field_present": true,
-  "codex_cli_command_field_present": true,
-  "final_status": "APPROVED",
-  "history_appended": true,
-  "cache_saved": true,
-  "exit_code": 0
+  "description": "preflight PASS 후 bundle 생성 후 codex-review APPROVE 정상 흐름",
+  "preflight_checks": {
+    "raw_accept_code_present": false,
+    "codex_review_loop_state_exists": true,
+    "codex_review_loop_status": "PENDING",
+    "except_pass_present": false,
+    "pr_diff_hygiene_ok": true
+  },
+  "diff_files": [
+    "pipeline.py",
+    "tests/e2e/test_codex_cost_optimization_9f5e.py"
+  ],
+  "critical_files_changed": ["pipeline.py"],
+  "cache_key": null,
+  "cache_hit": false,
+  "codex_response": "APPROVED",
+  "reject_count": 0
 }
