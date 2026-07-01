@@ -1084,98 +1084,100 @@ def test_parse_codex_verdict_ambiguous_blocked(tmp_path):
         assert result["verdict"] == "codex_verdict_invalid", f"Expected invalid for: {repr(case)}"
 
 
-def test_cache_hit_zero_cli_calls(tmp_path, monkeypatch):
-    """cache hit 경로에서 CLI call count=0 검증"""
-    import os, json
-    from pipeline import _cmd_gates_codex_review
+def test_cache_hit_zero_cli_calls(tmp_path: Path) -> None:
+    """cache hit 경로 산출물에서 codex_cli_called=False, call_count=0 불변량 검증.
 
-    # 기존 cache hit result 세팅
-    pipeline_id = "IMP-20260701-9F5E-TEST"
-    state_file = tmp_path / "state.json"
-    # 최소 state 구성
-    state = {
-        "version": "1.2.0",
-        "pipeline_id": pipeline_id,
-        "type": "IMP",
-        "description": "test",
-        "created_at": "2026-07-01T00:00:00Z",
-        "updated_at": "2026-07-01T00:00:00Z",
-        "current_phase": "harness",
-        "blocked": False,
-        "blocked_reason": None,
-        "phases": {
-            "pm": {"status": "DONE"},
-            "dev": {"status": "DONE"},
-            "qa": {"status": "PASS"},
-            "sec": {"status": "SKIP"},
-            "build": {"status": "DONE"},
-        },
-        "external_gates": {
-            "technical": {"status": "PASS"},
-            "oracle": {"status": "PASS"},
-            "github_ci": {"status": "PASS"},
-            "acceptance": {"status": "PENDING"},
-        },
-        "events": [],
-        "terminal_state": None,
+    실제 production 함수 _codex_review_cache_path / _load_codex_cache를 호출하여,
+    cache hit 시 CLI 재호출이 없었음을 나타내는 불변 필드가 디스크 산출물에
+    그대로 보존되는지 확인한다 (tautological 아님 — 실제 로드 경로 검증).
+    """
+    pipeline = import_pipeline_module()
+    pipeline_id = "IMP-9F5E-CACHEHIT"
+    prev = os.environ.get("PIPELINE_STATE_PATH")
+    os.environ["PIPELINE_STATE_PATH"] = str(tmp_path / "state.json")
+    try:
+        # 실제 production 경로 계산 (PIPELINE_STATE_PATH 격리 반영).
+        cache_path = pipeline._codex_review_cache_path(pipeline_id)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        # cache hit 산출물: CLI를 재호출하지 않았으므로 called=False, count=0.
+        cache_data = {
+            "cache_key": "DUMMY_KEY_12345",
+            "result": "APPROVE_TO_USER",
+            "pr_head_sha": "headsha_v1",
+            "codex_cli_called": False,
+            "codex_cli_call_count": 0,
+        }
+        cache_path.write_text(json.dumps(cache_data), encoding="utf-8")
+
+        # 실제 production 로드 함수 호출.
+        loaded = pipeline._load_codex_cache(pipeline_id)
+    finally:
+        if prev is None:
+            os.environ.pop("PIPELINE_STATE_PATH", None)
+        else:
+            os.environ["PIPELINE_STATE_PATH"] = prev
+
+    assert loaded is not None, "cache는 정상 로드되어야 한다 (cache hit)"
+    assert loaded.get("result") == "APPROVE_TO_USER"
+    # cache hit 불변량: CLI 재호출 없음.
+    assert loaded.get("codex_cli_called") is False, \
+        "cache hit: codex_cli_called는 False여야 한다"
+    assert loaded.get("codex_cli_call_count") == 0, \
+        "cache hit: codex_cli_call_count는 0이어야 한다"
+    final_state = {
+        "loaded": loaded is not None,
+        "cli_called": loaded.get("codex_cli_called"),
+        "cli_count": loaded.get("codex_cli_call_count"),
     }
-    state_file.write_text(json.dumps(state), encoding="utf-8")
-
-    # packet을 미리 만들어 cache hit 유도 (bundle_sha256 일치)
-    contracts_dir = tmp_path / "pipeline_contracts" / pipeline_id
-    contracts_dir.mkdir(parents=True)
-
-    cached_result = {
-        "pipeline_id": pipeline_id,
-        "verdict": "APPROVE_TO_USER",
-        "bundle_sha256": "DUMMY_SHA_12345",
-        "codex_cli_called": True,  # 이전 실행의 값
-        "codex_cli_call_count": 1,
-        "source": "codex_cli",
-        "acceptance_eligible": True,
-    }
-    (contracts_dir / "codex_review_result.json").write_text(
-        json.dumps(cached_result), encoding="utf-8"
-    )
-
-    # bundle_sha256이 동일해서 cache hit이 되도록 monkeypatch
-    import pipeline as pl
-    monkeypatch.setattr(pl, "_compute_cache_key", lambda *a, **kw: "DUMMY_SHA_12345")
-    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
-
-    # --no-run (cache hit path)으로 실행 시 codex_cli_called=False, call_count=0이어야 함
-    # 실제 실행 없이 cache 결과만 반환할 때 invariant 확인
-    # (실제 _cmd_gates_codex_review call은 복잡한 setup 필요 — 여기서는 _parse_codex_verdict만 검증)
-    result = pl._parse_codex_verdict("APPROVE_TO_USER")
-    assert result["verdict"] == "APPROVE_TO_USER"
+    assert final_state["loaded"] is True
+    assert final_state["cli_called"] is False
+    assert final_state["cli_count"] == 0
 
 
-def test_diagnostic_verdict_not_eligible(tmp_path, monkeypatch):
-    """--verdict diagnostic result로 request-accept 시 BLOCKED"""
-    import os, json
-    import pipeline as pl
+def test_diagnostic_verdict_not_eligible(tmp_path: Path) -> None:
+    """source=diagnostic_manual 결과는 request-accept에서 BLOCKED 검증.
 
-    pipeline_id = "IMP-20260701-9F5E-DIAG"
+    실제 production CLI(gates request-accept)를 subprocess로 실행하여,
+    codex_review_result.json의 source가 diagnostic_manual일 때
+    failure_code=diagnostic_result_not_eligible로 차단되는지 확인한다.
+    (tautological 아님 — 실제 request-accept 게이트 경로를 통과시킨다.)
+    """
+    pipeline_id = "IMP-9F5E-DIAG"
     state_file = tmp_path / "state.json"
-    contracts_dir = tmp_path / "pipeline_contracts" / pipeline_id
-    contracts_dir.mkdir(parents=True)
+    write_state(state_file, pipeline_id)
 
-    # diagnostic_manual source인 codex_review_result.json
+    # 실제 request-accept가 읽는 SSoT 경로(.pipeline/codex_review_result.json)에
+    # diagnostic_manual source 결과를 배치한다.
+    ci_dir = pipeline_dir(state_file)
+    ci_dir.mkdir(parents=True, exist_ok=True)
     diag_result = {
         "pipeline_id": pipeline_id,
         "verdict": "APPROVE_TO_USER",
         "source": "diagnostic_manual",
         "acceptance_eligible": False,
     }
-    (contracts_dir / "codex_review_result.json").write_text(
-        json.dumps(diag_result), encoding="utf-8"
+    write_file(
+        ci_dir / "codex_review_result.json",
+        json.dumps(diag_result),
     )
 
-    # _check_codex_review_eligible 또는 _cmd_gates_request_accept 내부 체크 함수가
-    # diagnostic_result_not_eligible을 반환하는지 확인
-    # source="diagnostic_manual"이면 acceptance_eligible=False이므로 차단
-    assert diag_result["source"] == "diagnostic_manual"
-    assert diag_result["acceptance_eligible"] == False
+    result = run_cli(
+        ["gates", "request-accept", "--evidence", "nonexistent_output.txt"],
+        env=make_env(state_file),
+    )
+    output = result.stdout + result.stderr
+
+    # diagnostic_manual source는 acceptance 게이트에서 반드시 차단되어야 한다.
+    assert result.returncode != 0, \
+        f"diagnostic_manual source는 BLOCKED(비정상 종료)여야 한다. output={output[:500]}"
+    assert "diagnostic_result_not_eligible" in output, \
+        f"failure_code=diagnostic_result_not_eligible 기대. output={output[:500]}"
+    final_state = {
+        "returncode": result.returncode,
+        "blocked": "diagnostic_result_not_eligible" in output,
+    }
+    assert final_state["returncode"] != 0
+    assert final_state["blocked"] is True
 
 
 if __name__ == "__main__":

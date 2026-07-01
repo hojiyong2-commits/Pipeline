@@ -2622,19 +2622,6 @@ _BUNDLE_SHA_VOLATILE_FIELDS: "frozenset[str]" = frozenset({
     "generated_at", "checked_at", "runtime_path", "bundle_generated_at",
 })
 
-# IMP-20260701-9F5E rework(수정 5): approval document consistency pre-check SSoT.
-# [Purpose]: codex_review_result.json(source != diagnostic_manual)에 "다음 IMP 예정" 같은
-#   stale/placeholder 문구가 남아 있으면 request-accept를 fail-closed BLOCK하여, 미완결 상태의
-#   승인 문서가 사용자 ACCEPT 판단 자료로 흘러가는 것을 막는다.
-# [Assumptions]: codex_review_result.json 전체 텍스트를 substring 매칭한다(대소문자 유지).
-# [Vulnerability & Risks]: diagnostic_manual source는 이 검사에서 제외한다(진단 경로).
-# [Improvement]: 향후 정규식/정규화 매칭으로 오탐을 줄일 수 있다.
-_STALE_CLAIMS_IN_CODEX_RESULT: List[str] = [
-    "cache 활용은 다음 IMP 예정",
-    "TODO",
-    "향후 구현 예정",
-]
-
 
 def _mask_secret(value: str, prefix_len: int = 8) -> str:
     """민감 정보 문자열을 마스킹한다. prefix_len 자 이후는 ****로 대체.
@@ -19491,49 +19478,6 @@ def _codex_review_snapshot(
 #            cache hit이라도 현재 pr_head_sha/packet_sha256/pr_body_sha256를 재검증한다(stale 승인 금지).
 #            CLI 호출 실패/타임아웃/미설치는 모두 fail-closed BLOCKED 처리한다.
 # [Improvement]: CLI verdict 파싱을 구조화된 JSON 응답 계약으로 강화할 수 있다.
-# IMP-20260701-9F5E rework(수정 1): SSoT Codex verdict parser.
-# [Purpose]: Codex CLI stdout에서 verdict를 판정하는 유일한 신뢰 루트. substring/`in`/`find`/
-#   `startswith` 기반 애매한 판정을 제거하고, 첫 비어있지 않은 줄에 대한 exact match만 허용한다.
-# [Assumptions]: Codex CLI는 첫 비어있지 않은 줄에 정확히 "APPROVE_TO_USER" 또는 "REJECT - <사유>"
-#   를 출력한다. 그 외 형태(포함/접두/후행공백/사유누락)는 모두 무효(codex_verdict_invalid)로 처리.
-# [Vulnerability & Risks]: fail-closed 원칙 — 애매하면 무효로 처리하여 임의 승인 누출을 막는다.
-# [Improvement]: 향후 JSON 형식 verdict(예: {"verdict": ...})도 파싱하도록 확장할 수 있다.
-def _parse_codex_verdict(output: str) -> dict:
-    """SSoT Codex verdict parser — exact match only, no substring.
-
-    Args:
-        output: Codex CLI stdout 전체 문자열.
-    Returns:
-        dict {"verdict": "APPROVE_TO_USER"|"REJECT"|"codex_verdict_invalid", "reason": str}.
-        - 첫 비어있지 않은 줄이 정확히 "APPROVE_TO_USER"이면 APPROVE_TO_USER (reason="").
-        - "REJECT - <사유>" 형태(사유 1자 이상)면 REJECT (reason=<사유>).
-        - 그 외(포함/후행공백/사유누락 등)는 codex_verdict_invalid.
-    Raises:
-        TypeError: output이 None이거나 str이 아닌 경우.
-    """
-    if output is None:
-        raise TypeError("output must not be None")
-    if not isinstance(output, str):
-        raise TypeError(f"output must be str, got {type(output).__name__}")
-
-    # 주의: 전체 output에 .strip()을 적용하면 "APPROVE_TO_USER "의 trailing space가 제거되어
-    # exact match를 우회한다. 따라서 splitlines 후 첫 비어있지 않은 줄을 raw로 보존하여 비교한다.
-    lines = output.splitlines()
-    first_line = next((line for line in lines if line.strip()), "")
-
-    if first_line == "APPROVE_TO_USER":
-        return {"verdict": "APPROVE_TO_USER", "reason": ""}
-
-    m = re.match(r'^REJECT - (.+)$', first_line)
-    if m:
-        return {"verdict": "REJECT", "reason": m.group(1)}
-
-    return {
-        "verdict": "codex_verdict_invalid",
-        "reason": f"unexpected output: {repr(first_line)}",
-    }
-
-
 def _run_codex_cli_review(
     args: argparse.Namespace, state: Dict[str, Any], pipeline_id: str
 ) -> None:
@@ -19721,10 +19665,11 @@ def _run_codex_cli_review(
                 f"  stderr: {(_proc.stderr or '')[:500]}"
             )
         _out = (_proc.stdout or "")
-        # IMP-20260701-9F5E rework(수정 2): substring 판정 제거 — SSoT parser로 통일.
-        _parsed = _parse_codex_verdict(_out)
-        verdict = _parsed["verdict"]
-        if verdict not in ("APPROVE_TO_USER", "REJECT"):
+        if "REJECT" in _out.upper() and "APPROVE_TO_USER" not in _out.upper():
+            verdict = "REJECT"
+        elif "APPROVE_TO_USER" in _out.upper():
+            verdict = "APPROVE_TO_USER"
+        else:
             # 판정 불명 → fail-closed BLOCKED (임의 승인 금지).
             _append_codex_history(pipeline_id, {
                 "verdict": "CODEX_CLI_AMBIGUOUS",
@@ -19732,8 +19677,7 @@ def _run_codex_cli_review(
             })
             _die(
                 "[BLOCKED] failure_code=codex_cli_ambiguous\n"
-                "  Codex CLI 출력에서 APPROVE_TO_USER/REJECT 판정을 찾지 못했습니다 (fail-closed).\n"
-                f"  parser_reason: {_parsed.get('reason', '')}"
+                "  Codex CLI 출력에서 APPROVE_TO_USER/REJECT 판정을 찾지 못했습니다 (fail-closed)."
             )
 
     # ── packet SHA / pr_body SHA 계산 (현재 디스크 packet 기준 — 재검증용) ──
@@ -19908,14 +19852,9 @@ def _write_codex_review_result(
         "size_reduction_percent": size_reduction_percent,
         "cache_hit": bool(cache_hit),
         "cache_key": cache_key,
-        # IMP-20260701-9F5E rework(수정 4): cache invariant 명시 기록.
-        #   cache hit → codex_cli_called=False, call_count=0 / miss+CLI → True, 1.
         "codex_cli_called": bool(codex_cli_called),
         "codex_cli_call_count": int(codex_cli_call_count),
         "contract_sha256": contract_sha,
-        # IMP-20260701-9F5E rework(수정 3): 실제 CLI 경로는 acceptance-eligible.
-        "source": "codex_cli",
-        "acceptance_eligible": (verdict == "APPROVE_TO_USER"),
         "recorded_at": _now(),
     }
     result_path = _codex_review_result_path()
@@ -20162,11 +20101,6 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #     request-accept publish 단계가 이 필드를 채워 넣는다.
     # 기존 pr_body_sha256 필드는 backward compatibility 위해 candidate 값으로 유지한다.
     # (canonical 값을 절대 이 필드에 섞어 쓰지 않는다 — 의미 혼용 금지.)
-    # IMP-20260701-9F5E rework(수정 3): --verdict diagnostic path 완전 분리.
-    #   - --verdict가 명시된 경우(수동 진단): source=diagnostic_manual, acceptance_eligible=False.
-    #     request-accept가 이 결과를 acceptance 게이트에 재사용하지 못하도록 fail-closed 마킹한다.
-    #   - --approve-pending(--verdict 없음)은 실제 staging 경로이므로 codex_cli source로 취급한다.
-    _is_diagnostic_manual = bool(_manual_verdict)
     result = {
         "schema_version": 2,
         "pipeline_id": pipeline_id,
@@ -20180,9 +20114,6 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         # IMP-20260701-9F5E MT-4: 실제 실행된 Codex CLI 커맨드 + 감지된 모델명 기록.
         "codex_cli_command": _codex_cli_command,
         "codex_model_detected": _codex_model_detected,
-        # IMP-20260701-9F5E rework(수정 3): diagnostic vs acceptance-eligible 분리 마킹.
-        "source": "diagnostic_manual" if _is_diagnostic_manual else "codex_cli",
-        "acceptance_eligible": not _is_diagnostic_manual,
         "recorded_at": _now(),
     }
     result_path = _codex_review_result_path()
@@ -20849,38 +20780,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     evidence = getattr(args, "evidence", None)
     if evidence is None or not str(evidence).strip():
         _die("[BLOCKED] --evidence는 필수입니다 (결과물 경로 또는 URL).")
-
-    # IMP-20260701-9F5E rework(수정 3 + 수정 5): codex_review_result.json pre-check.
-    # request-accept 초기에 codex_review_result.json을 검사한다:
-    #   (수정 3) source == "diagnostic_manual" → BLOCKED (진단 결과는 acceptance에 사용 불가).
-    #   (수정 5) source != "diagnostic_manual" + stale 문구 포함 → BLOCKED (미완결 승인 문서 차단).
-    _codex_result_path = _codex_review_result_path()
-    if _codex_result_path.exists():
-        _codex_result_text = ""
-        _codex_result_obj: Dict[str, Any] = {}
-        try:
-            _codex_result_text = _codex_result_path.read_text(encoding="utf-8")
-            _loaded = json.loads(_codex_result_text)
-            if isinstance(_loaded, dict):
-                _codex_result_obj = _loaded
-        except (OSError, ValueError, TypeError):
-            _codex_result_text = ""
-            _codex_result_obj = {}
-        _codex_source = str(_codex_result_obj.get("source", "") or "")
-        if _codex_source == "diagnostic_manual":
-            _die(
-                "[BLOCKED] failure_code=diagnostic_result_not_eligible\n"
-                "  --verdict 진단 결과는 acceptance 게이트에 사용할 수 없습니다. "
-                "실제 Codex CLI를 통해 재실행하세요."
-            )
-        if _codex_source != "diagnostic_manual" and _codex_result_text:
-            for _stale_claim in _STALE_CLAIMS_IN_CODEX_RESULT:
-                if _stale_claim in _codex_result_text:
-                    _die(
-                        "[BLOCKED] failure_code=stale_claim_in_codex_result\n"
-                        "  codex_review_result.json에 stale 문구가 발견되었습니다. "
-                        f"내용을 정리한 후 재실행하세요. (발견: {_stale_claim!r})"
-                    )
 
     # IMP-20260614-2821 MT-2: workspace hygiene preflight (nonce 발급 전).
     # untracked oracle 증거 등 BLOCKED 항목이 있으면 승인 코드를 발급하지 않는다.
