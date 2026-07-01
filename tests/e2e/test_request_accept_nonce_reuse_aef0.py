@@ -62,23 +62,50 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
     gh CLI 없는 환경(pr_head_sha=""/ci_run_id="")을 시뮬레이션한다.
     """
     body_json = json.dumps(_AEF0_FAKE_GH_PR_BODY)
+    _pipeline_root = Path(PIPELINE_PY).resolve().parent
+    pipeline_dir_json = json.dumps(str(_pipeline_root))
     script = tmp_path / "fake_gh_aef0.py"
+    # BUG-20260628-F52C: publish가 디스크에 기록한 packet.md가 있으면 그 내용으로 FINAL_PACKET
+    # 블록을 교체한 "publish 후 최종 body"를 반환한다(실제 gh pr view와 동일). 없으면 원본 body.
+    # 이것이 없으면 publish 후 _verify_published_pr_body_three_way의 3자 SHA 검증이 깨진다.
+    # packet.md는 pipeline._packet_output_path()가 os.getcwd() 기준으로 쓰므로, stub도 자신의
+    # cwd(=pipeline cwd=tmp_path) 기준 human_acceptance_packet.md를 읽는다(경로 일치 필수).
     script.write_text(
-        "import sys, io, json\n"
+        "import sys, io, json, os\n"
         'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
-        f"BODY = {body_json}\n"
+        f"sys.path.insert(0, {pipeline_dir_json})\n"
+        f"DEFAULT_BODY = {body_json}\n"
+        'PACKET_MD = os.path.join(os.getcwd(), "human_acceptance_packet.md")\n'
+        "def _current_body():\n"
+        "    try:\n"
+        '        with open(PACKET_MD, encoding="utf-8") as fh:\n'
+        "            packet = fh.read()\n"
+        "    except OSError:\n"
+        "        return DEFAULT_BODY\n"
+        "    try:\n"
+        "        import pipeline\n"
+        "        return pipeline._replace_pr_body_packet_block(DEFAULT_BODY, packet)\n"
+        "    except Exception:\n"
+        "        return DEFAULT_BODY\n"
         "args = sys.argv[1:]\n"
+        'if "pr" in args and "edit" in args:\n'
+        "    sys.exit(0)\n"
+        'if "pr" in args and "comment" in args:\n'
+        '    print("https://github.com/test/repo/pull/1#issuecomment-1"); sys.exit(0)\n'
         'if "--jq" in args:\n'
         '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
         '    if jq == ".body":\n'
-        '        sys.stdout.write(BODY)\n'
-        '        if not BODY.endswith("\\n"):\n'
+        "        _b = _current_body()\n"
+        "        sys.stdout.write(_b)\n"
+        '        if not _b.endswith("\\n"):\n'
         '            sys.stdout.write("\\n")\n'
         "        sys.exit(0)\n"
         '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
         '        print("[]"); sys.exit(0)\n'
         '    elif ".headSha" in jq or ".databaseId" in jq:\n'
         '        print(""); sys.exit(0)\n'
+        'if "api" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
         'if "run" in args and "list" in args:\n'
         '    print("[]"); sys.exit(0)\n'
         'if "run" in args and "view" in args:\n'
@@ -86,7 +113,7 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
         'if "pr" in args and "list" in args:\n'
         '    print("[]"); sys.exit(0)\n'
         "print(json.dumps({\n"
-        '    "body": BODY, "number": 1,\n'
+        '    "body": _current_body(), "number": 1,\n'
         '    "headRefOid": "abc123def456abc123def456abc123def456abc1",\n'
         '    "isDraft": False, "state": "OPEN", "files": [],\n'
         '    "url": "https://github.com/test/repo/pull/1",\n'
@@ -145,6 +172,109 @@ def _run_pipeline(
         env=env,
         cwd=str(cwd),
     )
+
+
+def _acceptance_staging_path() -> Path:
+    """acceptance_staging.json 경로 — pipeline.py는 BASE_DIR(.pipeline)에 저장한다."""
+    return Path(PIPELINE_PY).resolve().parent / ".pipeline" / "acceptance_staging.json"
+
+
+def _clean_acceptance_staging() -> None:
+    """공유 staging file(.pipeline/acceptance_staging.json)을 제거한다(테스트 간 격리)."""
+    sp = _acceptance_staging_path()
+    if sp.exists():
+        try:
+            sp.unlink()
+        except OSError:
+            pass
+
+
+def _clean_shared_root_artifacts() -> None:
+    """프로젝트 루트의 공유 publish 산출물을 제거한다(BUG-20260628-F52C 격리).
+
+    fake gh stub의 _current_body()가 프로젝트 루트의 human_acceptance_packet.md를 읽어
+    'publish 후 최종 body'를 반환하므로, 직전 테스트의 stale packet.md가 남아 있으면 codex
+    단계의 current_body가 오염되어 3자 SHA 검증이 깨진다(codex_review_stale 오발동).
+    """
+    root = Path(PIPELINE_PY).resolve().parent
+    for name in (
+        "human_acceptance_packet.md",
+        "human_acceptance_packet.md.tmp",
+        "human_acceptance_packet.json",
+        "human_acceptance_packet.json.tmp",
+        "acceptance_request.json",
+        "acceptance_request.json.tmp",
+    ):
+        p = root / name
+        if p.exists():
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    cx = root / ".pipeline" / "codex_review_result.json"
+    if cx.exists():
+        try:
+            cx.unlink()
+        except OSError:
+            pass
+
+
+import pytest  # noqa: E402 — 헬퍼 정의 후 fixture 등록을 위해 지연 import.
+
+
+@pytest.fixture(autouse=True)
+def _clean_staging_aef0():
+    """각 테스트 전후로 공유 staging file + 루트 publish 산출물을 정리한다(BUG-20260628-F52C)."""
+    _clean_acceptance_staging()
+    _clean_shared_root_artifacts()
+    yield
+    _clean_acceptance_staging()
+    _clean_shared_root_artifacts()
+
+
+def _codex_approve(
+    state_path: Path,
+    cwd: Path,
+    evidence_path: Path,
+    extra_env: Optional[Dict[str, str]] = None,
+    extra_stage_args: Optional[list] = None,
+) -> None:
+    """BUG-20260628-F52C 2-call: staging file 생성(1차 request-accept) 후 codex APPROVE 기록.
+
+    request-accept가 "staging frozen bytes → codex 검토 → frozen bytes publish" 2-call 흐름으로
+    재설계되었으므로, 성공을 기대하는 TC는 이 헬퍼로 (1) staging file을 만들고 (2) 그 frozen
+    bytes를 codex APPROVE_TO_USER로 기록해야 한다. 이후 TC의 request-accept(2차)가 publish한다.
+
+    1차 request-accept의 evidence는 TC의 2차 request-accept evidence와 같아야 staging 조건이
+    일치하여 frozen req_candidate(nonce 포함)가 그대로 채택된다. --force-new-code 같은 플래그가
+    publish 단계에서 사용되면, staging 단계(1차)에도 동일 플래그(extra_stage_args)를 전달해야
+    staging의 nonce와 publish 시 채택 nonce가 일치한다.
+
+    CLI Evidence Contract: PIPELINE_STATE_PATH 환경변수를 통해 state 격리.
+    codex_review_result.json(final_state SSoT)에 verdict를 기록한다.
+    """
+    _clean_acceptance_staging()
+    # 1차 request-accept — staging file 생성. codex 미승인이므로 BLOCKED(exit 1)가 정상.
+    _stage_args = ["gates", "request-accept", "--evidence", str(evidence_path)]
+    if extra_stage_args:
+        _stage_args += list(extra_stage_args)
+    _run_pipeline(
+        _stage_args,
+        state_path,
+        cwd=cwd,
+        extra_env=extra_env,
+    )
+    assert _acceptance_staging_path().exists(), (
+        "1차 request-accept가 staging file을 생성하지 않음"
+    )
+    # 2) codex-review --approve-pending — staging file frozen bytes로 APPROVE_TO_USER 기록.
+    result = _run_pipeline(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        state_path,
+        cwd=cwd,
+        extra_env=extra_env,
+    )
+    assert result.returncode == 0, f"codex-review approve failed: {result.stderr}"
 
 
 def _write_state(state_path: Path, pipeline_id: str) -> None:
@@ -257,6 +387,7 @@ def test_nonce_reused_on_same_conditions(tmp_path: Path) -> None:
         status="PENDING",
     )
 
+    _codex_approve(state_path, cwd=tmp_path, evidence_path=evidence_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -310,6 +441,12 @@ def test_force_new_code_always_new_nonce(tmp_path: Path) -> None:
         status="PENDING",
     )
 
+    # BUG-20260628-F52C: publish 단계가 --force-new-code를 쓰므로 staging 단계(1차)에도 동일
+    # 플래그를 전달해야 staging nonce와 publish 채택 nonce가 일치한다(force-new 결과 새 nonce).
+    _codex_approve(
+        state_path, cwd=tmp_path, evidence_path=evidence_path,
+        extra_env=_fake_gh_env(tmp_path), extra_stage_args=["--force-new-code"],
+    )
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path), "--force-new-code"],
         state_path,
@@ -358,6 +495,7 @@ def test_new_nonce_when_evidence_sha_changed(tmp_path: Path) -> None:
     # 현재 파일: 내용이 달라져 SHA-256이 다름
     _write_evidence_file(evidence_path, content="new different evidence content")
 
+    _codex_approve(state_path, cwd=tmp_path, evidence_path=evidence_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -406,6 +544,7 @@ def test_new_nonce_when_pr_sha_changed(tmp_path: Path) -> None:
         status="PENDING",
     )
 
+    _codex_approve(state_path, cwd=tmp_path, evidence_path=evidence_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -454,6 +593,7 @@ def test_new_nonce_when_ci_run_changed(tmp_path: Path) -> None:
         status="PENDING",
     )
 
+    _codex_approve(state_path, cwd=tmp_path, evidence_path=evidence_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,
@@ -498,6 +638,7 @@ def test_new_nonce_when_status_not_pending(tmp_path: Path) -> None:
         status="CONSUMED",  # 이미 소비된 상태
     )
 
+    _codex_approve(state_path, cwd=tmp_path, evidence_path=evidence_path, extra_env=_fake_gh_env(tmp_path))
     result = _run_pipeline(
         ["gates", "request-accept", "--evidence", str(evidence_path)],
         state_path,

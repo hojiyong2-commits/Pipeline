@@ -1,0 +1,8 @@
+﻿{
+    "test_case":  "normal_snapshot_sync",
+    "pr_body_content":  "test pr body v1",
+    "packet_content_before":  "test packet v1",
+    "pipeline_id":  "TEST-PIPELINE-001",
+    "scenario":  "request-accept runs staging then codex-review then publish",
+    "codex_result":  "APPROVED"
+}

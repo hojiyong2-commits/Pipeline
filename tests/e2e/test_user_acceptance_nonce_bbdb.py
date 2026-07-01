@@ -275,6 +275,17 @@ def test_tc1_request_accept_creates_json(tmp_path):
     evidence_file = tmp_path / "result.txt"
     evidence_file.write_text("test result", encoding="utf-8")
 
+    # BUG-20260628-F52C r7: codex-review --approve-pending은 staging file 생성 후에만 가능하다
+    # (path B staging-probe fallback 제거). staging file은 request-accept가 codex 검토 전에
+    # 생성하므로 2-call-with-retry 흐름을 따른다.
+    run_cli(
+        ["gates", "request-accept", "--evidence", str(evidence_file)],
+        env=env, cwd=tmp_path,
+    )
+    run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=env, cwd=tmp_path,
+    )
     r = run_cli(
         ["gates", "request-accept", "--evidence", str(evidence_file)],
         env=env,

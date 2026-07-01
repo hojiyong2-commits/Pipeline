@@ -274,7 +274,9 @@ _FAKE_GH_PR_BODY_4AC2 = (
 )
 
 
-def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]:
+def _setup_fake_bins(
+    tmp_path: Path, stale_mode: bool = False, head_sha: str = ""
+) -> Dict[str, str]:
     """Real CLI Path E2E용 fake git/gh 바이너리 생성 및 PATH 환경 반환.
 
     Windows에서 subprocess.run(['git', ...])가 PATH의 git.cmd보다 git.exe를
@@ -304,6 +306,12 @@ def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]
         encoding="utf-8",
     )
     body_json = json.dumps(_FAKE_GH_PR_BODY_4AC2)
+    head_sha_json = json.dumps(head_sha)
+    # BUG-20260628-F52C r7: stateful fake gh — `pr edit --body`가 본문을 sidecar에 보존하고
+    # 이후 `pr view --json body`가 갱신된 본문을 반환해야 _verify_published_pr_body_three_way의
+    # 3자 SHA 불변식이 실제로 성립한다(static body만 반환하면 항상 codex_review_stale 발생).
+    state_file = tmp_path / "fake_gh_pr_body_state_4ac2.txt"
+    state_file_repr = json.dumps(str(state_file))
     # run list run ID: stale_mode이면 항상 22222222, 아니면 --branch면 11111111 / 무분기면 99999999
     run_id_expr = (
         "'22222222'"
@@ -311,10 +319,22 @@ def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]
         else "('11111111' if '--branch' in args else '99999999')"
     )
     fake_gh_src = (
-        "import sys, io, json\n"
+        "import sys, io, json, pathlib\n"
         'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
-        f"BODY = {body_json}\n"
+        f"DEFAULT_BODY = {body_json}\n"
+        f"HEAD_SHA = {head_sha_json}\n"
+        f"STATE_FILE = pathlib.Path({state_file_repr})\n"
         "args = sys.argv[1:]\n"
+        "def _current_body():\n"
+        "    if STATE_FILE.exists():\n"
+        '        return STATE_FILE.read_text(encoding="utf-8")\n'
+        "    return DEFAULT_BODY\n"
+        # pr edit --body <new>: 갱신된 본문을 sidecar에 보존 (stateful).
+        'if "pr" in args and "edit" in args and "--body" in args:\n'
+        '    bi = args.index("--body")\n'
+        "    new_body = args[bi+1] if bi+1 < len(args) else \"\"\n"
+        '    STATE_FILE.write_text(new_body, encoding="utf-8")\n'
+        "    sys.exit(0)\n"
         # run ID 브랜치 필터 (핵심 검증 대상): gh run list --branch <b> --json databaseId --jq .[0].databaseId
         # 이 호출은 --jq .[0].databaseId를 포함하므로 PR body 분기보다 먼저 처리해야 한다.
         'if "run" in args and "list" in args:\n'
@@ -323,21 +343,24 @@ def _setup_fake_bins(tmp_path: Path, stale_mode: bool = False) -> Dict[str, str]
         'if "--jq" in args:\n'
         '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
         '    if jq == ".body":\n'
-        '        sys.stdout.write(BODY)\n'
-        '        if not BODY.endswith("\\n"):\n'
+        "        body = _current_body()\n"
+        "        sys.stdout.write(body)\n"
+        '        if not body.endswith("\\n"):\n'
         '            sys.stdout.write("\\n")\n'
         "        sys.exit(0)\n"
         '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
         '        print("[]"); sys.exit(0)\n'
-        '    elif ".headSha" in jq or ".databaseId" in jq:\n'
+        '    elif ".headSha" in jq or ".headRefOid" in jq:\n'
+        "        print(HEAD_SHA); sys.exit(0)\n"
+        '    elif ".databaseId" in jq:\n'
         '        print(""); sys.exit(0)\n'
         # 기타 pr/run list 형태는 빈 배열
         'if "list" in args:\n'
         '    print("[]"); sys.exit(0)\n'
         # 그 외 pr view 등 — 빈 PR 메타데이터 반환
         "print(json.dumps({\n"
-        '    "body": BODY, "number": 1,\n'
-        '    "headRefOid": "",\n'
+        '    "body": _current_body(), "number": 1,\n'
+        '    "headRefOid": HEAD_SHA,\n'
         '    "isDraft": False, "state": "OPEN", "files": [],\n'
         '    "url": "https://github.com/test/repo/pull/1",\n'
         "}))\n"
@@ -391,6 +414,40 @@ def _run_cli(
     )
 
 
+def _codex_then_request_accept(
+    evidence: str,
+    state_path: Path,
+    cwd: Path,
+    extra_env: Optional[Dict[str, str]] = None,
+) -> subprocess.CompletedProcess:
+    """BUG-20260628-F52C r7: codex APPROVE + request-accept의 올바른 2-call-with-retry 흐름.
+
+    staging file은 request-accept가 codex 검토 전에 생성한다. 따라서 순서는:
+      1. request-accept (staging file 생성 → codex_review_result.json 부재로 BLOCK, staging 잔존)
+      2. codex-review --approve-pending (잔존 staging file의 frozen bytes로 SHA 기록 — path A)
+      3. request-accept (동일 조건 staging file 재사용 → codex APPROVE → publish)
+    이 흐름은 codex가 검토한 bytes와 published bytes가 정확히 일치(3자 SHA 불변식)함을 보장한다.
+
+    격리: 호출자가 PIPELINE_STATE_PATH 환경변수로 격리된 state_path를 주입한다.
+    post-state assertion: 호출자 테스트 함수에서 final_state (acceptance_request.json 등)를 검증한다.
+
+    Returns:
+        마지막 request-accept(publish 단계)의 CompletedProcess.
+    """
+    _run_cli(
+        ["gates", "request-accept", "--evidence", evidence],
+        state_path, cwd=cwd, extra_env=extra_env,
+    )
+    _run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        state_path, cwd=cwd, extra_env=extra_env,
+    )
+    return _run_cli(
+        ["gates", "request-accept", "--evidence", evidence],
+        state_path, cwd=cwd, extra_env=extra_env,
+    )
+
+
 # ─── TC-CLI-1 (normal): request-accept가 브랜치 run ID를 기록 ──────────────────
 
 def test_tc_cli1_request_accept_stores_branch_run_id(tmp_path: Path) -> None:
@@ -413,11 +470,9 @@ def test_tc_cli1_request_accept_stores_branch_run_id(tmp_path: Path) -> None:
 
     fake_env = _setup_fake_bins(tmp_path, stale_mode=False)
 
-    result = _run_cli(
-        ["gates", "request-accept", "--evidence", str(evidence_path)],
-        state_path,
-        cwd=tmp_path,
-        extra_env=fake_env,
+    # BUG-20260628-F52C r7: codex APPROVE는 staging file 생성 후에만 가능 (2-call-with-retry).
+    result = _codex_then_request_accept(
+        str(evidence_path), state_path, tmp_path, fake_env
     )
 
     assert result.returncode == 0, (
@@ -462,11 +517,9 @@ def test_tc_cli3_branch_filter_not_global_latest(tmp_path: Path) -> None:
     evidence_path.write_text("test evidence", encoding="utf-8")
     fake_env = _setup_fake_bins(tmp_path, stale_mode=False)
 
-    result = _run_cli(
-        ["gates", "request-accept", "--evidence", str(evidence_path)],
-        state_path,
-        cwd=tmp_path,
-        extra_env=fake_env,
+    # BUG-20260628-F52C r7: codex APPROVE는 staging file 생성 후에만 가능 (2-call-with-retry).
+    result = _codex_then_request_accept(
+        str(evidence_path), state_path, tmp_path, fake_env
     )
 
     assert result.returncode == 0, (
@@ -508,28 +561,67 @@ def test_tc_stale_cli_gates_accept_blocks_on_stale_run_id(tmp_path: Path) -> Non
     _write_harness_state(state_path, DUMMY_CLI_PIPELINE_ID)
     evidence_path.write_text("test evidence", encoding="utf-8")
 
-    # acceptance_request.json에 github_ci_run_id=11111111 직접 기록 (request-accept 시점)
+    # BUG-20260628-F52C r7: gates accept는 stale_run_id 검사 전에 Codex Review gate
+    # (_check_codex_review_gate, codex_review_loop_state.json 기준)를 먼저 수행한다.
+    # stale_run_id 분기에 도달하려면 Codex gate를 먼저 통과해야 하므로, 일치하는
+    # codex_review_loop_state.json(APPROVED)과 acceptance_request.json을 seed한다.
+    fake_head_sha = "abc123def456abc123def456abc123def456abc1"
+    packet_sha = "a" * 64  # acceptance_request와 loop_state가 동일 값을 공유해야 PASS
+    pr_body_sha = "b" * 64
     nonce = "TESTNNCE"  # 8자 더미 nonce (A-Z2-7: E는 유효)
+    # acceptance_request.json에 github_ci_run_id=11111111 직접 기록 (request-accept 시점)
     req_data = {
         "schema_version": 1,
         "pipeline_id": DUMMY_CLI_PIPELINE_ID,
         "request_id": "cli_stale_test",
         "nonce": nonce,
         "created_at": "2026-05-31T10:00:00Z",
-        "pr_url": "",
-        "pr_head_sha": "",
+        "pr_url": "https://github.com/test/repo/pull/1",
+        "pr_head_sha": fake_head_sha,
         "github_ci_run_id": IMPL_BRANCH_RUN_ID,  # "11111111" 저장
         "evidence": str(evidence_path),
         "evidence_sha256": None,
         "evidence_url": None,
+        "packet_sha256": packet_sha,
+        "pr_body_sha256": pr_body_sha,
         "status": "PENDING",
     }
     req_path.write_text(
         json.dumps(req_data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    # codex_review_loop_state.json(APPROVED) seed — Codex gate 통과용.
+    # PIPELINE_STATE_PATH 격리 시 경로는 state 파일 옆 .pipeline/ 하위다.
+    loop_dir = state_path.parent / ".pipeline"
+    loop_dir.mkdir(parents=True, exist_ok=True)
+    (loop_dir / "codex_review_loop_state.json").write_text(
+        json.dumps({
+            "status": "APPROVED",
+            "pipeline_id": DUMMY_CLI_PIPELINE_ID,
+            "pr_head_sha": fake_head_sha,
+            "packet_sha256": packet_sha,
+            "pr_body_sha256": pr_body_sha,
+            "accept_code": f"ACCEPT-{DUMMY_CLI_PIPELINE_ID}-{nonce}",
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    # codex_review_result.json(SSoT) seed — gates accept가 pr_body_sha256 존재를 강제한다.
+    (loop_dir / "codex_review_result.json").write_text(
+        json.dumps({
+            "schema_version": 1,
+            "pipeline_id": DUMMY_CLI_PIPELINE_ID,
+            "verdict": "APPROVE_TO_USER",
+            "packet_sha256": packet_sha,
+            "pr_body_sha256": pr_body_sha,
+            "pr_head_sha": fake_head_sha,
+            "recorded_at": "2026-05-31T10:00:00Z",
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
-    # fake PATH bins: gh.cmd → 22222222 (stale_mode=True)
-    fake_env = _setup_fake_bins(tmp_path, stale_mode=True)
+    # fake PATH bins: gh.cmd → 22222222 (stale_mode=True), head SHA는 일치하도록 주입.
+    fake_env = _setup_fake_bins(
+        tmp_path, stale_mode=True, head_sha=fake_head_sha
+    )
 
     # gates accept 실행: ACCEPT 코드로 시도 → stale_run_id BLOCKED 예상
     accept_code = f"ACCEPT-{DUMMY_CLI_PIPELINE_ID}-{nonce}"

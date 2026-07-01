@@ -91,23 +91,50 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
     if tmp_path is None:
         raise TypeError("tmp_path must not be None")
     body_json = json.dumps(_FAKE_GH_PR_BODY)
+    pipeline_dir_json = json.dumps(str(PIPELINE_PY.parent))
+    packet_md_json = json.dumps(str(PIPELINE_PY.parent / "human_acceptance_packet.md"))
     script = tmp_path / "fake_gh_069a.py"
+    # BUG-20260628-F52C: publish가 디스크에 기록한 packet.md가 있으면 그 내용으로 FINAL_PACKET
+    # 블록을 교체한 "publish 후 최종 body"를 반환한다(실제 gh pr view와 동일). 없으면 원본 body.
+    # 이것이 없으면 publish 후 _verify_published_pr_body_three_way의 3자 SHA 검증이 깨진다.
     script.write_text(
-        "import sys, io, json\n"
+        "import sys, io, json, os\n"
         'sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")\n'
-        f"BODY = {body_json}\n"
+        f"sys.path.insert(0, {pipeline_dir_json})\n"
+        f"DEFAULT_BODY = {body_json}\n"
+        f"PACKET_MD = {packet_md_json}\n"
+        "def _current_body():\n"
+        "    try:\n"
+        '        with open(PACKET_MD, encoding="utf-8") as fh:\n'
+        "            packet = fh.read()\n"
+        "    except OSError:\n"
+        "        return DEFAULT_BODY\n"
+        "    try:\n"
+        "        import pipeline\n"
+        "        return pipeline._replace_pr_body_packet_block(DEFAULT_BODY, packet)\n"
+        "    except Exception:\n"
+        "        return DEFAULT_BODY\n"
         "args = sys.argv[1:]\n"
+        '# pr edit (PR body 갱신) — no-op 성공(.body가 packet.md 기준으로 결정적 반환).\n'
+        'if "pr" in args and "edit" in args:\n'
+        "    sys.exit(0)\n"
+        '# pr comment — pending 안내 댓글 성공.\n'
+        'if "pr" in args and "comment" in args:\n'
+        '    print("https://github.com/test/repo/pull/1#issuecomment-1"); sys.exit(0)\n'
         'if "--jq" in args:\n'
         '    jq_idx = args.index("--jq"); jq = args[jq_idx+1] if jq_idx+1 < len(args) else ""\n'
         '    if jq == ".body":\n'
-        '        sys.stdout.write(BODY)\n'
-        '        if not BODY.endswith("\\n"):\n'
+        "        _b = _current_body()\n"
+        "        sys.stdout.write(_b)\n"
+        '        if not _b.endswith("\\n"):\n'
         '            sys.stdout.write("\\n")\n'
         "        sys.exit(0)\n"
         '    elif "[.files" in jq or jq.startswith(".[0]"):\n'
         '        print("[]"); sys.exit(0)\n'
         '    elif ".headSha" in jq or ".databaseId" in jq:\n'
         '        print(""); sys.exit(0)\n'
+        'if "api" in args:\n'
+        '    print("[]"); sys.exit(0)\n'
         'if "run" in args and "list" in args:\n'
         '    print("[]"); sys.exit(0)\n'
         'if "run" in args and "view" in args:\n'
@@ -115,7 +142,7 @@ def _write_fake_gh_script(tmp_path: Path) -> Path:
         'if "pr" in args and "list" in args:\n'
         '    print("[]"); sys.exit(0)\n'
         "print(json.dumps({\n"
-        '    "body": BODY, "number": 1,\n'
+        '    "body": _current_body(), "number": 1,\n'
         '    "headRefOid": "abc123def456abc123def456abc123def456abc1",\n'
         '    "isDraft": False, "state": "OPEN", "files": [],\n'
         '    "url": "https://github.com/test/repo/pull/1",\n'
@@ -196,6 +223,48 @@ def _meaningful_lines(stdout: str) -> List[str]:
     return [ln for ln in stdout.splitlines() if ln.strip()]
 
 
+def _staging_path() -> Path:
+    """acceptance_staging.json 경로 — pipeline.py는 BASE_DIR(.pipeline)에 저장한다."""
+    return PIPELINE_PY.parent / ".pipeline" / "acceptance_staging.json"
+
+
+def stage_and_codex_approve(env: Dict[str, str], evidence: Path) -> None:
+    """BUG-20260628-F52C 2-call 흐름: staging file 생성 후 codex-review로 frozen bytes 검토.
+
+    1) gates request-accept (1차) — staging file 생성, codex 미승인으로 BLOCKED(정상).
+    2) gates codex-review --approve-pending — staging file frozen bytes로 APPROVE_TO_USER 기록.
+
+    격리: 호출자가 PIPELINE_STATE_PATH 환경변수(env dict)로 격리된 state를 주입한다.
+    post-state assertion: 호출자 테스트 함수에서 final_state 및 acceptance_request.json을 검증한다.
+    """
+    run_cli(["gates", "request-accept", "--evidence", str(evidence)], env=env)
+    assert _staging_path().exists(), "1차 request-accept가 staging file을 생성하지 않음"
+    r_cx = run_cli(
+        ["gates", "codex-review", "--verdict", "APPROVE_TO_USER", "--approve-pending"],
+        env=env,
+    )
+    assert r_cx.returncode == 0, (
+        f"codex-review --approve-pending 실패\n{r_cx.stdout}{r_cx.stderr}"
+    )
+
+
+@pytest.fixture(autouse=True)
+def _clean_staging_069a():
+    """각 테스트 전후로 공유 staging file(.pipeline/acceptance_staging.json)을 정리한다."""
+    sp = _staging_path()
+    if sp.exists():
+        try:
+            sp.unlink()
+        except OSError:
+            pass
+    yield
+    if sp.exists():
+        try:
+            sp.unlink()
+        except OSError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Tests — 실제 CLI stdout 기반 (REJECT 사유 2 수정)
 # ---------------------------------------------------------------------------
@@ -212,6 +281,8 @@ class TestRealCliRequestAcceptFormat:
         pid = bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve, 그 다음 publish.
+        stage_and_codex_approve(env, ev_file)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -263,6 +334,8 @@ class TestRealCliRequestAcceptFormat:
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve, 그 다음 publish.
+        stage_and_codex_approve(env, ev_file)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -300,6 +373,8 @@ class TestRealCliRequestAcceptFormat:
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve, 그 다음 publish.
+        stage_and_codex_approve(env, ev_file)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -329,6 +404,8 @@ class TestRealCliRequestAcceptFormat:
         bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve, 그 다음 publish.
+        stage_and_codex_approve(env, ev_file)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -360,6 +437,8 @@ class TestRealCliRequestAcceptFormat:
         pid = bootstrap_pipeline_legacy(tmp_path, env)
         ev_file = write_evidence_file(tmp_path)
 
+        # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve, 그 다음 publish.
+        stage_and_codex_approve(env, ev_file)
         r = run_cli(
             ["gates", "request-accept", "--evidence", str(ev_file)],
             env=env,
@@ -400,6 +479,8 @@ if __name__ == "__main__":
         _env = make_env(_tp)
         _pid = bootstrap_pipeline_legacy(_tp, _env)
         _ev = write_evidence_file(_tp)
+        # BUG-20260628-F52C 2-call: staging file 생성 후 codex approve, 그 다음 publish.
+        stage_and_codex_approve(_env, _ev)
         _r = run_cli(["gates", "request-accept", "--evidence", str(_ev)], env=_env)
         assert _r.returncode == 0, f"request-accept 실패: {_r.stdout} {_r.stderr}"
         _meaningful = _meaningful_lines(_r.stdout)

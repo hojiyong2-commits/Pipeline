@@ -1,0 +1,6 @@
+﻿{
+    "outcome":  "BLOCKED",
+    "packet_modified":  false,
+    "failure_code":  "pending_snapshot_lock",
+    "error_message_contains":  "PENDING"
+}
