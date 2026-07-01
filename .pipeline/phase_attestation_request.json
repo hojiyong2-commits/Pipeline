@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-01T10:41:49Z",
+  "pipeline_id": "IMP-20260701-9F5E",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "c88b6881150dcf9188c6d812dca6381bee5c4387",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-07-01T10:37:55Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_codex_cost_optimization_9f5e.py"
+  },
+  "agent_run": {
+    "run_id": "dev-2467d2e1d0384254",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "751d516edb8decfa33520e240ddb0a8fa7729ecec872ef3391fdbda10ed51a42",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260701-9F5E/dev/agent_receipt_dev-2467d2e1d0384254.json",
+    "receipt_sha256": "9232cabfed3a4a541fc26cf903656cf6f8d9e19902505519fee6d58e98dd2ed9",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260701-9F5E\\dev\\dev-2467d2e1d0384254.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260701-9F5E\\dev\\dev-2467d2e1d0384254.json",
+      "path": ".pipeline/phase_evidence/IMP-20260701-9F5E/dev/agent_receipt_dev-2467d2e1d0384254.json",
+      "sha256": "9232cabfed3a4a541fc26cf903656cf6f8d9e19902505519fee6d58e98dd2ed9",
+      "size_bytes": 502,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260701-9F5E/dev/report_dev_handover.xml",
+      "sha256": "751d516edb8decfa33520e240ddb0a8fa7729ecec872ef3391fdbda10ed51a42",
+      "size_bytes": 4064,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260701-9F5E/dev/scope_manifest_scope_manifest.json",
+      "sha256": "d602caf18ce1f10ca891ca79dffdb065c006f036d9c484ee8f249a513b91cd69",
+      "size_bytes": 1716,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "0895a102fc1dd3a4fa16a6c073f40c408ecdbfc153ccae313b6bf9449ebcd4a7",
+      "size_bytes": 1290428
+    },
+    {
+      "path": "tests/e2e/test_codex_cost_optimization_9f5e.py",
+      "sha256": "32d9b54dcf187c716e47e14060adcc21575fce33fd7275239efbcb783f055dd8",
+      "size_bytes": 33087
+    }
+  ],
+  "local_only_files": []
+}

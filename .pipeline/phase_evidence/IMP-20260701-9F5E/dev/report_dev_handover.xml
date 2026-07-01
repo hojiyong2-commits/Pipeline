@@ -1,0 +1,65 @@
+<dev_handover_bundle>
+<scope_declaration>
+  <files_to_create>tests/e2e/test_codex_cost_optimization_9f5e.py</files_to_create>
+  <files_to_modify>pipeline.py</files_to_modify>
+  <files_to_delete>없음</files_to_delete>
+  <reuse_search>
+    <searched>Grep으로 codex_review/_codex_review_result_path/_get_git_diff_files/_sha256_file/_load_json_file/_get_current_pr_head_sha/_die/_write_json 검색</searched>
+    <decision>NEW(신규 함수 다수) + EXTEND(_cmd_gates_codex_review). 기존 헬퍼 재사용, F52C 로직 보존.</decision>
+  </reuse_search>
+  <out_of_scope>F52C 3자 SHA 불변식 로직(_verify_snapshot_invariant/_codex_review_snapshot) 미변경.</out_of_scope>
+</scope_declaration>
+
+<impact_analysis>
+  <micro_task_id>MT-1~MT-7</micro_task_id>
+  <target_function>pipeline._cmd_gates_codex_preflight, _build_codex_review_bundle, _extract_critical_function_diffs, _is_critical_file, _cmd_gates_codex_review, cache 4함수, history 3함수, TC-1~TC-24</target_function>
+  <upstream_callers>
+    <caller location="pipeline.py cmd_gates dispatch">gates codex-preflight/codex-review 서브커맨드</caller>
+  </upstream_callers>
+  <downstream_dependencies>
+    <dep>_get_git_diff_files, _get_current_pr_head_sha, _sha256_file, _write_json, _load_json_file, _now, _contract_paths</dep>
+  </downstream_dependencies>
+  <state_mutations>
+    <mutation>.pipeline/codex_preflight_result.json, codex_review_bundle.json, codex_review_cache.json, codex_review_history.jsonl — write</mutation>
+    <mutation>.pipeline/codex_review_result.json — write (기존 F52C 필드 유지 + codex_cli_command/codex_model_detected 신규 필드)</mutation>
+  </state_mutations>
+  <risk_assessment>
+    <signature_change>NO — _cmd_gates_codex_review(args, state) 유지, 나머지 신규</signature_change>
+    <breaking_change>NO — F52C 불변식 필드 보존, 신규 필드/서브커맨드만 추가</breaking_change>
+    <test_coverage>NEW_TEST_ADDED — TC-1~TC-24 (24 passed) + F52C 회귀(51 passed)</test_coverage>
+    <rollback_strategy>신규 함수/상수/서브파서/dispatch/신규 필드 제거로 기존 함수 복원</rollback_strategy>
+  </risk_assessment>
+</impact_analysis>
+
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <status>READY_FOR_QA</status>
+  <agent_run_id>dev-2467d2e1d0384254</agent_run_id>
+  <files>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+  </files>
+  <evidence>
+    <item>MT-1~MT-7 module gate 모두 PASS</item>
+    <item>integration gate PASS</item>
+    <item>preflight 8개 검사 구현 완료 (raw ACCEPT/NOT_CONFIGURED fallback/PENDING review/SHA 우회/except:pass/PENDING contract 변경/diff hygiene WARN/best-effort)</item>
+    <item>bundle 생성기 + critical coverage 추출기 구현 완료 (PR body/oracle JSON/raw ACCEPT 코드 제외)</item>
+    <item>critical files SSoT(CODEX_REVIEW_CRITICAL_FILES/PATTERNS) + _is_critical_file 구현 완료</item>
+    <item>safe cache(contract+bundle SHA key, stale SHA 방지) + rate-limit(REJECT>=2 차단) + append-only history 구현 완료</item>
+    <item>_cmd_gates_codex_review에 preflight 자동 호출 + --use-bundle + codex_cli_command/codex_model_detected 필드 추가 (F52C 3자 SHA 불변식 보존)</item>
+    <item>E2E 테스트 TC-1~TC-24 구현 완료 (PIPELINE_STATE_PATH 격리 + final_state assertion, 24 passed)</item>
+    <item>F52C 불변식 회귀 테스트 PASS (test_codex_snapshot_sync_f52c.py 51 passed)</item>
+    <item>python -m py_compile pipeline.py tests/e2e/test_codex_cost_optimization_9f5e.py — PASS</item>
+    <item>python -c "import pipeline" — PASS</item>
+  </evidence>
+</handover>
+
+<scope_lock_check>
+  <git_diff_files>pipeline.py (M), tests/e2e/test_codex_cost_optimization_9f5e.py (신규)</git_diff_files>
+  <manifest_files>pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py</manifest_files>
+  <extra_files>없음</extra_files>
+  <trust_root_violation>false</trust_root_violation>
+  <verdict>PASS</verdict>
+</scope_lock_check>
+</dev_handover_bundle>
