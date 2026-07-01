@@ -19631,7 +19631,7 @@ def _run_codex_cli_review(
                 _proc = subprocess.run(
                     f'"{codex_exe}" review --bundle "{bundle_path}"',
                     capture_output=True, text=True, encoding="utf-8",
-                    errors="replace", timeout=300, shell=True,
+                    errors="replace", timeout=300, shell=True,  # nosec B602 — Windows .cmd/.bat 런처 전용 경로, codex_exe는 고정 실행파일 경로
                 )
             else:
                 _proc = subprocess.run(
