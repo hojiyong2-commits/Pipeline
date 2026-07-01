@@ -7316,6 +7316,36 @@ def _check_codex_rate_limit(pipeline_id: str) -> Tuple[bool, int]:
 # [Vulnerability & Risks]: git diff를 얻지 못하면 diff 기반 검사(1,5)는 건너뛴다(경고 없음).
 #   이 경우에도 상태 파일 기반 검사(2,3,4,6)는 수행된다.
 # [Improvement]: diff 기반 검사에 AST 파싱을 도입하여 except:pass 오탐을 줄일 수 있다.
+# preflight 검사 1/5/8에서 제외할 경로 접두사 (테스트 픽스처 오탐지 방지 SSoT)
+_PREFLIGHT_SCAN_EXCLUDE_PREFIXES: Tuple[str, ...] = (
+    "tests/",
+    "tests\\",
+)
+
+
+def _strip_excluded_diff_sections(
+    diff_text: str, exclude_prefixes: Tuple[str, ...]
+) -> str:
+    """unified diff 텍스트에서 제외 경로 파일 섹션을 제거한다.
+
+    preflight 보안 검사(1/5/8)가 test fixture 코드를 오탐지하지 않도록
+    tests/** 경로를 제외한 production 코드만 남긴다.
+    """
+    lines = diff_text.split("\n")
+    result: List[str] = []
+    skip = False
+    for line in lines:
+        if line.startswith("diff --git "):
+            # 형식: "diff --git a/tests/foo.py b/tests/foo.py"
+            skip = any(
+                f" b/{p}" in line
+                for p in exclude_prefixes
+            )
+        if not skip:
+            result.append(line)
+    return "\n".join(result)
+
+
 _RAW_ACCEPT_CODE_RE = re.compile(r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}-[0-9a-f]{8}")
 _EXCEPT_PASS_RE = re.compile(r"except\s*:\s*pass")
 _BEST_EFFORT_RE = re.compile(r"#\s*(?:best-effort|fallback pass)", re.IGNORECASE)
@@ -7439,8 +7469,14 @@ def _run_codex_preflight_checks(
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             diff_text = ""
 
+    # 검사 1/5/8: 보안 패턴 스캔은 production 코드만 대상으로 한다.
+    # 테스트 파일의 fixture/assertion 코드에서 오탐지가 발생하지 않도록 제외.
+    production_diff_text = _strip_excluded_diff_sections(
+        diff_text, _PREFLIGHT_SCAN_EXCLUDE_PREFIXES
+    )
+
     # 검사 1: raw ACCEPT 코드 패턴이 diff에 포함 → BLOCKED.
-    if _RAW_ACCEPT_CODE_RE.search(diff_text):
+    if _RAW_ACCEPT_CODE_RE.search(production_diff_text):
         blocked.append(
             "검사1: PR diff에 raw ACCEPT 코드 패턴이 포함됨 "
             "(승인 코드 조기 노출 — Codex APPROVE 전 노출 금지)."
@@ -7499,7 +7535,7 @@ def _run_codex_preflight_checks(
                     )
 
     # 검사 5: except:pass 패턴이 diff에 포함 → BLOCKED.
-    if _EXCEPT_PASS_RE.search(diff_text):
+    if _EXCEPT_PASS_RE.search(production_diff_text):
         blocked.append(
             "검사5: PR diff에 'except: pass' 패턴이 포함됨 (예외 은폐 금지)."
         )
@@ -7537,7 +7573,7 @@ def _run_codex_preflight_checks(
         )
 
     # 검사 8: 구현 파일에 best-effort PASS 패턴 → BLOCKED.
-    if _BEST_EFFORT_RE.search(diff_text):
+    if _BEST_EFFORT_RE.search(production_diff_text):
         blocked.append(
             "검사8: PR diff에 best-effort/fallback pass 패턴 주석이 포함됨 "
             "(# best-effort / # fallback pass 금지)."
