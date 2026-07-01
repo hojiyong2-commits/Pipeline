@@ -166,6 +166,7 @@ def import_pipeline_module() -> Any:
 
 def test_tc01_preflight_pass_without_raw_accept(tmp_path: Path) -> None:
     """clean 파일에는 raw ACCEPT 코드가 없으므로 preflight PASS (exit 0)."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC01")
     clean = tmp_path / "clean.py"
@@ -194,6 +195,7 @@ def test_tc01_preflight_pass_without_raw_accept(tmp_path: Path) -> None:
 
 def test_tc02_preflight_blocked_on_raw_accept_code(tmp_path: Path) -> None:
     """raw ACCEPT 코드 패턴이 파일에 있으면 preflight BLOCKED (exit 1)."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC02")
     bad = tmp_path / "leak.py"
@@ -222,6 +224,7 @@ def test_tc02_preflight_blocked_on_raw_accept_code(tmp_path: Path) -> None:
 
 def test_tc03_preflight_blocked_on_except_pass(tmp_path: Path) -> None:
     """except: pass 패턴이 있으면 preflight BLOCKED (exit 1)."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC03")
     bad = tmp_path / "swallow.py"
@@ -247,6 +250,7 @@ def test_tc03_preflight_blocked_on_except_pass(tmp_path: Path) -> None:
 
 def test_tc04_preflight_blocked_on_best_effort(tmp_path: Path) -> None:
     """# best-effort / # fallback pass 주석이 있으면 preflight BLOCKED."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC04")
     bad = tmp_path / "beffort.py"
@@ -272,6 +276,7 @@ def test_tc04_preflight_blocked_on_best_effort(tmp_path: Path) -> None:
 
 def test_tc05_preflight_pass_on_normal_diff(tmp_path: Path) -> None:
     """정상적인 코드 파일은 preflight PASS."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC05")
     normal = tmp_path / "normal.py"
@@ -646,6 +651,7 @@ def test_tc21_codex_review_auto_calls_preflight(tmp_path: Path) -> None:
     --files로 except:pass 파일을 지정하면 preflight 검사5가 BLOCKED되어
     codex-review가 codex_preflight_blocked로 중단됨을 검증한다.
     """
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC21")
     bad = tmp_path / "swallow.py"
@@ -676,6 +682,7 @@ def test_tc21_codex_review_auto_calls_preflight(tmp_path: Path) -> None:
 
 def test_tc22_codex_review_use_bundle_passes_bundle_only(tmp_path: Path) -> None:
     """--use-bundle 시 codex_cli_command가 bundle 경로만 참조하고 bundle이 생성된다."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC22")
     clean = tmp_path / "clean.py"
@@ -708,6 +715,7 @@ def test_tc22_codex_review_use_bundle_passes_bundle_only(tmp_path: Path) -> None
 
 def test_tc23_codex_review_records_cli_command(tmp_path: Path) -> None:
     """codex_review_result.json에 codex_cli_command 필드가 기록된다."""
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC23")
     clean = tmp_path / "clean.py"
@@ -740,6 +748,7 @@ def test_tc24_codex_review_records_model_detected(tmp_path: Path) -> None:
 
     CODEX_MODEL 환경변수가 있으면 그 값, 없으면 'unknown'이 기록된다.
     """
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC24")
     clean = tmp_path / "clean.py"
