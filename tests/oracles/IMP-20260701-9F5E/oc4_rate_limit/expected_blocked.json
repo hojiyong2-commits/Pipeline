@@ -1,0 +1,9 @@
+{
+  "scenario": "rate_limit_after_two_rejects",
+  "description": "REJECT 2회 후 rate limit 발동 상황",
+  "history": [
+    {"pipeline_id": "IMP-20260701-9F5E", "reviewed_at": "2026-07-01T07:00:00Z", "result": "REJECT", "reject_reason": "Missing error handling in _cmd_gates_codex_preflight", "review_round": 1},
+    {"pipeline_id": "IMP-20260701-9F5E", "reviewed_at": "2026-07-01T08:00:00Z", "result": "REJECT", "reject_reason": "Cache invalidation logic incomplete", "review_round": 2}
+  ],
+  "reject_count": 2
+}

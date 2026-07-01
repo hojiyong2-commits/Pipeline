@@ -1,0 +1,7 @@
+{
+  "scenario": "critical_file_changed",
+  "description": "critical file(pipeline.py) 변경 시 bundle에 full diff 포함 강제",
+  "diff_content": "diff --git a/pipeline.py b/pipeline.py\nindex abc123..def456 100644\n--- a/pipeline.py\n+++ b/pipeline.py\n@@ -100,6 +100,10 @@\n def _cmd_gates_codex_preflight(args, state):\n+    \"\"\"Codex review preflight checks.\"\"\"\n+    pass",
+  "critical_files_in_diff": ["pipeline.py"],
+  "non_critical_files_in_diff": ["tests/e2e/test_codex_cost_optimization_9f5e.py"]
+}
