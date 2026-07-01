@@ -853,6 +853,7 @@ def env_with_fake_codex(state_file: Path, bin_dir: Path) -> Dict[str, str]:
 # TC-19b: preflight BLOCKED이면 Codex CLI call_count = 0
 def test_tc19b_preflight_blocked_no_cli_call(tmp_path: Path) -> None:
     """preflight가 BLOCKED이면 실제 Codex CLI가 호출되지 않아야 한다 (call_count=0)."""
+    # PIPELINE_STATE_PATH isolation: env_with_fake_codex -> make_env(state_file) 내부에서 PIPELINE_STATE_PATH=str(state_file) 설정
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC19B")
     bin_dir = tmp_path / "bin"
@@ -883,6 +884,7 @@ def test_tc19b_preflight_blocked_no_cli_call(tmp_path: Path) -> None:
 # TC-21b: cache miss 시 Codex CLI call_count = 1 + bundle 경로 payload 검증
 def test_tc21b_cache_miss_cli_called_with_bundle_path(tmp_path: Path) -> None:
     """cache miss 시 Codex CLI가 bundle 경로를 인자로 받아 1회 호출되어야 한다."""
+    # PIPELINE_STATE_PATH isolation: env_with_fake_codex -> make_env(state_file) 내부에서 PIPELINE_STATE_PATH=str(state_file) 설정
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC21B")
     bin_dir = tmp_path / "bin"
@@ -918,6 +920,7 @@ def test_tc21b_cache_miss_cli_called_with_bundle_path(tmp_path: Path) -> None:
 # TC-20b: cache hit 시 Codex CLI call_count = 0 (두 번째 실행)
 def test_tc20b_cache_hit_no_second_cli_call(tmp_path: Path) -> None:
     """동일 변경으로 두 번 실행 시, 두 번째는 cache hit되어 CLI를 추가 호출하지 않는다."""
+    # PIPELINE_STATE_PATH isolation: env_with_fake_codex -> make_env(state_file) 내부에서 PIPELINE_STATE_PATH=str(state_file) 설정
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC20B")
     bin_dir = tmp_path / "bin"
@@ -1016,6 +1019,7 @@ def test_tc26_build_bundle_stable_sha_ignores_generated_at(tmp_path: Path) -> No
 # TC-27: Codex CLI mock이 받은 입력이 bundle 경로뿐 (full diff text 미포함)
 def test_tc27_cli_receives_bundle_path_only(tmp_path: Path) -> None:
     """Codex CLI mock이 받은 args에 bundle 경로만 포함되고 full diff 원문은 미포함이어야 한다."""
+    # PIPELINE_STATE_PATH isolation: env_with_fake_codex -> make_env(state_file) 내부에서 PIPELINE_STATE_PATH=str(state_file) 설정
     state_file = tmp_path / "state.json"
     write_state(state_file, "IMP-9F5E-TC27")
     bin_dir = tmp_path / "bin"
