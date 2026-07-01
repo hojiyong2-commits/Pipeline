@@ -1,7 +1,7 @@
 {
   "pipeline_id": "IMP-20260701-9F5E",
   "scenario": "normal_flow",
-  "description": "preflight PASS 후 bundle 생성 후 codex-review APPROVE 정상 흐름",
+  "description": "preflight PASS → bundle 생성 → codex-review APPROVE 정상 흐름",
   "preflight_checks": {
     "raw_accept_code_present": false,
     "codex_review_loop_state_exists": true,

@@ -1,6 +1,6 @@
 {
   "scenario": "cache_hit",
-  "description": "cache key 일치 시 Codex CLI 호출없이 캐시된 결과 반환",
+  "description": "cache key 일치 → Codex CLI 미호출, 캐시된 결과 반환",
   "contract_sha256": "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
   "review_bundle_sha256": "def456abc123def456abc123def456abc123def456abc123def456abc123def4",
   "cache_entry": {
