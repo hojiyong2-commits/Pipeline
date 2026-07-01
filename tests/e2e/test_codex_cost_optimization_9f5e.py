@@ -906,8 +906,8 @@ def test_tc21b_cache_miss_cli_called_with_bundle_path(tmp_path: Path) -> None:
     assert call_count == 1, f"cache miss 시 CLI 1회 호출 기대, 실제={call_count}"
     # 전달 payload: bundle 경로(.json)만 포함, full diff 원문 미포함.
     call_args = log_path.read_text(encoding="utf-8").strip()
-    assert "--bundle" in call_args, f"CLI args에 --bundle 없음: {call_args}"
-    assert "codex_review_bundle.json" in call_args, f"bundle 경로 미전달: {call_args}"
+    assert "--base" in call_args, f"CLI args에 --base 없음: {call_args}"
+    assert "origin/main" in call_args, f"origin/main 미전달: {call_args}"
     assert "def f()" not in call_args, "full diff 원문이 CLI args에 노출됨"
     # 결과 파일의 codex_cli_call_count 검증.
     res_file = pipeline_dir(state_file) / "codex_review_result.json"
@@ -1037,16 +1037,16 @@ def test_tc27_cli_receives_bundle_path_only(tmp_path: Path) -> None:
         f"exit 0 기대, 실제={result.returncode}\n{result.stdout}\n{result.stderr}"
     )
     call_args = log_path.read_text(encoding="utf-8").strip()
-    # bundle 경로(.json)는 포함.
-    assert ".json" in call_args, f"bundle .json 경로 미포함: {call_args}"
-    assert "--bundle" in call_args
-    # full diff 원문 marker는 미포함 (bundle만 전달).
+    # base 리뷰 인자(--base origin/main)는 포함.
+    assert "--base" in call_args, f"--base 미포함: {call_args}"
+    assert "origin/main" in call_args, f"origin/main 미포함: {call_args}"
+    # full diff 원문 marker는 미포함 (bundle SHA만 전달).
     assert "unique_marker_xyz" not in call_args, "full diff 원문이 CLI args로 새어나감"
     final_state = {
-        "bundle_in_args": ".json" in call_args,
+        "base_in_args": "--base" in call_args and "origin/main" in call_args,
         "no_full_diff_leak": "unique_marker_xyz" not in call_args,
     }
-    assert final_state["bundle_in_args"] is True
+    assert final_state["base_in_args"] is True, f"--base origin/main 미전달: {call_args}"
     assert final_state["no_full_diff_leak"] is True
 
 

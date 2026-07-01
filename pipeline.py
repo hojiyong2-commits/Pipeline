@@ -19485,7 +19485,7 @@ def _codex_review_snapshot(
 # [Purpose]: gates codex-review가 --verdict 수동 recorder가 아니라 실제 Codex CLI 실행기로
 #            동작하도록 control flow를 구현한다: bundle 생성 → deterministic preflight →
 #            stable cache key 조회 → cache miss 시 실제 Codex CLI subprocess 호출 → 결과 기록.
-# [Assumptions]: Codex CLI는 PATH의 `codex` 실행 파일이며 `codex review --bundle <path>`를 받는다.
+# [Assumptions]: Codex CLI는 PATH의 `codex` 실행 파일이며 `codex review --base origin/main [PROMPT]`를 받는다.
 #            stdout에 APPROVE_TO_USER 또는 REJECT를 포함한다. 미설치 시 fail-closed BLOCKED.
 # [Vulnerability & Risks]: preflight BLOCKED이면 Codex CLI를 절대 호출하지 않는다(비용/위험 차단).
 #            cache hit이라도 현재 pr_head_sha/packet_sha256/pr_body_sha256를 재검증한다(stale 승인 금지).
@@ -19647,11 +19647,11 @@ def _run_codex_cli_review(
     codex_model_detected = str(os.environ.get("CODEX_MODEL", "") or "unknown")
     if cache_hit and cached_verdict in ("APPROVE_TO_USER", "REJECT"):
         verdict = cached_verdict
-        codex_cli_command = f"[CACHE HIT] codex review --bundle {_display_path(bundle_path)}"
+        codex_cli_command = "[CACHE HIT] codex review --base origin/main"
     else:
         cache_hit = False
         codex_exe = shutil.which("codex")
-        codex_cli_command = f"codex review --bundle {_display_path(bundle_path)}"
+        codex_cli_command = "codex review --base origin/main"
         if codex_exe is None:
             # Codex CLI 미설치 → 수동 verdict 필요. fail-closed BLOCKED.
             print(RED("[CODEX] CLI 미설치 — 수동 verdict 필요"))
@@ -19683,15 +19683,20 @@ def _run_codex_cli_review(
             (".cmd", ".bat")
         )
         try:
+            _review_prompt = (
+                f"Review pipeline {pipeline_id} PR changes for security violations. "
+                f"Output ONLY 'APPROVE_TO_USER' or 'REJECT - <specific reason>'. "
+                f"Bundle SHA: {stable_bundle_sha[:12]}."
+            )
             if _is_windows_script:
                 _proc = subprocess.run(
-                    f'"{codex_exe}" review --bundle "{bundle_path}"',
+                    f'"{codex_exe}" review --base origin/main "{_review_prompt}"',
                     capture_output=True, text=True, encoding="utf-8",
                     errors="replace", timeout=300, shell=True,  # nosec B602 — Windows .cmd/.bat 런처 전용 경로, codex_exe는 고정 실행파일 경로
                 )
             else:
                 _proc = subprocess.run(
-                    [codex_exe, "review", "--bundle", str(bundle_path)],
+                    [codex_exe, "review", "--base", "origin/main", _review_prompt],
                     capture_output=True, text=True, encoding="utf-8",
                     errors="replace", timeout=300,
                 )
