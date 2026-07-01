@@ -51,17 +51,6 @@
       "requires_force_add": true
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "011885512e0a197e28cbbb8f07eeef8976376330d6f8a154f37758dea8311f37",
-      "size_bytes": 1320479
-    },
-    {
-      "path": "tests/e2e/test_codex_cost_optimization_9f5e.py",
-      "sha256": "522f1d90898a75ff9060459f1e80a2de624b535b84c9a8f0a9b67d62d45d47ee",
-      "size_bytes": 52588
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
