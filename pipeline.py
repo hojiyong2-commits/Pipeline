@@ -2611,6 +2611,17 @@ CODEX_REVIEW_CRITICAL_PATTERNS: List[str] = [
     "tests/e2e/",
 ]
 
+# IMP-20260701-9F5E MT-4 (REJECT r2): stable bundle SHA volatile 필드 SSoT.
+# [Purpose]: review bundle의 SHA 계산에서 실행 시각/경로 등 매 실행 달라지는 volatile 값을
+#   제외하여 cache key를 안정화한다(동일 코드 변경 → 동일 stable_bundle_sha256 → cache hit).
+# [Assumptions]: 아래 필드들은 bundle 내용의 의미와 무관한 실행 메타데이터다.
+# [Vulnerability & Risks]: 새 volatile 필드가 bundle에 추가되면 이 SSoT를 갱신하지 않는 한
+#   cache key가 불안정해진다(매번 miss).
+# [Improvement]: bundle builder가 volatile 필드를 별도 서브딕트로 분리하면 자동 판정 가능.
+_BUNDLE_SHA_VOLATILE_FIELDS: "frozenset[str]" = frozenset({
+    "generated_at", "checked_at", "runtime_path", "bundle_generated_at",
+})
+
 
 def _mask_secret(value: str, prefix_len: int = 8) -> str:
     """민감 정보 문자열을 마스킹한다. prefix_len 자 이후는 ****로 대체.
@@ -7030,6 +7041,20 @@ def _build_codex_review_bundle(
         canonical.encode("utf-8")
     ).hexdigest()
 
+    # IMP-20260701-9F5E MT-4 (REJECT r2): stable_bundle_sha256 — volatile 필드(generated_at 등)를
+    # 제외한 SHA. cache key는 이 값을 사용하여 동일 코드 변경에 대해 안정적으로 hit되게 한다.
+    # (기존 review_bundle_sha256은 generated_at을 포함하므로 매 실행 달라져 cache key로 부적합.)
+    _stable_dict = {
+        k: v for k, v in bundle.items()
+        if k not in _BUNDLE_SHA_VOLATILE_FIELDS
+        and k not in ("review_bundle_sha256", "stable_bundle_sha256",
+                      "stable_bundle_sha256_input_fields")
+    }
+    bundle["stable_bundle_sha256"] = hashlib.sha256(
+        json.dumps(_stable_dict, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    bundle["stable_bundle_sha256_input_fields"] = sorted(_stable_dict.keys())
+
     bundle_path = _codex_ci_dir() / "codex_review_bundle.json"
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(bundle_path, bundle)
@@ -7062,17 +7087,24 @@ def _codex_review_cache_path(pipeline_id: str) -> Path:
     return _codex_ci_dir() / "codex_review_cache.json"
 
 
-def _compute_cache_key(contract_sha256: str, review_bundle_sha256: str) -> str:
-    """cache key = SHA256(contract_sha256 + ':' + review_bundle_sha256).
+def _compute_cache_key(contract_sha256: str, bundle: "Any") -> str:
+    """cache key = SHA256(contract_sha256 + ':' + stable_bundle_sha256).
+
+    IMP-20260701-9F5E MT-4 (REJECT r2): cache key를 stable_bundle_sha256 기반으로 계산하여
+    generated_at 등 volatile 값이 key에 섞여 매번 miss되는 문제를 제거한다.
+
+    두 번째 인자는 아래 두 형태를 모두 허용한다 (하위 호환):
+      - dict: bundle dict를 넘기면 bundle["stable_bundle_sha256"]를 사용한다.
+      - str: bundle SHA 문자열을 직접 넘기면 그 값을 그대로 stable 값으로 사용한다.
 
     Args:
         contract_sha256: frozen contract의 SHA256.
-        review_bundle_sha256: review bundle의 SHA256.
+        bundle: review bundle dict(권장) 또는 stable bundle SHA256 문자열.
     Returns:
         64자 hex SHA256 문자열.
     Raises:
-        TypeError: 인자가 None이거나 str이 아닌 경우.
-        ValueError: 인자가 빈 문자열인 경우.
+        TypeError: contract_sha256이 None/str이 아니거나 bundle이 None/(dict|str)이 아닌 경우.
+        ValueError: contract_sha256 또는 추출된 stable SHA가 빈 문자열인 경우.
     """
     if contract_sha256 is None:
         raise TypeError("contract_sha256 must not be None")
@@ -7080,18 +7112,21 @@ def _compute_cache_key(contract_sha256: str, review_bundle_sha256: str) -> str:
         raise TypeError(
             f"contract_sha256 must be str, got {type(contract_sha256).__name__}"
         )
-    if review_bundle_sha256 is None:
-        raise TypeError("review_bundle_sha256 must not be None")
-    if not isinstance(review_bundle_sha256, str):
+    if bundle is None:
+        raise TypeError("bundle must not be None")
+    if isinstance(bundle, dict):
+        stable_sha = str(bundle.get("stable_bundle_sha256", "") or "")
+    elif isinstance(bundle, str):
+        stable_sha = bundle  # backward compat: 이미 stable SHA 문자열을 받은 경우.
+    else:
         raise TypeError(
-            f"review_bundle_sha256 must be str, got "
-            f"{type(review_bundle_sha256).__name__}"
+            f"bundle must be dict or str, got {type(bundle).__name__}"
         )
     if not contract_sha256.strip():
         raise ValueError("contract_sha256 must not be empty")
-    if not review_bundle_sha256.strip():
-        raise ValueError("review_bundle_sha256 must not be empty")
-    material = f"{contract_sha256}:{review_bundle_sha256}"
+    if not stable_sha.strip():
+        raise ValueError("stable_bundle_sha256 must not be empty")
+    material = f"{contract_sha256}:{stable_sha}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -19387,6 +19422,401 @@ def _codex_review_snapshot(
     }
 
 
+# IMP-20260701-9F5E MT-4 (REJECT r2): 실질 Codex CLI 어댑터.
+# [Purpose]: gates codex-review가 --verdict 수동 recorder가 아니라 실제 Codex CLI 실행기로
+#            동작하도록 control flow를 구현한다: bundle 생성 → deterministic preflight →
+#            stable cache key 조회 → cache miss 시 실제 Codex CLI subprocess 호출 → 결과 기록.
+# [Assumptions]: Codex CLI는 PATH의 `codex` 실행 파일이며 `codex review --bundle <path>`를 받는다.
+#            stdout에 APPROVE_TO_USER 또는 REJECT를 포함한다. 미설치 시 fail-closed BLOCKED.
+# [Vulnerability & Risks]: preflight BLOCKED이면 Codex CLI를 절대 호출하지 않는다(비용/위험 차단).
+#            cache hit이라도 현재 pr_head_sha/packet_sha256/pr_body_sha256를 재검증한다(stale 승인 금지).
+#            CLI 호출 실패/타임아웃/미설치는 모두 fail-closed BLOCKED 처리한다.
+# [Improvement]: CLI verdict 파싱을 구조화된 JSON 응답 계약으로 강화할 수 있다.
+def _run_codex_cli_review(
+    args: argparse.Namespace, state: Dict[str, Any], pipeline_id: str
+) -> None:
+    """실제 Codex CLI를 호출하여 codex-review verdict를 산출하고 SSoT에 기록한다.
+
+    control flow: [1] stable bundle → [2] deterministic preflight → [3] stable cache key →
+    [4] cache 조회(재검증) → [5] cache miss 시 Codex CLI 실행 → [6] cache 저장 → [7] history →
+    [8] codex_review_result.json 기록.
+
+    Args:
+        args: argparse Namespace (files/base_ref/force_review 선택).
+        state: 활성 pipeline_state dict.
+        pipeline_id: 활성 파이프라인 ID (호출자가 검증 완료).
+    Raises:
+        TypeError: state가 None/dict가 아니거나 pipeline_id가 None/str/빈 문자열인 경우.
+        SystemExit: preflight BLOCKED / rate limit / CLI 미설치 / CLI 실패 시 BLOCKED(exit 1),
+            APPROVE_TO_USER면 exit 0.
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    if not pipeline_id.strip():
+        raise ValueError("pipeline_id must not be empty")
+
+    # rate limit — REJECT 2회 이상이면 CLI 호출 전에 차단 (--force-review로만 우회).
+    _force_review = bool(getattr(args, "force_review", False))
+    _rate_limited, _reject_count = _check_codex_rate_limit(pipeline_id)
+    if _rate_limited and not _force_review:
+        _die(
+            "[PIPELINE ERROR] failure_code=codex_rate_limited\n"
+            f"  현재 파이프라인의 Codex REJECT 횟수={_reject_count} (>=2).\n"
+            "  반복 REJECT로 인한 Codex 비용 폭증을 막기 위해 차단합니다.\n"
+            "  --force-review 플래그로만 우회할 수 있습니다."
+        )
+
+    # ── [1] stable bundle 생성 ──
+    bundle = _build_codex_review_bundle(state, pipeline_id)
+    bundle_path = _codex_ci_dir() / "codex_review_bundle.json"
+    stable_bundle_sha = str(bundle.get("stable_bundle_sha256", "") or "")
+    full_bundle_sha = str(bundle.get("review_bundle_sha256", "") or "")
+
+    # ── [2] deterministic preflight 실행 — BLOCKED이면 Codex CLI 미호출 ──
+    _preflight_blocked, _preflight_warnings, _preflight_meta = (
+        _run_codex_preflight_checks(args, state)
+    )
+    for _w in _preflight_warnings:
+        print(YELLOW(f"  [PREFLIGHT WARN] {_w}"))
+    if _preflight_blocked:
+        print(RED(f"\n[PREFLIGHT BLOCKED] codex-review 중단 — {pipeline_id}"))
+        for _b in _preflight_blocked:
+            print(RED(f"  - {_b}"))
+        # preflight 결과를 history에 기록 (진단 추적).
+        _append_codex_history(pipeline_id, {
+            "verdict": "PREFLIGHT_BLOCKED",
+            "preflight_blocked": list(_preflight_blocked),
+            "codex_cli_called": False,
+        })
+        _die(
+            "[BLOCKED] failure_code=codex_preflight_blocked\n"
+            "  gates codex-preflight 검사가 실패했습니다. 위 항목을 해결한 후 재실행하세요."
+        )
+
+    # ── [3] stable cache key 계산 (contract_sha256 + stable_bundle_sha256) ──
+    contract_sha = ""
+    try:
+        _cpaths = _contract_paths(pipeline_id) if pipeline_id else None
+        if _cpaths is not None:
+            _contract_file = _cpaths.get("contract")
+            if _contract_file is not None and Path(_contract_file).exists():
+                _cobj = json.loads(
+                    Path(_contract_file).read_text(encoding="utf-8-sig")
+                )
+                if isinstance(_cobj, dict):
+                    contract_sha = str(_cobj.get("contract_hash", "") or "")
+    except (OSError, ValueError, KeyError, TypeError):
+        contract_sha = ""
+
+    cache_key = ""
+    if contract_sha and stable_bundle_sha:
+        cache_key = _compute_cache_key(contract_sha, bundle)
+
+    pr_head_sha = _get_current_pr_head_sha() or ""
+
+    # ── [4] cache 조회 (반드시 실행 경로에서 호출) ──
+    cache_hit = False
+    cached_verdict = ""
+    if cache_key:
+        cached = _load_codex_cache(pipeline_id)
+        if (
+            isinstance(cached, dict)
+            and str(cached.get("cache_key", "") or "") == cache_key
+        ):
+            # cache hit 후보 — 단, stale 승인 재사용 금지: pr_head_sha를 재검증한다.
+            _cached_head = str(cached.get("pr_head_sha", "") or "")
+            if pr_head_sha and _cached_head and _cached_head != pr_head_sha:
+                # head SHA가 바뀌었으면 cache hit이라도 무효 → CLI 재호출.
+                cache_hit = False
+            else:
+                cache_hit = True
+                cached_verdict = str(cached.get("result", "") or "")
+
+    # ── [5] cache miss 시: 실제 Codex CLI 실행 ──
+    codex_cli_called = False
+    codex_cli_call_count = 0
+    codex_cli_command = ""
+    codex_model_detected = str(os.environ.get("CODEX_MODEL", "") or "unknown")
+    if cache_hit and cached_verdict in ("APPROVE_TO_USER", "REJECT"):
+        verdict = cached_verdict
+        codex_cli_command = f"[CACHE HIT] codex review --bundle {_display_path(bundle_path)}"
+    else:
+        cache_hit = False
+        codex_exe = shutil.which("codex")
+        codex_cli_command = f"codex review --bundle {_display_path(bundle_path)}"
+        if codex_exe is None:
+            # Codex CLI 미설치 → 수동 verdict 필요. fail-closed BLOCKED.
+            print(RED("[CODEX] CLI 미설치 — 수동 verdict 필요"))
+            _write_codex_review_result(
+                state, pipeline_id,
+                verdict="CODEX_CLI_UNAVAILABLE",
+                packet_sha="", pr_body_sha="", pr_head_sha=pr_head_sha,
+                bundle=bundle, cache_key=cache_key, cache_hit=False,
+                codex_cli_called=False, codex_cli_call_count=0,
+                codex_cli_command=codex_cli_command,
+                codex_model_detected=codex_model_detected,
+                contract_sha=contract_sha, stable_bundle_sha=stable_bundle_sha,
+                full_bundle_sha=full_bundle_sha, bundle_path=bundle_path,
+            )
+            _append_codex_history(pipeline_id, {
+                "verdict": "CODEX_CLI_UNAVAILABLE",
+                "codex_cli_called": False,
+            })
+            _die(
+                "[BLOCKED] failure_code=codex_cli_unavailable\n"
+                "  Codex CLI(`codex`)가 PATH에 없습니다. 설치 후 재실행하거나\n"
+                "  수동 진단 모드(--verdict APPROVE_TO_USER|REJECT)를 사용하세요."
+            )
+        # 실제 CLI 호출 — bundle 경로만 전달 (전체 diff를 인자/stdin으로 넘기지 않는다).
+        # shutil.which가 반환한 절대 경로를 그대로 사용한다. Windows에서 codex.cmd 같은
+        # 런처 스크립트는 bare name("codex")으로는 실행되지 않으므로(WinError 2) resolved
+        # 경로를 사용해야 한다. .cmd/.bat 런처는 shell=True로 실행한다.
+        _is_windows_script = os.name == "nt" and codex_exe.lower().endswith(
+            (".cmd", ".bat")
+        )
+        try:
+            if _is_windows_script:
+                _proc = subprocess.run(
+                    f'"{codex_exe}" review --bundle "{bundle_path}"',
+                    capture_output=True, text=True, encoding="utf-8",
+                    errors="replace", timeout=300, shell=True,
+                )
+            else:
+                _proc = subprocess.run(
+                    [codex_exe, "review", "--bundle", str(bundle_path)],
+                    capture_output=True, text=True, encoding="utf-8",
+                    errors="replace", timeout=300,
+                )
+            codex_cli_called = True
+            codex_cli_call_count = 1
+        except (OSError, subprocess.SubprocessError) as _exc:
+            print(RED(f"[CODEX] CLI 실행 실패: {_exc}"))
+            _append_codex_history(pipeline_id, {
+                "verdict": "CODEX_CLI_ERROR",
+                "codex_cli_called": True,
+                "error": str(_exc),
+            })
+            _die(
+                "[BLOCKED] failure_code=codex_cli_failed\n"
+                f"  Codex CLI 실행에 실패했습니다: {_exc}"
+            )
+        if _proc.returncode != 0:
+            print(RED(f"[CODEX] CLI returncode={_proc.returncode}"))
+            _append_codex_history(pipeline_id, {
+                "verdict": "CODEX_CLI_ERROR",
+                "codex_cli_called": True,
+                "returncode": _proc.returncode,
+            })
+            _die(
+                "[BLOCKED] failure_code=codex_cli_failed\n"
+                f"  Codex CLI가 비정상 종료했습니다 (returncode={_proc.returncode}).\n"
+                f"  stderr: {(_proc.stderr or '')[:500]}"
+            )
+        _out = (_proc.stdout or "")
+        if "REJECT" in _out.upper() and "APPROVE_TO_USER" not in _out.upper():
+            verdict = "REJECT"
+        elif "APPROVE_TO_USER" in _out.upper():
+            verdict = "APPROVE_TO_USER"
+        else:
+            # 판정 불명 → fail-closed BLOCKED (임의 승인 금지).
+            _append_codex_history(pipeline_id, {
+                "verdict": "CODEX_CLI_AMBIGUOUS",
+                "codex_cli_called": True,
+            })
+            _die(
+                "[BLOCKED] failure_code=codex_cli_ambiguous\n"
+                "  Codex CLI 출력에서 APPROVE_TO_USER/REJECT 판정을 찾지 못했습니다 (fail-closed)."
+            )
+
+    # ── packet SHA / pr_body SHA 계산 (현재 디스크 packet 기준 — 재검증용) ──
+    packet_sha = ""
+    packet_path = _packet_output_path()
+    if packet_path.exists():
+        try:
+            packet_sha = _sha256_file(packet_path)
+        except (OSError, TypeError):
+            packet_sha = ""
+    pr_body_sha = ""
+    try:
+        if _gh_available():
+            pr_body_sha = hashlib.sha256(
+                (_get_pr_body_text() or "").encode("utf-8")
+            ).hexdigest()
+    except (OSError, ValueError, KeyError, TypeError):
+        pr_body_sha = ""
+
+    # ── [6] cache 저장 (stable key 기반 + 현재 pr_head_sha 갱신) ──
+    if cache_key and verdict in ("APPROVE_TO_USER", "REJECT"):
+        try:
+            _save_codex_cache(pipeline_id, cache_key, verdict, pr_head_sha)
+        except (OSError, ValueError, KeyError, TypeError):
+            pass  # cache 저장 실패는 진단 캐시일 뿐 — verdict 기록/종료를 막지 않는다.
+
+    # ── [7] history 추가 ──
+    _append_codex_history(pipeline_id, {
+        "verdict": verdict,
+        "packet_sha256": packet_sha,
+        "pr_head_sha": pr_head_sha,
+        "cache_hit": cache_hit,
+        "codex_cli_called": codex_cli_called,
+        "codex_cli_call_count": codex_cli_call_count,
+        "codex_model_detected": codex_model_detected,
+    })
+
+    # ── [8] codex_review_result.json 기록 ──
+    result_path = _write_codex_review_result(
+        state, pipeline_id,
+        verdict=verdict, packet_sha=packet_sha, pr_body_sha=pr_body_sha,
+        pr_head_sha=pr_head_sha, bundle=bundle, cache_key=cache_key,
+        cache_hit=cache_hit, codex_cli_called=codex_cli_called,
+        codex_cli_call_count=codex_cli_call_count,
+        codex_cli_command=codex_cli_command,
+        codex_model_detected=codex_model_detected,
+        contract_sha=contract_sha, stable_bundle_sha=stable_bundle_sha,
+        full_bundle_sha=full_bundle_sha, bundle_path=bundle_path,
+    )
+
+    color = GREEN if verdict == "APPROVE_TO_USER" else RED
+    print(color(f"\n[CODEX REVIEW {verdict}] {pipeline_id}"))
+    print(f"  cache_hit: {cache_hit}")
+    print(f"  codex_cli_called: {codex_cli_called} (call_count={codex_cli_call_count})")
+    print(f"  codex_cli_command: {codex_cli_command}")
+    print(f"  stable_bundle_sha256: {stable_bundle_sha}")
+    print(f"  result: {_display_path(result_path)}\n")
+    _log_event(
+        state,
+        f"codex cli review: verdict={verdict} cache_hit={cache_hit} "
+        f"cli_calls={codex_cli_call_count}"
+    )
+    _save(state)
+    sys.exit(0 if verdict == "APPROVE_TO_USER" else 1)
+
+
+# IMP-20260701-9F5E MT-4 (REJECT r2): codex_review_result.json 기록 헬퍼.
+# [Purpose]: CLI 어댑터 경로와 미설치 경로가 동일한 result 스키마로 기록하도록 통합한다(Rule D1).
+# [Assumptions]: 호출자가 verdict/SHA 필드를 이미 계산했다.
+# [Vulnerability & Risks]: F52C 3자 불변식 필드(packet_sha256/pr_body_candidate_sha256/pr_head_sha)를
+#            반드시 유지해야 request-accept가 정상 동작한다.
+# [Improvement]: schema_version 증가 시 마이그레이션 훅을 추가할 수 있다.
+def _write_codex_review_result(
+    state: Dict[str, Any],
+    pipeline_id: str,
+    *,
+    verdict: str,
+    packet_sha: str,
+    pr_body_sha: str,
+    pr_head_sha: str,
+    bundle: Dict[str, Any],
+    cache_key: str,
+    cache_hit: bool,
+    codex_cli_called: bool,
+    codex_cli_call_count: int,
+    codex_cli_command: str,
+    codex_model_detected: str,
+    contract_sha: str,
+    stable_bundle_sha: str,
+    full_bundle_sha: str,
+    bundle_path: Path,
+) -> Path:
+    """codex_review_result.json을 기록하고 경로를 반환한다.
+
+    Args:
+        state: 활성 pipeline_state dict.
+        pipeline_id: 활성 파이프라인 ID.
+        verdict: Codex 판정 (APPROVE_TO_USER|REJECT|CODEX_CLI_UNAVAILABLE).
+        packet_sha: 검토 packet SHA256.
+        pr_body_sha: 검토 PR body candidate SHA256.
+        pr_head_sha: 현재 PR head SHA.
+        bundle: review bundle dict.
+        cache_key: stable cache key.
+        cache_hit: cache hit 여부.
+        codex_cli_called: CLI 실제 호출 여부.
+        codex_cli_call_count: CLI 호출 횟수.
+        codex_cli_command: 실행한 CLI 커맨드 문자열.
+        codex_model_detected: 감지된 모델명.
+        contract_sha: contract SHA256.
+        stable_bundle_sha: volatile 제외 bundle SHA256.
+        full_bundle_sha: 전체 bundle SHA256.
+        bundle_path: bundle 파일 경로.
+    Returns:
+        기록한 result 파일 경로.
+    Raises:
+        TypeError: pipeline_id가 None/str이 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+
+    full_diff_size_bytes = 0
+    try:
+        _dp = subprocess.run(
+            ["git", "diff", "origin/main...HEAD"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=30,
+        )
+        if _dp.returncode == 0:
+            full_diff_size_bytes = len((_dp.stdout or "").encode("utf-8"))
+    except (OSError, subprocess.SubprocessError):
+        full_diff_size_bytes = 0
+
+    bundle_size_bytes = 0
+    try:
+        if bundle_path.exists():
+            bundle_size_bytes = bundle_path.stat().st_size
+    except OSError:
+        bundle_size_bytes = 0
+
+    size_reduction_percent = 0.0
+    if full_diff_size_bytes > 0:
+        size_reduction_percent = round(
+            (1.0 - (bundle_size_bytes / full_diff_size_bytes)) * 100.0, 2
+        )
+
+    result = {
+        "schema_version": 2,
+        "pipeline_id": pipeline_id,
+        "verdict": verdict,
+        "reason": (
+            "Codex CLI 검토 통과" if verdict == "APPROVE_TO_USER"
+            else ("Codex CLI 미설치 — 수동 verdict 필요"
+                  if verdict == "CODEX_CLI_UNAVAILABLE" else "Codex CLI 검토 거절")
+        ),
+        "packet_sha256": packet_sha,
+        "pr_body_candidate_sha256": pr_body_sha,
+        "github_canonical_pr_body_sha256": "",
+        "pr_body_sha256": pr_body_sha,  # backward compat (= candidate).
+        "pr_head_sha": pr_head_sha,
+        "codex_cli_command": codex_cli_command,
+        "codex_model_detected": codex_model_detected,
+        # IMP-20260701-9F5E MT-4 (REJECT r2): 신규 진단 필드.
+        "review_bundle_sha256": full_bundle_sha,
+        "stable_bundle_sha256": stable_bundle_sha,
+        "stable_bundle_sha256_input_fields": list(
+            bundle.get("stable_bundle_sha256_input_fields", []) or []
+        ),
+        "full_diff_size_bytes": full_diff_size_bytes,
+        "bundle_size_bytes": bundle_size_bytes,
+        "size_reduction_percent": size_reduction_percent,
+        "cache_hit": bool(cache_hit),
+        "cache_key": cache_key,
+        "codex_cli_called": bool(codex_cli_called),
+        "codex_cli_call_count": int(codex_cli_call_count),
+        "contract_sha256": contract_sha,
+        "recorded_at": _now(),
+    }
+    result_path = _codex_review_result_path()
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(result_path, result)
+    return result_path
+
+
 # [Purpose]: BUG-20260628-F52C MT-3 — gates codex-review 핸들러. staged snapshot(또는 현재
 #            디스크 packet)을 검토 대상으로 삼아 Codex verdict를 codex_review_result.json SSoT에
 #            기록한다. 이 함수가 codex_review_result.json을 생성하는 유일한 진입점이다.
@@ -19394,7 +19824,7 @@ def _codex_review_snapshot(
 #            --packet-sha256은 검토한 packet의 SHA다(미지정 시 현재 디스크 packet에서 계산).
 # [Vulnerability & Risks]: verdict 형식 오류는 즉시 BLOCKED. packet SHA를 계산할 수 없으면 BLOCKED.
 #            REJECT verdict도 result 파일에 기록하여 request-accept가 fail-closed로 차단되게 한다.
-# [Improvement]: Codex CLI를 직접 호출하여 verdict를 자동 산출하는 모드를 추가할 수 있다.
+# [Improvement]: --verdict/--approve-pending 없으면 _run_codex_cli_review로 실제 CLI 호출한다.
 def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> None:
     """gates codex-review 핸들러: staged snapshot 검토 결과를 codex_review_result.json에 기록한다.
 
@@ -19408,7 +19838,17 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     if not pipeline_id:
         _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다.")
 
-    verdict = str(getattr(args, "verdict", "") or "").strip()
+    # IMP-20260701-9F5E MT-4 (REJECT r2): 실질 Codex CLI 어댑터 vs 수동 진단 recorder 분기.
+    #   - --verdict 또는 --approve-pending이 있으면: 기존 수동 진단 recorder 로직 유지(아래 흐름).
+    #   - 둘 다 없으면: 실제 Codex CLI를 호출하는 control flow로 위임한다
+    #     (bundle→preflight→cache→CLI→record). 이것이 REJECT-1(수동 recorder만 존재)의 근본 수정.
+    _manual_verdict = str(getattr(args, "verdict", "") or "").strip()
+    _approve_pending_flag = bool(getattr(args, "approve_pending", False))
+    if not _manual_verdict and not _approve_pending_flag:
+        _run_codex_cli_review(args, state, pipeline_id)
+        return  # _run_codex_cli_review가 sys.exit로 종료한다 (방어적 return).
+
+    verdict = _manual_verdict
     if verdict not in ("APPROVE_TO_USER", "REJECT"):
         _die(
             "[BLOCKED] failure_code=codex_verdict_invalid\n"
@@ -24013,8 +24453,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Codex Review verdict를 codex_review_result.json(SSoT)에 기록 (APPROVE_TO_USER|REJECT)",
     )
     p_gate_codex.add_argument(
-        "--verdict", required=True, choices=["APPROVE_TO_USER", "REJECT"],
-        help="Codex 검토 판정 (APPROVE_TO_USER 또는 REJECT)",
+        "--verdict", required=False, default=None,
+        choices=["APPROVE_TO_USER", "REJECT"],
+        help=(
+            "수동 진단용 Codex 검토 판정 (APPROVE_TO_USER 또는 REJECT). "
+            "IMP-20260701-9F5E: 이 플래그(또는 --approve-pending)가 없으면 실제 Codex CLI를 호출한다."
+        ),
     )
     p_gate_codex.add_argument(
         "--packet-sha256", dest="packet_sha256", default=None,

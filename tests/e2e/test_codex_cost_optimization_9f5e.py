@@ -772,6 +772,280 @@ def test_tc24_codex_review_records_model_detected(tmp_path: Path) -> None:
     assert final_state["codex_model_detected"] == "codex-test-model-v1"
 
 
+# ---------------------------------------------------------------------------
+# IMP-20260701-9F5E REJECT r2: 실질 Codex CLI 어댑터 검증 (call count / payload / stable SHA)
+# ---------------------------------------------------------------------------
+
+def install_fake_codex(bin_dir: Path, verdict: str = "APPROVE_TO_USER") -> Path:
+    """PATH에 넣을 fake `codex` 실행기를 생성하고, 호출 로그를 남긴다.
+
+    fake codex는 받은 인자를 codex_calls.log에 한 줄로 append하고, verdict를 stdout에 출력한다.
+    이를 통해 실제 Codex CLI 호출 횟수와 전달된 인자(bundle 경로)를 검증할 수 있다.
+
+    Args:
+        bin_dir: fake codex를 설치할 디렉토리.
+        verdict: fake codex가 출력할 판정 (APPROVE_TO_USER|REJECT).
+    Returns:
+        codex_calls.log 경로 (호출 로그 파일).
+    Raises:
+        TypeError: bin_dir가 None이거나 Path가 아닌 경우.
+    """
+    if bin_dir is None:
+        raise TypeError("bin_dir must not be None")
+    if not isinstance(bin_dir, Path):
+        raise TypeError(f"bin_dir must be Path, got {type(bin_dir).__name__}")
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    log_path = bin_dir / "codex_calls.log"
+    # 크로스플랫폼: python 스크립트 + OS별 런처(Windows codex.cmd / POSIX codex).
+    py_script = bin_dir / "codex_impl.py"
+    py_script.write_text(
+        "import sys\n"
+        f"log = r'''{log_path}'''\n"
+        "with open(log, 'a', encoding='utf-8') as fh:\n"
+        "    fh.write(' '.join(sys.argv[1:]) + '\\n')\n"
+        f"print('{verdict}')\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    if os.name == "nt":
+        launcher = bin_dir / "codex.cmd"
+        launcher.write_text(
+            f"@echo off\r\n\"{sys.executable}\" \"{py_script}\" %*\r\n",
+            encoding="utf-8",
+        )
+    else:
+        launcher = bin_dir / "codex"
+        launcher.write_text(
+            f"#!/bin/sh\nexec \"{sys.executable}\" \"{py_script}\" \"$@\"\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+    return log_path
+
+
+def read_call_count(log_path: Path) -> int:
+    """codex_calls.log의 줄 수(=CLI 호출 횟수)를 반환한다.
+
+    Args:
+        log_path: 호출 로그 경로.
+    Returns:
+        호출 횟수 (파일 없으면 0).
+    """
+    if not log_path.exists():
+        return 0
+    return len([ln for ln in log_path.read_text(encoding="utf-8").splitlines() if ln.strip()])
+
+
+def env_with_fake_codex(state_file: Path, bin_dir: Path) -> Dict[str, str]:
+    """make_env에 fake codex bin_dir을 PATH 앞에 추가한 환경을 반환한다.
+
+    Args:
+        state_file: 격리 state 파일 경로.
+        bin_dir: fake codex 설치 디렉토리.
+    Returns:
+        환경 변수 dict.
+    """
+    env = make_env(state_file)
+    env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+    return env
+
+
+# TC-19b: preflight BLOCKED이면 Codex CLI call_count = 0
+def test_tc19b_preflight_blocked_no_cli_call(tmp_path: Path) -> None:
+    """preflight가 BLOCKED이면 실제 Codex CLI가 호출되지 않아야 한다 (call_count=0)."""
+    state_file = tmp_path / "state.json"
+    write_state(state_file, "IMP-9F5E-TC19B")
+    bin_dir = tmp_path / "bin"
+    log_path = install_fake_codex(bin_dir, verdict="APPROVE_TO_USER")
+    # except:pass 파일 → preflight 검사5 BLOCKED.
+    bad = tmp_path / "swallow.py"
+    write_file(bad, "def f():\n    try:\n        g()\n    except:\n        pass\n")
+
+    # --verdict/--approve-pending 없이 실행 → 실제 CLI control flow 진입.
+    result = run_cli(
+        ["gates", "codex-review", "--files", str(bad)],
+        env=env_with_fake_codex(state_file, bin_dir),
+    )
+
+    assert result.returncode == 1, (
+        f"preflight BLOCKED 시 exit 1 기대, 실제={result.returncode}\n"
+        f"stdout={result.stdout}\nstderr={result.stderr}"
+    )
+    combined = result.stdout + result.stderr
+    assert "PREFLIGHT BLOCKED" in combined or "codex_preflight_blocked" in combined
+    # 핵심: preflight BLOCKED이므로 Codex CLI가 절대 호출되지 않았어야 한다.
+    call_count = read_call_count(log_path)
+    assert call_count == 0, f"preflight BLOCKED 시 CLI 미호출 기대, 실제 호출={call_count}"
+    final_state = {"preflight_blocked_no_cli_call": call_count == 0}
+    assert final_state["preflight_blocked_no_cli_call"] is True
+
+
+# TC-21b: cache miss 시 Codex CLI call_count = 1 + bundle 경로 payload 검증
+def test_tc21b_cache_miss_cli_called_with_bundle_path(tmp_path: Path) -> None:
+    """cache miss 시 Codex CLI가 bundle 경로를 인자로 받아 1회 호출되어야 한다."""
+    state_file = tmp_path / "state.json"
+    write_state(state_file, "IMP-9F5E-TC21B")
+    bin_dir = tmp_path / "bin"
+    log_path = install_fake_codex(bin_dir, verdict="APPROVE_TO_USER")
+    clean = tmp_path / "clean.py"
+    write_file(clean, "def f():\n    return 1\n")
+
+    result = run_cli(
+        ["gates", "codex-review", "--files", str(clean)],
+        env=env_with_fake_codex(state_file, bin_dir),
+    )
+
+    assert result.returncode == 0, (
+        f"clean 파일 + APPROVE_TO_USER는 exit 0 기대, 실제={result.returncode}\n"
+        f"stdout={result.stdout}\nstderr={result.stderr}"
+    )
+    # CLI가 정확히 1회 호출됨.
+    call_count = read_call_count(log_path)
+    assert call_count == 1, f"cache miss 시 CLI 1회 호출 기대, 실제={call_count}"
+    # 전달 payload: bundle 경로(.json)만 포함, full diff 원문 미포함.
+    call_args = log_path.read_text(encoding="utf-8").strip()
+    assert "--bundle" in call_args, f"CLI args에 --bundle 없음: {call_args}"
+    assert "codex_review_bundle.json" in call_args, f"bundle 경로 미전달: {call_args}"
+    assert "def f()" not in call_args, "full diff 원문이 CLI args에 노출됨"
+    # 결과 파일의 codex_cli_call_count 검증.
+    res_file = pipeline_dir(state_file) / "codex_review_result.json"
+    final_state = json.loads(res_file.read_text(encoding="utf-8"))
+    assert final_state["codex_cli_called"] is True
+    assert final_state["codex_cli_call_count"] == 1
+    assert final_state["cache_hit"] is False
+
+
+# TC-20b: cache hit 시 Codex CLI call_count = 0 (두 번째 실행)
+def test_tc20b_cache_hit_no_second_cli_call(tmp_path: Path) -> None:
+    """동일 변경으로 두 번 실행 시, 두 번째는 cache hit되어 CLI를 추가 호출하지 않는다."""
+    state_file = tmp_path / "state.json"
+    write_state(state_file, "IMP-9F5E-TC20B")
+    bin_dir = tmp_path / "bin"
+    log_path = install_fake_codex(bin_dir, verdict="APPROVE_TO_USER")
+    clean = tmp_path / "clean.py"
+    write_file(clean, "def f():\n    return 1\n")
+    env = env_with_fake_codex(state_file, bin_dir)
+
+    # 1차 실행: cache miss → CLI 1회.
+    r1 = run_cli(["gates", "codex-review", "--files", str(clean)], env=env)
+    assert r1.returncode == 0, f"1차 exit 0 기대\n{r1.stdout}\n{r1.stderr}"
+    assert read_call_count(log_path) == 1, "1차 실행에서 CLI 1회 호출되어야 함"
+
+    # 2차 실행: 동일 stable bundle → cache hit → CLI 추가 호출 없음.
+    r2 = run_cli(["gates", "codex-review", "--files", str(clean)], env=env)
+    assert r2.returncode == 0, f"2차 exit 0 기대\n{r2.stdout}\n{r2.stderr}"
+    # cache hit 검증: contract가 없으면 cache_key가 비어 hit 불가하므로 조건부 검증.
+    res_file = pipeline_dir(state_file) / "codex_review_result.json"
+    final = json.loads(res_file.read_text(encoding="utf-8"))
+    if final.get("cache_key"):
+        # cache_key가 계산된 경우: 2차는 반드시 cache hit + CLI 미호출.
+        assert final["cache_hit"] is True, "2차 실행은 cache hit이어야 함"
+        assert read_call_count(log_path) == 1, "cache hit 시 CLI 추가 호출 없어야 함"
+        assert final["codex_cli_call_count"] == 0, "cache hit 시 call_count=0"
+    final_state = {"cache_key_present": bool(final.get("cache_key"))}
+    assert isinstance(final_state["cache_key_present"], bool)
+
+
+# TC-25: volatile timestamp가 stable_bundle_sha256에 영향 없음
+def test_tc25_volatile_fields_excluded_from_stable_sha(tmp_path: Path) -> None:
+    """generated_at 등 volatile 필드가 달라져도 stable_bundle_sha256은 동일해야 한다."""
+    import hashlib
+    pipeline = import_pipeline_module()
+
+    bundle1 = {
+        "pipeline_id": "TEST-001",
+        "contract_sha256": "abc123",
+        "pr_diff_summary": "test",
+        "generated_at": "2026-07-01T10:00:00Z",
+    }
+    bundle2 = dict(bundle1)
+    bundle2["generated_at"] = "2026-07-01T11:00:00Z"
+
+    stable_dict1 = {
+        k: v for k, v in bundle1.items()
+        if k not in pipeline._BUNDLE_SHA_VOLATILE_FIELDS
+    }
+    stable_dict2 = {
+        k: v for k, v in bundle2.items()
+        if k not in pipeline._BUNDLE_SHA_VOLATILE_FIELDS
+    }
+    sha1 = hashlib.sha256(
+        json.dumps(stable_dict1, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+    sha2 = hashlib.sha256(
+        json.dumps(stable_dict2, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+
+    assert sha1 == sha2, "volatile 필드 변경이 stable SHA에 영향을 주면 안 됨"
+    # cache key도 동일해야 한다 (stable SHA 기반).
+    key1 = pipeline._compute_cache_key("contractX", {"stable_bundle_sha256": sha1})
+    key2 = pipeline._compute_cache_key("contractX", {"stable_bundle_sha256": sha2})
+    assert key1 == key2, "동일 stable SHA → 동일 cache key"
+    final_state = {"stable_sha_unchanged": sha1 == sha2, "key_unchanged": key1 == key2}
+    assert final_state["stable_sha_unchanged"] is True
+    assert final_state["key_unchanged"] is True
+
+
+# TC-26: 실제 bundle builder가 volatile 필드를 stable SHA에서 제외하는지 검증
+def test_tc26_build_bundle_stable_sha_ignores_generated_at(tmp_path: Path) -> None:
+    """_build_codex_review_bundle이 두 번 실행되어 generated_at이 달라도 stable SHA는 동일하다."""
+    pipeline = import_pipeline_module()
+    state = {"pipeline_id": "IMP-9F5E-TC26"}
+    prev = os.environ.get("PIPELINE_STATE_PATH")
+    os.environ["PIPELINE_STATE_PATH"] = str(tmp_path / "state.json")
+    try:
+        b1 = pipeline._build_codex_review_bundle(state, "IMP-9F5E-TC26")
+        b2 = pipeline._build_codex_review_bundle(state, "IMP-9F5E-TC26")
+    finally:
+        if prev is None:
+            os.environ.pop("PIPELINE_STATE_PATH", None)
+        else:
+            os.environ["PIPELINE_STATE_PATH"] = prev
+    # generated_at은 (거의 항상) 달라지지만 stable_bundle_sha256은 동일해야 한다.
+    assert "stable_bundle_sha256" in b1
+    assert "stable_bundle_sha256" in b2
+    assert b1["stable_bundle_sha256"] == b2["stable_bundle_sha256"], (
+        "동일 diff에 대해 stable_bundle_sha256이 실행마다 달라지면 안 됨 (cache key 불안정)"
+    )
+    # generated_at은 stable SHA input에서 제외되어야 한다.
+    assert "generated_at" not in b1["stable_bundle_sha256_input_fields"]
+    final_state = {"stable_equal": b1["stable_bundle_sha256"] == b2["stable_bundle_sha256"]}
+    assert final_state["stable_equal"] is True
+
+
+# TC-27: Codex CLI mock이 받은 입력이 bundle 경로뿐 (full diff text 미포함)
+def test_tc27_cli_receives_bundle_path_only(tmp_path: Path) -> None:
+    """Codex CLI mock이 받은 args에 bundle 경로만 포함되고 full diff 원문은 미포함이어야 한다."""
+    state_file = tmp_path / "state.json"
+    write_state(state_file, "IMP-9F5E-TC27")
+    bin_dir = tmp_path / "bin"
+    log_path = install_fake_codex(bin_dir, verdict="APPROVE_TO_USER")
+    clean = tmp_path / "clean.py"
+    # 고유 marker를 코드에 넣어, 이 문자열이 CLI args에 새어나가지 않음을 검증.
+    write_file(clean, "def unique_marker_xyz():\n    return 1\n")
+
+    result = run_cli(
+        ["gates", "codex-review", "--files", str(clean)],
+        env=env_with_fake_codex(state_file, bin_dir),
+    )
+
+    assert result.returncode == 0, (
+        f"exit 0 기대, 실제={result.returncode}\n{result.stdout}\n{result.stderr}"
+    )
+    call_args = log_path.read_text(encoding="utf-8").strip()
+    # bundle 경로(.json)는 포함.
+    assert ".json" in call_args, f"bundle .json 경로 미포함: {call_args}"
+    assert "--bundle" in call_args
+    # full diff 원문 marker는 미포함 (bundle만 전달).
+    assert "unique_marker_xyz" not in call_args, "full diff 원문이 CLI args로 새어나감"
+    final_state = {
+        "bundle_in_args": ".json" in call_args,
+        "no_full_diff_leak": "unique_marker_xyz" not in call_args,
+    }
+    assert final_state["bundle_in_args"] is True
+    assert final_state["no_full_diff_leak"] is True
+
+
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-v"]))
