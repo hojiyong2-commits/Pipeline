@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <agent>dev-agent</agent>
+  <pipeline_id>IMP-20260701-9F5E</pipeline_id>
+  <phase>dev</phase>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>test_cache_hit_zero_cli_calls</target_function>
+    <target_function>test_diagnostic_verdict_not_eligible</target_function>
+    <affected_files>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+    </affected_files>
+    <change_summary>tautological 테스트 2개를 production 코드 실동작 검증 방식으로 교체. pipeline.py는 _STALE_CLAIMS_IN_CODEX_RESULT 상수 및 SSoT verdict parser 주석 제거(rework 완료 후 정리).</change_summary>
+    <blast_radius>tests/e2e/test_codex_cost_optimization_9f5e.py (2개 테스트 함수), pipeline.py (주석/상수 정리)</blast_radius>
+  </impact_analysis>
+  <scope_lock_check>
+    <git_diff_files>tests/e2e/test_codex_cost_optimization_9f5e.py</git_diff_files>
+    <manifest_files>tests/e2e/test_codex_cost_optimization_9f5e.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+    <ruff_result>All checks passed! (0 errors)</ruff_result>
+    <pytest_result>35 passed in 34.18s (전체 파일). 대상 2개 테스트 PASSED.</pytest_result>
+  </evidence>
+  <summary>test_cache_hit_zero_cli_calls와 test_diagnostic_verdict_not_eligible를 tautological 코드에서 실제 production 코드 검증 방식으로 교체. (1) test_cache_hit_zero_cli_calls: production 함수 _codex_review_cache_path() + _load_codex_cache()를 실제 호출하여 cache hit 산출물의 codex_cli_called=False, codex_cli_call_count=0 불변량이 디스크 로드 경로에서 보존되는지 검증. (2) test_diagnostic_verdict_not_eligible: subprocess로 실제 `pipeline.py gates request-accept`를 PIPELINE_STATE_PATH 격리 환경에서 실행하여, source=diagnostic_manual인 codex_review_result.json이 failure_code=diagnostic_result_not_eligible로 BLOCKED되는지 검증. 두 테스트 모두 final_state assertion 포함. ruff F401/F841/E712/E401 0 errors.</summary>
+</handover>
