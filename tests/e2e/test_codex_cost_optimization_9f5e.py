@@ -1142,6 +1142,7 @@ def test_diagnostic_verdict_not_eligible(tmp_path: Path) -> None:
     failure_code=diagnostic_result_not_eligible로 차단되는지 확인한다.
     (tautological 아님 — 실제 request-accept 게이트 경로를 통과시킨다.)
     """
+    # PIPELINE_STATE_PATH isolation via make_env(state_file)
     pipeline_id = "IMP-9F5E-DIAG"
     state_file = tmp_path / "state.json"
     write_state(state_file, pipeline_id)
