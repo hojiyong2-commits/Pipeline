@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manager_handoff>
+  <pipeline_id>IMP-20260701-9F5E</pipeline_id>
+  <planner_run_id>pm_planner-0123d8b29dab87b0</planner_run_id>
+  <manager_run_id>pipeline_manager-9bb36bd729643d6e</manager_run_id>
+  <status>READY</status>
+  <from>pipeline-manager-agent</from>
+  <handoff_timestamp>2026-07-01T09:50:00Z</handoff_timestamp>
+  <step_plan_sha256>7b03e79b53a4143e0ffcb807f586b80fb8c48a04310ea22b77bef693a0a31821</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+
+  <task_summary>
+    Codex Review 비용 최적화 — deterministic preflight + minimal review bundle + safe cache + append-only review history 구현.
+    pipeline.py에 신규 함수 7세트 추가, E2E 테스트 파일 신규 생성.
+  </task_summary>
+
+  <pm_planning_verified>true</pm_planning_verified>
+  <planning_notes>decomposition 및 design_confirmation은 step_plan.xml에 기록됨</planning_notes>
+
+  <contract_status>
+    <initialized>true</initialized>
+    <audit_result>PASS</audit_result>
+    <frozen>true</frozen>
+    <contract_hash>9036417b81b37f7f1962106f371f99d96831a77bf9bb7ebbd4a7bfa48d5dc804</contract_hash>
+    <test_set_hash>f1942ff17ffddd0fe07a3dd7ca37627cc63cfc6af0179db5bb5fb7b2b5c23793</test_set_hash>
+    <oracle_count>5</oracle_count>
+    <normal_oracle_count>1</normal_oracle_count>
+    <edge_error_oracle_count>4</edge_error_oracle_count>
+    <modules_registered>7</modules_registered>
+    <tests_registered>11</tests_registered>
+  </contract_status>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <module_id>M1</module_id>
+      <name>Codex Preflight Gate</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_cmd_gates_codex_preflight</affected_function>
+      <covers_ac>AC-1, AC-2</covers_ac>
+      <change_summary>신규 함수 추가 — 8가지 deterministic preflight 검사, argparse 등록</change_summary>
+      <line_estimate>80</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <module_id>M2</module_id>
+      <name>Codex Review Bundle Builder</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_build_codex_review_bundle, _extract_critical_function_diffs</affected_function>
+      <covers_ac>AC-3</covers_ac>
+      <change_summary>bundle 포함/제외 규칙 구현, codex_review_bundle.json 생성</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+    <micro_task id="MT-3">
+      <module_id>M3</module_id>
+      <name>Critical Files SSoT Constants</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>CODEX_REVIEW_CRITICAL_FILES, _is_critical_file</affected_function>
+      <covers_ac>AC-3</covers_ac>
+      <change_summary>신규 상수와 판별 함수 추가</change_summary>
+      <line_estimate>20</line_estimate>
+    </micro_task>
+    <micro_task id="MT-4">
+      <module_id>M4</module_id>
+      <name>Codex Review Command Enhancement</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_cmd_gates_codex_review</affected_function>
+      <covers_ac>AC-1, AC-2, AC-3</covers_ac>
+      <change_summary>preflight 자동 호출, bundle 모드, codex_cli_command/codex_model_detected 필드 추가</change_summary>
+      <line_estimate>40</line_estimate>
+    </micro_task>
+    <micro_task id="MT-5">
+      <module_id>M5</module_id>
+      <name>Codex Review Cache Layer</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_codex_review_cache_path, _load_codex_cache, _save_codex_cache, _compute_cache_key</affected_function>
+      <covers_ac>AC-4</covers_ac>
+      <change_summary>cache key = contract_sha256 + review_bundle_sha256, hit 시 SHA 재검증</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+    <micro_task id="MT-6">
+      <module_id>M6</module_id>
+      <name>Codex Review History and Rate Limiter</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_codex_review_history_path, _append_codex_history, _check_codex_rate_limit</affected_function>
+      <covers_ac>AC-5</covers_ac>
+      <change_summary>append-only history (.pipeline/codex_review_history.jsonl), REJECT 2회 → rate_limited</change_summary>
+      <line_estimate>50</line_estimate>
+    </micro_task>
+    <micro_task id="MT-7">
+      <module_id>M7</module_id>
+      <name>E2E Test Suite TC-1~TC-24</name>
+      <target_files><file>tests/e2e/test_codex_cost_optimization_9f5e.py</file></target_files>
+      <affected_function>TC-1 through TC-24</affected_function>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5</covers_ac>
+      <change_summary>PIPELINE_STATE_PATH 격리 + CLI stub/mock 기반 E2E 테스트 24개</change_summary>
+      <line_estimate>350</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <execution_profile>HIGH_RISK</execution_profile>
+  <risk_flags>
+    <pipeline_protocol>true</pipeline_protocol>
+    <reason>pipeline.py 핵심 로직 수정 — trust-root 파일 변경</reason>
+  </risk_flags>
+
+  <execution_plan>
+    <phase name="PM">완료 — contract frozen, oracle 5개 등록, phase attestation 대기</phase>
+    <phase name="Dev">MT-1~MT-7 순차 구현 (pipeline.py + tests/e2e/test_codex_cost_optimization_9f5e.py)</phase>
+    <phase name="QA">7개 카테고리 검증 후 96점 이상 PASS</phase>
+    <phase name="SEC">skip — 외부 API/DB 없음</phase>
+    <phase name="Build">N/A skip-reason=meta-task</phase>
+    <phase name="ExternalGates">Technical/Oracle/GitHub CI/Codex Review/User Acceptance</phase>
+    <phase name="Architect">RCA 완료</phase>
+  </execution_plan>
+</manager_handoff>
