@@ -7347,8 +7347,17 @@ def _strip_excluded_diff_sections(
 
 
 _RAW_ACCEPT_CODE_RE = re.compile(r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}-[0-9a-f]{8}")
-_EXCEPT_PASS_RE = re.compile(r"except\s*:\s*pass")
-_BEST_EFFORT_RE = re.compile(r"#\s*(?:best-effort|fallback pass)", re.IGNORECASE)
+# 검사5/8 정규식은 statement/comment 구조에 앵커하여 pipeline.py 자체 diff의
+# 문자열 리터럴("...'except: pass'...", "(# best-effort ...)")에 self-match되지 않게 한다.
+# except는 라인 시작(선택적 diff '+' + 들여쓰기) 뒤의 실제 구문만 매칭하고,
+# best-effort/fallback pass 주석은 앞에 따옴표/괄호가 없는 실제 주석만 매칭한다.
+_EXCEPT_PASS_RE = re.compile(
+    r"^\+?[ \t]*except\s*:\s*(?:\r?\n\+?[ \t]*)?pass\b", re.MULTILINE
+)
+_BEST_EFFORT_RE = re.compile(
+    r"^(?:[^\"'\n]*?)(?<![\"'(])#\s*(?:best-effort|fallback pass)",
+    re.MULTILINE | re.IGNORECASE,
+)
 
 
 def _cmd_gates_codex_preflight(
