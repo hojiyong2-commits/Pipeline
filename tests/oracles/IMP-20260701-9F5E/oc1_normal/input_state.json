@@ -1,0 +1,21 @@
+{
+  "pipeline_id": "IMP-20260701-9F5E",
+  "scenario": "normal_flow",
+  "description": "preflight PASS → bundle 생성 → codex-review APPROVE 정상 흐름",
+  "preflight_checks": {
+    "raw_accept_code_present": false,
+    "codex_review_loop_state_exists": true,
+    "codex_review_loop_status": "PENDING",
+    "except_pass_present": false,
+    "pr_diff_hygiene_ok": true
+  },
+  "diff_files": [
+    "pipeline.py",
+    "tests/e2e/test_codex_cost_optimization_9f5e.py"
+  ],
+  "critical_files_changed": ["pipeline.py"],
+  "cache_key": null,
+  "cache_hit": false,
+  "codex_response": "APPROVED",
+  "reject_count": 0
+}
