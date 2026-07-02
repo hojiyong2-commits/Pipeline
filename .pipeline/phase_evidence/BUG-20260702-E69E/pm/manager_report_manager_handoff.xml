@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manager_handoff>
+  <pipeline_id>BUG-20260702-E69E</pipeline_id>
+  <run_id>pipeline_manager-90edc6f5070dc7b0</run_id>
+  <planner_run_id>pm_planner-f90f4d31393d7cbf</planner_run_id>
+  <status>HANDOFF_COMPLETE</status>
+  <from>pipeline-manager-agent</from>
+  <handoff_timestamp>2026-07-02T10:10:00Z</handoff_timestamp>
+  <step_plan_sha256>4eb0484eb6b1fbb910d4a41bfa228805c91cfa13c0c49525fd42c669a6cbedde</step_plan_sha256>
+  <accepted_for_execution>true</accepted_for_execution>
+  <will_not_modify_step_plan>true</will_not_modify_step_plan>
+  <next_phase>dev</next_phase>
+
+  <task_summary>
+    Codex Review 상태 모델 분리 — CLI 오류(usage limit/timeout/network)를 verdict=REJECT로
+    오기록하는 구조적 결함 수정. APPROVED/REJECTED/ERROR 3-way 상태 모델 도입,
+    reject_count/cli_error_count 카운터 분리, --retry-cli-error 복구 명령 추가.
+    pipeline.py 핵심 함수 수정 + E2E 테스트 TC-1~TC-12 추가.
+  </task_summary>
+
+  <pm_planning_verified>true</pm_planning_verified>
+  <planning_notes>decomposition 및 design_confirmation은 step_plan.xml에 기록됨</planning_notes>
+
+  <execution_profile>HIGH_RISK</execution_profile>
+  <risk_flags>
+    <pipeline_protocol>true</pipeline_protocol>
+    <reason>pipeline.py 핵심 로직 수정 — trust-root 파일 변경, Codex Review 상태 모델 구조 변경</reason>
+  </risk_flags>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <name>_classify_codex_cli_error 신규 함수 추가</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_classify_codex_cli_error</affected_function>
+      <covers_ac>AC-1, AC-2</covers_ac>
+      <change_summary>exit code / stdout 문자열 / stderr 기반 오류 분류 — usage_limit / timeout / missing_executable / network / parse_failure / unknown_error 반환</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+    <micro_task id="MT-2">
+      <name>_run_codex_cli_review ERROR/REJECTED 분리</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_run_codex_cli_review</affected_function>
+      <covers_ac>AC-1, AC-2, AC-3</covers_ac>
+      <change_summary>exit code non-zero → ERROR 분기, 성공 시만 verdict 파싱, CLI 오류를 REJECT fallback하는 코드 제거</change_summary>
+      <line_estimate>50</line_estimate>
+    </micro_task>
+    <micro_task id="MT-3">
+      <name>_cmd_gates_codex_review 카운터/결과 필드 수정</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_cmd_gates_codex_review</affected_function>
+      <covers_ac>AC-3, AC-4</covers_ac>
+      <change_summary>reject_count/cli_error_count 분리 기록, error_type/error_retryable/codex_cli_exit_code/stdout_excerpt/stderr_excerpt 필드 추가, acceptance_eligible=false on ERROR</change_summary>
+      <line_estimate>60</line_estimate>
+    </micro_task>
+    <micro_task id="MT-4">
+      <name>_check_codex_rate_limit REJECTED 횟수만 적용</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_check_codex_rate_limit</affected_function>
+      <covers_ac>AC-3</covers_ac>
+      <change_summary>reject_count 기반 rate-limit, cli_error_count 미적용, usage limit/timeout ERROR는 rate-limit 트리거 금지</change_summary>
+      <line_estimate>30</line_estimate>
+    </micro_task>
+    <micro_task id="MT-5">
+      <name>_cmd_gates_request_accept ERROR 차단 + --retry-cli-error 추가</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_cmd_gates_request_accept, _codex_review_snapshot</affected_function>
+      <covers_ac>AC-5, AC-6, AC-7</covers_ac>
+      <change_summary>effective status ERROR면 request-accept BLOCKED, --retry-cli-error 복구 명령 구현, SHA 동일성 확인 후 retry 허용</change_summary>
+      <line_estimate>70</line_estimate>
+    </micro_task>
+    <micro_task id="MT-6">
+      <name>_append_codex_history 필드 수정</name>
+      <target_files><file>pipeline.py</file></target_files>
+      <affected_function>_append_codex_history</affected_function>
+      <covers_ac>AC-4</covers_ac>
+      <change_summary>history 항목에 status/error_type/reject_count/cli_error_count/acceptance_eligible 기록</change_summary>
+      <line_estimate>25</line_estimate>
+    </micro_task>
+    <micro_task id="MT-7">
+      <name>E2E 테스트 TC-1 ~ TC-12 추가</name>
+      <target_files><file>tests/e2e/test_codex_cost_optimization_9f5e.py</file></target_files>
+      <affected_function>TC-1 through TC-12</affected_function>
+      <covers_ac>AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7</covers_ac>
+      <change_summary>PIPELINE_STATE_PATH 격리 + CLI stub/mock 기반 E2E 테스트 TC-1~TC-12 추가 (기존 TC 보존)</change_summary>
+      <line_estimate>250</line_estimate>
+    </micro_task>
+  </micro_tasks>
+
+  <execution_plan>
+    <phase name="PM">완료 — contract 신규 초기화 필요, oracle 5개 등록, phase attestation 대기</phase>
+    <phase name="Dev">MT-1~MT-7 순차 구현 (pipeline.py + tests/e2e/test_codex_cost_optimization_9f5e.py)</phase>
+    <phase name="QA">7개 카테고리 검증 후 96점 이상 PASS</phase>
+    <phase name="SEC">skip — 외부 API/DB 없음</phase>
+    <phase name="Build">N/A skip-reason=meta-task</phase>
+    <phase name="ExternalGates">Technical/Oracle/GitHub CI/Codex Review/User Acceptance</phase>
+    <phase name="Architect">RCA 완료</phase>
+  </execution_plan>
+
+  <user_response>진행 — 상태 모델 분리(APPROVED/REJECTED/ERROR), reject_count/cli_error_count 분리, --retry-cli-error 복구 명령 추가</user_response>
+  <askuser_resolution>AQ-1 → 사용자 승인: pipeline.py 상태 모델 분리 방식 진행</askuser_resolution>
+</manager_handoff>
