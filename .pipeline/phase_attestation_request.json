@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-07-02T10:16:17Z",
+  "generated_at": "2026-07-02T10:24:57Z",
   "pipeline_id": "BUG-20260702-E69E",
   "phase": "pm",
   "phase_status": "DONE",
@@ -20,7 +20,7 @@
     "output_file": "step_plan.xml",
     "output_sha256": "4eb0484eb6b1fbb910d4a41bfa228805c91cfa13c0c49525fd42c669a6cbedde",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260702-E69E/pm/agent_receipt_pm_planner-f90f4d31393d7cbf.json",
-    "receipt_sha256": "ebed78b9ef8edfe38086489b2d3dd4d22a79221922f837dddbe03172fb868b03",
+    "receipt_sha256": "36b2aa12c6c735f6b3881ea027ada576f73b8d4e9ef78648a30cd377423b0f8a",
     "used_by_phase": "pm",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\pm_planner\\pm_planner-f90f4d31393d7cbf.json"
   },
@@ -32,7 +32,7 @@
     "output_file": "manager_handoff.xml",
     "output_sha256": "16fc19cb5a63badcdaec9be8d4ac6e32aaa7b1635eab66d98ec74b885c3d718e",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260702-E69E/pm/manager_receipt_pipeline_manager-90edc6f5070dc7b0.json",
-    "receipt_sha256": "2953cb8a5acceeb2a9c4fdf84bb2ccd674ed9c83704f28336914e22b47f0e1d6",
+    "receipt_sha256": "57bb69e7bbeac45850ccb5b1dd22f61c68586af176470480a5ec85e804506786",
     "used_by_phase": "pm_manager",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\pipeline_manager\\pipeline_manager-90edc6f5070dc7b0.json"
   },
@@ -41,7 +41,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\pm_planner\\pm_planner-f90f4d31393d7cbf.json",
       "path": ".pipeline/phase_evidence/BUG-20260702-E69E/pm/agent_receipt_pm_planner-f90f4d31393d7cbf.json",
-      "sha256": "ebed78b9ef8edfe38086489b2d3dd4d22a79221922f837dddbe03172fb868b03",
+      "sha256": "36b2aa12c6c735f6b3881ea027ada576f73b8d4e9ef78648a30cd377423b0f8a",
       "size_bytes": 533,
       "requires_force_add": true
     },
@@ -49,7 +49,7 @@
       "label": "manager_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\pipeline_manager\\pipeline_manager-90edc6f5070dc7b0.json",
       "path": ".pipeline/phase_evidence/BUG-20260702-E69E/pm/manager_receipt_pipeline_manager-90edc6f5070dc7b0.json",
-      "sha256": "2953cb8a5acceeb2a9c4fdf84bb2ccd674ed9c83704f28336914e22b47f0e1d6",
+      "sha256": "57bb69e7bbeac45850ccb5b1dd22f61c68586af176470480a5ec85e804506786",
       "size_bytes": 557,
       "requires_force_add": true
     },
