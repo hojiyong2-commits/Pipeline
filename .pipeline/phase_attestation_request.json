@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-02T10:59:36Z",
+  "pipeline_id": "BUG-20260702-E69E",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "0a7920d1bfaac8ee30bce381ece8cfd1692f7dba",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-07-02T10:59:29Z",
+    "report_file": "dev_handover.xml",
+    "evidence": "pipeline.py,tests/e2e/test_codex_cost_optimization_9f5e.py,tests/oracles/BUG-20260702-E69E/tc1_usage_limit/expected.json,tests/oracles/BUG-20260702-E69E/tc1_usage_limit/input.json,tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/expected.json,tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/input.json,tests/oracles/BUG-20260702-E69E/tc4_real_reject/expected.json,tests/oracles/BUG-20260702-E69E/tc4_real_reject/input.json,tests/oracles/BUG-20260702-E69E/tc8_approve/expected.json,tests/oracles/BUG-20260702-E69E/tc8_approve/input.json,tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/expected.json,tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/input.json"
+  },
+  "agent_run": {
+    "run_id": "dev-347786cb877432a3",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover.xml",
+    "output_sha256": "65cc2377756e35169af8427a6d17bfef05455ff823765aa575fabc041480eae1",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/agent_receipt_dev-347786cb877432a3.json",
+    "receipt_sha256": "35b312f4d58117fb3d950ddafddb44917c092c3b433ee6de7b480e5fd711271c",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\dev\\dev-347786cb877432a3.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\dev\\dev-347786cb877432a3.json",
+      "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/agent_receipt_dev-347786cb877432a3.json",
+      "sha256": "35b312f4d58117fb3d950ddafddb44917c092c3b433ee6de7b480e5fd711271c",
+      "size_bytes": 586,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/report_dev_handover.xml",
+      "sha256": "65cc2377756e35169af8427a6d17bfef05455ff823765aa575fabc041480eae1",
+      "size_bytes": 4823,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/scope_manifest_scope_manifest.json",
+      "sha256": "a63e27a426484bcff00c682fb23ab27f205cf23d12a9aa82ead615fd18363cbe",
+      "size_bytes": 1759,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "5fac4ae0797e1eb9fa2ad623f154a873c05b457cdd376c405bfbe4bda4c3b45a",
+      "size_bytes": 1285182
+    },
+    {
+      "path": "tests/e2e/test_codex_cost_optimization_9f5e.py",
+      "sha256": "73f7852e3f7c431b73a574426121db679154aadd1f60054659c336dbde230ed8",
+      "size_bytes": 18329
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc1_usage_limit/expected.json",
+      "sha256": "976ce76f4b3d96788f2f4c6ce4e73c56c1f5cae0ad790467712e57e356cc5717",
+      "size_bytes": 159
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc1_usage_limit/input.json",
+      "sha256": "7ac85b35c53870dc12debc52280cbe6fd36d00b81af92287e58e54443b63f8d2",
+      "size_bytes": 315
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/expected.json",
+      "sha256": "84d6b9cb0ae94525f0825cb38d7fb957b2090110a1c0d6d490c666390f1b54fd",
+      "size_bytes": 159
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/input.json",
+      "sha256": "d8e4db6e8932d060a29921208522ab9db7cfe7a9eeeac44a2f6fac7f297b8819",
+      "size_bytes": 299
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc4_real_reject/expected.json",
+      "sha256": "ada8325d404841b352215e6c090cf53a3759b608bc970316a0e7504bc48ae0ad",
+      "size_bytes": 154
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc4_real_reject/input.json",
+      "sha256": "d4832390d2005070611a49ba758b2476ba6858c1925c5ce2a27997c4268a2b9a",
+      "size_bytes": 382
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc8_approve/expected.json",
+      "sha256": "c1614897468cb0c233d40f2ceed76e3277ed435fecd228dc0a7702310f0811a0",
+      "size_bytes": 153
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc8_approve/input.json",
+      "sha256": "24bc33f07bceefd55aba9b19bfe7e31726a5a16e0179754e852fafedfc3d5081",
+      "size_bytes": 276
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/expected.json",
+      "sha256": "d49cb8ad41003935954ce45790cbdf06d27c43795fe7a338662917e7669e918a",
+      "size_bytes": 167
+    },
+    {
+      "path": "tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/input.json",
+      "sha256": "d1ccf47b47d464519bbf9b20e35080818e1d1cfce54f0a588996cff1485fbc7b",
+      "size_bytes": 286
+    }
+  ],
+  "local_only_files": []
+}

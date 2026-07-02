@@ -1,0 +1,52 @@
+﻿{
+  "pipeline_id": "BUG-20260702-E69E",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_classify_codex_cli_error"]
+    },
+    {
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_cmd_gates_codex_review (스키마 확장)"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_check_codex_rate_limit"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_cmd_gates_codex_review (복구 명령 인자)"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_codex_review_snapshot"]
+    },
+    {
+      "id": "MT-6",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_append_codex_history"]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "tests/e2e/test_codex_cost_optimization_9f5e.py",
+        "tests/oracles/BUG-20260702-E69E/tc1_usage_limit/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc1_usage_limit/input.json",
+        "tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/input.json",
+        "tests/oracles/BUG-20260702-E69E/tc4_real_reject/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc4_real_reject/input.json",
+        "tests/oracles/BUG-20260702-E69E/tc8_approve/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc8_approve/input.json",
+        "tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/input.json"
+      ],
+      "affected_functions": ["test_tc1_* ~ test_tc10_*"]
+    }
+  ]
+}
