@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PM Planner Agent Output for BUG-20260702-E69E -->
+<!-- Codex Review 상태 모델 분리 — CLI 오류(usage limit/timeout/network)를 verdict=REJECT로 오기록하는 구조적 결함 수정 -->
+
+<decomposition_audit>
+  <audit_result>SPLIT_REQUIRED</audit_result>
+  <micro_task_count>7</micro_task_count>
+  <grep_executions>5</grep_executions>
+  <boundary_type>function_level</boundary_type>
+  <split_reason>
+    pipeline.py의 Codex Review 상태 모델 분리는 7개 micro_task로 분해됩니다:
+    MT-1: _classify_codex_cli_error (신규) — CLI stdout/stderr 분석하여 status/failure_code/retry_after 결정
+    MT-2: _cmd_gates_codex_review (수정) — codex_review_result.json 스키마 확장, reject_count/cli_error_count 분리
+    MT-3: _check_codex_rate_limit (신규) — reject_count 기반 rate-limit 정책 적용
+    MT-4: _cmd_gates_codex_review (수정) — --retry-cli-error, --force-review 인자 추가
+    MT-5: _codex_review_snapshot (수정) — status=APPROVED 조건 강화, ERROR 시 복구 안내
+    MT-6: _append_codex_history (신규) — append-only history event_type 기록
+    MT-7: 테스트 TC-1 ~ TC-10 (신규 파일) — 상태 모델 검증 테스트
+  </split_reason>
+  <file_count>2</file_count>
+  <function_count>8</function_count>
+  <line_estimate>540</line_estimate>
+  <mt_coverage>
+    <mt id="MT-1" files="pipeline.py" functions="_classify_codex_cli_error" />
+    <mt id="MT-2" files="pipeline.py" functions="_cmd_gates_codex_review" />
+    <mt id="MT-3" files="pipeline.py" functions="_check_codex_rate_limit" />
+    <mt id="MT-4" files="pipeline.py" functions="_cmd_gates_codex_review" />
+    <mt id="MT-5" files="pipeline.py" functions="_codex_review_snapshot" />
+    <mt id="MT-6" files="pipeline.py" functions="_append_codex_history" />
+    <mt id="MT-7" files="tests/e2e/test_codex_cost_optimization_9f5e.py" functions="test_tc1_*...test_tc10_*" />
+  </mt_coverage>
+  <grep_validation>
+    <item pattern="def _cmd_gates_codex_review" count="1" executed="true" />
+    <item pattern="def _codex_review_snapshot" count="1" executed="true" />
+    <item pattern="_classify_codex_cli_error" count="0" note="신규 함수" executed="true" />
+    <item pattern="_check_codex_rate_limit" count="0" note="신규 함수" executed="true" />
+    <item pattern="_append_codex_history" count="0" note="신규 함수" executed="true" />
+  </grep_validation>
+</decomposition_audit>
+
+<step_plan>
+  <pipeline_id>BUG-20260702-E69E</pipeline_id>
+
+  <task_complexity>
+    <execution_profile>HIGH_RISK</execution_profile>
+    <reason>pipeline.py 핵심 상태 모델(codex_review_result.json) 스키마 변경, rate-limit 정책 변경, gates request-accept 조건 변경 — Trust-Root 파일 수정</reason>
+    <uncertainty>
+      <p0_questions>0</p0_questions>
+      <p1_questions>1</p1_questions>
+      <output_format_clear>true</output_format_clear>
+    </uncertainty>
+    <blast_radius>
+      <expected_changed_files>2</expected_changed_files>
+      <expected_changed_functions>8</expected_changed_functions>
+      <expected_changed_lines>540</expected_changed_lines>
+    </blast_radius>
+    <risk_flags>
+      <data_deletion>false</data_deletion>
+      <file_move>false</file_move>
+      <external_api>false</external_api>
+      <auth_or_secret>false</auth_or_secret>
+      <pipeline_protocol>true</pipeline_protocol>
+      <build_or_deploy>false</build_or_deploy>
+      <core_parser_logic>true</core_parser_logic>
+      <database_or_migration>false</database_or_migration>
+      <new_dependency>false</new_dependency>
+    </risk_flags>
+  </task_complexity>
+
+  <design_confirmation>
+    <module_split_presented>true</module_split_presented>
+    <module_split_user_confirmed>true</module_split_user_confirmed>
+    <maintenance_priority>maintainability_first</maintenance_priority>
+    <low_value_questions_filtered>true</low_value_questions_filtered>
+    <filter_summary>P2 내부 코드 스타일 질문(변수명, 에러 메시지 형식, 로그 포맷)은 묻지 않고 유지보수성 우선 원칙으로 처리했습니다. 신규 함수명은 기존 pipeline.py 네이밍 패턴(_verb_noun)을 따릅니다.</filter_summary>
+    <decision_questions>
+      <question id="DQ-1" priority="P1" category="module_split" mt_id="MT-1">
+        <user_facing_question>Codex CLI 오류(사용량 한도, 타임아웃, 네트워크 오류)를 구분하는 상태 모델을 pipeline.py 내부에 새로 만들고, codex_review_result.json 스키마를 확장하면 됩니다. 사용자 요청대로 이 방식으로 진행할까요?</user_facing_question>
+        <evidence>IMP-20260701-9F5E REJECT 사유: Codex CLI 사용량 한도 초과("You've hit your usage limit. Try again at 11:34 AM")가 실제 Codex REJECT verdict로 오기록되어 reject_count가 증가하고 rate-limit이 적용됨. 현재 codex_review_result.json은 verdict(APPROVE_TO_USER/REJECT)만 기록하고 CLI 호출 자체의 성공/실패를 구분하지 않음.</evidence>
+        <why_it_matters>CLI 오류가 실제 REJECT처럼 reject_count에 반영되면, 일시적인 rate limit 메시지 때문에 사용자 승인 요청이 불필요하게 차단됩니다. 사용자는 11:34 AM까지 기다렸다가 재시도하면 되는데, 파이프라인이 영구 REJECT처럼 처리하여 복구가 어려워집니다.</why_it_matters>
+        <recommended_option>A</recommended_option>
+        <options>
+          <option id="A">
+            <label>pipeline.py에 상태 모델 분리 추가 (사용자 요청대로)</label>
+            <benefit>CLI 오류(usage limit/timeout/network)와 실제 REJECT가 명확히 구분됨. --retry-cli-error로 CLI 오류만 재시도 가능. reject_count는 실제 REJECT만 반영하여 rate-limit 정확도 향상.</benefit>
+            <cost>pipeline.py 변경량 증가(약 290줄), 신규 테스트 10개 추가 필요, codex_review_result.json 스키마 버전 업그레이드.</cost>
+          </option>
+          <option id="B">
+            <label>현재 구조 유지 — CLI 오류 시 사용자에게 수동 복구 안내만</label>
+            <benefit>pipeline.py 변경 최소화.</benefit>
+            <cost>CLI 오류와 실제 REJECT 구분 불가, reject_count 오염 지속, rate-limit 오발동 계속, 사용자가 매번 수동으로 상태 파일을 편집해야 함.</cost>
+          </option>
+        </options>
+        <user_answer>사용자 요청대로 A안(pipeline.py 상태 모델 분리)으로 진행 — IMP-20260701-9F5E REJECT 사유가 정확히 이 문제이므로 근본 수정 필요</user_answer>
+      </question>
+    </decision_questions>
+  </design_confirmation>
+
+  <requirements>
+    <requirement id="REQ-1">codex_review_result.json에 status 필드 추가 (APPROVED/REJECTED/ERROR/BLOCKED/RATE_LIMITED)</requirement>
+    <requirement id="REQ-2">reject_count와 cli_error_count를 분리하여 실제 REJECT만 reject_count에 반영</requirement>
+    <requirement id="REQ-3">실제 REJECT 2회 이상만 reject rate-limit 적용, CLI 오류는 rate-limit 미적용</requirement>
+    <requirement id="REQ-4">--retry-cli-error 복구 명령 추가 (CLI 오류 재시도), --force-review로 실제 REJECT rate-limit 수동 우회</requirement>
+    <requirement id="REQ-5">gates request-accept 통과 조건: status=APPROVED AND verdict=APPROVE_TO_USER</requirement>
+    <requirement id="REQ-6">status=ERROR 시 승인 코드 미출력, 복구 안내 출력</requirement>
+    <requirement id="REQ-7">verdict parser에서 usage limit/INFO/WARNING/empty stdout을 status=ERROR로 분류</requirement>
+    <requirement id="REQ-8">append-only history에 event_type(codex_cli_error/codex_verdict) 추가</requirement>
+    <requirement id="REQ-9">TC-1 ~ TC-10 테스트 추가 (PIPELINE_STATE_PATH 격리 + subprocess 기반)</requirement>
+  </requirements>
+
+  <micro_tasks>
+    <micro_task id="MT-1">
+      <affected_function>_classify_codex_cli_error</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_classify_codex_cli_error</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 함수: CLI exit_code, stdout, stderr를 분석하여 status/failure_code/retry_after dict 반환</change_summary>
+      <line_estimate>45</line_estimate>
+      <covers_ac>AC-1,AC-7</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-2">
+      <affected_function>_cmd_gates_codex_review (스키마 확장)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>argparse subparser gates codex-review 핸들러</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _cmd_gates_codex_review</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>codex_review_result.json 스키마 확장: schema_version=3, status/failure_code/retry_after/codex_cli_called/codex_cli_exit_code/codex_cli_error_type 필드 추가. reject_count/cli_error_count 분리 기록.</change_summary>
+      <line_estimate>80</line_estimate>
+      <covers_ac>AC-1,AC-2,AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-3">
+      <affected_function>_check_codex_rate_limit</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_check_codex_rate_limit</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 함수: reject_count >= 2이면 RATE_LIMITED 반환. cli_error_count는 rate-limit 미적용. --force-review 플래그 처리.</change_summary>
+      <line_estimate>35</line_estimate>
+      <covers_ac>AC-3,AC-5,AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-4">
+      <affected_function>_cmd_gates_codex_review (복구 명령 인자)</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>argparse subparser gates codex-review</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>--force-review|--retry-cli-error</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>--retry-cli-error: status=ERROR인 이전 기록이 있을 때 재시도 허용. --force-review: reject_count >= 2여도 강제 진행(기존 의미 유지). argparse 인자 추가 및 핸들러 분기.</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-4</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-5">
+      <affected_function>_codex_review_snapshot</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>_cmd_gates_request_accept</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>def _codex_review_snapshot</pattern>
+        <match_count>1</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>status=APPROVED AND verdict=APPROVE_TO_USER 조건 검증 강화. status=ERROR/BLOCKED/RATE_LIMITED 시 codex_review_error BLOCKED + 복구 안내 메시지 출력. 승인 코드 미발급.</change_summary>
+      <line_estimate>50</line_estimate>
+      <covers_ac>AC-5,AC-6</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-6">
+      <affected_function>_append_codex_history</affected_function>
+      <target_files>
+        <file>pipeline.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>_append_codex_history</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 함수: .pipeline/codex_review_history.jsonl에 append-only 이벤트 기록. event_type(codex_cli_error/codex_verdict), counts_toward_reject_rate_limit 필드 포함.</change_summary>
+      <line_estimate>40</line_estimate>
+      <covers_ac>AC-8</covers_ac>
+    </micro_task>
+
+    <micro_task id="MT-7">
+      <affected_function>test_tc1_* ~ test_tc10_*</affected_function>
+      <target_files>
+        <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+      </target_files>
+      <affected_call_sites>
+        <site>none</site>
+      </affected_call_sites>
+      <grep_evidence>
+        <pattern>test_codex_cost_optimization_9f5e</pattern>
+        <match_count>0</match_count>
+        <executed>true</executed>
+      </grep_evidence>
+      <change_summary>신규 파일 생성: TC-1 ~ TC-10 테스트 추가. 각 테스트는 PIPELINE_STATE_PATH 격리 + subprocess 기반 실제 CLI 경로 사용. final_state assertion으로 status/reject_count/cli_error_count 검증.</change_summary>
+      <line_estimate>250</line_estimate>
+      <covers_ac>AC-9</covers_ac>
+    </micro_task>
+  </micro_tasks>
+
+  <acceptance_criteria>
+    <criterion id="AC-1" must_verify="true" source="user" user_visible="true">
+      <text>codex_review_result.json의 status 필드가 APPROVED/REJECTED/ERROR/BLOCKED/RATE_LIMITED 중 하나로 기록되고, CLI stdout에 "You've hit your usage limit"가 포함되면 status=ERROR, failure_code=codex_cli_usage_limit, retry_after 필드에 시간값(예: "11:34 AM")이 기록된다</text>
+    </criterion>
+    <criterion id="AC-2" must_verify="true" source="user" user_visible="true">
+      <text>usage limit 실패 시 reject_count가 증가하지 않고(0 유지 또는 기존값 유지), cli_error_count가 1 증가한다</text>
+    </criterion>
+    <criterion id="AC-3" must_verify="true" source="user" user_visible="true">
+      <text>실제 REJECT("REJECT - ..." 첫 줄 반환) 2회 이상만 reject rate-limit이 적용되어 status=RATE_LIMITED가 되고, CLI 오류(usage limit/timeout/network)는 횟수와 관계없이 rate-limit 미적용</text>
+    </criterion>
+    <criterion id="AC-4" must_verify="true" source="user" user_visible="true">
+      <text>--retry-cli-error 명령으로 status=ERROR인 이전 기록을 무시하고 CLI 재호출이 가능하고, --force-review로 reject_count >= 2인 rate-limit을 수동 우회하여 강제 진행 가능</text>
+    </criterion>
+    <criterion id="AC-5" must_verify="true" source="user" user_visible="true">
+      <text>gates request-accept 통과 조건: status=APPROVED AND verdict=APPROVE_TO_USER AND stale 검증(pr_head_sha, packet_sha256) PASS. 그 외 상태는 모두 BLOCKED</text>
+    </criterion>
+    <criterion id="AC-6" must_verify="true" source="user" user_visible="true">
+      <text>status=ERROR 시 승인 코드 미출력, 대신 "[PIPELINE ERROR] [CODEX REVIEW ERROR] failure_code=codex_cli_usage_limit\nretry_after: 11:34 AM\n복구 명령: python pipeline.py gates codex-review --retry-cli-error" 형식의 복구 안내 출력</text>
+    </criterion>
+    <criterion id="AC-7" must_verify="true" source="user" user_visible="true">
+      <text>CLI non-zero exit + stderr만 출력, timeout, network error 시 모두 status=ERROR (verdict=null), failure_code는 codex_cli_nonzero/codex_cli_timeout/codex_cli_network_error로 구분 기록</text>
+    </criterion>
+    <criterion id="AC-8" must_verify="true" source="user" user_visible="true">
+      <text>.pipeline/codex_review_history.jsonl에 append-only 이벤트가 기록되고, 각 이벤트에 event_type(codex_cli_error/codex_verdict)과 counts_toward_reject_rate_limit(true/false) 필드가 포함된다</text>
+    </criterion>
+    <criterion id="AC-9" must_verify="true" source="user" user_visible="true">
+      <text>tests/e2e/test_codex_cost_optimization_9f5e.py에 TC-1 ~ TC-10 테스트 10개가 추가되고, 모든 테스트가 PIPELINE_STATE_PATH 격리 + subprocess 기반 실제 CLI 경로를 사용하며, final_state JSON 필드를 assertion 대상으로 하여 PASS한다</text>
+    </criterion>
+  </acceptance_criteria>
+
+  <oracle_spec>
+    <storage_root>tests/oracles/BUG-20260702-E69E</storage_root>
+    <cases>
+      <case id="tc1_usage_limit" kind="edge">
+        <description>TC-1: Codex CLI stdout에 "You've hit your usage limit" 포함 시 status=ERROR</description>
+        <input_file>tests/oracles/BUG-20260702-E69E/tc1_usage_limit/input.json</input_file>
+        <expected_file>tests/oracles/BUG-20260702-E69E/tc1_usage_limit/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="tc2_usage_limit_no_reject_count" kind="edge">
+        <description>TC-2: usage limit 실패 시 reject_count 미증가</description>
+        <input_file>tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/input.json</input_file>
+        <expected_file>tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="tc4_real_reject" kind="normal">
+        <description>TC-4: 실제 REJECT 반환 시 status=REJECTED, reject_count 증가</description>
+        <input_file>tests/oracles/BUG-20260702-E69E/tc4_real_reject/input.json</input_file>
+        <expected_file>tests/oracles/BUG-20260702-E69E/tc4_real_reject/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="tc8_approve" kind="normal">
+        <description>TC-8: APPROVE_TO_USER 반환 시 status=APPROVED, request-accept 통과</description>
+        <input_file>tests/oracles/BUG-20260702-E69E/tc8_approve/input.json</input_file>
+        <expected_file>tests/oracles/BUG-20260702-E69E/tc8_approve/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+      <case id="tc9_cli_nonzero_stderr" kind="edge">
+        <description>TC-9: CLI non-zero exit + stderr만 출력 시 status=ERROR (REJECTED 아님)</description>
+        <input_file>tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/input.json</input_file>
+        <expected_file>tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/expected.json</expected_file>
+        <expected_source>user_provided</expected_source>
+      </case>
+    </cases>
+  </oracle_spec>
+
+  <python_version>3.10 — pipeline.py 및 테스트 환경 일관성</python_version>
+
+  <forbidden>
+    <item>_parse_codex_verdict의 exact-match 로직 변경 (기존 보안 요건 유지)</item>
+    <item>nonce 생성/검증/consume 보안 로직 약화</item>
+    <item>Codex APPROVED 전 _post_github_pending_acceptance_comment 호출 경로 생성</item>
+    <item>status=APPROVED 외 상태에서 request-accept 승인 코드 출력</item>
+    <item>gates accept 자동 실행</item>
+    <item>PR #780 수정 (BUG-20260628-1AAC, HALTED)</item>
+    <item>Hook 파일(.claude/hooks/codex_user_acceptance_review.py) 수정 — 이 파이프라인은 pipeline.py만 대상</item>
+  </forbidden>
+
+  <handover_template>
+    <dev_to_qa_handover_example>
+      <from>dev-agent</from>
+      <to>qa-agent</to>
+      <status>READY_FOR_QA</status>
+      <evidence>
+        <file>pipeline.py</file>
+        <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+      </evidence>
+    </dev_to_qa_handover_example>
+  </handover_template>
+</step_plan>
+
+<askuser>
+  <question id="AQ-1" priority="P1">
+    Codex CLI 오류(사용량 한도, 타임아웃, 네트워크 오류)를 구분하는 상태 모델을 pipeline.py 내부에 새로 만들고, codex_review_result.json 스키마를 확장하면 됩니다. 사용자 요청대로 이 방식으로 진행할까요?
+
+    **근거:** IMP-20260701-9F5E REJECT 사유가 정확히 이 문제입니다 — Codex CLI 사용량 한도 초과 메시지("You've hit your usage limit. Try again at 11:34 AM")가 실제 REJECT로 오기록되어 reject_count가 증가하고 rate-limit이 적용되었습니다.
+
+    **추천:** A안 (pipeline.py 상태 모델 분리) — CLI 오류와 실제 REJECT가 명확히 구분되고, --retry-cli-error로 CLI 오류만 재시도 가능합니다.
+
+    진행하시겠습니까?
+  </question>
+</askuser>
+
+<pipeline_manager_handoff>ready</pipeline_manager_handoff>
