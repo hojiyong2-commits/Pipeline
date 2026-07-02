@@ -1,8 +1,0 @@
-{
-  "status": "ERROR",
-  "error_type": "missing_executable",
-  "error_retryable": false,
-  "reject_count": 0,
-  "cli_error_count": 1,
-  "acceptance_eligible": false
-}

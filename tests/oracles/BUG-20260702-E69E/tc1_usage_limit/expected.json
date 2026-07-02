@@ -1,8 +1,0 @@
-{
-  "status": "ERROR",
-  "error_type": "usage_limit",
-  "error_retryable": true,
-  "reject_count": 0,
-  "cli_error_count": 1,
-  "acceptance_eligible": false
-}
