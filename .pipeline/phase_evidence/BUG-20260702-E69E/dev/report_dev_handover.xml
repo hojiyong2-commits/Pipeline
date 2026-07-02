@@ -1,9 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
 <handover>
   <from>dev-agent</from>
   <to>qa-agent</to>
   <status>READY_FOR_QA</status>
   <pipeline_id>BUG-20260702-E69E</pipeline_id>
-  <run_id>dev-6527841e530eda17</run_id>
+  <run_id>dev-0b59d44ade974322</run_id>
   <scope_lock_check>
     <git_diff_files>pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py, tests/oracles/BUG-20260702-E69E/**</git_diff_files>
     <manifest_files>pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py</manifest_files>
