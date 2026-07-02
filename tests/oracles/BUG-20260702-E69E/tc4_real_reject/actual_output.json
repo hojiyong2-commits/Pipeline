@@ -1,0 +1,8 @@
+{
+  "status": "REJECTED",
+  "error_type": null,
+  "error_retryable": false,
+  "reject_count": 1,
+  "cli_error_count": 0,
+  "acceptance_eligible": false
+}

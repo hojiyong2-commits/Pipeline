@@ -6899,14 +6899,73 @@ def _classify_codex_cli_error(exit_code: int, stdout: str, stderr: str) -> Dict[
     return {"error_type": "nonzero_exit", "error_retryable": True}
 
 
+# [Purpose]: BUG-20260702-E69E REJECT-2 — Codex CLI stdout의 마지막 JSON block을 파싱하여
+#            machine-readable verdict를 추출한다. startswith("REJECT") 같은 취약한 prefix 판정을
+#            대체하는 신뢰 루트다. {"verdict": "APPROVE_TO_USER"|"REJECT", "reason": ...} 형식만
+#            유효 verdict로 인정하고, REJECT는 비어있지 않은 reason을 요구한다(fail-closed).
+# [Assumptions]: Codex CLI가 JSON protocol을 지원하면 stdout 끝에 단일 JSON object를 출력한다.
+#            JSON이 없거나 형식이 다르면 None을 반환하여 호출자가 legacy fallback으로 진행한다.
+# [Vulnerability & Risks]: 알 수 없는 verdict 값이나 reason 없는 REJECT는 None(=파싱 실패)으로
+#            처리하여 임의 문자열이 verdict로 승격되는 것을 막는다.
+# [Improvement]: schema_version 필드를 강제하여 protocol 버전 협상을 정교화할 수 있다.
+def _parse_json_verdict(stdout: str) -> Optional[Dict[str, Any]]:
+    """stdout의 마지막 JSON block을 파싱하여 verdict를 추출한다.
+
+    Args:
+        stdout: Codex CLI 표준 출력 문자열.
+    Returns:
+        {"verdict": "APPROVED"|"REJECTED", "reason": str, "source": "json_protocol"}
+        또는 None (JSON 없음/파싱 실패/알 수 없는 verdict/reason 없는 REJECT).
+    """
+    # None/비str 입력 방어 — 명시적 None 반환(예외 대신 fallback 허용).
+    if stdout is None:
+        return None
+    if not isinstance(stdout, str):
+        return None
+    if not stdout:
+        return None
+
+    # 오른쪽에서 마지막 '}'를 찾고, 그에 대응하는 마지막 '{'로 JSON 블록을 추출한다.
+    end = stdout.rfind("}")
+    if end == -1:
+        return None
+    start = stdout.rfind("{", 0, end + 1)
+    if start == -1:
+        return None
+
+    json_str = stdout[start:end + 1]
+    try:
+        obj = json.loads(json_str)
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+    if not isinstance(obj, dict):
+        return None
+
+    verdict = str(obj.get("verdict", "") or "")
+    reason = str(obj.get("reason", "") or "")
+
+    if verdict == "APPROVE_TO_USER":
+        return {"verdict": "APPROVED", "reason": reason, "source": "json_protocol"}
+    if verdict == "REJECT":
+        # reason 없는 REJECT는 유효하지 않은 것으로 간주(fail-closed).
+        if not reason:
+            return None
+        return {"verdict": "REJECTED", "reason": reason, "source": "json_protocol"}
+
+    # 알 수 없는 verdict 값 → 파싱 실패로 처리(임의 문자열 승격 방지).
+    return None
+
+
 # [Purpose]: BUG-20260702-E69E MT-2 — Codex CLI 실행 결과 원시값(exit_code/stdout/stderr)을
 #            분석하여 표준화된 Codex Review 결과 dict를 반환한다. CLI 실행 실패는 REJECT로
 #            fallback하지 않고 ERROR로 분류하며, exit 0인 경우에만 stdout을 verdict로 파싱한다.
-# [Assumptions]: Codex CLI는 승인 시 stdout에 "APPROVE_TO_USER"를, 거절 시 "REJECT - <사유>"를
-#            출력한다(대소문자 무관 매칭). exit_code는 실제 subprocess 종료 코드다.
+# [Assumptions]: Codex CLI는 승인 시 stdout에 JSON verdict 또는 "APPROVE_TO_USER"를, 거절 시
+#            JSON verdict 또는 정확한 "REJECT - <사유>" 형식을 출력한다. exit_code는 실제 종료 코드다.
 # [Vulnerability & Risks]: exit 0 + 유효하지 않은 stdout은 parse_failure ERROR로 처리(fail-closed).
 #            REJECT verdict만 REJECTED로 승격되며, CLI 오류는 절대 REJECTED가 되지 않는다.
-# [Improvement]: Codex CLI가 JSON verdict를 반환하면 정규식 대신 구조화 파싱으로 전환 가능.
+#            "REJECT" 단독/"REJECTED"/"REJECT_LIMIT"/"INFO: REJECT" 등은 REJECTED로 승격되지 않는다.
+# [Improvement]: JSON protocol이 정착되면 legacy 정규식 fallback을 제거할 수 있다.
 def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str, Any]:
     """Codex CLI 실행 결과를 표준화된 Codex Review 결과 dict로 변환한다.
 
@@ -6967,10 +7026,39 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
         base["error_retryable"] = classified["error_retryable"]
         return base
 
+    # BUG-20260702-E69E REJECT-2: JSON verdict protocol을 먼저 시도(machine-readable).
+    #   startswith("REJECT") 취약 판정을 대체한다. JSON이 유효하면 그 verdict를 신뢰 루트로 사용.
+    _json_verdict = _parse_json_verdict(stripped)
+    if _json_verdict is not None:
+        if _json_verdict["verdict"] == "APPROVED":
+            return {
+                "status": "APPROVED",
+                "error_type": None,
+                "error_retryable": False,
+                "codex_cli_exit_code": exit_code,
+                "codex_cli_stdout_excerpt": stdout[:200],
+                "codex_cli_stderr_excerpt": stderr[:200],
+                "verdict": "APPROVE_TO_USER",
+                "reject_reason": None,
+            }
+        if _json_verdict["verdict"] == "REJECTED":
+            return {
+                "status": "REJECTED",
+                "error_type": None,
+                "error_retryable": False,
+                "codex_cli_exit_code": exit_code,
+                "codex_cli_stdout_excerpt": stdout[:200],
+                "codex_cli_stderr_excerpt": stderr[:200],
+                "verdict": "REJECT",
+                "reject_reason": _json_verdict["reason"],
+            }
+
     up = stripped.upper()
-    # 명시적 REJECT — "REJECT - <사유>" 또는 "REJECT" 단독.
-    if up.startswith("REJECT"):
-        # "REJECT - " 뒤의 사유를 추출 (구분자 유무 무관).
+    # Legacy fallback: 정확한 "REJECT - <사유>" 형식만 REJECTED로 승격한다.
+    #   "REJECT" 단독, "REJECTED", "REJECT_LIMIT - ...", "INFO: REJECT - ..." 등은 여기서
+    #   매치되지 않고 아래 parse_failure ERROR로 흐른다(startswith 취약 판정 제거).
+    m_reject = re.match(r"^REJECT\s+-\s+\S", stripped, re.IGNORECASE)
+    if m_reject:
         reason = ""
         m = re.match(r"^\s*REJECT\s*[-:]\s*(.+)", stripped, re.IGNORECASE | re.DOTALL)
         if m:
@@ -6986,8 +7074,11 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
             "reject_reason": reason or None,
         }
 
-    # 명시적 APPROVE_TO_USER.
-    if "APPROVE_TO_USER" in up:
+    # 명시적 APPROVE_TO_USER (legacy). BUG-20260702-E69E REJECT-2: substring 매칭은
+    #   "WARNING: APPROVE_TO_USER may be premature" 같은 진단 문구를 승인으로 오분류하므로
+    #   stripped stdout이 정확히 APPROVE_TO_USER일 때만 승격한다(fail-closed). 그 외는 아래
+    #   parse_failure ERROR로 흐른다.
+    if up == "APPROVE_TO_USER":
         return {
             "status": "APPROVED",
             "error_type": None,
@@ -7000,6 +7091,7 @@ def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str,
         }
 
     # exit 0 이지만 유효한 verdict 형식이 아님 → parse_failure ERROR (fail-closed).
+    #   "REJECT" 단독/"REJECTED"/"REJECT_LIMIT"/"INFO: REJECT" 등은 모두 여기서 처리된다.
     classified = _classify_codex_cli_error(0, stdout, stderr)
     base["error_type"] = classified["error_type"]  # parse_failure
     base["error_retryable"] = classified["error_retryable"]
@@ -7046,6 +7138,19 @@ def _append_codex_history(entry: Dict[str, Any]) -> None:
             entry.get("acceptance_eligible", status == "APPROVED")
         ),
     }
+    # BUG-20260702-E69E REJECT-1: attempt 단위 추적 필드를 있으면 보존한다(감사 추적).
+    if entry.get("attempt_id"):
+        record["attempt_id"] = str(entry.get("attempt_id"))
+    if entry.get("invalidation_reason"):
+        record["invalidation_reason"] = str(entry.get("invalidation_reason"))
+    if entry.get("invalidated_from_attempt_id"):
+        record["invalidated_from_attempt_id"] = str(entry.get("invalidated_from_attempt_id"))
+    if entry.get("changed_fields"):
+        # snapshot 변경으로 무효화된 경우, 어떤 SHA 차원이 바뀌었는지 이력에 남긴다.
+        _cf = entry.get("changed_fields")
+        record["changed_fields"] = list(_cf) if isinstance(_cf, (list, tuple)) else [str(_cf)]
+    if entry.get("snapshot_identity") and isinstance(entry.get("snapshot_identity"), dict):
+        record["snapshot_identity"] = dict(entry.get("snapshot_identity"))
     hist_path = _codex_review_history_path()
     hist_path.parent.mkdir(parents=True, exist_ok=True)
     with open(hist_path, "a", encoding="utf-8") as fh:
@@ -19036,19 +19141,25 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     prev_reject_count = 0
     prev_cli_error_count = 0
     prev_status = ""
+    _prev: Dict[str, Any] = {}
     _prev_result_path = _codex_review_result_path()
     if _prev_result_path.exists():
         try:
             with open(_prev_result_path, encoding="utf-8") as _pfh:
-                _prev = json.load(_pfh)
-            if isinstance(_prev, dict) and str(_prev.get("pipeline_id", "") or "") == pipeline_id:
+                _prev_loaded = json.load(_pfh)
+            if isinstance(_prev_loaded, dict) and str(_prev_loaded.get("pipeline_id", "") or "") == pipeline_id:
+                _prev = _prev_loaded
                 prev_reject_count = int(_prev.get("reject_count", 0) or 0)
                 prev_cli_error_count = int(_prev.get("cli_error_count", 0) or 0)
                 prev_status = str(_prev.get("status", "") or "")
         except (OSError, json.JSONDecodeError, ValueError, TypeError):
+            _prev = {}
             prev_reject_count = 0
             prev_cli_error_count = 0
             prev_status = ""
+
+    # BUG-20260702-E69E REJECT-1: attempt 단위 상태 모델 — 이번 시도의 고유 식별자를 발급한다.
+    attempt_id = _generate_attempt_id()
 
     # BUG-20260702-E69E MT-4/MT-5/MT-7: --retry-cli-error는 ERROR 상태 기록에서만 허용한다.
     #   REJECTED 상태에서는 --retry-cli-error로 우회 불가(별도 --force-review 필요).
@@ -19058,6 +19169,30 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             "  이전 Codex Review 결과가 REJECTED입니다 — --retry-cli-error로 우회할 수 없습니다.\n"
             "  REJECT는 실제 거절이므로 재검토가 필요합니다 (--force-review 사용)."
         )
+
+    # BUG-20260702-E69E REJECT-1: --retry-cli-error + 이전 ERROR 상태에서는 snapshot identity를
+    #   검증한다. 이전 ERROR attempt가 본 snapshot(pr_head_sha/packet_sha256)이 현재와 다르면,
+    #   그 검토는 다른 대상에 대한 것이므로 재사용할 수 없다 → 이전 attempt를 무효화하고 새 Codex
+    #   Review를 요구한다(fail-closed). 이전 값이 빈 문자열이면 비교 불가 → 새 attempt로 진행 허용.
+    if retry_cli_error and prev_status == "ERROR":
+        _prev_attempt_id = str(_prev.get("attempt_id", "") or "unknown")
+        # 6개 차원(review_bundle/contract/pr_head/packet/pr_body_candidate/staging)을
+        # 관측 가능한 범위 내에서 비교한다. 하나라도 관측된 차원의 값이 다르면 snapshot 변경.
+        _prev_identity = _extract_snapshot_identity(_prev)
+        _curr_identity = _codex_snapshot_identity(pipeline_id)
+        _cmp = _snapshot_identity_matches(_prev_identity, _curr_identity)
+
+        if _cmp["changed"]:
+            # 이전 ERROR attempt를 INVALIDATED_BY_SNAPSHOT_CHANGE로 이력에 남긴다(감사 추적).
+            _invalidate_error_attempt(_prev, _cmp["changed_fields"])
+            _die(
+                "[BLOCKED] failure_code=codex_snapshot_changed_need_new_review\n"
+                "  --retry-cli-error: snapshot identity가 변경되었습니다.\n"
+                f"  변경된 차원: {', '.join(_cmp['changed_fields'])}\n"
+                f"  이전 attempt: {_prev_attempt_id} (INVALIDATED_BY_SNAPSHOT_CHANGE)\n"
+                "  새 Codex Review를 시작하세요: python pipeline.py gates codex-review ..."
+            )
+        # snapshot 동일(또는 비교 불가) → 새 attempt_id로 retry를 허용하고 아래로 진행한다.
 
     # BUG-20260702-E69E MT-2: Codex CLI 실행 원시값(exit_code/stdout/stderr)이 주어지면
     #   _run_codex_cli_review로 분류한다. CLI 실행 실패는 절대 REJECT로 fallback하지 않고 ERROR로
@@ -19094,6 +19229,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             _finish_codex_review_error(
                 state, pipeline_id, cli_run,
                 prev_reject_count, prev_cli_error_count,
+                attempt_id=attempt_id,
             )
             return  # unreachable (_finish_codex_review_error가 sys.exit)
         # ERROR가 아니면 verdict를 CLI 결과에서 도출하여 아래 정상 기록 경로로 이어간다.
@@ -19288,9 +19424,25 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     new_cli_error_count = prev_cli_error_count  # ERROR 경로는 별도 함수에서 처리됨
     acceptance_eligible = review_status == "APPROVED"
 
+    # BUG-20260702-E69E REJECT-1: 이번 attempt가 검토한 snapshot identity를 중첩 dict로 기록한다.
+    #   top-level 개별 필드(packet_sha256/pr_head_sha/pr_body_candidate_sha256)는 하위 호환을 위해
+    #   유지하되, 6개 차원 전체(review_bundle/contract/staging 포함)를 snapshot_identity에 담아
+    #   request-accept가 현재 snapshot과 일치 검증할 수 있게 한다.
+    _snap_now = _codex_snapshot_identity(pipeline_id)
+    snapshot_identity = {
+        "pr_head_sha": pr_head_sha or _snap_now["pr_head_sha"],
+        "packet_sha256": packet_sha or _snap_now["packet_sha256"],
+        "pr_body_candidate_sha256": pr_body_sha or _snap_now["pr_body_candidate_sha256"],
+        "staging_id": _snap_now["staging_id"],
+        "contract_sha256": _snap_now["contract_sha256"],
+        "review_bundle_sha256": _snap_now["review_bundle_sha256"],
+    }
+
     result = {
-        "schema_version": 3,
+        "schema_version": 4,  # REJECT-1: attempt-model + snapshot_identity + effective pointer
         "pipeline_id": pipeline_id,
+        "attempt_id": attempt_id,
+        "effective": True,  # 이 result가 현재 유효(effective current) attempt임을 표시
         "status": review_status,
         "error_type": None,
         "error_retryable": False,
@@ -19300,6 +19452,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "codex_cli_stdout_excerpt": (cli_run.get("codex_cli_stdout_excerpt", "") if cli_run else ""),
         "codex_cli_stderr_excerpt": (cli_run.get("codex_cli_stderr_excerpt", "") if cli_run else ""),
         "verdict": verdict,
+        "verdict_source": (cli_run.get("verdict_source") if cli_run else "external_verdict"),
         "reject_reason": (cli_run.get("reject_reason") if cli_run else (reason or None)),
         "reason": reason or ("Codex 검토 통과" if verdict == "APPROVE_TO_USER" else "Codex 검토 거절"),
         "packet_sha256": packet_sha,
@@ -19307,6 +19460,10 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "github_canonical_pr_body_sha256": "",
         "pr_body_sha256": pr_body_sha,  # backward compat (= candidate, 절대 canonical 아님)
         "pr_head_sha": pr_head_sha,
+        "staging_id": snapshot_identity["staging_id"] or None,
+        "contract_sha256": snapshot_identity["contract_sha256"],
+        "review_bundle_sha256": snapshot_identity["review_bundle_sha256"],
+        "snapshot_identity": snapshot_identity,
         "acceptance_eligible": acceptance_eligible,
         "recorded_at": _now(),
     }
@@ -19314,7 +19471,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     result_path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(result_path, result)
 
-    # BUG-20260702-E69E MT-6: append-only 이력 기록.
+    # BUG-20260702-E69E MT-6/REJECT-1: append-only 이력 기록 (attempt_id + snapshot_identity).
     _append_codex_history({
         "timestamp": result["recorded_at"],
         "status": review_status,
@@ -19323,6 +19480,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "cli_error_count": new_cli_error_count,
         "counts_toward_reject_rate_limit": review_status == "REJECTED",
         "acceptance_eligible": acceptance_eligible,
+        "attempt_id": attempt_id,
+        "snapshot_identity": snapshot_identity,
     })
 
     color = GREEN if verdict == "APPROVE_TO_USER" else RED
@@ -19336,6 +19495,23 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     sys.exit(0 if verdict == "APPROVE_TO_USER" else 1)
 
 
+# [Purpose]: BUG-20260702-E69E REJECT-1 — Codex Review 시도(attempt)마다 고유 식별자를 부여하여
+#            attempt 단위 상태 모델을 성립시킨다. 이 id로 --retry-cli-error 시 이전 ERROR attempt의
+#            snapshot identity(pr_head_sha/packet_sha256)와 현재 snapshot을 비교하여 재사용/무효화를
+#            결정할 수 있다.
+# [Assumptions]: uuid4의 hex 12자리는 파이프라인 수명 내 충돌 가능성이 무시 가능할 만큼 낮다.
+# [Vulnerability & Risks]: 충돌 확률은 극히 낮으나 0은 아니다. 감사 추적용 식별자이므로 충돌이
+#            보안 경계를 무너뜨리지는 않는다(실제 판정은 snapshot SHA 비교로 이루어짐).
+# [Improvement]: 시각 prefix(cr-<epoch>-<rand>)를 추가하면 이력에서 시간순 정렬이 쉬워진다.
+def _generate_attempt_id() -> str:
+    """Codex Review 시도마다 고유한 attempt_id를 생성한다.
+
+    Returns:
+        "cr-" prefix + uuid4 hex 12자리 형식의 attempt 식별자.
+    """
+    return f"cr-{uuid.uuid4().hex[:12]}"
+
+
 # [Purpose]: BUG-20260702-E69E MT-3 — Codex CLI 실행 실패(ERROR)를 codex_review_result.json에
 #            기록하고 이력에 남긴 뒤 exit한다. ERROR는 reject_count를 증가시키지 않으며,
 #            승인 코드를 발급할 수 없다(acceptance_eligible=false). "REJECT"로 표시하지 않는다.
@@ -19343,12 +19519,202 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
 # [Vulnerability & Risks]: ERROR 결과는 APPROVED cache로 재사용될 수 없어야 한다
 #            (verdict=None, acceptance_eligible=false 보장).
 # [Improvement]: retry_after를 stdout에서 파싱하여 사용자에게 재시도 시각을 안내할 수 있다.
+def _codex_snapshot_identity(pipeline_id: str) -> Dict[str, str]:
+    """현재 Codex Review 대상 snapshot의 identity 필드를 best-effort로 계산한다.
+
+    각 필드는 조회 실패 시 빈 문자열로 안전하게 대체한다(BLOCK 아님).
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID (staging/contract 경로 계산에 사용).
+    Returns:
+        {pr_head_sha, packet_sha256, pr_body_candidate_sha256, staging_id,
+         contract_sha256, review_bundle_sha256} — 모두 str(계산 실패 시 빈 문자열).
+    Raises:
+        TypeError: pipeline_id가 None이거나 str이 아닌 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+
+    pr_head_sha = ""
+    try:
+        pr_head_sha = _get_current_pr_head_sha() or ""
+    except Exception:  # noqa: BLE001 — best-effort snapshot; 실패는 빈 문자열로 대체
+        pr_head_sha = ""
+
+    packet_sha256 = ""
+    try:
+        _pkt_path = _packet_output_path()
+        if _pkt_path.exists():
+            packet_sha256 = _sha256_file(_pkt_path)
+    except Exception:  # noqa: BLE001
+        packet_sha256 = ""
+
+    pr_body_candidate_sha256 = ""
+    staging_id = ""
+    try:
+        _stg = _load_acceptance_staging(pipeline_id)
+        if isinstance(_stg, dict):
+            pr_body_candidate_sha256 = str(_stg.get("staged_packet_sha256", "") or "")
+            _req_candidate = _stg.get("req_candidate")
+            if isinstance(_req_candidate, dict):
+                staging_id = str(_req_candidate.get("request_id", "") or "")
+    except Exception:  # noqa: BLE001
+        pr_body_candidate_sha256 = ""
+        staging_id = ""
+
+    contract_sha256 = ""
+    try:
+        _contract_path = CONTRACTS_DIR / pipeline_id / "task_contract.json"
+        if _contract_path.exists():
+            contract_sha256 = _sha256_file(_contract_path)
+    except Exception:  # noqa: BLE001
+        contract_sha256 = ""
+
+    review_bundle_sha256 = ""
+    try:
+        _bundle_path = CONTRACTS_DIR / pipeline_id / "codex_review_bundle.json"
+        if _bundle_path.exists():
+            review_bundle_sha256 = _sha256_file(_bundle_path)
+    except Exception:  # noqa: BLE001
+        review_bundle_sha256 = ""
+
+    return {
+        "pr_head_sha": pr_head_sha,
+        "packet_sha256": packet_sha256,
+        "pr_body_candidate_sha256": pr_body_candidate_sha256,
+        "staging_id": staging_id,
+        "contract_sha256": contract_sha256,
+        "review_bundle_sha256": review_bundle_sha256,
+    }
+
+
+# [Purpose]: BUG-20260702-E69E REJECT-1 — result dict에 기록된 snapshot_identity 필드들을 하나의
+#            dict로 추출한다. 신 스키마(중첩 snapshot_identity dict)와 구 스키마(top-level 개별
+#            SHA)를 모두 지원하여 --retry-cli-error 비교를 일관되게 한다.
+# [Assumptions]: result는 codex_review_result.json에서 로드한 dict다. 필드 누락은 빈 문자열로 대체.
+# [Vulnerability & Risks]: result가 None/비dict면 빈 identity(모든 필드 "")를 반환한다(fail-safe).
+# [Improvement]: 필드 목록을 상수로 추출하여 write/compare 경로 간 drift를 방지할 수 있다.
+def _extract_snapshot_identity(result: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """result dict에서 snapshot_identity 6개 필드를 표준 dict로 추출한다.
+
+    Args:
+        result: codex_review_result.json에서 로드한 dict 또는 None.
+    Returns:
+        {pr_head_sha, packet_sha256, pr_body_candidate_sha256, staging_id,
+         contract_sha256, review_bundle_sha256} — 모두 str.
+    """
+    keys = (
+        "pr_head_sha", "packet_sha256", "pr_body_candidate_sha256",
+        "staging_id", "contract_sha256", "review_bundle_sha256",
+    )
+    if not isinstance(result, dict):
+        return {k: "" for k in keys}
+    nested = result.get("snapshot_identity")
+    if isinstance(nested, dict):
+        return {k: str(nested.get(k, "") or "") for k in keys}
+    return {k: str(result.get(k, "") or "") for k in keys}
+
+
+# [Purpose]: BUG-20260702-E69E REJECT-1 — 두 snapshot_identity가 동일한 검토 대상인지 판정한다.
+#            --retry-cli-error가 "같은 snapshot 재시도"인지 "snapshot 변경 → 새 검토 필요"인지를
+#            결정하는 신뢰 루트다.
+# [Assumptions]: 두 dict 모두 _extract_snapshot_identity/_codex_snapshot_identity 형식이다.
+#            관측 가능한(비어있지 않은) 공통 SHA 차원만 비교한다. gh CLI 없는 환경에서 양쪽 모두
+#            빈 값인 차원은 비교에서 제외한다.
+# [Vulnerability & Risks]: 모든 차원이 양쪽 모두 비어있으면(관측 불가) changed=False로 판정한다.
+#            이는 격리 환경에서 무한 재시도 차단 회귀를 막기 위한 의도적 선택이며, 실제 값이 하나라도
+#            관측되면 그 차원의 불일치를 즉시 감지한다.
+# [Improvement]: 차원별 가중치를 부여해 review_bundle 변경을 packet 변경보다 강하게 취급 가능.
+def _snapshot_identity_matches(
+    prev: Dict[str, str], current: Dict[str, str]
+) -> Dict[str, Any]:
+    """두 snapshot_identity가 동일한 검토 대상을 가리키는지 판정한다.
+
+    Args:
+        prev: 이전 attempt의 snapshot_identity dict.
+        current: 현재 snapshot_identity dict.
+    Returns:
+        {"changed": bool, "changed_fields": List[str], "compared_fields": List[str]}.
+    Raises:
+        TypeError: prev/current가 None/비dict인 경우.
+    """
+    if prev is None:
+        raise TypeError("prev must not be None")
+    if not isinstance(prev, dict):
+        raise TypeError(f"prev must be dict, got {type(prev).__name__}")
+    if current is None:
+        raise TypeError("current must not be None")
+    if not isinstance(current, dict):
+        raise TypeError(f"current must be dict, got {type(current).__name__}")
+
+    keys = (
+        "review_bundle_sha256", "contract_sha256", "pr_head_sha",
+        "packet_sha256", "pr_body_candidate_sha256", "staging_id",
+    )
+    changed_fields = []
+    compared_fields = []
+    for k in keys:
+        pv = str(prev.get(k, "") or "")
+        cv = str(current.get(k, "") or "")
+        if not pv and not cv:
+            continue  # 관측 불가 차원은 제외.
+        compared_fields.append(k)
+        if pv != cv:
+            changed_fields.append(k)
+    return {
+        "changed": len(changed_fields) > 0,
+        "changed_fields": changed_fields,
+        "compared_fields": compared_fields,
+    }
+
+
+# [Purpose]: BUG-20260702-E69E REJECT-1 — 이전 ERROR attempt를 INVALIDATED_BY_SNAPSHOT_CHANGE
+#            상태로 이력에 남긴다. snapshot이 변경되어 이전 ERROR와 다른 검토 대상이 된 경우,
+#            이전 ERROR를 그대로 두지 않고 명시적으로 무효화하여 감사 추적을 남긴다.
+# [Assumptions]: prev_result는 codex_review_result.json에서 로드한 이전 ERROR dict다.
+# [Vulnerability & Risks]: 이력 append 실패(OSError)는 호출자에게 전파되지만, 무효화 이력 기록
+#            실패가 gate 판정을 바꾸지는 않는다(호출자가 즉시 BLOCK 처리).
+# [Improvement]: 무효화 사유(어떤 SHA가 바뀌었는지)를 이력에 함께 남겨 진단을 강화할 수 있다.
+def _invalidate_error_attempt(
+    prev_result: Dict[str, Any], changed_fields: List[str]
+) -> None:
+    """이전 ERROR attempt를 INVALIDATED_BY_SNAPSHOT_CHANGE로 이력에 기록한다.
+
+    Args:
+        prev_result: 이전 ERROR codex_review_result dict.
+        changed_fields: snapshot 비교에서 변경된 필드 목록.
+    Raises:
+        TypeError: prev_result가 None/비dict인 경우.
+    """
+    if prev_result is None:
+        raise TypeError("prev_result must not be None")
+    if not isinstance(prev_result, dict):
+        raise TypeError(f"prev_result must be dict, got {type(prev_result).__name__}")
+
+    _append_codex_history({
+        "timestamp": _now(),
+        "status": "INVALIDATED_BY_SNAPSHOT_CHANGE",
+        "error_type": str(prev_result.get("error_type", "") or "") or None,
+        "reject_count": int(prev_result.get("reject_count", 0) or 0),
+        "cli_error_count": int(prev_result.get("cli_error_count", 0) or 0),
+        "counts_toward_reject_rate_limit": False,
+        "acceptance_eligible": False,
+        "attempt_id": str(prev_result.get("attempt_id", "") or "") or None,
+        "invalidated_from_attempt_id": str(prev_result.get("attempt_id", "") or "") or None,
+        "invalidation_reason": "snapshot_changed_on_retry",
+        "changed_fields": list(changed_fields),
+    })
+
+
 def _finish_codex_review_error(
     state: Dict[str, Any],
     pipeline_id: str,
     cli_run: Dict[str, Any],
     prev_reject_count: int,
     prev_cli_error_count: int,
+    attempt_id: Optional[str] = None,
 ) -> NoReturn:
     """Codex CLI ERROR 결과를 기록하고 이력에 남긴 뒤 non-zero exit한다.
 
@@ -19358,14 +19724,22 @@ def _finish_codex_review_error(
         cli_run: _run_codex_cli_review가 반환한 status="ERROR" dict.
         prev_reject_count: 직전 누적 REJECTED 횟수 (그대로 유지).
         prev_cli_error_count: 직전 누적 ERROR 횟수 (+1).
+        attempt_id: 이번 시도의 고유 식별자. None이면 새로 생성한다.
     Raises:
         SystemExit: 항상 exit code 1로 종료한다 (ERROR = 승인 불가).
     """
+    # attempt 단위 상태 모델: 식별자가 없으면 생성한다.
+    attempt_id = attempt_id or _generate_attempt_id()
     error_type = str(cli_run.get("error_type", "") or "unknown")
     new_cli_error_count = prev_cli_error_count + 1
+    # BUG-20260702-E69E REJECT-1: ERROR 결과에도 snapshot identity를 실제 값으로 기록한다.
+    #   --retry-cli-error 시 이 값을 현재 snapshot과 비교하여 재사용/무효화를 판정한다.
+    _snap = _codex_snapshot_identity(pipeline_id)
     result = {
-        "schema_version": 3,
+        "schema_version": 4,  # REJECT-1: attempt-model + snapshot_identity + effective pointer
         "pipeline_id": pipeline_id,
+        "attempt_id": attempt_id,
+        "effective": True,  # 이 ERROR result가 현재 유효(effective current) attempt임을 표시
         "status": "ERROR",
         "error_type": error_type,
         "error_retryable": bool(cli_run.get("error_retryable", False)),
@@ -19375,13 +19749,18 @@ def _finish_codex_review_error(
         "codex_cli_stdout_excerpt": str(cli_run.get("codex_cli_stdout_excerpt", "") or ""),
         "codex_cli_stderr_excerpt": str(cli_run.get("codex_cli_stderr_excerpt", "") or ""),
         "verdict": None,  # ERROR는 verdict 없음 — APPROVED cache 재사용 불가
+        "verdict_source": None,
         "reject_reason": None,
         "reason": f"Codex CLI ERROR (error_type={error_type})",
-        "packet_sha256": "",
-        "pr_body_candidate_sha256": "",
+        "packet_sha256": _snap["packet_sha256"],
+        "pr_body_candidate_sha256": _snap["pr_body_candidate_sha256"],
         "github_canonical_pr_body_sha256": "",
-        "pr_body_sha256": "",
-        "pr_head_sha": "",
+        "pr_body_sha256": _snap["pr_body_candidate_sha256"],
+        "pr_head_sha": _snap["pr_head_sha"],
+        "staging_id": _snap["staging_id"] or None,
+        "contract_sha256": _snap["contract_sha256"],
+        "review_bundle_sha256": _snap["review_bundle_sha256"],
+        "snapshot_identity": dict(_snap),
         "acceptance_eligible": False,  # ERROR는 승인 코드 발급 불가
         "recorded_at": _now(),
     }
@@ -19397,6 +19776,8 @@ def _finish_codex_review_error(
         "cli_error_count": new_cli_error_count,
         "counts_toward_reject_rate_limit": False,
         "acceptance_eligible": False,
+        "attempt_id": attempt_id,
+        "snapshot_identity": dict(_snap),
     })
 
     # 사용자 출력: "REJECT"가 아니라 "Codex CLI ERROR"로 표시한다 (MT-12 핵심).

@@ -23,16 +23,23 @@ TC-5: parse failure (exit 0 + 빈 stdout) → ERROR, fail-closed.
 TC-6: ERROR 상태에서 reject rate-limit 미적용.
 TC-7: --retry-cli-error는 ERROR 상태에서만 허용.
 TC-8: REJECTED 상태에서 --retry-cli-error 우회 불가.
-TC-9: retry 시 bundle/head/packet/pr_body SHA 변경되면 차단 (skip 처리).
-TC-10: ERROR 후 재시도 성공 시 stale/provenance 검증 유지.
+TC-9: --retry-cli-error + 동일 snapshot → 새 attempt 허용(APPROVED 전환, 새 attempt_id).
+TC-10(snapshot): --retry-cli-error + snapshot 변경 → INVALIDATED_BY_SNAPSHOT_CHANGE + BLOCKED.
+TC-10(retry-success): ERROR 후 재시도 성공 시 verdict/카운터 provenance 유지.
 TC-11: ERROR 결과는 APPROVED cache로 재사용 불가.
 TC-12: 사용자 출력에 "REJECT"가 아니라 "Codex CLI ERROR"로 표시됨.
+TC-13: JSON verdict protocol / legacy 오분류 경계("REJECTED"/"REJECT_LIMIT"/"INFO: REJECT" → ERROR).
+TC-14: parse_failure ERROR는 reject_count를 올리지 않는다.
+TC-15: APPROVED result는 attempt_id + effective 포인터 + snapshot_identity(6차원)를 기록한다.
+TC-16: ERROR result도 attempt_id + snapshot_identity를 기록한다(retry 비교 근거).
+TC-17: "WARNING: APPROVE_TO_USER" 진단 접두는 APPROVED로 오분류되지 않는다.
 """
 import subprocess
 import sys
 import os
 import json
 import shutil
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -336,12 +343,187 @@ def test_tc8_retry_cli_error_blocked_on_rejected_state(isolated_pipeline):
     assert final["status"] == "REJECTED", final
 
 
+def _sha256_file_local(path: Path) -> str:
+    """디스크 파일의 SHA-256 hex digest를 반환한다 (pipeline._sha256_file과 동일 규칙)."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 # ---------------------------------------------------------------------------
-# TC-9: retry 시 bundle/head/packet/pr_body SHA 변경되면 차단 (skip 처리 가능)
+# TC-9: --retry-cli-error + 동일 snapshot → 새 attempt 허용 (APPROVED 전환 가능)
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="TC-9: SHA provenance 재검증은 request-accept publish 경로(gh 필요)에서 커버됨")
-def test_tc9_retry_sha_change_blocked(isolated_pipeline):
-    pass
+def test_tc9_retry_cli_error_same_snapshot_allows_new_attempt(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+    # cwd에 packet 파일을 만들어 결정적 packet_sha256을 갖게 한다 (gh 없음 → pr_head_sha는 빈 값).
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    packet_path.write_text("packet body for TC-9\n", encoding="utf-8")
+    packet_sha = _sha256_file_local(packet_path)
+
+    # 이전 ERROR attempt: 동일 packet_sha256을 기록 (snapshot 동일 상황).
+    _write_codex_result(tmp_path, {
+        "schema_version": 3,
+        "pipeline_id": PIPELINE_ID,
+        "attempt_id": "cr-prevattempt01",
+        "status": "ERROR",
+        "error_type": "usage_limit",
+        "reject_count": 0,
+        "cli_error_count": 1,
+        "acceptance_eligible": False,
+        "verdict": None,
+        "pr_head_sha": "",           # gh 없음 → 이전에도 빈 값
+        "packet_sha256": packet_sha,  # 현재 packet과 동일 → snapshot 변화 없음
+    })
+    result = _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", "APPROVE_TO_USER",
+        "--packet-sha256", DUMMY_PACKET_SHA,
+        "--retry-cli-error",
+    )
+    combined = result.stdout + result.stderr
+    assert "codex_snapshot_changed_need_new_review" not in combined, combined
+    final = _read_codex_result(tmp_path)
+    assert result.returncode == 0, f"동일 snapshot retry는 허용되어야 함 (stderr={result.stderr})"
+    assert final["status"] == "APPROVED", final
+    # 새 attempt_id가 생성되어 이전 값과 달라야 한다.
+    assert final.get("attempt_id", "").startswith("cr-"), final
+    assert final["attempt_id"] != "cr-prevattempt01", "retry는 새 attempt_id를 발급해야 함"
+    assert final["acceptance_eligible"] is True, final
+
+
+# ---------------------------------------------------------------------------
+# TC-10: --retry-cli-error + snapshot 변경 → codex_snapshot_changed_need_new_review BLOCKED
+# ---------------------------------------------------------------------------
+def test_tc10_snapshot_changed_blocked(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+    # 현재 cwd packet은 새 내용 → 새 SHA.
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    packet_path.write_text("NEW packet body — snapshot changed\n", encoding="utf-8")
+    curr_sha = _sha256_file_local(packet_path)
+
+    # 이전 ERROR attempt는 다른 packet_sha256을 기록 → snapshot 변경.
+    stale_sha = "b" * 64
+    assert stale_sha != curr_sha
+    _write_codex_result(tmp_path, {
+        "schema_version": 3,
+        "pipeline_id": PIPELINE_ID,
+        "attempt_id": "cr-staleattempt9",
+        "status": "ERROR",
+        "error_type": "usage_limit",
+        "reject_count": 0,
+        "cli_error_count": 1,
+        "acceptance_eligible": False,
+        "verdict": None,
+        "pr_head_sha": "",
+        "packet_sha256": stale_sha,   # 현재 packet과 다름 → snapshot 변경 탐지
+    })
+    result = _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", "APPROVE_TO_USER",
+        "--packet-sha256", DUMMY_PACKET_SHA,
+        "--retry-cli-error",
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0, "snapshot 변경 시 retry는 차단되어야 함"
+    assert "codex_snapshot_changed_need_new_review" in combined, combined
+    assert "cr-staleattempt9" in combined, "차단 메시지에 이전 attempt_id를 표시해야 함"
+    # 이력에 무효화 기록이 남아야 한다.
+    hist = _read_history(tmp_path)
+    assert any(
+        h.get("status") == "INVALIDATED_BY_SNAPSHOT_CHANGE"
+        and h.get("invalidation_reason") == "snapshot_changed_on_retry"
+        for h in hist
+    ), hist
+
+
+# ---------------------------------------------------------------------------
+# TC-13: JSON verdict protocol / legacy parse_failure 경계 검증
+# ---------------------------------------------------------------------------
+def test_tc13_parse_failure_and_json_verdict_cases(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+
+    def run_and_read(*extra):
+        # 각 케이스마다 이전 결과를 초기화하여 카운터 오염을 방지한다.
+        pipeline_dir = tmp_path / ".pipeline"
+        result_json = pipeline_dir / "codex_review_result.json"
+        if result_json.exists():
+            result_json.unlink()
+        _run_codex_review(tmp_path, state_file, *extra)
+        return _read_codex_result(tmp_path)
+
+    # "REJECTED" 단독 → ERROR (parse_failure).
+    f = run_and_read("--codex-cli-exit-code", "0", "--codex-cli-stdout", "REJECTED")
+    assert f["status"] == "ERROR" and f["error_type"] == "parse_failure", f
+
+    # "REJECT_LIMIT - reason" → ERROR (parse_failure).
+    f = run_and_read("--codex-cli-exit-code", "0", "--codex-cli-stdout", "REJECT_LIMIT - hit the cap")
+    assert f["status"] == "ERROR" and f["error_type"] == "parse_failure", f
+
+    # "INFO: REJECT - reason" → ERROR (parse_failure).
+    f = run_and_read("--codex-cli-exit-code", "0", "--codex-cli-stdout", "INFO: REJECT - context note")
+    assert f["status"] == "ERROR" and f["error_type"] == "parse_failure", f
+
+    # "REJECT" 단독 → ERROR (parse_failure).
+    f = run_and_read("--codex-cli-exit-code", "0", "--codex-cli-stdout", "REJECT")
+    assert f["status"] == "ERROR" and f["error_type"] == "parse_failure", f
+
+    # valid "REJECT - some reason" → REJECTED (legacy fallback).
+    f = run_and_read(
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", "REJECT - genuine reason here",
+        "--packet-sha256", DUMMY_PACKET_SHA,
+    )
+    assert f["status"] == "REJECTED" and f["verdict"] == "REJECT", f
+    assert f["reject_reason"] == "genuine reason here", f
+
+    # JSON {"verdict": "REJECT", "reason": "too short"} → REJECTED (JSON protocol).
+    f = run_and_read(
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", '{"verdict": "REJECT", "reason": "too short"}',
+        "--packet-sha256", DUMMY_PACKET_SHA,
+    )
+    assert f["status"] == "REJECTED" and f["reject_reason"] == "too short", f
+
+    # JSON {"verdict": "APPROVE_TO_USER"} → APPROVED (JSON protocol).
+    f = run_and_read(
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", '{"verdict": "APPROVE_TO_USER"}',
+        "--packet-sha256", DUMMY_PACKET_SHA,
+    )
+    assert f["status"] == "APPROVED" and f["verdict"] == "APPROVE_TO_USER", f
+
+    # malformed JSON (닫는 중괄호 없음, 시작이 '{') → parse_failure ERROR (fail-closed).
+    f = run_and_read("--codex-cli-exit-code", "0", "--codex-cli-stdout", "{not valid json")
+    assert f["status"] == "ERROR" and f["error_type"] == "parse_failure", f
+
+
+# ---------------------------------------------------------------------------
+# TC-14: parse_failure ERROR / JSON parse 실패는 reject_count를 올리지 않는다
+# ---------------------------------------------------------------------------
+def test_tc14_reject_count_not_increased_on_parse_failure(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+
+    # 1차: 유효 REJECT → reject_count=1.
+    _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", "REJECT - real reason",
+        "--packet-sha256", DUMMY_PACKET_SHA,
+    )
+    first = _read_codex_result(tmp_path)
+    assert first["reject_count"] == 1, first
+
+    # 2차: "REJECTED" 단독(parse_failure ERROR) → reject_count 변화 없음(=1 유지).
+    #   retry 플래그 없이 실행한다(ERROR는 rate-limit을 트리거하지 않으므로 정상 기록됨).
+    _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", "REJECTED",
+    )
+    second = _read_codex_result(tmp_path)
+    assert second["status"] == "ERROR", second
+    assert second["reject_count"] == 1, "parse_failure ERROR는 reject_count를 올리면 안 됨"
+    assert second["cli_error_count"] == 1, second
 
 
 # ---------------------------------------------------------------------------
@@ -412,3 +594,139 @@ def test_tc12_user_output_shows_codex_cli_error(isolated_pipeline):
     hist = _read_history(tmp_path)
     assert any(h["status"] == "ERROR" and h["counts_toward_reject_rate_limit"] is False
                for h in hist), hist
+
+
+# ---------------------------------------------------------------------------
+# TC-15: APPROVED result는 attempt_id + effective 포인터 + snapshot_identity를 기록한다
+#        (attempt 단위 상태 모델 구조 증명 — REJECT-1)
+# ---------------------------------------------------------------------------
+def test_tc15_approved_records_attempt_and_snapshot_identity(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    packet_path.write_text("approved packet body\n", encoding="utf-8")
+    packet_sha = _sha256_file_local(packet_path)
+
+    result = _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", '{"schema_version": 1, "verdict": "APPROVE_TO_USER", "reason": "ok"}',
+        "--packet-sha256", packet_sha,
+    )
+    assert result.returncode == 0, f"APPROVED는 exit 0이어야 함 (stderr={result.stderr})"
+    final = _read_codex_result(tmp_path)
+    assert final["status"] == "APPROVED", final
+    # attempt 단위 상태 모델: attempt_id + effective 포인터.
+    assert final.get("attempt_id", "").startswith("cr-"), final
+    assert final.get("effective") is True, "APPROVED result는 effective=true여야 함"
+    assert final.get("schema_version") == 4, "attempt-model은 schema_version 4"
+    # snapshot_identity 중첩 dict가 6개 차원을 포함해야 한다.
+    ident = final.get("snapshot_identity")
+    assert isinstance(ident, dict), final
+    for key in ("pr_head_sha", "packet_sha256", "pr_body_candidate_sha256",
+                "staging_id", "contract_sha256", "review_bundle_sha256"):
+        assert key in ident, f"snapshot_identity에 {key} 누락: {ident}"
+    # packet_sha256 차원은 검토 대상 packet SHA와 일치해야 한다.
+    assert ident["packet_sha256"] == packet_sha, ident
+    # 이력에도 APPROVED attempt가 snapshot_identity와 함께 append되어야 한다.
+    hist = _read_history(tmp_path)
+    assert any(
+        h.get("status") == "APPROVED"
+        and h.get("attempt_id", "").startswith("cr-")
+        and isinstance(h.get("snapshot_identity"), dict)
+        for h in hist
+    ), hist
+
+
+# ---------------------------------------------------------------------------
+# TC-16: ERROR result도 attempt_id + snapshot_identity를 기록한다
+#        (--retry-cli-error가 이후 snapshot 비교를 할 수 있어야 함 — REJECT-1)
+# ---------------------------------------------------------------------------
+def test_tc16_error_records_attempt_and_snapshot_identity(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    packet_path.write_text("error-time packet body\n", encoding="utf-8")
+    packet_sha = _sha256_file_local(packet_path)
+
+    _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "1",
+        "--codex-cli-stdout", "You've hit your usage limit. Try again later.",
+    )
+    final = _read_codex_result(tmp_path)
+    assert final["status"] == "ERROR", final
+    assert final["error_type"] == "usage_limit", final
+    # ERROR attempt에도 고유 attempt_id + snapshot_identity가 기록되어야 한다.
+    assert final.get("attempt_id", "").startswith("cr-"), final
+    ident = final.get("snapshot_identity")
+    assert isinstance(ident, dict), final
+    # 디스크 packet이 존재하므로 packet_sha256 차원이 실제 값으로 채워져야 한다.
+    assert ident.get("packet_sha256") == packet_sha, ident
+    # verdict는 없어야 하고 승인 불가여야 한다(ERROR는 APPROVED cache로 재사용 불가).
+    assert final.get("verdict") is None, final
+    assert final.get("acceptance_eligible") is False, final
+
+
+# ---------------------------------------------------------------------------
+# TC-17: "WARNING: APPROVE_TO_USER" 진단 접두는 APPROVED로 오분류되지 않는다 (REJECT-2)
+# ---------------------------------------------------------------------------
+def test_tc17_warning_prefixed_approve_not_misclassified(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+    result = _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout", "WARNING: APPROVE_TO_USER may be premature",
+    )
+    final = _read_codex_result(tmp_path)
+    # 진단 접두가 붙은 APPROVE_TO_USER는 verdict가 아니라 parse_failure ERROR여야 한다.
+    assert final["status"] == "ERROR", final
+    assert final["error_type"] == "parse_failure", final
+    assert final.get("verdict") is None, final
+    assert final.get("acceptance_eligible") is False, final
+    assert result.returncode != 0, "parse_failure는 non-zero exit"
+
+
+# ---------------------------------------------------------------------------
+# 구조 증명: REJECTED / REJECT_LIMIT / bare REJECT 등 misformat은 parse_failure ERROR
+# ---------------------------------------------------------------------------
+def test_tc_reject_misformat_parse_failure():
+    """REJECTED, REJECT_LIMIT, INFO: REJECT, WARNING: REJECT, bare REJECT는 parse_failure ERROR.
+
+    startswith("REJECT") 취약 판정을 제거하고 정확한 "REJECT - <사유>" 형식만 REJECTED로
+    승격됨을 단위 수준에서 증명한다(fail-closed).
+    """
+    sys.path.insert(0, str(Path(__file__).parents[2]))
+    from pipeline import _run_codex_cli_review
+
+    bad_cases = [
+        "REJECTED: security issue",
+        "REJECT_LIMIT exceeded",
+        "INFO: REJECT - something",
+        "WARNING: REJECT",
+        "REJECT",
+    ]
+    for stdout in bad_cases:
+        result = _run_codex_cli_review(0, stdout, "")
+        assert result["status"] == "ERROR", \
+            f"Expected ERROR for {stdout!r}, got {result['status']}"
+        assert result.get("error_type") == "parse_failure", \
+            f"Expected parse_failure for {stdout!r}"
+
+
+# ---------------------------------------------------------------------------
+# 구조 증명: JSON verdict protocol — REJECT는 REJECTED, 스키마 위반은 parse_failure
+# ---------------------------------------------------------------------------
+def test_tc_json_verdict_reject_count():
+    """JSON {"verdict":"REJECT"} → REJECTED. {"verdict":"REJECTED"}(오타) → parse_failure ERROR."""
+    sys.path.insert(0, str(Path(__file__).parents[2]))
+    from pipeline import _run_codex_cli_review
+
+    json_reject = '{"schema_version":1,"verdict":"REJECT","reason":"security issue"}'
+    result = _run_codex_cli_review(0, json_reject, "")
+    assert result["status"] == "REJECTED", result
+    assert result["reject_reason"] == "security issue", result
+
+    # verdict 값이 유효 집합(APPROVE_TO_USER/REJECT) 밖이면 승격하지 않고 parse_failure ERROR.
+    bad_json = '{"schema_version":1,"verdict":"REJECTED","reason":"oops"}'
+    result2 = _run_codex_cli_review(0, bad_json, "")
+    assert result2["status"] == "ERROR", result2
+    assert result2.get("error_type") == "parse_failure", result2
