@@ -7150,7 +7150,7 @@ def _append_codex_history(entry: Dict[str, Any]) -> None:
         _cf = entry.get("changed_fields")
         record["changed_fields"] = list(_cf) if isinstance(_cf, (list, tuple)) else [str(_cf)]
     if entry.get("snapshot_identity") and isinstance(entry.get("snapshot_identity"), dict):
-        record["snapshot_identity"] = dict(entry.get("snapshot_identity"))
+        record["snapshot_identity"] = dict(entry.get("snapshot_identity"))  # type: ignore[arg-type]
     hist_path = _codex_review_history_path()
     hist_path.parent.mkdir(parents=True, exist_ok=True)
     with open(hist_path, "a", encoding="utf-8") as fh:
