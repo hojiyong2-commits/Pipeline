@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_type": "agent-run-receipt-v1",
+  "pipeline_id": "BUG-20260702-E69E",
+  "phase": "qa",
+  "agent_id": "qa-agent",
+  "run_id": "qa-f882d3b716f70ef9",
+  "status": "COMPLETED",
+  "started_at": "2026-07-02T11:23:18Z",
+  "completed_at": "2026-07-02T11:29:10Z",
+  "output_file": "qa_report.xml",
+  "output_sha256": "456a2b10cffe7b97ed1443a29a87a6e5f0e4ebff0c36b22a163f549ba27f4f85",
+  "evidence_files": [],
+  "commit_sha": "0a7920d1bfaac8ee30bce381ece8cfd1692f7dba"
+}
