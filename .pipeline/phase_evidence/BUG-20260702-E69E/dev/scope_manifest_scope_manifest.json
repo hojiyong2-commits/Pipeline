@@ -2,87 +2,46 @@
   "pipeline_id": "BUG-20260702-E69E",
   "micro_tasks": [
     {
-      "id": "MT-REWORK-1",
-      "files": [
-        "pipeline.py"
-      ],
-      "affected_functions": [
-        "_run_codex_cli_review",
-        "_parse_json_verdict",
-        "_finish_codex_review_error",
-        "_cmd_gates_codex_review",
-        "_codex_review_error_blocker",
-        "_generate_attempt_id",
-        "_codex_snapshot_identity",
-        "_extract_snapshot_identity",
-        "_snapshot_identity_matches",
-        "_invalidate_error_attempt",
-        "_append_codex_history"
-      ],
-      "implemented_tasks": [
-        {
-          "mt_id": "MT-REWORK-1",
-          "implemented_ac": [
-            "AC-1",
-            "AC-2",
-            "AC-3",
-            "AC-4",
-            "AC-5",
-            "AC-6",
-            "AC-7",
-            "AC-8"
-          ],
-          "changed_files": [
-            "pipeline.py"
-          ],
-          "implementation_evidence": [
-            "_run_codex_cli_review: exit 0 stdout을 _parse_json_verdict(JSON verdict protocol)로 먼저 파싱하고, 실패 시 정확한 'REJECT - <사유>' 형식만 legacy REJECTED로 인정. 'REJECTED'/'REJECT_LIMIT'/'INFO: REJECT'/'REJECT' 단독은 parse_failure ERROR (startswith 취약 판정 제거).",
-            "_run_codex_cli_review: APPROVE_TO_USER는 정확히 'APPROVE_TO_USER'일 때만 승격 — 'WARNING: APPROVE_TO_USER' 진단 접두는 parse_failure ERROR.",
-            "_generate_attempt_id: 'cr-'+uuid4 hex 12자리로 호출마다 고유 attempt_id 발급.",
-            "_codex_snapshot_identity: pr_head_sha/packet_sha256/pr_body_candidate_sha256/staging_id/contract_sha256/review_bundle_sha256 6차원 계산.",
-            "_cmd_gates_codex_review 성공 경로: schema_version=4, attempt_id, effective=true, snapshot_identity 중첩 dict 기록.",
-            "_finish_codex_review_error: ERROR result에도 schema_version=4, attempt_id, effective=true, snapshot_identity 기록.",
-            "_cmd_gates_codex_review --retry-cli-error: 이전 ERROR snapshot_identity를 _extract_snapshot_identity로 읽어 _snapshot_identity_matches로 비교 — 동일하면 새 attempt 진행, 변경 시 _invalidate_error_attempt로 INVALIDATED_BY_SNAPSHOT_CHANGE 기록 후 codex_snapshot_changed_need_new_review BLOCKED.",
-            "_append_codex_history: append-only jsonl에 attempt_id/snapshot_identity/invalidation_reason/invalidated_from_attempt_id/changed_fields 보존.",
-            "reject rate-limit은 reject_count(REJECTED)에만 기반 — parse_failure/CLI ERROR는 reject_count 미증가."
-          ]
-        }
-      ]
+      "id": "MT-1",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_classify_codex_cli_error"]
     },
     {
-      "id": "MT-REWORK-2",
+      "id": "MT-2",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_cmd_gates_codex_review (스키마 확장)"]
+    },
+    {
+      "id": "MT-3",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_check_codex_rate_limit"]
+    },
+    {
+      "id": "MT-4",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_cmd_gates_codex_review (복구 명령 인자)"]
+    },
+    {
+      "id": "MT-5",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_codex_review_snapshot"]
+    },
+    {
+      "id": "MT-6",
+      "files": ["pipeline.py"],
+      "affected_functions": ["_append_codex_history"]
+    },
+    {
+      "id": "MT-7",
       "files": [
-        "tests/e2e/test_codex_cost_optimization_9f5e.py"
+        "tests/e2e/test_codex_cost_optimization_9f5e.py",
+        "tests/oracles/BUG-20260702-E69E/tc1_usage_limit/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc2_high_cost/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc3_low_cost/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc4_no_usage/expected.json",
+        "tests/oracles/BUG-20260702-E69E/tc5_excessive_token/expected.json"
       ],
-      "affected_functions": [
-        "test_tc9_retry_cli_error_same_snapshot_allows_new_attempt",
-        "test_tc10_snapshot_changed_blocked",
-        "test_tc13_parse_failure_and_json_verdict_cases",
-        "test_tc14_reject_count_not_increased_on_parse_failure",
-        "test_tc15_approved_records_attempt_and_snapshot_identity",
-        "test_tc16_error_records_attempt_and_snapshot_identity",
-        "test_tc17_warning_prefixed_approve_not_misclassified"
-      ],
-      "implemented_tasks": [
-        {
-          "mt_id": "MT-REWORK-2",
-          "implemented_ac": [
-            "AC-9"
-          ],
-          "changed_files": [
-            "tests/e2e/test_codex_cost_optimization_9f5e.py"
-          ],
-          "implementation_evidence": [
-            "TC-9 skip 완전 제거 후 test_tc9_retry_cli_error_same_snapshot_allows_new_attempt로 대체: 동일 snapshot retry가 새 attempt_id로 APPROVED effective pointer 전환 증명.",
-            "test_tc10_snapshot_changed_blocked: snapshot 변경 시 codex_snapshot_changed_need_new_review BLOCKED + INVALIDATED_BY_SNAPSHOT_CHANGE 이력 증명.",
-            "test_tc13_parse_failure_and_json_verdict_cases: 오분류 경계 + JSON verdict protocol 유효 케이스 증명.",
-            "test_tc14_reject_count_not_increased_on_parse_failure: parse_failure ERROR가 reject_count 미증가 증명.",
-            "test_tc15_approved_records_attempt_and_snapshot_identity: APPROVED result의 attempt_id + effective + 6차원 snapshot_identity 증명.",
-            "test_tc16_error_records_attempt_and_snapshot_identity: ERROR result의 attempt_id + snapshot_identity 증명.",
-            "test_tc17_warning_prefixed_approve_not_misclassified: 진단 접두 오분류 방지 증명. 총 테스트 12→20, skip 0건."
-          ]
-        }
-      ]
+      "affected_functions": ["test_tc1_* ~ test_tc10_*"]
     }
   ]
 }

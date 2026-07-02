@@ -5,7 +5,7 @@
   "pipeline_id": "BUG-20260702-E69E",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "e8aaec7206db9497ff0b9479bd5b5cf36a751a68",
+  "commit_hint": "541894e2eccab5e6243d055485181031444d87be",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-07-02T22:59:18Z",
@@ -46,16 +46,16 @@
       "label": "scope_manifest",
       "source": "scope_manifest.json",
       "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/scope_manifest_scope_manifest.json",
-      "sha256": "46f51a688e2976e4ebde9df186c48f86ff43f4eede980e314974fe226c00b465",
-      "size_bytes": 4650,
+      "sha256": "e1d67869c548d0f60b931dd065d1da8fd959221130aa41932477c192b9aa4701",
+      "size_bytes": 1365,
       "requires_force_add": false
     }
   ],
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "12f841acacd318198b3a7d1e2e7e3447e4528370e30448ffef7f5e74fbb5c1c5",
-      "size_bytes": 1252776
+      "sha256": "01e8dc66799fce7316593aed3e49b14902c539eb5acc0c592bf2faf77b8b4815",
+      "size_bytes": 1305328
     }
   ],
   "local_only_files": []
