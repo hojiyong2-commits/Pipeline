@@ -1,0 +1,9 @@
+{
+  "test_case": "TC-2",
+  "description": "usage limit 실패 후 reject_count가 증가하지 않아야 함",
+  "codex_cli_exit_code": 1,
+  "codex_cli_stdout": "You've hit your usage limit. Try again at 2:00 PM.",
+  "codex_cli_stderr": "",
+  "prior_reject_count": 1,
+  "prior_cli_error_count": 0
+}

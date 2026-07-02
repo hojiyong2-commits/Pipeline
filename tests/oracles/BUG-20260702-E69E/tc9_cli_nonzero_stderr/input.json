@@ -1,0 +1,9 @@
+{
+  "test_case": "TC-9",
+  "description": "CLI non-zero exit + stderr만 출력 시 status=ERROR (REJECTED 아님)",
+  "codex_cli_exit_code": 2,
+  "codex_cli_stdout": "",
+  "codex_cli_stderr": "Error: codex: command not found",
+  "prior_reject_count": 0,
+  "prior_cli_error_count": 0
+}
