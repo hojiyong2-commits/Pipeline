@@ -51,12 +51,6 @@
       "requires_force_add": false
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "01e8dc66799fce7316593aed3e49b14902c539eb5acc0c592bf2faf77b8b4815",
-      "size_bytes": 1305328
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
