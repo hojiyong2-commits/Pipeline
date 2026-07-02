@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260701-9F5E</pipeline_id>
+  <run_id>qa-bc4398c011e212a7</run_id>
+  <round>rework3</round>
+  <handover_verified>
+    <from>dev-agent</from>
+    <evidence>dev_handover_rework_test_fix.xml, pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py</evidence>
+    <accepted>true</accepted>
+  </handover_verified>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. codex CLI는 로컬 subprocess.</wa>
+    <ui>N-A — UI 카테고리 아님 (CLI/파이프라인 로직).</ui>
+    <fs>N-A — 파일 쓰기는 기존 _write_json/_load_codex_cache 재사용, 신규 FS 로직 없음.</fs>
+    <pd>PASS — _parse_codex_verdict SSoT 함수로 verdict 판정 단일 신뢰 루트화. 인터페이스 계약(dict 반환) 명확.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — _parse_codex_verdict None/비-str TypeError 방어, 빈 출력/후행공백/사유누락 등 엣지 케이스 fail-closed 처리.</al>
+    <build>N-A — meta/CLI 로직 태스크, EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VSCE 카테고리 아님.</vsce>
+  </category_check>
+
+  <numeric_score>116</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5 (SSoT parser 단일 함수 분리) + 인터페이스계약 5/5 (dict verdict/reason 계약)</pd>
+    <al score="20" max="20">TypeError 방어 + 빈/후행공백/사유누락 엣지 fail-closed 완비</al>
+    <build score="0" max="10">N/A — 카테고리 미해당</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — 미채점</sec>
+    <total score="30" max="30"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS</numeric_verdict>
+    <note>해당 카테고리(PD 10 + AL 20)만 유효 배점 30점. CLI --numeric-score는 120점 정규화 값 116 사용 (유효 카테고리 100% 충족).</note>
+  </numeric_score_detail>
+
+  <requirement_verification>
+    <req id="1" name="_parse_codex_verdict SSoT 함수" verdict="PASS">
+      pipeline.py:19501 정의. 첫 비어있지 않은 줄 raw 보존(19521-19522, 전체 strip 미적용으로 trailing space 우회 차단), "APPROVE_TO_USER" exact == 비교(19524), "^REJECT - (.+)$" 정규식으로 사유 1자 이상 강제(19527), 그 외 codex_verdict_invalid(19531), None/비-str TypeError 방어(19514-19517).
+    </req>
+    <req id="2" name="_run_codex_cli_review에서 SSoT 호출" verdict="PASS">
+      pipeline.py:19725 `_parsed = _parse_codex_verdict(_out)` 호출 + verdict 사용(19726-19737). substring 판정 제거 주석(19724) 일치.
+    </req>
+    <req id="3" name="--verdict manual path source/eligible 마킹" verdict="PASS">
+      pipeline.py:20169 `_is_diagnostic_manual = bool(_manual_verdict)`, 20184 `source=diagnostic_manual`, 20185 `acceptance_eligible = not _is_diagnostic_manual` → --verdict 시 False.
+    </req>
+    <req id="4" name="cache hit 경로 CLI 호출 0 보장" verdict="PASS">
+      pipeline.py:19644-19645 codex_cli_called=False/call_count=0 초기화. 19648-19650 cache hit 분기에서 verdict만 캐시값으로 설정, 증가 없음. 결과 산출물(19769-19770)에 False/0 기록.
+    </req>
+    <req id="5" name="_STALE_CLAIMS SSoT + request-accept BLOCKED" verdict="PASS">
+      pipeline.py:2632 _STALE_CLAIMS_IN_CODEX_RESULT 상수 정의. 20870 source==diagnostic_manual → diagnostic_result_not_eligible BLOCKED. 20876-20883 stale 문구 발견 시 stale_claim_in_codex_result BLOCKED.
+    </req>
+    <req id="6" name="테스트 2개 production 코드 실제 호출 (rework 핵심)" verdict="PASS">
+      test_cache_hit_zero_cli_calls(1087): pipeline._codex_review_cache_path()(1100) + pipeline._load_codex_cache()(1113) 실제 호출, PIPELINE_STATE_PATH 격리(1097), codex_cli_called=False/call_count=0 assert(1123-1134). tautological 아님.
+      test_diagnostic_verdict_not_eligible(1137): run_cli(["gates","request-accept",...])(1165) subprocess 실제 실행, make_env로 PIPELINE_STATE_PATH 격리(1167), returncode!=0 + "diagnostic_result_not_eligible" in output assert(1172-1181). 실제 게이트 경로 통과. tautological 아님.
+    </req>
+  </requirement_verification>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover evidence에 pytest 35 passed + ruff 결과 포함, QA가 직접 재실행 확인</execution_check_present>
+    <execution_check_verdict>PASS — 현재 코드 기준 QA 재실행: 35 passed / 핵심 2개 PASSED</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _parse_codex_verdict 실제 호출 경로(19725) 확인, _STALE_CLAIMS 실제 사용 루프(20877) 확인, 함수 정의만 존재하는 dead code 아님</functional_binding_verified>
+  </runtime_functional_check>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>1</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>pipeline.py — handover evidence에는 test 파일만 명시되나 impact_analysis/summary에 pipeline.py 정리(상수·주석) 명시됨. git diff origin/main...HEAD 결과 pipeline.py + test 파일 모두 변경 확인. scope_creep 아님(선언된 scope 내).</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>N-A — rework round, 기존 MT 계획 하 test-fix. legacy 판정(requirements_tracking 미설정).</decomposition_audit_present>
+    <grep_evidence_present>N-A</grep_evidence_present>
+    <declared_functions>2</declared_functions>
+    <actual_modified_functions>2</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <tooling_evidence>
+    <pytest>35 passed in 22.16s (QA 재실행, HEAD 6e7c70a2). 핵심 2개 test_cache_hit_zero_cli_calls / test_diagnostic_verdict_not_eligible PASSED.</pytest>
+    <ruff>All checks passed! (pipeline.py + test 파일)</ruff>
+    <bandit>High=0 (Medium 10/Low 189은 23358줄 전체 파일의 기존 항목, rework 미도입). #nosec 처리 4건.</bandit>
+  </tooling_evidence>
+
+  <result>[PASS]</result>
+  <verdict>PASS</verdict>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음. 6개 핵심 요건 모두 현재 코드(HEAD 6e7c70a2) 기준 PASS. rework 핵심(요건 6)인 tautological 테스트 2개가 production 함수/CLI를 실제 호출하는 방식으로 교체되었음을 코드 리뷰 + 실행으로 확인.
+  </critical_issues>
+  <improvement_suggestions>
+    - _STALE_CLAIMS_IN_CODEX_RESULT의 "TODO" 문구는 대소문자 유지 substring 매칭이라 정상 문서에도 우연 매칭될 소지가 있음. 향후 정규식/경계 매칭으로 오탐 감소 가능(현재 태스크 범위 밖, 감점 아님).
+  </improvement_suggestions>
+</qa_report>
