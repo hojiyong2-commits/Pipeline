@@ -20,7 +20,7 @@
     "output_file": "dev_handover.xml",
     "output_sha256": "65cc2377756e35169af8427a6d17bfef05455ff823765aa575fabc041480eae1",
     "receipt_path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/agent_receipt_dev-347786cb877432a3.json",
-    "receipt_sha256": "35b312f4d58117fb3d950ddafddb44917c092c3b433ee6de7b480e5fd711271c",
+    "receipt_sha256": "1076b7cfe37e1c38a87d7d44e908aae96da1300a56a3319ad08166da234f0502",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\dev\\dev-347786cb877432a3.json"
   },
@@ -30,8 +30,8 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\dev\\dev-347786cb877432a3.json",
       "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/agent_receipt_dev-347786cb877432a3.json",
-      "sha256": "35b312f4d58117fb3d950ddafddb44917c092c3b433ee6de7b480e5fd711271c",
-      "size_bytes": 586,
+      "sha256": "1076b7cfe37e1c38a87d7d44e908aae96da1300a56a3319ad08166da234f0502",
+      "size_bytes": 569,
       "requires_force_add": false
     },
     {
