@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-07-02T10:59:36Z",
+  "generated_at": "2026-07-02T11:06:15Z",
   "pipeline_id": "BUG-20260702-E69E",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "0a7920d1bfaac8ee30bce381ece8cfd1692f7dba",
+  "commit_hint": "b59fb6a174ea67005ebca85c06c89fd643912bb0",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-07-02T10:59:29Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/agent_receipt_dev-347786cb877432a3.json",
       "sha256": "35b312f4d58117fb3d950ddafddb44917c092c3b433ee6de7b480e5fd711271c",
       "size_bytes": 586,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
@@ -40,7 +40,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/report_dev_handover.xml",
       "sha256": "65cc2377756e35169af8427a6d17bfef05455ff823765aa575fabc041480eae1",
       "size_bytes": 4823,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "scope_manifest",
@@ -48,7 +48,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/scope_manifest_scope_manifest.json",
       "sha256": "a63e27a426484bcff00c682fb23ab27f205cf23d12a9aa82ead615fd18363cbe",
       "size_bytes": 1759,
-      "requires_force_add": true
+      "requires_force_add": false
     }
   ],
   "workspace_file_checks": [
@@ -59,8 +59,8 @@
     },
     {
       "path": "tests/e2e/test_codex_cost_optimization_9f5e.py",
-      "sha256": "73f7852e3f7c431b73a574426121db679154aadd1f60054659c336dbde230ed8",
-      "size_bytes": 18329
+      "sha256": "8c7ecefcf1c397c6b7a25f1cb40b65a4cb0835bca6d9240f71f2aa8a499c58ba",
+      "size_bytes": 17915
     },
     {
       "path": "tests/oracles/BUG-20260702-E69E/tc1_usage_limit/expected.json",
