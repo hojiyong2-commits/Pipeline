@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-07-02T23:00:01Z",
+  "generated_at": "2026-07-02T23:02:34Z",
   "pipeline_id": "BUG-20260702-E69E",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "f61418a7ca51bbabc46a62c83aba9002f7af0a3a",
+  "commit_hint": "e8aaec7206db9497ff0b9479bd5b5cf36a751a68",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-07-02T22:59:18Z",
@@ -32,7 +32,7 @@
       "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/agent_receipt_dev-0b59d44ade974322.json",
       "sha256": "cb4fa80154422ca2a022b972b56bf127fc484a53fe7bc21873160b95deaaa219",
       "size_bytes": 502,
-      "requires_force_add": true
+      "requires_force_add": false
     },
     {
       "label": "report",
