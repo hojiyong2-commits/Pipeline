@@ -19499,15 +19499,17 @@ def _codex_review_snapshot(
 # [Vulnerability & Risks]: fail-closed 원칙 — 애매하면 무효로 처리하여 임의 승인 누출을 막는다.
 # [Improvement]: 향후 JSON 형식 verdict(예: {"verdict": ...})도 파싱하도록 확장할 수 있다.
 def _parse_codex_verdict(output: str) -> dict:
-    """SSoT Codex verdict parser — exact match only, no substring.
+    """SSoT Codex verdict parser.
 
     Args:
         output: Codex CLI stdout 전체 문자열.
     Returns:
         dict {"verdict": "APPROVE_TO_USER"|"REJECT"|"codex_verdict_invalid", "reason": str}.
-        - 첫 비어있지 않은 줄이 정확히 "APPROVE_TO_USER"이면 APPROVE_TO_USER (reason="").
-        - "REJECT - <사유>" 형태(사유 1자 이상)면 REJECT (reason=<사유>).
-        - 그 외(포함/후행공백/사유누락 등)는 codex_verdict_invalid.
+        우선순위:
+        1. 정확히 "APPROVE_TO_USER"인 줄 → APPROVE_TO_USER (reason="").
+        2. "REJECT - <사유>" 형태(사유 1자 이상)인 줄 → REJECT (reason=<사유>).
+        3. Codex 자연어 리뷰 출력(prompt 없이 실행 시): P1/blocking 이슈 → REJECT.
+        4. 그 외 → codex_verdict_invalid.
     Raises:
         TypeError: output이 None이거나 str이 아닌 경우.
     """
@@ -19519,15 +19521,55 @@ def _parse_codex_verdict(output: str) -> dict:
     # 주의: 전체 output에 .strip()을 적용하면 "APPROVE_TO_USER "의 trailing space가 제거되어
     # exact match를 우회한다. 따라서 splitlines 후 첫 비어있지 않은 줄을 raw로 보존하여 비교한다.
     lines = output.splitlines()
-    first_line = next((line for line in lines if line.strip()), "")
 
-    if first_line == "APPROVE_TO_USER":
-        return {"verdict": "APPROVE_TO_USER", "reason": ""}
+    # [경로 1] 정확한 판정 줄 탐색 — "SUCCESS:" 같은 noise 줄은 건너뛰되, 나머지는 raw로 비교.
+    # "APPROVE_TO_USER " (trailing space)는 exact match 실패로 올바르게 invalid 처리됨.
+    for line in lines:
+        if not line.strip():
+            continue
+        # noise 줄 건너뜀: Windows 프로세스 종료 메시지, Codex CLI 헤더/세션 정보 등.
+        if line.startswith("SUCCESS:") or line.startswith("OpenAI Codex"):
+            continue
+        # raw 비교 (trailing space 등은 그대로 보존 — exact match 의미).
+        if line == "APPROVE_TO_USER":
+            return {"verdict": "APPROVE_TO_USER", "reason": ""}
+        m = re.match(r'^REJECT - (.+)$', line)
+        if m:
+            return {"verdict": "REJECT", "reason": m.group(1)}
 
-    m = re.match(r'^REJECT - (.+)$', first_line)
-    if m:
-        return {"verdict": "REJECT", "reason": m.group(1)}
+    # [경로 2] Codex 자연어 리뷰 출력 (prompt 없이 --base origin/main 실행 시 발생).
+    # P1 또는 "blocking" 문구가 포함되면 REJECT.
+    # "LGTM" 또는 "no issues" 문구만 있으면 APPROVE_TO_USER.
+    # 이 경로는 fallback이며, 정확한 판정 줄이 없는 경우에만 사용한다.
+    has_p1 = any(
+        re.search(r'\[P1\]|blocking issue|introduces blocking', line, re.IGNORECASE)
+        for line in lines
+    )
+    has_p2_only = any(
+        re.search(r'\[P2\]', line, re.IGNORECASE)
+        for line in lines
+    ) and not has_p1
+    content = "\n".join(lines).lower()
+    has_lgtm = (
+        ("lgtm" in content or "no issues found" in content or "no blocking" in content)
+        and not has_p1
+    )
 
+    if has_p1:
+        # P1 이슈가 있으면 REJECT — reason은 첫 P1 이슈 라인 발췌.
+        first_p1 = next(
+            (ln.strip() for ln in lines if re.search(r'\[P1\]|blocking issue|introduces blocking', ln, re.IGNORECASE)),
+            "P1 blocking issue found in Codex review"
+        )
+        # 너무 긴 reason은 자르기 (256자).
+        reason_text = first_p1[:256]
+        return {"verdict": "REJECT", "reason": reason_text, "natural_language_output": True}
+
+    if has_lgtm or has_p2_only:
+        return {"verdict": "APPROVE_TO_USER", "reason": "", "natural_language_output": True}
+
+    # 판정 불명 — 첫 의미 있는 줄 반환.
+    first_line = next((line for line in lines if line.strip() and not line.startswith("SUCCESS:")), "")
     return {
         "verdict": "codex_verdict_invalid",
         "reason": f"unexpected output: {repr(first_line)}",
@@ -19675,30 +19717,27 @@ def _run_codex_cli_review(
                 "  Codex CLI(`codex`)가 PATH에 없습니다. 설치 후 재실행하거나\n"
                 "  수동 진단 모드(--verdict APPROVE_TO_USER|REJECT)를 사용하세요."
             )
-        # 실제 CLI 호출 — bundle 경로만 전달 (전체 diff를 인자/stdin으로 넘기지 않는다).
+        # 실제 CLI 호출 — --base origin/main 만 사용한다 (prompt 인자 제거).
+        # Codex CLI v0.130.0에서 --base <BRANCH>와 [PROMPT]는 상호 배타적이다
+        # (동시 사용 시 returncode=2, "cannot be used with" 오류 발생).
         # shutil.which가 반환한 절대 경로를 그대로 사용한다. Windows에서 codex.cmd 같은
         # 런처 스크립트는 bare name("codex")으로는 실행되지 않으므로(WinError 2) resolved
-        # 경로를 사용해야 한다. .cmd/.bat 런처는 shell=True로 실행한다.
+        # 경로를 사용해야 한다. .cmd/.bat/.ps1 런처는 shell=True로 실행한다.
         _is_windows_script = os.name == "nt" and codex_exe.lower().endswith(
-            (".cmd", ".bat")
+            (".cmd", ".bat", ".ps1")
         )
         try:
-            _review_prompt = (
-                f"Review pipeline {pipeline_id} PR changes for security violations. "
-                f"Output ONLY 'APPROVE_TO_USER' or 'REJECT - <specific reason>'. "
-                f"Bundle SHA: {stable_bundle_sha[:12]}."
-            )
             if _is_windows_script:
                 _proc = subprocess.run(
-                    f'"{codex_exe}" review --base origin/main "{_review_prompt}"',
+                    f'"{codex_exe}" review --base origin/main',
                     capture_output=True, text=True, encoding="utf-8",
-                    errors="replace", timeout=300, shell=True,  # nosec B602 — Windows .cmd/.bat 런처 전용 경로, codex_exe는 고정 실행파일 경로
+                    errors="replace", timeout=600, shell=True,  # nosec B602 — Windows .cmd/.bat/.ps1 런처 전용 경로, codex_exe는 고정 실행파일 경로
                 )
             else:
                 _proc = subprocess.run(
-                    [codex_exe, "review", "--base", "origin/main", _review_prompt],
+                    [codex_exe, "review", "--base", "origin/main"],
                     capture_output=True, text=True, encoding="utf-8",
-                    errors="replace", timeout=300,
+                    errors="replace", timeout=600,
                 )
             codex_cli_called = True
             codex_cli_call_count = 1
