@@ -6794,6 +6794,349 @@ def _codex_review_result_path() -> Path:
     return PIPELINE_CI_DIR / "codex_review_result.json"
 
 
+# ---------------------------------------------------------------------------
+# BUG-20260702-E69E: Codex CLI 실행 오류를 REJECT verdict와 분리한다.
+#   Codex가 명시적으로 "REJECT - ..."를 반환한 경우만 REJECTED이며,
+#   usage limit / timeout / network / non-zero exit / parse 실패 등 CLI 실행
+#   실패는 모두 ERROR로 분류한다. ERROR는 reject rate-limit을 트리거하지 않고,
+#   승인 코드 발급을 차단하되 --retry-cli-error로 재시도할 수 있다.
+# ---------------------------------------------------------------------------
+
+# [Purpose]: BUG-20260702-E69E MT-6 — Codex Review 이력(.pipeline/codex_review_history.jsonl)
+#            경로를 반환한다. PIPELINE_STATE_PATH 격리를 지원하여 E2E 테스트가 전역 이력을
+#            오염시키지 않도록 한다.
+# [Assumptions]: PIPELINE_STATE_PATH가 설정되면 그 state 파일과 같은 .pipeline 디렉토리에 위치한다.
+# [Vulnerability & Risks]: append-only jsonl이므로 파일 손상 시 마지막 줄만 영향받는다.
+# [Improvement]: 향후 이력 항목에 reviewer 서명/TTL을 추가해 위변조 검출을 강화할 수 있다.
+def _codex_review_history_path() -> Path:
+    """codex_review_history.jsonl (Codex Review append-only 이력) 경로를 반환한다.
+
+    Returns:
+        .pipeline/codex_review_history.jsonl 절대 경로.
+    """
+    env_state = os.environ.get("PIPELINE_STATE_PATH")
+    if env_state:
+        return Path(env_state).resolve().parent / ".pipeline" / "codex_review_history.jsonl"
+    return PIPELINE_CI_DIR / "codex_review_history.jsonl"
+
+
+# [Purpose]: BUG-20260702-E69E MT-1 — Codex CLI 실행 결과(exit_code/stdout/stderr)를 분석하여
+#            error_type과 재시도 가능 여부(error_retryable)를 반환한다. CLI 실행 실패를 Codex의
+#            REJECT verdict와 명확히 구분하기 위한 단일 분류 지점이다.
+# [Assumptions]: 호출자는 subprocess 실행 후 exit_code(int), stdout(str), stderr(str)를 그대로
+#            넘긴다. subprocess.TimeoutExpired는 호출자가 exit_code=-1 + stdout/stderr에
+#            "timeout" 문자열을 채워 넘기거나, 직접 error_type="timeout"으로 처리한다.
+# [Vulnerability & Risks]: 문자열 매칭 기반이므로 Codex CLI 메시지 문구가 바뀌면 nonzero_exit로
+#            fallback될 수 있다. 이는 fail-closed(ERROR로 처리) 방향이라 안전하다.
+# [Improvement]: Codex CLI가 구조화된 error code를 반환하면 문자열 매칭 대신 code 기반 분류로
+#            전환할 수 있다.
+def _classify_codex_cli_error(exit_code: int, stdout: str, stderr: str) -> Dict[str, Any]:
+    """Codex CLI 실행 결과를 분석하여 error 분류를 반환한다.
+
+    Args:
+        exit_code: subprocess 종료 코드 (정수). timeout은 관례상 -1로 넘길 수 있다.
+        stdout: CLI 표준 출력 문자열.
+        stderr: CLI 표준 에러 문자열.
+    Returns:
+        {"error_type": str, "error_retryable": bool} 형식의 dict.
+        error_type 값: usage_limit | timeout | missing_executable | network |
+                       parse_failure | nonzero_exit.
+    Raises:
+        TypeError: exit_code가 None/비int이거나 stdout/stderr가 None/비str인 경우.
+    """
+    if exit_code is None:
+        raise TypeError("exit_code must not be None")
+    # bool은 int의 subclass이므로 명시적으로 배제 (True/False를 exit code로 오용 방지).
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        raise TypeError(
+            f"exit_code must be int, got {type(exit_code).__name__}"
+        )
+    if stdout is None:
+        raise TypeError("stdout must not be None")
+    if not isinstance(stdout, str):
+        raise TypeError(f"stdout must be str, got {type(stdout).__name__}")
+    if stderr is None:
+        raise TypeError("stderr must not be None")
+    if not isinstance(stderr, str):
+        raise TypeError(f"stderr must be str, got {type(stderr).__name__}")
+
+    out_low = stdout.lower()
+    err_low = stderr.lower()
+    combined = out_low + "\n" + err_low
+
+    # 1) usage limit — Codex CLI가 사용량 한도에 도달한 경우. 재시도 가능(시간 경과 후).
+    if "you've hit your usage limit" in out_low or "usage limit" in combined:
+        return {"error_type": "usage_limit", "error_retryable": True}
+
+    # 2) timeout — subprocess.TimeoutExpired 또는 timeout 관련 문자열. 재시도 가능.
+    if exit_code == -1 or "timeout" in combined or "timed out" in combined:
+        return {"error_type": "timeout", "error_retryable": True}
+
+    # 3) missing_executable — codex CLI 자체가 없음. 재시도해도 동일 실패 → 재시도 불가.
+    if (
+        "not found" in err_low
+        or "command not found" in combined
+        or "no such file" in err_low
+        or "is not recognized" in err_low  # Windows: '...' is not recognized ...
+    ):
+        return {"error_type": "missing_executable", "error_retryable": False}
+
+    # 4) network — 네트워크/연결 오류. 재시도 가능.
+    if (
+        "network" in combined
+        or "connection" in combined
+        or "connect" in combined and "refused" in combined
+        or "econnreset" in combined
+        or "dns" in combined
+    ):
+        return {"error_type": "network", "error_retryable": True}
+
+    # 5) parse_failure — exit 0이지만 stdout이 비었거나 verdict로 파싱 불가. 재시도 가능.
+    if exit_code == 0:
+        return {"error_type": "parse_failure", "error_retryable": True}
+
+    # 6) nonzero_exit — 위 조건 어디에도 해당하지 않는 non-zero exit. 재시도 가능(원인 불명확).
+    return {"error_type": "nonzero_exit", "error_retryable": True}
+
+
+# [Purpose]: BUG-20260702-E69E MT-2 — Codex CLI 실행 결과 원시값(exit_code/stdout/stderr)을
+#            분석하여 표준화된 Codex Review 결과 dict를 반환한다. CLI 실행 실패는 REJECT로
+#            fallback하지 않고 ERROR로 분류하며, exit 0인 경우에만 stdout을 verdict로 파싱한다.
+# [Assumptions]: Codex CLI는 승인 시 stdout에 "APPROVE_TO_USER"를, 거절 시 "REJECT - <사유>"를
+#            출력한다(대소문자 무관 매칭). exit_code는 실제 subprocess 종료 코드다.
+# [Vulnerability & Risks]: exit 0 + 유효하지 않은 stdout은 parse_failure ERROR로 처리(fail-closed).
+#            REJECT verdict만 REJECTED로 승격되며, CLI 오류는 절대 REJECTED가 되지 않는다.
+# [Improvement]: Codex CLI가 JSON verdict를 반환하면 정규식 대신 구조화 파싱으로 전환 가능.
+def _run_codex_cli_review(exit_code: int, stdout: str, stderr: str) -> Dict[str, Any]:
+    """Codex CLI 실행 결과를 표준화된 Codex Review 결과 dict로 변환한다.
+
+    분류 규칙:
+      - exit_code != 0 → _classify_codex_cli_error 호출 → status="ERROR".
+      - exit_code == 0 이지만 stdout이 APPROVE_TO_USER / REJECT - ... 형식이 아님
+        → parse_failure status="ERROR" (fail-closed).
+      - exit_code == 0 + stdout에 "REJECT" → status="REJECTED" (verdict="REJECT").
+      - exit_code == 0 + stdout에 "APPROVE_TO_USER" → status="APPROVED".
+    CLI 실행 오류를 REJECT로 fallback하지 않는다(핵심 결함 수정).
+
+    Args:
+        exit_code: subprocess 종료 코드 (정수, timeout은 -1).
+        stdout: CLI 표준 출력.
+        stderr: CLI 표준 에러.
+    Returns:
+        dict {status, error_type, error_retryable, codex_cli_exit_code,
+              codex_cli_stdout_excerpt, codex_cli_stderr_excerpt, verdict, reject_reason}.
+    Raises:
+        TypeError: exit_code가 None/비int이거나 stdout/stderr가 None/비str인 경우.
+    """
+    if exit_code is None:
+        raise TypeError("exit_code must not be None")
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        raise TypeError(f"exit_code must be int, got {type(exit_code).__name__}")
+    if stdout is None:
+        raise TypeError("stdout must not be None")
+    if not isinstance(stdout, str):
+        raise TypeError(f"stdout must be str, got {type(stdout).__name__}")
+    if stderr is None:
+        raise TypeError("stderr must not be None")
+    if not isinstance(stderr, str):
+        raise TypeError(f"stderr must be str, got {type(stderr).__name__}")
+
+    base = {
+        "status": "ERROR",
+        "error_type": None,
+        "error_retryable": False,
+        "codex_cli_exit_code": exit_code,
+        "codex_cli_stdout_excerpt": stdout[:200],
+        "codex_cli_stderr_excerpt": stderr[:200],
+        "verdict": None,
+        "reject_reason": None,
+    }
+
+    # non-zero exit → CLI 실행 실패 → ERROR (절대 REJECT로 fallback하지 않음).
+    if exit_code != 0:
+        classified = _classify_codex_cli_error(exit_code, stdout, stderr)
+        base["error_type"] = classified["error_type"]
+        base["error_retryable"] = classified["error_retryable"]
+        return base
+
+    # exit 0 — stdout을 verdict로 파싱. 빈 stdout은 parse_failure.
+    stripped = stdout.strip()
+    if not stripped:
+        classified = _classify_codex_cli_error(0, stdout, stderr)
+        base["error_type"] = classified["error_type"]  # parse_failure
+        base["error_retryable"] = classified["error_retryable"]
+        return base
+
+    up = stripped.upper()
+    # 명시적 REJECT — "REJECT - <사유>" 또는 "REJECT" 단독.
+    if up.startswith("REJECT"):
+        # "REJECT - " 뒤의 사유를 추출 (구분자 유무 무관).
+        reason = ""
+        m = re.match(r"^\s*REJECT\s*[-:]\s*(.+)", stripped, re.IGNORECASE | re.DOTALL)
+        if m:
+            reason = m.group(1).strip()
+        return {
+            "status": "REJECTED",
+            "error_type": None,
+            "error_retryable": False,
+            "codex_cli_exit_code": exit_code,
+            "codex_cli_stdout_excerpt": stdout[:200],
+            "codex_cli_stderr_excerpt": stderr[:200],
+            "verdict": "REJECT",
+            "reject_reason": reason or None,
+        }
+
+    # 명시적 APPROVE_TO_USER.
+    if "APPROVE_TO_USER" in up:
+        return {
+            "status": "APPROVED",
+            "error_type": None,
+            "error_retryable": False,
+            "codex_cli_exit_code": exit_code,
+            "codex_cli_stdout_excerpt": stdout[:200],
+            "codex_cli_stderr_excerpt": stderr[:200],
+            "verdict": "APPROVE_TO_USER",
+            "reject_reason": None,
+        }
+
+    # exit 0 이지만 유효한 verdict 형식이 아님 → parse_failure ERROR (fail-closed).
+    classified = _classify_codex_cli_error(0, stdout, stderr)
+    base["error_type"] = classified["error_type"]  # parse_failure
+    base["error_retryable"] = classified["error_retryable"]
+    return base
+
+
+# [Purpose]: BUG-20260702-E69E MT-6 — Codex Review 결과 1건을 append-only 이력 파일에 기록한다.
+#            reject/CLI-error 카운트와 rate-limit 기여 여부를 함께 남겨 감사 추적을 가능하게 한다.
+# [Assumptions]: entry는 최소 "status" 키를 포함한다. reject_count/cli_error_count는 호출자가
+#            누적 계산하여 넘긴다(없으면 0).
+# [Vulnerability & Risks]: append 실패(OSError)는 조용히 흡수하지 않고 호출자가 인지하도록 예외를
+#            전파한다. 단, 이력 기록 실패가 gate 판정 자체를 바꾸지는 않는다.
+# [Improvement]: 이력 회전(rotation)을 추가해 파일이 무한히 커지는 것을 방지할 수 있다.
+def _append_codex_history(entry: Dict[str, Any]) -> None:
+    """Codex Review 결과 1건을 codex_review_history.jsonl에 append한다.
+
+    저장 필드(누락 시 기본값 채움):
+      timestamp, status, error_type, reject_count, cli_error_count,
+      counts_toward_reject_rate_limit, acceptance_eligible.
+
+    Args:
+        entry: 기록할 결과 dict. 최소 "status" 키 포함.
+    Raises:
+        TypeError: entry가 None이거나 dict가 아닌 경우.
+        OSError: 이력 파일 write 실패 시.
+    """
+    if entry is None:
+        raise TypeError("entry must not be None")
+    if not isinstance(entry, dict):
+        raise TypeError(f"entry must be dict, got {type(entry).__name__}")
+
+    status = str(entry.get("status", "") or "")
+    record = {
+        "timestamp": str(entry.get("timestamp", "") or _now()),
+        "status": status,
+        "error_type": entry.get("error_type"),
+        "reject_count": int(entry.get("reject_count", 0) or 0),
+        "cli_error_count": int(entry.get("cli_error_count", 0) or 0),
+        # reject rate-limit에 기여하는 것은 REJECTED 상태뿐이다.
+        "counts_toward_reject_rate_limit": bool(
+            entry.get("counts_toward_reject_rate_limit", status == "REJECTED")
+        ),
+        "acceptance_eligible": bool(
+            entry.get("acceptance_eligible", status == "APPROVED")
+        ),
+    }
+    hist_path = _codex_review_history_path()
+    hist_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(hist_path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+# [Purpose]: BUG-20260702-E69E MT-4 — Codex Review reject rate-limit을 판정한다. reject_count에만
+#            기반하며, cli_error_count(CLI 실행 실패)는 rate-limit 트리거에서 완전히 제외한다.
+# [Assumptions]: reject_count는 누적 REJECTED 횟수, cli_error_count는 누적 ERROR 횟수다.
+#            retry_cli_error=True는 --retry-cli-error 플래그(ERROR 상태 우회)를 의미한다.
+# [Vulnerability & Risks]: reject_count가 음수로 넘어오면 방어적으로 0 취급(잘못된 상태로 인한
+#            무한 우회 방지). retry_cli_error는 reject rate-limit을 우회하지 못한다(REJECT는 실제
+#            거절이므로 CLI-error 재시도로 우회 불가).
+# [Improvement]: reject 시각을 함께 받아 시간 창(window) 기반 rate-limit으로 정교화할 수 있다.
+def _check_codex_rate_limit(
+    reject_count: int,
+    cli_error_count: int = 0,
+    retry_cli_error: bool = False,
+    reject_threshold: int = 2,
+) -> Dict[str, Any]:
+    """Codex Review reject rate-limit 여부를 판정한다 (reject_count 기반).
+
+    규칙:
+      - reject_count >= reject_threshold(기본 2) → RATE_LIMITED.
+      - cli_error_count는 rate-limit 트리거에서 완전히 제외된다.
+      - retry_cli_error 플래그는 reject rate-limit을 우회하지 못한다(REJECT는 실제 거절).
+
+    Args:
+        reject_count: 누적 REJECTED 횟수.
+        cli_error_count: 누적 ERROR 횟수 (rate-limit 판정에 미사용, 진단용).
+        retry_cli_error: --retry-cli-error 플래그 여부.
+        reject_threshold: rate-limit 임계값 (기본 2).
+    Returns:
+        {"status": "OK"|"RATE_LIMITED", "reject_count": int, "cli_error_count": int,
+         "reason": str}.
+    Raises:
+        TypeError: reject_count/cli_error_count/reject_threshold가 None/비int이거나
+            retry_cli_error가 비bool인 경우.
+        ValueError: reject_threshold가 1 미만인 경우.
+    """
+    if reject_count is None:
+        raise TypeError("reject_count must not be None")
+    if isinstance(reject_count, bool) or not isinstance(reject_count, int):
+        raise TypeError(f"reject_count must be int, got {type(reject_count).__name__}")
+    if cli_error_count is None:
+        raise TypeError("cli_error_count must not be None")
+    if isinstance(cli_error_count, bool) or not isinstance(cli_error_count, int):
+        raise TypeError(
+            f"cli_error_count must be int, got {type(cli_error_count).__name__}"
+        )
+    if not isinstance(retry_cli_error, bool):
+        raise TypeError(
+            f"retry_cli_error must be bool, got {type(retry_cli_error).__name__}"
+        )
+    if reject_threshold is None:
+        raise TypeError("reject_threshold must not be None")
+    if isinstance(reject_threshold, bool) or not isinstance(reject_threshold, int):
+        raise TypeError(
+            f"reject_threshold must be int, got {type(reject_threshold).__name__}"
+        )
+    # reject_threshold는 rate-limit 하한 — 1 미만은 무의미(모든 reject 즉시 차단은 별도 정책).
+    if reject_threshold < 1:
+        raise ValueError(
+            f"reject_threshold must be >= 1, got {reject_threshold}"
+        )
+
+    # 방어적 정규화: 음수 카운트는 0으로 취급 (잘못된 상태로 인한 무한 우회 방지).
+    # negative counts are not meaningful; clamp to 0 to fail-safe.
+    eff_reject = reject_count if reject_count > 0 else 0
+    eff_cli_error = cli_error_count if cli_error_count > 0 else 0
+
+    if eff_reject >= reject_threshold:
+        return {
+            "status": "RATE_LIMITED",
+            "reject_count": eff_reject,
+            "cli_error_count": eff_cli_error,
+            "reason": (
+                f"reject_count={eff_reject} >= threshold={reject_threshold} — "
+                "Codex REJECT가 반복되어 rate-limit이 적용됩니다. "
+                "--force-review로만 우회할 수 있습니다."
+            ),
+        }
+
+    return {
+        "status": "OK",
+        "reject_count": eff_reject,
+        "cli_error_count": eff_cli_error,
+        "reason": "reject rate-limit 미적용",
+    }
+
+
 def _check_codex_review_gate(
     pipeline_id: str, state: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -18686,12 +19029,95 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     if not pipeline_id:
         _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다.")
 
-    verdict = str(getattr(args, "verdict", "") or "").strip()
+    # BUG-20260702-E69E: 직전 기록에서 reject/CLI-error 누적 카운터를 읽는다.
+    #   reject_count는 status==REJECTED일 때만, cli_error_count는 status==ERROR일 때만 누적한다.
+    retry_cli_error = bool(getattr(args, "retry_cli_error", False))
+    force_review = bool(getattr(args, "force_review", False))
+    prev_reject_count = 0
+    prev_cli_error_count = 0
+    prev_status = ""
+    _prev_result_path = _codex_review_result_path()
+    if _prev_result_path.exists():
+        try:
+            with open(_prev_result_path, encoding="utf-8") as _pfh:
+                _prev = json.load(_pfh)
+            if isinstance(_prev, dict) and str(_prev.get("pipeline_id", "") or "") == pipeline_id:
+                prev_reject_count = int(_prev.get("reject_count", 0) or 0)
+                prev_cli_error_count = int(_prev.get("cli_error_count", 0) or 0)
+                prev_status = str(_prev.get("status", "") or "")
+        except (OSError, json.JSONDecodeError, ValueError, TypeError):
+            prev_reject_count = 0
+            prev_cli_error_count = 0
+            prev_status = ""
+
+    # BUG-20260702-E69E MT-4/MT-5/MT-7: --retry-cli-error는 ERROR 상태 기록에서만 허용한다.
+    #   REJECTED 상태에서는 --retry-cli-error로 우회 불가(별도 --force-review 필요).
+    if retry_cli_error and prev_status == "REJECTED":
+        _die(
+            "[BLOCKED] failure_code=codex_retry_cli_error_on_reject\n"
+            "  이전 Codex Review 결과가 REJECTED입니다 — --retry-cli-error로 우회할 수 없습니다.\n"
+            "  REJECT는 실제 거절이므로 재검토가 필요합니다 (--force-review 사용)."
+        )
+
+    # BUG-20260702-E69E MT-2: Codex CLI 실행 원시값(exit_code/stdout/stderr)이 주어지면
+    #   _run_codex_cli_review로 분류한다. CLI 실행 실패는 절대 REJECT로 fallback하지 않고 ERROR로
+    #   기록한다. 원시값이 없으면 기존 --verdict 경로(외부 리뷰어 판정 직접 입력)를 사용한다.
+    _cli_exit_arg = getattr(args, "codex_cli_exit_code", None)
+    cli_run: Optional[Dict[str, Any]] = None
+    if _cli_exit_arg is not None:
+        try:
+            _cli_exit = int(_cli_exit_arg)
+        except (TypeError, ValueError):
+            _die(
+                "[BLOCKED] failure_code=codex_cli_exit_invalid\n"
+                f"  --codex-cli-exit-code는 정수여야 합니다. 받은 값: {_cli_exit_arg!r}"
+            )
+        _cli_stdout = str(getattr(args, "codex_cli_stdout", "") or "")
+        _cli_stderr = str(getattr(args, "codex_cli_stderr", "") or "")
+        cli_run = _run_codex_cli_review(_cli_exit, _cli_stdout, _cli_stderr)
+
+    if cli_run is not None:
+        run_status = str(cli_run.get("status", "ERROR"))
+        # reject rate-limit은 reject_count에만 기반한다. ERROR는 트리거하지 않는다.
+        prospective_reject = prev_reject_count + (1 if run_status == "REJECTED" else 0)
+        rl = _check_codex_rate_limit(
+            prospective_reject, prev_cli_error_count, retry_cli_error=retry_cli_error
+        )
+        if rl["status"] == "RATE_LIMITED" and not force_review:
+            _die(
+                "[BLOCKED] failure_code=codex_reject_rate_limited\n"
+                f"  {rl['reason']}"
+            )
+
+        if run_status == "ERROR":
+            # CLI 실행 실패 — ERROR로 기록하고 승인 코드 미발급. reject_count 증가 없음.
+            _finish_codex_review_error(
+                state, pipeline_id, cli_run,
+                prev_reject_count, prev_cli_error_count,
+            )
+            return  # unreachable (_finish_codex_review_error가 sys.exit)
+        # ERROR가 아니면 verdict를 CLI 결과에서 도출하여 아래 정상 기록 경로로 이어간다.
+        verdict = str(cli_run.get("verdict", "") or "")
+    else:
+        verdict = str(getattr(args, "verdict", "") or "").strip()
+
     if verdict not in ("APPROVE_TO_USER", "REJECT"):
         _die(
             "[BLOCKED] failure_code=codex_verdict_invalid\n"
-            "  --verdict는 정확히 APPROVE_TO_USER 또는 REJECT여야 합니다.\n"
+            "  --verdict는 정확히 APPROVE_TO_USER 또는 REJECT여야 합니다 "
+            "(또는 --codex-cli-exit-code/--codex-cli-stdout로 CLI 결과를 넘기세요).\n"
             f"  받은 값: {verdict or '(없음)'}"
+        )
+
+    # BUG-20260702-E69E: --verdict 직접 경로에서도 reject rate-limit을 적용한다.
+    _prospective_reject_v = prev_reject_count + (1 if verdict == "REJECT" else 0)
+    _rl_v = _check_codex_rate_limit(
+        _prospective_reject_v, prev_cli_error_count, retry_cli_error=retry_cli_error
+    )
+    if _rl_v["status"] == "RATE_LIMITED" and not force_review:
+        _die(
+            "[BLOCKED] failure_code=codex_reject_rate_limited\n"
+            f"  {_rl_v['reason']}"
         )
 
     # 검토 대상 packet SHA 결정 순서:
@@ -18854,29 +19280,199 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #     request-accept publish 단계가 이 필드를 채워 넣는다.
     # 기존 pr_body_sha256 필드는 backward compatibility 위해 candidate 값으로 유지한다.
     # (canonical 값을 절대 이 필드에 섞어 쓰지 않는다 — 의미 혼용 금지.)
+    # BUG-20260702-E69E MT-3: verdict → status 매핑 + reject/CLI-error 카운터 갱신.
+    #   APPROVE_TO_USER → status=APPROVED, REJECT → status=REJECTED.
+    #   reject_count는 REJECTED일 때만 +1, cli_error_count는 ERROR 경로에서만 증가(여기 미도달).
+    review_status = "APPROVED" if verdict == "APPROVE_TO_USER" else "REJECTED"
+    new_reject_count = prev_reject_count + (1 if review_status == "REJECTED" else 0)
+    new_cli_error_count = prev_cli_error_count  # ERROR 경로는 별도 함수에서 처리됨
+    acceptance_eligible = review_status == "APPROVED"
+
     result = {
-        "schema_version": 2,
+        "schema_version": 3,
         "pipeline_id": pipeline_id,
+        "status": review_status,
+        "error_type": None,
+        "error_retryable": False,
+        "reject_count": new_reject_count,
+        "cli_error_count": new_cli_error_count,
+        "codex_cli_exit_code": (cli_run.get("codex_cli_exit_code") if cli_run else None),
+        "codex_cli_stdout_excerpt": (cli_run.get("codex_cli_stdout_excerpt", "") if cli_run else ""),
+        "codex_cli_stderr_excerpt": (cli_run.get("codex_cli_stderr_excerpt", "") if cli_run else ""),
         "verdict": verdict,
+        "reject_reason": (cli_run.get("reject_reason") if cli_run else (reason or None)),
         "reason": reason or ("Codex 검토 통과" if verdict == "APPROVE_TO_USER" else "Codex 검토 거절"),
         "packet_sha256": packet_sha,
         "pr_body_candidate_sha256": pr_body_sha,
         "github_canonical_pr_body_sha256": "",
         "pr_body_sha256": pr_body_sha,  # backward compat (= candidate, 절대 canonical 아님)
         "pr_head_sha": pr_head_sha,
+        "acceptance_eligible": acceptance_eligible,
         "recorded_at": _now(),
     }
     result_path = _codex_review_result_path()
     result_path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(result_path, result)
 
+    # BUG-20260702-E69E MT-6: append-only 이력 기록.
+    _append_codex_history({
+        "timestamp": result["recorded_at"],
+        "status": review_status,
+        "error_type": None,
+        "reject_count": new_reject_count,
+        "cli_error_count": new_cli_error_count,
+        "counts_toward_reject_rate_limit": review_status == "REJECTED",
+        "acceptance_eligible": acceptance_eligible,
+    })
+
     color = GREEN if verdict == "APPROVE_TO_USER" else RED
     print(color(f"\n[CODEX REVIEW {verdict}] {pipeline_id}"))
+    print(f"  status: {review_status}")
     print(f"  packet_sha256: {packet_sha}")
+    print(f"  reject_count: {new_reject_count}  cli_error_count: {new_cli_error_count}")
     print(f"  result: {_display_path(result_path)}\n")
     _log_event(state, f"codex review recorded: verdict={verdict} packet_sha256={packet_sha[:12]}")
     _save(state)
     sys.exit(0 if verdict == "APPROVE_TO_USER" else 1)
+
+
+# [Purpose]: BUG-20260702-E69E MT-3 — Codex CLI 실행 실패(ERROR)를 codex_review_result.json에
+#            기록하고 이력에 남긴 뒤 exit한다. ERROR는 reject_count를 증가시키지 않으며,
+#            승인 코드를 발급할 수 없다(acceptance_eligible=false). "REJECT"로 표시하지 않는다.
+# [Assumptions]: cli_run은 _run_codex_cli_review가 반환한 status="ERROR" dict다.
+# [Vulnerability & Risks]: ERROR 결과는 APPROVED cache로 재사용될 수 없어야 한다
+#            (verdict=None, acceptance_eligible=false 보장).
+# [Improvement]: retry_after를 stdout에서 파싱하여 사용자에게 재시도 시각을 안내할 수 있다.
+def _finish_codex_review_error(
+    state: Dict[str, Any],
+    pipeline_id: str,
+    cli_run: Dict[str, Any],
+    prev_reject_count: int,
+    prev_cli_error_count: int,
+) -> NoReturn:
+    """Codex CLI ERROR 결과를 기록하고 이력에 남긴 뒤 non-zero exit한다.
+
+    Args:
+        state: 활성 pipeline_state.
+        pipeline_id: 현재 파이프라인 ID.
+        cli_run: _run_codex_cli_review가 반환한 status="ERROR" dict.
+        prev_reject_count: 직전 누적 REJECTED 횟수 (그대로 유지).
+        prev_cli_error_count: 직전 누적 ERROR 횟수 (+1).
+    Raises:
+        SystemExit: 항상 exit code 1로 종료한다 (ERROR = 승인 불가).
+    """
+    error_type = str(cli_run.get("error_type", "") or "unknown")
+    new_cli_error_count = prev_cli_error_count + 1
+    result = {
+        "schema_version": 3,
+        "pipeline_id": pipeline_id,
+        "status": "ERROR",
+        "error_type": error_type,
+        "error_retryable": bool(cli_run.get("error_retryable", False)),
+        "reject_count": prev_reject_count,  # ERROR는 reject_count 증가 없음
+        "cli_error_count": new_cli_error_count,
+        "codex_cli_exit_code": cli_run.get("codex_cli_exit_code"),
+        "codex_cli_stdout_excerpt": str(cli_run.get("codex_cli_stdout_excerpt", "") or ""),
+        "codex_cli_stderr_excerpt": str(cli_run.get("codex_cli_stderr_excerpt", "") or ""),
+        "verdict": None,  # ERROR는 verdict 없음 — APPROVED cache 재사용 불가
+        "reject_reason": None,
+        "reason": f"Codex CLI ERROR (error_type={error_type})",
+        "packet_sha256": "",
+        "pr_body_candidate_sha256": "",
+        "github_canonical_pr_body_sha256": "",
+        "pr_body_sha256": "",
+        "pr_head_sha": "",
+        "acceptance_eligible": False,  # ERROR는 승인 코드 발급 불가
+        "recorded_at": _now(),
+    }
+    result_path = _codex_review_result_path()
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(result_path, result)
+
+    _append_codex_history({
+        "timestamp": result["recorded_at"],
+        "status": "ERROR",
+        "error_type": error_type,
+        "reject_count": prev_reject_count,
+        "cli_error_count": new_cli_error_count,
+        "counts_toward_reject_rate_limit": False,
+        "acceptance_eligible": False,
+    })
+
+    # 사용자 출력: "REJECT"가 아니라 "Codex CLI ERROR"로 표시한다 (MT-12 핵심).
+    print(RED(f"\n[CODEX REVIEW ERROR] {pipeline_id}"))
+    print(f"  error_type: {error_type}")
+    print(f"  error_retryable: {result['error_retryable']}")
+    print(f"  cli_error_count: {new_cli_error_count}  (reject_count 변화 없음: {prev_reject_count})")
+    if result["error_retryable"]:
+        print("  복구 명령: python pipeline.py gates codex-review --retry-cli-error ...")
+    print(f"  result: {_display_path(result_path)}\n")
+    _log_event(state, f"codex review CLI ERROR: error_type={error_type}")
+    _save(state)
+    sys.exit(1)
+
+
+# [Purpose]: BUG-20260702-E69E MT-5 — codex_review_result.json(SSoT)을 읽어 status가 ERROR이거나
+#            acceptance_eligible=false인지 판정하고, ERROR이면 사용자용 복구 안내 메시지를 반환한다.
+#            request-accept가 CLI 실행 실패를 "REJECT"가 아니라 "Codex CLI ERROR"로 안내하게 한다.
+# [Assumptions]: codex_review_result.json은 gates codex-review가 기록한 SSoT다. schema v3 이상은
+#            status/error_type/acceptance_eligible 필드를 포함하고, 구 스키마(v2 이하)는 포함하지
+#            않으므로 status 미존재 시 ERROR로 오판하지 않는다(하위 호환).
+# [Vulnerability & Risks]: 파일 없음/파싱 실패는 여기서 ERROR로 처리하지 않는다(None 반환). 그
+#            fail-closed 처리는 후속 _codex_review_snapshot이 담당하여 이중 판정을 피한다.
+# [Improvement]: stdout excerpt에서 retry_after 값을 정규식으로 추출해 재시도 시각을 안내할 수 있다.
+def _codex_review_error_blocker(pipeline_id: str) -> Optional[Dict[str, Any]]:
+    """codex_review_result.json이 ERROR 상태이면 복구 안내 dict를, 아니면 None을 반환한다.
+
+    Args:
+        pipeline_id: 현재 활성 파이프라인 ID (result의 pipeline_id와 대조).
+    Returns:
+        {"error_type": str, "message": str} (ERROR인 경우) 또는 None.
+    Raises:
+        TypeError: pipeline_id가 None/비str인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+
+    result_path = _codex_review_result_path()
+    if not result_path.exists():
+        return None  # 파일 없음 → 후속 snapshot이 fail-closed 처리
+    try:
+        with open(result_path, encoding="utf-8") as fh:
+            result = json.load(fh)
+        if not isinstance(result, dict):
+            return None
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None  # 파싱 실패 → 후속 snapshot이 fail-closed 처리
+
+    result_pid = str(result.get("pipeline_id", "") or "")
+    if result_pid and result_pid != pipeline_id:
+        return None  # 다른 파이프라인 결과 → 후속 snapshot이 처리
+
+    status = str(result.get("status", "") or "")
+    # 구 스키마(status 미기록)는 ERROR로 오판하지 않는다.
+    if status != "ERROR":
+        return None
+
+    error_type = str(result.get("error_type", "") or "unknown")
+    # retry_after 추출 (stdout excerpt에서 숫자+시간 단위가 있으면 안내).
+    stdout_excerpt = str(result.get("codex_cli_stdout_excerpt", "") or "")
+    retry_after = ""
+    m = re.search(r"retry[ _-]?after[:\s]*([0-9]+\s*(?:s|sec|seconds|m|min|minutes|h|hours)?)",
+                  stdout_excerpt, re.IGNORECASE)
+    if m:
+        retry_after = m.group(1).strip()
+
+    lines = [
+        "[PIPELINE ERROR] [CODEX REVIEW ERROR]",
+        f"error_type: {error_type}",
+    ]
+    if retry_after:
+        lines.append(f"retry_after: {retry_after}")
+    lines.append("복구 명령: python pipeline.py gates codex-review --retry-cli-error")
+    return {"error_type": error_type, "message": "\n".join(lines)}
 
 
 # [Purpose]: PENDING acceptance_request가 있을 때, 디스크 packet이 기록된 packet_sha256과
@@ -19817,6 +20413,18 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         # codex_review_loop_state.json은 읽지 않는다. codex_review_result.json(SSoT)만 사용.
         # APPROVE_TO_USER가 아니면 즉시 BLOCKED(exit non-zero), 승인 코드/댓글/요청 파일 미생성.
         # REJECT-1: packet_sha256 외에 pr_body_sha256/pr_head_sha도 동일 강도 fail-closed 검증.
+        # BUG-20260702-E69E MT-5: codex_review_result.json의 status가 ERROR이거나
+        #   acceptance_eligible=false이면, "REJECT"가 아니라 "Codex CLI ERROR"로 안내하고
+        #   복구 명령을 출력한다. CLI 실행 실패를 사용자에게 거절로 표시하지 않는다.
+        _codex_error_block = _codex_review_error_blocker(pipeline_id)
+        if _codex_error_block is not None:
+            _log_event(
+                state,
+                f"acceptance request blocked by Codex CLI ERROR: {_codex_error_block.get('error_type')}",
+            )
+            _save(state)
+            _die(_codex_error_block["message"])
+            return  # unreachable
         codex_result = _codex_review_snapshot(
             pipeline_id, staged_sha_manifest, state,
             staged_pr_body_sha256=staged_pr_body_sha,
@@ -23207,8 +23815,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Codex Review verdict를 codex_review_result.json(SSoT)에 기록 (APPROVE_TO_USER|REJECT)",
     )
     p_gate_codex.add_argument(
-        "--verdict", required=True, choices=["APPROVE_TO_USER", "REJECT"],
-        help="Codex 검토 판정 (APPROVE_TO_USER 또는 REJECT)",
+        "--verdict", required=False, default=None, choices=["APPROVE_TO_USER", "REJECT"],
+        help=(
+            "Codex 검토 판정 (APPROVE_TO_USER 또는 REJECT). "
+            "--codex-cli-exit-code로 CLI 실행 결과를 넘기는 경우 생략 가능."
+        ),
+    )
+    # BUG-20260702-E69E: Codex CLI 실행 원시값을 넘겨 CLI 오류를 REJECT와 분리한다.
+    p_gate_codex.add_argument(
+        "--codex-cli-exit-code", dest="codex_cli_exit_code", type=int, default=None,
+        help="Codex CLI subprocess 종료 코드 (timeout은 -1). 주어지면 CLI 결과를 분류한다.",
+    )
+    p_gate_codex.add_argument(
+        "--codex-cli-stdout", dest="codex_cli_stdout", default=None,
+        help="Codex CLI 표준 출력 (verdict 파싱 및 error 분류에 사용).",
+    )
+    p_gate_codex.add_argument(
+        "--codex-cli-stderr", dest="codex_cli_stderr", default=None,
+        help="Codex CLI 표준 에러 (error 분류에 사용).",
+    )
+    p_gate_codex.add_argument(
+        "--retry-cli-error", dest="retry_cli_error", action="store_true", default=False,
+        help="이전 결과가 ERROR인 경우에만 재실행을 허용한다 (REJECTED 우회 불가).",
+    )
+    p_gate_codex.add_argument(
+        "--force-review", dest="force_review", action="store_true", default=False,
+        help="reject rate-limit을 우회하여 강제로 재검토를 기록한다.",
     )
     p_gate_codex.add_argument(
         "--packet-sha256", dest="packet_sha256", default=None,
