@@ -1,0 +1,9 @@
+{
+  "test_case": "TC-8",
+  "description": "Codex가 APPROVE_TO_USER 반환 시 status=APPROVED, acceptance_eligible=true",
+  "codex_cli_exit_code": 0,
+  "codex_cli_stdout": "APPROVE_TO_USER",
+  "codex_cli_stderr": "",
+  "prior_reject_count": 0,
+  "prior_cli_error_count": 0
+}
