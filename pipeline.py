@@ -6883,7 +6883,10 @@ def _is_critical_file(path: str) -> bool:
         raise TypeError("path must not be None")
     if not isinstance(path, str):
         raise TypeError(f"path must be str, got {type(path).__name__}")
-    normalized = path.strip().replace("\\", "/").lstrip("./")
+    # leading "./" 만 제거 (예: "./pipeline.py" → "pipeline.py").
+    # leading "." 단독 제거 금지 — ".github/", ".claude/" 등 숨김 경로의 dot는 보존.
+    _path_stripped = path.strip().replace("\\", "/")
+    normalized = _path_stripped[2:] if _path_stripped.startswith("./") else _path_stripped
     if not normalized:
         return False
     # 정확 파일명 매칭 (전체 경로 또는 basename).
@@ -7359,7 +7362,7 @@ def _strip_excluded_diff_sections(
     return "\n".join(result)
 
 
-_RAW_ACCEPT_CODE_RE = re.compile(r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}-[0-9a-f]{8}")
+_RAW_ACCEPT_CODE_RE = re.compile(r"ACCEPT-[A-Z]+-\d{8}-[0-9A-F]{4}-[0-9A-Za-z2-7]{8}")
 # 검사5/8 정규식은 statement/comment 구조에 앵커하여 pipeline.py 자체 diff의
 # 문자열 리터럴("...'except: pass'...", "(# best-effort ...)")에 self-match되지 않게 한다.
 # except는 라인 시작(선택적 diff '+' + 들여쓰기) 뒤의 실제 구문만 매칭하고,
@@ -19616,8 +19619,11 @@ def _run_codex_cli_review(
             "  --force-review 플래그로만 우회할 수 있습니다."
         )
 
+    # Codex P2 수정: --base-ref 인자를 존중한다 (기본값: origin/main).
+    _base_ref = str(getattr(args, "base_ref", None) or "origin/main").strip() or "origin/main"
+
     # ── [1] stable bundle 생성 ──
-    bundle = _build_codex_review_bundle(state, pipeline_id)
+    bundle = _build_codex_review_bundle(state, pipeline_id, base=_base_ref)
     bundle_path = _codex_ci_dir() / "codex_review_bundle.json"
     stable_bundle_sha = str(bundle.get("stable_bundle_sha256", "") or "")
     full_bundle_sha = str(bundle.get("review_bundle_sha256", "") or "")
@@ -19689,11 +19695,11 @@ def _run_codex_cli_review(
     codex_model_detected = str(os.environ.get("CODEX_MODEL", "") or "unknown")
     if cache_hit and cached_verdict in ("APPROVE_TO_USER", "REJECT"):
         verdict = cached_verdict
-        codex_cli_command = "[CACHE HIT] codex review --base origin/main"
+        codex_cli_command = f"[CACHE HIT] codex review --base {_base_ref}"
     else:
         cache_hit = False
         codex_exe = shutil.which("codex")
-        codex_cli_command = "codex review --base origin/main"
+        codex_cli_command = f"codex review --base {_base_ref}"
         if codex_exe is None:
             # Codex CLI 미설치 → 수동 verdict 필요. fail-closed BLOCKED.
             print(RED("[CODEX] CLI 미설치 — 수동 verdict 필요"))
@@ -19729,13 +19735,13 @@ def _run_codex_cli_review(
         try:
             if _is_windows_script:
                 _proc = subprocess.run(
-                    f'"{codex_exe}" review --base origin/main',
+                    f'"{codex_exe}" review --base {_base_ref}',
                     capture_output=True, text=True, encoding="utf-8",
                     errors="replace", timeout=600, shell=True,  # nosec B602 — Windows .cmd/.bat/.ps1 런처 전용 경로, codex_exe는 고정 실행파일 경로
                 )
             else:
                 _proc = subprocess.run(
-                    [codex_exe, "review", "--base", "origin/main"],
+                    [codex_exe, "review", "--base", _base_ref],
                     capture_output=True, text=True, encoding="utf-8",
                     errors="replace", timeout=600,
                 )
@@ -19990,12 +19996,14 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         _die("[BLOCKED] pipeline_state.json에 pipeline_id가 없습니다.")
 
     # IMP-20260701-9F5E MT-4 (REJECT r2): 실질 Codex CLI 어댑터 vs 수동 진단 recorder 분기.
-    #   - --verdict 또는 --approve-pending이 있으면: 기존 수동 진단 recorder 로직 유지(아래 흐름).
-    #   - 둘 다 없으면: 실제 Codex CLI를 호출하는 control flow로 위임한다
+    #   - --verdict만 있으면: 수동 진단 recorder 로직 유지(아래 흐름, diagnostic_manual).
+    #   - --verdict 없음(--approve-pending 포함 또는 플래그 없음): 실제 Codex CLI를 호출한다.
     #     (bundle→preflight→cache→CLI→record). 이것이 REJECT-1(수동 recorder만 존재)의 근본 수정.
+    #   Codex P1 수정: --approve-pending은 CLI를 건너뛰지 않는다. staging 처리는 _run_codex_cli_review
+    #   완료 후 아래 흐름에서 수행된다. verdict는 반드시 CLI가 생성해야 acceptance_eligible=True가 보장.
     _manual_verdict = str(getattr(args, "verdict", "") or "").strip()
     _approve_pending_flag = bool(getattr(args, "approve_pending", False))
-    if not _manual_verdict and not _approve_pending_flag:
+    if not _manual_verdict:
         _run_codex_cli_review(args, state, pipeline_id)
         return  # _run_codex_cli_review가 sys.exit로 종료한다 (방어적 return).
 
