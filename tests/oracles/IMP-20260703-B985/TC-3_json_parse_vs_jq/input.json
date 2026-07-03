@@ -1,0 +1,9 @@
+{
+  "description": "TC-3: gh --json body JSON parse vs jq stdout 비교",
+  "scenario": {
+    "gh_json_body_output": "{\"body\":\"## Test\\n- Item 1\"}",
+    "jq_stdout_output": "## Test\n- Item 1\n",
+    "note": "jq .body stdout는 trailing newline을 추가함"
+  },
+  "assertion": "canonical helper는 JSON parse 결과만 사용하고 jq stdout을 SHA 계산에 사용하지 않아야 함"
+}

@@ -1,0 +1,18 @@
+{
+  "description": "TC-2 기대 결과: 각 trailing newline 상태는 구분되어야 함 (GitHub API body 재현)",
+  "results": {
+    "no_trailing_newline": {
+      "sha_differs_from_single_newline": true,
+      "canonical_body": "## Summary\n- Change"
+    },
+    "single_trailing_newline": {
+      "sha_differs_from_no_newline": true,
+      "canonical_body": "## Summary\n- Change\n"
+    },
+    "double_trailing_newline": {
+      "sha_differs_from_single_newline": true,
+      "canonical_body": "## Summary\n- Change\n\n"
+    }
+  },
+  "note": "trailing newline strip은 하지 않음 - GitHub 저장값과 동일하게 재현해야 canonical SHA 일치"
+}
