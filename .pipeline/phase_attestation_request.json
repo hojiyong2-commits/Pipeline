@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "request_type": "pipeline-phase-attestation-request-v1",
-  "generated_at": "2026-07-03T12:43:55Z",
+  "generated_at": "2026-07-03T12:48:40Z",
   "pipeline_id": "IMP-20260703-B985",
   "phase": "dev",
   "phase_status": "DONE",
-  "commit_hint": "92bbaa6bf82d893f8b1e7056de9fc29354e657cc",
+  "commit_hint": "56f0eb5066d165c8fb029d20e7d7e45120285e72",
   "state": {
     "current_phase": "qa",
     "phase_completed_at": "2026-07-03T12:38:41Z",
@@ -51,17 +51,6 @@
       "requires_force_add": false
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "107f15f4d698bc7beb198e608f4997afae2a02a194d121476b1eac1a03939ba1",
-      "size_bytes": 1325636
-    },
-    {
-      "path": "tests/test_canonical_pr_body_sha256_b985.py",
-      "sha256": "520988360a1488bec3c6caeb805a555aeeff27e5c7d339176a1ea2a05a8baab6",
-      "size_bytes": 15451
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
