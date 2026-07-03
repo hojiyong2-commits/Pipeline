@@ -1,0 +1,9 @@
+{
+  "test_case": "TC-1",
+  "description": "Codex CLI stdout에 'You've hit your usage limit' 포함 시 status=ERROR 분류",
+  "codex_cli_exit_code": 1,
+  "codex_cli_stdout": "You've hit your usage limit. Try again at 11:34 AM.",
+  "codex_cli_stderr": "",
+  "prior_reject_count": 0,
+  "prior_cli_error_count": 0
+}
