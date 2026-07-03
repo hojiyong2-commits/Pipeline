@@ -1,0 +1,8 @@
+{
+  "description": "TC-1 기대 결과: 모든 줄바꿈 형식에서 동일 canonical SHA 반환",
+  "canonical_sha256": "66f34ed4c2bd4e9f208f4c38613aca29070e1c0b492576364580ae6232c131e9",
+  "normalized_body": "## Summary\n- Change 1\n- Change 2\n\n## Test plan\nManual test",
+  "all_vectors_same_sha": true,
+  "sha_count_expected": 1,
+  "note": "sha256 of normalized_body encoded as UTF-8 (CRLF to LF normalized)"
+}

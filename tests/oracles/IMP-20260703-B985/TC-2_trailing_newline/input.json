@@ -1,0 +1,18 @@
+{
+  "description": "TC-2: trailing newline 처리 테스트 - canonical 규칙 적용 여부",
+  "test_vectors": [
+    {
+      "id": "no_trailing_newline",
+      "pr_body": "## Summary\n- Change"
+    },
+    {
+      "id": "single_trailing_newline",
+      "pr_body": "## Summary\n- Change\n"
+    },
+    {
+      "id": "double_trailing_newline",
+      "pr_body": "## Summary\n- Change\n\n"
+    }
+  ],
+  "assertion": "canonical helper는 trailing newline을 제거하지 않고 원문 그대로 LF 정규화만 수행 - GitHub API body 값 재현 가능성 보장"
+}

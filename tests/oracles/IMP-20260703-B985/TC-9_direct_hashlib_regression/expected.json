@@ -1,0 +1,16 @@
+{
+  "description": "TC-9 기대 결과: canonical helper 외부의 PR body SHA 직접 계산 0건",
+  "direct_hashlib_calls_outside_helper": 0,
+  "allowed_helper_name": "_canonical_pr_body_sha256",
+  "all_pr_body_sha_paths": [
+    "_prepare_acceptance_snapshot_candidate → _canonical_pr_body_sha256",
+    "_verify_published_canonical_pr_body → _canonical_pr_body_sha256",
+    "_fetch_canonical_pr_body_sha256 → _canonical_pr_body_sha256",
+    "codex record → _canonical_pr_body_sha256"
+  ],
+  "regression_check": {
+    "line_20422": "hashlib.sha256(pr_body.encode(\"utf-8\")).hexdigest() → _canonical_pr_body_sha256(pr_body) 변경 필요",
+    "line_20718": "hashlib.sha256(current_pr_body.encode(\"utf-8\")).hexdigest() → _canonical_pr_body_sha256(current_pr_body) 변경 필요",
+    "line_20884": "hashlib.sha256(pr_body.encode(\"utf-8\")).hexdigest() → _canonical_pr_body_sha256(pr_body) 변경 필요"
+  }
+}
