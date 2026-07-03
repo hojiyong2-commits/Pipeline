@@ -1,0 +1,15 @@
+{
+  "description": "TC-9: 직접 hashlib.sha256(pr_body.encode(...)) 호출 회귀 테스트",
+  "scan_targets": [
+    "pipeline.py"
+  ],
+  "forbidden_patterns": [
+    "hashlib.sha256.*pr_body.*encode",
+    "pr_body.*encode.*sha256",
+    "hashlib.sha256.*\\.encode.*hexdigest"
+  ],
+  "allowed_locations": [
+    "_canonical_pr_body_sha256 helper 내부만"
+  ],
+  "assertion": "PR body SHA 계산 경로에서 canonical helper 외부의 직접 hashlib 호출이 없어야 함"
+}

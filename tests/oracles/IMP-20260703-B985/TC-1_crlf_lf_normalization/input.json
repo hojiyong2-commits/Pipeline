@@ -1,0 +1,18 @@
+{
+  "description": "TC-1: CRLF/LF 정규화 테스트 - 동일 논리 본문, 다른 줄바꿈 형식",
+  "test_vectors": [
+    {
+      "id": "lf_only",
+      "pr_body": "## Summary\n- Change 1\n- Change 2\n\n## Test plan\nManual test"
+    },
+    {
+      "id": "crlf_only",
+      "pr_body": "## Summary\r\n- Change 1\r\n- Change 2\r\n\r\n## Test plan\r\nManual test"
+    },
+    {
+      "id": "mixed_line_endings",
+      "pr_body": "## Summary\r\n- Change 1\n- Change 2\r\n\n## Test plan\r\nManual test"
+    }
+  ],
+  "assertion": "모든 test_vectors의 pr_body에 대해 canonical helper 결과 SHA가 동일해야 함"
+}

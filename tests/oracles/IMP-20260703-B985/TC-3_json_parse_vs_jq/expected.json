@@ -1,0 +1,9 @@
+{
+  "description": "TC-3 기대 결과: JSON parse body만 canonical SHA 계산에 사용",
+  "json_parse_canonical_body": "## Test\n- Item 1",
+  "jq_stdout_body": "## Test\n- Item 1\n",
+  "sha_differs": true,
+  "canonical_helper_uses": "json_parse",
+  "forbidden": ["jq stdout", "subprocess stdout trailing newline"],
+  "note": "JSON parse body와 jq stdout body의 SHA는 trailing newline 때문에 다름 - canonical helper는 JSON parse만 사용해야 SHA 일관성 보장"
+}
