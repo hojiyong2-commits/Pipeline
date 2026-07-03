@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-03T05:51:19Z",
+  "pipeline_id": "BUG-20260702-E69E",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "525c7c184588de67ec13e5f2fa6c84feaab77e14",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-07-03T05:46:45Z",
+    "report_file": "dev_handover_rework4.xml",
+    "evidence": "pipeline.py,tests/e2e/test_codex_cost_optimization_9f5e.py,tests/oracles/BUG-20260702-E69E/tc1_usage_limit/expected.json,tests/oracles/BUG-20260702-E69E/tc1_usage_limit/input.json,tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/expected.json,tests/oracles/BUG-20260702-E69E/tc2_usage_limit_no_reject_count/input.json,tests/oracles/BUG-20260702-E69E/tc4_real_reject/expected.json,tests/oracles/BUG-20260702-E69E/tc4_real_reject/input.json,tests/oracles/BUG-20260702-E69E/tc8_approve/expected.json,tests/oracles/BUG-20260702-E69E/tc8_approve/input.json,tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/expected.json,tests/oracles/BUG-20260702-E69E/tc9_cli_nonzero_stderr/input.json"
+  },
+  "agent_run": {
+    "run_id": "dev-0cd3badf6e4e84ca",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_rework4.xml",
+    "output_sha256": "64df9647fa78c381c02acf517b67be3431b7330c15896040cca9ff38e5a6ccab",
+    "receipt_path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/agent_receipt_dev-0cd3badf6e4e84ca.json",
+    "receipt_sha256": "958b007ed57088d53b00ae4d7c65aa3f34ec68282759b3ed0429597ff9c3e5df",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\dev\\dev-0cd3badf6e4e84ca.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\BUG-20260702-E69E\\dev\\dev-0cd3badf6e4e84ca.json",
+      "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/agent_receipt_dev-0cd3badf6e4e84ca.json",
+      "sha256": "958b007ed57088d53b00ae4d7c65aa3f34ec68282759b3ed0429597ff9c3e5df",
+      "size_bytes": 510,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_rework4.xml",
+      "path": ".pipeline/phase_evidence/BUG-20260702-E69E/dev/report_dev_handover_rework4.xml",
+      "sha256": "64df9647fa78c381c02acf517b67be3431b7330c15896040cca9ff38e5a6ccab",
+      "size_bytes": 1398,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "12f841acacd318198b3a7d1e2e7e3447e4528370e30448ffef7f5e74fbb5c1c5",
+      "size_bytes": 1252776
+    }
+  ],
+  "local_only_files": []
+}
