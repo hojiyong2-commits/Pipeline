@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <from>dev-agent</from>
+  <to>qa-agent</to>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <status>READY_FOR_QA</status>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+  </evidence>
+  <scope_manifest>scope_manifest.json</scope_manifest>
+  <scope_declaration>
+    <files_to_create>
+      <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+    </files_to_create>
+    <files_to_modify>
+      <file>pipeline.py</file>
+    </files_to_modify>
+    <files_to_delete>없음</files_to_delete>
+    <scope_amendment_reason>
+      [Side-Effect Audit] PR body SHA 계산 통일 리팩터는 PM step_plan에 개별 명시되지 않은 공유 헬퍼도 포함한다:
+      MT-4에 _get_pr_body_text(_prepare/request-accept가 candidate body 소스로 사용; --jq .body의 trailing
+      newline이 candidate SHA를 오염시켜 반드시 --json body JSON parse로 교체 필요), MT-5에 _get_staged_pr_body_sha
+      (final_body candidate SHA 2곳). 또한 PM 플랜의 MT-6 affected_function은 실존 함수명이 아닌
+      '_cmd_codex_record'였으므로 실제 함수 _cmd_gates_codex_review로 정정. MT-7은 함수가 아닌 스키마 변경으로
+      기재되어 있어 실제 대상 함수 _prepare_acceptance_snapshot_candidate, _publish_acceptance_request로 구체화.
+      모든 변경 함수는 pipeline.py 단일 파일 내에 있으며 PM target_files(pipeline.py) 범위를 초과하지 않는다.
+    </scope_amendment_reason>
+    <out_of_scope>gates accept 실행 경로의 codex_review_not_approved vs pr_body_stale 게이트 순서(A716 TC-4)는 본 파이프라인 범위 밖 — baseline에서도 동일 실패로 확인됨.</out_of_scope>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_canonical_pr_body_sha256 (신규 SSoT) + 7개 배선 함수</target_function>
+    <upstream_callers>
+      <caller>_prepare_acceptance_snapshot_candidate, _verify_published_canonical_pr_body, _fetch_canonical_pr_body_sha256, _get_pr_body_text, _cmd_gates_request_accept, _get_staged_pr_body_sha, _cmd_gates_codex_review, _publish_acceptance_request</caller>
+    </upstream_callers>
+    <downstream_dependencies>
+      <dep>hashlib.sha256</dep>
+      <dep>gh pr view --json body (JSON parse)</dep>
+    </downstream_dependencies>
+    <state_mutations>
+      <mutation>acceptance_request.json — pr_body_candidate_sha256 / github_canonical_pr_body_sha256 필드 추가 (write)</mutation>
+    </state_mutations>
+    <risk_assessment>
+      <signature_change>NO — 기존 함수 시그니처 불변, 신규 helper만 추가</signature_change>
+      <breaking_change>NO — pr_body_sha256 backward-compat 필드 유지, candidate/canonical 분리는 신규 필드 추가</breaking_change>
+      <test_coverage>NEW_TEST_ADDED — tests/test_canonical_pr_body_sha256_b985.py 18개</test_coverage>
+      <rollback_strategy>helper 호출을 원래 inline hashlib로 되돌리면 복구 가능 (단일 파일 diff)</rollback_strategy>
+    </risk_assessment>
+  </impact_analysis>
+  <self_check>
+    <python_version_syntax>PASS — 3.9+ 호환 (typing 사용, from __future__ import annotations)</python_version_syntax>
+    <type_hinting>PASS — _canonical_pr_body_sha256(text: str) -> str 명시</type_hinting>
+    <error_handling>PASS — helper None/비str TypeError; fetch 경로 graceful None</error_handling>
+    <path_safety>N/A — 경로 입력 없음</path_safety>
+    <security>PASS — secret 없음; SHA 계산만</security>
+    <al_edge_cases>PASS — None/비str(bool)/bytes TypeError, 빈 문자열 유효 SHA, 큰 입력 안정</al_edge_cases>
+    <pd_policy>PASS — 암묵적 형변환 금지, 명시적 TypeError</pd_policy>
+    <fs_encoding_fallback>N/A — 파일 읽기 없음 (SHA helper)</fs_encoding_fallback>
+    <docstring>PASS — helper 및 자기반성 헤더 4항목 포함</docstring>
+    <execution_check>PASS — py_compile OK; import OK; pytest B985 18 passed, F52C 69 passed, E69E 25 passed</execution_check>
+    <impact_analysis_check>PASS — 모든 MT impact/manifest 기록</impact_analysis_check>
+    <frozen_codebase_check>PASS — pipeline.py 내 PR body SHA 경로만 최소 변경, 무관 리팩토링 0건, Side-Effect Audit로 공유 헬퍼 배선 확인, scope_amendment 명시</frozen_codebase_check>
+  </self_check>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <module_gate_summary>
+    <mt id="MT-1">PASS</mt>
+    <mt id="MT-2">PASS</mt>
+    <mt id="MT-3">PASS</mt>
+    <mt id="MT-4">PASS</mt>
+    <mt id="MT-5">PASS</mt>
+    <mt id="MT-6">PASS</mt>
+    <mt id="MT-7">PASS</mt>
+    <mt id="MT-8">PASS</mt>
+    <integration>PASS</integration>
+  </module_gate_summary>
+</handover>
