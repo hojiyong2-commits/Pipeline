@@ -1,0 +1,212 @@
+{
+  "pipeline_id": "IMP-20260703-B985",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_canonical_pr_body_sha256 (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_canonical_pr_body_sha256 신규 canonical SSoT helper 추가 — CRLF/lone-CR→LF 정규화 + UTF-8 + sha256, trailing newline strip 없음"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_prepare_acceptance_snapshot_candidate"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": [
+            "AC-3",
+            "AC-9"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_prepare_acceptance_snapshot_candidate: 직접 hashlib.sha256(pr_body)를 _canonical_pr_body_sha256(pr_body)로 교체"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_verify_published_canonical_pr_body"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": [
+            "AC-7",
+            "AC-9"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_verify_published_canonical_pr_body: recompute_sha를 _canonical_pr_body_sha256(current_pr_body)로 교체"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_fetch_canonical_pr_body_sha256",
+        "_get_pr_body_text"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": [
+            "AC-3",
+            "AC-6"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_fetch_canonical_pr_body_sha256: inline 정규화+hashlib를 helper로 교체",
+            "_get_pr_body_text: --jq .body → --json body + json.loads (jq trailing newline 제거)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept",
+        "_get_staged_pr_body_sha"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": [
+            "AC-5",
+            "AC-9"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_cmd_gates_request_accept: _new_pr_body_sha256 및 stale 조기검사 hashlib를 helper로 교체",
+            "_get_staged_pr_body_sha: final_body candidate SHA 2곳 helper로 교체"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_review"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": [
+            "AC-4",
+            "AC-5",
+            "AC-6"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "_cmd_gates_codex_review: pr_body_sha(final_body) 계산을 helper로 통일"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_prepare_acceptance_snapshot_candidate",
+        "_publish_acceptance_request"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": [
+            "AC-4",
+            "AC-5",
+            "AC-6",
+            "AC-8"
+          ],
+          "changed_files": [
+            "pipeline.py"
+          ],
+          "implementation_evidence": [
+            "acceptance_request.json에 pr_body_candidate_sha256 + github_canonical_pr_body_sha256 필드 분리 추가",
+            "_publish_acceptance_request: publish 후 github_canonical_pr_body_sha256 canonical 값 기록"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "tests/test_canonical_pr_body_sha256_b985.py (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8",
+          "implemented_ac": [
+            "AC-1",
+            "AC-2",
+            "AC-3",
+            "AC-4",
+            "AC-7",
+            "AC-8",
+            "AC-9",
+            "AC-10"
+          ],
+          "changed_files": [
+            "tests/test_canonical_pr_body_sha256_b985.py"
+          ],
+          "implementation_evidence": [
+            "tests/test_canonical_pr_body_sha256_b985.py 신규 — 18개 테스트, oracle 4케이스 대조"
+          ]
+        }
+      ]
+    }
+  ]
+}
