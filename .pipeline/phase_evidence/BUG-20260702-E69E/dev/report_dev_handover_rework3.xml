@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<handover>
+  <pipeline_id>BUG-20260702-E69E</pipeline_id>
+  <agent_run_id>dev-2d6b6a08aed38ed0</agent_run_id>
+  <phase>dev</phase>
+  <status>COMPLETE</status>
+  <rework_context>REJECT #3 rework — review_bundle_sha256 SSoT 구현 (stash@{0} 적용). MT-8: _codex_review_bundle_path/bundle_build/cmd_gates/finish_error, MT-9: TC-B1/B2/B3 테스트.</rework_context>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+    </files_to_modify>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_codex_review_bundle_path, _build_codex_review_bundle, _cmd_gates_codex_review, _finish_codex_review_error, _snapshot_identity_matches</target_function>
+    <change_summary>bundle SHA SSoT materialize fail-closed, snapshot 비교 하위호환(not pv or not cv), ERROR result에 bundle SHA 기록</change_summary>
+  </impact_analysis>
+  <scope_lock_check>
+    <manifest_files>pipeline.py, tests/e2e/test_codex_cost_optimization_9f5e.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/e2e/test_codex_cost_optimization_9f5e.py</file>
+  </evidence>
+  <test_result>23 passed</test_result>
+</handover>
