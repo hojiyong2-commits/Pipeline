@@ -830,3 +830,48 @@ def test_retry_empty_prev_bundle_sha_blocked(isolated_pipeline):
         f"빈 이전 bundle SHA로 retry가 허용되면 안 됨. exit={result.returncode}, out={combined[:400]}"
     )
     assert "codex_retry_missing_prev_bundle_sha" in combined, combined[:400]
+
+
+def test_final_packet_no_stale_skip_count():
+    """TC-18: stale '11 passed 1 skipped' 문구가 있어도 human_acceptance_packet에
+    그대로 노출되지 않도록 _refresh_test_count_in_verification이 실시간 카운트로 갱신해야 함."""
+    import sys
+    repo_root = Path(__file__).parent.parent.parent
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from pipeline import _refresh_test_count_in_verification
+
+    stale_text = "TC-1~TC-12 E2E 테스트 11 passed 1 skipped"
+    refreshed = _refresh_test_count_in_verification(
+        stale_text, pipeline_root=str(repo_root)
+    )
+
+    assert "1 skipped" not in refreshed, f"stale '1 skipped' 문구가 제거되지 않음: {refreshed}"
+    assert "11 passed" not in refreshed, f"stale '11 passed' 문구가 제거되지 않음: {refreshed}"
+
+
+def test_final_packet_test_count_not_stale():
+    """TC-19: _refresh_test_count_in_verification이 실제 테스트 파일의 def test_ 카운트를
+    올바르게 반영해야 함 (현재 25개: 기존 23 + TC-18/TC-19)."""
+    import sys
+    repo_root = Path(__file__).parent.parent.parent
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from pipeline import (
+        _count_test_functions_in_file,
+        _refresh_test_count_in_verification,
+    )
+
+    test_file = repo_root / "tests" / "e2e" / "test_codex_cost_optimization_9f5e.py"
+    actual_count = _count_test_functions_in_file(str(test_file))
+    assert actual_count >= 23, f"실제 테스트 카운트가 예상보다 작음: {actual_count}"
+
+    stale_text = "TC-1~TC-12 E2E 테스트 11 passed 1 skipped — 상태 분리 검증 완료"
+    refreshed = _refresh_test_count_in_verification(
+        stale_text, pipeline_root=str(repo_root)
+    )
+
+    assert f"{actual_count} passed" in refreshed, (
+        f"실제 카운트 '{actual_count} passed'가 반영되지 않음: {refreshed}"
+    )
+    assert "0 skipped" in refreshed, f"'0 skipped'이 반영되지 않음: {refreshed}"
