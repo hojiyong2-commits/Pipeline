@@ -730,3 +730,103 @@ def test_tc_json_verdict_reject_count():
     result2 = _run_codex_cli_review(0, bad_json, "")
     assert result2["status"] == "ERROR", result2
     assert result2.get("error_type") == "parse_failure", result2
+
+
+# ---------------------------------------------------------------------------
+# TC-B1: APPROVED result에 review_bundle_sha256이 non-empty로 기록된다
+#        (_build_codex_review_bundle이 입력 bundle을 materialize하고 SHA를 남긴다)
+# ---------------------------------------------------------------------------
+def test_bundle_sha256_nonempty_in_approved(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+    packet_path = tmp_path / "human_acceptance_packet.md"
+    packet_path.write_text("approved bundle packet body\n", encoding="utf-8")
+    packet_sha = _sha256_file_local(packet_path)
+
+    result = _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout",
+        '{"schema_version":1,"verdict":"APPROVE_TO_USER","reason":"ok"}',
+        "--packet-sha256", packet_sha,
+    )
+    assert result.returncode == 0, f"APPROVED는 exit 0이어야 함 (stderr={result.stderr})"
+    final = _read_codex_result(tmp_path)
+    assert final is not None, f"result.json 미생성 (stderr={result.stderr})"
+    assert final["status"] == "APPROVED", final
+    # top-level + snapshot_identity 양쪽에 non-empty bundle SHA가 있어야 한다.
+    assert final.get("review_bundle_sha256", "") != "", (
+        f"APPROVED result에 review_bundle_sha256이 있어야 함: {final}"
+    )
+    ident = final.get("snapshot_identity")
+    assert isinstance(ident, dict), final
+    assert ident.get("review_bundle_sha256", "") != "", ident
+    # bundle 파일이 격리 .pipeline 경로에 실제로 materialize되어야 한다(테스트 오염 방지).
+    bundle_file = tmp_path / ".pipeline" / "codex_review_bundle.json"
+    assert bundle_file.exists(), "codex_review_bundle.json이 격리 경로에 생성되어야 함"
+    assert _sha256_file_local(bundle_file) == final["review_bundle_sha256"], (
+        "기록된 review_bundle_sha256이 실제 bundle 파일 SHA와 일치해야 함"
+    )
+
+
+# ---------------------------------------------------------------------------
+# TC-B2: ERROR result에도 review_bundle_sha256이 non-empty로 기록된다
+#        (--retry-cli-error가 이후 이 값을 snapshot 비교 기준으로 사용할 수 있어야 함)
+# ---------------------------------------------------------------------------
+def test_bundle_sha256_nonempty_in_error(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+    result = _run_codex_review(
+        tmp_path, state_file,
+        "--codex-cli-exit-code", "1",
+        "--codex-cli-stdout", "You've hit your usage limit at 11:34 AM",
+    )
+    final = _read_codex_result(tmp_path)
+    assert final is not None, f"result.json 미생성 (stderr={result.stderr})"
+    assert final["status"] == "ERROR", final
+    assert final.get("review_bundle_sha256", "") != "", (
+        f"ERROR result에 review_bundle_sha256이 있어야 함: {final}"
+    )
+    ident = final.get("snapshot_identity")
+    assert isinstance(ident, dict), final
+    assert ident.get("review_bundle_sha256", "") != "", ident
+
+
+# ---------------------------------------------------------------------------
+# TC-B3: 이전 ERROR attempt의 review_bundle_sha256이 비어 있으면 --retry-cli-error 금지
+#        (bundle 없이 기록된 구 결과는 신뢰할 수 있는 snapshot 비교 기준이 없음 — fail-closed)
+# ---------------------------------------------------------------------------
+def test_retry_empty_prev_bundle_sha_blocked(isolated_pipeline):
+    tmp_path, state_file = isolated_pipeline
+    # 이전 ERROR: review_bundle_sha256이 빈 값(구 스키마 시뮬레이션).
+    _write_codex_result(tmp_path, {
+        "schema_version": 4,
+        "pipeline_id": PIPELINE_ID,
+        "status": "ERROR",
+        "attempt_id": "cr-emptybundle01",
+        "review_bundle_sha256": "",
+        "snapshot_identity": {
+            "pr_head_sha": "",
+            "packet_sha256": "",
+            "pr_body_candidate_sha256": "",
+            "staging_id": "",
+            "contract_sha256": "",
+            "review_bundle_sha256": "",
+        },
+        "error_type": "usage_limit",
+        "error_retryable": True,
+        "reject_count": 0,
+        "cli_error_count": 1,
+        "acceptance_eligible": False,
+        "verdict": None,
+    })
+    result = _run_codex_review(
+        tmp_path, state_file,
+        "--retry-cli-error",
+        "--codex-cli-exit-code", "0",
+        "--codex-cli-stdout",
+        '{"schema_version":1,"verdict":"APPROVE_TO_USER","reason":"ok"}',
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0, (
+        f"빈 이전 bundle SHA로 retry가 허용되면 안 됨. exit={result.returncode}, out={combined[:400]}"
+    )
+    assert "codex_retry_missing_prev_bundle_sha" in combined, combined[:400]

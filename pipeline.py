@@ -6794,6 +6794,183 @@ def _codex_review_result_path() -> Path:
     return PIPELINE_CI_DIR / "codex_review_result.json"
 
 
+# [Purpose]: BUG-20260702-E69E — Codex Review 입력 bundle(codex_review_bundle.json)의 경로를
+#            producer(_build_codex_review_bundle)와 consumer(_codex_snapshot_identity)가 동일하게
+#            해석하도록 단일 헬퍼로 통일한다. _codex_review_result_path와 동일한 PIPELINE_STATE_PATH
+#            격리 규칙을 사용하여 E2E 테스트가 실제 repo의 pipeline_contracts/를 오염시키지 않게 한다.
+# [Assumptions]: PIPELINE_STATE_PATH가 설정되면 state 파일 옆 .pipeline/에, 아니면 운영
+#            CONTRACTS_DIR/<pid>/ 아래에 위치한다.
+# [Vulnerability & Risks]: pipeline_id가 빈 문자열이면 격리되지 않은 CONTRACTS_DIR 하위에 빈
+#            세그먼트가 생기나, 호출자가 pipeline_id 존재를 먼저 검증하므로 실무상 도달하지 않는다.
+# [Improvement]: result/history/bundle 경로를 하나의 팩토리로 묶으면 drift를 더 강하게 막을 수 있다.
+def _codex_review_bundle_path(pipeline_id: str) -> Path:
+    """codex_review_bundle.json 경로를 반환 (PIPELINE_STATE_PATH 격리 지원).
+
+    Args:
+        pipeline_id: 현재 파이프라인 ID (운영 경로 계산에 사용).
+    Returns:
+        codex_review_bundle.json 절대 경로.
+    Raises:
+        TypeError: pipeline_id가 None/비str인 경우.
+    """
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(f"pipeline_id must be str, got {type(pipeline_id).__name__}")
+    env_state = os.environ.get("PIPELINE_STATE_PATH")
+    if env_state:
+        return Path(env_state).resolve().parent / ".pipeline" / "codex_review_bundle.json"
+    return CONTRACTS_DIR / pipeline_id / "codex_review_bundle.json"
+
+
+# [Purpose]: BUG-20260702-E69E — gates codex-review 시작 시 Codex에게 전달할 입력 bundle을
+#            codex_review_bundle.json으로 명시적으로 materialize하고 그 SHA256을 반환한다.
+#            그동안 bundle을 생성하는 코드가 없어 _codex_snapshot_identity의 review_bundle_sha256이
+#            항상 빈 값이었고, --retry-cli-error snapshot 비교에서 이 차원이 제외됐다. 이 함수가
+#            그 차원을 실제로 관측 가능하게 닫는다.
+# [Assumptions]: gh/git 조회 실패는 개별 필드 빈 값으로 대체한다(BLOCK 아님). write에 성공하면
+#            non-empty SHA를 반환하고, write/직렬화 실패 시에만 ("", "")를 반환한다.
+# [Vulnerability & Risks]: 가장 취약한 지점은 bundle write 자체 실패다. 이 경우 ("", "")를 반환하고
+#            호출자가 fail-closed로 BLOCK하여 Codex CLI 호출을 막는다.
+# [Improvement]: critical_file_summary에 diff 통계(추가/삭제 라인)를 포함하면 Codex 컨텍스트가 풍부해진다.
+def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple[str, str]:
+    """Codex Review 입력 bundle을 SSoT artifact로 materialize하고 (SHA256, 경로)를 반환한다.
+
+    Args:
+        state: 활성 pipeline_state (진단 로그 기록에 사용).
+        pipeline_id: 현재 파이프라인 ID. bundle 경로/게이트 결과 경로 계산에 사용.
+    Returns:
+        (sha256_hex, bundle_path) — write 성공 시 non-empty SHA. 실패 시 ("", "").
+    Raises:
+        없음 — 모든 예외를 내부에서 흡수하고 실패 시 ("", "")를 반환한다(fail-closed는 호출자 책임).
+    """
+    if pipeline_id is None:
+        # None 입력 방어: bundle을 만들 수 없으므로 fail-closed로 호출자에게 위임.
+        return ("", "")
+    if not isinstance(pipeline_id, str):
+        return ("", "")
+
+    # BUG-20260702-E69E: bundle은 "검토 대상 입력"의 결정적 스냅샷이어야 한다. 동일 대상에 대한
+    #   --retry-cli-error가 동일 bundle SHA를 산출하도록 실행 시각(_now) 같은 휘발성 메타데이터는
+    #   bundle에 포함하지 않는다(포함하면 재시도마다 SHA가 달라져 거짓 snapshot 변경으로 오판됨).
+    bundle: Dict[str, Any] = {
+        "pipeline_id": str(pipeline_id or ""),
+        "pr_url": "",
+        "pr_head_sha": "",
+        "packet_sha256": "",
+        "pr_body_candidate_sha256": "",
+        "contract_sha256": "",
+        "changed_files": [],
+        "critical_file_summary": {},
+        "technical_gate_status": "UNKNOWN",
+        "oracle_gate_status": "UNKNOWN",
+        "github_ci_gate_status": "UNKNOWN",
+    }
+
+    try:
+        # pr_head_sha (gh CLI, best-effort)
+        try:
+            bundle["pr_head_sha"] = _get_current_pr_head_sha() or ""
+        except Exception:  # noqa: BLE001 — best-effort; 실패는 빈 문자열로 대체
+            bundle["pr_head_sha"] = ""
+
+        # pr_url (gh pr view, best-effort)
+        try:
+            r = subprocess.run(
+                _build_gh_cmd_prefix() + ["pr", "view", "--json", "url", "--jq", ".url"],
+                capture_output=True, text=True, timeout=15,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            if r.returncode == 0:
+                bundle["pr_url"] = r.stdout.strip()
+        except Exception:  # noqa: BLE001
+            bundle["pr_url"] = ""
+
+        # packet_sha256 (현재 디스크 packet)
+        try:
+            _pkt = _packet_output_path()
+            if _pkt.exists():
+                bundle["packet_sha256"] = _sha256_file(_pkt)
+        except Exception:  # noqa: BLE001
+            bundle["packet_sha256"] = ""
+
+        # contract_sha256
+        try:
+            _cp = CONTRACTS_DIR / pipeline_id / "task_contract.json"
+            if _cp.exists():
+                bundle["contract_sha256"] = _sha256_file(_cp)
+        except Exception:  # noqa: BLE001
+            bundle["contract_sha256"] = ""
+
+        # pr_body_candidate_sha256 (acceptance_staging.json의 frozen packet SHA)
+        try:
+            _stg = _load_acceptance_staging(pipeline_id)
+            if isinstance(_stg, dict):
+                bundle["pr_body_candidate_sha256"] = str(
+                    _stg.get("staged_packet_sha256", "") or ""
+                )
+        except Exception:  # noqa: BLE001
+            bundle["pr_body_candidate_sha256"] = ""
+
+        # changed_files (git diff origin/main...HEAD --name-only)
+        try:
+            dr = subprocess.run(
+                ["git", "diff", "origin/main...HEAD", "--name-only"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(BASE_DIR), encoding="utf-8", errors="replace",
+            )
+            if dr.returncode == 0:
+                cf = [f.strip() for f in dr.stdout.strip().splitlines() if f.strip()]
+                bundle["changed_files"] = cf
+                _crit = {"pipeline.py", "CLAUDE.md"}
+                bundle["critical_file_summary"] = {
+                    f: bool(
+                        f in _crit
+                        or f.startswith(".github/")
+                        or f.startswith(".claude/agents/")
+                    )
+                    for f in cf
+                }
+        except Exception:  # noqa: BLE001
+            bundle["changed_files"] = []
+
+        # gate statuses (pipeline_contracts/<pid>/gates/*.json)
+        _gdir = CONTRACTS_DIR / pipeline_id / "gates"
+        for _fname, _key in (
+            ("technical_result.json", "technical_gate_status"),
+            ("oracle_result.json", "oracle_gate_status"),
+            ("github_ci_result.json", "github_ci_gate_status"),
+        ):
+            _gp = _gdir / _fname
+            if _gp.exists():
+                try:
+                    _gj = json.loads(_gp.read_text(encoding="utf-8"))
+                    if isinstance(_gj, dict):
+                        bundle[_key] = str(_gj.get("status", "UNKNOWN"))
+                except Exception:  # noqa: BLE001
+                    pass
+
+        # materialize — _codex_snapshot_identity가 읽는 동일 경로에 쓴다(SSoT 불변식).
+        #   PIPELINE_STATE_PATH 격리 시 state 파일 옆 .pipeline/에 위치한다(테스트 오염 방지).
+        bundle_path = _codex_review_bundle_path(pipeline_id)
+        bundle_path.parent.mkdir(parents=True, exist_ok=True)
+        raw = json.dumps(
+            bundle, ensure_ascii=False, sort_keys=True, indent=2
+        ).encode("utf-8")
+        bundle_path.write_bytes(raw)
+        # _codex_snapshot_identity가 _sha256_file로 재현하므로 동일 함수로 SHA를 계산한다.
+        sha = _sha256_file(bundle_path)
+        if not sha:
+            return ("", "")
+        return (sha, str(bundle_path))
+    except Exception as exc:  # noqa: BLE001 — write/직렬화 실패만 여기 도달. fail-closed는 호출자.
+        try:
+            _log_event(state, f"codex_review_bundle_build_failed: {exc}")
+        except Exception:  # noqa: BLE001
+            pass
+        return ("", "")
+
+
 # ---------------------------------------------------------------------------
 # BUG-20260702-E69E: Codex CLI 실행 오류를 REJECT verdict와 분리한다.
 #   Codex가 명시적으로 "REJECT - ..."를 반환한 경우만 REJECTED이며,
@@ -19158,6 +19335,18 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
             prev_cli_error_count = 0
             prev_status = ""
 
+    # BUG-20260702-E69E: Codex Review 입력 bundle을 SSoT artifact로 먼저 materialize한다(fail-closed).
+    #   이 write가 review_bundle_sha256을 non-empty로 만들어, 이후 _codex_snapshot_identity가
+    #   동일 경로를 읽어 snapshot_identity의 review_bundle_sha256 차원을 실제로 관측/비교하게 한다.
+    #   write/SHA 실패 시 Codex CLI를 호출하지 않고 즉시 BLOCK한다(입력 스냅샷 없이 실행 금지).
+    _review_bundle_sha256, _bundle_path = _build_codex_review_bundle(state, pipeline_id)
+    if not _review_bundle_sha256:
+        _die(
+            "[BLOCKED] failure_code=codex_review_bundle_build_failed\n"
+            "  review bundle 생성 실패 또는 SHA 빈 값 — Codex CLI를 호출하지 않습니다 (fail-closed).\n"
+            "  수정 후 다시 gates codex-review를 실행하세요."
+        )
+
     # BUG-20260702-E69E REJECT-1: attempt 단위 상태 모델 — 이번 시도의 고유 식별자를 발급한다.
     attempt_id = _generate_attempt_id()
 
@@ -19176,6 +19365,24 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     #   Review를 요구한다(fail-closed). 이전 값이 빈 문자열이면 비교 불가 → 새 attempt로 진행 허용.
     if retry_cli_error and prev_status == "ERROR":
         _prev_attempt_id = str(_prev.get("attempt_id", "") or "unknown")
+
+        # BUG-20260702-E69E: --retry-cli-error는 이전 ERROR attempt에 review_bundle_sha256이
+        #   기록되어 있어야만 허용한다. 빈 값이면 그 attempt는 신뢰할 수 있는 snapshot 비교 기준이
+        #   없으므로 재사용을 금지하고 새 Codex Review를 요구한다(fail-closed).
+        #   단, 하위 호환: snapshot_identity dict가 없는 구(舊) 스키마(v3 이하) 결과는 bundle
+        #   메커니즘 도입 이전에 기록된 것이므로 이 검사에서 제외하고 아래 snapshot 비교로 넘긴다.
+        _prev_has_new_schema = isinstance(_prev.get("snapshot_identity"), dict)
+        _prev_bundle_sha = str(
+            _extract_snapshot_identity(_prev).get("review_bundle_sha256", "") or ""
+        )
+        if _prev_has_new_schema and not _prev_bundle_sha:
+            _die(
+                "[BLOCKED] failure_code=codex_retry_missing_prev_bundle_sha\n"
+                "  이전 ERROR attempt의 review_bundle_sha256이 비어 있습니다.\n"
+                "  --retry-cli-error를 사용하려면 이전 attempt에 review_bundle_sha256이 기록되어 있어야 합니다.\n"
+                "  새 Codex Review를 시작하세요 (--retry-cli-error 없이)."
+            )
+
         # 6개 차원(review_bundle/contract/pr_head/packet/pr_body_candidate/staging)을
         # 관측 가능한 범위 내에서 비교한다. 하나라도 관측된 차원의 값이 다르면 snapshot 변경.
         _prev_identity = _extract_snapshot_identity(_prev)
@@ -19230,6 +19437,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 state, pipeline_id, cli_run,
                 prev_reject_count, prev_cli_error_count,
                 attempt_id=attempt_id,
+                review_bundle_sha256=_review_bundle_sha256,
             )
             return  # unreachable (_finish_codex_review_error가 sys.exit)
         # ERROR가 아니면 verdict를 CLI 결과에서 도출하여 아래 정상 기록 경로로 이어간다.
@@ -19435,7 +19643,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
         "pr_body_candidate_sha256": pr_body_sha or _snap_now["pr_body_candidate_sha256"],
         "staging_id": _snap_now["staging_id"],
         "contract_sha256": _snap_now["contract_sha256"],
-        "review_bundle_sha256": _snap_now["review_bundle_sha256"],
+        # BUG-20260702-E69E: 방금 materialize한 bundle SHA를 우선 반영(입력 bundle과 결정적 일치).
+        "review_bundle_sha256": _review_bundle_sha256 or _snap_now["review_bundle_sha256"],
     }
 
     result = {
@@ -19574,7 +19783,9 @@ def _codex_snapshot_identity(pipeline_id: str) -> Dict[str, str]:
 
     review_bundle_sha256 = ""
     try:
-        _bundle_path = CONTRACTS_DIR / pipeline_id / "codex_review_bundle.json"
+        # BUG-20260702-E69E: bundle은 _build_codex_review_bundle이 기록한 경로에서 읽는다
+        #   (producer/consumer 경로 통일 + PIPELINE_STATE_PATH 격리).
+        _bundle_path = _codex_review_bundle_path(pipeline_id)
         if _bundle_path.exists():
             review_bundle_sha256 = _sha256_file(_bundle_path)
     except Exception:  # noqa: BLE001
@@ -19658,8 +19869,12 @@ def _snapshot_identity_matches(
     for k in keys:
         pv = str(prev.get(k, "") or "")
         cv = str(current.get(k, "") or "")
-        if not pv and not cv:
-            continue  # 관측 불가 차원은 제외.
+        # BUG-20260702-E69E: 양쪽 모두 값이 관측된 차원만 비교한다. 한쪽만 값이 있는 경우(예: 구
+        #   스키마 prev에는 bundle SHA가 없지만 현재 run은 bundle을 materialize한 경우)는 "변경"이
+        #   아니라 "prev 측 미관측"이므로 비교에서 제외한다. 이렇게 해야 bundle 메커니즘 도입 전에
+        #   기록된 ERROR와의 retry 비교가 거짓 변경으로 오판되지 않는다(하위 호환).
+        if not pv or not cv:
+            continue  # 한쪽이라도 미관측이면 비교 불가 차원으로 제외.
         compared_fields.append(k)
         if pv != cv:
             changed_fields.append(k)
@@ -19715,6 +19930,8 @@ def _finish_codex_review_error(
     prev_reject_count: int,
     prev_cli_error_count: int,
     attempt_id: Optional[str] = None,
+    snapshot_identity: Optional[Dict[str, Any]] = None,
+    review_bundle_sha256: str = "",
 ) -> NoReturn:
     """Codex CLI ERROR 결과를 기록하고 이력에 남긴 뒤 non-zero exit한다.
 
@@ -19725,6 +19942,10 @@ def _finish_codex_review_error(
         prev_reject_count: 직전 누적 REJECTED 횟수 (그대로 유지).
         prev_cli_error_count: 직전 누적 ERROR 횟수 (+1).
         attempt_id: 이번 시도의 고유 식별자. None이면 새로 생성한다.
+        snapshot_identity: 이번 attempt가 검토한 snapshot identity(호출자 계산값). None이면
+            _codex_snapshot_identity로 재계산한다.
+        review_bundle_sha256: 이번 attempt가 materialize한 bundle의 SHA256. 비어 있지 않으면
+            snapshot identity의 review_bundle_sha256보다 우선하여 result에 기록한다.
     Raises:
         SystemExit: 항상 exit code 1로 종료한다 (ERROR = 승인 불가).
     """
@@ -19734,7 +19955,16 @@ def _finish_codex_review_error(
     new_cli_error_count = prev_cli_error_count + 1
     # BUG-20260702-E69E REJECT-1: ERROR 결과에도 snapshot identity를 실제 값으로 기록한다.
     #   --retry-cli-error 시 이 값을 현재 snapshot과 비교하여 재사용/무효화를 판정한다.
-    _snap = _codex_snapshot_identity(pipeline_id)
+    if isinstance(snapshot_identity, dict):
+        _snap = dict(snapshot_identity)
+    else:
+        _snap = _codex_snapshot_identity(pipeline_id)
+    # BUG-20260702-E69E: 호출자가 방금 materialize한 bundle SHA가 있으면 우선 반영한다
+    #   (입력 bundle과 ERROR result의 review_bundle_sha256을 결정적으로 일치시킨다).
+    _effective_bundle_sha = str(review_bundle_sha256 or "") or str(
+        _snap.get("review_bundle_sha256", "") or ""
+    )
+    _snap["review_bundle_sha256"] = _effective_bundle_sha
     result = {
         "schema_version": 4,  # REJECT-1: attempt-model + snapshot_identity + effective pointer
         "pipeline_id": pipeline_id,
