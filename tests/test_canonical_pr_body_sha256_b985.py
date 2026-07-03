@@ -324,5 +324,6 @@ def test_tc9_direct_hashlib_regression():
     test_tc9_no_direct_hashlib_pr_body_outside_helper()
 
 
+# oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
