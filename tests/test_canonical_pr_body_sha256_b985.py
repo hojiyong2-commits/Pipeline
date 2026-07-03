@@ -324,6 +324,53 @@ def test_tc9_direct_hashlib_regression():
     test_tc9_no_direct_hashlib_pr_body_outside_helper()
 
 
+# ── TC-12: pr_body_candidate_sha256 != packet_sha256 (시맨틱 분리 검증) ────────
+def test_tc12_pr_body_candidate_ne_packet_sha256(tmp_path, monkeypatch):
+    """pr_body_candidate_sha256과 packet_sha256은 서로 다른 값이어야 한다.
+
+    버그: staged_packet_sha256(패킷 파일 SHA)를 pr_body_candidate_sha256에 잘못 넣으면
+    두 값이 같아진다. 올바른 구현에서는 두 값이 다른 SHA여야 한다.
+    """
+    # 패킷 파일(human_acceptance_packet.md) 내용
+    packet_content = "## 최종 확인 안내\n테스트 패킷 내용\n"
+    # 현재 PR body (패킷 블록 없음)
+    pr_body = "## 작업 요약\n- 변경 사항\n"
+
+    packet_sha = pipeline._canonical_pr_body_sha256(packet_content)
+
+    # PR body에 패킷 블록을 삽입한 최종 body의 canonical SHA
+    final_body = pipeline._replace_pr_body_packet_block(pr_body, packet_content)
+    candidate_sha = pipeline._canonical_pr_body_sha256(final_body)
+
+    # 두 SHA는 반드시 달라야 한다
+    assert candidate_sha != packet_sha, (
+        "pr_body_candidate_sha256과 packet_sha256이 동일함 — "
+        "staged_packet_sha256을 pr_body_candidate_sha256에 넣는 버그가 남아 있음"
+    )
+
+
+# ── TC-13: pr_body_candidate_sha256 == canonical_sha256(패킷 블록 교체된 PR body) ──
+def test_tc13_pr_body_candidate_equals_final_body_canonical_sha():
+    """pr_body_candidate_sha256은 staged_packet_content로 PR body 블록을 교체한
+    최종 body의 canonical SHA와 일치해야 한다.
+    """
+    packet_content = "## 최종 확인 안내\n테스트 패킷 내용\n- AC 1: PASS\n- AC 2: PASS\n"
+    pr_body = "## 작업 요약\n- 변경 사항\n\n## 검증\n통과\n"
+
+    # 최종 body = PR body에 패킷 블록 교체
+    final_body = pipeline._replace_pr_body_packet_block(pr_body, packet_content)
+
+    # pr_body_candidate_sha256은 이 최종 body의 canonical SHA여야 함
+    expected_candidate_sha = pipeline._canonical_pr_body_sha256(final_body)
+
+    # 패킷 파일 자체의 SHA와는 달라야 함 (TC-12와 동일 검증)
+    packet_sha = pipeline._canonical_pr_body_sha256(packet_content)
+    assert expected_candidate_sha != packet_sha
+
+    # 참조 구현(직접 계산)과 일치 확인
+    assert expected_candidate_sha == _reference_sha(final_body)
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

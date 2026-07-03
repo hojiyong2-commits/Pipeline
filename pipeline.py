@@ -6940,13 +6940,21 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
         except Exception:  # noqa: BLE001
             bundle["contract_sha256"] = ""
 
-        # pr_body_candidate_sha256 (acceptance_staging.json의 frozen packet SHA)
+        # pr_body_candidate_sha256: staged_packet_content로 PR body 블록을 교체한
+        #   최종 body의 canonical SHA. staged_packet_sha256(패킷 파일 SHA)와는 의미가 다르다.
         try:
             _stg = _load_acceptance_staging(pipeline_id)
             if isinstance(_stg, dict):
-                bundle["pr_body_candidate_sha256"] = str(
-                    _stg.get("staged_packet_sha256", "") or ""
-                )
+                _staged_content = _stg.get("staged_packet_content")
+                if _staged_content:
+                    _cur_body = _get_pr_body_text()
+                    if _cur_body is not None:
+                        _final_body = _replace_pr_body_packet_block(
+                            _cur_body, _staged_content
+                        )
+                        bundle["pr_body_candidate_sha256"] = (
+                            _canonical_pr_body_sha256(_final_body)
+                        )
         except Exception:  # noqa: BLE001
             bundle["pr_body_candidate_sha256"] = ""
 
@@ -19861,12 +19869,19 @@ def _codex_snapshot_identity(pipeline_id: str) -> Dict[str, str]:
     except Exception:  # noqa: BLE001
         packet_sha256 = ""
 
+    # pr_body_candidate_sha256: staged_packet_content로 PR body 블록을 교체한
+    #   최종 body의 canonical SHA. staged_packet_sha256(패킷 파일 SHA)와는 의미가 다르다.
     pr_body_candidate_sha256 = ""
     staging_id = ""
     try:
         _stg = _load_acceptance_staging(pipeline_id)
         if isinstance(_stg, dict):
-            pr_body_candidate_sha256 = str(_stg.get("staged_packet_sha256", "") or "")
+            _staged_content = _stg.get("staged_packet_content")
+            if _staged_content:
+                _cur_body = _get_pr_body_text()
+                if _cur_body is not None:
+                    _final_body = _replace_pr_body_packet_block(_cur_body, _staged_content)
+                    pr_body_candidate_sha256 = _canonical_pr_body_sha256(_final_body)
             _req_candidate = _stg.get("req_candidate")
             if isinstance(_req_candidate, dict):
                 staging_id = str(_req_candidate.get("request_id", "") or "")
