@@ -5163,44 +5163,6 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-# [Purpose]: IMP-20260703-B985 MT-1 — PR body SHA-256 계산의 단일 canonical 신뢰 루트(SSoT).
-#   BUG-20260628-F52C 계열 REJECT의 근본 원인은 PR body SHA를 계산하는 코드가 여러 곳에 흩어져
-#   있고 각기 다른 정규화(어떤 곳은 CRLF→LF, 어떤 곳은 정규화 없음, 어떤 곳은 jq stdout trailing
-#   newline)를 적용해 동일 논리 본문이 서로 다른 SHA로 갈렸던 것이다. 이 helper로 모든 PR body SHA
-#   계산 경로를 통일하여 candidate/canonical SHA가 동일 정규화 규칙 위에서 계산되도록 강제한다.
-# [Assumptions]: 입력 text는 이미 gh `--json body`(jq 없이) JSON parse로 추출한 body 필드 원문이거나,
-#   로컬에서 구성한 "publish 후 최종 body" 원문이다. 호출자는 jq stdout/콘솔 stdout을 전달하지 않는다.
-# [Vulnerability & Risks]: 이 helper는 fail-closed가 아니라 순수 계산 함수다. None/비str 입력은
-#   TypeError로 즉시 차단한다(호출자가 잘못된 값을 넘기면 조용히 통과하지 않는다). trailing newline은
-#   절대 strip하지 않는다 — GitHub API가 저장한 body 값을 그대로 재현해야 canonical 2자 검증이
-#   성립하기 때문이다(strip 시 GitHub 저장값과 SHA가 갈려 회귀).
-# [Improvement]: 향후 GitHub GraphQL canonical body를 직접 받아 REST/GraphQL 정규화 차이까지 흡수 가능.
-def _canonical_pr_body_sha256(text: str) -> str:
-    """PR body SHA-256 canonical SSoT helper (모든 PR body SHA 계산의 단일 진입점).
-
-    규칙(IMP-20260703-B985 MT-1):
-      - CRLF(\\r\\n) 및 lone CR(\\r)을 LF(\\n)로 정규화하여 OS/GitHub 저장 형식 차이를 흡수한다.
-      - trailing newline은 제거하지 않는다(strip 금지) — GitHub API body 저장값 재현성 보장.
-      - 정규화된 텍스트를 UTF-8로 인코딩 후 hashlib.sha256().hexdigest()를 반환한다.
-      - jq stdout, 콘솔 stdout, trailing newline 기반 계산은 이 helper를 통과할 수 없다(호출자 책임).
-
-    Args:
-        text: PR body 원문 문자열 (gh --json body JSON parse 결과 또는 로컬 구성 최종 body).
-    Returns:
-        canonical body SHA-256 hex 문자열.
-    Raises:
-        TypeError: text가 None이거나 str이 아닌 경우 (외부 입력 타입 가드, 암묵적 형변환 금지).
-    """
-    if text is None:
-        raise TypeError("text must not be None")
-    if not isinstance(text, str):
-        raise TypeError(f"text must be str, got {type(text).__name__}")
-    # CRLF→LF, lone CR→LF 순서로 정규화(먼저 \r\n을 처리해야 이중 변환을 피한다).
-    text_lf = text.replace("\r\n", "\n").replace("\r", "\n")
-    body_bytes = text_lf.encode("utf-8")
-    return hashlib.sha256(body_bytes).hexdigest()
-
-
 # IMP-20260531-BBDB MT-1: User Acceptance Nonce Gate 헬퍼 (5개)
 # [Purpose]: --user-confirmed 단독 통과 차단을 위한 일회용 승인 코드(nonce) 파일 I/O.
 # [Assumptions]: BASE_DIR 또는 현재 작업 디렉토리에 acceptance_request.json 저장.
@@ -17156,29 +17118,17 @@ def _get_pr_body_text() -> Optional[str]:
     Raises:
         없음.
     """
-    # IMP-20260703-B985 MT-4: `--jq .body`(stdout, trailing newline 추가 가능) 대신
-    # `--json body`(jq 없이) → Python JSON parse로 body 필드를 추출한다. jq stdout이 붙이는
-    # trailing newline이 candidate body SHA(_canonical_pr_body_sha256 입력)를 오염시키던 경로를 제거한다.
     gh_args_prefix = _build_gh_cmd_prefix()
     try:
         r = subprocess.run(
-            gh_args_prefix + ["pr", "view", "--json", "body"],
+            gh_args_prefix + ["pr", "view", "--json", "body", "--jq", ".body"],
             capture_output=True, text=True, timeout=10,
             encoding="utf-8", errors="replace",
         )
-        if r.returncode != 0:
-            return None
-        out = (r.stdout or "").strip()
-        if not out:
-            return None
-        data = json.loads(out)
-        if not isinstance(data, dict):
-            return None
-        body = data.get("body")
-        if body is None or not isinstance(body, str):
-            return None
-        return body if body else None
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError, json.JSONDecodeError):
+        if r.returncode == 0:
+            out = r.stdout
+            return out if out else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
     return None
 
@@ -17189,7 +17139,7 @@ def _get_pr_body_text() -> Optional[str]:
 #   `gh pr view --json body --jq .body`(stdout) 결과를 그대로 인코딩했기 때문이다. `--jq` 출력은
 #   stdout이며 trailing newline을 덧붙이거나 일부 환경에서 정규화 차이가 생긴다. 따라서 canonical
 #   SHA의 신뢰 루트를 `gh pr view <pr_number> --json body`(jq 없이) → JSON parse → body 필드 →
-#   _canonical_pr_body_sha256(SSoT helper) 로 통일한다 (IMP-20260703-B985 MT-4).
+#   .encode('utf-8') → sha256 으로 통일한다.
 # [Assumptions]: gh CLI(또는 PIPELINE_GH_EXECUTABLE stub)가 `--json body`를 JSON 객체로 반환한다.
 #   pr_number가 None이면 현재 브랜치 PR을 자동 조회(인자 없는 gh pr view --json body).
 # [Vulnerability & Risks]: gh 부재/PR 없음/JSON 파싱 실패/body 필드 부재는 모두 None(graceful)으로
@@ -17202,7 +17152,7 @@ def _fetch_canonical_pr_body_sha256(pr_number: Optional[int] = None) -> Optional
     규칙(BUG-20260628-F52C r11):
       - `gh pr view [<pr_number>] --json body`(jq 없이) 실행 후 JSON parse하여 body 필드만 추출한다.
       - --jq 출력, 콘솔 stdout, trailing newline 기반 계산은 절대 하지 않는다.
-      - body 텍스트를 _canonical_pr_body_sha256(SSoT helper)로 SHA 계산한다 (IMP-20260703-B985 MT-4).
+      - body 텍스트를 .encode('utf-8') 후 hashlib.sha256().hexdigest()로 계산한다.
       - 실패(gh 부재/PR 없음/파싱 실패/body 부재) 시 None을 반환한다(graceful).
 
     Args:
@@ -17253,11 +17203,12 @@ def _fetch_canonical_pr_body_sha256(pr_number: Optional[int] = None) -> Optional
         body = data.get("body")
         if body is None or not isinstance(body, str):
             return None
-        # IMP-20260703-B985 MT-4: inline 정규화+hashlib를 canonical SSoT helper로 교체.
-        # helper 내부에서 CRLF→LF, lone CR→LF 정규화 후 UTF-8 인코딩하여 sha256을 계산한다.
-        # JSON parse한 body 필드 원문을 그대로 helper에 전달하므로 jq stdout/trailing newline 오염이 없다.
-        # acceptance_request candidate/codex candidate/canonical 모든 경로가 이 helper 하나로 통일된다.
-        return _canonical_pr_body_sha256(body)
+        # BUG-20260628-F52C r11: CRLF→LF 정규화로 Windows/Linux/GitHub 저장 형식 차이를 흡수한다.
+        # 동일 논리 본문이 줄바꿈 형식만 다르면(예: gh가 \r\n, GitHub canonical이 \n) SHA가 갈렸다.
+        # acceptance_request와 codex canonical을 동일 정규화 경로로 계산해 3자 일치를 보장한다.
+        body = body.replace("\r\n", "\n")
+        # canonical: JSON으로 parse한 body 필드 원문을 LF 정규화 후 인코딩(trailing newline 미추가).
+        return hashlib.sha256(body.encode("utf-8")).hexdigest()
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError, json.JSONDecodeError):
         return None
 
@@ -19179,8 +19130,7 @@ def _get_staged_pr_body_sha(
         if current_body is None:
             return None
         final_body = _replace_pr_body_packet_block(current_body, staged_packet_content)
-        # IMP-20260703-B985 MT-5: staged candidate body SHA도 canonical SSoT helper로 통일.
-        return _canonical_pr_body_sha256(final_body)
+        return hashlib.sha256(final_body.encode("utf-8")).hexdigest()
 
     # gh CLI가 없으면 PR body를 stage할 수 없으므로 None(차원 생략).
     if not _gh_available():
@@ -19200,8 +19150,7 @@ def _get_staged_pr_body_sha(
 
     # publish가 실제로 기록할 최종 PR body = 현재 body의 FINAL_PACKET 블록을 staged 본문으로 교체.
     final_body = _replace_pr_body_packet_block(current_body, staged_content)
-    # IMP-20260703-B985 MT-5: staged candidate body SHA도 canonical SSoT helper로 통일.
-    return _canonical_pr_body_sha256(final_body)
+    return hashlib.sha256(final_body.encode("utf-8")).hexdigest()
 
 
 # [Purpose]: BUG-20260628-F52C 재작업 — request-accept 내부에서 staged snapshot 기준으로
@@ -19700,8 +19649,7 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                 final_body = _replace_pr_body_packet_block(
                     current_body, _staged_content_from_file
                 )
-                # IMP-20260703-B985 MT-6: codex record의 candidate body SHA도 canonical SSoT helper로 통일.
-                pr_body_sha = _canonical_pr_body_sha256(final_body)
+                pr_body_sha = hashlib.sha256(final_body.encode("utf-8")).hexdigest()
             except (OSError, ValueError, KeyError, TypeError):
                 pr_body_sha = ""
         elif _approve_pending_candidate is not None:
@@ -20471,9 +20419,7 @@ def _prepare_acceptance_snapshot_candidate(
     except Exception:
         pass
 
-    # IMP-20260703-B985 MT-2: 직접 hashlib 호출을 canonical SSoT helper로 교체.
-    # 이 값은 request-accept 시점의 "publish 예정 로컬 body" candidate SHA다(canonical 아님).
-    pr_body_sha256_for_req = _canonical_pr_body_sha256(pr_body)
+    pr_body_sha256_for_req = hashlib.sha256(pr_body.encode("utf-8")).hexdigest()
     body_check_result = _validate_pr_body_readiness(pr_body)
     pr_body_readiness_for_req = body_check_result.get("status", "PASS")
     required_sections_present_for_req = (
@@ -20500,13 +20446,6 @@ def _prepare_acceptance_snapshot_candidate(
         "packet_path": pkt_path_for_req,
         "packet_sha256": pkt_sha_for_req,
         "github_ci_head_sha": ci_head_sha_for_req,
-        # IMP-20260703-B985 MT-7: candidate SHA와 canonical SHA를 명시적으로 분리한 필드.
-        #   pr_body_candidate_sha256: request-accept 시점 로컬 "publish 예정 body"의 SHA(canonical 아님).
-        #   github_canonical_pr_body_sha256: publish 후 GitHub에서 fetch한 실제 canonical body SHA
-        #     (_publish_acceptance_request가 publish 직후 채운다; 여기서는 빈 문자열로 초기화).
-        #   pr_body_sha256: backward compatibility 필드 — publish 후 canonical 값으로 갱신됨(기존 동작 유지).
-        "pr_body_candidate_sha256": pr_body_sha256_for_req,
-        "github_canonical_pr_body_sha256": "",
         "pr_body_sha256": pr_body_sha256_for_req,
         "pr_body_readiness": pr_body_readiness_for_req,
         "required_sections_present": required_sections_present_for_req,
@@ -20633,9 +20572,6 @@ def _publish_acceptance_request(
                 _req_path_post.read_text(encoding="utf-8", errors="replace")
             )
             _req_post["pr_body_sha256"] = _updated_body_sha
-            # IMP-20260703-B985 MT-7: publish 후 GitHub canonical body SHA를 전용 필드에 분리 기록.
-            # candidate 필드(pr_body_candidate_sha256)는 request-accept 시점 로컬 값이므로 덮어쓰지 않는다.
-            _req_post["github_canonical_pr_body_sha256"] = _updated_body_sha
             _pkt_p_post = snapshot_result.get("packet_path")
             if _pkt_p_post:
                 _req_post["packet_sha256"] = _sha256_file(Path(_pkt_p_post))
@@ -20650,7 +20586,7 @@ def _publish_acceptance_request(
                 json.dumps(_req_post, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            print("  [PR 본문 SHA 재기록] pr_body_sha256 + github_canonical_pr_body_sha256(canonical) 업데이트 완료")
+            print("  [PR 본문 SHA 재기록] pr_body_sha256(canonical) 업데이트 완료")
         except (OSError, json.JSONDecodeError, TypeError) as _exc:
             _die(
                 "[BLOCKED] failure_code=pr_body_resync_failed\n"
@@ -20779,10 +20715,7 @@ def _verify_published_canonical_pr_body(
             "gates request-accept를 다시 실행하세요."
         )
 
-    # IMP-20260703-B985 MT-3: 직접 hashlib 호출을 canonical SSoT helper로 교체.
-    # current_pr_body는 _fetch_canonical_pr_body_text(동일 SSoT 정규화)로 읽은 GitHub canonical 원문이며,
-    # _fetch_canonical_pr_body_sha256도 동일 helper를 사용하므로 2자 검증의 정규화 경로가 완전히 일치한다.
-    recompute_sha = _canonical_pr_body_sha256(current_pr_body)
+    recompute_sha = hashlib.sha256(current_pr_body.encode("utf-8")).hexdigest()
 
     # canonical 2자: acceptance_request.pr_body_sha256 == sha256(현재 GitHub canonical body).
     if recorded_body_sha != recompute_sha:
@@ -20947,9 +20880,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     new_evidence_sha256: Optional[str] = None if is_url else _compute_file_sha256(evidence_str)
     # IMP-20260611-A716: _should_reuse_acceptance_nonce 호출 전 pr_body SHA-256 계산
     # (pr_body는 line 15785에서 이미 fetch됨)
-    # IMP-20260703-B985 MT-5: 직접 hashlib 호출을 canonical SSoT helper로 교체 (candidate body SHA).
     _new_pr_body_sha256: Optional[str] = (
-        _canonical_pr_body_sha256(pr_body) if pr_body else None
+        hashlib.sha256(pr_body.encode("utf-8")).hexdigest() if pr_body else None
     )
 
     existing_req = _load_acceptance_request()
@@ -22789,10 +22721,10 @@ def cmd_gates(args: argparse.Namespace) -> None:
         if _saved_body_sha_early:
             _current_pr_body_early = _get_pr_body_text()
             if _current_pr_body_early:
-                # IMP-20260703-B985 MT-5: stale 조기 검사도 canonical SSoT helper로 통일.
-                # _get_pr_body_text가 jq-free JSON parse body를 반환하고 candidate SHA도 동일 helper로
-                # 계산되므로, 이 비교가 candidate 기준(pr_body_sha256)과 일관된 정규화 위에서 이뤄진다.
-                _current_body_sha_early = _canonical_pr_body_sha256(_current_pr_body_early)
+                import hashlib as _hashlib_stale_early
+                _current_body_sha_early = _hashlib_stale_early.sha256(
+                    _current_pr_body_early.encode("utf-8")
+                ).hexdigest()
                 if _current_body_sha_early != _saved_body_sha_early:
                     _record_failure_packet(
                         state,
