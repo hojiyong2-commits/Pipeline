@@ -51,17 +51,6 @@
       "requires_force_add": false
     }
   ],
-  "workspace_file_checks": [
-    {
-      "path": "pipeline.py",
-      "sha256": "107f15f4d698bc7beb198e608f4997afae2a02a194d121476b1eac1a03939ba1",
-      "size_bytes": 1325636
-    },
-    {
-      "path": "tests/test_canonical_pr_body_sha256_b985.py",
-      "sha256": "520988360a1488bec3c6caeb805a555aeeff27e5c7d339176a1ea2a05a8baab6",
-      "size_bytes": 15451
-    }
-  ],
+  "workspace_file_checks": [],
   "local_only_files": []
 }
