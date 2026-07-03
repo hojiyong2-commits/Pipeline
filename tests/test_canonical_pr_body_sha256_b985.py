@@ -298,5 +298,31 @@ def test_tc11_e69e_state_model_intact():
     assert "github_canonical_pr_body_sha256" in src, "canonical 필드 없음"
 
 
+# ── Oracle test_set.json alias (test_set.json은 frozen이므로 함수명 alias를 여기서 제공) ──
+# test_set.json T001: test_tc1_crlf_lf_normalization
+def test_tc1_crlf_lf_normalization():
+    """TC-1 oracle alias: test_tc1_crlf_lf_normalization_same_sha와 동일."""
+    test_tc1_crlf_lf_normalization_same_sha()
+
+
+# test_set.json T002: test_tc2_trailing_newline
+def test_tc2_trailing_newline():
+    """TC-2 oracle alias: test_tc2_trailing_newline_distinct와 동일."""
+    test_tc2_trailing_newline_distinct()
+
+
+# test_set.json T003: test_tc3_json_parse_vs_jq
+def test_tc3_json_parse_vs_jq():
+    """TC-3 oracle alias: test_tc3_source_has_no_jq_body_in_get_pr_body_text와 동일.
+    gh fixture 없이 실행 가능한 소스 레벨 검증."""
+    test_tc3_source_has_no_jq_body_in_get_pr_body_text()
+
+
+# test_set.json T004: test_tc9_direct_hashlib_regression
+def test_tc9_direct_hashlib_regression():
+    """TC-9 oracle alias: test_tc9_no_direct_hashlib_pr_body_outside_helper와 동일."""
+    test_tc9_no_direct_hashlib_pr_body_outside_helper()
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
