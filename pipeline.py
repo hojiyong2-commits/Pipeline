@@ -6942,19 +6942,26 @@ def _build_codex_review_bundle(state: Dict[str, Any], pipeline_id: str) -> Tuple
 
         # pr_body_candidate_sha256: staged_packet_content로 PR body 블록을 교체한
         #   최종 body의 canonical SHA. staged_packet_sha256(패킷 파일 SHA)와는 의미가 다르다.
+        # IMP-20260703-B985 MT-9: staged frozen SHA를 먼저 읽어 re-fetch 방지.
+        # 필드가 없으면 구형 staging 재계산 fallback.
         try:
             _stg = _load_acceptance_staging(pipeline_id)
             if isinstance(_stg, dict):
-                _staged_content = _stg.get("staged_packet_content")
-                if _staged_content:
-                    _cur_body = _get_pr_body_text()
-                    if _cur_body is not None:
-                        _final_body = _replace_pr_body_packet_block(
-                            _cur_body, _staged_content
-                        )
-                        bundle["pr_body_candidate_sha256"] = (
-                            _canonical_pr_body_sha256(_final_body)
-                        )
+                _cached_sha = _stg.get("pr_body_candidate_sha256", "")
+                if _cached_sha:
+                    bundle["pr_body_candidate_sha256"] = _cached_sha
+                else:
+                    # Fallback: 이전 방식 (re-fetch)
+                    _staged_content = _stg.get("staged_packet_content")
+                    if _staged_content:
+                        _cur_body = _get_pr_body_text()
+                        if _cur_body is not None:
+                            _final_body = _replace_pr_body_packet_block(
+                                _cur_body, _staged_content
+                            )
+                            bundle["pr_body_candidate_sha256"] = (
+                                _canonical_pr_body_sha256(_final_body)
+                            )
         except Exception:  # noqa: BLE001
             bundle["pr_body_candidate_sha256"] = ""
 
@@ -18369,7 +18376,8 @@ def _save_acceptance_staging(data: Dict[str, Any]) -> None:
 
     Args:
         data: staging payload dict (pipeline_id, req_candidate, frozen_at,
-            staged_packet_content, staged_packet_sha256 포함).
+            staged_packet_content, staged_packet_sha256, pr_body_candidate_content,
+            pr_body_candidate_sha256 포함).
     Raises:
         TypeError: data가 None이거나 dict가 아닌 경우.
         OSError: 파일 기록 실패 시.
@@ -19654,6 +19662,25 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                         _staged.get("sha_manifest", {}).get("packet_sha256", "") or ""
                     )
                     if _recovered_content and _recovered_pkt_sha:
+                        # IMP-20260703-B985 MT-9: recovery path도 pr_body_candidate 필드 추가.
+                        _recovery_pr_body_text = ""
+                        _recovery_pr_body_candidate_content = ""
+                        _recovery_pr_body_candidate_sha256 = ""
+                        try:
+                            _recovery_pr_body_text = _get_pr_body_text() or ""
+                            if _recovery_pr_body_text and _recovered_content:
+                                _recovery_pr_body_candidate_content = (
+                                    _replace_pr_body_packet_block(
+                                        _recovery_pr_body_text, _recovered_content
+                                    )
+                                )
+                                _recovery_pr_body_candidate_sha256 = (
+                                    _canonical_pr_body_sha256(
+                                        _recovery_pr_body_candidate_content
+                                    )
+                                )
+                        except Exception:  # noqa: BLE001
+                            pass
                         # codex가 검토한 frozen bytes를 staging file에 보존 → request-accept가 재사용.
                         _save_acceptance_staging({
                             "pipeline_id": pipeline_id,
@@ -19661,6 +19688,8 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                             "frozen_at": _recover_frozen_at,
                             "staged_packet_content": _recovered_content,
                             "staged_packet_sha256": _recovered_pkt_sha,
+                            "pr_body_candidate_content": _recovery_pr_body_candidate_content,
+                            "pr_body_candidate_sha256": _recovery_pr_body_candidate_sha256,
                         })
                         _staged_content_from_file = _recovered_content
                         packet_sha = _recovered_pkt_sha
@@ -19876,12 +19905,19 @@ def _codex_snapshot_identity(pipeline_id: str) -> Dict[str, str]:
     try:
         _stg = _load_acceptance_staging(pipeline_id)
         if isinstance(_stg, dict):
-            _staged_content = _stg.get("staged_packet_content")
-            if _staged_content:
-                _cur_body = _get_pr_body_text()
-                if _cur_body is not None:
-                    _final_body = _replace_pr_body_packet_block(_cur_body, _staged_content)
-                    pr_body_candidate_sha256 = _canonical_pr_body_sha256(_final_body)
+            # IMP-20260703-B985 MT-9: 먼저 frozen 필드를 읽어 re-fetch 방지.
+            # 필드가 없으면 구형 staging backward compat fallback.
+            _cached_sha = _stg.get("pr_body_candidate_sha256", "")
+            if _cached_sha:
+                pr_body_candidate_sha256 = _cached_sha
+            else:
+                # Fallback: 이전 방식 (re-fetch)
+                _staged_content = _stg.get("staged_packet_content")
+                if _staged_content:
+                    _cur_body = _get_pr_body_text()
+                    if _cur_body is not None:
+                        _final_body = _replace_pr_body_packet_block(_cur_body, _staged_content)
+                        pr_body_candidate_sha256 = _canonical_pr_body_sha256(_final_body)
             _req_candidate = _stg.get("req_candidate")
             if isinstance(_req_candidate, dict):
                 staging_id = str(_req_candidate.get("request_id", "") or "")
@@ -21106,6 +21142,9 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             staged_sha_manifest = {
                 "packet_sha256": _existing_staging["staged_packet_sha256"],
             }
+            # IMP-20260703-B985 MT-9: frozen 필드 재사용 (재계산 없음)
+            _pr_body_candidate_content = _existing_staging.get("pr_body_candidate_content", "")
+            _pr_body_candidate_sha256 = _existing_staging.get("pr_body_candidate_sha256", "")
             print(
                 f"  [STAGING FILE 재사용] packet_sha256={staged_sha_manifest['packet_sha256']}"
             )
@@ -21122,6 +21161,17 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                     "[PIPELINE ERROR] staged packet content 생성 실패 — 승인 코드 발급 차단.\n"
                     "  gates request-accept를 다시 실행하세요."
                 )
+            # IMP-20260703-B985 MT-9: pr_body_candidate를 staging 시점의 pr_body로 한 번에 계산.
+            # _codex_snapshot_identity / _build_codex_review_bundle은 이 필드를 읽어 re-fetch 생략.
+            _pr_body_candidate_content = ""
+            _pr_body_candidate_sha256 = ""
+            if pr_body and staged_packet_content:
+                _pr_body_candidate_content = _replace_pr_body_packet_block(
+                    pr_body, staged_packet_content
+                )
+                _pr_body_candidate_sha256 = _canonical_pr_body_sha256(
+                    _pr_body_candidate_content
+                )
             # staging file 저장 (codex-review가 같은 bytes를 검토할 수 있게).
             _save_acceptance_staging({
                 "pipeline_id": pipeline_id,
@@ -21129,6 +21179,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 "frozen_at": frozen_at,
                 "staged_packet_content": staged_packet_content,
                 "staged_packet_sha256": staged_sha_manifest.get("packet_sha256", ""),
+                "pr_body_candidate_content": _pr_body_candidate_content,  # NEW
+                "pr_body_candidate_sha256": _pr_body_candidate_sha256,    # NEW
             })
             print(
                 f"  [STAGING FILE 저장] packet_sha256={staged_sha_manifest.get('packet_sha256')}"
@@ -21138,16 +21190,21 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         # 3차 REJECT 수정: 현재 PR body SHA가 아니라 "publish 후 최종 PR body"
         # (= 현재 PR body의 FINAL_PACKET 블록을 staged packet 본문으로 교체한 결과) SHA를 계산한다.
         # gh 없는 환경에서는 _get_staged_pr_body_sha가 None을 반환하여 해당 차원 검증을 생략한다.
-        try:
-            staged_pr_body_sha = _get_staged_pr_body_sha(
-                state, req_candidate, staged_packet_content=staged_packet_content
-            )
-        except (OSError, ValueError, KeyError, TypeError) as _spb_exc:
-            _die(
-                "[PIPELINE ERROR] staged PR 본문 SHA 계산 실패 — 승인 코드 발급 차단.\n"
-                f"  오류: {_spb_exc}\n"
-                "  gates request-accept를 다시 실행하세요."
-            )
+        # IMP-20260703-B985 MT-9: staging frozen SHA를 직접 사용 (re-fetch 없음).
+        # _pr_body_candidate_sha256가 비어 있으면(구형 staging) 기존 _get_staged_pr_body_sha fallback.
+        if _pr_body_candidate_sha256:
+            staged_pr_body_sha = _pr_body_candidate_sha256
+        else:
+            try:
+                staged_pr_body_sha = _get_staged_pr_body_sha(
+                    state, req_candidate, staged_packet_content=staged_packet_content
+                )
+            except (OSError, ValueError, KeyError, TypeError) as _spb_exc:
+                _die(
+                    "[PIPELINE ERROR] staged PR 본문 SHA 계산 실패 — 승인 코드 발급 차단.\n"
+                    f"  오류: {_spb_exc}\n"
+                    "  gates request-accept를 다시 실행하세요."
+                )
         current_head_sha = pr_head_sha or None
         print()
         print(f"  [STAGED SNAPSHOT] packet_sha256={staged_sha_manifest.get('packet_sha256')}")

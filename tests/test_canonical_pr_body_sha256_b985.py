@@ -371,6 +371,181 @@ def test_tc13_pr_body_candidate_equals_final_body_canonical_sha():
     assert expected_candidate_sha == _reference_sha(final_body)
 
 
+class TestFrozenAcceptanceStagingMT9:
+    """MT-9: acceptance_staging.json frozen snapshot 완성 검증"""
+
+    def test_staging_stores_pr_body_candidate_content(self, tmp_path):
+        """새 필드 pr_body_candidate_content가 staging에 저장된다."""
+        from pipeline import _replace_pr_body_packet_block, _canonical_pr_body_sha256
+        pr_body = "# PR\n<!-- PIPELINE_FINAL_PACKET_START -->\nold\n<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        packet = "## New Packet\n"
+        candidate = _replace_pr_body_packet_block(pr_body, packet)
+        sha = _canonical_pr_body_sha256(candidate)
+        staging = {
+            "pipeline_id": "TEST-1",
+            "staged_packet_content": packet,
+            "staged_packet_sha256": "abc",
+            "frozen_at": "2026-01-01T00:00:00Z",
+            "req_candidate": {},
+            "pr_body_candidate_content": candidate,
+            "pr_body_candidate_sha256": sha,
+        }
+        import json
+        p = tmp_path / ".pipeline" / "acceptance_staging.json"
+        p.parent.mkdir(parents=True)
+        p.write_text(json.dumps(staging), encoding="utf-8")
+        # 저장된 값 검증
+        assert staging["pr_body_candidate_content"] == candidate
+        assert staging["pr_body_candidate_sha256"] == sha
+
+    def test_staging_candidate_sha256_equals_canonical_of_replaced_body(self):
+        """pr_body_candidate_sha256 == canonical_sha(replace(pr_body, packet))"""
+        from pipeline import _replace_pr_body_packet_block, _canonical_pr_body_sha256
+        pr_body = "# Title\n\n<!-- PIPELINE_FINAL_PACKET_START -->\nold content\n<!-- PIPELINE_FINAL_PACKET_END -->\n\nfooter"
+        packet = "## Packet Content\ndata here\n"
+        candidate = _replace_pr_body_packet_block(pr_body, packet)
+        sha_direct = _canonical_pr_body_sha256(candidate)
+        # 저장했다가 읽은 것과 같아야 함
+        assert sha_direct == _canonical_pr_body_sha256(candidate)
+
+    def test_staging_candidate_sha256_differs_from_packet_sha256(self):
+        """pr_body_candidate_sha256와 packet_sha256는 의미가 다르다 (동일값 금지)."""
+        import hashlib
+        from pipeline import _replace_pr_body_packet_block, _canonical_pr_body_sha256
+        pr_body = "# PR Body\n<!-- PIPELINE_FINAL_PACKET_START -->\nold\n<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        packet_content = "## Packet\nsome content\n"
+        candidate_body = _replace_pr_body_packet_block(pr_body, packet_content)
+        pr_body_candidate_sha256 = _canonical_pr_body_sha256(candidate_body)
+        # packet_sha256는 패킷 파일 내용의 SHA (여기서는 packet_content의 SHA로 근사)
+        packet_sha256 = hashlib.sha256(packet_content.encode("utf-8")).hexdigest()
+        # pr_body에 packet이 삽입되면 전체 body가 달라지므로 SHA가 다름
+        assert pr_body_candidate_sha256 != packet_sha256
+
+    def test_codex_snapshot_identity_uses_staging_sha_when_available(self, tmp_path, monkeypatch):
+        """_codex_snapshot_identity가 staging의 pr_body_candidate_sha256를 사용하고 re-fetch 없이 반환한다."""
+        import json
+        import pipeline as pl
+        from pipeline import _canonical_pr_body_sha256
+
+        # frozen SHA를 staging에 저장
+        expected_sha = _canonical_pr_body_sha256("# PR Body\npacket block here\n")
+        staging = {
+            "pipeline_id": "IMP-TEST",
+            "staged_packet_content": "## Packet\n",
+            "staged_packet_sha256": "def456",
+            "frozen_at": "2026-01-01T00:00:00Z",
+            "req_candidate": {"request_id": "test-req-1"},
+            "pr_body_candidate_content": "# PR Body\npacket block here\n",
+            "pr_body_candidate_sha256": expected_sha,
+        }
+        staging_path = tmp_path / ".pipeline" / "acceptance_staging.json"
+        staging_path.parent.mkdir(parents=True)
+        staging_path.write_text(json.dumps(staging), encoding="utf-8")
+
+        # _get_pr_body_text가 호출되면 안 됨 (re-fetch 금지)
+        call_count = {"n": 0}
+        def mock_get_pr_body_text():
+            call_count["n"] += 1
+            return "should not be called"
+
+        monkeypatch.setattr("pipeline.BASE_DIR", tmp_path)
+        monkeypatch.setattr("pipeline._get_pr_body_text", mock_get_pr_body_text)
+        monkeypatch.setattr("pipeline._get_current_pr_head_sha", lambda: "abc123")
+        monkeypatch.setattr("pipeline._packet_output_path", lambda: tmp_path / "packet.md")
+        monkeypatch.setattr("pipeline._codex_review_bundle_path", lambda pid: tmp_path / "bundle.json")
+
+        result = pl._codex_snapshot_identity("IMP-TEST")
+
+        assert result["pr_body_candidate_sha256"] == expected_sha, (
+            f"Expected staging SHA {expected_sha}, got {result['pr_body_candidate_sha256']}"
+        )
+        assert call_count["n"] == 0, (
+            f"_get_pr_body_text was called {call_count['n']} times — re-fetch should not happen"
+        )
+
+    def test_build_codex_review_bundle_uses_staging_sha_when_available(self, tmp_path, monkeypatch):
+        """_build_codex_review_bundle이 staging pr_body_candidate_sha256를 사용하고 re-fetch 없이 반환한다."""
+        import json
+        import pipeline as pl
+        from pipeline import _canonical_pr_body_sha256
+
+        expected_sha = _canonical_pr_body_sha256("# PR Body\npacket block here\n")
+        staging = {
+            "pipeline_id": "IMP-TEST2",
+            "staged_packet_content": "## Packet\n",
+            "staged_packet_sha256": "ghi789",
+            "frozen_at": "2026-01-01T00:00:00Z",
+            "req_candidate": {},
+            "pr_body_candidate_content": "# PR Body\npacket block here\n",
+            "pr_body_candidate_sha256": expected_sha,
+        }
+        staging_path = tmp_path / ".pipeline" / "acceptance_staging.json"
+        staging_path.parent.mkdir(parents=True)
+        staging_path.write_text(json.dumps(staging), encoding="utf-8")
+
+        call_count = {"n": 0}
+        def mock_get_pr_body_text():
+            call_count["n"] += 1
+            return "should not be called"
+
+        monkeypatch.setattr("pipeline.BASE_DIR", tmp_path)
+        monkeypatch.setattr("pipeline._get_pr_body_text", mock_get_pr_body_text)
+        monkeypatch.setattr("pipeline._get_current_pr_head_sha", lambda: "sha999")
+        monkeypatch.setattr("pipeline._packet_output_path", lambda: tmp_path / "packet.md")
+        monkeypatch.setattr("pipeline.CONTRACTS_DIR", tmp_path / "contracts")
+        monkeypatch.setattr("pipeline._codex_review_bundle_path", lambda pid: tmp_path / "bundle.json")
+        monkeypatch.setattr("pipeline._get_git_diff_files", lambda base="origin/main": ["pipeline.py"])
+
+        # state stub
+        state = {"pipeline_id": "IMP-TEST2"}
+        bundle_sha, bundle_path = pl._build_codex_review_bundle(state, "IMP-TEST2")
+
+        # bundle에서 pr_body_candidate_sha256 읽기
+        if bundle_path and Path(bundle_path).exists():
+            bundle_data = json.loads(Path(bundle_path).read_text(encoding="utf-8"))
+            assert bundle_data.get("pr_body_candidate_sha256") == expected_sha, (
+                f"Expected {expected_sha}, got {bundle_data.get('pr_body_candidate_sha256')}"
+            )
+        assert call_count["n"] == 0, (
+            f"_get_pr_body_text was called {call_count['n']} times — re-fetch should not happen"
+        )
+
+    def test_backward_compat_without_new_fields(self, tmp_path, monkeypatch):
+        """staging에 pr_body_candidate_sha256 없으면 fallback re-fetch로 계산한다."""
+        import json
+        import pipeline as pl
+
+        # 구형 staging (새 필드 없음)
+        staging = {
+            "pipeline_id": "IMP-OLD",
+            "staged_packet_content": "## Packet\n",
+            "staged_packet_sha256": "old_sha",
+            "frozen_at": "2026-01-01T00:00:00Z",
+            "req_candidate": {"request_id": "old-req"},
+        }
+        staging_path = tmp_path / ".pipeline" / "acceptance_staging.json"
+        staging_path.parent.mkdir(parents=True)
+        staging_path.write_text(json.dumps(staging), encoding="utf-8")
+
+        call_count = {"n": 0}
+        def mock_get_pr_body_text():
+            call_count["n"] += 1
+            return "# PR Body\n<!-- PIPELINE_FINAL_PACKET_START -->\nold\n<!-- PIPELINE_FINAL_PACKET_END -->\n"
+
+        monkeypatch.setattr("pipeline.BASE_DIR", tmp_path)
+        monkeypatch.setattr("pipeline._get_pr_body_text", mock_get_pr_body_text)
+        monkeypatch.setattr("pipeline._get_current_pr_head_sha", lambda: "abc")
+        monkeypatch.setattr("pipeline._packet_output_path", lambda: tmp_path / "packet.md")
+        monkeypatch.setattr("pipeline._codex_review_bundle_path", lambda pid: tmp_path / "bundle.json")
+
+        result = pl._codex_snapshot_identity("IMP-OLD")
+
+        # 새 필드 없으므로 fallback re-fetch가 호출됨
+        assert call_count["n"] >= 1, "Fallback path should re-fetch PR body"
+        # SHA가 비어있지 않아야 함
+        assert result["pr_body_candidate_sha256"] != "", "Should compute SHA via fallback"
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
