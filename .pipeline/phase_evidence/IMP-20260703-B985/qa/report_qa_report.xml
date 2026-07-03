@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <verdict>PASS</verdict>
+  <run_id>qa-fb7649aedd8f046d</run_id>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</evidence>
+    <accepted>true — 비UI 태스크(pipeline.py 리팩터 + 테스트), dev-agent handover가 최종 인계자로 유효. category_tags에 UI 미포함이므로 ui-app-agent handover 불필요.</accepted>
+  </handover>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 호출 카테고리 아님. gh CLI 호출은 subprocess timeout=10 + JSON parse + graceful None 처리로 이미 방어됨(변경 대상 아님).</wa>
+    <ui>N-A — GUI 위젯 없음. 순수 pipeline.py 엔진 리팩터.</ui>
+    <fs>N-A — 파일 쓰기 신규 없음. acceptance_request.json 필드 추가는 기존 json.dumps(ensure_ascii=False) 경로 유지.</fs>
+    <pd>PASS — _canonical_pr_body_sha256 단일 SSoT helper로 14개 분산 SHA 계산 경로를 통일. 명시적 타입 계약 (text: str) -> str, TypeError 가드. God function 없음.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA 미채점.</sec>
+    <al>PASS — None/비str(bool/bytes/list/dict) TypeError 가드, 빈 문자열 유효 SHA, 100KB 대입력 안정, bare except 없음. 4종 방어 충족.</al>
+    <build>N-A — BUILD 태그 없음. pipeline.py는 EXE 빌드 대상 아님.</build>
+    <vsce>N-A — VSCE 태그 없음. VS Code Extension 아님.</vsce>
+  </category_check>
+
+  <numeric_score>120</numeric_score>
+  <numeric_score_detail>
+    <wa score="0" max="0">N/A — WA 카테고리 미해당</wa>
+    <ui score="0" max="0">N/A — UI 카테고리 미해당</ui>
+    <fs score="0" max="0">N/A — FS 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5 (SSoT helper 완전 격리, 14개 배선 통일) + 인터페이스계약 5/5 (typed signature + TypeError 가드)</pd>
+    <al score="20" max="20">타입가드 5/5 + 범위(빈문자열/대입력) 5/5 + 입력타입 5/5 + 빈데이터 5/5</al>
+    <build score="0" max="0">N/A</build>
+    <sec score="N/A" max="N/A">Phase 5 전담</sec>
+    <total score="120" max="120"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS(≥96/120) — 적용 카테고리(PD 10 + AL 20 = 30/30, 100%)를 120 스케일로 환산 시 만점. N/A 카테고리는 채점 제외.</numeric_verdict>
+  </numeric_score_detail>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev handover self_check.execution_check = PASS (py_compile OK, import OK, B985 18 passed)</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _canonical_pr_body_sha256 helper가 정의만이 아닌 14개 실제 호출 경로에서 사용됨(grep 확인). 직접 hashlib.sha256(pr_body/final_body/current_pr_body...) 잔여 0건.</functional_binding_verified>
+  </runtime_functional_check>
+
+  <visual_reference_check>
+    <reference_required>NO — PM step_plan requirements에 참고 이미지/파일 경로 없음</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <verdict>N-A</verdict>
+  </visual_reference_check>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS — step_plan.xml에 decomposition_audit 블록 존재 (SPLIT_REQUIRED, 8 MT)</decomposition_audit_present>
+    <grep_evidence_present>PASS — 8개 micro_task 모두 grep_evidence.executed=true</grep_evidence_present>
+    <declared_functions>10</declared_functions>
+    <actual_modified_functions>9</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음 — 변경 함수 전부 선언 범위 내. _sha256_file은 hunk 인접 컨텍스트 마커일 뿐(helper 신규 삽입 위치), 실제 변경 아님. cmd_gates는 MT-5 stale 조기검사 helper 교체의 enclosing 함수.</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — impl 커밋 52375935 변경 파일 = pipeline.py(+116/-24) + tests/test_canonical_pr_body_sha256_b985.py 정확히 2개. tests/** 신규 테스트는 PM target_files에 명시된 허용 범위.</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</git_diff_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false — pipeline.py는 PM step_plan target_files에 명시된 HIGH_RISK 프로필 대상. 신규 테스트 파일도 PM 계획 범위 내.</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+
+  <regression_verification>
+    <new_tests>tests/test_canonical_pr_body_sha256_b985.py — 18 passed / 18</new_tests>
+    <touched_path_regressions>test_codex_review.py, test_acceptance_request_verification_json.py, test_gates_accept_verification_json.py 등 88 passed</touched_path_regressions>
+    <pre_existing_failures verified="baseline_reproduced">
+      test_verification_json_ssot.py(2건): acceptance_code에 nonce suffix 미포함 — baseline(52375935~1) 스왑 실행에서 동일 실패 재현. B985가 _build_verification_json acceptance_code 로직 미변경(baseline diff 동일).
+      test_final_packet_2e3d.py(6건): request-accept 경로가 codex_review_not_approved로 차단 — baseline에서 동일 실패 재현. dev out_of_scope로 사전 선언된 게이트 순서 이슈.
+      test_pr_body_readiness_a716.py::test_tc4_accept_blocked_when_pr_body_stale(1건): 프롬프트에서 pre-existing으로 사전 고지 + baseline 재현 확인.
+    </pre_existing_failures>
+    <b985_introduced_regressions>0 — 9건 실패 전부 baseline pipeline.py(52375935~1) 스왑 실행에서 동일하게 재현됨. B985 변경으로 인한 신규 회귀 없음.</b985_introduced_regressions>
+  </regression_verification>
+
+  <observations>
+    step_plan.xml anti_gaming_read 태그 부재: PM step_plan에 anti_gaming_read 태그가 없으나, pipeline.py의 strict done --phase pm hard gate(신뢰 루트 SSoT)가 이미 PM DONE을 PASS 기록함(status 확인). 해당 태그는 pipeline.py PM 스키마의 차단 항목이 아니므로 관찰 사항으로만 기록하고 자동 FAIL하지 않음.
+    tests/oracles/IMP-20260703-B985/TC-1/expected.json canonical_sha256 필드가 placeholder 값(cf65...)이며 note에 명시됨. 단 테스트는 이 필드를 사용하지 않고 normalized_body 기준 동적 참조 SHA로 검증하므로 기능 영향 없음. Phase 7 oracle 품질 게이트에서 placeholder로 감지될 수 있으니 실제 계산값 교체 권고(QA 차단 사유 아님).
+    step_plan MT-6 PM affected_function은 _cmd_codex_record로 기재됐으나 실존 함수는 _cmd_gates_codex_review. dev-agent가 scope_amendment_reason에 투명하게 정정하고 scope 내에서 변경. 허용.
+  </observations>
+
+  <result>[PASS] 모든 적용 카테고리 PASS(PD/AL), numeric_verdict=PASS(120/120), scope WITHIN_SCOPE, C-3 교차검증 PASS, 신규 18 테스트 전원 통과, B985 신규 회귀 0건(9건 baseline 재현으로 pre-existing 확정). dead code 0, duplication 0.</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>없음</critical_issues>
+  <improvement_suggestions>
+    1. TC-1 oracle expected.json의 placeholder canonical_sha256를 실제 계산값으로 교체하여 Phase 7 oracle 품질 게이트 placeholder 감지를 사전 예방.
+    2. 별도 IMP에서 test_final_packet_2e3d의 codex_review_not_approved vs pr_body_stale 게이트 순서 및 test_verification_json_ssot의 acceptance_code nonce suffix 누락(둘 다 B985 무관, pre-existing) 해결 권고.
+    3. PM step_plan에 anti_gaming_read 태그 및 정확한 실존 함수명 기재 강화.
+  </improvement_suggestions>
+</qa_report>
