@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <phase>dev</phase>
+  <agent_run_id>dev-0bf627244f03b16f</agent_run_id>
+  <micro_tasks>
+    <task id="MT-12">
+      <status>DONE</status>
+      <files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</files>
+      <change_summary>_build_final_packet_content에 MT-12 PENDING auto-override 추가: acceptance_status_override가 None이어도 _load_acceptance_request()로 active acceptance_request.json을 확인하여 status==PENDING이면 "승인 대기 중 (PENDING)"으로 강제하고 gate_status.acceptance도 PENDING으로 동기화. override를 전달하지 않는 fallback 호출 경로에서 이전 FAIL/REJECT 상태가 packet에 표시되는 것을 방지.</change_summary>
+    </task>
+    <task id="MT-13">
+      <status>DONE</status>
+      <files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</files>
+      <change_summary>atomic verification_json_sha256 publish: _build_final_packet_content에 verification_json_sha256 파라미터 추가(주입 시 packet md에 embed, 미주입 시 기존처럼 디스크 파일에서 읽는 하위호환 유지). _materialize_acceptance_snapshot의 non-frozen 경로에서 verification_json을 먼저 직렬화하여 _pre_json_sha를 계산하고 이를 _build_final_packet_content에 주입 → 동일 verification_json을 tmp_json에 기록하므로 packet md embed 값 == 실제 json 파일 SHA(_sha256_file(tmp_json)) == acceptance_request.json.verification_json_sha256 불변식이 성립.</change_summary>
+    </task>
+    <task id="MT-15">
+      <status>NO_CHANGE</status>
+      <files>pipeline.py</files>
+      <change_summary>gates request-accept의 최종 사용자 승인 요청 stdout(사용자 승인 요청 / PR / 승인 코드 / CODEX 검토 필요)이 이미 고정 양식으로 구현되어 있음 — 코드 변경 불필요.</change_summary>
+    </task>
+  </micro_tasks>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py (워킹트리 == HEAD, blob hash 일치 — 변경 내용은 이미 impl 브랜치에 커밋됨)</git_diff_files>
+    <manifest_files>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <verification>
+    <py_compile>PASS — python -m py_compile pipeline.py</py_compile>
+    <import_check>PASS — python -c "import pipeline"</import_check>
+    <status_check>PASS — python pipeline.py status 정상 출력</status_check>
+    <unit_tests>PASS — tests/test_canonical_pr_body_sha256_b985.py 45 passed (신규 5개: TC-MT12-1, TC-MT12-2, TC-MT13-1, TC-MT13-2, TC-MT13-3)</unit_tests>
+    <regression_tests>PASS — packet/acceptance/consistency 관련 114 passed</regression_tests>
+  </verification>
+  <evidence>
+    <file>pipeline.py</file>
+    <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+    <file>scope_manifest.json</file>
+  </evidence>
+  <scope_declaration>
+    <files_to_modify>
+      <file>pipeline.py</file>
+      <file>tests/test_canonical_pr_body_sha256_b985.py</file>
+    </files_to_modify>
+    <excluded>모든 다른 파일</excluded>
+  </scope_declaration>
+  <impact_analysis>
+    <target_function>_build_final_packet_content (MT-12), _materialize_acceptance_snapshot (MT-13), _publish_acceptance_request (MT-13), _cmd_gates_request_accept (MT-13/MT-15)</target_function>
+    <affected_call_sites>
+      <site>_publish_acceptance_request → _materialize_acceptance_snapshot</site>
+      <site>_cmd_gates_request_accept → _publish_acceptance_request → _materialize_acceptance_snapshot</site>
+    </affected_call_sites>
+    <blast_radius>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</blast_radius>
+    <verdict>PASS</verdict>
+  </impact_analysis>
+  <token>tok_wYhOL6LubClmb30WW9s3WbJep4Qi6Z7Emlq_jPzuo2k</token>
+</handover>
