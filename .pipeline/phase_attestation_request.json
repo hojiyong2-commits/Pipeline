@@ -20,7 +20,7 @@
     "output_file": "dev_handover_r2.xml",
     "output_sha256": "7cfeb308cb108ee5ab7a8a6b41a282b0bea1d4db957b0cf8e64bc719ae2b8b92",
     "receipt_path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/agent_receipt_dev-e132c1ffb7968d35.json",
-    "receipt_sha256": "115549fd4cd7c4af3ce0558ea362f86529c933bac34ae9cffe1978185e476e95",
+    "receipt_sha256": "c2b5f75c3b33a7af310f4ee833e6af2c1dc00ed9c3c7893cd0baa6aebfd09d31",
     "used_by_phase": "dev",
     "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260703-B985\\dev\\dev-e132c1ffb7968d35.json"
   },
@@ -30,7 +30,7 @@
       "label": "agent_receipt",
       "source": ".pipeline\\agent_receipts\\IMP-20260703-B985\\dev\\dev-e132c1ffb7968d35.json",
       "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/agent_receipt_dev-e132c1ffb7968d35.json",
-      "sha256": "115549fd4cd7c4af3ce0558ea362f86529c933bac34ae9cffe1978185e476e95",
+      "sha256": "c2b5f75c3b33a7af310f4ee833e6af2c1dc00ed9c3c7893cd0baa6aebfd09d31",
       "size_bytes": 518,
       "requires_force_add": true
     },
@@ -54,13 +54,13 @@
   "workspace_file_checks": [
     {
       "path": "pipeline.py",
-      "sha256": "ed76d246833aef81ff44ec08b449823d811b7fdad7411de6d1d63e81e54be248",
-      "size_bytes": 1338716
+      "sha256": "107f15f4d698bc7beb198e608f4997afae2a02a194d121476b1eac1a03939ba1",
+      "size_bytes": 1272896
     },
     {
       "path": "tests/test_canonical_pr_body_sha256_b985.py",
-      "sha256": "d1125bd43797d4293fde2fe102f567befd282a6a330bb96286cf7c4c9e681ac0",
-      "size_bytes": 49729
+      "sha256": "ffd8e8447b542f2e8971cb9b8203465860d638ea5fea167bbd40eaac4039ab67",
+      "size_bytes": 47568
     },
     {
       "path": "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/expected.json",
