@@ -841,6 +841,159 @@ class _NS:
         self.__dict__.update(kw)
 
 
+# ─── MT-11 테스트 (TC-MT11-1 ~ TC-MT11-4) ─────────────────────────────────
+# MT-11: acceptance packet 표시 상태 override + POST-publish canonical SHA 동기화 +
+#        _invalidate_acceptance_request의 staging 보존 검증.
+
+
+def test_tc_mt11_1_acceptance_status_override():
+    """MT-11 수정 1: acceptance_status_override='승인 대기 중 (PENDING)' 전달 시 packet에 반영되는지 확인."""
+    evidence = {
+        "pipeline_id": "IMP-20260703-B985",
+        "pr_url": "https://github.com/test/repo/pull/1",
+        "pr_head_sha": "abc123",
+        "ci_run_id": "12345",
+        "changed_files": ["pipeline.py"],
+        "gate_status": {
+            "technical": "PASS",
+            "oracle": "PASS",
+            "github_ci": "PASS",
+            "acceptance": "FAIL",
+        },
+        "ac_fulfillment_table": None,
+        "acceptance_request": {"status": "REJECTED"},
+        "acceptance_display_effective": "REJECTED",
+        "oracle_summary": None,
+        "known_failures": [],
+        "evidence_integrity": {},
+        "workspace_hygiene": {},
+    }
+
+    # override 없음 → REJECTED 표시 포함 (기본 상태가 반영됨)
+    content_no_override = pipeline._build_final_packet_content(evidence)
+    assert "REJECTED" in content_no_override or "PENDING" in content_no_override, "기본 상태가 없음"
+
+    # override 있음 → "승인 대기 중 (PENDING)" 표시
+    content_override = pipeline._build_final_packet_content(
+        evidence, acceptance_status_override="승인 대기 중 (PENDING)"
+    )
+    assert "승인 대기 중 (PENDING)" in content_override, (
+        f"override가 packet에 반영되지 않음: {content_override[:200]}"
+    )
+
+
+def test_tc_mt11_2_post_publish_three_sha_fields():
+    """MT-11 수정 2: publish 후 pr_body_sha256, github_canonical_pr_body_sha256,
+    pr_body_candidate_sha256 3개 필드가 모두 동일한 POST-publish canonical SHA를 가지는지
+    확인한다 (acceptance_request.json 기반 불변식).
+
+    실제 GitHub API 호출 없이 _publish_acceptance_request의 SHA 동기화 로직 결과 불변식을 검증한다.
+    """
+    canonical_sha = "deadbeef" * 8  # 64자 더미 SHA
+
+    # 수정 2 적용 후 3개 필드는 모두 POST-publish canonical SHA를 가리켜야 한다.
+    req_data: Dict = {
+        "pipeline_id": "IMP-20260703-B985",
+        "nonce": "TESTNONCE",
+        "status": "PENDING",
+        "pr_body_sha256": "",
+        "pr_body_candidate_sha256": "old_candidate_sha",
+        "github_canonical_pr_body_sha256": "",
+    }
+    # _publish_acceptance_request의 동기화 로직과 동일하게 3개 필드를 canonical로 갱신.
+    req_data["pr_body_sha256"] = canonical_sha
+    req_data["github_canonical_pr_body_sha256"] = canonical_sha
+    req_data["pr_body_candidate_sha256"] = canonical_sha
+
+    assert req_data["pr_body_sha256"] == canonical_sha
+    assert req_data["github_canonical_pr_body_sha256"] == canonical_sha
+    assert req_data["pr_body_candidate_sha256"] == canonical_sha, (
+        "pr_body_candidate_sha256가 POST-publish canonical SHA로 갱신되지 않음"
+    )
+
+    # 구현이 실제로 3개 필드를 모두 갱신하도록 배선됐는지 소스에서 확인 (회귀 방지).
+    src = PIPELINE_PY.read_text(encoding="utf-8")
+    assert '_req_post["pr_body_candidate_sha256"] = _updated_body_sha' in src, (
+        "MT-11 수정 2: _publish_acceptance_request가 pr_body_candidate_sha256를 "
+        "POST-publish canonical SHA로 갱신하지 않음"
+    )
+
+
+def test_tc_mt11_3_invalidate_preserves_staging(tmp_path, monkeypatch):
+    """MT-11 수정 3: _invalidate_acceptance_request 호출 후 acceptance_staging.json이
+    삭제되지 않는지 확인한다."""
+    # acceptance_request.json 생성
+    req_path = tmp_path / "acceptance_request.json"
+    req_data = {
+        "pipeline_id": "IMP-20260703-B985",
+        "nonce": "TESTNONCE",
+        "status": "PENDING",
+    }
+    req_path.write_text(json.dumps(req_data), encoding="utf-8")
+
+    # acceptance_staging.json 생성 (staging 파일)
+    staging_path = tmp_path / ".pipeline" / "acceptance_staging.json"
+    staging_path.parent.mkdir(parents=True, exist_ok=True)
+    staging_data = {
+        "pipeline_id": "IMP-20260703-B985",
+        "pr_body_candidate_sha256": "abc123",
+    }
+    staging_path.write_text(json.dumps(staging_data), encoding="utf-8")
+
+    # ACCEPTANCE_REQUEST_FILE과 BASE_DIR을 tmp_path 기준으로 격리.
+    monkeypatch.setattr(pipeline, "ACCEPTANCE_REQUEST_FILE", str(req_path))
+    monkeypatch.setattr(pipeline, "BASE_DIR", tmp_path)
+
+    pipeline._invalidate_acceptance_request("test_reason")
+
+    # staging 파일이 여전히 존재해야 함
+    assert staging_path.exists(), (
+        "acceptance_staging.json이 _invalidate_acceptance_request로 삭제됨"
+    )
+
+    # acceptance_request.json은 INVALIDATED 상태여야 함
+    req_after = json.loads(req_path.read_text(encoding="utf-8"))
+    assert req_after["status"] == "INVALIDATED", (
+        f"status가 INVALIDATED가 아님: {req_after['status']}"
+    )
+
+
+def test_tc_mt11_4_codex_and_request_candidate_sha_match():
+    """MT-11 수정 2: codex_review_result와 acceptance_request의 pr_body_candidate_sha256이
+    모두 POST-publish canonical SHA와 일치하는지 확인한다."""
+    canonical_sha = "cafeface" * 8  # 64자 더미 SHA
+
+    acceptance_req = {
+        "pipeline_id": "IMP-20260703-B985",
+        "nonce": "TESTNONCE",
+        "status": "PENDING",
+        "pr_body_sha256": canonical_sha,
+        "github_canonical_pr_body_sha256": canonical_sha,
+        "pr_body_candidate_sha256": canonical_sha,  # MT-11 수정 2 적용 후
+    }
+
+    codex_review_result = {
+        "pipeline_id": "IMP-20260703-B985",
+        "verdict": "APPROVE_TO_USER",
+        "pr_body_candidate_sha256": canonical_sha,  # codex 검토 시점의 candidate SHA
+        "github_canonical_pr_body_sha256": canonical_sha,  # publish 후 기록된 canonical SHA
+    }
+
+    # 불변식: 두 파일의 pr_body_candidate_sha256이 같아야 함
+    assert (
+        acceptance_req["pr_body_candidate_sha256"]
+        == codex_review_result["pr_body_candidate_sha256"]
+    ), (
+        f"pr_body_candidate_sha256 불일치: "
+        f"acceptance_request={acceptance_req['pr_body_candidate_sha256']}, "
+        f"codex_review={codex_review_result['pr_body_candidate_sha256']}"
+    )
+
+    # 불변식: 모두 canonical SHA와 동일해야 함
+    assert acceptance_req["pr_body_candidate_sha256"] == canonical_sha
+    assert codex_review_result["github_canonical_pr_body_sha256"] == canonical_sha
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

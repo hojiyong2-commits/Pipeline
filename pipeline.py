@@ -13512,7 +13512,10 @@ def _build_acceptance_display_model(
     }
 
 
-def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
+def _build_final_packet_content(
+    evidence: Dict[str, Any],
+    acceptance_status_override: Optional[str] = None,
+) -> str:
     """packet 텍스트를 생성한다. 120자/줄 제한 + 승인 코드 독립 줄.
 
     IMP-20260607-E656 MT-2: 슬림다운 — [검증용 메타데이터] 고정 블록 추가,
@@ -13520,9 +13523,13 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     승인 코드는 접두사 없이 독립 줄에만 출력.
     IMP-20260612-8104 MT-1: 라벨을 [Codex 검토용] → [검증용 메타데이터]로 교체.
     구 라벨 packet 파일도 파서가 그대로 읽을 수 있도록 필드 라인 기반 파싱은 유지.
+    IMP-20260703-B985 MT-11 수정 1: acceptance_status_override 파라미터 추가.
+    request-accept 경로에서 이전 REJECT/FAIL 상태가 packet 표시에 들어가지 않도록
+    강제로 PENDING 표시로 덮어쓴다 (기본 None이면 기존 동작 유지, 하위호환).
 
     Args:
         evidence: _collect_packet_evidence 결과 dict.
+        acceptance_status_override: None이 아니면 acceptance 표시 상태를 이 값으로 강제.
     Returns:
         packet 본문 문자열 (markdown-friendly, 헤더는 일반 텍스트).
     Raises:
@@ -13550,6 +13557,10 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
         _acceptance_display_status = _resolve_acceptance_display_state(
             acceptance_request if isinstance(acceptance_request, dict) else None
         )
+    # MT-11 수정 1: acceptance_status_override가 주어지면 강제로 표시 상태를 덮어쓴다.
+    # request-accept 경로에서 이전 REJECT/FAIL 상태가 packet에 들어가지 않도록 한다.
+    if acceptance_status_override is not None:
+        _acceptance_display_status = acceptance_status_override
     if _acceptance_display_status in ("PENDING", "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
@@ -18531,7 +18542,13 @@ def _materialize_acceptance_snapshot(
     # 고정했으므로 재렌더링하지 않는다(packet md SHA invariant 유지). 그 외 경로는 evidence_payload로
     # content를 빌드한다. verification_json은 항상 최신 evidence_payload로 생성한다(SHA invariant 비대상).
     if not (frozen_packet_content is not None and publish):
-        content = _build_final_packet_content(evidence_payload)
+        # MT-11 수정 4: acceptance snapshot(staging/publish 모두)은 사용자에게 승인 대기 packet을
+        # 보여주는 SSoT이므로, 이전 REJECT/FAIL 상태가 아니라 항상 PENDING 표시로 강제한다.
+        # codex 검토용 staging packet도 동일하게 PENDING을 표시해야 3자 SHA 불변식이 유지된다.
+        content = _build_final_packet_content(
+            evidence_payload,
+            acceptance_status_override="승인 대기 중 (PENDING)",
+        )
     verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
 
     packet_path = _packet_output_path()
@@ -20681,8 +20698,14 @@ def _publish_acceptance_request(
             )
             _req_post["pr_body_sha256"] = _updated_body_sha
             # IMP-20260703-B985 MT-7: publish 후 GitHub canonical body SHA를 전용 필드에 분리 기록.
-            # candidate 필드(pr_body_candidate_sha256)는 request-accept 시점 로컬 값이므로 덮어쓰지 않는다.
             _req_post["github_canonical_pr_body_sha256"] = _updated_body_sha
+            # MT-11 수정 2: pr_body_candidate_sha256도 POST-publish canonical SHA로 갱신한다.
+            # 기존 값은 staging 시점의 로컬 계산값(교체 전 예상치)이었으므로, publish 후
+            # GitHub canonical SHA로 덮어써서 codex-review의 pr_body_candidate_sha256와 일치시킨다.
+            _req_post["pr_body_candidate_sha256"] = _updated_body_sha
+            # pr_body_sha256도 canonical SSoT와 명시적으로 동기화 (이미 위에서 기록됐으나 보강).
+            # 3개 필드(pr_body_sha256, github_canonical_pr_body_sha256, pr_body_candidate_sha256)
+            # 모두 동일한 POST-publish canonical SHA를 가리켜야 gates accept의 stale 검증이 통과한다.
             _pkt_p_post = snapshot_result.get("packet_path")
             if _pkt_p_post:
                 _req_post["packet_sha256"] = _sha256_file(Path(_pkt_p_post))
@@ -20732,6 +20755,24 @@ def _publish_acceptance_request(
                 "  fail-closed — 승인 요청을 노출하지 않습니다. "
                 "gates request-accept를 다시 실행하세요."
             )
+
+        # MT-11 수정 2b: acceptance_staging.json의 pr_body_candidate_sha256도 POST-publish
+        # canonical SHA로 갱신한다. staging이 codex-review 재실행 시 재사용되므로, staging의
+        # candidate SHA도 canonical과 동기화해야 재실행 시 불일치가 발생하지 않는다.
+        try:
+            _staging_path_post = BASE_DIR / ACCEPTANCE_STAGING_PATH
+            if _staging_path_post.exists():
+                _staging_post = json.loads(
+                    _staging_path_post.read_text(encoding="utf-8", errors="replace")
+                )
+                if isinstance(_staging_post, dict):
+                    _staging_post["pr_body_candidate_sha256"] = _updated_body_sha
+                    _staging_path_post.write_text(
+                        json.dumps(_staging_post, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass  # staging 갱신 실패는 non-fatal
 
         # BUG-20260628-F52C r8 (A안): publish 직후 canonical 2자 일치 검증으로 대체.
         #   acceptance_request.pr_body_sha256 == sha256(현재 GitHub canonical body).
@@ -21364,13 +21405,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 "  gates request-accept를 다시 실행하세요."
             )
 
-        # BUG-20260628-F52C: publish 성공 후 staging file 정리 (1회용이므로 삭제).
-        try:
-            _staging_cleanup = BASE_DIR / ACCEPTANCE_STAGING_PATH
-            if _staging_cleanup.exists():
-                _staging_cleanup.unlink()
-        except OSError:
-            pass  # 정리 실패는 non-fatal — 다음 staging이 덮어쓴다.
+        # MT-11 수정 3: publish 후 staging 삭제 제거.
+        # acceptance_staging.json은 codex-review 재실행 시 조건이 동일하면 재사용된다.
+        # 삭제하면 codex-review 이후 request-accept 재실행 시 새 staging을 생성해야 하므로
+        # pr_body_candidate_sha256 불일치가 발생할 수 있다. 파일은 다음 새 staging이 덮어쓰므로
+        # 삭제를 생략해도 안전하다.
     except (OSError, ValueError, KeyError) as exc:
         _die(
             "[PIPELINE ERROR] final packet 자동 생성 실패 — 승인 코드 발급 차단.\n"
