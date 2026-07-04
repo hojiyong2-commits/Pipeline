@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <run_id>qa-e596baab965c53c0</run_id>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</evidence>
+    <accepted>true</accepted>
+  </handover>
+  <category_check>
+    <wa>N-A — 네트워크 호출 신규 추가 없음. gh CLI 조회는 기존 경로.</wa>
+    <ui>N-A — GUI 위젯 없음. CLI 파이프라인 엔진.</ui>
+    <fs>PASS — MT-19 atomic publish: os.replace 커밋 후 read_bytes()로 SHA 재계산, OSError 흡수. 원자적 쓰기 유지.</fs>
+    <pd>PASS — 단일 helper 3종(_get_acceptance_display_state/_check_approval_request_ready/_build_approval_request_output) SSoT 분리. Dict[str,Any] 계약, 각 1회 정의.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — _build_approval_request_output None/비str TypeError, 빈 pipeline_id ValueError 가드. display_state isinstance dict/str 방어. bare except 없음.</al>
+    <build>N-A — BUILD 태그 없음. 파이프라인 엔진 코드.</build>
+    <vsce>N-A — VSCE 태그 없음.</vsce>
+  </category_check>
+  <numeric_score>108</numeric_score>
+  <score_detail>
+    <wa score="0" max="20">N/A — 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — 카테고리 미해당</ui>
+    <fs score="20" max="20">원자적 쓰기(os.replace) + 커밋 후 read_bytes 재검증 + OSError fallback 완비</fs>
+    <pd score="10" max="10">모듈분리 5(helper SSoT 3종, 각 1회 정의, 소비지점 배선) / 인터페이스계약 5(Dict[str,Any] 반환 계약, Optional 타입힌팅)</pd>
+    <al score="20" max="20">타입가드(TypeError) 5 / 값검증(ValueError 빈 id) 5 / isinstance 방어 5 / 안전 fallback(UNKNOWN/skip) 5</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="50" max="50"/>
+    <percentage>100.0</percentage>
+    <numeric_verdict>PASS(≥96/120 환산 100%)</numeric_verdict>
+  </score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — _safe_replace(tempfile → os.replace) + MT-19 post-commit read_bytes 재검증</atomic_write>
+      <encoding_fallback>N-A — 신규 파일 읽기 경로에 utf-8 errors="replace" 사용, 다중 인코딩 대상 아님</encoding_fallback>
+      <traversal_wired>N-A — user-supplied 경로 신규 처리 없음</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — handover self_check에 execution_check 결과 존재</execution_check_present>
+    <execution_check_verdict>PASS — py_compile OK, import OK, pytest 57 passed (QA 재현 확인)</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — argparse --machine-readable 플래그(25080) + 소비 branch(21517/21840) 실제 배선 확인. helper 3종 모두 pipeline.py 내 호출됨(dead code 아님).</functional_binding_verified>
+  </runtime_functional_check>
+  <vsce_compliance>
+    <view_id_match>N-A</view_id_match>
+    <webview_provider_type>N-A</webview_provider_type>
+    <resolve_webview_view>N-A</resolve_webview_view>
+    <asset_uri_conversion>N-A</asset_uri_conversion>
+    <initial_state_handshake>N-A</initial_state_handshake>
+  </vsce_compliance>
+  <visual_reference_check>
+    <reference_required>NO</reference_required>
+    <reference_applied_tag>N-A</reference_applied_tag>
+    <check_result>N-A</check_result>
+  </visual_reference_check>
+  <dead_code>
+    <symbol>_get_acceptance_display_state / _check_approval_request_ready / _build_approval_request_output</symbol>
+    <defined_at>pipeline.py:5567 / 5652 / 5599</defined_at>
+    <call_sites>pipeline.py 8회 + test 11회 참조 확인</call_sites>
+    <check_result>KEEP_REASON — 모두 소비지점 배선됨</check_result>
+  </dead_code>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <check_result>PASS</check_result>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>N-A</grep_evidence_present>
+    <declared_functions>4</declared_functions>
+    <actual_modified_functions>4</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <blast_radius>WITHIN_SCOPE</blast_radius>
+  </micro_task_boundary>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <verdict>PASS</verdict>
+  <numeric_verdict>PASS</numeric_verdict>
+  <result>[PASS]</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>FIRST</repeat_indicator>
+  <critical_issues>
+    - 없음. git diff origin/main...HEAD = pipeline.py, tests/test_canonical_pr_body_sha256_b985.py (+ handover XML)로 scope 일치.
+  </critical_issues>
+  <improvement_suggestions>
+    - MT-17 검사 5(PR body embed vs json 파일 SHA)를 완화한 것은 handover known_constraints에 문서화되어 있으며, 검사 4가 fail-closed로 대체 보장하므로 수용 가능. 향후 2-call codex 흐름 리팩터 시 검사 5 재활성화 검토 권장.
+  </improvement_suggestions>
+  <summary>
+    MT-16~20 검증 완료. 신규 회귀 테스트 57 passed, 인접 게이트 스위트 포함 126 passed (신규 실패 0건).
+    3개 helper 함수(_get_acceptance_display_state/_check_approval_request_ready/_build_approval_request_output)
+    존재·타입힌팅·소비배선 확인. --machine-readable argparse 플래그 및 reuse/publish 양쪽 stdout branch 확인.
+    MT-19 atomic post-commit SHA 재계산 로직(read_bytes + staging 우선 + OSError fallback) 정상.
+    scope lock: pipeline.py, tests 파일만 변경(trust-root 대상, HIGH_RISK 프로필 필요 — PM scope 명시 전제).
+    dead code 0, duplication 0, blast radius WITHIN_SCOPE.
+  </summary>
+</qa_report>
