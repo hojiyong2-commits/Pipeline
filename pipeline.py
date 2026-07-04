@@ -21116,10 +21116,12 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # staging 생성(codex 검토 대상 bytes)이 사라져 codex-review 단계가 깨진다.
     _reuse_published = (
         not _is_new_candidate
+        and existing_req is not None
         and bool(str(existing_req.get("packet_sha256", "") or ""))
         and _packet_output_path().exists()
     )
     if _reuse_published:
+        assert existing_req is not None  # _reuse_published 조건에서 이미 확인됨
         # (A) packet 파일 stale 검증 (파일이 있을 때만; 없으면 신규 발급으로 이미 분기됐어야 함).
         _reuse_packet_sha = str(existing_req.get("packet_sha256", "") or "")
         _reuse_pkt_path = _packet_output_path()
