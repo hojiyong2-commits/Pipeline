@@ -1,0 +1,224 @@
+{
+  "pipeline_id": "IMP-20260703-B985",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_canonical_pr_body_sha256 (신규)"
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_prepare_acceptance_snapshot_candidate"
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_verify_published_canonical_pr_body"
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_fetch_canonical_pr_body_sha256",
+        "_get_pr_body_text"
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept",
+        "_get_staged_pr_body_sha"
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_review"
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_prepare_acceptance_snapshot_candidate",
+        "_publish_acceptance_request"
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        "tests/test_canonical_pr_body_sha256_b985.py",
+        "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/expected.json",
+        "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/input.json",
+        "tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/expected.json",
+        "tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/input.json",
+        "tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/expected.json",
+        "tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/input.json",
+        "tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/expected.json",
+        "tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/input.json"
+      ],
+      "affected_functions": [
+        "tests/test_canonical_pr_body_sha256_b985.py (신규)"
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept (acceptance_staging frozen snapshot)"
+      ]
+    },
+    {
+      "id": "MT-10",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept (reuse early-return block)",
+        "_build_final_packet_content (packet_md_sha256 removal)"
+      ]
+    },
+    {
+      "id": "MT-11",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_build_final_packet_content",
+        "_publish_acceptance_request",
+        "_materialize_acceptance_snapshot",
+        "_cmd_gates_request_accept"
+      ]
+    },
+    {
+      "id": "MT-12",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_build_final_packet_content",
+        "_resolve_acceptance_display_state"
+      ]
+    },
+    {
+      "id": "MT-13",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_publish_acceptance_request",
+        "_materialize_acceptance_snapshot",
+        "_cmd_gates_request_accept"
+      ]
+    },
+    {
+      "id": "MT-14",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_build_final_packet_content",
+        "_build_verification_json"
+      ]
+    },
+    {
+      "id": "MT-15",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept"
+      ]
+    },
+    {
+      "id": "MT-16",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept",
+        "_build_approval_request_output"
+      ]
+    },
+    {
+      "id": "MT-17",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_check_approval_request_ready",
+        "_cmd_gates_request_accept"
+      ]
+    },
+    {
+      "id": "MT-18",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_get_acceptance_display_state",
+        "_build_final_packet_content",
+        "_build_verification_json"
+      ]
+    },
+    {
+      "id": "MT-19",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_materialize_acceptance_snapshot"
+      ]
+    },
+    {
+      "id": "MT-20",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "test_tc_mt16_*",
+        "test_tc_mt17_*",
+        "test_tc_mt18_*",
+        "test_tc_mt19_*",
+        "test_tc_mt20_*"
+      ]
+    }
+  ]
+}
