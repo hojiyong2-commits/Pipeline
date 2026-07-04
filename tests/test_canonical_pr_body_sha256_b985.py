@@ -1131,6 +1131,370 @@ def test_tc_mt13_3_materialize_atomic_sha_invariant_source():
     )
 
 
+# ─── MT-16 ~ MT-20 테스트 (IMP-20260703-B985 r3) ──────────────────────────────
+# MT-16: gates request-accept --machine-readable JSON 출력
+# MT-17: _check_approval_request_ready 사전 검증 게이트
+# MT-18: _get_acceptance_display_state 단일 helper
+# MT-19: verification_json_sha256 atomic publish 순서 (write → read → sha)
+# MT-20: 회귀 테스트 7종
+
+
+def _stub_reuse_preflight_mr(pl, tmp_path, monkeypatch, pr_body):
+    """MT-16 재사용 경로용 preflight 스텁 (TestTrueIdempotentReuseMT10 패턴 재사용)."""
+    monkeypatch.setattr(pl, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(pl, "_check_workspace_hygiene", lambda state: {"status": "PASS"})
+    monkeypatch.setattr(pl, "_save", lambda state: None)
+    monkeypatch.setattr(pl, "_log_event", lambda state, msg: None)
+    monkeypatch.setattr(pl, "_is_deployable_evidence", lambda p: True)
+    monkeypatch.setattr(pl, "_validate_ac_table_before_request_accept", lambda state: None)
+    monkeypatch.setattr(pl, "_check_oracle_manifest_vs_inventory", lambda state: {"status": "PASS"})
+    monkeypatch.setattr(
+        pl, "_contract_paths",
+        lambda pid: {"evidence_inventory": tmp_path / "no_inventory.json"},
+    )
+    monkeypatch.setattr(pl, "_oracle_manifest_status", lambda paths: ([], []))
+    monkeypatch.setattr(pl, "_get_current_pr_changed_files", lambda: ["pipeline.py"])
+    monkeypatch.setattr(pl, "_get_pr_body_text", lambda: pr_body)
+    monkeypatch.setattr(pl, "_validate_pr_body_readiness", lambda body: {"allow_accept": True})
+    monkeypatch.setattr(pl, "_get_current_pr_url", lambda: "https://example.com/pr/1")
+    monkeypatch.setattr(pl, "_get_current_pr_head_sha", lambda: "HEADSHA")
+    monkeypatch.setattr(pl, "_get_pr_branch_ci_run_id", lambda branch=None: "RUNID")
+    monkeypatch.setattr(pl, "_get_git_diff_files", lambda base="origin/main": ["pipeline.py"])
+    monkeypatch.setattr(
+        pl, "_check_packet_freshness_against_actual",
+        lambda path, head, run, files: None,
+    )
+    monkeypatch.setattr(pl, "_compute_file_sha256", lambda p: "EVIDSHA")
+    monkeypatch.setattr(
+        pl, "_find_existing_valid_acceptance_comment",
+        lambda pr_url, pid, created_at: None,
+    )
+
+
+def _make_reuse_req_mr(canonical_sha, packet_sha):
+    return {
+        "status": "PENDING",
+        "pipeline_id": "IMP-20260703-B985",
+        "evidence": "output.xlsx",
+        "evidence_sha256": "EVIDSHA",
+        "pr_head_sha": "HEADSHA",
+        "github_ci_run_id": "RUNID",
+        "pr_body_sha256": canonical_sha,
+        "pr_body_readiness": "PASS",
+        "required_sections_present": True,
+        "temporary_phrases_absent": True,
+        "packet_sha256": packet_sha,
+        "pr_body_candidate_sha256": "CAND",
+        "nonce": "reusenonce",
+        "request_id": "req-reuse-1",
+        "created_at": "2026-07-03T00:00:00Z",
+    }
+
+
+# ── TC-MT16: --machine-readable 출력 포맷 ──────────────────────────────────────
+def test_tc_mt16_machine_readable_output_format(tmp_path, monkeypatch, capsys):
+    """--machine-readable(machine_readable=True) 시 stdout이 유효한 JSON이고 5개 필드를 갖는다.
+
+    실제 재사용 경로(_cmd_gates_request_accept read-only 단축)를 in-process로 실행하여
+    복잡한 mocking 없이 실제 출력 동작을 검증한다. PIPELINE_STATE_PATH 격리는 state 파일을
+    tmp_path 하위로 두어 전역 pipeline_state.json을 오염시키지 않게 한다.
+    """
+    import pipeline as pl
+
+    # PIPELINE_STATE_PATH 격리
+    state_file = tmp_path / "pipeline_state.json"
+    state_file.write_text(json.dumps({"pipeline_id": "IMP-20260703-B985"}), encoding="utf-8")
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+
+    pr_body = (
+        "# PR\n<!-- PIPELINE_FINAL_PACKET_START -->\npacket\n"
+        "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+    )
+    canonical_sha = pl._canonical_pr_body_sha256(pr_body)
+    packet_file = tmp_path / "human_acceptance_packet.md"
+    packet_file.write_text("packet body\n", encoding="utf-8")
+    packet_sha = pl._sha256_file(packet_file)
+    existing_req = _make_reuse_req_mr(canonical_sha, packet_sha)
+
+    _stub_reuse_preflight_mr(pl, tmp_path, monkeypatch, pr_body)
+    monkeypatch.setattr(pl, "_packet_output_path", lambda: packet_file)
+    monkeypatch.setattr(pl, "_load_acceptance_request", lambda: dict(existing_req))
+    monkeypatch.setattr(pl, "_current_pr_number_for_canonical", lambda: 1)
+    monkeypatch.setattr(pl, "_fetch_canonical_pr_body_sha256", lambda n=None: canonical_sha)
+
+    args = _NS(evidence="output.xlsx", force_new_code=False, machine_readable=True)
+    state = {"pipeline_id": "IMP-20260703-B985"}
+    pl._cmd_gates_request_accept(args, state)
+
+    out = capsys.readouterr().out.strip()
+    # stdout 전체가 유효한 JSON이어야 한다 (human-readable 텍스트 없음).
+    data = json.loads(out)
+    for field in (
+        "approval_request_message", "acceptance_code_display",
+        "pr_url", "codex_required", "status",
+    ):
+        assert field in data, f"machine-readable JSON에 {field} 필드 누락"
+    assert data["acceptance_code_display"] == "ACCEPT-IMP-20260703-B985"
+    assert data["codex_required"] is True
+    assert data["status"] == "PENDING"
+    # "사용자 승인 요청"이 JSON 문자열 값 안에만 존재하고, JSON 외부 stdout에는 없어야 한다.
+    # (JSON.loads가 성공했다는 것 자체가 stdout이 JSON only임을 의미)
+    assert out.startswith("{") and out.endswith("}"), f"stdout이 JSON only가 아님: {out[:80]}"
+
+
+def test_tc_mt16_argparse_flag_exists():
+    """--machine-readable 플래그가 gates request-accept subparser에 등록되어 있는지 확인."""
+    src = PIPELINE_PY.read_text(encoding="utf-8")
+    assert '"--machine-readable"' in src, "argparse에 --machine-readable 플래그가 없음"
+    assert 'dest="machine_readable"' in src, "machine_readable dest가 없음"
+
+
+# ── TC-MT17: approval_request_ready 사전 검증 ─────────────────────────────────
+def _write_codex_approved(tmp_path, monkeypatch):
+    """codex_review_result.json(APPROVED)을 격리 경로에 생성한다."""
+    cx_dir = tmp_path / ".pipeline"
+    cx_dir.mkdir(parents=True, exist_ok=True)
+    (cx_dir / "codex_review_result.json").write_text(
+        json.dumps({"status": "APPROVED", "verdict": "APPROVE_TO_USER"}),
+        encoding="utf-8",
+    )
+
+
+def test_tc_mt17_approval_ready_blocks_on_fail_acceptance_display(tmp_path, monkeypatch):
+    """PR body에 'acceptance: FAIL'이 있으면 _check_approval_request_ready가 BLOCKED(ok=False)."""
+    import pipeline as pl
+
+    state_file = tmp_path / "pipeline_state.json"
+    state_file.write_text(json.dumps({"pipeline_id": "IMP-20260703-B985"}), encoding="utf-8")
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+    _write_codex_approved(tmp_path, monkeypatch)
+
+    # acceptance_request 없음 → 검사 1/3/4 skip. codex APPROVED → 검사 2 통과.
+    monkeypatch.setattr(pl, "_load_acceptance_request", lambda: None)
+
+    pr_body = (
+        "## 작업 요약\n- x\n\n"
+        "<!-- PIPELINE_FINAL_PACKET_START -->\nacceptance: FAIL\n"
+        "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+    )
+    result = pl._check_approval_request_ready(pr_body)
+    assert result["ok"] is False, "acceptance FAIL 표시인데 BLOCKED되지 않음"
+    assert result["failure_code"] == "pr_body_acceptance_fail"
+
+
+def test_tc_mt17_approval_ready_blocks_on_sha_mismatch(tmp_path, monkeypatch):
+    """acceptance_request.verification_json_sha256 != 실제 json 파일 SHA면 BLOCKED."""
+    import pipeline as pl
+
+    state_file = tmp_path / "pipeline_state.json"
+    state_file.write_text(json.dumps({"pipeline_id": "IMP-20260703-B985"}), encoding="utf-8")
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+    _write_codex_approved(tmp_path, monkeypatch)
+
+    # packet.md / packet.json 실제 파일 준비
+    packet_md = tmp_path / "human_acceptance_packet.md"
+    packet_md.write_text("packet md\n", encoding="utf-8")
+    packet_json = tmp_path / "human_acceptance_packet.json"
+    packet_json.write_bytes(b'{"schema_version": 1}')
+    actual_md_sha = hashlib.sha256(packet_md.read_bytes()).hexdigest()
+
+    monkeypatch.setattr(pl, "_packet_output_path", lambda: packet_md)
+    monkeypatch.setattr(pl, "_packet_json_output_path", lambda: packet_json)
+
+    # req: packet md SHA는 맞추고, verification_json_sha256만 틀리게 → 검사 4에서 BLOCKED
+    req = {
+        "status": "PENDING",
+        "packet_sha256": actual_md_sha,
+        "verification_json_sha256": "0" * 64,  # 실제 파일 SHA와 다름
+    }
+    monkeypatch.setattr(pl, "_load_acceptance_request", lambda: dict(req))
+
+    result = pl._check_approval_request_ready("no packet block here")
+    assert result["ok"] is False, "verification_json SHA 불일치인데 BLOCKED되지 않음"
+    assert result["failure_code"] == "verification_json_sha_mismatch"
+
+
+def test_tc_mt17_approval_ready_blocks_on_missing_codex(tmp_path, monkeypatch):
+    """codex_review_result.json이 없으면 BLOCKED(codex_review_missing)."""
+    import pipeline as pl
+
+    state_file = tmp_path / "pipeline_state.json"
+    state_file.write_text(json.dumps({"pipeline_id": "IMP-20260703-B985"}), encoding="utf-8")
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+    # codex 파일 미생성.
+    monkeypatch.setattr(pl, "_load_acceptance_request", lambda: None)
+
+    result = pl._check_approval_request_ready("body")
+    assert result["ok"] is False
+    assert result["failure_code"] == "codex_review_missing"
+
+
+# ── TC-MT18: acceptance display state helper ──────────────────────────────────
+def test_tc_mt18_acceptance_display_pending_when_request_pending(tmp_path, monkeypatch):
+    """acceptance_request.status == PENDING이면 _get_acceptance_display_state() == 'PENDING'."""
+    import pipeline as pl
+
+    state_file = tmp_path / "pipeline_state.json"
+    state_file.write_text(
+        json.dumps({
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {"acceptance": {"status": "FAIL"}},  # gate는 FAIL이어도
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+    monkeypatch.setattr(
+        pl, "_load_acceptance_request",
+        lambda: {"pipeline_id": "IMP-20260703-B985", "status": "PENDING"},
+    )
+    # PENDING request가 있으면 gate FAIL을 무시하고 PENDING 반환.
+    assert pl._get_acceptance_display_state() == "PENDING"
+
+
+def test_tc_mt18_falls_back_to_state_when_no_pending_request(tmp_path, monkeypatch):
+    """PENDING request가 없으면 external_gates.acceptance.status로 fallback."""
+    import pipeline as pl
+
+    state_file = tmp_path / "pipeline_state.json"
+    state_file.write_text(
+        json.dumps({
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {"acceptance": {"status": "PASS"}},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+    monkeypatch.setattr(pl, "_load_acceptance_request", lambda: None)
+    assert pl._get_acceptance_display_state() == "PASS"
+
+
+def test_tc_mt18_no_fail_in_packet_when_pending(monkeypatch):
+    """PENDING acceptance_request 상태에서 _build_final_packet_content 결과에
+    'acceptance: FAIL' 문자열이 없어야 한다 (PENDING을 절대 FAIL로 표시 안 함)."""
+    import pipeline as pl
+
+    evidence = {
+        "pipeline_id": "IMP-20260703-B985",
+        "pr_url": "https://github.com/test/repo/pull/1",
+        "pr_head_sha": "abc123",
+        "ci_run_id": "12345",
+        "changed_files": ["pipeline.py"],
+        "gate_status": {
+            "technical": "PASS",
+            "oracle": "PASS",
+            "github_ci": "PASS",
+            "acceptance": "FAIL",  # 이전 FAIL 잔류
+        },
+        "ac_fulfillment_table": None,
+        "acceptance_request": {"status": "PENDING"},
+        "oracle_summary": None,
+        "known_failures": [],
+        "evidence_integrity": {},
+        "workspace_hygiene": {},
+    }
+    # active PENDING request 모킹.
+    monkeypatch.setattr(
+        pl, "_load_acceptance_request",
+        lambda: {"pipeline_id": "IMP-20260703-B985", "status": "PENDING"},
+    )
+    # state에도 external_gates.acceptance FAIL이 있어도 helper가 PENDING을 반환하도록 격리.
+    monkeypatch.setattr(pl, "_load", lambda: {
+        "pipeline_id": "IMP-20260703-B985",
+        "external_gates": {"acceptance": {"status": "FAIL"}},
+    })
+
+    content = pl._build_final_packet_content(evidence)
+    assert "acceptance: FAIL" not in content, (
+        f"PENDING 상태인데 packet에 acceptance: FAIL이 표시됨: {content[:400]}"
+    )
+    assert "acceptance: PENDING" in content, "packet에 acceptance: PENDING 표시가 없음"
+
+
+# ── TC-MT19: verification_json_sha256 atomic publish 순서 ─────────────────────
+def test_tc_mt19_verification_json_sha256_matches_file_bytes(monkeypatch, tmp_path):
+    """write → read → sha 계산이 일치: 파일을 쓰고 다시 읽은 SHA가 acceptance_request에
+    저장된 verification_json_sha256과 동일해야 한다.
+
+    _materialize_acceptance_snapshot(publish=True)의 MT-19 배선 결과를 실제 실행으로 검증한다.
+    """
+    import pipeline as pl
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pl, "BASE_DIR", tmp_path)
+    # gh 미사용 (PR 본문 갱신 skip).
+    monkeypatch.setattr(pl, "_gh_available", lambda: False)
+    # evidence 수집을 단순화 — 실제 _collect_packet_evidence를 쓰되 gh/네트워크 의존 최소화.
+    monkeypatch.setattr(pl, "_get_pr_body_text", lambda: "body")
+    monkeypatch.setattr(pl, "_get_git_diff_files", lambda base="origin/main": ["pipeline.py"])
+    monkeypatch.setattr(pl, "_get_current_pr_url", lambda: "https://example.com/pr/1")
+    monkeypatch.setattr(pl, "_get_current_pr_head_sha", lambda: "HEADSHA")
+    monkeypatch.setattr(pl, "_get_pr_branch_ci_run_id", lambda branch=None: "RUNID")
+
+    state = {"pipeline_id": "IMP-20260703-B985", "external_gates": {}}
+    acceptance_request = {
+        "pipeline_id": "IMP-20260703-B985",
+        "nonce": "NONCE19",
+        "status": "PENDING",
+        "request_id": "req-19",
+    }
+
+    result = pl._materialize_acceptance_snapshot(state, acceptance_request, publish=True)
+    assert result["published"] is True
+
+    # 커밋된 json 파일을 다시 읽어 SHA 계산.
+    json_path = pl._packet_json_output_path()
+    assert json_path.exists()
+    file_sha = hashlib.sha256(json_path.read_bytes()).hexdigest()
+
+    # acceptance_request.json에 기록된 verification_json_sha256이 실제 파일 bytes SHA와 동일.
+    req_path = tmp_path / "acceptance_request.json"
+    assert req_path.exists()
+    req_after = json.loads(req_path.read_text(encoding="utf-8"))
+    assert req_after["verification_json_sha256"] == file_sha, (
+        "acceptance_request.verification_json_sha256이 실제 커밋 json 파일 SHA와 다름 "
+        "(MT-19 atomic publish 순서 위반)"
+    )
+
+
+def test_tc_mt19_source_rereads_committed_json(monkeypatch):
+    """소스에 MT-19 배선(커밋된 json 파일 재읽기 후 SHA 계산)이 존재하는지 확인 (회귀 방지)."""
+    src = PIPELINE_PY.read_text(encoding="utf-8")
+    assert "_committed_json_sha" in src, "MT-19: 커밋 파일 재읽기 SHA 변수(_committed_json_sha)가 없음"
+    assert "json_out_path.read_bytes()" in src, (
+        "MT-19: 커밋된 json 파일을 read_bytes()로 재읽어 SHA를 계산해야 함"
+    )
+
+
+# ── TC-MT20: approval_request_message가 정확히 1번 출현 ───────────────────────
+def test_tc_mt20_approval_request_appears_once():
+    """_build_approval_request_output의 approval_request_message에 '사용자 승인 요청'이 정확히 1번."""
+    import pipeline as pl
+
+    out = pl._build_approval_request_output("IMP-20260703-B985", "https://github.com/x/pull/1")
+    msg = out["approval_request_message"]
+    assert msg.count("사용자 승인 요청") == 1, (
+        f"'사용자 승인 요청'이 {msg.count('사용자 승인 요청')}번 출현 (정확히 1번이어야 함)"
+    )
+    # 4요소 고정 양식 확인.
+    assert "PR: https://github.com/x/pull/1" in msg
+    assert "승인 코드:\nACCEPT-IMP-20260703-B985" in msg
+    assert "CODEX 검토 필요" in msg
+
+
+def test_tc_mt20_build_approval_output_type_guards():
+    """_build_approval_request_output의 None/비str/빈 pipeline_id 방어."""
+    import pipeline as pl
+
+    with pytest.raises(TypeError):
+        pl._build_approval_request_output(None, "url")  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        pl._build_approval_request_output("PID", None)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        pl._build_approval_request_output(123, "url")  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        pl._build_approval_request_output("", "url")
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
