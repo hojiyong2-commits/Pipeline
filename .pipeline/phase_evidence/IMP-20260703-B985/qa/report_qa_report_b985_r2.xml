@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qa_report>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <phase>qa</phase>
+  <rework_round>2</rework_round>
+  <category_tags>FS,PD,AL</category_tags>
+
+  <handover>
+    <from>dev-agent</from>
+    <evidence>dev_handover_b985_r2.xml (pipeline.py, tests/test_canonical_pr_body_sha256_b985.py)</evidence>
+    <note>프롬프트가 지정한 dev_handover_rework4.xml은 BUG-20260702-E69E 파이프라인 소속이라 무효. B985 정식 handover는 dev_handover_b985_r2.xml이며 pipeline_id 일치 확인함.</note>
+    <accepted>true — UI 태그 없음, dev-agent 단독 수행 태스크로 dev handover만 필요</accepted>
+  </handover>
+
+  <pm_gate_checks>
+    <anti_gaming_read>PASS — step_plan.xml line 61 &lt;anti_gaming_read&gt;true&lt;/anti_gaming_read&gt;</anti_gaming_read>
+    <decomposition_audit_present>PASS — &lt;decomposition_audit&gt; 블록 존재 (SPLIT_REQUIRED, 8 MT)</decomposition_audit_present>
+    <grep_evidence_present>PASS — 모든 micro_task에 &lt;grep_evidence&gt;&lt;executed&gt;true&lt;/executed&gt; 존재</grep_evidence_present>
+    <judgment_calls>N-A — step_plan에 &lt;judgment_calls&gt; 블록 없음 (AMBIGUOUS 태스크 아님)</judgment_calls>
+  </pm_gate_checks>
+
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님 (내부 SHA 리팩토링)</wa>
+    <ui>N-A — GUI 위젯 없음</ui>
+    <fs>PASS — _canonical_pr_body_sha256는 파일 I/O 없이 문자열 정규화만 수행. acceptance_staging 저장은 기존 _save_acceptance_staging 원자적 경로 재사용</fs>
+    <pd>PASS — SSoT helper 단일 진입점(_canonical_pr_body_sha256)으로 21개 호출부 통일, 관심사 분리 명확</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점</sec>
+    <al>PASS — helper에 None/isinstance 타입 가드 존재, TypeError 명시 발생. bare except 없음</al>
+    <build>N-A — BUILD 태그 없음 (meta-task, EXE 대상 아님)</build>
+    <vsce>N-A — VSCE 태그 없음</vsce>
+  </category_check>
+
+  <numeric_score>120</numeric_score>
+  <numeric_score_details>
+    <wa score="0" max="20">N/A — 카테고리 미해당, 총점 정규화에서 제외</wa>
+    <ui score="0" max="20">N/A — 카테고리 미해당, 총점 정규화에서 제외</ui>
+    <fs score="20" max="20">문자열 정규화 순수 함수 + 기존 원자적 staging 경로 재사용. traversal/encoding 리스크 없음</fs>
+    <pd score="10" max="10">모듈분리 5/5 (단일 SSoT helper) / 인터페이스계약 5/5 (text:str -&gt; str 명시 시그니처, 타입가드)</pd>
+    <al score="20" max="20">None 가드 5/5 + isinstance 타입가드 5/5 + 빈문자열/대용량 처리 5/5(TC-10) + 회귀방지 5/5(TC-9)</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음, 총점 정규화에서 제외</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="50" max="50"/>
+    <percentage>100.0</percentage>
+    <normalized_to_120>120</normalized_to_120>
+    <numeric_verdict>PASS(120/120 정규화 ≥ 96) — 적용 가능 카테고리(FS 20 + PD 10 + AL 20 = 50/50) 만점, 미해당 카테고리(WA/UI/BUILD) 제외 후 120점 스케일 정규화 시 120</numeric_verdict>
+  </numeric_score_details>
+
+  <ac_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="test_tc1_crlf_lf_normalization_same_sha + test_tc1_lone_cr_normalized_to_lf PASSED. helper가 CRLF/lone-CR을 LF로 정규화(pipeline.py:5199)"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="test_tc2_trailing_newline_distinct + test_tc2_no_strip_applied PASSED. strip 미적용, trailing newline 원문 유지 확인"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="test_tc3_fetch_canonical_sha_matches_json_parse_body + test_tc3_get_pr_body_text_uses_json_parse_not_jq PASSED. JSON parse 경로 사용"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="test_tc4_trailing_whitespace_stdout_not_absorbed PASSED. jq/PowerShell stdout SHA 오염 차단"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="test_tc5_candidate_sha_deterministic + MT-9/MT-10 테스트군 PASSED. acceptance_staging frozen snapshot으로 candidate SHA 일관성 확보"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="test_tc6_fetch_canonical_text_and_sha_consistent PASSED. github_canonical_pr_body_sha256 필드 분리(_fetch_canonical_pr_body_sha256:17271)"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="test_tc7_verify_published_uses_canonical_helper PASSED. gates accept stale 검증이 helper 사용(pipeline.py:20832, recompute_sha)"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="test_tc8_acceptance_request_has_separated_fields PASSED. pr_body_candidate_sha256/github_canonical_pr_body_sha256 필드 분리"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="test_tc9_no_direct_hashlib_pr_body_outside_helper + test_tc9_all_pr_body_paths_route_through_helper PASSED. grep 확인 결과 helper 외부 직접 hashlib(pr_body) 호출 0건"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="test_tc11_f52c_canonical_rule_backward_compatible + test_tc11_e69e_state_model_intact PASSED. E69E/F52C 상태 모델 비파괴"/>
+  </ac_verification>
+
+  <criteria_verification>
+    <criterion ac_id="AC-1" status="PASS" evidence="CRLF/LF 정규화 → 동일 SHA. 오라클 TC-1 canonical_sha256 값 실측 일치"/>
+    <criterion ac_id="AC-2" status="PASS" evidence="trailing newline 구분 유지, strip 미적용. 오라클 TC-2 3가지 상태 구분 확인"/>
+    <criterion ac_id="AC-3" status="PASS" evidence="gh --json body JSON parse 경로 == 내부 body helper SHA. 오라클 TC-3"/>
+    <criterion ac_id="AC-4" status="PASS" evidence="stdout trailing whitespace 미흡수. canonical helper 내부 정규화"/>
+    <criterion ac_id="AC-5" status="PASS" evidence="MT-9 frozen snapshot(pr_body_candidate_content/sha256) + MT-10 read-only reuse로 request-accept 재실행 간 candidate SHA 불변"/>
+    <criterion ac_id="AC-6" status="PASS" evidence="publish 후 GitHub fetch canonical SHA == github_canonical_pr_body_sha256 필드"/>
+    <criterion ac_id="AC-7" status="PASS" evidence="gates accept가 동일 _canonical_pr_body_sha256로 stale 검증(recompute_sha, line 20832)"/>
+    <criterion ac_id="AC-8" status="PASS" evidence="candidate/canonical 필드 분리로 오판 stale 방지"/>
+    <criterion ac_id="AC-9" status="PASS" evidence="직접 hashlib(pr_body) 0건, helper 21개 호출부 통일"/>
+    <criterion ac_id="AC-10" status="PASS" evidence="E69E ERROR/REJECT + F52C staged snapshot 테스트 비파괴"/>
+  </criteria_verification>
+
+  <module_qa_summary>
+    <module mt_id="MT-9" verdict="PASS" report="module_qa_MT-9-b985.xml" note="acceptance_staging frozen snapshot 구현, 30 passed"/>
+    <module mt_id="MT-10" verdict="PASS" report="module_qa_MT-10-b985.xml" note="True Idempotent read-only reuse + packet_md_sha256 self-ref 제거, 36 passed"/>
+    <note>MT-1~MT-8은 이전 라운드에서 module QA PASS 기록됨(dev DONE + 통합 완료 상태). MT-9/MT-10은 REJECT 수리 후속 모듈로 본 라운드에서 재검증됨.</note>
+  </module_qa_summary>
+
+  <runtime_functional_check>
+    <execution_check_present>PASS — dev_handover_b985_r2.xml에 execution_check(py_compile OK, import OK, 24 passed) 존재</execution_check_present>
+    <execution_check_verdict>PASS — QA 재실행 시 36 passed로 확대 확인</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _canonical_pr_body_sha256가 실제 21개 호출부에 배선됨(grep 확인), 정의만 존재하는 dead code 아님</functional_binding_verified>
+  </runtime_functional_check>
+
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>PASS — 신규 파일 쓰기 없음. staging 저장은 기존 _save_acceptance_staging 재사용</atomic_write>
+      <encoding_fallback>N-A — 파일 읽기 신규 없음. helper는 UTF-8 인코딩 SHA 계산만</encoding_fallback>
+      <traversal_wired>N-A — 사용자 경로 입력 없음</traversal_wired>
+    </fs>
+  </compliance_checklist>
+
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES — git diff origin/main...HEAD --name-only = pipeline.py, tests/test_canonical_pr_body_sha256_b985.py 정확히 2개. 미커밋 tracked 변경 0</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>_codex_snapshot_identity, _build_codex_review_bundle (r2), _cmd_gates_request_accept, _build_final_packet_content (MT-9/MT-10)</declared_functions>
+    <actual_modified_functions>동일 — 선언 범위 내 변경만 확인</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+
+  <dead_code>
+    <symbol>_canonical_pr_body_sha256</symbol>
+    <defined_at>pipeline.py:5178</defined_at>
+    <call_sites>21</call_sites>
+    <verdict>KEEP_REASON — SSoT helper로 다수 호출부에서 사용</verdict>
+  </dead_code>
+
+  <oracle_quality>
+    <normal_case>PASS — TC-1 (kind=normal)</normal_case>
+    <edge_error_case>PASS — TC-2/TC-3 (edge), TC-9 (error)</edge_error_case>
+    <non_empty_expected>PASS — 모든 expected.json에 실측 canonical_sha256/구조 값 존재</non_empty_expected>
+    <no_placeholder>PASS — TODO/PLACEHOLDER/TBD/N-A 미검출</no_placeholder>
+    <expected_source>PASS — user_provided</expected_source>
+    <gate_result>PASS — python pipeline.py gates oracle → ORACLE GATE PASS</gate_result>
+  </oracle_quality>
+
+  <verdict>PASS</verdict>
+  <result>[PASS] 모든 카테고리 PASS/N-A이고 numeric_verdict=PASS (120/120 정규화, ≥96 통과)</result>
+  <numeric_score_cli>120</numeric_score_cli>
+
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+
+  <issues>
+    <critical_issues>없음</critical_issues>
+    <improvement_suggestions>
+      - (경미) pipeline.py:6965의 `except Exception: bundle["pr_body_candidate_sha256"] = ""`는 fallback 값 대입이 있어 bare except/pass는 아니나, 예외 종류 로깅을 추가하면 향후 진단성이 개선됨. 현재 라운드 감점 사유 아님.
+      - MT-9/MT-10 신규 필드(pr_body_candidate_content)는 staging 파일 크기를 다소 증가시키나 재현성 확보 대비 합리적 트레이드오프.
+    </improvement_suggestions>
+  </issues>
+</qa_report>
