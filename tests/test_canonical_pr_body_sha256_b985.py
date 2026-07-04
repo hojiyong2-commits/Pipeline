@@ -994,6 +994,143 @@ def test_tc_mt11_4_codex_and_request_candidate_sha_match():
     assert codex_review_result["github_canonical_pr_body_sha256"] == canonical_sha
 
 
+# ─── MT-12 테스트 (TC-MT12-1) ─────────────────────────────────────────────
+# MT-12: acceptance_status_override가 None이어도 현재 파이프라인의 active
+#        acceptance_request.json이 PENDING이면 packet 표시가 PENDING으로 강제된다.
+
+
+def _mt12_base_evidence() -> Dict:
+    """MT-12/MT-13 테스트용 최소 evidence dict (acceptance_display_effective 미포함)."""
+    return {
+        "pipeline_id": "IMP-20260703-B985",
+        "pr_url": "https://github.com/test/repo/pull/1",
+        "pr_head_sha": "abc123",
+        "ci_run_id": "12345",
+        "changed_files": ["pipeline.py"],
+        "gate_status": {
+            "technical": "PASS",
+            "oracle": "PASS",
+            "github_ci": "PASS",
+            "acceptance": "FAIL",  # 이전 REJECT/FAIL 잔류 상태
+        },
+        "ac_fulfillment_table": None,
+        "acceptance_request": {"status": "REJECTED"},
+        # acceptance_display_effective 키 없음 → fallback 경로 진입 (MT-12 대상)
+        "oracle_summary": None,
+        "known_failures": [],
+        "evidence_integrity": {},
+        "workspace_hygiene": {},
+    }
+
+
+def test_tc_mt12_1_pending_request_forces_pending_display(monkeypatch):
+    """MT-12: override 없이 호출해도 active acceptance_request.json이 PENDING이면
+    packet 표시가 '승인 대기 중 (PENDING)'으로 강제되는지 확인한다."""
+    evidence = _mt12_base_evidence()
+
+    # active acceptance_request.json이 PENDING인 상황을 모킹.
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"pipeline_id": "IMP-20260703-B985", "status": "PENDING"},
+    )
+
+    content = pipeline._build_final_packet_content(evidence)
+    assert "승인 대기 중 (PENDING)" in content, (
+        f"active PENDING request가 packet 표시에 반영되지 않음: {content[:300]}"
+    )
+    # gate_status.acceptance도 PENDING으로 동기화되어야 한다.
+    assert "acceptance: PENDING" in content, (
+        f"gate_status.acceptance가 PENDING으로 동기화되지 않음: {content[:400]}"
+    )
+
+
+def test_tc_mt12_2_no_pending_request_keeps_fallback(monkeypatch):
+    """MT-12: active acceptance_request가 PENDING이 아니면(예: 실제 REJECTED consumed)
+    MT-12 강제가 적용되지 않고 기존 fallback 표시 상태가 유지되는지 확인한다."""
+    evidence = _mt12_base_evidence()
+    # evidence의 acceptance_request를 실제 REJECTED 표시로 만드는 consumed dict로 교체.
+    evidence["acceptance_request"] = {
+        "status": "CONSUMED",
+        "consumed_result": "REJECT",
+    }
+    # active request도 동일한 REJECTED consumed 상태 → MT-12 PENDING 강제 미적용.
+    monkeypatch.setattr(
+        pipeline,
+        "_load_acceptance_request",
+        lambda: {"status": "CONSUMED", "consumed_result": "REJECT"},
+    )
+
+    content = pipeline._build_final_packet_content(evidence)
+    # active PENDING이 아니므로 MT-12 강제가 걸리지 않고 REJECTED 표시가 유지된다.
+    assert "acceptance_display: REJECTED" in content, (
+        f"active PENDING이 없을 때 기존 fallback(REJECTED)이 유지되지 않음: {content[:400]}"
+    )
+
+
+# ─── MT-13 테스트 (TC-MT13-1) ─────────────────────────────────────────────
+# MT-13: verification_json_sha256 주입 시 packet md에 embed되는 값이 주입값과 일치.
+#        (staging → publish atomic 순서 보장의 단위 검증.)
+
+
+def test_tc_mt13_1_injected_vj_sha256_embedded(monkeypatch):
+    """MT-13: verification_json_sha256을 주입하면 packet md의 verification_json_sha256
+    라인에 그 값이 그대로 embed되는지 확인한다."""
+    evidence = _mt12_base_evidence()
+    # active request 간섭 배제 (override로 PENDING 고정).
+    monkeypatch.setattr(pipeline, "_load_acceptance_request", lambda: None)
+
+    injected_sha = "1234abcd" * 8  # 64자 결정적 더미 SHA
+
+    content = pipeline._build_final_packet_content(
+        evidence,
+        acceptance_status_override="승인 대기 중 (PENDING)",
+        verification_json_sha256=injected_sha,
+    )
+    assert f"verification_json_sha256: {injected_sha}" in content, (
+        f"주입한 verification_json_sha256이 packet md에 embed되지 않음: {content[:400]}"
+    )
+
+
+def test_tc_mt13_2_no_injection_reads_disk_backward_compat(monkeypatch, tmp_path):
+    """MT-13: verification_json_sha256을 주입하지 않으면 기존처럼 디스크의
+    human_acceptance_packet.json 파일에서 SHA를 읽는 하위호환 동작이 유지되는지 확인한다."""
+    evidence = _mt12_base_evidence()
+    monkeypatch.setattr(pipeline, "_load_acceptance_request", lambda: None)
+
+    # 디스크에 json 파일을 만들고 cwd를 그 디렉터리로 이동.
+    vj_file = tmp_path / pipeline.HUMAN_ACCEPTANCE_PACKET_JSON_FILE
+    vj_file.parent.mkdir(parents=True, exist_ok=True)
+    vj_bytes = b'{"schema_version": 1}'
+    vj_file.write_bytes(vj_bytes)
+    expected_sha = hashlib.sha256(vj_bytes).hexdigest()
+    monkeypatch.chdir(tmp_path)
+
+    content = pipeline._build_final_packet_content(
+        evidence,
+        acceptance_status_override="승인 대기 중 (PENDING)",
+    )
+    assert f"verification_json_sha256: {expected_sha}" in content, (
+        f"주입 없을 때 디스크 파일 SHA가 embed되지 않음(하위호환 실패): {content[:400]}"
+    )
+
+
+def test_tc_mt13_3_materialize_atomic_sha_invariant_source():
+    """MT-13: _materialize_acceptance_snapshot이 verification_json SHA를 미리 계산하여
+    packet md에 주입하고, 동일 verification_json을 json 파일로 기록하는 배선이 소스에
+    존재하는지 확인한다 (atomic publish 순서 회귀 방지)."""
+    src = PIPELINE_PY.read_text(encoding="utf-8")
+    # non-frozen 경로에서 verification_json_sha256 주입 배선.
+    assert "verification_json_sha256=_pre_json_sha" in src, (
+        "MT-13: _materialize_acceptance_snapshot이 미리 계산한 SHA를 "
+        "_build_final_packet_content에 주입하지 않음"
+    )
+    # _build_final_packet_content 시그니처에 파라미터 추가.
+    assert "verification_json_sha256: Optional[str] = None" in src, (
+        "MT-13: _build_final_packet_content에 verification_json_sha256 파라미터가 없음"
+    )
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

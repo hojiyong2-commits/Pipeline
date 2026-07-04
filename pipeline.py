@@ -13515,6 +13515,7 @@ def _build_acceptance_display_model(
 def _build_final_packet_content(
     evidence: Dict[str, Any],
     acceptance_status_override: Optional[str] = None,
+    verification_json_sha256: Optional[str] = None,
 ) -> str:
     """packet 텍스트를 생성한다. 120자/줄 제한 + 승인 코드 독립 줄.
 
@@ -13526,10 +13527,19 @@ def _build_final_packet_content(
     IMP-20260703-B985 MT-11 수정 1: acceptance_status_override 파라미터 추가.
     request-accept 경로에서 이전 REJECT/FAIL 상태가 packet 표시에 들어가지 않도록
     강제로 PENDING 표시로 덮어쓴다 (기본 None이면 기존 동작 유지, 하위호환).
+    IMP-20260703-B985 MT-13: verification_json_sha256 파라미터 추가.
+    호출자가 "이번 호출에서 실제로 기록될 verification_json"의 SHA를 미리 계산하여 주입하면,
+    packet md에 embed되는 verification_json_sha256이 실제 기록될 json 파일의 SHA와 일치한다.
+    (기존 코드는 디스크에 이미 존재하는 stale json 파일의 SHA를 읽어 embed했다.)
+    None이면 기존처럼 디스크 파일에서 읽는다 (하위호환).
+    IMP-20260703-B985 MT-12: acceptance_status_override가 None이어도 현재 파이프라인의
+    active acceptance_request.json이 PENDING이면 항상 PENDING 표시로 강제한다.
 
     Args:
         evidence: _collect_packet_evidence 결과 dict.
         acceptance_status_override: None이 아니면 acceptance 표시 상태를 이 값으로 강제.
+        verification_json_sha256: None이 아니면 이 값을 packet md에 embed (atomic publish 순서 보장).
+            None이면 디스크의 human_acceptance_packet.json 파일에서 SHA를 읽는다.
     Returns:
         packet 본문 문자열 (markdown-friendly, 헤더는 일반 텍스트).
     Raises:
@@ -13561,6 +13571,15 @@ def _build_final_packet_content(
     # request-accept 경로에서 이전 REJECT/FAIL 상태가 packet에 들어가지 않도록 한다.
     if acceptance_status_override is not None:
         _acceptance_display_status = acceptance_status_override
+    # MT-12 수정: acceptance_status_override가 None이어도 현재 파이프라인의 active
+    # acceptance_request.json이 PENDING이면 항상 PENDING 표시로 강제한다. override를 전달하지
+    # 않는 호출 경로(fallback)에서 이전 FAIL/REJECT 상태가 packet에 표시되는 것을 방지한다.
+    if acceptance_status_override is None:
+        _cur_req = _load_acceptance_request()
+        if isinstance(_cur_req, dict) and str(_cur_req.get("status", "")).upper() == "PENDING":
+            _acceptance_display_status = "승인 대기 중 (PENDING)"
+            if gate_status.get("acceptance") not in ("PASS",):
+                gate_status["acceptance"] = "PENDING"
     if _acceptance_display_status in ("PENDING", "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
@@ -13580,14 +13599,20 @@ def _build_final_packet_content(
             pass
 
     # verification_json_sha256: human_acceptance_packet.json SHA-256
-    vj_sha256 = ""
-    try:
-        _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
-        if _vj_path.exists():
-            import hashlib as _hashlib
-            vj_sha256 = _hashlib.sha256(_vj_path.read_bytes()).hexdigest()
-    except OSError:
-        pass
+    # MT-13 수정: 외부에서 verification_json_sha256을 주입받으면 사용한다(atomic publish 순서 보장).
+    # 주입값은 "이번 호출에서 실제로 기록될 verification_json"의 SHA이므로, packet md에 embed된
+    # 값이 실제 기록될 json 파일의 SHA와 일치한다. 주입이 없으면 기존처럼 디스크 파일에서 읽는다.
+    if verification_json_sha256 is not None:
+        vj_sha256 = verification_json_sha256
+    else:
+        vj_sha256 = ""
+        try:
+            _vj_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_JSON_FILE
+            if _vj_path.exists():
+                import hashlib as _hashlib
+                vj_sha256 = _hashlib.sha256(_vj_path.read_bytes()).hexdigest()
+        except OSError:
+            pass
 
     # IMP-20260703-B985 MT-10: packet_md_sha256 self-reference 라인 제거.
     # human_acceptance_packet.md는 이 content 자체이므로, content 안에 자신의 SHA를 embed하면
@@ -18436,6 +18461,7 @@ def _materialize_acceptance_snapshot(
     publish: bool = True,
     frozen_at: Optional[str] = None,
     frozen_packet_content: Optional[str] = None,
+    staged_json_sha256: Optional[str] = None,
 ) -> Dict[str, Any]:
     """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
 
@@ -18545,11 +18571,21 @@ def _materialize_acceptance_snapshot(
         # MT-11 수정 4: acceptance snapshot(staging/publish 모두)은 사용자에게 승인 대기 packet을
         # 보여주는 SSoT이므로, 이전 REJECT/FAIL 상태가 아니라 항상 PENDING 표시로 강제한다.
         # codex 검토용 staging packet도 동일하게 PENDING을 표시해야 3자 SHA 불변식이 유지된다.
+        # MT-13 수정: content 빌드 전에 verification_json을 먼저 직렬화하여 SHA를 계산하고,
+        # 그 SHA를 packet md에 embed한다 (atomic publish 순서 보장).
+        # 이로써 packet md의 verification_json_sha256 == acceptance_request.json의
+        # verification_json_sha256 == 실제 기록된 json 파일의 SHA가 모두 일치한다.
+        import hashlib as _pre_hashlib
+        verification_json = _build_verification_json(evidence_payload)
+        _pre_vj_str = json.dumps(verification_json, ensure_ascii=False, indent=2)
+        _pre_json_sha = _pre_hashlib.sha256(_pre_vj_str.encode("utf-8")).hexdigest()
         content = _build_final_packet_content(
             evidence_payload,
             acceptance_status_override="승인 대기 중 (PENDING)",
+            verification_json_sha256=_pre_json_sha,  # MT-13: 미리 계산한 SHA 주입
         )
-    verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
+    else:
+        verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
 
     packet_path = _packet_output_path()
     packet_path.parent.mkdir(parents=True, exist_ok=True)
@@ -18635,12 +18671,30 @@ def _materialize_acceptance_snapshot(
     _safe_replace(str(tmp_json), str(json_out_path))
     _safe_replace(str(tmp_req), str(req_path))
 
+    # MT-13: staged_json_sha256가 주어지면 acceptance_request.json의 verification_json_sha256을
+    # staging SHA로 고정한다. frozen_packet_content(staging bytes)에 embed된 SHA와 일치시키기 위해.
+    # packet md에는 staging 시 계산된 _pre_json_sha가 embed되어 있으므로, acceptance_request.json도
+    # 동일 SHA를 가져야 packet md 표시값 == acceptance_request.json 값 불변식이 성립한다.
+    _effective_json_sha = staged_json_sha256 if staged_json_sha256 is not None else json_sha
+
+    # tmp_req도 staged_json_sha를 반영하도록 재작성 (이미 커밋된 파일이므로 직접 갱신)
+    if staged_json_sha256 is not None and req_path.exists():
+        try:
+            _req_data_update = json.loads(req_path.read_text(encoding="utf-8", errors="replace"))
+            _req_data_update["verification_json_sha256"] = staged_json_sha256
+            req_path.write_text(
+                json.dumps(_req_data_update, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except (OSError, json.JSONDecodeError):
+            pass
+
     # 메모리 state도 동기화
     if isinstance(state.get("acceptance_request"), dict):
         state["acceptance_request"]["packet_path"] = str(packet_path)
         state["acceptance_request"]["packet_sha256"] = pkt_sha
         state["acceptance_request"]["verification_json_path"] = str(json_out_path)
-        state["acceptance_request"]["verification_json_sha256"] = json_sha
+        state["acceptance_request"]["verification_json_sha256"] = _effective_json_sha
 
     # Phase 4: PR 본문 갱신.
     # BUG-20260628-F52C REJECT-2: gh가 있는데 pr edit가 실패하면 "갱신 안 됨"과 구분되는
@@ -20596,6 +20650,7 @@ def _publish_acceptance_request(
     pr_body: str,
     codex_review_result: Optional[Dict[str, Any]] = None,
     frozen_packet_content: Optional[str] = None,
+    staged_json_sha256: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Codex APPROVED 이후 acceptance_request/packet/PR body/pending comment를 publish한다.
 
@@ -20643,9 +20698,12 @@ def _publish_acceptance_request(
 
     # 2) packet md/json + acceptance_request.json SHA 동기화 + PR body 갱신 (publish=True).
     #    BUG-20260628-F52C: frozen bytes pass-through — staging이 만든 동일 packet 본문을 그대로 커밋.
+    #    MT-13: staged_json_sha256가 주어지면 _materialize_acceptance_snapshot에 전달하여
+    #    acceptance_request.json의 verification_json_sha256을 staging SHA와 동일하게 유지한다.
     snapshot_result = _materialize_acceptance_snapshot(
         state, req_candidate, publish=True,
         frozen_packet_content=frozen_packet_content,
+        staged_json_sha256=staged_json_sha256,
     )
 
     # REJECT-2: gh가 있는데 PR body 갱신(pr edit)이 실패한 경우 fail-closed BLOCKED.
@@ -21369,10 +21427,14 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         # 이 시점에 acceptance_request.json(nonce 포함), packet md/json, PR body, pending comment를
         # 모두 publish한다. publish 전에는 어떤 사용자 노출 산출물도 디스크에 쓰지 않았다.
         # REJECT-3: codex_result를 전달하여 publish 직후 PR body SHA 3자 일치를 검증한다.
+        # MT-13: staged_sha_manifest["json_sha256"]를 전달하여 acceptance_request.json의
+        # verification_json_sha256을 staging SHA와 동일하게 유지한다.
+        _staged_json_sha = str(staged_sha_manifest.get("json_sha256") or "")
         publish_result = _publish_acceptance_request(
             state, req_candidate, evidence_str, pr_body,
             codex_review_result=codex_result,
             frozen_packet_content=staged_packet_content,  # frozen bytes pass-through
+            staged_json_sha256=_staged_json_sha or None,  # MT-13: staging SHA pass-through
         )
         snapshot_result = publish_result["snapshot_result"]
         print(f"  [FINAL PACKET 자동 생성] {snapshot_result['packet_path']}")
