@@ -13578,16 +13578,12 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     except OSError:
         pass
 
-    # packet_md_sha256: human_acceptance_packet.md SHA-256 (자기 자신이므로 현재 content 기준 X)
-    # 이전에 쓰인 파일이 있으면 그 SHA를 사용
-    packet_md_sha256 = ""
-    try:
-        _pmd_path = Path(os.getcwd()) / HUMAN_ACCEPTANCE_PACKET_FILE
-        if _pmd_path.exists():
-            import hashlib as _hashlib2
-            packet_md_sha256 = _hashlib2.sha256(_pmd_path.read_bytes()).hexdigest()
-    except OSError:
-        pass
+    # IMP-20260703-B985 MT-10: packet_md_sha256 self-reference 라인 제거.
+    # human_acceptance_packet.md는 이 content 자체이므로, content 안에 자신의 SHA를 embed하면
+    # 항상 stale하다(hash를 넣는 순간 content가 바뀌어 실제 파일 SHA가 달라짐). 이 값은 어떤
+    # gate/검증에도 사용되지 않으며, packet SHA의 SSoT는 acceptance_request.packet_sha256
+    # (_materialize_acceptance_snapshot가 실제 파일에서 계산)이다. 따라서 이 self-reference
+    # 라인을 메타데이터 블록에서 제거하여 REJECT #2(packet_md_sha256 불일치)를 구조적으로 없앤다.
 
     # requirements_summary: AC 충족표에서 PASS/TOTAL
     req_pass = req_total = 0
@@ -13631,7 +13627,7 @@ def _build_final_packet_content(evidence: Dict[str, Any]) -> str:
     else:
         lines.append(f"changed_files: {changed_files_inline}")
     lines.append(f"verification_json_sha256: {vj_sha256 or '(없음)'}")
-    lines.append(f"packet_md_sha256: {packet_md_sha256 or '(없음)'}")
+    # IMP-20260703-B985 MT-10: packet_md_sha256 self-reference 라인 삭제 (위 주석 참조).
     lines.append(f"technical: {gate_status.get('technical', 'PENDING')}")
     lines.append(f"oracle: {gate_status.get('oracle', 'PENDING')}")
     lines.append(f"github_ci: {gate_status.get('github_ci', 'PENDING')}")
@@ -21097,6 +21093,87 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # 사용자에게 보이는 PR 댓글 승인 코드는 nonce 없는 단순 형식이며 Codex APPROVE 후에만 출력한다.
     pr_comment_accept_code = f"ACCEPT-{pipeline_id}"
 
+    # ── IMP-20260703-B985 MT-10: True Idempotent Reuse (재사용 경로는 진정한 read-only) ──
+    # 재사용(_is_new_candidate=False)일 때는 staging 재생성 / packet 재materialize /
+    # pr_body 재계산을 절대 하지 않는다. existing_req(acceptance_request.json)가 유일한 신뢰
+    # 루트이며, 그 안의 packet_sha256 / pr_body_candidate_sha256 / pr_body_sha256을 그대로 쓴다.
+    #
+    # 재사용 조건(_should_reuse_acceptance_nonce)이 이미 아래를 보장한다:
+    #   - existing_req.status == PENDING
+    #   - existing_req.pr_head_sha == 현재 PR head SHA
+    #   - existing_req.github_ci_run_id == 현재 CI run ID
+    #   - existing_req.pr_body_sha256 == _canonical_pr_body_sha256(현재 PR body)
+    # 따라서 재사용 경로에서 새로 계산할 SHA는 없다. 단, 아래 두 stale 케이스만 read-only로
+    # 재확인하여, 승인 코드 발급 이후 파일이 손상/치환되었으면 fail-closed 차단한다:
+    #   (A) human_acceptance_packet.md 파일이 존재하고 existing_req.packet_sha256과 일치하는가
+    #   (B) 현재 GitHub PR body canonical SHA == existing_req.pr_body_sha256 (gh 있을 때만)
+    #
+    # read-only 단축은 "이미 publish까지 완료된 재사용 가능 요청"에만 적용한다. 완료의 증거는
+    # existing_req.packet_sha256가 채워져 있고(=이전 publish가 packet을 커밋함) 실제 packet
+    # 파일이 존재하는 것이다. 아직 publish되지 않은 요청(seeded PENDING/2-call 1차 staging 등)은
+    # packet_sha256가 없으므로 read-only 단축을 건너뛰고 아래 staging→codex→publish 흐름을
+    # 그대로 수행한다(기존 nonce는 req_candidate로 보존). 이 게이트가 없으면 2-call 흐름의
+    # staging 생성(codex 검토 대상 bytes)이 사라져 codex-review 단계가 깨진다.
+    _reuse_published = (
+        not _is_new_candidate
+        and bool(str(existing_req.get("packet_sha256", "") or ""))
+        and _packet_output_path().exists()
+    )
+    if _reuse_published:
+        # (A) packet 파일 stale 검증 (파일이 있을 때만; 없으면 신규 발급으로 이미 분기됐어야 함).
+        _reuse_packet_sha = str(existing_req.get("packet_sha256", "") or "")
+        _reuse_pkt_path = _packet_output_path()
+        if _reuse_packet_sha and _reuse_pkt_path.exists():
+            _reuse_actual_pkt_sha = _sha256_file(_reuse_pkt_path)
+            if _reuse_actual_pkt_sha != _reuse_packet_sha:
+                _invalidate_acceptance_request("reuse_packet_sha_stale")
+                _die(
+                    "[BLOCKED] failure_code=packet_sha_stale\n"
+                    "  재사용 검증: human_acceptance_packet.md 파일의 SHA가\n"
+                    "  acceptance_request.packet_sha256와 다릅니다 (packet 파일이 발급 후 변경됨).\n"
+                    f"  acceptance_request: {_reuse_packet_sha}\n"
+                    f"  현재 파일:          {_reuse_actual_pkt_sha}\n"
+                    "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+                    "  gates request-accept를 다시 실행하세요."
+                )
+        # (B) 현재 GitHub PR body canonical SHA vs existing_req.pr_body_sha256 (gh 있을 때만).
+        _reuse_pr_num = _current_pr_number_for_canonical()
+        _reuse_canonical_sha = _fetch_canonical_pr_body_sha256(_reuse_pr_num)
+        if _reuse_canonical_sha is not None:
+            _reuse_req_body_sha = str(existing_req.get("pr_body_sha256", "") or "")
+            if _reuse_req_body_sha and _reuse_req_body_sha != _reuse_canonical_sha:
+                _invalidate_acceptance_request("reuse_pr_body_changed")
+                _die(
+                    "[BLOCKED] failure_code=pr_body_stale\n"
+                    "  재사용 검증: acceptance_request.pr_body_sha256가 현재 GitHub PR\n"
+                    "  본문(canonical) SHA와 다릅니다 (PR 본문이 발급 후 변경됨).\n"
+                    f"  acceptance_request:     {_reuse_req_body_sha}\n"
+                    f"  현재 GitHub canonical:  {_reuse_canonical_sha}\n"
+                    "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
+                    "  gates request-accept를 다시 실행하세요."
+                )
+        # 재사용 경로: 어떤 파일도 write하지 않고 기존 승인 코드를 그대로 재출력한다.
+        print()
+        print("사용자 승인 요청")
+        print()
+        if pr_url:
+            print(f"PR: {pr_url}")
+        else:
+            print("PR: (PR 링크 없음)")
+        print()
+        print("승인 코드:")
+        print(f"{pr_comment_accept_code}")
+        print()
+        print("CODEX 검토 필요")
+        accept_code = f"ACCEPT-{pipeline_id}-{nonce}"  # 내부 CLI nonce SSoT 보존
+        _log_event(
+            state,
+            f"acceptance request 재사용(read-only): request_id={req_candidate.get('request_id')} "
+            f"nonce={nonce} accept_code_prefix={accept_code[:len('ACCEPT-')]}",
+        )
+        _save(state)
+        return
+
     try:
         # ── 단계 1: prepare_snapshot (staging) — frozen bytes 생성 및 staging file 저장 ──
         # BUG-20260628-F52C 근본 수정: staged bytes를 frozen_at으로 고정하여 publish에서 재렌더링 없이
@@ -21386,7 +21463,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     print(f"{pr_comment_accept_code}")
     print()
     print("CODEX 검토 필요")
-    reused_label = "재사용" if not _is_new_candidate else "신규 발급"
+    # IMP-20260703-B985 MT-10: 재사용 경로는 위에서 early-return하므로 이 지점은 신규 발급 전용.
+    reused_label = "신규 발급"
     # gates accept CLI 흐름은 nonce 포함 형식(--acceptance-code)을 그대로 유지한다.
     # 사용자에게 보이는 PR 댓글 코드는 nonce 없는 pr_comment_accept_code이며, 내부 SSoT는 nonce 포함.
     accept_code = f"ACCEPT-{pipeline_id}-{nonce}"  # 내부 CLI nonce SSoT 보존

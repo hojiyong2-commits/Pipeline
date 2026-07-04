@@ -546,6 +546,301 @@ class TestFrozenAcceptanceStagingMT9:
         assert result["pr_body_candidate_sha256"] != "", "Should compute SHA via fallback"
 
 
+class TestTrueIdempotentReuseMT10:
+    """MT-10: True Idempotent Reuse + packet_md_sha256 self-reference 제거 검증.
+
+    REJECT 근본 원인 3건에 대한 회귀 테스트:
+      - REJECT #2: packet content에 자기 자신 SHA(packet_md_sha256)를 embed하면 항상 stale.
+      - REJECT #3: 재사용 경로가 staging을 재생성하며 pr_body_candidate_sha256을 재계산 →
+        codex_review_result의 값과 불일치. 재사용 경로를 read-only로 만들어 해소.
+    """
+
+    # ── TC-MT10-1: packet content에 self-referential packet_md_sha256 라인이 없다 ──
+    def test_mt10_1_no_self_referential_packet_md_sha256(self):
+        """_build_final_packet_content 결과에 packet_md_sha256: 라인이 없어야 한다."""
+        import pipeline as pl
+        evidence = {
+            "pipeline_id": "IMP-20260703-B985",
+            "pr_url": "https://example.com/pr/1",
+            "pr_head_sha": "abc123",
+            "ci_run_id": "999",
+            "changed_files": ["pipeline.py"],
+            "gate_status": {
+                "technical": "PASS",
+                "oracle": "PASS",
+                "github_ci": "PASS",
+                "acceptance": "PENDING",
+            },
+            "acceptance_request": {"nonce": "deadbeef"},
+        }
+        content = pl._build_final_packet_content(evidence)
+        # self-reference 라인 제거 확인 (REJECT #2 구조적 해소)
+        assert "packet_md_sha256:" not in content, (
+            "packet content가 자기 자신의 SHA를 embed하면 안 됩니다 (self-reference stale)."
+        )
+        # 다른 검증용 메타데이터 라인은 유지되어야 함
+        assert "verification_json_sha256:" in content
+        assert "[검증용 메타데이터]" in content
+
+    def test_mt10_1_source_has_no_packet_md_sha256_line_append(self):
+        """소스에서 packet_md_sha256 라인을 append하는 코드가 제거되었는지 확인."""
+        src = (Path(pipeline.__file__)).read_text(encoding="utf-8")
+        assert 'lines.append(f"packet_md_sha256:' not in src, (
+            "packet_md_sha256 라인 append 코드가 남아 있습니다 (self-reference)."
+        )
+
+    # ── 재사용 경로 read-only 검증을 위한 preflight 스텁 ──
+    def _stub_request_accept_preflight(self, pl, tmp_path, monkeypatch, pr_body):
+        """_cmd_gates_request_accept의 preflight를 모두 통과시키는 monkeypatch 묶음."""
+        monkeypatch.setattr(pl, "BASE_DIR", tmp_path)
+        monkeypatch.setattr(pl, "_check_workspace_hygiene", lambda state: {"status": "PASS"})
+        monkeypatch.setattr(pl, "_save", lambda state: None)
+        monkeypatch.setattr(pl, "_log_event", lambda state, msg: None)
+        monkeypatch.setattr(pl, "_is_deployable_evidence", lambda p: True)
+        monkeypatch.setattr(pl, "_validate_ac_table_before_request_accept", lambda state: None)
+        monkeypatch.setattr(
+            pl, "_check_oracle_manifest_vs_inventory", lambda state: {"status": "PASS"}
+        )
+        # oracle manifest 없음 → provenance 검증 skip
+        monkeypatch.setattr(
+            pl, "_contract_paths",
+            lambda pid: {
+                "evidence_inventory": tmp_path / "no_inventory.json",
+            },
+        )
+        monkeypatch.setattr(pl, "_oracle_manifest_status", lambda paths: ([], []))
+        monkeypatch.setattr(pl, "_get_current_pr_changed_files", lambda: ["pipeline.py"])
+        monkeypatch.setattr(pl, "_get_pr_body_text", lambda: pr_body)
+        monkeypatch.setattr(
+            pl, "_validate_pr_body_readiness", lambda body: {"allow_accept": True}
+        )
+        monkeypatch.setattr(pl, "_get_current_pr_url", lambda: "https://example.com/pr/1")
+        monkeypatch.setattr(pl, "_get_current_pr_head_sha", lambda: "HEADSHA")
+        monkeypatch.setattr(pl, "_get_pr_branch_ci_run_id", lambda branch=None: "RUNID")
+        monkeypatch.setattr(pl, "_get_git_diff_files", lambda base="origin/main": ["pipeline.py"])
+        monkeypatch.setattr(
+            pl, "_check_packet_freshness_against_actual",
+            lambda path, head, run, files: None,
+        )
+        monkeypatch.setattr(pl, "_compute_file_sha256", lambda p: "EVIDSHA")
+        # idempotent 자동 accept 경로를 타지 않도록 유효 댓글 없음으로 스텁
+        monkeypatch.setattr(
+            pl, "_find_existing_valid_acceptance_comment",
+            lambda pr_url, pid, created_at: None,
+        )
+
+    def _make_existing_req(self, pr_body, canonical_sha, packet_sha, candidate_sha):
+        """재사용 조건을 만족하는 acceptance_request.json dict 생성."""
+        return {
+            "status": "PENDING",
+            "pipeline_id": "IMP-20260703-B985",
+            "evidence": "output.xlsx",
+            "evidence_sha256": "EVIDSHA",
+            "pr_head_sha": "HEADSHA",
+            "github_ci_run_id": "RUNID",
+            "pr_body_sha256": canonical_sha,
+            "pr_body_readiness": "PASS",
+            "required_sections_present": True,
+            "temporary_phrases_absent": True,
+            "packet_sha256": packet_sha,
+            "pr_body_candidate_sha256": candidate_sha,
+            "nonce": "reusenonce",
+            "request_id": "req-reuse-1",
+            "created_at": "2026-07-03T00:00:00Z",
+        }
+
+    # ── TC-MT10-2: 재사용 경로는 staging/materialize를 호출하지 않는다 (read-only) ──
+    def test_mt10_2_reuse_path_is_read_only(self, tmp_path, monkeypatch, capsys):
+        """reuse=True일 때 _save_acceptance_staging/_materialize_acceptance_snapshot 미호출."""
+        import pipeline as pl
+
+        pr_body = (
+            "# PR\n<!-- PIPELINE_FINAL_PACKET_START -->\npacket\n"
+            "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        )
+        canonical_sha = pl._canonical_pr_body_sha256(pr_body)
+        # packet 파일 준비
+        packet_file = tmp_path / "human_acceptance_packet.md"
+        packet_file.write_text("packet body\n", encoding="utf-8")
+        packet_sha = pl._sha256_file(packet_file)
+        candidate_sha = "CANDIDATE_FROZEN_SHA"
+
+        existing_req = self._make_existing_req(
+            pr_body, canonical_sha, packet_sha, candidate_sha
+        )
+
+        self._stub_request_accept_preflight(pl, tmp_path, monkeypatch, pr_body)
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: packet_file)
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: dict(existing_req))
+        # canonical fetch: 현재 GitHub body == existing_req.pr_body_sha256 (일치 → 통과)
+        monkeypatch.setattr(pl, "_current_pr_number_for_canonical", lambda: 1)
+        monkeypatch.setattr(pl, "_fetch_canonical_pr_body_sha256", lambda n=None: canonical_sha)
+
+        # read-only 위반 감지용 sentinel
+        called = {"staging": 0, "materialize": 0, "publish": 0, "invalidate": 0}
+        monkeypatch.setattr(
+            pl, "_save_acceptance_staging",
+            lambda data: called.__setitem__("staging", called["staging"] + 1),
+        )
+
+        def _boom_materialize(*a, **k):
+            called["materialize"] += 1
+            raise AssertionError("_materialize_acceptance_snapshot must not run on reuse")
+        monkeypatch.setattr(pl, "_materialize_acceptance_snapshot", _boom_materialize)
+
+        def _boom_publish(*a, **k):
+            called["publish"] += 1
+            raise AssertionError("_publish_acceptance_request must not run on reuse")
+        monkeypatch.setattr(pl, "_publish_acceptance_request", _boom_publish)
+        monkeypatch.setattr(
+            pl, "_invalidate_acceptance_request",
+            lambda reason: called.__setitem__("invalidate", called["invalidate"] + 1),
+        )
+
+        args = _NS(evidence="output.xlsx", force_new_code=False)
+        state = {"pipeline_id": "IMP-20260703-B985"}
+        pl._cmd_gates_request_accept(args, state)
+
+        out = capsys.readouterr().out
+        assert called["staging"] == 0, "재사용 경로가 staging을 write함 (read-only 위반)"
+        assert called["materialize"] == 0, "재사용 경로가 packet을 materialize함"
+        assert called["publish"] == 0, "재사용 경로가 publish를 수행함"
+        assert called["invalidate"] == 0, "정상 재사용인데 INVALIDATED 처리됨"
+        assert "ACCEPT-IMP-20260703-B985" in out, "재사용 승인 코드가 출력되지 않음"
+
+    # ── TC-MT10-3: 재사용 경로에서 pr_body_candidate_sha256이 재계산되지 않는다 ──
+    def test_mt10_3_pr_body_candidate_sha256_from_existing_req(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """재사용 경로는 existing_req의 candidate SHA를 그대로 두고 재계산하지 않는다.
+
+        _canonical_pr_body_sha256이 (재사용 조건 판정 외에) 후보 재계산에 쓰이지 않음을 확인.
+        """
+        import pipeline as pl
+
+        pr_body = (
+            "# PR\n<!-- PIPELINE_FINAL_PACKET_START -->\npacket\n"
+            "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        )
+        canonical_sha = pl._canonical_pr_body_sha256(pr_body)
+        packet_file = tmp_path / "human_acceptance_packet.md"
+        packet_file.write_text("packet body\n", encoding="utf-8")
+        packet_sha = pl._sha256_file(packet_file)
+        # codex가 검토했던 frozen candidate SHA — 재사용 경로가 이 값을 보존해야 함
+        candidate_sha = "FROZEN_CANDIDATE_FROM_CODEX"
+        existing_req = self._make_existing_req(
+            pr_body, canonical_sha, packet_sha, candidate_sha
+        )
+
+        self._stub_request_accept_preflight(pl, tmp_path, monkeypatch, pr_body)
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: packet_file)
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: dict(existing_req))
+        monkeypatch.setattr(pl, "_current_pr_number_for_canonical", lambda: 1)
+        monkeypatch.setattr(pl, "_fetch_canonical_pr_body_sha256", lambda n=None: canonical_sha)
+        monkeypatch.setattr(pl, "_materialize_acceptance_snapshot", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no materialize")))
+        monkeypatch.setattr(pl, "_save_acceptance_staging", lambda data: (_ for _ in ()).throw(AssertionError("no staging write")))
+
+        args = _NS(evidence="output.xlsx", force_new_code=False)
+        state = {"pipeline_id": "IMP-20260703-B985"}
+        pl._cmd_gates_request_accept(args, state)
+
+        # existing_req의 candidate SHA는 read-only 경로 후에도 그대로 (변형/재계산 없음).
+        assert existing_req["pr_body_candidate_sha256"] == candidate_sha
+        out = capsys.readouterr().out
+        assert "사용자 승인 요청" in out
+
+    # ── TC-MT10-4: 재사용 경로에서 packet 파일이 stale하면 fail-closed 차단 ──
+    def test_mt10_4_reuse_blocks_on_stale_packet(self, tmp_path, monkeypatch):
+        """packet 파일 SHA != existing_req.packet_sha256이면 BLOCKED + INVALIDATED."""
+        import pipeline as pl
+
+        pr_body = (
+            "# PR\n<!-- PIPELINE_FINAL_PACKET_START -->\npacket\n"
+            "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        )
+        canonical_sha = pl._canonical_pr_body_sha256(pr_body)
+        packet_file = tmp_path / "human_acceptance_packet.md"
+        packet_file.write_text("actual current content\n", encoding="utf-8")
+        # existing_req에는 옛날 packet SHA를 넣어 stale 상황 유발
+        stale_packet_sha = "0" * 64
+        existing_req = self._make_existing_req(
+            pr_body, canonical_sha, stale_packet_sha, "CAND"
+        )
+
+        self._stub_request_accept_preflight(pl, tmp_path, monkeypatch, pr_body)
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: packet_file)
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: dict(existing_req))
+        monkeypatch.setattr(pl, "_current_pr_number_for_canonical", lambda: 1)
+        monkeypatch.setattr(pl, "_fetch_canonical_pr_body_sha256", lambda n=None: canonical_sha)
+
+        invalidated = {"n": 0, "reason": ""}
+        def _inv(reason):
+            invalidated["n"] += 1
+            invalidated["reason"] = reason
+        monkeypatch.setattr(pl, "_invalidate_acceptance_request", _inv)
+
+        args = _NS(evidence="output.xlsx", force_new_code=False)
+        state = {"pipeline_id": "IMP-20260703-B985"}
+        with pytest.raises(SystemExit):
+            pl._cmd_gates_request_accept(args, state)
+        assert invalidated["n"] == 1, "stale packet인데 INVALIDATED 미처리"
+        assert invalidated["reason"] == "reuse_packet_sha_stale"
+
+    # ── TC-MT10-5: 미publish 재사용 요청은 read-only 단축을 타지 않고 staging 흐름으로 진입 ──
+    def test_mt10_5_unpublished_reuse_falls_through_to_staging(
+        self, tmp_path, monkeypatch
+    ):
+        """packet_sha256 없는(미publish) 재사용 요청은 read-only 단축을 건너뛰고
+        staging→codex→publish 흐름으로 진입해야 한다 (2-call codex 흐름 보존).
+
+        검증: _materialize_acceptance_snapshot이 호출됨(=staging 흐름 진입). 이는
+        _codex_approve 헬퍼가 1차 request-accept로 staging file을 생성하는 E2E 계약과 일치.
+        """
+        import pipeline as pl
+
+        pr_body = (
+            "# PR\n<!-- PIPELINE_FINAL_PACKET_START -->\npacket\n"
+            "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        )
+        canonical_sha = pl._canonical_pr_body_sha256(pr_body)
+        # 미publish 요청: packet_sha256 없음 (seeded PENDING 상태 시뮬레이션)
+        existing_req = self._make_existing_req(pr_body, canonical_sha, "", "")
+        existing_req.pop("packet_sha256", None)
+        existing_req.pop("pr_body_candidate_sha256", None)
+
+        self._stub_request_accept_preflight(pl, tmp_path, monkeypatch, pr_body)
+        # packet 파일 부재 → _reuse_published=False 확정
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: tmp_path / "no_packet.md")
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: dict(existing_req))
+        monkeypatch.setattr(pl, "_build_ac_fulfillment_table", lambda state: None)
+        monkeypatch.setattr(pl, "_load_acceptance_staging", lambda pid: None)
+
+        materialize_called = {"n": 0}
+
+        def _fake_materialize(*a, **k):
+            materialize_called["n"] += 1
+            # staging 흐름에 진입했음을 확인한 뒤, 이후 codex 단계로 가지 않도록 즉시 중단.
+            raise SystemExit(0)
+
+        monkeypatch.setattr(pl, "_materialize_acceptance_snapshot", _fake_materialize)
+
+        args = _NS(evidence="output.xlsx", force_new_code=False)
+        state = {"pipeline_id": "IMP-20260703-B985"}
+        with pytest.raises(SystemExit):
+            pl._cmd_gates_request_accept(args, state)
+        assert materialize_called["n"] == 1, (
+            "미publish 재사용이 read-only 단축을 타서 staging 흐름에 진입하지 못함 "
+            "(2-call codex 흐름 파손)"
+        )
+
+
+class _NS:
+    """argparse.Namespace 대용 경량 스텁 (테스트용)."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
