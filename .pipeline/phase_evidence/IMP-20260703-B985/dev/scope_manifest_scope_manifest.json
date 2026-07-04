@@ -1,0 +1,218 @@
+{
+  "pipeline_id": "IMP-20260703-B985",
+  "micro_tasks": [
+    {
+      "id": "MT-1",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_canonical_pr_body_sha256 (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-1",
+          "implemented_ac": ["AC-1", "AC-2"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": ["_canonical_pr_body_sha256: new canonical SSoT helper"]
+        }
+      ]
+    },
+    {
+      "id": "MT-2",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_prepare_acceptance_snapshot_candidate"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-2",
+          "implemented_ac": ["AC-3", "AC-9"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": ["replaced direct hashlib call with canonical helper"]
+        }
+      ]
+    },
+    {
+      "id": "MT-3",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_verify_published_canonical_pr_body"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-3",
+          "implemented_ac": ["AC-7", "AC-9"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": ["recompute_sha replaced with canonical helper"]
+        }
+      ]
+    },
+    {
+      "id": "MT-4",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_fetch_canonical_pr_body_sha256",
+        "_get_pr_body_text"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-4",
+          "implemented_ac": ["AC-3", "AC-6"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": ["inline hashlib replaced; jq replaced with json.loads"]
+        }
+      ]
+    },
+    {
+      "id": "MT-5",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept",
+        "_get_staged_pr_body_sha"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-5",
+          "implemented_ac": ["AC-5", "AC-9"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": ["stale check hashlib replaced with helper in 2 places"]
+        }
+      ]
+    },
+    {
+      "id": "MT-6",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_codex_review"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-6",
+          "implemented_ac": ["AC-4", "AC-5", "AC-6"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": ["pr_body_sha calculation replaced with canonical helper (scope amendment: actual function is _cmd_gates_codex_review)"]
+        }
+      ]
+    },
+    {
+      "id": "MT-7",
+      "files": [
+        "pipeline.py"
+      ],
+      "affected_functions": [
+        "_prepare_acceptance_snapshot_candidate",
+        "_publish_acceptance_request"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-7",
+          "implemented_ac": ["AC-4", "AC-5", "AC-6", "AC-8"],
+          "changed_files": ["pipeline.py"],
+          "implementation_evidence": ["pr_body_candidate_sha256 + github_canonical_pr_body_sha256 fields added"]
+        }
+      ]
+    },
+    {
+      "id": "MT-8",
+      "files": [
+        "tests/test_canonical_pr_body_sha256_b985.py",
+        "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/expected.json",
+        "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/input.json",
+        "tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/expected.json",
+        "tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/input.json",
+        "tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/expected.json",
+        "tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/input.json",
+        "tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/expected.json",
+        "tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/input.json"
+      ],
+      "affected_functions": [
+        "tests/test_canonical_pr_body_sha256_b985.py (신규)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-8",
+          "implemented_ac": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-7", "AC-8", "AC-9", "AC-10"],
+          "changed_files": ["tests/test_canonical_pr_body_sha256_b985.py", "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/expected.json", "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/input.json", "tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/expected.json", "tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/input.json", "tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/expected.json", "tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/input.json", "tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/expected.json", "tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/input.json"],
+          "implementation_evidence": ["30 tests, 4 oracle cases with input/expected files"]
+        }
+      ]
+    },
+    {
+      "id": "MT-9",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept (acceptance_staging frozen snapshot)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-9",
+          "implemented_ac": ["AC-5"],
+          "changed_files": ["pipeline.py", "tests/test_canonical_pr_body_sha256_b985.py"],
+          "implementation_evidence": ["acceptance_staging frozen snapshot: pr_body_candidate_content/sha256 저장으로 re-fetch 통합"]
+        }
+      ]
+    },
+    {
+      "id": "MT-10",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_cmd_gates_request_accept (reuse early-return block)",
+        "_build_final_packet_content (packet_md_sha256 removal)"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-10",
+          "implemented_ac": ["AC-5"],
+          "changed_files": ["pipeline.py", "tests/test_canonical_pr_body_sha256_b985.py"],
+          "implementation_evidence": [
+            "_cmd_gates_request_accept: 재사용 경로 True Idempotent read-only 재설계 — SHA 재계산 없이 existing_req SSoT 사용",
+            "_build_final_packet_content: self-referential packet_md_sha256 라인 제거"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MT-11",
+      "files": [
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "affected_functions": [
+        "_build_final_packet_content",
+        "_publish_acceptance_request",
+        "_materialize_acceptance_snapshot",
+        "_cmd_gates_request_accept"
+      ],
+      "implemented_tasks": [
+        {
+          "mt_id": "MT-11",
+          "implemented_ac": ["AC-5", "AC-9"],
+          "changed_files": ["pipeline.py", "tests/test_canonical_pr_body_sha256_b985.py"],
+          "implementation_evidence": [
+            "_build_final_packet_content: acceptance_status_override 파라미터 추가 — PENDING override 전달",
+            "_publish_acceptance_request: pr_body_candidate_sha256를 POST-publish canonical SHA로 갱신",
+            "_materialize_acceptance_snapshot: acceptance_status_override 전달",
+            "_cmd_gates_request_accept: staging cleanup 삭제 제거"
+          ]
+        }
+      ]
+    }
+  ]
+}

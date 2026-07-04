@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<handover>
+  <pipeline_id>IMP-20260625-AD69</pipeline_id>
+  <agent_run_id>dev-563e69219ee43fe8</agent_run_id>
+  <phase>dev</phase>
+  <rework_round>2</rework_round>
+  <changed_files>
+    <file>pipeline.py</file>
+  </changed_files>
+  <scope_declaration>
+    <files_to_modify>pipeline.py</files_to_modify>
+    <files_to_create>scope_manifest_MT-2_r2.json</files_to_create>
+    <files_to_delete>없음</files_to_delete>
+  </scope_declaration>
+  <scope_lock_check>
+    <git_diff_files>pipeline.py (외 FEAT-20260426-332E/* 파일들은 MT-2 이전부터 변경된 상태로 본 MT-2 무관)</git_diff_files>
+    <manifest_files>pipeline.py</manifest_files>
+    <extra_files>없음</extra_files>
+    <trust_root_violation>false</trust_root_violation>
+    <verdict>PASS</verdict>
+  </scope_lock_check>
+  <impact_analysis>
+    <micro_task_id>MT-2</micro_task_id>
+    <target_function>_cmd_gates_request_accept</target_function>
+    <change_summary>
+      (1) 기존 유효 PR 승인 댓글 확인 위치를 함수 초반(pr_url 결정 직후, packet 생성 전)으로 이동.
+      (2) 유효 댓글 발견 시 안내문만 출력하던 미완료 경로 제거.
+      (3) 기존 nonce로 gates accept subprocess 재호출 — provenance/replay/stale 검증 전체 통과.
+    </change_summary>
+  </impact_analysis>
+  <qa_evidence>
+    <test_file>tests/test_acceptance_comment_reuse_ad69.py</test_file>
+    <test_result>15개 중 13개 PASS. test_tc7/test_provenance_preserved 2개는 기존 HEAD(012cd3f)에도 동일하게 실패하는 환경 stale state 사유이며 MT-2 변경과 무관함 확인.</test_result>
+  </qa_evidence>
+</handover>

@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "request_type": "pipeline-phase-attestation-request-v1",
+  "generated_at": "2026-07-04T02:25:56Z",
+  "pipeline_id": "IMP-20260703-B985",
+  "phase": "dev",
+  "phase_status": "DONE",
+  "commit_hint": "a26860de1a3096e5f60b61d3bee856342452a5e7",
+  "state": {
+    "current_phase": "qa",
+    "phase_completed_at": "2026-07-04T02:21:58Z",
+    "report_file": "dev_handover_r2.xml",
+    "evidence": "pipeline.py,tests/test_canonical_pr_body_sha256_b985.py,tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/expected.json,tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/input.json,tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/expected.json,tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/input.json,tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/expected.json,tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/input.json,tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/expected.json,tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/input.json"
+  },
+  "agent_run": {
+    "run_id": "dev-e132c1ffb7968d35",
+    "phase": "dev",
+    "agent_id": "dev-agent",
+    "status": "COMPLETED",
+    "output_file": "dev_handover_r2.xml",
+    "output_sha256": "7cfeb308cb108ee5ab7a8a6b41a282b0bea1d4db957b0cf8e64bc719ae2b8b92",
+    "receipt_path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/agent_receipt_dev-e132c1ffb7968d35.json",
+    "receipt_sha256": "115549fd4cd7c4af3ce0558ea362f86529c933bac34ae9cffe1978185e476e95",
+    "used_by_phase": "dev",
+    "receipt_source_path": ".pipeline\\agent_receipts\\IMP-20260703-B985\\dev\\dev-e132c1ffb7968d35.json"
+  },
+  "manager_run": null,
+  "copied_evidence": [
+    {
+      "label": "agent_receipt",
+      "source": ".pipeline\\agent_receipts\\IMP-20260703-B985\\dev\\dev-e132c1ffb7968d35.json",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/agent_receipt_dev-e132c1ffb7968d35.json",
+      "sha256": "115549fd4cd7c4af3ce0558ea362f86529c933bac34ae9cffe1978185e476e95",
+      "size_bytes": 518,
+      "requires_force_add": true
+    },
+    {
+      "label": "report",
+      "source": "dev_handover_r2.xml",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/report_dev_handover_r2.xml",
+      "sha256": "7cfeb308cb108ee5ab7a8a6b41a282b0bea1d4db957b0cf8e64bc719ae2b8b92",
+      "size_bytes": 1676,
+      "requires_force_add": true
+    },
+    {
+      "label": "scope_manifest",
+      "source": "scope_manifest.json",
+      "path": ".pipeline/phase_evidence/IMP-20260703-B985/dev/scope_manifest_scope_manifest.json",
+      "sha256": "f6855f1973619110319dbc64e4d6a988170780f69542da68c5d55f16e89a33dd",
+      "size_bytes": 7470,
+      "requires_force_add": true
+    }
+  ],
+  "workspace_file_checks": [
+    {
+      "path": "pipeline.py",
+      "sha256": "ed76d246833aef81ff44ec08b449823d811b7fdad7411de6d1d63e81e54be248",
+      "size_bytes": 1338716
+    },
+    {
+      "path": "tests/test_canonical_pr_body_sha256_b985.py",
+      "sha256": "d1125bd43797d4293fde2fe102f567befd282a6a330bb96286cf7c4c9e681ac0",
+      "size_bytes": 49729
+    },
+    {
+      "path": "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/expected.json",
+      "sha256": "650e1b27bf3f511f38dd7e42b00749d799474fa0490e701a70c12c47e36c280b",
+      "size_bytes": 418
+    },
+    {
+      "path": "tests/oracles/IMP-20260703-B985/TC-1_crlf_lf_normalization/input.json",
+      "sha256": "657ec3fb2c4f69e00def98eaf3048501292daa1c144c1000c10bcd2c6c2dea2d",
+      "size_bytes": 622
+    },
+    {
+      "path": "tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/expected.json",
+      "sha256": "a5d22630c82a661944a0cdcfd28a3e37be211692d651e8bf7ca74a13c3f840ab",
+      "size_bytes": 660
+    },
+    {
+      "path": "tests/oracles/IMP-20260703-B985/TC-2_trailing_newline/input.json",
+      "sha256": "4c9eb7f3e1ee8d45e063129e90269bab0f52569ede5c48c3bbdc43656a679900",
+      "size_bytes": 562
+    },
+    {
+      "path": "tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/expected.json",
+      "sha256": "541ed01322ea2c2dedeecb05af7d1dec39b45d47aa648eb7cb955d1d7d5e4a59",
+      "size_bytes": 481
+    },
+    {
+      "path": "tests/oracles/IMP-20260703-B985/TC-3_json_parse_vs_jq/input.json",
+      "sha256": "651f7e0c9f5397cbb01d65278624f2365d8d69e0ef27a44409506e013ace8ca2",
+      "size_bytes": 396
+    },
+    {
+      "path": "tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/expected.json",
+      "sha256": "7120a140ce5c13e852d168603b452f5acd89be4b71532cb6cbfbc791318fba63",
+      "size_bytes": 928
+    },
+    {
+      "path": "tests/oracles/IMP-20260703-B985/TC-9_direct_hashlib_regression/input.json",
+      "sha256": "b62759b3c88e9d64947226e27dba6a3bd7320610e8b6d95b60b61a30fceb61d2",
+      "size_bytes": 478
+    }
+  ],
+  "local_only_files": []
+}
