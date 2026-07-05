@@ -5648,6 +5648,7 @@ def _build_approval_request_output(pipeline_id: str, pr_url: str) -> Dict[str, A
 #            은 현재 cwd 또는 격리 경로에 존재할 수 있으며, 없으면 발급 초기 시도로 간주해 일부 검사를 skip한다.
 # [Vulnerability & Risks]: gh CLI 부재 시 PR body 검사(5,6)는 PASS로 흘려보낸다(정보 부족을 차단 사유로 삼지 않음).
 #            packet/json 파일 부재는 최초 발급 시도로 간주하여 관련 SHA 검사를 skip한다.
+#            MT-24 검사7: packet github_ci: FAIL vs 실제 PASS 불일치를 fail-closed로 차단한다.
 # [Improvement]: 검사 항목을 세분화된 failure_code로 반환하면 호출부 안내를 더 구체화할 수 있다.
 def _check_approval_request_ready(pr_body: Optional[str] = None) -> Dict[str, Any]:
     """승인 요청문 출력 직전 정합성 사전 검증 (MT-17).
@@ -5766,6 +5767,38 @@ def _check_approval_request_ready(pr_body: Optional[str] = None) -> Dict[str, An
                     "이전 REJECT/FAIL 상태를 PENDING으로 갱신한 후 다시 실행하세요."
                 ),
             }
+
+    # 검사 7 (MT-24): packet github_ci 상태가 실제 external_gates.github_ci.status와 일치하는지 검증
+    # packet이 없거나 github_ci 상태 필드가 없으면 graceful skip (구 포맷 호환)
+    try:
+        _pkt_path_mt24 = _packet_output_path()
+        if _pkt_path_mt24.exists():
+            _pkt_text_mt24 = _pkt_path_mt24.read_text(encoding="utf-8", errors="replace")
+            # "github_ci: FAIL" 또는 "GitHub CI: FAIL" 패턴 탐지 (대소문자 무관)
+            _packet_github_ci_fail = bool(
+                re.search(r'github_ci:\s*FAIL', _pkt_text_mt24, re.IGNORECASE)
+                or re.search(r'GitHub CI:\s*FAIL', _pkt_text_mt24, re.IGNORECASE)
+            )
+            # 실제 gate 상태 확인
+            _state_mt24 = _load()
+            _actual_github_ci_mt24 = "UNKNOWN"
+            if isinstance(_state_mt24, dict):
+                _actual_github_ci_mt24 = str(
+                    (_state_mt24.get("external_gates") or {}).get("github_ci", {}).get("status", "UNKNOWN")
+                )
+            if _packet_github_ci_fail and _actual_github_ci_mt24 == "PASS":
+                return {
+                    "ok": False,
+                    "failure_code": "packet_github_ci_stale",
+                    "message": (
+                        "PR body final packet에 'github_ci: FAIL'이 표시되지만 "
+                        "실제 external_gates.github_ci.status는 PASS입니다. "
+                        "'python pipeline.py report final-packet && python pipeline.py report update-pr-body'로 "
+                        "packet을 재생성한 후 gates request-accept를 다시 실행하세요."
+                    ),
+                }
+    except Exception:
+        pass  # packet 읽기 실패는 non-fatal (구 포맷/파일 없음)
 
     return {"ok": True, "failure_code": "", "message": ""}
 
@@ -21504,6 +21537,34 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         and bool(str(existing_req.get("packet_sha256", "") or ""))
         and _packet_output_path().exists()
     )
+    # MT-24: 재사용 대상 packet이 'github_ci: FAIL'을 표시하는데 실제 external_gates.github_ci가
+    # PASS이면(REJECT #8), read-only 재사용 단축을 건너뛰고 신규 발급 경로로 폴백하여
+    # 최신 github_ci 상태로 packet을 재materialize한다. 파일이 없거나 상태 필드가 없으면
+    # graceful skip(재사용 유지). 파일 read 실패도 non-fatal(재사용 유지).
+    if _reuse_published:
+        try:
+            _mt24_reuse_pkt = _packet_output_path()
+            _mt24_pkt_text = _mt24_reuse_pkt.read_text(encoding="utf-8", errors="replace")
+            _mt24_packet_ci_fail = bool(
+                re.search(r'github_ci:\s*FAIL', _mt24_pkt_text, re.IGNORECASE)
+                or re.search(r'GitHub CI:\s*FAIL', _mt24_pkt_text, re.IGNORECASE)
+            )
+            _mt24_actual_ci = str(
+                (state.get("external_gates") or {}).get("github_ci", {}).get("status", "UNKNOWN")
+            )
+            if _mt24_packet_ci_fail and _mt24_actual_ci == "PASS":
+                _invalidate_acceptance_request("reuse_packet_github_ci_stale")
+                if not _machine_readable:
+                    print(YELLOW(
+                        "  [재사용 무효화] packet에 github_ci: FAIL이 표시되지만 실제 게이트는 PASS입니다 "
+                        "— 신규 발급 경로로 packet을 재생성합니다."
+                    ))
+                # read-only 단축만 건너뛴다. 이후 staging→publish 경로가 req_candidate(기존 nonce
+                # 보존)로 packet을 최신 github_ci 상태로 재materialize한다. existing_req/_is_new_candidate는
+                # staging 경로가 참조하지 않으므로 변경하지 않는다(Minimal Fix).
+                _reuse_published = False
+        except Exception:
+            pass  # packet read 실패는 non-fatal — 기존 재사용 검증 흐름 유지
     if _reuse_published:
         assert existing_req is not None  # _reuse_published 조건에서 이미 확인됨
         # (A) packet 파일 stale 검증 (파일이 있을 때만; 없으면 신규 발급으로 이미 분기됐어야 함).

@@ -1811,6 +1811,97 @@ class TestDualChannelOutputPrevention:
             assert not matched, f"제품 파일 '{f}'이 실행 산출물로 오탐됨"
 
 
+class TestPacketGateCIConsistency:
+    """MT-24: packet github_ci 상태와 실제 gate 상태 일치 검증."""
+
+    def test_check_approval_request_ready_blocks_when_packet_has_github_ci_fail(
+        self, tmp_path, monkeypatch
+    ):
+        """packet에 github_ci: FAIL이 있고 실제 gate가 PASS이면 BLOCKED."""
+        import json as _json
+
+        state_path = tmp_path / "pipeline_state.json"
+        packet_path = tmp_path / "human_acceptance_packet.md"
+
+        # 실제 gate: PASS
+        state = {
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {
+                "github_ci": {"status": "PASS", "evidence": "github_actions_run:12345"},
+                "technical": {"status": "PASS"},
+                "oracle": {"status": "PASS"},
+                "acceptance": {"status": "PENDING"},
+            },
+        }
+        state_path.write_text(_json.dumps(state), encoding="utf-8")
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+
+        # 검사2(codex APPROVED)를 통과시켜 검사7까지 도달하도록 codex 결과 준비
+        codex_dir = state_path.parent / ".pipeline"
+        codex_dir.mkdir(parents=True, exist_ok=True)
+        (codex_dir / "codex_review_result.json").write_text(
+            _json.dumps({"status": "APPROVED"}), encoding="utf-8"
+        )
+
+        # packet에는 FAIL 표시 (stale)
+        packet_path.write_text(
+            "github_ci: FAIL\nGitHub CI: FAIL\n판단 정보 상태: 판단 가능",
+            encoding="utf-8",
+        )
+
+        import importlib
+        import pipeline as _pl
+        importlib.reload(_pl)
+        # acceptance_request 부재로 검사1/3/4 skip → 검사2(codex)와 검사7만 gate
+        monkeypatch.setattr(_pl, "_load_acceptance_request", lambda: None)
+        monkeypatch.setattr(_pl, "_packet_output_path", lambda: packet_path)
+        result = _pl._check_approval_request_ready("dummy pr body")
+
+        assert result.get("ok") is False, "packet github_ci FAIL인데 PASS 반환 — BLOCKED 필요"
+        assert result.get("failure_code") == "packet_github_ci_stale"
+
+    def test_check_approval_request_ready_passes_when_packet_has_github_ci_pass(
+        self, tmp_path, monkeypatch
+    ):
+        """packet에 github_ci: PASS이고 실제 gate도 PASS이면 packet_github_ci_stale BLOCKED 없음."""
+        import json as _json
+
+        state_path = tmp_path / "pipeline_state.json"
+        packet_path = tmp_path / "human_acceptance_packet.md"
+
+        state = {
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {
+                "github_ci": {"status": "PASS", "evidence": "github_actions_run:12345"},
+                "technical": {"status": "PASS"},
+                "oracle": {"status": "PASS"},
+                "acceptance": {"status": "PENDING"},
+            },
+        }
+        state_path.write_text(_json.dumps(state), encoding="utf-8")
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_path))
+
+        # packet에도 PASS 표시
+        packet_path.write_text(
+            "github_ci: PASS\nGitHub CI: PASS\n판단 정보 상태: 판단 가능",
+            encoding="utf-8",
+        )
+
+        import importlib
+        import pipeline as _pl
+        importlib.reload(_pl)
+        monkeypatch.setattr(_pl, "_packet_output_path", lambda: packet_path)
+        result = _pl._check_approval_request_ready(
+            "작업 요약\n사용자가 확인할 결과물\n기대 결과와 실제 결과\n중요한 선택과 트레이드오프\n검증\n판단 정보 상태: 판단 가능"
+        )
+
+        # packet_github_ci_stale 검증만 통과하면 됨 (다른 섹션 검증은 실패할 수 있음)
+        if not result.get("ok"):
+            assert result.get("failure_code") != "packet_github_ci_stale", (
+                f"packet github_ci PASS인데 packet_github_ci_stale BLOCKED: {result}"
+            )
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
