@@ -18696,6 +18696,7 @@ def _materialize_acceptance_snapshot(
     frozen_at: Optional[str] = None,
     frozen_packet_content: Optional[str] = None,
     staged_json_sha256: Optional[str] = None,
+    staged_json_content: Optional[str] = None,  # MT-21: frozen publish path용 staged JSON content
 ) -> Dict[str, Any]:
     """final packet(md + json)을 원자적으로 생성하고 acceptance_request.json을 동기화한다.
 
@@ -18818,8 +18819,21 @@ def _materialize_acceptance_snapshot(
             acceptance_status_override="승인 대기 중 (PENDING)",
             verification_json_sha256=_pre_json_sha,  # MT-13: 미리 계산한 SHA 주입
         )
+        _vj_write_str = _pre_vj_str  # MT-21: pre-computed string으로 SHA 일관성 보장
     else:
-        verification_json = _build_verification_json(evidence_payload)  # 실패 시 ValueError — 아무것도 안 써짐
+        # IMP-20260703-B985 MT-21: frozen publish path — staged JSON content가 있으면 그대로 기록하여
+        # written JSON SHA == staging SHA == frozen MD에 embed된 SHA 3자 불변식을 보장한다.
+        # staged_json_content 없으면 현재 evidence로 재빌드(기존 동작, SHA 불일치 가능).
+        if staged_json_content:
+            _vj_write_str = staged_json_content
+            try:
+                verification_json = json.loads(staged_json_content)
+            except (json.JSONDecodeError, ValueError):
+                verification_json = _build_verification_json(evidence_payload)
+                _vj_write_str = json.dumps(verification_json, ensure_ascii=False, indent=2)
+        else:
+            verification_json = _build_verification_json(evidence_payload)
+            _vj_write_str = json.dumps(verification_json, ensure_ascii=False, indent=2)
 
     packet_path = _packet_output_path()
     packet_path.parent.mkdir(parents=True, exist_ok=True)
@@ -18836,10 +18850,14 @@ def _materialize_acceptance_snapshot(
     try:
         # Phase 2: 모든 temp 파일 쓰기 (아직 아무것도 커밋 안 됨)
         tmp_pkt.write_text(content, encoding="utf-8")
-        tmp_json.write_text(
-            json.dumps(verification_json, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        # MT-21: newline="" 로 write하여 플랫폼 기본 newline 변환(Windows \n→\r\n)을 차단한다.
+        # sha_manifest.json_sha256은 _sha256_file(tmp_json)(디스크 bytes)으로 계산되므로, newline
+        # 변환이 개입하면 반환하는 json_content(_vj_write_str)의 str.encode("utf-8") SHA와 어긋난다.
+        # newline=""로 기록하면 disk bytes == _vj_write_str.encode("utf-8")가 되어
+        # (1) 반환 json_content SHA == sha_manifest.json_sha256,
+        # (2) staging→frozen publish 재사용 시 동일 bytes 재기록,
+        # (3) Windows 로컬과 Linux CI가 동일 SHA를 산출하는 3자/크로스플랫폼 불변식이 성립한다.
+        tmp_json.write_text(_vj_write_str, encoding="utf-8", newline="")
 
         # SHA는 temp 파일에서 계산 (실제 경로가 아님)
         pkt_sha = _sha256_file(tmp_pkt)
@@ -18896,6 +18914,7 @@ def _materialize_acceptance_snapshot(
             # SHA를 결정적으로 계산할 수 있게 한다. (현재 PR body SHA가 아니라 packet 블록이
             # 교체된 publish 후 body SHA가 codex/acceptance_request/현재 PR body 3자 검증 기준이다.)
             "packet_content": content,
+            "json_content": _vj_write_str,  # MT-21: frozen publish path에서 재사용하기 위한 staged JSON 직렬화 문자열
         }
 
     # Phase 3: 모든 temp를 원자적으로 커밋 (여기서부터는 부분 실패 가능성 낮음)
@@ -20905,6 +20924,8 @@ def _publish_acceptance_request(
     codex_review_result: Optional[Dict[str, Any]] = None,
     frozen_packet_content: Optional[str] = None,
     staged_json_sha256: Optional[str] = None,
+    staged_json_content: Optional[str] = None,  # MT-21: frozen publish path용 staged JSON content
+    suppress_pending_comment: bool = False,  # MT-21: machine-readable 모드에서 PR comment 중복 억제
 ) -> Dict[str, Any]:
     """Codex APPROVED 이후 acceptance_request/packet/PR body/pending comment를 publish한다.
 
@@ -20958,6 +20979,7 @@ def _publish_acceptance_request(
         state, req_candidate, publish=True,
         frozen_packet_content=frozen_packet_content,
         staged_json_sha256=staged_json_sha256,
+        staged_json_content=staged_json_content,  # MT-21: frozen publish path JSON content
     )
 
     # REJECT-2: gh가 있는데 PR body 갱신(pr edit)이 실패한 경우 fail-closed BLOCKED.
@@ -21094,34 +21116,38 @@ def _publish_acceptance_request(
     # 4) pending PR 안내 댓글 — Codex APPROVED 이후에만 게시한다.
     #    REJECT-2: gh가 있는데(=pr_body_updated True) 댓글 게시가 실패하면 fail-closed BLOCKED.
     #    gh CLI 없는 환경(pr_body_updated False)은 graceful skip을 유지한다.
+    #    MT-21: suppress_pending_comment=True (--machine-readable 모드)이면 댓글 게시를 억제한다.
+    #    machine-readable 모드에서는 Pipeline Manager가 JSON stdout으로 승인 코드를 한 번만
+    #    사용자에게 전달하므로, PR 댓글 중복 게시로 인한 duplicate output을 방지한다.
     published_req = _load_acceptance_request() or req_candidate
-    if snapshot_result.get("pr_body_updated"):
-        try:
-            _comment_res = _post_github_pending_acceptance_comment(
-                published_req, evidence_str
-            )
-        except Exception as _cexc:  # noqa: BLE001 — gh subprocess 실패를 fail-closed로 승격.
-            _die(
-                "[BLOCKED] failure_code=pending_comment_failed\n"
-                f"  pending PR 안내 댓글 게시 중 예외: {_cexc}\n"
-                "  fail-closed — 승인 요청을 노출하지 않습니다."
-            )
-        if not (isinstance(_comment_res, dict) and _comment_res.get("success")):
-            _err = (
-                str(_comment_res.get("error", ""))
-                if isinstance(_comment_res, dict) else "(알 수 없는 오류)"
-            )
-            _die(
-                "[BLOCKED] failure_code=pending_comment_failed\n"
-                f"  pending PR 안내 댓글 게시 실패: {_err}\n"
-                "  fail-closed — 승인 요청을 노출하지 않습니다."
-            )
-    else:
-        # gh 없음(graceful skip) — 댓글을 게시하지 않으며 BLOCKED도 아니다.
-        try:
-            _post_github_pending_acceptance_comment(published_req, evidence_str)
-        except Exception:  # noqa: BLE001 — gh 없는 환경의 댓글 시도 실패는 non-fatal.
-            pass
+    if not suppress_pending_comment:
+        if snapshot_result.get("pr_body_updated"):
+            try:
+                _comment_res = _post_github_pending_acceptance_comment(
+                    published_req, evidence_str
+                )
+            except Exception as _cexc:  # noqa: BLE001 — gh subprocess 실패를 fail-closed로 승격.
+                _die(
+                    "[BLOCKED] failure_code=pending_comment_failed\n"
+                    f"  pending PR 안내 댓글 게시 중 예외: {_cexc}\n"
+                    "  fail-closed — 승인 요청을 노출하지 않습니다."
+                )
+            if not (isinstance(_comment_res, dict) and _comment_res.get("success")):
+                _err = (
+                    str(_comment_res.get("error", ""))
+                    if isinstance(_comment_res, dict) else "(알 수 없는 오류)"
+                )
+                _die(
+                    "[BLOCKED] failure_code=pending_comment_failed\n"
+                    f"  pending PR 안내 댓글 게시 실패: {_err}\n"
+                    "  fail-closed — 승인 요청을 노출하지 않습니다."
+                )
+        else:
+            # gh 없음(graceful skip) — 댓글을 게시하지 않으며 BLOCKED도 아니다.
+            try:
+                _post_github_pending_acceptance_comment(published_req, evidence_str)
+            except Exception:  # noqa: BLE001 — gh 없는 환경의 댓글 시도 실패는 non-fatal.
+                pass
 
     return {"snapshot_result": snapshot_result, "req": published_req}
 
@@ -21583,7 +21609,9 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             staged_packet_content = _existing_staging["staged_packet_content"]
             staged_sha_manifest = {
                 "packet_sha256": _existing_staging["staged_packet_sha256"],
+                "json_sha256": _existing_staging.get("staged_json_sha256", ""),  # MT-21: NEW — staging SHA pass-through 복구
             }
+            staged_json_content_for_publish = _existing_staging.get("staged_json_content", "")  # MT-21: NEW
             # IMP-20260703-B985 MT-9: frozen 필드 재사용 (재계산 없음)
             _pr_body_candidate_content = _existing_staging.get("pr_body_candidate_content", "")
             _pr_body_candidate_sha256 = _existing_staging.get("pr_body_candidate_sha256", "")
@@ -21599,6 +21627,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             )
             staged_sha_manifest = staged_result.get("sha_manifest", {})
             staged_packet_content = staged_result.get("packet_content", "")
+            staged_json_content_for_publish = staged_result.get("json_content", "")  # MT-21: NEW
             if not staged_packet_content:
                 _die(
                     "[PIPELINE ERROR] staged packet content 생성 실패 — 승인 코드 발급 차단.\n"
@@ -21622,6 +21651,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 "frozen_at": frozen_at,
                 "staged_packet_content": staged_packet_content,
                 "staged_packet_sha256": staged_sha_manifest.get("packet_sha256", ""),
+                "staged_json_content": staged_json_content_for_publish,    # MT-21: NEW
+                "staged_json_sha256": staged_sha_manifest.get("json_sha256", ""),  # MT-21: NEW
                 "pr_body_candidate_content": _pr_body_candidate_content,  # NEW
                 "pr_body_candidate_sha256": _pr_body_candidate_sha256,    # NEW
             })
@@ -21702,6 +21733,8 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             codex_review_result=codex_result,
             frozen_packet_content=staged_packet_content,  # frozen bytes pass-through
             staged_json_sha256=_staged_json_sha or None,  # MT-13: staging SHA pass-through
+            staged_json_content=staged_json_content_for_publish or None,  # MT-21: JSON content pass-through
+            suppress_pending_comment=_machine_readable,  # MT-21: machine-readable 모드에서 PR comment 억제
         )
         snapshot_result = publish_result["snapshot_result"]
         if not _machine_readable:

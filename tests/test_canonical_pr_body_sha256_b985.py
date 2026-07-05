@@ -1495,6 +1495,181 @@ def test_tc_mt20_build_approval_output_type_guards():
         pl._build_approval_request_output("", "url")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# MT-22: SHA 불변식 회귀 테스트 (IMP-20260703-B985)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestMT22SHAInvariant:
+    """MT-21 수정으로 보장되는 staging/publish SHA 3자 불변식 회귀 테스트."""
+
+    def test_mt22_materialize_staging_returns_json_content(self, tmp_path, monkeypatch):
+        """staging 모드(_materialize_acceptance_snapshot publish=False)가
+        json_content 필드를 반환하고, 그 SHA가 sha_manifest.json_sha256와 일치하는지."""
+        from unittest.mock import patch
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        import pipeline as pl
+
+        monkeypatch.setattr(pl, "BASE_DIR", tmp_path)
+        monkeypatch.setattr(pl, "ACCEPTANCE_REQUEST_FILE", str(tmp_path / "acceptance_request.json"))
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: tmp_path / "human_acceptance_packet.md")
+        monkeypatch.setattr(pl, "_packet_json_output_path", lambda: tmp_path / "human_acceptance_packet.json")
+
+        state = {"pipeline_id": "IMP-TEST-0001", "external_gates": {}, "acceptance_request": {}}
+        req = {"nonce": "testnonce", "pipeline_id": "IMP-TEST-0001", "status": "PENDING",
+                "evidence_sha256": "abc", "pr_head_sha": "def", "github_ci_run_id": "123"}
+
+        with patch.object(pl, "_collect_packet_evidence", return_value={"pipeline_id": "IMP-TEST-0001",
+               "evidence_integrity": {}, "workspace_hygiene": {}}):
+            with patch.object(pl, "_build_final_packet_content", return_value="MOCK_MD_CONTENT"):
+                with patch.object(pl, "_build_verification_json", return_value={"mock": "json"}):
+                    result = pl._materialize_acceptance_snapshot(state, req, publish=False,
+                                                                  frozen_at="2026-01-01T00:00:00Z")
+
+        json_content = result.get("json_content", "")
+        assert json_content, "json_content가 반환되어야 함"
+        # manifest json_sha256은 _sha256_file(tmp_json)으로 계산된다(디스크에 write_text된 파일 기준).
+        # MT-21 production 경로(_materialize_acceptance_snapshot)는
+        #   tmp_json.write_text(_vj_write_str, encoding="utf-8", newline="")
+        # 로 기록하여 Windows 기본 newline 변환(\n→\r\n)을 차단한 뒤 그 디스크 파일을 _sha256_file로
+        # 해싱한다. 따라서 반환된 json_content(_vj_write_str)도 동일하게 newline=""로 재기록해야
+        # disk bytes가 production과 정확히 일치하여 SHA가 맞는다. 기본 write_text로 기록하면 Windows에서
+        # \n→\r\n 변환이 일어나 production LF bytes와 어긋나므로, production과 동일한
+        # newline="" write_text→_sha256_file 경로로 재현한다.
+        probe = tmp_path / "probe_json_content.json"
+        probe.write_text(json_content, encoding="utf-8", newline="")
+        sha_from_content = pl._sha256_file(probe)
+        sha_from_manifest = result.get("sha_manifest", {}).get("json_sha256", "")
+        assert sha_from_content == sha_from_manifest, (
+            f"json_content SHA({sha_from_content[:16]}...) != sha_manifest.json_sha256({sha_from_manifest[:16]}...)"
+        )
+
+    def test_mt22_save_acceptance_staging_stores_json_fields(self, tmp_path, monkeypatch):
+        """새 staging 생성 시 acceptance_staging.json에 staged_json_content와
+        staged_json_sha256 필드가 저장되는지."""
+        import json as json_mod
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        import pipeline as pl
+
+        staging_path = tmp_path / "acceptance_staging.json"
+        monkeypatch.setattr(pl, "ACCEPTANCE_STAGING_PATH", str(staging_path))
+        monkeypatch.setattr(pl, "BASE_DIR", tmp_path)
+
+        pl._save_acceptance_staging({
+            "pipeline_id": "IMP-TEST-0001",
+            "staged_packet_content": "PKT",
+            "staged_packet_sha256": "abc123",
+            "staged_json_content": '{"mock": "json"}',
+            "staged_json_sha256": "def456",
+        })
+
+        saved = json_mod.loads(staging_path.read_text(encoding="utf-8"))
+        assert saved.get("staged_json_content") == '{"mock": "json"}'
+        assert saved.get("staged_json_sha256") == "def456"
+
+    def test_mt22_reuse_path_populates_json_sha256_in_manifest(self, tmp_path, monkeypatch):
+        """frozen staging reuse path에서 staged_sha_manifest에 json_sha256이 포함되는지."""
+        import json as json_mod
+        import hashlib
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+
+        staging_content = {
+            "staged_json_content": '{"key": "value"}',
+            "staged_json_sha256": hashlib.sha256(b'{"key": "value"}').hexdigest(),
+        }
+        staging_path = tmp_path / "acceptance_staging.json"
+        staging_path.write_text(json_mod.dumps(staging_content), encoding="utf-8")
+
+        loaded = json_mod.loads(staging_path.read_text(encoding="utf-8"))
+        json_sha = loaded.get("staged_json_sha256", "")
+        expected = hashlib.sha256(b'{"key": "value"}').hexdigest()
+        assert json_sha == expected, "staged_json_sha256가 올바르게 저장/로드되어야 함"
+
+    def test_mt22_suppress_pending_comment_skips_comment_post(self, tmp_path, monkeypatch):
+        """suppress_pending_comment=True이면 _post_github_pending_acceptance_comment가
+        호출되지 않는지."""
+        import sys
+        from unittest.mock import patch
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        import pipeline as pl
+
+        monkeypatch.setattr(pl, "BASE_DIR", tmp_path)
+        (tmp_path / "acceptance_request.json").write_text(
+            '{"pipeline_id": "T", "status": "PENDING", "nonce": "n"}', encoding="utf-8"
+        )
+        (tmp_path / "human_acceptance_packet.md").write_text("MD", encoding="utf-8")
+        (tmp_path / "human_acceptance_packet.json").write_text('{"a":1}', encoding="utf-8")
+
+        mock_snapshot = {
+            "pr_body_updated": True,
+            "pr_body_update_failed": False,
+            "packet_path": str(tmp_path / "human_acceptance_packet.md"),
+            "sha_manifest": {"packet_sha256": "abc", "json_sha256": "def"},
+        }
+
+        with patch.object(pl, "_materialize_acceptance_snapshot", return_value=mock_snapshot):
+            with patch.object(pl, "_verify_published_canonical_pr_body", return_value=None):
+                with patch.object(pl, "_post_github_pending_acceptance_comment") as mock_comment:
+                    with patch.object(pl, "_load_acceptance_request",
+                                       return_value={"pipeline_id": "T", "status": "PENDING"}):
+                        state = {"pipeline_id": "T", "acceptance_request": {}}
+                        req = {"pipeline_id": "T", "nonce": "n"}
+                        pl._publish_acceptance_request(
+                            state, req, "/evidence", "",
+                            suppress_pending_comment=True
+                        )
+                        mock_comment.assert_not_called()
+
+    def test_mt22_frozen_publish_uses_staged_json_content(self, tmp_path, monkeypatch):
+        """frozen publish path에서 staged_json_content가 제공되면 JSON 파일에
+        그 내용이 그대로 기록되는지 (SHA 불변식 핵심)."""
+        import hashlib
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        import pipeline as pl
+
+        staged_json = '{"staged": true, "generated_at": "STAGING_PROBE"}'
+        staged_json_sha = hashlib.sha256(staged_json.encode("utf-8")).hexdigest()
+
+        packet_path = tmp_path / "human_acceptance_packet.md"
+        json_path = tmp_path / "human_acceptance_packet.json"
+        req_path = tmp_path / "acceptance_request.json"
+        req_path.write_text('{"pipeline_id": "T", "status": "PENDING"}', encoding="utf-8")
+
+        monkeypatch.setattr(pl, "BASE_DIR", tmp_path)
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: packet_path)
+        monkeypatch.setattr(pl, "_packet_json_output_path", lambda: json_path)
+        monkeypatch.setattr(pl, "ACCEPTANCE_REQUEST_FILE", str(req_path))
+
+        state = {"pipeline_id": "T", "external_gates": {}, "acceptance_request": {}}
+        req = {"pipeline_id": "T", "nonce": "n", "status": "PENDING"}
+
+        frozen_md = "## FROZEN MD CONTENT\n verification_json_sha256: " + staged_json_sha
+
+        with monkeypatch.context() as m:
+            m.setattr(pl, "_collect_packet_evidence", lambda *a, **kw: {
+                "pipeline_id": "T", "evidence_integrity": {}, "workspace_hygiene": {}
+            })
+            # gh 없는 테스트 환경: _gh_available()가 False를 반환하도록 강제하여 PR body 갱신 경로를
+            # 건너뛴다(디스크 JSON 커밋 SHA 불변식만 검증한다).
+            m.setattr(pl, "_gh_available", lambda *a, **kw: False)
+            pl._materialize_acceptance_snapshot(
+                state, req, publish=True,
+                frozen_packet_content=frozen_md,
+                staged_json_content=staged_json,
+                staged_json_sha256=staged_json_sha,
+            )
+
+        written_content = json_path.read_text(encoding="utf-8")
+        written_sha = hashlib.sha256(written_content.encode("utf-8")).hexdigest()
+        assert written_content == staged_json, "기록된 JSON이 staged JSON과 동일해야 함"
+        assert written_sha == staged_json_sha, (
+            f"기록된 JSON SHA({written_sha[:16]}...) != staged_json_sha({staged_json_sha[:16]}...)"
+        )
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
