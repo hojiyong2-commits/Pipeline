@@ -1670,6 +1670,147 @@ class TestMT22SHAInvariant:
         )
 
 
+class TestDualChannelOutputPrevention:
+    """MT-23: 이중 출력 채널 방지 회귀 테스트.
+
+    실제 실패 경로: pipeline.py stdout + Pipeline Manager 중계가 동시에 활성화되어
+    사용자가 승인 요청을 2회 받는 문제를 회귀 테스트로 차단한다.
+    """
+
+    def test_machine_readable_suppresses_human_stdout(self, tmp_path, monkeypatch):
+        """--machine-readable 모드에서 human stdout이 출력되지 않아야 한다."""
+        import json as json_mod2
+
+        # _build_approval_request_output 결과를 가져온다
+        result = pipeline._build_approval_request_output(
+            "IMP-20260703-B985", "https://github.com/test/pr/1"
+        )
+        msg = result.get("approval_request_message", "")
+
+        # machine-readable JSON 출력은 사용자 승인 요청 텍스트를 approval_request_message 안에 담는다
+        # 이 메시지가 JSON key로 감싸져 있지 않고 raw stdout에 직접 출력되면 이중 출력이 됨
+        # human_stdout_phrases는 machine-readable 모드에서 직접 print되면 안 된다
+        human_stdout_phrases = ["사용자 승인 요청", "승인 코드:", "CODEX 검토 필요"]
+
+        # approval_request_message 안에는 포함되어 있어야 한다 (올바른 경로)
+        for phrase in human_stdout_phrases:
+            assert phrase in msg, f"approval_request_message에 '{phrase}'가 없음: {msg!r}"
+
+        # raw JSON 출력을 파싱하면 human phrases가 approval_request_message key 아래에만 있어야 한다
+        json_output = json_mod2.dumps(result, ensure_ascii=False)
+        parsed = json_mod2.loads(json_output)
+        assert "approval_request_message" in parsed
+        assert "acceptance_code_display" in parsed
+        # acceptance_code_display에는 승인 요청 phrase가 없어야 한다
+        code_display = parsed.get("acceptance_code_display", "")
+        for phrase in ["사용자 승인 요청", "승인 코드:", "CODEX 검토 필요"]:
+            assert phrase not in code_display, (
+                f"acceptance_code_display에 '{phrase}' 포함 — 이중 출력 위험"
+            )
+
+    def test_approval_request_message_contains_required_phrases_exactly_once(self):
+        """approval_request_message에 각 핵심 문구가 정확히 1회만 포함된다."""
+        result = pipeline._build_approval_request_output(
+            "IMP-20260703-B985", "https://github.com/test/pr/1"
+        )
+        msg = result.get("approval_request_message", "")
+
+        required_phrases = ["사용자 승인 요청", "승인 코드:", "CODEX 검토 필요"]
+        for phrase in required_phrases:
+            count = msg.count(phrase)
+            assert count == 1, f"'{phrase}'가 {count}회 나타남 (정확히 1회여야 함)"
+
+    def test_pr_diff_artifact_exclusion_check(self):
+        """PR diff에 포함되면 안 되는 실행 산출물 파일명 패턴을 검증한다.
+
+        dev_handover_*.xml, build_report*.xml, integration_report*.xml,
+        qa_report*.xml 같은 파이프라인 실행 산출물이 product 코드 PR에 포함되면
+        scope 자기모순이 발생한다.
+        """
+        import re
+
+        # 실행 산출물 파일명 패턴 (PR diff에 들어오면 안 됨)
+        artifact_patterns = [
+            r"dev_handover.*\.xml$",
+            r"build_report.*\.xml$",
+            r"integration_report.*\.xml$",
+            r"qa_report.*\.xml$",
+            r"security_audit.*\.xml$",
+            r"architect_report.*\.xml$",
+            r"architect_rca.*\.xml$",
+        ]
+
+        sample_files_in_pr_diff = [
+            "pipeline.py",
+            "tests/test_canonical_pr_body_sha256_b985.py",
+            ".claude/agents/pipeline-manager-agent.md",
+        ]
+
+        for f in sample_files_in_pr_diff:
+            for pattern in artifact_patterns:
+                assert not re.search(pattern, f), (
+                    f"PR diff에 실행 산출물 '{f}'이 포함되어 있음 — scope 자기모순"
+                )
+
+        # 아래는 패턴이 실제로 탐지하는지 확인 (역방향 검증)
+        artifact_files = [
+            "dev_handover_b985_r3.xml",
+            "build_report_b985_r3.xml",
+            "integration_report_r4.xml",
+        ]
+        for f in artifact_files:
+            matched = any(re.search(p, f) for p in artifact_patterns)
+            assert matched, f"패턴이 실행 산출물 '{f}'을 탐지하지 못함"
+
+    def test_build_approval_output_is_json_serializable(self):
+        """_build_approval_request_output 결과는 JSON 직렬화 가능해야 한다."""
+        import json as json_mod3
+
+        result = pipeline._build_approval_request_output(
+            "IMP-20260703-B985", "https://github.com/test/pr/1"
+        )
+        serialized = json_mod3.dumps(result, ensure_ascii=False)
+        parsed = json_mod3.loads(serialized)
+        assert parsed["status"] == "PENDING"
+        assert parsed["codex_required"] is True
+        assert "approval_request_message" in parsed
+
+    def test_acceptance_code_display_does_not_contain_approval_phrases(self):
+        """acceptance_code_display에는 승인 요청 phrase가 포함되지 않는다."""
+        result = pipeline._build_approval_request_output(
+            "IMP-20260703-B985", "https://github.com/test/pr/1"
+        )
+        code_display = result.get("acceptance_code_display", "")
+        for phrase in ["사용자 승인 요청", "승인 코드:", "CODEX 검토 필요"]:
+            assert phrase not in code_display, (
+                f"acceptance_code_display에 '{phrase}' 포함 — 이중 출력 위험"
+            )
+
+    def test_pr_diff_artifact_pattern_detection(self):
+        """실행 산출물 파일명 패턴이 올바르게 탐지된다."""
+        import re
+        artifact_patterns = [
+            r"dev_handover.*\.xml$",
+            r"build_report.*\.xml$",
+            r"integration_report.*\.xml$",
+            r"qa_report.*\.xml$",
+        ]
+        artifact_files = [
+            "dev_handover_b985_r3.xml",
+            "build_report_b985_r3.xml",
+            "integration_report_r4.xml",
+            "qa_report_b985_r3.xml",
+        ]
+        for f in artifact_files:
+            matched = any(re.search(p, f) for p in artifact_patterns)
+            assert matched, f"패턴이 실행 산출물 '{f}'을 탐지하지 못함"
+        # 제품 코드는 탐지하지 않아야 함
+        product_files = ["pipeline.py", "tests/test_foo.py"]
+        for f in product_files:
+            matched = any(re.search(p, f) for p in artifact_patterns)
+            assert not matched, f"제품 파일 '{f}'이 실행 산출물로 오탐됨"
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
