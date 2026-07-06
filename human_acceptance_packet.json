@@ -1,0 +1,587 @@
+{
+  "schema_version": 1,
+  "packet_type": "final_acceptance_evidence",
+  "pipeline_id": "IMP-20260703-B985",
+  "generated_at": "2026-07-06T03:05:54Z",
+  "pr": {
+    "url": "https://github.com/hojiyong2-commits/Pipeline/pull/835",
+    "number": "835",
+    "head_sha": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+    "base_branch": "main",
+    "head_branch": ""
+  },
+  "github_actions": {
+    "run_id": "28764330622",
+    "run_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/28764330622",
+    "status": "",
+    "head_sha": "3ee4fc34e866483d2199bb50d1df483e310d16ac"
+  },
+  "changed_files": [
+    ".claude/agents/pipeline-manager-agent.md",
+    "pipeline.py",
+    "tests/test_canonical_pr_body_sha256_b985.py"
+  ],
+  "changed_files_count": 3,
+  "gates": {
+    "technical": "PASS",
+    "oracle": "PASS",
+    "github_ci": "PASS",
+    "acceptance": "FAIL"
+  },
+  "requirements": [
+    {
+      "ac_id": "AC-1",
+      "summary": "TC-1: 동일 PR body 문자열을 canonical helper로 계산하면 CRLF/LF 차이에도 같은 SHA가 나온다",
+      "linked_mt": [
+        "MT-1",
+        "MT-8"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-2",
+      "summary": "TC-2: trailing newline 유무가 정의된 canonical 규칙대로 처리된다 (strip 금지, 원문 유지)",
+      "linked_mt": [
+        "MT-1",
+        "MT-8"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-3",
+      "summary": "TC-3: gh pr view --json body 결과를 Python JSON parser로 읽은 값과 내부 PR body 문자열이 helper 통과 후 같은 SHA이다",
+      "linked_mt": [
+        "MT-2",
+        "MT-4",
+        "MT-8"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-4",
+      "summary": "TC-4: jq stdout 또는 PowerShell stdout에 추가 개행이 붙어도 SHA 기준이 흔들리지 않는다 (canonical helper가 내부 정규화 수행)",
+      "linked_mt": [
+        "MT-6",
+        "MT-7",
+        "MT-8"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-5",
+      "summary": "TC-5: request-accept 직후 codex_review_result.pr_body_candidate_sha256 == acceptance_request.pr_body_candidate_sha256",
+      "linked_mt": [
+        "MT-5",
+        "MT-6",
+        "MT-7",
+        "MT-9",
+        "MT-10",
+        "MT-11"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-6",
+      "summary": "TC-6: PR body publish 후 GitHub에서 fetch한 canonical SHA == acceptance_request.github_canonical_pr_body_sha256",
+      "linked_mt": [
+        "MT-4",
+        "MT-6",
+        "MT-7"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-7",
+      "summary": "TC-7: gates accept가 동일 canonical helper로 current PR body stale 검증을 수행한다",
+      "linked_mt": [
+        "MT-3",
+        "MT-8"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-8",
+      "summary": "TC-8: candidate SHA와 github canonical SHA를 의도적으로 다르게 만든 경우 올바른 필드에서만 차이를 보고, 잘못된 stale로 오판하지 않는다",
+      "linked_mt": [
+        "MT-7",
+        "MT-8"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-9",
+      "summary": "TC-9: 직접 hashlib.sha256(pr_body.encode(...)) 호출이 PR body SHA 경로에 남아 있지 않다 (canonical helper 외부)",
+      "linked_mt": [
+        "MT-2",
+        "MT-3",
+        "MT-5",
+        "MT-8",
+        "MT-11"
+      ],
+      "status": "PASS",
+      "evidence": []
+    },
+    {
+      "ac_id": "AC-10",
+      "summary": "TC-10/11: 기존 E69E Codex CLI ERROR/REJECT 상태 모델 테스트 및 F52C staged snapshot/packet SHA 검증 테스트가 깨지지 않는다",
+      "linked_mt": [
+        "MT-8"
+      ],
+      "status": "PASS",
+      "evidence": []
+    }
+  ],
+  "requirements_summary": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0
+  },
+  "oracle_summary": {
+    "status": "PASS",
+    "case_count": 14,
+    "passed_count": 14,
+    "failed_count": 0
+  },
+  "known_failures": [],
+  "warnings": [],
+  "acceptance": {
+    "code": "ACCEPT-IMP-20260703-B985",
+    "reject_example": "REJECT-IMP-20260703-B985: 이유",
+    "nonce": "VY7CLC75",
+    "request_id": "1f926be1",
+    "status": "PENDING",
+    "display_status": "FAIL"
+  },
+  "artifacts": {
+    "human_packet_md": "human_acceptance_packet.md",
+    "verification_json": "human_acceptance_packet.json",
+    "cleanup_manifest": null
+  },
+  "evidence_integrity": {
+    "status": "PASS",
+    "protected_evidence_count": 8,
+    "tracked_count": 8,
+    "pr_included_count": 8,
+    "untracked_protected": [],
+    "orphan_oracle_warnings": [],
+    "cleanup_only_artifacts": [],
+    "blockers": []
+  },
+  "workspace_hygiene": {
+    "status": "OK",
+    "blocking_items": [],
+    "cleanup_only_items": [],
+    "protected_evidence_count": 0,
+    "tracked_oracle_count": 0,
+    "untracked_oracle_count": 0,
+    "pr_included_protected_count": 8,
+    "cleanup_command": "Remove-Item <파일>",
+    "checked_at": "2026-07-06T03:05:45Z",
+    "pr_runtime_state_leak": []
+  },
+  "workspace_hygiene_summary": {
+    "status": "OK",
+    "scratch_root": "C:\\Users\\hojiy\\OneDrive\\Desktop\\Projects\\Really good agents for QA and Orchestra\\.pipeline\\runs\\IMP-20260703-B985\\scratch",
+    "cleanup_only_count": 0,
+    "blocking_count": 0,
+    "permission_denied_count": 0,
+    "runtime_state_leak_count": 0,
+    "cleanup_command": "Remove-Item <파일>"
+  },
+  "post_complete_cleanup": {
+    "workspace_readiness": "unknown",
+    "ready_for_next_task": null,
+    "removed_count": 0,
+    "deferred_count": 0,
+    "unknown_count": 0
+  },
+  "acceptance_target": {
+    "description": "사용자가 확인해야 하는 실제 구현 기준점 (marker PR 아님)",
+    "repository": "hojiyong2-commits/Pipeline",
+    "acceptance_pr": {
+      "number": "#835",
+      "head_sha": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+      "title": "[IMP-20260703-B985] PR body SHA canonical SSoT 통일 (v2)",
+      "changed_files": [
+        ".claude/agents/pipeline-manager-agent.md",
+        "pipeline.py",
+        "tests/test_canonical_pr_body_sha256_b985.py"
+      ],
+      "note": "이 PR이 User Acceptance 승인 대상입니다. changed_files 목록이 사용자가 최종 확인하는 변경 범위입니다."
+    },
+    "acceptance_pr_note": "acceptance_pr은 현재 User Acceptance 승인 대상인 오픈 PR입니다. impl_prs(이력)와 구분하세요.",
+    "target_main_commit": "006dd36e4470dfcf8d747f05425d2938183a4f28",
+    "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+    "target_commit_note": "PR head SHA — origin/main이 아닌 현재 PR의 최신 commit",
+    "impl_prs": [
+      {
+        "pr": "#833",
+        "title": "[IMP-20260703-B985] oracle 파일 추가 및 ruff unused import 수정",
+        "merged_commit": "006dd36e4470"
+      },
+      {
+        "pr": "#828",
+        "title": "[IMP-20260703-B985] PR body SHA canonical SSoT 통일",
+        "merged_commit": "52375935fabe"
+      }
+    ],
+    "impl_prs_note": "pipeline_id로 검색한 이미 머지된 PR 이력입니다. 승인 대상은 acceptance_pr을 확인하세요.",
+    "changed_files": [
+      ".claude/agents/pipeline-manager-agent.md",
+      "pipeline.py",
+      "tests/test_canonical_pr_body_sha256_b985.py"
+    ],
+    "oracle_evidence_files": [
+      {
+        "path": "tests\\oracles\\IMP-20260703-B985\\TC-1_crlf_lf_normalization\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "657ec3fb2c4f69e00def98eaf3048501292daa1c144c1000c10bcd2c6c2dea2d",
+        "target_blob_sha256": "657ec3fb2c4f69e00def98eaf3048501292daa1c144c1000c10bcd2c6c2dea2d",
+        "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260703-B985\\TC-1_crlf_lf_normalization\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "650e1b27bf3f511f38dd7e42b00749d799474fa0490e701a70c12c47e36c280b",
+        "target_blob_sha256": "650e1b27bf3f511f38dd7e42b00749d799474fa0490e701a70c12c47e36c280b",
+        "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260703-B985\\TC-2_trailing_newline\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "4c9eb7f3e1ee8d45e063129e90269bab0f52569ede5c48c3bbdc43656a679900",
+        "target_blob_sha256": "4c9eb7f3e1ee8d45e063129e90269bab0f52569ede5c48c3bbdc43656a679900",
+        "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260703-B985\\TC-2_trailing_newline\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "a5d22630c82a661944a0cdcfd28a3e37be211692d651e8bf7ca74a13c3f840ab",
+        "target_blob_sha256": "a5d22630c82a661944a0cdcfd28a3e37be211692d651e8bf7ca74a13c3f840ab",
+        "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260703-B985\\TC-3_json_parse_vs_jq\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "651f7e0c9f5397cbb01d65278624f2365d8d69e0ef27a44409506e013ace8ca2",
+        "target_blob_sha256": "651f7e0c9f5397cbb01d65278624f2365d8d69e0ef27a44409506e013ace8ca2",
+        "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260703-B985\\TC-3_json_parse_vs_jq\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "541ed01322ea2c2dedeecb05af7d1dec39b45d47aa648eb7cb955d1d7d5e4a59",
+        "target_blob_sha256": "541ed01322ea2c2dedeecb05af7d1dec39b45d47aa648eb7cb955d1d7d5e4a59",
+        "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260703-B985\\TC-9_direct_hashlib_regression\\input.json",
+        "kind": "oracle_input",
+        "inventory_sha256": "b62759b3c88e9d64947226e27dba6a3bd7320610e8b6d95b60b61a30fceb61d2",
+        "target_blob_sha256": "b62759b3c88e9d64947226e27dba6a3bd7320610e8b6d95b60b61a30fceb61d2",
+        "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+        "sha_match": true,
+        "status": "MATCH"
+      },
+      {
+        "path": "tests\\oracles\\IMP-20260703-B985\\TC-9_direct_hashlib_regression\\expected.json",
+        "kind": "oracle_expected",
+        "inventory_sha256": "7120a140ce5c13e852d168603b452f5acd89be4b71532cb6cbfbc791318fba63",
+        "target_blob_sha256": "7120a140ce5c13e852d168603b452f5acd89be4b71532cb6cbfbc791318fba63",
+        "target_commit": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+        "sha_match": true,
+        "status": "MATCH"
+      }
+    ],
+    "oracle_evidence_note": "oracle_evidence_files의 target_blob_sha256은 target_commit에서 git show로 추출한 blob SHA256입니다. inventory_sha256과 일치하면 sha_match=true, status=MATCH로 표시됩니다."
+  },
+  "blocked": false,
+  "blocked_reasons": [],
+  "pr_url": "https://github.com/hojiyong2-commits/Pipeline/pull/835",
+  "pr_number": "835",
+  "pr_head_sha": "3ee4fc34e866483d2199bb50d1df483e310d16ac",
+  "ci_run_id": "28764330622",
+  "actions_url": "https://github.com/hojiyong2-commits/Pipeline/actions/runs/28764330622",
+  "gate_status": {
+    "technical": "PASS",
+    "oracle": "PASS",
+    "github_ci": "PASS",
+    "acceptance": "FAIL"
+  },
+  "structured_ac": [],
+  "ac_fulfillment_table": [
+    {
+      "ac_id": "AC-1",
+      "requirement": "TC-1: 동일 PR body 문자열을 canonical helper로 계산하면 CRLF/LF 차이에도 같은 SHA가 나온다",
+      "linked_mt": [
+        "MT-1",
+        "MT-8"
+      ],
+      "implementation_evidence": [
+        "MT-1: _canonical_pr_body_sha256(text: str) -> str 신규 함수를 _sha256_file 직후에 추가. CRLF(\r\n)와 lone CR(\r)을 LF(\n)로 정규화 후 UTF-8 인코딩하여 hashlib.sha256().hexdigest() 반환 (AC-1).",
+        "MT-1: trailing newline을 strip하지 않아 no/single/double trailing newline이 서로 다른 SHA를 생성 — GitHub API body 저장값 재현성 보장 (AC-2).",
+        "MT-1: None/비str(bool 포함) 입력 TypeError 타입 가드 완비. 순수 계산 함수(상태 변경 없음).",
+        "MT-8: tests/test_canonical_pr_body_sha256_b985.py 신규 작성 — 18개 테스트 (TC-1~TC-11 커버).",
+        "MT-8: TC-1 CRLF/LF/lone-CR 정규화 동일 SHA, TC-2 trailing newline 구분(strip 없음), TC-3 --json body JSON parse vs jq stdout, TC-9 canonical helper 외부 직접 hashlib 0건 회귀, TC-11 F52C/E69E 호환성 검증.",
+        "MT-8: oracle 4개 케이스(TC-1/TC-2/TC-3/TC-9) input/expected와 대조. pytest 18 passed."
+      ],
+      "verification": [
+        "MT-1: PASS — _canonical_pr_body_sha256가 CRLF/LF/mixed 3개 test_vector에서 동일 SHA(66f34ed4c2bd) 반환 — 실행 확인",
+        "MT-8: PASS — MT-8 AC-1 — 해당 TC 테스트 통과 (25 passed)"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-2",
+      "requirement": "TC-2: trailing newline 유무가 정의된 canonical 규칙대로 처리된다 (strip 금지, 원문 유지)",
+      "linked_mt": [
+        "MT-1",
+        "MT-8"
+      ],
+      "implementation_evidence": [
+        "MT-1: _canonical_pr_body_sha256(text: str) -> str 신규 함수를 _sha256_file 직후에 추가. CRLF(\r\n)와 lone CR(\r)을 LF(\n)로 정규화 후 UTF-8 인코딩하여 hashlib.sha256().hexdigest() 반환 (AC-1).",
+        "MT-1: trailing newline을 strip하지 않아 no/single/double trailing newline이 서로 다른 SHA를 생성 — GitHub API body 저장값 재현성 보장 (AC-2).",
+        "MT-1: None/비str(bool 포함) 입력 TypeError 타입 가드 완비. 순수 계산 함수(상태 변경 없음).",
+        "MT-8: tests/test_canonical_pr_body_sha256_b985.py 신규 작성 — 18개 테스트 (TC-1~TC-11 커버).",
+        "MT-8: TC-1 CRLF/LF/lone-CR 정규화 동일 SHA, TC-2 trailing newline 구분(strip 없음), TC-3 --json body JSON parse vs jq stdout, TC-9 canonical helper 외부 직접 hashlib 0건 회귀, TC-11 F52C/E69E 호환성 검증.",
+        "MT-8: oracle 4개 케이스(TC-1/TC-2/TC-3/TC-9) input/expected와 대조. pytest 18 passed."
+      ],
+      "verification": [
+        "MT-1: PASS — no/single/double trailing newline이 서로 다른 SHA 생성, strip 미적용 — 실행 확인",
+        "MT-8: PASS — MT-8 AC-2 — 해당 TC 테스트 통과 (25 passed)"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-3",
+      "requirement": "TC-3: gh pr view --json body 결과를 Python JSON parser로 읽은 값과 내부 PR body 문자열이 helper 통과 후 같은 SHA이다",
+      "linked_mt": [
+        "MT-2",
+        "MT-4",
+        "MT-8"
+      ],
+      "implementation_evidence": [
+        "MT-2: _prepare_acceptance_snapshot_candidate의 line ~20503 직접 hashlib.sha256(pr_body.encode)를 _canonical_pr_body_sha256(pr_body)로 교체 (AC-9).",
+        "MT-2: candidate body SHA 계산을 canonical SSoT helper로 통일 (AC-3).",
+        "MT-4: _fetch_canonical_pr_body_sha256 inline 정규화+hashlib를 _canonical_pr_body_sha256(body)로 교체 (AC-6).",
+        "MT-4: _get_pr_body_text를 --jq .body에서 --json body + Python JSON parse로 변경 — jq stdout trailing newline 오염 제거 (AC-3).",
+        "MT-8: tests/test_canonical_pr_body_sha256_b985.py 신규 작성 — 18개 테스트 (TC-1~TC-11 커버).",
+        "MT-8: TC-1 CRLF/LF/lone-CR 정규화 동일 SHA, TC-2 trailing newline 구분(strip 없음), TC-3 --json body JSON parse vs jq stdout, TC-9 canonical helper 외부 직접 hashlib 0건 회귀, TC-11 F52C/E69E 호환성 검증.",
+        "MT-8: oracle 4개 케이스(TC-1/TC-2/TC-3/TC-9) input/expected와 대조. pytest 18 passed."
+      ],
+      "verification": [
+        "MT-2: PASS — MT-2 AC-3 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-4: PASS — MT-4 AC-3 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-8: PASS — MT-8 AC-3 — 해당 TC 테스트 통과 (25 passed)"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-4",
+      "requirement": "TC-4: jq stdout 또는 PowerShell stdout에 추가 개행이 붙어도 SHA 기준이 흔들리지 않는다 (canonical helper가 내부 정규화 수행)",
+      "linked_mt": [
+        "MT-6",
+        "MT-7",
+        "MT-8"
+      ],
+      "implementation_evidence": [
+        "MT-6: _cmd_gates_codex_review(플랜의 _cmd_codex_record)의 pr_body_sha final_body 계산을 _canonical_pr_body_sha256으로 통일 (AC-5).",
+        "MT-6: jq/stdout 정규화 차이 제거로 SHA 안정화 (AC-4). github_canonical_pr_body_sha256 필드는 codex_review_result에 이미 분리 존재 (AC-6).",
+        "MT-7: acceptance_request.json에 pr_body_candidate_sha256(로컬 예정 body) + github_canonical_pr_body_sha256(publish 후 GitHub 실제 body) 필드 분리 추가 (AC-8).",
+        "MT-7: _publish_acceptance_request가 publish 직후 github_canonical_pr_body_sha256을 canonical fetch 값으로 기록 (AC-6). candidate/canonical 필드 혼용 없음 (AC-8).",
+        "MT-8: tests/test_canonical_pr_body_sha256_b985.py 신규 작성 — 18개 테스트 (TC-1~TC-11 커버).",
+        "MT-8: TC-1 CRLF/LF/lone-CR 정규화 동일 SHA, TC-2 trailing newline 구분(strip 없음), TC-3 --json body JSON parse vs jq stdout, TC-9 canonical helper 외부 직접 hashlib 0건 회귀, TC-11 F52C/E69E 호환성 검증.",
+        "MT-8: oracle 4개 케이스(TC-1/TC-2/TC-3/TC-9) input/expected와 대조. pytest 18 passed."
+      ],
+      "verification": [
+        "MT-6: PASS — MT-6 AC-4 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-7: PASS — MT-7 AC-4 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-8: PASS — MT-8 AC-4 — 해당 TC 테스트 통과 (25 passed)"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-5",
+      "requirement": "TC-5: request-accept 직후 codex_review_result.pr_body_candidate_sha256 == acceptance_request.pr_body_candidate_sha256",
+      "linked_mt": [
+        "MT-5",
+        "MT-6",
+        "MT-7",
+        "MT-9",
+        "MT-10",
+        "MT-11"
+      ],
+      "implementation_evidence": [
+        "MT-5: _cmd_gates_request_accept의 _new_pr_body_sha256 및 stale 조기검사 직접 hashlib를 canonical helper로 교체 (AC-9).",
+        "MT-5: _get_staged_pr_body_sha의 final_body candidate SHA 2곳을 canonical helper로 통일 — codex/acceptance_request candidate 3자 일치 (AC-5).",
+        "MT-6: _cmd_gates_codex_review(플랜의 _cmd_codex_record)의 pr_body_sha final_body 계산을 _canonical_pr_body_sha256으로 통일 (AC-5).",
+        "MT-6: jq/stdout 정규화 차이 제거로 SHA 안정화 (AC-4). github_canonical_pr_body_sha256 필드는 codex_review_result에 이미 분리 존재 (AC-6).",
+        "MT-7: acceptance_request.json에 pr_body_candidate_sha256(로컬 예정 body) + github_canonical_pr_body_sha256(publish 후 GitHub 실제 body) 필드 분리 추가 (AC-8).",
+        "MT-7: _publish_acceptance_request가 publish 직후 github_canonical_pr_body_sha256을 canonical fetch 값으로 기록 (AC-6). candidate/canonical 필드 혼용 없음 (AC-8).",
+        "MT-9(covers_ac): 구현 완료 — pipeline.py, tests/test_canonical_pr_body_sha256_b985.py",
+        "MT-10: _cmd_gates_request_accept: 재사용 경로에 _reuse_published 게이트 추가 — read-only 단축 경로 구현으로 codex_review_result.pr_body_candidate_sha256 == acceptance_request.pr_body_candidate_sha256 보장",
+        "MT-10: _build_final_packet_content: self-referential packet_md_sha256 라인 제거 — packet SHA SSoT를 acceptance_request.packet_sha256으로 단일화",
+        "MT-10: tests/test_canonical_pr_body_sha256_b985.py: TestTrueIdempotentReuseMT10 6개 테스트 추가 (36 passed)",
+        "MT-11: _build_final_packet_content: acceptance_status_override: Optional[str]=None 파라미터 추가 — override가 주어지면 _acceptance_display_status를 강제로 덮어써 이전 REJECT/FAIL 상태가 packet 표시에 들어가지 않게 한다 (수정 1)",
+        "MT-11: _publish_acceptance_request: publish 후 acceptance_request.json의 pr_body_candidate_sha256을 POST-publish canonical SHA(_updated_body_sha)로 갱신 — pr_body_sha256/github_canonical_pr_body_sha256/pr_body_candidate_sha256 3개 필드가 동일 canonical SHA를 가리키게 하여 AC-5 불변식(codex==acceptance_request candidate SHA 일치)을 만족 (수정 2)",
+        "MT-11: _publish_acceptance_request: acceptance_staging.json의 pr_body_candidate_sha256도 POST-publish canonical SHA로 갱신 — codex-review 재실행 시 staging 재사용에서 불일치 방지 (수정 2b)",
+        "MT-11: _cmd_gates_request_accept: publish 성공 후 acceptance_staging.json unlink 삭제 로직 제거 — codex-review 재실행 시 staging 재사용 가능하도록 보존, 파일은 다음 새 staging이 덮어씀 (수정 3)",
+        "MT-11: _materialize_acceptance_snapshot: _build_final_packet_content 호출 시 acceptance_status_override='승인 대기 중 (PENDING)' 전달 — staging/publish packet 모두 PENDING 표시 강제 (수정 4)",
+        "MT-11: tests/test_canonical_pr_body_sha256_b985.py: TC-MT11-1(override 반영), TC-MT11-2(3개 SHA 필드 동일값+소스 배선 회귀), TC-MT11-3(_invalidate 후 staging 보존), TC-MT11-4(codex==request candidate SHA 일치 불변식) 4개 테스트 추가 — 40개 전부 통과"
+      ],
+      "verification": [
+        "MT-5: PASS — MT-5 AC-5 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-6: PASS — MT-6 AC-5 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-7: PASS — MT-7 AC-5 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-11: PASS — pr_body_sha256, github_canonical_pr_body_sha256, pr_body_candidate_sha256 3개 필드가 동일\n      POST-publish canonical SHA를 가리킴. TC-MT11-2, TC-MT11-4로 검증."
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-6",
+      "requirement": "TC-6: PR body publish 후 GitHub에서 fetch한 canonical SHA == acceptance_request.github_canonical_pr_body_sha256",
+      "linked_mt": [
+        "MT-4",
+        "MT-6",
+        "MT-7"
+      ],
+      "implementation_evidence": [
+        "MT-4: _fetch_canonical_pr_body_sha256 inline 정규화+hashlib를 _canonical_pr_body_sha256(body)로 교체 (AC-6).",
+        "MT-4: _get_pr_body_text를 --jq .body에서 --json body + Python JSON parse로 변경 — jq stdout trailing newline 오염 제거 (AC-3).",
+        "MT-6: _cmd_gates_codex_review(플랜의 _cmd_codex_record)의 pr_body_sha final_body 계산을 _canonical_pr_body_sha256으로 통일 (AC-5).",
+        "MT-6: jq/stdout 정규화 차이 제거로 SHA 안정화 (AC-4). github_canonical_pr_body_sha256 필드는 codex_review_result에 이미 분리 존재 (AC-6).",
+        "MT-7: acceptance_request.json에 pr_body_candidate_sha256(로컬 예정 body) + github_canonical_pr_body_sha256(publish 후 GitHub 실제 body) 필드 분리 추가 (AC-8).",
+        "MT-7: _publish_acceptance_request가 publish 직후 github_canonical_pr_body_sha256을 canonical fetch 값으로 기록 (AC-6). candidate/canonical 필드 혼용 없음 (AC-8)."
+      ],
+      "verification": [
+        "MT-4: PASS — MT-4 AC-6 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-6: PASS — MT-6 AC-6 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-7: PASS — MT-7 AC-6 — canonical helper 통일 후 py_compile/import 및 회귀 확인"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-7",
+      "requirement": "TC-7: gates accept가 동일 canonical helper로 current PR body stale 검증을 수행한다",
+      "linked_mt": [
+        "MT-3",
+        "MT-8"
+      ],
+      "implementation_evidence": [
+        "MT-3: _verify_published_canonical_pr_body의 recompute_sha 직접 hashlib를 _canonical_pr_body_sha256(current_pr_body)로 교체 (AC-9).",
+        "MT-3: gates accept 시 current PR body stale 검증이 canonical helper로 계산 (AC-7).",
+        "MT-8: tests/test_canonical_pr_body_sha256_b985.py 신규 작성 — 18개 테스트 (TC-1~TC-11 커버).",
+        "MT-8: TC-1 CRLF/LF/lone-CR 정규화 동일 SHA, TC-2 trailing newline 구분(strip 없음), TC-3 --json body JSON parse vs jq stdout, TC-9 canonical helper 외부 직접 hashlib 0건 회귀, TC-11 F52C/E69E 호환성 검증.",
+        "MT-8: oracle 4개 케이스(TC-1/TC-2/TC-3/TC-9) input/expected와 대조. pytest 18 passed."
+      ],
+      "verification": [
+        "MT-3: PASS — MT-3 AC-7 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-8: PASS — MT-8 AC-7 — 해당 TC 테스트 통과 (25 passed)"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-8",
+      "requirement": "TC-8: candidate SHA와 github canonical SHA를 의도적으로 다르게 만든 경우 올바른 필드에서만 차이를 보고, 잘못된 stale로 오판하지 않는다",
+      "linked_mt": [
+        "MT-7",
+        "MT-8"
+      ],
+      "implementation_evidence": [
+        "MT-7: acceptance_request.json에 pr_body_candidate_sha256(로컬 예정 body) + github_canonical_pr_body_sha256(publish 후 GitHub 실제 body) 필드 분리 추가 (AC-8).",
+        "MT-7: _publish_acceptance_request가 publish 직후 github_canonical_pr_body_sha256을 canonical fetch 값으로 기록 (AC-6). candidate/canonical 필드 혼용 없음 (AC-8).",
+        "MT-8: tests/test_canonical_pr_body_sha256_b985.py 신규 작성 — 18개 테스트 (TC-1~TC-11 커버).",
+        "MT-8: TC-1 CRLF/LF/lone-CR 정규화 동일 SHA, TC-2 trailing newline 구분(strip 없음), TC-3 --json body JSON parse vs jq stdout, TC-9 canonical helper 외부 직접 hashlib 0건 회귀, TC-11 F52C/E69E 호환성 검증.",
+        "MT-8: oracle 4개 케이스(TC-1/TC-2/TC-3/TC-9) input/expected와 대조. pytest 18 passed."
+      ],
+      "verification": [
+        "MT-7: PASS — MT-7 AC-8 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-8: PASS — MT-8 AC-8 — 해당 TC 테스트 통과 (25 passed)"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-9",
+      "requirement": "TC-9: 직접 hashlib.sha256(pr_body.encode(...)) 호출이 PR body SHA 경로에 남아 있지 않다 (canonical helper 외부)",
+      "linked_mt": [
+        "MT-2",
+        "MT-3",
+        "MT-5",
+        "MT-8",
+        "MT-11"
+      ],
+      "implementation_evidence": [
+        "MT-2: _prepare_acceptance_snapshot_candidate의 line ~20503 직접 hashlib.sha256(pr_body.encode)를 _canonical_pr_body_sha256(pr_body)로 교체 (AC-9).",
+        "MT-2: candidate body SHA 계산을 canonical SSoT helper로 통일 (AC-3).",
+        "MT-3: _verify_published_canonical_pr_body의 recompute_sha 직접 hashlib를 _canonical_pr_body_sha256(current_pr_body)로 교체 (AC-9).",
+        "MT-3: gates accept 시 current PR body stale 검증이 canonical helper로 계산 (AC-7).",
+        "MT-5: _cmd_gates_request_accept의 _new_pr_body_sha256 및 stale 조기검사 직접 hashlib를 canonical helper로 교체 (AC-9).",
+        "MT-5: _get_staged_pr_body_sha의 final_body candidate SHA 2곳을 canonical helper로 통일 — codex/acceptance_request candidate 3자 일치 (AC-5).",
+        "MT-8: tests/test_canonical_pr_body_sha256_b985.py 신규 작성 — 18개 테스트 (TC-1~TC-11 커버).",
+        "MT-8: TC-1 CRLF/LF/lone-CR 정규화 동일 SHA, TC-2 trailing newline 구분(strip 없음), TC-3 --json body JSON parse vs jq stdout, TC-9 canonical helper 외부 직접 hashlib 0건 회귀, TC-11 F52C/E69E 호환성 검증.",
+        "MT-8: oracle 4개 케이스(TC-1/TC-2/TC-3/TC-9) input/expected와 대조. pytest 18 passed.",
+        "MT-11: _build_final_packet_content: acceptance_status_override: Optional[str]=None 파라미터 추가 — override가 주어지면 _acceptance_display_status를 강제로 덮어써 이전 REJECT/FAIL 상태가 packet 표시에 들어가지 않게 한다 (수정 1)",
+        "MT-11: _publish_acceptance_request: publish 후 acceptance_request.json의 pr_body_candidate_sha256을 POST-publish canonical SHA(_updated_body_sha)로 갱신 — pr_body_sha256/github_canonical_pr_body_sha256/pr_body_candidate_sha256 3개 필드가 동일 canonical SHA를 가리키게 하여 AC-5 불변식(codex==acceptance_request candidate SHA 일치)을 만족 (수정 2)",
+        "MT-11: _publish_acceptance_request: acceptance_staging.json의 pr_body_candidate_sha256도 POST-publish canonical SHA로 갱신 — codex-review 재실행 시 staging 재사용에서 불일치 방지 (수정 2b)",
+        "MT-11: _cmd_gates_request_accept: publish 성공 후 acceptance_staging.json unlink 삭제 로직 제거 — codex-review 재실행 시 staging 재사용 가능하도록 보존, 파일은 다음 새 staging이 덮어씀 (수정 3)",
+        "MT-11: _materialize_acceptance_snapshot: _build_final_packet_content 호출 시 acceptance_status_override='승인 대기 중 (PENDING)' 전달 — staging/publish packet 모두 PENDING 표시 강제 (수정 4)",
+        "MT-11: tests/test_canonical_pr_body_sha256_b985.py: TC-MT11-1(override 반영), TC-MT11-2(3개 SHA 필드 동일값+소스 배선 회귀), TC-MT11-3(_invalidate 후 staging 보존), TC-MT11-4(codex==request candidate SHA 일치 불변식) 4개 테스트 추가 — 40개 전부 통과"
+      ],
+      "verification": [
+        "MT-2: PASS — MT-2 AC-9 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-3: PASS — MT-3 AC-9 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-5: PASS — MT-5 AC-9 — canonical helper 통일 후 py_compile/import 및 회귀 확인",
+        "MT-8: PASS — MT-8 AC-9 — 해당 TC 테스트 통과 (25 passed)",
+        "MT-11: PASS — acceptance_status_override 전달 시 packet 표시 상태 강제 변경. TC-MT11-1로 검증."
+      ],
+      "result": "PASS",
+      "user_visible": true
+    },
+    {
+      "ac_id": "AC-10",
+      "requirement": "TC-10/11: 기존 E69E Codex CLI ERROR/REJECT 상태 모델 테스트 및 F52C staged snapshot/packet SHA 검증 테스트가 깨지지 않는다",
+      "linked_mt": [
+        "MT-8"
+      ],
+      "implementation_evidence": [
+        "MT-8: tests/test_canonical_pr_body_sha256_b985.py 신규 작성 — 18개 테스트 (TC-1~TC-11 커버).",
+        "MT-8: TC-1 CRLF/LF/lone-CR 정규화 동일 SHA, TC-2 trailing newline 구분(strip 없음), TC-3 --json body JSON parse vs jq stdout, TC-9 canonical helper 외부 직접 hashlib 0건 회귀, TC-11 F52C/E69E 호환성 검증.",
+        "MT-8: oracle 4개 케이스(TC-1/TC-2/TC-3/TC-9) input/expected와 대조. pytest 18 passed."
+      ],
+      "verification": [
+        "MT-8: PASS — MT-8 AC-10 — 해당 TC 테스트 통과 (25 passed)"
+      ],
+      "result": "PASS",
+      "user_visible": true
+    }
+  ],
+  "acceptance_code": "ACCEPT-IMP-20260703-B985"
+}
