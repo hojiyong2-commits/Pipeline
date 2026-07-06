@@ -5896,23 +5896,55 @@ def _check_approval_request_ready(pr_body: Optional[str] = None) -> Dict[str, An
     except Exception:
         pass  # packet 읽기 실패는 non-fatal (구 포맷/파일 없음)
 
-    # 검사 8 (MT-25): CI final-check 댓글이 "정보 부족"이면 BLOCKED.
-    # CI가 없거나 댓글 없으면 graceful skip (self-hosted CI 환경 등).
+    # 검사 8 (MT-27): CI final-check 댓글이 "정보 부족"이면 final_check.yml 자동 트리거 후 폴링.
+    # CI가 없거나 댓글 없음(NOT_FOUND)이면 graceful skip (self-hosted CI 환경 등).
     try:
         _ci_fc = _get_ci_final_check_status()
         if _ci_fc.get("status") == "FAIL":
-            _reason_ci = _ci_fc.get("reason", "정보 부족")
-            _url_ci = _ci_fc.get("comment_url", "")
-            _url_hint = f" ({_url_ci})" if _url_ci else ""
-            return {
-                "ok": False,
-                "failure_code": "ci_final_check_insufficient",
-                "message": (
-                    f"GitHub Actions final-check 댓글이 '정보 부족'을 표시합니다{_url_hint}: {_reason_ci}. "
-                    "'python pipeline.py report final-packet'을 실행하고, "
-                    "human_acceptance_packet.json을 커밋+푸시한 뒤 CI가 완료되면 다시 실행하세요."
-                ),
-            }
+            # 자동 트리거: gh workflow run final_check.yml
+            _pr_num = _current_pr_number_for_canonical()
+            try:
+                _branch_result = subprocess.run(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    capture_output=True, text=True, timeout=10
+                )
+                _branch_raw = _branch_result.stdout.strip() if _branch_result.returncode == 0 else ""
+            except Exception:
+                _branch_raw = ""
+            _repo = "hojiyong2-commits/Pipeline"
+            if _pr_num and _branch_raw:
+                try:
+                    _trigger_result = subprocess.run(
+                        ["gh", "workflow", "run", "final_check.yml",
+                         "--repo", _repo,
+                         "--ref", _branch_raw.strip(),
+                         "--field", f"pr_number={_pr_num}"],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if _trigger_result.returncode == 0:
+                        # 최대 120초 폴링 (5초 간격)
+                        import time as _time_fc
+                        for _poll_i in range(24):
+                            _time_fc.sleep(5)
+                            _ci_fc2 = _get_ci_final_check_status()
+                            if _ci_fc2.get("status") == "PASS":
+                                _ci_fc = _ci_fc2
+                                break
+                except Exception:
+                    pass
+
+            if _ci_fc.get("status") == "FAIL":
+                return {
+                    "ok": False,
+                    "failure_code": "ci_final_check_insufficient",
+                    "message": (
+                        "GitHub Actions final-check 댓글이 '정보 부족'을 표시합니다.\n"
+                        f"사유: {_ci_fc.get('reason', 'unknown')}\n"
+                        "해결: python pipeline.py report final-packet && "
+                        "python pipeline.py report update-pr-body\n"
+                        "이후 request-accept를 재실행하세요."
+                    ),
+                }
     except Exception:
         pass  # CI 댓글 조회 실패는 non-fatal — graceful skip
 
