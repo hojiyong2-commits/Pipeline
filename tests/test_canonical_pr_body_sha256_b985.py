@@ -2100,9 +2100,14 @@ class TestMT26PRBodyPacketJSON:
     CI가 파일 커밋 없이 PR body에서 packet JSON을 읽어 freshness 검증할 수 있게 한다."""
 
     def test_markers_defined(self):
-        """PIPELINE_PACKET_JSON 마커 상수가 정의되어 있다."""
-        assert pipeline.PIPELINE_PACKET_JSON_START_MARKER == "<!-- PIPELINE_PACKET_JSON_START -->"
-        assert pipeline.PIPELINE_PACKET_JSON_END_MARKER == "<!-- PIPELINE_PACKET_JSON_END -->"
+        """PIPELINE_PACKET_JSON 마커 상수가 정의되어 있다 (MT-28: 단일 HTML 주석 경계 형식)."""
+        # IMP-20260703-B985 MT-28: JSON이 단일 HTML 주석 안에 들어가도록 START는 주석을 열기만,
+        # END는 닫기만 한다. 결과 블록은 렌더링 시 보이지 않는다.
+        assert pipeline.PIPELINE_PACKET_JSON_START_MARKER == "<!-- PIPELINE_PACKET_JSON_START"
+        assert pipeline.PIPELINE_PACKET_JSON_END_MARKER == "PIPELINE_PACKET_JSON_END -->"
+        # 두 마커 모두 여전히 substring 추출 계약 키워드를 포함한다.
+        assert "PIPELINE_PACKET_JSON_START" in pipeline.PIPELINE_PACKET_JSON_START_MARKER
+        assert "PIPELINE_PACKET_JSON_END" in pipeline.PIPELINE_PACKET_JSON_END_MARKER
 
     def test_replace_appends_block_when_absent(self):
         """블록이 없으면 PR body 끝에 JSON 블록을 추가한다."""
@@ -2228,6 +2233,116 @@ class TestMT26PRBodyPacketJSON:
         parsed = json.loads(extracted)
         assert parsed["pr"]["head_sha"] == "deadbeef1234"
         assert parsed["github_actions"]["run_id"] == "42"
+
+
+class TestMT28AcceptanceFlow:
+    """MT-28: nonce 노출 제거 / packet PENDING 갱신 / JSON을 HTML 주석 안에 배치 /
+    fresh pending comment / Check 9(non-blocking warn) 회귀 테스트."""
+
+    def test_request_accept_output_no_nonce(self):
+        """gates request-accept 출력 승인 코드에 nonce(하이픈+본체)가 없다.
+
+        승인 코드 표시 형식은 ACCEPT-{pipeline_id} (파이프라인 ID로만 끝남).
+        approval_request_message에도 nonce 포함 형식(ACCEPT-{pid}-{nonce})이 없어야 한다.
+        """
+        pid = "IMP-20260703-B985"
+        out = pipeline._build_approval_request_output(pid, "https://example/pr/1")
+        # 표시 코드는 nonce 없는 순수 형식.
+        assert out["acceptance_code_display"] == f"ACCEPT-{pid}"
+        # nonce 포함 형식(ACCEPT-IMP-20260703-B985-XXXX)이 message에 없어야 한다.
+        assert f"ACCEPT-{pid}-" not in out["approval_request_message"]
+        # 정확히 nonce 없는 코드가 message에 포함된다.
+        assert f"ACCEPT-{pid}" in out["approval_request_message"]
+        assert out["status"] == "PENDING"
+
+    def test_packet_json_in_html_comment(self):
+        """_replace_pr_body_packet_json_block 반환 블록이 단일 HTML 주석 경계 형식이다.
+
+        형식: "<!-- PIPELINE_PACKET_JSON_START\\n{json}\\nPIPELINE_PACKET_JSON_END -->"
+        JSON 전체가 하나의 HTML 주석 안에 들어가 렌더링 시 보이지 않는다.
+        """
+        one_line = '{"schema_version":1,"pr":{"head_sha":"abc123"}}'
+        out = pipeline._replace_pr_body_packet_json_block("작업 요약", one_line)
+        expected_block = (
+            f"{pipeline.PIPELINE_PACKET_JSON_START_MARKER}\n"
+            f"{one_line}\n"
+            f"{pipeline.PIPELINE_PACKET_JSON_END_MARKER}"
+        )
+        assert expected_block in out
+        # START는 주석을 열기만(닫는 --> 없음), END는 닫기만 한다.
+        assert pipeline.PIPELINE_PACKET_JSON_START_MARKER == "<!-- PIPELINE_PACKET_JSON_START"
+        assert pipeline.PIPELINE_PACKET_JSON_END_MARKER == "PIPELINE_PACKET_JSON_END -->"
+        # 블록 내부의 JSON은 START(<!--)와 END(-->) 사이, 즉 단일 주석 안에 위치한다.
+        _comment_open = out.index("<!-- PIPELINE_PACKET_JSON_START")
+        _comment_close = out.index("PIPELINE_PACKET_JSON_END -->") + len("PIPELINE_PACKET_JSON_END -->")
+        assert out.index(one_line) > _comment_open
+        assert out.index(one_line) < _comment_close
+
+    def test_packet_json_backwards_compat_replaces_legacy_marker(self):
+        """구 마커(self-closed 주석)가 남아 있으면 새 마커로 교체한다 (backwards-compat)."""
+        legacy_start = "<!-- PIPELINE_PACKET_JSON_START -->"
+        legacy_end = "<!-- PIPELINE_PACKET_JSON_END -->"
+        old = '{"pr":{"head_sha":"OLD"}}'
+        new = '{"pr":{"head_sha":"NEW"}}'
+        body = f"머리말\n{legacy_start}\n{old}\n{legacy_end}\n꼬리말"
+        out = pipeline._replace_pr_body_packet_json_block(body, new)
+        assert new in out
+        assert old not in out
+        # 구 self-closed 마커는 더 이상 존재하지 않는다.
+        assert legacy_start not in out
+        assert legacy_end not in out
+        # 새 마커가 정확히 1쌍 존재한다.
+        assert out.count(pipeline.PIPELINE_PACKET_JSON_START_MARKER) == 1
+        assert out.count(pipeline.PIPELINE_PACKET_JSON_END_MARKER) == 1
+        assert "머리말" in out and "꼬리말" in out
+
+    def test_packet_shows_pending_after_request_accept(self):
+        """승인 요청 표시 SSoT(_build_approval_request_output)의 acceptance 상태가 PENDING이다."""
+        pid = "IMP-20260703-B985"
+        out = pipeline._build_approval_request_output(pid, "")
+        assert out["status"] == "PENDING"
+        # PENDING 상태 문자열이 관측 가능해야 한다(대문자 SSoT).
+        assert "PENDING" in str(out["status"]).upper()
+
+    def test_pending_comment_posted_after_acceptance_request(self):
+        """_render_pending_acceptance_comment가 pending 마커를 포함한다 (fresh pending comment)."""
+        pid = "IMP-20260703-B985"
+        display_model = {
+            "pipeline_id": pid,
+            "pr_url": "https://example/pr/1",
+            "approval_code": f"ACCEPT-{pid}",
+        }
+        comment = pipeline._render_pending_acceptance_comment(display_model)
+        assert "pipeline-human-acceptance-packet-pending" in comment
+        # 승인 코드는 nonce 없는 형식으로 노출된다.
+        assert f"ACCEPT-{pid}" in comment
+        assert f"ACCEPT-{pid}-" not in comment
+        # 완료 마커(accepted)는 포함되지 않는다.
+        assert "pipeline-human-acceptance-packet-accepted" not in comment
+
+    def test_extract_packet_json_new_marker_format(self, tmp_path, monkeypatch):
+        """새 마커 형식에서 CI 추출 로직과 동일한 substring 파싱이 올바르게 동작한다."""
+        pkt = {
+            "schema_version": 1,
+            "pr": {"head_sha": "cafebabe9999"},
+            "github_actions": {"run_id": "77"},
+        }
+        pkt_path = tmp_path / "human_acceptance_packet.json"
+        pkt_path.write_text(json.dumps(pkt, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(pipeline, "_packet_json_output_path", lambda: pkt_path)
+        one_line = pipeline._load_packet_json_one_line()
+        assert one_line is not None
+        body = pipeline._replace_pr_body_packet_json_block("최종 확인 안내", one_line)
+        # ci.yml / final_check.yml의 substring 추출을 재현: START 이후 ~ END 이전.
+        start = pipeline.PIPELINE_PACKET_JSON_START_MARKER
+        end = pipeline.PIPELINE_PACKET_JSON_END_MARKER
+        si = body.index(start)
+        ei = body.index(end)
+        assert si >= 0 and ei > si
+        extracted = body[si + len(start):ei].strip()
+        parsed = json.loads(extracted)
+        assert parsed["pr"]["head_sha"] == "cafebabe9999"
+        assert parsed["github_actions"]["run_id"] == "77"
 
 
 def _make_base_state(pipeline_id: str) -> dict:

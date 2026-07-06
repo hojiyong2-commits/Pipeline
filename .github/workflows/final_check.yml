@@ -33,8 +33,10 @@ jobs:
 
           function Extract-PacketJson {
             param([string]$Body)
-            $s = "<!-- PIPELINE_PACKET_JSON_START -->"
-            $e = "<!-- PIPELINE_PACKET_JSON_END -->"
+            # IMP-20260703-B985 MT-28: JSON을 단일 HTML 주석 안에 embed하는 새 마커 형식.
+            # START는 주석을 열기만 하고 END가 닫으므로 JSON이 렌더링에서 보이지 않는다.
+            $s = "<!-- PIPELINE_PACKET_JSON_START"
+            $e = "PIPELINE_PACKET_JSON_END -->"
             $si = $Body.IndexOf($s)
             $ei = $Body.IndexOf($e)
             if ($si -ge 0 -and $ei -gt $si) {

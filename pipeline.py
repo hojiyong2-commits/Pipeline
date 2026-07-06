@@ -5948,6 +5948,27 @@ def _check_approval_request_ready(pr_body: Optional[str] = None) -> Dict[str, An
     except Exception:
         pass  # CI 댓글 조회 실패는 non-fatal — graceful skip
 
+    # 검사 9 (IMP-20260703-B985 MT-28): Codex PR body SHA 검사 (non-blocking WARN).
+    # codex_review_result.json에 pr_body_sha256(또는 pr_body_candidate_sha256)가 기록돼 있으면,
+    # 향후 strict mode(ENABLE_CODEX_SHA_CHECK=1)에서 acceptance_request/PR body canonical SHA와
+    # 대조하는 hard gate로 승격할 수 있다. 현재는 WARN 구조만 유지하며 승인 요청을 차단하지 않는다.
+    try:
+        _codex_path9 = _codex_review_result_path()
+        if _codex_path9.exists():
+            _codex_data9 = json.loads(
+                _codex_path9.read_text(encoding="utf-8", errors="replace")
+            )
+            if isinstance(_codex_data9, dict):
+                _codex_sha9 = (
+                    _codex_data9.get("pr_body_sha256")
+                    or _codex_data9.get("pr_body_candidate_sha256")
+                )
+                if _codex_sha9:
+                    # non-blocking: WARN만. strict 처리는 ENABLE_CODEX_SHA_CHECK=1 도입 시 추가.
+                    pass  # 현재는 WARN 구조만, strict 처리는 향후 추가
+    except Exception:
+        pass  # codex_review_result 읽기 실패는 non-fatal — graceful skip
+
     return {"ok": True, "failure_code": "", "message": ""}
 
 
@@ -13474,8 +13495,16 @@ PIPELINE_FINAL_PACKET_START_MARKER = "<!-- PIPELINE_FINAL_PACKET_START -->"
 PIPELINE_FINAL_PACKET_END_MARKER = "<!-- PIPELINE_FINAL_PACKET_END -->"
 # IMP-20260703-B985 MT-26: CI가 PR 파일시스템 커밋 없이도 최신 packet JSON을 읽도록
 # PR 본문에 packet JSON을 embed하는 별도 블록 마커. FINAL_PACKET(사용자 렌더링용)과 분리한다.
-PIPELINE_PACKET_JSON_START_MARKER = "<!-- PIPELINE_PACKET_JSON_START -->"
-PIPELINE_PACKET_JSON_END_MARKER = "<!-- PIPELINE_PACKET_JSON_END -->"
+# IMP-20260703-B985 MT-28: JSON 본문이 GitHub PR 렌더링에서 보이지 않도록 마커를 단일 HTML
+# 주석의 열림/닫힘 경계로 재배치한다. START는 주석을 열기만 하고(닫지 않음), END는 주석을
+# 닫는다(열지 않음). 결과 블록은 "<!-- PIPELINE_PACKET_JSON_START\n{json}\nPIPELINE_PACKET_JSON_END -->"
+# 형태가 되어 JSON 전체가 하나의 주석 안에 들어간다. substring/regex 추출 계약은 그대로 유지된다
+# (두 마커 모두 여전히 "PIPELINE_PACKET_JSON_START"/"PIPELINE_PACKET_JSON_END" 부분문자열 포함).
+PIPELINE_PACKET_JSON_START_MARKER = "<!-- PIPELINE_PACKET_JSON_START"
+PIPELINE_PACKET_JSON_END_MARKER = "PIPELINE_PACKET_JSON_END -->"
+# 구 마커(self-closed 주석) — backwards-compat 교체용. 기존 PR body에 남아 있으면 새 마커로 변환.
+PIPELINE_PACKET_JSON_START_MARKER_LEGACY = "<!-- PIPELINE_PACKET_JSON_START -->"
+PIPELINE_PACKET_JSON_END_MARKER_LEGACY = "<!-- PIPELINE_PACKET_JSON_END -->"
 HUMAN_ACCEPTANCE_PACKET_FILE = "human_acceptance_packet.md"
 PACKET_LINE_MAX_WIDTH = 120
 
@@ -15206,6 +15235,18 @@ def _replace_pr_body_packet_json_block(pr_body: str, json_one_line: str) -> str:
     new_block = f"{start}\n{json_one_line}\n{end}"
     if pr_body is None:
         pr_body = ""
+    # IMP-20260703-B985 MT-28: 구 마커(self-closed 주석)가 남아 있으면 새 마커로 먼저 변환한다
+    # (backwards-compat). END를 먼저 교체해야 START 부분문자열 충돌을 피한다:
+    # 구 START "<!-- PIPELINE_PACKET_JSON_START -->"는 새 START "<!-- PIPELINE_PACKET_JSON_START"를
+    # 부분문자열로 포함하므로, 구 END를 먼저 새 END로 바꾼 뒤 구 START를 새 START로 바꾼다.
+    if PIPELINE_PACKET_JSON_END_MARKER_LEGACY in pr_body:
+        pr_body = pr_body.replace(
+            PIPELINE_PACKET_JSON_END_MARKER_LEGACY, PIPELINE_PACKET_JSON_END_MARKER
+        )
+    if PIPELINE_PACKET_JSON_START_MARKER_LEGACY in pr_body:
+        pr_body = pr_body.replace(
+            PIPELINE_PACKET_JSON_START_MARKER_LEGACY, PIPELINE_PACKET_JSON_START_MARKER
+        )
     if start in pr_body and end in pr_body:
         pattern = re.compile(
             re.escape(start) + r".*?" + re.escape(end),
