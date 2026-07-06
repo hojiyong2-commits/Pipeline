@@ -2602,6 +2602,61 @@ class TestMT27FinalCheckAutoTrigger:
             pass
 
 
+class TestMT29PendingCommentAlwaysPosted:
+    """MT-29: 항상 pending comment를 게시하고(reuse/publish/machine-readable 모두),
+    packet JSON을 standalone 블록이 아니라 PIPELINE_FINAL_PACKET 블록 안에 embed한다."""
+
+    def test_suppress_pending_comment_false_in_machine_readable(self):
+        """publish 경로의 _publish_acceptance_request 호출이 suppress_pending_comment=False로
+        고정되어 machine-readable 모드에서도 pending comment를 게시한다."""
+        src = (REPO_ROOT / "pipeline.py").read_text(encoding="utf-8")
+        # MT-29 표식이 붙은 suppress_pending_comment=False 라인이 존재한다.
+        assert "suppress_pending_comment=False,  # MT-29" in src
+        # 구 MT-21 machine-readable 억제 대입이 남아 있지 않다.
+        assert "suppress_pending_comment=_machine_readable" not in src
+
+    def test_reuse_path_calls_post_pending_comment(self):
+        """reuse(read-only) 경로에서 _post_github_pending_acceptance_comment를 호출한다."""
+        src = (REPO_ROOT / "pipeline.py").read_text(encoding="utf-8")
+        # reuse 경로 return 직전에 req_candidate/evidence_str로 pending comment를 게시한다.
+        assert (
+            "_post_github_pending_acceptance_comment(req_candidate, evidence_str)" in src
+        )
+        # MT-29 주석으로 reuse 경로 comment 게시 의도가 명시되어 있다.
+        assert "MT-29: reuse path에서도 fresh pending comment" in src
+
+    def test_update_pr_body_no_standalone_packet_json_block(self):
+        """embed 후 PR body에 FINAL_PACKET 밖의 standalone JSON 블록이 없다.
+
+        JSON 블록은 PIPELINE_FINAL_PACKET 블록 안에만 존재해야 한다.
+        """
+        fps = pipeline.PIPELINE_FINAL_PACKET_START_MARKER
+        fpe = pipeline.PIPELINE_FINAL_PACKET_END_MARKER
+        js = pipeline.PIPELINE_PACKET_JSON_START_MARKER
+        je = pipeline.PIPELINE_PACKET_JSON_END_MARKER
+        one_line = '{"pr":{"head_sha":"abc123"},"github_actions":{"run_id":"7"}}'
+        # 기존 standalone JSON 블록이 있는 body -> embed 후 standalone 제거 + FINAL_PACKET 내부 이동
+        body = f"머리말\n{fps}\npacket 내용\n{fpe}\n\n{js}\nOLD_JSON\n{je}\n꼬리말"
+        out = pipeline._embed_packet_json_in_final_packet_block(body, one_line)
+        # FINAL_PACKET 블록 추출
+        fp_inner = out[out.index(fps):out.index(fpe) + len(fpe)]
+        outside = out.replace(fp_inner, "")
+        # standalone JSON 블록이 FINAL_PACKET 밖에 없어야 한다.
+        assert "PIPELINE_PACKET_JSON" not in outside
+        # JSON은 FINAL_PACKET 안에 있고 최신 값으로 교체됨.
+        assert one_line in fp_inner
+        assert "OLD_JSON" not in out
+        # 마커는 정확히 1쌍만 존재.
+        assert out.count(js) == 1
+        assert out.count(je) == 1
+        # CI Extract-PacketJsonFromPRBody와 동일한 substring 추출 계약이 여전히 성립.
+        s = out.index(js) + len(js)
+        e = out.index(je)
+        parsed = json.loads(out[s:e].strip())
+        assert parsed["pr"]["head_sha"] == "abc123"
+        assert parsed["github_actions"]["run_id"] == "7"
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

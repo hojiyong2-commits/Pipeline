@@ -15258,6 +15258,107 @@ def _replace_pr_body_packet_json_block(pr_body: str, json_one_line: str) -> str:
     return pr_body + "\n" + new_block + "\n"
 
 
+def _embed_packet_json_in_final_packet_block(pr_body: str, json_one_line: str) -> str:
+    """packet JSON 블록을 PIPELINE_FINAL_PACKET 블록 안(END 마커 직전)에 embed한다.
+
+    IMP-20260703-B985 MT-29: JSON 블록을 별도 standalone 블록으로 두지 않고 FINAL_PACKET
+    블록 내부에 배치한다. CI/consistency의 substring 추출 계약(PIPELINE_PACKET_JSON_START/END)은
+    JSON이 FINAL_PACKET 안에 있어도 그대로 동작한다. embed 후 FINAL_PACKET 밖의 standalone
+    JSON 블록(구/신 마커 모두)을 제거하여 중복을 방지한다.
+
+    Args:
+        pr_body: 현재 PR 본문 텍스트 (FINAL_PACKET 블록을 이미 포함한다고 가정).
+        json_one_line: embed할 한 줄 JSON 문자열.
+    Returns:
+        JSON이 FINAL_PACKET 블록 안에 embed되고 standalone 블록이 제거된 PR 본문.
+    Raises:
+        TypeError: json_one_line이 None이거나 문자열이 아닌 경우.
+    """
+    if json_one_line is None:
+        raise TypeError("json_one_line must not be None")
+    if not isinstance(json_one_line, str):
+        raise TypeError(
+            f"json_one_line must be str, got {type(json_one_line).__name__}"
+        )
+    if pr_body is None:
+        pr_body = ""
+
+    fps = PIPELINE_FINAL_PACKET_START_MARKER
+    fpe = PIPELINE_FINAL_PACKET_END_MARKER
+    js = PIPELINE_PACKET_JSON_START_MARKER
+    je = PIPELINE_PACKET_JSON_END_MARKER
+
+    # FINAL_PACKET 블록이 없으면 기존 standalone 동작으로 폴백(하위 호환).
+    if fps not in pr_body or fpe not in pr_body:
+        return _replace_pr_body_packet_json_block(pr_body, json_one_line)
+
+    new_json_block = f"{js}\n{json_one_line}\n{je}"
+
+    # 1) FINAL_PACKET 블록 안의 기존 JSON embed를 새 embed로 교체(없으면 END 직전에 삽입).
+    fp_pattern = re.compile(
+        re.escape(fps) + r"(.*?)" + re.escape(fpe),
+        re.DOTALL,
+    )
+
+    def _replace_fp(m: "re.Match[str]") -> str:
+        inner = m.group(1)
+        # 구 self-closed 마커를 신 마커로 먼저 변환(END 먼저 — START substring 충돌 회피).
+        if PIPELINE_PACKET_JSON_END_MARKER_LEGACY in inner:
+            inner = inner.replace(
+                PIPELINE_PACKET_JSON_END_MARKER_LEGACY, PIPELINE_PACKET_JSON_END_MARKER
+            )
+        if PIPELINE_PACKET_JSON_START_MARKER_LEGACY in inner:
+            inner = inner.replace(
+                PIPELINE_PACKET_JSON_START_MARKER_LEGACY, PIPELINE_PACKET_JSON_START_MARKER
+            )
+        # 기존 embed JSON 블록 제거.
+        inner = re.sub(
+            re.escape(js) + r".*?" + re.escape(je),
+            "",
+            inner,
+            flags=re.DOTALL,
+        )
+        inner = inner.rstrip("\n")
+        # \g<0> 등 group 참조 오류 방지를 위해 함수 반환값으로 치환.
+        return f"{fps}{inner}\n\n{new_json_block}\n{fpe}"
+
+    result = fp_pattern.sub(_replace_fp, pr_body, count=1)
+
+    # 2) FINAL_PACKET 밖의 standalone JSON 블록 제거(embed된 블록은 보존).
+    #    embed된 블록을 잠시 placeholder로 치환한 뒤 나머지 standalone 블록을 제거하고 복원한다.
+    embedded_marker = "\x00__MT29_EMBEDDED_JSON__\x00"
+    fp_capture = re.compile(
+        re.escape(fps) + r".*?" + re.escape(fpe),
+        re.DOTALL,
+    )
+    fp_saved: Dict[str, str] = {}
+
+    def _stash_fp(m: "re.Match[str]") -> str:
+        fp_saved["block"] = m.group(0)
+        return embedded_marker
+
+    result = fp_capture.sub(_stash_fp, result, count=1)
+    # 남은(standalone) JSON 블록 제거 — 구/신 마커 모두.
+    if PIPELINE_PACKET_JSON_END_MARKER_LEGACY in result:
+        result = result.replace(
+            PIPELINE_PACKET_JSON_END_MARKER_LEGACY, PIPELINE_PACKET_JSON_END_MARKER
+        )
+    if PIPELINE_PACKET_JSON_START_MARKER_LEGACY in result:
+        result = result.replace(
+            PIPELINE_PACKET_JSON_START_MARKER_LEGACY, PIPELINE_PACKET_JSON_START_MARKER
+        )
+    result = re.sub(
+        r"\n*" + re.escape(js) + r".*?" + re.escape(je) + r"\n*",
+        "\n",
+        result,
+        flags=re.DOTALL,
+    )
+    # placeholder 복원.
+    if "block" in fp_saved:
+        result = result.replace(embedded_marker, fp_saved["block"], 1)
+    return result
+
+
 def _gh_edit_pr_body(new_body: str) -> bool:
     """gh CLI로 현재 PR 본문을 갱신한다. gh 없으면 False 반환.
 
@@ -15416,12 +15517,15 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
 
     new_body = _replace_pr_body_packet_block(cleaned_body, packet_content)
 
-    # IMP-20260703-B985 MT-26: CI가 파일 커밋 없이 최신 packet 정보를 얻도록
+    # IMP-20260703-B985 MT-26/MT-29: CI가 파일 커밋 없이 최신 packet 정보를 얻도록
     # PR 본문에 packet JSON을 embed한다. packet.json이 없으면 graceful skip.
+    # MT-29: JSON 블록을 별도 standalone 블록으로 두지 않고 PIPELINE_FINAL_PACKET END
+    # 마커 직전에 embed한다. 마커(substring)가 FINAL_PACKET 안에 있어도 CI의 substring
+    # 추출 계약은 그대로 동작한다. 이후 FINAL_PACKET 밖의 standalone JSON 블록을 제거한다.
     json_one_line = _load_packet_json_one_line()
     json_embedded = False
     if json_one_line is not None:
-        new_body = _replace_pr_body_packet_json_block(new_body, json_one_line)
+        new_body = _embed_packet_json_in_final_packet_block(new_body, json_one_line)
         json_embedded = True
 
     ok = _gh_edit_pr_body(new_body)
@@ -21904,6 +22008,13 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             print()
             print("CODEX 검토 필요")
         accept_code = f"ACCEPT-{pipeline_id}-{nonce}"  # 내부 CLI nonce SSoT 보존
+        # MT-29: reuse path에서도 fresh pending comment를 게시한다. reuse는 파일을 write하지
+        # 않지만, PR comment는 사용자가 승인 코드를 확인하는 주 채널이므로 항상 최신화한다.
+        # comment 실패는 non-fatal(reuse 흐름을 차단하지 않음).
+        try:
+            _post_github_pending_acceptance_comment(req_candidate, evidence_str)
+        except Exception:  # noqa: BLE001 — reuse 경로 comment 실패는 non-fatal.
+            pass
         _log_event(
             state,
             f"acceptance request 재사용(read-only): request_id={req_candidate.get('request_id')} "
@@ -22081,7 +22192,7 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             frozen_packet_content=staged_packet_content,  # frozen bytes pass-through
             staged_json_sha256=_staged_json_sha or None,  # MT-13: staging SHA pass-through
             staged_json_content=staged_json_content_for_publish or None,  # MT-21: JSON content pass-through
-            suppress_pending_comment=_machine_readable,  # MT-21: machine-readable 모드에서 PR comment 억제
+            suppress_pending_comment=False,  # MT-29: 항상 pending comment 게시 (machine-readable 모드도 포함)
         )
         snapshot_result = publish_result["snapshot_result"]
         if not _machine_readable:
