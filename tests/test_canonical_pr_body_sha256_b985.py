@@ -2095,6 +2095,141 @@ class TestCIFinalCheckGate:
         assert result.get("failure_code") != "ci_final_check_insufficient"
 
 
+class TestMT26PRBodyPacketJSON:
+    """MT-26: report update-pr-body가 PR body에 packet JSON을 embed하고,
+    CI가 파일 커밋 없이 PR body에서 packet JSON을 읽어 freshness 검증할 수 있게 한다."""
+
+    def test_markers_defined(self):
+        """PIPELINE_PACKET_JSON 마커 상수가 정의되어 있다."""
+        assert pipeline.PIPELINE_PACKET_JSON_START_MARKER == "<!-- PIPELINE_PACKET_JSON_START -->"
+        assert pipeline.PIPELINE_PACKET_JSON_END_MARKER == "<!-- PIPELINE_PACKET_JSON_END -->"
+
+    def test_replace_appends_block_when_absent(self):
+        """블록이 없으면 PR body 끝에 JSON 블록을 추가한다."""
+        body = "작업 요약\n내용"
+        one_line = '{"schema_version":1,"pr":{"head_sha":"abc123"}}'
+        out = pipeline._replace_pr_body_packet_json_block(body, one_line)
+        assert pipeline.PIPELINE_PACKET_JSON_START_MARKER in out
+        assert pipeline.PIPELINE_PACKET_JSON_END_MARKER in out
+        assert one_line in out
+        # 기존 본문 보존
+        assert "작업 요약" in out
+
+    def test_replace_updates_existing_block(self):
+        """기존 블록이 있으면 교체하고 중복 추가하지 않는다."""
+        start = pipeline.PIPELINE_PACKET_JSON_START_MARKER
+        end = pipeline.PIPELINE_PACKET_JSON_END_MARKER
+        old = '{"pr":{"head_sha":"OLD"}}'
+        new = '{"pr":{"head_sha":"NEW"}}'
+        body = f"머리말\n{start}\n{old}\n{end}\n꼬리말"
+        out = pipeline._replace_pr_body_packet_json_block(body, new)
+        assert new in out
+        assert old not in out
+        # 마커는 정확히 1쌍만 존재
+        assert out.count(start) == 1
+        assert out.count(end) == 1
+        assert "머리말" in out and "꼬리말" in out
+
+    def test_replace_handles_backslash_json_safely(self):
+        """JSON 내 백슬래시/그룹참조 유사 문자열이 re.sub group 오류를 일으키지 않는다."""
+        start = pipeline.PIPELINE_PACKET_JSON_START_MARKER
+        end = pipeline.PIPELINE_PACKET_JSON_END_MARKER
+        # \g<0> 유사 패턴과 백슬래시 포함 (윈도우 경로 등)
+        tricky = r'{"path":"C:\\temp\\out","note":"\g<0> literal"}'
+        body = f"{start}\nOLD\n{end}"
+        out = pipeline._replace_pr_body_packet_json_block(body, tricky)
+        assert tricky in out
+
+    def test_replace_rejects_none(self):
+        """None json_one_line은 TypeError를 발생시킨다 (AL type guard)."""
+        with pytest.raises(TypeError):
+            pipeline._replace_pr_body_packet_json_block("body", None)
+
+    def test_replace_rejects_non_str(self):
+        """비문자열 json_one_line은 TypeError를 발생시킨다."""
+        with pytest.raises(TypeError):
+            pipeline._replace_pr_body_packet_json_block("body", {"a": 1})
+
+    def test_load_packet_json_one_line_reads_file(self, tmp_path, monkeypatch):
+        """packet.json 파일이 있으면 compact 한 줄 JSON으로 반환한다."""
+        pkt = {
+            "schema_version": 1,
+            "packet_type": "final_acceptance_evidence",
+            "pr": {"head_sha": "abc123"},
+            "github_actions": {"run_id": "999"},
+        }
+        pkt_path = tmp_path / "human_acceptance_packet.json"
+        pkt_path.write_text(json.dumps(pkt, indent=2), encoding="utf-8")
+        monkeypatch.setattr(pipeline, "_packet_json_output_path", lambda: pkt_path)
+        one_line = pipeline._load_packet_json_one_line()
+        assert one_line is not None
+        assert "\n" not in one_line  # 한 줄
+        parsed = json.loads(one_line)
+        assert parsed["pr"]["head_sha"] == "abc123"
+        assert parsed["github_actions"]["run_id"] == "999"
+
+    def test_load_packet_json_one_line_missing_file_returns_none(self, tmp_path, monkeypatch):
+        """packet.json 파일이 없으면 None을 반환한다 (graceful skip)."""
+        missing = tmp_path / "nonexistent_packet.json"
+        monkeypatch.setattr(pipeline, "_packet_json_output_path", lambda: missing)
+        assert pipeline._load_packet_json_one_line() is None
+
+    def test_load_packet_json_one_line_invalid_json_returns_none(self, tmp_path, monkeypatch):
+        """packet.json이 깨진 JSON이면 None을 반환한다."""
+        bad = tmp_path / "human_acceptance_packet.json"
+        bad.write_text("{ not valid json ", encoding="utf-8")
+        monkeypatch.setattr(pipeline, "_packet_json_output_path", lambda: bad)
+        assert pipeline._load_packet_json_one_line() is None
+
+    def test_load_packet_json_preserves_korean(self, tmp_path, monkeypatch):
+        """한글 값이 ensure_ascii=False로 보존된다."""
+        pkt = {"note": "사용자 확인", "pr": {"head_sha": "x"}}
+        pkt_path = tmp_path / "human_acceptance_packet.json"
+        pkt_path.write_text(json.dumps(pkt, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(pipeline, "_packet_json_output_path", lambda: pkt_path)
+        one_line = pipeline._load_packet_json_one_line()
+        assert one_line is not None
+        assert "사용자 확인" in one_line
+
+    def test_ci_yml_reads_packet_from_pr_body(self):
+        """ci.yml이 PR body에서 packet JSON을 추출하는 로직을 포함한다."""
+        ci_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+        text = ci_path.read_text(encoding="utf-8")
+        assert "Extract-PacketJsonFromPRBody" in text
+        assert "PIPELINE_PACKET_JSON_START" in text
+        assert "PIPELINE_PACKET_JSON_END" in text
+
+    def test_ci_yml_keeps_file_fallback(self):
+        """ci.yml이 PR body에 JSON 없을 때 파일 fallback을 유지한다."""
+        ci_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+        text = ci_path.read_text(encoding="utf-8")
+        # 파일 fallback 경로와 "packet file not found" 분기(정보 부족 판정) 보존
+        assert "human_acceptance_packet.json" in text
+        assert "packet file not found" in text
+
+    def test_round_trip_embed_and_extract_semantics(self, tmp_path, monkeypatch):
+        """embed된 JSON을 다시 파싱하면 head_sha/run_id가 그대로 복원된다 (CI 추출 계약)."""
+        pkt = {
+            "schema_version": 1,
+            "pr": {"head_sha": "deadbeef1234"},
+            "github_actions": {"run_id": "42"},
+        }
+        pkt_path = tmp_path / "human_acceptance_packet.json"
+        pkt_path.write_text(json.dumps(pkt), encoding="utf-8")
+        monkeypatch.setattr(pipeline, "_packet_json_output_path", lambda: pkt_path)
+        one_line = pipeline._load_packet_json_one_line()
+        body = pipeline._replace_pr_body_packet_json_block("최종 확인 안내", one_line)
+        # CI의 Extract-PacketJsonFromPRBody와 동일한 substring 추출 재현
+        start = pipeline.PIPELINE_PACKET_JSON_START_MARKER
+        end = pipeline.PIPELINE_PACKET_JSON_END_MARKER
+        s = body.index(start) + len(start)
+        e = body.index(end)
+        extracted = body[s:e].strip()
+        parsed = json.loads(extracted)
+        assert parsed["pr"]["head_sha"] == "deadbeef1234"
+        assert parsed["github_actions"]["run_id"] == "42"
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

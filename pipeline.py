@@ -13440,6 +13440,10 @@ def cmd_outputs(args: argparse.Namespace) -> None:
 
 PIPELINE_FINAL_PACKET_START_MARKER = "<!-- PIPELINE_FINAL_PACKET_START -->"
 PIPELINE_FINAL_PACKET_END_MARKER = "<!-- PIPELINE_FINAL_PACKET_END -->"
+# IMP-20260703-B985 MT-26: CI가 PR 파일시스템 커밋 없이도 최신 packet JSON을 읽도록
+# PR 본문에 packet JSON을 embed하는 별도 블록 마커. FINAL_PACKET(사용자 렌더링용)과 분리한다.
+PIPELINE_PACKET_JSON_START_MARKER = "<!-- PIPELINE_PACKET_JSON_START -->"
+PIPELINE_PACKET_JSON_END_MARKER = "<!-- PIPELINE_PACKET_JSON_END -->"
 HUMAN_ACCEPTANCE_PACKET_FILE = "human_acceptance_packet.md"
 PACKET_LINE_MAX_WIDTH = 120
 
@@ -15106,6 +15110,81 @@ def _replace_pr_body_packet_block(pr_body: str, packet_content: str) -> str:
     return pr_body + "\n" + new_block + "\n"
 
 
+def _load_packet_json_one_line() -> Optional[str]:
+    """human_acceptance_packet.json을 읽어 한 줄 JSON 문자열로 반환한다.
+
+    IMP-20260703-B985 MT-26: PR 본문 embed용. 파일 부재/JSON 파싱 실패 시 None 반환하여
+    호출부가 embed를 graceful하게 건너뛰도록 한다.
+
+    Returns:
+        packet JSON을 compact 한 줄로 직렬화한 문자열, 없거나 실패 시 None.
+    Raises:
+        없음 (모든 예외를 흡수하고 None 반환).
+    """
+    path = _packet_json_output_path()
+    try:
+        if not path.exists():
+            return None
+    except OSError:
+        return None
+    # utf-8 → cp949 → latin-1 fallback (FS.encoding 규칙 준수)
+    raw: Optional[str] = None
+    for enc in ("utf-8", "cp949", "latin-1"):
+        try:
+            raw = path.read_text(encoding=enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+        except OSError:
+            return None
+    if raw is None:
+        return None
+    try:
+        obj = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    try:
+        # separators로 공백 제거한 compact 한 줄 JSON, 한글 보존(ensure_ascii=False)
+        return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _replace_pr_body_packet_json_block(pr_body: str, json_one_line: str) -> str:
+    """PR 본문에서 PIPELINE_PACKET_JSON_START/END 블록을 교체하고, 없으면 끝에 추가.
+
+    IMP-20260703-B985 MT-26: CI가 PR 본문에서 packet JSON을 직접 읽을 수 있도록 embed한다.
+
+    Args:
+        pr_body: 현재 PR 본문 텍스트.
+        json_one_line: embed할 한 줄 JSON 문자열.
+    Returns:
+        JSON 블록이 교체/추가된 PR 본문 텍스트.
+    Raises:
+        TypeError: json_one_line이 None이거나 문자열이 아닌 경우.
+    """
+    if json_one_line is None:
+        raise TypeError("json_one_line must not be None")
+    if not isinstance(json_one_line, str):
+        raise TypeError(
+            f"json_one_line must be str, got {type(json_one_line).__name__}"
+        )
+    start = PIPELINE_PACKET_JSON_START_MARKER
+    end = PIPELINE_PACKET_JSON_END_MARKER
+    new_block = f"{start}\n{json_one_line}\n{end}"
+    if pr_body is None:
+        pr_body = ""
+    if start in pr_body and end in pr_body:
+        pattern = re.compile(
+            re.escape(start) + r".*?" + re.escape(end),
+            re.DOTALL,
+        )
+        return pattern.sub(lambda _m: new_block, pr_body, count=1)
+    if pr_body and not pr_body.endswith("\n"):
+        pr_body += "\n"
+    return pr_body + "\n" + new_block + "\n"
+
+
 def _gh_edit_pr_body(new_body: str) -> bool:
     """gh CLI로 현재 PR 본문을 갱신한다. gh 없으면 False 반환.
 
@@ -15263,6 +15342,15 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
     cleaned_body = _clean_pr_body_artifacts(current_body, pipeline_id_str, current_nonce)
 
     new_body = _replace_pr_body_packet_block(cleaned_body, packet_content)
+
+    # IMP-20260703-B985 MT-26: CI가 파일 커밋 없이 최신 packet 정보를 얻도록
+    # PR 본문에 packet JSON을 embed한다. packet.json이 없으면 graceful skip.
+    json_one_line = _load_packet_json_one_line()
+    json_embedded = False
+    if json_one_line is not None:
+        new_body = _replace_pr_body_packet_json_block(new_body, json_one_line)
+        json_embedded = True
+
     ok = _gh_edit_pr_body(new_body)
     if not ok:
         print(YELLOW(
@@ -15270,7 +15358,16 @@ def _cmd_report_update_pr_body(args: argparse.Namespace) -> None:
             "PR이 열려 있고 gh 인증이 유효한지 확인하세요.\n"
         ))
         return
-    print(GREEN("\n[PR 본문 갱신 완료] PIPELINE_FINAL_PACKET 블록이 최신 packet으로 교체되었습니다.\n"))
+    if json_embedded:
+        print(GREEN(
+            "\n[PR 본문 갱신 완료] PIPELINE_FINAL_PACKET + PIPELINE_PACKET_JSON 블록이 "
+            "최신 packet으로 교체되었습니다.\n"
+        ))
+    else:
+        print(GREEN(
+            "\n[PR 본문 갱신 완료] PIPELINE_FINAL_PACKET 블록이 최신 packet으로 교체되었습니다. "
+            "(packet JSON 없음 — gates request-accept/report final-packet 실행 전)\n"
+        ))
 
 
 def cmd_report(args: argparse.Namespace) -> None:
@@ -21956,55 +22053,6 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             f"  오류: {exc}\n"
             "  gates request-accept를 다시 실행하세요."
         )
-
-    # MT-25: human_acceptance_packet.json을 CI가 읽을 수 있도록 force-add 후 커밋+푸시.
-    # .gitignore에 의해 차단되더라도 -f 옵션으로 강제 추가한다. 새로 staged된 packet 변경이
-    # 있을 때만 커밋+푸시하고, 성공 시 승인 코드를 발급하지 않고 반환하여 CI 완료(판단 가능)를
-    # 기다린다(WAIT_FOR_CI). 이후 재실행 시 검사 8(CI final-check gate)이 상태를 확인한다.
-    try:
-        _json_pkt_path = _packet_json_output_path()
-        if _json_pkt_path.exists():
-            _add_r = subprocess.run(
-                ["git", "add", "-f", str(_json_pkt_path)],
-                capture_output=True, text=True, timeout=30,
-                cwd=str(Path(__file__).parent),
-            )
-            if _add_r.returncode == 0:
-                # staged 변경사항이 있는지 확인
-                _diff_r = subprocess.run(
-                    ["git", "diff", "--cached", "--name-only"],
-                    capture_output=True, text=True, timeout=30,
-                    cwd=str(Path(__file__).parent),
-                )
-                _staged_files = (_diff_r.stdout or "").strip().splitlines()
-                _pkt_name = _json_pkt_path.name
-                if any(_pkt_name in f for f in _staged_files):
-                    _st_for_commit = _load()
-                    _pid_for_commit = str(
-                        (_st_for_commit or {}).get("pipeline_id", "UNKNOWN") or "UNKNOWN"
-                    )
-                    _commit_r = subprocess.run(
-                        ["git", "commit", "-m",
-                         f"[{_pid_for_commit}] Add acceptance packet for CI verification (MT-25)"],
-                        capture_output=True, text=True, timeout=60,
-                        cwd=str(Path(__file__).parent),
-                    )
-                    if _commit_r.returncode == 0:
-                        _push_r = subprocess.run(
-                            ["git", "push"],
-                            capture_output=True, text=True, timeout=120,
-                            cwd=str(Path(__file__).parent),
-                        )
-                        _machine_readable_flag = getattr(args, "machine_readable", False)
-                        if _push_r.returncode == 0:
-                            if not _machine_readable_flag:
-                                print(
-                                    "[MT-25] human_acceptance_packet.json을 커밋+푸시했습니다. "
-                                    "GitHub Actions CI가 완료(판단 가능)되면 gates request-accept를 다시 실행하세요."
-                                )
-                            return  # WAIT_FOR_CI: 승인 코드 미발급, CI 대기
-    except Exception:
-        pass  # 커밋 실패는 non-fatal — 이후 검사 8에서 차단됨
 
     # ── 단계 4.5: 최종 불변식 검증 (MT-5, BUG-20260628-F52C r11) ──
     # 사용자에게 승인 요청(stdout)을 출력하기 직전, 마지막으로 GitHub에서 current PR body를
