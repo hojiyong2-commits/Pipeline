@@ -5650,6 +5650,102 @@ def _build_approval_request_output(pipeline_id: str, pr_url: str) -> Dict[str, A
 #            packet/json 파일 부재는 최초 발급 시도로 간주하여 관련 SHA 검사를 skip한다.
 #            MT-24 검사7: packet github_ci: FAIL vs 실제 PASS 불일치를 fail-closed로 차단한다.
 # [Improvement]: 검사 항목을 세분화된 failure_code로 반환하면 호출부 안내를 더 구체화할 수 있다.
+def _get_ci_final_check_status(
+    pr_number: Optional[int] = None, repo: Optional[str] = None
+) -> Dict[str, Any]:
+    """CI final-check 댓글에서 판단 정보 상태를 가져온다 (MT-25).
+
+    # [Purpose]: GitHub Actions final-check 댓글이 '정보 부족'을 표시하면
+    #            gates request-accept가 승인 코드를 발급하지 못하도록 fail-closed 처리하기 위해,
+    #            <!-- pipeline-final-check-packet --> 마커 댓글의 판단 정보 상태를 파싱한다.
+    # [Assumptions]: gh CLI가 설치되어 있고 현재 PR에 접근 가능하다. 없으면 NOT_FOUND로 graceful skip.
+    # [Vulnerability & Risks]: gh/network 오류를 모두 NOT_FOUND로 흡수하므로, self-hosted/오프라인
+    #            환경에서 CI 상태를 확인하지 못한 채 통과할 수 있다(의도적 non-fatal 설계).
+    # [Improvement]: comment id/timestamp를 함께 반환해 stale 댓글(오래된 실행)을 구분하면 정확도 향상.
+
+    <!-- pipeline-final-check-packet --> 마커가 있는 댓글을 찾아
+    '판단 정보 상태: **판단 가능**' 또는 '정보 부족'을 파싱한다.
+
+    Args:
+        pr_number: PR 번호 (None이면 gh로 자동 탐지).
+        repo: owner/repo 문자열 (None이면 gh로 자동 탐지).
+    Returns:
+        dict with keys: status (PASS|FAIL|NOT_FOUND), reason, comment_url.
+    Raises:
+        없음 — 모든 예외를 NOT_FOUND로 흡수한다(non-fatal, graceful skip).
+    """
+    try:
+        # repo와 pr_number를 자동 탐지
+        if pr_number is None or repo is None:
+            _view = subprocess.run(
+                ["gh", "pr", "view", "--json", "number,headRefName"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(Path(__file__).parent),
+            )
+            if _view.returncode != 0:
+                return {"status": "NOT_FOUND", "reason": "gh pr view failed", "comment_url": ""}
+            _view_data = json.loads(_view.stdout or "{}")
+            if pr_number is None:
+                pr_number = _view_data.get("number")
+            if repo is None:
+                # repo를 git remote에서 추출
+                _remote = subprocess.run(
+                    ["gh", "repo", "view", "--json", "nameWithOwner"],
+                    capture_output=True, text=True, timeout=30,
+                    cwd=str(Path(__file__).parent),
+                )
+                if _remote.returncode == 0:
+                    repo = json.loads(_remote.stdout or "{}").get("nameWithOwner")
+
+        if not pr_number or not repo:
+            return {
+                "status": "NOT_FOUND",
+                "reason": "pr_number or repo could not be determined",
+                "comment_url": "",
+            }
+
+        # comments API로 final-check 마커 검색
+        _comments_r = subprocess.run(
+            ["gh", "api", f"repos/{repo}/issues/{pr_number}/comments", "--paginate"],
+            capture_output=True, text=True, timeout=60,
+            cwd=str(Path(__file__).parent),
+        )
+        if _comments_r.returncode != 0:
+            return {"status": "NOT_FOUND", "reason": "gh api comments call failed", "comment_url": ""}
+
+        comments = json.loads(_comments_r.stdout or "[]")
+        if not isinstance(comments, list):
+            return {"status": "NOT_FOUND", "reason": "unexpected comments format", "comment_url": ""}
+
+        for comment in comments:
+            body = comment.get("body", "") or ""
+            if "<!-- pipeline-final-check-packet -->" not in body:
+                continue
+            comment_url = comment.get("html_url", "")
+            if "판단 정보 상태: **판단 가능**" in body:
+                return {
+                    "status": "PASS",
+                    "reason": "CI final-check shows 판단 가능",
+                    "comment_url": comment_url,
+                }
+            # 정보 부족 또는 stale packet 등 실패 상태
+            reason = "CI final-check shows 정보 부족"
+            _stale_m = re.search(r"stale packet[^\)]*\)", body)
+            if _stale_m:
+                reason += f": {_stale_m.group()}"
+            elif "packet file not found" in body:
+                reason += ": packet file not found"
+            return {
+                "status": "FAIL",
+                "reason": reason,
+                "comment_url": comment_url,
+            }
+
+        return {"status": "NOT_FOUND", "reason": "no final-check comment found", "comment_url": ""}
+    except Exception as _e_ci:
+        return {"status": "NOT_FOUND", "reason": str(_e_ci), "comment_url": ""}
+
+
 def _check_approval_request_ready(pr_body: Optional[str] = None) -> Dict[str, Any]:
     """승인 요청문 출력 직전 정합성 사전 검증 (MT-17).
 
@@ -5799,6 +5895,26 @@ def _check_approval_request_ready(pr_body: Optional[str] = None) -> Dict[str, An
                 }
     except Exception:
         pass  # packet 읽기 실패는 non-fatal (구 포맷/파일 없음)
+
+    # 검사 8 (MT-25): CI final-check 댓글이 "정보 부족"이면 BLOCKED.
+    # CI가 없거나 댓글 없으면 graceful skip (self-hosted CI 환경 등).
+    try:
+        _ci_fc = _get_ci_final_check_status()
+        if _ci_fc.get("status") == "FAIL":
+            _reason_ci = _ci_fc.get("reason", "정보 부족")
+            _url_ci = _ci_fc.get("comment_url", "")
+            _url_hint = f" ({_url_ci})" if _url_ci else ""
+            return {
+                "ok": False,
+                "failure_code": "ci_final_check_insufficient",
+                "message": (
+                    f"GitHub Actions final-check 댓글이 '정보 부족'을 표시합니다{_url_hint}: {_reason_ci}. "
+                    "'python pipeline.py report final-packet'을 실행하고, "
+                    "human_acceptance_packet.json을 커밋+푸시한 뒤 CI가 완료되면 다시 실행하세요."
+                ),
+            }
+    except Exception:
+        pass  # CI 댓글 조회 실패는 non-fatal — graceful skip
 
     return {"ok": True, "failure_code": "", "message": ""}
 
@@ -21840,6 +21956,55 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             f"  오류: {exc}\n"
             "  gates request-accept를 다시 실행하세요."
         )
+
+    # MT-25: human_acceptance_packet.json을 CI가 읽을 수 있도록 force-add 후 커밋+푸시.
+    # .gitignore에 의해 차단되더라도 -f 옵션으로 강제 추가한다. 새로 staged된 packet 변경이
+    # 있을 때만 커밋+푸시하고, 성공 시 승인 코드를 발급하지 않고 반환하여 CI 완료(판단 가능)를
+    # 기다린다(WAIT_FOR_CI). 이후 재실행 시 검사 8(CI final-check gate)이 상태를 확인한다.
+    try:
+        _json_pkt_path = _packet_json_output_path()
+        if _json_pkt_path.exists():
+            _add_r = subprocess.run(
+                ["git", "add", "-f", str(_json_pkt_path)],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(Path(__file__).parent),
+            )
+            if _add_r.returncode == 0:
+                # staged 변경사항이 있는지 확인
+                _diff_r = subprocess.run(
+                    ["git", "diff", "--cached", "--name-only"],
+                    capture_output=True, text=True, timeout=30,
+                    cwd=str(Path(__file__).parent),
+                )
+                _staged_files = (_diff_r.stdout or "").strip().splitlines()
+                _pkt_name = _json_pkt_path.name
+                if any(_pkt_name in f for f in _staged_files):
+                    _st_for_commit = _load()
+                    _pid_for_commit = str(
+                        (_st_for_commit or {}).get("pipeline_id", "UNKNOWN") or "UNKNOWN"
+                    )
+                    _commit_r = subprocess.run(
+                        ["git", "commit", "-m",
+                         f"[{_pid_for_commit}] Add acceptance packet for CI verification (MT-25)"],
+                        capture_output=True, text=True, timeout=60,
+                        cwd=str(Path(__file__).parent),
+                    )
+                    if _commit_r.returncode == 0:
+                        _push_r = subprocess.run(
+                            ["git", "push"],
+                            capture_output=True, text=True, timeout=120,
+                            cwd=str(Path(__file__).parent),
+                        )
+                        _machine_readable_flag = getattr(args, "machine_readable", False)
+                        if _push_r.returncode == 0:
+                            if not _machine_readable_flag:
+                                print(
+                                    "[MT-25] human_acceptance_packet.json을 커밋+푸시했습니다. "
+                                    "GitHub Actions CI가 완료(판단 가능)되면 gates request-accept를 다시 실행하세요."
+                                )
+                            return  # WAIT_FOR_CI: 승인 코드 미발급, CI 대기
+    except Exception:
+        pass  # 커밋 실패는 non-fatal — 이후 검사 8에서 차단됨
 
     # ── 단계 4.5: 최종 불변식 검증 (MT-5, BUG-20260628-F52C r11) ──
     # 사용자에게 승인 요청(stdout)을 출력하기 직전, 마지막으로 GitHub에서 current PR body를

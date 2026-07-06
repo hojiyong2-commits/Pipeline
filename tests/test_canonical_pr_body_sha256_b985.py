@@ -1902,6 +1902,199 @@ class TestPacketGateCIConsistency:
             )
 
 
+# ---------------------------------------------------------------------------
+# MT-25: CI final-check gate 회귀 테스트
+# ---------------------------------------------------------------------------
+
+class TestCIFinalCheckGate:
+    """CI final-check 댓글 상태에 따른 gates request-accept 차단 동작 검증 (MT-25)."""
+
+    def test_get_ci_final_check_status_fail_for_stale_packet(self, monkeypatch):
+        """_get_ci_final_check_status가 stale packet 댓글 파싱 시 FAIL 반환."""
+        import pipeline as _pl
+
+        fake_comment_body = (
+            "<!-- pipeline-final-check-packet -->\n"
+            "판단 정보 상태: **정보 부족**\n"
+            "stale packet (packet file not found)\n"
+        )
+        fake_comments = [
+            {"body": fake_comment_body, "html_url": "https://github.com/test/pr#issuecomment-99"}
+        ]
+
+        def mock_run(cmd, **kwargs):
+            class FakeResult:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            r = FakeResult()
+            if "gh" in cmd[0] and "pr" in cmd and "view" in cmd:
+                r.stdout = json.dumps({"number": 835, "headRefName": "impl/test"})
+            elif "gh" in cmd[0] and "repo" in cmd and "view" in cmd:
+                r.stdout = json.dumps({"nameWithOwner": "owner/repo"})
+            elif "gh" in cmd[0] and "api" in cmd:
+                r.stdout = json.dumps(fake_comments)
+            return r
+
+        import subprocess
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        result = _pl._get_ci_final_check_status()
+        assert result["status"] == "FAIL"
+        assert "stale packet" in result["reason"] or "정보 부족" in result["reason"]
+        assert result["comment_url"] == "https://github.com/test/pr#issuecomment-99"
+
+    def test_get_ci_final_check_status_pass_for_ready(self, monkeypatch):
+        """_get_ci_final_check_status가 '판단 가능' 댓글 파싱 시 PASS 반환."""
+        import pipeline as _pl
+
+        fake_comment_body = (
+            "<!-- pipeline-final-check-packet -->\n"
+            "판단 정보 상태: **판단 가능**\n"
+        )
+        fake_comments = [{"body": fake_comment_body, "html_url": "https://github.com/test/pr#issuecomment-1"}]
+
+        def mock_run(cmd, **kwargs):
+            class FakeResult:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            r = FakeResult()
+            if "gh" in cmd[0] and "pr" in cmd and "view" in cmd:
+                r.stdout = json.dumps({"number": 835, "headRefName": "impl/test"})
+            elif "gh" in cmd[0] and "repo" in cmd and "view" in cmd:
+                r.stdout = json.dumps({"nameWithOwner": "owner/repo"})
+            elif "gh" in cmd[0] and "api" in cmd:
+                r.stdout = json.dumps(fake_comments)
+            return r
+
+        import subprocess
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        result = _pl._get_ci_final_check_status()
+        assert result["status"] == "PASS"
+
+    def test_get_ci_final_check_status_not_found_when_no_comment(self, monkeypatch):
+        """CI 댓글에 final-check 마커가 없으면 NOT_FOUND, graceful skip."""
+        import pipeline as _pl
+
+        fake_comments = [{"body": "일반 댓글입니다", "html_url": "https://github.com/test/pr#issuecomment-2"}]
+
+        def mock_run(cmd, **kwargs):
+            class FakeResult:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            r = FakeResult()
+            if "gh" in cmd[0] and "pr" in cmd and "view" in cmd:
+                r.stdout = json.dumps({"number": 835, "headRefName": "impl/test"})
+            elif "gh" in cmd[0] and "repo" in cmd and "view" in cmd:
+                r.stdout = json.dumps({"nameWithOwner": "owner/repo"})
+            elif "gh" in cmd[0] and "api" in cmd:
+                r.stdout = json.dumps(fake_comments)
+            return r
+
+        import subprocess
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        result = _pl._get_ci_final_check_status()
+        assert result["status"] == "NOT_FOUND"
+
+    def test_get_ci_final_check_status_graceful_when_gh_fails(self, monkeypatch):
+        """gh pr view 실패(returncode!=0) 시 NOT_FOUND로 graceful skip."""
+        import pipeline as _pl
+
+        def mock_run(cmd, **kwargs):
+            class FakeResult:
+                returncode = 1
+                stdout = ""
+                stderr = "gh: not found"
+
+            return FakeResult()
+
+        import subprocess
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        result = _pl._get_ci_final_check_status()
+        assert result["status"] == "NOT_FOUND"
+
+    def test_approval_ready_blocks_when_ci_final_check_insufficient(self, monkeypatch):
+        """검사 8: CI final-check FAIL 시 ci_final_check_insufficient BLOCKED.
+
+        검사 1~7을 모두 통과하도록 파일/PR body를 준비한 뒤, 검사 8만
+        FAIL이 되도록 _get_ci_final_check_status를 monkeypatch한다.
+        """
+        import pipeline as _pl
+
+        # 검사 1~7이 통과/skip하도록 최소 조건 구성.
+        # 검사 2(codex_review_result APPROVED)는 파일이 필요하므로 함수를 우회.
+        monkeypatch.setattr(
+            _pl, "_load_acceptance_request", lambda: None
+        )  # 검사 1 skip
+        monkeypatch.setattr(
+            _pl, "_packet_output_path", lambda: Path("__mt25_nonexistent_packet__.md")
+        )  # 검사 3,4,7 skip (파일 없음)
+
+        # 검사 2: codex_review_result APPROVED로 통과시킨다.
+        _cx_path = Path("__mt25_codex_result__.json")
+        _cx_path.write_text(json.dumps({"status": "APPROVED"}), encoding="utf-8")
+        monkeypatch.setattr(_pl, "_codex_review_result_path", lambda: _cx_path)
+
+        # 검사 8: CI final-check FAIL.
+        monkeypatch.setattr(
+            _pl,
+            "_get_ci_final_check_status",
+            lambda **kw: {
+                "status": "FAIL",
+                "reason": "CI final-check shows 정보 부족: stale packet (packet file not found)",
+                "comment_url": "https://github.com/test/pr#issuecomment-99",
+            },
+        )
+
+        try:
+            result = _pl._check_approval_request_ready(
+                "작업 요약\n사용자가 확인할 결과물\n기대 결과와 실제 결과\n중요한 선택과 트레이드오프\n검증"
+            )
+        finally:
+            if _cx_path.exists():
+                _cx_path.unlink()
+
+        assert result["ok"] is False
+        assert result["failure_code"] == "ci_final_check_insufficient"
+        assert "정보 부족" in result["message"] or "stale packet" in result["message"]
+
+    def test_approval_ready_graceful_when_ci_final_check_not_found(self, monkeypatch):
+        """검사 8: CI 댓글 없음(NOT_FOUND) 시 검사 8은 통과(ok 유지)."""
+        import pipeline as _pl
+
+        monkeypatch.setattr(_pl, "_load_acceptance_request", lambda: None)
+        monkeypatch.setattr(
+            _pl, "_packet_output_path", lambda: Path("__mt25_nonexistent_packet__.md")
+        )
+        _cx_path = Path("__mt25_codex_result2__.json")
+        _cx_path.write_text(json.dumps({"status": "APPROVED"}), encoding="utf-8")
+        monkeypatch.setattr(_pl, "_codex_review_result_path", lambda: _cx_path)
+        monkeypatch.setattr(
+            _pl,
+            "_get_ci_final_check_status",
+            lambda **kw: {"status": "NOT_FOUND", "reason": "no final-check comment found", "comment_url": ""},
+        )
+        # 검사 6: PR body에 acceptance FAIL 표시 없음 → 통과.
+        try:
+            result = _pl._check_approval_request_ready(
+                "작업 요약\n사용자가 확인할 결과물\n검증"
+            )
+        finally:
+            if _cx_path.exists():
+                _cx_path.unlink()
+
+        # 검사 8이 NOT_FOUND면 ci_final_check_insufficient로 차단하지 않는다.
+        assert result.get("failure_code") != "ci_final_check_insufficient"
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))
