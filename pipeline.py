@@ -21727,6 +21727,32 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     # 출력해야 하므로, 진행 안내용 preamble print를 모두 억제한다(BLOCKED 메시지는 stderr/_die 경로).
     _machine_readable = bool(getattr(args, "machine_readable", False))
 
+    # IMP-20260703-B985 MT-31: technical/oracle/github_ci gate PASS 선행 검증.
+    # state 로드 직후, hygiene/evidence/nonce 등 다른 어떤 처리보다 먼저 실행하여
+    # 상위 external gate가 PASS가 아니면 pending comment 게시·승인 코드 발급을 즉시 차단한다.
+    _gates = state.get("external_gates") or {}
+    _tech_status = str((_gates.get("technical") or {}).get("status", "")).upper()
+    _oracle_status = str((_gates.get("oracle") or {}).get("status", "")).upper()
+    _ci_status = str((_gates.get("github_ci") or {}).get("status", "")).upper()
+    if _tech_status != "PASS":
+        _die(
+            "[BLOCKED] failure_code=technical_gate_not_pass\n"
+            f"  Technical gate가 PASS가 아닙니다 (status={_tech_status or 'PENDING'}).\n"
+            "  python pipeline.py gates technical 을 먼저 실행하세요."
+        )
+    if _oracle_status != "PASS":
+        _die(
+            "[BLOCKED] failure_code=oracle_gate_not_pass\n"
+            f"  Oracle gate가 PASS가 아닙니다 (status={_oracle_status or 'PENDING'}).\n"
+            "  python pipeline.py gates oracle 을 먼저 실행하세요."
+        )
+    if _ci_status != "PASS":
+        _die(
+            "[BLOCKED] failure_code=github_ci_gate_not_pass\n"
+            f"  GitHub CI gate가 PASS가 아닙니다 (status={_ci_status or 'PENDING'}).\n"
+            "  python pipeline.py gates github-ci 를 먼저 실행하세요."
+        )
+
     # IMP-20260614-2821 MT-2: workspace hygiene preflight (nonce 발급 전).
     # untracked oracle 증거 등 BLOCKED 항목이 있으면 승인 코드를 발급하지 않는다.
     # cleanup_only 파일은 WARN으로만 표시한다.
@@ -21899,12 +21925,14 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             pr_url, pipeline_id, _existing_created_at
         )
         if _existing_comment is not None:
-            print()
-            print(
-                f"[기존 PR 승인 댓글 확인됨] comment_id={_existing_comment['comment_id']}, "
-                f"작성자={_existing_comment['author']}, 시각={_existing_comment['created_at']}"
-            )
-            print("유효한 승인 댓글을 확인했습니다 — gates accept를 자동 실행합니다.")
+            # IMP-20260703-B985 MT-31: --machine-readable 시 human stdout 억제.
+            if not _machine_readable:
+                print()
+                print(
+                    f"[기존 PR 승인 댓글 확인됨] comment_id={_existing_comment['comment_id']}, "
+                    f"작성자={_existing_comment['author']}, 시각={_existing_comment['created_at']}"
+                )
+                print("유효한 승인 댓글을 확인했습니다 — gates accept를 자동 실행합니다.")
             _log_event(
                 state,
                 f"acceptance request idempotent auto-accept: existing comment "
@@ -22171,9 +22199,11 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                 "pr_body_candidate_content": _pr_body_candidate_content,  # NEW
                 "pr_body_candidate_sha256": _pr_body_candidate_sha256,    # NEW
             })
-            print(
-                f"  [STAGING FILE 저장] packet_sha256={staged_sha_manifest.get('packet_sha256')}"
-            )
+            # IMP-20260703-B985 MT-31: --machine-readable 시 human stdout 억제.
+            if not _machine_readable:
+                print(
+                    f"  [STAGING FILE 저장] packet_sha256={staged_sha_manifest.get('packet_sha256')}"
+                )
 
         # staged PR body SHA: frozen bytes 기준 직접 계산 (staging 재실행 없음).
         # 3차 REJECT 수정: 현재 PR body SHA가 아니라 "publish 후 최종 PR body"

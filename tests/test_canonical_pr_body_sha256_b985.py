@@ -698,7 +698,15 @@ class TestTrueIdempotentReuseMT10:
         )
 
         args = _NS(evidence="output.xlsx", force_new_code=False)
-        state = {"pipeline_id": "IMP-20260703-B985"}
+        state = {
+        "pipeline_id": "IMP-20260703-B985",
+        # MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
+    }
         pl._cmd_gates_request_accept(args, state)
 
         out = capsys.readouterr().out
@@ -741,7 +749,15 @@ class TestTrueIdempotentReuseMT10:
         monkeypatch.setattr(pl, "_save_acceptance_staging", lambda data: (_ for _ in ()).throw(AssertionError("no staging write")))
 
         args = _NS(evidence="output.xlsx", force_new_code=False)
-        state = {"pipeline_id": "IMP-20260703-B985"}
+        state = {
+        "pipeline_id": "IMP-20260703-B985",
+        # MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
+    }
         pl._cmd_gates_request_accept(args, state)
 
         # existing_req의 candidate SHA는 read-only 경로 후에도 그대로 (변형/재계산 없음).
@@ -780,7 +796,15 @@ class TestTrueIdempotentReuseMT10:
         monkeypatch.setattr(pl, "_invalidate_acceptance_request", _inv)
 
         args = _NS(evidence="output.xlsx", force_new_code=False)
-        state = {"pipeline_id": "IMP-20260703-B985"}
+        state = {
+        "pipeline_id": "IMP-20260703-B985",
+        # MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
+    }
         with pytest.raises(SystemExit):
             pl._cmd_gates_request_accept(args, state)
         assert invalidated["n"] == 1, "stale packet인데 INVALIDATED 미처리"
@@ -825,7 +849,15 @@ class TestTrueIdempotentReuseMT10:
         monkeypatch.setattr(pl, "_materialize_acceptance_snapshot", _fake_materialize)
 
         args = _NS(evidence="output.xlsx", force_new_code=False)
-        state = {"pipeline_id": "IMP-20260703-B985"}
+        state = {
+        "pipeline_id": "IMP-20260703-B985",
+        # MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
+    }
         with pytest.raises(SystemExit):
             pl._cmd_gates_request_accept(args, state)
         assert materialize_called["n"] == 1, (
@@ -1223,7 +1255,15 @@ def test_tc_mt16_machine_readable_output_format(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(pl, "_fetch_canonical_pr_body_sha256", lambda n=None: canonical_sha)
 
     args = _NS(evidence="output.xlsx", force_new_code=False, machine_readable=True)
-    state = {"pipeline_id": "IMP-20260703-B985"}
+    state = {
+        "pipeline_id": "IMP-20260703-B985",
+        # MT-31: request-accept는 technical/oracle/github_ci PASS를 선행 요구한다.
+        "external_gates": {
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
+            "github_ci": {"status": "PASS"},
+        },
+    }
     pl._cmd_gates_request_accept(args, state)
 
     out = capsys.readouterr().out.strip()
@@ -2798,6 +2838,175 @@ class TestMT30AcceptancePendingAndShaSync:
         # frozen 우선 경로이므로 PR body re-fetch가 발생하지 않아야 한다.
         assert fetch_calls["n"] == 0, (
             f"frozen SHA 우선 경로인데 _get_pr_body_text가 {fetch_calls['n']}회 호출됨 (re-fetch 금지)"
+        )
+
+
+class TestMT31GateReadinessAndSingleEmitter:
+    """IMP-20260703-B985 MT-31:
+      - acceptance 표시 helper가 technical/oracle 게이트 렌더링에 영향을 주지 않음.
+      - gates request-accept가 technical/oracle/github_ci PASS를 선행 요구함.
+      - --machine-readable 시 human stdout(사용자 승인 요청 등) 완전 억제.
+    """
+
+    @staticmethod
+    def _evidence_with_pending_acceptance(tech, oracle, github_ci):
+        """acceptance_request는 PENDING이지만 상위 게이트는 임의 상태인 evidence dict."""
+        return {
+            "pipeline_id": "IMP-20260703-B985",
+            "pr_url": "https://github.com/test/repo/pull/1",
+            "pr_head_sha": "abc123",
+            "ci_run_id": "12345",
+            "changed_files": ["pipeline.py"],
+            "gate_status": {
+                "technical": tech,
+                "oracle": oracle,
+                "github_ci": github_ci,
+                "acceptance": "FAIL",  # state에 남은 FAIL — 표시는 PENDING으로 덮여야 함
+            },
+            "ac_fulfillment_table": None,
+            "acceptance_request": {"status": "PENDING"},
+            "acceptance_display_effective": "PENDING",
+            "oracle_summary": None,
+            "known_failures": [],
+            "evidence_integrity": {},
+            "workspace_hygiene": {},
+        }
+
+    def test_resolve_acceptance_only_not_technical(self, tmp_path, monkeypatch):
+        """acceptance PENDING이어도 technical 게이트 표시는 실제 gate 상태(FAIL)를 반환."""
+        import pipeline as pl
+
+        # active PENDING acceptance_request가 있어도 technical 표시는 덮이지 않아야 한다.
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: {"status": "PENDING"})
+        evidence = self._evidence_with_pending_acceptance("FAIL", "PASS", "PASS")
+        content = pl._build_final_packet_content(evidence)
+
+        assert "technical: FAIL" in content, (
+            f"acceptance PENDING이 technical 표시를 덮음: {content!r}"
+        )
+        # acceptance는 PENDING으로 표시되지만 technical은 독립적으로 FAIL 유지.
+        assert "technical: PENDING" not in content, "technical이 잘못 PENDING으로 표시됨"
+        assert "acceptance: PENDING" in content, "acceptance 표시가 PENDING이 아님"
+
+    def test_resolve_acceptance_only_not_oracle(self, tmp_path, monkeypatch):
+        """acceptance PENDING이어도 oracle 게이트 표시는 실제 gate 상태(FAIL)를 반환."""
+        import pipeline as pl
+
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: {"status": "PENDING"})
+        evidence = self._evidence_with_pending_acceptance("PASS", "FAIL", "PASS")
+        content = pl._build_final_packet_content(evidence)
+
+        assert "oracle: FAIL" in content, (
+            f"acceptance PENDING이 oracle 표시를 덮음: {content!r}"
+        )
+        assert "oracle: PENDING" not in content, "oracle이 잘못 PENDING으로 표시됨"
+        assert "acceptance: PENDING" in content, "acceptance 표시가 PENDING이 아님"
+
+    def test_check_approval_blocked_when_technical_not_pass(self, tmp_path, monkeypatch):
+        """technical.status=FAIL이면 gates request-accept가 technical_gate_not_pass로 BLOCKED."""
+        import pipeline as pl
+
+        state_file = tmp_path / "pipeline_state.json"
+        state_file.write_text(
+            json.dumps({"pipeline_id": "IMP-20260703-B985"}), encoding="utf-8"
+        )
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+
+        args = _NS(evidence="output.xlsx", force_new_code=False, machine_readable=False)
+        state = {
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {
+                "technical": {"status": "FAIL"},
+                "oracle": {"status": "PASS"},
+                "github_ci": {"status": "PASS"},
+            },
+        }
+        with pytest.raises(SystemExit) as exc:
+            pl._cmd_gates_request_accept(args, state)
+        assert exc.value.code == 1, "technical FAIL인데 exit code가 1이 아님"
+
+    def test_check_approval_blocked_message_has_failure_code(self, tmp_path, monkeypatch, capsys):
+        """technical FAIL BLOCKED 메시지에 failure_code=technical_gate_not_pass가 포함된다."""
+        import pipeline as pl
+
+        state_file = tmp_path / "pipeline_state.json"
+        state_file.write_text(
+            json.dumps({"pipeline_id": "IMP-20260703-B985"}), encoding="utf-8"
+        )
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+
+        args = _NS(evidence="output.xlsx", force_new_code=False, machine_readable=False)
+        state = {
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {
+                "technical": {"status": "FAIL"},
+                "oracle": {"status": "PASS"},
+                "github_ci": {"status": "PASS"},
+            },
+        }
+        with pytest.raises(SystemExit):
+            pl._cmd_gates_request_accept(args, state)
+        err = capsys.readouterr().err
+        assert "technical_gate_not_pass" in err, (
+            f"BLOCKED 메시지에 failure_code 누락: {err!r}"
+        )
+
+    def test_machine_readable_suppresses_human_stdout(self, tmp_path, monkeypatch, capsys):
+        """--machine-readable 시 stdout에 '사용자 승인 요청' 없이 JSON만 존재."""
+        import pipeline as pl
+
+        # PIPELINE_STATE_PATH 격리
+        state_file = tmp_path / "pipeline_state.json"
+        state_file.write_text(
+            json.dumps({"pipeline_id": "IMP-20260703-B985"}), encoding="utf-8"
+        )
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+
+        pr_body = (
+            "# PR\n<!-- PIPELINE_FINAL_PACKET_START -->\npacket\n"
+            "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        )
+        canonical_sha = pl._canonical_pr_body_sha256(pr_body)
+        packet_file = tmp_path / "human_acceptance_packet.md"
+        packet_file.write_text("packet body\n", encoding="utf-8")
+        packet_sha = pl._sha256_file(packet_file)
+        existing_req = _make_reuse_req_mr(canonical_sha, packet_sha)
+
+        _stub_reuse_preflight_mr(pl, tmp_path, monkeypatch, pr_body)
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: packet_file)
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: dict(existing_req))
+        monkeypatch.setattr(pl, "_current_pr_number_for_canonical", lambda: 1)
+        monkeypatch.setattr(pl, "_fetch_canonical_pr_body_sha256", lambda n=None: canonical_sha)
+
+        args = _NS(evidence="output.xlsx", force_new_code=False, machine_readable=True)
+        # MT-31: gate PASS 선행 검증을 통과시키기 위해 external_gates를 PASS로 설정.
+        state = {
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {
+                "technical": {"status": "PASS"},
+                "oracle": {"status": "PASS"},
+                "github_ci": {"status": "PASS"},
+            },
+        }
+        pl._cmd_gates_request_accept(args, state)
+
+        out = capsys.readouterr().out.strip()
+        # stdout 전체가 유효한 JSON 한 줄이어야 한다 (bare human-readable print 없음).
+        # "사용자 승인 요청"은 JSON 값(approval_request_message) 안에만 존재해야 하고,
+        # JSON 외부(bare stdout)에는 존재하지 않아야 한다. json.loads 성공 +
+        # startswith/endswith가 stdout이 JSON only임을 증명한다.
+        assert out.startswith("{") and out.endswith("}"), (
+            f"stdout이 JSON only가 아님 (bare human stdout 노출): {out[:120]}"
+        )
+        data = json.loads(out)
+        assert data["status"] == "PENDING"
+        # JSON을 제거한 나머지 stdout(=bare human text)이 비어 있어야 한다.
+        assert out.replace(json.dumps(data, ensure_ascii=False), "").strip() == "", (
+            "JSON 외부에 bare human stdout이 존재함"
+        )
+        # 승인 요청 안내문은 machine-readable 필드(JSON 값)로만 존재.
+        assert "사용자 승인 요청" in data["approval_request_message"], (
+            "approval_request_message 필드에 승인 안내문이 없음"
         )
 
 

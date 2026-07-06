@@ -145,11 +145,14 @@ def _write_state(state_path: Path, pipeline_id: str) -> None:
             "pm": {"status": "DONE"},
             "dev": {"status": "PENDING"},
         },
+        # IMP-20260703-B985 MT-31: request-accept는 technical/oracle/github_ci PASS를 선행
+        # 요구한다. 이 테스트들은 그 이후의 evidence-deployable 차단을 검증하므로 상위
+        # 게이트를 PASS로 seed한다. acceptance는 요청 대상 게이트이므로 PENDING을 유지한다.
         "external_gates": {
-            "technical": {"status": "PENDING"},
-            "oracle": {"status": "PENDING"},
+            "technical": {"status": "PASS"},
+            "oracle": {"status": "PASS"},
             "acceptance": {"status": "PENDING"},
-            "github_ci": {"status": "PENDING"},
+            "github_ci": {"status": "PASS"},
         },
         "events": [],
         "event_log": [],
