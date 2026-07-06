@@ -162,9 +162,9 @@ jobs:
           $currentRunId = "${{ github.run_id }}"
 
           # BUG-20260615-A35C MT-4: packet freshness 검증 helper (packet 객체 기준).
-          # packet의 pr.head_sha / github_actions.run_id가 현재 CI의 head SHA / run ID와
-          # 일치하는지 확인한다. 불일치 시 FAIL을 반환하여 stale packet을 정상 fallback으로
-          # 사용하지 못하게 한다(DEFECT-B fail-closed).
+          # packet의 pr.head_sha가 현재 CI의 head SHA와 일치하는지 확인한다.
+          # IMP-20260703-B985 MT-26: run_id 검증 제거 — PR body 기반 embed 방식에서
+          # run_id는 사전에 알 수 없으므로(chicken-and-egg) head SHA만 검증한다.
           function Validate-PacketObject {
             param(
               [object]$Packet,
@@ -173,13 +173,9 @@ jobs:
               [string]$SourceLabel
             )
             $packetSha = [string]$Packet.pr.head_sha
-            $packetRunId = [string]$Packet.github_actions.run_id
             $srcSuffix = if ([string]::IsNullOrWhiteSpace($SourceLabel)) { "" } else { " ($SourceLabel)" }
             if ($packetSha -ne $ExpectedHeadSha) {
               return @{ Status = "FAIL"; Reason = "head SHA mismatch$srcSuffix : packet=$packetSha, current=$ExpectedHeadSha" }
-            }
-            if ($packetRunId -ne $ExpectedRunId) {
-              return @{ Status = "FAIL"; Reason = "run_id mismatch$srcSuffix : packet=$packetRunId, current=$ExpectedRunId" }
             }
             return @{ Status = "PASS"; Reason = "" }
           }
