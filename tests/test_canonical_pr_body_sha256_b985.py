@@ -2657,6 +2657,150 @@ class TestMT29PendingCommentAlwaysPosted:
         assert parsed["github_actions"]["run_id"] == "7"
 
 
+class TestMT30AcceptancePendingAndShaSync:
+    """MT-30: acceptance PENDING 표시 일관, codex/acceptance pr_body_sha256 통일.
+
+    변경 1: _resolve_acceptance_display_status(state)가 active PENDING request가 있으면
+            external_gates.acceptance.status가 FAIL이어도 "PENDING (승인 대기 중)"을 반환한다.
+    변경 2: gates codex-review --approve-pending이 staging file의 frozen
+            pr_body_candidate_sha256을 그대로 사용하여(re-fetch 없이) codex_review_result의
+            pr_body SHA를 acceptance_request가 쓰게 될 값과 통일한다.
+    """
+
+    def test_acceptance_display_pending_when_request_pending(self, monkeypatch):
+        """acceptance_request.status=PENDING이면 gate status가 FAIL이어도 PENDING 표시."""
+        import pipeline as pl
+
+        # 현재 파이프라인 소속 active PENDING request 모킹.
+        monkeypatch.setattr(
+            pl,
+            "_load_acceptance_request",
+            lambda: {"pipeline_id": "IMP-20260703-B985", "status": "PENDING"},
+        )
+        # gate는 FAIL(이전 REJECT 잔류) 상태.
+        state = {
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {"acceptance": {"status": "FAIL"}},
+        }
+        result = pl._resolve_acceptance_display_status(state)
+        assert result == "PENDING (승인 대기 중)", (
+            f"active PENDING request인데 표시가 PENDING이 아님: {result!r}"
+        )
+        # external_gates.acceptance.status(게이트 판정 필드)는 절대 변경되지 않아야 한다.
+        assert state["external_gates"]["acceptance"]["status"] == "FAIL", (
+            "렌더링 helper가 external_gates.acceptance.status를 변조함 (렌더링 전용 위반)"
+        )
+
+    def test_acceptance_display_fail_when_no_pending_request(self, monkeypatch):
+        """acceptance_request 없으면 gate status(FAIL)를 그대로 반환한다."""
+        import pipeline as pl
+
+        # acceptance_request.json 없음 → gate status fallback.
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: None)
+        state = {
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {"acceptance": {"status": "FAIL"}},
+        }
+        result = pl._resolve_acceptance_display_status(state)
+        assert result == "FAIL", (
+            f"PENDING request 없을 때 gate status(FAIL)가 반환되지 않음: {result!r}"
+        )
+
+    def test_acceptance_display_type_guards(self):
+        """state가 None/비dict이면 TypeError로 차단(하위 helper 계약 전파)."""
+        import pipeline as pl
+
+        with pytest.raises(TypeError):
+            pl._resolve_acceptance_display_status(None)  # type: ignore[arg-type]
+        with pytest.raises(TypeError):
+            pl._resolve_acceptance_display_status("not a dict")  # type: ignore[arg-type]
+
+    def test_codex_pr_body_sha256_matches_acceptance_request(self, tmp_path, monkeypatch):
+        """codex-review --approve-pending 후 codex_review_result.pr_body_candidate_sha256이
+        staging file의 frozen pr_body_candidate_sha256(=acceptance_request가 쓰게 될 값)과
+        일치하고, re-fetch(_get_pr_body_text) 없이 계산된다."""
+        import pipeline as pl
+
+        # staging file이 acceptance_request.pr_body_candidate_sha256으로 쓰게 될 frozen SHA.
+        frozen_candidate_sha = pl._canonical_pr_body_sha256(
+            "# PR Body\n<!-- PIPELINE_FINAL_PACKET_START -->\nstaged packet\n"
+            "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        )
+        staging = {
+            "pipeline_id": "IMP-20260703-B985",
+            "staged_packet_content": "## Packet\ncontent\n",
+            "staged_packet_sha256": "STAGED_PACKET_SHA",
+            "frozen_at": "2026-01-01T00:00:00Z",
+            "req_candidate": {"request_id": "req-mt30"},
+            "pr_body_candidate_content": "# PR Body\ncandidate\n",
+            "pr_body_candidate_sha256": frozen_candidate_sha,
+        }
+
+        # codex-review 결과 파일을 tmp로 격리.
+        result_path = tmp_path / ".pipeline" / "codex_review_result.json"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # re-fetch 감지: _get_pr_body_text가 호출되면 frozen 우선 경로가 아님 → 실패.
+        fetch_calls = {"n": 0}
+
+        def _spy_get_pr_body_text():
+            fetch_calls["n"] += 1
+            return "should not be called (frozen SHA must be used)"
+
+        monkeypatch.setattr(pl, "_load_acceptance_staging", lambda pid: dict(staging))
+        monkeypatch.setattr(
+            pl, "_build_codex_review_bundle", lambda state, pid: ("BUNDLESHA", str(tmp_path / "b.json"))
+        )
+        monkeypatch.setattr(
+            pl, "_check_codex_rate_limit",
+            lambda *a, **k: {"status": "OK", "reason": ""},
+        )
+        monkeypatch.setattr(
+            pl, "_codex_snapshot_identity",
+            lambda pid: {
+                "pr_head_sha": "HEADSHA",
+                "packet_sha256": "STAGED_PACKET_SHA",
+                "pr_body_candidate_sha256": frozen_candidate_sha,
+                "staging_id": "sid",
+                "contract_sha256": "csha",
+                "review_bundle_sha256": "BUNDLESHA",
+            },
+        )
+        monkeypatch.setattr(pl, "_get_current_pr_head_sha", lambda: "HEADSHA")
+        monkeypatch.setattr(pl, "_gh_available", lambda: True)
+        monkeypatch.setattr(pl, "_get_pr_body_text", _spy_get_pr_body_text)
+        monkeypatch.setattr(pl, "_codex_review_result_path", lambda: result_path)
+        monkeypatch.setattr(pl, "_append_codex_history", lambda entry: None)
+
+        args = _NS(
+            approve_pending=True,
+            verdict="APPROVE_TO_USER",
+            retry_cli_error=False,
+            force_review=False,
+            codex_cli_exit_code=None,
+            pr_body_sha256="",
+            packet_sha256="",
+            reason="",
+        )
+        state = {"pipeline_id": "IMP-20260703-B985", "event_log": []}
+
+        with pytest.raises(SystemExit) as exc:
+            pl._cmd_gates_codex_review(args, state)
+        assert exc.value.code == 0, "APPROVE_TO_USER인데 exit code가 0이 아님"
+
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        # codex_review_result의 candidate SHA가 staging frozen SHA(= acceptance_request 값)와 일치.
+        assert result["pr_body_candidate_sha256"] == frozen_candidate_sha, (
+            "codex_review_result.pr_body_candidate_sha256이 staging frozen SHA와 불일치"
+        )
+        # backward-compat 필드도 동일 값.
+        assert result["pr_body_sha256"] == frozen_candidate_sha
+        # frozen 우선 경로이므로 PR body re-fetch가 발생하지 않아야 한다.
+        assert fetch_calls["n"] == 0, (
+            f"frozen SHA 우선 경로인데 _get_pr_body_text가 {fetch_calls['n']}회 호출됨 (re-fetch 금지)"
+        )
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

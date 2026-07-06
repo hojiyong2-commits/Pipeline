@@ -5591,6 +5591,43 @@ def _get_acceptance_display_state() -> str:
     return "UNKNOWN"
 
 
+# [Purpose]: IMP-20260703-B985 MT-30 — acceptance 표시 상태를 사용자에게 보여줄 display 문자열로
+#            반환하는 얇은 wrapper. 기존 SSoT(_get_effective_acceptance_display_state)의 판정을
+#            그대로 재사용하되, PENDING이면 "PENDING (승인 대기 중)" 표시 문자열로 매핑한다.
+#            gate가 FAIL이어도 현재 파이프라인의 active PENDING request가 있으면 PENDING을 우선하여,
+#            packet/게이트표/JSON 어느 소비자도 승인 대기 중 요청을 FAIL로 표시하지 않게 한다.
+# [Assumptions]: state는 pipeline_state dict이며 external_gates.acceptance.status를 가질 수 있다.
+#            _get_effective_acceptance_display_state가 acceptance_request.json 소속/상태를 판정한다.
+# [Vulnerability & Risks]: state가 None/비dict이면 하위 helper가 TypeError를 던진다(호출자 계약 위반).
+#            display 문자열 매핑은 PENDING만 특수 처리하고, ACCEPTED/REJECTED/기타 게이트 상태는
+#            원문(대문자 문자열)을 그대로 반환한다.
+# [Improvement]: 향후 표시 상태 종류가 늘면 status->display 매핑 테이블로 확장 가능.
+def _resolve_acceptance_display_status(state: Dict[str, Any]) -> str:
+    """acceptance 표시 상태를 사용자 display 문자열로 반환한다 (MT-30 표시 일관 SSoT wrapper).
+
+    external_gates.acceptance.status가 FAIL이어도, 현재 파이프라인의 active
+    acceptance_request.json이 PENDING이면 "PENDING (승인 대기 중)"을 반환한다. 이 helper는
+    렌더링 전용이며, external_gates.acceptance.status(게이트 PASS 판정 필드)는 절대 변경하지 않는다.
+
+    Args:
+        state: 활성 pipeline_state dict. None 금지 (하위 helper가 TypeError를 던짐).
+    Returns:
+        "PENDING (승인 대기 중)" — active PENDING acceptance_request가 있을 때,
+        그 외에는 _get_effective_acceptance_display_state(state)의 반환 문자열
+        (예: "ACCEPTED" / "REJECTED" / gate status 문자열).
+    Raises:
+        TypeError: state가 None이거나 dict가 아닌 경우 (하위 helper 계약을 그대로 전파).
+    """
+    if state is None:
+        raise TypeError("state must not be None")
+    if not isinstance(state, dict):
+        raise TypeError(f"state must be dict, got {type(state).__name__}")
+    effective = _get_effective_acceptance_display_state(state)
+    if str(effective or "").upper() == "PENDING":
+        return "PENDING (승인 대기 중)"
+    return str(effective)
+
+
 # [Purpose]: IMP-20260703-B985 MT-16 — 승인 요청 출력(human/JSON 공통)의 message/필드를 단일
 #            지점에서 조립한다. --machine-readable JSON과 human stdout이 동일 내용을 공유하게 한다.
 # [Assumptions]: pipeline_id는 비어있지 않고, pr_url은 str(빈 문자열 허용).
@@ -20361,12 +20398,20 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # BUG-20260628-F52C 근본 수정: acceptance_staging.json(request-accept가 저장한 frozen bytes)이
     # 있으면 그 bytes 기준으로 SHA를 계산한다. 이것이 3자 SHA 불변식의 단일 신뢰 루트다.
     _staged_content_from_file = ""
+    # IMP-20260703-B985 MT-30: staging file의 frozen pr_body_candidate_sha256을 캡처한다.
+    # request-accept가 acceptance_request.pr_body_candidate_sha256으로 쓰게 될 값과 동일하므로,
+    # codex_review_result의 pr_body SHA를 이 frozen 값으로 통일하여 re-fetch 없이 3자 일치시킨다.
+    _staged_pr_body_candidate_sha_from_file = ""
     if bool(getattr(args, "approve_pending", False)):
         _acceptance_staging = _load_acceptance_staging(pipeline_id)
         _staged_content_from_file = (
             _acceptance_staging.get("staged_packet_content", "")
             if _acceptance_staging else ""
         )
+        if _acceptance_staging:
+            _staged_pr_body_candidate_sha_from_file = str(
+                _acceptance_staging.get("pr_body_candidate_sha256", "") or ""
+            )
 
         if _staged_content_from_file:
             # 경로 A: staging file의 frozen bytes 사용 (올바른 3자 불변식 경로).
@@ -20457,6 +20502,11 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
                         _staged_content_from_file = _recovered_content
                         packet_sha = _recovered_pkt_sha
                         _approve_pending_candidate = _recovered_candidate
+                        # IMP-20260703-B985 MT-30: recovery 경로에서도 frozen candidate SHA를 캡처하여
+                        # codex_review_result의 pr_body SHA를 staging/acceptance_request와 통일한다.
+                        _staged_pr_body_candidate_sha_from_file = (
+                            _recovery_pr_body_candidate_sha256
+                        )
                         print(
                             "  [STAGING FILE 복구] acceptance_request.json(PENDING)에서 "
                             f"staging 재생성 완료 — packet_sha256={packet_sha}"
@@ -20492,7 +20542,14 @@ def _cmd_gates_codex_review(args: argparse.Namespace, state: Dict[str, Any]) -> 
     # request-accept publish 직후 현재 PR body SHA와 3자 일치한다.
     pr_body_sha = str(getattr(args, "pr_body_sha256", "") or "").strip()
     if not pr_body_sha:
-        if _staged_content_from_file and _gh_available():
+        # IMP-20260703-B985 MT-30: staging file에 frozen pr_body_candidate_sha256이 있으면
+        # 그 값을 최우선으로 사용한다(re-fetch/재계산 생략). 이 값은 request-accept가
+        # acceptance_request.pr_body_candidate_sha256으로 쓰게 될 값과 동일하므로,
+        # codex_review_result.pr_body_candidate_sha256 == acceptance_request.pr_body_candidate_sha256
+        # 불변식이 재계산 오차 없이 보장된다.
+        if _staged_pr_body_candidate_sha_from_file:
+            pr_body_sha = _staged_pr_body_candidate_sha_from_file
+        elif _staged_content_from_file and _gh_available():
             # 경로 A: staging file의 frozen bytes 기준으로 "publish 후 최종 PR body" SHA를 계산.
             # 이것이 request-accept publish 직후 현재 PR body SHA와 3자 일치하는 신뢰 루트다.
             try:
