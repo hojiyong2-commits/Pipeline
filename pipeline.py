@@ -20030,6 +20030,153 @@ def _get_staged_pr_body_sha(
     return _canonical_pr_body_sha256(final_body)
 
 
+# [Purpose]: IMP-20260703-B985 MT-23 — _reuse_published 경로 전용 Codex Review freshness hard gate.
+#            reuse 경로는 _codex_review_snapshot을 건너뛰므로, 이전 commit의 pr_head_sha로 승인된
+#            stale Codex APPROVE가 재사용되는 취약점이 있었다. acceptance_request.json과
+#            codex_review_result.json이 동일 스냅샷(pr_head_sha/packet_sha256/pr_body_sha256/
+#            github_canonical_pr_body_sha256)을 가리키는지 대조하여 불일치 시 BLOCKED(fail-closed).
+# [Assumptions]: gates codex-review가 codex_review_result.json에 verdict=APPROVE_TO_USER와
+#            pr_head_sha/packet_sha256/pr_body_sha256(또는 pr_body_candidate_sha256)를 기록한다.
+#            existing_req는 _load_acceptance_request()가 반환한 발급 완료 dict이다.
+# [Vulnerability & Risks]: 파일 없음/파싱 실패/pipeline_id 불일치/verdict!=APPROVE_TO_USER/SHA 불일치는
+#            모두 fail-closed BLOCKED로 처리한다. 양쪽 필드가 모두 비어 있으면(gh 없는 환경) 해당
+#            차원은 검증 생략 — 존재하는 필드만 대조하므로 false-block을 유발하지 않는다.
+# [Improvement]: codex_review_result.json에 reviewer 서명/TTL을 추가하면 만료 검출이 가능하다.
+def _check_codex_review_freshness_for_reuse(
+    existing_req: Dict[str, Any],
+    pipeline_id: str,
+) -> Optional[str]:
+    """_reuse_published 경로 전용: codex_review_result.json이 acceptance_request.json과
+    동일한 스냅샷을 가리키는지 검증한다.
+
+    검증하는 필드:
+      - pr_head_sha: acceptance_request.json vs codex_review_result.json
+      - packet_sha256: acceptance_request.json vs codex_review_result.json
+      - pr_body_sha256 (또는 pr_body_candidate_sha256): 양쪽 중 공통 필드 비교
+      - github_canonical_pr_body_sha256: 양쪽 모두 존재할 때만 비교
+
+    Args:
+        existing_req: _load_acceptance_request()가 반환한 발급 완료 acceptance_request dict.
+        pipeline_id: 현재 활성 파이프라인 ID.
+    Returns:
+        None = PASS, str = BLOCKED 사유 (failure_code=codex_review_stale 포함).
+    Raises:
+        TypeError: existing_req가 None/딕트가 아니거나 pipeline_id가 None/str이 아닌 경우.
+    """
+    if existing_req is None:
+        raise TypeError("existing_req must not be None")
+    if not isinstance(existing_req, dict):
+        raise TypeError(
+            f"existing_req must be dict, got {type(existing_req).__name__}"
+        )
+    if pipeline_id is None:
+        raise TypeError("pipeline_id must not be None")
+    if not isinstance(pipeline_id, str):
+        raise TypeError(
+            f"pipeline_id must be str, got {type(pipeline_id).__name__}"
+        )
+
+    _cx_path = _codex_review_result_path()
+    if not _cx_path.exists():
+        return (
+            "[BLOCKED] failure_code=codex_review_missing\n"
+            "  재사용 검증: codex_review_result.json이 없습니다 — Codex Review가 수행되지 않았습니다.\n"
+            "  gates codex-review를 실행한 후 gates request-accept를 다시 실행하세요."
+        )
+    try:
+        cx = json.loads(_cx_path.read_text(encoding="utf-8", errors="replace"))
+        if not isinstance(cx, dict):
+            raise ValueError("not a dict")
+    except (OSError, json.JSONDecodeError, ValueError):
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.json 로드/파싱 실패 (fail-closed).\n"
+            "  gates codex-review를 다시 실행하세요."
+        )
+
+    # pipeline_id 불일치
+    cx_pid = str(cx.get("pipeline_id", "") or "")
+    if cx_pid and cx_pid != pipeline_id:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            f"  재사용 검증: codex_review_result.json의 pipeline_id가 현재 파이프라인과 다릅니다.\n"
+            f"  codex: {cx_pid}, current: {pipeline_id}\n"
+            "  gates codex-review를 현재 파이프라인에 대해 다시 실행하세요."
+        )
+
+    # verdict 검증
+    cx_verdict = str(cx.get("verdict", "") or "")
+    if cx_verdict != "APPROVE_TO_USER":
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            f"  재사용 검증: codex_review_result.json의 verdict가 APPROVE_TO_USER가 아닙니다 (현재: {cx_verdict or '(없음)'}).\n"
+            "  gates codex-review를 다시 실행하세요."
+        )
+
+    # pr_head_sha 비교
+    req_head = str(existing_req.get("pr_head_sha", "") or "")
+    cx_head = str(cx.get("pr_head_sha", "") or "")
+    if req_head and cx_head and req_head != cx_head:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.pr_head_sha가 acceptance_request.pr_head_sha와 다릅니다.\n"
+            f"  acceptance_request: {req_head}\n"
+            f"  codex_review_result: {cx_head}\n"
+            "  PR head가 변경된 후 이전 Codex APPROVED를 재사용할 수 없습니다.\n"
+            "  gates codex-review를 현재 commit HEAD에 대해 다시 실행한 후 gates request-accept를 재실행하세요."
+        )
+
+    # packet_sha256 비교
+    req_pkt = str(existing_req.get("packet_sha256", "") or "")
+    cx_pkt = str(cx.get("packet_sha256", "") or "")
+    if req_pkt and cx_pkt and req_pkt != cx_pkt:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.packet_sha256가 acceptance_request.packet_sha256와 다릅니다.\n"
+            f"  acceptance_request: {req_pkt}\n"
+            f"  codex_review_result: {cx_pkt}\n"
+            "  Codex가 검토한 packet이 현재 acceptance_request의 packet과 다릅니다.\n"
+            "  gates codex-review를 다시 실행한 후 gates request-accept를 재실행하세요."
+        )
+
+    # pr_body_sha256 / pr_body_candidate_sha256 비교
+    req_body = str(
+        existing_req.get("pr_body_candidate_sha256", "")
+        or existing_req.get("pr_body_sha256", "")
+        or ""
+    )
+    cx_body = str(
+        cx.get("pr_body_candidate_sha256", "")
+        or cx.get("pr_body_sha256", "")
+        or ""
+    )
+    if req_body and cx_body and req_body != cx_body:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.pr_body_sha256(또는 pr_body_candidate_sha256)가\n"
+            "  acceptance_request의 동일 필드와 다릅니다.\n"
+            f"  acceptance_request: {req_body}\n"
+            f"  codex_review_result: {cx_body}\n"
+            "  Codex가 검토한 PR body 후보가 현재 acceptance_request의 것과 다릅니다.\n"
+            "  gates codex-review를 다시 실행한 후 gates request-accept를 재실행하세요."
+        )
+
+    # github_canonical_pr_body_sha256 비교 (둘 다 존재할 때만)
+    req_canonical = str(existing_req.get("github_canonical_pr_body_sha256", "") or "")
+    cx_canonical = str(cx.get("github_canonical_pr_body_sha256", "") or "")
+    if req_canonical and cx_canonical and req_canonical != cx_canonical:
+        return (
+            "[BLOCKED] failure_code=codex_review_stale\n"
+            "  재사용 검증: codex_review_result.github_canonical_pr_body_sha256가\n"
+            "  acceptance_request.github_canonical_pr_body_sha256와 다릅니다.\n"
+            f"  acceptance_request: {req_canonical}\n"
+            f"  codex_review_result: {cx_canonical}\n"
+            "  gates codex-review를 다시 실행한 후 gates request-accept를 재실행하세요."
+        )
+
+    return None  # PASS
+
+
 # [Purpose]: BUG-20260628-F52C 재작업 — request-accept 내부에서 staged snapshot 기준으로
 #            Codex Review hard gate를 실행한다. codex_review_loop_state.json은 절대 읽지 않고,
 #            codex_review_result.json(SSoT)만 신뢰 루트로 사용한다. 결과가 APPROVE_TO_USER이고
@@ -22088,6 +22235,21 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
                     "  기존 승인 요청을 INVALIDATED 처리했습니다 — fail-closed.\n"
                     "  gates request-accept를 다시 실행하세요."
                 )
+        # (C) IMP-20260703-B985 MT-23: codex_review_result.json freshness hard gate (fail-closed).
+        # reuse_published 경로는 _codex_review_snapshot을 건너뛰므로, 이전 커밋/패킷 기준
+        # Codex APPROVED가 현재 상태와 불일치할 때 stale 승인 코드가 재사용되는 취약점이 있었다.
+        # _check_codex_review_freshness_for_reuse가 pr_head_sha/packet_sha256/pr_body_sha256/
+        # github_canonical_pr_body_sha256을 대조하여 불일치 시 BLOCKED 사유를 반환한다.
+        _freshness_err = _check_codex_review_freshness_for_reuse(existing_req, pipeline_id)
+        if _freshness_err is not None:
+            _invalidate_acceptance_request("codex_review_stale_on_reuse")
+            _log_event(
+                state,
+                "acceptance request blocked: codex_review_stale (reuse path) — "
+                "acceptance_request SHA와 codex_review_result SHA 불일치",
+            )
+            _save(state)
+            _die(_freshness_err)
         # 재사용 경로: 어떤 파일도 write하지 않고 기존 승인 코드를 그대로 재출력한다.
         # IMP-20260703-B985 MT-16: --machine-readable 시 human stdout 없이 JSON만 출력.
         # IMP-20260703-B985 MT-34: _build_approval_request_output 재사용으로 SSoT 유지.
