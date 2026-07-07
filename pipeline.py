@@ -22960,11 +22960,20 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
             existing_req is not None
             and str(existing_req.get("status", "") or "").upper() == "PENDING"
         )
+        # packet_md_sha256/packet_json_sha256은 acceptance_request가 기록하는 파일 기반 SHA
+        # (_sha256_file)와 일치해야 3자 불변식(_validate_snapshot_invariants)이 성립한다.
+        # staging manifest의 파일 기반 SHA를 신뢰 루트로 사용한다(_sha256_text(content)와 다를 수 있음).
+        _authoritative_packet_sha = str(staged_sha_manifest.get("packet_sha256", "") or "")
+        _authoritative_json_sha = str(staged_sha_manifest.get("json_sha256", "") or "")
         _reuse_snapshot_id = ""
         if _existing_snapshot is not None and _existing_ar_pending:
             _new_shas = {
-                "packet_md_sha256": _sha256_text(_staged_snapshot_data["packet_md_text"]),
-                "packet_json_sha256": _sha256_text(_staged_snapshot_data["packet_json_text"]),
+                "packet_md_sha256": _authoritative_packet_sha or _sha256_text(
+                    _staged_snapshot_data["packet_md_text"]
+                ),
+                "packet_json_sha256": _authoritative_json_sha or _sha256_text(
+                    _staged_snapshot_data["packet_json_text"]
+                ),
                 "pr_body_sha256": _sha256_text(_staged_snapshot_data["pr_body_candidate_text"]),
                 "approval_message_sha256": _sha256_text(
                     _staged_snapshot_data["approval_request_message_text"]
@@ -22994,16 +23003,23 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         _consolidated_snapshot = _create_acceptance_snapshot(
             pipeline_id, _staged_snapshot_data
         )
+        # packet/json SHA를 파일 기반 authoritative SHA로 덮어써서 acceptance_request와 일치시킨다.
+        if _authoritative_packet_sha:
+            _consolidated_snapshot["packet_md_sha256"] = _authoritative_packet_sha
+        if _authoritative_json_sha:
+            _consolidated_snapshot["packet_json_sha256"] = _authoritative_json_sha
         if _reuse_snapshot_id:
             # 기존 snapshot_id를 보존하여 codex/acceptance_request 전파 값이 흔들리지 않게 한다.
             _consolidated_snapshot["snapshot_id"] = _reuse_snapshot_id
-            try:
-                _acceptance_snapshot_path(pipeline_id).write_text(
-                    json.dumps(_consolidated_snapshot, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-            except OSError:
-                pass
+        # authoritative SHA override / snapshot_id 재사용을 디스크 snapshot에 반영한다.
+        # (publish의 _validate_snapshot_invariants가 디스크 snapshot을 다시 로드하므로 필수.)
+        try:
+            _acceptance_snapshot_path(pipeline_id).write_text(
+                json.dumps(_consolidated_snapshot, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
         _snapshot_id = str(_consolidated_snapshot.get("snapshot_id", "") or "")
         # snapshot_id + approval/pending sha256을 req_candidate에 전파 (publish 시 기록).
         req_candidate["snapshot_id"] = _snapshot_id
