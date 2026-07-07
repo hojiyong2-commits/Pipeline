@@ -2437,12 +2437,10 @@ class TestMT27FinalCheckGate:
     def test_request_accept_triggers_workflow_when_insufficient(self, tmp_path, monkeypatch):
         """final-check FAIL 시 gh workflow run final_check.yml 트리거를 시도한다."""
         import pipeline as pl
-        import subprocess
         import sys
 
         triggered = []
 
-        real_run = subprocess.run
         def mock_run(cmd, **kwargs):
             if isinstance(cmd, list) and "workflow" in cmd and "run" in cmd and "final_check.yml" in cmd:
                 triggered.append(list(cmd))
@@ -2485,13 +2483,12 @@ class TestMT27FinalCheckGate:
         monkeypatch.setattr(sys.modules["subprocess"], "run", mock_run)
         monkeypatch.setattr("time.sleep", lambda x: None)
 
-        result = pl._check_approval_request_ready()
+        pl._check_approval_request_ready()
         assert len(triggered) >= 1, "workflow trigger가 호출되지 않았습니다"
 
     def test_request_accept_pass_after_workflow_trigger(self, tmp_path, monkeypatch):
         """trigger 후 final-check PASS → ci_final_check_insufficient BLOCKED 없음."""
         import pipeline as pl
-        import subprocess
         import sys
 
         state_file = tmp_path / "pipeline_state.json"
@@ -2521,9 +2518,9 @@ class TestMT27FinalCheckGate:
         monkeypatch.setattr(sys.modules["subprocess"], "run", mock_trigger)
         monkeypatch.setattr("time.sleep", lambda x: None)
 
-        result = pl._check_approval_request_ready()
+        check_result = pl._check_approval_request_ready()
         # ci_final_check_insufficient로 차단되지 않아야 함 (trigger 후 PASS)
-        assert result.get("failure_code") != "ci_final_check_insufficient"
+        assert check_result.get("failure_code") != "ci_final_check_insufficient"
 
 
 class TestMT27FinalCheckAutoTrigger:
