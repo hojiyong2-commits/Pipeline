@@ -3010,6 +3010,199 @@ class TestMT31GateReadinessAndSingleEmitter:
         )
 
 
+class TestMT33FinalPacketAcceptancePending:
+    """MT-33 (REJECT #16): active PENDING acceptance_request가 있으면 packet 메타데이터
+    블록이 'acceptance: PENDING'을 표시해야 한다. 기존 정확일치 검사('PENDING'/'REJECTED')는
+    '승인 대기 중 (PENDING)' 표시 문자열을 매치하지 못해 gate_status가 FAIL로 남았다.
+    """
+
+    def _base_evidence(self):
+        return {
+            "pipeline_id": "IMP-20260703-B985",
+            "pr_url": "https://github.com/test/repo/pull/1",
+            "pr_head_sha": "abc123",
+            "ci_run_id": "12345",
+            "changed_files": ["pipeline.py"],
+            "gate_status": {
+                "technical": "PASS",
+                "oracle": "PASS",
+                "github_ci": "PASS",
+                # 이전 REJECT 잔류 상태 — PENDING request가 있으면 FAIL이 아니라 PENDING이어야.
+                "acceptance": "FAIL",
+            },
+            "ac_fulfillment_table": None,
+            "acceptance_request": {"status": "PENDING"},
+            "acceptance_display_effective": "PENDING",
+            "oracle_summary": None,
+            "known_failures": [],
+            "evidence_integrity": {},
+            "workspace_hygiene": {},
+        }
+
+    def test_final_packet_shows_acceptance_pending_when_request_pending(self, monkeypatch):
+        """acceptance_request.json이 PENDING이면 packet에 'acceptance: PENDING' (FAIL 아님)."""
+        import pipeline as pl
+
+        # active PENDING request + SSoT helper가 PENDING을 반환하도록 모킹.
+        monkeypatch.setattr(
+            pl,
+            "_load_acceptance_request",
+            lambda: {"pipeline_id": "IMP-20260703-B985", "status": "PENDING"},
+        )
+        monkeypatch.setattr(pl, "_get_acceptance_display_state", lambda: "PENDING")
+
+        content = pl._build_final_packet_content(self._base_evidence())
+
+        # 메타데이터 블록: 'acceptance: PENDING' 라인이 존재하고 'acceptance: FAIL'은 없어야.
+        assert "acceptance: PENDING" in content, (
+            f"메타데이터 블록에 acceptance: PENDING이 없음: {content[:400]}"
+        )
+        assert "acceptance: FAIL" not in content, (
+            f"PENDING request인데 acceptance: FAIL이 재발함: {content[:400]}"
+        )
+
+    def test_final_packet_user_section_not_fail_when_pending(self, monkeypatch):
+        """사용자 표시 섹션(User Acceptance)도 PENDING request 시 FAIL로 표시되지 않는다."""
+        import pipeline as pl
+
+        monkeypatch.setattr(
+            pl,
+            "_load_acceptance_request",
+            lambda: {"pipeline_id": "IMP-20260703-B985", "status": "PENDING"},
+        )
+        monkeypatch.setattr(pl, "_get_acceptance_display_state", lambda: "PENDING")
+
+        content = pl._build_final_packet_content(self._base_evidence())
+
+        assert "User Acceptance: FAIL" not in content, (
+            f"PENDING request인데 User Acceptance: FAIL이 재발함: {content[:600]}"
+        )
+
+
+class TestMT33DisplayModelAcceptancePending:
+    """MT-33 (REJECT #16): _display_model_from_evidence에 '승인 대기 중 (PENDING)' 표시
+    상태가 주어지면 gates['acceptance']가 PENDING이어야 한다(정확일치 검사 확장).
+    """
+
+    def _base_evidence(self):
+        return {
+            "pipeline_id": "IMP-20260703-B985",
+            "pr_url": "https://github.com/test/repo/pull/1",
+            "pr_head_sha": "abc123",
+            "ci_run_id": "12345",
+            "changed_files": ["pipeline.py"],
+            "gate_status": {
+                "technical": "PASS",
+                "oracle": "PASS",
+                "github_ci": "PASS",
+                "acceptance": "FAIL",
+            },
+            "ac_fulfillment_table": None,
+            "acceptance_request": {"status": "PENDING", "nonce": "N"},
+            "acceptance_display_effective": "PENDING",
+            "oracle_summary": None,
+            "known_failures": [],
+            "evidence_integrity": {},
+            "workspace_hygiene": {},
+        }
+
+    def test_display_model_pending_for_korean_pending_string(self):
+        """acceptance_display='승인 대기 중 (PENDING)'이면 gates['acceptance']='PENDING'."""
+        import pipeline as pl
+
+        model = pl._display_model_from_evidence(
+            self._base_evidence(), "승인 대기 중 (PENDING)"
+        )
+        assert model["gates"]["acceptance"] == "PENDING", (
+            f"'승인 대기 중 (PENDING)' 표시인데 gates['acceptance']가 PENDING이 아님: "
+            f"{model['gates']['acceptance']!r}"
+        )
+
+    def test_display_model_pending_for_plain_pending_string(self):
+        """기존 'PENDING' 정확일치 케이스도 여전히 PENDING으로 처리된다(회귀 방지)."""
+        import pipeline as pl
+
+        model = pl._display_model_from_evidence(self._base_evidence(), "PENDING")
+        assert model["gates"]["acceptance"] == "PENDING"
+
+    def test_display_model_rejected_string_still_pending(self):
+        """REJECTED 표시도 gate가 PASS가 아니면 PENDING으로 표시된다(기존 동작 보존)."""
+        import pipeline as pl
+
+        model = pl._display_model_from_evidence(self._base_evidence(), "REJECTED")
+        assert model["gates"]["acceptance"] == "PENDING"
+
+
+class TestMT33MachineReadableSuppressHumanPrint:
+    """MT-33 (REJECT #16): --machine-readable 시 _cmd_gates_request_accept의 human
+    stdout(WORKSPACE HYGIENE WARN / orphan oracle WARN 등)이 완전히 억제되어 stdout에
+    JSON 한 줄만 남는다. bare human 텍스트가 섞이면 machine 소비자가 파싱에 실패한다.
+    """
+
+    def test_machine_readable_no_bare_human_stdout_with_hygiene_warn(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """hygiene WARN이 발생해도 machine-readable stdout은 bare human 텍스트가 없다."""
+        import pipeline as pl
+
+        state_file = tmp_path / "pipeline_state.json"
+        state_file.write_text(
+            json.dumps({"pipeline_id": "IMP-20260703-B985"}), encoding="utf-8"
+        )
+        monkeypatch.setenv("PIPELINE_STATE_PATH", str(state_file))
+
+        pr_body = (
+            "# PR\n<!-- PIPELINE_FINAL_PACKET_START -->\npacket\n"
+            "<!-- PIPELINE_FINAL_PACKET_END -->\n"
+        )
+        canonical_sha = pl._canonical_pr_body_sha256(pr_body)
+        packet_file = tmp_path / "human_acceptance_packet.md"
+        packet_file.write_text("packet body\n", encoding="utf-8")
+        packet_sha = pl._sha256_file(packet_file)
+        existing_req = _make_reuse_req_mr(canonical_sha, packet_sha)
+
+        _stub_reuse_preflight_mr(pl, tmp_path, monkeypatch, pr_body)
+        monkeypatch.setattr(pl, "_packet_output_path", lambda: packet_file)
+        monkeypatch.setattr(pl, "_load_acceptance_request", lambda: dict(existing_req))
+        monkeypatch.setattr(pl, "_current_pr_number_for_canonical", lambda: 1)
+        monkeypatch.setattr(
+            pl, "_fetch_canonical_pr_body_sha256", lambda n=None: canonical_sha
+        )
+        # MT-33 대상: hygiene가 WARN을 반환하도록 강제하여 unguarded WARN print 경로를 탄다.
+        monkeypatch.setattr(
+            pl,
+            "_check_workspace_hygiene",
+            lambda *a, **k: {
+                "status": "WARN",
+                "blocking_items": [],
+                "cleanup_only_items": ["stale_report.xml"],
+            },
+        )
+
+        args = _NS(evidence="output.xlsx", force_new_code=False, machine_readable=True)
+        state = {
+            "pipeline_id": "IMP-20260703-B985",
+            "external_gates": {
+                "technical": {"status": "PASS"},
+                "oracle": {"status": "PASS"},
+                "github_ci": {"status": "PASS"},
+            },
+        }
+        pl._cmd_gates_request_accept(args, state)
+
+        out = capsys.readouterr().out.strip()
+        # stdout 전체가 유효한 JSON 한 줄이어야 한다 (WARN 등 bare human stdout 없음).
+        assert out.startswith("{") and out.endswith("}"), (
+            f"machine-readable stdout에 bare human 텍스트가 섞임: {out[:200]}"
+        )
+        data = json.loads(out)
+        # WARN 안내문(WORKSPACE HYGIENE WARN)이 bare stdout에 노출되지 않아야.
+        assert "WORKSPACE HYGIENE WARN" not in out.replace(
+            json.dumps(data, ensure_ascii=False), ""
+        ), "hygiene WARN 텍스트가 machine-readable stdout에 노출됨"
+        assert data["status"] == "PENDING"
+
+
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-x", "-q"]))

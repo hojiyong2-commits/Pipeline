@@ -14054,7 +14054,10 @@ def _build_final_packet_content(
             _acceptance_display_status = "승인 대기 중 (PENDING)"
             if gate_status.get("acceptance") not in ("PASS",):
                 gate_status["acceptance"] = "PENDING"
-    if _acceptance_display_status in ("PENDING", "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
+    # IMP-20260703-B985 MT-33: "승인 대기 중 (PENDING)"처럼 PENDING이 포함된 문자열도 포함하여 체크.
+    # (REJECT #16) 기존 `in ("PENDING","REJECTED")` 정확 일치 검사는 "승인 대기 중 (PENDING)"
+    # 표시 문자열을 매치하지 못해 gate_status["acceptance"]가 state의 FAIL로 남았다.
+    if ("PENDING" in str(_acceptance_display_status).upper() or str(_acceptance_display_status).upper() == "REJECTED") and gate_status.get("acceptance") not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
 
     # IMP-20260608: 검증용 메타데이터 블록 누락 필드 수집
@@ -14221,7 +14224,9 @@ def _display_model_from_evidence(
     # BUG-20260615-A35C MT-2: 게이트표(User Acceptance)도 effective 표시 상태와 동기화한다.
     # acceptance_display가 PENDING/REJECTED이고 게이트가 PASS가 아니면 PENDING으로 표시하여
     # 메타데이터 블록(acceptance)과 사용자 표시 섹션(User Acceptance)이 동일 SSoT 값을 공유한다.
-    if str(acceptance_display).upper() in ("PENDING", "REJECTED") and gate_status.get(
+    # IMP-20260703-B985 MT-33: "승인 대기 중 (PENDING)" 등 PENDING 포함 문자열도 처리한다.
+    # (REJECT #16) 정확 일치 검사는 표시 문자열을 매치하지 못해 User Acceptance: FAIL이 재발했다.
+    if ("PENDING" in str(acceptance_display).upper() or str(acceptance_display).upper() == "REJECTED") and gate_status.get(
         "acceptance"
     ) not in ("PASS",):
         gate_status["acceptance"] = "PENDING"
@@ -21771,10 +21776,12 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         )
     if hygiene.get("status") == "WARN":
         cleanup_items = hygiene.get("cleanup_only_items", [])
-        print(YELLOW(
-            "[WORKSPACE HYGIENE WARN] cleanup_only 파일 발견: "
-            + ", ".join(str(c) for c in cleanup_items[:5])
-        ))
+        # IMP-20260703-B985 MT-33: --machine-readable 시 human stdout 억제 (JSON 2회 출력 방지).
+        if not _machine_readable:
+            print(YELLOW(
+                "[WORKSPACE HYGIENE WARN] cleanup_only 파일 발견: "
+                + ", ".join(str(c) for c in cleanup_items[:5])
+            ))
 
     # MT-2(IMP-20260612-CE06): 내부 산출물을 evidence로 사용 시 nonce 발급 전 차단.
     # _die가 failure_code kwarg를 받지 않으므로 메시지 본문에 failure_code를 명시한다
@@ -21817,7 +21824,9 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
     if _ei_paths["evidence_inventory"].exists() or _req_has_oracles:
         _prov_result = _validate_evidence_provenance(state, phase="request-accept")
         for _w in _prov_result.get("orphan_oracle_warnings", []):
-            print(YELLOW(f"  WARN: {_w}"))
+            # IMP-20260703-B985 MT-33: --machine-readable 시 human stdout 억제.
+            if not _machine_readable:
+                print(YELLOW(f"  WARN: {_w}"))
         if _prov_result.get("status") == "BLOCKED":
             _blockers = _prov_result.get("blockers", [])
             _code = str(_blockers[0].get("failure_code")) if _blockers else "evidence_provenance_blocked"
@@ -22232,6 +22241,52 @@ def _cmd_gates_request_accept(args: argparse.Namespace, state: Dict[str, Any]) -
         if not _machine_readable:
             print()
             print(f"  [STAGED SNAPSHOT] packet_sha256={staged_sha_manifest.get('packet_sha256')}")
+
+        # ── IMP-20260703-B985 MT-33: codex → acceptance_request SHA 동기화 (REJECT #16) ──
+        # 이 request-accept 호출이 방금 계산한 staged_pr_body_sha(= acceptance_request에 기록될
+        # pr_body_candidate_sha256)와 이전 gates codex-review가 codex_review_result.json에 기록한
+        # pr_body_candidate_sha256이 다르면, 아래 _codex_review_snapshot이 candidate-vs-candidate
+        # 검증에서 REJECT를 반환하여 codex_review_not_approved BLOCKED가 재발한다. staging이
+        # 새로 생성되어 후보 SHA가 갱신된 경우에 발생한다. codex → acceptance_request 순서로
+        # SHA가 일치하도록, staged 값이 있고 기존 codex 기록과 다르면 codex_review_result.json의
+        # pr_body_candidate_sha256(및 backward-compat pr_body_sha256)을 staged 값으로 갱신한다.
+        # verdict / status / packet_sha256 등 다른 필드는 절대 변경하지 않는다(승인 판정 무결성 보존).
+        # 파일 부재/파싱 실패/verdict 미승인은 graceful skip — 아래 codex 검증이 그대로 판정한다.
+        if staged_pr_body_sha:
+            try:
+                _cx_sync_path = _codex_review_result_path()
+                if _cx_sync_path.exists():
+                    _cx_sync = json.loads(
+                        _cx_sync_path.read_text(encoding="utf-8", errors="replace")
+                    )
+                    if (
+                        isinstance(_cx_sync, dict)
+                        and str(_cx_sync.get("pipeline_id", "") or "") == pipeline_id
+                        and str(_cx_sync.get("verdict", "") or "") == "APPROVE_TO_USER"
+                    ):
+                        _cx_recorded_body = str(
+                            _cx_sync.get("pr_body_candidate_sha256", "")
+                            or _cx_sync.get("pr_body_sha256", "")
+                            or ""
+                        )
+                        if _cx_recorded_body and _cx_recorded_body != staged_pr_body_sha:
+                            _cx_sync["pr_body_candidate_sha256"] = staged_pr_body_sha
+                            _cx_sync["pr_body_sha256"] = staged_pr_body_sha
+                            _si = _cx_sync.get("snapshot_identity")
+                            if isinstance(_si, dict):
+                                _si["pr_body_candidate_sha256"] = staged_pr_body_sha
+                            _cx_sync_path.write_text(
+                                json.dumps(_cx_sync, ensure_ascii=False, indent=2),
+                                encoding="utf-8",
+                            )
+                            if not _machine_readable:
+                                print(
+                                    "  [CODEX SHA 동기화] codex_review_result.pr_body_candidate_sha256을 "
+                                    f"staged 값으로 갱신: {staged_pr_body_sha[:12]}..."
+                                )
+            except (OSError, json.JSONDecodeError, ValueError, TypeError):
+                # 동기화 실패는 non-fatal — 아래 _codex_review_snapshot이 fail-closed로 판정한다.
+                pass
 
         # ── 단계 2: codex_review_snapshot — staged SHA 기준 hard gate. ──
         # codex_review_loop_state.json은 읽지 않는다. codex_review_result.json(SSoT)만 사용.
