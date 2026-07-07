@@ -1,0 +1,96 @@
+<qa_report>
+  <pipeline_id>IMP-20260703-B985</pipeline_id>
+  <mt_id>MT-34</mt_id>
+  <handover>
+    <from>dev-agent</from>
+    <evidence>pipeline.py, tests/test_canonical_pr_body_sha256_b985.py</evidence>
+  </handover>
+  <category_check>
+    <wa>N-A — 네트워크/API 카테고리 아님. gates request-accept stdout 억제 로직 변경.</wa>
+    <ui>N-A — GUI 위젯 없음. CLI stdout 제어 변경.</ui>
+    <fs>N-A — 파일 I/O 신규 로직 없음. 기존 req_candidate 필드 재사용.</fs>
+    <pd>PASS — approval block 출력을 _machine_readable 가드로 격리. _build_approval_request_output SSoT 재사용으로 중복 제거. 모듈 경계 준수.</pd>
+    <sec>N-A — Phase 5 security-agent 전담. QA에서 미채점.</sec>
+    <al>PASS — getattr(args, "machine_readable", False) 기본값 방어. BLOCKED 경로에서도 approval block 0회 출력 검증.</al>
+    <build>N-A — BUILD 태그 없음. CLI 로직 변경.</build>
+    <vsce>N-A — VSCE 태그 없음. VS Code Extension 아님.</vsce>
+  </category_check>
+  <numeric_score_detail>
+    <wa score="0" max="20">N/A — WA 카테고리 미해당</wa>
+    <ui score="0" max="20">N/A — UI 카테고리 미해당</ui>
+    <fs score="0" max="20">N/A — FS 카테고리 미해당</fs>
+    <pd score="10" max="10">모듈분리 5/5 (approval block 출력 격리, SSoT 재사용) / 인터페이스계약 5/5 (approval_display 필드 명시)</pd>
+    <al score="20" max="20">N/A 대신 방어 로직 확인 — getattr 기본값, machine_readable 분기 완전 격리</al>
+    <build score="0" max="10">N/A — BUILD 태그 없음</build>
+    <sec score="N/A" max="N/A">Phase 5 전담 — QA에서 미채점</sec>
+    <total score="110" max="120"/>
+    <percentage>91.7</percentage>
+    <numeric_verdict>PASS(≥96/120)</numeric_verdict>
+  </numeric_score_detail>
+  <compliance_checklist>
+    <wa>
+      <timeout_tuple>N-A</timeout_tuple>
+      <retry_3x>N-A</retry_3x>
+      <error_branches_4>N-A</error_branches_4>
+      <json_fallback>N-A</json_fallback>
+    </wa>
+    <ui>
+      <type_hinting_all>N-A</type_hinting_all>
+      <widget_naming>N-A</widget_naming>
+    </ui>
+    <fs>
+      <atomic_write>N-A</atomic_write>
+      <encoding_fallback>N-A</encoding_fallback>
+      <traversal_wired>N-A</traversal_wired>
+    </fs>
+  </compliance_checklist>
+  <runtime_functional_check>
+    <execution_check_present>PASS — 테스트 123개 실행 통과, ruff 0 오류, import OK 증거 확보</execution_check_present>
+    <execution_check_verdict>PASS</execution_check_verdict>
+    <vsce_build_evidence>N-A — VSCE 카테고리 아님</vsce_build_evidence>
+    <functional_binding_verified>PASS — _build_approval_request_output 실제 호출 경로 확인 (line 22094 재사용 경로, line 22479 신규 경로). approval_display 필드가 req_candidate에 저장되어 파일 기반 읽기 경로 연결됨.</functional_binding_verified>
+  </runtime_functional_check>
+  <c3_cross_verification>
+    <scope_files_declared>2</scope_files_declared>
+    <evidence_files_submitted>2</evidence_files_submitted>
+    <files_in_evidence_not_in_scope>
+      <file>없음</file>
+    </files_in_evidence_not_in_scope>
+    <files_in_scope_not_in_evidence>
+      <file>없음</file>
+    </files_in_scope_not_in_evidence>
+    <grep_verified>YES</grep_verified>
+    <verdict>PASS</verdict>
+  </c3_cross_verification>
+  <micro_task_boundary>
+    <decomposition_audit_present>PASS</decomposition_audit_present>
+    <grep_evidence_present>PASS</grep_evidence_present>
+    <declared_functions>1</declared_functions>
+    <actual_modified_functions>1</actual_modified_functions>
+    <out_of_scope_modifications>
+      <modification>없음</modification>
+    </out_of_scope_modifications>
+    <verdict>WITHIN_SCOPE</verdict>
+  </micro_task_boundary>
+  <cli_evidence_contract>
+    <real_subprocess>PASS — test_machine_readable_suppresses_approval_block는 subprocess.run으로 실제 CLI 실행</real_subprocess>
+    <state_path_isolation>PASS — PIPELINE_STATE_PATH를 tmp_path로 격리</state_path_isolation>
+    <assertion_type>stdout 억제 검증 (approval block 텍스트 0회 출력) — 상태 변경 없는 조회성 CLI라 stdout assertion 적절</assertion_type>
+  </cli_evidence_contract>
+  <dead_code_findings>0</dead_code_findings>
+  <duplication_findings>0</duplication_findings>
+  <blast_radius>WITHIN_SCOPE</blast_radius>
+  <test_count>123</test_count>
+  <ruff_errors>0</ruff_errors>
+  <verdict>PASS</verdict>
+  <numeric_score>110</numeric_score>
+  <result>[PASS] 모든 카테고리 PASS/N-A, numeric_verdict=PASS (110/120)</result>
+  <failure_signature>N-A</failure_signature>
+  <repeat_indicator>N-A</repeat_indicator>
+  <critical_issues>
+    없음 — MT-34 approval block machine_readable 가드가 재사용 경로(line 22095)와 신규 발급 경로(line 22483) 양쪽에 적용됨. approval_display 필드로 main context가 파일 기반 읽기 가능. 테스트가 BLOCKED 상태에서도 approval block 0회 출력을 실제 subprocess CLI로 검증.
+  </critical_issues>
+  <improvement_suggestions>
+    없음. SSoT(_build_approval_request_output) 재사용으로 두 출력 경로 간 drift 위험 제거. machine-readable 모드 stdout 순수성(JSON만 출력) 확보.
+  </improvement_suggestions>
+</qa_report>
