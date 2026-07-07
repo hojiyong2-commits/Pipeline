@@ -18512,7 +18512,6 @@ def _post_github_pending_acceptance_comment(req: Dict[str, Any], evidence: str) 
         return {"success": False, "error": "req must not be None"}
     if not isinstance(req, dict):
         return {"success": False, "error": f"req must be dict, got {type(req).__name__}"}
-    pipeline_id = str(req.get("pipeline_id", ""))
     pr_url = str(req.get("pr_url", "") or "")
 
     # IMP-20260703-B985 MT-24: pending 댓글 본문 생성을 단일 순수 renderer로 통일한다.
