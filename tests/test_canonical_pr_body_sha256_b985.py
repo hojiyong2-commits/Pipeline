@@ -3424,7 +3424,7 @@ def test_approval_message_no_extra_text():
     # 승인 코드는 ACCEPT-<pid> 형식
     assert "ACCEPT-TEST-0000-XXXX" in msg, f"승인 코드 표시 불일치: {msg!r}"
     # 추가 줄 수 검사: 고정 양식은 비어있지 않은 줄 7줄 이하
-    lines = [l for l in msg.strip().split("\n") if l.strip()]
+    lines = [ln for ln in msg.strip().split("\n") if ln.strip()]
     assert len(lines) <= 7, f"양식 외 추가 줄 존재 ({len(lines)}줄): {msg!r}"
 
 
