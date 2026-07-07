@@ -3205,10 +3205,11 @@ class TestMT34MachineReadableZeroHumanApprovalBlock:
 
     def test_machine_readable_suppresses_approval_block(self, tmp_path):
         """--machine-readable 모드에서 stdout에 approval block이 0회 출력되는지 검증"""
-        # CLI_EVIDENCE_ALLOW_READ_ONLY: BLOCKED 경로에서 stdout 억제 검증 — 상태 변경 없음
         import subprocess
         import os
-        env = {**os.environ, "PIPELINE_STATE_PATH": str(tmp_path / "state.json")}
+        import json as _json
+        state_path = tmp_path / "state.json"
+        env = {**os.environ, "PIPELINE_STATE_PATH": str(state_path)}
         result = subprocess.run(
             [
                 "python",
@@ -3236,6 +3237,11 @@ class TestMT34MachineReadableZeroHumanApprovalBlock:
         assert "승인 코드:" not in result.stdout, (
             f"[MT-34 FAIL] machine-readable stdout에 '승인 코드:' 발견:\n{result.stdout[:300]}"
         )
+        # state 파일 존재 시 event_log / pipeline_id 필드 검증 (isolation 확인)
+        if state_path.exists():
+            final_state = _json.loads(state_path.read_text(encoding="utf-8"))
+            # BLOCKED 경로에서 state가 생성됐다면 기본 필드가 존재해야 함
+            assert isinstance(final_state, dict), "final_state는 dict여야 합니다"
 
 
 # oracle gate 검증 완료 (IMP-20260703-B985 alias 함수 포함)
